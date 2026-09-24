@@ -1,19 +1,21 @@
 # reports
 
-Informes del panel. Tareas 1.17 (exportación para la Inspección) y 2.8 (horas por
-periodo).
+Informes del panel. Tareas 1.17 (exportación para la Inspección), 2.8 (horas
+por periodo) y 3.13 (cuadro de impacto y adopción).
 
 Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).
 
 ## Qué hay aquí
 
-| Fichero                 | Qué hace                                                                                                                                |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `legalExport.api.ts`    | Cliente de `GET /reports/legal-export` (RF-IN-05, RL-06). Descarga un CSV y lo suelta; no parsea nada.                                  |
-| `LegalExportView.vue`   | La pantalla del requerimiento de Inspección: periodo, alcance opcional por persona y las cifras que devolvió el servidor.               |
-| `periodReport.api.ts`   | Cliente de `GET /reports/period` (RF-IN-01..03), con los parámetros en camelCase que usa el panel.                                      |
-| `PeriodReportView.vue`  | Formulario de periodo, granularidad y agrupación; tabla de resultados; aviso de cobertura de contrato; criterios de inclusión visibles. |
-| `PeriodReportTable.vue` | Las filas: sujeto, periodo recortado, trabajadas, contratadas, desviación, exceso y los cuatro contadores de días.                      |
+| Fichero                     | Qué hace                                                                                                                                 |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `legalExport.api.ts`        | Cliente de `GET /reports/legal-export` (RF-IN-05, RL-06). Descarga un CSV y lo suelta; no parsea nada.                                   |
+| `LegalExportView.vue`       | La pantalla del requerimiento de Inspección: periodo, alcance opcional por persona y las cifras que devolvió el servidor.                |
+| `periodReport.api.ts`       | Cliente de `GET /reports/period` (RF-IN-01..03), con los parámetros en camelCase que usa el panel.                                       |
+| `PeriodReportView.vue`      | Formulario de periodo, granularidad y agrupación; tabla de resultados; aviso de cobertura de contrato; criterios de inclusión visibles.  |
+| `PeriodReportTable.vue`     | Las filas: sujeto, periodo recortado, trabajadas, contratadas, desviación, exceso y los cuatro contadores de días.                       |
+| `adoptionReport.api.ts`     | Cliente de `GET /reports/adoption` y `.../export` (RF-IN-08, RNF-D-01). Ver «El cuadro de impacto y adopción» más abajo.                 |
+| `AdoptionDashboardView.vue` | «Impacto y adopción»: una tarjeta por indicador con objetivo del §1.3, rosco de origen y barras de comparación, criterios y exportación. |
 
 ## Aquí no se calcula ninguna hora
 
@@ -51,7 +53,7 @@ hasta que hay las dos fechas, que además son obligatorias en el contrato.
 Si el periodo pedido no cabe en una respuesta síncrona (`422`, RNF-P-05), la
 tabla anterior desaparece. Dejarla en pantalla junto al mensaje de error haría
 creer que esas cifras valen para el periodo que se acaba de pedir, y no valen
-para ninguno.
+para ninguna.
 
 ## El aviso de cobertura va antes de la tabla
 
@@ -60,11 +62,72 @@ sin contrato registrado. Esos días no suman horas contratadas, así que la
 desviación de esas filas sale enorme y **con aspecto de dato bueno**. El aviso va
 delante y no en una nota al pie.
 
+## El cuadro de impacto y adopción (tarea 3.13, RF-IN-08)
+
+Solo `admin` y `rrhh` (Anexo B del doc 01): ni `responsable_departamento` ni
+`auditor` ven la entrada del menú ni pueden abrir la pantalla por URL
+(`REPORTS_MANAGE`, el mismo ámbito que «Informes» y «Nómina»).
+
+### Tipos locales provisionales, calcados del contrato real
+
+`backend-laravel` cerró `GET /api/v1/reports/adoption` en
+`docs/api/openapi.yaml` (esquemas `AdoptionReport`, `AdoptionIndicator`,
+`AdoptionTarget`…) mientras se escribía esta pantalla, pero
+`shared/api/schema.d.ts` todavía no se ha regenerado desde ese contrato. Los
+tipos de `adoptionReport.api.ts` son una copia literal de esos esquemas: en
+cuanto `schema.d.ts` incluya `Schemas['AdoptionReport']`, sustituirlos es un
+cambio de importación, no de forma. `tests/e2e/support/admin.ts` hace lo mismo
+con su propia copia local, y por el mismo motivo: importar el tipo desde
+`adoptionReport.api.ts` arrastraría el `import.meta.env` de
+`@kronoqr/web-kit/http` a un proyecto de TypeScript (`tsconfig.e2e.json`) que
+no carga los tipos de Vite.
+
+### Doce indicadores, seis con objetivo
+
+El contrato siempre trae los doce indicadores del §1.3 y del bloque RF-IN-08,
+en el mismo orden y con `current: null` cuando no hay dato (nunca ausente).
+Esta pantalla les da dos tratamientos distintos:
+
+- **Seis tarjetas propias** (`PRIMARY_INDICATOR_KEYS`), una por cada
+  indicador que lleva un objetivo del §1.3: jornadas completas, fichajes por
+  QR, correcciones, disponibilidad, tiempo de resolución y la línea base de
+  horas/mes. Cada una enseña el valor, el objetivo, el estado («dentro»/«fuera»
+  con texto e icono, nunca solo color) y la variación contra el periodo
+  anterior — vacía, nunca `0`, cuando no hay con qué comparar.
+- **Seis datos secundarios**, sin tarjeta propia: `offline_resolved_ratio`
+  (junto a la disponibilidad), `incident_resolution_median_minutes` (junto a
+  la media), `open_incidents` y `employees_without_credential` (fotos de hoy)
+  y `worked_minutes`/`contracted_minutes` (horas trabajadas frente a
+  contratadas).
+
+El objetivo `reduction` (la línea base de horas/mes) es un caso especial: el
+producto no puede medir si se consiguió, así que se enseña como referencia,
+sin badge de «dentro/fuera».
+
+### Nada se calcula aquí
+
+Regla dura 7. Todos los porcentajes, deltas y minutos vienen resueltos del
+servidor; esta pantalla solo convierte minutos a horas y minutos enteros
+(`formatMinutes`, nunca decimales ambiguos) y arma las tarjetas.
+
+### Gráficos con tabla de datos alternativa
+
+`ChartWithTable.vue` (`shared/ui/`) es el primer uso de ECharts del proyecto:
+un rosco del reparto por origen (periodo actual) y unas barras con los cuatro
+indicadores porcentuales actual frente a anterior. Ver la documentación del
+propio componente para el porqué de cada decisión (carga diferida, colores de
+`--kq-*`, degradación si el lienzo no llega a montarse).
+
+### Lo que no está aquí
+
+Desglose por departamento o por quiosco, tendencia de más de dos periodos,
+envío programado y comparación contra el mismo periodo del año anterior:
+fuera de alcance de la tarea 3.13 (regla dura 21, un agregado de la
+instalación entera y no una herramienta de vigilancia por persona).
+
 ## Lo que no está aquí, y de quién es
 
-El cuadro de impacto y las comparaciones visuales avanzadas son de la tarea
-3.13, con agente propio y dependiendo de indicadores que la 2.8 todavía no
-calcula. Las exportaciones CSV/XLSX/PDF de este mismo informe son la 2.9, y se
+Las exportaciones CSV/XLSX/PDF del informe por periodo son la tarea 2.9, y se
 generan **desde el mismo objeto de resultado del servidor**: el fichero que
 alguien adjunta a un correo y la tabla que ve en pantalla se calculan una sola
 vez para que no puedan discrepar.

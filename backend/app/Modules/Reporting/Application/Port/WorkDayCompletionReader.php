@@ -40,4 +40,34 @@ interface WorkDayCompletionReader
      *                                                      jornada ese dia **no aparece**.
      */
     public function completionOn(string $workDate): array;
+
+    /**
+     * Lo mismo para un **rango** de jornadas, con la misma definicion exacta
+     * (RF-IN-08, tarea 3.13).
+     *
+     * ## Por que un metodo y no llamar al de arriba en un bucle
+     *
+     * Porque el cuadro de impacto pide periodos de hasta un año: 366 consultas por
+     * periodo y dos periodos por cuadro son 732 idas y vueltas a PostgreSQL para
+     * devolver cuatro numeros. Y porque sumar los resultados diarios daria
+     * exactamente lo mismo solo si la agrupacion es por persona **y fecha**, que es
+     * la condicion que hay que poder leer en un sitio en lugar de deducirla.
+     *
+     * ## Y por que aqui y no una consulta propia del cuadro
+     *
+     * Porque «jornada completa» tiene que significar **una sola cosa** en el
+     * producto: la del `workdays_complete_ratio{site}` que pinta Grafana desde la
+     * tarea 3.1 y la del indicador que enseña el panel. Con dos consultas, el
+     * cuadro de mando y el cuadro de impacto acabarian dando dos porcentajes para
+     * la misma semana, y el cuadro perderia justo la funcion que tiene (decision 8
+     * de la ficha 3.13). **Lo que no comparten es la ventana**: Grafana mira los
+     * ultimos siete dias de contadores y el cuadro un periodo civil cerrado.
+     *
+     * @param  string  $from  Primera jornada, inclusive, en `Y-m-d` y en la zona del centro.
+     * @param  string  $to  Ultima jornada, inclusive.
+     * @return array<int, array{complete: int, total: int}> Indexado por centro. Un centro sin
+     *                                                      ninguna jornada en el rango **no
+     *                                                      aparece**, igual que arriba.
+     */
+    public function completionBetween(string $from, string $to): array;
 }

@@ -39,6 +39,8 @@ use App\Modules\Product\Http\Controller\LicenseController;
 use App\Modules\Product\Http\Controller\SettingsController;
 use App\Modules\Product\Http\Controller\SetupController;
 use App\Modules\Product\Http\Controller\SupportGrantController;
+use App\Modules\Reporting\Http\Controller\AdoptionReportController;
+use App\Modules\Reporting\Http\Controller\AdoptionReportExportController;
 use App\Modules\Reporting\Http\Controller\ComplianceSummaryController;
 use App\Modules\Reporting\Http\Controller\EmployeeWorkDayController;
 use App\Modules\Reporting\Http\Controller\LivePresenceController;
@@ -618,6 +620,103 @@ Route::get('/reports/payroll-export', PayrollExportController::class)
         'locale.installation',
     ])
     ->name('reporting.reports.payroll-export');
+
+/*
+ * GET /api/v1/reports/adoption — el cuadro de impacto y adopcion (RF-IN-08,
+ * RNF-D-01, tarea 3.13).
+ *
+ * ES UN AGREGADO DE LA INSTALACION ENTERA, Y ESO NO ES UNA LIMITACION SINO LA
+ * DECISION. Doce indicadores del §1.3 con su comparacion contra el periodo
+ * anterior, sin un solo `employee_uuid`, sin nombres y sin departamentos: con
+ * desglose por departamento, un departamento de una persona convertiria «horas
+ * trabajadas» en su dato individual, servido en una pantalla cuya finalidad es
+ * medir la adopcion del sistema y no evaluar a nadie (regla dura 21). De ahi que
+ * la consulta no lleve alcance y que la policy sea la mas estrecha del modulo.
+ *
+ * `reports:*` Y ROL `{admin, rrhh}` Y NADIE MAS (Anexo B del doc 01, regla dura
+ * 18). El `responsable_departamento` no lleva ningun ambito de informes (§7.3) y
+ * el `auditor` lleva el estrecho —`reports:legal`—, asi que ninguno de los dos
+ * pasa del middleware; `AdoptionReportPolicy` dice lo mismo desde el otro lado y
+ * es POLICY PROPIA y no la del informe por periodo: el dia que un responsable
+ * pueda ver las horas de su equipo, esa concesion no puede arrastrar consigo el
+ * cuadro que mide el sistema entero.
+ *
+ * `Feature::ImpactDashboard` POR ENCIMA, Y RESPONDE `402`, NO `403`. Es
+ * funcionalidad accesoria (ADR-023) y su PRIMERA CONSUMIDORA: estaba en el
+ * catalogo desde la tarea 5.3 sin que nada la mirara. Hay aqui una ironia que
+ * conviene tener escrita: el cuadro que sostiene la renovacion de la licencia se
+ * apaga cuando la licencia caduca. Es correcto —degradar lo accesorio y no el
+ * registro es exactamente la frontera de ADR-023— y el aviso del `402` es lo que
+ * lleva a renovar. EL REGISTRO LEGAL NO SE TOCA: el fichaje, la consulta de
+ * jornadas, el portal y `GET /reports/legal-export` siguen respondiendo (RL-06,
+ * regla dura 15).
+ *
+ * NO ESCRIBE EN `audit_log`, Y ES LA UNICA LECTURA DE INFORMES DE LA QUE SE PUEDE
+ * DECIR ESO. No hay dato personal que divulgar (RS-05 no aplica a un agregado sin
+ * identificadores), y un asiento por cada apertura llenaria el trail —cuatro años
+ * de retencion, RL-02— de filas que no describen ninguna divulgacion. La
+ * DESCARGA si se audita: ver la ruta de abajo.
+ *
+ * SIN PARAMETROS OBLIGATORIOS: la pantalla se abre sola con el mes natural
+ * anterior completo, resuelto en la zona del CENTRO (ADR-040). No admite `site_id`
+ * (hay un centro), ni `department_id`, ni paginacion: el cuadro se lee entero o no
+ * significa nada.
+ *
+ * `throttle:management` POR LO QUE CUESTA. Cada peticion cruza `scan_events`,
+ * `shift_corrections`, `incidents` y `error_events` de DOS periodos y pide dos
+ * informes de horas, todo contra la base de datos que atiende el fichaje
+ * (RNF-P-02, regla dura 19). El techo de rango de `config/reporting.php` es la otra
+ * mitad de esa defensa, y por encima responde `422` — SIN generacion en diferido,
+ * porque son doce filas y una cola no resolveria nada.
+ */
+Route::get('/reports/adoption', AdoptionReportController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::REPORTS_ALL->value,
+        'throttle:management',
+    ])
+    ->name('reporting.reports.adoption');
+
+/*
+ * GET /api/v1/reports/adoption/export — el MISMO cuadro como fichero CSV, XLSX o
+ * PDF sellado (RF-IN-08, tarea 3.13).
+ *
+ * MISMA CONSULTA, MISMO AMBITO, MISMA LICENCIA Y MISMO LIMITADOR QUE LA CONSULTA
+ * DE ARRIBA, y tiene que ser asi: lo que sale es exactamente lo mismo, con el
+ * agravante de que un fichero se reenvia por correo. Un endpoint de descarga con
+ * la autorizacion —o la degradacion— mas floja que su consulta es la forma
+ * habitual de que ninguna de las dos sirva de nada. La policy si es OTRO METODO
+ * (`export`) aunque hoy diga lo mismo que `view`: el dia que alguien quiera dejar
+ * ver el cuadro sin poder llevarselo, ese cambio tiene que poder hacerse sin tocar
+ * la consulta.
+ *
+ * LOS TRES FORMATOS, al contrario que la salida a nomina, donde el PDF esta
+ * descartado porque ningun programa de nomina lo importa. Aqui es al reves: el PDF
+ * sellado es el formato mas util, porque es el que se adjunta a una renovacion de
+ * licencia.
+ *
+ * ESTA SI SE AUDITA, con la accion `adoption_report.exported` (regla dura 6). No
+ * porque salgan datos personales —el cuadro es un agregado—, sino porque sale un
+ * DOCUMENTO del sistema, y de un papel que va a una reunion y se archiva fuera del
+ * producto el cliente tiene que poder responder quien lo saco y de que periodo
+ * hablaba. El asiento se escribe ANTES de entregar el fichero: si falla, la
+ * descarga no ocurre (ADR-027).
+ *
+ * ES UN `GET` AUNQUE QUEDE AUDITADO. Solo lee; mismo criterio que la exportacion
+ * legal y que la descarga del informe por periodo. Un `POST` ademas impediria
+ * enlazar la descarga.
+ */
+Route::get('/reports/adoption/export', AdoptionReportExportController::class)
+    ->middleware([
+        'auth:sanctum',
+        'ability:'.TokenAbility::REPORTS_ALL->value,
+        'throttle:management',
+        // Es un documento: sale en el idioma de la INSTALACION, no en el del
+        // navegador (regla dura 13; UseInstallationLocale). Lo abre y lo archiva
+        // una persona que puede no ser quien lo descargo.
+        'locale.installation',
+    ])
+    ->name('reporting.reports.adoption.export');
 
 /*
  * La bandeja de incidencias y su resolucion (RF-PA-05, tarea 2.5).

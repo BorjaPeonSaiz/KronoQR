@@ -93,6 +93,14 @@ const WEEKLY_SUMMARY_EMAIL_KEY = 'WEEKLY_SUMMARY_EMAIL' satisfies SettingKey
 const KIOSK_UPDATE_WINDOW_KEY = 'KIOSK_UPDATE_WINDOW' satisfies SettingKey
 const KIOSK_UPDATE_QUIET_MINUTES_KEY = 'KIOSK_UPDATE_QUIET_MINUTES' satisfies SettingKey
 
+// --- Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13) ---------------------
+//
+// `BASELINE_MANUAL_HOURS_PER_MONTH` ya esta en el enum `SettingKey` del
+// contrato (segunda vuelta de la tarea 3.13): `satisfies SettingKey` hace que
+// un cambio de nombre ahi falle aqui, mismo criterio que
+// `KIOSK_UPDATE_QUIET_MINUTES_KEY`.
+const BASELINE_MANUAL_HOURS_KEY = 'BASELINE_MANUAL_HOURS_PER_MONTH' satisfies SettingKey
+
 /** `HH:MM-HH:MM`, la misma forma que valida el servidor (decision 9 de la ficha 3.12): puede cruzar la medianoche, eso no lo dice el formato, lo permite. */
 const UPDATE_WINDOW_PATTERN = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/
 
@@ -209,6 +217,14 @@ const weeklySummaryEmail = ref('disabled')
 const kioskUpdateWindow = ref('03:00-05:00')
 /** Entero 0-120 (RF-KI-07, tarea 3.12), como cadena para `v-model`. `10` de serie. */
 const kioskUpdateQuietMinutes = ref<number | string>('10')
+
+/**
+ * `BASELINE_MANUAL_HOURS_PER_MONTH` (RF-IN-08, tarea 3.13), como cadena para
+ * `v-model`. `0` de serie -«no declarada»- (decision 9 de la ficha): sin este
+ * dato el cuadro de impacto deja el indicador vacio en vez de inventar una
+ * mejora frente al proceso manual que el producto sustituye.
+ */
+const baselineManualHoursPerMonth = ref<number | string>('0')
 /**
  * Guardado DEFENSIVO (segunda vuelta de la tarea 3.3): el contrato de hoy
  * (`SettingValue = number | string | string[]`) no admite `null`, pero un
@@ -413,6 +429,7 @@ function fill(catalog: InstallationSettings): void {
   // aplicado aqui): si la clave no tiene fila propia se ve `0`, no un
   // valor de serie que nadie ha configurado.
   kioskUpdateQuietMinutes.value = integerValue(catalog, KIOSK_UPDATE_QUIET_MINUTES_KEY)
+  baselineManualHoursPerMonth.value = integerValue(catalog, BASELINE_MANUAL_HOURS_KEY)
 
   payrollColumnsText.value = payrollColumnsValueOf(catalog).join('\n')
   payrollDelimiter.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_DELIMITER', 'semicolon')
@@ -457,6 +474,9 @@ const fieldLabels = computed<Record<string, string>>(() => ({
   'settings.WEEKLY_SUMMARY_EMAIL': t('operationalSettings.fields.weeklySummaryEmail'),
   'settings.KIOSK_UPDATE_WINDOW': t('operationalSettings.fields.kioskUpdateWindow'),
   'settings.KIOSK_UPDATE_QUIET_MINUTES': t('operationalSettings.fields.kioskUpdateQuietMinutes'),
+  'settings.BASELINE_MANUAL_HOURS_PER_MONTH': t(
+    'operationalSettings.fields.baselineManualHoursPerMonth',
+  ),
   'settings.LOCALE_DEFAULT': t('operationalSettings.fields.localeDefault'),
   'settings.LOCALE_AVAILABLE': t('operationalSettings.fields.localeAvailable'),
   'settings.PAYROLL_EXPORT_COLUMNS': t('operationalSettings.fields.payrollColumns'),
@@ -520,6 +540,18 @@ const kioskUpdateQuietMinutesErrors = computed<readonly string[]>(() => {
   const local = issue === null ? [] : [t(`operationalSettings.errors.${issue}`)]
 
   return [...local, ...serverFieldErrors(KIOSK_UPDATE_QUIET_MINUTES_KEY)]
+})
+
+/** `BASELINE_MANUAL_HOURS_PER_MONTH` (RF-IN-08, tarea 3.13): mismo criterio que `issueOf`, sin rango -eso lo decide el `422`-. */
+const baselineManualHoursPerMonthIssue = computed<'required' | 'notAWholeNumber' | null>(() =>
+  wholeNumberIssueOf(baselineManualHoursPerMonth.value),
+)
+
+const baselineManualHoursPerMonthErrors = computed<readonly string[]>(() => {
+  const issue = baselineManualHoursPerMonthIssue.value
+  const local = issue === null ? [] : [t(`operationalSettings.errors.${issue}`)]
+
+  return [...local, ...serverFieldErrors(BASELINE_MANUAL_HOURS_KEY)]
 })
 
 /**
@@ -665,6 +697,14 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     changes[KIOSK_UPDATE_QUIET_MINUTES_KEY] = quietMinutesValue
   }
 
+  // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13).
+  const baselineValue = asInteger(baselineManualHoursPerMonth.value)
+  const previousBaselineValue = entryOf(current, BASELINE_MANUAL_HOURS_KEY)?.value
+
+  if (baselineValue !== undefined && baselineValue !== previousBaselineValue) {
+    changes[BASELINE_MANUAL_HOURS_KEY] = baselineValue
+  }
+
   const trimmedDefault = localeDefault.value.trim()
   const previousDefault = entryOf(current, 'LOCALE_DEFAULT')?.value
 
@@ -744,6 +784,7 @@ const canSave = computed(
     payrollColumnsLocalIssue.value === null &&
     kioskUpdateWindowLocalIssue.value === null &&
     kioskUpdateQuietMinutesIssue.value === null &&
+    baselineManualHoursPerMonthIssue.value === null &&
     !saving.value,
 )
 
@@ -970,6 +1011,36 @@ async function save(): Promise<void> {
               type="number"
               inputmode="numeric"
               data-test="kiosk-update-quiet-minutes"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="w-32 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+            />
+          </template>
+        </FormField>
+      </fieldset>
+
+      <!-- Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): la linea base
+           declarada de horas al mes que RRHH dedicaba a consolidar hojas de
+           horas antes del sistema. Opcional: `0` significa «no declarada» y
+           el cuadro deja el indicador vacio en vez de inventar una mejora. -->
+      <fieldset class="flex flex-col gap-4" data-test="adoption-baseline-settings">
+        <legend class="text-lg font-medium text-kq-text">
+          {{ t('operationalSettings.adoptionHeading') }}
+        </legend>
+
+        <FormField
+          :label="t('operationalSettings.fields.baselineManualHoursPerMonth')"
+          :hint="t('operationalSettings.hints.baselineManualHoursPerMonth')"
+          :errors="baselineManualHoursPerMonthErrors"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <input
+              :id="id"
+              v-model="baselineManualHoursPerMonth"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              data-test="baseline-manual-hours-per-month"
               :aria-describedby="describedBy"
               :aria-invalid="invalid"
               class="w-32 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"

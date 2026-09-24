@@ -212,6 +212,27 @@ function managementEndpoints(): array
         // esconderia si la autorizacion funciona.
         'descargar la salida a nomina' => ['GET', '/api/v1/reports/payroll-export?format=csv&from=2026-03-01&to=2026-03-31', []],
 
+        // El cuadro de impacto y adopcion (tarea 3.13, RF-IN-08). ENTRA COMO DOS
+        // PAREJAS por lo mismo que sus vecinas: la consulta y la descarga son dos
+        // rutas con su propio `authorize()`, y ademas su policy tiene DOS METODOS
+        // —`view` y `export`— que hoy dicen lo mismo. El dia que alguien pueda ver
+        // el cuadro sin poder llevarselo, una policy fusionada seria invisible
+        // desde aqui.
+        //
+        // **Y aqui el `403` del `responsable_departamento` es el que mas importa**,
+        // al reves que en la vista de cumplimiento. Alla entra acotado a su gente;
+        // aqui no entra en absoluto, y no por permisos: un cuadro de adopcion de un
+        // departamento de tres personas convierte «horas trabajadas» en el dato de
+        // esas tres (regla dura 21). El cuadro es de la instalacion entera
+        // precisamente para que eso no pueda pasar, y por eso su consulta no lleva
+        // alcance que acotar.
+        //
+        // Sin `from` ni `to` a proposito, al reves que el informe por periodo: aqui
+        // son OPCIONALES —la pantalla se abre con el mes anterior—, asi que la
+        // peticion es valida y lo unico que puede fallar es la autorizacion.
+        'ver el cuadro de impacto' => ['GET', '/api/v1/reports/adoption', []],
+        'descargar el cuadro de impacto' => ['GET', '/api/v1/reports/adoption/export?format=csv', []],
+
         /*
          * Los informes generados en diferido (tarea 3.9, RF-IN-06, ADR-041).
          *

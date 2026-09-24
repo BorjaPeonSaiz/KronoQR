@@ -50,6 +50,12 @@ in your record of processing activities under art. 30 of the GDPR (RGPD):
   device they were recorded from.
 - Log of access and of actions with legal relevance (`audit_log`).
 
+The **impact dashboard** ([`hr-guide.md`](hr-guide.md) §6.6) adds nothing to
+that list: it is a further, **aggregate** use of data already processed
+—counts and percentages for the whole installation, with no identifiers and no
+breakdown by person or by department—, compatible with the purpose of the
+record.
+
 **What it does NOT process, and cannot process:**
 
 - **Nothing biometric** (ADR-009). No fingerprint, no face, no voice. It is not
@@ -107,6 +113,12 @@ report is still in the panel and the week is resent by hand. If you decide not
 to use the email channel, discuss it with whoever
 installs the system for you: it is a configuration decision for your
 installation.
+
+**The impact dashboard export** (CSV, Excel or PDF) is the only thing that
+leaves by hand and by your decision, and **it contains no personal data**: only
+the installation's aggregates. Even so, every download is recorded in the audit
+trail (`adoption_report.exported`: who, which period and in which format),
+because it is a document that leaves the system.
 
 
 **And a second channel, which ships switched off: telemetry.** The product can

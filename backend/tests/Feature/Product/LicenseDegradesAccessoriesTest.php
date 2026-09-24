@@ -514,3 +514,78 @@ it('el resumen semanal no se enciende con los informes avanzados contratados', f
         ->get('/api/v1/reports/period?from=2026-06-01&to=2026-06-07&granularity=range&group_by=employee')
         ->assertOk();
 })->group('RF-PD-05', 'RF-PR-05');
+
+// --- 3.13: el cuadro de impacto y adopcion (RF-IN-08) ------------------------
+
+it('el cuadro de impacto funciona con la funcionalidad contratada', function (): void {
+    // `impact_dashboard` estaba en el catalogo de ADR-023 desde la 5.3 SIN NINGUN
+    // CONSUMIDOR. Este endpoint es el primero, y sin este control positivo los
+    // `402` de abajo pasarian identicos si la ruta no existiera.
+    conFuncionalidades(['impact_dashboard']);
+
+    Api::as(reportsToken())
+        ->get('/api/v1/reports/adoption?from=2026-05-01&to=2026-05-31')
+        ->assertOk();
+})->group('RF-PD-05', 'RF-IN-08');
+
+it('CON LA LICENCIA CADUCADA el cuadro de impacto responde 402 con el aviso', function (): void {
+    /*
+     * Y aqui hay una ironia que conviene tener escrita: **el cuadro que sostiene la
+     * renovacion de la licencia se apaga cuando la licencia caduca**.
+     *
+     * Es correcto. Degradar lo accesorio y no el registro es exactamente la
+     * frontera de ADR-023, y el aviso del `402` es lo que lleva a renovar: dice que
+     * la funcionalidad existe y que hay que hablar con quien firma el contrato. Lo
+     * que NO puede pasar —y comprueba la prueba de abajo— es que se toque el
+     * registro legal.
+     */
+    conLicenciaCaducada();
+
+    $response = Api::as(reportsToken())
+        ->withHeaders(['Accept-Language' => 'es'])
+        ->get('/api/v1/reports/adoption?from=2026-05-01&to=2026-05-31')
+        ->assertStatus(402);
+
+    expect($response->json('feature'))->toBe('impact_dashboard')
+        ->and($response->json('restriction'))->toBe('license_expired');
+})->group('RF-PD-05', 'RF-IN-08');
+
+it('la descarga del cuadro se degrada igual que su consulta', function (): void {
+    // Un endpoint de descarga con la degradacion mas floja que su consulta es la
+    // forma habitual de que la degradacion no sirva de nada: lo que sale es
+    // exactamente lo mismo, con el agravante de que un fichero se reenvia.
+    conLicenciaCaducada();
+
+    Api::as(reportsToken())
+        ->get('/api/v1/reports/adoption/export?format=csv&from=2026-05-01&to=2026-05-31')
+        ->assertStatus(402);
+})->group('RF-PD-05', 'RF-IN-08');
+
+it('el cuadro de impacto no se enciende con los informes avanzados contratados', function (): void {
+    // DOS FUNCIONALIDADES DISTINTAS del catalogo de ADR-023, y la distincion
+    // importa comercialmente: un plan puede llevar los informes de horas y no el
+    // cuadro de direccion. Si compartieran bandera, contratar uno regalaria el otro.
+    conFuncionalidades(['advanced_reports']);
+
+    $response = Api::as(reportsToken())
+        ->get('/api/v1/reports/adoption?from=2026-05-01&to=2026-05-31')
+        ->assertStatus(402);
+
+    expect($response->json('feature'))->toBe('impact_dashboard')
+        ->and($response->json('restriction'))->toBe('not_in_plan');
+})->group('RF-PD-05', 'RF-IN-08');
+
+it('degradar el cuadro de impacto NO degrada el registro legal', function (): void {
+    // REGLA DURA 15 y ADR-019: la caducidad de la licencia jamas bloquea el
+    // registro. El cuadro mide si el sistema sirve; el registro que se entrega a la
+    // Inspeccion no depende de que el cliente haya renovado.
+    conLicenciaCaducada();
+
+    Api::as(reportsToken())
+        ->get('/api/v1/reports/adoption?from=2026-05-01&to=2026-05-31')
+        ->assertStatus(402);
+
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)))
+        ->get('/api/v1/reports/legal-export?from=2026-06-01&to=2026-06-07')
+        ->assertOk();
+})->group('RF-PD-05', 'RF-IN-08', 'RL-06');

@@ -2535,6 +2535,193 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/adoption": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cuadro de impacto y adopcion
+         * @description Los indicadores del §1.3 del documento 01 para un periodo civil, **con la
+         *     comparacion contra el periodo anterior** (RF-IN-08). Es el cuadro que
+         *     responde a *«¿esto esta sirviendo?»* con datos: que porcentaje de jornadas
+         *     queda registrado completo, cuantos fichajes son por tarjeta, por PIN o por
+         *     correccion manual, cuanto se tarda en resolver una incidencia y cuanta
+         *     gente sigue sin tarjeta entregada.
+         *
+         *     ## Es un agregado de la instalacion entera, y eso es una decision de privacidad
+         *
+         *     **No hay desglose por departamento ni por persona, y no lo habra por
+         *     comodidad.** Un departamento de una persona convertiria «horas trabajadas»
+         *     en el dato individual de alguien, servido en una pantalla cuya finalidad es
+         *     medir la adopcion del sistema y no evaluar a nadie (regla dura 21). Por eso
+         *     la respuesta no lleva ni un `employee_uuid`, ni un nombre, ni un
+         *     `department_id`, y por eso **la lectura no escribe asiento de divulgacion**
+         *     en `audit_log`: no hay dato personal que divulgar. La exportacion si lo
+         *     escribe, porque produce un documento que sale del sistema.
+         *
+         *     ## Ningun porcentaje se calcula en la base de datos
+         *
+         *     La consulta trae **hechos** —recuentos y sumas— y una politica de dominio
+         *     los convierte en indicadores. Es lo que permite que la aritmetica se
+         *     verifique a mano en una prueba unitaria, en lugar de confiar en un
+         *     `round(100.0 * a / b, 2)` escondido en un `SELECT`.
+         *
+         *     ## `previous` y `delta` son nulos cuando no hay con que comparar, nunca `0`
+         *
+         *     Un periodo anterior sin denominador —la instalacion acababa de arrancar, el
+         *     hotel estaba cerrado— **no vale cero por ciento**: vale «no se sabe». Un
+         *     `0` ahi se lee como un desplome, y es exactamente el error que el cuadro
+         *     existe para no cometer. Lo mismo se aplica a `current`.
+         *
+         *     Cuatro indicadores **no tienen comparacion por definicion** y llevan
+         *     `previous` y `delta` a `null` siempre: `open_incidents` y
+         *     `employees_without_credential` son la foto de hoy —una cola pendiente, no
+         *     un flujo del periodo—, `offline_resolved_ratio` acompaña a la
+         *     disponibilidad y `baseline_manual_minutes_per_month` es un dato declarado
+         *     por el cliente, no una medida.
+         *
+         *     ## Que es cada indicador, exactamente
+         *
+         *     | Clave | Que mide | Objetivo del §1.3 |
+         *     |---|---|---|
+         *     | `workdays_complete_ratio` | Jornadas con **todos** sus tramos cerrados / jornadas con algun tramo | ≥ 99 % |
+         *     | `qr_scans_ratio` | Fichajes aceptados con origen `qr_kiosk` / fichajes aceptados | ≥ 98 % |
+         *     | `manual_corrections_ratio` | Correcciones creadas en el periodo / fichajes aceptados | < 2 % |
+         *     | `clocking_availability_ratio` | Fichajes **atendidos** / (atendidos + intentos que el quiosco no pudo cursar) | ≥ 99,9 % |
+         *     | `offline_resolved_ratio` | De los atendidos, los que llegaron por la cola offline | — |
+         *     | `incident_resolution_mean_minutes` | Media de `resolved_at − detected_at` de los turnos sin cerrar resueltos en el periodo | < 24 h |
+         *     | `incident_resolution_median_minutes` | La mediana de lo mismo | — |
+         *     | `open_incidents` | Incidencias abiertas **hoy**, de cualquier tipo | — |
+         *     | `employees_without_credential` | Personas de alta **hoy** sin tarjeta entregada | — |
+         *     | `worked_minutes` | Horas trabajadas del periodo, de la instalacion entera | — |
+         *     | `contracted_minutes` | Horas contratadas del mismo periodo | — |
+         *     | `baseline_manual_minutes_per_month` | Lo que el cliente declaro que le costaba consolidar hojas de horas a mano | −80 % |
+         *
+         *     **La disponibilidad del acto de fichar (RNF-D-01) no es el tiempo de
+         *     servicio de la API**, y el §1.3 lo aclara entre parentesis: «incluye modo
+         *     offline». Lo que mide es si el empleado **pudo fichar**, y con la cola
+         *     offline pudo aunque el servidor estuviera caido (ADR-008). El denominador
+         *     suma los `scan_events` del periodo —un rechazo por regla de negocio es un
+         *     intento **atendido**— y los intentos que el quiosco no llego a cursar y
+         *     reporto en `error_events` (camara no disponible, permiso denegado,
+         *     escaner que no arranca, decodificador que no carga, almacenamiento offline
+         *     inservible, envio fallido). Medirlo como *uptime* de `/health` daria una
+         *     cifra peor que la realidad y contaria como caida precisamente el escenario
+         *     que el diseño resuelve.
+         *
+         *     **La linea base de horas/mes consolidando hojas es anterior al sistema** y
+         *     ninguna metrica puede observarla: la declara el cliente en
+         *     `BASELINE_MANUAL_HOURS_PER_MONTH` (`PATCH /api/v1/settings`). Sin declarar,
+         *     el indicador sale vacio, y eso es lo correcto: es honesto no inventar un
+         *     porcentaje de mejora.
+         *
+         *     ## Periodo y comparacion
+         *
+         *     `from` y `to` son **fechas civiles en la zona del centro** (RN-05, reglas
+         *     duras 3 y 4): un turno de 22:00 a 06:00 cuenta entero en la jornada de su
+         *     hora de inicio y no se parte a medianoche. Sin ellas se toma **el mes
+         *     natural anterior completo**, que es el periodo cerrado del que se habla en
+         *     una reunion.
+         *
+         *     El **periodo anterior** es el mismo numero de dias inmediatamente antes de
+         *     `from`: para marzo entero, febrero entero; para una semana, la semana
+         *     previa. No es «el mismo periodo del año pasado» —eso no esta en esta
+         *     version— y por eso viaja en `meta.previous_period` en lugar de deducirse en
+         *     el cliente.
+         *
+         *     ## Licencia, autorizacion y coste
+         *
+         *     Funcionalidad **accesoria**
+         *     ([ADR-023](../adr/ADR-023-frontera-de-degradacion-por-licencia.md)): sin
+         *     `impact_dashboard` en el plan responde `402`. Esto **no** toca el registro
+         *     legal — el fichaje, la consulta de jornadas y
+         *     `GET /api/v1/reports/legal-export` no se degradan jamas (regla dura 15).
+         *
+         *     Ambito `reports:*` y rol **`admin` o `rrhh` y nadie mas** (Anexo B del
+         *     documento 01, regla dura 18), con policy propia: ni el
+         *     `responsable_departamento` ni el `auditor` llegan, y un token de quiosco o
+         *     de portal tampoco tiene el ambito. Un cuadro que mide la adopcion del
+         *     sistema es material de direccion, no de auditoria ni de gestion de turno.
+         *
+         *     El rango no puede superar `DateRange::MAXIMUM_DAYS` (366 dias): por encima
+         *     responde `422` con `urn:kronoqr:problem:report-too-large`. **Sin generacion
+         *     en diferido**: el cuadro son doce filas por muchos datos que haya detras,
+         *     asi que la unica salida ante un `422` es acortar el rango.
+         */
+        get: operations["getAdoptionReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/adoption/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cuadro de impacto y adopcion como fichero
+         * @description El **mismo** cuadro que devuelve `GET /api/v1/reports/adoption`, como CSV,
+         *     hoja de calculo o PDF sellado (RF-IN-08).
+         *
+         *     ## Es la misma consulta, y eso es la mitad del requisito
+         *
+         *     Los mismos hechos, la misma politica de dominio y los mismos criterios. Si
+         *     la exportacion tuviera calculo propio, el papel que alguien lleva a la
+         *     renovacion de la licencia y la pantalla que estaba mirando podrian
+         *     discrepar, y el que se creeria seria el equivocado.
+         *
+         *     ## Sincrono, porque son doce filas
+         *
+         *     Sin cola y sin enlace caducable: el cuadro tiene doce indicadores y cuatro
+         *     origenes por mucho volumen que haya detras, asi que la respuesta se
+         *     entrega en el acto. El `422` por rango demasiado ancho sigue existiendo
+         *     —lo que cuesta es la consulta de hechos, no el fichero—.
+         *
+         *     ## Las horas se leen `HH:MM`, sin excepcion
+         *
+         *     Igual que en el informe por periodo: `81:00` y no `81` ni `4860`. Lo que
+         *     cruza la frontera del producto lo abre una persona, y una columna de
+         *     minutos al lado invita a dividir entre 60 y volver a la hora decimal. Los
+         *     porcentajes van con coma o punto segun el idioma del documento, que es el
+         *     de la **instalacion** y no el del navegador (regla dura 13).
+         *
+         *     ## Sello, emisor y huella
+         *
+         *     Las mismas tres cabeceras que el informe por periodo —`X-Kronoqr-Report-Digest`,
+         *     `X-Kronoqr-Report-Rows` y `X-Kronoqr-Export-Criteria`— y, en el PDF, el pie
+         *     repetido en cada pagina con el instante en la zona del centro, la cuenta
+         *     emisora, el periodo y la huella. **La huella es del contenido, no del
+         *     binario**: el CSV y el PDF del mismo cuadro llevan la misma, y dos PDF
+         *     generados con dos segundos de diferencia tambien.
+         *
+         *     ## Esta si se audita
+         *
+         *     La lectura de la pantalla no escribe en `audit_log` —es un agregado sin
+         *     identificadores—, pero **la exportacion escribe `adoption_report.exported`**
+         *     con el periodo, el formato, la huella y el tamaño (regla dura 6). Es un
+         *     documento que sale del sistema y que sostiene la renovacion de la licencia:
+         *     quien lo saco y cuando forma parte de lo que el cliente tiene que poder
+         *     responder. **Ni un nombre y ni una hora de nadie** en el asiento (regla
+         *     dura 21).
+         */
+        get: operations["exportAdoptionReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/legal-export": {
         parameters: {
             query?: never;
@@ -6384,9 +6571,20 @@ export interface components {
          *     dos son `presentation`: no mueven ni un minuto del registro. La franja se
          *     **declara** y no se infiere (regla dura 13), y fuera de ella la tablet
          *     sigue fichando y encolando: lo unico que no hace es recargarse.
+         *
+         *     `BASELINE_MANUAL_HOURS_PER_MONTH` (tarea 3.13, RF-IN-08) son las **horas al
+         *     mes que el cliente dedicaba a consolidar hojas de horas a mano antes de
+         *     instalar KronoQR**, de 0 a 10.000 y `0` de serie, que significa «no
+         *     declarado». Es el unico dato del producto que el sistema **no puede medir**:
+         *     describe el trabajo anterior a su instalacion, y ninguna metrica de una
+         *     aplicacion observa lo que se hacia antes de que existiera. El cuadro de
+         *     impacto (`GET /api/v1/reports/adoption`) lo muestra como linea base con el
+         *     objetivo de −80 % del §1.3 y **vacio** si no se declaro: es honesto no
+         *     inventar un porcentaje de mejora. Impacto `presentation`: no mueve ni un
+         *     minuto del registro.
          * @enum {string}
          */
-        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW" | "WEEKLY_SUMMARY_EMAIL" | "KIOSK_UPDATE_WINDOW" | "KIOSK_UPDATE_QUIET_MINUTES";
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW" | "WEEKLY_SUMMARY_EMAIL" | "KIOSK_UPDATE_WINDOW" | "KIOSK_UPDATE_QUIET_MINUTES" | "BASELINE_MANUAL_HOURS_PER_MONTH";
         /**
          * SettingValue
          * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
@@ -9092,6 +9290,181 @@ export interface components {
             meta: components["schemas"]["ComplianceSummaryMeta"];
         };
         /**
+         * AdoptionReport
+         * @description El cuadro de impacto y adopcion completo (RF-IN-08): los indicadores del
+         *     §1.3, el reparto de fichajes por origen y el criterio con el que se han
+         *     medido.
+         *
+         *     **Ni un identificador de persona, ni un nombre, ni un departamento.** Es un
+         *     agregado de la instalacion entera a proposito (regla dura 21): con desglose
+         *     por departamento, un departamento de una persona convertiria «horas
+         *     trabajadas» en su dato individual.
+         */
+        AdoptionReport: {
+            data: {
+                /**
+                 * @description Los doce indicadores, **en el orden en el que se leen** y siempre
+                 *     los doce: uno sin datos viaja con `current: null`, nunca ausente.
+                 *     Una tarjeta que desaparece de la pantalla se lee como una averia
+                 *     del cuadro.
+                 */
+                indicators: components["schemas"]["AdoptionIndicator"][];
+                /**
+                 * @description El reparto de los fichajes **aceptados** del periodo por origen,
+                 *     con los cuatro origenes siempre presentes y en el mismo orden. Las
+                 *     cuotas **suman 100** leidas con sus dos decimales: el residuo del
+                 *     redondeo se absorbe en el origen mayor, porque un rosco cuyas
+                 *     porciones suman 99,9 se lee como un dato perdido. (Sumarlas en
+                 *     coma flotante puede dar 99,99999999999999; esa ultima cifra no
+                 *     existe en ningun sitio donde alguien la vea.)
+                 *
+                 *     Sin ningun fichaje aceptado en el periodo, las cuatro cuotas son
+                 *     `null` y no `0`: no hay denominador con el que repartir.
+                 */
+                origin_breakdown: components["schemas"]["AdoptionOriginShare"][];
+            };
+            meta: {
+                /**
+                 * Format: date-time
+                 * @description Instante de generacion, en **UTC** (regla dura 3). La zona del centro va aparte.
+                 */
+                generated_at: string;
+                time_zone: components["schemas"]["TimeZoneName"];
+                period: components["schemas"]["AdoptionPeriod"];
+                previous_period: components["schemas"]["AdoptionPeriod"];
+                /**
+                 * @description Que se ha contado y que no, en frases llanas y **ya traducidas al
+                 *     idioma de la instalacion**. Van en la respuesta y no en un manual
+                 *     por lo mismo que en el informe por periodo: un indicador cuyo
+                 *     criterio no se ve es un numero que cada persona interpreta a su
+                 *     manera, y esa interpretacion acaba discutiendose en una reunion.
+                 */
+                criteria: string[];
+            };
+        };
+        /**
+         * AdoptionPeriod
+         * @description Un periodo del cuadro, en **fechas civiles** de la zona del centro.
+         *
+         *     `days` viaja resuelto y no se deduce restando fechas: el cliente no tiene
+         *     que reimplementar «inclusive por los dos extremos», y es lo que hace
+         *     evidente que los dos periodos del cuadro tienen la misma anchura.
+         */
+        AdoptionPeriod: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            days: number;
+        };
+        /**
+         * AdoptionIndicator
+         * @description Un indicador del cuadro con su valor, su comparacion y su objetivo.
+         *
+         *     **`current`, `previous` y `delta` pueden ser nulos, y el nulo significa «no
+         *     se sabe»**, nunca cero. Sin denominador no hay porcentaje: una instalacion
+         *     que arranco a mitad del periodo anterior no tuvo «0 % de jornadas
+         *     completas», no tuvo jornadas.
+         */
+        AdoptionIndicator: {
+            key: components["schemas"]["AdoptionIndicatorKey"];
+            unit: components["schemas"]["AdoptionIndicatorUnit"];
+            /**
+             * @description Valor del periodo pedido. En `percent`, de 0 a 100 con dos decimales;
+             *     en `minutes` y `count`, entero.
+             */
+            current: number | null;
+            /**
+             * @description El mismo valor en el periodo anterior, o `null` cuando aquel no tiene
+             *     denominador o el indicador no admite comparacion por definicion (ver la
+             *     descripcion del endpoint).
+             */
+            previous: number | null;
+            /**
+             * @description `current − previous`, **con signo**, en la misma unidad: puntos
+             *     porcentuales en `percent`, minutos en `minutes`, unidades en `count`.
+             *     `null` exactamente cuando `previous` o `current` lo son.
+             *
+             *     No es una variacion relativa a proposito: «ha subido 2,3 puntos» es una
+             *     frase que se puede comprobar sumando, y «ha mejorado un 2,4 %» sobre un
+             *     porcentaje es la forma habitual de que dos personas entiendan dos cosas
+             *     distintas.
+             */
+            delta: number | null;
+            /**
+             * @description El objetivo a tres meses de produccion del §1.3, o `null` para los
+             *     indicadores que no tienen ninguno. **No es un umbral configurable ni una
+             *     regla de negocio**: es la ambicion declarada del producto, y por eso
+             *     viaja en la respuesta en lugar de estar escrita en la pantalla.
+             */
+            target: components["schemas"]["AdoptionTarget"] | null;
+        };
+        /**
+         * AdoptionIndicatorKey
+         * @description Que indicador es. Clave estable: el rotulo que lo acompaña en la pantalla
+         *     sale de `i18n` del cliente y puede cambiar sin que esto cambie.
+         * @example workdays_complete_ratio
+         * @enum {string}
+         */
+        AdoptionIndicatorKey: "workdays_complete_ratio" | "qr_scans_ratio" | "manual_corrections_ratio" | "clocking_availability_ratio" | "offline_resolved_ratio" | "incident_resolution_mean_minutes" | "incident_resolution_median_minutes" | "open_incidents" | "employees_without_credential" | "worked_minutes" | "contracted_minutes" | "baseline_manual_minutes_per_month";
+        /**
+         * AdoptionIndicatorUnit
+         * @description En que esta expresado el indicador.
+         *
+         *     **`minutes` y no horas decimales**, por lo mismo que en el informe por
+         *     periodo: los minutos son enteros y suman; `8,25 h` no. Quien lo enseña a una
+         *     persona lo escribe `HH:MM`, y eso es lo que hace la exportacion.
+         * @example percent
+         * @enum {string}
+         */
+        AdoptionIndicatorUnit: "percent" | "minutes" | "count";
+        /**
+         * AdoptionTarget
+         * @description El objetivo del §1.3 de un indicador, en la **misma unidad** que el
+         *     indicador salvo en `reduction`, que es un porcentaje de mejora sobre la
+         *     linea base declarada.
+         * @example {
+         *       "comparison": "at_least",
+         *       "value": 99
+         *     }
+         */
+        AdoptionTarget: {
+            /**
+             * @description - **`at_least`** — el indicador cumple si `current >= value`
+             *       (jornadas completas, fichajes por QR, disponibilidad).
+             *     - **`at_most`** — cumple si `current < value`, **estrictamente**
+             *       (correcciones, tiempo de resolucion). El §1.3 del documento 01 los
+             *       escribe asi —«< 2 %», «< 24 h»—, asi que el valor clavado NO cumple:
+             *       veinticuatro horas exactas para resolver un turno sin cerrar no es
+             *       cumplir el objetivo de detectarlo pronto.
+             *     - **`reduction`** — `value` es el **porcentaje de reduccion** que se
+             *       busca sobre `current`, que aqui es la linea base declarada por el
+             *       cliente. El producto **no puede medir si se ha conseguido**: no
+             *       observa el trabajo que se hacia antes de instalarlo, y por eso lo
+             *       presenta como referencia y no como un cumplido o incumplido.
+             * @enum {string}
+             */
+            comparison: "at_least" | "at_most" | "reduction";
+            /** @description El umbral, en la unidad del indicador (o en puntos porcentuales con `reduction`). */
+            value: number;
+        };
+        /**
+         * AdoptionOriginShare
+         * @description Cuantos fichajes aceptados del periodo vinieron de un origen, y que cuota representan.
+         */
+        AdoptionOriginShare: {
+            origin: components["schemas"]["ClockingSource"];
+            /** @description Fichajes **aceptados** con ese origen. Un escaneo rechazado no es un fichaje. */
+            scans: number;
+            /**
+             * @description Cuota sobre el total de aceptados, de 0 a 100 con dos decimales. `null`
+             *     cuando el periodo no tuvo ningun fichaje aceptado, nunca `0` en ese
+             *     caso: «nadie ficho» y «nadie ficho por tarjeta» son afirmaciones
+             *     distintas.
+             */
+            share: number | null;
+        };
+        /**
          * ReportGranularity
          * @description Grano de agrupacion del informe por periodo (RF-IN-01).
          *
@@ -11043,6 +11416,53 @@ export interface components {
          * @example 2026-03-31
          */
         WorkDateTo: string;
+        /**
+         * @description Primera **jornada** del cuadro de impacto, inclusive: una fecha civil en la
+         *     zona del centro, no un instante (RN-05, regla dura 4).
+         *
+         *     **Sin `from` ni `to` se toma el mes natural anterior completo**, resuelto
+         *     en la zona del centro (ADR-040), que es la unica que decide en que mes vive
+         *     esa plantilla. Es el periodo cerrado del que se habla en una reunion: el
+         *     mes en curso daria un cuadro que cambia cada dia y cuyos porcentajes
+         *     dependen de la hora a la que se mire.
+         *
+         *     Si se da solo una de las dos, la otra se completa con el mismo criterio:
+         *     `from` sin `to` llega hasta hoy, y `to` sin `from` empieza el dia 1 de su
+         *     mes.
+         *
+         *     El rango no puede superar 366 dias (`DateRange::MAXIMUM_DAYS`): por encima
+         *     responde `422` con `urn:kronoqr:problem:report-too-large`.
+         * @example 2026-03-01
+         */
+        AdoptionFrom: string;
+        /**
+         * @description Ultima jornada del cuadro, inclusive. Ver `from` para la omision: las dos
+         *     se resuelven juntas y en la zona del centro.
+         *
+         *     **El periodo anterior se deriva de estas dos y no se pide**: es el mismo
+         *     numero de dias inmediatamente antes de `from`, y viaja resuelto en
+         *     `meta.previous_period` para que el cliente no tenga que calcularlo.
+         * @example 2026-03-31
+         */
+        AdoptionTo: string;
+        /**
+         * @description Formato del fichero del cuadro. **Los tres**, al contrario que la salida a
+         *     nomina: este documento lo abre y lo imprime una persona, no lo importa un
+         *     programa, asi que el PDF sellado es aqui el formato mas util de los tres —es
+         *     el que se adjunta a una renovacion de licencia—.
+         *
+         *     - **`csv`** — con el bloque de criterios visible antes de la tabla y el
+         *       separador que corresponde al idioma de la instalacion.
+         *     - **`xlsx`** — dos hojas, la de indicadores y la de criterios, con todas las
+         *       celdas como texto para que `81:00` no se convierta en una hora del reloj.
+         *     - **`pdf`** — sellado, con la marca de la instalacion y el pie con emisor,
+         *       periodo y huella en cada pagina.
+         *
+         *     **Sin valor por omision**: quien pulsa un boton de descarga ya ha elegido
+         *     formato, y suponer CSV seria decidir por el.
+         * @example pdf
+         */
+        AdoptionExportFormat: "csv" | "xlsx" | "pdf";
         /**
          * @description Primera **jornada** del informe, inclusive. Es una fecha civil en la zona
          *     del centro, no un instante: agrupar por jornada y no por la hora de las
@@ -14025,6 +14445,215 @@ export interface operations {
              *     **Los dos casos se distinguen por el `type`**: `…validation-failed` si
              *     la peticion es invalida y `urn:kronoqr:problem:report-too-large` si el
              *     informe no cabe. Mismo cuerpo, distinta accion.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdoptionReport: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Primera **jornada** del cuadro de impacto, inclusive: una fecha civil en la
+                 *     zona del centro, no un instante (RN-05, regla dura 4).
+                 *
+                 *     **Sin `from` ni `to` se toma el mes natural anterior completo**, resuelto
+                 *     en la zona del centro (ADR-040), que es la unica que decide en que mes vive
+                 *     esa plantilla. Es el periodo cerrado del que se habla en una reunion: el
+                 *     mes en curso daria un cuadro que cambia cada dia y cuyos porcentajes
+                 *     dependen de la hora a la que se mire.
+                 *
+                 *     Si se da solo una de las dos, la otra se completa con el mismo criterio:
+                 *     `from` sin `to` llega hasta hoy, y `to` sin `from` empieza el dia 1 de su
+                 *     mes.
+                 *
+                 *     El rango no puede superar 366 dias (`DateRange::MAXIMUM_DAYS`): por encima
+                 *     responde `422` con `urn:kronoqr:problem:report-too-large`.
+                 * @example 2026-03-01
+                 */
+                from?: components["parameters"]["AdoptionFrom"];
+                /**
+                 * @description Ultima jornada del cuadro, inclusive. Ver `from` para la omision: las dos
+                 *     se resuelven juntas y en la zona del centro.
+                 *
+                 *     **El periodo anterior se deriva de estas dos y no se pide**: es el mismo
+                 *     numero de dias inmediatamente antes de `from`, y viaja resuelto en
+                 *     `meta.previous_period` para que el cliente no tenga que calcularlo.
+                 * @example 2026-03-31
+                 */
+                to?: components["parameters"]["AdoptionTo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Los doce indicadores en el orden en el que se leen, el reparto de
+             *     fichajes por origen y los criterios con los que se ha medido.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdoptionReport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["FeatureNotLicensed"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description La instalacion todavia no tiene centro configurado, asi que no hay
+             *     zona horaria en la que resolver «el mes anterior» ni las jornadas
+             *     (RF-PD-03, ADR-040).
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description La peticion no es valida —fechas mal formadas, rango invertido— **o**
+             *     el rango supera el techo de `DateRange::MAXIMUM_DAYS` (366 dias).
+             *
+             *     **Los dos casos se distinguen por el `type`**:
+             *     `urn:kronoqr:problem:validation-failed` el primero y
+             *     `urn:kronoqr:problem:report-too-large` el segundo. **Este cuadro no
+             *     tiene generacion en diferido**, asi que ante el segundo la unica
+             *     salida es acortar el rango.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    exportAdoptionReport: {
+        parameters: {
+            query: {
+                /**
+                 * @description Formato del fichero del cuadro. **Los tres**, al contrario que la salida a
+                 *     nomina: este documento lo abre y lo imprime una persona, no lo importa un
+                 *     programa, asi que el PDF sellado es aqui el formato mas util de los tres —es
+                 *     el que se adjunta a una renovacion de licencia—.
+                 *
+                 *     - **`csv`** — con el bloque de criterios visible antes de la tabla y el
+                 *       separador que corresponde al idioma de la instalacion.
+                 *     - **`xlsx`** — dos hojas, la de indicadores y la de criterios, con todas las
+                 *       celdas como texto para que `81:00` no se convierta en una hora del reloj.
+                 *     - **`pdf`** — sellado, con la marca de la instalacion y el pie con emisor,
+                 *       periodo y huella en cada pagina.
+                 *
+                 *     **Sin valor por omision**: quien pulsa un boton de descarga ya ha elegido
+                 *     formato, y suponer CSV seria decidir por el.
+                 * @example pdf
+                 */
+                format: components["parameters"]["AdoptionExportFormat"];
+                /**
+                 * @description Primera **jornada** del cuadro de impacto, inclusive: una fecha civil en la
+                 *     zona del centro, no un instante (RN-05, regla dura 4).
+                 *
+                 *     **Sin `from` ni `to` se toma el mes natural anterior completo**, resuelto
+                 *     en la zona del centro (ADR-040), que es la unica que decide en que mes vive
+                 *     esa plantilla. Es el periodo cerrado del que se habla en una reunion: el
+                 *     mes en curso daria un cuadro que cambia cada dia y cuyos porcentajes
+                 *     dependen de la hora a la que se mire.
+                 *
+                 *     Si se da solo una de las dos, la otra se completa con el mismo criterio:
+                 *     `from` sin `to` llega hasta hoy, y `to` sin `from` empieza el dia 1 de su
+                 *     mes.
+                 *
+                 *     El rango no puede superar 366 dias (`DateRange::MAXIMUM_DAYS`): por encima
+                 *     responde `422` con `urn:kronoqr:problem:report-too-large`.
+                 * @example 2026-03-01
+                 */
+                from?: components["parameters"]["AdoptionFrom"];
+                /**
+                 * @description Ultima jornada del cuadro, inclusive. Ver `from` para la omision: las dos
+                 *     se resuelven juntas y en la zona del centro.
+                 *
+                 *     **El periodo anterior se deriva de estas dos y no se pide**: es el mismo
+                 *     numero de dias inmediatamente antes de `from`, y viaja resuelto en
+                 *     `meta.previous_period` para que el cliente no tenga que calcularlo.
+                 * @example 2026-03-31
+                 */
+                to?: components["parameters"]["AdoptionTo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description El fichero, con el bloque de criterios visible dentro y el sello en el pie del PDF. */
+            200: {
+                headers: {
+                    /**
+                     * @description Adjunto, con un nombre que solo lleva el concepto y el periodo:
+                     *     aqui no hay ningun dato personal que ocultar, y aun asi el criterio
+                     *     es el mismo que en los demas informes (regla dura 21).
+                     */
+                    "Content-Disposition"?: string;
+                    /** @description `no-store, private`, como el resto de las descargas de informes. */
+                    "Cache-Control"?: string;
+                    /** @description Huella SHA-256 del **contenido** del cuadro, igual en los tres formatos. */
+                    "X-Kronoqr-Report-Digest"?: string;
+                    /**
+                     * @description Filas de datos del fichero, sin contar la cabecera ni el bloque de criterios.
+                     * @example 12
+                     */
+                    "X-Kronoqr-Report-Rows"?: number;
+                    /**
+                     * @description Los criterios de inclusion ya traducidos al idioma de la
+                     *     instalacion, unidos por `\n` y codificados en **base64 de UTF-8**:
+                     *     una cabecera HTTP no admite ni acentos ni saltos de linea, y los
+                     *     criterios llevan los dos.
+                     *
+                     *     Van **ademas** dentro del fichero, al contrario que en la salida a
+                     *     nomina: este documento lo abre una persona.
+                     */
+                    "X-Kronoqr-Export-Criteria"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "application/pdf": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            402: components["responses"]["FeatureNotLicensed"];
+            403: components["responses"]["Forbidden"];
+            /** @description La instalacion todavia no tiene centro configurado (RF-PD-03, ADR-040). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Formato desconocido, fechas mal formadas o rango invertido
+             *     (`urn:kronoqr:problem:validation-failed`), **o** rango por encima de
+             *     366 dias (`urn:kronoqr:problem:report-too-large`).
              */
             422: {
                 headers: {

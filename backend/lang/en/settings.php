@@ -57,11 +57,15 @@ return [
         'ATTENDANCE_MIN_TRANSIT_SECONDS' => 'minimum transit time between two kiosks (seconds)',
         'ATTENDANCE_PATTERN_WINDOW_SECONDS' => 'coincidence window at the same kiosk (seconds)',
         'ATTENDANCE_PATTERN_MIN_REPEATS' => 'days with a coincidence before raising an incident',
+        /* Break clocking (RF-AT-12, task 3.5). */
+        'ATTENDANCE_BREAK_CLOCKING' => 'break clocking at the kiosk',
         'BRANDING_APP_NAME' => 'application name',
         'BRANDING_LOGO_PATH' => 'logo path on the server',
         'BRANDING_ACCENT_COLOR' => 'accent colour',
         'LOCALE_DEFAULT' => 'default language',
         'LOCALE_AVAILABLE' => 'available languages',
+        /* The service code of the kiosk diagnostics screen (RF-KI-08, task 3.3). */
+        'KIOSK_SERVICE_CODE' => 'kiosk service code',
         /* Payroll export (RF-IN-07, task 3.9). */
         'PAYROLL_EXPORT_COLUMNS' => 'payroll file columns',
         'PAYROLL_EXPORT_DELIMITER' => 'payroll file delimiter',
@@ -74,6 +78,8 @@ return [
         /* The kiosk update window (RF-KI-07, task 3.12). */
         'KIOSK_UPDATE_WINDOW' => 'window in which the tablet may update (HH:MM-HH:MM, local time)',
         'KIOSK_UPDATE_QUIET_MINUTES' => 'minutes without scans before updating the tablet',
+        /* The impact dashboard baseline (RF-IN-08, task 3.13). */
+        'BASELINE_MANUAL_HOURS_PER_MONTH' => 'hours per month consolidating timesheets before the system was installed',
     ],
 
 ];

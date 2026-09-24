@@ -13,6 +13,7 @@
       "live": "Presence",
       "incidents": "Incidents",
       "reports": "Reports",
+      "adoptionDashboard": "Impact and adoption",
       "payrollExport": "Payroll",
       "compliance": "Compliance",
       "complianceProfile": "Compliance profile",
@@ -622,6 +623,13 @@
       "previewCaption": "What changes on this entry"
     }
   },
+  "chartWithTable": {
+    "viewAsTable": "View as table",
+    "viewAsChart": "View as chart",
+    "unavailable": "The chart is not available in this browser. The same data is still in the table.",
+    "category": "Category",
+    "noData": "No data"
+  },
   "reports": {
     "legalExport": {
       "heading": "Export for the Labour Inspectorate",
@@ -703,6 +711,99 @@
         "requesting": "Requesting the generation…",
         "requested": "Export requested. It will appear in the background exports block as soon as it starts processing.",
         "seeExports": "See the background exports"
+      }
+    },
+    "adoption": {
+      "title": "Impact and adoption",
+      "subtitle": "What the system is achieving, compared against the previous period: how much is fully recorded, how people clock in, how much is corrected by hand, and how long it takes to resolve an incident. This is the dashboard that answers «is this working?» with data.",
+      "loading": "Calculating the dashboard…",
+      "generate": "Calculate",
+      "filters": {
+        "legend": "Dashboard period",
+        "from": "From",
+        "to": "To"
+      },
+      "generatedAt": "Calculated at {at} · site time zone: {zone}",
+      "previousPeriod": "Previous comparison period: {from} — {to}",
+      "noPreviousComparable": "No comparable previous period.",
+      "deltaPercentagePoints": "{value} pp",
+      "licenseRequired": "The impact and adoption dashboard is not included in your current licence.",
+      "rangeTooLarge": "This period does not fit in an immediate response (maximum 366 days) and the impact dashboard has no background generation. Try a shorter range.",
+      "status": {
+        "within": "Within target",
+        "outside": "Outside target"
+      },
+      "noData": "No data for this period",
+      "target": {
+        "atLeast": "Target: ≥ {target}",
+        "atMost": "Target: ≤ {target}",
+        "reduction": "Reference target: −{value}% (not verifiable: the system did not measure the previous process)"
+      },
+      "indicators": {
+        "workdays_complete_ratio": {
+          "label": "Fully recorded working days",
+          "help": "Percentage of working days in the period with at least one shift entry where every shift entry is closed."
+        },
+        "qr_scans_ratio": {
+          "label": "Clock-ins by QR",
+          "help": "Percentage of accepted clock-ins in the period that came in by QR card at the kiosk."
+        },
+        "manual_corrections_ratio": {
+          "label": "Corrections over the total",
+          "help": "Manual corrections created in the period, over the total accepted clock-ins in the same period."
+        },
+        "clocking_availability_ratio": {
+          "label": "Clock-in flow availability",
+          "help": "Attended clock-ins over attended plus attempts the kiosk could not process, including those resolved by the offline queue. Not the API's uptime."
+        },
+        "incident_resolution_mean_minutes": {
+          "label": "Average time to resolve an unclosed shift",
+          "help": "Average minutes between detection and resolution of unclosed-shift incidents resolved in the period."
+        },
+        "baseline_manual_minutes_per_month": {
+          "label": "Hours per month consolidating timesheets",
+          "help": "What the customer declared it used to cost to consolidate timesheets by hand, before the system."
+        }
+      },
+      "duration": "{hours} h {minutes} min",
+      "medianResolution": "Median: {hours}",
+      "originHeading": "Clock-in breakdown by origin",
+      "originVsPreviousHeading": "Clock-ins by origin: current period vs. previous",
+      "origin": {
+        "qr_kiosk": "QR at kiosk",
+        "pin_kiosk": "PIN at kiosk",
+        "manual_admin": "Manual correction",
+        "import": "Import"
+      },
+      "currentSeries": "Current period",
+      "previousSeries": "Previous period",
+      "incidentsHeading": "Incidents",
+      "incidentsOpen": "Incidents open today",
+      "openShiftFoto": "Today's snapshot, not compared with the previous period.",
+      "credentialsHeading": "Credentials",
+      "employeesWithoutCredential": "Employees without a delivered credential",
+      "hoursHeading": "Worked hours vs. contracted hours",
+      "workedHours": "Worked",
+      "contractedHours": "Contracted",
+      "availabilityOffline": "Of which, resolved without the server (offline queue)",
+      "baselineDeclared": "Baseline declared by the customer before having the system.",
+      "baselineNotDeclared": "Not declared: set it in «Settings → Operational settings».",
+      "criteria": {
+        "title": "Criteria for this dashboard",
+        "generated": "Calculated at {at} · site time zone: {timeZone}"
+      },
+      "export": {
+        "label": "Export this dashboard:",
+        "running": "Preparing the {format} download…",
+        "done": "{format} download ready.",
+        "failed": "The dashboard could not be downloaded."
+      },
+      "announce": {
+        "results": "The impact and adoption dashboard has been calculated."
+      },
+      "empty": {
+        "title": "There is nothing to show for that period",
+        "description": "There are no clock-ins or working days within your scope on the chosen dates. Try another period."
       }
     },
     "table": {
@@ -1343,6 +1444,7 @@
     "weeklySummaryHeading": "Weekly summary",
     "diagnosticsHeading": "Diagnostics",
     "kioskHeading": "Kiosk",
+    "adoptionHeading": "Impact dashboard",
     "localesHeading": "Languages",
     "payrollHeading": "Payroll export",
     "payrollIntro": "The format of the file that «Payroll» exports (RF-IN-07): which columns it carries, in which order, with which delimiter, and how hours and dates are written. A customer with a different payroll tool changes this, not the product.",
@@ -1358,6 +1460,7 @@
       "weeklySummaryEmail": "Weekly summary by email",
       "kioskUpdateWindow": "Kiosk update window",
       "kioskUpdateQuietMinutes": "Minutes with no scans before updating",
+      "baselineManualHoursPerMonth": "Hours per month consolidating timesheets before the system",
       "localeDefault": "Default language",
       "localeAvailable": "Available languages",
       "payrollColumns": "File columns",
@@ -1380,6 +1483,7 @@
       "weeklySummaryEmail": "Enabled: every Monday at 06:00 UTC, every active department manager with an email address receives the previous week for their own scope and nobody else's: hours worked, contracted and deviation, days with activity, absences and holidays. It requires the site's outgoing email to be configured and the feature to be included in the licence; without either, the send is skipped without an error.",
       "kioskUpdateWindow": "Slot in which the tablet is allowed to install a new version. Outside it, it never updates, even if the version has been waiting for days; inside it, it only does so if the clocking queue is also empty and there has been no recent scan. Format HH:MM-HH:MM; it can cross midnight (for example 23:00-02:00).",
       "kioskUpdateQuietMinutes": "Minutes without a single clocking that the tablet demands, on top of being inside the window and having an empty queue, before updating. It covers the shift that starts earlier than planned; 0 leaves only the other two conditions. Accepted range: {minimum}–{maximum} minutes.",
+      "baselineManualHoursPerMonth": "For the impact dashboard (RF-IN-08): how much time per month was spent consolidating timesheets before having the system. It is the baseline used to show the reduction against the −80% target. 0 = not declared: the dashboard leaves the indicator empty instead of inventing an improvement.",
       "localeDefault": "The language the three applications and the documents are served in when nobody picks another. It has to be among the available languages.",
       "localeAvailable": "Languages this installation offers. At least one, and the default language always has to stay checked.",
       "payrollColumns": "One column per line, in the order they appear in the file. Each line is either the identifier as-is (for example «worked_hours») or the identifier followed by «=» and the header label you want (for example «worked_hours=Worked hours»). An identifier that is not in the catalogue below is rejected when saving.",

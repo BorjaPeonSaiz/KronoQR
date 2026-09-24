@@ -118,6 +118,17 @@ final class UpdateSettingsRequest extends FormRequest
         // Y apagarla tampoco: dejaria sin un aviso que el hotel decidio tener,
         // en silencio y desde fuera.
         SettingKey::WEEKLY_SUMMARY_EMAIL->value,
+        // RF-IN-08 (tarea 3.13): es el DENOMINADOR DECLARADO del objetivo comercial
+        // «−80 % de carga administrativa» del §1.3, y describe el proceso manual del
+        // hotel **anterior a la instalacion**, que el sistema no puede medir ni
+        // comprobar.
+        //
+        // Quien mantiene el producto tiene interes en el resultado: subirla mejora el
+        // cuadro con el que se argumenta una renovacion, y bajarla lo empeora, sin
+        // que nada en los datos cambie. Es exactamente la clase de dato que ADR-020
+        // y la regla dura 16 reservan al cliente — con el agravante de que aqui el
+        // fabricante no la estaria interpretando, la estaria escribiendo.
+        SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH->value,
     ];
 
     public function authorize(): bool
@@ -166,7 +177,7 @@ final class UpdateSettingsRequest extends FormRequest
 
     /**
      * Si el cuerpo pretende cambiar alguna clave **reservada al cliente**
-     * (RF-AT-12, RF-PR-05).
+     * (RF-AT-12, RF-PR-05, RF-IN-08).
      *
      * Lista explicita y no una propiedad del catalogo, a diferencia de
      * `confidential`. No es pereza: las tres alternativas mienten.
@@ -177,7 +188,7 @@ final class UpdateSettingsRequest extends FormRequest
      * `SettingImpact::DATA_DISCLOSURE` ataria «quien puede cambiarla» a «que
      * consecuencia tiene», que son dos preguntas distintas.
      *
-     * Con dos claves la lista sigue siendo mas honesta que una regla; si llegara
+     * Con tres claves la lista sigue siendo mas honesta que una regla; si llegara
      * a haber cinco, habra ganado el derecho a ser una propiedad del dominio.
      */
     private function touchesCustomerReservedKey(): bool

@@ -521,11 +521,49 @@ it('no deja que un actor de soporte encienda ni apague el resumen semanal por co
     'diagnostico' => [SupportScope::Diagnostics],
 ])->group('RF-ID-02', 'RS-05', 'RF-PD-11', 'RF-PR-05');
 
+it('no deja que un actor de soporte declare la linea base del cuadro de impacto', function (SupportScope $alcance): void {
+    // RF-IN-08, RF-PD-11, ADR-020 y regla dura 16 (decision 19 de la ficha 3.13).
+    //
+    // ES LA TERCERA CLAVE RESERVADA AL CLIENTE, Y LA UNICA EN LA QUE EL FABRICANTE
+    // TIENE INTERES PROPIO. Las otras dos le niegan una potestad sobre el hotel:
+    // decidir de que responde ante una inspeccion y si los datos de su gente salen
+    // por correo. Esta le niega un CONFLICTO DE INTERES.
+    //
+    // `BASELINE_MANUAL_HOURS_PER_MONTH` son las horas al mes que el hotel dedicaba a
+    // consolidar hojas de horas ANTES de instalar KronoQR: el denominador del
+    // objetivo «−80 % de carga administrativa» del §1.3. Nadie puede comprobarla
+    // contra ningun dato del sistema —describe un proceso que ya no existe—, y
+    // subirla mejora el cuadro con el que se argumenta una renovacion de licencia.
+    // Quien mantiene el producto no escribe la cifra con la que se le juzga.
+    $token = SupportGrants::tokenFor($alcance);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => ['BASELINE_MANUAL_HOURS_PER_MONTH' => 120]])
+        ->assertStatus(403);
+
+    // Ni mezclada con una clave que si puede tocar: la peticion entera cae, y no se
+    // escribe ninguna de las dos.
+    Api::as($token)
+        ->patch('/api/v1/settings', [
+            'settings' => [
+                'ATTENDANCE_DEBOUNCE_SECONDS' => 90,
+                'BASELINE_MANUAL_HOURS_PER_MONTH' => 120,
+            ],
+        ])
+        ->assertStatus(403);
+
+    expect(DB::table('installation_settings')->where('key', 'BASELINE_MANUAL_HOURS_PER_MONTH')->exists())->toBeFalse()
+        ->and(DB::table('installation_settings')->where('key', 'ATTENDANCE_DEBOUNCE_SECONDS')->exists())->toBeFalse();
+})->with([
+    'configuracion' => [SupportScope::Configuration],
+    'diagnostico' => [SupportScope::Diagnostics],
+])->group('RF-ID-02', 'RS-05', 'RF-PD-11', 'RF-IN-08');
+
 it('el actor de soporte sigue pudiendo ajustar los umbrales operativos que si son suyos', function (): void {
     // La otra mitad, y la que impide que la puerta se convierta en «soporte no
     // toca nada»: el alcance `configuration` existe para que el fabricante pueda
     // ajustar la instalacion mientras diagnostica (RF-PD-11). Lo que se le niega
-    // son las dos claves reservadas al cliente, no la configuracion entera.
+    // son las tres claves reservadas al cliente, no la configuracion entera.
     $token = SupportGrants::tokenFor(SupportScope::Configuration);
 
     Api::as($token)

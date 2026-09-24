@@ -99,4 +99,35 @@ final class ReportTooLargeForSynchronousDelivery extends DomainException
             .$maximumDays.'. Reduce el rango.',
         );
     }
+
+    /**
+     * El rango pedido al cuadro de impacto supera lo que se entrega en el acto
+     * (RF-IN-08, tarea 3.13).
+     *
+     * Factoria propia por lo mismo que las dos de la vista de cumplimiento: el
+     * cuadro **no tiene generacion en diferido** —son doce filas por mucho volumen
+     * que haya detras, asi que una cola no resolveria nada— y ofrecer una salida
+     * que no existe es peor que no ofrecer ninguna, porque quien la lee se va a
+     * buscarla.
+     */
+    public static function adoptionRangeTooWide(int $days, int $maximumDays): self
+    {
+        return new self(
+            'El cuadro de impacto abarca '.$days.' dias y el maximo que se entrega en el acto es '
+            .$maximumDays.'. Reduce el rango.',
+        );
+    }
+
+    /**
+     * La consulta de hechos del cuadro de impacto agoto su `statement_timeout`.
+     *
+     * Misma razon que arriba para no reutilizar {@see self::timedOut()}.
+     */
+    public static function adoptionTimedOut(int $timeoutSeconds): self
+    {
+        return new self(
+            'El cuadro de impacto ha superado los '.$timeoutSeconds.' segundos y se ha cancelado. '
+            .'Reduce el rango.',
+        );
+    }
 }

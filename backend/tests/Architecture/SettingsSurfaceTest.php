@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use Tests\Architecture\Support\ClientDocs;
+use Tests\Architecture\Support\Repo;
 use Tests\Architecture\Support\SettingsSurface;
 
 /*
@@ -148,3 +149,51 @@ it('dice en la guia por donde se cambia cada clave de installation_settings', fu
 })->with('el catalogo de configuracion en las dos lenguas')
     ->with('las claves de installation_settings')
     ->group('RF-PD-01', 'RF-PD-02');
+
+it('rotula cada clave de installation_settings en los dos idiomas del producto', function (string $locale, SettingKey $key): void {
+    /*
+     * EL TERCER LADO DE LA MISMA COSTURA (decision 21 de la ficha 3.13).
+     *
+     * Las dos pruebas de arriba comprueban que la clave tiene pantalla y que la guia
+     * dice cual. Esta comprueba que, cuando el valor es invalido, **el `422` se lee**:
+     * `settings.attributes.<KEY>` es el nombre con el que Laravel compone el mensaje
+     * de validacion, y sin traduccion el panel enseña literalmente
+     * «settings.attributes.BASELINE_MANUAL_HOURS_PER_MONTH debe estar entre 0 y
+     * 10000» a quien acaba de teclear un numero.
+     *
+     * Se descubrio con la clave de la 3.13 y destapo dos huecos heredados
+     * —`ATTENDANCE_BREAK_CLOCKING` (3.5) y `KIOSK_SERVICE_CODE` (3.3)—, que es
+     * exactamente lo que se espera de una convencion cuando por fin la mira una
+     * herramienta: «una convencion que no verifica una herramienta es una
+     * sugerencia» (CLAUDE.md).
+     *
+     * LOS DOS IDIOMAS, no solo el de serie: el producto se vende con `es` y `en`
+     * activos (ADR-017) y un `422` en ingles con una clave suelta dentro es igual de
+     * roto que en castellano.
+     */
+    // `Repo::file()` y no `base_path()`: esta suite NO arranca la aplicacion —son
+    // pruebas de arquitectura sobre ficheros—, asi que el contenedor de Laravel no
+    // esta resuelto y `base_path()` revienta. La raiz se reconoce por su marca.
+    $labels = require Repo::file('backend/lang/'.$locale.'/settings.php');
+
+    expect($labels)->toHaveKey('attributes');
+
+    $attributes = is_array($labels['attributes'] ?? null) ? $labels['attributes'] : [];
+
+    // `array_key_exists` y no `toHaveKey()`: el segundo argumento de aquel es el
+    // VALOR esperado, no el mensaje de fallo, y usarlo asi comparaba el rotulo
+    // contra la explicacion del error.
+    expect(array_key_exists($key->value, $attributes))->toBeTrue(
+        'Falta «settings.attributes.'.$key->value.'» en lang/'.$locale.'/settings.php: el 422 por '
+        .'un valor invalido enseñaria la clave de traduccion en lugar del nombre del ajuste.'
+    );
+
+    $label = $attributes[$key->value] ?? '';
+
+    expect(is_string($label) && trim($label) !== '')->toBeTrue(
+        'El rotulo de '.$key->value.' en lang/'.$locale.'/settings.php esta vacio.'
+    );
+})->with([
+    'es' => ['es'],
+    'en' => ['en'],
+])->with('las claves de installation_settings')->group('RF-PD-01', 'RF-PD-02');

@@ -105,6 +105,47 @@ return [
     ],
 
     /*
+     * CUADRO DE IMPACTO Y ADOPCION (RF-IN-08, RNF-D-01, tarea 3.13).
+     *
+     * Los dos son presupuestos de RECURSOS. LOS OBJETIVOS DEL §1.3 NO ESTAN AQUI
+     * —«≥ 99 % de jornadas completas», «≥ 99,9 % de disponibilidad»— y no pueden
+     * estarlo: son la ambicion declarada del producto, la misma para todos los
+     * clientes, y viven en `AdoptionIndicatorKey::target()`. Ni la linea base de
+     * horas/mes, que es un dato que declara cada cliente y vive en
+     * `installation_settings` (`BASELINE_MANUAL_HOURS_PER_MONTH`).
+     */
+    'adoption' => [
+
+        /*
+         * Techo del rango que se entrega en el acto, en dias.
+         *
+         * **Un año, y no los tres meses de sus dos hermanas.** La diferencia es
+         * deliberada: aquellas producen una fila por persona y dia —o por persona y
+         * jornada—, asi que el rango es proporcional al tamaño de la respuesta.
+         * Este cuadro devuelve **doce indicadores y cuatro origenes** por mucho
+         * volumen que haya detras, y el caso ancho real es «el año pasado
+         * completo», que es exactamente la pregunta con la que se renueva una
+         * licencia.
+         *
+         * Coincide con `DateRange::MAXIMUM_DAYS` (366) a proposito: por encima no
+         * hay rango que construir, asi que subirlo en el `.env` no daria mas
+         * alcance, solo un error distinto.
+         */
+        'max_range_days' => (int) env('REPORTING_ADOPTION_MAX_RANGE_DAYS', 366),
+
+        /*
+         * `statement_timeout` de la consulta de hechos, en segundos.
+         *
+         * Diez, como las otras dos, y por lo mismo: la consulta corre contra la
+         * base de datos por la que pasa cada fichaje (ADR-010, RNF-P-02, regla dura
+         * 19), asi que quien la corta tiene que ser PostgreSQL —que libera la
+         * conexion— y no un cronometro en PHP. La cancelacion sale como `422`, con
+         * el mismo consejo que el techo de rango: acortar el periodo.
+         */
+        'statement_timeout_seconds' => (int) env('REPORTING_ADOPTION_TIMEOUT_SECONDS', 10),
+    ],
+
+    /*
      * INFORMES EN DIFERIDO (RF-IN-06, RF-IN-07, ADR-041, tarea 3.9).
      *
      * Los seis son presupuestos de RECURSOS y plazos de RETENCION, nunca reglas

@@ -90,4 +90,26 @@ final readonly class PeriodReport
             $this->rows,
         ));
     }
+
+    /**
+     * Las horas contratadas del informe entero, en minutos.
+     *
+     * La hermana de {@see self::workedMinutes()}, y la pide el cuadro de impacto
+     * (RF-IN-08), que enseña «trabajadas frente a contratadas» como totales de la
+     * instalacion. Sumar aqui y no en el consumidor es lo que evita que cada
+     * pantalla decida por su cuenta si el cubo de quien no tiene departamento entra
+     * en el total — entra, y por eso existe.
+     *
+     * **Ojo con lo que NO mide.** Los dias sin contrato vigente no suman nada y
+     * salen aparte en `contractCoverage`: un informe con cobertura incompleta da un
+     * total contratado mas bajo de lo real, y el cuadro lo dice en sus criterios
+     * en lugar de rellenarlo con una estimacion.
+     */
+    public function contractedMinutes(): int
+    {
+        return array_sum(array_map(
+            static fn (PeriodReportRow $row): int => $row->contractedMinutes,
+            $this->rows,
+        ));
+    }
 }

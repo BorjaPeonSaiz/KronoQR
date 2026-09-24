@@ -150,6 +150,20 @@ function catalog(
         source: kioskUpdateQuietMinutes === 10 ? 'product_default' : 'installation',
         constraints: { minimum: 0, maximum: 120 },
       },
+      // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): TODAVIA no en el
+      // enum `SettingKey` del contrato en el momento de escribir esta prueba
+      // (`OperationalSettingsView.vue` lo explica), mismo criterio que
+      // `WEEKLY_SUMMARY_EMAIL`/`KIOSK_UPDATE_*` de arriba. `0` de serie: «no
+      // declarada».
+      {
+        key: 'BASELINE_MANUAL_HOURS_PER_MONTH',
+        value: 0,
+        type: 'integer',
+        impact: 'presentation',
+        affects_worked_hours: false,
+        source: 'product_default',
+        constraints: { minimum: 0, maximum: 10000 },
+      },
       {
         key: 'LOCALE_DEFAULT',
         value: 'es',

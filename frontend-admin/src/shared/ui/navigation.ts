@@ -65,6 +65,15 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   { name: 'credentials', labelKey: 'app.nav.credentials', abilities: [CREDENTIALS_MANAGE] },
   { name: 'reports', labelKey: 'app.nav.reports', abilities: [REPORTS_MANAGE] },
   {
+    // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): subentrada de
+    // «Informes», con el mismo ambito. Solo `admin` y `rrhh` lo llevan hoy
+    // (Anexo B), asi que un `responsable_departamento` no la ve, igual que
+    // «Nomina»: no hace falta un ambito propio, ya lo hace `reports:*`.
+    name: 'adoption-dashboard',
+    labelKey: 'app.nav.adoptionDashboard',
+    abilities: [REPORTS_MANAGE],
+  },
+  {
     // Salida a nomina (RF-IN-07, tarea 3.9): subentrada de «Informes», con el
     // mismo ambito. Solo `admin` y `rrhh` lo llevan hoy (doc 02 §7.3), asi que
     // un `responsable_departamento` no la ve, tal como pide la ficha

@@ -32,12 +32,15 @@ use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
  * `GET /api/v1/settings`.
  *
  * **Y solo se toman las claves que se consumen.** Del conjunto resuelto salen
- * `ATTENDANCE_*` y las dos `KIOSK_UPDATE_*` de la tarea 3.12 —nueve—: la marca,
- * los idiomas y la salida a nomina no entran aqui ni pueden influir en lo que
- * este adaptador devuelve. Las dos ultimas no las consume el servidor: viajan al
- * quiosco por el latido (RF-KI-07) y quien decide con ellas es la tablet; entran
- * por aqui porque el latido ya resuelve este objeto para llevarse el fichaje de
- * pausa y la tolerancia de desfase.
+ * `ATTENDANCE_*`, las dos `KIOSK_UPDATE_*` de la tarea 3.12 y la linea base del
+ * cuadro de impacto de la 3.13 —diez—: la marca, los idiomas y la salida a nomina
+ * no entran aqui ni pueden influir en lo que este adaptador devuelve. **Las tres
+ * ultimas no las consume el servidor en el camino de fichaje**: las dos del
+ * quiosco viajan a la tablet por el latido (RF-KI-07) y quien decide con ellas es
+ * ella, y la linea base la lee solo el cuadro de impacto (RF-IN-08). Entran por
+ * aqui porque el latido ya resuelve este objeto para llevarse el fichaje de pausa
+ * y la tolerancia de desfase, y un proveedor aparte seria una segunda cascada que
+ * mantener.
  *
  * ## La cascada, ahora con dos escalones
  *
@@ -79,7 +82,7 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
      *
      * El caso de uso del fichaje pide la configuracion en **cada** escaneo. La
      * cache de Redis evita la consulta; esto evita ademas resolver la cascada
-     * nueve veces por peticion. No es una cache con invalidacion: el enlace es
+     * diez veces por peticion. No es una cache con invalidacion: el enlace es
      * `scoped()` y muere con la peticion, asi que un cambio en el panel tiene
      * efecto en la siguiente.
      *
@@ -124,6 +127,16 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             // que lanza (regla dura 19).
             kioskUpdateWindow: KioskUpdateWindow::fromRange($settings->text(SettingKey::KIOSK_UPDATE_WINDOW)),
             kioskUpdateQuietMinutes: $settings->integer(SettingKey::KIOSK_UPDATE_QUIET_MINUTES),
+            // RF-IN-08 (tarea 3.13). La tercera que el servidor NO consume en
+            // ningun camino de fichaje: la lee el cuadro de impacto y nadie mas.
+            // Entra por aqui porque es configuracion operativa del centro y ya se
+            // resuelve en esta cascada; un proveedor aparte para una sola clave
+            // seria una segunda cascada que mantener.
+            //
+            // **Cero significa «no declarado»** y se traduce a «vacio» en el
+            // dominio del cuadro, no aqui: este adaptador transporta el valor tal
+            // cual, como con los otros ocho.
+            baselineManualHoursPerMonth: $settings->integer(SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH),
         );
     }
 }

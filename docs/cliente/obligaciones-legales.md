@@ -47,6 +47,11 @@ de actividades de tratamiento (art. 30 RGPD):
   dispositivo desde el que se registraron.
 - Registro de accesos y de acciones con relevancia legal (`audit_log`).
 
+El **cuadro de impacto** ([`guia-rrhh.md`](guia-rrhh.md) §6.6) no añade nada a
+esa lista: es un uso ulterior **agregado** de datos ya tratados —recuentos y
+porcentajes de la instalación entera, sin identificadores y sin desglose por
+persona ni por departamento—, compatible con la finalidad del registro.
+
 **Qué NO trata, y no puede tratar:**
 
 - **Nada biométrico** (ADR-009). Ni huella, ni cara, ni voz. No es una opción
@@ -100,6 +105,12 @@ panel, que es donde se trabajan, y el resumen de la noche siguiente vuelve a
 incluirlas. Con el resumen semanal pasa lo mismo: si no sale, el informe sigue
 en el panel y la semana se reenvía a mano. Si decides no usar el canal de correo, coméntalo con quien te instale
 el sistema: es una decisión de configuración de tu instalación.
+
+**La exportación del cuadro de impacto** (CSV, Excel o PDF) es lo único que
+sale a mano y por decisión tuya, y **no contiene datos personales**: solo los
+agregados de la instalación. Aun así, cada descarga queda anotada en la
+auditoría (`adoption_report.exported`: quién, qué periodo y en qué formato),
+porque es un documento que sale del sistema.
 
 
 **Y un segundo canal, que viene apagado: la telemetría.** El producto puede
