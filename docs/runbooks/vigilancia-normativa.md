@@ -50,7 +50,7 @@ Un responsable sin nombre es un repaso que no se hace.
      registro horario.
 
 La **revisión anual de seguridad** del producto (RS-11,
-[`../seguridad/paquete-revisor.md`](../seguridad/paquete-revisor.md)) es una
+`docs/seguridad/paquete-revisor.md` del repositorio del fabricante, que no viaja en el paquete) es una
 cita distinta, del fabricante, y **no sustituye** a esta: aquella mira el
 código; esta mira la norma.
 

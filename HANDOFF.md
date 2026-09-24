@@ -1437,6 +1437,11 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   fichero al abrir la redirección y el contenedor tarda en generar. Un agente que lo vea vacío y haga `git checkout --` pisa la
   regeneración (pasó en el cierre de la Fase 3). Regenerar solo sin agentes activos y comprobar el tamaño (~900 KB) y la línea «Fase
   en curso» antes del commit.
+- **Con `failOnWarning` (desde el cierre de la Fase 3), un aviso PHP en la CARGA de un fichero de pruebas pone la suite en 1 con todo
+  en verde y sin que Pest imprima nada** (ni con `--display-all-issues`): PHPUnit lo registra como «Test Runner Triggered PHP
+  Warning». Diagnóstico: `vendor/bin/pest --testsuite=X --log-events-text /tmp/e.txt` y `grep "Triggered PHP Warning" /tmp/e.txt`,
+  que da fichero y línea. La causa típica es una `const` global repetida entre dos ficheros de la misma suite
+  (`AHORA_DEL_FICHAJE` en `RegisterScanTest` y en `TracingDoesNotBlockClockingTest`): prefijo por fichero.
 - **`docs/` va montado `:ro` en el contenedor `app`** (`infra/compose.dev.yaml`): `qa:traceability` en modo escritura falla ahí;
   la matriz se regenera con `make traceability` (usa `--output=-` y escribe desde el anfitrión). `TraceabilityMatrixFreshnessTest`
   cae si la matriz versionada no coincide con lo que generaría el comando: **regenerar antes de cada commit que toque etiquetas**.
