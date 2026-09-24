@@ -50,10 +50,10 @@ Ante cualquier hallazgo nuevo, en este orden:
    columna *Fixed Version* trae una versión que Alpine ya sirve y el paquete
    lo instala un `apk add` de nuestro Dockerfile, el hallazgo no es del código:
    es la **caché de Actions**, que reutiliza la capa de paquetes mientras el
-   texto de la instrucción no cambie. Las tres imágenes llevan el sello semanal
-   `APK_INDEX_STAMP` (`make build-ci-images`, semana ISO) precisamente para
-   eso; si el hallazgo aparece a mitad de semana, basta con relanzar el job la
-   semana siguiente o forzar el refresco con
+   texto de la instrucción no cambie. Las tres imágenes llevan el sello diario
+   `APK_INDEX_STAMP` (`make build-ci-images`, fecha UTC) precisamente para
+   eso; si el hallazgo aparece a lo largo del día, basta con relanzar el job al
+   día siguiente o forzar el refresco con
    `make build-ci-images APK_INDEX_STAMP=$(date -u +%s)`; en la CI, el disparo
    manual admite el mismo valor:
    `gh workflow run ci.yml --ref <rama> -f apk_index_stamp=$(date -u +%s)`.

@@ -677,13 +677,16 @@ sast-community: ## Semgrep: reglas comunitarias PHP/JS/TS/OWASP (umbral: 0 halla
 # buildx ahi cuesta mas de lo que ahorra.
 IMAGES        ?= postgres
 BUILDX_CACHE  ?=
-# APK_INDEX_STAMP invalida una vez por semana (semana ISO) la capa de paquetes
+# APK_INDEX_STAMP invalida una vez al dia (fecha UTC) la capa de paquetes
 # de las tres imagenes. Sin el, la cache de Actions reutilizaba la capa del
 # `apk add` de forma indefinida y `trivy image` acababa marcando CVE con el
 # parche ya publicado en Alpine (libexpat 2.8.3-r0 → 2.8.4-r0, septiembre de
 # 2026). Explicado en infra/docker/php/Dockerfile. Para forzar un refresco
-# fuera de ciclo: `make build-ci-images APK_INDEX_STAMP=$$(date -u +%s)`.
-APK_INDEX_STAMP ?= $(shell date -u +%G-W%V)
+# fuera de ciclo: `make build-ci-images APK_INDEX_STAMP=$$(date -u +%s)`. Era semanal
+# hasta el 24-09-2026: un CVE de libexpat publicado a mitad de semana (CVE-2026-93990)
+# dejo la CI en rojo hasta el lunes siguiente con el parche ya en Alpine; una capa
+# al dia cuesta ~6 min por imagen y cierra esa ventana.
+APK_INDEX_STAMP ?= $(shell date -u +%F)
 
 # La version que viaja DENTRO de la imagen de la aplicacion, y que publica
 # `GET /api/v1/health` y la pantalla de diagnostico del quiosco (doc 02 §10.5).

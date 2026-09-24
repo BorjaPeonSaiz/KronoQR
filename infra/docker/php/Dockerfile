@@ -32,7 +32,7 @@ FROM php:${PHP_VERSION}-fpm-alpine@${PHP_IMAGE_DIGEST} AS base
 COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
 
 # APK_INDEX_STAMP: sello que INVALIDA LA CACHE de la capa de paquetes una vez
-# por semana. Lo pone `make build-ci-images` (semana ISO, `AAAA-Wnn`) y no hace
+# al dia. Lo pone `make build-ci-images` (fecha UTC, `AAAA-MM-DD`) y no hace
 # falta tocarlo a mano.
 #
 # POR QUE. La CI construye con cache de Actions (`BUILDX_CACHE=gha`) y BuildKit
@@ -44,8 +44,8 @@ COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /u
 # `chromium`/`fontconfig`, no la imagen base) con el 2.8.4-r0 disponible desde
 # hacia dias: la unica forma de arreglarlo era un cambio cosmetico en la
 # instruccion para que la capa se reconstruyera. El sello hace eso de forma
-# previsible: la capa de paquetes se refresca el primer build de cada semana y
-# el resto de la semana la cache sigue ahorrando los ~6 minutos que ahorra.
+# previsible: la capa de paquetes se refresca el primer build de cada dia y
+# el resto del dia la cache sigue ahorrando los ~6 minutos que ahorra.
 #
 # El `apk upgrade --no-cache` que abre la capa sube tambien los paquetes que
 # la imagen base trae ya instalados (libssl, musl, zlib...). Aqui SI puede ir

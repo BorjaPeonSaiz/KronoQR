@@ -81,7 +81,7 @@ on:
   workflow_dispatch:
     inputs:
       apk_index_stamp:
-        description: "Fuerza el refresco de la capa de paquetes Alpine de las imagenes (runbook triaje-hallazgos-seguridad.md, punto 1): un valor nuevo, p. ej. la salida de `date -u +%s`, reconstruye la capa aunque la semana ISO no haya cambiado. Vacio = sello semanal de make."
+        description: "Fuerza el refresco de la capa de paquetes Alpine de las imagenes (runbook triaje-hallazgos-seguridad.md, punto 1): un valor nuevo, p. ej. la salida de `date -u +%s`, reconstruye la capa aunque el dia no haya cambiado. Vacio = sello diario de make."
         required: false
         default: ""
   schedule:

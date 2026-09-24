@@ -287,7 +287,7 @@ en el runner frente al techo de 586; 19,5 fichajes/s). **Escrito en el acta lo q
 verifica por delegación (sin id en `requisitos.yaml`); RS-11 está preparada, no cumplida (el tercero); RNF-P-06 sin cifra absoluta en
 hardware de referencia.
 
-**Siguiente acción:** integrar la **PR #81** (commit `0010a45` más `2ab36db` y `2d4c589`, que dejaron la CI en verde: `libexpat` 2.8.5-r0 en la capa Alpine cacheada de `app` vía la entrada nueva `apk_index_stamp` del disparo manual, y un enlace del runbook de vigilancia que no viajaba en el paquete; **CI manual 35990497391 en verde en todos los jobs**) con *merge commit*. Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
+**Siguiente acción:** PR #81 integrada en `main` (`96142cc`, 24-09-2026). Integrar la **PR #82** «decisiones post cierre» (rama `docs/decisiones-post-cierre-3`: commit de docs de las condiciones de venta + `0613481` con las tres decisiones aplicadas: soporte `read_only` sin presencia en vivo ni resumen de cumplimiento, `make mutate-changed` por push con la completa nocturna y en el disparo manual, regla de idioma con `IdentifierLanguageTest`/`id-match`/`TestGlobalConstantsTest`; **CI manual 36012810304**) con *merge commit*; sin migración: `git pull` y `make up`. Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
 venta** (condiciones del plan 06): validación jurídica por la asesoría laboral con `docs/cliente/preguntas-asesoria.md`; designar al
 responsable de vigilancia normativa (`docs/runbooks/vigilancia-normativa.md`); prueba de campo del hardware (12 h en tablet real);
 instalación limpia por una persona ajena; pasada de k6 en hardware de referencia (`INSTANCES=10`); los costes de impresión dejaron
@@ -1058,7 +1058,10 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   enlace, dos `POST` de la misma cuenta, dos pasadas de `reporting:weekly-summary` (`qa-testing`); agotar la zona `report-download`
   (30 r/m por IP) (`qa-testing`); E2E de licencia (RF-PD-04/05 y regla dura 15: fichar con licencia caducada) (`qa-testing`); paridad
   ES/EN de los `locales/*.json` del portal (`frontend-portal-empleado`); las dos pruebas del menú lateral de `shell.spec.ts` sin
-  etiqueta (`qa-testing`); `ReportExport::withLifecycle()` lleva un `$completedAt` que ningún llamante pasa (`complete()` va por `withFile()`): código muerto
+  etiqueta (`qa-testing`); `docs/runbooks/fallo-de-ci.md` arrastra referencias obsoletas anteriores al cierre (tareas 0.5/0.7/1.1/1.2,
+  «la etapa ④ todavía no existe»): limpieza completa del runbook (`devops-observabilidad`); el alias de un `v-for` en la plantilla de
+  un `.vue` escapa a `id-match` (si se quiere cerrar, `vue/no-restricted-syntax` sobre `VForExpression`) (`frontend-panel`);
+  `ReportExport::withLifecycle()` lleva un `$completedAt` que ningún llamante pasa (`complete()` va por `withFile()`): código muerto
   que hace inmatable un mutante, borrar de la firma (`backend-laravel`); `isDownloadable()` solo se distingue con una fila `failed`
   con `file_path` que el `CHECK` prohíbe: si se quiere matar, `ReportExportFixtures::hydratedFromCorruptRow()` (`qa-testing`). Rector,
   `sanitizeContext`/`lib/checks.sh` y la señal del `409` de `POST /setup/administrator` siguen en «Deuda técnica anotada».
