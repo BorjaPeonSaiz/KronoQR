@@ -211,4 +211,4 @@ Se acepta a cambio un residuo de riesgo de préstamo de credencial, mitigado por
 
 1. **Cronometrar de verdad** los tiempos de §4.1 en la prueba de campo, con el hardware real y en el cambio de turno.
 2. **Validar la durabilidad de la tarjeta** en un entorno de cocina durante una temporada completa, y confirmar que el nivel Q de corrección de errores basta.
-3. **Contrastar el coste de impresión** con proveedores reales antes de publicarlo en la documentación comercial.
+3. ~~Contrastar el coste de impresión con proveedores reales antes de publicarlo en la documentación comercial.~~ **Resuelto por decisión del usuario (24-09-2026): la impresión de las tarjetas la hace el cliente**, con su impresora o su proveedor y en el formato que elija; el producto entrega el PDF de la hoja de credenciales (RF-QR-05) y no publica ningún precio de tarjeta. El «alrededor de un euro» de §4.4 queda como orientación para la comparación de este documento, no como promesa comercial.

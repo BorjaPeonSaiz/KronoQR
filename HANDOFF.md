@@ -290,7 +290,8 @@ hardware de referencia.
 **Siguiente acción:** integrar la **PR #81** (commit `0010a45` más `2ab36db` y `2d4c589`, que dejaron la CI en verde: `libexpat` 2.8.5-r0 en la capa Alpine cacheada de `app` vía la entrada nueva `apk_index_stamp` del disparo manual, y un enlace del runbook de vigilancia que no viajaba en el paquete; **CI manual 35990497391 en verde en todos los jobs**) con *merge commit*. Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
 venta** (condiciones del plan 06): validación jurídica por la asesoría laboral con `docs/cliente/preguntas-asesoria.md`; designar al
 responsable de vigilancia normativa (`docs/runbooks/vigilancia-normativa.md`); prueba de campo del hardware (12 h en tablet real);
-contraste de costes de impresión; instalación limpia por una persona ajena; pasada de k6 en hardware de referencia (`INSTANCES=10`);
+instalación limpia por una persona ajena; pasada de k6 en hardware de referencia (`INSTANCES=10`); los costes de impresión dejaron
+de ser condición el 24-09-2026 (la impresión es del cliente; ver «Del usuario»);
 `git stash drop` del stash huérfano; y dos decisiones: la etapa ③ de la CI tarda 42 min por la mutación en cada push (nocturno o
 acotar al diff) y si doc 02 §3.5 admite ayudantes de prueba en español. Después, **Fase 4** (plan 07 «Fase 4 — Evolución»), empezando
 por los restos con dueño del bloque «Fase 4» de «Pendiente».
@@ -1003,6 +1004,20 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Decisiones de proceso del cierre de la Fase 3:** la etapa ③ de la CI tarda ~42 min por la mutación en cada push (doc 02 §10.1
   prometía 4 min): mutación nocturna o acotada al diff (`devops-observabilidad`); y si doc 02 §3.5 admite ayudantes de prueba en
   español (`hotelConCuadroDeImpacto()`, `cargarAusencias()`… cientos, mezclados con inglés) o se dejan de escribir.
+- **Condiciones del plan antes de la primera venta (decididas el 24-09-2026, tras el cierre de la Fase 3):** (1) **validación
+  jurídica**: a la espera de la reunión con la asesoría laboral, con `docs/cliente/preguntas-asesoria.md` como guion; las preguntas
+  1 y 2 (plazos de `employment_contracts` y `absences`) abren tarea de `RetentionScope` cuando se contesten; (2) **responsable de
+  vigilancia normativa**: es un rol, no software; en el fabricante lo asume el usuario con la asesoría como fuente (primer repaso en
+  esa misma reunión; después semestral y antes de cada versión mayor, añadido a la lista del plan 08), y en cada cliente lo designa
+  el propio cliente en la puesta en marcha siguiendo `docs/runbooks/vigilancia-normativa.md`; (3) **prueba de campo de 12 h en
+  tablet real**: más adelante, con la tarjeta impresa y la recalibración de R16 (bullet «Hardware» de abajo); (4) **costes de
+  impresión: dejan de ser condición** — la impresión de las tarjetas es del cliente, en el formato que elija; el producto entrega el
+  PDF de la hoja de credenciales y el euro por tarjeta del doc 04 §4.4 queda como orientación, no como precio publicado (doc 04
+  «Pendiente de validar» y doc 02 §11 actualizados); (5) **instalación limpia por una persona ajena**: más adelante;
+  (6) **k6 en hardware de referencia** (recomendación aceptada por el usuario a falta de fecha): alquilar un VPS Linux del perfil
+  mínimo del doc 02 §11.6 (4 vCPU / 8 GB) un par de horas, instalar desde el paquete como hace `load-test.yml` y correr
+  `make load-test INSTANCES=10 DURATION=120s` para obtener la cifra absoluta de RNF-P-06 (50 fichajes/s, p95 < 150 ms) que hoy
+  nadie ha medido; tarea temprana de la Fase 4 (`devops-observabilidad` + usuario para la máquina), y se repite en cada versión mayor.
 - **Generar el par ed25519 una vez** (`php tools/license-issuer/generate-keypair.php`), privada al
   gestor de secretos, pública como valor por defecto de `env('LICENSE_PUBLIC_KEY', '')` en
   `backend/config/license.php`. `make release-gate` lo exige en cada etiqueta `vX.Y.Z`.

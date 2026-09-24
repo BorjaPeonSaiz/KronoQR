@@ -1141,7 +1141,7 @@ La columna **Agente / Skill** indica quién ejecuta cada tarea. Los agentes est�
 
 **Incluyen** el diseño, la implementación, las pruebas de los niveles que exige el §9.5, la documentación y —sobre todo— **la revisión humana de lo que produce el agente**, que es tiempo real y es la parte que no se puede recortar. En este dominio, aceptar sin leer un cálculo de duraciones es exactamente el fallo que el proyecto entero existe para evitar.
 
-**No incluyen** aprender el dominio, esperar decisiones del cliente, ni las tres validaciones de la nota final (asesoría laboral, prueba de campo del hardware, contraste de costes de impresión).
+**No incluyen** aprender el dominio, esperar decisiones del cliente, ni las validaciones de la nota final (asesoría laboral y prueba de campo del hardware; el contraste de costes de impresión dejó de ser una de ellas el 24-09-2026: la impresión es del cliente, doc 04 «Pendiente de validar»).
 
 Dos advertencias sobre la extrapolación:
 
