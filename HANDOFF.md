@@ -252,8 +252,7 @@ conocido); volumen RNF-P-05 **500 × 2 años en 0,891 s** (antes 2,179 s); mutac
 **3991 (Pest 3711, Playwright 274, k6 6)**; `qa:traceability --check`, `docs:consistency`, `api-lint` y `observability-check` en verde; panel: lint, `vue-tsc`,
 600 unitarias, 158 E2E (axe sin violaciones críticas ni graves); quiosco y portal: lint, `vue-tsc` y unitarias en verde.
 
-**Siguiente acción:** commit único `feat(3.13): …`, push, CI manual y PR contra `main` con *merge commit*; después un
-`docs(handoff)` con los números. **Sin migración ni variables nuevas de `.env`**: tras integrar basta `git pull` y `make up`; conviene
+**Siguiente acción:** integrar la **PR #80** (commit `1da90fa`; **CI manual 35940352359 en verde en todos los jobs**) con *merge commit*. **Sin migración ni variables nuevas de `.env`**: tras integrar basta `git pull` y `make up`; conviene
 abrir «Informes → Impacto y adopción» en el panel con la licencia de dev (si el plan no lleva `impact_dashboard` verá el aviso 402) y
 descargar un PDF para ver el asiento `adoption_report.exported`. Después, según plan 06 §11: el **Cierre de la Fase 3** (plan 06 → «Cierre de la Fase 3»: las cuatro revisiones de cierre, `make quality && make test && make mutate && make e2e`, k6, doc 07 §6 con las filas vencidas, `current_phase` a 3 en `qa:traceability`).
 
