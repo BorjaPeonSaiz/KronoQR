@@ -5,6 +5,8 @@ import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescri
 import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 import pluginVue from 'eslint-plugin-vue'
 
+import { identifierLanguage } from './eslint/identifier-language.js'
+
 export default defineConfigWithVueTs(
   {
     name: 'kronoqr/files-to-lint',
@@ -27,5 +29,7 @@ export default defineConfigWithVueTs(
       'vue/no-v-html': 'error',
     },
   },
+  // Identificadores en ingles en src/** (doc 02 §3.5, decision del 24-09-2026).
+  identifierLanguage(),
   skipFormatting,
 )

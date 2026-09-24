@@ -11,6 +11,7 @@
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 import pluginVue from 'eslint-plugin-vue'
+import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
 
 export default defineConfigWithVueTs(
   {
@@ -86,5 +87,8 @@ export default defineConfigWithVueTs(
       globals: { process: 'readonly', console: 'readonly' },
     },
   },
+  // Identificadores en ingles en src/** (doc 02 §3.5, decision del 24-09-2026).
+  // La lista de palabras y el motivo viven en web-kit, una sola vez.
+  identifierLanguage(),
   skipFormatting,
 )

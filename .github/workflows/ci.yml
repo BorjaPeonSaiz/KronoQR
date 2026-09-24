@@ -3,7 +3,11 @@
 #   ① Lint + Tipos            Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck   ~1 min
 #                             + @redocly/cli sobre docs/api/openapi.yaml
 #   ② Arquitectura            Deptrac · Pest Arch                                ~30 s
-#   ③ Unitarias + Mutacion    Pest Unit · Contract · Feature · MSI >= 80 %       ~2 min
+#   ③ Unitarias + Mutacion    Pest Unit · Contract · Feature · MSI >= 80 % SOLO  ~2 min
+#                             sobre el Domain que cambia (`make mutate-changed`);
+#                             completa (`make mutate`) en `workflow_dispatch` -en
+#                             `schedule` no corre este job, ver el job `mutation`,
+#                             al final del fichero, junto a `coverage`-
 #   ③b Trazabilidad           qa:traceability --check · docs:consistency --check (dentro del job ③, al final)
 #   ④ Integracion             Pest --testsuite=Integration con PostgreSQL real   ~3 min
 #                             (invariantes SQL, MigrationsRoundTripTest, los caminos
@@ -47,6 +51,17 @@
 # push duplicaria, con Xdebug encendido, un trabajo que la etapa ③ ya paga sin
 # el, y por el mismo motivo que la etapa ⑧ no corre en cada push. Se ejecuta de
 # noche (`schedule`) y a mano (`workflow_dispatch`), nunca en un push normal.
+#
+# LA MUTACION COMPLETA (RQ-10: MSI >= 80 % sobre Modules/*/Domain, doc 02 §9.2)
+# TAMPOCO CORRE ENTERA EN CADA PUSH, desde el 24-09-2026. `make mutate` sobre
+# el dominio completo tarda 37-42 min medidos (comentario del job `unit`, mas
+# abajo): eso no cabe en el presupuesto de menos de 4 minutos de las etapas
+# ①-③. La etapa ③ muta en cada push SOLO los ficheros de `Modules/*/Domain`
+# que ese push cambia (`make mutate-changed`, dentro del job `unit`); la
+# pasada COMPLETA es el job `mutation`, al final del fichero junto a
+# `coverage` -mismo `if`, nocturna y a mano- porque `unit` no puede alojarla:
+# no se ejecuta en `schedule` (ver mas abajo). El umbral `--min=80` no cambia
+# en ningun caso: lo unico que cambia es cuantos ficheros mide cada pasada.
 #
 # ⑦ E2E sustituye al marcador `.github/workflows/e2e.yml` (retirado, no
 # reemplazado por un workflow separado): el patron de este repositorio es UN
@@ -468,6 +483,12 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # fetch-depth completo (no el superficial por defecto): `make
+          # mutate-changed` necesita `origin/main` alcanzable para calcular
+          # que ha cambiado cuando el push no trae un `github.event.before`
+          # utilizable (rama nueva, primer commit). Mismo motivo que en el
+          # job `security` (gitleaks) y en `update`.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: PostgreSQL 17 del producto y Redis 7
@@ -547,13 +568,52 @@ jobs:
         # el coste de arrancar otro runner.
         run: make test-contract
 
-      - name: Mutacion sobre Modules/*/Domain (MSI >= 80 %)
-        # El umbral --min=80 vive en el Makefile, no aqui. Hoy este paso NO
-        # ejecuta mutantes: el dominio se escribe en la tarea 1.1 y el MSI empieza
-        # a exigirse en la 1.2. El objetivo lo dice por su cuenta y emite una
-        # anotacion de GitHub cuando corre en la CI, para que quede en el resumen
-        # de la ejecucion y no parezca una comprobacion que ha pasado.
-        run: make mutate
+      - name: "Mutacion sobre Modules/*/Domain (MSI >= 80 %): acotada en push, completa en el disparo manual"
+        # El umbral --min=80 vive en el Makefile, no aqui, y se aplica ENTERO
+        # en los dos casos de abajo.
+        #
+        # Decision (24-09-2026): la mutacion COMPLETA tardaba 37-42 min
+        # medidos en este runner y el doc 02 §10.1 promete que las etapas
+        # ①-③ respondan en menos de 4 minutos; los dos hechos no cabian
+        # juntos. En cada `push` este paso muta SOLO los ficheros de
+        # `Modules/*/Domain` que el push cambia (`make mutate-changed`,
+        # comentario largo junto al objetivo en el Makefile): la base del
+        # diff es `github.event.before` si es un commit valido y alcanzable
+        # -mismo criterio que el job `update`, mas abajo-, o `origin/main`
+        # si no (rama nueva, force-push, o el primer push de todos). En
+        # `workflow_dispatch` -el disparo manual que se hace siempre antes de
+        # abrir una PR- corre la mutacion COMPLETA (`make mutate`), la misma
+        # que corria en cada push hasta este cambio: es la comprobacion
+        # exhaustiva antes de proponer el cambio, no cada vez que se sube un
+        # commit intermedio.
+        #
+        # La NOCHE no esta aqui. El job `unit` no se ejecuta en `schedule`
+        # -depende de `architecture`, que depende de jobs con
+        # `if: github.event_name != 'schedule'`, y un `needs` que no corre
+        # deja sin correr tambien al que depende de el-, asi que la mutacion
+        # completa nocturna vive en el job `mutation`, junto a `coverage` mas
+        # abajo, con el mismo `if`.
+        #
+        # Si `Modules/*/Domain` no existe todavia (Fase 0, antes de la tarea
+        # 1.1), `make mutate-changed`/`make mutate` lo dicen por su cuenta y
+        # terminan en verde sin mutar nada.
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            base=""
+            if [ -n "${EVENT_BEFORE}" ] &&
+              [ "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ] &&
+              git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
+              base="${EVENT_BEFORE}"
+            else
+              base="origin/main"
+            fi
+            make mutate-changed MUTATE_BASE="${base}"
+          else
+            make mutate
+          fi
 
       # --- etapa ③b · Trazabilidad y coherencia documental --------------------
       #
@@ -2176,4 +2236,68 @@ jobs:
             echo ""
             echo "Umbrales: dominio >= 90 %, global >= 75 %. Detalle linea a linea en el"
             echo "log de \`make coverage\` de este mismo job."
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  #-----------------------------------------------------------------------------
+  # Mutacion completa — RQ-10: MSI >= 80 % sobre Modules/*/Domain (doc 02 §9.2)
+  #
+  # Por que esto no vive dentro del job `unit`. `unit` NO se ejecuta en
+  # `schedule`: depende (transitivamente, via `architecture`) de jobs con
+  # `if: github.event_name != 'schedule'`, y un `needs` que no corre deja sin
+  # correr tambien al que depende de el. La mutacion completa nocturna
+  # necesita, por tanto, un job propio con el `if` de abajo -el mismo que
+  # `coverage`, justo encima-, no un paso mas dentro de `unit`.
+  #
+  # Por que esto no vive DENTRO del job `coverage` de encima, aunque comparten
+  # `if`. `make mutate` no toca base de datos -muta y ejecuta unicamente la
+  # suite `Unit`, igual que el paso equivalente del job `unit`- asi que
+  # arrastrarlo al job `coverage` habria pagado el arranque de PostgreSQL,
+  # Redis y Puppeteer (varios minutos) para un paso que no los usa. Un job
+  # aparte, mas ligero, corre en paralelo al de cobertura sin ese coste.
+  #
+  # En `push`, el job `unit` ya muta lo que ese push cambia
+  # (`make mutate-changed`); en `workflow_dispatch` ese mismo job muta YA el
+  # dominio completo (`make mutate`), asi que este job vuelve a mutarlo
+  # tambien ahi -duplicado a proposito, igual que `coverage` ya duplica hoy a
+  # `unit` en cada disparo manual: es el unico evento donde correr dos veces
+  # la comprobacion mas cara es mas barato que no tener la version nocturna
+  # probada a mano antes de fiarse de ella-.
+  #
+  # timeout-minutes 60 y no 30 (el de `coverage`): es el mismo trabajo que
+  # `unit` acotaba a 60 cuando mutaba el dominio entero (comentario junto a
+  # ese job): 37-42 min medidos, con margen para el siguiente modulo de
+  # dominio.
+  #-----------------------------------------------------------------------------
+  mutation:
+    name: "Mutacion completa (RQ-10, nocturna)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          # Mismo motivo que en el job `unit`: la mutacion necesita cobertura,
+          # y el propio objetivo del Makefile la enciende solo para su proceso
+          # con XDEBUG_MODE=coverage.
+          coverage: xdebug
+
+      - name: Mutacion COMPLETA sobre Modules/*/Domain (MSI >= 80 %)
+        # Sin base de datos: `make mutate` ejecuta solo la suite `Unit`.
+        run: make mutate
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "### Mutacion completa (RQ-10)"
+            echo ""
+            echo "MSI >= 80 % sobre Modules/*/Domain. En cada *push* solo se muta lo"
+            echo "que ese push cambia (\`make mutate-changed\`, job \`unit\`); esta es la"
+            echo "pasada completa, nocturna y del disparo manual."
           } >>"$GITHUB_STEP_SUMMARY"

@@ -292,8 +292,8 @@ venta** (condiciones del plan 06): validación jurídica por la asesoría labora
 responsable de vigilancia normativa (`docs/runbooks/vigilancia-normativa.md`); prueba de campo del hardware (12 h en tablet real);
 instalación limpia por una persona ajena; pasada de k6 en hardware de referencia (`INSTANCES=10`); los costes de impresión dejaron
 de ser condición el 24-09-2026 (la impresión es del cliente; ver «Del usuario»);
-`git stash drop` del stash huérfano; y dos decisiones: la etapa ③ de la CI tarda 42 min por la mutación en cada push (nocturno o
-acotar al diff) y si doc 02 §3.5 admite ayudantes de prueba en español. Después, **Fase 4** (plan 07 «Fase 4 — Evolución»), empezando
+`git stash drop` del stash huérfano (hecho el 24-09-2026); las decisiones sobre el soporte `read_only`, la mutación por push y el
+idioma de las pruebas están tomadas y aplicadas (ver «Del usuario»). Después, **Fase 4** (plan 07 «Fase 4 — Evolución»), empezando
 por los restos con dueño del bloque «Fase 4» de «Pendiente».
 
 **Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
@@ -993,17 +993,14 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel (sí; tarea ad hoc pendiente, reparto en el bloque
   «Fase 4» de «Por tarea»).
   La línea base del runner y la fila del modelo de amenazas (reloj del quiosco) ya se hicieron en `chore/restos-3.8`.
-- **Decisión pendiente (cierre de la Fase 3, 24-09-2026): qué lee un acceso de soporte `read_only`.** `SupportScopeRoutesTest` mide
-  ahora todas las rutas `GET` que cada alcance alcanza y exige que cada una esté concedida por escrito; las ausencias quedaron
-  cerradas por `AbsencePolicy` (art. 9). Cinco rutas con dato personal siguen abiertas al fabricante porque el docblock de
-  `SupportScope::ReadOnly` las contempla («leer jornadas, tramos, plantilla y auditoría»): `GET /employees`, `/employees/{uuid}`,
-  `/employees/{uuid}/workdays` (la razón de ser del alcance, auditada como divulgación), **`/attendance/live`** (quién está dentro del
-  hotel ahora mismo, con nombre) y **`/compliance/summary`** (incidencias de cumplimiento por persona, sin acotar por departamento).
-  Las dos últimas son las más difíciles de justificar como necesidad de soporte. Si se cierran, es una línea en su policy
-  (`isSupportActor()`), la prueba se ajusta sola y hay que actualizar `operacion.md` §12.4 y doc 07 §6. Decisión del usuario.
-- **Decisiones de proceso del cierre de la Fase 3:** la etapa ③ de la CI tarda ~42 min por la mutación en cada push (doc 02 §10.1
-  prometía 4 min): mutación nocturna o acotada al diff (`devops-observabilidad`); y si doc 02 §3.5 admite ayudantes de prueba en
-  español (`hotelConCuadroDeImpacto()`, `cargarAusencias()`… cientos, mezclados con inglés) o se dejan de escribir.
+- **Decididas el 24-09-2026 (tras el cierre de la Fase 3), aplicadas en `docs/decisiones-post-cierre-3`:** (1) **un acceso de
+  soporte `read_only` ya no alcanza la presencia en vivo ni el resumen de cumplimiento por persona** (policies con `isSupportActor()`,
+  prueba por alcance, lista cerrada de `SupportScopeRoutesTest` sin esas dos rutas; sigue leyendo plantilla y el registro horario de
+  una persona, auditado); (2) **la mutación completa del dominio sale del push**: por push se muta solo lo que el push toca en el
+  dominio (`make mutate-changed`), y la completa con su umbral corre de noche y en el disparo manual previo a cada PR (doc 02 §10.1);
+  (3) **los ayudantes, constantes y datasets de las pruebas pueden ir en el idioma del escenario**, como las descripciones; la regla
+  del inglés queda atada a herramienta donde aplica (`IdentifierLanguageTest` sobre `backend/app/`, `id-match` de ESLint sobre los
+  `src/` de las SPA y `web-kit`) y las constantes globales de un fichero Pest llevan prefijo del fichero (`TestGlobalConstantsTest`).
 - **Condiciones del plan antes de la primera venta (decididas el 24-09-2026, tras el cierre de la Fase 3):** (1) **validación
   jurídica**: a la espera de la reunión con la asesoría laboral, con `docs/cliente/preguntas-asesoria.md` como guion; las preguntas
   1 y 2 (plazos de `employment_contracts` y `absences`) abren tarea de `RetentionScope` cuando se contesten; (2) **responsable de
@@ -1061,10 +1058,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   enlace, dos `POST` de la misma cuenta, dos pasadas de `reporting:weekly-summary` (`qa-testing`); agotar la zona `report-download`
   (30 r/m por IP) (`qa-testing`); E2E de licencia (RF-PD-04/05 y regla dura 15: fichar con licencia caducada) (`qa-testing`); paridad
   ES/EN de los `locales/*.json` del portal (`frontend-portal-empleado`); las dos pruebas del menú lateral de `shell.spec.ts` sin
-  etiqueta (`qa-testing`); la etapa ③ de la CI tarda 42 min por la mutación en cada push (§10.1 prometía 4 min): decidir nocturno o
-  acotar al diff (decisión del usuario, `devops-observabilidad`); identificadores de ayudantes de prueba en español (cientos, patrón
-  anterior a la fase): decidir si doc 02 §3.5 los admite o se dejan de escribir (decisión del usuario, `qa-testing` redacta);
-  `ReportExport::withLifecycle()` lleva un `$completedAt` que ningún llamante pasa (`complete()` va por `withFile()`): código muerto
+  etiqueta (`qa-testing`); `ReportExport::withLifecycle()` lleva un `$completedAt` que ningún llamante pasa (`complete()` va por `withFile()`): código muerto
   que hace inmatable un mutante, borrar de la firma (`backend-laravel`); `isDownloadable()` solo se distingue con una fila `failed`
   con `file_path` que el `CHECK` prohíbe: si se quiere matar, `ReportExportFixtures::hydratedFromCorruptRow()` (`qa-testing`). Rector,
   `sanitizeContext`/`lib/checks.sh` y la señal del `409` de `POST /setup/administrator` siguen en «Deuda técnica anotada».

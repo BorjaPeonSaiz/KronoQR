@@ -241,6 +241,13 @@ Route::middleware([
  * `attendance:read` en el token y aun asi recibe `403`: auditar es mirar lo que
  * quedo escrito, no quien esta en la cocina ahora.
  *
+ * Y ES TAMBIEN LA MITAD QUE DEJA FUERA A TODO ACTOR DE SOPORTE del fabricante
+ * (decision del 24-09-2026): `SupportScope::ReadOnly` lleva `attendance:read` y
+ * se presenta como `admin`, asi que el ambito abre y el rol abre. Quien cierra
+ * es la policy, porque esto es quien esta dentro del hotel AHORA MISMO con
+ * nombre —vigilancia en tiempo real— y no hace falta para diagnosticar un
+ * calculo de horas (regla dura 16, ADR-020).
+ *
  * EL ALCANCE POR DEPARTAMENTO NO SE COMPRUEBA AQUI: entra **en la consulta**
  * (RF-ID-03), incluidos los recuentos. Es un listado, y un listado acota en vez
  * de denegar.
@@ -283,6 +290,12 @@ Route::get('/attendance/live', LivePresenceController::class)
  * 18). Es la mitad que deja fuera al `auditor`, que lleva `attendance:read` en el
  * token y aun asi recibe `403`: auditar es mirar lo que quedo escrito, no la
  * gestion del dia.
+ *
+ * Y ES TAMBIEN LA MITAD QUE DEJA FUERA A TODO ACTOR DE SOPORTE del fabricante
+ * (decision del 24-09-2026): el ambito abre y el rol abre —se presenta como
+ * `admin`—, y quien cierra es la policy. Esto es el listado de incumplimientos
+ * por persona de TODA la plantilla, y no hace falta para diagnosticar un calculo
+ * de horas (regla dura 16, ADR-020).
  *
  * EL ALCANCE POR DEPARTAMENTO NO SE COMPRUEBA AQUI: entra **en la consulta**
  * (RF-ID-03), incluidos los recuentos de `meta.totals`. Es un listado, y un

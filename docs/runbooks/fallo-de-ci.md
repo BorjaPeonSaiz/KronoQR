@@ -18,7 +18,7 @@ alguien no puede fichar, este no es el runbook: mira
 | ① Lint + Tipos · backend | Pint, PHPStan 9, ShellCheck, `shfmt -i 2 -d`, robustez de los scripts | Estilo, tipado o un script de shell que no cumple el §3.5 |
 | ① Lint + Tipos · *frontend* | ESLint y `vue-tsc` de cada frontend | Estilo de Vue, `any`, tipos que no cuadran |
 | ② Arquitectura | Deptrac y la suite `Architecture` de Pest | **Se ha roto una frontera**: reglas duras 1 o 2 de `CLAUDE.md` |
-| ③ Unitarias + Mutación | Suite `Unit` de Pest y MSI ≥ 80 % sobre `Modules/*/Domain` | Una regla de negocio se comporta distinto de lo que dice su prueba |
+| ③ Unitarias + Mutación | Suite `Unit` de Pest y MSI ≥ 80 % sobre `Modules/*/Domain` **que cambia ese push** (`make mutate-changed`); la mutación **completa** corre de noche (job `mutation`) y en el disparo manual | Una regla de negocio se comporta distinto de lo que dice su prueba |
 | Puerta de versión | `CHANGELOG.md` bien formado y, al etiquetar, con entrada para esa versión | Se iba a publicar una versión sin decirle al cliente qué cambia |
 
 La distinción entre ① y ② es deliberada. Que un `use Illuminate\Support\...`
@@ -37,7 +37,8 @@ make rector       # etapa ①  informativo, nunca bloquea
 make deptrac      # etapa ②  fronteras entre capas y módulos
 make test-arch    # etapa ②  Pest Arch: reloj del sistema, Carbon, Eloquent
 make test-unit    # etapa ③  suite unitaria
-make mutate       # etapa ③  mutación sobre el dominio
+make mutate-changed  # etapa ③  mutación acotada a lo que cambia frente a origin/main
+make mutate       # mutación COMPLETA (nocturna y disparo manual, jobs unit/mutation)
 make changelog-check VERSION=1.2.3   # puerta de versión
 ```
 

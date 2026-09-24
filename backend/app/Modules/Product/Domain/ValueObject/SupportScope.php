@@ -68,10 +68,34 @@ enum SupportScope: string
     case Diagnostics = 'diagnostics';
 
     /**
-     * Lo anterior y **leer** jornadas, tramos, plantilla y auditoria.
+     * Lo anterior y **leer** jornadas, tramos y plantilla.
      *
      * Existe para la incidencia que el paquete no resuelve: «a esta persona le
-     * salen ocho horas y deberian ser nueve».
+     * salen ocho horas y deberian ser nueve». Traducir el `uuid` del caso a la
+     * persona y leer su registro horario: eso, y nada que no sirva para eso.
+     *
+     * ## LO QUE EL AMBITO ALCANZA Y LA POLICY CIERRA (decision del 24-09-2026)
+     *
+     * Tres pantallas cuelgan de `attendance:read` y de `employees:read` sin ser
+     * necesarias para diagnosticar un calculo de horas, y las tres responden
+     * `403` a los tres alcances de soporte. **El ambito no las cierra —tiene que
+     * abrir, o el alcance no serviria para nada—; las cierra su policy** (regla
+     * dura 16, ADR-020, RL-19):
+     *
+     * - `GET /api/v1/attendance/live` y los canales de presencia. Es quien esta
+     *   dentro del hotel **ahora mismo**, con nombre: vigilancia en tiempo real
+     *   de la plantilla del cliente, sin valor diagnostico ninguno. La cierra
+     *   `Reporting\Http\Policy\LivePresencePolicy`.
+     * - `GET /api/v1/compliance/summary`. Es el listado de **incumplimientos por
+     *   persona de toda la plantilla**, sin acotar por departamento. La cierra
+     *   `Reporting\Http\Policy\ComplianceSummaryPolicy`.
+     * - `GET /api/v1/absences` y su detalle. `sick_leave` y la nota son **dato
+     *   de salud del art. 9 del RGPD** (cierre de la Fase 3). Las cierra
+     *   `Workforce\Http\Policy\AbsencePolicy`.
+     *
+     * Lo que queda dentro son `GET /employees`, `GET /employees/{uuid}` y
+     * `GET /employees/{uuid}/workdays`, que **son** la razon de ser del alcance
+     * y dejan su asiento de divulgacion con el actor de soporte delante (RS-05).
      *
      * **Lo que lo hace de solo lectura son sus tres ambitos, no su rol.** Lleva
      * `attendance:read`, `employees:read` y `audit:read`, y esas tres familias
@@ -189,7 +213,7 @@ enum SupportScope: string
      * | Alcance | Ambitos | Lo que abre de verdad |
      * | --- | --- | --- |
      * | `diagnostics` | `diagnostics:*` | El paquete anonimizado y el historico de errores |
-     * | `read_only` | + `attendance:read`, `employees:read`, `audit:read` | **Solo rutas `GET`**: jornadas, presencia y plantilla |
+     * | `read_only` | + `attendance:read`, `employees:read`, `audit:read` | **Solo rutas `GET`**: jornadas y plantilla. **No** la presencia en vivo, el resumen de cumplimiento ni las ausencias: los cierran sus policies |
      * | `configuration` | + `settings:*` | Ajustes de instalacion y quioscos. **No** el perfil de cumplimiento: lo cierra su policy (RL-01, RL-02) |
      *
      * **Que los tres ambitos de lectura no abran ni una sola ruta de escritura no

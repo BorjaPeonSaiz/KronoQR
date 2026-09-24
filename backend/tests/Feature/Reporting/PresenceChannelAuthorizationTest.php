@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Domain\ValueObject\SupportScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Testing\TestResponse;
@@ -11,6 +12,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\LicenseKeys;
+use Tests\Support\Product\SupportGrants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -201,3 +203,60 @@ it('firma a RRHH el canal global', function (): void {
 
     autorizarCanal($token, 'presence.all')->assertOk();
 })->group('RF-PA-01');
+
+/*
+ * **EL FABRICANTE TAMPOCO ENTRA POR EL CABLE** (decision del 24-09-2026; regla
+ * dura 16, ADR-020, RL-19, RF-PD-11).
+ *
+ * `LivePresencePolicy` cierra `GET /attendance/live` a todo actor de soporte, y
+ * este fichero es la otra mitad de esa decision: los dos canales preguntan por
+ * **la misma habilidad** (`Gate::allows('view', PresenceBoard::class)` en
+ * `routes/channels.php`), asi que cerrar solo el endpoint dejaria al fabricante
+ * sin la foto y **con el flujo en vivo intacto**, que es peor que no haber
+ * cerrado nada: la vigilancia en tiempo real seguiria llegandole, y encima sin
+ * pasar por la ruta que escribe el asiento de divulgacion.
+ *
+ * Que hoy compartan la habilidad no basta para no probarlo. Es precisamente
+ * cuando dos caminos dependen de la misma linea cuando hace falta una prueba por
+ * camino: el dia que el canal tenga su propio criterio —y ya tiene uno propio,
+ * el `FeatureGate`— nadie se acordara de que esto dependia de aquello.
+ */
+it('no firma ningun canal de presencia a un acceso de soporte del fabricante', function (SupportScope $alcance): void {
+    // arrange
+    // El token se concede ANTES de montar el escenario y de cualquier viaje en
+    // el tiempo: la vigencia de una concesion se comprueba contra `time()`
+    // —infraestructura de sesion, no dominio— mientras que `expires_at` se
+    // calcularia con el reloj detenido. Concedida despues, nacera caducada y la
+    // peticion respondera `401`, que es un rechazo por el motivo equivocado.
+    // Este fichero no detiene el reloj hoy; el orden se deja escrito para que
+    // siga siendo correcto el dia que alguien lo detenga.
+    $token = SupportGrants::tokenFor($alcance);
+    $escenario = escenarioDeCanales();
+
+    // act / assert
+    autorizarCanal($token, 'presence.all')->assertStatus(403);
+    autorizarCanal($token, 'presence.department.'.$escenario['cocina'])->assertStatus(403);
+})->with([
+    // Se para en el middleware: no lleva `attendance:read`.
+    'diagnostics' => [SupportScope::Diagnostics],
+    // **PASA EL MIDDLEWARE** —lleva el ambito— y ante las policies se presenta
+    // como `admin` (`SupportScope::actsAs()`). Lo unico que lo para es la
+    // pregunta por quien actua. Es el caso que importa; los otros dos estan
+    // porque lo que se afirma es que NINGUNO pasa, no donde se para cada uno.
+    'read_only' => [SupportScope::ReadOnly],
+    // Se para en el middleware: lleva `settings:*`, no el registro horario.
+    'configuration' => [SupportScope::Configuration],
+])->group('RF-PA-01', 'RF-PD-11', 'ADR-020');
+
+it('firma a un admin del cliente los dos canales que le niega al soporte', function (): void {
+    // El control positivo de la prueba de arriba, y con los MISMOS dos canales:
+    // sin el, cerrar los canales a todo el mundo —o dejarlos sin declarar—
+    // pasaria en verde, y la presencia en vivo es la pantalla con la que
+    // recepcion sabe quien esta dentro del hotel.
+    $escenario = escenarioDeCanales();
+
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    autorizarCanal($token, 'presence.all')->assertOk();
+    autorizarCanal($token, 'presence.department.'.$escenario['cocina'])->assertOk();
+})->group('RF-PA-01', 'RF-PD-11', 'RQ-07');
