@@ -16,8 +16,8 @@ use Throwable;
  * `Attendance\Infrastructure\Metrics\RedisScanMetrics`: el hecho medido lo
  * produce una peticion HTTP, no un comando diario, y un fichero reescrito en cada
  * latido seria una escritura de disco por minuto y por quiosco, con una carrera
- * entre procesos PHP de regalo. El endpoint `/metrics` que lo publica es de la
- * tarea 3.1; hasta entonces los valores se acumulan y las pruebas los leen.
+ * entre procesos PHP de regalo. `/metrics` las publica desde la tarea 3.1, con
+ * `MetricCatalogue` y `MetricsCatalogueTest` contra el doc 02 §8.2.
  *
  * **`HSET` y no `HINCRBY`: son gauges.** Lo que interesa no es cuantos latidos
  * hubo sino **cual fue el ultimo** y **cuanto hay en la cola ahora**. Un contador

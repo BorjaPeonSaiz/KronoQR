@@ -311,18 +311,31 @@ final readonly class AdoptionReportLayout
     }
 
     /**
-     * Un numero con el separador decimal del idioma del documento.
+     * Un numero con los separadores del idioma del documento.
      *
      * Coma en español y punto en ingles, por lo mismo que el separador del CSV: lo
      * abre una hoja de calculo con la configuracion regional del cliente, y un
      * `99.94` en un Excel español se lee como noventa y nueve mil novecientos
      * noventa y cuatro.
+     *
+     * ## LOS SEPARADORES SALEN DE `lang/`, NO DE UN `if` POR IDIOMA
+     *
+     * Esto era `Lang::getLocale() === 'es' ? ... : ...`, el unico condicional por
+     * idioma del backend. Con dos idiomas daba la respuesta correcta; con un
+     * tercero habria dado la inglesa **en silencio**, que en una hoja de calculo
+     * no es un formato feo sino una cifra distinta.
+     *
+     * Por {@see self::text()}, que exige la clave y falla con su nombre delante si
+     * falta: un idioma nuevo no puede olvidarse de decir como escribe un numero.
      */
     private static function number(float $value, int $decimals): string
     {
-        return Lang::getLocale() === 'es'
-            ? number_format($value, $decimals, ',', '.')
-            : number_format($value, $decimals, '.', ',');
+        return number_format(
+            $value,
+            $decimals,
+            self::text('number.decimal_separator'),
+            self::text('number.thousands_separator'),
+        );
     }
 
     private static function signed(float $value, int $decimals): string

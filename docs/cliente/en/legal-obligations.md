@@ -48,6 +48,8 @@ in your record of processing activities under art. 30 of the GDPR (RGPD):
   department, start and end dates. Email is **optional**.
 - Clock-in and clock-out timestamps, their origin (QR card or PIN) and the
   device they were recorded from.
+- Absences: type, dates, optional note, versions and voidings.
+- Contract data: agreed hours, type of working day and validity period.
 - Log of access and of actions with legal relevance (`audit_log`).
 
 The **impact dashboard** ([`hr-guide.md`](hr-guide.md) §6.6) adds nothing to
@@ -61,7 +63,9 @@ record.
 - **Nothing biometric** (ADR-009). No fingerprint, no face, no voice. It is not
   a disabled option: it does not exist.
 - **No geolocation** of individuals.
-- **No special-category data** under art. 9 GDPR.
+- **One special category only**, and only if you use it: the "Sick leave" type
+  in the absence register and the note written next to it are **data
+  concerning health** (art. 9 GDPR). See §4. No other data in the product is.
 
 **Legal basis**: compliance with a legal obligation of the employer
 (art. 6.1.c GDPR, in connection with art. 34.9 ET). **It is not consent**, and
@@ -144,10 +148,15 @@ your entire workforce every day, so the question has to be asked.
 advisable.** The factors that trigger high risk are absent: there is no
 biometrics (ADR-009: it is not a disabled option, it does not exist), no
 geolocation of individuals, no automated decisions with effects on anybody,
-and the data does not leave your infrastructure — with the sole exception of
-the incident email described above. What remains is the minimum data — who
+and the data does not leave your infrastructure — with the exception of the
+**two emails** described above. What remains is the minimum data — who
 clocks in, when and on which device — processed under the legal basis of art.
-6.1.c.
+6.1.c. **And since absences are recorded there is a special category at
+stake** —the "Sick leave" type and its note—, and that weighs in the analysis:
+the WP248 guidelines count sensitive data among the criteria that add up
+towards high risk. Describe it in the assessment: who sees it, with what scope
+and why. The questions to take to your advisers before closing it are in
+[`legal-questions.md`](legal-questions.md).
 
 **One processing operation has to go into that analysis by name: the
 automatic detection of credential usage patterns.** Every night the system
@@ -243,6 +252,8 @@ Policy per data type, which is the one the system applies:
 | Contract data (agreed hours, type of working day, validity period) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **it is kept**: the system does not purge it |
 | Absences (type, dates, note, versions and voidings) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **they are kept**: the system does not purge them. **They contain health data** |
 | Record of weekly summary sends (`weekly_summary_deliveries`) | **No automatic purge** | It keeps counts and the recipient account; **no data about the staff** |
+| Report files generated in the background (`report_exports`): named hours of the staff, ready to download | **7 days** by default | Your installation (`REPORTING_EXPORT_RETENTION_DAYS`, [`configuration.md`](configuration.md) §6.25). They are downloaded with a single-use link; when they expire, the file is deleted and the note that it existed is left without any person identifiers or scope |
+| ZIP of the full export (§7 quater) | **7 days** by default | Your installation (`PRODUCT_DATA_EXPORT_RETENTION_DAYS`). It contains all the personal data of the installation; while it exists, its custody is yours. The note that it existed is kept |
 
 **A weekly summary email that has been delivered is a copy outside the
 product.** It lives in the manager's mailbox, it can be forwarded and printed,
@@ -513,3 +524,21 @@ prohibition on retaining data when finished. The vendor delivers it with the
 product contract; if you do not have it signed, ask for it **before** ticking
 the checkbox or granting the access, not after. The anonymised bundle does not
 need it: it is the normal support route, and that is why it is the default.
+
+---
+
+## 9. What to ask your advisers, and who watches the law
+
+Several of the obligations in this guide end in "confirm it with your
+advisers": the retention period for contract data and for absences, the legal
+basis for the health data, whether a DPIA is required, the admissibility of
+pattern detection and of its disciplinary use, and the daily notice by email.
+They are collected, **closed and with what is done with each answer**, in
+[`legal-questions.md`](legal-questions.md): eight questions, not one more. Take
+them together; it is a single meeting.
+
+And the law changes without telling the product. Who watches it, how often and
+how a change comes in —through the compliance profile, never through the code—
+is in the runbook
+[`../../runbooks/vigilancia-normativa.md`](../../runbooks/vigilancia-normativa.md)
+(in Spanish), which travels in your package and requires a named person.

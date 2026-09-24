@@ -159,7 +159,12 @@ it('admite apagar el anti-rebote y el transito minimo con un cero', function ():
     // puede querer el anti-rebote apagado, o dos quioscos contiguos donde el
     // transito real es de segundos.
     $settings = new OperationalSettings(
-        720, 0, 10, 0, 0, 1,
+        anomalousShiftMinutes: 720,
+        debounceSeconds: 0,
+        maximumClockSkewMinutes: 10,
+        minimumTransitSeconds: 0,
+        patternWindowSeconds: 0,
+        patternMinRepeats: 1,
         breakClockingEnabled: false,
         kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
         // RF-KI-07 (tarea 3.12): el cuarto que admite el cero. Apaga la guarda
@@ -179,8 +184,19 @@ it('admite apagar el anti-rebote y el transito minimo con un cero', function ():
 })->group('RF-AT-06');
 
 it('acepta un umbral operativo de exactamente una unidad', function (): void {
+    // Los seis van con NOMBRE, no por posicion. Con `1, 1, 1, 1, 1, 1` la prueba
+    // pasaba igual con el constructor en cualquier orden —seis unos no distinguen
+    // una posicion de otra—, asi que no afirmaba nada sobre que umbral es cual.
+    // Con nombre, cada `toBe(1)` de abajo si dice a que campo llego el uno; y es
+    // como el unico llamador de produccion lo construye
+    // (`DbOperationalSettingsProvider`).
     $settings = new OperationalSettings(
-        1, 1, 1, 1, 1, 1,
+        anomalousShiftMinutes: 1,
+        debounceSeconds: 1,
+        maximumClockSkewMinutes: 1,
+        minimumTransitSeconds: 1,
+        patternWindowSeconds: 1,
+        patternMinRepeats: 1,
         breakClockingEnabled: true,
         kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
         kioskUpdateQuietMinutes: 1,

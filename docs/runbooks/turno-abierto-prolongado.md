@@ -176,7 +176,7 @@ docker compose -f infra/compose.prod.yaml exec -T app sh -c 'ls -l "$BACKUP_PATH
 
 Causas por frecuencia: el contenedor `scheduler` parado, `BACKUP_PATH` sin
 permisos de escritura para el usuario de la aplicación, o
-`OBSERVABILITY_METRICS_ENABLED` en `false`.
+`METRICS_TEXTFILE_ENABLED` en `false`.
 
 ---
 

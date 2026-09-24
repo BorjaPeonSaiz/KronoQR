@@ -35,6 +35,31 @@ use Throwable;
  * `...:result=accepted`). Se prueban las dos, en ese orden, sin preguntar el
  * tipo: `TYPE` devuelve un objeto en un cliente y una cadena en el otro, y
  * depender de eso romperia el paquete al cambiar de driver de Redis.
+ *
+ * ## Restos de la 3.1: las claves sueltas nunca llegaban al paquete
+ *
+ * `installation_setting_changes_total`, `compliance_profile_changes_total` y
+ * `license_limit_exceeded_total` viven exactamente asi —una clave por
+ * combinacion de etiquetas— y desde la 5.5 no viajaban en el paquete de
+ * diagnostico: {@see self::labelled()} llamaba a `command('SCAN', [$cursor,
+ * 'MATCH', $pattern, 'COUNT', $count])`, que traduce a
+ * `$client->SCAN($cursor, 'MATCH', $pattern, 'COUNT', $count)` —cinco
+ * argumentos posicionales—, y `phpredis` no tiene un `SCAN` que acepte eso:
+ * su metodo `scan()` es `scan(&$iterator, $pattern, $count, $type)`, con
+ * cuatro como mucho. La llamada lanzaba `ArgumentCountError`, {@see
+ * self::command()} lo atrapaba en silencio (el mismo `try` que protege una
+ * serie individual de tumbar a las demas) y la seccion `metrics` del paquete
+ * seguia saliendo sin decir que le faltaban tres series.
+ *
+ * La correccion usa el mismo envoltorio que ya arreglo esto en
+ * `RedisMetricReader` (tarea 3.1, Integration
+ * `MetricsExpositionTest::it('encuentra las series que viven como claves
+ * sueltas...')`): el `scan()` de `PhpRedisConnection`, que SI traduce
+ * `match`/`count` y devuelve `[cursor, claves]`, y a mano las dos trampas que
+ * `phpredis` no resuelve solo: el prefijo global de la instalacion
+ * (`database.redis.options.prefix`) NO se antepone al patron `MATCH` ni se
+ * quita de las claves que `SCAN` devuelve, y un cursor inicial `0` (en vez de
+ * `null`) se lee como «el recorrido ya termino» sin mirar una sola clave.
  */
 final readonly class MetricsCollector implements DiagnosticsCollector
 {
@@ -207,42 +232,110 @@ final readonly class MetricsCollector implements DiagnosticsCollector
      * degradacion aceptable de una seccion accesoria; un comando que no termina,
      * no.
      *
+     * **El patron se prefija a mano y el resultado se desprefija antes de
+     * pedir su valor.** Ver el docblock de la clase: `phpredis` no hace ni lo
+     * uno ni lo otro por su cuenta.
+     *
      * @return array<string, int|float>
      */
     private function labelled(Connection $connection, string $key): array
     {
-        $values = [];
-        $cursor = '0';
-        $rounds = 0;
+        $prefix = $this->keyPrefix();
+        $pattern = $prefix.$key.':*';
 
-        do {
-            $page = $this->command($connection, 'SCAN', [$cursor, 'MATCH', $key.':*', 'COUNT', (string) self::SCAN_COUNT]);
+        $values = [];
+        // NULL y no CERO en la primera vuelta: `phpredis` recibe el cursor por
+        // referencia y trata un `0` de entrada como «el recorrido ya
+        // termino», sin mirar una sola clave.
+        $cursor = null;
+
+        for ($round = 0; $round < self::SCAN_MAX_ROUNDS; $round++) {
+            $page = $this->scanPage($connection, $pattern, $cursor);
 
             if (! is_array($page) || \count($page) < 2) {
                 break;
             }
 
-            $cursor = is_scalar($page[0]) ? (string) $page[0] : '0';
-            $found = is_array($page[1]) ? $page[1] : [];
+            $cursor = is_scalar($page[0]) ? (int) $page[0] : 0;
 
-            foreach ($found as $candidate) {
-                if (! is_string($candidate)) {
-                    continue;
-                }
+            $this->collectFound(is_array($page[1]) ? $page[1] : [], $connection, $prefix, $key, $values);
 
-                $number = $this->number($this->command($connection, 'GET', [$candidate]));
-
-                if ($number !== null) {
-                    $values[substr($candidate, \strlen($key) + 1)] = $number;
-                }
+            if ($cursor === 0) {
+                break;
             }
-
-            $rounds++;
-        } while ($cursor !== '0' && $rounds < self::SCAN_MAX_ROUNDS);
+        }
 
         ksort($values, SORT_STRING);
 
         return $values;
+    }
+
+    /**
+     * Una vuelta de claves encontradas, desprefijadas y con su valor pedido.
+     *
+     * Separado de {@see self::labelled()} para que la complejidad ciclomatica
+     * de la vuelta de `SCAN` no se sume a la del recorrido de sus claves (doc
+     * 02 §3.5): son dos decisiones distintas —cuantas vueltas hacer, y que
+     * hacer con lo que trae cada una—.
+     *
+     * @param  array<array-key, mixed>  $found
+     * @param  array<string, int|float>  $values
+     */
+    private function collectFound(array $found, Connection $connection, string $prefix, string $key, array &$values): void
+    {
+        foreach ($found as $candidate) {
+            if (! is_string($candidate)) {
+                continue;
+            }
+
+            $unprefixed = str_starts_with($candidate, $prefix)
+                ? substr($candidate, \strlen($prefix))
+                : $candidate;
+
+            $number = $this->number($this->command($connection, 'GET', [$unprefixed]));
+
+            if ($number !== null) {
+                $values[substr($unprefixed, \strlen($key) + 1)] = $number;
+            }
+        }
+    }
+
+    /**
+     * Una vuelta de `SCAN`, o `null` si Redis no contesta.
+     *
+     * Aislada en su propio metodo por lo mismo que en `RedisMetricReader`: el
+     * tipo de vuelta es `mixed` para que las comprobaciones de {@see
+     * self::labelled()} sean comprobaciones de verdad, y no una promesa del
+     * analisis estatico sobre una firma que no es la que corre.
+     */
+    private function scanPage(Connection $connection, string $pattern, ?int $cursor): mixed
+    {
+        try {
+            // El envoltorio de Laravel y no `command('SCAN', …)`: `phpredis`
+            // recibe el cursor POR REFERENCIA y la lista de argumentos
+            // `MATCH … COUNT …` del protocolo crudo no le vale —peta con
+            // «expects at most 4 arguments»—. Ver el docblock de la clase.
+            //
+            // @phpstan-ignore argument.type (`Connection` declara `@mixin \Redis`, asi que el analisis ve la firma cruda `Redis::scan(&$it, ?string $pattern, int $count)`. La que corre es `PhpRedisConnection::scan($cursor, array $options)`, que es la unica que traduce `match`/`count` y devuelve `[cursor, claves]`. Verificado contra el contenedor, igual que en `RedisMetricReader::scanPage()`.)
+            return $connection->scan($cursor, ['match' => $pattern, 'count' => self::SCAN_COUNT]);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * El prefijo global que el cliente de Redis antepone a toda clave.
+     *
+     * Misma lectura que `MetricsServiceProvider::keyPrefix()` (que alimenta a
+     * `RedisMetricReader`): vacio si la instalacion no configuro ninguno, que
+     * es una configuracion legitima y el paquete tiene que seguir funcionando
+     * igual.
+     */
+    private function keyPrefix(): string
+    {
+        $prefix = config('database.redis.options.prefix');
+
+        return is_string($prefix) ? $prefix : '';
     }
 
     /**

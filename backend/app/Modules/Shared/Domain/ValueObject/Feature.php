@@ -53,13 +53,28 @@ enum Feature: string
      */
     case AdvancedReports = 'advanced_reports';
 
-    /** Cuadro de impacto y adopcion (RF-IN-08). Material de gestion. Llega en la Fase 3. */
+    /**
+     * Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13). Material de gestion.
+     *
+     * Con consumidor desde esa tarea: `AdoptionReportController` y
+     * `AdoptionReportExportController` preguntan por ella y responden `402`.
+     */
     case ImpactDashboard = 'impact_dashboard';
 
-    /** Exportacion configurable para nomina (RF-IN-07). Llega en la Fase 3. */
+    /**
+     * Exportacion configurable para nomina (RF-IN-07, tarea 3.9).
+     *
+     * Con consumidor desde esa tarea: `PayrollExportController` y la rama
+     * `payroll` de `ReportExportController` preguntan por ella y responden `402`.
+     */
     case PayrollExport = 'payroll_export';
 
-    /** Resumen semanal por correo (RF-PR-05). Llega en la Fase 3. */
+    /**
+     * Resumen semanal por correo (RF-PR-05, tarea 3.12).
+     *
+     * Con consumidor desde esa tarea: `SendWeeklySummaries` pregunta por ella
+     * antes de componer nada y registra `not_in_plan` cuando el plan no la trae.
+     */
     case WeeklyEmailSummary = 'weekly_email_summary';
 
     /**
@@ -99,25 +114,53 @@ enum Feature: string
     case Telemetry = 'telemetry';
 
     /**
-     * Las que ya tienen consumidor en el codigo de hoy.
+     * Las que ya tienen consumidor en el codigo de hoy: **desde el cierre de la
+     * Fase 3, las siete**.
      *
-     * Existe para que la documentacion, la pantalla de licencia y `license:show`
-     * puedan distinguir «esto se apagara» de «esto se apagara cuando exista», en
-     * lugar de prometerle al cliente una degradacion de algo que todavia no ha
-     * comprado. Las tres restantes -cuadro de impacto, exportacion para nomina
-     * y resumen semanal- entran con su tarea de la Fase 3.
+     * Nacio para que la documentacion, la pantalla de licencia y `license:show`
+     * pudieran distinguir «esto se apagara» de «esto se apagara cuando exista»,
+     * en lugar de prometerle al cliente la degradacion de algo que todavia no
+     * habia comprado. Eran cuatro porque tres de los siete casos no tenian aun
+     * quien preguntara por ellos.
      *
-     * `WhiteLabel` entra con la tarea 5.8, que es la que le da consumidor: el
-     * decorador `LicensedBrandingProvider`. `Telemetry` entra con la 5.10, que
-     * le da el suyo: `SendTelemetryHandler` pregunta por ella antes de construir
-     * ni enviar nada, asi que a partir de esa tarea una licencia caducada la
-     * apaga de verdad y el cliente merece verlo en `license:show`.
+     * Ya no queda ninguno. Las tres que faltaban estrenaron consumidor en la
+     * Fase 3 y las tres responden `402` con la licencia caducada:
+     *
+     * | Caso | Quien pregunta | Tarea |
+     * |---|---|---|
+     * | `PayrollExport` | `PayrollExportController`, `ReportExportController` | 3.9 |
+     * | `WeeklyEmailSummary` | `SendWeeklySummaries` | 3.12 |
+     * | `ImpactDashboard` | `AdoptionReportController`, `AdoptionReportExportController` | 3.13 |
+     *
+     * **Mantenerlas fuera era peor que no tener la lista**: los cuatro
+     * consumidores de `isImplemented()` —`LicenseShowCommand`, `LicenseResource`,
+     * `LicenseCollector` y la pantalla de licencia del panel— filtran por ella, y
+     * con la licencia vencida el cliente recibia un `402` del endpoint y, en la
+     * misma pantalla, un texto diciendo que esa funcionalidad *«todavia no
+     * existe, asi que no se pierde nada»*. Es exactamente la promesa incumplida
+     * que esta lista existia para evitar, con el signo invertido (ADR-019,
+     * ADR-023, RF-PD-05).
+     *
+     * ## Por que el metodo sigue existiendo aunque hoy no separe nada
+     *
+     * Porque separara otra vez: el catalogo lo manda ADR-023 —la tabla
+     * «Degradable» del documento, atada por `LicenseBoundaryTest`— y un caso
+     * nuevo se declara ahi **antes** de que exista quien pregunte por el. Ese dia
+     * hay que poder decirlo, y retirar el concepto obligaria a reintroducirlo, a
+     * cambiar el contrato y a tocar los cuatro consumidores por segunda vez.
+     *
+     * Lo que si cambia es que ahora hay una prueba que lo vigila:
+     * `LicenseBoundaryTest` recorre los modulos buscando quien consulta cada caso
+     * por el puerto `FeatureGate` y exige que todo caso consultado este aqui. Un
+     * consumidor nuevo sobre un caso ausente de esta lista deja de ser una
+     * contradiccion silenciosa en la pantalla del cliente y pasa a ser una
+     * prueba roja.
      *
      * @return list<self>
      */
     public static function implemented(): array
     {
-        return [self::AdvancedReports, self::RealtimePresence, self::WhiteLabel, self::Telemetry];
+        return self::cases();
     }
 
     public function isImplemented(): bool

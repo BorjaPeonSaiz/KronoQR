@@ -250,3 +250,69 @@ it('el camino de fichaje no menciona la licencia por ninguna via', function (str
     'Kiosk/Http/Controller/RosterController.php',
     'Kiosk/Http/Controller/HeartbeatController.php',
 ])->group('RF-PD-05');
+
+it('implemented() es exactamente el conjunto de funcionalidades con consumidor', function (): void {
+    /*
+     * **LA CONTRADICCION QUE ESTA PRUEBA IMPIDE** (RF-PD-05, ADR-019, ADR-023).
+     *
+     * `Feature::implemented()` separa «esto se apagara» de «esto se apagara
+     * cuando exista», y de ella cuelgan cuatro consumidores: `LicenseShowCommand`,
+     * `LicenseResource`, `LicenseCollector` y la pantalla de licencia del panel.
+     *
+     * Mientras la lista se mantuvo a mano, tres casos —`payroll_export`,
+     * `impact_dashboard` y `weekly_email_summary`— estrenaron consumidor en la
+     * Fase 3 sin entrar en ella, y el resultado fue el peor posible: con la
+     * licencia caducada el endpoint respondia `402` y la pantalla, a la vez,
+     * anunciaba que esa funcionalidad todavia no existe y que **no se pierde
+     * nada**. Justo la promesa incumplida que la lista existia para evitar.
+     *
+     * Asi que la lista deja de mantenerse a mano y pasa a comprobarse, **en las
+     * dos direcciones**:
+     *
+     *   - un caso **con** consumidor fuera de `implemented()` le oculta al
+     *     cliente una perdida real (el fallo de la Fase 3);
+     *   - un caso **sin** consumidor dentro de `implemented()` le anuncia la
+     *     perdida de algo que todavia no ha visto nunca (el fallo simetrico, que
+     *     aparece en cuanto alguien declare un caso nuevo —ADR-023 los declara
+     *     antes de que exista quien los use— y no ajuste la lista).
+     *
+     * «Tener consumidor» es una propiedad del codigo y no una nota en un
+     * docblock: alguien pregunta por el caso a traves del puerto `FeatureGate`.
+     * Se buscan las tres formas en las que se pregunta —`isEnabled()`,
+     * `statusOf()` y `allows()`— y no una mencion cualquiera de `Feature::`,
+     * porque el catalogo de etiquetas de `license:show` nombra los siete y eso no
+     * es consumirlos.
+     */
+    $sources = array_map(
+        static fn (string $file): string => (string) file_get_contents($file),
+        ModuleTree::filesIn(''),
+    );
+
+    $consumed = [];
+
+    foreach (Feature::cases() as $feature) {
+        $pattern = '/(?:isEnabled|statusOf|allows)\(\s*Feature::'.preg_quote($feature->name, '/').'\b/';
+
+        foreach ($sources as $source) {
+            if (preg_match($pattern, $source) === 1) {
+                $consumed[] = $feature->value;
+
+                break;
+            }
+        }
+    }
+
+    $declared = array_map(static fn (Feature $feature): string => $feature->value, Feature::implemented());
+
+    sort($consumed);
+    sort($declared);
+
+    expect($declared)->toBe(
+        $consumed,
+        '`Feature::implemented()` ya no describe lo que el codigo consulta por `FeatureGate`. '
+        .'Sobran: ['.implode(', ', array_diff($declared, $consumed)).']; '
+        .'faltan: ['.implode(', ', array_diff($consumed, $declared)).']. '
+        .'Lo primero le anuncia al cliente la perdida de algo que no existe; lo segundo le oculta '
+        .'una perdida real (ADR-019, ADR-023).'
+    );
+})->group('RF-PD-05');

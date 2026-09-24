@@ -38,11 +38,24 @@ it('reconoce los nombres castellanos de la carga, sin distinguir mayusculas ni t
     'ingles' => ['vacation', 'vacation'],
     'castellano' => ['vacaciones', 'vacation'],
     'con mayusculas' => ['VACACIONES', 'vacation'],
+    // El singular, que es como lo escribe quien anota una sola jornada.
+    'castellano en singular' => ['vacacion', 'vacation'],
     'baja' => ['Baja', 'sick_leave'],
     'baja medica con tilde' => ['Baja médica', 'sick_leave'],
     'incapacidad temporal' => ['IT', 'sick_leave'],
     'permiso' => ['permiso', 'leave'],
     'otro' => ['Otro', 'other'],
+    // LOS TRES NOMBRES CANONICOS EN INGLES que faltaban, y no sobran: son los
+    // que sale de una EXPORTACION del propio producto, que es el fichero mas
+    // probable de todos —el cliente exporta, corrige en la hoja y vuelve a
+    // cargar—. Sin ellos, borrar la fila `'sick_leave' => SickLeave` del mapa de
+    // alias no rompia ninguna prueba: la carga de la exportacion propia dejaba
+    // de reconocer la baja y nadie se enteraba hasta el fichero del cliente.
+    'baja en ingles' => ['sick_leave', 'sick_leave'],
+    'permiso en ingles' => ['leave', 'leave'],
+    'otro en ingles' => ['other', 'other'],
+    // Y el plural castellano de `other`, por lo mismo que el de `vacation`.
+    'otros en plural' => ['Otros', 'other'],
 ])->group('RF-GP-04');
 
 it('devuelve null para una etiqueta que no reconoce', function (): void {

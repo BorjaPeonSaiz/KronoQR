@@ -327,6 +327,107 @@ final class ClientDocs
     }
 
     /**
+     * Las frases donde el documento NIEGA EN BLOQUE tratar dato de categoria
+     * especial del art. 9 sin nombrar la excepcion.
+     *
+     * POR QUE EXISTE. `obligaciones-legales.md` decia en su §2 «Ningun dato de
+     * categoria especial del art. 9 RGPD» y, cuatro paginas mas abajo, que el
+     * tipo «Baja medica» de una ausencia ES dato de salud. Las dos frases no
+     * pueden ser ciertas a la vez, y la que el cliente copia en su registro de
+     * actividades del art. 30 es la primera: se lleva a su documentacion una
+     * afirmacion falsa sobre su propio tratamiento, que es exactamente lo que
+     * RL-21 existe para evitar.
+     *
+     * EL CRITERIO ES LA EXCEPCION NOMBRADA, no la ausencia de la frase. Negar
+     * el art. 9 sigue siendo correcto —y necesario— mientras la misma frase diga
+     * de que se exceptua: «ningun dato de categoria especial salvo el tipo de
+     * ausencia» pasa, «ningun dato de categoria especial» a secas no. Por eso no
+     * se prohibe el literal: se mira la frase que lo contiene, igual que en
+     * {@see pinByEmailClaims()}.
+     *
+     * Y por eso tampoco se acusa la frase que DESCRIBE el dato de salud —«el
+     * tipo Baja medica es dato de salud, categoria especial del art. 9»—: nombra
+     * la excepcion, asi que es la frase correcta, no la contradictoria.
+     *
+     * @return list<string>
+     */
+    public static function blanketSpecialCategoryDenials(string $relative): array
+    {
+        $text = self::folded(self::contents($relative));
+
+        preg_match_all('/categoria especial|special[- ]categor(?:y|ies)/', $text, $matches, PREG_OFFSET_CAPTURE);
+
+        $denials = [];
+
+        foreach ($matches[0] as $match) {
+            $sentence = self::sentenceAround($text, (int) $match[1], strlen((string) $match[0]));
+
+            if (preg_match('/\b(ningun|ninguno|ninguna|nada|sin|no|not|never|nunca)\b/', $sentence) !== 1) {
+                continue;
+            }
+
+            if (preg_match('/ausencia|baja medica|dato de salud|datos de salud|absence|sick leave|health data|salvo|excepto|except|other than/', $sentence) === 1) {
+                continue;
+            }
+
+            $denials[] = mb_scrub($sentence);
+        }
+
+        return $denials;
+    }
+
+    /**
+     * Los puntos de la primera lista con guion que sigue a un texto ancla.
+     *
+     * Se devuelve el bloque tal cual —con su sangria y sus lineas de
+     * continuacion— para que la prueba pueda buscar un termino dentro de LA
+     * LISTA y no en el resto del apartado. La diferencia importa: la §2 de
+     * `obligaciones-legales.md` habla de las ausencias en varios parrafos, pero
+     * la lista que el cliente copia en su registro del art. 30 es solo esa, y es
+     * ahi donde faltaba nombrarlas.
+     *
+     * La lista se cierra en la primera linea que no es ni un punto, ni una
+     * continuacion sangrada, ni un hueco: lo que venga despues ya es prosa.
+     * Cadena vacia si el ancla no esta o si no hay lista detras, para que la
+     * prueba lo diga con su propio mensaje.
+     */
+    public static function firstListAfter(string $relative, string $anchor): string
+    {
+        $content = self::contents($relative);
+        $position = mb_strpos($content, $anchor);
+
+        if ($position === false) {
+            return '';
+        }
+
+        $block = [];
+        $open = false;
+
+        foreach (explode("\n", mb_substr($content, $position + mb_strlen($anchor))) as $line) {
+            if (str_starts_with($line, '- ')) {
+                $open = true;
+                $block[] = $line;
+
+                continue;
+            }
+
+            if (! $open) {
+                continue;
+            }
+
+            if (str_starts_with($line, '  ') || trim($line) === '') {
+                $block[] = $line;
+
+                continue;
+            }
+
+            break;
+        }
+
+        return trim(implode("\n", $block));
+    }
+
+    /**
      * La frase que contiene una posicion del texto, entre puntos.
      *
      * Sin newlines de por medio: el texto llega ya colapsado, asi que los

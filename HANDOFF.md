@@ -256,6 +256,46 @@ conocido); volumen RNF-P-05 **500 × 2 años en 0,891 s** (antes 2,179 s); mutac
 abrir «Informes → Impacto y adopción» en el panel con la licencia de dev (si el plan no lleva `impact_dashboard` verá el aviso 402) y
 descargar un PDF para ver el asiento `adoption_report.exported`. Después, según plan 06 §11: el **Cierre de la Fase 3** (plan 06 → «Cierre de la Fase 3»: las cuatro revisiones de cierre, `make quality && make test && make mutate && make e2e`, k6, doc 07 §6 con las filas vencidas, `current_phase` a 3 en `qa:traceability`).
 
+**Rama `chore/cierre-fase-3` (desde `main` `d118d53`, PR #80 de la 3.13 integrada). CIERRE DE LA FASE 3 EJECUTADO el 24-09-2026
+(`current_phase => 3`); ver «Siguiente acción».** El acta completa está en el plan 06 → «Cierre de la Fase 3» → «Cierre ejecutado»;
+el porqué de cada decisión, en Engram (`fase-3/cierre/*`). Lo que importa: los cuatro revisores en paralelo sobre `main` `d118d53`
+y **todo lo bloqueante corregido en la misma rama antes de dar el literal por bueno**: (1) un acceso de soporte `read_only` leía el
+registro de ausencias entero con `sick_leave` y la nota (`AbsencePolicy` no consultaba `isSupportActor()`; `SupportScopeRoutesTest`
+solo miraba escrituras) → cerrado a todo actor de soporte, prueba por alcance y guarda simétrica sobre las rutas de lectura; (2)
+`obligaciones-legales.md` se contradecía sobre el art. 9 y la lista del art. 30 no tenía las ausencias → corregido ES/EN con guarda
+en `ClientDocumentationTest`; (3) `Feature::implemented()` en cuatro casos con siete consumidos (licencia caducada: 402 y «no se pierde
+nada») → los siete, prueba y doc 05 §10.5; (4) runbook de brecha sin `payroll_export` ni `report_export.*` y el de derechos sin el
+art. 15.1.c de los dos canales nuevos → ampliados; (5) `ATTENDANCE_PATTERN_WINDOW_SECONDS`/`_MIN_REPEATS` **reservadas al cliente**
+(`MIN_TRANSIT` se queda, fila 200 de doc 07); (6) `MetricsCollector` del paquete de diagnóstico sin enviar tres series desde la 5.5
+(`ArgumentCountError` tragado) → arreglado con prueba; (7) panel de Grafana «correcciones / fichajes» con denominador distinto del
+cuadro de adopción → misma fracción; (8) **`make dast`** creado y ejecutado (`docs/seguridad/evidencia/dast-2026-09-24.md`); (9)
+`absences_current` con serie de frescura; (10) modelo de amenazas con **quince filas** (canal SMTP, `T1114`), doc 07 §6 dictaminado
+fila a fila y **SAMM 1,73 → 1,80** (solo sube Evaluación de arquitectura 1 → 2; Gobierno, Gestión de defectos e Incidentes llevan tres
+cierres sin moverse); (11) de la revisión de código: `withStatementTimeout` de adopción unificado y su `57014 → 422` probado, nueve
+comentarios de `/metrics` en futuro, `PAYROLL_EXPORT_*` con `satisfies SettingKey`, `formatBytes` en `web-kit`, `failOnWarning` en
+`phpunit.xml`, tres datasets de RN-16, mutantes vivos de `Absence*`/`ReportExport*`, `OperationalSettings` con argumentos con nombre
+en pruebas; (12) dos entregables para las verificaciones humanas: `docs/runbooks/vigilancia-normativa.md` y
+`docs/cliente/preguntas-asesoria.md` (ocho preguntas cerradas para la asesoría laboral). **La duda de la mutación de la 3.13 era el
+bind mount**: en una copia dentro del contenedor `AdoptionTarget`/`AdoptionIndicator` dan 20 mutantes (uno vivo real, ya con prueba:
+100 %); receta en «Trampas». Cifras del cierre (24-09-2026): `make quality` en verde; Unit 2399, Integration 752, Contract
+63, Feature 2051, Architecture 707 (+ `SourceDiscoveryTest` conocido); `make e2e` quiosco 90, panel 158, portal
+30; `qa:traceability --check` con `current_phase = 3` en verde (21 requisitos de la fase con prueba; matriz 4022 (Pest 3742, Playwright 274, k6 6)); **MSI
+del dominio 85,43 %** (CI y copia local coinciden; `Workforce` sigue flojo); cobertura CI dominio 95,25 % / global 91,7 %;
+`audit_chain_verification_failures_total` 0 y `projection_divergence_total` 6 (acumulado de la carga de la 3.6, no se reinicia por
+diseño; criterio: sin incidentes abiertos); alertas ↔ runbooks ↔ destinatarios 41/41/41; **k6 run 35967821828 verde** (p95 453,6 ms
+en el runner frente al techo de 586; 19,5 fichajes/s). **Escrito en el acta lo que la matriz verde no dice:** «§9 completo» se
+verifica por delegación (sin id en `requisitos.yaml`); RS-11 está preparada, no cumplida (el tercero); RNF-P-06 sin cifra absoluta en
+hardware de referencia.
+
+**Siguiente acción:** commit único `chore(cierre-fase-3): …`, push, CI manual y PR contra `main` con *merge commit*; después un
+`docs(handoff)` con los números. Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
+venta** (condiciones del plan 06): validación jurídica por la asesoría laboral con `docs/cliente/preguntas-asesoria.md`; designar al
+responsable de vigilancia normativa (`docs/runbooks/vigilancia-normativa.md`); prueba de campo del hardware (12 h en tablet real);
+contraste de costes de impresión; instalación limpia por una persona ajena; pasada de k6 en hardware de referencia (`INSTANCES=10`);
+`git stash drop` del stash huérfano; y dos decisiones: la etapa ③ de la CI tarda 42 min por la mutación en cada push (nocturno o
+acotar al diff) y si doc 02 §3.5 admite ayudantes de prueba en español. Después, **Fase 4** (plan 07 «Fase 4 — Evolución»), empezando
+por los restos con dueño del bloque «Fase 4» de «Pendiente».
+
 **Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
 `chore(restos-3.8): …`, CI manual tras el push y PR contra `main` (*merge commit*). Sin migración: basta `git pull` y `make up`, que
 reconstruye la imagen `kronoqr/node:dev`.** (1) **Contenedores `node-*` de dev arreglados** (`devops-observabilidad`): montan la raíz
@@ -950,8 +990,20 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 
 ### Del usuario
 
-- **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel (sí; tarea ad hoc pendiente, reparto en «3.8 (restos)»).
+- **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel (sí; tarea ad hoc pendiente, reparto en el bloque
+  «Fase 4» de «Por tarea»).
   La línea base del runner y la fila del modelo de amenazas (reloj del quiosco) ya se hicieron en `chore/restos-3.8`.
+- **Decisión pendiente (cierre de la Fase 3, 24-09-2026): qué lee un acceso de soporte `read_only`.** `SupportScopeRoutesTest` mide
+  ahora todas las rutas `GET` que cada alcance alcanza y exige que cada una esté concedida por escrito; las ausencias quedaron
+  cerradas por `AbsencePolicy` (art. 9). Cinco rutas con dato personal siguen abiertas al fabricante porque el docblock de
+  `SupportScope::ReadOnly` las contempla («leer jornadas, tramos, plantilla y auditoría»): `GET /employees`, `/employees/{uuid}`,
+  `/employees/{uuid}/workdays` (la razón de ser del alcance, auditada como divulgación), **`/attendance/live`** (quién está dentro del
+  hotel ahora mismo, con nombre) y **`/compliance/summary`** (incidencias de cumplimiento por persona, sin acotar por departamento).
+  Las dos últimas son las más difíciles de justificar como necesidad de soporte. Si se cierran, es una línea en su policy
+  (`isSupportActor()`), la prueba se ajusta sola y hay que actualizar `operacion.md` §12.4 y doc 07 §6. Decisión del usuario.
+- **Decisiones de proceso del cierre de la Fase 3:** la etapa ③ de la CI tarda ~42 min por la mutación en cada push (doc 02 §10.1
+  prometía 4 min): mutación nocturna o acotada al diff (`devops-observabilidad`); y si doc 02 §3.5 admite ayudantes de prueba en
+  español (`hotelConCuadroDeImpacto()`, `cargarAusencias()`… cientos, mezclados con inglés) o se dejan de escribir.
 - **Generar el par ed25519 una vez** (`php tools/license-issuer/generate-keypair.php`), privada al
   gestor de secretos, pública como valor por defecto de `env('LICENSE_PUBLIC_KEY', '')` en
   `backend/config/license.php`. `make release-gate` lo exige en cada etiqueta `vX.Y.Z`.
@@ -966,10 +1018,42 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Engram (09-09-2026):** en funcionamiento (binario 1.20.0 en `~/.local/bin`, plugin `engram@engram` y MCP `engram` en ámbito
   usuario, protocolo `slim`, proyecto detectado `kronoqr`, nueve memorias sembradas: trampas del entorno, 5.12 y receta de
   orquestación). **Falta solo** añadir `"permissions": {"allow": ["mcp__engram"]}` a `~/.claude/settings.json` (o ejecutar
-  `engram setup claude-code --protocol=slim` en una terminal) para que fuera del modo automático no pregunte por cada `mem_*`.
+  `engram setup claude-code --protocol=slim` en una terminal) para que fuera del modo automático no pregunte por cada `mem_*`
+  (comprobar; si ya está, borrar).
 
 ### Por tarea
 
+- **Fase 4 (restos de la Fase 3 con dueño, 24-09-2026):** cola `reports` propia con configuración de Horizon publicada
+  (`devops-observabilidad` + `backend-laravel`); telemetría (span y log) de los endpoints de informes en diferido (3.9) y de
+  ausencias (3.10) y el `GenerateReportExportJob` colgando de `QueuedTraceContext` (`devops-observabilidad` + `backend-laravel`);
+  partir `stubManagementApi` de `frontend-admin/tests/e2e/support/admin.ts` (~2450 líneas, siete banderas `*Outcome`) por *feature*
+  antes de las pantallas de la Fase 4 (`qa-testing`); pantalla de cuentas de gestión + `identity:list-users` + cambio de contraseña
+  propio, contrato primero (`backend-laravel` + `frontend-panel`); minimizar también las exportaciones `failed` vencidas de
+  `report_exports` (hoy conservan `scope` y `employee_uuid` sin plazo; relajar el `CHECK`) (`backend-laravel` + `qa-testing`);
+  `SECURITY.md` y acta de simulacro de brecha (Gestión de incidentes SAMM 1 → 2) (`devops-observabilidad` + `seguridad-cumplimiento`);
+  los dos WARN del primer `make dast` (`docs/seguridad/evidencia/dast-2026-09-24.md`): restringir `allowed_origins` de CORS en
+  `/api/v1/*` (hoy el valor por defecto de Laravel, `*`; ningún llamador legítimo de otro origen) (`backend-laravel` +
+  `seguridad-cumplimiento`) y añadir `Cross-Origin-Resource-Policy: same-origin` en nginx con su fila en `QualityGatesTest`
+  (`devops-observabilidad`);
+  plazo de corrección por severidad escrito (Gestión de defectos 1 → 2) (`seguridad-cumplimiento`); DFD de las tres SPA y el quiosco
+  físico (Modelado de amenazas 2 → 3) (`arquitecto-dominio` + `seguridad-cumplimiento`); prueba que enumere el router y exija
+  autorización negativa por ruta (`seguridad-cumplimiento` + `qa-testing`); doc 02 §8.2 sin trece series reales del colector textfile
+  (`credentials_coverage_*`, `kronoqr_backup_*`, `kronoqr_maintenance_*`, `presence_metrics_timestamp_seconds`, `retention_*`) y
+  ampliar `textfileSeries()` de `MetricsCatalogueTest` al universo real (`devops-observabilidad`); `amtool check-config` real en Pest
+  (`devops-observabilidad`); cabeceras de descarga unificadas (`X-Kronoqr-Report-Rows` vs `Export-Rows`, `Report-Digest` vs
+  `Export-Sha256`) con `components.headers` en el contrato en la próxima versión (`arquitecto-dominio` decide, `backend-laravel`
+  ejecuta); MSI de `Workforce` (`EmployeeCode`, `Employee`, `ImportColumnMap`, `AbsenceType`) por debajo del resto del dominio
+  (`qa-testing`); concurrencia real por HTTP donde hoy se prueba el candado: dos `PATCH` de la misma ausencia, dos descargas del mismo
+  enlace, dos `POST` de la misma cuenta, dos pasadas de `reporting:weekly-summary` (`qa-testing`); agotar la zona `report-download`
+  (30 r/m por IP) (`qa-testing`); E2E de licencia (RF-PD-04/05 y regla dura 15: fichar con licencia caducada) (`qa-testing`); paridad
+  ES/EN de los `locales/*.json` del portal (`frontend-portal-empleado`); las dos pruebas del menú lateral de `shell.spec.ts` sin
+  etiqueta (`qa-testing`); la etapa ③ de la CI tarda 42 min por la mutación en cada push (§10.1 prometía 4 min): decidir nocturno o
+  acotar al diff (decisión del usuario, `devops-observabilidad`); identificadores de ayudantes de prueba en español (cientos, patrón
+  anterior a la fase): decidir si doc 02 §3.5 los admite o se dejan de escribir (decisión del usuario, `qa-testing` redacta);
+  `ReportExport::withLifecycle()` lleva un `$completedAt` que ningún llamante pasa (`complete()` va por `withFile()`): código muerto
+  que hace inmatable un mutante, borrar de la firma (`backend-laravel`); `isDownloadable()` solo se distingue con una fila `failed`
+  con `file_path` que el `CHECK` prohíbe: si se quiere matar, `ReportExportFixtures::hydratedFromCorruptRow()` (`qa-testing`). Rector,
+  `sanitizeContext`/`lib/checks.sh` y la señal del `409` de `POST /setup/administrator` siguen en «Deuda técnica anotada».
 - **3.9 (restos, 23-09-2026):** **cola `reports` propia** para los informes en diferido (hoy todo va a `default`; exige publicar la
   configuración de Horizon y un proceso que la atienda); **`REPORTING_EXPORT_PATH` y `PRODUCT_DATA_EXPORT_PATH` no se validan contra
   `public/` ni `BACKUP_PATH`** (deuda compartida: una comprobación en `doctor` que avise); la instantánea de `scope` es hoy inerte (solo
@@ -980,10 +1064,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   sin cubrir en `ReportExport`; `ComplianceSummary` emite `report-too-large` sin diferido al que remitir (acortar el rango); riesgo
   aceptado: el correo de aviso llega aunque la cuenta se desactive entre pedir y generar (sin enlace ni datos); exportación para la
   Inspección en diferido, plantillas libres de nómina, envío por correo/SFTP y centro de notificaciones: fuera de alcance (decisión 12); **presupuesto de la suite unitaria**: 2181 pruebas en 6,8 s en reposo en esta máquina frente a los 5 s de `make test-unit` (la CI la mide en Linux y la pasó con 2181 en el run 35831869626): si algún día la rechaza, medir qué ficheros pesan antes de subir el presupuesto.
-- **3.13 (restos, 24-09-2026):** **`make mutate` no genera mutantes en `AdoptionTarget` ni `AdoptionIndicator`** con `--covered-only`
-  aunque `AdoptionTargetTest` los ejercita de forma directa (22 marcados *uncovered* sin la opción): el `>=`/`<` de los objetivos queda
-  fuera del MSI del dominio; averiguar por qué el plugin no atribuye la cobertura (`qa-testing`), porque mientras dure el MSI mide menos
-  de lo que parece (los bordes de los seis objetivos están fijados con pruebas explícitas); la columna «Estado» del fichero exportado
+- **3.13 (restos, 24-09-2026):** la columna «Estado» del fichero exportado
   («Fuera del objetivo» / «Sin dato») no se afirma en ningún formato para un indicador en el límite; el texto impreso del PDF no se
   lee (tipografía en subconjunto, sin extractor en el contenedor; mismo compromiso que `PeriodReportPdfSealTest`); `X-Kronoqr-Export-Criteria`
   mide ≈ 5,3 KB en base64 (dentro del `fastcgi_buffer_size` de 32 KB de la nginx del producto): si un proxy del cliente topa las
@@ -991,8 +1072,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   aproximada (`last_seen_at` + `occurrences`, poda de `product:errors:prune`) y así lo dice la línea de criterios; el presupuesto de
   base de datos de una petición es de 30 s en el peor caso (hechos + dos informes de horas con su propio `statement_timeout`): si
   molesta, un `statement_timeout` más corto para las dos llamadas de horas; la línea base de horas **no entra en el asistente de puesta
-  en marcha** (enum cerrado de ocho pasos): solo en «Ajustes operativos»; el comentario de `PAYROLL_EXPORT_*` en `OperationalSettingsView.vue`
-  (3.9) sigue diciendo que el contrato no las declara; la disponibilidad RNF-D-01 es una aproximación declarada (el latido no cuenta
+  en marcha** (enum cerrado de ocho pasos): solo en «Ajustes operativos»; la disponibilidad RNF-D-01 es una aproximación declarada (el latido no cuenta
   intentos); contraste visual con `impacto-adopcion.json` de Grafana en el cierre de fase; fuera de alcance (decisión 10): desglose por
   departamento o quiosco, tendencia de más de dos periodos, envío programado del cuadro, compartirlo anonimizado con el fabricante; la
   skill `dataviz` que cita el reparto de la ficha no existe en `.claude/skills` (se siguió doc 06). Aparte, un `git stash` huérfano
@@ -1022,10 +1102,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   el momento del fichaje, coincidencias entre más de dos personas como hallazgo propio, umbrales por departamento o quiosco, acción
   automática, correo por hallazgo, patrón sobre fichajes manuales o importados.
 
-- **3.10 (restos, 22-09-2026):** **serie hermana de frescura** `absences_metrics_day_seconds` (equivalente de
-  `compliance_metrics_week_start_seconds`): sin ella, unas cifras congeladas por un planificador parado se leen igual que un mes sin
-  ausencias (fila en doc 02 §8.2 + publicación en `TextfileAbsenceMetrics`); **la carrera se prueba por el candado y no con dos
-  `PATCH` a la vez** (`AbsenceConcurrencyTest` usa `FOR UPDATE NOWAIT` desde una segunda conexión; el escenario HTTP real iría con
+- **3.10 (restos, 22-09-2026):** **la carrera se prueba por el candado y no con dos `PATCH` a la vez** (`AbsenceConcurrencyTest` usa `FOR UPDATE NOWAIT` desde una segunda conexión; el escenario HTTP real iría con
   `ParallelRequests`); `translate()` distingue `absences_chk_superseded_consistency` por el nombre de la restricción en el mensaje del
   driver; `PeriodReportVolumeTest` no siembra `absences` (comprobar con ~500 empleados que el `LEFT JOIN` usa el índice parcial);
   los 21 mutantes sin cubrir de `Absence`/`AbsenceType`/`AbsenteeismRule`; el respaldo inalcanzable de `ApplyAbsenceImport` salta la
@@ -1034,32 +1111,22 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   (decisión 12); el derecho de acceso (art. 15) se atiende con `GET /absences?employee_uuid=…&status=all` desde `rrhh` (runbook §3),
   no hay exportación por interesado.
 - **3.8 (restos, 22-09-2026):** **RS-11 sigue pendiente del tercero**: el informe interno, el paquete del revisor y la evidencia están,
-  la revisión externa no; **⑧b de esta rama es la primera que toma la rama «+1 asiento» de U3** (H-14): mirarla en la CI manual antes
-  de integrar; **deuda hermana de H-14**: `update.sh:1874`, `install.sh:1294` y `doctor.sh:266` siguen con `2>/dev/null || true` (sin
-  SIGPIPE, pero un fallo real de `docker compose exec` se lee como «el paquete no trae el comando»): migrarlas a `kq_app_knows_command`
-  es tarea propia con su prueba; **`baseline.json` del runner** puede avisar de regresión por el perfil nuevo (+0,5 r/s por origen del
-  escenario `reject-out-of-order`): decidir si se regenera en el mismo runner con la primera pasada de `load-test.yml`, que es también
-  la que da la cifra de A-13; **pantalla de cuentas del panel** (listar, dar de baja, restablecer contraseña) y **`identity:list-users`**
-  (la fila 17 de `endurecimiento.md` ya no enseña `psql` y el producto no enumera cuentas): decisiones de producto; **cambio de
-  contraseña por la propia persona** no existe (la de `identity:reset-password` es definitiva hasta el siguiente restablecimiento);
+  la revisión externa no; **deuda hermana de H-14**: `update.sh:1874`, `install.sh:1294` y `doctor.sh:266` siguen con `2>/dev/null || true`
+  (sin SIGPIPE, pero un fallo real de `docker compose exec` se lee como «el paquete no trae el comando»): migrarlas a
+  `kq_app_knows_command` es tarea propia con su prueba; **cuentas de gestión** (pantalla del panel, `identity:list-users`, cambio de
+  contraseña por la propia persona; endpoints con policy de `admin` y autorización negativa por rol; las bajas por API colapsan
+  «no existe»/«ya inactiva» en una sola respuesta, RS-03): decisión (a) del usuario del 22-09, con dueño en el bloque «Fase 4»;
   `identity:deactivate-user` identifica por correo (el docblock lo justifica) y `identity:2fa-reset` por UUID: unificar si
   `seguridad-cumplimiento` lo prefiere; sin métrica ni span nuevos para los comandos de consola (un contador de rehash publicaría
   cuántos hashes viejos quedan); `SaturacionDelBordeEnElFichaje` mide la capa de aplicación (no hay exportador de Nginx: los `429` de
   `limit_req` siguen sin métrica); umbral de `RechazoDeFirmaQr` (> 20 en 15 min) sin validar con tráfico real; `render-config.sh` de
   Prometheus sin prueba Pest propia (verificado a mano en los cuatro casos); DAST aplazado al cierre de la Fase 3 con dueño
-  (`devops-observabilidad`, `make dast` manual); **decisiones del usuario (22-09-2026)**: (a) **sí habrá pantalla de cuentas de gestión en el panel** (listar, dar de baja,
-  restablecer contraseña) más `identity:list-users`: tarea ad hoc «cuentas de gestión en el panel», contrato primero (endpoints de cuentas
-  con policy de `admin` y autorización negativa por rol; las bajas por API deben colapsar los desenlaces «no existe»/«ya inactiva» en
-  una sola respuesta, RS-03), `backend-laravel` + `frontend-panel`, y de paso el cambio de contraseña por la propia persona; (b) **la
-  línea base del runner se regenera** con la primera pasada de `load-test.yml` tras integrar la 3.8 (recomendación: la actual se
-  tomó sin el escenario `reject-out-of-order` y compararía perfiles distintos; copiar el `summary.json` a `baseline.json` en una PR
-  pequeña, como en la 3.6); (c) **el modelo de amenazas gana una fila** «Manipulación del reloj del quiosco» (STRIDE Manipulación;
-  mitigación: `recorded_at` es la hora del servidor, desfase tolerado y aviso de RF-AT-10 (3.5), incidencia y anti-rebote; ATT&CK
-  T1070.006 *Timestomp*) en doc 01 §8.1, con su fila en doc 07 §4 y «once» → «doce» en la ficha 3.8; el repudio de la lectura de datos
-  por un responsable NO se añade (ya lo cubre RS-05 con `personal_data.accessed`). (b) y (c) **HECHOS en `chore/restos-3.8` (22-09-2026)**; `SecurityReviewEvidenceTest` no exige que los
-  `BLOQUEANTE` del informe estén cerrados (el §8 no tiene formato fijo); el escenario `reject-out-of-order` deja 50 turnos abiertos
-  permanentes en empleados reservados de k6 (deliberado, regla 5); `docs/runbooks/brecha-de-seguridad.md` menciona el paquete del
-  revisor sin enlazarlo (no viaja al cliente).
+  (`devops-observabilidad`, `make dast` manual); decisiones (b) línea base del runner regenerada con la primera pasada de `load-test.yml`
+  y (c) fila «Manipulación del reloj del quiosco» en el modelo de amenazas (doc 01 §8.1, doc 07 §4, ATT&CK T1070.006; el repudio de
+  la lectura de datos por un responsable no se añade, lo cubre RS-05): **hechas en `chore/restos-3.8` (22-09-2026)**;
+  `SecurityReviewEvidenceTest` no exige que los `BLOQUEANTE` del informe estén cerrados (el §8 no tiene formato fijo); el escenario
+  `reject-out-of-order` deja 50 turnos abiertos permanentes en empleados reservados de k6 (deliberado, regla 5);
+  `docs/runbooks/brecha-de-seguridad.md` menciona el paquete del revisor sin enlazarlo (no viaja al cliente).
 - **3.7 (restos, 18/22-09-2026):** la **licencia** (activación fuera del asistente, renovación, degradación honesta: RF-PD-04/05) no tiene
   recorrido E2E, solo una pasada de axe (fila «pendiente» de la tabla de recorridos de la ficha; la regla dura 15 tampoco tiene E2E:
   propuesta `admin/license.spec.ts` + un fichaje del quiosco con licencia caducada, `producto-licencia` + `qa-testing`); una tarjeta
@@ -1074,9 +1141,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   temporada, contraluz) siguen siendo manuales; el doc 04/ADR-014 no dice nada del acabado de la tarjeta (mate/brillo) ni de cuándo
   reponerla por criterio visual: decisión del cliente, sin promesa; la regla ESLint `kronoqr/e2e-sin-esperas-por-reloj` va replicada
   byte a byte en los tres `eslint.config.js` (no hay config compartida de ESLint) y no ve un `setTimeout` envuelto en un helper;
-  `config/identity.php` conserva un comentario largo sobre la redundancia del nivel Q (explicación, no promesa); los seis requisitos
-  de la Fase 3 sin prueba (RF-GP-04, RF-IN-06/07, RF-KI-07, RF-PR-05, RN-16) son de 3.9–3.12 y `RS-11` con una sola prueba es de la
-  3.8 (decisión 13).
+  `config/identity.php` conserva un comentario largo sobre la redundancia del nivel Q (explicación, no promesa); `RS-11` con una sola
+  prueba remite al bloque «3.8 (restos)» (decisión 13).
 - **RN-18 (restos, 18-09-2026):** la salvaguarda de la carrera y el puerto `closedEntryEndingAfter` no tienen unitaria de Application
   (el handler exige un `ConnectionInterface` falso; lo determinista lo cubren dos Feature con `StaleOpenWorkDayRepository`); la
   E2E de la bandeja del panel no usa dobles por tipo (solo `OPEN_INCIDENT`); `verify-after-load.php` compara `filas >= contadas`
@@ -1086,24 +1152,19 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   repetir: candidata a intermitente si repite; `make test-unit` en local sigue por encima de los 5 s por el bind mount (6,05 s);
   `load-tests/` queda fuera del alcance de Pint (comillas dobles sin interpolación las detecta una revisión, no una herramienta); doc 05
   §9.2/§9.5 admite reforzar «nada se pierde» con RN-18 (decisión comercial, sin tocar).
-- **3.6 (restos, 17-09-2026):** `load-tests/k6/baseline.json` sale del `summary.json` de la primera ejecución del workflow en el
-  runner (decisión 17) y hasta entonces `--baseline` no se aplica; **`load-test.yml` no ha corrido nunca** (primero a mano con
-  `INSTANCES=2 DURATION=30s`, después la llena); **un elemento de lote con `503` (`ClockOutBeforeClockIn`) se reintentaría para
+- **3.6 (restos, 17-09-2026):** `load-test.yml` corrió el 22-09 (run 35724101995, rojo en RNF-P-02 contra la línea base anterior) y
+  su `summary.json` se versionó como línea base nueva (`load-tests/k6/baseline.json`); en el cierre de la Fase 3 se lanzó otra pasada
+  (run 35967821828) contra esa línea base; **un elemento de lote con `503` (`ClockOutBeforeClockIn`) se reintentaría para
   siempre** (el contrato dice «conservar en la cola»; candidato a incidencia RN-15); `DailyTotalsSnapshot` en `Domain/Event/` está
   pendiente de ratificar por `arquitecto-dominio`; el `[global]` del pool rendido solo repone `error_log`/`daemonize` frente al
   `php-fpm.conf.default` de la imagen base; `compliance:verify-audit-chain` no admite rango (recorre la cadena entera tras la
   carga); `/metrics` solo es legible desde el contenedor `prometheus` (si la pila del paquete no lo lleva, `summary.json` va sin
-  `server_metrics`); `node --test load-tests/k6/` falla en Windows (usar la ruta del fichero); cierre de la Fase 3: revisar A-11 y
-  A-12 del doc 07 y las «pruebas de abuso» que quedan para la 3.7; la base de desarrollo queda con ~5 800 empleados `K6…`
-  («Carga k6»), 81 quioscos `k6-*`, 145 600 escaneos de histórico y `projection_divergence_total` en 6 (tarjetas, tokens y cuenta
-  revocados por el cierre); `make help` funciona de nuevo en Git Bash (44 líneas entrecomilladas); el residuo «fila ausente +
-  fichaje simultáneo» de la reconciliación es A-12.
-- **3.5 (restos, 17-09-2026):** **doc 07 §6 en el cierre de fase:** `break_clocking_enabled` y la tolerancia en `localStorage` de la tablet
-  (manipulables; el servidor honra la intención y aplica su umbral; control: modo quiosco sin devtools), la ventana de 10 s del
-  botón «Pausa» (la intención es de la tablet, no de la persona), y la excepción de soporte sobre `ATTENDANCE_BREAK_CLOCKING`;
-  **«pausa sin vuelta» sin incidencia** (candidata a tipo nuevo `open_break`/`missing_break_end` con migración y bandeja); la
-  divergencia `intent`/`result` solo se ve en la base de datos (ninguna pantalla la muestra); `qa:traceability` no exige aún
-  RF-AT-10/12 (`current_phase` 5 hasta cerrar la Fase 3); probar en tablet real TalkBack del aviso armado y la banda con guantes;
+  `server_metrics`); `node --test load-tests/k6/` falla en Windows (usar la ruta del fichero); la base de desarrollo queda con ~5 800
+  empleados `K6…` («Carga k6»), 81 quioscos `k6-*`, 145 600 escaneos de histórico y `projection_divergence_total` en 6 (tarjetas,
+  tokens y cuenta revocados por el cierre); el residuo «fila ausente + fichaje simultáneo» de la reconciliación es A-12 (A-11 y A-12
+  del doc 07 no vencen hasta el cierre de la Fase 4).
+- **3.5 (restos, 17-09-2026):** **«pausa sin vuelta» sin incidencia** (candidata a tipo nuevo `open_break`/`missing_break_end` con migración y bandeja); la
+  divergencia `intent`/`result` solo se ve en la base de datos (ninguna pantalla la muestra); probar en tablet real TalkBack del aviso armado y la banda con guantes;
   captura `quiosco-pausa-confirmada` para la hoja; k6 sobre `lastAcceptedScanOf()` con años de `scan_events` (3.6); la pantalla del
   perfil descarga el catálogo entero de ajustes (con `KIOSK_SERVICE_CODE` en claro para `admin`) para leer una clave; la mitad
   `break_end`-tras-`break_start` de la exención del anti-rebote solo la ejercita un cliente de API (el quiosco nunca envía
@@ -1131,20 +1192,12 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   configuración del código abre el diagnóstico sin él (decisión 7, documentado en A-10 y §16.5); mover los umbrales de salud a
   `installation_settings` sigue descartado (decisión 2); `make test-unit` en local ~8 s con la máquina cargada frente a los 5 s del
   presupuesto (medir en reposo y leer la CI); `HeartbeatConcurrencyTest` dio un falso positivo con `migrate:fresh` de otro agente
-  (BD compartida); el `settings/README.md` del panel ya no dice que ningún umbral tiene pantalla.
-- **Dependabot (16-09-2026):** cuatro PRs abiertas. #58 (composer menores) y #59 (npm menores) caían solo por la bomba de tiempo
-  de `main`: `@dependabot rebase` tras integrar el hotfix e integrarlas si pasan. **#60 (`@vitest/coverage-v8` 5.0) y #61 (`vitest`
-  5.0) son un cambio mayor** (Node 22, `sequential` retirado, `toHaveTextContent` estricto, entradas obsoletas) que rompe ① y ⑥
-  en los cuatro paquetes. **Decisión del usuario (16-09): APLAZAR.** `dependabot.yml` ignora las mayores de `vitest` y `@vitest/*`
-  y las agrupa (`vitest-mayor`) para que, al levantar el `ignore`, lleguen en una sola PR coherente; #60 y #61 cerradas. La
-  migración a Vitest 5 se aborda a propósito en la 3.7 o al cierre de la Fase 3 (`qa-testing`, rama única con los dos paquetes,
-  lock regenerado desde Linux). Recordar la trampa del lock (`npm install` solo desde Linux y sin `node_modules`). **Hecho en la 3.7 (18-09-2026):** Vitest 5 en los cuatro paquetes, `ignore` levantado y grupo `vitest-mayor` conservado.
+  (BD compartida).
 - **3.2 (restos, 10-09-2026):** `amtool check-config` solo corre en `make observability-check`, en la CI y al arrancar el contenedor
   (`AlertmanagerConfigTest` valida con el parser de Symfony, más laxo); `render-config.sh` sin prueba de sus `die` de plantilla
   ausente; las variables de plantilla de Grafana (`label_values`) y los `legendFormat` no se contrastan con el §8.2 ni con la regla
   dura 21; «incidencias por antigüedad» del cuadro de integridad es una aproximación (`incidents_open` en el tiempo: no hay serie por
-  edad); «Negocio» no muestra horas contratadas ni impuntualidad (sin serie: 3.13; el absentismo ya tiene `absences_current` desde la
-  3.10); `kiosk_last_seen_seconds` vive
+  edad); «Negocio» no muestra horas contratadas ni impuntualidad (sin serie: 3.13); `kiosk_last_seen_seconds` vive
   en Redis y un quiosco callado ANTES de un `FLUSHALL` desaparece de la serie (segunda red: `kiosk:health`); `QuioscoSinLatido`
   lleva 600 s literal atados por prueba al valor por defecto de `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, pero cambiar la variable en una
   instalación no mueve la regla; las alertas de TLS no ven validez ni cadena ni CN (`insecure_skip_verify`; doc 07 A-8, candidata a
@@ -1156,10 +1209,7 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   y `make mutate` no las cubre; en Docker Desktop `MetricasDelAnfitrionAusentes` queda encendida en dev (ver Trampas) y con
   Alertmanager en dev intentará entregarse a buzones vacíos; comprobar en tablet real que un `.prom` truncado por disco lleno no
   inhibe nada (fail-safe verificado solo por lectura); ficha 3.1 «Verificación final» sigue citando `kronoqr-backup` (histórico).
-- **3.1 (restos, 10-09-2026):** `MetricsCollector` del paquete de diagnóstico llama `command('SCAN', [...])` con cinco argumentos y
-  phpredis lanza `ArgumentCountError` tragado en su `try`: `installation_setting_changes_total`, `compliance_profile_changes_total` y
-  `license_limit_exceeded_total` **nunca han viajado en el paquete** (desde la 5.5; usar `RedisMetricReader` o `scan($cursor, $opts)`
-  con cursor `null` y prefijo a mano); comprobación de `doctor` que avise si `LOKI_URL` u `OTEL_EXPORTER_OTLP_ENDPOINT` apuntan a un
+- **3.1 (restos, 10-09-2026):** comprobación de `doctor` que avise si `LOKI_URL` u `OTEL_EXPORTER_OTLP_ENDPOINT` apuntan a un
   contenedor que no existe (`Probe` nueva en `Product/Infrastructure/Diagnostics/Probe/`); **doc 07 §6 A-4: validar con el DPO del
   cliente** que el log técnico con `employee_uuid` + instante de fichaje en Loki 90 días sin borrado selectivo encaja con el derecho
   de supresión (no es asesoramiento jurídico); `ScanBatchTelemetry` escribe `oldest_occurred_at` (hora real de fichaje) en el log
@@ -1249,7 +1299,8 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Rector: 227 ficheros en rojo e ignorado** en `make quality` — aplicar esas reglas o retirarlas del
   conjunto; un paso siempre rojo y siempre ignorado acaba sin leerse.
 - XLSX se lee sin cota de descompresión más allá de `max_rows` y los 4 MB (riesgo bajo, consciente).
-- El 409 de `POST /setup/administrator` (intento de segundo admin) no deja señal; registrar sin PII.
+- El 409 de `POST /setup/administrator` (intento de segundo admin) no deja señal; registrar sin PII (doc 07, fila del 2.º factor,
+  abierta en el tercer cierre; `backend-laravel`).
 - La suite Feature depende del orden alfabético de directorios para EXPONER acoplamientos de estado;
   nada detecta una prueba que dependa del vaciado de tablas de trabajo confirmadas.
 - `heading-order` (axe, impacto moderado) en `LicenseStep`/`ComplianceProfileStep` al incrustar
@@ -1375,6 +1426,17 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   (`InvalidSettingValue`, `SettingKey`, `SettingDefinition`, `InvalidComplianceProfileValue`, `InvalidLicenseKey`…); el MSI
   real de `Product` es 81,77 % (el 74,85 % local era de media plantilla, ver el *bind mount* más abajo). **Toda cifra de
   mutación o cobertura se lee de la CI**, nunca del portátil.
+- **El bind mount también ciega la cobertura y la mutación locales** (24-09-2026, cierre de la Fase 3): los ~90 ficheros de `app/`
+  que `SourceDiscoveryTest` lista como perdidos no entran en el informe de cobertura de PHPUnit, Pest los da por no cubiertos y
+  `make mutate --covered-only` **no crea ningún mutante** para ellos («0 Mutations for 0 Files» en `AdoptionTarget`; sin la opción,
+  todos «uncovered»). No es un hueco de pruebas ni del plugin. Para medir en esta máquina: copiar el backend dentro del contenedor
+  y mutar allí: `docker compose --env-file .env -f infra/compose.dev.yaml exec -T -e XDEBUG_MODE=coverage app sh -c 'rm -rf /tmp/kq
+  && cp -a . /tmp/kq && cd /tmp/kq && PHP_INI_SCAN_DIR=":$(pwd)/tools/mutation" vendor/bin/pest --mutate --parallel --path=…
+  --testsuite=Unit --covered-only --no-cache'` (el dominio entero: 12 min, mismo MSI que la CI). La cifra oficial sigue siendo la de la CI.
+- **`docs/trazabilidad-pruebas.md` está a 0 bytes mientras `make traceability` corre** (>3 min; más bajo carga): make trunca el
+  fichero al abrir la redirección y el contenedor tarda en generar. Un agente que lo vea vacío y haga `git checkout --` pisa la
+  regeneración (pasó en el cierre de la Fase 3). Regenerar solo sin agentes activos y comprobar el tamaño (~900 KB) y la línea «Fase
+  en curso» antes del commit.
 - **`docs/` va montado `:ro` en el contenedor `app`** (`infra/compose.dev.yaml`): `qa:traceability` en modo escritura falla ahí;
   la matriz se regenera con `make traceability` (usa `--output=-` y escribe desde el anfitrión). `TraceabilityMatrixFreshnessTest`
   cae si la matriz versionada no coincide con lo que generaría el comando: **regenerar antes de cada commit que toque etiquetas**.

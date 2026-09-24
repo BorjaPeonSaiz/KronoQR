@@ -56,7 +56,7 @@ Se cambian solo las que hagan falta.
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Desfase tolerado entre el reloj de la tablet y el del servidor antes de marcar el fichaje para revisión. **Nunca rechaza un fichaje**, solo lo señala. Es además el umbral con el que **la propia tablet avisa** de que su hora se ha ido. |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a `0` si tienes dos tablets en la misma puerta; súbelo si hay dos edificios. |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | `10` | 0 – 300 | Segundos por debajo de los cuales dos fichajes de **dos personas distintas en el mismo quiosco** cuentan como una **coincidencia** (como mucho una por pareja y día). **No abre incidencia por sí sola**: hace falta que la misma pareja acumule los días de la clave siguiente. `0` desactiva este patrón. |
-| `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Días con coincidencia que tiene que acumular la misma pareja, dentro de los últimos 30 días, para que se abra la incidencia «Patrón anómalo de uso de la credencial» —**una a cada persona**—. Súbelo si en tu centro es normal entrar en grupo por la misma puerta; bájalo a `1` solo si quieres ver cada pareja de escaneos seguidos. **La incidencia no anula ningún fichaje ni califica a nadie**: la revisa el responsable ([`guia-rrhh.md`](guia-rrhh.md) §4.5). |
+| `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Días con coincidencia que tiene que acumular la misma pareja, dentro de los últimos 30 días, para que se abra la incidencia «Patrón anómalo de uso de la credencial» —**una por cada persona implicada**, cada una con su contraparte principal: si tres entran siempre juntas, son tres incidencias—. Súbelo si en tu centro es normal entrar en grupo por la misma puerta; bájalo a `1` solo si quieres ver cada pareja de escaneos seguidos. **La incidencia no anula ningún fichaje ni califica a nadie**: la revisa el responsable ([`guia-rrhh.md`](guia-rrhh.md) §4.5). |
 | `WEEKLY_SUMMARY_EMAIL` | `disabled` | `enabled` o `disabled` | Enciende el **resumen semanal por correo**: los lunes a las 06:00 UTC, cada responsable de departamento activo y con correo recibe la semana anterior **de su ámbito y de nadie más**. Exige salida de correo configurada (sección 6.21) y la funcionalidad `weekly_email_summary` en la licencia; sin cualquiera de las dos **el sistema funciona igual** y el envío se omite dejando constancia. Ver debajo de la tabla. |
 | `KIOSK_UPDATE_WINDOW` | `03:00-05:00` | `HH:MM-HH:MM`, hora local del centro | Franja en la que las tablets **tienen permiso** para instalar una versión nueva de la app del quiosco. Fuera de ella no se actualizan nunca, aunque la versión lleve días esperando. Puede cruzar la medianoche (`23:30-01:30`). Ver debajo de la tabla. |
 | `KIOSK_UPDATE_QUIET_MINUTES` | `10` | 0 – 120 | Minutos **sin ningún fichaje** que la tablet exige, además de estar dentro de la ventana y con la cola vacía, antes de actualizarse. Cubre el turno que empieza antes de lo previsto. `0` deja solo las otras dos condiciones. |
@@ -78,6 +78,15 @@ Se cambian solo las que hagan falta.
 > **nunca a una persona** («Tablet de María»): el rótulo se escribe en el
 > contexto de cada incidencia y en los asientos de auditoría, que no admiten
 > nombres.
+
+> **El soporte del fabricante no puede tocar `ATTENDANCE_PATTERN_WINDOW_SECONDS`
+> ni `ATTENDANCE_PATTERN_MIN_REPEATS`.** Un acceso de soporte con alcance
+> `configuration` cambia el resto de ajustes operativos, pero **no estas dos**:
+> si lo intenta, recibe un 403. Es la misma excepción que el fichaje de pausa, y
+> por un motivo parecido: con `0` en la primera se apaga la detección de
+> coincidencias, que es la mitigación que compensa no tener biometría, y esa
+> decisión es del hotel. El reparto completo está en
+> [`operacion.md`](operacion.md) §12.4.
 
 **`ATTENDANCE_BREAK_CLOCKING` — qué cambia exactamente.** Se pone en
 Panel → **Ajustes operativos** (`/settings`) → «Fichaje de pausa», donde las dos

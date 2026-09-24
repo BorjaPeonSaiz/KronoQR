@@ -229,8 +229,14 @@ final readonly class AdoptionIndicators
             ),
 
             // (c) §1.3, objetivo < 2 %. La misma fraccion que el panel de Grafana
-            // pinta con `manual_corrections_total / scans_total`, para que el
+            // pinta con `manual_corrections_total / scans_total{result!~"rejected_.*"}`
+            // —sobre ACEPTADOS, no sobre el total de intentos— para que el
             // cuadro y el cuadro de mando no puedan decir cosas distintas.
+            // (Cierre de la Fase 3: el panel dividia por `scans_total` sin
+            // filtrar, una fraccion distinta con un denominador un 27 % mayor
+            // en el entorno de desarrollo; corregido en
+            // `impacto-adopcion.json`, panel «Ratio de correcciones
+            // manuales / fichajes aceptados».)
             AdoptionIndicator::of(
                 AdoptionIndicatorKey::ManualCorrectionsRatio,
                 self::ratio($facts->current->corrections, $facts->current->acceptedScans()),

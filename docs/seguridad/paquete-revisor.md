@@ -28,11 +28,11 @@ ficticios; los `.env` no se entregan).
 |---|---|---|
 | Arquitectura | [`docs/02-stack-tecnologico-y-plan-implementacion.md`](../02-stack-tecnologico-y-plan-implementacion.md) §1 y §2 | Monolito modular hexagonal, fronteras verificadas por Deptrac y Pest Arch |
 | Diseño de seguridad | [`docs/02-stack-tecnologico-y-plan-implementacion.md`](../02-stack-tecnologico-y-plan-implementacion.md) §7 | Limitación de tasa por capas, ámbitos de token, auditoría encadenada, ASVS, secretos |
-| Modelo de amenazas | [`docs/01-especificaciones-proyecto.md`](../01-especificaciones-proyecto.md) §8.1 | STRIDE, once vectores con mitigación y técnica ATT&CK |
+| Modelo de amenazas | [`docs/01-especificaciones-proyecto.md`](../01-especificaciones-proyecto.md) §8.1 | STRIDE, quince vectores con mitigación y técnica ATT&CK (catorce en el commit del informe interno; la del canal SMTP entró en el cierre de la Fase 3) |
 | Madurez y riesgos aceptados | [`docs/07-seguridad-madurez-y-amenazas.md`](../07-seguridad-madurez-y-amenazas.md) | SAMM 2.0 con evidencia, mapa SDL, riesgos aceptados con dueño y fecha (§6) |
-| Contrato de la API | [`docs/api/openapi.yaml`](../api/openapi.yaml) | Fuente de verdad de las 69 rutas y 80 operaciones, ámbitos y respuestas de error |
+| Contrato de la API | [`docs/api/openapi.yaml`](../api/openapi.yaml) | Fuente de verdad de las 79 rutas y 93 operaciones, ámbitos y respuestas de error |
 | Matriz de trazabilidad de pruebas | [`docs/trazabilidad-pruebas.md`](../trazabilidad-pruebas.md) | Requisito → pruebas, generada por `php artisan qa:traceability` |
-| Decisiones arquitectónicas | [`docs/adr/`](../adr/) | ADR-001 a ADR-040; las de seguridad: 005, 009, 010, 014, 015, 016, 019, 020, 037, 038, 039 |
+| Decisiones arquitectónicas | [`docs/adr/`](../adr/) | ADR-001 a ADR-041; las de seguridad: 005, 009, 010, 014, 015, 016, 019, 020, 037, 038, 039, 041 (enlace de descarga de un solo uso) |
 | Revisión interna previa | [`revision-interna-asvs-2026-09.md`](revision-interna-asvs-2026-09.md) | Hallazgos por ASVS y STRIDE, dictamen de los riesgos aceptados, qué mirar con más atención (§7) |
 | Evidencia automática | [`evidencia/`](evidencia/) | Salida resumida de `composer audit`, `npm audit`, Semgrep propio y comunitario, Trivy y gitleaks sobre el commit revisado |
 | Runbooks de seguridad | [`docs/runbooks/brecha-de-seguridad.md`](../runbooks/brecha-de-seguridad.md), [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md), [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md), [`triaje-hallazgos-seguridad.md`](../runbooks/triaje-hallazgos-seguridad.md) | Procedimientos de 72 h, respuesta a credenciales, integridad, triaje de hallazgos |

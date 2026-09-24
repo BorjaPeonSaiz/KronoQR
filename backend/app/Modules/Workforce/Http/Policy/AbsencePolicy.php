@@ -45,6 +45,34 @@ use App\Modules\Workforce\Domain\Model\Absence;
  * no como un `if` dentro del `Resource`: escrita en el `Resource` seria invisible
  * desde la matriz de autorizacion y nadie la probaria en negativo.
  *
+ * ## Y NUNCA UN ACCESO DE SOPORTE DEL FABRICANTE
+ *
+ * Regla dura 16, ADR-020 y art. 9 del RGPD. `SupportScope::ReadOnly` lleva
+ * `employees:read` —el ambito del que cuelgan las dos rutas de lectura de
+ * ausencias— y `SupportScope::actsAs()` devuelve `admin` ante las policies, asi
+ * que sin esta comprobacion **pasa el middleware y pasa la lista de roles**: un
+ * token del fabricante leeria el registro de ausencias entero, con el `type` y
+ * con la `note`.
+ *
+ * Y no es un dato cualquiera. `sick_leave` es **dato de salud** —categoria
+ * especial del art. 9 del RGPD— y la nota puede llevar un diagnostico: es el
+ * conjunto mas sensible que este modulo sirve. El fabricante no accede a los
+ * datos del cliente, y menos aun a los del art. 9, ni con una concesion vigente
+ * ni mientras diagnostica una incidencia. Para eso esta el paquete
+ * **anonimizado** (RL-19).
+ *
+ * Se cierra en **las siete** habilidades y no solo en las tres de lectura. Las
+ * cuatro de escritura ya se quedan hoy en el middleware —ningun alcance de
+ * soporte concede `employees:*`—, pero la regla dura 18 pide las dos
+ * comprobaciones, y la que depende de la lista de ambitos de otro modulo no es
+ * la que debe sostener sola «el fabricante no escribe una baja medica».
+ *
+ * Es el mismo cierre que ya hacen `DataExportPolicy`, `ErrorEventPolicy`,
+ * `SettingsPolicy::updateConfidential()` y `ReportExportPolicy`, y por la misma
+ * via: la pregunta va por el puerto {@see ManagementActor::isSupportActor()},
+ * porque `Workforce` no puede importar nada de `Identity` ni de `Product`
+ * (doc 02 §1.6, verificado por Deptrac).
+ *
  * ## Se registra contra el modelo de DOMINIO
  *
  * {@see Absence} y no la fila de Eloquent, por lo mismo que el resto de las
@@ -77,16 +105,34 @@ final class AbsencePolicy
         return [UserRole::ADMIN, UserRole::RRHH];
     }
 
+    /**
+     * Si quien pregunta es una cuenta **de la organizacion del cliente** con uno
+     * de los roles indicados.
+     *
+     * Las dos condiciones en un solo sitio para que ninguna habilidad se pueda
+     * escribir olvidando la primera: un `actsAs()` suelto en un metodo nuevo
+     * seria una puerta abierta al fabricante sobre datos del art. 9, y no se
+     * notaria al leerlo.
+     */
+    private static function isCustomerStaff(ManagementActor $actor, UserRole ...$roles): bool
+    {
+        if ($actor->isSupportActor()) {
+            return false;
+        }
+
+        return $actor->actsAs(...$roles);
+    }
+
     /** `GET /api/v1/absences`. */
     public function viewAny(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::readers());
+        return self::isCustomerStaff($actor, ...self::readers());
     }
 
     /** `GET /api/v1/absences/{uuid}`. */
     public function view(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::readers());
+        return self::isCustomerStaff($actor, ...self::readers());
     }
 
     /**
@@ -98,30 +144,30 @@ final class AbsencePolicy
      */
     public function viewNote(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::writers());
+        return self::isCustomerStaff($actor, ...self::writers());
     }
 
     /** `POST /api/v1/absences`. */
     public function create(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::writers());
+        return self::isCustomerStaff($actor, ...self::writers());
     }
 
     /** `PATCH /api/v1/absences/{uuid}`. */
     public function correct(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::writers());
+        return self::isCustomerStaff($actor, ...self::writers());
     }
 
     /** `POST /api/v1/absences/{uuid}/void`. */
     public function void(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::writers());
+        return self::isCustomerStaff($actor, ...self::writers());
     }
 
     /** `POST /api/v1/absences/import`. */
     public function import(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::writers());
+        return self::isCustomerStaff($actor, ...self::writers());
     }
 }

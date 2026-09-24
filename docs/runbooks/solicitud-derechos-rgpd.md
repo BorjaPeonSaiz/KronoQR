@@ -160,6 +160,72 @@ docker compose --env-file .env -f infra/compose.dev.yaml exec -T app php artisan
 lectura mecánica (art. 20.1 RGPD). Las ausencias y las incidencias se adjuntan
 en el mismo envío, en el formato en que las devuelvan las consultas anteriores.
 
+### 3 bis. «A quién se comunicaron sus datos» (art. 15.1.c)
+
+El derecho de acceso incluye **los destinatarios** a los que se han comunicado
+los datos. En este producto son tres caminos, y los tres dejan asiento en
+`audit_log`: el **resumen semanal por correo** al responsable de departamento
+(`weekly_summary`), la **salida a nómina** hacia el programa de nómina del hotel
+(`payroll_export`) y los **informes generados en segundo plano** que alguien
+descargó con su enlace de un solo uso (`report_export.generated`). La consulta
+es por `employee_uuid`, nunca por nombre:
+
+```bash
+docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+  psql -U fichaje_app -d fichaje -c "
+  -- (a) Asientos que NOMBRAN a la persona: el resumen semanal cuando el
+  --     alcance tenía 50 personas o menos.
+  SELECT occurred_at, action, actor_type, actor_id,
+         payload->>'dataset'         AS conjunto,
+         payload->>'manager_user_id' AS responsable,
+         payload->>'week_start'      AS semana
+    FROM audit_log
+   WHERE action = 'personal_data.accessed'
+     AND payload->>'dataset' = 'weekly_summary'
+     AND payload->'employee_uuids' ? '<employee_uuid>'
+   ORDER BY occurred_at;"
+
+docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+  psql -U fichaje_app -d fichaje -c "
+  -- (b) Asientos EN BLOQUE que pudieron contenerla: se resuelven por alcance,
+  --     periodo y departamento, no por identificador.
+  SELECT occurred_at, action, actor_type, actor_id,
+         payload->>'dataset'        AS conjunto,
+         payload->>'kind'           AS tipo,
+         payload->>'format'         AS formato,
+         payload->>'scope'          AS alcance,
+         payload->>'department_id'  AS departamento,
+         payload->>'manager_user_id' AS responsable,
+         payload->>'week_start'     AS semana,
+         payload->>'employees'      AS personas
+    FROM audit_log
+   WHERE (action = 'personal_data.accessed'
+          AND payload->>'dataset' IN ('weekly_summary','payroll_export'))
+      OR action = 'report_export.generated'
+   ORDER BY occurred_at;"
+```
+
+- **En `weekly_summary` la lista nominal solo está cuando el alcance tenía 50
+  personas o menos.** Por encima, el asiento lleva `employees` (recuento),
+  `scope`, `manager_user_id` y `week_start`, y ni un identificador: la persona
+  iba dentro si estaba de alta en el departamento de ese responsable esa
+  semana. No concluyas «no se comunicó» porque la consulta (a) no devuelva
+  filas: pasa siempre por la (b).
+- **`payroll_export` y `report_export.generated` no nombran a nadie** (recuento,
+  `format`, `scope` y, en el segundo, `kind`, `sha256` y `row_count`). La
+  persona iba dentro si el alcance de quien lo pidió la incluía en ese periodo;
+  y en el informe en diferido el destinatario real es quien descargó con el
+  enlace (`report_export.downloaded`, mismo `report_export_uuid`), que no
+  tiene por qué ser quien lo pidió. Si el fichero ya se purgó, la fila
+  perdió los identificadores: queda el asiento, no la lista.
+- **Lo que se responde** es la categoría de destinatario y la fecha: «su
+  responsable de departamento, por el resumen semanal de la semana X», «el
+  programa de nómina del hotel, exportación del periodo Y», «informe de horas
+  por periodo descargado el día Z». No se entregan identificadores de terceros
+  (art. 15.4). El aviso diario de incidencias (`incident_digest`) sigue el mismo
+  camino que la consulta (a) del runbook de brecha
+  ([`brecha-de-seguridad.md`](brecha-de-seguridad.md) §4.1).
+
 ---
 
 ## 4. Derecho de RECTIFICACIÓN — que no es un borrado

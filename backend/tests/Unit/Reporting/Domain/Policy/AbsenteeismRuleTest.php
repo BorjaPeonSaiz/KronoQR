@@ -108,6 +108,50 @@ it('deja los tres contadores disjuntos donde tienen que serlo', function (): voi
     }
 })->group('RF-GP-04');
 
+it('devuelve los tres contadores del dia, con su nombre y en un solo paso', function (
+    bool $employed,
+    bool $hasActivity,
+    bool $coveredByAbsence,
+    bool $holiday,
+    bool $absence,
+    bool $holidayCounter,
+    bool $unjustified,
+): void {
+    /*
+     * `classify()` ES LA PUERTA QUE USA EL INFORME, y hasta el cierre de la
+     * Fase 3 ninguna prueba miraba lo que devuelve: la de arriba solo contaba
+     * cuantas claves salen ciertas, y «como mucho una» sigue siendo verdad con
+     * una clave de menos —o con el array vacio—.
+     *
+     * Se midio: borrar `'absence'`, `'holiday'` o `'unjustified'` del array, o
+     * devolver `[]` entero, no rompia nada (cuatro mutantes vivos en las lineas
+     * 134-137). El informe se quedaria sin una columna y el unico sintoma seria
+     * un cero en la pantalla del hotel.
+     *
+     * Por eso se compara el array COMPLETO y con sus claves, no clave a clave: es
+     * la unica forma de que una que falte cuente como fallo.
+     */
+
+    // arrange / act
+    $counters = AbsenteeismRule::classify($employed, $hasActivity, $coveredByAbsence, $holiday);
+
+    // assert
+    expect($counters)->toBe([
+        'absence' => $absence,
+        'holiday' => $holidayCounter,
+        'unjustified' => $unjustified,
+    ]);
+})->with([
+    // Un caso por columna, mas el dia en que ninguna cuenta y el dia de quien ya
+    // no esta de alta.
+    'de alta con ausencia activa' => [true, false, true, false, true, false, false],
+    'de alta en festivo sin ausencia' => [true, false, false, true, false, true, false],
+    'de alta, sin actividad, sin ausencia y sin festivo' => [true, false, false, false, false, false, true],
+    'de alta y trabajando' => [true, true, false, false, false, false, false],
+    'ausencia que cae en festivo: gana la ausencia' => [true, false, true, true, true, false, false],
+    'sin alta no cuenta ninguna' => [false, false, true, true, false, false, false],
+])->group('RF-GP-04');
+
 it('no cuenta como absentismo un dia cubierto por una ausencia, y si el anterior y el posterior', function (): void {
     /*
      * EL CASO DE LA FICHA, LITERAL: «un empleado con una baja de tres dias no

@@ -22,8 +22,8 @@ use Throwable;
  * `{@see}` porque un `use` de otro modulo es la frontera del §1.6 que Deptrac
  * rechaza.
  *
- * El endpoint `/metrics` que lo publica es de la tarea 3.1; hasta entonces los
- * contadores se acumulan y las pruebas los leen.
+ * `/metrics` las publica desde la tarea 3.1, con `MetricCatalogue` y
+ * `MetricsCatalogueTest` contra el doc 02 §8.2.
  *
  * **Medir no puede romper un fichaje.** Si Redis no responde, el escaneo sigue su
  * camino: la regla dura 19 dice que el quiosco nunca bloquea al empleado, y

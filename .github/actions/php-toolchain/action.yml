@@ -73,6 +73,25 @@ runs:
       # desarrollo, y son justo lo que estas etapas ejecutan.
       run: composer install --working-dir=backend --no-interaction --no-progress --prefer-dist
 
+    - name: Crear un backend/.env vacio
+      shell: bash
+      # En el runner TODA la configuracion llega por el `env:` del job: no hay
+      # `.env` y no debe haberlo, porque un fichero con valores propios haria
+      # que la CI probase una configuracion distinta de la que declara el job.
+      #
+      # Pero `vlucas/phpdotenv` lee el fichero con `@file_get_contents()`
+      # (`Store/File/Reader.php:73`) y la arroba ya no silencia nada para
+      # PHPUnit 12: su manejador registra el aviso suprimido igual. El resultado
+      # era **un aviso por cada prueba que arranca el framework** —2088 en
+      # Contract+Feature y 747 en Integracion en el run 35940352359—, con lo que
+      # `failOnWarning` no se podia encender y cualquier aviso NUEVO y real
+      # quedaba enterrado entre miles de copias del mismo.
+      #
+      # Un fichero VACIO lo apaga sin cambiar nada: `Dotenv::safeLoad()` no
+      # sobrescribe una variable que ya existe en el entorno, asi que los
+      # valores siguen siendo exactamente los del job.
+      run: touch backend/.env
+
     - name: Marcar el inicio de las comprobaciones
       shell: bash
       # A partir de aqui empieza a contar el presupuesto de la etapa (§10.1). Lo

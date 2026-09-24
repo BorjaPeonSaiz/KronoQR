@@ -33,9 +33,16 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * su idioma; el servidor da los hechos.
  *
  * `implemented` distingue lo que se apagara de verdad hoy de lo que se apagara
- * cuando exista (las funcionalidades de la Fase 3, la marca blanca de la 5.8 y
- * la telemetria de la 5.10). Sin ese matiz, la pantalla le anunciaria al cliente
- * la perdida de cuatro cosas que todavia no ha visto nunca.
+ * cuando exista, y **desde el cierre de la Fase 3 viene `true` en las siete**:
+ * el cuadro de impacto (3.13), la exportacion para nomina (3.9) y el resumen
+ * semanal (3.12) estrenaron consumidor y ya responden `402` con la licencia
+ * caducada, asi que anunciarlas como «todavia no existe» era prometerle al
+ * cliente que no perdia algo que si pierde.
+ *
+ * **El campo se queda igual y sigue viajando.** Un caso del catalogo se declara
+ * en ADR-023 antes de que exista quien pregunte por el, asi que el matiz volvera
+ * a hacer falta; quien lo mantiene honesto es `Feature::implemented()`, atado por
+ * `LicenseBoundaryTest`.
  *
  * ## Lo que nunca sale de aqui
  *

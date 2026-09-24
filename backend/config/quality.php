@@ -44,7 +44,7 @@ return [
      * valor tiene que ser el mismo en todas las maquinas, no puede venir del
      * entorno. QualityGatesTest lo verifica.
      */
-    'current_phase' => 5,
+    'current_phase' => 3,
 
     /*
      * El orden REAL de ejecucion de las fases, literal del Anexo A del doc 01:

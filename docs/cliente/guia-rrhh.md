@@ -532,7 +532,7 @@ centro y enseña, para tu ámbito, las jornadas y las semanas que se salen de
 ellos. La bandeja (§4) te dice **qué hay pendiente de resolver**; esta pantalla
 te dice **si lo registrado cumple la norma**, lo haya abierto alguien o no.
 
-No son la misma lista: la bandeja tiene ocho tipos de incidencia y esta pantalla
+No son la misma lista: la bandeja tiene nueve tipos de incidencia y esta pantalla
 cuatro reglas legales. Coinciden en las dos primeras, y eso es a propósito.
 
 ### 4 bis.1 Los cuatro avisos, y con qué umbral

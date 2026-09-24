@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Modules\Reporting\Domain\ValueObject\AdoptionIndicator;
+use App\Modules\Reporting\Domain\ValueObject\AdoptionIndicatorKey;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionTarget;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionTargetComparison;
 
@@ -18,12 +20,16 @@ use App\Modules\Reporting\Domain\ValueObject\AdoptionTargetComparison;
  * «Fuera del objetivo» sobre un mes sin datos, que es acusar a alguien de un
  * incumplimiento inventado.
  *
- * Y hay una razon de herramienta, medida el 24-09-2026: la mutacion de Pest
- * atribuye los mutantes de un fichero a las pruebas por **nombre**, asi que los 22
- * mutantes de `AdoptionTarget` y `AdoptionIndicator` salian «uncovered» —estaban
- * cubiertos de verdad, pero de forma indirecta— y `make mutate`, que corre con
- * `--covered-only`, los descartaba sin contarlos. Justo ahi vive el `>=` frente al
- * `>` que el doc 02 §9.3 pone como ejemplo para justificar el umbral de MSI.
+ * Y una razon de herramienta, diagnosticada el 24-09-2026 en el cierre de la Fase 3:
+ * en la maquina de desarrollo (Windows, bind mount de Docker Desktop) `make mutate`
+ * no creaba **ningun** mutante para `AdoptionTarget` ni `AdoptionIndicator`, y sin
+ * `--covered-only` los 22 salian «uncovered». No es que la mutacion atribuya por
+ * nombre: es que el bind mount no enumera estos ficheros al recorrer `app/`
+ * (`SourceDiscoveryTest` los lista), la cobertura de PHPUnit los filtra fuera del
+ * informe y Pest los da por no cubiertos. En una copia del backend dentro del
+ * contenedor, y en la CI, los mismos mutantes salen y esta prueba los mata. Justo
+ * ahi vive el `>=` frente al `>` que el doc 02 §9.3 pone como ejemplo para
+ * justificar el umbral de MSI: por eso las cifras de mutacion se leen de la CI.
  */
 
 it('da por cumplido un objetivo de minimo exactamente en el umbral', function (
@@ -118,3 +124,18 @@ it('conserva la cifra del objetivo tal y como la escribe el §1.3', function (
     'resolucion en 24 h' => [AdoptionTarget::atMost(1440.0), AdoptionTargetComparison::AtMost, 1440.0],
     'linea base' => [AdoptionTarget::reductionOf(80.0), AdoptionTargetComparison::Reduction, 80.0],
 ])->group('RF-IN-08');
+
+it('un indicador sin objetivo no juzga nada, ni con valor', function (): void {
+    /*
+     * Seis de los doce indicadores no tienen objetivo en el §1.3 (minutos trabajados
+     * y contratados, las dos fotos, la mediana y los resueltos sin servidor):
+     * `meetsTarget()` tiene que decir «no se puede decir» y no reventar contra un
+     * objetivo que no existe. Es el mutante que el `?->` protege: sin esta prueba,
+     * cambiarlo por `->` sobrevive porque nadie pregunta por el estado de un
+     * indicador sin objetivo.
+     */
+    $indicator = AdoptionIndicator::of(AdoptionIndicatorKey::WorkedMinutes, 9600.0, 8400.0);
+
+    expect($indicator->target)->toBeNull()
+        ->and($indicator->meetsTarget())->toBeNull();
+})->group('RF-IN-08');

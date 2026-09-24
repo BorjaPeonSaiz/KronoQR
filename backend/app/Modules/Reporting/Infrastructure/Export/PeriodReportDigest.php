@@ -68,7 +68,7 @@ use App\Modules\Reporting\Domain\ValueObject\ReportCriterion;
  * castellano y en ingles tiene la misma huella. Lo que si entra son las
  * sustituciones —«cuantos festivos»—, porque cambian lo que el informe afirma.
  *
- * ## Por que vive en `Http/Support` y no en el dominio
+ * ## Por que vive en `Infrastructure/Export` y no en el dominio
  *
  * Porque no es una regla de negocio: es como se **identifica** un documento que
  * sale de la instalacion. El dominio no sabe que existen los ficheros. Mismo

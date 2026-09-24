@@ -83,6 +83,39 @@ it('license:show imprime contratado frente a real para las dos magnitudes', func
         ->and($result['code'])->toBe(1);
 })->group('RF-PD-04', 'RF-PD-05');
 
+it('license:show ya no dice de ninguna funcionalidad que todavia no exista', function (): void {
+    /*
+     * RF-PD-05, ADR-019 y ADR-023. Hasta el cierre de la Fase 3,
+     * `Feature::implemented()` devolvia cuatro de los siete casos, asi que este
+     * comando imprimia un parrafo diciendo que las otras tres *«todavia no
+     * existen en esta version, asi que no se pierde nada con ellas»*.
+     *
+     * Para entonces las tres ya tenian consumidor —la exportacion para nomina
+     * (3.9), el resumen semanal (3.12) y el cuadro de impacto (3.13)— y las tres
+     * responden `402` con la licencia caducada. La persona de informatica del
+     * hotel leia en pantalla que no perdia nada mientras su gente recibia un
+     * error: es la promesa incumplida que `implemented()` existia para evitar,
+     * con el signo invertido.
+     *
+     * Se comprueba aqui y no solo en `LicenseBoundaryTest` porque esto es lo que
+     * el cliente LEE. La prueba de arquitectura ata la lista; esta ata el texto.
+     */
+    expect(runLicenseCommand('license:activate', ['key' => LicenseKeys::current()->issue([
+        'valid_from' => '2025-01-01T00:00:00Z',
+        'valid_until' => '2025-12-31T23:59:59Z',
+    ])])['code'])->toBe(1);
+
+    $output = runLicenseCommand('license:show')['output'];
+
+    // Las tres que faltaban, con su nombre y su motivo.
+    expect($output)->toContain('Cuadro de impacto y adopcion')
+        ->and($output)->toContain('Exportacion para nomina')
+        ->and($output)->toContain('Resumen semanal por correo')
+        // Y ni rastro del parrafo que las daba por inexistentes.
+        ->and($output)->not->toContain('todavia no existen')
+        ->and($output)->not->toContain('no se pierde nada con ellas');
+})->group('RF-PD-04', 'RF-PD-05');
+
 it('license:show sale 0 solo con la licencia vigente y sin excesos', function (): void {
     runLicenseCommand('license:activate', ['key' => LicenseKeys::current()->issue()]);
 

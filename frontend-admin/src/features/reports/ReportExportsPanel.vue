@@ -28,6 +28,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstantWithZone, FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
+import { formatBytes } from '@kronoqr/web-kit/formatBytes'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -131,28 +132,9 @@ function failureReasonLabel(code: string | null): string {
   return key === undefined ? code : t(key)
 }
 
-/** Tamaño legible, en unidades BINARIAS (mismo criterio que `dataExport.api.ts`/`sizeLabel`): no es una cifra del registro legal. */
+/** Tamaño legible, en unidades BINARIAS (`formatBytes` de `@kronoqr/web-kit`, ADR-036, misma funcion que `DataExportPanel`): no es una cifra del registro legal. */
 function sizeLabel(bytes: number | null): string {
-  if (bytes === null) {
-    return t('common.empty')
-  }
-
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'] as const
-  let value = bytes
-  let unitIndex = 0
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex += 1
-  }
-
-  const decimals = unitIndex === 0 ? 0 : 1
-  const formatted = new Intl.NumberFormat(locale.value, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value)
-
-  return `${formatted} ${units[unitIndex]}`
+  return bytes === null ? t('common.empty') : formatBytes(bytes, locale.value)
 }
 
 function rowCountLabel(row: ReportExport): string {

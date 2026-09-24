@@ -57,7 +57,7 @@ only the ones you need.
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Drift tolerated between the tablet's clock and the server's before flagging the clock-in for review. **It never rejects a clock-in**, it only flags it. It is also the threshold at which **the tablet itself warns** that its clock has drifted. |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Minimum credible time to get from one kiosk to another. Below it, an incident is opened. Set it to `0` if you have two tablets at the same door; raise it if there are two buildings. |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | `10` | 0 – 300 | Seconds below which two clock-ins by **two different people at the same kiosk** count as one **coincidence** (at most one per pair and day). **It opens no incident on its own**: the same pair has to accumulate the days of the next key. `0` disables this pattern. |
-| `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Days with a coincidence that the same pair has to accumulate, within the last 30 days, for the "Anomalous credential usage pattern" incident to open —**one for each person**—. Raise it if entering in a group through the same door is normal at your site; lower it to `1` only if you want to see every pair of back-to-back scans. **The incident cancels no clocking and labels nobody**: the manager reviews it ([`hr-guide.md`](hr-guide.md) §4.5). |
+| `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Days with a coincidence that the same pair has to accumulate, within the last 30 days, for the "Anomalous credential usage pattern" incident to open —**one for each person involved**, each with its main counterpart: if three people always walk in together, that is three incidents—. Raise it if entering in a group through the same door is normal at your site; lower it to `1` only if you want to see every pair of back-to-back scans. **The incident cancels no clocking and labels nobody**: the manager reviews it ([`hr-guide.md`](hr-guide.md) §4.5). |
 | `WEEKLY_SUMMARY_EMAIL` | `disabled` | `enabled` or `disabled` | Turns on the **weekly summary by email**: on Mondays at 06:00 UTC, every active department manager with an email address receives the previous week **for their own scope and nobody else's**. It requires outgoing email to be configured (section 6.21) and the `weekly_email_summary` feature in the licence; without either of them **the system works exactly the same** and the send is skipped, leaving a record. See below the table. |
 | `KIOSK_UPDATE_WINDOW` | `03:00-05:00` | `HH:MM-HH:MM`, site local time | Slot in which the tablets **are allowed** to install a new version of the kiosk app. Outside it they never update, even if the version has been waiting for days. It may cross midnight (`23:30-01:30`). See below the table. |
 | `KIOSK_UPDATE_QUIET_MINUTES` | `10` | 0 – 120 | Minutes **without a single clocking** that the tablet demands, on top of being inside the window and having an empty queue, before updating. It covers the shift that starts earlier than planned. `0` leaves only the other two conditions. |
@@ -80,6 +80,15 @@ only the ones you need.
 > entrance"—, **never a person** ("María's tablet"): the label is written into
 > the context of every incident and into the audit entries, which admit no
 > names.
+
+> **The vendor's support cannot touch `ATTENDANCE_PATTERN_WINDOW_SECONDS` or
+> `ATTENDANCE_PATTERN_MIN_REPEATS`.** A support access with the `configuration`
+> scope changes the rest of the operational settings, but **not these two**:
+> any attempt gets a 403. It is the same exception as break clocking, and for a
+> similar reason: with `0` in the first one the coincidence detection is
+> switched off, which is the mitigation that makes up for having no biometrics,
+> and that decision is the hotel's. The full split is in
+> [`operation.md`](operation.md) §12.4.
 
 **`ATTENDANCE_BREAK_CLOCKING` — exactly what changes.** It is set in
 Panel → **Operational settings** (`/settings`) → "Break clocking", where the two

@@ -32,6 +32,32 @@ use Tests\Support\Reporting\ReportExportFixtures;
  * a los quince minutos» se comprueba en microsegundos en lugar de esperando
  * quince minutos o moviendo el reloj de la maquina. Es exactamente la razon por
  * la que el modelo no lee la hora.
+ *
+ * ## LOS TRES MUTANTES QUE SIGUEN VIVOS, Y POR QUE
+ *
+ * Medido con `pest --mutate` en el cierre de la Fase 3. Ninguno de los tres se
+ * puede matar con una prueba que afirme algo cierto:
+ *
+ * - `isDownloadable()`, `BooleanAndToBooleanOr` de la PRIMERA conjuncion
+ *   (linea 135): `($this->status->isDownloadable() || $this->filePath !== null)`.
+ *   Para distinguirlo hace falta una fila **que no esta en `completed` y que
+ *   tenga `file_path`**, y el modelo no puede producirla: `complete()` es lo
+ *   unico que escribe la ruta y deja el estado en `completed`, y `purge()` la
+ *   borra. Solo saldria de hidratar una fila que el `CHECK`
+ *   `report_exports_chk_completed_is_complete` prohibe. Se deja vivo **a
+ *   sabiendas** y anotado, en vez de construir a mano un estado imposible: la
+ *   tercera condicion esta ahi como defensa en profundidad, no porque el
+ *   agregado pueda llegar ahi.
+ * - `withLifecycle()`, `CoalesceRemoveLeft` de `completedAt` (linea 364).
+ *   **El parametro `$completedAt` de ese metodo privado no lo pasa ningun
+ *   llamante**: `complete()` va por `withFile()`, que escribe el instante
+ *   directamente. El `?? ` de la izquierda es codigo muerto, y por eso quitarlo
+ *   no cambia nada. Queda anotado como hallazgo para quien toque el modelo; no
+ *   se arregla desde una prueba.
+ * - `ReportExportStatus::isInProgress()`, `TrueToFalse` (linea 71): pasar
+ *   `in_array($this, self::inProgress(), false)`. Los casos de un `enum` son
+ *   instancias unicas, asi que `==` y `===` dan el mismo resultado sobre ellos:
+ *   el mutante es indistinguible por definicion del lenguaje.
  */
 
 it('arranca solo desde pending y sella el momento', function (): void {
@@ -95,8 +121,56 @@ it('admite fallar desde pending, que es la fila que nadie llego a recoger', func
 
     expect($fallida->status)->toBe(ReportExportStatus::Failed)
         ->and($fallida->failureReason)->toBe(ReportExportFailure::Stale)
-        ->and($fallida->isInProgress())->toBeFalse();
+        ->and($fallida->isInProgress())->toBeFalse()
+        // EL MOMENTO DEL FALLO, que es lo que la pantalla ensena y lo que permite
+        // saber si la obsolescencia la cerro a los diez minutos o a las tres
+        // horas. Nadie lo afirmaba: `failedAt ?? $this->failedAt` podia quedarse
+        // en `$this->failedAt` —nulo en una fila `pending`— y la fila fallaba sin
+        // fecha de fallo (mutante vivo en la linea 365).
+        ->and($fallida->failedAt?->format(DATE_ATOM))->toBe('2026-03-08T10:00:00+00:00');
 })->group('RF-IN-06');
+
+it('no ofrece descarga de ninguna exportacion que no este terminada', function (): void {
+    /*
+     * LAS TRES CONDICIONES DE `isDownloadable()` SON UNA CONJUNCION, y hasta el
+     * cierre de la Fase 3 nadie la miraba en negativo sobre una fila sin fichero:
+     * solo estaban el caso verde (`completed`) y el purgado. Con eso, cambiar el
+     * `&&` por un `||` dejaba `isDownloadable()` devolviendo CIERTO para una
+     * exportacion `pending` —purgada no esta, asi que `purgedAt === null`— y la
+     * pantalla ofreceria descargar un informe que aun no existe: `404` para quien
+     * lo pidio, y un enlace emitido sobre una fila sin fichero.
+     */
+
+    // arrange / act / assert
+    expect(ReportExportFixtures::pending()->isDownloadable())->toBeFalse();
+
+    expect(ReportExportFixtures::pending()
+        ->start(ReportExportFixtures::at('2026-03-08T09:00:05+00:00'))
+        ->isDownloadable())->toBeFalse();
+
+    expect(ReportExportFixtures::pending()
+        ->fail(ReportExportFixtures::at('2026-03-08T10:00:00+00:00'), ReportExportFailure::Stale)
+        ->isDownloadable())->toBeFalse();
+})->group('RF-IN-06');
+
+it('no purga una exportacion que no llego a terminar', function (ReportExport $exportacion): void {
+    /*
+     * Purgar es «el fichero se borro al vencer su plazo», y una fila que nunca
+     * tuvo fichero no tiene plazo que vencer. Sin esta prueba, quitar el
+     * `assertStatusIs()` de `purge()` no rompia nada (mutante vivo en la linea
+     * 248) y una fila `pending` o `failed` podia acabar en `purged`: perderia su
+     * `failureReason`, y la pregunta «¿por que no salio este informe?» se
+     * quedaria sin respuesta en la unica fila que la tenia.
+     */
+
+    // arrange / act / assert
+    expect(static fn () => $exportacion->purge(ReportExportFixtures::at('2026-03-15T04:25:00+00:00')))
+        ->toThrow(InvalidReportExportTransition::class);
+})->with([
+    'pendiente' => [fn (): ReportExport => ReportExportFixtures::pending()],
+    'en curso' => [fn (): ReportExport => ReportExportFixtures::pending()->start(ReportExportFixtures::at('2026-03-08T09:00:05+00:00'))],
+    'fallida' => [fn (): ReportExport => ReportExportFixtures::pending()->fail(ReportExportFixtures::at('2026-03-08T10:00:00+00:00'), ReportExportFailure::Stale)],
+])->group('RF-IN-06');
 
 it('purgar borra la ruta y el enlace, y conserva la huella', function (): void {
     // Regla dura 5: la fila se queda para siempre. Lo que desaparece es la ruta

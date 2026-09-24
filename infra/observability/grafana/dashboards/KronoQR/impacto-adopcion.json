@@ -122,15 +122,15 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Ratio de correcciones manuales / fichajes (7 días)",
-      "description": "Si sube, el registro se está degradando: adopción real de la tarjeta frente al parche manual (doc 01 §9.2).",
+      "title": "Ratio de correcciones manuales / fichajes aceptados (7 días)",
+      "description": "Si sube, el registro se está degradando: adopción real de la tarjeta frente al parche manual (doc 01 §9.2). Denominador sobre ACEPTADOS (result!~\"rejected_.*\"), como AdoptionIndicators::recordIndicators(): un rechazo no es un fichaje y contarlo abajo castigaría el indicador por las tarjetas revocadas que el sistema rechaza bien. Misma fracción que el cuadro de impacto y adopción del panel (RF-IN-08), con la ventana de 7 días de Grafana en vez de un periodo civil cerrado (doc 02 §8.3).",
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
-          "expr": "sum(increase(manual_corrections_total[7d])) / sum(increase(scans_total[7d]))",
+          "expr": "sum(increase(manual_corrections_total[7d])) / sum(increase(scans_total{result!~\"rejected_.*\"}[7d]))",
           "instant": true
         }
       ],

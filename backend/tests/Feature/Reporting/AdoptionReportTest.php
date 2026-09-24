@@ -584,6 +584,48 @@ it('escribe las horas del fichero en HH:MM y nunca en decimal', function (): voi
         ->and($csv)->toContain('+25,00 pp');
 })->group('RF-IN-08');
 
+it('escribe los numeros con el separador del idioma de la instalacion, y sale de lang/', function (string $idioma, string $conSeparador, string $sinEl): void {
+    /*
+     * EL SEPARADOR DECIMAL NO ES UN `if` POR IDIOMA (revision del cierre de la
+     * Fase 3).
+     *
+     * `AdoptionReportLayout::number()` preguntaba `Lang::getLocale() === 'es'`, el
+     * unico condicional por idioma que quedaba en el backend. Con dos idiomas daba
+     * la respuesta correcta; con un tercero habria dado la inglesa **en silencio**.
+     *
+     * Y en una hoja de calculo eso no es un formato feo: `88.89` abierto en un
+     * Excel con configuracion regional espaÃ±ola se lee como ochenta y ocho mil
+     * ochocientos noventa, que es una cifra distinta en un documento que se
+     * archiva.
+     *
+     * Ahora los dos separadores son textos de `lang/{es,en}/reports.php` y los pide
+     * `text()`, que **falla con el nombre de la clave delante** si un idioma nuevo
+     * no la trae. La regla deja de ser Â«acordarseÂ» y pasa a ser Â«no compilaÂ».
+     */
+    $context = hotelConCuadroDeImpacto();
+
+    // EL IDIOMA SALE DE LA INSTALACION Y NO DE `Accept-Language`: la ruta lleva
+    // `locale.installation` porque esto es un DOCUMENTO, y lo abre una persona que
+    // puede no ser quien lo descargo (regla dura 13, `UseInstallationLocale`). Se
+    // mueve el ajuste, que es lo que de verdad decide.
+    DB::table('installation_settings')->updateOrInsert(
+        ['key' => 'LOCALE_DEFAULT'],
+        ['value' => '"'.$idioma.'"', 'updated_at' => '2026-01-01 00:00:00+00'],
+    );
+
+    $csv = Api::as($context['token'])
+        ->get('/api/v1/reports/adoption/export?format=csv&from=2026-03-01&to=2026-03-31')
+        ->assertOk()
+        ->getContent();
+
+    // 8 de 9 intentos atendidos: 88,89 % o 88.89 %, segun quien lo abra.
+    expect($csv)->toContain($conSeparador)
+        ->and($csv)->not->toContain($sinEl);
+})->with([
+    'castellano' => ['es', '88,89', '88.89'],
+    'ingles' => ['en', '88.89', '88,89'],
+])->group('RF-IN-08', 'RF-PD-01');
+
 it('rechaza un formato que no existe sin llegar a consultar nada', function (): void {
     $context = hotelConCuadroDeImpacto();
 

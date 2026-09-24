@@ -106,14 +106,16 @@ const UPDATE_WINDOW_PATTERN = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$
 
 // --- Salida a nomina (RF-IN-07, tarea 3.9) -----------------------------------
 //
-// Las seis claves `PAYROLL_EXPORT_*` TODAVIA NO ESTAN en el enum `SettingKey`
-// del contrato en el momento de escribir esta pantalla: dos agentes de
-// `backend-laravel` lo redactan en paralelo (decision 5 de la ficha). Por eso
-// aqui abajo se usan como cadenas sueltas y no como `SettingKey` -igual que ya
-// hace `KIOSK_SERVICE_CODE` en el resto de este fichero, que tampoco se tipa
-// contra el enum en cada sitio- y `entryOf`/`stringValue` aceptan `key:
-// string` a proposito. En cuanto el contrato las declare y se regeneren los
-// tipos, nada de esto cambia: sigue siendo una clave mas del catalogo.
+// Las seis claves `PAYROLL_EXPORT_*` ya estan en el enum `SettingKey` del
+// contrato (segunda vuelta de la tarea 3.9): `satisfies SettingKey` hace que
+// un cambio de nombre ahi falle aqui, mismo criterio que
+// `BASELINE_MANUAL_HOURS_KEY`.
+const PAYROLL_COLUMNS_KEY = 'PAYROLL_EXPORT_COLUMNS' satisfies SettingKey
+const PAYROLL_DELIMITER_KEY = 'PAYROLL_EXPORT_DELIMITER' satisfies SettingKey
+const PAYROLL_HOURS_FORMAT_KEY = 'PAYROLL_EXPORT_HOURS_FORMAT' satisfies SettingKey
+const PAYROLL_DATE_FORMAT_KEY = 'PAYROLL_EXPORT_DATE_FORMAT' satisfies SettingKey
+const PAYROLL_ENCODING_KEY = 'PAYROLL_EXPORT_ENCODING' satisfies SettingKey
+const PAYROLL_HEADER_ROW_KEY = 'PAYROLL_EXPORT_HEADER_ROW' satisfies SettingKey
 
 /** El catalogo cerrado de columnas (decision 5 de la ficha): el mismo que valida el servidor. Un `id` fuera de esta lista es `422` al guardar, aqui y en el backend. */
 const PAYROLL_COLUMN_IDS = [
@@ -322,19 +324,17 @@ function allowedValuesOf(catalog: InstallationSettings | null, key: string): rea
 }
 
 const payrollDelimiterOptions = computed(() =>
-  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_DELIMITER'),
+  allowedValuesOf(settings.value, PAYROLL_DELIMITER_KEY),
 )
 const payrollHoursFormatOptions = computed(() =>
-  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_HOURS_FORMAT'),
+  allowedValuesOf(settings.value, PAYROLL_HOURS_FORMAT_KEY),
 )
 const payrollDateFormatOptions = computed(() =>
-  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_DATE_FORMAT'),
+  allowedValuesOf(settings.value, PAYROLL_DATE_FORMAT_KEY),
 )
-const payrollEncodingOptions = computed(() =>
-  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_ENCODING'),
-)
+const payrollEncodingOptions = computed(() => allowedValuesOf(settings.value, PAYROLL_ENCODING_KEY))
 const payrollHeaderRowOptions = computed(() =>
-  allowedValuesOf(settings.value, 'PAYROLL_EXPORT_HEADER_ROW'),
+  allowedValuesOf(settings.value, PAYROLL_HEADER_ROW_KEY),
 )
 
 /** Los dos valores que el catalogo admite para `WEEKLY_SUMMARY_EMAIL` (RF-PR-05, tarea 3.12), mismo criterio que `breakClockingOptions`. */
@@ -344,7 +344,7 @@ const weeklySummaryEmailOptions = computed(() =>
 
 /** Las columnas ya guardadas, o las de serie mientras la clave no tenga fila propia. */
 function payrollColumnsValueOf(catalog: InstallationSettings): readonly string[] {
-  const value = entryOf(catalog, 'PAYROLL_EXPORT_COLUMNS')?.value
+  const value = entryOf(catalog, PAYROLL_COLUMNS_KEY)?.value
 
   return Array.isArray(value) && value.length > 0 ? value : DEFAULT_PAYROLL_COLUMNS
 }
@@ -432,11 +432,11 @@ function fill(catalog: InstallationSettings): void {
   baselineManualHoursPerMonth.value = integerValue(catalog, BASELINE_MANUAL_HOURS_KEY)
 
   payrollColumnsText.value = payrollColumnsValueOf(catalog).join('\n')
-  payrollDelimiter.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_DELIMITER', 'semicolon')
-  payrollHoursFormat.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_HOURS_FORMAT', 'hhmm')
-  payrollDateFormat.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_DATE_FORMAT', 'iso')
-  payrollEncoding.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_ENCODING', 'utf8_bom')
-  payrollHeaderRow.value = closedTextValueOf(catalog, 'PAYROLL_EXPORT_HEADER_ROW', 'enabled')
+  payrollDelimiter.value = closedTextValueOf(catalog, PAYROLL_DELIMITER_KEY, 'semicolon')
+  payrollHoursFormat.value = closedTextValueOf(catalog, PAYROLL_HOURS_FORMAT_KEY, 'hhmm')
+  payrollDateFormat.value = closedTextValueOf(catalog, PAYROLL_DATE_FORMAT_KEY, 'iso')
+  payrollEncoding.value = closedTextValueOf(catalog, PAYROLL_ENCODING_KEY, 'utf8_bom')
+  payrollHeaderRow.value = closedTextValueOf(catalog, PAYROLL_HEADER_ROW_KEY, 'enabled')
 }
 
 async function load(): Promise<void> {
@@ -598,7 +598,7 @@ const payrollColumnsEntries = computed(() => parsePayrollColumnsText(payrollColu
 /**
  * `null` (valido), `empty` sin ninguna columna, o `unknownColumn` si algun
  * `id` no esta en el catalogo cerrado. El `422` del servidor sigue mandando
- * (`serverFieldErrors('PAYROLL_EXPORT_COLUMNS')` lo añade), esto es solo para
+ * (`serverFieldErrors(PAYROLL_COLUMNS_KEY)` lo añade), esto es solo para
  * no descargar la peticion con una lista que ya se sabe invalida.
  */
 const payrollColumnsLocalIssue = computed<'empty' | 'unknownColumn' | null>(() => {
@@ -619,7 +619,7 @@ const payrollColumnsErrors = computed<readonly string[]>(() => {
       ? []
       : [t(`operationalSettings.errors.${payrollColumnsLocalIssue.value}`)]
 
-  return [...local, ...serverFieldErrors('PAYROLL_EXPORT_COLUMNS')]
+  return [...local, ...serverFieldErrors(PAYROLL_COLUMNS_KEY)]
 })
 
 /** Un idioma no se puede desmarcar si es el que esta activo por defecto (mismo patron que `OrganisationStep`). */
@@ -733,34 +733,34 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     payrollColumnsLocalIssue.value === null &&
     JSON.stringify(payrollColumnsEntries.value) !== JSON.stringify(previousColumns)
   ) {
-    changes['PAYROLL_EXPORT_COLUMNS'] = payrollColumnsEntries.value
+    changes[PAYROLL_COLUMNS_KEY] = payrollColumnsEntries.value
   }
 
   const payrollClosedFields: ReadonlyArray<[key: string, value: string, previousValue: string]> = [
     [
-      'PAYROLL_EXPORT_DELIMITER',
+      PAYROLL_DELIMITER_KEY,
       payrollDelimiter.value,
-      closedTextValueOf(current, 'PAYROLL_EXPORT_DELIMITER', 'semicolon'),
+      closedTextValueOf(current, PAYROLL_DELIMITER_KEY, 'semicolon'),
     ],
     [
-      'PAYROLL_EXPORT_HOURS_FORMAT',
+      PAYROLL_HOURS_FORMAT_KEY,
       payrollHoursFormat.value,
-      closedTextValueOf(current, 'PAYROLL_EXPORT_HOURS_FORMAT', 'hhmm'),
+      closedTextValueOf(current, PAYROLL_HOURS_FORMAT_KEY, 'hhmm'),
     ],
     [
-      'PAYROLL_EXPORT_DATE_FORMAT',
+      PAYROLL_DATE_FORMAT_KEY,
       payrollDateFormat.value,
-      closedTextValueOf(current, 'PAYROLL_EXPORT_DATE_FORMAT', 'iso'),
+      closedTextValueOf(current, PAYROLL_DATE_FORMAT_KEY, 'iso'),
     ],
     [
-      'PAYROLL_EXPORT_ENCODING',
+      PAYROLL_ENCODING_KEY,
       payrollEncoding.value,
-      closedTextValueOf(current, 'PAYROLL_EXPORT_ENCODING', 'utf8_bom'),
+      closedTextValueOf(current, PAYROLL_ENCODING_KEY, 'utf8_bom'),
     ],
     [
-      'PAYROLL_EXPORT_HEADER_ROW',
+      PAYROLL_HEADER_ROW_KEY,
       payrollHeaderRow.value,
-      closedTextValueOf(current, 'PAYROLL_EXPORT_HEADER_ROW', 'enabled'),
+      closedTextValueOf(current, PAYROLL_HEADER_ROW_KEY, 'enabled'),
     ],
   ]
 
@@ -1151,7 +1151,7 @@ async function save(): Promise<void> {
           <FormField
             :label="t('operationalSettings.fields.payrollDelimiter')"
             :hint="t('operationalSettings.hints.payrollDelimiter')"
-            :errors="serverFieldErrors('PAYROLL_EXPORT_DELIMITER')"
+            :errors="serverFieldErrors(PAYROLL_DELIMITER_KEY)"
           >
             <template #default="{ id, describedBy, invalid }">
               <select
@@ -1172,7 +1172,7 @@ async function save(): Promise<void> {
           <FormField
             :label="t('operationalSettings.fields.payrollHoursFormat')"
             :hint="t('operationalSettings.hints.payrollHoursFormat')"
-            :errors="serverFieldErrors('PAYROLL_EXPORT_HOURS_FORMAT')"
+            :errors="serverFieldErrors(PAYROLL_HOURS_FORMAT_KEY)"
           >
             <template #default="{ id, describedBy, invalid }">
               <select
@@ -1193,7 +1193,7 @@ async function save(): Promise<void> {
           <FormField
             :label="t('operationalSettings.fields.payrollDateFormat')"
             :hint="t('operationalSettings.hints.payrollDateFormat')"
-            :errors="serverFieldErrors('PAYROLL_EXPORT_DATE_FORMAT')"
+            :errors="serverFieldErrors(PAYROLL_DATE_FORMAT_KEY)"
           >
             <template #default="{ id, describedBy, invalid }">
               <select
@@ -1214,7 +1214,7 @@ async function save(): Promise<void> {
           <FormField
             :label="t('operationalSettings.fields.payrollEncoding')"
             :hint="t('operationalSettings.hints.payrollEncoding')"
-            :errors="serverFieldErrors('PAYROLL_EXPORT_ENCODING')"
+            :errors="serverFieldErrors(PAYROLL_ENCODING_KEY)"
           >
             <template #default="{ id, describedBy, invalid }">
               <select
@@ -1235,7 +1235,7 @@ async function save(): Promise<void> {
           <FormField
             :label="t('operationalSettings.fields.payrollHeaderRow')"
             :hint="t('operationalSettings.hints.payrollHeaderRow')"
-            :errors="serverFieldErrors('PAYROLL_EXPORT_HEADER_ROW')"
+            :errors="serverFieldErrors(PAYROLL_HEADER_ROW_KEY)"
           >
             <template #default="{ id, describedBy, invalid }">
               <select
