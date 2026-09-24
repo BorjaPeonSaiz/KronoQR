@@ -313,7 +313,7 @@ una publicación. Guarda en `QualityGatesTest`; plan 08 §8.2, doc 02 §9.2 e `i
 entrega el fabricante con la licencia) actualizados. **No se ha ejecutado todavía ninguna publicación real**: la primera etiqueta es la
 prueba de fuego; si falla, se corrige, se relanza `ci.yml` sobre la misma etiqueta y después `release.yml` por `workflow_dispatch`.
 
-**Siguiente acción:** integrar la PR de esta rama con *merge commit*; después, **a mano**: (a) decidir `vars.IMAGE_REGISTRY` en Settings
+**Siguiente acción:** integrar la **PR #83** (commit `64647b6`; CI manual 36050566399) con *merge commit*; después, **a mano**: (a) decidir `vars.IMAGE_REGISTRY` en Settings
 → Variables (vacía = `ghcr.io/borjapeonsaiz/kronoqr`; `ghcr.io/kronoqr` exige crear la organización `kronoqr` en GitHub); (b)
 `git tag v2.1.0 <merge> && git push origin v2.1.0`; vigilar `ci.yml` (etapa ⑧ y ⑧b) y `release.yml`; (c) poner en público —o dar acceso—
 los tres paquetes `php`, `nginx`, `postgres` en GHCR (nacen privados) y enlazarlos al repositorio; (d) abrir el ciclo siguiente en un
