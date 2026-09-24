@@ -42,6 +42,31 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * antes. Con las dos, un token de quiosco no llega aqui aunque su portador tuviera
  * rol —no tiene el ambito— y una cuenta con el ambito pero sin rol no ve a nadie.
  *
+ * ## Y NUNCA UN ACCESO DE SOPORTE DEL FABRICANTE (decision del 24-09-2026)
+ *
+ * Regla dura 16 y ADR-020. `SupportScope::ReadOnly` lleva `attendance:read` y
+ * `SupportScope::actsAs()` devuelve `admin` ante las policies, asi que sin esta
+ * comprobacion **pasa el middleware y pasa la lista de roles**: hasta esta
+ * decision, un token del fabricante leia el resumen entero.
+ *
+ * Y lo que este resumen es, es **un listado de incumplimientos por persona de
+ * toda la plantilla** —descanso corto, jornada excedida— sin acotar por
+ * departamento, porque el actor de soporte se presenta como `admin`. Es decir:
+ * el peor conjunto posible de este modulo, la lista de quien lleva mal las
+ * horas en el hotel del cliente, servida al fabricante de una vez.
+ *
+ * **Y no hace falta para diagnosticar nada.** La incidencia para la que existe
+ * el alcance `read_only` es «a esta persona le salen ocho horas y deberian ser
+ * nueve», y eso se mira en `GET /employees/{uuid}/workdays` de la persona del
+ * caso, que queda auditado como divulgacion. El resumen no da una hora mas: da
+ * un juicio sobre las horas de todos los demas.
+ *
+ * Mismo patron y misma via que `Workforce\Http\Policy\AbsencePolicy`,
+ * `Product\Http\Policy\DataExportPolicy`, `SettingsPolicy` y
+ * `ReportExportPolicy`: la pregunta va por el puerto
+ * {@see ManagementActor::isSupportActor()}, porque `Reporting` no puede importar
+ * nada de `Identity` ni de `Product` (doc 02 §1.6, verificado por Deptrac).
+ *
  * **Se registra contra {@see ComplianceSummary}, que es un objeto de dominio y no
  * un modelo Eloquent.** Asi la autorizacion se decide **antes** de tocar la base
  * de datos: declarada sobre una fila, habria que cargarla para poder preguntar si
@@ -62,9 +87,27 @@ final class ComplianceSummaryPolicy
         return [UserRole::ADMIN, UserRole::RRHH, UserRole::RESPONSABLE_DEPARTAMENTO];
     }
 
+    /**
+     * Si quien pregunta es una cuenta **de la organizacion del cliente** con uno
+     * de los roles indicados.
+     *
+     * Las dos condiciones en un solo sitio para que ninguna habilidad futura se
+     * pueda escribir olvidando la primera: un `actsAs()` suelto en un metodo
+     * nuevo volveria a servirle al fabricante la lista de incumplimientos de la
+     * plantilla, y no se notaria al leerlo.
+     */
+    private static function isCustomerStaff(ManagementActor $actor, UserRole ...$roles): bool
+    {
+        if ($actor->isSupportActor()) {
+            return false;
+        }
+
+        return $actor->actsAs(...$roles);
+    }
+
     /** `GET /api/v1/compliance/summary`. */
     public function view(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::watchers());
+        return self::isCustomerStaff($actor, ...self::watchers());
     }
 }

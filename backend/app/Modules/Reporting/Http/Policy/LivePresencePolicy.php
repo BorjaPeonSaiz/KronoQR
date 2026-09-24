@@ -43,6 +43,32 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * tuviera rol —no tiene el ambito— y una cuenta con el ambito pero sin rol no ve
  * a nadie.
  *
+ * ## Y NUNCA UN ACCESO DE SOPORTE DEL FABRICANTE (decision del 24-09-2026)
+ *
+ * Regla dura 16 y ADR-020. `SupportScope::ReadOnly` lleva `attendance:read` y
+ * `SupportScope::actsAs()` devuelve `admin` ante las policies, asi que sin esta
+ * comprobacion **pasa el middleware y pasa la lista de roles**: hasta esta
+ * decision, un token del fabricante veia el panel de presencia entero.
+ *
+ * Y lo que ese panel enseña no es el registro horario: es **quien esta dentro
+ * del hotel ahora mismo, con nombre y desde que hora**. Eso es vigilancia en
+ * tiempo real de la plantilla del cliente, y **no tiene ningun valor
+ * diagnostico**: la incidencia para la que existe el alcance `read_only` —«a
+ * esta persona le salen ocho horas y deberian ser nueve»— se mira sobre
+ * `GET /employees/{uuid}/workdays`, que son los datos ya escritos y auditados
+ * como divulgacion. Saber quien esta en la cocina a las 21:40 no ayuda a
+ * cuadrar un calculo de horas de la semana pasada.
+ *
+ * Cierra tambien **la suscripcion a los canales de presencia**, porque
+ * `routes/channels.php` pregunta por esta misma habilidad: si no, el fabricante
+ * se quedaria sin la foto y conservaria el flujo, que es peor.
+ *
+ * Mismo patron y misma via que `Workforce\Http\Policy\AbsencePolicy`,
+ * `Product\Http\Policy\DataExportPolicy`, `SettingsPolicy` y
+ * `ReportExportPolicy`: la pregunta va por el puerto
+ * {@see ManagementActor::isSupportActor()}, porque `Reporting` no puede importar
+ * nada de `Identity` ni de `Product` (doc 02 §1.6, verificado por Deptrac).
+ *
  * **Se registra contra {@see PresenceBoard}, que es un objeto de dominio y no un
  * modelo Eloquent.** Asi la autorizacion se decide **antes** de tocar la base de
  * datos: declarada sobre una fila, habria que cargarla para poder preguntar si
@@ -65,10 +91,28 @@ final class LivePresencePolicy
     }
 
     /**
+     * Si quien pregunta es una cuenta **de la organizacion del cliente** con uno
+     * de los roles indicados.
+     *
+     * Las dos condiciones en un solo sitio para que ninguna habilidad futura se
+     * pueda escribir olvidando la primera: un `actsAs()` suelto en un metodo
+     * nuevo volveria a abrirle al fabricante la vigilancia en vivo del hotel, y
+     * no se notaria al leerlo.
+     */
+    private static function isCustomerStaff(ManagementActor $actor, UserRole ...$roles): bool
+    {
+        if ($actor->isSupportActor()) {
+            return false;
+        }
+
+        return $actor->actsAs(...$roles);
+    }
+
+    /**
      * `GET /api/v1/attendance/live` y la suscripcion a los canales de presencia.
      */
     public function view(ManagementActor $actor): bool
     {
-        return $actor->actsAs(...self::watchers());
+        return self::isCustomerStaff($actor, ...self::watchers());
     }
 }

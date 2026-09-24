@@ -242,7 +242,7 @@ endif
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
-        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e load-test dast clean changelog changelog-check tool-versions \
+        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill observability-check
 
 help: ## Muestra esta ayuda
@@ -282,7 +282,8 @@ help: ## Muestra esta ayuda
 	@echo "  make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)"
 	@echo "  make coverage         Cobertura: dominio 90, global 75 por ciento"
 	@echo "  make coverage-now     Cobertura actual, sin umbral"
-	@echo "  make mutate           Mutacion sobre el dominio, MSI 80 por ciento"
+	@echo "  make mutate           Mutacion COMPLETA sobre el dominio, MSI 80 por ciento (nocturna y a mano)"
+	@echo "  make mutate-changed   Mutacion acotada a los ficheros de dominio de este push (etapa 3 de la CI)"
 	@echo "  make e2e              Playwright: quiosco, panel y portal"
 	@echo "  make load-test        Carga k6 (RNF-P-06): 50 fichajes/s, p95 menor que 150 ms. INSTANCES=8 DURATION=120s"
 	@echo "  make changelog        Genera el CHANGELOG desde los commits convencionales"
@@ -676,13 +677,16 @@ sast-community: ## Semgrep: reglas comunitarias PHP/JS/TS/OWASP (umbral: 0 halla
 # buildx ahi cuesta mas de lo que ahorra.
 IMAGES        ?= postgres
 BUILDX_CACHE  ?=
-# APK_INDEX_STAMP invalida una vez por semana (semana ISO) la capa de paquetes
+# APK_INDEX_STAMP invalida una vez al dia (fecha UTC) la capa de paquetes
 # de las tres imagenes. Sin el, la cache de Actions reutilizaba la capa del
 # `apk add` de forma indefinida y `trivy image` acababa marcando CVE con el
 # parche ya publicado en Alpine (libexpat 2.8.3-r0 → 2.8.4-r0, septiembre de
 # 2026). Explicado en infra/docker/php/Dockerfile. Para forzar un refresco
-# fuera de ciclo: `make build-ci-images APK_INDEX_STAMP=$$(date -u +%s)`.
-APK_INDEX_STAMP ?= $(shell date -u +%G-W%V)
+# fuera de ciclo: `make build-ci-images APK_INDEX_STAMP=$$(date -u +%s)`. Era semanal
+# hasta el 24-09-2026: un CVE de libexpat publicado a mitad de semana (CVE-2026-93990)
+# dejo la CI en rojo hasta el lunes siguiente con el parche ya en Alpine; una capa
+# al dia cuesta ~6 min por imagen y cierra esa ventana.
+APK_INDEX_STAMP ?= $(shell date -u +%F)
 
 # La version que viaja DENTRO de la imagen de la aplicacion, y que publica
 # `GET /api/v1/health` y la pantalla de diagnostico del quiosco (doc 02 §10.5).
@@ -949,6 +953,17 @@ space := $(empty) $(empty)
 DOMAIN_PATHS := $(patsubst backend/%,%,$(wildcard backend/app/Modules/*/Domain))
 MUTATE_PATHS := $(subst $(space),$(comma),$(strip $(DOMAIN_PATHS)))
 
+# Base contra la que `mutate-changed` calcula que ha cambiado. `origin/main`
+# por defecto (uso local: "que cambia mi rama frente a main"); la CI la
+# sobreescribe por push (`make mutate-changed MUTATE_BASE=<sha-anterior>`),
+# resuelta con el mismo criterio que el job `update` de ci.yml
+# (github.event.before si es un commit valido, si no origin/main). No se
+# resuelve aqui con `:=` porque eso ejecutaria git en CADA invocacion de make,
+# incluida `make help`, y fallaria sin red antes de que el objetivo se
+# necesite; se resuelve dentro de la receta, con fallback y mensaje si no
+# puede.
+MUTATE_BASE ?= origin/main
+
 # Los DOS umbrales del §9.2 (RNF-M-01), y hacen falta los dos.
 #
 # `--min` de Pest es uno solo y GLOBAL. Con solo el 75 puesto, el 90 % del
@@ -1034,6 +1049,56 @@ else
 # Un `use` sin efecto (clase global en un fichero sin namespace) rompe el
 # arranque de los procesos hijos como ErrorException: no dejar ninguno.
 	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --parallel --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
+endif
+
+# `mutate` completo tarda 37-42 min medidos en la CI (comentario de arriba) y
+# el doc 02 §10.1 exige que las etapas 1-3 respondan en menos de 4 minutos en
+# cada push: los dos hechos juntos no caben en el mismo sitio. Decision
+# (24-09-2026): en cada push se muta SOLO lo que el push cambia; la mutacion
+# COMPLETA queda para la noche (`schedule`) y para el disparo manual
+# (`workflow_dispatch`, el que se hace siempre antes de abrir una PR), en
+# ci.yml.
+#
+# Por que esto no relaja RQ-10. El umbral --min=80 se sigue aplicando, entero,
+# sobre el subconjunto que cambia: un push que introduce una regla de negocio
+# sin prueba que la mate sigue en rojo el mismo dia, no la noche siguiente. Lo
+# que se aplaza a la ejecucion nocturna es la comprobacion de que ninguna
+# regresion ha erosionado el MSI de un fichero de dominio que ESTE push no
+# toca -algo que solo puede pasar si alguien borra o debilita una prueba sin
+# tocar el fichero que prueba, un caso raro y que la ejecucion nocturna sigue
+# cazando antes de la manana siguiente-.
+#
+# Por que "ficheros que cambian" y no "modulos que cambian": una prueba que se
+# retoca sin tocar el fichero de dominio que cubre no debe disparar la
+# mutacion de TODO el modulo -eso volveria a acercarse al tiempo de la
+# completa sin razon-, y una tarea que cambia dos lineas en un fichero de
+# Attendance/Domain no tiene por que mutar tambien Compliance/Domain porque
+# comparten modulo padre. El precio, explicito: un cambio en una prueba SIN
+# tocar el fichero de dominio que cubre no muta nada por push -y eso es
+# exactamente lo que la ejecucion nocturna, con el dominio entero, sigue
+# cazando antes de la manana siguiente-.
+mutate-changed: ## Mutacion acotada a Domain/*.php que cambian frente a MUTATE_BASE (por defecto origin/main)
+ifeq ($(DOMAIN_MODELS),)
+	$(call notice,Mutacion NO ejecutada: Modules/*/Domain no existe todavia.)
+else
+	@base="$(MUTATE_BASE)"; \
+	if ! git rev-parse --verify --quiet "$$base" >/dev/null 2>&1; then \
+		git fetch --no-tags origin main >/dev/null 2>&1 || true; \
+		base="origin/main"; \
+	fi; \
+	if ! git rev-parse --verify --quiet "$$base" >/dev/null 2>&1; then \
+		echo "[make] ERROR: no se pudo resolver la base '$(MUTATE_BASE)' ni 'origin/main' para calcular el diff."; \
+		echo "[make] Ejecuta 'git fetch origin main' o repite con MUTATE_BASE=<commit-o-rama> y vuelve a intentar."; \
+		exit 1; \
+	fi; \
+	files="$$(git diff --name-only --diff-filter=ACMR "$${base}...HEAD" -- 'backend/app/Modules/*/Domain/*.php' | sed 's#^backend/##')"; \
+	if [ -z "$$files" ]; then \
+		echo "[make] Sin ficheros de app/Modules/*/Domain cambiados frente a $$base: mutacion acotada omitida; la completa corre de noche (schedule) y en el disparo manual (workflow_dispatch)."; \
+		exit 0; \
+	fi; \
+	paths="$$(printf '%s\n' "$$files" | tr '\n' ',' | sed 's/,$$//')"; \
+	echo "[make] Mutando lo cambiado frente a $$base: $$paths"; \
+	$(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=':$$(pwd)/tools/mutation' $(PEST) --mutate --parallel --path=$$paths --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80"
 endif
 
 e2e: ## Playwright: quiosco con camara simulada, panel de gestion y portal

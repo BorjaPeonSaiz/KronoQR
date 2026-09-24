@@ -45,7 +45,7 @@ Las del ecosistema, no un estilo propio. Detalle completo y herramienta que veri
 
 - **PHP:** PSR-12/PER con Pint preset `laravel`, `declare(strict_types=1)` en todo fichero, tipado completo, PHPStan 9. Sin lógica de negocio en controladores ni en modelos Eloquent. Sin facades en `Domain/` ni en `Application/`.
 - **Vue y TypeScript:** guía de estilo oficial de Vue 3 (prioridades A y B), Composition API con `<script setup lang="ts">`, TS estricto, **sin `any`**, tipos de la API generados del contrato.
-- **El código se escribe en inglés**; los textos de usuario van en `i18n`. El glosario del documento 01 §13 traduce el lenguaje ubicuo: *tramo* → `ShiftEntry`, *jornada* → `WorkDay`. Nunca identificadores en español.
+- **El código de producción se escribe en inglés** (`backend/app/`, `packages/web-kit/src/`, `frontend-*/src/`); los textos de usuario van en `i18n`. El glosario del documento 01 §13 traduce el lenguaje ubicuo: *tramo* → `ShiftEntry`, *jornada* → `WorkDay`. Lo verifican `IdentifierLanguageTest` y la regla `id-match` de ESLint. En las pruebas, los ayudantes, constantes y datasets pueden ir en el idioma del escenario, como las descripciones; las constantes globales de un fichero Pest llevan prefijo del fichero (`TestGlobalConstantsTest`).
 - **Una convención que no verifica una herramienta es una sugerencia.** Si propones una, ata su comprobación a Pint, PHPStan, Deptrac, ESLint o `vue-tsc`.
 
 ## Pruebas: qué exige cada funcionalidad

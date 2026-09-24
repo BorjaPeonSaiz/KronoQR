@@ -287,12 +287,13 @@ en el runner frente al techo de 586; 19,5 fichajes/s). **Escrito en el acta lo q
 verifica por delegación (sin id en `requisitos.yaml`); RS-11 está preparada, no cumplida (el tercero); RNF-P-06 sin cifra absoluta en
 hardware de referencia.
 
-**Siguiente acción:** integrar la **PR #81** (commit `0010a45` más `2ab36db` y `2d4c589`, que dejaron la CI en verde: `libexpat` 2.8.5-r0 en la capa Alpine cacheada de `app` vía la entrada nueva `apk_index_stamp` del disparo manual, y un enlace del runbook de vigilancia que no viajaba en el paquete; **CI manual 35990497391 en verde en todos los jobs**) con *merge commit*. Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
+**Siguiente acción:** PR #81 integrada en `main` (`96142cc`, 24-09-2026). Integrar la **PR #82** «decisiones post cierre» (rama `docs/decisiones-post-cierre-3`: commit de docs de las condiciones de venta + `0613481` con las tres decisiones aplicadas: soporte `read_only` sin presencia en vivo ni resumen de cumplimiento, `make mutate-changed` por push con la completa nocturna y en el disparo manual, regla de idioma con `IdentifierLanguageTest`/`id-match`/`TestGlobalConstantsTest`; **CI manual 36018614725**; el sello de la capa de paquetes Alpine pasa de semanal a diario tras caer la 36012810304 en la etapa ⑧) con *merge commit*; sin migración: `git pull` y `make up`. Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
 venta** (condiciones del plan 06): validación jurídica por la asesoría laboral con `docs/cliente/preguntas-asesoria.md`; designar al
 responsable de vigilancia normativa (`docs/runbooks/vigilancia-normativa.md`); prueba de campo del hardware (12 h en tablet real);
-contraste de costes de impresión; instalación limpia por una persona ajena; pasada de k6 en hardware de referencia (`INSTANCES=10`);
-`git stash drop` del stash huérfano; y dos decisiones: la etapa ③ de la CI tarda 42 min por la mutación en cada push (nocturno o
-acotar al diff) y si doc 02 §3.5 admite ayudantes de prueba en español. Después, **Fase 4** (plan 07 «Fase 4 — Evolución»), empezando
+instalación limpia por una persona ajena; pasada de k6 en hardware de referencia (`INSTANCES=10`); los costes de impresión dejaron
+de ser condición el 24-09-2026 (la impresión es del cliente; ver «Del usuario»);
+`git stash drop` del stash huérfano (hecho el 24-09-2026); las decisiones sobre el soporte `read_only`, la mutación por push y el
+idioma de las pruebas están tomadas y aplicadas (ver «Del usuario»). Después, **Fase 4** (plan 07 «Fase 4 — Evolución»), empezando
 por los restos con dueño del bloque «Fase 4» de «Pendiente».
 
 **Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
@@ -992,17 +993,28 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel (sí; tarea ad hoc pendiente, reparto en el bloque
   «Fase 4» de «Por tarea»).
   La línea base del runner y la fila del modelo de amenazas (reloj del quiosco) ya se hicieron en `chore/restos-3.8`.
-- **Decisión pendiente (cierre de la Fase 3, 24-09-2026): qué lee un acceso de soporte `read_only`.** `SupportScopeRoutesTest` mide
-  ahora todas las rutas `GET` que cada alcance alcanza y exige que cada una esté concedida por escrito; las ausencias quedaron
-  cerradas por `AbsencePolicy` (art. 9). Cinco rutas con dato personal siguen abiertas al fabricante porque el docblock de
-  `SupportScope::ReadOnly` las contempla («leer jornadas, tramos, plantilla y auditoría»): `GET /employees`, `/employees/{uuid}`,
-  `/employees/{uuid}/workdays` (la razón de ser del alcance, auditada como divulgación), **`/attendance/live`** (quién está dentro del
-  hotel ahora mismo, con nombre) y **`/compliance/summary`** (incidencias de cumplimiento por persona, sin acotar por departamento).
-  Las dos últimas son las más difíciles de justificar como necesidad de soporte. Si se cierran, es una línea en su policy
-  (`isSupportActor()`), la prueba se ajusta sola y hay que actualizar `operacion.md` §12.4 y doc 07 §6. Decisión del usuario.
-- **Decisiones de proceso del cierre de la Fase 3:** la etapa ③ de la CI tarda ~42 min por la mutación en cada push (doc 02 §10.1
-  prometía 4 min): mutación nocturna o acotada al diff (`devops-observabilidad`); y si doc 02 §3.5 admite ayudantes de prueba en
-  español (`hotelConCuadroDeImpacto()`, `cargarAusencias()`… cientos, mezclados con inglés) o se dejan de escribir.
+- **Decididas el 24-09-2026 (tras el cierre de la Fase 3), aplicadas en `docs/decisiones-post-cierre-3`:** (1) **un acceso de
+  soporte `read_only` ya no alcanza la presencia en vivo ni el resumen de cumplimiento por persona** (policies con `isSupportActor()`,
+  prueba por alcance, lista cerrada de `SupportScopeRoutesTest` sin esas dos rutas; sigue leyendo plantilla y el registro horario de
+  una persona, auditado); (2) **la mutación completa del dominio sale del push**: por push se muta solo lo que el push toca en el
+  dominio (`make mutate-changed`), y la completa con su umbral corre de noche y en el disparo manual previo a cada PR (doc 02 §10.1);
+  (3) **los ayudantes, constantes y datasets de las pruebas pueden ir en el idioma del escenario**, como las descripciones; la regla
+  del inglés queda atada a herramienta donde aplica (`IdentifierLanguageTest` sobre `backend/app/`, `id-match` de ESLint sobre los
+  `src/` de las SPA y `web-kit`) y las constantes globales de un fichero Pest llevan prefijo del fichero (`TestGlobalConstantsTest`).
+- **Condiciones del plan antes de la primera venta (decididas el 24-09-2026, tras el cierre de la Fase 3):** (1) **validación
+  jurídica**: a la espera de la reunión con la asesoría laboral, con `docs/cliente/preguntas-asesoria.md` como guion; las preguntas
+  1 y 2 (plazos de `employment_contracts` y `absences`) abren tarea de `RetentionScope` cuando se contesten; (2) **responsable de
+  vigilancia normativa**: es un rol, no software; en el fabricante lo asume el usuario con la asesoría como fuente (primer repaso en
+  esa misma reunión; después semestral y antes de cada versión mayor, añadido a la lista del plan 08), y en cada cliente lo designa
+  el propio cliente en la puesta en marcha siguiendo `docs/runbooks/vigilancia-normativa.md`; (3) **prueba de campo de 12 h en
+  tablet real**: más adelante, con la tarjeta impresa y la recalibración de R16 (bullet «Hardware» de abajo); (4) **costes de
+  impresión: dejan de ser condición** — la impresión de las tarjetas es del cliente, en el formato que elija; el producto entrega el
+  PDF de la hoja de credenciales y el euro por tarjeta del doc 04 §4.4 queda como orientación, no como precio publicado (doc 04
+  «Pendiente de validar» y doc 02 §11 actualizados); (5) **instalación limpia por una persona ajena**: más adelante;
+  (6) **k6 en hardware de referencia** (recomendación aceptada por el usuario a falta de fecha): alquilar un VPS Linux del perfil
+  mínimo del doc 02 §11.6 (4 vCPU / 8 GB) un par de horas, instalar desde el paquete como hace `load-test.yml` y correr
+  `make load-test INSTANCES=10 DURATION=120s` para obtener la cifra absoluta de RNF-P-06 (50 fichajes/s, p95 < 150 ms) que hoy
+  nadie ha medido; tarea temprana de la Fase 4 (`devops-observabilidad` + usuario para la máquina), y se repite en cada versión mayor.
 - **Generar el par ed25519 una vez** (`php tools/license-issuer/generate-keypair.php`), privada al
   gestor de secretos, pública como valor por defecto de `env('LICENSE_PUBLIC_KEY', '')` en
   `backend/config/license.php`. `make release-gate` lo exige en cada etiqueta `vX.Y.Z`.
@@ -1046,9 +1058,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   enlace, dos `POST` de la misma cuenta, dos pasadas de `reporting:weekly-summary` (`qa-testing`); agotar la zona `report-download`
   (30 r/m por IP) (`qa-testing`); E2E de licencia (RF-PD-04/05 y regla dura 15: fichar con licencia caducada) (`qa-testing`); paridad
   ES/EN de los `locales/*.json` del portal (`frontend-portal-empleado`); las dos pruebas del menú lateral de `shell.spec.ts` sin
-  etiqueta (`qa-testing`); la etapa ③ de la CI tarda 42 min por la mutación en cada push (§10.1 prometía 4 min): decidir nocturno o
-  acotar al diff (decisión del usuario, `devops-observabilidad`); identificadores de ayudantes de prueba en español (cientos, patrón
-  anterior a la fase): decidir si doc 02 §3.5 los admite o se dejan de escribir (decisión del usuario, `qa-testing` redacta);
+  etiqueta (`qa-testing`); `docs/runbooks/fallo-de-ci.md` arrastra referencias obsoletas anteriores al cierre (tareas 0.5/0.7/1.1/1.2,
+  «la etapa ④ todavía no existe»): limpieza completa del runbook (`devops-observabilidad`); el alias de un `v-for` en la plantilla de
+  un `.vue` escapa a `id-match` (si se quiere cerrar, `vue/no-restricted-syntax` sobre `VForExpression`) (`frontend-panel`);
   `ReportExport::withLifecycle()` lleva un `$completedAt` que ningún llamante pasa (`complete()` va por `withFile()`): código muerto
   que hace inmatable un mutante, borrar de la firma (`backend-laravel`); `isDownloadable()` solo se distingue con una fila `failed`
   con `file_path` que el `CHECK` prohíbe: si se quiere matar, `ReportExportFixtures::hydratedFromCorruptRow()` (`qa-testing`). Rector,

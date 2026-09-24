@@ -112,9 +112,14 @@ it('los ambitos de lectura de read_only no abren NINGUNA ruta que escriba', func
     // Es la autorizacion de suscripcion al canal de presencia (ADR-011), y es
     // `POST` por protocolo, no porque cambie nada: lo dice el propio
     // `bootstrap/app.php` al darle `attendance:read` —«suscribirse al canal es
-    // otra forma de leer lo mismo»— y el alcance por canal lo vuelve a
-    // comprobar `routes/channels.php`. Que `read_only` la alcance es coherente
-    // con que alcance `GET /api/v1/attendance/live`.
+    // otra forma de leer lo mismo»—.
+    //
+    // Que el AMBITO de `read_only` la alcance no le sirve de nada desde el
+    // 24-09-2026: el alcance por canal lo vuelve a comprobar
+    // `routes/channels.php` preguntando `view` sobre `PresenceBoard`, y esa
+    // policy rechaza a todo actor de soporte. Se queda sin la foto —`GET
+    // /attendance/live`— y sin el flujo, que es la unica combinacion coherente:
+    // cerrar una y dejar la otra seria cerrar nada.
     //
     // Se declara como lista cerrada, no se ignora: cualquier otra que aparezca
     // rompe la prueba.
@@ -261,11 +266,13 @@ it('ningun alcance lleva un ambito que el contrato prohibe', function (SupportSc
  *
  * Esa diferencia es todo el valor de la prueba:
  *
- * - Las dos de ausencias **no estan en la lista**, y no hacen falta: las cierra
- *   `AbsencePolicy` y por eso no llegan a compararse. El dia que alguien quite
- *   el `isSupportActor()` de esa policy, dejaran de responder `403`, apareceran
- *   en la comparacion y esta prueba se pondra roja **sin que haya que acordarse
- *   de nada**. Una lista de exclusiones no haria eso: seguiria verde.
+ * - Las dos de ausencias, la presencia en vivo y el resumen de cumplimiento **no
+ *   estan en la lista**, y no hacen falta: las cierran `AbsencePolicy`,
+ *   `LivePresencePolicy` y `ComplianceSummaryPolicy` y por eso no llegan a
+ *   compararse. El dia que alguien quite el `isSupportActor()` de una de esas
+ *   policies, su ruta dejara de responder `403`, aparecera en la comparacion y
+ *   esta prueba se pondra roja **sin que haya que acordarse de nada**. Una lista
+ *   de exclusiones no haria eso: seguiria verde.
  * - Y al reves: una ruta de lectura nueva con dato personal que nadie cierre
  *   aparece el mismo dia en que se escribe, y hay que decidir explicitamente si
  *   el fabricante la lee. Que es la decision que con `audit:read` ya quedo
@@ -465,17 +472,29 @@ it('el fabricante solo lee lo que la lista cerrada le concede', function (Suppor
          */
         'GET /api/v1/compliance-profile',
         /*
-         * LAS CINCO DE `read_only`, Y TODAS LLEVAN DATO PERSONAL. No es un
-         * descuido: es el alcance entero. `read_only` existe para la incidencia
+         * LAS TRES DE `read_only`, Y TODAS LLEVAN DATO PERSONAL. No es un
+         * descuido: son el alcance entero. `read_only` existe para la incidencia
          * que el paquete anonimizado no resuelve —«a esta persona le salen ocho
-         * horas y deberian ser nueve»—, y sin la plantilla, la presencia y las
-         * jornadas no se puede mirar.
+         * horas y deberian ser nueve»—, y eso son exactamente estas tres:
+         * traducir el `uuid` del caso a la persona y leer su registro horario.
          *
          * Lo que las hace aceptables es lo que las rodea, no que sean inocuas:
          * el acceso es **temporal, concedido por el cliente y auditado** (RL-18,
          * ADR-020), y la lectura del registro de una persona deja su asiento con
          * el actor de soporte delante (RS-05), asi que el cliente puede
          * reconstruir despues que se miro y cuando.
+         *
+         * **ERAN CINCO HASTA EL 24-09-2026.** `GET /attendance/live` y
+         * `GET /compliance/summary` cuelgan de `attendance:read` y por tanto el
+         * AMBITO sigue alcanzandolas; lo que las saca de esta lista es que ahora
+         * responden `403` y no llegan a compararse. Se decidio que ninguna de
+         * las dos hace falta para diagnosticar un calculo de horas: la primera
+         * es quien esta dentro del hotel **ahora mismo** con nombre —vigilancia
+         * en tiempo real—, y la segunda, el listado de **incumplimientos por
+         * persona de toda la plantilla** sin acotar por departamento. Las
+         * cierran `LivePresencePolicy` y `ComplianceSummaryPolicy` (regla dura
+         * 16, ADR-020), y su prueba de comportamiento es
+         * `tests/Feature/Reporting/PresenceAndComplianceSupportAccessTest.php`.
          *
          * **Y llegan hasta aqui y no mas.** Ninguna sirve dato del art. 9 —eso
          * son las ausencias, y las cierra `AbsencePolicy`—, ninguna permite
@@ -486,8 +505,6 @@ it('el fabricante solo lee lo que la lista cerrada le concede', function (Suppor
         'GET /api/v1/employees',
         'GET /api/v1/employees/{uuid}',
         'GET /api/v1/employees/{uuid}/workdays',
-        'GET /api/v1/attendance/live',
-        'GET /api/v1/compliance/summary',
     ];
 
     // arrange
@@ -529,3 +546,34 @@ it('no deja al fabricante leer las ausencias, que es dato del art. 9', function 
     expect($abiertas)->not->toContain('GET /api/v1/absences')
         ->and($abiertas)->not->toContain('GET /api/v1/absences/{uuid}');
 })->with(SupportScope::cases())->group('RF-PD-11', 'RL-19', 'RF-GP-04', 'ADR-020');
+
+it('no deja al fabricante ver la presencia en vivo ni el resumen de cumplimiento', function (SupportScope $scope): void {
+    /*
+     * Lo mismo, para las dos rutas que salieron de la lista el 24-09-2026.
+     *
+     * Con `read_only` el AMBITO las alcanza —las dos cuelgan de
+     * `attendance:read`, igual que las jornadas que si se conceden— y lo unico
+     * que las deja fuera de la comparacion es que responden `403`: lo ponen
+     * `LivePresencePolicy` y `ComplianceSummaryPolicy`.
+     *
+     * Ninguna de las dos hace falta para diagnosticar un calculo de horas, que
+     * es para lo que se concede el alcance: la presencia en vivo es vigilancia
+     * en tiempo real de quien esta dentro del hotel, y el resumen es el listado
+     * de incumplimientos por persona de TODA la plantilla —sin acotar por
+     * departamento, porque el actor de soporte se presenta como `admin`—.
+     *
+     * El `403` con los datos delante y la ausencia de asiento de divulgacion los
+     * prueba `tests/Feature/Reporting/PresenceAndComplianceSupportAccessTest.php`.
+     * Esta enumera; aquella ejercita.
+     */
+
+    // arrange
+    $paths = supportReadPaths();
+
+    // act
+    $abiertas = supportReadRoutesLeftOpenFor($scope, SupportGrants::tokenFor($scope), $paths);
+
+    // assert
+    expect($abiertas)->not->toContain('GET /api/v1/attendance/live')
+        ->and($abiertas)->not->toContain('GET /api/v1/compliance/summary');
+})->with(SupportScope::cases())->group('RF-PD-11', 'RL-19', 'RF-PA-01', 'RF-PA-06', 'ADR-020');

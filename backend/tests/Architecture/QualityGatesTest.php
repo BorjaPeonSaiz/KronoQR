@@ -92,11 +92,11 @@ it('exige el MSI del 80 por ciento sobre el dominio, acotado y con OPcache apaga
     //   anula. Medido: 22 % con OPcache y 100 % sin el, sobre las MISMAS
     //   pruebas y el mismo fichero.
     //
-    // Esta prueba no ejecuta la mutacion —eso es `make mutate`, y esta en la
-    // etapa ③ de la CI—: comprueba que el umbral y sus dos condiciones siguen
-    // escritos donde tienen efecto. Un `--min=80` que alguien baje a 50, o un
-    // `--path` que se ensanche a `app/`, dejan la puerta en verde sin comprobar
-    // lo que RQ-10 pide.
+    // Esta prueba no ejecuta la mutacion —eso es `make mutate` / `make
+    // mutate-changed`, y estan en la etapa ③ de la CI—: comprueba que el
+    // umbral y sus dos condiciones siguen escritos donde tienen efecto. Un
+    // `--min=80` que alguien baje a 50, o un `--path` que se ensanche a
+    // `app/`, dejan la puerta en verde sin comprobar lo que RQ-10 pide.
     $makefile = repoContents('Makefile');
 
     expect($makefile)->toContain('--min=80');
@@ -106,9 +106,26 @@ it('exige el MSI del 80 por ciento sobre el dominio, acotado y con OPcache apaga
     expect(repoContents('backend/tools/mutation/zzz-no-opcache.ini'))
         ->toMatch('/^opcache\.enable_cli\s*=\s*0\s*$/m');
 
-    // Y que la CI lo ejecute de verdad. Un umbral que solo corre en el portatil
-    // de quien lo escribio no es una puerta.
-    expect(repoContents('.github/workflows/ci.yml'))->toContain('run: make mutate');
+    // `mutate-changed` (decision del 24-09-2026, doc 02 §10.1): la mutacion
+    // COMPLETA tardaba 37-42 min medidos y no cabia en el presupuesto de
+    // menos de 4 minutos de las etapas ①-③. El umbral --min=80 tiene que
+    // seguir aplicandose ENTERO sobre el subconjunto que cambia en cada push
+    // -no es un umbral mas laxo, es el mismo umbral sobre menos ficheros-, y
+    // el objetivo tiene que existir de verdad, no solo mencionarse en un
+    // comentario.
+    expect($makefile)->toMatch('/^mutate-changed:/m');
+    expect($makefile)->toContain('--path=$$paths');
+
+    // Y que la CI ejecute de verdad los DOS objetivos, no solo el completo.
+    // El job `unit` corre `mutate-changed` en cada push y `mutate` completo
+    // en el disparo manual; el job `mutation` corre `mutate` completo de
+    // noche y tambien en el disparo manual. Sin los dos jobs, un umbral que
+    // solo corre en el portatil de quien lo escribio no es una puerta.
+    $ci = repoContents('.github/workflows/ci.yml');
+
+    expect($ci)->toContain('make mutate-changed');
+    expect($ci)->toMatch('/\bmake mutate\b(?!-changed)/');
+    expect($ci)->toMatch('/^\s*mutation:\s*$/m');
 })->group('RNF-M-01', 'RQ-10');
 
 it('declara las cinco suites de la piramide de pruebas', function (): void {

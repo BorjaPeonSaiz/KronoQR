@@ -60,11 +60,11 @@ ENV TZ=UTC \
 # esa clase entera de hallazgos en vez de ir excepcionandolos uno a uno en
 # infra/docker/.trivyignore.yaml.
 #
-# APK_INDEX_STAMP: sello semanal que pone `make build-ci-images` para que la
+# APK_INDEX_STAMP: sello diario que pone `make build-ci-images` para que la
 # cache de Actions no reutilice esta capa indefinidamente con las versiones del
 # dia en que se construyo (explicado en infra/docker/php/Dockerfile). Aqui el
 # `apk upgrade` sigue ACOTADO por lo dicho arriba: el sello solo garantiza que
-# esas dos librerias se vuelven a resolver contra el indice cada semana.
+# esas dos librerias se vuelven a resolver contra el indice cada dia.
 ARG APK_INDEX_STAMP=local
 RUN echo "apk index stamp: ${APK_INDEX_STAMP}" \
   && apk upgrade --no-cache libssl3 libcrypto3 libuuid \

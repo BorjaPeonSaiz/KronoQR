@@ -135,14 +135,32 @@ it('read_only SI lee la plantilla', function (): void {
         ->assertOk();
 })->group('RF-PD-11');
 
-it('read_only SI lee la presencia en tiempo real', function (): void {
-    // La tercera pantalla que abre `attendance:read`, y la unica forma de ver
-    // «quien esta dentro ahora mismo» cuando la incidencia es que el panel no
-    // cuadra con la realidad.
-    Api::as(SupportGrants::tokenFor(SupportScope::ReadOnly))
-        ->get('/api/v1/attendance/live')
-        ->assertOk();
-})->group('RF-PD-11');
+it('read_only NO ve la presencia en tiempo real ni el resumen de cumplimiento', function (): void {
+    /*
+     * HASTA EL 24-09-2026 LAS LEIA LAS DOS, y por la misma via que las
+     * jornadas: `attendance:read` las alcanza y `actsAs()` lo presenta como
+     * `admin`. Se decidio que ninguna hace falta para lo que este alcance
+     * existe.
+     *
+     * La presencia en vivo es **quien esta dentro del hotel ahora mismo, con
+     * nombre**: vigilancia en tiempo real de la plantilla del cliente, no un
+     * dato con el que se cuadre un calculo. El resumen de cumplimiento es el
+     * **listado de incumplimientos por persona de toda la plantilla**, sin
+     * acotar por departamento. Lo que si se mira sigue estando abierto: el
+     * registro de la persona del caso, arriba.
+     *
+     * Las cierran `LivePresencePolicy` y `ComplianceSummaryPolicy`, no el
+     * ambito, y el detalle —los tres alcances, sin asiento de divulgacion, con
+     * el control positivo de los roles del cliente— esta en
+     * `tests/Feature/Reporting/PresenceAndComplianceSupportAccessTest.php`.
+     */
+    $token = SupportGrants::tokenFor(SupportScope::ReadOnly);
+
+    Api::as($token)->get('/api/v1/attendance/live')->assertStatus(403);
+    Api::as($token)
+        ->get('/api/v1/compliance/summary?from=2026-06-01&to=2026-06-07')
+        ->assertStatus(403);
+})->group('RF-PD-11', 'RL-19', 'ADR-020');
 
 it('read_only NO cambia la configuracion', function (): void {
     // Solo lectura: no lleva `settings:*` y se queda en el middleware.

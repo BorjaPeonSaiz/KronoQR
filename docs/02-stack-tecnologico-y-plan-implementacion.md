@@ -425,6 +425,7 @@ Se adoptan las convenciones **más establecidas de cada stack**, sin inventar un
 | Laravel idiomático | FormRequest para validar, Resource para serializar, Policy para autorizar, comandos de consola con firma explícita. **Sin lógica de negocio en controladores ni en modelos Eloquent** | Deptrac, `revisor-codigo` |
 | Facades | Prohibidas en `Domain/` y en `Application/`. En `Infrastructure/` y `Http/`, permitidas | Deptrac |
 | Complejidad | Complejidad ciclomática ≤ 10 por método; métodos que quepan en una pantalla | PHPStan (regla de complejidad) |
+| Idioma de los identificadores | **Inglés en `backend/app/`**, con el glosario del documento 01 §13 como puente. Se denuncia el identificador **declarado** —clase, interfaz, enum, caso de enum, función, método, constante, propiedad, parámetro o variable— que lleve una palabra del glosario como segmento completo de `camelCase`, también en plural (`getJornada`, `tramosDelDia`, `MAX_JORNADA`), o un carácter fuera de ASCII (`añoFiscal`). No aplica a lo que no es un nombre elegido: cadenas, comentarios, docblocks, claves de `i18n`, nombres de tabla y de columna, y el caso de un enum respaldado que escribe su propio valor (`UserRole::EMPLEADO = 'empleado'`, los códigos del Anexo C), que son datos del requisito y de la base de datos. En `tests/` no aplica (ver «Código de pruebas») | `IdentifierLanguageTest` (Pest Arch, tokeniza `app/`) |
 
 #### Frontend (TypeScript y Vue 3)
 
@@ -436,6 +437,7 @@ Se adoptan las convenciones **más establecidas de cada stack**, sin inventar un
 | Formato | Prettier, sin discusión de estilo en revisión | Prettier + ESLint |
 | Estado | Pinia con *stores* por dominio funcional, acciones tipadas, sin estado global mutable fuera de ellas | Revisión |
 | Estructura | Carpeta por *feature* (`features/scan/`, `features/live/`), no por tipo de fichero | Revisión |
+| Idioma de los identificadores | **Inglés en `src/**` de las tres SPA y de `packages/web-kit`**, con las mismas veinte palabras del glosario y el mismo criterio de segmento de `camelCase` que en el backend. `properties: false` y `onlyDeclarations: true`: se gobierna cómo se llama lo que este repositorio **declara**, no la clave de un objeto que llega de la API o que espera `i18n`. En `tests/**` no aplica | Regla `id-match` de ESLint, con la lista escrita una sola vez en `packages/web-kit/eslint/identifier-language.js` |
 
 #### Scripts de instalación y operación
 
@@ -465,10 +467,13 @@ La mitad del repositorio son pruebas y envejecen peor que el código si nadie la
 - **Sin `sleep()`.** Se espera por condición o se inyecta el reloj.
 - **Los valores límite se escriben explícitos.** Si la regla dice "más de 12 h", el test contiene 11:59, 12:00 y 12:01 como números, no como cálculo.
 - **Toda prueba lleva su etiqueta de requisito** (`->group('RN-05')`), de la que sale la matriz de trazabilidad del §9.6.
+- **En `tests/` manda el idioma del escenario** (decisión del 24-09-2026). Los nombres de los ayudantes, de las constantes y de los *datasets* pueden ir en español, igual que las descripciones de `it()`, y por el mismo motivo: una prueba fallida tiene que leerse sola. La regla del inglés se aplica a `backend/app/` y a `src/**`, y su verificador está acotado a esos dos árboles.
+- **Las constantes globales de un fichero de Pest llevan el prefijo del fichero**: `SCAN_IDEMPOTENCY_AHORA_DEL_FICHAJE`, no `AHORA_DEL_FICHAJE`. Una constante a nivel de fichero no tiene espacio de nombres que la separe: la misma declarada en dos ficheros de la misma suite hace que PHP avise **mientras Pest carga los ficheros**, la suite salga con código 1 y la salida no nombre ni la constante, ni el fichero, ni la prueba. Pasó en el cierre de la Fase 3. Lo verifica `TestGlobalConstantsTest`.
 
 #### Transversal
 
-- **El código se escribe en inglés**; los textos que ve una persona van en `i18n` (ES y EN mínimo). El glosario del documento 01 §13 es el puente entre el lenguaje ubicuo en español y las clases en inglés: *tramo* → `ShiftEntry`, *jornada* → `WorkDay`, *credencial* → `Credential`, *incidencia* → `Incident`. **Nunca `Tramo` ni `getJornada()`**: mezclar idiomas en los identificadores es la vía rápida a tener dos nombres para la misma cosa.
+- **El código se escribe en inglés**; los textos que ve una persona van en `i18n` (ES y EN mínimo). El glosario del documento 01 §13 es el puente entre el lenguaje ubicuo en español y las clases en inglés: *tramo* → `ShiftEntry`, *jornada* → `WorkDay`, *credencial* → `Credential`, *incidencia* → `Incident`. **Nunca `Tramo` ni `getJornada()`**: mezclar idiomas en los identificadores es la vía rápida a tener dos nombres para la misma cosa. **El alcance es `backend/app/`, `packages/web-kit/src/` y `frontend-*/src/`, y desde el 24-09-2026 lo verifica una herramienta** en cada lado: la fila «Idioma de los identificadores» de las dos tablas de arriba. En `tests/` no aplica, y eso también está decidido: ahí manda el idioma del escenario (ver «Código de pruebas»).
+
 - **Los comentarios explican el porqué, no el qué.** Un comentario que parafrasea el código sobra; uno que explica por qué un turno no se parte a medianoche vale oro.
 - **Nombres del dominio, no del patrón.** `WorkDay`, no `WorkDayEntityImpl`. El sufijo solo aparece cuando distingue de verdad (`EloquentWorkDayRepository` frente al puerto `WorkDayRepository`).
 - **SOLID donde aporte, no por completitud.** Una interfaz con una sola implementación que nunca tendrá otra es coste sin beneficio, salvo que sea un puerto del hexágono, donde la segunda implementación es la del test.
@@ -946,7 +951,7 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 | Modernización | Rector (dry-run en CI) | Informativo |
 | **Arquitectura** | Pest Arch + **Deptrac** | 0 violaciones de frontera |
 | Unitarias | Pest | Cobertura de dominio ≥ 90 % · duración dentro del presupuesto que verifica `make test-unit` (`UNIT_SUITE_MAX_SECONDS`, 4 s en el contenedor de desarrollo; el objetivo aspiracional de 2 s aplica al runner Linux de la CI) |
-| **Mutación** | Pest `--mutate` (o Infection) sobre `Modules/*/Domain` | **MSI ≥ 80 %** |
+| **Mutación** | Pest `--mutate` (o Infection) sobre `Modules/*/Domain` | **MSI ≥ 80 %**, aplicado entero en los dos casos de abajo. **En cada *push*, acotada a los ficheros de dominio que ese *push* cambia** (`make mutate-changed`, job `unit`); **completa** (`make mutate`) **de noche** (job `mutation`, `schedule`) **y en el disparo manual** (`workflow_dispatch`, en `unit` y en `mutation`) — §10.1 explica por qué la completa no cabe en el presupuesto de las etapas ①–③ |
 | Propiedades | Generación dirigida | Duraciones, DST, medianoche |
 | Integración | Pest + PostgreSQL real en contenedor | — |
 | Contrato | Spectator contra `openapi.yaml` | Toda respuesta valida el esquema |
@@ -966,7 +971,9 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 
 ### 9.3 Por qué pruebas de mutación en el dominio
 
-Una cobertura del 90 % dice qué líneas se ejecutan, no si las aserciones detectarían un error. En un cálculo de duraciones donde un `>` en lugar de `>=` produce minutos incorrectos en la nómina de alguien, esa distinción importa. Las pruebas de mutación cambian operadores y valores a propósito y comprueban que alguna prueba falle. Se aplican **solo al dominio**, donde son rápidas y donde el coste de un error es real.
+Una cobertura del 90 % dice qué líneas se ejecutan, no si las aserciones detectarían un error. En un cálculo de duraciones donde un `>` en lugar de `>=` produce minutos incorrectos en la nómina de alguien, esa distinción importa. Las pruebas de mutación cambian operadores y valores a propósito y comprueban que alguna prueba falle. Se aplican **solo al dominio**, donde el coste de un error es real.
+
+**"Rápidas" dejó de ser cierto para la mutación completa según el dominio crece**: 37-42 min medidos en la CI al cierre de la Fase 5, con `--parallel`. Por eso, desde el 24-09-2026, en cada *push* se muta **solo lo que ese push cambia** (`make mutate-changed`, acotado a los ficheros de `Modules/*/Domain` del diff — ahí sí es rápida, segundos) y la pasada **completa** queda para la noche y para el disparo manual anterior a cada PR (§10.1). El umbral `--min=80` no cambia entre una y otra: lo que cambia es cuántos ficheros mide cada ejecución, nunca cuánto se les exige.
 
 ### 9.4 Pruebas específicas ineludibles
 
@@ -1053,7 +1060,7 @@ Esto resuelve tres cosas que ninguna métrica de cobertura resuelve:
 graph LR
     PR["Pull Request"] --> L["① Lint + Tipos<br/>Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck<br/>~1 min"]
     L --> A["② Arquitectura<br/>Deptrac · Pest Arch · promtool · amtool<br/>~90 s"]
-    A --> U["③ Unitarias + Mutación<br/>Pest · MSI ≥ 80%<br/>~2 min"]
+    A --> U["③ Unitarias + Mutación de lo cambiado<br/>Pest · MSI ≥ 80% sobre el diff<br/>completa de noche y a mano · ~2 min"]
     U --> T["③b Trazabilidad<br/>qa:traceability --check<br/>~10 s"]
     T --> I["④ Integración + Feature<br/>PostgreSQL real · Contrato OpenAPI<br/>~3 min"]
     I --> S["⑤ Seguridad<br/>composer/npm audit · Semgrep propio + comunitario · gitleaks · Trivy fs/image · SBOM<br/>~2 min"]
@@ -1063,11 +1070,13 @@ graph LR
     INST --> REL["🚀 Publicación de versión<br/>imágenes etiquetadas + paquete de entrega"]
 ```
 
-Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos). Etapa 8 antes de publicar una versión.
+Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos: la ③ muta solo el diff, no el dominio completo — ver más abajo). Etapa 8 antes de publicar una versión.
 
 **Etapas 4–7 en cada *push*, no en cada PR.** Este repositorio no usa *pull request* como disparador de CI (trunk-based con ramas cortas, §10.5): todo el pipeline vive en un único `push:` de `.github/workflows/ci.yml`, y una etapa que solo corriera en un evento que nadie emite no correría nunca. Las cuatro etapas corren en cada push desde el cierre de la Fase 5 (jobs `integration`, `security` —desde el cierre de la Fase 0—, `frontend-unit` y `e2e`), más estricto que lo que este apartado pedía originalmente, no menos.
 
 **La puerta de cobertura (RNF-M-01, §9.2) no es ninguna de las ocho etapas numeradas.** Instrumentar con Xdebug la suite completa (Unit + Integration + Feature + Contract) para medir dominio ≥ 90 % / global ≥ 75 % tarda minutos que duplicarían, sin aportar nada nuevo, lo que la etapa ③ ya comprueba sin cobertura. Corre como job `coverage` de `ci.yml`, nocturno (`schedule`) y a mano (`workflow_dispatch`), nunca en un push normal.
+
+**La etapa ③ solo muta lo que cada *push* cambia; la mutación completa del dominio (RQ-10, §9.2) tampoco corre en cada *push*, por el mismo motivo que la cobertura.** Medida al cierre de la Fase 5: 37-42 min con `--parallel` sobre `Modules/*/Domain` completo, frente al presupuesto de menos de 4 minutos de las etapas ①-③. Desde el 24-09-2026, el job `unit` ejecuta `make mutate-changed` en cada *push* —acotado con `git diff --diff-filter=ACMR <base>...HEAD` a los ficheros de `Modules/*/Domain` que ese *push* cambia, con el mismo umbral `--min=80` aplicado entero sobre el subconjunto— y solo ejecuta la mutación **completa** (`make mutate`) en el disparo manual (`workflow_dispatch`), que es el que se hace siempre antes de abrir una PR. La pasada nocturna de la mutación completa no puede vivir dentro de `unit` —ese job no se ejecuta en `schedule`, porque depende transitivamente de jobs que tampoco lo hacen— así que corre en un job propio, `mutation`, con el mismo disparador que `coverage` (`schedule` y `workflow_dispatch`) y sin el coste de PostgreSQL/Redis/Puppeteer que `coverage` sí paga, porque `make mutate` no toca base de datos. Correr la mutación completa dos veces en un `workflow_dispatch` (en `unit` y en `mutation`) es deliberado: es el único evento donde ese coste doble es más barato que descubrir de noche, sin nadie mirando, que el dominio completo ha bajado del 80 %.
 
 **La prueba de carga (RQ-08, tarea 3.6) tampoco es ninguna de las ocho etapas**, por el mismo motivo que la cobertura: `load-tests/k6/scan-peak.js` sostiene 50 fichajes/s durante minutos, y meterla en `ci.yml` rompería el presupuesto de las etapas ①–③ (< 4 min) sin que nadie la espere en cada *push*. Vive en `.github/workflows/load-test.yml`, un *workflow* propio que corre a mano (`workflow_dispatch`) y en cada etiqueta `vX.0.0` —una versión MAYOR—, nunca en cada *push* ni en cada PR. Mide las **imágenes de entrega instaladas desde el paquete** del §11.6.1 (construidas, etiquetadas e instaladas con el mismo instalador que la etapa ⑧, no la imagen de desarrollo), y en ese *workflow* el veredicto de RNF-P-02/RNF-P-06 se toma **contra la línea base del propio runner** (`load-tests/k6/baseline.json`: p95 ≤ +25 % y tramos/s ≥ −20 % con los mismos parámetros), no contra el umbral: el runner de GitHub Actions (4 vCPU compartidas entre el servidor y los generadores) sostiene unos 29 fichajes/s con p95 de decenas de segundos, así que un veredicto de umbral allí sería rojo para siempre. Lo que sí bloquea en el runner es el contrato, la idempotencia (RQ-03), el tiempo constante (RS-03), la verificación posterior y la regla 21. **El umbral de RNF-P-06 (50 fichajes/s con p95 < 150 ms) se juzga en el hardware Linux de referencia del §11.6.2 con `make load-test`**, paso manual del procedimiento de publicación de una versión mayor, y esa es la cifra que vale para el cliente.
 
@@ -1141,7 +1150,7 @@ La columna **Agente / Skill** indica quién ejecuta cada tarea. Los agentes est�
 
 **Incluyen** el diseño, la implementación, las pruebas de los niveles que exige el §9.5, la documentación y —sobre todo— **la revisión humana de lo que produce el agente**, que es tiempo real y es la parte que no se puede recortar. En este dominio, aceptar sin leer un cálculo de duraciones es exactamente el fallo que el proyecto entero existe para evitar.
 
-**No incluyen** aprender el dominio, esperar decisiones del cliente, ni las tres validaciones de la nota final (asesoría laboral, prueba de campo del hardware, contraste de costes de impresión).
+**No incluyen** aprender el dominio, esperar decisiones del cliente, ni las validaciones de la nota final (asesoría laboral y prueba de campo del hardware; el contraste de costes de impresión dejó de ser una de ellas el 24-09-2026: la impresión es del cliente, doc 04 «Pendiente de validar»).
 
 Dos advertencias sobre la extrapolación:
 
