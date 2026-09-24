@@ -4,8 +4,14 @@ declare(strict_types=1);
 
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use Illuminate\Routing\Route;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route as Router;
+use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Http\Api;
+use Tests\Support\Product\LicenseKeys;
+use Tests\Support\Product\SupportGrants;
+use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
  * Que cada alcance de soporte abra lo que dice y NADA MAS, comprobado sobre las
@@ -40,6 +46,21 @@ use Tests\Support\Database\RefreshDatabase;
  */
 
 uses(RefreshDatabase::class);
+
+/*
+ * El centro y la licencia, que la mitad de LECTURA si necesita.
+ *
+ * La de escritura no toca la base de datos —solo recorre el router— y por eso
+ * este fichero no tenia `beforeEach`. Las pruebas de lectura piden cada ruta de
+ * verdad con un token de soporte, y sin licencia instalada las funcionalidades
+ * accesorias se degradan (ADR-019): una ruta degradada responderia algo que no
+ * es `403` por un motivo que no tiene nada que ver con la autorizacion.
+ */
+beforeEach(function (): void {
+    WorkforceFixtures::site();
+    LicenseKeys::install();
+});
+
 /**
  * Los ambitos que exige una ruta, tal y como los declara su middleware
  * `ability:` (`CheckForAnyAbility`: la lista separada por comas significa «o»).
@@ -213,3 +234,298 @@ it('ningun alcance lleva un ambito que el contrato prohibe', function (SupportSc
         expect($scope->abilities())->not->toContain($prohibido);
     }
 })->with(SupportScope::cases())->group('RF-PD-11', 'RL-19');
+
+/*
+ * ---------------------------------------------------------------------------
+ * LA MITAD DE LECTURA (cierre de la Fase 3)
+ * ---------------------------------------------------------------------------
+ *
+ * Todo lo de arriba pregunta «¿que ESCRIBE un alcance de soporte?», y durante
+ * tres fases esa fue la unica pregunta que se hizo. Por eso nadie vio que un
+ * token `read_only` leia `GET /api/v1/absences` entera —con `type: sick_leave`
+ * y con la nota—, que es **dato de salud del art. 9 del RGPD** servido al
+ * fabricante (regla dura 16, ADR-020, RL-19).
+ *
+ * No fallo ninguna de las dos comprobaciones del §7.3: el ambito abria porque
+ * `employees:read` tiene que abrir, y la policy abria porque `actsAs()` devuelve
+ * `admin` y `AbsencePolicy` no preguntaba quien actuaba. Fallo que **nadie
+ * enumeraba la superficie de lectura**.
+ *
+ * ## Como se comprueba, y por que no basta con una lista
+ *
+ * La lista cerrada de abajo dice lo que el fabricante PUEDE leer, con el motivo
+ * escrito de cada linea. Pero una ruta no entra en la comparacion por estar o no
+ * en la lista: entra **si la aplicacion la deja pasar de verdad**. Cada ruta de
+ * lectura que el ambito alcanza se pide con un token de soporte real, y las que
+ * responden `403` quedan fuera porque las cierra su policy.
+ *
+ * Esa diferencia es todo el valor de la prueba:
+ *
+ * - Las dos de ausencias **no estan en la lista**, y no hacen falta: las cierra
+ *   `AbsencePolicy` y por eso no llegan a compararse. El dia que alguien quite
+ *   el `isSupportActor()` de esa policy, dejaran de responder `403`, apareceran
+ *   en la comparacion y esta prueba se pondra roja **sin que haya que acordarse
+ *   de nada**. Una lista de exclusiones no haria eso: seguiria verde.
+ * - Y al reves: una ruta de lectura nueva con dato personal que nadie cierre
+ *   aparece el mismo dia en que se escribe, y hay que decidir explicitamente si
+ *   el fabricante la lee. Que es la decision que con `audit:read` ya quedo
+ *   anotada como riesgo abierto en el docblock de `SupportScope::ReadOnly`.
+ *
+ * **No sustituye a `AbsenceSupportAccessTest`**, que es quien prueba el `403`
+ * con la baja medica y la nota dentro y quien comprueba que no queda asiento de
+ * divulgacion. Esta enumera; aquella ejercita.
+ */
+
+/**
+ * Las rutas de la API que SOLO leen.
+ *
+ * `GET|POST /api/v1/broadcasting/auth` queda fuera por llevar `POST`: la trata
+ * la mitad de escritura, donde su excepcion esta razonada.
+ *
+ * @return list<Route>
+ */
+function supportReadRoutes(): array
+{
+    $rutas = [];
+
+    foreach (Router::getRoutes()->getRoutes() as $route) {
+        $verbos = array_values(array_diff($route->methods(), ['HEAD', 'OPTIONS']));
+
+        if ($verbos === ['GET'] && str_starts_with($route->uri(), 'api/v1')) {
+            $rutas[] = $route;
+        }
+    }
+
+    return $rutas;
+}
+
+/**
+ * Las rutas de lectura que el AMBITO de un alcance alcanza.
+ *
+ * @return list<Route>
+ */
+function supportReadRoutesReachableBy(SupportScope $scope): array
+{
+    $rutas = [];
+
+    foreach (supportReadRoutes() as $route) {
+        if (array_intersect($scope->abilities(), abilitiesRequiredBy($route)) !== []) {
+            $rutas[] = $route;
+        }
+    }
+
+    return $rutas;
+}
+
+/**
+ * El camino concreto con el que se pide cada ruta de lectura, por su plantilla.
+ *
+ * LOS IDENTIFICADORES SON REALES a proposito. Con un UUID inventado, una ruta
+ * que resolviera el modelo antes de autorizar responderia `404` en vez de `403`
+ * y esta prueba la contaria como abierta —o como cerrada— por el motivo
+ * equivocado. Con la fila delante, el unico motivo posible de un `403` es la
+ * policy.
+ *
+ * Las que no aparecen aqui se piden tal cual: no llevan parametros ni exigen
+ * rango de fechas.
+ *
+ * @return array<string, string>
+ */
+function supportReadPaths(): array
+{
+    $siteId = WorkforceFixtures::onlySiteId();
+    $employeeUuid = WorkforceFixtures::employee($siteId);
+
+    /** @var int|string|null $employeeId */
+    $employeeId = DB::table('employees')->where('uuid', $employeeUuid)->value('id');
+
+    $absenceUuid = Str::uuid7()->toString();
+
+    // Una baja medica con nota: el peor caso que la pantalla de ausencias puede
+    // servir, y el que tiene que quedarse dentro de la instalacion.
+    DB::table('absences')->insert([
+        'uuid' => $absenceUuid,
+        'employee_id' => \is_numeric($employeeId) ? (int) $employeeId : 0,
+        'type' => 'sick_leave',
+        'starts_on' => '2026-06-02',
+        'ends_on' => '2026-06-06',
+        'note' => 'Parte de baja',
+        'status' => 'active',
+        'version' => 1,
+        'created_at' => '2026-06-01T08:00:00+00:00',
+    ]);
+
+    return [
+        'api/v1/employees/{uuid}' => '/api/v1/employees/'.$employeeUuid,
+        'api/v1/employees/{uuid}/workdays' => '/api/v1/employees/'.$employeeUuid.'/workdays?from=2026-06-01&to=2026-06-07',
+        'api/v1/absences' => '/api/v1/absences?from=2026-06-01&to=2026-06-30',
+        'api/v1/absences/{uuid}' => '/api/v1/absences/'.$absenceUuid,
+        'api/v1/compliance/summary' => '/api/v1/compliance/summary?from=2026-06-01&to=2026-06-07',
+        // El descargable no existe y no hace falta que exista: el controlador
+        // autoriza contra la CLASE antes de resolver nada, asi que un `403` aqui
+        // es de `DataExportPolicy` y de nadie mas.
+        'api/v1/data-export/{uuid}/download' => '/api/v1/data-export/'.Str::uuid7()->toString().'/download',
+    ];
+}
+
+/**
+ * De las rutas de lectura que el ambito alcanza, las que la aplicacion NO cierra.
+ *
+ * @param  array<string, string>  $paths
+ * @return list<string>
+ */
+function supportReadRoutesLeftOpenFor(SupportScope $scope, string $token, array $paths): array
+{
+    $abiertas = [];
+
+    foreach (supportReadRoutesReachableBy($scope) as $route) {
+        $status = Api::as($token)->get($paths[$route->uri()] ?? '/'.$route->uri())->status();
+
+        if ($status !== 403) {
+            $abiertas[] = 'GET /'.$route->uri();
+        }
+    }
+
+    $abiertas = array_values(array_unique($abiertas));
+    sort($abiertas);
+
+    return $abiertas;
+}
+
+/**
+ * Las rutas de lectura con parametros que un alcance alcanza y para las que
+ * nadie ha escrito un camino concreto.
+ *
+ * @return list<string>
+ */
+function supportReadRoutesWithoutPath(SupportScope $scope): array
+{
+    $sinCamino = [];
+    $paths = supportReadPaths();
+
+    foreach (supportReadRoutesReachableBy($scope) as $route) {
+        if (str_contains($route->uri(), '{') && ! \array_key_exists($route->uri(), $paths)) {
+            $sinCamino[] = $route->uri();
+        }
+    }
+
+    return $sinCamino;
+}
+
+it('encuentra rutas de lectura que analizar', function (): void {
+    // El control que impide que la comparacion de abajo pase por vacio, igual
+    // que el de la mitad de escritura.
+    expect(supportReadRoutes())->not->toBe([]);
+})->group('RF-PD-11');
+
+it('tiene un camino concreto para cada ruta de lectura parametrizada que un alcance alcanza', function (SupportScope $scope): void {
+    // SIN ESTE CONTROL LA PRUEBA DE ABAJO SE DEGRADA EN SILENCIO. Una ruta nueva
+    // con `{uuid}` que nadie anada a `supportReadPaths()` se pediria con la
+    // llave literal, responderia `404` o `400`, y se contaria como abierta por
+    // un motivo que no tiene nada que ver con la autorizacion.
+
+    // arrange / act
+    $sinCamino = supportReadRoutesWithoutPath($scope);
+
+    // assert
+    expect($sinCamino)->toBe([], 'Ruta(s) de lectura con parametros que el alcance '.$scope->value
+        .' alcanza y que no tienen camino concreto en supportReadPaths(): '.implode(', ', $sinCamino));
+})->with(SupportScope::cases())->group('RF-PD-11');
+
+it('el fabricante solo lee lo que la lista cerrada le concede', function (SupportScope $scope): void {
+    /*
+     * LA LISTA CERRADA DE LECTURA. Cada linea lleva escrito por que el
+     * fabricante puede leer eso, igual que la de escritura. Lo que NO aparece
+     * aqui, o lo cierra una policy —y entonces no llega a compararse— o pone
+     * esta prueba en rojo.
+     */
+    $permitidas = [
+        /*
+         * EL HISTORICO DE ERRORES (RF-PD-15). Lo alcanzan los tres alcances por
+         * `diagnostics:*`, y es literalmente para lo que existe un acceso de
+         * soporte. **No lleva dato personal y eso no se confia**: la regla dura
+         * 21 prohibe nombres en `error_events` y lo comprueba
+         * `ErrorEventsHaveNoPersonalDataTest`.
+         */
+        'GET /api/v1/diagnostics/errors',
+        /*
+         * LA CONFIGURACION DE LA INSTALACION y los quioscos (`settings:*`, solo
+         * `configuration`). Es la incidencia para la que ese alcance existe: un
+         * umbral operativo mal puesto, una zona horaria equivocada, un quiosco
+         * que no vincula. Ninguno de los dos recursos describe a una persona.
+         */
+        'GET /api/v1/settings',
+        'GET /api/v1/devices',
+        /*
+         * EL PERFIL DE CUMPLIMIENTO en LECTURA, y solo en lectura: es lo que
+         * hace falta para diagnosticar por que salta una incidencia. Escribirlo
+         * lo cierra `ComplianceProfilePolicy::update()`, porque ahi viven los
+         * umbrales legales y `retention_years` (RL-01, RL-02, regla dura 14).
+         * Decision de `seguridad-cumplimiento` en la revision de la tarea 5.9.
+         */
+        'GET /api/v1/compliance-profile',
+        /*
+         * LAS CINCO DE `read_only`, Y TODAS LLEVAN DATO PERSONAL. No es un
+         * descuido: es el alcance entero. `read_only` existe para la incidencia
+         * que el paquete anonimizado no resuelve —«a esta persona le salen ocho
+         * horas y deberian ser nueve»—, y sin la plantilla, la presencia y las
+         * jornadas no se puede mirar.
+         *
+         * Lo que las hace aceptables es lo que las rodea, no que sean inocuas:
+         * el acceso es **temporal, concedido por el cliente y auditado** (RL-18,
+         * ADR-020), y la lectura del registro de una persona deja su asiento con
+         * el actor de soporte delante (RS-05), asi que el cliente puede
+         * reconstruir despues que se miro y cuando.
+         *
+         * **Y llegan hasta aqui y no mas.** Ninguna sirve dato del art. 9 —eso
+         * son las ausencias, y las cierra `AbsencePolicy`—, ninguna permite
+         * corregir una hora (`attendance:correct` no lo concede ningun alcance)
+         * y ninguna emite la exportacion para la Inspeccion (`reports:legal`
+         * tampoco).
+         */
+        'GET /api/v1/employees',
+        'GET /api/v1/employees/{uuid}',
+        'GET /api/v1/employees/{uuid}/workdays',
+        'GET /api/v1/attendance/live',
+        'GET /api/v1/compliance/summary',
+    ];
+
+    // arrange
+    $token = SupportGrants::tokenFor($scope);
+    $paths = supportReadPaths();
+
+    // act
+    $abiertas = supportReadRoutesLeftOpenFor($scope, $token, $paths);
+
+    // assert
+    expect(array_values(array_diff($abiertas, $permitidas)))->toBe(
+        [],
+        'El alcance '.$scope->value.' LEE ruta(s) que nadie ha concedido por escrito, y ninguna policy lo para: '
+        .implode(', ', array_diff($abiertas, $permitidas)),
+    );
+})->with(SupportScope::cases())->group('RF-PD-11', 'RL-19', 'ADR-020');
+
+it('no deja al fabricante leer las ausencias, que es dato del art. 9', function (SupportScope $scope): void {
+    /*
+     * La cara concreta de lo de arriba, escrita aparte para que se lea sola.
+     *
+     * Las dos rutas de ausencias NO estan en la lista de permitidas, y con
+     * `read_only` el AMBITO las alcanza: `employees:read` abre las dos. Lo unico
+     * que las deja fuera de la comparacion es que responden `403`, y eso lo pone
+     * `AbsencePolicy`.
+     *
+     * Si esa policy volviera a abrirse, las dos apareceran en `$abiertas`, no
+     * estaran en `$permitidas` y la prueba de arriba se pondra roja. Esta lo
+     * dice con el nombre delante.
+     */
+
+    // arrange
+    $paths = supportReadPaths();
+
+    // act
+    $abiertas = supportReadRoutesLeftOpenFor($scope, SupportGrants::tokenFor($scope), $paths);
+
+    // assert
+    expect($abiertas)->not->toContain('GET /api/v1/absences')
+        ->and($abiertas)->not->toContain('GET /api/v1/absences/{uuid}');
+})->with(SupportScope::cases())->group('RF-PD-11', 'RL-19', 'RF-GP-04', 'ADR-020');

@@ -559,11 +559,72 @@ it('no deja que un actor de soporte declare la linea base del cuadro de impacto'
     'diagnostico' => [SupportScope::Diagnostics],
 ])->group('RF-ID-02', 'RS-05', 'RF-PD-11', 'RF-IN-08');
 
+it('no deja que un actor de soporte toque la deteccion de patrones de credencial', function (SupportScope $alcance, string $clave, int $valor): void {
+    // RF-PR-06, RF-PD-11, ADR-020, ADR-009 y regla dura 16 (decision del cierre
+    // de la Fase 3).
+    //
+    // SON LAS DOS CLAVES QUE APAGAN LA MITIGACION QUE SUSTITUYE A LA BIOMETRIA.
+    // ADR-009 la descarta, y con una tarjeta fisica nada impide que una persona
+    // fiche por otra: lo unico que lo detecta despues es el patron de RF-PR-06,
+    // dos fichajes de personas distintas separados por segundos en el mismo
+    // quiosco y repetidos varios dias.
+    //
+    // `ATTENDANCE_PATTERN_WINDOW_SECONDS` a `0` LA APAGA ENTERA, y sin ninguna
+    // señal: no falla nada, no se deja de escribir ningun dato, simplemente no
+    // vuelve a aparecer un hallazgo. Subir `ATTENDANCE_PATTERN_MIN_REPEATS` hace
+    // lo mismo por la via lenta. Quien decide si su instalacion vigila el fichaje
+    // por cuenta de otro es el hotel, no quien mantiene el producto.
+    //
+    // `403` y no `422`, como con las otras tres reservadas: quien no puede tocar
+    // una clave tampoco tiene por que aprender que valores admite.
+    $token = SupportGrants::tokenFor($alcance);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => [$clave => $valor]])
+        ->assertStatus(403);
+
+    // Ni mezclada con una clave que si puede tocar: la peticion entera cae, y no
+    // se escribe ninguna de las dos.
+    Api::as($token)
+        ->patch('/api/v1/settings', [
+            'settings' => [
+                'ATTENDANCE_DEBOUNCE_SECONDS' => 90,
+                $clave => $valor,
+            ],
+        ])
+        ->assertStatus(403);
+
+    expect(DB::table('installation_settings')->where('key', $clave)->exists())->toBeFalse()
+        ->and(DB::table('installation_settings')->where('key', 'ATTENDANCE_DEBOUNCE_SECONDS')->exists())->toBeFalse();
+})->with([
+    // El cero es el caso que importa: es el valor que apaga la deteccion.
+    'configuracion apaga la ventana' => [SupportScope::Configuration, 'ATTENDANCE_PATTERN_WINDOW_SECONDS', 0],
+    'diagnostico apaga la ventana' => [SupportScope::Diagnostics, 'ATTENDANCE_PATTERN_WINDOW_SECONDS', 0],
+    'configuracion sube las repeticiones' => [SupportScope::Configuration, 'ATTENDANCE_PATTERN_MIN_REPEATS', 30],
+    'diagnostico sube las repeticiones' => [SupportScope::Diagnostics, 'ATTENDANCE_PATTERN_MIN_REPEATS', 30],
+])->group('RF-PD-11', 'RF-PR-06', 'RS-04', 'ADR-009');
+
+it('el transito minimo entre quioscos SIGUE siendo ajustable por el soporte', function (): void {
+    // La frontera de la decision, escrita. `ATTENDANCE_MIN_TRANSIT_SECONDS` no
+    // entra en las reservadas y no es un olvido: ese umbral decide cuando un
+    // mismo empleado no puede haber llegado de un quiosco a otro (RN-16) y es un
+    // parametro del EDIFICIO —la distancia entre dos puertas—, no una decision
+    // sobre si se vigila. El doc 07 §6 acepta el ajuste operativo de los umbrales
+    // de fichaje por el soporte, y sin este caso la lista se iria ampliando hasta
+    // dejar el alcance `configuration` sin contenido.
+    Api::as(SupportGrants::tokenFor(SupportScope::Configuration))
+        ->patch('/api/v1/settings', ['settings' => ['ATTENDANCE_MIN_TRANSIT_SECONDS' => 180]])
+        ->assertStatus(200);
+
+    expect(DB::table('installation_settings')->where('key', 'ATTENDANCE_MIN_TRANSIT_SECONDS')->exists())
+        ->toBeTrue();
+})->group('RF-PD-11', 'RN-16');
+
 it('el actor de soporte sigue pudiendo ajustar los umbrales operativos que si son suyos', function (): void {
     // La otra mitad, y la que impide que la puerta se convierta en «soporte no
     // toca nada»: el alcance `configuration` existe para que el fabricante pueda
     // ajustar la instalacion mientras diagnostica (RF-PD-11). Lo que se le niega
-    // son las tres claves reservadas al cliente, no la configuracion entera.
+    // son las cinco claves reservadas al cliente, no la configuracion entera.
     $token = SupportGrants::tokenFor(SupportScope::Configuration);
 
     Api::as($token)

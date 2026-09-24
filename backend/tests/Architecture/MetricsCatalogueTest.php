@@ -109,12 +109,17 @@ function textfileSeries(): array
         'compliance_findings_last_week',
         'compliance_employees_affected_last_week',
         'compliance_metrics_week_start_seconds',
-        // Reporting\Infrastructure\Metrics\TextfileAbsenceMetrics (tarea 3.10, decision 8)
+        // Reporting\Infrastructure\Metrics\TextfileAbsenceMetrics (tarea 3.10, decision 8;
+        // hermana de frescura del cierre de la Fase 3)
         //
         // Mismo patron y misma cadencia que las tres de arriba, y el §8.2 lo dice
         // por escrito para esta serie: la publica un comando programado que corre
         // y termina, y sale por el colector *textfile*, no por `/metrics`.
         'absences_current',
+        // Que dia se midio, no cuando corrio: mismo papel que
+        // `compliance_metrics_week_start_seconds` de arriba, para que un mes sin
+        // recalculo no se lea igual que un mes sin ausencias.
+        'absences_metrics_day_seconds',
         // Reporting\Infrastructure\Metrics\TextfileWeeklySummaryMetrics (tarea 3.12, decision 8)
         //
         // Las dos salen SIEMPRE, tambien cuando la pasada no envia nada: sin

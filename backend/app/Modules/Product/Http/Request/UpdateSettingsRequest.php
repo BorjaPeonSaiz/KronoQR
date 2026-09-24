@@ -129,6 +129,21 @@ final class UpdateSettingsRequest extends FormRequest
         // y la regla dura 16 reservan al cliente — con el agravante de que aqui el
         // fabricante no la estaria interpretando, la estaria escribiendo.
         SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH->value,
+        // RF-PR-06 (tarea 3.11): la coincidencia de quiosco es LA MITIGACION QUE
+        // COMPENSA EL DESCARTE DE LA BIOMETRIA (ADR-009). Con la tarjeta fisica
+        // nada impide que una persona fiche por otra, y lo unico que lo detecta es
+        // el patron: dos fichajes de personas distintas separados por segundos en
+        // el mismo quiosco, repetidos varios dias.
+        //
+        // **Un cero en la ventana la apaga por completo**, en silencio y sin dejar
+        // de generar un solo dato: la deteccion simplemente no vuelve a encontrar
+        // nada. Y subir las repeticiones tiene el mismo efecto por la via lenta.
+        // Quien decide si su instalacion vigila los fichajes por cuenta de otro es
+        // el hotel —responde el de la inspeccion y del convenio—, no quien
+        // mantiene el producto. Mismo argumento que `ATTENDANCE_BREAK_CLOCKING`:
+        // apagar una deteccion desde fuera es peor que encenderla.
+        SettingKey::ATTENDANCE_PATTERN_WINDOW_SECONDS->value,
+        SettingKey::ATTENDANCE_PATTERN_MIN_REPEATS->value,
     ];
 
     public function authorize(): bool
@@ -158,15 +173,16 @@ final class UpdateSettingsRequest extends FormRequest
         }
 
         /*
-         * La tercera puerta (tarea 3.5, RF-AT-12; ampliada en la 3.12,
-         * RF-PR-05): las claves **reservadas al cliente**.
+         * La tercera puerta (tarea 3.5, RF-AT-12; ampliada en la 3.12, RF-PR-05,
+         * en la 3.13, RF-IN-08, y en el cierre de la Fase 3, RF-PR-06): las claves
+         * **reservadas al cliente**.
          *
          * Mismo mecanismo y mismo motivo que la anterior, con otra pregunta
          * detras: `ComplianceProfilePolicy` ya le niega al actor de soporte el
-         * perfil de cumplimiento entero, y estas dos hacen lo suyo desde otra
-         * tabla —una decide que jornadas se marcan y la otra que los datos de la
-         * plantilla salgan por correo—. Ver
-         * {@see SettingsPolicy::updateCustomerReserved()}.
+         * perfil de cumplimiento entero, y estas cinco hacen lo suyo desde otra
+         * tabla —que jornadas se marcan, que los datos de la plantilla salgan por
+         * correo, con que cifra se juzga el producto y si se detecta el fichaje por
+         * cuenta de otro—. Ver {@see SettingsPolicy::updateCustomerReserved()}.
          *
          * Tambien `403` antes de validar, por lo mismo: quien no puede tocar una
          * clave no tiene por que aprender que valores admite.
@@ -177,19 +193,28 @@ final class UpdateSettingsRequest extends FormRequest
 
     /**
      * Si el cuerpo pretende cambiar alguna clave **reservada al cliente**
-     * (RF-AT-12, RF-PR-05, RF-IN-08).
+     * (RF-AT-12, RF-PR-05, RF-IN-08, RF-PR-06).
      *
      * Lista explicita y no una propiedad del catalogo, a diferencia de
      * `confidential`. No es pereza: las tres alternativas mienten.
-     * `confidential` ademas **redacta el valor** al leerlo, y estos dos ajustes
-     * los tiene que ver el panel; `SettingImpact::COMPLIANCE_REVIEW` lo llevan
-     * cuatro claves, tres de las cuales son parametros operativos que el soporte
-     * si debe poder ajustar (RF-PD-11); y derivar la puerta de
-     * `SettingImpact::DATA_DISCLOSURE` ataria «quien puede cambiarla» a «que
-     * consecuencia tiene», que son dos preguntas distintas.
+     * `confidential` ademas **redacta el valor** al leerlo, y estos ajustes los
+     * tiene que ver el panel; `SettingImpact::COMPLIANCE_REVIEW` lo llevan seis
+     * claves, y tres de ellas —la jornada maxima, el desfase de reloj y el
+     * transito minimo— son parametros operativos que el soporte si debe poder
+     * ajustar (RF-PD-11); y
+     * derivar la puerta de `SettingImpact::DATA_DISCLOSURE` ataria «quien puede
+     * cambiarla» a «que consecuencia tiene», que son dos preguntas distintas.
      *
-     * Con tres claves la lista sigue siendo mas honesta que una regla; si llegara
-     * a haber cinco, habra ganado el derecho a ser una propiedad del dominio.
+     * ## LA LISTA HA LLEGADO A CINCO, Y AQUI ESTABA ESCRITO QUE ENTONCES TOCABA MOVERLA
+     *
+     * Decia que «si llegara a haber cinco, habra ganado el derecho a ser una
+     * propiedad del dominio». Ha llegado con las dos claves de RF-PR-06 en el
+     * cierre de la Fase 3, y la decision de ese cierre fue **mantenerla explicita
+     * un ciclo mas**: las tres alternativas siguen mintiendo por los mismos
+     * motivos, y mover la marca al catalogo es un cambio del dominio
+     * —`SettingDefinition` y su migracion— que no se hace dentro de una
+     * correccion de seguridad. Queda anotado aqui y no en la cabeza de nadie: la
+     * sexta clave la mueve.
      */
     private function touchesCustomerReservedKey(): bool
     {

@@ -45,9 +45,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
 
 uses(RefreshDatabase::class);
 
-const AHORA_DEL_FICHAJE = '2026-03-14 07:02:31';
+const AHORA_DEL_FICHAJE_CON_TRAZAS = '2026-03-14 07:02:31';
 
-const TARJETA_DEL_FICHAJE = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa';
+const TARJETA_DEL_FICHAJE_CON_TRAZAS = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa';
 
 /** Nadie escucha ahi. Es el destino inalcanzable de la ficha. */
 const COLECTOR_INALCANZABLE = 'http://127.0.0.1:9';
@@ -61,10 +61,10 @@ function escenarioDeFichajeConTrazas(): array
     $employee = WorkforceFixtures::employee($site, WorkforceFixtures::department($site));
     $device = AttendanceFixtures::device($site);
 
-    FrozenTime::at(AHORA_DEL_FICHAJE);
+    FrozenTime::at(AHORA_DEL_FICHAJE_CON_TRAZAS);
     app()->instance(
         CredentialResolver::class,
-        FakeCredentialResolver::new()->resolving(TARJETA_DEL_FICHAJE, $employee),
+        FakeCredentialResolver::new()->resolving(TARJETA_DEL_FICHAJE_CON_TRAZAS, $employee),
     );
 
     return ['token' => AttendanceFixtures::tokenFor($device['id']), 'employee' => $employee];
@@ -86,7 +86,7 @@ function ficharMidiendo(string $token, string $occurredAt): array
     ])->post('/api/v1/scan', [
         'scan_id' => $scanId,
         'occurred_at' => $occurredAt,
-        'qr_payload' => TARJETA_DEL_FICHAJE,
+        'qr_payload' => TARJETA_DEL_FICHAJE_CON_TRAZAS,
     ]);
 
     return [

@@ -241,6 +241,75 @@ it('cita uno a uno los seis requisitos legales que el cliente asume', function (
     expect($uncited)->toBe([], $guide.' no cita: '.implode(', ', $uncited));
 })->with('las obligaciones legales en las dos lenguas')->group('RL-16', 'RL-17', 'RL-18', 'RL-19', 'RL-20', 'RL-21');
 
+/*
+ * La guia de obligaciones legales con los terminos del art. 9 de cada lengua
+ * (guarda del cierre de la Fase 3).
+ *
+ * Van en un dataset y no en un bucle porque el par que falla tiene que salir en
+ * el nombre: «(obligaciones legales)» y «(legal obligations)» dicen cual de las
+ * dos guias se contradice sin abrir ninguna.
+ */
+dataset('las obligaciones legales con su termino de dato de salud', [
+    'obligaciones legales' => ['docs/cliente/obligaciones-legales.md', 'dato de salud'],
+    'legal obligations' => ['docs/cliente/en/legal-obligations.md', 'health data'],
+]);
+
+/*
+ * La lista del art. 30 de cada lengua: el ancla que la abre y el termino que
+ * tiene que nombrar.
+ */
+dataset('la lista de lo que el producto trata en las dos lenguas', [
+    'obligaciones legales' => ['docs/cliente/obligaciones-legales.md', '**Qué trata este producto**', 'ausencia'],
+    'legal obligations' => ['docs/cliente/en/legal-obligations.md', '**What this product processes**', 'absence'],
+]);
+
+it('no niega en bloque el dato de categoria especial en la misma guia que reconoce el dato de salud', function (string $guide, string $healthTerm): void {
+    // RL-21 y el cierre de la Fase 3. La guia decia en su §2 «Ningun dato de
+    // categoria especial del art. 9 RGPD» y, doscientas lineas mas abajo, que el
+    // tipo «Baja medica» de una ausencia ES dato de salud. Las dos no pueden ser
+    // ciertas, y la que el cliente copia literalmente en su registro de
+    // actividades del art. 30 es la primera: se lleva a su documentacion una
+    // afirmacion falsa sobre su propio tratamiento, y con ella decide que no le
+    // hace falta ni base juridica reforzada ni EIPD.
+    //
+    // LA GUARDA ES DE DOS LADOS a proposito. Si solo prohibiera la negacion en
+    // bloque, se arreglaria borrando el parrafo que reconoce el dato de salud
+    // —quitar la verdad incomoda en vez de la afirmacion falsa—, que es la
+    // correccion equivocada y la que deja al cliente peor que antes.
+
+    // arrange / act
+    $denials = ClientDocs::blanketSpecialCategoryDenials($guide);
+
+    // assert
+    expect(ClientDocs::literalsMissingFrom([$healthTerm], $guide))->toBe(
+        [],
+        $guide.' no reconoce en ningun sitio que las ausencias lleven «'.$healthTerm.'»: el tipo «Baja medica» es dato de salud del art. 9 y el cliente tiene que saberlo.',
+    )->and($denials)->toBe(
+        [],
+        count($denials).' frase(s) de '.$guide.' niegan EN BLOQUE el dato de categoria especial sin nombrar la excepcion de las ausencias: '
+        .implode(' | ', $denials),
+    );
+})->with('las obligaciones legales con su termino de dato de salud')->group('RL-21', 'RF-PD-02');
+
+it('nombra las ausencias en la lista de lo que el producto trata', function (string $guide, string $heading, string $term): void {
+    // Esa lista es la que el §2 pide copiar «asi de corto» en el registro de
+    // actividades del art. 30 RGPD, y llevaba tres puntos: identificacion de
+    // plantilla, marcas de tiempo y `audit_log`. Las ausencias —tipo, fechas y
+    // nota, con dato de salud dentro— no estaban, asi que el registro del cliente
+    // nace incompleto para el tratamiento que MAS le obliga.
+    //
+    // Se mira la LISTA y no el apartado entero porque el apartado ya hablaba de
+    // ausencias en su prosa: buscar el termino en todo el §2 daria verde con la
+    // lista igual de incompleta.
+
+    // arrange / act
+    $list = ClientDocs::firstListAfter($guide, $heading);
+
+    // assert
+    expect($list)->not->toBe('', $guide.' no tiene lista con guiones detras de «'.$heading.'»: o el titulo cambio o la lista del art. 30 desaparecio.')
+        ->and(mb_strtolower($list))->toContain($term);
+})->with('la lista de lo que el producto trata en las dos lenguas')->group('RL-21', 'RF-PD-02');
+
 it('entrega cada guia del paquete en las dos lenguas', function (string $spanish, string $english): void {
     // DoD §10.3: «textos en espanol e ingles». Y decision 2 de la ficha: la
     // version inglesa vive en `docs/cliente/en/` con nombre en ingles. Que el par

@@ -2,12 +2,21 @@
 
 declare(strict_types=1);
 
+use App\Modules\Reporting\Application\Port\AdoptionFactsReader;
+use App\Modules\Reporting\Application\Port\WorkDayCompletionReader;
 use App\Modules\Reporting\Application\Query\AdoptionReportCriteria;
 use App\Modules\Reporting\Application\Query\ReadAdoptionReport;
+use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
+use App\Modules\Reporting\Domain\ValueObject\AdoptionFacts;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionIndicatorKey;
+use App\Modules\Reporting\Domain\ValueObject\AdoptionReportQuery;
 use App\Modules\Reporting\Domain\ValueObject\DateRange;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseAdoptionFactsReader;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Mockery\MockInterface;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -355,3 +364,77 @@ it('recorre scan_events UNA sola vez por consulta y no una por periodo y origen'
     expect($plan)->toContain('on scan_events')
         ->and($plan)->not->toMatch('/on scan_events s.*loops=(?!1\))/');
 })->group('RNF-P-05', 'RF-IN-08');
+
+it('traduce la cancelacion de PostgreSQL al 422 del cuadro y no a un 500', function (): void {
+    /*
+     * EL GEMELO DE `ComplianceFactsReaderVolumeTest` PARA ADOPCION (RF-IN-08).
+     *
+     * El `SQLSTATE 57014` (`query_canceled`) no es una averia: es el
+     * `statement_timeout` haciendo su trabajo sobre un rango demasiado grande. Un
+     * `500` mandaria a soporte a buscar un fallo que no existe; quien recibe el
+     * `422` tiene algo que cambiar —acortar el rango— y el `detail` se lo dice.
+     *
+     * Hasta el cierre de la Fase 3 este camino no lo recorria ninguna prueba, y
+     * ademas leia el `SQLSTATE` de `getCode()` en vez de `errorInfo[0]`, que es
+     * como lo leen sus dos hermanas: `QueryException::getCode()` hereda el codigo
+     * de la `PDOException` envuelta, que segun el driver es la cadena del
+     * `SQLSTATE` o un entero. Con `getCode()`, una cancelacion podia escaparse
+     * como `500`.
+     *
+     * Se provoca con una conexion que cancela a proposito, en lugar de con un
+     * volumen que tarde: asi la prueba dice lo mismo en cualquier maquina.
+     */
+    $cancelada = new PDOException('SQLSTATE[57014]: Query canceled');
+    $cancelada->errorInfo = ['57014', 7, 'canceling statement due to statement timeout'];
+
+    /** @var ConnectionInterface&MockInterface $connection */
+    $connection = Mockery::mock(ConnectionInterface::class);
+    $connection->shouldReceive('transaction')->andThrow(
+        new QueryException('pgsql', 'SELECT 1', [], $cancelada),
+    );
+
+    /** @var WorkDayCompletionReader&MockInterface $workDays */
+    $workDays = Mockery::mock(WorkDayCompletionReader::class);
+
+    $reader = new DatabaseAdoptionFactsReader($connection, $workDays, 10);
+
+    expect(fn (): AdoptionFacts => $reader->factsFor(
+        AdoptionReportQuery::of(DateRange::between('2026-01-01', '2026-01-31')),
+        timeZone: 'Europe/Madrid',
+    ))->toThrow(
+        ReportTooLargeForSynchronousDelivery::class,
+        'El cuadro de impacto ha superado los 10 segundos y se ha cancelado. Reduce el rango.',
+    );
+})->group('RF-IN-08', 'RNF-P-05');
+
+it('pone el techo de tiempo EN SEGUNDOS y dentro de la transaccion', function (): void {
+    /*
+     * `= '10s'` y no `= 10000`. Las dos formas valen para PostgreSQL —sin unidad
+     * el valor son milisegundos—, pero las otras dos lecturas de informes del
+     * repositorio escriben la unidad, y una cifra desnuda de cinco digitos es
+     * justo la que alguien lee como segundos al ajustar `config/reporting.php`.
+     * La sentencia se afirma literal para que la divergencia vuelva a notarse.
+     */
+    // Sin volumen: lo que se afirma es la SENTENCIA, no el tiempo.
+    WorkforceFixtures::site();
+
+    $sentencias = [];
+
+    DB::listen(static function (object $query) use (&$sentencias): void {
+        /** @var object{sql: string} $query */
+        $sentencias[] = $query->sql;
+    });
+
+    app(AdoptionFactsReader::class)->factsFor(
+        AdoptionReportQuery::of(DateRange::between('2026-01-05', '2026-01-11')),
+        timeZone: 'Europe/Madrid',
+    );
+
+    $puestas = array_values(array_filter(
+        $sentencias,
+        static fn (string $sql): bool => str_contains($sql, 'SET LOCAL statement_timeout'),
+    ));
+
+    expect($puestas)->toHaveCount(1)
+        ->and($puestas[0])->toBe("SET LOCAL statement_timeout = '10s'");
+})->group('RF-IN-08', 'RNF-P-05');

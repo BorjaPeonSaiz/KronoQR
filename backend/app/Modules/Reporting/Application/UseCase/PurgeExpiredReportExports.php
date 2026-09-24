@@ -131,18 +131,18 @@ final readonly class PurgeExpiredReportExports
      */
     private function sweepOrphans(): int
     {
-        $conDerecho = $this->exports->uuidsWithFile();
-        $borrados = 0;
+        $entitled = $this->exports->uuidsWithFile();
+        $deleted = 0;
 
         foreach ($this->storage->storedUuids() as $uuid) {
-            if (\in_array($uuid, $conDerecho, true)) {
+            if (\in_array($uuid, $entitled, true)) {
                 continue;
             }
 
             $this->storage->deleteAllFor($uuid);
-            $borrados++;
+            $deleted++;
         }
 
-        return $borrados;
+        return $deleted;
     }
 }

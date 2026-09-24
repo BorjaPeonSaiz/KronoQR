@@ -367,6 +367,23 @@ return [
         ],
 
         /*
+         * HOW A NUMBER IS WRITTEN IN THIS LANGUAGE. It lives here, and not in an
+         * `if` inside the generator, so that adding a third language cannot
+         * silently fall back to English separators: the generator demands the key
+         * and fails by name when it is missing.
+         *
+         * The file is opened by a spreadsheet using the customer's regional
+         * settings, so this is not cosmetic: `99.94` in a Spanish Excel reads as
+         * ninety-nine thousand nine hundred and ninety-four.
+         */
+        'number' => [
+
+            'decimal_separator' => '.',
+
+            'thousands_separator' => ',',
+        ],
+
+        /*
          * The twelve indicators. The label says WHAT it measures, not what the
          * key is called: whoever reads the paper does not know `qr_scans_ratio`
          * exists.

@@ -54,10 +54,14 @@ Ante cualquier hallazgo nuevo, en este orden:
    `APK_INDEX_STAMP` (`make build-ci-images`, semana ISO) precisamente para
    eso; si el hallazgo aparece a mitad de semana, basta con relanzar el job la
    semana siguiente o forzar el refresco con
-   `make build-ci-images APK_INDEX_STAMP=$(date -u +%s)`. **Nunca se resuelve
-   con una excepción**: el CVE es real, solo que la imagen reconstruida ya no
-   lo tiene. Caso de referencia: `libexpat` 2.8.3-r0 → 2.8.4-r0 en
-   `kronoqr/app:ci`, septiembre de 2026.
+   `make build-ci-images APK_INDEX_STAMP=$(date -u +%s)`; en la CI, el disparo
+   manual admite el mismo valor:
+   `gh workflow run ci.yml --ref <rama> -f apk_index_stamp=$(date -u +%s)`.
+   **Nunca se resuelve con una excepción**: el CVE es real, solo que la imagen
+   reconstruida ya no lo tiene. Casos de referencia: `libexpat` 2.8.3-r0 →
+   2.8.4-r0 en `kronoqr/app:ci`, septiembre de 2026, y 2.8.4-r0 → 2.8.5-r0
+   (CVE-2026-93990) en el cierre de la Fase 3, que es cuando el disparo manual
+   ganó la entrada `apk_index_stamp`.
 2. **¿Es un falso positivo verificable?** —la herramienta no puede ver algo
    que sí es cierto en tiempo de ejecución—. Documenta la excepción (§2) con
    fecha de caducidad. Solo si el punto 1 no era posible: una excepción por

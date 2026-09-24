@@ -77,6 +77,7 @@ fallo*. Se escriben en la tarea que los introduce.
 | [`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md) | Un hallazgo de Semgrep comunitario o Trivy en modo informe del job `security` | SSDLC · pipeline de seguridad |
 | [`entrega-de-alertas.md`](entrega-de-alertas.md) | Alertas `EnrutadoDeAlertasCaido`/`EntregaDeAlertasFallando`: Alertmanager caído o sin poder entregar. No responde a una fila del catálogo del doc 01 §9.3, responde a un fallo de la propia infraestructura de alertas | Fase 3 · tarea 3.2 (segunda vuelta, revisión de seguridad) |
 | [`saturacion-del-borde.md`](saturacion-del-borde.md) | Alerta `SaturacionDelBordeEnElFichaje` (T1499.002): `429` por encima de lo normal en las rutas de fichaje | Fase 3 · tarea 3.8 (hallazgo H-10) |
+| [`vigilancia-normativa.md`](vigilancia-normativa.md) | **No responde a una alerta: responde a un cambio de la norma.** Quién vigila el art. 34.9 ET, el convenio, la AEPD y la jurisprudencia, cada cuánto, y por dónde entra un cambio (perfil de cumplimiento, nunca el código). Lo ejecuta el cliente; viaja en el paquete. Arranca con [`../cliente/preguntas-asesoria.md`](../cliente/preguntas-asesoria.md) | Fase 3 · cierre (revisión de seguridad, verificaciones humanas) |
 
 ## Qué debe contener un runbook
 

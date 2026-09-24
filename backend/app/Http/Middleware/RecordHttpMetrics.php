@@ -32,8 +32,9 @@ use Throwable;
  *
  * Mismo motivo que `RedisScanMetrics`: el proceso PHP que atiende una peticion
  * termina con ella, asi que un contador en memoria no lo lee nadie. `HINCRBY` es
- * atomico entre procesos y cuesta microsegundos. El endpoint `/metrics` que lo
- * publica es de la tarea 3.1; hasta entonces los contadores se acumulan.
+ * atomico entre procesos y cuesta microsegundos. `/metrics` las publica desde
+ * la tarea 3.1, con `MetricCatalogue` y `MetricsCatalogueTest` contra el doc
+ * 02 §8.2.
  *
  * ## Los cubos son los del presupuesto de latencia
  *

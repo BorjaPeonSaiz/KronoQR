@@ -3,7 +3,25 @@
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
          colors="true"
+         failOnWarning="true"
 >
+    <!--
+        UN AVISO DE PHP ES UN FALLO (cierre de la Fase 3).
+
+        Antes de esto la CI salia en verde con «2088 warnings» en Contract+Feature
+        y «747» en Integracion (run 35940352359): uno por prueba, todos el mismo
+        —`file_get_contents(.../.env)` desde `vlucas/phpdotenv`, porque en el
+        runner la configuracion llega por el `env:` del job y no hay fichero—.
+        Se apago en origen creando un `.env` vacio en la accion compuesta
+        `.github/actions/php-toolchain`, no aqui.
+
+        Que ese ruido existiera es lo que hacia imposible encender esta bandera, y
+        con ella apagada un aviso NUEVO —un `undefined array key` en una respuesta,
+        una deprecacion de PHP 8.5, un fichero que la suite lee y no existe— se
+        publicaba con el mismo color verde que el resto. Se enciende ahora que la
+        cuenta es cero, y a partir de aqui cualquier aviso pone la suite en rojo
+        el dia en que se introduce.
+    -->
     <!--
         Las cinco suites del doc 02 §2 y §9.1. Unit no toca base de datos ni
         arranca el framework y debe terminar por debajo de 2 s: es la suite que

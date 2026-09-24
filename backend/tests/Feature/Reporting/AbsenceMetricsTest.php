@@ -69,7 +69,13 @@ it('publica las cuatro etiquetas, con las personas ausentes hoy en cada una', fu
         ->toContain('absences_current{type="leave"} 0')
         ->toContain('absences_current{type="other"} 0')
         // El `# HELP`, que es donde alguien busca la explicacion.
-        ->toContain('# HELP absences_current ');
+        ->toContain('# HELP absences_current ')
+        // La hermana de frescura: que dia se midio, no cuando corrio. El
+        // miercoles 11 de marzo a medianoche UTC (resto del cierre de la Fase
+        // 3: sin ella, un mes sin recalculo se lee igual que un mes sin
+        // ausencias).
+        ->toContain('# TYPE absences_metrics_day_seconds gauge')
+        ->toContain('absences_metrics_day_seconds 1773187200');
 
     // Ni un nombre ni un identificador de persona: una etiqueta con
     // `employee_uuid` crearia una serie por empleado (regla dura 21).
@@ -146,7 +152,10 @@ it('cuenta el dia civil del centro y no el del servidor', function (): void {
     expect(Artisan::call('reporting:absence-metrics'))->toBe(0);
 
     expect((string) file_get_contents(ficheroDeMetricasDeAusencias()))
-        ->toContain('absences_current{type="vacation"} 1');
+        ->toContain('absences_current{type="vacation"} 1')
+        // El dia civil (11), no el del reloj del servidor en el instante en
+        // que corrio (10 UTC): la misma medianoche de la prueba de arriba.
+        ->toContain('absences_metrics_day_seconds 1773187200');
 })->group('RF-GP-04', 'RN-09');
 
 it('deja el fichero identico al ejecutarse dos veces', function (): void {

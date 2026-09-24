@@ -19,6 +19,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstantWithZone, FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
+import { formatBytes } from '@kronoqr/web-kit/formatBytes'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -127,34 +128,16 @@ function failureReasonLabel(code: string | null): string {
 }
 
 /**
- * Tamaño legible del ZIP, en unidades BINARIAS (divisor 1024): las mismas
- * KiB/MiB/GiB/TiB que `product:export-all` y `doctor` en la consola
+ * Tamaño legible del ZIP, en unidades BINARIAS (`formatBytes` de
+ * `@kronoqr/web-kit`, ADR-036, misma funcion que `ReportExportsPanel`): las
+ * mismas KiB/MiB/GiB/TiB que `product:export-all` y `doctor` en la consola
  * (`ProductExportAllCommand::humanBytes`, `DiskProbe`), para que el panel y
  * la consola digan lo mismo del mismo fichero. No es un dato del registro
  * legal -es una lista de ficheros, no una nomina-, asi que aqui si conviene
  * redondear a una cifra razonable en vez del numero exacto de bytes.
  */
 function sizeLabel(bytes: number | null): string {
-  if (bytes === null) {
-    return t('common.empty')
-  }
-
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'] as const
-  let value = bytes
-  let unitIndex = 0
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex += 1
-  }
-
-  const decimals = unitIndex === 0 ? 0 : 1
-  const formatted = new Intl.NumberFormat(locale.value, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value)
-
-  return `${formatted} ${units[unitIndex]}`
+  return bytes === null ? t('common.empty') : formatBytes(bytes, locale.value)
 }
 
 /** Total de filas de todos los ficheros del ZIP. Vacio hasta que termina (contrato). */

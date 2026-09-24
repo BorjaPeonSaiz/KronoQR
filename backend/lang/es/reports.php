@@ -415,6 +415,29 @@ return [
         ],
 
         /*
+         * COMO SE ESCRIBE UN NUMERO EN ESTE IDIOMA, y por eso vive aqui y no en
+         * un `if` del generador.
+         *
+         * Era el unico condicional por idioma del backend: `Lang::getLocale()
+         * === 'es' ? ',' : '.'`. Con dos idiomas funcionaba; con un tercero, el
+         * CSV habria salido con separadores ingleses en silencio, y un `99,94`
+         * leido como `99.94` no es un error visible sino una cifra distinta.
+         *
+         * Aqui el idioma nuevo no puede olvidarse: el generador exige la clave y
+         * falla con el nombre delante si falta (`AdoptionReportLayout::text()`).
+         *
+         * IMPORTA MAS QUE LA ESTETICA: el fichero lo abre una hoja de calculo con
+         * la configuracion regional del cliente, y un `99.94` en un Excel espanol
+         * se lee como noventa y nueve mil novecientos noventa y cuatro.
+         */
+        'number' => [
+
+            'decimal_separator' => ',',
+
+            'thousands_separator' => '.',
+        ],
+
+        /*
          * Los doce indicadores. El rotulo dice QUE mide, no como se llama la
          * clave: quien lee el papel no sabe que existe `qr_scans_ratio`.
          */

@@ -545,7 +545,7 @@ outside them. The inbox (§4) tells you **what is pending resolution**; this
 screen tells you **whether what is recorded complies with the law**, whether or
 not anybody has opened anything.
 
-They are not the same list: the inbox has eight incident types and this screen
+They are not the same list: the inbox has nine incident types and this screen
 four legal rules. They overlap on the first two, and that is on purpose.
 
 ### 4 bis.1 The four warnings, and with which threshold

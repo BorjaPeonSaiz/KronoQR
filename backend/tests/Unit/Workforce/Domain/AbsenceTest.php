@@ -21,6 +21,25 @@ use App\Modules\Workforce\Domain\ValueObject\AbsenceType;
  * **Los resultados esperados se escriben como numero**, nunca se deducen con la
  * misma formula que el codigo: si se dedujeran, los dos podrian estar mal de la
  * misma manera.
+ *
+ * ## LOS CINCO MUTANTES QUE SIGUEN VIVOS, Y POR QUE SE QUEDAN
+ *
+ * Medido con `pest --mutate` sobre `Absence.php` en el cierre de la Fase 3. Los
+ * cinco son **equivalentes**: cambian el codigo sin cambiar lo que hace, asi que
+ * no existe prueba que los pueda matar y escribir una seria escribir una prueba
+ * que no afirma nada.
+ *
+ * - `days()`, `RemoveIntegerCast` (linea 138). Quitar el `(int)` de
+ *   `(int) ...->format('%a') + 1` no cambia el resultado: PHP suma una cadena
+ *   numerica como entero, y el `+ 1` fuerza el tipo igual. El molde esta ahi por
+ *   claridad y porque PHPStan lo exige, no por aritmetica.
+ * - `asDate()`, `IncrementInteger` y `DecrementInteger` ×4 (linea 359). Mover el
+ *   `setTime(0, 0)` a otra hora fija no cambia ninguna comparacion, porque
+ *   **los dos lados de cada comparacion pasan por esta misma funcion**: `covers()`
+ *   normaliza el dia y los extremos, y `days()` normaliza las dos fechas. Es
+ *   precisamente la propiedad que se queria: la hora del dia no significa nada en
+ *   una fecha de calendario. Un mutante que desplaza igual los dos lados es
+ *   indistinguible por construccion.
  */
 
 function ausencia(
@@ -140,6 +159,106 @@ it('corregir devuelve una version nueva y no toca la anterior', function (): voi
     expect($original->changeReason)->toBeNull();
     expect($original->status)->toBe(AbsenceStatus::Active);
 })->group('RF-GP-04', 'RN-13');
+
+it('corrige el tipo y la fecha de inicio cuando se los dan, y no los hereda', function (): void {
+    /*
+     * LA OTRA MITAD DE LA CORRECCION, y la que faltaba: la de arriba pasa
+     * `type: null` y `startsOn: null` para comprobar que lo omitido se hereda.
+     * Nadie pasaba un valor, asi que `$type ?? $this->type` y
+     * `$startsOn ?? $this->startsOn` podian quedarse en `$this->type` y
+     * `$this->startsOn` —dos mutantes vivos en las lineas 210 y 211— sin romper
+     * nada.
+     *
+     * Lo que se perderia es la correccion mas comun de todas: RRHH registro
+     * «Otro» y era una baja medica, o puso el lunes y empezo el domingo. El
+     * `PATCH` respondia `200`, la version nueva se creaba con su motivo y su
+     * asiento… y con los datos viejos. El informe de absentismo seguiria contando
+     * lo que no fue.
+     */
+
+    // arrange
+    $original = ausencia(type: 'other', startsOn: '2026-03-02', endsOn: '2026-03-06', note: 'Se aclara luego.');
+
+    // act
+    $corregida = $original->correctedWith(
+        uuid: '0199f4a1-8e44-7032-9b61-4c5d6e7f8a92',
+        type: AbsenceType::SickLeave,
+        startsOn: dia('2026-03-01'),
+        endsOn: null,
+        note: null,
+        noteGiven: false,
+        reason: 'Era una baja medica y empezo el domingo.',
+    );
+
+    // assert
+    expect($corregida->type)->toBe(AbsenceType::SickLeave)
+        ->and($corregida->isoStartsOn())->toBe('2026-03-01')
+        // El fin no se toco: se hereda.
+        ->and($corregida->isoEndsOn())->toBe('2026-03-06')
+        ->and($corregida->days())->toBe(6)
+        // Y la anterior sigue diciendo lo que se registro aquel dia.
+        ->and($original->type)->toBe(AbsenceType::Other)
+        ->and($original->isoStartsOn())->toBe('2026-03-02');
+})->group('RF-GP-04', 'RN-13');
+
+it('rechaza una ausencia sin identidad', function (string $uuid, string $employeeUuid): void {
+    // Una ausencia sin UUID publico no se puede corregir ni anular —no hay a que
+    // apuntar—, y una sin persona es un dato de salud sin dueno. Las dos rompen
+    // en el constructor, en voz alta y con el nombre de la clase, y hasta el
+    // cierre de la Fase 3 ninguna prueba lo exigia: quitar `assertIdentity()` del
+    // constructor no rompia nada (mutantes vivos en las lineas 102, 371 y 375).
+
+    // arrange / act / assert
+    expect(fn (): Absence => new Absence(
+        uuid: $uuid,
+        employeeUuid: $employeeUuid,
+        type: AbsenceType::Vacation,
+        startsOn: dia('2026-03-02'),
+        endsOn: dia('2026-03-06'),
+    ))->toThrow(InvalidArgumentException::class);
+})->with([
+    'sin identificador publico' => ['', '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'],
+    'sin persona' => ['0199f4a1-6c22-7e10-9b40-2a3b4c5d6e70', ''],
+])->group('RF-GP-04');
+
+it('rechaza un encadenado de versiones que no se sostiene', function (int $version, ?string $changeReason, ?string $supersedesUuid): void {
+    /*
+     * LAS MISMAS INVARIANTES QUE DECLARA LA MIGRACION, comprobadas aqui porque
+     * aqui rompen antes de tocar la base de datos. Ninguna tenia prueba: quitar
+     * `assertVersioning()` del constructor, o bajar el `version < 1` a
+     * `version < 0`, no rompia nada (lineas 105 y 405).
+     *
+     * Lo que sostiene RN-13 y la regla dura 5 es justamente esta cadena: una
+     * version 2 sin motivo escrito es una correccion sin explicacion, y una
+     * version 1 con motivo es una correccion sin nada que corregir. Las dos
+     * dejarian el historico legal sin poder reconstruir quien cambio que y por
+     * que.
+     */
+
+    // arrange / act / assert
+    expect(fn (): Absence => new Absence(
+        uuid: '0199f4a1-6c22-7e10-9b40-2a3b4c5d6e70',
+        employeeUuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90',
+        type: AbsenceType::Vacation,
+        startsOn: dia('2026-03-02'),
+        endsOn: dia('2026-03-06'),
+        version: $version,
+        supersedesUuid: $supersedesUuid,
+        changeReason: $changeReason,
+    ))->toThrow(InvalidArgumentException::class);
+})->with([
+    // El numero va escrito, no calculado: la primera version es la 1.
+    'version cero' => [0, null, null],
+    'version negativa' => [-1, null, null],
+    // LA VERSION CERO **CON** MOTIVO DE CAMBIO, que parece redundante y no lo es.
+    // Sin ella, bajar la guarda de `version < 1` a `version < 0` seguia pasando:
+    // la version 0 sin motivo rompe igual por la segunda comprobacion —«la 1 no
+    // lleva motivo»— y el mutante quedaba vivo. Con motivo, la segunda deja
+    // pasar y la unica que puede rechazar la fila es la del numero de version.
+    'version cero con motivo de cambio' => [0, 'Corrige la fecha.', '0199f4a1-5b11-7d00-8a30-192a3b4c5d60'],
+    'primera version con motivo de cambio' => [1, 'No corrige nada.', null],
+    'segunda version sin motivo de cambio' => [2, null, '0199f4a1-5b11-7d00-8a30-192a3b4c5d60'],
+])->group('RF-GP-04', 'RN-13');
 
 it('distingue borrar la nota de no tocarla', function (): void {
     // Es la unica forma de expresar en un `PATCH` «quita lo que hay ahi», que es

@@ -576,27 +576,42 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
      * @param  callable(): T  $read
      * @return T
      *
-     * @throws ReportTooLargeForSynchronousDelivery
+     * @throws ReportTooLargeForSynchronousDelivery cuando PostgreSQL cancela la consulta
      */
     private function withStatementTimeout(callable $read): mixed
     {
         try {
             return $this->connection->transaction(function () use ($read): mixed {
-                $this->connection->statement('SET LOCAL statement_timeout = '.($this->timeoutSeconds * 1000));
+                // `SET LOCAL` acota el techo a ESTA transaccion: un
+                // `statement_timeout` global cortaria migraciones y
+                // reconciliaciones que legitimamente tardan mas.
+                $this->connection->statement("SET LOCAL statement_timeout = '".$this->timeoutSeconds."s'");
 
                 return $read();
             });
-        } catch (QueryException $failure) {
-            if ($this->wasCanceled($failure)) {
+        } catch (QueryException $exception) {
+            if ($this->wasCancelled($exception)) {
                 throw ReportTooLargeForSynchronousDelivery::adoptionTimedOut($this->timeoutSeconds);
             }
 
-            throw $failure;
+            throw $exception;
         }
     }
 
-    private function wasCanceled(Throwable $failure): bool
+    /**
+     * El `SQLSTATE` sale de `errorInfo[0]`, NO de `getCode()`.
+     *
+     * Es la forma que usan las otras cinco traducciones de `SQLSTATE` del
+     * repositorio —empezando por las dos hermanas de este mismo directorio—, y no
+     * es cuestion de gusto: `QueryException::getCode()` hereda el codigo de la
+     * `PDOException` que envuelve, que unas veces es la cadena del `SQLSTATE` y
+     * otras un entero del driver. Dependiendo de ella, una cancelacion por
+     * `statement_timeout` podia salir como `500` en vez de como el `422` que esta
+     * clase promete.
+     */
+    private function wasCancelled(Throwable $exception): bool
     {
-        return $failure instanceof QueryException && $failure->getCode() === self::QUERY_CANCELED;
+        return $exception instanceof QueryException
+            && ($exception->errorInfo[0] ?? null) === self::QUERY_CANCELED;
     }
 }

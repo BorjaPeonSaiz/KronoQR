@@ -93,22 +93,44 @@ final class SettingsPolicy
 
     /**
      * Si ademas puede tocar una clave **reservada al cliente** (tarea 3.5,
-     * RF-AT-12; ampliada en la 3.12, RF-PR-05, y en la 3.13, RF-IN-08).
+     * RF-AT-12; ampliada en la 3.12, RF-PR-05, en la 3.13, RF-IN-08, y en el
+     * cierre de la Fase 3, RF-PR-06).
      *
      * Son las que no deciden «como funciona el producto» sino **de que responde
-     * el hotel, a donde van los datos de su gente y con que cifra se juzga el
-     * propio producto**. Hoy son tres y por tres motivos distintos:
+     * el hotel, a donde van los datos de su gente, con que cifra se juzga el
+     * propio producto y si se vigila el fichaje por cuenta de otro**. Hoy son
+     * cinco y por cuatro motivos distintos:
      *
      * | Clave | Que decide |
      * |---|---|
      * | `ATTENDANCE_BREAK_CLOCKING` | Que jornadas se marcan: reactiva o suspende RN-12 (RF-AT-12). |
      * | `WEEKLY_SUMMARY_EMAIL` | Que cada lunes salgan por SMTP nombres y horas de la plantilla hacia buzones (RF-PR-05). |
      * | `BASELINE_MANUAL_HOURS_PER_MONTH` | El denominador declarado del «−80 % de carga administrativa» del §1.3, que el sistema no puede medir (RF-IN-08). |
+     * | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | Si se detecta el fichaje por cuenta de otro: **cero apaga la coincidencia de quiosco** (RF-PR-06). |
+     * | `ATTENDANCE_PATTERN_MIN_REPEATS` | Cuanto tiene que repetirse un patron antes de abrir la incidencia; subirlo apaga el hallazgo por la via lenta (RF-PR-06). |
      *
      * El fabricante configura la instalacion y diagnostica; no decide el
      * cumplimiento de su cliente, no enciende una salida de datos personales de
-     * su plantilla y **no escribe la cifra con la que se argumenta su propia
-     * renovacion** (ADR-020, regla dura 16).
+     * su plantilla, **no escribe la cifra con la que se argumenta su propia
+     * renovacion** y **no apaga la deteccion de fichajes por cuenta de otro**
+     * (ADR-020, regla dura 16).
+     *
+     * ## Las dos ultimas apagan la mitigacion QUE SUSTITUYE A LA BIOMETRIA
+     *
+     * ADR-009 descarta la biometria, y con una tarjeta fisica nada impide que una
+     * persona fiche por otra: lo unico que lo detecta a posteriori es el patron de
+     * RF-PR-06 —dos fichajes de personas distintas separados por segundos en el
+     * mismo quiosco, repetidos varios dias—. La ventana a `0` lo apaga por
+     * completo, y sin ninguna señal: no falla nada, no se deja de escribir ningun
+     * dato, simplemente no vuelve a aparecer un hallazgo. Un actor de soporte que
+     * pudiera moverla dejaria al hotel sin el unico control que tiene sobre el
+     * fichaje por cuenta de otro, desde fuera y sin que nadie lo notara.
+     *
+     * `ATTENDANCE_MIN_TRANSIT_SECONDS` **no entra**, y la diferencia es de que
+     * lado esta el umbral: ese decide cuando un mismo empleado no puede haber
+     * llegado de un quiosco a otro (RN-16) y es un parametro del edificio —la
+     * distancia entre dos puertas—, no una decision sobre si se vigila. El doc 07
+     * §6 ya acepta el ajuste operativo de los umbrales de fichaje por el soporte.
      *
      * ## La tercera es la unica en la que el fabricante tiene interes propio
      *

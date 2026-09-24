@@ -45,6 +45,8 @@ de actividades de tratamiento (art. 30 RGPD):
   centro, departamento, fechas de alta y baja. El correo es **opcional**.
 - Marcas de tiempo de entrada y salida, su origen (tarjeta QR o PIN) y el
   dispositivo desde el que se registraron.
+- Ausencias: tipo, fechas, nota opcional, versiones y anulaciones.
+- Datos de contrato: horas pactadas, tipo de jornada y vigencia.
 - Registro de accesos y de acciones con relevancia legal (`audit_log`).
 
 El **cuadro de impacto** ([`guia-rrhh.md`](guia-rrhh.md) §6.6) no añade nada a
@@ -57,7 +59,10 @@ persona ni por departamento—, compatible con la finalidad del registro.
 - **Nada biométrico** (ADR-009). Ni huella, ni cara, ni voz. No es una opción
   desactivada: no existe.
 - **Nada de geolocalización** por persona.
-- **Ningún dato de categoría especial** del art. 9 RGPD.
+- **Una sola categoría especial**, y solo si la usas: el tipo «Baja médica» del
+  registro de ausencias y la nota que se escriba junto a él son **datos
+  relativos a la salud** (art. 9 RGPD). Ver §4. Ningún otro dato del producto
+  lo es.
 
 **Base jurídica**: cumplimiento de una obligación legal del empleador
 (art. 6.1.c RGPD, en relación con el art. 34.9 ET). **No es consentimiento**, y
@@ -136,10 +141,15 @@ hacérsela.
 recomendable.** Los factores que disparan el riesgo alto no están: no hay
 biometría (ADR-009: no es una opción desactivada, no existe), no hay
 geolocalización por persona, no hay decisiones automatizadas con efectos sobre
-nadie, y los datos no salen de tu infraestructura —con la única excepción del
-correo de incidencias descrito arriba—. Lo que queda es el dato mínimo —quién
+nadie, y los datos no salen de tu infraestructura —con la excepción de los
+**dos correos** descritos arriba—. Lo que queda es el dato mínimo —quién
 ficha, cuándo y en qué dispositivo— tratado con la base jurídica del art.
-6.1.c.
+6.1.c. **Y desde que se registran ausencias hay una categoría especial en
+juego** —el tipo «Baja médica» y su nota—, y eso pesa en el análisis: las
+directrices WP248 cuentan los datos sensibles entre los criterios que suman
+hacia el riesgo alto. Descríbelo en la evaluación: quién lo ve, con qué alcance
+y por qué. Las preguntas que hay que llevarle a la asesoría antes de cerrarla
+están en [`preguntas-asesoria.md`](preguntas-asesoria.md).
 
 **Hay un tratamiento que tiene que entrar en ese análisis con nombre propio: la
 detección automática de patrones de uso de credencial.** Cada madrugada el
@@ -232,6 +242,8 @@ Política por tipo de dato, que es la que aplica el sistema:
 | Datos de contrato (horas pactadas, tipo de jornada, vigencia) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no los purga |
 | Ausencias (tipo, fechas, nota, versiones y anulaciones) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no las purga. **Contienen dato de salud** |
 | Registro de envíos del resumen semanal (`weekly_summary_deliveries`) | **Sin purga automática** | Guarda recuentos y la cuenta destinataria; **ningún dato de la plantilla** |
+| Ficheros de informes generados en segundo plano (`report_exports`): horas nominales de la plantilla, listos para descargar | **7 días** de serie | Tu instalación (`REPORTING_EXPORT_RETENTION_DAYS`, [`configuracion.md`](configuracion.md) §6.25). Se descargan con un enlace de un solo uso; al vencer, el fichero se borra y la anotación de que existió se queda sin identificadores de personas ni alcance |
+| ZIP de la exportación íntegra (§7 quater) | **7 días** de serie | Tu instalación (`PRODUCT_DATA_EXPORT_RETENTION_DAYS`). Contiene todos los datos personales de la instalación; mientras exista, su custodia es tuya. La anotación de que existió se conserva |
 
 **El correo del resumen semanal ya entregado es una copia fuera del producto.**
 Vive en el buzón del responsable, se puede reenviar e imprimir, y **su plazo de
@@ -487,3 +499,20 @@ entrega con el contrato del producto; si no lo tienes firmado, pídelo **antes**
 de marcar la casilla o de conceder el acceso, no después. El paquete
 anonimizado no lo necesita: es la vía normal de soporte, y por eso es la que
 sale por defecto.
+
+---
+
+## 9. Lo que hay que preguntarle a tu asesoría, y quién vigila la norma
+
+Varias de las obligaciones de esta guía terminan en «confírmalo con tu
+asesoría»: el plazo de conservación de los datos de contrato y de las ausencias,
+la base jurídica del dato de salud, si procede la EIPD, la admisibilidad de la
+detección de patrones y de su uso disciplinario, y el aviso diario por correo.
+Están recogidas, **cerradas y con lo que se hace con cada respuesta**, en
+[`preguntas-asesoria.md`](preguntas-asesoria.md): ocho preguntas, ni una más.
+Llévaselas juntas; es una sola reunión.
+
+Y la norma cambia sin avisar al producto. Quién la mira, cada cuánto y por
+dónde entra un cambio —por el perfil de cumplimiento, nunca por el código— está
+en el runbook [`../runbooks/vigilancia-normativa.md`](../runbooks/vigilancia-normativa.md),
+que viaja en tu paquete y exige una persona con nombre.

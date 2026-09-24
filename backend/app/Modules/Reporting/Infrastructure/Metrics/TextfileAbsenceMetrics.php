@@ -7,6 +7,7 @@ namespace App\Modules\Reporting\Infrastructure\Metrics;
 use App\Modules\Reporting\Application\Port\AbsenceMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\TextfileExposition;
 use DateTimeImmutable;
+use DateTimeZone;
 
 /**
  * Publica `absences_current{type}` para el colector *textfile* de
@@ -25,14 +26,18 @@ use DateTimeImmutable;
  * desaparece es indistinguible de una que nunca tuvo nada, y «hoy no hay ninguna
  * baja medica» es justo lo que se mira.
  *
- * **Una sola serie, sin la hermana de «que dia se midio».** La de cumplimiento
- * publica ademas `compliance_metrics_week_start_seconds` para que unas cifras
- * congeladas no se lean como una semana tranquila, y aqui haria el mismo papel —
- * pero el §8.2 declara **solo** `absences_current{type}`, y una serie que el
- * documento no nombra es exactamente el hueco que `MetricsCatalogueTest` existe
- * para cerrar. El dia que se quiera, se añade la fila al §8.2 primero; la fecha
- * medida entra mientras tanto por `{@see AbsenceMetrics::publish()}` y se queda
- * en el log del comando.
+ * **Con la hermana de «que dia se midio», resto del cierre de la Fase 3.**
+ * `absences_metrics_day_seconds` es la fecha civil medida (medianoche UTC),
+ * mismo papel y mismo tipo de valor que `compliance_metrics_week_start_seconds`
+ * (y misma tecnica que `adoption_metrics_work_date_seconds`, que la calcula
+ * igual desde una fecha `AAAA-MM-DD`): sin ella, un `reporting:absence-metrics`
+ * que dejo de correr se lee en el cuadro exactamente igual que un mes sin
+ * ausencias. **Una sola serie de frescura y no dos** —al contrario que
+ * adopcion, que ademas publica cuando corrio—: aqui basta con saber que dia
+ * describen las cuatro etiquetas, que es la misma pregunta que resuelve la de
+ * cumplimiento, y por eso seguimos el precedente de una sola serie.
+ * **Sigue sin alerta** (§8.4): es un indicador de RRHH, no hay runbook que
+ * sostenga despertar a nadie por el.
  *
  * **Ni un nombre, ni un `employee_uuid`, ni un departamento** (regla dura 21).
  * El tipo de ausencia es dato de salud cuando dice «baja medica», y aqui va sin
@@ -60,6 +65,23 @@ final readonly class TextfileAbsenceMetrics implements AbsenceMetrics
             $lines[] = 'absences_current{type="'.TextfileExposition::escapeLabel($type).'"} '.$people;
         }
 
+        $lines[] = '# HELP absences_metrics_day_seconds Fecha civil medida por absences_current, a medianoche UTC (RF-GP-04). Delata una tarea programada que dejo de ejecutarse: sin ella, un mes sin recalculo se lee igual que un mes sin ausencias.';
+        $lines[] = '# TYPE absences_metrics_day_seconds gauge';
+        $lines[] = 'absences_metrics_day_seconds '.$this->midnightOf($onDate);
+
         TextfileExposition::write(self::FILE, $lines);
+    }
+
+    /**
+     * La fecha civil medida, como instante, para que sea un numero y no una
+     * etiqueta (mismo motivo y misma tecnica que
+     * `TextfileAdoptionMetrics::midnightOf()`: como etiqueta seria una serie
+     * nueva cada dia).
+     */
+    private function midnightOf(string $onDate): int
+    {
+        $midnight = DateTimeImmutable::createFromFormat('!Y-m-d', $onDate, new DateTimeZone('UTC'));
+
+        return $midnight === false ? 0 : $midnight->getTimestamp();
     }
 }

@@ -35,9 +35,9 @@ use App\Modules\Shared\Domain\ValueObject\ErrorSource;
  *
  * El adaptador traga cualquier fallo de Redis: se llama desde el camino de un
  * error que ya ocurrio, y perder un contador es infinitamente mas barato que
- * convertir un error en dos (regla dura 19). El endpoint `/metrics` que publica
- * la serie es de la tarea 3.1; hasta entonces se acumula y la leen el paquete de
- * diagnostico y las pruebas.
+ * convertir un error en dos (regla dura 19). `/metrics` publica la serie
+ * desde la tarea 3.1, con `MetricCatalogue` y `MetricsCatalogueTest` contra
+ * el doc 02 §8.2.
  */
 interface ErrorMetrics
 {

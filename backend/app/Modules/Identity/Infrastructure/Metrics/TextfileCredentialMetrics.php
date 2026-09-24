@@ -18,10 +18,11 @@ use DateTimeImmutable;
  * credentials_pending_print{site="1",site_name="Hotel Marina"}
  * ```
  *
- * **Por que un fichero y no un contador en memoria.** `/metrics` lo expone la
- * aplicacion a partir de la tarea 3.1. Hasta entonces, quien produce estos
- * numeros es un comando programado que corre y termina, y un contador en memoria
- * de un proceso que termina no lo lee nadie. Es el mismo mecanismo que usan las
+ * **Por que un fichero y no un contador en memoria.** `/metrics` existe desde
+ * la tarea 3.1 (`MetricCatalogue` y `MetricsCatalogueTest` contra el doc 02
+ * §8.2), pero estas dos series no pasan por ahi: quien produce estos numeros
+ * es un comando programado que corre y termina, y un contador en memoria de
+ * un proceso que termina no lo lee nadie. Es el mismo mecanismo que usan las
  * metricas de la copia y las de la cadena de auditoria, y por la misma razon.
  *
  * **Se escriben SIEMPRE, tambien cuando todo esta a cero.** Una serie que

@@ -242,7 +242,7 @@ endif
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
-        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e load-test clean changelog changelog-check tool-versions \
+        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate e2e load-test dast clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill observability-check
 
 help: ## Muestra esta ayuda
@@ -273,6 +273,7 @@ help: ## Muestra esta ayuda
 	@echo "  make trivy-image      Trivy: postgres:ci y app:ci ya construidas (informe)"
 	@echo "  make secrets-scan     gitleaks sobre el historico completo (bloqueante)"
 	@echo "  make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json"
+	@echo "  make dast             ZAP baseline manual contra 'make up' (informe, fuera de ci.yml)"
 	@echo "  make build-ci-images  Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx)"
 	@echo "  make release-gate     Falla si la entrega saldria sin clave publica del fabricante"
 	@echo "  make nginx-smoke      Arranca la imagen del borde sola y pide las cinco rutas"
@@ -1059,6 +1060,35 @@ load-test: ## Prueba de carga k6 (RNF-P-06, RQ-08): 50 fichajes/s con p95 < 150 
 	  $(if $(K6_COMPOSE_ARGS),K6_COMPOSE_ARGS='$(K6_COMPOSE_ARGS)') \
 	  $(if $(NETWORK),NETWORK=$(NETWORK)) \
 	  bash load-tests/k6/run.sh
+
+#--- DAST (doc 07 §6, "Sin DAST") ---------------------------------------------
+# Aplazado con dueno y fecha: manual, FUERA de ci.yml (presupuesto de ①-③ en
+# doc 02 §9.2), dueno devops-observabilidad, cierre de la Fase 3.
+#
+# `:stable`, sin fijar version como con Prometheus/Alertmanager (PROMTOOL,
+# AMTOOL de arriba): en una herramienta de seguridad el reglero actualizado
+# importa mas que la reproducibilidad exacta entre ejecuciones, y esta no es
+# una puerta bloqueante que la reproducibilidad tenga que sostener.
+ZAP_IMAGE := ghcr.io/zaproxy/zaproxy:stable
+DAST_DATE := $(shell date -u +%Y-%m-%d)
+DAST_EVIDENCE_DIR := docs/seguridad/evidencia
+
+dast: ## ZAP baseline manual contra 'make up' (informe, fuera de ci.yml). Dueno: devops-observabilidad
+	@docker network inspect kronoqr-app >/dev/null 2>&1 || \
+	  (echo "[make] La pila de desarrollo no esta arriba: ejecuta 'make up' primero." && exit 1)
+	@mkdir -p $(DAST_EVIDENCE_DIR)
+	MSYS_NO_PATHCONV=1 docker run --rm --network kronoqr-app \
+	  -v "$(CURDIR)/infra/security/zap:/zap/wrk/config:ro" \
+	  -v "$(CURDIR)/$(DAST_EVIDENCE_DIR):/zap/wrk/out:rw" \
+	  $(ZAP_IMAGE) zap-baseline.py \
+	  -t https://nginx:8443/api/v1/health \
+	  -c /zap/wrk/config/zap-baseline.conf \
+	  -J out/dast-$(DAST_DATE).json \
+	  -d \
+	  -I
+	@echo "[make] Informe JSON en $(DAST_EVIDENCE_DIR)/dast-$(DAST_DATE).json"
+	@echo "[make] Escribe el triaje humano en $(DAST_EVIDENCE_DIR)/dast-$(DAST_DATE).md (docs/runbooks/triaje-hallazgos-seguridad.md)."
+	@echo "[make] make dast NO bloquea nada: es informativo, no forma parte de ci.yml."
 
 #--- Versionado (doc 02 §10.5) ------------------------------------------------
 # El CHANGELOG se GENERA de los mensajes de commit convencionales, no se escribe

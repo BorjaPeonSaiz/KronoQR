@@ -263,7 +263,8 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
    WHERE action = 'personal_data.accessed'
      AND payload->>'dataset' IN ('employee_directory','kiosk_roster','credential_status',
                                  'incident_board','period_report','live_presence',
-                                 'compliance_summary','absence_register','weekly_summary')
+                                 'compliance_summary','absence_register','weekly_summary',
+                                 'payroll_export')
      AND occurred_at BETWEEN '<inicio de la ventana>' AND '<fin de la ventana>'
    ORDER BY occurred_at;"
 ```
@@ -286,6 +287,7 @@ centro: si el padrón se descargó, esa persona estaba dentro.
 | `incident_board` | Bandeja de incidencias | No (recuento y alcance) |
 | `incident_digest` | **Resumen que sale por correo** (RF-PR-01) | **Sí**: `employee_uuids` |
 | `weekly_summary` | **Resumen semanal que sale por correo** al responsable de departamento (RF-PR-05) | **Solo si el alcance tiene 50 personas o menos**: `employee_uuids`. Por encima, `employees` (recuento), `scope`, `manager_user_id` y `week_start`, sin lista: se resuelve por departamento con la consulta (b) |
+| `payroll_export` | **Fichero preparado para importar en el programa de nómina** (RF-IN-06): una fila por persona y periodo con horas trabajadas, contratadas, exceso y ausencias. **Sale de la instalación hacia otro sistema** | No (recuento, `format`, alcance). Lo escriben la descarga directa y la generación en diferido: en el segundo caso, el fichero y su enlace de un solo uso dejan además los asientos `report_export.*` (§4.2) |
 | `employee_workdays` | Registro horario de una persona | **Sí**: `employee_uuid` |
 | `period_report` | Informe de periodo, en pantalla o descargado | No (recuento, `format`, alcance) |
 | `live_presence` | Presencia en vivo del panel | No. **Agrupado por ventana de 15 min** |
@@ -334,7 +336,8 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
          ip, user_agent
     FROM audit_log
    WHERE actor_type = 'user' AND actor_id = $ACTOR_ID
-     AND action IN ('personal_data.accessed','legal_export.generated','access.denied')
+     AND action IN ('personal_data.accessed','legal_export.generated','access.denied',
+                    'report_export.requested','report_export.generated','report_export.downloaded')
    ORDER BY occurred_at;"
 ```
 
@@ -344,15 +347,27 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
    lleva `period_from`, `period_to`, `scope`, `employees_exported` y los recuentos
    de filas: eso es, literalmente, el alcance de la brecha. El fichero está en
    `storage/app/legal-exports/` y **no lo limpia ningún cron**: compruébalo.
-2. `personal_data.accessed` con `dataset = period_report` y un `format` de
-   descarga — se llevaron un fichero con horas de plantilla, no una pantalla.
-3. `dataset = incident_digest` o `weekly_summary` — **salió por correo**, a otra
+2. `report_export.requested` → `report_export.generated` →
+   `report_export.downloaded` — **un informe en diferido** (horas por periodo o
+   salida a nómina, `kind`) **se escribió en disco y alguien se lo llevó**. El
+   asiento de generación lleva `sha256`, `size_bytes`, `row_count`, `scope` y
+   el recuento `employees`; el de descarga, la misma huella y `download_count`.
+   Dos cautelas: **el actor de los tres es quien pidió el informe**, que es a
+   quien se le entregó el enlace de un solo uso, **no necesariamente quien
+   pulsó la descarga** —si el enlace se reenvió, el `ip`/`user_agent` de
+   `downloaded` es la única pista—; y un `requested` sin `downloaded` dentro de
+   `REPORTING_EXPORT_RETENTION_DAYS` significa que el fichero se purgó sin
+   salir, y al purgarse la fila perdió los identificadores de personas.
+3. `personal_data.accessed` con `dataset = period_report` o `payroll_export` y
+   un `format` de descarga — se llevaron un fichero con horas de plantilla, no
+   una pantalla; en el caso de nómina, hacia otro sistema.
+4. `dataset = incident_digest` o `weekly_summary` — **salió por correo**, a otra
    máquina. Los `employee_uuids` afectados están en el asiento; en
    `weekly_summary` **solo cuando el alcance tenía 50 personas o menos**. Si el
    asiento trae `employees` y `scope` sin lista, **no concluyas que los datos
    de una persona no salieron** porque no encuentres su identificador: resuelve
    el departamento del responsable con la consulta (b).
-4. `dataset = employee_directory` o `kiosk_roster` con `record_count` alto —
+5. `dataset = employee_directory` o `kiosk_roster` con `record_count` alto —
    alguien tuvo la plantilla entera delante.
 
 **Y el otro lado del mismo hilo:** qué autoridad tenía esa cuenta y quién se la

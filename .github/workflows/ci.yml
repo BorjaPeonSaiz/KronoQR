@@ -64,6 +64,11 @@ on:
   # se comprueba es una rama que llega a main sin comprobar.
   push:
   workflow_dispatch:
+    inputs:
+      apk_index_stamp:
+        description: "Fuerza el refresco de la capa de paquetes Alpine de las imagenes (runbook triaje-hallazgos-seguridad.md, punto 1): un valor nuevo, p. ej. la salida de `date -u +%s`, reconstruye la capa aunque la semana ISO no haya cambiado. Vacio = sello semanal de make."
+        required: false
+        default: ""
   schedule:
     # Dispara UNICAMENTE el job `coverage` (ver su comentario): todos los
     # demas jobs de este fichero llevan `if: github.event_name != 'schedule'`
@@ -873,7 +878,9 @@ jobs:
         # objetivo). Aqui, y solo aqui, con BUILDX_CACHE=gha: es el unico job
         # que construye las DOS imagenes en cada push y el unico que tiene
         # justo encima el paso de `ghaction-github-runtime`.
-        run: make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha
+        env:
+          APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
+        run: make build-ci-images IMAGES="postgres app" BUILDX_CACHE=gha ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
 
       - name: Trivy fs — dependencias, Dockerfiles y secretos del repo (bloqueante)
         id: trivy_fs
@@ -1260,7 +1267,9 @@ jobs:
         run: make release-gate
 
       - name: Construir las tres imagenes de entrega
-        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha
+        env:
+          APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
+        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
 
       - name: El borde sirve las tres SPA (comprobacion de 30 s, antes de instalar nada)
         # ADELANTA EL HALLAZGO, no lo duplica. Los escenarios C y siguientes ya
@@ -1731,6 +1740,8 @@ jobs:
         run: git worktree add --detach anterior "${{ steps.anterior.outputs.ref }}"
 
       - name: Construir las imagenes de la version anterior
+        env:
+          APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
         if: steps.anterior.outputs.skip != 'true'
         # Con SU Makefile y SU arbol: son las imagenes que ese cliente tiene en
         # el disco. Se etiquetan como las nombra su compose y se hace ANTES de
@@ -1738,17 +1749,19 @@ jobs:
         run: |
           set -euo pipefail
           old="${{ steps.anterior.outputs.old_version }}"
-          make -C anterior build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha APP_VERSION="${old}"
+          make -C anterior build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha APP_VERSION="${old}" ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
           docker tag kronoqr/app:ci      "kronoqr/php:${old}"
           docker tag kronoqr/postgres:ci "kronoqr/postgres:${old}"
           docker tag kronoqr/nginx:ci    "kronoqr/nginx:${old}"
 
       - name: Construir las imagenes de esta version
+        env:
+          APK_INDEX_STAMP_OVERRIDE: ${{ inputs.apk_index_stamp }}
         if: steps.anterior.outputs.skip != 'true'
         run: |
           set -euo pipefail
           new="${{ steps.anterior.outputs.new_version }}"
-          make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha APP_VERSION="${new}"
+          make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha APP_VERSION="${new}" ${APK_INDEX_STAMP_OVERRIDE:+APK_INDEX_STAMP=$APK_INDEX_STAMP_OVERRIDE}
           docker tag kronoqr/app:ci      "kronoqr/php:${new}"
           docker tag kronoqr/postgres:ci "kronoqr/postgres:${new}"
           docker tag kronoqr/nginx:ci    "kronoqr/nginx:${new}"

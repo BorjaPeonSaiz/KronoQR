@@ -167,8 +167,10 @@ final class ReportingServiceProvider extends ServiceProvider
          *
          * Fichero para el colector *textfile* de `node-exporter`, como las de
          * credenciales y las de la cadena de auditoria, y por el mismo motivo:
-         * `/metrics` lo expone la tarea 3.1, y hasta entonces quien produce estos
-         * numeros es un comando programado que corre y termina.
+         * `/metrics` existe desde la tarea 3.1 (`MetricCatalogue` y
+         * `MetricsCatalogueTest` contra el doc 02 §8.2), pero estas series no
+         * pasan por ahi: quien las produce es un comando programado que corre
+         * y termina.
          */
         $this->app->bind(PresenceMetrics::class, TextfilePresenceMetrics::class);
 

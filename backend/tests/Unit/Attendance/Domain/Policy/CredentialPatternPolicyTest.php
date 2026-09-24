@@ -442,6 +442,121 @@ it('recorta el rotulo del quiosco a lo que admite el contrato', function (): voi
 })->group('RF-PR-06');
 
 // -----------------------------------------------------------------------------
+// Los tres bordes que la 3.11 dejo «revisados a mano» (cierre de la Fase 3).
+//
+// Los tres se habian mirado leyendo el codigo y ninguno tenia prueba. Van aqui,
+// escritos como datasets, porque los tres son la misma clase de fallo: un
+// recuento que se hace sobre la etiqueta equivocada —el dia civil, el segundo
+// del reloj de pared, el quiosco— y que solo se nota cuando la bandeja se llena
+// de indicios que no existen, o cuando se queda vacia de uno que si.
+// -----------------------------------------------------------------------------
+
+/**
+ * Las coincidencias de ANA y BRUNO a caballo de la medianoche civil, `$nights`
+ * noches seguidas.
+ *
+ * ANA escanea antes de las doce y BRUNO despues, asi que cada noche deja DOS
+ * dias civiles distintos en juego y UNA sola coincidencia.
+ *
+ * @return list<CredentialScan>
+ */
+function coincidingMidnights(int $nights, string $anaWallClock = '23:59:58', string $brunoWallClock = '00:00:01'): array
+{
+    $scans = [];
+
+    for ($night = 1; $night <= $nights; $night++) {
+        $scans[] = kioskScan(ANA, sprintf('2026-03-%02d ', $night).$anaWallClock);
+        $scans[] = kioskScan(BRUNO, sprintf('2026-03-%02d ', $night + 1).$brunoWallClock);
+    }
+
+    return $scans;
+}
+
+it('cuenta como UN dia la coincidencia que cruza la medianoche civil', function (): void {
+    // TRES NOCHES SON TRES DIAS, NO SEIS. Cada noche deja dos fechas civiles
+    // —ANA el 1 a las 23:59:58 y BRUNO el 2 a las 00:00:01— y el recuento de
+    // «dias distintos con coincidencia» se hace sobre la jornada del escaneo que
+    // ABRE la coincidencia (regla dura 4: lo que empieza antes de medianoche
+    // pertenece al dia en que empezo).
+    //
+    // Si se contara la fecha de los dos escaneos, el turno de noche llegaria al
+    // umbral de tres dias en dos noches: un centro con relevo a las doce veria
+    // la bandeja llenarse de indicios que nadie ha ganado.
+
+    // arrange / act
+    $anomalies = coincidencesIn(patternPolicy(window: 10, repeats: 3), coincidingMidnights(3));
+
+    // assert
+    expect($anomalies)->toHaveCount(2)
+        ->and($anomalies[0]->context['coincidence_days'])->toBe(3)
+        // Y el hallazgo queda anclado en la jornada de la ULTIMA noche, que es la
+        // del 3 y no la del 4: la coincidencia empezo el dia 3.
+        ->and($anomalies[0]->workDate->isoDate)->toBe('2026-03-03');
+})->group('RN-16', 'RF-PR-06');
+
+it('no llega al umbral con dos noches aunque toquen tres fechas civiles', function (): void {
+    // El reverso, y el que demuestra que el recuento no esta inflado: dos noches
+    // tocan el 1, el 2 y el 3 del calendario. Si el dia se contara por fecha de
+    // escaneo, esto abriria incidencia con `MIN_REPEATS = 3`. No la abre.
+
+    // arrange / act
+    $anomalies = coincidencesIn(patternPolicy(window: 10, repeats: 3), coincidingMidnights(2));
+
+    // assert
+    expect($anomalies)->toBe([]);
+})->group('RN-16', 'RF-PR-06');
+
+it('mide la ventana sobre el instante real tambien cuando el hueco cruza la medianoche', function (string $anaWallClock, bool $expected): void {
+    // LA VENTANA SE MIDE EN SEGUNDOS DE VERDAD, no restando horas de reloj de
+    // pared. Con 10 s de ventana: 23:59:55 -> 00:00:04 son NUEVE segundos y
+    // cuentan; 23:59:54 -> 00:00:04 son DIEZ y no, porque el limite no pertenece
+    // a la ventana.
+    //
+    // La aritmetica ingenua sobre la hora local daria en los dos casos una
+    // diferencia de veintitantas horas y no veria ninguna coincidencia: el turno
+    // de noche seria el unico que nunca dispara este hallazgo, que es justo
+    // donde el prestamo de tarjeta es mas facil de esconder.
+
+    // arrange / act
+    $anomalies = coincidencesIn(
+        patternPolicy(window: 10, repeats: 3),
+        coincidingMidnights(3, anaWallClock: $anaWallClock, brunoWallClock: '00:00:04'),
+    );
+
+    // assert
+    expect($anomalies !== [])->toBe($expected);
+})->with([
+    'nueve segundos a caballo de las doce cuentan' => ['23:59:55', true],
+    'diez segundos no: el limite no pertenece a la ventana' => ['23:59:54', false],
+])->group('RN-16', 'RF-PR-06');
+
+it('no suma los dias de dos quioscos distintos para llegar al umbral', function (int $enRecepcion, int $enCocina, bool $expected): void {
+    // RF-PR-06 habla de coincidencia sistematica **en el mismo quiosco**, y el
+    // par se agrupa por contraparte Y dispositivo. Dos dias en recepcion y dos
+    // en cocina son cuatro dias de calendario y NINGUN patron: son dos habitos
+    // de dos dias, y ninguno llega a tres.
+    //
+    // Sin esta prueba, agrupar solo por contraparte pasaria inadvertido: el
+    // recuento seria mayor, la incidencia se abriria antes y el contexto
+    // senalaria un quiosco en el que el par casi no coincidio.
+
+    // arrange
+    $scans = [
+        ...coincidingDays($enRecepcion, 4, deviceId: 7, from: 1),
+        ...coincidingDays($enCocina, 4, deviceId: 8, from: $enRecepcion + 1),
+    ];
+
+    // act
+    $anomalies = coincidencesIn(patternPolicy(window: 10, repeats: 3), $scans);
+
+    // assert
+    expect($anomalies !== [])->toBe($expected);
+})->with([
+    'dos dias en recepcion y dos en cocina: cuatro dias y ningun patron' => [2, 2, false],
+    'tres dias en recepcion y uno en cocina: el patron esta en recepcion' => [3, 1, true],
+])->group('RN-16', 'RF-PR-06');
+
+// -----------------------------------------------------------------------------
 // La bandeja manda: lo abierto silencia y lo resuelto reinicia la cuenta.
 // -----------------------------------------------------------------------------
 
