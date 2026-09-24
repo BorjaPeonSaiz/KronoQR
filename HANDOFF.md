@@ -287,8 +287,7 @@ en el runner frente al techo de 586; 19,5 fichajes/s). **Escrito en el acta lo q
 verifica por delegación (sin id en `requisitos.yaml`); RS-11 está preparada, no cumplida (el tercero); RNF-P-06 sin cifra absoluta en
 hardware de referencia.
 
-**Siguiente acción:** commit único `chore(cierre-fase-3): …`, push, CI manual y PR contra `main` con *merge commit*; después un
-`docs(handoff)` con los números. Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
+**Siguiente acción:** integrar la **PR #81** (commit `0010a45` más `2ab36db` y `2d4c589`, que dejaron la CI en verde: `libexpat` 2.8.5-r0 en la capa Alpine cacheada de `app` vía la entrada nueva `apk_index_stamp` del disparo manual, y un enlace del runbook de vigilancia que no viajaba en el paquete; **CI manual 35990497391 en verde en todos los jobs**) con *merge commit*. Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
 venta** (condiciones del plan 06): validación jurídica por la asesoría laboral con `docs/cliente/preguntas-asesoria.md`; designar al
 responsable de vigilancia normativa (`docs/runbooks/vigilancia-normativa.md`); prueba de campo del hardware (12 h en tablet real);
 contraste de costes de impresión; instalación limpia por una persona ajena; pasada de k6 en hardware de referencia (`INSTANCES=10`);
