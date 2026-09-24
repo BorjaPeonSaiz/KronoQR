@@ -13,6 +13,7 @@
       "live": "Presencia",
       "incidents": "Incidencias",
       "reports": "Informes",
+      "adoptionDashboard": "Impacto y adopción",
       "payrollExport": "Nómina",
       "compliance": "Cumplimiento",
       "complianceProfile": "Perfil de cumplimiento",
@@ -622,6 +623,13 @@
       "previewCaption": "Lo que cambia en este tramo"
     }
   },
+  "chartWithTable": {
+    "viewAsTable": "Ver como tabla",
+    "viewAsChart": "Ver como gráfico",
+    "unavailable": "El gráfico no está disponible en este navegador. Los mismos datos siguen en la tabla.",
+    "category": "Categoría",
+    "noData": "Sin datos"
+  },
   "reports": {
     "legalExport": {
       "heading": "Exportación para la Inspección de Trabajo",
@@ -703,6 +711,99 @@
         "requesting": "Pidiendo la generación…",
         "requested": "Exportación pedida. Aparecerá en el bloque de exportaciones en cuanto empiece a procesarse.",
         "seeExports": "Ver las exportaciones en segundo plano"
+      }
+    },
+    "adoption": {
+      "title": "Impacto y adopción",
+      "subtitle": "Qué está consiguiendo el sistema, con comparación contra el periodo anterior: cuánto se registra completo, cómo se ficha, cuánto se corrige a mano y cuánto tarda en resolverse una incidencia. Es el cuadro que responde a «¿esto está sirviendo?» con datos.",
+      "loading": "Calculando el cuadro…",
+      "generate": "Calcular",
+      "filters": {
+        "legend": "Periodo del cuadro",
+        "from": "Desde",
+        "to": "Hasta"
+      },
+      "generatedAt": "Calculado el {at} · zona horaria del centro: {zone}",
+      "previousPeriod": "Periodo anterior de comparación: {from} — {to}",
+      "noPreviousComparable": "Sin periodo anterior comparable.",
+      "deltaPercentagePoints": "{value} pp",
+      "licenseRequired": "El cuadro de impacto y adopción no está incluido en tu licencia actual.",
+      "rangeTooLarge": "Este periodo no cabe en una respuesta al momento (máximo 366 días) y el cuadro de impacto no tiene generación en segundo plano. Prueba con un rango más corto.",
+      "status": {
+        "within": "Dentro del objetivo",
+        "outside": "Fuera del objetivo"
+      },
+      "noData": "Sin datos en el periodo",
+      "target": {
+        "atLeast": "Objetivo: ≥ {target}",
+        "atMost": "Objetivo: ≤ {target}",
+        "reduction": "Objetivo de referencia: −{value} % (no verificable: el sistema no midió el proceso anterior)"
+      },
+      "indicators": {
+        "workdays_complete_ratio": {
+          "label": "Jornadas con registro completo",
+          "help": "Porcentaje de jornadas del periodo con algún tramo en las que todos los tramos están cerrados."
+        },
+        "qr_scans_ratio": {
+          "label": "Fichajes por QR",
+          "help": "Porcentaje de los fichajes aceptados del periodo que entraron por tarjeta QR en el quiosco."
+        },
+        "manual_corrections_ratio": {
+          "label": "Correcciones sobre el total",
+          "help": "Correcciones manuales creadas en el periodo, sobre el total de fichajes aceptados del mismo periodo."
+        },
+        "clocking_availability_ratio": {
+          "label": "Disponibilidad del acto de fichar",
+          "help": "Fichajes atendidos sobre atendidos más intentos que el quiosco no pudo cursar, incluidos los resueltos por la cola sin conexión. No es el tiempo de servicio de la API."
+        },
+        "incident_resolution_mean_minutes": {
+          "label": "Tiempo medio de resolución de un turno sin cerrar",
+          "help": "Media de minutos entre la detección y la resolución de las incidencias de turno sin cerrar resueltas en el periodo."
+        },
+        "baseline_manual_minutes_per_month": {
+          "label": "Horas al mes consolidando hojas de horas",
+          "help": "Lo que el cliente declaró que le costaba consolidar hojas de horas a mano, antes del sistema."
+        }
+      },
+      "duration": "{hours} h {minutes} min",
+      "medianResolution": "Mediana: {hours}",
+      "originHeading": "Reparto de fichajes por origen",
+      "originVsPreviousHeading": "Fichajes por origen: periodo actual frente al anterior",
+      "origin": {
+        "qr_kiosk": "QR en quiosco",
+        "pin_kiosk": "PIN en quiosco",
+        "manual_admin": "Corrección manual",
+        "import": "Importación"
+      },
+      "currentSeries": "Periodo actual",
+      "previousSeries": "Periodo anterior",
+      "incidentsHeading": "Incidencias",
+      "incidentsOpen": "Incidencias abiertas hoy",
+      "openShiftFoto": "Foto de hoy, sin comparación con el periodo anterior.",
+      "credentialsHeading": "Credenciales",
+      "employeesWithoutCredential": "Empleados sin credencial entregada",
+      "hoursHeading": "Horas trabajadas frente a contratadas",
+      "workedHours": "Trabajadas",
+      "contractedHours": "Contratadas",
+      "availabilityOffline": "De ellas, resueltas sin servidor (cola sin conexión)",
+      "baselineDeclared": "Línea base declarada por el cliente antes de tener el sistema.",
+      "baselineNotDeclared": "No declarada: se indica en «Ajustes → Ajustes operativos».",
+      "criteria": {
+        "title": "Criterios de este cuadro",
+        "generated": "Calculado el {at} · zona horaria del centro: {timeZone}"
+      },
+      "export": {
+        "label": "Exportar este cuadro:",
+        "running": "Preparando la descarga en {format}…",
+        "done": "Descarga en {format} lista.",
+        "failed": "No se ha podido descargar el cuadro."
+      },
+      "announce": {
+        "results": "El cuadro de impacto y adopción se ha calculado."
+      },
+      "empty": {
+        "title": "No hay datos que mostrar en ese periodo",
+        "description": "No hay fichajes ni jornadas dentro de tu alcance en las fechas elegidas. Prueba con otro periodo."
       }
     },
     "table": {
@@ -1343,6 +1444,7 @@
     "weeklySummaryHeading": "Resumen semanal",
     "diagnosticsHeading": "Diagnóstico",
     "kioskHeading": "Quiosco",
+    "adoptionHeading": "Cuadro de impacto",
     "localesHeading": "Idiomas",
     "payrollHeading": "Salida a nómina",
     "payrollIntro": "El formato del fichero que exporta «Nómina» (RF-IN-07): qué columnas lleva, en qué orden, con qué separador y cómo se escriben las horas y las fechas. Un cliente con otro programa de nómina cambia esto, no el producto.",
@@ -1358,6 +1460,7 @@
       "weeklySummaryEmail": "Resumen semanal por correo",
       "kioskUpdateWindow": "Ventana de actualización del quiosco",
       "kioskUpdateQuietMinutes": "Minutos sin fichajes antes de actualizar",
+      "baselineManualHoursPerMonth": "Horas al mes consolidando hojas de horas antes del sistema",
       "localeDefault": "Idioma por defecto",
       "localeAvailable": "Idiomas disponibles",
       "payrollColumns": "Columnas del fichero",
@@ -1380,6 +1483,7 @@
       "weeklySummaryEmail": "Activado: cada lunes a las 06:00 UTC, cada responsable de departamento activo y con correo recibe la semana anterior de su ámbito y de nadie más: horas trabajadas, contratadas y desviación, días con actividad, ausencias y festivos. Exige tener la salida de correo del centro configurada y la funcionalidad incluida en la licencia; sin alguna de las dos, el envío se omite sin error.",
       "kioskUpdateWindow": "Franja en la que la tablet tiene permiso para instalar una versión nueva. Fuera de ella no se actualiza nunca, aunque la versión lleve días esperando; dentro, solo lo hace si además la cola de fichajes está vacía y no ha habido ningún escaneo reciente. Formato HH:MM-HH:MM; puede cruzar la medianoche (por ejemplo 23:00-02:00).",
       "kioskUpdateQuietMinutes": "Minutos sin ningún fichaje que la tablet exige, además de estar dentro de la ventana y con la cola vacía, antes de actualizarse. Cubre el turno que empieza antes de lo previsto; 0 deja solo las otras dos condiciones. Rango admitido: {minimum}–{maximum} minutos.",
+      "baselineManualHoursPerMonth": "Para el cuadro de impacto (RF-IN-08): cuánto tiempo al mes se dedicaba a consolidar hojas de horas antes de tener el sistema. Sirve de línea base para mostrar la reducción frente al objetivo del −80 %. 0 = no declarada: el cuadro deja el indicador vacío en vez de inventar una mejora.",
       "localeDefault": "Idioma con el que se sirven las tres aplicaciones y los documentos cuando nadie elige otro. Tiene que estar entre los idiomas disponibles.",
       "localeAvailable": "Idiomas que ofrece esta instalación. Al menos uno, y el idioma por defecto siempre tiene que quedar entre los marcados.",
       "payrollColumns": "Una columna por línea, en el orden en que aparecen en el fichero. Cada línea es el identificador tal cual (por ejemplo «worked_hours») o el identificador seguido de «=» y la etiqueta de cabecera que quieras usar (por ejemplo «worked_hours=Horas trabajadas»). Un identificador que no esté en el catálogo de abajo se rechaza al guardar.",

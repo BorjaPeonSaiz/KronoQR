@@ -60,9 +60,10 @@ Se cambian solo las que hagan falta.
 | `WEEKLY_SUMMARY_EMAIL` | `disabled` | `enabled` o `disabled` | Enciende el **resumen semanal por correo**: los lunes a las 06:00 UTC, cada responsable de departamento activo y con correo recibe la semana anterior **de su ámbito y de nadie más**. Exige salida de correo configurada (sección 6.21) y la funcionalidad `weekly_email_summary` en la licencia; sin cualquiera de las dos **el sistema funciona igual** y el envío se omite dejando constancia. Ver debajo de la tabla. |
 | `KIOSK_UPDATE_WINDOW` | `03:00-05:00` | `HH:MM-HH:MM`, hora local del centro | Franja en la que las tablets **tienen permiso** para instalar una versión nueva de la app del quiosco. Fuera de ella no se actualizan nunca, aunque la versión lleve días esperando. Puede cruzar la medianoche (`23:30-01:30`). Ver debajo de la tabla. |
 | `KIOSK_UPDATE_QUIET_MINUTES` | `10` | 0 – 120 | Minutos **sin ningún fichaje** que la tablet exige, además de estar dentro de la ventana y con la cola vacía, antes de actualizarse. Cubre el turno que empieza antes de lo previsto. `0` deja solo las otras dos condiciones. |
+| `BASELINE_MANUAL_HOURS_PER_MONTH` | `0` | 0 – 10000 | Horas al mes que RRHH dedicaba a consolidar hojas de horas **antes** de instalar el sistema, declaradas por el hotel. **Solo alimenta el cuadro de impacto** ([`guia-rrhh.md`](guia-rrhh.md) §6.6), que la enseña junto al objetivo de reducirla un 80 %; el cuadro exige la funcionalidad `impact_dashboard` en la licencia. `0` significa «no declarada» y deja ese indicador vacío. **No cambia ningún cálculo**: ni horas, ni incidencias, ni informes. **El soporte del fabricante no puede tocarla** (403, como `WEEKLY_SUMMARY_EMAIL`): es el denominador declarado del objetivo comercial y describe tu proceso anterior a la instalación ([`operacion.md`](operacion.md) §12.4). |
 
-> **Las tres últimas claves ajustan un sistema de control sobre la plantilla,
-> no un parámetro técnico.** La detección de patrones de uso de credencial forma
+> **Las tres claves de tránsito y de patrón ajustan un sistema de control sobre
+> la plantilla, no un parámetro técnico.** La detección de patrones de uso de credencial forma
 > parte de lo que hay que informar previamente a las personas trabajadoras y a
 > su representación (art. 20.3 ET y arts. 87 a 91 LOPDGDD;
 > [`obligaciones-legales.md`](obligaciones-legales.md) §3). Bajar
@@ -1474,9 +1475,9 @@ sudo docker compose exec app php artisan product:doctor
 > significa que quien tenga uno puede leer las copias, firmar tarjetas o abrir
 > los PIN sellados del otro.
 
-### 6.0 Las veintidós claves que NO son variables de entorno
+### 6.0 Las veintitrés claves que NO son variables de entorno
 
-Veintidós propiedades de la instalación no viven en el `.env` sino en la tabla
+Veintitrés propiedades de la instalación no viven en el `.env` sino en la tabla
 `installation_settings`, se editan **desde el panel** y surten efecto en la
 petición siguiente sin reiniciar nada:
 
@@ -1492,6 +1493,7 @@ petición siguiente sin reiniciar nada:
 | `WEEKLY_SUMMARY_EMAIL` | Panel → **Ajustes operativos** (`/settings`) → «Resumen semanal por correo» | Sección 2.1 |
 | `KIOSK_UPDATE_WINDOW` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `KIOSK_UPDATE_QUIET_MINUTES` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `BASELINE_MANUAL_HOURS_PER_MONTH` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `BRANDING_APP_NAME` | Panel → **Marca** (`/branding`) | Sección 2.2 |
 | `BRANDING_LOGO_PATH` | Panel → **Marca** (`/branding`) | Sección 2.2 |
 | `BRANDING_ACCENT_COLOR` | Panel → **Marca** (`/branding`) | Sección 2.2 |
@@ -1534,18 +1536,18 @@ queda auditado con tu nombre, la fecha y el valor anterior. Si no ves esas
 entradas en el menú, no es que falten: es que tu cuenta no es de
 administrador.
 
-**Manda la base de datos** (sección 1). Quince de las veintidós —las de marca,
-las de idioma, el código de servicio, las seis de la salida a nómina, el resumen
-semanal y las dos de la ventana de actualización del quiosco— no existen como
-variable de entorno: las de marca y las de idioma se retiraron para que no
+**Manda la base de datos** (sección 1). Dieciséis de las veintitrés —las de
+marca, las de idioma, el código de servicio, las seis de la salida a nómina, el
+resumen semanal, las dos de la ventana de actualización del quiosco y la línea
+base de horas en hojas— no existen como variable de entorno: las de marca y las de idioma se retiraron para que no
 hubiera dos sitios donde escribir el mismo dato; el código de servicio nunca la
 tuvo, porque un secreto en el `.env` es un secreto que acaba en una copia de
 seguridad sin cifrar; las seis de la salida a nómina tampoco, porque el formato
 que pide un programa de nómina se ajusta a prueba y error el día de la
 implantación y no puede exigir reiniciar los contenedores en cada intento; y las
-tres últimas nacieron ya en el panel, porque son decisiones de operación del
-hotel —si sale un correo con nombres, y a qué hora puede reiniciarse una
-tablet— y no de despliegue.
+cuatro últimas nacieron ya en el panel, porque son decisiones de operación del
+hotel —si sale un correo con nombres, a qué hora puede reiniciarse una tablet y
+cuántas horas se iban antes en hojas de horas— y no de despliegue.
 
 **Las cinco `ATTENDANCE_*` sí siguen apareciendo en `.env.example`, y conviene
 saber exactamente qué son:** una copia del valor de serie, escrita ahí para que

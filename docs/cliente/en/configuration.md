@@ -61,9 +61,10 @@ only the ones you need.
 | `WEEKLY_SUMMARY_EMAIL` | `disabled` | `enabled` or `disabled` | Turns on the **weekly summary by email**: on Mondays at 06:00 UTC, every active department manager with an email address receives the previous week **for their own scope and nobody else's**. It requires outgoing email to be configured (section 6.21) and the `weekly_email_summary` feature in the licence; without either of them **the system works exactly the same** and the send is skipped, leaving a record. See below the table. |
 | `KIOSK_UPDATE_WINDOW` | `03:00-05:00` | `HH:MM-HH:MM`, site local time | Slot in which the tablets **are allowed** to install a new version of the kiosk app. Outside it they never update, even if the version has been waiting for days. It may cross midnight (`23:30-01:30`). See below the table. |
 | `KIOSK_UPDATE_QUIET_MINUTES` | `10` | 0 – 120 | Minutes **without a single clocking** that the tablet demands, on top of being inside the window and having an empty queue, before updating. It covers the shift that starts earlier than planned. `0` leaves only the other two conditions. |
+| `BASELINE_MANUAL_HOURS_PER_MONTH` | `0` | 0 – 10000 | Hours per month HR spent consolidating timesheets **before** the system was installed, as declared by the hotel. **It only feeds the impact dashboard** ([`hr-guide.md`](hr-guide.md) §6.6), which shows it next to the target of reducing it by 80 %; the dashboard requires the `impact_dashboard` feature in the licence. `0` means "not declared" and leaves that indicator empty. **It changes no calculation**: not hours, not incidents, not reports. **The vendor's support cannot touch it** (403, like `WEEKLY_SUMMARY_EMAIL`): it is the declared denominator of the commercial target and describes your process before the installation ([`operation.md`](operation.md) §12.4). |
 
-> **The last three keys adjust a monitoring system over the staff, not a
-> technical parameter.** The detection of credential usage patterns is part of
+> **The three transit and pattern keys adjust a monitoring system over the
+> staff, not a technical parameter.** The detection of credential usage patterns is part of
 > what has to be communicated beforehand to the workers and their
 > representatives (art. 20.3 of the Workers' Statute and arts. 87 to 91
 > LOPDGDD; [`legal-obligations.md`](legal-obligations.md) §3). Lowering
@@ -1495,9 +1496,9 @@ sudo docker compose exec app php artisan product:doctor
 > means whoever has one can read the backups, sign cards or open the sealed
 > PINs of the other.
 
-### 6.0 The twenty-two keys that are NOT environment variables
+### 6.0 The twenty-three keys that are NOT environment variables
 
-Twenty-two properties of the installation do not live in the `.env` but in the
+Twenty-three properties of the installation do not live in the `.env` but in the
 `installation_settings` table, are edited **from the panel** and take effect on
 the next request without restarting anything:
 
@@ -1513,6 +1514,7 @@ the next request without restarting anything:
 | `WEEKLY_SUMMARY_EMAIL` | Panel → **Operational settings** (`/settings`) → "Weekly summary by email" | Section 2.1 |
 | `KIOSK_UPDATE_WINDOW` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `KIOSK_UPDATE_QUIET_MINUTES` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `BASELINE_MANUAL_HOURS_PER_MONTH` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `BRANDING_APP_NAME` | Panel → **Branding** (`/branding`) | Section 2.2 |
 | `BRANDING_LOGO_PATH` | Panel → **Branding** (`/branding`) | Section 2.2 |
 | `BRANDING_ACCENT_COLOR` | Panel → **Branding** (`/branding`) | Section 2.2 |
@@ -1554,18 +1556,18 @@ recorded in the audit trail with your name, the date and the previous value. If
 you cannot see those entries in the menu, they are not missing: your account is
 not an administrator one.
 
-**The database wins** (section 1). Fifteen of the twenty-two —the branding ones,
-the language ones, the service code, the six payroll export ones, the weekly
-summary and the two for the kiosk update window— do not exist as environment
-variables: the branding and language ones were removed so that there were not
+**The database wins** (section 1). Sixteen of the twenty-three —the branding
+ones, the language ones, the service code, the six payroll export ones, the
+weekly summary, the two for the kiosk update window and the timesheet hours
+baseline— do not exist as environment variables: the branding and language ones were removed so that there were not
 two places to write the same piece of data; the service code never had one,
 because a secret in the `.env` is a secret that ends up in an unencrypted
 backup; the six payroll export ones never had one either, because the format a
 payroll package asks for is tuned by trial and error on roll-out day and cannot
-demand a container restart on every attempt; and the last three were born in
+demand a container restart on every attempt; and the last four were born in
 the panel, because they are operating decisions of the hotel —whether an email
-with names goes out, and at what time a tablet may restart— and not deployment
-ones.
+with names goes out, at what time a tablet may restart and how many hours used
+to go into timesheets— and not deployment ones.
 
 **The five `ATTENDANCE_*` do still appear in `.env.example`, and it is worth
 knowing exactly what they are:** a copy of the default value, written there so

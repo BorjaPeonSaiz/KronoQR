@@ -111,6 +111,7 @@ use App\Modules\Product\Domain\Event\SetupCompleted;
 use App\Modules\Product\Domain\Event\SupportAccessGranted;
 use App\Modules\Product\Domain\Event\SupportAccessRevoked;
 use App\Modules\Product\Domain\Event\SupportAccessUsed;
+use App\Modules\Reporting\Domain\Event\AdoptionReportExported;
 use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
 use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
 use App\Modules\Reporting\Domain\Event\ReportExportRequested;
@@ -866,10 +867,16 @@ final class ComplianceServiceProvider extends ServiceProvider
      * quede en un fichero durante unos dias es un detalle de implementacion, no
      * un hecho distinto. Ver el mapa de sujetos en `AuditAction`.
      *
-     * **Un listener con tres metodos**, al contrario que la exportacion integra:
-     * alli los actores se resuelven distinto y aqui los tres son la misma cuenta
+     * **Un listener con cuatro metodos**, al contrario que la exportacion integra:
+     * alli los actores se resuelven distinto y aqui los cuatro son la misma cuenta
      * —quien pidio el informe—, tambien en la descarga, que va **sin sesion**
      * (ADR-041) y por tanto no tiene de donde sacar otro.
+     *
+     * **El cuarto es el cuadro de impacto** (RF-IN-08, tarea 3.13), y es el unico
+     * cuya LECTURA no deja asiento: su documento son doce agregados de la
+     * instalacion entera, sin un solo identificador (regla dura 21), asi que abrir
+     * la pantalla no saca nada del sistema. Descargarlo si, y por eso el hecho que
+     * se registra es `adoption_report.exported` y no un acceso.
      *
      * Sincronos, sin `ShouldQueue` y sin `afterCommit`: si el asiento falla, el
      * informe no se crea, no se marca como terminado y no se entrega (ADR-027).
@@ -881,6 +888,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(ReportExportRequested::class, [RecordReportExportLifecycle::class, 'requested']);
         Event::listen(ReportExportGenerated::class, [RecordReportExportLifecycle::class, 'generated']);
         Event::listen(ReportExportDownloaded::class, [RecordReportExportLifecycle::class, 'downloaded']);
+        Event::listen(AdoptionReportExported::class, [RecordReportExportLifecycle::class, 'adoptionExported']);
     }
 
     /**

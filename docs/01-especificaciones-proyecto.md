@@ -1210,6 +1210,7 @@ GET    /api/v1/reports/exports/{id}/download Descarga del fichero       [sin ses
 GET    /api/v1/reports/legal-export        Exportación para Inspección  [rol: auditor|rrhh]
 GET    /api/v1/reports/payroll-export      Salida para nómina           [rol: rrhh]
 GET    /api/v1/reports/adoption            Cuadro de impacto y adopción [rol: admin|rrhh]
+GET    /api/v1/reports/adoption/export     El mismo cuadro como fichero [rol: admin|rrhh, ?format=csv|xlsx|pdf]
 
 POST   /api/v1/me/login                    Acceso con código y PIN      [público, con throttle]
 GET    /api/v1/me/workdays                 Mi propio registro           [scope: self:read]

@@ -139,6 +139,7 @@ it('rechaza una configuracion operativa con un umbral que no puede ser cero', fu
         breakClockingEnabled: false,
         kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
         kioskUpdateQuietMinutes: 10,
+        baselineManualHoursPerMonth: 0,
     ))->toThrow(InvalidArgumentException::class);
 })->with([
     'sin duracion anomala de tramo' => [0, 60, 10, 120, 10, 3],
@@ -164,6 +165,7 @@ it('admite apagar el anti-rebote y el transito minimo con un cero', function ():
         // RF-KI-07 (tarea 3.12): el cuarto que admite el cero. Apaga la guarda
         // de silencio y deja mandar a la franja y a la cola vacia.
         kioskUpdateQuietMinutes: 0,
+        baselineManualHoursPerMonth: 0,
     );
 
     expect($settings->kioskUpdateQuietMinutes)->toBe(0)
@@ -182,6 +184,7 @@ it('acepta un umbral operativo de exactamente una unidad', function (): void {
         breakClockingEnabled: true,
         kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
         kioskUpdateQuietMinutes: 1,
+        baselineManualHoursPerMonth: 0,
     );
 
     expect($settings->anomalousShiftMinutes)->toBe(1)
@@ -297,6 +300,7 @@ it('transporta el fichaje de pausa sin suponer ningun valor', function (bool $en
         breakClockingEnabled: $enabled,
         kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
         kioskUpdateQuietMinutes: 10,
+        baselineManualHoursPerMonth: 0,
     );
 
     expect($settings->breakClockingEnabled)->toBe($enabled);

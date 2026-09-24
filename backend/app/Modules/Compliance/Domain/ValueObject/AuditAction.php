@@ -549,6 +549,33 @@ enum AuditAction: string
      */
     case ReportExportDownloaded = 'report_export.downloaded';
 
+    /**
+     * El cuadro de impacto y adopcion ha salido como fichero (**RF-IN-08**, regla
+     * dura 6, tarea 3.13).
+     *
+     * ## Se audita la descarga y **no** la lectura, al contrario que el informe
+     *
+     * Y es la unica accion de la familia de informes de la que se puede decir eso.
+     * El motivo es que aqui no hay dato personal que divulgar: el cuadro son doce
+     * agregados de la instalacion entera, sin un solo `employee_uuid`, sin nombres y
+     * sin departamentos (regla dura 21). Abrir la pantalla no saca nada del sistema,
+     * asi que un `personal_data.accessed` por cada apertura llenaria el trail
+     * —cuatro años de retencion (RL-02)— de filas que no describen ninguna
+     * divulgacion, y con ello haria mas dificil encontrar las que si.
+     *
+     * Descargarlo si deja algo fuera: **un documento que sostiene la renovacion de
+     * la licencia**, que va a una reunion, se adjunta a un correo y se archiva fuera
+     * del producto. De un papel asi el cliente tiene que poder responder quien lo
+     * saco, cuando y de que periodo hablaba.
+     *
+     * El payload lleva el periodo, el formato, **la huella del contenido** —la misma
+     * que imprime el pie del PDF y la misma para los tres formatos, de modo que el
+     * asiento se puede comparar con el papel— y el tamaño del fichero. Nunca un
+     * nombre y nunca una hora de nadie, que aqui no cuesta nada porque el documento
+     * tampoco los lleva.
+     */
+    case AdoptionReportExported = 'adoption_report.exported';
+
     // --- Ciclo de vida de la instalacion (RF-PD-10, RL-04, RS-07, tarea 5.7) --
 
     /**
@@ -762,6 +789,24 @@ enum AuditAction: string
         // segun si el periodo cabia en una respuesta sincrona — que es un detalle
         // de implementacion y no un hecho distinto.
         'report_export' => AuditableEvent::PersonalDataAccess,
+        // El cuadro de impacto comparte familia con el informe en diferido, y aqui
+        // la clasificacion cuesta mas de justificar porque **el documento no lleva
+        // ningun dato personal**: son doce agregados de la instalacion entera.
+        //
+        // Va en `PersonalDataAccess` de todos modos porque la familia no se decide
+        // por lo que el fichero contiene, sino por la PREGUNTA que su asiento
+        // responde: «¿que informes han salido de esta instalacion y quien se los
+        // llevo?». Es literalmente la misma que responden `report_export` y el
+        // `personal_data.accessed` del informe sincrono, y la cuenta que aparece en
+        // los tres es la misma persona haciendo la misma clase de cosa. Separarlo
+        // obligaria a consultar dos familias para reconstruir lo que hizo alguien
+        // con los informes de un mes.
+        //
+        // No cabe en `LegalExport`: eso es «una copia del REGISTRO sale de aqui»
+        // —integra o normalizada— y esto no es el registro, es una medida de como va
+        // el producto. Ni en `SupportAccess`: no sale hacia el fabricante (ADR-020,
+        // regla dura 16), sale hacia el propio cliente.
+        'adoption_report' => AuditableEvent::PersonalDataAccess,
         // Actualizar el producto y restaurar una copia son los dos hechos que
         // pueden cambiar —o hacer desaparecer— el resto del trail. No son una
         // purga de retencion (aquella es planificada y sellada) ni un cambio de

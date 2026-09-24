@@ -109,11 +109,15 @@ return [
         'ATTENDANCE_MIN_TRANSIT_SECONDS' => 'tránsito mínimo entre dos quioscos (segundos)',
         'ATTENDANCE_PATTERN_WINDOW_SECONDS' => 'ventana de coincidencia en el mismo quiosco (segundos)',
         'ATTENDANCE_PATTERN_MIN_REPEATS' => 'días con coincidencia antes de abrir incidencia',
+        /* El fichaje de pausa (RF-AT-12, tarea 3.5). */
+        'ATTENDANCE_BREAK_CLOCKING' => 'fichaje de la pausa en el quiosco',
         'BRANDING_APP_NAME' => 'nombre de la aplicación',
         'BRANDING_LOGO_PATH' => 'ruta del logotipo en el servidor',
         'BRANDING_ACCENT_COLOR' => 'color de acento',
         'LOCALE_DEFAULT' => 'idioma por defecto',
         'LOCALE_AVAILABLE' => 'idiomas disponibles',
+        /* El código de servicio de la pantalla de diagnóstico (RF-KI-08, tarea 3.3). */
+        'KIOSK_SERVICE_CODE' => 'código de servicio del quiosco',
         /* La salida a nómina (RF-IN-07, tarea 3.9). */
         'PAYROLL_EXPORT_COLUMNS' => 'columnas del fichero de nómina',
         'PAYROLL_EXPORT_DELIMITER' => 'separador del fichero de nómina',
@@ -126,6 +130,8 @@ return [
         /* La ventana de actualización del quiosco (RF-KI-07, tarea 3.12). */
         'KIOSK_UPDATE_WINDOW' => 'franja en la que la tablet puede actualizarse (HH:MM-HH:MM, hora local)',
         'KIOSK_UPDATE_QUIET_MINUTES' => 'minutos sin escaneos antes de actualizar la tablet',
+        /* La línea base del cuadro de impacto (RF-IN-08, tarea 3.13). */
+        'BASELINE_MANUAL_HOURS_PER_MONTH' => 'horas al mes consolidando hojas de horas antes de instalar el sistema',
     ],
 
 ];

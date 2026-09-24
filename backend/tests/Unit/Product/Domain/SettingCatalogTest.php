@@ -132,6 +132,10 @@ it('clasifica el impacto de cada clave', function (SettingKey $key, SettingImpac
     'el resumen semanal enciende una salida de datos' => [SettingKey::WEEKLY_SUMMARY_EMAIL, SettingImpact::DATA_DISCLOSURE],
     'la ventana de actualizacion no toca el registro' => [SettingKey::KIOSK_UPDATE_WINDOW, SettingImpact::PRESENTATION],
     'los minutos de silencio no tocan el registro' => [SettingKey::KIOSK_UPDATE_QUIET_MINUTES, SettingImpact::PRESENTATION],
+    // La linea base del cuadro de impacto (RF-IN-08, tarea 3.13). No mueve un
+    // minuto, no abre incidencia y no enciende ninguna salida de datos: solo
+    // decide si una tarjeta del cuadro ensena una referencia o sale vacia.
+    'la linea base de horas manuales solo se ve' => [SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH, SettingImpact::PRESENTATION],
 ])->group('RF-PD-01');
 
 // --- El resumen semanal y la ventana del quiosco (RF-PR-05, RF-KI-07) -------
@@ -286,3 +290,36 @@ it('clasifica el fichaje de pausa como revision de cumplimiento y no como calcul
         ->and($definition->impact->affectsWorkedHours())->toBeFalse()
         ->and($definition->confidential)->toBeFalse();
 })->group('RF-PD-01', 'RF-AT-12', 'RL-04');
+
+// --- La linea base del cuadro de impacto (RF-IN-08, tarea 3.13) --------------
+
+it('entrega la linea base de horas manuales sin declarar', function (): void {
+    // CERO SIGNIFICA «NO DECLARADO», no «cero horas»: una instalacion recien puesta
+    // en marcha no ha contestado todavia, y el cuadro de impacto traduce ese cero a
+    // «vacio». Un valor de serie distinto de cero seria peor de todas las formas
+    // posibles: el cuadro ensenaria una linea base inventada como si el cliente la
+    // hubiera declarado.
+    expect(SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH->definition()->default)->toBe(0);
+})->group('RF-PD-01', 'RF-IN-08');
+
+it('acota la linea base entre cero y diez mil horas al mes', function (int $hours, bool $valid): void {
+    // El techo no es un limite de negocio: son unas catorce personas a jornada
+    // completa dedicadas solo a consolidar hojas de horas, asi que es la frontera
+    // entre un dato y un error de tecleo. Un negativo no significa nada.
+    $key = SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH;
+
+    $accepted = rescue(
+        static fn (): bool => $key->definition()->validate($key, $hours) === $hours,
+        false,
+        report: false,
+    );
+
+    expect($accepted)->toBe($valid);
+})->with([
+    'sin declarar' => [0, true],
+    'una hora al mes' => [1, true],
+    'cuarenta horas al mes' => [40, true],
+    'el techo exacto' => [10000, true],
+    'por encima del techo' => [10001, false],
+    'negativo' => [-1, false],
+])->group('RF-PD-01', 'RF-IN-08');

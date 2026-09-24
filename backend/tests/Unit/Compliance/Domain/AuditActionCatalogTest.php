@@ -165,3 +165,28 @@ it('no abre familia nueva del bloque D al anadir los informes en diferido', func
     // atribuye a quien recibio el enlace—.
     expect(AuditAction::ReportExportDownloaded->requiresSystemActor())->toBeFalse();
 })->group('RS-07', 'RF-IN-06');
+
+it('sella la exportacion del cuadro de impacto sin abrir familia nueva', function (): void {
+    /*
+     * `adoption_report.exported` (tarea 3.13, RF-IN-08).
+     *
+     * ES LA UNICA ACCION DE LA FAMILIA DE INFORMES CUYO DOCUMENTO NO LLEVA NINGUN
+     * DATO PERSONAL: el cuadro de impacto son doce agregados de la instalacion
+     * entera, sin `employee_uuid`, sin nombres y sin departamentos (regla dura 21).
+     * Por eso **leer** el cuadro no deja asiento y descargarlo si: lo que se
+     * registra no es un acceso a datos de nadie, es que un documento del sistema ha
+     * salido del sistema.
+     *
+     * Y cae en `PersonalDataAccess` de todos modos, con el mismo argumento que los
+     * informes en diferido: la familia no la decide lo que el fichero contiene sino
+     * la PREGUNTA que su asiento responde —«¿que informes han salido de aqui y quien
+     * se los llevo?»—, que es exactamente la de `report_export.*`. Separarlo
+     * obligaria a consultar dos familias para reconstruir lo que hizo una cuenta con
+     * los informes de un mes.
+     */
+    expect(AuditAction::AdoptionReportExported->event())->toBe(AuditableEvent::PersonalDataAccess);
+
+    // Y no es una accion de sistema: detras hay una cuenta de gestion pulsando un
+    // boton de descarga, y es de quien se responde.
+    expect(AuditAction::AdoptionReportExported->requiresSystemActor())->toBeFalse();
+})->group('RS-07', 'RF-IN-08');

@@ -99,6 +99,29 @@ final readonly class OperationalSettings
          * producto a saber cuando empieza (paso 6 de la ficha 3.12).
          */
         public int $kioskUpdateQuietMinutes,
+        /**
+         * RF-IN-08: horas al mes que el cliente **declara** que dedicaba a
+         * consolidar hojas de horas a mano antes de instalar KronoQR
+         * (`BASELINE_MANUAL_HOURS_PER_MONTH`, tarea 3.13).
+         *
+         * **`0` significa «no declarado»**, no «cero horas»: el catalogo lo fija
+         * asi porque una instalacion recien puesta en marcha no ha contestado
+         * todavia, y el cuadro de impacto traduce ese cero a «vacio» en un solo
+         * sitio. Un cero que llegara al indicador se pintaria como «cero horas al
+         * mes consolidando hojas», que es una afirmacion espectacular y falsa.
+         *
+         * **No lo consume el servidor en ningun camino de fichaje**, como las dos
+         * `KIOSK_UPDATE_*`: lo lee el cuadro de impacto y nadie mas. Entra por aqui
+         * —y no por un puerto propio— porque es configuracion operativa del centro
+         * que se resuelve en la misma cascada, y un segundo proveedor para una sola
+         * clave seria una segunda cascada que mantener.
+         *
+         * **Es el unico dato del producto que el sistema no puede medir**: describe
+         * el trabajo anterior a su instalacion, y ninguna metrica de una aplicacion
+         * observa lo que se hacia antes de que existiera (§1.3, nota de coherencia
+         * de la ficha 3.13).
+         */
+        public int $baselineManualHoursPerMonth,
     ) {
         $this->positive($anomalousShiftMinutes, 'la duracion anomala de tramo (RN-08)');
         $this->notNegative($debounceSeconds, 'la ventana anti-rebote (RF-AT-06)');
@@ -109,6 +132,8 @@ final readonly class OperationalSettings
         // Cero es legitimo, como el anti-rebote: apaga la guarda de silencio y
         // deja mandar a la franja y a la cola vacia (RF-KI-07).
         $this->notNegative($kioskUpdateQuietMinutes, 'los minutos sin escaneo antes de actualizar el quiosco (RF-KI-07)');
+        // Cero es legitimo y significa «no declarado»: ver el docblock del campo.
+        $this->notNegative($baselineManualHoursPerMonth, 'la linea base de horas consolidando hojas (RF-IN-08)');
     }
 
     private function positive(int $value, string $what): void

@@ -259,4 +259,187 @@ return [
 
         'no_department' => 'your scope',
     ],
+
+    /*
+     * THE IMPACT AND ADOPTION DASHBOARD (RF-IN-08, RNF-D-01, task 3.13).
+     *
+     * THE CRITERIA ARE PART OF THE DASHBOARD, NOT OF THE MANUAL, for the same
+     * reason as in the period report: a percentage without its definition is a
+     * number everyone reads their own way, and this dashboard is shown in
+     * meetings where it is decided whether the system gets renewed.
+     *
+     * Every line is written for whoever runs the hotel, not for whoever wrote
+     * this: it says WHAT was counted, not how it was implemented. And it also
+     * says what the dashboard does NOT know, which is half of its honesty.
+     */
+    'adoption' => [
+
+        'criteria' => [
+
+            'workdays_complete' => 'A workday counts as fully recorded when all of its entries are closed. The denominator is workdays with at least one entry: whoever did not clock in is neither in the numerator nor in the denominator, so a day the hotel was closed does not drag the figure down. Voided entries and versions superseded by a correction do not count.',
+
+            'origin' => 'The breakdown by origin counts accepted clockings only. A rejected scan —unknown card, invalid signature, bounce— is not a clocking and is not part of the breakdown, although it does count as a served attempt in availability.',
+
+            'corrections' => 'Corrections are counted by the date they were made, not by the workday they correct, and compared against the accepted clockings of the same period. All three kinds count: manual entry, amendment and voiding. That way a closed month does not change when somebody amends an old day.',
+
+            'availability' => 'Clocking availability is not server uptime: it measures whether the person was able to clock. The numerator holds every served clocking, including those rejected by a rule —the system was there and answered— and those that arrived through the offline queue. The denominator adds the attempts the tablet could not carry out and reported as errors: camera unavailable or not permitted, scanner failing to start, decoder failing to load, offline storage unusable and failed submission. It is an approximation that errs in favour of reliability: an attempt that never produced an error is invisible, and the periodic pruning of the error history shortens the denominator for older periods.',
+
+            'offline' => 'Of the served clockings, those that arrived more than a minute after they actually happened: the ones that waited in the tablet queue. It is the part of availability that did not depend on the server.',
+
+            'incidents' => 'Resolution time is measured only over open-shift incidents resolved within the period, from detection to closure. The median sits next to the mean on purpose: a single incident forgotten for three weeks moves the mean and not the median. Open incidents are today\'s snapshot, of any kind, and that is why they are not compared against the previous period.',
+
+            'credentials' => 'People without a delivered card are active employees who today hold no current credential already handed over. A card printed and still in the drawer counts as not delivered. It is today\'s snapshot and is not compared against the previous period.',
+
+            'hours' => 'Worked and contracted hours come from the consolidated attendance record, for the whole installation, with no breakdown by person or department. Days with a still-open shift contribute no minutes. Days without a current contract add no contracted hours.',
+
+            'baseline' => 'The hours per month spent consolidating timesheets are declared by the customer: they describe the manual work that predates the system, and no program can measure what was done before it existed. If nothing was declared, the line is left empty instead of inventing an improvement.',
+
+            'previous_period' => 'The previous period is the same number of days immediately before the first day of the requested period. When the previous period has nothing to compare against, the change is left empty rather than shown as zero: «there was no activity» and «there was activity and it went badly» are not the same thing.',
+
+            'timezone' => 'Everything is measured in the site time zone. A 22:00 to 06:00 shift counts whole on the day it started and is not split at midnight, and weeks with a daylight-saving change do not distort any percentage.',
+
+            'aggregate' => 'The dashboard covers the whole installation and carries no names and no person identifiers. There is no breakdown by department on purpose: in a one-person department, «worked hours» would be that person\'s individual data.',
+
+            'dashboard' => 'The definitions are the same ones used by the technical monitoring dashboard of the installation, but the window is not: that one looks at the last few days and this one at a closed period, so the two figures may differ without either being wrong.',
+        ],
+
+        /*
+         * Labels of the exported file. All three formats use these same texts,
+         * for the same reason as the period report: whoever compares two
+         * downloads of the same dashboard in different formats has to see the
+         * same thing.
+         */
+        'document' => [
+
+            'title' => 'Impact and adoption dashboard',
+
+            'period' => 'Period',
+
+            'previous_period' => 'Previous period',
+
+            'time_zone' => 'Site time zone',
+
+            'generated_at' => 'Generated on',
+
+            'issuer' => 'Issued by',
+
+            'issuer_unknown' => 'Unidentifiable account',
+
+            'rows' => 'Indicators',
+
+            'digest' => 'SHA-256 digest of the contents',
+
+            'criteria' => 'Criteria for this dashboard',
+
+            'sheet_indicators' => 'Indicators',
+
+            'sheet_criteria' => 'Criteria',
+
+            'empty' => 'No data',
+
+            'origin_breakdown' => 'Clockings by origin',
+        ],
+
+        /* The columns of the indicator table, in order. */
+        'columns' => [
+
+            'indicator' => 'Indicator',
+
+            'current' => 'Period',
+
+            'previous' => 'Previous period',
+
+            'delta' => 'Change',
+
+            'target' => 'Target',
+
+            'status' => 'Status',
+        ],
+
+        /* The columns of the breakdown by origin. */
+        'origin_columns' => [
+
+            'origin' => 'Origin',
+
+            'scans' => 'Clockings',
+
+            'share' => 'Share',
+        ],
+
+        /*
+         * The twelve indicators. The label says WHAT it measures, not what the
+         * key is called: whoever reads the paper does not know `qr_scans_ratio`
+         * exists.
+         */
+        'indicators' => [
+
+            'workdays_complete_ratio' => 'Workdays fully recorded',
+
+            'qr_scans_ratio' => 'Clockings by QR card',
+
+            'manual_corrections_ratio' => 'Manual corrections over clockings',
+
+            'clocking_availability_ratio' => 'Clocking availability',
+
+            'offline_resolved_ratio' => 'Of those, resolved without the server',
+
+            'incident_resolution_mean_minutes' => 'Mean time to resolve an open shift',
+
+            'incident_resolution_median_minutes' => 'Median time to resolve an open shift',
+
+            'open_incidents' => 'Incidents open today',
+
+            'employees_without_credential' => 'People without a delivered card today',
+
+            'worked_minutes' => 'Hours worked',
+
+            'contracted_minutes' => 'Hours contracted',
+
+            'baseline_manual_minutes_per_month' => 'Hours per month consolidating timesheets (declared)',
+        ],
+
+        /* The four clocking origins. */
+        'origins' => [
+
+            'qr_kiosk' => 'QR card at the kiosk',
+
+            'pin_kiosk' => 'PIN at the kiosk',
+
+            'manual_admin' => 'Manual correction',
+
+            'import' => 'Import',
+        ],
+
+        /*
+         * How the §1.3 target is phrased in the file. `reduction` says neither
+         * «met» nor «not met» on purpose: the product cannot measure the work
+         * that predates its installation.
+         */
+        'target' => [
+
+            'at_least' => 'at least :value',
+
+            'at_most' => 'less than :value',
+
+            'reduction' => 'cut by :value % against the baseline',
+
+            'none' => '—',
+        ],
+
+        /*
+         * Whether the indicator meets its target. «No data» is not «not met»:
+         * there is nothing to decide it with, and confusing the two is how an
+         * honest dashboard turns into an alarmist one.
+         */
+        'status' => [
+
+            'met' => 'On target',
+
+            'not_met' => 'Off target',
+
+            'unknown' => 'No data',
+
+            'no_target' => 'No target',
+        ],
+    ],
 ];

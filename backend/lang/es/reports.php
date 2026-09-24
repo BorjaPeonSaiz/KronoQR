@@ -307,4 +307,186 @@ return [
 
         'no_department' => 'tu ámbito',
     ],
+
+    /*
+     * EL CUADRO DE IMPACTO Y ADOPCION (RF-IN-08, RNF-D-01, tarea 3.13).
+     *
+     * LOS CRITERIOS SON PARTE DEL CUADRO, NO DE LA DOCUMENTACION, por lo mismo
+     * que en el informe por periodo: un porcentaje sin su definicion es un
+     * numero que cada persona interpreta a su manera, y este cuadro se enseña en
+     * reuniones donde se decide si el sistema se renueva.
+     *
+     * Cada linea se escribe para quien dirige el hotel, no para quien programo
+     * esto: dice QUE se ha contado, no como se ha implementado. Y dice tambien
+     * lo que el cuadro NO sabe, que es la mitad de su honestidad.
+     */
+    'adoption' => [
+
+        'criteria' => [
+
+            'workdays_complete' => 'Una jornada cuenta como registro completo cuando todos sus tramos están cerrados. El denominador son las jornadas con algún tramo: quien no fichó no entra ni arriba ni abajo, así que un día de cierre del hotel no baja el indicador. Los tramos anulados y las versiones sustituidas por una corrección no cuentan.',
+
+            'origin' => 'El reparto por origen cuenta solo los fichajes aceptados. Un escaneo rechazado —tarjeta desconocida, firma inválida, rebote— no es un fichaje y no entra en el reparto, aunque sí cuenta como intento atendido en la disponibilidad.',
+
+            'corrections' => 'Las correcciones se cuentan por la fecha en la que se hicieron, no por la jornada que corrigen, y se comparan con los fichajes aceptados del mismo periodo. Entran las tres clases: alta manual, rectificación y anulación. Así el cuadro de un mes cerrado no cambia cuando alguien rectifica un día antiguo.',
+
+            'availability' => 'La disponibilidad del acto de fichar no es el tiempo de servicio del servidor: mide si la persona pudo fichar. Arriba van todos los fichajes atendidos, incluidos los rechazados por una regla —el sistema estaba ahí y contestó— y los que llegaron por la cola sin conexión. Abajo, además, los intentos que la tablet no pudo cursar y reportó como error: cámara no disponible o sin permiso, escáner que no arranca, lector que no carga, almacenamiento sin conexión inservible y envío fallido. Es una aproximación por exceso a favor de la fiabilidad: un intento que ni llegó a producir un error no se ve, y la limpieza periódica del histórico de errores recorta el denominador en los periodos antiguos.',
+
+            'offline' => 'De los fichajes atendidos, los que llegaron con más de un minuto de retraso entre el momento real y su recepción: los que estuvieron esperando en la cola de la tablet. Es la parte de la disponibilidad que no dependió del servidor.',
+
+            'incidents' => 'El tiempo hasta resolver se mide solo sobre los turnos sin cerrar que se resolvieron dentro del periodo, desde que se detectaron hasta que se cerraron. La mediana va al lado de la media a propósito: una sola incidencia olvidada tres semanas dispara la media y no la mediana. Las incidencias abiertas son la foto de hoy, de cualquier tipo, y por eso no se comparan con el periodo anterior.',
+
+            'credentials' => 'Sin tarjeta entregada son las personas de alta que hoy no tienen ninguna credencial vigente ya entregada en mano. La tarjeta impresa y todavía en el cajón cuenta como no entregada. Es la foto de hoy y no se compara con el periodo anterior.',
+
+            'hours' => 'Las horas trabajadas y contratadas son las del registro horario ya consolidado, de la instalación entera, sin desglose por persona ni por departamento. Los días con un turno todavía abierto no aportan minutos. Los días sin contrato vigente no suman horas contratadas.',
+
+            'baseline' => 'Las horas al mes consolidando hojas de horas son un dato que declara el cliente: describen el trabajo manual anterior a la instalación del sistema, y ningún programa puede medir lo que se hacía antes de que existiera. Si no se ha declarado, la línea sale vacía en lugar de inventar una mejora.',
+
+            'previous_period' => 'El periodo anterior es el mismo número de días inmediatamente antes del primero del periodo pedido. Cuando el periodo anterior no tiene con qué comparar, la variación sale vacía y no como cero: «no hubo actividad» y «hubo actividad y salió mal» no son lo mismo.',
+
+            'timezone' => 'Todo se mide en la zona horaria del centro. Un turno de 22:00 a 06:00 cuenta entero en el día en que empezó y no se parte a medianoche, y las semanas con cambio de hora no distorsionan ningún porcentaje.',
+
+            'aggregate' => 'El cuadro es de la instalación entera y no lleva ningún nombre ni ningún identificador de persona. No hay desglose por departamento a propósito: en un departamento de una persona, «horas trabajadas» sería su dato individual.',
+
+            'dashboard' => 'Las definiciones son las mismas que usa el cuadro de mando técnico de la instalación, pero la ventana no: aquél mira los últimos días y éste un periodo cerrado, así que las dos cifras pueden diferir sin que ninguna esté mal.',
+        ],
+
+        /*
+         * Rotulos del fichero exportado. Los tres formatos usan estos mismos
+         * textos, por lo mismo que el informe por periodo: quien compare dos
+         * descargas del mismo cuadro en formatos distintos tiene que ver lo
+         * mismo.
+         */
+        'document' => [
+
+            'title' => 'Cuadro de impacto y adopción',
+
+            'period' => 'Periodo',
+
+            'previous_period' => 'Periodo anterior',
+
+            'time_zone' => 'Zona horaria del centro',
+
+            'generated_at' => 'Generado el',
+
+            'issuer' => 'Emitido por',
+
+            'issuer_unknown' => 'Cuenta no identificable',
+
+            'rows' => 'Indicadores',
+
+            'digest' => 'Huella SHA-256 del contenido',
+
+            'criteria' => 'Criterios de este cuadro',
+
+            'sheet_indicators' => 'Indicadores',
+
+            'sheet_criteria' => 'Criterios',
+
+            'empty' => 'Sin datos',
+
+            'origin_breakdown' => 'Reparto de fichajes por origen',
+        ],
+
+        /* Las columnas de la tabla de indicadores, en orden. */
+        'columns' => [
+
+            'indicator' => 'Indicador',
+
+            'current' => 'Periodo',
+
+            'previous' => 'Periodo anterior',
+
+            'delta' => 'Variación',
+
+            'target' => 'Objetivo',
+
+            'status' => 'Estado',
+        ],
+
+        /* Las columnas del reparto por origen. */
+        'origin_columns' => [
+
+            'origin' => 'Origen',
+
+            'scans' => 'Fichajes',
+
+            'share' => 'Cuota',
+        ],
+
+        /*
+         * Los doce indicadores. El rotulo dice QUE mide, no como se llama la
+         * clave: quien lee el papel no sabe que existe `qr_scans_ratio`.
+         */
+        'indicators' => [
+
+            'workdays_complete_ratio' => 'Jornadas con registro completo',
+
+            'qr_scans_ratio' => 'Fichajes por tarjeta QR',
+
+            'manual_corrections_ratio' => 'Correcciones manuales sobre fichajes',
+
+            'clocking_availability_ratio' => 'Disponibilidad del acto de fichar',
+
+            'offline_resolved_ratio' => 'De ellos, resueltos sin servidor',
+
+            'incident_resolution_mean_minutes' => 'Tiempo medio hasta resolver un turno sin cerrar',
+
+            'incident_resolution_median_minutes' => 'Tiempo mediano hasta resolver un turno sin cerrar',
+
+            'open_incidents' => 'Incidencias abiertas hoy',
+
+            'employees_without_credential' => 'Personas sin tarjeta entregada hoy',
+
+            'worked_minutes' => 'Horas trabajadas',
+
+            'contracted_minutes' => 'Horas contratadas',
+
+            'baseline_manual_minutes_per_month' => 'Horas al mes consolidando hojas de horas (declarado)',
+        ],
+
+        /* Los cuatro origenes de fichaje. */
+        'origins' => [
+
+            'qr_kiosk' => 'Tarjeta QR en el quiosco',
+
+            'pin_kiosk' => 'PIN en el quiosco',
+
+            'manual_admin' => 'Corrección manual',
+
+            'import' => 'Importación',
+        ],
+
+        /*
+         * Como se enuncia el objetivo del §1.3 en el fichero. `reduction` no
+         * dice «cumple» ni «no cumple» a proposito: el producto no puede medir
+         * el trabajo anterior a su instalacion.
+         */
+        'target' => [
+
+            'at_least' => 'al menos :value',
+
+            'at_most' => 'menos de :value',
+
+            'reduction' => 'reducir un :value % sobre la línea base',
+
+            'none' => '—',
+        ],
+
+        /*
+         * Si el indicador alcanza su objetivo. «Sin dato» no es «no cumple»: es
+         * que no hay con qué decidirlo, y confundirlos es como un cuadro honesto
+         * se convierte en un cuadro alarmista.
+         */
+        'status' => [
+
+            'met' => 'Dentro del objetivo',
+
+            'not_met' => 'Fuera del objetivo',
+
+            'unknown' => 'Sin dato',
+
+            'no_target' => 'Sin objetivo',
+        ],
+    ],
 ];

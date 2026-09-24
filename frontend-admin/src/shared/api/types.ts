@@ -261,3 +261,19 @@ export type ComplianceWeek = Schemas['ComplianceWeek']
 export type ComplianceIncidentLink = Schemas['ComplianceIncidentLink']
 export type ComplianceProfileRef = Schemas['ComplianceProfileRef']
 export type ComplianceTotals = Schemas['ComplianceTotals']
+
+// Cuadro de impacto y adopcion (RF-IN-08, RNF-D-01, tarea 3.13): los doce
+// indicadores del doc 01 §1.3, con objetivo y comparacion contra el periodo
+// anterior. Agregado de la instalacion entera, sin identificadores de persona
+// (regla dura 21): `GET /reports/adoption`.
+export type AdoptionReport = Schemas['AdoptionReport']
+export type AdoptionPeriod = Schemas['AdoptionPeriod']
+export type AdoptionIndicator = Schemas['AdoptionIndicator']
+export type AdoptionIndicatorKey = Schemas['AdoptionIndicatorKey']
+export type AdoptionIndicatorUnit = Schemas['AdoptionIndicatorUnit']
+export type AdoptionTarget = Schemas['AdoptionTarget']
+export type AdoptionTargetComparison = AdoptionTarget['comparison']
+export type AdoptionOriginShare = Schemas['AdoptionOriginShare']
+// `GET /reports/adoption/export` (los tres formatos, sin valor por omision:
+// quien pulsa un boton de descarga ya ha elegido uno).
+export type AdoptionExportFormat = Parameters_['AdoptionExportFormat']

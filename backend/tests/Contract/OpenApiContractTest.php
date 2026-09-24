@@ -156,6 +156,21 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // conjunto en el asiento de divulgacion. Compartir ruta habria obligado a
         // una sola policy para dos potestades distintas.
         '/api/v1/reports/payroll-export',
+        // Tarea 3.13: el cuadro de impacto y adopcion (RF-IN-08, RNF-D-01).
+        //
+        // RUTA PROPIA Y NO UNA GRANULARIDAD MAS DEL INFORME POR PERIODO, aunque
+        // las dos hablen de horas: aquel es una tabla de personas y este es un
+        // agregado de la instalacion entera **sin un solo identificador** (regla
+        // dura 21). De ahi que su policy sea otra —`{admin, rrhh}` y nadie mas—,
+        // que su consulta no lleve alcance y que leerlo no deje asiento de
+        // divulgacion, cosa que ninguna ruta del informe puede decir.
+        '/api/v1/reports/adoption',
+        // Y su descarga, por lo mismo que la del informe por periodo: son dos
+        // respuestas de naturaleza distinta y mezclarlas obligaria al cliente
+        // generado a elegir entre cuatro tipos de contenido en una operacion.
+        // Esta si deja asiento (`adoption_report.exported`): lo que se registra no
+        // es un acceso a datos de nadie, es que un documento salio del sistema.
+        '/api/v1/reports/adoption/export',
         // Tarea 1.17: exportacion normalizada para la Inspeccion (RF-IN-05).
         '/api/v1/reports/legal-export',
         // Tarea 3.9: informes generados en diferido (RF-IN-06, ADR-041). Es la

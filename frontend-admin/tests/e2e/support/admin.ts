@@ -15,6 +15,7 @@ import type {
   AbsenceCollection,
   AbsenceDetail,
   AddShiftEntryRequest,
+  AdoptionReport,
   Branding,
   ComplianceProfile,
   ComplianceSummary,
@@ -907,6 +908,166 @@ export const REPORT_EXPORT_COMPLETED: ReportExport = {
   download: null,
 }
 
+// --- Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13) --------------------
+//
+// `AdoptionReport` SI se importa de `@/shared/api/types` (generado desde
+// `docs/api/openapi.yaml`, regenerado por `backend-laravel` al cerrar el
+// contrato de esta tarea): ese modulo es puro -sin imports de tiempo de
+// ejecucion, solo re-exporta tipos de `schema.d.ts`- y por eso no arrastra
+// nada a `tsconfig.e2e.json`. Lo que este fichero NO hace es importar un tipo
+// desde `adoptionReport.api.ts` de una `feature`: ese si tiene codigo de
+// tiempo de ejecucion (`requestJson`/`requestBlob` de
+// `@kronoqr/web-kit/http`, con su propio `import.meta.env`), y arrastrarlo
+// aqui rompia la compilacion de este proyecto de TypeScript, que no carga los
+// tipos de Vite (hallazgo de la primera vuelta de esta tarea).
+
+/**
+ * El cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): un mes con los doce
+ * indicadores del contrato y CON periodo anterior comparable. Las claves son
+ * EXACTAS al contrato (`docs/api/openapi.yaml`, esquema `AdoptionReport`,
+ * cerrado por `backend-laravel` en paralelo a esta pantalla): un cambio de
+ * nombre ahi tiene que fallar aqui.
+ */
+export const ADOPTION_REPORT: AdoptionReport = {
+  data: {
+    indicators: [
+      {
+        key: 'workdays_complete_ratio',
+        unit: 'percent',
+        current: 99.4,
+        previous: 98.1,
+        delta: 1.3,
+        target: { comparison: 'at_least', value: 99 },
+      },
+      {
+        key: 'qr_scans_ratio',
+        unit: 'percent',
+        current: 97.2,
+        previous: 96.5,
+        delta: 0.7,
+        target: { comparison: 'at_least', value: 98 },
+      },
+      {
+        key: 'manual_corrections_ratio',
+        unit: 'percent',
+        current: 1.4,
+        previous: 1.8,
+        delta: -0.4,
+        target: { comparison: 'at_most', value: 2 },
+      },
+      {
+        key: 'clocking_availability_ratio',
+        unit: 'percent',
+        current: 99.92,
+        previous: 99.88,
+        delta: 0.04,
+        target: { comparison: 'at_least', value: 99.9 },
+      },
+      {
+        key: 'offline_resolved_ratio',
+        unit: 'percent',
+        current: 0.6,
+        previous: null,
+        delta: null,
+        target: null,
+      },
+      {
+        key: 'incident_resolution_mean_minutes',
+        unit: 'minutes',
+        current: 390,
+        previous: 555,
+        delta: -165,
+        target: { comparison: 'at_most', value: 1440 },
+      },
+      {
+        key: 'incident_resolution_median_minutes',
+        unit: 'minutes',
+        current: 270,
+        previous: null,
+        delta: null,
+        target: null,
+      },
+      {
+        key: 'open_incidents',
+        unit: 'count',
+        current: 3,
+        previous: null,
+        delta: null,
+        target: null,
+      },
+      {
+        key: 'employees_without_credential',
+        unit: 'count',
+        current: 2,
+        previous: null,
+        delta: null,
+        target: null,
+      },
+      {
+        key: 'worked_minutes',
+        unit: 'minutes',
+        current: 612_000,
+        previous: 580_000,
+        delta: 32_000,
+        target: null,
+      },
+      {
+        key: 'contracted_minutes',
+        unit: 'minutes',
+        current: 604_800,
+        previous: 590_400,
+        delta: 14_400,
+        target: null,
+      },
+      {
+        key: 'baseline_manual_minutes_per_month',
+        unit: 'minutes',
+        current: 1080,
+        previous: null,
+        delta: null,
+        target: { comparison: 'reduction', value: 80 },
+      },
+    ],
+    origin_breakdown: [
+      { origin: 'qr_kiosk', scans: 4120, share: 97.2 },
+      { origin: 'pin_kiosk', scans: 96, share: 2.3 },
+      { origin: 'manual_admin', scans: 18, share: 0.4 },
+      { origin: 'import', scans: 4, share: 0.1 },
+    ],
+  },
+  meta: {
+    generated_at: '2026-04-01T07:20:11.000000Z',
+    time_zone: 'Europe/Madrid',
+    period: { from: '2026-03-01', to: '2026-03-31', days: 31 },
+    previous_period: { from: '2026-01-29', to: '2026-02-28', days: 31 },
+    // Los dos criterios reales del ejemplo del contrato, tal cual: no se
+    // resumen ni se inventan para el doble.
+    criteria: [
+      'Una jornada cuenta como registro completo cuando todos sus tramos están cerrados. El denominador son las jornadas con algún tramo: quien no fichó no entra ni arriba ni abajo. Los tramos anulados y las versiones sustituidas por una corrección no cuentan.',
+      'El reparto por origen cuenta solo los fichajes aceptados. Un escaneo rechazado —tarjeta desconocida, firma inválida, rebote— no es un fichaje y no entra en el reparto, aunque sí cuenta como intento atendido en la disponibilidad.',
+    ],
+  },
+}
+
+/**
+ * El mismo cuadro, pero SIN periodo anterior comparable (instalación con
+ * menos de dos periodos de historia): `previous`/`delta` de cada indicador
+ * van a `null`, NUNCA a `0` (contrato: «previous y delta son nulos cuando no
+ * hay con que comparar»). `adoption-dashboard.spec.ts` lo usa para comprobar
+ * que la pantalla enseña el texto vacío y no un «0».
+ */
+export const ADOPTION_REPORT_WITHOUT_PREVIOUS_PERIOD: AdoptionReport = {
+  ...ADOPTION_REPORT,
+  data: {
+    ...ADOPTION_REPORT.data,
+    indicators: ADOPTION_REPORT.data.indicators.map((indicator) => ({
+      ...indicator,
+      previous: null,
+      delta: null,
+    })),
+  },
+}
+
 // --- Bandeja de incidencias (RF-PA-05, RF-PR-01) -----------------------------
 
 export const INCIDENT_ID = 412
@@ -1310,6 +1471,18 @@ export interface ManagementApiOptions {
    */
   readonly payrollExportOutcome?: 'ok' | 'licenseRequired'
   /**
+   * El cuadro de impacto y adopcion (RF-IN-08, tarea 3.13). Por omision,
+   * `ADOPTION_REPORT`: un mes con periodo anterior comparable.
+   */
+  readonly adoptionReport?: AdoptionReport
+  /**
+   * Como responde `GET /reports/adoption` y su exportacion (RF-IN-08, tarea
+   * 3.13), aparte del `tooLarge` de `periodReportOutcome`, que tambien los
+   * alcanza (mismo techo de RNF-P-05). `licenseRequired` simula que
+   * `impact_dashboard` no esta en el plan (`402`, ADR-019, regla dura 15).
+   */
+  readonly adoptionReportOutcome?: 'ok' | 'licenseRequired'
+  /**
    * Las exportaciones de informes en segundo plano de partida (RF-IN-06,
    * RF-IN-07, tarea 3.9): horas por periodo y salida a nomina comparten el
    * mismo ciclo de vida (`report_exports`, decision 1 de la ficha). Por
@@ -1397,6 +1570,11 @@ export interface ManagementApiOptions {
      */
     readonly kioskUpdateWindow?: string
     readonly kioskUpdateQuietMinutes?: number
+    /**
+     * `BASELINE_MANUAL_HOURS_PER_MONTH` (RF-IN-08, tarea 3.13). Por omision,
+     * `0`: «no declarada», una instalacion recien puesta en marcha.
+     */
+    readonly baselineManualHoursPerMonth?: number
   }
   /**
    * Lo que devuelve `GET /api/v1/license` (RF-PD-04, RF-PD-05, tarea 5.3).
@@ -1639,6 +1817,7 @@ export async function stubManagementApi(
   const exportOutcome = options.exportOutcome ?? 'ok'
   const periodReportOutcome = options.periodReportOutcome ?? 'ok'
   const payrollExportOutcome = options.payrollExportOutcome ?? 'ok'
+  const adoptionReportOutcome = options.adoptionReportOutcome ?? 'ok'
   const correctionOutcome = options.correctionOutcome ?? 'ok'
   const baseUser =
     options.role === 'manager'
@@ -1881,6 +2060,8 @@ export async function stubManagementApi(
   let weeklySummaryEmail = options.operationalSettings?.weeklySummaryEmail ?? 'disabled'
   let kioskUpdateWindow = options.operationalSettings?.kioskUpdateWindow ?? '03:00-05:00'
   let kioskUpdateQuietMinutes = options.operationalSettings?.kioskUpdateQuietMinutes ?? 10
+  // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): `0` de serie, «no declarada».
+  let baselineManualHoursPerMonth = options.operationalSettings?.baselineManualHoursPerMonth ?? 0
 
   /** El catalogo completo de `installation_settings`, con la forma de `GET/PATCH /settings`. */
   function settingsCatalog(): unknown {
@@ -2124,6 +2305,18 @@ export async function stubManagementApi(
           affects_worked_hours: false,
           source: kioskUpdateQuietMinutes === 10 ? 'product_default' : 'installation',
           constraints: { minimum: 0, maximum: 120 },
+        },
+        // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): la linea base
+        // declarada de horas/mes consolidando hojas de horas antes del
+        // sistema. `0` (de serie) significa «no declarada».
+        {
+          key: 'BASELINE_MANUAL_HOURS_PER_MONTH',
+          value: baselineManualHoursPerMonth,
+          type: 'integer',
+          impact: 'presentation',
+          affects_worked_hours: false,
+          source: baselineManualHoursPerMonth === 0 ? 'product_default' : 'installation',
+          constraints: { minimum: 0, maximum: 10000 },
         },
       ],
       meta: { unknown_keys: [], invalid_keys: [] },
@@ -3118,6 +3311,7 @@ export async function stubManagementApi(
           }
 
           const updateQuietMinutes = checkInteger('KIOSK_UPDATE_QUIET_MINUTES', 0, 120)
+          const baselineHours = checkInteger('BASELINE_MANUAL_HOURS_PER_MONTH', 0, 10000)
 
           if (Object.keys(errors).length > 0) {
             await validationProblem(
@@ -3205,6 +3399,10 @@ export async function stubManagementApi(
 
           if (updateQuietMinutes !== undefined) {
             kioskUpdateQuietMinutes = updateQuietMinutes
+          }
+
+          if (baselineHours !== undefined) {
+            baselineManualHoursPerMonth = baselineHours
           }
 
           const appName = patch.settings['BRANDING_APP_NAME']
@@ -3734,6 +3932,80 @@ export async function stubManagementApi(
               'X-Kronoqr-Export-Rows': String(payrollColumns.length > 0 ? 42 : 0),
             },
             body: csvBody === '' ? 'contenido-de-prueba' : csvBody,
+          })
+
+          return
+        }
+        case 'GET /api/v1/reports/adoption': {
+          // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): el mismo
+          // `402` de licencia que la salida a nomina (ADR-019, regla dura
+          // 15) y el mismo `422` de tamaño que el resto de informes
+          // (RNF-P-05).
+          if (adoptionReportOutcome === 'licenseRequired') {
+            await route.fulfill({
+              status: 402,
+              contentType: 'application/problem+json',
+              body: JSON.stringify({
+                type: 'urn:kronoqr:problem:feature-not-licensed',
+                title: 'Funcionalidad no incluida en el plan',
+                status: 402,
+                feature: 'impact_dashboard',
+                restriction: 'not_in_plan',
+              }),
+            })
+
+            return
+          }
+
+          if (periodReportOutcome === 'tooLarge') {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:report-too-large',
+              'El cuadro no cabe en una respuesta al momento',
+              tooLargeMessage('to'),
+            )
+
+            return
+          }
+
+          await json(route, 200, options.adoptionReport ?? ADOPTION_REPORT)
+          return
+        }
+        case 'GET /api/v1/reports/adoption/export': {
+          if (adoptionReportOutcome === 'licenseRequired') {
+            await route.fulfill({
+              status: 402,
+              contentType: 'application/problem+json',
+              body: JSON.stringify({
+                type: 'urn:kronoqr:problem:feature-not-licensed',
+                title: 'Funcionalidad no incluida en el plan',
+                status: 402,
+                feature: 'impact_dashboard',
+                restriction: 'not_in_plan',
+              }),
+            })
+
+            return
+          }
+
+          const adoptionFormat = url.searchParams.get('format') ?? 'csv'
+          const adoptionContentType =
+            adoptionFormat === 'xlsx'
+              ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+              : adoptionFormat === 'pdf'
+                ? 'application/pdf'
+                : 'text/csv; charset=utf-8'
+
+          await route.fulfill({
+            status: 200,
+            contentType: adoptionContentType,
+            headers: {
+              'Content-Disposition':
+                `attachment; filename=kronoqr-impacto-adopcion-${url.searchParams.get('from') ?? ''}_` +
+                `${url.searchParams.get('to') ?? ''}.${adoptionFormat}`,
+              'Cache-Control': 'no-store, private',
+            },
+            body: 'contenido-de-prueba',
           })
 
           return

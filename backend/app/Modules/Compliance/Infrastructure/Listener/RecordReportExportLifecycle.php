@@ -10,6 +10,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
+use App\Modules\Reporting\Domain\Event\AdoptionReportExported;
 use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
 use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
 use App\Modules\Reporting\Domain\Event\ReportExportRequested;
@@ -104,6 +105,46 @@ final readonly class RecordReportExportLifecycle
                 'expires_at' => $event->expiresAt,
                 'employees' => \count($event->employeeUuids),
                 ...self::affectedSubjects($event->employeeUuids),
+            ]),
+        ));
+    }
+
+    /**
+     * El cuadro de impacto descargado (**RF-IN-08**, tarea 3.13).
+     *
+     * ## Vive en este listener y no en uno propio
+     *
+     * Porque es el mismo hecho de la misma familia con la misma atribucion: una
+     * cuenta de gestion se lleva un documento de informes. Un listener nuevo habria
+     * repetido el constructor y habria dejado la pregunta «¿que informes salieron?»
+     * contestada desde dos sitios.
+     *
+     * ## Y aqui el payload es corto, porque el documento no lleva a nadie dentro
+     *
+     * Periodo, formato, huella y tamaño. No hay `employee_uuids` que acotar ni
+     * `row_count` que explicar: el cuadro son doce agregados de la instalacion
+     * entera (regla dura 21). Es el unico de los cuatro hechos de este fichero del
+     * que se puede decir eso, y la razon por la que **leer** el cuadro no deja
+     * asiento mientras descargarlo si.
+     *
+     * La huella es la **del contenido**, no la del fichero: es la misma para el CSV,
+     * el XLSX y el PDF del mismo cuadro y la misma que imprime el pie del PDF, asi
+     * que el asiento se puede comparar con el papel que alguien tenga delante. El
+     * tamaño si es del fichero, y va al lado por lo contrario: es lo que permite
+     * reconocer el adjunto concreto.
+     */
+    public function adoptionExported(AdoptionReportExported $event): void
+    {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: AuditActor::user($event->exportedByUserId),
+            action: AuditAction::AdoptionReportExported,
+            subject: AuditSubject::of('adoption_report'),
+            payload: AuditPayload::of([
+                'from' => $event->from,
+                'to' => $event->to,
+                'format' => $event->format,
+                'sha256' => $event->sha256,
+                'size_bytes' => $event->sizeBytes,
             ]),
         ));
     }

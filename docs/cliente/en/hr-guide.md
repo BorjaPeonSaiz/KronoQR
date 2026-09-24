@@ -1264,6 +1264,124 @@ once; in this version there is no individual opt-out.
 > there is decided by the hotel with its advisers, not by the system's retention
 > ([`legal-obligations.md`](legal-obligations.md) §4).
 
+### 6.6 The impact dashboard: what it measures and what it does not
+
+**What it is.** A screen in the panel —Reports → "Impact and adoption"— that
+answers a single question: **is the system working?** It does not say how much
+anybody has worked: it says whether the record is being kept complete, whether
+people clock with the card or things have to be fixed by hand, how long
+incidents take to be resolved and how many people are still without a card. It
+is visible to administrator and HR accounts; department managers do not see it.
+
+**The period, and what it is compared against.** You choose a closed period —by
+default, the previous full calendar month— and every indicator comes with its
+value and with the **change against the previous period**, which is always
+**the same number of days immediately before** the one you chose: a
+thirty-day month is compared with the thirty days before it, a fortnight with
+the previous fortnight. If there is nothing to compare against in that
+previous period —because the system was not running yet, or there were no
+clockings— **the change is left blank, not set to zero**: a zero would say
+nothing changed, when what happens is that there is nothing to measure it
+against. Two indicators (open incidents and people without a card) are a
+snapshot of today and have no change figure.
+
+**The indicators, one by one, with the target the product sets itself three
+months after going live.** The target sits next to the value and the dashboard
+says in words, not only with a colour, whether you are inside or outside it.
+
+- **Working days with a complete record — target: 99 % or more.** Of all the
+  working days in the period on which somebody clocked, how many have **all
+  their entries closed**: in and out, no forgotten shift. It is the main
+  indicator, because it is what the product is for: a complete working-time
+  record. A working day with an open shift that is later closed with a
+  correction counts as complete from that moment on: the dashboard is
+  calculated on what exists when you open it.
+- **Clockings by card — target: 98 % or more**, with the split by **card, PIN,
+  manual correction and import**. Only **accepted** clockings count —a scan
+  that produced no entry contributes nothing— and the split always adds up to
+  100 %. A low card percentage is not a system failure: it is people without a
+  card handed over, or people using the PIN out of habit, and the fix is in
+  §2.4 and §2.6.
+- **Corrections over clockings — target: under 2 %.** How many corrections
+  (§5) were made in the period for every hundred accepted clockings of the same
+  period. It measures trust in the data: if one in ten has to be fixed by hand,
+  the record is being built after the fact, which is exactly what the product
+  is there to avoid.
+- **Incidents open today, and time to close a forgotten shift — target: under
+  24 hours.** The first is a snapshot of the moment, with no change figure. The
+  second is the **average time** between the system detecting an unclosed
+  shift (§4.1) and somebody resolving it (§4.3), counting only those resolved
+  within the period; next to it is the **median**, which is not dragged by one
+  incident that sat forgotten for a month. It measures whether the inbox is
+  attended to promptly, not whether there are few incidents.
+- **People without a card handed over, today.** How many active people do not
+  yet have a card with its handover recorded (§2.6). A snapshot of today, with
+  no change figure. Until it is zero, somebody is clocking with a PIN or not
+  clocking at all.
+- **Hours worked against contracted** in the period, for the whole hotel: the
+  same figures and the same criteria as the hours-per-period report (§6.1),
+  added up for the entire workforce, without days with an open shift and with
+  public holidays treated the same way. It has no target: it is context, so
+  that you read the other indicators knowing how much activity there was.
+- **Availability of the act of clocking — target: 99.9 % or more.** Read this
+  one carefully, because it does not measure what it seems to. **It is not
+  "the server was up": it is "the person was able to clock".** The tablet
+  stores the clocking without a network and uploads it when the connection
+  comes back (§8, "…somebody cannot clock"), so the server may have been down
+  for half a morning and availability still be at 100 %: nobody was left
+  unable to clock. It is calculated as the clockings the tablet **handled**
+  —including those it stored offline and uploaded later, which the dashboard
+  shows separately as **"resolved without the server"**, and also those a rule
+  rejected, because they were handled— against the attempts the tablet itself
+  **reported as failed**: the camera that does not start, the reader that does
+  not load, the storage that will not save. Two caveats, and the dashboard
+  states them: it is an **approximation in favour of reliability**, because an
+  attempt that never even produced an error on the tablet is seen by nobody;
+  and the tablets' error history **is trimmed over time**, so on old periods
+  the figure may come out somewhat better than reality.
+- **Hours per month consolidating timesheets — reference: 80 % less.** This is
+  the only indicator that **the system cannot measure**, because it measures
+  the work HR did **before** the system was installed, and no application
+  observes what happened before it existed. The figure is declared by the
+  hotel in Operational settings (the `BASELINE_MANUAL_HOURS_PER_MONTH`
+  setting): how many hours a month went into gathering and reconciling
+  timesheets. The dashboard shows it as declared, with the target of reducing
+  it by 80 % as a reference for your own comparison. If it has not been
+  declared, the box **is left empty**: the product does not invent an
+  improvement it has not measured.
+
+**What it is not.** The values are **for the whole installation and never per
+person**: there is no "who corrects most" or "who forgets to clock" column, and
+there will not be one, because the dashboard exists to evaluate the system,
+not the staff. A number outside its target points to a process to fix —cards
+not handed over, an inbox nobody looks at, a badly placed tablet—, not to a
+person. Nor is it a real-time view: it is a closed period, and a correction
+made today on last month changes last month's dashboard the next time you open
+it. At the bottom, the dashboard states its criteria as the hours report does.
+
+**Exporting.** It downloads as CSV, Excel or PDF; the PDF carries a timestamp,
+issuer and a digest of its content, like the others. Although it carries no names,
+**every export is recorded** in the audit trail —who, which period and in which
+format—, because it is a document that leaves the system and the one your
+provider will ask you for when the renewal comes up. When the document is going
+to leave the hotel —to the provider, for instance—, **export closed periods of a
+month, not loose days**: in a small installation, a very short period stops
+being an aggregate and can be read as one particular person's working day.
+
+**Licence.** The plan needs to include the impact dashboard. If it does not,
+or the licence has expired, the screen says so and shows nothing else;
+clocking, the record, corrections and the export for the Labour Inspectorate
+are not affected (§8, "…there is a licence notice in the panel").
+
+**If IT shows you another dashboard with the same name.** The system also
+carries a technical dashboard called "Impact and adoption" in the server
+monitoring tool. It uses the same definitions —what a complete working day is,
+what an accepted clocking is, what a correction is— but it **looks at the last
+seven days** on a rolling basis, whereas this dashboard looks at a closed
+period that you choose. That is why they may not match to the decimal, and it
+is not an error: the one on the panel screen is the one that counts when
+talking to your provider.
+
 ---
 
 ## 7. The compliance profile
@@ -1450,7 +1568,8 @@ one:
 **Everything keeps clocking and you keep having access to the whole record.** An
 expired licence never stops clocking, nor consulting, nor correcting, nor the
 export for the Labour Inspectorate: what gets degraded are accessory features
-—for example, your own branding goes back to the product's. Leaving you without
+—for example, your own branding goes back to the product's, or the impact
+dashboard (§6.6) stops being shown. Leaving you without
 a working-time record over a commercial matter would leave you in breach of the
 law, and this product does not do that. Tell whoever handles the relationship
 with the provider; the detail is in

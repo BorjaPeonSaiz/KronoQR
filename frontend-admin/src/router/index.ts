@@ -15,6 +15,7 @@ import {
   SUPPORT_MANAGE,
 } from '@/features/auth/abilities'
 import AbsenceListView from '@/features/absences/AbsenceListView.vue'
+import AdoptionDashboardView from '@/features/reports/AdoptionDashboardView.vue'
 import LoginView from '@/features/auth/LoginView.vue'
 import ComplianceView from '@/features/compliance/ComplianceView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
@@ -194,6 +195,19 @@ export const routes: RouteRecordRaw[] = [
         path: 'reports/payroll',
         name: 'payroll-export',
         component: PayrollExportView,
+        meta: { ability: REPORTS_MANAGE, section: 'reports' },
+      },
+      {
+        // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): los seis
+        // indicadores del doc 01 §1.3, con objetivo y comparacion contra el
+        // periodo anterior. Ambito `reports:*`, el mismo que «Informes» y
+        // «Nomina»: solo `admin` y `rrhh` lo llevan (Anexo B: `admin|rrhh`),
+        // asi que un `responsable_departamento` o un `auditor` no llegan ni
+        // por URL. La policy del servidor es la que autoriza de verdad
+        // (regla dura 18).
+        path: 'reports/adoption',
+        name: 'adoption-dashboard',
+        component: AdoptionDashboardView,
         meta: { ability: REPORTS_MANAGE, section: 'reports' },
       },
       {

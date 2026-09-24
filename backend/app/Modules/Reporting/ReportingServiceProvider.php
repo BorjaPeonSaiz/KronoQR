@@ -9,6 +9,7 @@ use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Attendance\Domain\Event\ShiftCorrected;
 use App\Modules\Reporting\Application\Port\AbsenceCensusReader;
 use App\Modules\Reporting\Application\Port\AbsenceMetrics;
+use App\Modules\Reporting\Application\Port\AdoptionFactsReader;
 use App\Modules\Reporting\Application\Port\AdoptionMetrics;
 use App\Modules\Reporting\Application\Port\ComplianceFactsReader;
 use App\Modules\Reporting\Application\Port\ComplianceIncidentLinks;
@@ -47,10 +48,12 @@ use App\Modules\Reporting\Application\UseCase\RequestReportExport;
 use App\Modules\Reporting\Application\UseCase\SendWeeklySummaries;
 use App\Modules\Reporting\Application\UseCase\ShowReportExport;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Reporting\Domain\ValueObject\AdoptionReport;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceSummary;
 use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\PresenceBoard;
 use App\Modules\Reporting\Domain\ValueObject\WorkDayJournal;
+use App\Modules\Reporting\Http\Policy\AdoptionReportPolicy;
 use App\Modules\Reporting\Http\Policy\ComplianceSummaryPolicy;
 use App\Modules\Reporting\Http\Policy\LivePresencePolicy;
 use App\Modules\Reporting\Http\Policy\PayrollExportPolicy;
@@ -84,6 +87,7 @@ use App\Modules\Reporting\Infrastructure\Metrics\TextfileWeeklySummaryMetrics;
 use App\Modules\Reporting\Infrastructure\Notification\MailReportExportNotifier;
 use App\Modules\Reporting\Infrastructure\Notification\MailWeeklySummaryNotifier;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseAbsenceCensusReader;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabaseAdoptionFactsReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceFactsReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceIncidentLinks;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseComplianceProfileReference;
@@ -197,6 +201,7 @@ final class ReportingServiceProvider extends ServiceProvider
 
         $this->registerPeriodReport();
         $this->registerComplianceSummary();
+        $this->registerAdoptionReport();
         $this->registerWeeklySummary();
     }
 
@@ -242,6 +247,19 @@ final class ReportingServiceProvider extends ServiceProvider
          * fuera teniendo el ambito, que es la mitad que aporta la policy.
          */
         Gate::policy(ComplianceSummary::class, ComplianceSummaryPolicy::class);
+
+        /*
+         * El cuadro de impacto y adopcion (RF-IN-08, tarea 3.13). `{admin, rrhh}`
+         * y NADIE MAS, que es lo que dice el Anexo B —«rol: admin|rrhh»— y lo que
+         * hace coherente que la consulta no lleve alcance: quien llega alcanza a
+         * toda la plantilla por definicion.
+         *
+         * **Policy propia y no la del informe por periodo**, aunque hoy digan lo
+         * mismo: el dia que un responsable pueda ver las horas de su equipo, esa
+         * concesion no puede arrastrar consigo el cuadro que mide la adopcion del
+         * sistema entero.
+         */
+        Gate::policy(AdoptionReport::class, AdoptionReportPolicy::class);
 
         /*
          * El informe generado en diferido (RF-IN-06, RF-IN-07, tarea 3.9).
@@ -403,6 +421,36 @@ final class ReportingServiceProvider extends ServiceProvider
          * hallazgo, porque solo puede crecer.
          */
         $this->app->bind(ComplianceMetrics::class, TextfileComplianceMetrics::class);
+    }
+
+    /**
+     * El cuadro de impacto y adopcion (RF-IN-08, RNF-D-01, tarea 3.13).
+     *
+     * **Un solo puerto nuevo**, y el adaptador se compone con dos cosas que ya
+     * existian: el `statement_timeout` de `config/reporting.php` —porque
+     * `Application` no lee configuracion (doc 02 §3.5)— y
+     * {@see WorkDayCompletionReader}, que es quien define «jornada completa» desde
+     * la tarea 3.1. Que el lector de hechos lo reciba **inyectado** y no repita su
+     * SQL es lo que impide que el cuadro de Grafana y el cuadro del panel den dos
+     * porcentajes distintos para la misma semana (decision 8 de la ficha).
+     *
+     * **No hay metrica nueva.** Las del §8.2 que alimentan el cuadro
+     * —`workdays_complete_ratio`, `scans_by_origin_total`,
+     * `incident_resolution_seconds`, `employees_without_delivered_credential`— se
+     * publican desde las tareas 3.1 y 3.2. Publicar aqui otra serie daria un valor
+     * que cambia cada vez que alguien abre la pantalla; lo que este endpoint tiene
+     * es `http_requests_total{route}` y su traza.
+     */
+    private function registerAdoptionReport(): void
+    {
+        $this->app->bind(
+            AdoptionFactsReader::class,
+            static fn (Application $app): DatabaseAdoptionFactsReader => new DatabaseAdoptionFactsReader(
+                $app->make(ConnectionInterface::class),
+                $app->make(WorkDayCompletionReader::class),
+                Config::integer('reporting.adoption.statement_timeout_seconds'),
+            ),
+        );
     }
 
     /**

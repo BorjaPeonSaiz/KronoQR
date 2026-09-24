@@ -93,20 +93,30 @@ final class SettingsPolicy
 
     /**
      * Si ademas puede tocar una clave **reservada al cliente** (tarea 3.5,
-     * RF-AT-12; ampliada en la 3.12, RF-PR-05).
+     * RF-AT-12; ampliada en la 3.12, RF-PR-05, y en la 3.13, RF-IN-08).
      *
      * Son las que no deciden «como funciona el producto» sino **de que responde
-     * el hotel y a donde van los datos de su gente**. Hoy son dos y por dos
-     * motivos distintos:
+     * el hotel, a donde van los datos de su gente y con que cifra se juzga el
+     * propio producto**. Hoy son tres y por tres motivos distintos:
      *
      * | Clave | Que decide |
      * |---|---|
      * | `ATTENDANCE_BREAK_CLOCKING` | Que jornadas se marcan: reactiva o suspende RN-12 (RF-AT-12). |
      * | `WEEKLY_SUMMARY_EMAIL` | Que cada lunes salgan por SMTP nombres y horas de la plantilla hacia buzones (RF-PR-05). |
+     * | `BASELINE_MANUAL_HOURS_PER_MONTH` | El denominador declarado del «−80 % de carga administrativa» del §1.3, que el sistema no puede medir (RF-IN-08). |
      *
      * El fabricante configura la instalacion y diagnostica; no decide el
-     * cumplimiento de su cliente ni enciende una salida de datos personales de
-     * su plantilla (ADR-020, regla dura 16).
+     * cumplimiento de su cliente, no enciende una salida de datos personales de
+     * su plantilla y **no escribe la cifra con la que se argumenta su propia
+     * renovacion** (ADR-020, regla dura 16).
+     *
+     * ## La tercera es la unica en la que el fabricante tiene interes propio
+     *
+     * Las dos primeras le niegan una potestad sobre el hotel. Esta le niega un
+     * **conflicto de interes**: la linea base describe el proceso manual anterior a
+     * la instalacion, nadie puede comprobarla contra ningun dato, y subirla mejora el
+     * cuadro de impacto con el que se defiende una renovacion. Es la unica clave del
+     * catalogo cuyo valor beneficia a quien mantiene el producto.
      *
      * ## El fabricante no decide el cumplimiento del cliente
      *

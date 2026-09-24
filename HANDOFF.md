@@ -213,12 +213,49 @@ máquina): `make quality` en verde; Unit 2292 (6,5 s en reposo, sobre el presupu
 `qa:traceability --check`, `docs:consistency` y `observability-check` en verde; matriz **3908 (Pest 3636, Playwright 266, k6 6)**; panel: lint, `vue-tsc`, 584
 unitarias, 150 E2E; quiosco: lint, `vue-tsc`, 538 unitarias, 90 E2E, bundle 107 KiB / 250; portal: lint y `vue-tsc`.
 
-**Siguiente acción:** el usuario integra la **PR #79** de la 3.12 (commit `e8074b3`; **CI manual 35887267293 en verde en todos los
-jobs**) con *merge commit* y borra la rama. **Con migración** (`2026_09_23_100000_weekly_summary_deliveries.php`; sin variables nuevas de `.env`:
-los tres ajustes viven en el panel): tras integrar, `git pull`, `make up` y `make migrate`; comprobar `php artisan migrate:status`,
-que el latido de un quiosco responde `update_window`, y `php artisan reporting:weekly-summary` a mano (con el ajuste apagado responde
-`disabled` y publica `kronoqr_weekly_summary.prom`). Después, la **3.13** «Cuadro de impacto y adopción» (RF-IN-08; `backend-laravel` +
-`frontend-panel`).
+**PR #79 INTEGRADA en `main` (`7196ac5`, 23-09-2026).** Tras integrar: `git pull`, `make up`, `make migrate` (`weekly_summary_deliveries` aplicada,
+nada pendiente); el latido de «Entrada de personal» responde `update_window {03:00, 05:00, 10}`; `reporting:weekly-summary` a mano
+responde `disabled`, publica `kronoqr_weekly_summary.prom` y no deja filas.
+
+**Rama `feat/tarea-3.13-cuadro-impacto-adopcion` (desde `main` `7196ac5`, PR #79 de la 3.12 integrada). Tarea 3.13 «Cuadro de
+impacto y adopción» (RF-IN-08, RNF-D-01) IMPLEMENTADA, REVISADA (dos vueltas: `revisor-codigo` y `seguridad-cumplimiento`) y PROBADA
+el 24-09-2026; ver «Siguiente acción».** Veinticuatro decisiones en la ficha (plan 06 → «Tarea 3.13» → «Decisiones tomadas», «Al
+ejecutar la primera oleada» y «Segunda vuelta»). Lo que importa: **informe agregado en `Reporting`** (`ReadAdoptionReport`, puerto
+`AdoptionFactsReader`, política pura `AdoptionIndicators`: **ni un porcentaje en SQL**, `previous`/`delta` **`null` y nunca `0`** sin
+denominador), **doce indicadores** en orden de lectura (`AdoptionIndicatorKey::inReadingOrder()`: jornadas completas, fichajes por QR,
+correcciones, disponibilidad RNF-D-01, resueltos sin servidor, media y mediana de resolución de `open_shift_expired`, incidencias
+abiertas, personas sin tarjeta entregada, minutos trabajados y contratados, línea base) con unidades `percent|minutes|count`,
+objetivo `{comparison: at_least|at_most|reduction, value}|null` (**`at_most` estricto** como doc 01 §1.3; `reduction` no juzgable: el
+producto no mide el trabajo anterior a su instalación) y reparto por los cuatro orígenes siempre; `GET /api/v1/reports/adoption`
+(admin|rrhh, `Feature::ImpactDashboard` → 402, primer consumidor; techo **366 días** → 422 `report-too-large`) y
+`/reports/adoption/export?format=csv|xlsx|pdf` sellado (huella de contenido idéntica en los tres formatos, pie compartido
+`pdf.period-report-footer`, compuesto en memoria para escribir **antes** el asiento `adoption_report.exported` `{from,to,format,
+sha256,size_bytes}`); **la lectura no deja asiento** (agregado sin identificadores; ratificado: un umbral de k-anonimato sería
+indistinguible de «sin denominador»). `DatabaseAdoptionFactsReader`: cuatro consultas de **una pasada por tabla** (`count(*) FILTER` +
+`LEFT JOIN` sobre la CTE de dos periodos; la primera versión recorría `scan_events` catorce veces y con cuatro años de retención habría
+superado el `statement_timeout` de 10 s), `AT TIME ZONE` con la zona ligada como parámetro, `SET LOCAL statement_timeout` en
+transacción, sin índice nuevo (la expresión con la zona es configuración, regla 13). `WorkDayCompletionReader::completionBetween()`:
+**una sola definición de jornada completa** para Grafana y el cuadro (`completionOn()` delega). Ajuste `BASELINE_MANUAL_HOURS_PER_MONTH`
+(`integer(0,0,10000)`, `PRESENTATION`, 0 = no declarada, en `OperationalSettings`; **vedada al actor de soporte**, `CUSTOMER_RESERVED_KEYS`:
+es el denominador del objetivo comercial y describe el proceso anterior del hotel); prueba nueva que exige rótulo `settings.attributes.*`
+es/en por cada `SettingKey` (cerró dos huecos heredados). Telemetría: span y log sin PII **ni ratios** (sin denominador serían el dato de
+una persona); sin métricas nuevas (las del §8.2 se recalculan). **Sin migración.** Panel: `AdoptionDashboardView.vue` (`/reports/adoption`,
+`REPORTS_MANAGE`) con `ChartWithTable.vue` compartido (**primer ECharts**, cargado en diferido, tema por tokens, tabla de datos alternativa
+donde `null` se escribe «sin datos» y nunca `0`), porcentajes **con dos decimales** por `Intl.NumberFormat` (el borde 99,86/99,94 de
+RNF-D-01), variación en **`pp`**, `HH:MM` con `durationParts()` de `web-kit`, `422 report-too-large` reconocido por `problem.type`,
+estado vacío alcanzable, ajuste nuevo en «Ajustes operativos» (no en el asistente: enum cerrado de ocho pasos); tipos del contrato vía
+`shared/api/types.ts`. Docs: guía de RRHH §6.6 «El cuadro de impacto: qué mide y qué no» (+ exportar **periodos cerrados de un mes**
+si sale del hotel), `configuracion.md` §2.1/§6 (veintitrés claves), `operacion.md` §12.4, `obligaciones-legales.md` §2 (uso ulterior
+agregado, exportación sin datos personales, descarga auditada), doc 01 Anexo B, doc 02 §8.3. Cifras (24-09-2026, esta máquina):
+`make quality` en verde; Unit 2369, Integration 747, Contract 63, Feature 2025, Architecture 702 (+ `SourceDiscoveryTest`
+conocido); volumen RNF-P-05 **500 × 2 años en 0,891 s** (antes 2,179 s); mutación acotada `AdoptionIndicators` **98,73 %**; matriz
+**3991 (Pest 3711, Playwright 274, k6 6)**; `qa:traceability --check`, `docs:consistency`, `api-lint` y `observability-check` en verde; panel: lint, `vue-tsc`,
+600 unitarias, 158 E2E (axe sin violaciones críticas ni graves); quiosco y portal: lint, `vue-tsc` y unitarias en verde.
+
+**Siguiente acción:** commit único `feat(3.13): …`, push, CI manual y PR contra `main` con *merge commit*; después un
+`docs(handoff)` con los números. **Sin migración ni variables nuevas de `.env`**: tras integrar basta `git pull` y `make up`; conviene
+abrir «Informes → Impacto y adopción» en el panel con la licencia de dev (si el plan no lleva `impact_dashboard` verá el aviso 402) y
+descargar un PDF para ver el asiento `adoption_report.exported`. Después, según plan 06 §11: el **Cierre de la Fase 3** (plan 06 → «Cierre de la Fase 3»: las cuatro revisiones de cierre, `make quality && make test && make mutate && make e2e`, k6, doc 07 §6 con las filas vencidas, `current_phase` a 3 en `qa:traceability`).
 
 **Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
 `chore(restos-3.8): …`, CI manual tras el push y PR contra `main` (*merge commit*). Sin migración: basta `git pull` y `make up`, que
@@ -944,6 +981,23 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
   sin cubrir en `ReportExport`; `ComplianceSummary` emite `report-too-large` sin diferido al que remitir (acortar el rango); riesgo
   aceptado: el correo de aviso llega aunque la cuenta se desactive entre pedir y generar (sin enlace ni datos); exportación para la
   Inspección en diferido, plantillas libres de nómina, envío por correo/SFTP y centro de notificaciones: fuera de alcance (decisión 12); **presupuesto de la suite unitaria**: 2181 pruebas en 6,8 s en reposo en esta máquina frente a los 5 s de `make test-unit` (la CI la mide en Linux y la pasó con 2181 en el run 35831869626): si algún día la rechaza, medir qué ficheros pesan antes de subir el presupuesto.
+- **3.13 (restos, 24-09-2026):** **`make mutate` no genera mutantes en `AdoptionTarget` ni `AdoptionIndicator`** con `--covered-only`
+  aunque `AdoptionTargetTest` los ejercita de forma directa (22 marcados *uncovered* sin la opción): el `>=`/`<` de los objetivos queda
+  fuera del MSI del dominio; averiguar por qué el plugin no atribuye la cobertura (`qa-testing`), porque mientras dure el MSI mide menos
+  de lo que parece (los bordes de los seis objetivos están fijados con pruebas explícitas); la columna «Estado» del fichero exportado
+  («Fuera del objetivo» / «Sin dato») no se afirma en ningún formato para un indicador en el límite; el texto impreso del PDF no se
+  lee (tipografía en subconjunto, sin extractor en el contenedor; mismo compromiso que `PeriodReportPdfSealTest`); `X-Kronoqr-Export-Criteria`
+  mide ≈ 5,3 KB en base64 (dentro del `fastcgi_buffer_size` de 32 KB de la nginx del producto): si un proxy del cliente topa las
+  cabeceras a 8 KB, pasar las claves de criterio en vez del texto o leerlas del JSON; la atribución de `error_events` al periodo es
+  aproximada (`last_seen_at` + `occurrences`, poda de `product:errors:prune`) y así lo dice la línea de criterios; el presupuesto de
+  base de datos de una petición es de 30 s en el peor caso (hechos + dos informes de horas con su propio `statement_timeout`): si
+  molesta, un `statement_timeout` más corto para las dos llamadas de horas; la línea base de horas **no entra en el asistente de puesta
+  en marcha** (enum cerrado de ocho pasos): solo en «Ajustes operativos»; el comentario de `PAYROLL_EXPORT_*` en `OperationalSettingsView.vue`
+  (3.9) sigue diciendo que el contrato no las declara; la disponibilidad RNF-D-01 es una aproximación declarada (el latido no cuenta
+  intentos); contraste visual con `impacto-adopcion.json` de Grafana en el cierre de fase; fuera de alcance (decisión 10): desglose por
+  departamento o quiosco, tendencia de más de dos periodos, envío programado del cuadro, compartirlo anonimizado con el fabricante; la
+  skill `dataviz` que cita el reparto de la ficha no existe en `.claude/skills` (se siguió doc 06). Aparte, un `git stash` huérfano
+  (`wip-3.13-adoption-dashboard`, duplicado del árbol) quedó en la máquina de desarrollo: `git stash drop` a mano.
 - **3.12 (restos, 23-09-2026):** **concurrencia real** de dos pasadas de `reporting:weekly-summary` contra el `UNIQUE` (hoy se prueba con
   una reclamación duplicada, no con dos procesos); una semana cuyo correo falló **no se recupera sola** el lunes siguiente (la pasada
   calcula la semana anterior): se reenvía con `--week`; si molesta, una pasada que revise las N semanas sin fila; `registration.update()`

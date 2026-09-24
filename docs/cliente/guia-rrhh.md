@@ -1236,6 +1236,123 @@ esta versión no hay baja individual.
 > no la retención del sistema ([`obligaciones-legales.md`](obligaciones-legales.md)
 > §4).
 
+### 6.6 El cuadro de impacto: qué mide y qué no
+
+**Qué es.** Una pantalla del panel —Informes → «Impacto y adopción»— que
+responde a una sola pregunta: **¿está sirviendo el sistema?** No dice cuánto ha
+trabajado nadie: dice si el registro se está haciendo completo, si la gente
+ficha con la tarjeta o hay que arreglar a mano, cuánto tardan en resolverse las
+incidencias y cuánta gente sigue sin tarjeta. La ven las cuentas de
+administración y de RRHH; los responsables de departamento, no.
+
+**El periodo, y con qué se compara.** Eliges un periodo cerrado —de serie, el
+mes natural anterior completo— y cada indicador sale con su valor y con la
+**variación frente al periodo anterior**, que es siempre **el mismo número de
+días justo antes** del que has elegido: un mes de treinta días se compara con
+los treinta días anteriores, una quincena con la quincena anterior. Si en ese
+periodo anterior no hay nada con lo que comparar —porque el sistema aún no
+estaba en marcha, o no hubo fichajes— **la variación queda en blanco, no a
+cero**: un cero diría que nada cambió, y lo que pasa es que no hay con qué
+medirlo. Dos indicadores (incidencias abiertas y personas sin tarjeta) son una
+foto de hoy y no tienen variación.
+
+**Los indicadores, uno a uno, con el objetivo que el producto se fija a los
+tres meses de estar en marcha.** El objetivo sale junto al valor y el cuadro
+dice con palabras, no solo con un color, si estás dentro o fuera.
+
+- **Jornadas con registro completo — objetivo: 99 % o más.** De todas las
+  jornadas del periodo en las que alguien fichó, cuántas tienen **todos sus
+  tramos cerrados**: entrada y salida, sin turno olvidado. Es el indicador
+  principal, porque es la función del producto: un registro horario completo.
+  Una jornada con un turno abierto que se cierra después con una corrección
+  pasa a contar como completa desde ese momento: el cuadro se calcula sobre lo
+  que hay cuando lo abres.
+- **Fichajes por tarjeta — objetivo: 98 % o más**, con el reparto por
+  **tarjeta, PIN, corrección manual e importación**. Se cuentan solo los
+  fichajes **aceptados** —un escaneo que no produjo tramo no reparte nada— y el
+  reparto suma siempre el 100 %. Un porcentaje bajo de tarjeta no es un fallo
+  del sistema: es gente sin tarjeta entregada o que usa el PIN por costumbre, y
+  la solución está en el §2.4 y en el §2.6.
+- **Correcciones sobre fichajes — objetivo: menos del 2 %.** Cuántas
+  correcciones (§5) se han hecho en el periodo por cada cien fichajes aceptados
+  del mismo periodo. Mide la confianza en el dato: si hay que arreglar a mano
+  uno de cada diez, el registro se está haciendo a posteriori, y eso es
+  justamente lo que el producto viene a evitar.
+- **Incidencias abiertas hoy, y tiempo hasta cerrar un turno olvidado —
+  objetivo: menos de 24 horas.** Lo primero es una foto del momento, sin
+  variación. Lo segundo es el **tiempo medio** entre que el sistema detecta un
+  turno sin cerrar (§4.1) y que alguien lo resuelve (§4.3), contando solo las
+  resueltas dentro del periodo; al lado sale la **mediana**, que no se deja
+  arrastrar por una incidencia que estuvo un mes olvidada. Mide si la bandeja
+  se atiende pronto, no si hay pocas incidencias.
+- **Personas sin tarjeta entregada, hoy.** Cuántas personas activas no tienen
+  todavía una tarjeta con la entrega registrada (§2.6). Foto de hoy, sin
+  variación. Mientras no sea cero, alguien está fichando con PIN o no está
+  fichando.
+- **Horas trabajadas frente a contratadas** en el periodo, del hotel entero:
+  las mismas cifras y los mismos criterios del informe de horas por periodo
+  (§6.1) sumados para toda la plantilla, sin días con turno abierto y con los
+  festivos tratados igual. No tiene objetivo: es contexto, para leer los demás
+  indicadores sabiendo cuánta actividad ha habido.
+- **Disponibilidad del acto de fichar — objetivo: 99,9 % o más.** Léelo con
+  cuidado, porque no mide lo que parece. **No es «el servidor estaba
+  encendido»: es «la persona pudo fichar».** La tablet guarda el fichaje sin
+  red y lo sube cuando vuelve la conexión (§8, «…alguien no puede fichar»), así
+  que el servidor puede haber estado caído media mañana y la disponibilidad
+  seguir en el 100 %: nadie se quedó sin fichar. Se calcula como los fichajes
+  que la tablet **atendió** —incluidos los que guardó sin red y subió después,
+  que el cuadro enseña aparte como **«resueltos sin servidor»**, y también los
+  que una regla rechazó, porque fueron atendidos— frente a los intentos que la
+  propia tablet **reportó como fallidos**: la cámara que no arranca, el lector
+  que no carga, el almacenamiento que no deja guardar. Dos salvedades, y el
+  cuadro las declara: es una **aproximación a favor de la fiabilidad**, porque
+  un intento que ni siquiera llegó a producir un error en la tablet no lo ve
+  nadie; y el historial de errores de las tablets **se recorta con el tiempo**,
+  así que sobre periodos antiguos la cifra puede salir algo mejor que la
+  realidad.
+- **Horas al mes consolidando hojas de horas — referencia: un 80 % menos.** Es
+  el único indicador que **el sistema no puede medir**, porque mide el trabajo
+  que RRHH hacía **antes** de instalarlo, y ninguna aplicación observa lo que
+  ocurría antes de existir. La cifra la declara el hotel en Ajustes operativos
+  (ajuste `BASELINE_MANUAL_HOURS_PER_MONTH`): cuántas horas al mes se iban en
+  juntar y cuadrar hojas de horas. El cuadro la enseña tal cual, con el
+  objetivo de reducirla un 80 % como referencia para tu propia comparación. Si
+  no se ha declarado, la casilla **queda vacía**: el producto no inventa una
+  mejora que no ha medido.
+
+**Lo que no es.** Los valores son **de la instalación entera y nunca por
+persona**: no hay una columna de «quién corrige más» ni de «quién olvida
+fichar», y no la habrá, porque el cuadro sirve para evaluar el sistema, no a la
+plantilla. Un número fuera de objetivo señala un proceso que arreglar —tarjetas
+sin entregar, una bandeja que nadie mira, una tablet mal colocada—, no a una
+persona. Tampoco es una vista en tiempo real: es un periodo cerrado, y una
+corrección hecha hoy sobre el mes pasado cambia el cuadro del mes pasado la
+próxima vez que lo abras. Al pie, el cuadro declara sus criterios como hace el
+informe de horas.
+
+**Exportar.** Se descarga en CSV, Excel o PDF; el PDF lleva sello de tiempo,
+emisor y huella del contenido, como los demás. Aunque no lleva nombres, **cada
+exportación queda registrada** en la auditoría —quién, qué periodo y en qué
+formato—, porque es un documento que sale del sistema y el que tu proveedor te
+pedirá al hablar de la renovación. Cuando el documento vaya a salir del hotel
+—al proveedor, por ejemplo—, **exporta periodos cerrados de un mes, no días
+sueltos**: en una instalación pequeña, un periodo muy corto deja de ser un
+agregado y puede leerse como la jornada de una persona concreta.
+
+**Licencia.** Hace falta que el plan incluya el cuadro de impacto. Si no lo
+incluye, o la licencia ha caducado, la pantalla lo dice y no enseña nada más;
+el fichaje, el registro, las correcciones y la exportación para la Inspección
+no se ven afectados (§8, «…hay un aviso de licencia en el panel»).
+
+**Si IT te enseña otro cuadro con el mismo nombre.** El sistema lleva también
+un cuadro de mando técnico llamado «Impacto y adopción» en la herramienta de
+supervisión del servidor. Usa las mismas definiciones —qué es una jornada
+completa, qué es un fichaje aceptado, qué es una corrección— pero **mira los
+últimos siete días** de forma continua, mientras que este cuadro mira un
+periodo cerrado que eliges tú. Por eso pueden no coincidir al céntimo, y no es
+un error: el de la pantalla del panel es el que vale para hablar con tu
+proveedor.
+
 ---
 
 ## 7. El perfil de cumplimiento
@@ -1412,7 +1529,8 @@ Suele ser una de dos cosas, y ninguna se arregla resolviéndolas una a una:
 **Sigue fichando todo y sigues teniendo acceso a todo el registro.** Una licencia
 caducada nunca detiene el fichaje, ni la consulta, ni la corrección, ni la
 exportación para la Inspección: lo que se degrada son funcionalidades accesorias
-—por ejemplo, la marca propia vuelve a la del producto—. Dejarte sin registro
+—por ejemplo, la marca propia vuelve a la del producto, o el cuadro de impacto
+(§6.6) deja de mostrarse—. Dejarte sin registro
 horario por una cuestión comercial te dejaría incumpliendo la ley, y eso no lo
 hace este producto. Avisa a quien lleve la relación con el proveedor; el detalle
 está en [`configuracion.md`](configuracion.md) §3 bis.3.

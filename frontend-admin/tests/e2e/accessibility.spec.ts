@@ -366,6 +366,44 @@ test(
   },
 )
 
+// --- Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13) --------------------
+
+test(
+  'el cuadro de impacto y adopción tampoco, con los graficos',
+  { tag: ['@RF-IN-08'] },
+  async ({ page }) => {
+    await stubManagementApi(page)
+    await logIn(page)
+    await page.goto('/reports/adoption')
+    await expect(page.getByRole('heading', { level: 1, name: 'Impacto y adopción' })).toBeVisible()
+    await expect(page.getByTestId('indicator-card')).toHaveCount(6)
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'el cuadro de impacto y adopción con la tabla de datos alternativa tampoco',
+  { tag: ['@RF-IN-08'] },
+  async ({ page }) => {
+    await stubManagementApi(page)
+    await logIn(page)
+    await page.goto('/reports/adoption')
+    await expect(page.getByTestId('indicator-card')).toHaveCount(6)
+
+    // Los dos graficos conmutados a tabla (doc 02 §3.3): es lo que hace el
+    // cuadro accesible, y tiene que pasar axe igual que el grafico.
+    const toggles = page.getByTestId('toggle-view')
+
+    await expect(toggles).toHaveCount(2)
+    await toggles.nth(0).click()
+    await toggles.nth(1).click()
+    await expect(page.getByTestId('chart-table')).toHaveCount(2)
+
+    await expectNoBlockingViolations(page)
+  },
+)
+
 test('la salida a nomina tampoco', { tag: ['@RF-IN-07'] }, async ({ page }) => {
   await stubManagementApi(page, { role: 'admin' })
   await logInAsAdmin(page)

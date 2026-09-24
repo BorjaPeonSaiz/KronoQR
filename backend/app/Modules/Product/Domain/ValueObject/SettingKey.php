@@ -306,6 +306,39 @@ enum SettingKey: string
     case KIOSK_UPDATE_QUIET_MINUTES = 'KIOSK_UPDATE_QUIET_MINUTES';
 
     /**
+     * RF-IN-08: horas al mes que el cliente dedicaba a **consolidar hojas de
+     * horas a mano** antes de instalar KronoQR (tarea 3.13).
+     *
+     * ## Es el unico ajuste que el sistema no puede medir por su cuenta
+     *
+     * El §1.3 del documento 01 fija como objetivo reducir un 80 % la carga
+     * administrativa de RRHH, y lo mide en «horas/mes consolidando hojas de
+     * horas». Esa cifra es **anterior al sistema**: describe el proceso manual que
+     * KronoQR viene a sustituir, y ninguna metrica de una aplicacion observa el
+     * trabajo que se hacia antes de instalarla. Asi que la declara el cliente —en
+     * la puesta en marcha o en Ajustes operativos— o el indicador sale **vacio**,
+     * que es lo correcto: es honesto no inventar un porcentaje de mejora.
+     *
+     * ## `0` significa «no declarado», no «cero horas»
+     *
+     * Y por eso el valor de serie es cero: una instalacion recien puesta en marcha
+     * no ha contestado todavia. El cuadro de impacto traduce ese cero a «vacio» en
+     * un solo sitio; un cero que llegara al indicador se pintaria como «cero horas
+     * al mes consolidando hojas», que es una afirmacion espectacular y falsa.
+     *
+     * El techo son 10.000 horas al mes —unas catorce personas a jornada completa
+     * dedicadas solo a eso—, que no es un limite de negocio sino la frontera entre
+     * un dato y un error de tecleo.
+     *
+     * ## Impacto `PRESENTATION`
+     *
+     * No mueve ni un minuto del registro horario, no enciende ninguna salida de
+     * datos y no cambia ninguna evaluacion: solo decide si una tarjeta del cuadro
+     * de impacto enseña una referencia o sale vacia.
+     */
+    case BASELINE_MANUAL_HOURS_PER_MONTH = 'BASELINE_MANUAL_HOURS_PER_MONTH';
+
+    /**
      * Los idiomas que el producto trae traducidos.
      *
      * No es configuracion del cliente: es lo que hay en `lang/` y en los `i18n`
@@ -489,6 +522,13 @@ enum SettingKey: string
             // siempre en un hotel con actividad de madrugada.
             self::KIOSK_UPDATE_QUIET_MINUTES->value => SettingDefinition::integer(
                 10, 0, 120, SettingImpact::PRESENTATION,
+            ),
+            // LA LINEA BASE DEL CUADRO DE IMPACTO (RF-IN-08, tarea 3.13). Cero de
+            // serie y cero significa «no declarado»: ver el docblock de la clave.
+            // El techo de 10.000 h/mes no es un limite de negocio, es la frontera
+            // entre un dato y un error de tecleo.
+            self::BASELINE_MANUAL_HOURS_PER_MONTH->value => SettingDefinition::integer(
+                0, 0, 10000, SettingImpact::PRESENTATION,
             ),
         ];
     }

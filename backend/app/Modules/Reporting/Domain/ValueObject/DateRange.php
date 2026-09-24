@@ -88,6 +88,34 @@ final readonly class DateRange
         return self::between($start->format('Y-m-d'), $end->format('Y-m-d'));
     }
 
+    /**
+     * Cuantos dias abarcaria el rango `[$from, $to]`, **sin aplicar el techo**.
+     *
+     * Existe para quien tiene su propio techo y quiere responder con su propio
+     * error: el cuadro de impacto (RF-IN-08) responde `422` con
+     * `urn:kronoqr:problem:report-too-large` cuando se piden mas dias de los que
+     * entrega en el acto, y construyendo el rango primero recibiria el
+     * `InvalidDateRange` de {@see self::MAXIMUM_DAYS} —un `validation-failed`— que
+     * no remite a nada.
+     *
+     * **No es una puerta trasera al techo.** Devuelve un entero; para tener un
+     * rango sigue habiendo que pasar por {@see self::between()}, que lo aplica.
+     * Las dos fechas se validan igual, asi que «2026-02-30» sigue siendo un error.
+     */
+    public static function spanInDays(string $from, string $to): int
+    {
+        $start = self::parse($from);
+        $end = self::parse($to);
+
+        if ($start > $end) {
+            throw new InvalidDateRange(
+                'El rango de jornadas empieza en '.$from.' y termina en '.$to.': la primera fecha no puede ser posterior a la ultima.',
+            );
+        }
+
+        return (int) $start->diff($end)->format('%a') + 1;
+    }
+
     public function isoFrom(): string
     {
         return $this->from->format('Y-m-d');

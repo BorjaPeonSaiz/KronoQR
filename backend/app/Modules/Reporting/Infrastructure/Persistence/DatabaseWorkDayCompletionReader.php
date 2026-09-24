@@ -43,6 +43,34 @@ final readonly class DatabaseWorkDayCompletionReader implements WorkDayCompletio
 
     public function completionOn(string $workDate): array
     {
+        return $this->completionBetween($workDate, $workDate);
+    }
+
+    /**
+     * ## Es la MISMA consulta, con `BETWEEN` en lugar de `=`
+     *
+     * Y por eso `completionOn()` delega aqui en lugar de tener la suya: un dia es
+     * un rango de un dia. Con dos textos SQL, la definicion de «jornada completa»
+     * que publica la metrica de Grafana y la que enseña el cuadro de impacto
+     * podrian separarse sin que nadie lo notara —bastaria con añadir un estado
+     * nuevo a `status` y actualizar solo uno de los dos—, y entonces el cuadro
+     * perderia la funcion que tiene (decision 8 de la ficha 3.13).
+     *
+     * ## La agrupacion sigue siendo por persona **y fecha**
+     *
+     * Es lo que hace que un rango de treinta dias cuente treinta jornadas de una
+     * persona y no una. Agrupando solo por persona, un mes entero se reduciria a
+     * una fila y bastaria un turno abierto el dia 3 para que ese mes contara como
+     * «incompleto» al completo.
+     *
+     * ## Va por el mismo indice
+     *
+     * `shift_entries_site_id_work_date_index`: con `=` es una busqueda exacta y
+     * con `BETWEEN` un recorrido de rango sobre la misma columna, que es
+     * exactamente para lo que sirve un B-tree.
+     */
+    public function completionBetween(string $from, string $to): array
+    {
         $rows = $this->connection->select(<<<'SQL'
             SELECT site_id,
                    count(*)                                  AS total,
@@ -50,15 +78,16 @@ final readonly class DatabaseWorkDayCompletionReader implements WorkDayCompletio
               FROM (
                     SELECT se.site_id,
                            se.employee_id,
+                           se.work_date,
                            count(*) FILTER (WHERE se.clocked_out_at IS NULL) AS open_entries
                       FROM shift_entries se
-                     WHERE se.work_date = ?
+                     WHERE se.work_date BETWEEN ? AND ?
                        AND se.status NOT IN ('voided', 'superseded')
-                     GROUP BY se.site_id, se.employee_id
+                     GROUP BY se.site_id, se.employee_id, se.work_date
                    ) AS work_days
              GROUP BY site_id
              ORDER BY site_id
-            SQL, [$workDate]);
+            SQL, [$from, $to]);
 
         $completion = [];
 

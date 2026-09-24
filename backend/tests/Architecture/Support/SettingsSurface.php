@@ -98,6 +98,12 @@ final class SettingsSurface
         // tablets, no quien lleva la marca.
         'KIOSK_UPDATE_WINDOW' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
         'KIOSK_UPDATE_QUIET_MINUTES' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        // La linea base del cuadro de impacto (RF-IN-08, tarea 3.13). Va con los
+        // umbrales operativos y NO en la pantalla de informes, que es donde
+        // estaria mas cerca de donde se usa: es un dato que se declara UNA VEZ,
+        // al poner el sistema en marcha, y tenerlo al alcance de quien mira el
+        // cuadro cada mes invitaria a ajustarlo hasta que la mejora salga bien.
+        'BASELINE_MANUAL_HOURS_PER_MONTH' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
     ];
 
     /** La pantalla pactada para una clave, o cadena vacia si nadie la ha decidido. */
