@@ -717,7 +717,17 @@ Ese último punto es el que convierte la documentación en verificable: un coman
 
 ### 8.2 Qué se publica cuando la etapa 8 está en verde
 
-Del §10.1 y del §11.6.1: **imágenes etiquetadas** (versión inmutable, registro privado) y el **paquete de entrega** con el árbol de la [sección 1](#1-qué-se-entrega-al-cliente). El flujo de publicación vive en `.github/workflows/release.yml` (§2).
+Del §10.1 y del §11.6.1: **imágenes etiquetadas** (versión inmutable, registro privado) y el **paquete de entrega** con el árbol de la [sección 1](#1-qué-se-entrega-al-cliente). El flujo de publicación vive en `.github/workflows/release.yml` (§2), que dejó de ser un marcador y publica de verdad.
+
+**El recorrido completo, etiqueta a etiqueta:**
+
+1. Alguien empuja una etiqueta `vX.Y.Z` (o repite una publicación con `workflow_dispatch` y la entrada `tag`, sin crear etiqueta nueva).
+2. Ese mismo `push` dispara `ci.yml` entero, incluida la etapa 8 (`clean-install` y `update`) sobre esa etiqueta.
+3. `release.yml` arranca en paralelo. Sus dos primeros jobs corren a la vez: `gates` repite las puertas rápidas (clave pública del fabricante, `CHANGELOG` cerrado, `VERSION` igual a la etiqueta, 0 vulnerabilidades críticas o altas) y `esperar-ci` busca la ejecución de `ci.yml` de esa misma etiqueta y la espera con `gh run watch --exit-status`, en vez de duplicar la etapa 8 —que ya construye las tres imágenes, arma el paquete y prueba los cuatro escenarios de `RQ-11`—.
+4. Con las dos puertas en verde, `paquete` arma el paquete de entrega, comprueba sus enlaces, lo empaqueta en un `.tar.gz` reproducible y genera el SBOM CycloneDX y las sumas SHA-256.
+5. `publicar` construye y escanea las tres imágenes, las publica en el registro con la etiqueta de versión (nunca `latest`) y crea —o actualiza, si se repite— la *release* de GitHub con el paquete, el SBOM y las sumas adjuntos, y las notas tomadas literalmente de la sección `## [<version>]` del `CHANGELOG.md`.
+
+El único paso que sigue siendo manual es **crear la etiqueta**: `release.yml` no la crea, y `workflow_dispatch` solo repite la publicación de una que ya existe. El registro de imágenes lo fija `vars.IMAGE_REGISTRY` (variable de repositorio); si está vacía, se usa `ghcr.io/<propietario del repositorio, en minúsculas>/kronoqr` — `ghcr.io/kronoqr`, el valor de ejemplo de `compose.prod.yaml` y de `.env.example`, exige una organización de GitHub llamada `kronoqr` que hoy no existe.
 
 ### 8.3 Lo que la etapa 8 no cubre y hay que recordar
 

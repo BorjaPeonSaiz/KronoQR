@@ -61,7 +61,7 @@ return [
      * rotacion de urgencia del par del fabricante sin esperar a una version
      * nueva. NO es un parametro que un cliente deba tocar.
      */
-    'public_key' => (string) env('LICENSE_PUBLIC_KEY', ''),
+    'public_key' => (string) env('LICENSE_PUBLIC_KEY', '7cc9b38f9d408e5e8162a5421f080235a69a39c783f3b40902c9657ec9d0ae5c'),
 
     /*
      * Con cuantos dias de antelacion empieza a avisar el panel de que la

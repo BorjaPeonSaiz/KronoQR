@@ -287,7 +287,7 @@ en el runner frente al techo de 586; 19,5 fichajes/s). **Escrito en el acta lo q
 verifica por delegación (sin id en `requisitos.yaml`); RS-11 está preparada, no cumplida (el tercero); RNF-P-06 sin cifra absoluta en
 hardware de referencia.
 
-**Siguiente acción:** PR #81 integrada en `main` (`96142cc`, 24-09-2026). Integrar la **PR #82** «decisiones post cierre» (rama `docs/decisiones-post-cierre-3`: commit de docs de las condiciones de venta + `0613481` con las tres decisiones aplicadas: soporte `read_only` sin presencia en vivo ni resumen de cumplimiento, `make mutate-changed` por push con la completa nocturna y en el disparo manual, regla de idioma con `IdentifierLanguageTest`/`id-match`/`TestGlobalConstantsTest`; **CI manual 36018614725**; el sello de la capa de paquetes Alpine pasa de semanal a diario tras caer la 36012810304 en la etapa ⑧) con *merge commit*; sin migración: `git pull` y `make up`. Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
+**Siguiente acción:** PR #81 (`96142cc`) y PR #82 (`58f6a21`, decisiones post cierre) integradas en `main` el 24-09-2026. Sigue la **publicación de la 2.1.0** (bloque siguiente). Sin migración: tras integrar, `git pull` y `make up`. **Pendiente del usuario antes de la primera
 venta** (condiciones del plan 06): validación jurídica por la asesoría laboral con `docs/cliente/preguntas-asesoria.md`; designar al
 responsable de vigilancia normativa (`docs/runbooks/vigilancia-normativa.md`); prueba de campo del hardware (12 h en tablet real);
 instalación limpia por una persona ajena; pasada de k6 en hardware de referencia (`INSTANCES=10`); los costes de impresión dejaron
@@ -295,6 +295,31 @@ de ser condición el 24-09-2026 (la impresión es del cliente; ver «Del usuario
 `git stash drop` del stash huérfano (hecho el 24-09-2026); las decisiones sobre el soporte `read_only`, la mutación por push y el
 idioma de las pruebas están tomadas y aplicadas (ver «Del usuario»). Después, **Fase 4** (plan 07 «Fase 4 — Evolución»), empezando
 por los restos con dueño del bloque «Fase 4» de «Pendiente».
+
+**Rama `chore/release-2.1.0` (desde `main` `58f6a21`). PUBLICACIÓN DE LA 2.1.0, la primera versión instalable, PREPARADA el
+24-09-2026; ver «Siguiente acción».** Lo que importa: (1) **par ed25519 del fabricante generado una sola vez** (dentro del contenedor
+`app`, el host no tiene `ext-sodium`): la **privada** está en `C:\Users\borja\.kronoqr\emision.key` (0600, fuera del repositorio:
+llevarla al gestor de secretos y hacer copia; sin ella no se emiten licencias y rotarla es publicar otra versión) y la **pública** es el
+valor por defecto de `env('LICENSE_PUBLIC_KEY', …)` en `backend/config/license.php`; `make release-gate` en verde; (2) `CHANGELOG.md`
+cerrado como `[2.1.0] - 2026-09-24` con `changelog.sh generate --release` (263 entradas desde `v2.0.0`; lista como cambio incompatible
+el 2FA obligatorio de la 2.1, que es anterior al instalador: la 2.1.0 es la primera instalable por decisión del 07-09-2026); (3)
+`infra/versions.txt`: `2.1.0 2026_09_23_100000_weekly_summary_deliveries`; (4) **`release.yml` deja de ser un marcador**: con la
+etiqueta `vX.Y.Z` resuelve la versión, pasa las puertas (`VERSION` = etiqueta, `release-gate`, `changelog-check`, auditorías de
+dependencias), **espera a que la CI de esa misma etiqueta termine en verde** (la etapa ⑧ ya corre ahí), arma el paquete con
+`package.sh` + `check-package-links`, tarball reproducible, `make sbom` y `SHA256SUMS`, construye y escanea las tres imágenes
+(Trivy bloqueante) y las publica con la versión (nunca `latest`) en `vars.IMAGE_REGISTRY` o, si está vacía, `ghcr.io/<owner en
+minúsculas>/kronoqr`, y crea la *release* de GitHub con las notas de la sección del `CHANGELOG`; `workflow_dispatch` con `tag` repite
+una publicación. Guarda en `QualityGatesTest`; plan 08 §8.2, doc 02 §9.2 e `instalacion.md` (el valor real de `IMAGE_REGISTRY` lo
+entrega el fabricante con la licencia) actualizados. **No se ha ejecutado todavía ninguna publicación real**: la primera etiqueta es la
+prueba de fuego; si falla, se corrige, se relanza `ci.yml` sobre la misma etiqueta y después `release.yml` por `workflow_dispatch`.
+
+**Siguiente acción:** integrar la PR de esta rama con *merge commit*; después, **a mano**: (a) decidir `vars.IMAGE_REGISTRY` en Settings
+→ Variables (vacía = `ghcr.io/borjapeonsaiz/kronoqr`; `ghcr.io/kronoqr` exige crear la organización `kronoqr` en GitHub); (b)
+`git tag v2.1.0 <merge> && git push origin v2.1.0`; vigilar `ci.yml` (etapa ⑧ y ⑧b) y `release.yml`; (c) poner en público —o dar acceso—
+los tres paquetes `php`, `nginx`, `postgres` en GHCR (nacen privados) y enlazarlos al repositorio; (d) abrir el ciclo siguiente en un
+commit `chore: abre el ciclo 2.2.0` (`VERSION` 2.2.0 y línea `2.2.0 *` en `infra/versions.txt`; `QualityGatesTest` lo exige); (e) emitir
+la licencia de la demo con `tools/license-issuer/issue.php` dentro del contenedor, con la privada por variable de entorno
+(`KRONOQR_LICENSE_SECRET_KEY`), y montar la demo en el VPS con el paquete de la *release* siguiendo `docs/cliente/instalacion.md`.
 
 **Rama `chore/restos-3.8` (desde `main` `d5c07bc`). Los tres restos de la 3.8 HECHOS el 22-09-2026 en un commit único
 `chore(restos-3.8): …`, CI manual tras el push y PR contra `main` (*merge commit*). Sin migración: basta `git pull` y `make up`, que
@@ -1319,8 +1344,9 @@ accesibilidad), `web-kit` 187, quiosco y portal `type-check`. A mano en el conte
 - El contrato OpenAPI no enumera el `503` de mantenimiento por endpoint (solo `/scan` y `/scan/batch` lo
   tenían ya); está descrito en `MaintenanceModeTest` y en `ProblemDetails::maintenance`. Decidir si va en
   `info.description` o como respuesta reutilizable en cada ruta.
-- `release.yml` sigue siendo un marcador: publicar imágenes etiquetadas, el paquete y el SBOM en una *release* es del plan de
-  implementación 08 (la etapa ⑧ ya vive en `ci.yml`).
+- `release.yml` publica desde el 24-09-2026 (rama `chore/release-2.1.0`): con la etiqueta `vX.Y.Z` espera a la CI de esa etiqueta,
+  construye y escanea las tres imágenes, las empuja al registro (`vars.IMAGE_REGISTRY` o `ghcr.io/<owner>/kronoqr`), arma el paquete,
+  el SBOM y `SHA256SUMS` y crea la *release* con las notas del `CHANGELOG`. Sin ejecución real todavía: la primera etiqueta es la prueba.
 - **Del cierre de la Fase 5 (`revisor-codigo`, con horas):** unificar `sanitizeContext` y el buffer de errores de cliente de
   `web-kit/clientErrors.ts` y `frontend-kiosk/.../errorReporter.ts` (copia literal, 3–4 h); generar los `urn:kronoqr:problem:*`
   del contrato y atar los ocho literales de las SPA (3–4 h); `PdfDocument::builder()` con `dontCache()` + regla Pest Arch que

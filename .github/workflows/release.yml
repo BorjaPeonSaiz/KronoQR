@@ -1,66 +1,420 @@
-# KronoQR — etapa ⑧ y publicacion de version: instalacion limpia, imagenes
-# etiquetadas y paquete de entrega.
+# KronoQR — publicacion de version: imagenes etiquetadas, paquete de entrega y
+# release de GitHub (plan de implementacion 08, doc 02 §10.1/§10.5/§11.6.1).
 #
-# MARCADOR. Este workflow existe porque el arbol del doc 02 §2 lo lista. La
-# etapa ⑧ (instalacion limpia y actualizacion) y el empaquetado viven en ci.yml
-# desde la Fase 5 (tareas 5.4 y 5.7); publicar de verdad —imagenes etiquetadas,
-# paquete y SBOM adjuntos a la release— queda para el plan de implementacion 08
-# (entrega, despliegue y actualizacion), fuera de la Fase 5 (cierre, 09-09-2026).
+# CUANDO SE DISPARA. `push` de una etiqueta `vX.Y.Z` (SemVer, con sufijo
+# opcional de preversion) o `workflow_dispatch` con la entrada `tag`, para
+# REPETIR una publicacion sin crear una etiqueta nueva (p. ej. si el registro
+# de imagenes fallo a mitad, o hay que rehacer el paquete). El disparo manual
+# no crea nada en Git: publica sobre una etiqueta que YA EXISTE.
 #
-# Que tendra que hacer (doc 02 §10.1, §9.2 y §10.5):
-#   - Etapa ⑧: instalacion limpia en un contenedor virgen MAS actualizacion desde
-#     la version anterior (RQ-11). Verde antes de publicar, sin excepcion.
-#   - Trivy sobre la imagen final: 0 CVE criticos.
-#   - `composer audit` y `npm audit`: 0 vulnerabilidades criticas o altas (RS-10).
-#   - Construir y etiquetar las imagenes con la version, y armar el paquete de
-#     entrega que instala el IT del hotel.
-#   - Cerrar el CHANGELOG de la version:
-#         bash infra/scripts/changelog.sh generate --release X.Y.Z --write
+# QUE HACE, EN ORDEN:
 #
-# Lo que ya esta activo y no espera a la publicacion: la puerta de version del
-# CHANGELOG. Vive en ci.yml (job "Puerta de version") y se dispara con la
-# etiqueta `vX.Y.Z`, de modo que una version sin entrada en el CHANGELOG falla
-# desde hoy. El §10.5 lo exige y el actualizador de la tarea 5.7 lo necesita para
-# decirle al cliente que cambia antes de tocar su servidor.
+#   1. `resolver`     valida la forma SemVer de la etiqueta y calcula la
+#                      version y si es una preversion (sufijo `-algo`: se
+#                      publica como prerelease de GitHub).
+#   2. `gates`         las puertas que el §11.6.1 y el §9.2 exigen ANTES de
+#                      construir nada: la clave publica del fabricante puesta
+#                      (`make release-gate`), el CHANGELOG cerrado para esta
+#                      version (`make changelog-check`), el fichero VERSION
+#                      igual a la etiqueta, y 0 vulnerabilidades criticas o
+#                      altas en las dependencias (RS-10).
+#   3. `esperar-ci`    NO se publica una version cuya etapa 8 (instalacion
+#                      limpia + actualizacion, `ci.yml`) no haya terminado en
+#                      verde para ESTA etiqueta.
 #
-# Tambien listo y esperando: el SBOM. `make sbom` (doc 02 §9.2) ya genera
-# sbom/kronoqr-<version>.cdx.json en cada ejecucion del job `security` de
-# ci.yml y lo sube como artefacto de esa ejecucion. Lo que falta AQUI, para
-# cuando se implemente la publicacion, es adjuntarlo a la release
-# publicada en lugar de dejarlo solo en el artefacto de la ejecucion:
+#                      COMO SE ESPERA, Y POR QUE ASI. `ci.yml` no filtra por
+#                      rama en su disparador `push` (ver su cabecera): el
+#                      mismo `push` de esta etiqueta ya lo ha disparado, con
+#                      sus ocho etapas completas -incluida `clean-install`,
+#                      que construye las tres imagenes de entrega, arma el
+#                      paquete y prueba los cuatro escenarios de RQ-11 sobre
+#                      ESTA MISMA ETIQUETA-. Repetir esa etapa aqui duplicaria
+#                      15-90 minutos de runner sin comprobar nada nuevo. Este
+#                      job en su lugar BUSCA esa ejecucion por el SHA exacto
+#                      de la etiqueta y la rama `refs/tags/<etiqueta>` (que en
+#                      la API de Ejecuciones de GitHub es simplemente el
+#                      nombre de la etiqueta) y la ESPERA con
+#                      `gh run watch --exit-status`.
 #
-#   - name: SBOM CycloneDX de la version publicada
-#     # Lee VERSION del repositorio, que en el momento de publicar ya tiene
-#     # que llevar la version etiquetada (lo comprueba `changelog-check`).
-#     run: make sbom
+#                      Se prefiere a `workflow_run` porque ese evento no
+#                      distingue con la misma certeza una etiqueta de una
+#                      rama con el mismo nombre (su filtro `branches` esta
+#                      pensado para ramas), y anadiria un disparador nuevo
+#                      cuyo `head_branch` hay que interpretar con cuidado. Una
+#                      busqueda directa por SHA y por el nombre de la
+#                      etiqueta con `gh run list` es mas simple de leer y no
+#                      tiene esa ambiguedad; el precio es sondear cada 10 s en
+#                      vez de que GitHub empuje el evento, aceptable para un
+#                      flujo que ya tarda minutos.
 #
-#   - name: Adjuntar el SBOM a la release de GitHub
-#     uses: softprops/action-gh-release@<sha-por-fijar> # vX.Y.Z
-#     with:
-#       files: sbom/kronoqr-*.cdx.json
+#                      Si `ci.yml` no se ha disparado o no aparece en 10
+#                      minutos, este job falla con un mensaje que dice donde
+#                      mirar, en vez de esperar en silencio hasta el timeout
+#                      de una hora y media.
 #
-# No se implementa aqui: la etapa ⑧ ya existe en ci.yml; lo que falta es la
-# publicacion en si, y ese es el trabajo del plan 08, no de este marcador.
+#   4. `paquete`       arma el paquete de entrega (`infra/scripts/package.sh`)
+#                      DESPUES de las dos puertas anteriores, comprueba que
+#                      ningun enlace de su documentacion sale del paquete, lo
+#                      empaqueta en un `.tar.gz` REPRODUCIBLE (mismo
+#                      contenido, mismos bytes: sin metadatos de fecha ni de
+#                      propietario) y genera el SBOM CycloneDX y las sumas
+#                      SHA-256 del paquete y del SBOM juntos.
+#   5. `publicar`      construye y publica las TRES imagenes de entrega en el
+#                      registro (etiqueta de version, nunca `latest`), y crea
+#                      -o actualiza, si ya existe por un `workflow_dispatch`
+#                      repetido- la release de GitHub con el paquete, el SBOM
+#                      y las sumas adjuntos, con las notas tomadas
+#                      LITERALMENTE de la seccion `## [<version>]` del
+#                      CHANGELOG (sin prosa inventada).
 #
-# Secretos: cuando esta etapa se implemente necesitara credenciales de registro
-# de imagenes. Iran en secretos del repositorio, nunca en el arbol ni en la
-# salida del pipeline, y el paso que las use llevara `mask` (doc 02 §7.7).
+# PERMISOS. El minimo posible en cada job: `contents: read` en todos salvo
+# `esperar-ci` (necesita ademas `actions: read`, para preguntar por la
+# ejecucion de `ci.yml`) y `publicar`, que es EL UNICO job que escribe:
+# `packages: write` para empujar a GHCR y `contents: write` para crear la
+# release. Ningun secreto propio: `github.token` (efimero) basta para las dos
+# cosas, igual que en `ci.yml`.
+#
+# REGISTRO DE IMAGENES. La ruta la fija la variable de repositorio
+# `vars.IMAGE_REGISTRY`; si esta vacia, se usa
+# `ghcr.io/<propietario-del-repositorio-en-minusculas>/kronoqr`.
+# `ghcr.io/kronoqr` -el valor por defecto de `compose.prod.yaml` y de
+# `.env.example`- exige una ORGANIZACION de GitHub llamada `kronoqr` que hoy
+# no existe: hasta que exista, el valor real que un cliente pone en su `.env`
+# es el que resulte de esta variable de repositorio, y
+# `docs/cliente/instalacion.md` ya avisa de que lo entrega el fabricante junto
+# con la licencia.
+#
+# NADA DE `${{ }}` DE ENTRADAS DENTRO DE `run:`. Cada valor que viene de un
+# contexto (`inputs`, `needs.*.outputs`, `vars.*`, `github.*`) se pasa por
+# `env:` y se referencia como variable de entorno dentro del script: mismo
+# criterio que aplica `make sast-community` al resto del repositorio, para que
+# ninguna entrada se interprete como codigo de shell.
 
-name: Publicacion de version (marcador — plan de implementacion 08, tras la Fase 5)
+name: Publicacion de version
 
 on:
+  push:
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Etiqueta YA EXISTENTE a publicar (p. ej. v2.1.0). Repite una
+          publicacion; no crea una etiqueta nueva.
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  pendiente:
-    name: "⑧ Instalacion limpia y publicacion — sin implementar"
+  resolver:
+    name: "Resolver la etiqueta a publicar"
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 2
+    outputs:
+      tag: ${{ steps.resolver.outputs.tag }}
+      version: ${{ steps.resolver.outputs.version }}
+      prerelease: ${{ steps.resolver.outputs.prerelease }}
     steps:
-      - name: Decir que no esta implementado
+      - name: Validar la forma SemVer de la etiqueta
+        id: resolver
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          echo "::error title=Publicacion sin implementar::La etapa ⑧ y el empaquetado viven en ci.yml desde la Fase 5; publicar imagenes etiquetadas, el paquete y el SBOM en una release es del plan de implementacion 08. Este workflow es un marcador: no construye ni publica nada."
-          exit 1
+          set -euo pipefail
+          tag="${TAG_INPUT:-${REF_NAME}}"
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error title=Etiqueta invalida::«${tag}» no tiene forma vX.Y.Z (SemVer, doc 02 §10.5). No se publica nada."
+            exit 1
+          fi
+          version="${tag#v}"
+          prerelease=false
+          case "${tag}" in
+          *-*) prerelease=true ;;
+          esac
+          {
+            echo "tag=${tag}"
+            echo "version=${version}"
+            echo "prerelease=${prerelease}"
+          } >>"${GITHUB_OUTPUT}"
+          echo "Publicando ${tag} (version ${version}, prerelease=${prerelease})."
+
+  gates:
+    name: "Puertas antes de publicar"
+    needs: resolver
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PHP_VERSION: "8.4"
+      NODE_VERSION: "24"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolver.outputs.tag }}
+          persist-credentials: false
+
+      - name: El fichero VERSION coincide con la etiqueta
+        env:
+          VERSION: ${{ needs.resolver.outputs.version }}
+        run: |
+          set -euo pipefail
+          contenido="$(tr -d '[:space:]' <VERSION)"
+          if [ "${contenido}" != "${VERSION}" ]; then
+            echo "::error title=VERSION no coincide con la etiqueta::VERSION dice '${contenido}' y la etiqueta pide '${VERSION}'. Corrige VERSION y vuelve a etiquetar: una imagen construida asi informaria en /api/v1/health una version distinta de la que lleva por fuera."
+            exit 1
+          fi
+
+      - name: La clave publica del fabricante esta puesta (RS-08)
+        run: make release-gate
+
+      - name: El CHANGELOG esta bien formado
+        run: make changelog-check
+
+      - name: La version publicada tiene su entrada en el CHANGELOG
+        env:
+          VERSION: ${{ needs.resolver.outputs.version }}
+        run: make changelog-check VERSION="${VERSION}"
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+
+      - name: composer audit (0 vulnerabilidades, RS-10)
+        run: make deps-audit-php
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: npm audit del workspace (0 criticas ni altas, RS-10)
+        run: make deps-audit-js
+
+  esperar-ci:
+    name: "Esperar a que ci.yml termine en verde para esta etiqueta"
+    needs: resolver
+    runs-on: ubuntu-24.04
+    # `update` (etapa 8b) sola llega a 90 min en frio; el resto de ci.yml
+    # corre en paralelo dentro de esa misma ejecucion, no en serie con ella.
+    # Margen generoso a proposito: esperar de mas cuesta minutos de runner,
+    # publicar sin haber esperado cuesta un incidente en el servidor de un
+    # cliente.
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Buscar y esperar la ejecucion de ci.yml de esta etiqueta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY}"
+          sha="$(gh api "repos/${repo}/commits/${TAG}" --jq '.sha')"
+          echo "Etiqueta ${TAG} -> commit ${sha}"
+
+          run_id=""
+          echo "Buscando la ejecucion de ci.yml disparada por el push de esta etiqueta (hasta 10 minutos)..."
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list --repo "${repo}" --workflow=ci.yml --branch "${TAG}" \
+              --json databaseId,headSha -L 20 \
+              --jq "[.[] | select(.headSha == \"${sha}\")] | .[0].databaseId // empty")"
+            [ -n "${run_id}" ] && break
+            sleep 10
+          done
+
+          if [ -z "${run_id}" ]; then
+            echo "::error title=No hay ejecucion de CI para esta etiqueta::ci.yml no se ha disparado (o no aparece aun) para el push de ${TAG} (commit ${sha}). Comprueba la pestaña Actions del repositorio: sin la etapa 8 (instalacion limpia y actualizacion) verificada sobre esta etiqueta, esta publicacion no tiene evidencia de RQ-11. Relanza este workflow con «Run workflow» cuando ci.yml haya corrido sobre la etiqueta."
+            exit 1
+          fi
+
+          echo "Ejecucion de ci.yml encontrada: ${run_id}. Esperando a que termine (incluye la etapa 8 y la actualizacion, hasta 90 min en frio)..."
+          gh run watch "${run_id}" --repo "${repo}" --exit-status
+
+  paquete:
+    name: "Paquete de entrega y SBOM"
+    needs: [resolver, gates, esperar-ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolver.outputs.tag }}
+          persist-credentials: false
+
+      - name: Armar el paquete de entrega (doc 02 §11.6.1)
+        run: |
+          set -euo pipefail
+          bash infra/scripts/package.sh paquete
+          test -x paquete/install.sh
+          test -x paquete/update.sh
+          test -x paquete/doctor.sh
+          test -f paquete/VERSION
+          test ! -e paquete/tools
+          test ! -e paquete/.env
+
+      - name: Ningun enlace de la documentacion entregada sale del paquete
+        run: bash infra/scripts/check-package-links.sh paquete
+
+      - name: Empaquetar en un tarball reproducible
+        env:
+          VERSION: ${{ needs.resolver.outputs.version }}
+        run: |
+          set -euo pipefail
+          nombre="kronoqr-${VERSION}"
+          mv paquete "${nombre}"
+          tar --sort=name --mtime="@0" --owner=0 --group=0 --numeric-owner \
+            -czf "${nombre}.tar.gz" "${nombre}"
+          echo "Tarball: ${nombre}.tar.gz ($(du -h "${nombre}.tar.gz" | cut -f1))"
+
+      - name: SBOM CycloneDX de la version publicada
+        # `make sbom` lee VERSION del repositorio, que en este checkout ya es
+        # el de la etiqueta (comprobado por el job `gates`).
+        run: make sbom
+
+      - name: Sumas SHA-256 del paquete y del SBOM
+        env:
+          VERSION: ${{ needs.resolver.outputs.version }}
+        run: |
+          set -euo pipefail
+          cp "sbom/kronoqr-${VERSION}.cdx.json" .
+          sha256sum "kronoqr-${VERSION}.tar.gz" "kronoqr-${VERSION}.cdx.json" >SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Subir el paquete, el SBOM y las sumas
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: entrega-${{ needs.resolver.outputs.version }}
+          path: |
+            kronoqr-*.tar.gz
+            kronoqr-*.cdx.json
+            SHA256SUMS
+          retention-days: 90
+          if-no-files-found: error
+
+  publicar:
+    name: "Imagenes + release de GitHub"
+    needs: [resolver, paquete]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolver.outputs.tag }}
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: Construir las tres imagenes de entrega
+        env:
+          VERSION: ${{ needs.resolver.outputs.version }}
+        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha APP_VERSION="${VERSION}"
+
+      - name: Trivy sobre las tres imagenes (bloqueante, 0 HIGH/CRITICAL)
+        run: make trivy-image TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci"
+
+      - name: Resolver el registro de destino
+        id: registro
+        env:
+          IMAGE_REGISTRY_VAR: ${{ vars.IMAGE_REGISTRY }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          propietario="$(echo "${OWNER}" | tr '[:upper:]' '[:lower:]')"
+          registro="${IMAGE_REGISTRY_VAR:-ghcr.io/${propietario}/kronoqr}"
+          echo "registro=${registro}" >>"${GITHUB_OUTPUT}"
+          if [ -n "${IMAGE_REGISTRY_VAR}" ]; then
+            echo "Publicando en ${registro} (vars.IMAGE_REGISTRY puesta explicitamente)."
+          else
+            echo "Publicando en ${registro} (vars.IMAGE_REGISTRY vacia; usando el valor por defecto)."
+          fi
+
+      - name: Autenticarse en GHCR
+        # `packages: write` de este job basta con el token efimero: no hace
+        # falta ningun secreto propio (doc 02 §7.7). Si `vars.IMAGE_REGISTRY`
+        # apuntara a un registro que no fuera ghcr.io, esta autenticacion no
+        # le serviria: ese seria un registro propio del cliente o del
+        # fabricante, fuera de lo que este flujo soporta con solo
+        # `github.token`.
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Etiquetar y publicar php, nginx y postgres con la version (nunca latest)
+        env:
+          REGISTRO: ${{ steps.registro.outputs.registro }}
+          VERSION: ${{ needs.resolver.outputs.version }}
+        run: |
+          set -euo pipefail
+          declare -A imagenes=([app]=php [nginx]=nginx [postgres]=postgres)
+          for local_tag in "${!imagenes[@]}"; do
+            remoto="${imagenes[${local_tag}]}"
+            destino="${REGISTRO}/${remoto}:${VERSION}"
+            docker tag "kronoqr/${local_tag}:ci" "${destino}"
+            docker push "${destino}"
+            echo "Publicada: ${destino}"
+          done
+
+      - name: Descargar el paquete, el SBOM y las sumas
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: entrega-${{ needs.resolver.outputs.version }}
+
+      - name: Extraer las notas de esta version del CHANGELOG
+        # LITERAL, no prosa inventada: la seccion `## [<version>]` tal cual
+        # esta escrita. El job `gates` ya ha comprobado que existe.
+        env:
+          VERSION: ${{ needs.resolver.outputs.version }}
+        run: |
+          set -euo pipefail
+          version_regex="$(printf '%s' "${VERSION}" | sed 's/\./\\./g')"
+          awk -v pat="^## \\[${version_regex}\\]" '
+            $0 ~ pat { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md >release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "::error title=Sin notas de version::No se ha podido extraer la seccion '## [${VERSION}]' de CHANGELOG.md."
+            exit 1
+          fi
+
+      - name: Publicar la release de GitHub
+        id: release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ needs.resolver.outputs.tag }}
+          name: "KronoQR ${{ needs.resolver.outputs.tag }}"
+          body_path: release-notes.md
+          prerelease: ${{ needs.resolver.outputs.prerelease == 'true' }}
+          files: |
+            kronoqr-*.tar.gz
+            kronoqr-*.cdx.json
+            SHA256SUMS
+
+      - name: Resumen
+        env:
+          REGISTRO: ${{ steps.registro.outputs.registro }}
+          VERSION: ${{ needs.resolver.outputs.version }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+        run: |
+          {
+            echo "### KronoQR ${VERSION} publicado"
+            echo ""
+            echo "- Imagenes: \`${REGISTRO}/{php,nginx,postgres}:${VERSION}\`"
+            echo "- Release: ${RELEASE_URL}"
+          } >>"${GITHUB_STEP_SUMMARY}"

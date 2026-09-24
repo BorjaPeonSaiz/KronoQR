@@ -207,6 +207,12 @@ valor de ejemplo. El motivo es concreto: con `APP_URL=https://localhost` el
 sistema arranca, todas las comprobaciones pasan —la verificación final sondea
 `127.0.0.1`— y **ningún quiosco puede llegar a él**. Nada posterior detecta eso.
 
+**`IMAGE_REGISTRY=ghcr.io/kronoqr` es el valor de ejemplo, no necesariamente el
+tuyo.** El fabricante te entrega el valor exacto junto con la licencia (suele
+llevar tu propio usuario u organización de GitHub delante, no `kronoqr`
+literal). Si `docker login` o la descarga de imágenes fallan con este valor tal
+cual, es la primera variable que hay que revisar.
+
 **`TLS_ALLOW_SELF_SIGNED=false` en producción, y el instalador lo exige.** Con
 `true`, el servidor web se genera un certificado autofirmado: las tablets
 avisarían de sitio no seguro cada mañana y alguien acabaría desactivando la
@@ -747,7 +753,10 @@ el servidor ve la IP del proxy y no la del quiosco, y `KIOSK_VLAN_CIDR`,
 
 ### …dice «no se han podido descargar las imagenes»
 
-El servidor no llega al registro del fabricante, o no has iniciado sesión:
+El servidor no llega al registro del fabricante, o no has iniciado sesión.
+Sustituye `ghcr.io/kronoqr` por el valor real de `IMAGE_REGISTRY` que te dio el
+fabricante con la licencia (el ejemplo de abajo usa el de la plantilla, casi
+nunca el tuyo):
 
 ```bash
 docker login ghcr.io/kronoqr
@@ -1118,7 +1127,11 @@ cada trimestre— está en
 ## 7. Instalar sin salida a internet
 
 El sistema funciona íntegramente sin internet. Lo único que hay que resolver es
-cómo llegan las imágenes al servidor. Desde una máquina que sí tenga acceso:
+cómo llegan las imágenes al servidor. Desde una máquina que sí tenga acceso.
+
+**Sustituye `ghcr.io/kronoqr` por tu `IMAGE_REGISTRY` real** (te lo entrega el
+fabricante con la licencia): el de abajo es el valor de ejemplo de la
+plantilla, no una organización pública en la que estén tus imágenes.
 
 ```bash
 version="$(cat VERSION)"
