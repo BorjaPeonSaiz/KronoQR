@@ -334,6 +334,7 @@ jobs:
           set -euo pipefail
           propietario="$(echo "${OWNER}" | tr '[:upper:]' '[:lower:]')"
           registro="${IMAGE_REGISTRY_VAR:-ghcr.io/${propietario}/kronoqr}"
+          registro="${registro%/}"  # una barra final en la variable produciria "ghcr.io/x//php:2.1.0"
           echo "registro=${registro}" >>"${GITHUB_OUTPUT}"
           if [ -n "${IMAGE_REGISTRY_VAR}" ]; then
             echo "Publicando en ${registro} (vars.IMAGE_REGISTRY puesta explicitamente)."
