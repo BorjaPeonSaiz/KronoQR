@@ -382,10 +382,13 @@ jobs:
           VERSION: ${{ needs.resolver.outputs.version }}
         run: |
           set -euo pipefail
-          version_regex="$(printf '%s' "${VERSION}" | sed 's/\./\\./g')"
-          awk -v pat="^## \\[${version_regex}\\]" '
-            $0 ~ pat { found=1; next }
-            found && /^## \[/ { exit }
+          # Comparacion de cadenas con index(), no una expresion regular: en una
+          # asignacion `-v` awk procesa las secuencias de escape, `\\[` se queda
+          # en `[` y `[2.1.0]` pasa a ser una clase de caracteres que no casa con
+          # la cabecera. La primera publicacion real (v2.1.0, 25-09-2026) cayo aqui.
+          awk -v version="${VERSION}" '
+            index($0, "## [" version "]") == 1 { found=1; next }
+            found && index($0, "## [") == 1 { exit }
             found { print }
           ' CHANGELOG.md >release-notes.md
 
