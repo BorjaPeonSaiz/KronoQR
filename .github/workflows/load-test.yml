@@ -3,9 +3,8 @@
 # POR QUE UN WORKFLOW PROPIO Y NO `ci.yml` NI `release.yml` (decision 12 de la
 # ficha 3.6, plan 06). Las etapas ①-③ de `ci.yml` tienen que seguir por debajo
 # de 4 minutos (doc 02 §10.1): una CI lenta se acaba ignorando, y el pipeline
-# de ese fichero no tiene etapa de carga. `release.yml` sigue siendo el
-# marcador del plan de implementacion 08 (publicacion de verdad): esto no
-# publica nada, solo MIDE.
+# de ese fichero no tiene etapa de carga. `release.yml` publica de verdad
+# (plan de implementacion 08): esto no publica nada, solo MIDE.
 #
 # QUE MIDE. `load-tests/k6/scan-peak.js` (cinco escenarios: fichajes validos,
 # reenvios idempotentes, rechazos de firma/desconocidos/revocados, lotes y la

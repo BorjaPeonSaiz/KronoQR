@@ -878,3 +878,51 @@ it('documenta la actualizacion para el cliente con sus codigos de salida', funct
     expect($operacion)->toContain('update.sh')
         ->and($operacion)->toContain('actualizacion-cliente.md');
 })->group('RF-PD-10');
+
+it('publica las tres imagenes de entrega y adjunta el paquete y el SBOM a la release', function (): void {
+    // Plan de implementacion 08, doc 02 §10.1/§10.5/§11.6.1. `release.yml`
+    // dejo de ser el marcador que hacia fallar el job a proposito: esta
+    // prueba fija su CONFIGURACION -que sigue publicando lo que promete-,
+    // igual que las pruebas de arriba hacen con `clean-install` para la
+    // instalacion limpia. Que la publicacion funcione de verdad lo dice la
+    // propia ejecucion sobre una etiqueta, no esta suite.
+    $workflow = repoContents('.github/workflows/release.yml');
+
+    // Dispara con la etiqueta, no en cada push.
+    expect($workflow)->toMatch('/^\s*tags:\s*$/m');
+    expect($workflow)->toContain('v*.*.*');
+
+    // Las puertas antes de publicar: clave publica del fabricante, CHANGELOG
+    // cerrado y 0 vulnerabilidades criticas o altas (RS-08, RS-10).
+    foreach (['make release-gate', 'make changelog-check', 'make deps-audit-php', 'make deps-audit-js'] as $step) {
+        expect($workflow)->toContain($step);
+    }
+
+    // Espera a que la etapa 8 de ci.yml termine en verde para esta etiqueta
+    // (RQ-11), en vez de duplicarla.
+    expect($workflow)->toContain('gh run watch')
+        ->and($workflow)->toContain('--workflow=ci.yml');
+
+    // Las tres imagenes de entrega, escaneadas y publicadas.
+    expect($workflow)->toContain('make build-ci-images IMAGES="postgres app nginx"')
+        ->and($workflow)->toContain('make trivy-image TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci"')
+        ->and($workflow)->toContain('docker push');
+
+    // Nunca una etiqueta movil (RF-PD-02): ninguna imagen se publica como
+    // `latest`.
+    expect($workflow)->not->toContain(':latest"');
+
+    // El paquete, el SBOM y las sumas, adjuntos a la release.
+    expect($workflow)->toContain('bash infra/scripts/package.sh paquete')
+        ->and($workflow)->toContain('bash infra/scripts/check-package-links.sh paquete')
+        ->and($workflow)->toContain('make sbom')
+        ->and($workflow)->toContain('SHA256SUMS')
+        ->and($workflow)->toContain('softprops/action-gh-release')
+        ->and($workflow)->toContain('CHANGELOG.md');
+
+    // Permisos minimos: el resto del pipeline solo lee, y solo el job que
+    // publica escribe (doc 02 §7.7).
+    expect($workflow)->toMatch('/^permissions:\s*\n\s*contents:\s*read\s*$/m');
+    expect($workflow)->toMatch('/packages:\s*write/');
+    expect($workflow)->toMatch('/contents:\s*write/');
+})->group('RQ-11', 'RF-PD-02', 'RS-10');
