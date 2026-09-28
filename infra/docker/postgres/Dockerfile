@@ -8,7 +8,7 @@
 # corra como `postgres` desde el principio, sin pasar por root (ver el `USER`
 # del final).
 
-FROM postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+FROM postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
 
 # Regla dura 3: la base de datos nace en UTC. Si nace en Europe/Madrid, todo lo
 # que venga despues arrastra el error y no se nota hasta el cambio de hora.
