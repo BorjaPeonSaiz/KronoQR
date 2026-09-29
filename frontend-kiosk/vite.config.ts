@@ -32,6 +32,35 @@ const appVersion =
 // que se cayera el wifi, que es exactamente cuando el modo offline existe.
 const base = process.env['KRONOQR_BASE'] ?? '/'
 
+// Cabeceras de seguridad de `vite preview` (PIN-04). Las pone
+// `playwright.config.ts`, que las lee del snippet REAL de Nginx
+// (`tests/e2e/support/securityHeaders.ts`) y las pasa por esta variable: asi
+// los E2E corren bajo la misma CSP que la tablet instalada, y este fichero no
+// depende de `infra/` (la imagen de Nginx construye el quiosco con el).
+// Sin la variable -`npm run preview` a mano-, no hay cabeceras; con ella mal
+// formada, se para: nunca «sin cabeceras» en silencio dentro de un E2E.
+const PREVIEW_HEADERS_ENV = 'KRONOQR_PREVIEW_SECURITY_HEADERS'
+
+function previewSecurityHeaders(): Record<string, string> | undefined {
+  const raw = process.env[PREVIEW_HEADERS_ENV]
+  if (raw === undefined) {
+    return undefined
+  }
+  const parsed: unknown = JSON.parse(raw)
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    !Object.values(parsed).every((value) => typeof value === 'string') ||
+    !('Content-Security-Policy' in parsed)
+  ) {
+    throw new Error(`${PREVIEW_HEADERS_ENV} no es un mapa de cabeceras con Content-Security-Policy`)
+  }
+  return parsed as Record<string, string>
+}
+
+const previewHeaders = previewSecurityHeaders()
+
 export default defineConfig(({ mode }) => ({
   base,
   plugins: [
@@ -155,6 +184,7 @@ export default defineConfig(({ mode }) => ({
     target: 'es2022',
     sourcemap: false,
   },
+  preview: previewHeaders === undefined ? {} : { headers: previewHeaders },
   server: {
     host: true,
     port: 5173,

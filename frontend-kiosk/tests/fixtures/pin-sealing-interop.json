@@ -1,0 +1,9 @@
+{
+  "description": "Sobre del PIN sellado por sealPin (libsodium-wrappers) para abrirlo con SodiumSealedPinOpener. Pareja de PRUEBA derivada de seed_phrase; ver scripts/generate-pin-sealing-fixture.mjs.",
+  "seed_phrase": "kronoqr/pin-sealing-interop/v1",
+  "derivation": "crypto_box_seed_keypair(SHA-256(seed_phrase))",
+  "x25519_public_base64": "PAlpxV4mJyxLJUuFuWTJkKon8lJUk9BUI/zAVWH2Cjo=",
+  "pin": "483920",
+  "pin_sealed": "u655YV6PHqDEMqpJvTQX9+fLzbCKnWQjgn6ihC4XhgAVfwPYhH2y28Qr2AiZ3igExi70HRio",
+  "sealed_with": "libsodium-wrappers 0.8.4, sealPin() de src/features/pin/infrastructure"
+}
