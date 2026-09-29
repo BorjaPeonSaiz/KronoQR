@@ -208,11 +208,23 @@ it('sirve las cabeceras de seguridad completas', function (): void {
         'X-Content-Type-Options',
         'Referrer-Policy',
         'Permissions-Policy',
+        'Cross-Origin-Opener-Policy',
+        'Cross-Origin-Resource-Policy',
     ] as $header) {
         expect($headers)->toContain($header);
     }
 
     expect($headers)->toContain('camera=(self)');
+    expect($headers)->toContain('Cross-Origin-Resource-Policy "same-origin"');
+
+    // PIN-01: libsodium compila WebAssembly; sin 'wasm-unsafe-eval' el fichaje por
+    // PIN falla siempre en produccion. 'unsafe-eval' e 'unsafe-inline' siguen
+    // prohibidos: el primer permiso no abre `eval` de JavaScript, los otros si.
+    expect(preg_match("/Content-Security-Policy \"[^\"]*?script-src ([^;\"]*)/", $headers, $csp))->toBe(1);
+    expect($csp[1])
+        ->toContain("'wasm-unsafe-eval'")
+        ->not->toContain("'unsafe-eval'")
+        ->not->toContain("'unsafe-inline'");
 })->group('RS-09');
 
 it('no deja los argumentos de las funciones en las trazas de excepcion', function (): void {

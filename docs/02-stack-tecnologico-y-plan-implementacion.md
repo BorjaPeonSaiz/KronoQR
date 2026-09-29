@@ -681,14 +681,15 @@ sequenceDiagram
 
 ```nginx
 add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
-add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=()" always;
 add_header Cross-Origin-Opener-Policy "same-origin" always;
+add_header Cross-Origin-Resource-Policy "same-origin" always;
 ```
 
-`img-src` y `media-src` incluyen `blob:` porque el escaneo por cámara los necesita. `camera=(self)` es imprescindible: sin ello, la PWA del quiosco no puede acceder al dispositivo de vídeo. Es un fallo de configuración que se diagnostica mal y cuesta horas.
+`img-src` y `media-src` incluyen `blob:` porque el escaneo por cámara los necesita. `script-src` lleva `'wasm-unsafe-eval'` (PIN-01, 2.2.0): `libsodium-wrappers`, que sella el PIN del quiosco, compila WebAssembly, y con `script-src 'self'` a secas el fichaje por PIN falla siempre en producción; el token no permite `eval` de JavaScript y **`'unsafe-eval'` y `'unsafe-inline'` siguen prohibidos** (lo comprueba `QualityGatesTest`). `camera=(self)` es imprescindible: sin ello, la PWA del quiosco no puede acceder al dispositivo de vídeo. Es un fallo de configuración que se diagnostica mal y cuesta horas.
 
 ### 7.3 Ámbitos de token
 
