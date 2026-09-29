@@ -1037,6 +1037,14 @@ defecto. Se toma poniendo `PORTAL_INTERNAL_CIDR=0.0.0.0/0` y debe quedar
 anotada en el acta de entrega de la instalación: es lo que responde el día que
 alguien pregunte por qué el portal es alcanzable desde fuera del hotel.
 
+**Formato de las tres redes.** Cada variable (`KIOSK_VLAN_CIDR`,
+`PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR`) lleva **un solo** CIDR IPv4 con
+prefijo, por ejemplo `10.20.0.0/24`; una dirección suelta se escribe con `/32`.
+IPv6 no se admite (el borde solo escucha en IPv4). Si el valor no es válido, el
+borde no arranca y el registro dice qué variable y qué valor; con
+`PORTAL_INTERNAL_CIDR=0.0.0.0/0` arranca, pero deja un aviso visible en el
+registro.
+
 ### Certificado TLS
 
 ```dotenv

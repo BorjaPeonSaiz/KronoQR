@@ -1052,6 +1052,14 @@ default. It is taken by setting `PORTAL_INTERNAL_CIDR=0.0.0.0/0` and must be
 noted in the installation's handover record: it is what answers the day
 someone asks why the portal is reachable from outside the hotel.
 
+**Format of the three networks.** Each variable (`KIOSK_VLAN_CIDR`,
+`PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR`) takes **one** IPv4 CIDR with a
+prefix, for example `10.20.0.0/24`; a single address is written with `/32`.
+IPv6 is not accepted (the edge only listens on IPv4). If a value is invalid the
+edge does not start and the log names the variable and the value; with
+`PORTAL_INTERNAL_CIDR=0.0.0.0/0` it starts but leaves a visible warning in the
+log.
+
 ### TLS certificate
 
 ```dotenv

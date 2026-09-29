@@ -114,6 +114,7 @@ COPY infra/docker/nginx/snippets/ /etc/nginx/snippets/
 # En desarrollo, compose.dev.yaml monta dev-extra/ ENCIMA de este directorio y
 # lo sustituye por los proxys a los servidores de Vite.
 COPY infra/docker/nginx/extra/ /etc/nginx/extra/
+COPY infra/docker/nginx/errors/ /usr/share/nginx/kronoqr-errors/
 COPY infra/docker/nginx/docker-entrypoint.d/ /docker-entrypoint.d/
 
 # Tambien los .envsh: el entrypoint oficial IGNORA («Ignoring ..., not executable»)

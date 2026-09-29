@@ -32,8 +32,20 @@
 #                         estado interno del sistema.
 #
 # Codigos de salida:
-#   0  estan las tres
-#   1  falta alguna; se nombran todas las que faltan, no solo la primera
+#   0  estan las tres y su sintaxis CIDR es valida
+#   1  falta alguna o no es un CIDR IPv4 valido; se nombran todas, no solo la primera
+#
+# SINTAXIS. Cada variable lleva UN solo CIDR IPv4 con prefijo (a.b.c.d/n, octetos
+# 0-255 y n entre 0 y 32). Sin la validacion, un `10.0.0.0/33` o una coma de
+# mas llegaba hasta `nginx -t` y moria con un `[emerg]` sobre un fichero generado
+# que no nombra la variable. IPv6 NO se acepta a proposito: el borde solo escucha
+# en IPv4 (`listen 8443 ssl`), asi que un rango IPv6 seria un candado que nunca
+# casa con nadie -en KIOSK_VLAN_CIDR, quioscos frenados a 30 r/m sin aviso-.
+# Una direccion suelta se escribe con /32.
+#
+# AVISO (no error): PORTAL_INTERNAL_CIDR=0.0.0.0/0 publica el portal a internet.
+# Es una decision legitima del cliente (RF-ID-08), pero tiene que ser visible.
+# Prueba: infra/scripts/nginx-entrypoint-test.sh
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -56,4 +68,29 @@ if [ -n "${faltan}" ]; then
   exit 1
 fi
 
-log "info" "Las tres redes del borde estan definidas."
+readonly OCTETO='(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])'
+readonly PREFIJO='(3[0-2]|[12]?[0-9])'
+readonly CIDR_IPV4="^${OCTETO}\.${OCTETO}\.${OCTETO}\.${OCTETO}/${PREFIJO}\$"
+
+invalidas=0
+
+for variable in KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR METRICS_ALLOW_CIDR; do
+  valor="${!variable}"
+  # Solo caracteres inocuos: el valor va dentro de una linea de registro JSON.
+  visible="${valor//[^0-9A-Za-z./: ,-]/?}"
+  if ! [[ "${valor}" =~ ${CIDR_IPV4} ]]; then
+    log "error" "${variable}='${visible}' no es un CIDR IPv4 valido (se espera a.b.c.d/n, por ejemplo 10.20.0.0/24, con un solo rango)."
+    log "error" "Que hacer: corrige ${variable} en el .env de la instalacion. Una direccion suelta se escribe con /32 (10.20.0.5/32); IPv6 no se admite porque el borde solo escucha en IPv4. Explicado en docs/cliente/instalacion.md, seccion 6."
+    invalidas=1
+  fi
+done
+
+if [ "${invalidas}" -ne 0 ]; then
+  exit 1
+fi
+
+if [ "${PORTAL_INTERNAL_CIDR}" = "0.0.0.0/0" ]; then
+  log "warn" "PORTAL_INTERNAL_CIDR=0.0.0.0/0: portal abierto a internet. Es una decision explicita del cliente (RF-ID-08): anotala en el acta de instalacion y revisa docs/cliente/endurecimiento.md."
+fi
+
+log "info" "Las tres redes del borde estan definidas y son CIDR IPv4 validos."

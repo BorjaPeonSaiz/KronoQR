@@ -83,6 +83,54 @@ comprobar() {
   printf '  [ok]    %-10s %s\n' "${ruta}" "${codigo}"
 }
 
+# cabecera RUTA NOMBRE PATRON [CABECERA_PETICION]: la respuesta a RUTA trae la
+# cabecera NOMBRE y su linea casa con PATRON (grep -E).
+cabecera() {
+  local ruta="$1" nombre="$2" patron="$3" peticion="${4:-X-Kq-Smoke: 1}" linea
+
+  linea="$(curl -s -k -o /dev/null -D - -H "${peticion}" --max-time 10 \
+    "https://127.0.0.1:${PUERTO}${ruta}" | tr -d '\r' | grep -i "^${nombre}:" || true)"
+
+  if ! grep -qEi -- "${patron}" <<<"${linea}"; then
+    printf '  [FALLA] %-24s cabecera %s: "%s", se esperaba /%s/\n' "${ruta}" "${nombre}" "${linea}" "${patron}" >&2
+    fallo=1
+    return 0
+  fi
+
+  printf '  [ok]    %-24s %s\n' "${ruta}" "${nombre}"
+}
+
+# sin_cabecera RUTA NOMBRE PATRON: lo contrario; falla si la linea casa.
+sin_cabecera() {
+  local ruta="$1" nombre="$2" patron="$3" linea
+
+  linea="$(curl -s -k -o /dev/null -D - --max-time 10 \
+    "https://127.0.0.1:${PUERTO}${ruta}" | tr -d '\r' | grep -i "^${nombre}:" || true)"
+
+  if grep -qEi -- "${patron}" <<<"${linea}"; then
+    printf '  [FALLA] %-24s cabecera %s no deberia casar /%s/: "%s"\n' "${ruta}" "${nombre}" "${patron}" "${linea}" >&2
+    fallo=1
+    return 0
+  fi
+
+  printf '  [ok]    %-24s sin %s /%s/\n' "${ruta}" "${nombre}" "${patron}"
+}
+
+# sin_cuerpo RUTA PATRON: falla si el cuerpo de la respuesta casa con PATRON.
+sin_cuerpo() {
+  local ruta="$1" patron="$2" cuerpo
+
+  cuerpo="$(curl -s -k --max-time 10 "https://127.0.0.1:${PUERTO}${ruta}" || true)"
+
+  if grep -qE -- "${patron}" <<<"${cuerpo}"; then
+    printf '  [FALLA] %-24s el cuerpo revela la red (/%s/)\n' "${ruta}" "${patron}" >&2
+    fallo=1
+    return 0
+  fi
+
+  printf '  [ok]    %-24s sin IP ni CIDR en el cuerpo\n' "${ruta}"
+}
+
 main() {
   [ "$#" -le 1 ] || {
     printf 'Uso: nginx-smoke.sh [IMAGEN]\n' >&2
@@ -98,6 +146,9 @@ main() {
     printf 'No existe la imagen %s. Construyela con: make build-ci-images IMAGES=nginx\n' "${IMAGEN}" >&2
     exit "${KQ_EXIT_REQUIREMENTS}"
   }
+
+  # Sin Docker ni imagen: la validacion de las tres redes (PP-06).
+  bash "${SCRIPT_DIR}/nginx-entrypoint-test.sh" || exit "${KQ_EXIT_VERIFY_FAILED}"
 
   printf 'Arrancando %s sola, sin aplicacion detras.\n' "${IMAGEN}"
 
@@ -138,6 +189,41 @@ main() {
   # es justo el escenario que una plantilla de Nginx mal editada podria dejar
   # abierto sin que nadie lo notara hasta que alguien mirara desde fuera.
   comprobar /metrics 403
+
+  # PIN-01: libsodium compila WebAssembly. Sin 'wasm-unsafe-eval' el fichaje por
+  # PIN del quiosco falla siempre en produccion; 'unsafe-eval' sigue prohibido.
+  # CORP: la misma cabecera en las tres SPA y en la API.
+  local ruta activo
+  for ruta in /kiosk/ /admin/ /portal/ /api/v1/ready; do
+    cabecera "${ruta}" Content-Security-Policy "script-src 'self' 'wasm-unsafe-eval';"
+    sin_cabecera "${ruta}" Content-Security-Policy "'unsafe-eval'|'unsafe-inline'"
+    cabecera "${ruta}" Cross-Origin-Resource-Policy "^Cross-Origin-Resource-Policy: same-origin$"
+  done
+
+  # PT-P2: los estaticos de una SPA salen comprimidos.
+  activo="$(curl -s -k --max-time 10 "https://127.0.0.1:${PUERTO}/kiosk/" | grep -oE 'assets/[^"]+\.js' | head -n 1 || true)"
+  if [ -z "${activo}" ]; then
+    printf '  [FALLA] /kiosk/ no referencia ningun assets/*.js: no se puede comprobar la compresion\n' >&2
+    fallo=1
+  else
+    cabecera "/kiosk/${activo}" Content-Encoding "^Content-Encoding: gzip$" "Accept-Encoding: gzip"
+  fi
+
+  # PP-02 y PP-08: el 403 del portal sigue siendo 403 (RF-ID-08), con pagina
+  # bilingue, y la API del portal responde problem+json; ni una ni otra dicen
+  # la red permitida ni la IP del visitante.
+  comprobar /portal/ 403 "Accede desde la red del hotel o consulta con RRHH"
+  comprobar /portal/ 403 "Connect from the hotel network or contact HR"
+  comprobar /api/v1/me/workdays 403 "urn:kronoqr:problem:forbidden"
+  cabecera /api/v1/me/workdays Content-Type "application/problem\+json"
+  sin_cuerpo /portal/ "${CIDR_PORTAL%%/*}|127\.0\.0\.1"
+  sin_cuerpo /api/v1/me/workdays "${CIDR_PORTAL%%/*}|127\.0\.0\.1"
+  comprobar /portal 301
+  cabecera /portal Location "^Location: /portal/$"
+
+  # T1: Horizon no llega a PHP-FPM (aqui daria 502, no 404).
+  comprobar /horizon 404
+  comprobar /horizon/dashboard 404
 
   if [ "${fallo}" -ne 0 ]; then
     printf '\nEl borde no responde lo que debe. Registro de errores:\n' >&2

@@ -87,6 +87,37 @@ geo $kronoqr_portal_allowed {
 }
 
 #------------------------------------------------------------------------------
+# Compresion — PT-P2 (2.2.0)
+#------------------------------------------------------------------------------
+# Sin esto el bundle de cada SPA viajaba en claro: en la Wi-Fi de una tablet, la
+# primera carga del quiosco a las 06:00 es la que importa.
+#
+# BREACH: comprimir una respuesta que mezcla un secreto con texto que el
+# atacante puede reflejar permite adivinar el secreto por el tamano. Por eso
+# la lista NO es «todo»:
+#   - A nivel http, solo estaticos: JS, CSS, SVG, manifiestos, texto. Son
+#     publicos y no llevan secretos ni reflejan la peticion.
+#   - JSON y CSV solo en /api/v1/reports/ y /api/v1/attendance/ (bloques mas
+#     abajo): consultas de datos que no devuelven tokens, PIN ni cabeceras de
+#     autenticacion. Auth, fichaje, emparejamiento y portal (/me/) NO se
+#     comprimen jamas: sus respuestas llevan tokens o secretos.
+# text/html lo comprime nginx siempre; solo sale de los estaticos de las SPA.
+# `gzip_types` de una location SUSTITUYE a la de fuera, no la amplia: si se toca
+# esta lista, tocar tambien la de los dos bloques de la API.
+gzip on;
+gzip_vary on;
+gzip_comp_level 5;
+gzip_min_length 1024;
+gzip_proxied any;
+gzip_types
+  text/plain
+  text/css
+  text/javascript
+  application/javascript
+  application/manifest+json
+  image/svg+xml;
+
+#------------------------------------------------------------------------------
 # Caducidad de la cache de las tres SPA
 #------------------------------------------------------------------------------
 # Dos politicas, y la frontera la marca Vite: todo lo de `assets/` lleva el
@@ -292,7 +323,70 @@ server {
     if ($kronoqr_portal_allowed = 0) {
       return 403;
     }
+    # Sigue siendo 403 (RF-ID-08) y sigue siendo problem+json, como el resto de
+    # la API (openapi.yaml, schema Problem). Sin IP ni CIDR en el cuerpo.
+    error_page 403 @kronoqr_me_forbidden;
     limit_req zone=portal burst=10 nodelay;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  # Cuerpo del 403 del portal fuera de su red: bilingue, sin PII ni CIDR.
+  # La plantilla se mantiene en ASCII: sin tildes en el cuerpo.
+  location @kronoqr_me_forbidden {
+    default_type application/problem+json;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-store" always;
+    return 403 '{"type":"urn:kronoqr:problem:forbidden","title":"Acceso no permitido desde esta red / Access not allowed from this network","status":403,"detail":"Accede desde la red del hotel o consulta con RRHH. / Connect from the hotel network or contact HR."}';
+  }
+
+  # Pagina estatica del 403 del portal (la usa spa.conf). Interna: no se puede
+  # pedir directamente. Sin <style> en linea porque la CSP no lo admite.
+  location = /__kronoqr/portal-forbidden {
+    internal;
+    alias /usr/share/nginx/kronoqr-errors/portal-forbidden.html;
+    default_type text/html;
+    charset utf-8;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-store" always;
+  }
+
+  # Horizon (T1, 2.2.0): su panel no se expone por el borde. Sin esto, /horizon
+  # caia en `location /` -> index.php y llegaba a PHP-FPM. Prefijo `^~`: cubre
+  # /horizon y todo lo que cuelga de el.
+  location ^~ /horizon {
+    return 404;
+  }
+
+  #--- Consultas de solo lectura con compresion: 120 r/m ---------------------
+  # Misma zona y rafaga que el resto de la API; solo anaden JSON y CSV a la
+  # compresion (ver «Compresion» arriba: por que solo aqui).
+  location ^~ /api/v1/reports/ {
+    gzip_types
+      text/plain
+      text/css
+      text/javascript
+      application/javascript
+      application/manifest+json
+      image/svg+xml
+      application/json
+      application/problem+json
+      text/csv;
+    limit_req zone=api burst=60 nodelay;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  location ^~ /api/v1/attendance/ {
+    gzip_types
+      text/plain
+      text/css
+      text/javascript
+      application/javascript
+      application/manifest+json
+      image/svg+xml
+      application/json
+      application/problem+json
+      text/csv;
+    limit_req zone=api burst=60 nodelay;
     include /etc/nginx/snippets/php-fpm.conf;
   }
 
