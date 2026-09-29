@@ -313,11 +313,10 @@ una publicación. Guarda en `QualityGatesTest`; plan 08 §8.2, doc 02 §9.2 e `i
 entrega el fabricante con la licencia) actualizados. **No se ha ejecutado todavía ninguna publicación real**: la primera etiqueta es la
 prueba de fuego; si falla, se corrige, se relanza `ci.yml` sobre la misma etiqueta y después `release.yml` por `workflow_dispatch`.
 
-**Siguiente acción:** integrar la **PR #83** (commit `64647b6`; CI manual 36050566399) con *merge commit*; después, **a mano**: (a) decidir `vars.IMAGE_REGISTRY` en Settings
+**PUBLICADA el 25-09-2026**: PR #83 integrada (`9282af6`), etiqueta `v2.1.0` sobre ese merge, CI de la etiqueta 36121907596 en verde (etapa ⑧ incluida) y *release* https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.1.0 con `kronoqr-2.1.0.tar.gz` (7,9 MB), el SBOM y `SHA256SUMS`; imágenes en `ghcr.io/borjapeonsaiz/kronoqr/{php,nginx,postgres}:2.1.0` (variable `IMAGE_REGISTRY` borrada: valor por defecto). Hicieron falta tres intentos de `release.yml`: el primero se canceló desde fuera mientras esperaba a la CI; el segundo publicó las imágenes y cayó extrayendo las notas del `CHANGELOG` (`awk -v` procesa los escapes del patrón); el tercero, con el arreglo, desde la rama `chore/ciclo-2.2.0` con `tag=v2.1.0`. **Siguiente acción:** integrar la **PR #84** (ciclo 2.2.0 + los dos arreglos de `release.yml`); después, **a mano**: (a) decidir `vars.IMAGE_REGISTRY` en Settings
 → Variables (vacía = `ghcr.io/borjapeonsaiz/kronoqr`; `ghcr.io/kronoqr` exige crear la organización `kronoqr` en GitHub); (b)
 `git tag v2.1.0 <merge> && git push origin v2.1.0`; vigilar `ci.yml` (etapa ⑧ y ⑧b) y `release.yml`; (c) poner en público —o dar acceso—
-los tres paquetes `php`, `nginx`, `postgres` en GHCR (nacen privados) y enlazarlos al repositorio; (d) abrir el ciclo siguiente en un
-commit `chore: abre el ciclo 2.2.0` (`VERSION` 2.2.0 y línea `2.2.0 *` en `infra/versions.txt`; `QualityGatesTest` lo exige); (e) emitir
+los tres paquetes `php`, `nginx`, `postgres` en GHCR (nacen privados) y enlazarlos al repositorio; (d) **abrir el ciclo 2.2.0 con el primer cambio real de la serie**, no antes: `VERSION` 2.2.0 y línea `2.2.0 *` en `infra/versions.txt` obligan a regenerar las capturas de las guías del cliente (`npm run docs:screenshots` con el entorno levantado; `ClientDocumentationTest` sella `docs/cliente/img/VERSION` por serie menor y puso en rojo la CI de la PR #84 al intentarlo sin capturas nuevas); (e) emitir
 la licencia de la demo con `tools/license-issuer/issue.php` dentro del contenedor, con la privada por variable de entorno
 (`KRONOQR_LICENSE_SECRET_KEY`), y montar la demo en el VPS con el paquete de la *release* siguiendo `docs/cliente/instalacion.md`.
 
