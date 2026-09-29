@@ -62,8 +62,6 @@ name: kronoqr
 
 x-app-image: &app-image
   image: &php-image ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
-  env_file:
-    - .env
   volumes:
     # Destino de las copias, en el disco del cliente y montado en la MISMA ruta
     # dentro del contenedor. Asi `php artisan backup:run` escribe donde dice el
@@ -100,6 +98,397 @@ x-app-image: &app-image
       max-size: "20m"
       max-file: "5"
 
+#------------------------------------------------------------------------------
+# ENTORNO DE LOS SERVICIOS DE RUNTIME (AUD-1, ADR-042, regla dura 6)
+#
+# NINGUN contenedor de runtime recibe `env_file: .env`. Antes (hasta la 2.1.0)
+# `app`, `horizon`, `reverb`, `scheduler` y `nginx` recibian el .env ENTERO, con
+# la contrasena del superusuario de PostgreSQL (`DB_MIGRATION_PASSWORD`), la de
+# las copias y las claves de firma del QR: quien ejecutara codigo en PHP podia
+# reescribir `shift_entries` y `audit_log` y recalcular la cadena de hash.
+#
+# Ahora cada servicio nombra, una a una, las variables que necesita, SIN VALOR
+# (`X:`): Compose las resuelve desde el .env del cliente y, si la clave no
+# existe en el, la variable NO llega al contenedor y `env('X', defecto)` de
+# config/ conserva su valor por defecto. NO se escribe `X: ${X:-}`: llegaria
+# VACIA y anularia ese defecto. Solo se pone un valor cuando se quiere el
+# defecto de Compose (`NGINX_CLIENT_MAX_BODY_SIZE`).
+#
+# COMO SE MANTIENE. Una variable nueva de config/ o de un SettingKey que no
+# figure aqui NO llega a la aplicacion: la prueba de arquitectura de completitud
+# (RuntimeEnvironmentTest) cruza .env.example, `env()` de backend/config y de los
+# config/ de paquetes y las SettingKey con estas listas, y solo admite las
+# exclusiones explicitas de esa prueba (cada una con su motivo).
+#
+# LO QUE NO ESTA AQUI, A PROPOSITO: DB_MIGRATION_PASSWORD y DB_MAINTENANCE_PASSWORD
+# (solo `migrate`, `restore` y `postgres`), BACKUP_ENCRYPTION_KEY y BACKUP_DB_*
+# (solo `scheduler`, que lanza las copias con el rol de SOLO LECTURA), los
+# DB_*_URL y DB_*_CONNECTION (llevarian credenciales o reapuntarian el runtime
+# a otro rol), y todo lo de nginx, Grafana y Alertmanager.
+#------------------------------------------------------------------------------
+x-runtime-env: &runtime-env
+  # Aplicacion
+  APP_DEBUG:
+  APP_ENV:
+  APP_FALLBACK_LOCALE:
+  APP_KEY:
+  APP_LOCALE:
+  APP_MAINTENANCE_DRIVER:
+  APP_MAINTENANCE_STORE:
+  APP_NAME:
+  APP_PREVIOUS_KEYS:
+  APP_SUPPORTED_LOCALES:
+  APP_TIMEZONE:
+  APP_URL:
+  COMPOSE_PROFILES:
+  IMAGE_TAG:
+  # Registro, trazas y logs
+  LOG_CHANNEL:
+  LOG_DAILY_DAYS:
+  LOG_DEPRECATIONS_CHANNEL:
+  LOG_DEPRECATIONS_TRACE:
+  LOG_LEVEL:
+  LOG_STACK:
+  LOKI_URL:
+  OTEL_EXPORTER_OTLP_ENDPOINT:
+  OTEL_EXPORTER_OTLP_TIMEOUT:
+  OTEL_SERVICE_NAME:
+  OTEL_TRACES_SAMPLER_ARG:
+  # Base de datos: SOLO el rol de aplicacion (+ los NOMBRES de los otros roles, que usa AuditLogSchema)
+  DB_CHARSET:
+  DB_CONNECTION:
+  DB_DATABASE:
+  DB_HOST:
+  DB_MAINTENANCE_USERNAME:
+  DB_MIGRATION_USERNAME:
+  DB_PASSWORD:
+  DB_PORT:
+  DB_SSLMODE:
+  DB_USERNAME:
+  # Redis, colas, cache, sesion y difusion
+  AUTH_GUARD:
+  AUTH_MODEL:
+  AUTH_PASSWORD_BROKER:
+  AUTH_PASSWORD_RESET_TOKEN_TABLE:
+  AUTH_PASSWORD_TIMEOUT:
+  BROADCAST_CONNECTION:
+  CACHE_PREFIX:
+  CACHE_STORE:
+  FILESYSTEM_DISK:
+  HORIZON_DOMAIN:
+  HORIZON_NAME:
+  HORIZON_PATH:
+  QUEUE_CONNECTION:
+  QUEUE_FAILED_DRIVER:
+  REDIS_BACKOFF_ALGORITHM:
+  REDIS_BACKOFF_BASE:
+  REDIS_BACKOFF_CAP:
+  REDIS_CACHE_CONNECTION:
+  REDIS_CACHE_DB:
+  REDIS_CACHE_LOCK_CONNECTION:
+  REDIS_CLIENT:
+  REDIS_CLUSTER:
+  REDIS_DB:
+  REDIS_HOST:
+  REDIS_MAX_RETRIES:
+  REDIS_PASSWORD:
+  REDIS_PERSISTENT:
+  REDIS_PORT:
+  REDIS_PREFIX:
+  REDIS_QUEUE:
+  REDIS_QUEUE_CONNECTION:
+  REDIS_QUEUE_RETRY_AFTER:
+  REDIS_TIMEOUT:
+  REDIS_URL:
+  REDIS_USERNAME:
+  SANCTUM_STATEFUL_DOMAINS:
+  SANCTUM_TOKEN_PREFIX:
+  SESSION_CONNECTION:
+  SESSION_DOMAIN:
+  SESSION_DRIVER:
+  SESSION_ENCRYPT:
+  SESSION_EXPIRE_ON_CLOSE:
+  SESSION_HTTP_ONLY:
+  SESSION_LIFETIME:
+  SESSION_PARTITIONED_COOKIE:
+  SESSION_PATH:
+  SESSION_SAME_SITE:
+  SESSION_SECURE_COOKIE:
+  SESSION_STORE:
+  SESSION_TABLE:
+  # Tiempo real: Reverb y cliente
+  REALTIME_AUTH_ENDPOINT:
+  REALTIME_ENABLED:
+  REALTIME_EVENT:
+  REALTIME_PATH:
+  REALTIME_POLL_INTERVAL_SECONDS:
+  REVERB_ALLOWED_ORIGINS:
+  REVERB_APP_ACCEPT_CLIENT_EVENTS_FROM:
+  REVERB_APP_ACTIVITY_TIMEOUT:
+  REVERB_APP_ID:
+  REVERB_APP_KEY:
+  REVERB_APP_MAX_CONNECTIONS:
+  REVERB_APP_MAX_MESSAGE_SIZE:
+  REVERB_APP_PING_INTERVAL:
+  REVERB_APP_RATE_LIMITING_ENABLED:
+  REVERB_APP_RATE_LIMIT_DECAY_SECONDS:
+  REVERB_APP_RATE_LIMIT_MAX_ATTEMPTS:
+  REVERB_APP_RATE_LIMIT_TERMINATE:
+  REVERB_APP_SECRET:
+  REVERB_HOST:
+  REVERB_MAX_REQUEST_SIZE:
+  REVERB_PORT:
+  REVERB_PULSE_INGEST_INTERVAL:
+  REVERB_SCALING_CHANNEL:
+  REVERB_SCALING_ENABLED:
+  REVERB_SCHEME:
+  REVERB_SERVER:
+  REVERB_SERVER_HOST:
+  REVERB_SERVER_PATH:
+  REVERB_SERVER_PORT:
+  REVERB_TELESCOPE_INGEST_INTERVAL:
+  # Firma del QR, PIN, sesiones (IDENTITY_*) y limites del quiosco
+  IDENTITY_2FA_CHALLENGE_MINUTES:
+  IDENTITY_2FA_ISSUER:
+  IDENTITY_2FA_LOCKOUT_SECONDS:
+  IDENTITY_2FA_MAX_ATTEMPTS:
+  IDENTITY_2FA_RATE_LIMIT:
+  IDENTITY_2FA_REQUIRED_ROLES:
+  IDENTITY_2FA_SECRET_LENGTH:
+  IDENTITY_2FA_WINDOW:
+  IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS:
+  IDENTITY_DEVICE_TOKEN_DAYS:
+  IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD:
+  IDENTITY_LOGIN_LOCKOUT_SECONDS:
+  IDENTITY_LOGIN_MAX_ATTEMPTS:
+  IDENTITY_MANAGEMENT_RATE_LIMIT:
+  IDENTITY_PASSWORD_MIN_LENGTH:
+  IDENTITY_PIN_FORBIDDEN:
+  IDENTITY_PIN_LOCKOUT_RESET_HOURS:
+  IDENTITY_PIN_LOCKOUT_SECONDS:
+  IDENTITY_PIN_LOCKOUT_TIER2_ATTEMPTS:
+  IDENTITY_PIN_LOCKOUT_TIER2_SECONDS:
+  IDENTITY_PIN_LOCKOUT_TIER3_ATTEMPTS:
+  IDENTITY_PIN_LOCKOUT_TIER3_SECONDS:
+  IDENTITY_PIN_MAX_ATTEMPTS:
+  IDENTITY_PIN_SEALING_SECRET_KEY:
+  IDENTITY_PORTAL_RATE_LIMIT:
+  IDENTITY_PORTAL_SESSION_HOURS:
+  IDENTITY_SESSION_TOKEN_HOURS:
+  KIOSK_BATCH_MAX_SIZE:
+  KIOSK_BATCH_RATE_PER_DEVICE:
+  KIOSK_HEALTH_BATTERY_LOW_PERCENT:
+  KIOSK_HEALTH_FRESH_WITHIN_SECONDS:
+  KIOSK_HEALTH_SILENT_AFTER_SECONDS:
+  KIOSK_PAIRING_CLAIM_RATE_PER_PAIRING:
+  KIOSK_PAIRING_CODE_TTL_SECONDS:
+  KIOSK_PAIRING_MAX_LIVE_PENDING:
+  KIOSK_PAIRING_POLL_INTERVAL_SECONDS:
+  KIOSK_PAIRING_PURGE_AFTER_HOURS:
+  KIOSK_PAIRING_REQUEST_RATE_PER_IP:
+  KIOSK_PIN_SCAN_RATE_PER_DEVICE:
+  KIOSK_PIN_SCAN_RATE_PER_IP:
+  KIOSK_RATE_PER_IP:
+  KIOSK_SCAN_RATE_PER_DEVICE:
+  KIOSK_SERVICE_CODE:
+  KIOSK_TELEMETRY_RATE_PER_DEVICE:
+  KIOSK_UPDATE_QUIET_MINUTES:
+  KIOSK_UPDATE_WINDOW:
+  QR_ERROR_CORRECTION:
+  QR_SIGNING_KEY_CURRENT:
+  QR_SIGNING_KEY_CURRENT_ID:
+  QR_SIGNING_KEY_PREVIOUS:
+  QR_SIGNING_KEY_PREVIOUS_ID:
+  QR_SIZE_MM:
+  # Reglas de jornada, ausencias y cumplimiento (tambien las 23 SettingKey que lee $_ENV)
+  ATTENDANCE_BREAK_CLOCKING:
+  ATTENDANCE_DEBOUNCE_SECONDS:
+  ATTENDANCE_MAX_CLOCK_SKEW_MINUTES:
+  ATTENDANCE_MAX_SHIFT_HOURS:
+  ATTENDANCE_MIN_TRANSIT_SECONDS:
+  ATTENDANCE_PATTERN_MIN_REPEATS:
+  ATTENDANCE_PATTERN_WINDOW_SECONDS:
+  BASELINE_MANUAL_HOURS_PER_MONTH:
+  COMPLIANCE_AUTHZ_DENIAL_WINDOW_SECONDS:
+  COMPLIANCE_DISCLOSURE_WINDOW_SECONDS:
+  COMPLIANCE_INCIDENT_LOOKBACK_DAYS:
+  COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS:
+  COMPLIANCE_PATTERN_LOOKBACK_DAYS:
+  COMPLIANCE_PROFILE:
+  COMPLIANCE_RETENTION_BATCH_SIZE:
+  COMPLIANCE_RETENTION_REPORT_PATH:
+  COMPLIANCE_TECHNICAL_LOG_PATH:
+  ERROR_HISTORY_RETENTION_DAYS:
+  LOCALE_AVAILABLE:
+  LOCALE_DEFAULT:
+  PAYROLL_EXPORT_COLUMNS:
+  PAYROLL_EXPORT_DATE_FORMAT:
+  PAYROLL_EXPORT_DELIMITER:
+  PAYROLL_EXPORT_ENCODING:
+  PAYROLL_EXPORT_HEADER_ROW:
+  PAYROLL_EXPORT_HOURS_FORMAT:
+  TECHNICAL_LOG_RETENTION_DAYS:
+  WEEKLY_SUMMARY_EMAIL:
+  WORKFORCE_ABSENCE_IMPORT_COLUMN_ALIASES:
+  WORKFORCE_IMPORT_COLUMN_ALIASES:
+  WORKFORCE_IMPORT_MAX_FILE_KILOBYTES:
+  WORKFORCE_IMPORT_MAX_ROWS:
+  # Producto, marca, licencia y telemetria
+  BRANDING_ACCENT_COLOR:
+  BRANDING_APP_NAME:
+  BRANDING_LOGO_PATH:
+  BRANDING_LOGO_ROOT:
+  LICENSE_EXPIRY_WARNING_DAYS:
+  LICENSE_HEALTH_PROBE_TTL_SECONDS:
+  LICENSE_KEY:
+  LICENSE_PUBLIC_KEY:
+  PRODUCT_BRANDING_RATE_LIMIT:
+  PRODUCT_CLIENT_ERRORS_RATE_LIMIT:
+  PRODUCT_DATA_EXPORT_PATH:
+  PRODUCT_DATA_EXPORT_RATE_LIMIT:
+  PRODUCT_DATA_EXPORT_RETENTION_DAYS:
+  PRODUCT_DATA_EXPORT_STALE_AFTER:
+  PRODUCT_DIAGNOSTICS_MAX_BYTES:
+  PRODUCT_DIAGNOSTICS_PATH:
+  PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS:
+  PRODUCT_DIAGNOSTICS_RATE_LIMIT:
+  PRODUCT_DIAGNOSTICS_RETENTION_DAYS:
+  PRODUCT_ERRORS_MAX_OPEN_GROUPS_PER_SOURCE:
+  PRODUCT_SETTINGS_ANOMALY_WINDOW_SECONDS:
+  PRODUCT_SETUP_RATE_LIMIT:
+  PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS:
+  PRODUCT_SUPPORT_GRANT_MAX_HOURS:
+  PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS:
+  TELEMETRY_ENABLED:
+  TELEMETRY_ENDPOINT:
+  TELEMETRY_RETRY_DELAY_SECONDS:
+  TELEMETRY_STATE_PATH:
+  # Informes y PDF
+  LARAVEL_PDF_BIN_PATH:
+  LARAVEL_PDF_CHROME_PATH:
+  LARAVEL_PDF_INCLUDE_PATH:
+  LARAVEL_PDF_NODE_BINARY:
+  LARAVEL_PDF_NODE_MODULES_PATH:
+  LARAVEL_PDF_NO_SANDBOX:
+  LARAVEL_PDF_NPM_BINARY:
+  LARAVEL_PDF_TEMP_PATH:
+  LARAVEL_PDF_WRITE_OPTIONS_TO_FILE:
+  REPORTING_ADOPTION_MAX_RANGE_DAYS:
+  REPORTING_ADOPTION_TIMEOUT_SECONDS:
+  REPORTING_COMPLIANCE_MAX_RANGE_DAYS:
+  REPORTING_COMPLIANCE_TIMEOUT_SECONDS:
+  REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT:
+  REPORTING_EXPORT_LINK_TTL_MINUTES:
+  REPORTING_EXPORT_PATH:
+  REPORTING_EXPORT_RETENTION_DAYS:
+  REPORTING_EXPORT_STALE_AFTER:
+  REPORTING_EXPORT_TIMEOUT_SECONDS:
+  REPORTING_PERIOD_MAX_RANGE_DAYS:
+  REPORTING_PERIOD_MAX_ROWS:
+  REPORTING_PERIOD_TIMEOUT_SECONDS:
+  # Correo y avisos
+  ALERT_EMAIL_IT:
+  ALERT_EMAIL_RRHH:
+  ALERT_EMAIL_SEGURIDAD:
+  ALERT_WEBHOOK_IT:
+  ALERT_WEBHOOK_RRHH:
+  ALERT_WEBHOOK_SEGURIDAD:
+  MAIL_EHLO_DOMAIN:
+  MAIL_FROM_ADDRESS:
+  MAIL_FROM_NAME:
+  MAIL_HOST:
+  MAIL_LOG_CHANNEL:
+  MAIL_MAILER:
+  MAIL_PASSWORD:
+  MAIL_PORT:
+  MAIL_SCHEME:
+  MAIL_SENDMAIL_PATH:
+  MAIL_URL:
+  MAIL_USERNAME:
+  # Copias: solo lo NO secreto (la clave y las credenciales de copia son del planificador)
+  BACKUP_DAILY_AT:
+  BACKUP_DAILY_MODE:
+  BACKUP_MIN_COPIES:
+  BACKUP_PATH:
+  BACKUP_RETENTION_DAYS:
+  BACKUP_SCRIPT_PATH:
+  BACKUP_TIMEOUT_SECONDS:
+  BACKUP_WAL_RETENTION_DAYS:
+  BACKUP_WEEKLY_AT:
+  BACKUP_WEEKLY_MODE:
+  BACKUP_WEEKLY_ON:
+  # Borde y observabilidad que la aplicacion tambien consulta
+  METRICS_ALLOW_CIDR:
+  METRICS_TEXTFILE_ENABLED:
+  TLS_ALLOW_SELF_SIGNED:
+  TRUSTED_PROXIES:
+# Reverb no atiende peticiones ni toca la base de datos: arranca el framework,
+# habla con Redis y sirve WebSocket (medido en dind: sin DB_*, sin correo, sin
+# claves de firma).
+x-reverb-env: &reverb-env
+  APP_DEBUG:
+  APP_ENV:
+  APP_KEY:
+  APP_NAME:
+  APP_URL:
+  APP_TIMEZONE:
+  LOG_CHANNEL:
+  LOG_DAILY_DAYS:
+  LOG_DEPRECATIONS_CHANNEL:
+  LOG_DEPRECATIONS_TRACE:
+  LOG_LEVEL:
+  LOG_STACK:
+  LOKI_URL:
+  OTEL_SERVICE_NAME:
+  BROADCAST_CONNECTION:
+  CACHE_PREFIX:
+  CACHE_STORE:
+  REDIS_BACKOFF_ALGORITHM:
+  REDIS_BACKOFF_BASE:
+  REDIS_BACKOFF_CAP:
+  REDIS_CACHE_CONNECTION:
+  REDIS_CACHE_DB:
+  REDIS_CACHE_LOCK_CONNECTION:
+  REDIS_CLIENT:
+  REDIS_CLUSTER:
+  REDIS_DB:
+  REDIS_HOST:
+  REDIS_MAX_RETRIES:
+  REDIS_PASSWORD:
+  REDIS_PERSISTENT:
+  REDIS_PORT:
+  REDIS_PREFIX:
+  REDIS_QUEUE:
+  REDIS_QUEUE_CONNECTION:
+  REDIS_QUEUE_RETRY_AFTER:
+  REDIS_TIMEOUT:
+  REDIS_URL:
+  REDIS_USERNAME:
+  REVERB_ALLOWED_ORIGINS:
+  REVERB_APP_ACCEPT_CLIENT_EVENTS_FROM:
+  REVERB_APP_ACTIVITY_TIMEOUT:
+  REVERB_APP_ID:
+  REVERB_APP_KEY:
+  REVERB_APP_MAX_CONNECTIONS:
+  REVERB_APP_MAX_MESSAGE_SIZE:
+  REVERB_APP_PING_INTERVAL:
+  REVERB_APP_RATE_LIMITING_ENABLED:
+  REVERB_APP_RATE_LIMIT_DECAY_SECONDS:
+  REVERB_APP_RATE_LIMIT_MAX_ATTEMPTS:
+  REVERB_APP_RATE_LIMIT_TERMINATE:
+  REVERB_APP_SECRET:
+  REVERB_HOST:
+  REVERB_MAX_REQUEST_SIZE:
+  REVERB_PORT:
+  REVERB_PULSE_INGEST_INTERVAL:
+  REVERB_SCALING_CHANNEL:
+  REVERB_SCALING_ENABLED:
+  REVERB_SCHEME:
+  REVERB_SERVER:
+  REVERB_SERVER_HOST:
+  REVERB_SERVER_PATH:
+  REVERB_SERVER_PORT:
+  REVERB_TELESCOPE_INGEST_INTERVAL:
 services:
 
   app:
@@ -111,9 +500,15 @@ services:
         condition: service_healthy
     command: ["fpm"]
     environment:
+      <<: *runtime-env
+      # Solo `app` (entrypoint.sh los valida y renderiza el pool de PHP-FPM).
+      PHP_FPM_MAX_CHILDREN:
+      DB_LOCK_TIMEOUT:
+      DB_IDLE_IN_TRANSACTION_TIMEOUT:
       # PGOPTIONS (tarea 3.6, RNF-P-06, RNF-D-01) SOLO en `app`, el servicio
-      # que sirve peticiones (fichaje, panel, portal) y las migraciones
-      # (`compose run app php artisan migrate ...`). NO en `horizon` ni
+      # que sirve peticiones (fichaje, panel, portal); las migraciones ya
+      # no van por aqui sino por el servicio `migrate`, que lleva su propio
+      # `lock_timeout` (AUD-1). NO en `horizon` ni
       # `scheduler`: `idle_in_transaction_session_timeout=60s` puede abortar
       # el `pg_dump` de `backup.sh` con un destino de red lento, y
       # `lock_timeout=5s` rendiria una tarea de mantenimiento larga ante un
@@ -133,8 +528,22 @@ services:
 
   nginx:
     image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/nginx:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
-    env_file:
-      - .env
+    # Solo lo que el borde usa (plantilla kronoqr.conf.template y entrypoint.d).
+    # Ni una credencial: PIN-10, mismo criterio que el resto de AUD-1.
+    environment:
+      # Obligatorias. Sin valor por defecto a proposito: 04-kronoqr-required-env.sh
+      # las exige y explica por que.
+      KIOSK_VLAN_CIDR:
+      PORTAL_INTERNAL_CIDR:
+      METRICS_ALLOW_CIDR:
+      # Opcionales. Sin valor por defecto de Compose: si no estan, la imagen y
+      # 03-kronoqr-tls-paths.envsh ponen las suyas.
+      TLS_ALLOW_SELF_SIGNED:
+      TLS_CERT_FILE:
+      TLS_KEY_FILE:
+      # Con el defecto de la imagen (8m) tambien aqui: vacia, la directiva
+      # `client_max_body_size` es invalida y nginx no arranca.
+      NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-8m}
     ports:
       - "${HTTP_PORT:-80}:8080"
       - "${HTTPS_PORT:-443}:8443"
@@ -265,6 +674,8 @@ services:
   horizon:
     <<: *app-image
     command: ["horizon"]
+    environment:
+      <<: *runtime-env
     depends_on:
       redis:
         condition: service_healthy
@@ -272,6 +683,12 @@ services:
   reverb:
     <<: *app-image
     command: ["reverb"]
+    # Sin volúmenes: `reverb` solo habla WebSocket con Redis y no lee ni escribe
+    # ni las copias (BACKUP_PATH) ni el logotipo de la marca que monta el ancla.
+    # La clave explícita gana sobre la del ancla en la fusión de YAML.
+    volumes: []
+    environment:
+      <<: *reverb-env
     expose:
       - "8080"
     depends_on:
@@ -281,6 +698,16 @@ services:
   scheduler:
     <<: *app-image
     command: ["scheduler"]
+    environment:
+      <<: *runtime-env
+      # LO UNICO QUE EL PLANIFICADOR TIENE Y EL RESTO NO (AUD-1, ADR-042): lanza
+      # `backup:run` y las copias necesitan la clave de cifrado y un rol de
+      # PostgreSQL. BACKUP_DB_* es `fichaje_backup`, de SOLO LECTURA
+      # (pg_read_all_data + REPLICATION): no puede escribir una fila. La contrasena
+      # del migrador (superusuario) no esta aqui ni en ningun runtime.
+      BACKUP_ENCRYPTION_KEY:
+      BACKUP_DB_USERNAME:
+      BACKUP_DB_PASSWORD:
     depends_on:
       postgres:
         condition: service_healthy

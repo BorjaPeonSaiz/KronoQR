@@ -37,6 +37,11 @@ readonly SCRIPT_DIR
 # shellcheck source=lib/exit-codes.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/exit-codes.sh"
 
+# Git Bash (MSYS) reescribe `-e TLS_CERT_FILE=/etc/nginx/...` a `C:/...` antes de
+# llegar a Docker. En Linux no hace nada: la comprobacion es la misma en la CI y
+# en una estacion Windows.
+export MSYS_NO_PATHCONV=1
+
 readonly IMAGEN="${1:-kronoqr/nginx:ci}"
 readonly PUERTO="${KRONOQR_SMOKE_PORT:-18443}"
 readonly NOMBRE="kronoqr-nginx-smoke-$$"
@@ -155,11 +160,19 @@ main() {
   # `--add-host`: el template proxya a `app` y a `reverb`, que aqui no existen.
   # Apuntandolos al propio contenedor, nginx arranca y las rutas de la API dan
   # 502 -que es correcto y no se comprueba-, en vez de morir al resolver.
+  #
+  # EL ENTORNO ES EL DE compose.prod.yaml (PIN-10, AUD-1) Y NO MAS: las tres redes
+  # obligatorias, y las cuatro opcionales tal como las entrega Compose desde el
+  # .env.example. El borde no recibe el .env entero ni ninguna credencial; si un
+  # dia necesita otra variable, se anade aqui Y en su bloque de compose.prod.yaml.
   CONTENEDOR="$(docker run -d --name "${NOMBRE}" \
     -e KIOSK_VLAN_CIDR=10.92.0.0/24 \
     -e PORTAL_INTERNAL_CIDR="${CIDR_PORTAL}" \
     -e METRICS_ALLOW_CIDR=10.91.0.5/32 \
     -e TLS_ALLOW_SELF_SIGNED=true \
+    -e TLS_CERT_FILE=/etc/nginx/certs/tls.crt \
+    -e TLS_KEY_FILE=/etc/nginx/certs/tls.key \
+    -e NGINX_CLIENT_MAX_BODY_SIZE=8m \
     --add-host app:127.0.0.1 --add-host reverb:127.0.0.1 \
     -p "${PUERTO}:8443" "${IMAGEN}")"
 

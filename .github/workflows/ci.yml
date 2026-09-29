@@ -1591,6 +1591,11 @@ jobs:
           test "$(consulta "SELECT rolreplication FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "t"
           test "$(sudo docker compose --env-file .env -f docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
           test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' .env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' .env)"
+          # AUD-1 / PIN-10: NINGUN contenedor de runtime (app, horizon, reverb,
+          # scheduler, nginx) tiene la contrasena del migrador ni la de
+          # mantenimiento; solo scheduler tiene la clave de cifrado y las
+          # credenciales de copia; app recibe toda la configuracion no privilegiada.
+          bash ../.github/scripts/assert-runtime-env.sh .env docker-compose.yml
 
       - name: "D · Segunda ejecucion: salida 3, y la instalacion sigue en pie"
         run: |
@@ -1959,6 +1964,9 @@ jobs:
           sudo grep -qx 'BACKUP_DB_USERNAME=fichaje_backup' paquete-nuevo/.env
           test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' paquete-nuevo/.env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' paquete-nuevo/.env)"
           test "$(sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
+          # Y tras actualizar DESDE UNA 2.1.0 (que llevaba el .env entero en todos los
+          # contenedores) los cinco runtime ya no tienen credenciales privilegiadas.
+          bash .github/scripts/assert-runtime-env.sh paquete-nuevo/.env paquete-nuevo/docker-compose.yml
           antes="$(sed -n 's/^audit_log=//p' conteos-antes.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues.txt)"
           test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.updated mas"; exit 1; }
           consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.updated'

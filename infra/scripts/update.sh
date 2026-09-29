@@ -1010,6 +1010,7 @@ readonly -a PRECONDITION_CHECKS=(
   check_services
   check_audit_chain
   check_env_new_keys
+  check_env_orphan_keys
 )
 
 check_package_files() {
@@ -1432,6 +1433,50 @@ check_env_new_keys() {
   if [ "${count}" -gt 0 ]; then
     [ "${count}" -gt 8 ] && shown="${shown} ..."
     check_warn "$(kq_format u_c_env_new_keys "${count}" "${shown}")" "$(kq_format u_f_env_new_keys "${ENV_FILE}")"
+  fi
+}
+
+# Claves del .env del cliente que NINGUN servicio de la version nueva recibe
+# (AUD-1, ADR-042). Hasta la 2.1.0 los contenedores de runtime recibian el .env
+# entero (`env_file`); desde la 2.2.0 cada servicio nombra las variables que
+# necesita, y una clave que el cliente puso por su cuenta y que compose.yml no
+# nombra deja de llegar SIN AVISAR: no falla nada, simplemente se ignora. Es un
+# aviso y no un fallo: casi siempre son restos (AWS_*, SPEC_PATH...), y decirlo
+# aqui evita descubrirlo el dia que alguien espera que una variable surta efecto.
+#
+# «Recibida» = aparece en el `environment:` de algun servicio del compose ya
+# resuelto (con todos los perfiles) o compose la usa para interpolar (`${CLAVE}`).
+# Los NOMBRES salen de `docker compose config`, cuya salida lleva los valores: se
+# recorta con awk a solo nombres y nunca se guarda ni se imprime el resto.
+check_env_orphan_keys() {
+  [ "${DOCKER_OK}" -eq 1 ] && [ -n "${CURRENT_ENV}" ] && [ -f "${COMPOSE_FILE}" ] || return 0
+
+  local resolved received key count=0 shown=""
+
+  resolved="$(IMAGE_TAG="${TARGET_VERSION}" docker compose --profile '*' --env-file "${CURRENT_ENV}" \
+    -f "${COMPOSE_FILE}" config 2>/dev/null)" || return 0
+  received="$(
+    {
+      printf '%s\n' "${resolved}" | awk '
+        /^    environment:[[:space:]]*$/ { in_env = 1; next }
+        in_env && /^      [A-Za-z_][A-Za-z0-9_]*:/ { sub(/^      /, ""); sub(/:.*/, ""); print; next }
+        { in_env = 0 }
+      '
+      grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*' "${COMPOSE_FILE}" | sed 's/^\${//'
+    } | sort -u
+  )"
+  [ -n "${received}" ] || return 0
+
+  while IFS= read -r key; do
+    [ -n "${key}" ] || continue
+    printf '%s\n' "${received}" | grep -qxF "${key}" && continue
+    count=$((count + 1))
+    [ "${count}" -le 8 ] && shown="${shown}${shown:+ }${key}"
+  done < <(sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Z_][A-Z0-9_]*)=.*/\2/p' "${CURRENT_ENV}" | sort -u)
+
+  if [ "${count}" -gt 0 ]; then
+    [ "${count}" -gt 8 ] && shown="${shown} ..."
+    check_warn "$(kq_format u_c_env_orphan_keys "${count}" "${shown}")" "$(kq_format u_f_env_orphan_keys "${COMPOSE_FILE}")"
   fi
 }
 
