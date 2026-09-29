@@ -226,6 +226,9 @@ services:
       # se crea sin credencial utilizable. Se le asigna en el servidor del
       # cliente cuando la tarea 2.10 active la purga por retencion.
       DB_MAINTENANCE_PASSWORD: ${DB_MAINTENANCE_PASSWORD:-}
+      # Rol de las COPIAS (AUD-1): solo lectura; ver compose.prod.yaml.
+      DB_BACKUP_USERNAME: ${BACKUP_DB_USERNAME:-fichaje_backup}
+      DB_BACKUP_PASSWORD: ${BACKUP_DB_PASSWORD:-kronoqr_local_dev_only_backup}
       TZ: UTC
       PGTZ: UTC
       # Destino del WAL archivado. Igual que en produccion para que el

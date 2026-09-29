@@ -53,7 +53,6 @@ jobs:
       # Claves de usar y tirar para un servidor que vive tres minutos en un
       # runner efimero. NO son secretos del producto: los del cliente los
       # genera install.sh en su servidor y no los conoce nadie mas (§7.7).
-      PGPASSWORD: simulacro_local_ci
       BACKUP_ENCRYPTION_KEY: simulacro_local_ci_clave_de_cifrado
       BACKUP_PATH: /tmp/kronoqr-backups
       DB_HOST: 127.0.0.1
@@ -68,6 +67,14 @@ jobs:
       # este workflow fallara en todas las ramas desde la tarea 1.14.
       DB_USERNAME: fichaje_migrator
       DB_PASSWORD: simulacro_local_ci
+      # AUD-1: las copias se hacen con el rol de SOLO LECTURA, no con el de
+      # migracion (superusuario). Sin PGPASSWORD a nivel de job a proposito:
+      # backup-common.sh da prioridad a PGUSER/PGPASSWORD sobre BACKUP_DB_*, y un
+      # PGPASSWORD global haria que la copia siguiera usando al migrador sin que
+      # nadie lo notara. Los pasos que necesitan al migrador (sembrar, consultar
+      # el archivador) ponen ellos su PGPASSWORD.
+      BACKUP_DB_USERNAME: fichaje_backup
+      BACKUP_DB_PASSWORD: simulacro_backup_ci
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -101,6 +108,8 @@ jobs:
             -e POSTGRES_DB="$DB_DATABASE" \
             -e POSTGRES_USER="$DB_USERNAME" \
             -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+            -e DB_BACKUP_USERNAME="$BACKUP_DB_USERNAME" \
+            -e DB_BACKUP_PASSWORD="$BACKUP_DB_PASSWORD" \
             -e KRONOQR_WAL_ARCHIVE_DIR=/var/backups/fichaje/wal \
             -p 5432:5432 \
             kronoqr/postgres:ci \
@@ -127,6 +136,8 @@ jobs:
           exit 1
 
       - name: Datos con relaciones y casos limite
+        env:
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
         # Turno nocturno que cruza medianoche y turno en el cambio de hora: si
         # una copia se los comiera, el registro legal quedaria mal y los
         # conteos por tabla lo dirian.
@@ -152,13 +163,49 @@ jobs:
           FROM generate_series(1, 5000) g;
           -- Turno que cruza el cambio de hora (RN-05, ADR-006).
           INSERT INTO shift_entries VALUES (99999, 1, '2026-03-29 01:30:00+01', '2026-03-29 09:00:00+02');
+          -- audit_log es una tabla PARTICIONADA por anyo: el rol de copias tiene que
+          -- leer tambien las particiones que se creen despues (pg_read_all_data).
+          CREATE TABLE audit_log (id bigint NOT NULL, at timestamptz NOT NULL, action text NOT NULL) PARTITION BY RANGE (at);
+          CREATE TABLE audit_log_2026 PARTITION OF audit_log FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
+          INSERT INTO audit_log SELECT g, '2026-05-01'::timestamptz + (g || ' minutes')::interval, 'clock.in' FROM generate_series(1, 200) g;
           SELECT pg_switch_wal();
           SQL
+
+      - name: El rol de copias es de SOLO LECTURA y aun asi copia (AUD-1)
+        env:
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          q() { psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc "$1"; }
+          test "$(q "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = '$BACKUP_DB_USERNAME'")" = "f"
+          test "$(q "SELECT rolreplication FROM pg_roles WHERE rolname = '$BACKUP_DB_USERNAME'")" = "t"
+          # Una particion nueva DESPUES de aprovisionar el rol: se copia igual.
+          q "CREATE TABLE audit_log_2027 PARTITION OF audit_log FOR VALUES FROM ('2027-01-01') TO ('2028-01-01')"
+          q "INSERT INTO audit_log VALUES (9001, '2027-02-01', 'clock.out')"
+          # No puede escribir, ni crear, ni tocar audit_log, ni crear bases.
+          w() { PGPASSWORD="$BACKUP_DB_PASSWORD" psql -h "$DB_HOST" -U "$BACKUP_DB_USERNAME" -d "$DB_DATABASE" -Atc "$1"; }
+          for sql in "UPDATE audit_log SET action = 'x'" "DELETE FROM audit_log" "INSERT INTO shift_entries VALUES (1, 1, now(), now())" "CREATE TABLE intruso (x int)" "CREATE DATABASE intruso"; do
+            if w "$sql" >/dev/null 2>&1; then echo "::error::El rol de copias ha podido ejecutar: $sql"; exit 1; fi
+          done
+          # Lee todo, particiones incluidas.
+          test "$(w "SELECT count(*) FROM audit_log")" = "201"
+          echo "fichaje_backup: lee todo y no escribe nada."
 
       - name: Copia cifrada y verificada
         run: |
           mkdir -p "$BACKUP_PATH"
           bash infra/scripts/backup.sh run --mode dump
+          # La particion creada DESPUES del rol esta en el volcado. La copia se
+          # descifra con las mismas funciones que usa backup.sh.
+          copia="$(ls "$BACKUP_PATH"/daily/*.dump.enc | tail -n 1)"
+          bash -c '. infra/scripts/lib/backup-common.sh; load_backup_config; decrypt_stream < "$1" | pg_restore --list' _ "$copia" |
+            grep -q 'TABLE DATA public audit_log_2027' ||
+            { echo '::error::La particion de audit_log creada despues del rol no esta en la copia.'; exit 1; }
+
+      - name: Copia FISICA (pg_basebackup) con el rol de solo lectura
+        run: |
+          bash infra/scripts/backup.sh run --mode base
+          ls -l "$BACKUP_PATH"/base/*.tar.gz.enc
 
       - name: La copia esta CIFRADA (RL-12)
         # Que no se pueda leer sin la clave no es una opinion: se comprueba.
@@ -175,7 +222,7 @@ jobs:
       - name: Archivado de WAL en marcha (RPO <= 15 min)
         run: |
           sleep 5
-          psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc \
+          PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc \
             "SELECT CASE WHEN archived_count > 0 AND failed_count = 0 THEN 'ok' ELSE 'mal' END FROM pg_stat_archiver" |
             grep -qx ok || { echo "::error::El archivado de WAL no funciona: sin el no hay RPO de 15 minutos."; exit 1; }
 

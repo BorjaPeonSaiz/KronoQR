@@ -1018,10 +1018,12 @@ phase_secrets() {
   # momento de la purga anual, con el procedimiento de
   # docs/cliente/operacion.md, «Custodia de secretos».
   #
-  # El volcado de la copia lo hace el rol de migracion (lib/backup-common.sh),
-  # asi que su credencial es la misma. Escribirla aparte con otro valor dejaria
-  # la copia diaria fallando desde el primer dia.
-  set_generated_secret "BACKUP_DB_PASSWORD" "$(env_value "${ENV_FILE}" "DB_MIGRATION_PASSWORD")" 32
+  # La copia la hace `fichaje_backup`, un rol de SOLO LECTURA con contrasena
+  # PROPIA (AUD-1): ya no es la del migrador, que es superusuario y no puede
+  # estar en el entorno del planificador. PostgreSQL crea el rol al inicializar
+  # el volumen (initdb/03-backup-role.sh) con esta misma contrasena, que le
+  # llega por compose.
+  set_generated_secret "BACKUP_DB_PASSWORD" "$(random_password)" 32
 
   set_generated_secret "REVERB_APP_ID" "$(random_hex 8)" 16
   set_generated_secret "REVERB_APP_KEY" "$(random_hex 16)" 32
@@ -1230,7 +1232,16 @@ phase_bootstrap() {
   say "$(kq_text migrating)"
   # Con el rol de MIGRACION, no con el de la aplicacion: el de la aplicacion no
   # tiene DDL y no puede tener UPDATE ni DELETE sobre audit_log (regla dura 6).
-  if ! compose exec -T app php artisan migrate --database=pgsql_migrator --force; then
+  #
+  # Por el servicio puntual `migrate` (AUD-1), no con `exec app`: la contrasena
+  # del migrador (superusuario) solo existe en ese contenedor efimero, nunca en
+  # el de la aplicacion que sirve peticiones. `--no-deps`: postgres ya esta sano
+  # (arriba) y no se quiere que Compose arranque nada mas.
+  #
+  # El orden se deja como estaba (`up -d` completo y despues migrar): mover las
+  # migraciones antes seria seguro, pero la espera del borde de arriba es la que
+  # cubre el fallo de certificado y no conviene reordenar dos cosas a la vez.
+  if ! compose run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force; then
     rollback_and_die "$(kq_format f_migrating "${COMPOSE_FILE}")"
   fi
 

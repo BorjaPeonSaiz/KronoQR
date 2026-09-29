@@ -1537,7 +1537,7 @@ jobs:
           # unica forma honesta de hacerlo: buscar "algo que parezca una clave"
           # daria verde con cualquier fuga real.
           for clave in APP_KEY QR_SIGNING_KEY_CURRENT BACKUP_ENCRYPTION_KEY \
-                       REVERB_APP_SECRET DB_PASSWORD DB_MIGRATION_PASSWORD \
+                       REVERB_APP_SECRET DB_PASSWORD DB_MIGRATION_PASSWORD BACKUP_DB_PASSWORD \
                        IDENTITY_PIN_SEALING_SECRET_KEY GRAFANA_ADMIN_PASSWORD; do
             valor="$(sudo sed -n "s/^${clave}=//p" .env | head -1)"
             test -n "${valor}"
@@ -1585,6 +1585,12 @@ jobs:
           test "$(consulta 'SELECT count(*) FROM employees')"     -eq 0
           test "$(consulta 'SELECT count(*) FROM shift_entries')" -eq 0
           test "$(consulta 'SELECT count(*) FROM users')"         -eq 0
+          # AUD-1: las copias se hacen con un rol PROPIO de solo lectura, distinto
+          # del migrador, y el planificador (que las lanza) lleva ese, no el otro.
+          test "$(consulta "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "f"
+          test "$(consulta "SELECT rolreplication FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "t"
+          test "$(sudo docker compose --env-file .env -f docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
+          test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' .env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' .env)"
 
       - name: "D · Segunda ejecucion: salida 3, y la instalacion sigue en pie"
         run: |
@@ -1947,12 +1953,18 @@ jobs:
           # Los usuarios no cambian; audit_log crece EXACTAMENTE en uno: el asiento
           # system.updated que el paso 5 escribe desde el cierre de la Fase 5.
           test "$(grep '^users=' conteos-antes.txt)" = "$(grep '^users=' conteos-despues.txt)"
+          # AUD-1: la actualizacion desde una 2.1.0 (copias con el migrador) crea el
+          # rol de solo lectura y reescribe BACKUP_DB_* en el .env NUEVO.
+          test "$(consulta "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "f"
+          sudo grep -qx 'BACKUP_DB_USERNAME=fichaje_backup' paquete-nuevo/.env
+          test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' paquete-nuevo/.env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' paquete-nuevo/.env)"
+          test "$(sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
           antes="$(sed -n 's/^audit_log=//p' conteos-antes.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues.txt)"
           test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.updated mas"; exit 1; }
           consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.updated'
           # Ninguna migracion pendiente, y el informe donde dice la guia.
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
-            exec -T app php artisan migrate:status --database=pgsql_migrator --pending=1
+            run --rm --no-deps -T migrate php artisan migrate:status --database=pgsql_migrator --pending=1
           # El directorio de informes es 0750 del uid de la aplicacion: el comodin
           # lo expande root, no la shell del runner (que no puede listarlo).
           sudo ls -la /var/backups/fichaje/reports/
@@ -2025,6 +2037,10 @@ jobs:
           docker pull --quiet alpine:3.20 >/dev/null
           docker tag alpine:3.20 "kronoqr/nginx:${new}"
 
+          # AUD-1: el .env de la version anterior es el de la vuelta atras y NO se
+          # toca (el paso del rol de copias solo escribe el del paquete nuevo).
+          env_antes="$(sudo md5sum < paquete-anterior/.env)"
+
           cd paquete-nuevo
           set +e
           sudo ./update.sh >salida-u3.log 2>&1
@@ -2037,6 +2053,7 @@ jobs:
           grep -q 'VUELTA ATRAS COMPLETADA' paquete-nuevo/salida-u3.log
           curl -fsS -k https://127.0.0.1/api/v1/health | tee health-u3.json
           grep -qF "\"version\":\"${old}\"" health-u3.json
+          test "$(sudo md5sum < paquete-anterior/.env)" = "${env_antes}" || { echo 'La actualizacion fallida ha tocado el .env de la version anterior'; exit 1; }
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
           {
             echo "users=$(consulta 'SELECT count(*) FROM users')"
@@ -2103,7 +2120,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
-            exec -T app bash /opt/kronoqr/scripts/restore-drill.sh --mode database
+            run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore-drill.sh --mode database
 
       - name: Diagnostico si algo ha fallado
         if: failure() && steps.anterior.outputs.skip != 'true'

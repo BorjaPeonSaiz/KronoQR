@@ -61,7 +61,7 @@
 name: kronoqr
 
 x-app-image: &app-image
-  image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
+  image: &php-image ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
   env_file:
     - .env
   volumes:
@@ -186,6 +186,11 @@ services:
       # nace sin credencial utilizable y no aparece en el .env de la
       # aplicacion. Se le asigna cuando la tarea 2.10 active la purga.
       DB_MAINTENANCE_PASSWORD: ${DB_MAINTENANCE_PASSWORD:-}
+      # Rol de las COPIAS (AUD-1): solo lectura, lo crea initdb/03-backup-role.sh.
+      # Si el .env aun trae BACKUP_DB_USERNAME=fichaje_migrator (2.1.0), el script
+      # se niega a tocar el migrador y no hace nada.
+      DB_BACKUP_USERNAME: ${BACKUP_DB_USERNAME:-fichaje_backup}
+      DB_BACKUP_PASSWORD: ${BACKUP_DB_PASSWORD:-}
       TZ: UTC
       PGTZ: UTC
       KRONOQR_WAL_ARCHIVE_DIR: ${BACKUP_PATH:-/var/backups/fichaje}/wal
@@ -279,6 +284,96 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  #----------------------------------------------------------------------------
+  # TAREAS PUNTUALES CON CREDENCIALES PRIVILEGIADAS (AUD-1, ADR-033, regla dura 6)
+  #
+  # `migrate` y `restore` son los UNICOS servicios que reciben la contraseña del
+  # rol de migracion (`fichaje_migrator`, superusuario del cluster). No arrancan
+  # con `up -d`: el perfil `tools` los deja fuera, y `docker compose run --rm
+  # migrate ...` los lanza sin activar el perfil (comprobado con Compose v5).
+  # Nacen, hacen una cosa y mueren (`restart: "no"`).
+  #
+  # SIN `env_file`, y sin heredar `x-app-image`: sus volumenes y su entorno son
+  # los que ellos nombran. Las variables van SIN valor (`X:`): Compose las
+  # resuelve desde el .env del cliente y, si la clave no existe, la variable NO
+  # llega al contenedor. Con `X: ${X:-}` llegaria vacia y anularia el valor por
+  # defecto que `env('X', ...)` lleva en config/.
+  #
+  # Uso:
+  #   docker compose run --rm --no-deps -T migrate php artisan migrate --force --database=pgsql_migrator
+  #   docker compose run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore.sh ...
+  #
+  # `--no-deps` porque quien las llama (install.sh, update.sh) ya ha esperado a
+  # que postgres este sano y no quiere que Compose arranque nada mas.
+  #----------------------------------------------------------------------------
+  migrate:
+    profiles: [tools]
+    image: *php-image
+    restart: "no"
+    command: ["php", "artisan", "migrate", "--database=pgsql_migrator", "--force"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app
+    environment:
+      # Arranque de la aplicacion (ProductionSafetyGuard lee APP_ENV/APP_DEBUG).
+      APP_NAME:
+      APP_ENV:
+      APP_DEBUG:
+      APP_KEY:
+      APP_TIMEZONE:
+      LOG_CHANNEL:
+      LOG_STACK:
+      LOG_LEVEL:
+      # Conexion. DB_USERNAME es el NOMBRE del rol de aplicacion: las migraciones
+      # le escriben los GRANT (AuditLogSchema). Su contraseña no hace falta.
+      DB_CONNECTION:
+      DB_HOST:
+      DB_PORT:
+      DB_DATABASE:
+      DB_SSLMODE:
+      DB_USERNAME:
+      DB_MIGRATION_USERNAME:
+      DB_MIGRATION_PASSWORD:
+      DB_MAINTENANCE_USERNAME:
+      # Como en `app` (RNF-D-01): una migracion que espera un candado mas de 5 s
+      # aborta en vez de bloquear el fichaje. Sin idle_in_transaction: una
+      # migracion larga no debe morir por eso.
+      PGOPTIONS: "-c lock_timeout=${DB_LOCK_TIMEOUT:-5s}"
+
+  restore:
+    profiles: [tools]
+    image: *php-image
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app
+    volumes:
+      # La misma ruta dentro y fuera, como en `app`: restore.sh lee de aqui las
+      # copias y escribe aqui su informe.
+      - ${BACKUP_PATH:-/var/backups/fichaje}:${BACKUP_PATH:-/var/backups/fichaje}
+    environment:
+      APP_ENV:
+      LOG_CHANNEL:
+      LOG_LEVEL:
+      # restore.sh y restore-drill.sh --mode database toman PGUSER/PGPASSWORD
+      # antes que BACKUP_DB_* (lib/backup-common.sh): restaurar exige CREATEDB y
+      # renombrar bases, cosa que el rol de copia (solo lectura) no puede.
+      PGUSER: ${DB_MIGRATION_USERNAME:-fichaje_migrator}
+      PGPASSWORD: ${DB_MIGRATION_PASSWORD:?define DB_MIGRATION_PASSWORD en el .env; install.sh lo genera}
+      DB_HOST:
+      DB_PORT:
+      DB_DATABASE:
+      DB_USERNAME:
+      DB_MAINTENANCE_USERNAME:
+      BACKUP_PATH:
+      BACKUP_ENCRYPTION_KEY:
+      BACKUP_RETENTION_DAYS:
+      BACKUP_MIN_COPIES:
 
   # ENTRYPOINT DE RENDERIZADO (tarea 3.8, hallazgo H-05). Mismo mecanismo que
   # Alertmanager (ver el comentario de ese servicio, mas abajo, para el

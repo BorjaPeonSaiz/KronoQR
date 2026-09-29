@@ -435,4 +435,9 @@ it('espera tambien al borde antes de dar la fase 4 por buena', function (): void
 
     expect($posicion('wait_for_healthy app'))->toBeLessThan($posicion('wait_for_healthy nginx'))
         ->and($posicion('wait_for_healthy nginx'))->toBeLessThan($posicion('artisan migrate'));
+
+    // AUD-1: la contrasena del migrador (superusuario) no llega al contenedor de la
+    // aplicacion. Las migraciones van por el servicio puntual `migrate`.
+    expect($script)->toContain('run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force')
+        ->not->toContain('exec -T app php artisan migrate');
 })->group('RF-PD-02');

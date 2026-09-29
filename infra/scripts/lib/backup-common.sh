@@ -122,9 +122,11 @@ load_backup_config() {
   BACKUP_DIR_REPORTS="${BACKUP_PATH}/reports"
   BACKUP_LATEST_POINTER="${BACKUP_DIR_DUMP}/LATEST"
 
-  # Credenciales. El usuario de la copia puede ser distinto del de la
-  # aplicacion: la aplicacion no tiene UPDATE ni DELETE sobre audit_log (regla
-  # dura 6) y el volcado necesita leerlo entero.
+  # Credenciales. El usuario de la copia NO es el de la aplicacion ni el de
+  # migracion: es `fichaje_backup` (AUD-1), de solo lectura (pg_read_all_data +
+  # REPLICATION; initdb/03-backup-role.sh). La aplicacion no tiene UPDATE ni
+  # DELETE sobre audit_log (regla dura 6) y el volcado necesita leerlo entero;
+  # el superusuario no hace falta para copiar y no debe estar en este entorno.
   PGHOST="${PGHOST:-${DB_HOST:-postgres}}"
   PGPORT="${PGPORT:-${DB_PORT:-5432}}"
   PGDATABASE="${PGDATABASE:-${DB_DATABASE:-fichaje}}"

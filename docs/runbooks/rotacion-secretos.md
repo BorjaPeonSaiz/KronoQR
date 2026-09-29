@@ -50,7 +50,7 @@ del instalador, y eso se comprueba en cada publicación de versión.
 | `QR_SIGNING_KEY_CURRENT_ID` | 2 caracteres hexadecimales | §1 |
 | `DB_PASSWORD` | 32 caracteres alfanuméricos | §3 |
 | `DB_MIGRATION_PASSWORD` | Íd. | §3 |
-| `BACKUP_DB_PASSWORD` | **Copia de `DB_MIGRATION_PASSWORD`**: el volcado lo hace el rol de migración, porque `pg_basebackup` exige `REPLICATION` | §3 |
+| `BACKUP_DB_PASSWORD` | 32 caracteres alfanuméricos, **propia** (no es la del migrador): la usa `fichaje_backup`, un rol de solo lectura con `REPLICATION` | §3 |
 | `REVERB_APP_ID` / `_KEY` | 8 y 16 bytes en hexadecimal | §6 bis |
 | `REVERB_APP_SECRET` | 32 bytes aleatorios en base64 | §6 bis |
 | `BACKUP_ENCRYPTION_KEY` | 32 bytes aleatorios en base64 | §5 |
@@ -125,16 +125,17 @@ Avisa a RRHH antes: no es una avería, pero lo parece.
 
 ## 3. Credenciales de base de datos
 
-Son **tres roles distintos** (ADR-033) y se rotan por separado, empezando por el
-que menos duele:
+Son **cuatro roles distintos** (ADR-033 y AUD-1) y se rotan por separado,
+empezando por el que menos duele:
 
 | Rol | Dónde vive | Qué pasa si se hace mal |
 | --- | --- | --- |
 | `fichaje_maintenance` | **Fuera del `.env`**, solo en la caja fuerte del operador | La purga por retención falla. Nadie deja de fichar |
-| `fichaje_migrator` | `DB_MIGRATION_*`, idealmente solo al desplegar | El siguiente despliegue falla. Nadie deja de fichar |
+| `fichaje_migrator` | `DB_MIGRATION_*` en el `.env`, que solo leen PostgreSQL y los servicios puntuales `migrate` y `restore`. **Ningún contenedor de runtime lo recibe** | El siguiente despliegue o restauración falla. Nadie deja de fichar |
+| `fichaje_backup` | `BACKUP_DB_*`. **Solo lectura** (`pg_read_all_data` + `REPLICATION`). Lo lleva el `scheduler`, que lanza las copias | La copia diaria falla y salta la alerta de copia fallida. Nadie deja de fichar |
 | `fichaje_app` | `DB_*`. **Es el runtime** | **El fichaje se cae entero** |
 
-Para el tercero, el orden importa:
+Para `fichaje_app`, el orden importa:
 
 ```sql
 -- 1. Cambiar la contraseña en PostgreSQL
@@ -153,6 +154,37 @@ Entre 1 y 3 **la aplicación no puede consultar la base de datos**. Hazlo fuera
 de horario de entrada y salida de turnos, y recuerda que durante ese hueco el
 quiosco **encola y no bloquea a nadie** (regla dura 19): los fichajes de esos
 minutos llegan después, con su `occurred_at` real.
+
+### Rotar `fichaje_backup` (las copias)
+
+No toca el fichaje. **No uses la contraseña del migrador para esto**: es el
+superusuario, y la razón de existir de este rol es que no esté en el entorno del
+planificador.
+
+```bash
+# 1. Genera la nueva y aplícala; la contraseña entra por la ENTRADA ESTÁNDAR del
+#    script, no por la línea de órdenes (no queda en `ps` ni en `docker inspect`).
+nueva="$(openssl rand -base64 48 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-32)"
+printf '%s\n' "${nueva}" | docker compose exec -T \
+  -e DB_BACKUP_USERNAME=fichaje_backup postgres \
+  /docker-entrypoint-initdb.d/03-backup-role.sh --password-stdin
+# 2. Escribe la misma en BACKUP_DB_PASSWORD del .env y recrea el planificador
+docker compose up -d scheduler
+# 3. Comprueba con una copia de verdad
+docker compose exec scheduler php artisan backup:run
+```
+
+El script es idempotente y **se niega a tocar** el rol si `BACKUP_DB_USERNAME`
+coincide con el de migración, el de aplicación o el de mantenimiento (una 2.1.0
+lo trae apuntando al migrador hasta que `update.sh` lo pasa al rol de solo
+lectura): degradar al migrador dejaría la instalación sin quien pueda migrar.
+
+Lo que este rol **no** protege: lee todo (la confidencialidad de la copia la da
+`BACKUP_ENCRYPTION_KEY`, §5) y una copia física incluye los verificadores SCRAM
+de los demás roles. Con contraseñas aleatorias de 32 caracteres no es explotable
+en la práctica, pero no es cero. Tampoco puede leer un *objeto grande* de
+PostgreSQL (`lo_import`): KronoQR no los usa y, si alguien crea uno, la copia
+falla con un mensaje que lo dice.
 
 ---
 

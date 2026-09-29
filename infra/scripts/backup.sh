@@ -366,7 +366,7 @@ copia_logica() {
   if ! { "${BACKUP_DUMP_COMMAND:-pg_dump}" --format=custom --compress=6 --no-password |
     encrypt_stream; } >"$tmp"; then
     rm -f "$tmp"
-    die "${KQ_EXIT_ROLLED_BACK}" "ha fallado el volcado o el cifrado. No se ha escrito ninguna copia nueva y la anterior sigue intacta. Revisa el espacio libre en '${BACKUP_PATH}' y los permisos del usuario ${PGUSER} sobre la base ${PGDATABASE}. Ver docs/runbooks/restaurar-backup.md."
+    die "${KQ_EXIT_ROLLED_BACK}" "ha fallado el volcado o el cifrado. No se ha escrito ninguna copia nueva y la anterior sigue intacta. Revisa el espacio libre en '${BACKUP_PATH}' y los permisos del usuario ${PGUSER} sobre la base ${PGDATABASE}. El rol de copias es de solo lectura (pg_read_all_data): si alguien ha creado un objeto grande (lo_import), ese rol no puede leerlo y el volcado falla; KronoQR no los usa. Ver docs/runbooks/restaurar-backup.md."
   fi
 
   [ -s "$tmp" ] || {

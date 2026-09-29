@@ -1594,8 +1594,14 @@ phase_backup() {
   heading "$(kq_text u_phase_3)"
   say "$(kq_format u_backup_start "${SOURCE_VERSION}")"
 
+  # Con `run` y NO con `exec`: la fase 2 acaba de parar `scheduler` (y `horizon`) para
+  # que nada escriba durante la migracion, y `exec` sobre un contenedor parado
+  # falla con 1. Tampoco con `app` (AUD-1): a `app` no le llegan ni BACKUP_DB_* ni
+  # la clave de cifrado, solo al planificador. `run` levanta un contenedor efimero
+  # con el MISMO entorno que `scheduler` (en la 2.1.0 el .env entero; desde la
+  # 2.2.0, solo lo suyo), asi que vale para las dos versiones.
   detail_note "--- backup:run --mode dump ---"
-  compose_current exec -T app php artisan backup:run --mode=dump >>"$(detail_sink)" 2>&1 || code=$?
+  compose_current run --rm --no-deps -T scheduler php artisan backup:run --mode=dump >>"$(detail_sink)" 2>&1 || code=$?
   if [ "${code}" -ne 0 ]; then
     backup_failed "$(kq_format u_f_backup "${code}" "$(kq_exit_name "${code}")" "${SOURCE_VERSION}")"
   fi
@@ -1703,7 +1709,7 @@ phase_migrations() {
       args+=("--path=${name}")
     done
     detail_note "--- migrate (${version}) ---"
-    if ! compose_new run --rm --no-deps -T app php artisan migrate --force --database=pgsql_migrator --realpath "${args[@]}" \
+    if ! compose_new run --rm --no-deps -T migrate php artisan migrate --force --database=pgsql_migrator --realpath "${args[@]}" \
       >>"$(detail_sink)" 2>&1; then
       rollback_and_die "$(kq_format u_f_migrating_version "${version}" "${LAST_CHECKPOINT:-$(kq_text u_report_none)}")" migration_failed
     fi
@@ -1723,6 +1729,79 @@ phase_migrations() {
     rollback_and_die "$(kq_format u_f_pending_left "${pending% }")" migration_failed
   fi
   say "$(kq_format u_no_pending "${TARGET_VERSION}")"
+
+  provision_backup_role
+}
+
+#------------------------------------------------------------------------------
+# Rol de las COPIAS (AUD-1, regla dura 6, ADR-033). Se ejecuta al final del
+# paso 4, con PostgreSQL ya en la version nueva y ANTES de arrancar el
+# `scheduler` nuevo, que es el unico contenedor de runtime que recibe
+# BACKUP_DB_* y la clave de cifrado.
+#
+# Hasta la 2.1.0 la copia se hacia con `fichaje_migrator`, superusuario, y su
+# contrasena viajaba en el entorno de todos los contenedores de runtime. Aqui se
+# pasa al rol `fichaje_backup`, de solo lectura, y se reescriben BACKUP_DB_* en
+# el .env NUEVO. Idempotente: si el .env ya nombra un rol propio se limita a
+# volver a aplicar el aprovisionamiento (repone el rol y sus permisos si el
+# volumen no los tuviera) sin cambiar ninguna credencial.
+#
+# VUELTA ATRAS. Solo se escribe ENV_FILE. La version anterior arranca con
+# ROLLBACK_ENV (el .env viejo intacto en modo lado a lado, y la copia
+# `.kronoqr-pre-update` en modo in-place), que sigue diciendo
+# BACKUP_DB_USERNAME=fichaje_migrator: su `restore.sh` conserva CREATEDB. El rol
+# nuevo queda en el cluster sin uso, que es inocuo.
+#
+# La contrasena viaja por la ENTRADA ESTANDAR del script de PostgreSQL: ni
+# `argv` (visible con `ps`) ni `docker inspect`. Nunca se imprime.
+#------------------------------------------------------------------------------
+new_backup_password() {
+  local pool=""
+
+  while [ "${#pool}" -lt 32 ]; do
+    pool="${pool}$(openssl rand -base64 48 | LC_ALL=C tr -dc 'A-Za-z0-9')"
+  done
+  printf '%s' "${pool:0:32}"
+}
+
+provision_backup_role() {
+  local role password generated=0
+
+  say ""
+  say "$(kq_text u_backup_role_start)"
+
+  command -v openssl >/dev/null 2>&1 ||
+    rollback_and_die "$(kq_text u_f_backup_role_openssl)" migration_failed
+
+  role="$(env_value "${ENV_FILE}" "BACKUP_DB_USERNAME")"
+  password="$(env_value "${ENV_FILE}" "BACKUP_DB_PASSWORD")"
+
+  # El rol de copia NO puede ser el de migracion ni el de aplicacion: el primero
+  # es el que se quiere sacar del entorno, y el segundo no tiene REPLICATION.
+  if [ -z "${role}" ] || [ "${role}" = "${CFG_DB_MIGRATION_USERNAME}" ] || [ "${role}" = "${CFG_DB_USERNAME}" ] ||
+    [ -z "${password}" ]; then
+    role="fichaje_backup"
+    password="$(new_backup_password)"
+    generated=1
+  fi
+
+  detail_note "--- 03-backup-role.sh (${role}) ---"
+  if ! printf '%s\n' "${password}" |
+    compose_new exec -T -e "DB_BACKUP_USERNAME=${role}" postgres \
+      /docker-entrypoint-initdb.d/03-backup-role.sh --password-stdin >>"$(detail_sink)" 2>&1; then
+    rollback_and_die "$(kq_format u_f_backup_role "${role}")" migration_failed
+  fi
+
+  if [ "${generated}" -eq 1 ]; then
+    if ! kq_env_set "${ENV_FILE}" "BACKUP_DB_USERNAME" "${role}" ||
+      ! kq_env_set "${ENV_FILE}" "BACKUP_DB_PASSWORD" "${password}" ||
+      ! chmod 0600 "${ENV_FILE}"; then
+      rollback_and_die "$(kq_format u_f_backup_role_env "${ENV_FILE}")" migration_failed
+    fi
+    say "$(kq_format u_backup_role_switched "${role}" "${ENV_FILE}")"
+  else
+    say "$(kq_format u_backup_role_kept "${role}")"
+  fi
 }
 
 #------------------------------------------------------------------------------
@@ -2060,7 +2139,7 @@ rollback_and_die() {
 
   say "$(kq_format u_rollback_restore "${BACKUP_FILE}")"
   detail_note "--- restore.sh --file ${BACKUP_FILE} --yes ---"
-  compose_new run --rm --no-deps -T app bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes \
+  compose_new run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes \
     >>"$(detail_sink)" 2>&1
   code=$?
   if [ "${code}" -ne 0 ]; then

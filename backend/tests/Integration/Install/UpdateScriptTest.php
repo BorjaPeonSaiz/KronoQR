@@ -513,3 +513,32 @@ it('pregunta lo mismo y con la misma funcion en update.sh y en la etapa 8b', fun
     expect((string) file_get_contents(Repo::file('infra/scripts/package.sh')))
         ->toContain('infra/scripts/lib');
 })->group('RF-PD-10', 'RS-07');
+
+it('migra y restaura por los servicios puntuales, y crea el rol de copias antes de arrancar el planificador (AUD-1)', function (): void {
+    // AUD-1, regla dura 6. La contrasena del migrador (superusuario) solo puede
+    // existir en los contenedores efimeros `migrate` y `restore`, asi que ni las
+    // migraciones ni la vuelta atras pueden volver a ir por `app`. Se comprueba
+    // sobre el texto porque ejercitarlo exige Docker; ⑧b lo cubre de verdad.
+    $actualizador = (string) file_get_contents(Repo::file('infra/scripts/update.sh'));
+    $mensajes = (string) file_get_contents(Repo::file('infra/scripts/lib/messages-update.sh'));
+
+    expect($actualizador)
+        ->toContain('run --rm --no-deps -T migrate php artisan migrate --force --database=pgsql_migrator')
+        ->toContain('run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh"')
+        ->toContain('run --rm --no-deps -T scheduler php artisan backup:run --mode=dump')
+        ->not->toContain('-T app php artisan migrate')
+        ->not->toContain('-T app bash "${KQ_CONTAINER_SCRIPTS}/restore.sh"')
+        ->not->toContain('exec -T app php artisan backup:run');
+
+    // La ayuda de la vuelta atras incompleta tambien: una persona la copia tal cual.
+    expect($mensajes)->toContain('run --rm --no-deps restore')
+        ->not->toContain('run --rm --no-deps app');
+
+    // El rol se crea al final del paso 4, antes de que el paso 5 levante el
+    // `scheduler` nuevo (el unico runtime que recibe BACKUP_DB_*), y la
+    // contrasena no pasa por argv: entra por la entrada estandar.
+    expect(strpos($actualizador, "\n  provision_backup_role\n}"))->toBeLessThan(strpos($actualizador, "\nphase_start_and_verify() {"));
+    expect($actualizador)->toContain('03-backup-role.sh --password-stdin')
+        ->and($actualizador)->toContain('kq_env_set "${ENV_FILE}" "BACKUP_DB_PASSWORD" "${password}"')
+        ->and($actualizador)->not->toMatch('/DB_BACKUP_PASSWORD=/');
+})->group('RS-07', 'RF-PD-10');

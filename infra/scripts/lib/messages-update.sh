@@ -159,6 +159,12 @@ KQ_MSG_ES[u_migrating_version_none]="Version %s: sin migraciones nuevas (punto d
 KQ_MSG_ES[u_checkpoint]="PUNTO DE CONTROL %s alcanzado: %d migraciones aplicadas en %d s (lote %s de la tabla migrations)."
 KQ_MSG_ES[u_f_migrating_version]="la migracion de la version %s ha fallado. Ultimo punto de control alcanzado: %s. Se deshace a la copia previa."
 KQ_MSG_ES[u_no_pending]="Ninguna migracion pendiente tras la cadena: el esquema esta en la version %s."
+KQ_MSG_ES[u_backup_role_start]="Rol de las copias: comprobando que PostgreSQL tiene el rol de solo lectura (fichaje_backup)..."
+KQ_MSG_ES[u_backup_role_switched]="Las copias pasan al rol %s, de solo lectura. BACKUP_DB_USERNAME y BACKUP_DB_PASSWORD reescritas en %s (0600). El rol de migracion ya no viaja al planificador."
+KQ_MSG_ES[u_backup_role_kept]="Las copias ya usan el rol %s: aprovisionamiento repetido sin cambiar credenciales."
+KQ_MSG_ES[u_f_backup_role_openssl]="falta 'openssl' en este servidor y hace falta para generar la contraseña del rol de las copias. Instalalo (apt install openssl) y repite: no se ha tocado la instalacion. Se deshace a la copia previa."
+KQ_MSG_ES[u_f_backup_role]="no se ha podido crear el rol de copias %s en PostgreSQL. El detalle esta en el informe. Se deshace a la copia previa; la version anterior sigue haciendo sus copias como hasta ahora."
+KQ_MSG_ES[u_f_backup_role_env]="no se ha podido escribir el rol de copias en %s. Comprueba que se puede escribir en ese fichero. Se deshace a la copia previa."
 KQ_MSG_ES[u_f_pending_left]="tras aplicar la cadena quedan migraciones pendientes: %s. La matriz de versiones (versions.txt) no las atribuye a ninguna version y el actualizador no adivina. Se deshace. Avisa al fabricante con este informe."
 
 KQ_MSG_ES[u_app_up]="Arrancando la aplicacion %s SIN borde: nginx, horizon, scheduler y reverb esperan a que la verificacion pase."
@@ -199,7 +205,7 @@ KQ_MSG_ES[u_rollback_incomplete]="VUELTA ATRAS INCOMPLETA. NO SE TOCA NADA MAS: 
 
 Que hay que hacer, en este orden:
   1. Parar lo que escribe:       docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx
-  2. Restaurar la copia previa:  docker compose --env-file %s -f %s run --rm --no-deps app \\
+  2. Restaurar la copia previa:  docker compose --env-file %s -f %s run --rm --no-deps restore \\
                                    bash /opt/kronoqr/scripts/restore.sh --file %s --yes
   3. Relanzar la version %s:   docker compose --env-file %s -f %s up -d --remove-orphans
   4. Comprobar:                  curl -k https://127.0.0.1:%s/api/v1/health  (debe decir %s)
@@ -407,6 +413,12 @@ KQ_MSG_EN[u_migrating_version_none]="Version %s: no new migrations (checkpoint).
 KQ_MSG_EN[u_checkpoint]="CHECKPOINT %s reached: %d migrations applied in %d s (batch %s of the migrations table)."
 KQ_MSG_EN[u_f_migrating_version]="the migration of version %s failed. Last checkpoint reached: %s. Rolling back to the previous backup."
 KQ_MSG_EN[u_no_pending]="No pending migration after the chain: the schema is at version %s."
+KQ_MSG_EN[u_backup_role_start]="Backup role: checking that PostgreSQL has the read-only role (fichaje_backup)..."
+KQ_MSG_EN[u_backup_role_switched]="Backups move to role %s, which is read-only. BACKUP_DB_USERNAME and BACKUP_DB_PASSWORD rewritten in %s (0600). The migration role no longer travels to the scheduler."
+KQ_MSG_EN[u_backup_role_kept]="Backups already use role %s: provisioning repeated without changing any credential."
+KQ_MSG_EN[u_f_backup_role_openssl]="'openssl' is missing on this server and is needed to generate the backup role password. Install it (apt install openssl) and retry: the installation was not touched. Rolling back to the previous backup."
+KQ_MSG_EN[u_f_backup_role]="the backup role %s could not be created in PostgreSQL. The detail is in the report. Rolling back to the previous backup; the previous version keeps taking its backups as before."
+KQ_MSG_EN[u_f_backup_role_env]="the backup role could not be written to %s. Check that the file is writable. Rolling back to the previous backup."
 KQ_MSG_EN[u_f_pending_left]="after applying the chain there are still pending migrations: %s. The version matrix (versions.txt) assigns them to no version and the updater does not guess. Rolling back. Tell the manufacturer, attaching this report."
 
 KQ_MSG_EN[u_app_up]="Starting application %s WITHOUT the edge: nginx, horizon, scheduler and reverb wait until verification passes."
@@ -447,7 +459,7 @@ KQ_MSG_EN[u_rollback_incomplete]="ROLLBACK INCOMPLETE. NOTHING ELSE IS TOUCHED: 
 
 What to do, in this order:
   1. Stop what writes:            docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx
-  2. Restore the pre-update backup: docker compose --env-file %s -f %s run --rm --no-deps app \\
+  2. Restore the pre-update backup: docker compose --env-file %s -f %s run --rm --no-deps restore \\
                                    bash /opt/kronoqr/scripts/restore.sh --file %s --yes
   3. Relaunch version %s:       docker compose --env-file %s -f %s up -d --remove-orphans
   4. Check:                       curl -k https://127.0.0.1:%s/api/v1/health  (must report %s)
