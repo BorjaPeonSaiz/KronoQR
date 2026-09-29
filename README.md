@@ -102,7 +102,7 @@ El backend se organiza en ocho módulos con fronteras verificadas por Deptrac:
 | `Product` | Configuración de instalación, perfiles de cumplimiento, marca blanca, licencia, diagnóstico y soporte. |
 | `Shared` | Objetos de valor comunes, puertos transversales (`Clock`, proveedores de configuración) y contratos de eventos. |
 
-Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework) → `Application/` (casos de uso y puertos) → `Infrastructure/` (Eloquent, adaptadores, proyecciones) + `Http/` (controladores, requests, recursos, policies). Las decisiones que justifican este diseño están en [`docs/adr/`](docs/adr/) (41 ADR).
+Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework) → `Application/` (casos de uso y puertos) → `Infrastructure/` (Eloquent, adaptadores, proyecciones) + `Http/` (controladores, requests, recursos, policies). Las decisiones que justifican este diseño están en [`docs/adr/`](docs/adr/) (42 ADR).
 
 ---
 

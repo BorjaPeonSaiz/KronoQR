@@ -7,6 +7,7 @@
 | **Decide** | `seguridad-cumplimiento` con `arquitecto-dominio` |
 | **Afecta a** | Tareas 1.3, 2.2 y 2.10 · [ADR-027](ADR-027-audit-log-particionado.md) · **Regla dura 6** de `CLAUDE.md`, y la 5 |
 | **Requisitos** | RL-04, RL-11, RS-05, RS-07, RN-13, RF-PA-04 |
+| **Enmiendas** | Enmendada por [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): condición 1 |
 
 > Procede de la primera tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4, que ya fijaba decisión, contexto y consecuencias. Esta redacción los desarrolla y los enlaza con los requisitos y con las reglas duras; no cambia la decisión.
 
@@ -31,6 +32,8 @@ La entrada génesis usa `prev_hash = SHA256("FICHAJE-HOTEL-GENESIS")`.
 Cuatro condiciones lo sostienen, y las cuatro son parte de la decisión:
 
 1. **El usuario de base de datos de la aplicación tiene `INSERT` y `SELECT`, y nada más, sobre esa tabla y sobre todas sus particiones** (regla dura 6). Sin `UPDATE`, sin `DELETE`, sin DDL. La garantía no es que la aplicación no lo haga: es que **no puede**.
+
+   > **Enmienda de [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026).** «No puede» significa que **la aplicación no posee ninguna credencial que pueda modificar el registro, ni en su entorno ni en su conexión**. Tener limitado su propio rol no bastaba: la verificación de la 2.1.0 (AUD-1) encontró la contraseña del migrador, que es superusuario, en los contenedores de runtime, y al propio runtime usándola para crear la partición anual. La única forma de DDL que puede provocar la aplicación es pedir, mediante la función `SECURITY DEFINER` `audit_log_create_partition`, la partición del año en curso o del siguiente, ya restringida con los mismos permisos que las demás.
 2. **Toda acción con relevancia legal escribe una entrada**: correcciones y anulaciones de jornada (RN-13, RF-PA-04), emisión, entrega y revocación de credencial y de PIN, cambios de configuración que afecten al cálculo de horas, accesos a datos personales de terceros (RS-05), concesiones de soporte y purgas de retención.
 3. **La cadena se verifica a diario** con `compliance:verify-audit-chain`, y cualquier rotura dispara **alerta crítica de seguridad** dirigida al responsable de seguridad —no al IT—, con su runbook (`rotura-cadena-auditoria.md`) y menos de 24 h de detección (RS-07).
 4. **La purga de retención no rompe la cadena.** Se resuelve con particionado por año y anclas selladas ([ADR-027](ADR-027-audit-log-particionado.md)), ejecutada por un rol de mantenimiento distinto del de la aplicación.
