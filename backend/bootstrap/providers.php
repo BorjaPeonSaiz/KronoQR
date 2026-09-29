@@ -12,6 +12,7 @@ use App\Modules\Reporting\ReportingServiceProvider;
 use App\Modules\Shared\SharedServiceProvider;
 use App\Modules\Workforce\WorkforceServiceProvider;
 use App\Providers\AppServiceProvider;
+use App\Providers\HorizonServiceProvider;
 use App\Support\Observability\Logging\LoggingServiceProvider;
 use App\Support\Observability\Metrics\MetricsServiceProvider;
 use App\Support\Observability\Tracing\TracingServiceProvider;
@@ -52,4 +53,11 @@ return [
     MetricsServiceProvider::class,
     TracingServiceProvider::class,
     LoggingServiceProvider::class,
+
+    /*
+     * Cierra el panel de Horizon y sus rutas `horizon/api/*` a todo el mundo,
+     * tambien con `APP_ENV=local` (regla dura 18, hallazgo T1 de la 2.1.0). El
+     * porque, en su docblock.
+     */
+    HorizonServiceProvider::class,
 ];
