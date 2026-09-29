@@ -120,7 +120,8 @@ colas de los quioscos y entra después, gane o pierda la actualización.
   ventana.
 - La copia previa queda en `BACKUP_PATH/daily/` con la retención normal.
 - El directorio de la versión anterior sigue ahí. Consérvalo hasta la
-  siguiente actualización; su `.env` lleva los mismos secretos que el nuevo.
+  siguiente actualización; su `.env` lleva los mismos secretos que el nuevo,
+  salvo `BACKUP_DB_*` si vienes de la 2.1.0 (§6.1).
 
 ---
 
@@ -185,7 +186,9 @@ sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml stop app
 # 2. Restaurar la copia previa. Restaura en una base NUEVA y solo al final
 #    intercambia los nombres; la base fallida se conserva 7 días como
 #    <base>_pre_restore_<marca> para el diagnóstico.
-sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml run --rm --no-deps app \
+#    Va por el servicio de un solo uso `restore` del paquete NUEVO: es el único
+#    que recibe la credencial del rol de migración, que restaurar necesita.
+sudo docker compose --env-file $NUEVO/.env -f $NUEVO/docker-compose.yml run --rm --no-deps restore \
   bash /opt/kronoqr/scripts/restore.sh --file $COPIA --yes
 
 # 3. Relanzar la versión anterior desde SU directorio (su compose, su .env,
@@ -200,7 +203,7 @@ sudo docker compose --env-file $ANTERIOR/.env -f $ANTERIOR/docker-compose.yml ex
 
 Si `restore.sh` se niega por **conexiones abiertas** (salida `3`), algún
 contenedor de aplicación sigue en pie: `docker ps` y párralo. Si sale `2`, la
-copia no se descifra o no se lee: prueba con la anterior (`backup.sh list`) y
+copia no se descifra o no se lee: prueba con la anterior (`restore.sh --list`, por el mismo servicio `restore`) y
 lee [`restaurar-backup.md`](restaurar-backup.md) §6, que tiene los tiempos que
 caben en el RTO de 4 h.
 
@@ -222,13 +225,49 @@ ejemplo). Revísalo antes de enviarlo, y envíalo solo si el fabricante lo pide.
 ## 6. Lo que no cambia nunca al actualizar
 
 - **El `.env` con tus secretos.** El actualizador lo copia al paquete nuevo tal
-  cual (0600) y solo cambia `IMAGE_TAG`. No regenera ningún secreto.
+  cual (0600) y solo cambia `IMAGE_TAG`. No regenera ningún secreto, con una
+  excepción única al pasar de la 2.1.0 (§6.1).
 - **Los datos.** Las migraciones amplían el esquema; ninguna borra registro
   horario. `audit_log` es solo-append y su cadena se verifica antes y después.
 - **La licencia.** Una licencia caducada o inválida **no impide actualizar**:
   dejaría al cliente sin correcciones de seguridad sobre su registro legal
   (ADR-019). El estado de la licencia se anota en el informe, nada más.
 - **El fichaje.** Ni durante la actualización ni si falla.
+
+### 6.1 Desde la 2.1.0: cada contenedor recibe solo lo suyo (ADR-042)
+
+Hasta la 2.1.0, los contenedores de la aplicación (`app`, `horizon`, `reverb`,
+`scheduler`) y `nginx` recibían el `.env` **entero**, incluida la contraseña del
+rol de migración, que es superusuario de PostgreSQL. Desde la 2.2.0 cada
+servicio recibe **solo las variables que nombra** el `docker-compose.yml`, y la
+credencial de migración solo llega a los servicios de un solo uso `migrate` y
+`restore`. Tabla completa: [`configuracion.md`](../cliente/configuracion.md)
+§6.2. Lo que eso cambia al actualizar:
+
+- **Variables propias en el `.env`.** Si añadiste alguna que el producto no
+  declara, ya no llega a ningún contenedor. El paso 1 (y `--check-only`) lo
+  avisa: «Tu .env tiene N claves que ningun servicio de esta version recibe y
+  se IGNORARAN». Es un aviso, no un fallo, y no detiene la actualización. Si
+  alguna te hace falta de verdad, dilo al fabricante: una variable soportada
+  tiene que figurar en el compose del paquete, y editarlo a mano se pierde en
+  la siguiente actualización.
+- **Rol de las copias.** En el paso 4, `update.sh` crea en PostgreSQL el rol
+  `fichaje_backup` (solo lectura) y escribe `BACKUP_DB_USERNAME=fichaje_backup`
+  y una `BACKUP_DB_PASSWORD` nueva en el `.env` **del paquete nuevo**. Lo dice
+  en pantalla: «Las copias pasan al rol fichaje_backup, de solo lectura». Si ya
+  tenías un rol propio distinto del de migración y del de la aplicación, lo
+  respeta.
+- **La vuelta atrás vuelve a la 2.1.0 con sus credenciales.** El `.env` de la
+  versión anterior no se toca: sigue diciendo `BACKUP_DB_USERNAME=fichaje_migrator`,
+  y la 2.1.0 vuelve a repartir el `.env` entero a sus contenedores. Es
+  deliberado —es lo que la 2.1.0 sabe usar—, pero significa que el problema que
+  corrige la 2.2.0 vuelve a estar abierto **hasta que actualices otra vez**. El
+  rol `fichaje_backup` queda en la base sin uso, y es inocuo.
+- **Órdenes que cambian de contenedor.** Las copias a mano van por
+  `docker compose exec scheduler …`, la restauración por
+  `docker compose run --rm --no-deps restore …` y las migraciones a mano por
+  `docker compose run --rm --no-deps -T migrate …`. Ninguna va ya por `app`:
+  [`restaurar-backup.md`](restaurar-backup.md) tiene las órdenes completas.
 
 ---
 

@@ -1614,9 +1614,10 @@ lines.
 
 ### 6.2 Database
 
-They are **three distinct PostgreSQL roles**, and it is not bureaucracy: the
-application role cannot modify or delete the audit log, and only the
-maintenance one can drop an expired partition.
+They are **four distinct PostgreSQL roles**, and it is not bureaucracy: the
+application role cannot modify or delete the audit log, the backup one only
+reads, and only the maintenance one can drop an expired partition. Which
+container receives each credential is in the table below this one.
 
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
 | --- | --- | --- | --- | --- | --- |
@@ -1626,12 +1627,49 @@ maintenance one can drop an expired partition.
 | `DB_DATABASE` | — | Database name | `fichaje` | Never after installing | No |
 | `DB_USERNAME` | — | Runtime role. **No DDL and no `UPDATE` or `DELETE` on the audit log** | `fichaje_app` | Never | No |
 | `DB_PASSWORD` | `[INSTALADOR]` | Password of that role | (empty; `install.sh` generates it) | Only in a secrets rotation; there is a runbook ([`rotacion-secretos.md`](../../runbooks/rotacion-secretos.md), in Spanish) | No |
-| `DB_MIGRATION_USERNAME` | — | Owner role, the only one with DDL. Runs the migrations | `fichaje_migrator` | Never | No |
-| `DB_MIGRATION_PASSWORD` | `[INSTALADOR]` | Password of that role | (empty; `install.sh` generates it) | Same as the previous one | No |
+| `DB_MIGRATION_USERNAME` | — | Owner role, the only one with DDL. Runs the migrations and the restore, **never the running application** | `fichaje_migrator` | Never | No |
+| `DB_MIGRATION_PASSWORD` | `[INSTALADOR]` | Password of that role. Only `postgres` and the one-shot `migrate` and `restore` services receive it | (empty; `install.sh` generates it) | Same as the previous one | No |
 | `DB_MAINTENANCE_USERNAME` | — | Role of the retention purge, the only one that drops expired partitions | `fichaje_maintenance` | Never | No |
 | `DB_MAINTENANCE_PASSWORD` | — | Password of that role | **Empty on purpose** | **It is never written here.** It is supplied at the moment of running the annual purge: see [`operation.md`](operation.md) §6 and §9 | No |
-| `BACKUP_DB_USERNAME` | — | User the backups are made with. It is the migration one because backing up and restoring require attributes the application one does not have | `fichaje_migrator` | Never | No |
-| `BACKUP_DB_PASSWORD` | `[INSTALADOR]` | Its password, the same as the migration one | (empty; `install.sh` generates it) | Never separately: with a different value, the daily backup fails from day one | No |
+| `BACKUP_DB_USERNAME` | — | Role the backups are made with: `fichaje_backup`, **read-only**. It reads the whole database, which is what the backup needs, and cannot write anything. Restoring does not use it: the `restore` service does that with the migration role | `fichaje_backup` | Never. If you come from 2.1.0, `update.sh` creates it and rewrites this key and the next one in the new version's `.env`; the previous version's `.env` keeps the old ones on purpose, for the rollback | No |
+| `BACKUP_DB_PASSWORD` | `[INSTALADOR]` | Its password, **its own** (not the migration one). Only the `scheduler` receives it | (empty; `install.sh` generates it) | Only in a secrets rotation, which changes it in the database and here at the same time: with a different value, the daily backup fails | No |
+
+#### Which credentials each thing has
+
+From 2.2.0 on **no container receives the whole `.env`**: each service receives
+only the variables that `docker-compose.yml` names. The passwords can still sit
+together in the same `.env` on the server, but each one only reaches where it
+is needed. That is what guarantees that the running application **cannot**
+alter the record: it has no credential to do it with.
+
+| Container | When it runs | Database credentials it receives | Role |
+| --- | --- | --- | --- |
+| `app`, `horizon` | Always | `DB_USERNAME` and `DB_PASSWORD` | `fichaje_app` |
+| `scheduler` | Always | Those of `app`, plus `BACKUP_DB_USERNAME`, `BACKUP_DB_PASSWORD` and `BACKUP_ENCRYPTION_KEY`, because it makes the daily backup | `fichaje_app` and, for backing up, `fichaje_backup` |
+| `reverb` | Always | None: it only talks to Redis | — |
+| `nginx` | Always | None: only its allowed networks and the certificate | — |
+| `migrate` | Only when launched (`install.sh`, `update.sh` or by hand) and disappears when done | `DB_MIGRATION_USERNAME` and `DB_MIGRATION_PASSWORD` | `fichaje_migrator` |
+| `restore` | Only when restoring a backup, and disappears when done | The migration role's, and `BACKUP_ENCRYPTION_KEY` | `fichaje_migrator` |
+| `postgres` | Always | All of them, to create the roles when the database is initialised | — |
+
+| Role | What it can do | Who uses it and when |
+| --- | --- | --- |
+| `fichaje_app` | Read and write clock-ins. On the audit trail, only append and read. Ask the database for the audit trail's yearly partition, and nothing else | The application, all the time |
+| `fichaje_backup` | **Only read**, everything. It cannot write a single row | The `scheduler`, in the daily and weekly backup, and when you launch a backup by hand |
+| `fichaje_maintenance` | Drop audit partitions that are already sealed | Nobody, normally. It is born without a password; it is given one only during the annual purge ([`operation.md`](operation.md) §3 and §9) |
+| `fichaje_migrator` | Everything: it is the owner and superuser of the database | Only `migrate` and `restore`, and only while that task lasts |
+
+**Two practical consequences:**
+
+- Backup commands go through the `scheduler`
+  (`docker compose exec scheduler php artisan backup:run`) and the restore
+  through the `restore` service, never through `app`: `app` has neither the
+  encryption key nor the backup role. The full commands are in
+  [`operation.md`](operation.md) and in the backup runbook.
+- A **physical** backup (the weekly one) includes the password verifiers of
+  every role in the cluster, the migrator's too. That is why it is always
+  encrypted, and the destination (`BACKUP_PATH`, in the §6.22 table) has to be
+  access-restricted and not on the same disk as the database.
 
 ### 6.3 Redis, queues, cache and sessions
 

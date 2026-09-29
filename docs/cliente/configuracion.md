@@ -1594,9 +1594,10 @@ cinco líneas.
 
 ### 6.2 Base de datos
 
-Son **tres roles distintos de PostgreSQL**, y no es burocracia: el rol de la
-aplicación no puede modificar ni borrar el registro de auditoría, y solo el de
-mantenimiento puede soltar una partición vencida.
+Son **cuatro roles distintos de PostgreSQL**, y no es burocracia: el rol de la
+aplicación no puede modificar ni borrar el registro de auditoría, el de copias
+solo lee, y solo el de mantenimiento puede soltar una partición vencida. Qué
+contenedor recibe cada credencial está en la tabla de debajo de esta.
 
 | Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
 | --- | --- | --- | --- | --- | --- |
@@ -1606,12 +1607,49 @@ mantenimiento puede soltar una partición vencida.
 | `DB_DATABASE` | — | Nombre de la base de datos | `fichaje` | Nunca después de instalar | No |
 | `DB_USERNAME` | — | Rol de ejecución. **Sin DDL y sin `UPDATE` ni `DELETE` sobre la auditoría** | `fichaje_app` | Nunca | No |
 | `DB_PASSWORD` | `[INSTALADOR]` | Contraseña de ese rol | (vacía; la genera `install.sh`) | Solo en una rotación de secretos; hay runbook | No |
-| `DB_MIGRATION_USERNAME` | — | Rol propietario, el único con DDL. Ejecuta las migraciones | `fichaje_migrator` | Nunca | No |
-| `DB_MIGRATION_PASSWORD` | `[INSTALADOR]` | Contraseña de ese rol | (vacía; la genera `install.sh`) | Íd. que la anterior | No |
+| `DB_MIGRATION_USERNAME` | — | Rol propietario, el único con DDL. Ejecuta las migraciones y la restauración, **nunca la aplicación en marcha** | `fichaje_migrator` | Nunca | No |
+| `DB_MIGRATION_PASSWORD` | `[INSTALADOR]` | Contraseña de ese rol. Solo la reciben `postgres` y los servicios de un solo uso `migrate` y `restore` | (vacía; la genera `install.sh`) | Íd. que la anterior | No |
 | `DB_MAINTENANCE_USERNAME` | — | Rol de la purga por retención, el único que suelta particiones vencidas | `fichaje_maintenance` | Nunca | No |
 | `DB_MAINTENANCE_PASSWORD` | — | Contraseña de ese rol | **Vacía a propósito** | **Nunca se escribe aquí.** Se aporta en el momento de ejecutar la purga anual: ver [`operacion.md`](operacion.md) §6 y §9 | No |
-| `BACKUP_DB_USERNAME` | — | Usuario con el que se hacen las copias. Es el de migración porque copiar y restaurar exigen atributos que el de la aplicación no tiene | `fichaje_migrator` | Nunca | No |
-| `BACKUP_DB_PASSWORD` | `[INSTALADOR]` | Su contraseña, la misma que la de migración | (vacía; la genera `install.sh`) | Nunca por separado: con otro valor, la copia diaria falla desde el primer día | No |
+| `BACKUP_DB_USERNAME` | — | Rol con el que se hacen las copias: `fichaje_backup`, de **solo lectura**. Lee toda la base, que es lo que necesita la copia, y no puede escribir nada. Restaurar no lo usa: lo hace el servicio `restore` con el rol de migración | `fichaje_backup` | Nunca. Si vienes de la 2.1.0, `update.sh` lo crea y reescribe esta clave y la siguiente en el `.env` de la versión nueva; el `.env` de la anterior conserva las antiguas a propósito, para la vuelta atrás | No |
+| `BACKUP_DB_PASSWORD` | `[INSTALADOR]` | Su contraseña, **propia** (no es la de migración). Solo la recibe el `scheduler` | (vacía; la genera `install.sh`) | Solo en una rotación de secretos, que la cambia a la vez en la base y aquí: con otro valor, la copia diaria falla | No |
+
+#### Qué credenciales tiene cada cosa
+
+Desde la 2.2.0 **ningún contenedor recibe el `.env` entero**: cada servicio
+recibe solo las variables que nombra el `docker-compose.yml`. Las contraseñas
+pueden seguir juntas en el mismo `.env` del servidor, pero cada una llega solo
+adonde hace falta. Es lo que garantiza que la aplicación en marcha **no puede**
+alterar el registro: no tiene ninguna credencial con la que hacerlo.
+
+| Contenedor | Cuándo corre | Credenciales de base de datos que recibe | Rol |
+| --- | --- | --- | --- |
+| `app`, `horizon` | Siempre | `DB_USERNAME` y `DB_PASSWORD` | `fichaje_app` |
+| `scheduler` | Siempre | Las de `app`, más `BACKUP_DB_USERNAME`, `BACKUP_DB_PASSWORD` y `BACKUP_ENCRYPTION_KEY`, porque hace la copia diaria | `fichaje_app` y, para copiar, `fichaje_backup` |
+| `reverb` | Siempre | Ninguna: solo habla con Redis | — |
+| `nginx` | Siempre | Ninguna: solo sus redes permitidas y el certificado | — |
+| `migrate` | Solo cuando se lanza (`install.sh`, `update.sh` o a mano) y desaparece al terminar | `DB_MIGRATION_USERNAME` y `DB_MIGRATION_PASSWORD` | `fichaje_migrator` |
+| `restore` | Solo al restaurar una copia, y desaparece al terminar | La del rol de migración y `BACKUP_ENCRYPTION_KEY` | `fichaje_migrator` |
+| `postgres` | Siempre | Todas, para crear los roles al inicializar la base | — |
+
+| Rol | Qué puede | Quién lo usa y cuándo |
+| --- | --- | --- |
+| `fichaje_app` | Leer y escribir fichajes. Sobre la auditoría, solo añadir y leer. Pedir a la base la partición anual de la auditoría, y nada más | La aplicación, todo el tiempo |
+| `fichaje_backup` | **Solo leer**, todo. No puede escribir ni una fila | El `scheduler`, en la copia diaria y semanal, y cuando lanzas una copia a mano |
+| `fichaje_maintenance` | Soltar particiones de auditoría ya selladas | Nadie de forma habitual. Nace sin contraseña; se le asigna una solo durante la purga anual ([`operacion.md`](operacion.md) §3 y §9) |
+| `fichaje_migrator` | Todo: es el propietario y superusuario de la base | Solo `migrate` y `restore`, y solo mientras dura esa tarea |
+
+**Dos consecuencias prácticas:**
+
+- Las órdenes de copia van por el `scheduler`
+  (`docker compose exec scheduler php artisan backup:run`) y la restauración por
+  el servicio `restore`, nunca por `app`: `app` no tiene ni la clave de cifrado
+  ni el rol de copias. Las órdenes completas están en
+  [`operacion.md`](operacion.md) y en el runbook de copias.
+- Una copia **física** (la semanal) incluye los verificadores de contraseña de
+  todos los roles del clúster, también el del migrador. Por eso va siempre
+  cifrada, y el destino (`BACKUP_PATH`, en la tabla de la §6.22) tiene que ser
+  de acceso restringido y no estar en el mismo disco que la base.
 
 ### 6.3 Redis, colas, caché y sesiones
 

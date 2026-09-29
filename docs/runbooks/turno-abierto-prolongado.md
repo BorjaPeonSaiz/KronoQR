@@ -171,7 +171,7 @@ docker compose -f infra/compose.prod.yaml ps scheduler
 
 # ¿Escribe el fichero?
 docker compose -f infra/compose.prod.yaml exec -T app php artisan compliance:incident-metrics
-docker compose -f infra/compose.prod.yaml exec -T app sh -c 'ls -l "$BACKUP_PATH/metrics/kronoqr_incidents.prom"'
+docker compose -f infra/compose.prod.yaml exec -T scheduler sh -c 'ls -l "$BACKUP_PATH/metrics/kronoqr_incidents.prom"'
 ```
 
 Causas por frecuencia: el contenedor `scheduler` parado, `BACKUP_PATH` sin

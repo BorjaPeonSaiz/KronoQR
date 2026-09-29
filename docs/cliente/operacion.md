@@ -434,6 +434,14 @@ history -c
 La **simulación** (`--dry-run`), que es la que corre sola cada lunes, **no
 necesita nada de esto**: solo cuenta, y cuenta con el rol de la aplicación.
 
+**Desde la 2.2.0 los contenedores no reciben el `.env` entero**, solo las
+variables que necesitan ([`configuracion.md`](configuracion.md) §6.2), y estas
+órdenes siguen valiendo tal cual: `-e DB_MAINTENANCE_PASSWORD=…` entrega la
+contraseña **solo** al contenedor efímero de esa orden, que desaparece al
+terminar (`--rm`); el `app` que está en marcha nunca la ve. Y el
+`ALTER ROLE` se hace dentro del contenedor `postgres`, no en el de la
+aplicación.
+
 ### Las cuentas del panel: alta, baja y contraseña
 
 Las cuentas de gestión se crean por consola y **se retiran por consola**. En esta
@@ -493,7 +501,7 @@ Es una configuración soportada, pero **asume esta tarea manual**:
 
 | Cada | Qué comprobar |
 | --- | --- |
-| Semanal | `docker compose exec app php artisan backup:verify` — que la última copia existe y verifica |
+| Semanal | `docker compose exec scheduler php artisan backup:verify` — que la última copia existe y verifica |
 | Semanal | `df -h` sobre el disco de Docker y sobre `BACKUP_PATH` |
 | Trimestral | El simulacro de restauración (sección 1), que no cambia |
 
@@ -658,8 +666,8 @@ la alimenta dejó de ejecutarse):
 | `RoturaDeCadenaDeAuditoria` | Cualquiera | Crítica | Seguridad | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Preserva la evidencia (§2 de ese runbook) antes de tocar nada |
 | `VerificacionDeAuditoriaAusente` | > 26 h sin verificar | Crítica | Seguridad | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba que el `scheduler` sigue vivo |
 | `ParticionDeAuditoriaAusente` | Falta la partición del año en curso | Crítica | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | **El fichaje está caído**: `compliance:ensure-audit-partitions` ya |
-| `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Falta la del año próximo, desde noviembre | Media | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba el `scheduler` y `DB_MIGRATION_USERNAME` en el `.env` |
-| `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Cualquiera | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | `backup:verify` y reintenta con `backup:run` |
+| `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Falta la del año próximo, desde noviembre | Media | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba que el `scheduler` corre y que la migración `2026_09_29_100000` está aplicada (`migrate:status` por el servicio `migrate`, ver el runbook §5). Ya no depende de `DB_MIGRATION_USERNAME`: la partición la pide la aplicación a una función de la base |
+| `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Cualquiera | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | `backup:verify` y reintenta con `backup:run`, los dos en el contenedor `scheduler` (no en `app`) |
 | `CopiaDeSeguridadAusente` | Sin métrica en 30 min | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Comprueba el `scheduler` y que `BACKUP_PATH` está montado |
 | `ArchivadoDeWalDetenido` | > 30 min sin archivar | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Urgente: sin espacio, PostgreSQL termina parándose entero |
 | `DiscoDeCopiasCasiLleno` | < 20 % libre en el volumen de copias | Media | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Amplía el disco o baja `BACKUP_RETENTION_DAYS` |
@@ -801,10 +809,33 @@ que se vuelve ya conoce esa acción (desde la 2.2.0): una anterior no sabría ve
 después de la siguiente actualización.
 
 **Lo que no cambia:** tus secretos (el `.env` se copia tal cual y solo cambia
-`IMAGE_TAG`), los datos, la licencia (una licencia caducada **no impide
-actualizar**), y el fichaje. **Lo que sí hace falta:** `BACKUP_ENCRYPTION_KEY`
-en el `.env` y espacio para la copia y para la migración; el paso 1 lo dice con
-cifras.
+`IMAGE_TAG`; la única excepción es la de abajo, al pasar de la 2.1.0), los
+datos, la licencia (una licencia caducada **no impide actualizar**), y el
+fichaje. **Lo que sí hace falta:** `BACKUP_ENCRYPTION_KEY` en el `.env` y
+espacio para la copia y para la migración; el paso 1 lo dice con cifras.
+
+**Al actualizar desde la 2.1.0: cada contenedor recibe solo lo suyo.** Hasta la
+2.1.0 todos los contenedores de la aplicación recibían el `.env` entero,
+incluida la contraseña del rol de migración, que es superusuario de la base.
+Desde la 2.2.0, cada servicio recibe **solo las variables que necesita** (la
+tabla está en [`configuracion.md`](configuracion.md) §6.2). Tres consecuencias
+que tienes que conocer:
+
+- **Si añadiste al `.env` una variable propia**, ya no llega a ningún
+  contenedor. El paso 1 (y `--check-only`) te avisa con la lista de las claves
+  de tu `.env` que ningún servicio recibirá. Es un aviso, no un fallo: casi
+  siempre son restos que no hacían nada. Si alguna sí te importa, dilo al
+  fabricante; no edites el `docker-compose.yml`, que la siguiente
+  actualización sustituye.
+- **Las copias pasan a un rol de solo lectura.** El actualizador crea el rol
+  `fichaje_backup` y escribe `BACKUP_DB_USERNAME` y una `BACKUP_DB_PASSWORD`
+  nueva **en el `.env` de la versión nueva**. El `.env` de la versión anterior
+  conserva las credenciales antiguas a propósito: es con lo que arranca la
+  vuelta atrás.
+- **Una vuelta atrás a la 2.1.0 vuelve a la 2.1.0 entera**, con su forma de
+  repartir credenciales: los contenedores vuelven a recibir el `.env` completo
+  hasta que actualices otra vez. Si la actualización se deshizo, no lo dejes
+  para meses: el motivo está en el informe.
 
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las

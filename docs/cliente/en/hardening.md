@@ -644,7 +644,7 @@ there.
 | 10 | The `docker` group has only who it should | `getent group docker` | Quarterly and on every leaver |
 | 11 | Time synchronised | `timedatectl status` | Quarterly |
 | 12 | Backup key kept in custody off the server | Check that it exists in the password manager or the safe, with its date | Delivery and annually |
-| 13 | Last night's backup exists and was verified | `docker compose exec app php artisan backup:verify` ([`operation.md`](operation.md) §2), or the observability alert | Daily (automatic) or weekly (manual, if you switched it off) |
+| 13 | Last night's backup exists and was verified | `docker compose exec scheduler php artisan backup:verify` ([`operation.md`](operation.md) §2), or the observability alert | Daily (automatic) or weekly (manual, if you switched it off) |
 | 14 | Restore genuinely tested | Drill from [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) | **Quarterly** |
 | 15 | Email encryption mandatory | `sudo grep '^MAIL_SCHEME=' .env` | Delivery |
 | 16 | Second factor mandatory on the management accounts | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` still says `admin,rrhh,auditor`: an account with one of those roles and no second factor cannot log in | Quarterly |

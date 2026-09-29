@@ -630,7 +630,7 @@ está.
 | 10 | El grupo `docker` solo tiene a quien debe | `getent group docker` | Trimestral y en cada baja |
 | 11 | Hora sincronizada | `timedatectl status` | Trimestral |
 | 12 | Clave de copias custodiada fuera del servidor | Comprobar que existe en el gestor de contraseñas o en la caja fuerte, con su fecha | Entrega y anual |
-| 13 | La copia de anoche existe y se verificó | `docker compose exec app php artisan backup:verify` ([`operacion.md`](operacion.md) §2), o la alerta de la observabilidad | Diario (automático) o semanal (manual, si la apagaste) |
+| 13 | La copia de anoche existe y se verificó | `docker compose exec scheduler php artisan backup:verify` ([`operacion.md`](operacion.md) §2), o la alerta de la observabilidad | Diario (automático) o semanal (manual, si la apagaste) |
 | 14 | Restauración probada de verdad | Simulacro de [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) | **Trimestral** |
 | 15 | Correo cifrado de forma obligatoria | `sudo grep '^MAIL_SCHEME=' .env` | Entrega |
 | 16 | Segundo factor obligatorio en las cuentas de gestión | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` sigue diciendo `admin,rrhh,auditor`: una cuenta de esos roles sin segundo factor no puede entrar | Trimestral |

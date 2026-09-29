@@ -443,6 +443,13 @@ The **simulation** (`--dry-run`), which is the one that runs on its own every
 Monday, **needs none of this**: it only counts, and it counts with the
 application role.
 
+**From 2.2.0 on the containers do not receive the whole `.env`**, only the
+variables they need ([`configuration.md`](configuration.md) §6.2), and these
+commands still work as they are: `-e DB_MAINTENANCE_PASSWORD=…` hands the
+password **only** to that command's ephemeral container, which disappears when
+it finishes (`--rm`); the running `app` never sees it. And the `ALTER ROLE` is
+done inside the `postgres` container, not the application's.
+
 ### The panel accounts: creating, deactivating and the password
 
 Management accounts are created from the console and **are withdrawn from the
@@ -503,7 +510,7 @@ services. It is a supported configuration, but **take on this manual task**:
 
 | Every | What to check |
 | --- | --- |
-| Week | `docker compose exec app php artisan backup:verify` — that the latest backup exists and verifies |
+| Week | `docker compose exec scheduler php artisan backup:verify` — that the latest backup exists and verifies |
 | Week | `df -h` on the Docker disk and on `BACKUP_PATH` |
 | Quarter | The restore drill (section 1), which does not change |
 
@@ -668,8 +675,8 @@ stopped running):
 | `RoturaDeCadenaDeAuditoria` | Any | Critical | Security | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Preserve the evidence (§2 of that runbook) before touching anything |
 | `VerificacionDeAuditoriaAusente` | > 26 h without verifying | Critical | Security | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check that the `scheduler` is still alive |
 | `ParticionDeAuditoriaAusente` | The current year's partition is missing | Critical | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | **Clock-ins are down**: run `compliance:ensure-audit-partitions` now |
-| `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Next year's is missing, from November on | Medium | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check the `scheduler` and `DB_MIGRATION_USERNAME` in the `.env` |
-| `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Any | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | `backup:verify`, then retry with `backup:run` |
+| `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Next year's is missing, from November on | Medium | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check that the `scheduler` is running and that migration `2026_09_29_100000` is applied (`migrate:status` through the `migrate` service, see the runbook §5). It no longer depends on `DB_MIGRATION_USERNAME`: the application asks a database function for the partition |
+| `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Any | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | `backup:verify`, then retry with `backup:run`, both in the `scheduler` container (not `app`) |
 | `CopiaDeSeguridadAusente` | No metric in 30 min | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Check the `scheduler` and that `BACKUP_PATH` is mounted |
 | `ArchivadoDeWalDetenido` | > 30 min without archiving | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Urgent: without space, PostgreSQL ends up stopping entirely |
 | `DiscoDeCopiasCasiLleno` | < 20 % free on the backup volume | Medium | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Expand the disk, or lower `BACKUP_RETENTION_DAYS` |
@@ -813,10 +820,34 @@ verify the chain with it, so the report keeps the data and you write it with
 `compliance:record-system-event` after the next update.
 
 **What does not change:** your secrets (the `.env` is copied as is and only
-`IMAGE_TAG` changes), the data, the licence (an expired licence **does not
-prevent updating**), and clocking. **What is needed:** `BACKUP_ENCRYPTION_KEY`
-in the `.env` and space for the backup and for the migration; step 1 says so
-with figures.
+`IMAGE_TAG` changes; the only exception is the one below, when coming from
+2.1.0), the data, the licence (an expired licence **does not prevent
+updating**), and clocking. **What is needed:** `BACKUP_ENCRYPTION_KEY` in the
+`.env` and space for the backup and for the migration; step 1 says so with
+figures.
+
+**When updating from 2.1.0: each container receives only its own.** Up to
+2.1.0 every application container received the whole `.env`, including the
+password of the migration role, which is a database superuser. From 2.2.0 on,
+each service receives **only the variables it needs** (the table is in
+[`configuration.md`](configuration.md) §6.2). Three consequences you need to
+know:
+
+- **If you added a variable of your own to the `.env`**, it no longer reaches
+  any container. Step 1 (and `--check-only`) warns you with the list of the
+  keys in your `.env` that no service will receive. It is a warning, not a
+  failure: they are almost always leftovers that did nothing. If one of them
+  does matter to you, tell the vendor; do not edit `docker-compose.yml`, which
+  the next update replaces.
+- **Backups move to a read-only role.** The updater creates the
+  `fichaje_backup` role and writes `BACKUP_DB_USERNAME` and a new
+  `BACKUP_DB_PASSWORD` **into the new version's `.env`**. The previous
+  version's `.env` keeps the old credentials on purpose: it is what the
+  rollback starts with.
+- **A rollback to 2.1.0 goes back to the whole of 2.1.0**, including its way of
+  handing out credentials: the containers receive the full `.env` again until
+  you update once more. If the update was rolled back, do not leave it for
+  months: the reason is in the report.
 
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor

@@ -150,7 +150,7 @@ Salida esperada: **cero filas**. Si devuelve algo, la corrección falló: mira
 
 ```bash
 # ¿Hubo un despliegue o una migración en las horas previas?
-docker compose -f infra/compose.prod.yaml exec -T app php artisan migrate:status | tail -20
+docker compose -f infra/compose.prod.yaml run --rm --no-deps -T migrate php artisan migrate:status --database=pgsql_migrator | tail -20
 
 # ¿Hay sesiones conectadas a la base que no sean la aplicación?
 docker compose -f infra/compose.prod.yaml exec -T postgres \

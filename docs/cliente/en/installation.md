@@ -634,7 +634,8 @@ them.
 | `APP_KEY` | Encrypts sessions and encrypted data | Sessions and that data can no longer be read |
 | `QR_SIGNING_KEY_CURRENT` (+ its `_ID`) | Signs the QR codes on the cards | **Every card has to be reprinted** |
 | `DB_PASSWORD` | The application's role in PostgreSQL | Rotated; see `../../runbooks/rotacion-secretos.md` (in Spanish) |
-| `DB_MIGRATION_PASSWORD` | Migration and backup role | Same |
+| `DB_MIGRATION_PASSWORD` | Migration role, owner of the database. Only the one-shot `migrate` and `restore` services receive it | Same |
+| `BACKUP_DB_PASSWORD` | Backup role `fichaje_backup`, **read-only**. Only the `scheduler` receives it | Same. The daily backup fails until it is rotated |
 | `REVERB_APP_ID` / `_KEY` / `_SECRET` | Live presence in the panel | Rotated; only affects real time |
 | `BACKUP_ENCRYPTION_KEY` | Encrypts the backups | **The backups can no longer be restored.** Keep it outside the server |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | Opens the PINs the kiosk seals without network | PIN clock-ins queued without network could not be opened |
@@ -1135,10 +1136,15 @@ archived WAL rebuilds nothing and the maximum loss stops being 15 minutes.
 **How to check that it works:**
 
 ```bash
-docker compose exec app php artisan backup:run    # crea y verifica una copia
-docker compose exec app php artisan backup:verify # verifica la última
+docker compose exec scheduler php artisan backup:run    # crea y verifica una copia
+docker compose exec scheduler php artisan backup:verify # verifica la última
 bash ./restore-drill.sh                            # simulacro trimestral
 ```
+
+The first two go through the **`scheduler`** container, not `app`: it is the
+one that makes the scheduled backup and the only running one that receives the
+encryption key and the backup role. If the `scheduler` were stopped, change
+`exec` to `run --rm --no-deps`.
 
 The full recovery procedure — and the drill that has to be run every
 quarter — is in

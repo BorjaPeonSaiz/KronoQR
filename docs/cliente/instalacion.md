@@ -623,7 +623,8 @@ transmiten a nadie**. El fabricante no los conoce y no puede recuperarlos.
 | `APP_KEY` | Cifra sesiones y datos cifrados | Las sesiones y esos datos dejan de poder leerse |
 | `QR_SIGNING_KEY_CURRENT` (+ su `_ID`) | Firma los códigos QR de las tarjetas | **Hay que reimprimir todas las tarjetas** |
 | `DB_PASSWORD` | Rol de la aplicación en PostgreSQL | Se rota; ver `../runbooks/rotacion-secretos.md` |
-| `DB_MIGRATION_PASSWORD` | Rol de migración y de copias | Íd. |
+| `DB_MIGRATION_PASSWORD` | Rol de migración, propietario de la base. Solo lo reciben los servicios de un solo uso `migrate` y `restore` | Íd. |
+| `BACKUP_DB_PASSWORD` | Rol de copias `fichaje_backup`, de **solo lectura**. Solo lo recibe el `scheduler` | Íd. La copia diaria falla hasta que se rota |
 | `REVERB_APP_ID` / `_KEY` / `_SECRET` | Presencia en vivo del panel | Se rotan; solo afecta al tiempo real |
 | `BACKUP_ENCRYPTION_KEY` | Cifra las copias de seguridad | **Las copias dejan de poder restaurarse.** Custódiala fuera del servidor |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | Abre los PIN que el quiosco sella sin red | Los fichajes por PIN encolados sin red no se podrían abrir |
@@ -1121,10 +1122,15 @@ no reconstruye nada y la pérdida máxima deja de ser de 15 minutos.
 **Cómo comprobar que funciona:**
 
 ```bash
-docker compose exec app php artisan backup:run    # crea y verifica una copia
-docker compose exec app php artisan backup:verify # verifica la última
+docker compose exec scheduler php artisan backup:run    # crea y verifica una copia
+docker compose exec scheduler php artisan backup:verify # verifica la última
 bash ./restore-drill.sh                            # simulacro trimestral
 ```
+
+Las dos primeras van por el contenedor **`scheduler`**, no por `app`: es el que
+hace la copia programada y el único de los que están en marcha que recibe la
+clave de cifrado y el rol de copias. Si el `scheduler` estuviera parado, cambia
+`exec` por `run --rm --no-deps`.
 
 El procedimiento completo de recuperación —y el simulacro que hay que ejecutar
 cada trimestre— está en

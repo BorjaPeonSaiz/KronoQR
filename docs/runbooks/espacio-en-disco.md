@@ -117,7 +117,7 @@ Solo si lo anterior no fue suficiente, y **en este orden de preferencia**
    anterior, ese WAL archivado no reconstruye nada.
 
 ```bash
-docker compose exec app bash /opt/kronoqr/scripts/backup.sh prune
+docker compose exec scheduler bash /opt/kronoqr/scripts/backup.sh prune
 ```
 
 **No borres ficheros de `BACKUP_PATH/daily` ni `/base` a mano con `rm`.**

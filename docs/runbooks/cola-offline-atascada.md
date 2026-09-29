@@ -75,8 +75,8 @@ aceptar, o el propio dispositivo. Ve a §3.
 Si **varios quioscos a la vez** acumulan cola, sospecha del servidor antes
 que de las tablets: revisa si `SondaDelBordeFallida` también está sonando
 (§1 de este documento, última fila de la tabla de alertas) o si hay un
-despliegue o una migración en curso —`docker compose exec app php artisan
-migrate:status`—. Durante una actualización (`update.sh`), **es lo
+despliegue o una migración en curso —`docker compose run --rm --no-deps -T migrate php artisan
+migrate:status --database=pgsql_migrator`—. Durante una actualización (`update.sh`), **es lo
 esperado**: los quioscos encolan mientras dura la ventana de mantenimiento y
 vacían solos al final ([`actualizacion-cliente.md`](actualizacion-cliente.md)
 §3).

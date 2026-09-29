@@ -32,7 +32,7 @@ auditoría | cualquiera | Crítica (seguridad)»*), definidas en
 | `audit_log` | Solo-append, encadenada por hash, particionada por año | PostgreSQL, esquema `public` |
 | `audit_chain_anchors` | Sella cada partición antes de soltarla (ADR-027) | PostgreSQL |
 | `compliance:verify-audit-chain` | Recorre la cadena a diario, 04:05 UTC | Contenedor `scheduler` |
-| `compliance:ensure-audit-partitions` | Crea la partición que falte, 02:45 UTC | Contenedor `scheduler` |
+| `compliance:ensure-audit-partitions` | Pide la partición que falte a la función `audit_log_create_partition` de la base, 02:45 UTC. Usa la conexión de la aplicación, no la de migración | Contenedor `scheduler` |
 | `audit_chain_verification_failures_total` | Contador. **Debe estar siempre en cero** | `BACKUP_PATH/metrics/kronoqr_audit_chain.prom` |
 
 **La fórmula** (doc 02 §7.4):
@@ -44,20 +44,23 @@ hash_n = SHA256( prev_hash || occurred_at || actor || action || subject || canon
 La entrada génesis usa `prev_hash = SHA256("FICHAJE-HOTEL-GENESIS")`, que vale
 `5a4bce588b4e0fa301a7a7befe42825a5d44ec5b90d26697b300acca0add5f2e`.
 
-**Los tres roles de base de datos, porque son media respuesta:**
+**Los cuatro roles de base de datos, porque son media respuesta:**
 
 | Rol | Qué puede | Dónde vive su credencial |
 | --- | --- | --- |
-| `fichaje_migrator` | Todo. Propietario. Solo migraciones | `.env`, `DB_MIGRATION_*` |
-| `fichaje_app` | Sobre `audit_log`: **solo `INSERT` y `SELECT`** | `.env`, `DB_*`. Es el runtime |
-| `fichaje_maintenance` | `SELECT` y soltar particiones (retención) | **No está en el `.env`** |
+| `fichaje_migrator` | Todo. Propietario y superusuario. Solo migraciones y restauración | `.env`, `DB_MIGRATION_*`. Solo la reciben `postgres` y los servicios de un solo uso `migrate` y `restore`; **ningún contenedor en marcha** |
+| `fichaje_app` | Sobre `audit_log`: **solo `INSERT` y `SELECT`**. Crear la partición del año en curso o del siguiente, y nada más, a través de la función | `.env`, `DB_*`. Es el runtime |
+| `fichaje_backup` | **Solo lectura** de todo (copias) | `.env`, `BACKUP_DB_*`. Solo el `scheduler` |
+| `fichaje_maintenance` | `SELECT` y soltar particiones selladas (retención) | **No está en el `.env`** |
 
 **Las tres cosas que hay que saber sin buscarlas:**
 
 1. **La aplicación no puede haber causado esto.** `fichaje_app` no tiene
-   `UPDATE` ni `DELETE` sobre `audit_log` y no es superusuario ni propietario. Si
-   la cadena está rota, la escritura vino de fuera de la aplicación: `psql` con
-   otro rol, una restauración parcial, o una intervención manual.
+   `UPDATE` ni `DELETE` sobre `audit_log` y no es superusuario ni propietario, y
+   desde la 2.2.0 ningún contenedor de la aplicación en marcha tiene en su
+   entorno otra credencial que pueda escribir en el registro. Si la cadena está
+   rota, la escritura vino de fuera de la aplicación: `psql` con otro rol, una
+   restauración parcial, o una intervención manual.
 2. **Nada de lo que imprime `compliance:verify-audit-chain` contiene datos
    personales** (regla dura 21): identificadores y hashes. Se puede pegar tal
    cual en un parte de incidencia.
@@ -85,9 +88,11 @@ INCIDENTE="audit-$(date -u +%Y%m%dT%H%M%SZ)"; echo "$INCIDENTE"
 docker compose exec -T app php artisan compliance:verify-audit-chain \
   | tee "/tmp/${INCIDENTE}-verificacion.txt"
 
-# 2. Copia física inmediata de la base. NO esperes a la copia nocturna:
-#    una restauración o un mantenimiento posterior se lleva la evidencia.
-docker compose exec -T app php artisan backup:run --mode=dump
+# 2. Copia inmediata de la base. NO esperes a la copia nocturna: una
+#    restauración o un mantenimiento posterior se lleva la evidencia. Va por
+#    el scheduler, el único con la clave de las copias; si está parado,
+#    `docker compose run --rm --no-deps -T scheduler` en lugar de `exec -T`.
+docker compose exec -T scheduler php artisan backup:run --mode=dump
 
 # 3. Registro de conexiones y de sentencias del motor.
 docker compose logs --no-color --since 168h postgres \
@@ -144,11 +149,29 @@ Y la misma fila en la copia de anoche, que es la comparación que dice **qué**
 cambió:
 
 ```bash
-# Restaura la copia en una base de trabajo, NUNCA sobre fichaje.
-docker compose exec -T app bash /opt/kronoqr/scripts/restore.sh --into fichaje_forense
-docker compose exec -T postgres psql -U fichaje_migrator -d fichaje_forense -c \
+# 1. Localiza la copia de ANOCHE. La del paso 2 de la §2 es de después de la
+#    alteración y no sirve para comparar.
+docker compose exec scheduler bash /opt/kronoqr/scripts/backup.sh list
+
+# 2. Restáurala en un contenedor LIMPIO y sin red, NUNCA sobre fichaje ni en
+#    el PostgreSQL de producción. Desde el directorio de la instalación:
+sudo BACKUP_ENV_FILE=./.env bash ./restore-drill.sh --keep \
+  --file "${BACKUP_PATH:-/var/backups/fichaje}/daily/<copia-de-anoche>.dump.enc"
+
+# 3. Consulta la fila. El nombre del contenedor lo imprime el paso anterior
+#    («Contenedor conservado: kronoqr-drill-<marca>»).
+docker exec -i kronoqr-drill-<marca> psql -U postgres -d drill -c \
   "SELECT * FROM audit_log WHERE id = <id>"
+
+# 4. Destrúyelo al acabar: contiene el registro completo de la plantilla.
+docker rm -f kronoqr-drill-<marca>
 ```
+
+Es el simulacro de restauración con `--keep`: restaura en un contenedor de
+PostgreSQL de usar y tirar, sin red, y lo conserva para que lo consultes. No
+toca la base de producción, ni sus copias, ni sus contenedores.
+`BACKUP_ENV_FILE=./.env` le da la clave de cifrado de las copias, que el script
+necesita para abrir la copia y que no está en el entorno de tu sesión.
 
 ### Resolución
 
@@ -269,8 +292,9 @@ docker compose exec -T app php artisan schedule:list
 # Ejecútala a mano: si falla, el motivo sale aquí.
 docker compose exec -T app php artisan compliance:verify-audit-chain
 
-# ¿Llega el fichero de métricas a node-exporter?
-docker compose exec -T app cat "${BACKUP_PATH:-/var/backups/fichaje}/metrics/kronoqr_audit_chain.prom"
+# ¿Llega el fichero de métricas a node-exporter? Se lee en el propio servidor:
+# BACKUP_PATH está montado en la misma ruta dentro y fuera de los contenedores.
+cat "${BACKUP_PATH:-/var/backups/fichaje}/metrics/kronoqr_audit_chain.prom"
 ```
 
 Causas, de más a menos frecuente: el contenedor `scheduler` parado; el destino
@@ -293,9 +317,50 @@ docker compose exec -T app php artisan compliance:ensure-audit-partitions
 docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -c "\d+ audit_log"
 ```
 
-Si el comando falla con un error de permisos, es que la conexión de migración no
-está configurada: crear una partición es DDL y `fichaje_app` no tiene DDL.
-Comprueba `DB_MIGRATION_USERNAME` y `DB_MIGRATION_PASSWORD` en el `.env`.
+**Cómo la crea, desde la 2.2.0** (ADR-042). La aplicación no tiene DDL ni
+ninguna credencial que lo tenga: pide la partición a la función
+`audit_log_create_partition` de la base, que la crea con los mismos permisos que
+las demás y **solo** para el año en curso o el siguiente. Por eso esta orden va
+por `app` y no necesita ninguna contraseña del `.env`. `DB_MIGRATION_USERNAME` y
+`DB_MIGRATION_PASSWORD` ya no intervienen: no las busques aquí.
+
+Si el comando falla con `la base de datos no ofrece la funcion
+audit_log_create_partition al rol de la aplicacion`, la migración que crea la
+función (`2026_09_29_100000_audit_log_partition_function`) no está aplicada. Lo
+normal es que una actualización no terminara. Compruébalo:
+
+```bash
+# ¿Está aplicada? La línea de 2026_09_29_100000 debe decir «Ran».
+docker compose run --rm --no-deps -T migrate php artisan migrate:status --database=pgsql_migrator
+```
+
+- **Si sale como pendiente**, aplícala con el servicio de un solo uso
+  `migrate`, que es la misma orden que lanzan `install.sh` y `update.sh`. Haz
+  antes una copia (§2, paso 2) y vuelve a lanzar la orden de arriba:
+
+  ```bash
+  docker compose run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force
+  docker compose exec -T app php artisan compliance:ensure-audit-partitions
+  ```
+
+  Si hay más de una migración pendiente, no es este caso sino una
+  actualización a medias: para y sigue
+  [`actualizacion-cliente.md`](actualizacion-cliente.md).
+- **Si sale como aplicada y aun así falla**, lo más probable es que se haya
+  cambiado `DB_USERNAME` después de instalar: la función guarda el nombre del
+  rol de la aplicación al crearse, y hay que volver a crearla. **No lo
+  intentes con `migrate:refresh` ni con `migrate:rollback`**: sobre una base con
+  registro legal no se deshace ninguna migración. Abre un caso al fabricante con
+  el paquete de diagnóstico.
+- **Si falla por tiempo de espera de un bloqueo** (`lock timeout`), la tabla
+  estaba ocupada en ese instante: la función no espera para no dejar en cola
+  los fichajes. Repite la orden pasados unos segundos.
+
+**Para la alerta del año próximo** (`ParticionDeAuditoriaDelProximoAnoSinPreparar`),
+que no tiene fichaje afectado: comprueba primero que el `scheduler` corre
+(`docker compose ps scheduler`) y que la migración está aplicada con la orden de
+arriba. Con las dos cosas bien, la tarea de las 02:45 UTC la crea sola; si no
+quieres esperar, lanza la misma `compliance:ensure-audit-partitions`.
 
 **Después de crearla, mira hacia atrás.** Haber llegado a este estado significa
 que durante un rato las acciones auditables estaban fallando. Revisa el log de
@@ -312,6 +377,7 @@ dura 19) y se reenvían solos, pero conviene confirmarlo.
 | Cualquier hallazgo de la §3 | Responsable de seguridad del cliente **y** DPO | Inmediato |
 | Permisos alterados sobre `audit_log` | Responsable de seguridad + fabricante (sin datos) | Inmediato |
 | Falta la partición del año en curso | IT del cliente | Inmediato: hay fichaje afectado |
+| Falta la del año próximo (desde noviembre) | IT del cliente | Dentro de la semana: hay dos meses de margen |
 | Silencio de la verificación | IT del cliente | Dentro de la jornada |
 
 **El fabricante no accede a los datos del cliente** (ADR-020, regla dura 16). Lo
