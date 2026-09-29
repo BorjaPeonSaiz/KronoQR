@@ -220,7 +220,7 @@ it('sirve las cabeceras de seguridad completas', function (): void {
     // PIN-01: libsodium compila WebAssembly; sin 'wasm-unsafe-eval' el fichaje por
     // PIN falla siempre en produccion. 'unsafe-eval' e 'unsafe-inline' siguen
     // prohibidos: el primer permiso no abre `eval` de JavaScript, los otros si.
-    expect(preg_match("/Content-Security-Policy \"[^\"]*?script-src ([^;\"]*)/", $headers, $csp))->toBe(1);
+    expect(preg_match('/Content-Security-Policy "[^"]*?script-src ([^;"]*)/', $headers, $csp))->toBe(1);
     expect($csp[1])
         ->toContain("'wasm-unsafe-eval'")
         ->not->toContain("'unsafe-eval'")
