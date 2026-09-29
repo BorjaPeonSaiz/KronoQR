@@ -172,7 +172,14 @@ it('deja al rol de la aplicacion solo INSERT y SELECT sobre la tabla y sus parti
     // «lo intentamos y fallo», sino «el catalogo dice que no puede».
     $application = Config::string('database.roles.application');
 
-    $relations = ['audit_log', AuditLogSchema::partitionName(2026)];
+    // TODAS las particiones, no solo la de 2026: desde ADR-042 las crea
+    // tambien una funcion con el rol de la aplicacion, y una que naciera con
+    // los permisos por defecto del migrador tendria `UPDATE` y `DELETE`.
+    $partitions = auditLogTodasLasParticiones();
+
+    expect($partitions)->toContain(AuditLogSchema::partitionName(2026));
+
+    $relations = ['audit_log', ...$partitions];
 
     foreach ($relations as $relation) {
         foreach (['UPDATE', 'DELETE', 'TRUNCATE'] as $privilege) {
@@ -213,17 +220,54 @@ it('no deja que el rol de la aplicacion sea superusuario ni propietario de audit
 
     expect($role?->rolsuper)->toBeFalse($application.' es superusuario: los GRANT no se comprueban.');
 
-    /** @var object{owner: string}|null $owner */
-    $owner = DB::selectOne(<<<'SQL'
-        SELECT r.rolname AS owner
-        FROM pg_class c
-        JOIN pg_roles r ON r.oid = c.relowner
-        WHERE c.relname = 'audit_log'
+    // La tabla madre y cada particion: ninguna puede ser del rol de la
+    // aplicacion, tambien las que cree la funcion de ADR-042.
+    foreach (['audit_log', ...auditLogTodasLasParticiones()] as $relation) {
+        /** @var object{owner: string}|null $owner */
+        $owner = DB::selectOne(<<<'SQL'
+            SELECT r.rolname AS owner
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_roles r ON r.oid = c.relowner
+            WHERE n.nspname = 'public' AND c.relname = ?
+        SQL, [$relation]);
+
+        expect($owner?->owner)->not->toBe($application, $relation.' es del rol de la aplicacion.')
+            ->and($owner?->owner)->toBe(Config::string('database.roles.migration'), $relation);
+    }
+})->group('RS-07');
+
+it('no deja al rol de la aplicacion crear nada en el esquema public', function (): void {
+    // ADR-042: la unica forma de DDL que la aplicacion puede provocar es pedir
+    // la particion a la funcion. Con `CREATE` en el esquema podria crear sus
+    // propias tablas y funciones, y con ellas preparar un desvio.
+    /** @var object{granted: bool}|null $result */
+    $result = DB::selectOne(
+        'SELECT has_schema_privilege(?, ?, ?) AS granted',
+        [Config::string('database.roles.application'), 'public', 'CREATE'],
+    );
+
+    expect($result?->granted)->toBeFalse();
+})->group('RS-07');
+
+/**
+ * Las particiones adjuntas a `public.audit_log`, leidas del catalogo.
+ *
+ * @return list<string>
+ */
+function auditLogTodasLasParticiones(): array
+{
+    /** @var list<object{relname: string}> $rows */
+    $rows = DB::select(<<<'SQL'
+        SELECT child.relname
+        FROM pg_inherits
+        JOIN pg_class child ON child.oid = pg_inherits.inhrelid
+        WHERE pg_inherits.inhparent = 'public.audit_log'::regclass
+        ORDER BY child.relname
     SQL);
 
-    expect($owner?->owner)->not->toBe($application)
-        ->and($owner?->owner)->toBe(Config::string('database.roles.migration'));
-})->group('RS-07');
+    return array_map(static fn (object $row): string => $row->relname, $rows);
+}
 
 it('no da al rol de la aplicacion permiso para escribir un ancla', function (): void {
     // Sellar una particion es el paso previo a soltarla (ADR-027). Si la

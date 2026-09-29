@@ -84,6 +84,11 @@ Schedule::command('compliance:verify-audit-chain')
  *
  * A las 02:45 UTC, antes de la copia: si crea una particion, que entre en la
  * copia de esa misma noche.
+ *
+ * Corre con la conexion de la aplicacion, como el resto del planificador: la
+ * particion la crea la funcion `audit_log_create_partition` de la base, que
+ * tiene los permisos del propietario y solo admite el año en curso o el
+ * siguiente (ADR-042). El `scheduler` no recibe la credencial del migrador.
  */
 Schedule::command('compliance:ensure-audit-partitions')
     ->dailyAt('02:45')

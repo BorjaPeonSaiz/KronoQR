@@ -6,19 +6,25 @@ namespace App\Modules\Compliance\Infrastructure\Persistence;
 
 use Illuminate\Support\Facades\Config;
 use InvalidArgumentException;
+use LogicException;
 
 /**
  * El SQL de `audit_log`: nombres, particiones y permisos, en un solo sitio
  * (ADR-027, regla dura 6).
  *
- * **Por que no vive dentro de la migracion.** La particion del año en curso la
- * crea la migracion y la del año siguiente la crea una tarea programada. Si cada
- * una escribiera su propio `CREATE TABLE ... PARTITION OF`, tarde o temprano una
- * de las dos se olvidaria del `REVOKE`: **los permisos NO se heredan al adjuntar
- * una particion**, asi que una particion creada sin revocar dejaria a la
- * aplicacion con `UPDATE` y `DELETE` sobre el registro probatorio de ese año, y
- * nada fallaria. Crear y restringir tienen que ser la misma operacion, escrita
- * una vez.
+ * **Por que no vive dentro de la migracion.** Las particiones las crean dos
+ * caminos: las migraciones, con el rol de migracion, y la funcion
+ * `audit_log_create_partition` (ADR-042), que la tarea programada invoca con el
+ * rol de la aplicacion para el año siguiente o, si faltara, para el año en
+ * curso. Si cada camino escribiera su propio `CREATE TABLE ... PARTITION OF` y
+ * sus propios permisos, tarde o temprano uno se olvidaria del `REVOKE`: **los
+ * permisos NO se heredan al adjuntar una particion**, y los `ALTER DEFAULT
+ * PRIVILEGES` del migrador se aplican tambien dentro de la funcion, asi que una
+ * particion creada sin revocar dejaria a la aplicacion con `UPDATE` y `DELETE`
+ * sobre el registro probatorio de ese año, y nada fallaria. Crear y restringir
+ * tienen que ser la misma operacion, y la lista de permisos esta escrita una
+ * sola vez ({@see self::appendOnlyGrantTemplates()}): de ella salen tanto las
+ * sentencias de las migraciones como el cuerpo de la funcion.
  */
 final class AuditLogSchema
 {
@@ -34,10 +40,36 @@ final class AuditLogSchema
     public const string DROP_FUNCTION = 'audit_log_drop_sealed_partition';
 
     /**
+     * La funcion que crea la particion anual (ADR-042). Vive aqui por el mismo
+     * motivo que {@see self::DROP_FUNCTION}: la nombran la migracion que la
+     * crea, el adaptador que la invoca y las pruebas que comprueban quien puede
+     * ejecutarla.
+     */
+    public const string CREATE_FUNCTION = 'audit_log_create_partition';
+
+    /**
+     * El `search_path` de toda funcion `SECURITY DEFINER` de esta clase. `pg_temp`
+     * va explicito y al final: si no aparece, PostgreSQL lo busca PRIMERO para
+     * las relaciones, y `PUBLIC` tiene `TEMPORARY` sobre la base, asi que una
+     * tabla temporal de quien llama podria suplantar a una del esquema.
+     */
+    public const string DEFINER_SEARCH_PATH = 'pg_catalog, pg_temp';
+
+    /**
+     * El `search_path` con el que la migracion de la tarea 2.10 creo la funcion
+     * de purga. Solo lo usa el `down()` de la migracion que la alinea con
+     * {@see self::DEFINER_SEARCH_PATH}.
+     */
+    public const string LEGACY_DROP_FUNCTION_SEARCH_PATH = 'pg_catalog, public';
+
+    /**
      * Primer año con particion. Es el año del primer despliegue del producto y
      * el literal de ADR-027 y del doc 01 §5.5.
      */
     public const int FIRST_YEAR = 2026;
+
+    /** La marca que ocupa el lugar de la relacion en {@see self::appendOnlyGrantTemplates()}. */
+    private const string RELATION_MARK = '{relation}';
 
     public static function partitionName(int $year): string
     {
@@ -69,6 +101,13 @@ final class AuditLogSchema
         // `%I` y `%` de `format()` y de `RAISE`, y duplicarlos todos para
         // esquivar a `sprintf` convierte una funcion legible en un jeroglifico
         // que nadie revisa. Las marcas salen de constantes de esta clase.
+        //
+        // El `search_path` de abajo es el historico de la tarea 2.10 y NO se
+        // cambia aqui: la migracion 2026_09_29_100000 lo alinea con
+        // `DEFINER_SEARCH_PATH` mediante `ALTER FUNCTION`, para las instalaciones
+        // nuevas y las existentes por igual, y su `down()` lo devuelve
+        // exactamente a este valor. Cambiarlo aqui haria que ese `down()` no
+        // restaurase lo que habia en una instalacion limpia.
         $body = strtr(<<<'SQL'
             CREATE OR REPLACE FUNCTION :function:(p_year integer)
             RETURNS void
@@ -125,6 +164,128 @@ final class AuditLogSchema
     }
 
     /**
+     * `ALTER FUNCTION … SET search_path` sobre la funcion de purga. Conserva
+     * propietario y ACL: solo cambia la configuracion de la funcion.
+     */
+    public static function dropFunctionSearchPathStatement(string $searchPath): string
+    {
+        if (! \in_array($searchPath, [self::DEFINER_SEARCH_PATH, self::LEGACY_DROP_FUNCTION_SEARCH_PATH], true)) {
+            throw new InvalidArgumentException('search_path no previsto para la funcion de purga: '.$searchPath);
+        }
+
+        return sprintf(
+            'ALTER FUNCTION public.%s(integer) SET search_path = %s',
+            self::quoteIdentifier(self::DROP_FUNCTION),
+            $searchPath,
+        );
+    }
+
+    /**
+     * La funcion que crea la particion anual de `audit_log` (ADR-042).
+     *
+     * Es `SECURITY DEFINER` y pertenece al rol de migracion, igual que la de
+     * purga: `CREATE TABLE … PARTITION OF` exige ser propietario de la tabla
+     * madre, y hacer propietario —o dar `CREATE` en el esquema— al rol de la
+     * aplicacion le permitiria volver a otorgarse `UPDATE` y `DELETE`. Con la
+     * funcion, el rol de la aplicacion puede pedir exactamente una cosa: la
+     * particion del año UTC en curso o del siguiente.
+     *
+     * Lo que la hace segura con un propietario superusuario:
+     *
+     * - recibe un `integer` y construye el nombre con `format('%I')` y los
+     *   limites con `%L`: no entra texto de quien llama;
+     * - califica todo con `public.` y fija `search_path = pg_catalog, pg_temp`;
+     * - rechaza años fuera de `[año UTC, año UTC + 1]`, por debajo de
+     *   `FIRST_YEAR` y **sellados** en `audit_chain_anchors` (un año purgado no
+     *   puede reaparecer vacio para recibir entradas retrodatadas);
+     * - falla, en vez de no hacer nada, si existe una tabla homonima que no es
+     *   particion;
+     * - serializa con un cerrojo consultivo y acota la espera con `lock_timeout`,
+     *   porque `PARTITION OF` bloquea en exclusiva la tabla madre y los fichajes
+     *   harian cola detras;
+     * - deja la particion con los permisos de {@see self::appendOnlyGrantTemplates()}
+     *   en la misma operacion.
+     *
+     * Devuelve `true` si la ha creado y `false` si ya existia.
+     *
+     * @return list<string>
+     */
+    public static function createFunctionStatements(): array
+    {
+        $function = self::quoteIdentifier(self::CREATE_FUNCTION);
+        $application = self::quoteIdentifier(self::applicationRole());
+
+        $body = strtr(<<<'SQL'
+            CREATE OR REPLACE FUNCTION public.:function:(p_year integer)
+            RETURNS boolean
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            SET search_path = :search_path:
+            SET lock_timeout = '5s'
+            AS $kronoqr$
+            DECLARE
+                utc_year       integer := extract(year FROM (now() AT TIME ZONE 'UTC'))::integer;
+                partition_name text    := ':table:_' || p_year::text;
+                existing       oid;
+            BEGIN
+                IF p_year IS NULL OR p_year < :first_year: OR p_year < utc_year OR p_year > utc_year + 1 THEN
+                    RAISE EXCEPTION 'Ano de particion fuera de rango: %', p_year USING ERRCODE = '22023';
+                END IF;
+
+                IF EXISTS (SELECT 1 FROM public.:anchors: WHERE partition_year = p_year) THEN
+                    RAISE EXCEPTION 'El ano % esta sellado: no se recrea su particion (ADR-027)', p_year
+                        USING ERRCODE = '22023';
+                END IF;
+
+                PERFORM pg_advisory_xact_lock(hashtext('kronoqr.:function_name:'));
+
+                SELECT c.oid INTO existing
+                  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'public' AND c.relname = partition_name;
+
+                IF existing IS NOT NULL THEN
+                    IF EXISTS (SELECT 1 FROM pg_inherits
+                                WHERE inhrelid = existing AND inhparent = 'public.:table:'::regclass) THEN
+                        RETURN false;
+                    END IF;
+                    RAISE EXCEPTION 'public.% existe y no es particion de :table:', partition_name
+                        USING ERRCODE = '42P07';
+                END IF;
+
+                EXECUTE format(
+                    'CREATE TABLE public.%I PARTITION OF public.:table: FOR VALUES FROM (%L) TO (%L)',
+                    partition_name, p_year || '-01-01T00:00:00Z', (p_year + 1) || '-01-01T00:00:00Z'
+                );
+
+            :grants:
+                RETURN true;
+            END;
+            $kronoqr$
+            SQL, [
+            ':function_name:' => self::CREATE_FUNCTION,
+            ':function:' => $function,
+            ':search_path:' => self::DEFINER_SEARCH_PATH,
+            ':table:' => self::TABLE,
+            ':anchors:' => self::ANCHORS_TABLE,
+            ':first_year:' => (string) self::FIRST_YEAR,
+            ':grants:' => self::functionGrantBlock(),
+        ]);
+
+        return [
+            $body,
+            // `PUBLIC` recibe `EXECUTE` sobre toda funcion nueva si no se le
+            // retira. El rol de mantenimiento tampoco la necesita.
+            sprintf('REVOKE ALL ON FUNCTION public.%s(integer) FROM PUBLIC', $function),
+            sprintf('GRANT EXECUTE ON FUNCTION public.%s(integer) TO %s', $function, $application),
+        ];
+    }
+
+    public static function createFunctionRemovalStatement(): string
+    {
+        return sprintf('DROP FUNCTION IF EXISTS public.%s(integer)', self::quoteIdentifier(self::CREATE_FUNCTION));
+    }
+
+    /**
      * `CREATE TABLE … PARTITION OF` mas los permisos de esa particion, en el
      * orden en que hay que ejecutarlos.
      *
@@ -175,16 +336,64 @@ final class AuditLogSchema
     public static function appendOnlyGrantStatements(string $relation): array
     {
         $table = self::quoteIdentifier($relation);
+
+        return array_map(
+            static fn (string $template): string => str_replace(self::RELATION_MARK, $table, $template),
+            self::appendOnlyGrantTemplates(),
+        );
+    }
+
+    /**
+     * La lista de permisos solo-append, **escrita una vez**, con la relacion
+     * como marca. De aqui salen las sentencias de las migraciones
+     * ({@see self::appendOnlyGrantStatements()}) y el cuerpo de la funcion que
+     * crea particiones ({@see self::functionGrantBlock()}): si alguien añade o
+     * quita un permiso, cambia en los dos caminos a la vez.
+     *
+     * @return list<string>
+     */
+    private static function appendOnlyGrantTemplates(): array
+    {
         $application = self::quoteIdentifier(self::applicationRole());
         $maintenance = self::quoteIdentifier(self::maintenanceRole());
+        $relation = self::RELATION_MARK;
 
         return [
-            sprintf('REVOKE ALL ON TABLE %s FROM PUBLIC', $table),
-            sprintf('REVOKE ALL ON TABLE %s FROM %s', $table, $application),
-            sprintf('REVOKE ALL ON TABLE %s FROM %s', $table, $maintenance),
-            sprintf('GRANT INSERT, SELECT ON TABLE %s TO %s', $table, $application),
-            sprintf('GRANT SELECT ON TABLE %s TO %s', $table, $maintenance),
+            'REVOKE ALL ON TABLE '.$relation.' FROM PUBLIC',
+            'REVOKE ALL ON TABLE '.$relation.' FROM '.$application,
+            'REVOKE ALL ON TABLE '.$relation.' FROM '.$maintenance,
+            'GRANT INSERT, SELECT ON TABLE '.$relation.' TO '.$application,
+            'GRANT SELECT ON TABLE '.$relation.' TO '.$maintenance,
         ];
+    }
+
+    /**
+     * Los permisos de {@see self::appendOnlyGrantTemplates()} como sentencias
+     * PL/pgSQL que actuan sobre la variable `partition_name` de la funcion.
+     *
+     * Cada plantilla va como literal de `format()`, entre comillas simples. Es
+     * seguro porque las plantillas no pueden contener `'` ni `%`: sus unicas
+     * piezas variables son nombres de rol que {@see self::assertIdentifier()}
+     * limita a `[A-Za-z0-9_]`. Se comprueba igual, porque si algun dia una
+     * plantilla los contuviera, el cuerpo de la funcion cambiaria de sentido
+     * en silencio.
+     */
+    private static function functionGrantBlock(): string
+    {
+        $lines = [];
+
+        foreach (self::appendOnlyGrantTemplates() as $template) {
+            if (str_contains($template, "'") || str_contains($template, '%')) {
+                throw new LogicException(
+                    'La plantilla de permisos «'.$template.'» contiene comillas simples o «%»: '
+                    .'no puede ir como literal de format() en la funcion '.self::CREATE_FUNCTION.'.'
+                );
+            }
+
+            $lines[] = "    EXECUTE format('".str_replace(self::RELATION_MARK, 'public.%I', $template)."', partition_name);";
+        }
+
+        return implode("\n", $lines);
     }
 
     public static function applicationRole(): string
@@ -215,7 +424,10 @@ final class AuditLogSchema
         if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $identifier) !== 1) {
             throw new InvalidArgumentException(
                 'El nombre de rol «'.$identifier.'» no es un identificador simple de PostgreSQL. '
-                .'Revisa DB_USERNAME, DB_MIGRATION_USERNAME y DB_MAINTENANCE_USERNAME en el .env.'
+                // Sin nombrar las variables del rol de migracion: ADR-042 prohibe
+                // que el codigo de la aplicacion las mencione, y la prueba de
+                // arquitectura lo comprueba. La lista completa esta en .env.example.
+                .'Revisa los nombres de rol de base de datos del .env (los *_USERNAME de la seccion de base de datos de .env.example).'
             );
         }
 

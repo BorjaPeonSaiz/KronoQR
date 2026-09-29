@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Application\Exception\AuditPartitionCreationUnavailable;
 use App\Modules\Compliance\Application\UseCase\EnsureAuditLogPartitions;
 use Tests\Support\Compliance\InMemoryAuditLogPartitions;
 use Tests\Support\Compliance\RecordingAuditMetrics;
@@ -17,11 +18,12 @@ use Tests\Support\Time\FixedClock;
 
 /**
  * @param  list<int>  $existing
+ * @param  list<int>  $unavailable  Años cuya creacion falla como si faltara la funcion de ADR-042.
  * @return array{0: EnsureAuditLogPartitions, 1: InMemoryAuditLogPartitions, 2: RecordingAuditMetrics}
  */
-function partitionScenario(string $now, array $existing): array
+function partitionScenario(string $now, array $existing, array $unavailable = []): array
 {
-    $partitions = new InMemoryAuditLogPartitions($existing);
+    $partitions = new InMemoryAuditLogPartitions($existing, $unavailable);
     $metrics = new RecordingAuditMetrics;
 
     return [
@@ -94,4 +96,44 @@ it('publica el estado como metrica en cada pasada', function (): void {
 
     expect($metrics->lastPartitionStatus)->not->toBeNull()
         ->and($metrics->lastPartitionStatus?->currentYear)->toBe(2026);
+})->group('RS-07');
+
+// --- Cuando la creacion falla (ADR-042) ---------------------------------------
+
+it('publica el año siguiente como no preparado y relanza si no se puede crear', function (): void {
+    // Sin la metrica, el fichero se quedaria con el valor de la pasada anterior
+    // y el aviso de noviembre no sonaria nunca.
+    [$ensure, $partitions, $metrics] = partitionScenario('2027-11-02 02:45:00', [2026, 2027], [2028]);
+
+    expect(fn () => $ensure->handle())->toThrow(AuditPartitionCreationUnavailable::class);
+
+    expect($partitions->created)->toBe([])
+        ->and($metrics->lastPartitionStatus?->currentYear)->toBe(2027)
+        ->and($metrics->lastPartitionStatus?->nextYearReady)->toBeFalse()
+        ->and($metrics->lastPartitionStatus?->currentYearWasMissing)->toBeFalse()
+        ->and($metrics->lastPartitionStatus?->createdYears)->toBe([]);
+})->group('RS-07');
+
+it('publica el año en curso como ausente y relanza si no se puede crear', function (): void {
+    // El caso critico: sin particion del año en curso, toda accion auditable
+    // falla. La metrica a 0 es lo que hace sonar la alerta critica.
+    [$ensure, $partitions, $metrics] = partitionScenario('2027-03-04 02:45:00', [2026], [2027]);
+
+    expect(fn () => $ensure->handle())->toThrow(AuditPartitionCreationUnavailable::class);
+
+    expect($partitions->created)->toBe([])
+        ->and($metrics->lastPartitionStatus?->currentYearWasMissing)->toBeTrue()
+        ->and($metrics->lastPartitionStatus?->createdYears)->toBe([])
+        ->and($metrics->lastPartitionStatus?->nextYearReady)->toBeFalse();
+})->group('RS-07');
+
+it('publica lo que si creo aunque falle el año siguiente', function (): void {
+    [$ensure, $partitions, $metrics] = partitionScenario('2027-11-02 02:45:00', [2026], [2028]);
+
+    expect(fn () => $ensure->handle())->toThrow(AuditPartitionCreationUnavailable::class);
+
+    expect($partitions->created)->toBe([2027])
+        ->and($metrics->lastPartitionStatus?->createdYears)->toBe([2027])
+        ->and($metrics->lastPartitionStatus?->currentYearWasMissing)->toBeTrue()
+        ->and($metrics->lastPartitionStatus?->nextYearReady)->toBeFalse();
 })->group('RS-07');

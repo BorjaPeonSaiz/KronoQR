@@ -109,8 +109,9 @@ groups:
           summary: "No existe la particion de audit_log del año que viene"
           description: >-
             La tarea programada la crea a partir de noviembre. Que no exista
-            significa que la tarea no se esta ejecutando o que no puede hacer
-            DDL: comprueba que el scheduler corre y que la conexion de migracion
-            esta configurada (DB_MIGRATION_USERNAME en el .env). Si llega el 1 de
-            enero sin ella, se para el fichaje.
+            significa que la tarea no se esta ejecutando o que no puede crearla:
+            comprueba que el scheduler corre y que la migracion
+            2026_09_29_100000_audit_log_partition_function esta aplicada (la
+            particion la crea esa funcion de la base, ADR-042; se aplica
+            actualizando). Si llega el 1 de enero sin ella, se para el fichaje.
           runbook_url: docs/runbooks/rotura-cadena-auditoria.md

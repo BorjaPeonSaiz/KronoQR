@@ -121,10 +121,15 @@ return [
          *
          *   php artisan migrate --database=pgsql_migrator --force
          *
-         * NADA de la aplicacion en marcha usa esta conexion. Si algun dia un
-         * caso de uso la resolviera, seria un defecto: la prueba de integracion
-         * de RS-07 comprueba que el rol de runtime sigue chocando con el
-         * REVOKE.
+         * NADA de la aplicacion en marcha usa esta conexion (ADR-042): solo
+         * las migraciones y las pruebas. La particion anual de `audit_log`,
+         * que era su ultimo uso en runtime, la crea desde la 2.2.0 la funcion
+         * `audit_log_create_partition` invocada con el rol de la aplicacion.
+         * Si algun dia codigo de `app/` la nombrara, seria un defecto, y lo
+         * detectan dos pruebas: `RuntimeDatabaseCredentialsTest` (ningun
+         * fichero de `app/` la nombra) y la de integracion de RS-07 (el rol de
+         * runtime sigue chocando con el REVOKE). En produccion, ademas, su
+         * credencial solo llega a los servicios `migrate` y `restore`.
          */
         'pgsql_migrator' => [
             'driver' => 'pgsql',
@@ -264,7 +269,8 @@ return [
          * esta clave —solo mira `--database`—, pero la lee KronoQR: la usan el
          * `migrateFreshUsing()` de la suite y `Tests\Support\Database\
          * TestDatabase`, para que la conexion correcta este declarada en un
-         * sitio y no repetida en cada invocacion.
+         * sitio y no repetida en cada invocacion. Solo la leen las pruebas y
+         * quien lanza las migraciones; ningun codigo de `app/` (ADR-042).
          */
         'connection' => env('DB_MIGRATION_CONNECTION', 'pgsql_migrator'),
     ],
