@@ -158,6 +158,46 @@ describe.each(backends)('cola de fichajes ($name)', (backend) => {
     expect(await queue.claim(10, { ignoreSchedule: true })).toHaveLength(1)
   })
 
+  // G1: el orden de sincronizacion no se rompe por una fila atascada.
+  it('una fila atascada DETIENE la lectura: un escaneo nuevo no la adelanta (G1)', async () => {
+    const stuck = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+    const fresh = '0199f13a-7c22-7b41-9e88-0c4d5e6f7a81'
+    await queue.enqueue(scan(stuck, '2026-08-14T05:00:00.000Z'))
+    await queue.retryLater([stuck])
+    await queue.enqueue(scan(fresh, '2026-08-14T05:58:00.000Z'))
+
+    // La entrada espera su reintento; la salida nueva (espera 0) NO sale sola.
+    expect(await queue.claim(10)).toHaveLength(0)
+
+    // Con «vuelve la red» sale todo, y en orden.
+    const all = await queue.claim(10, { ignoreSchedule: true })
+    expect(all.map((record) => record.scan_id)).toEqual([stuck, fresh])
+  })
+
+  it('toma el prefijo vencido y se detiene en la primera fila con espera (G1)', async () => {
+    const first = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+    const second = '0199f13a-7c22-7b41-9e88-0c4d5e6f7a81'
+    const third = '0199f2a1-3b7c-7e12-9f04-6a1b2c3d4e5f'
+    await queue.enqueue(scan(first, '2026-08-14T05:00:00.000Z'))
+    await queue.enqueue(scan(second, '2026-08-14T05:10:00.000Z'))
+    await queue.enqueue(scan(third, '2026-08-14T05:20:00.000Z'))
+    await queue.retryLater([second])
+
+    const claimed = await queue.claim(10)
+
+    expect(claimed.map((record) => record.scan_id)).toEqual([first])
+  })
+
+  it('el proximo intento de la cola es el de la CABEZA, no el minimo de todas (G1, G2)', async () => {
+    const nowMs = new Date('2026-08-14T06:00:00.000Z').getTime()
+    const stuck = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+    await queue.enqueue(scan(stuck, '2026-08-14T05:00:00.000Z'))
+    await queue.retryLater([stuck])
+    await queue.enqueue(scan('0199f13a-7c22-7b41-9e88-0c4d5e6f7a81', '2026-08-14T05:58:00.000Z'))
+
+    expect(queue.stats().nextAttemptAt).toBe(nowMs + 1_000)
+  })
+
   it('el mas antiguo alimenta `oldest_pending_at` del latido', async () => {
     await queue.enqueue(scan('0199f13a-7c22-7b41-9e88-0c4d5e6f7a81', '2026-08-14T14:03:12.000Z'))
     await queue.enqueue(scan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T05:58:31.000Z'))

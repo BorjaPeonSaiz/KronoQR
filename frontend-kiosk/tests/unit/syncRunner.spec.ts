@@ -831,3 +831,101 @@ describe('PIN-08 — un 400 es terminal', () => {
 function accepted200(scanId: string): ApiResult<ScanOk> {
   return { outcome: 'ok', data: accepted(scanId, '2026-08-14T08:00:00.000Z', 'clock_in') }
 }
+
+// G1 y G2. Sobre el drenaje real, no solo sobre `claim()`.
+describe('G1/G2 — el orden sobrevive a un fallo y el drenaje no gira en vacio', () => {
+  const OLD = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+  const NEW = '0199f13a-7c22-7b41-9e88-0c4d5e6f7a81'
+
+  it('una entrada atascada no es adelantada por una salida nueva cuando vuelve el servidor (G1)', async () => {
+    const order: string[] = []
+    let failFirst = true
+    const bench = harness({
+      onBatch: (request) => {
+        if (failFirst) {
+          failFirst = false
+          return { outcome: 'failed', cause: 'server', httpStatus: 500 }
+        }
+        order.push(...request.scans.map((item) => item.scan_id))
+        return {
+          outcome: 'ok',
+          data: {
+            results: request.scans.map((item) => ({
+              scan_id: item.scan_id,
+              status: 200 as const,
+              outcome: accepted(item.scan_id, item.occurred_at, 'clock_in'),
+            })),
+          },
+        }
+      },
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(scan(OLD, '2026-08-14T08:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true }) // falla: la entrada queda en espera
+
+    // Llega una salida nueva y se drena SIN saltarse la espera (temporizador).
+    await bench.queue.enqueue(scan(NEW, '2026-08-14T16:00:00.000Z'))
+    await runner.drain()
+    expect(order).toEqual([])
+    expect(bench.queue.stats().size).toBe(2)
+
+    // Vuelve la red: sale todo, la entrada primero.
+    await runner.drain({ ignoreSchedule: true })
+    expect(order).toEqual([OLD, NEW])
+    expect(bench.queue.stats().size).toBe(0)
+  })
+
+  it('el relanzamiento pedido mientras se drenaba hereda `ignoreSchedule` (G1)', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let calls = 0
+    const bench = harness({
+      onBatch: () => ({ outcome: 'failed', cause: 'network' }),
+    })
+    const original = bench.api.syncScanBatch
+    bench.api.syncScanBatch = vi.fn(async (request: ScanBatchRequest, key: string) => {
+      calls += 1
+      if (calls === 1) await gate
+      return original(request, key)
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(scan(OLD, '2026-08-14T08:00:00.000Z'))
+    const first = runner.drain({ ignoreSchedule: true })
+    await vi.waitFor(() => expect(calls).toBe(1))
+    // «Vuelve la red» mientras el primer drenaje sigue en vuelo.
+    void runner.drain({ ignoreSchedule: true })
+    release?.()
+    await first
+
+    // El relanzamiento tambien se salto la espera que el primer fallo acaba de fijar.
+    await vi.waitFor(() => expect(calls).toBe(2))
+  })
+
+  it('sin red el drenaje se programa a la espera larga, no a 0 ms (G2)', async () => {
+    const delays: number[] = []
+    const bench = harness()
+    const runner = createSyncRunner({
+      api: bench.api,
+      queue: bench.queue,
+      clock: CLOCK,
+      isOnline: () => false,
+      setTimer: (_handler, delayMs) => {
+        delays.push(delayMs)
+        return 1
+      },
+      clearTimer: () => undefined,
+    })
+
+    runner.start()
+    await bench.queue.enqueue(scan(OLD, '2026-08-14T08:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(bench.api.syncScanBatch).not.toHaveBeenCalled()
+    expect(delays.length).toBeGreaterThan(0)
+    expect(Math.min(...delays)).toBeGreaterThanOrEqual(30_000)
+  })
+})

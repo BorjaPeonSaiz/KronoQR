@@ -148,6 +148,8 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   let draining = false
   /** Un despertador pedido mientras se drenaba: se atiende al terminar. */
   let rerun = false
+  /** El despertador pedido mientras se drenaba puede traer «acaba de volver la red». */
+  let rerunIgnoreSchedule = false
 
   function cancelTimer(): void {
     if (timer === null) return
@@ -164,7 +166,11 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
 
     const nowMs = clock.now().getTime()
     const due = stats.nextAttemptAt ?? nowMs
-    const delay = Math.max(0, Math.min(due - nowMs, IDLE_POLL_MS))
+    // G2: sin red, `drain()` suelta las filas sin tocarlas y su espera sigue
+    // siendo 0: programar con esa espera giraba en vacio (miles de lecturas de
+    // IndexedDB por segundo). El evento `online` despierta de verdad
+    // (`wakeNow`); esto es solo la red de seguridad de cuando ese evento no llega.
+    const delay = isOnline() ? Math.max(0, Math.min(due - nowMs, IDLE_POLL_MS)) : IDLE_POLL_MS
     timer = setTimer(() => {
       timer = null
       void drain()
@@ -374,6 +380,10 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   async function drain(drainOptions: { readonly ignoreSchedule?: boolean } = {}): Promise<void> {
     if (draining) {
       rerun = true
+      // G1: el relanzamiento hereda `ignoreSchedule`. Sin esto, el `online`
+      // que llega mientras otro drenaje esta en curso se degrada a un drenaje
+      // normal y la fila atascada espera su retroceso con la red ya de vuelta.
+      rerunIgnoreSchedule ||= drainOptions.ignoreSchedule === true
       return
     }
     draining = true
@@ -442,8 +452,10 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       options.onSyncing?.(false)
       scheduleNext()
       if (rerun) {
+        const inherited = rerunIgnoreSchedule
         rerun = false
-        void drain()
+        rerunIgnoreSchedule = false
+        void drain({ ignoreSchedule: inherited })
       }
     }
   }
