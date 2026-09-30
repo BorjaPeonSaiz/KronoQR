@@ -280,8 +280,7 @@ run_delegated_doctor() {
   # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
   # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
   available_commands="$(compose_current exec -T app php artisan list --raw 2>/dev/null || true)"
-  if ! printf '%s
-' "${available_commands}" | grep -q '^product:doctor'; then
+  if ! grep -q '^product:doctor' <<<"${available_commands}"; then
     die "${KQ_EXIT_VERIFY_FAILED}" "$(kq_text d_f_doctor_missing_command)"
   fi
 
@@ -508,7 +507,7 @@ check_certificate_expiry() {
 # (0 ocupado · 1 libre · 2 no se ha podido averiguar); duplicada a proposito,
 # porque no vive en una biblioteca comun y doctor.sh se ejecuta solo.
 port_listening() {
-  local port="$1"
+  local port="$1" listing
 
   if command -v ss >/dev/null 2>&1; then
     [ -n "$(ss -ltnH "sport = :${port}" 2>/dev/null)" ] && return 0
@@ -516,7 +515,11 @@ port_listening() {
   fi
 
   if command -v netstat >/dev/null 2>&1 && netstat -ltn >/dev/null 2>&1; then
-    netstat -ltn 2>/dev/null | grep -qE "[:.]${port}[[:space:]]" && return 0
+    # Capturado y no en tuberia: con `pipefail`, `grep -q` cierra el tubo al
+    # primer acierto y el productor puede morir por SIGPIPE, dando «libre»
+    # donde habia un proceso escuchando.
+    listing="$(netstat -ltn 2>/dev/null || true)"
+    grep -qE "[:.]${port}[[:space:]]" <<<"${listing}" && return 0
     return 1
   fi
 

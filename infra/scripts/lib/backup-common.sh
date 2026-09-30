@@ -422,7 +422,7 @@ compare_table_counts() {
       continue
     fi
     if [ "$reales" != "$esperadas" ]; then
-      if printf '%s\n' "$estables" | grep -qxF "$tabla"; then
+      if grep -qxF "$tabla" <<<"$estables"; then
         err "CONTEO distinto en '${tabla}', que no cambio durante la copia: manifiesto ${esperadas}, restaurada ${reales}."
         fallos=$((fallos + 1))
       elif [ "$reales" -lt "$esperadas" ]; then

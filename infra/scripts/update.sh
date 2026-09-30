@@ -1473,7 +1473,7 @@ check_env_orphan_keys() {
 
   while IFS= read -r key; do
     [ -n "${key}" ] || continue
-    printf '%s\n' "${received}" | grep -qxF "${key}" && continue
+    grep -qxF "${key}" <<<"${received}" && continue
     count=$((count + 1))
     [ "${count}" -le 8 ] && shown="${shown}${shown:+ }${key}"
   done < <(sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Z_][A-Z0-9_]*)=.*/\2/p' "${CURRENT_ENV}" | sort -u)
@@ -1736,7 +1736,7 @@ phase_migrations() {
     files=()
     while IFS= read -r name; do
       [ -n "${name}" ] || continue
-      printf '%s\n' "${applied}" | grep -qxF "${name}" && continue
+      grep -qxF "${name}" <<<"${applied}" && continue
       files+=("${KQ_CONTAINER_MIGRATIONS}/${name}.php")
     done < <(printf '%s\n' "${MIGRATIONS_IN_IMAGE}" | kq_migrations_for_version "${version}")
 
@@ -2000,8 +2000,7 @@ phase_start_and_verify() {
   # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
   # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
   available_commands="$(compose_new exec -T app php artisan list --raw 2>/dev/null || true)"
-  if ! printf '%s
-' "${available_commands}" | grep -q '^product:doctor'; then
+  if ! grep -q '^product:doctor' <<<"${available_commands}"; then
     remember_check "doctor" "$(kq_text u_report_failed)"
     rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)" doctor_failed
   fi

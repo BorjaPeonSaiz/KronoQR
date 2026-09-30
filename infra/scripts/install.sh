@@ -402,7 +402,7 @@ env_value() {
 # allocated" de Docker, con el .env ya escrito. Aqui se avisa de que no se pudo
 # comprobar y se sigue: el que decide de verdad es Docker al publicar el puerto.
 port_in_use() {
-  local port="$1"
+  local port="$1" listing
 
   if command -v ss >/dev/null 2>&1; then
     [ -n "$(ss -ltnH "sport = :${port}" 2>/dev/null)" ] && return 0
@@ -413,7 +413,11 @@ port_in_use() {
   # esas banderas, no responde a la pregunta y no se puede tomar su silencio
   # por un "libre".
   if command -v netstat >/dev/null 2>&1 && netstat -ltn >/dev/null 2>&1; then
-    netstat -ltn 2>/dev/null | grep -qE "[:.]${port}[[:space:]]" && return 0
+    # Capturado y no en tuberia: con `pipefail`, `grep -q` cierra el tubo al
+    # primer acierto y el productor puede morir por SIGPIPE, dando «libre»
+    # donde habia un proceso escuchando.
+    listing="$(netstat -ltn 2>/dev/null || true)"
+    grep -qE "[:.]${port}[[:space:]]" <<<"${listing}" && return 0
     return 1
   fi
 
@@ -1303,8 +1307,7 @@ phase_verify() {
   # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
   # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
   available_commands="$(compose exec -T app php artisan list --raw 2>/dev/null || true)"
-  if ! printf '%s
-' "${available_commands}" | grep -q '^product:doctor'; then
+  if ! grep -q '^product:doctor' <<<"${available_commands}"; then
     err ""
     err "ERROR: $(kq_format f_verify_doctor_missing_command "${COMPOSE_FILE}")"
     err "$(kq_format exit_line "${KQ_EXIT_VERIFY_FAILED}" "$(kq_exit_name "${KQ_EXIT_VERIFY_FAILED}")")"
