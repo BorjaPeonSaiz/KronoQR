@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tareas 2.2 y 2.10 · §5.5 del documento 01 · Regla dura 6 de `CLAUDE.md` |
 | **Requisitos** | RL-02, RL-04, RL-10, RS-07, RF-PD-13 |
+| **Enmiendas** | Enmendada por [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): quién crea la partición del año siguiente |
 
 ## Contexto
 
@@ -84,6 +85,8 @@ Es la diferencia entre *«faltan filas»* y *«faltan filas que alguien registr�
 
 - **La tarea 2.2 crea la tabla ya particionada**, no plana, y crea `audit_chain_anchors` en la misma migración. El coste ahora es una cláusula `PARTITION BY`; después sería una migración de datos sobre el registro probatorio.
 - **Hace falta crear la partición del año siguiente antes de que llegue.** Se resuelve con una tarea programada que crea la partición `N+1` en noviembre y alerta si no existe la del año en curso. Un `INSERT` sin partición de destino falla, y un fallo de escritura en `audit_log` bloquea la acción auditada: no puede ocurrir en silencio.
+
+  > **Enmienda de [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026).** La tarea programada corre con la conexión de la **aplicación**, no con la de migración. Pide la partición a la función `SECURITY DEFINER` `audit_log_create_partition(integer)`, propiedad del migrador y ejecutable solo por el rol de aplicación. La función crea únicamente la partición del año UTC en curso o del siguiente, nunca la de un año ya sellado, y la deja con los mismos permisos que las demás. El usuario de aplicación sigue teniendo exactamente `INSERT` y `SELECT` sobre la tabla y sus particiones: lo que gana es `EXECUTE` sobre esa función. Si la función falta, la tarea falla con un mensaje propio y deja la métrica de partición a 0.
 - **`docker-compose` y el instalador provisionan dos roles de base de datos**, no uno. El de mantenimiento no aparece en el `.env` de la aplicación.
 - **`compliance:verify-audit-chain` gana un caso de prueba nuevo y obligatorio:** distinguir purga sellada de manipulación. Sin él, la alerta de RS-07 no vale.
 - **La clave primaria pasa a ser `(id, occurred_at)`**, porque PostgreSQL exige que la clave de partición forme parte de toda restricción única. Ninguna referencia externa apunta a `audit_log`, así que no arrastra cambios.

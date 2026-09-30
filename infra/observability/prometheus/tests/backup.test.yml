@@ -196,6 +196,61 @@ tests:
         exp_alerts: []
 
   #-----------------------------------------------------------------------------
+  # SlotDeReplicacionParado (A3-05): un slot sin consumidor. Dispara a los 15 min.
+  #-----------------------------------------------------------------------------
+  - name: slot_parado_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_replication_slots_inactive
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: SlotDeReplicacionParado
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: SlotDeReplicacionParado
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "Hay un slot de replicacion parado que retiene WAL"
+              description: >-
+                PostgreSQL tiene al menos un slot de replicacion sin
+                consumidor. KronoQR no usa ninguno, asi que no es normal:
+                retiene WAL y puede llenar el disco de datos, y quien lo creo
+                tenia el rol de copias (REPLICATION) o el del superusuario.
+                Retiralo y averigua como nacio.
+              runbook_url: docs/runbooks/slot-replicacion-parado.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: cero slots parados (lo normal), para siempre. Nunca dispara.
+  #-----------------------------------------------------------------------------
+  - name: slot_parado_boundary
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_replication_slots_inactive
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: SlotDeReplicacionParado
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Se retira el slot (la siguiente copia publica 0): la alerta se apaga.
+  #-----------------------------------------------------------------------------
+  - name: slot_parado_se_resuelve
+    interval: 1m
+    input_series:
+      - series: kronoqr_backup_replication_slots_inactive
+        values: "1x20 0x20"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: SlotDeReplicacionParado
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
   # DiscoDeCopiasCasiLleno: 10 % libre, por debajo del 20 %.
   #-----------------------------------------------------------------------------
   - name: disco_copias_dispara

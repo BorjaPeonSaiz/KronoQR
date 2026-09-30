@@ -128,6 +128,8 @@ KQ_MSG_ES[u_c_audit_chain]="Cadena de auditoria integra ANTES de actualizar"
 KQ_MSG_ES[u_f_audit_chain]="compliance:verify-audit-chain ha detectado una ROTURA en la cadena de auditoria antes de tocar nada. Es un incidente de seguridad, no un fallo de la actualizacion: sigue docs/runbooks/rotura-cadena-auditoria.md (preserva la evidencia) y NO actualices hasta resolverlo. Si esperaras, nadie podria distinguir si la rotura la causo la actualizacion."
 KQ_MSG_ES[u_c_env_new_keys]="El .env.example de esta version trae %d claves que tu .env no tiene: %s"
 KQ_MSG_ES[u_f_env_new_keys]="no es un fallo: cada una usa su valor de serie. Su significado esta en docs/cliente/configuracion.md; anadelas a %s despues de actualizar si quieres otro valor."
+KQ_MSG_ES[u_c_env_orphan_keys]="Tu .env tiene %d claves que ningun servicio de esta version recibe y se IGNORARAN: %s"
+KQ_MSG_ES[u_f_env_orphan_keys]="no es un fallo, pero cambian de comportamiento: desde la 2.2.0 los contenedores ya no reciben el .env entero, solo las variables que %s nombra. Casi siempre son restos que no hacian nada (variables de otros proveedores, de desarrollo). Si alguna SI te importa, dilo al fabricante: una variable soportada tiene que figurar en ese fichero."
 KQ_MSG_ES[u_c_root]="Ejecutado como root"
 KQ_MSG_ES[u_f_root]="ejecuta 'sudo ./update.sh'. Hace falta root para copiar el certificado conservando su propietario (uid 101), escribir el .env en 0600, hablar con Docker y dejar el informe legible por la aplicacion."
 KQ_MSG_ES[u_c_lock]="Ninguna otra actualizacion en curso"
@@ -159,6 +161,12 @@ KQ_MSG_ES[u_migrating_version_none]="Version %s: sin migraciones nuevas (punto d
 KQ_MSG_ES[u_checkpoint]="PUNTO DE CONTROL %s alcanzado: %d migraciones aplicadas en %d s (lote %s de la tabla migrations)."
 KQ_MSG_ES[u_f_migrating_version]="la migracion de la version %s ha fallado. Ultimo punto de control alcanzado: %s. Se deshace a la copia previa."
 KQ_MSG_ES[u_no_pending]="Ninguna migracion pendiente tras la cadena: el esquema esta en la version %s."
+KQ_MSG_ES[u_backup_role_start]="Rol de las copias: comprobando que PostgreSQL tiene el rol de solo lectura (fichaje_backup)..."
+KQ_MSG_ES[u_backup_role_switched]="Las copias pasan al rol %s, de solo lectura. BACKUP_DB_USERNAME y BACKUP_DB_PASSWORD reescritas en %s (0600). El rol de migracion ya no viaja al planificador."
+KQ_MSG_ES[u_backup_role_kept]="Las copias ya usan el rol %s: aprovisionamiento repetido sin cambiar credenciales."
+KQ_MSG_ES[u_f_backup_role_openssl]="falta 'openssl' en este servidor y hace falta para generar la contraseña del rol de las copias. Instalalo (apt install openssl) y repite: no se ha tocado la instalacion. Se deshace a la copia previa."
+KQ_MSG_ES[u_f_backup_role]="no se ha podido crear el rol de copias %s en PostgreSQL. El detalle esta en el informe. Se deshace a la copia previa; la version anterior sigue haciendo sus copias como hasta ahora."
+KQ_MSG_ES[u_f_backup_role_env]="no se ha podido escribir el rol de copias en %s. Comprueba que se puede escribir en ese fichero. Se deshace a la copia previa."
 KQ_MSG_ES[u_f_pending_left]="tras aplicar la cadena quedan migraciones pendientes: %s. La matriz de versiones (versions.txt) no las atribuye a ninguna version y el actualizador no adivina. Se deshace. Avisa al fabricante con este informe."
 
 KQ_MSG_ES[u_app_up]="Arrancando la aplicacion %s SIN borde: nginx, horizon, scheduler y reverb esperan a que la verificacion pase."
@@ -199,7 +207,7 @@ KQ_MSG_ES[u_rollback_incomplete]="VUELTA ATRAS INCOMPLETA. NO SE TOCA NADA MAS: 
 
 Que hay que hacer, en este orden:
   1. Parar lo que escribe:       docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx
-  2. Restaurar la copia previa:  docker compose --env-file %s -f %s run --rm --no-deps app \\
+  2. Restaurar la copia previa:  docker compose --env-file %s -f %s run --rm --no-deps restore \\
                                    bash /opt/kronoqr/scripts/restore.sh --file %s --yes
   3. Relanzar la version %s:   docker compose --env-file %s -f %s up -d --remove-orphans
   4. Comprobar:                  curl -k https://127.0.0.1:%s/api/v1/health  (debe decir %s)
@@ -210,7 +218,8 @@ KQ_MSG_ES[u_interrupted]="interrumpido por el operador (senal %s)."
 
 KQ_MSG_ES[u_done_title]="KronoQR actualizado y verificado: %s → %s"
 KQ_MSG_ES[u_done_report]="Informe guardado en %s: es lo que hay que adjuntar si se abre un caso con el fabricante. El detalle tecnico esta en %s, solo de root, y PUEDE CONTENER DATOS PERSONALES: no lo envies sin revisarlo."
-KQ_MSG_ES[u_done_old_dir]="El directorio de la version anterior, %s, queda intacto: conservalo hasta la siguiente actualizacion por si hiciera falta volver a mano (docs/runbooks/actualizacion-cliente.md §5). Su .env lleva los mismos secretos que el nuevo."
+KQ_MSG_ES[u_done_old_dir]="El directorio de la version anterior, %s, queda intacto: conservalo hasta la siguiente actualizacion por si hiciera falta volver a mano (docs/runbooks/actualizacion-cliente.md §5). Su .env lleva los mismos secretos que el nuevo, salvo BACKUP_DB_USERNAME y BACKUP_DB_PASSWORD si venias de una version anterior a la 2.2.0: ahi siguen siendo los del superusuario (el nuevo lleva los del rol de copias de solo lectura). Guardalo con el mismo cuidado (0600, solo root) y borralo cuando ya no haga falta; no lo copies sobre el nuevo."
+KQ_MSG_ES[u_rollback_aud1_reopened]="ATENCION (AUD-1): la version restaurada (%s) es anterior a la %s y entrega la credencial del superusuario de la base de datos a sus contenedores de aplicacion: quien consiga ejecutar codigo en ellos podria alterar el registro horario. La vuelta atras ha sido correcta, pero esta situacion no debe durar: actualiza de nuevo cuanto antes, en cuanto se resuelva el motivo del fallo (docs/runbooks/actualizacion-cliente.md)."
 KQ_MSG_ES[u_done_queue]="Los quioscos estan sincronizando lo que encolaron durante la ventana de mantenimiento. Cada fichaje conserva su hora real (occurred_at); la hora de recepcion sera posterior, y eso es correcto. Si la ventana supero el umbral de retraso, la bandeja mostrara incidencias de sincronizacion: no son un fallo."
 KQ_MSG_ES[u_done_backup]="Copia previa a la actualizacion: %s (verificada). Se conserva con la retencion normal."
 
@@ -376,6 +385,8 @@ KQ_MSG_EN[u_c_audit_chain]="Audit chain intact BEFORE updating"
 KQ_MSG_EN[u_f_audit_chain]="compliance:verify-audit-chain found a BREAK in the audit chain before anything was touched. It is a security incident, not an update failure: follow docs/runbooks/rotura-cadena-auditoria.md (preserve the evidence) and do NOT update until it is resolved. Had you waited, nobody could tell whether the update caused the break."
 KQ_MSG_EN[u_c_env_new_keys]="This version's .env.example brings %d keys your .env lacks: %s"
 KQ_MSG_EN[u_f_env_new_keys]="not a failure: each one uses its factory value. Their meaning is in docs/cliente/configuracion.md; add them to %s after updating if you want another value."
+KQ_MSG_EN[u_c_env_orphan_keys]="Your .env has %d keys that no service of this version receives and that will be IGNORED: %s"
+KQ_MSG_EN[u_f_env_orphan_keys]="not a failure, but behaviour changes: since 2.2.0 the containers no longer receive the whole .env, only the variables that %s names. They are almost always leftovers that did nothing (other providers', development ones). If one of them DOES matter to you, tell the manufacturer: a supported variable has to be listed in that file."
 KQ_MSG_EN[u_c_root]="Running as root"
 KQ_MSG_EN[u_f_root]="run 'sudo ./update.sh'. Root is needed to copy the certificate keeping its owner (uid 101), write the .env as 0600, talk to Docker and leave the report readable by the application."
 KQ_MSG_EN[u_c_lock]="No other update in progress"
@@ -407,6 +418,12 @@ KQ_MSG_EN[u_migrating_version_none]="Version %s: no new migrations (checkpoint).
 KQ_MSG_EN[u_checkpoint]="CHECKPOINT %s reached: %d migrations applied in %d s (batch %s of the migrations table)."
 KQ_MSG_EN[u_f_migrating_version]="the migration of version %s failed. Last checkpoint reached: %s. Rolling back to the previous backup."
 KQ_MSG_EN[u_no_pending]="No pending migration after the chain: the schema is at version %s."
+KQ_MSG_EN[u_backup_role_start]="Backup role: checking that PostgreSQL has the read-only role (fichaje_backup)..."
+KQ_MSG_EN[u_backup_role_switched]="Backups move to role %s, which is read-only. BACKUP_DB_USERNAME and BACKUP_DB_PASSWORD rewritten in %s (0600). The migration role no longer travels to the scheduler."
+KQ_MSG_EN[u_backup_role_kept]="Backups already use role %s: provisioning repeated without changing any credential."
+KQ_MSG_EN[u_f_backup_role_openssl]="'openssl' is missing on this server and is needed to generate the backup role password. Install it (apt install openssl) and retry: the installation was not touched. Rolling back to the previous backup."
+KQ_MSG_EN[u_f_backup_role]="the backup role %s could not be created in PostgreSQL. The detail is in the report. Rolling back to the previous backup; the previous version keeps taking its backups as before."
+KQ_MSG_EN[u_f_backup_role_env]="the backup role could not be written to %s. Check that the file is writable. Rolling back to the previous backup."
 KQ_MSG_EN[u_f_pending_left]="after applying the chain there are still pending migrations: %s. The version matrix (versions.txt) assigns them to no version and the updater does not guess. Rolling back. Tell the manufacturer, attaching this report."
 
 KQ_MSG_EN[u_app_up]="Starting application %s WITHOUT the edge: nginx, horizon, scheduler and reverb wait until verification passes."
@@ -447,7 +464,7 @@ KQ_MSG_EN[u_rollback_incomplete]="ROLLBACK INCOMPLETE. NOTHING ELSE IS TOUCHED: 
 
 What to do, in this order:
   1. Stop what writes:            docker compose --env-file %s -f %s stop app horizon scheduler reverb nginx
-  2. Restore the pre-update backup: docker compose --env-file %s -f %s run --rm --no-deps app \\
+  2. Restore the pre-update backup: docker compose --env-file %s -f %s run --rm --no-deps restore \\
                                    bash /opt/kronoqr/scripts/restore.sh --file %s --yes
   3. Relaunch version %s:       docker compose --env-file %s -f %s up -d --remove-orphans
   4. Check:                       curl -k https://127.0.0.1:%s/api/v1/health  (must report %s)
@@ -458,7 +475,8 @@ KQ_MSG_EN[u_interrupted]="interrupted by the operator (signal %s)."
 
 KQ_MSG_EN[u_done_title]="KronoQR updated and verified: %s → %s"
 KQ_MSG_EN[u_done_report]="Report saved at %s: it is what to attach if a case is opened with the manufacturer. The technical detail is at %s, root-only, and MAY CONTAIN PERSONAL DATA: do not send it without reviewing it."
-KQ_MSG_EN[u_done_old_dir]="The previous version's directory, %s, stays intact: keep it until the next update in case a manual rollback is needed (docs/runbooks/actualizacion-cliente.md §5). Its .env holds the same secrets as the new one."
+KQ_MSG_EN[u_done_old_dir]="The previous version's directory, %s, stays intact: keep it until the next update in case a manual rollback is needed (docs/runbooks/actualizacion-cliente.md §5). Its .env holds the same secrets as the new one, except BACKUP_DB_USERNAME and BACKUP_DB_PASSWORD if you came from a version older than 2.2.0: there they are still the superuser's (the new one carries the read-only backup role's). Keep it with the same care (0600, root only) and delete it when it is no longer needed; do not copy it over the new one."
+KQ_MSG_EN[u_rollback_aud1_reopened]="WARNING (AUD-1): the restored version (%s) is older than %s and hands the database superuser credential to its application containers: whoever manages to run code in them could alter the time record. The rollback was correct, but this situation must not last: update again as soon as the cause of the failure is resolved (docs/runbooks/actualizacion-cliente.md)."
 KQ_MSG_EN[u_done_queue]="Kiosks are syncing what they queued during the maintenance window. Every clocking keeps its real time (occurred_at); the reception time will be later, and that is correct. If the window exceeded the delay threshold, the inbox will show sync incidents: they are not a failure."
 KQ_MSG_EN[u_done_backup]="Pre-update backup: %s (verified). Kept under the normal retention."
 

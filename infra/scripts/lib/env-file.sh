@@ -58,8 +58,15 @@ kq_env_value() {
 kq_env_unquote() {
   local value="$1"
 
-  # Entre comillas, el valor es literal: ni comentario ni recorte por dentro.
-  if [[ "${value}" =~ ^[[:space:]]*\"(.*)\"[[:space:]]*$ ]] ||
+  # Entre comillas, el valor es literal: ni comentario ni recorte por dentro. Puede
+  # ir seguido de un comentario (`"valor" # nota`, que Compose entiende): sin comillas
+  # dentro, es lo primero que se prueba; si el valor las lleva, se cae al patron
+  # voraz, que solo vale sin comentario final. Antes solo existia ese segundo, asi que
+  # `CLAVE="abc" # nota` salia como `"abc"` CON comillas en los scripts mientras
+  # Compose entregaba `abc` al contenedor (A3-10).
+  if [[ "${value}" =~ ^[[:space:]]*\"([^\"]*)\"([[:space:]]+#.*)?[[:space:]]*$ ]] ||
+    [[ "${value}" =~ ^[[:space:]]*\'([^\']*)\'([[:space:]]+#.*)?[[:space:]]*$ ]] ||
+    [[ "${value}" =~ ^[[:space:]]*\"(.*)\"[[:space:]]*$ ]] ||
     [[ "${value}" =~ ^[[:space:]]*\'(.*)\'[[:space:]]*$ ]]; then
     printf '%s' "${BASH_REMATCH[1]}"
     return 0

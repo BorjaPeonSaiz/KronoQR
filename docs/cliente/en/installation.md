@@ -24,10 +24,11 @@ Vue.** You need a Linux server with Docker and thirty minutes.
 | System | **Linux** with **Docker 24 or newer** and **Compose v2** | Same |
 | Network | Reachable from the internal network. Internet access **optional** | Same |
 
-**Is this server up to my shift change?** The minimum sustains a workforce of up
-to 100 people with the default configuration; the recommended one, up to 500. If
-you would rather check it with a measurement of your own than take our word for
-it, there is a load test that says so requirement by requirement, and a single
+**Is this server up to my shift change?** The minimum is sized for a workforce
+of up to 100 people with the default configuration; the recommended one, up to
+500. These are design targets, with no measurement on reference hardware we can
+hand you yet: for a figure from your server there is a load test that says so
+requirement by requirement, and a single
 control to turn — `PHP_FPM_MAX_CHILDREN` — when there is spare CPU and not
 enough pool: [`operation.md`](operation.md) **§17**. It is run **on a test
 environment, never on production**.
@@ -132,14 +133,19 @@ docs/runbooks/           Procedures: restore, rotate secrets, new kiosk,
 >
 > - **If the application is running**, it delegates to the product's real
 >   diagnosis (`php artisan product:doctor`) and shows its full report:
->   database, queues, email, certificate, permissions, disk and licence, each
->   check with what to do if it is red.
+>   database, queues, email, certificate, permissions, disk, licence and the
+>   three edge networks, each check with what to do if it is red.
 > - **If the application is stopped** — the case this script exists for:
 >   without it, `docker compose exec` is of no use — it checks from the outside
 >   what it can: that Docker responds, the state of each service, that the
 >   `.env` is there with `0600` permissions, free space, the certificate and
 >   its expiry, and whether something listens on the configured ports. And it
 >   tells you how to start it.
+> - **In both cases** it reviews the networks in the `.env` (`KIOSK_VLAN_CIDR`,
+>   `PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR` and `TRUSTED_PROXY_CIDR`, §6)
+>   and detects whether **Redis is restarting in a loop**, the typical result of
+>   a power cut: if the cause is its damaged persistence file, it gives you the
+>   three commands that repair it ([`operation.md`](operation.md) §18).
 >
 > It never prints a secret: from the `.env` it only reads paths, ports and
 > file names. Its exit codes are in section 2, below.
@@ -201,13 +207,50 @@ BACKUP_PATH=/var/backups/fichaje
 IMAGE_REGISTRY=ghcr.io/kronoqr
 ```
 
-**The four network values and `APP_URL` cannot be left as they come.** The
+**The three network values and `APP_URL` cannot be left as they come.** The
 installer **compares against the template** and refuses to install if
-`APP_URL`, `KIOSK_VLAN_CIDR`, `PORTAL_INTERNAL_CIDR` or `METRICS_ALLOW_CIDR`
-still hold the example value. The reason is concrete: with
-`APP_URL=https://localhost` the system starts, every check passes — the final
-verification probes `127.0.0.1` — and **no kiosk can reach it**. Nothing
-afterwards detects that.
+`APP_URL`, `KIOSK_VLAN_CIDR` or `PORTAL_INTERNAL_CIDR` still hold the example
+value. The reason is concrete: with `APP_URL=https://localhost` the system
+starts, every check passes — the final verification probes `127.0.0.1` — and
+**no kiosk can reach it**. Nothing afterwards detects that.
+
+**`METRICS_ALLOW_CIDR=172.29.0.20/32` is left as it is.** It is the fixed
+address of Prometheus, the product's own metrics collector, and it is the right
+value: the installer accepts it and only checks that it is a valid range and
+that it covers Prometheus (§6).
+
+**Beyond the format, the installer checks what each value does**, and warns —
+without blocking the installation — if something does not add up: a
+`PORTAL_INTERNAL_CIDR` that contains no network of this server nor the kiosk
+one (the portal would answer `403` to everyone), a range open to the whole
+internet, a `MAIL_HOST` still set to `mailpit` (the vendor's test mailbox: no
+email would go out), an empty licence or no alert recipient. `update.sh` and
+`./doctor.sh` repeat the network checks on every run.
+
+**`IMAGE_REGISTRY=ghcr.io/kronoqr` is the template value and today it downloads
+nothing: put the one the vendor gives you.** The images are published on
+GitHub's container registry (GHCR) under the vendor's account, in the form
+`ghcr.io/<vendor-account>/kronoqr`, and the exact value reaches you in writing
+together with the licence. Write it with no trailing slash and no version: the
+installer appends `/php:<version>`, `/nginx:<version>` and `/postgres:<version>`
+by itself.
+
+**Before installing, check that your server can download them.** Copy these two
+commands as they are, after saving the `.env`:
+
+```bash
+registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+docker pull "${registro}/php:$(cat VERSION)"
+```
+
+If it ends with `Status: Downloaded newer image` (or `Image is up to date`), all
+is well and nothing else is needed. If it answers `denied` or `unauthorized`,
+the registry you have written is not the right one or your version's images are
+not publicly accessible: **you do not need `docker login` if the vendor has told
+you they are public**; if you were given a user and a read token, log in with
+them (§5, "…it says "could not download the images""). And if you do not know
+which case is yours, ask before going on: it is the only variable in this block
+you cannot work out yourself.
 
 **`TLS_ALLOW_SELF_SIGNED=false` in production, and the installer requires
 it.** With `true`, the web server generates itself a self-signed certificate:
@@ -266,11 +309,20 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    APP_URL filled in the template
   [ok]    KIOSK_VLAN_CIDR filled in the template
   [ok]    PORTAL_INTERNAL_CIDR filled in the template
-  [ok]    METRICS_ALLOW_CIDR filled in the template
   [ok]    BACKUP_PATH filled in the template
   [ok]    TLS_CERT_DIR filled in the template
+  [ok]    METRICS_ALLOW_CIDR filled in the template
   [ok]    APP_ENV=production
   [ok]    APP_DEBUG=false
+  [ok]    KIOSK_VLAN_CIDR is a valid IPv4 CIDR (10.0.20.0/24)
+  [ok]    PORTAL_INTERNAL_CIDR is a valid IPv4 CIDR (10.0.10.0/24)
+  [ok]    METRICS_ALLOW_CIDR is a valid IPv4 CIDR (172.29.0.20/32)
+  [ok]    PORTAL_INTERNAL_CIDR=10.0.10.0/24 covers a network of this server or the kiosk one
+  [ok]    METRICS_ALLOW_CIDR=172.29.0.20/32 covers Prometheus (172.29.0.20)
+  [ok]    COMPLIANCE_PROFILE filled in the template
+  [ok]    LICENSE_KEY has the expected format
+  [ok]    MAIL_HOST points to a mail server of your own
+  [ok]    ALERT_EMAIL_*: there is at least one alert recipient
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    Name fichaje.tuhotel.local resolves from this server
   [ok]    TLS certificate in /opt/kronoqr-2.1.0/certs
@@ -282,7 +334,7 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    Writable: /opt/kronoqr-2.1.0
   [ok]    Privileges to set the owner of the WAL archive
 
-Requirements met: 29 checks, 0 warnings.
+Requirements met: 38 checks, 0 warnings.
 
 Check only (--check-only): nothing was touched. Run again without the flag to install.
 ```
@@ -579,7 +631,9 @@ sudo chmod 0644 /opt/kronoqr/branding/logo.png
 # 2. Tell docker-compose where it is. Empty = ./branding, next to
 #    docker-compose.yml.
 #    In the .env:  BRANDING_PATH=/opt/kronoqr/branding
-sudo docker compose up -d app
+#    The three containers that mount it are recreated: app, horizon (deferred
+#    PDFs) and scheduler. With app alone, deferred PDFs would lack the logo.
+sudo docker compose up -d app horizon scheduler
 
 # 3. Check that the container sees it. If this comes out empty, do not go on:
 #    what is failing is the mount, not the configuration.
@@ -634,7 +688,8 @@ them.
 | `APP_KEY` | Encrypts sessions and encrypted data | Sessions and that data can no longer be read |
 | `QR_SIGNING_KEY_CURRENT` (+ its `_ID`) | Signs the QR codes on the cards | **Every card has to be reprinted** |
 | `DB_PASSWORD` | The application's role in PostgreSQL | Rotated; see `../../runbooks/rotacion-secretos.md` (in Spanish) |
-| `DB_MIGRATION_PASSWORD` | Migration and backup role | Same |
+| `DB_MIGRATION_PASSWORD` | Migration role, owner of the database. Only the one-shot `migrate` and `restore` services receive it | Same |
+| `BACKUP_DB_PASSWORD` | Backup role `fichaje_backup`, **read-only**. Only the `scheduler` receives it | Same. The daily backup fails until it is rotated |
 | `REVERB_APP_ID` / `_KEY` / `_SECRET` | Live presence in the panel | Rotated; only affects real time |
 | `BACKUP_ENCRYPTION_KEY` | Encrypts the backups | **The backups can no longer be restored.** Keep it outside the server |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | Opens the PINs the kiosk seals without network | PIN clock-ins queued without network could not be opened |
@@ -758,18 +813,33 @@ sudo systemctl stop nginx      # o lo que aparezca
 If you need to keep that service, publish KronoQR on other ports with
 `HTTP_PORT` and `HTTPS_PORT` in the `.env`, and put it behind your proxy.
 First, read [`hardening.md`](hardening.md) §1.6: behind a reverse proxy the
-server sees the proxy's IP and not the kiosk's, and `KIOSK_VLAN_CIDR`,
-`PORTAL_INTERNAL_CIDR` and `METRICS_ALLOW_CIDR` stop telling origins apart.
+server sees the proxy's IP and not the kiosk's, and `KIOSK_VLAN_CIDR` and
+`PORTAL_INTERNAL_CIDR` stop telling origins apart until you declare that proxy
+in `TRUSTED_PROXY_CIDR` (§6).
 
 ### …it says "could not download the images"
 
-The server cannot reach the vendor's registry, or you have not logged in:
+There are three possible causes, and a single test download tells them apart:
 
 ```bash
-docker login ghcr.io/kronoqr
+registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+echo "${registro}"
+docker pull "${registro}/php:$(cat VERSION)"
 ```
 
-If this installation has no internet access, go to §7.
+| What it answers | What is going on | What to do |
+| --- | --- | --- |
+| `echo` prints `ghcr.io/kronoqr` | It still holds the template value | Put in `IMAGE_REGISTRY` the value the vendor gave you with the licence (§1.2) and repeat |
+| `denied`, `unauthorized` or `manifest unknown` | Registry misspelt, a version that does not exist in that registry, or images that require logging in | Check the value letter by letter (no trailing slash, no version). If the vendor gave you a user and a read token, log in with the command below and repeat. If you were told the images are public, **do not log in**: the problem is the value or the version, and you need to talk to the vendor |
+| `dial tcp`, `timeout` or `no such host` | The server has no internet access, or a proxy blocks it | If this installation has no internet access, go to §7. If it should have it, check Docker's proxy with your network team |
+
+Log in only if the vendor has given you read credentials. It asks for the user
+and for the token, which you paste; the token does not stay in the shell
+history:
+
+```bash
+docker login ghcr.io
+```
 
 ### …it says "A previous KronoQR installation was found" and exits with `3`
 
@@ -849,6 +919,21 @@ dependency, not the application.
 **It is correct** if your computer is outside `PORTAL_INTERNAL_CIDR`. The
 portal is opened with an employee code and a 6-digit PIN, and one of the
 protections is that it is not reachable from any IP. See §6.
+
+Three cases where the `403` is surprising and is still expected:
+
+- **Testing from the server itself** (`https://localhost/portal/` or its LAN
+  IP): the web server sees the gateway of the container network — something
+  like `172.18.0.1` — and not your LAN. Test from a computer on the LAN.
+- **The `.env` still holds `172.28.0.0/16`**, the template value: it covers
+  nobody in production.
+- **Docker Desktop** (Windows or macOS): every connection arrives from an
+  internal Docker address and the range cannot tell the LAN from the internet.
+  It is not a production platform (§0).
+
+How to find out the IP the web server sees, what to do in each case and how to
+open the portal to the internet if the hotel decides so:
+[`../../runbooks/portal-403.md`](../../runbooks/portal-403.md) (in Spanish).
 
 ### …I cannot find where to sign in: there is no user
 
@@ -1027,30 +1112,117 @@ container network is authorised, requests made from the server itself fall
 inside that range and `/metrics` becomes reachable without anything warning
 about it.
 
+**The template value is the right one and is left as it is.** `172.29.0.20` is
+the fixed address the product gives Prometheus. Change it only if another
+collector of yours reads `/metrics`. With observability on, the installer,
+`update.sh` and `./doctor.sh` warn if the value does not cover Prometheus: that
+would mean losing the metrics and the alerts that depend on them.
+
 ### `PORTAL_INTERNAL_CIDR` — from where the employee portal can be entered
 
 ```dotenv
-PORTAL_INTERNAL_CIDR=172.28.0.0/16
+PORTAL_INTERNAL_CIDR=10.0.10.0/24
 ```
 
 **What it does.** The employee portal (employee code + 6-digit PIN) only
 responds to requests arriving from this range. Any other origin receives
-`403` at the web server itself, before reaching the application.
+`403` at the web server itself, before reaching the application. The tablets
+do not go through here: this range does not affect clocking in.
 
 **Why it exists.** A 6-digit PIN is a small space. Restricting the portal to
 the internal network is one of the four controls that compensate for it,
 together with lockout after failed attempts, the per-IP request limit and the
 fact that the portal session can only read the employee's own data.
 
-**The example value is for development**, not production: it covers Docker
-Compose's internal network. Before deploying, replace it with the hotel's real
-LAN or with the range of the corporate VPN the staff use to come in from
-outside.
+**What to put.** The LAN from which the staff will open the portal (the office
+computers and the staff wifi, for example `10.0.10.0/24`) or the corporate VPN
+range if people come in from outside. **It takes a single range**: if you need
+two networks, write one that covers both (`10.0.10.0/23` covers `10.0.10.x`
+and `10.0.11.x`).
+
+**The template value, `172.28.0.0/16`, does not work in production.** It is
+the network of the vendor's development environment; on your server the
+container network has no fixed subnet, so that value admits nobody and
+everyone would get a `403`.
+
+**What the web server sees is not always the computer's IP.** Three cases worth
+knowing before testing:
+
+- **From the server itself** — `https://localhost/portal/` or the server's own
+  LAN IP — the request comes in through the gateway of the container network
+  (something like `172.18.0.1`). That is expected: test from a computer on the
+  LAN and **do not authorise that address** just to be able to test.
+- **With Docker Desktop** (Windows or macOS) **or with rootless Docker**, every
+  connection arrives from an internal Docker address. The range cannot tell
+  the LAN from the internet, which is why production runs on Linux with Docker
+  Engine (§0).
+- **Behind a reverse proxy or a CDN**, the web server sees the proxy's IP. Do
+  not authorise it in the range: declare the proxy in `TRUSTED_PROXY_CIDR` (next
+  subsection).
+
+To find out the exact IP the web server sees and what to do with it:
+[`../../runbooks/portal-403.md`](../../runbooks/portal-403.md) (in Spanish).
 
 **Exposing the portal to the internet is an explicit decision**, never a
 default. It is taken by setting `PORTAL_INTERNAL_CIDR=0.0.0.0/0` and must be
 noted in the installation's handover record: it is what answers the day
-someone asks why the portal is reachable from outside the hotel.
+someone asks why the portal is reachable from outside the hotel. What you take
+on by doing it, and when it is not advisable, is in the same runbook, §4.
+
+**Format of the three networks.** Each variable (`KIOSK_VLAN_CIDR`,
+`PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR`) takes **one** IPv4 CIDR with a
+prefix, for example `10.20.0.0/24`; a single address is written with `/32`.
+IPv6 is not accepted (the edge only listens on IPv4). If a value is invalid the
+edge does not start and the log names the variable and the value; with
+`PORTAL_INTERNAL_CIDR=0.0.0.0/0` it starts but leaves a visible warning in the
+log.
+
+### `TRUSTED_PROXY_CIDR` — if there is a proxy, a load balancer or a CDN in front
+
+```dotenv
+TRUSTED_PROXY_CIDR=
+```
+
+**Empty is normal**, and it is right if the tablets and the staff reach the
+server directly. It is only filled in if you put a reverse proxy, a load
+balancer or a CDN **in front of** KronoQR's web server.
+
+**Why it is needed then.** With a proxy in front, the web server **always sees
+the proxy's IP**, and that breaks three things at once: every kiosk falls
+outside `KIOSK_VLAN_CIDR` (and into the request limit meant for the internet),
+the portal stops telling the internal network apart, and the per-IP request
+limit treats everyone as a single person.
+
+**What to put.** The address or addresses of the proxy, in CIDR format and
+separated by commas; a single address with `/32`:
+
+```dotenv
+TRUSTED_PROXY_CIDR=10.0.0.5/32,10.0.1.0/24
+```
+
+With that, the web server takes the visitor's real IP from the
+`X-Forwarded-For` header, **but only if the request comes from one of those
+proxies**: from any other origin the header is ignored and nobody can forge
+their IP. The proxy has to add that header; almost all do by default.
+
+**Three rules:**
+
+- **Never `0.0.0.0/0`.** It would trust anyone: writing the header would be
+  enough to pass as a kiosk or as the internal network. The web server does not
+  start with that value, and the installer, `update.sh` and `./doctor.sh`
+  reject it.
+- **Leave `TRUSTED_PROXIES` empty.** It is the application's equivalent
+  variable. With `TRUSTED_PROXY_CIDR` set, the web server already hands it the
+  visitor's real IP; if you also filled in `TRUSTED_PROXIES`, the application
+  would read the header again over an IP that is already the right one.
+- **Read [`hardening.md`](hardening.md) §1.6 first**: the proxy must not remove
+  or rewrite the security headers, or the tablets' camera stops working.
+
+It is applied by recreating the web server (`docker compose up -d nginx`). To
+check that it works, follow
+[`../../runbooks/portal-403.md`](../../runbooks/portal-403.md) §2.2 (in
+Spanish): the IP that shows up in the log must be the visitor's, not the
+proxy's.
 
 ### TLS certificate
 
@@ -1127,10 +1299,15 @@ archived WAL rebuilds nothing and the maximum loss stops being 15 minutes.
 **How to check that it works:**
 
 ```bash
-docker compose exec app php artisan backup:run    # crea y verifica una copia
-docker compose exec app php artisan backup:verify # verifica la última
-bash ./restore-drill.sh                            # simulacro trimestral
+docker compose exec scheduler php artisan backup:run    # crea y verifica una copia
+docker compose exec scheduler php artisan backup:verify # verifica la última
+sudo bash ./restore-drill.sh           # simulacro trimestral
 ```
+
+The first two go through the **`scheduler`** container, not `app`: it is the
+one that makes the scheduled backup and the only running one that receives the
+encryption key and the backup role. If the `scheduler` were stopped, change
+`exec` to `run --rm --no-deps`.
 
 The full recovery procedure — and the drill that has to be run every
 quarter — is in
@@ -1142,26 +1319,36 @@ Spanish).
 ## 7. Installing without internet access
 
 The system works entirely without internet. The only thing to sort out is how
-the images get to the server. From a machine that does have access:
+the images get to the server. From a machine that does have access.
+
+On the first line, **change `ghcr.io/kronoqr` to your real `IMAGE_REGISTRY`**
+(the vendor gives it to you with the licence; see §1.2): the template one
+downloads nothing. If the vendor has given you read credentials, run
+`docker login ghcr.io` on that machine first; if you were told the images are
+public, there is no need.
 
 ```bash
+registro="ghcr.io/kronoqr"
 version="$(cat VERSION)"
 for imagen in php nginx postgres; do
-  docker pull "ghcr.io/kronoqr/${imagen}:${version}"
+  docker pull "${registro}/${imagen}:${version}"
 done
 docker pull redis:7-alpine
 
 docker save -o "imagenes-${version}.tar" \
-  "ghcr.io/kronoqr/php:${version}" \
-  "ghcr.io/kronoqr/nginx:${version}" \
-  "ghcr.io/kronoqr/postgres:${version}" \
+  "${registro}/php:${version}" \
+  "${registro}/nginx:${version}" \
+  "${registro}/postgres:${version}" \
   redis:7-alpine
 ```
 
-Copy that file to the hotel's server (USB, internal share) and there:
+Copy that file to the hotel's server (USB, internal share). There, the `.env`
+must carry **the same** `IMAGE_REGISTRY` you used above: loaded images are
+looked up by their full name and, with a different registry, the installer
+would try to download them. Then:
 
 ```bash
-docker load -i imagenes-2.1.0.tar
+docker load -i "imagenes-$(cat VERSION).tar"
 sudo ./install.sh
 ```
 

@@ -402,7 +402,7 @@ env_value() {
 # allocated" de Docker, con el .env ya escrito. Aqui se avisa de que no se pudo
 # comprobar y se sigue: el que decide de verdad es Docker al publicar el puerto.
 port_in_use() {
-  local port="$1"
+  local port="$1" listing
 
   if command -v ss >/dev/null 2>&1; then
     [ -n "$(ss -ltnH "sport = :${port}" 2>/dev/null)" ] && return 0
@@ -413,7 +413,11 @@ port_in_use() {
   # esas banderas, no responde a la pregunta y no se puede tomar su silencio
   # por un "libre".
   if command -v netstat >/dev/null 2>&1 && netstat -ltn >/dev/null 2>&1; then
-    netstat -ltn 2>/dev/null | grep -qE "[:.]${port}[[:space:]]" && return 0
+    # Capturado y no en tuberia: con `pipefail`, `grep -q` cierra el tubo al
+    # primer acierto y el productor puede morir por SIGPIPE, dando «libre»
+    # donde habia un proceso escuchando.
+    listing="$(netstat -ltn 2>/dev/null || true)"
+    grep -qE "[:.]${port}[[:space:]]" <<<"${listing}" && return 0
     return 1
   fi
 
@@ -717,16 +721,21 @@ check_tls() {
 # de Docker Compose— y todos son cadenas no vacias. Con la comprobacion anterior
 # pasaban la fase 1, y la fase 5 los daba por buenos porque sondea 127.0.0.1
 # con `--insecure`: la instalacion se declaraba correcta y ningun quiosco podia
-# llegar a ella. Por eso estas cuatro se comparan contra la PLANTILLA: si siguen
+# llegar a ella. Por eso estas tres se comparan contra la PLANTILLA: si siguen
 # valiendo lo mismo que en `.env.example`, nadie las ha decidido.
 #
-# Las otras dos (`BACKUP_PATH`, `TLS_CERT_DIR`) SI pueden coincidir con la
-# plantilla legitimamente: `/var/backups/fichaje` y `./certs` son destinos
-# perfectamente validos en produccion. Ahi solo se exige que no esten vacias.
+# Las otras —`BACKUP_PATH`, `TLS_CERT_DIR` y `METRICS_ALLOW_CIDR`— SI pueden
+# coincidir con la plantilla legitimamente: `/var/backups/fichaje` y `./certs`
+# son destinos perfectamente validos en produccion, y el valor de serie de
+# `METRICS_ALLOW_CIDR` (`172.29.0.20/32`, la IP fija de Prometheus) es el UNICO
+# que le da acceso a /metrics sin ensanchar el rango. Compararlo con la
+# plantilla obligaba a cambiarlo por algo que dejaba a Prometheus con 403 (I1).
+# Ahi solo se exige que no esten vacias; que sean un CIDR y que cubran a
+# Prometheus lo comprueba `check_network_cidrs`.
 check_customer_values() {
   local key value plantilla
 
-  for key in APP_URL KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR METRICS_ALLOW_CIDR; do
+  for key in APP_URL KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR; do
     value="$(env_value "${ENV_FILE}" "${key}")"
     plantilla="$(env_value "${ENV_TEMPLATE}" "${key}")"
 
@@ -741,7 +750,7 @@ check_customer_values() {
     fi
   done
 
-  for key in BACKUP_PATH TLS_CERT_DIR; do
+  for key in BACKUP_PATH TLS_CERT_DIR METRICS_ALLOW_CIDR; do
     value="$(env_value "${ENV_FILE}" "${key}")"
     if [ -n "${value}" ]; then
       check_pass "$(kq_format c_env_key "${key}")"
@@ -823,6 +832,8 @@ phase_requirements() {
     esac
 
     check_customer_values
+    check_network_cidrs "${ENV_FILE}" "${COMPOSE_FILE}" skip-missing
+    check_operational_settings "${ENV_FILE}" "${COMPOSE_FILE}"
     check_app_url
     check_tls
     check_ports
@@ -1018,10 +1029,12 @@ phase_secrets() {
   # momento de la purga anual, con el procedimiento de
   # docs/cliente/operacion.md, «Custodia de secretos».
   #
-  # El volcado de la copia lo hace el rol de migracion (lib/backup-common.sh),
-  # asi que su credencial es la misma. Escribirla aparte con otro valor dejaria
-  # la copia diaria fallando desde el primer dia.
-  set_generated_secret "BACKUP_DB_PASSWORD" "$(env_value "${ENV_FILE}" "DB_MIGRATION_PASSWORD")" 32
+  # La copia la hace `fichaje_backup`, un rol de SOLO LECTURA con contrasena
+  # PROPIA (AUD-1): ya no es la del migrador, que es superusuario y no puede
+  # estar en el entorno del planificador. PostgreSQL crea el rol al inicializar
+  # el volumen (initdb/03-backup-role.sh) con esta misma contrasena, que le
+  # llega por compose.
+  set_generated_secret "BACKUP_DB_PASSWORD" "$(random_password)" 32
 
   set_generated_secret "REVERB_APP_ID" "$(random_hex 8)" 16
   set_generated_secret "REVERB_APP_KEY" "$(random_hex 16)" 32
@@ -1230,7 +1243,16 @@ phase_bootstrap() {
   say "$(kq_text migrating)"
   # Con el rol de MIGRACION, no con el de la aplicacion: el de la aplicacion no
   # tiene DDL y no puede tener UPDATE ni DELETE sobre audit_log (regla dura 6).
-  if ! compose exec -T app php artisan migrate --database=pgsql_migrator --force; then
+  #
+  # Por el servicio puntual `migrate` (AUD-1), no con `exec app`: la contrasena
+  # del migrador (superusuario) solo existe en ese contenedor efimero, nunca en
+  # el de la aplicacion que sirve peticiones. `--no-deps`: postgres ya esta sano
+  # (arriba) y no se quiere que Compose arranque nada mas.
+  #
+  # El orden se deja como estaba (`up -d` completo y despues migrar): mover las
+  # migraciones antes seria seguro, pero la espera del borde de arriba es la que
+  # cubre el fallo de certificado y no conviene reordenar dos cosas a la vez.
+  if ! compose run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force; then
     rollback_and_die "$(kq_format f_migrating "${COMPOSE_FILE}")"
   fi
 
@@ -1292,8 +1314,7 @@ phase_verify() {
   # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
   # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
   available_commands="$(compose exec -T app php artisan list --raw 2>/dev/null || true)"
-  if ! printf '%s
-' "${available_commands}" | grep -q '^product:doctor'; then
+  if ! grep -q '^product:doctor' <<<"${available_commands}"; then
     err ""
     err "ERROR: $(kq_format f_verify_doctor_missing_command "${COMPOSE_FILE}")"
     err "$(kq_format exit_line "${KQ_EXIT_VERIFY_FAILED}" "$(kq_exit_name "${KQ_EXIT_VERIFY_FAILED}")")"

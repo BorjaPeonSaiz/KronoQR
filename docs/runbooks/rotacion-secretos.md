@@ -50,7 +50,7 @@ del instalador, y eso se comprueba en cada publicación de versión.
 | `QR_SIGNING_KEY_CURRENT_ID` | 2 caracteres hexadecimales | §1 |
 | `DB_PASSWORD` | 32 caracteres alfanuméricos | §3 |
 | `DB_MIGRATION_PASSWORD` | Íd. | §3 |
-| `BACKUP_DB_PASSWORD` | **Copia de `DB_MIGRATION_PASSWORD`**: el volcado lo hace el rol de migración, porque `pg_basebackup` exige `REPLICATION` | §3 |
+| `BACKUP_DB_PASSWORD` | 32 caracteres alfanuméricos, **propia** (no es la del migrador): la usa `fichaje_backup`, un rol de solo lectura con `REPLICATION` | §3 |
 | `REVERB_APP_ID` / `_KEY` | 8 y 16 bytes en hexadecimal | §6 bis |
 | `REVERB_APP_SECRET` | 32 bytes aleatorios en base64 | §6 bis |
 | `BACKUP_ENCRYPTION_KEY` | 32 bytes aleatorios en base64 | §5 |
@@ -125,16 +125,17 @@ Avisa a RRHH antes: no es una avería, pero lo parece.
 
 ## 3. Credenciales de base de datos
 
-Son **tres roles distintos** (ADR-033) y se rotan por separado, empezando por el
-que menos duele:
+Son **cuatro roles distintos** (ADR-033 y AUD-1) y se rotan por separado,
+empezando por el que menos duele:
 
 | Rol | Dónde vive | Qué pasa si se hace mal |
 | --- | --- | --- |
 | `fichaje_maintenance` | **Fuera del `.env`**, solo en la caja fuerte del operador | La purga por retención falla. Nadie deja de fichar |
-| `fichaje_migrator` | `DB_MIGRATION_*`, idealmente solo al desplegar | El siguiente despliegue falla. Nadie deja de fichar |
+| `fichaje_migrator` | `DB_MIGRATION_*` en el `.env`, que solo leen PostgreSQL y los servicios puntuales `migrate` y `restore`. **Ningún contenedor de runtime lo recibe** | El siguiente despliegue o restauración falla. Nadie deja de fichar |
+| `fichaje_backup` | `BACKUP_DB_*`. **Solo lectura** (`pg_read_all_data` + `REPLICATION`). Lo lleva el `scheduler`, que lanza las copias | La copia diaria falla y salta la alerta de copia fallida. Nadie deja de fichar |
 | `fichaje_app` | `DB_*`. **Es el runtime** | **El fichaje se cae entero** |
 
-Para el tercero, el orden importa:
+Para `fichaje_app`, el orden importa:
 
 ```sql
 -- 1. Cambiar la contraseña en PostgreSQL
@@ -154,30 +155,96 @@ de horario de entrada y salida de turnos, y recuerda que durante ese hueco el
 quiosco **encola y no bloquea a nadie** (regla dura 19): los fichajes de esos
 minutos llegan después, con su `occurred_at` real.
 
+### Rotar `fichaje_backup` (las copias)
+
+No toca el fichaje. **No uses la contraseña del migrador para esto**: es el
+superusuario, y la razón de existir de este rol es que no esté en el entorno del
+planificador.
+
+```bash
+# 1. Genera la nueva y aplícala; la contraseña entra por la ENTRADA ESTÁNDAR del
+#    script, no por la línea de órdenes (no queda en `ps` ni en `docker inspect`).
+nueva="$(openssl rand -base64 48 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-32)"
+printf '%s\n' "${nueva}" | docker compose exec -T \
+  -e DB_BACKUP_USERNAME=fichaje_backup postgres \
+  /docker-entrypoint-initdb.d/03-backup-role.sh --password-stdin
+# 2. Escribe la misma en BACKUP_DB_PASSWORD del .env y recrea el planificador
+docker compose up -d scheduler
+# 3. Comprueba con una copia de verdad
+docker compose exec scheduler php artisan backup:run
+```
+
+El script es idempotente y **se niega a tocar** el rol si `BACKUP_DB_USERNAME`
+coincide con el de migración, el de aplicación o el de mantenimiento (una 2.1.0
+lo trae apuntando al migrador hasta que `update.sh` lo pasa al rol de solo
+lectura): degradar al migrador dejaría la instalación sin quien pueda migrar.
+
+Lo que este rol **no** protege: lee todo (la confidencialidad de la copia la da
+`BACKUP_ENCRYPTION_KEY`, §5) y una copia física incluye los verificadores SCRAM
+de los demás roles. Con contraseñas aleatorias de 32 caracteres no es explotable
+en la práctica, pero no es cero. Tampoco puede leer un *objeto grande* de
+PostgreSQL (`lo_import`): KronoQR no los usa y, si alguien crea uno, la copia
+falla con un mensaje que lo dice.
+
 ---
 
 ## 4. Tokens de dispositivo del quiosco
 
-No se «rotan» a mano de forma masiva: **se renuevan solos**. Cada token vive
-`IDENTITY_DEVICE_TOKEN_DAYS` (90 de serie) y se rota cuando ha consumido
-`IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` (80 %) de su vida, en una petición
-normal del propio quiosco.
+Cada token vive `IDENTITY_DEVICE_TOKEN_DAYS` (90 de serie). El diseño es que se
+renueve solo cuando ha consumido `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD`
+(80 %) de su vida, en una petición normal del propio quiosco, pero **en esta
+versión esa renovación no se ejecuta**: a los 90 días de vincularla, cada tablet
+vuelve a la pantalla de emparejamiento. Mientras no llegue la versión que la
+active, hay que desvincular y volver a vincular cada tablet antes del día 90
+([`../cliente/operacion.md`](../cliente/operacion.md) §18). Eso emite un token
+nuevo y, de paso, es la rotación.
 
 Rotación forzada de una tablet concreta —robo, extravío, baja del equipo—: se
-**revoca** su token, con lo que ese quiosco deja de poder enviar fichajes
-inmediatamente y hay que volver a emparejarlo. La revocación deja asiento
-`device.revoked` en `audit_log`.
-
-> **Pendiente de su procedimiento.** El caso de uso existe
-> (`Identity\Application\UseCase\RevokeDeviceToken`), pero la vía de operación
-> —emparejamiento por código, alta y baja de una tablet— la entrega la tarea 5.6
-> junto con `alta-nuevo-quiosco.md`. Hasta entonces, la revocación la ejecuta
-> quien despliega, y este runbook enlazará ahí en cuanto exista.
+**desvincula** desde el panel, con lo que su token queda revocado, ese quiosco
+deja de poder enviar fichajes inmediatamente y hay que volver a emparejarlo. El
+procedimiento está en [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) §5.2 y
+queda en `audit_log`.
 
 Antes de revocar, si la tablet todavía enciende: **déjala conectada hasta que su
 cola local llegue a cero** (`kiosk_offline_queue_size{device}`). Los fichajes que
 no se hayan sincronizado se pierden con el token, y son registro horario de
 alguien.
+
+### El rol de las copias es privilegiado (`backup.sh` sale con `7`)
+
+`backup.sh run` comprueba, nada más conectar, que el rol con el que copia
+(`SELECT rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls FROM pg_roles
+WHERE rolname = current_user`) **no** puede alterar nada. Si puede, se niega a
+copiar, sale con `7` (*garantía de seguridad rota*, `docs/cliente/operacion.md`
+§8), deja la métrica de copia como fallida —salta `CopiaDeSeguridadFallida`— y
+`doctor.sh` marca el mismo fallo. No depende de que el `.env` esté bien: lo dice
+el propio servidor.
+
+**Causa habitual:** una instalación que viene de la 2.1.0 y todavía tiene
+`BACKUP_DB_USERNAME=fichaje_migrator` (el superusuario). Con ese rol, quien
+ejecute código en el `scheduler` podría reescribir el registro legal (AUD-1).
+
+```bash
+# 1. ¿Qué rol es y qué puede? (solo nombres y atributos, ninguna contraseña)
+grep '^BACKUP_DB_USERNAME=' .env
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc \
+  "SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls FROM pg_roles ORDER BY 1"'
+# 2. Provisiona el rol de solo lectura con una contraseña nueva (entra por la
+#    entrada estándar; el script quita además cualquier pertenencia extra)
+nueva="$(openssl rand -base64 48 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-32)"
+printf '%s\n' "${nueva}" | docker compose exec -T \
+  -e DB_BACKUP_USERNAME=fichaje_backup postgres \
+  /docker-entrypoint-initdb.d/03-backup-role.sh --password-stdin
+# 3. Pon BACKUP_DB_USERNAME=fichaje_backup y BACKUP_DB_PASSWORD=<nueva> en el
+#    .env, recrea el planificador y comprueba con una copia de verdad
+docker compose up -d scheduler
+docker compose exec scheduler php artisan backup:run
+```
+
+**Si el `scheduler` llegó a arrancar con la credencial del migrador, trátalo como
+una exposición de esa credencial**: rota `fichaje_migrator` (§3), ejecuta
+`php artisan compliance:verify-audit-chain` y, si algo no cuadra, sigue
+[`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md).
 
 ---
 

@@ -91,6 +91,35 @@ return [
             ],
         ],
 
+        /*
+         * LOS TRABAJOS ACCESORIOS DEL FICHAJE NO TUMBAN EL FICHAJE (CH1, regla
+         * dura 19).
+         *
+         * La difusion al panel en vivo y la metrica de minutos trabajados son
+         * oyentes encolados de los eventos del fichaje, y se encolan DESPUES del
+         * COMMIT. Con Redis caido, el `push` lanzaba con el fichaje ya
+         * confirmado, el quiosco recibia un `500` y reenviaba algo que ya estaba
+         * registrado.
+         *
+         * Con esta conexion, si la cola de `QUEUE_CONNECTION` no responde, el
+         * trabajo se ejecuta en el mismo proceso **despues de enviar la
+         * respuesta** (`deferred`): el quiosco no espera y el panel se entera
+         * igual. Solo la usan esos oyentes; los trabajos pesados —informes,
+         * exportaciones— siguen en la cola normal y fallan si no hay cola, que es
+         * lo correcto para algo que no puede ejecutarse dentro de una peticion.
+         *
+         * `failover-after-commit` y no el `failover` del framework: aquel no ve el
+         * fallo de un trabajo `afterCommit`, porque el `push` real ocurre despues
+         * del COMMIT y fuera de su `try` (ver `AfterCommitFailoverQueue`).
+         */
+        'resilient' => [
+            'driver' => 'failover-after-commit',
+            'connections' => [
+                env('QUEUE_CONNECTION', 'database'),
+                'deferred',
+            ],
+        ],
+
     ],
 
     /*

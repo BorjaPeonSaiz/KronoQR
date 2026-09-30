@@ -131,8 +131,8 @@ status, installation size in bands and aggregate counters; **never** data about
 people or working days, nor names, nor emails, nor the company name. It is
 disabled by default and is only enabled if you decide so in the `.env`, with
 the exact list of fields in front of you
-([`configuration.md`](configuration.md) §3 quinquies); `php artisan
-product:telemetry` shows you the document that would be sent before enabling
+([`configuration.md`](configuration.md) §3 quinquies); `docker compose exec app
+php artisan product:telemetry` shows you the document that would be sent before enabling
 anything. If you enable it, note it in your record of processing activities as
 what it is: a transfer of technical data, with no personal data, to a
 destination you choose.
@@ -443,8 +443,8 @@ full data export that you can run at any time and take with you (§7 quater).
 
 > If you ever find that **you cannot clock in or cannot access the record** and
 > the cause is the licence, **that is not by design**: it is a malfunction.
-> Notify the vendor, attaching the output of `php artisan license:show` and of
-> `GET /api/v1/health`.
+> Notify the vendor, attaching the output of
+> `docker compose exec app php artisan license:show` and of `GET /api/v1/health`.
 
 ---
 

@@ -89,6 +89,12 @@ readonly KQ_CERT_WARN_DAYS=30
 
 readonly KQ_COMPOSE_PROJECT="kronoqr"
 
+# Redis en bucle de reinicio (R0): al menos este numero de reinicios Y menos de
+# estos segundos encendido. Un contenedor que reinicio tres veces el mes pasado
+# y lleva semanas estable NO esta en bucle: el contador no se pone a cero solo.
+readonly KQ_REDIS_LOOP_MIN_RESTARTS=3
+readonly KQ_REDIS_LOOP_UPTIME_SECONDS=120
+
 #------------------------------------------------------------------------------
 # Estado
 #------------------------------------------------------------------------------
@@ -246,6 +252,16 @@ check_app_running() {
   esac
 }
 
+# Salida de la rama delegada: `product:doctor` ha ido bien o con avisos, pero
+# una comprobacion externa de este script (el rol de las copias) puede haber
+# fallado.
+finish_delegated() {
+  if [ "${CHECKS_FAILED}" -gt 0 ]; then
+    die "${KQ_EXIT_VERIFY_FAILED}" "$(kq_text d_f_doctor_failed)"
+  fi
+  exit "${KQ_EXIT_OK}"
+}
+
 #------------------------------------------------------------------------------
 # Paso 4a — `app` en marcha: delegar en el diagnostico real del producto.
 #------------------------------------------------------------------------------
@@ -253,6 +269,14 @@ run_delegated_doctor() {
   local output status=0
 
   say "$(kq_text d_delegating)"
+  say ""
+
+  # Comprobaciones que `product:doctor` no puede hacer desde dentro (necesitan
+  # a PostgreSQL con el superusuario, que el contenedor `app` no tiene): su
+  # fallo tambien cuenta para el codigo de salida.
+  check_backup_role
+  check_edge_networks
+  check_redis_restart_loop
   say ""
 
   # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
@@ -264,8 +288,7 @@ run_delegated_doctor() {
   # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
   # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
   available_commands="$(compose_current exec -T app php artisan list --raw 2>/dev/null || true)"
-  if ! printf '%s
-' "${available_commands}" | grep -q '^product:doctor'; then
+  if ! grep -q '^product:doctor' <<<"${available_commands}"; then
     die "${KQ_EXIT_VERIFY_FAILED}" "$(kq_text d_f_doctor_missing_command)"
   fi
 
@@ -276,11 +299,11 @@ run_delegated_doctor() {
   case "${status}" in
   0)
     check_pass "$(kq_text d_doctor_ok)"
-    exit "${KQ_EXIT_OK}"
+    finish_delegated
     ;;
   1)
     check_warn "$(kq_text d_doctor_warn)" "$(kq_text d_doctor_warn_fix)"
-    exit "${KQ_EXIT_OK}"
+    finish_delegated
     ;;
   2)
     die "${KQ_EXIT_VERIFY_FAILED}" "$(kq_text d_f_doctor_failed)"
@@ -304,6 +327,9 @@ run_external_checks() {
 
   check_services_state
   check_env_permissions
+  check_backup_role
+  check_edge_networks
+  check_redis_restart_loop
   check_disk_space
   check_certificates
   check_listening_ports
@@ -358,6 +384,96 @@ check_env_permissions() {
   else
     check_warn "$(kq_format d_c_env_present "${CURRENT_ENV}")" \
       "$(kq_format d_f_env_mode "${CURRENT_ENV}" "${mode}" "${CURRENT_ENV}")"
+  fi
+}
+
+# A3-03. El rol con el que se hacen las copias no puede ser privilegiado. Se
+# pregunta a PostgreSQL por el NOMBRE que declara el `.env` (un nombre no es un
+# secreto), con el socket local del propio contenedor `postgres` (pg_hba: local
+# trust), asi que no hace falta ninguna contraseña. Es la sonda gemela de la
+# comprobacion de `backup.sh`: una cubre la instalacion en reposo y la otra, el
+# instante de copiar.
+check_backup_role() {
+  local role state
+
+  role="$(env_value "${CURRENT_ENV}" BACKUP_DB_USERNAME)"
+  [ -n "${role}" ] || role="fichaje_backup"
+
+  if ! [[ "${role}" =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
+    check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_name "${role}")"
+    return 0
+  fi
+
+  # `sh -c` dentro del contenedor: POSTGRES_USER y POSTGRES_DB son de SU entorno.
+  # El nombre del rol ya esta validado arriba, asi que va tal cual en el SQL.
+  state="$(compose_current exec -T postgres sh -c "exec psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atq -c \"SELECT CASE WHEN rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls THEN 'privileged' ELSE 'readonly' END FROM pg_roles WHERE rolname = '${role}'\"" 2>/dev/null)" || state="unknown"
+  state="$(printf '%s' "${state}" | tr -d '[:space:]')"
+
+  case "${state}" in
+  readonly) check_pass "$(kq_format d_c_backup_role "${role}")" ;;
+  privileged) check_fail "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_f_backup_role_privileged "${role}")" ;;
+  "") check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_missing "${role}")" ;;
+  *) check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_unknown "${role}")" ;;
+  esac
+}
+
+# Las redes del borde del .env (PP-01, PP-03, I1): sintaxis, cobertura del portal
+# y de Prometheus, y TRUSTED_PROXY_CIDR. Es la MISMA comprobacion que hacen
+# install.sh y update.sh (lib/checks.sh). `product:doctor` la repite desde
+# dentro con su sonda de redes; aqui se hace sin depender de que `app` este en
+# pie, que es cuando mas falta hace: con un CIDR invalido, nginx no arranca.
+check_edge_networks() {
+  check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE}"
+}
+
+# R0. Un corte de luz puede dejar el AOF de Redis con una escritura a medias y
+# Redis entra en bucle de reinicio («Bad file format reading the append only
+# file»). Es traicionero porque el fichaje NO se cae (CH1: los quioscos encolan
+# y /scan responde) y el sintoma aparece lejos: el panel y el portal no dejan
+# entrar (las sesiones viven en Redis), las colas se paran y `/ready` da 503.
+# `docker compose ps` solo diria «restarting» y nada sobre como salir de ahi.
+check_redis_restart_loop() {
+  local container info status restarts started started_epoch uptime logs loop=0
+
+  container="$(compose_current ps -a -q redis 2>/dev/null || true)"
+  container="${container%%$'\n'*}"
+  [ -n "${container}" ] || return 0
+
+  info="$(docker inspect -f '{{.State.Status}}|{{.RestartCount}}|{{.State.StartedAt}}' "${container}" 2>/dev/null || true)"
+  [ -n "${info}" ] || return 0
+  IFS='|' read -r status restarts started <<<"${info}"
+  [[ "${restarts}" =~ ^[0-9]+$ ]] || restarts=0
+
+  case "${status}" in
+  restarting) loop=1 ;;
+  running)
+    # Docker da `2026-09-30T13:05:27.123456789Z`. Sin fracciones ni la `T`, que es
+    # lo que entienden tanto `date` de GNU como el de BusyBox.
+    started="${started%%.*}"
+    started="${started%Z}"
+    started="${started/T/ }"
+    started_epoch="$(date -u -d "${started}" +%s 2>/dev/null || true)"
+    if [[ "${started_epoch}" =~ ^[0-9]+$ ]]; then
+      uptime=$(($(date +%s) - started_epoch))
+      if [ "${restarts}" -ge "${KQ_REDIS_LOOP_MIN_RESTARTS}" ] && [ "${uptime}" -lt "${KQ_REDIS_LOOP_UPTIME_SECONDS}" ]; then
+        loop=1
+      fi
+    fi
+    ;;
+  esac
+
+  if [ "${loop}" -eq 0 ]; then
+    check_pass "$(kq_format d_c_redis_stable "${status}" "${restarts}")"
+    return 0
+  fi
+
+  # Sin tuberia: `grep -q` sobre una tuberia con pipefail da falsos «no».
+  logs="$(compose_current logs --no-color --tail 50 redis 2>&1 || true)"
+  if grep -qiE 'append only file|appendonly' <<<"${logs}"; then
+    check_fail "$(kq_format d_c_redis_loop "${restarts}")" \
+      "$(kq_format d_f_redis_loop_aof "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+  else
+    check_fail "$(kq_format d_c_redis_loop "${restarts}")" "$(kq_format d_f_redis_loop_other "${CURRENT_COMPOSE}")"
   fi
 }
 
@@ -461,7 +577,7 @@ check_certificate_expiry() {
 # (0 ocupado · 1 libre · 2 no se ha podido averiguar); duplicada a proposito,
 # porque no vive en una biblioteca comun y doctor.sh se ejecuta solo.
 port_listening() {
-  local port="$1"
+  local port="$1" listing
 
   if command -v ss >/dev/null 2>&1; then
     [ -n "$(ss -ltnH "sport = :${port}" 2>/dev/null)" ] && return 0
@@ -469,7 +585,11 @@ port_listening() {
   fi
 
   if command -v netstat >/dev/null 2>&1 && netstat -ltn >/dev/null 2>&1; then
-    netstat -ltn 2>/dev/null | grep -qE "[:.]${port}[[:space:]]" && return 0
+    # Capturado y no en tuberia: con `pipefail`, `grep -q` cierra el tubo al
+    # primer acierto y el productor puede morir por SIGPIPE, dando «libre»
+    # donde habia un proceso escuchando.
+    listing="$(netstat -ltn 2>/dev/null || true)"
+    grep -qE "[:.]${port}[[:space:]]" <<<"${listing}" && return 0
     return 1
   fi
 

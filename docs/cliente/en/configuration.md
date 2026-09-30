@@ -246,10 +246,13 @@ sudo cp logo.png /opt/kronoqr/branding/logo.png
 sudo chmod 0644 /opt/kronoqr/branding/logo.png
 
 # 2. If it was not already, point BRANDING_PATH there in the .env and recreate
-#    the application container (first time only: changing the FILE afterwards
-#    does not require restarting anything).
+#    the THREE containers that mount that folder: app (screens and immediate
+#    PDFs), horizon (deferred PDFs) and scheduler (scheduled reports). With
+#    `app` alone, the other two keep the old folder and deferred PDFs come out
+#    without the logo. First time only: changing the FILE afterwards does not
+#    require restarting anything.
 #    BRANDING_PATH=/opt/kronoqr/branding
-sudo docker compose up -d app
+sudo docker compose up -d app horizon scheduler
 
 # 3. Save the path AS SEEN FROM INSIDE the container, from the panel or via the API.
 curl -sS -X PATCH https://TU-SERVIDOR/api/v1/settings \
@@ -1614,9 +1617,10 @@ lines.
 
 ### 6.2 Database
 
-They are **three distinct PostgreSQL roles**, and it is not bureaucracy: the
-application role cannot modify or delete the audit log, and only the
-maintenance one can drop an expired partition.
+They are **four distinct PostgreSQL roles**, and it is not bureaucracy: the
+application role cannot modify or delete the audit log, the backup one only
+reads, and only the maintenance one can drop an expired partition. Which
+container receives each credential is in the table below this one.
 
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
 | --- | --- | --- | --- | --- | --- |
@@ -1626,12 +1630,49 @@ maintenance one can drop an expired partition.
 | `DB_DATABASE` | — | Database name | `fichaje` | Never after installing | No |
 | `DB_USERNAME` | — | Runtime role. **No DDL and no `UPDATE` or `DELETE` on the audit log** | `fichaje_app` | Never | No |
 | `DB_PASSWORD` | `[INSTALADOR]` | Password of that role | (empty; `install.sh` generates it) | Only in a secrets rotation; there is a runbook ([`rotacion-secretos.md`](../../runbooks/rotacion-secretos.md), in Spanish) | No |
-| `DB_MIGRATION_USERNAME` | — | Owner role, the only one with DDL. Runs the migrations | `fichaje_migrator` | Never | No |
-| `DB_MIGRATION_PASSWORD` | `[INSTALADOR]` | Password of that role | (empty; `install.sh` generates it) | Same as the previous one | No |
+| `DB_MIGRATION_USERNAME` | — | Owner role, the only one with DDL. Runs the migrations and the restore, **never the running application** | `fichaje_migrator` | Never | No |
+| `DB_MIGRATION_PASSWORD` | `[INSTALADOR]` | Password of that role. Only `postgres` and the one-shot `migrate` and `restore` services receive it | (empty; `install.sh` generates it) | Same as the previous one | No |
 | `DB_MAINTENANCE_USERNAME` | — | Role of the retention purge, the only one that drops expired partitions | `fichaje_maintenance` | Never | No |
 | `DB_MAINTENANCE_PASSWORD` | — | Password of that role | **Empty on purpose** | **It is never written here.** It is supplied at the moment of running the annual purge: see [`operation.md`](operation.md) §6 and §9 | No |
-| `BACKUP_DB_USERNAME` | — | User the backups are made with. It is the migration one because backing up and restoring require attributes the application one does not have | `fichaje_migrator` | Never | No |
-| `BACKUP_DB_PASSWORD` | `[INSTALADOR]` | Its password, the same as the migration one | (empty; `install.sh` generates it) | Never separately: with a different value, the daily backup fails from day one | No |
+| `BACKUP_DB_USERNAME` | — | Role the backups are made with: `fichaje_backup`, **read-only**. It reads the whole database, which is what the backup needs, and cannot write anything. Restoring does not use it: the `restore` service does that with the migration role | `fichaje_backup` | Never. If you come from 2.1.0, `update.sh` creates it and rewrites this key and the next one in the new version's `.env`; the previous version's `.env` keeps the old ones on purpose, for the rollback | No |
+| `BACKUP_DB_PASSWORD` | `[INSTALADOR]` | Its password, **its own** (not the migration one). Only the `scheduler` receives it | (empty; `install.sh` generates it) | Only in a secrets rotation, which changes it in the database and here at the same time: with a different value, the daily backup fails | No |
+
+#### Which credentials each thing has
+
+From 2.2.0 on **no container receives the whole `.env`**: each service receives
+only the variables that `docker-compose.yml` names. The passwords can still sit
+together in the same `.env` on the server, but each one only reaches where it
+is needed. That is what guarantees that the running application **cannot**
+alter the record: it has no credential to do it with.
+
+| Container | When it runs | Database credentials it receives | Role |
+| --- | --- | --- | --- |
+| `app`, `horizon` | Always | `DB_USERNAME` and `DB_PASSWORD` | `fichaje_app` |
+| `scheduler` | Always | Those of `app`, plus `BACKUP_DB_USERNAME`, `BACKUP_DB_PASSWORD` and `BACKUP_ENCRYPTION_KEY`, because it makes the daily backup | `fichaje_app` and, for backing up, `fichaje_backup` |
+| `reverb` | Always | None: it only talks to Redis | — |
+| `nginx` | Always | None: only its allowed networks and the certificate | — |
+| `migrate` | Only when launched (`install.sh`, `update.sh` or by hand) and disappears when done | `DB_MIGRATION_USERNAME` and `DB_MIGRATION_PASSWORD` | `fichaje_migrator` |
+| `restore` | Only when restoring a backup, and disappears when done | The migration role's, and `BACKUP_ENCRYPTION_KEY` | `fichaje_migrator` |
+| `postgres` | Always | All of them, to create the roles when the database is initialised | — |
+
+| Role | What it can do | Who uses it and when |
+| --- | --- | --- |
+| `fichaje_app` | Read and write clock-ins. On the audit trail, only append and read. Ask the database for the audit trail's yearly partition, and nothing else | The application, all the time |
+| `fichaje_backup` | **Only read**, everything. It cannot write a single row | The `scheduler`, in the daily and weekly backup, and when you launch a backup by hand |
+| `fichaje_maintenance` | Drop audit partitions that are already sealed | Nobody, normally. It is born without a password; it is given one only during the annual purge ([`operation.md`](operation.md) §3 and §9) |
+| `fichaje_migrator` | Everything: it is the owner and superuser of the database | Only `migrate` and `restore`, and only while that task lasts |
+
+**Two practical consequences:**
+
+- Backup commands go through the `scheduler`
+  (`docker compose exec scheduler php artisan backup:run`) and the restore
+  through the `restore` service, never through `app`: `app` has neither the
+  encryption key nor the backup role. The full commands are in
+  [`operation.md`](operation.md) and in the backup runbook.
+- A **physical** backup (the weekly one) includes the password verifiers of
+  every role in the cluster, the migrator's too. That is why it is always
+  encrypted, and the destination (`BACKUP_PATH`, in the §6.22 table) has to be
+  access-restricted and not on the same disk as the database.
 
 ### 6.3 Redis, queues, cache and sessions
 
@@ -1640,7 +1681,7 @@ maintenance one can drop an expired partition.
 | `REDIS_HOST` | — | Name of the Redis container | `redis` | Only if you move Redis to a separate server | No |
 | `REDIS_PORT` | — | Port | `6379` | Same as above | No |
 | `REDIS_PASSWORD` | — | Redis password | *(empty)* | Empty is correct in the standard installation: Redis **publishes no port** and is reachable only from Docker's internal network. Fill it in only if you move Redis to another machine, and configure it there too | No |
-| `QUEUE_CONNECTION` | — | Where background jobs live | `redis` | Never. If Redis goes down, those jobs wait for it to come back; **clocking does not depend on them** | No |
+| `QUEUE_CONNECTION` | — | Where background jobs live | `redis` | Never. If Redis goes down, jobs queued in the meantime (reports, exports, alerts) fail and must be repeated. **Clocking keeps working**: the request limiter fails open only on scan, batch upload and PIN clocking (`scan`, `scan-batch`, `scan-pin`). The rest of the API (panel, portal, sign-in) does depend on Redis (cache and limiter) and may stop responding until it returns | No |
 | `CACHE_STORE` | — | Where the cache lives | `redis` | Never | No |
 | `SESSION_DRIVER` | — | Where sessions live | `redis` | Never | No |
 
@@ -1677,7 +1718,7 @@ switches to polling and says so. Nobody is left unable to clock in.
 | `QR_SIZE_MM` | — | Side of the printed QR, in millimetres | `26` | Only if you change card format. It is the minimum size at which reading is guaranteed | No |
 | `IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS` | — | Time floor consumed by **every** credential rejection, so that from outside “does not exist” cannot be told from “revoked” or from “bad signature” | `25` | Almost never. Raising it hardens the control and adds latency **only to rejections**; at `0` it is disabled and that must not be done in production | No |
 | `BRANDING_LOGO_ROOT` | — | Directory **inside the container** where the logo has to be. It is what prevents the logo's public address from turning into a read of any file on the server | `/var/kronoqr/branding` | Never, unless you also change the `docker-compose` mount. See **section 2.2** | No |
-| `BRANDING_PATH` | — | Folder **on your server** that is mounted there, read-only. It is where you put the PNG or the SVG | *(empty: `./branding` next to the `docker-compose.yml`)* | When placing the hotel's logo. See **section 2.2** | No |
+| `BRANDING_PATH` | — | Folder **on your server** that is mounted there, read-only. It is where you put the PNG or the SVG | *(empty: `./branding` next to the `docker-compose.yml`)* | When placing the hotel's logo. See **section 2.2**. When you change it, recreate `app`, `horizon` and `scheduler` (`docker compose up -d app horizon scheduler`): all three produce documents with the logo | No |
 
 ### 6.6 PDF generation
 
@@ -1752,8 +1793,8 @@ does not leave anyone unable to clock in through the other.
 | `IDENTITY_PIN_LOCKOUT_TIER3_SECONDS` | — | Duration of the third lockout | `3600` (60 min) | Almost never | No |
 | `IDENTITY_PIN_LOCKOUT_RESET_HOURS` | — | With no failures during these hours, the counter goes back to zero | `24` | Almost never. Resetting someone's PIN also clears their counter immediately | No |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | `[INSTALADOR]` | Private key with which the server opens the PINs the tablet seals. It is what allows clocking by PIN **without a network** without leaving the PIN in the clear on the tablet | (empty; `install.sh` generates it) | Never copy it from another server. **Empty is a legitimate case**: it means this installation does not offer clocking by PIN and the kiosk hides the numeric keypad | No |
-| `IDENTITY_DEVICE_TOKEN_DAYS` | — | Days a paired tablet's token lives | `90` | Almost never | No |
-| `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` | — | Fraction of that lifetime from which the token renews itself | `0.8` | Almost never. Renewing it on the last day would leave a tablet that had spent a week disconnected unable to clock in | No |
+| `IDENTITY_DEVICE_TOKEN_DAYS` | — | Days a paired tablet's token lives. When they are up, the tablet goes back to the pairing screen and has to be linked again: see [`operation.md`](operation.md) §18 | `90` | Almost never | No |
+| `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` | — | Fraction of that lifetime from which the token should renew itself. **In this version that renewal does not run**: changing this value has no effect until the version that turns it on arrives. Meanwhile, link each tablet again before day 90 ([`operation.md`](operation.md) §18) | `0.8` | Almost never. Renewing it on the last day would leave a tablet that had spent a week disconnected unable to clock in | No |
 
 ### 6.11 Setup wizard and public branding
 
@@ -1814,9 +1855,10 @@ The three ranges are explained in detail, with symptoms and checks, in
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
 | --- | --- | --- | --- | --- | --- |
 | `KIOSK_VLAN_CIDR` | `[CLIENTE]` | Range of the kiosk VLAN, for which the clocking limit is raised. See [`installation.md`](installation.md) §6 | `10.0.20.0/24` | **On installing, always.** If the kiosks fall outside it, the failure is silent and shows up as “the kiosk is slow at 06:00” | No |
-| `PORTAL_INTERNAL_CIDR` | `[CLIENTE]` | Network from which the employee portal is allowed. Outside it, a `403` is answered before reaching the application. See [`installation.md`](installation.md) §6 | `172.28.0.0/16` (a development network) | **On installing, always**, with the hotel's real LAN or the VPN. Exposing it to the internet is an explicit decision taken by setting `0.0.0.0/0`, never by leaving the default; document it in the handover record | No |
-| `METRICS_ALLOW_CIDR` | `[CLIENTE]` | The only origin allowed to read the metrics. Everything else gets `403`, the server itself included. See [`installation.md`](installation.md) §6 | `172.29.0.20/32` | On installing, if you move the metrics collector. It is a `/32` on purpose, and **a single range**: the edge (Nginx) accepts only one even though the application accepts several separated by commas | No |
-| `TRUSTED_PROXIES` | — | Who the application trusts to set the client IP (`X-Forwarded-For`), comma-separated IP/CIDR list | *(empty: no proxy is trusted)* | **Only if you put another proxy in front of KronoQR's edge** ([`hardening.md`](hardening.md) §1.6): then it carries that proxy's IP, not Nginx's. Laravel ships a built-in heuristic that trusts `X-Forwarded-For` when the `Host` ends in `.on-forge.com` — and the client sends that `Host` itself —; the product disables it entirely and requires this explicit list instead | No |
+| `PORTAL_INTERNAL_CIDR` | `[CLIENTE]` | Network from which the employee portal is allowed. Outside it, a `403` is answered before reaching the application. See [`installation.md`](installation.md) §6 | `172.28.0.0/16` (a development network) | **On installing, always**, with the hotel's real LAN or the VPN. Exposing it to the internet is an explicit decision taken by setting `0.0.0.0/0`, never by leaving the default; document it in the handover record. If it answers `403` to someone it should not: [`../../runbooks/portal-403.md`](../../runbooks/portal-403.md) (in Spanish) | No |
+| `METRICS_ALLOW_CIDR` | `[CLIENTE]` | The only origin allowed to read the metrics. Everything else gets `403`, the server itself included. See [`installation.md`](installation.md) §6 | `172.29.0.20/32` (Prometheus's fixed IP: **it is the right value**) | Almost never: only if another collector of yours reads the metrics. The installer accepts it as it is. It is a `/32` on purpose, and **a single range**: the edge (Nginx) accepts only one even though the application accepts several separated by commas | No |
+| `TRUSTED_PROXY_CIDR` | — | Trusted proxies **in front of** the edge (reverse proxy, load balancer or CDN). The edge takes the visitor's real IP from `X-Forwarded-For`, only when the request comes from one of them. Comma-separated list of IPv4 CIDRs. See [`installation.md`](installation.md) §6 | *(empty: no proxy, the connection's IP is used)* | Only if you put a proxy, a load balancer or a CDN in front. **Never `0.0.0.0/0`**: the edge does not start and the installer rejects it. With it set, leave `TRUSTED_PROXIES` empty | No |
+| `TRUSTED_PROXIES` | — | Who the application trusts to set the client IP (`X-Forwarded-For`), comma-separated IP/CIDR list | *(empty: no proxy is trusted)* | **Leave it empty.** With a proxy in front of the edge, what gets filled in is `TRUSTED_PROXY_CIDR`: the edge already hands the application the real IP, and filling in both would make the application read the header again over an IP that is already the right one. Laravel ships a built-in heuristic that trusts `X-Forwarded-For` when the `Host` ends in `.on-forge.com` — and the client sends that `Host` itself —; the product disables it entirely and requires this explicit list instead | No |
 | `NGINX_CLIENT_MAX_BODY_SIZE` | — | Maximum body size the web server accepts | `8m` | Almost never. Raise it only if you also raise `WORKFORCE_IMPORT_MAX_FILE_KILOBYTES` above that | No |
 | `TLS_ALLOW_SELF_SIGNED` | `[CLIENTE]` | Allows starting with a self-signed certificate | `true` in the template | **To `false` in production.** With `false` and no certificate, the web server does not start and says one has to be put in place. It is intentional. See [`installation.md`](installation.md) §6 | No |
 | `TLS_CERT_FILE` | — | Path of the certificate **inside the container** | `/etc/nginx/certs/tls.crt` | Never. What is changed is the server folder, `TLS_CERT_DIR` | No |
@@ -1955,6 +1997,7 @@ keeps it. The procedure and the restoration are in
 | `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Encrypts the backups. **Without it there is no backup**: the script refuses to start | (empty; `install.sh` generates it) | Never by hand. **It is the only one that has to be kept safe off the server**: without it nothing can be restored. See [`operation.md`](operation.md) §9 | No |
 | `BACKUP_RETENTION_DAYS` | — | Days the daily backups are kept. See [`operation.md`](operation.md) §6 | `30` | If your backup policy is different. **Mind the disk space** before raising it | No |
 | `BACKUP_MIN_COPIES` | — | Backups that are never deleted, even if they have all expired | `3` | Almost never. It is the safety net that avoids being left with no backup at all | No |
+| `DB_MAX_SLOT_WAL_KEEP_GB` | — | Gigabytes of transaction log the database retains at most because of a stalled «replication slot». KronoQR uses none: it is the cap that stops one created by mistake from filling the disk | `5` | Almost never. Raise it only if the data disk allows it. If the «stalled replication slot» alert fires, follow `docs/runbooks/slot-replicacion-parado.md` | No |
 | `BACKUP_WAL_RETENTION_DAYS` | — | Days of archived transaction log that are kept, which is what allows restoring to a point in time | `8` | **It has to be greater than the interval between full backups** (weekly by default): without the previous full backup, that archive rebuilds nothing | No |
 | `BACKUP_DAILY_AT` | — | Time of the daily backup, **in UTC** | `03:15` | If it clashes with another task of yours. Never near a shift change. Remember it is UTC, not the hotel's time | No |
 | `BACKUP_WEEKLY_AT` | — | Time of the weekly full backup, **in UTC** | `02:15` | Same as above | No |
@@ -1966,7 +2009,7 @@ The production `docker-compose` reads them. In development they are ignored.
 
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
 | --- | --- | --- | --- | --- | --- |
-| `IMAGE_REGISTRY` | `[CLIENTE]` | Registry the images are pulled from | `ghcr.io/kronoqr` | If you have your own internal registry, or if you install with no internet access. See [`installation.md`](installation.md) §7 | No |
+| `IMAGE_REGISTRY` | `[CLIENTE]` | Registry the images are pulled from | `ghcr.io/kronoqr` (template value: **downloads nothing**) | **Always, when installing**: put the `ghcr.io/<vendor-account>/kronoqr` the vendor gives you with the licence, or your internal registry if you have one. How to check it before installing, in [`installation.md`](installation.md) §1.2; with no internet access, §7 | No |
 | `IMAGE_TAG` | `[INSTALADOR]` | The deployed version: the tag of the images and what the health probe publishes | (`install.sh` writes it from the package's `VERSION` file) | Never by hand. **`latest` is forbidden in production** and there is no default: if this is empty, Compose stops before creating anything and says what to put. An installation that cannot say which version it runs makes `update.sh`'s rollback impossible | No |
 | `COMPOSE_PROFILES` | — | Switches the seven observability services on (Prometheus, node-exporter, Alertmanager, Grafana, Loki, Tempo and blackbox-exporter) | `observability` | Leave it set. They are what warns that last night's backup failed or that transaction-log archiving has stopped, the two failures that turn a healthy installation into data loss without anyone noticing. **Leaving it empty switches them off**, which is a supported configuration that frees about 850 MiB, and then verifying the backup becomes a weekly manual task of yours | No |
 | `HTTP_PORT` | `[CLIENTE]` | Port the server listens on for unencrypted requests, to redirect them | `80` | Only if that port is already taken on the machine | No |

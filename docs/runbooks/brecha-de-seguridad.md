@@ -159,9 +159,11 @@ el alcance.
 INC="brecha-$(date -u +%Y%m%dT%H%M%SZ)"; echo "$INC"
 mkdir -p "/var/backups/fichaje/evidencia/$INC"
 
-# 1. Copia física inmediata. NO esperes a la copia nocturna: una restauración
-#    o un mantenimiento posterior se lleva la evidencia.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T app \
+# 1. Copia inmediata. NO esperes a la copia nocturna: una restauración o un
+#    mantenimiento posterior se lleva la evidencia. Va por el scheduler, el
+#    único contenedor con la clave de las copias (si está parado, cambia
+#    `exec -T` por `run --rm --no-deps -T`).
+docker compose --env-file .env -f infra/compose.prod.yaml exec -T scheduler \
   php artisan backup:run --mode=dump
 
 # 2. La cadena de auditoría, verificada AHORA. Si ya estaba rota, el alcance

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Exceptions;
 
 use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 /**
  * Respuestas de error en `application/problem+json` (RFC 9457).
@@ -218,6 +219,45 @@ final class ProblemDetails
      * campo de hora.
      */
     public const string TYPE_CORRECTION_WOULD_CHANGE_WORK_DATE = 'urn:kronoqr:problem:correction-would-change-work-date';
+
+    /*
+     * LOS ERRORES QUE PRODUCE EL FRAMEWORK Y NO UN CASO DE USO (F4a-1, CH4).
+     *
+     * Hasta la 2.2.0 salian como `application/json {"message": ...}` —o, con
+     * `APP_DEBUG=true`, con la traza, el SQL y datos de la plantilla—, y el
+     * contrato promete `problem+json` para TODA respuesta de error. Tipos
+     * propios y no uno generico porque al cliente le cambia la accion: un `405`
+     * o un `415` son un defecto del cliente que no se arregla reintentando; un
+     * `500` si puede arreglarse solo.
+     */
+
+    /** El metodo no existe para esa ruta. Lleva la cabecera `Allow`. */
+    public const string TYPE_METHOD_NOT_ALLOWED = 'urn:kronoqr:problem:method-not-allowed';
+
+    /** El cuerpo supera lo que acepta PHP (`post_max_size`). */
+    public const string TYPE_PAYLOAD_TOO_LARGE = 'urn:kronoqr:problem:payload-too-large';
+
+    /** El tipo de medio del cuerpo no es uno que la ruta entienda. */
+    public const string TYPE_UNSUPPORTED_MEDIA_TYPE = 'urn:kronoqr:problem:unsupported-media-type';
+
+    /** Token CSRF caducado o ausente en una peticion con sesion (`419`). */
+    public const string TYPE_CSRF_TOKEN_MISMATCH = 'urn:kronoqr:problem:csrf-token-mismatch';
+
+    /** Peticion que el framework no puede interpretar (`400` sin detalle por campo). */
+    public const string TYPE_BAD_REQUEST = 'urn:kronoqr:problem:bad-request';
+
+    /**
+     * Fallo no controlado del servidor.
+     *
+     * **Nunca lleva el mensaje de la excepcion**, tampoco con `APP_DEBUG=true`:
+     * el de una `QueryException` trae el SQL y los valores enlazados, y entre
+     * ellos codigos de empleado (CH4, regla dura 21). El detalle esta en el log y
+     * en `error_events`, agrupado por huella (RF-PD-15).
+     */
+    public const string TYPE_INTERNAL_ERROR = 'urn:kronoqr:problem:internal-error';
+
+    /** Cualquier otro codigo HTTP de error que el framework emita sin tipo propio. */
+    public const string TYPE_HTTP_ERROR = 'urn:kronoqr:problem:http-error';
 
     /**
      * @param  array<string, list<string>>  $errors  Detalle por campo. Solo en errores de validacion.
@@ -658,6 +698,77 @@ final class ProblemDetails
             JsonResponse::HTTP_SERVICE_UNAVAILABLE,
             'La instancia todavia no esta lista para recibir trafico.',
         );
+    }
+
+    /**
+     * Un error HTTP que el framework lanzo sin pasar por ningun caso de uso:
+     * `405`, `413`, `415`, `419`, `400`… (F4a-1).
+     *
+     * Conserva las cabeceras que la excepcion traia —`Allow` en el `405`,
+     * `Retry-After` si la hubiera— porque son parte de la respuesta, no del
+     * formato. **El `detail` es fijo por codigo**: el mensaje de la excepcion no
+     * sale, que en un `405` de desarrollo arrastraba la ruta interna.
+     *
+     * @param  array<string, string>  $headers
+     */
+    public static function httpError(int $status, array $headers = []): JsonResponse
+    {
+        [$type, $title, $detail] = match ($status) {
+            JsonResponse::HTTP_BAD_REQUEST => [
+                self::TYPE_BAD_REQUEST, 'Peticion mal formada', 'La peticion no se ha podido interpretar.',
+            ],
+            JsonResponse::HTTP_METHOD_NOT_ALLOWED => [
+                self::TYPE_METHOD_NOT_ALLOWED, 'Metodo no permitido', 'Esta ruta no admite ese metodo HTTP.',
+            ],
+            JsonResponse::HTTP_CONFLICT => [
+                self::TYPE_CONFLICT, 'Conflicto con el estado actual', 'La peticion choca con el estado actual del recurso.',
+            ],
+            JsonResponse::HTTP_REQUEST_ENTITY_TOO_LARGE => [
+                self::TYPE_PAYLOAD_TOO_LARGE, 'Peticion demasiado grande', 'El cuerpo de la peticion supera el tamaño admitido.',
+            ],
+            JsonResponse::HTTP_UNSUPPORTED_MEDIA_TYPE => [
+                self::TYPE_UNSUPPORTED_MEDIA_TYPE, 'Tipo de contenido no admitido', 'El tipo de contenido del cuerpo no es uno que esta ruta acepte.',
+            ],
+            419 => [
+                self::TYPE_CSRF_TOKEN_MISMATCH, 'Sesion caducada', 'El token de la sesion ha caducado. Vuelve a cargar e intentalo otra vez.',
+            ],
+            JsonResponse::HTTP_INTERNAL_SERVER_ERROR => [
+                self::TYPE_INTERNAL_ERROR, 'Error interno', 'Se ha producido un error inesperado. Ha quedado registrado.',
+            ],
+            default => [
+                self::TYPE_HTTP_ERROR, 'Error HTTP', 'La peticion no se ha podido atender.',
+            ],
+        };
+
+        return self::response($type, $title, $status, $detail, headers: $headers);
+    }
+
+    /**
+     * Las cabeceras de una excepcion HTTP que viajan con su `problem+json`:
+     * `Allow`, `Retry-After`… Una lista se une como hace Symfony al enviarla.
+     *
+     * @return array<string, string>
+     */
+    public static function headersOf(HttpExceptionInterface $exception): array
+    {
+        $headers = [];
+
+        foreach ($exception->getHeaders() as $name => $value) {
+            $headers[(string) $name] = \is_array($value)
+                ? implode(', ', array_map(static fn (mixed $item): string => \is_scalar($item) ? (string) $item : '', $value))
+                : (\is_scalar($value) ? (string) $value : '');
+        }
+
+        return $headers;
+    }
+
+    /**
+     * El `500` de cualquier excepcion que ningun `render` especifico traduce
+     * (CH4). Ver {@see self::TYPE_INTERNAL_ERROR}.
+     */
+    public static function internalError(): JsonResponse
+    {
+        return self::httpError(JsonResponse::HTTP_INTERNAL_SERVER_ERROR);
     }
 
     public static function tooManyRequests(int $retryAfterSeconds): JsonResponse

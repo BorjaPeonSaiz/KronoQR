@@ -201,11 +201,14 @@ Two warnings that cost dearly if forgotten:
 It is a legitimate set-up — for instance, to keep a service that was already
 listening on 443 — but it has **two consequences you need to know beforehand**:
 
-1. **All traffic will reach the edge with the proxy's IP.** The two clock-in
-   zones stop telling origins apart and `KIOSK_VLAN_CIDR` stops having any
-   effect: everything falls into whichever zone that single IP belongs to. The
-   same happens to `PORTAL_INTERNAL_CIDR` and `METRICS_ALLOW_CIDR`. **It cannot
-   be fixed from the `.env`.**
+1. **All traffic will reach the edge with the proxy's IP**, unless you declare
+   it. Without declaring it, the two clock-in zones stop telling origins apart
+   and `KIOSK_VLAN_CIDR` stops having any effect: everything falls into
+   whichever zone that single IP belongs to, and the same happens to
+   `PORTAL_INTERNAL_CIDR`. **It is fixed with `TRUSTED_PROXY_CIDR`** in the
+   `.env`: the proxy's address (never `0.0.0.0/0`), with `TRUSTED_PROXIES`
+   empty. The edge then takes the real IP from `X-Forwarded-For`, only from
+   that proxy ([`installation.md`](installation.md) §6).
 2. **The tablets have to open the PWA from the same origin that serves the API,
    and the proxy must not touch the security headers.** If it removes or
    rewrites `Permissions-Policy`, the kiosk camera is no longer granted and the
@@ -644,7 +647,7 @@ there.
 | 10 | The `docker` group has only who it should | `getent group docker` | Quarterly and on every leaver |
 | 11 | Time synchronised | `timedatectl status` | Quarterly |
 | 12 | Backup key kept in custody off the server | Check that it exists in the password manager or the safe, with its date | Delivery and annually |
-| 13 | Last night's backup exists and was verified | `docker compose exec app php artisan backup:verify` ([`operation.md`](operation.md) §2), or the observability alert | Daily (automatic) or weekly (manual, if you switched it off) |
+| 13 | Last night's backup exists and was verified | `docker compose exec scheduler php artisan backup:verify` ([`operation.md`](operation.md) §2), or the observability alert | Daily (automatic) or weekly (manual, if you switched it off) |
 | 14 | Restore genuinely tested | Drill from [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) | **Quarterly** |
 | 15 | Email encryption mandatory | `sudo grep '^MAIL_SCHEME=' .env` | Delivery |
 | 16 | Second factor mandatory on the management accounts | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` still says `admin,rrhh,auditor`: an account with one of those roles and no second factor cannot log in | Quarterly |

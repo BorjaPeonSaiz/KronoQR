@@ -267,6 +267,23 @@ final readonly class RegisterScanHandler
     }
 
     /**
+     * La respuesta original de un `scan_id` ya registrado, o `null` si no lo
+     * esta (RF-AT-07).
+     *
+     * **No es el mecanismo de idempotencia**, y no sustituye al UNIQUE: entre
+     * esta lectura y la escritura cabe otra peticion con el mismo identificador,
+     * y esa carrera la sigue resolviendo `handle()` con el indice. Existe para
+     * quien tiene trabajo CARO o CON EFECTOS antes de llamar a `handle()` y no
+     * debe repetirlo en un reenvio: el fichaje por PIN, que sin esto volvia a
+     * pagar un bcrypt y a sumar un fallo al bloqueo por cada reenvio de la cola
+     * offline (PIN-02, regla dura 8).
+     */
+    public function replayOf(string $scanId): ?RegisterScanResult
+    {
+        return $this->replay($scanId);
+    }
+
+    /**
      * `scans_by_origin_total{origin}` (doc 02 §8.2, RF-IN-08, tarea 3.1).
      *
      * ## Por que en el caso de uso y no en la telemetria del borde

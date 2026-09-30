@@ -50,10 +50,11 @@ invalidaría de golpe todo lo impreso.
    tarjetas para nadie: lo impide el índice
    `one_pending_credential_per_employee`.
 
-Todos los comandos se ejecutan dentro del contenedor:
+Todos los comandos se ejecutan dentro del contenedor de la aplicación, desde el
+directorio de la instalación (donde están `docker-compose.yml` y `.env`):
 
 ```bash
-docker compose --env-file .env -f infra/compose.dev.yaml exec -T app <comando>
+docker compose exec -T app <comando>
 ```
 
 ---

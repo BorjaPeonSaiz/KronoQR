@@ -1537,7 +1537,7 @@ jobs:
           # unica forma honesta de hacerlo: buscar "algo que parezca una clave"
           # daria verde con cualquier fuga real.
           for clave in APP_KEY QR_SIGNING_KEY_CURRENT BACKUP_ENCRYPTION_KEY \
-                       REVERB_APP_SECRET DB_PASSWORD DB_MIGRATION_PASSWORD \
+                       REVERB_APP_SECRET DB_PASSWORD DB_MIGRATION_PASSWORD BACKUP_DB_PASSWORD \
                        IDENTITY_PIN_SEALING_SECRET_KEY GRAFANA_ADMIN_PASSWORD; do
             valor="$(sudo sed -n "s/^${clave}=//p" .env | head -1)"
             test -n "${valor}"
@@ -1585,6 +1585,28 @@ jobs:
           test "$(consulta 'SELECT count(*) FROM employees')"     -eq 0
           test "$(consulta 'SELECT count(*) FROM shift_entries')" -eq 0
           test "$(consulta 'SELECT count(*) FROM users')"         -eq 0
+          # AUD-1: las copias se hacen con un rol PROPIO de solo lectura, distinto
+          # del migrador, y el planificador (que las lanza) lleva ese, no el otro.
+          test "$(consulta "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "f"
+          test "$(consulta "SELECT rolreplication FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "t"
+          # A3-06: la unica pertenencia del rol de copias es pg_read_all_data (una
+          # anterior, p. ej. pg_write_all_data, se retira al provisionarlo) y no puede
+          # escribir en el registro ni en los fichajes.
+          test "$(consulta "SELECT string_agg(g.rolname, ',' ORDER BY g.rolname) FROM pg_auth_members am JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member WHERE m.rolname = 'fichaje_backup'")" = "pg_read_all_data"
+          test "$(consulta "SELECT has_table_privilege('fichaje_backup', 'audit_log', 'UPDATE') OR has_table_privilege('fichaje_backup', 'audit_log', 'DELETE') OR has_table_privilege('fichaje_backup', 'shift_entries', 'UPDATE')")" = "f"
+          test "$(sudo docker compose --env-file .env -f docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
+          test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' .env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' .env)"
+          # AUD-1 / PIN-10: NINGUN contenedor de runtime (app, horizon, reverb,
+          # scheduler, nginx) tiene la contrasena del migrador ni la de
+          # mantenimiento; solo scheduler tiene la clave de cifrado y las
+          # credenciales de copia; app recibe toda la configuracion no privilegiada.
+          bash ../.github/scripts/assert-runtime-env.sh .env docker-compose.yml
+
+      - name: "C · La comprobacion de runtime falla ante cada incumplimiento (prueba de la prueba)"
+        # A3-10. assert-runtime-env.sh dio falsos negativos (un alias en app, un .env con
+        # comillas y nota). Una comprobacion de seguridad que nunca ha fallado no demuestra
+        # nada: aqui se le hace cada trampa a una pila de juguete y tiene que fallar.
+        run: bash .github/scripts/assert-runtime-env-selftest.sh
 
       - name: "D · Segunda ejecucion: salida 3, y la instalacion sigue en pie"
         run: |
@@ -1610,10 +1632,12 @@ jobs:
         # fichero de compose con `config` demuestra que el perfil existe, no que
         # arranque.
         #
-        # No se hace una TERCERA instalacion completa: se enciende el perfil
-        # sobre la que ya esta en pie, que es ademas la operacion real que hara
-        # un cliente que lo apago y se arrepiente. Cuesta la descarga de las
-        # cinco imagenes publicas (~690 MiB, medido) y no otra migracion.
+        # Aqui se enciende el perfil sobre la instalacion que ya esta en pie, que
+        # es ademas la operacion real que hara un cliente que lo apago y se
+        # arrepiente. Cuesta la descarga de las cinco imagenes publicas (~690 MiB,
+        # medido) y no otra migracion. La INSTALACION con el perfil encendido desde
+        # el principio, tal como la deja la guia, es el escenario G de mas abajo
+        # (I4, 2.2.0).
         #
         # La descarga va aparte y con reintento a proposito: asi un limite de
         # Docker Hub se distingue de un perfil mal escrito, en vez de aparecer
@@ -1668,6 +1692,74 @@ jobs:
           sudo docker compose --env-file .env -f docker-compose.yml exec -T node-exporter \
             ls /var/backups/metrics >/dev/null
 
+      - name: "G · Segunda pasada: el procedimiento LITERAL de la guia, con la observabilidad encendida"
+        # I4 (2.2.0). Los escenarios A-F rellenan el `.env` con otros valores y
+        # APAGAN la observabilidad (prepare-package-env.sh, modo por defecto): el
+        # camino que sigue un cliente, que es copiar `.env.example`, poner lo de
+        # su bloque «Lo minimo que hay que rellenar» y dejar el resto como viene,
+        # no se ejecutaba NUNCA. Asi paso I1 —el instalador rechazaba el unico
+        # valor de METRICS_ALLOW_CIDR que deja a Prometheus leer /metrics— con la
+        # etapa en verde, y la guia decia que este procedimiento «esta probado en
+        # cada publicacion».
+        #
+        # Aqui se retira la instalacion de C-F (misma maquina, mismos puertos) y se
+        # instala otra DESDE UN PAQUETE NUEVO con `--literal`: `METRICS_ALLOW_CIDR`
+        # de serie y `COMPOSE_PROFILES=observability`. Lo que se exige despues es lo
+        # que la guia promete: instalado y verificado, `doctor.sh` sin fallos y
+        # `/metrics` raspado por Prometheus.
+        #
+        # Las imagenes de observabilidad ya estan en el runner (las descarga el
+        # escenario F): esto no anade descargas.
+        run: |
+          set -euo pipefail
+          sudo docker compose --env-file paquete/.env -f paquete/docker-compose.yml \
+            --profile '*' down -v --remove-orphans
+          sudo rm -rf /var/backups/fichaje
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+
+          bash infra/scripts/package.sh paquete-g
+          bash .github/scripts/prepare-package-env.sh paquete-g --literal
+          cd paquete-g
+          # Lo que la guia deja como viene, tal como viene.
+          grep -q '^COMPOSE_PROFILES=observability' .env
+          grep -q '^METRICS_ALLOW_CIDR=172.29.0.20/32' .env
+
+          sudo ./install.sh | tee salida-g.log
+          grep -q 'instalado y verificado' salida-g.log
+
+      - name: "G · doctor.sh sale sin fallos (avisos si, fallos no)"
+        run: |
+          set -euo pipefail
+          cd paquete-g
+          # Sale 0 con avisos y 6 con algun fallo. Los avisos esperados de un
+          # paquete recien instalado —correo de desarrollo, sin destinatarios de
+          # alerta, portal fuera de la red del runner— no son fallos.
+          sudo ./doctor.sh | tee doctor-g.log
+
+      - name: "G · Prometheus raspa /metrics: el target kronoqr-api esta up"
+        # `up == 1` exige un 200 de /metrics a traves de nginx, asi que un
+        # METRICS_ALLOW_CIDR que no cubra a Prometheus (403) deja `up == 0`. Es
+        # exactamente el fallo de I1. Se espera por condicion, no por `sleep`: el
+        # primer raspado tarda lo que tarde el intervalo.
+        run: |
+          set -euo pipefail
+          cd paquete-g
+          consulta='http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22kronoqr-api%22%7D'
+          respuesta=""
+          for _ in $(seq 1 40); do
+            respuesta="$(sudo docker compose --env-file .env -f docker-compose.yml exec -T prometheus \
+              wget -qO- "${consulta}" || true)"
+            if grep -qE '\[[0-9.]+,"1"\]' <<<"${respuesta}"; then
+              echo "kronoqr-api: up"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Prometheus no consigue raspar /metrics tras 200 s. Respuesta: ${respuesta}"
+          sudo docker compose --env-file .env -f docker-compose.yml exec -T prometheus \
+            wget -qO- 'http://127.0.0.1:9090/api/v1/targets' || true
+          exit 1
 
       - name: Trivy sobre la imagen de borde recien construida (bloqueante)
         # Por `make`, como TODAS las demas invocaciones de Trivy del
@@ -1682,7 +1774,7 @@ jobs:
         # Los dos paquetes: el de la instalacion buena y el del escenario de
         # fallo seguro. Cual de los dos existe depende de donde se haya roto.
         run: |
-          for dir in paquete paquete-e; do
+          for dir in paquete paquete-e paquete-g; do
             [ -d "${dir}" ] || continue
             echo "=============== ${dir} ==============="
             [ -f "${dir}/.env" ] || continue
@@ -1714,6 +1806,8 @@ jobs:
             paquete/salida-d.log
             paquete-e/salida-e.log
             paquete-e/reintento-e.log
+            paquete-g/salida-g.log
+            paquete-g/doctor-g.log
           retention-days: 14
           if-no-files-found: warn
 
@@ -1947,12 +2041,26 @@ jobs:
           # Los usuarios no cambian; audit_log crece EXACTAMENTE en uno: el asiento
           # system.updated que el paso 5 escribe desde el cierre de la Fase 5.
           test "$(grep '^users=' conteos-antes.txt)" = "$(grep '^users=' conteos-despues.txt)"
+          # AUD-1: la actualizacion desde una 2.1.0 (copias con el migrador) crea el
+          # rol de solo lectura y reescribe BACKUP_DB_* en el .env NUEVO.
+          test "$(consulta "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "f"
+          sudo grep -qx 'BACKUP_DB_USERNAME=fichaje_backup' paquete-nuevo/.env
+          # A3-06: la unica pertenencia del rol de copias es pg_read_all_data (una
+          # anterior, p. ej. pg_write_all_data, se retira al provisionarlo) y no puede
+          # escribir en el registro ni en los fichajes.
+          test "$(consulta "SELECT string_agg(g.rolname, ',' ORDER BY g.rolname) FROM pg_auth_members am JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member WHERE m.rolname = 'fichaje_backup'")" = "pg_read_all_data"
+          test "$(consulta "SELECT has_table_privilege('fichaje_backup', 'audit_log', 'UPDATE') OR has_table_privilege('fichaje_backup', 'audit_log', 'DELETE') OR has_table_privilege('fichaje_backup', 'shift_entries', 'UPDATE')")" = "f"
+          test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' paquete-nuevo/.env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' paquete-nuevo/.env)"
+          test "$(sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
+          # Y tras actualizar DESDE UNA 2.1.0 (que llevaba el .env entero en todos los
+          # contenedores) los cinco runtime ya no tienen credenciales privilegiadas.
+          bash .github/scripts/assert-runtime-env.sh paquete-nuevo/.env paquete-nuevo/docker-compose.yml
           antes="$(sed -n 's/^audit_log=//p' conteos-antes.txt)"; despues="$(sed -n 's/^audit_log=//p' conteos-despues.txt)"
           test "$despues" -eq "$((antes + 1))" || { echo "audit_log paso de ${antes} a ${despues}: se esperaba exactamente un asiento system.updated mas"; exit 1; }
           consulta "SELECT action FROM audit_log ORDER BY id DESC LIMIT 1" | grep -qx 'system.updated'
           # Ninguna migracion pendiente, y el informe donde dice la guia.
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
-            exec -T app php artisan migrate:status --database=pgsql_migrator --pending=1
+            run --rm --no-deps -T migrate php artisan migrate:status --database=pgsql_migrator --pending=1
           # El directorio de informes es 0750 del uid de la aplicacion: el comodin
           # lo expande root, no la shell del runner (que no puede listarlo).
           sudo ls -la /var/backups/fichaje/reports/
@@ -2025,6 +2133,10 @@ jobs:
           docker pull --quiet alpine:3.20 >/dev/null
           docker tag alpine:3.20 "kronoqr/nginx:${new}"
 
+          # AUD-1: el .env de la version anterior es el de la vuelta atras y NO se
+          # toca (el paso del rol de copias solo escribe el del paquete nuevo).
+          env_antes="$(sudo md5sum < paquete-anterior/.env)"
+
           cd paquete-nuevo
           set +e
           sudo ./update.sh >salida-u3.log 2>&1
@@ -2037,6 +2149,7 @@ jobs:
           grep -q 'VUELTA ATRAS COMPLETADA' paquete-nuevo/salida-u3.log
           curl -fsS -k https://127.0.0.1/api/v1/health | tee health-u3.json
           grep -qF "\"version\":\"${old}\"" health-u3.json
+          test "$(sudo md5sum < paquete-anterior/.env)" = "${env_antes}" || { echo 'La actualizacion fallida ha tocado el .env de la version anterior'; exit 1; }
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
           {
             echo "users=$(consulta 'SELECT count(*) FROM users')"
@@ -2103,7 +2216,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
-            exec -T app bash /opt/kronoqr/scripts/restore-drill.sh --mode database
+            run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore-drill.sh --mode database
 
       - name: Diagnostico si algo ha fallado
         if: failure() && steps.anterior.outputs.skip != 'true'

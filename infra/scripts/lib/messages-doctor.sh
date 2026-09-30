@@ -90,6 +90,13 @@ KQ_MSG_ES[d_c_env_mode]="%s con permisos 0600"
 KQ_MSG_ES[d_f_env_mode]="%s tiene permisos %s. Contiene secretos: corrigelo con 'chmod 0600 %s'."
 KQ_MSG_ES[d_w_env_mode_unknown]="no se ha podido comprobar los permisos de %s (no hay 'stat' en este servidor). Compruebalo a mano: tiene que ser 0600."
 
+KQ_MSG_ES[d_c_backup_role]="El rol de las copias (%s) es de solo lectura"
+KQ_MSG_ES[d_c_backup_role_check]="Rol de las copias (%s)"
+KQ_MSG_ES[d_f_backup_role_privileged]="el rol de las copias (%s) es superusuario, o puede crear roles o bases, o se salta RLS. Una copia solo necesita leer: con ese rol, quien ejecute codigo en el contenedor 'scheduler' podria reescribir el registro legal (AUD-1). BACKUP_DB_USERNAME y BACKUP_DB_PASSWORD del .env tienen que ser los de fichaje_backup, no los de migracion. Sigue docs/runbooks/rotacion-secretos.md (seccion «El rol de las copias»)."
+KQ_MSG_ES[d_w_backup_role_missing]="el rol de las copias (%s) no existe en PostgreSQL: las copias fallaran. Ejecuta ./update.sh (lo aprovisiona) o sigue docs/runbooks/rotacion-secretos.md (seccion «El rol de las copias»)."
+KQ_MSG_ES[d_w_backup_role_name]="BACKUP_DB_USERNAME del .env (%s) no es un nombre de rol valido (minusculas, digitos y guion bajo): no se ha podido comprobar el rol de las copias. Corrigelo en el .env."
+KQ_MSG_ES[d_w_backup_role_unknown]="no se ha podido comprobar el rol de las copias (%s): PostgreSQL no responde o el servicio 'postgres' esta parado. Arrancalo y repite ./doctor.sh."
+
 KQ_MSG_ES[d_c_cert_present]="Certificado presente en %s"
 KQ_MSG_ES[d_c_cert_missing]="Falta el certificado %s"
 KQ_MSG_ES[d_f_cert_missing]="coloca el certificado del hotel en %s. Sin el, nginx no arranca. Procedimiento en docs/cliente/instalacion.md, seccion 1.2."
@@ -104,6 +111,15 @@ KQ_MSG_ES[d_c_port_not_listening]="Puerto %s: nada escucha"
 KQ_MSG_ES[d_w_port_not_listening]="nada escucha en el puerto %s. Es lo esperable con la aplicacion parada: arrancala con 'docker compose -f %s up -d' y repite este diagnostico."
 KQ_MSG_ES[d_c_port_unknown]="Puerto %s: no se ha podido comprobar"
 KQ_MSG_ES[d_w_port_unknown]="este servidor no tiene 'ss' ni 'netstat', y tampoco se ha podido abrir una conexion de prueba al puerto %s. Compruebalo a mano."
+
+KQ_MSG_ES[d_c_redis_stable]="Redis: %s, %s reinicio(s) desde que se creo el contenedor"
+KQ_MSG_ES[d_c_redis_loop]="Redis se esta reiniciando en bucle (%s reinicios)"
+KQ_MSG_ES[d_f_redis_loop_aof]="el registro de Redis dice que su fichero AOF esta danado, lo habitual tras un corte de luz. Con Redis caido el fichaje NO se para —los quioscos encolan y /scan sigue respondiendo—, pero caen el acceso al panel y al portal (las sesiones viven en Redis), las colas de trabajos y el tiempo real, y /ready responde 503. Reparalo asi; solo se pierde la ultima escritura corrupta del fichero:
+  docker compose -f %s stop redis
+  echo y | docker compose -f %s run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
+  docker compose -f %s up -d redis
+Despues repite ./doctor.sh. El procedimiento completo esta en docs/runbooks/errores-en-el-panel.md."
+KQ_MSG_ES[d_f_redis_loop_other]="Redis no se mantiene en pie y su registro no apunta al fichero AOF. Mira por que: docker compose -f %s logs --tail 50 redis. Las causas habituales son disco lleno o falta de memoria; si el registro habla de 'append only file', sigue docs/runbooks/errores-en-el-panel.md. Con Redis caido el fichaje no se para, pero caen el panel, el portal, las colas y el tiempo real."
 
 KQ_MSG_ES[d_summary_fail]="Diagnostico externo: %s comprobaciones, %s fallo(s), %s aviso(s)."
 KQ_MSG_ES[d_summary_ok]="Diagnostico externo: %s comprobaciones, sin fallos, %s aviso(s)."
@@ -172,6 +188,13 @@ KQ_MSG_EN[d_c_env_mode]="%s with mode 0600"
 KQ_MSG_EN[d_f_env_mode]="%s has mode %s. It holds secrets: fix it with 'chmod 0600 %s'."
 KQ_MSG_EN[d_w_env_mode_unknown]="could not check the permissions of %s (no 'stat' on this server). Check it by hand: it must be 0600."
 
+KQ_MSG_EN[d_c_backup_role]="The backup role (%s) is read-only"
+KQ_MSG_EN[d_c_backup_role_check]="Backup role (%s)"
+KQ_MSG_EN[d_f_backup_role_privileged]="the backup role (%s) is a superuser, or can create roles or databases, or bypasses RLS. A backup only needs to read: with that role, whoever runs code in the 'scheduler' container could rewrite the legal record (AUD-1). BACKUP_DB_USERNAME and BACKUP_DB_PASSWORD in the .env must be those of fichaje_backup, not the migration ones. Follow docs/runbooks/rotacion-secretos.md (section «El rol de las copias»)."
+KQ_MSG_EN[d_w_backup_role_missing]="the backup role (%s) does not exist in PostgreSQL: backups will fail. Run ./update.sh (it provisions it) or follow docs/runbooks/rotacion-secretos.md (section «El rol de las copias»)."
+KQ_MSG_EN[d_w_backup_role_name]="BACKUP_DB_USERNAME in the .env (%s) is not a valid role name (lowercase letters, digits and underscore): the backup role could not be checked. Fix it in the .env."
+KQ_MSG_EN[d_w_backup_role_unknown]="could not check the backup role (%s): PostgreSQL does not answer or the 'postgres' service is stopped. Start it and run ./doctor.sh again."
+
 KQ_MSG_EN[d_c_cert_present]="Certificate present at %s"
 KQ_MSG_EN[d_c_cert_missing]="Certificate missing: %s"
 KQ_MSG_EN[d_f_cert_missing]="put the hotel certificate at %s. Without it nginx does not start. Procedure in docs/cliente/instalacion.md, section 1.2."
@@ -186,6 +209,15 @@ KQ_MSG_EN[d_c_port_not_listening]="Port %s: nothing is listening"
 KQ_MSG_EN[d_w_port_not_listening]="nothing is listening on port %s. Expected while the application is down: start it with 'docker compose -f %s up -d' and run this diagnostic again."
 KQ_MSG_EN[d_c_port_unknown]="Port %s: could not check"
 KQ_MSG_EN[d_w_port_unknown]="this server has neither 'ss' nor 'netstat', and a test connection to port %s could not be opened either. Check it by hand."
+
+KQ_MSG_EN[d_c_redis_stable]="Redis: %s, %s restart(s) since the container was created"
+KQ_MSG_EN[d_c_redis_loop]="Redis is restarting in a loop (%s restarts)"
+KQ_MSG_EN[d_f_redis_loop_aof]="the Redis log says its AOF file is damaged, which is usual after a power cut. With Redis down clocking-in does NOT stop —kiosks queue and /scan keeps answering—, but panel and portal sign-in (sessions live in Redis), job queues and real time go down, and /ready answers 503. Repair it like this; only the last corrupt write of the file is lost:
+  docker compose -f %s stop redis
+  echo y | docker compose -f %s run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
+  docker compose -f %s up -d redis
+Then run ./doctor.sh again. The full procedure is in docs/runbooks/errores-en-el-panel.md (in Spanish)."
+KQ_MSG_EN[d_f_redis_loop_other]="Redis does not stay up and its log does not point at the AOF file. Find out why: docker compose -f %s logs --tail 50 redis. Usual causes are a full disk or lack of memory; if the log mentions 'append only file', follow docs/runbooks/errores-en-el-panel.md (in Spanish). With Redis down clocking-in does not stop, but the panel, the portal, the queues and real time do."
 
 KQ_MSG_EN[d_summary_fail]="External diagnostic: %s checks, %s failure(s), %s warning(s)."
 KQ_MSG_EN[d_summary_ok]="External diagnostic: %s checks, no failures, %s warning(s)."

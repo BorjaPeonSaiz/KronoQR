@@ -9,6 +9,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorCheck;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorReport;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
+use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\FixedLogo;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -246,6 +248,86 @@ it('sobrevive a una sonda que revienta y lo dice sin filtrar el mensaje', functi
         ->and($result['output'])->toContain('disk.storage');
 })->group('RF-PD-13', 'RS-08');
 
+/**
+ * Una sonda que revienta con la excepcion que se le de.
+ */
+function sondaQueRevienta(string $family, Throwable $failure): DoctorProbe
+{
+    return new class($family, $failure) implements DoctorProbe
+    {
+        public function __construct(private string $family, private Throwable $failure) {}
+
+        public function family(): string
+        {
+            return $this->family;
+        }
+
+        public function run(): array
+        {
+            throw $this->failure;
+        }
+    };
+}
+
+/**
+ * Como `conSondas()`, pero con el clasificador de fallos de conexion que monta
+ * el proveedor de verdad.
+ *
+ * @param  list<DoctorProbe>  $probes
+ */
+function conSondasClasificadas(array $probes): void
+{
+    app()->bind(RunDoctorHandler::class, static fn (): RunDoctorHandler => new RunDoctorHandler(
+        probes: $probes,
+        translator: app(DoctorTranslator::class),
+        clock: app(Clock::class),
+        productVersion: 'test',
+        failures: new ConnectionProbeFailureClassifier,
+    ));
+}
+
+it('no culpa al producto cuando una sonda revienta porque Redis no responde', function (): void {
+    // PR2: con Redis parado, configuracion y licencia reventaban y el informe
+    // decia dos veces «es un fallo del producto, envia el paquete a soporte», con
+    // la comprobacion de Redis en rojo dos lineas mas arriba.
+    conSondasClasificadas([
+        sondaQueRevienta('settings', new RedisException('Connection refused')),
+        sondaQueRevienta('license', new RedisException('Connection refused')),
+    ]);
+
+    $result = runDoctor(['--lang' => 'es']);
+
+    expect($result['code'])->toBe(2)
+        ->and($result['output'])->toContain('porque Redis no responde')
+        ->and($result['output'])->toContain('queue.redis')
+        ->and($result['output'])->not->toContain('Es un fallo del producto')
+        ->and($result['output'])->not->toContain('base de datos');
+})->group('RF-PD-13');
+
+it('no culpa al producto cuando una sonda revienta porque la base de datos no responde', function (): void {
+    $caida = new PDOException('SQLSTATE[08006] could not connect to server', 7);
+    $caida->errorInfo = ['08006', 7, 'could not connect to server'];
+
+    conSondasClasificadas([sondaQueRevienta('settings', $caida)]);
+
+    $result = runDoctor(['--lang' => 'en']);
+
+    expect($result['output'])->toContain('because the database does not respond')
+        ->and($result['output'])->toContain('database.connection')
+        ->and($result['output'])->not->toContain('product defect')
+        ->and($result['output'])->not->toContain('could not connect');
+})->group('RF-PD-13');
+
+it('sigue atribuyendo al producto un fallo que no es de conexion', function (): void {
+    // Un error de sintaxis SQL (`42601`) no es «la base de datos esta caida».
+    $defecto = new PDOException('SQLSTATE[42601] syntax error');
+    $defecto->errorInfo = ['42601', 7, 'syntax error'];
+
+    conSondasClasificadas([sondaQueRevienta('settings', $defecto)]);
+
+    expect(runDoctor(['--lang' => 'es'])['output'])->toContain('Es un fallo del producto');
+})->group('RF-PD-13');
+
 // --- El codigo de servicio del quiosco (RF-KI-08, tarea 3.3) ----------------
 
 it('avisa, y nunca falla, mientras no haya codigo de servicio de quiosco', function (): void {
@@ -283,6 +365,52 @@ it('da por correcto el codigo de servicio configurado sin publicarlo', function 
         ->and($check->summary)->not->toContain('48392017')
         ->and(json_encode($report->toArray(), JSON_THROW_ON_ERROR))->not->toContain('48392017');
 })->group('RF-PD-13', 'RF-KI-08');
+
+// --- El logotipo de la marca (DC6) -----------------------------------------
+
+it('dice que hacer con un logotipo que ya no vale, sin el codigo en bruto ni mandar subirlo desde el panel', function (string $averia, string $resumenEs, string $arreglo): void {
+    // El aviso decia «(missing)» y mandaba «volver a subir el logotipo desde el
+    // panel», que no tiene boton para subir nada: el fichero se copia a la
+    // carpeta de BRANDING_PATH y en el panel solo se escribe su ruta. Quien lee
+    // este informe no tiene al fabricante al lado (ADR-016).
+    $root = sys_get_temp_dir().'/kronoqr-doctor-logo-'.bin2hex(random_bytes(6));
+    mkdir($root, 0o755, true);
+    config(['branding.logo_root' => $root]);
+    file_put_contents($root.'/logo.png', FixedLogo::onePixelPng());
+
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->patch('/api/v1/settings', ['settings' => ['BRANDING_LOGO_PATH' => $root.'/logo.png']])
+        ->assertStatus(200);
+
+    // La averia llega DESPUES de guardar, que es como pasa de verdad: una
+    // restauracion, un volumen que se desmonta, alguien que pisa el fichero.
+    $averia === 'missing'
+        ? unlink($root.'/logo.png')
+        : file_put_contents($root.'/logo.png', 'esto no es una imagen');
+
+    $es = comprobacion(app(RunDoctorHandler::class)->handle('es'), 'permissions.branding_logo');
+    $en = comprobacion(app(RunDoctorHandler::class)->handle('en'), 'permissions.branding_logo');
+
+    expect($es->status)->toBe(DoctorStatus::Warning)
+        // El codigo exacto sigue en los detalles, para soporte; no en la frase.
+        ->and($es->details['reason'] ?? null)->toBe($averia === 'missing' ? 'missing' : 'unsupported_format')
+        ->and($es->summary)->toContain($resumenEs)
+        ->and($es->summary)->not->toContain('(missing)')
+        ->and($es->summary)->not->toContain('unsupported_format')
+        ->and((string) $es->fix)->toContain($arreglo)
+        ->and((string) $es->fix)->toContain('BRANDING_PATH')
+        ->and((string) $es->fix)->not->toContain('subir')
+        ->and((string) $en->fix)->toContain('BRANDING_PATH')
+        ->and((string) $en->fix)->not->toContain('Upload');
+
+    if (is_file($root.'/logo.png')) {
+        unlink($root.'/logo.png');
+    }
+    rmdir($root);
+})->with([
+    'el fichero ya no esta' => ['missing', 'no hay ningun fichero legible', 'docker compose up -d app horizon scheduler'],
+    'el fichero no es una imagen' => ['content', 'no es un PNG o un SVG', 'Sustituye el fichero'],
+])->group('RF-PD-13', 'RF-PD-08');
 
 // --- Informe ----------------------------------------------------------------
 

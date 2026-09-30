@@ -5,6 +5,40 @@ declare(strict_types=1);
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+/*
+ * CUANTO SE ESPERA A QUE POSTGRESQL CONTESTE AL CONECTAR (CH3).
+ *
+ * `pdo_pgsql` traduce `ATTR_TIMEOUT` al `connect_timeout` de libpq y, sin el,
+ * espera 30 s por intento. Con la base de datos inalcanzable, `GET
+ * /api/v1/ready` tardaba 15,6 s en dar su `503`, y un orquestador con una sonda
+ * de 1-5 s habria visto «la sonda no responde» en vez de «la base de datos esta
+ * caida». PostgreSQL vive en la misma red de Docker: si no contesta en 2 s, no
+ * va a contestar. Solo afecta a la CONEXION; una consulta larga la acota
+ * `statement_timeout`, no esto. Vale para las cuatro conexiones de PostgreSQL.
+ */
+$pgsqlOptions = [
+    PDO::ATTR_TIMEOUT => (int) env('DB_CONNECT_TIMEOUT', 2),
+];
+
+/*
+ * CUANTO SE ESPERA A REDIS (CH1, CH3).
+ *
+ * Sin limite, `phpredis` hereda `default_socket_timeout` (60 s): con Redis
+ * inalcanzable por la red —no apagado, que rechaza al instante—, cada acceso a
+ * la cache, al limitador o a las metricas colgaba la peticion un minuto, y el
+ * fichaje, que ya no depende de Redis (CH1), habria esperado igual.
+ *
+ * `REDIS_TIMEOUT` es la variable que ya usa el escalado de Reverb para lo mismo
+ * —el tiempo de conexion— y la que Compose ya entrega a los servicios; aqui su
+ * valor por defecto es 1 s porque Redis esta en la misma red de Docker. La de
+ * lectura acota un comando que no contesta; 2 s sobran para todo lo que hace el
+ * producto, que no usa lecturas bloqueantes (`block_for` es nulo en la cola).
+ */
+$redisTimeouts = [
+    'timeout' => (float) env('REDIS_TIMEOUT', 1.0),
+    'read_timeout' => (float) env('REDIS_READ_TIMEOUT', 2.0),
+];
+
 return [
 
     /*
@@ -103,6 +137,7 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'options' => $pgsqlOptions,
         ],
 
         /*
@@ -121,10 +156,15 @@ return [
          *
          *   php artisan migrate --database=pgsql_migrator --force
          *
-         * NADA de la aplicacion en marcha usa esta conexion. Si algun dia un
-         * caso de uso la resolviera, seria un defecto: la prueba de integracion
-         * de RS-07 comprueba que el rol de runtime sigue chocando con el
-         * REVOKE.
+         * NADA de la aplicacion en marcha usa esta conexion (ADR-042): solo
+         * las migraciones y las pruebas. La particion anual de `audit_log`,
+         * que era su ultimo uso en runtime, la crea desde la 2.2.0 la funcion
+         * `audit_log_create_partition` invocada con el rol de la aplicacion.
+         * Si algun dia codigo de `app/` la nombrara, seria un defecto, y lo
+         * detectan dos pruebas: `RuntimeDatabaseCredentialsTest` (ningun
+         * fichero de `app/` la nombra) y la de integracion de RS-07 (el rol de
+         * runtime sigue chocando con el REVOKE). En produccion, ademas, su
+         * credencial solo llega a los servicios `migrate` y `restore`.
          */
         'pgsql_migrator' => [
             'driver' => 'pgsql',
@@ -139,6 +179,7 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'options' => $pgsqlOptions,
         ],
 
         /*
@@ -173,6 +214,7 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'options' => $pgsqlOptions,
         ],
 
         /*
@@ -225,6 +267,7 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'options' => $pgsqlOptions,
         ],
 
         'sqlsrv' => [
@@ -264,7 +307,8 @@ return [
          * esta clave —solo mira `--database`—, pero la lee KronoQR: la usan el
          * `migrateFreshUsing()` de la suite y `Tests\Support\Database\
          * TestDatabase`, para que la conexion correcta este declarada en un
-         * sitio y no repetida en cada invocacion.
+         * sitio y no repetida en cada invocacion. Solo la leen las pruebas y
+         * quien lanza las migraciones; ningun codigo de `app/` (ADR-042).
          */
         'connection' => env('DB_MIGRATION_CONNECTION', 'pgsql_migrator'),
     ],
@@ -322,6 +366,7 @@ return [
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
             'backoff_base' => env('REDIS_BACKOFF_BASE', 100),
             'backoff_cap' => env('REDIS_BACKOFF_CAP', 1000),
+            ...$redisTimeouts,
         ],
 
         'cache' => [
@@ -335,6 +380,7 @@ return [
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
             'backoff_base' => env('REDIS_BACKOFF_BASE', 100),
             'backoff_cap' => env('REDIS_BACKOFF_CAP', 1000),
+            ...$redisTimeouts,
         ],
 
     ],

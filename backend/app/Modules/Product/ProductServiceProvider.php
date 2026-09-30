@@ -110,12 +110,14 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\MetricsCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\PersonalDataCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ServicesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
 use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
 use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\AlertRecipientsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\EdgeNetworksProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ErrorHistoryProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\KioskServiceCodeProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\LicenseProbe;
@@ -1789,6 +1791,15 @@ final class ProductServiceProvider extends ServiceProvider
                             ],
                         ],
                     ),
+                    /*
+                     * Las tres redes que decide el cliente (PP-01). Lectura
+                     * tolerante, como el correo: si la aplicacion no las
+                     * recibe, la sonda lo declara y no revienta. Va delante de
+                     * `TlsProbe` porque el orden de esta lista ES el del
+                     * informe: primero quien puede llegar al servidor y
+                     * despues con que certificado.
+                     */
+                    self::edgeNetworksProbe(),
                     new TlsProbe(
                         applicationUrl: Config::string('app.url'),
                         allowSelfSigned: Config::boolean('security.tls_allow_self_signed'),
@@ -1842,6 +1853,9 @@ final class ProductServiceProvider extends ServiceProvider
                 translator: $app->make(DoctorTranslator::class),
                 clock: $app->make(Clock::class),
                 productVersion: Config::string('app.version'),
+                // PR2: una sonda que revienta porque Redis o PostgreSQL no
+                // contestan no es un fallo del producto.
+                failures: new ConnectionProbeFailureClassifier,
             ),
         );
 
@@ -1907,5 +1921,19 @@ final class ProductServiceProvider extends ServiceProvider
     private static function number(mixed $value): ?int
     {
         return is_numeric($value) ? (int) $value : null;
+    }
+
+    /**
+     * La sonda de las tres redes del borde (PP-01). Aparte del `bind` porque la
+     * lectura tolerante de tres claves subia la complejidad de la funcion
+     * anonima por encima del maximo de PHPStan.
+     */
+    private static function edgeNetworksProbe(): EdgeNetworksProbe
+    {
+        return new EdgeNetworksProbe(
+            kioskVlan: self::text(Config::get('security.edge_networks.kiosk_vlan')) ?? '',
+            portalInternal: self::text(Config::get('security.edge_networks.portal_internal')) ?? '',
+            metricsAllow: self::text(Config::get('security.edge_networks.metrics_allow')) ?? '',
+        );
     }
 }

@@ -19,12 +19,21 @@
 
 import { defineConfig, devices } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
+import { readProductionSecurityHeaders } from './tests/e2e/support/securityHeaders'
 
 const fixture = (name: string): string =>
   fileURLToPath(new URL(`./e2e/fixtures/${name}`, import.meta.url))
 
-const PORT = 4173
+// El puerto se puede mover con `KRONOQR_E2E_PORT` para no chocar con otro
+// `vite preview` de la misma maquina (4173 es el que usa la CI).
+const PORT = Number(process.env['KRONOQR_E2E_PORT'] ?? 4173)
 const BASE_URL = `http://127.0.0.1:${PORT}`
+
+// Las MISMAS cabeceras de seguridad que Nginx en produccion, leidas del snippet
+// real (PIN-04). Se leen aqui, al cargar la configuracion, para que un snippet
+// ausente o sin CSP pare toda la ejecucion en vez de dejar los E2E corriendo
+// sin CSP, que es justo como PIN-01 llego a produccion sin que nada lo viera.
+const SECURITY_HEADERS = readProductionSecurityHeaders()
 
 /** Argumentos comunes: camara falsa y permiso concedido sin dialogo. */
 function chromiumArgs(videoFile: string): string[] {
@@ -130,6 +139,9 @@ export default defineConfig({
     // eso, solo que constante queda inlineada.
     command: `node scripts/generate-qr-fixture.mjs && npx vite build --mode test && npx vite preview --port ${PORT} --host 127.0.0.1 --strictPort`,
     url: BASE_URL,
+    // `vite.config.ts` -> `preview.headers`. Si se reutiliza un servidor ya
+    // arrancado, `pin-csp.spec.ts` comprueba que sus cabeceras son estas.
+    env: { KRONOQR_PREVIEW_SECURITY_HEADERS: JSON.stringify(SECURITY_HEADERS) },
     reuseExistingServer: process.env['CI'] !== 'true',
     timeout: 120_000,
   },

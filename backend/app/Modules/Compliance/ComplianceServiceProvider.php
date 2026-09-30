@@ -183,11 +183,15 @@ final class ComplianceServiceProvider extends ServiceProvider
             static fn (): DatabaseAuditChainReader => new DatabaseAuditChainReader(DB::connection()),
         );
 
+        /*
+         * Sobre la conexion de la APLICACION, como todo el runtime (ADR-042): la
+         * particion la crea una funcion `SECURITY DEFINER` de la base, no el rol
+         * que llama. Ningun codigo de la aplicacion resuelve la conexion de
+         * migracion; `RuntimeDatabaseCredentialsTest` lo comprueba.
+         */
         $this->app->singleton(
             AuditLogPartitions::class,
-            static fn (): DatabaseAuditLogPartitions => new DatabaseAuditLogPartitions(
-                DB::connection(Config::string('database.migrations.connection', 'pgsql_migrator')),
-            ),
+            static fn (): DatabaseAuditLogPartitions => new DatabaseAuditLogPartitions(DB::connection()),
         );
 
         $this->app->singleton(AuditMetrics::class, TextfileAuditMetrics::class);

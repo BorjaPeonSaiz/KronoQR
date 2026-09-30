@@ -49,6 +49,27 @@ info:
     (RFC 9457). El miembro `type` es un URN estable de KronoQR: es lo que el
     cliente debe interpretar, no el texto de `title` ni el de `detail`.
 
+    Tambien las que produce el servidor sin llegar a ningun endpoint concreto,
+    que pueden aparecer en cualquier ruta aunque no esten en su lista de
+    respuestas: `404` `urn:kronoqr:problem:not-found` (ruta inexistente),
+    `405` `urn:kronoqr:problem:method-not-allowed` (con cabecera `Allow`),
+    `400` `urn:kronoqr:problem:bad-request` (peticion que no se puede
+    interpretar; los errores por campo siguen siendo `invalid-request` o
+    `validation-failed`), `413` `urn:kronoqr:problem:payload-too-large`,
+    `415` `urn:kronoqr:problem:unsupported-media-type`, `419`
+    `urn:kronoqr:problem:csrf-token-mismatch`, `429`
+    `urn:kronoqr:problem:too-many-requests` (con `Retry-After`), `500`
+    `urn:kronoqr:problem:internal-error` y, para cualquier otro codigo,
+    `urn:kronoqr:problem:http-error`. Cuando la aplicacion no llega a
+    responder, el servidor web contesta con la misma forma: `502`
+    `urn:kronoqr:problem:bad-gateway`, `503`
+    `urn:kronoqr:problem:service-unavailable` y `504`
+    `urn:kronoqr:problem:gateway-timeout`. El `500` **nunca** lleva el mensaje de la
+    excepcion ni la traza, tampoco en desarrollo: la causa queda en el registro
+    del servidor. Un `500` o un `503` no dicen nada del fichaje enviado: el
+    quiosco lo conserva en su cola y lo reenvia con el mismo `scan_id`
+    (regla dura 8), y si ya se habia registrado recibe la respuesta original.
+
     **Mantenimiento (RF-PD-10).** Mientras `update.sh` actualiza la instalacion,
     TODA ruta salvo `/health` y `/ready` responde `503` como `problem+json` con
     `type: urn:kronoqr:problem:maintenance` y cabecera `Retry-After`. No es un

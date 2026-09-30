@@ -36,12 +36,23 @@ declare(strict_types=1);
 $probe = [
     'failure' => 'No se pudo ejecutar el grupo de comprobaciones «:family»: algo fallo de forma inesperada '
         .'dentro del propio diagnostico. El resto de comprobaciones si se ha ejecutado.',
+    // PR2: al grupo le falta un servicio que no contesta. No es un fallo del producto.
+    'failure_redis' => 'No se pudo ejecutar el grupo de comprobaciones «:family» porque Redis no responde. '
+        .'El resto de comprobaciones si se ha ejecutado.',
+    'failure_database' => 'No se pudo ejecutar el grupo de comprobaciones «:family» porque la base de datos no '
+        .'responde. El resto de comprobaciones si se ha ejecutado.',
 ];
 
 $probeFix = [
     'failure' => "Es un fallo del producto, no de tu instalacion.\n"
         ."Genera el paquete de diagnostico y enviaselo a soporte:\n"
         .'  php artisan product:diagnostics',
+    'failure_redis' => "Arregla primero Redis: mira la comprobacion «queue.redis» de este mismo informe.\n"
+        ."Despues vuelve a ejecutar este comando:\n"
+        .'  php artisan product:doctor',
+    'failure_database' => "Arregla primero la base de datos: mira la comprobacion «database.connection» de este\n"
+        ."mismo informe. Despues vuelve a ejecutar este comando:\n"
+        .'  php artisan product:doctor',
 ];
 
 return [
@@ -116,8 +127,9 @@ return [
             'probe' => $probe,
             'redis' => [
                 'ok' => 'Redis responde.',
-                'failure' => 'Redis no responde. Sin el no funcionan la cola de trabajos, la cache ni las '
-                    .'sesiones del panel.',
+                'failure' => 'Redis no responde. Sin el no funcionan la cola de trabajos ni las metricas, y el panel '
+                    .'y el portal del empleado rechazan las peticiones, porque su limite de intentos no se puede '
+                    .'comprobar. El fichaje sigue funcionando.',
             ],
             'backlog' => [
                 'ok' => 'La cola de trabajos esta al dia (:count pendientes).',
@@ -161,6 +173,48 @@ return [
                     .'de aviso no tienen ni correo ni webhook: :roles. Las alertas dirigidas a ellos se '
                     .'encienden y se apagan sin que las vea nadie. No son avisos menores: la rotura del '
                     .'registro de auditoria va a «seguridad» y los turnos sin cerrar van a «rrhh».',
+            ],
+        ],
+
+        // --- Redes del borde (PP-01) -----------------------------------------
+
+        'network' => [
+            'probe' => $probe,
+            'portal' => [
+                'ok' => 'El portal del empleado solo se abre desde una red privada.',
+                'ok_not_provided' => 'La aplicacion no recibe PORTAL_INTERNAL_CIDR, asi que no se ha podido '
+                    .'comprobar desde donde se abre el portal.',
+                'warning_open' => 'El portal del empleado esta abierto a internet (PORTAL_INTERNAL_CIDR permite '
+                    .'cualquier origen). Es una decision legitima del cliente, pero el portal entra con codigo '
+                    .'de empleado y un PIN de 6 digitos: conviene que conste y que alguien vigile los intentos '
+                    .'fallidos.',
+                'warning_public' => 'PORTAL_INTERNAL_CIDR incluye direcciones que no son de una red privada: el '
+                    .'portal del empleado se puede abrir desde esas direcciones publicas de internet.',
+                'warning_sample' => 'PORTAL_INTERNAL_CIDR conserva el valor de ejemplo de la red de desarrollo. '
+                    .'En un servidor real esa red no existe y nadie puede abrir el portal: toda la plantilla '
+                    .'recibe un 403.',
+                'failure_invalid' => 'PORTAL_INTERNAL_CIDR no es un rango de red IPv4 valido. El servidor web '
+                    .'no arranca con ese valor, asi que no se sirve nada: ni el portal, ni el panel, ni los '
+                    .'quioscos.',
+            ],
+            'kiosk_vlan' => [
+                'ok' => 'El limite elevado de fichaje solo se aplica a una red concreta (KIOSK_VLAN_CIDR).',
+                'ok_not_provided' => 'La aplicacion no recibe KIOSK_VLAN_CIDR, asi que no se ha podido '
+                    .'comprobar la red de los quioscos.',
+                'warning_open' => 'KIOSK_VLAN_CIDR permite cualquier origen: el limite elevado de fichaje '
+                    .'(600 peticiones por minuto) se aplica a todo internet y el limite de 30 por minuto que '
+                    .'protege desde fuera no se aplica a nadie.',
+                'failure_invalid' => 'KIOSK_VLAN_CIDR no es un rango de red IPv4 valido. El servidor web no '
+                    .'arranca con ese valor, asi que los quioscos no pueden fichar contra el servidor.',
+            ],
+            'metrics' => [
+                'ok' => 'La lectura de /metrics esta limitada a una red concreta (METRICS_ALLOW_CIDR).',
+                'ok_not_provided' => 'La aplicacion no recibe METRICS_ALLOW_CIDR, asi que no se ha podido '
+                    .'comprobar quien puede leer /metrics.',
+                'warning_open' => 'METRICS_ALLOW_CIDR permite cualquier origen: /metrics, que expone el estado '
+                    .'interno del sistema, se puede leer desde cualquier sitio.',
+                'failure_invalid' => 'METRICS_ALLOW_CIDR no es un rango de red IPv4 valido. El servidor web no '
+                    .'arranca con ese valor.',
             ],
         ],
 
@@ -211,8 +265,15 @@ return [
             ],
             'branding_logo' => [
                 'ok' => 'El logotipo configurado se lee correctamente.',
-                'warning' => 'El logotipo configurado no se puede usar (:reason). Las aplicaciones enseñaran la '
-                    .'marca del producto. No afecta a nada mas.',
+                // Una variante por grupo de motivos (LogoRejection), no el codigo en
+                // bruto: «(missing)» no le dice nada a quien administra el servidor.
+                'warning_path' => 'El logotipo configurado no se puede usar: su ruta no esta dentro del directorio '
+                    .'de marca. Las aplicaciones y los PDF saldran sin logotipo. No afecta a nada mas.',
+                'warning_missing' => 'El logotipo configurado no se puede usar: no hay ningun fichero legible en esa '
+                    .'ruta. Las aplicaciones y los PDF saldran sin logotipo. No afecta a nada mas.',
+                'warning_content' => 'El logotipo configurado no se puede usar: el fichero no es un PNG o un SVG '
+                    .'admitido (formato, peso, dimensiones o un SVG con guion). Las aplicaciones y los PDF saldran '
+                    .'sin logotipo. No afecta a nada mas.',
                 'warning_unknown' => 'No se ha podido comprobar el logotipo configurado.',
             ],
         ],
@@ -378,7 +439,7 @@ return [
                     ."  docker compose ps\n"
                     ."  docker compose logs --tail=50 redis\n"
                     ."  docker compose restart redis\n"
-                    .'Se puede seguir fichando mientras tanto, pero el panel puede pedir volver a entrar.',
+                    .'Se puede seguir fichando mientras tanto; el panel y el portal vuelven cuando Redis responda.',
             ],
             'backlog' => [
                 'warning' => "Mira si el proceso que consume la cola esta vivo:\n"
@@ -436,6 +497,48 @@ return [
             ],
         ],
 
+        'network' => [
+            'probe' => $probeFix,
+            'portal' => [
+                'warning_open' => "Si abrirlo a internet es lo que quieres, no hay nada que corregir: anotalo en\n"
+                    ."el acta de instalacion y revisa docs/cliente/endurecimiento.md.\n"
+                    ."Si no, pon en el fichero .env la red del hotel o de tu VPN y aplica el cambio:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    .'  docker compose up -d nginx',
+                'warning_public' => "Si solo debe abrirse desde la red del hotel, pon en el fichero .env su rango\n"
+                    ."privado y aplica el cambio:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    ."  docker compose up -d nginx\n"
+                    .'Si esas direcciones publicas son las que quieres, no hay nada que corregir.',
+                'warning_sample' => "Averigua con que IP ve nginx a un empleado (docs/runbooks/portal-403.md) y\n"
+                    ."pon su red en el fichero .env. Despues aplica el cambio:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Corrigelo en el fichero .env: un solo rango con el formato a.b.c.d/n, por\n"
+                    ."ejemplo 10.20.0.0/16 (una direccion suelta se escribe con /32, y IPv6 no se admite).\n"
+                    ."Despues aplica el cambio:\n"
+                    .'  docker compose up -d nginx',
+            ],
+            'kiosk_vlan' => [
+                'warning_open' => "Pon en el fichero .env solo la red de las tablets y aplica el cambio:\n"
+                    ."  KIOSK_VLAN_CIDR=10.0.20.0/24\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Corrigelo en el fichero .env: un solo rango con el formato a.b.c.d/n, por\n"
+                    ."ejemplo 10.0.20.0/24 (una direccion suelta se escribe con /32, y IPv6 no se admite).\n"
+                    ."Despues aplica el cambio:\n"
+                    .'  docker compose up -d nginx',
+            ],
+            'metrics' => [
+                'warning_open' => "Pon en el fichero .env solo la red de Prometheus (por defecto 172.29.0.20/32) y\n"
+                    ."aplica el cambio:\n"
+                    ."  METRICS_ALLOW_CIDR=172.29.0.20/32\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Corrigelo en el fichero .env: un solo rango con el formato a.b.c.d/n, por\n"
+                    ."ejemplo 172.29.0.20/32. Despues aplica el cambio:\n"
+                    .'  docker compose up -d nginx',
+            ],
+        ],
+
         'tls' => [
             'probe' => $probeFix,
             'certificate' => [
@@ -485,8 +588,22 @@ return [
                     .'leerlo. Si no usas logotipo propio, no hay nada que hacer.',
             ],
             'branding_logo' => [
-                'warning' => 'Vuelve a subir el logotipo desde el panel, en Configuracion. El formato admitido '
-                    .'es PNG o SVG.',
+                // El logotipo no se sube desde el panel: se copia a la carpeta del
+                // servidor y en el panel solo se escribe su ruta (DC6).
+                'warning_path' => 'Copia el PNG o el SVG a la carpeta de BRANDING_PATH del servidor (si esta vacia, '
+                    .'./branding junto al docker-compose.yml) y escribe en el panel, pantalla Marca, su ruta '
+                    .'de dentro del contenedor: /var/kronoqr/branding/<fichero>. Detalle: '
+                    .'docs/cliente/configuracion.md, seccion 2.2.',
+                'warning_missing' => 'Comprueba que el fichero esta en la carpeta de BRANDING_PATH del servidor y que '
+                    ."se puede leer (chmod 0644). Si esta orden no lo enseña:\n"
+                    ."  docker compose exec app ls -l /var/kronoqr/branding\n"
+                    .'el volumen no esta montado: revisa BRANDING_PATH en el .env y recrea los tres contenedores '
+                    .'que lo usan con docker compose up -d app horizon scheduler. Detalle: '
+                    .'docs/cliente/configuracion.md, seccion 2.2.',
+                'warning_content' => 'Sustituye el fichero por un PNG, o por un SVG sin guion (<script>), de peso y '
+                    .'dimensiones moderados, en la misma carpeta de BRANDING_PATH, y vuelve a guardar la ruta en el '
+                    .'panel, pantalla Marca: al guardar se comprueba y el panel dice el motivo exacto. Detalle: '
+                    .'docs/cliente/configuracion.md, seccion 2.2.',
                 'warning_unknown' => 'Vuelve a ejecutar este comando cuando la base de datos responda.',
             ],
         ],

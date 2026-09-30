@@ -9,6 +9,10 @@
 > La **15** es de la **5.12**: el histórico de `error_events`. La **16** es de
 > la **3.3**: la pantalla de quioscos del panel, el código de servicio y la
 > pantalla de diagnóstico de la tablet.
+>
+> **¿Tienes un problema ahora mismo?** Ve directamente al **§18, «Qué hacer
+> si…»**: tablets que vuelven a emparejarse, Redis que no arranca, un `402`,
+> informes que no terminan y la copia nocturna fallida.
 
 ---
 > **Los comandos de esta guía se ejecutan desde el directorio del paquete**, que
@@ -116,7 +120,7 @@ docker compose -f docker-compose.yml run --rm \
 **Después:**
 
 - **Archiva el informe** junto a la autorización escrita.
-- Lanza `php artisan compliance:verify-audit-chain`. Tiene que terminar en verde
+- Lanza `docker compose exec app php artisan compliance:verify-audit-chain`. Tiene que terminar en verde
   y decir «Purga sellada reconocida: particion AAAA». Si dijera otra cosa, es un
   incidente de seguridad.
 
@@ -128,7 +132,7 @@ docker compose -f docker-compose.yml run --rm \
 | --- | --- | --- |
 | «La frase de confirmación no corresponde…» | El informe caducó, o cambió el perfil de cumplimiento | Vuelve a lanzar `--dry-run` y usa la frase nueva |
 | «La cadena de la partición audit_log_AAAA NO verifica» | Alguien tocó la auditoría | **Incidente de seguridad.** `rotura-cadena-auditoria.md`. No repitas la purga |
-| «La purga no ha podido completarse contra la base de datos» | Falta la credencial de `fichaje_maintenance`, o el rol no la tiene puesta | Provisiónala con `infra/docker/postgres/initdb/02-application-roles.sh` y repite |
+| «La purga no ha podido completarse contra la base de datos» | Falta la credencial de `fichaje_maintenance`, o el rol no la tiene puesta | El rol nace sin contraseña a propósito: asígnasela solo para esta operación como explica el §9 («`fichaje_maintenance`: el rol que nace sin contraseña») y repite |
 | «La instalación no tiene centro de trabajo» | La puesta en marcha no se ha completado | Termina el asistente; sin centro no hay perfil de cumplimiento y no hay plazo |
 | La propuesta semanal deja de aparecer | El planificador no está corriendo | Revisa el contenedor `scheduler`; la métrica `retention_last_run_timestamp_seconds` lo delata |
 
@@ -333,6 +337,7 @@ mensaje, que es lo que hay que leer.**
 | `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada**. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
 | `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
 | `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`); con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
+| `7` | **Garantía de seguridad rota. NADA aplicado.** Un rol de la base de datos tiene más privilegios de los permitidos, o una copia ha intentado cambiarlos (AUD-1). No es una avería: es una garantía que el producto se niega a saltarse | `backup.sh`: el rol con el que se copia es superusuario, o puede crear roles o bases, o saltarse RLS; no se ha escrito ninguna copia y salta la alerta de copia fallida. `restore.sh` y `restore-drill.sh --mode database`: la copia ha cambiado roles del clúster al restaurarse; no se ha intercambiado ninguna base y se ha intentado devolver los roles a su estado. Sigue `rotacion-secretos.md` («El rol de las copias es privilegiado») o `restaurar-backup.md` §6.6 |
 
 `install.sh` y `update.sh` invocan `product:doctor` en su fase de verificación
 (RF-PD-13): en `install.sh` un aviso (código `1` de `product:doctor`) se
@@ -434,6 +439,14 @@ history -c
 La **simulación** (`--dry-run`), que es la que corre sola cada lunes, **no
 necesita nada de esto**: solo cuenta, y cuenta con el rol de la aplicación.
 
+**Desde la 2.2.0 los contenedores no reciben el `.env` entero**, solo las
+variables que necesitan ([`configuracion.md`](configuracion.md) §6.2), y estas
+órdenes siguen valiendo tal cual: `-e DB_MAINTENANCE_PASSWORD=…` entrega la
+contraseña **solo** al contenedor efímero de esa orden, que desaparece al
+terminar (`--rm`); el `app` que está en marcha nunca la ve. Y el
+`ALTER ROLE` se hace dentro del contenedor `postgres`, no en el de la
+aplicación.
+
 ### Las cuentas del panel: alta, baja y contraseña
 
 Las cuentas de gestión se crean por consola y **se retiran por consola**. En esta
@@ -493,7 +506,7 @@ Es una configuración soportada, pero **asume esta tarea manual**:
 
 | Cada | Qué comprobar |
 | --- | --- |
-| Semanal | `docker compose exec app php artisan backup:verify` — que la última copia existe y verifica |
+| Semanal | `docker compose exec scheduler php artisan backup:verify` — que la última copia existe y verifica |
 | Semanal | `df -h` sobre el disco de Docker y sobre `BACKUP_PATH` |
 | Trimestral | El simulacro de restauración (sección 1), que no cambia |
 
@@ -658,10 +671,11 @@ la alimenta dejó de ejecutarse):
 | `RoturaDeCadenaDeAuditoria` | Cualquiera | Crítica | Seguridad | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Preserva la evidencia (§2 de ese runbook) antes de tocar nada |
 | `VerificacionDeAuditoriaAusente` | > 26 h sin verificar | Crítica | Seguridad | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba que el `scheduler` sigue vivo |
 | `ParticionDeAuditoriaAusente` | Falta la partición del año en curso | Crítica | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | **El fichaje está caído**: `compliance:ensure-audit-partitions` ya |
-| `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Falta la del año próximo, desde noviembre | Media | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba el `scheduler` y `DB_MIGRATION_USERNAME` en el `.env` |
-| `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Cualquiera | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | `backup:verify` y reintenta con `backup:run` |
+| `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Falta la del año próximo, desde noviembre | Media | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba que el `scheduler` corre y que la migración `2026_09_29_100000` está aplicada (`migrate:status` por el servicio `migrate`, ver el runbook §5). Ya no depende de `DB_MIGRATION_USERNAME`: la partición la pide la aplicación a una función de la base |
+| `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Cualquiera | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | `backup:verify` y reintenta con `backup:run`, los dos en el contenedor `scheduler` (no en `app`) |
 | `CopiaDeSeguridadAusente` | Sin métrica en 30 min | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Comprueba el `scheduler` y que `BACKUP_PATH` está montado |
 | `ArchivadoDeWalDetenido` | > 30 min sin archivar | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Urgente: sin espacio, PostgreSQL termina parándose entero |
+| `SlotDeReplicacionParado` | ≥ 1 slot de replicación sin consumidor durante 15 min | Crítica | IT | [`slot-replicacion-parado.md`](../runbooks/slot-replicacion-parado.md) | KronoQR no usa ninguno: uno solo ya es anómalo. Retiene registro de transacciones y puede llenar el disco de datos |
 | `DiscoDeCopiasCasiLleno` | < 20 % libre en el volumen de copias | Media | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Amplía el disco o baja `BACKUP_RETENTION_DAYS` |
 | `SimulacroDeRestauracionNuncaEjecutado` | Ninguno registrado todavía | Media | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Ejecútalo: sin él, nadie ha comprobado que las copias restauran de verdad |
 | `SimulacroDeRestauracionCaducado` | Fallido o > 100 días | Media | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Repite el simulacro con la copia anterior si la última falla |
@@ -788,7 +802,7 @@ Los siete pasos y lo que pasa si falla cada uno:
 | 3 · Copia previa | Sale `2` | Mantenimiento retirado; nada tocado. **Sin copia no hay actualización** | [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2 y volver a ejecutar |
 | 4 · Migraciones | Vuelta atrás automática → `4` | Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante antes de reintentar: dice en qué versión intermedia se paró |
 | 5 · Arranque y verificación | Vuelta atrás automática → `4` | Igual que arriba. **La versión nueva nunca recibió tráfico**: se verifica sin borde | Igual que arriba |
-| 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `artisan up`, **sin restaurar nada**) o la restauración quedó a medias (tres órdenes y la ruta de la copia) | Runbook §5. Los quioscos siguen encolando mientras tanto |
+| 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `docker compose exec app php artisan up`, **sin restaurar nada**) o la restauración quedó a medias (tres órdenes y la ruta de la copia) | Runbook §5. Los quioscos siguen encolando mientras tanto |
 | 7 · Informe | — | `BACKUP_PATH/reports/update-<fecha>.log`, siempre; al lado, `update-<fecha>.detalle.log` (solo root, salida cruda, **puede llevar datos personales**) | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
 
 Los pasos 5 y 6 dejan además su propio asiento en `audit_log` (`system.updated`
@@ -801,10 +815,33 @@ que se vuelve ya conoce esa acción (desde la 2.2.0): una anterior no sabría ve
 después de la siguiente actualización.
 
 **Lo que no cambia:** tus secretos (el `.env` se copia tal cual y solo cambia
-`IMAGE_TAG`), los datos, la licencia (una licencia caducada **no impide
-actualizar**), y el fichaje. **Lo que sí hace falta:** `BACKUP_ENCRYPTION_KEY`
-en el `.env` y espacio para la copia y para la migración; el paso 1 lo dice con
-cifras.
+`IMAGE_TAG`; la única excepción es la de abajo, al pasar de la 2.1.0), los
+datos, la licencia (una licencia caducada **no impide actualizar**), y el
+fichaje. **Lo que sí hace falta:** `BACKUP_ENCRYPTION_KEY` en el `.env` y
+espacio para la copia y para la migración; el paso 1 lo dice con cifras.
+
+**Al actualizar desde la 2.1.0: cada contenedor recibe solo lo suyo.** Hasta la
+2.1.0 todos los contenedores de la aplicación recibían el `.env` entero,
+incluida la contraseña del rol de migración, que es superusuario de la base.
+Desde la 2.2.0, cada servicio recibe **solo las variables que necesita** (la
+tabla está en [`configuracion.md`](configuracion.md) §6.2). Tres consecuencias
+que tienes que conocer:
+
+- **Si añadiste al `.env` una variable propia**, ya no llega a ningún
+  contenedor. El paso 1 (y `--check-only`) te avisa con la lista de las claves
+  de tu `.env` que ningún servicio recibirá. Es un aviso, no un fallo: casi
+  siempre son restos que no hacían nada. Si alguna sí te importa, dilo al
+  fabricante; no edites el `docker-compose.yml`, que la siguiente
+  actualización sustituye.
+- **Las copias pasan a un rol de solo lectura.** El actualizador crea el rol
+  `fichaje_backup` y escribe `BACKUP_DB_USERNAME` y una `BACKUP_DB_PASSWORD`
+  nueva **en el `.env` de la versión nueva**. El `.env` de la versión anterior
+  conserva las credenciales antiguas a propósito: es con lo que arranca la
+  vuelta atrás.
+- **Una vuelta atrás a la 2.1.0 vuelve a la 2.1.0 entera**, con su forma de
+  repartir credenciales: los contenedores vuelven a recibir el `.env` completo
+  hasta que actualices otra vez. Si la actualización se deshizo, no lo dejes
+  para meses: el motivo está en el informe.
 
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
@@ -948,7 +985,7 @@ y auditada**, nunca el valor por defecto:
 
 - Panel: marca «Incluir datos personales»; la pantalla te dice qué se va a
   incluir y que queda registrado, y solo entonces te deja generar.
-- Consola: `php artisan product:diagnostics --with-personal-data --period-days=7`
+- Consola: `docker compose exec app php artisan product:diagnostics --with-personal-data --period-days=7`
   (máximo 31 días).
 
 Añade la plantilla —**solo las personas con actividad en el periodo o con una
@@ -1114,7 +1151,8 @@ cola se reinició— no bloquea nada: pasado el tiempo máximo de generación (u
 hora) el sistema la da por **fallida** con el motivo `stale` en cuanto alguien
 pide otra o en la purga de la hora siguiente, y puedes generar de nuevo. No
 hace falta tocar la base de datos; si de verdad ves una en curso más de una
-hora sin que pase a fallida, ejecuta `php artisan product:export-all --purge`
+hora sin que pase a fallida, ejecuta
+`docker compose exec app php artisan product:export-all --purge`
 y vuelve a pedirla.
 
 **Si aparece como «fallida».** El motivo que enseña el panel es un código, no
@@ -1343,7 +1381,7 @@ según la razón. Un quiosco que va bien no pide nada. El resumen:
 | **Aviso, fichajes pendientes** — la tablet **tiene red y sigue con fichajes sin enviar** | [`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md). **No desvincules esa tablet**: perderías la cola |
 | **Aviso, batería baja** | Ve al punto de montaje: cargador desenchufado, regleta apagada o cable partido |
 | **Aviso, latido tardío** | Nada todavía. Si no vuelve a «al día» en diez minutos pasará a fallo y sonará la alerta |
-| **La tablet volvió sola a la pantalla de emparejamiento** | Alguien la desvinculó o rotó su token: [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6 |
+| **La tablet volvió sola a la pantalla de emparejamiento** | Alguien la desvinculó, o su token cumplió los 90 días (§18): [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6 |
 
 **Si la cola no baja aunque la red de ese punto vaya bien**, y el «más antiguo»
 de la columna «Pendientes» se queda clavado en la misma hora día tras día,
@@ -1453,12 +1491,17 @@ apareciendo al día.
 
 ### 17.1 Qué promete el producto, y qué significa en un hotel
 
-El producto se publica con un umbral escrito: **50 fichajes por segundo
+El producto se diseña contra un umbral escrito: **50 fichajes por segundo
 sostenidos en el servidor, con el 95 % de las respuestas por debajo de 150 ms**
-(`RNF-P-06` y `RNF-P-02`). **Se mide antes de cada versión mayor sobre hardware
-de referencia y con esta misma orden, `make load-test`, como paso del
-procedimiento de publicación**, y el resultado viaja con la versión. Es el mismo
-procedimiento que puedes repetir tú sobre tu servidor.
+(`RNF-P-06` y `RNF-P-02`). **Hoy es un objetivo de diseño, no una cifra medida
+que podamos entregarte**: todavía no se ha medido en el hardware de referencia
+(4 núcleos y 8 GB) con un servidor dedicado, así que ninguna versión viaja con
+esa medición. Cuando exista, las notas de la versión lo dirán con la cifra y la
+máquina.
+
+**Mídelo tú con `make load-test`** (§17.2): es la misma prueba, da un veredicto
+requisito a requisito y es la única cifra que vale para tu servidor, porque sale
+de tu hardware, tu disco y tu red.
 
 Al etiquetar la versión hay además una comprobación automática en la
 infraestructura del fabricante, pero **esa no juzga el umbral y no debe leerse
@@ -1475,7 +1518,7 @@ Traducido a tu hotel son **dos límites distintos**, y conviene no confundirlos:
 | Dónde | Qué límite hay | Por qué |
 | --- | --- | --- |
 | **En el borde, por origen** (el servidor web) | Desde `KIOSK_VLAN_CIDR`: **una ráfaga de 50 fichajes en el acto** y después **10 por segundo** (600 por minuto). Desde cualquier otro origen, 30 por minuto con ráfaga de 10 | Todos los quioscos de un hotel salen por la misma IP. Ver [`instalacion.md`](instalacion.md) §6 |
-| **En el servidor, en total** | **50 fichajes por segundo sostenidos** sumando todos los orígenes, con p95 < 150 ms | Es lo que mide la prueba de carga y lo que decide si una versión mayor sale |
+| **En el servidor, en total** | **50 fichajes por segundo sostenidos** sumando todos los orígenes, con p95 < 150 ms | Es el objetivo de diseño y lo que juzga la prueba de carga cuando la ejecutas sobre tu servidor |
 
 **El cambio de turno de una plantilla entera cabe en la ráfaga.** Las primeras
 50 tarjetas pasan de golpe; a partir de ahí el borde deja pasar diez fichajes
@@ -1622,9 +1665,10 @@ empleado ve es lo de siempre: el quiosco confirma, encola y reenvía.
 
 **El hardware, como referencia.** Los mínimos publicados son **2 núcleos y
 4 GB**; el recomendado, **4 núcleos y 8 GB** ([`instalacion.md`](instalacion.md)
-§0). El mínimo sostiene una plantilla de hasta 100 personas con el pool de
-serie; a partir de ahí la conversación es de núcleos y de RAM antes que de
-parámetros.
+§0). El mínimo está dimensionado para una plantilla de hasta 100 personas con
+el pool de serie —es el objetivo de diseño; confírmalo en tu servidor con
+`make load-test`—; a partir de ahí la conversación es de núcleos y de RAM antes
+que de parámetros.
 
 **Un `429` no deja a nadie sin fichar.** El quiosco no bloquea nunca al
 empleado: confirma en pantalla, guarda el fichaje en su cola local con la hora
@@ -1721,3 +1765,178 @@ un entorno de pruebas la respuesta es la de siempre: se vuelve a sembrar.
 
 Las tres primeras se cambian en el `.env` y **exigen reiniciar los servicios**;
 su ficha completa está en [`configuracion.md`](configuracion.md) §6.24 y §6.15.
+
+---
+
+## 18. Qué hacer si…
+
+Los fallos previsibles de una instalación en marcha, con el síntoma que ve
+alguien del hotel y las órdenes para salir de él. **Antes de nada, en
+cualquiera de ellos:**
+
+```bash
+./doctor.sh
+```
+
+Dice qué está en rojo y qué hacer con cada cosa (§12.1). Lo que sigue es para
+cuando ya sabes cuál de estos casos es el tuyo.
+
+### …todas las tablets vuelven a la pantalla de emparejamiento a los 90 días
+
+**Qué pasa.** Cada tablet recibe al vincularla un token que vive **90 días**
+(`IDENTITY_DEVICE_TOKEN_DAYS`). La renovación automática antes de que caduque
+está prevista, pero **en esta versión no se ejecuta**: el día 90 desde que se
+vinculó, la tablet deja de ser aceptada, vuelve sola a la pantalla de
+emparejamiento y **en ella no se puede fichar hasta volver a vincularla**. Si
+vinculaste todas el mismo día, caen todas el mismo día.
+
+**Lo que no se pierde:** los fichajes que la tablet tuviera en su cola local. Se
+conservan y se envían en cuanto vuelve a estar vinculada.
+
+**Prevención, que es lo que recomendamos.** En el panel, **Quioscos**, la
+columna **«Vinculado»** dice cuándo se vinculó cada una: suma 80 días y
+apúntalo en el calendario. Ese día, con la tablet delante y fuera del cambio de
+turno:
+
+1. Comprueba en esa misma pantalla que su columna **«Fichajes sin
+   sincronizar»** está a `0`.
+2. **Desvincúlala** (Quioscos › el quiosco › **Desvincular**). En un par de
+   minutos la tablet muestra un código nuevo.
+3. **Vincúlala con el mismo nombre exacto.** Se reactiva el mismo quiosco, con
+   su historia, y recibe un token nuevo de 90 días.
+
+Son dos minutos por tablet y quedan en la auditoría. Si puedes, reparte las
+tablets en días distintos para que no coincidan nunca todas. El detalle, con
+capturas, está en
+[`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §5.2 y
+§5.3.
+
+**Si ya ha pasado**, el procedimiento es el mismo empezando por el paso 2 (el
+panel no te dejará vincular con ese nombre mientras el quiosco siga activo:
+desvincula primero). Después, comprueba que su cola baja a `0`:
+
+```bash
+docker compose exec app php artisan kiosk:health
+```
+
+### …Redis se reinicia una y otra vez, casi siempre tras un corte de luz
+
+**Síntoma.** `docker compose ps` muestra `redis` como `Restarting`, y su
+registro habla del fichero de persistencia (`Bad file format reading the append
+only file`, `AOF ... is not valid`). Un apagado brusco dejó ese fichero a medias
+y Redis se niega a arrancar con él.
+
+**Impacto.** **El fichaje sigue funcionando**: las tablets registran contra la
+base de datos, que no depende de Redis. Lo que sí falla mientras tanto:
+
+| Qué | Cómo se nota |
+| --- | --- |
+| El acceso al panel y al portal | Errores al entrar o pantallas que no cargan |
+| Los trabajos en segundo plano (informes, exportaciones, avisos) | Los que se pidan ahora salen **«Fallida»**: hay que repetirlos cuando Redis vuelva |
+| La pantalla de presencia en tiempo real | Deja de actualizarse al instante |
+
+**Qué hacer.** `./doctor.sh` lo detecta y te da estas mismas órdenes. Para
+Redis, repara su fichero y vuelve a levantarlo. La reparación pregunta antes de
+recortar; el `echo y` de la segunda orden contesta por ti. Termina con `All AOF
+files and manifest are valid`.
+
+```bash
+docker compose logs --tail 30 redis
+docker compose stop redis
+echo y | docker compose run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
+docker compose up -d redis
+./doctor.sh
+```
+
+Si `./doctor.sh` sigue viendo algún servicio parado, `docker compose up -d` lo
+levanta todo. El mismo procedimiento, visto desde la alerta que lo dispara, está
+en [`../runbooks/errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md)
+§1.1.
+
+La reparación recorta lo último que se escribió antes del corte. **En Redis no
+hay nada del registro horario**: lo que se pierde son, como mucho, trabajos que
+estaban en cola en ese instante. Si un informe sale «Fallido», vuelve a pedirlo.
+
+**Si `redis-check-aof` no consigue repararlo**, se puede arrancar Redis vacío:
+por la misma razón, no se pierde ningún fichaje ni ninguna corrección. Se
+pierden los trabajos en cola y los contadores de intentos fallidos, que vuelven
+a cero. Cambia `NOMBRE` por el que devuelva la segunda orden:
+
+```bash
+docker compose rm -sf redis
+docker volume ls --filter name=redis-data
+docker volume rm NOMBRE
+docker compose up -d
+```
+
+### …una pantalla del panel dice que esa función no está incluida en la licencia (`402`)
+
+**No es una avería ni un permiso.** Es la respuesta `402` del producto: la
+funcionalidad **accesoria** que se ha pedido —informes por periodo, exportación
+para nómina, cuadro de adopción, exportaciones en segundo plano— no está en la
+licencia activa, o la licencia ha caducado. El propio mensaje dice qué sigue
+disponible.
+
+**Lo que nunca responde `402`:** el fichaje, la sincronización de las tablets, la
+consulta de jornadas, el portal del empleado, la exportación para la Inspección,
+las correcciones, la auditoría y las copias. Eso no se toca con ninguna licencia
+(§7).
+
+**Qué hacer:**
+
+```bash
+docker compose exec app php artisan license:show
+```
+
+Si dice que no hay licencia, que caducó o que esa funcionalidad no está en el
+plan, es una conversación con el fabricante, no una tarea de IT. Con la clave
+nueva, `license:activate` (§7). No reinicies nada: no sirve de nada.
+
+### …los informes se quedan «En cola» y no terminan nunca
+
+**Qué pasa.** Los informes y exportaciones que no caben en una respuesta al
+momento los genera el servicio **`horizon`**, el trabajador de colas. Si está
+parado, se quedan **«En cola»**. **No se pierden**: se generan en cuanto vuelve.
+Hoy ninguna alerta avisa de que `horizon` está parado; el síntoma es este.
+
+```bash
+docker compose ps horizon
+docker compose logs --tail 50 horizon
+docker compose up -d horizon
+```
+
+Si `horizon` no arranca, mira su registro: casi siempre es que Redis tampoco
+está (sección anterior de este mismo apartado) o que la base de datos no
+responde (`./doctor.sh`). El fichaje no depende de `horizon`.
+
+### …la copia nocturna ha fallado
+
+**Síntoma.** Suena `CopiaDeSeguridadFallida`, `CopiaDeSeguridadSinVerificar` o
+`CopiaDeSeguridadAusente` (§10.4), o `./doctor.sh` avisa de que no puede escribir
+en el directorio de copias.
+
+**Impacto.** El fichaje no se entera. Pero **sin una copia verificada no hay
+actualización** (`update.sh` se niega en su paso 3) y, si hubiera que restaurar,
+volverías a la última copia buena. Resuélvelo el mismo día.
+
+Las órdenes de copia van por el contenedor **`scheduler`**, no por `app`: es el
+que tiene la clave de cifrado y el rol de copias.
+
+```bash
+docker compose ps scheduler
+docker compose logs --since 24h scheduler | grep -i backup
+docker compose exec scheduler php artisan backup:verify
+docker compose exec scheduler php artisan backup:run
+```
+
+La última termina con un código de la tabla común (§8), y el mensaje dice la
+causa:
+
+| Código | Causa más frecuente | Qué hacer |
+| --- | --- | --- |
+| `2` | `BACKUP_PATH` sin montar o sin espacio, o falta la clave de cifrado | Monta el destino o libera espacio y repite. La copia anterior sigue intacta |
+| `6` | La copia se escribió pero **no verifica** | Trátala como inexistente y repite. Si se repite, [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2 |
+| `7` | El rol de las copias tiene más privilegios de los permitidos | No es una avería: [`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md), «El rol de las copias es privilegiado» |
+
+El diagnóstico completo, código a código, está en
+[`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2.

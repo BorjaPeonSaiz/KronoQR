@@ -6,6 +6,7 @@ namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Application\Port\DoctorTranslator;
+use App\Modules\Product\Application\Port\ProbeFailureClassifier;
 use App\Modules\Product\Domain\ValueObject\DoctorCheck;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorReport;
@@ -55,6 +56,11 @@ final readonly class RunDoctorHandler
         private DoctorTranslator $translator,
         private Clock $clock,
         private string $productVersion,
+        /**
+         * Nulo en las pruebas que montan sondas a mano: entonces toda sonda que
+         * revienta se atribuye al producto, que era el comportamiento anterior.
+         */
+        private ?ProbeFailureClassifier $failures = null,
     ) {}
 
     public function handle(string $locale): DoctorReport
@@ -80,6 +86,10 @@ final readonly class RunDoctorHandler
         } catch (Throwable $failure) {
             return [DoctorFinding::failure(
                 $probe->family().'.probe',
+                // PR2: si lo que fallo fue Redis o PostgreSQL, el texto lo dice y
+                // manda a su comprobacion; «es un fallo del producto, avisa a
+                // soporte» queda para lo que de verdad lo es.
+                variant: $this->failures?->unavailableService($failure),
                 params: ['family' => $probe->family()],
                 // La CLASE de la excepcion, jamas su mensaje: un
                 // `PDOException` lleva el DSN, y el DSN lleva la contraseña.

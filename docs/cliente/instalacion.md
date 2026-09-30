@@ -24,11 +24,12 @@ Vue.** Hace falta un servidor Linux con Docker y treinta minutos.
 | Sistema | **Linux** con **Docker 24 o superior** y **Compose v2** | Íd. |
 | Red | Alcanzable desde la red interna. Salida a internet **opcional** | Íd. |
 
-**¿Da la talla este servidor para mi cambio de turno?** El mínimo sostiene una
-plantilla de hasta 100 personas con la configuración de serie; el recomendado,
-hasta 500. Si quieres comprobarlo con una medida tuya en lugar de creernos, hay
-una prueba de carga que lo dice requisito a requisito, y un solo mando que tocar
-—`PHP_FPM_MAX_CHILDREN`— cuando sobra CPU y falta pool:
+**¿Da la talla este servidor para mi cambio de turno?** El mínimo está
+dimensionado para una plantilla de hasta 100 personas con la configuración de
+serie; el recomendado, hasta 500. Son objetivos de diseño, todavía sin una
+medición en hardware de referencia que podamos entregarte: para una cifra de tu
+servidor hay una prueba de carga que lo dice requisito a requisito, y un solo
+mando que tocar —`PHP_FPM_MAX_CHILDREN`— cuando sobra CPU y falta pool:
 [`operacion.md`](operacion.md) **§17**. Se ejecuta **en un entorno de pruebas,
 nunca en producción**.
 
@@ -131,14 +132,19 @@ docs/runbooks/           Procedimientos: restaurar, rotar secretos, alta de
 >
 > - **Si la aplicación está en marcha**, delega en el diagnóstico real del
 >   producto (`php artisan product:doctor`) y muestra su informe completo:
->   base de datos, colas, correo, certificado, permisos, disco y licencia,
->   cada comprobación con qué hacer si está en rojo.
+>   base de datos, colas, correo, certificado, permisos, disco, licencia y las
+>   tres redes del borde, cada comprobación con qué hacer si está en rojo.
 > - **Si la aplicación está parada** —el caso para el que este script existe:
 >   sin ella, `docker compose exec` no sirve de nada—, comprueba desde fuera
 >   lo que se puede: que Docker responde, el estado de cada servicio, que el
 >   `.env` está y con permisos `0600`, el espacio libre, el certificado y su
 >   caducidad, y si algo escucha en los puertos configurados. Y dice cómo
 >   arrancarla.
+> - **En los dos casos** revisa las redes del `.env` (`KIOSK_VLAN_CIDR`,
+>   `PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR` y `TRUSTED_PROXY_CIDR`, §6) y
+>   detecta si **Redis se reinicia en bucle**, lo típico tras un corte de luz:
+>   si la causa es su fichero de persistencia dañado, te da las tres órdenes
+>   que lo reparan ([`operacion.md`](operacion.md) §18).
 >
 > Nunca imprime un secreto: del `.env` solo lee rutas, puertos y nombres de
 > fichero. Sus códigos de salida están en la sección 2, más abajo.
@@ -200,18 +206,49 @@ BACKUP_PATH=/var/backups/fichaje
 IMAGE_REGISTRY=ghcr.io/kronoqr
 ```
 
-**Los cuatro valores de red y `APP_URL` no pueden quedarse como vienen.** El
+**Los tres valores de red y `APP_URL` no pueden quedarse como vienen.** El
 instalador **compara con la plantilla** y se niega a instalar si `APP_URL`,
-`KIOSK_VLAN_CIDR`, `PORTAL_INTERNAL_CIDR` o `METRICS_ALLOW_CIDR` siguen con el
-valor de ejemplo. El motivo es concreto: con `APP_URL=https://localhost` el
-sistema arranca, todas las comprobaciones pasan —la verificación final sondea
-`127.0.0.1`— y **ningún quiosco puede llegar a él**. Nada posterior detecta eso.
+`KIOSK_VLAN_CIDR` o `PORTAL_INTERNAL_CIDR` siguen con el valor de ejemplo. El
+motivo es concreto: con `APP_URL=https://localhost` el sistema arranca, todas
+las comprobaciones pasan —la verificación final sondea `127.0.0.1`— y **ningún
+quiosco puede llegar a él**. Nada posterior detecta eso.
 
-**`IMAGE_REGISTRY=ghcr.io/kronoqr` es el valor de ejemplo, no necesariamente el
-tuyo.** El fabricante te entrega el valor exacto junto con la licencia (suele
-llevar tu propio usuario u organización de GitHub delante, no `kronoqr`
-literal). Si `docker login` o la descarga de imágenes fallan con este valor tal
-cual, es la primera variable que hay que revisar.
+**`METRICS_ALLOW_CIDR=172.29.0.20/32` se deja tal cual.** Es la dirección fija
+de Prometheus, el recolector de métricas del propio producto, y es el valor
+correcto: el instalador lo acepta y solo comprueba que sea un rango válido y
+que cubra a Prometheus (§6).
+
+**Además de la forma, el instalador comprueba qué hace cada valor**, y avisa
+—sin impedir la instalación— si algo no cuadra: un `PORTAL_INTERNAL_CIDR` que
+no contiene ninguna red de este servidor ni la de los quioscos (el portal daría
+`403` a todo el mundo), un rango abierto a todo internet, un `MAIL_HOST` que
+sigue en `mailpit` (el buzón de pruebas del fabricante: no saldría ningún
+correo), la licencia vacía o ningún destinatario de alertas. `update.sh` y
+`./doctor.sh` repiten las comprobaciones de redes en cada ejecución.
+
+**`IMAGE_REGISTRY=ghcr.io/kronoqr` es el valor de la plantilla y hoy no
+descarga nada: pon el que te da el fabricante.** Las imágenes se publican en el
+registro de contenedores de GitHub (GHCR) bajo la cuenta del fabricante, con la
+forma `ghcr.io/<cuenta-del-fabricante>/kronoqr`, y el valor exacto te llega por
+escrito junto con la licencia. Escríbelo sin barra final y sin versión: el
+instalador añade él solo `/php:<versión>`, `/nginx:<versión>` y
+`/postgres:<versión>`.
+
+**Antes de instalar, comprueba que tu servidor puede descargarlas.** Copia estas
+dos órdenes tal cual, después de guardar el `.env`:
+
+```bash
+registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+docker pull "${registro}/php:$(cat VERSION)"
+```
+
+Si termina con `Status: Downloaded newer image` (o `Image is up to date`), está
+bien y no hace falta nada más. Si responde `denied` o `unauthorized`, el
+registro que tienes escrito no es el correcto o las imágenes de tu versión no
+son de acceso público: **no hace falta `docker login` si el fabricante te ha
+dicho que son públicas**; si te ha dado un usuario y un token de lectura, inicia
+sesión con ellos (§5, «…dice "no se han podido descargar las imagenes"»). Y si no sabes qué caso es el tuyo, pregúntalo antes de seguir: es la única
+variable de este bloque que no puedes deducir tú.
 
 **`TLS_ALLOW_SELF_SIGNED=false` en producción, y el instalador lo exige.** Con
 `true`, el servidor web se genera un certificado autofirmado: las tablets
@@ -270,11 +307,20 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    APP_URL relleno en la plantilla
   [ok]    KIOSK_VLAN_CIDR relleno en la plantilla
   [ok]    PORTAL_INTERNAL_CIDR relleno en la plantilla
-  [ok]    METRICS_ALLOW_CIDR relleno en la plantilla
   [ok]    BACKUP_PATH relleno en la plantilla
   [ok]    TLS_CERT_DIR relleno en la plantilla
+  [ok]    METRICS_ALLOW_CIDR relleno en la plantilla
   [ok]    APP_ENV=production
   [ok]    APP_DEBUG=false
+  [ok]    KIOSK_VLAN_CIDR es un CIDR IPv4 valido (10.0.20.0/24)
+  [ok]    PORTAL_INTERNAL_CIDR es un CIDR IPv4 valido (10.0.10.0/24)
+  [ok]    METRICS_ALLOW_CIDR es un CIDR IPv4 valido (172.29.0.20/32)
+  [ok]    PORTAL_INTERNAL_CIDR=10.0.10.0/24 cubre una red de este servidor o la de los quioscos
+  [ok]    METRICS_ALLOW_CIDR=172.29.0.20/32 cubre a Prometheus (172.29.0.20)
+  [ok]    COMPLIANCE_PROFILE relleno en la plantilla
+  [ok]    LICENSE_KEY tiene el formato esperado
+  [ok]    MAIL_HOST apunta a un servidor de correo propio
+  [ok]    ALERT_EMAIL_*: hay al menos un destinatario de alertas
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    El nombre fichaje.tuhotel.local resuelve desde este servidor
   [ok]    Certificado TLS en /opt/kronoqr-2.1.0/certs
@@ -286,7 +332,7 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    Se puede escribir en /opt/kronoqr-2.1.0
   [ok]    Privilegios para asignar el propietario del archivo de WAL
 
-Requisitos cumplidos: 29 comprobaciones, 0 avisos.
+Requisitos cumplidos: 38 comprobaciones, 0 avisos.
 
 Solo comprobacion (--check-only): no se ha tocado nada. Vuelve a ejecutar sin la opcion para instalar.
 ```
@@ -570,7 +616,9 @@ sudo chmod 0644 /opt/kronoqr/branding/logo.png
 # 2. Decirle al docker-compose dónde está. Vacío = ./branding, junto al
 #    docker-compose.yml.
 #    En el .env:  BRANDING_PATH=/opt/kronoqr/branding
-sudo docker compose up -d app
+#    Se recrean los tres que la montan: app, horizon (PDF en diferido) y
+#    scheduler. Con solo app, los PDF en diferido saldrían sin logotipo.
+sudo docker compose up -d app horizon scheduler
 
 # 3. Comprobar que el contenedor lo ve. Si esto sale vacío, no sigas:
 #    lo que falla es el montaje, no la configuración.
@@ -623,7 +671,8 @@ transmiten a nadie**. El fabricante no los conoce y no puede recuperarlos.
 | `APP_KEY` | Cifra sesiones y datos cifrados | Las sesiones y esos datos dejan de poder leerse |
 | `QR_SIGNING_KEY_CURRENT` (+ su `_ID`) | Firma los códigos QR de las tarjetas | **Hay que reimprimir todas las tarjetas** |
 | `DB_PASSWORD` | Rol de la aplicación en PostgreSQL | Se rota; ver `../runbooks/rotacion-secretos.md` |
-| `DB_MIGRATION_PASSWORD` | Rol de migración y de copias | Íd. |
+| `DB_MIGRATION_PASSWORD` | Rol de migración, propietario de la base. Solo lo reciben los servicios de un solo uso `migrate` y `restore` | Íd. |
+| `BACKUP_DB_PASSWORD` | Rol de copias `fichaje_backup`, de **solo lectura**. Solo lo recibe el `scheduler` | Íd. La copia diaria falla hasta que se rota |
 | `REVERB_APP_ID` / `_KEY` / `_SECRET` | Presencia en vivo del panel | Se rotan; solo afecta al tiempo real |
 | `BACKUP_ENCRYPTION_KEY` | Cifra las copias de seguridad | **Las copias dejan de poder restaurarse.** Custódiala fuera del servidor |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | Abre los PIN que el quiosco sella sin red | Los fichajes por PIN encolados sin red no se podrían abrir |
@@ -748,21 +797,33 @@ sudo systemctl stop nginx      # o lo que aparezca
 Si necesitas conservar ese servicio, publica KronoQR en otros puertos con
 `HTTP_PORT` y `HTTPS_PORT` en el `.env`, y ponlo detrás de tu proxy. Antes,
 lee [`endurecimiento.md`](endurecimiento.md) §1.6: detrás de un proxy inverso
-el servidor ve la IP del proxy y no la del quiosco, y `KIOSK_VLAN_CIDR`,
-`PORTAL_INTERNAL_CIDR` y `METRICS_ALLOW_CIDR` dejan de distinguir orígenes.
+el servidor ve la IP del proxy y no la del quiosco, y `KIOSK_VLAN_CIDR` y
+`PORTAL_INTERNAL_CIDR` dejan de distinguir orígenes hasta que declares ese
+proxy en `TRUSTED_PROXY_CIDR` (§6).
 
 ### …dice «no se han podido descargar las imagenes»
 
-El servidor no llega al registro del fabricante, o no has iniciado sesión.
-Sustituye `ghcr.io/kronoqr` por el valor real de `IMAGE_REGISTRY` que te dio el
-fabricante con la licencia (el ejemplo de abajo usa el de la plantilla, casi
-nunca el tuyo):
+Hay tres causas posibles, y se distinguen con una sola descarga de prueba:
 
 ```bash
-docker login ghcr.io/kronoqr
+registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+echo "${registro}"
+docker pull "${registro}/php:$(cat VERSION)"
 ```
 
-Si esta instalación no tiene salida a internet, ve a §7.
+| Lo que responde | Qué pasa | Qué hacer |
+| --- | --- | --- |
+| `echo` imprime `ghcr.io/kronoqr` | Sigue el valor de la plantilla | Pon en `IMAGE_REGISTRY` el valor que te dio el fabricante con la licencia (§1.2) y repite |
+| `denied`, `unauthorized` o `manifest unknown` | Registro mal escrito, versión que no existe en ese registro, o imágenes que exigen iniciar sesión | Revisa letra a letra el valor (sin barra final, sin versión). Si el fabricante te dio un usuario y un token de lectura, inicia sesión con la orden de abajo y repite. Si te dijo que las imágenes son públicas, **no inicies sesión**: el problema es el valor o la versión, y hay que hablar con él |
+| `dial tcp`, `timeout` o `no such host` | El servidor no sale a internet, o un proxy lo impide | Si esta instalación no tiene salida a internet, ve a §7. Si debería tenerla, revisa el proxy de Docker con tu equipo de redes |
+
+Iniciar sesión solo si el fabricante te ha dado credenciales de lectura. Pide el
+usuario y pega el token cuando lo pida; el token no queda en el historial de la
+consola:
+
+```bash
+docker login ghcr.io
+```
 
 ### …dice «Se ha encontrado una instalacion previa» y sale con `3`
 
@@ -840,6 +901,21 @@ responde y `ready` no, el problema es una dependencia, no la aplicación.
 **Es lo correcto** si tu ordenador está fuera de `PORTAL_INTERNAL_CIDR`. El
 portal se abre con código de empleado y PIN de 6 dígitos, y una de las
 protecciones es que no sea alcanzable desde cualquier IP. Ver §6.
+
+Tres casos en los que el `403` sorprende y sigue siendo lo esperado:
+
+- **Pruebas desde el propio servidor** (`https://localhost/portal/` o su IP de
+  la LAN): el servidor web ve la puerta de enlace de la red de contenedores
+  —algo como `172.18.0.1`—, no tu LAN. Prueba desde un ordenador de la LAN.
+- **El `.env` sigue con `172.28.0.0/16`**, el valor de la plantilla: no cubre a
+  nadie en producción.
+- **Docker Desktop** (Windows o macOS): todas las conexiones llegan desde una
+  dirección interna de Docker y el rango no puede distinguir la LAN de internet.
+  No es plataforma de producción (§0).
+
+Cómo averiguar la IP que ve el servidor web, qué hacer en cada caso y cómo abrir
+el portal a internet si el hotel lo decide:
+[`../runbooks/portal-403.md`](../runbooks/portal-403.md).
 
 ### …no encuentro dónde iniciar sesión: no hay ningún usuario
 
@@ -1011,31 +1087,117 @@ Conviene que sea una dirección concreta y no una red entera: si se autoriza la
 red completa de contenedores, las peticiones hechas desde el propio servidor
 entran dentro de ese rango y `/metrics` queda accesible sin que nada lo avise.
 
+**El valor de la plantilla es el correcto y se deja tal cual.** `172.29.0.20`
+es la dirección fija que el producto da a Prometheus. Cámbialo solo si lee
+`/metrics` otro recolector tuyo. Con la observabilidad encendida, el
+instalador, `update.sh` y `./doctor.sh` avisan si el valor no cubre a
+Prometheus: sería perder las métricas y las alertas que dependen de ellas.
+
 ### `PORTAL_INTERNAL_CIDR` — desde dónde se puede entrar al portal del empleado
 
 ```dotenv
-PORTAL_INTERNAL_CIDR=172.28.0.0/16
+PORTAL_INTERNAL_CIDR=10.0.10.0/24
 ```
 
 **Qué hace.** El portal del empleado (código de empleado + PIN de 6 dígitos)
 solo responde a las peticiones que llegan desde este rango. Cualquier otro
 origen recibe `403` en el propio servidor web, antes de llegar a la
-aplicación.
+aplicación. Las tablets no pasan por aquí: este rango no afecta al fichaje.
 
 **Por qué existe.** Un PIN de 6 dígitos es un espacio pequeño. Restringir el
 portal a la red interna es uno de los cuatro controles que lo compensan, junto
 con el bloqueo por intentos, el límite de peticiones por IP y que la sesión
 del portal solo pueda leer los datos del propio empleado.
 
-**El valor de ejemplo es de desarrollo**, no de producción: cubre la red
-interna de Docker Compose. Antes de desplegar, cámbialo por la LAN real del
-hotel o por el rango de la VPN corporativa que use la plantilla para entrar
-desde fuera.
+**Qué poner.** La LAN desde la que la plantilla abrirá el portal (la de los
+ordenadores de la oficina y del wifi de personal, por ejemplo `10.0.10.0/24`)
+o el rango de la VPN corporativa si se entra desde fuera. **Admite un solo
+rango**: si necesitas dos redes, escribe uno que cubra las dos (`10.0.10.0/23`
+cubre `10.0.10.x` y `10.0.11.x`).
+
+**El valor de la plantilla, `172.28.0.0/16`, no sirve en producción.** Es la
+red del entorno de desarrollo del fabricante; en tu servidor la red de
+contenedores no tiene esa subred fija, así que ese valor no admite a nadie y
+todo el mundo recibiría `403`.
+
+**Lo que el servidor web ve no siempre es la IP del ordenador.** Tres casos
+que conviene conocer antes de probar:
+
+- **Desde el propio servidor** —`https://localhost/portal/` o la IP de la LAN
+  del propio servidor—, la petición entra por la puerta de enlace de la red de
+  contenedores (algo como `172.18.0.1`). Es lo esperado: prueba desde un
+  ordenador de la LAN y **no autorices esa dirección** para poder probar.
+- **Con Docker Desktop** (Windows o macOS) **o con Docker sin root**, todas las
+  conexiones llegan desde una dirección interna de Docker. El rango no puede
+  distinguir la LAN de internet, y por eso la producción va sobre Linux con
+  Docker Engine (§0).
+- **Detrás de un proxy inverso o una CDN**, el servidor web ve la IP del proxy.
+  No la autorices en el rango: declara el proxy en `TRUSTED_PROXY_CIDR`
+  (apartado siguiente).
+
+Para averiguar la IP exacta que ve el servidor web y qué hacer con ella:
+[`../runbooks/portal-403.md`](../runbooks/portal-403.md).
 
 **Exponer el portal a internet es una decisión explícita**, nunca un valor por
 defecto. Se toma poniendo `PORTAL_INTERNAL_CIDR=0.0.0.0/0` y debe quedar
 anotada en el acta de entrega de la instalación: es lo que responde el día que
-alguien pregunte por qué el portal es alcanzable desde fuera del hotel.
+alguien pregunte por qué el portal es alcanzable desde fuera del hotel. Qué se
+asume al hacerlo, y cuándo no conviene, está en el mismo runbook, §4.
+
+**Formato de las tres redes.** Cada variable (`KIOSK_VLAN_CIDR`,
+`PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR`) lleva **un solo** CIDR IPv4 con
+prefijo, por ejemplo `10.20.0.0/24`; una dirección suelta se escribe con `/32`.
+IPv6 no se admite (el borde solo escucha en IPv4). Si el valor no es válido, el
+borde no arranca y el registro dice qué variable y qué valor; con
+`PORTAL_INTERNAL_CIDR=0.0.0.0/0` arranca, pero deja un aviso visible en el
+registro.
+
+### `TRUSTED_PROXY_CIDR` — si hay un proxy, un balanceador o una CDN delante
+
+```dotenv
+TRUSTED_PROXY_CIDR=
+```
+
+**Vacía es lo normal**, y es lo correcto si las tablets y el personal llegan
+directamente al servidor. Solo se rellena si pones **delante** del servidor web
+de KronoQR un proxy inverso, un balanceador o una CDN.
+
+**Por qué hace falta entonces.** Con un proxy delante, el servidor web ve
+**siempre la IP del proxy**, y eso rompe tres cosas a la vez: todos los
+quioscos caen fuera de `KIOSK_VLAN_CIDR` (y en el límite de peticiones pensado
+para internet), el portal deja de distinguir la red interna, y el límite de
+peticiones por IP trata a todo el mundo como una sola persona.
+
+**Qué poner.** La dirección o direcciones del proxy, en formato CIDR y
+separadas por comas; una dirección suelta con `/32`:
+
+```dotenv
+TRUSTED_PROXY_CIDR=10.0.0.5/32,10.0.1.0/24
+```
+
+Con eso, el servidor web toma la IP real del visitante de la cabecera
+`X-Forwarded-For`, **pero solo si la petición llega de uno de esos proxies**:
+de cualquier otro origen la cabecera se ignora y nadie puede falsificar su IP.
+El proxy tiene que añadir esa cabecera; casi todos lo hacen de serie.
+
+**Tres reglas:**
+
+- **Nunca `0.0.0.0/0`.** Confiaría en cualquiera: bastaría con escribir la
+  cabecera para hacerse pasar por un quiosco o por la red interna. El servidor
+  web no arranca con ese valor, y el instalador, `update.sh` y `./doctor.sh` lo
+  rechazan.
+- **Deja `TRUSTED_PROXIES` vacía.** Es la variable equivalente de la
+  aplicación. Con `TRUSTED_PROXY_CIDR` puesta, el servidor web ya le entrega la
+  IP real del visitante; si rellenaras también `TRUSTED_PROXIES`, la aplicación
+  volvería a leer la cabecera sobre una IP que ya es la buena.
+- **Lee antes [`endurecimiento.md`](endurecimiento.md) §1.6**: el proxy no puede
+  quitar ni reescribir las cabeceras de seguridad, o la cámara de las tablets
+  deja de funcionar.
+
+Se aplica recreando el servidor web (`docker compose up -d nginx`). Para
+comprobar que funciona, sigue
+[`../runbooks/portal-403.md`](../runbooks/portal-403.md) §2.2: la IP que
+aparece en el registro tiene que ser la del visitante, no la del proxy.
 
 ### Certificado TLS
 
@@ -1113,10 +1275,15 @@ no reconstruye nada y la pérdida máxima deja de ser de 15 minutos.
 **Cómo comprobar que funciona:**
 
 ```bash
-docker compose exec app php artisan backup:run    # crea y verifica una copia
-docker compose exec app php artisan backup:verify # verifica la última
-bash ./restore-drill.sh                            # simulacro trimestral
+docker compose exec scheduler php artisan backup:run    # crea y verifica una copia
+docker compose exec scheduler php artisan backup:verify # verifica la última
+sudo bash ./restore-drill.sh           # simulacro trimestral
 ```
+
+Las dos primeras van por el contenedor **`scheduler`**, no por `app`: es el que
+hace la copia programada y el único de los que están en marcha que recibe la
+clave de cifrado y el rol de copias. Si el `scheduler` estuviera parado, cambia
+`exec` por `run --rm --no-deps`.
 
 El procedimiento completo de recuperación —y el simulacro que hay que ejecutar
 cada trimestre— está en
@@ -1129,28 +1296,34 @@ cada trimestre— está en
 El sistema funciona íntegramente sin internet. Lo único que hay que resolver es
 cómo llegan las imágenes al servidor. Desde una máquina que sí tenga acceso.
 
-**Sustituye `ghcr.io/kronoqr` por tu `IMAGE_REGISTRY` real** (te lo entrega el
-fabricante con la licencia): el de abajo es el valor de ejemplo de la
-plantilla, no una organización pública en la que estén tus imágenes.
+En la primera línea, **cambia `ghcr.io/kronoqr` por tu `IMAGE_REGISTRY` real**
+(te lo entrega el fabricante con la licencia; ver §1.2): el de la plantilla no
+descarga nada. Si el fabricante te ha dado credenciales de lectura, ejecuta
+antes `docker login ghcr.io` en esa máquina; si te ha dicho que las imágenes son
+públicas, no hace falta.
 
 ```bash
+registro="ghcr.io/kronoqr"
 version="$(cat VERSION)"
 for imagen in php nginx postgres; do
-  docker pull "ghcr.io/kronoqr/${imagen}:${version}"
+  docker pull "${registro}/${imagen}:${version}"
 done
 docker pull redis:7-alpine
 
 docker save -o "imagenes-${version}.tar" \
-  "ghcr.io/kronoqr/php:${version}" \
-  "ghcr.io/kronoqr/nginx:${version}" \
-  "ghcr.io/kronoqr/postgres:${version}" \
+  "${registro}/php:${version}" \
+  "${registro}/nginx:${version}" \
+  "${registro}/postgres:${version}" \
   redis:7-alpine
 ```
 
-Copia ese fichero al servidor del hotel (USB, recurso interno) y allí:
+Copia ese fichero al servidor del hotel (USB, recurso interno). Allí, el `.env`
+tiene que llevar **el mismo** `IMAGE_REGISTRY` que usaste arriba: las imágenes
+cargadas se buscan por su nombre completo y, con otro registro, el instalador
+intentaría descargarlas. Después:
 
 ```bash
-docker load -i imagenes-2.1.0.tar
+docker load -i "imagenes-$(cat VERSION).tar"
 sudo ./install.sh
 ```
 

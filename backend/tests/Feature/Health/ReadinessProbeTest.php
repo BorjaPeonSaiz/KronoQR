@@ -66,6 +66,42 @@ it('responde 503 cuando Redis no responde', function (): void {
         ->assertJsonPath('type', 'urn:kronoqr:problem:not-ready');
 })->group('RQ-06', 'RF-PD-13');
 
+/*
+ * CH3: CUANTO TARDA EL `503`. Una direccion que no enruta —ni acepta ni rechaza—
+ * es el peor caso: sin tiempo de conexion configurado, `phpredis` esperaba el
+ * `default_socket_timeout` (60 s) y `pdo_pgsql` sus 30 s por intento, y la
+ * verificacion de la 2.1.0 midio 15,6 s. Un orquestador con una sonda de 1-5 s
+ * habria visto «la sonda no responde» en lugar de «no estoy listo». El techo de
+ * la prueba es holgado a proposito: lo que detecta es la espera sin limite.
+ */
+const READINESS_DIRECCION_QUE_NO_RESPONDE = '10.255.255.1';
+
+it('da el 503 en pocos segundos con Redis inalcanzable por la red', function (): void {
+    config()->set('database.redis.default.host', READINESS_DIRECCION_QUE_NO_RESPONDE);
+    app()->forgetInstance('redis');
+    app()->forgetInstance(Redis::class);
+
+    $inicio = microtime(true);
+
+    Api::guest()->get('/api/v1/ready')->assertStatus(503);
+
+    expect(microtime(true) - $inicio)->toBeLessThan(5.0);
+})->group('RQ-06', 'RF-PD-13');
+
+it('da el 503 en pocos segundos con PostgreSQL inalcanzable por la red', function (): void {
+    config()->set('database.connections.pgsql_inalcanzable', [
+        ...config()->array('database.connections.pgsql'),
+        'host' => READINESS_DIRECCION_QUE_NO_RESPONDE,
+    ]);
+    config()->set('database.default', 'pgsql_inalcanzable');
+
+    $inicio = microtime(true);
+
+    Api::guest()->get('/api/v1/ready')->assertStatus(503);
+
+    expect(microtime(true) - $inicio)->toBeLessThan(5.0);
+})->group('RQ-06', 'RF-PD-13');
+
 it('no dice que dependencia ha fallado', function (): void {
     /*
      * La decision de seguridad de este endpoint, y la unica que no se ve mirando

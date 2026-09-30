@@ -47,6 +47,21 @@ el procedimiento de la §6, medido.
    (regla dura 21): rutas, nombres de tabla y números. Se pueden pegar en un
    parte de incidencia tal cual.
 
+**Desde qué contenedor se lanza cada cosa** (desde la 2.2.0, ADR-042). Cada
+contenedor recibe solo las credenciales que necesita, así que las órdenes de
+este runbook **no** van por `app`, que no tiene ni la clave de cifrado ni el rol
+de copias:
+
+| Qué | Contenedor | Por qué ahí |
+| --- | --- | --- |
+| Hacer, verificar, listar y podar copias (`backup:run`, `backup:verify`, `backup.sh`) | `scheduler` | Es el que hace la copia programada: el único de los que están en marcha que recibe `BACKUP_ENCRYPTION_KEY` y el rol de copias `fichaje_backup`, que **solo lee** |
+| Restaurar (`restore.sh`) | `restore`, de un solo uso | Restaurar exige crear y renombrar bases, cosa que el rol de copias no puede. Solo `restore` y `migrate` reciben la credencial del rol de migración, y ninguno de los dos se queda en marcha |
+
+Con el `scheduler` en marcha se usa `docker compose exec scheduler …`. **Si está
+parado** —por ejemplo, porque lo paraste para restaurar—, la misma orden con
+`docker compose run --rm --no-deps scheduler …` levanta un contenedor efímero con
+el mismo entorno y lo retira al terminar.
+
 ---
 
 ## 2. La copia ha fallado
@@ -55,10 +70,14 @@ el procedimiento de la §6, medido.
 
 ```bash
 # 1. Qué dice la última ejecución (código y motivo)
-docker compose exec app php artisan backup:verify
+docker compose exec scheduler php artisan backup:verify
 
 # 2. Qué copias hay y desde cuándo
-docker compose exec app bash /opt/kronoqr/scripts/backup.sh list
+docker compose exec scheduler bash /opt/kronoqr/scripts/backup.sh list
+
+# Si el scheduler está parado, las mismas dos órdenes con un contenedor efímero:
+docker compose run --rm --no-deps scheduler php artisan backup:verify
+docker compose run --rm --no-deps scheduler bash /opt/kronoqr/scripts/backup.sh list
 
 # 3. Métricas publicadas (lo que ve la alerta)
 cat "${BACKUP_PATH:-/var/backups/fichaje}"/metrics/*.prom
@@ -78,15 +97,16 @@ Es la tabla común de los cinco scripts ([`../cliente/operacion.md`](../cliente/
 | `4` | La copia falló y lo escrito a medias se retiró; **la anterior sigue siendo la buena** | Sigue el mensaje: dice qué falló y dónde |
 | `5` | Quedó algo a medias que hay que retirar a mano | El mensaje dice qué fichero |
 | `6` | La copia se escribió pero **no verifica**, o una existente no verifica. **Trátala como inexistente** | Prueba la anterior; si la clave rotó, hace falta la anterior |
+| `7` | **El rol con el que se copia es privilegiado** (superusuario, o puede crear roles o bases, o saltarse RLS). No se ha escrito ninguna copia | Es una garantía de seguridad, no una avería: [`rotacion-secretos.md`](rotacion-secretos.md), sección «El rol de las copias es privilegiado». Con el rol equivocado no se copia |
 
 ### Resolución
 
 ```bash
 # Reintento manual, con salida en directo
-docker compose exec app php artisan backup:run
+docker compose exec scheduler php artisan backup:run
 
 # Si el problema era de espacio y ya se ha liberado, la retención sola:
-docker compose exec app bash /opt/kronoqr/scripts/backup.sh prune
+docker compose exec scheduler bash /opt/kronoqr/scripts/backup.sh prune
 ```
 
 **Mientras no haya una copia nueva verificada, la anterior sigue siendo la
@@ -98,8 +118,17 @@ la clave no es la que corresponde, o el fichero está dañado. Comprueba con la
 copia anterior:
 
 ```bash
-docker compose exec app php artisan backup:verify --file="${BACKUP_PATH}/daily/<copia-anterior>.dump.enc"
+docker compose exec scheduler php artisan backup:verify --file="${BACKUP_PATH}/daily/<copia-anterior>.dump.enc"
 ```
+
+**Si el mensaje habla de permisos o de no poder conectar como
+`fichaje_backup`** y la instalación viene de la 2.1.0: `update.sh` crea ese rol
+y escribe sus credenciales en el `.env` de la versión nueva. Comprueba que
+`BACKUP_DB_USERNAME` vale `fichaje_backup` y que `BACKUP_DB_PASSWORD` no está
+vacía en el `.env` **del directorio desde el que corre la instalación**, y
+recrea el planificador con `docker compose up -d scheduler`. Para cambiarle la
+contraseña: [`rotacion-secretos.md`](rotacion-secretos.md), «Rotar
+`fichaje_backup`».
 
 ---
 
@@ -176,7 +205,7 @@ Qué ajustar, por orden de preferencia:
    el WAL archivado no reconstruye nada.
 
 ```bash
-docker compose exec app bash /opt/kronoqr/scripts/backup.sh prune
+docker compose exec scheduler bash /opt/kronoqr/scripts/backup.sh prune
 ```
 
 ---
@@ -208,7 +237,7 @@ trimestral. Si crece, el RTO se está estrechando.
 
 ```bash
 # 0. SIEMPRE primero: comprueba sin tocar nada.
-docker compose exec app bash /opt/kronoqr/scripts/restore.sh --dry-run
+docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --dry-run
 
 # 1. Para lo que escribe. El fichaje NO se detiene: los quioscos encolan en
 #    local y sincronizan al volver (regla dura 19).
@@ -216,18 +245,25 @@ docker compose stop app horizon scheduler reverb
 
 # 2. Restaura. Se restaura en una base NUEVA y solo al final se intercambian
 #    los nombres: hasta ese instante la base viva no se toca.
-docker compose run --rm app bash /opt/kronoqr/scripts/restore.sh --yes
+docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --yes
 
 # 3. Arranca y comprueba
 docker compose up -d
 curl -sk https://localhost/api/v1/health
 ```
 
+Las tres órdenes de `restore.sh` van por el servicio **`restore`**, no por
+`app`: es un contenedor de un solo uso que recibe la credencial del rol de
+migración (restaurar exige crear y renombrar bases), hace su trabajo y
+desaparece con `--rm`. `docker compose up -d` **no** lo arranca, y `--no-deps`
+evita que la orden vuelva a levantar lo que acabas de parar. Solo necesita que
+`postgres` esté en pie.
+
 Para restaurar una copia concreta, no la última:
 
 ```bash
-docker compose exec app bash /opt/kronoqr/scripts/backup.sh list
-docker compose run --rm app bash /opt/kronoqr/scripts/restore.sh \
+docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --list
+docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh \
   --file "${BACKUP_PATH}/daily/kronoqr-<marca>.dump.enc" --yes
 ```
 
@@ -285,6 +321,33 @@ conservada como `<base>_pre_restore_<marca>` durante 7 días, un informe en
 `BACKUP_PATH/reports/update-<marca>.log`** con el paso en que se paró y por
 qué. Ese segundo informe es el que se adjunta al caso.
 
+### 6.6 La restauración se niega con salida `7` (la copia toca los roles)
+
+`restore.sh` (y `restore-drill.sh --mode database`) toma, antes del
+`pg_restore`, una foto de los atributos y las pertenencias de rol del clúster
+(`pg_roles` y `pg_auth_members`, ordenadas y sin contraseñas) y otra después. Si
+difieren, **no intercambia las bases**: elimina la base de trabajo, intenta
+devolver los roles a su estado anterior, muestra qué ha cambiado (`-` antes, `+`
+después) y sale con `7`. `pg_restore` corre como superusuario y ejecuta lo que
+traiga el archivo: una copia con `ALTER ROLE fichaje_app SUPERUSER` dentro
+dejaría la aplicación con poder para reescribir el registro.
+
+1. **No uses esa copia.** Prueba con la anterior (`backup.sh list`,
+   `restore.sh --file <anterior> --yes`).
+2. Comprueba que los roles están como antes (el mensaje dice si la reversión se
+   ha comprobado; si dice que NO, corrige a mano los que difieran de la lista):
+   `SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls,
+   rolreplication FROM pg_roles ORDER BY 1`.
+3. Una copia manipulada es un incidente de seguridad: quién puede escribir en
+   `BACKUP_PATH` y quién tiene `BACKUP_ENCRYPTION_KEY` (el `scheduler`) es el
+   perímetro. Sigue [`brecha-de-seguridad.md`](brecha-de-seguridad.md) y rota
+   la clave de cifrado y `fichaje_backup`
+   ([`rotacion-secretos.md`](rotacion-secretos.md) §3 y §5).
+
+Lo que esta guarda **no** cubre: un archivo manipulado ejecutado por un
+superusuario puede hacer más que cambiar un rol. Frente a quien tiene la clave
+de cifrado, la garantía completa exige sacar la copia del runtime (ADR-042).
+
 Si el actualizador sale con `5`, la restauración quedó a medias y hay que
 terminarla a mano: las órdenes exactas están en su mensaje y en
 [`actualizacion-cliente.md`](actualizacion-cliente.md) §5. Son las de §6.2 con
@@ -300,11 +363,16 @@ restaurados, y que los **conteos por tabla** cuadran con el manifiesto.
 
 ```bash
 # En el servidor del cliente (necesita Docker, que ya está)
-bash /opt/kronoqr/scripts/restore-drill.sh
+sudo bash /opt/kronoqr/scripts/restore-drill.sh
 
 # Sin Docker disponible, contra una instancia de PRUEBAS (nunca la de producción)
-bash /opt/kronoqr/scripts/restore-drill.sh --mode database
+sudo bash /opt/kronoqr/scripts/restore-drill.sh --mode database
 ```
+
+El modo `database` **no** se lanza con el servicio `restore`: ese servicio
+apunta a la base de producción con el rol de migración, y el simulacro crearía
+su base de usar y tirar en la misma instancia que sostiene el registro legal.
+En el servidor del cliente se usa el modo por defecto, que no toca PostgreSQL.
 
 No toca la instalación: ni la base de producción, ni los contenedores del
 producto, ni las copias, que se abren en lectura. El volcado descifrado vive y
@@ -316,6 +384,8 @@ del cliente, el día 1 de cada trimestre:
 ```cron
 0 4 1 1,4,7,10 * /opt/kronoqr/scripts/restore-drill.sh >> /var/log/kronoqr-drill.log 2>&1
 ```
+
+El simulacro lee el `.env` de la instalación (`/opt/kronoqr/.env`, junto al directorio `scripts/`) y el `.env` es de `root` con permisos `0600`: por eso se lanza con `sudo` a mano y, en el cron, desde la tabla de `root`. Si tu `.env` está en otro sitio, indícalo con `BACKUP_ENV_FILE=<ruta>` delante de la orden.
 
 En el repositorio del fabricante lo ejecuta
 [`.github/workflows/backup-drill.yml`](../../.github/workflows/backup-drill.yml)
@@ -332,7 +402,8 @@ y de RQ-09, y no contiene ni un dato personal.
 
 1. Repítelo con la copia anterior: `restore-drill.sh --file <copia-anterior>`.
 2. Si esa sí pasa, el problema es de la copia nueva: relánzala
-   (`php artisan backup:run`) y vuelve a probar.
+   (`docker compose exec scheduler php artisan backup:run`, §2) y vuelve a
+   probar.
 3. Si fallan varias, **es un incidente**: la instalación lleva tiempo sin copias
    utilizables. Escala al responsable del sistema el mismo día.
 

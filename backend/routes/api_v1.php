@@ -9,6 +9,7 @@ use App\Modules\Attendance\Http\Controller\ScanBatchController;
 use App\Modules\Attendance\Http\Controller\ScanController;
 use App\Modules\Attendance\Http\Controller\ShiftEntryController;
 use App\Modules\Attendance\Http\Controller\VoidShiftEntryController;
+use App\Modules\Attendance\Http\Middleware\ThrottleScanFailOpen;
 use App\Modules\Compliance\Http\Controller\IncidentController;
 use App\Modules\Compliance\Http\Controller\LegalExportController;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
@@ -129,9 +130,14 @@ Route::get('/ready', ReadinessController::class)->name('health.ready');
  * EL ORDEN DE LOS MIDDLEWARES IMPORTA: `throttle` va DESPUES de `auth:sanctum`
  * para que la clave del limite pueda ser el dispositivo del token. Delante solo
  * podria limitar por IP, que es justo lo que no distingue quioscos.
+ *
+ * Y NO ES EL `throttle` DEL FRAMEWORK SINO `ThrottleScanFailOpen` (CH1): el mismo
+ * limitador con nombre, que si Redis no responde deja pasar el fichaje en vez de
+ * devolver un `500` (regla dura 19). Solo las tres rutas de fichaje; `auth`,
+ * `portal` y gestion siguen fallando cerradas.
  */
 Route::post('/scan', ScanController::class)
-    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, 'throttle:scan'])
+    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleScanFailOpen::zone('scan')])
     ->name('attendance.scan');
 
 /*
@@ -146,7 +152,7 @@ Route::post('/scan', ScanController::class)
  * el envio, y cada resultado lleva su propio codigo.
  */
 Route::post('/scan/batch', ScanBatchController::class)
-    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, 'throttle:scan-batch'])
+    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleScanFailOpen::zone('scan-batch')])
     ->name('attendance.scan.batch');
 
 /*
@@ -174,7 +180,7 @@ Route::post('/scan/batch', ScanBatchController::class)
  * el tercero no ve a quien prueba codigos al azar. Hacen falta los tres.
  */
 Route::post('/scan/pin', PinScanController::class)
-    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, 'throttle:scan-pin'])
+    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleScanFailOpen::zone('scan-pin')])
     ->name('attendance.scan.pin');
 
 /*

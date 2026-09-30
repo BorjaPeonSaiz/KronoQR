@@ -77,7 +77,7 @@ COPY infra/docker/postgres/initdb/ /docker-entrypoint-initdb.d/
 # aplicandose al propio entrypoint. Ademas asi se puede lanzar a mano contra un
 # cluster ya inicializado, que es la via de actualizacion de una instalacion
 # existente (regla dura 6, tarea 1.14).
-RUN chmod 0755 /docker-entrypoint-initdb.d/02-application-roles.sh
+RUN chmod 0755 /docker-entrypoint-initdb.d/02-application-roles.sh /docker-entrypoint-initdb.d/03-backup-role.sh
 
 # Archivado de WAL (RNF-D-02, RPO <= 15 min). El `archive_command` de los
 # ficheros de compose apunta aqui. El script decide si un segmento esta a salvo

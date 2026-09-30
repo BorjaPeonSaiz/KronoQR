@@ -225,6 +225,10 @@ STEP="1"
 ROLLBACK_ARMED=0
 ROLLBACK_SUMMARY=""
 FINAL_STATE=""
+# Primera version cuyo runtime NO recibe la credencial del superusuario (AUD-1,
+# ADR-042). Una vuelta atras que deja la instalacion en una version anterior
+# tiene que decirlo (A3-08).
+readonly KQ_AUD1_FIXED_IN="2.2.0"
 # Segunda mitad del paso 5 (RF-PD-10, SystemUpdateStep): 0 mientras se arranca
 # y se verifica sin exponer · 1 desde que el borde (nginx) se abre de verdad.
 # Decide si un fallo de ahi en adelante es `start_and_verify` o `expose`.
@@ -1009,7 +1013,9 @@ readonly -a PRECONDITION_CHECKS=(
   check_images
   check_services
   check_audit_chain
+  check_edge_networks
   check_env_new_keys
+  check_env_orphan_keys
 )
 
 check_package_files() {
@@ -1415,6 +1421,18 @@ check_audit_chain() {
   fi
 }
 
+# Las redes del borde HTTP del .env actual (PP-01, PP-03). Se comprueban ANTES de
+# tocar nada porque el borde nuevo arranca con el mismo .env: un CIDR mal escrito
+# lo dejaria en bucle de reinicio con la ventana de mantenimiento ya abierta. La
+# sintaxis invalida es un fallo (exit 2, nada tocado); lo demas son avisos que
+# no frenan la actualizacion (el portal abierto a internet, por ejemplo, es una
+# decision del cliente).
+check_edge_networks() {
+  [ -n "${CURRENT_ENV}" ] || return 0
+
+  check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE:-${COMPOSE_FILE}}"
+}
+
 # Claves que trae el .env.example nuevo y el .env del cliente no tiene. No es un
 # fallo —cada una usa su valor de serie—, pero decirlo aqui evita descubrirlo
 # leyendo configuracion.md meses despues.
@@ -1432,6 +1450,50 @@ check_env_new_keys() {
   if [ "${count}" -gt 0 ]; then
     [ "${count}" -gt 8 ] && shown="${shown} ..."
     check_warn "$(kq_format u_c_env_new_keys "${count}" "${shown}")" "$(kq_format u_f_env_new_keys "${ENV_FILE}")"
+  fi
+}
+
+# Claves del .env del cliente que NINGUN servicio de la version nueva recibe
+# (AUD-1, ADR-042). Hasta la 2.1.0 los contenedores de runtime recibian el .env
+# entero (`env_file`); desde la 2.2.0 cada servicio nombra las variables que
+# necesita, y una clave que el cliente puso por su cuenta y que compose.yml no
+# nombra deja de llegar SIN AVISAR: no falla nada, simplemente se ignora. Es un
+# aviso y no un fallo: casi siempre son restos (AWS_*, SPEC_PATH...), y decirlo
+# aqui evita descubrirlo el dia que alguien espera que una variable surta efecto.
+#
+# «Recibida» = aparece en el `environment:` de algun servicio del compose ya
+# resuelto (con todos los perfiles) o compose la usa para interpolar (`${CLAVE}`).
+# Los NOMBRES salen de `docker compose config`, cuya salida lleva los valores: se
+# recorta con awk a solo nombres y nunca se guarda ni se imprime el resto.
+check_env_orphan_keys() {
+  [ "${DOCKER_OK}" -eq 1 ] && [ -n "${CURRENT_ENV}" ] && [ -f "${COMPOSE_FILE}" ] || return 0
+
+  local resolved received key count=0 shown=""
+
+  resolved="$(IMAGE_TAG="${TARGET_VERSION}" docker compose --profile '*' --env-file "${CURRENT_ENV}" \
+    -f "${COMPOSE_FILE}" config 2>/dev/null)" || return 0
+  received="$(
+    {
+      printf '%s\n' "${resolved}" | awk '
+        /^    environment:[[:space:]]*$/ { in_env = 1; next }
+        in_env && /^      [A-Za-z_][A-Za-z0-9_]*:/ { sub(/^      /, ""); sub(/:.*/, ""); print; next }
+        { in_env = 0 }
+      '
+      grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*' "${COMPOSE_FILE}" | sed 's/^\${//'
+    } | sort -u
+  )"
+  [ -n "${received}" ] || return 0
+
+  while IFS= read -r key; do
+    [ -n "${key}" ] || continue
+    grep -qxF "${key}" <<<"${received}" && continue
+    count=$((count + 1))
+    [ "${count}" -le 8 ] && shown="${shown}${shown:+ }${key}"
+  done < <(sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Z_][A-Z0-9_]*)=.*/\2/p' "${CURRENT_ENV}" | sort -u)
+
+  if [ "${count}" -gt 0 ]; then
+    [ "${count}" -gt 8 ] && shown="${shown} ..."
+    check_warn "$(kq_format u_c_env_orphan_keys "${count}" "${shown}")" "$(kq_format u_f_env_orphan_keys "${COMPOSE_FILE}")"
   fi
 }
 
@@ -1594,8 +1656,14 @@ phase_backup() {
   heading "$(kq_text u_phase_3)"
   say "$(kq_format u_backup_start "${SOURCE_VERSION}")"
 
+  # Con `run` y NO con `exec`: la fase 2 acaba de parar `scheduler` (y `horizon`) para
+  # que nada escriba durante la migracion, y `exec` sobre un contenedor parado
+  # falla con 1. Tampoco con `app` (AUD-1): a `app` no le llegan ni BACKUP_DB_* ni
+  # la clave de cifrado, solo al planificador. `run` levanta un contenedor efimero
+  # con el MISMO entorno que `scheduler` (en la 2.1.0 el .env entero; desde la
+  # 2.2.0, solo lo suyo), asi que vale para las dos versiones.
   detail_note "--- backup:run --mode dump ---"
-  compose_current exec -T app php artisan backup:run --mode=dump >>"$(detail_sink)" 2>&1 || code=$?
+  compose_current run --rm --no-deps -T scheduler php artisan backup:run --mode=dump >>"$(detail_sink)" 2>&1 || code=$?
   if [ "${code}" -ne 0 ]; then
     backup_failed "$(kq_format u_f_backup "${code}" "$(kq_exit_name "${code}")" "${SOURCE_VERSION}")"
   fi
@@ -1681,7 +1749,7 @@ phase_migrations() {
     files=()
     while IFS= read -r name; do
       [ -n "${name}" ] || continue
-      printf '%s\n' "${applied}" | grep -qxF "${name}" && continue
+      grep -qxF "${name}" <<<"${applied}" && continue
       files+=("${KQ_CONTAINER_MIGRATIONS}/${name}.php")
     done < <(printf '%s\n' "${MIGRATIONS_IN_IMAGE}" | kq_migrations_for_version "${version}")
 
@@ -1703,7 +1771,7 @@ phase_migrations() {
       args+=("--path=${name}")
     done
     detail_note "--- migrate (${version}) ---"
-    if ! compose_new run --rm --no-deps -T app php artisan migrate --force --database=pgsql_migrator --realpath "${args[@]}" \
+    if ! compose_new run --rm --no-deps -T migrate php artisan migrate --force --database=pgsql_migrator --realpath "${args[@]}" \
       >>"$(detail_sink)" 2>&1; then
       rollback_and_die "$(kq_format u_f_migrating_version "${version}" "${LAST_CHECKPOINT:-$(kq_text u_report_none)}")" migration_failed
     fi
@@ -1723,6 +1791,79 @@ phase_migrations() {
     rollback_and_die "$(kq_format u_f_pending_left "${pending% }")" migration_failed
   fi
   say "$(kq_format u_no_pending "${TARGET_VERSION}")"
+
+  provision_backup_role
+}
+
+#------------------------------------------------------------------------------
+# Rol de las COPIAS (AUD-1, regla dura 6, ADR-033). Se ejecuta al final del
+# paso 4, con PostgreSQL ya en la version nueva y ANTES de arrancar el
+# `scheduler` nuevo, que es el unico contenedor de runtime que recibe
+# BACKUP_DB_* y la clave de cifrado.
+#
+# Hasta la 2.1.0 la copia se hacia con `fichaje_migrator`, superusuario, y su
+# contrasena viajaba en el entorno de todos los contenedores de runtime. Aqui se
+# pasa al rol `fichaje_backup`, de solo lectura, y se reescriben BACKUP_DB_* en
+# el .env NUEVO. Idempotente: si el .env ya nombra un rol propio se limita a
+# volver a aplicar el aprovisionamiento (repone el rol y sus permisos si el
+# volumen no los tuviera) sin cambiar ninguna credencial.
+#
+# VUELTA ATRAS. Solo se escribe ENV_FILE. La version anterior arranca con
+# ROLLBACK_ENV (el .env viejo intacto en modo lado a lado, y la copia
+# `.kronoqr-pre-update` en modo in-place), que sigue diciendo
+# BACKUP_DB_USERNAME=fichaje_migrator: su `restore.sh` conserva CREATEDB. El rol
+# nuevo queda en el cluster sin uso, que es inocuo.
+#
+# La contrasena viaja por la ENTRADA ESTANDAR del script de PostgreSQL: ni
+# `argv` (visible con `ps`) ni `docker inspect`. Nunca se imprime.
+#------------------------------------------------------------------------------
+new_backup_password() {
+  local pool=""
+
+  while [ "${#pool}" -lt 32 ]; do
+    pool="${pool}$(openssl rand -base64 48 | LC_ALL=C tr -dc 'A-Za-z0-9')"
+  done
+  printf '%s' "${pool:0:32}"
+}
+
+provision_backup_role() {
+  local role password generated=0
+
+  say ""
+  say "$(kq_text u_backup_role_start)"
+
+  command -v openssl >/dev/null 2>&1 ||
+    rollback_and_die "$(kq_text u_f_backup_role_openssl)" migration_failed
+
+  role="$(env_value "${ENV_FILE}" "BACKUP_DB_USERNAME")"
+  password="$(env_value "${ENV_FILE}" "BACKUP_DB_PASSWORD")"
+
+  # El rol de copia NO puede ser el de migracion ni el de aplicacion: el primero
+  # es el que se quiere sacar del entorno, y el segundo no tiene REPLICATION.
+  if [ -z "${role}" ] || [ "${role}" = "${CFG_DB_MIGRATION_USERNAME}" ] || [ "${role}" = "${CFG_DB_USERNAME}" ] ||
+    [ -z "${password}" ]; then
+    role="fichaje_backup"
+    password="$(new_backup_password)"
+    generated=1
+  fi
+
+  detail_note "--- 03-backup-role.sh (${role}) ---"
+  if ! printf '%s\n' "${password}" |
+    compose_new exec -T -e "DB_BACKUP_USERNAME=${role}" postgres \
+      /docker-entrypoint-initdb.d/03-backup-role.sh --password-stdin >>"$(detail_sink)" 2>&1; then
+    rollback_and_die "$(kq_format u_f_backup_role "${role}")" migration_failed
+  fi
+
+  if [ "${generated}" -eq 1 ]; then
+    if ! kq_env_set "${ENV_FILE}" "BACKUP_DB_USERNAME" "${role}" ||
+      ! kq_env_set "${ENV_FILE}" "BACKUP_DB_PASSWORD" "${password}" ||
+      ! chmod 0600 "${ENV_FILE}"; then
+      rollback_and_die "$(kq_format u_f_backup_role_env "${ENV_FILE}")" migration_failed
+    fi
+    say "$(kq_format u_backup_role_switched "${role}" "${ENV_FILE}")"
+  else
+    say "$(kq_format u_backup_role_kept "${role}")"
+  fi
 }
 
 #------------------------------------------------------------------------------
@@ -1872,8 +2013,7 @@ phase_start_and_verify() {
   # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
   # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
   available_commands="$(compose_new exec -T app php artisan list --raw 2>/dev/null || true)"
-  if ! printf '%s
-' "${available_commands}" | grep -q '^product:doctor'; then
+  if ! grep -q '^product:doctor' <<<"${available_commands}"; then
     remember_check "doctor" "$(kq_text u_report_failed)"
     rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)" doctor_failed
   fi
@@ -2060,7 +2200,7 @@ rollback_and_die() {
 
   say "$(kq_format u_rollback_restore "${BACKUP_FILE}")"
   detail_note "--- restore.sh --file ${BACKUP_FILE} --yes ---"
-  compose_new run --rm --no-deps -T app bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes \
+  compose_new run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes \
     >>"$(detail_sink)" 2>&1
   code=$?
   if [ "${code}" -ne 0 ]; then
@@ -2202,6 +2342,18 @@ rollback_and_die() {
   MAINTENANCE_SECONDS=$(($(now_epoch) - MAINTENANCE_SINCE))
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "${reason}" "$(kq_text u_report_ok)")"
   FINAL_STATE="${SOURCE_VERSION}"
+
+  # ADR-042, «Consecuencias» (A3-08): volver a una version anterior a la que
+  # cierra AUD-1 reabre el hallazgo hasta la proxima actualizacion, y ni la
+  # persona que lee esto ni el informe pueden ignorarlo. Va tambien al informe
+  # (la linea que enviara al fabricante) y no solo a la pantalla.
+  # Se compara el nucleo de la version: una 2.2.0-rc ya lleva el arreglo.
+  if [ "$(kq_semver_compare "${SOURCE_VERSION%%[-+]*}" "${KQ_AUD1_FIXED_IN}")" = "-1" ]; then
+    err ""
+    err "$(kq_format u_rollback_aud1_reopened "${SOURCE_VERSION}" "${KQ_AUD1_FIXED_IN}")"
+    remember_check "aud-1-reopened" "$(kq_format u_rollback_aud1_reopened "${SOURCE_VERSION}" "${KQ_AUD1_FIXED_IN}")"
+  fi
+
   err ""
   err "$(kq_format u_rollback_done "${SOURCE_VERSION}" "${REPORT_FILE:-?}")"
   err "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"

@@ -7,6 +7,7 @@
 | **Decide** | `devops-observabilidad` · decisión tomada al ejecutar la tarea 0.2 |
 | **Afecta a** | Tareas 0.1, 0.2 y 5.4 · [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §7.7 y Anexo B · Reglas duras 3 y 13 de `CLAUDE.md` |
 | **Requisitos** | RF-PD-01, RF-PD-02, RS-08, RNF-M-06 |
+| **Enmiendas** | Enmendada por [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): cómo llega el `.env` a cada contenedor en producción |
 
 > Los ADR-001 a ADR-020 provienen de la tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4. Este, como los ADR-021 a ADR-028, nace de una decisión tomada al desarrollar el plan de implementación: quedó implementada en la tarea 0.2 y sin documentar hasta ahora.
 
@@ -26,6 +27,8 @@ La salida intuitiva —copiar la configuración a `backend/.env`— crea dos fue
 - Su contenido es un comentario que dice exactamente por qué está vacío y por qué no hay que rellenarlo. **Existe para que no haya dos fuentes de verdad**, no para configurar.
 - Ninguno de los dos ficheros se versiona: `.gitignore` ignora `.env` en cualquier nivel, y lo versionado es `.env.example` (§7.7, RS-08).
 - En la instalación del cliente aplica el mismo modelo: `install.sh` **genera los secretos en el servidor** y los deja en el `.env` que Compose inyecta (tarea 5.4). El fabricante no los transmite ni los conoce.
+
+> **Enmienda de [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): cómo llega el `.env` a cada contenedor.** La fuente de verdad no cambia: sigue siendo un único `.env` en la raíz del despliegue, y `backend/.env` sigue vacío. Lo que cambia es el vehículo en **producción**. `env_file: .env` entregaba el fichero **entero** a cada servicio, incluidas la contraseña del migrador (superusuario) y la clave de firma del QR, y eso desmentía la condición 1 de [ADR-010](ADR-010-auditoria-solo-append-encadenada.md) (hallazgo AUD-1). En `infra/compose.prod.yaml`, `app`, `horizon`, `reverb`, `scheduler` y `nginx` declaran `environment:` **con nombres sin valor**: Compose toma cada valor del mismo `.env`, pero cada contenedor recibe solo lo que nombra. `DB_MIGRATION_*` solo lo reciben los servicios de un solo uso `migrate` y `restore` (`profiles: [tools]`). **Excepción documentada:** `infra/compose.dev.yaml` conserva `env_file`, porque la suite de pruebas usa la conexión `pgsql_migrator` para preparar la base y para simular la manipulación por fuera de la aplicación. En desarrollo no hay registro legal ni datos reales.
 
 ### Dos consecuencias prácticas ya vividas
 
@@ -51,7 +54,7 @@ Ninguna es teórica: las dos salieron de la tarea 0.2.
 - **Todo parámetro nuevo se documenta en `.env.example`** —versionado y comentado— y en el Anexo B del documento 02. Un parámetro que solo existe en la máquina de alguien no existe.
 - **`backend/.env` es un fichero vacío que hay que saber leer.** Su comentario es la única defensa contra que alguien lo rellene con buena intención; por eso está redactado como advertencia y no como nota.
 - **La creación es idempotente y condicionada a que exista `artisan`**, de modo que el entrypoint no crea basura antes de que haya aplicación, ni pisa un fichero existente.
-- **En producción no cambia el modelo**, lo que hace que el entorno de desarrollo se parezca al del cliente: mismo mecanismo, distinto origen de los valores.
+- **En producción no cambia el modelo**, lo que hace que el entorno de desarrollo se parezca al del cliente: mismo mecanismo, distinto origen de los valores. *(Enmienda de ADR-042, 29-09-2026: el modelo, un único `.env` como fuente, se mantiene; el vehículo difiere a propósito. En producción cada servicio nombra sus variables en `environment:`, y en desarrollo se conserva `env_file`. Una variable nueva del runtime se añade a `.env.example` **y** al `environment:` de cada servicio de `compose.prod.yaml` que la use.)*
 - **Las variables de entorno son el vehículo de las reglas duras 3 y 13**: `APP_TIMEZONE=UTC` llega por aquí, y la diferencia entre clientes es dato —configuración y base de datos—, nunca código ([ADR-017](ADR-017-toda-diferencia-entre-clientes-es-configuracion.md)).
 
 ## Verificación

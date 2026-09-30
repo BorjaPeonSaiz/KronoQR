@@ -42,6 +42,23 @@
 #      una instalacion que quiza solo tiene el certificado mal seria peor. El
 #      mensaje dice que comprobar.
 #
+#   7  GARANTIA DE SEGURIDAD ROTA (AUD-1, ADR-042). El script se ha negado a
+#      continuar porque un rol de base de datos tiene mas privilegios de los que
+#      el producto le permite, o porque una copia intento cambiarlos. No es un
+#      fallo de la operacion sino de la garantia que la sostiene: NO se reintenta
+#      con otra copia ni con otro `.env` sin haber leido el mensaje y el runbook
+#      docs/runbooks/rotacion-secretos.md.
+#        · backup.sh   el rol de las copias es superusuario o puede crear roles o
+#                      bases o saltarse RLS (BACKUP_DB_* apunta al migrador).
+#                      No se ha escrito ninguna copia y la metrica de copia sale
+#                      como fallida para que suene la alerta.
+#        · restore.sh  el pg_restore ha cambiado atributos o pertenencias de rol
+#                      del cluster. NO se han intercambiado las bases; la base
+#                      de trabajo se ha eliminado y se ha intentado revertir.
+#        · restore-drill.sh --mode database   lo mismo que restore.sh.
+#      (doctor.sh vigila el rol de las copias, pero su fallo sale con 6: es un
+#      fallo del diagnostico, y el mensaje dice cual.)
+#
 # Por que 4 y 5 son dos codigos y no uno: son dos llamadas de telefono
 # distintas. Con un 4 el IT reintenta; con un 5 alguien tiene que mirar el
 # servidor antes de volver a ejecutar nada. Colapsarlos obligaria a leerse el
@@ -51,7 +68,7 @@
 # docs/cliente/operacion.md y en docs/cliente/instalacion.md. Cambiar el
 # significado de uno rompe los cron y los runbooks del cliente.
 
-# Las siete constantes las consumen los scripts que CARGAN este fichero, no el
+# Las ocho constantes las consumen los scripts que CARGAN este fichero, no el
 # fichero en si: ShellCheck no lo puede ver y las daria por muertas una a una.
 # La supresion es de FICHERO porque aqui solo viven esas constantes y una
 # funcion, asi que no puede tapar una variable muerta de verdad.
@@ -67,6 +84,7 @@ readonly KQ_EXIT_STATE_CONFLICT=3
 readonly KQ_EXIT_ROLLED_BACK=4
 readonly KQ_EXIT_ROLLBACK_INCOMPLETE=5
 readonly KQ_EXIT_VERIFY_FAILED=6
+readonly KQ_EXIT_SECURITY=7
 
 # Idioma de los nombres de codigo.
 #
@@ -74,7 +92,7 @@ readonly KQ_EXIT_VERIFY_FAILED=6
 # tambien backup.sh, restore.sh y restore-drill.sh, que no cargan el catalogo
 # del instalador. Si el nombre del codigo dependiera de messages.sh, los tres
 # scripts de copia se quedarian sin el o habria que arrastrarles un catalogo
-# entero para siete cadenas.
+# entero para ocho cadenas.
 #
 # Si install.sh ya ha fijado KQ_LANG (por --lang o por el entorno), manda ese;
 # si no, se mira la configuracion regional del sistema. Un idioma desconocido
@@ -109,6 +127,7 @@ kq_exit_name() {
     4) printf 'failure, rolled back' ;;
     5) printf 'failure, rollback INCOMPLETE, needs intervention' ;;
     6) printf 'post-run verification failed, services up' ;;
+    7) printf 'security guarantee broken, nothing applied' ;;
     *) printf 'undocumented code' ;;
     esac
     return 0
@@ -122,6 +141,7 @@ kq_exit_name() {
   4) printf 'fallo con vuelta atras completada' ;;
   5) printf 'fallo con vuelta atras INCOMPLETA, requiere intervencion' ;;
   6) printf 'verificacion posterior fallida, servicios en pie' ;;
+  7) printf 'garantia de seguridad rota, nada aplicado' ;;
   *) printf 'codigo no documentado' ;;
   esac
 }

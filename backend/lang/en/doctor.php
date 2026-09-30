@@ -16,12 +16,23 @@ declare(strict_types=1);
 $probe = [
     'failure' => 'The «:family» group of checks could not run: something failed unexpectedly inside the '
         .'diagnostic itself. Every other check did run.',
+    // PR2: the group needs a service that did not answer. It is not a product defect.
+    'failure_redis' => 'The «:family» group of checks could not run because Redis does not respond. '
+        .'Every other check did run.',
+    'failure_database' => 'The «:family» group of checks could not run because the database does not respond. '
+        .'Every other check did run.',
 ];
 
 $probeFix = [
     'failure' => "This is a product defect, not a problem with your installation.\n"
         ."Generate the diagnostics bundle and send it to support:\n"
         .'  php artisan product:diagnostics',
+    'failure_redis' => "Fix Redis first: look at the «queue.redis» check in this same report.\n"
+        ."Then run this command again:\n"
+        .'  php artisan product:doctor',
+    'failure_database' => "Fix the database first: look at the «database.connection» check in this same report.\n"
+        ."Then run this command again:\n"
+        .'  php artisan product:doctor',
 ];
 
 return [
@@ -89,8 +100,9 @@ return [
             'probe' => $probe,
             'redis' => [
                 'ok' => 'Redis responds.',
-                'failure' => 'Redis does not respond. Without it the job queue, the cache and the panel sessions '
-                    .'do not work.',
+                'failure' => 'Redis does not respond. Without it the job queue and the metrics do not work, and the '
+                    .'panel and the employee portal reject requests, because their attempt limit cannot be checked. '
+                    .'Clocking in keeps working.',
             ],
             'backlog' => [
                 'ok' => 'The job queue is up to date (:count pending).',
@@ -132,6 +144,48 @@ return [
                     .'recipients have neither an email address nor a webhook: :roles. The alerts addressed to '
                     .'them turn on and off without anyone seeing them. These are not minor notices: a broken '
                     .'audit record goes to «seguridad» and unclosed shifts go to «rrhh».',
+            ],
+        ],
+
+        // --- Edge networks (PP-01) -------------------------------------------
+
+        'network' => [
+            'probe' => $probe,
+            'portal' => [
+                'ok' => 'The employee portal only opens from a private network.',
+                'ok_not_provided' => 'The application does not receive PORTAL_INTERNAL_CIDR, so where the portal '
+                    .'opens from could not be checked.',
+                'warning_open' => 'The employee portal is open to the internet (PORTAL_INTERNAL_CIDR allows any '
+                    .'origin). This is a legitimate customer decision, but the portal signs in with an employee '
+                    .'code and a 6-digit PIN: it should be on record and someone should watch the failed '
+                    .'attempts.',
+                'warning_public' => 'PORTAL_INTERNAL_CIDR includes addresses that are not from a private network: '
+                    .'the employee portal can be opened from those public internet addresses.',
+                'warning_sample' => 'PORTAL_INTERNAL_CIDR still holds the example value of the development '
+                    .'network. On a real server that network does not exist and nobody can open the portal: the '
+                    .'whole staff gets a 403.',
+                'failure_invalid' => 'PORTAL_INTERNAL_CIDR is not a valid IPv4 network range. The web server does '
+                    .'not start with that value, so nothing is served: neither the portal, nor the panel, nor the '
+                    .'kiosks.',
+            ],
+            'kiosk_vlan' => [
+                'ok' => 'The raised clock-in limit only applies to one specific network (KIOSK_VLAN_CIDR).',
+                'ok_not_provided' => 'The application does not receive KIOSK_VLAN_CIDR, so the kiosk network '
+                    .'could not be checked.',
+                'warning_open' => 'KIOSK_VLAN_CIDR allows any origin: the raised clock-in limit (600 requests per '
+                    .'minute) applies to the whole internet and the 30 per minute limit that protects from '
+                    .'outside applies to nobody.',
+                'failure_invalid' => 'KIOSK_VLAN_CIDR is not a valid IPv4 network range. The web server does not '
+                    .'start with that value, so kiosks cannot clock in against the server.',
+            ],
+            'metrics' => [
+                'ok' => 'Reading /metrics is limited to one specific network (METRICS_ALLOW_CIDR).',
+                'ok_not_provided' => 'The application does not receive METRICS_ALLOW_CIDR, so who can read '
+                    .'/metrics could not be checked.',
+                'warning_open' => 'METRICS_ALLOW_CIDR allows any origin: /metrics, which exposes the internal '
+                    .'state of the system, can be read from anywhere.',
+                'failure_invalid' => 'METRICS_ALLOW_CIDR is not a valid IPv4 network range. The web server does '
+                    .'not start with that value.',
             ],
         ],
 
@@ -178,8 +232,13 @@ return [
             ],
             'branding_logo' => [
                 'ok' => 'The configured logo can be read.',
-                'warning' => 'The configured logo cannot be used (:reason). The applications will show the '
-                    .'product branding. Nothing else is affected.',
+                'warning_path' => 'The configured logo cannot be used: its path is not inside the brand directory. '
+                    .'The applications and the PDFs will come out without a logo. Nothing else is affected.',
+                'warning_missing' => 'The configured logo cannot be used: there is no readable file at that path. '
+                    .'The applications and the PDFs will come out without a logo. Nothing else is affected.',
+                'warning_content' => 'The configured logo cannot be used: the file is not an accepted PNG or SVG '
+                    .'(format, size, dimensions or an SVG with a script). The applications and the PDFs will come '
+                    .'out without a logo. Nothing else is affected.',
                 'warning_unknown' => 'The configured logo could not be checked.',
             ],
         ],
@@ -332,7 +391,7 @@ return [
                     ."  docker compose ps\n"
                     ."  docker compose logs --tail=50 redis\n"
                     ."  docker compose restart redis\n"
-                    .'People can keep clocking in meanwhile, but the panel may ask to sign in again.',
+                    .'People can keep clocking in meanwhile; the panel and the portal come back once Redis responds.',
             ],
             'backlog' => [
                 'warning' => "Check whether the queue worker is alive:\n"
@@ -390,6 +449,48 @@ return [
             ],
         ],
 
+        'network' => [
+            'probe' => $probeFix,
+            'portal' => [
+                'warning_open' => "If opening it to the internet is what you want, there is nothing to fix: note it\n"
+                    ."in the installation record and review docs/cliente/endurecimiento.md (in Spanish).\n"
+                    ."If not, put the hotel network or your VPN range in the .env file and apply the change:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    .'  docker compose up -d nginx',
+                'warning_public' => "If it must only open from the hotel network, put its private range in the .env\n"
+                    ."file and apply the change:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    ."  docker compose up -d nginx\n"
+                    .'If those public addresses are the ones you want, there is nothing to fix.',
+                'warning_sample' => "Find out which IP nginx sees for an employee (docs/runbooks/portal-403.md, in\n"
+                    ."Spanish) and put its network in the .env file. Then apply the change:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Fix it in the .env file: one single range in the a.b.c.d/n format, for\n"
+                    ."example 10.20.0.0/16 (a single address is written with /32, and IPv6 is not accepted).\n"
+                    ."Then apply the change:\n"
+                    .'  docker compose up -d nginx',
+            ],
+            'kiosk_vlan' => [
+                'warning_open' => "Put only the tablets' network in the .env file and apply the change:\n"
+                    ."  KIOSK_VLAN_CIDR=10.0.20.0/24\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Fix it in the .env file: one single range in the a.b.c.d/n format, for\n"
+                    ."example 10.0.20.0/24 (a single address is written with /32, and IPv6 is not accepted).\n"
+                    ."Then apply the change:\n"
+                    .'  docker compose up -d nginx',
+            ],
+            'metrics' => [
+                'warning_open' => "Put only the Prometheus network in the .env file (default 172.29.0.20/32) and\n"
+                    ."apply the change:\n"
+                    ."  METRICS_ALLOW_CIDR=172.29.0.20/32\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Fix it in the .env file: one single range in the a.b.c.d/n format, for\n"
+                    ."example 172.29.0.20/32. Then apply the change:\n"
+                    .'  docker compose up -d nginx',
+            ],
+        ],
+
         'tls' => [
             'probe' => $probeFix,
             'certificate' => [
@@ -439,8 +540,20 @@ return [
                     .'If you do not use a custom logo, there is nothing to do.',
             ],
             'branding_logo' => [
-                'warning' => 'Upload the logo again from the panel, under Settings. Accepted formats are PNG '
-                    .'and SVG.',
+                'warning_path' => 'Copy the PNG or the SVG to the BRANDING_PATH folder on the server (if it is '
+                    .'empty, ./branding next to docker-compose.yml) and enter in the panel, Brand screen, its '
+                    .'path as seen from inside the container: /var/kronoqr/branding/<file>. Detail: '
+                    .'docs/cliente/en/configuration.md, section 2.2.',
+                'warning_missing' => 'Check that the file is in the BRANDING_PATH folder on the server and that it '
+                    ."can be read (chmod 0644). If this command does not show it:\n"
+                    ."  docker compose exec app ls -l /var/kronoqr/branding\n"
+                    .'the volume is not mounted: check BRANDING_PATH in the .env and recreate the three containers '
+                    .'that use it with docker compose up -d app horizon scheduler. Detail: '
+                    .'docs/cliente/en/configuration.md, section 2.2.',
+                'warning_content' => 'Replace the file with a PNG, or with an SVG without a script (<script>), of '
+                    .'moderate size and dimensions, in the same BRANDING_PATH folder, and save the path again in '
+                    .'the panel, Brand screen: it is checked on saving and the panel gives the exact reason. '
+                    .'Detail: docs/cliente/en/configuration.md, section 2.2.',
                 'warning_unknown' => 'Run this command again once the database responds.',
             ],
         ],

@@ -317,7 +317,7 @@ está mirando».
 docker compose -f infra/compose.prod.yaml ps scheduler
 
 # ¿Cuándo fue la última pasada?
-docker compose -f infra/compose.prod.yaml exec -T app sh -c 'cat "$BACKUP_PATH/metrics/kronoqr_pattern_detection.prom"'
+docker compose -f infra/compose.prod.yaml exec -T scheduler sh -c 'cat "$BACKUP_PATH/metrics/kronoqr_pattern_detection.prom"'
 
 # Lánzala a mano. Es idempotente: no duplica lo que ya se abrió.
 docker compose -f infra/compose.prod.yaml exec -T app php artisan attendance:detect-patterns

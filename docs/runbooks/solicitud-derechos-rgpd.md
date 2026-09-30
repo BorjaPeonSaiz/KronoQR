@@ -84,7 +84,7 @@ Lo que hay que entregar es el registro horario de esa persona. El producto ya lo
 produce en el formato normalizado que la Inspección acepta (RF-IN-05, RL-06):
 
 ```bash
-docker compose --env-file .env -f infra/compose.dev.yaml exec app \
+docker compose exec app \
   php artisan compliance:legal-export --from=2023-01-01 --to=2026-12-31 --employee=<employee_uuid>
 ```
 
@@ -127,7 +127,7 @@ cosas: el contexto (`context`) y la nota de resolución (`resolution_note`), con
 su estado, su desenlace y sus fechas. Se extraen así:
 
 ```bash
-docker compose --env-file .env -f infra/compose.dev.yaml exec -T app php artisan tinker --execute="
+docker compose exec -T app php artisan tinker --execute="
   DB::table('incidents')
     ->join('employees', 'employees.id', '=', 'incidents.employee_id')
     ->where('employees.uuid', '<employee_uuid>')
@@ -257,7 +257,7 @@ número de informe (ver §5).
 1. **Comprueba el plazo.** Lanza la propuesta de retención, que no borra nada:
 
    ```bash
-   docker compose --env-file .env -f infra/compose.dev.yaml exec app \
+   docker compose exec app \
      php artisan compliance:apply-retention --dry-run
    ```
 
@@ -303,10 +303,14 @@ producto que borra datos (regla dura 5).
    ejecutar**.
 
 3. **Ejecución**, con la credencial del rol de mantenimiento, que no vive en el
-   `.env` de la aplicación (ADR-033):
+   `.env` de la aplicación (ADR-033). El rol nace sin contraseña: cómo
+   asignársela solo para esta orden y retirársela al terminar, sin escribirla
+   en ningún fichero, está en
+   [`../cliente/operacion.md`](../cliente/operacion.md) §9 («`fichaje_maintenance`:
+   el rol que nace sin contraseña»). Desde el directorio de la instalación:
 
    ```bash
-   docker compose --env-file .env -f infra/compose.dev.yaml run --rm \
+   docker compose run --rm \
      -e DB_MAINTENANCE_PASSWORD='<la del rol fichaje_maintenance>' app \
      php artisan compliance:apply-retention \
        --confirm=PURGAR-AAAA-MM-DD-xxxxxx \

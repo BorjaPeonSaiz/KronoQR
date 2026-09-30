@@ -9,6 +9,10 @@
 > full data export. Section **15** comes from **5.12**: the `error_events`
 > history. Section **16** comes from **3.3**: the kiosks screen in the panel,
 > the service code and the tablet's diagnostic screen.
+>
+> **Got a problem right now?** Go straight to **§18, "What to do if…"**:
+> tablets that ask to be paired again, Redis that will not start, a `402`,
+> reports that never finish and the failed nightly backup.
 
 ---
 > **The commands in this guide are run from the package directory**, which is
@@ -118,7 +122,7 @@ management account that authorises the purge.)
 **Afterwards:**
 
 - **Archive the report** together with the written authorisation.
-- Run `php artisan compliance:verify-audit-chain`. It has to finish green and
+- Run `docker compose exec app php artisan compliance:verify-audit-chain`. It has to finish green and
   say «Purga sellada reconocida: particion AAAA» (sealed purge recognised for
   partition YYYY). If it said anything else, that is a security incident.
 
@@ -133,7 +137,7 @@ meaning is given next to each.
 | --- | --- | --- |
 | «La frase de confirmación no corresponde…» (the confirmation phrase does not match) | The report expired, or the compliance profile changed | Run `--dry-run` again and use the new phrase |
 | «La cadena de la partición audit_log_AAAA NO verifica» (the chain of partition audit_log_YYYY does NOT verify) | Someone tampered with the audit trail | **Security incident.** `rotura-cadena-auditoria.md`. Do not repeat the purge |
-| «La purga no ha podido completarse contra la base de datos» (the purge could not be completed against the database) | The `fichaje_maintenance` credential is missing, or the role does not have it set | Provision it with `infra/docker/postgres/initdb/02-application-roles.sh` and try again |
+| «La purga no ha podido completarse contra la base de datos» (the purge could not be completed against the database) | The `fichaje_maintenance` credential is missing, or the role does not have it set | The role is born without a password on purpose: give it one only for this operation as §9 explains ("`fichaje_maintenance`: the role that is born without a password") and try again |
 | «La instalación no tiene centro de trabajo» (the installation has no site) | Setup has not been completed | Finish the wizard; without a site there is no compliance profile and no retention period |
 | The weekly proposal stops appearing | The scheduler is not running | Check the `scheduler` container; the `retention_last_run_timestamp_seconds` metric gives it away |
 
@@ -340,6 +344,7 @@ is in the message, which is what you have to read.**
 | `4` | **Failed and everything done was undone** in that run. Can be retried | `install.sh`: containers, volumes and `.env` returned to their state. `backup.sh`: half-written files swept away, the previous backup intact. `restore.sh`: working database removed, the production one untouched. `update.sh`: pre-update backup restored and **previous version running and verified**. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
 | `5` | **Failed and NOT everything could be undone. Manual intervention required.** The message says exactly what is left and which order removes it | It is the only code that requires a person present. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
 | `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up, check the certificate and the logs. `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`); with the application stopped, in one of the external checks. The message says what to read |
+| `7` | **Security guarantee broken. NOTHING applied.** A database role has more privileges than allowed, or a backup tried to change them (AUD-1). It is not a fault: it is a guarantee the product refuses to bypass | `backup.sh`: the role used to copy is a superuser, or can create roles or databases, or bypass RLS; no backup was written and the failed-backup alert fires. `restore.sh` and `restore-drill.sh --mode database`: the backup changed cluster roles when restored; no database was swapped and the roles were put back as they were. Follow `rotacion-secretos.md` («El rol de las copias es privilegiado») or `restaurar-backup.md` §6.6 (both in Spanish) |
 
 `install.sh` and `update.sh` invoke `product:doctor` in their verification
 phase (RF-PD-13): in `install.sh` a warning (`product:doctor` code `1`) is
@@ -443,6 +448,13 @@ The **simulation** (`--dry-run`), which is the one that runs on its own every
 Monday, **needs none of this**: it only counts, and it counts with the
 application role.
 
+**From 2.2.0 on the containers do not receive the whole `.env`**, only the
+variables they need ([`configuration.md`](configuration.md) §6.2), and these
+commands still work as they are: `-e DB_MAINTENANCE_PASSWORD=…` hands the
+password **only** to that command's ephemeral container, which disappears when
+it finishes (`--rm`); the running `app` never sees it. And the `ALTER ROLE` is
+done inside the `postgres` container, not the application's.
+
 ### The panel accounts: creating, deactivating and the password
 
 Management accounts are created from the console and **are withdrawn from the
@@ -503,7 +515,7 @@ services. It is a supported configuration, but **take on this manual task**:
 
 | Every | What to check |
 | --- | --- |
-| Week | `docker compose exec app php artisan backup:verify` — that the latest backup exists and verifies |
+| Week | `docker compose exec scheduler php artisan backup:verify` — that the latest backup exists and verifies |
 | Week | `df -h` on the Docker disk and on `BACKUP_PATH` |
 | Quarter | The restore drill (section 1), which does not change |
 
@@ -668,10 +680,11 @@ stopped running):
 | `RoturaDeCadenaDeAuditoria` | Any | Critical | Security | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Preserve the evidence (§2 of that runbook) before touching anything |
 | `VerificacionDeAuditoriaAusente` | > 26 h without verifying | Critical | Security | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check that the `scheduler` is still alive |
 | `ParticionDeAuditoriaAusente` | The current year's partition is missing | Critical | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | **Clock-ins are down**: run `compliance:ensure-audit-partitions` now |
-| `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Next year's is missing, from November on | Medium | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check the `scheduler` and `DB_MIGRATION_USERNAME` in the `.env` |
-| `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Any | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | `backup:verify`, then retry with `backup:run` |
+| `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Next year's is missing, from November on | Medium | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check that the `scheduler` is running and that migration `2026_09_29_100000` is applied (`migrate:status` through the `migrate` service, see the runbook §5). It no longer depends on `DB_MIGRATION_USERNAME`: the application asks a database function for the partition |
+| `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Any | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | `backup:verify`, then retry with `backup:run`, both in the `scheduler` container (not `app`) |
 | `CopiaDeSeguridadAusente` | No metric in 30 min | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Check the `scheduler` and that `BACKUP_PATH` is mounted |
 | `ArchivadoDeWalDetenido` | > 30 min without archiving | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Urgent: without space, PostgreSQL ends up stopping entirely |
+| `SlotDeReplicacionParado` | ≥ 1 replication slot without a consumer for 15 min | Critical | IT | [`slot-replicacion-parado.md`](../../runbooks/slot-replicacion-parado.md) (in Spanish) | KronoQR uses none: a single one is already anomalous. It retains transaction log and can fill the data disk |
 | `DiscoDeCopiasCasiLleno` | < 20 % free on the backup volume | Medium | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Expand the disk, or lower `BACKUP_RETENTION_DAYS` |
 | `SimulacroDeRestauracionNuncaEjecutado` | None recorded yet | Medium | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Run it: without it, nobody has checked that the backups actually restore |
 | `SimulacroDeRestauracionCaducado` | Failed, or > 100 days | Medium | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Repeat the drill with the previous backup if the latest one fails |
@@ -800,7 +813,7 @@ The seven steps and what happens if each one fails:
 | 3 · Pre-update backup | Exits `2` | Maintenance lifted; nothing touched. **No backup, no update** | [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) §2 and run again |
 | 4 · Migrations | Automatic rollback → `4` | Backup restored, previous version running and verified | Send the report to the vendor before retrying: it says at which intermediate version it stopped |
 | 5 · Start-up and verification | Automatic rollback → `4` | Same as above. **The new version never received traffic**: it is verified without the edge | Same as above |
-| 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `artisan up`, **without restoring anything**) or the restore was left half-done (three orders and the path of the backup) | Runbook §5. The kiosks keep queueing meanwhile |
+| 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `docker compose exec app php artisan up`, **without restoring anything**) or the restore was left half-done (three orders and the path of the backup) | Runbook §5. The kiosks keep queueing meanwhile |
 | 7 · Report | — | `BACKUP_PATH/reports/update-<fecha>.log`, always; next to it, `update-<fecha>.detalle.log` (root only, raw output, **may contain personal data**) | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
 
 Steps 5 and 6 also leave their own entry in `audit_log` (`system.updated` or
@@ -813,10 +826,34 @@ verify the chain with it, so the report keeps the data and you write it with
 `compliance:record-system-event` after the next update.
 
 **What does not change:** your secrets (the `.env` is copied as is and only
-`IMAGE_TAG` changes), the data, the licence (an expired licence **does not
-prevent updating**), and clocking. **What is needed:** `BACKUP_ENCRYPTION_KEY`
-in the `.env` and space for the backup and for the migration; step 1 says so
-with figures.
+`IMAGE_TAG` changes; the only exception is the one below, when coming from
+2.1.0), the data, the licence (an expired licence **does not prevent
+updating**), and clocking. **What is needed:** `BACKUP_ENCRYPTION_KEY` in the
+`.env` and space for the backup and for the migration; step 1 says so with
+figures.
+
+**When updating from 2.1.0: each container receives only its own.** Up to
+2.1.0 every application container received the whole `.env`, including the
+password of the migration role, which is a database superuser. From 2.2.0 on,
+each service receives **only the variables it needs** (the table is in
+[`configuration.md`](configuration.md) §6.2). Three consequences you need to
+know:
+
+- **If you added a variable of your own to the `.env`**, it no longer reaches
+  any container. Step 1 (and `--check-only`) warns you with the list of the
+  keys in your `.env` that no service will receive. It is a warning, not a
+  failure: they are almost always leftovers that did nothing. If one of them
+  does matter to you, tell the vendor; do not edit `docker-compose.yml`, which
+  the next update replaces.
+- **Backups move to a read-only role.** The updater creates the
+  `fichaje_backup` role and writes `BACKUP_DB_USERNAME` and a new
+  `BACKUP_DB_PASSWORD` **into the new version's `.env`**. The previous
+  version's `.env` keeps the old credentials on purpose: it is what the
+  rollback starts with.
+- **A rollback to 2.1.0 goes back to the whole of 2.1.0**, including its way of
+  handing out credentials: the containers receive the full `.env` again until
+  you update once more. If the update was rolled back, do not leave it for
+  months: the reason is in the report.
 
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
@@ -964,7 +1001,7 @@ and audited**, never the default:
 
 - Panel: tick "Include personal data"; the screen tells you what will be
   included and that it is recorded, and only then lets you generate.
-- Console: `php artisan product:diagnostics --with-personal-data --period-days=7`
+- Console: `docker compose exec app php artisan product:diagnostics --with-personal-data --period-days=7`
   (31 days at most).
 
 It adds the workforce —**only the people with activity in the period or with an
@@ -1137,7 +1174,8 @@ passed, the system marks it as **failed** with reason `stale` as soon as
 someone requests another or in the next hourly purge, and you can generate
 again. There is no need to touch the database; if you really see one in
 progress for more than an hour without it moving to failed, run
-`php artisan product:export-all --purge` and request it again.
+`docker compose exec app php artisan product:export-all --purge` and request it
+again.
 
 **If it shows as "Could not be generated".** The reason the panel shows is a
 code, not free text, so that no data from a row is ever put on the screen or in
@@ -1372,7 +1410,7 @@ summary:
 | **Warning, pending clock-ins** — the tablet **has network and still has clock-ins left to send** | [`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish). **Do not unpair that tablet**: you would lose the queue |
 | **Warning, low battery** | Go to the mounting point: unplugged charger, switched-off power strip or a broken cable |
 | **Warning, late heartbeat** | Nothing yet. If it does not return to "up to date" within ten minutes it becomes a failure and the alert fires |
-| **The tablet went back to the pairing screen on its own** | Someone unpaired it or rotated its token: [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) (in Spanish) §6 |
+| **The tablet went back to the pairing screen on its own** | Someone unpaired it, or its token reached 90 days (§18): [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) (in Spanish) §6 |
 
 **If the queue does not go down even though the network at that point is
 fine**, and the "oldest" in the "Pending" column stays stuck at the same time
@@ -1483,12 +1521,17 @@ looking at its diagnostic screen still shows as up to date.
 
 ### 17.1 What the product promises, and what it means in a hotel
 
-The product is published with a written threshold: **50 clock-ins per second
+The product is designed against a written threshold: **50 clock-ins per second
 sustained on the server, with 95 % of the responses under 150 ms** (`RNF-P-06`
-and `RNF-P-02`). **It is measured before every major version on reference
-hardware and with this very command, `make load-test`, as a step of the release
-procedure**, and the result travels with the version. It is the same procedure
-you can repeat on your own server.
+and `RNF-P-02`). **Today it is a design target, not a measured figure we can
+hand you**: it has not yet been measured on the reference hardware (4 cores and
+8 GB) with a dedicated server, so no version ships with that measurement. When
+it exists, the release notes will say so, with the figure and the machine.
+
+**Measure it yourself with `make load-test`** (§17.2): it is the same test, it
+gives a verdict requirement by requirement and it is the only figure that holds
+for your server, because it comes from your hardware, your disk and your
+network.
 
 When the version is tagged there is also an automatic check on the vendor's
 infrastructure, but **that one does not judge the threshold and should not be
@@ -1506,7 +1549,7 @@ be confused:
 | Where | What the limit is | Why |
 | --- | --- | --- |
 | **At the edge, per origin** (the web server) | From `KIOSK_VLAN_CIDR`: **a burst of 50 clock-ins straight away** and then **10 per second** (600 per minute). From any other origin, 30 per minute with a burst of 10 | Every kiosk in a hotel goes out through the same IP. See [`installation.md`](installation.md) §6 |
-| **On the server, in total** | **50 clock-ins per second sustained** across all origins, with p95 < 150 ms | It is what the load test measures and what decides whether a major version ships |
+| **On the server, in total** | **50 clock-ins per second sustained** across all origins, with p95 < 150 ms | It is the design target and what the load test judges when you run it on your server |
 
 **The shift change of a whole workforce fits inside the burst.** The first 50
 cards go through at once; from then on the edge lets ten clock-ins per second
@@ -1655,9 +1698,10 @@ employee sees is the usual thing: the kiosk confirms, queues and resends.
 
 **The hardware, for reference.** The published minimums are **2 cores and
 4 GB**; the recommended, **4 cores and 8 GB**
-([`installation.md`](installation.md) §0). The minimum sustains a workforce of
-up to 100 people with the default pool; beyond that, the conversation is about
-cores and RAM before it is about parameters.
+([`installation.md`](installation.md) §0). The minimum is sized for a workforce
+of up to 100 people with the default pool — that is the design target; confirm
+it on your server with `make load-test` —; beyond that, the conversation is
+about cores and RAM before it is about parameters.
 
 **A `429` leaves nobody unable to clock in.** The kiosk never blocks the
 employee: it confirms on screen, stores the clock-in in its local queue with the
@@ -1757,3 +1801,178 @@ test environment the answer is the usual one: seed it again.
 The first three are changed in the `.env` and **require restarting the
 services**; their full entry is in [`configuration.md`](configuration.md) §6.24
 and §6.15.
+
+---
+
+## 18. What to do if…
+
+The foreseeable failures of a running installation, with the symptom someone at
+the hotel sees and the commands to get out of it. **First of all, in any of
+them:**
+
+```bash
+./doctor.sh
+```
+
+It says what is red and what to do about each thing (§12.1). What follows is
+for when you already know which of these cases is yours.
+
+### …every tablet goes back to the pairing screen after 90 days
+
+**What is going on.** When it is linked, each tablet receives a token that
+lives **90 days** (`IDENTITY_DEVICE_TOKEN_DAYS`). Automatic renewal before it
+expires is planned, but **in this version it does not run**: on day 90 after it
+was linked, the tablet is no longer accepted, goes back to the pairing screen by
+itself and **nobody can clock in on it until it is linked again**. If you linked
+them all on the same day, they all drop on the same day.
+
+**What is not lost:** the clock-ins the tablet had in its local queue. They are
+kept and sent as soon as it is linked again.
+
+**Prevention, which is what we recommend.** In the panel, **Kiosks**, the
+**"Linked"** column says when each one was linked: add 80 days and put it in the
+calendar. On that day, with the tablet in front of you and away from the shift
+change:
+
+1. Check on that same screen that its **"Unsynced clockings"** column is at
+   `0`.
+2. **Unlink it** (Kiosks › the kiosk › **Unlink**). Within a couple of minutes
+   the tablet shows a new code.
+3. **Link it with exactly the same name.** The same kiosk is reactivated, with
+   its history, and receives a new 90-day token.
+
+It takes two minutes per tablet and it is recorded in the audit log. If you
+can, spread the tablets over different days so they never all coincide. The
+detail, with screenshots, is in
+[`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md)
+§5.2 and §5.3 (in Spanish).
+
+**If it has already happened**, the procedure is the same starting at step 2
+(the panel will not let you link with that name while the kiosk is still
+active: unlink first). Then check that its queue goes down to `0`:
+
+```bash
+docker compose exec app php artisan kiosk:health
+```
+
+### …Redis restarts over and over, almost always after a power cut
+
+**Symptom.** `docker compose ps` shows `redis` as `Restarting`, and its log
+talks about the persistence file (`Bad file format reading the append only
+file`, `AOF ... is not valid`). An abrupt shutdown left that file half written
+and Redis refuses to start with it.
+
+**Impact.** **Clocking in keeps working**: the tablets record against the
+database, which does not depend on Redis. What does fail in the meantime:
+
+| What | How you notice |
+| --- | --- |
+| Access to the panel and the portal | Errors when logging in, or screens that do not load |
+| Background jobs (reports, exports, notices) | The ones requested now come out **"Failed"**: they must be repeated once Redis is back |
+| The real-time presence screen | Stops updating instantly |
+
+**What to do.** `./doctor.sh` detects it and gives you these same commands.
+Stop Redis, repair its file and bring it back up. The repair asks before
+truncating; the `echo y` in the second command answers for you. It ends with
+`All AOF files and manifest are valid`.
+
+```bash
+docker compose logs --tail 30 redis
+docker compose stop redis
+echo y | docker compose run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
+docker compose up -d redis
+./doctor.sh
+```
+
+If `./doctor.sh` still sees a service stopped, `docker compose up -d` brings
+everything up. The same procedure, seen from the alert that triggers it, is in
+[`../../runbooks/errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md)
+§1.1 (in Spanish).
+
+The repair truncates the last thing written before the cut. **Redis holds
+nothing of the working-time record**: what is lost is, at most, jobs that were
+queued at that moment. If a report comes out "Failed", request it again.
+
+**If `redis-check-aof` cannot repair it**, Redis can be started empty: for the
+same reason, no clock-in and no correction is lost. Queued jobs and the
+failed-attempt counters are lost, and the counters go back to zero. Replace
+`NOMBRE` with the name the second command returns:
+
+```bash
+docker compose rm -sf redis
+docker volume ls --filter name=redis-data
+docker volume rm NOMBRE
+docker compose up -d
+```
+
+### …a panel screen says that feature is not included in the licence (`402`)
+
+**It is neither a fault nor a permission.** It is the product's `402` response:
+the **accessory** feature requested — period reports, payroll export, adoption
+dashboard, background exports — is not in the active licence, or the licence
+has expired. The message itself says what is still available.
+
+**What never answers `402`:** clocking in, tablet synchronisation, looking up
+working days, the employee portal, the export for the Labour Inspectorate,
+corrections, the audit log and backups. No licence touches those (§7).
+
+**What to do:**
+
+```bash
+docker compose exec app php artisan license:show
+```
+
+If it says there is no licence, that it expired or that the feature is not in
+the plan, it is a conversation with the vendor, not an IT task. With the new
+key, `license:activate` (§7). Do not restart anything: it achieves nothing.
+
+### …reports stay "Queued" and never finish
+
+**What is going on.** Reports and exports that do not fit in an immediate
+response are generated by the **`horizon`** service, the queue worker. If it is
+stopped, they stay **"Queued"**. **They are not lost**: they are generated as
+soon as it comes back. Today no alert warns that `horizon` is stopped; this is
+the symptom.
+
+```bash
+docker compose ps horizon
+docker compose logs --tail 50 horizon
+docker compose up -d horizon
+```
+
+If `horizon` does not start, read its log: it is almost always that Redis is
+not there either (previous case in this same section) or that the database does
+not respond (`./doctor.sh`). Clocking in does not depend on `horizon`.
+
+### …the nightly backup has failed
+
+**Symptom.** `CopiaDeSeguridadFallida`, `CopiaDeSeguridadSinVerificar` or
+`CopiaDeSeguridadAusente` fires (§10.4), or `./doctor.sh` warns that it cannot
+write to the backup directory.
+
+**Impact.** Clocking in does not notice. But **without a verified backup there
+is no update** (`update.sh` refuses at its step 3) and, if a restore were
+needed, you would go back to the last good backup. Solve it the same day.
+
+The backup commands go through the **`scheduler`** container, not `app`: it is
+the one holding the encryption key and the backup role.
+
+```bash
+docker compose ps scheduler
+docker compose logs --since 24h scheduler | grep -i backup
+docker compose exec scheduler php artisan backup:verify
+docker compose exec scheduler php artisan backup:run
+```
+
+The last one ends with a code from the common table (§8), and the message says
+the cause:
+
+| Code | Most frequent cause | What to do |
+| --- | --- | --- |
+| `2` | `BACKUP_PATH` not mounted or out of space, or the encryption key is missing | Mount the destination or free space and repeat. The previous backup is intact |
+| `6` | The backup was written but **does not verify** | Treat it as non-existent and repeat. If it happens again, [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2 (in Spanish) |
+| `7` | The backup role has more privileges than allowed | It is not a fault: [`../../runbooks/rotacion-secretos.md`](../../runbooks/rotacion-secretos.md), "El rol de las copias es privilegiado" (in Spanish) |
+
+The full diagnosis, code by code, is in
+[`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2
+(in Spanish).

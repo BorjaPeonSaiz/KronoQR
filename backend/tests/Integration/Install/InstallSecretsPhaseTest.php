@@ -132,6 +132,31 @@ it('escribe los trece secretos y CONSERVA la copia previa del .env', function ()
     limpiarEnvTemporal($env);
 })->group('RF-PD-02', 'RS-08');
 
+it('genera para las copias una contrasena PROPIA, distinta de la del migrador (AUD-1)', function (): void {
+    // Hasta la 2.1.0, BACKUP_DB_PASSWORD era una copia de DB_MIGRATION_PASSWORD y
+    // el rol de las copias era el migrador (superusuario) dentro del entorno de
+    // los contenedores de runtime. Ahora el rol es `fichaje_backup`, de solo
+    // lectura, y su contrasena no puede coincidir con la de ningun otro rol:
+    // si coincidiera, el rol de solo lectura no protegeria nada.
+    $env = envTemporal();
+
+    $resultado = bashConLaFase3(
+        'ENV_FILE='.escapeshellarg($env).'; PRODUCT_VERSION=2.0.0; kq_msg_init es; phase_secrets'
+    );
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput());
+
+    $contenido = (string) file_get_contents($env);
+    $copias = valorEscrito($contenido, 'BACKUP_DB_PASSWORD');
+
+    expect($copias)->not->toBe(valorEscrito($contenido, 'DB_MIGRATION_PASSWORD'))
+        ->and($copias)->not->toBe(valorEscrito($contenido, 'DB_PASSWORD'))
+        ->and(valorEscrito($contenido, 'BACKUP_DB_USERNAME'))->toBe('fichaje_backup')
+        ->and(valorEscrito($contenido, 'BACKUP_DB_USERNAME'))->not->toBe(valorEscrito($contenido, 'DB_MIGRATION_USERNAME'));
+
+    limpiarEnvTemporal($env);
+})->group('RS-08', 'RF-PD-02');
+
 it('no imprime ni uno de los secretos que acaba de generar', function (): void {
     // §3.5 y RS-08. Se comprueba contra los valores REALES recien escritos, que
     // es la unica forma honesta: buscar «algo que parezca una clave» daria verde

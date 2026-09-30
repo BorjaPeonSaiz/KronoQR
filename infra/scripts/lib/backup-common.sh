@@ -102,12 +102,61 @@ load_env_file() {
   kq_env_load "$1"
 }
 
+# Que fichero .env se lee cuando nadie ha dicho cual (N2.2-2).
+#
+# Las guias del cliente mandan ejecutar `bash ./restore-drill.sh` desde el
+# directorio del paquete, y una entrada de cron con la ruta absoluta del script:
+# en los dos casos el .env de la instalacion esta JUNTO AL PAQUETE y ninguna de
+# las dos lleva `BACKUP_ENV_FILE`. Se busca respecto a la ubicacion del propio
+# script, nunca respecto al directorio de trabajo (un cron no trabaja donde
+# esta el paquete):
+#
+#   <paquete>/lib/backup-common.sh  ->  <paquete>/.env           (el paquete)
+#                                       <paquete>/../.env        (scripts/ dentro
+#                                                                 de la instalacion,
+#                                                                 como en el runbook)
+#
+# El primero que exista. Imprime la ruta, o nada si no hay ninguno.
+kq_default_env_file() {
+  local candidate
+  for candidate in "${BACKUP_COMMON_DIR}/../.env" "${BACKUP_COMMON_DIR}/../../.env"; do
+    if [ -e "$candidate" ]; then
+      # Sin `lib/..` en el mensaje que ve quien no puede leerlo.
+      readlink -f -- "$candidate" 2>/dev/null || printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  return 0
+}
+
 # Configuracion: entorno > fichero .env > valor por defecto.
+#
+# El fichero es BACKUP_ENV_FILE si esta definida (ahi manda quien la define, y
+# `/dev/null` la desactiva) y, si no, el .env junto al paquete
+# (`kq_default_env_file`). Lo que ya esta en el entorno GANA siempre al fichero.
 #
 # Regla dura 13: rutas, destinos y retencion son configuracion. Nada de lo que
 # se lee aqui esta escrito en el codigo de ningun script.
 load_backup_config() {
-  load_env_file "${BACKUP_ENV_FILE:-/dev/null}"
+  local env_file="${BACKUP_ENV_FILE-}"
+
+  if [ -z "${BACKUP_ENV_FILE+x}" ]; then
+    env_file="$(kq_default_env_file)"
+    # El .env de una instalacion es 0600 y de root (install.sh): quien no pueda
+    # leerlo recibe el motivo verdadero y no un «falta la clave de cifrado» que
+    # le mandaria a buscar en el sitio equivocado. Si la clave ya viene del
+    # entorno, el fichero no hace falta y no se protesta.
+    if [ -n "$env_file" ] && [ ! -r "$env_file" ]; then
+      if [ -n "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+        env_file=""
+      else
+        die "${KQ_EXIT_REQUIREMENTS}" \
+          "no se puede leer '${env_file}' (es de root y de modo 0600: contiene secretos). Ejecuta esto con sudo, o exporta BACKUP_ENCRYPTION_KEY y BACKUP_PATH en el entorno, o indica otro fichero con BACKUP_ENV_FILE=RUTA."
+      fi
+    fi
+  fi
+
+  load_env_file "${env_file:-/dev/null}"
 
   BACKUP_PATH="${BACKUP_PATH:-/var/backups/fichaje}"
   BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
@@ -122,9 +171,11 @@ load_backup_config() {
   BACKUP_DIR_REPORTS="${BACKUP_PATH}/reports"
   BACKUP_LATEST_POINTER="${BACKUP_DIR_DUMP}/LATEST"
 
-  # Credenciales. El usuario de la copia puede ser distinto del de la
-  # aplicacion: la aplicacion no tiene UPDATE ni DELETE sobre audit_log (regla
-  # dura 6) y el volcado necesita leerlo entero.
+  # Credenciales. El usuario de la copia NO es el de la aplicacion ni el de
+  # migracion: es `fichaje_backup` (AUD-1), de solo lectura (pg_read_all_data +
+  # REPLICATION; initdb/03-backup-role.sh). La aplicacion no tiene UPDATE ni
+  # DELETE sobre audit_log (regla dura 6) y el volcado necesita leerlo entero;
+  # el superusuario no hace falta para copiar y no debe estar en este entorno.
   PGHOST="${PGHOST:-${DB_HOST:-postgres}}"
   PGPORT="${PGPORT:-${DB_PORT:-5432}}"
   PGDATABASE="${PGDATABASE:-${DB_DATABASE:-fichaje}}"
@@ -371,7 +422,7 @@ compare_table_counts() {
       continue
     fi
     if [ "$reales" != "$esperadas" ]; then
-      if printf '%s\n' "$estables" | grep -qxF "$tabla"; then
+      if grep -qxF "$tabla" <<<"$estables"; then
         err "CONTEO distinto en '${tabla}', que no cambio durante la copia: manifiesto ${esperadas}, restaurada ${reales}."
         fallos=$((fallos + 1))
       elif [ "$reales" -lt "$esperadas" ]; then
@@ -385,4 +436,159 @@ compare_table_counts() {
 
   [ "$avisos" -eq 0 ] || log "${avisos} tablas con mas filas que el manifiesto: se copio con el sistema en marcha."
   [ "$fallos" -eq 0 ]
+}
+
+#------------------------------------------------------------------------------
+# Guarda de roles (AUD-1, A3-01)
+#------------------------------------------------------------------------------
+#
+# POR QUE EXISTE. Restaurar corre como el rol de migracion, que es SUPERUSUARIO:
+# `pg_restore` ejecuta lo que traiga el archivo. Una copia manipulada —el
+# runtime puede escribir en BACKUP_PATH y el `scheduler` tiene la clave de
+# cifrado— podria llevar `ALTER ROLE fichaje_app SUPERUSER`, y los roles son del
+# CLUSTER, no de la base: el intercambio de nombres no lo deshace. Por eso se
+# toma una foto de los atributos y de las pertenencias de rol ANTES del
+# `pg_restore` y otra DESPUES, y si difieren no se intercambia nada.
+#
+# QUE SE COMPARA, y que no: los siete atributos que gobiernan el poder de un
+# rol (superusuario, crear roles, crear bases, saltarse RLS, replicacion,
+# login, herencia) y TODAS las pertenencias con sus opciones. Nunca
+# contraseñas: se lee `pg_roles`, que las oculta, y no `pg_authid`.
+#
+# LO QUE ESTO NO CUBRE, dicho para que nadie lo descubra despues: un archivo
+# manipulado ejecutado por un superusuario puede hacer mucho mas que cambiar un
+# rol (COPY ... PROGRAM, ALTER SYSTEM, funciones). Esta guarda cierra el
+# vector concreto de la escalada de roles; la autenticidad de la copia frente a
+# quien tiene la clave de cifrado (el scheduler) es otra cosa y la resuelve
+# sacar la copia del runtime (ADR-042, «Alternativas descartadas»).
+
+# Escribe en DESTINO la foto, ordenada en la coleccion `C` para que dos fotos
+# iguales sean identicas byte a byte.
+#
+#   kq_roles_snapshot DESTINO
+kq_roles_snapshot() {
+  local dest="$1"
+
+  {
+    psql_q postgres "SELECT 'role|' || concat_ws('|', rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolreplication, rolcanlogin, rolinherit) FROM pg_roles"
+    psql_q postgres "SELECT 'member|' || concat_ws('|', g.rolname, m.rolname, gr.rolname, am.admin_option, am.inherit_option, am.set_option) FROM pg_auth_members am JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member JOIN pg_roles gr ON gr.oid = am.grantor"
+  } | LC_ALL=C sort >"$dest"
+}
+
+# Identificador SQL entre comillas dobles, con las comillas internas duplicadas.
+kq_sql_ident() {
+  local name="$1"
+  printf '"%s"' "${name//\"/\"\"}"
+}
+
+# Un booleano de psql (`t`/`f`; con concat_ws sale asi, no como `true`/`false`)
+# convertido en su palabra SQL: `t` -> SUPERUSER, `f` -> NOSUPERUSER. Cualquier
+# otra cosa se trata como falsa, que es el lado seguro.
+kq_role_keyword() {
+  local value="$1" keyword="$2"
+  if [ "$value" = "t" ]; then
+    printf '%s' "$keyword"
+  else
+    printf 'NO%s' "$keyword"
+  fi
+}
+
+# `t` -> TRUE, cualquier otra cosa -> FALSE.
+kq_sql_bool() {
+  if [ "$1" = "t" ]; then
+    printf 'TRUE'
+  else
+    printf 'FALSE'
+  fi
+}
+
+# Intenta devolver el cluster a la foto ANTERIOR: atributos de los roles que
+# existian, pertenencias y roles que no existian (se borran; si poseen algo el
+# DROP falla y el diff los sigue mostrando). Es un mejor esfuerzo, y por eso el
+# llamador vuelve a fotografiar y compara: lo unico que vale es la segunda foto.
+# El llamador elimina ANTES la base de trabajo: un rol nuevo puede ser su
+# propietario.
+#
+#   kq_roles_revert ANTES AHORA
+kq_roles_revert() {
+  local antes="$1" ahora="$2" line kind a b c d e f g h sql
+
+  # Roles cuya linea ya no es la de antes: se les reescriben los atributos.
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    IFS='|' read -r kind a b c d e f g h <<<"$line"
+    [ "$kind" = "role" ] || continue
+    sql="ALTER ROLE $(kq_sql_ident "$a") WITH $(kq_role_keyword "$b" SUPERUSER) $(kq_role_keyword "$c" CREATEROLE) $(kq_role_keyword "$d" CREATEDB) $(kq_role_keyword "$e" BYPASSRLS) $(kq_role_keyword "$f" REPLICATION) $(kq_role_keyword "$g" LOGIN) $(kq_role_keyword "$h" INHERIT)"
+    "${PSQL_CMD[@]}" -d postgres -Atqc "$sql" >/dev/null 2>&1 || true
+  done < <(LC_ALL=C comm -23 "$antes" "$ahora")
+
+  # Roles que no estaban: se borran.
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    IFS='|' read -r kind a b <<<"$line"
+    [ "$kind" = "role" ] || continue
+    grep -q "^role|${a}|" "$antes" && continue
+    "${PSQL_CMD[@]}" -d postgres -Atqc "DROP ROLE IF EXISTS $(kq_sql_ident "$a")" >/dev/null 2>&1 || true
+  done < <(LC_ALL=C comm -13 "$antes" "$ahora")
+
+  # Pertenencias que no estaban: se retiran, con su otorgante.
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    IFS='|' read -r kind a b c d e f <<<"$line"
+    [ "$kind" = "member" ] || continue
+    sql="REVOKE $(kq_sql_ident "$a") FROM $(kq_sql_ident "$b") GRANTED BY $(kq_sql_ident "$c")"
+    "${PSQL_CMD[@]}" -d postgres -Atqc "$sql" >/dev/null 2>&1 || true
+  done < <(LC_ALL=C comm -13 "$antes" "$ahora")
+
+  # Pertenencias que estaban y ya no (o con otras opciones): se devuelven.
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    IFS='|' read -r kind a b c d e f <<<"$line"
+    [ "$kind" = "member" ] || continue
+    sql="GRANT $(kq_sql_ident "$a") TO $(kq_sql_ident "$b") WITH ADMIN $(kq_sql_bool "$d"), INHERIT $(kq_sql_bool "$e"), SET $(kq_sql_bool "$f") GRANTED BY $(kq_sql_ident "$c")"
+    "${PSQL_CMD[@]}" -d postgres -Atqc "$sql" >/dev/null 2>&1 || true
+  done < <(LC_ALL=C comm -23 "$antes" "$ahora")
+}
+
+# Compara la foto de ANTES con una nueva. Devuelve:
+#   0  iguales.
+#   1  difieren, y tras el intento de reversion la foto vuelve a ser la de antes.
+#   2  difieren y NO se ha podido revertir: hay que intervenir a mano.
+# Si difieren imprime en la salida de error que ha cambiado (roles y atributos,
+# nada secreto).
+#
+#   kq_roles_unchanged ANTES [ORDEN ARGUMENTOS...]
+#
+# ORDEN, si se da, se ejecuta solo cuando hay cambios y ANTES de revertirlos
+# (sirve para soltar la base de trabajo).
+kq_roles_unchanged() {
+  local antes="$1" ahora
+  shift
+
+  ahora="$(mktemp "${antes}.XXXXXX")"
+  kq_roles_snapshot "$ahora"
+
+  if cmp -s "$antes" "$ahora"; then
+    rm -f "$ahora"
+    return 0
+  fi
+
+  err "Cambios en los roles del cluster durante la restauracion (- antes, + despues):"
+  {
+    LC_ALL=C comm -23 "$antes" "$ahora" | sed 's/^/  - /'
+    LC_ALL=C comm -13 "$antes" "$ahora" | sed 's/^/  + /'
+  } >&2
+
+  if [ "$#" -gt 0 ]; then
+    "$@" >/dev/null 2>&1 || true
+  fi
+
+  kq_roles_revert "$antes" "$ahora"
+  kq_roles_snapshot "$ahora"
+  if cmp -s "$antes" "$ahora"; then
+    rm -f "$ahora"
+    return 1
+  fi
+  rm -f "$ahora"
+  return 2
 }

@@ -630,6 +630,30 @@ it('deja soltar una particion solo al rol de mantenimiento, nunca al de la aplic
         $maintenance.' no puede ejecutar '.$function.': la purga de ADR-027 seria imposible.'
     );
 
+    // Y al reves con la funcion que CREA particiones (ADR-042): es del rol de
+    // la aplicacion y de nadie mas. Mantenimiento no la necesita para purgar.
+    /** @var object{granted: bool}|null $maintenanceCreates */
+    $maintenanceCreates = DB::selectOne(
+        'SELECT has_function_privilege(?, ?, ?) AS granted',
+        [$maintenance, AuditLogSchema::CREATE_FUNCTION.'(integer)', 'EXECUTE'],
+    );
+
+    expect($maintenanceCreates?->granted)->toBeFalse(
+        $maintenance.' puede ejecutar '.AuditLogSchema::CREATE_FUNCTION.': ADR-042 la reserva al rol de la aplicacion.'
+    );
+
+    // La funcion de purga, alineada con la de creacion (migracion
+    // 2026_09_29_100000): `pg_temp` explicito y al final, para que una tabla
+    // temporal no pueda suplantar a una del esquema.
+    /** @var object{config: string}|null $purgeConfig */
+    $purgeConfig = DB::selectOne(
+        'SELECT array_to_json(proconfig) AS config FROM pg_proc WHERE oid = ?::regprocedure',
+        ['public.'.$function],
+    );
+
+    expect(json_decode((string) $purgeConfig?->config, true, 512, JSON_THROW_ON_ERROR))
+        ->toContain('search_path='.AuditLogSchema::DEFINER_SEARCH_PATH);
+
     $partition = AuditLogSchema::partitionName(2026);
 
     // Y en la practica, con el rol con el que corre el producto:

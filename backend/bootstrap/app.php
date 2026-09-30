@@ -66,6 +66,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -73,6 +74,7 @@ use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -377,11 +379,18 @@ return Application::configure(basePath: dirname(__DIR__))
          * informes) se devuelven como `JsonResponse` sin pasar por aqui. Quien
          * anada un `abort(503)` que no sea mantenimiento tiene que darle su
          * propio tipo antes, o el cliente leera «se esta actualizando» durante
-         * una averia. Las demas `HttpException` siguen su camino.
+         * una averia.
+         *
+         * LAS DEMAS `HttpException` TAMBIEN SALEN COMO `problem+json` (F4a-1):
+         * el `405` de una ruta que no admite el metodo, el `413` de un cuerpo que
+         * supera `post_max_size`, el `419` de un token CSRF caducado, un
+         * `abort(409)`… Antes salian como `{"message": ...}` y, en desarrollo, el
+         * `405` volcaba la traza. Cada codigo lleva su `type` y conserva las
+         * cabeceras de la excepcion (`Allow`).
          */
         $exceptions->render(static function (HttpException $exception): mixed {
             if ($exception->getStatusCode() !== 503) {
-                return null;
+                return ProblemDetails::httpError($exception->getStatusCode(), ProblemDetails::headersOf($exception));
             }
 
             $retryAfter = $exception->getHeaders()['Retry-After'] ?? '60';
@@ -1032,4 +1041,34 @@ return Application::configure(basePath: dirname(__DIR__))
                 $exception->getMessage(),
             ),
         ));
+
+        /*
+         * Y TODO LO DEMAS: `500` como `problem+json` (CH4). VA EL ULTIMO a
+         * proposito: el framework prueba los `render` en el orden en que se
+         * registran, asi que cualquier traduccion especifica de arriba gana.
+         *
+         * Sin esto, una caida de PostgreSQL a mitad de una peticion devolvia el
+         * `500` crudo del framework: `{"message": "Server Error"}` con
+         * `APP_DEBUG=false`, y con `APP_DEBUG=true` la traza entera, el SQL y un
+         * `employee_code` en claro. **El cuerpo no lleva nada de la excepcion, ni
+         * en desarrollo**: la causa esta en el log y en `error_events`, que es
+         * donde el §8.1 la quiere (regla dura 21). Informar sigue funcionando
+         * igual: `render` decide la respuesta, no el registro.
+         *
+         * Dos cosas se dejan pasar: `HttpResponseException`, que ya TRAE su
+         * respuesta —el `400` de `invalid-request` del quiosco sale de una—, y las
+         * `HttpException` que devuelve `render` de arriba; aqui solo llega lo que
+         * nadie tradujo.
+         */
+        $exceptions->render(static function (Throwable $exception): mixed {
+            if ($exception instanceof HttpResponseException) {
+                return null;
+            }
+
+            if ($exception instanceof HttpExceptionInterface) {
+                return ProblemDetails::httpError($exception->getStatusCode(), ProblemDetails::headersOf($exception));
+            }
+
+            return ProblemDetails::internalError();
+        });
     })->create();

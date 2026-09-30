@@ -106,8 +106,26 @@ it('horizon, reverb y scheduler NO llevan PGOPTIONS, en ninguno de los dos compo
     ['infra/compose.prod.yaml', 'scheduler'],
 ])->group('RNF-P-06', 'RNF-D-01');
 
-it('PGOPTIONS aparece EXACTAMENTE una vez por compose (solo en app, nunca duplicado)', function (string $compose): void {
+it('PGOPTIONS aparece solo donde debe: una vez en desarrollo (app) y dos en produccion (app y migrate)', function (string $compose, int $esperadas): void {
+    // En produccion las migraciones ya no van por `app` sino por el servicio
+    // puntual `migrate` (AUD-1): lleva `lock_timeout` —una migracion que espera un
+    // candado mas de 5 s aborta en vez de bloquear el fichaje, RNF-D-01— y NO
+    // `idle_in_transaction_session_timeout`. `restore` no lleva ninguno: restaurar
+    // es largo por naturaleza.
     $veces = substr_count(Repo::contents($compose), 'PGOPTIONS:');
 
-    expect($veces)->toBe(1);
-})->with(['infra/compose.dev.yaml', 'infra/compose.prod.yaml'])->group('RNF-P-06', 'RNF-D-01');
+    expect($veces)->toBe($esperadas);
+})->with([
+    ['infra/compose.dev.yaml', 1],
+    ['infra/compose.prod.yaml', 2],
+])->group('RNF-P-06', 'RNF-D-01');
+
+it('migrate lleva lock_timeout y no idle_in_transaction; restore no lleva PGOPTIONS (AUD-1)', function (): void {
+    $migrate = bloqueDeServicio('infra/compose.prod.yaml', 'migrate');
+    $restore = bloqueDeServicio('infra/compose.prod.yaml', 'restore');
+
+    expect($migrate)->toContain('PGOPTIONS:')
+        ->toContain('lock_timeout=${DB_LOCK_TIMEOUT:-5s}');
+    expect($migrate)->not->toContain('idle_in_transaction_session_timeout');
+    expect($restore)->not->toContain('PGOPTIONS:');
+})->group('RNF-D-01');

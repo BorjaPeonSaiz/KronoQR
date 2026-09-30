@@ -7,6 +7,7 @@
 | **Decide** | `backend-laravel` (tarea 1.14), ratificada al cierre de la Fase 1 |
 | **Afecta a** | [ADR-027](ADR-027-audit-log-particionado.md) · [ADR-010](ADR-010-auditoria-solo-append-encadenada.md) · Regla dura 6 de `CLAUDE.md` · `infra/compose.dev.yaml`, `infra/compose.prod.yaml` |
 | **Requisitos** | RS-07, RS-08 |
+| **Enmiendas** | Enmendada por [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): consecuencia 3 (dónde vive la credencial del migrador) y rol nuevo `fichaje_backup` |
 
 ## Contexto
 
@@ -43,6 +44,14 @@ Laravel usa una conexión de base de datos distinta para migraciones (`pgsql_mig
 - `infra/compose.dev.yaml` y `infra/compose.prod.yaml` arrancan el clúster con `POSTGRES_USER=${DB_MIGRATION_USERNAME:-fichaje_migrator}`, no con `fichaje_app`.
 - `infra/docker/postgres/initdb/02-application-roles.sh` provisiona los tres roles de forma idempotente, incluida la ruta de actualización de un clúster ya existente (donde `fichaje_app` era el rol de arranque): aparta ese rol con otro nombre, crea `fichaje_app` de cero sin `SUPERUSER`, y traslada la propiedad de los objetos de `public`.
 - Las credenciales de migración y las de runtime viven en el mismo `.env` por defecto. Esto protege el camino de la **aplicación** (una inyección, un endpoint comprometido) pero no protege contra quien ya tiene acceso al fichero de entorno del servidor. En producción, `install.sh` puede mantener `DB_MIGRATION_*` fuera del entorno de los contenedores de runtime y pasarlas solo al desplegar — decisión de despliegue del cliente, no de esta ADR.
+
+  > **Enmienda de [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): esta consecuencia queda sustituida.** Dejarla en manos del cliente no protegía nada: `DB_MIGRATION_PASSWORD` llegaba por `env_file` a los cuatro contenedores de runtime, y el propio runtime usaba `pgsql_migrator` para crear la partición anual (hallazgo AUD-1). Ahora la separación la garantiza el producto:
+  >
+  > - `DB_MIGRATION_*` solo llega a los servicios de un solo uso `migrate` y `restore` (`profiles: [tools]`);
+  > - la partición la crea una función `SECURITY DEFINER` que ejecuta el rol de aplicación;
+  > - las copias las hace un cuarto rol de solo lectura, `fichaje_backup` (`LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE REPLICATION`, `GRANT pg_read_all_data`), cuya credencial conserva el `scheduler` junto a `BACKUP_ENCRYPTION_KEY`.
+  >
+  > El resto de esta ADR sigue vigente, y `fichaje_migrator` sigue siendo el rol de arranque, propietario y `SUPERUSER`.
 - El texto de ADR-027 («dos roles, no uno») queda desactualizado en su literal de conteo; su decisión de fondo —rol de aplicación sin `UPDATE`/`DELETE` sobre `audit_log`, purga por `DROP PARTITION` con rol de mantenimiento separado— sigue vigente sin cambios.
 
 ## Verificación
