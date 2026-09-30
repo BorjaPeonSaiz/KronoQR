@@ -9,6 +9,10 @@
 > full data export. Section **15** comes from **5.12**: the `error_events`
 > history. Section **16** comes from **3.3**: the kiosks screen in the panel,
 > the service code and the tablet's diagnostic screen.
+>
+> **Got a problem right now?** Go straight to **§18, "What to do if…"**:
+> tablets that ask to be paired again, Redis that will not start, a `402`,
+> reports that never finish and the failed nightly backup.
 
 ---
 > **The commands in this guide are run from the package directory**, which is
@@ -1405,7 +1409,7 @@ summary:
 | **Warning, pending clock-ins** — the tablet **has network and still has clock-ins left to send** | [`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish). **Do not unpair that tablet**: you would lose the queue |
 | **Warning, low battery** | Go to the mounting point: unplugged charger, switched-off power strip or a broken cable |
 | **Warning, late heartbeat** | Nothing yet. If it does not return to "up to date" within ten minutes it becomes a failure and the alert fires |
-| **The tablet went back to the pairing screen on its own** | Someone unpaired it or rotated its token: [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) (in Spanish) §6 |
+| **The tablet went back to the pairing screen on its own** | Someone unpaired it, or its token reached 90 days (§18): [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) (in Spanish) §6 |
 
 **If the queue does not go down even though the network at that point is
 fine**, and the "oldest" in the "Pending" column stays stuck at the same time
@@ -1796,3 +1800,171 @@ test environment the answer is the usual one: seed it again.
 The first three are changed in the `.env` and **require restarting the
 services**; their full entry is in [`configuration.md`](configuration.md) §6.24
 and §6.15.
+
+---
+
+## 18. What to do if…
+
+The foreseeable failures of a running installation, with the symptom someone at
+the hotel sees and the commands to get out of it. **First of all, in any of
+them:**
+
+```bash
+./doctor.sh
+```
+
+It says what is red and what to do about each thing (§12.1). What follows is
+for when you already know which of these cases is yours.
+
+### …every tablet goes back to the pairing screen after 90 days
+
+**What is going on.** When it is linked, each tablet receives a token that
+lives **90 days** (`IDENTITY_DEVICE_TOKEN_DAYS`). Automatic renewal before it
+expires is planned, but **in this version it does not run**: on day 90 after it
+was linked, the tablet is no longer accepted, goes back to the pairing screen by
+itself and **nobody can clock in on it until it is linked again**. If you linked
+them all on the same day, they all drop on the same day.
+
+**What is not lost:** the clock-ins the tablet had in its local queue. They are
+kept and sent as soon as it is linked again.
+
+**Prevention, which is what we recommend.** In the panel, **Kiosks**, the
+**"Linked"** column says when each one was linked: add 80 days and put it in the
+calendar. On that day, with the tablet in front of you and away from the shift
+change:
+
+1. Check on that same screen that its **"Unsynced clockings"** column is at
+   `0`.
+2. **Unlink it** (Kiosks › the kiosk › **Unlink**). Within a couple of minutes
+   the tablet shows a new code.
+3. **Link it with exactly the same name.** The same kiosk is reactivated, with
+   its history, and receives a new 90-day token.
+
+It takes two minutes per tablet and it is recorded in the audit log. If you
+can, spread the tablets over different days so they never all coincide. The
+detail, with screenshots, is in
+[`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md)
+§5.2 and §5.3 (in Spanish).
+
+**If it has already happened**, the procedure is the same starting at step 2
+(the panel will not let you link with that name while the kiosk is still
+active: unlink first). Then check that its queue goes down to `0`:
+
+```bash
+docker compose exec app php artisan kiosk:health
+```
+
+### …Redis restarts over and over, almost always after a power cut
+
+**Symptom.** `docker compose ps` shows `redis` as `Restarting`, and its log
+talks about the persistence file (`Bad file format reading the append only
+file`, `AOF ... is not valid`). An abrupt shutdown left that file half written
+and Redis refuses to start with it.
+
+**Impact.** **Clocking in keeps working**: the tablets record against the
+database, which does not depend on Redis. What does fail in the meantime:
+
+| What | How you notice |
+| --- | --- |
+| Access to the panel and the portal | Errors when logging in, or screens that do not load |
+| Background jobs (reports, exports, notices) | The ones requested now come out **"Failed"**: they must be repeated once Redis is back |
+| The real-time presence screen | Stops updating instantly |
+
+**What to do.** Stop Redis, repair its file and bring everything back up. The
+repair asks before truncating: answer `y`.
+
+```bash
+docker compose logs --tail 30 redis
+docker compose stop redis
+docker compose run --rm --no-deps redis redis-check-aof --fix /data/appendonlydir/appendonly.aof.manifest
+docker compose up -d
+./doctor.sh
+```
+
+The repair truncates the last thing written before the cut. **Redis holds
+nothing of the working-time record**: what is lost is, at most, jobs that were
+queued at that moment. If a report comes out "Failed", request it again.
+
+**If `redis-check-aof` cannot repair it**, Redis can be started empty: for the
+same reason, no clock-in and no correction is lost. Queued jobs and the
+failed-attempt counters are lost, and the counters go back to zero. Replace
+`NOMBRE` with the name the second command returns:
+
+```bash
+docker compose rm -sf redis
+docker volume ls --filter name=redis-data
+docker volume rm NOMBRE
+docker compose up -d
+```
+
+### …a panel screen says that feature is not included in the licence (`402`)
+
+**It is neither a fault nor a permission.** It is the product's `402` response:
+the **accessory** feature requested — period reports, payroll export, adoption
+dashboard, background exports — is not in the active licence, or the licence
+has expired. The message itself says what is still available.
+
+**What never answers `402`:** clocking in, tablet synchronisation, looking up
+working days, the employee portal, the export for the Labour Inspectorate,
+corrections, the audit log and backups. No licence touches those (§7).
+
+**What to do:**
+
+```bash
+docker compose exec app php artisan license:show
+```
+
+If it says there is no licence, that it expired or that the feature is not in
+the plan, it is a conversation with the vendor, not an IT task. With the new
+key, `license:activate` (§7). Do not restart anything: it achieves nothing.
+
+### …reports stay "Queued" and never finish
+
+**What is going on.** Reports and exports that do not fit in an immediate
+response are generated by the **`horizon`** service, the queue worker. If it is
+stopped, they stay **"Queued"**. **They are not lost**: they are generated as
+soon as it comes back. Today no alert warns that `horizon` is stopped; this is
+the symptom.
+
+```bash
+docker compose ps horizon
+docker compose logs --tail 50 horizon
+docker compose up -d horizon
+```
+
+If `horizon` does not start, read its log: it is almost always that Redis is
+not there either (previous case in this same section) or that the database does
+not respond (`./doctor.sh`). Clocking in does not depend on `horizon`.
+
+### …the nightly backup has failed
+
+**Symptom.** `CopiaDeSeguridadFallida`, `CopiaDeSeguridadSinVerificar` or
+`CopiaDeSeguridadAusente` fires (§10.4), or `./doctor.sh` warns that it cannot
+write to the backup directory.
+
+**Impact.** Clocking in does not notice. But **without a verified backup there
+is no update** (`update.sh` refuses at its step 3) and, if a restore were
+needed, you would go back to the last good backup. Solve it the same day.
+
+The backup commands go through the **`scheduler`** container, not `app`: it is
+the one holding the encryption key and the backup role.
+
+```bash
+docker compose ps scheduler
+docker compose logs --since 24h scheduler | grep -i backup
+docker compose exec scheduler php artisan backup:verify
+docker compose exec scheduler php artisan backup:run
+```
+
+The last one ends with a code from the common table (§8), and the message says
+the cause:
+
+| Code | Most frequent cause | What to do |
+| --- | --- | --- |
+| `2` | `BACKUP_PATH` not mounted or out of space, or the encryption key is missing | Mount the destination or free space and repeat. The previous backup is intact |
+| `6` | The backup was written but **does not verify** | Treat it as non-existent and repeat. If it happens again, [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2 (in Spanish) |
+| `7` | The backup role has more privileges than allowed | It is not a fault: [`../../runbooks/rotacion-secretos.md`](../../runbooks/rotacion-secretos.md), "El rol de las copias es privilegiado" (in Spanish) |
+
+The full diagnosis, code by code, is in
+[`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2
+(in Spanish).

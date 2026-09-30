@@ -9,6 +9,10 @@
 > La **15** es de la **5.12**: el histórico de `error_events`. La **16** es de
 > la **3.3**: la pantalla de quioscos del panel, el código de servicio y la
 > pantalla de diagnóstico de la tablet.
+>
+> **¿Tienes un problema ahora mismo?** Ve directamente al **§18, «Qué hacer
+> si…»**: tablets que vuelven a emparejarse, Redis que no arranca, un `402`,
+> informes que no terminan y la copia nocturna fallida.
 
 ---
 > **Los comandos de esta guía se ejecutan desde el directorio del paquete**, que
@@ -1376,7 +1380,7 @@ según la razón. Un quiosco que va bien no pide nada. El resumen:
 | **Aviso, fichajes pendientes** — la tablet **tiene red y sigue con fichajes sin enviar** | [`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md). **No desvincules esa tablet**: perderías la cola |
 | **Aviso, batería baja** | Ve al punto de montaje: cargador desenchufado, regleta apagada o cable partido |
 | **Aviso, latido tardío** | Nada todavía. Si no vuelve a «al día» en diez minutos pasará a fallo y sonará la alerta |
-| **La tablet volvió sola a la pantalla de emparejamiento** | Alguien la desvinculó o rotó su token: [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6 |
+| **La tablet volvió sola a la pantalla de emparejamiento** | Alguien la desvinculó, o su token cumplió los 90 días (§18): [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6 |
 
 **Si la cola no baja aunque la red de ese punto vaya bien**, y el «más antiguo»
 de la columna «Pendientes» se queda clavado en la misma hora día tras día,
@@ -1760,3 +1764,171 @@ un entorno de pruebas la respuesta es la de siempre: se vuelve a sembrar.
 
 Las tres primeras se cambian en el `.env` y **exigen reiniciar los servicios**;
 su ficha completa está en [`configuracion.md`](configuracion.md) §6.24 y §6.15.
+
+---
+
+## 18. Qué hacer si…
+
+Los fallos previsibles de una instalación en marcha, con el síntoma que ve
+alguien del hotel y las órdenes para salir de él. **Antes de nada, en
+cualquiera de ellos:**
+
+```bash
+./doctor.sh
+```
+
+Dice qué está en rojo y qué hacer con cada cosa (§12.1). Lo que sigue es para
+cuando ya sabes cuál de estos casos es el tuyo.
+
+### …todas las tablets vuelven a la pantalla de emparejamiento a los 90 días
+
+**Qué pasa.** Cada tablet recibe al vincularla un token que vive **90 días**
+(`IDENTITY_DEVICE_TOKEN_DAYS`). La renovación automática antes de que caduque
+está prevista, pero **en esta versión no se ejecuta**: el día 90 desde que se
+vinculó, la tablet deja de ser aceptada, vuelve sola a la pantalla de
+emparejamiento y **en ella no se puede fichar hasta volver a vincularla**. Si
+vinculaste todas el mismo día, caen todas el mismo día.
+
+**Lo que no se pierde:** los fichajes que la tablet tuviera en su cola local. Se
+conservan y se envían en cuanto vuelve a estar vinculada.
+
+**Prevención, que es lo que recomendamos.** En el panel, **Quioscos**, la
+columna **«Vinculado»** dice cuándo se vinculó cada una: suma 80 días y
+apúntalo en el calendario. Ese día, con la tablet delante y fuera del cambio de
+turno:
+
+1. Comprueba en esa misma pantalla que su columna **«Fichajes sin
+   sincronizar»** está a `0`.
+2. **Desvincúlala** (Quioscos › el quiosco › **Desvincular**). En un par de
+   minutos la tablet muestra un código nuevo.
+3. **Vincúlala con el mismo nombre exacto.** Se reactiva el mismo quiosco, con
+   su historia, y recibe un token nuevo de 90 días.
+
+Son dos minutos por tablet y quedan en la auditoría. Si puedes, reparte las
+tablets en días distintos para que no coincidan nunca todas. El detalle, con
+capturas, está en
+[`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §5.2 y
+§5.3.
+
+**Si ya ha pasado**, el procedimiento es el mismo empezando por el paso 2 (el
+panel no te dejará vincular con ese nombre mientras el quiosco siga activo:
+desvincula primero). Después, comprueba que su cola baja a `0`:
+
+```bash
+docker compose exec app php artisan kiosk:health
+```
+
+### …Redis se reinicia una y otra vez, casi siempre tras un corte de luz
+
+**Síntoma.** `docker compose ps` muestra `redis` como `Restarting`, y su
+registro habla del fichero de persistencia (`Bad file format reading the append
+only file`, `AOF ... is not valid`). Un apagado brusco dejó ese fichero a medias
+y Redis se niega a arrancar con él.
+
+**Impacto.** **El fichaje sigue funcionando**: las tablets registran contra la
+base de datos, que no depende de Redis. Lo que sí falla mientras tanto:
+
+| Qué | Cómo se nota |
+| --- | --- |
+| El acceso al panel y al portal | Errores al entrar o pantallas que no cargan |
+| Los trabajos en segundo plano (informes, exportaciones, avisos) | Los que se pidan ahora salen **«Fallida»**: hay que repetirlos cuando Redis vuelva |
+| La pantalla de presencia en tiempo real | Deja de actualizarse al instante |
+
+**Qué hacer.** Para Redis, repara su fichero y vuelve a levantarlo todo. La
+reparación pregunta antes de recortar: responde `y`.
+
+```bash
+docker compose logs --tail 30 redis
+docker compose stop redis
+docker compose run --rm --no-deps redis redis-check-aof --fix /data/appendonlydir/appendonly.aof.manifest
+docker compose up -d
+./doctor.sh
+```
+
+La reparación recorta lo último que se escribió antes del corte. **En Redis no
+hay nada del registro horario**: lo que se pierde son, como mucho, trabajos que
+estaban en cola en ese instante. Si un informe sale «Fallido», vuelve a pedirlo.
+
+**Si `redis-check-aof` no consigue repararlo**, se puede arrancar Redis vacío:
+por la misma razón, no se pierde ningún fichaje ni ninguna corrección. Se
+pierden los trabajos en cola y los contadores de intentos fallidos, que vuelven
+a cero. Cambia `NOMBRE` por el que devuelva la segunda orden:
+
+```bash
+docker compose rm -sf redis
+docker volume ls --filter name=redis-data
+docker volume rm NOMBRE
+docker compose up -d
+```
+
+### …una pantalla del panel dice que esa función no está incluida en la licencia (`402`)
+
+**No es una avería ni un permiso.** Es la respuesta `402` del producto: la
+funcionalidad **accesoria** que se ha pedido —informes por periodo, exportación
+para nómina, cuadro de adopción, exportaciones en segundo plano— no está en la
+licencia activa, o la licencia ha caducado. El propio mensaje dice qué sigue
+disponible.
+
+**Lo que nunca responde `402`:** el fichaje, la sincronización de las tablets, la
+consulta de jornadas, el portal del empleado, la exportación para la Inspección,
+las correcciones, la auditoría y las copias. Eso no se toca con ninguna licencia
+(§7).
+
+**Qué hacer:**
+
+```bash
+docker compose exec app php artisan license:show
+```
+
+Si dice que no hay licencia, que caducó o que esa funcionalidad no está en el
+plan, es una conversación con el fabricante, no una tarea de IT. Con la clave
+nueva, `license:activate` (§7). No reinicies nada: no sirve de nada.
+
+### …los informes se quedan «En cola» y no terminan nunca
+
+**Qué pasa.** Los informes y exportaciones que no caben en una respuesta al
+momento los genera el servicio **`horizon`**, el trabajador de colas. Si está
+parado, se quedan **«En cola»**. **No se pierden**: se generan en cuanto vuelve.
+Hoy ninguna alerta avisa de que `horizon` está parado; el síntoma es este.
+
+```bash
+docker compose ps horizon
+docker compose logs --tail 50 horizon
+docker compose up -d horizon
+```
+
+Si `horizon` no arranca, mira su registro: casi siempre es que Redis tampoco
+está (sección anterior de este mismo apartado) o que la base de datos no
+responde (`./doctor.sh`). El fichaje no depende de `horizon`.
+
+### …la copia nocturna ha fallado
+
+**Síntoma.** Suena `CopiaDeSeguridadFallida`, `CopiaDeSeguridadSinVerificar` o
+`CopiaDeSeguridadAusente` (§10.4), o `./doctor.sh` avisa de que no puede escribir
+en el directorio de copias.
+
+**Impacto.** El fichaje no se entera. Pero **sin una copia verificada no hay
+actualización** (`update.sh` se niega en su paso 3) y, si hubiera que restaurar,
+volverías a la última copia buena. Resuélvelo el mismo día.
+
+Las órdenes de copia van por el contenedor **`scheduler`**, no por `app`: es el
+que tiene la clave de cifrado y el rol de copias.
+
+```bash
+docker compose ps scheduler
+docker compose logs --since 24h scheduler | grep -i backup
+docker compose exec scheduler php artisan backup:verify
+docker compose exec scheduler php artisan backup:run
+```
+
+La última termina con un código de la tabla común (§8), y el mensaje dice la
+causa:
+
+| Código | Causa más frecuente | Qué hacer |
+| --- | --- | --- |
+| `2` | `BACKUP_PATH` sin montar o sin espacio, o falta la clave de cifrado | Monta el destino o libera espacio y repite. La copia anterior sigue intacta |
+| `6` | La copia se escribió pero **no verifica** | Trátala como inexistente y repite. Si se repite, [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2 |
+| `7` | El rol de las copias tiene más privilegios de los permitidos | No es una avería: [`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md), «El rol de las copias es privilegiado» |
+
+El diagnóstico completo, código a código, está en
+[`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2.

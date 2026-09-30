@@ -1770,8 +1770,8 @@ a nadie sin poder fichar por la otra.
 | `IDENTITY_PIN_LOCKOUT_TIER3_SECONDS` | — | Duración del tercer bloqueo | `3600` (60 min) | Casi nunca | No |
 | `IDENTITY_PIN_LOCKOUT_RESET_HOURS` | — | Sin fallos durante estas horas, el contador vuelve a cero | `24` | Casi nunca. Restablecer el PIN de alguien también limpia su contador en el acto | No |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | `[INSTALADOR]` | Clave privada con la que el servidor abre los PIN que la tablet sella. Es lo que permite fichar por PIN **sin red** sin dejar el PIN en claro en la tablet | (vacía; la genera `install.sh`) | Nunca la copies de otro servidor. **Vacía es un caso legítimo**: significa que esta instalación no ofrece fichaje por PIN y el quiosco oculta el teclado numérico | No |
-| `IDENTITY_DEVICE_TOKEN_DAYS` | — | Días que vive el token de una tablet emparejada | `90` | Casi nunca | No |
-| `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` | — | Fracción de esa vida a partir de la cual el token se renueva solo | `0.8` | Casi nunca. Renovarlo el último día dejaría sin fichar a una tablet que hubiera pasado una semana desconectada | No |
+| `IDENTITY_DEVICE_TOKEN_DAYS` | — | Días que vive el token de una tablet emparejada. Al cumplirlos, la tablet vuelve a la pantalla de emparejamiento y hay que volver a vincularla: ver [`operacion.md`](operacion.md) §18 | `90` | Casi nunca | No |
+| `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` | — | Fracción de esa vida a partir de la cual el token debería renovarse solo. **En esta versión esa renovación no se ejecuta**: cambiar este valor no tiene efecto hasta que llegue la versión que la active. Mientras tanto, vuelve a vincular cada tablet antes del día 90 ([`operacion.md`](operacion.md) §18) | `0.8` | Casi nunca. Renovarlo el último día dejaría sin fichar a una tablet que hubiera pasado una semana desconectada | No |
 
 ### 6.11 Asistente de puesta en marcha y marca pública
 

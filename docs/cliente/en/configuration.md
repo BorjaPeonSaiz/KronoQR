@@ -1790,8 +1790,8 @@ does not leave anyone unable to clock in through the other.
 | `IDENTITY_PIN_LOCKOUT_TIER3_SECONDS` | — | Duration of the third lockout | `3600` (60 min) | Almost never | No |
 | `IDENTITY_PIN_LOCKOUT_RESET_HOURS` | — | With no failures during these hours, the counter goes back to zero | `24` | Almost never. Resetting someone's PIN also clears their counter immediately | No |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | `[INSTALADOR]` | Private key with which the server opens the PINs the tablet seals. It is what allows clocking by PIN **without a network** without leaving the PIN in the clear on the tablet | (empty; `install.sh` generates it) | Never copy it from another server. **Empty is a legitimate case**: it means this installation does not offer clocking by PIN and the kiosk hides the numeric keypad | No |
-| `IDENTITY_DEVICE_TOKEN_DAYS` | — | Days a paired tablet's token lives | `90` | Almost never | No |
-| `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` | — | Fraction of that lifetime from which the token renews itself | `0.8` | Almost never. Renewing it on the last day would leave a tablet that had spent a week disconnected unable to clock in | No |
+| `IDENTITY_DEVICE_TOKEN_DAYS` | — | Days a paired tablet's token lives. When they are up, the tablet goes back to the pairing screen and has to be linked again: see [`operation.md`](operation.md) §18 | `90` | Almost never | No |
+| `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` | — | Fraction of that lifetime from which the token should renew itself. **In this version that renewal does not run**: changing this value has no effect until the version that turns it on arrives. Meanwhile, link each tablet again before day 90 ([`operation.md`](operation.md) §18) | `0.8` | Almost never. Renewing it on the last day would leave a tablet that had spent a week disconnected unable to clock in | No |
 
 ### 6.11 Setup wizard and public branding
 

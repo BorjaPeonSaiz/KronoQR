@@ -190,21 +190,20 @@ falla con un mensaje que lo dice.
 
 ## 4. Tokens de dispositivo del quiosco
 
-No se «rotan» a mano de forma masiva: **se renuevan solos**. Cada token vive
-`IDENTITY_DEVICE_TOKEN_DAYS` (90 de serie) y se rota cuando ha consumido
-`IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` (80 %) de su vida, en una petición
-normal del propio quiosco.
+Cada token vive `IDENTITY_DEVICE_TOKEN_DAYS` (90 de serie). El diseño es que se
+renueve solo cuando ha consumido `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD`
+(80 %) de su vida, en una petición normal del propio quiosco, pero **en esta
+versión esa renovación no se ejecuta**: a los 90 días de vincularla, cada tablet
+vuelve a la pantalla de emparejamiento. Mientras no llegue la versión que la
+active, hay que desvincular y volver a vincular cada tablet antes del día 90
+([`../cliente/operacion.md`](../cliente/operacion.md) §18). Eso emite un token
+nuevo y, de paso, es la rotación.
 
 Rotación forzada de una tablet concreta —robo, extravío, baja del equipo—: se
-**revoca** su token, con lo que ese quiosco deja de poder enviar fichajes
-inmediatamente y hay que volver a emparejarlo. La revocación deja asiento
-`device.revoked` en `audit_log`.
-
-> **Pendiente de su procedimiento.** El caso de uso existe
-> (`Identity\Application\UseCase\RevokeDeviceToken`), pero la vía de operación
-> —emparejamiento por código, alta y baja de una tablet— la entrega la tarea 5.6
-> junto con `alta-nuevo-quiosco.md`. Hasta entonces, la revocación la ejecuta
-> quien despliega, y este runbook enlazará ahí en cuanto exista.
+**desvincula** desde el panel, con lo que su token queda revocado, ese quiosco
+deja de poder enviar fichajes inmediatamente y hay que volver a emparejarlo. El
+procedimiento está en [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) §5.2 y
+queda en `audit_log`.
 
 Antes de revocar, si la tablet todavía enciende: **déjala conectada hasta que su
 cola local llegue a cero** (`kiosk_offline_queue_size{device}`). Los fichajes que
