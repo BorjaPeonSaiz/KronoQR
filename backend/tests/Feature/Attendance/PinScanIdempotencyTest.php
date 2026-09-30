@@ -189,3 +189,128 @@ it('no gasta un intento del bloqueo al reenviar un fichaje ya registrado', funct
     expect(DB::table('scan_events')->count())->toBe(1)
         ->and(DB::table('shift_entries')->count())->toBe(1);
 })->group('RF-AT-07', 'RS-12');
+
+/**
+ * Un fichaje por PIN con el PIN que se diga, sin tocar el `scan_id`.
+ *
+ * @param  array{token: string, code: string, publicKey: string, ...}  $escenario
+ * @return array<string, string>
+ */
+function cuerpoDePinCon(array $escenario, string $scanId, string $pin, string $occurredAt = '2026-03-14T07:02:31Z'): array
+{
+    return [
+        'scan_id' => $scanId,
+        'occurred_at' => $occurredAt,
+        'employee_code' => $escenario['code'],
+        'pin_sealed' => EmployeePins::seal($pin, $escenario['publicKey']),
+    ];
+}
+
+it('no bloquea a nadie por reenviar tres veces un fichaje con el PIN equivocado', function (): void {
+    // PIN-02 y PIN-05. El reenvio de la cola offline es EL MISMO gesto, no tres
+    // intentos: antes se volvia a verificar el PIN en cada reenvio y el tercero
+    // abria el bloqueo (5 min), de modo que el PIN correcto con otro `scan_id`
+    // era rechazado. Reproducido en produccion en la verificacion de la 2.1.0.
+    $escenario = escenarioIdempotente();
+
+    $scanId = Str::uuid7()->toString();
+    // El MISMO sobre en los tres reenvios, como hace la cola offline.
+    $cuerpo = cuerpoDePinCon($escenario, $scanId, '111111');
+
+    $respuestas = [];
+
+    for ($i = 0; $i < 3; $i++) {
+        $respuestas[] = Api::as($escenario['token'])
+            ->withHeaders(['Idempotency-Key' => $scanId])
+            ->post('/api/v1/scan/pin', $cuerpo);
+    }
+
+    foreach ($respuestas as $respuesta) {
+        $respuesta->assertStatus(422)->assertJsonPath('type', 'urn:kronoqr:problem:scan-rejected');
+    }
+
+    // Tres respuestas identicas y una sola fila: es un solo gesto.
+    expect(array_unique(array_map(static fn ($r): string => (string) $r->getContent(), $respuestas)))->toHaveCount(1)
+        ->and(DB::table('scan_events')->count())->toBe(1);
+
+    // Y el PIN bueno, en un gesto nuevo, entra: no hay bloqueo abierto.
+    $bueno = Str::uuid7()->toString();
+
+    Api::as($escenario['token'])
+        ->withHeaders(['Idempotency-Key' => $bueno])
+        ->post('/api/v1/scan/pin', cuerpoDePin($escenario, $bueno, '2026-03-14T07:02:31Z'))
+        ->assertOk()
+        ->assertJsonPath('action', 'clock_in');
+
+    expect(DB::table('audit_log')->where('action', 'auth.lockout_started')->count())->toBe(0);
+})->group('RF-AT-07', 'RF-AT-11', 'RS-12');
+
+it('devuelve la respuesta original al reenviar durante un bloqueo, sin alargarlo', function (): void {
+    // PIN-05, la otra mitad: un fichaje BUENO registrado antes de que alguien
+    // provocara el bloqueo de su dueño se reenvia —la tablet no supo que llego—
+    // mientras el bloqueo esta activo. Tiene que recibir su `200` original: el
+    // fichaje ya ocurrio, y el bloqueo es sobre intentos nuevos.
+    $escenario = escenarioIdempotente('2026-03-14 07:00:00');
+
+    $entrada = Str::uuid7()->toString();
+    $cuerpoEntrada = cuerpoDePin($escenario, $entrada, '2026-03-14T07:00:00Z');
+
+    $original = Api::as($escenario['token'])
+        ->withHeaders(['Idempotency-Key' => $entrada])
+        ->post('/api/v1/scan/pin', $cuerpoEntrada);
+
+    $original->assertOk();
+
+    // Tres gestos NUEVOS con el PIN equivocado: esos si bloquean.
+    FrozenTime::at('2026-03-14 07:10:00');
+
+    for ($i = 0; $i < 3; $i++) {
+        $intento = Str::uuid7()->toString();
+
+        Api::as($escenario['token'])
+            ->withHeaders(['Idempotency-Key' => $intento])
+            ->post('/api/v1/scan/pin', cuerpoDePinCon($escenario, $intento, '222222', '2026-03-14T07:10:00Z'))
+            ->assertStatus(422);
+    }
+
+    expect(DB::table('audit_log')->where('action', 'auth.lockout_started')->count())->toBe(1);
+
+    // El reenvio del fichaje bueno, con el bloqueo puesto: la respuesta original.
+    $reenvio = Api::as($escenario['token'])
+        ->withHeaders(['Idempotency-Key' => $entrada])
+        ->post('/api/v1/scan/pin', $cuerpoEntrada);
+
+    $reenvio->assertOk();
+
+    expect($reenvio->json())->toBe($original->json())
+        ->and(DB::table('shift_entries')->count())->toBe(1)
+        // Y el reenvio no ha tocado el bloqueo: ni un asiento mas.
+        ->and(DB::table('audit_log')->where('action', 'auth.lockout_started')->count())->toBe(1);
+
+    // El bloqueo sigue valiendo para un gesto nuevo, aunque el PIN sea bueno.
+    $nuevo = Str::uuid7()->toString();
+
+    Api::as($escenario['token'])
+        ->withHeaders(['Idempotency-Key' => $nuevo])
+        ->post('/api/v1/scan/pin', cuerpoDePin($escenario, $nuevo, '2026-03-14T07:10:00Z'))
+        ->assertStatus(422);
+})->group('RF-AT-07', 'RF-AT-11', 'RS-12');
+
+it('no cuenta como uso del PIN el reenvio de un fichaje ya registrado', function (): void {
+    // `pin_fallback_scans_total` cuenta gestos, no reintentos de red (§8.2).
+    $escenario = escenarioIdempotente();
+    $metricas = new RecordingScanMetrics;
+    app()->instance(ScanMetrics::class, $metricas);
+
+    $scanId = Str::uuid7()->toString();
+    $cuerpo = cuerpoDePin($escenario, $scanId, '2026-03-14T07:02:31Z');
+
+    for ($i = 0; $i < 3; $i++) {
+        Api::as($escenario['token'])
+            ->withHeaders(['Idempotency-Key' => $scanId])
+            ->post('/api/v1/scan/pin', $cuerpo)
+            ->assertOk();
+    }
+
+    expect($metricas->pinFallbacks)->toBe([$escenario['site']]);
+})->group('RF-AT-07', 'RF-AT-11');

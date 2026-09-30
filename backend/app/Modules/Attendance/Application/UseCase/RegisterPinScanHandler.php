@@ -105,6 +105,23 @@ final readonly class RegisterPinScanHandler
 
     public function handle(RegisterPinScanCommand $command): RegisterScanResult
     {
+        // PIN-02: un reenvio NO vuelve a comprobar el PIN. Antes se verificaba
+        // primero y el UNIQUE detectaba el reenvio despues, asi que cada reintento
+        // de la cola offline pagaba un bcrypt y, si el PIN era erroneo, sumaba un
+        // fallo al bloqueo: tres reenvios del MISMO fichaje bloqueaban a su dueño
+        // (regla dura 8 rota, y la 19 con ella). El reenvio devuelve lo que ya se
+        // respondio —tambien el rechazo— y no cuenta como uso del PIN.
+        //
+        // La carrera de dos PRIMEROS envios simultaneos sigue existiendo: los dos
+        // leen «no esta», los dos verifican y el UNIQUE deja uno. Con un PIN
+        // erroneo eso suma dos fallos en vez de uno, que es el comportamiento de
+        // antes de este atajo y no uno peor.
+        $replay = $this->scans->replayOf($command->scanId);
+
+        if ($replay instanceof RegisterScanResult) {
+            return $replay;
+        }
+
         $resolution = $this->resolve($command);
 
         $result = $this->scans->handle(
@@ -195,7 +212,9 @@ final readonly class RegisterPinScanHandler
      */
     private function countFallback(RegisterScanResult $result): void
     {
-        if ($result->isRejected() || $result->employeeUuid === null) {
+        // El reenvio que resolvio el UNIQUE —la carrera de arriba— tampoco es un
+        // uso nuevo del PIN: se conto la primera vez.
+        if ($result->isRejected() || $result->employeeUuid === null || $result->isReplay) {
             return;
         }
 
