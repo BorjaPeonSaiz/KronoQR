@@ -265,8 +265,15 @@ return [
             ],
             'branding_logo' => [
                 'ok' => 'El logotipo configurado se lee correctamente.',
-                'warning' => 'El logotipo configurado no se puede usar (:reason). Las aplicaciones enseñaran la '
-                    .'marca del producto. No afecta a nada mas.',
+                // Una variante por grupo de motivos (LogoRejection), no el codigo en
+                // bruto: «(missing)» no le dice nada a quien administra el servidor.
+                'warning_path' => 'El logotipo configurado no se puede usar: su ruta no esta dentro del directorio '
+                    .'de marca. Las aplicaciones y los PDF saldran sin logotipo. No afecta a nada mas.',
+                'warning_missing' => 'El logotipo configurado no se puede usar: no hay ningun fichero legible en esa '
+                    .'ruta. Las aplicaciones y los PDF saldran sin logotipo. No afecta a nada mas.',
+                'warning_content' => 'El logotipo configurado no se puede usar: el fichero no es un PNG o un SVG '
+                    .'admitido (formato, peso, dimensiones o un SVG con guion). Las aplicaciones y los PDF saldran '
+                    .'sin logotipo. No afecta a nada mas.',
                 'warning_unknown' => 'No se ha podido comprobar el logotipo configurado.',
             ],
         ],
@@ -581,8 +588,22 @@ return [
                     .'leerlo. Si no usas logotipo propio, no hay nada que hacer.',
             ],
             'branding_logo' => [
-                'warning' => 'Vuelve a subir el logotipo desde el panel, en Configuracion. El formato admitido '
-                    .'es PNG o SVG.',
+                // El logotipo no se sube desde el panel: se copia a la carpeta del
+                // servidor y en el panel solo se escribe su ruta (DC6).
+                'warning_path' => 'Copia el PNG o el SVG a la carpeta de BRANDING_PATH del servidor (si esta vacia, '
+                    .'./branding junto al docker-compose.yml) y escribe en el panel, pantalla Marca, su ruta '
+                    .'de dentro del contenedor: /var/kronoqr/branding/<fichero>. Detalle: '
+                    .'docs/cliente/configuracion.md, seccion 2.2.',
+                'warning_missing' => 'Comprueba que el fichero esta en la carpeta de BRANDING_PATH del servidor y que '
+                    ."se puede leer (chmod 0644). Si esta orden no lo enseña:\n"
+                    ."  docker compose exec app ls -l /var/kronoqr/branding\n"
+                    .'el volumen no esta montado: revisa BRANDING_PATH en el .env y recrea los tres contenedores '
+                    .'que lo usan con docker compose up -d app horizon scheduler. Detalle: '
+                    .'docs/cliente/configuracion.md, seccion 2.2.',
+                'warning_content' => 'Sustituye el fichero por un PNG, o por un SVG sin guion (<script>), de peso y '
+                    .'dimensiones moderados, en la misma carpeta de BRANDING_PATH, y vuelve a guardar la ruta en el '
+                    .'panel, pantalla Marca: al guardar se comprueba y el panel dice el motivo exacto. Detalle: '
+                    .'docs/cliente/configuracion.md, seccion 2.2.',
                 'warning_unknown' => 'Vuelve a ejecutar este comando cuando la base de datos responda.',
             ],
         ],

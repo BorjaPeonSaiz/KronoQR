@@ -191,8 +191,18 @@ Lo que sí se hace, en este orden:
    que poder responder ante la AEPD en 72 h es *qué datos personales pudieron
    verse*, no *quién lo hizo*.
 3. **Cerrar la vía.** Si el paso 5 de la §2 mostró permisos de más, retirarlos y
-   volver a ejecutar `infra/docker/postgres/initdb/02-application-roles.sh`, que
-   es idempotente y devuelve los tres roles a su sitio.
+   volver a ejecutar el script que crea los tres roles. No está suelto en el
+   paquete: viaja **dentro de la imagen de PostgreSQL**, y el contenedor ya
+   tiene en su entorno los nombres y contraseñas que necesita. Es idempotente y
+   devuelve los tres roles a su sitio (el de mantenimiento, sin contraseña).
+   Desde el directorio de la instalación:
+
+   ```bash
+   docker compose exec postgres /docker-entrypoint-initdb.d/02-application-roles.sh
+   ```
+
+   Si lo que tenía permisos de más era el rol de las copias, el suyo es
+   `/docker-entrypoint-initdb.d/03-backup-role.sh`, con la misma orden.
 4. **Registrar el incidente** y valorar con el DPO del cliente si procede
    notificación (RL-15, procedimiento de 72 h en `brecha-de-seguridad.md`).
 5. **Dejar constancia en la propia auditoría.** La cadena sigue a partir de la

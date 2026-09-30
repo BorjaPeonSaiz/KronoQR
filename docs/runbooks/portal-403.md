@@ -66,7 +66,7 @@ docker compose logs --no-log-prefix --since 10m nginx | grep '"status":403' | gr
 Sale una línea por cada IP rechazada en los últimos diez minutos, con cuántas
 veces. Por ejemplo:
 
-```
+```text
       3 "remote_addr":"10.0.10.57"
 ```
 
@@ -97,7 +97,7 @@ Con la IP de §2.2 y esta tabla sabes en qué caso estás. Pasa a §3.
 | La IP es de la **VPN** corporativa | Quien entra por VPN sale con una IP de su propio rango | Igual que la fila anterior: un rango que cubra LAN y VPN. Si no hay uno razonable que cubra las dos, decide cuál de las dos es la que necesita el portal |
 | Pruebas **desde el propio servidor** (`https://localhost/portal/` o su IP de la LAN) y la IP es algo como `172.18.0.1` | Las peticiones del servidor a sí mismo entran por la puerta de enlace de la red de contenedores, no por la LAN: el servidor web ve esa dirección interna | **Es lo esperado y no hay que arreglarlo.** No autorices esa dirección para poder probar: prueba desde un ordenador de la LAN. Para confirmar que es la puerta de enlace, ver el comando de debajo de la tabla |
 | **Todas** las peticiones llegan con la misma IP interna (`172.x.0.1`, `192.168.65.x`), vengan de donde vengan | El servidor corre sobre **Docker Desktop** (Windows o macOS) o con Docker **sin root**. En los dos, Docker entrega las conexiones desde una dirección propia y el servidor web nunca ve la IP real | En esa máquina el rango **no puede distinguir** la LAN de internet: autorizar esa IP equivale a abrir el portal a quien llegue al puerto. Docker Desktop no es plataforma de producción ([`../cliente/instalacion.md`](../cliente/instalacion.md) §0: Linux con Docker Engine). Para una demostración, `0.0.0.0/0` a sabiendas (§4) |
-| Todas llegan con la IP de **un proxy inverso, un balanceador o una CDN** | El servidor web ve la IP de ese equipo, no la de la persona | Lee [`../cliente/endurecimiento.md`](../cliente/endurecimiento.md) §1.6 antes de tocar el rango. No autorices la IP del proxy «para que funcione»: dejarías entrar a todo lo que pase por él |
+| Todas llegan con la IP de **un proxy inverso, un balanceador o una CDN** | El servidor web ve la IP de ese equipo, no la de la persona | **No autorices la IP del proxy en el rango** «para que funcione»: dejarías entrar a todo lo que pase por él. Declara el proxy en `TRUSTED_PROXY_CIDR` (§3.1): el servidor web pasa a tomar la IP real de la cabecera `X-Forwarded-For`, solo cuando la petición viene de ese proxy, y el rango vuelve a distinguir a las personas |
 | La IP es **pública** (un móvil con datos, la casa de la persona) | El portal está cerrado a internet, que es el valor de serie | **Es el comportamiento correcto.** O se entra desde la red del hotel (o la VPN), o el hotel decide abrirlo (§4) |
 | El rango ya es `0.0.0.0/0` y aun así da `403` | No es el rango: `0.0.0.0/0` lo admite todo | Comprueba §2.1 (¿el servidor web tiene el valor nuevo?). Si lo tiene, recoge el paquete de diagnóstico y escala (§6) |
 
@@ -110,6 +110,31 @@ docker network inspect kronoqr-app kronoqr-observability --format '{{.Name}} {{r
 ```
 
 Si la IP de §2.2 es una de esas, la petición salió del propio servidor.
+
+### 3.1 Con un proxy, un balanceador o una CDN delante: `TRUSTED_PROXY_CIDR`
+
+Pon en el `.env` la dirección del proxy (o las de la CDN), en formato CIDR y
+separadas por comas; una IP suelta con `/32`:
+
+```dotenv
+TRUSTED_PROXY_CIDR=10.0.0.5/32
+```
+
+Tres condiciones, y las tres importan:
+
+- **El proxy tiene que añadir `X-Forwarded-For`** con la IP del visitante. Casi
+  todos lo hacen de serie; compruébalo en su configuración.
+- **Nunca `0.0.0.0/0`.** Confiaría en cualquiera: bastaría con escribir esa
+  cabecera para hacerse pasar por la red interna. El servidor web no arranca con
+  ese valor, y `./doctor.sh` y el instalador lo rechazan.
+- **Deja `TRUSTED_PROXIES` vacía.** Es la variable equivalente de la aplicación;
+  con `TRUSTED_PROXY_CIDR` puesta, el servidor web ya le entrega la IP real y la
+  aplicación no tiene que volver a leer la cabecera.
+
+Aplica el cambio como en §5 (`docker compose up -d nginx`) y repite §2.2: la IP
+rechazada debe ser ahora la de la persona, no la del proxy. El detalle, en
+[`../cliente/instalacion.md`](../cliente/instalacion.md) §6 y
+[`../cliente/endurecimiento.md`](../cliente/endurecimiento.md) §1.6.
 
 ---
 
@@ -157,9 +182,9 @@ versión—, actívalo el mismo día y pide a la plantilla que cambie el PIN.
   pero nadie se entera. Enciéndela antes
   ([`../cliente/operacion.md`](../cliente/operacion.md) §10) y ten a mano
   [`ataque-a-credenciales.md`](ataque-a-credenciales.md).
-- **Si el servidor está detrás de un proxy o una CDN** sin configurar según
-  [`../cliente/endurecimiento.md`](../cliente/endurecimiento.md) §1.6: el límite
-  por IP vería una sola IP para todo el mundo y dejaría de proteger.
+- **Si el servidor está detrás de un proxy o una CDN sin `TRUSTED_PROXY_CIDR`**
+  (§3.1): el límite por IP vería una sola IP para todo el mundo y dejaría de
+  proteger.
 
 **Y cerrarlo otra vez** es volver a poner el rango de la LAN y aplicar (§5). Las
 sesiones de portal ya abiertas desde fuera dejan de poder pedir datos en el

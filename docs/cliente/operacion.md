@@ -1835,16 +1835,23 @@ base de datos, que no depende de Redis. Lo que sí falla mientras tanto:
 | Los trabajos en segundo plano (informes, exportaciones, avisos) | Los que se pidan ahora salen **«Fallida»**: hay que repetirlos cuando Redis vuelva |
 | La pantalla de presencia en tiempo real | Deja de actualizarse al instante |
 
-**Qué hacer.** Para Redis, repara su fichero y vuelve a levantarlo todo. La
-reparación pregunta antes de recortar: responde `y`.
+**Qué hacer.** `./doctor.sh` lo detecta y te da estas mismas órdenes. Para
+Redis, repara su fichero y vuelve a levantarlo. La reparación pregunta antes de
+recortar; el `echo y` de la segunda orden contesta por ti. Termina con `All AOF
+files and manifest are valid`.
 
 ```bash
 docker compose logs --tail 30 redis
 docker compose stop redis
-docker compose run --rm --no-deps redis redis-check-aof --fix /data/appendonlydir/appendonly.aof.manifest
-docker compose up -d
+echo y | docker compose run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
+docker compose up -d redis
 ./doctor.sh
 ```
+
+Si `./doctor.sh` sigue viendo algún servicio parado, `docker compose up -d` lo
+levanta todo. El mismo procedimiento, visto desde la alerta que lo dispara, está
+en [`../runbooks/errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md)
+§1.1.
 
 La reparación recorta lo último que se escribió antes del corte. **En Redis no
 hay nada del registro horario**: lo que se pierde son, como mucho, trabajos que

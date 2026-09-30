@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\FixedLogo;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -364,6 +365,52 @@ it('da por correcto el codigo de servicio configurado sin publicarlo', function 
         ->and($check->summary)->not->toContain('48392017')
         ->and(json_encode($report->toArray(), JSON_THROW_ON_ERROR))->not->toContain('48392017');
 })->group('RF-PD-13', 'RF-KI-08');
+
+// --- El logotipo de la marca (DC6) -----------------------------------------
+
+it('dice que hacer con un logotipo que ya no vale, sin el codigo en bruto ni mandar subirlo desde el panel', function (string $averia, string $resumenEs, string $arreglo): void {
+    // El aviso decia «(missing)» y mandaba «volver a subir el logotipo desde el
+    // panel», que no tiene boton para subir nada: el fichero se copia a la
+    // carpeta de BRANDING_PATH y en el panel solo se escribe su ruta. Quien lee
+    // este informe no tiene al fabricante al lado (ADR-016).
+    $root = sys_get_temp_dir().'/kronoqr-doctor-logo-'.bin2hex(random_bytes(6));
+    mkdir($root, 0o755, true);
+    config(['branding.logo_root' => $root]);
+    file_put_contents($root.'/logo.png', FixedLogo::onePixelPng());
+
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->patch('/api/v1/settings', ['settings' => ['BRANDING_LOGO_PATH' => $root.'/logo.png']])
+        ->assertStatus(200);
+
+    // La averia llega DESPUES de guardar, que es como pasa de verdad: una
+    // restauracion, un volumen que se desmonta, alguien que pisa el fichero.
+    $averia === 'missing'
+        ? unlink($root.'/logo.png')
+        : file_put_contents($root.'/logo.png', 'esto no es una imagen');
+
+    $es = comprobacion(app(RunDoctorHandler::class)->handle('es'), 'permissions.branding_logo');
+    $en = comprobacion(app(RunDoctorHandler::class)->handle('en'), 'permissions.branding_logo');
+
+    expect($es->status)->toBe(DoctorStatus::Warning)
+        // El codigo exacto sigue en los detalles, para soporte; no en la frase.
+        ->and($es->details['reason'] ?? null)->toBe($averia === 'missing' ? 'missing' : 'unsupported_format')
+        ->and($es->summary)->toContain($resumenEs)
+        ->and($es->summary)->not->toContain('(missing)')
+        ->and($es->summary)->not->toContain('unsupported_format')
+        ->and((string) $es->fix)->toContain($arreglo)
+        ->and((string) $es->fix)->toContain('BRANDING_PATH')
+        ->and((string) $es->fix)->not->toContain('subir')
+        ->and((string) $en->fix)->toContain('BRANDING_PATH')
+        ->and((string) $en->fix)->not->toContain('Upload');
+
+    if (is_file($root.'/logo.png')) {
+        unlink($root.'/logo.png');
+    }
+    rmdir($root);
+})->with([
+    'el fichero ya no esta' => ['missing', 'no hay ningun fichero legible', 'docker compose up -d app horizon scheduler'],
+    'el fichero no es una imagen' => ['content', 'no es un PNG o un SVG', 'Sustituye el fichero'],
+])->group('RF-PD-13', 'RF-PD-08');
 
 // --- Informe ----------------------------------------------------------------
 

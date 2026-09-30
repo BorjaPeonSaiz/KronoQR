@@ -199,11 +199,14 @@ Dos avisos que se pagan caros si se olvidan:
 Es una configuración legítima —por ejemplo, para conservar un servicio que ya
 escuchaba en el 443—, pero tiene **dos consecuencias que hay que conocer antes**:
 
-1. **Todo el tráfico llegará al borde con la IP del proxy.** Las dos zonas de
-   fichaje dejan de distinguir el origen y `KIOSK_VLAN_CIDR` deja de tener
-   efecto: todo cae en la zona que corresponda a esa única IP. Lo mismo le pasa
-   a `PORTAL_INTERNAL_CIDR` y a `METRICS_ALLOW_CIDR`. **No se puede corregir
-   desde el `.env`.**
+1. **Todo el tráfico llegará al borde con la IP del proxy**, salvo que lo
+   declares. Sin declararlo, las dos zonas de fichaje dejan de distinguir el
+   origen y `KIOSK_VLAN_CIDR` deja de tener efecto: todo cae en la zona que
+   corresponda a esa única IP, y lo mismo le pasa a `PORTAL_INTERNAL_CIDR`.
+   **Se corrige con `TRUSTED_PROXY_CIDR`** en el `.env`: la dirección del proxy
+   (nunca `0.0.0.0/0`), con `TRUSTED_PROXIES` vacía. El borde toma entonces la
+   IP real de `X-Forwarded-For`, solo de ese proxy
+   ([`instalacion.md`](instalacion.md) §6).
 2. **Las tablets tienen que abrir la PWA por el mismo origen que sirve la API,
    y el proxy no puede tocar las cabeceras de seguridad.** Si quita o reescribe
    `Permissions-Policy`, la cámara del quiosco deja de concederse y el síntoma

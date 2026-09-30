@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Application\Port\LogoInspector;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
+use App\Modules\Product\Domain\ValueObject\LogoRejection;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use Throwable;
 
@@ -131,12 +132,33 @@ final readonly class PermissionsProbe implements DoctorProbe
             return DoctorFinding::ok('permissions.branding_logo', ['configured' => true]);
         }
 
+        $rejection = $inspection->rejection();
+
         return DoctorFinding::warning(
             'permissions.branding_logo',
-            params: ['reason' => $inspection->rejection()->value],
+            self::logoVariant($rejection),
             // La RAZON del rechazo, no la ruta: la ruta la escribe el cliente y
-            // puede llevar el nombre del hotel.
-            details: ['reason' => $inspection->rejection()->value],
+            // puede llevar el nombre del hotel. El codigo exacto queda en los
+            // detalles, para soporte; el texto para personas lo da la variante.
+            details: ['reason' => $rejection->value],
         );
+    }
+
+    /**
+     * Agrupa los nueve motivos en los tres «que hacer» distintos que existen.
+     *
+     * Antes el aviso imprimia el codigo en bruto —«(missing)»— y mandaba subir
+     * el logotipo desde el panel, cosa que no se puede hacer (DC6). Cada grupo
+     * lleva a una accion concreta: mover el fichero a la carpeta de marca,
+     * comprobar que esta y se puede leer, o sustituirlo por uno admitido.
+     */
+    private static function logoVariant(LogoRejection $rejection): string
+    {
+        return match ($rejection) {
+            LogoRejection::NOT_ABSOLUTE, LogoRejection::TRAVERSAL, LogoRejection::OUTSIDE_ROOT => 'path',
+            LogoRejection::MISSING, LogoRejection::UNREADABLE => 'missing',
+            LogoRejection::TOO_LARGE, LogoRejection::UNSUPPORTED_FORMAT, LogoRejection::ACTIVE_CONTENT,
+            LogoRejection::TOO_MANY_PIXELS => 'content',
+        };
     }
 }

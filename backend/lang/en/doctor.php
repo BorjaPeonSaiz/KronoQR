@@ -232,8 +232,13 @@ return [
             ],
             'branding_logo' => [
                 'ok' => 'The configured logo can be read.',
-                'warning' => 'The configured logo cannot be used (:reason). The applications will show the '
-                    .'product branding. Nothing else is affected.',
+                'warning_path' => 'The configured logo cannot be used: its path is not inside the brand directory. '
+                    .'The applications and the PDFs will come out without a logo. Nothing else is affected.',
+                'warning_missing' => 'The configured logo cannot be used: there is no readable file at that path. '
+                    .'The applications and the PDFs will come out without a logo. Nothing else is affected.',
+                'warning_content' => 'The configured logo cannot be used: the file is not an accepted PNG or SVG '
+                    .'(format, size, dimensions or an SVG with a script). The applications and the PDFs will come '
+                    .'out without a logo. Nothing else is affected.',
                 'warning_unknown' => 'The configured logo could not be checked.',
             ],
         ],
@@ -535,8 +540,20 @@ return [
                     .'If you do not use a custom logo, there is nothing to do.',
             ],
             'branding_logo' => [
-                'warning' => 'Upload the logo again from the panel, under Settings. Accepted formats are PNG '
-                    .'and SVG.',
+                'warning_path' => 'Copy the PNG or the SVG to the BRANDING_PATH folder on the server (if it is '
+                    .'empty, ./branding next to docker-compose.yml) and enter in the panel, Brand screen, its '
+                    .'path as seen from inside the container: /var/kronoqr/branding/<file>. Detail: '
+                    .'docs/cliente/en/configuration.md, section 2.2.',
+                'warning_missing' => 'Check that the file is in the BRANDING_PATH folder on the server and that it '
+                    ."can be read (chmod 0644). If this command does not show it:\n"
+                    ."  docker compose exec app ls -l /var/kronoqr/branding\n"
+                    .'the volume is not mounted: check BRANDING_PATH in the .env and recreate the three containers '
+                    .'that use it with docker compose up -d app horizon scheduler. Detail: '
+                    .'docs/cliente/en/configuration.md, section 2.2.',
+                'warning_content' => 'Replace the file with a PNG, or with an SVG without a script (<script>), of '
+                    .'moderate size and dimensions, in the same BRANDING_PATH folder, and save the path again in '
+                    .'the panel, Brand screen: it is checked on saving and the panel gives the exact reason. '
+                    .'Detail: docs/cliente/en/configuration.md, section 2.2.',
                 'warning_unknown' => 'Run this command again once the database responds.',
             ],
         ],

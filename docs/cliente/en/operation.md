@@ -1871,16 +1871,23 @@ database, which does not depend on Redis. What does fail in the meantime:
 | Background jobs (reports, exports, notices) | The ones requested now come out **"Failed"**: they must be repeated once Redis is back |
 | The real-time presence screen | Stops updating instantly |
 
-**What to do.** Stop Redis, repair its file and bring everything back up. The
-repair asks before truncating: answer `y`.
+**What to do.** `./doctor.sh` detects it and gives you these same commands.
+Stop Redis, repair its file and bring it back up. The repair asks before
+truncating; the `echo y` in the second command answers for you. It ends with
+`All AOF files and manifest are valid`.
 
 ```bash
 docker compose logs --tail 30 redis
 docker compose stop redis
-docker compose run --rm --no-deps redis redis-check-aof --fix /data/appendonlydir/appendonly.aof.manifest
-docker compose up -d
+echo y | docker compose run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
+docker compose up -d redis
 ./doctor.sh
 ```
+
+If `./doctor.sh` still sees a service stopped, `docker compose up -d` brings
+everything up. The same procedure, seen from the alert that triggers it, is in
+[`../../runbooks/errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md)
+§1.1 (in Spanish).
 
 The repair truncates the last thing written before the cut. **Redis holds
 nothing of the working-time record**: what is lost is, at most, jobs that were

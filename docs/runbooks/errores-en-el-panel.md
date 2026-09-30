@@ -39,7 +39,8 @@ con `command` y `exit_code`, y una `attendance.incident_not_opened` por
 hallazgo, con `employee_uuid` y la clase de la excepción (nunca nombres).
 Búscalas con `docker compose logs scheduler | grep -E 'scheduler.command_failed|incident_not_opened'`
 o en Loki. Corregida la causa (casi siempre base de datos o disco:
-`product:doctor`), repite `php artisan attendance:detect-incidents`: es
+`product:doctor`), repite
+`docker compose exec app php artisan attendance:detect-incidents`: es
 idempotente y no duplica lo que sí se abrió; la métrica vuelve a cero en la
 siguiente pasada y la alerta se apaga sola. Lo mismo vale para
 `ReconciliacionConFallos` y `attendance:reconcile`, cuyo runbook es
@@ -70,6 +71,53 @@ algo falle detrás. La excepción es el origen `api` sobre `/scan*` y los
 códigos `kiosk.*` que sí le impiden fichar (§4, filas marcadas). Compruébalo
 antes de nada: es la diferencia entre «hay que mirarlo hoy» y «hay que
 mirarlo ya».
+
+### 1.1 `SondaDelBordeFallida` tras un corte de luz: Redis en bucle de reinicio
+
+Es el caso más frecuente de `SondaDelBordeFallida` con el servidor encendido, y
+no deja nada en `error_events` porque la aplicación no llega a escribir. Un
+apagado brusco deja a medias el fichero de persistencia de Redis (AOF) y Redis
+se niega a arrancar con él: se reinicia una y otra vez.
+
+**Cómo se reconoce.** `./doctor.sh` lo dice él solo («Redis se esta
+reiniciando en bucle») y trae las mismas órdenes de abajo. A mano:
+
+```bash
+docker compose ps redis
+docker compose logs --tail 30 redis
+```
+
+`redis` sale como `Restarting` y su registro habla del *append only file*
+(`Bad file format reading the append only file`, `AOF ... is not valid`).
+
+**Impacto en el fichaje: ninguno.** Las tablets registran contra PostgreSQL y
+el escaneo no depende de Redis. Lo que cae mientras tanto: el acceso al panel y
+al portal, las colas de trabajos (un informe pedido ahora sale «Fallida» y hay
+que repetirlo), el tiempo real, y `/ready`, que responde `503` —por eso suena la
+alerta—.
+
+**Reparación**, desde el directorio de la instalación:
+
+```bash
+docker compose stop redis
+echo y | docker compose run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
+docker compose up -d redis
+./doctor.sh
+```
+
+La segunda orden recorta la última escritura corrupta y termina con `All AOF
+files and manifest are valid`. **En Redis no hay nada del registro horario**: lo
+que se pierde son, como mucho, trabajos que estaban en cola en ese instante.
+En cuanto Redis está sano, el resto de servicios se reconecta solo; si
+`./doctor.sh` sigue viendo algo parado, `docker compose up -d` lo levanta todo.
+
+**Si `redis-check-aof` no consigue repararlo**, se arranca Redis vacío, con las
+órdenes de [`../cliente/operacion.md`](../cliente/operacion.md) §18 («…Redis se
+reinicia una y otra vez»). Tampoco se pierde ningún fichaje ni ninguna
+corrección.
+
+**Si el registro de Redis no habla del AOF**, la causa suele ser disco lleno
+([`espacio-en-disco.md`](espacio-en-disco.md)) o falta de memoria del servidor.
 
 ---
 

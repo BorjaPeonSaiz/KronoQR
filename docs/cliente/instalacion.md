@@ -132,14 +132,19 @@ docs/runbooks/           Procedimientos: restaurar, rotar secretos, alta de
 >
 > - **Si la aplicación está en marcha**, delega en el diagnóstico real del
 >   producto (`php artisan product:doctor`) y muestra su informe completo:
->   base de datos, colas, correo, certificado, permisos, disco y licencia,
->   cada comprobación con qué hacer si está en rojo.
+>   base de datos, colas, correo, certificado, permisos, disco, licencia y las
+>   tres redes del borde, cada comprobación con qué hacer si está en rojo.
 > - **Si la aplicación está parada** —el caso para el que este script existe:
 >   sin ella, `docker compose exec` no sirve de nada—, comprueba desde fuera
 >   lo que se puede: que Docker responde, el estado de cada servicio, que el
 >   `.env` está y con permisos `0600`, el espacio libre, el certificado y su
 >   caducidad, y si algo escucha en los puertos configurados. Y dice cómo
 >   arrancarla.
+> - **En los dos casos** revisa las redes del `.env` (`KIOSK_VLAN_CIDR`,
+>   `PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR` y `TRUSTED_PROXY_CIDR`, §6) y
+>   detecta si **Redis se reinicia en bucle**, lo típico tras un corte de luz:
+>   si la causa es su fichero de persistencia dañado, te da las tres órdenes
+>   que lo reparan ([`operacion.md`](operacion.md) §18).
 >
 > Nunca imprime un secreto: del `.env` solo lee rutas, puertos y nombres de
 > fichero. Sus códigos de salida están en la sección 2, más abajo.
@@ -201,12 +206,25 @@ BACKUP_PATH=/var/backups/fichaje
 IMAGE_REGISTRY=ghcr.io/kronoqr
 ```
 
-**Los cuatro valores de red y `APP_URL` no pueden quedarse como vienen.** El
+**Los tres valores de red y `APP_URL` no pueden quedarse como vienen.** El
 instalador **compara con la plantilla** y se niega a instalar si `APP_URL`,
-`KIOSK_VLAN_CIDR`, `PORTAL_INTERNAL_CIDR` o `METRICS_ALLOW_CIDR` siguen con el
-valor de ejemplo. El motivo es concreto: con `APP_URL=https://localhost` el
-sistema arranca, todas las comprobaciones pasan —la verificación final sondea
-`127.0.0.1`— y **ningún quiosco puede llegar a él**. Nada posterior detecta eso.
+`KIOSK_VLAN_CIDR` o `PORTAL_INTERNAL_CIDR` siguen con el valor de ejemplo. El
+motivo es concreto: con `APP_URL=https://localhost` el sistema arranca, todas
+las comprobaciones pasan —la verificación final sondea `127.0.0.1`— y **ningún
+quiosco puede llegar a él**. Nada posterior detecta eso.
+
+**`METRICS_ALLOW_CIDR=172.29.0.20/32` se deja tal cual.** Es la dirección fija
+de Prometheus, el recolector de métricas del propio producto, y es el valor
+correcto: el instalador lo acepta y solo comprueba que sea un rango válido y
+que cubra a Prometheus (§6).
+
+**Además de la forma, el instalador comprueba qué hace cada valor**, y avisa
+—sin impedir la instalación— si algo no cuadra: un `PORTAL_INTERNAL_CIDR` que
+no contiene ninguna red de este servidor ni la de los quioscos (el portal daría
+`403` a todo el mundo), un rango abierto a todo internet, un `MAIL_HOST` que
+sigue en `mailpit` (el buzón de pruebas del fabricante: no saldría ningún
+correo), la licencia vacía o ningún destinatario de alertas. `update.sh` y
+`./doctor.sh` repiten las comprobaciones de redes en cada ejecución.
 
 **`IMAGE_REGISTRY=ghcr.io/kronoqr` es el valor de la plantilla y hoy no
 descarga nada: pon el que te da el fabricante.** Las imágenes se publican en el
@@ -289,11 +307,20 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    APP_URL relleno en la plantilla
   [ok]    KIOSK_VLAN_CIDR relleno en la plantilla
   [ok]    PORTAL_INTERNAL_CIDR relleno en la plantilla
-  [ok]    METRICS_ALLOW_CIDR relleno en la plantilla
   [ok]    BACKUP_PATH relleno en la plantilla
   [ok]    TLS_CERT_DIR relleno en la plantilla
+  [ok]    METRICS_ALLOW_CIDR relleno en la plantilla
   [ok]    APP_ENV=production
   [ok]    APP_DEBUG=false
+  [ok]    KIOSK_VLAN_CIDR es un CIDR IPv4 valido (10.0.20.0/24)
+  [ok]    PORTAL_INTERNAL_CIDR es un CIDR IPv4 valido (10.0.10.0/24)
+  [ok]    METRICS_ALLOW_CIDR es un CIDR IPv4 valido (172.29.0.20/32)
+  [ok]    PORTAL_INTERNAL_CIDR=10.0.10.0/24 cubre una red de este servidor o la de los quioscos
+  [ok]    METRICS_ALLOW_CIDR=172.29.0.20/32 cubre a Prometheus (172.29.0.20)
+  [ok]    COMPLIANCE_PROFILE relleno en la plantilla
+  [ok]    LICENSE_KEY tiene el formato esperado
+  [ok]    MAIL_HOST apunta a un servidor de correo propio
+  [ok]    ALERT_EMAIL_*: hay al menos un destinatario de alertas
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    El nombre fichaje.tuhotel.local resuelve desde este servidor
   [ok]    Certificado TLS en /opt/kronoqr-2.1.0/certs
@@ -305,7 +332,7 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    Se puede escribir en /opt/kronoqr-2.1.0
   [ok]    Privilegios para asignar el propietario del archivo de WAL
 
-Requisitos cumplidos: 29 comprobaciones, 0 avisos.
+Requisitos cumplidos: 38 comprobaciones, 0 avisos.
 
 Solo comprobacion (--check-only): no se ha tocado nada. Vuelve a ejecutar sin la opcion para instalar.
 ```
@@ -770,8 +797,9 @@ sudo systemctl stop nginx      # o lo que aparezca
 Si necesitas conservar ese servicio, publica KronoQR en otros puertos con
 `HTTP_PORT` y `HTTPS_PORT` en el `.env`, y ponlo detrás de tu proxy. Antes,
 lee [`endurecimiento.md`](endurecimiento.md) §1.6: detrás de un proxy inverso
-el servidor ve la IP del proxy y no la del quiosco, y `KIOSK_VLAN_CIDR`,
-`PORTAL_INTERNAL_CIDR` y `METRICS_ALLOW_CIDR` dejan de distinguir orígenes.
+el servidor ve la IP del proxy y no la del quiosco, y `KIOSK_VLAN_CIDR` y
+`PORTAL_INTERNAL_CIDR` dejan de distinguir orígenes hasta que declares ese
+proxy en `TRUSTED_PROXY_CIDR` (§6).
 
 ### …dice «no se han podido descargar las imagenes»
 
@@ -1059,6 +1087,12 @@ Conviene que sea una dirección concreta y no una red entera: si se autoriza la
 red completa de contenedores, las peticiones hechas desde el propio servidor
 entran dentro de ese rango y `/metrics` queda accesible sin que nada lo avise.
 
+**El valor de la plantilla es el correcto y se deja tal cual.** `172.29.0.20`
+es la dirección fija que el producto da a Prometheus. Cámbialo solo si lee
+`/metrics` otro recolector tuyo. Con la observabilidad encendida, el
+instalador, `update.sh` y `./doctor.sh` avisan si el valor no cubre a
+Prometheus: sería perder las métricas y las alertas que dependen de ellas.
+
 ### `PORTAL_INTERNAL_CIDR` — desde dónde se puede entrar al portal del empleado
 
 ```dotenv
@@ -1098,7 +1132,8 @@ que conviene conocer antes de probar:
   distinguir la LAN de internet, y por eso la producción va sobre Linux con
   Docker Engine (§0).
 - **Detrás de un proxy inverso o una CDN**, el servidor web ve la IP del proxy.
-  Lee [`endurecimiento.md`](endurecimiento.md) §1.6 antes de tocar el rango.
+  No la autorices en el rango: declara el proxy en `TRUSTED_PROXY_CIDR`
+  (apartado siguiente).
 
 Para averiguar la IP exacta que ve el servidor web y qué hacer con ella:
 [`../runbooks/portal-403.md`](../runbooks/portal-403.md).
@@ -1116,6 +1151,53 @@ IPv6 no se admite (el borde solo escucha en IPv4). Si el valor no es válido, el
 borde no arranca y el registro dice qué variable y qué valor; con
 `PORTAL_INTERNAL_CIDR=0.0.0.0/0` arranca, pero deja un aviso visible en el
 registro.
+
+### `TRUSTED_PROXY_CIDR` — si hay un proxy, un balanceador o una CDN delante
+
+```dotenv
+TRUSTED_PROXY_CIDR=
+```
+
+**Vacía es lo normal**, y es lo correcto si las tablets y el personal llegan
+directamente al servidor. Solo se rellena si pones **delante** del servidor web
+de KronoQR un proxy inverso, un balanceador o una CDN.
+
+**Por qué hace falta entonces.** Con un proxy delante, el servidor web ve
+**siempre la IP del proxy**, y eso rompe tres cosas a la vez: todos los
+quioscos caen fuera de `KIOSK_VLAN_CIDR` (y en el límite de peticiones pensado
+para internet), el portal deja de distinguir la red interna, y el límite de
+peticiones por IP trata a todo el mundo como una sola persona.
+
+**Qué poner.** La dirección o direcciones del proxy, en formato CIDR y
+separadas por comas; una dirección suelta con `/32`:
+
+```dotenv
+TRUSTED_PROXY_CIDR=10.0.0.5/32,10.0.1.0/24
+```
+
+Con eso, el servidor web toma la IP real del visitante de la cabecera
+`X-Forwarded-For`, **pero solo si la petición llega de uno de esos proxies**:
+de cualquier otro origen la cabecera se ignora y nadie puede falsificar su IP.
+El proxy tiene que añadir esa cabecera; casi todos lo hacen de serie.
+
+**Tres reglas:**
+
+- **Nunca `0.0.0.0/0`.** Confiaría en cualquiera: bastaría con escribir la
+  cabecera para hacerse pasar por un quiosco o por la red interna. El servidor
+  web no arranca con ese valor, y el instalador, `update.sh` y `./doctor.sh` lo
+  rechazan.
+- **Deja `TRUSTED_PROXIES` vacía.** Es la variable equivalente de la
+  aplicación. Con `TRUSTED_PROXY_CIDR` puesta, el servidor web ya le entrega la
+  IP real del visitante; si rellenaras también `TRUSTED_PROXIES`, la aplicación
+  volvería a leer la cabecera sobre una IP que ya es la buena.
+- **Lee antes [`endurecimiento.md`](endurecimiento.md) §1.6**: el proxy no puede
+  quitar ni reescribir las cabeceras de seguridad, o la cámara de las tablets
+  deja de funcionar.
+
+Se aplica recreando el servidor web (`docker compose up -d nginx`). Para
+comprobar que funciona, sigue
+[`../runbooks/portal-403.md`](../runbooks/portal-403.md) §2.2: la IP que
+aparece en el registro tiene que ser la del visitante, no la del proxy.
 
 ### Certificado TLS
 

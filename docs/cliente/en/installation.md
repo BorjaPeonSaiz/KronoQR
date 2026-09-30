@@ -133,14 +133,19 @@ docs/runbooks/           Procedures: restore, rotate secrets, new kiosk,
 >
 > - **If the application is running**, it delegates to the product's real
 >   diagnosis (`php artisan product:doctor`) and shows its full report:
->   database, queues, email, certificate, permissions, disk and licence, each
->   check with what to do if it is red.
+>   database, queues, email, certificate, permissions, disk, licence and the
+>   three edge networks, each check with what to do if it is red.
 > - **If the application is stopped** — the case this script exists for:
 >   without it, `docker compose exec` is of no use — it checks from the outside
 >   what it can: that Docker responds, the state of each service, that the
 >   `.env` is there with `0600` permissions, free space, the certificate and
 >   its expiry, and whether something listens on the configured ports. And it
 >   tells you how to start it.
+> - **In both cases** it reviews the networks in the `.env` (`KIOSK_VLAN_CIDR`,
+>   `PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR` and `TRUSTED_PROXY_CIDR`, §6)
+>   and detects whether **Redis is restarting in a loop**, the typical result of
+>   a power cut: if the cause is its damaged persistence file, it gives you the
+>   three commands that repair it ([`operation.md`](operation.md) §18).
 >
 > It never prints a secret: from the `.env` it only reads paths, ports and
 > file names. Its exit codes are in section 2, below.
@@ -202,13 +207,25 @@ BACKUP_PATH=/var/backups/fichaje
 IMAGE_REGISTRY=ghcr.io/kronoqr
 ```
 
-**The four network values and `APP_URL` cannot be left as they come.** The
+**The three network values and `APP_URL` cannot be left as they come.** The
 installer **compares against the template** and refuses to install if
-`APP_URL`, `KIOSK_VLAN_CIDR`, `PORTAL_INTERNAL_CIDR` or `METRICS_ALLOW_CIDR`
-still hold the example value. The reason is concrete: with
-`APP_URL=https://localhost` the system starts, every check passes — the final
-verification probes `127.0.0.1` — and **no kiosk can reach it**. Nothing
-afterwards detects that.
+`APP_URL`, `KIOSK_VLAN_CIDR` or `PORTAL_INTERNAL_CIDR` still hold the example
+value. The reason is concrete: with `APP_URL=https://localhost` the system
+starts, every check passes — the final verification probes `127.0.0.1` — and
+**no kiosk can reach it**. Nothing afterwards detects that.
+
+**`METRICS_ALLOW_CIDR=172.29.0.20/32` is left as it is.** It is the fixed
+address of Prometheus, the product's own metrics collector, and it is the right
+value: the installer accepts it and only checks that it is a valid range and
+that it covers Prometheus (§6).
+
+**Beyond the format, the installer checks what each value does**, and warns —
+without blocking the installation — if something does not add up: a
+`PORTAL_INTERNAL_CIDR` that contains no network of this server nor the kiosk
+one (the portal would answer `403` to everyone), a range open to the whole
+internet, a `MAIL_HOST` still set to `mailpit` (the vendor's test mailbox: no
+email would go out), an empty licence or no alert recipient. `update.sh` and
+`./doctor.sh` repeat the network checks on every run.
 
 **`IMAGE_REGISTRY=ghcr.io/kronoqr` is the template value and today it downloads
 nothing: put the one the vendor gives you.** The images are published on
@@ -292,11 +309,20 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    APP_URL filled in the template
   [ok]    KIOSK_VLAN_CIDR filled in the template
   [ok]    PORTAL_INTERNAL_CIDR filled in the template
-  [ok]    METRICS_ALLOW_CIDR filled in the template
   [ok]    BACKUP_PATH filled in the template
   [ok]    TLS_CERT_DIR filled in the template
+  [ok]    METRICS_ALLOW_CIDR filled in the template
   [ok]    APP_ENV=production
   [ok]    APP_DEBUG=false
+  [ok]    KIOSK_VLAN_CIDR is a valid IPv4 CIDR (10.0.20.0/24)
+  [ok]    PORTAL_INTERNAL_CIDR is a valid IPv4 CIDR (10.0.10.0/24)
+  [ok]    METRICS_ALLOW_CIDR is a valid IPv4 CIDR (172.29.0.20/32)
+  [ok]    PORTAL_INTERNAL_CIDR=10.0.10.0/24 covers a network of this server or the kiosk one
+  [ok]    METRICS_ALLOW_CIDR=172.29.0.20/32 covers Prometheus (172.29.0.20)
+  [ok]    COMPLIANCE_PROFILE filled in the template
+  [ok]    LICENSE_KEY has the expected format
+  [ok]    MAIL_HOST points to a mail server of your own
+  [ok]    ALERT_EMAIL_*: there is at least one alert recipient
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    Name fichaje.tuhotel.local resolves from this server
   [ok]    TLS certificate in /opt/kronoqr-2.1.0/certs
@@ -308,7 +334,7 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    Writable: /opt/kronoqr-2.1.0
   [ok]    Privileges to set the owner of the WAL archive
 
-Requirements met: 29 checks, 0 warnings.
+Requirements met: 38 checks, 0 warnings.
 
 Check only (--check-only): nothing was touched. Run again without the flag to install.
 ```
@@ -787,8 +813,9 @@ sudo systemctl stop nginx      # o lo que aparezca
 If you need to keep that service, publish KronoQR on other ports with
 `HTTP_PORT` and `HTTPS_PORT` in the `.env`, and put it behind your proxy.
 First, read [`hardening.md`](hardening.md) §1.6: behind a reverse proxy the
-server sees the proxy's IP and not the kiosk's, and `KIOSK_VLAN_CIDR`,
-`PORTAL_INTERNAL_CIDR` and `METRICS_ALLOW_CIDR` stop telling origins apart.
+server sees the proxy's IP and not the kiosk's, and `KIOSK_VLAN_CIDR` and
+`PORTAL_INTERNAL_CIDR` stop telling origins apart until you declare that proxy
+in `TRUSTED_PROXY_CIDR` (§6).
 
 ### …it says "could not download the images"
 
@@ -1085,6 +1112,12 @@ container network is authorised, requests made from the server itself fall
 inside that range and `/metrics` becomes reachable without anything warning
 about it.
 
+**The template value is the right one and is left as it is.** `172.29.0.20` is
+the fixed address the product gives Prometheus. Change it only if another
+collector of yours reads `/metrics`. With observability on, the installer,
+`update.sh` and `./doctor.sh` warn if the value does not cover Prometheus: that
+would mean losing the metrics and the alerts that depend on them.
+
 ### `PORTAL_INTERNAL_CIDR` — from where the employee portal can be entered
 
 ```dotenv
@@ -1123,8 +1156,9 @@ knowing before testing:
   connection arrives from an internal Docker address. The range cannot tell
   the LAN from the internet, which is why production runs on Linux with Docker
   Engine (§0).
-- **Behind a reverse proxy or a CDN**, the web server sees the proxy's IP. Read
-  [`hardening.md`](hardening.md) §1.6 before touching the range.
+- **Behind a reverse proxy or a CDN**, the web server sees the proxy's IP. Do
+  not authorise it in the range: declare the proxy in `TRUSTED_PROXY_CIDR` (next
+  subsection).
 
 To find out the exact IP the web server sees and what to do with it:
 [`../../runbooks/portal-403.md`](../../runbooks/portal-403.md) (in Spanish).
@@ -1142,6 +1176,53 @@ IPv6 is not accepted (the edge only listens on IPv4). If a value is invalid the
 edge does not start and the log names the variable and the value; with
 `PORTAL_INTERNAL_CIDR=0.0.0.0/0` it starts but leaves a visible warning in the
 log.
+
+### `TRUSTED_PROXY_CIDR` — if there is a proxy, a load balancer or a CDN in front
+
+```dotenv
+TRUSTED_PROXY_CIDR=
+```
+
+**Empty is normal**, and it is right if the tablets and the staff reach the
+server directly. It is only filled in if you put a reverse proxy, a load
+balancer or a CDN **in front of** KronoQR's web server.
+
+**Why it is needed then.** With a proxy in front, the web server **always sees
+the proxy's IP**, and that breaks three things at once: every kiosk falls
+outside `KIOSK_VLAN_CIDR` (and into the request limit meant for the internet),
+the portal stops telling the internal network apart, and the per-IP request
+limit treats everyone as a single person.
+
+**What to put.** The address or addresses of the proxy, in CIDR format and
+separated by commas; a single address with `/32`:
+
+```dotenv
+TRUSTED_PROXY_CIDR=10.0.0.5/32,10.0.1.0/24
+```
+
+With that, the web server takes the visitor's real IP from the
+`X-Forwarded-For` header, **but only if the request comes from one of those
+proxies**: from any other origin the header is ignored and nobody can forge
+their IP. The proxy has to add that header; almost all do by default.
+
+**Three rules:**
+
+- **Never `0.0.0.0/0`.** It would trust anyone: writing the header would be
+  enough to pass as a kiosk or as the internal network. The web server does not
+  start with that value, and the installer, `update.sh` and `./doctor.sh`
+  reject it.
+- **Leave `TRUSTED_PROXIES` empty.** It is the application's equivalent
+  variable. With `TRUSTED_PROXY_CIDR` set, the web server already hands it the
+  visitor's real IP; if you also filled in `TRUSTED_PROXIES`, the application
+  would read the header again over an IP that is already the right one.
+- **Read [`hardening.md`](hardening.md) §1.6 first**: the proxy must not remove
+  or rewrite the security headers, or the tablets' camera stops working.
+
+It is applied by recreating the web server (`docker compose up -d nginx`). To
+check that it works, follow
+[`../../runbooks/portal-403.md`](../../runbooks/portal-403.md) §2.2 (in
+Spanish): the IP that shows up in the log must be the visitor's, not the
+proxy's.
 
 ### TLS certificate
 
