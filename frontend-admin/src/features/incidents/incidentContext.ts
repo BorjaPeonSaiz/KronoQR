@@ -330,6 +330,53 @@ function describeImpossibleSequence(
 }
 
 /**
+ * RN-19 (`rejected_pin_scan`): los tres numeros que acompañan a `scan_id` y
+ * `occurred_at` del primer intento por PIN sin subsanar.
+ *
+ * `attempts` y `lockout_attempts` son recuentos y se pintan como numero simple.
+ * `max_sync_delay_seconds` es una duracion CON SIGNO (`recorded_at −
+ * occurred_at`): positiva, lo que tardo en llegar al servidor —una cola offline
+ * que drena tarde—; negativa, un reloj de quiosco adelantado. Se pinta como
+ * duracion y, por debajo del minuto, en segundos: «0 h 00 min» diria que no
+ * hubo retraso.
+ */
+function describeRejectedPinScan(
+  context: IncidentContext,
+  t: Translate,
+  consumed: Set<string>,
+  lines: ContextLine[],
+): void {
+  for (const key of ['attempts', 'lockout_attempts'] as const) {
+    const value = context[key]
+
+    if (typeof value === 'number') {
+      lines.push(metricLine(key, String(value), t))
+      consumed.add(key)
+    }
+  }
+
+  const delay = context['max_sync_delay_seconds']
+
+  if (typeof delay !== 'number') {
+    return
+  }
+
+  const magnitude = Math.abs(delay)
+  const duration =
+    magnitude < 60
+      ? t('incidents.context.seconds', { seconds: magnitude })
+      : formatMinutes(Math.trunc(magnitude / 60), t)
+
+  lines.push({
+    key: 'max_sync_delay_seconds',
+    text: t(delay < 0 ? 'incidents.context.clockAhead' : 'incidents.context.maxSyncDelay', {
+      duration,
+    }),
+  })
+  consumed.add('max_sync_delay_seconds')
+}
+
+/**
  * Traduce el contexto de una incidencia a lineas legibles.
  *
  * Empareja cada metrica de minutos CONFIRMADA con `threshold_minutes` y la
@@ -397,6 +444,8 @@ export function describeIncidentContext(
     lines.push(metricLine('scans', String(scans), t))
     consumed.add('scans')
   }
+
+  describeRejectedPinScan(context, t, consumed, lines)
 
   const pattern = context['pattern']
 

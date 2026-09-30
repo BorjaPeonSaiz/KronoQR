@@ -1119,7 +1119,8 @@
       "clock_skew": "Clock skew",
       "missing_clock_out": "Missing clock-out",
       "anomalous_pattern": "Anomalous credential usage pattern",
-      "out_of_order_scan": "Out-of-order clocking"
+      "out_of_order_scan": "Out-of-order clocking",
+      "rejected_pin_scan": "PIN clocking not recorded"
     },
     "outcomes": {
       "resolved": "Resolved",
@@ -1173,12 +1174,17 @@
       "pair": "{metric} {value} of {threshold}",
       "metric": "{metric}: {value}",
       "raw": "{key}: {value}",
+      "seconds": "{seconds} s",
+      "maxSyncDelay": "longest delay reaching the server: {duration}",
+      "clockAhead": "kiosk clock ahead by: {duration}",
       "metrics": {
         "rest_minutes": "rest",
         "worked_minutes": "worked",
         "occurred_at": "clock time",
         "scan_id": "scan ID",
         "scans": "out-of-order scans",
+        "attempts": "unrecorded PIN attempts",
+        "lockout_attempts": "of which with the PIN locked",
         "device_name": "kiosk",
         "first_coincidence_at": "first coincidence",
         "last_coincidence_at": "last coincidence",

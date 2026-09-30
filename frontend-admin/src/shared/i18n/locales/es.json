@@ -1119,7 +1119,8 @@
       "clock_skew": "Desfase de reloj",
       "missing_clock_out": "Salida sin fichar",
       "anomalous_pattern": "Patrón anómalo de uso de la credencial",
-      "out_of_order_scan": "Fichaje fuera de orden"
+      "out_of_order_scan": "Fichaje fuera de orden",
+      "rejected_pin_scan": "Fichaje por PIN no registrado"
     },
     "outcomes": {
       "resolved": "Resuelta",
@@ -1173,12 +1174,17 @@
       "pair": "{metric} {value} de {threshold}",
       "metric": "{metric}: {value}",
       "raw": "{key}: {value}",
+      "seconds": "{seconds} s",
+      "maxSyncDelay": "mayor retraso hasta llegar al servidor: {duration}",
+      "clockAhead": "reloj del quiosco adelantado: {duration}",
       "metrics": {
         "rest_minutes": "descanso",
         "worked_minutes": "trabajado",
         "occurred_at": "hora del fichaje",
         "scan_id": "identificador del escaneo",
         "scans": "escaneos fuera de orden",
+        "attempts": "intentos por PIN sin registrar",
+        "lockout_attempts": "de ellos, con el PIN bloqueado",
         "device_name": "quiosco",
         "first_coincidence_at": "primera coincidencia",
         "last_coincidence_at": "última coincidencia",
