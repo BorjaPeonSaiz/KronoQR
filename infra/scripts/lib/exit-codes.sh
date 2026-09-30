@@ -41,6 +41,11 @@
 #      en pie, pero la comprobacion final no paso. NO se deshace nada: deshacer
 #      una instalacion que quiza solo tiene el certificado mal seria peor. El
 #      mensaje dice que comprobar.
+#        · restore.sh  ASIENTO PENDIENTE (PR1): la base esta restaurada y en
+#                      servicio, pero el asiento `system.restored_from_backup` de
+#                      audit_log no se ha podido escribir. NO se deshace nada y NO
+#                      se repite la restauracion: el mensaje trae la orden que
+#                      escribe el asiento (docs/runbooks/restaurar-backup.md §6.7).
 #
 #   7  GARANTIA DE SEGURIDAD ROTA (AUD-1, ADR-042). El script se ha negado a
 #      continuar porque un rol de base de datos tiene mas privilegios de los que

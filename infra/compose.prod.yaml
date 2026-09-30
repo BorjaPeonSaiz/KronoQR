@@ -802,9 +802,19 @@ services:
       # copias y escribe aqui su informe.
       - ${BACKUP_PATH:-/var/backups/fichaje}:${BACKUP_PATH:-/var/backups/fichaje}
     environment:
+      # Arranque de artisan para el asiento de auditoria de la restauracion (PR1):
+      # restore.sh escribe `system.restored_from_backup` con el rol de migracion
+      # que este servicio YA tiene (PGUSER/PGPASSWORD, mas abajo); estas variables
+      # no son credenciales de base de datos nuevas. Son las mismas que `migrate`.
+      APP_NAME:
       APP_ENV:
+      APP_DEBUG:
+      APP_KEY:
+      APP_TIMEZONE:
       LOG_CHANNEL:
+      LOG_STACK:
       LOG_LEVEL:
+      DB_SSLMODE:
       # restore.sh y restore-drill.sh --mode database toman PGUSER/PGPASSWORD
       # antes que BACKUP_DB_* (lib/backup-common.sh): restaurar exige CREATEDB y
       # renombrar bases, cosa que el rol de copia (solo lectura) no puede.

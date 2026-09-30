@@ -2199,8 +2199,10 @@ rollback_and_die() {
   CHAIN_DISCARDED="$(json_field "$(compose_new run --rm --no-deps -T app php artisan compliance:audit-chain-head 2>/dev/null || true)" hash)"
 
   say "$(kq_format u_rollback_restore "${BACKUP_FILE}")"
-  detail_note "--- restore.sh --file ${BACKUP_FILE} --yes ---"
-  compose_new run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes \
+  # `--audit-by-caller`: el asiento de la vuelta atras lo escribe este script
+  # mas abajo, con el paso y el motivo del fallo; restore.sh no deja otro (PR1).
+  detail_note "--- restore.sh --file ${BACKUP_FILE} --yes --audit-by-caller ---"
+  compose_new run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller \
     >>"$(detail_sink)" 2>&1
   code=$?
   if [ "${code}" -ne 0 ]; then
