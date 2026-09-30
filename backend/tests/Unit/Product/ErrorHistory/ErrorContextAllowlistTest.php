@@ -95,7 +95,7 @@ it('declara exactamente las claves que el servidor y los clientes emiten', funct
         // Panel y portal (`packages/web-kit/src/clientErrors.ts`).
         'component', 'hook', 'source', 'line',
         // Quiosco (`frontend-kiosk/src`).
-        'scope', 'audio_state', 'silence_ms', 'skew_seconds', 'durable',
+        'scope', 'audio_state', 'silence_ms', 'skew_seconds', 'durable', 'kind',
         'entries', 'items', 'missing', 'purged',
     ]);
 })->group('RF-PD-15');
