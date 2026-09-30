@@ -605,7 +605,9 @@ sudo chmod 0644 /opt/kronoqr/branding/logo.png
 # 2. Tell docker-compose where it is. Empty = ./branding, next to
 #    docker-compose.yml.
 #    In the .env:  BRANDING_PATH=/opt/kronoqr/branding
-sudo docker compose up -d app
+#    The three containers that mount it are recreated: app, horizon (deferred
+#    PDFs) and scheduler. With app alone, deferred PDFs would lack the logo.
+sudo docker compose up -d app horizon scheduler
 
 # 3. Check that the container sees it. If this comes out empty, do not go on:
 #    what is failing is the mount, not the configuration.

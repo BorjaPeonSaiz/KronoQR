@@ -124,8 +124,8 @@ la licencia, tamaño de la instalación por tramos y contadores agregados;
 **nunca** datos de personas ni de jornada, ni nombres, ni correos, ni la razón
 social. Viene desactivado de serie y solo se activa si tú lo decides en el
 `.env` con la lista exacta de campos delante
-([`configuracion.md`](configuracion.md) §3 quinquies); `php artisan
-product:telemetry` te enseña el documento que se enviaría antes de activar
+([`configuracion.md`](configuracion.md) §3 quinquies); `docker compose exec app
+php artisan product:telemetry` te enseña el documento que se enviaría antes de activar
 nada. Si lo activas, anótalo en tu registro de actividades como lo que es: un
 envío de datos técnicos, sin datos personales, a un destino que eliges tú.
 
@@ -420,8 +420,8 @@ puedes ejecutar en cualquier momento y llevarte (§7 quater).
 
 > Si alguna vez encuentras que **no puedes fichar o no puedes acceder al
 > registro** y la causa es la licencia, **no es lo previsto**: es una avería.
-> Avisa al proveedor adjuntando la salida de `php artisan license:show` y de
-> `GET /api/v1/health`.
+> Avisa al proveedor adjuntando la salida de
+> `docker compose exec app php artisan license:show` y de `GET /api/v1/health`.
 
 ---
 

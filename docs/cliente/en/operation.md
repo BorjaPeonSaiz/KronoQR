@@ -122,7 +122,7 @@ management account that authorises the purge.)
 **Afterwards:**
 
 - **Archive the report** together with the written authorisation.
-- Run `php artisan compliance:verify-audit-chain`. It has to finish green and
+- Run `docker compose exec app php artisan compliance:verify-audit-chain`. It has to finish green and
   say «Purga sellada reconocida: particion AAAA» (sealed purge recognised for
   partition YYYY). If it said anything else, that is a security incident.
 
@@ -137,7 +137,7 @@ meaning is given next to each.
 | --- | --- | --- |
 | «La frase de confirmación no corresponde…» (the confirmation phrase does not match) | The report expired, or the compliance profile changed | Run `--dry-run` again and use the new phrase |
 | «La cadena de la partición audit_log_AAAA NO verifica» (the chain of partition audit_log_YYYY does NOT verify) | Someone tampered with the audit trail | **Security incident.** `rotura-cadena-auditoria.md`. Do not repeat the purge |
-| «La purga no ha podido completarse contra la base de datos» (the purge could not be completed against the database) | The `fichaje_maintenance` credential is missing, or the role does not have it set | Provision it with `infra/docker/postgres/initdb/02-application-roles.sh` and try again |
+| «La purga no ha podido completarse contra la base de datos» (the purge could not be completed against the database) | The `fichaje_maintenance` credential is missing, or the role does not have it set | The role is born without a password on purpose: give it one only for this operation as §9 explains ("`fichaje_maintenance`: the role that is born without a password") and try again |
 | «La instalación no tiene centro de trabajo» (the installation has no site) | Setup has not been completed | Finish the wizard; without a site there is no compliance profile and no retention period |
 | The weekly proposal stops appearing | The scheduler is not running | Check the `scheduler` container; the `retention_last_run_timestamp_seconds` metric gives it away |
 
@@ -813,7 +813,7 @@ The seven steps and what happens if each one fails:
 | 3 · Pre-update backup | Exits `2` | Maintenance lifted; nothing touched. **No backup, no update** | [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) §2 and run again |
 | 4 · Migrations | Automatic rollback → `4` | Backup restored, previous version running and verified | Send the report to the vendor before retrying: it says at which intermediate version it stopped |
 | 5 · Start-up and verification | Automatic rollback → `4` | Same as above. **The new version never received traffic**: it is verified without the edge | Same as above |
-| 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `artisan up`, **without restoring anything**) or the restore was left half-done (three orders and the path of the backup) | Runbook §5. The kiosks keep queueing meanwhile |
+| 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `docker compose exec app php artisan up`, **without restoring anything**) or the restore was left half-done (three orders and the path of the backup) | Runbook §5. The kiosks keep queueing meanwhile |
 | 7 · Report | — | `BACKUP_PATH/reports/update-<fecha>.log`, always; next to it, `update-<fecha>.detalle.log` (root only, raw output, **may contain personal data**) | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
 
 Steps 5 and 6 also leave their own entry in `audit_log` (`system.updated` or
@@ -1001,7 +1001,7 @@ and audited**, never the default:
 
 - Panel: tick "Include personal data"; the screen tells you what will be
   included and that it is recorded, and only then lets you generate.
-- Console: `php artisan product:diagnostics --with-personal-data --period-days=7`
+- Console: `docker compose exec app php artisan product:diagnostics --with-personal-data --period-days=7`
   (31 days at most).
 
 It adds the workforce —**only the people with activity in the period or with an
@@ -1174,7 +1174,8 @@ passed, the system marks it as **failed** with reason `stale` as soon as
 someone requests another or in the next hourly purge, and you can generate
 again. There is no need to touch the database; if you really see one in
 progress for more than an hour without it moving to failed, run
-`php artisan product:export-all --purge` and request it again.
+`docker compose exec app php artisan product:export-all --purge` and request it
+again.
 
 **If it shows as "Could not be generated".** The reason the panel shows is a
 code, not free text, so that no data from a row is ever put on the screen or in

@@ -589,7 +589,9 @@ sudo chmod 0644 /opt/kronoqr/branding/logo.png
 # 2. Decirle al docker-compose dónde está. Vacío = ./branding, junto al
 #    docker-compose.yml.
 #    En el .env:  BRANDING_PATH=/opt/kronoqr/branding
-sudo docker compose up -d app
+#    Se recrean los tres que la montan: app, horizon (PDF en diferido) y
+#    scheduler. Con solo app, los PDF en diferido saldrían sin logotipo.
+sudo docker compose up -d app horizon scheduler
 
 # 3. Comprobar que el contenedor lo ve. Si esto sale vacío, no sigas:
 #    lo que falla es el montaje, no la configuración.

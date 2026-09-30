@@ -120,7 +120,7 @@ docker compose -f docker-compose.yml run --rm \
 **Después:**
 
 - **Archiva el informe** junto a la autorización escrita.
-- Lanza `php artisan compliance:verify-audit-chain`. Tiene que terminar en verde
+- Lanza `docker compose exec app php artisan compliance:verify-audit-chain`. Tiene que terminar en verde
   y decir «Purga sellada reconocida: particion AAAA». Si dijera otra cosa, es un
   incidente de seguridad.
 
@@ -132,7 +132,7 @@ docker compose -f docker-compose.yml run --rm \
 | --- | --- | --- |
 | «La frase de confirmación no corresponde…» | El informe caducó, o cambió el perfil de cumplimiento | Vuelve a lanzar `--dry-run` y usa la frase nueva |
 | «La cadena de la partición audit_log_AAAA NO verifica» | Alguien tocó la auditoría | **Incidente de seguridad.** `rotura-cadena-auditoria.md`. No repitas la purga |
-| «La purga no ha podido completarse contra la base de datos» | Falta la credencial de `fichaje_maintenance`, o el rol no la tiene puesta | Provisiónala con `infra/docker/postgres/initdb/02-application-roles.sh` y repite |
+| «La purga no ha podido completarse contra la base de datos» | Falta la credencial de `fichaje_maintenance`, o el rol no la tiene puesta | El rol nace sin contraseña a propósito: asígnasela solo para esta operación como explica el §9 («`fichaje_maintenance`: el rol que nace sin contraseña») y repite |
 | «La instalación no tiene centro de trabajo» | La puesta en marcha no se ha completado | Termina el asistente; sin centro no hay perfil de cumplimiento y no hay plazo |
 | La propuesta semanal deja de aparecer | El planificador no está corriendo | Revisa el contenedor `scheduler`; la métrica `retention_last_run_timestamp_seconds` lo delata |
 
@@ -802,7 +802,7 @@ Los siete pasos y lo que pasa si falla cada uno:
 | 3 · Copia previa | Sale `2` | Mantenimiento retirado; nada tocado. **Sin copia no hay actualización** | [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2 y volver a ejecutar |
 | 4 · Migraciones | Vuelta atrás automática → `4` | Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante antes de reintentar: dice en qué versión intermedia se paró |
 | 5 · Arranque y verificación | Vuelta atrás automática → `4` | Igual que arriba. **La versión nueva nunca recibió tráfico**: se verifica sin borde | Igual que arriba |
-| 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `artisan up`, **sin restaurar nada**) o la restauración quedó a medias (tres órdenes y la ruta de la copia) | Runbook §5. Los quioscos siguen encolando mientras tanto |
+| 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `docker compose exec app php artisan up`, **sin restaurar nada**) o la restauración quedó a medias (tres órdenes y la ruta de la copia) | Runbook §5. Los quioscos siguen encolando mientras tanto |
 | 7 · Informe | — | `BACKUP_PATH/reports/update-<fecha>.log`, siempre; al lado, `update-<fecha>.detalle.log` (solo root, salida cruda, **puede llevar datos personales**) | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
 
 Los pasos 5 y 6 dejan además su propio asiento en `audit_log` (`system.updated`
@@ -985,7 +985,7 @@ y auditada**, nunca el valor por defecto:
 
 - Panel: marca «Incluir datos personales»; la pantalla te dice qué se va a
   incluir y que queda registrado, y solo entonces te deja generar.
-- Consola: `php artisan product:diagnostics --with-personal-data --period-days=7`
+- Consola: `docker compose exec app php artisan product:diagnostics --with-personal-data --period-days=7`
   (máximo 31 días).
 
 Añade la plantilla —**solo las personas con actividad en el periodo o con una
@@ -1151,7 +1151,8 @@ cola se reinició— no bloquea nada: pasado el tiempo máximo de generación (u
 hora) el sistema la da por **fallida** con el motivo `stale` en cuanto alguien
 pide otra o en la purga de la hora siguiente, y puedes generar de nuevo. No
 hace falta tocar la base de datos; si de verdad ves una en curso más de una
-hora sin que pase a fallida, ejecuta `php artisan product:export-all --purge`
+hora sin que pase a fallida, ejecuta
+`docker compose exec app php artisan product:export-all --purge`
 y vuelve a pedirla.
 
 **Si aparece como «fallida».** El motivo que enseña el panel es un código, no

@@ -238,11 +238,14 @@ sudo mkdir -p /opt/kronoqr/branding
 sudo cp logo.png /opt/kronoqr/branding/logo.png
 sudo chmod 0644 /opt/kronoqr/branding/logo.png
 
-# 2. Si no lo estaba ya, apuntar BRANDING_PATH ahí en el .env y recrear el
-#    contenedor de la aplicación (solo la primera vez: cambiar el FICHERO
-#    después no exige reiniciar nada).
+# 2. Si no lo estaba ya, apuntar BRANDING_PATH ahí en el .env y recrear los
+#    TRES contenedores que montan esa carpeta: app (pantallas y PDF al momento),
+#    horizon (PDF en diferido) y scheduler (informes programados). Con solo
+#    `app`, los otros dos siguen con la carpeta antigua y los PDF en diferido
+#    salen sin logotipo. Solo la primera vez: cambiar el FICHERO después no
+#    exige reiniciar nada.
 #    BRANDING_PATH=/opt/kronoqr/branding
-sudo docker compose up -d app
+sudo docker compose up -d app horizon scheduler
 
 # 3. Guardar la ruta DE DENTRO del contenedor desde el panel, o por API.
 curl -sS -X PATCH https://TU-SERVIDOR/api/v1/settings \
@@ -1696,7 +1699,7 @@ queda sin fichar.
 | `QR_SIZE_MM` | — | Lado del QR impreso, en milímetros | `26` | Solo si cambias de formato de tarjeta. Es el tamaño mínimo con el que se garantiza la lectura | No |
 | `IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS` | — | Suelo de tiempo que consume **todo** rechazo de credencial, para que desde fuera no se distinga «no existe» de «revocada» ni de «mala firma» | `25` | Casi nunca. Subirlo endurece el control y añade latencia **solo al rechazo**; a `0` se desactiva y no debe hacerse en producción | No |
 | `BRANDING_LOGO_ROOT` | — | Directorio **dentro del contenedor** en el que tiene que estar el logotipo. Es lo que impide que la dirección pública del logotipo se convierta en una lectura de cualquier fichero del servidor | `/var/kronoqr/branding` | Nunca, salvo que cambies también el montaje del `docker-compose`. Ver **sección 2.2** | No |
-| `BRANDING_PATH` | — | Carpeta **de tu servidor** que se monta ahí, de solo lectura. Es donde dejas el PNG o el SVG | *(vacía: `./branding` junto al `docker-compose.yml`)* | Al colocar el logotipo del hotel. Ver **sección 2.2** | No |
+| `BRANDING_PATH` | — | Carpeta **de tu servidor** que se monta ahí, de solo lectura. Es donde dejas el PNG o el SVG | *(vacía: `./branding` junto al `docker-compose.yml`)* | Al colocar el logotipo del hotel. Ver **sección 2.2**. Al cambiarla, recrea `app`, `horizon` y `scheduler` (`docker compose up -d app horizon scheduler`): los tres generan documentos con el logotipo | No |
 
 ### 6.6 Generación de PDF
 

@@ -246,10 +246,13 @@ sudo cp logo.png /opt/kronoqr/branding/logo.png
 sudo chmod 0644 /opt/kronoqr/branding/logo.png
 
 # 2. If it was not already, point BRANDING_PATH there in the .env and recreate
-#    the application container (first time only: changing the FILE afterwards
-#    does not require restarting anything).
+#    the THREE containers that mount that folder: app (screens and immediate
+#    PDFs), horizon (deferred PDFs) and scheduler (scheduled reports). With
+#    `app` alone, the other two keep the old folder and deferred PDFs come out
+#    without the logo. First time only: changing the FILE afterwards does not
+#    require restarting anything.
 #    BRANDING_PATH=/opt/kronoqr/branding
-sudo docker compose up -d app
+sudo docker compose up -d app horizon scheduler
 
 # 3. Save the path AS SEEN FROM INSIDE the container, from the panel or via the API.
 curl -sS -X PATCH https://TU-SERVIDOR/api/v1/settings \
@@ -1715,7 +1718,7 @@ switches to polling and says so. Nobody is left unable to clock in.
 | `QR_SIZE_MM` | — | Side of the printed QR, in millimetres | `26` | Only if you change card format. It is the minimum size at which reading is guaranteed | No |
 | `IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS` | — | Time floor consumed by **every** credential rejection, so that from outside “does not exist” cannot be told from “revoked” or from “bad signature” | `25` | Almost never. Raising it hardens the control and adds latency **only to rejections**; at `0` it is disabled and that must not be done in production | No |
 | `BRANDING_LOGO_ROOT` | — | Directory **inside the container** where the logo has to be. It is what prevents the logo's public address from turning into a read of any file on the server | `/var/kronoqr/branding` | Never, unless you also change the `docker-compose` mount. See **section 2.2** | No |
-| `BRANDING_PATH` | — | Folder **on your server** that is mounted there, read-only. It is where you put the PNG or the SVG | *(empty: `./branding` next to the `docker-compose.yml`)* | When placing the hotel's logo. See **section 2.2** | No |
+| `BRANDING_PATH` | — | Folder **on your server** that is mounted there, read-only. It is where you put the PNG or the SVG | *(empty: `./branding` next to the `docker-compose.yml`)* | When placing the hotel's logo. See **section 2.2**. When you change it, recreate `app`, `horizon` and `scheduler` (`docker compose up -d app horizon scheduler`): all three produce documents with the logo | No |
 
 ### 6.6 PDF generation
 
