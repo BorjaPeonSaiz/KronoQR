@@ -61,4 +61,21 @@ return [
      */
     'tls_allow_self_signed' => filter_var(env('TLS_ALLOW_SELF_SIGNED', false), FILTER_VALIDATE_BOOL),
 
+    /*
+     * Las tres redes que el cliente declara en el `.env` y que aplica NGINX, no
+     * la aplicacion (PP-01): `KIOSK_VLAN_CIDR`, `PORTAL_INTERNAL_CIDR` y
+     * `METRICS_ALLOW_CIDR`.
+     *
+     * SE LEEN SOLO PARA DECIRLO. La sonda `network.*` de `product:doctor` las
+     * mira para avisar de un portal abierto a internet o de un rango con el
+     * valor de ejemplo de la red de desarrollo; ninguna decision de acceso de la
+     * aplicacion depende de ellas, y NO viajan en el paquete de diagnostico
+     * (describen la topologia interna del cliente, ADR-020).
+     */
+    'edge_networks' => [
+        'kiosk_vlan' => env('KIOSK_VLAN_CIDR', ''),
+        'portal_internal' => env('PORTAL_INTERNAL_CIDR', ''),
+        'metrics_allow' => env('METRICS_ALLOW_CIDR', ''),
+    ],
+
 ];

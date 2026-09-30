@@ -417,7 +417,11 @@ x-runtime-env: &runtime-env
   BACKUP_WEEKLY_AT:
   BACKUP_WEEKLY_MODE:
   BACKUP_WEEKLY_ON:
-  # Borde y observabilidad que la aplicacion tambien consulta
+  # Borde y observabilidad que la aplicacion tambien consulta. Las tres redes del
+  # borde las aplica nginx; la aplicacion las lee solo para que `product:doctor`
+  # (sonda `network.*`, PP-01) avise de un portal abierto a internet o de un
+  # rango de ejemplo. No son secretos.
+  KIOSK_VLAN_CIDR:
   METRICS_ALLOW_CIDR:
   METRICS_TEXTFILE_ENABLED:
   TLS_ALLOW_SELF_SIGNED:

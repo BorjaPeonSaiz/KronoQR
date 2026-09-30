@@ -176,6 +176,48 @@ return [
             ],
         ],
 
+        // --- Redes del borde (PP-01) -----------------------------------------
+
+        'network' => [
+            'probe' => $probe,
+            'portal' => [
+                'ok' => 'El portal del empleado solo se abre desde una red privada.',
+                'ok_not_provided' => 'La aplicacion no recibe PORTAL_INTERNAL_CIDR, asi que no se ha podido '
+                    .'comprobar desde donde se abre el portal.',
+                'warning_open' => 'El portal del empleado esta abierto a internet (PORTAL_INTERNAL_CIDR permite '
+                    .'cualquier origen). Es una decision legitima del cliente, pero el portal entra con codigo '
+                    .'de empleado y un PIN de 6 digitos: conviene que conste y que alguien vigile los intentos '
+                    .'fallidos.',
+                'warning_public' => 'PORTAL_INTERNAL_CIDR incluye direcciones que no son de una red privada: el '
+                    .'portal del empleado se puede abrir desde esas direcciones publicas de internet.',
+                'warning_sample' => 'PORTAL_INTERNAL_CIDR conserva el valor de ejemplo de la red de desarrollo. '
+                    .'En un servidor real esa red no existe y nadie puede abrir el portal: toda la plantilla '
+                    .'recibe un 403.',
+                'failure_invalid' => 'PORTAL_INTERNAL_CIDR no es un rango de red IPv4 valido. El servidor web '
+                    .'no arranca con ese valor, asi que no se sirve nada: ni el portal, ni el panel, ni los '
+                    .'quioscos.',
+            ],
+            'kiosk_vlan' => [
+                'ok' => 'El limite elevado de fichaje solo se aplica a una red concreta (KIOSK_VLAN_CIDR).',
+                'ok_not_provided' => 'La aplicacion no recibe KIOSK_VLAN_CIDR, asi que no se ha podido '
+                    .'comprobar la red de los quioscos.',
+                'warning_open' => 'KIOSK_VLAN_CIDR permite cualquier origen: el limite elevado de fichaje '
+                    .'(600 peticiones por minuto) se aplica a todo internet y el limite de 30 por minuto que '
+                    .'protege desde fuera no se aplica a nadie.',
+                'failure_invalid' => 'KIOSK_VLAN_CIDR no es un rango de red IPv4 valido. El servidor web no '
+                    .'arranca con ese valor, asi que los quioscos no pueden fichar contra el servidor.',
+            ],
+            'metrics' => [
+                'ok' => 'La lectura de /metrics esta limitada a una red concreta (METRICS_ALLOW_CIDR).',
+                'ok_not_provided' => 'La aplicacion no recibe METRICS_ALLOW_CIDR, asi que no se ha podido '
+                    .'comprobar quien puede leer /metrics.',
+                'warning_open' => 'METRICS_ALLOW_CIDR permite cualquier origen: /metrics, que expone el estado '
+                    .'interno del sistema, se puede leer desde cualquier sitio.',
+                'failure_invalid' => 'METRICS_ALLOW_CIDR no es un rango de red IPv4 valido. El servidor web no '
+                    .'arranca con ese valor.',
+            ],
+        ],
+
         // --- Certificado -----------------------------------------------------
 
         'tls' => [
@@ -445,6 +487,48 @@ return [
                     ."Despues recarga el enrutado de avisos:\n"
                     ."  docker compose up -d alertmanager\n"
                     .'Si prefieres no recibir avisos, apaga la vigilancia dejando COMPOSE_PROFILES vacio.',
+            ],
+        ],
+
+        'network' => [
+            'probe' => $probeFix,
+            'portal' => [
+                'warning_open' => "Si abrirlo a internet es lo que quieres, no hay nada que corregir: anotalo en\n"
+                    ."el acta de instalacion y revisa docs/cliente/endurecimiento.md.\n"
+                    ."Si no, pon en el fichero .env la red del hotel o de tu VPN y aplica el cambio:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    .'  docker compose up -d nginx',
+                'warning_public' => "Si solo debe abrirse desde la red del hotel, pon en el fichero .env su rango\n"
+                    ."privado y aplica el cambio:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    ."  docker compose up -d nginx\n"
+                    .'Si esas direcciones publicas son las que quieres, no hay nada que corregir.',
+                'warning_sample' => "Averigua con que IP ve nginx a un empleado (docs/runbooks/portal-403.md) y\n"
+                    ."pon su red en el fichero .env. Despues aplica el cambio:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Corrigelo en el fichero .env: un solo rango con el formato a.b.c.d/n, por\n"
+                    ."ejemplo 10.20.0.0/16 (una direccion suelta se escribe con /32, y IPv6 no se admite).\n"
+                    ."Despues aplica el cambio:\n"
+                    .'  docker compose up -d nginx',
+            ],
+            'kiosk_vlan' => [
+                'warning_open' => "Pon en el fichero .env solo la red de las tablets y aplica el cambio:\n"
+                    ."  KIOSK_VLAN_CIDR=10.0.20.0/24\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Corrigelo en el fichero .env: un solo rango con el formato a.b.c.d/n, por\n"
+                    ."ejemplo 10.0.20.0/24 (una direccion suelta se escribe con /32, y IPv6 no se admite).\n"
+                    ."Despues aplica el cambio:\n"
+                    .'  docker compose up -d nginx',
+            ],
+            'metrics' => [
+                'warning_open' => "Pon en el fichero .env solo la red de Prometheus (por defecto 172.29.0.20/32) y\n"
+                    ."aplica el cambio:\n"
+                    ."  METRICS_ALLOW_CIDR=172.29.0.20/32\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Corrigelo en el fichero .env: un solo rango con el formato a.b.c.d/n, por\n"
+                    ."ejemplo 172.29.0.20/32. Despues aplica el cambio:\n"
+                    .'  docker compose up -d nginx',
             ],
         ],
 

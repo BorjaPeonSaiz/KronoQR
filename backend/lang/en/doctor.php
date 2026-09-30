@@ -147,6 +147,48 @@ return [
             ],
         ],
 
+        // --- Edge networks (PP-01) -------------------------------------------
+
+        'network' => [
+            'probe' => $probe,
+            'portal' => [
+                'ok' => 'The employee portal only opens from a private network.',
+                'ok_not_provided' => 'The application does not receive PORTAL_INTERNAL_CIDR, so where the portal '
+                    .'opens from could not be checked.',
+                'warning_open' => 'The employee portal is open to the internet (PORTAL_INTERNAL_CIDR allows any '
+                    .'origin). This is a legitimate customer decision, but the portal signs in with an employee '
+                    .'code and a 6-digit PIN: it should be on record and someone should watch the failed '
+                    .'attempts.',
+                'warning_public' => 'PORTAL_INTERNAL_CIDR includes addresses that are not from a private network: '
+                    .'the employee portal can be opened from those public internet addresses.',
+                'warning_sample' => 'PORTAL_INTERNAL_CIDR still holds the example value of the development '
+                    .'network. On a real server that network does not exist and nobody can open the portal: the '
+                    .'whole staff gets a 403.',
+                'failure_invalid' => 'PORTAL_INTERNAL_CIDR is not a valid IPv4 network range. The web server does '
+                    .'not start with that value, so nothing is served: neither the portal, nor the panel, nor the '
+                    .'kiosks.',
+            ],
+            'kiosk_vlan' => [
+                'ok' => 'The raised clock-in limit only applies to one specific network (KIOSK_VLAN_CIDR).',
+                'ok_not_provided' => 'The application does not receive KIOSK_VLAN_CIDR, so the kiosk network '
+                    .'could not be checked.',
+                'warning_open' => 'KIOSK_VLAN_CIDR allows any origin: the raised clock-in limit (600 requests per '
+                    .'minute) applies to the whole internet and the 30 per minute limit that protects from '
+                    .'outside applies to nobody.',
+                'failure_invalid' => 'KIOSK_VLAN_CIDR is not a valid IPv4 network range. The web server does not '
+                    .'start with that value, so kiosks cannot clock in against the server.',
+            ],
+            'metrics' => [
+                'ok' => 'Reading /metrics is limited to one specific network (METRICS_ALLOW_CIDR).',
+                'ok_not_provided' => 'The application does not receive METRICS_ALLOW_CIDR, so who can read '
+                    .'/metrics could not be checked.',
+                'warning_open' => 'METRICS_ALLOW_CIDR allows any origin: /metrics, which exposes the internal '
+                    .'state of the system, can be read from anywhere.',
+                'failure_invalid' => 'METRICS_ALLOW_CIDR is not a valid IPv4 network range. The web server does '
+                    .'not start with that value.',
+            ],
+        ],
+
         'tls' => [
             'probe' => $probe,
             'certificate' => [
@@ -399,6 +441,48 @@ return [
                     ."Then reload the alert routing:\n"
                     ."  docker compose up -d alertmanager\n"
                     .'If you would rather not receive alerts, switch monitoring off by leaving COMPOSE_PROFILES empty.',
+            ],
+        ],
+
+        'network' => [
+            'probe' => $probeFix,
+            'portal' => [
+                'warning_open' => "If opening it to the internet is what you want, there is nothing to fix: note it\n"
+                    ."in the installation record and review docs/cliente/endurecimiento.md (in Spanish).\n"
+                    ."If not, put the hotel network or your VPN range in the .env file and apply the change:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    .'  docker compose up -d nginx',
+                'warning_public' => "If it must only open from the hotel network, put its private range in the .env\n"
+                    ."file and apply the change:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    ."  docker compose up -d nginx\n"
+                    .'If those public addresses are the ones you want, there is nothing to fix.',
+                'warning_sample' => "Find out which IP nginx sees for an employee (docs/runbooks/portal-403.md, in\n"
+                    ."Spanish) and put its network in the .env file. Then apply the change:\n"
+                    ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Fix it in the .env file: one single range in the a.b.c.d/n format, for\n"
+                    ."example 10.20.0.0/16 (a single address is written with /32, and IPv6 is not accepted).\n"
+                    ."Then apply the change:\n"
+                    .'  docker compose up -d nginx',
+            ],
+            'kiosk_vlan' => [
+                'warning_open' => "Put only the tablets' network in the .env file and apply the change:\n"
+                    ."  KIOSK_VLAN_CIDR=10.0.20.0/24\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Fix it in the .env file: one single range in the a.b.c.d/n format, for\n"
+                    ."example 10.0.20.0/24 (a single address is written with /32, and IPv6 is not accepted).\n"
+                    ."Then apply the change:\n"
+                    .'  docker compose up -d nginx',
+            ],
+            'metrics' => [
+                'warning_open' => "Put only the Prometheus network in the .env file (default 172.29.0.20/32) and\n"
+                    ."apply the change:\n"
+                    ."  METRICS_ALLOW_CIDR=172.29.0.20/32\n"
+                    .'  docker compose up -d nginx',
+                'failure_invalid' => "Fix it in the .env file: one single range in the a.b.c.d/n format, for\n"
+                    ."example 172.29.0.20/32. Then apply the change:\n"
+                    .'  docker compose up -d nginx',
             ],
         ],
 
