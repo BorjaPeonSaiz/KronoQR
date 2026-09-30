@@ -89,6 +89,12 @@ readonly KQ_CERT_WARN_DAYS=30
 
 readonly KQ_COMPOSE_PROJECT="kronoqr"
 
+# Redis en bucle de reinicio (R0): al menos este numero de reinicios Y menos de
+# estos segundos encendido. Un contenedor que reinicio tres veces el mes pasado
+# y lleva semanas estable NO esta en bucle: el contador no se pone a cero solo.
+readonly KQ_REDIS_LOOP_MIN_RESTARTS=3
+readonly KQ_REDIS_LOOP_UPTIME_SECONDS=120
+
 #------------------------------------------------------------------------------
 # Estado
 #------------------------------------------------------------------------------
@@ -270,6 +276,7 @@ run_delegated_doctor() {
   # fallo tambien cuenta para el codigo de salida.
   check_backup_role
   check_edge_networks
+  check_redis_restart_loop
   say ""
 
   # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
@@ -322,6 +329,7 @@ run_external_checks() {
   check_env_permissions
   check_backup_role
   check_edge_networks
+  check_redis_restart_loop
   check_disk_space
   check_certificates
   check_listening_ports
@@ -416,6 +424,57 @@ check_backup_role() {
 # pie, que es cuando mas falta hace: con un CIDR invalido, nginx no arranca.
 check_edge_networks() {
   check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE}"
+}
+
+# R0. Un corte de luz puede dejar el AOF de Redis con una escritura a medias y
+# Redis entra en bucle de reinicio («Bad file format reading the append only
+# file»). Es traicionero porque el fichaje NO se cae (CH1: los quioscos encolan
+# y /scan responde) y el sintoma aparece lejos: el panel y el portal no dejan
+# entrar (las sesiones viven en Redis), las colas se paran y `/ready` da 503.
+# `docker compose ps` solo diria «restarting» y nada sobre como salir de ahi.
+check_redis_restart_loop() {
+  local container info status restarts started started_epoch uptime logs loop=0
+
+  container="$(compose_current ps -a -q redis 2>/dev/null || true)"
+  container="${container%%$'\n'*}"
+  [ -n "${container}" ] || return 0
+
+  info="$(docker inspect -f '{{.State.Status}}|{{.RestartCount}}|{{.State.StartedAt}}' "${container}" 2>/dev/null || true)"
+  [ -n "${info}" ] || return 0
+  IFS='|' read -r status restarts started <<<"${info}"
+  [[ "${restarts}" =~ ^[0-9]+$ ]] || restarts=0
+
+  case "${status}" in
+  restarting) loop=1 ;;
+  running)
+    # Docker da `2026-09-30T13:05:27.123456789Z`. Sin fracciones ni la `T`, que es
+    # lo que entienden tanto `date` de GNU como el de BusyBox.
+    started="${started%%.*}"
+    started="${started%Z}"
+    started="${started/T/ }"
+    started_epoch="$(date -u -d "${started}" +%s 2>/dev/null || true)"
+    if [[ "${started_epoch}" =~ ^[0-9]+$ ]]; then
+      uptime=$(($(date +%s) - started_epoch))
+      if [ "${restarts}" -ge "${KQ_REDIS_LOOP_MIN_RESTARTS}" ] && [ "${uptime}" -lt "${KQ_REDIS_LOOP_UPTIME_SECONDS}" ]; then
+        loop=1
+      fi
+    fi
+    ;;
+  esac
+
+  if [ "${loop}" -eq 0 ]; then
+    check_pass "$(kq_format d_c_redis_stable "${status}" "${restarts}")"
+    return 0
+  fi
+
+  # Sin tuberia: `grep -q` sobre una tuberia con pipefail da falsos «no».
+  logs="$(compose_current logs --no-color --tail 50 redis 2>&1 || true)"
+  if grep -qiE 'append only file|appendonly' <<<"${logs}"; then
+    check_fail "$(kq_format d_c_redis_loop "${restarts}")" \
+      "$(kq_format d_f_redis_loop_aof "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+  else
+    check_fail "$(kq_format d_c_redis_loop "${restarts}")" "$(kq_format d_f_redis_loop_other "${CURRENT_COMPOSE}")"
+  fi
 }
 
 # Proporcion de espacio libre, no GiB absolutos (ver el comentario de los

@@ -112,6 +112,15 @@ KQ_MSG_ES[d_w_port_not_listening]="nada escucha en el puerto %s. Es lo esperable
 KQ_MSG_ES[d_c_port_unknown]="Puerto %s: no se ha podido comprobar"
 KQ_MSG_ES[d_w_port_unknown]="este servidor no tiene 'ss' ni 'netstat', y tampoco se ha podido abrir una conexion de prueba al puerto %s. Compruebalo a mano."
 
+KQ_MSG_ES[d_c_redis_stable]="Redis: %s, %s reinicio(s) desde que se creo el contenedor"
+KQ_MSG_ES[d_c_redis_loop]="Redis se esta reiniciando en bucle (%s reinicios)"
+KQ_MSG_ES[d_f_redis_loop_aof]="el registro de Redis dice que su fichero AOF esta danado, lo habitual tras un corte de luz. Con Redis caido el fichaje NO se para —los quioscos encolan y /scan sigue respondiendo—, pero caen el acceso al panel y al portal (las sesiones viven en Redis), las colas de trabajos y el tiempo real, y /ready responde 503. Reparalo asi; solo se pierde la ultima escritura corrupta del fichero:
+  docker compose -f %s stop redis
+  echo y | docker compose -f %s run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
+  docker compose -f %s up -d redis
+Despues repite ./doctor.sh. El procedimiento completo esta en docs/runbooks/errores-en-el-panel.md."
+KQ_MSG_ES[d_f_redis_loop_other]="Redis no se mantiene en pie y su registro no apunta al fichero AOF. Mira por que: docker compose -f %s logs --tail 50 redis. Las causas habituales son disco lleno o falta de memoria; si el registro habla de 'append only file', sigue docs/runbooks/errores-en-el-panel.md. Con Redis caido el fichaje no se para, pero caen el panel, el portal, las colas y el tiempo real."
+
 KQ_MSG_ES[d_summary_fail]="Diagnostico externo: %s comprobaciones, %s fallo(s), %s aviso(s)."
 KQ_MSG_ES[d_summary_ok]="Diagnostico externo: %s comprobaciones, sin fallos, %s aviso(s)."
 KQ_MSG_ES[d_how_to_start]="Como arrancar la aplicacion:
@@ -200,6 +209,15 @@ KQ_MSG_EN[d_c_port_not_listening]="Port %s: nothing is listening"
 KQ_MSG_EN[d_w_port_not_listening]="nothing is listening on port %s. Expected while the application is down: start it with 'docker compose -f %s up -d' and run this diagnostic again."
 KQ_MSG_EN[d_c_port_unknown]="Port %s: could not check"
 KQ_MSG_EN[d_w_port_unknown]="this server has neither 'ss' nor 'netstat', and a test connection to port %s could not be opened either. Check it by hand."
+
+KQ_MSG_EN[d_c_redis_stable]="Redis: %s, %s restart(s) since the container was created"
+KQ_MSG_EN[d_c_redis_loop]="Redis is restarting in a loop (%s restarts)"
+KQ_MSG_EN[d_f_redis_loop_aof]="the Redis log says its AOF file is damaged, which is usual after a power cut. With Redis down clocking-in does NOT stop —kiosks queue and /scan keeps answering—, but panel and portal sign-in (sessions live in Redis), job queues and real time go down, and /ready answers 503. Repair it like this; only the last corrupt write of the file is lost:
+  docker compose -f %s stop redis
+  echo y | docker compose -f %s run --rm -T --no-deps --entrypoint redis-check-aof redis --fix /data/appendonlydir/appendonly.aof.manifest
+  docker compose -f %s up -d redis
+Then run ./doctor.sh again. The full procedure is in docs/runbooks/errores-en-el-panel.md (in Spanish)."
+KQ_MSG_EN[d_f_redis_loop_other]="Redis does not stay up and its log does not point at the AOF file. Find out why: docker compose -f %s logs --tail 50 redis. Usual causes are a full disk or lack of memory; if the log mentions 'append only file', follow docs/runbooks/errores-en-el-panel.md (in Spanish). With Redis down clocking-in does not stop, but the panel, the portal, the queues and real time do."
 
 KQ_MSG_EN[d_summary_fail]="External diagnostic: %s checks, %s failure(s), %s warning(s)."
 KQ_MSG_EN[d_summary_ok]="External diagnostic: %s checks, no failures, %s warning(s)."
