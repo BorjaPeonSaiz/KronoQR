@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\ValueObject;
 
 use App\Modules\Attendance\Domain\Policy\CredentialPatternPolicy;
+use App\Modules\Attendance\Domain\Policy\PinAttemptRecoveryPolicy;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRule;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 
@@ -107,6 +108,19 @@ enum AnomalyType: string
     case ANOMALOUS_PATTERN = 'anomalous_pattern';
 
     /**
+     * RN-19: **un fichaje por PIN que no quedo registrado**. Alguien tecleo en el
+     * quiosco el codigo de esta persona —que puede fichar— y el PIN no verifico
+     * (erroneo, no emitido o bloqueo activo de RS-12), y ningun fichaje suyo lo
+     * subsano en {@see PinAttemptRecoveryPolicy::RECOVERY_WINDOW_SECONDS}.
+     *
+     * Se detecta leyendo hacia atras `scan_events.claimed_employee_id` (ADR-043),
+     * sin evento ni proceso nuevos, y como `OUT_OF_ORDER_SCAN` **no tiene tramo**
+     * que señalar: una por persona y jornada. La cierra una persona —correccion
+     * RN-13 si trabajo, descarte si no—; nada automatico.
+     */
+    case REJECTED_PIN_SCAN = 'rejected_pin_scan';
+
+    /**
      * La regla del **perfil de cumplimiento** cuyo umbral gobierna este hallazgo,
      * o `null` si el umbral que lo decide es operativo y no legal.
      *
@@ -131,6 +145,9 @@ enum AnomalyType: string
      * clase: RN-18 es **estructural** (doc 01 §4, como RN-01 y RN-02) y no se
      * configura. Suspenderla equivaldria a decidir que un fichaje real de alguien
      * no se revisa.
+     *
+     * `REJECTED_PIN_SCAN` tambien: la ventana de subsanacion de RN-19 es
+     * estructural (doc 01 §4, nota «Sobre RN-19»).
      */
     public function complianceRule(): ?ComplianceRule
     {
@@ -139,7 +156,7 @@ enum AnomalyType: string
             self::LONG_SHIFT => ComplianceRule::MaximumDailyWorkingTime,
             self::MISSING_BREAK => ComplianceRule::BreakInContinuousShift,
             self::OPEN_SHIFT_EXPIRED, self::SHORT_SHIFT, self::CLOCK_SKEW,
-            self::OUT_OF_ORDER_SCAN, self::ANOMALOUS_PATTERN => null,
+            self::OUT_OF_ORDER_SCAN, self::ANOMALOUS_PATTERN, self::REJECTED_PIN_SCAN => null,
         };
     }
 

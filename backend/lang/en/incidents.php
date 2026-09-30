@@ -22,6 +22,7 @@ return [
         'missing_clock_out' => 'Missing clock-out',
         'anomalous_pattern' => 'Anomalous credential usage pattern',
         'out_of_order_scan' => 'Clocking that does not match the record',
+        'rejected_pin_scan' => 'PIN clocking not recorded',
     ],
 
     'severities' => [

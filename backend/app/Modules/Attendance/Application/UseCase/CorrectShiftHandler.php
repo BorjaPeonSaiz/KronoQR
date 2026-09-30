@@ -11,7 +11,9 @@ use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Application\Support\Corrections;
+use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
@@ -89,6 +91,7 @@ final readonly class CorrectShiftHandler
 
     /**
      * @throws ShiftEntryNotFound el tramo no existe o ya no es vigente
+     * @throws ShiftMarkInFuture la entrada o la salida resultantes son posteriores a la hora del servidor mas el margen (F1)
      */
     public function handle(CorrectShiftCommand $command): CorrectedShift
     {
@@ -109,6 +112,16 @@ final readonly class CorrectShiftHandler
             throw ShiftEntryNotFound::withUuid($command->shiftEntryUuid);
         }
 
+        $times = $this->timesFor($command, $workDay);
+        $settings = $this->settings->forSite($workDay->siteId());
+
+        // F1: tampoco se corrige hacia el futuro. Se mira el tramo RESULTANTE y
+        // no solo lo que trae la orden: es el que queda en el registro. La
+        // jornada no se comprueba porque una correccion no puede moverla
+        // (`CorrectionWouldChangeWorkDate`, ADR-035).
+        ManualEntryHorizon::at($performedAt, $settings->manualEntryFutureToleranceMinutes)
+            ->assertTimesAllowed($times);
+
         $corrected = $workDay->correctEntry(
             $command->shiftEntryUuid,
             // UUID v7, como el del fichaje: cada version es una fila nueva y
@@ -116,13 +129,13 @@ final readonly class CorrectShiftHandler
             // identificador propio. Lo genera el caso de uso porque lleva la
             // hora dentro y el dominio no pregunta la hora (regla dura 2).
             Str::uuid7()->toString(),
-            $this->timesFor($command, $workDay),
+            $times,
             // La marca que cambia pasa a `manual_admin`; la que no, conserva su
             // origen. Ese reparto lo hace el tramo al crear su version
             // siguiente, dentro del agregado.
             ScanOrigin::MANUAL_ADMIN,
             Correction::by($command->performedByUserId, $performedAt, $command->reason),
-            ClockingPolicies::forSettings($this->settings->forSite($workDay->siteId())),
+            ClockingPolicies::forSettings($settings),
         );
 
         $this->workDays->save($workDay);

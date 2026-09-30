@@ -378,6 +378,8 @@ return [
                 'clock_skew_seconds' => 'Difference between the tablet clock and the server clock. A large skew raises an incident but **never rejects the clock-in**.',
                 'flagged_for_review' => 'Whether it was flagged for human review.',
                 'client_meta' => 'What the tablet reported about itself at that moment, as JSON.',
+                'claimed_employee_uuid' => 'On a rejected PIN clocking, the person the typed code belonged to, if they could clock (RN-19). It does not mean that person clocked or authenticated.',
+                'pin_lockout' => 'On that same row, whether the attempt opened or hit the PIN lockout.',
             ],
         ],
 

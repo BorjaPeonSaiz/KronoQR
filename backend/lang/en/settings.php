@@ -80,6 +80,7 @@ return [
         'KIOSK_UPDATE_QUIET_MINUTES' => 'minutes without scans before updating the tablet',
         /* The impact dashboard baseline (RF-IN-08, task 3.13). */
         'BASELINE_MANUAL_HOURS_PER_MONTH' => 'hours per month consolidating timesheets before the system was installed',
+        'ATTENDANCE_FUTURE_TOLERANCE_MINUTES' => 'future margin for manual entries and corrections (minutes)',
     ],
 
 ];

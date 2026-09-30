@@ -38,7 +38,7 @@ tests:
                 servicio). Las rutas attendance.scan, attendance.scan.batch y
                 attendance.scan.pin estan devolviendo 429 por encima de lo
                 que produce un uso legitimo (el limite por dispositivo es
-                120/min de serie). Nadie se ha quedado sin fichar: RN-19
+                120/min de serie). Nadie se ha quedado sin fichar: la regla dura 19
                 encola y confirma localmente en el quiosco. Esta serie mide
                 SOLO la capa de aplicacion (no hay exportador de Nginx en
                 esta pila todavia): un 429 rechazado por limit_req antes de

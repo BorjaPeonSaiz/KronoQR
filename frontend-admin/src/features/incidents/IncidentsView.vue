@@ -40,6 +40,9 @@ const TYPES: readonly IncidentType[] = [
   // RN-18 «Fichaje irreconciliable»: la pasada nocturna abre esta incidencia
   // leyendo `scan_events.result`, sin evento ni listener nuevos.
   'out_of_order_scan',
+  // RN-19 «Fichaje por PIN no registrado»: la pasada nocturna la abre leyendo
+  // `scan_events.claimed_employee_id` si nadie subsano el intento.
+  'rejected_pin_scan',
 ]
 const SEVERITIES: readonly IncidentSeverity[] = ['high', 'medium', 'low']
 

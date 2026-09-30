@@ -1119,7 +1119,8 @@
       "clock_skew": "Clock skew",
       "missing_clock_out": "Missing clock-out",
       "anomalous_pattern": "Anomalous credential usage pattern",
-      "out_of_order_scan": "Out-of-order clocking"
+      "out_of_order_scan": "Out-of-order clocking",
+      "rejected_pin_scan": "PIN clocking not recorded"
     },
     "outcomes": {
       "resolved": "Resolved",
@@ -1173,12 +1174,17 @@
       "pair": "{metric} {value} of {threshold}",
       "metric": "{metric}: {value}",
       "raw": "{key}: {value}",
+      "seconds": "{seconds} s",
+      "maxSyncDelay": "longest delay reaching the server: {duration}",
+      "clockAhead": "kiosk clock ahead by: {duration}",
       "metrics": {
         "rest_minutes": "rest",
         "worked_minutes": "worked",
         "occurred_at": "clock time",
         "scan_id": "scan ID",
         "scans": "out-of-order scans",
+        "attempts": "unrecorded PIN attempts",
+        "lockout_attempts": "of which with the PIN locked",
         "device_name": "kiosk",
         "first_coincidence_at": "first coincidence",
         "last_coincidence_at": "last coincidence",
@@ -1455,6 +1461,7 @@
       "minTransitSeconds": "Minimum transit between kiosks (s)",
       "patternWindowSeconds": "Coincidence window between two people (s)",
       "patternMinRepeats": "Days of coincidence before an incident",
+      "futureToleranceMinutes": "Future margin for manual entries (min)",
       "kioskServiceCode": "Kiosk service code",
       "breakClocking": "Break clocking",
       "weeklySummaryEmail": "Weekly summary by email",
@@ -1477,6 +1484,7 @@
       "minTransitSeconds": "The minimum believable time to walk from one kiosk to another. Below it, an incident is opened. Set it to 0 if two tablets sit at the same door. Accepted range: {minimum}–{maximum} seconds.",
       "patternWindowSeconds": "Seconds below which two consecutive clock events by two different people at the same kiosk count as a coincidence; 0 disables it. Accepted range: {minimum}–{maximum} seconds.",
       "patternMinRepeats": "Distinct days with a coincidence between the same two people before an incident is opened. Accepted range: {minimum}–{maximum} days.",
+      "futureToleranceMinutes": "How many minutes ahead of the server clock manual entries and corrections of a shift entry may go. Beyond that they are rejected: the record notes what has already happened. It does not affect the kiosk. Accepted range: {minimum}–{maximum} minutes.",
       "kioskServiceCode": "It opens the tablet's diagnostics screen. Empty: the screen opens with no code. Digits only, 8 to 12.",
       "kioskServiceCodeRedacted": "Not visible with this kind of access: someone signing in as support cannot see or change the service code.",
       "breakClocking": "Enabled: the tablet shows the «Break» button and, from the next nightly review, a continuous stretch with no break (RN-12) starts opening incidents and counting in the compliance view. Disabled: the button disappears from the tablet and RN-12 is suspended again, without closing any incident already open.",

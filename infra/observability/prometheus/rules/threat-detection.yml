@@ -48,7 +48,7 @@ groups:
       # del sistema: el límite por dispositivo de `scan` es 120/min de serie
       # (`config/kiosk.php` → `rate_limits.scan_per_device`), así que un
       # quiosco sano no se acerca ni de lejos a generar 429 en operación
-      # normal — RN-19 protege al empleado (encola y confirma localmente) pero
+      # normal — la regla dura 19 protege al empleado (encola y confirma localmente) pero
       # un 429 sostenido significa que ALGO está insistiendo por encima de lo
       # que un uso legítimo produce. El valor vive en este fichero, editable
       # por la instalación (regla dura 13: nada específico de un cliente en el
@@ -71,7 +71,7 @@ groups:
             servicio). Las rutas attendance.scan, attendance.scan.batch y
             attendance.scan.pin estan devolviendo 429 por encima de lo que
             produce un uso legitimo (el limite por dispositivo es 120/min de
-            serie). Nadie se ha quedado sin fichar: RN-19 encola y confirma
+            serie). Nadie se ha quedado sin fichar: la regla dura 19 encola y confirma
             localmente en el quiosco. Esta serie mide SOLO la capa de
             aplicacion (no hay exportador de Nginx en esta pila todavia): un
             429 rechazado por limit_req antes de llegar a PHP-FPM no esta

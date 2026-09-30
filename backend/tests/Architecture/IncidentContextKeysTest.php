@@ -75,6 +75,17 @@ function incidentContextCatalogue(): array
             'occurred_at' => ['type' => 'string', 'maxLength' => 64],
             'scans' => $minutos,
         ],
+        // RN-19 (ADR-043). Las dos cadenas son las mismas que en RN-18: con que
+        // encontrar el primer intento en el log. Los tres enteros son recuentos
+        // y un retraso con signo. **Ni el codigo de empleado ni el PIN**: la
+        // persona es la de la incidencia.
+        'REJECTED_PIN_SCAN' => [
+            'scan_id' => ['type' => 'string', 'maxLength' => 64],
+            'occurred_at' => ['type' => 'string', 'maxLength' => 64],
+            'attempts' => $minutos,
+            'lockout_attempts' => $minutos,
+            'max_sync_delay_seconds' => $minutos,
+        ],
         // RF-PR-06 y RN-16 (tarea 3.11). Un solo tipo de incidencia con DOS
         // formas, que `pattern` distingue, asi que esta entrada es la union de
         // las dos. Las cadenas son de tres clases y ninguna identifica a nadie:

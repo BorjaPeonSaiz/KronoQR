@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Domain\ValueObject\SystemRestoreReason;
+use App\Modules\Compliance\Domain\ValueObject\SystemUpdateStep;
 use Tests\Architecture\Support\AlertRules;
 use Tests\Architecture\Support\Repo;
 
@@ -786,3 +788,32 @@ it('PostgreSQL acota el WAL que puede retener un slot de replicacion y una alert
     expect($nombres)->toContain('SlotDeReplicacionParado');
     expect(backupFile('infra/scripts/backup.sh'))->toContain('kronoqr_backup_replication_slots_inactive');
 })->group('RF-PR-04', 'RNF-D-01');
+
+it('solo escribe desde los scripts pasos y motivos que el dominio admite', function (): void {
+    // La deriva de PR1: `restore.sh` escribia `failed_step=manual_restore` y
+    // `reason=manual_restore` y el dominio los rechazaba, asi que TODA
+    // restauracion manual salia con 6 «asiento pendiente». Cada literal
+    // `failed_step=`/`reason=` de los dos scripts tiene que ser un caso de su
+    // enum; los que llevan `${...}` se resuelven en ejecucion y los cubre
+    // `UpdateScriptTest`.
+    $literals = ['failed_step' => [], 'reason' => []];
+
+    foreach (['infra/scripts/restore.sh', 'infra/scripts/update.sh'] as $script) {
+        preg_match_all('/"(failed_step|reason)=([a-z_]+)"/', backupFile($script), $matches, PREG_SET_ORDER);
+
+        foreach ($matches as [, $field, $value]) {
+            $literals[$field][] = $value;
+        }
+    }
+
+    expect($literals['failed_step'])->toContain('manual_restore')
+        ->and($literals['reason'])->toContain('manual_restore');
+
+    foreach ($literals['failed_step'] as $step) {
+        expect(SystemUpdateStep::tryFrom($step))->not->toBeNull('failed_step='.$step.' no es un SystemUpdateStep');
+    }
+
+    foreach ($literals['reason'] as $reason) {
+        expect(SystemRestoreReason::tryFrom($reason))->not->toBeNull('reason='.$reason.' no es un SystemRestoreReason');
+    }
+})->group('RL-04', 'RF-PD-10');

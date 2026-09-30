@@ -72,6 +72,33 @@ describe('describeIncidentContext', () => {
     ])
   })
 
+  it('RN-19: el contexto de rejected_pin_scan pinta recuentos y el retraso como duracion', () => {
+    const lines = describeWithZone({
+      scan_id: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91',
+      occurred_at: '2026-03-14T07:02:00.000000Z',
+      attempts: 4,
+      lockout_attempts: 2,
+      max_sync_delay_seconds: 7260,
+    })
+
+    expect(lines).toEqual([
+      { key: 'occurred_at', text: 'hora del fichaje: 14/3/26, 8:02' },
+      { key: 'scan_id', text: 'identificador del escaneo: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91' },
+      { key: 'attempts', text: 'intentos por PIN sin registrar: 4' },
+      { key: 'lockout_attempts', text: 'de ellos, con el PIN bloqueado: 2' },
+      { key: 'max_sync_delay_seconds', text: 'mayor retraso hasta llegar al servidor: 2 h 01 min' },
+    ])
+  })
+
+  it('RN-19: un retraso negativo es un reloj adelantado, y bajo el minuto va en segundos', () => {
+    expect(describeWithZone({ max_sync_delay_seconds: -90 })).toEqual([
+      { key: 'max_sync_delay_seconds', text: 'reloj del quiosco adelantado: 0 h 01 min' },
+    ])
+    expect(describeWithZone({ max_sync_delay_seconds: 42 })).toEqual([
+      { key: 'max_sync_delay_seconds', text: 'mayor retraso hasta llegar al servidor: 42 s' },
+    ])
+  })
+
   // RF-PR-06, RN-16 (tarea 3.11): los dos patrones anomalos de uso de
   // credencial que distingue `context.pattern`. `kiosk_coincidence` no lleva
   // una lista de ocurrencias -`IncidentContext` no admite objetos ni listas,

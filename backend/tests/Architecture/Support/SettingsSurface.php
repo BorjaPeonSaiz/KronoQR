@@ -104,6 +104,9 @@ final class SettingsSurface
         // al poner el sistema en marcha, y tenerlo al alcance de quien mira el
         // cuadro cada mes invitaria a ajustarlo hasta que la mejora salga bien.
         'BASELINE_MANUAL_HOURS_PER_MONTH' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        // El margen de futuro del alta y la correccion manuales (F1). Con los
+        // demas umbrales de fichaje: es uno mas de la misma familia.
+        'ATTENDANCE_FUTURE_TOLERANCE_MINUTES' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
     ];
 
     /** La pantalla pactada para una clave, o cadena vacia si nadie la ha decidido. */

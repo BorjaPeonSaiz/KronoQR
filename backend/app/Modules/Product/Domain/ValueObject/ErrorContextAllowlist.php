@@ -118,6 +118,8 @@ final readonly class ErrorContextAllowlist
         'silence_ms',
         'skew_seconds',
         'durable',
+        // Quiosco: el canal de la fila de cola descartada (`pin` o `qr`), sin dato alguno del fichaje (PIN-08).
+        'kind',
         // Quiosco, cola offline y padron: cuantas cosas habia en juego.
         'entries',
         'items',

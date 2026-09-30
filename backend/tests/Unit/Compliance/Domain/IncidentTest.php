@@ -59,6 +59,40 @@ it('reparte la severidad por lo que se rompe si nadie lo mira', function (Incide
     'reloj desviado' => [IncidentType::ClockSkew, IncidentSeverity::Low],
 ])->group('RF-PR-01', 'RN-18');
 
+it('decide la severidad de cada tipo del catalogo, sin ninguno por omision', function (): void {
+    // `defaultSeverity()` tiene un grupo por omision (`medium`) para no pasar del
+    // tope de complejidad. Esta prueba es la que impide que un tipo nuevo caiga
+    // ahi sin que nadie lo decida: exige una fila por caso del enum.
+    $expected = [
+        'open_shift_expired' => IncidentSeverity::Medium,
+        'short_shift' => IncidentSeverity::Low,
+        'long_shift' => IncidentSeverity::Medium,
+        'missing_break' => IncidentSeverity::Medium,
+        'insufficient_rest' => IncidentSeverity::High,
+        'clock_skew' => IncidentSeverity::Low,
+        'missing_clock_out' => IncidentSeverity::Medium,
+        'anomalous_pattern' => IncidentSeverity::High,
+        'out_of_order_scan' => IncidentSeverity::Medium,
+        'rejected_pin_scan' => IncidentSeverity::Medium,
+    ];
+
+    $actual = [];
+
+    foreach (IncidentType::cases() as $type) {
+        $actual[$type->value] = $type->defaultSeverity();
+    }
+
+    expect($actual)->toBe($expected);
+})->group('RF-PR-01', 'RN-19');
+
+it('abre el fichaje por PIN no registrado como media y lo traduce desde la deteccion', function (): void {
+    // RN-19: registro posiblemente incompleto que se corrige con traza, el
+    // mismo criterio que `out_of_order_scan`.
+    expect(IncidentType::RejectedPinScan->defaultSeverity())->toBe(IncidentSeverity::Medium)
+        ->and(IncidentType::fromDetected('rejected_pin_scan'))->toBe(IncidentType::RejectedPinScan)
+        ->and(IncidentType::fromDetected(AnomalyType::REJECTED_PIN_SCAN->value))->toBe(IncidentType::RejectedPinScan);
+})->group('RN-19', 'RF-PR-01');
+
 it('traduce cada tipo que la deteccion puede emitir', function (AnomalyType $detected): void {
     // Los dos catalogos viven en modulos que no pueden importarse entre si
     // (doc 02 §1.6), asi que la unica forma de que no diverjan es esta prueba.

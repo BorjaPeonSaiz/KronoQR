@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Infrastructure\Console;
 
 use App\Modules\Identity\Application\Command\IssueCredentialCommand as IssueCredential;
 use App\Modules\Identity\Application\UseCase\IssueCredential as IssueCredentialHandler;
+use App\Modules\Identity\Domain\Exception\CredentialHolderIsOffboarded;
 use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Exception\IdentityDomainException;
 use Illuminate\Console\Command;
@@ -61,6 +62,10 @@ final class IssueCredentialCommand extends Command
         } catch (EmployeeAlreadyHasCredential $exception) {
             $this->error($exception->getMessage());
             $this->line('Usa --reissue --reason="motivo" para sustituirla.');
+
+            return self::FAILURE;
+        } catch (CredentialHolderIsOffboarded) {
+            $this->error(__('credentials.errors.holder_offboarded'));
 
             return self::FAILURE;
         } catch (IdentityDomainException $exception) {

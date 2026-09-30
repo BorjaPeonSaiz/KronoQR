@@ -11,6 +11,7 @@ use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
 use App\Modules\Workforce\Domain\Model\Employee;
+use Illuminate\Database\ConnectionInterface;
 
 /**
  * Modificacion de la ficha de un empleado (RF-GP-01).
@@ -21,8 +22,14 @@ use App\Modules\Workforce\Domain\Model\Employee;
  * sin fecha.
  *
  * Publica que campos cambiaron, **no sus valores**: la lista basta para que la
- * auditoria diga que se toco, y los valores anterior y nuevo son de `audit_log`,
- * que es donde tienen amparo legal y control de acceso (regla dura 21).
+ * auditoria diga que se toco (`employee.updated`, AUD-2) sin que el nombre, el
+ * correo o la adscripcion de una persona acaben copiados en ningun sitio mas
+ * (regla dura 21).
+ *
+ * **En una transaccion con el evento dentro** (AUD-2): el listener sincrono de
+ * `Compliance` escribe el asiento, y si falla la modificacion no se confirma
+ * (ADR-027). Dentro de una importacion la transaccion es anidada: un punto de
+ * guardado dentro de la del lote.
  */
 final readonly class UpdateEmployeeHandler
 {
@@ -30,9 +37,15 @@ final readonly class UpdateEmployeeHandler
         private EmployeeRepository $employees,
         private WorkforceEventPublisher $events,
         private Clock $clock,
+        private ConnectionInterface $connection,
     ) {}
 
     public function handle(UpdateEmployeeCommand $command): ?Employee
+    {
+        return $this->connection->transaction(fn (): ?Employee => $this->update($command));
+    }
+
+    private function update(UpdateEmployeeCommand $command): ?Employee
     {
         $current = $this->employees->findByUuid($command->uuid);
 
@@ -79,6 +92,10 @@ final readonly class UpdateEmployeeHandler
     {
         $changed = [];
 
+        // EL PUNTO DE EXTENSION DEL ASIENTO `employee.updated` (AUD-2). Un campo
+        // editable nuevo de la ficha —el teletrabajo del bloque 9, por ejemplo—
+        // entra aqui con su nombre de columna y queda trazado sin tocar el
+        // evento ni el listener de `Compliance`: el asiento lleva esta lista.
         $comparisons = [
             'first_name' => [$before->firstName, $after->firstName],
             'last_name' => [$before->lastName, $after->lastName],

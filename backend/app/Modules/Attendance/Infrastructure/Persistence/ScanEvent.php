@@ -36,6 +36,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $clock_skew_seconds
  * @property bool $flagged_for_review
  * @property int|null $worked_minutes
+ * @property int|null $claimed_employee_id
+ * @property bool|null $pin_lockout
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
  */
@@ -63,6 +65,8 @@ final class ScanEvent extends Model
         'clock_skew_seconds',
         'flagged_for_review',
         'worked_minutes',
+        'claimed_employee_id',
+        'pin_lockout',
     ];
 
     /**
@@ -75,6 +79,7 @@ final class ScanEvent extends Model
             'recorded_at' => 'immutable_datetime',
             'client_meta' => 'array',
             'flagged_for_review' => 'boolean',
+            'pin_lockout' => 'boolean',
         ];
     }
 }

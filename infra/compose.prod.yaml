@@ -300,9 +300,10 @@ x-runtime-env: &runtime-env
   QR_SIGNING_KEY_PREVIOUS:
   QR_SIGNING_KEY_PREVIOUS_ID:
   QR_SIZE_MM:
-  # Reglas de jornada, ausencias y cumplimiento (tambien las 23 SettingKey que lee $_ENV)
+  # Reglas de jornada, ausencias y cumplimiento (tambien las 24 SettingKey que lee $_ENV)
   ATTENDANCE_BREAK_CLOCKING:
   ATTENDANCE_DEBOUNCE_SECONDS:
+  ATTENDANCE_FUTURE_TOLERANCE_MINUTES:
   ATTENDANCE_MAX_CLOCK_SKEW_MINUTES:
   ATTENDANCE_MAX_SHIFT_HOURS:
   ATTENDANCE_MIN_TRANSIT_SECONDS:
@@ -801,9 +802,19 @@ services:
       # copias y escribe aqui su informe.
       - ${BACKUP_PATH:-/var/backups/fichaje}:${BACKUP_PATH:-/var/backups/fichaje}
     environment:
+      # Arranque de artisan para el asiento de auditoria de la restauracion (PR1):
+      # restore.sh escribe `system.restored_from_backup` con el rol de migracion
+      # que este servicio YA tiene (PGUSER/PGPASSWORD, mas abajo); estas variables
+      # no son credenciales de base de datos nuevas. Son las mismas que `migrate`.
+      APP_NAME:
       APP_ENV:
+      APP_DEBUG:
+      APP_KEY:
+      APP_TIMEZONE:
       LOG_CHANNEL:
+      LOG_STACK:
       LOG_LEVEL:
+      DB_SSLMODE:
       # restore.sh y restore-drill.sh --mode database toman PGUSER/PGPASSWORD
       # antes que BACKUP_DB_* (lib/backup-common.sh): restaurar exige CREATEDB y
       # renombrar bases, cosa que el rol de copia (solo lectura) no puede.

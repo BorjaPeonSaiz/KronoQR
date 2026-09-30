@@ -246,8 +246,11 @@ export interface paths {
          *     `urn:kronoqr:problem:scan-rejected`— y consume el mismo tiempo, ya sea porque el
          *     codigo de empleado no existe, porque el PIN no es correcto, porque el sobre no
          *     abre, porque el empleado no esta activo o porque **el bloqueo por intentos esta
-         *     activo** (RS-12). La causa concreta solo existe en `scan_events.result` y en el
-         *     log del servidor.
+         *     activo** (RS-12). **La causa no sale del servidor**: `scan_events.result` es
+         *     `rejected_unknown` en los cinco casos y el apunte del log tampoco los separa. Si
+         *     el codigo es de una persona que puede fichar, la fila de `scan_events` anota a
+         *     quien correspondia para la revision de RN-19 (ADR-043), y eso **nunca cambia la
+         *     respuesta ni su tiempo**: la misma sentencia escribe la fila con y sin dueño.
          *
          *     La garantia de **tiempo constante** cubre esas cinco, que son las que hablan
          *     de la credencial. El rechazo de RN-18 —un fichaje que no puede cuadrar con el
@@ -260,9 +263,11 @@ export interface paths {
          *     origen** —el contador del quiosco y el del portal son distintos, para que sondear
          *     una puerta no cierre la otra—, y el contador se reinicia tras 24 h sin fallos.
          *     Restablecer el PIN desbloquea inmediatamente (RF-ID-09). Los umbrales son
-         *     configuracion de la instalacion. **Un bloqueo activo no deja a nadie sin fichar**:
-         *     la tarjeta sigue funcionando, y esta via es la alternativa a la tarjeta, no al
-         *     reves.
+         *     configuracion de la instalacion. **Un bloqueo activo, o un PIN encolado que se
+         *     rechaza al sincronizar, no se pierde en silencio**: si nadie lo subsana con un
+         *     fichaje de esa persona en los 10 minutos siguientes, la revision diaria abre una
+         *     incidencia `rejected_pin_scan` para el responsable (RN-19). La respuesta de este
+         *     endpoint no cambia por ello.
          */
         post: operations["recordPinScan"];
         delete?: never;
@@ -1215,8 +1220,13 @@ export interface paths {
          *     conserva cuatro años (RL-02) y una inspeccion puede pedir el de alguien
          *     que ya no trabaja en el hotel.
          *
-         *     A partir de la baja, el empleado no ficha (RN-14) y su credencial queda
-         *     revocada.
+         *     A partir de la baja, el empleado no ficha (RN-14) y **todas** sus
+         *     credenciales activas —la tarjeta en uso y la reemision pendiente de
+         *     imprimir, si la hay— quedan revocadas en la misma transaccion, cada una
+         *     con su asiento `credential.revoked` y el motivo «Baja del empleado
+         *     (RN-14)». Sus sesiones abiertas del portal se cierran. Un escaneo
+         *     posterior de su tarjeta recibe el mismo rechazo generico que un codigo
+         *     inexistente (regla dura 17).
          */
         post: operations["offboardEmployee"];
         delete?: never;
@@ -1777,6 +1787,10 @@ export interface paths {
          *     `reason`, y entonces la anterior se revoca y la nueva se emite en la
          *     misma transaccion. Ese es el primer paso del flujo de tarjeta perdida:
          *     revocar y reemitir aqui, imprimir despues.
+         *
+         *     **Nunca a una persona de baja** (RN-14). La baja revoca sus tarjetas
+         *     (`/employees/{uuid}/offboard`), y emitirle o reemitirle otra devuelve
+         *     `409` sin tocar nada: ni se crea la nueva ni se revoca ninguna.
          */
         post: operations["issueCredential"];
         delete?: never;
@@ -2149,6 +2163,14 @@ export interface paths {
          *     porque derivarla de la fecha civil de la entrada mandaria la vuelta de
          *     una pausa de madrugada al dia siguiente y partiria el turno de noche
          *     (RN-05, ADR-006, ADR-024).
+         *
+         *     **Nada en el futuro** (F1, RL-01, RL-04). `work_date`, `clocked_in_at` y
+         *     `clocked_out_at` no pueden ser posteriores al momento del servidor mas
+         *     el margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` (5 min de serie, que
+         *     cubre el redondeo al minuto del formulario y la deriva del reloj del
+         *     navegador). Un registro horario anota lo que ya ha ocurrido: rellenar la
+         *     jornada teorica por adelantado o cerrar un turno con la salida
+         *     «prevista» da `422` con el error colgado del campo.
          */
         post: operations["addShiftEntry"];
         delete?: never;
@@ -2207,6 +2229,12 @@ export interface paths {
          *     rechaza con `422`** (ADR-035, RN-05): mover horas de un dia a otro son dos
          *     actos separados y auditados —anular en origen, dar de alta en destino—, no
          *     un efecto lateral de un `PATCH`.
+         *
+         *     **Tampoco se corrige hacia el futuro** (F1, RL-01, RL-04): la entrada o la
+         *     salida resultantes no pueden ser posteriores al momento del servidor mas
+         *     el margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`. Cerrar un turno abierto
+         *     con la hora a la que «va a salir» da `422` con el error en
+         *     `clocked_out_at`.
          */
         patch: operations["correctShiftEntry"];
         trace?: never;
@@ -6582,9 +6610,21 @@ export interface components {
          *     objetivo de −80 % del §1.3 y **vacio** si no se declaro: es honesto no
          *     inventar un porcentaje de mejora. Impacto `presentation`: no mueve ni un
          *     minuto del registro.
+         *
+         *     `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` (F1, RL-01, RL-04) es el **margen
+         *     sobre la hora del servidor** que admiten el alta manual y la correccion
+         *     de un tramo (`POST /api/v1/shift-entries` y `PATCH
+         *     /api/v1/shift-entries/{uuid}`): de 0 a 60 minutos, 5 de serie. Una marca
+         *     o una jornada posteriores a ese limite son `422`, porque un registro
+         *     horario anota lo que ya ha ocurrido. El margen existe por el redondeo al
+         *     minuto del formulario y por la deriva del reloj del navegador; no es un
+         *     umbral legal (no esta en el perfil de cumplimiento) sino operativo.
+         *     **No toca el fichaje del quiosco**, que nunca se rechaza por la hora
+         *     (regla dura 19; su desfase lo gobierna `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`).
+         *     Impacto `worked_hours`: decide que minutos se pueden anotar a mano.
          * @enum {string}
          */
-        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW" | "WEEKLY_SUMMARY_EMAIL" | "KIOSK_UPDATE_WINDOW" | "KIOSK_UPDATE_QUIET_MINUTES" | "BASELINE_MANUAL_HOURS_PER_MONTH";
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW" | "WEEKLY_SUMMARY_EMAIL" | "KIOSK_UPDATE_WINDOW" | "KIOSK_UPDATE_QUIET_MINUTES" | "BASELINE_MANUAL_HOURS_PER_MONTH" | "ATTENDANCE_FUTURE_TOLERANCE_MINUTES";
         /**
          * SettingValue
          * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
@@ -8173,6 +8213,17 @@ export interface components {
          *       que tramo describe. Una por empleado y jornada: dice «revisa esta
          *       jornada», no «revisa este escaneo», y por eso llega sin
          *       `shift_entry_uuid`.
+         *     - `rejected_pin_scan`: **fichaje por PIN no registrado** (RN-19). Alguien
+         *       intento fichar en el quiosco con el codigo de esta persona y el PIN no
+         *       verifico —PIN erroneo, no emitido o bloqueo activo (RS-12), a menudo
+         *       encolado sin red y rechazado al sincronizar— y **ningun fichaje suyo lo
+         *       subsano** en los 10 minutos siguientes. La abre la revision diaria; una
+         *       por persona y jornada (la del primer intento sin subsanar, en la zona
+         *       del centro) y **sin `shift_entry_uuid`**: no hay tramo. El `context`
+         *       lleva `scan_id` y `occurred_at` del primer intento, `attempts`,
+         *       `lockout_attempts` y `max_sync_delay_seconds` (con signo). El instante
+         *       del intento **no es una hora registrada**: la cierra una persona, con
+         *       una correccion (RN-13) si trabajo o descartandola si no.
          *
          *     **Ampliar este enum es aditivo** (ADR-012): un cliente que no conozca un
          *     valor lo enseña tal cual en la bandeja, y ninguna respuesta cambia de
@@ -8180,7 +8231,7 @@ export interface components {
          * @example insufficient_rest
          * @enum {string}
          */
-        IncidentType: "open_shift_expired" | "short_shift" | "long_shift" | "missing_break" | "insufficient_rest" | "clock_skew" | "missing_clock_out" | "anomalous_pattern" | "out_of_order_scan";
+        IncidentType: "open_shift_expired" | "short_shift" | "long_shift" | "missing_break" | "insufficient_rest" | "clock_skew" | "missing_clock_out" | "anomalous_pattern" | "out_of_order_scan" | "rejected_pin_scan";
         /**
          * IncidentSeverity
          * @description Con que urgencia entra en la bandeja (`incidents.severity`).
@@ -8323,6 +8374,14 @@ export interface components {
          *     el panel con su directorio y **nunca** entra en el contexto, que se
          *     exporta entero (RL-11) y no se entrega en una solicitud del art. 15
          *     ajena a esa persona.
+         *
+         *     La incidencia `rejected_pin_scan` (RN-19) lleva `scan_id` y
+         *     `occurred_at` del primer intento por PIN sin subsanar de la jornada,
+         *     `attempts` (intentos sin subsanar), `lockout_attempts` (cuantos de ellos
+         *     abrieron o encontraron el bloqueo de RS-12) y `max_sync_delay_seconds`
+         *     (el mayor `recorded_at − occurred_at`, con signo: una cola que drena
+         *     tarde da positivo, un reloj adelantado negativo). **Ni el codigo de
+         *     empleado ni el PIN**: la persona es la de la incidencia.
          * @example {
          *       "rest_minutes": 420,
          *       "threshold_minutes": 720
@@ -8331,6 +8390,13 @@ export interface components {
          *       "scan_id": "0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90",
          *       "occurred_at": "2026-03-14T13:50:00Z",
          *       "scans": 2
+         *     }
+         * @example {
+         *       "scan_id": "0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91",
+         *       "occurred_at": "2026-03-14T05:58:12Z",
+         *       "attempts": 4,
+         *       "lockout_attempts": 2,
+         *       "max_sync_delay_seconds": 7260
          *     }
          * @example {
          *       "pattern": "kiosk_coincidence",
@@ -13746,8 +13812,10 @@ export interface operations {
              *
              *     **`type` distingue las dos causas:**
              *
-             *     - `urn:kronoqr:problem:validation-failed` — un campo falta, no vale o
-             *       referencia algo que no existe.
+             *     - `urn:kronoqr:problem:validation-failed` — un campo falta, no vale,
+             *       referencia algo que no existe, o la jornada o alguna de las dos
+             *       marcas es **futura** (F1): mas alla del momento del servidor mas el
+             *       margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`.
              *     - `urn:kronoqr:problem:correction-would-change-work-date` — la hora de
              *       entrada llevaria la jornada a **otro dia civil** (RN-05, ADR-035).
              *       Es `422` y no `409` porque no hay nada que releer: mover horas de un
@@ -13835,7 +13903,10 @@ export interface operations {
              *     **`type` distingue las dos causas:**
              *
              *     - `urn:kronoqr:problem:validation-failed` — un campo falta o no vale,
-             *       la salida es anterior a la entrada, o el `PATCH` no cambia nada.
+             *       la salida es anterior a la entrada, el `PATCH` no cambia nada, o la
+             *       entrada o la salida resultantes son **futuras** (F1): mas alla del
+             *       momento del servidor mas el margen
+             *       `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`.
              *     - `urn:kronoqr:problem:correction-would-change-work-date` — mover la
              *       entrada que abre la jornada al otro lado de la medianoche local
              *       llevaria esas horas a **otra jornada** (RN-05, ADR-035). Es `422` y
