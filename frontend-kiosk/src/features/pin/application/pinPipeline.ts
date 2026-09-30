@@ -101,8 +101,9 @@ export interface PinPipelineOptions {
 export interface PinPipeline {
   /**
    * @returns la confirmacion a pintar. Nunca lanza: un sellado que falla se
-   *          convierte en el mismo rechazo generico que cualquier otra causa
-   *          (regla dura 17), nunca en una pantalla rota delante de una cola.
+   *          convierte en `unavailable` («PIN no disponible», PIN-03), un
+   *          fallo tecnico local que NO es un rechazo del servidor, y nunca en
+   *          una pantalla rota delante de una cola.
    *
    *          Con red: si el servidor contesta dentro de `PIN_VERIFY_GRACE_MS`
    *          con un desenlace real, ESE es el que se devuelve (un unico
@@ -216,7 +217,11 @@ export function createPinPipeline(options: PinPipelineOptions): PinPipeline {
         // este codigo esta dispuesto a arriesgar.
         const reason = error instanceof Error ? error.name : 'unknown'
         options.onError?.('seal_failed', { reason, message: reason })
-        return { kind: 'rejected', scanId, occurredAt }
+        // PIN-03: un fallo tecnico LOCAL no es un rechazo. «Codigo no valido,
+        // intentalo de nuevo» culpaba al empleado de algo que reintentar no
+        // arregla. No se ha encolado nada, asi que tampoco «pendiente»: se le
+        // dice que esta via no esta disponible y que use la tarjeta o avise.
+        return { kind: 'unavailable', scanId, occurredAt }
       }
 
       // Se consume tras sellar, ya con un PIN que de verdad va a encolarse

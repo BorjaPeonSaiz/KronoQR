@@ -316,3 +316,42 @@ test(
     await expectTouchTargets(page.getByTestId('pin-step-pin').getByRole('button'))
   },
 )
+
+test(
+  'si el navegador no puede arrancar WebAssembly, el quiosco no ofrece el PIN ni lo disfraza de «codigo no valido» (PIN-03)',
+  { tag: ['@RF-AT-11', '@RF-KI-06'] },
+  async ({ page }) => {
+    // La CSP de una instalacion mal configurada, o un WebView sin WASM: libsodium
+    // no arranca y `crypto_box_seal` no existe.
+    await page.addInitScript(() => {
+      const blocked = (): Promise<never> => Promise.reject(new Error('wasm blocked'))
+      Object.defineProperty(WebAssembly, 'instantiate', { value: blocked, configurable: true })
+      Object.defineProperty(WebAssembly, 'compile', { value: blocked, configurable: true })
+      Object.defineProperty(WebAssembly, 'instantiateStreaming', {
+        value: blocked,
+        configurable: true,
+      })
+    })
+    await stubKioskApiWithPin(page)
+
+    await page.goto('/')
+
+    // La tarjeta sigue ahi (es la via principal) y el PIN NO se ofrece.
+    await expect(page.getByTestId('scan-idle')).toBeVisible()
+    await expect(page.getByTestId('pin-entry-link')).toHaveCount(0)
+    await expect(page.getByTestId('pin-entry-link-fallback')).toHaveCount(0)
+
+    // Quien llega directo a /pin (recarga, marcador) lo ve dicho con claridad,
+    // antes de teclear nada.
+    await page.goto('/pin')
+    await expect(page.getByTestId('pin-unavailable')).toBeVisible()
+    await expect(page.getByTestId('pin-unavailable')).toContainText('recepción')
+    await expect(page.getByTestId('pin-step-code')).toHaveCount(0)
+
+    // Y de vuelta a la tarjeta, con el padron ya cargado y el estado ya sabido,
+    // el boton sigue sin existir (la ausencia de arriba no era solo prisa).
+    await page.getByTestId('pin-back-to-card').click()
+    await expect(page.getByTestId('scan-idle')).toBeVisible()
+    await expect(page.getByTestId('pin-entry-link')).toHaveCount(0)
+  },
+)

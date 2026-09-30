@@ -94,4 +94,10 @@ describe('feedback diferenciado', () => {
     expect(CONFIRMATION_DISPLAY_MS.rejected).toBeGreaterThan(CONFIRMATION_DISPLAY_MS.accepted)
     expect(CONFIRMATION_DISPLAY_MS.unreadable).toBeGreaterThan(CONFIRMATION_DISPLAY_MS.accepted)
   })
+
+  it('«PIN no disponible» suena y se ve como error, y se queda lo bastante para leerlo (PIN-03)', () => {
+    expect(toneFor(confirmation({ kind: 'unavailable' }))).toBe('error')
+    expect(variantFor(confirmation({ kind: 'unavailable' }))).toBe('error')
+    expect(CONFIRMATION_DISPLAY_MS.unavailable).toBeGreaterThan(CONFIRMATION_DISPLAY_MS.rejected)
+  })
 })

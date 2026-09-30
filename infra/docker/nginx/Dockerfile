@@ -64,6 +64,11 @@ COPY packages/ ./packages/
 COPY frontend-admin/ ./frontend-admin/
 COPY frontend-kiosk/ ./frontend-kiosk/
 COPY frontend-portal/ ./frontend-portal/
+# `app_version` del latido del quiosco sale de aqui (DC8): `frontend-kiosk/
+# vite.config.ts` lee `../VERSION` y el build de produccion se niega a seguir sin
+# el. Va despues de `npm ci` y de los COPY de las SPA para que subir la version
+# no invalide la capa de dependencias.
+COPY VERSION ./VERSION
 
 # KRONOQR_BASE es lo que hace que cada SPA cuelgue de su prefijo: lo leen los
 # tres vite.config.ts y de ahi sale `import.meta.env.BASE_URL`, que es lo que

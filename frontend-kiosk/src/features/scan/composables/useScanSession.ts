@@ -98,7 +98,8 @@ export function useScanSession(options: UseScanSessionOptions): ScanSession {
       // inconfundible de error (`TONES.error`, doc 01 §6.5) antes de irse, y
       // esta es la UNICA vez que puede sonar, porque el rechazo nunca sono
       // antes -opcion B de la revision de `ui-ux`-.
-      const isRejection = next.kind === 'rejected' || next.kind === 'unreadable'
+      const isRejection =
+        next.kind === 'rejected' || next.kind === 'unreadable' || next.kind === 'unavailable'
       show(next, isRejection)
     },
 

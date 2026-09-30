@@ -61,8 +61,11 @@ export interface ScanQueue {
   /** Espejo en memoria. Sincrono: lo consume el indicador de pantalla. */
   stats(): QueueStats
   /**
-   * Toma hasta `limit` elementos elegibles, ordenados por `occurred_at`, y los
-   * arrienda para que un segundo drenaje no los envie a la vez.
+   * Toma hasta `limit` elementos, ordenados por `occurred_at`, y los arrienda
+   * para que un segundo drenaje no los envie a la vez. Es un PREFIJO de la cola
+   * ordenada: se detiene en la primera fila cuyo reintento esta en el futuro
+   * (salvo `ignoreSchedule`), para que nada posterior adelante a una fila
+   * atascada (G1).
    */
   claim(limit: number, options?: { readonly ignoreSchedule?: boolean }): Promise<QueuedScanRecord[]>
   /**
@@ -125,11 +128,14 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       const count = await store.count()
       const ordered = orderForSync(rows)
       const oldest = ordered[0]
-      const schedules = ordered.map((row) => row.next_attempt_at)
       const next: QueueStats = {
         size: count,
         oldestOccurredAt: oldest?.occurred_at ?? null,
-        nextAttemptAt: schedules.length === 0 ? null : Math.min(...schedules),
+        // G1: como `claim()` para en la primera fila con espera, el momento en
+        // que la cola puede avanzar es el de la CABEZA, no el minimo de todas:
+        // con el minimo, una fila nueva (espera 0) detras de una atascada
+        // despertaria el drenaje a cada tic sin que `claim()` pudiera tomar nada.
+        nextAttemptAt: oldest?.next_attempt_at ?? null,
         durable: store.durable,
       }
       publish(next)
@@ -194,12 +200,20 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
         return []
       }
 
-      const eligible = orderForSync(rows).filter(
-        (row) =>
-          !leased.has(row.scan_id) &&
-          (claimOptions.ignoreSchedule === true || row.next_attempt_at <= nowMs),
-      )
-      const claimed = eligible.slice(0, limit)
+      // G1: el PREFIJO de la cola ordenada, no un filtro. Una fila que espera su
+      // reintento (`next_attempt_at` futuro) detiene la lectura: lo que viene
+      // detras —un escaneo nuevo, con `occurred_at` posterior— no puede
+      // adelantarla, porque una salida de las 16:00 que llega antes que la
+      // entrada de las 08:00 invierte el turno. Solo `ignoreSchedule` («vuelve
+      // la red», «arranque») salta la espera, y entonces sale TODO en orden.
+      // Las filas en vuelo (arrendadas) se saltan: las tiene otro envio.
+      const claimed: QueuedScanRecord[] = []
+      for (const row of orderForSync(rows)) {
+        if (claimed.length >= limit) break
+        if (leased.has(row.scan_id)) continue
+        if (claimOptions.ignoreSchedule !== true && row.next_attempt_at > nowMs) break
+        claimed.push(row)
+      }
       for (const row of claimed) leased.add(row.scan_id)
       return claimed
     },

@@ -74,6 +74,10 @@
   },
   "pin": {
     "entryButton": "Clock in with your code and PIN",
+    "unavailable": {
+      "title": "PIN not available",
+      "body": "This kiosk cannot clock you in with a PIN right now. Use your card or tell reception."
+    },
     "title": "Clock in with code and PIN",
     "backToCard": "Back to card",
     "code": {

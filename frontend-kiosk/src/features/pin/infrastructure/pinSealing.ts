@@ -37,22 +37,55 @@
 // `undefined` en marcha: haria que ESTE fichero jamas sellara nada.
 import sodium from 'libsodium-wrappers'
 
-let readyPromise: Promise<typeof sodium> | null = null
-
-function whenReady(): Promise<typeof sodium> {
-  readyPromise ??= sodium.ready.then(() => sodium)
-  return readyPromise
-}
-
-/** Se llama al montar la pantalla de PIN, para que `sealPin` no espere a WASM. */
-export function warmUpSealing(): void {
-  void whenReady()
-}
-
 export class PinSealingError extends Error {
   constructor(cause: string) {
     super(`pin_sealing_failed: ${cause}`)
     this.name = 'PinSealingError'
+  }
+}
+
+let readyPromise: Promise<typeof sodium> | null = null
+
+/**
+ * Solo se cachea el EXITO. Un fallo (WebAssembly bloqueado por la CSP, modulo
+ * que no llega a cargar) no se recuerda: con la promesa rechazada cacheada, el
+ * quiosco quedaba sin poder sellar hasta la siguiente recarga aunque la causa
+ * fuese pasajera, y cada fichaje por PIN se enseñaba como «codigo no valido»
+ * (PIN-03).
+ */
+function whenReady(): Promise<typeof sodium> {
+  if (readyPromise !== null) return readyPromise
+  const attempt = sodium.ready.then(() => {
+    // Con el modulo «listo» pero sin la primitiva (paquete mal empaquetado,
+    // ver el comentario de la importacion) sellar fallaria siempre: mejor
+    // saberlo aqui, donde se puede ocultar el boton, que al sexto digito.
+    if (typeof sodium.crypto_box_seal !== 'function') {
+      throw new PinSealingError('primitive_missing')
+    }
+    return sodium
+  })
+  readyPromise = attempt
+  attempt.catch(() => {
+    if (readyPromise === attempt) readyPromise = null
+  })
+  return attempt
+}
+
+/** `ready`: se puede sellar. `unavailable`: ahora mismo no, y NO se recuerda (se reintenta). */
+export type SealingStatus = 'ready' | 'unavailable'
+
+/**
+ * Se llama al montar las pantallas del quiosco, para que `sealPin` no espere a
+ * WASM y para saber SI se podra sellar antes de ofrecer la via del PIN. Nunca
+ * lanza. Devolver un estado es lo que permite a la pantalla ocultar el boton
+ * en vez de ofrecer un teclado que fallaria al sexto digito.
+ */
+export async function warmUpSealing(): Promise<SealingStatus> {
+  try {
+    await whenReady()
+    return 'ready'
+  } catch {
+    return 'unavailable'
   }
 }
 
@@ -66,7 +99,12 @@ export class PinSealingError extends Error {
  * @returns El sobre cerrado, en base64 estandar (`pin_sealed`).
  */
 export async function sealPin(pin: string, publicKeyBase64: string): Promise<string> {
-  const libsodium = await whenReady()
+  let libsodium: typeof sodium
+  try {
+    libsodium = await whenReady()
+  } catch (error) {
+    throw error instanceof PinSealingError ? error : new PinSealingError('not_ready')
+  }
 
   let publicKey: Uint8Array
   try {

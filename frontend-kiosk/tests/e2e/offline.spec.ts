@@ -21,6 +21,7 @@ import {
   readQueue,
   seedQueue,
   stubBatchApi,
+  stubFlakyBatchApi,
   stubHeartbeatQueueCapture,
 } from './support/offlineQueue'
 
@@ -324,5 +325,83 @@ test(
     await expect.poll(() => batch.calls.length).toBeGreaterThan(0)
     const sent = batch.calls[0]?.scans.find((item) => item.scan_id === queued[0]?.scan_id)
     expect(sent?.intent).toBe('break_start')
+  },
+)
+
+test(
+  'el peor escenario: 40 encolados, red intermitente y reconexion, sin perdidas, sin duplicados y en orden (G1, G2, G3)',
+  { tag: ['@RF-KI-03', '@RF-KI-04', '@RF-AT-07', '@RQ-05'] },
+  async ({ page }) => {
+    test.setTimeout(90_000)
+    const SEEDED = 39
+
+    await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
+    // Al volver: se corta, cae a mitad de lote, se vuelve a cortar y, por fin, responde.
+    const batch = await stubFlakyBatchApi(page, ['abort', 'partial', 'abort'])
+    // La camara decodifica DESPUES de sembrar, y con el quiosco ya sin red.
+    await delayCameraStart(page, 1_500)
+
+    // Sin red a la manera del navegador: `navigator.onLine` en `false`, que es lo
+    // que leen el cliente HTTP y el drenaje. No se usa `setOffline` de Playwright
+    // porque tambien cortaria la carga diferida del decodificador de QR, que en
+    // la tablet real ya esta precacheada por el service worker.
+    await page.addInitScript(() => {
+      let online = false
+      Object.defineProperty(navigator, 'onLine', { get: () => online, configurable: true })
+      ;(window as unknown as { __setOnline: (value: boolean) => void }).__setOnline = (value) => {
+        online = value
+      }
+    })
+
+    await page.goto('/')
+    await expect.poll(() => queueStoreReady(page)).toBe(true)
+
+    // Treinta y nueve fichajes antiguos en espera de reintento (como los deja un
+    // fallo previo) mas el que lee la camara, que es el MAS RECIENTE (G1).
+    const stuckUntil = Date.now() + 3_600_000
+    await seedQueue(
+      page,
+      Array.from({ length: SEEDED }, (_, index) => ({
+        scan_id: `0199f400-0000-7000-8000-${String(index).padStart(12, '0')}`,
+        occurred_at: new Date(Date.UTC(2026, 7, 14, 5, index, 0)).toISOString(),
+        qr_payload: FIXTURE_PAYLOAD,
+        next_attempt_at: stuckUntil,
+      })),
+    )
+    await expect.poll(async () => (await readQueue(page)).length).toBeGreaterThanOrEqual(SEEDED + 1)
+
+    // G2: sin red no se hace ni una peticion, ni se gira en vacio buscandola.
+    // eslint-disable-next-line no-restricted-syntax -- se prueba una AUSENCIA (ninguna peticion durante una ventana): no hay condicion observable que esperar, y una espera corta solo haria pasar la prueba por error
+    await page.waitForTimeout(3_000)
+    expect(batch.attempts).toBe(0)
+
+    const queuedBefore = await readQueue(page)
+    const occurredAtOf = new Map(queuedBefore.map((row) => [row.scan_id, row.occurred_at]))
+    expect(queuedBefore.length).toBeGreaterThanOrEqual(SEEDED + 1)
+
+    // Vuelve la red. Del WiFi intermitente se encarga el doble.
+    await page.evaluate(() =>
+      (window as unknown as { __setOnline: (value: boolean) => void }).__setOnline(true),
+    )
+    await announceOnline(page)
+
+    await expect.poll(async () => (await readQueue(page)).length, { timeout: 60_000 }).toBe(0)
+
+    // Hubo cortes de verdad: la sincronizacion no fue un camino feliz.
+    expect(batch.attempts).toBeGreaterThanOrEqual(4)
+
+    // Nada se perdio: los 40 (o mas, si la camara leyo de nuevo) fueron aceptados...
+    for (const scanId of occurredAtOf.keys()) expect(batch.accepted).toContain(scanId)
+    // ...ni se duplico: un `200` por `scan_id`, por mucho que el lote se repitiera.
+    expect(new Set(batch.accepted).size).toBe(batch.accepted.length)
+
+    // Y en orden: lo aceptado sale cronologico, asi que la salida nueva nunca
+    // adelanto a una entrada atascada (G1) y cada lote viajo ya ordenado.
+    const acceptedAt = batch.accepted.map((scanId) => occurredAtOf.get(scanId) ?? '')
+    expect(acceptedAt).toEqual([...acceptedAt].sort())
+    for (const call of batch.answered) {
+      const times = call.scan_ids.map((scanId) => occurredAtOf.get(scanId) ?? '9999')
+      expect(times).toEqual([...times].sort())
+    }
   },
 )

@@ -214,3 +214,35 @@ export const kioskPairs: readonly ThemePair[] = [
 ]
 
 export const themePairs: readonly ThemePair[] = [...lightPairs, ...kioskPairs]
+
+/** Blanco del texto de confirmacion del quiosco (`text-white` de Tailwind). */
+export const KIOSK_CONFIRMATION_FOREGROUND = '#ffffff'
+
+/**
+ * Los cinco fondos de confirmacion del quiosco (entrada, salida, pendiente,
+ * aviso, error). Son semanticos, no marca, y viven en `@theme` de
+ * `frontend-kiosk/src/assets/main.css` como `--color-kiosk-*` (no son `--kq-*`
+ * ni se sobreescriben con la marca blanca). El texto es siempre blanco. Como
+ * se leen de lejos y el mensaje es >= 24 px, el minimo es el de texto normal
+ * (4.5:1) por prudencia, no el de texto grande.
+ *
+ * `tests/unit/kioskConfirmation.spec.ts` lee `main.css` y mide cada pareja; un
+ * color de confirmacion nuevo sin pareja aqui, o por debajo del minimo, falla.
+ */
+export const kioskConfirmationPairs: readonly ThemePair[] = [
+  pair(KIOSK_CONFIRMATION_FOREGROUND, '--color-kiosk-entry', 'text', 'white on entry confirmation'),
+  pair(KIOSK_CONFIRMATION_FOREGROUND, '--color-kiosk-exit', 'text', 'white on exit confirmation'),
+  pair(
+    KIOSK_CONFIRMATION_FOREGROUND,
+    '--color-kiosk-pending',
+    'text',
+    'white on pending confirmation',
+  ),
+  pair(
+    KIOSK_CONFIRMATION_FOREGROUND,
+    '--color-kiosk-notice',
+    'text',
+    'white on notice confirmation',
+  ),
+  pair(KIOSK_CONFIRMATION_FOREGROUND, '--color-kiosk-error', 'text', 'white on error confirmation'),
+]

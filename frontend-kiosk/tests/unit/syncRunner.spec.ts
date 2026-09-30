@@ -742,3 +742,447 @@ describe('fichaje de respaldo por PIN (tarea 1.12, RF-AT-11)', () => {
     expect(bench.queue.stats().size).toBe(0)
   })
 })
+
+// PIN-08. Un 400/422 del servidor es el desenlace de ESE fichaje: se descarta
+// con diagnostico y la cola sigue. Antes se reintentaba para siempre y, como el
+// drenaje respeta el orden, un solo elemento envenenado paraba todo lo demas.
+describe('PIN-08 — un 400 es terminal (RF-KI-04, RF-AT-07)', () => {
+  const INVALID: ApiResult<ScanOk> = { outcome: 'failed', cause: 'invalid', httpStatus: 400 }
+  const POISONED = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+  const GOOD = '0199f13a-7c22-7b41-9e88-0c4d5e6f7a81'
+
+  it('un PIN envenenado se descarta con diagnostico y el siguiente SI se envia', async () => {
+    const bench = harness({
+      onPin: (scanId) => (scanId === POISONED ? INVALID : accepted200(scanId)),
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(pinScan(POISONED, '2026-08-14T08:00:00.000Z'))
+    await bench.queue.enqueue(pinScan(GOOD, '2026-08-14T16:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(bench.pinCalls).toEqual([POISONED, GOOD])
+    expect(bench.queue.stats().size).toBe(0)
+    expect(bench.diagnostics).toContain('sync.item_invalid')
+  })
+
+  it('un lote QR rechazado por mal formado se reenvia de uno en uno y solo cae el envenenado', async () => {
+    const bench = harness({
+      onBatch: () => INVALID as unknown as ApiResult<ScanBatchResponse>,
+      onSingle: (scanId) => (scanId === POISONED ? INVALID : accepted200(scanId)),
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(scan(POISONED, '2026-08-14T08:00:00.000Z'))
+    await bench.queue.enqueue(scan(GOOD, '2026-08-14T16:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    // En orden de `occurred_at` y por el endpoint individual.
+    expect(bench.singles).toEqual([POISONED, GOOD])
+    expect(bench.queue.stats().size).toBe(0)
+    expect(bench.diagnostics).toEqual(['sync.item_invalid'])
+  })
+
+  it('el diagnostico no lleva ni `scan_id` ni payload (regla dura 21)', async () => {
+    const contexts: Record<string, string | number>[] = []
+    const bench = harness({ onPin: () => INVALID })
+    const runner = createSyncRunner({
+      api: bench.api,
+      queue: bench.queue,
+      clock: CLOCK,
+      isOnline: () => true,
+      onDiagnostic: (_code, context) => contexts.push(context),
+      setTimer: () => 0,
+      clearTimer: () => undefined,
+    })
+
+    await bench.queue.enqueue(pinScan(POISONED, '2026-08-14T08:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(JSON.stringify(contexts)).not.toContain(POISONED)
+    expect(JSON.stringify(contexts)).not.toContain('E7QK2MXPR')
+    expect(contexts[0]).toMatchObject({ http_status: 400, kind: 'pin' })
+  })
+
+  it('en el camino rapido, un 400 saca el fichaje de la cola y se enseña como rechazado', async () => {
+    const bench = harness({ onSingle: () => INVALID })
+    const runner = runnerFor(bench)
+
+    const result = await runner.submit(scan(POISONED, '2026-08-14T08:00:00.000Z'))
+
+    expect(result).toEqual({ kind: 'rejected' })
+    expect(bench.queue.stats().size).toBe(0)
+    expect(bench.diagnostics).toContain('sync.item_invalid')
+  })
+
+  it('un fallo transitorio (5xx) sigue conservando el fichaje', async () => {
+    const bench = harness({
+      onSingle: () => ({ outcome: 'failed', cause: 'server', httpStatus: 500 }),
+    })
+    const runner = runnerFor(bench)
+
+    const result = await runner.submit(scan(POISONED, '2026-08-14T08:00:00.000Z'))
+
+    expect(result).toEqual({ kind: 'deferred' })
+    expect(bench.queue.stats().size).toBe(1)
+  })
+})
+
+function accepted200(scanId: string): ApiResult<ScanOk> {
+  return { outcome: 'ok', data: accepted(scanId, '2026-08-14T08:00:00.000Z', 'clock_in') }
+}
+
+// G1 y G2. Sobre el drenaje real, no solo sobre `claim()`.
+describe('G1/G2 — el orden sobrevive a un fallo y el drenaje no gira en vacio (RF-KI-04, RQ-05)', () => {
+  const OLD = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+  const NEW = '0199f13a-7c22-7b41-9e88-0c4d5e6f7a81'
+
+  it('una entrada atascada no es adelantada por una salida nueva cuando vuelve el servidor (G1)', async () => {
+    const order: string[] = []
+    let failFirst = true
+    const bench = harness({
+      onBatch: (request) => {
+        if (failFirst) {
+          failFirst = false
+          return { outcome: 'failed', cause: 'server', httpStatus: 500 }
+        }
+        order.push(...request.scans.map((item) => item.scan_id))
+        return {
+          outcome: 'ok',
+          data: {
+            results: request.scans.map((item) => ({
+              scan_id: item.scan_id,
+              status: 200 as const,
+              outcome: accepted(item.scan_id, item.occurred_at, 'clock_in'),
+            })),
+          },
+        }
+      },
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(scan(OLD, '2026-08-14T08:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true }) // falla: la entrada queda en espera
+
+    // Llega una salida nueva y se drena SIN saltarse la espera (temporizador).
+    await bench.queue.enqueue(scan(NEW, '2026-08-14T16:00:00.000Z'))
+    await runner.drain()
+    expect(order).toEqual([])
+    expect(bench.queue.stats().size).toBe(2)
+
+    // Vuelve la red: sale todo, la entrada primero.
+    await runner.drain({ ignoreSchedule: true })
+    expect(order).toEqual([OLD, NEW])
+    expect(bench.queue.stats().size).toBe(0)
+  })
+
+  it('el relanzamiento pedido mientras se drenaba hereda `ignoreSchedule` (G1)', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let calls = 0
+    const bench = harness({
+      onBatch: () => ({ outcome: 'failed', cause: 'network' }),
+    })
+    const original = bench.api.syncScanBatch
+    bench.api.syncScanBatch = vi.fn(async (request: ScanBatchRequest, key: string) => {
+      calls += 1
+      if (calls === 1) await gate
+      return original(request, key)
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(scan(OLD, '2026-08-14T08:00:00.000Z'))
+    const first = runner.drain({ ignoreSchedule: true })
+    await vi.waitFor(() => expect(calls).toBe(1))
+    // «Vuelve la red» mientras el primer drenaje sigue en vuelo.
+    void runner.drain({ ignoreSchedule: true })
+    release?.()
+    await first
+
+    // El relanzamiento tambien se salto la espera que el primer fallo acaba de fijar.
+    await vi.waitFor(() => expect(calls).toBe(2))
+  })
+
+  it('sin red el drenaje se programa a la espera larga, no a 0 ms (G2)', async () => {
+    const delays: number[] = []
+    const bench = harness()
+    const runner = createSyncRunner({
+      api: bench.api,
+      queue: bench.queue,
+      clock: CLOCK,
+      isOnline: () => false,
+      setTimer: (_handler, delayMs) => {
+        delays.push(delayMs)
+        return 1
+      },
+      clearTimer: () => undefined,
+    })
+
+    runner.start()
+    await bench.queue.enqueue(scan(OLD, '2026-08-14T08:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(bench.api.syncScanBatch).not.toHaveBeenCalled()
+    expect(delays.length).toBeGreaterThan(0)
+    expect(Math.min(...delays)).toBeGreaterThanOrEqual(30_000)
+  })
+})
+
+// KT2 (RF-KI-03, RF-KI-04): el camino rapido de `submit()` con la cola vacia
+// (el escaneo es lo unico pendiente) ante un fallo de red o un 5xx. El
+// empleado ya fue confirmado en local: lo que se prueba es que el fichaje NO
+// se pierde, sigue en la cola con su espera, y que se programa el reintento.
+describe('KT2 — camino rapido de submit() con fallo de red o 5xx (RF-KI-03, RF-KI-04)', () => {
+  const ID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+
+  /** `start()` deja un drenaje inicial en vuelo: se espera a que termine para que `submit()` tome el camino rapido. */
+  async function started(runner: ReturnType<typeof createSyncRunner>): Promise<void> {
+    runner.start()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  function runnerWithTimers(bench: Harness, timers: number[]) {
+    return createSyncRunner({
+      api: bench.api,
+      queue: bench.queue,
+      clock: CLOCK,
+      isOnline: () => true,
+      onDiagnostic: (code) => bench.diagnostics.push(code),
+      setTimer: (_handler, delayMs) => {
+        timers.push(delayMs)
+        return 1
+      },
+      clearTimer: () => undefined,
+    })
+  }
+
+  it.each([
+    ['fallo de red', { outcome: 'failed', cause: 'network' }],
+    ['tiempo agotado', { outcome: 'failed', cause: 'timeout' }],
+    ['un 500', { outcome: 'failed', cause: 'server', httpStatus: 500 }],
+    ['un 503', { outcome: 'failed', cause: 'server', httpStatus: 503 }],
+  ] as const)(
+    '%s: se aplaza, sigue en la cola y se programa el reintento',
+    async (_name, failure) => {
+      const timers: number[] = []
+      const bench = harness({ onSingle: () => failure })
+      const runner = runnerWithTimers(bench, timers)
+      await started(runner)
+
+      const result = await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))
+
+      expect(result).toEqual({ kind: 'deferred' })
+      expect(bench.queue.stats().size).toBe(1)
+      const [row] = await bench.queue.claim(10, { ignoreSchedule: true })
+      expect(row).toMatchObject({ scan_id: ID, attempts: 1 })
+      expect(row?.next_attempt_at).toBeGreaterThan(CLOCK.now().getTime())
+      expect(timers.length).toBeGreaterThan(0)
+    },
+  )
+
+  it('un fallo de transporte se anota; quedarse sin red no (es lo normal)', async () => {
+    const network = harness({ onSingle: () => ({ outcome: 'failed', cause: 'network' }) })
+    await runnerWithTimers(network, []).submit(scan(ID, '2026-08-14T08:00:00.000Z'))
+    expect(network.diagnostics).toContain('sync.transport_failed')
+
+    const offline = harness({ onSingle: () => ({ outcome: 'failed', cause: 'offline' }) })
+    await runnerWithTimers(offline, []).submit(scan(ID, '2026-08-14T08:00:00.000Z'))
+    expect(offline.diagnostics).toEqual([])
+  })
+
+  it('el reintento reenvia el MISMO scan_id (regla dura 8) y, al confirmar, la cola queda vacia', async () => {
+    let attempt = 0
+    const bench = harness({
+      onSingle: (scanId) => {
+        attempt += 1
+        return attempt === 1
+          ? { outcome: 'failed', cause: 'server', httpStatus: 500 }
+          : { outcome: 'ok', data: accepted(scanId, '2026-08-14T08:00:00.000Z', 'clock_in') }
+      },
+    })
+    const runner = runnerWithTimers(bench, [])
+    await started(runner)
+
+    await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(bench.singles[0]).toBe(ID)
+    expect(bench.batches.flatMap((batch) => batch.scans.map((item) => item.scan_id))).toContain(ID)
+    await vi.waitFor(() => expect(bench.queue.stats().size).toBe(0))
+  })
+
+  it('un 401 cuenta para la revocacion pero NO saca el fichaje', async () => {
+    const outcomes: boolean[] = []
+    const bench = harness({ onSingle: () => ({ outcome: 'failed', cause: 'unauthorized' }) })
+    const runner = createSyncRunner({
+      api: bench.api,
+      queue: bench.queue,
+      clock: CLOCK,
+      isOnline: () => true,
+      onAuthOutcome: (unauthorized) => outcomes.push(unauthorized),
+      setTimer: () => 0,
+      clearTimer: () => undefined,
+    })
+
+    const result = await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))
+
+    expect(result).toEqual({ kind: 'deferred' })
+    expect(outcomes).toContain(true)
+    expect(bench.queue.stats().size).toBe(1)
+  })
+})
+
+// KT3 (RF-KI-03, regla dura 19): ni IndexedDB ni la memoria aceptan el
+// fichaje. No se puede prometer un reintento, asi que se intenta AHORA, por el
+// endpoint individual, aunque sea lo unico que queda.
+describe('KT3 — rescate cuando no hay donde encolar (RF-KI-03)', () => {
+  const ID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+
+  /** Cola cuyo almacen no es duradero y rechaza toda escritura: no hay respaldo al que caer. */
+  function brokenQueue(): ScanQueue {
+    return createScanQueue({
+      openStorage: () => ({
+        ...createMemoryQueueStorage(),
+        durable: false,
+        add: async () => {
+          throw new Error('quota exceeded')
+        },
+      }),
+      clock: CLOCK,
+    })
+  }
+
+  function rescueHarness(options: Parameters<typeof harness>[0] = {}) {
+    const bench = harness(options)
+    const runner = createSyncRunner({
+      api: bench.api,
+      queue: brokenQueue(),
+      clock: CLOCK,
+      isOnline: () => true,
+      onDiagnostic: (code) => bench.diagnostics.push(code),
+      setTimer: () => 0,
+      clearTimer: () => undefined,
+    })
+    return { bench, runner }
+  }
+
+  it('la cola rota de verdad no guarda nada', async () => {
+    const queue = brokenQueue()
+
+    expect(await queue.enqueue(scan(ID, '2026-08-14T08:00:00.000Z'))).toEqual({
+      stored: false,
+      durable: false,
+    })
+  })
+
+  it('un QR se envia directo a /scan y, aceptado, se confirma con lo que dijo el servidor', async () => {
+    const { bench, runner } = rescueHarness()
+
+    const result = await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))
+
+    expect(bench.singles).toEqual([ID])
+    expect(result).toMatchObject({ kind: 'accepted', response: { scan_id: ID } })
+  })
+
+  it('un PIN se envia directo a /scan/pin', async () => {
+    const { bench, runner } = rescueHarness()
+
+    const result = await runner.submit(pinScan(ID, '2026-08-14T08:00:00.000Z'))
+
+    expect(bench.pinCalls).toEqual([ID])
+    expect(bench.singles).toEqual([])
+    expect(result.kind).toBe('accepted')
+  })
+
+  it('un anti-rebote es un desenlace aceptado, no un error', async () => {
+    const { runner } = rescueHarness({
+      onSingle: (scanId) => ({
+        outcome: 'ok',
+        data: {
+          scan_id: scanId,
+          action: 'debounced',
+          employee_display_name: 'Lucia G.',
+          work_date: '2026-08-14',
+          occurred_at: '2026-08-14T08:00:00.000Z',
+          recorded_at: '2026-08-14T09:30:00.000Z',
+          worked_minutes: 10,
+          last_accepted_at: '2026-08-14T07:59:50.000Z',
+        } as unknown as ScanOk,
+      }),
+    })
+
+    const result = await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))
+
+    expect(result.kind).toBe('debounced')
+  })
+
+  it('un 422 del servidor es un rechazo', async () => {
+    const { runner } = rescueHarness({
+      onSingle: (scanId) => ({
+        outcome: 'rejected',
+        problem: {
+          type: 'urn:kronoqr:problem:scan-rejected',
+          title: 'Escaneo no valido',
+          status: 422,
+          detail: 'El escaneo no se ha podido registrar.',
+          scan_id: scanId,
+        },
+      }),
+    })
+
+    expect(await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))).toEqual({
+      kind: 'rejected',
+    })
+  })
+
+  it('un 400 del servidor (PIN-08) tambien es un rechazo, con diagnostico', async () => {
+    const { bench, runner } = rescueHarness({
+      onSingle: () => ({ outcome: 'failed', cause: 'invalid', httpStatus: 400 }),
+    })
+
+    expect(await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))).toEqual({
+      kind: 'rejected',
+    })
+    expect(bench.diagnostics).toContain('sync.item_invalid')
+  })
+
+  it('sin red tampoco hay donde guardarlo: se dice `deferred`, sin lanzar y avisando al indicador', async () => {
+    const reachability: boolean[] = []
+    const bench = harness({ onSingle: () => ({ outcome: 'failed', cause: 'network' }) })
+    const runner = createSyncRunner({
+      api: bench.api,
+      queue: brokenQueue(),
+      clock: CLOCK,
+      isOnline: () => true,
+      onReachability: (reachable) => reachability.push(reachable),
+      setTimer: () => 0,
+      clearTimer: () => undefined,
+    })
+
+    const result = await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))
+
+    expect(result).toEqual({ kind: 'deferred' })
+    expect(reachability).toContain(false)
+  })
+
+  it('un 401 en el rescate cuenta para la revocacion del dispositivo', async () => {
+    const auth: boolean[] = []
+    const bench = harness({ onSingle: () => ({ outcome: 'failed', cause: 'unauthorized' }) })
+    const runner = createSyncRunner({
+      api: bench.api,
+      queue: brokenQueue(),
+      clock: CLOCK,
+      isOnline: () => true,
+      onAuthOutcome: (unauthorized) => auth.push(unauthorized),
+      setTimer: () => 0,
+      clearTimer: () => undefined,
+    })
+
+    const result = await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))
+
+    expect(result).toEqual({ kind: 'deferred' })
+    expect(auth).toEqual([true])
+  })
+})

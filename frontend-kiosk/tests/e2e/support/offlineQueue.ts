@@ -167,10 +167,71 @@ export async function stubBatchApi(
   return recorder
 }
 
+export type FlakyStep = 'abort' | 'partial' | 'ok'
+
+export interface FlakyBatchRecorder {
+  /** Peticiones que llegaron al doble, las cortadas incluidas. */
+  attempts: number
+  /** Cada peticion que recibio respuesta, con sus `scan_id` en el orden en que viajaron. */
+  readonly answered: Array<{ readonly scan_ids: string[]; readonly step: FlakyStep }>
+  /** `scan_id` a los que se contesto `200`, en ese orden. */
+  readonly accepted: string[]
+}
+
+/**
+ * `POST /api/v1/scan/batch` con red intermitente. Cada peticion consume un paso
+ * del plan y, agotado, contesta `ok`:
+ * - `abort`: la conexion se corta (WiFi que se va), no llega ninguna respuesta;
+ * - `partial`: un `207` en el que la PRIMERA MITAD sale `200` y el resto `503`,
+ *   como un servidor que procesa en orden y se cae a mitad del lote;
+ * - `ok`: `207` con todos en `200`.
+ */
+export async function stubFlakyBatchApi(
+  page: Page,
+  plan: readonly FlakyStep[],
+): Promise<FlakyBatchRecorder> {
+  const recorder: FlakyBatchRecorder = { attempts: 0, answered: [], accepted: [] }
+  const steps = [...plan]
+
+  await page.route('**/api/v1/scan/batch', async (route: Route) => {
+    recorder.attempts += 1
+    const step = steps.shift() ?? 'ok'
+    if (step === 'abort') {
+      await route.abort('failed')
+      return
+    }
+
+    const body = route.request().postDataJSON() as {
+      scans: Array<{ scan_id: string; occurred_at: string }>
+    }
+    const acceptedCount = step === 'partial' ? Math.floor(body.scans.length / 2) : body.scans.length
+    recorder.answered.push({ scan_ids: body.scans.map((item) => item.scan_id), step })
+    await route.fulfill({
+      status: 207,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        results: body.scans.map((item, index) => {
+          const status = index < acceptedCount ? 200 : 503
+          if (status === 200) recorder.accepted.push(item.scan_id)
+          return { scan_id: item.scan_id, status, outcome: outcomeFor(status, item) }
+        }),
+      }),
+    })
+  })
+
+  return recorder
+}
+
 /** Siembra la cola antes de cargar la aplicacion, para probar un orden concreto. */
 export async function seedQueue(
   page: Page,
-  rows: ReadonlyArray<{ scan_id: string; occurred_at: string; qr_payload: string }>,
+  rows: ReadonlyArray<{
+    scan_id: string
+    occurred_at: string
+    qr_payload: string
+    /** Epoch ms del proximo intento. Por defecto `0`: elegible ya. */
+    next_attempt_at?: number
+  }>,
 ): Promise<void> {
   await page.evaluate(
     async ([databaseName, storeName, seeded]) => {
@@ -185,12 +246,12 @@ export async function seedQueue(
         const store = transaction.objectStore(storeName)
         for (const row of seeded) {
           store.put({
-            ...row,
             intent: 'auto',
             device_id: 'e2e',
             attempts: 0,
             next_attempt_at: 0,
             enqueued_at: Date.now(),
+            ...row,
           })
         }
         transaction.oncomplete = () => resolve()

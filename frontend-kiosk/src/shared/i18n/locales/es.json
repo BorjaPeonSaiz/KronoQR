@@ -74,6 +74,10 @@
   },
   "pin": {
     "entryButton": "Ficha con tu código y PIN",
+    "unavailable": {
+      "title": "PIN no disponible",
+      "body": "Este quiosco no puede fichar con PIN ahora mismo. Usa tu tarjeta o avisa a recepción."
+    },
     "title": "Fichaje con código y PIN",
     "backToCard": "Volver a la tarjeta",
     "code": {

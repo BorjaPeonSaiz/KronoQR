@@ -48,7 +48,7 @@ Pantalla de pared que se mira de lejos, con mala luz y guantes. Fondo oscuro y c
 | `on-primary` | `#241a15` | Texto sobre `primary-strong` |
 | `focus` | `#fff7ed` | Anillo de foco |
 
-**Los cinco colores de confirmación del quiosco no están aquí y no se tocan**: entrada `#064e3b`, salida `#1e3a8a`, pendiente `#312e81`, aviso `#78350f`, error `#7f1d1d`. Son semánticos, están medidos contra el blanco (todos > 9:1) y viven en `frontend-kiosk/src/assets/main.css`. No son marca: un cliente no los cambia por estética, porque el empleado aprende que verde es entrada y azul es salida.
+**Los cinco colores de confirmación del quiosco no están aquí y no se tocan**: entrada `#064e3b`, salida `#1e3a8a`, pendiente `#312e81`, aviso `#78350f`, error `#7f1d1d`. Son semánticos, están medidos contra el blanco (9,07 a 11,42:1; `kioskConfirmationPairs` en `themePairs.ts`, verificado por `kioskConfirmation.spec.ts`, que lee `main.css`) y viven en `frontend-kiosk/src/assets/main.css`. No son marca: un cliente no los cambia por estética, porque el empleado aprende que verde es entrada y azul es salida.
 
 ## 2. Contrastes medidos (WCAG 2.2 AA)
 
