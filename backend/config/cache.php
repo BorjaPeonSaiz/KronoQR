@@ -17,7 +17,38 @@ return [
     |
     */
 
-    'default' => env('CACHE_STORE', 'database'),
+    /*
+     * LA CACHE POR DEFECTO SOBREVIVE A UNA CAIDA DE REDIS (CH1, regla dura 19).
+     *
+     * `CACHE_STORE` sigue eligiendo el almacen de verdad —Redis en toda
+     * instalacion real—, pero la aplicacion no lo usa directamente: usa
+     * `resilient`, que es ese mismo almacen con el disco local detras. Si Redis
+     * no responde, cada lectura y cada escritura caen al almacen `file` en vez de
+     * lanzar la `RedisException`.
+     *
+     * Por que hace falta: la cache esta en el camino de fichaje sin que se vea.
+     * La configuracion operativa se lee a traves de ella en cada escaneo, y el
+     * contador de fallos del PIN (RS-12) vive en ella. Con el almacen directo, la
+     * verificacion de la 2.1.0 obtuvo un `500` por cada fichaje con Redis parado.
+     *
+     * Por que el disco y no la memoria: una cache `array` dura una peticion, y el
+     * contador de fallos del PIN y el de los accesos al panel dejarian de contar
+     * durante la averia. En el disco siguen contando —en esta maquina, que es la
+     * unica que atiende peticiones (ADR-017, una instalacion por cliente)—.
+     * Cuando Redis vuelve, se vuelve a leer de el: lo escrito en el disco durante
+     * la averia caduca solo, y como mucho un contador empieza de cero.
+     */
+    'default' => 'resilient',
+
+    /*
+     * EL LIMITADOR NO CAE AL DISCO: usa el almacen de verdad, sin red.
+     *
+     * Con Redis caido, `throttle` lanza, y eso es lo que se quiere en `auth`,
+     * `portal`, `setup` y gestion: fallar CERRADO donde el limitador frena la
+     * fuerza bruta de una credencial. Las tres rutas de fichaje lo capturan y
+     * fallan ABIERTO con `ThrottleScanFailOpen`, que es la unica excepcion.
+     */
+    'limiter' => env('CACHE_STORE', 'database'),
 
     /*
     |--------------------------------------------------------------------------
@@ -98,6 +129,16 @@ return [
             'stores' => [
                 'database',
                 'array',
+            ],
+        ],
+
+        // La cache por defecto: el almacen de `CACHE_STORE` con el disco local
+        // detras. Ver el comentario de `default`.
+        'resilient' => [
+            'driver' => 'failover',
+            'stores' => [
+                env('CACHE_STORE', 'database'),
+                'file',
             ],
         ],
 

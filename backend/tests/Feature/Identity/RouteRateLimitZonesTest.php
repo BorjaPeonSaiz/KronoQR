@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Attendance\Http\Middleware\ThrottleScanFailOpen;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route as Router;
@@ -89,13 +90,41 @@ function rutasConSesion(): array
  */
 function zonaDeLimiteDe(Route $route): string
 {
+    // Las tres rutas de fichaje declaran su zona con `ThrottleScanFailOpen` (CH1),
+    // que es el mismo limitador con nombre y cuenta igual para esta prueba.
+    $prefijos = ['throttle:', ThrottleScanFailOpen::class.':'];
+
     foreach ($route->gatherMiddleware() as $middleware) {
-        if (\is_string($middleware) && str_starts_with($middleware, 'throttle:')) {
-            return substr($middleware, \strlen('throttle:'));
+        foreach ($prefijos as $prefijo) {
+            if (\is_string($middleware) && str_starts_with($middleware, $prefijo)) {
+                return substr($middleware, \strlen($prefijo));
+            }
         }
     }
 
     return '';
+}
+
+/**
+ * Las rutas cuyo limitador falla ABIERTO si Redis no responde (CH1).
+ *
+ * @return list<string>
+ */
+function rutasConLimiteAbierto(): array
+{
+    $rutas = [];
+
+    foreach (Router::getRoutes()->getRoutes() as $route) {
+        foreach ($route->gatherMiddleware() as $middleware) {
+            if (\is_string($middleware) && str_starts_with($middleware, ThrottleScanFailOpen::class.':')) {
+                $rutas[] = nombreDeRuta($route);
+            }
+        }
+    }
+
+    sort($rutas);
+
+    return $rutas;
 }
 
 /**
@@ -203,6 +232,23 @@ it('exige que cada zona usada por el router tenga su limitador registrado', func
         'Zona(s) de limitacion sin `RateLimiter::for()` que las declare: '.implode(', ', $huerfanas),
     );
 })->group('RS-02', 'RS-04', 'RS-05');
+
+it('abre el limitador ante una caida de Redis solo en las tres rutas de fichaje', function (): void {
+    // CH1: fallar abierto es aceptable donde el limitador es un control
+    // secundario del fichaje (regla dura 19) y nunca donde frena la fuerza bruta
+    // de una credencial. Una ruta de `auth`, `portal` o gestion que apareciera
+    // aqui desactivaria esa defensa justo durante una averia.
+    expect(rutasConLimiteAbierto())->toBe([
+        'POST /api/v1/scan',
+        'POST /api/v1/scan/batch',
+        'POST /api/v1/scan/pin',
+    ]);
+})->group('RS-02', 'RF-AT-10');
+
+it('se niega a abrir el limitador de una zona que no sea de fichaje', function (): void {
+    expect(static fn (): string => ThrottleScanFailOpen::zone('auth'))
+        ->toThrow(InvalidArgumentException::class);
+})->group('RS-02');
 
 /*
  * ---------------------------------------------------------------------------

@@ -60,6 +60,12 @@ final class RecordWorkedMinutes implements ShouldQueue
      */
     public bool $afterCommit = true;
 
+    /**
+     * La cola que no tumba el fichaje (CH1): ver `resilient` en
+     * `config/queue.php` y el mismo campo en `BroadcastPresenceChange`.
+     */
+    public string $connection = 'resilient';
+
     public function __construct(
         private readonly WorkedTimeMetrics $metrics,
         private readonly EmployeeAttribution $attribution,
