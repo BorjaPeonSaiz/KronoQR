@@ -190,3 +190,28 @@ it('sella la exportacion del cuadro de impacto sin abrir familia nueva', functio
     // boton de descarga, y es de quien se responde.
     expect(AuditAction::AdoptionReportExported->requiresSystemActor())->toBeFalse();
 })->group('RS-07', 'RF-IN-08');
+
+it('clasifica la plantilla y los departamentos sin abrir familia nueva', function (AuditAction $action, AuditableEvent $event): void {
+    // AUD-2. La plantilla responde «¿que hizo esa cuenta con la plantilla?»,
+    // como la carga masiva; el departamento es un ambito de autoridad
+    // (RF-ID-03), como el centro. Ninguna es accion de sistema: detras hay una
+    // cuenta de gestion.
+    expect($action->event())->toBe($event)
+        ->and($action->requiresSystemActor())->toBeFalse();
+})->with([
+    'alta de empleado' => [AuditAction::EmployeeHired, AuditableEvent::PersonalDataAccess],
+    'cambio de ficha' => [AuditAction::EmployeeUpdated, AuditableEvent::PersonalDataAccess],
+    'baja de empleado' => [AuditAction::EmployeeOffboarded, AuditableEvent::PersonalDataAccess],
+    'alta de departamento' => [AuditAction::DepartmentCreated, AuditableEvent::AuthorityOrCalculationChange],
+    'cambio de departamento' => [AuditAction::DepartmentRenamed, AuditableEvent::AuthorityOrCalculationChange],
+])->group('RS-07', 'RF-GP-01', 'RF-GP-02', 'RF-GP-03');
+
+it('nombra las cinco acciones de plantilla y departamento con su valor estable', function (): void {
+    expect([
+        AuditAction::EmployeeHired->value,
+        AuditAction::EmployeeUpdated->value,
+        AuditAction::EmployeeOffboarded->value,
+        AuditAction::DepartmentCreated->value,
+        AuditAction::DepartmentRenamed->value,
+    ])->toBe(['employee.hired', 'employee.updated', 'employee.offboarded', 'department.created', 'department.renamed']);
+})->group('RS-07', 'RF-GP-01', 'RF-GP-02');

@@ -172,15 +172,51 @@ enum AuditAction: string
      * inspeccion pregunta quien movio las reglas del calculo, que es una
      * pregunta distinta.
      *
-     * **Asiento del LOTE, no de cada alta.** Cada persona creada deja ademas su
-     * propio rastro por el camino de siempre; lo que este responde es «¿quien
-     * cargo la plantilla, cuando y con que fichero?», que es lo que se pregunta
-     * cuando aparecen doce altas que nadie recuerda haber hecho.
+     * **Asiento del LOTE, no de cada alta.** Cada persona creada o modificada
+     * por la carga deja ademas su propio asiento —{@see self::EmployeeHired}
+     * con `via_import: true` o {@see self::EmployeeUpdated}—, porque el lote
+     * reutiliza el alta y la modificacion de siempre (AUD-2; antes de AUD-2
+     * este comentario lo afirmaba sin que fuera verdad, RV-4). Lo que este
+     * responde es «¿quien cargo la plantilla, cuando y con que fichero?», que es
+     * lo que se pregunta cuando aparecen doce altas que nadie recuerda haber
+     * hecho.
      *
      * El payload lleva **cifras y la huella del fichero**: ni un nombre, ni un
      * correo, ni un documento, ni el nombre del fichero (regla dura 21).
      */
     case EmployeesImported = 'employee.imported';
+
+    /**
+     * Alta, modificacion y baja de una persona de la plantilla (**RF-GP-01**,
+     * **RF-GP-03**, **RN-14**, AUD-2).
+     *
+     * Misma familia que {@see self::EmployeesImported} —«¿que hizo esa cuenta con
+     * la plantilla?»—. Un cambio de departamento cambia que responsable ve y
+     * corrige la jornada de esa persona (RF-ID-03), y una baja le retira la
+     * credencial: sin estos tres asientos, ninguno de los dos hechos tenia traza
+     * (RL-04, RS-05).
+     *
+     * **El payload lleva `employee_uuid` y la lista de CAMPOS tocados, nunca
+     * sus valores** (regla dura 21): ni nombre, ni correo, ni documento, ni el
+     * motivo libre de la baja. `employee.hired` añade `site_id`,
+     * `department_id` —identificadores de la organizacion, no de la persona— y
+     * `via_import`; `employee.offboarded`, la fecha de cese.
+     */
+    case EmployeeHired = 'employee.hired';
+    case EmployeeUpdated = 'employee.updated';
+    case EmployeeOffboarded = 'employee.offboarded';
+
+    /**
+     * Alta y cambio de un departamento (**RF-GP-02**, **RF-ID-03**, AUD-2).
+     *
+     * Familia «cambia roles, permisos o parametros del calculo»: un departamento
+     * es un ambito de autoridad —decide que responsable ve y corrige la jornada
+     * de quien—, asi que crearlo o cambiarlo es un cambio de potestades, no un
+     * alta de plantilla. Solo identificadores y la lista de campos tocados, sin
+     * valores.
+     */
+    case DepartmentCreated = 'department.created';
+    case DepartmentRenamed = 'department.renamed';
 
     // --- Exportacion legal (RL-03, RL-06, RF-IN-05) --------------------------
 
@@ -716,6 +752,10 @@ enum AuditAction: string
         // que jornada va cada tramo: crear el centro y cambiarle la zona son
         // cambios del calculo, no altas de plantilla.
         'site' => AuditableEvent::AuthorityOrCalculationChange,
+        // Un departamento decide que responsable ve y corrige la jornada de
+        // quien (RF-ID-03): crearlo o cambiarlo es un cambio de potestades, no
+        // un alta de plantilla (AUD-2).
+        'department' => AuditableEvent::AuthorityOrCalculationChange,
         // Cerrar el asistente fija el momento a partir del cual la configuracion
         // de la instalacion solo se cambia por sus recursos, cada uno con su
         // asiento. Es un hecho sobre las reglas, no sobre una persona.

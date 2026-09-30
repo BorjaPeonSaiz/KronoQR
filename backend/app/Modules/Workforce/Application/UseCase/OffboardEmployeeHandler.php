@@ -24,11 +24,12 @@ use Illuminate\Database\ConnectionInterface;
  * estaba. El registro horario se conserva cuatro anos (RL-02) y una inspeccion
  * puede pedir el de alguien que ya no trabaja en el hotel.
  *
- * **Una transaccion con todo lo que la baja arrastra** (N1). El evento se
- * publica dentro: `Identity` revoca la credencial y cierra el portal (RN-14),
- * con su asiento, en un listener sincrono. Si falla, la baja no se confirma:
- * una persona de baja con la tarjeta aun activa es peor que una baja que hay
- * que repetir.
+ * **Una transaccion con todo lo que la baja arrastra** (N1, AUD-2). El evento
+ * se publica dentro: `Identity` revoca la credencial y cierra el portal
+ * (RN-14) y `Compliance` escribe el asiento `employee.offboarded`, los dos en
+ * listeners sincronos. Si cualquiera falla, la baja no se confirma: una baja
+ * sin traza, o una persona de baja con la tarjeta aun activa, es peor que una
+ * baja que hay que repetir.
  */
 final readonly class OffboardEmployeeHandler
 {
