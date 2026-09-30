@@ -104,6 +104,8 @@ const SYNC_DIAGNOSTIC_CODES = {
   'sync.malformed_response': 'kiosk.offline.malformed_batch_response',
   'sync.item_not_processed': 'kiosk.offline.item_not_processed',
   'sync.confirm_not_persisted': 'kiosk.offline.confirm_not_persisted',
+  // PIN-08: sin codigo nuevo a proposito (el enum es cerrado tambien en backend).
+  'sync.item_invalid': 'kiosk.offline.item_not_processed',
 } as const satisfies Record<SyncDiagnostic, ClientErrorCode>
 
 const ROSTER_DIAGNOSTIC_CODES = {

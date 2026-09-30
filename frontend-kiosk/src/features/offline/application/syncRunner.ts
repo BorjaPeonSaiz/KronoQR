@@ -30,9 +30,12 @@
 // aplaza con el mismo retroceso: dejar que un PIN mas tardio adelante a un QR
 // varado seria romper exactamente la garantia que esto existe para mantener.
 //
-// QUE SACA UN ELEMENTO DE LA COLA. Solo `200` o `422` para ESE `scan_id`.
+// QUE SACA UN ELEMENTO DE LA COLA. Solo `200`, `422` o `400` para ESE `scan_id`.
 // - `200`: registrado (o anti-rebote, que es un desenlace aceptado, ADR-031).
 // - `422`: el servidor decidio rechazarlo. Reintentar daria `422` para siempre.
+// - `400` (o un `422` no estandar) con cuerpo JSON: la peticion no vale y nunca
+//   valdra (PIN-08). Se descarta CON diagnostico. Un lote `400` se reenvia de uno
+//   en uno para aislar al envenenado. Un `400` sin cuerpo JSON (proxy) se reintenta.
 // - `503` (`ScanNotProcessed`): NO se decidio nada. Se conserva y se reintenta.
 // - Fallo de transporte, 401, 403, 429, 5xx: no se toca nada. Se reintenta.
 //
@@ -42,8 +45,8 @@
 // una tablet incomunicada hace doce intentos a la hora, no miles.
 
 import type { QueuedScan, ScanSubmissionResult } from '@/features/scan/application/ports'
-import type { ApiClient } from '@/shared/api/client'
-import type { PinScanRequest, ScanBatchEntry, ScanRequest } from '@/shared/api/types'
+import type { ApiClient, ApiResult } from '@/shared/api/client'
+import type { PinScanRequest, ScanBatchEntry, ScanOk, ScanRequest } from '@/shared/api/types'
 import { uuidV7 } from '@/shared/ids/uuidV7'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
@@ -72,6 +75,7 @@ export type SyncDiagnostic =
   | 'sync.malformed_response'
   | 'sync.item_not_processed'
   | 'sync.confirm_not_persisted'
+  | 'sync.item_invalid'
 
 export interface SyncRunnerOptions {
   readonly api: ApiClient
@@ -180,6 +184,15 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   async function sendBatch(records: readonly QueuedQrScanRecord[]): Promise<boolean> {
     const result = await options.api.syncScanBatch({ scans: records.map(toRequest) }, newBatchKey())
 
+    if (result.outcome === 'failed' && result.cause === 'invalid') {
+      // El servidor ha rechazado el LOTE entero por mal formado, y no dice cual
+      // de los elementos lo envenena. Reintentar el lote daria lo mismo para
+      // siempre y, al respetar el orden, pararia toda la cola (PIN-08). Se
+      // reenvian de uno en uno, en orden y por el endpoint individual: el
+      // envenenado se descarta y los demas se registran como siempre.
+      return sendOneByOne(records, (record) => options.api.recordScan(toRequest(record)))
+    }
+
     if (result.outcome !== 'ok') {
       options.onReachability?.(false)
 
@@ -261,15 +274,51 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
    * `/scan/pin`, ESPERADA antes de mandar la siguiente. Es lo que impide que un
    * PIN mas tardio (dentro del mismo tramo) adelante a uno mas temprano que
    * todavia no ha tenido respuesta.
+   *
+   * Tambien es el plan B de un lote QR que el servidor rechaza entero por mal
+   * formado (PIN-08): de uno en uno se ve cual es el envenenado.
    */
-  async function sendPinRun(records: readonly QueuedPinScanRecord[]): Promise<boolean> {
+  async function sendOneByOne<TRecord extends QueuedQrScanRecord | QueuedPinScanRecord>(
+    records: readonly TRecord[],
+    send: (record: TRecord) => Promise<ApiResult<ScanOk>>,
+  ): Promise<boolean> {
     let progressed = false
 
     for (let index = 0; index < records.length; index += 1) {
       const record = records[index]
       if (record === undefined) break
 
-      const result = await options.api.recordPinScan(toPinRequest(record))
+      const result = await send(record)
+
+      if (result.outcome === 'failed' && result.cause === 'invalid') {
+        // PIN-08. El servidor ha decidido que ESTE fichaje no es valido
+        // (400/422): reenviarlo daria lo mismo para siempre y, como el orden se
+        // respeta, pararia todo lo que viene detras. Se confirma (se saca de la
+        // cola) y queda constancia tecnica, sin `scan_id` ni payload (regla 21).
+        // El empleado ya fue confirmado en pantalla (regla 19); la revision
+        // humana no tiene canal en el contrato: ver `docs/verificacion`.
+        options.onReachability?.(true)
+        options.onAuthOutcome?.(false)
+        options.onDiagnostic?.('sync.item_invalid', {
+          http_status: result.httpStatus ?? 0,
+          kind: isPinScanRecord(record) ? 'pin' : 'qr',
+          message: 'item_invalid_discarded',
+        })
+        const discarded = await queue.confirm([record.scan_id])
+        if (!discarded) {
+          options.onDiagnostic?.('sync.confirm_not_persisted', {
+            items: 1,
+            message: 'confirm_not_persisted',
+          })
+          await queue.retryLater(
+            records.slice(index).map((item) => item.scan_id),
+            clock.now(),
+          )
+          return progressed
+        }
+        progressed = true
+        continue
+      }
 
       if (result.outcome === 'failed') {
         options.onReachability?.(false)
@@ -358,7 +407,9 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
           // subconjunto de `claimed`) y ya ordenado: una unica llamada de lote
           // basta para la parte QR, sin volver a trocear.
           const progressed = isPinScanRecord(first)
-            ? await sendPinRun(run as QueuedPinScanRecord[])
+            ? await sendOneByOne(run as QueuedPinScanRecord[], (record) =>
+                options.api.recordPinScan(toPinRequest(record)),
+              )
             : await sendBatch(run as QueuedQrScanRecord[])
 
           if (!progressed) {
@@ -428,6 +479,16 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
         options.onAuthOutcome?.(false)
         return { kind: 'rejected' }
       }
+      if (rescue.outcome === 'failed' && rescue.cause === 'invalid') {
+        // PIN-08: decidido por el servidor; no hay nada que reintentar.
+        options.onAuthOutcome?.(false)
+        options.onDiagnostic?.('sync.item_invalid', {
+          http_status: rescue.httpStatus ?? 0,
+          kind: scan.kind,
+          message: 'item_invalid_discarded',
+        })
+        return { kind: 'rejected' }
+      }
       options.onReachability?.(false)
       if (rescue.cause === 'unauthorized') options.onAuthOutcome?.(true)
       return { kind: 'deferred' }
@@ -472,6 +533,28 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       options.onAuthOutcome?.(false)
       // Decidido por el servidor: reintentarlo daria `422` para siempre.
       await queue.confirm([scan.scan_id])
+      return { kind: 'rejected' }
+    }
+
+    if (result.outcome === 'failed' && result.cause === 'invalid') {
+      // PIN-08: 400/422 del servidor. Terminal: se saca de la cola, con
+      // diagnostico, en vez de bloquear para siempre lo que venga detras.
+      options.onReachability?.(true)
+      options.onAuthOutcome?.(false)
+      options.onDiagnostic?.('sync.item_invalid', {
+        http_status: result.httpStatus ?? 0,
+        kind: scan.kind,
+        message: 'item_invalid_discarded',
+      })
+      const discarded = await queue.confirm([scan.scan_id])
+      if (!discarded) {
+        options.onDiagnostic?.('sync.confirm_not_persisted', {
+          items: 1,
+          message: 'confirm_not_persisted',
+        })
+        await queue.retryLater([scan.scan_id], clock.now())
+        scheduleNext()
+      }
       return { kind: 'rejected' }
     }
 

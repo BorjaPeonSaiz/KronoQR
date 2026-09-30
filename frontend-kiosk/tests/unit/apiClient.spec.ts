@@ -384,3 +384,57 @@ describe('marca de la instalacion (RF-PD-08)', () => {
     expect(await client.fetchBranding()).toEqual({ outcome: 'failed', cause: 'network' })
   })
 })
+
+describe('fichajes que el servidor declara invalidos (PIN-08)', () => {
+  const problem = { type: 'urn:kronoqr:problem:invalid-request', status: 400, errors: { x: ['y'] } }
+
+  it('un 400 con cuerpo JSON es `invalid` en /scan y en /scan/pin', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () => jsonResponse(400, problem)) as unknown as typeof fetch,
+    })
+
+    expect(await client.recordScan(REQUEST)).toEqual({
+      outcome: 'failed',
+      cause: 'invalid',
+      httpStatus: 400,
+    })
+    expect(
+      await client.recordPinScan({
+        scan_id: REQUEST.scan_id,
+        occurred_at: REQUEST.occurred_at,
+        employee_code: 'E7QK2MXPR',
+        pin_sealed: 'c2VhbGVk',
+        intent: 'auto',
+      }),
+    ).toMatchObject({ outcome: 'failed', cause: 'invalid', httpStatus: 400 })
+  })
+
+  it('un 422 que no es el rechazo estandar tambien es `invalid`', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () => jsonResponse(422, { message: 'x' })) as unknown as typeof fetch,
+    })
+
+    expect(await client.recordScan(REQUEST)).toMatchObject({ cause: 'invalid', httpStatus: 422 })
+  })
+
+  it('un 400 SIN cuerpo JSON (proxy) sigue siendo transitorio: no se descarta un fichaje por eso', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () =>
+        new Response('<html>Bad Request</html>', { status: 400 })) as unknown as typeof fetch,
+    })
+
+    expect(await client.recordScan(REQUEST)).toMatchObject({ cause: 'server', httpStatus: 400 })
+  })
+
+  it('un 5xx y un 401 no son `invalid`', async () => {
+    const serverDown = createApiClient({
+      fetchImpl: (async () => jsonResponse(500, problem)) as unknown as typeof fetch,
+    })
+    const unauthorized = createApiClient({
+      fetchImpl: (async () => jsonResponse(401, problem)) as unknown as typeof fetch,
+    })
+
+    expect(await serverDown.recordScan(REQUEST)).toMatchObject({ cause: 'server' })
+    expect(await unauthorized.recordScan(REQUEST)).toMatchObject({ cause: 'unauthorized' })
+  })
+})

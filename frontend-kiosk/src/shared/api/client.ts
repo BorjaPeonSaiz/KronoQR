@@ -41,6 +41,10 @@ export type ApiFailureCause =
   | 'timeout' // el servidor no contesto a tiempo
   | 'unauthorized' // 401/403: token de dispositivo caducado o revocado
   | 'throttled' // 429
+  // 400 o 422 con cuerpo JSON: el servidor decidio que ESTA peticion no vale y
+  // reenviarla no lo cambia (PIN-08). Un 400 sin cuerpo JSON (proxy, WAF) sigue
+  // siendo `server`: eso si puede ser transitorio.
+  | 'invalid'
   | 'server' // 5xx u otro codigo inesperado
   | 'malformed' // 2xx con un cuerpo que no encaja con el contrato
 
@@ -184,6 +188,21 @@ function causeForStatus(status: number): ApiFailureCause {
 }
 
 /**
+ * Fallo de un envio de fichaje (`/scan`, `/scan/pin`). Un `400` o un `422` que
+ * no es el rechazo estandar, pero con cuerpo JSON (`ValidationProblem`), es
+ * TERMINAL: el mismo `scan_id` con los mismos datos dara lo mismo siempre, y si
+ * se reintentara, al respetar el orden de la cola bloquearia todo lo que viene
+ * detras (PIN-08). Sin cuerpo JSON (pagina de error de un proxy) no se puede
+ * afirmar que lo haya decidido la aplicacion, asi que sigue siendo transitorio.
+ */
+function scanFailureFor(status: number, body: unknown): ApiResult<never> {
+  if ((status === 400 || status === 422) && isRecord(body)) {
+    return { outcome: 'failed', cause: 'invalid', httpStatus: status }
+  }
+  return { outcome: 'failed', cause: causeForStatus(status), httpStatus: status }
+}
+
+/**
  * Nombres de campo de un `400` con forma `ValidationProblem`
  * (`{ errors: { <campo>: string[] } }`, RFC 9457). `undefined` si el cuerpo
  * no trae esa forma -otro tipo de `400`, o un cuerpo vacio-.
@@ -288,7 +307,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       if (result.status === 422 && isScanRejected(result.body)) {
         return { outcome: 'rejected', problem: result.body }
       }
-      return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
+      return scanFailureFor(result.status, result.body)
     },
 
     async recordPinScan(request) {
@@ -308,7 +327,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       if (result.status === 422 && isScanRejected(result.body)) {
         return { outcome: 'rejected', problem: result.body }
       }
-      return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
+      return scanFailureFor(result.status, result.body)
     },
 
     async syncScanBatch(request, batchKey) {

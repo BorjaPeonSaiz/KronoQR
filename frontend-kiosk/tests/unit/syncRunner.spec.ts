@@ -742,3 +742,92 @@ describe('fichaje de respaldo por PIN (tarea 1.12, RF-AT-11)', () => {
     expect(bench.queue.stats().size).toBe(0)
   })
 })
+
+// PIN-08. Un 400/422 del servidor es el desenlace de ESE fichaje: se descarta
+// con diagnostico y la cola sigue. Antes se reintentaba para siempre y, como el
+// drenaje respeta el orden, un solo elemento envenenado paraba todo lo demas.
+describe('PIN-08 — un 400 es terminal', () => {
+  const INVALID: ApiResult<ScanOk> = { outcome: 'failed', cause: 'invalid', httpStatus: 400 }
+  const POISONED = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
+  const GOOD = '0199f13a-7c22-7b41-9e88-0c4d5e6f7a81'
+
+  it('un PIN envenenado se descarta con diagnostico y el siguiente SI se envia', async () => {
+    const bench = harness({
+      onPin: (scanId) => (scanId === POISONED ? INVALID : accepted200(scanId)),
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(pinScan(POISONED, '2026-08-14T08:00:00.000Z'))
+    await bench.queue.enqueue(pinScan(GOOD, '2026-08-14T16:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(bench.pinCalls).toEqual([POISONED, GOOD])
+    expect(bench.queue.stats().size).toBe(0)
+    expect(bench.diagnostics).toContain('sync.item_invalid')
+  })
+
+  it('un lote QR rechazado por mal formado se reenvia de uno en uno y solo cae el envenenado', async () => {
+    const bench = harness({
+      onBatch: () => INVALID as unknown as ApiResult<ScanBatchResponse>,
+      onSingle: (scanId) => (scanId === POISONED ? INVALID : accepted200(scanId)),
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(scan(POISONED, '2026-08-14T08:00:00.000Z'))
+    await bench.queue.enqueue(scan(GOOD, '2026-08-14T16:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    // En orden de `occurred_at` y por el endpoint individual.
+    expect(bench.singles).toEqual([POISONED, GOOD])
+    expect(bench.queue.stats().size).toBe(0)
+    expect(bench.diagnostics).toEqual(['sync.item_invalid'])
+  })
+
+  it('el diagnostico no lleva ni `scan_id` ni payload (regla dura 21)', async () => {
+    const contexts: Record<string, string | number>[] = []
+    const bench = harness({ onPin: () => INVALID })
+    const runner = createSyncRunner({
+      api: bench.api,
+      queue: bench.queue,
+      clock: CLOCK,
+      isOnline: () => true,
+      onDiagnostic: (_code, context) => contexts.push(context),
+      setTimer: () => 0,
+      clearTimer: () => undefined,
+    })
+
+    await bench.queue.enqueue(pinScan(POISONED, '2026-08-14T08:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(JSON.stringify(contexts)).not.toContain(POISONED)
+    expect(JSON.stringify(contexts)).not.toContain('E7QK2MXPR')
+    expect(contexts[0]).toMatchObject({ http_status: 400, kind: 'pin' })
+  })
+
+  it('en el camino rapido, un 400 saca el fichaje de la cola y se enseña como rechazado', async () => {
+    const bench = harness({ onSingle: () => INVALID })
+    const runner = runnerFor(bench)
+
+    const result = await runner.submit(scan(POISONED, '2026-08-14T08:00:00.000Z'))
+
+    expect(result).toEqual({ kind: 'rejected' })
+    expect(bench.queue.stats().size).toBe(0)
+    expect(bench.diagnostics).toContain('sync.item_invalid')
+  })
+
+  it('un fallo transitorio (5xx) sigue conservando el fichaje', async () => {
+    const bench = harness({
+      onSingle: () => ({ outcome: 'failed', cause: 'server', httpStatus: 500 }),
+    })
+    const runner = runnerFor(bench)
+
+    const result = await runner.submit(scan(POISONED, '2026-08-14T08:00:00.000Z'))
+
+    expect(result).toEqual({ kind: 'deferred' })
+    expect(bench.queue.stats().size).toBe(1)
+  })
+})
+
+function accepted200(scanId: string): ApiResult<ScanOk> {
+  return { outcome: 'ok', data: accepted(scanId, '2026-08-14T08:00:00.000Z', 'clock_in') }
+}
