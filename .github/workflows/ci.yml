@@ -1875,10 +1875,22 @@ jobs:
           old_version="$(git show "${ref}:VERSION" | head -n 1 | tr -d '[:space:]')"
           new_version="$(head -n 1 VERSION | tr -d '[:space:]')"
           synthetic=false
+          open_cycle=false
           if [ "${old_version}" = "${new_version}" ]; then
             IFS=. read -r major minor patch <<<"${new_version%%-*}"
             new_version="${major}.${minor}.$((patch + 1))-ci"
             synthetic=true
+            # CICLO ABIERTO: si `infra/versions.txt` acaba en una linea `V *` de
+            # una version POSTERIOR a la instalada (p. ej. `2.2.0 *` mientras
+            # VERSION sigue en 2.1.0), el paquete nuevo ES esa version: congelar
+            # su `*` y anadir una sintetica detras deja la matriz desordenada
+            # (frontera igual a la de la version anterior) y update.sh la
+            # rechaza. Se conserva la linea abierta tal cual.
+            abierta="$(sed -n -E 's/^([^ #]+) \*$/\1/p' infra/versions.txt | tail -n 1)"
+            if [ -n "${abierta}" ] && [ "${abierta}" != "${old_version}" ]; then
+              new_version="${abierta}"
+              open_cycle=true
+            fi
           fi
           echo "Version anterior: ${old_version} (${ref}) -> version de destino: ${new_version} (sintetica: ${synthetic})"
           {
@@ -1887,6 +1899,7 @@ jobs:
             echo "old_version=${old_version}"
             echo "new_version=${new_version}"
             echo "synthetic=${synthetic}"
+            echo "open_cycle=${open_cycle}"
           } >>"$GITHUB_OUTPUT"
 
       - name: Arbol de la version anterior
@@ -1949,6 +1962,9 @@ jobs:
           bash infra/scripts/package.sh paquete-nuevo
           if [ "${{ steps.anterior.outputs.synthetic }}" = "true" ]; then
             printf '%s\n' "${new}" >paquete-nuevo/VERSION
+          fi
+          if [ "${{ steps.anterior.outputs.synthetic }}" = "true" ] &&
+            [ "${{ steps.anterior.outputs.open_cycle }}" != "true" ]; then
             # LA FRONTERA ES LA ULTIMA MIGRACION DEL ARBOL ANTERIOR, no del nuevo:
             # es lo que esa version instalada tiene, y lo que un `chore(release)`
             # real habria congelado. Con la del arbol nuevo, toda migracion
