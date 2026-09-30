@@ -890,6 +890,21 @@ dependency, not the application.
 portal is opened with an employee code and a 6-digit PIN, and one of the
 protections is that it is not reachable from any IP. See §6.
 
+Three cases where the `403` is surprising and is still expected:
+
+- **Testing from the server itself** (`https://localhost/portal/` or its LAN
+  IP): the web server sees the gateway of the container network — something
+  like `172.18.0.1` — and not your LAN. Test from a computer on the LAN.
+- **The `.env` still holds `172.28.0.0/16`**, the template value: it covers
+  nobody in production.
+- **Docker Desktop** (Windows or macOS): every connection arrives from an
+  internal Docker address and the range cannot tell the LAN from the internet.
+  It is not a production platform (§0).
+
+How to find out the IP the web server sees, what to do in each case and how to
+open the portal to the internet if the hotel decides so:
+[`../../runbooks/portal-403.md`](../../runbooks/portal-403.md) (in Spanish).
+
 ### …I cannot find where to sign in: there is no user
 
 It is expected. **The installer creates no users.** Open
@@ -1070,27 +1085,52 @@ about it.
 ### `PORTAL_INTERNAL_CIDR` — from where the employee portal can be entered
 
 ```dotenv
-PORTAL_INTERNAL_CIDR=172.28.0.0/16
+PORTAL_INTERNAL_CIDR=10.0.10.0/24
 ```
 
 **What it does.** The employee portal (employee code + 6-digit PIN) only
 responds to requests arriving from this range. Any other origin receives
-`403` at the web server itself, before reaching the application.
+`403` at the web server itself, before reaching the application. The tablets
+do not go through here: this range does not affect clocking in.
 
 **Why it exists.** A 6-digit PIN is a small space. Restricting the portal to
 the internal network is one of the four controls that compensate for it,
 together with lockout after failed attempts, the per-IP request limit and the
 fact that the portal session can only read the employee's own data.
 
-**The example value is for development**, not production: it covers Docker
-Compose's internal network. Before deploying, replace it with the hotel's real
-LAN or with the range of the corporate VPN the staff use to come in from
-outside.
+**What to put.** The LAN from which the staff will open the portal (the office
+computers and the staff wifi, for example `10.0.10.0/24`) or the corporate VPN
+range if people come in from outside. **It takes a single range**: if you need
+two networks, write one that covers both (`10.0.10.0/23` covers `10.0.10.x`
+and `10.0.11.x`).
+
+**The template value, `172.28.0.0/16`, does not work in production.** It is
+the network of the vendor's development environment; on your server the
+container network has no fixed subnet, so that value admits nobody and
+everyone would get a `403`.
+
+**What the web server sees is not always the computer's IP.** Three cases worth
+knowing before testing:
+
+- **From the server itself** — `https://localhost/portal/` or the server's own
+  LAN IP — the request comes in through the gateway of the container network
+  (something like `172.18.0.1`). That is expected: test from a computer on the
+  LAN and **do not authorise that address** just to be able to test.
+- **With Docker Desktop** (Windows or macOS) **or with rootless Docker**, every
+  connection arrives from an internal Docker address. The range cannot tell
+  the LAN from the internet, which is why production runs on Linux with Docker
+  Engine (§0).
+- **Behind a reverse proxy or a CDN**, the web server sees the proxy's IP. Read
+  [`hardening.md`](hardening.md) §1.6 before touching the range.
+
+To find out the exact IP the web server sees and what to do with it:
+[`../../runbooks/portal-403.md`](../../runbooks/portal-403.md) (in Spanish).
 
 **Exposing the portal to the internet is an explicit decision**, never a
 default. It is taken by setting `PORTAL_INTERNAL_CIDR=0.0.0.0/0` and must be
 noted in the installation's handover record: it is what answers the day
-someone asks why the portal is reachable from outside the hotel.
+someone asks why the portal is reachable from outside the hotel. What you take
+on by doing it, and when it is not advisable, is in the same runbook, §4.
 
 **Format of the three networks.** Each variable (`KIOSK_VLAN_CIDR`,
 `PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR`) takes **one** IPv4 CIDR with a

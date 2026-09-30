@@ -871,6 +871,21 @@ responde y `ready` no, el problema es una dependencia, no la aplicación.
 portal se abre con código de empleado y PIN de 6 dígitos, y una de las
 protecciones es que no sea alcanzable desde cualquier IP. Ver §6.
 
+Tres casos en los que el `403` sorprende y sigue siendo lo esperado:
+
+- **Pruebas desde el propio servidor** (`https://localhost/portal/` o su IP de
+  la LAN): el servidor web ve la puerta de enlace de la red de contenedores
+  —algo como `172.18.0.1`—, no tu LAN. Prueba desde un ordenador de la LAN.
+- **El `.env` sigue con `172.28.0.0/16`**, el valor de la plantilla: no cubre a
+  nadie en producción.
+- **Docker Desktop** (Windows o macOS): todas las conexiones llegan desde una
+  dirección interna de Docker y el rango no puede distinguir la LAN de internet.
+  No es plataforma de producción (§0).
+
+Cómo averiguar la IP que ve el servidor web, qué hacer en cada caso y cómo abrir
+el portal a internet si el hotel lo decide:
+[`../runbooks/portal-403.md`](../runbooks/portal-403.md).
+
 ### …no encuentro dónde iniciar sesión: no hay ningún usuario
 
 Es lo esperado. **El instalador no crea usuarios.** Abre
@@ -1044,28 +1059,52 @@ entran dentro de ese rango y `/metrics` queda accesible sin que nada lo avise.
 ### `PORTAL_INTERNAL_CIDR` — desde dónde se puede entrar al portal del empleado
 
 ```dotenv
-PORTAL_INTERNAL_CIDR=172.28.0.0/16
+PORTAL_INTERNAL_CIDR=10.0.10.0/24
 ```
 
 **Qué hace.** El portal del empleado (código de empleado + PIN de 6 dígitos)
 solo responde a las peticiones que llegan desde este rango. Cualquier otro
 origen recibe `403` en el propio servidor web, antes de llegar a la
-aplicación.
+aplicación. Las tablets no pasan por aquí: este rango no afecta al fichaje.
 
 **Por qué existe.** Un PIN de 6 dígitos es un espacio pequeño. Restringir el
 portal a la red interna es uno de los cuatro controles que lo compensan, junto
 con el bloqueo por intentos, el límite de peticiones por IP y que la sesión
 del portal solo pueda leer los datos del propio empleado.
 
-**El valor de ejemplo es de desarrollo**, no de producción: cubre la red
-interna de Docker Compose. Antes de desplegar, cámbialo por la LAN real del
-hotel o por el rango de la VPN corporativa que use la plantilla para entrar
-desde fuera.
+**Qué poner.** La LAN desde la que la plantilla abrirá el portal (la de los
+ordenadores de la oficina y del wifi de personal, por ejemplo `10.0.10.0/24`)
+o el rango de la VPN corporativa si se entra desde fuera. **Admite un solo
+rango**: si necesitas dos redes, escribe uno que cubra las dos (`10.0.10.0/23`
+cubre `10.0.10.x` y `10.0.11.x`).
+
+**El valor de la plantilla, `172.28.0.0/16`, no sirve en producción.** Es la
+red del entorno de desarrollo del fabricante; en tu servidor la red de
+contenedores no tiene esa subred fija, así que ese valor no admite a nadie y
+todo el mundo recibiría `403`.
+
+**Lo que el servidor web ve no siempre es la IP del ordenador.** Tres casos
+que conviene conocer antes de probar:
+
+- **Desde el propio servidor** —`https://localhost/portal/` o la IP de la LAN
+  del propio servidor—, la petición entra por la puerta de enlace de la red de
+  contenedores (algo como `172.18.0.1`). Es lo esperado: prueba desde un
+  ordenador de la LAN y **no autorices esa dirección** para poder probar.
+- **Con Docker Desktop** (Windows o macOS) **o con Docker sin root**, todas las
+  conexiones llegan desde una dirección interna de Docker. El rango no puede
+  distinguir la LAN de internet, y por eso la producción va sobre Linux con
+  Docker Engine (§0).
+- **Detrás de un proxy inverso o una CDN**, el servidor web ve la IP del proxy.
+  Lee [`endurecimiento.md`](endurecimiento.md) §1.6 antes de tocar el rango.
+
+Para averiguar la IP exacta que ve el servidor web y qué hacer con ella:
+[`../runbooks/portal-403.md`](../runbooks/portal-403.md).
 
 **Exponer el portal a internet es una decisión explícita**, nunca un valor por
 defecto. Se toma poniendo `PORTAL_INTERNAL_CIDR=0.0.0.0/0` y debe quedar
 anotada en el acta de entrega de la instalación: es lo que responde el día que
-alguien pregunte por qué el portal es alcanzable desde fuera del hotel.
+alguien pregunte por qué el portal es alcanzable desde fuera del hotel. Qué se
+asume al hacerlo, y cuándo no conviene, está en el mismo runbook, §4.
 
 **Formato de las tres redes.** Cada variable (`KIOSK_VLAN_CIDR`,
 `PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR`) lleva **un solo** CIDR IPv4 con
