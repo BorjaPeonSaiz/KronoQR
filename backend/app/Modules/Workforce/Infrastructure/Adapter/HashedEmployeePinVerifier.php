@@ -9,6 +9,7 @@ use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use App\Modules\Shared\Domain\ValueObject\PinVerification;
 use Illuminate\Support\Facades\DB;
@@ -58,12 +59,17 @@ use SensitiveParameter;
  * seria un oraculo que confirma cuando se acierta— y RS-03 pide que el tiempo no
  * delate nada.
  *
- * ## Cuatro rechazos, un solo valor
+ * ## Cuatro rechazos, un solo valor hacia arriba de `CredentialResolution`
  *
  * Codigo inexistente, PIN incorrecto, PIN nunca emitido y empleado de baja
- * (RN-14) devuelven todos `PinVerification::rejected()`. No hay ninguna rama que
- * los distinga hacia arriba, y por tanto no hay ninguna forma de que se filtren
- * por descuido en un `Resource` futuro.
+ * (RN-14) devuelven todos `PinVerification::rejected()`: sin `employeeUuid()` y
+ * con `isVerified()` falso. **Desde RN-19 (ADR-043) el rechazo lleva ademas un
+ * `PinClaim` interno** cuando el codigo es de alguien que puede fichar —PIN
+ * incorrecto, no emitido o bloqueo—, y nunca con codigo inexistente, baja o
+ * suspendido. El claim solo lo lee el fichaje del quiosco para escribir
+ * `scan_events.claimed_employee_id`; la respuesta, el evento y el log siguen
+ * sin poder distinguir nada. Se construye con lo que ya habia en `$employee`:
+ * **ninguna E/S nueva**, asi que el tiempo de los cinco caminos no cambia.
  *
  * ## El contador del señuelo no bloquea a nadie
  *
@@ -167,7 +173,9 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
             $this->recordFailure(self::DECOY_SUBJECT, $origin);
             $this->journal->failed($channel, null, AuthFailureReason::INVALID_CREDENTIALS);
 
-            return PinVerification::locked($lockSeconds);
+            // RN-19 (ADR-043): el dueño del codigo baja con el bloqueo, solo para
+            // la fila de `scan_events`. Sin E/S nueva: todo esta ya en `$employee`.
+            return PinVerification::locked($lockSeconds, $this->claimOf($employee, lockout: true));
         }
 
         // RN-14 despues de la comparacion, no antes, para que dar de baja a
@@ -188,7 +196,9 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
                 $this->journal->lockoutStarted($channel, $employee['uuid'], $opened);
             }
 
-            return PinVerification::rejected();
+            // RN-19: `$opened` solo significa algo con empleado detras; con un
+            // codigo inexistente `claimOf()` devuelve `null` de todos modos.
+            return PinVerification::rejected($this->claimOf($employee, lockout: $opened > 0));
         }
 
         // Acertar borra el castigo acumulado en las dos puertas: el PIN es el
@@ -238,6 +248,22 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
         DB::table('employees')
             ->where('uuid', $employee['uuid'])
             ->update(['pin_hash' => Hash::make($pin)]);
+    }
+
+    /**
+     * El dueño del codigo de un PIN rechazado, solo si puede fichar (RN-19,
+     * ADR-043). Sin E/S: todo esta ya en `$employee`, y por eso no altera el
+     * tiempo de ningun camino (RS-03).
+     *
+     * @param  array{uuid: string, status: string, pin_hash: string|null}|null  $employee
+     */
+    private function claimOf(?array $employee, bool $lockout): ?PinClaim
+    {
+        if ($employee === null || ! EmploymentStatus::from($employee['status'])->canClock()) {
+            return null;
+        }
+
+        return PinClaim::of($employee['uuid'], $lockout);
     }
 
     /**

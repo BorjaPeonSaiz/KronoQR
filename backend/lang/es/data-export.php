@@ -403,6 +403,8 @@ return [
                 'clock_skew_seconds' => 'Desfase entre el reloj de la tablet y el del servidor. Un desfase grande genera incidencia, pero **nunca rechaza el fichaje**.',
                 'flagged_for_review' => 'Si quedo marcado para revision humana.',
                 'client_meta' => 'Lo que la tablet informo de si misma en ese momento, en JSON.',
+                'claimed_employee_uuid' => 'En un fichaje por PIN rechazado, la persona a la que correspondia el codigo tecleado, si podia fichar (RN-19). No dice que esa persona fichara ni que se autenticara.',
+                'pin_lockout' => 'En esa misma fila, si el intento abrio o encontro el bloqueo por intentos del PIN.',
             ],
         ],
 

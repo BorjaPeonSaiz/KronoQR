@@ -25,6 +25,7 @@ final readonly class CredentialResolution
     private function __construct(
         private ?string $employeeUuid,
         private ?CredentialRejectionReason $rejectionReason,
+        private ?PinClaim $pinClaim = null,
     ) {}
 
     /**
@@ -46,6 +47,18 @@ final readonly class CredentialResolution
     public static function rejected(CredentialRejectionReason $reason): self
     {
         return new self(null, $reason);
+    }
+
+    /**
+     * Rechazo de un fichaje por PIN cuyo codigo es de una persona que puede
+     * fichar (RN-19, ADR-043). **Hacia fuera es el mismo rechazo** que
+     * {@see rejected()} con `UNKNOWN`: sin `employeeUuid()` y con el mismo
+     * motivo. El claim solo lo lee el caso de uso para escribir
+     * `scan_events.claimed_employee_id`.
+     */
+    public static function rejectedWithPinClaim(PinClaim $claim): self
+    {
+        return new self(null, CredentialRejectionReason::UNKNOWN, $claim);
     }
 
     /**
@@ -71,5 +84,14 @@ final readonly class CredentialResolution
     public function isResolved(): bool
     {
         return $this->employeeUuid !== null;
+    }
+
+    /**
+     * A quien correspondia el codigo de un PIN rechazado (RN-19), o `null`.
+     * Nunca viaja a una respuesta, a un evento ni al log.
+     */
+    public function pinClaim(): ?PinClaim
+    {
+        return $this->pinClaim;
     }
 }

@@ -64,6 +64,20 @@ enum IncidentType: string
     case OutOfOrderScan = 'out_of_order_scan';
 
     /**
+     * RN-19: **fichaje por PIN no registrado**. Alguien intento fichar en el
+     * quiosco con el codigo de esta persona, el PIN no verifico —erroneo, no
+     * emitido o bloqueo activo— y ningun fichaje suyo lo subsano en los 10
+     * minutos siguientes.
+     *
+     * La abre la revision diaria leyendo `scan_events.claimed_employee_id`
+     * (ADR-043), **sin `shift_entry_id`** —el intento no produjo tramo— y una
+     * por persona y jornada. Se cierra con una correccion (RN-13) si la persona
+     * trabajo, o se descarta con nota si no; restablecer el PIN (RF-ID-09) si
+     * procede. Nada automatico.
+     */
+    case RejectedPinScan = 'rejected_pin_scan';
+
+    /**
      * Con que urgencia entra en la bandeja.
      *
      * **La decide el tipo y no quien detecta**, que es lo que impide que dos
@@ -80,17 +94,23 @@ enum IncidentType: string
      *     severidad de la alerta «Turnos abiertos > 12 h» del doc 01 §9.3, y la
      *     del fichaje irreconciliable de RN-18: hay un fichaje real que **falta**
      *     en el registro, que es exactamente «incompleto y hay que corregirlo»,
-     *     no una norma incumplida ni un dato meramente raro.
+     *     no una norma incumplida ni un dato meramente raro. Tambien la del
+     *     fichaje por PIN no registrado de RN-19, por el mismo motivo.
      *   - `low` — el registro es valido y el dato es raro. Se mira cuando se
      *     puede.
+     *
+     * **`medium` es el grupo por omision y no un olvido.** Con diez tipos, un
+     * `match` con un brazo por caso superaba el tope de complejidad ciclomatica
+     * del §3.5, asi que se nombran los dos grupos cortos y el resto es
+     * `medium`. Que un tipo nuevo no caiga ahi sin decidirlo lo impide
+     * `IncidentTest`, que exige una severidad esperada para **cada** caso.
      */
     public function defaultSeverity(): IncidentSeverity
     {
-        return match ($this) {
-            self::InsufficientRest, self::AnomalousPattern => IncidentSeverity::High,
-            self::OpenShiftExpired, self::LongShift, self::MissingBreak,
-            self::MissingClockOut, self::OutOfOrderScan => IncidentSeverity::Medium,
-            self::ShortShift, self::ClockSkew => IncidentSeverity::Low,
+        return match (true) {
+            \in_array($this, [self::InsufficientRest, self::AnomalousPattern], true) => IncidentSeverity::High,
+            \in_array($this, [self::ShortShift, self::ClockSkew], true) => IncidentSeverity::Low,
+            default => IncidentSeverity::Medium,
         };
     }
 

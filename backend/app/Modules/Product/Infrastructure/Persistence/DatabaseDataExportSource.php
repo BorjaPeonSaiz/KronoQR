@@ -514,10 +514,13 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                sc.worked_minutes::text      AS worked_minutes,
                sc.clock_skew_seconds::text  AS clock_skew_seconds,
                sc.flagged_for_review::text  AS flagged_for_review,
-               sc.client_meta::text         AS client_meta
+               sc.client_meta::text         AS client_meta,
+               ce.uuid::text                AS claimed_employee_uuid,
+               sc.pin_lockout::text         AS pin_lockout
           FROM scan_events sc
           JOIN devices d              ON d.id = sc.device_id
           LEFT JOIN employees e       ON e.id = sc.employee_id
+          LEFT JOIN employees ce      ON ce.id = sc.claimed_employee_id
           LEFT JOIN shift_entries se  ON se.id = sc.shift_entry_id
          ORDER BY sc.id
         SQL;

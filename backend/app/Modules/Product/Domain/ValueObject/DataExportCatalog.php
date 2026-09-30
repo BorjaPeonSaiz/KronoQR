@@ -120,8 +120,13 @@ final class DataExportCatalog
      * el registro de los resumenes semanales que salieron por correo (RF-PR-05).
      * Mismo criterio que el salto anterior: un fichero mas es un cambio de
      * forma, aunque ninguna columna de las que ya habia se haya movido.
+     *
+     * **`4` desde RN-19** (ADR-043): `scan_events.csv` gana
+     * `claimed_employee_uuid` y `pin_lockout`, a quien correspondia el codigo
+     * de un fichaje por PIN rechazado. Dos columnas mas son un cambio de forma
+     * por el mismo motivo.
      */
-    public const string SCHEMA_VERSION = '3';
+    public const string SCHEMA_VERSION = '4';
 
     /**
      * Los conjuntos de datos que van al ZIP, **en el orden en que se escriben**.
@@ -310,6 +315,9 @@ final class DataExportCatalog
                 'clock_skew_seconds',
                 'flagged_for_review',
                 'client_meta',
+                // RN-19 (ADR-043): el dueño del codigo por su UUID, nunca el `id`.
+                'claimed_employee_uuid',
+                'pin_lockout',
             ]),
 
             // --- Las evidencias -----------------------------------------------

@@ -34,7 +34,7 @@ final class IncidentFixtures
      * produciria. Lo que si comprueba que el producto la decide bien es la
      * prueba unitaria de `IncidentType::defaultSeverity()`.
      *
-     * @param  array<string, int>  $context
+     * @param  array<string, int|string>  $context
      * @return int `incidents.id`
      */
     public static function open(

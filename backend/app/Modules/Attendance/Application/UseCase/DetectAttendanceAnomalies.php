@@ -11,12 +11,14 @@ use App\Modules\Attendance\Application\Port\FlaggedScan;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
 use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
 use App\Modules\Attendance\Application\Port\OutOfOrderScans;
+use App\Modules\Attendance\Application\Port\RejectedPinScans;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Domain\Event\AttendanceAnomalyDetected;
 use App\Modules\Attendance\Domain\Event\AttendanceReviewCompleted;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\AnomalyDetectionPolicy;
+use App\Modules\Attendance\Domain\Policy\PinAttemptRecoveryPolicy;
 use App\Modules\Attendance\Domain\Policy\ReviewPolicy;
 use App\Modules\Attendance\Domain\ValueObject\AnomalyType;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
@@ -51,6 +53,7 @@ use Throwable;
  * | Jornadas con tramos cerrados | `lookbackDays` | Decision de retroactividad, doc 01 §4 |
  * | Escaneos marcados para revision | `lookbackDays` | RN-15, leyendo hacia atras `flagged_for_review` |
  * | Fichajes irreconciliables | `lookbackDays` | RN-18, leyendo hacia atras `result = 'rejected_out_of_order'` |
+ * | Fichajes por PIN rechazados con dueño sin subsanar | `lookbackDays` (por `recorded_at`) | RN-19, leyendo hacia atras `claimed_employee_id` |
  *
  * ## Los umbrales llegan por sus puertos, y son de dos clases
  *
@@ -73,6 +76,8 @@ final readonly class DetectAttendanceAnomalies
         private FlaggedScans $flaggedScans,
         /** RN-18: los escaneos que el fichaje ya registro como irreconciliables. */
         private OutOfOrderScans $outOfOrderScans,
+        /** RN-19: los PIN rechazados con dueño y los fichajes que los subsanan. */
+        private RejectedPinScans $rejectedPinScans,
         private InstallationSiteProvider $sites,
         private OperationalSettingsProvider $settings,
         private CompliancePolicyProvider $compliance,
@@ -115,6 +120,7 @@ final readonly class DetectAttendanceAnomalies
             ...$this->inspectWorkDays($workDays, $policy, $now, $suspension),
             ...$this->inspectFlaggedScans($command, $policy, $site->id, $timezone, $now),
             ...$this->inspectOutOfOrderScans($command, $site->id, $timezone, $now),
+            ...$this->inspectRejectedPinScans($command, $site->id, $timezone, $now),
         ];
 
         $failures = $this->publishEach($anomalies);
@@ -511,6 +517,102 @@ final readonly class DetectAttendanceAnomalies
                     // la misma pantalla son dos formatos que alguien parsea mal.
                     'occurred_at' => UtcInstant::of($group['occurredAt']),
                     'scans' => $group['scans'],
+                ],
+            );
+        }
+
+        return $anomalies;
+    }
+
+    /**
+     * RN-19: los fichajes por PIN rechazados **con dueño** que nadie subsano
+     * (ADR-043).
+     *
+     * El fichaje ya escribio `scan_events.claimed_employee_id` —el codigo era de
+     * alguien que puede fichar y el PIN no verifico— y aqui se lee hacia atras,
+     * por `recorded_at`, igual que RN-18: la cola offline drena tarde y el
+     * intento que mas necesita revision es el que mas tardo en llegar.
+     *
+     * **Subsanado** es que la misma persona tenga un fichaje que lo cubre en los
+     * 600 s siguientes ({@see PinAttemptRecoveryPolicy}): se equivoco de PIN y al
+     * momento acerto, o volvio con la tarjeta. Lo demas se agrupa **por persona y
+     * jornada** —la fecha civil del `occurred_at` del intento en la zona del
+     * centro (RN-05)— y sale una incidencia por grupo, sin tramo. La granularidad
+     * la sostiene ademas `one_incident_per_finding`, que es lo que hace
+     * idempotente repetir la pasada y que una descartada no se reabra.
+     *
+     * El `context` no lleva **ni el codigo de empleado ni el PIN** (regla dura
+     * 21): el `scan_id` y el instante del primero, y tres recuentos.
+     *
+     * @return list<DetectedAnomaly>
+     */
+    private function inspectRejectedPinScans(
+        DetectAnomaliesCommand $command,
+        int $siteId,
+        DateTimeZone $timezone,
+        DateTimeImmutable $now,
+    ): array {
+        $from = $now->modify('-'.$command->lookbackDays.' days');
+        $policy = new PinAttemptRecoveryPolicy;
+
+        /** @var array<string, array{claimantUuid: string, workDate: WorkDate, scanId: string, occurredAt: DateTimeImmutable, attempts: int, lockouts: int, maxDelay: int}> $groups */
+        $groups = [];
+
+        foreach ($this->rejectedPinScans->rejectedBetween($from, $now) as $attempt) {
+            $recovering = $this->rejectedPinScans->recoveringScansOf(
+                $attempt->claimantUuid,
+                $attempt->occurredAt,
+                $attempt->occurredAt->modify('+'.PinAttemptRecoveryPolicy::RECOVERY_WINDOW_SECONDS.' seconds'),
+            );
+
+            if ($policy->isRecovered($attempt, $recovering)) {
+                continue;
+            }
+
+            $workDate = WorkDate::fromInstant($attempt->occurredAt, $timezone);
+            $key = $attempt->claimantUuid.'|'.$workDate->isoDate;
+
+            if (isset($groups[$key])) {
+                // El primero se queda: el puerto entrega en orden ascendente de
+                // `occurred_at`, asi que el que ya esta es el mas antiguo.
+                $groups[$key]['attempts']++;
+                $groups[$key]['lockouts'] += $attempt->lockout ? 1 : 0;
+                $groups[$key]['maxDelay'] = max($groups[$key]['maxDelay'], $attempt->syncDelaySeconds());
+
+                continue;
+            }
+
+            $groups[$key] = [
+                'claimantUuid' => $attempt->claimantUuid,
+                'workDate' => $workDate,
+                'scanId' => $attempt->scanId,
+                'occurredAt' => $attempt->occurredAt,
+                'attempts' => 1,
+                'lockouts' => $attempt->lockout ? 1 : 0,
+                'maxDelay' => $attempt->syncDelaySeconds(),
+            ];
+        }
+
+        $anomalies = [];
+
+        foreach ($groups as $group) {
+            $anomalies[] = new DetectedAnomaly(
+                type: AnomalyType::REJECTED_PIN_SCAN,
+                employeeUuid: $group['claimantUuid'],
+                siteId: $siteId,
+                workDate: $group['workDate'],
+                // El intento no produjo tramo: la incidencia es de la jornada.
+                shiftEntryUuid: null,
+                detectedAt: $now,
+                context: [
+                    'scan_id' => $group['scanId'],
+                    // Misma forma que cualquier instante de la API (`UtcTimestamp`).
+                    'occurred_at' => UtcInstant::of($group['occurredAt']),
+                    'attempts' => $group['attempts'],
+                    'lockout_attempts' => $group['lockouts'],
+                    // Con signo: una cola que drena tarde da positivo; un reloj
+                    // adelantado, negativo.
+                    'max_sync_delay_seconds' => $group['maxDelay'],
                 ],
             );
         }

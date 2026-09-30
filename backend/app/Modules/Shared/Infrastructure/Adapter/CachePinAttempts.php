@@ -60,10 +60,17 @@ use Illuminate\Contracts\Cache\Repository as Cache;
  * ## Un riesgo que se acepta a proposito
  *
  * Quien conozca el codigo de un empleado puede bloquearle el PIN en tres
- * intentos. Se acepta porque **su tarjeta sigue funcionando**: el camino de
- * RF-AT-01 no pasa por aqui, asi que la persona sigue pudiendo fichar y la regla
- * dura 19 se sostiene. La alternativa —no bloquear— deja un espacio de 10^6
- * abierto a fuerza bruta, que es lo que RS-12 existe para impedir.
+ * intentos, y un bloqueo tambien puede alcanzar a la propia persona: fichajes
+ * por PIN encolados sin red que se rechazan al sincronizar, a veces horas
+ * despues. «Su tarjeta sigue funcionando» no bastaba —la via del PIN existe
+ * justo para quien no la lleva (RF-AT-11)— y lo que sostiene el riesgo es
+ * **RN-19** (ADR-043): cada intento rechazado de alguien que puede fichar deja
+ * en `scan_events` a quien correspondia el codigo y, si ningun fichaje suyo lo
+ * subsana en 10 minutos, la revision diaria abre una incidencia
+ * `rejected_pin_scan` para su responsable. El bloqueo no hace desaparecer la
+ * jornada: la manda a revision humana, y la respuesta al quiosco no cambia
+ * (RS-03). La alternativa —no bloquear— deja un espacio de 10^6 abierto a
+ * fuerza bruta, que es lo que RS-12 existe para impedir.
  *
  * **Todos los umbrales son configuracion** (regla dura 13): `IDENTITY_PIN_*` en
  * `config/identity.php`. Se leen en cada llamada y no en el constructor para que

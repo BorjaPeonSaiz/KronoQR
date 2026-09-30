@@ -58,7 +58,9 @@ use DateTimeImmutable;
  * 17). El tiempo lo iguala el verificador comparando siempre contra **algo**
  * —el hash real o el señuelo—, asi que aqui no hace falta ningun suelo
  * artificial; lo unico que este caso de uso tiene que hacer es no ramificar
- * hacia respuestas distintas.
+ * hacia respuestas distintas. **No lee `PinVerification::claim()`**: el dueño
+ * del codigo es para la revision de RN-19 en el quiosco (ADR-043), no para el
+ * portal.
  *
  * **El sexto desenlace es una carrera y sale igual**: que la persona deje de
  * existir entre la comprobacion del PIN y la emision del token. El puerto
