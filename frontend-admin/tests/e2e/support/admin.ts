@@ -2030,6 +2030,8 @@ export async function stubManagementApi(
   let attendanceMinTransitSeconds = options.operationalSettings?.minTransitSeconds ?? 120
   let attendancePatternWindowSeconds = options.operationalSettings?.patternWindowSeconds ?? 10
   let attendancePatternMinRepeats = options.operationalSettings?.patternMinRepeats ?? 3
+  // F1: el margen de futuro del alta manual, 5/0-60 como en `SettingKey`.
+  let attendanceFutureToleranceMinutes = 5
   let localeDefault = options.operationalSettings?.localeDefault ?? 'es'
   let localeAvailable = options.operationalSettings?.localeAvailable ?? ['es', 'en']
   let kioskServiceCode = options.operationalSettings?.kioskServiceCode ?? ''
@@ -2122,6 +2124,15 @@ export async function stubManagementApi(
           affects_worked_hours: false,
           source: attendancePatternMinRepeats === 3 ? 'product_default' : 'installation',
           constraints: { minimum: 1, maximum: 30 },
+        },
+        {
+          key: 'ATTENDANCE_FUTURE_TOLERANCE_MINUTES',
+          value: attendanceFutureToleranceMinutes,
+          type: 'integer',
+          impact: 'worked_hours',
+          affects_worked_hours: true,
+          source: attendanceFutureToleranceMinutes === 5 ? 'product_default' : 'installation',
+          constraints: { minimum: 0, maximum: 60 },
         },
         {
           key: 'BRANDING_APP_NAME',
@@ -3179,6 +3190,7 @@ export async function stubManagementApi(
           const minTransitSeconds = checkInteger('ATTENDANCE_MIN_TRANSIT_SECONDS', 0, 3600)
           const patternWindowSeconds = checkInteger('ATTENDANCE_PATTERN_WINDOW_SECONDS', 0, 300)
           const patternMinRepeats = checkInteger('ATTENDANCE_PATTERN_MIN_REPEATS', 1, 30)
+          const futureToleranceMinutes = checkInteger('ATTENDANCE_FUTURE_TOLERANCE_MINUTES', 0, 60)
 
           const serviceCodeRaw = patch.settings['KIOSK_SERVICE_CODE']
 
@@ -3374,6 +3386,10 @@ export async function stubManagementApi(
 
           if (patternMinRepeats !== undefined) {
             attendancePatternMinRepeats = patternMinRepeats
+          }
+
+          if (futureToleranceMinutes !== undefined) {
+            attendanceFutureToleranceMinutes = futureToleranceMinutes
           }
 
           localeDefault = nextLocaleDefault

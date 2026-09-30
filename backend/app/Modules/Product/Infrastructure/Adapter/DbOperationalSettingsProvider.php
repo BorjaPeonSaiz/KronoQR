@@ -137,6 +137,9 @@ final class DbOperationalSettingsProvider implements OperationalSettingsProvider
             // dominio del cuadro, no aqui: este adaptador transporta el valor tal
             // cual, como con los otros ocho.
             baselineManualHoursPerMonth: $settings->integer(SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH),
+            // F1. Solo lo consumen el alta y la correccion manuales del panel;
+            // el camino de fichaje nunca rechaza por la hora (regla dura 19).
+            manualEntryFutureToleranceMinutes: $settings->integer(SettingKey::ATTENDANCE_FUTURE_TOLERANCE_MINUTES),
         );
     }
 }

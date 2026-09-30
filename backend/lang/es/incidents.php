@@ -25,6 +25,7 @@ return [
         'missing_clock_out' => 'Falta el fichaje de salida',
         'anomalous_pattern' => 'Patrón anómalo de uso de credencial',
         'out_of_order_scan' => 'Fichaje que no cuadra con el registro',
+        'rejected_pin_scan' => 'Fichaje por PIN no registrado',
     ],
 
     'severities' => [

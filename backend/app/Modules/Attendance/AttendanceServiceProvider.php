@@ -16,6 +16,7 @@ use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
 use App\Modules\Attendance\Application\Port\OutOfOrderScans;
 use App\Modules\Attendance\Application\Port\PatternDetectionMetrics;
 use App\Modules\Attendance\Application\Port\ProjectionMetrics;
+use App\Modules\Attendance\Application\Port\RejectedPinScans;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
@@ -41,6 +42,7 @@ use App\Modules\Attendance\Infrastructure\Persistence\EloquentAnomalousPatternHi
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentCredentialScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentFlaggedScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentOutOfOrderScans;
+use App\Modules\Attendance\Infrastructure\Persistence\EloquentRejectedPinScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentScanLog;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentShiftEntryHistory;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentShiftEntrySubject;
@@ -115,6 +117,10 @@ final class AttendanceServiceProvider extends ServiceProvider
         // leen `scan_events` hacia atras, pero responden preguntas distintas y
         // cada uno trae solo lo que su hallazgo necesita.
         $this->app->bind(OutOfOrderScans::class, EloquentOutOfOrderScans::class);
+
+        // RN-19 (ADR-043): los PIN rechazados con dueño y los fichajes que los
+        // subsanan, leidos hacia atras por la misma revision diaria.
+        $this->app->bind(RejectedPinScans::class, EloquentRejectedPinScans::class);
 
         // RF-PR-06 y RN-16 (tarea 3.11): los usos de credencial en quiosco sobre
         // los que la deteccion de patrones busca coincidencias sistematicas y

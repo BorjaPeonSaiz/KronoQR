@@ -19,7 +19,8 @@ namespace App\Modules\Compliance\Domain\ValueObject;
  * codigo; alli, la frase.
  *
  * Cada valor corresponde a un punto de `rollback_and_die()` de `update.sh`; el
- * mapa exacto lo fija la tarea que engancha el script.
+ * mapa exacto lo fija la tarea que engancha el script. La excepcion es
+ * `manual_restore`, que escribe `restore.sh` (PR1).
  */
 enum SystemRestoreReason: string
 {
@@ -67,4 +68,16 @@ enum SystemRestoreReason: string
 
     /** `product:doctor` salio en rojo tras la actualizacion. */
     case DoctorFailed = 'doctor_failed';
+
+    /**
+     * **Restauracion manual** con `restore.sh` (PR1, runbook
+     * `restaurar-backup.md`): no la provoco ningun fallo de `update.sh`, sino
+     * la decision de una persona que opera la maquina.
+     *
+     * Existe para que ese asiento no tenga que fingir un motivo de la
+     * actualizacion: el intervalo descartado es igual de real (RL-04, regla
+     * dura 6) y el trail tiene que poder distinguir «el actualizador volvio
+     * atras» de «alguien restauro una copia».
+     */
+    case ManualRestore = 'manual_restore';
 }

@@ -13,7 +13,9 @@ use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Application\Support\Corrections;
+use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
@@ -48,6 +50,11 @@ use Illuminate\Support\Str;
  * aqui **si** puede decir por que, al contrario que en el quiosco: quien la
  * recibe es un responsable autenticado, no una pantalla en un pasillo (RS-03 y
  * la regla dura 17 hablan del escaneo).
+ *
+ * **Nada en el futuro** (F1, RL-01, RL-04). La jornada y las dos marcas se
+ * comparan con la hora del servidor mas `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`
+ * ({@see ManualEntryHorizon}) antes de tocar el agregado: rellenar la jornada
+ * teorica por adelantado o dejar escrita la salida «prevista» es un `422`.
  */
 final readonly class AddShiftEntryHandler
 {
@@ -64,6 +71,7 @@ final readonly class AddShiftEntryHandler
 
     /**
      * @throws EmployeeCannotBeClocked el empleado no existe, no puede fichar o su centro no tiene zona
+     * @throws ShiftMarkInFuture la jornada o alguna marca es posterior a la hora del servidor mas el margen
      */
     public function handle(AddShiftEntryCommand $command): CorrectedShift
     {
@@ -93,6 +101,15 @@ final readonly class AddShiftEntryHandler
         DateTimeImmutable $performedAt,
     ): CorrectedShift {
         $workDate = WorkDate::fromIsoDate($command->workDate, $timezone);
+        $times = ShiftTimes::of($command->clockedInAt, $command->clockedOutAt);
+        $settings = $this->settings->forSite($employee->siteId);
+
+        // F1: lo que no ha ocurrido no se anota. La jornada primero, porque una
+        // jornada futura con horas pasadas daria un error de RN-05 que no dice
+        // cual es el problema.
+        $horizon = ManualEntryHorizon::at($performedAt, $settings->manualEntryFutureToleranceMinutes);
+        $horizon->assertWorkDateAllowed($workDate);
+        $horizon->assertTimesAllowed($times);
 
         // La jornada puede no existir todavia: un alta retroactiva de un dia en
         // el que la persona no ficho nada la crea.
@@ -101,10 +118,10 @@ final readonly class AddShiftEntryHandler
 
         $entry = $workDay->addEntry(
             Str::uuid7()->toString(),
-            ShiftTimes::of($command->clockedInAt, $command->clockedOutAt),
+            $times,
             ScanOrigin::MANUAL_ADMIN,
             Correction::by($command->performedByUserId, $performedAt, $command->reason),
-            ClockingPolicies::forSettings($this->settings->forSite($employee->siteId)),
+            ClockingPolicies::forSettings($settings),
         );
 
         $this->workDays->save($workDay);

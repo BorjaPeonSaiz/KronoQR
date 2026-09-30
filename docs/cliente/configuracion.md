@@ -55,6 +55,7 @@ Se cambian solo las que hagan falta.
 | `ATTENDANCE_DEBOUNCE_SECONDS` | `60` | 0 – 3600 | Ventana de gracia: dos escaneos de la misma persona dentro de esa ventana cuentan como uno. **Esta clave cambia las horas registradas** — ver el aviso de abajo. `0` la desactiva. |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Desfase tolerado entre el reloj de la tablet y el del servidor antes de marcar el fichaje para revisión. **Nunca rechaza un fichaje**, solo lo señala. Es además el umbral con el que **la propia tablet avisa** de que su hora se ha ido. |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a `0` si tienes dos tablets en la misma puerta; súbelo si hay dos edificios. |
+| `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` | `5` | 0 – 60 | Margen por delante de la hora del servidor que admiten **el alta y la corrección manuales** de un tramo en el panel. Una hora o una jornada posteriores a «ahora + margen» se rechazan: el registro horario anota lo que ya ha ocurrido, no la salida prevista ni la jornada teórica. Existe porque el formulario redondea al minuto y el reloj del ordenador puede ir algo adelantado. `0` no admite ni un minuto de adelanto. **No afecta al quiosco**, que nunca rechaza un fichaje por la hora. **Cambia qué horas se pueden anotar a mano** — ver el aviso de abajo. |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | `10` | 0 – 300 | Segundos por debajo de los cuales dos fichajes de **dos personas distintas en el mismo quiosco** cuentan como una **coincidencia** (como mucho una por pareja y día). **No abre incidencia por sí sola**: hace falta que la misma pareja acumule los días de la clave siguiente. `0` desactiva este patrón. |
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Días con coincidencia que tiene que acumular la misma pareja, dentro de los últimos 30 días, para que se abra la incidencia «Patrón anómalo de uso de la credencial» —**una por cada persona implicada**, cada una con su contraparte principal: si tres entran siempre juntas, son tres incidencias—. Súbelo si en tu centro es normal entrar en grupo por la misma puerta; bájalo a `1` solo si quieres ver cada pareja de escaneos seguidos. **La incidencia no anula ningún fichaje ni califica a nadie**: la revisa el responsable ([`guia-rrhh.md`](guia-rrhh.md) §4.5). |
 | `WEEKLY_SUMMARY_EMAIL` | `disabled` | `enabled` o `disabled` | Enciende el **resumen semanal por correo**: los lunes a las 06:00 UTC, cada responsable de departamento activo y con correo recibe la semana anterior **de su ámbito y de nadie más**. Exige salida de correo configurada (sección 6.21) y la funcionalidad `weekly_email_summary` en la licencia; sin cualquiera de las dos **el sistema funciona igual** y el envío se omite dejando constancia. Ver debajo de la tabla. |
@@ -137,7 +138,9 @@ reinterpretan**: siguen siendo dos tramos con su pausa en medio.
 
 > **⚠️ `ATTENDANCE_DEBOUNCE_SECONDS` afecta al cálculo de horas.** Subirlo hace
 > que fichajes reales muy seguidos se descarten, y el total de la jornada sale
-> distinto. Es la única clave de esta lista que mueve minutos del registro legal.
+> distinto. Con `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` —cuánto adelanto sobre la
+> hora del servidor admite el alta manual— son las dos claves de esta lista que
+> deciden qué minutos entran en el registro legal.
 > Cámbiala con criterio y déjalo dicho por escrito: el cambio queda auditado con
 > tu nombre, la fecha y el valor anterior.
 >
@@ -1500,6 +1503,7 @@ petición siguiente sin reiniciar nada:
 | `ATTENDANCE_DEBOUNCE_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
+| `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.1 |
 | `WEEKLY_SUMMARY_EMAIL` | Panel → **Ajustes operativos** (`/settings`) → «Resumen semanal por correo» | Sección 2.1 |

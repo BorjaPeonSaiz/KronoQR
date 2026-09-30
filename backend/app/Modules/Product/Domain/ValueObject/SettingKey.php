@@ -6,6 +6,7 @@ namespace App\Modules\Product\Domain\ValueObject;
 
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
 use App\Modules\Shared\Domain\ValueObject\KioskUpdateWindow;
+use App\Modules\Shared\Domain\ValueObject\OperationalSettings;
 use App\Modules\Shared\Domain\ValueObject\PayrollColumn;
 use App\Modules\Shared\Domain\ValueObject\PayrollDateFormat;
 use App\Modules\Shared\Domain\ValueObject\PayrollDelimiter;
@@ -339,6 +340,34 @@ enum SettingKey: string
     case BASELINE_MANUAL_HOURS_PER_MONTH = 'BASELINE_MANUAL_HOURS_PER_MONTH';
 
     /**
+     * F1 (RL-01, RL-04): **cuantos minutos por delante de la hora del servidor**
+     * admiten el alta manual y la correccion de un tramo.
+     *
+     * Un registro horario anota lo que ya ha ocurrido. Sin este limite el panel
+     * dejaba rellenar la jornada teorica por adelantado o cerrar un turno con la
+     * salida «prevista». El margen no es una licencia para eso: existe porque el
+     * formulario redondea al minuto —quien cierra un turno «ahora» a las 10:04:30
+     * envia 10:05— y porque el reloj del navegador puede ir algo adelantado.
+     *
+     * ## Operativo y no legal, y por eso vive aqui
+     *
+     * La regla dura 14 manda al perfil de cumplimiento los umbrales que fija la
+     * jurisdiccion —descanso, jornada, pausas, retencion—. Este no lo fija
+     * ninguna norma: es la tolerancia de una herramienta de entrada de datos,
+     * como la ventana anti-rebote. El dominio lo recibe ya resuelto
+     * ({@see OperationalSettings}).
+     *
+     * **No toca el quiosco.** El fichaje nunca se rechaza por la hora (regla dura
+     * 19): su desfase lo gobierna {@see self::ATTENDANCE_MAX_CLOCK_SKEW_MINUTES},
+     * que solo marca para revision. Son dos claves porque son dos significados;
+     * compartir una obligaria a elegir entre un quiosco que marca demasiado y un
+     * panel que admite un dia entero de futuro.
+     *
+     * Impacto `WORKED_HOURS`: decide que minutos se pueden anotar a mano.
+     */
+    case ATTENDANCE_FUTURE_TOLERANCE_MINUTES = 'ATTENDANCE_FUTURE_TOLERANCE_MINUTES';
+
+    /**
      * Los idiomas que el producto trae traducidos.
      *
      * No es configuracion del cliente: es lo que hay en `lang/` y en los `i18n`
@@ -529,6 +558,14 @@ enum SettingKey: string
             // entre un dato y un error de tecleo.
             self::BASELINE_MANUAL_HOURS_PER_MONTH->value => SettingDefinition::integer(
                 0, 0, 10000, SettingImpact::PRESENTATION,
+            ),
+            // EL LIMITE DE FUTURO DEL ALTA Y LA CORRECCION MANUALES (F1). Cinco
+            // minutos cubren el redondeo al minuto del formulario y una deriva
+            // normal del reloj del navegador. Cero es legitimo: nada por delante
+            // del servidor. El techo es una hora, porque un margen mayor deja de
+            // ser una tolerancia y vuelve a permitir anotar lo que no ha pasado.
+            self::ATTENDANCE_FUTURE_TOLERANCE_MINUTES->value => SettingDefinition::integer(
+                5, 0, 60, SettingImpact::WORKED_HOURS,
             ),
         ];
     }

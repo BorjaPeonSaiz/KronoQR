@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Application\Port;
 
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
+use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /**
  * La fila de `scan_events` que el caso de uso quiere dejar escrita, ya
@@ -58,6 +60,11 @@ final readonly class ScanRecord
      *                                   escaneo posterior del mismo dia cambia el tramo. Nulo
      *                                   solo en un rechazo real; presente en el anti-rebote.
      * @param  array<string, scalar>  $clientMeta  Telemetria del cliente. Nunca datos personales.
+     * @param  PinClaim|null  $pinClaim  RN-19 (ADR-043): a quien correspondia el codigo de un
+     *                                   fichaje por PIN rechazado. Solo con `origin = pin_kiosk`,
+     *                                   `result = rejected_unknown` y sin `employeeUuid`: es el
+     *                                   espejo en PHP del `CHECK scan_events_chk_pin_claim`. Se
+     *                                   escribe en la fila y en ningun otro sitio.
      */
     public function __construct(
         public string $scanId,
@@ -74,5 +81,16 @@ final readonly class ScanRecord
         public bool $flaggedForReview = false,
         public ?int $workedMinutes = null,
         public array $clientMeta = [],
-    ) {}
+        public ?PinClaim $pinClaim = null,
+    ) {
+        if (! $pinClaim instanceof PinClaim) {
+            return;
+        }
+
+        if ($origin !== ScanOrigin::PIN_KIOSK || $result !== ScanResult::REJECTED_UNKNOWN || $employeeUuid !== null) {
+            throw new InvalidArgumentException(
+                'Un PinClaim solo cabe en un fichaje por PIN rechazado como rejected_unknown y sin empleado (RN-19).',
+            );
+        }
+    }
 }

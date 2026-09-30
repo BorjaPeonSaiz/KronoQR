@@ -30,6 +30,9 @@ namespace App\Modules\Compliance\Domain\ValueObject;
  *
  * El paso 6 es la vuelta atras y el 7 el informe: ninguno de los dos puede ser
  * el paso que **provoco** la vuelta atras, y por eso no tienen valor.
+ *
+ * `manual_restore` no es un paso de `update.sh`: lo escribe `restore.sh` cuando
+ * una persona restaura una copia a mano (PR1).
  */
 enum SystemUpdateStep: string
 {
@@ -54,4 +57,13 @@ enum SystemUpdateStep: string
      * que dice que no sabe.
      */
     case Unknown = 'unknown';
+
+    /**
+     * La restauracion no salio de ningun paso de `update.sh`: la lanzo una
+     * persona con `restore.sh` (PR1). Se nombra en lugar de reutilizar
+     * `unknown` porque aqui **si se sabe** que no hubo actualizacion en curso,
+     * y un asiento que dice «no se» cuando si se sabe es tan malo como uno que
+     * adivina.
+     */
+    case ManualRestore = 'manual_restore';
 }

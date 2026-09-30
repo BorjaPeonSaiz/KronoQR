@@ -36,6 +36,7 @@ use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
+use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
@@ -336,6 +337,9 @@ final readonly class RegisterScanHandler
                         ? ScanRejectionReason::UNKNOWN_CREDENTIAL
                         : ScanRejectionReason::fromCredentialRejection($reason),
                 ),
+                // RN-19 (ADR-043): el dueño del codigo de un PIN rechazado, solo
+                // para la fila. Nulo en todo lo demas.
+                pinClaim: $resolution->pinClaim(),
             );
         }
 
@@ -746,6 +750,7 @@ final readonly class RegisterScanHandler
         ?string $employeeUuid,
         ScanResult $result,
         bool $flaggedForReview = false,
+        ?PinClaim $pinClaim = null,
     ): RegisterScanResult {
         $fingerprint = $this->fingerprintOf($command->qrPayload);
 
@@ -765,6 +770,9 @@ final readonly class RegisterScanHandler
             // nuevos. `worked_minutes` no viaja en ninguno de los dos.
             flaggedForReview: $flaggedForReview,
             clientMeta: $command->clientMeta,
+            // RN-19: SOLO en la fila. Ni en `ScanRejected` —su `employeeUuid`
+            // sigue nulo— ni en el resultado: la respuesta no puede cambiar.
+            pinClaim: $pinClaim,
         ));
 
         $this->events->publish(new ScanRejected(

@@ -71,6 +71,7 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordSiteConfiguration;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSupportGrantGranted;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSupportGrantRevoked;
 use App\Modules\Compliance\Infrastructure\Listener\RecordSupportGrantUsed;
+use App\Modules\Compliance\Infrastructure\Listener\RecordWorkforceChange;
 use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileAuditMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileIncidentMetrics;
@@ -122,8 +123,13 @@ use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Workforce\Domain\Event\AbsenceCorrected;
 use App\Modules\Workforce\Domain\Event\AbsenceRegistered;
 use App\Modules\Workforce\Domain\Event\AbsenceVoided;
+use App\Modules\Workforce\Domain\Event\DepartmentCreated;
+use App\Modules\Workforce\Domain\Event\DepartmentRenamed;
+use App\Modules\Workforce\Domain\Event\EmployeeHired;
+use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
+use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Modules\Workforce\Domain\Event\EmploymentContractRegistered;
 use App\Modules\Workforce\Domain\Event\SiteConfigured;
@@ -311,6 +317,7 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->recordAbsenceChanges();
         $this->recordSiteConfiguration();
         $this->recordEmployeeImports();
+        $this->recordWorkforceChanges();
         $this->recordSetupCompletion();
         $this->recordInstallationSettingChanges();
         $this->recordComplianceProfileChanges();
@@ -692,6 +699,24 @@ final class ComplianceServiceProvider extends ServiceProvider
     private function recordSiteConfiguration(): void
     {
         Event::listen(SiteConfigured::class, [RecordSiteConfiguration::class, 'handle']);
+    }
+
+    /**
+     * Los asientos de **plantilla y departamentos** (AUD-2, RF-GP-01/02/03).
+     *
+     * `employee.hired|updated|offboarded` y `department.created|renamed`, con el
+     * identificador y la lista de campos tocados, nunca valores (regla dura 21).
+     * Sincrono, sin `ShouldQueue` y sin `afterCommit` (ADR-027): los cinco casos
+     * de uso publican dentro de su transaccion, y si el asiento falla el cambio
+     * no se confirma.
+     */
+    private function recordWorkforceChanges(): void
+    {
+        Event::listen(EmployeeHired::class, [RecordWorkforceChange::class, 'hired']);
+        Event::listen(EmployeeProfileUpdated::class, [RecordWorkforceChange::class, 'updated']);
+        Event::listen(EmployeeOffboarded::class, [RecordWorkforceChange::class, 'offboarded']);
+        Event::listen(DepartmentCreated::class, [RecordWorkforceChange::class, 'departmentCreated']);
+        Event::listen(DepartmentRenamed::class, [RecordWorkforceChange::class, 'departmentRenamed']);
     }
 
     /**

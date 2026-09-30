@@ -17,6 +17,7 @@ use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
+use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 
 /**
@@ -56,9 +57,16 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  * Los tres se traducen a `CredentialRejectionReason::UNKNOWN`, que es el mismo
  * valor con el que se rechaza una tarjeta desconocida: desde fuera, y tambien
  * desde `scan_events.result`, un PIN incorrecto es indistinguible de un codigo
- * que no existe y de un bloqueo activo (regla dura 17, RS-03). El desenlace
- * detallado no se pierde: viaja al log estructurado y a la metrica, que es donde
- * el §8.2 lo quiere y donde no lo ve quien teclea.
+ * que no existe y de un bloqueo activo (regla dura 17, RS-03). **Hacia fuera
+ * sigue siendo uno solo.**
+ *
+ * **Lo que no se pierde (RN-19, ADR-043).** Cuando el codigo es de una persona
+ * que puede fichar, el verificador devuelve ademas un `PinClaim` y el rechazo
+ * baja como `CredentialResolution::rejectedWithPinClaim()`: el mismo `UNKNOWN`,
+ * sin `employeeUuid`, con el dueño del codigo solo para la fila de
+ * `scan_events` (`claimed_employee_id`). La revision diaria lo convierte en
+ * incidencia si nadie lo subsana; la respuesta, el evento `ScanRejected` y el
+ * log no lo llevan. El sobre que no abre nunca lleva claim.
  *
  * **El sobre que no abre no cuenta como intento fallido**, y esa distincion
  * importa: un criptograma corrupto no dice nada sobre el PIN que lleva dentro, y
@@ -185,7 +193,15 @@ final readonly class RegisterPinScanHandler
             // incorrecto y bloqueo activo— ya los ha registrado el verificador,
             // que es el unico que sabe cual de los dos fue. Repetirlo daria dos
             // incrementos por intento y una tasa de fallo del doble de la real.
-            return CredentialResolution::rejected(CredentialRejectionReason::UNKNOWN);
+            //
+            // RN-19 (ADR-043): si el codigo es de alguien que puede fichar, el
+            // claim baja hasta la fila de `scan_events` y a ningun otro sitio.
+            // Hacia fuera es el mismo rechazo `UNKNOWN`, sin `employeeUuid`.
+            $claim = $verification->claim();
+
+            return $claim instanceof PinClaim
+                ? CredentialResolution::rejectedWithPinClaim($claim)
+                : CredentialResolution::rejected(CredentialRejectionReason::UNKNOWN);
         }
 
         $this->journal->succeeded(AuthChannel::KIOSK_PIN, $employeeUuid);

@@ -252,6 +252,10 @@ docker compose up -d
 curl -sk https://localhost/api/v1/health
 ```
 
+Al terminar, `restore.sh` deja un asiento `system.restored_from_backup` en `audit_log`
+(§6.7). Si sale con `6`, la base está restaurada y solo falta ese asiento: sigue
+§6.7 y **no repitas la restauración**.
+
 Las tres órdenes de `restore.sh` van por el servicio **`restore`**, no por
 `app`: es un contenedor de un solo uso que recibe la credencial del rol de
 migración (restaurar exige crear y renombrar bases), hace su trabajo y
@@ -352,6 +356,53 @@ Si el actualizador sale con `5`, la restauración quedó a medias y hay que
 terminarla a mano: las órdenes exactas están en su mensaje y en
 [`actualizacion-cliente.md`](actualizacion-cliente.md) §5. Son las de §6.2 con
 las rutas de los dos paquetes.
+
+### 6.7 El asiento de la restauración (PR1) y la salida `6`
+
+Restaurar descarta un intervalo del registro horario, y eso **tiene que constar
+dentro del propio registro**, no solo en un fichero de informe. Por eso, tras
+intercambiar las bases, `restore.sh` deja en `audit_log` un asiento
+`system.restored_from_backup` con: el nombre de la copia (sin ruta), el instante
+en que se hizo, su huella, la versión y **`chain_before`: la punta de la cadena
+que se descarta**, leída justo antes del intercambio. `chain_before` no encaja
+con el `prev_hash` del asiento, y esa discrepancia es la prueba, dentro de la
+cadena, de que hubo un intervalo que ya no está. `compliance:verify-audit-chain`
+sigue dando verde.
+
+- Lo escribe el propio servicio `restore` con el rol de migración que ya tiene:
+  **no se da ninguna credencial nueva al runtime** (AUD-1, ADR-042).
+- Solo se escribe si la base de destino es la de la instalación. Con
+  `--database otra_base` (pruebas, simulacros) no se descarta nada y no hay
+  asiento.
+- Si el entorno no puede escribirlo (sin `php`/`artisan`), `restore.sh` **se
+  niega a empezar** con salida `2` y no toca nada.
+- `update.sh` llama a `restore.sh` con `--audit-by-caller` porque escribe su
+  propio asiento de vuelta atrás, con el paso y el motivo del fallo. No es un
+  atajo para restauraciones manuales: si lo usas a mano, el intervalo
+  descartado no consta en el registro.
+
+**Si `restore.sh` sale con `6` (asiento pendiente).** La base **está restaurada y
+en servicio**; solo falta el asiento. **No repitas la restauración.**
+
+1. Copia la orden del mensaje (o de `BACKUP_PATH/reports/restore-<marca>.log`,
+   línea «Para escribirlo») y ejecútala. Lleva el JSON ya hecho:
+
+   ```bash
+   docker compose run --rm --no-deps -T -e DB_CONNECTION=pgsql_migrator migrate \
+     php artisan compliance:record-system-event system.restored_from_backup \
+     --data='{"backup_file":"...","backup_taken_at":"...","failed_step":"manual_restore","reason":"manual_restore",...}'
+   ```
+
+2. Comprueba la cadena: `docker compose exec app php artisan compliance:verify-audit-chain`
+   debe terminar con `0`.
+3. Si la orden falla con «El payload no se admite», copia el mensaje en el parte y
+   avisa al fabricante: la causa es que la versión instalada no conoce el motivo
+   `manual_restore`. **No edites `audit_log` a mano** (es solo-append y tiene
+   cadena por hash). El informe conserva el JSON para escribirlo tras actualizar.
+4. Mientras esté pendiente, anótalo en el parte del incidente: es un hueco en el
+   registro que hay que cerrar.
+
+---
 
 ## 7. Simulacro trimestral (RNF-D-05, RQ-09)
 

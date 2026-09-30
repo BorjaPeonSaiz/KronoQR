@@ -156,7 +156,8 @@ const DEFAULT_PAYROLL_COLUMNS: readonly string[] = [
 ]
 
 /**
- * Las seis claves `ATTENDANCE_*`, en el orden en que las declara el catalogo.
+ * Las siete claves numericas `ATTENDANCE_*` (la septima, el margen de futuro
+ * del alta manual de F1, se anadio al final del catalogo).
  * `key` se tipa contra `SettingKey` con `satisfies` (segunda vuelta de la
  * tarea 3.11, decision 17): las dos ultimas ya estan en el enum del contrato,
  * y un cambio de nombre ahi falla aqui en vez de en `changes[field.key]`. El
@@ -189,6 +190,13 @@ const ATTENDANCE_FIELDS = [
     testId: 'pattern-min-repeats',
     i18n: 'patternMinRepeats',
   },
+  // F1: margen por delante de la hora del servidor que admiten el alta y la
+  // correccion manuales de un tramo. 5 minutos de serie.
+  {
+    key: 'ATTENDANCE_FUTURE_TOLERANCE_MINUTES',
+    testId: 'future-tolerance-minutes',
+    i18n: 'futureToleranceMinutes',
+  },
 ] as const satisfies ReadonlyArray<{ key: SettingKey; testId: string; i18n: string }>
 
 type AttendanceKey = (typeof ATTENDANCE_FIELDS)[number]['key']
@@ -206,6 +214,7 @@ const form = ref<Record<AttendanceKey, number | string>>({
   ATTENDANCE_MIN_TRANSIT_SECONDS: '',
   ATTENDANCE_PATTERN_WINDOW_SECONDS: '',
   ATTENDANCE_PATTERN_MIN_REPEATS: '',
+  ATTENDANCE_FUTURE_TOLERANCE_MINUTES: '',
 })
 const localeDefault = ref('')
 const localeAvailable = ref<string[]>([])
@@ -469,6 +478,9 @@ const fieldLabels = computed<Record<string, string>>(() => ({
     'operationalSettings.fields.patternWindowSeconds',
   ),
   'settings.ATTENDANCE_PATTERN_MIN_REPEATS': t('operationalSettings.fields.patternMinRepeats'),
+  'settings.ATTENDANCE_FUTURE_TOLERANCE_MINUTES': t(
+    'operationalSettings.fields.futureToleranceMinutes',
+  ),
   'settings.KIOSK_SERVICE_CODE': t('operationalSettings.fields.kioskServiceCode'),
   'settings.ATTENDANCE_BREAK_CLOCKING': t('operationalSettings.fields.breakClocking'),
   'settings.WEEKLY_SUMMARY_EMAIL': t('operationalSettings.fields.weeklySummaryEmail'),

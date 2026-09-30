@@ -9,11 +9,14 @@ use App\Modules\Identity\Application\Port\CredentialRepository;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Domain\Event\CredentialIssued;
 use App\Modules\Identity\Domain\Event\CredentialRevoked;
+use App\Modules\Identity\Domain\Exception\CredentialHolderIsOffboarded;
 use App\Modules\Identity\Domain\Exception\CredentialRevocationNeedsReason;
 use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Model\Credential;
+use App\Modules\Identity\Domain\Policy\CredentialIssuancePolicy;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
@@ -49,6 +52,8 @@ final readonly class IssueCredential
         private CredentialRepository $credentials,
         private EmployeeRegistry $employees,
         private IdentityEventPublisher $events,
+        private EmploymentStatusLookup $employmentStatus,
+        private CredentialIssuancePolicy $issuance,
         private Clock $clock,
         private ConnectionInterface $connection,
     ) {}
@@ -58,6 +63,7 @@ final readonly class IssueCredential
      *
      * @throws EmployeeAlreadyHasCredential cuando ya hay una activa y no se pidio reemitir
      * @throws CredentialRevocationNeedsReason cuando se reemite sin declarar el motivo
+     * @throws CredentialHolderIsOffboarded cuando la persona esta de baja (RN-14)
      */
     public function handle(IssueCredentialCommand $command): ?IssuedCredential
     {
@@ -66,6 +72,17 @@ final readonly class IssueCredential
         if ($employeeId === null) {
             return null;
         }
+
+        // RN-14: nunca a una persona de baja, tampoco reemitiendo. Antes de la
+        // transaccion y antes de revocar nada: si no se puede emitir, no se
+        // toca ninguna tarjeta.
+        $status = $this->employmentStatus->statusOf($employeeId);
+
+        if ($status === null) {
+            return null;
+        }
+
+        $this->issuance->assertMayReceiveCredential($status);
 
         if ($command->reissue && trim((string) $command->reason) === '') {
             throw CredentialRevocationNeedsReason::make();

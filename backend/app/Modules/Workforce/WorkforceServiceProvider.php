@@ -11,6 +11,7 @@ use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmployeeScopeDirectory;
+use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
@@ -41,6 +42,7 @@ use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeCardDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeRegistry;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeScopeDirectory;
+use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmploymentStatusLookup;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentInstallationSiteProvider;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentSiteCalendar;
 use App\Modules\Workforce\Infrastructure\Adapter\HashedEmployeePinVerifier;
@@ -208,6 +210,10 @@ final class WorkforceServiceProvider extends ServiceProvider
         // el nombre completo. Un solo puerto habria metido el apellido entero en
         // el padron cacheado de una tablet colgada de una pared.
         $this->app->bind(EmployeeCardDirectory::class, EloquentEmployeeCardDirectory::class);
+
+        // RN-14: Identity no emite tarjeta a una persona de baja, y el estado
+        // vive aqui. Puerto propio: EmployeeRegistry solo traduce identificadores.
+        $this->app->bind(EmploymentStatusLookup::class, EloquentEmploymentStatusLookup::class);
     }
 
     public function boot(): void

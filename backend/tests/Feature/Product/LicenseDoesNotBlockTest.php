@@ -193,7 +193,7 @@ it('CON LA LICENCIA CADUCADA se corrige una jornada con su motivo', function ():
 
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)))
         ->patch('/api/v1/shift-entries/'.$uuid, [
-            'clocked_out_at' => '2027-06-15T15:00:00Z',
+            'clocked_out_at' => '2027-06-15T08:30:00Z',
             'reason_code' => 'OLVIDO_FICHAJE_SALIDA',
         ])->assertOk();
 

@@ -132,6 +132,7 @@ return [
         'KIOSK_UPDATE_QUIET_MINUTES' => 'minutos sin escaneos antes de actualizar la tablet',
         /* La línea base del cuadro de impacto (RF-IN-08, tarea 3.13). */
         'BASELINE_MANUAL_HOURS_PER_MONTH' => 'horas al mes consolidando hojas de horas antes de instalar el sistema',
+        'ATTENDANCE_FUTURE_TOLERANCE_MINUTES' => 'margen de futuro del alta y la corrección manuales (minutos)',
     ],
 
 ];

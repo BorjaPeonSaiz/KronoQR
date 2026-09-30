@@ -63,24 +63,54 @@ final readonly class EloquentScanLog implements ScanLog
 {
     public function __construct(private ConnectionInterface $connection) {}
 
+    /**
+     * ## RN-19: la misma sentencia con y sin dueño del codigo (ADR-043)
+     *
+     * `claimed_employee_id` se resuelve **dentro** del `INSERT` con una
+     * subconsulta sobre `employees.uuid`, y `pin_lockout` va como parametro. Sin
+     * claim, los dos parametros son `NULL` y la subconsulta no encuentra fila:
+     * la sentencia, el plan y el numero de viajes a la base de datos son los
+     * mismos en los cinco rechazos de `/scan/pin`. Resolver el `id` con una
+     * consulta previa solo cuando hay claim seria un viaje de mas que solo paga
+     * el codigo que existe, y eso se mide desde fuera (RS-03, regla dura 17).
+     *
+     * `ON CONFLICT DO NOTHING` es el mismo que compilaba `insertOrIgnore`: la
+     * idempotencia sigue en el UNIQUE de `scan_id` (regla dura 8).
+     */
     public function record(ScanRecord $scan): bool
     {
-        $written = ScanEvent::query()->insertOrIgnore([
-            'scan_id' => $scan->scanId,
-            'device_id' => $scan->deviceId,
-            'employee_id' => $scan->employeeUuid === null ? null : $this->employeeIdOf($scan->employeeUuid),
-            'occurred_at' => $this->toTimestamp($scan->occurredAt),
-            'recorded_at' => $this->toTimestamp($scan->recordedAt),
-            'origin' => $scan->origin->value,
-            'intent' => $scan->intent->value,
-            'result' => $scan->result->value,
-            'shift_entry_id' => $scan->shiftEntryUuid === null ? null : $this->shiftEntryIdOf($scan->shiftEntryUuid),
-            'payload_fingerprint' => $scan->payloadFingerprint,
-            'client_meta' => json_encode($scan->clientMeta, JSON_THROW_ON_ERROR),
-            'clock_skew_seconds' => $scan->clockSkewSeconds,
-            'flagged_for_review' => $scan->flaggedForReview,
-            'worked_minutes' => $scan->workedMinutes,
-        ]);
+        $written = $this->connection->affectingStatement(
+            <<<'SQL'
+                INSERT INTO scan_events (
+                    scan_id, device_id, employee_id, occurred_at, recorded_at, origin, intent, result,
+                    shift_entry_id, payload_fingerprint, client_meta, clock_skew_seconds,
+                    flagged_for_review, worked_minutes, claimed_employee_id, pin_lockout
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, (SELECT id FROM employees WHERE uuid = CAST(? AS uuid)), ?
+                )
+                ON CONFLICT DO NOTHING
+            SQL,
+            [
+                $scan->scanId,
+                $scan->deviceId,
+                $scan->employeeUuid === null ? null : $this->employeeIdOf($scan->employeeUuid),
+                $this->toTimestamp($scan->occurredAt),
+                $this->toTimestamp($scan->recordedAt),
+                $scan->origin->value,
+                $scan->intent->value,
+                $scan->result->value,
+                $scan->shiftEntryUuid === null ? null : $this->shiftEntryIdOf($scan->shiftEntryUuid),
+                $scan->payloadFingerprint,
+                json_encode($scan->clientMeta, JSON_THROW_ON_ERROR),
+                $scan->clockSkewSeconds,
+                $scan->flaggedForReview,
+                $scan->workedMinutes,
+                $scan->pinClaim?->claimantUuid,
+                $scan->pinClaim?->lockout,
+            ],
+        );
 
         return $written > 0;
     }

@@ -1119,7 +1119,8 @@
       "clock_skew": "Desfase de reloj",
       "missing_clock_out": "Salida sin fichar",
       "anomalous_pattern": "Patrón anómalo de uso de la credencial",
-      "out_of_order_scan": "Fichaje fuera de orden"
+      "out_of_order_scan": "Fichaje fuera de orden",
+      "rejected_pin_scan": "Fichaje por PIN no registrado"
     },
     "outcomes": {
       "resolved": "Resuelta",
@@ -1173,12 +1174,17 @@
       "pair": "{metric} {value} de {threshold}",
       "metric": "{metric}: {value}",
       "raw": "{key}: {value}",
+      "seconds": "{seconds} s",
+      "maxSyncDelay": "mayor retraso hasta llegar al servidor: {duration}",
+      "clockAhead": "reloj del quiosco adelantado: {duration}",
       "metrics": {
         "rest_minutes": "descanso",
         "worked_minutes": "trabajado",
         "occurred_at": "hora del fichaje",
         "scan_id": "identificador del escaneo",
         "scans": "escaneos fuera de orden",
+        "attempts": "intentos por PIN sin registrar",
+        "lockout_attempts": "de ellos, con el PIN bloqueado",
         "device_name": "quiosco",
         "first_coincidence_at": "primera coincidencia",
         "last_coincidence_at": "última coincidencia",
@@ -1455,6 +1461,7 @@
       "minTransitSeconds": "Tránsito mínimo entre quioscos (s)",
       "patternWindowSeconds": "Ventana de coincidencia entre dos personas (s)",
       "patternMinRepeats": "Días de coincidencia antes de incidencia",
+      "futureToleranceMinutes": "Margen de futuro del alta manual (min)",
       "kioskServiceCode": "Código de servicio del quiosco",
       "breakClocking": "Fichaje de pausa",
       "weeklySummaryEmail": "Resumen semanal por correo",
@@ -1477,6 +1484,7 @@
       "minTransitSeconds": "Tiempo mínimo creíble para ir de un quiosco a otro. Por debajo, se abre incidencia. Ponlo a 0 si hay dos tablets en la misma puerta. Rango admitido: {minimum}–{maximum} segundos.",
       "patternWindowSeconds": "Segundos por debajo de los cuales dos fichajes consecutivos de dos personas en el mismo quiosco cuentan como coincidencia; 0 desactiva. Rango admitido: {minimum}–{maximum} segundos.",
       "patternMinRepeats": "Días distintos con coincidencia entre las mismas dos personas antes de abrir una incidencia. Rango admitido: {minimum}–{maximum} días.",
+      "futureToleranceMinutes": "Cuántos minutos por delante de la hora del servidor admiten el alta y la corrección manuales de un tramo. Más allá, se rechazan: el registro anota lo que ya ha ocurrido. No afecta al quiosco. Rango admitido: {minimum}–{maximum} minutos.",
       "kioskServiceCode": "Con él se abre la pantalla de diagnóstico de la tablet. Vacío: la pantalla se abre sin código. Solo cifras, de 8 a 12.",
       "kioskServiceCodeRedacted": "No visible con este tipo de acceso: quien entra como soporte no ve ni puede cambiar el código de servicio.",
       "breakClocking": "Activado: la tablet enseña el botón «Pausa» y, a partir de la próxima revisión nocturna, un tramo continuo sin pausa (RN-12) empieza a abrir incidencias y a contarse en la vista de cumplimiento. Desactivado: el botón desaparece de la tablet y RN-12 vuelve a quedar suspendida, sin cerrar ninguna incidencia ya abierta.",

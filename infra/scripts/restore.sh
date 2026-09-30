@@ -27,6 +27,21 @@
 #   --dry-run          solo comprobaciones; no crea, no borra, no renombra
 #   --yes              confirma. Sin esto no se restaura nada
 #   --keep-previous N  dias que se conserva la base anterior. Por defecto 7
+#   --audit-by-caller  NO escribe el asiento de auditoria: lo escribe quien
+#                      llama. Solo lo usa update.sh en su vuelta atras, que
+#                      escribe el suyo con el paso y el motivo del fallo
+#
+# EL ASIENTO DE AUDITORIA (PR1, regla dura 6, RL-04). Restaurar descarta un
+# intervalo del registro horario, y eso ha de constar DENTRO del registro: tras
+# el intercambio de bases, y solo cuando la base de destino es la de la
+# instalacion (con --database hacia otra base no se descarta nada y no se
+# escribe), se deja en audit_log un asiento `system.restored_from_backup` con la
+# copia usada y la punta de la cadena descartada (`chain_before`), la unica
+# prueba de que hubo un intervalo que ya no esta. Lo escribe ESTE servicio
+# (`restore`) con el rol de migracion que ya tiene: el runtime no recibe ninguna
+# credencial nueva (AUD-1, ADR-042). Si no se puede escribir, la restauracion NO
+# se deshace —ya esta hecha y verificada— y se sale con 6, con el asiento listo
+# para escribir a mano: docs/runbooks/restaurar-backup.md §6.7.
 #
 # ANTES DE RESTAURAR hay que parar lo que escribe en la base: app, horizon,
 # scheduler y reverb. El procedimiento completo, con los tiempos que caben en
@@ -49,7 +64,10 @@
 #   5  Ha quedado algo a medias —tipicamente una base de trabajo con la copia
 #      ya restaurada— y hay que terminar el intercambio a mano. El mensaje dice
 #      que base es y que ordenes la activan.
-#   6  Verificacion posterior fallida.
+#   6  Verificacion posterior fallida. En este script, UNA sola causa: la base
+#      esta restaurada y en servicio pero el asiento `system.restored_from_backup`
+#      NO se ha escrito (ASIENTO PENDIENTE). No se deshace nada y NO se repite la
+#      restauracion: el mensaje y el informe traen la orden que lo escribe.
 #   7  GARANTIA DE SEGURIDAD ROTA (AUD-1, A3-01): la copia, al restaurarse, ha
 #      cambiado atributos o pertenencias de rol del cluster (por ejemplo
 #      `ALTER ROLE fichaje_app SUPERUSER`). NO se han intercambiado las bases:
@@ -82,6 +100,14 @@ SOLO_LISTAR=0
 DIAS_ANTERIOR=7
 TRABAJO=""
 INFORME=""
+ASIENTO_POR_LLAMADOR=0
+AUDITAR=0
+ASIENTO_PENDIENTE=0
+ASIENTO_JSON=""
+CADENA_DESCARTADA=""
+# Donde esta `artisan` en la imagen de la aplicacion (el servicio `restore` usa
+# la misma imagen que `app`).
+ARTISAN_DIR="${KQ_ARTISAN_DIR:-/var/www/html}"
 
 al_salir() {
   [ -n "$TRABAJO" ] && [ -d "$TRABAJO" ] && rm -rf "$TRABAJO"
@@ -129,6 +155,142 @@ guardar_roles() {
 }
 
 #------------------------------------------------------------------------------
+# Asiento de auditoria de la restauracion (PR1)
+#------------------------------------------------------------------------------
+
+# Mensaje en el idioma de la instalacion: texto "es" "en". Mismo criterio que la
+# tabla de codigos de salida (kq_exit_lang); un idioma desconocido cae a espanol.
+texto() {
+  if [ "$(kq_exit_lang)" = "en" ]; then
+    printf '%s' "$2"
+  else
+    printf '%s' "$1"
+  fi
+}
+
+# Ejecuta artisan CONTRA UNA BASE CONCRETA y con el rol de migracion que este
+# servicio ya tiene (PGUSER/PGPASSWORD). La contrasena viaja en el entorno del
+# proceso hijo, nunca en la linea de ordenes. No se introduce ninguna credencial
+# nueva (AUD-1, ADR-042): el rol de la aplicacion no llega a este servicio.
+artisan_migrador() {
+  local base="$1"
+  shift
+  (
+    cd -- "$ARTISAN_DIR" &&
+      DB_CONNECTION=pgsql_migrator DB_DATABASE="$base" DB_HOST="$PGHOST" DB_PORT="$PGPORT" \
+        DB_MIGRATION_USERNAME="$PGUSER" DB_MIGRATION_PASSWORD="${PGPASSWORD:-}" \
+        php artisan "$@"
+  )
+}
+
+# Como `audit_json_object` de update.sh: `clave=valor ...`, y una clave con valor
+# vacio se OMITE (es lo que pide el payload del dominio para los opcionales). Los
+# valores son versiones, huellas, un nombre de fichero y un instante UTC: nunca
+# texto libre ni datos personales.
+asiento_json() {
+  local pair key value out="{" first=1
+  for pair in "$@"; do
+    key="${pair%%=*}"
+    value="${pair#*=}"
+    [ -n "$value" ] || continue
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    [ "$first" -eq 1 ] || out+=","
+    first=0
+    out+="\"${key}\":\"${value}\""
+  done
+  out+="}"
+  printf '%s' "$out"
+}
+
+# Punta de la cadena de la base que se va a DESCARTAR, leida antes del
+# intercambio: despues ya no es la que sirve. Vacia si no se puede leer; el
+# asiento se escribe igual sin ella (un asiento sin punta vale mas que ninguno).
+punta_cadena_descartada() {
+  local salida
+  salida="$(artisan_migrador "$BASE_DESTINO" compliance:audit-chain-head 2>/dev/null || true)"
+  printf '%s' "$salida" | sed -n 's/.*"hash"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{64\}\)".*/\1/p' | head -n 1 || true
+}
+
+# Instante de la copia en UTC: el del manifiesto o, sin el, el de su nombre.
+instante_de_la_copia() {
+  local valor
+  valor="$(manifest_field "${FICHERO%.dump.enc}.manifest.json" created_at 2>/dev/null || true)"
+  if [ -z "$valor" ]; then
+    valor="$(basename -- "$FICHERO" | sed -n 's/.*\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)T\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)Z.*/\1-\2-\3T\4:\5:\6Z/p' || true)"
+  fi
+  printf '%s' "$valor"
+}
+
+huella_de_la_copia() {
+  local valor=""
+  [ ! -f "${FICHERO}.sha256" ] || valor="$(cut -d' ' -f1 <"${FICHERO}.sha256" 2>/dev/null || true)"
+  [[ "$valor" =~ ^[0-9a-f]{64}$ ]] || valor=""
+  printf '%s' "$valor"
+}
+
+# Version del producto que ejecuta esta restauracion: la de la imagen.
+version_instalada() {
+  local valor="${APP_VERSION:-}"
+  [ -n "$valor" ] || valor="$(head -n 1 "${ARTISAN_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
+  printf '%s' "$valor"
+}
+
+# Cuando hay que dejar asiento: la base de destino es la de la instalacion y
+# quien llama no se encarga. Restaurar en otra base (simulacros, pruebas) no
+# descarta ningun registro y no deja asiento.
+decidir_asiento() {
+  AUDITAR=0
+  [ "$ASIENTO_POR_LLAMADOR" -eq 0 ] || return 0
+  [ "$BASE_DESTINO" = "$PGDATABASE" ] || return 0
+  AUDITAR=1
+}
+
+# Precondicion (ANTES de tocar nada): si hay que dejar asiento, debe poder
+# escribirse. Si no, es mejor no empezar que restaurar sin poder documentarlo.
+comprobar_asiento_posible() {
+  [ "$AUDITAR" -eq 1 ] || return 0
+  if ! command -v php >/dev/null 2>&1 || [ ! -f "${ARTISAN_DIR}/artisan" ]; then
+    die "${KQ_EXIT_REQUIREMENTS}" "$(texto \
+      "no se puede escribir el asiento de auditoria de la restauracion: falta 'php' o '${ARTISAN_DIR}/artisan' en este entorno. Restaura desde el servicio 'restore' ('docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh ...'), que lleva la aplicacion. No se ha tocado nada." \
+      "the restore audit entry cannot be written: 'php' or '${ARTISAN_DIR}/artisan' is missing in this environment. Restore from the 'restore' service ('docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh ...'), which ships the application. Nothing has been touched.")"
+  fi
+}
+
+# Escribe `system.restored_from_backup` en la base YA restaurada. Nunca deshace
+# la restauracion por un fallo aqui (seria cambiar un problema de trazabilidad
+# por una perdida de datos): lo deja pendiente y main() sale con 6.
+escribir_asiento() {
+  local version salida estado=0 orden
+
+  version="$(version_instalada)"
+  ASIENTO_JSON="$(asiento_json \
+    "backup_file=$(basename -- "$FICHERO")" \
+    "backup_taken_at=$(instante_de_la_copia)" \
+    "failed_step=manual_restore" \
+    "reason=manual_restore" \
+    "from_version=${version}" \
+    "to_version=${version}" \
+    "backup_fingerprint=$(huella_de_la_copia)" \
+    "chain_before=${CADENA_DESCARTADA}" \
+    "report_id=$(basename -- "$INFORME" .log)")"
+
+  informar "Escribiendo el asiento system.restored_from_backup en audit_log"
+  salida="$(artisan_migrador "$BASE_DESTINO" compliance:record-system-event system.restored_from_backup --data=- 2>&1 <<<"$ASIENTO_JSON")" || estado=$?
+
+  if [ "$estado" -eq 0 ]; then
+    informar "Asiento escrito: ${salida}"
+    return 0
+  fi
+
+  ASIENTO_PENDIENTE=1
+  orden="docker compose run --rm --no-deps -T -e DB_CONNECTION=pgsql_migrator migrate php artisan compliance:record-system-event system.restored_from_backup --data='${ASIENTO_JSON}'"
+  informar "ASIENTO PENDIENTE (artisan salio con ${estado}): $(printf '%s' "$salida" | head -c 400 | tr '\n' ' ')"
+  informar "Asiento a escribir: ${ASIENTO_JSON}"
+  informar "Para escribirlo: ${orden}"
+}
+
+#------------------------------------------------------------------------------
 # Precondiciones: todas, antes de nada
 #------------------------------------------------------------------------------
 
@@ -164,6 +326,9 @@ comprobar_precondiciones() {
     "quedan $((libre / 1024 / 1024)) MiB libres y la restauracion necesita al menos $((tamano_copia * 5 / 1024 / 1024)) MiB de margen. Libera espacio antes de empezar. No se ha tocado nada."
 
   [ -n "$BASE_DESTINO" ] || BASE_DESTINO="$PGDATABASE"
+
+  decidir_asiento
+  comprobar_asiento_posible
 }
 
 # Descifra a un directorio privado y comprueba que pg_restore lo entiende.
@@ -243,6 +408,13 @@ restaurar() {
     die "${KQ_EXIT_ROLLED_BACK}" "la copia restaurada no supera las comprobaciones de integridad. NO se ha sustituido '${BASE_DESTINO}'. Prueba con la copia anterior y avisa al responsable del sistema."
   }
 
+  # La punta de la cadena que se va a descartar, en el ultimo instante en que
+  # todavia es la que sirve (PR1). Es lo que el asiento guarda como prueba.
+  if [ "$AUDITAR" -eq 1 ]; then
+    CADENA_DESCARTADA="$(punta_cadena_descartada)"
+    informar "Punta de la cadena de auditoria que se descarta: ${CADENA_DESCARTADA:-no disponible}"
+  fi
+
   # Intercambio de nombres. Es el unico momento en que la instalacion cambia, y
   # dura lo que dos ALTER DATABASE.
   informar "Intercambiando ${BASE_DESTINO} -> ${base_anterior} y ${base_nueva} -> ${BASE_DESTINO}"
@@ -257,6 +429,10 @@ restaurar() {
   informar "VUELTA ATRAS (mientras exista esa base): pare los servicios y ejecute"
   informar "  ALTER DATABASE \"${BASE_DESTINO}\" RENAME TO \"${BASE_DESTINO}_descartada\";"
   informar "  ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\";"
+
+  if [ "$AUDITAR" -eq 1 ]; then
+    escribir_asiento
+  fi
 
   purgar_bases_anteriores
 }
@@ -323,6 +499,13 @@ resumen_dry_run() {
   printf '  base de destino ........ %s en %s:%s\n' "$BASE_DESTINO" "$PGHOST" "$PGPORT"
   printf '  conexiones abiertas .... %s (deben ser 0 al restaurar)\n' "$(conexiones_abiertas)"
   printf '  espacio libre .......... %s MiB\n' "$(($(free_bytes_at "$BACKUP_PATH") / 1024 / 1024))"
+  if [ "$AUDITAR" -eq 1 ]; then
+    printf '  asiento de auditoria ... se escribira (system.restored_from_backup)\n'
+  elif [ "$ASIENTO_POR_LLAMADOR" -eq 1 ]; then
+    printf '  asiento de auditoria ... lo escribe quien llama (--audit-by-caller)\n'
+  else
+    printf '  asiento de auditoria ... no aplica (la base de destino no es la de la instalacion)\n'
+  fi
   printf '\n'
   printf 'Nada se ha modificado. Para restaurar de verdad:\n'
   printf '  1. docker compose stop app horizon scheduler reverb\n'
@@ -360,6 +543,10 @@ main() {
       ;;
     --dry-run)
       SOLO_COMPROBAR=1
+      shift
+      ;;
+    --audit-by-caller)
+      ASIENTO_POR_LLAMADOR=1
       shift
       ;;
     --list)
@@ -411,6 +598,17 @@ main() {
 
   log "Informe de la restauracion: ${INFORME}"
   log "Adjuntalo al parte del incidente: una restauracion en produccion se documenta (regla dura 6)."
+
+  # Asiento pendiente: la base esta restaurada y en servicio, pero el intervalo
+  # descartado aun no consta en audit_log. Codigo 6, con la orden que lo arregla.
+  if [ "$ASIENTO_PENDIENTE" -eq 1 ]; then
+    die "${KQ_EXIT_VERIFY_FAILED}" "$(texto \
+      "la base esta RESTAURADA y en servicio, pero el asiento 'system.restored_from_backup' de audit_log NO se ha escrito: el intervalo descartado no consta todavia en el registro (regla dura 6). NO repitas la restauracion. Escribelo ahora con: docker compose run --rm --no-deps -T -e DB_CONNECTION=pgsql_migrator migrate php artisan compliance:record-system-event system.restored_from_backup --data='${ASIENTO_JSON}' ; comprueba despues 'docker compose exec app php artisan compliance:verify-audit-chain'. El mismo asiento y el motivo del fallo estan en el informe '${INFORME}'. Procedimiento: docs/runbooks/restaurar-backup.md §6.7." \
+      "the database is RESTORED and in service, but the 'system.restored_from_backup' entry in audit_log was NOT written: the discarded interval is not yet recorded in the ledger (hard rule 6). Do NOT restore again. Write it now with: docker compose run --rm --no-deps -T -e DB_CONNECTION=pgsql_migrator migrate php artisan compliance:record-system-event system.restored_from_backup --data='${ASIENTO_JSON}' ; then check 'docker compose exec app php artisan compliance:verify-audit-chain'. The same entry and the failure reason are in the report '${INFORME}'. Procedure: docs/runbooks/restaurar-backup.md §6.7 (in Spanish).")"
+  fi
 }
 
-main "$@"
+# Ejecutable, o cargable con `source` para probar sus funciones sin restaurar.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

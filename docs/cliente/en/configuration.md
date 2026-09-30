@@ -56,6 +56,7 @@ only the ones you need.
 | `ATTENDANCE_DEBOUNCE_SECONDS` | `60` | 0 – 3600 | Grace window: two scans by the same person within that window count as one. **This key changes the recorded hours** — see the warning below. `0` disables it. |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | `15` | 1 – 1440 | Drift tolerated between the tablet's clock and the server's before flagging the clock-in for review. **It never rejects a clock-in**, it only flags it. It is also the threshold at which **the tablet itself warns** that its clock has drifted. |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | `120` | 0 – 3600 | Minimum credible time to get from one kiosk to another. Below it, an incident is opened. Set it to `0` if you have two tablets at the same door; raise it if there are two buildings. |
+| `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` | `5` | 0 – 60 | Margin ahead of the server clock accepted by **manual entries and corrections** of a shift entry in the panel. A time or a working day later than "now + margin" is rejected: the working-time record notes what has already happened, not the expected clock-out or the theoretical working day. It exists because the form rounds to the minute and the computer's clock may run slightly fast. `0` accepts no lead at all. **It does not affect the kiosk**, which never rejects a clocking because of the time. **It changes which hours can be entered by hand** — see the warning below. |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | `10` | 0 – 300 | Seconds below which two clock-ins by **two different people at the same kiosk** count as one **coincidence** (at most one per pair and day). **It opens no incident on its own**: the same pair has to accumulate the days of the next key. `0` disables this pattern. |
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Days with a coincidence that the same pair has to accumulate, within the last 30 days, for the "Anomalous credential usage pattern" incident to open —**one for each person involved**, each with its main counterpart: if three people always walk in together, that is three incidents—. Raise it if entering in a group through the same door is normal at your site; lower it to `1` only if you want to see every pair of back-to-back scans. **The incident cancels no clocking and labels nobody**: the manager reviews it ([`hr-guide.md`](hr-guide.md) §4.5). |
 | `WEEKLY_SUMMARY_EMAIL` | `disabled` | `enabled` or `disabled` | Turns on the **weekly summary by email**: on Mondays at 06:00 UTC, every active department manager with an email address receives the previous week **for their own scope and nobody else's**. It requires outgoing email to be configured (section 6.21) and the `weekly_email_summary` feature in the licence; without either of them **the system works exactly the same** and the send is skipped, leaving a record. See below the table. |
@@ -139,8 +140,10 @@ shift entries with their break in between.
 
 > **⚠️ `ATTENDANCE_DEBOUNCE_SECONDS` affects the hours calculation.** Raising it
 > makes real clock-ins that are very close together get discarded, and the total
-> for the working day comes out different. It is the only key in this list that
-> moves minutes of the legal record. Change it with care and leave it in
+> for the working day comes out different. Together with
+> `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` —how far ahead of the server clock a
+> manual entry may go— they are the two keys in this list that decide which
+> minutes enter the legal record. Change it with care and leave it in
 > writing: the change is audited with your name, the date and the previous
 > value.
 >
@@ -1521,6 +1524,7 @@ the next request without restarting anything:
 | `ATTENDANCE_DEBOUNCE_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
+| `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | Panel → **Operational settings** (`/settings`) | Section 2.1 |
 | `WEEKLY_SUMMARY_EMAIL` | Panel → **Operational settings** (`/settings`) → "Weekly summary by email" | Section 2.1 |
