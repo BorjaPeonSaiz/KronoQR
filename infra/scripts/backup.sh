@@ -29,7 +29,7 @@
 # Este script no envia nada a ninguna parte: escribe en un directorio local.
 #
 # Uso:
-#   backup.sh run [--mode dump|base|full] [--skip-verify] [--keep-going]
+#   backup.sh run [--mode dump|base|full] [--skip-verify]
 #   backup.sh verify [--file RUTA]
 #   backup.sh prune
 #   backup.sh list
