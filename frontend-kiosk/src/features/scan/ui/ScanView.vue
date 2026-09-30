@@ -283,7 +283,7 @@ onUnmounted(() => {
          `ConnectionStatusBadge` en su estado «en linea».
 
          El BORDE tambien se corrigio en la segunda vuelta:
-         `border-kiosk-notice` sobre `bg-kq-kiosk-surface-raised` mide 1,88:1;
+         `border-kiosk-notice` sobre `bg-kq-kiosk-surface-raised` mide 1,45:1;
          `border-kq-kiosk-border` (el borde neutro del sistema, ya usado en
          `ConnectionStatusBadge`) mide 3,18:1. Un borde decorativo no exige
          el 4,5:1 del texto (no es texto), pero por debajo de 3:1 deja de
