@@ -30,6 +30,7 @@ use App\Modules\Identity\Application\Exception\TwoFactorNotEnrolled;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyDelivered;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyPrinted;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyRevoked;
+use App\Modules\Identity\Domain\Exception\CredentialHolderIsOffboarded;
 use App\Modules\Identity\Domain\Exception\CredentialNotPrintedYet;
 use App\Modules\Identity\Domain\Exception\CredentialRevocationNeedsReason;
 use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
@@ -596,6 +597,12 @@ return Application::configure(basePath: dirname(__DIR__))
          * una clave.
          */
         $exceptions->render(static fn (EmployeeAlreadyHasCredential $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
+
+        // RN-14: emitir o reemitir a una persona de baja. `409` como el anterior
+        // —no hay campo que corregir— y con el texto en el idioma de la peticion.
+        $exceptions->render(static fn (CredentialHolderIsOffboarded $exception): mixed => ProblemDetails::conflict(
+            __('credentials.errors.holder_offboarded'),
+        ));
 
         $exceptions->render(static fn (CredentialAlreadyRevoked $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 

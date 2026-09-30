@@ -3550,6 +3550,10 @@ paths:
         `reason`, y entonces la anterior se revoca y la nueva se emite en la
         misma transaccion. Ese es el primer paso del flujo de tarjeta perdida:
         revocar y reemitir aqui, imprimir despues.
+
+        **Nunca a una persona de baja** (RN-14). La baja revoca sus tarjetas
+        (`/employees/{uuid}/offboard`), y emitirle o reemitirle otra devuelve
+        `409` sin tocar nada: ni se crea la nueva ni se revoca ninguna.
       tags: [Identity]
       security:
         - managementToken: ['credentials:*']
