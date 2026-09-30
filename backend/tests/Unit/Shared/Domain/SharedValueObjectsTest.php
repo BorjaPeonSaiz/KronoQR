@@ -140,6 +140,7 @@ it('rechaza una configuracion operativa con un umbral que no puede ser cero', fu
         kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
         kioskUpdateQuietMinutes: 10,
         baselineManualHoursPerMonth: 0,
+        manualEntryFutureToleranceMinutes: 5,
     ))->toThrow(InvalidArgumentException::class);
 })->with([
     'sin duracion anomala de tramo' => [0, 60, 10, 120, 10, 3],
@@ -153,6 +154,24 @@ it('rechaza una configuracion operativa con un umbral que no puede ser cero', fu
     'con ventana de coincidencia negativa' => [720, 60, 10, 120, -1, 3],
     'sin dias con coincidencia que exigir' => [720, 60, 10, 120, 10, 0],
 ])->group('RF-PD-01');
+
+it('admite un margen de futuro de cero y rechaza uno negativo', function (): void {
+    // F1: cero es legitimo —nada por delante del servidor—; un negativo
+    // rechazaria marcas del pasado, que es justo lo que el panel tiene que poder
+    // anotar.
+    $build = static fn (int $tolerance): OperationalSettings => new OperationalSettings(
+        720, 60, 15, 120, 10, 3,
+        breakClockingEnabled: false,
+        kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
+        kioskUpdateQuietMinutes: 10,
+        baselineManualHoursPerMonth: 0,
+        manualEntryFutureToleranceMinutes: $tolerance,
+    );
+
+    expect($build(0)->manualEntryFutureToleranceMinutes)->toBe(0)
+        ->and($build(7)->manualEntryFutureToleranceMinutes)->toBe(7)
+        ->and(fn (): OperationalSettings => $build(-1))->toThrow(InvalidArgumentException::class);
+})->group('RF-PA-04', 'RL-04');
 
 it('admite apagar el anti-rebote y el transito minimo con un cero', function (): void {
     // Cero es legitimo en los dos que desactivan una comprobacion: un centro
@@ -171,6 +190,7 @@ it('admite apagar el anti-rebote y el transito minimo con un cero', function ():
         // de silencio y deja mandar a la franja y a la cola vacia.
         kioskUpdateQuietMinutes: 0,
         baselineManualHoursPerMonth: 0,
+        manualEntryFutureToleranceMinutes: 5,
     );
 
     expect($settings->kioskUpdateQuietMinutes)->toBe(0)
@@ -201,6 +221,7 @@ it('acepta un umbral operativo de exactamente una unidad', function (): void {
         kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
         kioskUpdateQuietMinutes: 1,
         baselineManualHoursPerMonth: 0,
+        manualEntryFutureToleranceMinutes: 5,
     );
 
     expect($settings->anomalousShiftMinutes)->toBe(1)
@@ -317,6 +338,7 @@ it('transporta el fichaje de pausa sin suponer ningun valor', function (bool $en
         kioskUpdateWindow: KioskUpdateWindow::fromRange('03:00-05:00'),
         kioskUpdateQuietMinutes: 10,
         baselineManualHoursPerMonth: 0,
+        manualEntryFutureToleranceMinutes: 5,
     );
 
     expect($settings->breakClockingEnabled)->toBe($enabled);

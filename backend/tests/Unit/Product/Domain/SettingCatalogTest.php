@@ -73,16 +73,17 @@ it('admite el cero solo en la ventana de coincidencia, no en los dias', function
         ->toThrow(InvalidSettingValue::class);
 })->group('RF-PD-01', 'RF-PR-06');
 
-it('marca como clave que afecta al calculo de horas exactamente la ventana anti-rebote', function (): void {
-    // Es la unica que cambia los minutos registrados: un escaneo que la ventana
-    // se traga no cierra el tramo. Las otras tres abren o dejan de abrir
+it('marca como claves que afectan al calculo de horas exactamente el anti-rebote y el margen de futuro', function (): void {
+    // Son las unicas que deciden que minutos entran en el registro: un escaneo
+    // que la ventana se traga no cierra el tramo, y el margen de futuro (F1)
+    // decide que horas se pueden anotar a mano. Las demas abren o dejan de abrir
     // incidencias, y ninguna cierra, corrige ni descarta nada (doc 01 §4).
     $affecting = array_values(array_filter(
         SettingKey::cases(),
         static fn (SettingKey $key): bool => $key->definition()->impact->affectsWorkedHours(),
     ));
 
-    expect($affecting)->toBe([SettingKey::ATTENDANCE_DEBOUNCE_SECONDS]);
+    expect($affecting)->toBe([SettingKey::ATTENDANCE_DEBOUNCE_SECONDS, SettingKey::ATTENDANCE_FUTURE_TOLERANCE_MINUTES]);
 })->group('RF-PD-01');
 
 it('la salida de datos personales no cuenta como calculo de horas', function (): void {
@@ -136,7 +137,19 @@ it('clasifica el impacto de cada clave', function (SettingKey $key, SettingImpac
     // minuto, no abre incidencia y no enciende ninguna salida de datos: solo
     // decide si una tarjeta del cuadro ensena una referencia o sale vacia.
     'la linea base de horas manuales solo se ve' => [SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH, SettingImpact::PRESENTATION],
+    // F1. Decide que minutos se pueden anotar a mano: mueve el registro.
+    'el margen de futuro decide que horas se anotan a mano' => [SettingKey::ATTENDANCE_FUTURE_TOLERANCE_MINUTES, SettingImpact::WORKED_HOURS],
 ])->group('RF-PD-01');
+
+it('entrega el margen de futuro del alta manual a cinco minutos, de cero a una hora', function (): void {
+    // F1. Cinco cubren el redondeo al minuto del formulario y una deriva normal
+    // del reloj del navegador; mas de una hora deja de ser una tolerancia.
+    $definition = SettingKey::ATTENDANCE_FUTURE_TOLERANCE_MINUTES->definition();
+
+    expect($definition->default)->toBe(5)
+        ->and($definition->minimum)->toBe(0)
+        ->and($definition->maximum)->toBe(60);
+})->group('RF-PD-01', 'RF-PA-04');
 
 // --- El resumen semanal y la ventana del quiosco (RF-PR-05, RF-KI-07) -------
 

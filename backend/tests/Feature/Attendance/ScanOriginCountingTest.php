@@ -188,7 +188,7 @@ it('el alta manual de un tramo suma al origen manual', function (): void {
             'employee_uuid' => $escenario['employee'],
             'work_date' => '2026-03-14',
             'clocked_in_at' => '2026-03-14T06:00:00Z',
-            'clocked_out_at' => '2026-03-14T14:00:00Z',
+            'clocked_out_at' => '2026-03-14T07:00:00Z',
             'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
         ])
         ->assertCreated();
@@ -210,7 +210,8 @@ it('corregir un tramo que ya existia no suma ningun origen', function (): void {
 
     Api::as($rrhh)
         ->patch('/api/v1/shift-entries/'.$tramo, [
-            'clocked_out_at' => '2026-03-14T14:00:00Z',
+            // Dentro del margen de futuro de la hora congelada (F1).
+            'clocked_out_at' => '2026-03-14T07:05:00Z',
             'reason_code' => 'OLVIDO_FICHAJE_SALIDA',
         ])
         ->assertOk();

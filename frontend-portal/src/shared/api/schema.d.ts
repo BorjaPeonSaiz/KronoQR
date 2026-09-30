@@ -2149,6 +2149,14 @@ export interface paths {
          *     porque derivarla de la fecha civil de la entrada mandaria la vuelta de
          *     una pausa de madrugada al dia siguiente y partiria el turno de noche
          *     (RN-05, ADR-006, ADR-024).
+         *
+         *     **Nada en el futuro** (F1, RL-01, RL-04). `work_date`, `clocked_in_at` y
+         *     `clocked_out_at` no pueden ser posteriores al momento del servidor mas
+         *     el margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` (5 min de serie, que
+         *     cubre el redondeo al minuto del formulario y la deriva del reloj del
+         *     navegador). Un registro horario anota lo que ya ha ocurrido: rellenar la
+         *     jornada teorica por adelantado o cerrar un turno con la salida
+         *     «prevista» da `422` con el error colgado del campo.
          */
         post: operations["addShiftEntry"];
         delete?: never;
@@ -2207,6 +2215,12 @@ export interface paths {
          *     rechaza con `422`** (ADR-035, RN-05): mover horas de un dia a otro son dos
          *     actos separados y auditados —anular en origen, dar de alta en destino—, no
          *     un efecto lateral de un `PATCH`.
+         *
+         *     **Tampoco se corrige hacia el futuro** (F1, RL-01, RL-04): la entrada o la
+         *     salida resultantes no pueden ser posteriores al momento del servidor mas
+         *     el margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`. Cerrar un turno abierto
+         *     con la hora a la que «va a salir» da `422` con el error en
+         *     `clocked_out_at`.
          */
         patch: operations["correctShiftEntry"];
         trace?: never;
@@ -6582,9 +6596,21 @@ export interface components {
          *     objetivo de −80 % del §1.3 y **vacio** si no se declaro: es honesto no
          *     inventar un porcentaje de mejora. Impacto `presentation`: no mueve ni un
          *     minuto del registro.
+         *
+         *     `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` (F1, RL-01, RL-04) es el **margen
+         *     sobre la hora del servidor** que admiten el alta manual y la correccion
+         *     de un tramo (`POST /api/v1/shift-entries` y `PATCH
+         *     /api/v1/shift-entries/{uuid}`): de 0 a 60 minutos, 5 de serie. Una marca
+         *     o una jornada posteriores a ese limite son `422`, porque un registro
+         *     horario anota lo que ya ha ocurrido. El margen existe por el redondeo al
+         *     minuto del formulario y por la deriva del reloj del navegador; no es un
+         *     umbral legal (no esta en el perfil de cumplimiento) sino operativo.
+         *     **No toca el fichaje del quiosco**, que nunca se rechaza por la hora
+         *     (regla dura 19; su desfase lo gobierna `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`).
+         *     Impacto `worked_hours`: decide que minutos se pueden anotar a mano.
          * @enum {string}
          */
-        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW" | "WEEKLY_SUMMARY_EMAIL" | "KIOSK_UPDATE_WINDOW" | "KIOSK_UPDATE_QUIET_MINUTES" | "BASELINE_MANUAL_HOURS_PER_MONTH";
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW" | "WEEKLY_SUMMARY_EMAIL" | "KIOSK_UPDATE_WINDOW" | "KIOSK_UPDATE_QUIET_MINUTES" | "BASELINE_MANUAL_HOURS_PER_MONTH" | "ATTENDANCE_FUTURE_TOLERANCE_MINUTES";
         /**
          * SettingValue
          * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
@@ -13746,8 +13772,10 @@ export interface operations {
              *
              *     **`type` distingue las dos causas:**
              *
-             *     - `urn:kronoqr:problem:validation-failed` — un campo falta, no vale o
-             *       referencia algo que no existe.
+             *     - `urn:kronoqr:problem:validation-failed` — un campo falta, no vale,
+             *       referencia algo que no existe, o la jornada o alguna de las dos
+             *       marcas es **futura** (F1): mas alla del momento del servidor mas el
+             *       margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`.
              *     - `urn:kronoqr:problem:correction-would-change-work-date` — la hora de
              *       entrada llevaria la jornada a **otro dia civil** (RN-05, ADR-035).
              *       Es `422` y no `409` porque no hay nada que releer: mover horas de un
@@ -13835,7 +13863,10 @@ export interface operations {
              *     **`type` distingue las dos causas:**
              *
              *     - `urn:kronoqr:problem:validation-failed` — un campo falta o no vale,
-             *       la salida es anterior a la entrada, o el `PATCH` no cambia nada.
+             *       la salida es anterior a la entrada, el `PATCH` no cambia nada, o la
+             *       entrada o la salida resultantes son **futuras** (F1): mas alla del
+             *       momento del servidor mas el margen
+             *       `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`.
              *     - `urn:kronoqr:problem:correction-would-change-work-date` — mover la
              *       entrada que abre la jornada al otro lado de la medianoche local
              *       llevaria esas horas a **otra jornada** (RN-05, ADR-035). Es `422` y

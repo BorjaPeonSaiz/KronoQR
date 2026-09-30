@@ -122,6 +122,16 @@ final readonly class OperationalSettings
          * de la ficha 3.13).
          */
         public int $baselineManualHoursPerMonth,
+        /**
+         * F1 (RL-01, RL-04): minutos por delante de la hora del servidor que
+         * admiten el alta manual y la correccion de un tramo
+         * (`ATTENDANCE_FUTURE_TOLERANCE_MINUTES`).
+         *
+         * **Solo el panel.** El quiosco nunca se rechaza por la hora (regla dura
+         * 19); su desfase es {@see self::$maximumClockSkewMinutes}. Cero es
+         * legitimo: ni un minuto por delante del servidor.
+         */
+        public int $manualEntryFutureToleranceMinutes,
     ) {
         $this->positive($anomalousShiftMinutes, 'la duracion anomala de tramo (RN-08)');
         $this->notNegative($debounceSeconds, 'la ventana anti-rebote (RF-AT-06)');
@@ -134,6 +144,7 @@ final readonly class OperationalSettings
         $this->notNegative($kioskUpdateQuietMinutes, 'los minutos sin escaneo antes de actualizar el quiosco (RF-KI-07)');
         // Cero es legitimo y significa «no declarado»: ver el docblock del campo.
         $this->notNegative($baselineManualHoursPerMonth, 'la linea base de horas consolidando hojas (RF-IN-08)');
+        $this->notNegative($manualEntryFutureToleranceMinutes, 'el margen de futuro del alta y la correccion manuales (F1)');
     }
 
     private function positive(int $value, string $what): void

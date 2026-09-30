@@ -1532,6 +1532,8 @@ ATTENDANCE_MAX_SHIFT_HOURS=12          # RN-08
 ATTENDANCE_MAX_CLOCK_SKEW_MINUTES=15   # RF-AT-10 · genera incidencia, nunca rechaza el fichaje;
                                        # ×60 viaja en el latido y es el umbral con el que la
                                        # tablet avisa de su propio desfase
+ATTENDANCE_FUTURE_TOLERANCE_MINUTES=5  # F1, RF-PA-04 · margen sobre la hora del servidor del alta y la
+                                       # corrección manuales; más allá, 422. No toca el quiosco
 ATTENDANCE_PATTERN_WINDOW_SECONDS=10   # RF-PR-06 · fichajes consecutivos en el mismo quiosco
 ATTENDANCE_PATTERN_MIN_REPEATS=3       # RF-PR-06 · coincidencias antes de generar incidencia
 ATTENDANCE_MIN_TRANSIT_SECONDS=120     # RN-16 · tránsito mínimo entre dos quioscos distintos

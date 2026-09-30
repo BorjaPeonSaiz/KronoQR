@@ -177,7 +177,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | RF-PA-01 | Vista **en tiempo real** de empleados actualmente fichados: nombre, departamento, hora de entrada, tiempo transcurrido, quiosco de origen. Actualización push (WebSocket), no sondeo. | M |
 | RF-PA-02 | Filtrado por departamento y estado. Búsqueda por nombre. | M |
 | RF-PA-03 | Detalle de jornada por empleado y día: todos los tramos, totales, incidencias y correcciones. | M |
-| RF-PA-04 | **Corrección manual** de un fichaje (crear, modificar hora, cerrar turno abierto, anular) con **motivo obligatorio** de un catálogo más texto libre. Nunca sobrescribe: genera versión nueva y entrada de auditoría. | M |
+| RF-PA-04 | **Corrección manual** de un fichaje (crear, modificar hora, cerrar turno abierto, anular) con **motivo obligatorio** de un catálogo más texto libre. Nunca sobrescribe: genera versión nueva y entrada de auditoría. **Nunca hacia el futuro**: ninguna fecha u hora posterior a la del servidor más el margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES` (F1). | M |
 | RF-PA-05 | Bandeja de **incidencias** pendientes con flujo de resolución, asignada al responsable del departamento. | M |
 | RF-PA-06 | Vista de **cumplimiento**: alertas de descanso insuficiente entre jornadas, jornada diaria excesiva, ausencia de pausa en jornadas largas y exceso de horas semanales. | S |
 | RF-PA-07 | Panel de **salud de quioscos**: último latido, versión de la app, tamaño de la cola offline, nivel de batería. | S |

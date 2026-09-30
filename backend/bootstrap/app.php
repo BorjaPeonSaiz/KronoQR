@@ -17,6 +17,7 @@ use App\Modules\Attendance\Domain\Exception\CorrectionWouldChangeWorkDate;
 use App\Modules\Attendance\Domain\Exception\InvalidCorrectionReason;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
+use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
 use App\Modules\Compliance\Application\Exception\IncidentNotFound;
 use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
@@ -713,6 +714,23 @@ return Application::configure(basePath: dirname(__DIR__))
                 'clocked_out_at' => ['La hora de salida tiene que ser posterior a la de entrada.'],
             ])
             : null);
+
+        /*
+         * F1 (RL-01, RL-04): una marca o una jornada escritas a mano mas alla de
+         * la hora del servidor mas `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`. `422`
+         * colgado del campo que hay que corregir, en el idioma negociado.
+         *
+         * Sin acotar a las rutas de correccion como las de arriba, y no hace
+         * falta: solo `ManualEntryHorizon` la lanza, y el camino de fichaje no
+         * pasa por ella (regla dura 19).
+         */
+        $exceptions->render(static fn (ShiftMarkInFuture $exception): mixed => ProblemDetails::validationFailed([
+            $exception->mark->value => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
 
         /*
          * Un motivo fuera del Anexo C, o un `OTROS` sin explicacion. El

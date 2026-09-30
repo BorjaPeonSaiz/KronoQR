@@ -76,6 +76,16 @@ function catalog(
         source: 'product_default',
         constraints: { minimum: 1, maximum: 30 },
       },
+      // F1: el margen de futuro del alta manual.
+      {
+        key: 'ATTENDANCE_FUTURE_TOLERANCE_MINUTES',
+        value: 5,
+        type: 'integer',
+        impact: 'worked_hours',
+        affects_worked_hours: true,
+        source: 'product_default',
+        constraints: { minimum: 0, maximum: 60 },
+      },
       {
         key: 'BRANDING_APP_NAME',
         value: 'KronoQR',
