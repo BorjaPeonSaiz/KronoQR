@@ -207,11 +207,29 @@ valor de ejemplo. El motivo es concreto: con `APP_URL=https://localhost` el
 sistema arranca, todas las comprobaciones pasan —la verificación final sondea
 `127.0.0.1`— y **ningún quiosco puede llegar a él**. Nada posterior detecta eso.
 
-**`IMAGE_REGISTRY=ghcr.io/kronoqr` es el valor de ejemplo, no necesariamente el
-tuyo.** El fabricante te entrega el valor exacto junto con la licencia (suele
-llevar tu propio usuario u organización de GitHub delante, no `kronoqr`
-literal). Si `docker login` o la descarga de imágenes fallan con este valor tal
-cual, es la primera variable que hay que revisar.
+**`IMAGE_REGISTRY=ghcr.io/kronoqr` es el valor de la plantilla y hoy no
+descarga nada: pon el que te da el fabricante.** Las imágenes se publican en el
+registro de contenedores de GitHub (GHCR) bajo la cuenta del fabricante, con la
+forma `ghcr.io/<cuenta-del-fabricante>/kronoqr`, y el valor exacto te llega por
+escrito junto con la licencia. Escríbelo sin barra final y sin versión: el
+instalador añade él solo `/php:<versión>`, `/nginx:<versión>` y
+`/postgres:<versión>`.
+
+**Antes de instalar, comprueba que tu servidor puede descargarlas.** Copia estas
+dos órdenes tal cual, después de guardar el `.env`:
+
+```bash
+registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+docker pull "${registro}/php:$(cat VERSION)"
+```
+
+Si termina con `Status: Downloaded newer image` (o `Image is up to date`), está
+bien y no hace falta nada más. Si responde `denied` o `unauthorized`, el
+registro que tienes escrito no es el correcto o las imágenes de tu versión no
+son de acceso público: **no hace falta `docker login` si el fabricante te ha
+dicho que son públicas**; si te ha dado un usuario y un token de lectura, inicia
+sesión con ellos (§5, «…dice "no se han podido descargar las imagenes"»). Y si no sabes qué caso es el tuyo, pregúntalo antes de seguir: es la única
+variable de este bloque que no puedes deducir tú.
 
 **`TLS_ALLOW_SELF_SIGNED=false` en producción, y el instalador lo exige.** Con
 `true`, el servidor web se genera un certificado autofirmado: las tablets
@@ -754,16 +772,27 @@ el servidor ve la IP del proxy y no la del quiosco, y `KIOSK_VLAN_CIDR`,
 
 ### …dice «no se han podido descargar las imagenes»
 
-El servidor no llega al registro del fabricante, o no has iniciado sesión.
-Sustituye `ghcr.io/kronoqr` por el valor real de `IMAGE_REGISTRY` que te dio el
-fabricante con la licencia (el ejemplo de abajo usa el de la plantilla, casi
-nunca el tuyo):
+Hay tres causas posibles, y se distinguen con una sola descarga de prueba:
 
 ```bash
-docker login ghcr.io/kronoqr
+registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+echo "${registro}"
+docker pull "${registro}/php:$(cat VERSION)"
 ```
 
-Si esta instalación no tiene salida a internet, ve a §7.
+| Lo que responde | Qué pasa | Qué hacer |
+| --- | --- | --- |
+| `echo` imprime `ghcr.io/kronoqr` | Sigue el valor de la plantilla | Pon en `IMAGE_REGISTRY` el valor que te dio el fabricante con la licencia (§1.2) y repite |
+| `denied`, `unauthorized` o `manifest unknown` | Registro mal escrito, versión que no existe en ese registro, o imágenes que exigen iniciar sesión | Revisa letra a letra el valor (sin barra final, sin versión). Si el fabricante te dio un usuario y un token de lectura, inicia sesión con la orden de abajo y repite. Si te dijo que las imágenes son públicas, **no inicies sesión**: el problema es el valor o la versión, y hay que hablar con él |
+| `dial tcp`, `timeout` o `no such host` | El servidor no sale a internet, o un proxy lo impide | Si esta instalación no tiene salida a internet, ve a §7. Si debería tenerla, revisa el proxy de Docker con tu equipo de redes |
+
+Iniciar sesión solo si el fabricante te ha dado credenciales de lectura. Pide el
+usuario y pega el token cuando lo pida; el token no queda en el historial de la
+consola:
+
+```bash
+docker login ghcr.io
+```
 
 ### …dice «Se ha encontrado una instalacion previa» y sale con `3`
 
@@ -1143,28 +1172,34 @@ cada trimestre— está en
 El sistema funciona íntegramente sin internet. Lo único que hay que resolver es
 cómo llegan las imágenes al servidor. Desde una máquina que sí tenga acceso.
 
-**Sustituye `ghcr.io/kronoqr` por tu `IMAGE_REGISTRY` real** (te lo entrega el
-fabricante con la licencia): el de abajo es el valor de ejemplo de la
-plantilla, no una organización pública en la que estén tus imágenes.
+En la primera línea, **cambia `ghcr.io/kronoqr` por tu `IMAGE_REGISTRY` real**
+(te lo entrega el fabricante con la licencia; ver §1.2): el de la plantilla no
+descarga nada. Si el fabricante te ha dado credenciales de lectura, ejecuta
+antes `docker login ghcr.io` en esa máquina; si te ha dicho que las imágenes son
+públicas, no hace falta.
 
 ```bash
+registro="ghcr.io/kronoqr"
 version="$(cat VERSION)"
 for imagen in php nginx postgres; do
-  docker pull "ghcr.io/kronoqr/${imagen}:${version}"
+  docker pull "${registro}/${imagen}:${version}"
 done
 docker pull redis:7-alpine
 
 docker save -o "imagenes-${version}.tar" \
-  "ghcr.io/kronoqr/php:${version}" \
-  "ghcr.io/kronoqr/nginx:${version}" \
-  "ghcr.io/kronoqr/postgres:${version}" \
+  "${registro}/php:${version}" \
+  "${registro}/nginx:${version}" \
+  "${registro}/postgres:${version}" \
   redis:7-alpine
 ```
 
-Copia ese fichero al servidor del hotel (USB, recurso interno) y allí:
+Copia ese fichero al servidor del hotel (USB, recurso interno). Allí, el `.env`
+tiene que llevar **el mismo** `IMAGE_REGISTRY` que usaste arriba: las imágenes
+cargadas se buscan por su nombre completo y, con otro registro, el instalador
+intentaría descargarlas. Después:
 
 ```bash
-docker load -i imagenes-2.1.0.tar
+docker load -i "imagenes-$(cat VERSION).tar"
 sudo ./install.sh
 ```
 

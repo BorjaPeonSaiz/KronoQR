@@ -209,6 +209,31 @@ still hold the example value. The reason is concrete: with
 verification probes `127.0.0.1` — and **no kiosk can reach it**. Nothing
 afterwards detects that.
 
+**`IMAGE_REGISTRY=ghcr.io/kronoqr` is the template value and today it downloads
+nothing: put the one the vendor gives you.** The images are published on
+GitHub's container registry (GHCR) under the vendor's account, in the form
+`ghcr.io/<vendor-account>/kronoqr`, and the exact value reaches you in writing
+together with the licence. Write it with no trailing slash and no version: the
+installer appends `/php:<version>`, `/nginx:<version>` and `/postgres:<version>`
+by itself.
+
+**Before installing, check that your server can download them.** Copy these two
+commands as they are, after saving the `.env`:
+
+```bash
+registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+docker pull "${registro}/php:$(cat VERSION)"
+```
+
+If it ends with `Status: Downloaded newer image` (or `Image is up to date`), all
+is well and nothing else is needed. If it answers `denied` or `unauthorized`,
+the registry you have written is not the right one or your version's images are
+not publicly accessible: **you do not need `docker login` if the vendor has told
+you they are public**; if you were given a user and a read token, log in with
+them (§5, "…it says "could not download the images""). And if you do not know
+which case is yours, ask before going on: it is the only variable in this block
+you cannot work out yourself.
+
 **`TLS_ALLOW_SELF_SIGNED=false` in production, and the installer requires
 it.** With `true`, the web server generates itself a self-signed certificate:
 the tablets would warn about an unsafe site every morning and someone would end
@@ -764,13 +789,27 @@ server sees the proxy's IP and not the kiosk's, and `KIOSK_VLAN_CIDR`,
 
 ### …it says "could not download the images"
 
-The server cannot reach the vendor's registry, or you have not logged in:
+There are three possible causes, and a single test download tells them apart:
 
 ```bash
-docker login ghcr.io/kronoqr
+registro="$(sed -n 's/^IMAGE_REGISTRY=\([^ #]*\).*/\1/p' .env)"
+echo "${registro}"
+docker pull "${registro}/php:$(cat VERSION)"
 ```
 
-If this installation has no internet access, go to §7.
+| What it answers | What is going on | What to do |
+| --- | --- | --- |
+| `echo` prints `ghcr.io/kronoqr` | It still holds the template value | Put in `IMAGE_REGISTRY` the value the vendor gave you with the licence (§1.2) and repeat |
+| `denied`, `unauthorized` or `manifest unknown` | Registry misspelt, a version that does not exist in that registry, or images that require logging in | Check the value letter by letter (no trailing slash, no version). If the vendor gave you a user and a read token, log in with the command below and repeat. If you were told the images are public, **do not log in**: the problem is the value or the version, and you need to talk to the vendor |
+| `dial tcp`, `timeout` or `no such host` | The server has no internet access, or a proxy blocks it | If this installation has no internet access, go to §7. If it should have it, check Docker's proxy with your network team |
+
+Log in only if the vendor has given you read credentials. It asks for the user
+and for the token, which you paste; the token does not stay in the shell
+history:
+
+```bash
+docker login ghcr.io
+```
 
 ### …it says "A previous KronoQR installation was found" and exits with `3`
 
@@ -1156,26 +1195,36 @@ Spanish).
 ## 7. Installing without internet access
 
 The system works entirely without internet. The only thing to sort out is how
-the images get to the server. From a machine that does have access:
+the images get to the server. From a machine that does have access.
+
+On the first line, **change `ghcr.io/kronoqr` to your real `IMAGE_REGISTRY`**
+(the vendor gives it to you with the licence; see §1.2): the template one
+downloads nothing. If the vendor has given you read credentials, run
+`docker login ghcr.io` on that machine first; if you were told the images are
+public, there is no need.
 
 ```bash
+registro="ghcr.io/kronoqr"
 version="$(cat VERSION)"
 for imagen in php nginx postgres; do
-  docker pull "ghcr.io/kronoqr/${imagen}:${version}"
+  docker pull "${registro}/${imagen}:${version}"
 done
 docker pull redis:7-alpine
 
 docker save -o "imagenes-${version}.tar" \
-  "ghcr.io/kronoqr/php:${version}" \
-  "ghcr.io/kronoqr/nginx:${version}" \
-  "ghcr.io/kronoqr/postgres:${version}" \
+  "${registro}/php:${version}" \
+  "${registro}/nginx:${version}" \
+  "${registro}/postgres:${version}" \
   redis:7-alpine
 ```
 
-Copy that file to the hotel's server (USB, internal share) and there:
+Copy that file to the hotel's server (USB, internal share). There, the `.env`
+must carry **the same** `IMAGE_REGISTRY` you used above: loaded images are
+looked up by their full name and, with a different registry, the installer
+would try to download them. Then:
 
 ```bash
-docker load -i imagenes-2.1.0.tar
+docker load -i "imagenes-$(cat VERSION).tar"
 sudo ./install.sh
 ```
 
