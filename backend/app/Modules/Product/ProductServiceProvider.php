@@ -110,6 +110,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\MetricsCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\PersonalDataCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ServicesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
+use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
 use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
 use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\AlertRecipientsProbe;
@@ -1842,6 +1843,9 @@ final class ProductServiceProvider extends ServiceProvider
                 translator: $app->make(DoctorTranslator::class),
                 clock: $app->make(Clock::class),
                 productVersion: Config::string('app.version'),
+                // PR2: una sonda que revienta porque Redis o PostgreSQL no
+                // contestan no es un fallo del producto.
+                failures: new ConnectionProbeFailureClassifier,
             ),
         );
 

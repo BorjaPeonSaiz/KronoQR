@@ -16,12 +16,23 @@ declare(strict_types=1);
 $probe = [
     'failure' => 'The «:family» group of checks could not run: something failed unexpectedly inside the '
         .'diagnostic itself. Every other check did run.',
+    // PR2: the group needs a service that did not answer. It is not a product defect.
+    'failure_redis' => 'The «:family» group of checks could not run because Redis does not respond. '
+        .'Every other check did run.',
+    'failure_database' => 'The «:family» group of checks could not run because the database does not respond. '
+        .'Every other check did run.',
 ];
 
 $probeFix = [
     'failure' => "This is a product defect, not a problem with your installation.\n"
         ."Generate the diagnostics bundle and send it to support:\n"
         .'  php artisan product:diagnostics',
+    'failure_redis' => "Fix Redis first: look at the «queue.redis» check in this same report.\n"
+        ."Then run this command again:\n"
+        .'  php artisan product:doctor',
+    'failure_database' => "Fix the database first: look at the «database.connection» check in this same report.\n"
+        ."Then run this command again:\n"
+        .'  php artisan product:doctor',
 ];
 
 return [
@@ -89,8 +100,9 @@ return [
             'probe' => $probe,
             'redis' => [
                 'ok' => 'Redis responds.',
-                'failure' => 'Redis does not respond. Without it the job queue, the cache and the panel sessions '
-                    .'do not work.',
+                'failure' => 'Redis does not respond. Without it the job queue and the metrics do not work, and the '
+                    .'panel and the employee portal reject requests, because their attempt limit cannot be checked. '
+                    .'Clocking in keeps working.',
             ],
             'backlog' => [
                 'ok' => 'The job queue is up to date (:count pending).',
@@ -332,7 +344,7 @@ return [
                     ."  docker compose ps\n"
                     ."  docker compose logs --tail=50 redis\n"
                     ."  docker compose restart redis\n"
-                    .'People can keep clocking in meanwhile, but the panel may ask to sign in again.',
+                    .'People can keep clocking in meanwhile; the panel and the portal come back once Redis responds.',
             ],
             'backlog' => [
                 'warning' => "Check whether the queue worker is alive:\n"

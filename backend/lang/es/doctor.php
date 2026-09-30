@@ -36,12 +36,23 @@ declare(strict_types=1);
 $probe = [
     'failure' => 'No se pudo ejecutar el grupo de comprobaciones «:family»: algo fallo de forma inesperada '
         .'dentro del propio diagnostico. El resto de comprobaciones si se ha ejecutado.',
+    // PR2: al grupo le falta un servicio que no contesta. No es un fallo del producto.
+    'failure_redis' => 'No se pudo ejecutar el grupo de comprobaciones «:family» porque Redis no responde. '
+        .'El resto de comprobaciones si se ha ejecutado.',
+    'failure_database' => 'No se pudo ejecutar el grupo de comprobaciones «:family» porque la base de datos no '
+        .'responde. El resto de comprobaciones si se ha ejecutado.',
 ];
 
 $probeFix = [
     'failure' => "Es un fallo del producto, no de tu instalacion.\n"
         ."Genera el paquete de diagnostico y enviaselo a soporte:\n"
         .'  php artisan product:diagnostics',
+    'failure_redis' => "Arregla primero Redis: mira la comprobacion «queue.redis» de este mismo informe.\n"
+        ."Despues vuelve a ejecutar este comando:\n"
+        .'  php artisan product:doctor',
+    'failure_database' => "Arregla primero la base de datos: mira la comprobacion «database.connection» de este\n"
+        ."mismo informe. Despues vuelve a ejecutar este comando:\n"
+        .'  php artisan product:doctor',
 ];
 
 return [
@@ -116,8 +127,9 @@ return [
             'probe' => $probe,
             'redis' => [
                 'ok' => 'Redis responde.',
-                'failure' => 'Redis no responde. Sin el no funcionan la cola de trabajos, la cache ni las '
-                    .'sesiones del panel.',
+                'failure' => 'Redis no responde. Sin el no funcionan la cola de trabajos ni las metricas, y el panel '
+                    .'y el portal del empleado rechazan las peticiones, porque su limite de intentos no se puede '
+                    .'comprobar. El fichaje sigue funcionando.',
             ],
             'backlog' => [
                 'ok' => 'La cola de trabajos esta al dia (:count pendientes).',
@@ -378,7 +390,7 @@ return [
                     ."  docker compose ps\n"
                     ."  docker compose logs --tail=50 redis\n"
                     ."  docker compose restart redis\n"
-                    .'Se puede seguir fichando mientras tanto, pero el panel puede pedir volver a entrar.',
+                    .'Se puede seguir fichando mientras tanto; el panel y el portal vuelven cuando Redis responda.',
             ],
             'backlog' => [
                 'warning' => "Mira si el proceso que consume la cola esta vivo:\n"

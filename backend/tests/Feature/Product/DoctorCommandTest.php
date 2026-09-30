@@ -9,6 +9,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorCheck;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorReport;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
+use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -245,6 +246,86 @@ it('sobrevive a una sonda que revienta y lo dice sin filtrar el mensaje', functi
         // Y las demas sondas se ejecutan igual.
         ->and($result['output'])->toContain('disk.storage');
 })->group('RF-PD-13', 'RS-08');
+
+/**
+ * Una sonda que revienta con la excepcion que se le de.
+ */
+function sondaQueRevienta(string $family, Throwable $failure): DoctorProbe
+{
+    return new class($family, $failure) implements DoctorProbe
+    {
+        public function __construct(private string $family, private Throwable $failure) {}
+
+        public function family(): string
+        {
+            return $this->family;
+        }
+
+        public function run(): array
+        {
+            throw $this->failure;
+        }
+    };
+}
+
+/**
+ * Como `conSondas()`, pero con el clasificador de fallos de conexion que monta
+ * el proveedor de verdad.
+ *
+ * @param  list<DoctorProbe>  $probes
+ */
+function conSondasClasificadas(array $probes): void
+{
+    app()->bind(RunDoctorHandler::class, static fn (): RunDoctorHandler => new RunDoctorHandler(
+        probes: $probes,
+        translator: app(DoctorTranslator::class),
+        clock: app(Clock::class),
+        productVersion: 'test',
+        failures: new ConnectionProbeFailureClassifier,
+    ));
+}
+
+it('no culpa al producto cuando una sonda revienta porque Redis no responde', function (): void {
+    // PR2: con Redis parado, configuracion y licencia reventaban y el informe
+    // decia dos veces «es un fallo del producto, envia el paquete a soporte», con
+    // la comprobacion de Redis en rojo dos lineas mas arriba.
+    conSondasClasificadas([
+        sondaQueRevienta('settings', new RedisException('Connection refused')),
+        sondaQueRevienta('license', new RedisException('Connection refused')),
+    ]);
+
+    $result = runDoctor(['--lang' => 'es']);
+
+    expect($result['code'])->toBe(2)
+        ->and($result['output'])->toContain('porque Redis no responde')
+        ->and($result['output'])->toContain('queue.redis')
+        ->and($result['output'])->not->toContain('Es un fallo del producto')
+        ->and($result['output'])->not->toContain('base de datos');
+})->group('RF-PD-13');
+
+it('no culpa al producto cuando una sonda revienta porque la base de datos no responde', function (): void {
+    $caida = new PDOException('SQLSTATE[08006] could not connect to server', 7);
+    $caida->errorInfo = ['08006', 7, 'could not connect to server'];
+
+    conSondasClasificadas([sondaQueRevienta('settings', $caida)]);
+
+    $result = runDoctor(['--lang' => 'en']);
+
+    expect($result['output'])->toContain('because the database does not respond')
+        ->and($result['output'])->toContain('database.connection')
+        ->and($result['output'])->not->toContain('product defect')
+        ->and($result['output'])->not->toContain('could not connect');
+})->group('RF-PD-13');
+
+it('sigue atribuyendo al producto un fallo que no es de conexion', function (): void {
+    // Un error de sintaxis SQL (`42601`) no es «la base de datos esta caida».
+    $defecto = new PDOException('SQLSTATE[42601] syntax error');
+    $defecto->errorInfo = ['42601', 7, 'syntax error'];
+
+    conSondasClasificadas([sondaQueRevienta('settings', $defecto)]);
+
+    expect(runDoctor(['--lang' => 'es'])['output'])->toContain('Es un fallo del producto');
+})->group('RF-PD-13');
 
 // --- El codigo de servicio del quiosco (RF-KI-08, tarea 3.3) ----------------
 
