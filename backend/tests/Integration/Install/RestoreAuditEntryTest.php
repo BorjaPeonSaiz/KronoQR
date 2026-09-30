@@ -38,6 +38,7 @@ esac
 BASH;
 
 /**
+ * @param  array<string, string>  $env
  * @return array{0: string, 1: Process}
  */
 function restoreAuditScenario(string $body, array $env = []): array
@@ -90,7 +91,10 @@ it('escribe system.restored_from_backup con el rol de migracion del servicio y l
     ]);
 
     // Ni la contraseña ni una ruta absoluta entran en el asiento ni en el informe (reglas 16 y 21).
-    expect(json_encode($payload))->not->toContain('secreto-de-prueba')->not->toContain('/tmp');
+    $serialized = (string) json_encode($payload);
+
+    expect($serialized)->not->toContain('secreto-de-prueba')
+        ->and($serialized)->not->toContain('/tmp');
     expect((string) file_get_contents($dir.'/restore-20260930T020000Z.log'))->not->toContain('secreto-de-prueba');
 })->group('RL-04', 'RS-07', 'RF-PR-04');
 
@@ -139,10 +143,9 @@ it('el cableado: el actualizador no duplica el asiento, el servicio restore arra
     expect($actualizador)->toContain('restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller');
 
     // El asiento se escribe con la credencial que restore ya tiene, nunca con la de la aplicacion.
-    expect($restore)
-        ->toContain('DB_CONNECTION=pgsql_migrator')
-        ->not->toContain('DB_PASSWORD=')
-        ->toContain('KQ_EXIT_VERIFY_FAILED');
+    expect($restore)->toContain('DB_CONNECTION=pgsql_migrator')
+        ->and($restore)->not->toContain('DB_PASSWORD=')
+        ->and($restore)->toContain('KQ_EXIT_VERIFY_FAILED');
 
     // El intercambio de bases va ANTES del asiento, y el asiento antes de purgar.
     $intercambio = strpos($restore, 'ALTER DATABASE \"${base_nueva}\" RENAME TO');

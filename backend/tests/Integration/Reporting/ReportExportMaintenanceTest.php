@@ -249,7 +249,17 @@ it('la migracion se puede revertir y volver a aplicar', function (): void {
 
         expect($steps)->toBeGreaterThan(0);
 
-        [$exitCode] = Commands::run('migrate:rollback --database='.$name.' --step='.$steps);
+        // `--path` acota la vuelta atras a ESTA migracion: las posteriores se
+        // saltan. Sin el, el rollback pasaria por
+        // `2026_09_30_120100_index_pin_claims_on_scan_events` (RN-19), cuyo
+        // `DROP/CREATE INDEX CONCURRENTLY` espera a que terminen todas las
+        // transacciones abiertas, incluida la de `RefreshDatabase` de esta misma
+        // prueba, y se rinde por `lock_timeout`. Ese ciclo lo prueba
+        // `PinClaimMigrationsTest` sin transaccion envolvente.
+        [$exitCode] = Commands::run(
+            'migrate:rollback --database='.$name.' --step='.$steps
+            .' --path=database/migrations/2026_09_22_110000_report_exports.php'
+        );
 
         expect($exitCode)->toBe(0)
             ->and($migrator->getSchemaBuilder()->hasTable('report_exports'))->toBeFalse();
