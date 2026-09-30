@@ -269,6 +269,7 @@ run_delegated_doctor() {
   # a PostgreSQL con el superusuario, que el contenedor `app` no tiene): su
   # fallo tambien cuenta para el codigo de salida.
   check_backup_role
+  check_edge_networks
   say ""
 
   # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
@@ -320,6 +321,7 @@ run_external_checks() {
   check_services_state
   check_env_permissions
   check_backup_role
+  check_edge_networks
   check_disk_space
   check_certificates
   check_listening_ports
@@ -405,6 +407,15 @@ check_backup_role() {
   "") check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_missing "${role}")" ;;
   *) check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_unknown "${role}")" ;;
   esac
+}
+
+# Las redes del borde del .env (PP-01, PP-03, I1): sintaxis, cobertura del portal
+# y de Prometheus, y TRUSTED_PROXY_CIDR. Es la MISMA comprobacion que hacen
+# install.sh y update.sh (lib/checks.sh). `product:doctor` la repite desde
+# dentro con su sonda de redes; aqui se hace sin depender de que `app` este en
+# pie, que es cuando mas falta hace: con un CIDR invalido, nginx no arranca.
+check_edge_networks() {
+  check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE}"
 }
 
 # Proporcion de espacio libre, no GiB absolutos (ver el comentario de los

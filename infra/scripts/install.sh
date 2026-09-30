@@ -721,16 +721,21 @@ check_tls() {
 # de Docker Compose— y todos son cadenas no vacias. Con la comprobacion anterior
 # pasaban la fase 1, y la fase 5 los daba por buenos porque sondea 127.0.0.1
 # con `--insecure`: la instalacion se declaraba correcta y ningun quiosco podia
-# llegar a ella. Por eso estas cuatro se comparan contra la PLANTILLA: si siguen
+# llegar a ella. Por eso estas tres se comparan contra la PLANTILLA: si siguen
 # valiendo lo mismo que en `.env.example`, nadie las ha decidido.
 #
-# Las otras dos (`BACKUP_PATH`, `TLS_CERT_DIR`) SI pueden coincidir con la
-# plantilla legitimamente: `/var/backups/fichaje` y `./certs` son destinos
-# perfectamente validos en produccion. Ahi solo se exige que no esten vacias.
+# Las otras —`BACKUP_PATH`, `TLS_CERT_DIR` y `METRICS_ALLOW_CIDR`— SI pueden
+# coincidir con la plantilla legitimamente: `/var/backups/fichaje` y `./certs`
+# son destinos perfectamente validos en produccion, y el valor de serie de
+# `METRICS_ALLOW_CIDR` (`172.29.0.20/32`, la IP fija de Prometheus) es el UNICO
+# que le da acceso a /metrics sin ensanchar el rango. Compararlo con la
+# plantilla obligaba a cambiarlo por algo que dejaba a Prometheus con 403 (I1).
+# Ahi solo se exige que no esten vacias; que sean un CIDR y que cubran a
+# Prometheus lo comprueba `check_network_cidrs`.
 check_customer_values() {
   local key value plantilla
 
-  for key in APP_URL KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR METRICS_ALLOW_CIDR; do
+  for key in APP_URL KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR; do
     value="$(env_value "${ENV_FILE}" "${key}")"
     plantilla="$(env_value "${ENV_TEMPLATE}" "${key}")"
 
@@ -745,7 +750,7 @@ check_customer_values() {
     fi
   done
 
-  for key in BACKUP_PATH TLS_CERT_DIR; do
+  for key in BACKUP_PATH TLS_CERT_DIR METRICS_ALLOW_CIDR; do
     value="$(env_value "${ENV_FILE}" "${key}")"
     if [ -n "${value}" ]; then
       check_pass "$(kq_format c_env_key "${key}")"
@@ -827,6 +832,8 @@ phase_requirements() {
     esac
 
     check_customer_values
+    check_network_cidrs "${ENV_FILE}" "${COMPOSE_FILE}" skip-missing
+    check_operational_settings "${ENV_FILE}" "${COMPOSE_FILE}"
     check_app_url
     check_tls
     check_ports

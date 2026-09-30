@@ -1013,6 +1013,7 @@ readonly -a PRECONDITION_CHECKS=(
   check_images
   check_services
   check_audit_chain
+  check_edge_networks
   check_env_new_keys
   check_env_orphan_keys
 )
@@ -1418,6 +1419,18 @@ check_audit_chain() {
     check_fail "$(kq_text u_c_audit_chain)" "$(kq_text u_f_audit_chain)"
     remember_check "audit-chain-before" "$(kq_text u_report_failed)"
   fi
+}
+
+# Las redes del borde HTTP del .env actual (PP-01, PP-03). Se comprueban ANTES de
+# tocar nada porque el borde nuevo arranca con el mismo .env: un CIDR mal escrito
+# lo dejaria en bucle de reinicio con la ventana de mantenimiento ya abierta. La
+# sintaxis invalida es un fallo (exit 2, nada tocado); lo demas son avisos que
+# no frenan la actualizacion (el portal abierto a internet, por ejemplo, es una
+# decision del cliente).
+check_edge_networks() {
+  [ -n "${CURRENT_ENV}" ] || return 0
+
+  check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE:-${COMPOSE_FILE}}"
 }
 
 # Claves que trae el .env.example nuevo y el .env del cliente no tiene. No es un
