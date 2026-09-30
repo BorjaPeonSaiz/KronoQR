@@ -16,8 +16,21 @@
 # Al necesitarlo tambien el job de actualizacion —dos paquetes mas— se saco
 # aqui. Las diferencias entre escenarios van por argumentos, no por copias.
 #
+# DOS MODOS (I4, 2.2.0):
+#   · Por defecto (el de los escenarios A-F y el del job de actualizacion): ademas
+#     de lo de la guia, APAGA la observabilidad y pone `METRICS_ALLOW_CIDR` a otra
+#     cosa. Sirve para instalar rapido y sin descargar cinco imagenes, pero NO es
+#     el procedimiento de la guia: con el, el bloqueante I1 (un `METRICS_ALLOW_CIDR`
+#     que dejaba a Prometheus con 403) pasaba la CI sin que nadie lo viera.
+#   · `--literal`: SOLO lo que la guia manda poner en su bloque «Lo minimo que hay
+#     que rellenar» (instalacion.md §1.2): APP_ENV, APP_URL, KIOSK_VLAN_CIDR,
+#     PORTAL_INTERNAL_CIDR, TLS_ALLOW_SELF_SIGNED, BACKUP_PATH e IMAGE_REGISTRY. Lo
+#     demas queda como lo entrega el fabricante: `METRICS_ALLOW_CIDR` con el valor
+#     de serie (172.29.0.20/32) y `COMPOSE_PROFILES=observability` (encendida). Es
+#     lo que usa la segunda pasada del ⑧ (escenario G).
+#
 # Uso:
-#   prepare-package-env.sh DIRECTORIO [--backup-path RUTA] [--http-port N] [--https-port N]
+#   prepare-package-env.sh DIRECTORIO [--literal] [--backup-path RUTA] [--http-port N] [--https-port N]
 #
 # Necesita sudo: el certificado se entrega al uid 101 (nginx sin privilegios).
 # Codigos de salida: 0 correcto · 1 fallo · 2 uso incorrecto.
@@ -39,9 +52,14 @@ shift
 BACKUP_PATH="/var/backups/fichaje"
 HTTP_PORT="80"
 HTTPS_PORT="443"
+LITERAL=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+  --literal)
+    LITERAL=1
+    shift
+    ;;
   --backup-path)
     BACKUP_PATH="$2"
     shift 2
@@ -98,13 +116,19 @@ sed -i \
   -e 's|^APP_URL=.*|APP_URL=https://kronoqr.ci.local|' \
   -e 's|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=kronoqr|' \
   -e 's|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=10.92.0.0/24|' \
-  -e 's|^METRICS_ALLOW_CIDR=.*|METRICS_ALLOW_CIDR=10.91.0.5/32|' \
   -e 's|^TLS_ALLOW_SELF_SIGNED=.*|TLS_ALLOW_SELF_SIGNED=false|' \
-  -e 's|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=|' \
   -e "s|^BACKUP_PATH=.*|BACKUP_PATH=${BACKUP_PATH}|" \
   -e "s|^HTTP_PORT=.*|HTTP_PORT=${HTTP_PORT}|" \
   -e "s|^HTTPS_PORT=.*|HTTPS_PORT=${HTTPS_PORT}|" \
   "${PACKAGE_DIR}/.env"
+if [ "${LITERAL}" -eq 0 ]; then
+  # Lo que la guia NO manda tocar y este modo si: otra red de metricas y la
+  # observabilidad apagada (ver la cabecera: ese es el hueco de I4).
+  sed -i \
+    -e 's|^METRICS_ALLOW_CIDR=.*|METRICS_ALLOW_CIDR=10.91.0.5/32|' \
+    -e 's|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=|' \
+    "${PACKAGE_DIR}/.env"
+fi
 # El portal, a una red en la que el anfitrion NO esta: es lo que hace que la
 # comprobacion de RF-ID-08 espere un 403 y no un 200.
 sed -i -e 's|^PORTAL_INTERNAL_CIDR=.*|PORTAL_INTERNAL_CIDR=10.90.0.0/24|' "${PACKAGE_DIR}/.env"
@@ -117,5 +141,7 @@ grep -q '^APP_TIMEZONE=UTC$' "${PACKAGE_DIR}/.env"
 grep -q '^IMAGE_TAG=$' "${PACKAGE_DIR}/.env"
 grep -q '^APP_KEY=$' "${PACKAGE_DIR}/.env"
 
-printf 'Paquete %s rellenado: APP_URL=https://kronoqr.ci.local, BACKUP_PATH=%s, puertos %s/%s\n' \
-  "${PACKAGE_DIR}" "${BACKUP_PATH}" "${HTTP_PORT}" "${HTTPS_PORT}"
+MODE_LABEL=""
+[ "${LITERAL}" -eq 0 ] || MODE_LABEL=" (literal, como la guia)"
+printf 'Paquete %s rellenado%s: APP_URL=https://kronoqr.ci.local, BACKUP_PATH=%s, puertos %s/%s\n' \
+  "${PACKAGE_DIR}" "${MODE_LABEL}" "${BACKUP_PATH}" "${HTTP_PORT}" "${HTTPS_PORT}"

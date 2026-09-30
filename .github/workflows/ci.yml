@@ -1632,10 +1632,12 @@ jobs:
         # fichero de compose con `config` demuestra que el perfil existe, no que
         # arranque.
         #
-        # No se hace una TERCERA instalacion completa: se enciende el perfil
-        # sobre la que ya esta en pie, que es ademas la operacion real que hara
-        # un cliente que lo apago y se arrepiente. Cuesta la descarga de las
-        # cinco imagenes publicas (~690 MiB, medido) y no otra migracion.
+        # Aqui se enciende el perfil sobre la instalacion que ya esta en pie, que
+        # es ademas la operacion real que hara un cliente que lo apago y se
+        # arrepiente. Cuesta la descarga de las cinco imagenes publicas (~690 MiB,
+        # medido) y no otra migracion. La INSTALACION con el perfil encendido desde
+        # el principio, tal como la deja la guia, es el escenario G de mas abajo
+        # (I4, 2.2.0).
         #
         # La descarga va aparte y con reintento a proposito: asi un limite de
         # Docker Hub se distingue de un perfil mal escrito, en vez de aparecer
@@ -1690,6 +1692,74 @@ jobs:
           sudo docker compose --env-file .env -f docker-compose.yml exec -T node-exporter \
             ls /var/backups/metrics >/dev/null
 
+      - name: "G · Segunda pasada: el procedimiento LITERAL de la guia, con la observabilidad encendida"
+        # I4 (2.2.0). Los escenarios A-F rellenan el `.env` con otros valores y
+        # APAGAN la observabilidad (prepare-package-env.sh, modo por defecto): el
+        # camino que sigue un cliente, que es copiar `.env.example`, poner lo de
+        # su bloque «Lo minimo que hay que rellenar» y dejar el resto como viene,
+        # no se ejecutaba NUNCA. Asi paso I1 —el instalador rechazaba el unico
+        # valor de METRICS_ALLOW_CIDR que deja a Prometheus leer /metrics— con la
+        # etapa en verde, y la guia decia que este procedimiento «esta probado en
+        # cada publicacion».
+        #
+        # Aqui se retira la instalacion de C-F (misma maquina, mismos puertos) y se
+        # instala otra DESDE UN PAQUETE NUEVO con `--literal`: `METRICS_ALLOW_CIDR`
+        # de serie y `COMPOSE_PROFILES=observability`. Lo que se exige despues es lo
+        # que la guia promete: instalado y verificado, `doctor.sh` sin fallos y
+        # `/metrics` raspado por Prometheus.
+        #
+        # Las imagenes de observabilidad ya estan en el runner (las descarga el
+        # escenario F): esto no anade descargas.
+        run: |
+          set -euo pipefail
+          sudo docker compose --env-file paquete/.env -f paquete/docker-compose.yml \
+            --profile '*' down -v --remove-orphans
+          sudo rm -rf /var/backups/fichaje
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+
+          bash infra/scripts/package.sh paquete-g
+          bash .github/scripts/prepare-package-env.sh paquete-g --literal
+          cd paquete-g
+          # Lo que la guia deja como viene, tal como viene.
+          grep -q '^COMPOSE_PROFILES=observability' .env
+          grep -q '^METRICS_ALLOW_CIDR=172.29.0.20/32' .env
+
+          sudo ./install.sh | tee salida-g.log
+          grep -q 'instalado y verificado' salida-g.log
+
+      - name: "G · doctor.sh sale sin fallos (avisos si, fallos no)"
+        run: |
+          set -euo pipefail
+          cd paquete-g
+          # Sale 0 con avisos y 6 con algun fallo. Los avisos esperados de un
+          # paquete recien instalado —correo de desarrollo, sin destinatarios de
+          # alerta, portal fuera de la red del runner— no son fallos.
+          sudo ./doctor.sh | tee doctor-g.log
+
+      - name: "G · Prometheus raspa /metrics: el target kronoqr-api esta up"
+        # `up == 1` exige un 200 de /metrics a traves de nginx, asi que un
+        # METRICS_ALLOW_CIDR que no cubra a Prometheus (403) deja `up == 0`. Es
+        # exactamente el fallo de I1. Se espera por condicion, no por `sleep`: el
+        # primer raspado tarda lo que tarde el intervalo.
+        run: |
+          set -euo pipefail
+          cd paquete-g
+          consulta='http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22kronoqr-api%22%7D'
+          respuesta=""
+          for _ in $(seq 1 40); do
+            respuesta="$(sudo docker compose --env-file .env -f docker-compose.yml exec -T prometheus \
+              wget -qO- "${consulta}" || true)"
+            if grep -qE '\[[0-9.]+,"1"\]' <<<"${respuesta}"; then
+              echo "kronoqr-api: up"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Prometheus no consigue raspar /metrics tras 200 s. Respuesta: ${respuesta}"
+          sudo docker compose --env-file .env -f docker-compose.yml exec -T prometheus \
+            wget -qO- 'http://127.0.0.1:9090/api/v1/targets' || true
+          exit 1
 
       - name: Trivy sobre la imagen de borde recien construida (bloqueante)
         # Por `make`, como TODAS las demas invocaciones de Trivy del
@@ -1704,7 +1774,7 @@ jobs:
         # Los dos paquetes: el de la instalacion buena y el del escenario de
         # fallo seguro. Cual de los dos existe depende de donde se haya roto.
         run: |
-          for dir in paquete paquete-e; do
+          for dir in paquete paquete-e paquete-g; do
             [ -d "${dir}" ] || continue
             echo "=============== ${dir} ==============="
             [ -f "${dir}/.env" ] || continue
@@ -1736,6 +1806,8 @@ jobs:
             paquete/salida-d.log
             paquete-e/salida-e.log
             paquete-e/reintento-e.log
+            paquete-g/salida-g.log
+            paquete-g/doctor-g.log
           retention-days: 14
           if-no-files-found: warn
 
