@@ -423,6 +423,7 @@ x-runtime-env: &runtime-env
   # rango de ejemplo. No son secretos.
   KIOSK_VLAN_CIDR:
   METRICS_ALLOW_CIDR:
+  PORTAL_INTERNAL_CIDR:
   METRICS_TEXTFILE_ENABLED:
   TLS_ALLOW_SELF_SIGNED:
   TRUSTED_PROXIES:
@@ -542,6 +543,9 @@ services:
       METRICS_ALLOW_CIDR:
       # Opcionales. Sin valor por defecto de Compose: si no estan, la imagen y
       # 03-kronoqr-tls-paths.envsh ponen las suyas.
+      # PP-03: proxies de confianza (vacia = sin proxy). 04-kronoqr-required-env.sh
+      # valida su sintaxis y 06-kronoqr-real-ip.envsh la rinde como set_real_ip_from.
+      TRUSTED_PROXY_CIDR:
       TLS_ALLOW_SELF_SIGNED:
       TLS_CERT_FILE:
       TLS_KEY_FILE:

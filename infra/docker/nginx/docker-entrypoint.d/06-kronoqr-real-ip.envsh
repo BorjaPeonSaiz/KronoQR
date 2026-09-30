@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# KronoQR — IP real del visitante cuando hay un proxy o un balanceador delante
+# (PP-03).
+#
+# ES UN `.envsh` por la misma razon que `03-kronoqr-tls-paths.envsh`: solo lo
+# que se CARGA deja variables en el entorno que lee el
+# `20-envsubst-on-templates.sh` de la imagen base. Aqui se rinde
+# KRONOQR_REAL_IP_DIRECTIVES, que la plantilla `kronoqr.conf.template` coloca a
+# nivel `http`.
+#
+# PARA QUE SIRVE. Con un proxy o una CDN por delante, nginx ve SIEMPRE la IP del
+# proxy, y eso rompe tres cosas a la vez: el `geo` de KIOSK_VLAN_CIDR (todos los
+# quioscos caen en la zona de 30 r/m), el del portal (RF-ID-08) y el limite por
+# IP (RS-02). TRUSTED_PROXY_CIDR dice QUE proxies pueden decir quien es el
+# visitante de verdad.
+#
+# POR QUE NO BASTA CON `real_ip_header X-Forwarded-For` A SECAS. Esa cabecera la
+# escribe cualquiera: un visitante de internet que mande `X-Forwarded-For:
+# 10.0.20.7` se haria pasar por un quiosco y saltaria el limite de 30 r/m y el
+# candado del portal. Por eso `set_real_ip_from` acota los proxies de confianza
+# y `real_ip_recursive on` recorre la cadena de derecha a izquierda hasta la
+# primera direccion que NO sea de confianza. `04-kronoqr-required-env.sh` ya ha
+# validado la sintaxis y ha rechazado 0.0.0.0/0, que confiaria en todo el mundo.
+#
+# VACIA (lo normal: sin proxy) no se rinde ninguna directiva y el comportamiento
+# es el de siempre. `set -eu` y no `pipefail`: se carga dentro del shell del
+# punto de entrada (ver el 03).
+
+set -eu
+
+kronoqr_render_real_ip() {
+  local_out=""
+  local_list="$(printf '%s' "${TRUSTED_PROXY_CIDR:-}" | tr ',' ' ')"
+
+  set -f
+  for local_cidr in ${local_list}; do
+    local_out="${local_out}set_real_ip_from ${local_cidr};
+"
+  done
+  set +f
+
+  if [ -z "${local_out}" ]; then
+    printf '%s' "# TRUSTED_PROXY_CIDR vacio: no hay proxy de confianza; se usa la IP del socket."
+    return 0
+  fi
+
+  printf '%sreal_ip_header X-Forwarded-For;\nreal_ip_recursive on;' "${local_out}"
+}
+
+KRONOQR_REAL_IP_DIRECTIVES="$(kronoqr_render_real_ip)"
+export KRONOQR_REAL_IP_DIRECTIVES

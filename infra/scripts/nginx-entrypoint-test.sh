@@ -23,13 +23,18 @@ readonly SCRIPT_DIR
 
 readonly ENTRYPOINT="${SCRIPT_DIR}/../docker/nginx/docker-entrypoint.d/04-kronoqr-required-env.sh"
 
+readonly REAL_IP_ENVSH="${SCRIPT_DIR}/../docker/nginx/docker-entrypoint.d/06-kronoqr-real-ip.envsh"
+
 fallo=0
+
+# TRUSTED_PROXY_CIDR de los casos (PP-03). Vacia salvo en los que la prueban.
+PROXIES=""
 
 # caso DESCRIPCION SALIDA_ESPERADA TEXTO_ESPERADO KIOSK PORTAL METRICS
 caso() {
   local descripcion="$1" esperada="$2" texto="$3" kiosk="$4" portal="$5" metricas="$6" salida codigo=0
 
-  salida="$(env KIOSK_VLAN_CIDR="${kiosk}" PORTAL_INTERNAL_CIDR="${portal}" \
+  salida="$(env TRUSTED_PROXY_CIDR="${PROXIES}" KIOSK_VLAN_CIDR="${kiosk}" PORTAL_INTERNAL_CIDR="${portal}" \
     METRICS_ALLOW_CIDR="${metricas}" bash "${ENTRYPOINT}" 2>&1)" || codigo=$?
 
   if [ "${codigo}" != "${esperada}" ]; then
@@ -40,6 +45,22 @@ caso() {
 
   if [ -n "${texto}" ] && ! grep -qF -- "${texto}" <<<"${salida}"; then
     printf '  [FALLA] %s: la salida no contiene "%s"\n%s\n' "${descripcion}" "${texto}" "${salida}" >&2
+    fallo=1
+    return 0
+  fi
+
+  printf '  [ok]    %s\n' "${descripcion}"
+}
+
+# real_ip DESCRIPCION LISTA ESPERADO: lo que rinde 06-kronoqr-real-ip.envsh,
+# cargado con `.` como hace el punto de entrada de la imagen, en `sh`.
+real_ip() {
+  local descripcion="$1" lista="$2" esperado="$3" salida
+
+  salida="$(TRUSTED_PROXY_CIDR="${lista}" sh -c '. "$1"; printf "%s" "${KRONOQR_REAL_IP_DIRECTIVES}"' sh "${REAL_IP_ENVSH}" 2>&1)" || true
+
+  if [ "${salida}" != "${esperado}" ]; then
+    printf '  [FALLA] %s: rindio "%s", se esperaba "%s"\n' "${descripcion}" "${salida}" "${esperado}" >&2
     fallo=1
     return 0
   fi
@@ -65,6 +86,33 @@ main() {
   caso "basura con comillas no rompe el registro" 1 "no es un CIDR IPv4 valido" '10.0.0.0/8"}' 172.28.0.0/16 172.29.0.20/32
   caso "se nombran todas las invalidas" 1 "PORTAL_INTERNAL_CIDR='x'" 10.0.20.0/33 x 172.29.0.20/32
   caso "portal abierto a internet: solo aviso" 0 "portal abierto a internet" 10.0.20.0/24 0.0.0.0/0 172.29.0.20/32
+
+  # PP-03: TRUSTED_PROXY_CIDR es opcional y se valida solo si viene.
+  PROXIES="10.0.0.5/32"
+  caso "proxy de confianza valido" 0 "TRUSTED_PROXY_CIDR definida" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  PROXIES="10.0.0.5/32, 10.0.1.0/24"
+  caso "lista de proxies con espacio tras la coma" 0 "TRUSTED_PROXY_CIDR definida" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  PROXIES="0.0.0.0/0"
+  caso "proxy de confianza 0.0.0.0/0 se rechaza" 1 "incluye 0.0.0.0/0" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  PROXIES="10.0.0.5/32,0.0.0.0/0"
+  caso "0.0.0.0/0 escondido en una lista se rechaza" 1 "incluye 0.0.0.0/0" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  PROXIES="10.0.0.5"
+  caso "proxy sin prefijo" 1 "TRUSTED_PROXY_CIDR='10.0.0.5'" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  PROXIES="10.0.0.0/33"
+  caso "proxy con prefijo /33" 1 "no es un CIDR IPv4 valido" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  PROXIES='10.0.0.5/32";evil'
+  caso "basura en el proxy no rompe el registro" 1 "no es un CIDR IPv4 valido" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  PROXIES=""
+  caso "sin proxy no se dice nada de proxies" 0 "CIDR IPv4 validos" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+
+  real_ip "sin proxy no rinde directivas" "" "# TRUSTED_PROXY_CIDR vacio: no hay proxy de confianza; se usa la IP del socket."
+  real_ip "un proxy" "10.0.0.5/32" "set_real_ip_from 10.0.0.5/32;
+real_ip_header X-Forwarded-For;
+real_ip_recursive on;"
+  real_ip "dos proxies, una linea cada uno" "10.0.0.5/32, 10.0.1.0/24" "set_real_ip_from 10.0.0.5/32;
+set_real_ip_from 10.0.1.0/24;
+real_ip_header X-Forwarded-For;
+real_ip_recursive on;"
 
   if [ "${fallo}" -ne 0 ]; then
     printf '\nEl punto de entrada del borde no se comporta como debe.\n' >&2

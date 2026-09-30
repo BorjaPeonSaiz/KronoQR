@@ -51,9 +51,11 @@ readonly NOMBRE="kronoqr-nginx-smoke-$$"
 readonly CIDR_PORTAL="10.90.0.0/24"
 
 CONTENEDOR=""
+CONTENEDOR_PROXY=""
 
 al_salir() {
   [ -n "${CONTENEDOR}" ] && docker rm -f "${CONTENEDOR}" >/dev/null 2>&1
+  [ -n "${CONTENEDOR_PROXY}" ] && docker rm -f "${CONTENEDOR_PROXY}" >/dev/null 2>&1
   return 0
 }
 
@@ -163,6 +165,65 @@ problema() {
   printf '  [ok]    %-24s %s problem+json\n' "${ruta}" "${codigo}"
 }
 
+# con_xff PUERTO RUTA XFF ESPERADO DESCRIPCION: el codigo de RUTA cuando la
+# peticion declara un X-Forwarded-For (PP-03).
+con_xff() {
+  local puerto="$1" ruta="$2" xff="$3" esperado="$4" descripcion="$5" codigo
+
+  codigo="$(curl -s -k -o /dev/null -w '%{http_code}' -H "X-Forwarded-For: ${xff}" --max-time 10 \
+    "https://127.0.0.1:${puerto}${ruta}" || echo 000)"
+
+  if [ "${codigo}" != "${esperado}" ]; then
+    printf '  [FALLA] %s: %s con X-Forwarded-For %s devolvio %s, se esperaba %s\n' "${descripcion}" "${ruta}" "${xff}" "${codigo}" "${esperado}" >&2
+    fallo=1
+    return 0
+  fi
+
+  printf '  [ok]    %-24s %s (%s)\n' "${ruta}" "${codigo}" "${descripcion}"
+}
+
+# PP-03. Segundo borde, este CON un proxy de confianza: el gateway de su red de
+# Docker, que es de donde le llegan las peticiones de este anfitrion: la
+# X-Forwarded-For de ese proxy SI cuenta. Una IP dentro de PORTAL_INTERNAL_CIDR
+# abre el portal (200) y una de fuera no (403).
+proxy_de_confianza() {
+  local puerto="$((PUERTO + 1))" gateway contenedor _espera
+
+  # El gateway es el de la red del primer borde (la de Docker por defecto).
+  gateway="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' "${CONTENEDOR}" 2>/dev/null || true)"
+  if ! [[ "${gateway}" =~ ^[0-9.]+$ ]]; then
+    printf '  [aviso] no se ha podido averiguar el gateway de Docker: se omite la comprobacion del proxy de confianza\n' >&2
+    return 0
+  fi
+
+  contenedor="$(docker run -d --name "${NOMBRE}-proxy" \
+    -e KIOSK_VLAN_CIDR=10.92.0.0/24 \
+    -e PORTAL_INTERNAL_CIDR="${CIDR_PORTAL}" \
+    -e METRICS_ALLOW_CIDR=10.91.0.5/32 \
+    -e TLS_ALLOW_SELF_SIGNED=true \
+    -e TLS_CERT_FILE=/etc/nginx/certs/tls.crt \
+    -e TLS_KEY_FILE=/etc/nginx/certs/tls.key \
+    -e NGINX_CLIENT_MAX_BODY_SIZE=8m \
+    -e TRUSTED_PROXY_CIDR="${gateway}/32" \
+    --add-host app:127.0.0.1 --add-host reverb:127.0.0.1 \
+    -p "${puerto}:8443" "${IMAGEN}")"
+  CONTENEDOR_PROXY="${contenedor}"
+
+  for _espera in $(seq 1 30); do
+    [ "$(docker inspect -f '{{.State.Health.Status}}' "${contenedor}" 2>/dev/null || echo x)" = "healthy" ] && break
+    if [ "$(docker inspect -f '{{.State.Running}}' "${contenedor}" 2>/dev/null || echo false)" != "true" ]; then
+      printf '  [FALLA] el borde con TRUSTED_PROXY_CIDR no ha arrancado. Su registro:\n' >&2
+      docker logs "${contenedor}" 2>&1 | tail -20 >&2
+      fallo=1
+      return 0
+    fi
+    sleep 1
+  done
+
+  con_xff "${puerto}" /portal/ 10.90.0.9 200 "proxy de confianza: origen declarado dentro del portal"
+  con_xff "${puerto}" /portal/ 203.0.113.9 403 "proxy de confianza: origen declarado fuera del portal"
+}
+
 main() {
   [ "$#" -le 1 ] || {
     printf 'Uso: nginx-smoke.sh [IMAGEN]\n' >&2
@@ -258,6 +319,10 @@ main() {
   cabecera /api/v1/me/workdays Content-Type "application/problem\+json"
   sin_cuerpo /portal/ "${CIDR_PORTAL%%/*}|127\.0\.0\.1"
   sin_cuerpo /api/v1/me/workdays "${CIDR_PORTAL%%/*}|127\.0\.0\.1"
+
+  # PP-03: sin TRUSTED_PROXY_CIDR, la X-Forwarded-For de un visitante no cuenta.
+  # Si contara, cualquiera abriria el portal declarandose dentro de su red.
+  con_xff "${PUERTO}" /portal/ 10.90.0.9 403 "sin proxy de confianza la cabecera se ignora"
   comprobar /portal 301
   cabecera /portal Location "^Location: /portal/$"
 
@@ -284,6 +349,8 @@ main() {
   wait
   problema /api/v1/auth/login 429 too-many-requests -X POST
   comprobar /admin/ 200 '<!doctype html'
+
+  proxy_de_confianza
 
   if [ "${fallo}" -ne 0 ]; then
     printf '\nEl borde no responde lo que debe. Registro de errores:\n' >&2
