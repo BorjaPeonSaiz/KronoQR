@@ -256,3 +256,23 @@ it('deja construirlo con el actor sistema', function (): void {
     expect($draft->action->known())->toBe(AuditAction::SystemUpdated)
         ->and($draft->action->value)->toBe('system.updated');
 })->group('RF-PD-10');
+
+it('acepta el asiento de una restauracion manual tal y como lo compone restore.sh', function (): void {
+    // PR1: `restore.sh` escribe `failed_step=manual_restore` y
+    // `reason=manual_restore`. Antes de este caso el dominio los rechazaba y el
+    // script salia con 6 «asiento pendiente» en TODA restauracion manual: el
+    // intervalo descartado se quedaba fuera del ledger (regla dura 6).
+    $data = [
+        'backup_file' => 'fichaje-20260930-031200.dump.gpg',
+        'backup_taken_at' => '2026-09-30T03:12:04Z',
+        'failed_step' => SystemUpdateStep::ManualRestore->value,
+        'reason' => SystemRestoreReason::ManualRestore->value,
+        'from_version' => '2.1.0',
+        'to_version' => '2.1.0',
+        'backup_fingerprint' => str_repeat('e', 64),
+        'chain_before' => str_repeat('f', 64),
+        'report_id' => 'restore-20260930T081500Z',
+    ];
+
+    expect(SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $data)->payload->data)->toBe($data);
+})->group('RL-04', 'RF-PD-10');

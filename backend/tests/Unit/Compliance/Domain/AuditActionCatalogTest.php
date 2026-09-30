@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Modules\Compliance\Domain\ValueObject\AuditableEvent;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\SystemRestoreReason;
+use App\Modules\Compliance\Domain\ValueObject\SystemUpdateStep;
 
 /*
  * El bloque D de `/revision-cumplimiento` convertido en algo que falla solo.
@@ -215,3 +217,14 @@ it('nombra las cinco acciones de plantilla y departamento con su valor estable',
         AuditAction::DepartmentRenamed->value,
     ])->toBe(['employee.hired', 'employee.updated', 'employee.offboarded', 'department.created', 'department.renamed']);
 })->group('RS-07', 'RF-GP-01', 'RF-GP-02');
+
+it('distingue la restauracion manual de la vuelta atras del actualizador', function (): void {
+    // PR1: `system.restored_from_backup` lo escriben dos scripts. Con paso y
+    // motivo propios, el trail separa «el actualizador volvio atras» de
+    // «alguien restauro una copia» sin fingir un fallo de `update.sh`, y el
+    // asiento sigue siendo del actor sistema y del ciclo de vida.
+    expect(SystemUpdateStep::from('manual_restore'))->toBe(SystemUpdateStep::ManualRestore)
+        ->and(SystemRestoreReason::from('manual_restore'))->toBe(SystemRestoreReason::ManualRestore)
+        ->and(AuditAction::SystemRestoredFromBackup->event())->toBe(AuditableEvent::InstallationLifecycle)
+        ->and(AuditAction::SystemRestoredFromBackup->requiresSystemActor())->toBeTrue();
+})->group('RL-04', 'RF-PD-10');
