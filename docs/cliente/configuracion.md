@@ -1658,7 +1658,7 @@ alterar el registro: no tiene ninguna credencial con la que hacerlo.
 | `REDIS_HOST` | — | Nombre del contenedor de Redis | `redis` | Solo si mueves Redis a un servidor aparte | No |
 | `REDIS_PORT` | — | Puerto | `6379` | Íd. | No |
 | `REDIS_PASSWORD` | — | Contraseña de Redis | *(vacía)* | Vacía es lo correcto en la instalación estándar: Redis **no publica ningún puerto** y solo es alcanzable desde la red interna de Docker. Rellénala solo si sacas Redis a otra máquina, y configúralo también en él | No |
-| `QUEUE_CONNECTION` | — | Dónde viven los trabajos en segundo plano | `redis` | Nunca. Si Redis cae, esos trabajos esperan a que vuelva. **El fichaje sigue funcionando**: el limitador de peticiones falla abierto solo en el escaneo, el envío por lotes y el fichaje por PIN (`scan`, `scan-batch`, `scan-pin`). El resto de la API —panel, portal, acceso— sí depende de Redis (sesiones, caché, limitador) y puede dejar de responder hasta que vuelva | No |
+| `QUEUE_CONNECTION` | — | Dónde viven los trabajos en segundo plano | `redis` | Nunca. Si Redis cae, los trabajos que se encolan mientras tanto (informes, exportaciones, avisos) fallan y hay que repetirlos. **El fichaje sigue funcionando**: el limitador de peticiones falla abierto solo en el escaneo, el envío por lotes y el fichaje por PIN (`scan`, `scan-batch`, `scan-pin`). El resto de la API —panel, portal, acceso— sí depende de Redis (caché y limitador) y puede dejar de responder hasta que vuelva | No |
 | `CACHE_STORE` | — | Dónde vive la caché | `redis` | Nunca | No |
 | `SESSION_DRIVER` | — | Dónde viven las sesiones | `redis` | Nunca | No |
 

@@ -1678,7 +1678,7 @@ alter the record: it has no credential to do it with.
 | `REDIS_HOST` | — | Name of the Redis container | `redis` | Only if you move Redis to a separate server | No |
 | `REDIS_PORT` | — | Port | `6379` | Same as above | No |
 | `REDIS_PASSWORD` | — | Redis password | *(empty)* | Empty is correct in the standard installation: Redis **publishes no port** and is reachable only from Docker's internal network. Fill it in only if you move Redis to another machine, and configure it there too | No |
-| `QUEUE_CONNECTION` | — | Where background jobs live | `redis` | Never. If Redis goes down, those jobs wait for it to come back. **Clocking keeps working**: the request limiter fails open only on scan, batch upload and PIN clocking (`scan`, `scan-batch`, `scan-pin`). The rest of the API (panel, portal, sign-in) does depend on Redis (sessions, cache, limiter) and may stop responding until it returns | No |
+| `QUEUE_CONNECTION` | — | Where background jobs live | `redis` | Never. If Redis goes down, jobs queued in the meantime (reports, exports, alerts) fail and must be repeated. **Clocking keeps working**: the request limiter fails open only on scan, batch upload and PIN clocking (`scan`, `scan-batch`, `scan-pin`). The rest of the API (panel, portal, sign-in) does depend on Redis (cache and limiter) and may stop responding until it returns | No |
 | `CACHE_STORE` | — | Where the cache lives | `redis` | Never | No |
 | `SESSION_DRIVER` | — | Where sessions live | `redis` | Never | No |
 
