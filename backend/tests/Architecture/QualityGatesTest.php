@@ -459,6 +459,42 @@ it('restringe el portal del empleado a la red interna en el borde HTTP', functio
     expect(repoContents('docs/cliente/instalacion.md'))->toContain('PORTAL_INTERNAL_CIDR');
 })->group('RF-ID-08');
 
+it('sirve como problem+json los errores que genera nginx en la API', function (): void {
+    // F4a-2, CH4. Un 413, 429 o 502 del borde salia en HTML y el quiosco lo
+    // recibia donde esperaba JSON. `error_page` en una location SUSTITUYE al
+    // heredado, asi que cada location de la API lo incluye; /portal, /kiosk y
+    // /admin (spa.conf) no. nginx-smoke.sh lo comprueba en ejecucion.
+    $template = repoContents('infra/docker/nginx/templates/kronoqr.conf.template');
+    $pages = repoContents('infra/docker/nginx/snippets/api-error-pages.conf');
+    $locations = repoContents('infra/docker/nginx/snippets/api-error-locations.conf');
+
+    expect($template)->toContain('include /etc/nginx/snippets/api-error-locations.conf;');
+
+    foreach ([404, 405, 413, 429, 502, 503, 504] as $status) {
+        expect($pages)->toContain("error_page {$status} @kronoqr_api_{$status};")
+            ->and($locations)->toContain("location @kronoqr_api_{$status} {")
+            ->and($locations)->toContain("return {$status} '{\"type\":\"urn:kronoqr:problem:")
+            ->and($locations)->toContain('"status":'.$status.'}');
+    }
+
+    // Cabeceras de seguridad en cada cuerpo (`always` ya va dentro del snippet).
+    expect(substr_count($locations, 'include /etc/nginx/snippets/security-headers.conf;'))->toBe(7)
+        ->and($locations)->toContain('default_type application/problem+json;');
+
+    // Ni ruta interna, ni IP, ni version en un cuerpo estatico.
+    expect($locations)->not->toMatch('/return \d+ \'[^\']*(\/var\/|php|nginx\/|app:9000|127\.0\.0\.1)/i');
+
+    // Todas las locations de la API, y solo ellas.
+    preg_match_all('/location \^~ (\/api\/[^ ]*) \{(.*?)\n  \}/s', $template, $matches, PREG_SET_ORDER);
+    expect(count($matches))->toBeGreaterThanOrEqual(6);
+
+    foreach ($matches as $match) {
+        expect($match[2])->toContain('include /etc/nginx/snippets/api-error-pages.conf;');
+    }
+
+    expect(repoContents('infra/docker/nginx/extra/spa.conf'))->not->toContain('api-error-pages.conf');
+})->group('RF-AT-10');
+
 it('mantiene el alcance de la trazabilidad versionado y no en el entorno', function (): void {
     // RQ-13. `current_phase` decide a que requisitos se les exige prueba. Es
     // ESTADO DEL REPOSITORIO, no configuracion de despliegue, y por eso tiene

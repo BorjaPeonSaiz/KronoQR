@@ -136,6 +136,33 @@ sin_cuerpo() {
   printf '  [ok]    %-24s sin IP ni CIDR en el cuerpo\n' "${ruta}"
 }
 
+# problema RUTA CODIGO TIPO [ARGS_CURL...]: la respuesta a RUTA es CODIGO, de tipo
+# application/problem+json, con el cuerpo estatico del borde y las cabeceras de
+# seguridad (F4a-2, CH4). Sin rutas internas en el cuerpo.
+problema() {
+  local ruta="$1" codigo="$2" tipo="$3" respuesta cabeceras cuerpo
+  shift 3
+
+  # Una sola peticion: el cuerpo que llega por stdin (--data-binary @-) solo se lee una vez.
+  respuesta="$(curl -s -k -i --max-time 20 "$@" "https://127.0.0.1:${PUERTO}${ruta}" | tr -d '\r' || true)"
+  cabeceras="${respuesta%%$'\n\n'*}"
+  cuerpo="${respuesta#*$'\n\n'}"
+
+  if ! grep -qE "^HTTP/[0-9.]+ ${codigo}" <<<"${cabeceras}" ||
+    ! grep -qiE '^content-type: application/problem\+json' <<<"${cabeceras}" ||
+    ! grep -qiE '^x-content-type-options: nosniff' <<<"${cabeceras}" ||
+    ! grep -qiE '^content-security-policy:' <<<"${cabeceras}" ||
+    ! grep -qF "\"type\":\"urn:kronoqr:problem:${tipo}\"" <<<"${cuerpo}" ||
+    grep -qE '/var/www|php|nginx/[0-9]|127\.0\.0\.1|app:9000' <<<"${cuerpo}"; then
+    printf '  [FALLA] %-24s se esperaba %s problem+json (%s). Recibi:\n%s\n%s\n' \
+      "${ruta}" "${codigo}" "${tipo}" "${cabeceras}" "${cuerpo}" >&2
+    fallo=1
+    return 0
+  fi
+
+  printf '  [ok]    %-24s %s problem+json\n' "${ruta}" "${codigo}"
+}
+
 main() {
   [ "$#" -le 1 ] || {
     printf 'Uso: nginx-smoke.sh [IMAGEN]\n' >&2
@@ -237,6 +264,26 @@ main() {
   # T1: Horizon no llega a PHP-FPM (aqui daria 502, no 404).
   comprobar /horizon 404
   comprobar /horizon/dashboard 404
+
+  # F4a-2, CH4: los errores que genera nginx en la API salen como problem+json,
+  # no como HTML. Sin aplicacion detras no hay PHP-FPM: 502. Un cuerpo de 9 MiB
+  # supera NGINX_CLIENT_MAX_BODY_SIZE=8m: 413. Una rafaga sobre auth (5 r/m,
+  # rafaga 5) acaba en 429. Las SPA siguen siendo HTML (arriba, y al final).
+  local json='Content-Type: application/json'
+  problema /api/v1/ready 502 bad-gateway
+  problema /api/v1/scan 502 bad-gateway -X POST -H "${json}" -d '{}'
+  problema /api/v1/auth/login 502 bad-gateway -X POST -H "${json}" -d '{}'
+  problema /api/v1/scan 413 payload-too-large -X POST -H "${json}" \
+    --data-binary @- < <(head -c 9437184 /dev/zero | tr '\0' 'a')
+  # En paralelo: cada peticion que llega a la aplicacion espera el resolvedor.
+  local _rafaga
+  for _rafaga in $(seq 1 12); do
+    curl -s -k -o /dev/null --max-time 20 -X POST \
+      "https://127.0.0.1:${PUERTO}/api/v1/auth/login" &
+  done
+  wait
+  problema /api/v1/auth/login 429 too-many-requests -X POST
+  comprobar /admin/ 200 '<!doctype html'
 
   if [ "${fallo}" -ne 0 ]; then
     printf '\nEl borde no responde lo que debe. Registro de errores:\n' >&2

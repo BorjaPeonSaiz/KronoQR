@@ -289,6 +289,9 @@ server {
     return 200 "ok\n";
   }
 
+  # Cuerpos problem+json de los errores de nginx en la API (F4a-2, CH4).
+  include /etc/nginx/snippets/api-error-locations.conf;
+
   location = /metrics {
     if ($kronoqr_metrics_allowed = 0) {
       return 403;
@@ -304,12 +307,14 @@ server {
   location ^~ /api/v1/scan {
     limit_req zone=scan_kiosk_vlan burst=50 nodelay;
     limit_req zone=scan_other burst=10 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
     include /etc/nginx/snippets/php-fpm.conf;
   }
 
   #--- Autenticacion del panel: 5 r/m ----------------------------------------
   location ^~ /api/v1/auth/ {
     limit_req zone=auth burst=5 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
     include /etc/nginx/snippets/php-fpm.conf;
   }
 
@@ -327,6 +332,7 @@ server {
     # la API (openapi.yaml, schema Problem). Sin IP ni CIDR en el cuerpo.
     error_page 403 @kronoqr_me_forbidden;
     limit_req zone=portal burst=10 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
     include /etc/nginx/snippets/php-fpm.conf;
   }
 
@@ -372,6 +378,7 @@ server {
       application/problem+json
       text/csv;
     limit_req zone=api burst=60 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
     include /etc/nginx/snippets/php-fpm.conf;
   }
 
@@ -387,12 +394,14 @@ server {
       application/problem+json
       text/csv;
     limit_req zone=api burst=60 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
     include /etc/nginx/snippets/php-fpm.conf;
   }
 
   #--- Resto de la API: 120 r/m ----------------------------------------------
   location ^~ /api/ {
     limit_req zone=api burst=60 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
     include /etc/nginx/snippets/php-fpm.conf;
   }
 
