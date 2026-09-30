@@ -12,6 +12,7 @@ import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescri
 import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 import pluginVue from 'eslint-plugin-vue'
 import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
+import { noBareStrings } from '@kronoqr/web-kit/eslint/no-bare-strings'
 
 export default defineConfigWithVueTs(
   {
@@ -90,5 +91,7 @@ export default defineConfigWithVueTs(
   // Identificadores en ingles en src/** (doc 02 §3.5, decision del 24-09-2026).
   // La lista de palabras y el motivo viven en web-kit, una sola vez.
   identifierLanguage(),
+  // KI7-02: sin literales en las plantillas; los textos van en i18n.
+  noBareStrings(),
   skipFormatting,
 )

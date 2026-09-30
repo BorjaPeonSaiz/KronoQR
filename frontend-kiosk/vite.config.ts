@@ -5,20 +5,38 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// La version que declara el latido (`app_version`) sale del `package.json`, no
-// de una constante duplicada: dos sitios donde escribir la version es un sitio
-// donde equivocarse, y el campo sirve justamente para saber que quioscos no se
-// han actualizado (RF-KI-07, §10.5).
-const packageJson: unknown = JSON.parse(
-  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
-)
-const appVersion =
-  typeof packageJson === 'object' &&
-  packageJson !== null &&
-  'version' in packageJson &&
-  typeof packageJson.version === 'string'
-    ? packageJson.version
-    : '0.0.0'
+// La version que declara el latido (`app_version`) sale del fichero `VERSION`
+// de la raiz del repositorio (DC8), que es el mismo que fija la etiqueta del
+// release, las imagenes y el instalador: un solo sitio donde escribirla. El
+// `package.json` del quiosco dice 0.0.0 a proposito y NO sirve: con el, la
+// columna de version del panel enseñaba «0.0.0» en toda tablet y dejaba de
+// servir para lo que existe (saber que quioscos no se han actualizado,
+// RF-KI-07, §10.5).
+//
+// `npm run dev` y los E2E tambien leen VERSION. Solo el build de PRODUCCION
+// se niega a seguir sin ella: una imagen con `app_version` inventada es peor
+// que una imagen que no se construye (la imagen de Nginx copia VERSION
+// a proposito, `infra/docker/nginx/Dockerfile`).
+const SEMVER = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/
+
+function readAppVersion(mode: string): string {
+  try {
+    const raw = readFileSync(fileURLToPath(new URL('../VERSION', import.meta.url)), 'utf8')
+    const version = raw.split('\n', 1)[0]?.trim() ?? ''
+    if (SEMVER.test(version)) {
+      return version
+    }
+    throw new Error(`VERSION no contiene una version valida: «${version}»`)
+  } catch (error) {
+    if (mode === 'production') {
+      throw new Error(
+        `No se puede leer VERSION para app_version: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      )
+    }
+    return '0.0.0-dev'
+  }
+}
 
 // Ruta bajo la que se sirve el quiosco. En produccion Nginx lo publica en
 // `/kiosk/` y la imagen de entrega construye con KRONOQR_BASE=/kiosk/
@@ -91,9 +109,22 @@ export default defineConfig(({ mode }) => ({
         background_color: '#0f172a',
         theme_color: '#0f172a',
         lang: 'es',
-        // Sin iconos: los aporta la marca blanca (RF-PD-08, tarea 5.8), que es
-        // configuracion y no codigo (CLAUDE.md, regla dura 13).
-        icons: [],
+        // Iconos de la marca del FABRICANTE (PR7), sin nombre ni marca de cliente
+        // (regla dura 13): Android solo ofrece «Instalar» con PNG de 192 y 512.
+        // Se generan con `scripts/generate-icons.mjs`. Relativos al manifiesto,
+        // asi que siguen a `base` (`/kiosk/` en produccion). Que el icono
+        // instalado siga la marca blanca de un cliente (RF-PD-08) no se resuelve
+        // aqui: el manifiesto es estatico.
+        icons: [
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          {
+            src: 'icons/icon-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
       },
       workbox: {
         // Las fuentes autoalojadas (@kronoqr/web-kit/fonts.css) se sirven un
@@ -108,7 +139,7 @@ export default defineConfig(({ mode }) => ({
         // hace falta para operar sin red en los idiomas soportados; el arabe
         // (doc 01 §6.6) no lo cubre ninguno de los dos y usa la pila de
         // respaldo del sistema, que no necesita precacheo.
-        globPatterns: ['**/*.{js,css,html,svg}', '**/*-latin-*.woff2'],
+        globPatterns: ['**/*.{js,css,html,svg,png}', '**/*-latin-*.woff2'],
         // El *app shell* completo, decodificador incluido, cabe de sobra. El
         // techo por defecto de Workbox (2 MiB) dejaria fuera el trozo de ZXing y
         // el quiosco arrancaria sin poder escanear precisamente cuando no hay
@@ -170,7 +201,7 @@ export default defineConfig(({ mode }) => ({
     __VUE_I18N_FULL_INSTALL__: 'false',
     __VUE_I18N_LEGACY_API__: 'false',
     __INTLIFY_PROD_DEVTOOLS__: 'false',
-    __APP_VERSION__: JSON.stringify(appVersion),
+    __APP_VERSION__: JSON.stringify(readAppVersion(mode)),
     // Gancho de pruebas del guardian de actualizacion (RF-KI-07, tarea 3.12,
     // decision 16): `false` SOLO en `mode: 'production'` -el build real que
     // se instala en la tablet (`npm run build`, sin `--mode`)-, para que
