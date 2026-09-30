@@ -15,7 +15,24 @@
 import { onMounted, onUnmounted, readonly, ref } from 'vue'
 import type { Ref } from 'vue'
 import type { SealingStatus } from '../infrastructure/pinSealing'
-import { warmUpSealing } from '../infrastructure/pinSealing'
+
+/**
+ * `import()` y no un `import` estatico, y no es un detalle: la pantalla de tarjeta
+ * (la ruta critica, con presupuesto de 250 KB de JS) usa este composable, y
+ * `pinSealing` arrastra libsodium con su WebAssembly. Con el import estatico
+ * libsodium entraba en el primer pintado de TODA tablet, use PIN o no (Anexo A
+ * del doc 02). Asi se carga en un trozo aparte, al montar, fuera del camino de
+ * los 300 ms.
+ */
+async function warmUpLazily(): Promise<SealingStatus> {
+  try {
+    const { warmUpSealing } = await import('../infrastructure/pinSealing')
+    return await warmUpSealing()
+  } catch {
+    // El trozo no llego a cargarse (sin red y sin precacheo): tampoco se puede sellar.
+    return 'unavailable'
+  }
+}
 
 /** `checking` = todavia no se sabe; no se oculta nada mientras tanto. */
 export type PinSealingUiStatus = SealingStatus | 'checking'
@@ -43,7 +60,7 @@ export function resetPinSealingStatus(): void {
 }
 
 export function usePinSealingStatus(options: PinSealingStatusOptions = {}): PinSealingStatusHandle {
-  const warmUp = options.warmUp ?? warmUpSealing
+  const warmUp = options.warmUp ?? warmUpLazily
   const retryMs = options.retryMs ?? SEALING_RETRY_MS
   let timer: ReturnType<typeof setTimeout> | null = null
   let alive = true
