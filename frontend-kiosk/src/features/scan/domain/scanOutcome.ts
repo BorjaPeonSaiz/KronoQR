@@ -85,6 +85,20 @@ export interface UnreadableConfirmation extends ScanConfirmationBase {
   readonly kind: 'unreadable'
 }
 
+/**
+ * Solo la via del PIN la produce (PIN-03): el quiosco no ha podido SELLAR el PIN
+ * (WebAssembly bloqueado, libsodium sin cargar). Es un fallo tecnico LOCAL, no
+ * una respuesta del servidor: no culpa al empleado («Codigo no valido») ni
+ * promete nada («pendiente»), porque NO se ha encolado nada. Le dice que esta
+ * via no esta disponible y que avise a recepcion o use la tarjeta.
+ *
+ * No filtra nada que la regla dura 17 proteja: no habla de credenciales, habla
+ * de la tablet.
+ */
+export interface UnavailableConfirmation extends ScanConfirmationBase {
+  readonly kind: 'unavailable'
+}
+
 export type ScanConfirmation =
   | AcceptedConfirmation
   | PendingConfirmation
@@ -92,6 +106,7 @@ export type ScanConfirmation =
   | DebouncedConfirmation
   | RejectedConfirmation
   | UnreadableConfirmation
+  | UnavailableConfirmation
 
 /**
  * `clock_in` y `break_end` son «vuelve al puesto»; `clock_out` y `break_start`
@@ -116,6 +131,7 @@ export function toneFor(confirmation: ScanConfirmation): FeedbackTone {
       return 'notice'
     case 'rejected':
     case 'unreadable':
+    case 'unavailable':
       return 'error'
   }
 }
@@ -154,4 +170,6 @@ export const CONFIRMATION_DISPLAY_MS: Readonly<Record<ScanConfirmation['kind'], 
   debounced: 3_500,
   rejected: 5_000,
   unreadable: 5_000,
+  // Mas que un rechazo: hay que leerlo entero y decidir que hacer (PIN-03).
+  unavailable: 8_000,
 }

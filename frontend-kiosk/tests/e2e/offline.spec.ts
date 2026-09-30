@@ -371,6 +371,7 @@ test(
     await expect.poll(async () => (await readQueue(page)).length).toBeGreaterThanOrEqual(SEEDED + 1)
 
     // G2: sin red no se hace ni una peticion, ni se gira en vacio buscandola.
+    // eslint-disable-next-line no-restricted-syntax -- se prueba una AUSENCIA (ninguna peticion durante una ventana): no hay condicion observable que esperar, y una espera corta solo haria pasar la prueba por error
     await page.waitForTimeout(3_000)
     expect(batch.attempts).toBe(0)
 

@@ -313,7 +313,7 @@ describe('tuberia del PIN (RF-AT-11)', () => {
     })
   })
 
-  it('un sellado que falla se convierte en rechazo generico, sin el PIN en el contexto de error', async () => {
+  it('un sellado que falla se convierte en «PIN no disponible», NO en un rechazo, y sin el PIN en el contexto de error (PIN-03)', async () => {
     const { port, sent } = recorder()
     const errors: Array<{ code: string; context: Record<string, unknown> }> = []
     const pipeline = createPinPipeline({
@@ -328,7 +328,7 @@ describe('tuberia del PIN (RF-AT-11)', () => {
 
     const confirmation = await pipeline.submit('E7QK2MXPR', RAW_PIN)
 
-    expect(confirmation.kind).toBe('rejected')
+    expect(confirmation.kind).toBe('unavailable')
     expect(sent).toHaveLength(0) // nunca llego a encolarse nada
     expect(errors).toHaveLength(1)
     expect(errors[0]?.code).toBe('seal_failed')

@@ -49,8 +49,8 @@ import type { ScanConfirmation } from '@/features/scan/domain/scanOutcome'
 import { CONFIRMATION_DISPLAY_MS } from '@/features/scan/domain/scanOutcome'
 import { createPinPipeline } from '../application/pinPipeline'
 import { hasEmployeeCodeShape, normalizeEmployeeCode } from '../domain/pinCode'
-import { warmUpSealing } from '../infrastructure/pinSealing'
 import { usePinKeypad } from '../composables/usePinKeypad'
+import { usePinSealingStatus } from '../composables/usePinSealingStatus'
 import PinNumericKeypad from './PinNumericKeypad.vue'
 
 const { t } = useI18n()
@@ -97,6 +97,14 @@ watchEffect(() => {
   if (offline.pinSealingKnown.value && offline.pinSealingPublicKey.value === null) {
     void router.replace({ name: 'home' })
   }
+})
+
+// PIN-03: si libsodium no arranca, se dice AQUI, antes de pedir codigo y seis
+// digitos, y no con un «codigo no valido» al final. La comprobacion tambien
+// precalienta WASM para que el sellado del sexto digito sea casi sincrono.
+const sealing = usePinSealingStatus({
+  onUnavailable: () =>
+    reporter.report('kiosk.pin.seal_failed', { reason: 'warmup_failed', message: 'warmup_failed' }),
 })
 
 const sound = useScanSound({
@@ -275,7 +283,6 @@ const heartbeat = createHeartbeatScheduler({
 })
 
 onMounted(() => {
-  warmUpSealing()
   void wakeLock.request()
   heartbeat.start()
 })
@@ -313,7 +320,17 @@ onUnmounted(() => {
 
       <template v-if="session.confirmation.value === null">
         <div
-          v-if="step === 'code'"
+          v-if="sealing.status.value === 'unavailable'"
+          class="flex w-full max-w-md flex-col items-center gap-4 text-center"
+          role="alert"
+          data-testid="pin-unavailable"
+        >
+          <p class="text-confirm-sm font-heading font-bold">{{ t('pin.unavailable.title') }}</p>
+          <p class="text-confirm-sm">{{ t('pin.unavailable.body') }}</p>
+        </div>
+
+        <div
+          v-else-if="step === 'code'"
           class="flex w-full max-w-md flex-col gap-6"
           data-testid="pin-step-code"
         >

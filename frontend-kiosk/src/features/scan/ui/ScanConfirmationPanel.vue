@@ -120,6 +120,9 @@ function headlineFor(confirmation: ScanConfirmation): string {
       return t('scan.verifying.title')
     case 'debounced':
       return t('scan.debounced.title')
+    case 'unavailable':
+      // PIN-03: fallo tecnico local, no un rechazo. Texto propio.
+      return t('pin.unavailable.title')
     case 'rejected':
     case 'unreadable':
       // Mensaje UNICO para toda causa de rechazo (regla dura 17, RS-03). Aqui no
@@ -139,6 +142,8 @@ function detailFor(confirmation: ScanConfirmation, at: string): string {
       return t('scan.verifying.body')
     case 'debounced':
       return t('scan.debounced.body')
+    case 'unavailable':
+      return t('pin.unavailable.body')
     case 'rejected':
     case 'unreadable':
       return t('scan.rejected.body')

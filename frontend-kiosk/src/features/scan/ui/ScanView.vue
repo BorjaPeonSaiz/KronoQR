@@ -45,6 +45,7 @@ import { createScanPipeline } from '../application/scanPipeline'
 import { clockSkewMinutesFrom, exceedsClockSkewTolerance } from '../domain/clockSkewMessage'
 import { useQrScanner } from '../composables/useQrScanner'
 import { useBreakIntent } from '../composables/useBreakIntent'
+import { usePinSealingStatus } from '@/features/pin/composables/usePinSealingStatus'
 import { useScanSessionWithCleanup } from '../composables/useScanSession'
 import { useScanSound } from '../composables/useScanSound'
 import { useWakeLock } from '../composables/useWakeLock'
@@ -89,6 +90,17 @@ const offline = useOfflineQueue({
     void router.replace({ name: 'pair' })
   },
 })
+
+// PIN-03: la via del PIN solo se ofrece si se puede SELLAR. Con la clave en el
+// padron pero libsodium sin arrancar, el boton llevaba a un teclado que
+// acababa en un «codigo no valido» que no era del empleado.
+const pinSealing = usePinSealingStatus({
+  onUnavailable: () =>
+    reporter.report('kiosk.pin.seal_failed', { reason: 'warmup_failed', message: 'warmup_failed' }),
+})
+const pinOffered = computed(
+  () => offline.pinSealingPublicKey.value !== null && pinSealing.status.value !== 'unavailable',
+)
 
 // Marca blanca (RF-PD-08, tarea 5.8): pide la marca al servidor en segundo
 // plano y se vuelve a pedir al recuperar la red. Nunca bloquea el fichaje
@@ -343,7 +355,7 @@ onUnmounted(() => {
                padre es `pointer-events-none`: el enlace necesita recuperar los
                eventos para poder tocarse. -->
           <RouterLink
-            v-if="offline.pinSealingPublicKey.value !== null"
+            v-if="pinOffered"
             :to="{ name: 'pin' }"
             class="kiosk-touch pointer-events-auto mt-1 inline-flex items-center justify-center rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-6 text-base font-semibold text-kq-kiosk-text"
             data-testid="pin-entry-link"
@@ -472,7 +484,7 @@ onUnmounted(() => {
              Testid distinto del de `scan-idle` para que, con los dos bloques
              excluyentes entre si, nunca haya dos enlaces visibles a la vez. -->
         <RouterLink
-          v-if="offline.pinSealingPublicKey.value !== null"
+          v-if="pinOffered"
           :to="{ name: 'pin' }"
           class="kiosk-touch mt-2 inline-flex items-center justify-center rounded-kq-sm border border-kq-kiosk-border bg-kq-kiosk-surface-raised px-6 text-confirm-sm font-semibold text-kq-kiosk-text"
           data-testid="pin-entry-link-fallback"
