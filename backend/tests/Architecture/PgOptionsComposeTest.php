@@ -125,7 +125,7 @@ it('migrate lleva lock_timeout y no idle_in_transaction; restore no lleva PGOPTI
     $restore = bloqueDeServicio('infra/compose.prod.yaml', 'restore');
 
     expect($migrate)->toContain('PGOPTIONS:')
-        ->toContain('lock_timeout=${DB_LOCK_TIMEOUT:-5s}')
-        ->not->toContain('idle_in_transaction_session_timeout');
+        ->toContain('lock_timeout=${DB_LOCK_TIMEOUT:-5s}');
+    expect($migrate)->not->toContain('idle_in_transaction_session_timeout');
     expect($restore)->not->toContain('PGOPTIONS:');
 })->group('RNF-D-01');

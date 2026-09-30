@@ -700,3 +700,89 @@ it('no alerta por el resumen semanal, que es accesorio y opcional', function ():
 
     expect($sobreElResumen)->toBe([], 'El resumen semanal no alerta: es accesorio y opcional (decision 8 de la ficha 3.12).');
 })->group('RF-PR-05');
+
+// ---------------------------------------------------------------------------
+// Ronda de endurecimiento de AUD-1 (A3-01, A3-03, A3-04, A3-05, A3-06)
+// ---------------------------------------------------------------------------
+
+it('backup.sh se niega a copiar con un rol privilegiado y sale con el codigo de seguridad (A3-03)', function (): void {
+    $backup = backupFile('infra/scripts/backup.sh');
+
+    expect($backup)
+        ->toContain('comprobar_rol_de_copia')
+        ->toContain('rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls FROM pg_roles WHERE rolname = current_user')
+        ->toContain('KQ_EXIT_SECURITY');
+
+    // La comprobacion va en la ruta de COPIA, no en la de restauracion (que usa al migrador a proposito).
+    expect(backupFile('infra/scripts/restore.sh'))->not->toContain('comprobar_rol_de_copia');
+    expect(backupFile('infra/scripts/lib/exit-codes.sh'))->toContain('readonly KQ_EXIT_SECURITY=7');
+
+    // Y `doctor.sh` tiene la sonda gemela.
+    expect(backupFile('infra/scripts/doctor.sh'))->toContain('check_backup_role');
+})->group('RS-07', 'RL-04', 'RF-PR-04');
+
+it('restore.sh y el simulacro en modo database comparan los roles del cluster antes y despues del pg_restore (A3-01)', function (): void {
+    foreach (['infra/scripts/restore.sh', 'infra/scripts/restore-drill.sh'] as $script) {
+        $contenido = backupFile($script);
+
+        expect($contenido)
+            ->toContain('kq_roles_snapshot')
+            ->toContain('kq_roles_unchanged')
+            ->toContain('KQ_EXIT_SECURITY');
+    }
+
+    // En restore.sh la foto se toma ANTES del pg_restore y la comparacion va antes de
+    // cualquier intercambio de nombres de base.
+    $restore = backupFile('infra/scripts/restore.sh');
+
+    $foto = strpos($restore, 'kq_roles_snapshot "${TRABAJO}/roles-antes.txt"');
+    $restauracion = strpos($restore, 'pg_restore --dbname=');
+    $comparacion = strrpos($restore, 'guardar_roles "$base_nueva"');
+    $intercambio = strpos($restore, 'ALTER DATABASE \"${BASE_DESTINO}\" RENAME TO');
+
+    // Sin las cuatro marcas el orden no se puede afirmar: que falte una es un fallo, no un pase.
+    foreach (['foto' => $foto, 'pg_restore' => $restauracion, 'comparacion' => $comparacion, 'intercambio' => $intercambio] as $marca => $posicion) {
+        expect($posicion)->not->toBeFalse('restore.sh ya no contiene la marca «'.$marca.'» que fija el orden de la guarda de roles (A3-01).');
+    }
+
+    expect((int) $foto)->toBeLessThan((int) $restauracion);
+    expect((int) $comparacion)->toBeLessThan((int) $intercambio);
+
+    // Solo atributos y pertenencias, nunca contraseñas: se lee pg_roles, no pg_authid.
+    $comun = backupFile('infra/scripts/lib/backup-common.sh');
+
+    expect($comun)->toContain('FROM pg_roles')->toContain('FROM pg_auth_members');
+    expect((string) preg_replace('/^\s*#.*$/m', '', $comun))->not->toContain('pg_authid');
+})->group('RS-07', 'RL-04', 'RF-PR-04');
+
+it('los scripts de aprovisionamiento de roles no pasan contraseñas por la linea de ordenes (A3-04)', function (): void {
+    foreach (['02-application-roles.sh', '03-backup-role.sh'] as $script) {
+        $codigo = (string) preg_replace('/^\s*#.*$/m', '', backupFile('infra/docker/postgres/initdb/'.$script));
+
+        // `\\\\` en una cadena PHP de comillas simples da `\\` en la expresión regular,
+        // que casa una barra invertida literal: es el `\getenv` de psql.
+        expect($codigo)->toMatch('/\\\\getenv \w+ KQ_\w+_PASSWORD/');
+        expect($codigo)->not->toMatch('/--set\s+\w*password\w*=/i');
+    }
+})->group('RS-07', 'RS-08');
+
+it('el rol de copias solo conserva la pertenencia a pg_read_all_data (A3-06)', function (): void {
+    $rol = backupFile('infra/docker/postgres/initdb/03-backup-role.sh');
+
+    expect($rol)
+        ->toContain("g.rolname <> 'pg_read_all_data'")
+        ->toContain('REVOKE %I FROM %I GRANTED BY %I');
+})->group('RS-07', 'RL-04');
+
+it('PostgreSQL acota el WAL que puede retener un slot de replicacion y una alerta lo vigila (A3-05)', function (): void {
+    foreach (['infra/compose.prod.yaml', 'infra/compose.dev.yaml'] as $compose) {
+        expect(backupFile($compose))->toContain('max_slot_wal_keep_size=${DB_MAX_SLOT_WAL_KEEP_GB:-5}GB');
+    }
+
+    expect(backupFile('.env.example'))->toContain('DB_MAX_SLOT_WAL_KEEP_GB=5');
+
+    $nombres = array_column(AlertRules::inFile('infra/observability/prometheus/rules/backup.yml'), 'alert');
+
+    expect($nombres)->toContain('SlotDeReplicacionParado');
+    expect(backupFile('infra/scripts/backup.sh'))->toContain('kronoqr_backup_replication_slots_inactive');
+})->group('RF-PR-04', 'RNF-D-01');

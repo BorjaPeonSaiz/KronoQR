@@ -221,10 +221,11 @@ it('sirve las cabeceras de seguridad completas', function (): void {
     // PIN falla siempre en produccion. 'unsafe-eval' e 'unsafe-inline' siguen
     // prohibidos: el primer permiso no abre `eval` de JavaScript, los otros si.
     expect(preg_match('/Content-Security-Policy "[^"]*?script-src ([^;"]*)/', $headers, $csp))->toBe(1);
-    expect($csp[1])
-        ->toContain("'wasm-unsafe-eval'")
-        ->not->toContain("'unsafe-eval'")
-        ->not->toContain("'unsafe-inline'");
+    $scriptSrc = $csp[1] ?? '';
+
+    expect($scriptSrc)->toContain("'wasm-unsafe-eval'");
+    expect($scriptSrc)->not->toContain("'unsafe-eval'");
+    expect($scriptSrc)->not->toContain("'unsafe-inline'");
 })->group('RS-09');
 
 it('no deja los argumentos de las funciones en las trazas de excepcion', function (): void {
@@ -555,6 +556,7 @@ it('mantiene una sola tabla de codigos de salida para los cinco scripts de opera
         'KQ_EXIT_ROLLED_BACK=4',
         'KQ_EXIT_ROLLBACK_INCOMPLETE=5',
         'KQ_EXIT_VERIFY_FAILED=6',
+        'KQ_EXIT_SECURITY=7',
     ] as $constant) {
         expect($table)->toContain($constant);
     }

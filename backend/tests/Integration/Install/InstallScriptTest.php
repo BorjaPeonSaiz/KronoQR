@@ -261,6 +261,9 @@ it('lee el .env igual que Docker Compose, y no de otra manera', function (): voi
     file_put_contents($fichero, implode("\n", [
         'CON_COMILLAS="/srv/copias"   ',
         'CON_ALMOHADILLA_PEGADA=/srv/copias#1',
+        'CON_COMILLAS_Y_COMENTARIO="/srv/copias" # el destino',
+        "CON_COMILLAS_SIMPLES_Y_COMENTARIO='/srv/copias' # el destino",
+        'CON_COMILLAS_Y_ALMOHADILLA_DENTRO="/srv/copias # no es comentario"',
         'CON_COMENTARIO=/srv/copias # el destino',
         'CON_ESPACIOS=   /srv/copias   ',
         '# UN_COMENTARIO=no',
@@ -275,6 +278,9 @@ it('lee el .env igual que Docker Compose, y no de otra manera', function (): voi
 
     expect($lee('CON_COMILLAS'))->toBe('/srv/copias')
         ->and($lee('CON_ALMOHADILLA_PEGADA'))->toBe('/srv/copias#1')
+        ->and($lee('CON_COMILLAS_Y_COMENTARIO'))->toBe('/srv/copias')
+        ->and($lee('CON_COMILLAS_SIMPLES_Y_COMENTARIO'))->toBe('/srv/copias')
+        ->and($lee('CON_COMILLAS_Y_ALMOHADILLA_DENTRO'))->toBe('/srv/copias # no es comentario')
         ->and($lee('CON_COMENTARIO'))->toBe('/srv/copias')
         ->and($lee('CON_ESPACIOS'))->toBe('/srv/copias')
         ->and($lee('CON_EXPORT'))->toBe('valor')
@@ -438,6 +444,6 @@ it('espera tambien al borde antes de dar la fase 4 por buena', function (): void
 
     // AUD-1: la contrasena del migrador (superusuario) no llega al contenedor de la
     // aplicacion. Las migraciones van por el servicio puntual `migrate`.
-    expect($script)->toContain('run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force')
-        ->not->toContain('exec -T app php artisan migrate');
+    expect($script)->toContain('run --rm --no-deps -T migrate php artisan migrate --database=pgsql_migrator --force');
+    expect($script)->not->toContain('exec -T app php artisan migrate');
 })->group('RF-PD-02');

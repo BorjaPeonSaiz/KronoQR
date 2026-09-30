@@ -58,6 +58,9 @@ const RUNTIME_ENVIRONMENT_FORBIDDEN = [
     'DB_MAINTENANCE_CONNECTION' => 'reapuntaria la purga a otra conexion',
     'POSTGRES_PASSWORD' => 'contraseña de arranque del cluster, que es la del migrador',
     'DB_URL' => 'una URL puede llevar cualquier rol dentro; el runtime se conecta con DB_HOST, DB_USERNAME y DB_PASSWORD',
+    'DATABASE_URL' => 'lo mismo que DB_URL con otro nombre: una URL de conexion lleva rol y contraseña dentro',
+    'PGPASSFILE' => 'libpq leeria las credenciales de un fichero y esquivaria cualquier comprobacion por nombre de variable',
+    'PGSERVICEFILE' => 'un fichero de servicios de libpq puede llevar host, rol y contraseña',
 ];
 
 /** El rol de copia (solo lectura) y la clave de cifrado de las copias: solo el planificador (ADR-042 §2). */
@@ -105,6 +108,7 @@ const RUNTIME_ENVIRONMENT_NOT_FORWARDED = [
     'HTTPS_PORT' => 'la interpola Compose en `ports:` de nginx',
     'TLS_CERT_DIR' => 'la interpola Compose en el volumen del certificado de nginx',
     'BRANDING_PATH' => 'la interpola Compose en el volumen de marca; la aplicacion lee BRANDING_LOGO_ROOT',
+    'DB_MAX_SLOT_WAL_KEEP_GB' => 'la interpola Compose en el `command:` de postgres (max_slot_wal_keep_size); ningun proceso de la aplicacion la lee',
 ];
 
 const RUNTIME_ENVIRONMENT_MOTIVO_DRIVER_SIN_USO = 'driver o servicio de Laravel que el producto no usa (PostgreSQL, Redis, SMTP y stderr/Loki son los suyos)';
@@ -387,6 +391,57 @@ it('reverb no monta ningun volumen: ni las copias ni el logotipo de la marca', f
         .'lectura y escritura sobre las copias (BACKUP_PATH). Declara `volumes: []` en el servicio (ADR-042).'
     );
 })->group('RS-08', 'RL-04');
+
+/**
+ * El origen de un volumen de Compose, en sintaxis larga o corta. En la corta no se
+ * parte por los `:` de `${VAR:-valor}`, y de `${VAR:-./certs}` vale el valor por
+ * defecto, que es lo que monta Compose si el `.env` no dice otra cosa.
+ */
+function runtimeEnvironmentMountSource(mixed $volume): string
+{
+    if (\is_array($volume)) {
+        $declared = $volume['source'] ?? '';
+        $source = \is_scalar($declared) ? (string) $declared : '';
+    } else {
+        preg_match('/^(\$\{[^}]*\}|[^:]*)/', \is_scalar($volume) ? (string) $volume : '', $matches);
+        $source = $matches[1] ?? '';
+    }
+
+    if (preg_match('/^\$\{[A-Za-z_][A-Za-z0-9_]*:-(.*)\}$/', $source, $defaults) === 1) {
+        return $defaults[1];
+    }
+
+    return $source;
+}
+
+/** Un montaje que entrega el `.env` entero sin pasar por `environment:`. */
+function runtimeEnvironmentIsForbiddenMount(string $source): bool
+{
+    $normalised = rtrim($source, '/');
+
+    return \in_array($normalised, ['', '.', '..', '${PWD}', '$PWD'], true)
+        || str_starts_with($normalised, '..')
+        || basename($normalised) === '.env'
+        || str_ends_with($normalised, 'docker.sock');
+}
+
+it('ningun servicio de runtime monta el directorio de despliegue, el .env ni el socket de Docker', function (string $service): void {
+    // A3-10 (d). Una montura asi entrega el .env entero sin pasar por `environment:`
+    // y la comprobacion por nombre de variable no la veria. Es la mitad estatica de
+    // `.github/scripts/assert-runtime-env.sh`, que mira los montajes reales con
+    // `docker inspect`.
+    $definition = ComposeEnvironment::service(RUNTIME_ENVIRONMENT_PROD, $service);
+    $volumes = \is_array($definition['volumes'] ?? null) ? $definition['volumes'] : [];
+    $sources = array_map(runtimeEnvironmentMountSource(...), $volumes);
+    $offenders = array_values(array_filter($sources, runtimeEnvironmentIsForbiddenMount(...)));
+
+    expect($offenders)->toBe(
+        [],
+        "compose.prod.yaml: «{$service}» monta ".implode(', ', $offenders).'. Un runtime no puede montar el directorio '
+        .'de despliegue (contiene el .env), el propio .env ni el socket de Docker: entregaria los secretos sin pasar '
+        .'por environment: (A3-10, ADR-042).'
+    );
+})->with(RUNTIME_ENVIRONMENT_SERVICES)->group('RS-08', 'RS-07', 'RL-04');
 
 it('nginx no recibe ningun secreto de la aplicacion', function (): void {
     $offenders = array_values(array_intersect(RUNTIME_ENVIRONMENT_APP_SECRETS, runtimeEnvironmentReferencedBy('nginx')));

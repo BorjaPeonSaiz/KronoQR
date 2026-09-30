@@ -525,19 +525,24 @@ it('migra y restaura por los servicios puntuales, y crea el rol de copias antes 
     expect($actualizador)
         ->toContain('run --rm --no-deps -T migrate php artisan migrate --force --database=pgsql_migrator')
         ->toContain('run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh"')
-        ->toContain('run --rm --no-deps -T scheduler php artisan backup:run --mode=dump')
-        ->not->toContain('-T app php artisan migrate')
-        ->not->toContain('-T app bash "${KQ_CONTAINER_SCRIPTS}/restore.sh"')
-        ->not->toContain('exec -T app php artisan backup:run');
+        ->toContain('run --rm --no-deps -T scheduler php artisan backup:run --mode=dump');
+    expect($actualizador)->not->toContain('-T app php artisan migrate');
+    expect($actualizador)->not->toContain('-T app bash "${KQ_CONTAINER_SCRIPTS}/restore.sh"');
+    expect($actualizador)->not->toContain('exec -T app php artisan backup:run');
 
     // La ayuda de la vuelta atras incompleta tambien: una persona la copia tal cual.
-    expect($mensajes)->toContain('run --rm --no-deps restore')
-        ->not->toContain('run --rm --no-deps app');
+    expect($mensajes)->toContain('run --rm --no-deps restore');
+    expect($mensajes)->not->toContain('run --rm --no-deps app');
 
     // El rol se crea al final del paso 4, antes de que el paso 5 levante el
     // `scheduler` nuevo (el unico runtime que recibe BACKUP_DB_*), y la
     // contrasena no pasa por argv: entra por la entrada estandar.
-    expect(strpos($actualizador, "\n  provision_backup_role\n}"))->toBeLessThan(strpos($actualizador, "\nphase_start_and_verify() {"));
+    $creacionDelRol = strpos($actualizador, "\n  provision_backup_role\n}");
+    $arranqueDelPlanificador = strpos($actualizador, "\nphase_start_and_verify() {");
+
+    expect($creacionDelRol)->not->toBeFalse('update.sh ya no termina el paso 4 con provision_backup_role (AUD-1).');
+    expect($arranqueDelPlanificador)->not->toBeFalse('update.sh ya no define phase_start_and_verify.');
+    expect((int) $creacionDelRol)->toBeLessThan((int) $arranqueDelPlanificador);
     expect($actualizador)->toContain('03-backup-role.sh --password-stdin')
         ->and($actualizador)->toContain('kq_env_set "${ENV_FILE}" "BACKUP_DB_PASSWORD" "${password}"')
         ->and($actualizador)->not->toMatch('/DB_BACKUP_PASSWORD=/');
