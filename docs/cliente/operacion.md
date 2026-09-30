@@ -1486,12 +1486,17 @@ apareciendo al día.
 
 ### 17.1 Qué promete el producto, y qué significa en un hotel
 
-El producto se publica con un umbral escrito: **50 fichajes por segundo
+El producto se diseña contra un umbral escrito: **50 fichajes por segundo
 sostenidos en el servidor, con el 95 % de las respuestas por debajo de 150 ms**
-(`RNF-P-06` y `RNF-P-02`). **Se mide antes de cada versión mayor sobre hardware
-de referencia y con esta misma orden, `make load-test`, como paso del
-procedimiento de publicación**, y el resultado viaja con la versión. Es el mismo
-procedimiento que puedes repetir tú sobre tu servidor.
+(`RNF-P-06` y `RNF-P-02`). **Hoy es un objetivo de diseño, no una cifra medida
+que podamos entregarte**: todavía no se ha medido en el hardware de referencia
+(4 núcleos y 8 GB) con un servidor dedicado, así que ninguna versión viaja con
+esa medición. Cuando exista, las notas de la versión lo dirán con la cifra y la
+máquina.
+
+**Mídelo tú con `make load-test`** (§17.2): es la misma prueba, da un veredicto
+requisito a requisito y es la única cifra que vale para tu servidor, porque sale
+de tu hardware, tu disco y tu red.
 
 Al etiquetar la versión hay además una comprobación automática en la
 infraestructura del fabricante, pero **esa no juzga el umbral y no debe leerse
@@ -1508,7 +1513,7 @@ Traducido a tu hotel son **dos límites distintos**, y conviene no confundirlos:
 | Dónde | Qué límite hay | Por qué |
 | --- | --- | --- |
 | **En el borde, por origen** (el servidor web) | Desde `KIOSK_VLAN_CIDR`: **una ráfaga de 50 fichajes en el acto** y después **10 por segundo** (600 por minuto). Desde cualquier otro origen, 30 por minuto con ráfaga de 10 | Todos los quioscos de un hotel salen por la misma IP. Ver [`instalacion.md`](instalacion.md) §6 |
-| **En el servidor, en total** | **50 fichajes por segundo sostenidos** sumando todos los orígenes, con p95 < 150 ms | Es lo que mide la prueba de carga y lo que decide si una versión mayor sale |
+| **En el servidor, en total** | **50 fichajes por segundo sostenidos** sumando todos los orígenes, con p95 < 150 ms | Es el objetivo de diseño y lo que juzga la prueba de carga cuando la ejecutas sobre tu servidor |
 
 **El cambio de turno de una plantilla entera cabe en la ráfaga.** Las primeras
 50 tarjetas pasan de golpe; a partir de ahí el borde deja pasar diez fichajes
@@ -1655,9 +1660,10 @@ empleado ve es lo de siempre: el quiosco confirma, encola y reenvía.
 
 **El hardware, como referencia.** Los mínimos publicados son **2 núcleos y
 4 GB**; el recomendado, **4 núcleos y 8 GB** ([`instalacion.md`](instalacion.md)
-§0). El mínimo sostiene una plantilla de hasta 100 personas con el pool de
-serie; a partir de ahí la conversación es de núcleos y de RAM antes que de
-parámetros.
+§0). El mínimo está dimensionado para una plantilla de hasta 100 personas con
+el pool de serie —es el objetivo de diseño; confírmalo en tu servidor con
+`make load-test`—; a partir de ahí la conversación es de núcleos y de RAM antes
+que de parámetros.
 
 **Un `429` no deja a nadie sin fichar.** El quiosco no bloquea nunca al
 empleado: confirma en pantalla, guarda el fichaje en su cola local con la hora

@@ -1516,12 +1516,17 @@ looking at its diagnostic screen still shows as up to date.
 
 ### 17.1 What the product promises, and what it means in a hotel
 
-The product is published with a written threshold: **50 clock-ins per second
+The product is designed against a written threshold: **50 clock-ins per second
 sustained on the server, with 95 % of the responses under 150 ms** (`RNF-P-06`
-and `RNF-P-02`). **It is measured before every major version on reference
-hardware and with this very command, `make load-test`, as a step of the release
-procedure**, and the result travels with the version. It is the same procedure
-you can repeat on your own server.
+and `RNF-P-02`). **Today it is a design target, not a measured figure we can
+hand you**: it has not yet been measured on the reference hardware (4 cores and
+8 GB) with a dedicated server, so no version ships with that measurement. When
+it exists, the release notes will say so, with the figure and the machine.
+
+**Measure it yourself with `make load-test`** (§17.2): it is the same test, it
+gives a verdict requirement by requirement and it is the only figure that holds
+for your server, because it comes from your hardware, your disk and your
+network.
 
 When the version is tagged there is also an automatic check on the vendor's
 infrastructure, but **that one does not judge the threshold and should not be
@@ -1539,7 +1544,7 @@ be confused:
 | Where | What the limit is | Why |
 | --- | --- | --- |
 | **At the edge, per origin** (the web server) | From `KIOSK_VLAN_CIDR`: **a burst of 50 clock-ins straight away** and then **10 per second** (600 per minute). From any other origin, 30 per minute with a burst of 10 | Every kiosk in a hotel goes out through the same IP. See [`installation.md`](installation.md) §6 |
-| **On the server, in total** | **50 clock-ins per second sustained** across all origins, with p95 < 150 ms | It is what the load test measures and what decides whether a major version ships |
+| **On the server, in total** | **50 clock-ins per second sustained** across all origins, with p95 < 150 ms | It is the design target and what the load test judges when you run it on your server |
 
 **The shift change of a whole workforce fits inside the burst.** The first 50
 cards go through at once; from then on the edge lets ten clock-ins per second
@@ -1688,9 +1693,10 @@ employee sees is the usual thing: the kiosk confirms, queues and resends.
 
 **The hardware, for reference.** The published minimums are **2 cores and
 4 GB**; the recommended, **4 cores and 8 GB**
-([`installation.md`](installation.md) §0). The minimum sustains a workforce of
-up to 100 people with the default pool; beyond that, the conversation is about
-cores and RAM before it is about parameters.
+([`installation.md`](installation.md) §0). The minimum is sized for a workforce
+of up to 100 people with the default pool — that is the design target; confirm
+it on your server with `make load-test` —; beyond that, the conversation is
+about cores and RAM before it is about parameters.
 
 **A `429` leaves nobody unable to clock in.** The kiosk never blocks the
 employee: it confirms on screen, stores the clock-in in its local queue with the

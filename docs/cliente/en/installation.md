@@ -24,10 +24,11 @@ Vue.** You need a Linux server with Docker and thirty minutes.
 | System | **Linux** with **Docker 24 or newer** and **Compose v2** | Same |
 | Network | Reachable from the internal network. Internet access **optional** | Same |
 
-**Is this server up to my shift change?** The minimum sustains a workforce of up
-to 100 people with the default configuration; the recommended one, up to 500. If
-you would rather check it with a measurement of your own than take our word for
-it, there is a load test that says so requirement by requirement, and a single
+**Is this server up to my shift change?** The minimum is sized for a workforce
+of up to 100 people with the default configuration; the recommended one, up to
+500. These are design targets, with no measurement on reference hardware we can
+hand you yet: for a figure from your server there is a load test that says so
+requirement by requirement, and a single
 control to turn — `PHP_FPM_MAX_CHILDREN` — when there is spare CPU and not
 enough pool: [`operation.md`](operation.md) **§17**. It is run **on a test
 environment, never on production**.
