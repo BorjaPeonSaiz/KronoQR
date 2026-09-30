@@ -633,6 +633,15 @@ services:
       - archive_timeout=900
       - -c
       - archive_command=/usr/local/bin/kronoqr-archive-wal %p %f
+      # A3-05. `fichaje_backup` tiene REPLICATION (lo exige pg_basebackup) y con
+      # ese atributo puede crear un slot de replicacion, que retiene WAL sin
+      # limite mientras nadie lo consuma y acaba llenando el disco de datos.
+      # KronoQR no usa ningun slot: este tope hace que un slot huerfano se
+      # INVALIDE (deja de retener) en cuanto el WAL retenido supera el limite,
+      # en vez de parar PostgreSQL. La alerta SlotDeReplicacionParado
+      # (infra/observability/prometheus/rules/backup.yml) avisa mucho antes.
+      - -c
+      - max_slot_wal_keep_size=${DB_MAX_SLOT_WAL_KEEP_GB:-5}GB
     volumes:
       - postgres-data:/var/lib/postgresql/data
       # install.sh crea este directorio y se lo asigna al uid de postgres antes

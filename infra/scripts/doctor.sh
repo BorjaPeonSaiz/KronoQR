@@ -246,6 +246,16 @@ check_app_running() {
   esac
 }
 
+# Salida de la rama delegada: `product:doctor` ha ido bien o con avisos, pero
+# una comprobacion externa de este script (el rol de las copias) puede haber
+# fallado.
+finish_delegated() {
+  if [ "${CHECKS_FAILED}" -gt 0 ]; then
+    die "${KQ_EXIT_VERIFY_FAILED}" "$(kq_text d_f_doctor_failed)"
+  fi
+  exit "${KQ_EXIT_OK}"
+}
+
 #------------------------------------------------------------------------------
 # Paso 4a — `app` en marcha: delegar en el diagnostico real del producto.
 #------------------------------------------------------------------------------
@@ -253,6 +263,12 @@ run_delegated_doctor() {
   local output status=0
 
   say "$(kq_text d_delegating)"
+  say ""
+
+  # Comprobaciones que `product:doctor` no puede hacer desde dentro (necesitan
+  # a PostgreSQL con el superusuario, que el contenedor `app` no tiene): su
+  # fallo tambien cuenta para el codigo de salida.
+  check_backup_role
   say ""
 
   # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
@@ -276,11 +292,11 @@ run_delegated_doctor() {
   case "${status}" in
   0)
     check_pass "$(kq_text d_doctor_ok)"
-    exit "${KQ_EXIT_OK}"
+    finish_delegated
     ;;
   1)
     check_warn "$(kq_text d_doctor_warn)" "$(kq_text d_doctor_warn_fix)"
-    exit "${KQ_EXIT_OK}"
+    finish_delegated
     ;;
   2)
     die "${KQ_EXIT_VERIFY_FAILED}" "$(kq_text d_f_doctor_failed)"
@@ -304,6 +320,7 @@ run_external_checks() {
 
   check_services_state
   check_env_permissions
+  check_backup_role
   check_disk_space
   check_certificates
   check_listening_ports
@@ -359,6 +376,36 @@ check_env_permissions() {
     check_warn "$(kq_format d_c_env_present "${CURRENT_ENV}")" \
       "$(kq_format d_f_env_mode "${CURRENT_ENV}" "${mode}" "${CURRENT_ENV}")"
   fi
+}
+
+# A3-03. El rol con el que se hacen las copias no puede ser privilegiado. Se
+# pregunta a PostgreSQL por el NOMBRE que declara el `.env` (un nombre no es un
+# secreto), con el socket local del propio contenedor `postgres` (pg_hba: local
+# trust), asi que no hace falta ninguna contraseña. Es la sonda gemela de la
+# comprobacion de `backup.sh`: una cubre la instalacion en reposo y la otra, el
+# instante de copiar.
+check_backup_role() {
+  local role state
+
+  role="$(env_value "${CURRENT_ENV}" BACKUP_DB_USERNAME)"
+  [ -n "${role}" ] || role="fichaje_backup"
+
+  if ! [[ "${role}" =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
+    check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_name "${role}")"
+    return 0
+  fi
+
+  # `sh -c` dentro del contenedor: POSTGRES_USER y POSTGRES_DB son de SU entorno.
+  # El nombre del rol ya esta validado arriba, asi que va tal cual en el SQL.
+  state="$(compose_current exec -T postgres sh -c "exec psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atq -c \"SELECT CASE WHEN rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls THEN 'privileged' ELSE 'readonly' END FROM pg_roles WHERE rolname = '${role}'\"" 2>/dev/null)" || state="unknown"
+  state="$(printf '%s' "${state}" | tr -d '[:space:]')"
+
+  case "${state}" in
+  readonly) check_pass "$(kq_format d_c_backup_role "${role}")" ;;
+  privileged) check_fail "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_f_backup_role_privileged "${role}")" ;;
+  "") check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_missing "${role}")" ;;
+  *) check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_unknown "${role}")" ;;
+  esac
 }
 
 # Proporcion de espacio libre, no GiB absolutos (ver el comentario de los

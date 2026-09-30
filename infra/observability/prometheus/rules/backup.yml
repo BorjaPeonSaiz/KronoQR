@@ -107,6 +107,33 @@ groups:
           runbook_url: docs/runbooks/restaurar-backup.md
 
       #------------------------------------------------------------------------
+      # Slot de replicacion parado (A3-05, AUD-1). KronoQR no usa ningun slot,
+      # asi que UNO es ya anomalo: o alguien con el rol de copias (que tiene
+      # REPLICATION por pg_basebackup) lo ha creado, o una herramienta ajena lo
+      # dejo. Retiene WAL sin limite y llena el disco de datos; PostgreSQL lo
+      # acota con max_slot_wal_keep_size (DB_MAX_SLOT_WAL_KEEP_GB), pero un slot
+      # inesperado tambien es una senal de seguridad, por eso es critica.
+      # La metrica la escribe backup.sh en cada copia (diaria), asi que la
+      # alerta persiste hasta la siguiente copia tras retirar el slot.
+      #------------------------------------------------------------------------
+      - alert: SlotDeReplicacionParado
+        expr: kronoqr_backup_replication_slots_inactive > 0
+        for: 15m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "Hay un slot de replicacion parado que retiene WAL"
+          description: >-
+            PostgreSQL tiene al menos un slot de replicacion sin consumidor.
+            KronoQR no usa ninguno, asi que no es normal: retiene WAL y puede
+            llenar el disco de datos, y quien lo creo tenia el rol de copias
+            (REPLICATION) o el del superusuario. Retiralo y averigua como
+            nacio.
+          runbook_url: docs/runbooks/slot-replicacion-parado.md
+
+      #------------------------------------------------------------------------
       # Espacio en el destino de copias. La alerta general de disco es del
       # catalogo (tarea 3.2, espacio-en-disco.md); esta mira SOLO el volumen de
       # copias, que puede llenarse sin que el disco del sistema se resienta y

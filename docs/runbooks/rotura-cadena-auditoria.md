@@ -155,7 +155,7 @@ docker compose exec scheduler bash /opt/kronoqr/scripts/backup.sh list
 
 # 2. Restáurala en un contenedor LIMPIO y sin red, NUNCA sobre fichaje ni en
 #    el PostgreSQL de producción. Desde el directorio de la instalación:
-sudo BACKUP_ENV_FILE=./.env bash ./restore-drill.sh --keep \
+sudo bash ./restore-drill.sh --keep \
   --file "${BACKUP_PATH:-/var/backups/fichaje}/daily/<copia-de-anoche>.dump.enc"
 
 # 3. Consulta la fila. El nombre del contenedor lo imprime el paso anterior
@@ -170,7 +170,7 @@ docker rm -f kronoqr-drill-<marca>
 Es el simulacro de restauración con `--keep`: restaura en un contenedor de
 PostgreSQL de usar y tirar, sin red, y lo conserva para que lo consultes. No
 toca la base de producción, ni sus copias, ni sus contenedores.
-`BACKUP_ENV_FILE=./.env` le da la clave de cifrado de las copias, que el script
+El script lee el `.env` de la instalación para obtener la clave de cifrado de las copias, que
 necesita para abrir la copia y que no está en el entorno de tu sesión.
 
 ### Resolución

@@ -116,7 +116,8 @@ jobs:
             postgres -c timezone=UTC -c log_timezone=UTC \
               -c hba_file=/etc/kronoqr/pg_hba.conf \
               -c wal_level=replica -c archive_mode=on -c archive_timeout=60 \
-              -c "archive_command=/usr/local/bin/kronoqr-archive-wal %p %f"
+              -c "archive_command=/usr/local/bin/kronoqr-archive-wal %p %f" \
+              -c max_slot_wal_keep_size=5GB
           # `-h 127.0.0.1` a proposito: sin `-h`, pg_isready habla por el socket
           # Unix y responde "listo" durante el servidor TEMPORAL que initdb
           # levanta para ejecutar initdb.d (solo escucha en el socket). El
@@ -189,7 +190,36 @@ jobs:
           done
           # Lee todo, particiones incluidas.
           test "$(w "SELECT count(*) FROM audit_log")" = "201"
-          echo "fichaje_backup: lee todo y no escribe nada."
+          # A3-06. Su UNICA pertenencia es pg_read_all_data, y por tanto no puede
+          # escribir en el registro ni en los fichajes (ni por privilegio directo ni
+          # heredado).
+          pertenencias() { q "SELECT coalesce(string_agg(g.rolname, ',' ORDER BY g.rolname), '') FROM pg_auth_members am JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member WHERE m.rolname = '$BACKUP_DB_USERNAME'"; }
+          test "$(pertenencias)" = "pg_read_all_data"
+          escribe() { q "SELECT has_table_privilege('$BACKUP_DB_USERNAME', 'audit_log', 'UPDATE') OR has_table_privilege('$BACKUP_DB_USERNAME', 'audit_log', 'DELETE') OR has_table_privilege('$BACKUP_DB_USERNAME', 'shift_entries', 'UPDATE')"; }
+          test "$(escribe)" = "f"
+          # Una pertenencia ganada por el camino (pg_write_all_data daria UPDATE en
+          # todo) se RETIRA al volver a aprovisionar el rol, que es lo que hace
+          # update.sh: la contrasena entra por la entrada estandar, como en produccion.
+          # WITH INHERIT TRUE para que la pertenencia sea efectiva (un rol NOINHERIT no
+          # hereda por defecto, aunque `SET ROLE pg_write_all_data` seguiria siendo posible:
+          # razon de mas para retirar CUALQUIER pertenencia, no solo las que heredan).
+          q "GRANT pg_write_all_data TO $BACKUP_DB_USERNAME WITH INHERIT TRUE"
+          test "$(escribe)" = "t" || { echo "::error::El montaje de la prueba es invalido: pg_write_all_data no da escritura."; exit 1; }
+          printf '%s\n' "$BACKUP_DB_PASSWORD" | docker exec -i kronoqr-pg /docker-entrypoint-initdb.d/03-backup-role.sh --password-stdin
+          test "$(pertenencias)" = "pg_read_all_data" || { echo "::error::El aprovisionamiento no ha retirado una pertenencia de mas: $(pertenencias)"; exit 1; }
+          test "$(escribe)" = "f"
+          # A3-05. COMPORTAMIENTO REAL, medido y no supuesto: `pg_read_all_data` da
+          # SELECT sobre TODAS las tablas, catalogos restringidos incluidos, asi que
+          # el rol de copias PUEDE leer `pg_authid` (y con ella los verificadores de
+          # contrasena de los demas roles). Lo aceptado y documentado (03-backup-role.sh,
+          # rotacion-secretos.md) es que sean SCRAM-SHA-256, que no se pueden usar
+          # para autenticarse sin romperlos por fuerza bruta. Un verificador MD5 seria
+          # otra cosa (equivale a la contrasena), y eso si tiene que romper el simulacro.
+          test "$(w "SELECT count(*) > 0 FROM pg_authid")" = "t" || { echo "::error::El rol de copias ya no puede leer pg_authid: el comportamiento documentado ha cambiado, actualiza 03-backup-role.sh y rotacion-secretos.md."; exit 1; }
+          test "$(w "SELECT count(*) FROM pg_authid WHERE rolpassword IS NOT NULL AND rolpassword NOT LIKE 'SCRAM-SHA-256\$%'")" = "0" || { echo "::error::Hay un verificador de contrasena que no es SCRAM-SHA-256."; exit 1; }
+          # El tope de WAL retenido por un slot esta puesto (compose.prod.yaml).
+          test "$(q "SHOW max_slot_wal_keep_size")" = "5GB"
+          echo "fichaje_backup: lee todo, no escribe nada y solo pertenece a pg_read_all_data."
 
       - name: Copia cifrada y verificada
         run: |
@@ -249,6 +279,84 @@ jobs:
           grep -q '^kronoqr_backup_last_result{type="dump"} 0$' "$BACKUP_PATH"/metrics/kronoqr_backup_run.prom ||
             { echo "::error::El fallo no se ha publicado como metrica: la alerta no se enteraria."; exit 1; }
           bash infra/scripts/backup.sh run --mode dump
+
+      - name: A3-03 — backup.sh se niega a copiar con un rol privilegiado
+        # Que nada dependa de que el .env este bien: con el rol de MIGRACION
+        # (superusuario) la copia se niega, sale con el codigo propio (7), no escribe
+        # nada nuevo y publica la copia como fallida para que suene la alerta.
+        run: |
+          set -euo pipefail
+          antes="$(sha256sum "$BACKUP_PATH"/daily/*.dump.enc | sha256sum)"
+          codigo=0
+          PGUSER="$DB_USERNAME" PGPASSWORD="$DB_PASSWORD" bash infra/scripts/backup.sh run --mode dump || codigo=$?
+          [ "$codigo" -eq 7 ] || { echo "::error::Con el rol de migracion la copia debia salir con 7 y salio con $codigo."; exit 1; }
+          [ "$antes" = "$(sha256sum "$BACKUP_PATH"/daily/*.dump.enc | sha256sum)" ] ||
+            { echo "::error::La copia rechazada ha escrito o alterado ficheros."; exit 1; }
+          grep -q '^kronoqr_backup_last_result{type="dump"} 0$' "$BACKUP_PATH"/metrics/kronoqr_backup_run.prom ||
+            { echo "::error::El rechazo no se ha publicado como copia fallida: la alerta no sonaria."; exit 1; }
+          # Con el rol de solo lectura vuelve a funcionar (y deja la metrica en verde).
+          bash infra/scripts/backup.sh run --mode dump
+          grep -q '^kronoqr_backup_last_result{type="dump"} 1$' "$BACKUP_PATH"/metrics/kronoqr_backup_run.prom
+
+      - name: A3-05 — un slot de replicacion parado se ve en la metrica
+        # `fichaje_backup` tiene REPLICATION y puede crear un slot. La copia lo
+        # detecta y lo publica (alerta SlotDeReplicacionParado); al retirarlo, vuelve a 0.
+        run: |
+          set -euo pipefail
+          w() { PGPASSWORD="$BACKUP_DB_PASSWORD" psql -h "$DB_HOST" -U "$BACKUP_DB_USERNAME" -d "$DB_DATABASE" -Atc "$1"; }
+          metrica() { grep '^kronoqr_backup_replication_slots_inactive ' "$BACKUP_PATH"/metrics/kronoqr_backup_run.prom | cut -d' ' -f2; }
+          bash infra/scripts/backup.sh run --mode dump >/dev/null
+          test "$(metrica)" = "0"
+          w "SELECT pg_create_physical_replication_slot('kq_slot_de_prueba')" >/dev/null
+          sleep 1
+          bash infra/scripts/backup.sh run --mode dump >/dev/null
+          test "$(metrica)" = "1" || { echo "::error::Un slot de replicacion parado no aparece en la metrica."; exit 1; }
+          w "SELECT pg_drop_replication_slot('kq_slot_de_prueba')" >/dev/null
+          sleep 1
+          bash infra/scripts/backup.sh run --mode dump >/dev/null
+          test "$(metrica)" = "0"
+
+      - name: A3-01 — restore.sh y el simulacro no dejan que una copia toque los roles
+        # Un volcado MANIPULADO con `ALTER ROLE fichaje_app SUPERUSER` dentro: pg_restore
+        # corre como superusuario y lo ejecutaria. Tiene que salir con 7, sin intercambiar
+        # las bases, y dejar los roles como estaban. Y una copia buena, no dar falso positivo.
+        env:
+          PGHOST: ${{ env.DB_HOST }}
+          PGPORT: ${{ env.DB_PORT }}
+          PGUSER: ${{ env.DB_USERNAME }}
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          q() { psql -d postgres -Atqc "$1"; }
+          es_super() { q "SELECT rolsuper FROM pg_roles WHERE rolname = 'fichaje_app'"; }
+          test "$(es_super)" = "f"
+          q "DROP DATABASE IF EXISTS fichaje_destino" >/dev/null
+          q "CREATE DATABASE fichaje_destino" >/dev/null
+
+          for sentencia in "ALTER ROLE fichaje_app SUPERUSER;" "GRANT pg_write_all_data TO fichaje_app;" "CREATE ROLE kq_intruso SUPERUSER LOGIN;"; do
+            bash .github/scripts/forge-role-escalation-dump.sh /tmp/manipulada.dump "$sentencia"
+            bash -c '. infra/scripts/lib/backup-common.sh; load_backup_config; encrypt_stream < /tmp/manipulada.dump' >"$BACKUP_PATH/daily/kronoqr-29990101T000000Z.dump.enc"
+            codigo=0
+            bash infra/scripts/restore.sh --file "$BACKUP_PATH/daily/kronoqr-29990101T000000Z.dump.enc" --database fichaje_destino --yes || codigo=$?
+            [ "$codigo" -eq 7 ] || { echo "::error::restore.sh con «$sentencia» debia salir con 7 y salio con $codigo."; exit 1; }
+            test "$(es_super)" = "f" || { echo "::error::«$sentencia» ha dejado a fichaje_app superusuario."; exit 1; }
+            test "$(q "SELECT count(*) FROM pg_roles WHERE rolname = 'kq_intruso'")" = "0" || { echo "::error::El rol creado por la copia sigue en el cluster."; exit 1; }
+            test "$(q "SELECT count(*) FROM pg_auth_members am JOIN pg_roles m ON m.oid = am.member WHERE m.rolname = 'fichaje_app'")" = "0" ||
+              { echo "::error::fichaje_app conserva una pertenencia ganada con la copia."; exit 1; }
+            test "$(q "SELECT count(*) FROM pg_database WHERE datname LIKE 'fichaje_destino_restore_%'")" = "0" ||
+              { echo "::error::Ha quedado la base de trabajo de la restauracion rechazada."; exit 1; }
+          done
+
+          # El simulacro en modo `database` corre pg_restore contra un cluster real: lo mismo.
+          codigo=0
+          bash infra/scripts/restore-drill.sh --mode database --file "$BACKUP_PATH/daily/kronoqr-29990101T000000Z.dump.enc" || codigo=$?
+          [ "$codigo" -eq 7 ] || { echo "::error::El simulacro modo database con una copia manipulada debia salir con 7 y salio con $codigo."; exit 1; }
+          test "$(es_super)" = "f"
+
+          rm -f "$BACKUP_PATH/daily/kronoqr-29990101T000000Z.dump.enc"
+          # Sin falso positivo: una copia buena, en modo database, pasa.
+          bash infra/scripts/restore-drill.sh --mode database
+          q "DROP DATABASE IF EXISTS fichaje_destino" >/dev/null
 
       - name: SIMULACRO — restaurar en contenedor limpio y validar (RNF-D-05)
         run: bash infra/scripts/restore-drill.sh --timeout 120

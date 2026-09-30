@@ -257,6 +257,10 @@ services:
       - archive_mode=on
       - -c
       - archive_command=/usr/local/bin/kronoqr-archive-wal %p %f
+      # Igual que en produccion (A3-05): un slot de replicacion huerfano no
+      # puede llenar el disco de la maquina de desarrollo.
+      - -c
+      - max_slot_wal_keep_size=${DB_MAX_SLOT_WAL_KEEP_GB:-5}GB
     ports:
       # Solo accesible desde la propia maquina de desarrollo.
       - "127.0.0.1:5432:5432"

@@ -225,6 +225,10 @@ STEP="1"
 ROLLBACK_ARMED=0
 ROLLBACK_SUMMARY=""
 FINAL_STATE=""
+# Primera version cuyo runtime NO recibe la credencial del superusuario (AUD-1,
+# ADR-042). Una vuelta atras que deja la instalacion en una version anterior
+# tiene que decirlo (A3-08).
+readonly KQ_AUD1_FIXED_IN="2.2.0"
 # Segunda mitad del paso 5 (RF-PD-10, SystemUpdateStep): 0 mientras se arranca
 # y se verifica sin exponer · 1 desde que el borde (nginx) se abre de verdad.
 # Decide si un fallo de ahi en adelante es `start_and_verify` o `expose`.
@@ -2326,6 +2330,18 @@ rollback_and_die() {
   MAINTENANCE_SECONDS=$(($(now_epoch) - MAINTENANCE_SINCE))
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "${reason}" "$(kq_text u_report_ok)")"
   FINAL_STATE="${SOURCE_VERSION}"
+
+  # ADR-042, «Consecuencias» (A3-08): volver a una version anterior a la que
+  # cierra AUD-1 reabre el hallazgo hasta la proxima actualizacion, y ni la
+  # persona que lee esto ni el informe pueden ignorarlo. Va tambien al informe
+  # (la linea que enviara al fabricante) y no solo a la pantalla.
+  # Se compara el nucleo de la version: una 2.2.0-rc ya lleva el arreglo.
+  if [ "$(kq_semver_compare "${SOURCE_VERSION%%[-+]*}" "${KQ_AUD1_FIXED_IN}")" = "-1" ]; then
+    err ""
+    err "$(kq_format u_rollback_aud1_reopened "${SOURCE_VERSION}" "${KQ_AUD1_FIXED_IN}")"
+    remember_check "aud-1-reopened" "$(kq_format u_rollback_aud1_reopened "${SOURCE_VERSION}" "${KQ_AUD1_FIXED_IN}")"
+  fi
+
   err ""
   err "$(kq_format u_rollback_done "${SOURCE_VERSION}" "${REPORT_FILE:-?}")"
   err "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"

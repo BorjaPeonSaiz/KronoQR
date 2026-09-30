@@ -262,7 +262,10 @@ credencial de migración solo llega a los servicios de un solo uso `migrate` y
   y la 2.1.0 vuelve a repartir el `.env` entero a sus contenedores. Es
   deliberado —es lo que la 2.1.0 sabe usar—, pero significa que el problema que
   corrige la 2.2.0 vuelve a estar abierto **hasta que actualices otra vez**. El
-  rol `fichaje_backup` queda en la base sin uso, y es inocuo.
+  rol `fichaje_backup` queda en la base sin uso, y es inocuo. El script lo dice
+  en pantalla y en el informe (`update-<fecha>.log`, línea `aud-1-reopened`) cada
+  vez que una vuelta atrás deja la instalación en una versión anterior a la
+  2.2.0.
 - **Órdenes que cambian de contenedor.** Las copias a mano van por
   `docker compose exec scheduler …`, la restauración por
   `docker compose run --rm --no-deps restore …` y las migraciones a mano por

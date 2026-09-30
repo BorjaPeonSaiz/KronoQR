@@ -97,6 +97,7 @@ Es la tabla común de los cinco scripts ([`../cliente/operacion.md`](../cliente/
 | `4` | La copia falló y lo escrito a medias se retiró; **la anterior sigue siendo la buena** | Sigue el mensaje: dice qué falló y dónde |
 | `5` | Quedó algo a medias que hay que retirar a mano | El mensaje dice qué fichero |
 | `6` | La copia se escribió pero **no verifica**, o una existente no verifica. **Trátala como inexistente** | Prueba la anterior; si la clave rotó, hace falta la anterior |
+| `7` | **El rol con el que se copia es privilegiado** (superusuario, o puede crear roles o bases, o saltarse RLS). No se ha escrito ninguna copia | Es una garantía de seguridad, no una avería: [`rotacion-secretos.md`](rotacion-secretos.md), sección «El rol de las copias es privilegiado». Con el rol equivocado no se copia |
 
 ### Resolución
 
@@ -320,6 +321,33 @@ conservada como `<base>_pre_restore_<marca>` durante 7 días, un informe en
 `BACKUP_PATH/reports/update-<marca>.log`** con el paso en que se paró y por
 qué. Ese segundo informe es el que se adjunta al caso.
 
+### 6.6 La restauración se niega con salida `7` (la copia toca los roles)
+
+`restore.sh` (y `restore-drill.sh --mode database`) toma, antes del
+`pg_restore`, una foto de los atributos y las pertenencias de rol del clúster
+(`pg_roles` y `pg_auth_members`, ordenadas y sin contraseñas) y otra después. Si
+difieren, **no intercambia las bases**: elimina la base de trabajo, intenta
+devolver los roles a su estado anterior, muestra qué ha cambiado (`-` antes, `+`
+después) y sale con `7`. `pg_restore` corre como superusuario y ejecuta lo que
+traiga el archivo: una copia con `ALTER ROLE fichaje_app SUPERUSER` dentro
+dejaría la aplicación con poder para reescribir el registro.
+
+1. **No uses esa copia.** Prueba con la anterior (`backup.sh list`,
+   `restore.sh --file <anterior> --yes`).
+2. Comprueba que los roles están como antes (el mensaje dice si la reversión se
+   ha comprobado; si dice que NO, corrige a mano los que difieran de la lista):
+   `SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls,
+   rolreplication FROM pg_roles ORDER BY 1`.
+3. Una copia manipulada es un incidente de seguridad: quién puede escribir en
+   `BACKUP_PATH` y quién tiene `BACKUP_ENCRYPTION_KEY` (el `scheduler`) es el
+   perímetro. Sigue [`brecha-de-seguridad.md`](brecha-de-seguridad.md) y rota
+   la clave de cifrado y `fichaje_backup`
+   ([`rotacion-secretos.md`](rotacion-secretos.md) §3 y §5).
+
+Lo que esta guarda **no** cubre: un archivo manipulado ejecutado por un
+superusuario puede hacer más que cambiar un rol. Frente a quien tiene la clave
+de cifrado, la garantía completa exige sacar la copia del runtime (ADR-042).
+
 Si el actualizador sale con `5`, la restauración quedó a medias y hay que
 terminarla a mano: las órdenes exactas están en su mensaje y en
 [`actualizacion-cliente.md`](actualizacion-cliente.md) §5. Son las de §6.2 con
@@ -335,10 +363,10 @@ restaurados, y que los **conteos por tabla** cuadran con el manifiesto.
 
 ```bash
 # En el servidor del cliente (necesita Docker, que ya está)
-bash /opt/kronoqr/scripts/restore-drill.sh
+sudo bash /opt/kronoqr/scripts/restore-drill.sh
 
 # Sin Docker disponible, contra una instancia de PRUEBAS (nunca la de producción)
-bash /opt/kronoqr/scripts/restore-drill.sh --mode database
+sudo bash /opt/kronoqr/scripts/restore-drill.sh --mode database
 ```
 
 El modo `database` **no** se lanza con el servicio `restore`: ese servicio
@@ -356,6 +384,8 @@ del cliente, el día 1 de cada trimestre:
 ```cron
 0 4 1 1,4,7,10 * /opt/kronoqr/scripts/restore-drill.sh >> /var/log/kronoqr-drill.log 2>&1
 ```
+
+El simulacro lee el `.env` de la instalación (`/opt/kronoqr/.env`, junto al directorio `scripts/`) y el `.env` es de `root` con permisos `0600`: por eso se lanza con `sudo` a mano y, en el cron, desde la tabla de `root`. Si tu `.env` está en otro sitio, indícalo con `BACKUP_ENV_FILE=<ruta>` delante de la orden.
 
 En el repositorio del fabricante lo ejecuta
 [`.github/workflows/backup-drill.yml`](../../.github/workflows/backup-drill.yml)

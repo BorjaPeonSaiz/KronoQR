@@ -43,10 +43,16 @@
 #     -e PROVISION_AS_USER=fichaje_app postgres \
 #     /docker-entrypoint-initdb.d/02-application-roles.sh
 #
-# LAS CONTRASEÑAS no pasan por argv ni por sustitucion del shell: entran como
-# variables de psql, que las cita, y se leen desde una tabla temporal dentro del
-# bloque PL/pgSQL. psql NO interpola dentro de una cadena entrecomillada con
-# dolares, asi que la tabla temporal no es un rodeo: es la unica forma correcta.
+# LAS CONTRASEÑAS no pasan por argv ni por sustitucion del shell (A3-04): llegan
+# a psql por el ENTORNO de ese proceso (solo lo lee su propio usuario o root;
+# `ps` no lo ensena) y se recogen con `\getenv` (psql >= 15; la imagen es la
+# 17). Despues se citan como variables de psql y se leen desde una tabla
+# temporal dentro del bloque PL/pgSQL: psql NO interpola dentro de una cadena
+# entrecomillada con dolares, asi que la tabla temporal no es un rodeo, es la
+# unica forma correcta. Antes iban en `--set clave=valor`, que SI aparece en la
+# linea de ordenes del proceso. Lo que llega al servidor es el texto SQL por el
+# socket local: con log_statement=none (el valor por defecto, que esta imagen
+# no cambia) no queda en ningun registro.
 #
 # Sin contraseña configurada, el rol se crea igualmente pero sin credencial:
 # existe y no se puede usar por TCP. Es justo lo que se quiere para
@@ -81,10 +87,11 @@ fi
 if [[ "${MIGRATOR_ROLE}" != "${BOOTSTRAP_ROLE}" ]]; then
   log "Creando el rol de migracion ${MIGRATOR_ROLE} desde ${BOOTSTRAP_ROLE}."
 
-  psql --username "${BOOTSTRAP_ROLE}" --dbname "${BOOTSTRAP_DATABASE}" \
+  KQ_MIGRATOR_PASSWORD="${MIGRATOR_PASSWORD}" \
+    psql --username "${BOOTSTRAP_ROLE}" --dbname "${BOOTSTRAP_DATABASE}" \
     --no-password --set ON_ERROR_STOP=1 --quiet \
-    --set migrator_role="${MIGRATOR_ROLE}" \
-    --set migrator_password="${MIGRATOR_PASSWORD}" <<'SQL'
+    --set migrator_role="${MIGRATOR_ROLE}" <<'SQL'
+\getenv migrator_password KQ_MIGRATOR_PASSWORD
 CREATE TEMP TABLE kronoqr_migrator_config AS
 SELECT :'migrator_role'::text     AS migrator_role,
        :'migrator_password'::text AS migrator_password;
@@ -114,9 +121,7 @@ psql_run() {
   psql --username "${MIGRATOR_ROLE}" --dbname "$1" \
     --no-password --set ON_ERROR_STOP=1 --quiet \
     --set app_role="${APP_ROLE}" \
-    --set app_password="${APP_PASSWORD}" \
     --set maintenance_role="${MAINTENANCE_ROLE}" \
-    --set maintenance_password="${MAINTENANCE_PASSWORD}" \
     --set migrator_role="${MIGRATOR_ROLE}"
 }
 
@@ -125,7 +130,10 @@ psql_run() {
 # ---------------------------------------------------------------------------
 log "Provisionando ${APP_ROLE} y ${MAINTENANCE_ROLE}; propietario ${MIGRATOR_ROLE}."
 
-psql_run "${BOOTSTRAP_DATABASE}" <<'SQL'
+KQ_APP_PASSWORD="${APP_PASSWORD}" KQ_MAINTENANCE_PASSWORD="${MAINTENANCE_PASSWORD}" \
+  psql_run "${BOOTSTRAP_DATABASE}" <<'SQL'
+\getenv app_password KQ_APP_PASSWORD
+\getenv maintenance_password KQ_MAINTENANCE_PASSWORD
 CREATE TEMP TABLE kronoqr_role_config AS
 SELECT :'app_role'::text            AS app_role,
        :'app_password'::text        AS app_password,

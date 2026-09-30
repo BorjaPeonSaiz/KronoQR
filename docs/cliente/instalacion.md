@@ -1124,7 +1124,7 @@ no reconstruye nada y la pérdida máxima deja de ser de 15 minutos.
 ```bash
 docker compose exec scheduler php artisan backup:run    # crea y verifica una copia
 docker compose exec scheduler php artisan backup:verify # verifica la última
-bash ./restore-drill.sh                            # simulacro trimestral
+sudo bash ./restore-drill.sh           # simulacro trimestral
 ```
 
 Las dos primeras van por el contenedor **`scheduler`**, no por `app`: es el que

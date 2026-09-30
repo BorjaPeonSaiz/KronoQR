@@ -1138,7 +1138,7 @@ archived WAL rebuilds nothing and the maximum loss stops being 15 minutes.
 ```bash
 docker compose exec scheduler php artisan backup:run    # crea y verifica una copia
 docker compose exec scheduler php artisan backup:verify # verifica la última
-bash ./restore-drill.sh                            # simulacro trimestral
+sudo bash ./restore-drill.sh           # simulacro trimestral
 ```
 
 The first two go through the **`scheduler`** container, not `app`: it is the

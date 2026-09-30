@@ -99,12 +99,15 @@ fi
 
 log "Provisionando ${BACKUP_ROLE} (solo lectura) en «${DATABASE}»."
 
-# La contraseña y los nombres entran como variables de psql, que las cita; nunca
-# por sustitucion del shell dentro del SQL. Mismo patron que 02-application-roles.sh.
-psql --username "${MIGRATOR_ROLE}" --dbname "${DATABASE}" \
+# El nombre entra como variable de psql, que la cita; la contraseña, por el
+# ENTORNO de ese proceso y `\getenv` (A3-04): nunca por la linea de ordenes
+# (`ps` la veria), ni por sustitucion del shell dentro del SQL. Mismo patron que
+# 02-application-roles.sh.
+KQ_BACKUP_PASSWORD="${BACKUP_PASSWORD}" \
+  psql --username "${MIGRATOR_ROLE}" --dbname "${DATABASE}" \
   --no-password --set ON_ERROR_STOP=1 --quiet \
-  --set backup_role="${BACKUP_ROLE}" \
-  --set backup_password="${BACKUP_PASSWORD}" <<'SQL'
+  --set backup_role="${BACKUP_ROLE}" <<'SQL'
+\getenv backup_password KQ_BACKUP_PASSWORD
 CREATE TEMP TABLE kronoqr_backup_config AS
 SELECT :'backup_role'::text     AS backup_role,
        :'backup_password'::text AS backup_password;
@@ -112,6 +115,7 @@ SELECT :'backup_role'::text     AS backup_role,
 DO $$
 DECLARE
   cfg record;
+  membership record;
   attributes constant text := 'LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE REPLICATION NOBYPASSRLS NOINHERIT';
 BEGIN
   SELECT * INTO cfg FROM kronoqr_backup_config;
@@ -127,6 +131,24 @@ BEGIN
   IF cfg.backup_password <> '' THEN
     EXECUTE format('ALTER ROLE %I PASSWORD %L', cfg.backup_role, cfg.backup_password);
   END IF;
+
+  -- A3-06. Un rol que ya existia pudo ganar pertenencias por el camino
+  -- (pg_write_all_data, pg_execute_server_program, el propio migrador...). Se
+  -- retira TODA pertenencia distinta de pg_read_all_data, con el otorgante con
+  -- el que se concedio: desde PostgreSQL 16 un REVOKE sin `GRANTED BY` solo
+  -- quita lo concedido por el rol que lo ejecuta y deja el resto en pie.
+  FOR membership IN
+    SELECT g.rolname AS group_role, gr.rolname AS grantor_role
+    FROM pg_auth_members am
+    JOIN pg_roles g ON g.oid = am.roleid
+    JOIN pg_roles r ON r.oid = am.member
+    JOIN pg_roles gr ON gr.oid = am.grantor
+    WHERE r.rolname = cfg.backup_role
+      AND g.rolname <> 'pg_read_all_data'
+  LOOP
+    EXECUTE format('REVOKE %I FROM %I GRANTED BY %I',
+      membership.group_role, cfg.backup_role, membership.grantor_role);
+  END LOOP;
 
   -- Repetible: si la pertenencia existe, PostgreSQL 17 actualiza las opciones.
   EXECUTE format('GRANT pg_read_all_data TO %I WITH INHERIT TRUE', cfg.backup_role);

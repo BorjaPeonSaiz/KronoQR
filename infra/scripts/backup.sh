@@ -67,6 +67,13 @@
 #   6  La copia se ha escrito pero NO ha superado la verificacion, o una copia
 #      existente no verifica (huella distinta, no se descifra, o no es un
 #      volcado legible). TRATALA COMO INEXISTENTE.
+#   7  GARANTIA DE SEGURIDAD ROTA (AUD-1, A3-03): el rol con el que se conecta
+#      la copia es superusuario, o puede crear roles o bases, o se salta RLS.
+#      Copiar solo necesita leer; con ese rol, quien ejecute codigo en el
+#      contenedor que hace la copia podria reescribir el registro. NO se ha
+#      escrito ninguna copia y la metrica de copia sale como fallida, para que
+#      suene la alerta. BACKUP_DB_USERNAME/BACKUP_DB_PASSWORD tienen que ser los
+#      de `fichaje_backup`: docs/runbooks/rotacion-secretos.md.
 #
 # Si tenias un cron escrito contra la tabla anterior, la equivalencia esta en
 # lib/backup-common.sh y en docs/cliente/operacion.md.
@@ -141,6 +148,30 @@ comprobar_conexion() {
     "no se puede conectar a la base de datos ${PGDATABASE} en ${PGHOST}:${PGPORT} como ${PGUSER}. Comprueba que el servicio 'postgres' esta levantado (docker compose ps) y que DB_* del .env son correctos. No se ha tocado ninguna copia."
 }
 
+# A3-03. Que nada dependa de que el .env este bien: tras conectar, el propio
+# servidor dice si el rol de la copia es de solo lectura. Va en la ruta de
+# COPIA y no en la de restauracion, que usa legitimamente al migrador.
+#
+# Se abandona con el codigo de seguridad, y como `COPIA_EN_CURSO` vale 1 desde
+# antes de las precondiciones, `al_salir` publica la copia como fallida
+# (kronoqr_backup_last_result 0): suena la alerta de copia fallida y el runbook
+# remite aqui.
+comprobar_rol_de_copia() {
+  local privilegiado=""
+
+  privilegiado="$(psql -Atqc 'SELECT rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls FROM pg_roles WHERE rolname = current_user' 2>/dev/null | tr -d '[:space:]')" || true
+
+  case "$privilegiado" in
+  f) return 0 ;;
+  t)
+    die "${KQ_EXIT_SECURITY}" "el rol de las copias (${PGUSER}) es superusuario, o puede crear roles o bases, o se salta RLS. Una copia solo necesita LEER, y con ese rol quien ejecute codigo en este contenedor podria reescribir el registro legal (AUD-1). No se ha escrito ninguna copia y queda publicada como fallida. Que hacer: BACKUP_DB_USERNAME y BACKUP_DB_PASSWORD del .env tienen que ser los de fichaje_backup, no los de migracion. Sigue docs/runbooks/rotacion-secretos.md (seccion «El rol de las copias») y vuelve a lanzar la copia."
+    ;;
+  *)
+    die "${KQ_EXIT_REQUIREMENTS}" "no se han podido comprobar los atributos del rol de las copias (${PGUSER}) en pg_roles. Sin esa comprobacion no se hace copia. Comprueba la conexion con 'psql -c \"SELECT current_user\"' y vuelve a lanzarla."
+    ;;
+  esac
+}
+
 # Sin margen no se empieza: una copia que llena el disco deja el servidor sin
 # sitio para el WAL, y entonces se para PostgreSQL. Fallar aqui es barato.
 comprobar_espacio() {
@@ -192,8 +223,16 @@ EOF
 # pg_stat_archiver es la fuente autorizada y no exige montar el archivo de WAL
 # en el contenedor que hace la copia.
 metricas_de_archivado_wal() {
-  local fila edad fallos archivados
+  local fila edad fallos archivados fila_slots slots_inactivos slot_retenido
   fila="$(psql -Atq -F'|' -c "SELECT coalesce(extract(epoch from now() - last_archived_time)::bigint, -1), failed_count, archived_count FROM pg_stat_archiver" 2>/dev/null || true)"
+  # A3-05. Slots de replicacion parados: retienen WAL sin limite y llenan el
+  # disco de datos. KronoQR no crea ninguno; el rol de copias (REPLICATION) si
+  # podria. Se lee de `pg_replication_slots`, visible para cualquier rol.
+  fila_slots="$(psql -Atq -F'|' -c "SELECT count(*) FILTER (WHERE NOT active), coalesce(max(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)), 0)::bigint FROM pg_replication_slots" 2>/dev/null || true)"
+  slots_inactivos="${fila_slots%%|*}"
+  slot_retenido="$(printf '%s' "$fila_slots" | cut -d'|' -f2)"
+  [ -n "${slots_inactivos//[^0-9]/}" ] || slots_inactivos=0
+  [ -n "${slot_retenido//[^0-9]/}" ] || slot_retenido=0
   edad="${fila%%|*}"
   fallos="$(printf '%s' "$fila" | cut -d'|' -f2)"
   archivados="$(printf '%s' "$fila" | cut -d'|' -f3)"
@@ -211,6 +250,12 @@ kronoqr_backup_wal_archive_failures_total ${fallos}
 # HELP kronoqr_backup_wal_archived_total Segmentos de WAL archivados desde el ultimo reinicio de estadisticas.
 # TYPE kronoqr_backup_wal_archived_total counter
 kronoqr_backup_wal_archived_total ${archivados}
+# HELP kronoqr_backup_replication_slots_inactive Slots de replicacion sin consumidor (retienen WAL). KronoQR no usa ninguno: distinto de 0 es un incidente.
+# TYPE kronoqr_backup_replication_slots_inactive gauge
+kronoqr_backup_replication_slots_inactive ${slots_inactivos}
+# HELP kronoqr_backup_replication_slot_retained_bytes WAL retenido por el slot que mas retiene, en bytes.
+# TYPE kronoqr_backup_replication_slot_retained_bytes gauge
+kronoqr_backup_replication_slot_retained_bytes ${slot_retenido}
 EOF
 }
 
@@ -475,6 +520,7 @@ cmd_run() {
   require_encryption_key
   ensure_backup_tree
   comprobar_conexion
+  comprobar_rol_de_copia
   # Margen: el tamano de la base sin comprimir. El volcado comprimido ocupa
   # bastante menos, asi que exigir esto es exigir holgura de verdad.
   comprobar_espacio "$(tamano_base_de_datos)"

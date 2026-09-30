@@ -211,6 +211,42 @@ cola local llegue a cero** (`kiosk_offline_queue_size{device}`). Los fichajes qu
 no se hayan sincronizado se pierden con el token, y son registro horario de
 alguien.
 
+### El rol de las copias es privilegiado (`backup.sh` sale con `7`)
+
+`backup.sh run` comprueba, nada más conectar, que el rol con el que copia
+(`SELECT rolsuper OR rolcreaterole OR rolcreatedb OR rolbypassrls FROM pg_roles
+WHERE rolname = current_user`) **no** puede alterar nada. Si puede, se niega a
+copiar, sale con `7` (*garantía de seguridad rota*, `docs/cliente/operacion.md`
+§8), deja la métrica de copia como fallida —salta `CopiaDeSeguridadFallida`— y
+`doctor.sh` marca el mismo fallo. No depende de que el `.env` esté bien: lo dice
+el propio servidor.
+
+**Causa habitual:** una instalación que viene de la 2.1.0 y todavía tiene
+`BACKUP_DB_USERNAME=fichaje_migrator` (el superusuario). Con ese rol, quien
+ejecute código en el `scheduler` podría reescribir el registro legal (AUD-1).
+
+```bash
+# 1. ¿Qué rol es y qué puede? (solo nombres y atributos, ninguna contraseña)
+grep '^BACKUP_DB_USERNAME=' .env
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc \
+  "SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls FROM pg_roles ORDER BY 1"'
+# 2. Provisiona el rol de solo lectura con una contraseña nueva (entra por la
+#    entrada estándar; el script quita además cualquier pertenencia extra)
+nueva="$(openssl rand -base64 48 | LC_ALL=C tr -dc 'A-Za-z0-9' | cut -c1-32)"
+printf '%s\n' "${nueva}" | docker compose exec -T \
+  -e DB_BACKUP_USERNAME=fichaje_backup postgres \
+  /docker-entrypoint-initdb.d/03-backup-role.sh --password-stdin
+# 3. Pon BACKUP_DB_USERNAME=fichaje_backup y BACKUP_DB_PASSWORD=<nueva> en el
+#    .env, recrea el planificador y comprueba con una copia de verdad
+docker compose up -d scheduler
+docker compose exec scheduler php artisan backup:run
+```
+
+**Si el `scheduler` llegó a arrancar con la credencial del migrador, trátalo como
+una exposición de esa credencial**: rota `fichaje_migrator` (§3), ejecuta
+`php artisan compliance:verify-audit-chain` y, si algo no cuadra, sigue
+[`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md).
+
 ---
 
 ## 5. Clave de copia de seguridad

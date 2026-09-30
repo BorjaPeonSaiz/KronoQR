@@ -49,6 +49,11 @@
 #   2  Requisitos no cumplidos: falta Docker, la imagen, el contenedor no
 #      arranca, o falta una herramienta. NADA de la instalacion se ha tocado.
 #   3  No hay ninguna copia sobre la que ensayar.
+#   7  GARANTIA DE SEGURIDAD ROTA (solo en `--mode database`, A3-01): la copia,
+#      al restaurarse en el PostgreSQL configurado, ha cambiado atributos o
+#      pertenencias de rol del cluster. Se han intentado revertir. La copia esta
+#      manipulada: ver docs/runbooks/rotacion-secretos.md. En el modo por
+#      defecto el contenedor es de usar y tirar y sus roles no importan.
 #   6  EL SIMULACRO FALLA: la copia no se descifra, su huella no coincide o no
 #      se puede restaurar. Es el resultado que importa: significa que hoy no se
 #      podria recuperar el registro horario. Ver docs/runbooks/restaurar-backup.md.
@@ -78,6 +83,7 @@ CONSERVAR=0
 CONTENEDOR=""
 BASE_SIMULACRO=""
 INFORME=""
+ROLES_ANTES=""
 
 al_salir() {
   if [ -n "$CONTENEDOR" ] && [ "$CONSERVAR" -eq 0 ]; then
@@ -88,6 +94,7 @@ al_salir() {
   if [ "$MODO" = "database" ] && [ -n "$BASE_SIMULACRO" ] && [ "$CONSERVAR" -eq 0 ]; then
     psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${BASE_SIMULACRO}\"" >/dev/null 2>&1 || true
   fi
+  [ -z "$ROLES_ANTES" ] || rm -f "$ROLES_ANTES"
   return 0
 }
 
@@ -186,6 +193,10 @@ crear_base_de_simulacro() {
     "no se puede conectar a PostgreSQL en ${PGHOST}:${PGPORT}. El modo 'database' necesita una instancia de pruebas donde crear la base del simulacro."
 
   BASE_SIMULACRO="kronoqr_drill_$(timestamp_utc)"
+  # Foto de los roles del cluster ANTES de restaurar (A3-01): en este modo
+  # pg_restore corre contra un cluster REAL, como el rol que este configurado.
+  ROLES_ANTES="$(mktemp "${TMPDIR:-/tmp}/kronoqr-drill-roles.XXXXXX")"
+  kq_roles_snapshot "$ROLES_ANTES"
   informar "Creando base limpia ${BASE_SIMULACRO}"
   psql -d postgres -Atqc "CREATE DATABASE \"${BASE_SIMULACRO}\"" >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se ha podido crear la base del simulacro. El usuario ${PGUSER} necesita CREATEDB."
@@ -211,6 +222,27 @@ restaurar_en_destino() {
     rm -f "${TMPDIR:-/tmp}/kronoqr-drill.dump"
   fi
   return 0
+}
+
+# A3-01. Si el `pg_restore` de `--mode database` ha cambiado roles del cluster,
+# el simulacro FALLA con el codigo de seguridad: no es un fallo de la copia, es
+# una copia que intenta escalar privilegios. Publica el resultado como fallido.
+guardar_roles() {
+  local resultado=0 detalle duracion
+
+  kq_roles_unchanged "$ROLES_ANTES" \
+    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${BASE_SIMULACRO}\"" || resultado=$?
+  [ "$resultado" -ne 0 ] || return 0
+
+  if [ "$resultado" -eq 1 ]; then
+    detalle="Se han devuelto a su estado anterior y se ha comprobado."
+  else
+    detalle="NO se han podido devolver a su estado anterior: revisa AHORA 'SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolreplication FROM pg_roles' y corrige a mano los que difieran de los de arriba."
+  fi
+  duracion="$(($(now_epoch) - ${INICIO_SIMULACRO:-$(now_epoch)}))"
+  metricas_del_simulacro 0 "$duracion" 0 0
+  informar "SEGURIDAD: la copia ha cambiado roles del cluster. ${detalle}"
+  die "${KQ_EXIT_SECURITY}" "la copia '${FICHERO}' ha cambiado roles del cluster al restaurarse en el modo 'database' (arriba, lo que ha cambiado). ${detalle} La copia esta manipulada o no es de este producto: no la uses, avisa al responsable de seguridad y sigue docs/runbooks/rotacion-secretos.md."
 }
 
 #------------------------------------------------------------------------------
@@ -357,6 +389,7 @@ main() {
 
   informar "Simulacro de restauracion (RNF-D-05) sobre '${FICHERO}', modo ${MODO}."
   inicio="$(now_epoch)"
+  INICIO_SIMULACRO="$inicio"
 
   if [ "$MODO" = "container" ]; then
     levantar_contenedor_limpio
@@ -367,6 +400,12 @@ main() {
   if ! restaurar_en_destino; then
     resultado=1
     err "La restauracion en el destino limpio ha fallado. Revisa '${INFORME}'."
+  fi
+
+  # A3-01, solo en `--mode database`: el archivo se ha ejecutado contra un
+  # cluster real. Se mira aunque la restauracion haya fallado.
+  if [ "$MODO" = "database" ]; then
+    guardar_roles
   fi
 
   if [ "$resultado" -eq 0 ]; then

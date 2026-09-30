@@ -8,17 +8,34 @@
 # contra la pila YA EN PIE (`docker compose exec <servicio> env`), que es lo unico
 # honesto: el compose puede decir una cosa y el contenedor otra.
 #
-# Comprueba tres cosas:
+# Comprueba cuatro cosas:
 #
 #   1. Ningun runtime (app, horizon, reverb, scheduler, nginx) tiene la contrasena
-#      del migrador ni la del rol de mantenimiento, ni POSTGRES_*, ni ningun DB_*_URL
-#      —ni el NOMBRE de la variable ni su VALOR—.
+#      del migrador ni la del rol de mantenimiento, ni POSTGRES_*, ni ningun DB_*_URL,
+#      ni PGPASSFILE/PGSERVICEFILE/DATABASE_URL —ni el NOMBRE de la variable ni su
+#      VALOR—. El valor se busca aunque la variable se llame de otra forma
+#      (`FOO: ${DB_MIGRATION_PASSWORD}`): es lo que un alias esquivaria por nombre.
 #   2. La clave de cifrado de las copias y las credenciales de copia (rol de SOLO
-#      LECTURA) las tiene el `scheduler` y ningun otro.
+#      LECTURA) las tiene el `scheduler` y ningun otro, por nombre Y por valor.
 #   3. `app` recibe TODA la configuracion no privilegiada del .env: cada clave
 #      activa del .env que no figure en EXCLUIDAS (con su motivo, mas abajo) esta
 #      en su entorno. Es lo que detecta una variable nueva que se quedo fuera de
 #      `x-runtime-env` de compose.prod.yaml.
+#   4. Ningun runtime monta el directorio de despliegue (ni uno que lo contenga),
+#      ni el propio `.env`, ni el socket de Docker: una montura asi entrega el
+#      `.env` entero sin pasar por el entorno (A3-10).
+#
+# LECTURA DEL .env: se copia una vez a un temporal privado y se interpreta con
+# `kq_env_unquote`, la MISMA funcion que usan los scripts del producto
+# (infra/scripts/lib/env-file.sh): comillas y comentarios finales quedan fuera del
+# valor, y se consideran TODAS las lineas de una clave repetida, no solo la primera.
+# Sin esto, `DB_MIGRATION_PASSWORD="abc" # nota` se buscaba con las comillas y el
+# comentario, no aparecia en ningun sitio y la comprobacion salia en verde.
+#
+# SIN TUBERIAS EN LAS PREGUNTAS. `printf ... | grep -q` bajo `pipefail` responde NO
+# cuando la respuesta es SI si el productor recibe SIGPIPE (ver lib/app-commands.sh).
+# Aqui una pregunta que da un falso NO es un falso negativo de seguridad: se hace
+# con coincidencia de patrones de bash, que no tiene productor.
 #
 # Uso:
 #   assert-runtime-env.sh RUTA_ENV RUTA_COMPOSE      (Compose y el .env se leen con sudo)
@@ -27,6 +44,11 @@
 
 set -euo pipefail
 IFS=$'\n\t'
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+# shellcheck source=../../infra/scripts/lib/env-file.sh disable=SC1091
+. "${SCRIPT_DIR}/../../infra/scripts/lib/env-file.sh"
 
 [ "$#" -eq 2 ] || {
   printf 'uso: assert-runtime-env.sh RUTA_ENV RUTA_COMPOSE\n' >&2
@@ -53,7 +75,20 @@ readonly -a PROHIBIDAS=(
   DB_MAINTENANCE_URL
   PGPASSWORD
   PGUSER
+  PGPASSFILE
+  PGSERVICEFILE
+  DATABASE_URL
 )
+
+# Secretos cuyo VALOR no puede aparecer en ningun runtime salvo donde se usan. Las
+# dos primeras, en NINGUNO; las de copia, en todos menos el planificador.
+readonly -a VALOR_NUNCA_EN_RUNTIME=(DB_MIGRATION_PASSWORD DB_MAINTENANCE_PASSWORD)
+readonly -a VALOR_SOLO_SCHEDULER=(BACKUP_ENCRYPTION_KEY BACKUP_DB_PASSWORD)
+# El borde no necesita ningun secreto de la aplicacion: ni por nombre ni por valor.
+readonly -a VALOR_NUNCA_EN_NGINX=(APP_KEY QR_SIGNING_KEY_CURRENT IDENTITY_PIN_SEALING_SECRET_KEY DB_PASSWORD LICENSE_KEY REVERB_APP_SECRET MAIL_PASSWORD)
+# Un valor mas corto que esto no es un secreto generado (`true`, `5432`, `1`): buscarlo
+# daria falsos positivos con cualquier variable de configuracion.
+readonly LONGITUD_MINIMA_DE_SECRETO=8
 
 # Nombres que solo el planificador puede tener (copias con el rol de solo lectura).
 readonly -a SOLO_SCHEDULER=(
@@ -92,8 +127,95 @@ fallo() {
   status=1
 }
 
+# El .env se copia UNA vez a un temporal privado (mktemp lo crea 0600): sudo cat,
+# porque el del servidor es de root.
+ENV_COPIA="$(mktemp)"
+trap 'rm -f "${ENV_COPIA}"' EXIT
+# La redireccion la hace a proposito el usuario del runner (el temporal es suyo).
+# shellcheck disable=SC2024
+sudo cat "${ENV_FILE}" >"${ENV_COPIA}"
+
+# Todos los valores de una clave, ya sin comillas ni comentario final, uno por
+# linea. Compose se queda con la ULTIMA linea de una clave repetida y el script
+# del producto con la primera: se comprueban todas.
+valores_del_env() {
+  local clave="$1" linea
+  while IFS= read -r linea || [ -n "${linea}" ]; do
+    [[ "${linea}" =~ ^[[:space:]]*(export[[:space:]]+)?"${clave}"=(.*)$ ]] || continue
+    kq_env_unquote "${BASH_REMATCH[2]}"
+    printf '\n'
+  done <"${ENV_COPIA}"
+}
+
+# El primero, para lo que solo necesita UN valor (el nombre de un rol).
 valor_del_env() {
-  sudo sed -n "s/^$1=//p" "${ENV_FILE}" | head -1
+  kq_env_value "${ENV_COPIA}" "$1"
+}
+
+# ¿Hay en ENTORNO una linea NOMBRE=...? Sin tuberia.
+tiene_variable() {
+  local entorno="$1" nombre="$2"
+  [[ $'\n'"${entorno}" == *$'\n'"${nombre}="* ]]
+}
+
+# ¿Aparece TEXTO, literal, en ENTORNO? Sin tuberia.
+contiene_texto() {
+  local entorno="$1" texto="$2"
+  [[ "${entorno}" == *"${texto}"* ]]
+}
+
+# Falla si algun valor de la clave del .env aparece en el entorno del servicio.
+comprobar_valor() {
+  local servicio="$1" entorno="$2" clave="$3" valor
+  while IFS= read -r valor; do
+    [ "${#valor}" -ge "${LONGITUD_MINIMA_DE_SECRETO}" ] || continue
+    if contiene_texto "${entorno}" "${valor}"; then
+      fallo "el VALOR de ${clave} aparece en el entorno de ${servicio} (con ese u otro nombre de variable)."
+    fi
+  done < <(valores_del_env "${clave}")
+}
+
+# Ruta absoluta y sin enlaces simbolicos.
+ruta_real() {
+  readlink -f -- "$1" 2>/dev/null || printf '%s' "$1"
+}
+
+DIRECTORIO_DE_DESPLIEGUE="$(ruta_real "$(dirname -- "${COMPOSE_FILE}")")"
+readonly DIRECTORIO_DE_DESPLIEGUE
+ENV_ABSOLUTO="$(ruta_real "${ENV_FILE}")"
+readonly ENV_ABSOLUTO
+
+# A3-10 (d). Ningun montaje de un contenedor de runtime entrega el .env: ni el
+# directorio de despliegue (que lo contiene), ni un ancestro suyo, ni el fichero,
+# ni el socket de Docker. Se lee de `docker inspect`, que es lo que hay montado de
+# verdad y no lo que el compose dice.
+comprobar_montajes() {
+  local servicio="$1" id montajes origen destino real
+  id="$(compose ps -q "${servicio}")" || {
+    fallo "no se puede localizar el contenedor de ${servicio} (docker compose ps -q ${servicio})"
+    return 0
+  }
+  montajes="$(sudo docker inspect --format '{{range .Mounts}}{{.Source}}|{{.Destination}}{{"\n"}}{{end}}' "${id}")" || {
+    fallo "no se pueden leer los montajes de ${servicio} (docker inspect)"
+    return 0
+  }
+
+  while IFS='|' read -r origen destino; do
+    [ -n "${origen}" ] || continue
+    real="$(ruta_real "${origen}")"
+    if [ "${real}" = "/" ] || [ "${real}" = "${DIRECTORIO_DE_DESPLIEGUE}" ] ||
+      [[ "${DIRECTORIO_DE_DESPLIEGUE}" == "${real}"/* ]]; then
+      fallo "${servicio} monta ${origen} en ${destino}: es el directorio de despliegue o uno que lo contiene, y con el va el .env."
+    fi
+    if [ "${real}" = "${ENV_ABSOLUTO}" ] || [ "$(basename -- "${origen}")" = ".env" ] || [ "$(basename -- "${destino}")" = ".env" ]; then
+      fallo "${servicio} monta el .env (${origen} en ${destino}): un runtime no puede leer los secretos del despliegue."
+    fi
+    case "${real}" in
+    /var/run/docker.sock | /run/docker.sock)
+      fallo "${servicio} monta el socket de Docker (${origen}): quien ejecute codigo en el contenedor controla el servidor."
+      ;;
+    esac
+  done <<<"${montajes}"
 }
 
 en_lista() {
@@ -119,21 +241,33 @@ for servicio in "${RUNTIME[@]}"; do
 
   # 1. Nada prohibido, ni por nombre ni por valor.
   for nombre in "${PROHIBIDAS[@]}"; do
-    if printf '%s\n' "${entorno}" | grep -q "^${nombre}="; then
+    if tiene_variable "${entorno}" "${nombre}"; then
       fallo "${servicio} tiene ${nombre}: un contenedor de runtime no puede llevar credenciales del migrador ni del mantenimiento."
     fi
   done
-  for nombre in DB_MIGRATION_PASSWORD DB_MAINTENANCE_PASSWORD; do
-    valor="$(valor_del_env "${nombre}")"
-    if [ -n "${valor}" ] && printf '%s\n' "${entorno}" | grep -qF -- "${valor}"; then
-      fallo "el VALOR de ${nombre} aparece en el entorno de ${servicio}."
-    fi
+  for nombre in "${VALOR_NUNCA_EN_RUNTIME[@]}"; do
+    comprobar_valor "${servicio}" "${entorno}" "${nombre}"
   done
+  if [ "${servicio}" != "scheduler" ]; then
+    for nombre in "${VALOR_SOLO_SCHEDULER[@]}"; do
+      comprobar_valor "${servicio}" "${entorno}" "${nombre}"
+    done
+  fi
+  if [ "${servicio}" = "nginx" ]; then
+    for nombre in "${VALOR_NUNCA_EN_NGINX[@]}"; do
+      comprobar_valor "${servicio}" "${entorno}" "${nombre}"
+    done
+  fi
+
+  # 4. Montajes.
+  comprobar_montajes "${servicio}"
 
   # 2. Copias: solo el planificador.
   for nombre in "${SOLO_SCHEDULER[@]}"; do
     tiene=0
-    printf '%s\n' "${entorno}" | grep -q "^${nombre}=" && tiene=1
+    if tiene_variable "${entorno}" "${nombre}"; then
+      tiene=1
+    fi
     if [ "${servicio}" = "scheduler" ] && [ "${tiene}" -eq 0 ]; then
       fallo "scheduler no tiene ${nombre}: las copias programadas fallarian."
     fi
@@ -150,7 +284,7 @@ if [ -n "${ENTORNO[scheduler]:-}" ]; then
   if [ -n "${esperado}" ] && [ "${esperado}" = "${migrador}" ]; then
     fallo "BACKUP_DB_USERNAME (${esperado}) es el rol de migracion: las copias tienen que usar el rol de solo lectura."
   fi
-  if [ "$(valor_del_env BACKUP_DB_PASSWORD)" = "$(valor_del_env DB_MIGRATION_PASSWORD)" ]; then
+  if [ -n "$(valor_del_env BACKUP_DB_PASSWORD)" ] && [ "$(valor_del_env BACKUP_DB_PASSWORD)" = "$(valor_del_env DB_MIGRATION_PASSWORD)" ]; then
     fallo "BACKUP_DB_PASSWORD coincide con DB_MIGRATION_PASSWORD."
   fi
 fi
@@ -161,8 +295,8 @@ if [ -n "${ENTORNO[app]:-}" ]; then
   while IFS= read -r clave; do
     [ -n "${clave}" ] || continue
     en_lista "${clave}" "${EXCLUIDAS[@]}" && continue
-    printf '%s\n' "${ENTORNO[app]}" | grep -q "^${clave}=" || faltan="${faltan}${faltan:+ }${clave}"
-  done < <(sudo sed -nE 's/^[[:space:]]*([A-Z][A-Z0-9_]*)=.*/\1/p' "${ENV_FILE}" | sort -u)
+    tiene_variable "${ENTORNO[app]}" "${clave}" || faltan="${faltan}${faltan:+ }${clave}"
+  done < <(sed -nE 's/^[[:space:]]*([A-Z][A-Z0-9_]*)=.*/\1/p' "${ENV_COPIA}" | sort -u)
   if [ -n "${faltan}" ]; then
     fallo "claves del .env que app NO recibe y no estan excluidas: ${faltan}. Anadelas a x-runtime-env de compose.prod.yaml o, si no son de la aplicacion, a EXCLUIDAS (con su motivo) aqui y en RuntimeEnvironmentTest."
   fi
@@ -171,10 +305,10 @@ fi
 # nginx: solo lo suyo, y lo obligatorio presente.
 if [ -n "${ENTORNO[nginx]:-}" ]; then
   for nombre in KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR METRICS_ALLOW_CIDR; do
-    printf '%s\n' "${ENTORNO[nginx]}" | grep -q "^${nombre}=." || fallo "nginx no tiene ${nombre}, que exige 04-kronoqr-required-env.sh."
+    [[ $'\n'"${ENTORNO[nginx]}" == *$'\n'"${nombre}="?* ]] || fallo "nginx no tiene ${nombre}, que exige 04-kronoqr-required-env.sh."
   done
   for nombre in APP_KEY QR_SIGNING_KEY_CURRENT IDENTITY_PIN_SEALING_SECRET_KEY DB_PASSWORD LICENSE_KEY REVERB_APP_SECRET MAIL_PASSWORD; do
-    if printf '%s\n' "${ENTORNO[nginx]}" | grep -q "^${nombre}="; then
+    if tiene_variable "${ENTORNO[nginx]}" "${nombre}"; then
       fallo "nginx tiene ${nombre}: el borde no necesita ningun secreto de la aplicacion (PIN-10)."
     fi
   done

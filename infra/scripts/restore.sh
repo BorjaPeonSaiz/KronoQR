@@ -50,6 +50,14 @@
 #      ya restaurada— y hay que terminar el intercambio a mano. El mensaje dice
 #      que base es y que ordenes la activan.
 #   6  Verificacion posterior fallida.
+#   7  GARANTIA DE SEGURIDAD ROTA (AUD-1, A3-01): la copia, al restaurarse, ha
+#      cambiado atributos o pertenencias de rol del cluster (por ejemplo
+#      `ALTER ROLE fichaje_app SUPERUSER`). NO se han intercambiado las bases:
+#      la de trabajo se ha eliminado y '<base>' sigue como estaba. Se ha
+#      intentado devolver los roles a su estado anterior y el mensaje dice si lo
+#      ha conseguido. La copia esta manipulada o no es de este producto: NO la
+#      uses, avisa al responsable de seguridad y sigue
+#      docs/runbooks/rotacion-secretos.md.
 #
 # Si tenias un cron escrito contra la tabla anterior, la equivalencia esta en
 # lib/backup-common.sh y en docs/cliente/operacion.md.
@@ -95,6 +103,29 @@ informar() {
   log "$*"
   [ -n "$INFORME" ] && printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INFORME"
   return 0
+}
+
+# A3-01. Compara los roles del cluster con la foto tomada antes del
+# `pg_restore`. Si algo ha cambiado, elimina la base de trabajo y sale con el
+# codigo de seguridad SIN intercambiar nada. Se llama tambien cuando el
+# `pg_restore` ha FALLADO: un archivo manipulado puede cambiar un rol y
+# despues romperse a proposito para que nadie mire.
+guardar_roles() {
+  local base_nueva="$1" resultado=0 detalle
+
+  # Si hay cambios, la base de trabajo sobra y se suelta ANTES de revertir: un
+  # rol nuevo puede ser su propietario y no se dejaria borrar.
+  kq_roles_unchanged "${TRABAJO}/roles-antes.txt" \
+    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" || resultado=$?
+  [ "$resultado" -ne 0 ] || return 0
+
+  if [ "$resultado" -eq 1 ]; then
+    detalle="Los atributos y las pertenencias de rol se han devuelto a su estado anterior y se ha comprobado."
+  else
+    detalle="NO se han podido devolver los roles a su estado anterior: revisa AHORA 'SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolreplication FROM pg_roles' y corrige a mano los que difieran de los de arriba."
+  fi
+  informar "SEGURIDAD: la copia ha cambiado roles del cluster. ${detalle}"
+  die "${KQ_EXIT_SECURITY}" "la copia '${FICHERO}' ha cambiado roles del cluster al restaurarse (arriba, lo que ha cambiado). NO se ha intercambiado ninguna base: '${BASE_DESTINO}' sigue como estaba y la base de trabajo se ha eliminado. ${detalle} La copia esta manipulada o no es de este producto: no la uses, prueba con una anterior, avisa al responsable de seguridad y sigue docs/runbooks/rotacion-secretos.md."
 }
 
 #------------------------------------------------------------------------------
@@ -186,12 +217,19 @@ restaurar() {
     privilegios=()
   fi
 
+  # Foto de los roles del cluster ANTES de ejecutar lo que traiga el archivo
+  # (A3-01): pg_restore corre como superusuario.
+  kq_roles_snapshot "${TRABAJO}/roles-antes.txt"
+
   informar "Restaurando el volcado (esto es lo que mas tarda)"
   if ! pg_restore --dbname="$base_nueva" --no-owner "${privilegios[@]}" --exit-on-error \
     "${TRABAJO}/copia.dump" >>"${INFORME:-/dev/null}" 2>&1; then
+    guardar_roles "$base_nueva"
     psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
     die "${KQ_EXIT_ROLLED_BACK}" "la restauracion ha fallado; la base de trabajo se ha eliminado y '${BASE_DESTINO}' sigue como estaba. Revisa el informe '${INFORME}' y prueba con la copia anterior."
   fi
+
+  guardar_roles "$base_nueva"
 
   informar "Comprobando la copia restaurada antes de darla por buena"
   if [ "${#privilegios[@]}" -eq 0 ]; then

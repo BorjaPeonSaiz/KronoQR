@@ -1589,6 +1589,11 @@ jobs:
           # del migrador, y el planificador (que las lanza) lleva ese, no el otro.
           test "$(consulta "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "f"
           test "$(consulta "SELECT rolreplication FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "t"
+          # A3-06: la unica pertenencia del rol de copias es pg_read_all_data (una
+          # anterior, p. ej. pg_write_all_data, se retira al provisionarlo) y no puede
+          # escribir en el registro ni en los fichajes.
+          test "$(consulta "SELECT string_agg(g.rolname, ',' ORDER BY g.rolname) FROM pg_auth_members am JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member WHERE m.rolname = 'fichaje_backup'")" = "pg_read_all_data"
+          test "$(consulta "SELECT has_table_privilege('fichaje_backup', 'audit_log', 'UPDATE') OR has_table_privilege('fichaje_backup', 'audit_log', 'DELETE') OR has_table_privilege('fichaje_backup', 'shift_entries', 'UPDATE')")" = "f"
           test "$(sudo docker compose --env-file .env -f docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
           test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' .env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' .env)"
           # AUD-1 / PIN-10: NINGUN contenedor de runtime (app, horizon, reverb,
@@ -1596,6 +1601,12 @@ jobs:
           # mantenimiento; solo scheduler tiene la clave de cifrado y las
           # credenciales de copia; app recibe toda la configuracion no privilegiada.
           bash ../.github/scripts/assert-runtime-env.sh .env docker-compose.yml
+
+      - name: "C · La comprobacion de runtime falla ante cada incumplimiento (prueba de la prueba)"
+        # A3-10. assert-runtime-env.sh dio falsos negativos (un alias en app, un .env con
+        # comillas y nota). Una comprobacion de seguridad que nunca ha fallado no demuestra
+        # nada: aqui se le hace cada trampa a una pila de juguete y tiene que fallar.
+        run: bash .github/scripts/assert-runtime-env-selftest.sh
 
       - name: "D · Segunda ejecucion: salida 3, y la instalacion sigue en pie"
         run: |
@@ -1962,6 +1973,11 @@ jobs:
           # rol de solo lectura y reescribe BACKUP_DB_* en el .env NUEVO.
           test "$(consulta "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = 'fichaje_backup'")" = "f"
           sudo grep -qx 'BACKUP_DB_USERNAME=fichaje_backup' paquete-nuevo/.env
+          # A3-06: la unica pertenencia del rol de copias es pg_read_all_data (una
+          # anterior, p. ej. pg_write_all_data, se retira al provisionarlo) y no puede
+          # escribir en el registro ni en los fichajes.
+          test "$(consulta "SELECT string_agg(g.rolname, ',' ORDER BY g.rolname) FROM pg_auth_members am JOIN pg_roles g ON g.oid = am.roleid JOIN pg_roles m ON m.oid = am.member WHERE m.rolname = 'fichaje_backup'")" = "pg_read_all_data"
+          test "$(consulta "SELECT has_table_privilege('fichaje_backup', 'audit_log', 'UPDATE') OR has_table_privilege('fichaje_backup', 'audit_log', 'DELETE') OR has_table_privilege('fichaje_backup', 'shift_entries', 'UPDATE')")" = "f"
           test "$(sudo sed -n 's/^BACKUP_DB_PASSWORD=//p' paquete-nuevo/.env)" != "$(sudo sed -n 's/^DB_MIGRATION_PASSWORD=//p' paquete-nuevo/.env)"
           test "$(sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml exec -T scheduler printenv BACKUP_DB_USERNAME)" = "fichaje_backup"
           # Y tras actualizar DESDE UNA 2.1.0 (que llevaba el .env entero en todos los
