@@ -5,7 +5,7 @@
 | **Estado** | Aceptada |
 | **Fecha** | 29 de septiembre de 2026 |
 | **Decide** | `arquitecto-dominio` con `seguridad-cumplimiento` (Bloque 3 de la 2.2.0, hallazgo AUD-1) |
-| **Afecta a** | Enmienda [ADR-010](ADR-010-auditoria-solo-append-encadenada.md) (condición 1), [ADR-027](ADR-027-audit-log-particionado.md) (creación de la partición anual), [ADR-029](ADR-029-configuracion-en-el-entorno-del-contenedor.md) (inyección del `.env`) y [ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md) (consecuencia 3) · Regla dura 6 de `CLAUDE.md` · `infra/compose.prod.yaml`, `infra/compose.dev.yaml`, `infra/scripts/install.sh`, `infra/scripts/update.sh`, `infra/docker/postgres/initdb/02-application-roles.sh` |
+| **Afecta a** | Enmienda [ADR-010](ADR-010-auditoria-solo-append-encadenada.md) (condición 1), [ADR-027](ADR-027-audit-log-particionado.md) (creación de la partición anual), [ADR-029](ADR-029-configuracion-en-el-entorno-del-contenedor.md) (inyección del `.env`) y [ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md) (consecuencia 3) · Regla dura 6 de `CLAUDE.md` · `infra/compose.prod.yaml`, `infra/compose.dev.yaml`, `infra/scripts/install.sh`, `infra/scripts/update.sh`, `infra/docker/postgres/initdb/03-backup-role.sh` (rol `fichaje_backup`) · migración `backend/database/migrations/2026_09_29_100000_audit_log_partition_function.php` |
 | **Requisitos** | RS-07, RS-08, RL-04 |
 
 ## Contexto
@@ -33,9 +33,16 @@ Una función `public.audit_log_create_partition(integer)`, `SECURITY DEFINER` y 
 
 Solo el rol de aplicación tiene `EXECUTE`. Es el mismo mecanismo que ya delega la purga al rol de mantenimiento (tarea 2.10, `audit_log_drop_sealed_partition`): el estándar de PostgreSQL para delegar un privilegio estrecho sin repartir el ancho.
 
-### 2. Las copias las hace un rol de solo lectura propio
+### 2. Las copias las hace un rol propio sin privilegios de escritura
 
-Se provisiona un cuarto rol, **`fichaje_backup`**: `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE REPLICATION`, con `GRANT pg_read_all_data`. Sustituye al migrador en `BACKUP_DB_USERNAME`/`BACKUP_DB_PASSWORD`. El contenedor `scheduler`, que ejecuta la copia programada, conserva esa credencial junto a `BACKUP_ENCRYPTION_KEY`. Con ella se puede leer todo, pero no escribir nada.
+Se provisiona un cuarto rol, **`fichaje_backup`**: `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE REPLICATION`, con `GRANT pg_read_all_data`. Lo crea `infra/docker/postgres/initdb/03-backup-role.sh` en las instalaciones nuevas y `update.sh` en las existentes. Sustituye al migrador en `BACKUP_DB_USERNAME`/`BACKUP_DB_PASSWORD`. El contenedor `scheduler`, que ejecuta la copia programada, conserva esa credencial junto a `BACKUP_ENCRYPTION_KEY`.
+
+**Lo que este rol no impide, dicho con exactitud.** No tiene privilegios de escritura sobre ninguna tabla, pero eso no equivale a «inofensivo»:
+
+- **Confidencialidad.** `pg_read_all_data` lee todas las tablas, y `REPLICATION` permite leer lo que exige la replicación y crear *slots* de replicación, que retienen WAL y pueden llenar el disco si nadie los consume.
+- **Integridad, diferida a una restauración.** Es el riesgo principal. El runtime puede escribir en `BACKUP_PATH` y el `scheduler` tiene `BACKUP_ENCRYPTION_KEY`. Quien ejecutara código en esos contenedores podría dejar una copia manipulada, cifrada con la clave buena, con SQL que el servicio `restore` aplicaría **como superusuario** el día que alguien restaure. No altera el registro en vivo, pero sí en la restauración.
+
+**La 2.2.0 lo mitiga** comparando los atributos de los roles del clúster antes y después de `pg_restore`: una restauración que cree un rol o cambie sus atributos (`SUPERUSER`, `CREATEROLE`, `REPLICATION`, `BYPASSRLS`…) se detecta y falla. **La evolución**, un servicio de copias fuera del runtime y una restauración con un rol propietario que no sea superusuario, queda para la 2.3.0.
 
 ### 3. Migrar y restaurar son servicios de un solo uso
 
@@ -53,9 +60,9 @@ La conexión `pgsql_migrator` solo la usan las migraciones y las pruebas. Una pr
 
 | Rol | `audit_log` y particiones | Crear partición | Soltar partición | Dónde vive su credencial |
 |---|---|---|---|---|
-| `fichaje_app` | `INSERT`, `SELECT` | solo mediante la función, año en curso o siguiente | no | runtime (`app`, `horizon`, `reverb`, `scheduler`) |
+| `fichaje_app` | `INSERT`, `SELECT` | solo mediante la función, año en curso o siguiente | no | runtime (`app`, `horizon`, `scheduler`; `reverb` no recibe ninguna variable `DB_*`) |
 | `fichaje_maintenance` | `SELECT` | no | solo mediante su función y con ancla | en ningún contenedor: se aporta al ejecutar la purga |
-| `fichaje_backup` | `SELECT` (vía `pg_read_all_data`) | no | no | `scheduler`, junto a `BACKUP_ENCRYPTION_KEY` |
+| `fichaje_backup` | `SELECT` (vía `pg_read_all_data`), más `REPLICATION` | no | no | `scheduler`, junto a `BACKUP_ENCRYPTION_KEY` |
 | `fichaje_migrator` | propietario | sí | sí | solo `migrate` y `restore`, y el propio `postgres` para el arranque |
 
 ### Excepción: el entorno de desarrollo
@@ -81,9 +88,9 @@ La conexión `pgsql_migrator` solo la usan las migraciones y las pruebas. Una pr
 - **La condición 1 de ADR-010** se lee ahora así: la aplicación no puede modificar el registro **porque no posee ninguna credencial que pueda, ni en su entorno ni en su conexión**. La única forma de DDL que puede provocar es pedir, mediante la función, la partición del año en curso o del siguiente, ya restringida.
 - **La tarea programada de ADR-027** crea la partición con la función y la conexión de la aplicación. Si la función falta, porque la migración no se aplicó, la tarea falla con un mensaje propio, deja la métrica `audit_log_partition_ready` a 0 y hace sonar las alertas existentes. El fichaje no se bloquea mientras exista la partición del año en curso, y el año siguiente tiene dos meses de margen.
 - **El migrador sigue siendo `SUPERUSER`** y es el propietario de la función. Por eso la función es mínima, recibe un `integer` y califica todo. La evolución prevista es un rol propietario `NOLOGIN` y sin superusuario que posea las tablas y las funciones; exige traspasar la propiedad de todo el esquema y queda fuera de este ADR.
-- **`install.sh` y `update.sh` migran con el servicio `migrate`**, y la restauración usa `restore`. La vuelta atrás de una actualización sigue siendo restaurar la copia. Volver a la 2.1.0 reabre AUD-1 hasta volver a la 2.2.0, y el informe de la actualización tiene que decirlo.
+- **`install.sh` y `update.sh` migran con el servicio `migrate`**, y la restauración usa `restore`. La vuelta atrás de una actualización sigue siendo restaurar la copia. **Volver a una versión igual o anterior a la 2.1.0 reabre AUD-1** hasta volver a la 2.2.0: esa versión trae su propio `compose.prod.yaml`, con `env_file`, y su código usa `pgsql_migrator`. Es un riesgo aceptado, y la vuelta atrás tiene que avisarlo en pantalla y en el informe de la actualización, en español y en inglés.
 - **Los nombres de rol quedan grabados en la función** al crearla, igual que en la función de purga. Si cambian `DB_USERNAME` o `DB_MAINTENANCE_USERNAME`, hay que volver a lanzar la migración.
-- **Las instalaciones existentes** reciben la función, el rol `fichaje_backup` y la nueva forma de Compose al actualizar. `02-application-roles.sh` provisiona el rol de forma idempotente, y la actualización traslada `BACKUP_DB_USERNAME`/`BACKUP_DB_PASSWORD` al rol nuevo.
+- **Las instalaciones existentes** reciben la función, el rol `fichaje_backup` y la nueva forma de Compose al actualizar. En una instalación nueva, el rol lo crea `infra/docker/postgres/initdb/03-backup-role.sh` al inicializar el volumen. En una existente, cuyo volumen ya está inicializado, lo crea `update.sh` de forma idempotente, y la actualización traslada `BACKUP_DB_USERNAME`/`BACKUP_DB_PASSWORD` al rol nuevo.
 - **Cada variable nueva del runtime** hay que añadirla también al `environment:` de los servicios que la usan, además de a `.env.example` ([ADR-029](ADR-029-configuracion-en-el-entorno-del-contenedor.md)). Una prueba de arquitectura lo comprueba, para que olvidarla no se convierta en un fallo de configuración silencioso.
 
 ## Verificación
@@ -95,4 +102,5 @@ La conexión `pgsql_migrator` solo la usan las migraciones y las pruebas. Una pr
 - Arquitectura: ningún fichero de `backend/app` nombra `pgsql_migrator` ni `database.migrations.connection`. Ningún servicio de runtime ni `nginx` de `compose.prod.yaml` usa `env_file`, y ninguno recibe `DB_MIGRATION_*`. Solo `migrate` y `restore` reciben `DB_MIGRATION_*`, y `BACKUP_DB_*` solo llega al `scheduler`.
 - Integración: `fichaje_backup` puede ejecutar `pg_dump` completo y recibe `42501` en cualquier escritura.
 - Migración: `down()` quita la función sin tocar las particiones que creó, y volver a migrar la recrea con los mismos permisos.
-- Actualización 2.1.0 → 2.2.0 en dind (job ⑧b): tras actualizar, `docker inspect` de los contenedores de runtime no muestra `DB_MIGRATION_PASSWORD`, y `doctor.sh` queda en verde.
+- Instalación limpia (etapa ⑧) y actualización 2.1.0 → 2.2.0 en dind (etapa ⑧b): `.github/scripts/assert-runtime-env.sh` lee con `docker compose exec … env` el entorno real de cada contenedor de runtime y falla si alguno contiene `DB_MIGRATION_*` o una credencial que no le corresponde. `doctor.sh` queda en verde.
+- Restauración: los atributos de los roles del clúster son los mismos antes y después de `pg_restore`.
