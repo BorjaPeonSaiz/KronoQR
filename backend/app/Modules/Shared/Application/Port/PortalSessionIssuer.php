@@ -65,4 +65,15 @@ interface PortalSessionIssuer
         array $abilities,
         DateTimeImmutable $expiresAt,
     ): ?PortalSession;
+
+    /**
+     * Cierra **todas** las sesiones del portal de este empleado (RN-14, N1).
+     *
+     * La baja ya impide abrir una nueva; esto cubre la que estaba abierta, que
+     * de otro modo seguiria valiendo hasta caducar. Un empleado desconocido no
+     * es un error: no hay nada que cerrar.
+     *
+     * @return int cuantas sesiones se han cerrado
+     */
+    public function revokeAllFor(string $employeeUuid): int;
 }

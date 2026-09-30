@@ -13,6 +13,7 @@ use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Model\Employee;
 use DateTimeImmutable;
+use Illuminate\Database\ConnectionInterface;
 
 /**
  * Baja de empleado (RF-GP-03, RN-14).
@@ -23,9 +24,11 @@ use DateTimeImmutable;
  * estaba. El registro horario se conserva cuatro anos (RL-02) y una inspeccion
  * puede pedir el de alguien que ya no trabaja en el hotel.
  *
- * El evento que publica es el que, cuando la tarea 1.5 este en su sitio, hara
- * que `Identity` revoque la credencial: un empleado de baja no ficha, y su
- * tarjeta deja de valer el mismo dia.
+ * **Una transaccion con todo lo que la baja arrastra** (N1). El evento se
+ * publica dentro: `Identity` revoca la credencial y cierra el portal (RN-14),
+ * con su asiento, en un listener sincrono. Si falla, la baja no se confirma:
+ * una persona de baja con la tarjeta aun activa es peor que una baja que hay
+ * que repetir.
  */
 final readonly class OffboardEmployeeHandler
 {
@@ -33,6 +36,7 @@ final readonly class OffboardEmployeeHandler
         private EmployeeRepository $employees,
         private WorkforceEventPublisher $events,
         private Clock $clock,
+        private ConnectionInterface $connection,
     ) {}
 
     /**
@@ -41,23 +45,25 @@ final readonly class OffboardEmployeeHandler
      */
     public function handle(OffboardEmployeeCommand $command): ?Employee
     {
-        $employee = $this->employees->findByUuid($command->uuid);
+        return $this->connection->transaction(function () use ($command): ?Employee {
+            $employee = $this->employees->findByUuid($command->uuid);
 
-        if ($employee === null) {
-            return null;
-        }
+            if ($employee === null) {
+                return null;
+            }
 
-        $terminated = $employee->offboard(new DateTimeImmutable($command->terminatedAt));
+            $terminated = $employee->offboard(new DateTimeImmutable($command->terminatedAt));
 
-        $this->employees->save($terminated);
+            $this->employees->save($terminated);
 
-        $this->events->publish(new EmployeeOffboarded(
-            employeeUuid: $terminated->uuid,
-            terminatedOn: $command->terminatedAt,
-            reason: $command->reason,
-            occurredAt: $this->clock->now(),
-        ));
+            $this->events->publish(new EmployeeOffboarded(
+                employeeUuid: $terminated->uuid,
+                terminatedOn: $command->terminatedAt,
+                reason: $command->reason,
+                occurredAt: $this->clock->now(),
+            ));
 
-        return $terminated;
+            return $terminated;
+        });
     }
 }

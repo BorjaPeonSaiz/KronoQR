@@ -1215,8 +1215,13 @@ export interface paths {
          *     conserva cuatro años (RL-02) y una inspeccion puede pedir el de alguien
          *     que ya no trabaja en el hotel.
          *
-         *     A partir de la baja, el empleado no ficha (RN-14) y su credencial queda
-         *     revocada.
+         *     A partir de la baja, el empleado no ficha (RN-14) y **todas** sus
+         *     credenciales activas —la tarjeta en uso y la reemision pendiente de
+         *     imprimir, si la hay— quedan revocadas en la misma transaccion, cada una
+         *     con su asiento `credential.revoked` y el motivo «Baja del empleado
+         *     (RN-14)». Sus sesiones abiertas del portal se cierran. Un escaneo
+         *     posterior de su tarjeta recibe el mismo rechazo generico que un codigo
+         *     inexistente (regla dura 17).
          */
         post: operations["offboardEmployee"];
         delete?: never;

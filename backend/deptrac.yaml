@@ -956,6 +956,11 @@ parameters:
       - ExternalCode
       - IdentityPersistence
       - AttendanceApplicationPort
+      # N1, RN-14. `RevokeCredentialsOnOffboarding` escucha `EmployeeOffboarded`
+      # para retirar la credencial de quien se va: `Workforce` decide el estado
+      # laboral y no puede importar `Identity`. De solo lectura y solo sobre
+      # EVENTOS, como las aristas de Compliance y Product sobre el mismo modulo.
+      - WorkforceDomainEvent
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca
@@ -1001,6 +1006,8 @@ parameters:
       - ExternalCode
       - AppFramework
       - AttendanceApplicationPort
+      # N1: registra el listener de `EmployeeOffboarded` (ver IdentityInfrastructure).
+      - WorkforceDomainEvent
 
     # --------------------------------------------------------------- Reporting
 

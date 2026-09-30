@@ -65,6 +65,7 @@ use App\Modules\Identity\Infrastructure\Console\ResetTwoFactorCommand;
 use App\Modules\Identity\Infrastructure\Console\RetireSigningKeyCommand;
 use App\Modules\Identity\Infrastructure\Console\RevokeCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\RotateSigningKeyCommand;
+use App\Modules\Identity\Infrastructure\Listener\RevokeCredentialsOnOffboarding;
 use App\Modules\Identity\Infrastructure\Metrics\TextfileCredentialMetrics;
 use App\Modules\Identity\Infrastructure\Persistence\Device;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentCredentialRepository;
@@ -87,6 +88,7 @@ use App\Modules\Shared\Application\Port\PortalSessionIssuer;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
 use DateTimeInterface;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -96,6 +98,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter as RateLimiterFacade;
 use Illuminate\Support\ServiceProvider;
@@ -198,6 +201,11 @@ final class IdentityServiceProvider extends ServiceProvider
         $this->rejectTokensOfDeactivatedAccounts();
 
         Gate::policy(Credential::class, CredentialPolicy::class);
+
+        // RN-14 (N1): la baja de una persona le retira la credencial y le cierra
+        // el portal, en la misma transaccion y con su asiento. Sincrono a
+        // proposito (ADR-027): ver el listener.
+        Event::listen(EmployeeOffboarded::class, [RevokeCredentialsOnOffboarding::class, 'handle']);
 
         if ($this->app->runningInConsole()) {
             // Los del Anexo C del doc 02, ya completos: la tarea 2.12 añadio

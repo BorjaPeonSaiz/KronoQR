@@ -93,6 +93,21 @@ final readonly class SanctumPortalSessionIssuer implements PortalSessionIssuer
         );
     }
 
+    public function revokeAllFor(string $employeeUuid): int
+    {
+        $employee = Employee::query()->where('uuid', $employeeUuid)->first();
+
+        if (! $employee instanceof Employee) {
+            return 0;
+        }
+
+        // Un token de acceso no es registro legal: borrarlo es la forma en que
+        // Sanctum lo invalida, la misma que ya usa la limpieza de caducados.
+        $deleted = $employee->tokens()->delete();
+
+        return \is_int($deleted) ? $deleted : 0;
+    }
+
     private function timeZoneOf(int $siteId): ?string
     {
         $timeZone = Site::query()->whereKey($siteId)->value('timezone');
