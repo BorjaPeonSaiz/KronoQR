@@ -74,6 +74,14 @@
     "subtitle": "Tus jornadas, tus tramos y el total de cada día. Un turno que empezó a las 22:00 pertenece al día en que empezó, aunque terminara al día siguiente. Nada se borra: si algo se corrigió, aparece explicado más abajo.",
     "duration": "{hours} h {minutes} min",
     "loading": "Cargando tu registro…",
+    "summary": {
+      "label": "Resumen del periodo",
+      "periodTotal": "Total del periodo",
+      "days": "{count} jornadas con registro, del {from} al {to}.",
+      "provisional": "Este total todavía puede cambiar: {count} jornadas tienen un turno abierto, una revisión pendiente o un total que no cuadra con sus tramos.",
+      "today": "Hoy",
+      "todayEmpty": "Todavía no tienes ningún fichaje registrado hoy."
+    },
     "filters": {
       "legend": "Periodo consultado",
       "from": "Desde",

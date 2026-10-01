@@ -74,6 +74,14 @@
     "subtitle": "Your work days, your shifts and the total for each day. A shift that started at 22:00 belongs to the day it started, even if it ended the next day. Nothing is ever deleted: if something was corrected, it is explained below.",
     "duration": "{hours} h {minutes} min",
     "loading": "Loading your record…",
+    "summary": {
+      "label": "Period summary",
+      "periodTotal": "Total for the period",
+      "days": "{count} work days with records, from {from} to {to}.",
+      "provisional": "This total may still change: {count} work days have an open shift, a pending review or a total that does not match their shifts.",
+      "today": "Today",
+      "todayEmpty": "You have no clock-in recorded today yet."
+    },
     "filters": {
       "legend": "Period consulted",
       "from": "From",

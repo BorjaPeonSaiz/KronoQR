@@ -24,6 +24,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSessionStore } from '../login/session.store'
 import { useMyWorkDays } from './useMyWorkDays'
+import PeriodSummary from './PeriodSummary.vue'
 import WorkDayCard from './WorkDayCard.vue'
 import type { WorkDateRange } from './workdays.api'
 import { UNBOUNDED_RANGE } from './workdays.api'
@@ -48,7 +49,7 @@ const rangeErrors = computed<string[]>(() => {
   return tooWide.value ? [t('myRecords.filters.tooWide', { days: MAX_RANGE_DAYS })] : []
 })
 
-const { data, error, isPending, isFetching } = useMyWorkDays(applied)
+const { data, error, isPending, isFetching, today } = useMyWorkDays(applied)
 
 const days = computed(() => data.value?.data ?? [])
 
@@ -159,6 +160,21 @@ watch(data, (value) => {
       {{ t('myRecords.filters.resolved', { from: data.from, to: data.to }) }}
       <span v-if="isFetching" class="text-kq-text-muted">{{ t('common.updating') }}</span>
     </p>
+
+    <!--
+      El resumen va ANTES del detalle y no se ordena de otra forma el listado:
+      el contrato fija las jornadas de la mas antigua a la mas reciente (la
+      lectura cronologica es la que se contrasta con una nomina) y el servidor
+      no las invierte. Lo que hace falta ver nada mas entrar -cuanto lleva el
+      periodo y como va hoy- sube aqui, sin tocar el orden de las tarjetas.
+    -->
+    <PeriodSummary
+      v-if="data !== undefined && error === null"
+      :days="days"
+      :from="data.from"
+      :to="data.to"
+      :today="today"
+    />
 
     <LoadingPanel v-if="isPending" :label="t('myRecords.loading')" class="mt-4" />
 

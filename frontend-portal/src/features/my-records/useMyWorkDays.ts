@@ -20,6 +20,12 @@ export interface UseMyWorkDaysResult {
   isPending: Ref<boolean>
   /** Hay una peticion en curso, con o sin datos previos que enseñar mientras tanto. */
   isFetching: Ref<boolean>
+  /**
+   * «Hoy» en la zona del centro, o `null` si todavia no se sabe. Solo lo da el
+   * servidor: cuando se le pide el rango por omision, su `to` ES hoy en el
+   * centro. Calcularlo aqui usaria el reloj y la zona del navegador (regla dura 3).
+   */
+  today: Ref<string | null>
   reload: () => Promise<void>
 }
 
@@ -28,13 +34,21 @@ export function useMyWorkDays(range: Ref<WorkDateRange>): UseMyWorkDaysResult {
   const error = ref<unknown>(null)
   const isPending = ref(true)
   const isFetching = ref(false)
+  const today = ref<string | null>(null)
 
   async function load(): Promise<void> {
     isFetching.value = true
     error.value = null
 
     try {
-      data.value = await listMyWorkDays(range.value)
+      const requested = { ...range.value }
+      const result = await listMyWorkDays(requested)
+
+      data.value = result
+
+      if (requested.from === '' && requested.to === '') {
+        today.value = result.to
+      }
     } catch (caught) {
       error.value = caught
     } finally {
@@ -45,5 +59,5 @@ export function useMyWorkDays(range: Ref<WorkDateRange>): UseMyWorkDaysResult {
 
   watch(range, () => void load(), { immediate: true, deep: true })
 
-  return { data, error, isPending, isFetching, reload: load }
+  return { data, error, isPending, isFetching, today, reload: load }
 }
