@@ -107,7 +107,13 @@ transparencia es el motivo por el que el sistema funciona así.
 
 ## 3. Descargar tu registro
 
-En «Descargar mi historial» eliges el periodo y pulsas **«Descargar CSV»**.
+En «Descargar mi historial» eliges el periodo y el formato, y pulsas **«Descargar CSV»** o **«Descargar PDF»**.
+
+- **CSV**: para abrirlo en una hoja de cálculo.
+- **PDF**: un documento sellado, con la fecha de generación y una huella que
+  acredita que no se ha modificado, pensado para presentarlo ante un tercero.
+  Si el servidor no puede generarlo en ese momento, el portal te avisa y te
+  ofrece el CSV; no es nada que hayas hecho tú.
 
 ![Pantalla de descarga del historial propio](img/es/portal-04-descarga.png)
 
@@ -119,6 +125,8 @@ El fichero lleva:
   por qué;
 - las horas en formato HH:MM, **nunca en decimal**.
 
+El nombre del fichero lleva solo el periodo, nunca tu nombre ni tu código.
+
 Se abre con cualquier hoja de cálculo.
 
 **Para qué sirve.** El acceso al propio registro horario es un **derecho**, no
@@ -126,6 +134,8 @@ un favor: la empresa está obligada a que puedas consultarlo y a conservarlo
 cuatro años. Ese fichero es tu copia, y la puedes guardar o entregar a quien la
 necesite —tu representación legal, un asesor, un juzgado— sin pedir permiso a
 nadie y sin que quede constancia de para qué la querías.
+
+**Salir.** Al terminar, pulsa **«Salir»**, sobre todo en un ordenador compartido: cierra tu sesión también en el servidor, no solo en esa pantalla. Aunque la conexión falle en ese momento, tu sesión se cierra en este dispositivo y te devuelve a la pantalla de acceso.
 
 ---
 
