@@ -50,6 +50,20 @@ h3 {
   outline-offset: var(--kq-page-focus-offset);
 }
 
+/* Los controles de fecha y hora son un grupo de segmentos internos (dia, mes,
+   hora...): al enfocar el ultimo, Chromium no aplica `:focus-visible` al
+   propio input y el anillo desaparece aunque el foco siga ahi (WCAG 2.4.7,
+   PA7-004). `:focus-within` si coincide con el input cuando cualquiera de sus
+   segmentos tiene el foco. */
+input[type='date']:focus-within,
+input[type='time']:focus-within,
+input[type='datetime-local']:focus-within,
+input[type='month']:focus-within,
+input[type='week']:focus-within {
+  outline: 3px solid var(--kq-page-focus);
+  outline-offset: var(--kq-page-focus-offset);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

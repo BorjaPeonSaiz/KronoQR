@@ -1,5 +1,6 @@
 import { installClientErrorTransport } from '@kronoqr/web-kit/clientErrorTransport'
 import { createWebErrorReporter, installGlobalErrorCapture } from '@kronoqr/web-kit/clientErrors'
+import { syncDocumentLang } from '@kronoqr/web-kit/documentLang'
 import {
   setAuthTokenProvider,
   setLocaleProvider,
@@ -73,6 +74,9 @@ watch(
 // 422). Se lee en cada peticion porque cambia al entrar: pasa a ser el de la
 // persona (ver el `watch` de abajo).
 setLocaleProvider(() => i18n.global.locale.value)
+
+// El documento declara el idioma que se esta mostrando (WCAG 3.1.1, PA7-001).
+syncDocumentLang(() => i18n.global.locale.value)
 
 // El idioma del portal es el de la persona que ha entrado (`employees.locale`),
 // no el del navegador desde el que mira ni el del dispositivo compartido del
