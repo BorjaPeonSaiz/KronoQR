@@ -10,7 +10,9 @@ use App\Modules\Identity\Domain\ValueObject\PrintableCard;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Domain\ValueObject\LogoImage;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
 use Spatie\LaravelPdf\Enums\Format;
@@ -296,7 +298,18 @@ final readonly class BrowsershotCardRenderer implements CardRenderer
             CardFormat::SHEET => 'pdf.credential-sheet',
         };
 
+        // RV-2: el `<title>` y el `lang` del documento, en el idioma negociado
+        // por la peticion, como el informe sellado. El titulo va al metadato del
+        // PDF y al historial de descargas: sin nombres (regla dura 21).
+        $locale = App::getLocale();
+        $title = Lang::get(match ($format) {
+            CardFormat::CARD => 'credentials.document.card_title',
+            CardFormat::SHEET => 'credentials.document.sheet_title',
+        }, [], $locale);
+
         return View::make($view, [
+            'locale' => str_replace('_', '-', $locale),
+            'title' => \is_string($title) ? $title : 'KronoQR',
             'cards' => array_map(
                 fn (PrintableCard $card): array => [
                     'name' => $card->holder->fullName,
