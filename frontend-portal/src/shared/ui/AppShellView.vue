@@ -7,6 +7,7 @@
 // aplica el servidor en cada endpoint).
 import { announcement } from '@kronoqr/web-kit/announcer'
 import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useSessionStore } from '@/features/login/session.store'
@@ -17,9 +18,22 @@ const router = useRouter()
 const session = useSessionStore()
 const branding = useBrandingStore()
 
-/** Ver la nota de `session.store.ts`: solo olvida la sesion en este dispositivo. */
+/** Avisa al servidor y borra la sesion local siempre (ver `session.store.ts`, PO1). */
+const signingOut = ref(false)
+
 async function signOut(): Promise<void> {
-  session.signOutLocally()
+  if (signingOut.value) {
+    return
+  }
+
+  signingOut.value = true
+
+  try {
+    await session.signOut()
+  } finally {
+    signingOut.value = false
+  }
+
   await router.push({ name: 'login' })
 }
 </script>
@@ -82,6 +96,7 @@ async function signOut(): Promise<void> {
           <button
             type="button"
             class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg text-kq-text hover:bg-kq-surface-alt"
+            :aria-busy="signingOut"
             @click="signOut"
           >
             {{ t('app.signOut') }}
