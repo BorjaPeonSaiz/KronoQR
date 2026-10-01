@@ -1602,3 +1602,21 @@ it('declara las seis claves de nomina en el catalogo y en el cuerpo del PATCH', 
         ->and($admitidas)->toContain(...$nomina)
         ->and($admitidas)->toBe($catalogo);
 })->group('RF-IN-07', 'RF-PD-01', 'RQ-06');
+
+it('entrega el relevo del token del quiosco en el latido, opcional y con solo valor y caducidad', function (): void {
+    // RF-ID-04, F1-1, ADR-044. El relevo viaja en la respuesta del latido y SOLO
+    // cuando toca: opcional (fuera de `required`) y no anulable, para que «no
+    // toca rotar» no se confunda con «token vacio». Dos campos y ninguno mas: ni
+    // ambitos, ni estado del dispositivo, ni el token relevado.
+    $schema = ['components', 'schemas', 'KioskHeartbeat'];
+
+    expect(Contract::value(...[...$schema, 'required']))->not->toContain('rotated_token')
+        ->and(Contract::value(...[...$schema, 'properties', 'rotated_token', 'type']))->toBe('object')
+        ->and(Contract::value(...[...$schema, 'properties', 'rotated_token', 'additionalProperties']))->toBeFalse()
+        ->and(Contract::value(...[...$schema, 'properties', 'rotated_token', 'required']))->toBe(['value', 'expires_at'])
+        ->and(Contract::keys(...[...$schema, 'properties', 'rotated_token', 'properties']))->toBe(['value', 'expires_at'])
+        ->and(Contract::value(...[...$schema, 'properties', 'rotated_token', 'properties', 'expires_at', 'allOf', '0', '$ref']))
+        ->toBe('#/components/schemas/UtcTimestamp')
+        ->and(Contract::text('paths', '/api/v1/kiosk/heartbeat', 'post', 'description'))
+        ->toContain('IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS');
+})->group('RF-ID-04', 'RQ-06');

@@ -176,6 +176,9 @@ it('ninguna clave PERMITIDA tiene forma de secreto', function (): void {
         'IDENTITY_2FA_SECRET_LENGTH',
         // Cuantos dias vive el token de un quiosco, no el token.
         'IDENTITY_DEVICE_TOKEN_DAYS',
+        // Cuantas horas sigue valiendo el token relevado tras una rotacion
+        // (ADR-044), no el token.
+        'IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS',
     ];
 
     $suspicious = array_values(array_filter(
@@ -203,6 +206,7 @@ it('las excepciones de forma siguen siendo magnitudes y no secretos', function (
     'IDENTITY_PASSWORD_MIN_LENGTH',
     'IDENTITY_2FA_SECRET_LENGTH',
     'IDENTITY_DEVICE_TOKEN_DAYS',
+    'IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS',
 ])->group('RF-PD-09', 'RS-08');
 it('si deja salir los umbrales operativos, que es para lo que existe la seccion', function (string $key): void {
     // La otra mitad: una lista de permitidos vacia pasaria la prueba de arriba y

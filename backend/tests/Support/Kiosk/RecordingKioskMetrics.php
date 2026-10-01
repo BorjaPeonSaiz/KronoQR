@@ -69,4 +69,12 @@ final class RecordingKioskMetrics implements KioskMetrics
     {
         $this->rejected[] = $reason;
     }
+
+    /** @var list<string> Desenlaces de rotacion del token, en orden (ADR-044). */
+    public array $tokenRotations = [];
+
+    public function tokenRotation(string $result): void
+    {
+        $this->tokenRotations[] = $result;
+    }
 }
