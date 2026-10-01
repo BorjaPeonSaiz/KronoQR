@@ -345,3 +345,50 @@ it('ningun codigo, DNI ni IBAN generado sobrevive, sea cual sea la plantilla', f
         yield "iban {$i}" => [sprintf($plantilla, $iban), $iban];
     }
 })->group('RF-PD-15', 'RL-19', 'RL-08');
+
+/*
+ * ---------------------------------------------------------------------------
+ * Bordes que fija la mutacion (job 3 de la CI sobre el Bloque 6, PR12/L1).
+ * ---------------------------------------------------------------------------
+ */
+
+it('falla cerrado ante UTF-8 invalido: pierde el texto, no lo deja pasar sin sanear', function (): void {
+    /*
+     * `preg_replace()` devuelve `null` con un patron `/u` sobre bytes UTF-8
+     * invalidos. El saneador lo convierte en cadena vacia en un unico sitio, y
+     * esta prueba lo fija: ni lanza un `TypeError` (que en el enganche de
+     * captacion seria un error dentro del registro de otro error) ni devuelve el
+     * correo, el nombre o la hora que iban en el mismo texto.
+     */
+    $roto = "Employee 'Ana Ruiz' (ana.ruiz@hotel.es) fichó a las 22:15 \xC3\x28 sin cierre";
+
+    expect(ErrorMessageSanitizer::redact($roto))->toBe('')
+        ->and(ErrorMessageSanitizer::sanitize($roto))->toBe(ErrorMessageSanitizer::EMPTY_MESSAGE)
+        ->and(ErrorMessageSanitizer::sanitizeContextValue($roto))->toBe(ErrorMessageSanitizer::EMPTY_MESSAGE);
+})->group('RF-PD-15', 'RL-19');
+
+it('no trunca un texto que mide exactamente el techo', function (): void {
+    // El techo es el `maxLength` del contrato y el de la columna: un mensaje que
+    // cabe justo se guarda entero, sin el `…`.
+    $mensaje = str_repeat('x', ErrorMessageSanitizer::MAX_LENGTH);
+    $valor = str_repeat('y', ErrorMessageSanitizer::MAX_CONTEXT_LENGTH);
+
+    expect(ErrorMessageSanitizer::sanitize($mensaje))->toBe($mensaje)
+        ->and(ErrorMessageSanitizer::sanitizeContextValue($valor))->toBe($valor);
+})->group('RF-PD-15');
+
+it('al truncar conserva el principio del texto y cierra con el indicador', function (): void {
+    // Lo que diagnostica —`SQLSTATE`, la clase de la excepcion— va al
+    // principio: el corte se lleva la cola, nunca la cabeza.
+    expect(ErrorMessageSanitizer::sanitize('A'.str_repeat('x', 1500)))
+        ->toBe('A'.str_repeat('x', ErrorMessageSanitizer::MAX_LENGTH - 2).'…')
+        ->and(ErrorMessageSanitizer::sanitizeContextValue('B'.str_repeat('x', 500)))
+        ->toBe('B'.str_repeat('x', ErrorMessageSanitizer::MAX_CONTEXT_LENGTH - 2).'…');
+})->group('RF-PD-15');
+
+it('corta la consulta de una QueryException sin dejar marcador en su lugar', function (): void {
+    // La consulta ENTERA es el problema: no se sustituye por nada, se corta.
+    expect(ErrorMessageSanitizer::redact(
+        'SQLSTATE[23505] duplicate key (Connection: pgsql, SQL: insert into t values (Maria))',
+    ))->toBe('SQLSTATE[23505] duplicate key (Connection: pgsql');
+})->group('RF-PD-15', 'RL-19');
