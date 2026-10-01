@@ -76,6 +76,14 @@ final readonly class ErrorMessageSanitizer
     public const int MAX_CONTEXT_LENGTH = 200;
 
     /**
+     * Lo que devuelve {@see sanitize()} cuando no queda nada: un mensaje vacio,
+     * solo espacios o un texto que no se pudo sanear (falla cerrado, ver
+     * {@see redact()}). {@see ErrorContextAllowlist} lo usa para no guardar una
+     * clave de contexto que no dice nada.
+     */
+    public const string EMPTY_MESSAGE = '(sin mensaje)';
+
+    /**
      * Nombres que, a la izquierda de un `=` o de un `:`, marcan lo de la derecha
      * como secreto.
      *
@@ -100,7 +108,7 @@ final readonly class ErrorMessageSanitizer
         $clean = trim(self::redact(self::collapse($message)));
 
         if ($clean === '') {
-            return '(sin mensaje)';
+            return self::EMPTY_MESSAGE;
         }
 
         return self::truncate($clean, self::MAX_LENGTH);
@@ -114,9 +122,10 @@ final readonly class ErrorMessageSanitizer
      */
     public static function sanitizeContextValue(string $value): string
     {
-        $clean = trim(self::sanitize($value));
-
-        return self::truncate($clean, self::MAX_CONTEXT_LENGTH);
+        // Sin `trim()`: lo que devuelve `sanitize()` ya llega recortado —se
+        // recorta antes de truncar y el truncado termina en `…`—, y un segundo
+        // recorte no podia cambiar nada.
+        return self::truncate(self::sanitize($value), self::MAX_CONTEXT_LENGTH);
     }
 
     /**
@@ -153,6 +162,22 @@ final readonly class ErrorMessageSanitizer
     }
 
     /**
+     * El UNICO sitio donde se evalua una expresion, y donde se decide el fallo
+     * cerrado.
+     *
+     * `preg_replace()` devuelve `null` cuando no puede evaluar el patron —un
+     * texto con bytes UTF-8 invalidos contra un patron `/u`, el limite de
+     * retroceso de PCRE—. Ese `null` se convierte aqui en cadena vacia: se
+     * pierde el texto entero en lugar de dejarlo pasar sin sanear, y las reglas
+     * que vienen detras ya trabajan sobre la cadena vacia. Con la decision en un
+     * solo sitio, una prueba la fija para todas las reglas a la vez.
+     */
+    private static function replace(string $pattern, string $replacement, string $text): string
+    {
+        return preg_replace($pattern, $replacement, $text) ?? '';
+    }
+
+    /**
      * Corta por caracteres y no por bytes.
      *
      * `substr()` sobre UTF-8 parte una tilde por la mitad y deja un byte
@@ -179,7 +204,7 @@ final readonly class ErrorMessageSanitizer
      */
     private static function collapse(string $text): string
     {
-        return (string) preg_replace('/\s+/u', ' ', $text);
+        return self::replace('/\s+/u', ' ', $text);
     }
 
     /**
@@ -236,7 +261,7 @@ final readonly class ErrorMessageSanitizer
      */
     private static function sql(string $text): string
     {
-        $text = (string) preg_replace('/,\s*SQL:\s.*/su', '', $text);
+        $text = self::replace('/,\s*SQL:\s.*/su', '', $text);
 
         /*
          * HASTA EL FINAL, no hasta el primer parentesis de cierre: un valor de
@@ -245,7 +270,7 @@ final readonly class ErrorMessageSanitizer
          * fila a la vista. Lo que se pierde detras es la cola de la excepcion,
          * que no diagnostica nada que `SQLSTATE` no diga ya.
          */
-        $text = (string) preg_replace(
+        $text = self::replace(
             '/\bFailing row contains\b.*/su',
             'Failing row contains [redacted]',
             $text,
@@ -269,7 +294,7 @@ final readonly class ErrorMessageSanitizer
          * que de verdad sea un `(columnas)=(valores)`: un «missing key (x)» de
          * otro mensaje no se lleva el resto de la linea.
          */
-        return (string) preg_replace(
+        return self::replace(
             '/\b(key)\s*\((?=[^=]*\)\s*=\s*\().*?(?=\s+(?:already exists|conflicts with|is not present|is still referenced)\b|$)/isu',
             "\$1 ('…')=('…')",
             $text,
@@ -280,11 +305,11 @@ final readonly class ErrorMessageSanitizer
     {
         // Un payload de credencial completo (regla dura 10). No es PII, pero es
         // material firmado y no tiene por que salir de la instalacion.
-        $text = (string) preg_replace('/\bFH1\.[A-Za-z0-9._~+\/-]+=*/', '[secret]', $text);
+        $text = self::replace('/\bFH1\.[A-Za-z0-9._~+\/-]+=*/', '[secret]', $text);
 
-        $text = (string) preg_replace('/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/i', '[secret]', $text);
+        $text = self::replace('/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/i', '[secret]', $text);
 
-        return (string) preg_replace(
+        return self::replace(
             '/\b('.self::SECRET_NAMES.')(\s*[=:]\s*)("[^"]*"|\'[^\']*\'|\S+)/iu',
             '$1$2[secret]',
             $text,
@@ -293,7 +318,7 @@ final readonly class ErrorMessageSanitizer
 
     private static function emails(string $text): string
     {
-        return (string) preg_replace(
+        return self::replace(
             '/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/',
             '[email]',
             $text,
@@ -311,13 +336,13 @@ final readonly class ErrorMessageSanitizer
     private static function documents(string $text): string
     {
         // Compacto: `12345678Z`, `12345678-Z`, `X1234567L`, `X-1234567-L`.
-        $text = (string) preg_replace('/\b(?:[XYZ][ .-]?|[xyz])?\d{7,8}[ .\-]?[A-Za-z]\b/', '[id]', $text);
+        $text = self::replace('/\b(?:[XYZ][ .-]?|[xyz])?\d{7,8}[ .\-]?[A-Za-z]\b/', '[id]', $text);
 
         // Con separadores de miles, como se teclea a mano (F4c-2):
         // `12.345.678-Z`, `12 345 678 Z`, `X 1.234.567 L`. Exige los DOS
         // separadores entre grupos de tres cifras, que es lo que lo distingue
         // de un numero tecnico.
-        return (string) preg_replace(
+        return self::replace(
             '/(?<![\w.\-])(?:[XYZ][ .-]?|[xyz])?\d{1,2}[ .]\d{3}[ .]\d{3}[ .\-]?[A-Za-z](?!\w)/',
             '[id]',
             $text,
@@ -340,7 +365,7 @@ final readonly class ErrorMessageSanitizer
      */
     private static function ibans(string $text): string
     {
-        return (string) preg_replace(
+        return self::replace(
             '/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?\b/',
             '[iban]',
             $text,
@@ -372,13 +397,13 @@ final readonly class ErrorMessageSanitizer
      */
     private static function employeeCodes(string $text): string
     {
-        $text = (string) preg_replace(
+        $text = self::replace(
             '/\b(employee[_ \-]?code|c(?:o|\x{00F3})digo(?:[_ ]de)?[_ ]empleado)(\s*[=:#]\s*|\s+(?=\S*\d))(\S+)/iu',
             '$1$2[code]',
             $text,
         );
 
-        return (string) preg_replace(
+        return self::replace(
             '/\bE(?=[A-Z0-9]{8,9}\b)(?:(?=[A-Z0-9]*\d)[A-Z0-9]{8,9}|[ABCDEFGHJKMNPQRSTUVWXYZ]{9})\b/',
             '[code]',
             $text,
@@ -395,13 +420,13 @@ final readonly class ErrorMessageSanitizer
      */
     private static function passports(string $text): string
     {
-        $text = (string) preg_replace(
+        $text = self::replace(
             '/\b(passport|pasaporte)((?:\s*(?:no\.?|n\x{00BA}|n\x{00B0}|number|n(?:u|\x{00FA})mero))?(?:\s*[=:#]\s*|\s+(?=\S*\d)))(\S+)/iu',
             '$1$2[id]',
             $text,
         );
 
-        return (string) preg_replace('/\b[A-Z]{3}\d{6}\b/', '[id]', $text);
+        return self::replace('/\b[A-Z]{3}\d{6}\b/', '[id]', $text);
     }
 
     /**
@@ -414,7 +439,7 @@ final readonly class ErrorMessageSanitizer
      */
     private static function phones(string $text): string
     {
-        return (string) preg_replace(
+        return self::replace(
             '/(?<![\w.\-])(?:\+\d{1,3}[ .\-]?)?\d{3}[ .\-]?\d{3}[ .\-]?\d{3}(?![\w.\-])/',
             '[phone]',
             $text,
@@ -431,25 +456,25 @@ final readonly class ErrorMessageSanitizer
      */
     private static function instants(string $text): string
     {
-        $text = (string) preg_replace(
+        $text = self::replace(
             '/\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+\-]\d{2}:?\d{2})?)?/',
             '[time]',
             $text,
         );
 
-        $text = (string) preg_replace('/\b\d{4}\/\d{1,2}\/\d{1,2}\b/', '[time]', $text);
-        $text = (string) preg_replace('/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/', '[time]', $text);
+        $text = self::replace('/\b\d{4}\/\d{1,2}\/\d{1,2}\b/', '[time]', $text);
+        $text = self::replace('/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/', '[time]', $text);
 
         // `dd-mm-aaaa` y `dd.mm.aaaa` (F4c-2), con el MISMO separador las dos
         // veces y dia, mes y siglo plausibles: sin eso, `13.0.1234` o un
         // `1-2-3000` cualquiera pasarian por fecha.
-        $text = (string) preg_replace(
+        $text = self::replace(
             '/\b(?:0?[1-9]|[12]\d|3[01])([\-.])(?:0?[1-9]|1[0-2])\1(?:19|20)\d{2}\b/',
             '[time]',
             $text,
         );
 
-        return (string) preg_replace('/\b\d{1,2}:\d{2}(:\d{2})?\b/', '[time]', $text);
+        return self::replace('/\b\d{1,2}:\d{2}(:\d{2})?\b/', '[time]', $text);
     }
 
     /**
@@ -458,9 +483,9 @@ final readonly class ErrorMessageSanitizer
      */
     private static function quoted(string $text): string
     {
-        $text = (string) preg_replace('/"[^"]*"/u', "'…'", $text);
-        $text = (string) preg_replace('/\x{00AB}[^\x{00BB}]*\x{00BB}/u', "'…'", $text);
+        $text = self::replace('/"[^"]*"/u', "'…'", $text);
+        $text = self::replace('/\x{00AB}[^\x{00BB}]*\x{00BB}/u', "'…'", $text);
 
-        return (string) preg_replace('/\'[^\']*\'/u', "'…'", $text);
+        return self::replace('/\'[^\']*\'/u', "'…'", $text);
     }
 }

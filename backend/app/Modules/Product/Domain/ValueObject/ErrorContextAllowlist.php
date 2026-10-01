@@ -154,10 +154,15 @@ final readonly class ErrorContextAllowlist
      */
     public static function apply(array $context): array
     {
-        /** @var array<string, mixed> $named */
-        $named = array_filter($context, static fn (int|string $key): bool => is_string($key), ARRAY_FILTER_USE_KEY);
-
-        $filtered = (new FieldAllowlist(...self::KEYS))->apply($named);
+        /*
+         * Sin filtrar antes las claves enteras: `FieldAllowlist` solo LEE las
+         * claves declaradas, todas texto no numerico, asi que una clave entera
+         * no puede coincidir con ninguna y se cae sola. El `@var` estrecha el
+         * tipo a lo que esa lectura necesita; la prueba que manda un contexto
+         * con claves enteras fija que siguen sin entrar.
+         */
+        /** @var array<string, mixed> $context */
+        $filtered = new FieldAllowlist(...self::KEYS)->apply($context);
 
         $allowed = [];
 
@@ -172,8 +177,9 @@ final readonly class ErrorContextAllowlist
                 $clean = self::withoutLoneCode(ErrorMessageSanitizer::sanitizeContextValue($value));
 
                 // Un valor que se queda en nada despues del saneado no aporta
-                // una clave vacia: aporta ruido.
-                if ($clean !== '' && $clean !== '(sin mensaje)') {
+                // una clave vacia: aporta ruido. «En nada» es el texto de
+                // relleno: el saneador nunca devuelve la cadena vacia.
+                if ($clean !== ErrorMessageSanitizer::EMPTY_MESSAGE) {
                     $allowed[$key] = $clean;
                 }
 
