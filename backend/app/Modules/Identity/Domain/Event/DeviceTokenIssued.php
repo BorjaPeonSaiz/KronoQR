@@ -17,7 +17,8 @@ use DateTimeImmutable;
  *
  * `rotation` distingue el emparejamiento inicial de la renovacion automatica al
  * 80 % de vida: la segunda ocurre sola, muchas veces, y no debe leerse en el
- * trail como si alguien hubiera vuelto a emparejar la tablet.
+ * trail como si alguien hubiera vuelto a emparejar la tablet. La rotacion lleva
+ * ademas hasta cuando vale el token relevado y si es una reentrega (ADR-044).
  *
  * **Nunca lleva el token ni su hash.**
  */
@@ -32,6 +33,18 @@ final readonly class DeviceTokenIssued implements DomainEvent
         public bool $rotation,
         public ?int $actorUserId,
         private DateTimeImmutable $occurredAt,
+        /**
+         * Solo en una rotacion (ADR-044): hasta cuando sigue valiendo el token
+         * relevado, si nadie usa antes el nuevo. `null` en un emparejamiento,
+         * que retira el anterior en el acto.
+         */
+        public ?DateTimeImmutable $supersededUntil = null,
+        /**
+         * Solo en una rotacion: `true` si este token sustituye a un relevo que
+         * no llego a la tablet (la respuesta del latido se perdio). El solape
+         * del token viejo no cambia.
+         */
+        public bool $redelivery = false,
     ) {}
 
     public function eventName(): string

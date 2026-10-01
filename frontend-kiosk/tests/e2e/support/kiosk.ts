@@ -436,3 +436,66 @@ export async function stubHeartbeatWithErrorCapture(
 
   return recorder
 }
+
+/** Un relevo de token tal y como lo entrega `KioskHeartbeat.rotated_token` (RF-ID-04, ADR-044). */
+export interface RotatedTokenStub {
+  readonly value: string
+  readonly expires_at: string
+}
+
+export interface RotatingHeartbeatCall {
+  /** `Authorization` del latido: con que token firmo el quiosco ESTA peticion. */
+  readonly authorization: string | undefined
+  /** Lo que respondio el servidor simulado en `rotated_token`, o `undefined` si no toco. */
+  readonly rotated: RotatedTokenStub | undefined
+}
+
+export interface RotatingHeartbeatRecorder {
+  readonly calls: RotatingHeartbeatCall[]
+}
+
+/**
+ * Latido que entrega un relevo del token (RF-ID-04, ADR-044) cuando `rotate` lo
+ * decide, a partir de la peticion (su `Authorization` y su numero de orden).
+ * Sustituye la ruta de latido registrada antes: llamar DESPUES de `stubKioskApi`.
+ */
+export async function stubHeartbeatWithTokenRotation(
+  page: Page,
+  options: {
+    readonly serverTime?: () => string
+    /** `true` = el servidor simulado responde `401` a esa peticion (token ya retirado o caducado). */
+    readonly reject?: (authorization: string | undefined) => boolean
+    readonly rotate: (request: {
+      readonly index: number
+      readonly authorization: string | undefined
+    }) => RotatedTokenStub | undefined
+  },
+): Promise<RotatingHeartbeatRecorder> {
+  const recorder: RotatingHeartbeatRecorder = { calls: [] }
+
+  await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
+    const authorization = route.request().headers()['authorization']
+    if (options.reject?.(authorization) === true) {
+      recorder.calls.push({ authorization, rotated: undefined })
+      await route.fulfill({ status: 401, contentType: 'application/problem+json', body: '{}' })
+      return
+    }
+    const rotated = options.rotate({ index: recorder.calls.length, authorization })
+    recorder.calls.push({ authorization, rotated })
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        server_time: options.serverTime?.() ?? new Date().toISOString(),
+        client_errors_accepted: 0,
+        service_code_hash: null,
+        break_clocking_enabled: false,
+        clock_skew_tolerance_seconds: 900,
+        ...(rotated === undefined ? {} : { rotated_token: rotated }),
+      }),
+    })
+  })
+
+  return recorder
+}

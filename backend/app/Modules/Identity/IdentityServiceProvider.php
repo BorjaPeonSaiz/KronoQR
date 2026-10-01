@@ -37,6 +37,7 @@ use App\Modules\Identity\Application\UseCase\RotateDeviceTokenIfDue;
 use App\Modules\Identity\Application\UseCase\RotateSigningKey;
 use App\Modules\Identity\Application\UseCase\VerifyTwoFactorHandler;
 use App\Modules\Identity\Domain\Model\Credential;
+use App\Modules\Identity\Domain\Policy\DeviceTokenRotationPolicy;
 use App\Modules\Identity\Domain\Policy\TwoFactorRequirement;
 use App\Modules\Identity\Domain\ValueObject\DeviceStatus;
 use App\Modules\Identity\Http\Policy\CredentialPolicy;
@@ -107,6 +108,7 @@ use Laravel\Sanctum\PersonalAccessToken;
 use Laravel\Sanctum\Sanctum;
 use PragmaRX\Google2FA\Google2FA;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * Modulo Identity — usuarios, roles, permisos, credenciales QR y tokens de
@@ -557,9 +559,18 @@ final class IdentityServiceProvider extends ServiceProvider
             static fn (Application $app): RotateDeviceTokenIfDue => new RotateDeviceTokenIfDue(
                 devices: $app->make(DeviceRepository::class),
                 tokens: $app->make(DeviceTokenIssuer::class),
-                issue: $app->make(IssueDeviceToken::class),
+                events: $app->make(IdentityEventPublisher::class),
                 clock: $app->make(Clock::class),
-                rotationThreshold: Config::float('identity.devices.token_rotation_threshold', 0.8),
+                connection: DB::connection(),
+                policy: new DeviceTokenRotationPolicy(
+                    rotationThreshold: Config::float('identity.devices.token_rotation_threshold', 0.8),
+                    // ADR-044. Acotado aqui y no solo documentado: un solape de
+                    // cero dejaria sin fichar a la tablet cuya respuesta se
+                    // perdio, y uno de semanas mantendria vivo un token relevado
+                    // mucho despues de que nadie lo use. De 1 a 168 horas.
+                    overlapSeconds: 3600 * max(1, min(168, Config::integer('identity.devices.token_overlap_hours', 24))),
+                ),
+                lifetimeDays: Config::integer('identity.devices.token_days', 90),
             ),
         );
     }
@@ -832,7 +843,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 // de la caducidad del token esa tablet seguiria fichando tres
                 // meses (RS-04).
                 if ($owner instanceof Device) {
-                    return $owner->status === DeviceStatus::ACTIVE->value;
+                    return self::deviceTokenIsStillValid($owner, $accessToken);
                 }
 
                 // El tercer tokenable, que ya existe: la sesion del portal del
@@ -874,6 +885,35 @@ final class IdentityServiceProvider extends ServiceProvider
                 return false;
             }
         );
+    }
+
+    /**
+     * Si el token de un quiosco sigue valiendo (RF-ID-04, RS-04, ADR-044).
+     *
+     * 1. **El dispositivo esta activo.** Su revocacion tiene que valer YA y no
+     *    dentro de 90 dias: es la respuesta a una tablet robada, y si dependiera
+     *    de la caducidad del token esa tablet seguiria fichando tres meses. Sin
+     *    solape: revocar borra todos sus tokens a la vez.
+     * 2. **El primer uso de un relevo retira el token al que releva.** Solo en el
+     *    primer uso —`last_used_at` vacio—, asi que la peticion normal no escribe
+     *    nada aqui. Si fallara, el latido siguiente lo retira igual, de modo que
+     *    no se convierte en un rechazo (regla dura 19).
+     */
+    private static function deviceTokenIsStillValid(Device $owner, HasAbilities $accessToken): bool
+    {
+        if ($owner->status !== DeviceStatus::ACTIVE->value) {
+            return false;
+        }
+
+        if ($accessToken instanceof PersonalAccessToken && $accessToken->last_used_at === null) {
+            try {
+                SanctumDeviceTokenIssuer::retireSupersededBy($owner, $accessToken);
+            } catch (Throwable $failure) {
+                report($failure);
+            }
+        }
+
+        return true;
     }
 
     /**

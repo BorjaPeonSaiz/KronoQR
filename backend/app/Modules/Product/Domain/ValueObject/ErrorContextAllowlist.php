@@ -120,6 +120,8 @@ final readonly class ErrorContextAllowlist
         'durable',
         // Quiosco: el canal de la fila de cola descartada (`pin` o `qr`), sin dato alguno del fichaje (PIN-08).
         'kind',
+        // Quiosco: desenlace de la adopcion de un relevo de token (`adopted`, `stale`...), sin el token (F1-1).
+        'outcome',
         // Quiosco, cola offline y padron: cuantas cosas habia en juego.
         'entries',
         'items',

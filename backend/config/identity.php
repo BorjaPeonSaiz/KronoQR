@@ -471,12 +471,25 @@ return [
 
         /*
          * Fraccion de vida consumida a partir de la cual el token se rota
-         * automaticamente (§7.3: «al 80 % de vida»). Con 90 dias son 72.
+         * automaticamente en el latido (§7.3: «al 80 % de vida», ADR-044). Con
+         * 90 dias son 72.
          *
          * Que sea una fraccion y no un numero de dias es lo que hace que
          * cambiar `token_days` no obligue a recalcular esto a mano.
          */
         'token_rotation_threshold' => (float) env('IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD', 0.8),
+
+        /*
+         * Horas que el token relevado sigue valiendo tras una rotacion (ADR-044),
+         * salvo que el nuevo se use antes: su primer uso lo retira. Es el margen
+         * para que una respuesta de latido perdida no deje a la tablet con un
+         * token muerto: el latido siguiente le reentrega el relevo. Nunca pasa
+         * de la caducidad propia del token viejo. `IdentityServiceProvider` lo
+         * acota a 1-168.
+         *
+         * La desvinculacion NO tiene solape: revoca en el acto (RS-04).
+         */
+        'token_overlap_hours' => (int) env('IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS', 24),
     ],
 
 ];

@@ -400,7 +400,7 @@ describe('latido del quiosco', () => {
     })
   })
 
-  it('para el temporizador al detenerse', () => {
+  it('para el temporizador al detenerse', async () => {
     vi.useFakeTimers()
     const api = apiReturning(new Date().toISOString())
     const scheduler = createHeartbeatScheduler({
@@ -410,10 +410,12 @@ describe('latido del quiosco', () => {
       intervalMs: 1000,
     })
 
+    // Asincrono: los latidos van en serie (RF-ID-04, ADR-044), y uno que aun
+    // esta en vuelo absorbe al siguiente tic. Cada ciclo deja terminar el suyo.
     scheduler.start()
-    vi.advanceTimersByTime(3500)
+    await vi.advanceTimersByTimeAsync(3500)
     scheduler.stop()
-    vi.advanceTimersByTime(10_000)
+    await vi.advanceTimersByTimeAsync(10_000)
 
     expect(api.sendHeartbeat).toHaveBeenCalledTimes(4) // 1 al arrancar + 3 ciclos
     vi.useRealTimers()

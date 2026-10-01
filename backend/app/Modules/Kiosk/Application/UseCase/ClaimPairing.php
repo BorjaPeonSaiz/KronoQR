@@ -24,11 +24,12 @@ use Psr\Log\LoggerInterface;
 /**
  * Paso 3 de RF-PD-06: la tablet sondea y recoge su token.
  *
- * ## Es el unico sitio por el que sale el token de un quiosco
+ * ## Es el unico sitio por el que sale el PRIMER token de un quiosco
  *
  * Y sale **una sola vez**: el servidor guarda su hash y no puede volver a
  * enseñarlo. Si la tablet lo pierde, el camino es desvincular y volver a
- * emparejar.
+ * emparejar. Sus relevos salen despues por el latido (`rotated_token`,
+ * ADR-044), cada uno tambien una sola vez.
  *
  * ## Tiempo constante: la misma tecnica que `HmacSignatureVerifier`
  *

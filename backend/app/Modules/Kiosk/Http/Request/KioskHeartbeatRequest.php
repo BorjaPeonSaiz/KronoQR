@@ -196,6 +196,8 @@ final class KioskHeartbeatRequest extends FormRequest
                 batteryCharging: is_bool($charging) ? $charging : null,
             ),
             clientErrors: $this->clientErrors($device->uuid),
+            // RF-ID-04 (ADR-044): del guard, nunca del cuerpo.
+            presentedTokenId: $device->presentedTokenId,
         );
     }
 

@@ -6,6 +6,7 @@ namespace App\Modules\Kiosk\Application\UseCase;
 
 use App\Modules\Kiosk\Application\Command\RecordHeartbeatCommand;
 use App\Modules\Kiosk\Application\Port\DeviceFleet;
+use App\Modules\Kiosk\Application\Port\DeviceTokenRenewal;
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Kiosk\Domain\ValueObject\ServiceCodeFingerprint;
 use App\Modules\Shared\Application\Port\Clock;
@@ -77,6 +78,16 @@ use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
  * honra siempre (decision 1 de la ficha 3.5). El segundo sustituye a la
  * constante de 15 minutos que el quiosco llevaba escrita, para que la tablet y
  * el servidor no puedan discrepar sobre cuando un reloj esta desviado.
+ *
+ * ## Y el relevo del token (RF-ID-04, F1-1, ADR-044)
+ *
+ * El latido es tambien donde se rota el token del quiosco al 80 % de su vida:
+ * es el unico momento en que el servidor sabe que la tablet esta ahi para
+ * recibirlo. Va **al final** y por un puerto que no lanza
+ * ({@see DeviceTokenRenewal}): si la rotacion falla, el latido responde igual,
+ * sin relevo, y el siguiente lo reintenta. La rotacion si escribe en
+ * `audit_log` —cambia que token puede registrar fichajes—, pero eso ocurre en
+ * `Identity`, en su propia transaccion; el latido en si sigue sin asiento.
  */
 final readonly class RecordHeartbeat
 {
@@ -87,6 +98,7 @@ final readonly class RecordHeartbeat
         private ErrorEventSink $errors,
         private KioskServiceCodeProvider $serviceCodes,
         private OperationalSettingsProvider $settings,
+        private DeviceTokenRenewal $tokens,
     ) {}
 
     public function handle(RecordHeartbeatCommand $command): HeartbeatOutcome
@@ -128,6 +140,12 @@ final readonly class RecordHeartbeat
             // decision la tome quien tiene los tres datos.
             $settings->kioskUpdateWindow,
             $settings->kioskUpdateQuietMinutes,
+            // RF-ID-04 (ADR-044). DESPUES de registrar el latido, por lo mismo
+            // que los errores: lo que no puede perderse es la señal de vida. El
+            // puerto no lanza nunca; sin token persistido detras no se rota.
+            $command->presentedTokenId === null
+                ? null
+                : $this->tokens->renewIfDue($command->deviceUuid, $command->presentedTokenId),
         );
     }
 }

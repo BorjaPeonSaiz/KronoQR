@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Identity\Application\Command\IssueDeviceTokenCommand;
 use App\Modules\Identity\Application\Command\RevokeDeviceTokenCommand;
+use App\Modules\Identity\Application\Command\RotateDeviceTokenCommand;
 use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
 use App\Modules\Identity\Application\UseCase\RevokeDeviceToken;
 use App\Modules\Identity\Application\UseCase\RotateDeviceTokenIfDue;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\PersonalAccessToken;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Http\Api;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -164,33 +167,217 @@ it('revocar el dispositivo borra su token y lo deja fuera en el acto', function 
         ->and(DB::table('devices')->where('id', $device['id'])->value('status'))->toBe('revoked');
 })->group('RS-04', 'RF-ID-04');
 
-it('no rota el token antes del 80 % de su vida', function (): void {
-    $device = kioskDevice();
+/**
+ * La clave del token en `personal_access_tokens`: la mitad de `<id>|<secreto>`
+ * que no es secreta.
+ */
+function kioskTokenId(string $plainTextToken): int
+{
+    return (int) explode('|', $plainTextToken, 2)[0];
+}
 
-    app(IssueDeviceToken::class)->handle(new IssueDeviceTokenCommand($device['uuid']));
-
-    expect(app(RotateDeviceTokenIfDue::class)->handle($device['uuid']))->toBeNull();
-})->group('RF-ID-04');
-
-it('rota el token pasado el 80 % de su vida', function (): void {
-    // §7.3. Se envejece la fila en lugar de mover el reloj de la aplicacion: lo
-    // que decide es la fecha de emision del token, y asi la prueba comprueba
-    // exactamente lo que ocurrira dentro de 72 dias.
-    $device = kioskDevice();
-
-    $primero = issuedKioskToken($device['uuid']);
-
-    DB::table('personal_access_tokens')->where('tokenable_id', $device['id'])->update([
-        'created_at' => now()->subDays(80),
-        'expires_at' => now()->addDays(10),
+/**
+ * Envejece el token vigente del dispositivo hasta dejarlo pasado el 80 % de su
+ * vida (dia 80 de 90) respecto al reloj detenido.
+ *
+ * Se envejece la fila en lugar de mover el reloj: lo que decide es la fecha de
+ * emision del token, y asi la prueba comprueba exactamente lo que ocurrira
+ * dentro de 72 dias.
+ */
+function envejeceTokenDeQuiosco(int $deviceId, int $restanDias = 10): void
+{
+    DB::table('personal_access_tokens')->where('tokenable_id', $deviceId)->update([
+        'created_at' => now()->subDays(90 - $restanDias),
+        'expires_at' => now()->addDays($restanDias),
     ]);
+}
 
-    $rotado = app(RotateDeviceTokenIfDue::class)->handle($device['uuid']);
+function rotaTokenDeQuiosco(string $deviceUuid, string $presentado): ?IssuedAccessToken
+{
+    return app(RotateDeviceTokenIfDue::class)->handle(
+        new RotateDeviceTokenCommand($deviceUuid, kioskTokenId($presentado)),
+    );
+}
 
-    expect($rotado)->not->toBeNull()
-        ->and($rotado?->plainTextToken)->not->toBe($primero->plainTextToken)
+/**
+ * @return array{old: IssuedAccessToken, new: IssuedAccessToken, device: array{uuid: string, id: int}}
+ */
+function quioscoRecienRotado(): array
+{
+    $device = kioskDevice();
+    $old = issuedKioskToken($device['uuid']);
+    envejeceTokenDeQuiosco($device['id']);
+
+    $new = rotaTokenDeQuiosco($device['uuid'], $old->plainTextToken);
+
+    if (! $new instanceof IssuedAccessToken) {
+        throw new RuntimeException('La rotacion no ha emitido relevo.');
+    }
+
+    return ['old' => $old, 'new' => $new, 'device' => $device];
+}
+
+function caducidadDelToken(string $plainTextToken): ?string
+{
+    $value = DB::table('personal_access_tokens')->where('id', kioskTokenId($plainTextToken))->value('expires_at');
+
+    return is_string($value) ? $value : null;
+}
+
+it('no rota el token antes del 80 % de su vida', function (): void {
+    FrozenTime::at('2026-06-01 08:00:00');
+    $device = kioskDevice();
+
+    $token = issuedKioskToken($device['uuid']);
+
+    expect(rotaTokenDeQuiosco($device['uuid'], $token->plainTextToken))->toBeNull()
         ->and(DB::table('personal_access_tokens')->where('tokenable_id', $device['id'])->count())->toBe(1);
 })->group('RF-ID-04');
+
+it('rota pasado el 80 % y deja el token anterior en solape de 24 horas', function (): void {
+    // ADR-044. Antes, rotar borraba el anterior en la misma transaccion: si la
+    // respuesta del latido se perdia, la tablet se quedaba con un token muerto.
+    FrozenTime::at('2026-06-01 08:00:00');
+
+    $rotado = quioscoRecienRotado();
+
+    expect($rotado['new']->plainTextToken)->not->toBe($rotado['old']->plainTextToken)
+        ->and(DB::table('personal_access_tokens')->where('tokenable_id', $rotado['device']['id'])->count())->toBe(2)
+        ->and(PersonalAccessToken::findToken($rotado['old']->plainTextToken))->not->toBeNull()
+        ->and(caducidadDelToken($rotado['old']->plainTextToken))->toStartWith('2026-06-02 08:00:00')
+        ->and($rotado['new']->expiresAt->format('Y-m-d H:i:s'))->toBe('2026-08-30 08:00:00')
+        ->and(PersonalAccessToken::findToken($rotado['new']->plainTextToken)?->abilities)->toEqualCanonicalizing([
+            TokenAbility::SCAN_WRITE->value,
+            TokenAbility::ROSTER_READ->value,
+            TokenAbility::HEARTBEAT_WRITE->value,
+        ]);
+})->group('RF-ID-04', 'RS-04');
+
+it('el solape nunca pasa de la caducidad propia del token relevado', function (): void {
+    FrozenTime::at('2026-06-01 08:00:00');
+    $device = kioskDevice();
+    $old = issuedKioskToken($device['uuid']);
+
+    // Le quedan dos horas: el solape de 24 h no puede alargarle la vida.
+    DB::table('personal_access_tokens')->where('tokenable_id', $device['id'])->update([
+        'created_at' => now()->subDays(90)->addHours(2),
+        'expires_at' => now()->addHours(2),
+    ]);
+
+    expect(rotaTokenDeQuiosco($device['uuid'], $old->plainTextToken))->not->toBeNull()
+        ->and(caducidadDelToken($old->plainTextToken))->toStartWith('2026-06-01 10:00:00');
+})->group('RF-ID-04');
+
+it('un token en solape no rota otra vez: reentrega otro relevo sin alargar su solape', function (): void {
+    // La respuesta que llevaba el primer relevo se perdio y la tablet vuelve con
+    // el viejo. Se retira el relevo que no llego —nunca se uso— y se emite otro;
+    // el solape del viejo conserva su fecha. Nunca hay mas de dos tokens.
+    FrozenTime::at('2026-06-01 08:00:00');
+    $rotado = quioscoRecienRotado();
+
+    FrozenTime::at('2026-06-01 20:00:00');
+    $reentregado = rotaTokenDeQuiosco($rotado['device']['uuid'], $rotado['old']->plainTextToken);
+
+    expect($reentregado)->not->toBeNull()
+        ->and($reentregado?->plainTextToken)->not->toBe($rotado['new']->plainTextToken)
+        ->and(PersonalAccessToken::findToken($rotado['new']->plainTextToken))->toBeNull()
+        ->and(caducidadDelToken($rotado['old']->plainTextToken))->toStartWith('2026-06-02 08:00:00')
+        ->and(DB::table('personal_access_tokens')->where('tokenable_id', $rotado['device']['id'])->count())->toBe(2);
+})->group('RF-ID-04', 'RS-04');
+
+it('el relevo recien emitido no vuelve a rotar hasta su propio 80 %', function (): void {
+    FrozenTime::at('2026-06-01 08:00:00');
+    $rotado = quioscoRecienRotado();
+
+    expect(rotaTokenDeQuiosco($rotado['device']['uuid'], $rotado['new']->plainTextToken))->toBeNull()
+        // Y ya que firma el nuevo, el viejo sobra: la red de seguridad del
+        // primer uso lo retira.
+        ->and(PersonalAccessToken::findToken($rotado['old']->plainTextToken))->toBeNull()
+        ->and(PersonalAccessToken::findToken($rotado['new']->plainTextToken))->not->toBeNull();
+})->group('RF-ID-04');
+
+it('el primer uso del relevo retira en el acto el token al que releva', function (): void {
+    FrozenTime::at('2026-06-01 08:00:00');
+    $rotado = quioscoRecienRotado();
+
+    Api::as($rotado['old']->plainTextToken)->get('/api/v1/kiosk/roster')->assertOk();
+    Api::as($rotado['new']->plainTextToken)->get('/api/v1/kiosk/roster')->assertOk();
+
+    expect(PersonalAccessToken::findToken($rotado['old']->plainTextToken))->toBeNull();
+
+    Api::as($rotado['old']->plainTextToken)->get('/api/v1/kiosk/roster')->assertUnauthorized();
+    Api::as($rotado['new']->plainTextToken)->get('/api/v1/kiosk/roster')->assertOk();
+})->group('RF-ID-04', 'RS-04');
+
+it('el token relevado deja de valer al vencer el solape aunque el nuevo no se haya usado', function (): void {
+    FrozenTime::at('2026-06-01 08:00:00');
+    $rotado = quioscoRecienRotado();
+
+    FrozenTime::at('2026-06-02 07:59:00');
+    Api::as($rotado['old']->plainTextToken)->get('/api/v1/kiosk/roster')->assertOk();
+
+    FrozenTime::at('2026-06-02 08:00:01');
+    Api::as($rotado['old']->plainTextToken)->get('/api/v1/kiosk/roster')->assertUnauthorized();
+    Api::as($rotado['new']->plainTextToken)->get('/api/v1/kiosk/roster')->assertOk();
+})->group('RF-ID-04', 'RS-04');
+
+it('revocar un quiosco en pleno solape deja fuera los dos tokens en el acto', function (): void {
+    // RS-04: la revocacion no tiene solape. Es la respuesta a una tablet robada.
+    FrozenTime::at('2026-06-01 08:00:00');
+    $rotado = quioscoRecienRotado();
+
+    app(RevokeDeviceToken::class)->handle(new RevokeDeviceTokenCommand($rotado['device']['uuid'], 'Tablet robada'));
+
+    expect(DB::table('personal_access_tokens')->where('tokenable_id', $rotado['device']['id'])->count())->toBe(0);
+
+    Api::as($rotado['old']->plainTextToken)->get('/api/v1/kiosk/roster')->assertUnauthorized();
+    Api::as($rotado['new']->plainTextToken)->get('/api/v1/kiosk/roster')->assertUnauthorized();
+})->group('RS-04', 'RF-ID-04');
+
+it('volver a emparejar retira tambien el token que estaba en solape', function (): void {
+    FrozenTime::at('2026-06-01 08:00:00');
+    $rotado = quioscoRecienRotado();
+
+    $emparejado = issuedKioskToken($rotado['device']['uuid']);
+
+    expect(DB::table('personal_access_tokens')->where('tokenable_id', $rotado['device']['id'])->count())->toBe(1)
+        ->and(PersonalAccessToken::findToken($emparejado->plainTextToken))->not->toBeNull();
+})->group('RF-ID-04', 'RS-04');
+
+it('deja constancia de la rotacion y de la reentrega sin el valor del token', function (): void {
+    // Regla dura 6 y RS-04: cambia que token puede registrar fichajes. Solo el
+    // dispositivo y fechas; ni el token ni su hash.
+    FrozenTime::at('2026-06-01 08:00:00');
+    $rotado = quioscoRecienRotado();
+    rotaTokenDeQuiosco($rotado['device']['uuid'], $rotado['old']->plainTextToken);
+
+    /** @var list<array<string, mixed>> $asientos */
+    $asientos = DB::table('audit_log')
+        ->where('subject_type', 'device')
+        ->where('action', 'device.paired')
+        ->orderBy('id')
+        ->pluck('payload')
+        ->map(static fn (mixed $payload): array => (array) json_decode(is_string($payload) ? $payload : '{}', true))
+        ->values()
+        ->all();
+
+    $hash = DB::table('devices')->where('id', $rotado['device']['id'])->value('token_hash');
+    $hash = is_string($hash) ? $hash : 'sin-hash';
+
+    expect($asientos)->toHaveCount(3)
+        ->and($asientos[1]['rotation'] ?? null)->toBeTrue()
+        ->and($asientos[1]['redelivery'] ?? null)->toBeFalse()
+        ->and($asientos[1]['superseded_until'] ?? null)->toBe('2026-06-02T08:00:00+00:00')
+        ->and($asientos[1]['device_uuid'] ?? null)->toBe($rotado['device']['uuid'])
+        ->and($asientos[2]['redelivery'] ?? null)->toBeTrue()
+        ->and($asientos[2]['superseded_until'] ?? null)->toBe('2026-06-02T08:00:00+00:00');
+
+    $texto = json_encode($asientos, JSON_THROW_ON_ERROR);
+
+    expect($texto)->not->toContain(explode('|', $rotado['new']->plainTextToken)[1])
+        ->and($texto)->not->toContain(explode('|', $rotado['old']->plainTextToken)[1])
+        ->and($texto)->not->toContain($hash);
+})->group('RF-ID-04', 'RS-07', 'RS-04');
 
 it('deja constancia en audit_log de la emision y de la revocacion', function (): void {
     // Regla dura 6: cambia quien puede escribir en el registro horario.

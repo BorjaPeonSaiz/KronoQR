@@ -41,7 +41,7 @@ docker compose exec app php artisan <comando>
 | La tablet **fijada en modo quiosco** | Impide salir de la aplicación: sin escritorio, sin ajustes, sin navegador | **Tú** (§2) |
 | La PWA del quiosco | `https://fichaje.tuhotel.local/kiosk/` — pantalla completa, cámara y *wake lock* | El producto |
 | La fila `devices` | **El puesto de fichaje**, con su nombre («Recepción»). No es «la tablet»: si cambias de aparato, el puesto sigue siendo el mismo | El producto, al confirmar el código |
-| El token de dispositivo | Lo que permite a esa tablet enviar fichajes. Tres permisos mínimos (`scan:write`, `roster:read`, `heartbeat:write`), 90 días. **En esta versión no se renueva solo**: antes del día 90 hay que volver a vincular la tablet ([`../cliente/operacion.md`](../cliente/operacion.md) §18) | El producto; volver a vincular antes del día 90, **tú** |
+| El token de dispositivo | Lo que permite a esa tablet enviar fichajes. Tres permisos mínimos (`scan:write`, `roster:read`, `heartbeat:write`), 90 días. **Se renueva solo en el latido** hacia el día 72, con 24 h de solape, mientras la tablet esté encendida y con red; una tablet que pase más de unos 18 días sin latido lo deja caducar y hay que volver a vincularla ([`../cliente/operacion.md`](../cliente/operacion.md) §18) | El producto; no dejar una tablet apagada o sin red más de dos semanas, **tú** |
 | El código de emparejamiento | 6 dígitos, **10 minutos de vida**, **un solo uso** | El producto |
 | La cola local del quiosco | Guarda los fichajes cuando no hay red y los envía al recuperarla (regla dura 19) | El producto |
 | El latido | Cada 60 s. Es lo que actualiza «último contacto» en el panel | El producto |
@@ -264,9 +264,10 @@ vinculó un quiosco, usa el panel.
 
 - Existe una fila en `devices` con ese nombre, activa.
 - La tablet ha recibido **su** token, con los tres permisos mínimos y 90 días de
-  vida. **Apunta en el calendario el día 80**: la renovación automática del
-  token está prevista, pero en esta versión no se ejecuta, y el día 90 la tablet
-  volvería a esta pantalla sin dejar fichar. Qué hacer ese día, en
+  vida. **No hay que apuntar nada en el calendario**: mientras lata, el servidor
+  le entrega uno nuevo hacia el día 72 y la tablet lo adopta sola. Lo único que
+  la hace volver a esta pantalla es pasar **más de unos 18 días seguidos sin
+  latido** (apagada o sin red); qué hacer entonces, en
   [`../cliente/operacion.md`](../cliente/operacion.md) §18.
 - El código ha quedado **consumido**: no vale una segunda vez, ni siquiera dentro
   de sus 10 minutos.
@@ -436,13 +437,15 @@ Significa que **su token ya no vale**, por una de dos razones. No es un fallo de
 red — un corte de red **no** desvincula: la tablet sigue fichando contra su cola
 local (regla dura 19).
 
-- **Cumplió 90 días desde que se vinculó.** Es la causa más probable si nadie ha
-  tocado el panel, y sobre todo si caen **varias tablets el mismo día**: la
-  renovación automática no se ejecuta en esta versión. En **Quioscos**, la
-  columna «Vinculado» lo confirma. El quiosco sigue **activo** en el panel, así
-  que primero hay que **desvincularlo** y después vincularlo con el mismo nombre
-  (§5.2 y §5.3); si no, el panel dirá «ese nombre ya está en uso». Cómo evitar
-  que vuelva a pasar: [`../cliente/operacion.md`](../cliente/operacion.md) §18.
+- **Su token caducó sin llegar a renovarse.** El token se renueva solo en el
+  latido hacia el día 72 de sus 90; si la tablet pasó **más de unos 18 días
+  seguidos sin latido** —apagada, guardada o sin red—, no lo recogió y caducó. Es
+  la causa más probable si nadie ha tocado el panel y la tablet vuelve de un
+  periodo apagada o desconectada: en **Quioscos**, su «Último contacto» será de
+  hace semanas. El quiosco sigue **activo** en el panel, así que primero hay que
+  **desvincularlo** y después vincularlo con el mismo nombre (§5.2 y §5.3); si
+  no, el panel dirá «ese nombre ya está en uso». Cómo evitar que vuelva a pasar:
+  [`../cliente/operacion.md`](../cliente/operacion.md) §18.
 - **Alguien la desvinculó** desde el panel, o se revocó su token.
 
 - **Los fichajes encolados no se pierden** por volver a la pantalla de
@@ -451,8 +454,9 @@ local (regla dura 19).
   a 0.
 - Lo que **sí** se borra al desvincular es el padrón guardado en la tablet, y es
   lo correcto.
-- Si nadie de tu equipo la desvinculó **y no han pasado 90 días** desde que se
-  vinculó, trátalo como incidente: mira
+- Si nadie de tu equipo la desvinculó **y la tablet latía con normalidad** hasta
+  ese momento («Último contacto» de hace minutos u horas, no de semanas), trátalo
+  como incidente: mira
   [`rotacion-secretos.md`](rotacion-secretos.md) §4 y revisa quién tiene cuenta
   de administrador.
 
@@ -694,7 +698,7 @@ nadie (regla dura 6):
 | Asiento | Cuándo | Qué lleva |
 | --- | --- | --- |
 | `device.provisioned` | Al confirmar el código | **Quién lo autorizó** —la cuenta que confirmó, o `system` si fue por consola—, el nombre del quiosco, y si fue una **reactivación** y en qué estado estaba antes |
-| `device.paired` | Al recoger la tablet su token, segundos después | El dispositivo y el momento. Actor `system`: la tablet no es una persona |
+| `device.paired` | Al recoger la tablet su token, segundos después, y **otra vez en cada renovación automática** (hacia el día 72 de la vida del token) | El dispositivo y el momento. Actor `system`: la tablet no es una persona. En una renovación lleva además `rotation: true`, hasta cuándo vale el token anterior (`superseded_until`) y si fue una reentrega tras una respuesta perdida (`redelivery`) |
 | `device.revoked` | Al desvincular | Quién desvinculó y el motivo (`unpaired`) |
 
 Consultarlos, con el rol de solo lectura de la aplicación:

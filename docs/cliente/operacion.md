@@ -1381,7 +1381,7 @@ según la razón. Un quiosco que va bien no pide nada. El resumen:
 | **Aviso, fichajes pendientes** — la tablet **tiene red y sigue con fichajes sin enviar** | [`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md). **No desvincules esa tablet**: perderías la cola |
 | **Aviso, batería baja** | Ve al punto de montaje: cargador desenchufado, regleta apagada o cable partido |
 | **Aviso, latido tardío** | Nada todavía. Si no vuelve a «al día» en diez minutos pasará a fallo y sonará la alerta |
-| **La tablet volvió sola a la pantalla de emparejamiento** | Alguien la desvinculó, o su token cumplió los 90 días (§18): [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6 |
+| **La tablet volvió sola a la pantalla de emparejamiento** | Alguien la desvinculó, o pasó más de unos 18 días sin latido y su token caducó sin llegar a renovarse (§18): [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6 |
 
 **Si la cola no baja aunque la red de ese punto vaya bien**, y el «más antiguo»
 de la columna «Pendientes» se queda clavado en la misma hora día tras día,
@@ -1781,43 +1781,72 @@ cualquiera de ellos:**
 Dice qué está en rojo y qué hacer con cada cosa (§12.1). Lo que sigue es para
 cuando ya sabes cuál de estos casos es el tuyo.
 
-### …todas las tablets vuelven a la pantalla de emparejamiento a los 90 días
+### …una tablet vuelve a la pantalla de emparejamiento tras muchos días apagada o sin red
 
 **Qué pasa.** Cada tablet recibe al vincularla un token que vive **90 días**
-(`IDENTITY_DEVICE_TOKEN_DAYS`). La renovación automática antes de que caduque
-está prevista, pero **en esta versión no se ejecuta**: el día 90 desde que se
-vinculó, la tablet deja de ser aceptada, vuelve sola a la pantalla de
-emparejamiento y **en ella no se puede fichar hasta volver a vincularla**. Si
-vinculaste todas el mismo día, caen todas el mismo día.
+(`IDENTITY_DEVICE_TOKEN_DAYS`). **No tienes que renovarlo tú**: mientras la
+tablet esté encendida y con red, el servidor le entrega uno nuevo en su latido
+cuando ese token ha consumido el 80 % de su vida
+(`IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD`) —con los valores de serie, hacia
+el **día 72**—, y la tablet lo adopta sin que nadie haga nada y sin
+interrumpir el fichaje. El token anterior sigue valiendo **24 horas más**
+(`IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS`) o hasta que la tablet use el nuevo, lo
+que ocurra antes: si un corte de wifi se come justo esa respuesta, el latido
+siguiente le entrega otro. Cada renovación queda en la auditoría como
+`device.paired`.
+
+**El límite, que es lo único que tienes que vigilar.** La renovación solo
+puede ocurrir en un latido. Entre el día 72 y el día 90 la tablet tiene **18
+días** para dar al menos uno. Una tablet que pasa **más de unos 18 días
+seguidos sin latido** —apagada en un almacén, guardada fuera de temporada, o
+encendida pero sin red todo ese tiempo— puede llegar al día 90 sin haber
+recogido el relevo. Entonces su token caduca: al volver, la tablet deja de ser
+aceptada, va sola a la pantalla de emparejamiento y **en ella no se puede
+fichar hasta volver a vincularla**. No es un fallo ni se arregla solo.
+
+La renovación la hace **la app de la tablet desde la 2.2.0**. Tras actualizar
+el servidor, cada tablet carga la app nueva en su ventana de actualización
+(§11.1), normalmente esa misma noche. Comprueba en **Quioscos** que la columna
+**«Versión de la aplicación»** de todas se ha puesto al día: una tablet que
+siguiera con una app anterior no recogería el relevo y volvería a la pantalla de
+emparejamiento al día siguiente de cumplir su día 72.
 
 **Lo que no se pierde:** los fichajes que la tablet tuviera en su cola local. Se
 conservan y se envían en cuanto vuelve a estar vinculada.
 
-**Prevención, que es lo que recomendamos.** En el panel, **Quioscos**, la
-columna **«Vinculado»** dice cuándo se vinculó cada una: suma 80 días y
-apúntalo en el calendario. Ese día, con la tablet delante y fuera del cambio de
-turno:
+**Prevención.** En el panel, **Quioscos**, la columna **«Último contacto»** dice
+cuándo latió cada tablet por última vez (§16.1). Una tablet en **fallo, sin
+señal** no es urgente por el token durante los primeros días, pero no la dejes
+así más de **dos semanas**: enciéndela y conéctala para que dé un latido. Si
+vas a guardar una tablet más tiempo (cierre de temporada, puesto que no se usa),
+lo limpio es **desvincularla** al guardarla y vincularla de nuevo al sacarla,
+con el mismo nombre.
 
-1. Comprueba en esa misma pantalla que su columna **«Fichajes sin
-   sincronizar»** está a `0`.
-2. **Desvincúlala** (Quioscos › el quiosco › **Desvincular**). En un par de
+**Si ya ha pasado.** El panel sigue mostrando ese quiosco como **activo** (su
+veredicto será *Sin señal*): el servidor no sabe que la tablet se ha quedado
+fuera hasta que alguien lo resuelve. Por eso **no te dejará vincularla con el
+mismo nombre** —dirá que ese nombre ya está en uso— **hasta que la desvincules
+primero**. Con la tablet delante y fuera del cambio de turno:
+
+1. **Desvincúlala** (Quioscos › el quiosco › **Desvincular**). En un par de
    minutos la tablet muestra un código nuevo.
-3. **Vincúlala con el mismo nombre exacto.** Se reactiva el mismo quiosco, con
-   su historia, y recibe un token nuevo de 90 días.
-
-Son dos minutos por tablet y quedan en la auditoría. Si puedes, reparte las
-tablets en días distintos para que no coincidan nunca todas. El detalle, con
-capturas, está en
-[`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §5.2 y
-§5.3.
-
-**Si ya ha pasado**, el procedimiento es el mismo empezando por el paso 2 (el
-panel no te dejará vincular con ese nombre mientras el quiosco siga activo:
-desvincula primero). Después, comprueba que su cola baja a `0`:
+2. **Vincúlala con el mismo nombre exacto.** Se reactiva el mismo quiosco, con
+   su historia, y recibe un token nuevo de 90 días que a partir de ahí vuelve a
+   renovarse solo.
+3. Comprueba que su cola baja a `0`:
 
 ```bash
 docker compose exec app php artisan kiosk:health
 ```
+
+Son dos minutos y quedan en la auditoría. El detalle, con capturas, está en
+[`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §5.2 y
+§5.3.
+
+**Si una tablet que sí latía a diario vuelve a la pantalla de emparejamiento**,
+no es el token caducado: alguien la desvinculó. Trátalo como dice
+[`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6,
+«…la tablet vuelve sola a la pantalla de emparejamiento».
 
 ### …Redis se reinicia una y otra vez, casi siempre tras un corte de luz
 

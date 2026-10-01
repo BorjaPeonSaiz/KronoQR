@@ -9,6 +9,7 @@ use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
 use App\Modules\Identity\Application\UseCase\RevokeDeviceToken;
 use App\Modules\Kiosk\Application\Port\DeviceFleet;
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
+use App\Modules\Kiosk\Application\Port\DeviceTokenRenewal;
 use App\Modules\Kiosk\Application\Port\KioskEventPublisher;
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Kiosk\Application\Port\PairingRequests;
@@ -23,6 +24,7 @@ use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Kiosk\Http\Policy\KioskPairingPolicy;
 use App\Modules\Kiosk\Http\Policy\KioskPolicy;
+use App\Modules\Kiosk\Infrastructure\Adapter\IdentityDeviceTokenRenewal;
 use App\Modules\Kiosk\Infrastructure\Adapter\LaravelKioskEventPublisher;
 use App\Modules\Kiosk\Infrastructure\Adapter\RandomPairingSecrets;
 use App\Modules\Kiosk\Infrastructure\Console\KioskHealthCommand;
@@ -87,6 +89,9 @@ final class KioskServiceProvider extends ServiceProvider
         $this->app->bind(PairingRequests::class, DbPairingRequests::class);
         $this->app->bind(PairingSecrets::class, RandomPairingSecrets::class);
         $this->app->bind(KioskEventPublisher::class, LaravelKioskEventPublisher::class);
+        // RF-ID-04, ADR-044: la rotacion del token en el latido, por un puerto
+        // que no lanza. El adaptador llama al caso de uso publico de `Identity`.
+        $this->app->bind(DeviceTokenRenewal::class, IdentityDeviceTokenRenewal::class);
 
         // Singleton: no tiene estado y se resuelve en cada latido. En las pruebas
         // se sustituye por un doble que cuenta.

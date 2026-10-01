@@ -30,11 +30,11 @@ import {
   clearDeviceToken,
   readBreakClockingEnabled,
   readClockSkewToleranceSeconds,
-  readDeviceToken,
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
+import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
@@ -71,7 +71,8 @@ const api = createApiClient({
   // Sin esto el quiosco nunca manda `Authorization`: padron, latido y fichajes
   // reciben 401 aunque la tablet este emparejada. Se lee en cada peticion
   // porque el token rota (doc 02 §7.3).
-  deviceToken: readDeviceToken,
+  // Token vigente, respaldo y avisos del relevo (RF-ID-04, ADR-044).
+  ...deviceTokenApiOptions,
 })
 
 // La cola de IndexedDB (tarea 1.9). El escaneo se encola ANTES de confirmar y

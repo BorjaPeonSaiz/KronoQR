@@ -163,6 +163,13 @@ final class MetricCatalogue
                 ['result', 'reason'],
             ),
             new MetricDefinition(
+                'kiosk_token_rotations_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'Relevos del token de quiosco emitidos en el latido (issued) y rotaciones que fallaron y se reintentaran (failed).',
+                ['result'],
+            ),
+            new MetricDefinition(
                 'sync_delay_seconds',
                 MetricType::Histogram,
                 MetricStorage::Histogram,

@@ -12,7 +12,13 @@
 
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { stubHeartbeatWithErrorCapture, stubKioskApi, stubScanApi } from './support/kiosk'
+import {
+  stubHeartbeatWithErrorCapture,
+  stubHeartbeatWithTokenRotation,
+  stubKioskApi,
+  stubScanApi,
+} from './support/kiosk'
+import { announceOnline, queueStoreReady, seedQueue, stubBatchApi } from './support/offlineQueue'
 
 /**
  * `DEFAULT_HEARTBEAT_INTERVAL_MS` de `src/shared/telemetry/heartbeat.ts`. Se
@@ -222,5 +228,176 @@ test(
     expect(latency).toBeLessThan(300)
 
     await expect.poll(() => stub.recorded.length).toBeGreaterThan(0)
+  },
+)
+
+const TOKEN_STORAGE_KEY = 'kronoqr.kiosk.device_token'
+const TOKEN_EXPIRES_STORAGE_KEY = 'kronoqr.kiosk.device_token_expires_at'
+/** El que escribe `pairDevice` de `support/kiosk.ts`. */
+const PAIRED_TOKEN = 'device-token-e2e'
+
+async function storedToken(page: Page, key: string): Promise<string | null> {
+  return page.evaluate((storageKey: string) => window.localStorage.getItem(storageKey), key)
+}
+
+test(
+  'un latido con rotated_token: el quiosco sigue fichando y la cola sincroniza con el token nuevo',
+  { tag: ['@RF-ID-04', '@RF-KI-03', '@RQ-05'] },
+  async ({ page }) => {
+    const ROTATED = { value: '93|token-rotado-e2e', expires_at: '2027-01-01T06:00:00.000Z' }
+    await stubKioskApi(page)
+    const clock = await installLockstepClock(page, new Date('2026-10-01T05:58:00.000Z'))
+    // El PRIMER latido entrega el relevo; los siguientes, ninguno (clave ausente).
+    const heartbeat = await stubHeartbeatWithTokenRotation(page, {
+      serverTime: () => clock.nowIso(),
+      rotate: ({ index }) => (index === 0 ? ROTATED : undefined),
+    })
+    // Sin red para el envio individual: todo se encola y viaja por lote.
+    await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
+    const batch = await stubBatchApi(page)
+
+    await page.goto('/')
+
+    // Regla dura 19: con el relevo en curso el quiosco confirma igual. La
+    // latencia de 300 ms ya la fijan `scan.spec.ts` y la prueba de arriba.
+    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+
+    // El token y SU caducidad se guardaron juntos.
+    await expect.poll(() => storedToken(page, TOKEN_STORAGE_KEY)).toBe(ROTATED.value)
+    expect(await storedToken(page, TOKEN_EXPIRES_STORAGE_KEY)).toBe(ROTATED.expires_at)
+    expect(heartbeat.calls[0]?.authorization).toBe(`Bearer ${PAIRED_TOKEN}`)
+
+    // El siguiente latido ya va firmado con el token nuevo.
+    await clock.advance()
+    await expect
+      .poll(() => heartbeat.calls.some((call) => call.authorization === `Bearer ${ROTATED.value}`))
+      .toBe(true)
+
+    // Y la cola sincroniza con el token nuevo: la peticion posterior lleva el Bearer nuevo.
+    await expect.poll(() => queueStoreReady(page)).toBe(true)
+    const scanId = '0199f13a-7c22-7b41-9e88-0c4d5e6f7a81'
+    await seedQueue(page, [
+      {
+        scan_id: scanId,
+        occurred_at: '2026-10-01T05:58:31.000Z',
+        qr_payload: 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa',
+      },
+    ])
+    await announceOnline(page)
+    await expect
+      .poll(() =>
+        batch.calls.some(
+          (call) =>
+            call.authorization === `Bearer ${ROTATED.value}` &&
+            call.scans.some((item) => item.scan_id === scanId),
+        ),
+      )
+      .toBe(true)
+  },
+)
+
+test(
+  'dos relevos cruzados: el quiosco conserva el vigente, sigue sincronizando y nunca se desvincula',
+  { tag: ['@RF-ID-04', '@RF-KI-03', '@RQ-05'] },
+  async ({ page }) => {
+    // El servidor retiro T2 al emitir T3 (dos latidos simultaneos con T1), pero
+    // la respuesta con T2 llega primero. T1 sigue en solape; T3 es el vigente.
+    const T1 = `Bearer ${PAIRED_TOKEN}`
+    const T2 = { value: '92|relevo-retirado-e2e', expires_at: '2027-01-01T06:00:00.000Z' }
+    const T3 = { value: '93|relevo-vigente-e2e', expires_at: '2027-01-02T06:00:00.000Z' }
+    const alive = new Set([T1, `Bearer ${T3.value}`])
+    await stubKioskApi(page)
+    const clock = await installLockstepClock(page, new Date('2026-10-01T05:58:00.000Z'))
+    let staleSent = false
+    const heartbeat = await stubHeartbeatWithTokenRotation(page, {
+      serverTime: () => clock.nowIso(),
+      reject: (authorization) => !alive.has(authorization ?? ''),
+      rotate: ({ index, authorization }) => {
+        if (index === 0) return T2
+        // Reentrega: T1 sigue firmando (por respaldo) y recibe el vigente.
+        if (authorization === T1) return T3
+        // Respuesta cruzada que llega tarde: otra vez el T2 ya retirado.
+        if (authorization === `Bearer ${T3.value}` && !staleSent) {
+          staleSent = true
+          return T2
+        }
+        return undefined
+      },
+    })
+    const synced: Array<{ authorization: string | undefined; scanIds: string[] }> = []
+    await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
+    await page.route('**/api/v1/scan/batch', async (route) => {
+      const authorization = route.request().headers()['authorization']
+      if (!alive.has(authorization ?? '')) {
+        await route.fulfill({ status: 401, contentType: 'application/problem+json', body: '{}' })
+        return
+      }
+      const body = route.request().postDataJSON() as {
+        scans: Array<{ scan_id: string; occurred_at: string }>
+      }
+      synced.push({ authorization, scanIds: body.scans.map((item) => item.scan_id) })
+      await route.fulfill({
+        status: 207,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          results: body.scans.map((item) => ({
+            scan_id: item.scan_id,
+            status: 200,
+            outcome: {
+              scan_id: item.scan_id,
+              action: 'clock_in',
+              employee_display_name: 'Lucia G.',
+              work_date: item.occurred_at.slice(0, 10),
+              occurred_at: item.occurred_at,
+              recorded_at: new Date().toISOString(),
+              worked_minutes: 0,
+            },
+          })),
+        }),
+      })
+    })
+
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+
+    // 1. Adopta el T2 (que ya esta muerto sin que la tablet pueda saberlo).
+    await expect.poll(() => storedToken(page, TOKEN_STORAGE_KEY)).toBe(T2.value)
+
+    // 2. Firmado con T2 -> 401 -> reintento con el respaldo (T1) -> el servidor
+    //    lo acepta y le entrega el vigente (T3): la tablet vuelve a T1 y adopta T3.
+    await clock.advance()
+    await expect.poll(() => storedToken(page, TOKEN_STORAGE_KEY)).toBe(T3.value)
+
+    // 3. Llega tarde, cruzada, la respuesta con T2: id menor, se ignora.
+    await clock.advance()
+    await expect.poll(() => staleSent).toBe(true)
+    await clock.advance()
+    await expect
+      .poll(
+        () => heartbeat.calls.filter((call) => call.authorization === `Bearer ${T3.value}`).length,
+      )
+      .toBeGreaterThanOrEqual(2)
+    expect(await storedToken(page, TOKEN_STORAGE_KEY)).toBe(T3.value)
+    expect(await storedToken(page, TOKEN_EXPIRES_STORAGE_KEY)).toBe(T3.expires_at)
+
+    // 4. Sigue sincronizando con el vigente, y la tablet NUNCA se desvinculo.
+    await expect.poll(() => queueStoreReady(page)).toBe(true)
+    const scanId = '0199f13a-7c22-7b41-9e88-0c4d5e6f7a83'
+    await seedQueue(page, [
+      {
+        scan_id: scanId,
+        occurred_at: '2026-10-01T05:58:31.000Z',
+        qr_payload: 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa',
+      },
+    ])
+    await announceOnline(page)
+    await expect
+      .poll(() =>
+        synced.some(
+          (call) => call.authorization === `Bearer ${T3.value}` && call.scanIds.includes(scanId),
+        ),
+      )
+      .toBe(true)
+    expect(page.url()).not.toContain('/pair')
   },
 )

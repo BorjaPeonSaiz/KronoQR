@@ -94,4 +94,17 @@ interface KioskMetrics
      * @param  string  $reason  Motivo interno. **Nunca sale en una respuesta.**
      */
     public function pairingRejected(string $reason): void;
+
+    /**
+     * Una rotacion del token del quiosco en el latido (RF-ID-04, ADR-044):
+     * `kiosk_token_rotations_total{result}`.
+     *
+     * **Sin etiqueta de dispositivo**, como los emparejamientos: la pregunta es
+     * «¿se estan renovando los tokens, o esta fallando la renovacion?», y el
+     * dispositivo concreto esta en el log y en `audit_log`. Solo se cuenta lo
+     * que emite o falla; «no tocaba» es el caso de cada minuto y no dice nada.
+     *
+     * @param  'issued'|'failed'  $result
+     */
+    public function tokenRotation(string $result): void;
 }

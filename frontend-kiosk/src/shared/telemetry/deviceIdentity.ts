@@ -56,6 +56,17 @@ const DEVICE_TOKEN_EXPIRES_AT_KEY = 'kronoqr.kiosk.device_token_expires_at'
 const DEVICE_NAME_KEY = 'kronoqr.kiosk.device_name'
 
 /**
+ * Token ANTERIOR, conservado como respaldo tras un relevo (RF-ID-04, ADR-044).
+ * El servidor lo mantiene vivo durante el solape; si el relevo resulta ser un
+ * token muerto (dos respuestas cruzadas por una reconexion: el servidor retira
+ * el primer relevo al emitir el segundo), este es el que sigue valiendo. Se
+ * borra en cuanto el token vigente consigue su primer uso autenticado, que es
+ * justo cuando el servidor retira el anterior.
+ */
+const PREVIOUS_TOKEN_KEY = 'kronoqr.kiosk.device_token_previous'
+const PREVIOUS_TOKEN_EXPIRES_AT_KEY = 'kronoqr.kiosk.device_token_previous_expires_at'
+
+/**
  * Huella del codigo de servicio (`KioskHeartbeat.service_code_hash`, RF-KI-08,
  * tarea 3.3). La escribe el planificador del latido (`heartbeat.ts`) tras cada
  * `200`, nunca el codigo en claro. `null` = la instalacion no tiene codigo
@@ -442,10 +453,109 @@ export function persistPairedDevice(
   expiresAt: string,
   deviceName: string,
 ): void {
+  // Un emparejamiento nuevo empieza sin respaldo de ningun token anterior.
+  clearPreviousDeviceToken()
   storeDeviceToken(token)
   storeDeviceId(deviceId)
   storeDeviceTokenExpiresAt(expiresAt)
   storeDeviceName(deviceName)
+}
+
+/** El respaldo guardado tras un relevo: el token que dejo de ser el vigente. */
+export interface PreviousDeviceToken {
+  readonly value: string
+  readonly expiresAt: string | null
+}
+
+/** `null` si no hay respaldo (no ha habido relevo, o el vigente ya se uso con exito). */
+export function readPreviousDeviceToken(): PreviousDeviceToken | null {
+  const storage = safeStorage()
+  if (storage === null) return null
+  try {
+    const value = storage.getItem(PREVIOUS_TOKEN_KEY)
+    if (value === null || value === '') return null
+    const expiresAt = storage.getItem(PREVIOUS_TOKEN_EXPIRES_AT_KEY)
+    return { value, expiresAt: expiresAt === null || expiresAt === '' ? null : expiresAt }
+  } catch {
+    return null
+  }
+}
+
+export function clearPreviousDeviceToken(): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    storage.removeItem(PREVIOUS_TOKEN_KEY)
+    storage.removeItem(PREVIOUS_TOKEN_EXPIRES_AT_KEY)
+  } catch {
+    // Un respaldo que no se puede borrar solo cuesta un reintento de mas ante un 401.
+  }
+}
+
+/**
+ * Relevo del token del dispositivo (RF-ID-04, ADR-044): guarda el valor nuevo,
+ * su caducidad y el respaldo (`previous`, `null` = sin respaldo) como una sola
+ * unidad. `localStorage` no tiene transacciones, asi que la atomicidad se
+ * consigue por ORDEN y con compensacion: primero lo informativo y el respaldo,
+ * y el token el ULTIMO, de modo que el cambio que importa es un unico
+ * `setItem`, que el navegador aplica entero o no aplica. Si algo falla, TODAS
+ * las claves vuelven a lo que eran. Devuelve `false` si no se pudo y el quiosco
+ * sigue con el token anterior intacto (nunca una caducidad nueva con el token
+ * viejo, ni al reves).
+ */
+export function storeRotatedDeviceToken(
+  token: string,
+  expiresAt: string | null,
+  previous: PreviousDeviceToken | null,
+): boolean {
+  const storage = safeStorage()
+  if (storage === null) return false
+
+  const keys = [
+    PREVIOUS_TOKEN_KEY,
+    PREVIOUS_TOKEN_EXPIRES_AT_KEY,
+    DEVICE_TOKEN_EXPIRES_AT_KEY,
+    DEVICE_TOKEN_KEY,
+  ]
+  const snapshot = new Map<string, string | null>()
+  try {
+    for (const key of keys) snapshot.set(key, storage.getItem(key))
+  } catch {
+    return false
+  }
+
+  const write = (key: string, value: string | null): void => {
+    if (value === null) storage.removeItem(key)
+    else storage.setItem(key, value)
+  }
+
+  try {
+    write(PREVIOUS_TOKEN_KEY, previous?.value ?? null)
+    write(PREVIOUS_TOKEN_EXPIRES_AT_KEY, previous?.expiresAt ?? null)
+    write(DEVICE_TOKEN_EXPIRES_AT_KEY, expiresAt)
+    write(DEVICE_TOKEN_KEY, token)
+    if (storage.getItem(DEVICE_TOKEN_KEY) === token) return true
+  } catch {
+    // Se deshace abajo.
+  }
+
+  for (const [key, value] of snapshot) {
+    try {
+      write(key, value)
+    } catch {
+      // Sin almacenamiento no hay mas que hacer: el token solo se escribe el
+      // ultimo, asi que si llego a fallar es que el anterior sigue intacto.
+    }
+  }
+  return false
+}
+
+/**
+ * Solo la caducidad, cuando el servidor reentrega el MISMO token que la tablet
+ * ya tiene (informativa, ninguna decision depende de ella).
+ */
+export function refreshDeviceTokenExpiresAt(expiresAt: string): void {
+  storeDeviceTokenExpiresAt(expiresAt)
 }
 
 /**
@@ -458,6 +568,9 @@ export function clearDeviceToken(): void {
   if (storage === null) return
   try {
     storage.removeItem(DEVICE_TOKEN_KEY)
+    // Un dispositivo revocado no tiene respaldo: la revocacion no tiene solape.
+    storage.removeItem(PREVIOUS_TOKEN_KEY)
+    storage.removeItem(PREVIOUS_TOKEN_EXPIRES_AT_KEY)
   } catch {
     // Nada que hacer: sin almacenamiento no habia token que borrar de verdad.
   }

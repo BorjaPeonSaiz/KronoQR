@@ -110,6 +110,7 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         'kiosk_last_seen_seconds',
         'kiosk_offline_queue_size',
         'kiosk_pairing_total',
+        'kiosk_token_rotations_total',
         'kronoqr_auth_attempts_total',
         'license_limit_exceeded_total',
         'manual_corrections_total',
