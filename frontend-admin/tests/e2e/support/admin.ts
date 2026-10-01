@@ -9,6 +9,7 @@
 // turno del 14 de marzo de 2026 en `Europe/Madrid` al que faltaba la salida y
 // que RRHH cerro a las 14:05.
 import type { Page, Route } from '@playwright/test'
+import { contrastRatio } from '@kronoqr/web-kit/contrast'
 import { minutesBetween } from '@kronoqr/web-kit/datetime'
 import type {
   Absence,
@@ -3225,8 +3226,36 @@ export async function stubManagementApi(
           await json(route, 200, settingsCatalog())
           return
         case 'PATCH /api/v1/settings': {
-          const patch = request.postDataJSON() as { settings: Record<string, unknown> }
+          const patch = request.postDataJSON() as {
+            settings: Record<string, unknown>
+            confirm_low_contrast?: unknown
+          }
           const errors: Record<string, string[]> = {}
+
+          // MB2: la misma regla que el servidor. Un acento nuevo que no llega a
+          // 4,5:1 sobre las superficies claras (la peor de `#fff7ed` y `#ffffff`)
+          // se rechaza con `422` si la peticion no trae `confirm_low_contrast: true`.
+          const newAccent = patch.settings['BRANDING_ACCENT_COLOR']
+          if (typeof newAccent === 'string' && /^#[0-9a-f]{6}$/i.test(newAccent)) {
+            const worst = Math.min(
+              contrastRatio(newAccent, '#fff7ed'),
+              contrastRatio(newAccent, '#ffffff'),
+            )
+            if (worst < 4.5 && patch.confirm_low_contrast !== true) {
+              await validationProblem(
+                route,
+                'urn:kronoqr:problem:low-contrast-accent',
+                'Peticion no valida',
+                {
+                  'settings.BRANDING_ACCENT_COLOR': [
+                    'El color no llega al contraste minimo y no se ha confirmado.',
+                  ],
+                },
+              )
+
+              return
+            }
+          }
 
           /**
            * Un entero dentro de rango, o `undefined` -y un error colgado de

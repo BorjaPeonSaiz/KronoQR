@@ -349,7 +349,13 @@ async function save(): Promise<void> {
   saved.value = false
 
   try {
-    fill(await updateInstallationSettings(pendingChanges.value))
+    // La confirmacion solo viaja si el acento cambia Y no cumple Y la casilla
+    // esta marcada: es la misma regla que aplica el servidor.
+    fill(
+      await updateInstallationSettings(pendingChanges.value, {
+        confirmLowContrast: needsAccentConfirmation.value && accentConfirmed.value,
+      }),
+    )
     saved.value = true
     announce(t('branding.saved'))
     // La cabecera y el acceso pintan `branding.store.current`: sin recargar

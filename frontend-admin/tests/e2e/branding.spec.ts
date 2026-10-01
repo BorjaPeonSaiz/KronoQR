@@ -64,6 +64,45 @@ test(
     await expect(page.getByTestId('saved')).toBeVisible()
     expect(patches).toHaveLength(1)
     expect(patches[0]).toContain('#f5e663')
+    // El flag viaja a nivel superior, junto a `settings`, y es un booleano estricto.
+    expect(JSON.parse(patches[0] ?? '{}')).toEqual({
+      settings: { BRANDING_ACCENT_COLOR: '#f5e663' },
+      confirm_low_contrast: true,
+    })
+  },
+)
+
+test(
+  'si la peticion llega sin confirmar, el 422 del servidor se ve bajo el campo del color (MB2)',
+  { tag: ['@RF-PD-08'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    // Simula un cliente que se salta la casilla: quita el flag antes de que
+    // llegue al doble del servidor (la ruta registrada la ultima corre primero).
+    await page.route('**/api/v1/settings', async (route) => {
+      const request = route.request()
+      if (request.method() !== 'PATCH') {
+        await route.fallback()
+        return
+      }
+      const body = request.postDataJSON() as Record<string, unknown>
+      delete body['confirm_low_contrast']
+      await route.fallback({ postData: JSON.stringify(body) })
+    })
+
+    await page.getByRole('link', { name: 'Marca' }).click()
+    await page.getByLabel('Color de acento', { exact: true }).fill('#ffe14d')
+    await page.getByTestId('accent-confirm').check()
+    await page.getByTestId('save').click()
+
+    const field = page.getByLabel('Color de acento', { exact: true })
+    await expect(field).toHaveAttribute('aria-invalid', 'true')
+    await expect(
+      page.getByText('El color no llega al contraste minimo y no se ha confirmado.').first(),
+    ).toBeVisible()
+    await expect(page.getByTestId('saved')).not.toBeVisible()
   },
 )
 

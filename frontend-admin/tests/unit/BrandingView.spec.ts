@@ -185,9 +185,41 @@ describe('BrandingView', () => {
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
+    // El flag viaja a nivel superior, junto a `settings`, solo con la casilla.
     expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
       settings: { BRANDING_ACCENT_COLOR: '#f5e663' },
+      confirm_low_contrast: true,
     })
+  })
+
+  it('sin acento que cambie, o con uno que cumple, el cuerpo no lleva confirm_low_contrast', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse({ ...RECIEN_INSTALADO, data: RECIEN_INSTALADO.data })
+        : jsonResponse(RECIEN_INSTALADO),
+    )
+
+    const wrapper = await mountView(BrandingView)
+    await settle()
+
+    // Solo el nombre.
+    await wrapper.find('[data-test="app-name"]').setValue('Hotel Marina')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    // Un acento que cumple, sin casilla.
+    await wrapper.find('[data-test="accent-color-hex"]').setValue('#0f5c8c')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const bodies = fetchSpy.mock.calls
+      .filter(([, init]) => (init as RequestInit).method === 'PATCH')
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>)
+
+    expect(bodies).toHaveLength(2)
+    for (const body of bodies) {
+      expect(body).not.toHaveProperty('confirm_low_contrast')
+    }
   })
 
   it('cambiar el color anula la confirmacion dada al anterior', async () => {
