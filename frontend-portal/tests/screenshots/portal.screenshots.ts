@@ -41,7 +41,7 @@ interface Dictionary {
 /**
  * Extraidas literalmente de `src/shared/i18n/locales/{es,en}.json` (claves
  * `login.heading`, `myRecords.title`, `myRecords.history.heading`,
- * `myExport.title`, `myExport.download`): NO se importa el JSON en tiempo de
+ * `myExport.title`, `myExport.download.csv`): NO se importa el JSON en tiempo de
  * ejecucion (evita depender del alias `@/*` fuera del pipeline de Vite), se
  * copian aqui igual que ya hace el generador del asistente en
  * `frontend-admin`.

@@ -86,3 +86,50 @@ test(
     expect(api.requests.some((it) => it.path === '/api/v1/me/export')).toBe(false)
   },
 )
+
+test(
+  'descarga el PDF con el nombre del servidor, sin el nombre del empleado',
+  { tag: ['@RL-05', '@RF-ID-05'] },
+  async ({ page }) => {
+    const api = await stubPortalApi(page, { locale: 'es' })
+    await logInToPortal(page)
+    await page.goto('/export')
+
+    await page.getByRole('radio', { name: /PDF/ }).check()
+
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Descargar PDF' }).click()
+    const file = await download
+
+    expect(file.suggestedFilename()).toBe(`mi-registro-horario-${WORKDAYS_FROM}_${WORKDAYS_TO}.pdf`)
+    expect(file.suggestedFilename()).not.toContain('Amrani')
+
+    const request = api.requests.find((it) => it.path === '/api/v1/me/export')
+    expect(request?.query).toContain('format=pdf')
+    expect(request?.authorization).toBe(`Bearer ${PORTAL_SESSION_TOKEN}`)
+  },
+)
+
+test(
+  'si el servidor no puede generar el PDF (503), avisa y ofrece el CSV',
+  { tag: ['@RL-05', '@RF-ID-05'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es', pdfOutcome: 'unavailable' })
+    await logInToPortal(page)
+    await page.goto('/export')
+
+    await page.getByRole('radio', { name: /PDF/ }).check()
+    await page.getByRole('button', { name: 'Descargar PDF' }).click()
+
+    const notice = page.getByTestId('pdf-unavailable')
+
+    await expect(notice).toBeVisible()
+    await expect(notice).toContainText('no se puede generar el PDF')
+
+    const download = page.waitForEvent('download')
+    await notice.getByRole('button', { name: 'Descargar CSV en su lugar' }).click()
+    const file = await download
+
+    expect(file.suggestedFilename()).toBe(`mi-registro-horario-${WORKDAYS_FROM}_${WORKDAYS_TO}.csv`)
+  },
+)

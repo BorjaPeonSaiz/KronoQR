@@ -371,6 +371,11 @@ export interface PortalApiOptions {
   loginOutcome?: 'ok' | 'invalid' | 'rateLimited'
   /** La marca que devuelve `GET /api/v1/branding`. Por omision, la del producto. */
   branding?: Branding
+  /**
+   * Que pasa con `GET /api/v1/me/export?format=pdf`. Por omision, `'ok'`.
+   * `'unavailable'`: el servidor no tiene Chromium y responde `503` (PR19).
+   */
+  pdfOutcome?: 'ok' | 'unavailable'
 }
 
 export interface RecordedRequest {
@@ -398,6 +403,7 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
   const requests: RecordedRequest[] = []
   const loginOutcome = options.loginOutcome ?? 'ok'
   const branding = options.branding ?? PRODUCT_BRANDING
+  const pdfOutcome = options.pdfOutcome ?? 'ok'
 
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/'),
@@ -486,9 +492,43 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
           return
         }
 
+        case 'POST /api/v1/me/logout':
+          // Cierra la sesion del token que llama (PO1). Sin cuerpo.
+          await route.fulfill({ status: 204 })
+          return
+
         case 'GET /api/v1/me/export': {
           const from = url.searchParams.get('from') ?? WORKDAYS_FROM
           const to = url.searchParams.get('to') ?? WORKDAYS_TO
+
+          if (url.searchParams.get('format') === 'pdf') {
+            if (pdfOutcome === 'unavailable') {
+              await route.fulfill({
+                status: 503,
+                contentType: 'application/problem+json',
+                body: JSON.stringify({
+                  type: 'urn:kronoqr:problem:service-unavailable',
+                  title: 'Servicio no disponible',
+                  status: 503,
+                }),
+              })
+
+              return
+            }
+
+            await route.fulfill({
+              status: 200,
+              contentType: 'application/pdf',
+              headers: {
+                // Sin ningun nombre de persona (regla dura 21): solo el periodo.
+                'Content-Disposition': `attachment; filename=mi-registro-horario-${from}_${to}.pdf`,
+                'Cache-Control': 'no-store',
+              },
+              body: Buffer.from('%PDF-1.7 prueba'),
+            })
+
+            return
+          }
 
           await route.fulfill({
             status: 200,

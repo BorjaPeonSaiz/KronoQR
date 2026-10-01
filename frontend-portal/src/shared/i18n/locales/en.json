@@ -175,7 +175,7 @@
     "contents": {
       "entries": "One row for every shift worked, with clock in, clock out, duration and the total for each work day.",
       "corrections": "One row for every correction to your record, with who made it, when and why.",
-      "format": "CSV file, with times as HH:MM, never as a decimal."
+      "format": "CSV or PDF file, with times as HH:MM, never as a decimal. The PDF is a sealed document you can show to a third party."
     },
     "filters": {
       "legend": "Period to download",
@@ -186,7 +186,20 @@
       "inverted": "The period ends before it starts. Check both dates.",
       "tooWide": "The period cannot exceed {days} days."
     },
-    "download": "Download CSV",
+    "format": {
+      "legend": "File format",
+      "csv": "CSV (spreadsheet)",
+      "pdf": "PDF (sealed document)"
+    },
+    "download": {
+      "csv": "Download CSV",
+      "pdf": "Download PDF"
+    },
+    "pdfUnavailable": {
+      "title": "The PDF cannot be generated right now",
+      "advice": "It is nothing you did. You can download the same history as CSV, or try the PDF again later.",
+      "useCsv": "Download CSV instead"
+    },
     "downloading": "Generating the download…",
     "announce": {
       "done": "Download ready. Check your device's downloads."
