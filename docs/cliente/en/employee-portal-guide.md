@@ -111,7 +111,7 @@ That transparency is the reason the system works this way.
 Under "Download my history" you choose the period and the format, and press **"Download CSV"** or **"Download PDF"**.
 
 - **CSV**: to open in a spreadsheet.
-- **PDF**: a sealed document, with the date it was generated and a fingerprint
+- **PDF**: a sealed document, with the date it was generated and a checksum
   showing it has not been altered, meant to be shown to a third party. If the
   server cannot generate it at that moment, the portal tells you and offers the
   CSV instead; it is nothing you did.
