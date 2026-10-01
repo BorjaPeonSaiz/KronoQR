@@ -48,15 +48,17 @@ const visibleRows = computed(() =>
         .getVirtualItems()
         .map((item) => ({
           entry: props.entries[item.index],
+          index: item.index,
           start: item.start,
           key: String(item.key),
         }))
         .filter(
-          (row): row is { entry: LivePresenceEntry; start: number; key: string } =>
+          (row): row is { entry: LivePresenceEntry; index: number; start: number; key: string } =>
             row.entry !== undefined,
         )
     : props.entries.map((entry, index) => ({
         entry,
+        index,
         start: index * ROW_HEIGHT_PX,
         key: entry.employee_uuid,
       })),
@@ -131,11 +133,15 @@ function originLabel(entry: LivePresenceEntry): string {
 <template>
   <div
     ref="scroller"
+    tabindex="0"
+    role="region"
+    :aria-label="t('live.table.caption', { zone: zoneLabel })"
     class="max-h-[70vh] overflow-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
     data-test="presence-table"
   >
     <div
       role="table"
+      :aria-rowcount="entries.length + 1"
       :aria-label="t('live.table.caption', { zone: zoneLabel })"
       class="min-w-[56rem]"
     >
@@ -143,7 +149,11 @@ function originLabel(entry: LivePresenceEntry): string {
         role="rowgroup"
         class="sticky top-0 z-10 border-b border-kq-border bg-kq-surface-alt text-left text-sm font-semibold"
       >
-        <div role="row" class="grid grid-cols-[2fr_1.2fr_1fr_1fr_1.4fr] gap-2 px-3 py-2">
+        <div
+          role="row"
+          aria-rowindex="1"
+          class="grid grid-cols-[2fr_1.2fr_1fr_1fr_1.4fr] gap-2 px-3 py-2"
+        >
           <span role="columnheader">{{ t('live.table.name') }}</span>
           <span role="columnheader">{{ t('live.table.department') }}</span>
           <span role="columnheader">{{ t('live.table.since', { zone: zoneLabel }) }}</span>
@@ -157,6 +167,7 @@ function originLabel(entry: LivePresenceEntry): string {
           v-for="row of visibleRows"
           :key="row.key"
           role="row"
+          :aria-rowindex="row.index + 2"
           class="absolute left-0 grid w-full grid-cols-[2fr_1.2fr_1fr_1fr_1.4fr] items-center gap-2 border-b border-kq-border px-3"
           :style="{ transform: `translateY(${row.start}px)`, height: `${ROW_HEIGHT_PX}px` }"
           data-test="presence-entry"
