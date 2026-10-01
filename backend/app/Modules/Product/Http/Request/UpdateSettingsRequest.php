@@ -252,7 +252,20 @@ final class UpdateSettingsRequest extends FormRequest
      */
     public function rules(): array
     {
-        $rules = ['settings' => ['required', 'array', 'min:1']];
+        $rules = [
+            'settings' => ['required', 'array', 'min:1'],
+            // MB2: la confirmacion explicita de un acento sin contraste sobre
+            // las superficies claras. Booleano ESTRICTO, como los enteros de abajo: un «1» o un
+            // «yes» escritos a mano no son alguien diciendo «lo he visto».
+            'confirm_low_contrast' => [
+                'sometimes',
+                static function (string $attribute, mixed $value, Closure $fail): void {
+                    if (! is_bool($value)) {
+                        $fail('settings.strict_boolean')->translate();
+                    }
+                },
+            ],
+        ];
 
         foreach ($this->submittedKeys() as $name) {
             $key = SettingKey::tryFrom($name);
@@ -370,6 +383,7 @@ final class UpdateSettingsRequest extends FormRequest
         return new UpdateSettingsCommand(
             values: $values,
             actorUserId: $this->actorUserId(),
+            confirmLowContrast: $this->input('confirm_low_contrast') === true,
         );
     }
 

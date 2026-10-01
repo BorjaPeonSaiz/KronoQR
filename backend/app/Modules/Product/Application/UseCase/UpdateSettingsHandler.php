@@ -10,7 +10,9 @@ use App\Modules\Product\Application\Port\SettingsMetrics;
 use App\Modules\Product\Application\Port\SettingsRepository;
 use App\Modules\Product\Domain\Event\InstallationSettingChanged;
 use App\Modules\Product\Domain\Exception\InvalidSettingValue;
+use App\Modules\Product\Domain\Exception\LowContrastAccentColor;
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
+use App\Modules\Product\Domain\Policy\AccentContrastPolicy;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Product\Domain\ValueObject\SettingValue;
@@ -36,7 +38,10 @@ use Illuminate\Database\ConnectionInterface;
  *    entre los disponibles—, y comprobarlas sobre el resultado es lo que impide
  *    que un `PATCH` de dos claves deje la instalacion en un estado imposible
  *    segun el orden en que se escriban. **Antes de tocar ninguna fila.**
- * 5. **Se descarta lo que no cambia.** Abrir la pantalla y pulsar «guardar» no
+ * 5. **Se descarta lo que no cambia.** Y sobre lo que queda se comprueba que un
+ *    acento nuevo sin contraste sobre las superficies claras venga confirmado
+ *    ({@see AccentContrastPolicy}, MB2): solo lo que cambia, para que guardar
+ *    otra clave no vuelva a pedir confirmacion de un color ya aceptado. Abrir la pantalla y pulsar «guardar» no
  *    escribe ni una fila ni un asiento. Sin esto, el trail se llenaria de
  *    entradas que dicen «alguien miro la configuracion», y la señal que de
  *    verdad importa —«alguien cambio el anti-rebote»— quedaria enterrada.
@@ -113,6 +118,7 @@ final readonly class UpdateSettingsHandler
     /**
      * @throws UnknownSettingKey cuando una clave no esta en el catalogo
      * @throws InvalidSettingValue cuando un valor no cumple lo que su clave declara
+     * @throws LowContrastAccentColor cuando un acento nuevo no llega a 4,5:1 sobre las superficies claras y no viene confirmado (MB2)
      */
     public function handle(UpdateSettingsCommand $command): ResolvedSettings
     {
@@ -143,6 +149,11 @@ final readonly class UpdateSettingsHandler
             if ($changed === []) {
                 return [];
             }
+
+            // MB2: un acento NUEVO sin contraste sobre las superficies claras solo pasa
+            // confirmado. Sobre lo que cambia y no sobre lo pedido, para no
+            // volver a pedir confirmacion de un color ya guardado.
+            AccentContrastPolicy::assertAcceptable($command->confirmLowContrast, ...$changed);
 
             $this->settings->save($changed, $command->actorUserId);
             $this->publish($changed, $current);

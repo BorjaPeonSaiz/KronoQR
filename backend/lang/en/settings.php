@@ -25,9 +25,13 @@ return [
         'not_allowed' => 'Setting ":key" only accepts :allowed, and received ":value".',
         'default_locale_not_available' => 'The default language ":default" is not among the available languages (:available).',
         'strict_integer' => 'The value of :attribute must be an integer, not a quoted string.',
+        'low_contrast_accent' => 'The colour :value reaches :ratio:1 on the light background of the panel and the portal, and text needs at least :minimum:1. '
+            .'Screens and PDF documents will darken it until it reads well. To save it anyway, confirm it explicitly.',
     ],
 
     'strict_integer' => 'The value of :attribute must be an integer, not a quoted string.',
+
+    'strict_boolean' => 'The value of :attribute must be true or false.',
 
     'logo' => [
         'not_absolute' => 'The logo path must be absolute and start with "/". '

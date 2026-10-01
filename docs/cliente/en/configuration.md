@@ -204,7 +204,7 @@ a version is waiting— is in [`operation.md`](operation.md) §11.1.
 | --- | --- | --- |
 | `BRANDING_APP_NAME` | `KronoQR` | Application name. Up to 60 characters: that is what fits in the header of the printed card. |
 | `BRANDING_LOGO_PATH` | *(empty)* | **Absolute path on the server** to a PNG or an SVG. Empty means “the product's logo”, not “no logo”. |
-| `BRANDING_ACCENT_COLOR` | `#b8542a` | Accent colour, in `#rrggbb` notation. Any other form is rejected. |
+| `BRANDING_ACCENT_COLOR` | `#b8542a` | Accent colour, in `#rrggbb` notation. Any other form is rejected. A colour that does not reach 4.5:1 on the panel's light background is saved only if you confirm it (see below). |
 
 **Where it shows.** In the header and in the browser tab title of the panel, the
 portal and the kiosk; on the sign-in screen of all three; on the printed
@@ -212,6 +212,15 @@ credential card; in the header of the PDF hours report; and in the first line
 of the export for the Labour Inspectorate. A change applies **on the next
 request**, without restarting anything. Cards already printed, naturally, do not
 change.
+
+**A very light colour is flagged and must be confirmed.** Text needs a contrast
+of at least 4.5:1 to be readable. If you choose an accent that does not reach it
+—a yellow, a light grey—, the **Branding** screen tells you so and asks you to
+tick a box to save it, and the server rejects the change if it arrives without
+that confirmation (`"confirm_low_contrast": true` in the same request, if you use
+`curl`). Once saved, the screens and the PDF documents darken it just enough to
+be readable; the installation name appears in the PDF header whether or not
+there is a logo.
 
 **What never changes**: the technical identifiers. The `FH1` prefix of the QR
 codes, the table names, the API paths and the commands stay the same — renaming

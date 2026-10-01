@@ -41,6 +41,7 @@ use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
 use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
 use App\Modules\Product\Domain\Exception\InvalidSettingValue;
 use App\Modules\Product\Domain\Exception\LicenseKeyRejected;
+use App\Modules\Product\Domain\Exception\LowContrastAccentColor;
 use App\Modules\Product\Domain\Exception\SetupNotCompletable;
 use App\Modules\Product\Domain\Exception\SetupStepNotRecordable;
 use App\Modules\Product\Domain\Exception\UnknownSettingKey;
@@ -71,6 +72,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Number;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
@@ -913,6 +915,29 @@ return Application::configure(basePath: dirname(__DIR__))
             'settings' => [ProblemDetails::translated(
                 $exception->translationKey,
                 $exception->parameters,
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
+         * MB2: un acento nuevo sin contraste sobre las superficies claras y sin confirmar.
+         *
+         * Colgado de `settings.<CLAVE>` —aqui si se sabe cual es— y con `type`
+         * propio para que el panel ofrezca «guardar de todos modos» y repita la
+         * peticion con `confirm_low_contrast: true`. Las cifras en el formato del
+         * idioma negociado («1,30» y no «1.30» en castellano), y la del acento
+         * TRUNCADA y no redondeada: un 4,499 escrito como «4,5» junto a «el
+         * minimo es 4,5» no lo entenderia nadie.
+         */
+        $exceptions->render(static fn (LowContrastAccentColor $exception): mixed => ProblemDetails::lowContrastAccent([
+            'settings.'.$exception->key->value => [ProblemDetails::translated(
+                LowContrastAccentColor::TRANSLATION_KEY,
+                [
+                    'key' => $exception->key->value,
+                    'value' => $exception->color,
+                    'ratio' => (string) Number::format(floor($exception->ratio * 100) / 100, precision: 2, locale: app()->getLocale()),
+                    'minimum' => (string) Number::format($exception->minimum, maxPrecision: 2, locale: app()->getLocale()),
+                ],
                 $exception->getMessage(),
             )],
         ]));

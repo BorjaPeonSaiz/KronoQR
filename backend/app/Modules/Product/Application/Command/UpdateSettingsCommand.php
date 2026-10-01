@@ -23,9 +23,11 @@ final readonly class UpdateSettingsCommand
     /**
      * @param  array<string, mixed>  $values  clave del catalogo => valor sin validar
      * @param  ?int  $actorUserId  `users.id` de quien firma, o `null` si no hay ninguna persona detras
+     * @param  bool  $confirmLowContrast  quien firma ha visto que el acento nuevo no alcanza 4,5:1 sobre las superficies claras y lo quiere igual (MB2)
      */
     public function __construct(
         public array $values,
         public ?int $actorUserId,
+        public bool $confirmLowContrast = false,
     ) {}
 }

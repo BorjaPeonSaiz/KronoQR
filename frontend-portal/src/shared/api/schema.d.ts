@@ -3474,6 +3474,24 @@ export interface paths {
          *     **Volver al valor de serie no es guardar una cadena vacia.** Hoy no hay
          *     forma de retirar una clave desde la API; el valor de serie se restablece
          *     escribiendolo explicitamente.
+         *
+         *     **Un `BRANDING_ACCENT_COLOR` nuevo que no alcanza 4,5:1 exige
+         *     confirmacion** (MB2, RF-PD-08). Se mide el color **tal cual** contra las
+         *     dos superficies claras sobre las que es texto —`surface` `#fff7ed` y
+         *     `surface-raised` `#ffffff`— y cuenta el peor de los dos: la misma regla
+         *     con la que la pantalla «Marca» del panel decide si pide confirmacion. Es
+         *     el contraste de texto normal (WCAG 1.4.3): en el panel y el portal el
+         *     acento sustituye a `primary-strong`, texto de enlace y de marca. Sin
+         *     `confirm_low_contrast: true` la respuesta es `422` con
+         *     `type: urn:kronoqr:problem:low-contrast-accent` y el error colgado de
+         *     `settings.BRANDING_ACCENT_COLOR`, y **no se guarda ninguna clave** de la
+         *     peticion. Con la confirmacion se guarda, y el asiento de `audit_log` deja
+         *     constancia de quien lo hizo. **No es un rechazo duro** (doc 06 §7,
+         *     «contraste avisado, no impuesto»): el producto oscurece el acento alli
+         *     donde es texto —pantallas y PDF—, y lo que la confirmacion garantiza es
+         *     que nadie guarde un color ilegible sin haberlo visto. Solo se mira el
+         *     acento **si cambia**: guardar otra clave con un acento ya aceptado no
+         *     vuelve a pedirla.
          */
         patch: operations["updateInstallationSettings"];
         trace?: never;
@@ -7272,6 +7290,17 @@ export interface components {
             settings: {
                 [key: string]: components["schemas"]["SettingValue"];
             };
+            /**
+             * @description Quien guarda ha visto que el `BRANDING_ACCENT_COLOR` nuevo no alcanza
+             *     4,5:1 sobre las superficies claras (`#fff7ed` y `#ffffff`) y lo quiere
+             *     igual (MB2). Sin el, ese acento es
+             *     `422` con `type: urn:kronoqr:problem:low-contrast-accent`. Booleano
+             *     estricto: `"true"` o `1` son `422`. No tiene efecto sobre ninguna otra
+             *     clave ni sobre un acento que ya llega al minimo. Ausente equivale a
+             *     `false`; no se declara `default` para que el cliente generado lo deje
+             *     opcional.
+             */
+            confirm_low_contrast?: boolean;
         };
         /**
          * Problem
@@ -15517,7 +15546,28 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            422: components["responses"]["ValidationFailed"];
+            /**
+             * @description La peticion no se puede aplicar y no se guarda ninguna clave.
+             *
+             *     **`type` distingue las dos causas:**
+             *
+             *     - `urn:kronoqr:problem:validation-failed` — una clave fuera del
+             *       catalogo, un valor que no cumple su definicion, un logotipo que no
+             *       se puede usar o una invariante entre claves.
+             *     - `urn:kronoqr:problem:low-contrast-accent` — el
+             *       `BRANDING_ACCENT_COLOR` nuevo no alcanza 4,5:1 sobre las superficies claras y la
+             *       peticion no trae `confirm_low_contrast: true` (MB2). El panel ofrece
+             *       guardarlo de todos modos y repite la misma peticion con la
+             *       confirmacion.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };

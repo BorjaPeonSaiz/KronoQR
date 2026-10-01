@@ -220,6 +220,17 @@ final class ProblemDetails
      */
     public const string TYPE_CORRECTION_WOULD_CHANGE_WORK_DATE = 'urn:kronoqr:problem:correction-would-change-work-date';
 
+    /**
+     * El acento de marca nuevo no llega a 4,5:1 sobre las superficies claras y no viene
+     * confirmado (MB2, `PATCH /api/v1/settings`).
+     *
+     * `422` con el error colgado de `settings.BRANDING_ACCENT_COLOR`, como una
+     * validacion, y `type` propio por el mismo motivo que el de arriba: el panel
+     * no pinta un error sin salida junto al selector de color, ofrece «guardar
+     * de todos modos» y repite la peticion con `confirm_low_contrast: true`.
+     */
+    public const string TYPE_LOW_CONTRAST_ACCENT = 'urn:kronoqr:problem:low-contrast-accent';
+
     /*
      * LOS ERRORES QUE PRODUCE EL FRAMEWORK Y NO UN CASO DE USO (F4a-1, CH4).
      *
@@ -530,6 +541,24 @@ final class ProblemDetails
     {
         return self::response(
             self::TYPE_CORRECTION_WOULD_CHANGE_WORK_DATE,
+            'Peticion no valida',
+            JsonResponse::HTTP_UNPROCESSABLE_ENTITY,
+            'Revisa los campos indicados.',
+            $errors,
+        );
+    }
+
+    /**
+     * `422` de MB2: acento sin contraste y sin confirmar. Ver
+     * {@see self::TYPE_LOW_CONTRAST_ACCENT}. Mismo cuerpo que
+     * `validationFailed()` salvo el `type`.
+     *
+     * @param  array<string, list<string>>  $errors
+     */
+    public static function lowContrastAccent(array $errors): JsonResponse
+    {
+        return self::response(
+            self::TYPE_LOW_CONTRAST_ACCENT,
             'Peticion no valida',
             JsonResponse::HTTP_UNPROCESSABLE_ENTITY,
             'Revisa los campos indicados.',
