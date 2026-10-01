@@ -23,6 +23,7 @@ const HOTEL_BRANDING = {
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   createTestPinia()
   document.title = ''
   document.documentElement.removeAttribute('data-kq-branded')
@@ -101,5 +102,26 @@ describe('branding.store', () => {
 
     await expect(store.load()).resolves.toBeUndefined()
     expect(store.current).toEqual(PRODUCT_BRANDING)
+  })
+
+  it('MB4: tras cargar la marca, el siguiente arranque la pinta desde la copia, sin red', async () => {
+    stubFetch(() => jsonResponse(HOTEL_BRANDING))
+    await useBrandingStore().load()
+
+    // Otra carga completa de la pagina: store nuevo, red que no contesta.
+    createTestPinia()
+    document.title = ''
+    vi.stubGlobal('fetch', () => new Promise(() => undefined))
+    const store = useBrandingStore()
+    store.apply()
+
+    expect(store.current.applicationName).toBe('Hotel Marina')
+    expect(document.title).toBe('Hotel Marina')
+  })
+
+  it('MB4: una copia corrupta no impide arrancar con el producto', () => {
+    window.localStorage.setItem('kronoqr.branding', '{roto')
+
+    expect(useBrandingStore().current).toEqual(PRODUCT_BRANDING)
   })
 })
