@@ -14,9 +14,9 @@
 // tonos derivados (texto sobre el acento, fondo tintado, acento aclarado para
 // el fondo oscuro del quiosco) se calculan buscando el primer tono que alcanza
 // el minimo WCAG 2.2 AA de la pareja, con la misma formula que mide la paleta
-// del producto (`contrast.ts`). Lo que no se puede garantizar por calculo —el
-// acento como color GRANDE sobre las superficies del producto— se AVISA, no se
-// impone (paso 9 de la tarea): `contrastWarnings` pasa el acento por las
+// del producto (`contrast.ts`). En el panel y el portal el acento se OSCURECE
+// hasta 4,5:1 sobre las superficies claras (MB1); lo que no se puede garantizar
+// por calculo se AVISA (paso 9 de la tarea): `contrastWarnings` pasa el acento por las
 // parejas de `themePairs.ts` y devuelve las que no llegan.
 //
 // El valor por defecto ES el producto: con `accentColor: null` no se
@@ -142,11 +142,17 @@ function mix(a: Rgb, b: Rgb, weight: number): Rgb {
  * pasos de un 2,5 % hasta que alcance `minimum` sobre `background`. Si ni el
  * propio `target` llega, devuelve `target`: es lo mas lejos que se puede ir.
  */
-function adjustUntil(color: Rgb, target: Rgb, background: Rgb, minimum: number): Rgb {
+function adjustUntil(
+  color: Rgb,
+  target: Rgb,
+  background: Rgb | readonly Rgb[],
+  minimum: number,
+): Rgb {
+  const backgrounds: readonly Rgb[] = 'r' in background ? [background] : background
   const STEPS = 40
   for (let step = 0; step <= STEPS; step += 1) {
     const candidate = mix(target, color, step / STEPS)
-    if (contrastRatio(candidate, background) >= minimum) return candidate
+    if (backgrounds.every((item) => contrastRatio(candidate, item) >= minimum)) return candidate
   }
   return target
 }
@@ -225,8 +231,15 @@ export function accentOverrides(
   }
 
   const surfaceRaised = parseHexColor(tokens('--kq-color-surface-raised'))
+  const surfaces = lightSurfaces(tokens)
   const bodyText = parseHexColor(tokens('--kq-color-text'))
-  const onPrimary = bestOn(color, [WHITE, bodyText])
+  // El acento como texto o boton de marca se OSCURECE hasta 4,5:1 frente a la
+  // peor de las superficies de texto (MB1): un amarillo o un verde lima elegidos
+  // tal cual dejarian el boton principal y los enlaces entre 1,02:1 y 3,95:1.
+  // Un acento que ya llega no cambia ni un canal (paso 0 = el propio color).
+  // `primary` y `primary-strong` coinciden: el cliente aporta UN tono.
+  const strong = adjustUntil(color, BLACK, lightSurfaces(tokens, true), text)
+  const onPrimary = bestOn(strong, [WHITE, bodyText])
   // Fondo tintado: un 10 % de acento sobre la tarjeta blanca. El texto que va
   // encima es el acento oscurecido hasta leerse como texto normal.
   const soft = mix(color, surfaceRaised, 0.1)
@@ -235,16 +248,51 @@ export function accentOverrides(
   // teclado (WCAG 2.4.11). Lleva el acento, pero oscurecido hasta verse como
   // componente (3:1) sobre la tarjeta blanca, que es la superficie mas
   // exigente; un acento casi blanco dejaria sin foco al panel entero.
-  const focus = adjustUntil(color, BLACK, surfaceRaised, WCAG_AA_MINIMUM.large)
+  const focus = adjustUntil(color, BLACK, surfaces, WCAG_AA_MINIMUM.large)
 
   return {
-    '--kq-color-primary': accent.toLowerCase(),
-    '--kq-color-primary-strong': accent.toLowerCase(),
+    '--kq-color-primary': toHex(strong),
+    '--kq-color-primary-strong': toHex(strong),
     '--kq-color-primary-soft': toHex(soft),
     '--kq-color-on-primary': toHex(onPrimary),
     '--kq-color-on-primary-soft': toHex(onSoft),
     '--kq-color-focus': toHex(focus),
   }
+}
+
+/**
+ * Las superficies claras del producto. Con `textOnly`, solo las dos sobre las
+ * que el acento se lee como TEXTO (pagina y tarjeta, doc 06 §2); la tercera,
+ * las filas alternas, lo lleva solo como elemento grande (3:1).
+ */
+function lightSurfaces(tokens: TokenResolver, textOnly = false): Rgb[] {
+  const names = textOnly
+    ? ['--kq-color-surface', '--kq-color-surface-raised']
+    : ['--kq-color-surface', '--kq-color-surface-raised', '--kq-color-surface-alt']
+  return names.map((token) => parseHexColor(tokens(token)))
+}
+
+export interface AccentContrast {
+  /** El peor contraste del acento tal cual, sobre las superficies claras. */
+  readonly ratio: number
+  readonly minimum: number
+  readonly meets: boolean
+  /** El tono que el panel y el portal usaran de verdad (oscurecido si hace falta). */
+  readonly applied: string
+}
+
+/**
+ * Lo que el panel enseña mientras el cliente elige el color (MB2): cuanto
+ * contrasta el acento TAL CUAL con las superficies claras, si llega a 4,5:1 y
+ * en que tono se aplicara. Si no llega, la marca se pinta con `applied`.
+ */
+export function accentContrast(accent: string, tokens: TokenResolver): AccentContrast {
+  const ratio = Math.min(
+    ...lightSurfaces(tokens, true).map((surface) => contrastRatio(accent, surface)),
+  )
+  const minimum = WCAG_AA_MINIMUM.text
+  const applied = accentOverrides(accent, 'light', tokens)['--kq-color-primary-strong'] ?? accent
+  return { ratio, minimum, meets: ratio >= minimum, applied }
 }
 
 export interface ContrastWarning {

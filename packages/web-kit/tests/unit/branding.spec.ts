@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  accentContrast,
   accentOverrides,
   applyBranding,
   contrastWarnings,
@@ -18,6 +19,7 @@ import {
   type Branding,
 } from '../../src/branding'
 import { contrastRatio, WCAG_AA_MINIMUM } from '../../src/contrast'
+import { kioskPairs, lightPairs } from '../../src/themePairs'
 
 const themeCss = readFileSync(
   resolve(dirname(fileURLToPath(import.meta.url)), '../../src/theme.css'),
@@ -86,13 +88,125 @@ describe('parseBranding (RF-PD-08)', () => {
   })
 })
 
+// Superficies casi negras: ni el negro llega a 4,5:1 sobre ellas.
+const darkSurfaces = (token: string): string =>
+  token.includes('surface') && !token.includes('kiosk') ? '#050505' : themeToken(token)
+
+// Acentos reales que un cliente puede elegir: claros (amarillo, verde lima, el
+// blanco de partida), medios, oscuros y el de serie. Tras la derivacion, TODA
+// pareja declarada en `themePairs` donde interviene el acento llega a su
+// minimo (MB1): las parejas salen de la tabla, no de una lista escrita a mano.
+const REAL_ACCENTS: ReadonlyArray<readonly [string, string]> = [
+  ['amarillo', '#ffe14d'],
+  ['amarillo palido', '#f5e663'],
+  ['verde lima', '#a4de02'],
+  ['verde menta', '#7fd1ae'],
+  ['naranja', '#ff9900'],
+  ['gris medio', '#808080'],
+  ['rojo vivo', '#ff0000'],
+  ['casi blanco', '#fafafa'],
+  ['blanco', '#ffffff'],
+  ['azul corporativo', '#0f5c8c'],
+  ['granate', '#8b0000'],
+  ['azul noche', '#111827'],
+  ['negro', '#000000'],
+  ['el de serie', '#b8542a'],
+]
+
+const LIGHT_SURFACES = [
+  '--kq-color-surface',
+  '--kq-color-surface-raised',
+  '--kq-color-surface-alt',
+] as const
+
+describe('accentOverrides: toda pareja declarada cumple tras la derivacion (MB1)', () => {
+  it.each(REAL_ACCENTS)('%s (%s): las parejas del panel y del quiosco llegan', (_name, accent) => {
+    for (const [mode, pairs] of [
+      ['light', lightPairs],
+      ['kiosk', kioskPairs],
+    ] as const) {
+      const overrides = accentOverrides(accent, mode, themeToken)
+      const resolve = (token: string): string => overrides[token] ?? themeToken(token)
+
+      for (const pair of pairs) {
+        if (!(pair.foreground in overrides) && !(pair.background in overrides)) continue
+        expect(
+          contrastRatio(resolve(pair.foreground), resolve(pair.background)),
+          `${mode}: ${pair.use}`,
+        ).toBeGreaterThanOrEqual(WCAG_AA_MINIMUM[pair.requirement])
+      }
+    }
+  })
+
+  it.each(REAL_ACCENTS)('%s (%s): primary y primary-strong se leen como texto', (_name, accent) => {
+    const overrides = accentOverrides(accent, 'light', themeToken)
+
+    for (const token of ['--kq-color-primary', '--kq-color-primary-strong']) {
+      for (const surface of LIGHT_SURFACES) {
+        // Texto sobre pagina y tarjeta; solo elemento grande (3:1) sobre filas alternas.
+        const minimum =
+          surface === '--kq-color-surface-alt' ? WCAG_AA_MINIMUM.large : WCAG_AA_MINIMUM.text
+        expect(
+          contrastRatio(overrides[token] ?? '', themeToken(surface)),
+          `${token} sobre ${surface}`,
+        ).toBeGreaterThanOrEqual(minimum)
+      }
+    }
+  })
+
+  it('un acento que ya contrasta no se toca', () => {
+    for (const accent of ['#b8542a', '#0f5c8c', '#111827']) {
+      const overrides = accentOverrides(accent, 'light', themeToken)
+
+      expect(overrides['--kq-color-primary-strong']).toBe(accent)
+      expect(overrides['--kq-color-primary']).toBe(accent)
+    }
+  })
+
+  it('un acento claro se oscurece conservando el matiz: el amarillo sigue siendo calido', () => {
+    const strong =
+      accentOverrides('#ffe14d', 'light', themeToken)['--kq-color-primary-strong'] ?? ''
+
+    expect(strong).not.toBe('#ffe14d')
+    expect(parseInt(strong.slice(1, 3), 16)).toBeGreaterThan(parseInt(strong.slice(5, 7), 16))
+  })
+})
+
+describe('accentContrast: lo que enseña el panel al elegir el color (MB2)', () => {
+  it('el acento de serie cumple y se aplica tal cual', () => {
+    const result = accentContrast('#b8542a', themeToken)
+
+    expect(result.meets).toBe(true)
+    expect(result.minimum).toBe(WCAG_AA_MINIMUM.text)
+    expect(result.applied).toBe('#b8542a')
+  })
+
+  it('un amarillo no cumple y dice con que tono se pintara', () => {
+    const result = accentContrast('#ffe14d', themeToken)
+
+    expect(result.meets).toBe(false)
+    expect(result.ratio).toBeLessThan(2)
+    expect(result.applied).not.toBe('#ffe14d')
+    expect(contrastRatio(result.applied, themeToken('--kq-color-surface'))).toBeGreaterThanOrEqual(
+      WCAG_AA_MINIMUM.text,
+    )
+  })
+
+  it('mide contra la peor de las superficies de texto', () => {
+    const worst = Math.min(
+      ...LIGHT_SURFACES.slice(0, 2).map((token) => contrastRatio('#c0602f', themeToken(token))),
+    )
+
+    expect(accentContrast('#c0602f', themeToken).ratio).toBeCloseTo(worst, 10)
+  })
+})
+
 describe('accentOverrides: los tonos derivados se leen', () => {
   const accents = ['#0f5c8c', '#b8542a', '#111827', '#f5e663', '#8b0000', '#7fd1ae', '#ffffff']
 
   it.each(accents)('%s: el texto sobre el acento del panel alcanza 4,5:1', (accent) => {
     const overrides = accentOverrides(accent, 'light', themeToken)
 
-    expect(overrides['--kq-color-primary-strong']).toBe(accent)
     expect(
       contrastRatio(
         overrides['--kq-color-on-primary'] ?? '',
@@ -159,23 +273,23 @@ describe('contrastWarnings: se avisa, no se impone (doc 06 §7)', () => {
     expect(contrastWarnings('#0f5c8c', themeToken)).toEqual([])
   })
 
-  it('un amarillo palido avisa de que no sirve como acento grande sobre las superficies claras', () => {
-    const warnings = contrastWarnings('#f5e663', themeToken, 'light')
+  it('un amarillo palido ya no deja ninguna pareja por debajo: la derivacion lo corrige (MB1)', () => {
+    expect(contrastWarnings('#f5e663', themeToken)).toEqual([])
+  })
+
+  it('con una paleta base que ni el negro salva, el aviso nombra la pareja', () => {
+    const warnings = contrastWarnings('#f5e663', darkSurfaces, 'light')
 
     expect(warnings.length).toBeGreaterThan(0)
-    // Lo que falla es siempre el acento como PRIMER PLANO sobre las superficies
-    // claras del producto (grande como `primary`, texto como `primary-strong`, anillo de foco):
-    // los tonos derivados —texto sobre el acento, fondo tintado— siempre llegan.
     for (const warning of warnings) {
       expect(warning.ratio).toBeLessThan(warning.minimum)
-      expect(MANAGED_TOKENS.light).toContain(warning.pair.foreground)
     }
   })
 
   it('evalua un solo contexto cuando se le pide', () => {
-    const all = contrastWarnings('#f5e663', themeToken, 'all')
-    const light = contrastWarnings('#f5e663', themeToken, 'light')
-    const kiosk = contrastWarnings('#f5e663', themeToken, 'kiosk')
+    const all = contrastWarnings('#f5e663', darkSurfaces, 'all')
+    const light = contrastWarnings('#f5e663', darkSurfaces, 'light')
+    const kiosk = contrastWarnings('#f5e663', darkSurfaces, 'kiosk')
 
     expect(all).toHaveLength(light.length + kiosk.length)
   })
