@@ -28,6 +28,8 @@ import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import EmployeeContractsSection from './EmployeeContractsSection.vue'
 import PinRevealDialog from './PinRevealDialog.vue'
+import TeleworkingBadge from './TeleworkingBadge.vue'
+import TeleworkingCheckbox from './TeleworkingCheckbox.vue'
 import {
   deliverEmployeePin,
   getEmployee,
@@ -112,6 +114,10 @@ async function refreshCredential(): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: ['credential-board'] })
 }
 
+function teleworkingText(value: boolean): string {
+  return t(value ? 'employees.teleworking.yes' : 'employees.teleworking.no')
+}
+
 function departmentName(id: number | null): string {
   if (id === null) {
     return t('employees.fields.departmentNone')
@@ -138,6 +144,7 @@ const form = reactive({
   departmentId: null as number | null,
   status: 'active' as 'active' | 'suspended',
   locale: 'es',
+  teleworking: false,
 })
 
 function loadForm(source: Employee): void {
@@ -147,6 +154,7 @@ function loadForm(source: Employee): void {
   form.departmentId = source.department_id
   form.status = source.status === 'suspended' ? 'suspended' : 'active'
   form.locale = source.locale
+  form.teleworking = source.teleworking
 }
 
 watch(
@@ -235,6 +243,15 @@ const pendingUpdate = computed<PendingUpdate>(() => {
       label: t('employees.fields.locale'),
       from: current.locale,
       to: form.locale,
+    })
+  }
+
+  if (form.teleworking !== current.teleworking) {
+    body.teleworking = form.teleworking
+    changes.push({
+      label: t('employees.fields.teleworking'),
+      from: teleworkingText(current.teleworking),
+      to: teleworkingText(form.teleworking),
     })
   }
 
@@ -467,6 +484,10 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
             <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.hiredAt') }}</dt>
             <dd>{{ formatCivilDate(employee.hired_at, locale) }}</dd>
           </div>
+          <div>
+            <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.teleworking') }}</dt>
+            <dd><TeleworkingBadge :teleworking="employee.teleworking" /></dd>
+          </div>
           <div v-if="employee.terminated_at !== null">
             <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.terminatedAt') }}</dt>
             <dd>{{ formatCivilDate(employee.terminated_at, locale) }}</dd>
@@ -541,6 +562,8 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
               <option value="en">{{ t('common.locales.en') }}</option>
             </select>
           </FormField>
+
+          <TeleworkingCheckbox v-model="form.teleworking" class="sm:col-span-2" />
 
           <div class="flex gap-3 sm:col-span-2">
             <button

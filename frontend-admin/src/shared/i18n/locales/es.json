@@ -154,7 +154,11 @@
       "department": "Departamento",
       "departmentAll": "Todos los departamentos",
       "pinStatus": "Estado del PIN",
-      "pinStatusAll": "Cualquier estado del PIN"
+      "pinStatusAll": "Cualquier estado del PIN",
+      "teleworking": "Teletrabajo",
+      "teleworkingAll": "Todas las personas",
+      "teleworkingYes": "Sí",
+      "teleworkingNo": "No"
     },
     "status": {
       "active": "En alta",
@@ -172,7 +176,8 @@
       "code": "Código de empleado",
       "department": "Departamento",
       "status": "Situación",
-      "pinStatus": "Estado del PIN"
+      "pinStatus": "Estado del PIN",
+      "teleworking": "Teletrabajo"
     },
     "pagination": {
       "label": "Paginación de la plantilla"
@@ -191,7 +196,14 @@
       "hiredAt": "Fecha de alta",
       "terminatedAt": "Fecha de cese",
       "status": "Situación laboral",
-      "locale": "Idioma"
+      "locale": "Idioma",
+      "teleworking": "Teletrabajo",
+      "teleworkingLabel": "Esta persona teletrabaja",
+      "teleworkingHint": "Solo informativo: no cambia cómo ficha ni cómo se calculan sus horas."
+    },
+    "teleworking": {
+      "yes": "Teletrabaja",
+      "no": "No teletrabaja"
     },
     "create": {
       "heading": "Alta de empleado",

@@ -53,6 +53,7 @@ export function employee(overrides: Partial<Employee> = {}): Employee {
     hired_at: '2026-08-14',
     terminated_at: null,
     locale: 'es',
+    teleworking: false,
     pin_status: 'issued',
     ...overrides,
   }

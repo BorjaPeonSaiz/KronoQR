@@ -154,7 +154,11 @@
       "department": "Department",
       "departmentAll": "All departments",
       "pinStatus": "PIN state",
-      "pinStatusAll": "Any PIN state"
+      "pinStatusAll": "Any PIN state",
+      "teleworking": "Teleworking",
+      "teleworkingAll": "Everyone",
+      "teleworkingYes": "Yes",
+      "teleworkingNo": "No"
     },
     "status": {
       "active": "Active",
@@ -172,7 +176,8 @@
       "code": "Employee code",
       "department": "Department",
       "status": "Status",
-      "pinStatus": "PIN state"
+      "pinStatus": "PIN state",
+      "teleworking": "Teleworking"
     },
     "pagination": {
       "label": "Workforce pagination"
@@ -191,7 +196,14 @@
       "hiredAt": "Hire date",
       "terminatedAt": "Termination date",
       "status": "Employment status",
-      "locale": "Language"
+      "locale": "Language",
+      "teleworking": "Teleworking",
+      "teleworkingLabel": "This person teleworks",
+      "teleworkingHint": "Informative only: it does not change how they clock in or how their hours are calculated."
+    },
+    "teleworking": {
+      "yes": "Teleworks",
+      "no": "Does not telework"
     },
     "create": {
       "heading": "Add an employee",

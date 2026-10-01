@@ -27,12 +27,15 @@ import type { EmployeeProvisioned, EmploymentStatus, PinStatus } from '@/shared/
 import PaginationBar from '@/shared/ui/PaginationBar.vue'
 import EmployeeCreateDialog from './EmployeeCreateDialog.vue'
 import PinRevealDialog from './PinRevealDialog.vue'
+import TeleworkingBadge from './TeleworkingBadge.vue'
 import { EMPLOYEE_LIST_PER_PAGE, listEmployees } from './employees.api'
 
 const PER_PAGE = EMPLOYEE_LIST_PER_PAGE
 const SEARCH_DEBOUNCE_MS = 300
 const EMPLOYMENT_STATUSES: readonly EmploymentStatus[] = ['active', 'suspended', 'terminated']
 const PIN_STATUSES: readonly PinStatus[] = ['pending', 'issued', 'delivered']
+// El filtro se guarda como el literal que viaja en la URL y en la peticion.
+type TeleworkingFilterValue = '' | 'true' | 'false'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -75,6 +78,11 @@ const pinStatusFilter = ref<PinStatus | ''>(
     : '',
 )
 
+const initialTeleworking = queryParam('teleworking')
+const teleworkingFilter = ref<TeleworkingFilterValue>(
+  initialTeleworking === 'true' || initialTeleworking === 'false' ? initialTeleworking : '',
+)
+
 const creating = ref(false)
 
 // El PIN recien emitido vive AQUI y solo mientras el dialogo esta abierto. No
@@ -99,6 +107,7 @@ const query = computed(() => ({
   ...(statusFilter.value === '' ? {} : { status: statusFilter.value }),
   ...(departmentFilter.value === '' ? {} : { departmentId: departmentFilter.value }),
   ...(pinStatusFilter.value === '' ? {} : { pinStatus: pinStatusFilter.value }),
+  ...(teleworkingFilter.value === '' ? {} : { teleworking: teleworkingFilter.value === 'true' }),
 }))
 
 const {
@@ -138,6 +147,7 @@ const hasFilters = computed(
     statusFilter.value !== '' ||
     departmentFilter.value !== '' ||
     pinStatusFilter.value !== '' ||
+    teleworkingFilter.value !== '' ||
     qFilter.value !== '',
 )
 
@@ -192,13 +202,14 @@ function clearFilters(): void {
   statusFilter.value = ''
   departmentFilter.value = ''
   pinStatusFilter.value = ''
+  teleworkingFilter.value = ''
 }
 
 // La query string refleja el estado, para que un enlace copiado o el «volver»
 // del navegador reproduzcan la misma vista.
 watch(
-  [qFilter, statusFilter, departmentFilter, pinStatusFilter, page],
-  ([q, status, department, pinStatus, currentPage]) => {
+  [qFilter, statusFilter, departmentFilter, pinStatusFilter, teleworkingFilter, page],
+  ([q, status, department, pinStatus, teleworking, currentPage]) => {
     const nextQuery: Record<string, string> = {}
 
     if (q !== '') {
@@ -215,6 +226,10 @@ watch(
 
     if (pinStatus !== '') {
       nextQuery['pin_status'] = pinStatus
+    }
+
+    if (teleworking !== '') {
+      nextQuery['teleworking'] = teleworking
     }
 
     if (currentPage !== 1) {
@@ -356,6 +371,21 @@ const selectClass =
             </option>
           </select>
         </div>
+        <div class="flex flex-col gap-1">
+          <label for="employees-teleworking-filter" class="font-medium">
+            {{ t('employees.filters.teleworking') }}
+          </label>
+          <select
+            id="employees-teleworking-filter"
+            v-model="teleworkingFilter"
+            :class="selectClass"
+            @change="resetToFirstPage"
+          >
+            <option value="">{{ t('employees.filters.teleworkingAll') }}</option>
+            <option value="true">{{ t('employees.filters.teleworkingYes') }}</option>
+            <option value="false">{{ t('employees.filters.teleworkingNo') }}</option>
+          </select>
+        </div>
       </fieldset>
 
       <button
@@ -399,6 +429,8 @@ const selectClass =
               <!-- Estado del PIN, nunca el PIN. El valor solo existe en el
                    dialogo que lo emite (RF-ID-09). -->
               <th scope="col" class="px-3 py-2">{{ t('employees.table.pinStatus') }}</th>
+              <!-- Informativo: no altera el fichaje ni el calculo de horas. -->
+              <th scope="col" class="px-3 py-2">{{ t('employees.table.teleworking') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -421,6 +453,7 @@ const selectClass =
               </td>
               <td class="px-3 py-2">{{ t(`employees.status.${employee.status}`) }}</td>
               <td class="px-3 py-2">{{ t(`pin.status.${employee.pin_status}`) }}</td>
+              <td class="px-3 py-2"><TeleworkingBadge :teleworking="employee.teleworking" /></td>
             </tr>
           </tbody>
         </table>

@@ -455,4 +455,47 @@ describe('EmployeeDetailView', () => {
       expect(wrapper.text()).toContain(es.employees.detail.credentialInactive.title)
     })
   })
+
+  it('enseña el teletrabajo en la ficha con texto (RF-GP-01)', async () => {
+    const wrapper = await mountDetail(employee({ teleworking: true }))
+
+    expect(wrapper.find('[data-test="teleworking-badge"]').text()).toBe(
+      es.employees.teleworking.yes,
+    )
+  })
+
+  it('al editar solo el teletrabajo, la vista previa lo enseña y el PATCH lleva solo ese campo (RF-GP-01)', async () => {
+    let patchBody: unknown = null
+    const wrapper = await mountDetail(employee({ teleworking: false }), (_url, init) => {
+      if (init?.method === 'PATCH') {
+        patchBody = JSON.parse(String(init.body))
+
+        return jsonResponse(employee({ teleworking: true }))
+      }
+
+      return null
+    })
+
+    await buttonWith(wrapper, es.common.edit).trigger('click')
+    await settle(1)
+
+    expect(
+      buttonWith(wrapper, es.employees.detail.reviewChanges).attributes('disabled'),
+    ).toBeDefined()
+
+    await wrapper.find('[data-test="teleworking-checkbox"]').setValue(true)
+    await wrapper.find('#employee-edit-form').trigger('submit')
+    await settle(1)
+
+    const dialog = wrapper.find('[role="dialog"]')
+
+    expect(dialog.text()).toContain(es.employees.fields.teleworking)
+    expect(dialog.text()).toContain(es.employees.teleworking.no)
+    expect(dialog.text()).toContain(es.employees.teleworking.yes)
+
+    await buttonWith(wrapper, es.employees.detail.confirmAction).trigger('click')
+    await settle(1)
+
+    expect(patchBody).toEqual({ teleworking: true })
+  })
 })
