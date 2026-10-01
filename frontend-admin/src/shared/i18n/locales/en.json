@@ -247,6 +247,57 @@
       "offboarded": "The offboarding has been recorded."
     }
   },
+  "contracts": {
+    "heading": "Contracts",
+    "explanation": "This person's contracts, from the oldest to the current one. Contracted hours are the figure the period report measures each day against. A contract is never edited or deleted: you register a new one and the previous one is closed the day before.",
+    "loading": "Loading contracts…",
+    "retry": "Reload contracts",
+    "current": "Current",
+    "hoursValue": "{hours} h",
+    "actions": {
+      "register": "Register contract"
+    },
+    "empty": {
+      "title": "No contracts registered",
+      "description": "Until there is a contract, the period report counts this person's days as “no contract” and adds no contracted hours. Register the first one with the button above."
+    },
+    "table": {
+      "caption": "The person's contracts, from the oldest to the most recent"
+    },
+    "fields": {
+      "weeklyHours": "Hours per week",
+      "annualHours": "Annual hours (agreement)",
+      "scheduleType": "Schedule type",
+      "validFrom": "Valid from",
+      "validTo": "Valid until"
+    },
+    "schedule": {
+      "continua": "Continuous",
+      "partida": "Split",
+      "turnos": "Shifts"
+    },
+    "register": {
+      "heading": "Register contract",
+      "explanation": "Review the table below: it shows the value of the current contract and the one you are about to register. There is no end date; the system sets it when the next contract is registered.",
+      "weeklyHint": "Between 0 and 168. Decimals allowed, for example 37.5.",
+      "weeklyInvalid": "Enter a number greater than 0 and at most 168.",
+      "annualHint": "Optional. The agreement's annual hours; it is not used in any calculation.",
+      "annualInvalid": "Enter a number greater than 0 or leave the field empty.",
+      "scheduleHint": "Informative: it does not change any calculation today.",
+      "schedulePlaceholder": "Choose a type",
+      "validFromHint": "Must be later than the start of the current contract ({date}).",
+      "validFromHintFirst": "First day of validity, inclusive.",
+      "previewCaption": "What will be registered, from the current contract to the new one",
+      "closesPrevious": "Once registered, the current contract is closed the day before the start date. It stays in the list.",
+      "conflict": "There is already a current contract on that date: someone changed the contracts in the meantime. We have read them again and the table below shows the current state. Check the start date and try again.",
+      "submit": "Register contract"
+    },
+    "announce": {
+      "registered": "Contract registered. The previous contract is closed the day before.",
+      "reread": "The contracts were read again because they had changed."
+    }
+  },
+
   "pin": {
     "heading": "Employee portal PIN",
     "explanation": "With their employee code and this PIN, the person checks their own time records in the portal. It is handed over in person, never by email.",
@@ -662,6 +713,7 @@
       "generate": "Generate report",
       "loading": "Generating the report…",
       "contractCoverage": "There are {days} person-days in this period with no contract on record, affecting {employees} person(s). Those days add no contracted hours: the deviation on those rows is incomplete.",
+      "contractCoverageLink": "Register contracts from each person's record",
       "filters": {
         "legend": "Report period and grouping",
         "from": "From",

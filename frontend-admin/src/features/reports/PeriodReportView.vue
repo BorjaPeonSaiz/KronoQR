@@ -27,6 +27,9 @@ import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
+import { EMPLOYEES_MANAGE } from '@/features/auth/abilities'
+import { useSessionStore } from '@/features/auth/session.store'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type {
   PeriodReport,
@@ -50,6 +53,10 @@ const GROUPINGS: readonly ReportGrouping[] = ['employee', 'department', 'site']
 const FORMATS: readonly PeriodReportFormat[] = ['csv', 'xlsx', 'pdf']
 
 const { t, locale } = useI18n()
+const session = useSessionStore()
+
+// El enlace a las fichas es cortesia: sin `employees:*` el servidor responderia 403.
+const canManageContracts = computed(() => session.can(EMPLOYEES_MANAGE))
 
 // Como se llama cada campo de la consulta EN ESTA PANTALLA, para que un `422`
 // diga «Hasta: …» y no «to: …». El servidor ya manda el mensaje en el idioma de
@@ -433,6 +440,14 @@ const fieldClass =
             employees: report.meta.contract_coverage.employees_without_contract,
           })
         }}
+        <RouterLink
+          v-if="canManageContracts"
+          :to="{ name: 'employees' }"
+          class="ml-1 font-medium text-kq-primary-strong underline"
+          data-test="contract-coverage-link"
+        >
+          {{ t('reports.period.contractCoverageLink') }}
+        </RouterLink>
       </p>
 
       <!-- La descarga va SOBRE EL INFORME YA CONSULTADO y con su misma consulta
@@ -507,7 +522,13 @@ const fieldClass =
         :description="t('reports.period.empty.description')"
       />
 
-      <div v-else class="mt-4 overflow-x-auto">
+      <div
+        v-else
+        tabindex="0"
+        role="region"
+        :aria-label="t('reports.table.caption', { timeZone: report.meta.time_zone })"
+        class="mt-4 overflow-x-auto"
+      >
         <PeriodReportTable :rows="report.data" :time-zone="report.meta.time_zone" />
       </div>
 

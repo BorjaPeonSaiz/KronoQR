@@ -26,6 +26,7 @@ import type { Employee, IssuedPin, UpdateEmployeeRequest } from '@/shared/api/ty
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
+import EmployeeContractsSection from './EmployeeContractsSection.vue'
 import PinRevealDialog from './PinRevealDialog.vue'
 import {
   deliverEmployeePin,
@@ -592,6 +593,12 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
           </button>
         </div>
       </section>
+
+      <!-- Contratos (RF-GP-02) -->
+      <EmployeeContractsSection
+        :employee-uuid="employee.uuid"
+        :can-register="employee.status !== 'terminated'"
+      />
 
       <!-- Registro horario (RF-PA-03) -->
       <section
