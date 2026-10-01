@@ -193,6 +193,20 @@ test(
       throw new Error('el quiosco dejo de latir')
     }
 
+    // El `200` del latido llega al servidor simulado ANTES de que el cliente
+    // termine de guardar el relevo (re-cifra el padron y escribe el token). Si el
+    // reloj saltara 3 dias en ese hueco, un envio en vuelo firmado aun con el
+    // token anterior caeria ya fuera del solape de 24 h y recibiria el 401 que
+    // ADR-044 preve (y que el cliente recupera repitiendo con el vigente): no es
+    // lo que esta prueba mide, que es 170 dias sin ninguna revocacion. Se espera
+    // a que el quiosco haya adoptado el ultimo relevo entregado.
+    async function adopted(): Promise<void> {
+      const latest = server.issued.at(-1)?.value
+      await expect
+        .poll(() => page.evaluate(() => window.localStorage.getItem('kronoqr.kiosk.device_token')))
+        .toBe(latest)
+    }
+
     // 170 dias en saltos de 3: cada salto dispara UN latido (el temporizador
     // vencido se ejecuta una vez), que es lo que hace un quiosco que se despierta.
     const STEP_DAYS = 3
@@ -201,6 +215,7 @@ test(
       server.setNow(start + day * DAY_MS)
       await page.clock.fastForward(STEP_DAYS * DAY_MS)
       await nextHeartbeat(before)
+      await adopted()
     }
 
     // Dos relevos entregados y ningun 401 en 170 dias.
