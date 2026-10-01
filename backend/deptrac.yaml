@@ -1258,6 +1258,15 @@ parameters:
       - Eloquent
       - ExternalCode
       - KioskPersistence
+      # RF-ID-04, ADR-044. `IdentityDeviceTokenRenewal` implementa el puerto
+      # `DeviceTokenRenewal` llamando al caso de uso publico
+      # `RotateDeviceTokenIfDue`. No es una arista nueva entre modulos —la de
+      # `KioskApplication -> IdentityApplication` ya existe desde la tarea 5.6—
+      # sino la misma, un piso mas abajo: el puerto existe para que el latido
+      # tenga un colaborador que NO LANZA (regla dura 19), y quien captura la
+      # excepcion tiene que ser infraestructura. Mismo limite: ni Domain, ni
+      # Persistence, ni Infrastructure de Identity.
+      - IdentityApplication
 
     # Http entra por Application. Alcanza Persistence solo por los idiomas de
     # Laravel que lo necesitan (route-model binding y Resources), nunca

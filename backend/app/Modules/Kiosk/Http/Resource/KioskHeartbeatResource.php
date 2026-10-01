@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Kiosk\Http\Resource;
 
 use App\Modules\Kiosk\Application\UseCase\HeartbeatOutcome;
+use DateTimeZone;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -46,8 +47,11 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   y encolando: lo unico que no hace es recargarse.
  *
  * **No devuelve el estado del dispositivo**, ni su nombre, ni su centro, ni
- * cuando caduca su token. Un latido es una escritura, no una consulta, y cada
- * campo que devolviera seria informacion que un token robado obtiene sin pedirla.
+ * cuando caduca su token vigente. Un latido es una escritura, no una consulta, y
+ * cada campo que devolviera seria informacion que un token robado obtiene sin
+ * pedirla. La unica excepcion es `rotated_token` (RF-ID-04, ADR-044): el relevo
+ * con su caducidad, **solo** cuando el token que firmo ha pasado el umbral de
+ * rotacion, y que un token robado ya obtendria igual por ese mismo camino.
  *
  * Los milisegundos se conservan por lo mismo que en `recorded_at`: redondear al
  * segundo perderia precision justo en el dato que sirve para diagnosticar un
@@ -97,6 +101,19 @@ final class KioskHeartbeatResource extends JsonResource
                 'end' => $outcome->updateWindow->end,
                 'quiet_minutes' => $outcome->updateQuietMinutes,
             ],
+            // **El relevo del token, y solo cuando lo hay** (RF-ID-04, ADR-044).
+            // Al contrario que los de arriba, la clave se OMITE en el caso
+            // normal y no viaja a `null`: el contrato la declara opcional y no
+            // anulable, y asi «no toca rotar» no se confunde con «el servidor ha
+            // mandado un token vacio».
+            ...($outcome->rotatedToken === null ? [] : [
+                'rotated_token' => [
+                    'value' => $outcome->rotatedToken->value,
+                    'expires_at' => $outcome->rotatedToken->expiresAt
+                        ->setTimezone(new DateTimeZone('UTC'))
+                        ->format('Y-m-d\TH:i:s\Z'),
+                ],
+            ]),
         ];
     }
 }

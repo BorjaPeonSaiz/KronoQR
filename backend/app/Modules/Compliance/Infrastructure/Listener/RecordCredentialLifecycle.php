@@ -210,6 +210,13 @@ final readonly class RecordCredentialLifecycle
                 'abilities' => $event->abilities,
                 'expires_at' => $event->expiresAt->format('Y-m-d\TH:i:sP'),
                 'rotation' => $event->rotation,
+                // ADR-044: una rotacion dice ademas hasta cuando vale el token
+                // relevado y si es la reentrega de un relevo que no llego. Solo
+                // fechas y banderas: ni el token ni su hash.
+                ...($event->rotation ? [
+                    'superseded_until' => $event->supersededUntil?->format('Y-m-d\TH:i:sP'),
+                    'redelivery' => $event->redelivery,
+                ] : []),
             ]),
             occurredAt: $event->occurredAt(),
         ));

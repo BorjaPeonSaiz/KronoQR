@@ -7,6 +7,7 @@ namespace App\Modules\Kiosk\Http\Support;
 use App\Modules\Kiosk\Http\Policy\KioskPolicy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Laravel\Sanctum\PersonalAccessToken;
 use RuntimeException;
 
 /**
@@ -43,6 +44,13 @@ final readonly class KioskDevice
         public int $id,
         public string $uuid,
         public int $siteId,
+        /**
+         * El token con el que se firmo esta peticion (RF-ID-04, ADR-044), o
+         * `null` si detras no hay un token persistido (`Sanctum::actingAs` en
+         * una prueba). Sale del guard, que ya lo cargo: la rotacion decide por
+         * el firmante y no por el dispositivo.
+         */
+        public ?int $presentedTokenId = null,
     ) {}
 
     /**
@@ -71,6 +79,30 @@ final readonly class KioskDevice
             throw new RuntimeException('El dispositivo autenticado no esta vinculado a ningun centro.');
         }
 
-        return new self((int) $id, $uuid, (int) $siteId);
+        return new self((int) $id, $uuid, (int) $siteId, self::presentedTokenIdOf($actor));
+    }
+
+    /**
+     * La clave del token de Sanctum que autentico la peticion.
+     *
+     * Por `method_exists` y no por tipo, igual que el resto de esta clase:
+     * `Kiosk` no puede nombrar el modelo `Device` de `Identity`, que es quien
+     * lleva el rasgo `HasApiTokens`.
+     */
+    private static function presentedTokenIdOf(Model $actor): ?int
+    {
+        if (! method_exists($actor, 'currentAccessToken')) {
+            return null;
+        }
+
+        $token = $actor->currentAccessToken();
+
+        if (! $token instanceof PersonalAccessToken) {
+            return null;
+        }
+
+        $key = $token->getKey();
+
+        return is_numeric($key) ? (int) $key : null;
     }
 }

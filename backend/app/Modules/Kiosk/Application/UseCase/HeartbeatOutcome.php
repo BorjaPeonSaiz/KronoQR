@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Kiosk\Application\UseCase;
 
+use App\Modules\Kiosk\Domain\ValueObject\RenewedDeviceToken;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\KioskUpdateWindow;
 use DateTimeImmutable;
@@ -102,5 +103,11 @@ final readonly class HeartbeatOutcome
          * tenga que saber cuando empieza. Cero lo desactiva.
          */
         public int $updateQuietMinutes,
+        /**
+         * RF-ID-04 (ADR-044): el relevo del token, **solo cuando toca rotar**.
+         * `null` en el caso normal y tambien si la rotacion fallo: el latido
+         * responde igual y el siguiente lo reintenta (regla dura 19).
+         */
+        public ?RenewedDeviceToken $rotatedToken = null,
     ) {}
 }

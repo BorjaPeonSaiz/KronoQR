@@ -59,5 +59,12 @@ final readonly class RecordHeartbeatCommand
         public int $siteId,
         public HeartbeatTelemetry $telemetry,
         public array $clientErrors = [],
+        /**
+         * El token con el que se firmo el latido, **del guard** y nunca del
+         * cuerpo (RF-ID-04, ADR-044). La rotacion decide por el firmante. `null`
+         * cuando no hay un token persistido detras —una prueba con
+         * `Sanctum::actingAs`—: entonces no se rota.
+         */
+        public ?int $presentedTokenId = null,
     ) {}
 }

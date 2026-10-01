@@ -62,6 +62,12 @@ final readonly class RedisKioskMetrics implements KioskMetrics
      */
     public const string PAIRING_TOTAL = self::KEY_PREFIX.'kiosk_pairing_total';
 
+    /**
+     * `kiosk_token_rotations_total{result}` (RF-ID-04, ADR-044): relevos
+     * emitidos en el latido y rotaciones fallidas.
+     */
+    public const string TOKEN_ROTATIONS_TOTAL = self::KEY_PREFIX.'kiosk_token_rotations_total';
+
     public function __construct(private Redis $redis) {}
 
     public function heartbeat(
@@ -112,6 +118,11 @@ final readonly class RedisKioskMetrics implements KioskMetrics
     public function pairingRejected(string $reason): void
     {
         $this->increment(self::PAIRING_TOTAL, 'result=rejected,reason='.$reason);
+    }
+
+    public function tokenRotation(string $result): void
+    {
+        $this->increment(self::TOKEN_ROTATIONS_TOTAL, 'result='.$result);
     }
 
     /**
