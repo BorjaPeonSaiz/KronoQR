@@ -71,6 +71,8 @@ export async function queueStoreReady(page: Page): Promise<boolean> {
 
 export interface BatchCall {
   readonly idempotencyKey: string | undefined
+  /** `Authorization` tal y como llego: lo que prueba con QUE token se sincronizo (RF-ID-04). */
+  readonly authorization: string | undefined
   readonly scans: Array<{ scan_id: string; occurred_at: string; intent?: string }>
 }
 
@@ -145,6 +147,7 @@ export async function stubBatchApi(
     }
     recorder.calls.push({
       idempotencyKey: route.request().headers()['idempotency-key'],
+      authorization: route.request().headers()['authorization'],
       scans: body.scans,
     })
 
