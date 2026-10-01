@@ -169,7 +169,7 @@ final readonly class ErrorContextAllowlist
             }
 
             if (is_string($value)) {
-                $clean = ErrorMessageSanitizer::sanitizeContextValue($value);
+                $clean = self::withoutLoneCode(ErrorMessageSanitizer::sanitizeContextValue($value));
 
                 // Un valor que se queda en nada despues del saneado no aporta
                 // una clave vacia: aporta ruido.
@@ -184,6 +184,30 @@ final readonly class ErrorContextAllowlist
         }
 
         return $allowed;
+    }
+
+    /**
+     * Un valor que es, entero, una sola palabra con forma de codigo de empleado
+     * heredado se sustituye por `[code]` (PR12).
+     *
+     * El saneador atrapa la forma canonica (`E` y nueve caracteres) y cualquier
+     * codigo detras de su etiqueta, pero `EmployeeCode::fromString()` acepta
+     * codigos importados de otro sistema con cualquier forma alfanumerica en
+     * mayusculas, y en un mensaje libre esos son indistinguibles de un numero
+     * cualquiera. En un valor de contexto no: cuando un cliente escribe
+     * `reason: "AB12C3"`, ese valor solo puede ser un identificador, y los de
+     * esta lista —`scope`, `outcome`, `cause`— son palabras en minusculas.
+     *
+     * Exige letra Y cifra, de 4 a 32 caracteres (el techo de `EmployeeCode`).
+     * Un valor solo numerico no cuenta: un `"500"` como texto es un estado
+     * HTTP, no una persona. Lo que se pierde es un `"HTTP2"` o un `"UTF8"`
+     * mandado como valor suelto, que no diagnostica nada que el mensaje no diga.
+     */
+    private static function withoutLoneCode(string $value): string
+    {
+        return preg_match('/^(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{4,32}$/', $value) === 1
+            ? '[code]'
+            : $value;
     }
 
     /**

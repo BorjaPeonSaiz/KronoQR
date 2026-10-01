@@ -161,3 +161,187 @@ it('trunca los valores de contexto a doscientos caracteres', function (): void {
     expect(mb_strlen(ErrorMessageSanitizer::sanitizeContextValue(str_repeat('x', 900))))
         ->toBe(ErrorMessageSanitizer::MAX_CONTEXT_LENGTH);
 })->group('RF-PD-15');
+
+/*
+ * ---------------------------------------------------------------------------
+ * PR12, F4c-2 y L1 (verificacion de la 2.1.0): los patrones que faltaban.
+ *
+ * Codigo de empleado, DNI y NIE con puntos y espacios, fechas `dd-mm-aaaa`,
+ * IBAN, pasaporte y el `Key (…)=(…)` anidado de PostgreSQL. Dos tablas que se
+ * leen juntas: lo que tiene que desaparecer, y los mensajes tecnicos normales
+ * que tienen que salir **identicos**. La segunda es la que impide que un patron
+ * nuevo convierta el log en ruido.
+ * ---------------------------------------------------------------------------
+ */
+
+it('no deja pasar los datos personales de F4c-2 y PR12', function (string $texto, string $prohibido): void {
+    expect(ErrorMessageSanitizer::sanitize($texto))->not->toContain($prohibido)
+        ->and(ErrorMessageSanitizer::redact($texto))->not->toContain($prohibido);
+})->with([
+    // Codigo de empleado: la forma que genera `EmployeeCode::generate()`, la de
+    // la semilla (hexadecimal), la de los ejemplos del contrato (ocho) y la que
+    // no tiene ni una cifra pero si el alfabeto sin ambiguos.
+    'codigo canonico' => ['Employee E7K2M9QX4B not found', 'E7K2M9QX4B'],
+    'codigo de ocho' => ['tarjeta de E7QK2MXPR revocada', 'E7QK2MXPR'],
+    'codigo de la semilla' => ['fallo con E3A4F0B91C al fichar', 'E3A4F0B91C'],
+    'codigo sin cifras' => ['fallo con EKMNPQRSTU al fichar', 'KMNPQRSTU'],
+    'codigo heredado con etiqueta =' => ['employee_code=739104 rejected', '739104'],
+    'codigo heredado con etiqueta :' => ['employee code: AB12C3 rejected', 'AB12C3'],
+    'codigo heredado en castellano' => ['codigo de empleado 739104 no existe', '739104'],
+    'codigo con tilde' => ['código de empleado: ZX81 no existe', 'ZX81'],
+    // DNI y NIE como se teclean a mano.
+    'dni con puntos y guion' => ['documento 12.345.678-Z duplicado', '345.678'],
+    'dni con espacios' => ['documento 12 345 678 Z duplicado', '345 678'],
+    'dni de siete cifras con puntos' => ['documento 1.234.567-L duplicado', '234.567'],
+    'nie con guiones' => ['documento X-1234567-L duplicado', '1234567'],
+    'nie con puntos y espacios' => ['documento Y 1.234.567 L duplicado', '234.567'],
+    'dni con guion pegado' => ['documento 12345678-Z duplicado', '12345678'],
+    // Fechas.
+    'fecha dd-mm-aaaa' => ['jornada del 14-03-2026 incompleta', '14-03-2026'],
+    'fecha dd/mm/aaaa' => ['jornada del 14/03/2026 incompleta', '14/03/2026'],
+    'fecha dd.mm.aaaa' => ['jornada del 14.03.2026 incompleta', '14.03.2026'],
+    'fecha aaaa/mm/dd' => ['jornada del 2026/03/14 incompleta', '2026/03/14'],
+    'fecha d-m-aaaa' => ['alta el 1-3-2026', '1-3-2026'],
+    // IBAN, compacto y agrupado, espanol y extranjero.
+    'iban agrupado' => ['nomina a ES91 2100 0418 4502 0005 1332 rechazada', '2100 0418'],
+    'iban compacto' => ['nomina a ES9121000418450200051332 rechazada', '21000418'],
+    'iban aleman' => ['nomina a DE89370400440532013000 rechazada', '370400440532013000'],
+    'iban portugues agrupado' => ['nomina a PT50 0002 0123 1234 5678 9015 4', '0123 1234'],
+    // Pasaporte.
+    'pasaporte espanol' => ['pasaporte PAA123456 caducado', 'PAA123456'],
+    'pasaporte con etiqueta' => ['passport no. 987654321 expired', '987654321'],
+    'pasaporte con numero' => ['pasaporte numero: X12345678 caducado', 'X12345678'],
+])->group('RF-PD-15', 'RL-19', 'RL-08');
+
+it('quita los valores del Key anidado de PostgreSQL', function (string $mensaje, array $prohibidos): void {
+    /*
+     * F4c-2: el patron anterior cortaba en el primer `)`, asi que con una clave
+     * de expresion o de exclusion NO casaba y salian el `employee_id` y las
+     * horas del tramo. Un indice unico sobre CITEXT se expresa como
+     * `lower(...)`, y la exclusion de solapes de `shift_entries` (RN-01) lleva
+     * un `tstzrange(...)` con un rango semiabierto que ni siquiera tiene los
+     * parentesis equilibrados.
+     */
+    $limpio = ErrorMessageSanitizer::sanitize($mensaje);
+
+    foreach ($prohibidos as $prohibido) {
+        expect($limpio)->not->toContain($prohibido);
+    }
+
+    expect($limpio)->toContain("Key ('…')=('…')");
+})->with([
+    'indice de expresion' => [
+        'SQLSTATE[23505]: Unique violation: 7 ERROR: duplicate key value violates unique constraint '
+            .'"employees_code_lower_unique" DETAIL: Key (lower((employee_code)::text))=(e7k2m9qx4b) already exists.',
+        ['e7k2m9qx4b'],
+    ],
+    'exclusion con rango semiabierto' => [
+        'SQLSTATE[23P01]: Exclusion violation: 7 ERROR: conflicting key value violates exclusion constraint '
+            .'"shift_entries_no_overlap" DETAIL: Key (employee_id, tstzrange(started_at, ended_at, \'[)\'::text))'
+            .'=(4242, ["2026-03-14 07:02:00+00","2026-03-14 15:00:00+00")) conflicts with existing key '
+            .'(employee_id, tstzrange(started_at, ended_at, \'[)\'::text))=(4242, ["2026-03-14 06:00:00+00",'
+            .'"2026-03-14 08:00:00+00")).',
+        ['4242', '07:02', '15:00', '06:00'],
+    ],
+    'clave compuesta con un valor con parentesis' => [
+        'DETAIL: Key (site_id, note)=(3, Maria (de la) Fuente) already exists.',
+        ['Maria', 'Fuente', 'de la'],
+    ],
+    'clave foranea ausente' => [
+        'DETAIL: Key (employee_id)=(98765) is not present in table "employees".',
+        ['98765'],
+    ],
+])->group('RF-PD-15', 'RL-19', 'RL-08');
+
+it('conserva lo que sigue al Key: dice que paso sin decir de quien', function (): void {
+    $limpio = ErrorMessageSanitizer::redact(
+        'DETAIL: Key (employee_id)=(98765) is still referenced from table "shift_entries".',
+    );
+
+    expect($limpio)->toBe("DETAIL: Key ('…')=('…') is still referenced from table '…'.");
+})->group('RF-PD-15');
+
+it('no toca un mensaje tecnico normal', function (string $texto): void {
+    /*
+     * LA OTRA MITAD. Un patron nuevo que se coma versiones, UUID, rutas,
+     * numeros de linea o tamanos convierte el log tecnico en ruido, y un log que
+     * no se puede leer no protege a nadie: se deja de mirar. Estos salen
+     * identicos, caracter a caracter.
+     */
+    expect(ErrorMessageSanitizer::redact($texto))->toBe($texto);
+})->with([
+    'versiones' => ['PHP 8.4.12, Laravel v13.2.1, PostgreSQL 17.6, KronoQR 2.2.0'],
+    'version de cuatro cifras' => ['version 13.0.1234 build 2026.10.01'],
+    'uuid en minusculas' => ['employee 0199a1f0-0000-7000-8000-000000000000 not found'],
+    'uuid en mayusculas' => ['device 0199A1F0-ABCD-7000-8000-00000000AB12 unknown'],
+    'trace_id' => ['trace a1b2c3d4e5f60718293a4b5c6d7e8f90 span 00f067aa0ba902b7'],
+    'ruta con linea' => ['at /var/www/html/app/Modules/Product/Domain/ValueObject/Foo.php:123'],
+    'numero de linea' => ['Undefined array key 3 on line 1234'],
+    'sqlstate y http' => ['SQLSTATE[23505] HTTP 500 Internal Server Error'],
+    'memoria' => ['Allowed memory size of 1073741824 bytes exhausted (tried to allocate 20480 bytes)'],
+    'puertos y pid' => ['Connection refused tcp://redis:6379 port 5432 pid 12345'],
+    'huella en mayusculas' => ['E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'],
+    'huella en minusculas' => ['sha256 de12a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3'],
+    'palabras en mayusculas' => ['EXCEPTIONS EVERYTHING ENCRYPTED ERROR_CODE E_WARNING'],
+    'clase y metodo' => ['App\Modules\Kiosk\Application\UseCase\RecordHeartbeat::handle()'],
+    'duracion' => ['timeout after 30000 ms, retry 3 of 5'],
+    'clave sin valores' => ['missing key (config) in file'],
+    'numero y conjuncion' => ['procesados 120 y descartados 4'],
+])->group('RF-PD-15');
+
+it('es idempotente: sanear lo saneado no cambia nada', function (string $texto): void {
+    // La pila de log aplica el processor una vez por canal; la segunda pasada
+    // no puede estropear la primera.
+    $una = ErrorMessageSanitizer::redact($texto);
+
+    expect(ErrorMessageSanitizer::redact($una))->toBe($una);
+})->with([
+    'key anidado' => ['DETAIL: Key (lower((employee_code)::text))=(e7k2m9qx4b) already exists.'],
+    'de todo' => ['E7K2M9QX4B 12.345.678-Z ES91 2100 0418 4502 0005 1332 "Ana" 14-03-2026 22:15 a@b.es'],
+])->group('RF-PD-15');
+
+it('ningun codigo, DNI ni IBAN generado sobrevive, sea cual sea la plantilla', function (string $texto, string $dato): void {
+    /*
+     * Propiedad sobre valores generados, con semilla fija para que un fallo se
+     * reproduzca. No hay `Pest\Faker` en el repositorio y no hace falta: el
+     * generador sigue las mismas reglas que `EmployeeCode::generate()`, la
+     * letra de control del DNI y el formato agrupado del IBAN espanol.
+     */
+    expect(ErrorMessageSanitizer::redact($texto))->not->toContain($dato);
+})->with(static function (): iterable {
+    mt_srand(20261001);
+
+    $alfabeto = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    $letrasDni = 'TRWAGMYFPDXBNJZSQVHLCKE';
+    $plantillas = [
+        'Employee %s not found',
+        'SQLSTATE[23505]: Unique violation: valor %s ya existe',
+        '[2026-10-01T10:00:00Z] kiosk.error: fallo con %s (trace a1b2c3d4e5f60718293a4b5c6d7e8f90)',
+        "Error: %s\n#0 /var/www/html/app/Foo.php(12): bar()",
+        '%s',
+    ];
+
+    for ($i = 0; $i < 60; $i++) {
+        $codigo = 'E';
+
+        for ($j = 0; $j < 9; $j++) {
+            $codigo .= $alfabeto[mt_rand(0, 30)];
+        }
+
+        $numero = mt_rand(10_000_000, 99_999_999);
+        $dni = $numero.$letrasDni[$numero % 23];
+        $dniConPuntos = sprintf('%s.%s.%s-%s', substr($dni, 0, 2), substr($dni, 2, 3), substr($dni, 5, 3), $dni[8]);
+
+        $iban = 'ES'.mt_rand(10, 99);
+
+        for ($j = 0; $j < 5; $j++) {
+            $iban .= ' '.str_pad((string) mt_rand(0, 9999), 4, '0', STR_PAD_LEFT);
+        }
+
+        $plantilla = $plantillas[$i % count($plantillas)];
+
+        yield "codigo {$i}" => [sprintf($plantilla, $codigo), $codigo];
+        yield "dni {$i}" => [sprintf($plantilla, $dniConPuntos), $dniConPuntos];
+        yield "iban {$i}" => [sprintf($plantilla, $iban), $iban];
+    }
+})->group('RF-PD-15', 'RL-19', 'RL-08');
