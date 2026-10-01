@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Reporting\Application\Query\ReadEmployeeWorkDays;
 use App\Modules\Reporting\Http\Request\ExportMyWorkDaysRequest;
 use App\Modules\Reporting\Http\Response\PersonalRecordCsv;
+use App\Modules\Reporting\Http\Response\PersonalRecordPdf;
 use App\Modules\Reporting\Http\Support\JournalTelemetry;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -42,6 +43,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * volumen esta acotado por el techo de 366 dias de `DateRange`, asi que un
  * temporal solo añadiria un fichero con el registro horario de alguien esperando
  * a que alguien se olvide de borrarlo.
+ *
+ * El PDF (`?format=pdf`, PR19) tampoco toca el disco: el motor devuelve los bytes
+ * en memoria y se emiten tal cual. Lo compone {@see PersonalRecordPdf} con las
+ * plantillas y el sello del informe por periodo.
  */
 final class MyWorkDayExportController extends Controller
 {
@@ -49,6 +54,7 @@ final class MyWorkDayExportController extends Controller
         ExportMyWorkDaysRequest $request,
         ReadEmployeeWorkDays $workDays,
         JournalTelemetry $telemetry,
+        PersonalRecordPdf $pdf,
     ): StreamedResponse {
         $query = $request->toQuery();
 
@@ -57,6 +63,11 @@ final class MyWorkDayExportController extends Controller
             static fn () => $workDays->handle($query),
         );
 
-        return PersonalRecordCsv::respond($journal);
+        // Los dos formatos sobre el MISMO registro (PR19): lo que la persona
+        // presenta en papel y lo que se lleva en una hoja de calculo no pueden
+        // decir cosas distintas.
+        return $request->wantsPdf()
+            ? $pdf->respond($journal)
+            : PersonalRecordCsv::respond($journal);
     }
 }

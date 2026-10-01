@@ -6,6 +6,7 @@
 // autorizacion negativa se prueban en el backend (regla dura 18); mismo
 // patron que `frontend-admin/tests/e2e/errors.spec.ts`.
 import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import {
   PORTAL_EMPLOYEE_CODE,
   PORTAL_PIN,
@@ -20,6 +21,26 @@ import {
  * envio pendiente si el primero falla.
  */
 const RETRY_INTERVAL_MS = 60_000
+
+/**
+ * Deja que la pagina procese lo que el navegador ya le ha entregado: varias
+ * tareas reales (`MessageChannel`, que el reloj falso de Playwright no
+ * toca, a diferencia de `setTimeout`) para que la continuacion del `fetch`
+ * -leer el cuerpo del 500, rechazar, `finally { inFlight = false }`- termine
+ * antes de avanzar el reloj virtual.
+ */
+async function settlePageTasks(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    for (let turn = 0; turn < 5; turn += 1) {
+      await new Promise<void>((resolve) => {
+        const channel = new MessageChannel()
+
+        channel.port1.onmessage = () => resolve()
+        channel.port2.postMessage(null)
+      })
+    }
+  })
+}
 
 test(
   'un fallo al reportar un error de cliente no bloquea el portal ni reintenta en bucle',
@@ -77,10 +98,26 @@ test(
     // pagina y perderia el error ya lanzado, en memoria hasta que algo lo
     // vacie): se rellena y se envia el formulario ya cargado, igual que
     // `frontend-admin/tests/e2e/errors.spec.ts`.
+    // El primer envio se espera HASTA EL FINAL, no solo hasta que llega a la ruta
+    // interceptada. El transporte no lanza un segundo envio mientras otro sigue
+    // en vuelo (`inFlight`, `clientErrorTransport.ts`), y el contador del doble
+    // sube nada mas LLEGAR la peticion, antes de que se responda: con una
+    // respuesta lenta -la CI, una maquina cargada- el tick de `runFor` caia con
+    // el primero aun en vuelo, se descartaba por diseno y el recuento se quedaba
+    // en 1 (causa raiz del fallo intermitente; reproducido con 300 ms de retardo
+    // en la respuesta). Se declara la condicion que de verdad importa: el primer
+    // envio terminado y asimilado por la pagina.
+    const firstSendFinished = page.waitForEvent('requestfinished', {
+      predicate: (request) => request.url().endsWith('/api/v1/client-errors'),
+    })
+
     await page.locator('input[name="employee_code"]').fill(PORTAL_EMPLOYEE_CODE)
     await page.locator('input[name="pin"]').fill(PORTAL_PIN)
     await page.locator('form button[type="submit"]').click()
     await page.waitForURL('**/records')
+
+    await firstSendFinished
+    await settlePageTasks(page)
 
     await expect.poll(() => clientErrors.count(), { timeout: 5_000 }).toBeGreaterThanOrEqual(1)
     const firstCount = clientErrors.count()

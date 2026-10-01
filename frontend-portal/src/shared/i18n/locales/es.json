@@ -74,6 +74,14 @@
     "subtitle": "Tus jornadas, tus tramos y el total de cada día. Un turno que empezó a las 22:00 pertenece al día en que empezó, aunque terminara al día siguiente. Nada se borra: si algo se corrigió, aparece explicado más abajo.",
     "duration": "{hours} h {minutes} min",
     "loading": "Cargando tu registro…",
+    "summary": {
+      "label": "Resumen del periodo",
+      "periodTotal": "Total del periodo",
+      "days": "{count} jornadas con registro, del {from} al {to}.",
+      "provisional": "Este total todavía puede cambiar: {count} jornadas tienen un turno abierto, una revisión pendiente o un total que no cuadra con sus tramos.",
+      "today": "Hoy",
+      "todayEmpty": "Todavía no tienes ningún fichaje registrado hoy."
+    },
     "filters": {
       "legend": "Periodo consultado",
       "from": "Desde",
@@ -167,7 +175,7 @@
     "contents": {
       "entries": "Una fila por cada tramo trabajado, con entrada, salida, duración y el total de cada jornada.",
       "corrections": "Una fila por cada corrección de tu registro, con quién la hizo, cuándo y por qué.",
-      "format": "Fichero CSV, con las horas en formato HH:MM, nunca en decimal."
+      "format": "Fichero CSV o PDF, con las horas en formato HH:MM, nunca en decimal. El PDF es un documento sellado que puedes presentar ante un tercero."
     },
     "filters": {
       "legend": "Periodo a descargar",
@@ -178,7 +186,20 @@
       "inverted": "El periodo termina antes de empezar. Revisa las dos fechas.",
       "tooWide": "El periodo no puede superar {days} días."
     },
-    "download": "Descargar CSV",
+    "format": {
+      "legend": "Formato del fichero",
+      "csv": "CSV (hoja de cálculo)",
+      "pdf": "PDF (documento sellado)"
+    },
+    "download": {
+      "csv": "Descargar CSV",
+      "pdf": "Descargar PDF"
+    },
+    "pdfUnavailable": {
+      "title": "Ahora mismo no se puede generar el PDF",
+      "advice": "No es nada que hayas hecho tú. Puedes descargar el mismo historial en CSV, o volver a probar el PDF más tarde.",
+      "useCsv": "Descargar CSV en su lugar"
+    },
     "downloading": "Generando la descarga…",
     "announce": {
       "done": "Descarga generada. Revisa las descargas de tu dispositivo."

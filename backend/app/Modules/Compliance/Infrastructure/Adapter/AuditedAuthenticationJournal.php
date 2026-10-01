@@ -160,11 +160,16 @@ final readonly class AuditedAuthenticationJournal implements AuthenticationJourn
 
     public function loggedOut(AuthChannel $channel, ?string $subjectUuid): void
     {
-        if (! $channel->sessionEventsAreAudited() || $subjectUuid === null) {
-            return;
+        if ($channel->sessionEventsAreAudited() && $subjectUuid !== null) {
+            $this->audit->handle($this->entryFor(AuditAction::Logout, $channel, $subjectUuid));
         }
 
-        $this->audit->handle($this->entryFor(AuditAction::Logout, $channel, $subjectUuid));
+        // En todos los canales, y con sujeto (PO1, 2.2.0): el portal no deja
+        // asiento (ADR-039), y sin esta linea su cierre de sesion no dejaba
+        // ningun rastro. Es la que permite responder «¿esa sesion del ordenador
+        // compartido se cerro, o caduco?» sin salir del log. UUID y nunca nombre
+        // (regla dura 21).
+        $this->write('auth.logged_out', $channel, $subjectUuid, [], LogLevel::INFO);
     }
 
     /**

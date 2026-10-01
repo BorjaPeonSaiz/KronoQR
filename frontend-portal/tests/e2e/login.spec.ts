@@ -123,15 +123,21 @@ test(
 )
 
 test(
-  'salir borra la sesion local y una pantalla protegida vuelve a exigir el acceso',
-  { tag: ['@RL-05', '@RF-ID-06'] },
+  'salir cierra la sesion en el servidor con el Bearer, borra la local y una pantalla protegida vuelve a exigir el acceso',
+  { tag: ['@RL-05', '@RF-ID-05', '@RF-ID-06', '@RF-ID-07'] },
   async ({ page }) => {
-    await stubPortalApi(page, { locale: 'es' })
+    const api = await stubPortalApi(page, { locale: 'es' })
     await logInToPortal(page)
 
     await page.getByRole('button', { name: 'Salir' }).click()
 
     await expect(page).toHaveURL(/\/login$/)
+
+    const logout = api.requests.filter((it) => it.path === '/api/v1/me/logout')
+
+    expect(logout).toHaveLength(1)
+    expect(logout[0]?.method).toBe('POST')
+    expect(logout[0]?.authorization).toBe(`Bearer ${PORTAL_SESSION_TOKEN}`)
 
     const stored = await page.evaluate(
       (key) => globalThis.sessionStorage.getItem(key),
@@ -156,5 +162,31 @@ test(
     await pinField.fill(PORTAL_PIN)
 
     await expect(page).not.toHaveURL(new RegExp(PORTAL_PIN))
+  },
+)
+
+test(
+  'salir funciona aunque el servidor no responda al cierre: la sesion local se borra igualmente',
+  { tag: ['@RF-ID-05', '@RF-ID-07'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es' })
+    await logInToPortal(page)
+
+    // Registrada despues: gana a la generica. El cierre falla por red.
+    await page.route('**/api/v1/me/logout', (route) => route.abort('failed'))
+
+    await page.getByRole('button', { name: 'Salir' }).click()
+
+    await expect(page).toHaveURL(/\/login$/)
+
+    const stored = await page.evaluate(
+      (key) => globalThis.sessionStorage.getItem(key),
+      SESSION_STORAGE_KEY,
+    )
+
+    expect(stored).toBeNull()
+
+    await page.goto('/records')
+    await expect(page).toHaveURL(/\/login\?redirect=(?:%2F|\/)records$/)
   },
 )

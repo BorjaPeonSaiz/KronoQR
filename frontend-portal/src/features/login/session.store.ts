@@ -13,20 +13,20 @@
 //    a la que protege minimizar es la misma que ya los tiene delante.
 //  - **El PIN nunca llega a este fichero.** Vive en el estado efimero del
 //    formulario de acceso y se descarta en cuanto se envia (regla dura 21).
-//  - **No hay endpoint de cierre de sesion para el portal en el contrato**: el
-//    unico `POST /api/v1/auth/logout` exige `managementToken` (§/api/v1/auth),
-//    no `employeeToken`. `signOutLocally` por eso SOLO olvida la sesion en
-//    este dispositivo; el token sigue siendo valido en el servidor hasta su
-//    caducidad natural (maximo 2 h, PortalSession.expires_at). Revocarlo de
-//    verdad -pensando en el ordenador compartido del centro- necesitaria un
-//    `POST /api/v1/me/logout` nuevo en `docs/api/openapi.yaml`, que hoy no
-//    existe: no se ha improvisado aqui, se deja anotado para pedirlo.
+//  - **Salir cierra la sesion tambien en el servidor** (`POST /api/v1/me/logout`,
+//    PO1): el ordenador compartido del centro no puede dejar un token vivo hasta
+//    su caducidad. La llamada lleva un tiempo maximo corto y NUNCA bloquea la
+//    salida: la sesion local se borra siempre, salga lo que salga (204, 401, 403,
+//    429, error de red o tiempo agotado).
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { PortalEmployee, PortalLoginRequest } from '@/shared/api/types'
-import { logInToPortal as logInRequest } from './login.api'
+import { logInToPortal as logInRequest, logOutOfPortal as logOutRequest } from './login.api'
 
 const STORAGE_KEY = 'kronoqr.portal.session'
+
+/** Lo maximo que se espera al servidor al salir; pasado esto se sale igualmente. */
+export const LOGOUT_TIMEOUT_MS = 3000
 
 interface StoredPortalSession {
   token: string
@@ -129,10 +129,34 @@ export const useSessionStore = defineStore('portal-session', () => {
     writeStored({ token: session.token, expiresAt: session.expires_at, employee: session.employee })
   }
 
-  /** Ver la nota de cabecera: solo olvida la sesion en este dispositivo. */
+  /** Solo olvida la sesion en este dispositivo. Para la caducidad, no para el boton «Salir». */
   function signOutLocally(): void {
     clear()
   }
 
-  return { token, expiresAt, employee, isAuthenticated, logIn, signOutLocally, clear }
+  /**
+   * Boton «Salir»: avisa al servidor y despues borra lo local, siempre. Ningun
+   * desenlace de la llamada -ni el 401 de una sesion ya cerrada, ni el 403, ni
+   * el 429 de nginx, ni un fallo de red, ni el tiempo maximo- impide salir.
+   */
+  async function signOut(): Promise<void> {
+    const current = token.value
+
+    if (current !== null) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), LOGOUT_TIMEOUT_MS)
+
+      try {
+        await logOutRequest(current, controller.signal)
+      } catch {
+        // Da igual por que: la sesion local se borra de todos modos.
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+
+    clear()
+  }
+
+  return { token, expiresAt, employee, isAuthenticated, logIn, signOut, signOutLocally, clear }
 })

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="64" height="64" role="img" aria-label="KronoQR">
+  <!-- Icono del PRODUCTO, no de ningun cliente (regla dura 13): el mismo reloj
+       que los iconos del quiosco (`frontend-kiosk/scripts/generate-icons.mjs`),
+       con el acento de serie `primary-strong` de docs/06-guia-visual.md. Un
+       SVG estatico no puede leer los tokens `--kq-*`; si el acento por defecto
+       cambia, cambia aqui y en ese guion. -->
+  <rect width="100" height="100" rx="22" fill="#b8542a" />
+  <circle cx="50" cy="50" r="30" fill="none" stroke="#ffffff" stroke-width="5.5" />
+  <path d="M50 50V33M50 50L62 57" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+</svg>

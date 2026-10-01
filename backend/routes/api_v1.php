@@ -22,6 +22,7 @@ use App\Modules\Identity\Http\Controller\InstructionsSheetController;
 use App\Modules\Identity\Http\Controller\LoginController;
 use App\Modules\Identity\Http\Controller\LogoutController;
 use App\Modules\Identity\Http\Controller\PortalLoginController;
+use App\Modules\Identity\Http\Controller\PortalLogoutController;
 use App\Modules\Identity\Http\Controller\PrintCredentialBatchController;
 use App\Modules\Identity\Http\Controller\PrintCredentialController;
 use App\Modules\Identity\Http\Controller\RevokeCredentialController;
@@ -1057,27 +1058,45 @@ Route::middleware([
      * devuelva un fichero no lo convierte en una escritura, y un `POST`
      * impediria que el portal ofreciera la descarga como un enlace.
      *
-     * `?format=csv` es el unico valor de esta fase; el PDF llega en la tarea 2.9
-     * como un valor mas del mismo enumerado (ADR-012).
+     * `?format=csv` (por omision) y `?format=pdf`, el documento sellado que el
+     * Anexo B exige (PR19, 2.2.0): un valor mas del mismo enumerado (ADR-012),
+     * con el mismo rango maximo y esta misma zona de limite.
      */
     Route::get('/me/export', MyWorkDayExportController::class)
         // Es un documento: sale en el idioma de la instalacion, no en el del
         // navegador (regla dura 13; UseInstallationLocale).
         ->middleware('locale.installation')
         ->name('portal.export');
-
-    /*
-     * POST /api/v1/me/logout NO existe, y no es un olvido. El Anexo B del doc 01
-     * lista tres rutas de portal y solo tres. La sesion es corta y el cliente
-     * olvida el token, que es lo mismo que hace hoy el panel cuando caduca.
-     *
-     * Y para el caso que de verdad importa —un movil perdido— ya hay un camino
-     * que ademas cierra las dos puertas a la vez: que RRHH restablezca el PIN
-     * (RF-ID-09). `IdentityServiceProvider` invalida toda sesion de portal
-     * anterior al ultimo `pin_issued_at`, asi que el restablecimiento tiene
-     * efecto en la peticion siguiente y no cuando caduque el token.
-     */
 });
+
+/*
+ * POST /api/v1/me/logout — EL CIERRE DE LA SESION DEL PORTAL (PO1, RF-ID-05).
+ *
+ * Hasta la 2.2.0 no existia: «Salir» solo borraba el token del navegador y el
+ * token seguia valiendo hasta su caducidad. En el ordenador compartido de la
+ * sala de personal eso es una sesion abierta para quien se siente despues.
+ *
+ * `self:read` Y `PortalSessionPolicy`, como las otras dos rutas autenticadas del
+ * portal: un token de quiosco o de gestion recibe 403 aunque lleve el ambito
+ * puesto a mano.
+ *
+ * FUERA DEL GRUPO DE ARRIBA PORQUE NO LLEVA `throttle:portal`, y es la misma
+ * decision que `POST /auth/logout` (decision 11 de la ficha 3.8). La zona del
+ * portal cuenta tambien por IP, y en el ordenador compartido toda la plantilla
+ * sale por la misma: un 429 aqui dejaria la sesion abierta justo donde mas
+ * importa cerrarla. Esta ruta revoca el token del que llama y nada mas, asi que
+ * quien agotara un cupo solo se cerraria la sesion a si mismo.
+ * `Tests\Feature\Identity\RouteRateLimitZonesTest` la lleva en su lista cerrada
+ * de exenciones.
+ *
+ * Para el caso del movil perdido sigue valiendo el otro camino, que cierra todas
+ * las sesiones a la vez: que RRHH restablezca el PIN (RF-ID-09).
+ * `IdentityServiceProvider` invalida toda sesion de portal anterior al ultimo
+ * `pin_issued_at`.
+ */
+Route::post('/me/logout', PortalLogoutController::class)
+    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SELF_READ->value])
+    ->name('portal.logout');
 
 /*
  * LECTURA DE PLANTILLA: `employees:read`, no `employees:*` (RF-ID-03, tarea 2.1).

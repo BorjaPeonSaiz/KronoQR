@@ -108,7 +108,13 @@ That transparency is the reason the system works this way.
 
 ## 3. Downloading your record
 
-Under "Download my history" you choose the period and press **"Download CSV"**.
+Under "Download my history" you choose the period and the format, and press **"Download CSV"** or **"Download PDF"**.
+
+- **CSV**: to open in a spreadsheet.
+- **PDF**: a sealed document, with the date it was generated and a checksum
+  showing it has not been altered, meant to be shown to a third party. If the
+  server cannot generate it at that moment, the portal tells you and offers the
+  CSV instead; it is nothing you did.
 
 ![Screen for downloading your own history](../img/en/portal-04-descarga.png)
 
@@ -120,6 +126,8 @@ The file contains:
   why;
 - times as HH:MM, **never as a decimal**.
 
+The file name contains only the period, never your name or your code.
+
 It opens with any spreadsheet.
 
 **What it is for.** Access to your own working-time record is a **right**, not a
@@ -127,6 +135,8 @@ favour: the company is obliged to let you consult it and to keep it for four
 years. That file is your copy, and you can keep it or hand it over to whoever
 needs it —your legal representatives, an adviser, a court— without asking anyone
 for permission and without any trace of what you wanted it for.
+
+**Signing out.** When you finish, press **"Sign out"**, especially on a shared computer: it closes your session on the server as well, not just on that screen. Even if the connection fails at that moment, your session is closed on this device and you are taken back to the sign-in screen.
 
 ---
 

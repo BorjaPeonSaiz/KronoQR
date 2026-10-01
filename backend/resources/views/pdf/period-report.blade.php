@@ -1,6 +1,12 @@
 {{--
     Informe de horas por periodo, cuerpo del PDF (RF-IN-04, tarea 2.9).
 
+    TAMBIEN ES EL CUERPO DEL REGISTRO PERSONAL DEL PORTAL (PR19, 2.2.0):
+    `PersonalRecordPdfWriter` lo reutiliza con sus propias filas, y es el unico
+    que pasa `$wrapColumns` —las posiciones de las columnas de texto libre que
+    pueden partirse en lineas—. Sin esa variable, todas las celdas van en una
+    sola linea, como siempre.
+
     El SELLO NO ESTA AQUI. Fecha, emisor, periodo y huella los compone
     `pdf.period-report-footer` y los repite el motor en cada pagina: un pie
     escrito en este flujo saldria una sola vez, al final, y una hoja suelta
@@ -133,6 +139,15 @@
             margin-top: 8pt;
             font-style: italic;
         }
+
+        /* Texto libre —la explicacion de una correccion, el nombre de quien la
+           firmo— en el registro personal: partido en lineas, porque en una sola
+           empujaria la tabla fuera del papel. Las horas siguen sin partirse. */
+        table.data td.wrap {
+            white-space: normal;
+            min-width: 25mm;
+            max-width: 60mm;
+        }
     </style>
 </head>
 <body>
@@ -169,6 +184,7 @@
          con horas en ese periodo» tambien es una afirmacion. --}}
     <p class="empty">{{ $emptyLabel }}</p>
 @else
+    @php($wrapColumns = $wrapColumns ?? [])
     <table class="data">
         <thead>
         <tr>
@@ -180,8 +196,8 @@
         <tbody>
         @foreach ($rows as $row)
             <tr>
-                @foreach ($row as $cell)
-                    <td>{{ $cell }}</td>
+                @foreach ($row as $index => $cell)
+                    <td class="{{ in_array($index, $wrapColumns, true) ? 'wrap' : '' }}">{{ $cell }}</td>
                 @endforeach
             </tr>
         @endforeach

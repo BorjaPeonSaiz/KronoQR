@@ -20,6 +20,7 @@ use App\Modules\Reporting\Application\Port\LivePresenceReader;
 use App\Modules\Reporting\Application\Port\OpenIncidentCount;
 use App\Modules\Reporting\Application\Port\PayrollDocumentWriter;
 use App\Modules\Reporting\Application\Port\PeriodReportReader;
+use App\Modules\Reporting\Application\Port\PersonalRecordHolderDirectory;
 use App\Modules\Reporting\Application\Port\PresenceMetrics;
 use App\Modules\Reporting\Application\Port\QueuedJobFailureMetrics;
 use App\Modules\Reporting\Application\Port\RealtimeConnectionCounter;
@@ -95,6 +96,7 @@ use App\Modules\Reporting\Infrastructure\Persistence\DatabaseEmployeeAttribution
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseLivePresenceReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseOpenIncidentCount;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabasePeriodReportReader;
+use App\Modules\Reporting\Infrastructure\Persistence\DatabasePersonalRecordHolderDirectory;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportExportRecipients;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportExportRepository;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseReportIssuerDirectory;
@@ -473,6 +475,11 @@ final class ReportingServiceProvider extends ServiceProvider
     {
         $this->app->bind(ReportDocumentRenderer::class, BrowsershotReportRenderer::class);
         $this->app->bind(ReportIssuerDirectory::class, DatabaseReportIssuerDirectory::class);
+
+        // El titular del registro propio, para el PDF del portal (PR19). Misma
+        // forma que el emisor: una consulta de dos columnas sobre `employees`,
+        // sin el modelo de `Workforce`.
+        $this->app->bind(PersonalRecordHolderDirectory::class, DatabasePersonalRecordHolderDirectory::class);
 
         // `report_exports_total{format}` (§8.2). Redis y no el colector
         // *textfile*, como sus hermanas: `HINCRBY` es atomico y dos procesos PHP

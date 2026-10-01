@@ -227,18 +227,19 @@ it('no mete a nadie mas en el fichero del historico propio', function (): void {
         ->and($csv)->not->toContain('2026-03-14 07:00');
 })->group('RF-ID-07', 'RL-05');
 
-it('no ofrece ningun formato que no sea CSV en esta fase', function (): void {
-    // El PDF es la tarea 2.9 y XLSX no esta previsto para el historico personal.
-    // Servir un CSV a quien pidio otra cosa seria peor que decirle que no.
+it('no ofrece ningun formato que no sea CSV o PDF', function (): void {
+    // XLSX no esta previsto para el historico personal (Anexo B: CSV y PDF; el
+    // PDF lo prueba `MyWorkDaysPdfTest`). Servir un CSV a quien pidio otra cosa
+    // seria peor que decirle que no.
     $contexto = miPortal();
 
     Api::as($contexto['token'])
-        ->get('/api/v1/me/export', ['format' => 'pdf'])
+        ->get('/api/v1/me/export', ['format' => 'xlsx'])
         ->assertStatus(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
 
     Api::as($contexto['token'])
-        ->get('/api/v1/me/export', ['format' => 'xlsx'])
+        ->get('/api/v1/me/export', ['format' => 'json'])
         ->assertStatus(422);
 })->group('RF-ID-05', 'RQ-06');
 

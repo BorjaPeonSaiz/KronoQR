@@ -93,6 +93,8 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // Tarea 1.11: portal del empleado (RF-ID-05..08, RL-05). Ninguna lleva
         // `{uuid}`: el empleado sale del token, no de la URL.
         '/api/v1/me/login',
+        // PO1 (2.2.0): el cierre de la sesion del portal en el servidor.
+        '/api/v1/me/logout',
         '/api/v1/me/workdays',
         '/api/v1/me/export',
         '/api/v1/employees',
@@ -1212,6 +1214,7 @@ it('no admite ningun identificador de empleado en las rutas del portal', functio
     // o de consulta— tiene que pasar por esta prueba.
     $allowed = [
         '/api/v1/me/login' => [],
+        '/api/v1/me/logout' => [],
         '/api/v1/me/workdays' => ['from', 'to'],
         '/api/v1/me/export' => ['from', 'to', 'format'],
     ];
@@ -1219,7 +1222,7 @@ it('no admite ningun identificador de empleado en las rutas del portal', functio
     foreach ($allowed as $path => $expected) {
         expect($path)->not->toContain('{');
 
-        $method = $path === '/api/v1/me/login' ? 'post' : 'get';
+        $method = \in_array($path, ['/api/v1/me/login', '/api/v1/me/logout'], true) ? 'post' : 'get';
         $declared = Contract::has('paths', $path, $method, 'parameters')
             ? Contract::value('paths', $path, $method, 'parameters')
             : [];
@@ -1268,6 +1271,18 @@ it('exige el ambito self:read en las dos rutas de lectura del portal', function 
     expect(Contract::value('paths', '/api/v1/me/login', 'post', 'security'))->toBe([]);
 })->group('RF-ID-07', 'RS-04');
 
+it('acota el cierre de sesion del portal al token de portal, sin limite que lo impida', function (): void {
+    // PO1 (2.2.0). Exclusiva de la sesion de portal: `self:read` y nada mas, y
+    // sin `429` por la misma decision que `/auth/logout` —un techo aqui dejaria
+    // abierta la sesion del ordenador compartido—. Sin cuerpo: la sesion que se
+    // cierra es la del token, nunca una indicada por el cliente.
+    expect(Contract::value('paths', '/api/v1/me/logout', 'post', 'security'))
+        ->toBe([['employeeToken' => ['self:read']]])
+        ->and(Contract::keys('paths', '/api/v1/me/logout', 'post', 'responses'))->toBe(['204', '401', '403'])
+        ->and(Contract::has('paths', '/api/v1/me/logout', 'post', 'requestBody'))->toBeFalse()
+        ->and(Contract::has('paths', '/api/v1/me/logout', 'post', 'responses', '204', 'content'))->toBeFalse();
+})->group('RF-ID-05', 'RF-ID-07', 'RS-04');
+
 it('no deja que ningun endpoint de gestion acepte el token del portal', function (): void {
     // La promesa de RF-ID-07 leida al reves: ni `employeeToken` ni `self:read`
     // pueden aparecer en una operacion que no sea del portal.
@@ -1314,18 +1329,16 @@ it('no distingue las causas del rechazo del acceso al portal', function (): void
 })->group('RS-03', 'RS-12', 'RF-ID-06');
 
 it('no ofrece ningun formato propietario en la descarga del historico propio', function (): void {
-    // El plan es explicito: CSV en la 1.11 y PDF en la 2.9, sin XLSX. CSV cubre
-    // la portabilidad del RGPD y no arrastra Browsershot al camino critico de la
-    // Fase 1; XLSX no aporta nada sobre CSV para el historico de una persona.
+    // El Anexo B es explicito: CSV y PDF, sin XLSX. CSV cubre la portabilidad
+    // del RGPD y el PDF sellado (PR19, 2.2.0) es lo que una persona presenta;
+    // XLSX no aporta nada sobre CSV para el historico de una persona.
     $content = Contract::keys('paths', '/api/v1/me/export', 'get', 'responses', '200', 'content');
 
-    expect($content)->toBe(['text/csv']);
+    expect($content)->toBe(['text/csv', 'application/pdf']);
 
-    // El enumerado es de un solo valor. **El PDF llega en la 2.9** y sera otro
-    // valor de este mismo enumerado, es decir un cambio aditivo (ADR-012);
-    // describirlo ahora fijaria en v1 la forma de algo que nadie ha hecho. La
-    // comprobacion es sobre el `enum` y no sobre el texto del parametro, que si
-    // menciona el PDF para explicar por que todavia no esta.
+    // El PDF llego como otro valor del mismo enumerado, es decir un cambio
+    // aditivo (ADR-012), y el CSV sigue siendo el valor por omision: el portal
+    // que no dice nada recibe lo mismo que antes.
     $parametros = Contract::value('paths', '/api/v1/me/export', 'get', 'parameters');
 
     expect($parametros)->toBeArray();
@@ -1342,7 +1355,7 @@ it('no ofrece ningun formato propietario en la descarga del historico propio', f
     expect($formato)->not->toBeNull()
         ->and($formato['schema'] ?? null)->toBe([
             'type' => 'string',
-            'enum' => ['csv'],
+            'enum' => ['csv', 'pdf'],
             'default' => 'csv',
         ]);
 })->group('RF-ID-05', 'RL-05');

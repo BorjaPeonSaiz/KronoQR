@@ -1003,6 +1003,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cierre de la sesion del portal
+         * @description Revoca **el token de portal con el que se hace la llamada** y solo ese
+         *     (RF-ID-05, RS-03). Es lo que hace el boton «Salir» del portal: sin
+         *     esta llamada, cerrar sesion solo borraba el token del navegador y el
+         *     token seguia valiendo hasta su caducidad, que en el ordenador
+         *     compartido de la sala de personal es justo el riesgo que no se puede
+         *     dejar abierto (PO1 de la verificacion de la 2.1.0).
+         *
+         *     **Exclusiva de la sesion de portal.** Exige el ambito `self:read` y que
+         *     el portador sea una persona de la plantilla: un token de quiosco o de
+         *     gestion recibe `403`, aunque lleve `self:read` puesto a mano. El panel
+         *     cierra su sesion por `POST /api/v1/auth/logout`.
+         *
+         *     **Idempotente en la practica**, igual que la del panel: repetir la
+         *     llamada con un token ya revocado devuelve `401`, que el cliente debe
+         *     interpretar como «ya no hay sesion». No hay nada mas que hacer.
+         *
+         *     **Sin zona de limitacion de aplicacion, y es deliberado**, por el mismo
+         *     motivo que `POST /api/v1/auth/logout`: la zona `portal` cuenta tambien
+         *     por IP, y en el ordenador compartido toda la plantilla sale por la
+         *     misma. Un `429` aqui dejaria una sesion abierta justo donde mas importa
+         *     cerrarla, y quien agotara el cupo solo se cerraria la sesion a si
+         *     mismo. Por eso **no declara `429`**.
+         *
+         *     **Sin asiento en `audit_log`** (ADR-039): el catalogo de actores no
+         *     tiene tipo para un empleado y el acceso al portal tampoco lo deja.
+         *     Queda la linea `auth.logged_out` del log tecnico, con el `employee_uuid`
+         *     y nunca el nombre (regla dura 21).
+         */
+        post: operations["logOutOfPortal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/workdays": {
         parameters: {
             query?: never;
@@ -1066,12 +1112,24 @@ export interface paths {
          *     trabajador, y tambien lo que cubre la portabilidad del articulo 20 del
          *     RGPD sin ninguna maquinaria adicional.
          *
-         *     **CSV en esta version, PDF en la siguiente.** `format` solo admite `csv`
-         *     hoy; el PDF —que es lo que una persona presenta ante un tercero— llega
-         *     con la maquinaria de exportacion de la tarea 2.9 y sera un valor mas del
-         *     mismo enumerado, es decir un cambio aditivo (ADR-012). **Sin XLSX**: no
-         *     aporta nada sobre CSV para el historico de una sola persona, y es un
-         *     formato propietario.
+         *     **CSV y PDF**, como exige el Anexo B del doc 01. `format=csv` —el valor
+         *     por omision— cubre la portabilidad del RGPD; `format=pdf` (2.2.0, PR19)
+         *     es el documento **sellado** que una persona presenta ante un tercero.
+         *     El PDF llego como un valor mas del mismo enumerado, es decir un cambio
+         *     aditivo (ADR-012). **Sin XLSX**: no aporta nada sobre CSV para el
+         *     historico de una sola persona, y es un formato propietario.
+         *
+         *     **El PDF usa las plantillas y el sello del informe por periodo**: el
+         *     pie de cada pagina dice cuando se genero —en la zona del centro—, quien
+         *     lo descargo, que periodo abarca y la huella SHA-256 del contenido, que
+         *     viaja tambien en `X-Kronoqr-Report-Digest`. El cuerpo lleva el nombre de
+         *     la persona —es su propio registro—, sus tramos con entrada, salida y
+         *     duracion, el total de cada dia y el **total del periodo**, y cada
+         *     correccion con su autor y su motivo (RN-13). El titulo del documento y
+         *     el nombre del fichero no llevan ni nombre ni codigo de empleado.
+         *
+         *     **Mismo rango maximo y misma zona de limite** para los dos formatos: el
+         *     PDF no abre una puerta mas ancha que el CSV.
          *
          *     **No es la exportacion legal de `GET /api/v1/reports/legal-export`.**
          *     Aquella la genera RRHH o auditoria ante un requerimiento, abarca a
@@ -6159,7 +6217,7 @@ export interface components {
          *     **Corta y de solo lectura.** El unico ambito del token es `self:read`, y
          *     por eso no se enumera en la respuesta como hace `Session`: no hay nada
          *     que el portal tenga que decidir a partir de una lista de ambitos, porque
-         *     solo hay tres rutas y las tres son suyas.
+         *     solo hay cuatro rutas y las cuatro son suyas.
          */
         PortalSession: {
             /**
@@ -12593,7 +12651,7 @@ export interface operations {
         };
         responses: {
             /**
-             * @description Sesion abierta. El token viaja como `Bearer` en las dos rutas
+             * @description Sesion abierta. El token viaja como `Bearer` en las tres rutas
              *     restantes del portal y en ninguna mas: no alcanza ningun endpoint de
              *     gestion, porque su unico ambito es `self:read`.
              */
@@ -12608,6 +12666,26 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["PortalAccessDenied"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    logOutOfPortal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesion cerrada. El token deja de ser valido de inmediato. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listMyWorkDays: {
@@ -12683,11 +12761,11 @@ export interface operations {
                  */
                 to?: components["parameters"]["WorkDateTo"];
                 /**
-                 * @description Formato del fichero. `csv` es el unico disponible en esta version y
-                 *     es el valor por omision; `pdf` llega con la tarea 2.9.
+                 * @description Formato del fichero. `csv` es el valor por omision; `pdf` es el
+                 *     documento sellado para presentar ante un tercero.
                  * @example csv
                  */
-                format?: "csv";
+                format?: "csv" | "pdf";
             };
             header?: never;
             path?: never;
@@ -12696,26 +12774,59 @@ export interface operations {
         requestBody?: never;
         responses: {
             /**
-             * @description El fichero con el historico propio. Puede no tener ninguna fila de
-             *     datos —un periodo sin jornadas es una respuesta valida— y aun asi
-             *     lleva su cabecera de criterios.
+             * @description El fichero con el historico propio. El tipo de contenido depende de
+             *     `format`. Puede no tener ninguna fila de datos —un periodo sin
+             *     jornadas es una respuesta valida— y aun asi lleva su cabecera de
+             *     criterios.
              */
             200: {
                 headers: {
-                    /** @description Adjunto, con un nombre de fichero que no lleva ningun nombre de persona. */
+                    /**
+                     * @description Adjunto, con un nombre de fichero que no lleva ningun nombre de
+                     *     persona ni ningun codigo de empleado: solo el periodo y la
+                     *     extension (`.csv` o `.pdf`).
+                     */
                     "Content-Disposition"?: string;
                     /** @description Siempre `no-store`: el cuerpo es el registro horario de una persona. */
                     "Cache-Control"?: string;
+                    /**
+                     * @description Solo con `format=pdf`. Huella SHA-256 del contenido, en
+                     *     hexadecimal minusculo: la misma que imprime el pie de cada
+                     *     pagina. Dos PDF del mismo registro generados en momentos
+                     *     distintos llevan la misma.
+                     * @example 3d9c8f0a1b2c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6
+                     */
+                    "X-Kronoqr-Report-Digest"?: string;
+                    /**
+                     * @description Solo con `format=pdf`. Filas de la tabla del documento (tramos, jornadas sin tramos y correcciones).
+                     * @example 23
+                     */
+                    "X-Kronoqr-Report-Rows"?: number;
                     [name: string]: unknown;
                 };
                 content: {
                     "text/csv": string;
+                    "application/pdf": string;
                 };
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
+            /**
+             * @description Solo con `format=pdf`: el motor de composicion de PDF no esta
+             *     disponible en esta instalacion (falta Chromium, o no arranca). La
+             *     salida es descargar el mismo registro en CSV, que no depende de el.
+             *     `problem+json` y nunca un `500` opaco.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listEmployees: {
