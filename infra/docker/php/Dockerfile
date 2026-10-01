@@ -102,10 +102,17 @@ RUN set -eux; \
 
 # Puppeteer, que es lo que `browsershot.js` carga. Se instala GLOBAL y en una
 # capa propia para que no la invalide ningun cambio del codigo de la aplicacion.
+#
+# Version EXACTA (25.12.0), no `@24`: la 24.x arrastra puppeteer-core ->
+# @puppeteer/browsers 2.x -> proxy-agent -> get-uri -> basic-ftp 5.3.1, con
+# CVE-2026-102990 (HIGH) corregido solo en basic-ftp 6.x. La 25.x sustituye
+# @puppeteer/browsers por la 3.x, que ya no trae proxy-agent: la cadena
+# desaparece en vez de suprimirse. Requiere Node >= 22.12 (Alpine lo cumple).
+# Subir de version: cambiar aqui y en los dos pasos de ci.yml a la vez.
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 RUN set -eux; \
-  npm install --global --omit=dev puppeteer@24; \
+  npm install --global --omit=dev puppeteer@25.12.0; \
   npm cache clean --force
 
 # Usuario sin privilegios. El uid 1000 coincide con el del desarrollador tipico
