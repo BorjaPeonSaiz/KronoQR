@@ -199,7 +199,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 
 | ID | Requisito | Prio |
 |---|---|---|
-| RF-GP-01 | CRUD de empleados: datos identificativos mínimos, departamento, fecha de alta y baja. El centro es el de la instalación y no se elige (ADR-040). **El correo electrónico es opcional**: el producto no depende de él. | M |
+| RF-GP-01 | CRUD de empleados: datos identificativos mínimos, departamento, fecha de alta y baja. El centro es el de la instalación y no se elige (ADR-040). **El correo electrónico es opcional**: el producto no depende de él. **Marca de teletrabajo** (sí/no, `false` de serie): la edita RRHH, se ve y se filtra en el listado y cada cambio deja asiento `employee.updated`; **es informativa y no cambia cómo se ficha ni ningún cálculo** (decisión del propietario, `docs/verificacion/2.1.0-decisiones-comerciales.md`). | M |
 | RF-GP-02 | Registro de **contrato**: horas semanales y anuales contratadas, tipo de jornada, vigencia. Historizado. | M |
 | RF-GP-03 | Baja de empleado: **desactivación lógica**, nunca borrado. El registro histórico debe conservarse 4 años. | M |
 | RF-GP-04 | Registro de **ausencias** (vacaciones, baja médica, permiso) para no contabilizar como absentismo no justificado. Carga manual o CSV. | S |
@@ -466,7 +466,7 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 **`departments`** — `id`, `site_id`, `name`, `manager_user_id`
 
 **`employees`**
-`id` (BIGINT PK), `uuid` (UUID v7, identificador público), `site_id`, `department_id`, `first_name`, `last_name`, `employee_code` (CITEXT UNIQUE, **opaco y aleatorio**), `national_id_hash` (hash, no el DNI en claro), `email` (CITEXT NULL, **opcional**), `pin_hash` (RF-AT-11, RF-ID-06), `photo_path` (NULL; funcionalidad **desactivada por defecto**, RL-08), `status` (`active`|`suspended`|`terminated`), `hired_at`, `terminated_at`, `locale`, `created_at`, `updated_at`
+`id` (BIGINT PK), `uuid` (UUID v7, identificador público), `site_id`, `department_id`, `first_name`, `last_name`, `employee_code` (CITEXT UNIQUE, **opaco y aleatorio**), `national_id_hash` (hash, no el DNI en claro), `email` (CITEXT NULL, **opcional**), `pin_hash` (RF-AT-11, RF-ID-06), `photo_path` (NULL; funcionalidad **desactivada por defecto**, RL-08), `status` (`active`|`suspended`|`terminated`), `hired_at`, `terminated_at`, `locale`, `teleworking` (BOOLEAN NOT NULL DEFAULT false, **informativo**: ninguna regla lo lee, RF-GP-01), `created_at`, `updated_at`
 
 **`employment_contracts`** — `id`, `employee_id`, `weekly_hours`, `annual_hours`, `schedule_type` (`continua`|`partida`|`turnos`), `valid_from`, `valid_to`, `created_at`, `created_by_user_id`
 

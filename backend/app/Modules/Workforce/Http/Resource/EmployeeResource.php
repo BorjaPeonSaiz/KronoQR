@@ -54,6 +54,7 @@ final class EmployeeResource extends JsonResource
             'hired_at' => $employee->hiredAt->format('Y-m-d'),
             'terminated_at' => $employee->terminatedAt?->format('Y-m-d'),
             'locale' => $employee->locale,
+            'teleworking' => $employee->teleworking,
             'pin_status' => $this->pinStatus->value,
         ];
     }

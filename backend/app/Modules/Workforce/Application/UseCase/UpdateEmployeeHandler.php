@@ -61,6 +61,7 @@ final readonly class UpdateEmployeeHandler
             departmentId: $command->departmentId,
             departmentGiven: $command->departmentGiven,
             locale: $command->locale,
+            teleworking: $command->teleworking,
         );
 
         $updated = $this->applyStatus($updated, $command->status);
@@ -103,6 +104,7 @@ final readonly class UpdateEmployeeHandler
             'department_id' => [$before->departmentId, $after->departmentId],
             'status' => [$before->status->value, $after->status->value],
             'locale' => [$before->locale, $after->locale],
+            'teleworking' => [$before->teleworking, $after->teleworking],
         ];
 
         foreach ($comparisons as $field => [$old, $new]) {

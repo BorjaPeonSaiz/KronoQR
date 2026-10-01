@@ -79,10 +79,11 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
+        ?bool $teleworking,
         int $limit,
         int $offset,
     ): array {
-        $rows = $this->filtered($scope, $departmentId, $status, $search, $pinStatus)
+        $rows = $this->filtered($scope, $departmentId, $status, $search, $pinStatus, $teleworking)
             // Orden estable y previsible para quien pagina: dos personas con el
             // mismo apellido no pueden cambiar de sitio entre dos paginas.
             ->orderBy('last_name')
@@ -101,8 +102,9 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
+        ?bool $teleworking,
     ): int {
-        return $this->filtered($scope, $departmentId, $status, $search, $pinStatus)->count();
+        return $this->filtered($scope, $departmentId, $status, $search, $pinStatus, $teleworking)->count();
     }
 
     /**
@@ -114,11 +116,15 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
+        ?bool $teleworking,
     ): Builder {
         $query = $this->withinScope(Employee::query(), $scope)
             ->when($departmentId !== null, static fn (Builder $query): Builder => $query->where('department_id', $departmentId))
             ->when($status instanceof EmploymentStatus, static fn (Builder $query): Builder => $query->where('status', $status?->value))
-            ->when($search !== null, fn (Builder $query): Builder => $this->matchingSearch($query, (string) $search));
+            ->when($search !== null, fn (Builder $query): Builder => $this->matchingSearch($query, (string) $search))
+            // Sin indice, por lo mismo que el PIN: un booleano sobre cientos de
+            // filas. Informativo (RF-GP-01): filtra el listado y nada mas.
+            ->when($teleworking !== null, static fn (Builder $query): Builder => $query->where('teleworking', $teleworking));
 
         // Fuera de la cadena de `when()` a proposito: dentro de la clausura, el
         // analizador no puede saber que `$pinStatus` no es nulo, y el `match`
@@ -269,6 +275,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
             'hired_at' => $employee->hiredAt->format('Y-m-d'),
             'terminated_at' => $employee->terminatedAt?->format('Y-m-d'),
             'locale' => $employee->locale,
+            'teleworking' => $employee->teleworking,
         ];
     }
 
@@ -288,6 +295,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
                 ? null
                 : new DateTimeImmutable($row->terminated_at->format('Y-m-d')),
             locale: $row->locale,
+            teleworking: $row->teleworking,
         );
     }
 

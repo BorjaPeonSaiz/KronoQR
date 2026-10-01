@@ -47,6 +47,13 @@ final readonly class Employee
         public DateTimeImmutable $hiredAt,
         public ?DateTimeImmutable $terminatedAt,
         public string $locale,
+        /**
+         * Teletrabaja (RF-GP-01). **Informativo**: ningun metodo de esta clase
+         * ni ninguna regla del producto lo consulta. No cambia como se ficha
+         * (`canClock()` no lo mira) ni el computo de nada. Ultimo y con valor
+         * de serie para que las fichas anteriores al campo nazcan sin el.
+         */
+        public bool $teleworking = false,
     ) {
         $this->assertIdentityIsComplete();
         $this->assertAssignmentIsValid();
@@ -121,6 +128,7 @@ final readonly class Employee
         ?int $departmentId,
         DateTimeImmutable $hiredAt,
         string $locale,
+        bool $teleworking = false,
     ): self {
         return new self(
             uuid: $uuid,
@@ -134,6 +142,7 @@ final readonly class Employee
             hiredAt: $hiredAt,
             terminatedAt: null,
             locale: $locale,
+            teleworking: $teleworking,
         );
     }
 
@@ -197,6 +206,7 @@ final readonly class Employee
         ?int $departmentId = null,
         bool $departmentGiven = false,
         ?string $locale = null,
+        ?bool $teleworking = null,
     ): self {
         $this->refuseIfTerminated();
 
@@ -212,6 +222,7 @@ final readonly class Employee
             hiredAt: $this->hiredAt,
             terminatedAt: $this->terminatedAt,
             locale: $locale ?? $this->locale,
+            teleworking: $teleworking ?? $this->teleworking,
         );
     }
 
@@ -264,6 +275,7 @@ final readonly class Employee
             hiredAt: $this->hiredAt,
             terminatedAt: $terminatedAtGiven ? $terminatedAt : $this->terminatedAt,
             locale: $this->locale,
+            teleworking: $this->teleworking,
         );
     }
 

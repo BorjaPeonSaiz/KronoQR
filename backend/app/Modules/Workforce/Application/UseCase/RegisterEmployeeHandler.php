@@ -112,6 +112,9 @@ final readonly class RegisterEmployeeHandler
                 // y lo unico que cambia es quien cuenta el uso del plan —una vez
                 // por lote y no una por fila (ADR-028, H-04 de la 3.8)—.
                 viaImport: $command->viaImport,
+                // El valor inicial, para que el asiento del alta diga con que
+                // marca nacio la ficha (RF-GP-01, AUD-2).
+                teleworking: $employee->teleworking,
             ));
 
             return new RegisteredEmployee($employee, $pin);
@@ -154,6 +157,7 @@ final readonly class RegisterEmployeeHandler
             departmentId: $command->departmentId,
             hiredAt: new DateTimeImmutable($command->hiredAt),
             locale: $command->locale,
+            teleworking: $command->teleworking,
         );
     }
 }

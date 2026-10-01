@@ -168,6 +168,7 @@ final class DataExportCatalog
                 'hired_at',
                 'terminated_at',
                 'locale',
+                'teleworking',
                 'pin_issued_at',
                 'pin_delivered_at',
                 'pin_delivered_by_user_uuid',

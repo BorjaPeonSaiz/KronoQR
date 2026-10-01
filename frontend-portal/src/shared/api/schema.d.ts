@@ -1197,8 +1197,13 @@ export interface paths {
         head?: never;
         /**
          * Modificacion de la ficha de un empleado
-         * @description Cambia los datos que pueden cambiar: nombre, correo, idioma y
-         *     adscripcion a centro y departamento (RF-GP-01).
+         * @description Cambia los datos que pueden cambiar: nombre, correo, idioma,
+         *     departamento y la marca informativa de teletrabajo (RF-GP-01). El
+         *     centro no cambia: es el de la instalacion (ADR-040).
+         *
+         *     **Cada cambio efectivo deja asiento `employee.updated`** con la lista
+         *     de campos tocados y ningun valor (AUD-2, regla dura 21). Un `PATCH` que
+         *     no cambia nada no deja asiento.
          *
          *     **La baja no se hace por aqui.** Pasar a `terminated` es una operacion
          *     con consecuencias —revoca la credencial y cierra el computo (RN-14)— y
@@ -6273,8 +6278,23 @@ export interface components {
             terminated_at: string | null;
             /** @example es */
             locale: string;
+            teleworking: components["schemas"]["Teleworking"];
             pin_status: components["schemas"]["PinStatus"];
         };
+        /**
+         * Teleworking
+         * @description La persona teletrabaja (RF-GP-01). **Es informativo y nada mas**: no
+         *     cambia como ficha —con su tarjeta o con su PIN, como todos—, ni el
+         *     computo de su jornada, ni las incidencias, ni los informes, ni el
+         *     registro que se entrega a la Inspeccion. Lo marca y desmarca RRHH; el
+         *     alta deja el valor inicial en su asiento `employee.hired`, y cada cambio
+         *     posterior deja `employee.updated` con `teleworking` entre los campos
+         *     tocados (sin el valor). `false` de serie: la importacion masiva no lo
+         *     lee del fichero, y las fichas anteriores a este campo nacen sin
+         *     teletrabajo. Sale en la exportacion integra de datos de la instalacion
+         *     (RF-PD-14, RL-20), como el resto de la ficha.
+         */
+        Teleworking: boolean;
         /**
          * PinStatus
          * @description Situacion del PIN de esta persona (RF-ID-09). **Es el estado, nunca el
@@ -6377,7 +6397,8 @@ export interface components {
          * CreateEmployeeRequest
          * @description Alta de empleado. **El `employee_code` no viaja aqui**: lo genera el
          *     servidor para que sea opaco de verdad y no dependa de lo que teclee
-         *     quien da el alta.
+         *     quien da el alta. Sin `teleworking`, la ficha nace sin teletrabajo
+         *     (`false`).
          */
         CreateEmployeeRequest: {
             /**
@@ -6404,6 +6425,7 @@ export interface components {
             hired_at: string;
             /** @default es */
             locale: string;
+            teleworking?: components["schemas"]["Teleworking"];
         };
         /**
          * UpdateEmployeeRequest
@@ -6426,6 +6448,7 @@ export interface components {
              */
             status?: "active" | "suspended";
             locale?: string;
+            teleworking?: components["schemas"]["Teleworking"];
         };
         /**
          * OffboardEmployeeRequest
@@ -11430,6 +11453,14 @@ export interface components {
          */
         PinStatusFilter: components["schemas"]["PinStatus"];
         /**
+         * @description `true` limita el resultado a quien teletrabaja y `false` a quien no
+         *     (RF-GP-01). Sin el parametro, todos. Como los demas filtros, actua
+         *     **sobre la plantilla entera** y se combina con `AND`: `meta.total` es el
+         *     total de lo que casa. Se envia como literal `true` o `false`.
+         * @example true
+         */
+        TeleworkingFilter: boolean;
+        /**
          * @description Primer dia del periodo consultado, inclusive (RF-GP-04).
          *
          *     **Opcional, y por omision el primer dia del mes en curso** en la zona del
@@ -12747,6 +12778,14 @@ export interface operations {
                  * @example issued
                  */
                 pin_status?: components["parameters"]["PinStatusFilter"];
+                /**
+                 * @description `true` limita el resultado a quien teletrabaja y `false` a quien no
+                 *     (RF-GP-01). Sin el parametro, todos. Como los demas filtros, actua
+                 *     **sobre la plantilla entera** y se combina con `AND`: `meta.total` es el
+                 *     total de lo que casa. Se envia como literal `true` o `false`.
+                 * @example true
+                 */
+                teleworking?: components["parameters"]["TeleworkingFilter"];
                 /**
                  * @description Pagina solicitada, empezando en 1.
                  * @example 1

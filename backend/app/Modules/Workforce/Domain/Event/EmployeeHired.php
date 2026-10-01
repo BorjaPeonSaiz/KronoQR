@@ -40,6 +40,11 @@ final readonly class EmployeeHired implements DomainEvent
         private DateTimeImmutable $occurredAt,
         /** El alta llego dentro de una carga masiva de plantilla (RF-GP-05). */
         public bool $viaImport = false,
+        /**
+         * Con que marca de teletrabajo nace la ficha (RF-GP-01). Informativo;
+         * es un si o no, no un dato que identifique a nadie.
+         */
+        public bool $teleworking = false,
     ) {}
 
     public function eventName(): string

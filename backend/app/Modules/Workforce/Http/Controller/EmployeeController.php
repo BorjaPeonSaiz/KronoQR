@@ -54,6 +54,7 @@ final class EmployeeController extends Controller
             status: $request->statusFilter(),
             search: $request->searchTerm(),
             pinStatus: $request->pinStatusFilter(),
+            teleworking: $request->teleworkingFilter(),
             page: $request->page(),
             perPage: $request->perPage(),
         );

@@ -2275,6 +2275,7 @@ paths:
         - $ref: '#/components/parameters/DepartmentFilter'
         - $ref: '#/components/parameters/EmploymentStatusFilter'
         - $ref: '#/components/parameters/PinStatusFilter'
+        - $ref: '#/components/parameters/TeleworkingFilter'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -2298,6 +2299,7 @@ paths:
                         hired_at: '2026-08-14'
                         terminated_at: null
                         locale: es
+                        teleworking: false
                         pin_status: delivered
                     meta:
                       page: 1
@@ -2387,6 +2389,7 @@ paths:
                       hired_at: '2026-08-14'
                       terminated_at: null
                       locale: es
+                      teleworking: false
                       pin_status: issued
                     pin:
                       employee_uuid: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
@@ -2443,6 +2446,7 @@ paths:
                     hired_at: '2026-08-14'
                     terminated_at: null
                     locale: es
+                    teleworking: false
                     pin_status: delivered
         '401':
           $ref: '#/components/responses/Unauthenticated'
@@ -2456,8 +2460,13 @@ paths:
       operationId: updateEmployee
       summary: Modificacion de la ficha de un empleado
       description: |
-        Cambia los datos que pueden cambiar: nombre, correo, idioma y
-        adscripcion a centro y departamento (RF-GP-01).
+        Cambia los datos que pueden cambiar: nombre, correo, idioma,
+        departamento y la marca informativa de teletrabajo (RF-GP-01). El
+        centro no cambia: es el de la instalacion (ADR-040).
+
+        **Cada cambio efectivo deja asiento `employee.updated`** con la lista
+        de campos tocados y ningun valor (AUD-2, regla dura 21). Un `PATCH` que
+        no cambia nada no deja asiento.
 
         **La baja no se hace por aqui.** Pasar a `terminated` es una operacion
         con consecuencias —revoca la credencial y cierra el computo (RN-14)— y
@@ -2480,6 +2489,10 @@ paths:
                 summary: Suspension, que no es baja y no lleva fecha de cese
                 value:
                   status: suspended
+              teletrabajo:
+                summary: Marcar que la persona teletrabaja (informativo)
+                value:
+                  teleworking: true
       responses:
         '200':
           description: Ficha actualizada.
@@ -2500,6 +2513,7 @@ paths:
                     hired_at: '2026-08-14'
                     terminated_at: null
                     locale: es
+                    teleworking: false
                     pin_status: delivered
         '401':
           $ref: '#/components/responses/Unauthenticated'
@@ -2570,6 +2584,7 @@ paths:
                     hired_at: '2026-08-14'
                     terminated_at: '2026-08-31'
                     locale: es
+                    teleworking: false
                     pin_status: delivered
         '401':
           $ref: '#/components/responses/Unauthenticated'
@@ -9335,6 +9350,19 @@ components:
         $ref: '#/components/schemas/PinStatus'
       example: issued
 
+    TeleworkingFilter:
+      name: teleworking
+      in: query
+      required: false
+      description: |
+        `true` limita el resultado a quien teletrabaja y `false` a quien no
+        (RF-GP-01). Sin el parametro, todos. Como los demas filtros, actua
+        **sobre la plantilla entera** y se combina con `AND`: `meta.total` es el
+        total de lo que casa. Se envia como literal `true` o `false`.
+      schema:
+        type: boolean
+      example: true
+
     AbsenceFrom:
       name: from
       in: query
@@ -12218,6 +12246,7 @@ components:
         - hired_at
         - terminated_at
         - locale
+        - teleworking
         - pin_status
       properties:
         uuid:
@@ -12275,8 +12304,25 @@ components:
           maxLength: 10
           examples:
             - es
+        teleworking:
+          $ref: '#/components/schemas/Teleworking'
         pin_status:
           $ref: '#/components/schemas/PinStatus'
+
+    Teleworking:
+      type: boolean
+      title: Teleworking
+      description: |
+        La persona teletrabaja (RF-GP-01). **Es informativo y nada mas**: no
+        cambia como ficha —con su tarjeta o con su PIN, como todos—, ni el
+        computo de su jornada, ni las incidencias, ni los informes, ni el
+        registro que se entrega a la Inspeccion. Lo marca y desmarca RRHH; el
+        alta deja el valor inicial en su asiento `employee.hired`, y cada cambio
+        posterior deja `employee.updated` con `teleworking` entre los campos
+        tocados (sin el valor). `false` de serie: la importacion masiva no lo
+        lee del fichero, y las fichas anteriores a este campo nacen sin
+        teletrabajo. Sale en la exportacion integra de datos de la instalacion
+        (RF-PD-14, RL-20), como el resto de la ficha.
 
     PinStatus:
       type: string
@@ -12415,7 +12461,8 @@ components:
       description: |
         Alta de empleado. **El `employee_code` no viaja aqui**: lo genera el
         servidor para que sea opaco de verdad y no dependa de lo que teclee
-        quien da el alta.
+        quien da el alta. Sin `teleworking`, la ficha nace sin teletrabajo
+        (`false`).
       additionalProperties: false
       required: [first_name, last_name, hired_at]
       properties:
@@ -12457,6 +12504,8 @@ components:
           minLength: 2
           maxLength: 10
           default: es
+        teleworking:
+          $ref: '#/components/schemas/Teleworking'
 
     UpdateEmployeeRequest:
       type: object
@@ -12495,6 +12544,8 @@ components:
           type: string
           minLength: 2
           maxLength: 10
+        teleworking:
+          $ref: '#/components/schemas/Teleworking'
 
     OffboardEmployeeRequest:
       type: object

@@ -66,6 +66,9 @@ interface EmployeeRepository
      *                                     las dos reglas divergieran, el panel
      *                                     filtraria por una cosa y pintaria
      *                                     otra.
+     * @param  bool|null  $teleworking  `true` solo quien teletrabaja, `false` solo
+     *                                  quien no, `null` sin filtrar (RF-GP-01).
+     *                                  Informativo: filtra el listado y nada mas.
      * @param  AccessScope  $scope  Alcance de quien pregunta (**RF-ID-03**). Se aplica
      *                              **en la consulta** y se combina con `AND` con
      *                              `$departmentId`: pedir un departamento fuera del
@@ -80,6 +83,7 @@ interface EmployeeRepository
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
+        ?bool $teleworking,
         int $limit,
         int $offset,
     ): array;
@@ -97,5 +101,6 @@ interface EmployeeRepository
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
+        ?bool $teleworking,
     ): int;
 }

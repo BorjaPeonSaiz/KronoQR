@@ -324,6 +324,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
                to_char(e.hired_at, 'YYYY-MM-DD')      AS hired_at,
                to_char(e.terminated_at, 'YYYY-MM-DD') AS terminated_at,
                e.locale,
+               e.teleworking::text   AS teleworking,
                to_char(e.pin_issued_at    AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS pin_issued_at,
                to_char(e.pin_delivered_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS pin_delivered_at,
                pu.uuid::text         AS pin_delivered_by_user_uuid,

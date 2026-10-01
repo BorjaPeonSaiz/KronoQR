@@ -44,5 +44,10 @@ final readonly class RegisterEmployeeCommand
          * de declararlo cuenta de mas, nunca de menos.
          */
         public bool $viaImport = false,
+        /**
+         * Teletrabaja (RF-GP-01). Informativo. `false` de serie: la importacion
+         * masiva no lo lee del fichero y no lo pasa.
+         */
+        public bool $teleworking = false,
     ) {}
 }

@@ -219,6 +219,7 @@ return [
                 'hired_at' => 'Hire date.',
                 'terminated_at' => 'Termination date. Empty if still employed.',
                 'locale' => 'Language the person sees on the kiosk and the portal.',
+                'teleworking' => 'Whether the person works remotely (true or false). Informational only: it changes neither how they clock in nor any calculation.',
                 'pin_issued_at' => 'When their backup PIN was issued. Empty if never issued.',
                 'pin_delivered_at' => 'When that PIN was handed over in person.',
                 'pin_delivered_by_user_uuid' => 'Who handed it over.',

@@ -50,6 +50,7 @@ use Laravel\Sanctum\PersonalAccessToken;
  * @property Carbon $hired_at
  * @property Carbon|null $terminated_at
  * @property string $locale
+ * @property bool $teleworking
  * @property CarbonImmutable|null $pin_issued_at
  * @property CarbonImmutable|null $pin_delivered_at
  * @property int|null $pin_delivered_by_user_id
@@ -78,6 +79,7 @@ final class Employee extends Model
         'hired_at',
         'terminated_at',
         'locale',
+        'teleworking',
     ];
 
     /**
@@ -96,6 +98,7 @@ final class Employee extends Model
         return [
             'hired_at' => 'date',
             'terminated_at' => 'date',
+            'teleworking' => 'boolean',
             // Instantes y no fechas: la emision y la entrega del PIN ocurren a
             // una hora concreta y se guardan en UTC (regla dura 3).
             'pin_issued_at' => 'immutable_datetime',
