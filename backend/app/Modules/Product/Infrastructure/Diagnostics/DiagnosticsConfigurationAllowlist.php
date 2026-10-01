@@ -126,6 +126,13 @@ final class DiagnosticsConfigurationAllowlist
         // La RAIZ del directorio de marca, no la ruta del logotipo: la primera
         // es del despliegue y la segunda podria llevar el nombre del hotel.
         'BRANDING_LOGO_ROOT',
+        // PR13: en que fraccion de su vida se renueva el token del quiosco
+        // (ADR-044). Junto con `IDENTITY_DEVICE_TOKEN_DAYS` y `_OVERLAP_HOURS`
+        // —que ya entran por sufijo— y el `token_expires_on` de cada quiosco,
+        // dice si una tablet debio renovarse y no lo hizo. Es una fraccion
+        // (`0.8`), no un secreto; por nombre exacto y no por un sufijo
+        // `_THRESHOLD` que admitiria lo que alguien añada mañana.
+        'IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD',
     ];
 
     /**

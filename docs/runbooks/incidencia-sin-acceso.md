@@ -94,16 +94,30 @@ Comprobaciones que más veces explican una incidencia, por familia:
 1. **`installation`** — versión, entorno, zona horaria de la aplicación
    (debe ser `UTC`) y del centro, idiomas, perfil de cumplimiento. Una
    versión que no es la última explica los defectos ya corregidos: mira el
-   `CHANGELOG` antes de seguir.
+   `CHANGELOG` antes de seguir. Desde la 2.2.0 trae además `volume`, solo
+   recuentos: `active_employees`, `scan_events_last_30_days`,
+   `shift_entries_last_30_days` (tramos en vigor, sin anulados ni sustituidos)
+   y `open_incidents`. Para «la nómina sale vacía»: con tramos a cero no hay
+   nada que exportar (mira por qué no se ficha); con tramos y fichero vacío, el
+   problema está en el periodo pedido o en el formato (`installation_settings`,
+   punto 5).
 2. **`services`** — base de datos, Redis, colas, Reverb y `audit_log` (tamaño
    y último asiento). Un `audit_log` cuyo último asiento es de hace días en una
    instalación activa es una señal de que nada escribe: mira la cola y el
    trabajador.
-3. **`kiosks`** — por quiosco, `status`, `app_version`, `last_seen_at` y
-   `pending_queue_size`. Lo que dice cada combinación:
+3. **`kiosks`** — por quiosco, `status`, `app_version`, `last_seen_at`,
+   `pending_queue_size` y, desde la 2.2.0, `oldest_pending_at`,
+   `battery_level`, `battery_charging`, `paired_at` y `token_expires_on` (solo
+   el día). Los cinco últimos son `null` cuando no hay dato: sin token
+   (desvinculada), sin latido desde que se actualizó, o un navegador que no
+   informa de la batería. Lo que dice cada combinación:
 
    | Señal | Lectura |
    | --- | --- |
+   | `token_expires_on` hoy o ya pasado, y `last_seen_at` antiguo | El token del quiosco caducó sin renovarse (se renueva solo en el latido hacia el día 72 de 90; una tablet más de unos 18 días sin latido lo pierde). Hay que volver a vincularla, pero **si `pending_queue_size` no es cero, antes lee la advertencia de §5 de [`cola-offline-atascada.md`](cola-offline-atascada.md)**: desvincular con cola pendiente puede perder fichajes |
+   | `token_expires_on` a menos de 18 días y `last_seen_at` reciente | La renovación debería haber ocurrido ya: mira `error_events` del latido de ese quiosco |
+   | `oldest_pending_at` de hace horas o días | Cuánto lleva atascada la cola, no solo cuánto ocupa: sigue [`cola-offline-atascada.md`](cola-offline-atascada.md) |
+   | `battery_level` bajo y `battery_charging: false` | La tablet se apaga sola: es un problema de alimentación, no del producto |
    | `last_seen_at` antiguo y `pending_queue_size` alto | La tablet no llega al servidor: red, TLS o VLAN (`KIOSK_VLAN_CIDR`, que no va en el paquete pero sí en la guía de instalación) |
    | `last_seen_at` reciente y `pending_queue_size` alto | Llega, pero el envío falla: mira `error_events` y el limitador del quiosco |
    | `app_version` distinta entre quioscos | Una tablet no ha recibido la PWA nueva; los errores de esa tablet pueden ser de la versión anterior |
@@ -119,7 +133,12 @@ Comprobaciones que más veces explican una incidencia, por familia:
    valor que no valida, tal y como las devuelve `GET /api/v1/settings`) y
    `env_differs_from_db` (claves cuyo valor en `.env` no coincide con el de la
    base de datos: la base de datos manda, y el IT suele creer que manda el
-   `.env`).
+   `.env`). Desde la 2.2.0, `installation_settings` da el **valor que rige**
+   de cada ajuste guardado desde el panel, con `source: stored` o `default`:
+   tolerancias de fichaje, idiomas, formato de nómina (`PAYROLL_EXPORT_*`; de
+   las columnas, solo el identificador, nunca el rótulo), ventana de
+   actualización de las tablets y resumen semanal. La marca, el código de
+   servicio y `BASELINE_MANUAL_HOURS_PER_MONTH` no viajan.
 6. **`updates`** — el último informe de actualización y la lista de los
    anteriores. Si la incidencia empezó «después de actualizar», aquí está la
    secuencia completa con sus comprobaciones y su código de salida.

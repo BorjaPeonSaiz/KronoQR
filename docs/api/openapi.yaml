@@ -17425,6 +17425,11 @@ components:
             Version, entorno, zona horaria de la aplicacion (siempre `UTC`,
             regla dura 3) y del centro, idiomas y el perfil de cumplimiento con
             sus umbrales. **Sin el nombre del centro ni del cliente.**
+
+            `volume` (PR14) lleva **solo recuentos**: `active_employees`,
+            `scan_events_last_30_days`, `shift_entries_last_30_days` (tramos en
+            vigor, sin `voided` ni `superseded`) y `open_incidents`. Ningun
+            identificador, fecha concreta ni desglose por persona.
           additionalProperties: true
         configuration:
           type: object
@@ -17434,6 +17439,13 @@ components:
             `differs: true`, sin valores); y `invalid_keys` tal y como las
             devuelve `GET /api/v1/settings`. Ninguna clave secreta, ni
             «redactada»: las que no estan en la lista no aparecen.
+
+            `installation_settings` (PR14): los ajustes guardados de la
+            instalacion que pasan su propia lista de permitidos, como mapa
+            `clave → {value, source}` con `source` `stored` o `default`. Fuera
+            quedan la marca (`BRANDING_*`), `KIOSK_SERVICE_CODE` y
+            `BASELINE_MANUAL_HOURS_PER_MONTH`; de `PAYROLL_EXPORT_COLUMNS` viaja
+            el identificador de cada columna, nunca su rotulo.
           additionalProperties: true
         services:
           type: object
@@ -17452,11 +17464,26 @@ components:
           additionalProperties: true
         kiosks:
           type: array
-          description: Un elemento por quiosco. **Sin `name`**, que puede llevar el nombre de una persona.
+          description: |
+            Un elemento por quiosco. **Sin `name`**, que puede llevar el nombre
+            de una persona. Los campos del latido (`oldest_pending_at`,
+            `battery_level`, `battery_charging`) y la caducidad del token son
+            `null` cuando no hay dato: tablet que nunca ha latido, navegador que
+            no informa de la bateria o dispositivo sin token.
           items:
             type: object
             additionalProperties: false
-            required: [uuid, status, app_version, last_seen_at, pending_queue_size]
+            required:
+              - uuid
+              - status
+              - app_version
+              - last_seen_at
+              - pending_queue_size
+              - oldest_pending_at
+              - battery_level
+              - battery_charging
+              - paired_at
+              - token_expires_on
             properties:
               uuid:
                 type: string
@@ -17472,6 +17499,37 @@ components:
               pending_queue_size:
                 type: integer
                 minimum: 0
+              oldest_pending_at:
+                description: |
+                  Instante del fichaje mas antiguo que la tablet aun no ha
+                  enviado, segun su ultimo latido (PR13). Solo el instante: ni
+                  `scan_id` ni empleado.
+                oneOf:
+                  - $ref: '#/components/schemas/UtcTimestamp'
+                  - type: 'null'
+              battery_level:
+                description: Porcentaje de bateria del ultimo latido.
+                oneOf:
+                  - type: integer
+                    minimum: 0
+                    maximum: 100
+                  - type: 'null'
+              battery_charging:
+                type: [boolean, 'null']
+              paired_at:
+                oneOf:
+                  - $ref: '#/components/schemas/UtcTimestamp'
+                  - type: 'null'
+              token_expires_on:
+                description: |
+                  **Dia** (UTC) en que caduca el token vigente del quiosco; si
+                  hay dos en solape tras una rotacion, el que caduca mas tarde.
+                  Solo la fecha, nunca el token ni su hash. `null` si el
+                  dispositivo no tiene token.
+                oneOf:
+                  - type: string
+                    format: date
+                  - type: 'null'
         error_events:
           type: object
           description: |

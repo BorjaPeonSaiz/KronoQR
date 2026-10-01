@@ -313,6 +313,21 @@ it('genera un paquete anonimizado sobre 500 empleados y 90 dias sin una sola PII
         ->and($json)->not->toContain(NOMBRE_DE_QUIOSCO_SEMBRADO)
         ->and($json)->not->toContain('Tablet de');
 
+    // Ni un codigo de empleado (PR12, PR13, PR14): es un identificador directo y
+    // la mitad de la credencial del portal. Los 500 de la semilla, uno a uno.
+    /** @var list<string> $codigos */
+    $codigos = DB::table('employees')->pluck('employee_code')->all();
+
+    expect($codigos)->toHaveCount(500);
+
+    $codigosQueSalen = array_values(array_filter(
+        $codigos,
+        static fn (string $codigo): bool => str_contains($json, $codigo),
+    ));
+
+    expect($codigosQueSalen)->toBe([], 'El paquete anonimizado contiene estos codigos de empleado: '
+        .implode(', ', \array_slice($codigosQueSalen, 0, 10)));
+
     // --- Ni una hora de fichaje ---------------------------------------------
 
     // RL-19 en su literal: «sin registros de jornada». No hay ninguna seccion de
@@ -341,9 +356,20 @@ it('genera un paquete anonimizado sobre 500 empleados y 90 dias sin una sola PII
     expect($kiosks)->toHaveCount(3);
 
     foreach ($kiosks as $kiosk) {
-        expect(array_keys($kiosk))
-            ->toBe(['uuid', 'status', 'app_version', 'last_seen_at', 'pending_queue_size']);
+        expect(array_keys($kiosk))->toBe([
+            'uuid', 'status', 'app_version', 'last_seen_at', 'pending_queue_size',
+            // PR13: lo que hace falta para «el quiosco no sincroniza».
+            'oldest_pending_at', 'battery_level', 'battery_charging', 'paired_at', 'token_expires_on',
+        ]);
     }
+
+    // PR14: los recuentos de volumen salen y son solo numeros.
+    /** @var array{volume: array<string, int>} $installation */
+    $installation = $bundle->sections['installation'];
+
+    expect($installation['volume']['active_employees'])->toBe(500)
+        ->and($installation['volume']['scan_events_last_30_days'])->toBe(1)
+        ->and(array_filter($installation['volume'], is_int(...)))->toHaveCount(4);
 
     // --- Y el paquete sirve para algo ---------------------------------------
 

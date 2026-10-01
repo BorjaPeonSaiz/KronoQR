@@ -989,9 +989,29 @@ last update (only the lines in the report format, and never its
 `.detalle.log`) and **only counts** of the audit trail.
 
 **What it does not carry, by default:** anyone's names, emails, documents,
-clock-ins or working days. Employees appear only as an identifier. An
-automated test of the product checks this on a bundle generated with 500
-employees and 90 days of clock-ins.
+employee codes, clock-ins or working days. Employees appear only as an
+identifier. An automated test of the product checks this on a bundle generated
+with 500 employees and 90 days of clock-ins.
+
+#### What it carries about each tablet, your settings and volume (since 2.2.0)
+
+So that support can answer «a tablet does not sync» or «the payroll file comes
+out empty» without asking you for a second round of screenshots, the bundle
+adds:
+
+| Where (in the JSON) | Field | What it is | If it is `null` |
+| --- | --- | --- | --- |
+| `kiosks[]` | `token_expires_on` | **Only the day** (UTC) on which that tablet's credential expires. Never the credential itself | The tablet has no credential: not paired, or unpaired |
+| `kiosks[]` | `paired_at` | When it was paired | It was paired before the product recorded this |
+| `kiosks[]` | `oldest_pending_at` | Time of the oldest clock-in the tablet has not sent yet. **Only the time**: neither whose it is nor its identifier | Nothing pending, or no heartbeat received since the tablet was updated |
+| `kiosks[]` | `battery_level`, `battery_charging` | Battery in % and whether it is charging, from its last heartbeat | The tablet's browser does not report the battery (normal on some models) |
+| `configuration.installation_settings` | one entry per setting | The settings saved from the admin panel (clocking tolerances, languages, payroll file format, tablet update window, weekly summary on/off), with `source: stored` if you changed it and `default` if the factory value applies | — (always has a value) |
+| `installation.volume` | `active_employees`, `scan_events_last_30_days`, `shift_entries_last_30_days`, `open_incidents` | **Numbers only**: active staff, scans and shift entries in the last 30 days, open incidents | — (always has a value) |
+
+Of your settings, the trade name, logo and brand colour, the tablets' service
+code and the manual consolidation hours you declared are **not** sent. Of the
+payroll format, **which columns** are written and in what order is sent, but
+**not the labels** you gave them.
 
 ### 12.3 Including personal data is a separate action
 
