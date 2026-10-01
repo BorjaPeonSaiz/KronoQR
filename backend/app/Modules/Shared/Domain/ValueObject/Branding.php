@@ -56,4 +56,24 @@ final readonly class Branding
             throw new InvalidArgumentException('El color de acento de la marca debe ser #rrggbb, y es «'.$accentColor.'».');
         }
     }
+
+    /**
+     * El acento tal como se imprime en texto sobre papel blanco (MB3, DC3).
+     *
+     * El color del cliente, oscurecido lo justo para leerse como texto normal
+     * (4,5:1, WCAG 1.4.3) sobre blanco; si ya llega, sale intacto. Lo usan los
+     * escritores de los PDF sellados para el nombre de la cabecera: el panel
+     * oscurece igual en pantalla, pero un PDF no pasa por ningun navegador y un
+     * amarillo palido como texto de 10 pt quedaria a 1,3:1 en un documento con
+     * valor probatorio.
+     *
+     * **No sustituye a {@see self::$accentColor}**: el filete decorativo de la
+     * tarjeta lleva el color tal cual, porque ahi no hay nada que leer.
+     */
+    public function accentForTextOnWhite(): string
+    {
+        return HexColor::fromHex($this->accentColor)
+            ->darkenedUntil(HexColor::white(), HexColor::WCAG_TEXT_MINIMUM)
+            ->toHex();
+    }
 }

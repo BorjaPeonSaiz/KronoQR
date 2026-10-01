@@ -58,6 +58,10 @@
            de quien. */
         .brand {
             margin: 0 0 8pt;
+            /* Logotipo y nombre en la misma linea (DC3). */
+            display: flex;
+            align-items: center;
+            gap: 4mm;
         }
 
         .brand img {
@@ -149,13 +153,18 @@
 </head>
 <body>
 <div class="brand">
+    {{-- EL NOMBRE SALE SIEMPRE, con logotipo o sin el (DC3): si la licencia
+         pierde `white_label` el logotipo desaparece, y dos informes del mismo
+         mes no pueden salir con encabezados distintos. Con el nombre al lado,
+         la imagen es decorativa y su `alt` va vacio para no leerlo dos veces.
+
+         `$brandAccent` llega YA OSCURECIDO hasta 4,5:1 sobre blanco (MB3): lo
+         calcula el escritor con `Branding::accentForTextOnWhite()`, no esta
+         vista. --}}
     @if ($brandLogo !== null)
-        {{-- Con logotipo, el nombre NO se repite al lado: seria la misma
-             informacion dos veces. Va en el `alt`, que es donde sirve. --}}
-        <img src="{{ $brandLogo }}" alt="{{ $brandName }}">
-    @else
-        <div class="brand__name" style="color: {{ $brandAccent }}">{{ $brandName }}</div>
+        <img src="{{ $brandLogo }}" alt="">
     @endif
+    <div class="brand__name" style="color: {{ $brandAccent }}">{{ $brandName }}</div>
 </div>
 
 <h1>{{ $title }}</h1>

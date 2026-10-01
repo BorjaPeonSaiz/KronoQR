@@ -27,9 +27,10 @@
     Chromium sin salida a internet (ADR-016), y una referencia externa daria
     informes sin logotipo el dia que la red del hotel tenga un mal rato.
 
-    Y TODO PUEDE FALTAR MENOS EL NOMBRE. Sin logotipo, la cabecera es el nombre
-    solo; el nombre siempre existe porque el catalogo entrega el del producto de
-    serie. Nadie se queda sin su informe por una imagen.
+    Y TODO PUEDE FALTAR MENOS EL NOMBRE, que sale siempre, tambien junto al
+    logotipo (DC3); existe porque el catalogo entrega el del producto de serie.
+    Sin logotipo, la cabecera es el nombre solo. Nadie se queda sin su informe
+    por una imagen.
 --}}
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -59,6 +60,10 @@
            es y despues de quien. */
         .brand {
             margin: 0 0 8pt;
+            /* Logotipo y nombre en la misma linea (DC3). */
+            display: flex;
+            align-items: center;
+            gap: 4mm;
         }
 
         .brand img {
@@ -152,13 +157,18 @@
 </head>
 <body>
 <div class="brand">
+    {{-- EL NOMBRE SALE SIEMPRE, con logotipo o sin el (DC3): si la licencia
+         pierde `white_label` el logotipo desaparece, y dos informes del mismo
+         mes no pueden salir con encabezados distintos. Con el nombre al lado,
+         la imagen es decorativa y su `alt` va vacio para no leerlo dos veces.
+
+         `$brandAccent` llega YA OSCURECIDO hasta 4,5:1 sobre blanco (MB3): lo
+         calcula el escritor con `Branding::accentForTextOnWhite()`, no esta
+         vista. --}}
     @if ($brandLogo !== null)
-        {{-- Con logotipo, el nombre NO se repite al lado: seria la misma
-             informacion dos veces. Va en el `alt`, que es donde sirve. --}}
-        <img src="{{ $brandLogo }}" alt="{{ $brandName }}">
-    @else
-        <div class="brand__name" style="color: {{ $brandAccent }}">{{ $brandName }}</div>
+        <img src="{{ $brandLogo }}" alt="">
     @endif
+    <div class="brand__name" style="color: {{ $brandAccent }}">{{ $brandName }}</div>
 </div>
 
 <h1>{{ $title }}</h1>

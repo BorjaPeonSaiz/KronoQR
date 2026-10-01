@@ -85,7 +85,8 @@ final readonly class AdoptionReportPdfWriter
             // La marca de la instalacion, para la cabecera. El `title` de arriba es
             // el nombre del DOCUMENTO y no cambia: son dos cosas distintas.
             'brandName' => $brand->applicationName,
-            'brandAccent' => $brand->accentColor,
+            // Oscurecido hasta 4,5:1 sobre el papel (MB3): es texto de 10 pt.
+            'brandAccent' => $brand->accentForTextOnWhite(),
             'brandLogo' => $logo instanceof LogoImage ? $logo->dataUri() : null,
             'metadata' => AdoptionReportLayout::metadata($report, $issuer, $digest),
             'criteriaLabel' => AdoptionReportLayout::text('document.criteria'),
