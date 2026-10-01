@@ -972,10 +972,29 @@ contadores agregados, el informe de la última actualización (solo las líneas
 del formato del informe, y nunca su `.detalle.log`) y **solo recuentos** del
 registro de auditoría.
 
-**Qué no lleva, por defecto:** nombres, correos, documentos, fichajes ni
-jornadas de nadie. Los empleados aparecen solo como identificador. Una prueba
-automática del producto lo comprueba sobre un paquete generado con 500
-empleados y 90 días de fichajes.
+**Qué no lleva, por defecto:** nombres, correos, documentos, códigos de
+empleado, fichajes ni jornadas de nadie. Los empleados aparecen solo como
+identificador. Una prueba automática del producto lo comprueba sobre un
+paquete generado con 500 empleados y 90 días de fichajes.
+
+#### Lo que lleva de cada tablet, de tus ajustes y del volumen (desde la 2.2.0)
+
+Para que soporte pueda responder a «una tablet no sincroniza» o «la nómina
+sale vacía» sin pedirte una segunda ronda de capturas, el paquete añade:
+
+| Dónde (en el JSON) | Campo | Qué es | Si sale `null` |
+| --- | --- | --- | --- |
+| `kiosks[]` | `token_expires_on` | **Solo el día** (UTC) en que caduca la credencial de esa tablet. Nunca la credencial | La tablet no tiene credencial: sin vincular o desvinculada |
+| `kiosks[]` | `paired_at` | Cuándo se vinculó | Se vinculó antes de que el producto lo anotara |
+| `kiosks[]` | `oldest_pending_at` | Hora del fichaje más antiguo que la tablet aún no ha enviado. **Solo la hora**: ni de quién es ni su identificador | No tiene nada pendiente, o no ha enviado ningún latido desde que se actualizó |
+| `kiosks[]` | `battery_level`, `battery_charging` | Batería en % y si está cargando, según su último latido | El navegador de la tablet no informa de la batería (normal en algunos modelos) |
+| `configuration.installation_settings` | una entrada por ajuste | Los ajustes guardados desde el panel (tolerancias de fichaje, idiomas, formato del fichero de nómina, ventana de actualización de las tablets, resumen semanal sí/no), con `source: stored` si lo cambiaste y `default` si rige el de serie | — (siempre tiene valor) |
+| `installation.volume` | `active_employees`, `scan_events_last_30_days`, `shift_entries_last_30_days`, `open_incidents` | **Solo números**: personas en activo, escaneos y tramos de los últimos 30 días, incidencias abiertas | — (siempre tiene valor) |
+
+De tus ajustes **no** viajan el nombre comercial, el logotipo ni el color de
+marca, el código de servicio de las tablets ni las horas de consolidación
+manual que declaraste. Del formato de nómina viaja **qué columnas** salen y en
+qué orden, pero **no los rótulos** que les pusiste.
 
 ### 12.3 Incluir datos personales es otra acción
 

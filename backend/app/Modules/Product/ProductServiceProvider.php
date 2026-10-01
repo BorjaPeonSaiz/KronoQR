@@ -1874,6 +1874,7 @@ final class ProductServiceProvider extends ServiceProvider
                         database: DB::connection(),
                         settings: $app->make(GetSettingsHandler::class),
                         profiles: $app->make(ComplianceProfileRepository::class),
+                        clock: $app->make(Clock::class),
                         productVersion: Config::string('app.version'),
                         environment: Config::string('app.env'),
                         applicationTimezone: Config::string('app.timezone'),

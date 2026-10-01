@@ -179,6 +179,9 @@ it('ninguna clave PERMITIDA tiene forma de secreto', function (): void {
         // Cuantas horas sigue valiendo el token relevado tras una rotacion
         // (ADR-044), no el token.
         'IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS',
+        // En que fraccion de su vida se renueva el token de un quiosco (PR13),
+        // no el token: un decimal como `0.8`.
+        'IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD',
     ];
 
     $suspicious = array_values(array_filter(
@@ -207,6 +210,7 @@ it('las excepciones de forma siguen siendo magnitudes y no secretos', function (
     'IDENTITY_2FA_SECRET_LENGTH',
     'IDENTITY_DEVICE_TOKEN_DAYS',
     'IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS',
+    'IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD',
 ])->group('RF-PD-09', 'RS-08');
 it('si deja salir los umbrales operativos, que es para lo que existe la seccion', function (string $key): void {
     // La otra mitad: una lista de permitidos vacia pasaria la prueba de arriba y
@@ -220,6 +224,12 @@ it('si deja salir los umbrales operativos, que es para lo que existe la seccion'
     'APP_SUPPORTED_LOCALES',
     'ATTENDANCE_MAX_SHIFT_HOURS',
     'ATTENDANCE_DEBOUNCE_SECONDS',
+    // PR14: la tolerancia de futuro del panel (F1) y el solape del token del
+    // quiosco tras rotar (ADR-044). Magnitudes, no secretos: explican «no me
+    // deja cerrar el turno» y «el quiosco dejo de sincronizar tras rotar».
+    'ATTENDANCE_FUTURE_TOLERANCE_MINUTES',
+    'IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS',
+    'IDENTITY_DEVICE_TOKEN_DAYS',
     'COMPLIANCE_PROFILE',
     'KIOSK_BATCH_MAX_SIZE',
     'KIOSK_SCAN_RATE_PER_DEVICE',

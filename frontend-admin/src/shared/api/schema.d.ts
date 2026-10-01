@@ -10053,6 +10053,11 @@ export interface components {
              * @description Version, entorno, zona horaria de la aplicacion (siempre `UTC`,
              *     regla dura 3) y del centro, idiomas y el perfil de cumplimiento con
              *     sus umbrales. **Sin el nombre del centro ni del cliente.**
+             *
+             *     `volume` (PR14) lleva **solo recuentos**: `active_employees`,
+             *     `scan_events_last_30_days`, `shift_entries_last_30_days` (tramos en
+             *     vigor, sin `voided` ni `superseded`) y `open_incidents`. Ningun
+             *     identificador, fecha concreta ni desglose por persona.
              */
             installation: {
                 [key: string]: unknown;
@@ -10063,6 +10068,13 @@ export interface components {
              *     `differs: true`, sin valores); y `invalid_keys` tal y como las
              *     devuelve `GET /api/v1/settings`. Ninguna clave secreta, ni
              *     «redactada»: las que no estan en la lista no aparecen.
+             *
+             *     `installation_settings` (PR14): los ajustes guardados de la
+             *     instalacion que pasan su propia lista de permitidos, como mapa
+             *     `clave → {value, source}` con `source` `stored` o `default`. Fuera
+             *     quedan la marca (`BRANDING_*`), `KIOSK_SERVICE_CODE` y
+             *     `BASELINE_MANUAL_HOURS_PER_MONTH`; de `PAYROLL_EXPORT_COLUMNS` viaja
+             *     el identificador de cada columna, nunca su rotulo.
              */
             configuration: {
                 [key: string]: unknown;
@@ -10083,7 +10095,13 @@ export interface components {
             license: {
                 [key: string]: unknown;
             };
-            /** @description Un elemento por quiosco. **Sin `name`**, que puede llevar el nombre de una persona. */
+            /**
+             * @description Un elemento por quiosco. **Sin `name`**, que puede llevar el nombre
+             *     de una persona. Los campos del latido (`oldest_pending_at`,
+             *     `battery_level`, `battery_charging`) y la caducidad del token son
+             *     `null` cuando no hay dato: tablet que nunca ha latido, navegador que
+             *     no informa de la bateria o dispositivo sin token.
+             */
             kiosks: {
                 /** Format: uuid */
                 uuid: string;
@@ -10091,6 +10109,23 @@ export interface components {
                 app_version: string | null;
                 last_seen_at: components["schemas"]["UtcTimestamp"] | null;
                 pending_queue_size: number;
+                /**
+                 * @description Instante del fichaje mas antiguo que la tablet aun no ha
+                 *     enviado, segun su ultimo latido (PR13). Solo el instante: ni
+                 *     `scan_id` ni empleado.
+                 */
+                oldest_pending_at: components["schemas"]["UtcTimestamp"] | null;
+                /** @description Porcentaje de bateria del ultimo latido. */
+                battery_level: number | null;
+                battery_charging: boolean | null;
+                paired_at: components["schemas"]["UtcTimestamp"] | null;
+                /**
+                 * @description **Dia** (UTC) en que caduca el token vigente del quiosco; si
+                 *     hay dos en solape tras una rotacion, el que caduca mas tarde.
+                 *     Solo la fecha, nunca el token ni su hash. `null` si el
+                 *     dispositivo no tiene token.
+                 */
+                token_expires_on: string | null;
             }[];
             /**
              * @description Historico de errores agrupado por huella con su `trace_id`

@@ -47,8 +47,10 @@ namespace App\Modules\Product\Domain\ValueObject;
  *    con otra regla dejaria trozos reconocibles.
  * 2. **Correos**, antes que los numeros: `ana.ruiz+turno@hotel.es` tiene cifras
  *    que otra regla podria comerse dejando el dominio a la vista.
- * 3. **Documentos** (DNI y NIE) y **telefonos**, en ese orden: un DNI es ocho
- *    cifras y una letra, y el telefono acabaria mordiendole las cifras.
+ * 3. **IBAN, codigo de empleado, pasaporte, documentos** (DNI y NIE, tambien
+ *    con puntos y espacios) y **telefonos**, en ese orden: un IBAN son veinte
+ *    cifras largas y un DNI ocho cifras y una letra, y el telefono acabaria
+ *    mordiendoles las cifras.
  * 4. **Fechas y horas**, porque una hora de fichaje es un dato de jornada de una
  *    persona concreta y esta tabla no guarda jornadas.
  * 5. **Lo entrecomillado**, al final: es la regla mas destructiva y se aplica
@@ -95,17 +97,7 @@ final readonly class ErrorMessageSanitizer
      */
     public static function sanitize(string $message): string
     {
-        $clean = self::collapse($message);
-
-        $clean = self::sql($clean);
-        $clean = self::secrets($clean);
-        $clean = self::emails($clean);
-        $clean = self::documents($clean);
-        $clean = self::phones($clean);
-        $clean = self::instants($clean);
-        $clean = self::quoted($clean);
-
-        $clean = trim($clean);
+        $clean = trim(self::redact(self::collapse($message)));
 
         if ($clean === '') {
             return '(sin mensaje)';
@@ -125,6 +117,39 @@ final readonly class ErrorMessageSanitizer
         $clean = trim(self::sanitize($value));
 
         return self::truncate($clean, self::MAX_CONTEXT_LENGTH);
+    }
+
+    /**
+     * Las reglas y nada mas: sin colapsar espacios, sin techo y sin texto de
+     * relleno (L1, regla dura 21).
+     *
+     * Es lo que aplica el log tecnico a cada linea —mensaje, excepcion y
+     * valores de contexto—. No puede truncar: una linea de log de 3000
+     * caracteres es legitima y cortarla esconderia el diagnostico. Y no
+     * colapsa: una traza con saltos de linea sigue siendo legible en `stderr`.
+     *
+     * **Falla cerrado.** Si una expresion no se puede evaluar —un texto con
+     * bytes UTF-8 invalidos, el limite de retroceso de PCRE—, `preg_replace`
+     * devuelve `null` y aqui se convierte en cadena vacia: se pierde el texto,
+     * no se deja pasar sin sanear. Quien llama decide que escribir en su lugar.
+     *
+     * Es idempotente: sanear dos veces da lo mismo que una, que es lo que
+     * permite que la pila de canales de log aplique el processor una vez por
+     * canal sin estropear lo ya saneado.
+     */
+    public static function redact(string $text): string
+    {
+        $clean = self::sql($text);
+        $clean = self::secrets($clean);
+        $clean = self::emails($clean);
+        $clean = self::ibans($clean);
+        $clean = self::employeeCodes($clean);
+        $clean = self::passports($clean);
+        $clean = self::documents($clean);
+        $clean = self::phones($clean);
+        $clean = self::instants($clean);
+
+        return self::quoted($clean);
     }
 
     /**
@@ -226,9 +251,27 @@ final readonly class ErrorMessageSanitizer
             $text,
         );
 
+        /*
+         * El `Key (…)=(…)`, ANIDADO incluido (F4c-2). La version anterior
+         * cortaba en el primer `)`, y PostgreSQL anida parentesis en cuanto la
+         * clave es una expresion o una exclusion:
+         *
+         *     Key (employee_id, tstzrange(started_at, ended_at, '[)'::text))
+         *       =(4242, ["2026-03-14 07:02:00+00","2026-03-14 15:00:00+00"))
+         *       conflicts with existing key (…)=(…).
+         *
+         * Con `[^)]*` el patron no casaba y salian el `employee_id` y las dos
+         * horas del tramo. Contar parentesis no sirve: el rango semiabierto
+         * `[a,b)` del valor no esta equilibrado. Asi que se corta desde `Key (`
+         * hasta la frase con la que PostgreSQL cierra el DETAIL —`already
+         * exists`, `conflicts with`, `is not present`, `is still referenced`—
+         * o hasta el final del texto. La anticipacion `[^=]*\)\s*=\s*\(` exige
+         * que de verdad sea un `(columnas)=(valores)`: un «missing key (x)» de
+         * otro mensaje no se lleva el resto de la linea.
+         */
         return (string) preg_replace(
-            '/\bKey\s*\([^)]*\)\s*=\s*\([^)]*\)/u',
-            "Key ('…')=('…')",
+            '/\b(key)\s*\((?=[^=]*\)\s*=\s*\().*?(?=\s+(?:already exists|conflicts with|is not present|is still referenced)\b|$)/isu',
+            "\$1 ('…')=('…')",
             $text,
         );
     }
@@ -267,7 +310,98 @@ final readonly class ErrorMessageSanitizer
      */
     private static function documents(string $text): string
     {
-        return (string) preg_replace('/\b[XYZxyz]?\d{7,8}[ -]?[A-Za-z]\b/', '[id]', $text);
+        // Compacto: `12345678Z`, `12345678-Z`, `X1234567L`, `X-1234567-L`.
+        $text = (string) preg_replace('/\b(?:[XYZ][ .-]?|[xyz])?\d{7,8}[ .\-]?[A-Za-z]\b/', '[id]', $text);
+
+        // Con separadores de miles, como se teclea a mano (F4c-2):
+        // `12.345.678-Z`, `12 345 678 Z`, `X 1.234.567 L`. Exige los DOS
+        // separadores entre grupos de tres cifras, que es lo que lo distingue
+        // de un numero tecnico.
+        return (string) preg_replace(
+            '/(?<![\w.\-])(?:[XYZ][ .-]?|[xyz])?\d{1,2}[ .]\d{3}[ .]\d{3}[ .\-]?[A-Za-z](?!\w)/',
+            '[id]',
+            $text,
+        );
+    }
+
+    /**
+     * IBAN: dos letras de pais, dos cifras de control y de 12 a 31
+     * alfanumericos, compacto o en grupos de cuatro separados por un espacio
+     * (F4c-2).
+     *
+     * Va antes que documentos y telefonos: un IBAN espanol son veintidos cifras
+     * y esas reglas se comerian trozos dejando el resto a la vista.
+     *
+     * **Solo en mayusculas, a proposito.** En minusculas casaria con cualquier
+     * huella hexadecimal que empiece por dos letras y dos cifras —un `sha256`,
+     * un identificador de commit—, que si aparecen en mensajes tecnicos. Y sin
+     * guiones entre grupos: con ellos casaria un UUID en mayusculas. Un IBAN en
+     * minusculas o con guiones es el falso negativo que se acepta.
+     */
+    private static function ibans(string $text): string
+    {
+        return (string) preg_replace(
+            '/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?\b/',
+            '[iban]',
+            $text,
+        );
+    }
+
+    /**
+     * El codigo de empleado (PR12, F4c-2): un identificador directo y la mitad
+     * publica de la credencial del portal (ADR-015).
+     *
+     * Su forma la fija `Workforce\Domain\ValueObject\EmployeeCode::generate()`:
+     * una `E` y nueve caracteres de un alfabeto sin ambiguos; la semilla de
+     * desarrollo usa `E` y nueve hexadecimales, y el contrato documenta ejemplos
+     * con ocho. Se atrapan dos cosas:
+     *
+     * 1. **La forma canonica**: `E` mas ocho o nueve mayusculas y cifras con al
+     *    menos una cifra, o nueve letras **todas del alfabeto sin ambiguos**
+     *    (un 6,8 % de los codigos generados no lleva cifras). Eso deja fuera
+     *    palabras en mayusculas como `EXCEPTIONS` o `EVERYTHING`, que llevan
+     *    `I`, `O` o `L`.
+     * 2. **Cualquier valor detras de su nombre** —`employee_code=739104`,
+     *    `codigo de empleado: AB12`—, porque `EmployeeCode::fromString()`
+     *    acepta codigos heredados de cualquier forma alfanumerica, y esos solo
+     *    se reconocen por la etiqueta.
+     *
+     * Lo que NO se atrapa: un codigo heredado sin etiqueta y sin la forma
+     * canonica. Es indistinguible de un numero cualquiera; el `Key (…)=(…)` y
+     * el corte del SQL cubren los dos sitios por donde de verdad aparece.
+     */
+    private static function employeeCodes(string $text): string
+    {
+        $text = (string) preg_replace(
+            '/\b(employee[_ \-]?code|c(?:o|\x{00F3})digo(?:[_ ]de)?[_ ]empleado)(\s*[=:#]\s*|\s+(?=\S*\d))(\S+)/iu',
+            '$1$2[code]',
+            $text,
+        );
+
+        return (string) preg_replace(
+            '/\bE(?=[A-Z0-9]{8,9}\b)(?:(?=[A-Z0-9]*\d)[A-Z0-9]{8,9}|[ABCDEFGHJKMNPQRSTUVWXYZ]{9})\b/',
+            '[code]',
+            $text,
+        );
+    }
+
+    /**
+     * Pasaportes (F4c-2): el espanol son tres letras y seis cifras, y
+     * cualquiera, sea de donde sea, detras de la palabra.
+     *
+     * La forma sola es estrecha a proposito —mayusculas exactas y limites de
+     * palabra— para no comerse un identificador tecnico; lo que no tenga esa
+     * forma solo se reconoce por la etiqueta.
+     */
+    private static function passports(string $text): string
+    {
+        $text = (string) preg_replace(
+            '/\b(passport|pasaporte)((?:\s*(?:no\.?|n\x{00BA}|n\x{00B0}|number|n(?:u|\x{00FA})mero))?(?:\s*[=:#]\s*|\s+(?=\S*\d)))(\S+)/iu',
+            '$1$2[id]',
+            $text,
+        );
+
+        return (string) preg_replace('/\b[A-Z]{3}\d{6}\b/', '[id]', $text);
     }
 
     /**
@@ -303,7 +437,17 @@ final readonly class ErrorMessageSanitizer
             $text,
         );
 
+        $text = (string) preg_replace('/\b\d{4}\/\d{1,2}\/\d{1,2}\b/', '[time]', $text);
         $text = (string) preg_replace('/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/', '[time]', $text);
+
+        // `dd-mm-aaaa` y `dd.mm.aaaa` (F4c-2), con el MISMO separador las dos
+        // veces y dia, mes y siglo plausibles: sin eso, `13.0.1234` o un
+        // `1-2-3000` cualquiera pasarian por fecha.
+        $text = (string) preg_replace(
+            '/\b(?:0?[1-9]|[12]\d|3[01])([\-.])(?:0?[1-9]|1[0-2])\1(?:19|20)\d{2}\b/',
+            '[time]',
+            $text,
+        );
 
         return (string) preg_replace('/\b\d{1,2}:\d{2}(:\d{2})?\b/', '[time]', $text);
     }

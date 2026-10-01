@@ -10,6 +10,8 @@ use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
+use App\Modules\Shared\Application\Port\Clock;
+use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -29,13 +31,35 @@ use Illuminate\Database\ConnectionInterface;
  * Del perfil de cumplimiento sale la **jurisdiccion y sus umbrales**, no su
  * nombre: «ES-hosteleria» es una regla, «Convenio del Hotel Fulanito» seria el
  * cliente.
+ *
+ * ## `volume`: solo numeros, para no pedir una segunda ronda (PR14)
+ *
+ * «La nomina sale vacia» tiene dos lecturas opuestas: que no hay nada que
+ * exportar o que lo hay y el fichero no lo recoge. Cuatro recuentos las
+ * separan sin enviar un solo dato de nadie: personas en activo, escaneos de los
+ * ultimos 30 dias, tramos en vigor con jornada en esos 30 dias e incidencias
+ * abiertas. **Recuentos y nada mas**: ningun identificador, ninguna fecha
+ * concreta, ningun desglose por persona o departamento.
+ *
+ * Los tramos se cuentan aparte de los escaneos porque el alta manual del panel
+ * crea tramos sin escaneo: un hotel que ficha a mano tiene cero escaneos y una
+ * nomina perfectamente llena. Los tramos `voided` y `superseded` no cuentan:
+ * son versiones conservadas (RN-13), no horas.
+ *
+ * La ventana se mide con el puerto `Clock` en UTC; en la frontera del dia 30 el
+ * recuento puede diferir en unas horas de lo que vea el cliente en su zona, y
+ * para un orden de magnitud da igual.
  */
 final readonly class InstallationCollector implements DiagnosticsCollector
 {
+    /** Ventana de los recuentos de actividad, en dias. */
+    public const int VOLUME_WINDOW_DAYS = 30;
+
     public function __construct(
         private ConnectionInterface $database,
         private GetSettingsHandler $settings,
         private ComplianceProfileRepository $profiles,
+        private Clock $clock,
         private string $productVersion,
         private string $environment,
         private string $applicationTimezone,
@@ -62,6 +86,31 @@ final readonly class InstallationCollector implements DiagnosticsCollector
             'available_locales' => $resolved->textList(SettingKey::LOCALE_AVAILABLE),
             'site' => $this->site(),
             'compliance_profile' => $this->complianceProfile(),
+            'volume' => $this->volume(),
+        ];
+    }
+
+    /**
+     * Los recuentos de volumen. Ver el docblock de la clase.
+     *
+     * @return array{active_employees: int, scan_events_last_30_days: int, shift_entries_last_30_days: int, open_incidents: int}
+     */
+    private function volume(): array
+    {
+        $since = $this->clock->now()
+            ->setTimezone(new DateTimeZone('UTC'))
+            ->modify('-'.self::VOLUME_WINDOW_DAYS.' days');
+
+        return [
+            'active_employees' => $this->database->table('employees')->where('status', 'active')->count(),
+            'scan_events_last_30_days' => $this->database->table('scan_events')
+                ->where('occurred_at', '>=', $since->format('Y-m-d\TH:i:s.uP'))
+                ->count(),
+            'shift_entries_last_30_days' => $this->database->table('shift_entries')
+                ->where('work_date', '>=', $since->format('Y-m-d'))
+                ->whereNotIn('status', ['voided', 'superseded'])
+                ->count(),
+            'open_incidents' => $this->database->table('incidents')->where('status', 'open')->count(),
         ];
     }
 

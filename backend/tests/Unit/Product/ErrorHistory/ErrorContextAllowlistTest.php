@@ -46,6 +46,41 @@ it('sanea tambien los valores permitidos', function (): void {
         ->and($limpio['reason'] ?? '')->not->toContain('ana.ruiz@hotel.es');
 })->group('RF-PD-15', 'RL-19');
 
+it('no guarda un codigo de empleado que llegue por el contexto', function (string $valor, string $prohibido): void {
+    /*
+     * PR12: por `POST /client-errors` y por el latido del quiosco entra lo que
+     * el cliente quiera en `reason` o `cause`, y de ahi sale hacia el
+     * fabricante dentro del paquete de diagnostico. El codigo de empleado es un
+     * identificador directo y la mitad de la credencial del portal.
+     */
+    $limpio = ErrorContextAllowlist::apply(['reason' => $valor]);
+
+    expect((string) ($limpio['reason'] ?? ''))->not->toContain($prohibido);
+})->with([
+    'codigo canonico dentro de un texto' => ['tarjeta E7K2M9QX4B no reconocida', 'E7K2M9QX4B'],
+    'codigo con su etiqueta' => ['employee_code=739104', '739104'],
+    // Un codigo heredado, importado de otro sistema, sin la forma canonica: en
+    // un texto seria indistinguible de cualquier numero, pero un valor de
+    // contexto que es ENTERO una palabra asi solo puede ser un identificador.
+    'codigo heredado como valor suelto' => ['AB12C3', 'AB12C3'],
+    'codigo heredado largo como valor suelto' => ['HTL2019X0042', 'HTL2019X0042'],
+    'dni con puntos' => ['documento 12.345.678-Z', '345.678'],
+    'iban' => ['ES91 2100 0418 4502 0005 1332', '2100 0418'],
+])->group('RF-PD-15', 'RL-19');
+
+it('no confunde con un codigo los valores tecnicos que mandan los clientes', function (string $valor): void {
+    // Los valores reales de `scope`, `outcome`, `cause`, `method` o
+    // `error_type`: palabras, en minusculas o sin cifras. Salen tal cual.
+    expect(ErrorContextAllowlist::apply(['reason' => $valor]))->toBe(['reason' => $valor]);
+})->with([
+    'palabra' => ['timeout'],
+    'metodo' => ['POST'],
+    'tipo de error' => ['TypeError'],
+    'estado como texto' => ['500'],
+    'desenlace' => ['adopted'],
+    'con guion bajo' => ['NETWORK_ERROR'],
+])->group('RF-PD-15');
+
 it('no admite las tres identidades por el contexto: tienen columna propia', function (): void {
     // Si estuvieran en la lista habria dos sitios donde puede vivir un
     // `employee_uuid`, y solo uno de los dos tiene el tipo `uuid` detras.

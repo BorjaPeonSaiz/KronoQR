@@ -10,10 +10,12 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\InvalidSetting;
 use App\Modules\Product\Domain\ValueObject\SettingsDrift;
 use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsConfigurationAllowlist;
+use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsSettingsAllowlist;
 
 /**
- * Seccion `configuration`: el `.env` **filtrado por lista de permitidos**, las
- * filas de configuracion que no se pudieron aplicar y las claves en las que el
+ * Seccion `configuration`: el `.env` **filtrado por lista de permitidos**, los
+ * ajustes guardados en base de datos que pasan su propia lista de permitidos
+ * (`installation_settings`, PR14), las filas de configuracion que no se pudieron aplicar y las claves en las que el
  * `.env` y la base de datos dicen cosas distintas (RF-PD-09, RS-08).
  *
  * ## Las tres cosas responden a la misma pregunta
@@ -55,6 +57,9 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
 
         return [
             'env' => DiagnosticsConfigurationAllowlist::apply($this->environment),
+            // PR14: los ajustes guardados, que mandan sobre el `.env`, por lista
+            // de permitidos y con su procedencia (`DiagnosticsSettingsAllowlist`).
+            'installation_settings' => DiagnosticsSettingsAllowlist::apply($resolved),
             'invalid_keys' => array_map(
                 static fn (InvalidSetting $invalid): array => [
                     'key' => $invalid->key->value,
