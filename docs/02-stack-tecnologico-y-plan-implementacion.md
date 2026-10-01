@@ -214,7 +214,7 @@ fichaje-hotel/
 │   ├── 03-agentes-y-skills-ia.md
 │   ├── 04-decision-credencial.md
 │   ├── 05-presentacion-cliente.md   # Documento comercial entregable al cliente
-│   ├── adr/                         # ADR-001 … ADR-043
+│   ├── adr/                         # ADR-001 … ADR-044
 │   ├── api/openapi.yaml             # Contrato, fuente de verdad de la API
 │   ├── cliente/                     # Documentación que se entrega al cliente
 │   │   ├── instalacion.md
@@ -536,6 +536,7 @@ Los veintidós siguientes **no proceden de esta tabla**: nacieron al desarrollar
 | **041** | **Los ficheros generados en diferido se descargan con un enlace de un solo uso y caducidad, sin sesión** | RF-IN-06 promete «un enlace de descarga cuando esté listo» y al otro lado hay un fichero con el registro horario de la plantilla. Un enlace se abre con un clic y en ese clic no viaja ninguna cabecera `Authorization`, así que la sesión del panel no puede ser lo que lo protege; y el aviso puede salir por correo, un canal que el producto no controla | Token de 32 bytes del que solo se guarda el `sha256`, emitido **al consultar el estado** y rotado en cada consulta, con caducidad de minutos (`REPORTING_EXPORT_LINK_TTL_MINUTES`) y **consumido en la descarga**: reutilizarlo da `410`. La ruta va sin `auth:sanctum`, con zona de límite de tasa propia. **El correo lleva el enlace a la pantalla, nunca al fichero.** Solo el solicitante ve y descarga lo suyo (`404` para cualquier otro, también `admin`); cada descarga deja asiento y la fila sobrevive al fichero como `purged` |
 | **042** | **El runtime no tiene ninguna credencial que pueda alterar el registro** | La verificación de la 2.1.0 (AUD-1, 🔴 CRÍTICO) encontró la contraseña de `fichaje_migrator`, superusuario, en `app`, `horizon`, `reverb` y `scheduler` a través de `env_file: .env`, y al propio runtime usando `pgsql_migrator` a diario para crear la partición anual de `audit_log`. Con una ejecución de código en PHP se podía reescribir el registro y recalcular la cadena: la condición 1 de ADR-010, «no puede», era falsa | La partición la pide el rol de aplicación a una función `SECURITY DEFINER` (`audit_log_create_partition`) que solo crea el año UTC en curso o el siguiente, nunca uno sellado, y con los mismos permisos que las demás particiones. Las copias pasan a un rol de solo lectura, `fichaje_backup`. Migrar y restaurar son servicios de un solo uso (`migrate`, `restore`), los únicos con `DB_MIGRATION_*`. El runtime y `nginx` declaran `environment:` sin `env_file` (en desarrollo se conserva). Enmienda ADR-010, 027, 029 y 033. El migrador sigue siendo `SUPERUSER`: la evolución es un rol propietario `NOLOGIN` |
 | **043** | **El PIN rechazado conserva a quién correspondía el código, solo en la base de datos** | La verificación de la 2.1.0 (PIN-06, SC7-02) encontró que un PIN encolado que se rechaza al sincronizar, o un acierto que encuentra el bloqueo de RS-12, dejaba una jornada sin registro que nadie veía: el rechazo era indistinguible también dentro del servidor, y sin saber a quién correspondía el código no hay incidencia posible (RN-19) | `PinVerification` lleva en el rechazo un `PinClaim` opcional —dueño del código y bloqueo— solo si el código es de una persona que puede fichar; `employeeUuid()` sigue nulo. Viaja hasta la inserción de `scan_events` (`claimed_employee_id`, `pin_lockout`, con un `CHECK` que las ata a `pin_kiosk` + `rejected_unknown`) y ahí termina: ni respuesta, ni reenvío, ni `ScanRejected`, ni log técnico, ni paquete de diagnóstico. La incidencia `rejected_pin_scan` la abre la revisión diaria, no la petición. Precisa ADR-039 |
+| **044** | **El token del quiosco rota en el latido, con solape y reentrega** *(propuesta, pendiente de `seguridad-cumplimiento`)* | La verificación de la 2.1.0 (F1-1) encontró que la rotación al 80 % del §7.3 no se ejecutaba nunca y que, además, el emisor borraba el token anterior en la misma transacción: conectarla al latido tal cual convertía una respuesta perdida en una tablet fuera de servicio | El latido trae `rotated_token` solo cuando el token que lo firma ha pasado el umbral. El anterior sigue valiendo `IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS` (24 h) o hasta el primer uso del nuevo; si la tablet vuelve con el viejo, se retira el relevo no usado y se emite otro sin alargar el solape. El valor no se guarda en claro. La revocación sigue sin solape y la rotación nunca tumba el latido |
 
 ---
 
@@ -697,7 +698,7 @@ add_header Cross-Origin-Resource-Policy "same-origin" always;
 
 | Cliente | Ámbitos (*abilities*) | Caducidad | Rotación |
 |---|---|---|---|
-| Quiosco | `scan:write`, `roster:read`, `heartbeat:write` | 90 días | Automática al 80 % de vida |
+| Quiosco | `scan:write`, `roster:read`, `heartbeat:write` | 90 días | Automática al 80 % de vida, en el latido, con solape del anterior ([ADR-044](adr/ADR-044-el-token-del-quiosco-rota-en-el-latido-con-solape.md)) |
 | Empleado (portal) | `self:read` | Sesión corta | — |
 | Responsable | `attendance:read`, `attendance:correct`, `incidents:*`, `employees:read` (ámbito departamento) | Sesión | — |
 | RRHH | + `employees:*`, `reports:*`, `credentials:*` | Sesión + 2FA | — |
@@ -783,6 +784,7 @@ kiosk_last_seen_seconds{device}                          gauge
 kiosk_offline_queue_size{device}                         gauge
 kiosk_battery_level{device}                              gauge
 kiosk_pairing_total{result,reason}                       counter
+kiosk_token_rotations_total{result}                      counter
 sync_delay_seconds{device}                               histogram
 incidents_open{type,severity}                            gauge
 incidents_metrics_timestamp_seconds                      gauge

@@ -360,6 +360,21 @@ export interface paths {
          *
          *     **Sin datos personales, en ninguna direccion.** Ni el latido los envia ni la
          *     respuesta los devuelve: el dispositivo se identifica por su token.
+         *
+         *     **Es tambien el canal de la rotacion del token** (RF-ID-04, documento 02
+         *     §7.3, [ADR-044](../adr/ADR-044-el-token-del-quiosco-rota-en-el-latido-con-solape.md)).
+         *     Cuando el token con el que se firma el latido ha consumido el 80 % de su
+         *     vida (`IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD`), la respuesta trae
+         *     `rotated_token` con su relevo. El token anterior **sigue valiendo durante
+         *     un solape** —`IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS`, 24 h de serie, y nunca
+         *     mas alla de su propia caducidad— **o hasta que el nuevo se use por primera
+         *     vez**, lo que ocurra antes. Si la respuesta se pierde, la tablet sigue con
+         *     el token viejo y el siguiente latido le entrega **otro** relevo: el que no
+         *     llego se retira sin haberse usado nunca. El solape no se alarga con cada
+         *     reentrega y un token en solape no abre un solape nuevo. Si la rotacion
+         *     falla en el servidor, el latido responde igual, sin `rotated_token`, y se
+         *     reintenta en el siguiente (regla dura 19). **La desvinculacion sigue
+         *     revocando en el acto**, sin solape.
          */
         post: operations["recordKioskHeartbeat"];
         delete?: never;
@@ -5183,8 +5198,9 @@ export interface components {
         };
         /**
          * KioskHeartbeat
-         * @description Lo que el servidor le devuelve al quiosco: su hora y cuantos errores de
-         *     cliente ha aceptado.
+         * @description Lo que el servidor le devuelve al quiosco: su hora, cuantos errores de
+         *     cliente ha aceptado, los ajustes que la tablet necesita sin red y, solo
+         *     cuando toca, el relevo de su token (`rotated_token`).
          */
         KioskHeartbeat: {
             /**
@@ -5279,6 +5295,54 @@ export interface components {
                  * @example 10
                  */
                 quiet_minutes: number;
+            };
+            /**
+             * @description **El relevo del token del quiosco** (RF-ID-04, documento 02 §7.3,
+             *     [ADR-044](../adr/ADR-044-el-token-del-quiosco-rota-en-el-latido-con-solape.md)).
+             *     **Opcional y ausente en el caso normal**: solo aparece cuando el token
+             *     que firmo este latido ha consumido la fraccion de vida configurada
+             *     (`IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD`, 0,8 de serie: el dia 72
+             *     de 90), o cuando firma con un token ya relevado cuyo relevo nunca se
+             *     llego a usar. Nunca es `null`: o esta, o no esta.
+             *
+             *     **Que tiene que hacer la tablet.** Guardar `value` y `expires_at` de
+             *     forma atomica y firmar con el las peticiones siguientes; si deriva
+             *     alguna clave del token (el padron cacheado), volver a cifrar con la
+             *     nueva. Adoptar **siempre el ultimo relevo recibido**, aunque llegue en
+             *     la respuesta a una peticion firmada con el token viejo.
+             *
+             *     **El solape.** El token viejo sigue valiendo hasta
+             *     `IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS` (24 h de serie, sin pasar de su
+             *     propia caducidad) **o hasta que el nuevo se use por primera vez**, lo
+             *     que ocurra antes. A partir de ese primer uso, una peticion en vuelo
+             *     firmada con el viejo recibe `401`: la tablet la repite con el nuevo.
+             *
+             *     **Se entrega una sola vez y no se guarda en claro.** El servidor solo
+             *     conserva su hash (como el de cualquier token de Sanctum). Si esta
+             *     respuesta se pierde, la tablet no hace nada especial: sigue firmando
+             *     con el viejo, que esta en solape, y el latido siguiente trae **un
+             *     relevo distinto**; el que se perdio se retira sin haberse usado. La
+             *     fecha del solape no se alarga con cada reentrega: si la tablet no
+             *     consigue un latido completo antes de que venza, vuelve a la pantalla de
+             *     emparejamiento como con un token caducado, y su cola local se
+             *     conserva (regla dura 19).
+             *
+             *     **Si la rotacion falla en el servidor**, el latido responde `200`
+             *     igualmente, sin este campo, y se vuelve a intentar en el siguiente.
+             */
+            rotated_token?: {
+                /**
+                 * @description Nuevo token `Bearer`, con los mismos tres ambitos que el anterior
+                 *     (`kioskToken`). Mismo formato que el de
+                 *     `PairingCompleted.token.value`.
+                 * @example 93|Vx8kQ2mNp4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyAb
+                 */
+                value: string;
+                /**
+                 * @description Caducidad del nuevo token: `IDENTITY_DEVICE_TOKEN_DAYS` (90) desde
+                 *     el momento del relevo.
+                 */
+                expires_at: components["schemas"]["UtcTimestamp"];
             };
             /**
              * @description Hora del servidor en el momento de atender el latido. La tablet la compara
