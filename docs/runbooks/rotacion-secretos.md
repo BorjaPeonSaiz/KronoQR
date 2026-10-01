@@ -190,14 +190,21 @@ falla con un mensaje que lo dice.
 
 ## 4. Tokens de dispositivo del quiosco
 
-Cada token vive `IDENTITY_DEVICE_TOKEN_DAYS` (90 de serie). El diseño es que se
-renueve solo cuando ha consumido `IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD`
-(80 %) de su vida, en una petición normal del propio quiosco, pero **en esta
-versión esa renovación no se ejecuta**: a los 90 días de vincularla, cada tablet
-vuelve a la pantalla de emparejamiento. Mientras no llegue la versión que la
-active, hay que desvincular y volver a vincular cada tablet antes del día 90
-([`../cliente/operacion.md`](../cliente/operacion.md) §18). Eso emite un token
-nuevo y, de paso, es la rotación.
+Cada token vive `IDENTITY_DEVICE_TOKEN_DAYS` (90 de serie) y **rota solo**: en
+el primer latido después de haber consumido
+`IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` (80 %, hacia el día 72) de su vida,
+el servidor entrega a la tablet un token nuevo y deja el anterior en solape
+`IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS` (24 h) o hasta el primer uso del nuevo
+(ADR-044).
+No hay nada que programar. Cada relevo escribe `device.paired` en `audit_log`
+con `rotation: true`, sin el token ni su hash; si una rotación falla, el latido
+responde igual, se reintenta en el siguiente y el fallo queda en el histórico de
+errores y en `kiosk_token_rotations_total{result="failed"}`.
+
+El límite: una tablet que pasa **más de unos 18 días seguidos sin latido**
+(apagada o sin red) puede no recoger el relevo y caducar; entonces vuelve a la
+pantalla de emparejamiento y hay que desvincularla y volver a vincularla
+([`../cliente/operacion.md`](../cliente/operacion.md) §18).
 
 Rotación forzada de una tablet concreta —robo, extravío, baja del equipo—: se
 **desvincula** desde el panel, con lo que su token queda revocado, ese quiosco

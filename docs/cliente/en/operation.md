@@ -1410,7 +1410,7 @@ summary:
 | **Warning, pending clock-ins** — the tablet **has network and still has clock-ins left to send** | [`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish). **Do not unpair that tablet**: you would lose the queue |
 | **Warning, low battery** | Go to the mounting point: unplugged charger, switched-off power strip or a broken cable |
 | **Warning, late heartbeat** | Nothing yet. If it does not return to "up to date" within ten minutes it becomes a failure and the alert fires |
-| **The tablet went back to the pairing screen on its own** | Someone unpaired it, or its token reached 90 days (§18): [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) (in Spanish) §6 |
+| **The tablet went back to the pairing screen on its own** | Someone unpaired it, or it went more than about 18 days without a heartbeat and its token expired before it could be renewed (§18): [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) (in Spanish) §6 |
 
 **If the queue does not go down even though the network at that point is
 fine**, and the "oldest" in the "Pending" column stays stuck at the same time
@@ -1817,43 +1817,77 @@ them:**
 It says what is red and what to do about each thing (§12.1). What follows is
 for when you already know which of these cases is yours.
 
-### …every tablet goes back to the pairing screen after 90 days
+### …a tablet goes back to the pairing screen after many days switched off or without network
 
 **What is going on.** When it is linked, each tablet receives a token that
-lives **90 days** (`IDENTITY_DEVICE_TOKEN_DAYS`). Automatic renewal before it
-expires is planned, but **in this version it does not run**: on day 90 after it
-was linked, the tablet is no longer accepted, goes back to the pairing screen by
-itself and **nobody can clock in on it until it is linked again**. If you linked
-them all on the same day, they all drop on the same day.
+lives **90 days** (`IDENTITY_DEVICE_TOKEN_DAYS`). **You do not have to renew it
+yourself**: as long as the tablet is on and has network, the server hands it a
+new one in its heartbeat once that token has used up 80 % of its life
+(`IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD`) —with the default values, around
+**day 72**—, and the tablet adopts it without anyone doing anything and
+without interrupting clock-ins. The previous token stays valid for **24 more
+hours** (`IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS`) or until the tablet uses the new
+one, whichever comes first: if a wifi drop swallows exactly that response, the
+next heartbeat hands it another. Every renewal is recorded in the audit log as
+`device.paired`.
+
+**The limit, which is the only thing you have to watch.** The renewal can only
+happen in a heartbeat. Between day 72 and day 90 the tablet has **18 days** to
+send at least one. A tablet that spends **more than about 18 days in a row
+without a heartbeat** —switched off in a storeroom, put away out of season, or
+on but without network all that time— can reach day 90 without having picked
+up its replacement. Its token then expires: when it comes back, the tablet is
+no longer accepted, goes back to the pairing screen by itself and **nobody can
+clock in on it until it is linked again**. It is not a fault and it does not
+fix itself.
+
+The renewal is done by **the tablet app from 2.2.0 onwards**. After updating
+the server, each tablet loads the new app in its update window (§11.1),
+normally that same night. Check in **Kiosks** that the **"Application version"** column
+of all of them has caught up: a tablet still on an earlier app would not pick
+up its replacement and would go back to the pairing screen the day after its
+day 72.
 
 **What is not lost:** the clock-ins the tablet had in its local queue. They are
 kept and sent as soon as it is linked again.
 
-**Prevention, which is what we recommend.** In the panel, **Kiosks**, the
-**"Linked"** column says when each one was linked: add 80 days and put it in the
-calendar. On that day, with the tablet in front of you and away from the shift
+**Prevention.** In the panel, **Kiosks**, the **"Last contact"** column says
+when each tablet last sent a heartbeat (§16.1). A tablet in **failure, no
+signal** is not urgent because of the token during the first few days, but do
+not leave it like that for more than **two weeks**: switch it on and connect it
+so it sends a heartbeat. If you are going to put a tablet away for longer
+(end of season, a station that is not used), the clean way is to **unlink it**
+when you put it away and link it again when you bring it back, with the same
+name.
+
+**If it has already happened.** The panel still shows that kiosk as **active**
+(its verdict will be *No signal*): the server does not know the tablet has been
+locked out until someone resolves it. That is why **it will not let you link
+it with the same name** —it will say that name is already in use— **until you
+unlink it first**. With the tablet in front of you and away from the shift
 change:
 
-1. Check on that same screen that its **"Unsynced clockings"** column is at
-   `0`.
-2. **Unlink it** (Kiosks › the kiosk › **Unlink**). Within a couple of minutes
+1. **Unlink it** (Kiosks › the kiosk › **Unlink**). Within a couple of minutes
    the tablet shows a new code.
-3. **Link it with exactly the same name.** The same kiosk is reactivated, with
-   its history, and receives a new 90-day token.
-
-It takes two minutes per tablet and it is recorded in the audit log. If you
-can, spread the tablets over different days so they never all coincide. The
-detail, with screenshots, is in
-[`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md)
-§5.2 and §5.3 (in Spanish).
-
-**If it has already happened**, the procedure is the same starting at step 2
-(the panel will not let you link with that name while the kiosk is still
-active: unlink first). Then check that its queue goes down to `0`:
+2. **Link it with exactly the same name.** The same kiosk is reactivated, with
+   its history, and receives a new 90-day token that from then on renews
+   itself again.
+3. Check that its queue goes down to `0`:
 
 ```bash
 docker compose exec app php artisan kiosk:health
 ```
+
+It takes two minutes and it is recorded in the audit log. The detail, with
+screenshots, is in
+[`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md)
+§5.2 and §5.3 (in Spanish).
+
+**If a tablet that did send heartbeats every day goes back to the pairing
+screen**, it is not an expired token: someone unlinked it. Handle it as
+described in
+[`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md)
+§6, "…la tablet vuelve sola a la pantalla de emparejamiento" (in Spanish).
 
 ### …Redis restarts over and over, almost always after a power cut
 
