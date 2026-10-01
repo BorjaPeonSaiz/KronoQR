@@ -1329,18 +1329,16 @@ it('no distingue las causas del rechazo del acceso al portal', function (): void
 })->group('RS-03', 'RS-12', 'RF-ID-06');
 
 it('no ofrece ningun formato propietario en la descarga del historico propio', function (): void {
-    // El plan es explicito: CSV en la 1.11 y PDF en la 2.9, sin XLSX. CSV cubre
-    // la portabilidad del RGPD y no arrastra Browsershot al camino critico de la
-    // Fase 1; XLSX no aporta nada sobre CSV para el historico de una persona.
+    // El Anexo B es explicito: CSV y PDF, sin XLSX. CSV cubre la portabilidad
+    // del RGPD y el PDF sellado (PR19, 2.2.0) es lo que una persona presenta;
+    // XLSX no aporta nada sobre CSV para el historico de una persona.
     $content = Contract::keys('paths', '/api/v1/me/export', 'get', 'responses', '200', 'content');
 
-    expect($content)->toBe(['text/csv']);
+    expect($content)->toBe(['text/csv', 'application/pdf']);
 
-    // El enumerado es de un solo valor. **El PDF llega en la 2.9** y sera otro
-    // valor de este mismo enumerado, es decir un cambio aditivo (ADR-012);
-    // describirlo ahora fijaria en v1 la forma de algo que nadie ha hecho. La
-    // comprobacion es sobre el `enum` y no sobre el texto del parametro, que si
-    // menciona el PDF para explicar por que todavia no esta.
+    // El PDF llego como otro valor del mismo enumerado, es decir un cambio
+    // aditivo (ADR-012), y el CSV sigue siendo el valor por omision: el portal
+    // que no dice nada recibe lo mismo que antes.
     $parametros = Contract::value('paths', '/api/v1/me/export', 'get', 'parameters');
 
     expect($parametros)->toBeArray();
@@ -1357,7 +1355,7 @@ it('no ofrece ningun formato propietario en la descarga del historico propio', f
     expect($formato)->not->toBeNull()
         ->and($formato['schema'] ?? null)->toBe([
             'type' => 'string',
-            'enum' => ['csv'],
+            'enum' => ['csv', 'pdf'],
             'default' => 'csv',
         ]);
 })->group('RF-ID-05', 'RL-05');

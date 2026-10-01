@@ -13,7 +13,9 @@
     Las clases `pageNumber` y `totalPages` las rellena el propio motor.
 
     SIN NOMBRES DE EMPLEADO. El unico nombre de persona que aparece es el de la
-    cuenta que emitio el informe, que es de quien responde por el.
+    cuenta que emitio el informe, que es de quien responde por el. En el
+    registro personal del portal (PR19) quien lo emite es la propia persona, y
+    por eso ahi el pie la nombra a ella, con el rotulo «Descargado por».
 --}}
 <div style="width:100%; font-family:Arial,Helvetica,sans-serif; font-size:6pt; color:#444; padding:0 10mm; line-height:1.35;">
     <div>

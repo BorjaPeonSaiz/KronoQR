@@ -1058,8 +1058,9 @@ Route::middleware([
      * devuelva un fichero no lo convierte en una escritura, y un `POST`
      * impediria que el portal ofreciera la descarga como un enlace.
      *
-     * `?format=csv` es el unico valor de esta fase; el PDF llega en la tarea 2.9
-     * como un valor mas del mismo enumerado (ADR-012).
+     * `?format=csv` (por omision) y `?format=pdf`, el documento sellado que el
+     * Anexo B exige (PR19, 2.2.0): un valor mas del mismo enumerado (ADR-012),
+     * con el mismo rango maximo y esta misma zona de limite.
      */
     Route::get('/me/export', MyWorkDayExportController::class)
         // Es un documento: sale en el idioma de la instalacion, no en el del

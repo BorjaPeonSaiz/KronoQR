@@ -2216,12 +2216,24 @@ paths:
         trabajador, y tambien lo que cubre la portabilidad del articulo 20 del
         RGPD sin ninguna maquinaria adicional.
 
-        **CSV en esta version, PDF en la siguiente.** `format` solo admite `csv`
-        hoy; el PDF —que es lo que una persona presenta ante un tercero— llega
-        con la maquinaria de exportacion de la tarea 2.9 y sera un valor mas del
-        mismo enumerado, es decir un cambio aditivo (ADR-012). **Sin XLSX**: no
-        aporta nada sobre CSV para el historico de una sola persona, y es un
-        formato propietario.
+        **CSV y PDF**, como exige el Anexo B del doc 01. `format=csv` —el valor
+        por omision— cubre la portabilidad del RGPD; `format=pdf` (2.2.0, PR19)
+        es el documento **sellado** que una persona presenta ante un tercero.
+        El PDF llego como un valor mas del mismo enumerado, es decir un cambio
+        aditivo (ADR-012). **Sin XLSX**: no aporta nada sobre CSV para el
+        historico de una sola persona, y es un formato propietario.
+
+        **El PDF usa las plantillas y el sello del informe por periodo**: el
+        pie de cada pagina dice cuando se genero —en la zona del centro—, quien
+        lo descargo, que periodo abarca y la huella SHA-256 del contenido, que
+        viaja tambien en `X-Kronoqr-Report-Digest`. El cuerpo lleva el nombre de
+        la persona —es su propio registro—, sus tramos con entrada, salida y
+        duracion, el total de cada dia y el **total del periodo**, y cada
+        correccion con su autor y su motivo (RN-13). El titulo del documento y
+        el nombre del fichero no llevan ni nombre ni codigo de empleado.
+
+        **Mismo rango maximo y misma zona de limite** para los dos formatos: el
+        PDF no abre una puerta mas ancha que el CSV.
 
         **No es la exportacion legal de `GET /api/v1/reports/legal-export`.**
         Aquella la genera RRHH o auditoria ante un requerimiento, abarca a
@@ -2242,22 +2254,26 @@ paths:
           in: query
           required: false
           description: |
-            Formato del fichero. `csv` es el unico disponible en esta version y
-            es el valor por omision; `pdf` llega con la tarea 2.9.
+            Formato del fichero. `csv` es el valor por omision; `pdf` es el
+            documento sellado para presentar ante un tercero.
           schema:
             type: string
-            enum: [csv]
+            enum: [csv, pdf]
             default: csv
           example: csv
       responses:
         '200':
           description: |
-            El fichero con el historico propio. Puede no tener ninguna fila de
-            datos —un periodo sin jornadas es una respuesta valida— y aun asi
-            lleva su cabecera de criterios.
+            El fichero con el historico propio. El tipo de contenido depende de
+            `format`. Puede no tener ninguna fila de datos —un periodo sin
+            jornadas es una respuesta valida— y aun asi lleva su cabecera de
+            criterios.
           headers:
             Content-Disposition:
-              description: Adjunto, con un nombre de fichero que no lleva ningun nombre de persona.
+              description: |
+                Adjunto, con un nombre de fichero que no lleva ningun nombre de
+                persona ni ningun codigo de empleado: solo el periodo y la
+                extension (`.csv` o `.pdf`).
               schema:
                 type: string
                 examples: ['attachment; filename=mi-registro-horario-2026-03-01_2026-03-31.csv']
@@ -2266,8 +2282,28 @@ paths:
               schema:
                 type: string
                 examples: ['no-store, private']
+            X-Kronoqr-Report-Digest:
+              description: |
+                Solo con `format=pdf`. Huella SHA-256 del contenido, en
+                hexadecimal minusculo: la misma que imprime el pie de cada
+                pagina. Dos PDF del mismo registro generados en momentos
+                distintos llevan la misma.
+              schema:
+                type: string
+                pattern: '^[0-9a-f]{64}$'
+              example: 3d9c8f0a1b2c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6
+            X-Kronoqr-Report-Rows:
+              description: Solo con `format=pdf`. Filas de la tabla del documento (tramos, jornadas sin tramos y correcciones).
+              schema:
+                type: integer
+                minimum: 0
+              example: 23
           content:
             text/csv:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
               schema:
                 type: string
                 format: binary
@@ -2279,6 +2315,16 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: |
+            Solo con `format=pdf`: el motor de composicion de PDF no esta
+            disponible en esta instalacion (falta Chromium, o no arranca). La
+            salida es descargar el mismo registro en CSV, que no depende de el.
+            `problem+json` y nunca un `500` opaco.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 
   /api/v1/employees:
     get:

@@ -83,4 +83,65 @@ return [
         'none' => 'Sin tramos registrados',
     ],
 
+    /*
+     * El mismo registro como PDF sellado (`?format=pdf`, PR19, Anexo B del
+     * doc 01). Es lo que una persona presenta ante un tercero, asi que aqui los
+     * rotulos van con tildes y los tipos de fila se traducen: lo lee una persona,
+     * no lo compara una maquina. El cuerpo y el sello son las plantillas del
+     * informe por periodo (`pdf.period-report` y `pdf.period-report-footer`).
+     *
+     * EL TITULO NO LLEVA NOMBRES: va al metadato del PDF y de ahi al historial
+     * de descargas del navegador. El nombre de la persona va en el cuerpo y en
+     * el pie, que es su propio registro.
+     */
+    'pdf' => [
+        'title' => 'Mi registro horario',
+
+        'holder' => 'Persona trabajadora',
+        'holder_unknown' => 'Persona no identificable',
+        'period' => 'Periodo',
+        'period_value' => 'del :from al :to, por fecha de jornada',
+        'time_zone' => 'Zona horaria del centro',
+        'period_total' => 'Total del periodo',
+        'work_days' => 'Jornadas con registro',
+        'generated_at' => 'Generado el',
+        'legal_basis' => 'Base legal',
+        'digest' => 'Huella SHA-256 del contenido',
+        'downloaded_by' => 'Descargado por',
+        'criteria_label' => 'Criterios de este documento',
+        'empty' => 'No hay jornadas registradas en este periodo.',
+
+        'criteria' => [
+            'entries' => 'Una fila «Tramo» por cada periodo de trabajo cuya jornada cae dentro del periodo del documento.',
+            'night' => 'Un turno de noche es un único tramo, atribuido a la jornada en la que empezó. No se parte a medianoche.',
+            'open' => 'Un turno todavía abierto aparece sin hora de salida y aporta cero minutos al total del día y del periodo.',
+            'corrections' => 'Una fila «Corrección» por cada rectificación del registro, con su autor, su momento y su motivo. Nada se ha borrado.',
+            'times' => 'Las horas están expresadas en la zona horaria del centro. La descarga en CSV incluye además la marca en UTC, que es la almacenada.',
+            'durations' => 'Las duraciones se expresan como HH:MM. Nunca en formato decimal.',
+            'file' => 'Documento sellado: el pie de cada página lleva la fecha de generación, el periodo y la huella SHA-256 del contenido. Dos copias del mismo registro llevan la misma huella.',
+        ],
+
+        'columns' => [
+            'record_type' => 'Tipo',
+            'work_date' => 'Jornada',
+            'local_in' => 'Entrada',
+            'local_out' => 'Salida',
+            'duration' => 'Duración',
+            'day_total' => 'Total del día',
+            'status' => 'Estado',
+            'clock_in_source' => 'Origen de la entrada',
+            'clock_out_source' => 'Origen de la salida',
+            'correction_local_at' => 'Corregido el',
+            'correction_author' => 'Corregido por',
+            'correction_action' => 'Acción',
+            'correction_reason' => 'Motivo',
+            'correction_explanation' => 'Explicación',
+        ],
+
+        'record_type' => [
+            'shift' => 'Tramo',
+            'correction' => 'Corrección',
+        ],
+    ],
+
 ];
