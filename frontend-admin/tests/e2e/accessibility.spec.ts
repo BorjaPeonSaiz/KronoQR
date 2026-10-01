@@ -724,3 +724,170 @@ test('el resumen final de cierre tampoco', { tag: ['@RF-PD-03'] }, async ({ page
 
   await expectNoBlockingViolations(page)
 })
+
+// --- Bloque 9 de las correcciones 2.2.0: contratos, tablas con scroll, foco ---
+
+/**
+ * Las anchuras a las que se analiza el panel (AX7-03): el portatil de RRHH, un
+ * monitor pequeño y una tablet. Las tablas desbordan justo en las dos ultimas,
+ * y `scrollable-region-focusable` solo se dispara cuando hay desbordamiento.
+ */
+const VIEWPORT_WIDTHS = [1366, 1024, 768] as const
+
+async function generatePeriodReport(page: Page): Promise<void> {
+  await page.goto('/reports')
+  await page.getByLabel('Desde').fill('2026-03-01')
+  await page.getByLabel('Hasta').fill('2026-03-31')
+  await page.getByRole('button', { name: 'Generar informe' }).click()
+  await expect(page.getByTestId('report-row').first()).toBeVisible()
+}
+
+for (const width of VIEWPORT_WIDTHS) {
+  test(
+    `el informe de periodo YA GENERADO tampoco, a ${width} px (AX7-01, AX7-03)`,
+    { tag: ['@RF-IN-01', '@RF-IN-03'] },
+    async ({ page }) => {
+      await page.setViewportSize({ width, height: 768 })
+      await logIn(page)
+      await generatePeriodReport(page)
+
+      // La tabla desplazable es una region con nombre y se alcanza con el teclado.
+      const region = page.getByRole('region', { name: /Horas por periodo/ })
+
+      await expect(region).toHaveAttribute('tabindex', '0')
+
+      await expectNoBlockingViolations(page)
+    },
+  )
+
+  test(
+    `la presencia en vivo y la bandeja de incidencias tampoco, a ${width} px (AX7-02, AX7-03)`,
+    { tag: ['@RF-PA-01', '@RF-PA-05'] },
+    async ({ page }) => {
+      await page.setViewportSize({ width, height: 768 })
+      await logIn(page)
+
+      await page.goto('/live')
+      await expect(page.getByTestId('presence-entry').first()).toBeVisible()
+      await expect(page.getByTestId('presence-table')).toHaveAttribute('tabindex', '0')
+      await expectNoBlockingViolations(page)
+
+      await page.goto('/incidents')
+      await expect(page.getByTestId('incident-row').first()).toBeVisible()
+      await expect(page.getByTestId('incident-table')).toHaveAttribute('tabindex', '0')
+      await expectNoBlockingViolations(page)
+    },
+  )
+}
+
+test(
+  'la ficha con los contratos y el dialogo de alta tampoco, a 768 px',
+  { tag: ['@RF-GP-02'] },
+  async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 768 })
+    await stubManagementApi(page, {
+      contracts: [
+        {
+          id: 41,
+          employee_uuid: EMPLOYEE_UUID,
+          weekly_hours: 20,
+          annual_hours: 1040,
+          schedule_type: 'turnos',
+          valid_from: '2026-01-01',
+          valid_to: '2026-03-15',
+          is_current: false,
+        },
+        {
+          id: 58,
+          employee_uuid: EMPLOYEE_UUID,
+          weekly_hours: 40,
+          annual_hours: 1780,
+          schedule_type: 'turnos',
+          valid_from: '2026-03-16',
+          valid_to: null,
+          is_current: true,
+        },
+      ],
+    })
+    await logIn(page)
+    await page.goto(`/employees/${EMPLOYEE_UUID}`)
+    await expect(page.getByTestId('contract-row')).toHaveCount(2)
+    await expectNoBlockingViolations(page)
+
+    await page.getByTestId('contract-register-open').click()
+    await expect(page.getByRole('dialog', { name: 'Registrar contrato' })).toBeVisible()
+    await expectNoBlockingViolations(page)
+  },
+)
+
+test(
+  'el dialogo atrapa el foco en un ciclo de Tab y lo devuelve al boton que lo abrio (PA7-002)',
+  { tag: ['@RF-PA-04'] },
+  async ({ page }) => {
+    await logIn(page)
+    await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
+
+    const opener = page.getByTestId('entry-correct')
+
+    await opener.focus()
+    await page.keyboard.press('Enter')
+
+    // `document.activeElement` se retargetea al input aunque el foco este en un
+    // segmento interno de un campo de fecha, donde `:focus` no coincide.
+    const focusIsInsideDialog = (): Promise<boolean> =>
+      page.evaluate(
+        () => document.querySelector('[role="dialog"]')?.contains(document.activeElement) === true,
+      )
+    const dialog = page.getByRole('dialog')
+
+    await expect(dialog).toBeVisible()
+
+    // Quince Tab hacia delante y cinco hacia atras: el foco nunca sale del dialogo.
+    for (let step = 0; step < 15; step += 1) {
+      await page.keyboard.press('Tab')
+      await expect.poll(focusIsInsideDialog).toBe(true)
+    }
+
+    for (let step = 0; step < 5; step += 1) {
+      await page.keyboard.press('Shift+Tab')
+      await expect.poll(focusIsInsideDialog).toBe(true)
+    }
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await expect(opener).toBeFocused()
+  },
+)
+
+test(
+  'el campo de fecha y hora de una correccion muestra el anillo de foco en el propio input (PA7-004)',
+  { tag: ['@RF-PA-04'] },
+  async ({ page }) => {
+    await logIn(page)
+    await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
+    await page.getByTestId('entry-correct').click()
+
+    const dialog = page.getByRole('dialog')
+    const input = dialog.locator('input[type="datetime-local"]').first()
+
+    await input.focus()
+
+    // Se recorren los segmentos internos (dia, mes, año, hora, minuto) y en
+    // ninguno desaparece el anillo, que era lo que fallaba en el ultimo.
+    for (let segment = 0; segment < 6; segment += 1) {
+      const outline = await input.evaluate((element) => {
+        const style = getComputedStyle(element)
+
+        return { style: style.outlineStyle, width: style.outlineWidth }
+      })
+
+      expect(outline.style, `segmento ${segment}`).not.toBe('none')
+      expect(outline.width, `segmento ${segment}`).not.toBe('0px')
+      await page.keyboard.press('Tab')
+
+      if (!(await input.evaluate((element) => element.matches(':focus-within')))) {
+        break
+      }
+    }
+  },
+)
