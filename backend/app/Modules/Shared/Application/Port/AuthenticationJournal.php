@@ -104,8 +104,14 @@ interface AuthenticationJournal
     /**
      * Alguien ha cerrado su sesion y su token queda revocado.
      *
-     * @param  string|null  $subjectUuid  `null` cuando el token no es de una cuenta de
-     *                                    gestion; ver {@see AuthChannel::sessionEventsAreAudited()}.
+     * Escribe `auth.logged_out` en el log tecnico **en todos los canales** y el
+     * asiento `auth.logout` solo en los que {@see AuthChannel::sessionEventsAreAudited()}
+     * autoriza. Sin la linea del log, el cierre de sesion del portal no dejaba
+     * ningun rastro (PO1, 2.2.0).
+     *
+     * @param  string|null  $subjectUuid  UUID publico de quien cierra sesion —cuenta de
+     *                                    gestion o empleado del portal—, o `null` si el
+     *                                    token no cuelga de nadie identificable.
      */
     public function loggedOut(AuthChannel $channel, ?string $subjectUuid): void;
 }

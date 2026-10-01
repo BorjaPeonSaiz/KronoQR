@@ -1003,6 +1003,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cierre de la sesion del portal
+         * @description Revoca **el token de portal con el que se hace la llamada** y solo ese
+         *     (RF-ID-05, RS-03). Es lo que hace el boton «Salir» del portal: sin
+         *     esta llamada, cerrar sesion solo borraba el token del navegador y el
+         *     token seguia valiendo hasta su caducidad, que en el ordenador
+         *     compartido de la sala de personal es justo el riesgo que no se puede
+         *     dejar abierto (PO1 de la verificacion de la 2.1.0).
+         *
+         *     **Exclusiva de la sesion de portal.** Exige el ambito `self:read` y que
+         *     el portador sea una persona de la plantilla: un token de quiosco o de
+         *     gestion recibe `403`, aunque lleve `self:read` puesto a mano. El panel
+         *     cierra su sesion por `POST /api/v1/auth/logout`.
+         *
+         *     **Idempotente en la practica**, igual que la del panel: repetir la
+         *     llamada con un token ya revocado devuelve `401`, que el cliente debe
+         *     interpretar como «ya no hay sesion». No hay nada mas que hacer.
+         *
+         *     **Sin zona de limitacion de aplicacion, y es deliberado**, por el mismo
+         *     motivo que `POST /api/v1/auth/logout`: la zona `portal` cuenta tambien
+         *     por IP, y en el ordenador compartido toda la plantilla sale por la
+         *     misma. Un `429` aqui dejaria una sesion abierta justo donde mas importa
+         *     cerrarla, y quien agotara el cupo solo se cerraria la sesion a si
+         *     mismo. Por eso **no declara `429`**.
+         *
+         *     **Sin asiento en `audit_log`** (ADR-039): el catalogo de actores no
+         *     tiene tipo para un empleado y el acceso al portal tampoco lo deja.
+         *     Queda la linea `auth.logged_out` del log tecnico, con el `employee_uuid`
+         *     y nunca el nombre (regla dura 21).
+         */
+        post: operations["logOutOfPortal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/workdays": {
         parameters: {
             query?: never;
@@ -6159,7 +6205,7 @@ export interface components {
          *     **Corta y de solo lectura.** El unico ambito del token es `self:read`, y
          *     por eso no se enumera en la respuesta como hace `Session`: no hay nada
          *     que el portal tenga que decidir a partir de una lista de ambitos, porque
-         *     solo hay tres rutas y las tres son suyas.
+         *     solo hay cuatro rutas y las cuatro son suyas.
          */
         PortalSession: {
             /**
@@ -12593,7 +12639,7 @@ export interface operations {
         };
         responses: {
             /**
-             * @description Sesion abierta. El token viaja como `Bearer` en las dos rutas
+             * @description Sesion abierta. El token viaja como `Bearer` en las tres rutas
              *     restantes del portal y en ninguna mas: no alcanza ningun endpoint de
              *     gestion, porque su unico ambito es `self:read`.
              */
@@ -12608,6 +12654,26 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["PortalAccessDenied"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    logOutOfPortal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sesion cerrada. El token deja de ser valido de inmediato. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listMyWorkDays: {

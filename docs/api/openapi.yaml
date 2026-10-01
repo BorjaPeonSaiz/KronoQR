@@ -203,6 +203,8 @@ tags:
       **Todo lo de aqui es de solo lectura y de ambito `self:read`** (RF-ID-07).
       Ninguna ruta de esta seccion cambia nada del registro horario, y ninguna
       admite un identificador de empleado: no hay URL que manipular.
+      La unica escritura es `POST /me/logout`, que revoca el token de la propia
+      sesion y nada mas.
   - name: Workforce
     description: |
       Plantilla: empleados, departamentos y centros (RF-GP-01, RF-GP-03).
@@ -2075,7 +2077,7 @@ paths:
       responses:
         '200':
           description: |
-            Sesion abierta. El token viaja como `Bearer` en las dos rutas
+            Sesion abierta. El token viaja como `Bearer` en las tres rutas
             restantes del portal y en ninguna mas: no alcanza ningun endpoint de
             gestion, porque su unico ambito es `self:read`.
           content:
@@ -2100,6 +2102,49 @@ paths:
           $ref: '#/components/responses/PortalAccessDenied'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/me/logout:
+    post:
+      operationId: logOutOfPortal
+      summary: Cierre de la sesion del portal
+      description: |
+        Revoca **el token de portal con el que se hace la llamada** y solo ese
+        (RF-ID-05, RS-03). Es lo que hace el boton «Salir» del portal: sin
+        esta llamada, cerrar sesion solo borraba el token del navegador y el
+        token seguia valiendo hasta su caducidad, que en el ordenador
+        compartido de la sala de personal es justo el riesgo que no se puede
+        dejar abierto (PO1 de la verificacion de la 2.1.0).
+
+        **Exclusiva de la sesion de portal.** Exige el ambito `self:read` y que
+        el portador sea una persona de la plantilla: un token de quiosco o de
+        gestion recibe `403`, aunque lleve `self:read` puesto a mano. El panel
+        cierra su sesion por `POST /api/v1/auth/logout`.
+
+        **Idempotente en la practica**, igual que la del panel: repetir la
+        llamada con un token ya revocado devuelve `401`, que el cliente debe
+        interpretar como «ya no hay sesion». No hay nada mas que hacer.
+
+        **Sin zona de limitacion de aplicacion, y es deliberado**, por el mismo
+        motivo que `POST /api/v1/auth/logout`: la zona `portal` cuenta tambien
+        por IP, y en el ordenador compartido toda la plantilla sale por la
+        misma. Un `429` aqui dejaria una sesion abierta justo donde mas importa
+        cerrarla, y quien agotara el cupo solo se cerraria la sesion a si
+        mismo. Por eso **no declara `429`**.
+
+        **Sin asiento en `audit_log`** (ADR-039): el catalogo de actores no
+        tiene tipo para un empleado y el acceso al portal tampoco lo deja.
+        Queda la linea `auth.logged_out` del log tecnico, con el `employee_uuid`
+        y nunca el nombre (regla dura 21).
+      tags: [Portal]
+      security:
+        - employeeToken: ['self:read']
+      responses:
+        '204':
+          description: Sesion cerrada. El token deja de ser valido de inmediato.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /api/v1/me/workdays:
     get:
@@ -12135,7 +12180,7 @@ components:
         **Corta y de solo lectura.** El unico ambito del token es `self:read`, y
         por eso no se enumera en la respuesta como hace `Session`: no hay nada
         que el portal tenga que decidir a partir de una lista de ambitos, porque
-        solo hay tres rutas y las tres son suyas.
+        solo hay cuatro rutas y las cuatro son suyas.
       additionalProperties: false
       required: [token, token_type, expires_at, employee]
       properties:

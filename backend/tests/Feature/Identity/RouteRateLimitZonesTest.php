@@ -194,7 +194,7 @@ it('encuentra rutas autenticadas que analizar', function (): void {
 
 it('exige una zona de limitacion a toda ruta autenticada de la API', function (): void {
     /*
-     * LA UNICA EXENCION, Y CON MOTIVO ESCRITO (decision 11 de la ficha 3.8).
+     * LAS DOS UNICAS EXENCIONES, Y CON MOTIVO ESCRITO (decision 11 de la ficha 3.8).
      *
      * `POST /api/v1/auth/logout` revoca **el token del que llama** y nada mas:
      * no lleva `ability:`, acepta a proposito la sesion pendiente de segundo
@@ -204,11 +204,17 @@ it('exige una zona de limitacion a toda ruta autenticada de la API', function ()
      * el momento en que mas lo necesita, que es justo cuando sospecha que su
      * token esta comprometido.
      *
+     * `POST /api/v1/me/logout` (PO1, 2.2.0) es la misma decision para la sesion
+     * del portal, con un motivo mas: la zona `portal` cuenta tambien por IP, y en
+     * el ordenador compartido de la sala de personal toda la plantilla sale por
+     * la misma. Un `429` dejaria abierta la sesion de alguien justo donde mas
+     * importa cerrarla.
+     *
      * Es lista cerrada, no una excepcion abierta: cualquier otra ruta que
      * aparezca sin zona rompe esta prueba, y la cuenta de abajo impide que la
      * lista crezca sin que alguien lo decida.
      */
-    $exentas = ['api/v1/auth/logout'];
+    $exentas = ['api/v1/auth/logout', 'api/v1/me/logout'];
 
     $sinZona = rutasSinZonaDeLimite($exentas);
 
@@ -216,7 +222,7 @@ it('exige una zona de limitacion a toda ruta autenticada de la API', function ()
         [],
         \count($sinZona).' ruta(s) autenticada(s) sin zona `throttle:`, que es el hueco H-01 de la revision '
         .'interna: '.implode(', ', $sinZona),
-    )->and($exentas)->toHaveCount(1);
+    )->and($exentas)->toHaveCount(2);
 })->group('RS-02', 'RS-04', 'RS-05');
 
 it('exige que cada zona usada por el router tenga su limitador registrado', function (): void {

@@ -93,6 +93,8 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         // Tarea 1.11: portal del empleado (RF-ID-05..08, RL-05). Ninguna lleva
         // `{uuid}`: el empleado sale del token, no de la URL.
         '/api/v1/me/login',
+        // PO1 (2.2.0): el cierre de la sesion del portal en el servidor.
+        '/api/v1/me/logout',
         '/api/v1/me/workdays',
         '/api/v1/me/export',
         '/api/v1/employees',
@@ -1212,6 +1214,7 @@ it('no admite ningun identificador de empleado en las rutas del portal', functio
     // o de consulta— tiene que pasar por esta prueba.
     $allowed = [
         '/api/v1/me/login' => [],
+        '/api/v1/me/logout' => [],
         '/api/v1/me/workdays' => ['from', 'to'],
         '/api/v1/me/export' => ['from', 'to', 'format'],
     ];
@@ -1219,7 +1222,7 @@ it('no admite ningun identificador de empleado en las rutas del portal', functio
     foreach ($allowed as $path => $expected) {
         expect($path)->not->toContain('{');
 
-        $method = $path === '/api/v1/me/login' ? 'post' : 'get';
+        $method = \in_array($path, ['/api/v1/me/login', '/api/v1/me/logout'], true) ? 'post' : 'get';
         $declared = Contract::has('paths', $path, $method, 'parameters')
             ? Contract::value('paths', $path, $method, 'parameters')
             : [];
@@ -1267,6 +1270,18 @@ it('exige el ambito self:read en las dos rutas de lectura del portal', function 
     // Y el acceso es publico: todavia no hay token que exigir.
     expect(Contract::value('paths', '/api/v1/me/login', 'post', 'security'))->toBe([]);
 })->group('RF-ID-07', 'RS-04');
+
+it('acota el cierre de sesion del portal al token de portal, sin limite que lo impida', function (): void {
+    // PO1 (2.2.0). Exclusiva de la sesion de portal: `self:read` y nada mas, y
+    // sin `429` por la misma decision que `/auth/logout` —un techo aqui dejaria
+    // abierta la sesion del ordenador compartido—. Sin cuerpo: la sesion que se
+    // cierra es la del token, nunca una indicada por el cliente.
+    expect(Contract::value('paths', '/api/v1/me/logout', 'post', 'security'))
+        ->toBe([['employeeToken' => ['self:read']]])
+        ->and(Contract::keys('paths', '/api/v1/me/logout', 'post', 'responses'))->toBe(['204', '401', '403'])
+        ->and(Contract::has('paths', '/api/v1/me/logout', 'post', 'requestBody'))->toBeFalse()
+        ->and(Contract::has('paths', '/api/v1/me/logout', 'post', 'responses', '204', 'content'))->toBeFalse();
+})->group('RF-ID-05', 'RF-ID-07', 'RS-04');
 
 it('no deja que ningun endpoint de gestion acepte el token del portal', function (): void {
     // La promesa de RF-ID-07 leida al reves: ni `employeeToken` ni `self:read`
