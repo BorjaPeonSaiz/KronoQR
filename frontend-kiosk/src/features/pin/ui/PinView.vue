@@ -30,11 +30,11 @@ import {
   clearDeviceToken,
   readBreakClockingEnabled,
   readClockSkewToleranceSeconds,
-  readDeviceToken,
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
+import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
@@ -68,7 +68,8 @@ const api = createApiClient({
     ? {}
     : { baseUrl: import.meta.env.VITE_API_BASE_URL }),
   // Ver ScanView: sin el token no hay `Authorization` y todo acaba en 401.
-  deviceToken: readDeviceToken,
+  // Token vigente, respaldo y avisos del relevo (RF-ID-04, ADR-044).
+  ...deviceTokenApiOptions,
 })
 
 // Mismo controlador de cola UNICO que la pantalla de escaneo (tarea 1.9): el

@@ -42,6 +42,7 @@ import {
 } from '@/shared/telemetry/deviceIdentity'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
+import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import { getOfflineQueueController, pendingScanCount } from '@/features/offline/useOfflineQueue'
 import type { QueueStats } from '@/features/offline/application/scanQueue'
@@ -79,11 +80,15 @@ const api = createApiClient({
   ...(import.meta.env.VITE_API_BASE_URL === undefined
     ? {}
     : { baseUrl: import.meta.env.VITE_API_BASE_URL }),
-  deviceToken: readDeviceToken,
+  // Token vigente, respaldo y avisos del relevo (RF-ID-04, ADR-044).
+  ...deviceTokenApiOptions,
 })
 
 const token = readDeviceToken()
 const paired = token !== null
+// Refs, no constantes: el relevo del token (ADR-044) las cambia con la pantalla abierta.
+const tokenShortId = ref(token === null ? null : sha256Hex(token).slice(0, 8))
+const tokenExpiresAt = ref(readDeviceTokenExpiresAt())
 
 // MISMO controlador que `ScanView.vue`/`PinView.vue` (singleton por tablet,
 // `useOfflineQueue.ts`): si ya esta montado por la pantalla de la que se
@@ -271,6 +276,13 @@ const heartbeat = paired
         ...(battery.charging.value === null ? {} : { batteryCharging: battery.charging.value }),
       }),
       onAuthOutcome: (unauthorized) => offlineController?.reportAuthOutcome(unauthorized),
+      // Relevo del token (RF-ID-04, ADR-044): la caducidad y la huella que
+      // ensena el diagnostico son las del token NUEVO, no las de al abrir.
+      onTokenRotated: (expiresAt) => {
+        tokenExpiresAt.value = expiresAt
+        const rotated = readDeviceToken()
+        tokenShortId.value = rotated === null ? null : sha256Hex(rotated).slice(0, 8)
+      },
       // Se recalcula tras CADA latido con exito, no solo al abrir: es lo que
       // mantiene «hora del ultimo latido correcto» y «desfase» vivos mientras
       // la pantalla sigue montada.
@@ -282,7 +294,6 @@ const heartbeat = paired
 
 // --- Otras fuentes, leidas una vez al abrir: informativas, no legales -------
 
-const tokenShortId = token === null ? null : sha256Hex(token).slice(0, 8)
 const serviceWorkerSupported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator
 const serviceWorkerActive =
   serviceWorkerSupported && typeof navigator !== 'undefined'
@@ -324,9 +335,9 @@ const snapshot = computed(() =>
     },
     token: {
       present: token !== null,
-      expiresAt: readDeviceTokenExpiresAt(),
+      expiresAt: tokenExpiresAt.value,
       deviceName: readDeviceName(),
-      shortId: tokenShortId,
+      shortId: tokenShortId.value,
     },
     appVersion: APP_VERSION,
     serviceWorkerActive,

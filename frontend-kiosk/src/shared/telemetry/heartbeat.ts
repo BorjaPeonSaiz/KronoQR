@@ -37,6 +37,8 @@ import {
   storeUpdateWindow,
 } from './deviceIdentity'
 import type { ClientErrorEvent, ErrorReporter } from './errorReporter'
+import type { RotatedToken, TokenAdoptionOutcome } from './tokenRotation'
+import { adoptRotatedToken, isTokenAdoptionFailure, parseRotatedToken } from './tokenRotation'
 
 /**
  * Tope de `client_errors` por latido (contrato,
@@ -174,6 +176,9 @@ interface LastHeartbeatResult {
 
 let lastHeartbeatResult: LastHeartbeatResult | null = null
 
+/** El latido en vuelo de toda la tablet (ver `beat` en `createHeartbeatScheduler`). */
+let inFlightBeat: Promise<number | null> | null = null
+
 /** `null` si esta tablet no ha completado ningun latido en esta sesion. */
 export function getLastHeartbeatResult(): LastHeartbeatResult | null {
   return lastHeartbeatResult
@@ -214,6 +219,14 @@ export interface HeartbeatSchedulerOptions {
     readonly breakClockingEnabled: boolean
     readonly clockSkewToleranceSeconds: number
   }) => void
+  /**
+   * El servidor ha entregado un relevo del token (`rotated_token`, RF-ID-04,
+   * ADR-044) y esta tablet lo ha guardado (o ya lo tenia): `expiresAt` es la
+   * caducidad vigente, para que la pantalla de diagnostico no ensene la vieja.
+   */
+  readonly onTokenRotated?: (expiresAt: string) => void
+  /** Inyectable para pruebas; por defecto `adoptRotatedToken` (nunca lanza). */
+  readonly adoptToken?: (rotated: RotatedToken) => Promise<TokenAdoptionOutcome>
 }
 
 export interface HeartbeatScheduler {
@@ -228,7 +241,49 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
   const intervalMs = options.intervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS
   let timer: ReturnType<typeof setInterval> | null = null
 
-  async function beat(): Promise<number | null> {
+  async function adoptRotation(data: unknown): Promise<void> {
+    const rotated = parseRotatedToken(data)
+    if (rotated === null) return
+
+    const adopt = options.adoptToken ?? adoptRotatedToken
+    let outcome: TokenAdoptionOutcome
+    try {
+      outcome = await adopt(rotated)
+    } catch {
+      outcome = 'error'
+    }
+
+    if (outcome === 'adopted' || outcome === 'already_current') {
+      options.onTokenRotated?.(rotated.expires_at)
+      return
+    }
+    if (isTokenAdoptionFailure(outcome)) {
+      // Solo el motivo: ni el valor del token ni nada del padron. El servidor
+      // reentregara otro relevo en el siguiente latido (ADR-044).
+      options.reporter.report('kiosk.heartbeat.failed', {
+        cause: `token_rotation_${outcome}`,
+        http_status: 200,
+        message: 'token_rotation_discarded',
+      })
+    }
+  }
+
+  /**
+   * LATIDOS EN SERIE: nunca dos en vuelo en toda la tablet (el estado vive en el
+   * modulo, no en el planificador, porque `ScanView`, `PinView` y
+   * `DiagnosticsView` crean cada una el suyo). Dos latidos a la vez firmados con
+   * el mismo token podrian recibir dos relevos distintos, y el segundo
+   * retiraria al primero antes de que se hubiera podido usar. Quien pide un
+   * latido mientras hay otro en curso recibe el resultado de ese.
+   */
+  function beat(): Promise<number | null> {
+    inFlightBeat ??= runBeat().finally(() => {
+      inFlightBeat = null
+    })
+    return inFlightBeat
+  }
+
+  async function runBeat(): Promise<number | null> {
     // Lo pendiente en el momento de construir el cuerpo, no en el de recibir
     // la respuesta: si algo se reporta MIENTRAS este latido esta en el aire,
     // se queda para el siguiente ciclo en vez de perderse (`acknowledge` solo
@@ -286,6 +341,13 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
     }
 
     options.onAuthOutcome?.(false)
+
+    // RELEVO DEL TOKEN (RF-ID-04, ADR-044). Lo primero tras un `200`: es lo que
+    // mantiene viva a la tablet pasados los 72 dias. Se adopta SIEMPRE el que
+    // llegue, aunque esta peticion se firmara con el token anterior. Ningun
+    // fallo aqui impide seguir con el resto del latido ni fichar (regla dura 19).
+    await adoptRotation(result.data)
+
     // Solo AHORA, confirmado por el servidor, se vacia lo enviado -y solo lo
     // que declara `client_errors_accepted`-. `0` (no se enviaron, o la base
     // de datos no pudo guardarlos) no toca el buffer: vuelve integro en el

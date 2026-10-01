@@ -80,6 +80,15 @@ export interface ApiClientOptions {
   readonly fetchImpl?: typeof fetch
   /** Techo de espera. Corto a proposito: el quiosco ya ha confirmado en local. */
   readonly timeoutMs?: number
+  /**
+   * Token ANTERIOR conservado tras un relevo (RF-ID-04, ADR-044), o `null`. Si
+   * el vigente recibe `401` y hay respaldo, se repite UNA vez con el.
+   */
+  readonly fallbackDeviceToken?: () => string | null
+  /** El token `token` ha obtenido una respuesta autenticada (cualquier estado que no sea 401/403). */
+  readonly onDeviceTokenConfirmed?: (token: string) => void
+  /** El servidor ha aceptado el RESPALDO cuando el vigente daba 401: el vigente esta muerto. */
+  readonly onFallbackTokenConfirmed?: () => void
 }
 
 export interface ApiClient {
@@ -181,6 +190,15 @@ function isPairingRejected(value: unknown): value is PairingRejected {
   return isRecord(value) && value['type'] === 'urn:kronoqr:problem:pairing-rejected'
 }
 
+/**
+ * Un estado que prueba que el servidor ha AUTENTICADO la peticion: la respuesta
+ * es de la aplicacion, no de un proxy (5xx) ni de un limitador de borde (429),
+ * y no es un rechazo de credencial (401/403).
+ */
+function confirmsAuthentication(status: number): boolean {
+  return status < 500 && status !== 401 && status !== 403 && status !== 429
+}
+
 function causeForStatus(status: number): ApiFailureCause {
   if (status === 401 || status === 403) return 'unauthorized'
   if (status === 429) return 'throttled'
@@ -221,23 +239,76 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const deviceToken = options.deviceToken ?? (() => null)
 
-  async function send(
+  interface SendInit {
+    method: 'GET' | 'POST'
+    body?: unknown
+    idempotencyKey?: string
+    /**
+     * `false` en las dos rutas publicas de emparejamiento (`requestPairing`,
+     * `claimPairing`, RF-PD-06): quien las llama todavia no tiene token, y
+     * adjuntar uno viejo de `localStorage` -el caso real de una tablet
+     * recien revocada que vuelve a `/pair`- filtraria una credencial muerta
+     * a un endpoint publico. Por defecto `true`: todo lo demas SI va
+     * autenticado.
+     */
+    authenticated?: boolean
+  }
+
+  type SendOutcome = { status: number; body: unknown } | { failure: ApiFailureCause }
+
+  /**
+   * RELEVO DEL TOKEN (RF-ID-04, ADR-044). Un `401` no siempre es una
+   * revocacion, y no debe contarse como tal ni dejar el fichaje sin enviar:
+   *
+   * 1. Una peticion firmada con el token anterior que llega DESPUES del primer
+   *    uso del nuevo recibe `401` (el solape termina ahi). Si el token vigente
+   *    YA no es el que la firmo, se repite UNA vez con el vigente.
+   * 2. Con el vigente sin cambios, si hay un respaldo (el token que sustituyo
+   *    el relevo, aun no retirado) se repite UNA vez con el: el relevo puede ser
+   *    un token muerto (dos relevos cruzados). Si el servidor lo acepta, se
+   *    avisa para que la tablet vuelva a el.
+   * 3. En cualquier otro caso un `401` es un `401`.
+   *
+   * Siempre la misma `Idempotency-Key` (regla dura 8) y como mucho DOS intentos.
+   */
+  async function send(path: string, init: SendInit): Promise<SendOutcome> {
+    if (init.authenticated === false) return sendOnce(path, init, null)
+
+    const signedWith = deviceToken()
+    const first = await sendOnce(path, init, signedWith)
+    if ('failure' in first) return first
+    if (first.status !== 401) {
+      if (signedWith !== null && signedWith !== '' && confirmsAuthentication(first.status)) {
+        options.onDeviceTokenConfirmed?.(signedWith)
+      }
+      return first
+    }
+
+    const current = deviceToken()
+    if (current !== null && current !== '' && current !== signedWith) {
+      const retried = await sendOnce(path, init, current)
+      if (!('failure' in retried) && confirmsAuthentication(retried.status)) {
+        options.onDeviceTokenConfirmed?.(current)
+      }
+      return retried
+    }
+
+    const fallback = options.fallbackDeviceToken?.() ?? null
+    if (fallback !== null && fallback !== '' && fallback !== signedWith) {
+      const retried = await sendOnce(path, init, fallback)
+      if (!('failure' in retried) && confirmsAuthentication(retried.status)) {
+        options.onFallbackTokenConfirmed?.()
+        return retried
+      }
+    }
+    return first
+  }
+
+  async function sendOnce(
     path: string,
-    init: {
-      method: 'GET' | 'POST'
-      body?: unknown
-      idempotencyKey?: string
-      /**
-       * `false` en las dos rutas publicas de emparejamiento (`requestPairing`,
-       * `claimPairing`, RF-PD-06): quien las llama todavia no tiene token, y
-       * adjuntar uno viejo de `localStorage` -el caso real de una tablet
-       * recien revocada que vuelve a `/pair`- filtraria una credencial muerta
-       * a un endpoint publico. Por defecto `true`: todo lo demas SI va
-       * autenticado.
-       */
-      authenticated?: boolean
-    },
-  ): Promise<{ status: number; body: unknown } | { failure: ApiFailureCause }> {
+    init: SendInit,
+    token: string | null,
+  ): Promise<SendOutcome> {
     // `navigator.onLine` en `false` es informacion fiable (en `true` no lo es):
     // ahorra un fetch condenado y deja claro por que no se ha enviado.
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -252,9 +323,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       Accept: 'application/json',
       traceparent: createTraceparent(),
     }
-    if (init.authenticated !== false) {
-      const token = deviceToken()
-      if (token !== null && token !== '') headers['Authorization'] = `Bearer ${token}`
+    if (init.authenticated !== false && token !== null && token !== '') {
+      headers['Authorization'] = `Bearer ${token}`
     }
     if (init.body !== undefined) headers['Content-Type'] = 'application/json'
     if (init.idempotencyKey !== undefined) headers['Idempotency-Key'] = init.idempotencyKey

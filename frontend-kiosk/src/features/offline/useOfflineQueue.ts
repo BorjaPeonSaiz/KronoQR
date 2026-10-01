@@ -14,6 +14,7 @@
 
 import type { Ref } from 'vue'
 import { onUnmounted, ref } from 'vue'
+import { registerRosterKeyRotator } from '@/shared/telemetry/tokenRotation'
 import { createDeviceRevocationWatcher } from '@/features/pairing/application/deviceRevocation'
 import type { RosterLookupPort, ScanSubmissionPort } from '@/features/scan/application/ports'
 import type { ApiClient } from '@/shared/api/client'
@@ -143,6 +144,10 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       unauthorized ? revocation.reportUnauthorized() : revocation.reportAuthenticated(),
   })
 
+  // El relevo del token (RF-ID-04, ADR-044) re-cifra el padron a traves de este
+  // registro: el latido no conoce el controlador, y el padron solo vive aqui.
+  const unregisterRotator = registerRosterKeyRotator(roster)
+
   // Un solo contador de `401` consecutivos para toda la tablet: la
   // revocacion es una decision por dispositivo, no una por canal (heartbeat,
   // padron, sincronizacion). Purga el padron ANTES de avisar: quien escucha
@@ -270,6 +275,7 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
 
     async dispose() {
       runner.stop()
+      unregisterRotator()
       if (rosterTimer !== null) {
         clearInterval(rosterTimer)
         rosterTimer = null

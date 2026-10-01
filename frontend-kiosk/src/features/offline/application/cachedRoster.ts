@@ -27,6 +27,7 @@ import { parseCredentialPayload } from '@/features/scan/domain/credentialPayload
 import type { ApiClient } from '@/shared/api/client'
 import type { KioskRosterEntry } from '@/shared/api/types'
 import { sha256Hex } from '@/shared/crypto/sha256'
+import type { RosterKeyRotator, RosterRotationResult } from '@/shared/telemetry/tokenRotation'
 import type { QueueStorage } from '../infrastructure/queueStorage'
 import type { RosterCryptoDeps } from '../infrastructure/rosterCipher'
 import { openRoster, sealRoster } from '../infrastructure/rosterCipher'
@@ -52,7 +53,7 @@ export interface CachedRosterOptions {
   readonly onAuthOutcome?: (unauthorized: boolean) => void
 }
 
-export interface CachedRoster {
+export interface CachedRoster extends RosterKeyRotator {
   readonly port: RosterLookupPort
   /** Carga el indice desde la copia cifrada. Purga si no se puede abrir. */
   load(): Promise<void>
@@ -84,6 +85,17 @@ export function createCachedRoster(options: CachedRosterOptions): CachedRoster {
   let pinSealingPublicKey: string | null = null
   let resolved = false
 
+  // Exclusion mutua de todo lo que lee o escribe la copia cifrada: `load`, el
+  // sellado de `refresh` y `rotateKey`. Sin ella, un `refresh()` podria escribir
+  // una copia con la clave vieja justo despues de un relevo del token, o un
+  // `load()` leer el token viejo y descifrar una copia ya re-cifrada (y purgarla).
+  let tail: Promise<unknown> = Promise.resolve()
+  function exclusive<T>(task: () => Promise<T>): Promise<T> {
+    const run = tail.then(task, task)
+    tail = run.catch(() => undefined)
+    return run
+  }
+
   function reindex(entries: readonly KioskRosterEntry[], stamp: string): void {
     const next = new Map<string, string>()
     for (const entry of entries) next.set(entry.token_hash.toLowerCase(), entry.display_name)
@@ -112,34 +124,114 @@ export function createCachedRoster(options: CachedRosterOptions): CachedRoster {
       },
     },
 
-    async load() {
-      const token = options.deviceToken()
-      if (token === null || token === '') {
-        // Sin token no hay clave, y sin clave no puede haber copia. Si quedaba
-        // una de un emparejamiento anterior, fuera.
-        await purge()
-        return
-      }
+    load: () =>
+      exclusive(async () => {
+        const token = options.deviceToken()
+        if (token === null || token === '') {
+          // Sin token no hay clave, y sin clave no puede haber copia. Si quedaba
+          // una de un emparejamiento anterior, fuera.
+          await purge()
+          return
+        }
 
-      let record
-      try {
-        record = await options.storage().readRoster()
-      } catch {
-        record = null
-      }
-      if (record === null) return
+        let record
+        try {
+          record = await options.storage().readRoster()
+        } catch {
+          record = null
+        }
+        if (record === null) return
 
-      const entries = await openRoster(record, token, options.crypto ?? {})
-      if (entries === null) {
-        options.onDiagnostic?.('roster.decrypt_failed', { purged: 1, message: 'decrypt_failed' })
-        await purge()
-        return
-      }
-      reindex(entries, record.generated_at)
-      // La clave viaja en claro (ver `rosterCipher.ts`): se lee directamente del
-      // registro, sin depender de que el descifrado del padron haya ido bien.
-      pinSealingPublicKey = record.pin_sealing_public_key
-    },
+        const entries = await openRoster(record, token, options.crypto ?? {})
+        if (entries === null) {
+          options.onDiagnostic?.('roster.decrypt_failed', { purged: 1, message: 'decrypt_failed' })
+          await purge()
+          return
+        }
+        reindex(entries, record.generated_at)
+        // La clave viaja en claro (ver `rosterCipher.ts`): se lee directamente del
+        // registro, sin depender de que el descifrado del padron haya ido bien.
+        pinSealingPublicKey = record.pin_sealing_public_key
+      }),
+
+    /**
+     * Relevo del token del dispositivo (RF-ID-04, ADR-044): re-cifra la copia
+     * con `newToken` y, SOLO si ha ido bien, ejecuta `commit` (que escribe el
+     * token) sin soltar la exclusion. Orden: copia nueva -> token nuevo. Si
+     * `commit` falla, la copia vuelve a cifrarse con el token que sigue vigente.
+     * Si no se puede re-cifrar, no se llama a `commit`: el token viejo se
+     * conserva, y el relevo se descarta (el servidor reentregara otro).
+     *
+     * El padron es una COPIA, no un registro legal: una copia ya ilegible con el
+     * token actual, o un navegador sin WebCrypto (donde nunca se cacheo nada),
+     * no es motivo para retener el relevo; se purga y el padron se vuelve a
+     * pedir al servidor.
+     */
+    rotateKey: (newToken, commit): Promise<RosterRotationResult> =>
+      exclusive(async () => {
+        const oldToken = options.deviceToken()
+        const deps = options.crypto ?? {}
+        const storage = options.storage()
+
+        let record
+        try {
+          record = oldToken === null || oldToken === '' ? null : await storage.readRoster()
+        } catch {
+          return 'reseal_failed'
+        }
+
+        let wrote = false
+        if (record !== null && oldToken !== null) {
+          const entries = await openRoster(record, oldToken, deps)
+          if (entries === null) {
+            // Ya era ilegible con el token vigente: no hay nada que conservar.
+            await purge()
+          } else {
+            let resealed
+            try {
+              resealed = await sealRoster(
+                entries,
+                record.generated_at,
+                newToken,
+                record.pin_sealing_public_key,
+                deps,
+              )
+            } catch {
+              return 'reseal_failed'
+            }
+            if (resealed === null) {
+              await purge()
+            } else {
+              try {
+                await storage.writeRoster(resealed)
+                wrote = true
+              } catch {
+                // No se ha escrito nada: la copia sigue cifrada con el token viejo.
+                return 'reseal_failed'
+              }
+            }
+          }
+        }
+
+        let committed = false
+        try {
+          committed = commit()
+        } catch {
+          committed = false
+        }
+        if (committed) return 'committed'
+
+        // El token no se pudo guardar: la copia se devuelve a la clave vigente.
+        if (wrote && record !== null) {
+          try {
+            await storage.writeRoster(record)
+          } catch {
+            // Peor caso: copia ilegible con el token viejo. `load()` la purga y
+            // se vuelve a pedir; el fichaje no depende de ella (regla dura 19).
+          }
+        }
+        return 'commit_failed'
+      }),
 
     async refresh() {
       // `resolved` se marca pase lo que pase a partir de aqui (exito, fallo o
@@ -171,31 +263,37 @@ export function createCachedRoster(options: CachedRosterOptions): CachedRoster {
         // no tiene por que esperar a que la copia cifrada se pueda escribir.
         pinSealingPublicKey = result.data.pin_sealing_public_key
 
-        const sealed = await sealRoster(
-          result.data.entries,
-          result.data.generated_at,
-          token,
-          result.data.pin_sealing_public_key,
-          options.crypto ?? {},
-        )
-        if (sealed === null) {
-          // Sin WebCrypto no se cachea NADA: un padron en claro en IndexedDB
-          // incumpliria RL-12. El quiosco sigue fichando, sin nombre.
-          options.onDiagnostic?.('roster.not_cacheable', {
-            entries: result.data.entries.length,
-            message: 'no_webcrypto',
-          })
-          return false
-        }
+        // El sellado y la escritura van en exclusion con `rotateKey`, y con el
+        // token que haya EN ESTE MOMENTO (no el de antes de la peticion): si el
+        // token rota mientras el padron viajaba, la copia se cifra con el nuevo.
+        return await exclusive(async () => {
+          const sealToken = options.deviceToken() ?? token
+          const sealed = await sealRoster(
+            result.data.entries,
+            result.data.generated_at,
+            sealToken,
+            result.data.pin_sealing_public_key,
+            options.crypto ?? {},
+          )
+          if (sealed === null) {
+            // Sin WebCrypto no se cachea NADA: un padron en claro en IndexedDB
+            // incumpliria RL-12. El quiosco sigue fichando, sin nombre.
+            options.onDiagnostic?.('roster.not_cacheable', {
+              entries: result.data.entries.length,
+              message: 'no_webcrypto',
+            })
+            return false
+          }
 
-        try {
-          await options.storage().writeRoster(sealed)
-        } catch {
-          // La copia no se ha podido guardar; el indice en memoria vale para esta
-          // sesion y se volvera a pedir en la siguiente.
-        }
-        reindex(result.data.entries, result.data.generated_at)
-        return true
+          try {
+            await options.storage().writeRoster(sealed)
+          } catch {
+            // La copia no se ha podido guardar; el indice en memoria vale para esta
+            // sesion y se volvera a pedir en la siguiente.
+          }
+          reindex(result.data.entries, result.data.generated_at)
+          return true
+        })
       } finally {
         resolved = true
       }
