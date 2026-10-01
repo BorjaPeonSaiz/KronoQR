@@ -54,7 +54,7 @@ async function signOut(): Promise<void> {
           <p class="text-sm text-kq-text-muted">{{ t('app.title') }}</p>
         </div>
         <nav :aria-label="t('app.nav.label')">
-          <ul class="flex gap-2">
+          <ul class="flex flex-wrap gap-2">
             <li>
               <RouterLink
                 :to="{ name: 'my-records' }"

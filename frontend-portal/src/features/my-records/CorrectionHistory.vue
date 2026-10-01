@@ -149,49 +149,56 @@ const items = computed<CorrectionView[]>(() =>
             {{ item.reasonText }}
           </p>
 
-          <table class="mt-3 w-full border-collapse text-left text-sm">
-            <caption class="sr-only">
-              {{
-                t('myRecords.history.caption', { moment: item.moment })
-              }}
-            </caption>
-            <thead>
-              <tr class="border-b border-kq-border">
-                <th scope="col" class="py-1 pr-3"></th>
-                <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.in') }}</th>
-                <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.out') }}</th>
-                <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.worked') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!--
+          <div
+            tabindex="0"
+            role="region"
+            :aria-label="t('myRecords.history.caption', { moment: item.moment })"
+            class="mt-3 overflow-x-auto"
+          >
+            <table class="w-full border-collapse text-left text-sm">
+              <caption class="sr-only">
+                {{
+                  t('myRecords.history.caption', { moment: item.moment })
+                }}
+              </caption>
+              <thead>
+                <tr class="border-b border-kq-border">
+                  <th scope="col" class="py-1 pr-3"></th>
+                  <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.in') }}</th>
+                  <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.out') }}</th>
+                  <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.worked') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!--
                 El estado anterior a la correccion se ve, no se tacha (regla dura
                 5): esta fila nunca lleva `line-through` ni ningun otro estilo que
                 sugiera «esto se ha borrado». `text-kq-text-muted` la distingue de
                 la fila «despues» sin dar a entender que ha desaparecido.
               -->
-              <tr class="border-b border-kq-border text-kq-text-muted">
-                <th scope="row" class="py-1 pr-3 font-medium">
-                  {{ t('myRecords.history.before') }}
-                </th>
-                <td class="py-1 pr-3">
-                  {{ item.before?.clockIn ?? t('myRecords.history.noEntryBefore') }}
-                </td>
-                <td class="py-1 pr-3">{{ item.before?.clockOut ?? '—' }}</td>
-                <td class="py-1 pr-3">{{ item.before?.worked ?? '—' }}</td>
-              </tr>
-              <tr class="text-kq-text">
-                <th scope="row" class="py-1 pr-3 font-medium">
-                  {{ t('myRecords.history.after') }}
-                </th>
-                <td class="py-1 pr-3">
-                  {{ item.after?.clockIn ?? t('myRecords.history.noEntryAfter') }}
-                </td>
-                <td class="py-1 pr-3">{{ item.after?.clockOut ?? '—' }}</td>
-                <td class="py-1 pr-3">{{ item.after?.worked ?? '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+                <tr class="border-b border-kq-border text-kq-text-muted">
+                  <th scope="row" class="py-1 pr-3 font-medium">
+                    {{ t('myRecords.history.before') }}
+                  </th>
+                  <td class="py-1 pr-3">
+                    {{ item.before?.clockIn ?? t('myRecords.history.noEntryBefore') }}
+                  </td>
+                  <td class="py-1 pr-3">{{ item.before?.clockOut ?? '—' }}</td>
+                  <td class="py-1 pr-3">{{ item.before?.worked ?? '—' }}</td>
+                </tr>
+                <tr class="text-kq-text">
+                  <th scope="row" class="py-1 pr-3 font-medium">
+                    {{ t('myRecords.history.after') }}
+                  </th>
+                  <td class="py-1 pr-3">
+                    {{ item.after?.clockIn ?? t('myRecords.history.noEntryAfter') }}
+                  </td>
+                  <td class="py-1 pr-3">{{ item.after?.clockOut ?? '—' }}</td>
+                  <td class="py-1 pr-3">{{ item.after?.worked ?? '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </li>
       </ol>
     </template>

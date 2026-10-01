@@ -143,21 +143,16 @@ function duration(minutes: number): string {
       :aria-label="t('myRecords.entries.caption', { date: workDate })"
       class="overflow-x-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
     >
-      <table class="w-full table-fixed border-collapse text-left">
+      <table class="w-full border-collapse text-left">
         <caption class="sr-only">
           {{
             t('myRecords.entries.caption', { date: workDate })
           }}
         </caption>
-        <!-- La columna de duracion va un 10 % mas ancha que las demas: es el
-             numero que se compara con la nomina, y el resto del espacio se
-             reparte a partes iguales entre las otras tres columnas. -->
-        <colgroup>
-          <col class="w-[24.39%]" />
-          <col class="w-[24.39%]" />
-          <col class="w-[26.83%]" />
-          <col class="w-[24.39%]" />
-        </colgroup>
+        <!-- Sin anchos fijos: el navegador reparte el espacio segun el contenido.
+             Con `table-fixed` y porcentajes, al 200 % de texto las cabeceras se
+             solapaban hasta ser ilegibles (WCAG 1.4.4); asi la tabla crece y,
+             si no cabe, se desplaza dentro de su region con el teclado. -->
         <thead class="border-b border-kq-border bg-kq-surface-alt">
           <tr>
             <th scope="col" class="px-3 py-2">

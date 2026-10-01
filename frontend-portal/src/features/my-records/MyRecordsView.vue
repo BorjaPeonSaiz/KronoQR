@@ -97,7 +97,7 @@ watch(data, (value) => {
       novalidate
       @submit.prevent="submit"
     >
-      <fieldset class="flex flex-wrap items-start gap-4 border-0 p-0">
+      <fieldset class="flex min-w-0 flex-wrap items-start gap-4 border-0 p-0">
         <legend class="sr-only">{{ t('myRecords.filters.legend') }}</legend>
 
         <FormField
