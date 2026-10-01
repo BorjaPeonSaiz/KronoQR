@@ -81,6 +81,7 @@ saber por qué:
 | Correo electrónico | **No** | **Ninguna función del producto lo necesita.** No se envía nada por correo: ni la tarjeta, ni el PIN, ni el acceso al portal |
 | Documento de identidad | No | **No se guarda tal cual**: el sistema conserva solo una marca calculada a partir de él, que sirve para no dar de alta dos veces a la misma persona y no para leerlo |
 | Idioma | No | El idioma en el que verá el portal y en el que se le imprime la hoja de instrucciones |
+| Teletrabaja | No | Una casilla, desmarcada de serie. **Es solo informativa**: se ve como columna en el listado de plantilla y se puede filtrar por ella, pero **no cambia cómo ficha esa persona** —con su tarjeta o su código y PIN, como todos— **ni ningún cálculo**: ni sus horas, ni las incidencias, ni los informes, ni lo que se entrega a la Inspección. Se marca y desmarca desde la ficha, y cada cambio queda anotado en la auditoría (quién y cuándo). La carga por fichero no la lee: las altas entran sin marcar |
 
 **El código de empleado lo genera el sistema**, y es opaco a propósito: va
 impreso en la tarjeta, así que no puede ser el número de nómina ni nada que

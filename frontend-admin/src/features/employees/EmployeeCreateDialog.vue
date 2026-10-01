@@ -24,6 +24,7 @@ import { useQuery } from '@tanstack/vue-query'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type { CreateEmployeeRequest, EmployeeProvisioned } from '@/shared/api/types'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
+import TeleworkingCheckbox from './TeleworkingCheckbox.vue'
 import { createEmployee } from './employees.api'
 
 const props = defineProps<{ timezone: string }>()
@@ -38,6 +39,7 @@ const email = ref('')
 const nationalId = ref('')
 const locale = ref('es')
 const hiredAt = ref(todayInZone(props.timezone))
+const teleworking = ref(false)
 
 // `useQuery` devuelve refs sueltas: se desestructuran para que la plantilla las
 // desenvuelva sola. `departments.data` sin desestructurar seguiria siendo un Ref.
@@ -65,6 +67,7 @@ async function submit(): Promise<void> {
     national_id: nationalId.value.trim() === '' ? null : nationalId.value.trim(),
     hired_at: hiredAt.value,
     locale: locale.value,
+    teleworking: teleworking.value,
   }
 
   try {
@@ -207,6 +210,8 @@ const inputClass =
           <option value="en">{{ t('common.locales.en') }}</option>
         </select>
       </FormField>
+
+      <TeleworkingCheckbox v-model="teleworking" class="sm:col-span-2" />
 
       <p class="text-sm text-kq-text-muted sm:col-span-2">{{ t('employees.create.pinNotice') }}</p>
     </form>

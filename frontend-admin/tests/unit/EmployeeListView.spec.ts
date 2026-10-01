@@ -48,7 +48,7 @@ describe('EmployeeListView', () => {
     await settle()
 
     expect(wrapper.find('caption').exists()).toBe(true)
-    expect(wrapper.findAll('thead th[scope="col"]')).toHaveLength(5)
+    expect(wrapper.findAll('thead th[scope="col"]')).toHaveLength(6)
     expect(wrapper.find('tbody th[scope="row"]').text()).toContain('Youssef Amrani')
     expect(wrapper.text()).toContain('E7QK2MXPR')
     expect(wrapper.text()).toContain('Recepcion')
@@ -350,5 +350,125 @@ describe('EmployeeListView', () => {
 
     expect(wrapper.find('[data-test="pin-value"]').text()).toBe('483920')
     expect(wrapper.text()).toContain(es.pin.reveal.onlyOnce)
+  })
+
+  it('enseña el teletrabajo con texto, no solo con color, en columna propia (RF-GP-01)', async () => {
+    stubFetch(
+      routes(
+        employeeCollection([
+          employee({ teleworking: true }),
+          employee({ uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91', teleworking: false }),
+        ]),
+      ),
+    )
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+
+    const headers = wrapper.findAll('thead th[scope="col"]').map((header) => header.text())
+
+    expect(headers).toContain(es.employees.table.teleworking)
+    expect(wrapper.find('[data-test="teleworking-badge"]').text()).toBe(
+      es.employees.teleworking.yes,
+    )
+    expect(wrapper.find('[data-test="teleworking-none"]').text()).toBe(es.employees.teleworking.no)
+  })
+
+  it('el filtro de teletrabajo viaja como true/false, reinicia la pagina y refleja la URL (RF-GP-01)', async () => {
+    const spy = stubFetch(routes(employeeCollection([employee({ teleworking: true })], 120)))
+    const router = createTestRouter()
+    const wrapper = await mountView(EmployeeListView, { router })
+
+    await settle()
+    await wrapper.findAll('nav button')[1]?.trigger('click')
+    await settle()
+
+    const urlsOf = () => spy.mock.calls.map((call) => String(call[0]))
+
+    expect(urlsOf().some((url) => url.includes('teleworking='))).toBe(false)
+
+    await wrapper.find('#employees-teleworking-filter').setValue('true')
+    await settle()
+
+    expect(urlsOf().some((url) => url.includes('teleworking=true') && url.includes('page=1'))).toBe(
+      true,
+    )
+    expect(router.currentRoute.value.query['teleworking']).toBe('true')
+
+    await wrapper.find('#employees-teleworking-filter').setValue('false')
+    await settle()
+
+    expect(urlsOf().some((url) => url.includes('teleworking=false'))).toBe(true)
+
+    await wrapper.find('#employees-teleworking-filter').setValue('')
+    await settle()
+
+    expect(router.currentRoute.value.query['teleworking']).toBeUndefined()
+  })
+
+  it('el filtro de teletrabajo tiene etiqueta asociada y tres opciones', async () => {
+    stubFetch(routes(employeeCollection([employee()])))
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+
+    expect(wrapper.find('label[for="employees-teleworking-filter"]').text()).toBe(
+      es.employees.filters.teleworking,
+    )
+    expect(wrapper.findAll('#employees-teleworking-filter option')).toHaveLength(3)
+  })
+
+  it('el alta envia teleworking, y la casilla explica que es solo informativa (RF-GP-01)', async () => {
+    const spy = stubFetch((url, init) => {
+      if (url.startsWith('/api/v1/site')) {
+        return jsonResponse(SITE)
+      }
+
+      if (url.startsWith('/api/v1/departments')) {
+        return jsonResponse(DEPARTMENTS)
+      }
+
+      if (init?.method === 'POST') {
+        return jsonResponse(
+          {
+            employee: employee({ teleworking: true }),
+            pin: {
+              employee_uuid: EMPLOYEE_UUID,
+              pin: '483920',
+              issued_at: '2026-08-14T08:02:11.907Z',
+              pin_status: 'issued',
+            },
+          },
+          201,
+        )
+      }
+
+      return jsonResponse(employeeCollection([employee()]))
+    })
+
+    const wrapper = await mountView(EmployeeListView)
+
+    await settle()
+    await wrapper.find('button').trigger('click')
+    await settle()
+
+    const checkbox = wrapper.find('[data-test="teleworking-checkbox"]')
+    const label = wrapper.find(`label[for="${checkbox.attributes('id')}"]`)
+
+    expect(label.text()).toBe(es.employees.fields.teleworkingLabel)
+    expect(wrapper.find(`#${checkbox.attributes('aria-describedby')}`).text()).toBe(
+      es.employees.fields.teleworkingHint,
+    )
+    expect((checkbox.element as HTMLInputElement).checked).toBe(false)
+
+    await checkbox.setValue(true)
+    await wrapper.find('#employee-create-form').trigger('submit')
+    await settle()
+
+    const post = spy.mock.calls.find((call) => call[1]?.method === 'POST')
+
+    expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({ teleworking: true })
   })
 })

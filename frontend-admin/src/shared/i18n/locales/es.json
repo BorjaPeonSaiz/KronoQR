@@ -154,7 +154,11 @@
       "department": "Departamento",
       "departmentAll": "Todos los departamentos",
       "pinStatus": "Estado del PIN",
-      "pinStatusAll": "Cualquier estado del PIN"
+      "pinStatusAll": "Cualquier estado del PIN",
+      "teleworking": "Teletrabajo",
+      "teleworkingAll": "Todas las personas",
+      "teleworkingYes": "Sí",
+      "teleworkingNo": "No"
     },
     "status": {
       "active": "En alta",
@@ -172,7 +176,8 @@
       "code": "Código de empleado",
       "department": "Departamento",
       "status": "Situación",
-      "pinStatus": "Estado del PIN"
+      "pinStatus": "Estado del PIN",
+      "teleworking": "Teletrabajo"
     },
     "pagination": {
       "label": "Paginación de la plantilla"
@@ -191,7 +196,14 @@
       "hiredAt": "Fecha de alta",
       "terminatedAt": "Fecha de cese",
       "status": "Situación laboral",
-      "locale": "Idioma"
+      "locale": "Idioma",
+      "teleworking": "Teletrabajo",
+      "teleworkingLabel": "Esta persona teletrabaja",
+      "teleworkingHint": "Solo informativo: no cambia cómo ficha ni cómo se calculan sus horas."
+    },
+    "teleworking": {
+      "yes": "Teletrabaja",
+      "no": "No teletrabaja"
     },
     "create": {
       "heading": "Alta de empleado",
@@ -247,6 +259,57 @@
       "offboarded": "La baja se ha registrado."
     }
   },
+  "contracts": {
+    "heading": "Contratos",
+    "explanation": "La serie de contratos de esta persona, del más antiguo al vigente. Las horas contratadas son la cifra contra la que el informe de periodo mide cada día. Un contrato no se edita ni se borra: se registra uno nuevo y el anterior queda cerrado el día antes.",
+    "loading": "Cargando los contratos…",
+    "retry": "Volver a cargar los contratos",
+    "current": "Vigente",
+    "hoursValue": "{hours} h",
+    "actions": {
+      "register": "Registrar contrato"
+    },
+    "empty": {
+      "title": "Sin contratos registrados",
+      "description": "Mientras no haya un contrato, el informe de periodo cuenta los días de esta persona como «sin contrato» y no suma horas contratadas. Registra el primero con el botón de arriba."
+    },
+    "table": {
+      "caption": "Contratos de la persona, del más antiguo al más reciente"
+    },
+    "fields": {
+      "weeklyHours": "Horas por semana",
+      "annualHours": "Cómputo anual (horas)",
+      "scheduleType": "Tipo de jornada",
+      "validFrom": "Vigente desde",
+      "validTo": "Vigente hasta"
+    },
+    "schedule": {
+      "continua": "Continua",
+      "partida": "Partida",
+      "turnos": "Por turnos"
+    },
+    "register": {
+      "heading": "Registrar contrato",
+      "explanation": "Revisa la tabla de abajo: muestra el valor del contrato vigente y el que vas a registrar. No hay fecha de fin; la fija el sistema al registrar el siguiente contrato.",
+      "weeklyHint": "Entre 0 y 168. Admite decimales, por ejemplo 37,5.",
+      "weeklyInvalid": "Escribe un número mayor que 0 y como máximo 168.",
+      "annualHint": "Opcional. Es el cómputo del convenio; no entra en ningún cálculo.",
+      "annualInvalid": "Escribe un número mayor que 0 o deja el campo vacío.",
+      "scheduleHint": "Informativo: hoy no cambia ningún cálculo.",
+      "schedulePlaceholder": "Elige un tipo",
+      "validFromHint": "Tiene que ser posterior al inicio del contrato vigente ({date}).",
+      "validFromHintFirst": "Primer día de vigencia, inclusive.",
+      "previewCaption": "Qué se va a registrar, desde el contrato vigente hacia el nuevo",
+      "closesPrevious": "Al registrarlo, el contrato vigente queda cerrado el día anterior a la fecha de inicio. Se conserva en la lista.",
+      "conflict": "Ya hay un contrato vigente en esa fecha: alguien ha cambiado los contratos mientras tanto. Hemos vuelto a leerlos y la tabla de abajo muestra el estado actual. Revisa la fecha de inicio y vuelve a intentarlo.",
+      "submit": "Registrar contrato"
+    },
+    "announce": {
+      "registered": "Contrato registrado. El contrato anterior queda cerrado el día antes.",
+      "reread": "Los contratos se han vuelto a leer porque habían cambiado."
+    }
+  },
+
   "pin": {
     "heading": "PIN del portal del empleado",
     "explanation": "Con su código de empleado y este PIN, la persona consulta su propio registro horario en el portal. Se entrega en mano, nunca por correo.",
@@ -662,6 +725,7 @@
       "generate": "Generar informe",
       "loading": "Generando el informe…",
       "contractCoverage": "Hay {days} días-persona del periodo sin contrato registrado, que afectan a {employees} persona(s). Esos días no suman horas contratadas: la desviación de esas filas está incompleta.",
+      "contractCoverageLink": "Registrar contratos desde la ficha de cada persona",
       "filters": {
         "legend": "Periodo y agrupación del informe",
         "from": "Desde",

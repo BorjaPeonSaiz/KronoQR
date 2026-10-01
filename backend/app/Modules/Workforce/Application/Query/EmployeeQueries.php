@@ -59,10 +59,11 @@ final readonly class EmployeeQueries
         ?EmploymentStatus $status,
         ?string $search,
         ?PinStatus $pinStatus,
+        ?bool $teleworking,
         int $page,
         int $perPage,
     ): array {
-        $total = $this->employees->countMatching($scope, $departmentId, $status, $search, $pinStatus);
+        $total = $this->employees->countMatching($scope, $departmentId, $status, $search, $pinStatus, $teleworking);
 
         $items = $this->employees->search(
             $scope,
@@ -70,6 +71,7 @@ final readonly class EmployeeQueries
             $status,
             $search,
             $pinStatus,
+            $teleworking,
             $perPage,
             ($page - 1) * $perPage,
         );
@@ -86,6 +88,9 @@ final readonly class EmployeeQueries
             // hay dato personal en el valor: es un estado de un catalogo de
             // tres.
             'pin_status' => $pinStatus === null ? 'any' : $pinStatus->value,
+            // Igual que el de PIN: acota el alcance de lo divulgado y su valor
+            // es un si o no, sin dato de nadie dentro.
+            'teleworking' => $teleworking === null ? 'any' : ($teleworking ? 'true' : 'false'),
             // **El termino NO se guarda, solo si lo hubo.** Quien busca en el
             // panel escribe el nombre de una persona, asi que el termino es un
             // dato personal: escribirlo en `audit_log` seria copiar nombres a la

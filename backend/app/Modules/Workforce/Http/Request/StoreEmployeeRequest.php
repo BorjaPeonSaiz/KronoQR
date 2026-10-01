@@ -41,6 +41,8 @@ final class StoreEmployeeRequest extends FormRequest
             'national_id' => ['nullable', 'string', 'min:4', 'max:32'],
             'hired_at' => ['required', 'date_format:Y-m-d'],
             'locale' => ['sometimes', 'string', 'min:2', 'max:10'],
+            // Informativo (RF-GP-01). Sin el, `false`.
+            'teleworking' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -54,6 +56,7 @@ final class StoreEmployeeRequest extends FormRequest
             nationalId: $this->optionalString('national_id'),
             hiredAt: $this->string('hired_at')->value(),
             locale: $this->string('locale', 'es')->value(),
+            teleworking: $this->boolean('teleworking'),
         );
     }
 

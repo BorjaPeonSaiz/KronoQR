@@ -62,15 +62,17 @@ const visibleRows = computed(() =>
         .getVirtualItems()
         .map((item) => ({
           incident: props.entries[item.index],
+          index: item.index,
           start: item.start,
           key: String(item.key),
         }))
         .filter(
-          (row): row is { incident: Incident; start: number; key: string } =>
+          (row): row is { incident: Incident; index: number; start: number; key: string } =>
             row.incident !== undefined,
         )
     : props.entries.map((incident, index) => ({
         incident,
+        index,
         start: index * ROW_HEIGHT_PX,
         key: String(incident.id),
       })),
@@ -106,11 +108,15 @@ function detectedAtLabel(incident: Incident): string {
 <template>
   <div
     ref="scroller"
+    tabindex="0"
+    role="region"
+    :aria-label="t('incidents.table.caption', { zone: zoneLabel })"
     class="max-h-[70vh] overflow-auto rounded-kq border border-kq-border bg-kq-surface-raised shadow-kq-soft"
     data-test="incident-table"
   >
     <div
       role="table"
+      :aria-rowcount="entries.length + 1"
       :aria-label="t('incidents.table.caption', { zone: zoneLabel })"
       class="min-w-[64rem]"
     >
@@ -120,6 +126,7 @@ function detectedAtLabel(incident: Incident): string {
       >
         <div
           role="row"
+          aria-rowindex="1"
           class="grid grid-cols-[0.9fr_1.6fr_2fr_1fr_1.5fr_1.2fr_1fr] gap-3 px-3 py-2"
         >
           <span role="columnheader">{{ t('incidents.table.severity') }}</span>
@@ -137,6 +144,7 @@ function detectedAtLabel(incident: Incident): string {
           v-for="row of visibleRows"
           :key="row.key"
           role="row"
+          :aria-rowindex="row.index + 2"
           class="absolute left-0 grid w-full grid-cols-[0.9fr_1.6fr_2fr_1fr_1.5fr_1.2fr_1fr] items-center gap-3 border-b border-kq-border px-3 py-2"
           :style="{ transform: `translateY(${row.start}px)`, height: `${ROW_HEIGHT_PX}px` }"
           data-test="incident-row"

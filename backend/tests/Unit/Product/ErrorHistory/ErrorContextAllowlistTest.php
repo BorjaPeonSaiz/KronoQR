@@ -151,3 +151,21 @@ it('no guarda `message` en el contexto: asciende a la columna', function (): voi
         ->and(ErrorContextAllowlist::messageIn(['message' => '   ']))->toBeNull()
         ->and(ErrorContextAllowlist::messageIn(['component' => 'Vista']))->toBeNull();
 })->group('RF-PD-15');
+
+it('descarta las claves enteras del contexto', function (): void {
+    // Un cliente que mande una lista en lugar de un mapa no cuela sus valores:
+    // ninguna clave declarada es numerica.
+    expect(ErrorContextAllowlist::apply([0 => 'Ana Ruiz', 1 => 'ana.ruiz@hotel.es', 'route' => '/api/v1/scan']))
+        ->toBe(['route' => '/api/v1/scan']);
+})->group('RF-PD-15', 'RL-19');
+
+it('no guarda una clave cuyo valor se queda en nada tras el saneado', function (): void {
+    // Solo espacios, o bytes que no se pueden sanear (falla cerrado): el
+    // saneador devuelve su texto de relleno y la clave no aporta nada. Un valor
+    // que conserva algo despues del saneado si entra.
+    expect(ErrorContextAllowlist::apply([
+        'reason' => '   ',
+        'cause' => "fallo \xC3\x28 de ana.ruiz@hotel.es",
+        'scope' => 'kiosk',
+    ]))->toBe(['scope' => 'kiosk']);
+})->group('RF-PD-15', 'RL-19');

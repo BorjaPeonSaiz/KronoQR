@@ -68,6 +68,11 @@ final readonly class RecordWorkforceChange
             // La carga masiva deja ademas su asiento de lote
             // (`employee.imported`); esto dice por que via entro cada persona.
             'via_import' => $event->viaImport,
+            // El valor inicial del teletrabajo (RF-GP-01), como `department_id`:
+            // sin el, el primer `changed_fields: [teleworking]` posterior no se
+            // podria leer. Es un si o no informativo, sin nada que identifique a
+            // nadie mas alla del `employee_uuid` que ya va en el asiento.
+            'teleworking' => $event->teleworking,
         ], $event->occurredAt());
     }
 

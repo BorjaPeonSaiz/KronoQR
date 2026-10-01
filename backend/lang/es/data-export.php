@@ -244,6 +244,7 @@ return [
                 'hired_at' => 'Fecha de alta.',
                 'terminated_at' => 'Fecha de baja. Vacio si sigue en alta.',
                 'locale' => 'Idioma en el que la persona ve el quiosco y su portal.',
+                'teleworking' => 'Si teletrabaja (true o false). Informativo: no cambia como ficha ni ningun computo.',
                 'pin_issued_at' => 'Cuando se emitio su PIN de respaldo. Vacio si nunca se le emitio.',
                 'pin_delivered_at' => 'Cuando se le entrego ese PIN en mano.',
                 'pin_delivered_by_user_uuid' => 'Quien se lo entrego.',

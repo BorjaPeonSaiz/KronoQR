@@ -37,6 +37,8 @@ final class UpdateEmployeeRequest extends FormRequest
             'email' => ['sometimes', 'nullable', 'string', 'email:rfc', 'max:190'],
             'status' => ['sometimes', 'string', 'in:'.EmploymentStatus::ACTIVE->value.','.EmploymentStatus::SUSPENDED->value],
             'locale' => ['sometimes', 'string', 'min:2', 'max:10'],
+            // Informativo (RF-GP-01). No anulable: `null` responde `422`.
+            'teleworking' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -54,6 +56,7 @@ final class UpdateEmployeeRequest extends FormRequest
             departmentGiven: $this->has('department_id'),
             status: $this->filledString('status'),
             locale: $this->filledString('locale'),
+            teleworking: $this->has('teleworking') ? $this->boolean('teleworking') : null,
         );
     }
 

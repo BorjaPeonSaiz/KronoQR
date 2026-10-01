@@ -15,6 +15,7 @@ import type {
   EmployeeCollection,
   EmployeeImportReport,
   EmployeeWorkDays,
+  EmploymentContract,
   Incident,
   IncidentCollection,
   IssuedSupportGrant,
@@ -52,6 +53,7 @@ export function employee(overrides: Partial<Employee> = {}): Employee {
     hired_at: '2026-08-14',
     terminated_at: null,
     locale: 'es',
+    teleworking: false,
     pin_status: 'issued',
     ...overrides,
   }
@@ -500,6 +502,23 @@ export function employeeImportReport(
         messages: [],
       },
     ],
+    ...overrides,
+  }
+}
+
+/** Un contrato vigente (RF-GP-02), calcado del ejemplo del contrato de la API. */
+export function employmentContract(
+  overrides: Partial<EmploymentContract> = {},
+): EmploymentContract {
+  return {
+    id: 58,
+    employee_uuid: EMPLOYEE_UUID,
+    weekly_hours: 40,
+    annual_hours: 1780,
+    schedule_type: 'turnos',
+    valid_from: '2026-03-16',
+    valid_to: null,
+    is_current: true,
     ...overrides,
   }
 }

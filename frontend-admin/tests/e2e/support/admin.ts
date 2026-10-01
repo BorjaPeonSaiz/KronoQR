@@ -25,6 +25,7 @@ import type {
   CorrectShiftEntryRequest,
   CreateAbsenceRequest,
   CreateEmployeeRequest,
+  CreateEmploymentContractRequest,
   CredentialStatusBoard,
   DataExport,
   DepartmentCollection,
@@ -35,6 +36,7 @@ import type {
   EmployeeCollection,
   EmployeeProvisioned,
   EmployeeWorkDays,
+  EmploymentContract,
   Incident,
   IncidentCollection,
   IssuedSupportGrant,
@@ -402,6 +404,18 @@ export const TWO_FACTOR_ENROLMENT: TwoFactorEnrolment = {
     'otpauth://totp/KronoQR:rrhh%40hotel.example?secret=JBSWY3DPEHPK3PXP&issuer=KronoQR&algorithm=SHA1&digits=6&period=30',
 }
 
+/** El contrato que «otra persona» registra durante el 409 del alta (RF-GP-02). */
+export const CONTRACT_REGISTERED_BY_OTHER: EmploymentContract = {
+  id: 77,
+  employee_uuid: EMPLOYEE_UUID,
+  weekly_hours: 30,
+  annual_hours: null,
+  schedule_type: 'partida',
+  valid_from: '2026-09-01',
+  valid_to: null,
+  is_current: true,
+}
+
 export const EMPLOYEE: Employee = {
   uuid: EMPLOYEE_UUID,
   employee_code: 'E7QK2MXPR',
@@ -413,6 +427,7 @@ export const EMPLOYEE: Employee = {
   hired_at: '2026-08-14',
   terminated_at: null,
   locale: 'es',
+  teleworking: false,
   pin_status: 'issued',
 }
 
@@ -1437,6 +1452,31 @@ export interface ManagementApiOptions {
    * correcto (ver el primer caso de `incidents.spec.ts`).
    */
   readonly incidentBoard?: IncidentCollection
+  /**
+   * Los contratos de la persona de ejemplo (RF-GP-02, `GET/POST
+   * /employees/{uuid}/contracts`). Por omision, ninguno: la ficha muestra el
+   * estado vacio. El doble los mantiene mutables y, como el servidor, cierra el
+   * vigente el dia anterior al inicio del nuevo.
+   */
+  readonly contracts?: EmploymentContract[]
+  /**
+   * Que responde el alta de contrato. `conflict` simula que otra persona
+   * registro uno antes: la primera peticion responde `409` y las relecturas
+   * posteriores ya lo traen (`CONTRACT_REGISTERED_BY_OTHER`).
+   */
+  readonly contractOutcome?: 'ok' | 'conflict'
+  /**
+   * La plantilla de partida (RF-GP-01). Por omision, solo `EMPLOYEE`. El doble la
+   * mantiene mutable: el alta la amplia, `PATCH /employees/{uuid}` la cambia y
+   * `GET /employees` respeta `teleworking`, como el servidor.
+   */
+  readonly employees?: Employee[]
+  /**
+   * Que responde `PATCH /employees/{uuid}`. `forbidden` simula que el servidor
+   * deniega la modificacion (regla dura 18): la interfaz no la confia a la
+   * ocultacion de controles.
+   */
+  readonly employeeUpdateOutcome?: 'ok' | 'forbidden'
   /** El registro horario que devuelve `GET /employees/{uuid}/workdays`. Por omision, `WORKDAYS`. */
   readonly workdays?: EmployeeWorkDays
   /**
@@ -1864,6 +1904,39 @@ export async function stubManagementApi(
   // sitio; sin esta copia, una prueba dejaria su tramo añadido o corregido
   // dentro de la constante compartida y contaminaria el resto del fichero.
   const workdaysState: EmployeeWorkDays = structuredClone(options.workdays ?? WORKDAYS)
+
+  // La plantilla (RF-GP-01): mutable, con copia de cada ficha para que ni el
+  // alta ni el PATCH contaminen la constante `EMPLOYEE` compartida.
+  const employeesState: Employee[] = (options.employees ?? [EMPLOYEE]).map((candidate) => ({
+    ...candidate,
+  }))
+  const employeeUpdateOutcome = options.employeeUpdateOutcome ?? 'ok'
+
+  // Los contratos (RF-GP-02): mutables, y con la serie entera como la tabla de
+  // verdad (regla dura 5): registrar uno CIERRA el vigente, no lo sustituye.
+  const contractsState: EmploymentContract[] = (options.contracts ?? []).map((candidate) => ({
+    ...candidate,
+  }))
+  let contractConflictPending = options.contractOutcome === 'conflict'
+
+  /** El dia anterior a una fecha civil `AAAA-MM-DD`, sin pasar por la zona del navegador. */
+  function dayBefore(date: string): string {
+    const instant = new Date(`${date}T00:00:00Z`)
+
+    instant.setUTCDate(instant.getUTCDate() - 1)
+
+    return instant.toISOString().slice(0, 10)
+  }
+
+  /** Como el servidor: el contrato abierto se cierra el dia anterior al inicio del nuevo. */
+  function closeCurrentContract(newStart: string): void {
+    for (const contract of contractsState) {
+      if (contract.valid_to === null) {
+        contract.valid_to = dayBefore(newStart)
+        contract.is_current = false
+      }
+    }
+  }
 
   // Las ausencias (RF-GP-04, tarea 3.10): mutable, y con TODAS las versiones
   // que hayan existido -como la tabla de verdad, regla dura 5-, no solo las
@@ -3446,9 +3519,24 @@ export async function stubManagementApi(
         case 'GET /api/v1/departments':
           await json(route, 200, DEPARTMENTS)
           return
-        case 'GET /api/v1/employees':
-          await json(route, 200, EMPLOYEES)
+        case 'GET /api/v1/employees': {
+          // El unico filtro que el doble aplica de verdad es `teleworking`
+          // (RF-GP-01); los demas solo se comprueban en las pruebas unitarias.
+          const teleworkingParam = url.searchParams.get('teleworking')
+          const matching =
+            teleworkingParam === null
+              ? employeesState
+              : employeesState.filter(
+                  (candidate) => candidate.teleworking === (teleworkingParam === 'true'),
+                )
+          const collection: EmployeeCollection = {
+            data: matching,
+            meta: { page: 1, per_page: 30, total: matching.length, total_pages: 1 },
+          }
+
+          await json(route, 200, collection)
           return
+        }
         case 'GET /api/v1/absences': {
           // Listado de ausencias (RF-GP-04, tarea 3.10). El alcance por
           // departamento de RF-ID-03 no se simula aqui -eso se prueba en el
@@ -3598,8 +3686,11 @@ export async function stubManagementApi(
             hired_at: payload.hired_at,
             terminated_at: null,
             locale: payload.locale,
+            teleworking: payload.teleworking ?? false,
             pin_status: 'issued',
           }
+
+          employeesState.push(created)
           const provisioned: EmployeeProvisioned = {
             employee: created,
             pin: {
@@ -3614,8 +3705,77 @@ export async function stubManagementApi(
           return
         }
         case `GET /api/v1/employees/${EMPLOYEE_UUID}`:
-          await json(route, 200, EMPLOYEE)
+          await json(route, 200, employeesState.find((c) => c.uuid === EMPLOYEE_UUID) ?? EMPLOYEE)
           return
+        case `PATCH /api/v1/employees/${EMPLOYEE_UUID}`: {
+          if (employeeUpdateOutcome === 'forbidden') {
+            await problem(route, 403, 'urn:kronoqr:problem:forbidden', 'Sin permiso')
+            return
+          }
+
+          const patch = request.postDataJSON() as Record<string, unknown>
+
+          // `teleworking: null` no es un valor del contrato (RF-GP-01): 422.
+          if ('teleworking' in patch && typeof patch['teleworking'] !== 'boolean') {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Peticion no valida',
+              { teleworking: ['El teletrabajo debe ser verdadero o falso.'] },
+            )
+            return
+          }
+
+          const target = employeesState.find((candidate) => candidate.uuid === EMPLOYEE_UUID)
+
+          if (target === undefined) {
+            await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Empleado no encontrado')
+            return
+          }
+
+          Object.assign(target, patch)
+          await json(route, 200, target)
+          return
+        }
+        case `GET /api/v1/employees/${EMPLOYEE_UUID}/contracts`:
+          await json(route, 200, { data: contractsState })
+          return
+        case `POST /api/v1/employees/${EMPLOYEE_UUID}/contracts`: {
+          const payload = request.postDataJSON() as CreateEmploymentContractRequest
+
+          if (contractConflictPending) {
+            // Otra persona registro un contrato mientras este formulario estaba abierto.
+            contractConflictPending = false
+            closeCurrentContract(payload.valid_from)
+            contractsState.push(CONTRACT_REGISTERED_BY_OTHER)
+            await problem(
+              route,
+              409,
+              'urn:kronoqr:problem:conflict',
+              'Conflicto con el estado actual',
+              'Ya hay un contrato vigente en esa fecha.',
+            )
+
+            return
+          }
+
+          closeCurrentContract(payload.valid_from)
+
+          const created: EmploymentContract = {
+            id: 100 + contractsState.length,
+            employee_uuid: EMPLOYEE_UUID,
+            weekly_hours: payload.weekly_hours,
+            annual_hours: payload.annual_hours ?? null,
+            schedule_type: payload.schedule_type,
+            valid_from: payload.valid_from,
+            valid_to: null,
+            is_current: true,
+          }
+
+          contractsState.push(created)
+          await json(route, 201, created)
+          return
+        }
         case `GET /api/v1/employees/${EMPLOYEE_UUID}/workdays`:
           await json(route, 200, workdaysState)
           return

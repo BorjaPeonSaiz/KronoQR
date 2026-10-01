@@ -31,6 +31,8 @@ export interface EmployeeListQuery {
   q?: string
   /** Estado del PIN. Lo resuelve el servidor (parametro `pin_status` del contrato), no el cliente. */
   pinStatus?: PinStatus
+  /** Marca informativa de teletrabajo (parametro `teleworking`). Lo resuelve el servidor. */
+  teleworking?: boolean
 }
 
 export function listEmployees(query: EmployeeListQuery): Promise<EmployeeCollection> {
@@ -42,6 +44,7 @@ export function listEmployees(query: EmployeeListQuery): Promise<EmployeeCollect
       department_id: query.departmentId,
       q: query.q,
       pin_status: query.pinStatus,
+      teleworking: query.teleworking,
     },
   })
 }

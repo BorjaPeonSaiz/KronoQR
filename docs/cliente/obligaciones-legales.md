@@ -43,6 +43,8 @@ de actividades de tratamiento (art. 30 RGPD):
 
 - Identificación mínima de plantilla: nombre, apellidos, código de empleado,
   centro, departamento, fechas de alta y baja. El correo es **opcional**.
+- Si la persona teletrabaja (sí o no), **solo informativo**: lo marca RRHH,
+  se ve en el listado y no interviene en ningún cálculo.
 - Marcas de tiempo de entrada y salida, su origen (tarjeta QR o PIN) y el
   dispositivo desde el que se registraron.
 - Ausencias: tipo, fechas, nota opcional, versiones y anulaciones.

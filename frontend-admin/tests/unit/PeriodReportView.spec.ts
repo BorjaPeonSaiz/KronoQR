@@ -3,9 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PeriodReportView from '@/features/reports/PeriodReportView.vue'
 import type { PeriodReport, PeriodReportRow } from '@/shared/api/types'
 import es from '@/shared/i18n/locales/es.json'
+import { useSessionStore } from '@/features/auth/session.store'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
+import { managementUser } from './support/fixtures'
 import type { FetchHandler } from './support/harness'
 import {
+  createTestPinia,
   jsonResponse,
   mountView,
   problemResponse,
@@ -260,6 +263,49 @@ describe('informe de horas por periodo', () => {
 
     expect(warning.exists()).toBe(true)
     expect(warning.text()).toContain('15')
+    // Sin sesion con `employees:*` no se ofrece el enlace a las fichas (P1).
+    expect(wrapper.find('[data-test="contract-coverage-link"]').exists()).toBe(false)
+    // La tabla desplazable se puede recorrer con el teclado (AX7-01).
+    const region = wrapper.find('[role="region"]')
+
+    expect(region.attributes('tabindex')).toBe('0')
+    expect(region.attributes('aria-label')).not.toBe('')
+  })
+
+  it('con employees:* el aviso de contratos enlaza a la plantilla para registrarlos (P1)', async () => {
+    const pinia = createTestPinia()
+    const session = useSessionStore()
+
+    session.user = managementUser({ abilities: ['employees:*', 'reports:*'] })
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    stubFetch((input) =>
+      String(input).includes('/reports/period')
+        ? jsonResponse(
+            report({
+              meta: {
+                ...report().meta,
+                contract_coverage: {
+                  days_without_contract: 3,
+                  employees_without_contract: 1,
+                  complete: false,
+                },
+              },
+            }),
+          )
+        : jsonResponse({ data: [] }),
+    )
+    const wrapper = await mountView(PeriodReportView, { pinia })
+
+    await fillPeriod(wrapper, '2026-03-01', '2026-03-31')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    const link = wrapper.find('[data-test="contract-coverage-link"]')
+
+    expect(link.exists()).toBe(true)
+    expect(link.attributes('href')).toBe('/employees')
   })
 
   it('retira el informe anterior cuando el periodo pedido no cabe en una respuesta', async () => {

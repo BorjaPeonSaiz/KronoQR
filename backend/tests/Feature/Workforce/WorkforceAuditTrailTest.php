@@ -93,6 +93,8 @@ it('deja employee.hired con quien dio de alta y sin ningun dato personal', funct
             'department_id' => $contexto['department'],
             'employee_uuid' => $uuid,
             'site_id' => $contexto['site'],
+            // El valor inicial de la marca informativa (RF-GP-01): un si o no.
+            'teleworking' => false,
             'via_import' => false,
         ]);
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Http\Request;
 
+use App\Http\Requests\NormalisesBooleanQuery;
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\PinStatus;
@@ -20,6 +21,9 @@ use Illuminate\Support\Facades\Gate;
  */
 final class IndexEmployeeRequest extends FormRequest
 {
+    // `?teleworking=true` es la serializacion estandar del contrato y la regla
+    // `boolean` no la acepta: el trait la convierte antes de validar.
+    use NormalisesBooleanQuery;
     use RejectsUnknownInput;
 
     /** Techo de la busqueda libre. El mismo `maxLength` que declara el contrato. */
@@ -42,6 +46,8 @@ final class IndexEmployeeRequest extends FormRequest
             // estado nuevo de PIN entraria aqui solo, y una lista copiada se
             // quedaria atras sin que nada fallara.
             'pin_status' => ['sometimes', 'string', 'in:'.implode(',', array_column(PinStatus::cases(), 'value'))],
+            // Informativo (RF-GP-01): filtra el listado y nada mas.
+            'teleworking' => ['sometimes', 'boolean'],
             // El techo de 100 no es una regla de negocio: es lo que impide que
             // una URL manipulada mande un patron de megabytes a un `ILIKE` que
             // no puede usar indice. `nullable` por los enlaces copiados: el
@@ -88,6 +94,14 @@ final class IndexEmployeeRequest extends FormRequest
         $status = $this->string('pin_status')->value();
 
         return $status === '' ? null : PinStatus::from($status);
+    }
+
+    /**
+     * `true` o `false` si se filtra por teletrabajo (RF-GP-01), `null` si no.
+     */
+    public function teleworkingFilter(): ?bool
+    {
+        return $this->has('teleworking') ? $this->boolean('teleworking') : null;
     }
 
     public function departmentFilter(): ?int

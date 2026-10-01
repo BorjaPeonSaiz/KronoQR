@@ -21,5 +21,7 @@ final readonly class UpdateEmployeeCommand
         public bool $departmentGiven = false,
         public ?string $status = null,
         public ?string $locale = null,
+        /** `null` es «no se envio»: el teletrabajo no es anulable y no hace falta un `*Given`. */
+        public ?bool $teleworking = null,
     ) {}
 }
