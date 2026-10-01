@@ -54,6 +54,7 @@ function teleworkingInformativeMentions(): array
 {
     // Una sola lectura del arbol por proceso: las tres pruebas preguntan lo
     // mismo y recorrerlo por el bind mount cuesta segundos.
+    /** @var list<string>|null $cached */
     static $cached = null;
 
     if (\is_array($cached)) {
