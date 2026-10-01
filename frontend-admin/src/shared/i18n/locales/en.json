@@ -1447,6 +1447,12 @@
       "accentColor": "The colour of primary buttons, links and selected items. The rest of the product's palette is untouched.",
       "logoPath": "Absolute path inside the server's brand directory. Must be a PNG or an SVG up to 512 KiB and, if PNG, up to 2048 pixels on a side. Leave it blank to use the product's own logo."
     },
+    "accentContrast": {
+      "meets": "Accent contrast on the light background: {ratio}:1. It meets the {minimum}:1 minimum of WCAG 2.2 AA.",
+      "fails": "Accent contrast on the light background: {ratio}:1. It falls short of the {minimum}:1 minimum of WCAG 2.2 AA: with this colour, buttons and links would be hard to read.",
+      "applied": "So that it stays legible, the panel and the portal will use a darker version of the same colour ({color}). The kiosk lightens it against its dark background.",
+      "confirm": "I have read the warning and want to save this colour anyway."
+    },
     "resetAccent": "Reset to the product colour",
     "preview": {
       "lightHeading": "Console and portal",

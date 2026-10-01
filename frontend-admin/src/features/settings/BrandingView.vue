@@ -5,10 +5,12 @@
 // Tres decisiones que esta pantalla dice en voz alta, en vez de dejarlas
 // implicitas:
 //
-//  - **El color se avisa, no se impone.** Un acento que no llega al minimo de
-//    contraste WCAG 2.2 AA en alguna pareja del sistema visual (doc 06 §2) se
-//    puede guardar igual: la lista de abajo lo dice, pero no bloquea el
-//    boton. Es la misma decision que ya tomo `packages/web-kit/src/branding.ts`.
+//  - **El color se avisa y se confirma.** Mientras se escribe, la pantalla dice
+//    cuanto contrasta el acento con las superficies claras y si llega a 4,5:1
+//    (WCAG 2.2 AA). Si no llega, `branding.ts` lo OSCURECE al pintarlo (MB1) y
+//    aqui se dice con que tono, y guardarlo exige una casilla de confirmacion
+//    explicita (MB2): nunca se guarda un color ilegible por un clic de pasada.
+//    La validacion final es del servidor: su `422` sale bajo el campo.
 //  - **El logotipo es una RUTA, no una subida.** El fichero vive en el
 //    directorio de marca del servidor del cliente (`BRANDING_LOGO_ROOT`); esta
 //    pantalla solo guarda la ruta, y el servidor la comprueba contra el disco
@@ -19,6 +21,7 @@
 //    ESTILOS EN LINEA de la propia previsualizacion: el resto del panel sigue
 //    con la marca ya aplicada hasta que se guarda de verdad.
 import {
+  accentContrast,
   accentOverrides,
   contrastWarnings,
   PRODUCT_ACCENT_COLOR,
@@ -30,7 +33,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { LICENSE_MANAGE } from '@/features/auth/abilities'
@@ -58,6 +61,9 @@ const loading = ref(true)
 const saving = ref(false)
 const error = ref<unknown>(null)
 const saved = ref(false)
+
+/** El cliente ha leido el aviso de contraste del color que esta a punto de guardar. */
+const accentConfirmed = ref(false)
 
 const appName = ref('')
 const accentColor = ref(PRODUCT_ACCENT_COLOR)
@@ -136,6 +142,27 @@ const accentColorErrors = computed<readonly string[]>(() =>
     ? [t(`branding.errors.${accentColorLocalIssue.value}`)]
     : serverFieldErrors('BRANDING_ACCENT_COLOR'),
 )
+
+/**
+ * Cuanto contrasta el acento escrito y con que tono se pintara. `null` con un
+ * color invalido o sin los tokens base legibles (una prueba sin `theme.css`).
+ */
+const accentAssessment = computed(() => {
+  if (accentColorLocalIssue.value !== null) {
+    return null
+  }
+
+  try {
+    return accentContrast(accentColor.value, readThemeTokens(document))
+  } catch {
+    return null
+  }
+})
+
+/** Cualquier cambio de color anula la confirmacion: se confirma ESTE color, no el anterior. */
+watch(accentColor, () => {
+  accentConfirmed.value = false
+})
 
 /** El selector de color exige `#rrggbb` en minusculas; con un valor invalido, enseña el del producto. */
 const colorPickerValue = computed(() =>
@@ -295,11 +322,20 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
 
 const hasChanges = computed(() => Object.keys(pendingChanges.value).length > 0)
 
+/** Guardar un acento que no llega al minimo pide confirmacion explicita (MB2). */
+const needsAccentConfirmation = computed(
+  () =>
+    'BRANDING_ACCENT_COLOR' in pendingChanges.value &&
+    accentAssessment.value !== null &&
+    !accentAssessment.value.meets,
+)
+
 const canSave = computed(
   () =>
     hasChanges.value &&
     appName.value.trim() !== '' &&
     accentColorLocalIssue.value === null &&
+    (!needsAccentConfirmation.value || accentConfirmed.value) &&
     !saving.value,
 )
 
@@ -424,6 +460,58 @@ async function save(): Promise<void> {
           </div>
         </template>
       </FormField>
+
+      <!-- Contraste del acento elegido, en vivo (MB2). `role="status"`: se lee
+           al cambiar sin quitar el foco del campo. Si no llega al minimo, la
+           casilla de confirmacion es lo que desbloquea el guardado. -->
+      <div
+        v-if="accentAssessment !== null"
+        role="status"
+        class="flex max-w-3xl flex-col gap-3"
+        data-test="accent-contrast"
+        :data-meets="accentAssessment.meets ? 'true' : 'false'"
+      >
+        <p v-if="accentAssessment.meets" class="text-kq-success">
+          {{
+            t('branding.accentContrast.meets', {
+              ratio: accentAssessment.ratio.toFixed(2),
+              minimum: accentAssessment.minimum,
+            })
+          }}
+        </p>
+        <div
+          v-else
+          class="flex flex-col gap-3 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-text"
+        >
+          <p class="font-medium text-kq-warning">
+            {{
+              t('branding.accentContrast.fails', {
+                ratio: accentAssessment.ratio.toFixed(2),
+                minimum: accentAssessment.minimum,
+              })
+            }}
+          </p>
+          <p class="flex flex-wrap items-center gap-2">
+            <span
+              aria-hidden="true"
+              class="inline-block h-6 w-6 shrink-0 rounded-kq-sm border border-kq-border-strong"
+              :style="{ backgroundColor: accentAssessment.applied }"
+            ></span>
+            <span>{{
+              t('branding.accentContrast.applied', { color: accentAssessment.applied })
+            }}</span>
+          </p>
+          <label class="flex items-start gap-2">
+            <input
+              v-model="accentConfirmed"
+              type="checkbox"
+              data-test="accent-confirm"
+              class="mt-1 h-5 w-5 shrink-0"
+            />
+            <span>{{ t('branding.accentContrast.confirm') }}</span>
+          </label>
+        </div>
+      </div>
 
       <!-- Previsualizacion en vivo: SOLO estilos en linea sobre estos
            elementos, nunca `:root`. Mientras no se guarda, el resto del panel

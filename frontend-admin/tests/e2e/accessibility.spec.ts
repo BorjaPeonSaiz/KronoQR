@@ -281,17 +281,13 @@ test(
     await logInAsAdmin(page)
     await page.goto('/branding')
     await page.getByLabel('Color de acento', { exact: true }).fill('#f5e663')
-    await expect(page.getByTestId('contrast-warnings')).toBeVisible()
+    await expect(page.getByTestId('accent-contrast')).toContainText('No llega al mínimo')
+    await expect(page.getByTestId('accent-confirm')).toBeVisible()
 
-    // La previsualizacion es DELIBERADAMENTE fiel al color escrito, y ese es
-    // justo el punto: con un acento que no llega al minimo, el propio texto de
-    // muestra («Enlace de marca») queda tan ilegible como quedaria en la
-    // aplicacion real si se guardara (doc 06 §7, «se avisa, no se impone»). Un
-    // violacion de contraste ahi es la prueba de que el aviso dice la verdad,
-    // no un fallo de esta pantalla: se excluye de axe y se confia en el aviso
-    // textual (`contrast-warnings`, ya comprobado arriba) para transmitirlo de
-    // forma accesible.
-    await expectNoBlockingViolations(page, ['[data-test="preview"]'])
+    // Desde MB1 la previsualizacion enseña el tono OSCURECIDO que se aplicara de
+    // verdad, asi que ya no hay nada que excluir de axe: ni el aviso ni la
+    // muestra tienen violaciones de contraste.
+    await expectNoBlockingViolations(page)
   },
 )
 
