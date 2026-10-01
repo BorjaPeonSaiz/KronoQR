@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Infrastructure\Logging\RedactPersonalData;
 use App\Support\Observability\Logging\AddCorrelation;
 use App\Support\Observability\Logging\LogChannelStack;
 use App\Support\Observability\Logging\LokiLogChannel;
@@ -101,12 +102,20 @@ return [
             'ignore_exceptions' => false,
         ],
 
+        /*
+         * `RedactPersonalData` va en el `tap` de TODOS los canales que escriben
+         * a algun sitio (L1, regla dura 21): aplica el saneador de
+         * `error_events` al mensaje, al contexto y a la excepcion de cada
+         * linea, el ultimo de la cadena. La pila no lo declara porque hereda
+         * los processors de sus canales. `EveryLogChannelRedactsPersonalDataTest`
+         * falla si un canal llega sin el.
+         */
         'single' => [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
-            'tap' => [AddCorrelation::class],
+            'tap' => [AddCorrelation::class, RedactPersonalData::class],
         ],
 
         'daily' => [
@@ -115,7 +124,21 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
-            'tap' => [AddCorrelation::class],
+            'tap' => [AddCorrelation::class, RedactPersonalData::class],
+        ],
+
+        /*
+         * Lo declara el propio framework y Laravel fusiona sus canales por
+         * defecto con los de aqui: si no se redeclarara, existiria igual pero
+         * SIN el saneado. Lo descubrio `EveryLogChannelRedactsPersonalDataTest`.
+         */
+        'monthly' => [
+            'driver' => 'monthly',
+            'path' => storage_path('logs/laravel.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'max_files' => 3,
+            'replace_placeholders' => true,
+            'tap' => [AddCorrelation::class, RedactPersonalData::class],
         ],
 
         'slack' => [
@@ -125,6 +148,7 @@ return [
             'emoji' => env('LOG_SLACK_EMOJI', ':boom:'),
             'level' => env('LOG_LEVEL', 'critical'),
             'replace_placeholders' => true,
+            'tap' => [RedactPersonalData::class],
         ],
 
         'papertrail' => [
@@ -137,6 +161,7 @@ return [
                 'connectionString' => 'tls://'.env('PAPERTRAIL_URL').':'.env('PAPERTRAIL_PORT'),
             ],
             'processors' => [PsrLogMessageProcessor::class],
+            'tap' => [RedactPersonalData::class],
         ],
 
         /*
@@ -159,7 +184,7 @@ return [
             ],
             'formatter' => JsonFormatter::class,
             'processors' => [PsrLogMessageProcessor::class],
-            'tap' => [AddCorrelation::class],
+            'tap' => [AddCorrelation::class, RedactPersonalData::class],
         ],
 
         /*
@@ -191,7 +216,7 @@ return [
              * de aqui se descartan y se cuentan.
              */
             'buffer_size' => 1000,
-            'tap' => [AddCorrelation::class],
+            'tap' => [AddCorrelation::class, RedactPersonalData::class],
         ],
 
         'syslog' => [
@@ -199,12 +224,14 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'facility' => env('LOG_SYSLOG_FACILITY', LOG_USER),
             'replace_placeholders' => true,
+            'tap' => [RedactPersonalData::class],
         ],
 
         'errorlog' => [
             'driver' => 'errorlog',
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
+            'tap' => [RedactPersonalData::class],
         ],
 
         'null' => [
