@@ -91,7 +91,7 @@ it('conserva la marca al suspender, reincorporar y dar de baja', function (): vo
 
     expect($employee->suspend()->teleworking)->toBeTrue()
         ->and($employee->suspend()->reinstate()->teleworking)->toBeTrue()
-        ->and($employee->offboard(new DateTimeImmutable('2026-08-31'))->teleworking)->toBeTrue();
+        ->and($employee->offboard(new DateTimeImmutable('2026-08-31'), new DateTimeImmutable('2026-10-02'))->teleworking)->toBeTrue();
 })->group('RF-GP-01', 'RF-GP-03');
 
 it('no deja cambiar la marca de una ficha dada de baja', function (): void {

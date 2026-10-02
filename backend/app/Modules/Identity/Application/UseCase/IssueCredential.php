@@ -17,8 +17,8 @@ use App\Modules\Identity\Domain\Policy\CredentialIssuancePolicy;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use DateTimeImmutable;
-use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
 
 /**
@@ -42,9 +42,14 @@ use Illuminate\Support\Str;
  * semanas se puede imprimir hoy —que es lo que `credentials:print-batch
  * --pending` necesita— sin guardar nada reversible.
  *
- * **Lo que este caso de uso NO hace.** No comprueba si el empleado esta de baja:
- * RN-14 es de la Fase 2 y quien decide sobre el estado laboral es `Workforce`.
- * Tampoco imprime ni entrega: eso es la tarea 1.10.
+ * **Bajo el candado de la cadena** (ADR-046 §1.2, A-1): el estado laboral se
+ * relee dentro de `withChainLock()` y la comprobacion de RN-14 va dentro, en el
+ * orden cadena → `credentials` que sigue tambien la baja. Asi una persona de
+ * baja nunca queda con una tarjeta activa por una emision simultanea.
+ *
+ * **Lo que este caso de uso NO hace.** No decide el estado laboral —lo decide
+ * `Workforce`; aqui solo se lee—. Tampoco imprime ni entrega: eso es la tarea
+ * 1.10.
  */
 final readonly class IssueCredential
 {
@@ -55,7 +60,7 @@ final readonly class IssueCredential
         private EmploymentStatusLookup $employmentStatus,
         private CredentialIssuancePolicy $issuance,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -73,28 +78,33 @@ final readonly class IssueCredential
             return null;
         }
 
-        // RN-14: nunca a una persona de baja, tampoco reemitiendo. Antes de la
-        // transaccion y antes de revocar nada: si no se puede emitir, no se
-        // toca ninguna tarjeta.
-        $status = $this->employmentStatus->statusOf($employeeId);
-
-        if ($status === null) {
-            return null;
-        }
-
-        $this->issuance->assertMayReceiveCredential($status);
-
-        if ($command->reissue && trim((string) $command->reason) === '') {
-            throw CredentialRevocationNeedsReason::make();
-        }
-
         $now = $this->clock->now();
 
-        return $this->connection->transaction(function () use (
+        // CADENA PRIMERO, Y EL ESTADO SE LEE DENTRO (ADR-046 §1.2, A-1). Leido
+        // fuera y sin candado, una baja que confirmara entre la lectura y la
+        // insercion dejaba a una persona de baja con una tarjeta activa: la baja
+        // revoca lo que hay al confirmar, y esta emision llegaba despues. Con la
+        // cadena tomada, la baja o ya confirmo —y aqui se ve— o espera a que esta
+        // emision confirme y la revoca con las demas.
+        return $this->serialized->withChainLock(function () use (
             $command,
             $employeeId,
             $now,
-        ): IssuedCredential {
+        ): ?IssuedCredential {
+            // RN-14: nunca a una persona de baja, tampoco reemitiendo. Antes de
+            // revocar nada: si no se puede emitir, no se toca ninguna tarjeta.
+            $status = $this->employmentStatus->statusOf($employeeId);
+
+            if ($status === null) {
+                return null;
+            }
+
+            $this->issuance->assertMayReceiveCredential($status);
+
+            if ($command->reissue && trim((string) $command->reason) === '') {
+                throw CredentialRevocationNeedsReason::make();
+            }
+
             $replaced = $this->revokePreviousIfAsked($command, $employeeId, $now);
 
             $this->guardHasNoCardInHand($command, $employeeId);

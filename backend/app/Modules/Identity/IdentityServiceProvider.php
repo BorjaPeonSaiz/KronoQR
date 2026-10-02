@@ -83,9 +83,11 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CredentialFingerprints;
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PortalSessionIssuer;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -483,7 +485,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 renderer: $app->make(CardRenderer::class),
                 events: $app->make(IdentityEventPublisher::class),
                 clock: $app->make(Clock::class),
-                connection: DB::connection(),
+                serialized: $app->make(SerializedLedgerWrite::class),
             ),
         );
 
@@ -498,8 +500,9 @@ final class IdentityServiceProvider extends ServiceProvider
                 employees: $app->make(EmployeeRegistry::class),
                 events: $app->make(IdentityEventPublisher::class),
                 clock: $app->make(Clock::class),
-                connection: DB::connection(),
+                serialized: $app->make(SerializedLedgerWrite::class),
                 telemetry: $app->make(CredentialTelemetry::class),
+                employmentStatus: $app->make(EmploymentStatusLookup::class),
             ),
         );
 
@@ -523,7 +526,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 employees: $app->make(EmployeeRegistry::class),
                 events: $app->make(IdentityEventPublisher::class),
                 clock: $app->make(Clock::class),
-                connection: DB::connection(),
+                serialized: $app->make(SerializedLedgerWrite::class),
                 telemetry: $app->make(CredentialTelemetry::class),
             ),
         );

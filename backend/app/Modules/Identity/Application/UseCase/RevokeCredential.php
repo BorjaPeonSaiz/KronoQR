@@ -13,7 +13,7 @@ use App\Modules\Identity\Domain\Exception\CredentialRevocationNeedsReason;
 use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
-use Illuminate\Database\ConnectionInterface;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 
 /**
  * Revocacion de una credencial (RF-QR-03).
@@ -38,7 +38,7 @@ final readonly class RevokeCredential
         private EmployeeRegistry $employees,
         private IdentityEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -49,21 +49,27 @@ final readonly class RevokeCredential
      */
     public function handle(RevokeCredentialCommand $command): ?CredentialView
     {
-        $credential = $this->credentials->findByUuid($command->credentialUuid);
+        // CADENA PRIMERO, Y LA CREDENCIAL SE LEE DENTRO (ADR-046 §1.2). Hasta la
+        // 2.2.0 se escribia la fila y despues el asiento, al reves que la baja
+        // —que toma la cadena y revoca las tarjetas de la persona—: una
+        // revocacion manual y una baja simultaneas cerraban un ciclo. Leida
+        // dentro, una tarjeta que la baja acaba de revocar responde
+        // `CredentialAlreadyRevoked` en vez de reescribir su motivo.
+        return $this->serialized->withChainLock(function () use ($command): ?CredentialView {
+            $credential = $this->credentials->findByUuid($command->credentialUuid);
 
-        if (! $credential instanceof Credential) {
-            return null;
-        }
+            if (! $credential instanceof Credential) {
+                return null;
+            }
 
-        $revoked = $credential->revoke($command->reason, $this->clock->now());
+            $revoked = $credential->revoke($command->reason, $this->clock->now());
 
-        // Si la ficha del empleado hubiera desaparecido —no puede: la clave
-        // ajena lo impide y nada se borra— la revocacion se hace igual. Una
-        // tarjeta que sigue valiendo porque falta un dato accesorio seria peor
-        // que un asiento con un hueco.
-        $employeeUuid = $this->employees->uuidOf($revoked->employeeId) ?? '';
+            // Si la ficha del empleado hubiera desaparecido —no puede: la clave
+            // ajena lo impide y nada se borra— la revocacion se hace igual. Una
+            // tarjeta que sigue valiendo porque falta un dato accesorio seria
+            // peor que un asiento con un hueco.
+            $employeeUuid = $this->employees->uuidOf($revoked->employeeId) ?? '';
 
-        return $this->connection->transaction(function () use ($command, $revoked, $employeeUuid): CredentialView {
             $this->credentials->save($revoked);
 
             $this->events->publish(new CredentialRevoked(

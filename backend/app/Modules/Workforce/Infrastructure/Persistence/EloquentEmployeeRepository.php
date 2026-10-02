@@ -8,6 +8,7 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\PinStatus;
+use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeCodeAlreadyTaken;
 use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Employee as EmployeeEntity;
@@ -55,22 +56,91 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         });
     }
 
-    public function save(EmployeeEntity $employee): void
-    {
-        try {
-            Employee::query()
-                ->where('uuid', $employee->uuid)
-                ->update($this->toRow($employee));
-        } catch (QueryException $exception) {
-            throw $this->translate($exception, $employee->code);
-        }
-    }
-
     public function findByUuid(string $uuid): ?EmployeeEntity
     {
         $row = Employee::query()->where('uuid', $uuid)->first();
 
         return $row instanceof Employee ? $this->toEntity($row) : null;
+    }
+
+    /**
+     * `FOR NO KEY UPDATE` y no `lockForUpdate()` (ADR-046 §2): el segundo choca
+     * con el `FOR KEY SHARE` con el que cada fichaje, ausencia o tarjeta de esta
+     * persona comprueba su clave ajena, y la haria esperar a la baja. Solo sobre
+     * `employees` y sin `JOIN`, para no bloquear de paso ninguna fila padre.
+     */
+    public function findForUpdate(string $uuid): ?EmployeeEntity
+    {
+        $row = Employee::query()->where('uuid', $uuid)->lock('for no key update')->first();
+
+        return $row instanceof Employee ? $this->toEntity($row) : null;
+    }
+
+    public function saveProfile(EmployeeEntity $employee, bool $statusChanged): void
+    {
+        $columns = [
+            'first_name' => $employee->firstName,
+            'last_name' => $employee->lastName,
+            'email' => $employee->email,
+            'department_id' => $employee->departmentId,
+            'locale' => $employee->locale,
+            'teleworking' => $employee->teleworking,
+        ];
+
+        if ($statusChanged) {
+            $columns['status'] = $employee->status->value;
+        }
+
+        try {
+            $affected = $this->stillEmployed($employee)->update($columns);
+        } catch (QueryException $exception) {
+            throw $this->translate($exception, $employee->code);
+        }
+
+        $this->refuseIfNothingWritten($affected, $employee);
+    }
+
+    public function saveTermination(EmployeeEntity $employee): void
+    {
+        $affected = $this->stillEmployed($employee)->update([
+            'status' => $employee->status->value,
+            'terminated_at' => $employee->terminatedAt?->format('Y-m-d'),
+        ]);
+
+        $this->refuseIfNothingWritten($affected, $employee);
+    }
+
+    /**
+     * La ficha por su UUID, **si no esta de baja** (ADR-046 §3).
+     *
+     * Las dos escrituras de la ficha llevan este predicado. Ninguna escribe
+     * `id`, `uuid` ni `employee_code` (A-5): los tres tienen indice unico
+     * completo, y un `UPDATE` que los escribiera —aunque fuera con el mismo
+     * valor— tomaria `FOR UPDATE` en lugar de `FOR NO KEY UPDATE` y haria
+     * esperar a los fichajes de esta persona.
+     *
+     * @return Builder<Employee>
+     */
+    private function stillEmployed(EmployeeEntity $employee): Builder
+    {
+        return Employee::query()
+            ->where('uuid', $employee->uuid)
+            ->where('status', '<>', EmploymentStatus::TERMINATED->value);
+    }
+
+    /**
+     * Cero filas es que la ficha ya estaba de baja: la lectura bloqueante del
+     * caso de uso lo impide, y esto lo convierte en un `409` si algun camino se
+     * la saltara. La ficha no puede haber desaparecido —nada se borra (regla
+     * dura 5)—.
+     *
+     * @throws EmployeeAlreadyTerminated
+     */
+    private function refuseIfNothingWritten(int $affected, EmployeeEntity $employee): void
+    {
+        if ($affected === 0) {
+            throw EmployeeAlreadyTerminated::withUuid($employee->uuid);
+        }
     }
 
     public function search(

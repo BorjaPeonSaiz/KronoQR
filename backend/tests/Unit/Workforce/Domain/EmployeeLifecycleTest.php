@@ -56,7 +56,7 @@ it('da de alta a alguien sin direccion de correo', function (): void {
 })->group('RF-GP-01');
 
 it('da de baja cambiando el estado y fijando la fecha de cese', function (): void {
-    $terminated = employeeUnderTest()->offboard(new DateTimeImmutable('2026-08-31'));
+    $terminated = employeeUnderTest()->offboard(new DateTimeImmutable('2026-08-31'), new DateTimeImmutable('2026-10-02'));
 
     expect($terminated->status)->toBe(EmploymentStatus::TERMINATED)
         ->and($terminated->terminatedAt?->format('Y-m-d'))->toBe('2026-08-31')
@@ -70,7 +70,7 @@ it('da de baja cambiando el estado y fijando la fecha de cese', function (): voi
 it('deja de admitir fichajes en cuanto esta de baja', function (): void {
     // RN-14: solo el activo ficha.
     expect(employeeUnderTest()->canClock())->toBeTrue()
-        ->and(employeeUnderTest()->offboard(new DateTimeImmutable('2026-08-31'))->canClock())->toBeFalse()
+        ->and(employeeUnderTest()->offboard(new DateTimeImmutable('2026-08-31'), new DateTimeImmutable('2026-10-02'))->canClock())->toBeFalse()
         ->and(employeeUnderTest()->suspend()->canClock())->toBeFalse();
 })->group('RN-14', 'RF-GP-03');
 
@@ -78,27 +78,27 @@ it('no repite una baja ya registrada', function (): void {
     // Repetirla reescribiria la fecha de cese, que es desde la que cuenta la
     // retencion de RL-02. Corregir esa fecha exige una correccion trazada
     // (RN-13), no un segundo POST.
-    $terminated = employeeUnderTest()->offboard(new DateTimeImmutable('2026-08-31'));
+    $terminated = employeeUnderTest()->offboard(new DateTimeImmutable('2026-08-31'), new DateTimeImmutable('2026-10-02'));
 
-    expect(fn () => $terminated->offboard(new DateTimeImmutable('2026-09-30')))
+    expect(fn () => $terminated->offboard(new DateTimeImmutable('2026-09-30'), new DateTimeImmutable('2026-10-02')))
         ->toThrow(EmployeeAlreadyTerminated::class);
 })->group('RF-GP-03');
 
 it('rechaza una fecha de cese anterior a la de alta', function (): void {
-    expect(fn () => employeeUnderTest()->offboard(new DateTimeImmutable('2025-12-31')))
+    expect(fn () => employeeUnderTest()->offboard(new DateTimeImmutable('2025-12-31'), new DateTimeImmutable('2026-10-02')))
         ->toThrow(InvalidEmploymentPeriod::class);
 })->group('RF-GP-03');
 
 it('admite el cese el mismo dia del alta', function (): void {
     // Un contrato de un dia existe. El limite se escribe explicito porque es
     // donde la comparacion se equivoca (§3.5, valores limite).
-    $terminated = employeeUnderTest()->offboard(new DateTimeImmutable('2026-01-15'));
+    $terminated = employeeUnderTest()->offboard(new DateTimeImmutable('2026-01-15'), new DateTimeImmutable('2026-10-02'));
 
     expect($terminated->terminatedAt?->format('Y-m-d'))->toBe('2026-01-15');
 })->group('RF-GP-03');
 
 it('no permite modificar la ficha de quien ya esta de baja', function (): void {
-    $terminated = employeeUnderTest()->offboard(new DateTimeImmutable('2026-08-31'));
+    $terminated = employeeUnderTest()->offboard(new DateTimeImmutable('2026-08-31'), new DateTimeImmutable('2026-10-02'));
 
     expect(fn () => $terminated->updateProfile(firstName: 'Otro'))
         ->toThrow(EmployeeAlreadyTerminated::class);

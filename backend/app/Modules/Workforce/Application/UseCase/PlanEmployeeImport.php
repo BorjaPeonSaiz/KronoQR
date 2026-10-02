@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\UseCase;
 
+use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Application\Port\EmployeeImportSource;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -200,7 +201,11 @@ final readonly class PlanEmployeeImport
 
         $match = $this->matchOf($employee);
 
-        $errors = [...$this->errorsOf($employee, $departments, $seen, $seenEmails), ...$match->errors];
+        $errors = [
+            ...$this->errorsOf($employee, $departments, $seen, $seenEmails),
+            ...$match->errors,
+            ...self::terminationErrors($match),
+        ];
 
         if ($errors !== []) {
             return ImportRow::rejected($line, $this->labelOf($employee), $errors);
@@ -338,6 +343,30 @@ final readonly class PlanEmployeeImport
             ? []
             : [ImportMessage::of(ImportMessageCode::UNKNOWN_DEPARTMENT, 'department')];
 
+    }
+
+    /**
+     * **La linea de una persona dada de baja se rechaza** (`employee_terminated`,
+     * RN-14, ADR-046 §5).
+     *
+     * La importacion no modifica la ficha de una baja ni la da de alta otra vez.
+     * Antes esa linea salia como `update`, la aplicacion la mandaba a la
+     * modificacion, el dominio la rechazaba con `EmployeeAlreadyTerminated` y el
+     * lote entero caia con un `409` que no nombraba ninguna linea, despues de que
+     * quien importa hubiera revisado un informe que decia que todo iba bien.
+     *
+     * Si la baja se registra **entre** esta comprobacion y la aplicacion, la
+     * linea llega como `update` y la aplicacion entera responde `409` sin
+     * escribir nada: se aplica exactamente lo que se reviso, y si el estado
+     * cambio hay que volver a comprobar.
+     *
+     * @return list<ImportMessage>
+     */
+    private static function terminationErrors(ImportMatch $match): array
+    {
+        return $match->employee?->status === EmploymentStatus::TERMINATED
+            ? [ImportMessage::of(ImportMessageCode::EMPLOYEE_TERMINATED)]
+            : [];
     }
 
     /**

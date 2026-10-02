@@ -14,7 +14,9 @@ use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Application\Support\Corrections;
 use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
+use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
 use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
@@ -44,9 +46,12 @@ use Illuminate\Support\Str;
  * ADR-006, ADR-024). Lo unico que se resuelve aqui es **la zona** en que esa
  * fecha es civil, que es un dato del centro (`SiteCalendar`).
  *
- * **Se comprueba que el empleado existe y puede fichar** (RN-14). No es
- * autorizacion —eso es la policy— sino integridad: dar de alta horas a una
- * persona dada de baja produce un registro que nadie sabe defender. La respuesta
+ * **Se comprueba que el empleado existe y puede recibir el tramo** (RN-14,
+ * {@see ManualEntryEligibility}). No es autorizacion —eso es la policy— sino
+ * integridad: una persona en alta, o una **dada de baja** si la jornada esta
+ * entre su alta y su cese (2.2.0), que es como se completan los dias trabajados
+ * que no constaron. Una suspendida, o una jornada de una baja fuera de su
+ * periodo de empleo, produciria un registro que nadie sabe defender. La respuesta
  * aqui **si** puede decir por que, al contrario que en el quiosco: quien la
  * recibe es un responsable autenticado, no una pantalla en un pasillo (RS-03 y
  * la regla dura 17 hablan del escaneo).
@@ -72,6 +77,7 @@ final readonly class AddShiftEntryHandler
     /**
      * @throws EmployeeCannotBeClocked el empleado no existe, no puede fichar o su centro no tiene zona
      * @throws ShiftMarkInFuture la jornada o alguna marca es posterior a la hora del servidor mas el margen
+     * @throws WorkDateOutsideEmployment la persona esta de baja y la jornada cae fuera de su periodo de empleo
      */
     public function handle(AddShiftEntryCommand $command): CorrectedShift
     {
@@ -79,7 +85,9 @@ final readonly class AddShiftEntryHandler
 
         $employee = $this->employees->find($command->employeeUuid);
 
-        if (! $employee instanceof EmployeeSnapshot || ! $employee->canClock()) {
+        // RN-14 (2.2.0): en alta, o de baja para jornadas de su periodo de
+        // empleo, que se comprueban en `add()` cuando ya hay `WorkDate`.
+        if (! $employee instanceof EmployeeSnapshot || ! ManualEntryEligibility::of($employee)->admitsEntries()) {
             throw EmployeeCannotBeClocked::withUuid($command->employeeUuid);
         }
 
@@ -110,6 +118,10 @@ final readonly class AddShiftEntryHandler
         $horizon = ManualEntryHorizon::at($performedAt, $settings->manualEntryFutureToleranceMinutes);
         $horizon->assertWorkDateAllowed($workDate);
         $horizon->assertTimesAllowed($times);
+
+        // RN-14: a una persona de baja solo se le completan jornadas entre su
+        // alta y su cese. Antes de tocar el agregado: un `422` no escribe nada.
+        ManualEntryEligibility::of($employee)->assertWorkDateAllowed($workDate);
 
         // La jornada puede no existir todavia: un alta retroactiva de un dia en
         // el que la persona no ficho nada la crea.

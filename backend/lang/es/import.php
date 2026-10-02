@@ -61,6 +61,9 @@ return [
             .'que la de esta línea se ignora. Si de verdad hay que cambiarla, hazlo en la ficha de la '
             .'persona: mueve el punto desde el que cuenta la conservación de su registro.',
 
+        'employee_terminated' => 'Esta persona está dada de baja. La importación no modifica su ficha ni la '
+            .'vuelve a dar de alta; quita la línea del fichero.',
+
         'unknown_column' => 'La columna «:column» no se usa. Si esperabas que sí, revisa cómo se llama: '
             .'los nombres que el sistema reconoce están en la guía de configuración, y puedes añadir los '
             .'tuyos sin tocar nada del programa.',

@@ -31,7 +31,8 @@ use InvalidArgumentException;
  * que hay en la base de datos.
  *
  * **Sin reloj.** Ninguna fecha se calcula aqui (regla dura 2): la fecha de cese
- * la decide quien da la baja y entra ya resuelta.
+ * la decide quien da la baja, y «hoy» lo resuelve el caso de uso; las dos entran
+ * ya resueltas.
  */
 final readonly class Employee
 {
@@ -107,10 +108,13 @@ final readonly class Employee
             throw new InvalidArgumentException('Una baja necesita su fecha de cese (RF-GP-03).');
         }
 
-        if ($this->terminatedAt !== null && $this->terminatedAt < $this->dateOnly($this->hiredAt)) {
+        // Fechas civiles comparadas como `Y-m-d`, nunca como instantes: un alta
+        // creada a las 18:30 o en otra zona no deja fuera un cese de ese dia.
+        // `Y-m-d` ordena igual como cadena que como fecha.
+        if ($this->terminatedAt !== null && self::civilDate($this->terminatedAt) < self::civilDate($this->hiredAt)) {
             throw InvalidEmploymentPeriod::terminationBeforeHiring(
-                $this->terminatedAt->format('Y-m-d'),
-                $this->hiredAt->format('Y-m-d'),
+                self::civilDate($this->terminatedAt),
+                self::civilDate($this->hiredAt),
             );
         }
     }
@@ -153,18 +157,44 @@ final readonly class Employee
      * horario se conserva cuatro anos (RL-02) y una inspeccion puede pedir el de
      * alguien que ya no trabaja en el hotel.
      *
+     * **La baja es efectiva al registrarla** (RN-14, 2.2.0): por eso la fecha de
+     * cese no puede ser posterior a hoy. Se admite hoy y el pasado hasta el alta
+     * incluida. Si el alta aun no ha llegado —una contratacion que se cae antes
+     * de empezar—, la unica fecha admitida es la del alta: una baja sin efectos.
+     *
+     * Las dos fechas son **civiles** y se comparan como `Y-m-d`, nunca como
+     * instantes. `$today` es la fecha civil del centro en el instante en que el
+     * servidor recibe la baja, y la resuelve el caso de uso con el puerto `Clock`
+     * y la zona del centro (regla dura 2): aqui no se calcula ninguna fecha. El
+     * huso del objeto no importa, solo su fecha.
+     *
      * @throws EmployeeAlreadyTerminated
      * @throws InvalidEmploymentPeriod
      */
-    public function offboard(DateTimeImmutable $terminatedAt): self
+    public function offboard(DateTimeImmutable $terminatedOn, DateTimeImmutable $today): self
     {
         if ($this->status === EmploymentStatus::TERMINATED) {
             throw EmployeeAlreadyTerminated::withUuid($this->uuid);
         }
 
+        $termination = self::civilDate($terminatedOn);
+        $hiring = self::civilDate($this->hiredAt);
+        $todayDate = self::civilDate($today);
+
+        if ($hiring > $todayDate) {
+            // El alta todavia no ha llegado: la persona no ha trabajado ningun
+            // dia, y la unica baja coherente es la que no deja ninguno.
+            if ($termination !== $hiring) {
+                throw InvalidEmploymentPeriod::notStartedTerminationMustBeHireDate($termination, $hiring);
+            }
+        } elseif ($termination > $todayDate) {
+            throw InvalidEmploymentPeriod::terminationAfterToday($termination, $todayDate);
+        }
+
+        // Anterior al alta lo rechaza el constructor, con su propio texto.
         return $this->with(
             status: EmploymentStatus::TERMINATED,
-            terminatedAt: $this->dateOnly($terminatedAt),
+            terminatedAt: $terminatedOn->setTime(0, 0),
             terminatedAtGiven: true,
         );
     }
@@ -280,12 +310,12 @@ final readonly class Employee
     }
 
     /**
-     * `hired_at` y `terminated_at` son fechas civiles, no instantes: se comparan
-     * a medianoche para que una baja el mismo dia del alta no se rechace por
-     * unas horas.
+     * `hired_at`, `terminated_at` y «hoy» son fechas civiles, no instantes: se
+     * comparan por su `Y-m-d` para que ni la hora ni el huso del objeto cambien
+     * el resultado. Una baja el mismo dia del alta no se rechaza por unas horas.
      */
-    private function dateOnly(DateTimeImmutable $date): DateTimeImmutable
+    private static function civilDate(DateTimeImmutable $date): string
     {
-        return $date->setTime(0, 0);
+        return $date->format('Y-m-d');
     }
 }

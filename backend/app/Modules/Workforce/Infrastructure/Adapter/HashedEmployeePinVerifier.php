@@ -233,6 +233,23 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
      * objeto para guardarlo rompe esa promesa sin ganar nada. Tampoco se toca
      * `updated_at`: el PIN de la persona no ha cambiado, solo su hash.
      *
+     * ## Oportunista: fuera del orden de candados, y por diseño (ADR-046 §4, A-4)
+     *
+     * Esta en el camino del fichaje por PIN y del acceso al portal, asi que no
+     * puede esperar a una operacion de gestion que tenga la ficha, ni pisar el
+     * hash nuevo de un restablecimiento con el del PIN viejo. Por eso:
+     *
+     * - el hash nuevo se calcula **antes** de tocar la fila;
+     * - la fila se toma con `FOR NO KEY UPDATE SKIP LOCKED` en la misma
+     *   sentencia: si otra transaccion la tiene, no se espera;
+     * - se escribe solo si el hash guardado sigue siendo **el que se leyo**;
+     * - si la fila estaba ocupada o el hash ya cambio, no hace nada y no lo dice:
+     *   el rehash se repetira en el siguiente acierto;
+     * - **nunca toma la cadena** de `audit_log`.
+     *
+     * Una sola sentencia y no un `SELECT` seguido de un `UPDATE`: sin transaccion
+     * alrededor, el candado de la fila dura lo que dura la sentencia.
+     *
      * @param  array{uuid: string, status: string, pin_hash: string|null}  $employee
      */
     private function rehashIfStale(array $employee, #[SensitiveParameter] string $pin): void
@@ -245,9 +262,14 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
             return;
         }
 
-        DB::table('employees')
-            ->where('uuid', $employee['uuid'])
-            ->update(['pin_hash' => Hash::make($pin)]);
+        $rehashed = Hash::make($pin);
+
+        DB::update(
+            'UPDATE employees SET pin_hash = ? '
+            .'WHERE id = (SELECT id FROM employees WHERE uuid = ? AND pin_hash = ? FOR NO KEY UPDATE SKIP LOCKED) '
+            .'AND pin_hash = ?',
+            [$rehashed, $employee['uuid'], $hash, $hash],
+        );
     }
 
     /**

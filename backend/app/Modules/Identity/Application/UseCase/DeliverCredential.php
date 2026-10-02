@@ -16,7 +16,7 @@ use App\Modules\Identity\Domain\Exception\CredentialNotPrintedYet;
 use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
-use Illuminate\Database\ConnectionInterface;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 
 /**
  * Registrar la entrega de una tarjeta, con fecha y responsable (RF-QR-06).
@@ -48,7 +48,7 @@ final readonly class DeliverCredential
         private EmployeeRegistry $employees,
         private IdentityEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
         private CredentialTelemetry $telemetry,
     ) {}
 
@@ -80,11 +80,20 @@ final readonly class DeliverCredential
                 'employee_uuid' => $employeeUuid,
                 'delivered_by_user_id' => $command->deliveredByUserId,
             ],
-            fn (): CredentialView => $this->connection->transaction(function () use (
+            // CADENA PRIMERO, DESPUES LA FILA (ADR-046 §1.2). Hasta la 2.2.0 se
+            // escribia la tarjeta y despues el asiento, al reves que la baja,
+            // que toma la cadena y revoca tarjetas: una entrega y una baja
+            // simultaneas cerraban un ciclo. Dentro se relee la credencial: lo
+            // leido fuera solo sirvio para el `404` y para la traza.
+            fn (): CredentialView => $this->serialized->withChainLock(function () use (
                 $command,
-                $delivered,
+                $credential,
                 $employeeUuid,
             ): CredentialView {
+                $current = $this->credentials->findByUuid($credential->uuid) ?? $credential;
+
+                $delivered = $current->deliveredBy($command->deliveredByUserId, $this->clock->now());
+
                 if (! $this->credentials->markDelivered($delivered)) {
                     // Cero filas afectadas: entre la lectura y este `UPDATE` otra
                     // persona de RRHH registro la misma entrega, o alguien revoco
