@@ -1827,6 +1827,26 @@ jobs:
             wget -qO- 'http://127.0.0.1:9090/api/v1/targets' || true
           exit 1
 
+      - name: "H · Ficheros generados: genera horizon, descarga app, purga scheduler (ADR-045)"
+        # R3-PL-01, BLOQUEANTE DE LA 2.2.0. app, horizon y scheduler son tres
+        # contenedores de la misma imagen y, hasta el volumen `app-storage`, cada
+        # uno tenia su propio storage/app: la exportacion integra pedida desde el
+        # panel la escribia horizon y app respondia 404. Ninguna prueba de Pest
+        # puede verlo (un solo proceso), asi que se recorre aqui, sobre la
+        # instalacion de G: exportacion pedida por la API como la pide el panel
+        # (admin con 2FA) y descargada con su huella; recreacion de los tres;
+        # informe de retencion leido en el anfitrion y la consulta de
+        # operacion.md §3.1 tal cual; un ZIP borrado a mano (asiento
+        # file_missing y metrica); caducidad (la purga de scheduler lo borra);
+        # `kill` de horizon a mitad (el .work-<uuid> queda y la purga lo
+        # retira); doctor.sh en verde y storage/app app:app 700 en la imagen.
+        #
+        # Los plazos se acortan, no se esperan: el detalle esta en la cabecera
+        # del script. Medido en docker-in-docker: 70-80 s.
+        env:
+          KQ_E2E_APP_IMAGE: kronoqr/app:ci
+        run: bash .github/scripts/generated-files-e2e.sh paquete-g
+
       - name: Trivy sobre la imagen de borde recien construida (bloqueante)
         # Por `make`, como TODAS las demas invocaciones de Trivy del
         # repositorio. Este paso llamaba al binario `trivy` a pelo y el runner
@@ -2096,6 +2116,15 @@ jobs:
           grep -q '^users=1$' conteos-antes.txt
           compose exec -T app php artisan compliance:verify-audit-chain
 
+      - name: "Informes de retencion de la version anterior, con trampas, para el rescate de U1 (ADR-045)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Hasta la 2.1.0 vivian dentro del contenedor y una actualizacion los
+        # borraba. Se siembran en el `scheduler` anterior dos validos, un enlace,
+        # otro nombre y uno anidado, y en BACKUP_PATH/reports/retention un enlace
+        # plantado desde `app` hacia un fichero de root (F1). Lo que se exige
+        # esta en la cabecera de .github/scripts/retention-rescue-e2e.sh.
+        run: bash .github/scripts/retention-rescue-e2e.sh seed paquete-anterior
+
       - name: "U1 · Actualizar: salida 0, version nueva, datos intactos e informe en el servidor"
         if: steps.anterior.outputs.skip != 'true'
         run: |
@@ -2152,6 +2181,16 @@ jobs:
           test "$(sudo stat -c '%a' paquete-nuevo/.env)" = "600"
           sudo grep -q "^IMAGE_TAG=${new}$" paquete-nuevo/.env
           test "$(sudo stat -c '%u' paquete-nuevo/certs/tls.key)" = "101"
+
+      - name: "U1 · Rescate de los informes de retencion: solo los validos, 0640, sin seguir enlaces"
+        if: steps.anterior.outputs.skip != 'true'
+        # `docker compose cp` de verdad sobre el `scheduler` PARADO de la version
+        # anterior. Medido en docker-in-docker (2.1.0 -> 2.2.0): instalar,
+        # sembrar y actualizar, 2 min 20 s; la comprobacion, 1 s.
+        run: |
+          set -euo pipefail
+          grep -q 'Informes de retencion de scheduler' paquete-nuevo/salida-u1.log
+          bash .github/scripts/retention-rescue-e2e.sh check paquete-nuevo
 
       - name: "U1 · Ningun secreto en la salida, el informe ni el detalle"
         if: steps.anterior.outputs.skip != 'true'
