@@ -16,8 +16,10 @@ namespace Tests\Support\Time;
  * midio fue Xdebug, no el informe (CI-COB-01).
  *
  * Por eso el presupuesto se AFIRMA cuando no hay un driver de cobertura activo
- * —el job ④ de Integracion, el ③ de Unitarias y cualquier `make test` local—
- * y se ANUNCIA, sin afirmarlo, cuando lo hay: la prueba sigue comprobando su
+ * —el job ④ de Integracion, la pasada de Pest del ③ (Unit, Contract, Feature)
+ * y cualquier `make test` local— y se ANUNCIA, sin afirmarlo, en `make
+ * coverage` y en la mutacion (`make mutate`, `make mutate-changed`), que
+ * corren con Xdebug en modo `coverage`. La prueba sigue comprobando su
  * resultado y solo deja de comprobar el reloj. No es un `skip`: la puerta
  * `INTEGRATION_MAX_SKIPPED` cuenta omitidas y la prueba no lo es.
  *
@@ -40,36 +42,53 @@ final class WallClockBudget
      */
     public static function expectBelow(float $seconds, float $budget, string $requirement): void
     {
-        $notice = self::check($seconds, $budget, $requirement, self::coverageDriver());
+        self::announce(self::check($seconds, $budget, $requirement, self::coverageDriver()));
+    }
 
-        if ($notice !== null) {
-            fwrite(STDERR, $notice."\n");
-        }
+    /**
+     * Lo mismo en milisegundos, para los microbenchmarks: en segundos, una
+     * media de 0,05 ms se escribiria «0.000 s» y el mensaje no diria nada.
+     */
+    public static function expectBelowMilliseconds(float $milliseconds, float $budget, string $requirement): void
+    {
+        self::announce(self::check($milliseconds, $budget, $requirement, self::coverageDriver(), 'ms'));
     }
 
     /**
      * La decision, con el driver explicito para poder probarla sin depender
      * de con que se lance la suite. Devuelve el anuncio cuando NO ha afirmado.
      */
-    public static function check(float $seconds, float $budget, string $requirement, ?string $coverageDriver): ?string
-    {
+    public static function check(
+        float $measured,
+        float $budget,
+        string $requirement,
+        ?string $coverageDriver,
+        string $unit = 's',
+    ): ?string {
         if ($coverageDriver === null) {
-            expect($seconds)->toBeLessThan(
+            expect($measured)->toBeLessThan(
                 $budget,
-                \sprintf('%s: %.3f s medidos, presupuesto %.1f s.', $requirement, $seconds, $budget),
+                \sprintf('%s: %.3f %s medidos, presupuesto %.1f %s.', $requirement, $measured, $unit, $budget, $unit),
             );
 
             return null;
         }
 
+        // Una prueba cuya unica asercion es el reloj —un microbenchmark— se
+        // quedaria sin ninguna y PHPUnit la marcaria «risky». Que la medida sea
+        // un tiempo y no basura si se puede comprobar con cualquier driver.
+        expect($measured)->toBeGreaterThanOrEqual(0.0);
+
         return \sprintf(
-            '%s %s sin afirmar bajo cobertura (%s): %.3f s medidos, presupuesto %.1f s. '
-            .'Se afirma en las suites sin instrumentacion (job ④ de la CI y local).',
+            '%s %s sin afirmar bajo cobertura (%s): %.3f %s medidos, presupuesto %.1f %s. '
+            .'Se afirma en las pasadas sin cobertura ni mutacion (jobs ③ y ④ de la CI y local).',
             self::NOTICE_PREFIX,
             $requirement,
             $coverageDriver,
-            $seconds,
+            $measured,
+            $unit,
             $budget,
+            $unit,
         );
     }
 
@@ -88,5 +107,12 @@ final class WallClockBudget
         }
 
         return null;
+    }
+
+    private static function announce(?string $notice): void
+    {
+        if ($notice !== null) {
+            fwrite(STDERR, $notice."\n");
+        }
     }
 }

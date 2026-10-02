@@ -35,11 +35,23 @@ it('anuncia sin afirmar cuando hay un driver de cobertura activo', function (str
 
     expect($anuncio)->toBe(
         '[presupuesto-de-reloj] RNF-P-05 sin afirmar bajo cobertura ('.$driver.'): 5.880 s medidos, '
-        .'presupuesto 5.0 s. Se afirma en las suites sin instrumentacion (job ④ de la CI y local).'
+        .'presupuesto 5.0 s. Se afirma en las pasadas sin cobertura ni mutacion (jobs ③ y ④ de la CI y local).'
     );
 })->with(['xdebug', 'pcov'])->group('RNF-M-01');
 
 it('anuncia bajo cobertura aunque la medida quepa en el presupuesto', function (): void {
     expect(WallClockBudget::check(0.5, 5.0, 'RNF-P-05', 'xdebug'))
         ->toStartWith(WallClockBudget::NOTICE_PREFIX.' RNF-P-05 sin afirmar');
+})->group('RNF-M-01');
+
+it('falla en milisegundos y lo dice en milisegundos cuando no hay cobertura', function (): void {
+    expect(fn (): ?string => WallClockBudget::check(0.62, 0.5, 'RF-PD-15', null, 'ms'))
+        ->toThrow(ExpectationFailedException::class, 'RF-PD-15: 0.620 ms medidos, presupuesto 0.5 ms.');
+})->group('RNF-M-01');
+
+it('anuncia en milisegundos bajo cobertura', function (): void {
+    expect(WallClockBudget::check(0.62, 0.5, 'RF-PD-15', 'xdebug', 'ms'))->toBe(
+        '[presupuesto-de-reloj] RF-PD-15 sin afirmar bajo cobertura (xdebug): 0.620 ms medidos, '
+        .'presupuesto 0.5 ms. Se afirma en las pasadas sin cobertura ni mutacion (jobs ③ y ④ de la CI y local).'
+    );
 })->group('RNF-M-01');
