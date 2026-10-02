@@ -236,7 +236,8 @@
       "action": "Dar de baja",
       "confirmAction": "Confirmar la baja",
       "alreadyTerminated": "Esta persona está de baja desde el {date}. Su historial sigue disponible.",
-      "dateHint": "Nunca anterior a la fecha de alta. Desde ella empieza a contar la retención del registro.",
+      "dateHint": "No puede ser posterior a hoy ni anterior a la fecha de alta. Desde ella empieza a contar la retención del registro.",
+      "dateInFuture": "La fecha de cese no puede ser posterior a hoy ({today}). Regístrala el último día, cuando haya terminado su turno.",
       "reasonLabel": "Motivo del cese",
       "reasonHint": "Queda en el registro de auditoría. Sin datos de salud ni juicios de valor.",
       "reasonPlaceholder": "Elige un motivo",
@@ -249,8 +250,12 @@
         "other": "Otro motivo"
       },
       "consequenceCredential": "Su tarjeta QR queda revocada y deja de servir en el quiosco.",
-      "consequenceScan": "A partir de la fecha de cese no puede fichar.",
+      "consequenceScan": "La baja es efectiva al confirmarla, también si la fecha de cese es hoy: deja de poder fichar en el acto y no tiene vuelta atrás. Si tiene un turno abierto, se cierra con una corrección.",
       "consequenceHistory": "No se borra nada: su registro horario se conserva y se puede seguir consultando."
+    },
+    "conflict": {
+      "offboard": "La ficha ha cambiado mientras la tenías abierta, por ejemplo porque otra persona ya la ha dado de baja. Se ha recargado: revisa su estado y vuelve a intentarlo si procede.",
+      "updateTerminated": "Esta persona ya está dada de baja y su ficha no se puede modificar. Se ha recargado con su estado actual."
     },
     "announce": {
       "results": "Resultados de la plantilla: {count}.",

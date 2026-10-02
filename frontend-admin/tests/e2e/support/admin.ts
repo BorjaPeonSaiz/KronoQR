@@ -3766,6 +3766,47 @@ export async function stubManagementApi(
           await json(route, 200, target)
           return
         }
+        case `POST /api/v1/employees/${EMPLOYEE_UUID}/offboard`: {
+          // RN-14: la baja es efectiva al registrarla y su fecha de cese no es
+          // posterior a hoy, que es la fecha civil del CENTRO. El doble la
+          // calcula en la zona del centro, como el servidor (ADR-040).
+          const body = request.postDataJSON() as { terminated_at: string }
+          const today = new Intl.DateTimeFormat('en-CA', {
+            timeZone: SITE.timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date())
+          const target = employeesState.find((candidate) => candidate.uuid === EMPLOYEE_UUID)
+
+          if (target === undefined) {
+            await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Empleado no encontrado')
+            return
+          }
+
+          if (target.status === 'terminated') {
+            await problem(route, 409, 'urn:kronoqr:problem:conflict', 'Conflicto')
+            return
+          }
+
+          if (body.terminated_at > today) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Peticion no valida',
+              {
+                terminated_at: [
+                  `La fecha de cese (${body.terminated_at}) es posterior a hoy (${today}). La baja es efectiva al registrarla; regístrala el último día, cuando haya terminado su turno.`,
+                ],
+              },
+            )
+            return
+          }
+
+          Object.assign(target, { status: 'terminated', terminated_at: body.terminated_at })
+          await json(route, 200, target)
+          return
+        }
         case `GET /api/v1/employees/${EMPLOYEE_UUID}/contracts`:
           await json(route, 200, { data: contractsState })
           return

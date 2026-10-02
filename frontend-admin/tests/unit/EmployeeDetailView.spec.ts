@@ -1,3 +1,4 @@
+import type { DOMWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CredentialRowActions from '@/features/credentials/CredentialRowActions.vue'
 import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
@@ -20,6 +21,7 @@ import {
   createTestPinia,
   jsonResponse,
   mountView,
+  problemResponse,
   settle,
   stubFetch,
 } from './support/harness'
@@ -497,5 +499,143 @@ describe('EmployeeDetailView', () => {
     await settle(1)
 
     expect(patchBody).toEqual({ teleworking: true })
+  })
+  // --- Baja: fecha de cese (RF-GP-03, RN-14) ----------------------------------
+  describe('baja con fecha de cese', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    function dateInput(wrapper: Wrapper): DOMWrapper<HTMLInputElement> {
+      return wrapper.find<HTMLInputElement>('[role="dialog"] input[type="date"]')
+    }
+
+    it('el max del campo es hoy en la zona del centro, no la fecha UTC ni la del navegador', async () => {
+      // 22:30 UTC del 2 de octubre: en Madrid (CEST) ya es el 3 a las 00:30.
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T22:30:00Z') })
+
+      const wrapper = await mountDetail(employee())
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+
+      expect(dateInput(wrapper).attributes('max')).toBe('2026-10-03')
+      expect(dateInput(wrapper).element.value).toBe('2026-10-03')
+    })
+
+    it('no deja confirmar una fecha posterior a hoy y lo dice en el campo', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+
+      const wrapper = await mountDetail(employee())
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+      await wrapper.find('[role="dialog"] select').setValue('endOfContract')
+      await dateInput(wrapper).setValue('2026-10-31')
+      await settle(1)
+
+      expect(
+        buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('disabled'),
+      ).toBeDefined()
+      expect(dateInput(wrapper).attributes('aria-invalid')).toBe('true')
+    })
+
+    it('el texto de la baja dice que es efectiva al confirmarla, también hoy', async () => {
+      const wrapper = await mountDetail(employee())
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+
+      const text = wrapper.find('[role="dialog"]').text()
+
+      expect(text).toContain('efectiva al confirmarla')
+      expect(text).not.toContain('A partir de la fecha de cese')
+    })
+
+    it('pinta el 422 del servidor en el campo de fecha, accesible', async () => {
+      const message = 'La fecha de cese (2026-10-31) es posterior a hoy (2026-10-02).'
+      const wrapper = await mountDetail(employee(), (url, init) =>
+        url.endsWith('/offboard') && init?.method === 'POST'
+          ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+              errors: { terminated_at: [message] },
+            })
+          : null,
+      )
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+      await wrapper.find('[role="dialog"] select').setValue('endOfContract')
+      await buttonWith(wrapper, es.employees.offboard.confirmAction).trigger('click')
+      await settle()
+
+      const input = dateInput(wrapper)
+      const describedBy = (input.attributes('aria-describedby') ?? '').split(' ')
+      const errorParagraph = describedBy
+        .map((id) => wrapper.find(`[id="${id}"]`))
+        .find((candidate) => candidate.exists() && candidate.text() === message)
+
+      expect(input.attributes('aria-invalid')).toBe('true')
+      expect(errorParagraph).toBeDefined()
+      // El dialogo sigue abierto para corregir la fecha.
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
+    })
+
+    it('un 409 al dar de baja cierra el dialogo, lo explica y recarga la ficha', async () => {
+      let reads = 0
+      const wrapper = await mountDetail(employee(), (url, init) => {
+        if (url.endsWith('/offboard') && init?.method === 'POST') {
+          return problemResponse(409, 'urn:kronoqr:problem:conflict')
+        }
+
+        if (url === `/api/v1/employees/${EMPLOYEE_UUID}`) {
+          reads += 1
+        }
+
+        return null
+      })
+      const readsBefore = reads
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+      await wrapper.find('[role="dialog"] select').setValue('endOfContract')
+      await buttonWith(wrapper, es.employees.offboard.confirmAction).trigger('click')
+      await settle()
+
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="employee-conflict"]').text()).toBe(
+        es.employees.conflict.offboard,
+      )
+      expect(reads).toBeGreaterThan(readsBefore)
+    })
+
+    it('un 409 al modificar una ficha dada de baja lo explica y recarga la ficha', async () => {
+      let reads = 0
+      const wrapper = await mountDetail(employee(), (url, init) => {
+        if (init?.method === 'PATCH') {
+          return problemResponse(409, 'urn:kronoqr:problem:conflict')
+        }
+
+        if (url === `/api/v1/employees/${EMPLOYEE_UUID}`) {
+          reads += 1
+        }
+
+        return null
+      })
+      const readsBefore = reads
+
+      await buttonWith(wrapper, es.common.edit).trigger('click')
+      await settle(1)
+      await wrapper.find('[data-test="teleworking-checkbox"]').setValue(true)
+      await wrapper.find('#employee-edit-form').trigger('submit')
+      await settle(1)
+      await buttonWith(wrapper, es.employees.detail.confirmAction).trigger('click')
+      await settle()
+
+      expect(wrapper.find('[data-test="employee-conflict"]').text()).toBe(
+        es.employees.conflict.updateTerminated,
+      )
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+      expect(reads).toBeGreaterThan(readsBefore)
+    })
   })
 })

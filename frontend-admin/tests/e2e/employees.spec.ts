@@ -6,6 +6,7 @@
 // vigente el dia anterior al inicio del nuevo, como el servidor. La restriccion
 // de no solapar vigencias y la autorizacion real se prueban en el backend.
 import type { Page } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import type { Employee, EmploymentContract } from '@/shared/api/types'
 import { EMPLOYEE, EMPLOYEE_UUID, logIn, logInAsManager, stubManagementApi } from './support/admin'
@@ -304,5 +305,53 @@ test(
     await expect(page).not.toHaveURL(/employees/)
     await expect(page.getByTestId('teleworking-checkbox')).toHaveCount(0)
     await expect(page.getByLabel('Esta persona teletrabaja')).toHaveCount(0)
+  },
+)
+
+test(
+  'la baja con fecha de cese futura se rechaza en el campo y con la fecha de hoy se confirma',
+  { tag: ['@RF-GP-03', '@RN-14'] },
+  async ({ page }) => {
+    await stubManagementApi(page)
+    await logIn(page)
+    await page.goto(`/employees/${EMPLOYEE_UUID}`)
+
+    await page.getByRole('button', { name: 'Dar de baja' }).click()
+
+    const dialog = page.getByRole('dialog', { name: 'Baja' })
+    const date = dialog.getByLabel(/Fecha de cese/)
+
+    await expect(dialog.getByText(/efectiva al confirmarla/)).toBeVisible()
+    await dialog.getByLabel(/Motivo del cese/).selectOption('endOfContract')
+
+    // Una fecha futura (en el centro) no se admite: el campo lo dice y no se puede confirmar.
+    await date.fill('2999-12-31')
+    await expect(date).toHaveAttribute('aria-invalid', 'true')
+    await expect(dialog.getByText(/no puede ser posterior a hoy/).first()).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Confirmar la baja' })).toBeDisabled()
+
+    const results = await new AxeBuilder({ page })
+      .include('[role="dialog"]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+    const blocking = results.violations.filter(
+      (violation) => violation.impact === 'critical' || violation.impact === 'serious',
+    )
+
+    expect(
+      blocking,
+      blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
+    ).toEqual([])
+
+    // Con la fecha de hoy (la del centro, que es el `max` del campo) la baja se confirma.
+    const today = await date.getAttribute('max')
+
+    expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    await date.fill(today ?? '')
+    await expect(date).not.toHaveAttribute('aria-invalid', 'true')
+    await dialog.getByRole('button', { name: 'Confirmar la baja' }).click()
+
+    await expect(dialog).toBeHidden()
+    await expect(page.getByText(/Esta persona está de baja desde/)).toBeVisible()
   },
 )

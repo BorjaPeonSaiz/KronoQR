@@ -236,7 +236,8 @@
       "action": "Offboard employee",
       "confirmAction": "Confirm the offboarding",
       "alreadyTerminated": "This person has been offboarded since {date}. Their history is still available.",
-      "dateHint": "Never earlier than the hire date. Record retention starts counting from it.",
+      "dateHint": "It cannot be later than today or earlier than the hiring date. The record retention period starts counting from it.",
+      "dateInFuture": "The termination date cannot be later than today ({today}). Record it on the last day, once the shift is over.",
       "reasonLabel": "Reason for leaving",
       "reasonHint": "It goes into the audit log. No health data and no value judgements.",
       "reasonPlaceholder": "Choose a reason",
@@ -249,8 +250,12 @@
         "other": "Another reason"
       },
       "consequenceCredential": "Their QR card is revoked and stops working at the kiosk.",
-      "consequenceScan": "From the termination date on, they cannot clock in.",
+      "consequenceScan": "Offboarding takes effect as soon as you confirm it, even if the termination date is today: the person can no longer clock in right away and it cannot be undone. An open shift is closed with a correction.",
       "consequenceHistory": "Nothing is deleted: their time records are kept and can still be consulted."
+    },
+    "conflict": {
+      "offboard": "The record changed while you had it open, for example because someone else already offboarded this person. It has been reloaded: check its status and try again if it still applies.",
+      "updateTerminated": "This person has already been offboarded and their record can no longer be modified. It has been reloaded with its current status."
     },
     "announce": {
       "results": "Workforce results: {count}.",

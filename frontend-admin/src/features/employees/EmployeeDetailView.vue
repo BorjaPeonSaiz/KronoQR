@@ -12,6 +12,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatCivilDate, formatInstantWithZone, todayInZone } from '@kronoqr/web-kit/datetime'
+import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -269,7 +270,15 @@ async function confirmUpdate(): Promise<void> {
     confirmingEdit.value = false
     editing.value = false
   } catch (caught) {
-    saveError.value = caught
+    if (isApiError(caught) && caught.status === 409) {
+      // Una ficha dada de baja no se modifica (ADR-046): la baja entro primero.
+      // Se cierra la edicion, se dice por que y se recarga para ver el estado real.
+      confirmingEdit.value = false
+      editing.value = false
+      await reportConflict('employees.conflict.updateTerminated')
+    } else {
+      saveError.value = caught
+    }
   } finally {
     saving.value = false
   }
@@ -343,12 +352,51 @@ async function onPinDeliveredFromDialog(): Promise<void> {
   announce(t('pin.announce.delivered'))
 }
 
+// --- Conflicto (409) ---------------------------------------------------------
+
+/** Clave del mensaje de un 409 reciente; la ficha se ha recargado ya. */
+const conflictKey = ref<string | null>(null)
+
+async function reportConflict(key: string): Promise<void> {
+  conflictKey.value = key
+  announce(t(key))
+  await invalidate()
+}
+
 // --- Baja --------------------------------------------------------------------
 
 const offboarding = ref(false)
 const offboardBusy = ref(false)
 const offboardError = ref<unknown>(null)
 const terminatedAt = ref('')
+/**
+ * Hoy en la zona del CENTRO (ADR-040), fijado al abrir el dialogo: ni la fecha
+ * del navegador ni la UTC. Es el `max` del campo y solo una ayuda: la barrera es
+ * el servidor (RN-14). Vacio mientras el centro no ha cargado: sin zona no se
+ * inventa una fecha, y el servidor sigue rechazando una posterior a hoy.
+ */
+const offboardToday = ref('')
+/** Errores del servidor para `terminated_at` (422), ya traducidos por el servidor. */
+const terminatedAtServerErrors = ref<readonly string[]>([])
+const terminatedAtInput = ref<HTMLInputElement | null>(null)
+
+const terminatedAtIsFuture = computed(
+  () =>
+    offboardToday.value !== '' &&
+    terminatedAt.value !== '' &&
+    terminatedAt.value > offboardToday.value,
+)
+
+const terminatedAtErrors = computed<readonly string[]>(() => [
+  ...(terminatedAtIsFuture.value
+    ? [
+        t('employees.offboard.dateInFuture', {
+          today: formatCivilDate(offboardToday.value, locale.value),
+        }),
+      ]
+    : []),
+  ...terminatedAtServerErrors.value,
+])
 const offboardReasonKey = ref('')
 const offboardReasonText = ref('')
 
@@ -390,10 +438,13 @@ const offboardChanges = computed<Change[]>(() => [
 ])
 
 function startOffboarding(): void {
-  terminatedAt.value = todayInZone(timezone.value)
+  offboardToday.value = site.value === undefined ? '' : todayInZone(site.value.timezone)
+  terminatedAt.value = offboardToday.value
+  terminatedAtServerErrors.value = []
   offboardReasonKey.value = ''
   offboardReasonText.value = ''
   offboardError.value = null
+  conflictKey.value = null
   offboarding.value = true
 }
 
@@ -410,7 +461,18 @@ async function confirmOffboard(): Promise<void> {
     announce(t('employees.announce.offboarded'))
     offboarding.value = false
   } catch (caught) {
-    offboardError.value = caught
+    const dateErrors = isApiError(caught) ? (caught.fieldErrors['terminated_at'] ?? []) : []
+
+    if (isApiError(caught) && caught.status === 409) {
+      offboarding.value = false
+      await reportConflict('employees.conflict.offboard')
+    } else if (isApiError(caught) && caught.status === 422 && dateErrors.length > 0) {
+      // El mensaje ya viene traducido por el servidor y se pinta en su campo.
+      terminatedAtServerErrors.value = dateErrors
+      terminatedAtInput.value?.focus()
+    } else {
+      offboardError.value = caught
+    }
   } finally {
     offboardBusy.value = false
   }
@@ -436,6 +498,15 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
     <RouterLink :to="{ name: 'employees' }" class="text-kq-primary-strong underline">
       {{ t('employees.detail.backToList') }}
     </RouterLink>
+
+    <p
+      v-if="conflictKey !== null"
+      role="alert"
+      data-test="employee-conflict"
+      class="mt-4 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
+    >
+      {{ t(conflictKey) }}
+    </p>
 
     <LoadingPanel v-if="isPending" :label="t('employees.detail.loading')" class="mt-4" />
     <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
@@ -786,7 +857,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
       size="wide"
       :busy="offboardBusy"
       :error="offboardError"
-      :confirm-disabled="terminatedAt === '' || offboardReason === ''"
+      :confirm-disabled="terminatedAt === '' || terminatedAtIsFuture || offboardReason === ''"
       @cancel="offboarding = false"
       @confirm="confirmOffboard"
     >
@@ -795,15 +866,21 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
           v-slot="field"
           :label="t('employees.fields.terminatedAt')"
           :hint="t('employees.offboard.dateHint')"
+          :errors="terminatedAtErrors"
           required
         >
           <input
             :id="field.id"
+            ref="terminatedAtInput"
             v-model="terminatedAt"
             type="date"
             required
+            :max="offboardToday === '' ? undefined : offboardToday"
+            :min="employee?.hired_at"
             :class="inputClass"
+            :aria-invalid="field.invalid ? 'true' : undefined"
             :aria-describedby="field.describedBy"
+            @input="terminatedAtServerErrors = []"
           />
         </FormField>
 
