@@ -118,7 +118,7 @@ Lo que verás, y lo que significa cada paso:
 | 4 · Migraciones | Relanza PostgreSQL y Redis con las imágenes nuevas y aplica las migraciones **versión a versión**, con un punto de control entre cada una: `PUNTO DE CONTROL 2.2.0 alcanzado: 3 migraciones aplicadas en 4 s` | Igual |
 | 5 · Arranque y verificación | Arranca la aplicación nueva **sin borde** y la comprueba desde dentro: sondas, versión, cadena de auditoría, restricciones de RN-01 y RN-02. Solo si todo pasa arranca Nginx y los procesos de fondo, y vuelve a comprobar por loopback | Sigue encolando hasta que Nginx vuelve |
 | 6 · Vuelta atrás | Solo si el 4 o el 5 fallan: restaura la copia del paso 3 y relanza la versión anterior, sin preguntar (§5) | Igual: nada de lo encolado se pierde |
-| 7 · Informe | `BACKUP_PATH/reports/update-<fecha>.log`, siempre, también tras una vuelta atrás. Al lado, `update-<fecha>.detalle.log` con la salida cruda (migraciones, copia, restauración, logs): **dueño uid 1000, modo `0600`, puede llevar datos personales**. **Aparecen al terminar** (o al salir por cualquier camino), **no mientras corre**: durante la ejecución se escriben en un directorio temporal de root y al final se publican como el uid de la aplicación con `setpriv`. Si no se pueden publicar, el script lo avisa y dice en qué directorio temporal se quedaron: cópialos a `reports/` antes de reiniciar el servidor | — |
+| 7 · Informe | `BACKUP_PATH/reports/update-<fecha>.log`, siempre, también tras una vuelta atrás (uid 1000, `0640`). **El detalle** `update-<fecha>.detalle.log` (salida cruda de migraciones, copia, restauración y logs; **puede llevar datos personales**) **no se publica ahí**: vive solo en `/var/log/kronoqr/`, `root:root 0600` en un directorio `0700`, junto a una copia local del informe. El informe aparece en `reports/` **al terminar** (o al salir por cualquier camino), **no mientras corre**: durante la ejecución se escribe en `/var/log/kronoqr/` y al final se publica como el uid de la aplicación con `setpriv` (paquete `util-linux`; la fase 1 avisa si falta). Si no se puede publicar, el script lo avisa y el informe queda a salvo en `/var/log/kronoqr/`: cópialo con la orden que indica el aviso | — |
 
 **Por qué el mantenimiento va antes de la copia**, y no al revés como lo
 enumera el plan: un fichaje aceptado *entre* la copia y el mantenimiento
@@ -231,8 +231,8 @@ Cuando la versión anterior responda, genera el paquete de diagnóstico y abre u
 caso al fabricante adjuntando el **informe** de `BACKUP_PATH/reports/`
 (`update-<fecha>.log`). **El paquete va anonimizado por defecto** y el informe
 no lleva secretos ni datos personales. El **detalle técnico**
-(`update-<fecha>.detalle.log`) es otra cosa: es del uid 1000 con modo `0600`
-(ya no de root: así se publica sin seguir enlaces), lleva la salida
+(`update-<fecha>.detalle.log`) es otra cosa: es de root con modo `0600` y está en
+`/var/log/kronoqr/` (no en `BACKUP_PATH`, que escribe la aplicación), lleva la salida
 cruda de migraciones, copia, restauración y logs, y **puede contener datos
 personales** (un `DETAIL: Failing row contains (...)` de PostgreSQL, por
 ejemplo). Revísalo antes de enviarlo, y envíalo solo si el fabricante lo pide.

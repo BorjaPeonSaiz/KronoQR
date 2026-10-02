@@ -49,10 +49,13 @@
 #      resto de servicios.
 #   6  Si algo falla en el 4 o en el 5: restauracion de la copia y relanzamiento
 #      de la version anterior, sin intervencion humana.
-#   7  Informe en BACKUP_PATH/reports/, siempre, tambien tras una vuelta atras.
-#      DOS FICHEROS: el informe (resumen, sin secretos ni datos personales, para
-#      el paquete de diagnostico) y el detalle tecnico (salida cruda de
-#      migraciones, copia y logs; solo root; puede llevar datos personales).
+#   7  Informe, siempre, tambien tras una vuelta atras. DOS FICHEROS EN SITIOS
+#      DISTINTOS: el informe (resumen, sin secretos ni datos personales, para el
+#      paquete de diagnostico) se publica en BACKUP_PATH/reports/ como uid 1000
+#      0640, y el detalle tecnico (salida cruda de migraciones, copia y logs;
+#      puede llevar datos personales) vive SOLO en /var/log/kronoqr/
+#      (KRONOQR_LOG_DIR), root:root 0600, fuera del alcance del runtime. Una
+#      copia del informe queda tambien ahi.
 #
 # USO
 #   ./update.sh                    actualiza a la version de este paquete
@@ -929,39 +932,74 @@ resolve_failed_step() {
 # tambien tras una vuelta atras: el fabricante no tiene acceso al servidor
 # (ADR-016), asi que si el informe no queda aqui no queda en ninguna parte.
 #------------------------------------------------------------------------------
-# POR QUE SE ESCRIBE EN UN DIRECTORIO TEMPORAL Y SE PUBLICA AL FINAL (ADR-045,
-# hallazgo F1 de la revision del bloque 16). `reports/` es de 1000 y el runtime
-# lo escribe, y este script corre como root. Truncar, añadir (`>>`), `chmod` o
-# `chown` por RUTA sobre `reports/update-<UTC>.log` —un nombre predecible— sigue
-# un enlace simbolico plantado desde el contenedor: cambiaria el dueño y el modo
-# de, por ejemplo, /etc/shadow, o añadiria texto a un fichero de root. Y como el
-# runtime puede renombrar lo que hay en `reports/` en cualquier momento, no
-# basta con crearlo bien: hay que no volver a tocarlo por ruta como root.
+# DONDE VIVE CADA FICHERO Y POR QUE (ADR-045, hallazgo F1 de la revision del
+# bloque 16 y G1 de seguridad). Este script corre como root y `reports/` es de
+# 1000: lo escribe el runtime y puede renombrar lo que hay en cualquier
+# momento. Truncar, añadir (`>>`), `chmod` o `chown` por RUTA como root sobre un
+# nombre predecible dentro de `reports/` sigue un enlace simbolico plantado desde
+# el contenedor (cambiaria el dueño de /etc/shadow, o añadiria texto a un fichero
+# de root). Por eso root NO escribe ahi: lo que escribe vive en un directorio de
+# root, y a `reports/` solo se COPIA, como uid 1000.
 #
-# Asi que durante la ejecucion el informe y el detalle viven en un directorio de
-# root 0700 (`mktemp -d`), fuera de cualquier sitio que escriba el runtime, y
-# `publish_reports` los copia al final COMO EL UID DE LA APLICACION y sin
-# sobrescribir (lib/fs.sh, `kq_publish_as_app`): el dueño sale del uid, el modo
-# de la mascara y no hay operacion posterior por ruta. Contrapartida declarada:
-# el informe aparece en `reports/` al terminar (o al salir por cualquier
-# camino), no mientras corre, y el detalle —que antes era de root 0600— pasa a
-# 1000 0600. Con un runtime comprometido el detalle ya no es confidencial frente
-# a el, que de todos modos puede leer la base de datos. Cierra el vector de
-# escalada a root; la confidencialidad del detalle queda dentro de A3-R2
-# (doc 07). Sin `setpriv` el informe se queda en el directorio temporal y se
-# dice donde.
+#   · EL DETALLE (salida cruda de migraciones, copia y logs: puede llevar datos
+#     personales, regla dura 21) NO se publica en `BACKUP_PATH/reports`. Vive en
+#     `${KQ_UPDATE_LOG_DIR}` (por defecto /var/log/kronoqr), root:root 0700, como
+#     `update-<UTC>.detalle.log`, root:root 0600: «solo root» es una de sus dos
+#     defensas y no se cede al uid 1000, que en un Ubuntu tipico es el primer
+#     usuario humano del servidor. Se eligio ese sitio porque (1) es
+#     PERSISTENTE y sobrevive a un reinicio, a diferencia de /tmp; (2) esta fuera
+#     de BACKUP_PATH y de cualquier volumen o bind mount, asi que ningun
+#     contenedor lo alcanza; (3) no depende del directorio del paquete, que
+#     cambia en cada version (el paquete nuevo pasa a ser la instalacion y el
+#     anterior queda como vuelta atras); (4) es donde un administrador busca
+#     registros y se rota con logrotate. Es un directorio de root: crearlo y
+#     escribir ahi por ruta es seguro.
+#   · EL INFORME (resumen, sin secretos ni datos personales) se escribe primero
+#     en ese mismo directorio —`update-<UTC>.log`, root 0600, copia local que no
+#     se pierde si la publicacion falla— y `publish_reports` lo copia al final a
+#     `BACKUP_PATH/reports/update-<UTC>.log` COMO EL UID DE LA APLICACION y sin
+#     sobrescribir (lib/fs.sh, `kq_publish_as_app`): el dueño sale del uid, el
+#     modo de la mascara (0640) y no hay operacion posterior por ruta. Lo lee el
+#     paquete de diagnostico (`UpdatesCollector`). Contrapartida declarada: en
+#     `reports/` aparece al terminar (o al salir por cualquier camino), no
+#     mientras corre. Sin `setpriv` o con un nombre ya ocupado el informe se
+#     queda en el directorio de root y el script lo dice.
+KQ_UPDATE_LOG_DIR="${KRONOQR_LOG_DIR:-/var/log/kronoqr}"
+
+# Directorio de registros de root. 0 si existe, es de quien ejecuta el script, no
+# es un enlace y queda 0700; 1 si no se puede.
+ensure_update_log_dir() {
+  local dir="${KQ_UPDATE_LOG_DIR}"
+  [ ! -L "${dir}" ] || return 1
+  if [ ! -d "${dir}" ]; then
+    [ ! -e "${dir}" ] || return 1
+    install -d -m 0700 -- "${dir}" 2>/dev/null || return 1
+  fi
+  [ -d "${dir}" ] && [ ! -L "${dir}" ] || return 1
+  # Tiene que ser de quien ejecuta (root): un directorio ajeno no es de fiar.
+  [ "$(stat -c '%u' -- "${dir}" 2>/dev/null)" = "$(id -u)" ] || return 1
+  chmod 0700 -- "${dir}" 2>/dev/null || return 1
+  return 0
+}
+
 open_report() {
   local dir="${CFG_BACKUP_PATH}/reports"
 
+  ensure_update_log_dir || return 1
   # Si no existe, la crea el uid 1000 (lib/fs.sh); un enlace colgante se rechaza.
   kq_ensure_app_dir "${dir}" || return 1
-  STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kq-update.XXXXXX" 2>/dev/null)" || return 1
-  REPORT_WORK="${STAGE_DIR}/report.log"
-  DETAIL_WORK="${STAGE_DIR}/detail.log"
-  : >"${REPORT_WORK}" || return 1
-  : >"${DETAIL_WORK}" || return 1
+
+  REPORT_WORK="${KQ_UPDATE_LOG_DIR}/update-${STARTED_UTC}.log"
+  DETAIL_WORK="${KQ_UPDATE_LOG_DIR}/update-${STARTED_UTC}.detalle.log"
+  # Creacion exclusiva (O_EXCL) y 0600; el directorio es de root.
+  (
+    umask 077
+    set -C
+    : >"${REPORT_WORK}" && : >"${DETAIL_WORK}"
+  ) 2>/dev/null || return 1
+  STAGE_DIR="${KQ_UPDATE_LOG_DIR}"
   REPORT_FILE="${dir}/update-${STARTED_UTC}.log"
-  DETAIL_FILE="${dir}/update-${STARTED_UTC}.detalle.log"
+  DETAIL_FILE="${DETAIL_WORK}"
 
   report_append "$(kq_text u_report_title)"
   report_append "$(kq_format u_report_started "${STARTED_UTC}")"
@@ -972,27 +1010,22 @@ open_report() {
   return 0
 }
 
-# Copia el informe y el detalle a `reports/` (ver open_report). Idempotente.
+# Copia el informe a `reports/` (ver open_report). Idempotente. El detalle NO se
+# publica: se queda en `${KQ_UPDATE_LOG_DIR}`.
 publish_reports() {
   [ -n "${STAGE_DIR}" ] || return 0
   local status=0
 
   kq_publish_as_app "${REPORT_WORK}" "${REPORT_FILE}" 027 2>/dev/null || status=$?
+  STAGE_DIR=""
   if [ "${status}" -eq 0 ]; then
-    kq_publish_as_app "${DETAIL_WORK}" "${DETAIL_FILE}" 077 2>/dev/null || status=$?
-  fi
-
-  if [ "${status}" -eq 0 ]; then
-    rm -rf "${STAGE_DIR}"
-    STAGE_DIR=""
     return 0
   fi
 
   # No se pudo publicar (sin `setpriv`, o ya existia el nombre): el informe NO
-  # se pierde, queda donde esta y se dice.
-  kq_msg check_warn "$(kq_format u_report_not_published "${STAGE_DIR}")" >&2
-  kq_msg fix "$(kq_format u_f_report_not_published "${CFG_BACKUP_PATH}/reports" "${STAGE_DIR}")" >&2
-  STAGE_DIR=""
+  # se pierde, queda en el directorio de root y se dice.
+  kq_msg check_warn "$(kq_format u_report_not_published "${REPORT_WORK}")" >&2
+  kq_msg fix "$(kq_format u_f_report_not_published "${REPORT_WORK}" "${REPORT_FILE}")" >&2
   return 1
 }
 
@@ -1327,6 +1360,20 @@ check_backup_config() {
     kq_msg u_req_summary_fail "${CHECKS_FAILED}" "${SOURCE_VERSION:-?}"
     err "$(kq_format exit_line "${KQ_EXIT_REQUIREMENTS}" "$(kq_exit_name "${KQ_EXIT_REQUIREMENTS}")")"
     exit "${KQ_EXIT_REQUIREMENTS}"
+  fi
+
+  if ensure_update_log_dir; then
+    check_pass "$(kq_format u_c_log_dir "${KQ_UPDATE_LOG_DIR}")"
+  else
+    check_fail "$(kq_format u_c_log_dir "${KQ_UPDATE_LOG_DIR}")" \
+      "$(kq_format u_f_log_dir "${KQ_UPDATE_LOG_DIR}" "${KQ_UPDATE_LOG_DIR}")"
+    return 0
+  fi
+
+  if command -v setpriv >/dev/null 2>&1; then
+    check_pass "$(kq_text u_c_setpriv)"
+  else
+    check_warn "$(kq_text u_c_setpriv)" "$(kq_format u_w_setpriv "${KQ_UPDATE_LOG_DIR}")"
   fi
 
   if open_report; then

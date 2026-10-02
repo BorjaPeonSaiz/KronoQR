@@ -560,10 +560,11 @@ it('update.sh no abre su informe a traves de un reports plantado como enlace', f
         .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; STARTED_UTC=20261002T020000Z; '
         .'SOURCE_VERSION=2.1.0; TARGET_VERSION=2.2.0; CURRENT_DIR=/srv/a; PACKAGE_DIR=/srv/b; '
         .'estado=0; open_report || estado=$?; echo "@@ abierto=${estado}"; publish_reports || true',
-        ['TMPDIR' => $dir.'/tmp'],
+        ['TMPDIR' => $dir.'/tmp', 'KRONOQR_LOG_DIR' => $dir.'/registro'],
     );
 
     expect($proceso->getOutput())->not->toContain('@@ abierto=0')
+        ->and($proceso->getOutput())->toMatch('/@@ abierto=[1-9]/')
         ->and(ficherosGeneradosListado($dir.'/objetivo'))->toBe([]);
 
     ficherosGeneradosBorrar($dir);
@@ -728,24 +729,47 @@ function ficherosGeneradosInformeDeActualizacion(Closure $plantar): array
         .'SOURCE_VERSION=2.1.0; TARGET_VERSION=2.2.0; CURRENT_DIR=/srv/kronoqr-2.1.0; PACKAGE_DIR=/srv/kronoqr-2.2.0; '
         .'open_report; report_append "linea del informe"; detail_note "linea del detalle"; '
         .'estado=0; publish_reports || estado=$?; echo "@@ publicado=${estado}"',
-        ['TMPDIR' => $dir.'/tmp'],
+        ['TMPDIR' => $dir.'/tmp', 'KRONOQR_LOG_DIR' => $dir.'/registro'],
     );
 
     return ['dir' => $dir, 'informe' => $dir.'/copias/reports/update-20261002T020000Z', 'proceso' => $proceso];
 }
 
-it('update.sh publica su informe 0640 y su detalle 0600 al terminar', function (): void {
+it('update.sh publica su informe 0640 en reports y deja el detalle solo de su dueño en su directorio', function (): void {
+    // El detalle puede llevar datos personales (regla dura 21): NO se publica en
+    // BACKUP_PATH/reports, que escribe el runtime. Vive en el directorio de
+    // registros de root (0700), como update-<UTC>.detalle.log 0600, junto a una
+    // copia local del informe.
     ['dir' => $dir, 'informe' => $informe, 'proceso' => $proceso] = ficherosGeneradosInformeDeActualizacion(
         static fn (string $dir): bool => true,
     );
+    $registro = $dir.'/registro/update-20261002T020000Z';
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
         ->and($proceso->getOutput())->toContain('@@ publicado=0')
         ->and((string) file_get_contents($informe.'.log'))->toContain('linea del informe')
-        ->and((string) file_get_contents($informe.'.detalle.log'))->toContain('linea del detalle')
         ->and(ficherosGeneradosModo($informe.'.log'))->toBe('640')
-        ->and(ficherosGeneradosModo($informe.'.detalle.log'))->toBe('600')
-        ->and(ficherosGeneradosListado($dir.'/tmp'))->toBe([]);
+        ->and(file_exists($informe.'.detalle.log'))->toBeFalse()
+        ->and(ficherosGeneradosListado($dir.'/copias/reports'))->toBe(['update-20261002T020000Z.log'])
+        ->and((string) file_get_contents($registro.'.detalle.log'))->toContain('linea del detalle')
+        ->and(ficherosGeneradosModo($registro.'.detalle.log'))->toBe('600')
+        ->and((string) file_get_contents($registro.'.log'))->toContain('linea del informe')
+        ->and(ficherosGeneradosModo($registro.'.log'))->toBe('600')
+        ->and(ficherosGeneradosModo($dir.'/registro'))->toBe('700');
+
+    ficherosGeneradosBorrar($dir);
+})->group('RF-PD-10');
+
+it('update.sh no usa un directorio de registros que sea un enlace o que no sea suyo', function (): void {
+    $dir = ficherosGeneradosDirectorio('update-registro-ajeno');
+    mkdir($dir.'/objetivo', 0o755);
+    symlink($dir.'/objetivo', $dir.'/registro');
+
+    $proceso = ficherosGeneradosBash('update.sh', 'KQ_UPDATE_LOG_DIR='.escapeshellarg($dir.'/registro').'; '
+        .'estado=0; ensure_update_log_dir || estado=$?; echo "@@ registro=${estado}"');
+
+    expect($proceso->getOutput())->toContain('@@ registro=1')
+        ->and(ficherosGeneradosListado($dir.'/objetivo'))->toBe([]);
 
     ficherosGeneradosBorrar($dir);
 })->group('RF-PD-10');
@@ -753,7 +777,7 @@ it('update.sh publica su informe 0640 y su detalle 0600 al terminar', function (
 it('update.sh no sigue un enlace plantado con el nombre de su informe, y no pierde el informe', function (): void {
     // El mismo patron de F1 en `open_report`: el nombre lleva la hora de inicio
     // y reports/ es del uid 1000. Con el enlace en su sitio, la victima no
-    // cambia y el informe se queda en el temporal de root, con aviso.
+    // cambia y el informe se queda en el directorio de registros de root, con aviso.
     ['dir' => $dir, 'informe' => $informe, 'proceso' => $proceso] = ficherosGeneradosInformeDeActualizacion(
         static function (string $dir): void {
             file_put_contents($dir.'/victima', 'contenido de la victima');
@@ -761,16 +785,15 @@ it('update.sh no sigue un enlace plantado con el nombre de su informe, y no pier
             symlink($dir.'/victima', $dir.'/copias/reports/update-20261002T020000Z.log');
         },
     );
-    $temporales = glob($dir.'/tmp/kq-update.*/report.log') ?: [];
+    $copiaLocal = $dir.'/registro/update-20261002T020000Z.log';
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
-        ->and($proceso->getOutput().$proceso->getErrorOutput())->toContain('El informe de la actualizacion no se ha podido copiar a reports/.')
+        ->and($proceso->getOutput().$proceso->getErrorOutput())->toContain('El informe de la actualizacion no se ha podido copiar a BACKUP_PATH/reports.')
         ->and($proceso->getOutput())->toContain('@@ publicado=1')
         ->and(file_get_contents($dir.'/victima'))->toBe('contenido de la victima')
         ->and(ficherosGeneradosModo($dir.'/victima'))->toBe('600')
         ->and(is_link($informe.'.log'))->toBeTrue()
-        ->and($temporales)->toHaveCount(1)
-        ->and((string) file_get_contents($temporales[0] ?? '/dev/null'))->toContain('linea del informe');
+        ->and((string) file_get_contents($copiaLocal))->toContain('linea del informe');
 
     ficherosGeneradosBorrar($dir);
 })->group('RF-PD-10');
