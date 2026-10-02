@@ -659,7 +659,7 @@ return [
                     ."  docker compose exec app ls -l :path\n"
                     ."and to delete one:\n"
                     ."  docker compose exec app rm :path/<file>\n"
-                    .'Details: docs/runbooks/requerimiento-inspeccion.md, section 6.',
+                    .'Details: docs/runbooks/requerimiento-inspeccion.md, section 7.',
             ],
         ],
 

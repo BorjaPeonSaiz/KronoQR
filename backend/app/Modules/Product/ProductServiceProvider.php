@@ -52,6 +52,7 @@ use App\Modules\Product\Application\UseCase\RecordSupportAccessUseHandler;
 use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
 use App\Modules\Product\Application\UseCase\RunDoctorHandler;
 use App\Modules\Product\Application\UseCase\SendTelemetryHandler;
+use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Domain\Model\DataExport as DataExportModel;
 use App\Modules\Product\Domain\Model\SupportGrant as SupportGrantModel;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
@@ -951,6 +952,18 @@ final class ProductServiceProvider extends ServiceProvider
                 temporaries: GeneratedFileAreas::dataExportArchiveTemporaries(Config::string('product.data_export_path')),
                 staleAfterSeconds: max(1, Config::integer('product.data_export_stale_after_seconds', 3600)),
                 retentionDays: max(1, Config::integer('product.data_export_retention_days', 7)),
+            ),
+        );
+
+        // El barrido del paquete de diagnostico (ADR-045 §g, C4). Raiz y plazo
+        // se leen aqui, en el borde (regla dura 14).
+        $this->app->bind(
+            SweepExpiredDiagnosticsBundles::class,
+            static fn (Application $app): SweepExpiredDiagnosticsBundles => new SweepExpiredDiagnosticsBundles(
+                files: $app->make(GeneratedFileHousekeeping::class),
+                clock: $app->make(Clock::class),
+                bundles: GeneratedFileAreas::diagnostics(Config::string('product.diagnostics_storage_path')),
+                retentionDays: max(1, Config::integer('product.diagnostics_retention_days', 7)),
             ),
         );
     }

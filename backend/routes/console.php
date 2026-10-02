@@ -507,6 +507,13 @@ $retentionDryRun->onFailure(LogScheduledCommandFailure::of('compliance:apply-ret
  * claro— y el temporal de `ZipArchive`, a las 2 × `stale_after`. Todo dentro de
  * PRODUCT_DATA_EXPORT_PATH, a un nivel, por patron exacto y sin seguir enlaces.
  *
+ * Y BARRE LOS PAQUETES DE DIAGNOSTICO de mas de PRODUCT_DIAGNOSTICS_RETENTION_DAYS
+ * dias (ADR-045 §g, C4): solo `kronoqr-diagnostics-*.json` de primer nivel en
+ * PRODUCT_DIAGNOSTICS_PATH. Antes solo los borraba el siguiente
+ * `product:diagnostics`, y el ultimo desaparecia al recrear el contenedor; con
+ * el volumen persistente, un paquete con datos personales se quedaria para
+ * siempre si nadie generara otro.
+ *
  * `withoutOverlapping` por si una purga de muchos ficheros grandes se solapara
  * con la siguiente hora; repetirla es seguro —marcar una fila ya purgada no
  * cambia nada— asi que es higiene, no correccion.

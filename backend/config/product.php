@@ -130,8 +130,9 @@ return [
     'diagnostics_personal_data_max_period_days' => (int) env('PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS', 31),
 
     /*
-     * Dias que un paquete de diagnostico se queda en el disco antes de que
-     * `product:diagnostics` lo borre al generar el siguiente (RL-19).
+     * Dias que un paquete de diagnostico se queda en el disco antes de que lo
+     * borre la pasada horaria del `scheduler` (`product:export-all --purge`) o el
+     * siguiente `product:diagnostics`, lo que llegue antes (RL-19).
      *
      * UN PAQUETE ES MATERIAL CADUCADO EN CUANTO SE ENVIA. El anonimizado ocupa
      * sitio sin aportar nada; el que se pidio con `--with-personal-data` es una
@@ -144,10 +145,17 @@ return [
      * 7 dias dan margen de sobra para el ciclo real de una incidencia —generar,
      * inspeccionar, enviar, comentar— sin dejar nada criando polvo un mes.
      *
-     * El borrado ocurre al ejecutar el comando y NO en una tarea programada: una
-     * tarea que borrase ficheros del cliente por su cuenta seria una sorpresa.
-     * Quien no vuelva a generar nunca conserva su ultimo paquete, y eso es
-     * correcto: nadie ha pedido nada.
+     * HAY UNA TAREA PROGRAMADA QUE BORRA, y es una decision revisada (ADR-045
+     * §g, condicion C4). Hasta la 2.1.0 el borrado solo ocurria al generar el
+     * siguiente paquete, porque una tarea que borrase ficheros del cliente por
+     * su cuenta parecia una sorpresa; y el ultimo paquete desaparecia igualmente
+     * al recrear el contenedor en cada actualizacion. Con el volumen
+     * persistente ya no desaparece: un paquete con datos personales viviria
+     * para siempre si nadie generara otro (art. 5.1.e RGPD). La sorpresa se
+     * evita diciendolo en la guia (`operacion.md` §12.2) y en la salida de los
+     * dos comandos, no dejando de borrar. El barrido es confinado: solo
+     * `kronoqr-diagnostics-*.json` de primer nivel, sin seguir enlaces, con la
+     * edad `max(mtime, ctime)`.
      */
     'diagnostics_retention_days' => (int) env('PRODUCT_DIAGNOSTICS_RETENTION_DAYS', 7),
     /*

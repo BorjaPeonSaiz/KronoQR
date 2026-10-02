@@ -712,7 +712,7 @@ return [
                     ."  docker compose exec app ls -l :path\n"
                     ."y para borrar una:\n"
                     ."  docker compose exec app rm :path/<fichero>\n"
-                    .'Detalle: docs/runbooks/requerimiento-inspeccion.md, seccion 6.',
+                    .'Detalle: docs/runbooks/requerimiento-inspeccion.md, seccion 7.',
             ],
         ],
 

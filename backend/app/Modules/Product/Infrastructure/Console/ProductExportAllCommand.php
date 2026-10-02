@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Command\RequestDataExportCommand;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Application\UseCase\PurgeExpiredDataExportsHandler;
 use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
+use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
@@ -53,6 +54,11 @@ use Throwable;
  * nombre. Es lo que el planificador ejecuta cada hora; a mano sirve para hacer
  * sitio en el disco sin esperar.
  *
+ * En la misma pasada barre los paquetes de diagnostico de mas de
+ * `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` dias (ADR-045 §g, C4): es la pasada
+ * horaria de los ficheros del modulo, y un paquete pedido con datos personales
+ * no puede esperar a que alguien genere el siguiente para desaparecer.
+ *
  * ## Codigos de salida
  *
  * | Codigo | Significado |
@@ -76,9 +82,10 @@ final class ProductExportAllCommand extends Command
         RequestDataExportHandler $request,
         GenerateDataExportHandler $generate,
         PurgeExpiredDataExportsHandler $purge,
+        SweepExpiredDiagnosticsBundles $diagnostics,
     ): int {
         if ($this->option('purge') === true) {
-            return $this->purge($purge);
+            return $this->purge($purge, $diagnostics);
         }
 
         try {
@@ -150,9 +157,10 @@ final class ProductExportAllCommand extends Command
         return self::SUCCESS;
     }
 
-    private function purge(PurgeExpiredDataExportsHandler $purge): int
+    private function purge(PurgeExpiredDataExportsHandler $purge, SweepExpiredDiagnosticsBundles $diagnostics): int
     {
         $report = $purge->handle();
+        $bundles = $diagnostics->handle();
 
         $this->line($report->purged === 0
             ? 'No hay ninguna exportacion integra caducada que purgar.'
@@ -185,6 +193,12 @@ final class ProductExportAllCommand extends Command
             $this->line('ATENCION: '.$report->missing.' exportaciones han perdido su fichero antes de caducar. '
                 .'Queda asiento «data_export.file_missing» en la auditoria. Si no acabas de restaurar una '
                 .'copia, averigua quien lo borro o se lo llevo.');
+        }
+
+        if ($bundles > 0) {
+            // Solo la cifra: ni nombres de fichero ni rutas (regla dura 21).
+            $this->line('Borrados '.$bundles.' paquetes de diagnostico que superaban su plazo '
+                .'(PRODUCT_DIAGNOSTICS_RETENTION_DAYS).');
         }
 
         return self::SUCCESS;
