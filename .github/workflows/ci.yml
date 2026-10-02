@@ -1611,6 +1611,10 @@ jobs:
           # Permisos del .env (§7.7) y del archivo de WAL (uid de PostgreSQL).
           test "$(sudo stat -c '%a' .env)" = "600"
           test "$(sudo stat -c '%u:%g:%a' /var/backups/fichaje/wal)" = "70:70:750"
+          # ADR-045: informes de retencion junto a las copias, con el uid de la
+          # aplicacion, y el volumen de ficheros generados creado por Compose.
+          test "$(sudo stat -c '%u:%g:%a' /var/backups/fichaje/reports/retention)" = "1000:1000:750"
+          test -n "$(docker volume ls -q --filter name=^kronoqr_app-storage$)"
 
       - name: "C · Las dos sondas responden lo que dice el contrato"
         run: |
