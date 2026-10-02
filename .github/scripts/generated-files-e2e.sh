@@ -27,7 +27,8 @@
 #      fila `purged`, deja el asiento `data_export.file_missing` (con el uuid y
 #      sin ruta) y sube `generated_files_missing_total{class="data_export"}` en /metrics.
 #   5. Caducidad: con `expires_at` vencido, la pasada de `scheduler` borra el ZIP
-#      del volumen y la fila queda `purged`, SIN asiento file_missing.
+#      del volumen y la fila queda `purged`, SIN asiento file_missing. Y una fila
+#      alterada para apuntar fuera de su raiz (F3) responde 404 sin entregar nada.
 #   6. `docker compose kill horizon` a mitad de una exportacion deja su
 #      `.work-<uuid>/` en el volumen; la pasada posterior a 2 x `stale_after` lo
 #      retira y la fila queda `failed` (stale).
@@ -338,6 +339,19 @@ fi
 code="$(api GET "/api/v1/data-export/${first}/download")"
 expect_status 404 "${code}" "descarga de una exportacion caducada"
 ok "ZIP borrado, fila purged, sin asiento file_missing, descarga 404"
+
+# F3: la descarga solo entrega un fichero confinado a su raiz. Una fila
+# `completed` alterada para apuntar fuera (aqui, a un fichero que app SI puede
+# leer) responde 404 y no entrega su contenido.
+outside="$(request_export)"
+wait_export "${outside}"
+sql "UPDATE data_exports SET file_path = '/etc/passwd' WHERE uuid = '${outside}'" >/dev/null
+code="$(api GET "/api/v1/data-export/${outside}/download")"
+expect_status 404 "${code}" "descarga de una fila que apunta fuera de su raiz (F3)"
+if grep -q 'root:' "${WORK}/body"; then
+  fail "F3: la descarga ha entregado el fichero de fuera de la raiz"
+fi
+ok "una fila que apunta fuera de su raiz responde 404 sin entregar nada"
 
 # --- 6 ------------------------------------------------------------------------
 
