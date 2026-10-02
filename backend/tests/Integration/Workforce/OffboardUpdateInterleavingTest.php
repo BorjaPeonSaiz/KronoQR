@@ -11,6 +11,7 @@ use App\Modules\Workforce\Application\UseCase\PlanEmployeeImport;
 use App\Modules\Workforce\Application\UseCase\UpdateEmployeeHandler;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\Concurrency\ChildSessions;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Identity\Credentials;
 use Tests\Support\Time\FrozenTime;
@@ -55,6 +56,12 @@ const OFFBOARD_UPDATE_INTERLEAVING_EMAIL = 'persona.intercalada@example.test';
 
 beforeEach(function (): void {
     FrozenTime::at(OFFBOARD_UPDATE_INTERLEAVING_NOW);
+});
+
+afterEach(function (): void {
+    // Bloque 17: ninguna sesion de otro proceso sobrevive a la prueba; si
+    // quedara alguna, llenaria `max_connections` para la siguiente.
+    ChildSessions::waitUntilGone();
 });
 
 /**

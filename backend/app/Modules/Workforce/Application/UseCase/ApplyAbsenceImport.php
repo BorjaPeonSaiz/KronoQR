@@ -68,6 +68,7 @@ final readonly class ApplyAbsenceImport
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private ConnectionInterface $connection,
+        private AbsenceEmploymentRecheck $recheck,
     ) {}
 
     public function handle(AbsenceImportReport $report, ?int $importedByUserId): AbsenceImportReport
@@ -164,6 +165,13 @@ final readonly class ApplyAbsenceImport
             // dentro el nombre de una persona (regla dura 21).
             fileSha256: $fileSha256,
         ));
+
+        // RN-14, ADR-046: la ficha de esta fila puede haberse leido antes de
+        // que la importacion tomara la cadena —la primera fila siempre—. Con la
+        // cadena ya tomada por el asiento, una baja que confirmara entre medias
+        // se ve ahora y deshace la importacion entera: se aplica lo que se
+        // reviso o nada.
+        $this->recheck->assertStillWithinEmployment($stored);
 
         return $row->appliedAs($stored->uuid);
     }

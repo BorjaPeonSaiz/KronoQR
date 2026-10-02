@@ -229,7 +229,10 @@ final class UseCaseInOtherProcess
         return 'require "vendor/autoload.php";'
             .'$app = require "bootstrap/app.php";'
             .'$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();'
-            .'fwrite(STDOUT, "\n'.self::RESULT_MARKER.'" . json_encode('.self::class.'::runHere(), JSON_THROW_ON_ERROR));';
+            .'fwrite(STDOUT, "\n'.self::RESULT_MARKER.'" . json_encode('.self::class.'::runHere(), JSON_THROW_ON_ERROR));'
+            // La sesion se cierra explicitamente antes de salir (bloque 17):
+            // ver `ChildSessions`.
+            .ChildSessions::class.'::closeAll();';
     }
 
     private static function outcomeOf(Process $process): string

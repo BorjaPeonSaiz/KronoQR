@@ -17,7 +17,6 @@ use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 use DateTimeImmutable;
-use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
 use Random\RandomException;
 use RuntimeException;
@@ -59,7 +58,7 @@ final readonly class RegisterEmployeeHandler
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private IssueEmployeePinHandler $pins,
-        private ConnectionInterface $connection,
+        private EmployeeWriteRetry $retry,
     ) {}
 
     /**
@@ -85,7 +84,7 @@ final readonly class RegisterEmployeeHandler
         // congelaria los fichajes del hotel unos 160 ms.
         $material = $command->pinMaterial ?? $this->pins->freshMaterial();
 
-        return EmployeeWriteRetry::run($this->connection, function () use ($command, $siteId, $material): RegisteredEmployee {
+        return $this->retry->run('employee.register', function () use ($command, $siteId, $material): RegisteredEmployee {
             // La insercion va antes de la cadena (ADR-046 §1.2): toma
             // `FOR KEY SHARE` sobre el centro y el departamento —filas padre— y
             // la fila nueva no la ve nadie hasta el commit.

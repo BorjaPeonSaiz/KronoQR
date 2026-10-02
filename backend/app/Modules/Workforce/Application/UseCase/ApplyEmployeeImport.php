@@ -19,7 +19,6 @@ use App\Modules\Workforce\Domain\ValueObject\ImportedEmployee;
 use App\Modules\Workforce\Domain\ValueObject\ImportOutcome;
 use App\Modules\Workforce\Domain\ValueObject\ImportReport;
 use App\Modules\Workforce\Domain\ValueObject\ImportRow;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Escribe lo que {@see PlanEmployeeImport} decidio (**RF-GP-05**, fase de
@@ -85,7 +84,7 @@ final readonly class ApplyEmployeeImport
         private PinHasher $hasher,
         private WorkforceEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private EmployeeWriteRetry $retry,
     ) {}
 
     public function handle(ImportReport $report): ImportReport
@@ -95,7 +94,7 @@ final readonly class ApplyEmployeeImport
         // endpoint pueda existir al tamaño que documenta.
         $material = $this->pinMaterialFor($report);
 
-        $applied = EmployeeWriteRetry::run($this->connection, function () use ($report, $material): array {
+        $applied = $this->retry->run('employee.import', function () use ($report, $material): array {
             // FILAS PADRE ANTES DEL PRIMER ASIENTO (ADR-046 §1.1 punto 2, §5).
             // El primer alta o modificacion toma la cadena de `audit_log` y no la
             // suelta hasta el commit; a partir de ahi, pedir una fila padre seria

@@ -152,6 +152,11 @@ final class ParallelRequests
             pcntl_waitpid($pid, $status);
         }
 
+        // El padre no sigue hasta que las sesiones de los hijos han desaparecido
+        // del servidor: la ronda siguiente, o la prueba siguiente, no puede
+        // encontrarse `max_connections` lleno (bloque 17).
+        ChildSessions::waitUntilGone();
+
         return self::collect($count, $directory);
     }
 
@@ -218,6 +223,14 @@ final class ParallelRequests
         // resultado escrito en disco— asi que no queda nada que cerrar
         // limpiamente. PostgreSQL trata la desconexion abrupta como lo que es:
         // una sesion que se va, sin efecto sobre lo ya confirmado.
+        // ANTES del SIGKILL, el hijo cierra sus sesiones de PostgreSQL
+        // (bloque 17): el servidor las libera en el acto en vez de esperar a
+        // notar el socket cerrado, que a traves del proxy de puertos de Docker
+        // de la CI tardaba lo bastante para que cientos de hijos llenaran
+        // `max_connections`. Cerrar una conexion no ejecuta ningun manejador de
+        // apagado: sigue sin haber nada que el hijo haga sobre la base del padre.
+        ChildSessions::closeAll();
+
         posix_kill(posix_getpid(), SIGKILL);
 
         exit(0);

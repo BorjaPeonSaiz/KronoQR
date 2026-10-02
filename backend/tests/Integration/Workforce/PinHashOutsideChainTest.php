@@ -12,6 +12,7 @@ use App\Modules\Workforce\Application\UseCase\PlanEmployeeImport;
 use App\Modules\Workforce\Application\UseCase\RegisterEmployeeHandler;
 use App\Modules\Workforce\Application\UseCase\ResetEmployeePinHandler;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\Concurrency\ChildSessions;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\ChainProbingPinHasher;
@@ -36,6 +37,12 @@ uses(CommittedDatabase::class);
 
 beforeEach(function (): void {
     FrozenTime::at('2026-10-02 10:00:00');
+});
+
+afterEach(function (): void {
+    // Bloque 17: ninguna sesion de otro proceso sobrevive a la prueba; si
+    // quedara alguna, llenaria `max_connections` para la siguiente.
+    ChildSessions::waitUntilGone();
 });
 
 function sondaDelPinFueraDeLaCadena(): ChainProbingPinHasher

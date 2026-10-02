@@ -16,6 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Attendance\RecordingScanMetrics;
+use Tests\Support\Concurrency\ChildSessions;
 use Tests\Support\Concurrency\ParallelRequests;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Http\Api;
@@ -45,7 +46,11 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * - ninguna persona `terminated` sin su asiento, ni con dos;
  * - **cero `40P01`**: ni en una respuesta ni en el contador de abrazos mortales
  *   de PostgreSQL (`pg_stat_database.deadlocks`), que tambien cuenta los que un
- *   caso de uso hubiera reintentado en silencio.
+ *   caso de uso hubiera reintentado en silencio. **Excepto en la tanda del alta
+ *   contra una modificacion con el mismo correo**, que es el caso conocido de
+ *   ADR-046 §1.3: ahi los abrazos mortales estan permitidos —el caso de uso los
+ *   reintenta— y lo que se exige es que ninguno llegue al cliente (ningun 5xx) y
+ *   que el correo acabe en una sola persona.
  *
  * Las tandas cubren cada camino que ADR-046 §1.2 hace pasar por el orden unico
  * (filas padre → cadena → ficha → tarjetas): modificacion, importacion, PIN
@@ -202,12 +207,29 @@ function apellidosQueElRegistroContradice(string $pedido): array
  */
 function abrazosMortalesDetectados(): int
 {
+    esperarAQueSeCierrenLosHijos();
     DB::select('SELECT pg_stat_clear_snapshot()');
 
     /** @var object{deadlocks: int} $row */
     $row = DB::selectOne('SELECT deadlocks FROM pg_stat_database WHERE datname = current_database()');
 
     return (int) $row->deadlocks;
+}
+
+/**
+ * Espera, con tope, a que no quede en esta base ninguna sesion de los procesos
+ * hijos.
+ *
+ * Un backend vuelca sus estadisticas —tambien los abrazos mortales que vio— al
+ * cerrar, y el padre llega aqui justo despues de `pcntl_waitpid`: el proceso
+ * hijo ha terminado, pero su sesion de PostgreSQL puede seguir cerrandose. Leer
+ * el contador en ese hueco daria un falso «cero 40P01» (revision del bloque 17).
+ * El tope evita colgar la suite si alguna sesion ajena se queda abierta: en ese
+ * caso se lee lo que haya.
+ */
+function esperarAQueSeCierrenLosHijos(): void
+{
+    ChildSessions::waitUntilGone();
 }
 
 /**
@@ -518,17 +540,21 @@ it('treinta altas de tramo a la vez que una baja con cese anterior: ningun tramo
         ->and(desenlacesEnLaPosicion($tanda['rondas'], 1))->toBe(['http:200' => OFFBOARD_UPDATE_RACE_ROUNDS]);
 })->group('RN-14', 'RF-PA-04', 'RL-04');
 
-it('treinta altas a la vez que una modificacion que escribe el mismo correo: nunca un 5xx y el correo es de una sola persona', function (): void {
+it('treinta altas a la vez que dos modificaciones que escriben el mismo correo: nunca un 5xx y el correo es de una sola persona', function (): void {
     // ADR-046 §1.3, caso conocido: el alta inserta el correo antes de la
     // cadena y la espera; la modificacion tiene la cadena y espera al indice
     // unico. Si PostgreSQL rompe el ciclo, el caso de uso reintenta una vez y
     // responde el 409 del correo duplicado. Los abrazos mortales no se cuentan
     // aqui: son el caso conocido, y lo que importa es que no lleguen al cliente.
+    // Tres escritores y no dos: con tres, un reintento puede volver a cruzarse,
+    // y ese segundo cruce tiene que salir como 409 (`ConcurrentEmployeeWrite`),
+    // no como 500 (revision del bloque 17, segunda pasada).
     WorkforceFixtures::site('Hotel de la carrera');
     $token = tokenDeLaCarrera();
 
     $tanda = tandaContraLaBaja(static function (int $ronda) use ($token): array {
         $persona = personaParaLaCarrera($ronda);
+        $otra = personaParaLaCarrera($ronda + 1000);
         $correo = 'compartido.'.$ronda.'@example.test';
 
         return [
@@ -540,6 +566,10 @@ it('treinta altas a la vez que una modificacion que escribe el mismo correo: nun
             ])),
             static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->patch(
                 '/api/v1/employees/'.$persona,
+                ['email' => $correo],
+            )),
+            static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->patch(
+                '/api/v1/employees/'.$otra,
                 ['email' => $correo],
             )),
         ];

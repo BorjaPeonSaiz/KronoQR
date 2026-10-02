@@ -9,6 +9,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
+use Tests\Support\Concurrency\ChildSessions;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Identity\Credentials;
 use Tests\Support\Time\FrozenTime;
@@ -41,6 +42,9 @@ beforeEach(function (): void {
 
 afterEach(function (): void {
     DB::purge('employee_lock_probe');
+    // Bloque 17: ninguna sesion de otro proceso sobrevive a la prueba; si
+    // quedara alguna, llenaria `max_connections` para la siguiente.
+    ChildSessions::waitUntilGone();
 });
 
 /**

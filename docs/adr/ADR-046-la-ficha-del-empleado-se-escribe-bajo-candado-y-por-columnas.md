@@ -128,7 +128,12 @@ evita sin pasar el alta a cadena primero, que reabre los dos ciclos de arriba. *
 transacción de fuera del alta, de la modificación y de la importación se **reintenta una vez**
 (`EmployeeWriteRetry`); el reintento encuentra confirmada a la otra y el índice responde el `409` de
 dato duplicado. Si vuelve a cruzarse, `409` `urn:kronoqr:problem:conflict` (`ConcurrentEmployeeWrite`):
-nunca un `500`. El choque con el índice del documento, que antes salía `500`, es también `409`
+nunca un `500`. El cruce se reconoce por el SQLSTATE (`40P01`, `40001`) de la excepción o de su
+causa, no por su clase: desde una transacción anidada Laravel lo entrega como
+`Illuminate\Database\DeadlockException`, con código `0`. **Cada cruce deja un `warning`** en el log
+técnico (`workforce.employee_write_concurrency`, con el caso de uso, el intento y el SQLSTATE, sin
+datos personales): un reintento silencioso escondería una regresión del orden de candados. El
+choque con el índice del documento, que antes salía `500`, es también `409`
 (`EmployeeNationalIdAlreadyTaken`).
 
 ### 2. `FOR NO KEY UPDATE`, sobre `employees` y nada más

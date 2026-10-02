@@ -14,7 +14,6 @@ use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Model\Employee;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Modificacion de la ficha de un empleado (RF-GP-01).
@@ -51,7 +50,7 @@ final readonly class UpdateEmployeeHandler
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private SerializedLedgerWrite $serialized,
-        private ConnectionInterface $connection,
+        private EmployeeWriteRetry $retry,
     ) {}
 
     /**
@@ -59,7 +58,7 @@ final readonly class UpdateEmployeeHandler
      */
     public function handle(UpdateEmployeeCommand $command): ?Employee
     {
-        return EmployeeWriteRetry::run($this->connection, function () use ($command): ?Employee {
+        return $this->retry->run('employee.update', function () use ($command): ?Employee {
             if ($command->departmentGiven && $command->departmentId !== null) {
                 $this->parentRows->shareDepartments([$command->departmentId]);
             }

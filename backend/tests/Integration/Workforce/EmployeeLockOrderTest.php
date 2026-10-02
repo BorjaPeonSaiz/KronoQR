@@ -9,6 +9,7 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Attendance\AttendanceFixtures;
+use Tests\Support\Concurrency\ChildSessions;
 use Tests\Support\Concurrency\UseCaseInOtherProcess;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Identity\Credentials;
@@ -49,6 +50,9 @@ beforeEach(function (): void {
 afterEach(function (): void {
     DB::purge('lock_order_chain_holder');
     DB::purge('lock_order_probe');
+    // Bloque 17: ninguna sesion de otro proceso sobrevive a la prueba; si
+    // quedara alguna, llenaria `max_connections` para la siguiente.
+    ChildSessions::waitUntilGone();
 });
 
 function sesionDelOrdenDeCandados(string $nombre): ConnectionInterface

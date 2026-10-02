@@ -3,11 +3,17 @@
 declare(strict_types=1);
 
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Workforce\Application\UseCase\EmployeeWriteRetry;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\DeadlockException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Mockery\MockInterface;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Observability\RecordingLogger;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -122,3 +128,37 @@ it('responde 409 y no 500 a un documento de identidad que ya es de otra persona'
 
     expect(DB::table('employees')->count())->toBe(1);
 })->group('RF-GP-01', 'RL-08');
+
+it('responde 409 conflict, y no 500, si la modificacion se cruza dos veces seguidas con otra escritura', function (): void {
+    // ADR-046 §1.3: el reintento vuelve a cruzarse. El cruce llega como Laravel
+    // lo entrega desde la transaccion anidada —`DeadlockException`, codigo 0,
+    // con el SQLSTATE en la causa—, igual que en produccion.
+    $contexto = contextoDelConflictoDeBaja();
+    $persona = WorkforceFixtures::employee($contexto['site']);
+    $causa = new class('SQLSTATE[40P01]: deadlock detected') extends PDOException
+    {
+        public function __construct(string $message)
+        {
+            parent::__construct($message);
+            $this->code = '40P01';
+        }
+    };
+    $cruce = new DeadlockException('deadlock detected', 0, new QueryException('pgsql', 'UPDATE employees', [], $causa));
+    /** @var ConnectionInterface&MockInterface $conexion */
+    $conexion = Mockery::mock(ConnectionInterface::class);
+    $conexion->allows('transactionLevel')->andReturn(0);
+    $conexion->allows('transaction')->andThrow($cruce);
+    $log = new RecordingLogger;
+    app()->instance(EmployeeWriteRetry::class, new EmployeeWriteRetry($conexion, $log));
+
+    Api::as($contexto['token'])
+        ->patch('/api/v1/employees/'.$persona, ['email' => 'cruzado@hotel.example'])
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+
+    // Dos avisos, uno por cruce, sin el correo ni el nombre de nadie.
+    expect($log->lines)->toHaveCount(2)
+        ->and(json_encode($log->lines, JSON_THROW_ON_ERROR))->not->toContain('cruzado')
+        ->and(json_encode($log->lines, JSON_THROW_ON_ERROR))->not->toContain('Persona')
+        ->and(array_keys($log->lines[0]['context']))->toBe(['use_case', 'attempt', 'sqlstate', 'retried']);
+})->group('RF-GP-01', 'RL-04');
