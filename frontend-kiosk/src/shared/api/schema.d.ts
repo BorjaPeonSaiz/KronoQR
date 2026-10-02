@@ -1267,6 +1267,14 @@ export interface paths {
          *     con consecuencias —revoca la credencial y cierra el computo (RN-14)— y
          *     tiene su propio endpoint, `POST /employees/{uuid}/offboard`. Este
          *     `PATCH` solo alterna entre `active` y `suspended`.
+         *
+         *     **Una ficha dada de baja no se modifica** (`409`). Una modificacion y
+         *     una baja de la misma persona que llegan a la vez se aplican una detras
+         *     de otra, nunca entrelazadas ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md)):
+         *     o la modificacion entra primero y la baja despues, o la baja entra
+         *     primero y la modificacion responde `409`. **Ninguna escritura deshace
+         *     una baja**, y el asiento `employee.updated` describe siempre el cambio
+         *     que de verdad se aplico.
          */
         patch: operations["updateEmployee"];
         trace?: never;
@@ -1305,6 +1313,34 @@ export interface paths {
          *     (RN-14)». Sus sesiones abiertas del portal se cierran. Un escaneo
          *     posterior de su tarjeta recibe el mismo rechazo generico que un codigo
          *     inexistente (regla dura 17).
+         *
+         *     **La baja es efectiva en el momento en que se registra**, sea cual sea
+         *     `terminated_at`, y **tambien el mismo dia del cese**: registrada a las
+         *     10:00 con `terminated_at` de hoy, la persona ya no ficha a las 15:00.
+         *     Por eso se registra cuando la persona ha terminado su ultimo turno. Si
+         *     tenia un turno abierto, su salida se rechaza y el turno queda abierto
+         *     para que se cierre con una correccion (RF-PA-04, RF-PR-01).
+         *
+         *     **`terminated_at` no puede ser posterior a hoy** (RN-14, decision del
+         *     propietario de 02-10-2026). «Hoy» es la **fecha civil del centro**
+         *     (`Site.timezone`, ADR-040) en el instante en que el servidor recibe la
+         *     peticion, no la fecha UTC ni la del navegador: a las 00:30 del dia 3
+         *     en el centro, el 3 ya se admite aunque en UTC aun sea el 2. Una fecha
+         *     posterior responde `422` con el detalle en `errors.terminated_at`, **no
+         *     cambia nada y no deja asiento**, como cualquier otro `422`. Tampoco
+         *     puede ser anterior a la fecha de alta (`422`, mismo campo). Hacia atras
+         *     no hay mas limite: una baja que se registra dias despues de producirse
+         *     es el caso normal, y los tramos que la persona fichara despues de esa
+         *     fecha se conservan tal cual (regla dura 5).
+         *
+         *     **No hay baja programada en esta version**: un fin de contrato futuro
+         *     se registra el ultimo dia, al terminar el turno. Es de la 2.3.0.
+         *
+         *     **Bajas anteriores a la 2.2.0 con fecha de cese futura.** Una
+         *     instalacion que viene de la 2.1.0 puede tener fichas `terminated` con
+         *     `terminated_at` posterior a hoy. No se migran ni se reactivan: se
+         *     devuelven tal cual, y esa persona no ficha desde que se registro su
+         *     baja.
          */
         post: operations["offboardEmployee"];
         delete?: never;
@@ -6349,7 +6385,10 @@ export interface components {
             /**
              * Format: date
              * @description Fecha de cese. Obligatoria en cuanto el estado es `terminated`: sin
-             *     ella, la retencion de RL-02 no sabe cuando empieza a contar.
+             *     ella, la retencion de RL-02 no sabe cuando empieza a contar. Desde
+             *     la 2.2.0 nunca es posterior a la fecha en que se registro la baja
+             *     (RN-14); una ficha dada de baja con la 2.1.0 puede traer una fecha
+             *     futura, y se devuelve tal cual.
              */
             terminated_at: string | null;
             /** @example es */
@@ -6533,8 +6572,12 @@ export interface components {
         OffboardEmployeeRequest: {
             /**
              * Format: date
-             * @description Fecha de cese, **nunca anterior a la de alta**. Es el dato desde el
-             *     que cuenta la retencion de RL-02.
+             * @description Fecha de cese, **nunca anterior a la de alta ni posterior a hoy**
+             *     (RN-14). «Hoy» es la fecha civil del centro (`Site.timezone`) en el
+             *     momento en que el servidor recibe la peticion; una fecha futura
+             *     responde `422` en este campo. Hoy mismo se admite. Es el dato desde
+             *     el que cuenta la retencion de RL-02. La baja es efectiva al
+             *     registrarla, no en esta fecha.
              */
             terminated_at: string;
             /**
@@ -11097,6 +11140,13 @@ export interface components {
              *     fichero entero. `hired_at_not_updated` es un aviso de fila y no la
              *     impide. Los demas rechazan la fila que los lleva.
              *
+             *     **`employee_terminated`** (2.2.0): la fila corresponde a una persona
+             *     dada de baja. La importacion no modifica su ficha ni la da de alta
+             *     otra vez (RN-14); el resto del fichero se aplica. Si la baja se
+             *     registra entre la comprobacion y la aplicacion del mismo fichero,
+             *     la aplicacion entera responde `409` sin escribir nada y hay que
+             *     volver a comprobarlo ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md)).
+             *
              *     **`email_taken` se emite en dos situaciones**, y las dos protegen lo
              *     mismo —que el registro horario de alguien no acabe a nombre de otro—:
              *     cuando la fila trae documento y su correo pertenece **a otra persona**
@@ -11105,7 +11155,7 @@ export interface components {
              *     comprobacion, antes de escribir nada.
              * @enum {string}
              */
-            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "unknown_column";
+            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "unknown_column";
             /** @enum {string} */
             severity: "error" | "warning";
             /** @description Columna del fichero a la que se refiere, si es a una. */
@@ -13104,7 +13154,20 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
+            /**
+             * @description La peticion no cumple el contrato. Ademas de los errores de forma,
+             *     `errors.terminated_at` señala una fecha de cese **posterior a hoy en
+             *     la zona del centro** o **anterior a la fecha de alta**. No se ha
+             *     cambiado nada: ni el estado, ni las credenciales, ni `audit_log`.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };
