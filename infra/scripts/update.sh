@@ -952,8 +952,10 @@ resolve_failed_step() {
 #     contenedor lo alcanza; (3) no depende del directorio del paquete, que
 #     cambia en cada version (el paquete nuevo pasa a ser la instalacion y el
 #     anterior queda como vuelta atras); (4) es donde un administrador busca
-#     registros y se rota con logrotate. Es un directorio de root: crearlo y
-#     escribir ahi por ruta es seguro.
+#     registros. Es un directorio de root: crearlo y escribir ahi por ruta es
+#     seguro. OJO: nada lo purga todavia —el paquete no instala ninguna regla
+#     de logrotate— y el detalle puede llevar datos personales: su plazo de
+#     conservacion esta pendiente (bloque 20 del plan de la 2.2.0).
 #   · EL INFORME (resumen, sin secretos ni datos personales) se escribe primero
 #     en ese mismo directorio —`update-<UTC>.log`, root 0600, copia local que no
 #     se pierde si la publicacion falla— y `publish_reports` lo copia al final a
