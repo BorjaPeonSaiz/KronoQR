@@ -89,6 +89,10 @@ final readonly class ZipDataExportArchiveWriter implements DataExportArchiveWrit
             );
         }
 
+        // `0600` antes de la primera fila: con la umask del proceso, el CSV de la
+        // plantilla seria legible por otras cuentas mientras se escribe.
+        @chmod($path, 0o600);
+
         try {
             $written = $dataset->format === DataExportFormat::Csv
                 ? $this->writeCsv($handle, $dataset, $rows, $locale)

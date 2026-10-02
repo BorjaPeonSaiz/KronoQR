@@ -929,7 +929,9 @@ final class ProductServiceProvider extends ServiceProvider
                 exports: $app->make(DataExportRepository::class),
                 events: $app->make(ProductEventPublisher::class),
                 clock: $app->make(Clock::class),
-                connection: DB::connection(),
+                // Cadena de `audit_log` y despues fila, el orden de toda
+                // escritura auditada: la purga toma los dos igual (ADR-045, C5).
+                serialized: $app->make(SerializedLedgerWrite::class),
             ),
         );
 

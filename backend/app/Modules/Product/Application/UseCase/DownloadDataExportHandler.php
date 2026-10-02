@@ -10,7 +10,7 @@ use App\Modules\Product\Domain\Event\DataExportDownloaded;
 use App\Modules\Product\Domain\Exception\DataExportNotReady;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Shared\Application\Port\Clock;
-use Illuminate\Database\ConnectionInterface;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 
 /**
  * Autoriza la entrega del ZIP y **deja el asiento antes de entregarlo**
@@ -44,7 +44,7 @@ final readonly class DownloadDataExportHandler
         private DataExportRepository $exports,
         private ProductEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -74,7 +74,10 @@ final readonly class DownloadDataExportHandler
 
         $now = $this->clock->now();
 
-        $this->connection->transaction(function () use ($export, $now, $downloadedByUserId): void {
+        // Candado de la cadena de `audit_log` ANTES que la fila (ADR-010,
+        // ADR-045 §d): la purga horaria toma los dos en ese orden cuando un ZIP
+        // desaparece antes de caducar, y al reves se cerraria un abrazo mortal.
+        $this->serialized->withChainLock(function () use ($export, $now, $downloadedByUserId): void {
             $this->exports->recordDownload($export->id, $now);
 
             $this->events->publish(new DataExportDownloaded(

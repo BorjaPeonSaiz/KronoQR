@@ -90,6 +90,22 @@ it('la exportacion de consola termina diciendo que se borre en cuanto se entregu
         ->and($salida)->toContain('borralo en cuanto lo hayas entregado');
 })->group('RF-IN-05', 'RL-06');
 
+it('la exportacion legal nace con directorio 0700 y fichero 0600, como todo el volumen', function (): void {
+    // ADR-045: el fichero es el registro nominal de la plantilla. Con la umask
+    // del proceso saldria legible por otras cuentas del servidor.
+    sesionConJornadaParaExportar();
+    $directorio = GeneratedFilesSandbox::directory('legal-modo').'/nuevo';
+    $destino = $directorio.'/registro-horario-2026-03-01_2026-03-31.csv';
+
+    [$codigo] = Commands::run('compliance:legal-export --from=2026-03-01 --to=2026-03-31 --output='.$destino);
+
+    clearstatcache();
+
+    expect($codigo)->toBe(0)
+        ->and(fileperms($directorio) & 0o777)->toBe(0o700)
+        ->and(fileperms($destino) & 0o777)->toBe(0o600);
+})->group('RF-IN-05', 'RL-12');
+
 it('el aviso de la exportacion de consola existe tambien en ingles', function (): void {
     expect(trans('legal-export.console.delete_after_delivery', [], 'en'))
         ->toContain('delete it as soon as you have delivered it');

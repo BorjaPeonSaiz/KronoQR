@@ -11,8 +11,8 @@ use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
 use App\Modules\Reporting\Domain\Exception\ReportExportLinkUnavailable;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use DateTimeImmutable;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Consume el enlace de un solo uso y autoriza la entrega del fichero
@@ -65,7 +65,7 @@ final readonly class DownloadReportExport
         private ReportExportStorage $storage,
         private ReportingEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -76,7 +76,12 @@ final readonly class DownloadReportExport
     public function handle(string $uuid, string $token): ?ReportExport
     {
         /** @var ReportExport|null $export */
-        $export = $this->connection->transaction(function () use ($uuid, $token): ?ReportExport {
+        // Candado de la cadena de `audit_log` ANTES que el `FOR UPDATE` de la
+        // fila (ADR-010, ADR-045 §d): es el orden de la purga diaria cuando un
+        // fichero desaparece antes de caducar. Al reves se cerraria un abrazo
+        // mortal. El `FOR UPDATE` sigue dentro: el enlace es de un solo uso
+        // (ADR-041) porque dos peticiones con el mismo token se serializan aqui.
+        $export = $this->serialized->withChainLock(function () use ($uuid, $token): ?ReportExport {
             $export = $this->exports->lockByUuid($uuid);
             $now = $this->clock->now();
 

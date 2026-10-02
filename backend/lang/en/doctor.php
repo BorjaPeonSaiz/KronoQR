@@ -282,8 +282,7 @@ return [
                     .'will not be able to leave their report.',
                 'warning_missing' => 'The retention report directory :path does not exist. It will be created on the '
                     .'first run if the backup directory is writable.',
-                'warning_inside_storage' => 'Retention reports are written to :path, inside storage/app. Whoever '
-                    .'runs the server cannot read them there without entering the container.',
+                'warning_inside_storage' => 'COMPLIANCE_RETENTION_REPORT_PATH points to :path, inside storage/app.',
             ],
             'class_roots' => [
                 'ok' => 'Each class of generated file has its own directory and none overlaps another.',
@@ -636,10 +635,12 @@ return [
             'retention_reports' => [
                 'warning' => "Give the application user (uid 1000) write access to :path and check that the\n"
                     .'backup directory is not mounted read-only.',
-                'warning_missing' => "Create it with the owner and mode the installer uses, on the server:\n"
-                    .'  sudo install -d -o 1000 -g 1000 -m 0750 :path',
-                'warning_inside_storage' => "Remove COMPLIANCE_RETENTION_REPORT_PATH from the .env file so reports\n"
-                    .'go to BACKUP_PATH/reports/retention, and recreate the containers.',
+                'warning_missing' => "Create it on the server with 'sudo install -d -o 1000 -g 1000 -m 0750 :path' (and its\n"
+                    .'parent reports, with the same owner and mode). Without it the readable copy of the report is not '
+                    .'kept, and the purge still leaves its entry in the audit log.',
+                'warning_inside_storage' => "Retention reports belong in BACKUP_PATH/reports/retention, where a person\n"
+                    ."reads them without entering the container. Remove the key from the .env file to use the default,\n"
+                    .'and recreate the containers.',
             ],
             'class_roots' => [
                 'failure_overlap' => "Leave each variable at its default (remove it from .env) or give it a\n"

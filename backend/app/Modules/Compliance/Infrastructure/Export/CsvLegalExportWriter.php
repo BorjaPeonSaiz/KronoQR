@@ -144,6 +144,11 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
             throw new RuntimeException('No se ha podido abrir «'.$destinationPath.'» para escribir la exportacion legal.');
         }
 
+        // `0600` ANTES de escribir la primera fila, no al terminar: con la umask
+        // del proceso el registro nominal seria legible por otras cuentas
+        // mientras se escribe (ADR-045).
+        @chmod($destinationPath, 0o600);
+
         $shiftEntries = 0;
         $corrections = 0;
         /** @var array<string, true> $employees */
@@ -372,6 +377,9 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
      * mano quien atiende un requerimiento. En el segundo caso el directorio
      * puede no existir, y `fopen()` fallaria con un error de flujo que no dice
      * cual es el problema.
+     *
+     * `0700`, como todo lo que vive en el volumen `app-storage` (ADR-045): el
+     * fichero lleva el registro nominal de la plantilla.
      */
     private function ensureDirectoryExists(string $destinationPath): void
     {
@@ -382,7 +390,7 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
         }
 
         try {
-            if (! mkdir($directory, 0o750, true) && ! is_dir($directory)) {
+            if (! mkdir($directory, 0o700, true) && ! is_dir($directory)) {
                 throw new RuntimeException('No se ha podido crear el directorio «'.$directory.'».');
             }
         } catch (Throwable $failure) {

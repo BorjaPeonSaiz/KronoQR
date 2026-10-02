@@ -321,8 +321,7 @@ return [
                     .'dejar su informe.',
                 'warning_missing' => 'No existe el directorio de informes de retencion :path. Se creara en la primera '
                     .'pasada si el directorio de copias se puede escribir.',
-                'warning_inside_storage' => 'Los informes de retencion se escriben en :path, dentro de storage/app. '
-                    .'Ahi no los ve quien administra el servidor sin entrar al contenedor.',
+                'warning_inside_storage' => 'COMPLIANCE_RETENTION_REPORT_PATH apunta a :path, dentro de storage/app.',
             ],
             'class_roots' => [
                 'ok' => 'Cada clase de fichero generado tiene su propio directorio y ninguno pisa a otro.',
@@ -689,10 +688,12 @@ return [
             'retention_reports' => [
                 'warning' => "Da permiso de escritura al usuario de la aplicacion (uid 1000) sobre :path y\n"
                     .'comprueba que el directorio de copias no esta montado de solo lectura.',
-                'warning_missing' => "Crealo con el propietario y el modo que usa el instalador, en el servidor:\n"
-                    .'  sudo install -d -o 1000 -g 1000 -m 0750 :path',
-                'warning_inside_storage' => "Quita COMPLIANCE_RETENTION_REPORT_PATH del fichero .env para que los\n"
-                    .'informes vayan a BACKUP_PATH/reports/retention, y recrea los contenedores.',
+                'warning_missing' => "Crealo en el servidor con 'sudo install -d -o 1000 -g 1000 -m 0750 :path' (y su padre\n"
+                    .'reports, con el mismo propietario y modo). Sin el, la copia legible del informe no se guarda, y la '
+                    .'purga deja igualmente su asiento en el registro de auditoria.',
+                'warning_inside_storage' => "Los informes de retencion pertenecen a BACKUP_PATH/reports/retention, que es\n"
+                    ."donde los lee una persona sin entrar en el contenedor. Quita la clave del fichero .env para usar el\n"
+                    .'valor por defecto, y recrea los contenedores.',
             ],
             'class_roots' => [
                 'failure_overlap' => "Deja cada variable con su valor de serie (quitala del .env) o dale un\n"
