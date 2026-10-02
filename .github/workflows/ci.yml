@@ -3,9 +3,10 @@
 #   ① Lint + Tipos            Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck   ~2-3,5 min (backend)
 #                             + @redocly/cli sobre docs/api/openapi.yaml
 #   ② Arquitectura            Deptrac · Pest Arch                                ~50 s
-#   ③ Unitarias + Mutacion    Pest Unit · Contract · Feature · MSI >= 80 % por   ~4-10 min
-#                             FICHERO, solo sobre el Domain que cambia (`make
-#                             mutate-changed`, en push y en `workflow_dispatch`);
+#   ③ Unitarias + Mutacion    Pest Unit · Contract · Feature · MSI >= 80 % sobre ~4-10 min
+#                             el CONJUNTO de ficheros de Domain que el cambio toca
+#                             (`make mutate-changed`, frente a `origin/main` en toda
+#                             rama y en `workflow_dispatch`);
 #                             la completa (`make mutate`, MSI global) es el job
 #                             `mutation`, al final del fichero, junto a `coverage`:
 #                             nocturna y en `workflow_dispatch`
@@ -67,11 +68,13 @@
 # TAMPOCO CORRE ENTERA EN CADA PUSH, desde el 24-09-2026. `make mutate` sobre
 # el dominio completo tarda 37-57 min medidos: eso no cabe en las etapas ①-③.
 # La etapa ③ muta SOLO los ficheros de `Modules/*/Domain` que el cambio toca
-# (`make mutate-changed`, dentro del job `unit`) y exige el 80 % a CADA
-# fichero: en cada `push` frente al push anterior y, desde el 02-10-2026, en
-# `workflow_dispatch` frente a `origin/main` (R6-DV-01/02: antes el disparo
-# manual solo miraba el MSI global y la puerta por fichero no se evaluaba
-# hasta entrar en `main`). La pasada COMPLETA, MSI global, es el job
+# (`make mutate-changed`, dentro del job `unit`) y exige el 80 % sobre el
+# CONJUNTO de esos ficheros (Pest da una sola nota por ejecucion, no una por
+# fichero): frente a `origin/main` en cualquier rama y en `workflow_dispatch`
+# -asi el check «③» del mismo SHA dice lo mismo en los dos eventos-, y frente
+# al `before` del push solo en `main` (R6-DV-01/02: antes el disparo manual solo
+# miraba el MSI global y esta puerta no se evaluaba hasta entrar en `main`). La
+# pasada COMPLETA, MSI global, es el job
 # `mutation`, al final del fichero junto a `coverage` -mismo `if`, nocturna y
 # a mano- porque `unit` no puede alojarla: no se ejecuta en `schedule` (ver
 # mas abajo). El umbral `--min=80` no cambia en ningun caso: lo unico que
@@ -99,11 +102,11 @@ on:
         required: false
         default: ""
   schedule:
-    # Dispara UNICAMENTE el job `coverage` (ver su comentario): todos los
-    # demas jobs de este fichero llevan `if: github.event_name != 'schedule'`
-    # -o la variante que ya tenian `clean-install`/`update`, que sin la
-    # exclusion explicita habrian arrastrado el pipeline entero, y `install`/
-    # `update` con el, cada noche. Hora fuera del horario de trabajo habitual
+    # Dispara SOLO los jobs nocturnos: `coverage`, `mutation` y
+    # `secrets-history` (ver sus comentarios). Todos los demas de este fichero
+    # llevan `if: github.event_name != 'schedule'` -o la variante que ya tenian
+    # `clean-install`/`update`, que sin la exclusion explicita habrian
+    # arrastrado el pipeline entero, y `install`/`update` con el, cada noche. Hora fuera del horario de trabajo habitual
     # del equipo (España, UTC+1/+2).
     - cron: "17 3 * * *"
 
@@ -140,7 +143,8 @@ jobs:
     name: "① Lint + Tipos · backend"
     runs-on: ubuntu-24.04
     timeout-minutes: 6
-    # El `schedule` nocturno solo existe para el job `coverage` (ver cabecera).
+    # El `schedule` nocturno solo existe para los jobs nocturnos: `coverage`,
+    # `mutation` y `secrets-history` (ver cabecera).
     # Sin esto, la entrada de cron dispararia el pipeline entero cada noche.
     if: github.event_name != 'schedule'
 
@@ -241,7 +245,7 @@ jobs:
     name: "① Lint + Tipos · ${{ matrix.app }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 6
-    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para los jobs nocturnos.
     if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
@@ -369,7 +373,7 @@ jobs:
     name: "① Lint + Tipos · contrato OpenAPI"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para los jobs nocturnos.
     if: github.event_name != 'schedule'
 
     steps:
@@ -557,7 +561,10 @@ jobs:
         run: echo "TOOLS_START=$(date +%s)" >>"$GITHUB_ENV"
 
       - name: Pest — suite unitaria (dominio puro, sin base de datos)
-        run: make test-unit
+        # UNIT_MAX_SKIPPED=0 (R6-DV-07): la suite unitaria no tiene ninguna
+        # omision conocida (0 de 2772-2849 pruebas en los runs medidos); si una
+        # prueba pasa a `skipped`, el paso falla en vez de contar como cobertura.
+        run: make test-unit UNIT_MAX_SKIPPED=0
 
       - name: Esperar a PostgreSQL
         # Recien aqui y no al arrancarlo: el initdb (extensiones, roles,
@@ -592,30 +599,35 @@ jobs:
         # por una prueba que ningun workflow ejecuta. Ademas son baratas -no
         # necesitan mas que este mismo PostgreSQL- y separarlas solo anadiria
         # el coste de arrancar otro runner.
-        run: make test-contract
+        # CONTRACT_MAX_SKIPPED=0: igual que la unitaria (0 de 2283-2313 omitidas).
+        run: make test-contract CONTRACT_MAX_SKIPPED=0
 
-      - name: "Mutacion por fichero sobre Modules/*/Domain (80 % a cada fichero que cambia): en push y en el disparo manual"
+      - name: "Mutacion sobre el Domain que el cambio toca (MSI >= 80 % sobre ese conjunto): en push y en el disparo manual"
         # El umbral --min=80 vive en el Makefile, no aqui, y se aplica ENTERO
-        # a cada fichero de `Modules/*/Domain` que el cambio toca (`make
-        # mutate-changed`, comentario largo junto al objetivo en el Makefile).
+        # sobre el CONJUNTO de ficheros de `Modules/*/Domain` que el cambio toca
+        # (`make mutate-changed`, comentario largo junto al objetivo en el
+        # Makefile). OJO: es una nota para el conjunto, no una por fichero; un
+        # fichero flojo puede quedar tapado por otros del mismo cambio.
         #
         # Decision (24-09-2026): la mutacion COMPLETA tardaba 37-57 min
-        # medidos en este runner y no cabe en las etapas ①-③. Por eso el
-        # `push` muta SOLO lo que el push cambia: la base del diff es
-        # `github.event.before` si es un commit valido y alcanzable -mismo
-        # criterio que el job `update`, mas abajo-, o `origin/main` si no
-        # (rama nueva, force-push, o el primer push de todos).
+        # medidos en este runner y no cabe en las etapas ①-③. Por eso este
+        # paso muta SOLO lo que el cambio toca.
+        #
+        # LA BASE DEL DIFF ES LA MISMA EN PUSH Y EN DISPARO MANUAL
+        # (02-10-2026): `origin/main` (merge-base, `git diff origin/main...HEAD`)
+        # en cualquier rama. Push y disparo manual publican el MISMO check
+        # «③ Unitarias + Mutacion» sobre el mismo SHA; si uno mirara el ultimo
+        # push y el otro toda la rama, podrian discrepar. Solo en un push a
+        # `main` la base es `github.event.before` (si es un commit valido y
+        # alcanzable): para un merge commit es el diff de la rama integrada.
         #
         # Correccion (02-10-2026, R6-DV-01/02, R2-QB-01): `workflow_dispatch`
         # -el disparo manual que se hace siempre antes de abrir una PR-
-        # corria la mutacion completa, que solo mira el MSI GLOBAL, y ademas cancelaba
-        # el run del `push`, el unico que aplicaba la puerta por fichero. Asi
-        # esa puerta no se evaluaba antes del merge y fallaba al entrar en
-        # `main`. Ahora el disparo manual aplica la MISMA puerta por fichero
-        # sobre lo que la rama cambia respecto de `origin/main` (merge-base:
-        # `git diff origin/main...HEAD`). En `main` -o en una rama sin
-        # ficheros de dominio cambiados- el diff sale vacio y el paso termina
-        # en verde sin mutar nada.
+        # corria la mutacion completa, que solo mira el MSI GLOBAL, y ademas
+        # cancelaba el run del `push`, el unico que aplicaba esta puerta. Asi
+        # no se evaluaba antes del merge y fallaba al entrar en `main`.
+        # En `main` -o en una rama sin ficheros de dominio cambiados- el diff
+        # sale vacio y el paso termina en verde sin mutar nada.
         #
         # La pasada GLOBAL (MSI >= 80 % sobre todo el dominio) sigue existiendo
         # y se ejecuta tambien en el disparo manual y cada noche, pero en el
@@ -637,6 +649,7 @@ jobs:
           set -euo pipefail
           base="origin/main"
           if [ "${GITHUB_EVENT_NAME}" = "push" ] &&
+            [ "${GITHUB_REF}" = "refs/heads/main" ] &&
             [ -n "${EVENT_BEFORE}" ] &&
             [ "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ] &&
             git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
@@ -863,7 +876,7 @@ jobs:
     name: "Dependencias y SAST"
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para los jobs nocturnos.
     if: github.event_name != 'schedule'
 
     steps:
@@ -1106,7 +1119,7 @@ jobs:
     name: "⑥ Frontend unitarias · ${{ matrix.package }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para los jobs nocturnos.
     if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
@@ -1270,7 +1283,7 @@ jobs:
     name: "Puerta de version · CHANGELOG"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    # Ver el comentario de `lint-backend`: el `schedule` es solo para `coverage`.
+    # Ver el comentario de `lint-backend`: el `schedule` es solo para los jobs nocturnos.
     if: github.event_name != 'schedule'
 
     steps:
@@ -2434,7 +2447,7 @@ jobs:
   # la pasada GLOBAL (MSI >= 80 % sobre todo el dominio) y es la unica que
   # corre completa, de noche y en el disparo manual. Hasta el 02-10-2026 el
   # job `unit` repetia la completa en el disparo manual; se quito (R6-DV-01/02:
-  # era un duplicado de 40-55 min que ademas no aplicaba la puerta por fichero).
+  # era un duplicado de 40-55 min que ademas no aplicaba el 80 % sobre lo que el cambio toca).
   #
   # timeout-minutes 90 y no 60 (R6-DV-08): 26, 49 y 53 min medidos en los
   # ultimos runs manuales verdes; con 60 un runner un 15 % mas lento lo mataba
