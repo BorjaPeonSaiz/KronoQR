@@ -212,6 +212,48 @@ it('escribe en cada entrada cada cuanto se ejecuta esa prueba', function (): voi
     expect($output)->not->toContain('automática que la verifica en cada cambio');
 })->group('RQ-13');
 
+it('NO da por cubierto un requisito cuya unica prueba la CI omite siempre', function (): void {
+    // R2-QA-01. Las 19 pruebas de FpmPoolRenderTest se saltaban en todos los
+    // runs de la CI —no hay php-fpm en el runner— y la matriz las contaba como
+    // cobertura igual que si corrieran.
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n");
+    useTests(FakeTestSource::file([
+        FakeTestSource::pest('rinde el pool', ['RNF-P-06'], chained: "->skip(! hayFpmDeVerdad(), 'sin php-fpm')"),
+    ]));
+    config(['quality.current_phase' => 0, 'quality.skipped_in_ci' => ['CoberturaTest.php' => 1]]);
+
+    [$exit, $output] = Commands::run('qa:traceability --check');
+
+    expect($exit)->toBe(1);
+    expect($output)->toContain('RNF-P-06');
+})->group('RQ-13');
+
+it('sigue contando la prueba sin salto del mismo fichero que la CI omite', function (): void {
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n");
+    useTests(FakeTestSource::file([
+        FakeTestSource::pest('rinde el pool', ['RNF-P-06'], chained: "->skip(! hayFpmDeVerdad(), 'sin php-fpm')"),
+        FakeTestSource::pest('la formula sigue en el entrypoint', ['RNF-P-06']),
+    ]));
+    config(['quality.current_phase' => 0, 'quality.skipped_in_ci' => ['CoberturaTest.php' => 1]]);
+
+    expect(Commands::run('qa:traceability --check')[0])->toBe(0);
+})->group('RQ-13');
+
+it('enseña en la matriz la prueba que la CI omite siempre, marcada y fuera de la cobertura', function (): void {
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n");
+    useTests(FakeTestSource::file([
+        FakeTestSource::pest('rinde el pool', ['RNF-P-06'], chained: "->skip(! hayFpmDeVerdad(), 'sin php-fpm')"),
+    ]));
+    config(['quality.current_phase' => 0, 'quality.skipped_in_ci' => ['CoberturaTest.php' => 1]]);
+
+    [, $output] = Commands::run('qa:traceability --output=-');
+
+    expect($output)->toContain('rinde el pool (la CI la omite siempre: no cuenta como cobertura)')
+        ->and($output)->toContain('Nunca en la CI (`quality.skipped_in_ci`)')
+        ->and($output)->toContain('| 0 | sí | 1 | 0 | 1 |')
+        ->and($output)->not->toContain('si el entorno la deja correr');
+})->group('RQ-13');
+
 it('enumera aparte, y no como aviso, las pruebas condicionadas al entorno', function (): void {
     // Nueve pruebas del arbol dependen de una herramienta que no esta en todos
     // los entornos. Salian como «etiqueta con forma de requisito que no lo es»

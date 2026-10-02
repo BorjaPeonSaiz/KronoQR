@@ -2,7 +2,7 @@
 
 Aplazado hasta el cierre de la Fase 3 con dueño `devops-observabilidad`
 (`make dast`, manual, **fuera de `ci.yml`** por presupuesto de tiempo — doc 02
-§9.2 fija ①–③ en menos de 4 minutos, y un *baseline* de ZAP tarda minutos, no
+§10.1 fija ①–③ en menos de 15 minutos, y un *baseline* de ZAP tarda minutos, no
 segundos).
 
 ## Qué hace `make dast`

@@ -162,4 +162,31 @@ return [
         ],
     ],
 
+    /*
+     * Ficheros de Pest cuyas pruebas condicionadas al entorno
+     * (`->skip(! hayFpmDeVerdad(), …)`) la CI omite SIEMPRE, con cuantas pruebas
+     * omite de cada uno —filas de dataset incluidas, que es como las cuenta
+     * Pest—. Rutas relativas a backend/ (R2-QA-01, bloque 15 de la 2.2.0).
+     *
+     * El escaner da por buena una prueba condicionada porque «se ejecuta donde
+     * su herramienta esta». Eso es cierto en el portatil y FALSO en la CI para
+     * estas: `FpmPoolRenderTest` necesita `php-fpm` y el entrypoint de la imagen
+     * `kronoqr/app`, que el runner no tiene, y sus 19 pruebas salian omitidas en
+     * cada run mientras la matriz las contaba como cobertura de RNF-P-06 y
+     * RNF-D-01. Las de este fichero siguen apareciendo en la matriz, marcadas,
+     * pero NO cubren nada: un requisito cuya unica prueba este aqui bloquea
+     * `qa:traceability --check`. Las pruebas no condicionadas del mismo fichero
+     * si cuentan, porque corren en la CI.
+     *
+     * La suma de las cifras ES el `INTEGRATION_MAX_SKIPPED` del job de
+     * integracion de ci.yml, y `QualityGatesTest` exige que coincidan: si
+     * alguien lleva estas pruebas a un job con la imagen, baja las dos cosas
+     * en el mismo cambio, y si alguien añade un salto nuevo que la CI no puede
+     * ejecutar, tiene que declararlo aqui —y dejar de contarlo como cobertura—
+     * para que la puerta de omitidas no lo pare.
+     */
+    'skipped_in_ci' => [
+        'tests/Integration/Install/FpmPoolRenderTest.php' => 19,
+    ],
+
 ];

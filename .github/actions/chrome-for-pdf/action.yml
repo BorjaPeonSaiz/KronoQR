@@ -1,0 +1,64 @@
+# Chrome real para las pruebas de PDF de la CI (R6-DV-07, R2-QA-01).
+#
+# Por que existe. Las pruebas de sellado de los PDF (PeriodReport, PersonalRecord,
+# AdoptionReport, la hoja de instrucciones) se saltan con `->skip(! hayChromium())`
+# si `LARAVEL_PDF_CHROME_PATH` no apunta a un ejecutable. El `chromium-browser` de
+# Ubuntu es un envoltorio de snap que no arranca en el runner, asi que se usa el
+# Chrome que descarga puppeteer. La receta anterior lo instalaba con `sudo npm
+# install --global`: la descarga caia en la cache del usuario root
+# (`/root/.cache/puppeteer`), `executablePath()` lo buscaba en la del usuario del
+# runner y devolvia una ruta que no existia. Resultado: 5 pruebas `skipped` en
+# todos los runs, sin que nada avisara.
+#
+# Que cambia. Sin `sudo` y con prefijo y cache en `RUNNER_TEMP`, de modo que quien
+# instala y quien lee la ruta son el mismo usuario y el mismo directorio. Despues
+# se COMPRUEBA que el binario existe y arranca: si no, el paso falla con un
+# mensaje, en vez de dejar que la suite lo salte en silencio.
+#
+# `LARAVEL_PDF_NO_SANDBOX=true`, por lo mismo que en la imagen del producto
+# (.env.example): Ubuntu 24.04 restringe los user namespaces sin privilegios
+# (AppArmor) y Chrome con sandbox no arranca. El runner es efimero.
+#
+# La version de puppeteer es la de infra/docker/php/Dockerfile (version EXACTA:
+# la 24.x arrastra basic-ftp con un CVE, ver el comentario alli).
+
+name: Chrome para los PDF
+description: Instala puppeteer y su Chrome, comprueba que arranca y exporta las variables que lee laravel-pdf.
+
+inputs:
+  puppeteer-version:
+    description: Version de puppeteer. Fuente de verdad, la imagen del producto.
+    required: false
+    default: "25.12.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Instalar puppeteer y comprobar que su Chrome arranca
+      shell: bash
+      env:
+        PUPPETEER_VERSION: ${{ inputs.puppeteer-version }}
+      run: |
+        set -euo pipefail
+        prefix="${RUNNER_TEMP}/puppeteer"
+        export PUPPETEER_CACHE_DIR="${prefix}/cache"
+        npm install --global --omit=dev --prefix "${prefix}" "puppeteer@${PUPPETEER_VERSION}"
+        # Descarga explicita: con npm >= 11 el postinstall de puppeteer no corre
+        # sin `allowScripts` (aviso «install-scripts not yet covered»), y sin el
+        # no hay Chrome en la cache.
+        "${prefix}/bin/puppeteer" browsers install chrome
+        modules="${prefix}/lib/node_modules"
+        # `executablePath()` es asincrono desde puppeteer 25: sin esperar la promesa,
+        # `console.log` escribe «Promise { <pending> }» y esa cadena acaba como ruta.
+        chrome="$(NODE_PATH="${modules}" node -e "Promise.resolve(require('puppeteer').executablePath()).then(console.log)")"
+        if [ ! -x "${chrome}" ]; then
+          echo "::error title=Chrome para los PDF::puppeteer no ha dejado un Chrome ejecutable en '${chrome}'. Sin el, las pruebas de sellado de PDF se saltan en silencio. Revisa la salida de npm install de arriba (descarga bloqueada o PUPPETEER_CACHE_DIR distinto)."
+          exit 1
+        fi
+        "${chrome}" --version
+        {
+          echo "LARAVEL_PDF_NODE_MODULES_PATH=${modules}"
+          echo "LARAVEL_PDF_CHROME_PATH=${chrome}"
+          echo "LARAVEL_PDF_NO_SANDBOX=true"
+          echo "PUPPETEER_CACHE_DIR=${PUPPETEER_CACHE_DIR}"
+        } >>"$GITHUB_ENV"

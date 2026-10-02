@@ -1,15 +1,16 @@
 # KronoQR — pipeline completo (doc 02 §10.1).
 #
-#   ① Lint + Tipos            Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck   ~1 min
+#   ① Lint + Tipos            Pint · PHPStan 9 · ESLint · vue-tsc · ShellCheck   ~2-3,5 min (backend)
 #                             + @redocly/cli sobre docs/api/openapi.yaml
-#   ② Arquitectura            Deptrac · Pest Arch                                ~30 s
-#   ③ Unitarias + Mutacion    Pest Unit · Contract · Feature · MSI >= 80 % SOLO  ~2 min
-#                             sobre el Domain que cambia (`make mutate-changed`);
-#                             completa (`make mutate`) en `workflow_dispatch` -en
-#                             `schedule` no corre este job, ver el job `mutation`,
-#                             al final del fichero, junto a `coverage`-
+#   ② Arquitectura            Deptrac · Pest Arch                                ~50 s
+#   ③ Unitarias + Mutacion    Pest Unit · Contract · Feature · MSI >= 80 % por   ~4-10 min
+#                             FICHERO, solo sobre el Domain que cambia (`make
+#                             mutate-changed`, en push y en `workflow_dispatch`);
+#                             la completa (`make mutate`, MSI global) es el job
+#                             `mutation`, al final del fichero, junto a `coverage`:
+#                             nocturna y en `workflow_dispatch`
 #   ③b Trazabilidad           qa:traceability --check · docs:consistency --check (dentro del job ③, al final)
-#   ④ Integracion             Pest --testsuite=Integration con PostgreSQL real   ~3 min
+#   ④ Integracion             Pest --testsuite=Integration con PostgreSQL real   ~10-15 min
 #                             (invariantes SQL, MigrationsRoundTripTest, los caminos
 #                             de install.sh/update.sh que no necesitan Docker ni root)
 #   ⑤ Seguridad               composer/npm audit · Semgrep propio + comunitario ·
@@ -43,6 +44,16 @@
 # cada job los comprueba con una anotacion `::warning`, no con un fallo duro
 # -son un termometro, no una puerta mas-.
 #
+# PRESUPUESTO DE ①-③ (R1-DV-01, 02-10-2026): menos de 15 minutos de reloj en un
+# push normal, medidos desde que arranca el run hasta que termina ③. Medido en
+# tres pushes a `main` del 01-10-2026 (runs 36838676776, 36878835101 y
+# 36903163493): 8,9, 14,4 y 8,2 min de extremo a extremo, con ① backend 2:10-
+# 3:28, ② 0:46-0:57 y ③ 3:41-10:06 -la ruta critica es ① -> ② -> ③ porque cada
+# una espera a la anterior-. El "menos de 4 minutos" que decia el §10.1 no se
+# cumplio en NINGUNA medicion (solo ① backend tarda mas de 2) y se sustituyo
+# por lo medido. La CI completa de un push (hasta ④, la mas lenta) termina en
+# 15-19 min. Si ① -> ③ pasa de 15 min, se mide y se arregla, no se sube.
+#
 # LA PUERTA DE COBERTURA (RNF-M-01: dominio >= 90 %, global >= 75 %, doc 02
 # §9.2) NO ES NINGUNA DE LAS OCHO ETAPAS NUMERADAS. `make coverage` instrumenta
 # con Xdebug la suite ENTERA -Unit, Integration, Feature y Contract juntas, no
@@ -54,14 +65,17 @@
 #
 # LA MUTACION COMPLETA (RQ-10: MSI >= 80 % sobre Modules/*/Domain, doc 02 §9.2)
 # TAMPOCO CORRE ENTERA EN CADA PUSH, desde el 24-09-2026. `make mutate` sobre
-# el dominio completo tarda 37-42 min medidos (comentario del job `unit`, mas
-# abajo): eso no cabe en el presupuesto de menos de 4 minutos de las etapas
-# ①-③. La etapa ③ muta en cada push SOLO los ficheros de `Modules/*/Domain`
-# que ese push cambia (`make mutate-changed`, dentro del job `unit`); la
-# pasada COMPLETA es el job `mutation`, al final del fichero junto a
-# `coverage` -mismo `if`, nocturna y a mano- porque `unit` no puede alojarla:
-# no se ejecuta en `schedule` (ver mas abajo). El umbral `--min=80` no cambia
-# en ningun caso: lo unico que cambia es cuantos ficheros mide cada pasada.
+# el dominio completo tarda 37-57 min medidos: eso no cabe en las etapas ①-③.
+# La etapa ③ muta SOLO los ficheros de `Modules/*/Domain` que el cambio toca
+# (`make mutate-changed`, dentro del job `unit`) y exige el 80 % a CADA
+# fichero: en cada `push` frente al push anterior y, desde el 02-10-2026, en
+# `workflow_dispatch` frente a `origin/main` (R6-DV-01/02: antes el disparo
+# manual solo miraba el MSI global y la puerta por fichero no se evaluaba
+# hasta entrar en `main`). La pasada COMPLETA, MSI global, es el job
+# `mutation`, al final del fichero junto a `coverage` -mismo `if`, nocturna y
+# a mano- porque `unit` no puede alojarla: no se ejecuta en `schedule` (ver
+# mas abajo). El umbral `--min=80` no cambia en ningun caso: lo unico que
+# cambia es cuantos ficheros mide cada pasada.
 #
 # ⑦ E2E sustituye al marcador `.github/workflows/e2e.yml` (retirado, no
 # reemplazado por un workflow separado): el patron de este repositorio es UN
@@ -99,8 +113,17 @@ permissions:
 
 # Empujar dos veces seguidas no debe dejar dos ejecuciones compitiendo por los
 # runners: la anterior ya no interesa a nadie.
+#
+# El grupo incluye el TIPO de evento (R6-DV-01, 02-10-2026): `push`,
+# `workflow_dispatch` y `schedule` cubren cosas distintas -el disparo manual
+# corre la mutacion y la cobertura completas; el push, no; el `schedule`, solo
+# esas dos- y con un grupo comun un run cancelaba a otro que cubria algo que el
+# no cubria (el disparo manual cancelaba al push; el `schedule` de las 03:17
+# cancelo el push de `main` cuando solo le quedaba ④). Asi cada run solo
+# cancela a uno MAS ANTIGUO DEL MISMO TIPO. Coste: un push y un disparo manual
+# sobre la misma rama corren a la vez.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
@@ -449,12 +472,15 @@ jobs:
   unit:
     name: "③ Unitarias + Mutacion"
     runs-on: ubuntu-24.04
-    # 60 y no 8: la mutacion sola tardaba 37 min en serie en este runner y la
-    # tarea 5.12 (14 ficheros de dominio mas) la saco de los 45 que habia; con
-    # `--parallel` en `make mutate` baja varias veces, y el margen hasta 60 es
-    # para que el siguiente modulo de dominio no vuelva a matar el job por
-    # tiempo aunque todo pase. Si un dia se acerca, se mide, no se sube a ciegas.
-    timeout-minutes: 60
+    # 90 (R6-DV-08). Con la mutacion completa aqui el job tardo hasta 57,2 min
+    # de los 60 que tenia: un runner algo mas lento lo mataba por tiempo con
+    # todo en verde. Desde el 02-10-2026 este job solo muta lo que la rama
+    # cambia (`make mutate-changed`; la completa vive en el job `mutation`):
+    # lo normal son 4-15 min. El tope de 90 cubre el PEOR caso razonable, una
+    # rama que toca casi todo el dominio y paga la mutacion entera (37-57 min
+    # medidos) mas el resto del job, con el doble de margen. Medidas de los
+    # ultimos runs manuales verdes: 39, 57 y 57 min (con la completa aqui).
+    timeout-minutes: 90
     needs: architecture
 
     env:
@@ -568,52 +594,55 @@ jobs:
         # el coste de arrancar otro runner.
         run: make test-contract
 
-      - name: "Mutacion sobre Modules/*/Domain (MSI >= 80 %): acotada en push, completa en el disparo manual"
+      - name: "Mutacion por fichero sobre Modules/*/Domain (80 % a cada fichero que cambia): en push y en el disparo manual"
         # El umbral --min=80 vive en el Makefile, no aqui, y se aplica ENTERO
-        # en los dos casos de abajo.
+        # a cada fichero de `Modules/*/Domain` que el cambio toca (`make
+        # mutate-changed`, comentario largo junto al objetivo en el Makefile).
         #
-        # Decision (24-09-2026): la mutacion COMPLETA tardaba 37-42 min
-        # medidos en este runner y el doc 02 §10.1 promete que las etapas
-        # ①-③ respondan en menos de 4 minutos; los dos hechos no cabian
-        # juntos. En cada `push` este paso muta SOLO los ficheros de
-        # `Modules/*/Domain` que el push cambia (`make mutate-changed`,
-        # comentario largo junto al objetivo en el Makefile): la base del
-        # diff es `github.event.before` si es un commit valido y alcanzable
-        # -mismo criterio que el job `update`, mas abajo-, o `origin/main`
-        # si no (rama nueva, force-push, o el primer push de todos). En
-        # `workflow_dispatch` -el disparo manual que se hace siempre antes de
-        # abrir una PR- corre la mutacion COMPLETA (`make mutate`), la misma
-        # que corria en cada push hasta este cambio: es la comprobacion
-        # exhaustiva antes de proponer el cambio, no cada vez que se sube un
-        # commit intermedio.
+        # Decision (24-09-2026): la mutacion COMPLETA tardaba 37-57 min
+        # medidos en este runner y no cabe en las etapas ①-③. Por eso el
+        # `push` muta SOLO lo que el push cambia: la base del diff es
+        # `github.event.before` si es un commit valido y alcanzable -mismo
+        # criterio que el job `update`, mas abajo-, o `origin/main` si no
+        # (rama nueva, force-push, o el primer push de todos).
+        #
+        # Correccion (02-10-2026, R6-DV-01/02, R2-QB-01): `workflow_dispatch`
+        # -el disparo manual que se hace siempre antes de abrir una PR-
+        # corria la mutacion completa, que solo mira el MSI GLOBAL, y ademas cancelaba
+        # el run del `push`, el unico que aplicaba la puerta por fichero. Asi
+        # esa puerta no se evaluaba antes del merge y fallaba al entrar en
+        # `main`. Ahora el disparo manual aplica la MISMA puerta por fichero
+        # sobre lo que la rama cambia respecto de `origin/main` (merge-base:
+        # `git diff origin/main...HEAD`). En `main` -o en una rama sin
+        # ficheros de dominio cambiados- el diff sale vacio y el paso termina
+        # en verde sin mutar nada.
+        #
+        # La pasada GLOBAL (MSI >= 80 % sobre todo el dominio) sigue existiendo
+        # y se ejecuta tambien en el disparo manual y cada noche, pero en el
+        # job `mutation`, al final del fichero: ya corria alli en paralelo
+        # con este, y repetirla aqui duplicaba 40-55 min de ③ sin cambiar el
+        # veredicto (③ llego a tardar 57 min de 60).
         #
         # La NOCHE no esta aqui. El job `unit` no se ejecuta en `schedule`
         # -depende de `architecture`, que depende de jobs con
         # `if: github.event_name != 'schedule'`, y un `needs` que no corre
-        # deja sin correr tambien al que depende de el-, asi que la mutacion
-        # completa nocturna vive en el job `mutation`, junto a `coverage` mas
-        # abajo, con el mismo `if`.
+        # deja sin correr tambien al que depende de el-.
         #
         # Si `Modules/*/Domain` no existe todavia (Fase 0, antes de la tarea
-        # 1.1), `make mutate-changed`/`make mutate` lo dicen por su cuenta y
-        # terminan en verde sin mutar nada.
+        # 1.1), `make mutate-changed` lo dice por su cuenta y termina en verde
+        # sin mutar nada.
         env:
           EVENT_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-            base=""
-            if [ -n "${EVENT_BEFORE}" ] &&
-              [ "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ] &&
-              git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
-              base="${EVENT_BEFORE}"
-            else
-              base="origin/main"
-            fi
-            make mutate-changed MUTATE_BASE="${base}"
-          else
-            make mutate
+          base="origin/main"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] &&
+            [ -n "${EVENT_BEFORE}" ] &&
+            [ "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ] &&
+            git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
+            base="${EVENT_BEFORE}"
           fi
+          make mutate-changed MUTATE_BASE="${base}"
 
       # --- etapa ③b · Trazabilidad y coherencia documental --------------------
       #
@@ -686,7 +715,10 @@ jobs:
   integration:
     name: "④ Integracion"
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # 30 (R6-DV-08): duraba 10,4-14,6 min de los 15 anteriores y un runner
+    # lento lo mataba con la suite en verde; ahora ademas ejecuta de verdad las
+    # 5 pruebas de sellado de PDF con Chrome. 30 es el doble de lo medido.
+    timeout-minutes: 30
     needs: architecture
 
     env:
@@ -743,19 +775,27 @@ jobs:
           docker logs kronoqr-pg | tail -50
           exit 1
 
-      - name: Puppeteer y Chrome para Browsershot (los PDF de una cara y el sello del informe se prueban con el motor real)
+      - name: Chrome para Browsershot (los PDF de una cara y el sello del informe se prueban con el motor real)
         # La imagen del producto instala puppeteer global y usa el Chromium de la
         # distribucion; en el runner el `chromium-browser` de Ubuntu es un
-        # envoltorio de snap que no arranca, asi que aqui puppeteer trae su
-        # propio Chrome y las dos variables que lee laravel-pdf apuntan a el.
-        run: |
-          sudo npm install --global --omit=dev puppeteer@25.12.0
-          modules="$(npm root -g)"
-          echo "LARAVEL_PDF_NODE_MODULES_PATH=${modules}" >>"$GITHUB_ENV"
-          echo "LARAVEL_PDF_CHROME_PATH=$(NODE_PATH="${modules}" node -e "console.log(require('puppeteer').executablePath())")" >>"$GITHUB_ENV"
+        # envoltorio de snap que no arranca, asi que puppeteer trae su propio
+        # Chrome. La accion lo instala, COMPRUEBA que arranca y exporta las
+        # variables de laravel-pdf (R6-DV-07: la receta anterior dejaba una ruta
+        # inexistente y 5 pruebas saltaban en silencio en cada run).
+        uses: ./.github/actions/chrome-for-pdf
 
       - name: Pest — suite de Integracion (PostgreSQL real; MigrationsRoundTripTest sola en este job)
-        run: make test-integration
+        # INTEGRATION_MAX_SKIPPED: puerta contra las omisiones silenciosas
+        # (R6-DV-07). Hoy hay exactamente 19 pruebas que esta suite omite
+        # SIEMPRE en el runner: las de `FpmPoolRenderTest`, que necesitan
+        # `php-fpm` y el entrypoint de la imagen `kronoqr/app` (no existen en
+        # el runner). Las 5 de sellado de PDF YA NO se omiten: las ejecuta el
+        # Chrome de la accion de arriba. Si el numero de omitidas SUBE -una
+        # prueba nueva con `->skip(...)`, o Chrome que deja de arrancar- el
+        # paso falla; si BAJA (alguien lleva las 19 de FPM a un job con la
+        # imagen), se baja este numero en el mismo cambio. Ver el objetivo
+        # `test-integration` del Makefile.
+        run: make test-integration INTEGRATION_MAX_SKIPPED=19
 
       - name: Presupuesto de la etapa
         if: always()
@@ -901,14 +941,23 @@ jobs:
             exit 1
           }
 
-      - name: gitleaks sobre el historico completo (0 hallazgos, bloqueante)
+      - name: gitleaks sobre el historico alcanzable desde este commit (0 hallazgos, bloqueante)
         # BLOQUEANTE desde hoy: verificado en local sobre las 75 commits de
         # este repositorio, 0 hallazgos con la allowlist minima de
         # .gitleaks.toml (17 falsos positivos analizados uno a uno, ver el
         # fichero). Si esto rompe algun dia, NO se reescribe el historico para
         # arreglarlo: se reporta el commit y la ruta para que se decida
         # (§7.7).
-        run: make secrets-scan
+        #
+        # SCOPE=head (R6-DV-03, 02-10-2026): el checkout trae TODAS las ramas
+        # (`fetch-depth: 0`) y gitleaks, sin acotar, recorria todas las
+        # referencias: un valor de prueba en una rama sin integrar ponia en
+        # rojo `main` y todas las demas ramas (ocurrio con las PR #103 y
+        # #104). Aqui se escanea solo lo alcanzable desde el commit de este
+        # run, que es lo que este cambio puede introducir o arrastrar. El
+        # barrido de TODAS las referencias lo hace el job `secrets-history`,
+        # nocturno, donde un hallazgo avisa pero no bloquea a nadie.
+        run: make secrets-scan SECRETS_SCAN_SCOPE=head
 
       - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
         # A partir de aqui, Trivy necesita imagenes YA CONSTRUIDAS: la de
@@ -1278,7 +1327,7 @@ jobs:
   #
   # CUANDO SE EJECUTA. El §10.1 la situa «antes de publicar una version», no en
   # cada push, y cuesta entre 6 y 18 minutos: ponerla en cada push convertiria
-  # una CI de 4 minutos en una que nadie espera, que es como se acaba ignorando
+  # una CI de 15 minutos en una que nadie espera, que es como se acaba ignorando
   # una cadena de calidad entera.
   #
   #   · etiqueta `vX.Y.Z`  -> la publicacion de una version no sale sin esto
@@ -2293,7 +2342,9 @@ jobs:
   coverage:
     name: "Cobertura (RNF-M-01, nocturna)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # 50 (R6-DV-08): medido 16-25 min de los 30 anteriores, y la cobertura con
+    # Xdebug es de los pasos que mas varian entre runners.
+    timeout-minutes: 50
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
 
     env:
@@ -2344,15 +2395,9 @@ jobs:
           docker logs kronoqr-pg | tail -50
           exit 1
 
-      - name: Puppeteer y Chrome para Browsershot (la suite completa incluye los PDF con motor real)
-        # Misma receta que el job de integracion: el chromium-browser del runner
-        # es un envoltorio de snap; puppeteer trae su Chrome y laravel-pdf lo lee
-        # de estas dos variables.
-        run: |
-          sudo npm install --global --omit=dev puppeteer@25.12.0
-          modules="$(npm root -g)"
-          echo "LARAVEL_PDF_NODE_MODULES_PATH=${modules}" >>"$GITHUB_ENV"
-          echo "LARAVEL_PDF_CHROME_PATH=$(NODE_PATH="${modules}" node -e "console.log(require('puppeteer').executablePath())")" >>"$GITHUB_ENV"
+      - name: Chrome para Browsershot (la suite completa incluye los PDF con motor real)
+        # Misma accion que el job de integracion (ver alli).
+        uses: ./.github/actions/chrome-for-pdf
 
       - name: Cobertura — dominio >= 90 %, global >= 75 % (doc 02 §9.2)
         run: make coverage
@@ -2384,23 +2429,21 @@ jobs:
   # Redis y Puppeteer (varios minutos) para un paso que no los usa. Un job
   # aparte, mas ligero, corre en paralelo al de cobertura sin ese coste.
   #
-  # En `push`, el job `unit` ya muta lo que ese push cambia
-  # (`make mutate-changed`); en `workflow_dispatch` ese mismo job muta YA el
-  # dominio completo (`make mutate`), asi que este job vuelve a mutarlo
-  # tambien ahi -duplicado a proposito, igual que `coverage` ya duplica hoy a
-  # `unit` en cada disparo manual: es el unico evento donde correr dos veces
-  # la comprobacion mas cara es mas barato que no tener la version nocturna
-  # probada a mano antes de fiarse de ella-.
+  # En `push` y en `workflow_dispatch`, el job `unit` muta lo que el cambio
+  # toca y aplica el 80 % a CADA fichero (`make mutate-changed`); este job es
+  # la pasada GLOBAL (MSI >= 80 % sobre todo el dominio) y es la unica que
+  # corre completa, de noche y en el disparo manual. Hasta el 02-10-2026 el
+  # job `unit` repetia la completa en el disparo manual; se quito (R6-DV-01/02:
+  # era un duplicado de 40-55 min que ademas no aplicaba la puerta por fichero).
   #
-  # timeout-minutes 60 y no 30 (el de `coverage`): es el mismo trabajo que
-  # `unit` acotaba a 60 cuando mutaba el dominio entero (comentario junto a
-  # ese job): 37-42 min medidos, con margen para el siguiente modulo de
-  # dominio.
+  # timeout-minutes 90 y no 60 (R6-DV-08): 26, 49 y 53 min medidos en los
+  # ultimos runs manuales verdes; con 60 un runner un 15 % mas lento lo mataba
+  # por tiempo con el dominio entero en verde.
   #-----------------------------------------------------------------------------
   mutation:
     name: "Mutacion completa (RQ-10, nocturna)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
 
     steps:
@@ -2430,3 +2473,32 @@ jobs:
             echo "que ese push cambia (\`make mutate-changed\`, job \`unit\`); esta es la"
             echo "pasada completa, nocturna y del disparo manual."
           } >>"$GITHUB_STEP_SUMMARY"
+
+  #-----------------------------------------------------------------------------
+  # gitleaks sobre TODAS las referencias (nocturno)
+  #
+  # El job `security` escanea solo el historico alcanzable desde el commit del
+  # run (R6-DV-03): una rama ajena con un falso positivo ya no pone en rojo
+  # `main` ni las demas ramas. Este job conserva el barrido de todo lo que
+  # tiene el repositorio -ramas sin integrar incluidas, que es donde un secreto
+  # pegado por descuido se queda sin que nadie lo mire-. Corre solo en
+  # `schedule`: en push y en el disparo manual ya lo cubre `security`.
+  #
+  # Un hallazgo aqui deja en rojo el run NOCTURNO, no el de nadie: el camino es
+  # el de §7.7 (se reporta commit y ruta; el historico no se reescribe sin
+  # decidirlo).
+  #-----------------------------------------------------------------------------
+  secrets-history:
+    name: "gitleaks sobre todas las referencias (nocturno)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    if: github.event_name == 'schedule'
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: gitleaks sobre todas las referencias (0 hallazgos)
+        run: make secrets-scan SECRETS_SCAN_SCOPE=all

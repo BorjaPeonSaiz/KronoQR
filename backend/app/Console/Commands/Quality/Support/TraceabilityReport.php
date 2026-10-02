@@ -53,16 +53,69 @@ final readonly class TraceabilityReport
     /** El marcador corto de lo que no corre en cada push. */
     private const array OFF_CADENCE = ['k6' => 'k6: a mano y en cada etiqueta vX.0.0'];
 
-    /** @var array<string, list<TaggedTest>> */
+    /** El marcador de las pruebas que la CI omite siempre y que no cubren nada. */
+    private const string NEVER_IN_CI = 'la CI la omite siempre: no cuenta como cobertura';
+
+    /**
+     * Las pruebas que CUBREN cada requisito: todas las etiquetadas menos las
+     * que la CI omite siempre. Es lo que decide `--check`.
+     *
+     * @var array<string, list<TaggedTest>>
+     */
     private array $tests;
 
+    /**
+     * Todas las etiquetadas, cubran o no. Es lo que se enseña en la matriz:
+     * esconder una prueba que existe tambien seria mentir sobre el arbol.
+     *
+     * @var array<string, list<TaggedTest>>
+     */
+    private array $listed;
+
+    /**
+     * @param  list<string>  $skippedInCi  Ficheros de Pest, relativos a backend/,
+     *                                     cuyas pruebas condicionadas al entorno
+     *                                     la CI omite siempre (`quality.skipped_in_ci`).
+     */
     public function __construct(
         private RequirementCatalog $catalog,
         private TagScan $scan,
         private PhaseOrder $order,
         private int $currentPhase,
+        private array $skippedInCi = [],
     ) {
-        $this->tests = $scan->byRequirement();
+        $this->listed = $scan->byRequirement();
+        $this->tests = array_filter(array_map(
+            fn (array $tests): array => array_values(array_filter(
+                $tests,
+                fn (TaggedTest $test): bool => ! $this->isSkippedInCi($test),
+            )),
+            $this->listed,
+        ));
+    }
+
+    /**
+     * ¿Es una prueba condicionada al entorno de un fichero que la CI omite
+     * siempre? Solo las condicionadas: las demas pruebas del mismo fichero se
+     * ejecutan en la CI y cubren lo que dicen.
+     *
+     * Se compara por el FINAL de la ruta porque la prueba llega relativa al
+     * padre de `base_path()` —`html/tests/…` en el contenedor, `backend/tests/…`
+     * en la CI— y la configuracion no puede depender de donde se ejecute.
+     */
+    public function isSkippedInCi(TaggedTest $test): bool
+    {
+        if (! $test->conditional || $test->tool !== 'pest') {
+            return false;
+        }
+
+        foreach ($this->skippedInCi as $path) {
+            if (str_ends_with('/'.$test->file, '/'.ltrim($path, '/'))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /*
@@ -135,7 +188,7 @@ final readonly class TraceabilityReport
         $known = $this->catalog->phases();
 
         return array_filter(
-            $this->tests,
+            $this->listed,
             static fn (array $tests, int|string $id): bool => ! isset($known[(string) $id]),
             ARRAY_FILTER_USE_BOTH,
         );
@@ -217,6 +270,10 @@ final readonly class TraceabilityReport
             'correr)` y se enumeran además en su propio apartado: verifican lo que dicen, pero no en todas',
             'las máquinas.',
             '',
+            '**Salvo las que la CI omite siempre** (`quality.skipped_in_ci`): su herramienta no existe en',
+            'el runner, así que en la CI no se ejecutan nunca. Se enumeran y se marcan `('.self::NEVER_IN_CI.')`,',
+            'pero **no cubren su requisito**: uno cuya única prueba sea de estas cuenta como sin prueba.',
+            '',
             'No lleva fecha a propósito: dos ejecuciones sobre el mismo árbol producen el mismo fichero,',
             'así que un `git diff` sobre esta matriz solo enseña cambios reales de cobertura.',
             '',
@@ -266,7 +323,9 @@ final readonly class TraceabilityReport
         $rows = ['| Requisito | Fase | Enunciado |', '|---|---|---|'];
 
         foreach ($missing as $requirement) {
-            $rows[] = '| `'.$requirement->id.'` | '.$requirement->phase.' | '.self::cell($requirement->title).' |';
+            $rows[] = '| `'.$requirement->id.'` | '.$requirement->phase.' | '.self::cell($requirement->title)
+                .(isset($this->listed[$requirement->id]) ? ' (solo tiene pruebas que '.self::NEVER_IN_CI.')' : '')
+                .' |';
         }
 
         return [
@@ -287,10 +346,10 @@ final readonly class TraceabilityReport
         $rows = ['| Requisito | Fase | Pruebas | Enunciado |', '|---|---|---|---|'];
 
         foreach ($this->catalog->requirements as $requirement) {
-            $tests = $this->tests[$requirement->id] ?? [];
+            $tests = $this->listed[$requirement->id] ?? [];
 
             $rows[] = '| `'.$requirement->id.'` | '.$requirement->phase.' | '
-                .($tests === [] ? '—' : implode('<br>', array_map(self::describe(...), $tests)))
+                .($tests === [] ? '—' : implode('<br>', array_map($this->describe(...), $tests)))
                 .' | '.self::cell($requirement->title).' |';
         }
 
@@ -329,7 +388,7 @@ final readonly class TraceabilityReport
         foreach ($conditional as $test) {
             $rows[] = '| `'.$test->reference().'` — '.self::cell($test->name)
                 .' | '.implode(', ', array_map(static fn (string $id): string => '`'.$id.'`', $test->requirements))
-                .' | '.self::cadence($test).' |';
+                .' | '.$this->cadence($test).' |';
         }
 
         return [
@@ -371,9 +430,9 @@ final readonly class TraceabilityReport
         return [...$lines, ...($warnings === [] ? ['Ninguno.'] : $warnings), ''];
     }
 
-    private static function describe(TaggedTest $test): string
+    private function describe(TaggedTest $test): string
     {
-        return '`'.$test->reference().'` — '.self::cell($test->name).self::mark($test);
+        return '`'.$test->reference().'` — '.self::cell($test->name).$this->mark($test);
     }
 
     /**
@@ -385,7 +444,7 @@ final readonly class TraceabilityReport
      * dar por «en cada push» algo que no lo es es justo el fallo que este
      * marcador existe para evitar.
      */
-    private static function mark(TaggedTest $test): string
+    private function mark(TaggedTest $test): string
     {
         $notes = [];
 
@@ -393,7 +452,9 @@ final readonly class TraceabilityReport
             $notes[] = self::OFF_CADENCE[$test->tool] ?? $test->tool.': frecuencia sin declarar';
         }
 
-        if ($test->conditional) {
+        if ($this->isSkippedInCi($test)) {
+            $notes[] = self::NEVER_IN_CI;
+        } elseif ($test->conditional) {
             $notes[] = 'si el entorno la deja correr';
         }
 
@@ -401,8 +462,12 @@ final readonly class TraceabilityReport
     }
 
     /** Con que frecuencia se ejecuta esta prueba, en largo. */
-    private static function cadence(TaggedTest $test): string
+    private function cadence(TaggedTest $test): string
     {
+        if ($this->isSkippedInCi($test)) {
+            return 'Nunca en la CI (`quality.skipped_in_ci`): no cuenta como cobertura';
+        }
+
         return self::CADENCE[$test->tool] ?? $test->tool.', frecuencia sin declarar';
     }
 

@@ -412,11 +412,46 @@ else
 	fi
 endif
 
-test-integration: ## Repositorios contra PostgreSQL real
+# Puerta contra las omisiones silenciosas (R6-DV-07, R2-QA-01). Una prueba
+# `skipped` no falla ni avisa, y `qa:traceability` la cuenta como cobertura: 24
+# pruebas de esta suite salieron omitidas en cada run de la CI durante semanas
+# sin que nadie lo viera. Con `INTEGRATION_MAX_SKIPPED=<n>` el objetivo falla si
+# la suite omite MAS de n pruebas. Vacio (el valor por defecto, en local) no
+# comprueba nada: en un portatil sin Chromium o sin php-fpm omitir es esperable.
+# La CI lo fija en ci.yml, job `integration`, con el numero y el motivo.
+#
+# Se lee la linea final de Pest («Tests: 24 skipped, 6737 passed ...»), sin
+# colores porque no hay terminal. Si no aparece, la puerta falla en vez de
+# aprobar a ciegas. `tee` + fichero de estado y no `$$(...)`: la salida de 15
+# minutos tiene que verse en vivo, y `sh` de la CI es dash (sin PIPESTATUS).
+INTEGRATION_MAX_SKIPPED ?=
+
+test-integration: ## Repositorios contra PostgreSQL real (INTEGRATION_MAX_SKIPPED=n falla si se omiten mas de n pruebas)
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
-else
+else ifeq ($(INTEGRATION_MAX_SKIPPED),)
 	$(RUN_APP) php artisan test --testsuite=Integration
+else
+	@rm -f .integration-suite.log .integration-suite.status; \
+	( $(RUN_APP) php artisan test --testsuite=Integration; echo $$? >"$(CURDIR)/.integration-suite.status" ) | tee "$(CURDIR)/.integration-suite.log"; \
+	status=$$(cat .integration-suite.status 2>/dev/null || echo 1); \
+	omitidas=$$(sed 's/\x1b\[[0-9;]*[A-Za-z]//g' .integration-suite.log | grep -E '^ *Tests:' | grep -oE '[0-9]+ skipped' | grep -oE '[0-9]+' | tail -1); \
+	resumen=$$(sed 's/\x1b\[[0-9;]*[A-Za-z]//g' .integration-suite.log | grep -cE '^ *Tests:'); \
+	rm -f .integration-suite.log .integration-suite.status; \
+	if [ "$$status" -ne 0 ]; then exit "$$status"; fi; \
+	if [ "$$resumen" -eq 0 ]; then \
+		echo "[make] ERROR: no se encontro la linea «Tests:» de Pest; no se puede comprobar el numero de pruebas omitidas."; \
+		echo "[make] Si el formato de salida de Pest ha cambiado, adapta este objetivo; no se aprueba a ciegas."; \
+		exit 1; \
+	fi; \
+	omitidas=$${omitidas:-0}; \
+	if [ "$$omitidas" -gt "$(INTEGRATION_MAX_SKIPPED)" ]; then \
+		echo "[make] ERROR: la suite de Integracion ha omitido $$omitidas pruebas y lo esperado son como mucho $(INTEGRATION_MAX_SKIPPED)."; \
+		echo "[make] Una prueba omitida no falla, pero tampoco prueba nada. Busca las nuevas con: php artisan test --testsuite=Integration --display-skipped"; \
+		echo "[make] Causas habituales: Chrome que no arranca (accion .github/actions/chrome-for-pdf) o un ->skip() nuevo."; \
+		exit 1; \
+	fi; \
+	echo "[make] Pruebas omitidas: $$omitidas (maximo permitido $(INTEGRATION_MAX_SKIPPED))."
 endif
 
 # Contract y Feature juntas y en cada push desde el cierre de la Fase 0.
@@ -877,9 +912,31 @@ endif
 # delimitada por el propio escaneo). Al pasar limpio HOY, este objetivo es
 # BLOQUEANTE desde el primer dia (doc 02 §9.2): no lleva `continue-on-error` en
 # la CI.
-secrets-scan: ## gitleaks sobre el historico completo (umbral: 0 hallazgos, bloqueante)
-	$(GITLEAKS) git --config .gitleaks.toml --exit-code 1 -v .
-	@echo "[make] gitleaks: 0 hallazgos en el historico."
+#
+# ALCANCE (R6-DV-03, 02-10-2026). Sin `--log-opts`, gitleaks recorre TODAS las
+# referencias (`--all`): ramas ajenas, sin integrar, incluidas. Como la CI hace
+# `fetch-depth: 0`, un valor de prueba en una rama cualquiera ponia en rojo
+# `main` y todas las demas ramas (PR #103 y #104). Por eso hay dos alcances:
+#
+#   SECRETS_SCAN_SCOPE=head  el historico alcanzable desde HEAD (el commit del
+#                            run). Es lo que usa la CI en push y en el disparo
+#                            manual: lo que ESTE cambio introduce o arrastra.
+#   SECRETS_SCAN_SCOPE=all   todas las referencias. Lo usa el job nocturno
+#                            `secrets-history` y es el valor por defecto en
+#                            local, donde lo que se busca es no dejar nada.
+SECRETS_SCAN_SCOPE ?= all
+
+ifeq ($(SECRETS_SCAN_SCOPE),head)
+GITLEAKS_LOG_OPTS := --log-opts="--full-history HEAD"
+else ifeq ($(SECRETS_SCAN_SCOPE),all)
+GITLEAKS_LOG_OPTS :=
+else
+$(error SECRETS_SCAN_SCOPE debe ser "head" o "all", no "$(SECRETS_SCAN_SCOPE)")
+endif
+
+secrets-scan: ## gitleaks sobre el historico (SECRETS_SCAN_SCOPE=head|all; umbral: 0 hallazgos, bloqueante)
+	$(GITLEAKS) git --config .gitleaks.toml --exit-code 1 $(GITLEAKS_LOG_OPTS) -v .
+	@echo "[make] gitleaks: 0 hallazgos en el historico ($(SECRETS_SCAN_SCOPE))."
 
 # SBOM CycloneDX del arbol de fuentes (composer.lock y package-lock.json): un
 # inventario de que trae cada version publicada, independiente de cualquier
@@ -1051,13 +1108,20 @@ else
 	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --parallel --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
 endif
 
-# `mutate` completo tarda 37-42 min medidos en la CI (comentario de arriba) y
-# el doc 02 §10.1 exige que las etapas 1-3 respondan en menos de 4 minutos en
-# cada push: los dos hechos juntos no caben en el mismo sitio. Decision
+# `mutate` completo tarda 37-57 min medidos en la CI (comentario de arriba) y
+# no cabe en las etapas 1-3 de cada push (doc 02 §10.1). Decision
 # (24-09-2026): en cada push se muta SOLO lo que el push cambia; la mutacion
 # COMPLETA queda para la noche (`schedule`) y para el disparo manual
-# (`workflow_dispatch`, el que se hace siempre antes de abrir una PR), en
-# ci.yml.
+# (`workflow_dispatch`, el que se hace siempre antes de abrir una PR), en el
+# job `mutation` de ci.yml.
+#
+# Desde el 02-10-2026 el disparo manual TAMBIEN ejecuta este objetivo, con
+# `MUTATE_BASE=origin/main`, en el job `unit`: `mutate` solo mide el MSI global
+# y no ve un fichero de dominio que baja del 80 %, que es lo que este objetivo
+# si aplica a cada fichero (R6-DV-01/02, R2-QB-01). Asi una rama que deja un
+# fichero cambiado por debajo del 80 % sale roja antes del merge, no al entrar
+# en `main`. Sin ficheros de dominio cambiados (por ejemplo, en `main`) termina
+# en verde sin trabajo.
 #
 # Por que esto no relaja RQ-10. El umbral --min=80 se sigue aplicando, entero,
 # sobre el subconjunto que cambia: un push que introduce una regla de negocio
@@ -1093,7 +1157,7 @@ else
 	fi; \
 	files="$$(git diff --name-only --diff-filter=ACMR "$${base}...HEAD" -- 'backend/app/Modules/*/Domain/*.php' | sed 's#^backend/##')"; \
 	if [ -z "$$files" ]; then \
-		echo "[make] Sin ficheros de app/Modules/*/Domain cambiados frente a $$base: mutacion acotada omitida; la completa corre de noche (schedule) y en el disparo manual (workflow_dispatch)."; \
+		echo "[make] Sin ficheros de app/Modules/*/Domain cambiados frente a $$base: mutacion acotada omitida; la completa corre de noche (schedule) y en el disparo manual (job mutation)."; \
 		exit 0; \
 	fi; \
 	paths="$$(printf '%s\n' "$$files" | tr '\n' ',' | sed 's/,$$//')"; \
