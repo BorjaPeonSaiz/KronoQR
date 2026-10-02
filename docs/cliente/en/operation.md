@@ -285,7 +285,7 @@ docker compose exec app php artisan reporting:purge-expired-exports
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `REPORTING_EXPORT_PATH` | `storage/app/reports` (in the `app-storage` volume) | Where those files are written. Leave it empty. If you change it, it has to stay **inside `/var/www/html/storage/app`** and must not match or overlap the other generated-file paths (§13.5); `product:doctor` fails if they overlap and warns if they are outside it. **Never inside `BACKUP_PATH`**: they expire on their own and must not go into the backup |
+| `REPORTING_EXPORT_PATH` | `storage/app/reports` (in the `app-storage` volume) | Where those files are written. Leave it empty. If you change it, it has to stay **inside `/var/www/html/storage/app`** and must not match or overlap the other generated-file paths (§13.5); `product:doctor` fails if they overlap, and if they are outside it fails in production and warns elsewhere. **Never inside `BACKUP_PATH`**: they expire on their own and must not go into the backup |
 | `REPORTING_EXPORT_RETENTION_DAYS` | `7` | Days the file can be downloaded before the daily purge deletes it |
 | `REPORTING_EXPORT_LINK_TTL_MINUTES` | `15` | Minutes the download link is valid for; it is also **single-use** |
 | `REPORTING_EXPORT_TIMEOUT_SECONDS` | `600` | Limit on the deferred report's query. Raise it if a large export fails on time |
@@ -1402,7 +1402,7 @@ where the volume is mounted (a path outside it is not seen by the other
 containers and is lost on the next update), and **they must not coincide or
 contain one another**, because each purge deletes in its own folder and only in
 its own. `product:doctor` fails if two coincide, if one contains another or if
-any of them is `storage/app` (or contains it) or overlaps `BACKUP_PATH`; and it warns if any of them is outside `storage/app`.
+any of them is `storage/app` (or contains it) or overlaps `BACKUP_PATH`; and if any of them is outside `storage/app` it fails in production (that is the fault the volume fixes) and warns elsewhere. It also warns if it finds generated files in `storage/app` outside the configured paths, which is what is left after changing one of them: empty the old folder.
 
 ### 13.6 Where the files the product generates live, and who can read them
 

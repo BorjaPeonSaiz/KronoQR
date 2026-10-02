@@ -274,7 +274,7 @@ docker compose exec app php artisan reporting:purge-expired-exports
 
 | Variable | De serie | Qué hace |
 | --- | --- | --- |
-| `REPORTING_EXPORT_PATH` | `storage/app/reports` (en el volumen `app-storage`) | Dónde se escriben esos ficheros. Déjala vacía. Si la cambias, tiene que quedar **dentro de `/var/www/html/storage/app`** y no coincidir ni solaparse con las otras rutas de ficheros generados (§13.5); `product:doctor` falla si se solapan y avisa si quedan fuera. **Nunca dentro de `BACKUP_PATH`**: caducan solos y no deben entrar en la copia |
+| `REPORTING_EXPORT_PATH` | `storage/app/reports` (en el volumen `app-storage`) | Dónde se escriben esos ficheros. Déjala vacía. Si la cambias, tiene que quedar **dentro de `/var/www/html/storage/app`** y no coincidir ni solaparse con las otras rutas de ficheros generados (§13.5); `product:doctor` falla si se solapan, y si quedan fuera falla en producción y avisa en las demás instalaciones. **Nunca dentro de `BACKUP_PATH`**: caducan solos y no deben entrar en la copia |
 | `REPORTING_EXPORT_RETENTION_DAYS` | `7` | Días que el fichero se puede descargar antes de que la purga diaria lo borre |
 | `REPORTING_EXPORT_LINK_TTL_MINUTES` | `15` | Minutos que vale el enlace de descarga, que además es **de un solo uso** |
 | `REPORTING_EXPORT_TIMEOUT_SECONDS` | `600` | Tope de la consulta del informe en diferido. Súbelo si una exportación grande falla por tiempo |
@@ -1380,7 +1380,7 @@ es donde está montado el volumen (una ruta fuera de él no la ven los demás
 contenedores y se pierde en la siguiente actualización), y **no pueden
 coincidir ni contenerse unas a otras**, porque cada purga borra en su carpeta y
 solo en la suya. `product:doctor` falla si dos coinciden, si una contiene a
-otra, si alguna es `storage/app` (o la contiene) o si se pisa con `BACKUP_PATH`; y avisa si alguna queda fuera de `storage/app`.
+otra, si alguna es `storage/app` (o la contiene) o si se pisa con `BACKUP_PATH`; y si alguna queda fuera de `storage/app` falla en producción (es el fallo que el volumen corrige) y avisa en las demás instalaciones. Avisa también si encuentra ficheros generados en `storage/app` fuera de las rutas configuradas, que es lo que queda al cambiar una de ellas: vacía la carpeta anterior.
 
 ### 13.6 Dónde viven los ficheros que genera el producto, y quién puede leerlos
 
