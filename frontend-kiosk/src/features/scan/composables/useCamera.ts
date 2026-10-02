@@ -119,9 +119,27 @@ export function useCamera(options: UseCameraOptions = {}): CameraController {
     }
   }
 
-  async function start(): Promise<MediaStream | null> {
-    if (stream.value !== null) return stream.value
+  // Arranque en vuelo compartido: dos `start()` concurrentes de la misma generacion
+  // esperan al mismo `getUserMedia` en vez de abrir un segundo `MediaStream` que
+  // pisaria `stream.value` y dejaria el primero vivo sin dueno (R2-KI-01).
+  let pendingStart: {
+    readonly generation: number
+    readonly promise: Promise<MediaStream | null>
+  } | null = null
 
+  function start(): Promise<MediaStream | null> {
+    if (stream.value !== null) return Promise.resolve(stream.value)
+    if (pendingStart !== null && pendingStart.generation === generation) return pendingStart.promise
+    const promise = open()
+    const entry = { generation, promise }
+    pendingStart = entry
+    void promise.finally(() => {
+      if (pendingStart === entry) pendingStart = null
+    })
+    return promise
+  }
+
+  async function open(): Promise<MediaStream | null> {
     const media = globalThis.navigator?.mediaDevices
     if (media === undefined) {
       state.value = 'unavailable'

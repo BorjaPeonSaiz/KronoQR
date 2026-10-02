@@ -217,9 +217,11 @@ describe('useQrScanner: desmontar con la camara o el decodificador a medias (KT4
     setVisibility('visible')
     document.dispatchEvent(new Event('visibilitychange'))
 
+    // R2-KI-01: el segundo lanzamiento espera a que el invalidado suelte su camara.
     const stale = grantPermission()
-    const fresh = grantPermission()
     await first
+    await settle()
+    const fresh = grantPermission()
     await settle()
 
     expect(stale.stop).toHaveBeenCalled()
@@ -227,5 +229,99 @@ describe('useQrScanner: desmontar con la camara o el decodificador a medias (KT4
 
     scanner.wrapper.unmount()
     expect(fresh.stop).toHaveBeenCalled()
+  })
+})
+
+// R2-KI-01 y R2-KI-02 (RF-KI-02, RF-KI-01): invariante de la camara. En todo
+// momento hay como mucho UNA camara y UN bucle vivos, y ninguno tras parar.
+describe('useQrScanner: una sola camara y un solo bucle (R2-KI-01, R2-KI-02, RF-KI-02)', () => {
+  function mountScanner() {
+    const video = ref<HTMLVideoElement | null>(document.createElement('video'))
+    return withSetup(() => useQrScanner({ video, onDecoded: vi.fn() }))
+  }
+
+  function getUserMediaCalls(): number {
+    const media = navigator.mediaDevices as unknown as { getUserMedia: ReturnType<typeof vi.fn> }
+    return media.getUserMedia.mock.calls.length
+  }
+
+  it('dos start() sin esperar comparten el arranque: un getUserMedia, un bucle, y todo parado al desmontar', async () => {
+    const scanner = mountScanner()
+
+    const both = Promise.all([scanner.result.start(), scanner.result.start()])
+    expect(getUserMediaCalls()).toBe(1)
+    const camera = grantPermission()
+    await both
+    await settle()
+
+    expect(getUserMediaCalls()).toBe(1)
+    expect(scannerStops).toHaveLength(1)
+
+    scanner.wrapper.unmount()
+    expect(camera.stop).toHaveBeenCalled()
+    expect(scannerStops[0]).toHaveBeenCalled()
+  })
+
+  it('ocultar y mostrar con decodeFromStream retenido: el bucle viejo se para y solo queda el vigente', async () => {
+    let releaseDecoder: () => void = () => undefined
+    decodeGate = new Promise<void>((resolve) => {
+      releaseDecoder = resolve
+    })
+    const scanner = mountScanner()
+
+    const first = scanner.result.start()
+    const firstCamera = grantPermission()
+    await settle() // camara abierta, decodificador pendiente
+
+    setVisibility('hidden')
+    document.dispatchEvent(new Event('visibilitychange'))
+    setVisibility('visible')
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    releaseDecoder()
+    await settle()
+    // El segundo lanzamiento espera al primero y pide su propia camara.
+    const secondCamera = grantPermission()
+    await first
+    await settle()
+
+    expect(firstCamera.stop).toHaveBeenCalled()
+    expect(secondCamera.stop).not.toHaveBeenCalled()
+    expect(scannerStops).toHaveLength(2)
+    const [staleLoop, liveLoop] = scannerStops
+    expect(staleLoop).toHaveBeenCalled()
+    expect(liveLoop).not.toHaveBeenCalled()
+
+    scanner.wrapper.unmount()
+    expect(liveLoop).toHaveBeenCalled()
+    expect(secondCamera.stop).toHaveBeenCalled()
+  })
+
+  it('tras N reinicios del perro guardian, los controles y las pistas anteriores estan parados', async () => {
+    const scanner = mountScanner()
+
+    const starting = scanner.result.start()
+    grantPermission()
+    await starting
+    await settle()
+
+    const restarts = 3
+    for (let i = 0; i < restarts; i += 1) {
+      await vi.advanceTimersByTimeAsync(16_000) // silencio > 12 s: el perro guardian rearranca
+      grantPermission()
+      await settle()
+    }
+
+    expect(opened).toHaveLength(restarts + 1)
+    expect(scannerStops).toHaveLength(restarts + 1)
+    for (const camera of opened.slice(0, -1)) expect(camera.stop).toHaveBeenCalled()
+    for (const stop of scannerStops.slice(0, -1)) expect(stop).toHaveBeenCalled()
+    const last = scannerStops.at(-1)
+    expect(last).not.toHaveBeenCalled()
+    expect(opened.at(-1)?.stop).not.toHaveBeenCalled()
+
+    scanner.wrapper.unmount()
+    expect(last).toHaveBeenCalled()
+    expect(opened.at(-1)?.stop).toHaveBeenCalled()
   })
 })

@@ -116,7 +116,15 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
   let restarting = false
   let disposed = false
 
+  // Generacion de lanzamiento: `teardown()` la incrementa e invalida todo `launch()`
+  // en vuelo. Tras cada `await`, un lanzamiento que ya no es el vigente suelta lo
+  // que obtuvo y sale (R2-KI-02). El lanzamiento en vuelo se comparte: un segundo
+  // `start()` se une a el en vez de abrir otra camara (R2-KI-01).
+  let generation = 0
+  let inflight: { readonly generation: number; readonly promise: Promise<void> } | null = null
+
   function teardown(): void {
+    generation += 1
     if (watchdog !== null) {
       clearInterval(watchdog)
       watchdog = null
@@ -140,7 +148,9 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
     if (state.value === 'scanning' || state.value === 'starting') state.value = 'idle'
   }
 
-  async function launch(): Promise<void> {
+  async function launch(mine: number): Promise<void> {
+    const stale = (): boolean => disposed || mine !== generation
+
     const element = options.video.value
     if (element === null) {
       state.value = 'unavailable'
@@ -155,15 +165,15 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
 
     const stream = await camera.start()
     if (stream === null) return // `useCamera` ya ha fijado el estado y avisado.
-    if (disposed) {
-      camera.stop()
-      return
-    }
+    // Obsoleto: `teardown()` ya paro las pistas. NO se llama a `camera.stop()`: el
+    // controlador es compartido y pararia la camara del lanzamiento vigente.
+    if (stale()) return
 
     let BrowserQRCodeReader
     try {
       ;({ BrowserQRCodeReader } = await import('@zxing/browser'))
     } catch (error) {
+      if (stale()) return
       camera.stop()
       state.value = 'unavailable'
       options.onDiagnostic?.('scanner.decoder_load_failed', {
@@ -173,10 +183,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
       return
     }
 
-    if (disposed) {
-      camera.stop()
-      return
-    }
+    if (stale()) return
 
     try {
       const reader = new BrowserQRCodeReader(undefined, {
@@ -185,7 +192,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
       })
 
       lastAttemptAtMs = Date.now()
-      controls = await reader.decodeFromStream(stream, element, (result) => {
+      const started = await reader.decodeFromStream(stream, element, (result) => {
         // Se invoca tanto al acertar como al no encontrar nada. Los fallos de
         // decodificacion NO se reportan: son el caso normal diez veces por
         // segundo, y anotarlos llenaria `error_events` de ruido en una hora.
@@ -194,14 +201,21 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
         options.onDecoded(result.getText())
       })
 
-      if (disposed) {
-        teardown()
+      if (stale()) {
+        // Un bucle que nadie va a parar: se detiene aqui, solo el suyo.
+        try {
+          started.stop()
+        } catch {
+          // Da igual: ya no es el vigente.
+        }
         return
       }
 
+      controls = started
       state.value = 'scanning'
       startWatchdog()
     } catch (error) {
+      if (stale()) return
       camera.stop()
       state.value = 'unavailable'
       options.onDiagnostic?.('scanner.start_failed', {
@@ -229,7 +243,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
     restarting = true
     try {
       teardown()
-      await launch()
+      await start()
     } finally {
       restarting = false
     }
@@ -238,7 +252,23 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
   async function start(): Promise<void> {
     if (disposed) return
     if (controls !== null) return
-    await launch()
+    if (inflight !== null && inflight.generation === generation) return inflight.promise
+
+    const mine = generation
+    const previous = inflight?.promise ?? null
+    const promise = (async (): Promise<void> => {
+      // Un lanzamiento invalidado aun puede estar soltando sus recursos: se espera
+      // a que termine para que nunca haya dos bucles ni dos camaras a la vez.
+      if (previous !== null) await previous.catch(() => undefined)
+      if (disposed || mine !== generation) return
+      await launch(mine)
+    })()
+    const entry = { generation: mine, promise }
+    inflight = entry
+    void promise.finally(() => {
+      if (inflight === entry) inflight = null
+    })
+    return promise
   }
 
   function stop(): void {
