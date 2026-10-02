@@ -9,6 +9,7 @@
 | `FicheroGeneradoDesaparecidoAntesDeCaducar` | `generated_files_missing_total` sube (`increase` en 30 min, o serie nueva), `for: 1m` | Alta | Responsable de seguridad |
 | `FicheroGeneradoSinRetirarPasadoSuPlazo` | `generated_files_overdue > 0`, `for: 1h` | Media | IT del cliente |
 | `PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo` | `generated_files_refused_total` sube (`increase` en 1 h, o serie nueva), `for: 1m` | Media | IT del cliente |
+| `PurgaDeFicherosGeneradosNoPuedeBorrar` | `generated_files_remove_failed_total` sube (`increase` en 1 h, o serie nueva), `for: 1m` | Media | IT del cliente |
 
 **A las 06:30, quien la reciba hace esto:** mira la etiqueta `class` de la alerta
 (§1), lee el asiento de `audit_log` si es la de seguridad (§3) y decide con la
@@ -127,7 +128,65 @@ ha borrado nada de eso (por diseño), pero no debería haberlo.
    queda fuera de toda purga y sin plazo, con datos personales dentro. Cuando
    hayas comprobado que no hace falta, bórrala.
 
-## 6. Lo que no alerta, y un límite conocido
+## 6. `PurgaDeFicherosGeneradosNoPuedeBorrar` (IT)
+
+El sistema de ficheros ha **negado un borrado que tocaba**: el fichero sigue en el
+volumen pasado su plazo (contiene datos personales) y su fila **no** se marca
+`purged` hasta que se borre. La purga lo reintenta cada hora, así que la métrica
+sigue subiendo y la alerta no se apaga sola mientras la causa persista. El log
+técnico lleva `generated_files.remove_failed` con la clase y un motivo, sin ruta
+ni `uuid`:
+
+- `directory_not_writable`: el usuario de la aplicación no puede borrar dentro de
+  la carpeta de esa clase (dueño o modo incorrectos);
+- `unlink_failed`: el borrado del fichero lo ha rechazado el sistema de ficheros.
+
+**La causa habitual es de permisos**, no de seguridad: algo se creó con otro
+usuario, típicamente una exportación lanzada con `docker compose exec -u root`,
+que deja una carpeta o un fichero de `root` dentro de un volumen que es de `app`.
+
+1. Mira el dueño y el modo de la raíz del volumen y de la carpeta de la clase
+   (`exports`, `reports`, `diagnostics`, `tmp/legal-exports`):
+
+   ```bash
+   docker compose exec -T app ls -la /var/www/html/storage/app
+   docker compose exec -T app ls -la /var/www/html/storage/app/exports
+   ./doctor.sh            # la raíz del volumen debe ser app:app 0700
+   docker compose exec -T app php artisan product:doctor
+   ```
+
+2. Arregla **solo lo que no es de `app`**, sin borrar a mano más de lo debido:
+
+   ```bash
+   docker compose exec -u root app chown -R app:app /var/www/html/storage/app/exports
+   docker compose exec -u root app chmod 0700 /var/www/html/storage/app/exports
+   ```
+
+   (cambia `exports` por la clase de la alerta). No borres a mano los ficheros que
+   han caducado: la siguiente pasada horaria los retira y **marca la fila como
+   `purged`**, que es lo que deja constancia.
+3. Si el motivo sigue siendo `unlink_failed` con los permisos bien, el sistema de
+   ficheros del servidor está fallando (disco en solo lectura, atributos
+   inmutables): [`espacio-en-disco.md`](espacio-en-disco.md) y el log del
+   servidor. Mientras no se borre, el fichero con datos personales sigue vivo: no
+   lo dejes semanas.
+4. Evita la causa: lanza las exportaciones por consola como `app` (sin
+   `-u root`).
+
+## 6 bis. Dos avisos del log y de `product:doctor` que explican lo mismo
+
+- **`generated_files.root_unavailable`** (log del `scheduler`): la raíz de una
+  clase no existe, típicamente porque el volumen `app-storage` no está montado.
+  **Sin raíz las purgas ya no concilian** (no marcan nada como `purged` ni
+  `file_missing` por un volumen vacío por error). `./doctor.sh` dice qué servicio
+  no monta el volumen; recréalo con el `compose` del paquete.
+- **`product:doctor`**: la sonda `files.class_roots` **falla en producción** si una
+  raíz de clase queda fuera del volumen (un `*_PATH` del `.env` mal puesto), y
+  `files.stray_entries` avisa de ficheros de una clase que están **fuera** de las
+  raíces configuradas (restos de una raíz anterior: vacíalos cuando compruebes que
+  no hacen falta, ver §5 punto 5).
+
+## 7. Lo que no alerta, y un límite conocido
 
 - `generated_files_orphans_removed_total` es informativa y **no tiene alerta**: un
   resto borrado de vez en cuando es la conciliación trabajando. Si sube todos los

@@ -123,3 +123,34 @@ groups:
             las variables *_PATH de ficheros generados no se solapan
             (product:doctor) y que nadie ha dejado ficheros a mano en el volumen.
           runbook_url: docs/runbooks/ficheros-generados.md
+
+      #------------------------------------------------------------------------
+      # El sistema de ficheros nego un borrado que tocaba: el fichero SIGUE en
+      # disco pasado su plazo y su fila NO se marca `purged` (se reintenta en la
+      # pasada siguiente, cada hora, asi que la serie sigue subiendo mientras la
+      # causa persista y la alerta no se apaga sola). Hay datos personales
+      # sobreviviendo a su plazo, pero la causa habitual es de permisos —una
+      # exportacion lanzada con `exec -u root` deja una carpeta o un fichero que
+      # el usuario de la aplicacion ya no puede borrar—, no de seguridad: IT.
+      #------------------------------------------------------------------------
+      - alert: PurgaDeFicherosGeneradosNoPuedeBorrar
+        expr: >-
+          (increase(generated_files_remove_failed_total[1h]) > 0)
+          or
+          (generated_files_remove_failed_total > 0 unless generated_files_remove_failed_total offset 1h)
+        for: 1m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: generated-files
+        annotations:
+          summary: "La purga no puede borrar un fichero generado que ha caducado"
+          description: >-
+            Un fichero con datos personales sigue en el volumen pasado su plazo
+            porque el sistema de ficheros ha negado el borrado, y su fila no se
+            marca como purgada hasta que se borre. La causa habitual es de
+            permisos: algo lo creo con otro usuario (por ejemplo una exportacion
+            lanzada con exec -u root). Mira el dueño y el modo de la carpeta de
+            la clase, arreglalos sin borrar a mano mas de lo debido y la
+            siguiente pasada horaria lo retira.
+          runbook_url: docs/runbooks/ficheros-generados.md

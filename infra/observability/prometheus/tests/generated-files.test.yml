@@ -163,3 +163,70 @@ tests:
       - eval_time: 200m
         alertname: PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo
         exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # remove_failed: primer fallo (serie nueva) dispara; sigue subiendo con cada
+  # reintento horario y la alerta se mantiene; una serie vieja quieta no.
+  #-----------------------------------------------------------------------------
+  - name: remove_failed_primera_vez_dispara
+    interval: 1m
+    input_series:
+      - series: 'generated_files_remove_failed_total{class="data_export"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PurgaDeFicherosGeneradosNoPuedeBorrar
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: generated-files
+              class: data_export
+            exp_annotations:
+              summary: "La purga no puede borrar un fichero generado que ha caducado"
+              description: >-
+                Un fichero con datos personales sigue en el volumen pasado su plazo
+                porque el sistema de ficheros ha negado el borrado, y su fila no se
+                marca como purgada hasta que se borre. La causa habitual es de
+                permisos: algo lo creo con otro usuario (por ejemplo una exportacion
+                lanzada con exec -u root). Mira el dueño y el modo de la carpeta de
+                la clase, arreglalos sin borrar a mano mas de lo debido y la
+                siguiente pasada horaria lo retira.
+              runbook_url: docs/runbooks/ficheros-generados.md
+
+  - name: remove_failed_reintentos_mantienen_la_alerta
+    interval: 1m
+    input_series:
+      # Sube 1 cada hora (cada pasada de purga reintenta y vuelve a fallar).
+      - series: 'generated_files_remove_failed_total{class="report_export"}'
+        values: "1+0x59 2+0x60 3+0x60"
+    alert_rule_test:
+      - eval_time: 150m
+        alertname: PurgaDeFicherosGeneradosNoPuedeBorrar
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: generated-files
+              class: report_export
+            exp_annotations:
+              summary: "La purga no puede borrar un fichero generado que ha caducado"
+              description: >-
+                Un fichero con datos personales sigue en el volumen pasado su plazo
+                porque el sistema de ficheros ha negado el borrado, y su fila no se
+                marca como purgada hasta que se borre. La causa habitual es de
+                permisos: algo lo creo con otro usuario (por ejemplo una exportacion
+                lanzada con exec -u root). Mira el dueño y el modo de la carpeta de
+                la clase, arreglalos sin borrar a mano mas de lo debido y la
+                siguiente pasada horaria lo retira.
+              runbook_url: docs/runbooks/ficheros-generados.md
+
+  - name: remove_failed_serie_quieta_no_dispara
+    interval: 1m
+    input_series:
+      - series: 'generated_files_remove_failed_total{class="data_export"}'
+        values: "2x300"
+    alert_rule_test:
+      - eval_time: 200m
+        alertname: PurgaDeFicherosGeneradosNoPuedeBorrar
+        exp_alerts: []
