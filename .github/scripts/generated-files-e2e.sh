@@ -427,6 +427,16 @@ ok "informe con el aviso, fila restaurada purged con su asiento, huerfano respet
 
 step "8 · doctor.sh en verde con el volumen, y la imagen trae storage/app app:app 700"
 
+# El paso 7 recreo app: /ready responde antes de que Docker la marque sana, y
+# doctor.sh mira el estado de salud. Se espera por condicion.
+health=""
+for _ in $(seq 1 60); do
+  health="$(as_root docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q app)" 2>/dev/null || true)"
+  [ "${health}" = "healthy" ] && break
+  sleep 2
+done
+[ "${health}" = "healthy" ] || fail "app no llega a healthy en 120 s (ultimo estado: ${health})"
+
 if ! (cd "${PKG}" && as_root ./doctor.sh) >"${WORK}/doctor.out" 2>&1; then
   cat "${WORK}/doctor.out"
   fail "doctor.sh sale con fallos"
