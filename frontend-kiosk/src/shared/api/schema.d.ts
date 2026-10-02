@@ -1212,6 +1212,12 @@ export interface paths {
          *     sin PIN no puede fichar por respaldo (RF-AT-11) ni entrar al portal
          *     (RL-05), y ese estado no debe poder existir. El PIN viaja **una sola
          *     vez**, en esta respuesta: despues solo se restablece.
+         *
+         *     **Un correo o un documento que ya son de otra persona** dan `409`
+         *     (`urn:kronoqr:problem:conflict`), tambien si esa otra escritura
+         *     —una modificacion o una importacion— llega a la vez: el servidor
+         *     reintenta una vez la que PostgreSQL deshace y responde el `409` del
+         *     dato duplicado, nunca un `500` ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md) §1.3).
          */
         post: operations["createEmployee"];
         delete?: never;
@@ -1268,7 +1274,9 @@ export interface paths {
          *     tiene su propio endpoint, `POST /employees/{uuid}/offboard`. Este
          *     `PATCH` solo alterna entre `active` y `suspended`.
          *
-         *     **Una ficha dada de baja no se modifica** (`409`). Una modificacion y
+         *     **Una ficha dada de baja no se modifica** (`409` con `type`
+         *     `urn:kronoqr:problem:employee-terminated`, distinto del `409` generico
+         *     del correo duplicado). Una modificacion y
          *     una baja de la misma persona que llegan a la vez se aplican una detras
          *     de otra, nunca entrelazadas ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md)):
          *     o la modificacion entra primero y la baja despues, o la baja entra
@@ -1340,8 +1348,10 @@ export interface paths {
          *     otra fecha da `422` en `terminated_at` y el mensaje dice cual es la
          *     admitida.
          *
-         *     **Sin centro configurado no hay baja** (`409`): «hoy» se resuelve con la
-         *     zona del centro y nunca cae a UTC.
+         *     **Sin centro configurado no hay baja** (`409`, `urn:kronoqr:problem:conflict`):
+         *     «hoy» se resuelve con la zona del centro y nunca cae a UTC. Repetir la
+         *     baja de quien ya esta de baja es `409` con
+         *     `urn:kronoqr:problem:employee-terminated`.
          *
          *     **Tras la baja, los dias trabajados hasta el cese se completan a mano**
          *     con `POST /api/v1/shift-entries` (RF-PA-04), siempre que la jornada este
@@ -1400,6 +1410,10 @@ export interface paths {
          *
          *     **No dice si el empleado existe.** Un `uuid` desconocido y uno fuera del
          *     alcance de quien pregunta responden lo mismo, `404` (regla dura 17).
+         *
+         *     **A una persona dada de baja no se le restablece el PIN** (RN-14,
+         *     ADR-046): `409` con `urn:kronoqr:problem:employee-terminated`, sin
+         *     cambiar el hash ni dejar asiento.
          */
         post: operations["resetEmployeePin"];
         delete?: never;
@@ -1438,7 +1452,11 @@ export interface paths {
          *     Registrar la entrega de un PIN que no se ha emitido es un `409`: no se
          *     puede entregar lo que no existe. Repetir la entrega tambien lo es, por
          *     lo mismo que la revocacion de una credencial —sobrescribirla cambiaria
-         *     el momento y el responsable que ya constan en `audit_log`—.
+         *     el momento y el responsable que ya constan en `audit_log`—. Los dos
+         *     llevan `urn:kronoqr:problem:conflict`.
+         *
+         *     **A una persona dada de baja no se le registra la entrega** (RN-14,
+         *     ADR-046): `409` con `urn:kronoqr:problem:employee-terminated`.
          */
         post: operations["recordEmployeePinDelivery"];
         delete?: never;
@@ -11382,13 +11400,38 @@ export interface components {
         };
         /**
          * @description La operacion choca con el estado actual del recurso: un correo o un
-         *     nombre ya usados, o una baja sobre alguien que ya estaba de baja.
+         *     nombre ya usados. Una persona ya dada de baja tiene su propio `type`
+         *     (`EmployeeConflict`).
          *
          *     Es `409` y no `422` porque la peticion es valida en si misma; lo que no
          *     encaja es el estado del sistema. La distincion importa al cliente: ante
          *     un `409` no sirve corregir el formulario, hay que releer el recurso.
          */
         Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description La operacion sobre la ficha de una persona choca con su estado. **`type`
+         *     distingue las causas**, porque a quien las recibe le cambia la accion
+         *     siguiente:
+         *
+         *     - `urn:kronoqr:problem:employee-terminated` — **la persona ya esta dada
+         *       de baja** (RN-14, ADR-046). Su ficha no se modifica, no se da de baja
+         *       otra vez, y su PIN no se restablece ni se entrega. No hay nada que
+         *       corregir en el formulario: se recarga la ficha. Tambien sale cuando
+         *       la baja de otra persona del panel confirma mientras esta peticion
+         *       esperaba: la peticion la ve y no la deshace.
+         *     - `urn:kronoqr:problem:conflict` — cualquier otro choque del endpoint:
+         *       un correo que ya es de otra persona, un PIN sin emitir o ya
+         *       entregado, una instalacion sin centro. Se corrige lo indicado en
+         *       `detail` sin perder lo escrito.
+         */
+        EmployeeConflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -13142,7 +13185,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["EmployeeConflict"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -13180,7 +13223,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["EmployeeConflict"];
             /**
              * @description La peticion no cumple el contrato. Ademas de los errores de forma,
              *     `errors.terminated_at` señala una fecha de cese **posterior a hoy en
@@ -13230,6 +13273,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["EmployeeConflict"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -13262,7 +13306,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["EmployeeConflict"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -16301,6 +16345,10 @@ export interface operations {
              *     entre la peticion de validar y esta, no da `409`: esta peticion
              *     vuelve a comprobar el fichero y la fila sale rechazada en el
              *     informe.
+             *
+             *     **`type` distingue las dos causas**: el fichero distinto es
+             *     `urn:kronoqr:problem:conflict`; la baja durante la aplicacion es
+             *     `urn:kronoqr:problem:employee-terminated`.
              */
             409: {
                 headers: {
