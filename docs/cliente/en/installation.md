@@ -21,7 +21,7 @@ Vue.** You need a Linux server with Docker and thirty minutes.
 | CPU | 2 cores | 4 cores |
 | RAM | 4 GB | 8 GB |
 | Disk | 40 GB SSD | 100 GB SSD |
-| System | **Linux** with **Docker 24 or newer** and **Compose v2** | Same |
+| System | **Linux** with **Docker 24 or newer** and **Compose v2**, and `setpriv` (`util-linux` package, standard on Debian, Ubuntu and RHEL 7 or later; `update.sh` uses it) | Same |
 | Network | Reachable from the internal network. Internet access **optional** | Same |
 
 **Is this server up to my shift change?** The minimum is sized for a workforce

@@ -256,6 +256,29 @@ Al terminar, `restore.sh` deja un asiento `system.restored_from_backup` en `audi
 (§6.7). Si sale con `6`, la base está restaurada y solo falta ese asiento: sigue
 §6.7 y **no repitas la restauración**.
 
+**Lo que la restauración no repone, a propósito** (ADR-045):
+
+- **El volumen `app-storage`**: exportaciones íntegras, informes en diferido,
+  paquetes de diagnóstico, exportaciones para la Inspección por consola y el
+  estado de la telemetría. Todo eso caduca en días o se regenera desde la base,
+  y meterlo en la copia alargaría de 7 a 30 días la vida de una copia completa
+  de los datos personales. `restore.sh` no lo toca.
+- **Los informes de retención** de `BACKUP_PATH/reports/retention`: describen
+  purgas que ocurrieron, aunque la base vuelva a un momento anterior.
+
+**Consecuencia esperada, y el informe de `restore.sh` la anuncia:** las
+exportaciones e informes que la base restaurada recuerda como disponibles y cuyo
+fichero ya no está pasan a «Caducada» en la primera purga (la horaria para la
+exportación íntegra, la de las 04:25 UTC para los informes) y dejan un asiento
+`data_export.file_missing` o `report_export.file_missing`; si alguno no había
+caducado, puede sonar `FicheroGeneradoDesaparecidoAntesDeCaducar`. **Tras una
+restauración no es una brecha**: anótalo en el parte y pide de nuevo la
+exportación o el informe que haga falta. Los ficheros generados después de la
+copia, que la base ya no conoce, los borra la purga al cumplir su plazo. El
+detalle, en [`ficheros-generados.md`](ficheros-generados.md) §2 y en
+[`../cliente/operacion.md`](../cliente/operacion.md) §18. Si se restaura en un
+servidor nuevo, el volumen está vacío y la telemetría estrena identificador.
+
 Las tres órdenes de `restore.sh` van por el servicio **`restore`**, no por
 `app`: es un contenedor de un solo uso que recibe la credencial del rol de
 migración (restaurar exige crear y renombrar bases), hace su trabajo y

@@ -250,7 +250,8 @@ entrega —a quién, cuándo y por qué canal se entregó a la Inspección—, n
 
 **Lo que sí vigila el producto es que no se quede olvidado.** Mientras el fichero
 siga en `storage/app/legal-exports/`, `product:doctor` avisa cuando alguno pasa
-de 30 días en el servidor, y una métrica con su alerta cuenta cuántos hay (§7).
+de 30 días en el servidor, y la alerta `FicheroGeneradoSinRetirarPasadoSuPlazo`
+suena al IT ([`ficheros-generados.md`](ficheros-generados.md) §4). Ver §7.
 
 ---
 
@@ -269,7 +270,14 @@ criterio que un documento en papel, y el producto te lo recuerda:
 - el propio comando termina diciendo que lo borres en cuanto lo hayas
   entregado;
 - `product:doctor` avisa cuando alguno lleva **más de 30 días** en el servidor;
-- una métrica con alerta cuenta cuántos hay.
+- y a la vez suena la alerta `FicheroGeneradoSinRetirarPasadoSuPlazo`, que no
+  se apaga hasta que el fichero desaparece
+  ([`ficheros-generados.md`](ficheros-generados.md) §4).
+
+**Esa vigilancia solo cubre la carpeta por defecto.** Si lo generaste con
+`--output` hacia otra ruta (por ejemplo, dentro de `BACKUP_PATH`, §1), ni
+`product:doctor` ni la alerta de los 30 días saben que existe: la custodia y el
+borrado son solo de quien lo generó, y tiene que acordarse de dónde lo dejó.
 
 Para ver cuáles siguen ahí:
 
@@ -281,8 +289,8 @@ docker compose exec -T app sh -c 'ls -l storage/app/legal-exports/ 2>/dev/null'
    dejaste (en el servidor, o la copia que sacaste con `docker compose cp` a la
    máquina desde la que se entregó). No hace falta guardarlo en dos sitios:
    `audit_log` ya prueba qué se generó y cuándo. Si el procedimiento dura más
-   de 30 días, el aviso de `product:doctor` es esperado: no lo borres antes de
-   tiempo por quitarte el aviso.
+   de 30 días, el aviso de `product:doctor` y la alerta son esperados: no lo
+   borres antes de tiempo por quitártelos de encima.
 2. **Cuando el procedimiento se cierra** (resolución, archivo, o simplemente
    pasado el plazo de alegaciones sin novedad), bórralo:
 

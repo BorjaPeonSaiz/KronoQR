@@ -274,7 +274,7 @@ docker compose exec app php artisan reporting:purge-expired-exports
 
 | Variable | De serie | Qué hace |
 | --- | --- | --- |
-| `REPORTING_EXPORT_PATH` | `storage/app/reports` (en el volumen `app-storage`) | Dónde se escriben esos ficheros. Déjala vacía. Si la cambias, tiene que quedar **dentro de `/var/www/html/storage/app`** y no coincidir ni solaparse con las otras rutas de ficheros generados (§13.5); `product:doctor` falla si no. **Nunca dentro de `BACKUP_PATH`**: caducan solos y no deben entrar en la copia |
+| `REPORTING_EXPORT_PATH` | `storage/app/reports` (en el volumen `app-storage`) | Dónde se escriben esos ficheros. Déjala vacía. Si la cambias, tiene que quedar **dentro de `/var/www/html/storage/app`** y no coincidir ni solaparse con las otras rutas de ficheros generados (§13.5); `product:doctor` falla si se solapan y avisa si quedan fuera. **Nunca dentro de `BACKUP_PATH`**: caducan solos y no deben entrar en la copia |
 | `REPORTING_EXPORT_RETENTION_DAYS` | `7` | Días que el fichero se puede descargar antes de que la purga diaria lo borre |
 | `REPORTING_EXPORT_LINK_TTL_MINUTES` | `15` | Minutos que vale el enlace de descarga, que además es **de un solo uso** |
 | `REPORTING_EXPORT_TIMEOUT_SECONDS` | `600` | Tope de la consulta del informe en diferido. Súbelo si una exportación grande falla por tiempo |
@@ -750,6 +750,9 @@ la alimenta dejó de ejecutarse):
 | `KronoqrAuthFailureBurst` | > 20 fallos en 5 min, un canal | Media | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Determina si es una persona equivocándose o un intento automatizado |
 | `KronoqrAuthLockouts` | ≥ 3 bloqueos distintos en 15 min, un canal | Media | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Acota cuántas cuentas y si alguna llegó a entrar antes del bloqueo |
 | `KronoqrAuthFailureSpike` | > 100 fallos en 5 min, un canal | Crítica | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Preserva la evidencia antes de bloquear el origen en el borde |
+| `FicheroGeneradoDesaparecidoAntesDeCaducar` | Sube `generated_files_missing_total` (en 30 min, o serie nueva), durante 1 min | Alta | Seguridad | [`ficheros-generados.md`](../runbooks/ficheros-generados.md) §2 | Una exportación o un informe perdió su fichero antes de caducar. Tras restaurar una copia o actualizar desde la 2.1.0 es lo esperado (§18); si no, lee el asiento `*.file_missing` y trátalo como posible brecha |
+| `FicheroGeneradoSinRetirarPasadoSuPlazo` | `generated_files_overdue > 0` durante 1 h: una exportación para la Inspección lleva > 30 días en el servidor | Media | IT | [`ficheros-generados.md`](../runbooks/ficheros-generados.md) §4 | No se borra sola: confirma que se entregó y bórrala ([`requerimiento-inspeccion.md`](../runbooks/requerimiento-inspeccion.md) §7) |
+| `PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo` | Sube `generated_files_refused_total` (en 1 h, o serie nueva), durante 1 min | Media | IT | [`ficheros-generados.md`](../runbooks/ficheros-generados.md) §5 | Hay un enlace, un subdirectorio o un nombre ajeno en una carpeta del volumen, o rutas `*_PATH` solapadas: `product:doctor` (§13.5) |
 | `VentanaDeMantenimientoActiva` | Mientras dura una actualización, tope 2 h | Info (no notifica) | — | [`actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md) | Nada: solo silencia otras alertas mientras dura |
 
 **Lo que las alertas de certificado vigilan, y desde cuándo.**
@@ -871,7 +874,7 @@ Los siete pasos y lo que pasa si falla cada uno:
 | 4 · Migraciones | Vuelta atrás automática → `4` | Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante antes de reintentar: dice en qué versión intermedia se paró |
 | 5 · Arranque y verificación | Vuelta atrás automática → `4` | Igual que arriba. **La versión nueva nunca recibió tráfico**: se verifica sin borde | Igual que arriba |
 | 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `docker compose exec app php artisan up`, **sin restaurar nada**) o la restauración quedó a medias (tres órdenes y la ruta de la copia) | Runbook §5. Los quioscos siguen encolando mientras tanto |
-| 7 · Informe | — | `BACKUP_PATH/reports/update-<fecha>.log`, siempre; al lado, `update-<fecha>.detalle.log` (solo root, salida cruda, **puede llevar datos personales**) | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
+| 7 · Informe | — | `BACKUP_PATH/reports/update-<fecha>.log`, siempre; al lado, `update-<fecha>.detalle.log` (uid 1000, `0600`, salida cruda, **puede llevar datos personales**). **Aparecen al terminar, no mientras corre**; si no se pueden publicar ahí, el script dice en qué directorio temporal se quedaron | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
 
 Los pasos 5 y 6 dejan además su propio asiento en `audit_log` (`system.updated`
 o `system.restored_from_backup`): si por lo que sea no se puede escribir, la
@@ -886,7 +889,13 @@ después de la siguiente actualización.
 `IMAGE_TAG`; la única excepción es la de abajo, al pasar de la 2.1.0), los
 datos, la licencia (una licencia caducada **no impide actualizar**), y el
 fichaje. **Lo que sí hace falta:** `BACKUP_ENCRYPTION_KEY` en el `.env` y
-espacio para la copia y para la migración; el paso 1 lo dice con cifras.
+espacio para la copia y para la migración; el paso 1 lo dice con cifras. Y,
+desde la 2.2.0, **`setpriv`** en el servidor (paquete `util-linux`, de serie en
+Debian, Ubuntu y RHEL 7 o posterior; compruébalo con `command -v setpriv`):
+`update.sh` lo usa para escribir en `BACKUP_PATH` su informe, los informes de
+retención rescatados y sus métricas como el usuario de la aplicación y sin
+seguir enlaces. Sin él no se detiene: avisa, no rescata los informes de
+retención y deja su informe en un directorio temporal, diciendo cuál.
 
 **Al actualizar desde la 2.1.0: cada contenedor recibe solo lo suyo.** Hasta la
 2.1.0 todos los contenedores de la aplicación recibían el `.env` entero,
@@ -937,8 +946,9 @@ conviene saber:
   desechable, y no tiene sentido darles vida en el volumen nuevo. Sus
   anotaciones pasan a **«Caducada»** en la primera pasada de purga. Si alguna
   no había caducado todavía, además queda el asiento `data_export.file_missing`
-  o `report_export.file_missing` y puede sonar la alerta de fichero
-  desaparecido: **tras esta actualización es lo esperado**. Si necesitas una
+  o `report_export.file_missing` y puede sonar la alerta
+  `FicheroGeneradoDesaparecidoAntesDeCaducar`: **tras esta actualización es lo
+  esperado**. Si necesitas una
   exportación, pídela de nuevo.
 - **El identificador de la telemetría cambia una vez**, si la tenías activada
   (§13.4). A partir de aquí se conserva entre actualizaciones.
@@ -1300,7 +1310,9 @@ llevó qué y cuándo. Lo que se saca con `docker compose cp` no deja ese asient
 
 **Si el fichero desaparece antes de caducar**, la exportación pasa igualmente a
 «Caducada», pero además queda el asiento `data_export.file_missing` (con el
-identificador de la exportación, sin ruta) y suena una alerta. Fuera de los dos
+identificador de la exportación, sin ruta) y suena la alerta
+`FicheroGeneradoDesaparecidoAntesDeCaducar`, que va al responsable de
+seguridad (§10.4). Fuera de los dos
 casos en que es lo esperado —justo después de restaurar una copia, o de
 actualizar desde la 2.1.0—, **trátalo como un evento de seguridad**: alguien con
 acceso al servidor ha borrado o movido un fichero con todos los datos de la
@@ -1368,7 +1380,7 @@ es donde está montado el volumen (una ruta fuera de él no la ven los demás
 contenedores y se pierde en la siguiente actualización), y **no pueden
 coincidir ni contenerse unas a otras**, porque cada purga borra en su carpeta y
 solo en la suya. `product:doctor` falla si dos coinciden, si una contiene a
-otra o si alguna es `storage/app` entera o `BACKUP_PATH`.
+otra, si alguna es `storage/app` (o la contiene) o si se pisa con `BACKUP_PATH`; y avisa si alguna queda fuera de `storage/app`.
 
 ### 13.6 Dónde viven los ficheros que genera el producto, y quién puede leerlos
 
@@ -1380,7 +1392,7 @@ disco aparte son estos ficheros:
 | Exportación íntegra (ZIP, §13) | Volumen `app-storage`, carpeta `exports/` | 7 días; lo borra la purga horaria | No |
 | Informes generados en segundo plano (§6) | Volumen `app-storage`, carpeta `reports/` | 7 días; los borra la purga diaria de las 04:25 UTC | No |
 | Paquete de diagnóstico generado por consola (§12.2) | Volumen `app-storage`, carpeta `diagnostics/` | 7 días; lo borra la purga horaria | No |
-| Exportación para la Inspección generada por consola | Volumen `app-storage`, carpeta `legal-exports/` | **Hasta que la borres tú.** `product:doctor` avisa cuando alguna pasa de 30 días | No |
+| Exportación para la Inspección generada por consola | Volumen `app-storage`, carpeta `legal-exports/` | **Hasta que la borres tú.** Pasados 30 días avisan `product:doctor` y la alerta `FicheroGeneradoSinRetirarPasadoSuPlazo` (§10.4) | No |
 | Temporal de la exportación para la Inspección pedida desde el panel | Volumen `app-storage`, carpeta `tmp/legal-exports/` | Se borra al terminar la descarga; si la descarga se cortó, lo borra la purga horaria pasadas 6 horas | No |
 | Estado de la telemetría (§13.4) | Volumen `app-storage`, carpeta `telemetry/` | Se conserva; no lleva datos personales | No |
 | Informes de retención (§2 y §3) | `BACKUP_PATH/reports/retention` | **Siempre**: no se limpian solos | Viven en la carpeta de copias |
@@ -1434,6 +1446,11 @@ asiento. Trátalo como el acceso de administrador
 descarga desde el panel deja asiento (`data_export.downloaded`,
 `report_export.downloaded`); sacar el mismo fichero con `docker compose cp`
 no deja ninguno. Si lo haces, anótalo tú (§13.2).
+
+**Tres alertas vigilan estos ficheros** (§10.4): uno que desaparece antes de
+caducar, una exportación para la Inspección olvidada más de 30 días y una purga
+que se ha negado a tocar algo. Qué hacer con cada una:
+[`../runbooks/ficheros-generados.md`](../runbooks/ficheros-generados.md).
 
 **`docker compose down -v` borra el volumen**, igual que borra la base de
 datos. No la uses nunca en una instalación en producción.
@@ -2233,7 +2250,8 @@ desparejados en los dos sentidos:
   exportaciones íntegras, la de las 04:25 UTC para los informes) pasa a
   **«Caducada»** y deja el asiento `data_export.file_missing` o
   `report_export.file_missing`; si no había caducado aún, puede sonar además
-  la alerta de fichero desaparecido. **Tras una restauración es lo esperado**, y
+  la alerta `FicheroGeneradoDesaparecidoAntesDeCaducar`. **Tras una
+  restauración es lo esperado**, y
   el informe de `restore.sh` (en `BACKUP_PATH/reports/`) lo anuncia.
 - **El volumen tiene un fichero que la base restaurada no conoce** —se generó
   después de la copia—. Nadie lo puede descargar desde el panel, y la purga lo
@@ -2241,8 +2259,8 @@ desparejados en los dos sentidos:
 
 **Qué hacer.** Pide de nuevo lo que necesites: la exportación íntegra desde
 Licencia → «Tus datos son tuyos» (§13.2), y cada informe desde el panel, quien
-lo necesite. Se generan de los datos restaurados, que es lo que quieres. Si la
-alerta de fichero desaparecido suena **sin** que haya habido restauración ni
+lo necesite. Se generan de los datos restaurados, que es lo que quieres. Si
+`FicheroGeneradoDesaparecidoAntesDeCaducar` suena **sin** que haya habido restauración ni
 actualización desde la 2.1.0, no es esto: lee §13.3, «Si el fichero desaparece
 antes de caducar».
 

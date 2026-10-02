@@ -274,6 +274,15 @@ Fuera del producto, y enteramente tuyo. Lo mínimo:
   getent group docker
   ```
 
+- **Cifra el disco.** La base de datos y los ficheros que genera el producto
+  —la exportación íntegra lleva todos los datos de la plantilla— están en claro
+  en el disco donde Docker guarda sus datos (normalmente `/var/lib/docker`), y
+  las copias, aunque van cifradas, viven en `BACKUP_PATH`. Cifra los dos, con
+  la herramienta de tu sistema operativo o de tu plataforma de virtualización:
+  es lo que protege los datos si el disco o la máquina virtual salen del
+  edificio. El producto no puede hacerlo por ti: una clave guardada en el
+  mismo servidor no protege de quien ya lo controla
+  ([`operacion.md`](operacion.md) §13.6).
 - **SSH con clave, nunca con contraseña**, y sin acceso directo de `root`:
 
   ```bash
@@ -330,6 +339,7 @@ Fuera del producto, y enteramente tuyo. Lo mínimo:
   Si tocas cualquiera de los dos valores, mantén el margen.
 
 > **Cierra:** acceso al anfitrión, escalada por el grupo `docker`, lectura de
+> los datos en claro de un disco que sale del edificio, lectura de
 > los secretos de la instalación, incidencias falsas por hora desviada y un
 > histórico de errores que se queda sin conexión en el peor momento.
 > · **Dueño:** tú.

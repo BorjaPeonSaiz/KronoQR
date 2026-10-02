@@ -285,7 +285,7 @@ docker compose exec app php artisan reporting:purge-expired-exports
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `REPORTING_EXPORT_PATH` | `storage/app/reports` (in the `app-storage` volume) | Where those files are written. Leave it empty. If you change it, it has to stay **inside `/var/www/html/storage/app`** and must not match or overlap the other generated-file paths (§13.5); `product:doctor` fails otherwise. **Never inside `BACKUP_PATH`**: they expire on their own and must not go into the backup |
+| `REPORTING_EXPORT_PATH` | `storage/app/reports` (in the `app-storage` volume) | Where those files are written. Leave it empty. If you change it, it has to stay **inside `/var/www/html/storage/app`** and must not match or overlap the other generated-file paths (§13.5); `product:doctor` fails if they overlap and warns if they are outside it. **Never inside `BACKUP_PATH`**: they expire on their own and must not go into the backup |
 | `REPORTING_EXPORT_RETENTION_DAYS` | `7` | Days the file can be downloaded before the daily purge deletes it |
 | `REPORTING_EXPORT_LINK_TTL_MINUTES` | `15` | Minutes the download link is valid for; it is also **single-use** |
 | `REPORTING_EXPORT_TIMEOUT_SECONDS` | `600` | Limit on the deferred report's query. Raise it if a large export fails on time |
@@ -763,6 +763,9 @@ stopped running):
 | `KronoqrAuthFailureBurst` | > 20 failures in 5 min, one channel | Medium | Security | [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) (in Spanish) | Work out whether it is a person mistyping or an automated attempt |
 | `KronoqrAuthLockouts` | ≥ 3 distinct lockouts in 15 min, one channel | Medium | Security | [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) (in Spanish) | Scope how many accounts, and whether any got in before locking out |
 | `KronoqrAuthFailureSpike` | > 100 failures in 5 min, one channel | Critical | Security | [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) (in Spanish) | Preserve evidence before blocking the origin at the edge |
+| `FicheroGeneradoDesaparecidoAntesDeCaducar` | `generated_files_missing_total` goes up (within 30 min, or a new series), for 1 min | High | Security | [`ficheros-generados.md`](../../runbooks/ficheros-generados.md) (in Spanish) §2 | An export or a report lost its file before expiring. After restoring a backup or updating from 2.1.0 it is expected (§18); otherwise, read the `*.file_missing` entry and treat it as a possible breach |
+| `FicheroGeneradoSinRetirarPasadoSuPlazo` | `generated_files_overdue > 0` for 1 h: an export for the Labour Inspectorate has been on the server > 30 days | Medium | IT | [`ficheros-generados.md`](../../runbooks/ficheros-generados.md) (in Spanish) §4 | It is not deleted on its own: confirm it was handed over and delete it ([`requerimiento-inspeccion.md`](../../runbooks/requerimiento-inspeccion.md) §7, in Spanish) |
+| `PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo` | `generated_files_refused_total` goes up (within 1 h, or a new series), for 1 min | Medium | IT | [`ficheros-generados.md`](../../runbooks/ficheros-generados.md) (in Spanish) §5 | There is a link, a subdirectory or a foreign name in a folder of the volume, or overlapping `*_PATH` paths: `product:doctor` (§13.5) |
 | `VentanaDeMantenimientoActiva` | While an update lasts, capped at 2 h | Info (does not notify) | — | [`actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) (in Spanish) | Nothing: it only silences other alerts while it lasts |
 
 **What the certificate alerts watch, and since when.**
@@ -886,7 +889,7 @@ The seven steps and what happens if each one fails:
 | 4 · Migrations | Automatic rollback → `4` | Backup restored, previous version running and verified | Send the report to the vendor before retrying: it says at which intermediate version it stopped |
 | 5 · Start-up and verification | Automatic rollback → `4` | Same as above. **The new version never received traffic**: it is verified without the edge | Same as above |
 | 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `docker compose exec app php artisan up`, **without restoring anything**) or the restore was left half-done (three orders and the path of the backup) | Runbook §5. The kiosks keep queueing meanwhile |
-| 7 · Report | — | `BACKUP_PATH/reports/update-<fecha>.log`, always; next to it, `update-<fecha>.detalle.log` (root only, raw output, **may contain personal data**) | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
+| 7 · Report | — | `BACKUP_PATH/reports/update-<fecha>.log`, always; next to it, `update-<fecha>.detalle.log` (uid 1000, `0600`, raw output, **may contain personal data**). **They appear when it finishes, not while it runs**; if they cannot be published there, the script says in which temporary directory they were left | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
 
 Steps 5 and 6 also leave their own entry in `audit_log` (`system.updated` or
 `system.restored_from_backup`): if for whatever reason it cannot be written,
@@ -902,7 +905,13 @@ verify the chain with it, so the report keeps the data and you write it with
 2.1.0), the data, the licence (an expired licence **does not prevent
 updating**), and clocking. **What is needed:** `BACKUP_ENCRYPTION_KEY` in the
 `.env` and space for the backup and for the migration; step 1 says so with
-figures.
+figures. And, from 2.2.0 on, **`setpriv`** on the server (`util-linux`
+package, standard on Debian, Ubuntu and RHEL 7 or later; check it with
+`command -v setpriv`): `update.sh` uses it to write its report, the rescued
+retention reports and its metrics into `BACKUP_PATH` as the application user
+and without following links. Without it, it does not stop: it warns, does not
+rescue the retention reports and leaves its report in a temporary directory,
+saying which.
 
 **When updating from 2.1.0: each container receives only its own.** Up to
 2.1.0 every application container received the whole `.env`, including the
@@ -952,8 +961,8 @@ volume is created on its own at the first start. What is worth knowing:
   giving them a new life in the new volume. Their records turn to
   **"Expired"** in the first purge pass. If one had not expired yet, the
   `data_export.file_missing` or `report_export.file_missing` entry is left as
-  well and the missing-file alert may fire: **after this update that is
-  expected**. If you need an export, ask for it again.
+  well and the `FicheroGeneradoDesaparecidoAntesDeCaducar` alert may fire:
+  **after this update that is expected**. If you need an export, ask for it again.
 - **The telemetry identifier changes once**, if you had telemetry enabled
   (§13.4). From here on it is kept across updates.
 - **What was already lost cannot be recovered**: the reports of purges run with
@@ -1323,7 +1332,8 @@ a breach you can answer who took what and when. What is taken out with
 
 **If the file disappears before it expires**, the export still turns to
 "Expired", but the `data_export.file_missing` entry is also left (with the
-export's identifier, no path) and an alert fires. Outside the two cases where
+export's identifier, no path) and the `FicheroGeneradoDesaparecidoAntesDeCaducar`
+alert fires, addressed to the security officer (§10.4). Outside the two cases where
 it is expected —right after restoring a backup, or after updating from 2.1.0—,
 **treat it as a security event**: someone with access to the server has
 deleted or moved a file holding all the workforce's data
@@ -1392,7 +1402,7 @@ where the volume is mounted (a path outside it is not seen by the other
 containers and is lost on the next update), and **they must not coincide or
 contain one another**, because each purge deletes in its own folder and only in
 its own. `product:doctor` fails if two coincide, if one contains another or if
-any of them is the whole of `storage/app` or `BACKUP_PATH`.
+any of them is `storage/app` (or contains it) or overlaps `BACKUP_PATH`; and it warns if any of them is outside `storage/app`.
 
 ### 13.6 Where the files the product generates live, and who can read them
 
@@ -1404,7 +1414,7 @@ apart from that are these files:
 | Full data export (ZIP, §13) | `app-storage` volume, `exports/` folder | 7 days; the hourly purge deletes it | No |
 | Reports generated in the background (§6) | `app-storage` volume, `reports/` folder | 7 days; the daily 04:25 UTC purge deletes them | No |
 | Diagnostic bundle generated from the console (§12.2) | `app-storage` volume, `diagnostics/` folder | 7 days; the hourly purge deletes it | No |
-| Export for the Labour Inspectorate generated from the console | `app-storage` volume, `legal-exports/` folder | **Until you delete it.** `product:doctor` warns when one is older than 30 days | No |
+| Export for the Labour Inspectorate generated from the console | `app-storage` volume, `legal-exports/` folder | **Until you delete it.** After 30 days, `product:doctor` and the `FicheroGeneradoSinRetirarPasadoSuPlazo` alert (§10.4) warn about it | No |
 | Temporary file of the Labour Inspectorate export requested from the panel | `app-storage` volume, `tmp/legal-exports/` folder | Deleted when the download finishes; if the download was cut off, the hourly purge deletes it after 6 hours | No |
 | Telemetry state (§13.4) | `app-storage` volume, `telemetry/` folder | Kept; it holds no personal data | No |
 | Retention reports (§2 and §3) | `BACKUP_PATH/reports/retention` | **Forever**: they are not cleaned up on their own | They live in the backup folder |
@@ -1458,6 +1468,12 @@ Treat it like administrator access ([`hardening.md`](hardening.md) §3).
 panel leaves an entry (`data_export.downloaded`, `report_export.downloaded`);
 taking the same file out with `docker compose cp` leaves none. If you do,
 write it down yourself (§13.2).
+
+**Three alerts watch these files** (§10.4): one that disappears before
+expiring, an export for the Labour Inspectorate forgotten for more than 30 days
+and a purge that has refused to touch something. What to do with each:
+[`../../runbooks/ficheros-generados.md`](../../runbooks/ficheros-generados.md)
+(in Spanish).
 
 **`docker compose down -v` deletes the volume**, just as it deletes the
 database. Never use it on a production installation.
@@ -2275,7 +2291,8 @@ in both directions:
   with an empty volume—. In the first purge pass (the hourly one for full
   exports, the 04:25 UTC one for reports) it turns to **"Expired"** and leaves
   the `data_export.file_missing` or `report_export.file_missing` entry; if it
-  had not expired yet, the missing-file alert may fire as well. **After a
+  had not expired yet, the `FicheroGeneradoDesaparecidoAntesDeCaducar` alert
+  may fire as well. **After a
   restore that is expected**, and the `restore.sh` report (in
   `BACKUP_PATH/reports/`) announces it.
 - **The volume has a file the restored database does not know about** —it was
@@ -2284,8 +2301,8 @@ in both directions:
 
 **What to do.** Ask again for whatever you need: the full export from Licence →
 "Your data is yours" (§13.2), and each report from the panel, by whoever needs
-it. They are generated from the restored data, which is what you want. If the
-missing-file alert fires **without** there having been a restore or an update
+it. They are generated from the restored data, which is what you want. If
+`FicheroGeneradoDesaparecidoAntesDeCaducar` fires **without** there having been a restore or an update
 from 2.1.0, it is not this: read §13.3, "If the file disappears before it
 expires".
 
