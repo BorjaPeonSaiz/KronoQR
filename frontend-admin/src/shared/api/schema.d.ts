@@ -1334,7 +1334,8 @@ export interface paths {
          *     fecha se conservan tal cual (regla dura 5).
          *
          *     **Una contratacion que no llego a empezar** (fecha de alta posterior a
-         *     hoy) solo admite como fecha de cese **la propia fecha de alta**: es una
+         *     hoy, con el mismo «hoy» del centro de arriba y no con otro reloj) solo
+         *     admite como fecha de cese **la propia fecha de alta**: es una
          *     baja sin efectos, porque la persona nunca llego a trabajar. Cualquier
          *     otra fecha da `422` en `terminated_at` y el mensaje dice cual es la
          *     admitida.
@@ -6599,7 +6600,7 @@ export interface components {
              *     (RN-14). «Hoy» es la fecha civil del centro (`Site.timezone`) en el
              *     momento en que el servidor recibe la peticion; una fecha futura
              *     responde `422` en este campo. Hoy mismo se admite. Si la fecha de
-             *     alta es posterior a hoy, la unica admitida es la propia fecha de
+             *     alta es posterior a ese mismo hoy, la unica admitida es la propia fecha de
              *     alta. Es el dato desde el que cuenta la retencion de RL-02. La baja
              *     es efectiva al registrarla, no en esta fecha.
              */
