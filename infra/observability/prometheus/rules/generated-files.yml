@@ -42,8 +42,13 @@ groups:
       # borrado manual o una exfiltracion con `mv`, y RL-15 pide poder acotar el
       # alcance. Cada una deja asiento `*.file_missing` en audit_log.
       #
-      # ESPERADA tras restaurar una copia y tras actualizar desde la 2.1.0 (el
-      # volumen es nuevo y las filas antiguas no tienen fichero). Por eso es
+      # ESPERADA tras restaurar una copia en un servidor nuevo o tras `down -v`
+      # (las exportaciones que figuraban en la copia como disponibles ya no tienen
+      # fichero) y tras actualizar desde la 2.1.0 (el volumen es nuevo y las filas
+      # antiguas no tienen fichero). Restaurar en el mismo servidor no toca el
+      # volumen. Las generadas DESPUES de la copia no tienen fila en la base
+      # restaurada: sus ficheros son huerfanos y se borran al cumplir su plazo,
+      # sin asiento ni esta alerta. Por eso es
       # `high` y no `critical`, y no lleva `integrity`: no es una rotura de la
       # cadena, es un hecho que hay que explicar.
       #------------------------------------------------------------------------
@@ -62,12 +67,14 @@ groups:
           description: >-
             Una exportacion integra o un informe en diferido figuraba como
             disponible y su fichero ya no esta en el volumen. Tras restaurar una
-            copia o actualizar desde la 2.1.0 es lo ESPERADO: sus filas pasan a
-            purged con un asiento file_missing y se vuelve a pedir la
-            exportacion. Si no ha habido ni una cosa ni la otra, alguien ha
-            borrado o sacado el fichero a mano: lee el asiento
-            data_export.file_missing o report_export.file_missing en audit_log
-            y, si no hay explicacion, tratalo como brecha.
+            copia en un servidor nuevo (o tras `down -v`) o actualizar desde la 2.1.0 es
+            lo ESPERADO: las exportaciones que figuraban como disponibles pierden su
+            fichero, sus filas pasan a purged con un asiento file_missing y se vuelve a
+            pedir la exportacion. Al restaurar en el MISMO servidor el volumen no se
+            toca y no deberia aparecer. Si no hay ninguna de esas causas, alguien ha
+            borrado o sacado el fichero a mano: lee el asiento data_export.file_missing
+            o report_export.file_missing en audit_log y, si no hay explicacion, tratalo
+            como brecha.
           runbook_url: docs/runbooks/ficheros-generados.md
 
       #------------------------------------------------------------------------

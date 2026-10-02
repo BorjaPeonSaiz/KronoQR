@@ -40,9 +40,13 @@ sin ruta).
 
 **Primero descarta lo esperado.** Es lo normal, y no una brecha, si:
 
-- se acaba de **restaurar una copia** ([`restaurar-backup.md`](restaurar-backup.md)):
-  el volumen no entra en la copia, y las exportaciones posteriores a ella pierden
-  su fichero. El informe de `restore.sh` lo anuncia;
+- se acaba de **restaurar una copia en un servidor nuevo** (o tras `down -v`)
+  ([`restaurar-backup.md`](restaurar-backup.md)): el volumen no entra en la copia, y
+  las exportaciones que figuraban en ella como disponibles ya no tienen fichero.
+  El informe de `restore.sh` lo anuncia. En el mismo servidor, restaurar no toca
+  el volumen y esta alerta no debería aparecer. Las exportaciones hechas
+  *después* de la copia no tienen fila en la base restaurada: sus ficheros quedan
+  sin fila y se borran al cumplir su plazo, sin asiento ni alerta;
 - se acaba de **actualizar desde la 2.1.0** ([`actualizacion-cliente.md`](actualizacion-cliente.md)):
   el volumen es nuevo y las filas antiguas no tienen fichero;
 - alguien recreó el volumen (`docker compose down -v`).
@@ -114,6 +118,14 @@ ha borrado nada de eso (por diseño), pero no debería haberlo.
 3. Si alguien dejó ahí ficheros a mano, retíralos. Si aparece un **enlace
    simbólico** que nadie reconoce, es manipulación del volumen: trátalo como el
    caso de seguridad de §2.
+4. **Si no se ha cambiado ningún `*_PATH` del `.env`**, una fila que apunta fuera
+   de su raíz no es una mala configuración: es manipulación de la base de datos
+   (alguien con acceso de escritura a `data_exports` o `report_exports` ha
+   cambiado una ruta). Trátalo como §2 (seguridad) y sigue
+   [`brecha-de-seguridad.md`](brecha-de-seguridad.md).
+5. **Tras cambiar una raíz, vacía la carpeta anterior**: lo que quedó en ella
+   queda fuera de toda purga y sin plazo, con datos personales dentro. Cuando
+   hayas comprobado que no hace falta, bórrala.
 
 ## 6. Lo que no alerta, y un límite conocido
 

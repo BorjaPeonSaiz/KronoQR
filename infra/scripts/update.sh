@@ -208,6 +208,10 @@ CHECKS_FAILED=0
 CHECKS_WARNED=0
 REPORT_FILE=""
 DETAIL_FILE=""
+# Donde se escribe de verdad mientras dura la ejecucion (ver open_report).
+STAGE_DIR=""
+REPORT_WORK=""
+DETAIL_WORK=""
 REPORT_CLOSED=0
 LOCK_DIR=""
 LOCK_OWNED=0
@@ -258,13 +262,13 @@ declare -a REPORT_CHECKS=()
 # deben viajar al fabricante sin que alguien los lea antes.
 #------------------------------------------------------------------------------
 report_append() {
-  [ -n "${REPORT_FILE}" ] && [ "${REPORT_CLOSED}" -eq 0 ] || return 0
-  printf '%s\n' "$*" >>"${REPORT_FILE}" 2>/dev/null || true
+  [ -n "${REPORT_WORK}" ] && [ "${REPORT_CLOSED}" -eq 0 ] || return 0
+  printf '%s\n' "$*" >>"${REPORT_WORK}" 2>/dev/null || true
 }
 
 # Donde van los volcados. Antes de abrir el informe, a ninguna parte.
 detail_sink() {
-  printf '%s' "${DETAIL_FILE:-/dev/null}"
+  printf '%s' "${DETAIL_WORK:-/dev/null}"
 }
 
 say() {
@@ -285,8 +289,8 @@ err() {
 
 # Solo al detalle: una linea de contexto entre volcados.
 detail_note() {
-  [ -n "${DETAIL_FILE}" ] || return 0
-  printf '%s\n' "$*" >>"${DETAIL_FILE}" 2>/dev/null || true
+  [ -n "${DETAIL_WORK}" ] || return 0
+  printf '%s\n' "$*" >>"${DETAIL_WORK}" 2>/dev/null || true
 }
 
 # Los mensajes del catalogo tambien van al informe. Se redefine aqui la
@@ -328,6 +332,9 @@ cleanup_on_exit() {
   if [ "${LOCK_OWNED}" -eq 1 ] && [ -n "${LOCK_DIR}" ]; then
     rm -rf "${LOCK_DIR}" 2>/dev/null || true
   fi
+  # Si la ejecucion acaba sin pasar por close_report (señal, error no previsto),
+  # el informe parcial tambien llega a su sitio.
+  publish_reports || true
   return 0
 }
 
@@ -925,6 +932,27 @@ resolve_failed_step() {
 # tambien tras una vuelta atras: el fabricante no tiene acceso al servidor
 # (ADR-016), asi que si el informe no queda aqui no queda en ninguna parte.
 #------------------------------------------------------------------------------
+# POR QUE SE ESCRIBE EN UN DIRECTORIO TEMPORAL Y SE PUBLICA AL FINAL (ADR-045,
+# hallazgo F1 de la revision del bloque 16). `reports/` es de 1000 y el runtime
+# lo escribe, y este script corre como root. Truncar, añadir (`>>`), `chmod` o
+# `chown` por RUTA sobre `reports/update-<UTC>.log` —un nombre predecible— sigue
+# un enlace simbolico plantado desde el contenedor: cambiaria el dueño y el modo
+# de, por ejemplo, /etc/shadow, o añadiria texto a un fichero de root. Y como el
+# runtime puede renombrar lo que hay en `reports/` en cualquier momento, no
+# basta con crearlo bien: hay que no volver a tocarlo por ruta como root.
+#
+# Asi que durante la ejecucion el informe y el detalle viven en un directorio de
+# root 0700 (`mktemp -d`), fuera de cualquier sitio que escriba el runtime, y
+# `publish_reports` los copia al final COMO EL UID DE LA APLICACION y sin
+# sobrescribir (lib/fs.sh, `kq_publish_as_app`): el dueño sale del uid, el modo
+# de la mascara y no hay operacion posterior por ruta. Contrapartida declarada:
+# el informe aparece en `reports/` al terminar (o al salir por cualquier
+# camino), no mientras corre, y el detalle —que antes era de root 0600— pasa a
+# 1000 0600. Con un runtime comprometido el detalle ya no es confidencial frente
+# a el, que de todos modos puede leer la base de datos. Cierra el vector de
+# escalada a root; la confidencialidad del detalle queda dentro de A3-R2
+# (doc 07). Sin `setpriv` el informe se queda en el directorio temporal y se
+# dice donde.
 open_report() {
   local dir="${CFG_BACKUP_PATH}/reports"
 
@@ -932,15 +960,13 @@ open_report() {
     install -d -o "${KQ_APP_UID}" -g "${KQ_APP_UID}" -m 0750 "${dir}" 2>/dev/null ||
       install -d -m 0750 "${dir}" 2>/dev/null || return 1
   fi
+  STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kq-update.XXXXXX" 2>/dev/null)" || return 1
+  REPORT_WORK="${STAGE_DIR}/report.log"
+  DETAIL_WORK="${STAGE_DIR}/detail.log"
+  : >"${REPORT_WORK}" || return 1
+  : >"${DETAIL_WORK}" || return 1
   REPORT_FILE="${dir}/update-${STARTED_UTC}.log"
   DETAIL_FILE="${dir}/update-${STARTED_UTC}.detalle.log"
-  : >"${REPORT_FILE}" || return 1
-  : >"${DETAIL_FILE}" || return 1
-  # El informe lo lee la aplicacion (paquete de diagnostico); el detalle, solo
-  # root: puede llevar datos personales y no viaja sin que alguien lo lea.
-  chmod 0640 "${REPORT_FILE}" 2>/dev/null || true
-  chown "${KQ_APP_UID}:${KQ_APP_UID}" "${REPORT_FILE}" 2>/dev/null || true
-  chmod 0600 "${DETAIL_FILE}" 2>/dev/null || true
 
   report_append "$(kq_text u_report_title)"
   report_append "$(kq_format u_report_started "${STARTED_UTC}")"
@@ -951,10 +977,34 @@ open_report() {
   return 0
 }
 
+# Copia el informe y el detalle a `reports/` (ver open_report). Idempotente.
+publish_reports() {
+  [ -n "${STAGE_DIR}" ] || return 0
+  local status=0
+
+  kq_publish_as_app "${REPORT_WORK}" "${REPORT_FILE}" 027 2>/dev/null || status=$?
+  if [ "${status}" -eq 0 ]; then
+    kq_publish_as_app "${DETAIL_WORK}" "${DETAIL_FILE}" 077 2>/dev/null || status=$?
+  fi
+
+  if [ "${status}" -eq 0 ]; then
+    rm -rf "${STAGE_DIR}"
+    STAGE_DIR=""
+    return 0
+  fi
+
+  # No se pudo publicar (sin `setpriv`, o ya existia el nombre): el informe NO
+  # se pierde, queda donde esta y se dice.
+  kq_msg check_warn "$(kq_format u_report_not_published "${STAGE_DIR}")" >&2
+  kq_msg fix "$(kq_format u_f_report_not_published "${CFG_BACKUP_PATH}/reports" "${STAGE_DIR}")" >&2
+  STAGE_DIR=""
+  return 1
+}
+
 close_report() {
   local code="$1" entry finished state_text
 
-  [ -n "${REPORT_FILE}" ] && [ "${REPORT_CLOSED}" -eq 0 ] || return 0
+  [ -n "${REPORT_WORK}" ] && [ "${REPORT_CLOSED}" -eq 0 ] || return 0
 
   finished="$(timestamp_utc)"
   report_append ""
@@ -990,6 +1040,7 @@ close_report() {
   report_append "$(kq_format u_report_final "${FINAL_STATE:-${SOURCE_VERSION:-?}}" "${state_text}")"
   report_append "$(kq_format u_report_exit "${code}" "$(kq_exit_name "${code}")")"
   report_append "$(kq_format u_report_detail "${DETAIL_FILE}")"
+  publish_reports || true
   REPORT_CLOSED=1
 }
 
@@ -1266,7 +1317,9 @@ check_backup_config() {
   LOCK_DIR="${CFG_BACKUP_PATH}/update.lock"
   if mkdir "${LOCK_DIR}" 2>/dev/null; then
     LOCK_OWNED=1
-    printf '%s\n' "$$" >"${LOCK_DIR}/pid" 2>/dev/null || true
+    # No se escribe el pid dentro: LOCK_DIR esta en BACKUP_PATH (1000, lo escribe
+    # el runtime) y un `> ${LOCK_DIR}/pid` como root seguiria un enlace plantado
+    # en su lugar. Nadie lo leia.
     check_pass "$(kq_text u_c_lock)"
   else
     local age="?"
@@ -1647,18 +1700,33 @@ ensure_retention_reports_dir() {
 }
 
 # Copia de UN servicio. 0 si no habia nada o se copio; 1 si docker fallo de verdad.
+#
+# DOS CORRECCIONES DE LA REVISION DEL BLOQUE 16 (ADR-045, C8):
+#
+# 1. SIN `/.` EN EL ORIGEN. Con `ruta/.` `docker cp` resuelve el origen: si en la
+#    capa de la 2.1.0 `retention-reports` fuera un enlace a `/`, volcaria todo el
+#    sistema de ficheros del contenedor —el montaje de BACKUP_PATH incluido— en
+#    el temporal del anfitrion. Sin `/.` se copia el propio enlace, y se rechaza
+#    todo lo que no sea un directorio de verdad.
+# 2. SIN `chmod` NI `chown` POR RUTA COMO ROOT en `reports/retention`: es de 1000,
+#    el runtime lo escribe y `app` sigue en marcha en este paso, asi que un
+#    enlace plantado (`retencion-purga-X.txt -> /etc/shadow`) haria que root
+#    cambiase el dueño y el modo del destino. Se copia COMO EL UID 1000, sin
+#    sobrescribir (lib/fs.sh, `kq_publish_as_app`): el dueño sale del uid, el
+#    modo 0640 de la mascara, y no se vuelve a tocar nada por ruta.
 rescue_retention_reports_from() {
   local service="$1" source_path="$2" dest="$3"
-  local staging output file name copied=0
+  local staging output file name copied=0 status base="${2##*/}"
 
   # Sin contenedor (instalacion sin ese servicio) no hay nada que rescatar.
   if [ -z "$(compose_current ps -aq "${service}" 2>/dev/null || true)" ]; then
     return 0
   fi
 
+  # Directorio de root 0700: nadie mas lo ve ni lo puede sustituir.
   staging="$(mktemp -d "${TMPDIR:-/tmp}/kq-retention.XXXXXX" 2>/dev/null)" || return 1
 
-  if ! output="$(compose_current cp "${service}:${source_path}/." "${staging}" 2>&1)"; then
+  if ! output="$(compose_current cp "${service}:${source_path}" "${staging}" 2>&1)"; then
     rm -rf "${staging}"
     # Una ruta que no existe es lo normal en una instalacion que ya escribe en
     # BACKUP_PATH: no es un fallo.
@@ -1670,19 +1738,30 @@ rescue_retention_reports_from() {
     return 1
   fi
 
+  # Lo copiado tiene que ser un directorio de verdad: un enlace (a `/`, a
+  # BACKUP_PATH...) o un fichero suelto no se rescata ni se sigue.
+  if [ -L "${staging}/${base}" ] || [ ! -d "${staging}/${base}" ]; then
+    detail_note "--- ${service}:${source_path} no es un directorio: no se rescata nada ---"
+    rm -rf "${staging}"
+    return 0
+  fi
+
   while IFS= read -r -d '' file; do
     name="${file##*/}"
     [[ "${name}" =~ ${KQ_RETENTION_REPORT_NAME} ]] || continue
-    # Sin sobrescribir, tampoco a traves de un enlace que ya estuviera en destino.
+    # Sin sobrescribir; la copia ademas es exclusiva (O_EXCL) y como uid 1000.
     if [ -e "${dest}/${name}" ] || [ -L "${dest}/${name}" ]; then
       continue
     fi
-    if cp -n -- "${file}" "${dest}/${name}" 2>/dev/null; then
-      chmod 0640 "${dest}/${name}" 2>/dev/null || true
-      chown "${KQ_APP_UID}:${KQ_APP_UID}" "${dest}/${name}" 2>/dev/null || true
+    status=0
+    kq_publish_as_app "${file}" "${dest}/${name}" 027 2>/dev/null || status=$?
+    if [ "${status}" -eq 0 ]; then
       copied=$((copied + 1))
+    elif [ "${status}" -eq 2 ]; then
+      rm -rf "${staging}"
+      return 1
     fi
-  done < <(find "${staging}" -mindepth 1 -maxdepth 1 -type f -print0 2>/dev/null || true)
+  done < <(find "${staging}/${base}" -mindepth 1 -maxdepth 1 -type f -print0 2>/dev/null || true)
 
   rm -rf "${staging}"
   if [ "${copied}" -gt 0 ]; then

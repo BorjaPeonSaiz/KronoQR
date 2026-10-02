@@ -476,6 +476,12 @@ check_app_storage() {
 
   horizon_state="$(compose_current ps --format '{{.Service}} {{.State}}' 2>/dev/null |
     awk '$1 == "horizon" { print $2 }' || true)"
+  # Restos de una ejecucion interrumpida (Ctrl-C entre escribir y borrar): el
+  # nombre `.doctor-probe-*` no casa con ninguna purga y se quedaria para siempre
+  # en la raiz del volumen. Se barren al empezar, y tambien los de esta pasada
+  # al terminar.
+  # shellcheck disable=SC2016 # `$1` es del `sh -c` del contenedor.
+  compose_current exec -T horizon sh -c 'rm -f -- "$1"/.doctor-probe-*' sh "${KQ_STORAGE_MOUNT}" >/dev/null 2>&1 || true
   token=".doctor-probe-$$-$(date +%s)"
   if [ "${horizon_state}" = "running" ] &&
     compose_current exec -T horizon sh -c "umask 077 && : > '${KQ_STORAGE_MOUNT}/${token}'" >/dev/null 2>&1; then

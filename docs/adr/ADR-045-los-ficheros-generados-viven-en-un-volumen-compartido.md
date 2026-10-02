@@ -156,8 +156,12 @@ la guía lo dice así (C7).
 - **El estado de la telemetría no se copia.** Restaurar en un servidor nuevo estrena un identificador
   de instalación. Ese identificador solo lo usa la telemetría, no la licencia: cambiarlo es neutro.
 - `backup.sh` y `restore.sh` no cambian de comportamiento. Su cabecera dice qué **no** se repone y por
-  qué, y **el informe de `restore.sh` anuncia** que las exportaciones posteriores a la copia aparecerán
-  como `purged` con un asiento `*.file_missing` esperado.
+  qué, y **el informe de `restore.sh` anuncia** lo que cabe esperar después. Las exportaciones que
+  figuraban en la copia como disponibles y cuyo fichero ya no existe —lo habitual al restaurar en un
+  servidor nuevo o tras un `down -v`; en el mismo servidor el volumen no se toca— aparecerán como
+  `purged` con un asiento `*.file_missing` esperado. Las generadas después de la copia no tienen fila
+  en la base restaurada: sus ficheros quedan como huérfanos y se borran al cumplir su plazo, sin
+  asiento.
 
 ### Caducidad y purga: la fila manda en el registro y el directorio manda en el borrado
 

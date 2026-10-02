@@ -60,10 +60,53 @@ kq_free_gib() {
 # corren como el uid 1000 del contenedor `app`, pero `update.sh` corre en el
 # ANFITRION, normalmente como root; node-exporter siempre lee como uid 1000.
 # Sin el permiso de "otros", un fichero escrito por root no lo veria nadie mas.
+#
+# SI SE EJECUTA COMO ROOT, SE ESCRIBE COMO EL UID DE LA APLICACION (ADR-045,
+# hallazgo F1 de la revision del bloque 16). El directorio de metricas es 1000
+# y el runtime lo escribe: un `cat >tmp` o un `chmod` como root sobre un nombre
+# predecible (`<fichero>.<pid>.tmp`) siguen un enlace simbolico plantado desde
+# el contenedor y truncan o cambian el modo de cualquier fichero del anfitrion.
+# Como uid 1000 un enlace plantado no da nada que ese uid no pudiera ya hacer.
+# Sin `setpriv` no se escribe nada (la metrica es de cortesia y el llamador
+# ignora el fallo) en vez de escribir como root.
 kq_write_metrics_atomic() {
   local file="$1" tmp
   tmp="${file}.$$.tmp"
+  if [ "$(id -u)" = "0" ]; then
+    if ! command -v setpriv >/dev/null 2>&1; then
+      cat >/dev/null
+      return 1
+    fi
+    # shellcheck disable=SC2016 # `$1` y `$2` son del `sh -c`, no de este script.
+    setpriv --reuid=1000 --regid=1000 --clear-groups \
+      sh -c 'umask 022 && cat >"$1" && mv -f "$1" "$2"' sh "$tmp" "$file"
+    return
+  fi
   cat >"$tmp"
   chmod 0644 "$tmp"
   mv -f "$tmp" "$file"
+}
+
+# Copia el contenido de un fichero local (que solo root puede leer) a un
+# destino que escribe el runtime, COMO EL UID DE LA APLICACION y SIN
+# SOBRESCRIBIR. `kq_publish_as_app ORIGEN DESTINO UMASK`. Es la operacion que
+# sustituye a `cp` + `chmod` + `chown` por ruta como root: el dueño sale del uid
+# con el que se escribe, el modo de la mascara (027 = 0640, 077 = 0600), y no
+# hay ninguna operacion posterior por ruta. `set -C` crea con O_EXCL: si el
+# destino existe, sea un fichero o un enlace, la copia falla en vez de seguirlo.
+# Devuelve 2 si hay que ser root y no hay `setpriv`.
+kq_publish_as_app() {
+  local source_file="$1" dest="$2" mask="$3"
+  if [ "$(id -u)" = "0" ]; then
+    command -v setpriv >/dev/null 2>&1 || return 2
+    # shellcheck disable=SC2016 # `$1` y `$2` son del `sh -c`, no de este script.
+    setpriv --reuid=1000 --regid=1000 --clear-groups \
+      sh -c 'set -C && umask "$2" && cat >"$1"' sh "$dest" "$mask" <"$source_file"
+    return
+  fi
+  (
+    set -C
+    umask "$mask"
+    cat >"$dest"
+  ) <"$source_file"
 }

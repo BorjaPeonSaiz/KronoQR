@@ -49,11 +49,17 @@
 #     paquete de diagnostico, estado de la telemetria) NO entra en la copia y
 #     este script no lo toca. Todo lo que contiene caduca o se regenera desde
 #     los datos que si estan en la copia cifrada; meterlo en ella alargaria la
-#     vida de una copia completa de los datos personales. Tras restaurar, las
-#     exportaciones cuyo fichero no existe pasan a `purged` en la primera
-#     pasada de purga, con un asiento `data_export.file_missing` o
-#     `report_export.file_missing` que es ESPERADO; se vuelve a pedir la
-#     exportacion y se genera de los datos restaurados. El informe lo anuncia.
+#     vida de una copia completa de los datos personales. Tras restaurar:
+#       (a) las exportaciones que figuraban en la copia como disponibles y cuyo
+#           fichero ya no existe pasan a `purged` en la primera pasada de purga,
+#           con un asiento `data_export.file_missing` o `report_export.file_missing`
+#           que es ESPERADO. Es lo habitual al restaurar en un servidor NUEVO o
+#           tras `down -v`; en el mismo servidor el volumen no se toca. Se vuelve
+#           a pedir la exportacion y se genera de los datos restaurados;
+#       (b) las generadas DESPUES de la copia no tienen fila en la base
+#           restaurada: sus ficheros quedan huerfanos y se borran al cumplir su
+#           plazo, sin asiento.
+#     El informe lo anuncia.
 #   · Los informes de retencion (BACKUP_PATH/reports/retention) tampoco se
 #     tocan: un informe de purga describe un hecho que ocurrio aunque la base
 #     vuelva a un momento anterior.
@@ -618,8 +624,8 @@ main() {
   # de purga sepa que son esperados y no una exfiltracion.
   if [ "$AUDITAR" -eq 1 ]; then
     informar "$(texto \
-      "Aviso: el volumen de ficheros generados (app-storage) no forma parte de la copia y no se ha repuesto. Las exportaciones y los informes en diferido posteriores a la copia que se acaba de restaurar apareceran como 'purged' con un asiento data_export.file_missing o report_export.file_missing en la proxima pasada de purga: es lo ESPERADO tras una restauracion. Pide de nuevo la exportacion desde el panel. Los informes de retencion de BACKUP_PATH/reports/retention no se han tocado." \
-      "Notice: the generated-files volume (app-storage) is not part of the backup and has not been restored. Exports and deferred reports created after the backup you have just restored will show as 'purged' with a data_export.file_missing or report_export.file_missing entry on the next purge pass: that is EXPECTED after a restore. Request the export again from the panel. Retention reports in BACKUP_PATH/reports/retention have not been touched.")"
+      "Aviso: el volumen de ficheros generados (app-storage) no forma parte de la copia y no se ha repuesto. (a) Las exportaciones y los informes en diferido que figuraban en la copia como disponibles y cuyo fichero ya no existe saldran como 'purged' con un asiento data_export.file_missing o report_export.file_missing en la proxima pasada de purga: es lo habitual al restaurar en un servidor nuevo o tras 'down -v' (en el mismo servidor el volumen no se toca) y es ESPERADO. (b) Las generadas despues de la copia no tienen fila en la base restaurada: sus ficheros quedan huerfanos y se borran al cumplir su plazo, sin asiento. Pide de nuevo la exportacion desde el panel. Los informes de retencion de BACKUP_PATH/reports/retention no se han tocado." \
+      "Notice: the generated-files volume (app-storage) is not part of the backup and has not been restored. (a) Exports and deferred reports that the backup listed as available and whose file no longer exists will show as 'purged' with a data_export.file_missing or report_export.file_missing entry on the next purge pass: that is usual when restoring on a NEW server or after 'down -v' (on the same server the volume is untouched) and is EXPECTED. (b) Those generated after the backup have no row in the restored database: their files stay orphaned and are deleted when their term ends, with no entry. Request the export again from the panel. Retention reports in BACKUP_PATH/reports/retention have not been touched.")"
   fi
 
   log "Informe de la restauracion: ${INFORME}"
