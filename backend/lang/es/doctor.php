@@ -300,6 +300,48 @@ return [
             ],
         ],
 
+        // --- Ficheros generados (ADR-045) -----------------------------------
+
+        'files' => [
+            'probe' => $probe,
+            'storage_volume' => [
+                'ok' => 'storage/app es un volumen propio y se puede escribir: la exportacion, los informes y las '
+                    .'purgas ven los mismos ficheros en los tres contenedores.',
+                'ok_not_checked' => 'storage/app se puede escribir. No se comprueba que sea un volumen propio porque '
+                    .'esta instalacion no es de produccion.',
+                'failure' => 'La aplicacion no puede escribir en :path. Sin eso no se generan exportaciones, ni '
+                    .'informes en diferido, ni paquetes de diagnostico.',
+                'failure_not_mounted' => ':path NO es un volumen propio: cada contenedor tiene el suyo y lo pierde al '
+                    .'actualizar. La exportacion pedida desde el panel no se puede descargar y las purgas no ven los '
+                    .'ficheros con datos personales.',
+            ],
+            'retention_reports' => [
+                'ok' => 'Los informes de retencion se escriben en :path, junto a las copias.',
+                'warning' => 'No se puede escribir en :path: la propuesta semanal de retencion y la purga no podran '
+                    .'dejar su informe.',
+                'warning_missing' => 'No existe el directorio de informes de retencion :path. Se creara en la primera '
+                    .'pasada si el directorio de copias se puede escribir.',
+                'warning_inside_storage' => 'Los informes de retencion se escriben en :path, dentro de storage/app. '
+                    .'Ahi no los ve quien administra el servidor sin entrar al contenedor.',
+            ],
+            'class_roots' => [
+                'ok' => 'Cada clase de fichero generado tiene su propio directorio y ninguno pisa a otro.',
+                'failure_overlap' => ':first y :second apuntan al mismo directorio o uno esta dentro del otro: la '
+                    .'purga de uno podria borrar ficheros del otro.',
+                'failure_storage_root' => ':name apunta a :path, que es storage/app o lo contiene: su purga veria los '
+                    .'ficheros de todas las demas clases.',
+                'failure_backup_path' => ':name apunta a :path, que se pisa con el directorio de copias. Las copias '
+                    .'conservarian durante meses ficheros que caducan en dias.',
+                'warning_outside_volume' => 'Estos directorios estan fuera de storage/app: :names. Fuera del volumen '
+                    .'compartido, lo que escribe un contenedor no lo ve otro.',
+            ],
+            'legal_exports_console' => [
+                'ok' => 'Ninguna exportacion legal de consola lleva mas de :days dias en el servidor.',
+                'warning' => 'Hay :count exportacion(es) legal(es) de consola con mas de :days dias en :path. Llevan '
+                    .'datos personales de la plantilla y no se borran solas.',
+            ],
+        ],
+
         // --- Aplicacion ------------------------------------------------------
 
         'app' => [
@@ -630,6 +672,46 @@ return [
                     .'cuantas quedan: el minimo esta en BACKUP_MIN_COPIES.',
                 'warning_missing' => 'Comprueba que la ruta :path existe y esta montada.',
                 'warning_unknown' => 'Comprueba que la ruta :path esta montada y es accesible.',
+            ],
+        ],
+
+        'files' => [
+            'probe' => $probeFix,
+            'storage_volume' => [
+                'failure' => "Devuelve el directorio al usuario de la aplicacion. Desde el directorio de la\n"
+                    ."instalacion:\n"
+                    .'  docker compose exec -u root app chown app:app :path',
+                'failure_not_mounted' => "El docker-compose.yml no monta el volumen app-storage. Usa el de esta\n"
+                    ."version, que lo monta en app, horizon y scheduler, y recrea los contenedores:\n"
+                    ."  docker compose up -d app horizon scheduler\n"
+                    .'Despues ejecuta ./doctor.sh, que comprueba que los tres ven los mismos ficheros.',
+            ],
+            'retention_reports' => [
+                'warning' => "Da permiso de escritura al usuario de la aplicacion (uid 1000) sobre :path y\n"
+                    .'comprueba que el directorio de copias no esta montado de solo lectura.',
+                'warning_missing' => "Crealo con el propietario y el modo que usa el instalador, en el servidor:\n"
+                    .'  sudo install -d -o 1000 -g 1000 -m 0750 :path',
+                'warning_inside_storage' => "Quita COMPLIANCE_RETENTION_REPORT_PATH del fichero .env para que los\n"
+                    .'informes vayan a BACKUP_PATH/reports/retention, y recrea los contenedores.',
+            ],
+            'class_roots' => [
+                'failure_overlap' => "Deja cada variable con su valor de serie (quitala del .env) o dale un\n"
+                    ."directorio propio dentro de /var/www/html/storage/app. Despues recrea los contenedores:\n"
+                    .'  docker compose up -d app horizon scheduler',
+                'failure_storage_root' => "Quita :name del .env para volver a su valor de serie, o apuntala a un\n"
+                    .'subdirectorio propio de /var/www/html/storage/app. Despues recrea los contenedores.',
+                'failure_backup_path' => "Quita :name del .env para volver a su valor de serie: estos ficheros no\n"
+                    .'se guardan con las copias. Despues recrea los contenedores.',
+                'warning_outside_volume' => "Quita esas variables del .env para volver a su valor de serie, o\n"
+                    .'apuntalas a un subdirectorio de /var/www/html/storage/app. Despues recrea los contenedores.',
+            ],
+            'legal_exports_console' => [
+                'warning' => "Si ya entregaste esas exportaciones a la Inspeccion, borralas. Desde el directorio de\n"
+                    ."la instalacion, para verlas:\n"
+                    ."  docker compose exec app ls -l :path\n"
+                    ."y para borrar una:\n"
+                    ."  docker compose exec app rm :path/<fichero>\n"
+                    .'Detalle: docs/runbooks/requerimiento-inspeccion.md, seccion 6.',
             ],
         ],
 

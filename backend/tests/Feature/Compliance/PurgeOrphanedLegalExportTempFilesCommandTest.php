@@ -2,128 +2,142 @@
 
 declare(strict_types=1);
 
-use Illuminate\Support\Facades\Artisan;
+use Tests\Feature\Quality\Support\Commands;
+use Tests\Support\Shared\GeneratedFilesSandbox;
+use Tests\Support\Shared\RecordingGeneratedFileMetrics;
+use Tests\Support\Time\FrozenTime;
 
 /*
  * `compliance:purge-legal-export-temp` — hallazgo MEDIO-3 del cierre de la
- * Fase 1 (RF-IN-05).
+ * Fase 1 (RF-IN-05) y ADR-045.
  *
  * `LegalExportController` sirve la exportacion legal desde un temporal en
- * storage/framework/legal-exports/ y lo borra con `deleteFileAfterSend()` al
+ * storage/app/tmp/legal-exports/ y lo borra con `deleteFileAfterSend()` al
  * terminar. Si quien descarga aborta la conexion a medias, ese borrado nunca
- * corre. Estas pruebas comprueban lo que este comando promete: borra lo
- * viejo, respeta lo reciente, y NUNCA toca la copia deliberada de
- * `compliance:legal-export` en storage/app/legal-exports/.
+ * corre. Estas pruebas comprueban lo que este comando promete: borra lo viejo,
+ * respeta lo reciente, y NUNCA toca la copia deliberada de
+ * `compliance:legal-export` en storage/app/legal-exports/ — aunque si la cuenta
+ * cuando lleva mas de 30 dias.
+ *
+ * ## Como se envejece un fichero
+ *
+ * La edad es `max(mtime, ctime)` (C9) y `ctime` es el instante en que se creo el
+ * fichero: no se puede fabricar un fichero viejo con `touch`. Se adelanta el
+ * reloj inyectado. Las dos raices apuntan a directorios temporales propios: la
+ * prueba no toca el `storage/` del repositorio.
  */
 
-function legalExportTempDir(): string
-{
-    return storage_path('framework/legal-exports');
-}
-
-function legalExportConsoleDir(): string
-{
-    return storage_path('app/legal-exports');
-}
-
-/**
- * Crea un fichero con la antiguedad exacta que pide la prueba. `touch()` fija
- * el mtime; sin esto, todo fichero recien creado tendria "ahora" como fecha y
- * la ventana de retencion no se podria ejercitar.
- */
-function crearFicheroConAntiguedad(string $path, int $hoursAgo): void
-{
-    if (! is_dir(dirname($path))) {
-        mkdir(dirname($path), 0755, true);
-    }
-
-    file_put_contents($path, 'contenido de prueba, no un CSV real');
-    touch($path, time() - ($hoursAgo * 3600));
-}
+beforeEach(function (): void {
+    config([
+        'compliance.legal_export_temp_path' => GeneratedFilesSandbox::directory('legal-tmp'),
+        'compliance.legal_export_console_path' => GeneratedFilesSandbox::directory('legal-console'),
+    ]);
+});
 
 afterEach(function (): void {
-    // Limpieza del disco real: este comando no opera sobre un disco falso
-    // (regla dura del propio comando: toca storage/framework de verdad), asi
-    // que la prueba deja el arbol como lo encontro.
-    foreach ([legalExportTempDir(), legalExportConsoleDir()] as $dir) {
-        foreach (glob($dir.'/*.csv') ?: [] as $file) {
-            @unlink($file);
-        }
-    }
+    GeneratedFilesSandbox::cleanUp();
 });
+
+function temporalLegal(string $nombre): string
+{
+    return GeneratedFilesSandbox::file(config()->string('compliance.legal_export_temp_path').'/'.$nombre);
+}
+
+function copiaLegalDeConsola(string $nombre): string
+{
+    return GeneratedFilesSandbox::file(config()->string('compliance.legal_export_console_path').'/'.$nombre);
+}
+
+function relojLegalDentroDe(int $seconds): void
+{
+    FrozenTime::at(gmdate('Y-m-d H:i:s', time() + $seconds));
+}
 
 it('borra los temporales huerfanos mas viejos que la ventana de retencion', function (): void {
     config(['compliance.legal_export_temp_retention_hours' => 1]);
+    $viejo = temporalLegal('registro-horario-2026-01-01_2026-01-31-AbCdEf123456.csv');
 
-    $viejo = legalExportTempDir().'/registro-horario-viejo.csv';
-    crearFicheroConAntiguedad($viejo, hoursAgo: 2);
+    relojLegalDentroDe(2 * 3600);
+    [$codigo] = Commands::run('compliance:purge-legal-export-temp');
 
-    $exitCode = Artisan::call('compliance:purge-legal-export-temp');
-
-    expect($exitCode)->toBe(0);
-    expect(is_file($viejo))->toBeFalse();
+    expect($codigo)->toBe(0)
+        ->and(is_file($viejo))->toBeFalse();
 })->group('RF-IN-05');
 
 it('no toca un temporal mas reciente que la ventana: podria ser una descarga en curso', function (): void {
     config(['compliance.legal_export_temp_retention_hours' => 6]);
+    $reciente = temporalLegal('registro-horario-reciente.csv');
 
-    $reciente = legalExportTempDir().'/registro-horario-reciente.csv';
-    crearFicheroConAntiguedad($reciente, hoursAgo: 1);
-
-    Artisan::call('compliance:purge-legal-export-temp');
+    relojLegalDentroDe(3600);
+    Commands::run('compliance:purge-legal-export-temp');
 
     expect(is_file($reciente))->toBeTrue();
 })->group('RF-IN-05');
 
-it('nunca toca la copia deliberada de consola en storage/app/legal-exports', function (): void {
-    // Es la copia que se entrega a Inspeccion. Su custodia y su borrado son
-    // responsabilidad de quien la genero (docs/runbooks/requerimiento-inspeccion.md
-    // §6), no de un cron: si esta prueba fallara, un simulacro programado se
-    // estaria comiendo la unica prueba entregada a un tercero.
+it('no adelanta el borrado de un temporal recien escrito con un mtime viejo', function (): void {
+    // C9: `touch -d` hacia atras no envejece un fichero; manda ctime.
     config(['compliance.legal_export_temp_retention_hours' => 1]);
+    $reciente = temporalLegal('registro-horario-retocado.csv');
+    touch($reciente, time() - 48 * 3600);
 
-    $copiaDeInspeccion = legalExportConsoleDir().'/registro-horario-2026-01-01_2026-01-31.csv';
-    crearFicheroConAntiguedad($copiaDeInspeccion, hoursAgo: 24 * 30);
+    relojLegalDentroDe(60);
+    Commands::run('compliance:purge-legal-export-temp');
 
-    Artisan::call('compliance:purge-legal-export-temp');
-
-    expect(is_file($copiaDeInspeccion))->toBeTrue();
+    expect(is_file($reciente))->toBeTrue();
 })->group('RF-IN-05');
 
-it('no falla si el directorio de temporales todavia no existe', function (): void {
+it('solo borra lo que casa con el nombre del temporal', function (): void {
+    config(['compliance.legal_export_temp_retention_hours' => 1]);
+    $ajeno = temporalLegal('notas.txt');
+
+    relojLegalDentroDe(48 * 3600);
+    Commands::run('compliance:purge-legal-export-temp');
+
+    expect(is_file($ajeno))->toBeTrue();
+})->group('RF-IN-05');
+
+it('nunca toca la copia deliberada de consola, pero la cuenta y avisa a los 30 dias', function (): void {
+    // Es la copia que se entrega a Inspeccion. Su custodia y su borrado son
+    // responsabilidad de quien la genero (docs/runbooks/requerimiento-inspeccion.md
+    // §6), no de un cron: si esta prueba fallara, un borrado programado se
+    // estaria comiendo la unica prueba entregada a un tercero.
+    config(['compliance.legal_export_temp_retention_hours' => 1]);
+    $metricas = RecordingGeneratedFileMetrics::install();
+    $copiaDeInspeccion = copiaLegalDeConsola('registro-horario-2026-01-01_2026-01-31.csv');
+
+    relojLegalDentroDe(31 * 86400);
+    [$codigo, $salida] = Commands::run('compliance:purge-legal-export-temp');
+
+    expect($codigo)->toBe(0)
+        ->and(is_file($copiaDeInspeccion))->toBeTrue()
+        ->and($metricas->overdue)->toBe(['legal_export_console' => 1])
+        ->and($salida)->toContain('borralas en cuanto las hayas entregado')
+        // Ni la ruta ni el nombre en la salida que va al log del planificador.
+        ->and($salida)->not->toContain('registro-horario-2026-01-01');
+})->group('RF-IN-05', 'RL-19');
+
+it('publica cero exportaciones de consola vencidas cuando no las hay', function (): void {
+    $metricas = RecordingGeneratedFileMetrics::install();
+    copiaLegalDeConsola('registro-horario-2026-01-01_2026-01-31.csv');
+
+    relojLegalDentroDe(29 * 86400);
+    [, $salida] = Commands::run('compliance:purge-legal-export-temp');
+
+    // Cero tambien se publica: es lo que apaga la alerta cuando alguien las borra.
+    expect($metricas->overdue)->toBe(['legal_export_console' => 0])
+        ->and($salida)->not->toContain('borralas');
+})->group('RF-IN-05');
+
+it('no falla si los directorios todavia no existen', function (): void {
     // Una instalacion recien desplegada que nunca sirvio una exportacion por
-    // HTTP no tiene ese directorio con contenido. El comando programado corre
-    // cada hora desde el primer dia: no puede fallar por eso.
-    //
-    // El repositorio SI versiona storage/framework/legal-exports/.gitignore
-    // (el patron habitual de Laravel para trackear un directorio vacio), asi
-    // que "no existe" se simula quitando tambien ese fichero y restaurandolo
-    // al terminar: la prueba no puede dejar el arbol de trabajo mas pobre de
-    // lo que lo encontro.
-    $dir = legalExportTempDir();
-    $gitignore = $dir.'/.gitignore';
-    $hadGitignore = is_file($gitignore);
+    // HTTP no tiene ese directorio. El comando programado corre cada hora desde
+    // el primer dia: no puede fallar por eso.
+    config([
+        'compliance.legal_export_temp_path' => sys_get_temp_dir().'/kronoqr-no-existe-'.bin2hex(random_bytes(4)),
+        'compliance.legal_export_console_path' => sys_get_temp_dir().'/kronoqr-no-existe-'.bin2hex(random_bytes(4)),
+    ]);
 
-    if (is_dir($dir)) {
-        foreach (scandir($dir) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
+    [$codigo] = Commands::run('compliance:purge-legal-export-temp');
 
-            unlink($dir.'/'.$entry);
-        }
-
-        rmdir($dir);
-    }
-
-    try {
-        $exitCode = Artisan::call('compliance:purge-legal-export-temp');
-
-        expect($exitCode)->toBe(0);
-    } finally {
-        if ($hadGitignore) {
-            mkdir($dir, 0755, true);
-            file_put_contents($gitignore, "*\n!.gitignore\n");
-        }
-    }
+    expect($codigo)->toBe(0);
 })->group('RF-IN-05');

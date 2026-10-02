@@ -174,6 +174,12 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
     {
         $configured = Config::string('compliance.retention.report_path', '');
 
-        return rtrim($configured === '' ? storage_path('app/retention-reports') : $configured, '/\\');
+        // Vacio —`COMPLIANCE_RETENTION_REPORT_PATH=` en el `.env`— vale lo mismo
+        // que sin definir: junto a las copias, nunca en la capa del contenedor
+        // (ADR-045).
+        return rtrim(
+            $configured === '' ? rtrim(Config::string('backup.path'), '/\\').'/reports/retention' : $configured,
+            '/\\',
+        );
     }
 }

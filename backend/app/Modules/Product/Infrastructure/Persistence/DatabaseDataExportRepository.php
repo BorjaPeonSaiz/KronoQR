@@ -247,6 +247,16 @@ final readonly class DatabaseDataExportRepository implements DataExportRepositor
         return $this->hydrateAll($rows);
     }
 
+    public function completedWithFile(): array
+    {
+        /** @var list<object> $rows */
+        $rows = $this->connection->select(
+            self::SELECT." WHERE e.purged_at IS NULL AND e.status = 'completed' AND e.file_path IS NOT NULL ORDER BY e.id",
+        );
+
+        return $this->hydrateAll($rows);
+    }
+
     /**
      * @param  list<object>  $rows
      * @return list<DataExport>

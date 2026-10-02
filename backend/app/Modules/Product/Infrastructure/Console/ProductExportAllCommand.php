@@ -46,8 +46,12 @@ use Throwable;
  *
  * ## `--purge` no genera nada
  *
- * Borra los ficheros vencidos y marca sus filas. Es lo que el planificador
- * ejecuta cada hora; a mano sirve para hacer sitio en el disco sin esperar.
+ * Borra los ficheros vencidos y marca sus filas, y concilia fila y fichero en
+ * los dos sentidos (ADR-045): la fila cuyo ZIP ya no esta pasa a `purged`, y el
+ * ZIP o el `.work-<uuid>/` que ninguna fila viva nombra se borra al superar su
+ * edad minima. Todo dentro de `PRODUCT_DATA_EXPORT_PATH` y por patron exacto de
+ * nombre. Es lo que el planificador ejecuta cada hora; a mano sirve para hacer
+ * sitio en el disco sin esperar.
  *
  * ## Codigos de salida
  *
@@ -64,7 +68,7 @@ use Throwable;
 final class ProductExportAllCommand extends Command
 {
     protected $signature = 'product:export-all
-        {--purge : No genera nada: borra los ficheros de exportaciones ya caducadas y marca sus filas}';
+        {--purge : No genera nada: borra los ficheros caducados, marca sus filas y concilia fila y fichero}';
 
     protected $description = 'Exporta TODOS los datos de la instalacion a un ZIP con un CSV por tabla, o purga los caducados';
 
@@ -163,6 +167,24 @@ final class ProductExportAllCommand extends Command
              */
             $this->line('Liberadas '.$report->released.' exportaciones que se quedaron a medias '
                 .'(motivo «stale»): ya se puede pedir una nueva.');
+        }
+
+        if ($report->orphans > 0) {
+            // Sin nombres ni rutas, igual que el log: solo la cifra (regla dura 21).
+            $this->line('Borrados '.$report->orphans.' restos sin exportacion viva (un ZIP sin fila, o el '
+                .'directorio de trabajo de una generacion interrumpida).');
+        }
+
+        if ($report->missing > 0) {
+            /*
+             * En voz alta: un ZIP con la plantilla entera ha desaparecido antes
+             * de caducar. Tras una restauracion es lo esperado; fuera de eso,
+             * alguien lo borro o se lo llevo, y el asiento de auditoria es lo
+             * que permite acotar cuando.
+             */
+            $this->line('ATENCION: '.$report->missing.' exportaciones han perdido su fichero antes de caducar. '
+                .'Queda asiento «data_export.file_missing» en la auditoria. Si no acabas de restaurar una '
+                .'copia, averigua quien lo borro o se lo llevo.');
         }
 
         return self::SUCCESS;

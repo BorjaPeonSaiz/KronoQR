@@ -27,6 +27,7 @@ use App\Modules\Compliance\Application\Port\LegalExportMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
+use App\Modules\Compliance\Application\UseCase\SweepLegalExportFiles;
 use App\Modules\Compliance\Domain\Model\Incident;
 use App\Modules\Compliance\Http\Policy\IncidentPolicy;
 use App\Modules\Compliance\Http\Policy\LegalExportPolicy;
@@ -58,6 +59,7 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordDiagnosticsBundleGenera
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeeImport;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmployeePinLifecycle;
 use App\Modules\Compliance\Infrastructure\Listener\RecordEmploymentContractChange;
+use App\Modules\Compliance\Infrastructure\Listener\RecordGeneratedFileMissing;
 use App\Modules\Compliance\Infrastructure\Listener\RecordInstallationSettingChange;
 use App\Modules\Compliance\Infrastructure\Listener\RecordLicenseActivation;
 use App\Modules\Compliance\Infrastructure\Listener\RecordManagementAccountLifecycle;
@@ -101,6 +103,7 @@ use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Kiosk\Domain\Event\DeviceProvisioned;
 use App\Modules\Product\Domain\Event\ComplianceThresholdChanged;
 use App\Modules\Product\Domain\Event\DataExportDownloaded;
+use App\Modules\Product\Domain\Event\DataExportFileMissing;
 use App\Modules\Product\Domain\Event\DataExportGenerated;
 use App\Modules\Product\Domain\Event\DataExportRequested;
 use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
@@ -114,12 +117,15 @@ use App\Modules\Product\Domain\Event\SupportAccessRevoked;
 use App\Modules\Product\Domain\Event\SupportAccessUsed;
 use App\Modules\Reporting\Domain\Event\AdoptionReportExported;
 use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
+use App\Modules\Reporting\Domain\Event\ReportExportFileMissing;
 use App\Modules\Reporting\Domain\Event\ReportExportGenerated;
 use App\Modules\Reporting\Domain\Event\ReportExportRequested;
+use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\AuthorizationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\AbsenceCorrected;
 use App\Modules\Workforce\Domain\Event\AbsenceRegistered;
 use App\Modules\Workforce\Domain\Event\AbsenceVoided;
@@ -510,6 +516,22 @@ final class ComplianceServiceProvider extends ServiceProvider
         $this->app->bind(LegalExportAudit::class, AuditedLegalExportGeneration::class);
 
         $this->app->singleton(LegalExportMetrics::class, TextfileLegalExportMetrics::class);
+
+        // La pasada horaria sobre los ficheros de la exportacion legal (ADR-045):
+        // las dos raices y los dos plazos se leen aqui, en el borde (regla dura
+        // 14). `bind` y no `singleton`: una prueba que cambia la configuracion
+        // antes de lanzar el comando tiene que ver el valor nuevo.
+        $this->app->bind(
+            SweepLegalExportFiles::class,
+            static fn (Application $app): SweepLegalExportFiles => new SweepLegalExportFiles(
+                files: $app->make(GeneratedFileHousekeeping::class),
+                clock: $app->make(Clock::class),
+                temporaries: GeneratedFileAreas::legalExportTemporaries(Config::string('compliance.legal_export_temp_path')),
+                console: GeneratedFileAreas::legalExportConsole(Config::string('compliance.legal_export_console_path')),
+                temporaryRetentionHours: Config::integer('compliance.legal_export_temp_retention_hours', 6),
+                consoleWarningDays: Config::integer('compliance.legal_export_console_warning_days', 30),
+            ),
+        );
     }
 
     /**
@@ -883,6 +905,8 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(DataExportRequested::class, [RecordDataExportRequested::class, 'handle']);
         Event::listen(DataExportGenerated::class, [RecordDataExportGenerated::class, 'handle']);
         Event::listen(DataExportDownloaded::class, [RecordDataExportDownloaded::class, 'handle']);
+        // ADR-045 §d (C5): el ZIP desaparecio antes de caducar.
+        Event::listen(DataExportFileMissing::class, [RecordGeneratedFileMissing::class, 'dataExport']);
     }
 
     /**
@@ -918,6 +942,9 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(ReportExportGenerated::class, [RecordReportExportLifecycle::class, 'generated']);
         Event::listen(ReportExportDownloaded::class, [RecordReportExportLifecycle::class, 'downloaded']);
         Event::listen(AdoptionReportExported::class, [RecordReportExportLifecycle::class, 'adoptionExported']);
+        // ADR-045 §d (C5). Actor `system` y no la cuenta que lo pidio: lo detecta
+        // la purga diaria. Por eso va en su propio listener y no en el de arriba.
+        Event::listen(ReportExportFileMissing::class, [RecordGeneratedFileMissing::class, 'reportExport']);
     }
 
     /**

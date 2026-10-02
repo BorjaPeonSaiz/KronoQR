@@ -284,17 +284,14 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
         ]);
     }
 
-    public function uuidsWithFile(): array
+    public function completedWithFile(): array
     {
-        /** @var list<string> $uuids */
-        $uuids = $this->connection->table('report_exports')
-            ->where('status', ReportExportStatus::Completed->value)
-            ->whereNull('purged_at')
-            ->pluck('uuid')
-            ->map(static fn (mixed $uuid): string => \is_string($uuid) ? $uuid : '')
-            ->all();
+        /** @var list<object> $rows */
+        $rows = $this->connection->select(
+            self::SELECT." WHERE e.purged_at IS NULL AND e.status = 'completed' AND e.file_path IS NOT NULL ORDER BY e.id",
+        );
 
-        return $uuids;
+        return $this->hydrateAll($rows);
     }
 
     public function failStale(DateTimeImmutable $staleBefore, DateTimeImmutable $now): int

@@ -10,7 +10,11 @@ use App\Modules\Product\Domain\ValueObject\DataExportArchive;
 use App\Modules\Product\Domain\ValueObject\DataExportFile;
 use App\Modules\Product\Domain\ValueObject\DataExportFormat;
 use App\Modules\Product\Domain\ValueObject\ExportedDataset;
+use App\Modules\Shared\Application\Port\GeneratedFileStore;
+use App\Modules\Shared\Domain\ValueObject\GeneratedFileRemoval;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
+use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStore;
+use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use ZipArchive;
 
 /**
@@ -53,7 +57,10 @@ use ZipArchive;
  */
 final readonly class ZipDataExportArchiveWriter implements DataExportArchiveWriter
 {
-    public function __construct(private string $directory) {}
+    public function __construct(
+        private string $directory,
+        private GeneratedFileStore $files = new FilesystemGeneratedFileStore,
+    ) {}
 
     public function begin(string $exportUuid): string
     {
@@ -174,13 +181,20 @@ final readonly class ZipDataExportArchiveWriter implements DataExportArchiveWrit
         @rmdir($workspace);
     }
 
+    /**
+     * Confinado a la raiz de los ZIP y a su patron de nombre (ADR-045, C3).
+     *
+     * Antes hacia `unlink` de la ruta que le dieran: una fila alterada podia
+     * borrar una copia de `BACKUP_PATH`. Ahora una ruta fuera de
+     * `PRODUCT_DATA_EXPORT_PATH`, con un nombre que no es el de un ZIP de
+     * exportacion o a traves de un enlace simbolico no borra nada y devuelve
+     * `false`.
+     */
     public function delete(string $path): bool
     {
-        if (! is_file($path)) {
-            return true;
-        }
+        $outcome = $this->files->discard(GeneratedFileAreas::dataExportArchives($this->directory), $path);
 
-        return @unlink($path);
+        return $outcome === GeneratedFileRemoval::Removed || $outcome === GeneratedFileRemoval::Absent;
     }
 
     /**

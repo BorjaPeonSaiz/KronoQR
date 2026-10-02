@@ -97,6 +97,10 @@
              denied» mientras en el contenedor local pasaban. force: ningun .env
              puede devolverlas al directorio del producto. -->
         <env name="METRICS_TEXTFILE_PATH" value="storage/framework/testing/metrics" force="true"/>
+        <!-- Lo mismo con los informes de retencion, que desde ADR-045 van por
+             defecto a BACKUP_PATH/reports/retention: en el runner de la CI ese
+             directorio no existe ni se puede crear. -->
+        <env name="COMPLIANCE_RETENTION_REPORT_PATH" value="storage/framework/testing/retention-reports" force="true"/>
         <!--
             LA SUITE NO EXPORTA TRAZAS NI LOGS DE VERDAD.
 
@@ -176,6 +180,7 @@
         <server name="OTEL_EXPORTER_OTLP_ENDPOINT" value="" force="true"/>
         <server name="LOKI_URL" value="" force="true"/>
         <server name="METRICS_TEXTFILE_PATH" value="storage/framework/testing/metrics" force="true"/>
+        <server name="COMPLIANCE_RETENTION_REPORT_PATH" value="storage/framework/testing/retention-reports" force="true"/>
         <server name="BCRYPT_ROUNDS" value="4" force="true"/>
         <server name="BROADCAST_CONNECTION" value="null" force="true"/>
         <server name="CACHE_STORE" value="array" force="true"/>

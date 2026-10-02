@@ -6,6 +6,10 @@ namespace App\Modules\Reporting\Infrastructure\Adapter;
 
 use App\Modules\Reporting\Application\Port\ReportExportStorage;
 use App\Modules\Reporting\Domain\Exception\ReportExportWriteFailed;
+use App\Modules\Shared\Application\Port\GeneratedFileStore;
+use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
+use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStore;
+use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 
 /**
  * Los informes en diferido, en el sistema de ficheros local (**RF-IN-06**,
@@ -47,6 +51,7 @@ final readonly class FilesystemReportExportStorage implements ReportExportStorag
     public function __construct(
         /** `REPORTING_EXPORT_PATH`, **fuera de `public/`** (ver el puerto). */
         private string $root,
+        private GeneratedFileStore $files = new FilesystemGeneratedFileStore,
     ) {}
 
     public function pathFor(string $uuid, string $fileName): string
@@ -120,65 +125,38 @@ final readonly class FilesystemReportExportStorage implements ReportExportStorag
         return hash_final($context);
     }
 
+    /**
+     * Un nivel, **sin recursion y sin seguir enlaces** (ADR-045, C3).
+     *
+     * El arbol que este adaptador crea es exactamente `<raiz>/<uuid>/<fichero>`.
+     * Solo se borra un directorio cuyo nombre es un `uuid` v7, dentro de
+     * `REPORTING_EXPORT_PATH`, y solo si dentro no hay mas que ficheros
+     * regulares: el dia que alguien apunte la variable a un sitio compartido por
+     * error, `deleteAllFor('../exports')` no vacia nada.
+     */
     public function deleteAllFor(string $uuid): void
     {
-        $directory = $this->directoryFor($uuid);
-
-        if (! is_dir($directory)) {
-            return;
-        }
-
-        /*
-         * Un nivel y **sin recursion**: el arbol que este adaptador crea es
-         * exactamente `<raiz>/<uuid>/<fichero>`, asi que un borrado recursivo no
-         * haria falta y si abriria la posibilidad de vaciar mas de lo que se
-         * pretende el dia que alguien apunte `REPORTING_EXPORT_PATH` a un sitio
-         * compartido por error.
-         */
-        foreach (glob($directory.\DIRECTORY_SEPARATOR.'*') ?: [] as $file) {
-            if (is_file($file)) {
-                @unlink($file);
-            }
-        }
-
-        @rmdir($directory);
+        $this->files->remove($this->area(), $uuid);
     }
 
-    public function storedUuids(): array
-    {
-        $root = rtrim($this->root, '/\\');
-
-        if (! is_dir($root)) {
-            return [];
-        }
-
-        $uuids = [];
-
-        foreach (glob($root.\DIRECTORY_SEPARATOR.'*', GLOB_ONLYDIR) ?: [] as $directory) {
-            $uuids[] = basename($directory);
-        }
-
-        return $uuids;
-    }
-
+    /**
+     * Borra el fichero de una fila **solo si cae dentro de su clase**: bajo
+     * `REPORTING_EXPORT_PATH`, en un `<uuid>/` y sin enlaces (ADR-045, C3). Una
+     * fila que apunte a cualquier otro sitio no borra nada. Y el subdirectorio
+     * de la exportacion, si queda vacio; nunca recursivamente.
+     */
     public function delete(string $path): void
     {
         if ($path === '') {
             return;
         }
 
-        if (is_file($path)) {
-            @unlink($path);
-        }
+        $this->files->discard($this->area(), $path);
+    }
 
-        // Y el subdirectorio de la exportacion, si queda vacio. `@rmdir` falla en
-        // silencio cuando no lo esta, que es lo correcto: nunca se borra
-        // recursivamente nada bajo `REPORTING_EXPORT_PATH`.
-        $directory = \dirname($path);
-
-        if (is_dir($directory) && $directory !== rtrim($this->root, '/\\')) {
-            @rmdir($directory);
-        }
+    private function area(): GeneratedFileArea
+    {
+        return GeneratedFileAreas::reportExports($this->root);
     }
 
     /** El subdirectorio de esa exportacion: `<raiz>/<uuid>`. */

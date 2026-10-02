@@ -116,4 +116,15 @@ interface DataExportRepository
      * @return list<DataExport>
      */
     public function expired(DateTimeImmutable $now): array;
+
+    /**
+     * Las `completed` sin purgar que todavia dicen tener fichero, caducadas o no.
+     *
+     * Es la mitad «fila → fichero» de la conciliacion (ADR-045 §d): la purga
+     * comprueba que cada una sigue teniendo su ZIP, y sus nombres son lo unico
+     * que protege un ZIP del barrido de huerfanos.
+     *
+     * @return list<DataExport>
+     */
+    public function completedWithFile(): array;
 }

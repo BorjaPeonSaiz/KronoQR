@@ -153,9 +153,14 @@ return [
     /*
      * Directorio donde `php artisan product:diagnostics` deja el fichero.
      *
-     * Dentro de `storage/app` porque es el unico sitio escribible por la
-     * aplicacion que existe con seguridad en toda instalacion, y **no** dentro
-     * de `BACKUP_PATH`: ahi vive lo que hay que conservar, y un paquete de
+     * Dentro de `storage/app`, que en produccion es el volumen con nombre
+     * `app-storage`, compartido por `app`, `horizon` y `scheduler` y persistente
+     * entre actualizaciones (ADR-045): el paquete que se genera con `exec` en
+     * `app` lo puede barrer la pasada del `scheduler`. Tiene que quedar dentro de
+     * `/var/www/html/storage/app` y no coincidir ni solaparse con ninguna otra
+     * raiz de clase (`product:doctor`, comprobacion `files.class_roots`).
+     *
+     * Y **no** dentro de `BACKUP_PATH`: ahi vive lo que hay que conservar, y un paquete de
      * diagnostico es material desechable que ademas puede llevar datos
      * personales. Mezclarlos haria que la retencion de copias conservara durante
      * meses ficheros que deberian borrarse en cuanto se envian.
@@ -233,10 +238,23 @@ return [
     /*
      * Directorio donde se escribe el ZIP de la exportacion integra.
      *
-     * Dentro de `storage/app` por lo mismo que el paquete de diagnostico: es el
-     * unico sitio escribible por la aplicacion que existe con seguridad en toda
-     * instalacion. El escritor crea el directorio con `0700` y el fichero con
-     * `0600`.
+     * Dentro de `storage/app`, que en produccion es el volumen compartido
+     * `app-storage` (ADR-045): el ZIP lo escribe `horizon`, la descarga la sirve
+     * `app` y la purga horaria corre en `scheduler`, y los tres tienen que ver
+     * el mismo fichero. Antes de ese volumen cada contenedor tenia su propio
+     * `storage/app` y la descarga respondia `404` (R3-PL-01). El escritor crea
+     * el directorio con `0700` y el fichero con `0600`.
+     *
+     * **La purga concilia en los dos sentidos** dentro de esta raiz y por patron
+     * exacto de nombre: la fila sin ZIP pasa a `purged` (con asiento
+     * `data_export.file_missing` si aun no habia caducado), y el ZIP sin fila o
+     * el `.work-<uuid>/` de una generacion interrumpida se borra al superar su
+     * edad minima. Tiene que quedar dentro de `/var/www/html/storage/app` y no
+     * coincidir ni solaparse con ninguna otra raiz de clase.
+     *
+     * **El volumen no entra en la copia de seguridad**: el ZIP es una vista de
+     * datos que ya estan en el volcado cifrado, y tras restaurar se vuelve a
+     * pedir.
      *
      * **NO SE PONE DENTRO DE `BACKUP_PATH`**, y aqui el motivo es aun mas fuerte
      * que en el diagnostico: una exportacion integra es una copia completa de la
@@ -291,6 +309,12 @@ return [
      *
      * Se barre en dos sitios: al pedir una nueva —para que quien pulsa el boton
      * no espere a la hora en punto— y en la purga horaria.
+     *
+     * Y el DOBLE de este plazo es la edad minima con la que la purga horaria
+     * borra los restos de una generacion interrumpida —el `.work-<uuid>/` con
+     * todos los datos en claro y el temporal de `ZipArchive`— (ADR-045, C1): para
+     * entonces `failStale` ya cerro la fila, y no se compite nunca con un trabajo
+     * que sigue escribiendo.
      */
     'data_export_stale_after_seconds' => (int) env('PRODUCT_DATA_EXPORT_STALE_AFTER', 3600),
 
@@ -419,6 +443,12 @@ return [
      * Un fichero y no una tabla: borrarlo tiene que ser un `rm`, porque estrenar
      * identidad ante el fabricante es algo que el cliente debe poder hacer solo
      * (ADR-020). Directorio `0700`, fichero `0600`.
+     *
+     * En el volumen `app-storage` (ADR-045): lo escriben `scheduler` (`--send`)
+     * y `app` (consola), y ya no cambia de identificador cada vez que se recrea
+     * el `scheduler`. No entra en la copia: restaurar en otro servidor estrena
+     * identificador, y eso es neutro porque solo lo usa la telemetria. Su
+     * directorio es una raiz de clase y no puede solaparse con ninguna otra.
      */
     'telemetry_state_path' => (string) env('TELEMETRY_STATE_PATH', storage_path('app/telemetry/state.json')),
 

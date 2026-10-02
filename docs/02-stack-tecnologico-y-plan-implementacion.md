@@ -853,7 +853,15 @@ kronoqr_backup_volume_free_ratio                         gauge
 kronoqr_backup_restore_drill_last_result                 gauge
 kronoqr_backup_restore_drill_last_success_timestamp_seconds  gauge
 kronoqr_backup_restore_drill_duration_seconds            gauge
+
+# Ficheros generados — ADR-045, una sola etiqueta `class` de catálogo cerrado
+generated_files_orphans_removed_total{class}             counter
+generated_files_refused_total{class}                     counter
+generated_files_missing_total{class}                     counter
+generated_files_overdue{class}                           gauge
 ```
+
+**Las cuatro series `generated_files_*` describen la conciliación de las purgas** ([ADR-045](adr/ADR-045-los-ficheros-generados-viven-en-un-volumen-compartido.md)). `generated_files_missing_total` cuenta las filas `completed` cuyo fichero desapareció **antes** de caducar: es un evento de seguridad y deja además asiento (`data_export.file_missing`, `report_export.file_missing`); tras una restauración es lo esperado. `generated_files_refused_total` cuenta lo que la purga se negó a tocar (ruta fuera de su raíz, enlace, subdirectorio, nombre ajeno): mala configuración o manipulación. `generated_files_overdue` es un *gauge* de lo que sigue en disco pasado su plazo de aviso —hoy, las exportaciones legales hechas por consola con más de 30 días— y se publica cada hora, también cuando vale 0. `generated_files_orphans_removed_total` es informativa: si sube todos los días, los trabajos de generación están muriendo. `class` solo toma valores de un catálogo cerrado (`data_export`, `data_export_work`, `report_export`, `legal_export_tmp`, `legal_export_console`, `diagnostics`): ninguna serie lleva `uuid` ni ruta.
 
 **Las métricas de respaldo no las expone la aplicación.** Las escriben
 `infra/scripts/backup.sh` y `restore-drill.sh` como ficheros en

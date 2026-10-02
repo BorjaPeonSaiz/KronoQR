@@ -531,6 +531,27 @@ enum AuditAction: string
     case DataExportDownloaded = 'data_export.downloaded';
 
     /**
+     * El ZIP de una exportacion integra **ha desaparecido antes de caducar**
+     * (**RF-PD-14**, RL-15, RL-20; ADR-045 §d, condicion C5).
+     *
+     * Lo escribe la purga horaria cuando una fila `completed` ya no tiene
+     * fichero y su `expires_at` todavia no ha llegado; la fila pasa a `purged`
+     * en la misma transaccion. Un fichero con la plantilla entera que deja de
+     * estar antes de tiempo es un borrado a mano o una exfiltracion (`mv`), y sin
+     * este asiento no habria forma de acotar cuando ocurrio. Un fichero caducado
+     * que falta no deja asiento: es la purga normal.
+     *
+     * Tras una restauracion es lo esperado —el volumen no entra en la copia— y el
+     * informe de `restore.sh` lo anuncia.
+     *
+     * Familia `legal_export`, con el resto de `data_export.*`. Actor `system`;
+     * payload de lista cerrada: el `uuid` de la exportacion, su `expires_at` y el
+     * momento de la deteccion. **Nunca la ruta ni el nombre del fichero** (regla
+     * dura 21).
+     */
+    case DataExportFileMissing = 'data_export.file_missing';
+
+    /**
      * Se ha pedido un informe de horas **en diferido** (**RF-IN-06**, RS-05,
      * tarea 3.9).
      *
@@ -584,6 +605,21 @@ enum AuditAction: string
      * que el fichero que alguien tiene delante es el que salio de aqui.
      */
     case ReportExportDownloaded = 'report_export.downloaded';
+
+    /**
+     * El fichero de un informe en diferido **ha desaparecido antes de caducar**
+     * (**RF-IN-06**, RL-15; ADR-045 §d, condicion C5).
+     *
+     * Mismo hecho que `data_export.file_missing` sobre un fichero con horas
+     * nominales de la plantilla: lo escribe la purga diaria y la fila pasa a
+     * `purged` —minimizada, como en cualquier purga— en la misma transaccion.
+     *
+     * Familia `PersonalDataAccess`, con el resto de `report_export.*`. Actor
+     * `system`: lo detecta una tarea programada, no la cuenta que pidio el
+     * informe. Payload: `uuid`, `expires_at` y momento de la deteccion; **nunca
+     * la ruta ni el nombre del fichero**, que lleva el periodo (regla dura 21).
+     */
+    case ReportExportFileMissing = 'report_export.file_missing';
 
     /**
      * El cuadro de impacto y adopcion ha salido como fichero (**RF-IN-08**, regla

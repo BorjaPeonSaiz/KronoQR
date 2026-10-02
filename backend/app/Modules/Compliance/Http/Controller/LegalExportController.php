@@ -94,14 +94,17 @@ final class LegalExportController extends Controller
      *
      * **El nombre no lleva ningun dato personal** (regla dura 21): el periodo y
      * un aleatorio. El que ve quien descarga es otro —el del manifiesto— y
-     * tampoco lo lleva. Vive bajo `storage/framework`, que es del proceso y no
-     * se sirve por HTTP: un directorio publico con exportaciones a medio escribir
-     * seria una fuga esperando a que alguien adivine un nombre.
+     * tampoco lo lleva.
+     *
+     * **Vive en `storage/app/tmp/legal-exports`, dentro del volumen compartido**
+     * (ADR-045). Antes vivia en `storage/framework`, en la capa de este
+     * contenedor: el temporal huerfano de una descarga abortada lo escribia `app`
+     * y lo tenia que purgar `scheduler`, que no lo veia. Sigue sin servirse por
+     * HTTP: `nginx` no monta el volumen y la imagen no hace `storage:link`.
      */
     private function temporaryPath(string $suffix): string
     {
-        return storage_path(
-            'framework/legal-exports/registro-horario-'.$suffix.'-'.Str::random(12).'.csv',
-        );
+        return rtrim(config()->string('compliance.legal_export_temp_path'), '/')
+            .'/registro-horario-'.$suffix.'-'.Str::random(12).'.csv';
     }
 }

@@ -140,20 +140,19 @@ interface ReportExportRepository
     ): void;
 
     /**
-     * Los `uuid` de las exportaciones que **todavia tienen derecho a un fichero**
-     * en el disco: `completed` y sin purgar.
+     * Las exportaciones que **todavia dicen tener fichero** en el disco:
+     * `completed`, sin purgar y con ruta, caducadas o no.
      *
-     * Existe para la limpieza de huerfanos de `PurgeExpiredReportExports`
+     * Existe para la conciliacion de `PurgeExpiredReportExports` (ADR-045)
      * —nombrado en prosa porque un `use` de un caso de uso desde un puerto es la
-     * frontera que Deptrac rechaza—:
-     * todo lo demas que haya en `REPORTING_EXPORT_PATH` es basura de una
-     * generacion que murio sin poder cerrarse —`$timeout` agotado, el trabajador
-     * sin memoria, un `SIGTERM`—, y esa basura son las horas de la plantilla
-     * escritas a medias en un fichero que ninguna fila menciona.
+     * frontera que Deptrac rechaza—: cada una se comprueba contra el disco, y la
+     * que ya no tiene fichero pasa a `purged`. Las que si lo tienen son, junto a
+     * las que estan en curso, lo unico que protege un directorio `<uuid>/` del
+     * barrido de huerfanos.
      *
-     * @return list<string>
+     * @return list<ReportExport>
      */
-    public function uuidsWithFile(): array;
+    public function completedWithFile(): array;
 
     /**
      * Marca como `failed` con motivo `stale` las que llevan demasiado tiempo sin

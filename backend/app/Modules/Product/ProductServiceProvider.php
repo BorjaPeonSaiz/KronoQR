@@ -119,6 +119,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\EdgeNetworksProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ErrorHistoryProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\GeneratedFilesProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\KioskServiceCodeProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\LicenseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
@@ -148,18 +149,22 @@ use App\Modules\Product\Infrastructure\Telemetry\DatabaseTelemetryFacts;
 use App\Modules\Product\Infrastructure\Telemetry\FileTelemetryStateStore;
 use App\Modules\Product\Infrastructure\Telemetry\HttpTelemetrySender;
 use App\Modules\Product\Infrastructure\Telemetry\RedisTelemetryCounters;
+use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PayrollLayoutProvider;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
+use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Support\Locale\NegotiableLocales;
@@ -863,8 +868,9 @@ final class ProductServiceProvider extends ServiceProvider
 
         $this->app->bind(
             DataExportArchiveWriter::class,
-            static fn (): ZipDataExportArchiveWriter => new ZipDataExportArchiveWriter(
+            static fn (Application $app): ZipDataExportArchiveWriter => new ZipDataExportArchiveWriter(
                 Config::string('product.data_export_path'),
+                $app->make(GeneratedFileStore::class),
             ),
         );
 
@@ -931,9 +937,18 @@ final class ProductServiceProvider extends ServiceProvider
             PurgeExpiredDataExportsHandler::class,
             static fn (Application $app): PurgeExpiredDataExportsHandler => new PurgeExpiredDataExportsHandler(
                 exports: $app->make(DataExportRepository::class),
-                writer: $app->make(DataExportArchiveWriter::class),
+                files: $app->make(GeneratedFileHousekeeping::class),
+                events: $app->make(ProductEventPublisher::class),
+                serialized: $app->make(SerializedLedgerWrite::class),
                 clock: $app->make(Clock::class),
+                // Las tres clases de la raiz de exportaciones (ADR-045, tabla de
+                // huerfanos): el ZIP, el espacio de trabajo y el temporal de
+                // `ZipArchive`. La raiz se lee aqui, en el borde (regla dura 14).
+                archives: GeneratedFileAreas::dataExportArchives(Config::string('product.data_export_path')),
+                workspaces: GeneratedFileAreas::dataExportWorkspaces(Config::string('product.data_export_path')),
+                temporaries: GeneratedFileAreas::dataExportArchiveTemporaries(Config::string('product.data_export_path')),
                 staleAfterSeconds: max(1, Config::integer('product.data_export_stale_after_seconds', 3600)),
+                retentionDays: max(1, Config::integer('product.data_export_retention_days', 7)),
             ),
         );
     }
@@ -1815,6 +1830,26 @@ final class ProductServiceProvider extends ServiceProvider
                     new DiskProbe(
                         storagePath: storage_path(),
                         backupPath: Config::string('backup.path'),
+                    ),
+                    /*
+                     * Donde viven los ficheros que genera el producto (ADR-045,
+                     * C3). Detras del disco porque el orden de esta lista ES el
+                     * del informe: primero si hay sitio y despues si cada clase
+                     * esta donde debe.
+                     */
+                    new GeneratedFilesProbe(
+                        storageAppPath: storage_path('app'),
+                        applicationPath: base_path(),
+                        environment: Config::string('app.env'),
+                        retentionReportPath: Config::string('compliance.retention.report_path', ''),
+                        backupPath: Config::string('backup.path'),
+                        classRoots: GeneratedFileAreas::configuredRoots(),
+                        consoleExports: GeneratedFileAreas::legalExportConsole(
+                            Config::string('compliance.legal_export_console_path'),
+                        ),
+                        consoleWarningDays: Config::integer('compliance.legal_export_console_warning_days', 30),
+                        files: $app->make(GeneratedFileHousekeeping::class),
+                        clock: $app->make(Clock::class),
                     ),
                     new ApplicationProbe(
                         timezone: Config::string('app.timezone'),
