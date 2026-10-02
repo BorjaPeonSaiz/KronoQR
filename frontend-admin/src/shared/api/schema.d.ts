@@ -10659,7 +10659,9 @@ export interface components {
              * @description `pending` espera al trabajador de cola; `running` esta generando;
              *     `completed` se puede descargar; `failed` no se genero (la causa, sin
              *     datos personales, en `failure_reason`); `purged` existio y su fichero
-             *     se borro por caducidad.
+             *     ya no existe: se borro por caducidad o desaparecio antes (ADR-045).
+             *     En el segundo caso `purged_at` es anterior a `expires_at` y queda el
+             *     asiento `report_export.file_missing`.
              *
              *     **`purged` no es `failed`**: confundirlos seria decirle a quien lo
              *     pidio que su informe nunca se hizo cuando se hizo y se lo pudo llevar.
@@ -10745,7 +10747,9 @@ export interface components {
             criteria: string[];
             /**
              * @description Hasta cuando existe el fichero. Pasada, se purga y la fila pasa a
-             *     `purged`.
+             *     `purged`. Una fila puede pasar a `purged` ANTES de esta fecha si su
+             *     fichero desaparece (ADR-045): entonces `purged_at` es anterior a
+             *     `expires_at`.
              */
             expires_at: components["schemas"]["UtcTimestamp"] | null;
             purged_at: components["schemas"]["UtcTimestamp"] | null;
@@ -10826,7 +10830,9 @@ export interface components {
              * @description `pending` espera al trabajador de cola; `running` esta escribiendo;
              *     `completed` se puede descargar; `failed` no se genero (la causa,
              *     sin datos personales, en `failure_reason`); `purged` existio y su
-             *     fichero se borro por caducidad.
+             *     fichero ya no existe: se borro por caducidad o desaparecio antes
+             *     (ADR-045). En el segundo caso `purged_at` es anterior a `expires_at`
+             *     y queda el asiento `data_export.file_missing`.
              * @enum {string}
              */
             status: "pending" | "running" | "completed" | "failed" | "purged";
@@ -10878,7 +10884,9 @@ export interface components {
             };
             /**
              * @description Hasta cuando se puede descargar. Pasada, el fichero se purga y la
-             *     fila pasa a `purged`.
+             *     fila pasa a `purged`. Una fila puede pasar a `purged` ANTES de esta
+             *     fecha si su fichero desaparece (ADR-045): entonces `purged_at` es
+             *     anterior a `expires_at`.
              */
             expires_at: components["schemas"]["UtcTimestamp"] | null;
             purged_at: components["schemas"]["UtcTimestamp"] | null;
