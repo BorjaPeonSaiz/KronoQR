@@ -380,19 +380,39 @@ const offboardToday = ref('')
 const terminatedAtServerErrors = ref<readonly string[]>([])
 const terminatedAtInput = ref<HTMLInputElement | null>(null)
 
-const terminatedAtIsFuture = computed(
+/**
+ * Una persona cuya alta aun no ha llegado (RN-14) solo admite como cese la
+ * fecha de su alta: una baja sin efectos, porque nunca llego a empezar.
+ */
+const hireIsFuture = computed(
+  () =>
+    offboardToday.value !== '' &&
+    employee.value !== undefined &&
+    employee.value.hired_at > offboardToday.value,
+)
+
+/** La fecha mas tardia admitida: hoy, o la del alta si esta aun no ha llegado. */
+const offboardMax = computed(() =>
+  hireIsFuture.value ? (employee.value?.hired_at ?? '') : offboardToday.value,
+)
+
+const terminatedAtOutOfRange = computed(
   () =>
     offboardToday.value !== '' &&
     terminatedAt.value !== '' &&
-    terminatedAt.value > offboardToday.value,
+    (hireIsFuture.value
+      ? terminatedAt.value !== employee.value?.hired_at
+      : terminatedAt.value > offboardToday.value),
 )
 
 const terminatedAtErrors = computed<readonly string[]>(() => [
-  ...(terminatedAtIsFuture.value
+  ...(terminatedAtOutOfRange.value
     ? [
-        t('employees.offboard.dateInFuture', {
-          today: formatCivilDate(offboardToday.value, locale.value),
-        }),
+        hireIsFuture.value
+          ? t('employees.offboard.futureHire')
+          : t('employees.offboard.dateInFuture', {
+              today: formatCivilDate(offboardToday.value, locale.value),
+            }),
       ]
     : []),
   ...terminatedAtServerErrors.value,
@@ -439,7 +459,7 @@ const offboardChanges = computed<Change[]>(() => [
 
 function startOffboarding(): void {
   offboardToday.value = site.value === undefined ? '' : todayInZone(site.value.timezone)
-  terminatedAt.value = offboardToday.value
+  terminatedAt.value = hireIsFuture.value ? (employee.value?.hired_at ?? '') : offboardToday.value
   terminatedAtServerErrors.value = []
   offboardReasonKey.value = ''
   offboardReasonText.value = ''
@@ -857,10 +877,14 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
       size="wide"
       :busy="offboardBusy"
       :error="offboardError"
-      :confirm-disabled="terminatedAt === '' || terminatedAtIsFuture || offboardReason === ''"
+      :confirm-disabled="terminatedAt === '' || terminatedAtOutOfRange || offboardReason === ''"
       @cancel="offboarding = false"
       @confirm="confirmOffboard"
     >
+      <p v-if="hireIsFuture" class="mb-4" data-test="offboard-future-hire">
+        {{ t('employees.offboard.futureHire') }}
+      </p>
+
       <div class="grid gap-4 sm:grid-cols-2">
         <FormField
           v-slot="field"
@@ -875,7 +899,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
             v-model="terminatedAt"
             type="date"
             required
-            :max="offboardToday === '' ? undefined : offboardToday"
+            :max="offboardMax === '' ? undefined : offboardMax"
             :min="employee?.hired_at"
             :class="inputClass"
             :aria-invalid="field.invalid ? 'true' : undefined"
@@ -929,6 +953,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
       <ul class="mt-4 list-disc pl-5 text-kq-text-muted">
         <li>{{ t('employees.offboard.consequenceCredential') }}</li>
         <li>{{ t('employees.offboard.consequenceScan') }}</li>
+        <li>{{ t('employees.offboard.consequenceOpenShift') }}</li>
         <li>{{ t('employees.offboard.consequenceHistory') }}</li>
       </ul>
     </ConfirmDialog>

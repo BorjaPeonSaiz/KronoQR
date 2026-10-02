@@ -250,7 +250,9 @@
         "other": "Another reason"
       },
       "consequenceCredential": "Their QR card is revoked and stops working at the kiosk.",
-      "consequenceScan": "Offboarding takes effect as soon as you confirm it, even if the termination date is today: the person can no longer clock in right away and it cannot be undone. An open shift is closed with a correction.",
+      "consequenceScan": "Offboarding takes effect as soon as you confirm it, even if the termination date is today: the person can no longer clock in right away and it cannot be undone. Any days worked up to the termination date that are missing can be completed afterwards, by hand, from their time record.",
+      "consequenceOpenShift": "If they have an open shift, its clock-out can no longer be recorded: close it afterwards with a correction.",
+      "futureHire": "They have not started yet: the offboarding is recorded with their hiring date and leaves no worked day.",
       "consequenceHistory": "Nothing is deleted: their time records are kept and can still be consulted."
     },
     "conflict": {
@@ -678,6 +680,8 @@
       "contextWorkDate": "Work day of {date}, in {zone} time.",
       "workDateLabel": "Work day",
       "workDateHint": "The day this entry belongs to. It does not have to match the date of the clock-in time: a break that ends after midnight still belongs to the day the shift started.",
+      "workDateRange": "This person has left: only work days between their hiring date ({from}) and their termination date ({to}) are accepted.",
+      "employeeLabel": "Person",
       "clockInLabel": "Clock-in time",
       "clockOutLabel": "Clock-out time",
       "zoneHint": "Type the time in the site's time zone ({zone}), not the one on your computer.",

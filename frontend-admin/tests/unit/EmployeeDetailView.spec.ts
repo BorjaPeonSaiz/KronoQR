@@ -552,6 +552,56 @@ describe('EmployeeDetailView', () => {
       expect(text).not.toContain('A partir de la fecha de cese')
     })
 
+    it('una alta futura fija la fecha de cese a la del alta y lo explica', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+
+      const wrapper = await mountDetail(employee({ hired_at: '2026-10-15' }))
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+
+      const input = dateInput(wrapper)
+
+      expect(input.attributes('min')).toBe('2026-10-15')
+      expect(input.attributes('max')).toBe('2026-10-15')
+      expect(input.element.value).toBe('2026-10-15')
+      expect(wrapper.find('[data-test="offboard-future-hire"]').text()).toBe(
+        es.employees.offboard.futureHire,
+      )
+
+      await wrapper.find('[role="dialog"] select').setValue('endOfContract')
+      await input.setValue('2026-10-10')
+      await settle(1)
+
+      expect(
+        buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('disabled'),
+      ).toBeDefined()
+    })
+
+    it('avisa del turno abierto con un texto fijo y dice que los dias se completan despues', async () => {
+      const wrapper = await mountDetail(employee())
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+
+      const text = wrapper.find('[role="dialog"]').text()
+
+      expect(text).toContain(es.employees.offboard.consequenceOpenShift)
+      expect(text).toContain('se pueden completar después')
+    })
+
+    it('una alta que ya ha llegado no se limita a la fecha de alta', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+
+      const wrapper = await mountDetail(employee({ hired_at: '2026-08-14' }))
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+
+      expect(wrapper.find('[data-test="offboard-future-hire"]').exists()).toBe(false)
+      expect(dateInput(wrapper).attributes('max')).toBe('2026-10-02')
+    })
+
     it('pinta el 422 del servidor en el campo de fecha, accesible', async () => {
       const message = 'La fecha de cese (2026-10-31) es posterior a hoy (2026-10-02).'
       const wrapper = await mountDetail(employee(), (url, init) =>

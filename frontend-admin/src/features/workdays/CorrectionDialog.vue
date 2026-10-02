@@ -101,6 +101,13 @@ const props = defineProps<{
   workDate: string | undefined
   /** Obligatorio en 'correct'/'void': el tramo vigente sobre el que se actúa. */
   entry: WorkDayShiftEntry | undefined
+  /**
+   * Solo en 'add' y para una persona dada de baja (RN-14): la jornada tiene que
+   * caer entre su alta (`workDateMin`) y su cese o hoy (`workDateMax`). Es una
+   * ayuda: la barrera es el servidor (`422` en `work_date`).
+   */
+  workDateMin?: string | undefined
+  workDateMax?: string | undefined
 }>()
 
 const emit = defineEmits<{
@@ -133,6 +140,15 @@ const originalClockOut =
   props.mode === 'add' || props.entry === undefined
     ? ''
     : localInputFor(props.entry.clocked_out_at_local)
+
+const workDateRangeHint = computed(() =>
+  props.workDateMin === undefined || props.workDateMax === undefined
+    ? ''
+    : t('corrections.dialog.workDateRange', {
+        from: formatCivilDate(props.workDateMin, locale.value),
+        to: formatCivilDate(props.workDateMax, locale.value),
+      }),
+)
 
 const workDateInput = ref(props.mode === 'add' ? '' : (props.workDate ?? ''))
 const clockInInput = ref(originalClockIn)
@@ -490,13 +506,22 @@ const inputClass =
     </div>
 
     <form id="correction-form" class="mt-4 flex flex-col gap-4" novalidate @submit.prevent="submit">
-      <ErrorNotice v-if="error !== null" :error="error" data-test="dialog-error" />
+      <ErrorNotice
+        v-if="error !== null"
+        :error="error"
+        :field-labels="{ employee_uuid: t('corrections.dialog.employeeLabel') }"
+        data-test="dialog-error"
+      />
 
       <FormField
         v-if="mode === 'add'"
         v-slot="field"
         :label="t('corrections.dialog.workDateLabel')"
-        :hint="t('corrections.dialog.workDateHint')"
+        :hint="
+          workDateRangeHint === ''
+            ? t('corrections.dialog.workDateHint')
+            : `${t('corrections.dialog.workDateHint')} ${workDateRangeHint}`
+        "
         :errors="fieldErrors('work_date')"
         required
       >
@@ -505,6 +530,8 @@ const inputClass =
           v-model="workDateInput"
           type="date"
           required
+          :min="workDateMin"
+          :max="workDateMax"
           :class="inputClass"
           :aria-describedby="field.describedBy"
           :aria-invalid="field.invalid"

@@ -3893,6 +3893,41 @@ export async function stubManagementApi(
           }
 
           const payload = request.postDataJSON() as AddShiftEntryRequest
+
+          // RN-14: una persona de baja solo recibe jornadas entre su alta y su
+          // cese, ambas incluidas; una suspendida, ninguna (`422` en `employee_uuid`).
+          const person = employeesState.find(
+            (candidate) => candidate.uuid === payload.employee_uuid,
+          )
+
+          if (person?.status === 'suspended') {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Peticion no valida',
+              { employee_uuid: ['Esta persona está suspendida: no se le pueden registrar horas.'] },
+            )
+            return
+          }
+
+          if (
+            person?.status === 'terminated' &&
+            person.terminated_at !== null &&
+            (payload.work_date > person.terminated_at || payload.work_date < person.hired_at)
+          ) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Peticion no valida',
+              {
+                work_date: [
+                  `Esta persona está de baja desde el ${person.terminated_at}: solo se le pueden registrar horas de jornadas entre su alta (${person.hired_at}) y su cese (${person.terminated_at}).`,
+                ],
+              },
+            )
+            return
+          }
+
           const day = ensureWorkDay(workdaysState, payload.work_date)
           const newUuid = syntheticShiftEntryUuid()
           // Normalizado una vez: `AddShiftEntryRequest.clocked_out_at` es

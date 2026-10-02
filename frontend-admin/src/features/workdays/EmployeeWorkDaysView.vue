@@ -39,7 +39,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-kit/dateRange'
-import { FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
+import { FALLBACK_TIMEZONE, todayInZone } from '@kronoqr/web-kit/datetime'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'
@@ -173,6 +173,27 @@ const personLabel = computed(() =>
     ? props.uuid
     : `${employee.value.first_name} ${employee.value.last_name}`,
 )
+
+/**
+ * Una persona dada de baja solo recibe tramos entre su alta y su cese, y nunca
+ * de un dia futuro (RN-14). "Hoy" es el del CENTRO, no el del navegador. Para
+ * quien esta en alta no hay limite que ofrecer. Ayuda, no barrera: el servidor
+ * responde `422` en `work_date`.
+ */
+const addDateRange = computed<{ min: string; max: string } | null>(() => {
+  const person = employee.value
+
+  if (person === undefined || person.status !== 'terminated' || person.terminated_at === null) {
+    return null
+  }
+
+  const today = todayInZone(data.value?.time_zone ?? FALLBACK_TIMEZONE)
+
+  return {
+    min: person.hired_at,
+    max: person.terminated_at < today ? person.terminated_at : today,
+  }
+})
 
 const days = computed(() => data.value?.data ?? [])
 
@@ -316,6 +337,8 @@ watch(data, (value) => {
       :employee-name="personLabel"
       :time-zone="data?.time_zone ?? FALLBACK_TIMEZONE"
       :work-date="dialogWorkDate"
+      :work-date-min="dialog.mode === 'add' ? addDateRange?.min : undefined"
+      :work-date-max="dialog.mode === 'add' ? addDateRange?.max : undefined"
       :entry="dialogEntry"
       @success="onCorrectionSuccess"
       @cancel="closeDialog"

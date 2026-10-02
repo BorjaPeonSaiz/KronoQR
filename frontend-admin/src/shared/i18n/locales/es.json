@@ -250,7 +250,9 @@
         "other": "Otro motivo"
       },
       "consequenceCredential": "Su tarjeta QR queda revocada y deja de servir en el quiosco.",
-      "consequenceScan": "La baja es efectiva al confirmarla, también si la fecha de cese es hoy: deja de poder fichar en el acto y no tiene vuelta atrás. Si tiene un turno abierto, se cierra con una corrección.",
+      "consequenceScan": "La baja es efectiva al confirmarla, también si la fecha de cese es hoy: deja de poder fichar en el acto y no tiene vuelta atrás. Los días trabajados hasta el cese que falten se pueden completar después, a mano, desde su registro horario.",
+      "consequenceOpenShift": "Si tiene un turno abierto, su salida ya no se podrá fichar: ciérralo después con una corrección.",
+      "futureHire": "Aún no ha empezado: la baja se registra con su fecha de alta y no deja ningún día trabajado.",
       "consequenceHistory": "No se borra nada: su registro horario se conserva y se puede seguir consultando."
     },
     "conflict": {
@@ -678,6 +680,8 @@
       "contextWorkDate": "Jornada del {date}, en horario de {zone}.",
       "workDateLabel": "Jornada",
       "workDateHint": "El día al que pertenece este tramo. No tiene por qué coincidir con la fecha de la hora de entrada: la vuelta de una pausa de madrugada sigue perteneciendo al día en que empezó el turno.",
+      "workDateRange": "Esta persona está de baja: solo se admiten jornadas entre su alta ({from}) y su cese ({to}).",
+      "employeeLabel": "Persona",
       "clockInLabel": "Hora de entrada",
       "clockOutLabel": "Hora de salida",
       "zoneHint": "Escribe la hora en la zona horaria del centro ({zone}), no en la de tu ordenador.",
