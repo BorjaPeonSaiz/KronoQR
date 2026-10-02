@@ -1155,7 +1155,41 @@ ensure_backup_directories() {
     fi
   fi
 
+  ensure_retention_reports_directory
+
   [ "${created}" -eq 1 ] && kq_msg wal_dir "${wal}"
+  return 0
+}
+
+# Informes de retencion (ADR-045): `${BACKUP_PATH}/reports/retention`, junto a
+# los de update.sh y restore.sh. Lo escriben `scheduler` (propuesta semanal) y
+# `app` (`run --rm`, purga real), que corren como uid 1000, asi que el dueño es
+# 1000:1000 y el modo 0750 como el del resto del arbol de copias.
+#
+# `reports/` se crea ANTES que su hijo: `install -d` solo da dueño y modo a lo
+# ultimo de la ruta, y un `reports/` creado por el camino quedaria de root. Las
+# acciones de deshacer solo se registran para lo que ha creado ESTA ejecucion
+# (mismo criterio que arriba): un `reports/` con informes de una instalacion
+# anterior no se toca.
+#
+# No es bloqueante: sin el directorio la purga sigue funcionando y su asiento de
+# auditoria es la constancia (ADR-045); se pierde la copia legible, y se avisa.
+ensure_retention_reports_directory() {
+  local reports="${CFG_BACKUP_PATH}/reports"
+  local retention="${reports}/retention"
+  local dir
+
+  for dir in "${reports}" "${retention}"; do
+    [ -d "${dir}" ] && continue
+    if install -d -o 1000 -g 1000 -m 0750 "${dir}" 2>/dev/null ||
+      install -d -m 0750 "${dir}" 2>/dev/null; then
+      register_undo "$(kq_format undo_retention_dir "${dir}")" "rm -rf '${dir}'"
+    else
+      kq_msg check_warn "$(kq_format c_retention_dir "${dir}")"
+      kq_msg fix "$(kq_format f_retention_dir "${retention}")"
+      return 0
+    fi
+  done
   return 0
 }
 

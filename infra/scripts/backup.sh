@@ -28,6 +28,16 @@
 # La copia se queda en la infraestructura del cliente (regla dura 16, RL-14).
 # Este script no envia nada a ninguna parte: escribe en un directorio local.
 #
+# Que NO entra en la copia (ADR-045). El volumen `app-storage` —exportaciones
+# integras, informes en diferido, paquete de diagnostico, estado de la
+# telemetria— queda fuera a proposito: es efimero (caduca a los 7 dias) o se
+# regenera desde el volcado, que si esta cifrado aqui. Meterlo alargaria de 7 a
+# 30 dias la vida de una copia completa de los datos personales. Tras restaurar
+# se vuelve a pedir la exportacion (restore.sh lo anuncia en su informe). Los
+# informes de retencion SI estan en BACKUP_PATH (reports/retention) y viajan con
+# lo que el cliente haga con ese destino; `prune` solo toca daily/ y base/, no
+# reports/.
+#
 # Uso:
 #   backup.sh run [--mode dump|base|full] [--skip-verify]
 #   backup.sh verify [--file RUTA]

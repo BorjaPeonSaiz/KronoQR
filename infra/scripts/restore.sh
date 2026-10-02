@@ -43,6 +43,23 @@
 # se deshace —ya esta hecha y verificada— y se sale con 6, con el asiento listo
 # para escribir a mano: docs/runbooks/restaurar-backup.md §6.7.
 #
+# QUE NO SE REPONE (ADR-045). Restaurar devuelve la BASE DE DATOS y nada mas:
+#
+#   · El volumen `app-storage` (exportaciones integras, informes en diferido,
+#     paquete de diagnostico, estado de la telemetria) NO entra en la copia y
+#     este script no lo toca. Todo lo que contiene caduca o se regenera desde
+#     los datos que si estan en la copia cifrada; meterlo en ella alargaria la
+#     vida de una copia completa de los datos personales. Tras restaurar, las
+#     exportaciones cuyo fichero no existe pasan a `purged` en la primera
+#     pasada de purga, con un asiento `data_export.file_missing` o
+#     `report_export.file_missing` que es ESPERADO; se vuelve a pedir la
+#     exportacion y se genera de los datos restaurados. El informe lo anuncia.
+#   · Los informes de retencion (BACKUP_PATH/reports/retention) tampoco se
+#     tocan: un informe de purga describe un hecho que ocurrio aunque la base
+#     vuelva a un momento anterior.
+#   · Restaurar en un servidor nuevo estrena un identificador de instalacion de
+#     telemetria; solo lo usa la telemetria, no la licencia.
+#
 # ANTES DE RESTAURAR hay que parar lo que escribe en la base: app, horizon,
 # scheduler y reverb. El procedimiento completo, con los tiempos que caben en
 # el RTO de 4 h, esta en docs/runbooks/restaurar-backup.md. Este script se
@@ -595,6 +612,15 @@ main() {
   informar "Destino: ${BASE_DESTINO} en ${PGHOST}:${PGPORT}"
 
   restaurar
+
+  # ADR-045: el volumen de ficheros generados no se repone. Se anuncia en el
+  # informe para que quien lea los asientos `*.file_missing` de la primera pasada
+  # de purga sepa que son esperados y no una exfiltracion.
+  if [ "$AUDITAR" -eq 1 ]; then
+    informar "$(texto \
+      "Aviso: el volumen de ficheros generados (app-storage) no forma parte de la copia y no se ha repuesto. Las exportaciones y los informes en diferido posteriores a la copia que se acaba de restaurar apareceran como 'purged' con un asiento data_export.file_missing o report_export.file_missing en la proxima pasada de purga: es lo ESPERADO tras una restauracion. Pide de nuevo la exportacion desde el panel. Los informes de retencion de BACKUP_PATH/reports/retention no se han tocado." \
+      "Notice: the generated-files volume (app-storage) is not part of the backup and has not been restored. Exports and deferred reports created after the backup you have just restored will show as 'purged' with a data_export.file_missing or report_export.file_missing entry on the next purge pass: that is EXPECTED after a restore. Request the export again from the panel. Retention reports in BACKUP_PATH/reports/retention have not been touched.")"
+  fi
 
   log "Informe de la restauracion: ${INFORME}"
   log "Adjuntalo al parte del incidente: una restauracion en produccion se documenta (regla dura 6)."

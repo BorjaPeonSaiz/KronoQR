@@ -277,6 +277,7 @@ run_delegated_doctor() {
   check_backup_role
   check_edge_networks
   check_redis_restart_loop
+  check_app_storage
   say ""
 
   # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
@@ -330,6 +331,7 @@ run_external_checks() {
   check_backup_role
   check_edge_networks
   check_redis_restart_loop
+  check_app_storage
   check_disk_space
   check_certificates
   check_listening_ports
@@ -415,6 +417,96 @@ check_backup_role() {
   "") check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_missing "${role}")" ;;
   *) check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_unknown "${role}")" ;;
   esac
+}
+
+# Volumen `app-storage` (ADR-045, R3-PL-01). `app`, `horizon` y `scheduler` son
+# tres contenedores de la misma imagen y solo ven los mismos ficheros si montan
+# el MISMO volumen en `storage/app`: sin el, la exportacion integra que genera
+# `horizon` devuelve 404 en `app` y las purgas de `scheduler` no ven nada. Es el
+# fallo que ninguna prueba en un solo proceso puede detectar, asi que se mira
+# aqui, en la instalacion real.
+#
+# SIEMPRE (tambien con `app` parada, `docker inspect` lee contenedores
+# detenidos): que el volumen existe y que los tres servicios lo montan en
+# lectura y escritura. SOLO CON `app` EN MARCHA: que un fichero escrito desde
+# `horizon` se lee desde `app`, que la raiz es `app:app 0700` (C6: un fichero
+# con todos los datos personales no puede quedar legible por otro usuario) y
+# el tamano. El fichero de la prueba empieza por `.doctor-probe-`, no casa con
+# el patron de ninguna purga y se borra siempre.
+readonly KQ_STORAGE_MOUNT="/var/www/html/storage/app"
+
+check_app_storage() {
+  local service container mount token size owner mode horizon_state
+  local missing=0
+
+  if [ -n "$(docker volume ls -q \
+    --filter "label=com.docker.compose.project=${KQ_COMPOSE_PROJECT}" \
+    --filter "label=com.docker.compose.volume=app-storage" 2>/dev/null || true)" ]; then
+    check_pass "$(kq_text d_c_storage_volume)"
+  else
+    check_fail "$(kq_text d_c_storage_volume_missing)" \
+      "$(kq_format d_f_storage_volume_missing "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+    missing=1
+  fi
+
+  for service in app horizon scheduler; do
+    container="$(compose_current ps -a -q "${service}" 2>/dev/null || true)"
+    container="${container%%$'\n'*}"
+    [ -n "${container}" ] || continue
+
+    # Tipo|nombre|escritura del montaje que cae en storage/app.
+    mount="$(docker inspect -f \
+      '{{range .Mounts}}{{if eq .Destination "'"${KQ_STORAGE_MOUNT}"'"}}{{.Type}}|{{.Name}}|{{.RW}}{{end}}{{end}}' \
+      "${container}" 2>/dev/null || true)"
+
+    case "${mount}" in
+    volume'|'*_app-storage'|true')
+      check_pass "$(kq_format d_c_storage_mounted "${service}")"
+      ;;
+    *)
+      check_fail "$(kq_format d_c_storage_not_mounted "${service}")" \
+        "$(kq_format d_f_storage_not_mounted "${CURRENT_COMPOSE}" "${service}")"
+      missing=1
+      ;;
+    esac
+  done
+
+  # Lo que sigue necesita contenedores en marcha y un montaje que valga.
+  [ "${APP_UP}" -eq 1 ] && [ "${missing}" -eq 0 ] || return 0
+
+  horizon_state="$(compose_current ps --format '{{.Service}} {{.State}}' 2>/dev/null |
+    awk '$1 == "horizon" { print $2 }' || true)"
+  token=".doctor-probe-$$-$(date +%s)"
+  if [ "${horizon_state}" = "running" ] &&
+    compose_current exec -T horizon sh -c "umask 077 && : > '${KQ_STORAGE_MOUNT}/${token}'" >/dev/null 2>&1; then
+    if compose_current exec -T app test -f "${KQ_STORAGE_MOUNT}/${token}" >/dev/null 2>&1; then
+      check_pass "$(kq_text d_c_storage_shared)"
+    else
+      check_fail "$(kq_text d_c_storage_not_shared)" \
+        "$(kq_format d_f_storage_not_shared "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+    fi
+    compose_current exec -T horizon rm -f -- "${KQ_STORAGE_MOUNT}/${token}" >/dev/null 2>&1 || true
+  elif [ "${horizon_state}" = "running" ]; then
+    check_fail "$(kq_text d_c_storage_not_shared)" \
+      "$(kq_format d_f_storage_not_shared "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+  else
+    check_warn "$(kq_text d_c_storage_probe_skipped)" "$(kq_format d_w_storage_probe_skipped "${CURRENT_COMPOSE}")"
+  fi
+
+  owner="$(compose_current exec -T app stat -c '%U:%G' "${KQ_STORAGE_MOUNT}" 2>/dev/null || true)"
+  mode="$(compose_current exec -T app stat -c '%a' "${KQ_STORAGE_MOUNT}" 2>/dev/null || true)"
+  owner="${owner//[$'\r\n']/}"
+  mode="${mode//[$'\r\n']/}"
+  if [ "${owner}" = "app:app" ] && [ "${mode}" = "700" ]; then
+    check_pass "$(kq_text d_c_storage_root)"
+  else
+    check_fail "$(kq_format d_c_storage_root_bad "${owner:-?}" "${mode:-?}")" \
+      "$(kq_format d_f_storage_root "${CURRENT_COMPOSE}")"
+  fi
+
+  size="$(compose_current exec -T app du -sh "${KQ_STORAGE_MOUNT}" 2>/dev/null | awk '{ print $1 }' || true)"
+  [ -z "${size}" ] || check_pass "$(kq_format d_c_storage_size "${size}")"
+  return 0
 }
 
 # Las redes del borde del .env (PP-01, PP-03, I1): sintaxis, cobertura del portal

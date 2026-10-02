@@ -1610,6 +1610,126 @@ disarm_rollback_traps() {
   trap - ERR INT TERM HUP
 }
 
+#------------------------------------------------------------------------------
+# Informes de retencion (ADR-045, C8). Desde la 2.2.0 se escriben en
+# `${BACKUP_PATH}/reports/retention`, que es del anfitrion y sobrevive a todo.
+# Hasta la 2.1.0 se escribian en `storage/app/retention-reports` DENTRO de cada
+# contenedor (el de `scheduler` la propuesta semanal, el de `run --rm app` la
+# purga real, que moria con el contenedor), y recrear los contenedores los
+# borraba. Este paso los pone a salvo ANTES de la recreacion.
+#
+# QUE SE RESCATA, Y SOLO ESO: ficheros regulares de un nivel cuyo nombre case
+# con `retencion-(propuesta|purga)-<texto>.txt`. Nada de recursion, enlaces ni
+# otros nombres: el directorio de origen lo escribe el runtime y no se fia. Se
+# copia a un temporal, se filtra en el anfitrion y se copia SIN SOBRESCRIBIR, con
+# modo 0640. Los ZIP de exportacion integra y los informes en diferido no se
+# rescatan a proposito (datos personales caducos, ADR-045).
+#
+# NUNCA ABORTA una actualizacion: un informe no vale una vuelta atras. Con
+# `set -e` y el trap de ERR armados, todo lo que puede fallar va dentro de un
+# `if` o de un `||`.
+#------------------------------------------------------------------------------
+readonly KQ_RETENTION_STORAGE_ROOT="/var/www/html/storage/app"
+readonly KQ_RETENTION_DEFAULT_SOURCE="${KQ_RETENTION_STORAGE_ROOT}/retention-reports"
+readonly KQ_RETENTION_REPORT_NAME='^retencion-(propuesta|purga)-[A-Za-z0-9._-]+\.txt$'
+
+# Crea reports/ y reports/retention con dueño 1000:1000 y modo 0750. Idempotente.
+ensure_retention_reports_dir() {
+  local reports="${CFG_BACKUP_PATH}/reports" dir
+  for dir in "${reports}" "${reports}/retention"; do
+    [ -d "${dir}" ] && continue
+    if ! install -d -o "${KQ_APP_UID}" -g "${KQ_APP_UID}" -m 0750 "${dir}" 2>/dev/null &&
+      ! install -d -m 0750 "${dir}" 2>/dev/null; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+# Copia de UN servicio. 0 si no habia nada o se copio; 1 si docker fallo de verdad.
+rescue_retention_reports_from() {
+  local service="$1" source_path="$2" dest="$3"
+  local staging output file name copied=0
+
+  # Sin contenedor (instalacion sin ese servicio) no hay nada que rescatar.
+  if [ -z "$(compose_current ps -aq "${service}" 2>/dev/null || true)" ]; then
+    return 0
+  fi
+
+  staging="$(mktemp -d "${TMPDIR:-/tmp}/kq-retention.XXXXXX" 2>/dev/null)" || return 1
+
+  if ! output="$(compose_current cp "${service}:${source_path}/." "${staging}" 2>&1)"; then
+    rm -rf "${staging}"
+    # Una ruta que no existe es lo normal en una instalacion que ya escribe en
+    # BACKUP_PATH: no es un fallo.
+    if grep -qiE 'could not find|no such file|not found' <<<"${output}"; then
+      return 0
+    fi
+    detail_note "--- cp ${service}:${source_path} ---"
+    detail_note "${output}"
+    return 1
+  fi
+
+  while IFS= read -r -d '' file; do
+    name="${file##*/}"
+    [[ "${name}" =~ ${KQ_RETENTION_REPORT_NAME} ]] || continue
+    # Sin sobrescribir, tampoco a traves de un enlace que ya estuviera en destino.
+    if [ -e "${dest}/${name}" ] || [ -L "${dest}/${name}" ]; then
+      continue
+    fi
+    if cp -n -- "${file}" "${dest}/${name}" 2>/dev/null; then
+      chmod 0640 "${dest}/${name}" 2>/dev/null || true
+      chown "${KQ_APP_UID}:${KQ_APP_UID}" "${dest}/${name}" 2>/dev/null || true
+      copied=$((copied + 1))
+    fi
+  done < <(find "${staging}" -mindepth 1 -maxdepth 1 -type f -print0 2>/dev/null || true)
+
+  rm -rf "${staging}"
+  if [ "${copied}" -gt 0 ]; then
+    kq_msg check_ok "$(kq_format u_retention_rescued "${service}" "${source_path}" "${dest}" "${copied}")"
+  fi
+  return 0
+}
+
+rescue_retention_reports() {
+  local dest="${CFG_BACKUP_PATH}/reports/retention" configured source_path service
+
+  if ! ensure_retention_reports_dir; then
+    kq_msg check_warn "$(kq_format u_retention_dir_failed "${dest}")"
+    kq_msg fix "$(kq_format u_f_retention_dir "${dest}")"
+    return 0
+  fi
+
+  configured="$(env_value "${CURRENT_ENV}" "COMPLIANCE_RETENTION_REPORT_PATH")"
+  configured="${configured%/}"
+  source_path="${configured:-${KQ_RETENTION_DEFAULT_SOURCE}}"
+
+  case "${configured}" in
+  "${KQ_RETENTION_STORAGE_ROOT}" | "${KQ_RETENTION_STORAGE_ROOT}"/*)
+    kq_msg check_warn "$(kq_format u_retention_inside_storage "${configured}")"
+    kq_msg fix "$(kq_format u_f_retention_inside_storage "${CFG_BACKUP_PATH}" "${CURRENT_ENV}")"
+    ;;
+  esac
+
+  # Ruta relativa o ya dentro de BACKUP_PATH (bind mount del anfitrion): no hay
+  # capa de contenedor que rescatar.
+  case "${source_path}" in
+  /*) ;;
+  *) return 0 ;;
+  esac
+  case "${source_path}" in
+  "${CFG_BACKUP_PATH}" | "${CFG_BACKUP_PATH}"/*) return 0 ;;
+  esac
+
+  for service in app horizon scheduler; do
+    if ! rescue_retention_reports_from "${service}" "${source_path}" "${dest}"; then
+      kq_msg check_warn "$(kq_format u_retention_rescue_failed "${service}")"
+      kq_msg fix "$(kq_format u_f_retention_rescue "${service}" "${source_path}" "${dest}" "${CURRENT_COMPOSE}" "${service}" "${source_path}")"
+    fi
+  done
+  return 0
+}
+
 phase_maintenance() {
   STEP="2"
   heading "$(kq_text u_phase_2)"
@@ -1629,6 +1749,10 @@ phase_maintenance() {
   if ! compose_current stop horizon scheduler >>"$(detail_sink)" 2>&1; then
     rollback_and_die "$(kq_format u_f_stop_workers "${CURRENT_COMPOSE}")" workers_failed
   fi
+
+  # Con los trabajadores parados nadie escribe ya un informe nuevo, y los
+  # contenedores siguen existiendo (se recrean en el paso 5): es el momento.
+  rescue_retention_reports
 }
 
 #------------------------------------------------------------------------------
