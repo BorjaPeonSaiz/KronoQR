@@ -270,12 +270,14 @@ async function confirmUpdate(): Promise<void> {
     confirmingEdit.value = false
     editing.value = false
   } catch (caught) {
-    if (isApiError(caught) && caught.status === 409) {
+    if (isTerminatedConflict(caught)) {
       // Una ficha dada de baja no se modifica (ADR-046): la baja entro primero.
-      // Se cierra la edicion, se dice por que y se recarga para ver el estado real.
+      // Se cierra la edicion, se dice por que y se recarga para ver el estado
+      // real. Cualquier OTRO 409 (correo o documento duplicado, escritura
+      // concurrente) conserva lo escrito y se pinta con su detalle.
       confirmingEdit.value = false
       editing.value = false
-      await reportConflict('employees.conflict.updateTerminated')
+      await reportConflict()
     } else {
       saveError.value = caught
     }
@@ -320,7 +322,12 @@ async function confirmPinReset(): Promise<void> {
     await invalidate()
     announce(t('pin.announce.reset'))
   } catch (caught) {
-    pinError.value = caught
+    if (isTerminatedConflict(caught)) {
+      confirmingPinReset.value = false
+      await reportConflict()
+    } else {
+      pinError.value = caught
+    }
   } finally {
     pinBusy.value = false
   }
@@ -336,7 +343,12 @@ async function confirmPinDelivery(): Promise<void> {
     await invalidate()
     announce(t('pin.announce.delivered'))
   } catch (caught) {
-    pinError.value = caught
+    if (isTerminatedConflict(caught)) {
+      confirmingPinDelivery.value = false
+      await reportConflict()
+    } else {
+      pinError.value = caught
+    }
   } finally {
     pinBusy.value = false
   }
@@ -354,12 +366,21 @@ async function onPinDeliveredFromDialog(): Promise<void> {
 
 // --- Conflicto (409) ---------------------------------------------------------
 
-/** Clave del mensaje de un 409 reciente; la ficha se ha recargado ya. */
-const conflictKey = ref<string | null>(null)
+/** `type` del 409 «la persona ya esta de baja» (ADR-046); el resto de 409 llevan `conflict`. */
+const EMPLOYEE_TERMINATED_TYPE = 'urn:kronoqr:problem:employee-terminated'
 
-async function reportConflict(key: string): Promise<void> {
-  conflictKey.value = key
-  announce(t(key))
+function isTerminatedConflict(caught: unknown): boolean {
+  return (
+    isApiError(caught) && caught.status === 409 && caught.problem?.type === EMPLOYEE_TERMINATED_TYPE
+  )
+}
+
+/** Hay un aviso de «ya esta de baja» en pantalla; la ficha se recarga. */
+const conflictShown = ref(false)
+
+/** El aviso es un `role="alert"`: el lector de pantalla lo lee solo, sin `announce`. */
+async function reportConflict(): Promise<void> {
+  conflictShown.value = true
   await invalidate()
 }
 
@@ -464,7 +485,7 @@ function startOffboarding(): void {
   offboardReasonKey.value = ''
   offboardReasonText.value = ''
   offboardError.value = null
-  conflictKey.value = null
+  conflictShown.value = false
   offboarding.value = true
 }
 
@@ -483,9 +504,9 @@ async function confirmOffboard(): Promise<void> {
   } catch (caught) {
     const dateErrors = isApiError(caught) ? (caught.fieldErrors['terminated_at'] ?? []) : []
 
-    if (isApiError(caught) && caught.status === 409) {
+    if (isTerminatedConflict(caught)) {
       offboarding.value = false
-      await reportConflict('employees.conflict.offboard')
+      await reportConflict()
     } else if (isApiError(caught) && caught.status === 422 && dateErrors.length > 0) {
       // El mensaje ya viene traducido por el servidor y se pinta en su campo.
       terminatedAtServerErrors.value = dateErrors
@@ -520,12 +541,12 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
     </RouterLink>
 
     <p
-      v-if="conflictKey !== null"
+      v-if="conflictShown"
       role="alert"
       data-test="employee-conflict"
       class="mt-4 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
     >
-      {{ t(conflictKey) }}
+      {{ t('employees.conflict.terminated') }}
     </p>
 
     <LoadingPanel v-if="isPending" :label="t('employees.detail.loading')" class="mt-4" />

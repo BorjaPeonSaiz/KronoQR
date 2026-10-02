@@ -256,8 +256,7 @@
       "consequenceHistory": "No se borra nada: su registro horario se conserva y se puede seguir consultando."
     },
     "conflict": {
-      "offboard": "La ficha ha cambiado mientras la tenías abierta, por ejemplo porque otra persona ya la ha dado de baja. Se ha recargado: revisa su estado y vuelve a intentarlo si procede.",
-      "updateTerminated": "Esta persona ya está dada de baja y su ficha no se puede modificar. Se ha recargado con su estado actual."
+      "terminated": "Esta persona ya está dada de baja. Se ha recargado la ficha con su estado actual: lo que intentabas hacer no se ha aplicado."
     },
     "announce": {
       "results": "Resultados de la plantilla: {count}.",

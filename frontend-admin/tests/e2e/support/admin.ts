@@ -3744,6 +3744,12 @@ export async function stubManagementApi(
 
           const patch = request.postDataJSON() as Record<string, unknown>
 
+          // ADR-046: una ficha dada de baja no se modifica.
+          if (employeesState.find((c) => c.uuid === EMPLOYEE_UUID)?.status === 'terminated') {
+            await problem(route, 409, 'urn:kronoqr:problem:employee-terminated', 'Conflicto')
+            return
+          }
+
           // `teleworking: null` no es un valor del contrato (RF-GP-01): 422.
           if ('teleworking' in patch && typeof patch['teleworking'] !== 'boolean') {
             await validationProblem(
@@ -3785,7 +3791,7 @@ export async function stubManagementApi(
           }
 
           if (target.status === 'terminated') {
-            await problem(route, 409, 'urn:kronoqr:problem:conflict', 'Conflicto')
+            await problem(route, 409, 'urn:kronoqr:problem:employee-terminated', 'Conflicto')
             return
           }
 

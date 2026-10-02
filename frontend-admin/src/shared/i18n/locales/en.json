@@ -256,8 +256,7 @@
       "consequenceHistory": "Nothing is deleted: their time records are kept and can still be consulted."
     },
     "conflict": {
-      "offboard": "The record changed while you had it open, for example because someone else already offboarded this person. It has been reloaded: check its status and try again if it still applies.",
-      "updateTerminated": "This person has already been offboarded and their record can no longer be modified. It has been reloaded with its current status."
+      "terminated": "This person has already been offboarded. The record has been reloaded with its current status: what you were trying to do was not applied."
     },
     "announce": {
       "results": "Workforce results: {count}.",

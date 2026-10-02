@@ -5,7 +5,7 @@ import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import { useSessionStore } from '@/features/auth/session.store'
 import es from '@/shared/i18n/locales/es.json'
 import type { Employee } from '@/shared/api/types'
-import { clearAnnouncement } from '@kronoqr/web-kit/announcer'
+import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import {
   CREDENTIAL_UUID,
   EMPLOYEE_UUID,
@@ -32,6 +32,8 @@ const DEPARTMENTS = {
     { id: 4, name: 'Cocina' },
   ],
 }
+
+const TERMINATED_TYPE = 'urn:kronoqr:problem:employee-terminated'
 
 type Wrapper = Awaited<ReturnType<typeof mountView>>
 
@@ -634,7 +636,7 @@ describe('EmployeeDetailView', () => {
       let reads = 0
       const wrapper = await mountDetail(employee(), (url, init) => {
         if (url.endsWith('/offboard') && init?.method === 'POST') {
-          return problemResponse(409, 'urn:kronoqr:problem:conflict')
+          return problemResponse(409, TERMINATED_TYPE)
         }
 
         if (url === `/api/v1/employees/${EMPLOYEE_UUID}`) {
@@ -653,7 +655,7 @@ describe('EmployeeDetailView', () => {
 
       expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
       expect(wrapper.find('[data-test="employee-conflict"]').text()).toBe(
-        es.employees.conflict.offboard,
+        es.employees.conflict.terminated,
       )
       expect(reads).toBeGreaterThan(readsBefore)
     })
@@ -662,7 +664,7 @@ describe('EmployeeDetailView', () => {
       let reads = 0
       const wrapper = await mountDetail(employee(), (url, init) => {
         if (init?.method === 'PATCH') {
-          return problemResponse(409, 'urn:kronoqr:problem:conflict')
+          return problemResponse(409, TERMINATED_TYPE)
         }
 
         if (url === `/api/v1/employees/${EMPLOYEE_UUID}`) {
@@ -682,10 +684,93 @@ describe('EmployeeDetailView', () => {
       await settle()
 
       expect(wrapper.find('[data-test="employee-conflict"]').text()).toBe(
-        es.employees.conflict.updateTerminated,
+        es.employees.conflict.terminated,
       )
       expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
       expect(reads).toBeGreaterThan(readsBefore)
+    })
+
+    it('un 409 de correo duplicado en la modificacion conserva la edicion y lo escrito', async () => {
+      const wrapper = await mountDetail(employee(), (_url, init) =>
+        init?.method === 'PATCH' ? problemResponse(409, 'urn:kronoqr:problem:conflict') : null,
+      )
+
+      await buttonWith(wrapper, es.common.edit).trigger('click')
+      await settle(1)
+      await wrapper.find('#employee-edit-form input[type="email"]').setValue('otra@hotel.example')
+      await wrapper.find('#employee-edit-form').trigger('submit')
+      await settle(1)
+      await buttonWith(wrapper, es.employees.detail.confirmAction).trigger('click')
+      await settle()
+
+      expect(wrapper.find('[data-test="employee-conflict"]').exists()).toBe(false)
+      expect(wrapper.find('[role="dialog"]').text()).toContain(es.errors.conflict.title)
+      expect(wrapper.find('[role="dialog"]').text()).toContain('otra@hotel.example')
+      expect(wrapper.find('#employee-edit-form').exists()).toBe(true)
+      expect(
+        wrapper.find<HTMLInputElement>('#employee-edit-form input[type="email"]').element.value,
+      ).toBe('otra@hotel.example')
+    })
+
+    it('un 409 que no es de baja al dar de baja deja el dialogo abierto', async () => {
+      const wrapper = await mountDetail(employee(), (url, init) =>
+        url.endsWith('/offboard') && init?.method === 'POST'
+          ? problemResponse(409, 'urn:kronoqr:problem:conflict')
+          : null,
+      )
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+      await wrapper.find('[role="dialog"] select').setValue('endOfContract')
+      await buttonWith(wrapper, es.employees.offboard.confirmAction).trigger('click')
+      await settle()
+
+      expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="employee-conflict"]').exists()).toBe(false)
+    })
+
+    it('restablecer el PIN o registrar su entrega de una persona de baja avisa y recarga', async () => {
+      for (const [open, confirm, suffix] of [
+        [es.pin.actions.reset, es.pin.reset.action, '/pin/reset'],
+        [es.pin.actions.registerDelivery, es.pin.delivery.action, '/pin/deliver'],
+      ] as const) {
+        const wrapper = await mountDetail(employee({ pin_status: 'issued' }), (url, init) =>
+          url.includes(suffix) && init?.method === 'POST'
+            ? problemResponse(409, TERMINATED_TYPE)
+            : null,
+        )
+
+        await buttonWith(wrapper, open).trigger('click')
+        await settle(1)
+        await buttonWith(wrapper.find('[role="dialog"]'), confirm).trigger('click')
+        await settle()
+
+        expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="employee-conflict"]').text()).toBe(
+          es.employees.conflict.terminated,
+        )
+      }
+    })
+
+    it('el aviso de baja se lee una sola vez: es el rol alert, sin anuncio aparte', async () => {
+      const wrapper = await mountDetail(employee(), (_url, init) =>
+        init?.method === 'PATCH' ? problemResponse(409, TERMINATED_TYPE) : null,
+      )
+
+      await buttonWith(wrapper, es.common.edit).trigger('click')
+      await settle(1)
+      await wrapper.find('[data-test="teleworking-checkbox"]').setValue(true)
+      await wrapper.find('#employee-edit-form').trigger('submit')
+      await settle(1)
+      await buttonWith(wrapper, es.employees.detail.confirmAction).trigger('click')
+      await settle()
+
+      expect(announcement.value).toBe('')
+      expect(
+        wrapper
+          .findAll('[role="alert"]')
+          .filter((node) => node.text() === es.employees.conflict.terminated),
+      ).toHaveLength(1)
     })
   })
 })
