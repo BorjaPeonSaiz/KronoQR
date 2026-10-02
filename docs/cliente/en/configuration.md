@@ -895,6 +895,11 @@ by their email) and:
   deliberately, not in passing in a forty-line import.
 - **does not add or offboard anyone by changing a status**. Offboarding has its
   own procedure, with an end date and revocation of the card.
+- **rejects the line of a person who is offboarded**, with the message "This
+  person has been offboarded. The import does not change their record or make
+  them employed again; remove the line from the file." Only that line: the rest
+  of the file is imported. Up to 2.1.0, a line like that made the whole import
+  fail.
 
 ### 3 ter.5 After importing, the cards remain
 
@@ -1385,11 +1390,20 @@ but something rarer. Open it in your spreadsheet and save it again as **CSV
 UTF-8**. Then correct the names on the records: the import deletes nothing, so
 you can re-import the corrected file and they will update themselves.
 
+### …the import rejects the line of a person who is offboarded
+
+That is expected: the import does not touch anyone who is offboarded, neither
+to update their details nor to make them employed again. Remove that line from
+the file —or leave it: the rest is imported anyway— and carry on. If that
+person comes back to work at the hotel, the import does not make them employed
+again: an offboarding cannot be undone.
+
 ### …I imported the wrong file
 
 **Nothing is deleted.** People imported by mistake are offboarded one by one
-from their record, with their end date; the record they may have generated is
-kept, because the law requires keeping it for four years.
+from their record, with today as their end date (a date later than today is
+rejected); the record they may have generated is kept, because the law requires
+keeping it for four years.
 
 If you had **not confirmed** yet —you only did the check— nothing was written:
 upload the right file and start over.

@@ -974,6 +974,29 @@ volume is created on its own at the first start. What is worth knowing:
 - **If you roll back to 2.1.0**, the volume stays intact and unused until the
   next update, and the rescued reports stay in `BACKUP_PATH/reports/retention`.
 
+**When updating from 2.1.0: offboardings with a future termination date.**
+2.1.0 accepted recording an offboarding with a termination date later than the
+day it was recorded, and applied it on the spot: from that moment the person
+could not clock and their card was revoked. From 2.2.0 a termination date later
+than today is rejected (offboarding is recorded once the person has finished
+their last shift: [`hr-guide.md`](hr-guide.md) §8, "…a person leaves"). Those
+already recorded that way **are neither migrated nor reactivated**: they stay
+offboarded, with their date. What HR needs to know:
+
+- **Period reports count them as employed up to their termination date**, so
+  the days between the offboarding being recorded and the termination date come
+  out as employed days **with no activity**. It is not a report fault: that
+  person could not clock on those days.
+- **If they worked on those days**, their hours are not in the record and
+  cannot be added by hand to an offboarded person. What to do is in the HR
+  guide, "If you already recorded it too early".
+
+How to find them, without touching the database: in the panel, **Workforce**,
+filter **"Employment status"** set to **"Former staff"**, and open each
+person's record: **"Termination date"** is in their details. They are the ones
+with a termination date later than the day you updated to 2.2.0. Nothing needs
+doing in the system: HR just needs to know it when reading those reports.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which

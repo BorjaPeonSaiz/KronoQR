@@ -1522,17 +1522,81 @@ the employment status field: it has its own section because it carries a
 termination date and consequences). You choose the termination date and the
 reason, which goes into the audit log —no health data and no value judgements.
 
-What happens when you confirm it:
+**Offboarding takes effect the moment you confirm it, not on the termination
+date.** Even if the termination date is today, from the moment you press
+"Confirm the offboarding":
 
 - **Their card is revoked** and stops working at the kiosk.
-- **From the termination date on, they cannot clock.**
+- **They cannot clock**, neither with the card nor with their code and PIN at
+  the tablet.
+- **There is no going back.** A confirmed offboarding cannot be undone.
 - **Nothing is deleted.** Their record, their entries and their working days
   are kept for four years, because an inspection can ask for the records of
   someone who no longer works here, and they will keep appearing in the reports
-  for the period they worked.
+  for the period they worked. Reports count them as employed up to their
+  termination date.
+
+**Which termination date it accepts.** Today, or any earlier day back to their
+start date. **A date later than today is rejected** and nothing changes, with
+this message: "The termination date (…) is later than today (…). Offboarding
+takes effect as soon as it is recorded; record it on the last day, once the
+shift is over." "Today" is the **hotel's** date (the time zone of its site), not
+your computer's: it matters if you record the offboarding from another time
+zone, or close to midnight.
+
+**When to record it: once their last shift is over.** Never before. Recording it
+a few days later is normal and causes no problem at all: set as termination date
+the day they actually finished.
+
+Before confirming, two checks:
+
+1. **Fill in any missing days.** If they worked on some day before leaving and
+   there are no clockings, add it now with **"Add an entry"** (§5.1). **Once
+   they are offboarded, entries can no longer be added by hand** for that
+   person.
+2. **Check they have no open shift** (in **Presence** or in their time record).
+   If they forgot to clock out, correct it first (section "…somebody forgot
+   to clock out", above). If they are still working, wait until they finish.
+
+**An example.** A seasonal housekeeper's contract ends on Friday 30 October,
+with a 07:00 to 15:00 shift.
+
+- **Do not** record it on Monday 26 with Friday as the termination date: it is
+  rejected. And if you set Monday as the termination date so that it goes
+  through, they would be unable to clock from that same Monday and the four
+  days they have left would not make it into the record.
+- **Do** record it on Friday 30, after they clock out at 15:00, with Friday 30
+  as the termination date. Or, if nobody from HR is in that day, on Monday 2
+  with Friday 30 as the termination date: a past date is accepted.
 
 Collect the physical card if you can; if it does not turn up, revoke it anyway
 —it already is, because of the offboarding— and note it down.
+
+#### If you already recorded it too early
+
+From the moment you confirmed it, that person cannot clock. What you **cannot**
+do: undo the offboarding, add them back as employed, or add entries for them by
+hand. What you can do:
+
+- **If they had an open shift** when you confirmed the offboarding, their
+  clock-out is rejected at the tablet and the shift stays open. It will show up
+  as an **"Open shift not closed"** incident and is closed the same way as a
+  forgotten clock-out: **"Correct the times"** with the real clock-out time,
+  which is accepted for an offboarded person. As the reason, **"Other reason"**
+  with what happened, for example "Offboarding recorded before the shift ended;
+  the tablet rejected the clock-out".
+- **If they are going to keep working** the days they have left, tell them and
+  their manager that the tablet will reject them. Those hours **cannot go into
+  the KronoQR record**, and the law requires them to be recorded: write down
+  the clock-in and clock-out every day on paper, signed by the person, and ask
+  your employment adviser how to keep it alongside the record.
+
+**If your installation comes from 2.1.0**, it may have offboardings recorded
+with a future termination date, from when that was accepted. Those people were
+offboarded on the day it was recorded, and reports count them as employed up to
+their termination date, so those days come out with no activity. How to find
+them: [`operation.md`](operation.md) §11, "When updating from 2.1.0:
+offboardings with a future termination date".
 
 ### …somebody cannot clock
 

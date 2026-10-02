@@ -881,6 +881,10 @@ su correo) y:
   importación de cuarenta líneas.
 - **no da de alta ni de baja a nadie por cambiar de estado**. La baja tiene su
   propio procedimiento, con fecha de cese y revocación de la tarjeta.
+- **rechaza la línea de una persona que está de baja**, con el mensaje «Esta
+  persona está dada de baja. La importación no modifica su ficha ni la vuelve a
+  dar de alta; quita la línea del fichero.» Solo esa línea: el resto del fichero
+  se importa. Hasta la 2.1.0, una línea así hacía fallar la importación entera.
 
 ### 3 ter.5 Después de importar quedan las tarjetas
 
@@ -1368,11 +1372,19 @@ más raro. Ábrelo en tu hoja de cálculo y vuelve a guardarlo como **CSV UTF-8*
 Corrige después los nombres en las fichas: la importación no borra nada, así que
 puedes volver a importar el fichero corregido y se actualizarán solos.
 
+### …la importación rechaza la línea de una persona que está de baja
+
+Es lo esperado: la importación no toca a quien está de baja, ni para
+actualizar sus datos ni para volver a darle de alta. Quita esa línea del fichero
+—o déjala: el resto se importa igual— y sigue. Si esa persona vuelve a trabajar
+en el hotel, la importación no la vuelve a dar de alta: una baja no se deshace.
+
 ### …importé el fichero equivocado
 
 **Nada se borra.** Las personas importadas por error se dan de baja una a una
-desde su ficha, con su fecha de cese; el registro que hubieran generado se
-conserva, porque la ley obliga a conservarlo cuatro años.
+desde su ficha, con fecha de cese hoy (una fecha posterior a hoy se rechaza); el
+registro que hubieran generado se conserva, porque la ley obliga a conservarlo
+cuatro años.
 
 Si aún **no habías confirmado** —solo hiciste la comprobación— no se escribió
 nada: sube el fichero correcto y vuelve a empezar.
