@@ -179,14 +179,19 @@ todos sus escritores.
 
 Una fila que corresponde a una persona **dada de baja**:
 
-- **Al comprobar** (`PlanEmployeeImport`), se rechaza con el código nuevo `employee_terminated`. La
-  importación no modifica la ficha de una baja ni la da de alta otra vez (RN-14). Hoy esa fila llega a
-  `update`, `updateProfile()` lanza `EmployeeAlreadyTerminated` y tumba la importación entera con un
-  `409`: es un defecto que existía antes de la carrera.
-- **Si la baja se registra entre la comprobación y la aplicación** del mismo fichero, la fila llega
-  como `update`, la lectura bloqueante ve `terminated` y la aplicación entera responde `409` sin
-  escribir nada. Es coherente con `ImportFileChanged`: se aplica **exactamente lo que se revisó**, y si
-  el estado cambió, hay que volver a comprobar.
+- **Al planificar** (`PlanEmployeeImport`), se rechaza con el código nuevo `employee_terminated`. La
+  importación no modifica la ficha de una baja ni la da de alta otra vez (RN-14). Hasta la 2.2.0 esa
+  fila llegaba a `update`, `updateProfile()` lanzaba `EmployeeAlreadyTerminated` y tumbaba la
+  importación entera con un `409`: era un defecto anterior a la carrera.
+- **La petición `apply` vuelve a planificar el fichero** (`ImportEmployeesHandler`) y solo compara su
+  huella con `confirm_checksum`; no compara el informe con el de la comprobación. Por eso, si la baja
+  se registra **entre la petición de comprobar y la de aplicar**, la fila sale rechazada con
+  `employee_terminated`, el resto se aplica y la respuesta es `200`, con el informe diciéndolo. Es el
+  comportamiento correcto: nada se escribe sobre una persona de baja y quien importa lo ve en la fila.
+- **Solo si la baja confirma dentro de la propia petición `apply`**, entre su planificación y su
+  escritura, la fila llega como `update`, la lectura bloqueante ve `terminated` y la aplicación entera
+  responde `409` sin escribir nada y sin asiento del lote. Hay que volver a lanzarla, y entonces la
+  fila sale `employee_terminated`.
 
 ### 6. Invariantes y pruebas
 
@@ -230,7 +235,9 @@ Funcionales (dueños `backend-laravel` para las unitarias y `qa-testing` para el
 7. **Unitaria de `Employee::offboard($terminatedOn, $today)`**, con mutación por encima del 80 % sobre
    el fichero entero.
 8. **Importación**: la fila de una persona de baja sale `employee_terminated` y el resto se aplica.
-   Comprobar → baja → aplicar da `409`, cero filas escritas y ningún asiento nuevo.
+   Comprobar → baja → aplicar da `200` con esa fila `employee_terminated` y el resto aplicado. Una
+   baja que confirma dentro de la petición `apply`, entre su planificación y su escritura (intercalado
+   forzado), da `409`, cero filas escritas y ningún asiento nuevo.
 9. **Alta manual de tramo** para una persona de baja: jornada = fecha de cese se admite, con su
    `shift_corrections` y su asiento; el día siguiente da `422` en `work_date`. La autorización
    negativa por rol ya existe. Y **arquitectura**: el puerto no declara `save()`; nada en `Workforce`

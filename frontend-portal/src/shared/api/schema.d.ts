@@ -11167,10 +11167,12 @@ export interface components {
              *
              *     **`employee_terminated`** (2.2.0): la fila corresponde a una persona
              *     dada de baja. La importacion no modifica su ficha ni la da de alta
-             *     otra vez (RN-14); el resto del fichero se aplica. Si la baja se
-             *     registra entre la comprobacion y la aplicacion del mismo fichero,
-             *     la aplicacion entera responde `409` sin escribir nada y hay que
-             *     volver a comprobarlo ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md)).
+             *     otra vez (RN-14); el resto del fichero se aplica. `apply` vuelve a
+             *     comprobar el fichero, asi que una baja registrada entre la peticion
+             *     de comprobar y la de aplicar sale aqui, con `200`. Solo si la baja
+             *     se confirma durante la propia peticion `apply` la aplicacion entera
+             *     responde `409` sin escribir nada; al repetirla, la fila sale con
+             *     este codigo ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md)).
              *
              *     **`email_taken` se emite en dos situaciones**, y las dos protegen lo
              *     mismo —que el registro horario de alguien no acabe a nombre de otro—:
@@ -16291,6 +16293,14 @@ export interface operations {
             /**
              * @description `confirm_checksum` no coincide con el fichero enviado: **no es el que
              *     se valido**. Se vuelve a validar y se aplica con el resumen nuevo.
+             *
+             *     Tambien, y sin escribir nada, si una persona del fichero se da de
+             *     baja **durante** esta misma peticion de aplicar, entre su
+             *     comprobacion y su escritura (ADR-046). Al repetirla, esa fila sale
+             *     rechazada con `employee_terminated`. Una baja registrada antes,
+             *     entre la peticion de validar y esta, no da `409`: esta peticion
+             *     vuelve a comprobar el fichero y la fila sale rechazada en el
+             *     informe.
              */
             409: {
                 headers: {
