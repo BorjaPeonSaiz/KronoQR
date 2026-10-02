@@ -217,7 +217,7 @@ los asientos de su generación y su descarga. Ni el log ni la métrica llevan `u
 absoluta (regla dura 21).
 
 **f) Exportación legal por consola.** **No se borra sola**: es una copia entregada a la Inspección
-bajo custodia de quien la generó (runbook `requerimiento-inspeccion.md` §6). Pero ya no desaparece de
+bajo custodia de quien la generó (runbook `requerimiento-inspeccion.md` §7). Pero ya no desaparece de
 rebote, así que:
 
 - `product:doctor` avisa cuando hay ficheros con más de 30 días en `storage/app/legal-exports`.

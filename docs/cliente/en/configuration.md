@@ -966,11 +966,11 @@ granting it and the limit would stop being one.
 | `PRODUCT_DIAGNOSTICS_MAX_BYTES` | `8388608` | Maximum size of the diagnostics package (8 MiB). It is a channel limit —email, ticket portal—, not a memory limit |
 | `PRODUCT_DIAGNOSTICS_RATE_LIMIT` | `3` | Packages per minute and per account from the panel |
 | `PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS` | `31` | Maximum days of clock-ins that fit in a package **with personal data**. Raising it is a legal decision, not a performance one |
-| `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` | `7` | Days a package generated from the console is kept on the server before the next `product:diagnostics` deletes it |
+| `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` | `7` | Days a package generated from the console is kept on the server before the scheduler's hourly pass deletes it (the next `product:diagnostics` also deletes it) |
 | `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | `24` | Duration of a support access grant if none is stated |
 | `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | `72` | Maximum duration accepted |
 | `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | `900` | How often, at most, a new use of a support access grant is written to the audit log |
-| `PRODUCT_DATA_EXPORT_PATH` | `storage/app/exports` (in the container) | Where the full data export leaves the ZIP ([`operation.md`](operation.md) §13). Outside `BACKUP_PATH` on purpose: it is material that expires |
+| `PRODUCT_DATA_EXPORT_PATH` | `storage/app/exports` (in the `app-storage` volume) | Where the full data export leaves the ZIP ([`operation.md`](operation.md) §13). Outside `BACKUP_PATH` on purpose: it is material that expires. If you change it, inside `/var/www/html/storage/app` and without overlapping the other generated-file paths ([`operation.md`](operation.md) §13.5) |
 | `PRODUCT_DATA_EXPORT_RETENTION_DAYS` | `7` | Days the ZIP of a full export can be downloaded before it is purged. The note that it existed is always kept |
 | `PRODUCT_DATA_EXPORT_RATE_LIMIT` | `30` | Requests per minute **per account** to the export list and download (per IP address, four times as many); the panel polls every 5 s while one is in progress |
 | `PRODUCT_DATA_EXPORT_STALE_AFTER` | `3600` | Seconds after which an export interrupted halfway is considered failed (`stale`) and lets you request another. Never below what your largest export takes |
@@ -1060,7 +1060,7 @@ so. The definitive one is minted on the first send.
 | --- | --- | --- |
 | `TELEMETRY_ENABLED` | `false` | Whether telemetry is enabled |
 | `TELEMETRY_ENDPOINT` | *(empty)* | Where it is sent. It has to start with `https://`; empty, or without `https://`, means it is not sent |
-| `TELEMETRY_STATE_PATH` | `storage/app/telemetry/state.json` | Where the installation identifier and the send history live |
+| `TELEMETRY_STATE_PATH` | `storage/app/telemetry/state.json` (in the `app-storage` volume) | Where the installation identifier and the send history live. If you change it, inside `/var/www/html/storage/app` and without overlapping the other generated-file paths ([`operation.md`](operation.md) §13.5) |
 | `TELEMETRY_RETRY_DELAY_SECONDS` | `5` | Seconds between the attempt and its single retry |
 
 ### Everything that is sent, field by field
@@ -1125,6 +1125,21 @@ docker compose exec app rm -f storage/app/telemetry/state.json
 
 The next send mints a new identifier, unrelated to the previous one, and the
 counters start over.
+
+**Where that file lives, and when the identifier changes without you deleting
+it.** From 2.2.0 on the state file is in the generated-files volume, shared by
+the application containers ([`operation.md`](operation.md) §13.6): the order
+above deletes it for all of them, and the identifier is kept across restarts
+and updates. It only changes in two cases, and in neither do you have to do
+anything:
+
+- **Once, when updating from 2.1.0.** Until then the file lived inside the
+  scheduler's container and was lost every time it was recreated; the update
+  does not rescue it.
+- **When a backup is restored on a new server.** The volume is not part of the
+  backup, so the restored installation mints a new identifier.
+
+Only telemetry uses the identifier: your licence does not depend on it.
 
 ---
 
@@ -1891,7 +1906,7 @@ The three ranges are explained in detail, with symptoms and checks, in
 | `ERROR_HISTORY_RETENTION_DAYS` | — | Days the error history is kept. See [`operation.md`](operation.md) §6 and §15.4 | `90` | Almost never | No |
 | `TECHNICAL_LOG_RETENTION_DAYS` | — | Days the technical log is kept, in Loki and in Tempo (a different store from the previous one). See [`operation.md`](operation.md) §10 | `90` | Almost never, and **never on its own**: neither Loki nor Tempo re-read this variable — their retention is fixed in hours inside `infra/observability/loki/loki.yaml` and `infra/observability/tempo/tempo.yaml` — so changing it means editing those two files as well | No |
 | `COMPLIANCE_RETENTION_BATCH_SIZE` | — | Rows per delete statement in the purge. See [`operation.md`](operation.md) §6 | `1000` | Only if the annual purge takes too long | No |
-| `COMPLIANCE_RETENTION_REPORT_PATH` | — | Where the report of each proposal and of each purge is left. **It is not cleaned up automatically**: it is the proof that the purge was regular. See [`operation.md`](operation.md) §6 | `storage/app/retention-reports` (in the container) | Almost never | No |
+| `COMPLIANCE_RETENTION_REPORT_PATH` | — | Where the report of each proposal and of each purge is left, on the server, next to the backups. **It is not cleaned up automatically**: it is the readable copy of the evidence of the purge, which is its entry in the audit log. See [`operation.md`](operation.md) §2, §3.1 and §6 | `BACKUP_PATH/reports/retention` (empty in the `.env`: it is derived from `BACKUP_PATH`) | Almost never. **Never inside `storage/app`**, which is for files that expire and is not read from the server: `product:doctor` warns about it. If you had it set that way from an earlier version, remove the line from the `.env` | No |
 | `COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS` | — | Hours an orphaned temporary file from the legal export download may live before it is deleted automatically. **It does not affect** the deliberate copy generated by the export command: that one is kept by whoever generated it | `6` | Almost never | No |
 | `COMPLIANCE_AUTHZ_DENIAL_WINDOW_SECONDS` | — | Window in which repeated denials for the same actor are grouped into a single audit entry. Protects the audit chain from an enumeration | `60` | Set it to `0` if you are investigating an incident and want one entry per denial | No |
 | `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` | — | Days back that the daily incident detection reviews. Shift entries **still open** are always reviewed, whatever their date | `7` | Almost never. **Raising it can open incidents for working days already handed to the staff or to the Labour Inspectorate**, which is exactly what the window avoids | **Yes** (opens incidents) |
@@ -1923,9 +1938,9 @@ anonymised by default and there is no variable that changes that.**
 | `PRODUCT_DIAGNOSTICS_MAX_BYTES` | — | Maximum size of the diagnostics package. See **section 3 quater** | `8388608` (8 MiB) | If your support channel cuts off before that | No |
 | `PRODUCT_DIAGNOSTICS_RATE_LIMIT` | — | Packages per minute and per account. See **section 3 quater** | `3` | Almost never | No |
 | `PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS` | — | Maximum days of clock-ins in a package **with personal data**. See **section 3 quater** | `31` | **Raising it is a legal decision, not a performance one** | No |
-| `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` | — | Days a package stays on disk before the command deletes it when generating the next one. See **section 3 quater** | `7` | Almost never | No |
-| `PRODUCT_DIAGNOSTICS_PATH` | — | Where the package is written. Directory at `0700` and file at `0600` | `storage/app/diagnostics` (in the container) | Almost never. **Do not put it inside `BACKUP_PATH`**: a package is disposable material that may also carry personal data | No |
-| `PRODUCT_DATA_EXPORT_PATH` | — | Where the ZIP of the full export is written. See **section 3 quater** | `storage/app/exports` (in the container) | Almost never, and **never inside `BACKUP_PATH`** | No |
+| `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` | — | Days a package stays on disk before the scheduler's hourly pass deletes it (the command also deletes it when generating the next one). See **section 3 quater** | `7` | Almost never | No |
+| `PRODUCT_DIAGNOSTICS_PATH` | — | Where the package is written. Directory at `0700` and file at `0600` | `storage/app/diagnostics` (in the `app-storage` volume) | Almost never. If you change it, **inside `/var/www/html/storage/app`** and without matching or overlapping the other generated-file paths ([`operation.md`](operation.md) §13.5): `product:doctor` fails otherwise. **Do not put it inside `BACKUP_PATH`**: a package is disposable material that may also carry personal data | No |
+| `PRODUCT_DATA_EXPORT_PATH` | — | Where the ZIP of the full export is written. See **section 3 quater** | `storage/app/exports` (in the `app-storage` volume) | Almost never. If you change it, **inside `/var/www/html/storage/app`** and without overlapping the other generated-file paths: `product:doctor` fails otherwise. **Never inside `BACKUP_PATH`** | No |
 | `PRODUCT_DATA_EXPORT_RETENTION_DAYS` | — | Days that ZIP can be downloaded before it is purged. The note that it existed is always kept. See **section 3 quater** | `7` | If you need it for longer, better take it off the server | No |
 | `PRODUCT_DATA_EXPORT_RATE_LIMIT` | — | Requests per minute and per account to the export list and download. See **section 3 quater** | `30` | Do not lower it: the panel polls every five seconds while one is in progress | No |
 | `PRODUCT_DATA_EXPORT_STALE_AFTER` | — | Seconds after which an interrupted export is considered failed and lets you request another. See **section 3 quater** | `3600` | **Never below what your largest export takes**: you would give up for dead one that is still writing | No |
@@ -1944,7 +1959,7 @@ full in **section 3 quinquies**, including the closed list of what is sent.
 | --- | --- | --- | --- | --- | --- |
 | `TELEMETRY_ENABLED` | — | Whether telemetry is enabled. See **section 3 quinquies** | `false` | Only if you decide to enable it. The three conditions of that section are needed | No |
 | `TELEMETRY_ENDPOINT` | — | Where it is sent. See **section 3 quinquies** | *(empty)* | Same as above. **It has to start with `https://`**; empty, or without that, nothing is sent | No |
-| `TELEMETRY_STATE_PATH` | — | Where the installation's random identifier and the send history live. See **section 3 quinquies** | `storage/app/telemetry/state.json` | Almost never | No |
+| `TELEMETRY_STATE_PATH` | — | Where the installation's random identifier and the send history live. See **section 3 quinquies** | `storage/app/telemetry/state.json` (in the `app-storage` volume) | Almost never. If you change it, **inside `/var/www/html/storage/app`** and without overlapping the other generated-file paths: `product:doctor` fails otherwise | No |
 | `TELEMETRY_RETRY_DELAY_SECONDS` | — | Seconds between the attempt and its single retry. See **section 3 quinquies** | `5` | Almost never | No |
 
 ### 6.20 Observability
@@ -2061,7 +2076,7 @@ a ZIP with the whole installation and only the administrator generates it.
 
 | Variable | Mark | What it does | Default | When to change it | Does it affect the hours calculation? |
 | --- | --- | --- | --- | --- | --- |
-| `REPORTING_EXPORT_PATH` | — | Where the files generated in the background are written. **Outside the public folder on purpose**: the file is only reachable with its single-use link | `storage/app/reports` (inside the container) | Almost never, and **never inside `BACKUP_PATH`**: these are files that expire and must not go into the backup | No |
+| `REPORTING_EXPORT_PATH` | — | Where the files generated in the background are written. **Outside the public folder on purpose**: the file is only reachable with its single-use link | `storage/app/reports` (in the `app-storage` volume) | Almost never. If you change it, **inside `/var/www/html/storage/app`** and without matching or overlapping the other generated-file paths ([`operation.md`](operation.md) §13.5): `product:doctor` fails otherwise. **Never inside `BACKUP_PATH`**: these are files that expire and must not go into the backup | No |
 | `REPORTING_EXPORT_RETENTION_DAYS` | — | Days the file can be downloaded before the daily purge deletes it. The record that it existed is always kept | `7` | If your people need more room to fetch it. Raising it leaves files with workforce data on disk for longer | No |
 | `REPORTING_EXPORT_LINK_TTL_MINUTES` | — | Minutes the download link is valid for. The link is also **single-use**: using it consumes it, and asking for the status again issues another one | `15` | Almost never. It is the only secret that opens that file and it travels with no session: the shorter, the better | No |
 | `REPORTING_EXPORT_TIMEOUT_SECONDS` | — | Time limit the database gives the deferred report's query. It is much larger than the one for the report calculated while you wait, which is precisely why the deferred one exists | `600` | Raise it if a large export fails on time and the server has room | No |

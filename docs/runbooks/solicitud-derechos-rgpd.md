@@ -41,6 +41,9 @@ Lo que sí procede siempre: **acceso**, **portabilidad**, **rectificación** y l
 | Log técnico | `storage/logs` | **90 días** | `TECHNICAL_LOG_RETENTION_DAYS` |
 | Histórico de errores (`error_events`) | PostgreSQL | **90 días** | `ERROR_HISTORY_RETENTION_DAYS` |
 | Copias de seguridad | `BACKUP_PATH` | `BACKUP_RETENTION_DAYS` (30 de serie) | Configuración de la instalación |
+| Exportación íntegra (ZIP con **todos** los datos de la instalación), informes generados en segundo plano y paquetes de diagnóstico | Volumen `app-storage` del servidor ([`../cliente/operacion.md`](../cliente/operacion.md) §13.6) | **7 días**, y se borran solos | `PRODUCT_DATA_EXPORT_RETENTION_DAYS`, `REPORTING_EXPORT_RETENTION_DAYS`, `PRODUCT_DIAGNOSTICS_RETENTION_DAYS`. **No entran en las copias** |
+| Exportación del registro horario generada por consola (§3 de este runbook, o para la Inspección) | Volumen `app-storage`, carpeta `legal-exports/` | **Hasta que alguien la borre**; `product:doctor` avisa a los 30 días | Custodia de quien la generó ([`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) §7) |
+| Informes de retención (propuesta y purga) | `BACKUP_PATH/reports/retention` | **Sin purga**: no llevan datos personales | — |
 
 **Contratos y ausencias quedan fuera de la purga automática a propósito.** El
 ámbito de retención que ejecuta la purga es una **lista cerrada** —registro de
@@ -63,6 +66,17 @@ las copias de los treinta días anteriores; se aplica al sistema vivo y las copi
 caducan solas. Esto es doctrina consolidada de la AEPD y conviene decirlo en la
 respuesta: *«la supresión se ha aplicado al sistema; las copias de seguridad que
 aún la contengan expiran el DD/MM/AAAA»*.
+
+**Los ficheros generados tampoco se editan, pero caducan antes.** Una
+exportación íntegra o un informe en segundo plano generados antes de la
+supresión pueden contener todavía el dato: se borran solos a los 7 días y no
+entran en las copias, así que basta con decir que caducan en esa fecha. Si hay
+una exportación para la Inspección o para otra solicitud guardada en el
+servidor, esa no caduca sola: bórrala cuando ya no haga falta
+([`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) §7). Todos estos
+ficheros están **en claro** en el servidor, igual que la base de datos; quien
+pertenece al grupo `docker` puede leerlos
+([`../cliente/operacion.md`](../cliente/operacion.md) §13.6).
 
 ---
 
@@ -90,8 +104,16 @@ docker compose exec app \
 
 - El `employee_uuid` se ve en la ficha del panel. **Nunca** uses el nombre para
   acotar la exportación: el UUID es el identificador estable.
-- El fichero cae en `storage/app/legal-exports/`. **Su custodia y su borrado son
-  tuyos**: no lo limpia ningún cron (ver `requerimiento-inspeccion.md` §6).
+- El fichero cae en `storage/app/legal-exports/`, en el volumen de ficheros
+  generados, que sobrevive a reinicios y actualizaciones. **Su custodia y su
+  borrado son tuyos**: no lo limpia ningún cron, y `product:doctor` avisa si
+  sigue en el servidor pasados 30 días. Sácalo con
+  `docker compose cp app:/var/www/html/storage/app/legal-exports/<fichero> .`
+  y bórralo en cuanto lo hayas entregado al interesado (cómo, en
+  [`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) §7).
+- **Sacarlo por consola no deja asiento de descarga.** El asiento
+  `legal_export.generated` prueba que se generó; a quién y cuándo se entregó lo
+  prueba tu registro interno de solicitudes (§8). Anótalo ahí.
 - La generación **queda auditada** (`legal_export.generated`), que es lo que
   permite acreditar después que se atendió la solicitud.
 - Si la persona pide además sus datos de ficha —departamento, código de empleado,
@@ -171,7 +193,7 @@ descargó con su enlace de un solo uso (`report_export.generated`). La consulta
 es por `employee_uuid`, nunca por nombre:
 
 ```bash
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   -- (a) Asientos que NOMBRAN a la persona: el resumen semanal cuando el
   --     alcance tenía 50 personas o menos.
@@ -185,7 +207,7 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
      AND payload->'employee_uuids' ? '<employee_uuid>'
    ORDER BY occurred_at;"
 
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   -- (b) Asientos EN BLOQUE que pudieron contenerla: se resuelven por alcance,
   --     periodo y departamento, no por identificador.
@@ -291,10 +313,11 @@ número de informe (ver §5).
 **Dos personas y dos credenciales**, a propósito: es la única operación del
 producto que borra datos (regla dura 5).
 
-1. **Propuesta.** El planificador la deja cada lunes en
-   `storage/app/retention-reports/retencion-propuesta-*.txt`, y se puede pedir a
-   mano con `--dry-run`. Léela: dice qué tablas, qué rangos de fecha y cuántas
-   filas.
+1. **Propuesta.** El planificador la deja cada lunes en el servidor, en
+   `BACKUP_PATH/reports/retention/retencion-propuesta-*.txt`
+   (`/var/backups/fichaje/reports/retention/` de serie, se lee sin entrar en
+   ningún contenedor), y se puede pedir a mano con `--dry-run`. Léela: dice qué
+   tablas, qué rangos de fecha y cuántas filas.
 
 2. **Autorización.** El responsable del tratamiento (o quien tenga delegada la
    decisión) aprueba **ese informe**, no «la purga» en abstracto. La frase de
@@ -317,9 +340,16 @@ producto que borra datos (regla dura 5).
        --responsible=<id de la cuenta de gestión que autoriza>
    ```
 
-4. **Archiva el informe de purga** (`retencion-purga-*.txt`) con la autorización.
-   Es lo que acredita, si alguien pregunta dentro de dos años, que se borró lo que
-   había que borrar y solo eso.
+4. **Archiva el informe de purga** (`retencion-purga-*.txt`, en la misma
+   carpeta; se queda aunque la orden se lance con `run --rm`) con la
+   autorización, y **contrástalo con su asiento** `retention.purge_executed` de
+   `audit_log` por el token de confirmación, que llevan los dos
+   ([`../cliente/operacion.md`](../cliente/operacion.md) §3.1). El fichero es la
+   copia legible; **lo que acredita**, si alguien pregunta dentro de dos años,
+   que se borró lo que había que borrar y solo eso, **es el asiento**,
+   encadenado e inalterable. Si el fichero falta o no coincide, se cita el
+   asiento (`operacion.md` §18, «…necesitas acreditar una purga y su informe
+   no está»).
 
 **Qué ocurre con la auditoría.** `audit_log` no se borra con `DELETE` nunca
 (ADR-027): la partición del año vencido se **verifica**, se **sella** en
@@ -363,7 +393,8 @@ purga.
 | Solicitud, identidad comprobada y fecha | Registro interno de solicitudes del hotel |
 | Exportación entregada | `audit_log`, acción `legal_export.generated` |
 | Correcciones hechas | `audit_log` y `shift_corrections`, con motivo |
-| Purga ejecutada, si la hubo | Informe en `storage/app/retention-reports/` y asiento en `audit_log` |
+| Exportación sacada del servidor y entregada | Registro interno de solicitudes (a quién, cuándo y por qué canal): `docker compose cp` no deja asiento |
+| Purga ejecutada, si la hubo | Asiento `retention.purge_executed` en `audit_log` (la constancia) e informe en `BACKUP_PATH/reports/retention/` (su copia legible) |
 | Respuesta enviada y fecha | Registro interno de solicitudes del hotel |
 
 ---
