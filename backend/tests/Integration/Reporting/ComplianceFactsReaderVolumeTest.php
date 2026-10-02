@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Mockery\MockInterface;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -166,11 +167,14 @@ it('carga los hechos de 500 empleados por 92 dias con el descanso resuelto', fun
 
     // La ventana se amplia a semanas completas: del lunes 29 de diciembre al
     // domingo 5 de abril, que son 47 dias pares. 500 x 47 = 23.500 filas.
-    expect($facts)->toHaveCount(23_500)
-        // El presupuesto es el `statement_timeout` de la vista (10 s). El plan lo
-        // vigila la asercion de abajo; esto traduce el plan a lo que nota quien
-        // abre la pantalla.
-        ->and($segundos)->toBeLessThan(10.0);
+    expect($facts)->toHaveCount(23_500);
+
+    // El presupuesto es el `statement_timeout` de la vista (10 s). El plan lo
+    // vigila la asercion de abajo; esto traduce el plan a lo que nota quien
+    // abre la pantalla. Sin instrumentacion se afirma; bajo `make coverage`,
+    // que construye estas 23.500 filas con Xdebug midiendo, se anuncia
+    // (CI-COB-01).
+    WallClockBudget::expectBelow($segundos, 10.0, 'RF-PA-06');
 
     // Y el descanso esta resuelto en TODAS: la primera jornada de la ventana
     // tiene la suya de diciembre, fuera del rango pedido.
