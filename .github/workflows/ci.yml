@@ -749,7 +749,7 @@ jobs:
         # envoltorio de snap que no arranca, asi que aqui puppeteer trae su
         # propio Chrome y las dos variables que lee laravel-pdf apuntan a el.
         run: |
-          sudo npm install --global --omit=dev puppeteer@24
+          sudo npm install --global --omit=dev puppeteer@25.12.0
           modules="$(npm root -g)"
           echo "LARAVEL_PDF_NODE_MODULES_PATH=${modules}" >>"$GITHUB_ENV"
           echo "LARAVEL_PDF_CHROME_PATH=$(NODE_PATH="${modules}" node -e "console.log(require('puppeteer').executablePath())")" >>"$GITHUB_ENV"
@@ -2349,7 +2349,7 @@ jobs:
         # es un envoltorio de snap; puppeteer trae su Chrome y laravel-pdf lo lee
         # de estas dos variables.
         run: |
-          sudo npm install --global --omit=dev puppeteer@24
+          sudo npm install --global --omit=dev puppeteer@25.12.0
           modules="$(npm root -g)"
           echo "LARAVEL_PDF_NODE_MODULES_PATH=${modules}" >>"$GITHUB_ENV"
           echo "LARAVEL_PDF_CHROME_PATH=$(NODE_PATH="${modules}" node -e "console.log(require('puppeteer').executablePath())")" >>"$GITHUB_ENV"

@@ -76,6 +76,11 @@ useDefault = true
     #    `.$i` en cada iteracion para generar UUID distintos. No es una
     #    credencial: no viaja a ningun entorno real ni identifica nada.
     '''^0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b9$''',
+    # 1b) backend/tests/Integration/Identity/CredentialDocumentLanguageTest.php
+    #    (Bloque 11, RV-2): el mismo UUID de prueba, ya completo, como
+    #    `credentialUuid` del documento de credencial. No es un secreto: no
+    #    existe en ninguna instalacion y otras pruebas lo usan como uuid ficticio.
+    '''^0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90$''',
 
     # 2) frontend-admin/tests/unit/support/fixtures.ts: UUID v7 de prueba
     #    escrito a mano como identificador de una credencial de ejemplo.
