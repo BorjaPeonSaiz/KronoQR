@@ -2669,6 +2669,20 @@ paths:
         es el caso normal, y los tramos que la persona fichara despues de esa
         fecha se conservan tal cual (regla dura 5).
 
+        **Una contratacion que no llego a empezar** (fecha de alta posterior a
+        hoy, con el mismo «hoy» del centro de arriba y no con otro reloj) solo
+        admite como fecha de cese **la propia fecha de alta**: es una
+        baja sin efectos, porque la persona nunca llego a trabajar. Cualquier
+        otra fecha da `422` en `terminated_at` y el mensaje dice cual es la
+        admitida.
+
+        **Sin centro configurado no hay baja** (`409`): «hoy» se resuelve con la
+        zona del centro y nunca cae a UTC.
+
+        **Tras la baja, los dias trabajados hasta el cese se completan a mano**
+        con `POST /api/v1/shift-entries` (RF-PA-04), siempre que la jornada este
+        entre la fecha de alta y la de cese.
+
         **No hay baja programada en esta version**: un fin de contrato futuro
         se registra el ultimo dia, al terminar el turno. Es de la 2.3.0.
 
@@ -2752,6 +2766,16 @@ paths:
                     errors:
                       terminated_at:
                         - La fecha de cese (2026-08-01) es anterior a la de alta (2026-08-14).
+                alta-que-no-llego-a-empezar:
+                  summary: La fecha de alta aun no ha llegado y el cese no es esa misma fecha
+                  value:
+                    type: 'urn:kronoqr:problem:validation-failed'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      terminated_at:
+                        - Esta persona aún no ha empezado a trabajar (alta el 2026-10-15). La única fecha de cese posible es la de alta, 2026-10-15.
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -4489,6 +4513,16 @@ paths:
         navegador). Un registro horario anota lo que ya ha ocurrido: rellenar la
         jornada teorica por adelantado o cerrar un turno con la salida
         «prevista» da `422` con el error colgado del campo.
+
+        **Quien puede recibir un tramo** (RN-14, 2.2.0). Una persona en alta,
+        como hasta ahora; y una persona **dada de baja** si `work_date` esta
+        entre su fecha de alta y su fecha de cese, ambas incluidas: es como se
+        completan los dias trabajados que no constaron —un olvido de los
+        ultimos dias, un fichaje de la cola offline que llego despues de la
+        baja—. Una jornada posterior al cese o anterior al alta de una persona
+        de baja da `422` en `work_date`. Una persona suspendida, o que no
+        existe, da `422` en `employee_uuid`, como hasta ahora. El escaneo del
+        quiosco no cambia: una persona de baja no ficha.
       tags: [Attendance]
       security:
         - managementToken: ['attendance:correct']
@@ -4569,9 +4603,12 @@ paths:
             **`type` distingue las dos causas:**
 
             - `urn:kronoqr:problem:validation-failed` — un campo falta, no vale,
-              referencia algo que no existe, o la jornada o alguna de las dos
+              referencia algo que no existe, la jornada o alguna de las dos
               marcas es **futura** (F1): mas alla del momento del servidor mas el
-              margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`.
+              margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`, o la persona esta de
+              baja y `work_date` cae **fuera de su periodo de empleo** —despues
+              de la fecha de cese o antes de la de alta— (RN-14), en
+              `errors.work_date`.
             - `urn:kronoqr:problem:correction-would-change-work-date` — la hora de
               entrada llevaria la jornada a **otro dia civil** (RN-05, ADR-035).
               Es `422` y no `409` porque no hay nada que releer: mover horas de un
@@ -4600,6 +4637,16 @@ paths:
                     errors:
                       clocked_out_at:
                         - 'Esa hora todavía no ha llegado: no se pueden registrar horas futuras. Se admite un margen de 5 minuto(s) sobre la hora del servidor.'
+                jornada-posterior-al-cese:
+                  summary: Persona de baja y jornada posterior a su fecha de cese (RN-14)
+                  value:
+                    type: 'urn:kronoqr:problem:validation-failed'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      work_date:
+                        - 'Esta persona está de baja desde el 2026-09-30: solo se le pueden registrar horas de jornadas entre su alta (2026-03-01) y su cese (2026-09-30).'
                 cambiaria-de-jornada:
                   value:
                     type: 'urn:kronoqr:problem:correction-would-change-work-date'
@@ -12779,9 +12826,10 @@ components:
             Fecha de cese, **nunca anterior a la de alta ni posterior a hoy**
             (RN-14). «Hoy» es la fecha civil del centro (`Site.timezone`) en el
             momento en que el servidor recibe la peticion; una fecha futura
-            responde `422` en este campo. Hoy mismo se admite. Es el dato desde
-            el que cuenta la retencion de RL-02. La baja es efectiva al
-            registrarla, no en esta fecha.
+            responde `422` en este campo. Hoy mismo se admite. Si la fecha de
+            alta es posterior a ese mismo hoy, la unica admitida es la propia fecha de
+            alta. Es el dato desde el que cuenta la retencion de RL-02. La baja
+            es efectiva al registrarla, no en esta fecha.
         reason:
           type: string
           minLength: 1
