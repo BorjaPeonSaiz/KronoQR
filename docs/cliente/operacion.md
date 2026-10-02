@@ -975,15 +975,19 @@ fecha. Lo que tiene que saber RRHH:
   que los días entre el registro de la baja y la fecha de cese salen como días
   de alta **sin actividad**. No es un fallo del informe: es que esa persona no
   pudo fichar esos días.
-- **Si trabajó esos días**, sus horas no están en el registro y no se pueden
-  añadir a mano a una persona de baja. Lo que hacer está en la guía de RRHH,
-  «Si ya la registraste antes de tiempo».
+- **Si trabajó esos días, se pueden completar ahora a mano**: desde la 2.2.0
+  se admite añadir un tramo a una persona de baja en cualquier jornada entre
+  su fecha de alta y su fecha de cese, las dos incluidas, con su motivo y su
+  asiento, como cualquier tramo manual. Nunca un día que todavía no ha llegado.
+  Cómo se hace: guía de RRHH, «Después de la baja: completar los días que
+  falten».
 
 Cómo localizarlas, sin tocar la base de datos: en el panel, **Plantilla**, filtro
 **«Situación laboral»** en **«De baja»**, y abre la ficha de cada persona:
 **«Fecha de cese»** está en sus datos. Son las que tienen una fecha de cese
-posterior al día en que actualizaste a la 2.2.0. No hay que hacer nada en el
-sistema: solo que RRHH lo sepa al leer esos informes.
+posterior al día en que actualizaste a la 2.2.0. Pásale la lista a RRHH: que
+complete los días que esas personas sí trabajaron y que sepa leer los días sin
+actividad de esos informes. En el sistema no hay que hacer nada más.
 
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las

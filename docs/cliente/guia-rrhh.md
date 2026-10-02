@@ -1503,26 +1503,25 @@ registrarla; regístrala el último día, cuando haya terminado su turno.» «Ho
 la fecha **del hotel** (la zona horaria de su centro), no la de tu ordenador:
 importa si registras la baja desde otro huso horario, o cerca de la medianoche.
 
-**Cuándo registrarla: cuando haya terminado su último turno.** Nunca antes.
-Registrarla unos días después es normal y no tiene ningún problema: pon como
-fecha de cese el día que de verdad terminó.
+**Cuándo registrarla: cuando haya terminado su último turno.** Es lo
+recomendable. Registrarla unos días después es normal y no tiene ningún
+problema: pon como fecha de cese el día que de verdad terminó.
 
-Antes de confirmar, dos comprobaciones:
-
-1. **Completa los días que falten.** Si algún día anterior al cese trabajó y no
-   hay fichajes, añádelo ahora con **«Añadir un tramo»** (§5.1). **Una vez de
-   baja ya no se pueden añadir tramos a mano** de esa persona.
-2. **Mira que no tenga un turno abierto** (en **Presencia** o en su registro
-   horario). Si olvidó fichar la salida, corrígela antes (apartado «…alguien
-   olvidó fichar la salida», más arriba). Si todavía está trabajando, espera a que termine.
+Antes de confirmar, mira que no tenga un turno abierto (en **Presencia** o en su
+registro horario). Si todavía está trabajando, espera a que termine; si olvidó
+fichar la salida, corrígela (apartado «…alguien olvidó fichar la salida», más
+arriba). **El diálogo de baja te lo recuerda siempre** con un aviso fijo: «Si tiene un
+turno abierto, su salida ya no se podrá fichar: ciérralo después con una
+corrección.» No comprueba si lo tiene, así que el aviso sale igual aunque no
+haya ninguno. Comprobarlo es cosa tuya.
 
 **Un ejemplo.** El contrato de temporada de una camarera de pisos termina el
 viernes 30 de octubre, con turno de 07:00 a 15:00.
 
 - **No** la registres el lunes 26 con fecha de cese el viernes: se rechaza. Y si
   pusieras el lunes como fecha de cese para que te dejara, dejaría de poder
-  fichar ese mismo lunes y los cuatro días que le quedan no entrarían en el
-  registro.
+  fichar ese mismo lunes y ya no podrías anotarle los días que trabaje después
+  (más abajo).
 - **Sí** el viernes 30, después de que fiche la salida de las 15:00, con fecha
   de cese viernes 30. O, si ese día no hay nadie de RRHH, el lunes 2 con fecha
   de cese viernes 30: una fecha pasada se admite.
@@ -1530,28 +1529,53 @@ viernes 30 de octubre, con turno de 07:00 a 15:00.
 Recoge la tarjeta física si puedes; si no aparece, revócala igualmente —ya lo
 está por la baja— y anótalo.
 
-#### Si ya la registraste antes de tiempo
+#### Después de la baja: completar los días que falten
 
-Desde que la confirmaste, esa persona no puede fichar. Lo que **no** se puede
-hacer: deshacer la baja, volver a darla de alta, ni añadirle tramos a mano.
-Lo que sí:
+Una persona de baja ya no ficha, pero **sus días hasta la fecha de cese se
+pueden completar a mano**, con **«Añadir un tramo»** (§5.1) desde su registro
+horario. Vale para cualquier jornada entre su fecha de alta y su fecha de cese,
+las dos incluidas, con su motivo, como cualquier tramo manual: queda en el
+registro y en la auditoría. Los casos habituales:
 
-- **Si tenía un turno abierto** al confirmar la baja, su salida se rechaza en la
-  tablet y el turno queda abierto. Saldrá como incidencia **«Turno abierto sin
-  cerrar»** y se cierra igual que un olvido: **«Corregir las horas»** con la
-  hora real de salida, que sí se admite en una persona de baja. Como motivo,
-  **«Otro motivo»** con lo que pasó, por ejemplo «Baja registrada antes de que
-  terminara el turno; la tablet rechazó la salida».
-- **Si va a seguir trabajando** los días que le quedan, avísala a ella y a su
-  responsable de que la tablet la rechazará. Esas horas **no pueden entrar en
-  el registro de KronoQR**, y la ley obliga a registrarlas: anota a diario la
-  entrada y la salida por escrito, con la firma de la persona, y habla con tu
-  asesoría laboral sobre cómo conservarlo junto al registro.
+- **Un olvido** de los últimos días que nadie había corregido.
+- **La tablet estuvo sin red el último día.** Sus fichajes de ese día se guardan
+  en la tablet y se envían al volver la conexión; si llegan después de que
+  registraras la baja, **se rechazan** y no aparecen en su registro. Revisa su
+  último día y añade lo que falte, con **«Otro motivo»** y lo que pasó, por
+  ejemplo «Fichajes del último día que llegaron después de registrar la baja».
+  Si la tablet sigue sin red, espera a que vuelva y vacíe su cola antes de dar
+  de baja a nadie que fichara en ella.
+- **La baja se registró antes de terminar el turno.** Su salida se rechaza en la
+  tablet y el turno queda abierto: saldrá como incidencia **«Turno abierto sin
+  cerrar»** y se cierra igual que un olvido, con **«Corregir las horas»** y la
+  hora real de salida. Si siguió trabajando ese día, añade el resto a mano.
+
+Lo que **no** se puede hacer después de la baja:
+
+- **Deshacerla** ni volver a darla de alta.
+- **Anotar un día posterior a su fecha de cese**: se rechaza. Si la persona
+  siguió trabajando más allá de la fecha de cese que registraste, **KronoQR no
+  tiene forma de recoger esas horas**: no admite tramos después del cese ni deja
+  corregir la fecha de una baja. Avisa a la persona y a su responsable de que la
+  tablet la rechazará, y consulta con tu asesoría laboral cómo dejar constancia
+  de esas horas. Por eso la fecha de cese tiene que ser la del último día
+  trabajado de verdad.
+
+#### Una contratación que no llegó a empezar
+
+Si la persona tiene una fecha de alta **posterior a hoy** —una incorporación que
+se cae antes del primer día, o alguien importado por error—, la única fecha de
+cese que se admite es **su propia fecha de alta**. Es una baja sin efectos: nunca
+llegó a trabajar, su ficha queda de baja con el alta y el cese el mismo día, y
+no ocupa plaza en la licencia. El diálogo de baja te lo indica («Aún no ha
+empezado…»); con cualquier otra fecha, el mensaje de error te dice cuál es la
+admitida.
 
 **Si tu instalación viene de la 2.1.0**, puede tener bajas registradas con una
 fecha de cese futura, de cuando eso se admitía. Esas personas quedaron de baja
 el día que se registró, y los informes las cuentan de alta hasta su fecha de
-cese, así que esos días salen sin actividad. Cómo localizarlas:
+cese, así que esos días salen sin actividad. Los que sí trabajaron se pueden
+completar ahora a mano, como se explica arriba. Cómo localizarlas:
 [`operacion.md`](operacion.md) §11, «Al actualizar desde la 2.1.0: bajas con
 fecha de cese futura».
 

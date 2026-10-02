@@ -1401,9 +1401,15 @@ again: an offboarding cannot be undone.
 ### …I imported the wrong file
 
 **Nothing is deleted.** People imported by mistake are offboarded one by one
-from their record, with today as their end date (a date later than today is
-rejected); the record they may have generated is kept, because the law requires
-keeping it for four years.
+from their record; the record they may have generated is kept, because the law
+requires keeping it for four years. The end date accepted depends on their start
+date:
+
+- **If their start date has already arrived**: today or an earlier day, never
+  before the start date. A date later than today is rejected.
+- **If their start date is later than today** —they have not started—: **only
+  their own start date**. It is an offboarding with no effect: it leaves no
+  worked day ([`hr-guide.md`](hr-guide.md) §8, "…a person leaves").
 
 If you had **not confirmed** yet —you only did the check— nothing was written:
 upload the right file and start over.

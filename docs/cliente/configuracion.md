@@ -1382,9 +1382,15 @@ en el hotel, la importación no la vuelve a dar de alta: una baja no se deshace.
 ### …importé el fichero equivocado
 
 **Nada se borra.** Las personas importadas por error se dan de baja una a una
-desde su ficha, con fecha de cese hoy (una fecha posterior a hoy se rechaza); el
-registro que hubieran generado se conserva, porque la ley obliga a conservarlo
-cuatro años.
+desde su ficha; el registro que hubieran generado se conserva, porque la ley
+obliga a conservarlo cuatro años. La fecha de cese que se admite depende de su
+fecha de alta:
+
+- **Si su fecha de alta ya ha llegado**: hoy o un día anterior, nunca antes del
+  alta. Una fecha posterior a hoy se rechaza.
+- **Si su fecha de alta es posterior a hoy** —no ha llegado a empezar—: **solo
+  su propia fecha de alta**. Es una baja sin efectos: no deja ningún día
+  trabajado ([`guia-rrhh.md`](guia-rrhh.md) §8, «…una persona causa baja»).
 
 Si aún **no habías confirmado** —solo hiciste la comprobación— no se escribió
 nada: sube el fichero correcto y vuelve a empezar.
