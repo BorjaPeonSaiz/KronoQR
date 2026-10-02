@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import { useSessionStore } from '@/features/auth/session.store'
 import es from '@/shared/i18n/locales/es.json'
-import type { EmployeeWorkDays } from '@/shared/api/types'
+import type { Employee, EmployeeWorkDays } from '@/shared/api/types'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import {
   EMPLOYEE_UUID,
@@ -34,6 +34,8 @@ type Wrapper = Awaited<ReturnType<typeof mountView>>
 
 interface MountOptions {
   workdays?: EmployeeWorkDays
+  /** La ficha que devuelve el servidor. Por omision, una persona en alta. */
+  person?: Employee
   /** Respuesta de la ficha. `false` = la ficha no esta al alcance de este rol. */
   employeeAccessible?: boolean
   /** Ambitos del token. Por omision, ninguno: sin sesion no se enseña el enlace a la bandeja. */
@@ -59,7 +61,7 @@ async function mountWorkDays(options: MountOptions = {}): Promise<Wrapper> {
 
     return options.employeeAccessible === false
       ? problemResponse(403, 'urn:kronoqr:problem:forbidden')
-      : jsonResponse(employee())
+      : jsonResponse(options.person ?? employee())
   })
 
   const pinia = createTestPinia()
@@ -491,5 +493,114 @@ describe('EmployeeWorkDaysView, accesibilidad (WCAG 2.2 AA)', () => {
     const wrapper = await mountWorkDays()
 
     expect(wrapper.find('fieldset legend').text()).toBe(es.workdays.filters.legend)
+  })
+
+  describe('persona dada de baja (RN-14)', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    async function openAdd(person: Employee): Promise<Wrapper> {
+      const wrapper = await mountWorkDays({ abilities: ['attendance:correct'], person })
+
+      await wrapper.find('[data-test="add-shift-entry"]').trigger('click')
+      await settle(1)
+
+      return wrapper
+    }
+
+    /** Abre el alta de tramo, la rellena y la envia; el servidor responde `422` con `errors`. */
+    async function submitRejected(
+      person: Employee,
+      errors: Record<string, string[]>,
+    ): Promise<Wrapper> {
+      stubFetch((url) => {
+        if (url.includes('/shift-entries')) {
+          return problemResponse(422, 'urn:kronoqr:problem:validation-failed', { errors })
+        }
+
+        return url.includes('/workdays') ? jsonResponse(employeeWorkDays()) : jsonResponse(person)
+      })
+
+      const pinia = createTestPinia()
+      const session = useSessionStore(pinia)
+
+      session.token = 'token'
+      session.status = 'authenticated'
+      session.user = managementUser({ abilities: ['attendance:correct'] })
+
+      const wrapper = await mountView(EmployeeWorkDaysView, {
+        props: { uuid: EMPLOYEE_UUID },
+        pinia,
+      })
+
+      await settle()
+      await wrapper.find('[data-test="add-shift-entry"]').trigger('click')
+      await settle(1)
+      await wrapper.find('[data-test="dialog-work-date"]').setValue('2026-08-14')
+      await wrapper.find('[data-test="dialog-clock-in"]').setValue('2026-08-14T06:00')
+      await wrapper.find('[data-test="dialog-reason"]').setValue('OLVIDO_FICHAJE_ENTRADA')
+      await settle(1)
+      await wrapper.find('#correction-form').trigger('submit')
+      await settle()
+
+      return wrapper
+    }
+
+    it('«Añadir un tramo» sigue disponible y limita la jornada entre el alta y el cese', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+
+      const wrapper = await openAdd(
+        employee({ status: 'terminated', hired_at: '2026-03-01', terminated_at: '2026-09-30' }),
+      )
+      const input = wrapper.find('[data-test="dialog-work-date"]')
+
+      expect(input.attributes('min')).toBe('2026-03-01')
+      expect(input.attributes('max')).toBe('2026-09-30')
+    })
+
+    it('si un registro antiguo trae un cese futuro, el maximo es hoy en el centro', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+
+      const wrapper = await openAdd(
+        employee({ status: 'terminated', hired_at: '2026-03-01', terminated_at: '2026-10-31' }),
+      )
+
+      expect(wrapper.find('[data-test="dialog-work-date"]').attributes('max')).toBe('2026-10-02')
+    })
+
+    it('para una persona en alta no pone ningun limite', async () => {
+      const wrapper = await openAdd(employee())
+      const input = wrapper.find('[data-test="dialog-work-date"]')
+
+      expect(input.attributes('min')).toBeUndefined()
+      expect(input.attributes('max')).toBeUndefined()
+    })
+
+    it('pinta el 422 de work_date en el campo, accesible', async () => {
+      const message = 'Esta persona está de baja desde el 2026-09-30.'
+      const wrapper = await submitRejected(
+        employee({ status: 'terminated', terminated_at: '2026-09-30' }),
+        { work_date: [message] },
+      )
+      const input = wrapper.find('[data-test="dialog-work-date"]')
+      const described = (input.attributes('aria-describedby') ?? '')
+        .split(' ')
+        .map((id) => wrapper.find(`[id="${id}"]`))
+
+      expect(input.attributes('aria-invalid')).toBe('true')
+      expect(described.some((node) => node.exists() && node.text() === message)).toBe(true)
+    })
+
+    it('a una persona suspendida el 422 de employee_uuid se ve con su etiqueta', async () => {
+      const message = 'Esta persona está suspendida.'
+      const wrapper = await submitRejected(employee({ status: 'suspended' }), {
+        employee_uuid: [message],
+      })
+      const notice = wrapper.find('[data-test="dialog-error"]')
+
+      expect(notice.text()).toContain(message)
+      expect(notice.text()).toContain(es.corrections.dialog.employeeLabel)
+    })
   })
 })

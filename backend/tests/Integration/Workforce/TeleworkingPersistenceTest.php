@@ -43,12 +43,12 @@ it('lee false en una ficha que nadie ha marcado', function (): void {
 it('guarda y vuelve a leer la marca en los dos sentidos', function (): void {
     $uuid = WorkforceFixtures::employee(WorkforceFixtures::site());
 
-    teletrabajoRepositorio()->save(teletrabajoCargada($uuid)->updateProfile(teleworking: true));
+    teletrabajoRepositorio()->saveProfile(teletrabajoCargada($uuid)->updateProfile(teleworking: true), statusChanged: false);
 
     expect(teletrabajoCargada($uuid)->teleworking)->toBeTrue()
         ->and(DB::table('employees')->where('uuid', $uuid)->value('teleworking'))->toBeTrue();
 
-    teletrabajoRepositorio()->save(teletrabajoCargada($uuid)->updateProfile(teleworking: false));
+    teletrabajoRepositorio()->saveProfile(teletrabajoCargada($uuid)->updateProfile(teleworking: false), statusChanged: false);
 
     expect(teletrabajoCargada($uuid)->teleworking)->toBeFalse();
 })->group('RF-GP-01');

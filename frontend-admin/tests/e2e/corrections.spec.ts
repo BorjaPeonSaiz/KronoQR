@@ -6,8 +6,10 @@
 // `support/admin.ts`. La autorizacion real -que un `responsable_departamento`
 // no pueda anular aunque el panel se lo dejara pasar, que un `auditor` reciba
 // `403` si fuerza la peticion- se prueba en el backend.
+import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import {
+  EMPLOYEE,
   EMPLOYEE_UUID,
   logIn,
   logInAsAuditor,
@@ -317,6 +319,74 @@ test.describe('Los botones se ocultan sin el ambito', () => {
       await expect(page.getByTestId('add-shift-entry')).toBeVisible()
       await expect(page.getByTestId('entry-correct')).toBeVisible()
       await expect(page.getByTestId('entry-void')).toHaveCount(0)
+    },
+  )
+})
+
+test.describe('Añadir un tramo a una persona dada de baja', () => {
+  test(
+    'un dia anterior al cese se confirma y uno posterior da error en el campo',
+    { tag: ['@RF-PA-04', '@RN-14'] },
+    async ({ page }) => {
+      const api = await stubManagementApi(page, {
+        employees: [
+          {
+            ...EMPLOYEE,
+            status: 'terminated',
+            hired_at: '2026-03-01',
+            terminated_at: '2026-09-30',
+          },
+        ],
+      })
+      await logIn(page)
+      await page.goto(WORKDAYS_URL)
+
+      // La acción sigue disponible para quien está de baja.
+      await page.getByTestId('add-shift-entry').click()
+
+      const dialog = page.getByRole('dialog', { name: 'Añadir un tramo' })
+      const date = dialog.getByTestId('dialog-work-date')
+
+      await expect(date).toHaveAttribute('min', '2026-03-01')
+      await expect(date).toHaveAttribute('max', /^\d{4}-\d{2}-\d{2}$/)
+
+      // Un día posterior al cese: el servidor lo rechaza y el error cuelga del campo.
+      await date.fill('2026-10-01')
+      await dialog.getByTestId('dialog-clock-in').fill('2026-10-01T06:00')
+      await dialog.getByTestId('dialog-clock-out').fill('2026-10-01T14:00')
+      await dialog.getByTestId('dialog-reason').selectOption('OLVIDO_FICHAJE_ENTRADA')
+      await dialog.getByTestId('dialog-submit').click()
+
+      await expect(date).toHaveAttribute('aria-invalid', 'true')
+      await expect(dialog.getByText(/solo se le pueden registrar horas/).first()).toBeVisible()
+      await expect(dialog).toBeVisible()
+
+      const results = await new AxeBuilder({ page })
+        .include('[role="dialog"]')
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .analyze()
+      const blocking = results.violations.filter(
+        (violation) => violation.impact === 'critical' || violation.impact === 'serious',
+      )
+
+      expect(
+        blocking,
+        blocking.map((violation) => `${violation.id}: ${violation.help}`).join('\n'),
+      ).toEqual([])
+
+      // Un día anterior al cese: se confirma.
+      await date.fill('2026-09-29')
+      await dialog.getByTestId('dialog-clock-in').fill('2026-09-29T06:00')
+      await dialog.getByTestId('dialog-clock-out').fill('2026-09-29T14:00')
+      await dialog.getByTestId('dialog-submit').click()
+
+      await expect(dialog).toBeHidden()
+
+      const accepted = api.requests.filter(
+        (candidate) => candidate.path === '/api/v1/shift-entries' && candidate.method === 'POST',
+      )
+
+      expect(accepted).toHaveLength(2)
     },
   )
 })

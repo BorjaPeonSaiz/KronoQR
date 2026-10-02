@@ -442,22 +442,28 @@ it('rechaza un campo que el endpoint no conoce', function (): void {
         ->assertValidResponse(422);
 })->group('RF-PA-04', 'RN-05');
 
-it('no deja escribir horas a nombre de quien esta de baja', function (): void {
+it('no deja escribir horas a nombre de quien esta de baja despues de su cese', function (): void {
     // RN-14. No es autorizacion sino integridad: dar de alta horas a una persona
-    // cesada produce un registro que nadie sabe defender. Y aqui SI se puede
-    // decir por que, al contrario que en el quiosco: quien pregunta es un
-    // responsable autenticado, no una pantalla en un pasillo.
+    // cesada para un dia en que ya no trabajaba produce un registro que nadie
+    // sabe defender. Desde la 2.2.0 si se le pueden completar los dias hasta su
+    // cese (`ShiftEntryForOffboardedEmployeeTest`); el dia siguiente, no. Y aqui
+    // SI se puede decir por que, al contrario que en el quiosco: quien pregunta
+    // es un responsable autenticado, no una pantalla en un pasillo.
     $contexto = contextoDeCorreccion();
+    // De baja el 2026-06-30 (`WorkforceFixtures`).
     $cesado = WorkforceFixtures::employee($contexto['site'], null, 'terminated');
 
     Api::as($contexto['token'])
         ->post('/api/v1/shift-entries', [
             'employee_uuid' => $cesado,
-            'work_date' => '2026-03-14',
-            'clocked_in_at' => '2026-03-14T06:00:00Z',
+            'work_date' => '2026-07-01',
+            'clocked_in_at' => '2026-07-01T06:00:00Z',
             'reason_code' => 'ALTA_RETROACTIVA',
         ])
-        ->assertValidResponse(422);
+        ->assertValidResponse(422)
+        ->assertJsonStructure(['errors' => ['work_date']]);
+
+    expect(DB::table('shift_entries')->count())->toBe(0);
 })->group('RN-14', 'RF-PA-04');
 
 it('devuelve 409 cuando el alta pisaria a otro tramo de la misma persona', function (): void {

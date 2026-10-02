@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Workforce\Application\Command\RecordPinDeliveryCommand;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -13,7 +14,6 @@ use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeePinDelivered;
 use App\Modules\Workforce\Domain\Exception\PinAlreadyDelivered;
 use App\Modules\Workforce\Domain\Exception\PinNotIssued;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Registro de la entrega del PIN (RF-ID-09,
@@ -33,6 +33,13 @@ use Illuminate\Database\ConnectionInterface;
  * **Un caso de uso, una transaccion**, con el asiento de `audit_log` dentro: una
  * entrega registrada sin traza no sirve para lo unico que se le pide.
  *
+ * **Bajo el candado de la cadena** (ADR-046 §1.2): la escritura de la ficha y el
+ * asiento van dentro de `withChainLock()`, en el orden cadena → `employees`.
+ * Hasta la 2.2.0 se escribia la fila y despues el asiento, al reves que la baja.
+ * La escritura toma `FOR KEY SHARE` sobre `users` por
+ * `pin_delivered_by_user_id`, que es compatible con todo lo que se escribe en
+ * `users` (ningun caso de uso cambia su clave).
+ *
  * **No devuelve ningun PIN**, ni el entregado ni ningun otro. El PIN existe en
  * claro en la respuesta que lo emitio y en ninguna mas.
  */
@@ -43,7 +50,7 @@ final readonly class RecordPinDeliveryHandler
         private EmployeePinRepository $pins,
         private WorkforceEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -62,7 +69,7 @@ final readonly class RecordPinDeliveryHandler
 
         $deliveredAt = $this->clock->now();
 
-        return $this->connection->transaction(function () use (
+        return $this->serialized->withChainLock(function () use (
             $command,
             $employee,
             $deliveredAt,

@@ -25,4 +25,17 @@ interface EmploymentStatusLookup
 {
     /** Estado laboral del empleado con esa clave interna, o `null` si no existe. */
     public function statusOf(int $employeeId): ?EmploymentStatus;
+
+    /**
+     * El estado de varios empleados **en una sola consulta**, indexado por su
+     * clave interna. Los que no existen no aparecen.
+     *
+     * Existe para la rotacion de la clave de firma, que decide sobre cada
+     * tarjeta con la cadena de `audit_log` tomada (ADR-046 §1.2): una consulta
+     * por tarjeta alargaba el candado que comparten todos los fichajes.
+     *
+     * @param  list<int>  $employeeIds
+     * @return array<int, EmploymentStatus>
+     */
+    public function statusesOf(array $employeeIds): array;
 }

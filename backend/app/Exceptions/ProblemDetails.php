@@ -198,6 +198,19 @@ final class ProblemDetails
     public const string TYPE_SHIFT_ALREADY_OPEN = 'urn:kronoqr:problem:shift-already-open';
 
     /**
+     * La persona **ya esta dada de baja**: su ficha no se modifica, no se da de
+     * baja otra vez y su PIN no se restablece ni se entrega (RN-14, ADR-046).
+     *
+     * **Tipo propio y no `TYPE_CONFLICT`**, aunque los dos sean `409`, porque el
+     * mismo endpoint devuelve ambos y a quien los recibe le cambia la accion
+     * siguiente: el generico —un correo ya usado por otra persona— se corrige
+     * en el formulario sin perder lo escrito, y este dice «la ficha ya no se
+     * puede tocar: recargala». Distinguirlos por el `detail` es lo que el
+     * `type` existe para evitar (revision del bloque 17 de la 2.2.0).
+     */
+    public const string TYPE_EMPLOYEE_TERMINATED = 'urn:kronoqr:problem:employee-terminated';
+
+    /**
      * Las horas pisarian a **otro tramo vigente** de la misma persona (RN-02).
      *
      * Mismo acotamiento que {@see self::TYPE_SHIFT_ALREADY_OPEN}: rutas de
@@ -500,6 +513,17 @@ final class ProblemDetails
         return self::response(
             self::TYPE_SHIFT_ENTRY_SUPERSEDED,
             'Conflicto con el estado actual',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /** `409` de una persona ya dada de baja (RN-14). {@see self::TYPE_EMPLOYEE_TERMINATED} */
+    public static function employeeTerminated(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_EMPLOYEE_TERMINATED,
+            'La persona ya esta dada de baja',
             JsonResponse::HTTP_CONFLICT,
             $detail,
         );

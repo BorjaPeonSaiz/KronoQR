@@ -8,7 +8,6 @@ use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\Command\ResetEmployeePinCommand;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\PinMetrics;
-use Illuminate\Database\ConnectionInterface;
 use Random\RandomException;
 
 /**
@@ -17,7 +16,8 @@ use Random\RandomException;
  * **Un caso de uso, una transaccion.** El hash nuevo, el borrado del bloqueo por
  * intentos y el asiento de `audit_log` son un solo hecho: si el asiento falla,
  * el PIN no cambia. Lo contrario dejaria a una persona con un PIN que nadie sabe
- * cuando se emitio ni quien lo pidio.
+ * cuando se emitio ni quien lo pidio. La transaccion la abre la emision, con la
+ * cadena tomada (ADR-046); el hash se calcula aqui antes, fuera de ella (A-3).
  *
  * **El PIN anterior se invalida por sustitucion.** No hay «desactivar»: la unica
  * copia era el hash, y al reescribirlo el PIN viejo deja de existir. Esa es la
@@ -38,7 +38,6 @@ final readonly class ResetEmployeePinHandler
         private EmployeeRepository $employees,
         private IssueEmployeePinHandler $issue,
         private PinMetrics $metrics,
-        private ConnectionInterface $connection,
     ) {}
 
     /**
@@ -54,15 +53,21 @@ final readonly class ResetEmployeePinHandler
             return null;
         }
 
-        $issued = $this->connection->transaction(fn (): ?IssuedPin => $this->issue->handle(
-            new IssueEmployeePinCommand(
-                employeeUuid: $command->employeeUuid,
-                siteId: $employee->siteId,
-                // Siempre `reset`: aunque la ficha no tuviera PIN —una anterior a
-                // RF-ID-09—, quien pulsa este boton esta restableciendo, y el
-                // asiento tiene que decir lo que de verdad paso.
-                reset: true,
-            ),
+        // EL bcrypt, ANTES DE LA CADENA (ADR-046 §1.1 punto 5, A-3). Dentro de la
+        // emision correria con el candado de `audit_log` tomado y congelaria los
+        // fichajes del hotel unos 160 ms por restablecimiento.
+        $material = $this->issue->freshMaterial();
+
+        // La emision abre su propia transaccion con la cadena tomada: hash
+        // nuevo, desbloqueo y asiento son un solo hecho.
+        $issued = $this->issue->handle(new IssueEmployeePinCommand(
+            employeeUuid: $command->employeeUuid,
+            siteId: $employee->siteId,
+            // Siempre `reset`: aunque la ficha no tuviera PIN —una anterior a
+            // RF-ID-09—, quien pulsa este boton esta restableciendo, y el
+            // asiento tiene que decir lo que de verdad paso.
+            reset: true,
+            material: $material,
         ));
 
         if ($issued instanceof IssuedPin) {

@@ -9,6 +9,7 @@ use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
 use App\Modules\Workforce\Application\Pin\PinGenerator;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
+use App\Modules\Workforce\Application\Port\ParentRowLocks;
 use App\Modules\Workforce\Application\Port\PinHasher;
 use App\Modules\Workforce\Application\Port\PinMaterial;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
@@ -18,7 +19,6 @@ use App\Modules\Workforce\Domain\ValueObject\ImportedEmployee;
 use App\Modules\Workforce\Domain\ValueObject\ImportOutcome;
 use App\Modules\Workforce\Domain\ValueObject\ImportReport;
 use App\Modules\Workforce\Domain\ValueObject\ImportRow;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Escribe lo que {@see PlanEmployeeImport} decidio (**RF-GP-05**, fase de
@@ -56,6 +56,14 @@ use Illuminate\Database\ConnectionInterface;
  * el alta en nada: sirve para que el uso del plan se cuente **una vez por
  * importacion** y no una vez por fila (ADR-028, H-04 de la revision de la 3.8).
  *
+ * ## Una baja entre la comprobacion y la aplicacion tumba el lote (ADR-046 §5)
+ *
+ * La comprobacion ya rechaza las lineas de personas de baja
+ * (`employee_terminated`). Si la baja llega despues, la linea entra aqui como
+ * `update`, la modificacion lee la ficha con candado, la ve de baja y lanza
+ * `EmployeeAlreadyTerminated`: la transaccion entera revierte y la respuesta es
+ * `409`, sin ninguna fila escrita. Se aplica exactamente lo que se reviso.
+ *
  * ## Lo que esta importacion NO hace
  *
  * **No manda nada por correo** (regla dura 11, ADR-014). La credencial es una
@@ -71,25 +79,44 @@ final readonly class ApplyEmployeeImport
         private RegisterEmployeeHandler $register,
         private UpdateEmployeeHandler $update,
         private EmployeeImportDirectory $directory,
+        private ParentRowLocks $parentRows,
         private PinGenerator $pinGenerator,
         private PinHasher $hasher,
         private WorkforceEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private EmployeeWriteRetry $retry,
     ) {}
 
     public function handle(ImportReport $report): ImportReport
     {
-        $departments = $this->directory->departmentsByNormalisedName();
-
         // TODO EL bcrypt, ANTES DE ABRIR LA TRANSACCION. Es la correccion de la
         // revision de la 5.5 y no es una optimizacion: es lo que hace que este
         // endpoint pueda existir al tamaño que documenta.
         $material = $this->pinMaterialFor($report);
 
-        $applied = $this->connection->transaction(
-            fn (): array => $this->applyRows($report, $departments, $material),
-        );
+        $applied = $this->retry->run('employee.import', function () use ($report, $material): array {
+            // FILAS PADRE ANTES DEL PRIMER ASIENTO (ADR-046 §1.1 punto 2, §5).
+            // El primer alta o modificacion toma la cadena de `audit_log` y no la
+            // suelta hasta el commit; a partir de ahi, pedir una fila padre seria
+            // pedirla con la cadena en la mano y cerrar un ciclo con el renombrado
+            // de un departamento o del centro. Se toman aqui, de una vez, el centro
+            // y TODOS los departamentos del mapa con el que se resuelve cada
+            // linea, ordenados por `id`. Las fichas no se bloquean de antemano: la
+            // cadena ya serializa a todos sus escritores.
+            //
+            // El mapa se lee AQUI DENTRO y no antes del bcrypt de las altas (que
+            // con 500 son hasta ~80 s): leido fuera, un departamento renombrado
+            // en esa ventana se resolvia con su nombre viejo. Dentro, entre la
+            // lectura y el candado caben milisegundos, y un renombrado en ese
+            // hueco resuelve el mismo `id` que si hubiera llegado justo despues
+            // de esta importacion; a partir del `FOR KEY SHARE` ya no puede
+            // renombrarse hasta el commit (ADR-046 §5).
+            $this->parentRows->shareInstallationSite();
+            $departments = $this->directory->departmentsByNormalisedName();
+            $this->parentRows->shareDepartments(array_values($departments));
+
+            return $this->applyRows($report, $departments, $material);
+        });
 
         // El asiento del LOTE se publica DESPUES de confirmar, igual que el resto
         // de eventos de este modulo: un asiento de una carga que luego revierte

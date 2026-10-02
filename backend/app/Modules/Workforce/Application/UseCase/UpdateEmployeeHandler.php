@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
+use App\Modules\Workforce\Application\Port\ParentRowLocks;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
+use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Model\Employee;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Modificacion de la ficha de un empleado (RF-GP-01).
@@ -30,24 +32,44 @@ use Illuminate\Database\ConnectionInterface;
  * `Compliance` escribe el asiento, y si falla la modificacion no se confirma
  * (ADR-027). Dentro de una importacion la transaccion es anidada: un punto de
  * guardado dentro de la del lote.
+ *
+ * **Bajo el candado de la cadena y con la fila bloqueada** (ADR-046 §1). El
+ * orden es filas padre → cadena → ficha: el departamento nuevo, si lo hay, se
+ * toma con `FOR KEY SHARE` **antes** de la cadena —quien tiene la cadena no pide
+ * una fila padre, o cerraria un ciclo con el renombrado del departamento—; la
+ * ficha se lee con `findForUpdate()` ya dentro, y se escribe con `saveProfile()`,
+ * que solo toca las columnas de la ficha y nunca `terminated_at`. Una baja que
+ * llega a la vez se aplica antes o despues, nunca entrelazada: si fue antes,
+ * esta modificacion la ve y responde `409` en lugar de deshacerla.
  */
 final readonly class UpdateEmployeeHandler
 {
     public function __construct(
         private EmployeeRepository $employees,
+        private ParentRowLocks $parentRows,
         private WorkforceEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
+        private EmployeeWriteRetry $retry,
     ) {}
 
+    /**
+     * @throws EmployeeAlreadyTerminated si la ficha esta de baja, tambien si la baja llego mientras se esperaba
+     */
     public function handle(UpdateEmployeeCommand $command): ?Employee
     {
-        return $this->connection->transaction(fn (): ?Employee => $this->update($command));
+        return $this->retry->run('employee.update', function () use ($command): ?Employee {
+            if ($command->departmentGiven && $command->departmentId !== null) {
+                $this->parentRows->shareDepartments([$command->departmentId]);
+            }
+
+            return $this->serialized->withChainLock(fn (): ?Employee => $this->update($command));
+        });
     }
 
     private function update(UpdateEmployeeCommand $command): ?Employee
     {
-        $current = $this->employees->findByUuid($command->uuid);
+        $current = $this->employees->findForUpdate($command->uuid);
 
         if ($current === null) {
             return null;
@@ -66,7 +88,7 @@ final readonly class UpdateEmployeeHandler
 
         $updated = $this->applyStatus($updated, $command->status);
 
-        $this->employees->save($updated);
+        $this->employees->saveProfile($updated, statusChanged: $updated->status !== $current->status);
 
         $this->events->publish(new EmployeeProfileUpdated(
             employeeUuid: $updated->uuid,

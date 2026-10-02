@@ -236,7 +236,8 @@
       "action": "Offboard employee",
       "confirmAction": "Confirm the offboarding",
       "alreadyTerminated": "This person has been offboarded since {date}. Their history is still available.",
-      "dateHint": "Never earlier than the hire date. Record retention starts counting from it.",
+      "dateHint": "It cannot be later than today or earlier than the hiring date. The record retention period starts counting from it.",
+      "dateInFuture": "The termination date cannot be later than today ({today}). Record it on the last day, once the shift is over.",
       "reasonLabel": "Reason for leaving",
       "reasonHint": "It goes into the audit log. No health data and no value judgements.",
       "reasonPlaceholder": "Choose a reason",
@@ -249,8 +250,13 @@
         "other": "Another reason"
       },
       "consequenceCredential": "Their QR card is revoked and stops working at the kiosk.",
-      "consequenceScan": "From the termination date on, they cannot clock in.",
+      "consequenceScan": "Offboarding takes effect as soon as you confirm it, even if the termination date is today: the person can no longer clock in right away and it cannot be undone. Any days worked up to the termination date that are missing can be completed afterwards, by hand, from their time record.",
+      "consequenceOpenShift": "If they have an open shift, its clock-out can no longer be recorded: close it afterwards with a correction.",
+      "futureHire": "They have not started yet: the offboarding is recorded with their hiring date and leaves no worked day.",
       "consequenceHistory": "Nothing is deleted: their time records are kept and can still be consulted."
+    },
+    "conflict": {
+      "terminated": "This person has already been offboarded. The record has been reloaded with its current status: what you were trying to do was not applied."
     },
     "announce": {
       "results": "Workforce results: {count}.",
@@ -673,6 +679,8 @@
       "contextWorkDate": "Work day of {date}, in {zone} time.",
       "workDateLabel": "Work day",
       "workDateHint": "The day this entry belongs to. It does not have to match the date of the clock-in time: a break that ends after midnight still belongs to the day the shift started.",
+      "workDateRange": "This person has left: only work days between their hiring date ({from}) and their termination date ({to}) are accepted.",
+      "employeeLabel": "Person",
       "clockInLabel": "Clock-in time",
       "clockOutLabel": "Clock-out time",
       "zoneHint": "Type the time in the site's time zone ({zone}), not the one on your computer.",

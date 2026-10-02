@@ -12,6 +12,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatCivilDate, formatInstantWithZone, todayInZone } from '@kronoqr/web-kit/datetime'
+import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -269,7 +270,17 @@ async function confirmUpdate(): Promise<void> {
     confirmingEdit.value = false
     editing.value = false
   } catch (caught) {
-    saveError.value = caught
+    if (isTerminatedConflict(caught)) {
+      // Una ficha dada de baja no se modifica (ADR-046): la baja entro primero.
+      // Se cierra la edicion, se dice por que y se recarga para ver el estado
+      // real. Cualquier OTRO 409 (correo o documento duplicado, escritura
+      // concurrente) conserva lo escrito y se pinta con su detalle.
+      confirmingEdit.value = false
+      editing.value = false
+      await reportConflict()
+    } else {
+      saveError.value = caught
+    }
   } finally {
     saving.value = false
   }
@@ -311,7 +322,12 @@ async function confirmPinReset(): Promise<void> {
     await invalidate()
     announce(t('pin.announce.reset'))
   } catch (caught) {
-    pinError.value = caught
+    if (isTerminatedConflict(caught)) {
+      confirmingPinReset.value = false
+      await reportConflict()
+    } else {
+      pinError.value = caught
+    }
   } finally {
     pinBusy.value = false
   }
@@ -327,7 +343,12 @@ async function confirmPinDelivery(): Promise<void> {
     await invalidate()
     announce(t('pin.announce.delivered'))
   } catch (caught) {
-    pinError.value = caught
+    if (isTerminatedConflict(caught)) {
+      confirmingPinDelivery.value = false
+      await reportConflict()
+    } else {
+      pinError.value = caught
+    }
   } finally {
     pinBusy.value = false
   }
@@ -343,12 +364,80 @@ async function onPinDeliveredFromDialog(): Promise<void> {
   announce(t('pin.announce.delivered'))
 }
 
+// --- Conflicto (409) ---------------------------------------------------------
+
+/** `type` del 409 «la persona ya esta de baja» (ADR-046); el resto de 409 llevan `conflict`. */
+const EMPLOYEE_TERMINATED_TYPE = 'urn:kronoqr:problem:employee-terminated'
+
+function isTerminatedConflict(caught: unknown): boolean {
+  return (
+    isApiError(caught) && caught.status === 409 && caught.problem?.type === EMPLOYEE_TERMINATED_TYPE
+  )
+}
+
+/** Hay un aviso de «ya esta de baja» en pantalla; la ficha se recarga. */
+const conflictShown = ref(false)
+
+/** El aviso es un `role="alert"`: el lector de pantalla lo lee solo, sin `announce`. */
+async function reportConflict(): Promise<void> {
+  conflictShown.value = true
+  await invalidate()
+}
+
 // --- Baja --------------------------------------------------------------------
 
 const offboarding = ref(false)
 const offboardBusy = ref(false)
 const offboardError = ref<unknown>(null)
 const terminatedAt = ref('')
+/**
+ * Hoy en la zona del CENTRO (ADR-040), fijado al abrir el dialogo: ni la fecha
+ * del navegador ni la UTC. Es el `max` del campo y solo una ayuda: la barrera es
+ * el servidor (RN-14). Vacio mientras el centro no ha cargado: sin zona no se
+ * inventa una fecha, y el servidor sigue rechazando una posterior a hoy.
+ */
+const offboardToday = ref('')
+/** Errores del servidor para `terminated_at` (422), ya traducidos por el servidor. */
+const terminatedAtServerErrors = ref<readonly string[]>([])
+const terminatedAtInput = ref<HTMLInputElement | null>(null)
+
+/**
+ * Una persona cuya alta aun no ha llegado (RN-14) solo admite como cese la
+ * fecha de su alta: una baja sin efectos, porque nunca llego a empezar.
+ */
+const hireIsFuture = computed(
+  () =>
+    offboardToday.value !== '' &&
+    employee.value !== undefined &&
+    employee.value.hired_at > offboardToday.value,
+)
+
+/** La fecha mas tardia admitida: hoy, o la del alta si esta aun no ha llegado. */
+const offboardMax = computed(() =>
+  hireIsFuture.value ? (employee.value?.hired_at ?? '') : offboardToday.value,
+)
+
+const terminatedAtOutOfRange = computed(
+  () =>
+    offboardToday.value !== '' &&
+    terminatedAt.value !== '' &&
+    (hireIsFuture.value
+      ? terminatedAt.value !== employee.value?.hired_at
+      : terminatedAt.value > offboardToday.value),
+)
+
+const terminatedAtErrors = computed<readonly string[]>(() => [
+  ...(terminatedAtOutOfRange.value
+    ? [
+        hireIsFuture.value
+          ? t('employees.offboard.futureHire')
+          : t('employees.offboard.dateInFuture', {
+              today: formatCivilDate(offboardToday.value, locale.value),
+            }),
+      ]
+    : []),
+  ...terminatedAtServerErrors.value,
+])
 const offboardReasonKey = ref('')
 const offboardReasonText = ref('')
 
@@ -390,10 +479,13 @@ const offboardChanges = computed<Change[]>(() => [
 ])
 
 function startOffboarding(): void {
-  terminatedAt.value = todayInZone(timezone.value)
+  offboardToday.value = site.value === undefined ? '' : todayInZone(site.value.timezone)
+  terminatedAt.value = hireIsFuture.value ? (employee.value?.hired_at ?? '') : offboardToday.value
+  terminatedAtServerErrors.value = []
   offboardReasonKey.value = ''
   offboardReasonText.value = ''
   offboardError.value = null
+  conflictShown.value = false
   offboarding.value = true
 }
 
@@ -410,7 +502,18 @@ async function confirmOffboard(): Promise<void> {
     announce(t('employees.announce.offboarded'))
     offboarding.value = false
   } catch (caught) {
-    offboardError.value = caught
+    const dateErrors = isApiError(caught) ? (caught.fieldErrors['terminated_at'] ?? []) : []
+
+    if (isTerminatedConflict(caught)) {
+      offboarding.value = false
+      await reportConflict()
+    } else if (isApiError(caught) && caught.status === 422 && dateErrors.length > 0) {
+      // El mensaje ya viene traducido por el servidor y se pinta en su campo.
+      terminatedAtServerErrors.value = dateErrors
+      terminatedAtInput.value?.focus()
+    } else {
+      offboardError.value = caught
+    }
   } finally {
     offboardBusy.value = false
   }
@@ -436,6 +539,15 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
     <RouterLink :to="{ name: 'employees' }" class="text-kq-primary-strong underline">
       {{ t('employees.detail.backToList') }}
     </RouterLink>
+
+    <p
+      v-if="conflictShown"
+      role="alert"
+      data-test="employee-conflict"
+      class="mt-4 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
+    >
+      {{ t('employees.conflict.terminated') }}
+    </p>
 
     <LoadingPanel v-if="isPending" :label="t('employees.detail.loading')" class="mt-4" />
     <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
@@ -786,24 +898,34 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
       size="wide"
       :busy="offboardBusy"
       :error="offboardError"
-      :confirm-disabled="terminatedAt === '' || offboardReason === ''"
+      :confirm-disabled="terminatedAt === '' || terminatedAtOutOfRange || offboardReason === ''"
       @cancel="offboarding = false"
       @confirm="confirmOffboard"
     >
+      <p v-if="hireIsFuture" class="mb-4" data-test="offboard-future-hire">
+        {{ t('employees.offboard.futureHire') }}
+      </p>
+
       <div class="grid gap-4 sm:grid-cols-2">
         <FormField
           v-slot="field"
           :label="t('employees.fields.terminatedAt')"
           :hint="t('employees.offboard.dateHint')"
+          :errors="terminatedAtErrors"
           required
         >
           <input
             :id="field.id"
+            ref="terminatedAtInput"
             v-model="terminatedAt"
             type="date"
             required
+            :max="offboardMax === '' ? undefined : offboardMax"
+            :min="employee?.hired_at"
             :class="inputClass"
+            :aria-invalid="field.invalid ? 'true' : undefined"
             :aria-describedby="field.describedBy"
+            @input="terminatedAtServerErrors = []"
           />
         </FormField>
 
@@ -852,6 +974,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
       <ul class="mt-4 list-disc pl-5 text-kq-text-muted">
         <li>{{ t('employees.offboard.consequenceCredential') }}</li>
         <li>{{ t('employees.offboard.consequenceScan') }}</li>
+        <li>{{ t('employees.offboard.consequenceOpenShift') }}</li>
         <li>{{ t('employees.offboard.consequenceHistory') }}</li>
       </ul>
     </ConfirmDialog>

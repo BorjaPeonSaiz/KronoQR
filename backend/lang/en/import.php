@@ -52,6 +52,9 @@ return [
             .'row is ignored. If it really has to change, do it on the person record: it moves the point '
             .'from which their record retention runs.',
 
+        'employee_terminated' => 'This person has been offboarded. The import does not change their record '
+            .'or make them employed again; remove the line from the file.',
+
         'unknown_column' => 'Column ":column" is not used. If you expected it to be, check its name: the '
             .'names the system recognises are in the configuration guide, and you can add your own '
             .'without touching the program.',

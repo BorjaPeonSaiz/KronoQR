@@ -7,7 +7,7 @@
 | **Decide** | `seguridad-cumplimiento` con `arquitecto-dominio` |
 | **Afecta a** | Tareas 1.3, 2.2 y 2.10 · [ADR-027](ADR-027-audit-log-particionado.md) · **Regla dura 6** de `CLAUDE.md`, y la 5 |
 | **Requisitos** | RL-04, RL-11, RS-05, RS-07, RN-13, RF-PA-04 |
-| **Enmiendas** | Enmendada por [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): condición 1 |
+| **Enmiendas** | Enmendada por [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): condición 1 · Precisada por [ADR-046](ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md) (02-10-2026): orden único de candados alrededor de la cadena —filas padre → cadena → `employees` → `credentials`— |
 
 > Procede de la primera tabla del [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §4, que ya fijaba decisión, contexto y consecuencias. Esta redacción los desarrolla y los enlaza con los requisitos y con las reglas duras; no cambia la decisión.
 

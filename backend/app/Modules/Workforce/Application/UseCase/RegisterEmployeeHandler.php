@@ -17,7 +17,6 @@ use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 use DateTimeImmutable;
-use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
 use Random\RandomException;
 use RuntimeException;
@@ -59,7 +58,7 @@ final readonly class RegisterEmployeeHandler
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private IssueEmployeePinHandler $pins,
-        private ConnectionInterface $connection,
+        private EmployeeWriteRetry $retry,
     ) {}
 
     /**
@@ -79,17 +78,23 @@ final readonly class RegisterEmployeeHandler
 
         $siteId = $site->id;
 
-        return $this->connection->transaction(function () use ($command, $siteId): RegisteredEmployee {
+        // EL bcrypt, ANTES DE ABRIR LA TRANSACCION (ADR-046 §1.1 punto 5, A-3).
+        // La importacion masiva lo trae precalculado; el alta individual lo
+        // calcula aqui. Dentro correria con la cadena de `audit_log` tomada y
+        // congelaria los fichajes del hotel unos 160 ms.
+        $material = $command->pinMaterial ?? $this->pins->freshMaterial();
+
+        return $this->retry->run('employee.register', function () use ($command, $siteId, $material): RegisteredEmployee {
+            // La insercion va antes de la cadena (ADR-046 §1.2): toma
+            // `FOR KEY SHARE` sobre el centro y el departamento —filas padre— y
+            // la fila nueva no la ve nadie hasta el commit.
             $employee = $this->persistWithFreshCode($command, $siteId);
 
             $pin = $this->pins->handle(new IssueEmployeePinCommand(
                 employeeUuid: $employee->uuid,
                 siteId: $employee->siteId,
                 reset: false,
-                // Precalculado por la importacion masiva y nulo en el alta
-                // individual, que lo genera dentro: es lo que saca los 160 ms de
-                // bcrypt de la transaccion sin cambiar ninguna garantia.
-                material: $command->pinMaterial,
+                material: $material,
             ));
 
             if (! $pin instanceof IssuedPin) {

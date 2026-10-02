@@ -14,7 +14,9 @@ use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Application\Support\Corrections;
 use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
+use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Attendance\Domain\Model\WorkDay;
+use App\Modules\Attendance\Domain\Policy\ManualEntryEligibility;
 use App\Modules\Attendance\Domain\Policy\ManualEntryHorizon;
 use App\Modules\Attendance\Domain\ValueObject\Correction;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
@@ -22,6 +24,7 @@ use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -44,9 +47,12 @@ use Illuminate\Support\Str;
  * ADR-006, ADR-024). Lo unico que se resuelve aqui es **la zona** en que esa
  * fecha es civil, que es un dato del centro (`SiteCalendar`).
  *
- * **Se comprueba que el empleado existe y puede fichar** (RN-14). No es
- * autorizacion —eso es la policy— sino integridad: dar de alta horas a una
- * persona dada de baja produce un registro que nadie sabe defender. La respuesta
+ * **Se comprueba que el empleado existe y puede recibir el tramo** (RN-14,
+ * {@see ManualEntryEligibility}). No es autorizacion —eso es la policy— sino
+ * integridad: una persona en alta, o una **dada de baja** si la jornada esta
+ * entre su alta y su cese (2.2.0), que es como se completan los dias trabajados
+ * que no constaron. Una suspendida, o una jornada de una baja fuera de su
+ * periodo de empleo, produciria un registro que nadie sabe defender. La respuesta
  * aqui **si** puede decir por que, al contrario que en el quiosco: quien la
  * recibe es un responsable autenticado, no una pantalla en un pasillo (RS-03 y
  * la regla dura 17 hablan del escaneo).
@@ -67,11 +73,13 @@ final readonly class AddShiftEntryHandler
         private OperationalSettingsProvider $settings,
         private EventPublisher $events,
         private Clock $clock,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
      * @throws EmployeeCannotBeClocked el empleado no existe, no puede fichar o su centro no tiene zona
      * @throws ShiftMarkInFuture la jornada o alguna marca es posterior a la hora del servidor mas el margen
+     * @throws WorkDateOutsideEmployment la persona esta de baja y la jornada cae fuera de su periodo de empleo
      */
     public function handle(AddShiftEntryCommand $command): CorrectedShift
     {
@@ -79,7 +87,9 @@ final readonly class AddShiftEntryHandler
 
         $employee = $this->employees->find($command->employeeUuid);
 
-        if (! $employee instanceof EmployeeSnapshot || ! $employee->canClock()) {
+        // RN-14 (2.2.0): en alta, o de baja para jornadas de su periodo de
+        // empleo, que se comprueban en `add()` cuando ya hay `WorkDate`.
+        if (! $employee instanceof EmployeeSnapshot || ! ManualEntryEligibility::of($employee)->admitsEntries()) {
             throw EmployeeCannotBeClocked::withUuid($command->employeeUuid);
         }
 
@@ -111,6 +121,10 @@ final readonly class AddShiftEntryHandler
         $horizon->assertWorkDateAllowed($workDate);
         $horizon->assertTimesAllowed($times);
 
+        // RN-14: a una persona de baja solo se le completan jornadas entre su
+        // alta y su cese. Antes de tocar el agregado: un `422` no escribe nada.
+        ManualEntryEligibility::of($employee)->assertWorkDateAllowed($workDate);
+
         // La jornada puede no existir todavia: un alta retroactiva de un dia en
         // el que la persona no ficho nada la crea.
         $workDay = $this->workDays->findWorkDayFor($employee->employeeUuid, $workDate)
@@ -132,6 +146,42 @@ final readonly class AddShiftEntryHandler
         $this->ledger->record($correction);
         $this->events->publish(...$events);
 
+        $this->recheckAfterAudit($employee->employeeUuid, $workDate);
+
         return CorrectedShift::of($workDay, $entry, $correction);
+    }
+
+    /**
+     * **La elegibilidad se vuelve a mirar con la cadena de `audit_log` ya
+     * tomada** (RN-14, ADR-046; revision del bloque 17).
+     *
+     * La instantanea de arriba se leyo sin candado: una baja que confirmara
+     * entre esa lectura y este punto, con un cese anterior a la jornada, dejaria
+     * un tramo posterior al cese. No se toma la cadena al principio —el alta
+     * inserta en `shift_entries`, que comprueba su clave ajena sobre el centro,
+     * y eso seria pedir una fila padre con la cadena en la mano (ADR-046 §1.1,
+     * punto 2)—: se toma aqui, al final, como el fichaje. Con ella tomada, la
+     * baja o ya confirmo —y esta lectura la ve— o confirmara despues de este
+     * tramo, que entonces es anterior a ella en la cadena, igual que un fichaje
+     * recibido justo antes. Si ya no es elegible, la excepcion deshace la
+     * transaccion entera: ni tramo, ni correccion, ni asiento.
+     *
+     * `withChainLock()` es reentrante: si el asiento del tramo ya la tomo, no
+     * espera.
+     *
+     * @throws EmployeeCannotBeClocked
+     * @throws WorkDateOutsideEmployment
+     */
+    private function recheckAfterAudit(string $employeeUuid, WorkDate $workDate): void
+    {
+        $this->serialized->withChainLock(function () use ($employeeUuid, $workDate): void {
+            $current = $this->employees->find($employeeUuid);
+
+            if (! $current instanceof EmployeeSnapshot || ! ManualEntryEligibility::of($current)->admitsEntries()) {
+                throw EmployeeCannotBeClocked::withUuid($employeeUuid);
+            }
+
+            ManualEntryEligibility::of($current)->assertWorkDateAllowed($workDate);
+        });
     }
 }

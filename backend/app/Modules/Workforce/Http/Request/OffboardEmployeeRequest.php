@@ -16,6 +16,14 @@ use Illuminate\Support\Facades\Gate;
  * `terminated_at` es obligatoria y no se deduce de «hoy»: la baja se registra a
  * menudo dias despues de producirse, y es la fecha desde la que cuenta la
  * retencion de RL-02 y desde la que RN-14 deja de admitir fichajes.
+ *
+ * **Aqui NO se comprueba que no sea posterior a hoy** (RN-14, 2.2.0), y es a
+ * proposito. «Hoy» es la fecha civil **del centro** (`sites.timezone`), y una
+ * regla `before_or_equal:today` la evaluaria con la fecha UTC del servidor: a
+ * las 00:30 del dia 3 en Canarias rechazaria el 3, que ya es hoy. La barrera es
+ * el dominio (`Employee::offboard()`), con «hoy» resuelto por el caso de uso con
+ * el reloj y la zona del centro, y responde `422` en `terminated_at` igual que
+ * esta validacion.
  */
 final class OffboardEmployeeRequest extends FormRequest
 {

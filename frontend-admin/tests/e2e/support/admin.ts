@@ -3744,6 +3744,12 @@ export async function stubManagementApi(
 
           const patch = request.postDataJSON() as Record<string, unknown>
 
+          // ADR-046: una ficha dada de baja no se modifica.
+          if (employeesState.find((c) => c.uuid === EMPLOYEE_UUID)?.status === 'terminated') {
+            await problem(route, 409, 'urn:kronoqr:problem:employee-terminated', 'Conflicto')
+            return
+          }
+
           // `teleworking: null` no es un valor del contrato (RF-GP-01): 422.
           if ('teleworking' in patch && typeof patch['teleworking'] !== 'boolean') {
             await validationProblem(
@@ -3763,6 +3769,47 @@ export async function stubManagementApi(
           }
 
           Object.assign(target, patch)
+          await json(route, 200, target)
+          return
+        }
+        case `POST /api/v1/employees/${EMPLOYEE_UUID}/offboard`: {
+          // RN-14: la baja es efectiva al registrarla y su fecha de cese no es
+          // posterior a hoy, que es la fecha civil del CENTRO. El doble la
+          // calcula en la zona del centro, como el servidor (ADR-040).
+          const body = request.postDataJSON() as { terminated_at: string }
+          const today = new Intl.DateTimeFormat('en-CA', {
+            timeZone: SITE.timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date())
+          const target = employeesState.find((candidate) => candidate.uuid === EMPLOYEE_UUID)
+
+          if (target === undefined) {
+            await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Empleado no encontrado')
+            return
+          }
+
+          if (target.status === 'terminated') {
+            await problem(route, 409, 'urn:kronoqr:problem:employee-terminated', 'Conflicto')
+            return
+          }
+
+          if (body.terminated_at > today) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Peticion no valida',
+              {
+                terminated_at: [
+                  `La fecha de cese (${body.terminated_at}) es posterior a hoy (${today}). La baja es efectiva al registrarla; regístrala el último día, cuando haya terminado su turno.`,
+                ],
+              },
+            )
+            return
+          }
+
+          Object.assign(target, { status: 'terminated', terminated_at: body.terminated_at })
           await json(route, 200, target)
           return
         }
@@ -3852,6 +3899,41 @@ export async function stubManagementApi(
           }
 
           const payload = request.postDataJSON() as AddShiftEntryRequest
+
+          // RN-14: una persona de baja solo recibe jornadas entre su alta y su
+          // cese, ambas incluidas; una suspendida, ninguna (`422` en `employee_uuid`).
+          const person = employeesState.find(
+            (candidate) => candidate.uuid === payload.employee_uuid,
+          )
+
+          if (person?.status === 'suspended') {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Peticion no valida',
+              { employee_uuid: ['Esta persona está suspendida: no se le pueden registrar horas.'] },
+            )
+            return
+          }
+
+          if (
+            person?.status === 'terminated' &&
+            person.terminated_at !== null &&
+            (payload.work_date > person.terminated_at || payload.work_date < person.hired_at)
+          ) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Peticion no valida',
+              {
+                work_date: [
+                  `Esta persona está de baja desde el ${person.terminated_at}: solo se le pueden registrar horas de jornadas entre su alta (${person.hired_at}) y su cese (${person.terminated_at}).`,
+                ],
+              },
+            )
+            return
+          }
+
           const day = ensureWorkDay(workdaysState, payload.work_date)
           const newUuid = syntheticShiftEntryUuid()
           // Normalizado una vez: `AddShiftEntryRequest.clocked_out_at` es

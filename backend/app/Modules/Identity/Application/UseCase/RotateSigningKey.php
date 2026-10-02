@@ -15,8 +15,10 @@ use App\Modules\Identity\Domain\Event\SigningKeyRotated;
 use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use DateTimeImmutable;
-use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
 
 /**
@@ -55,6 +57,11 @@ use Illuminate\Support\Str;
  * asiento de una fallara, no se confirma ninguna (ADR-027): una rotacion a
  * medias es peor que una rotacion no empezada, porque el operador cree que ya
  * puede empezar a reimprimir y hay gente sin tarjeta nueva en la cola.
+ *
+ * La transaccion es la de `withChainLock()` (ADR-046 §1.2, A-1): la cadena se
+ * toma primero y la lista de tarjetas se calcula dentro, **sin las personas de
+ * baja**. El candado ya se retenia durante todo el bucle desde el primer
+ * asiento; ahora se toma unos milisegundos antes.
  */
 final readonly class RotateSigningKey
 {
@@ -64,8 +71,9 @@ final readonly class RotateSigningKey
         private EmployeeRegistry $employees,
         private IdentityEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
         private CredentialTelemetry $telemetry,
+        private EmploymentStatusLookup $employmentStatus,
     ) {}
 
     /**
@@ -88,25 +96,13 @@ final readonly class RotateSigningKey
 
         $this->guardNoRotationLeftOpen($keyring->keyIds());
 
-        $cards = $this->credentials->activeSignedWith($retiringKeyId);
-        $pending = $this->employeesWithPendingCredential($cards);
-
-        $toReissue = array_values(array_filter(
-            $cards,
-            static fn (Credential $card): bool => ! isset($pending[$card->employeeId]),
-        ));
-
-        $report = new SigningKeyRotationReport(
-            retiringKeyId: $retiringKeyId,
-            currentKeyId: $currentKeyId,
-            cardsOnRetiringKey: \count($cards),
-            reissued: \count($toReissue),
-            alreadyPending: \count($cards) - \count($toReissue),
-            dryRun: $command->dryRun,
-        );
+        // La simulacion y la etiqueta de la traza salen de una lectura sin
+        // candado: no escriben nada. La lista que se reemite de verdad se vuelve
+        // a calcular DENTRO de la cadena, mas abajo.
+        $preview = $this->plan($retiringKeyId, $currentKeyId, $command->dryRun);
 
         if ($command->dryRun) {
-            return $report;
+            return $preview['report'];
         }
 
         return $this->telemetry->measure(
@@ -114,26 +110,86 @@ final readonly class RotateSigningKey
             [
                 'retiring_key_id' => $retiringKeyId,
                 'current_key_id' => $currentKeyId,
-                'cards' => $report->cardsOnRetiringKey,
-                'reissued' => $report->reissued,
+                'cards' => $preview['report']->cardsOnRetiringKey,
+                'reissued' => $preview['report']->reissued,
             ],
-            fn (): SigningKeyRotationReport => $this->connection->transaction(
-                fn (): SigningKeyRotationReport => $this->reissue($toReissue, $report, $command),
+            // CADENA PRIMERO Y LA LISTA DENTRO (ADR-046 §1.2, A-1). Calculada
+            // fuera, una baja que confirmara entre medias quedaba con una
+            // reemision activa: la baja revoca lo que hay al confirmar, y esta
+            // insercion llegaba despues. Con la cadena tomada, la baja o ya
+            // confirmo —y la lista la omite— o espera y revoca tambien esta.
+            fn (): SigningKeyRotationReport => $this->serialized->withChainLock(
+                fn (): SigningKeyRotationReport => $this->reissue(
+                    $this->plan($retiringKeyId, $currentKeyId, false),
+                    $command,
+                ),
             ),
         );
     }
 
     /**
-     * @param  list<Credential>  $cards
+     * Que tarjetas se reemiten: las activas firmadas con la clave saliente, sin
+     * las de quien ya tiene una reemision pendiente y **sin las de las personas
+     * dadas de baja** (RN-14, A-1). Una baja no recibe tarjeta, tampoco por
+     * rotacion; su tarjeta vieja la revoco la propia baja.
+     *
+     * Las de baja no cuentan en el informe: no son tarjetas que alguien vaya a
+     * reimprimir.
+     *
+     * @return array{cards: list<Credential>, report: SigningKeyRotationReport}
      */
-    private function reissue(
-        array $cards,
-        SigningKeyRotationReport $report,
-        RotateSigningKeyCommand $command,
-    ): SigningKeyRotationReport {
+    private function plan(string $retiringKeyId, string $currentKeyId, bool $dryRun): array
+    {
+        $signed = $this->credentials->activeSignedWith($retiringKeyId);
+        $statuses = $this->employmentStatus->statusesOf(array_values(array_unique(array_map(
+            static fn (Credential $card): int => $card->employeeId,
+            $signed,
+        ))));
+
+        $cards = array_values(array_filter(
+            $signed,
+            static fn (Credential $card): bool => self::holderIsNotOffboarded($statuses[$card->employeeId] ?? null),
+        ));
+        $pending = $this->employeesWithPendingCredential($cards);
+
+        $toReissue = array_values(array_filter(
+            $cards,
+            static fn (Credential $card): bool => ! isset($pending[$card->employeeId]),
+        ));
+
+        return [
+            'cards' => $toReissue,
+            'report' => new SigningKeyRotationReport(
+                retiringKeyId: $retiringKeyId,
+                currentKeyId: $currentKeyId,
+                cardsOnRetiringKey: \count($cards),
+                reissued: \count($toReissue),
+                alreadyPending: \count($cards) - \count($toReissue),
+                dryRun: $dryRun,
+            ),
+        ];
+    }
+
+    /**
+     * Un estado desconocido —la ficha no existe, lo que la clave ajena
+     * impide— se trata como baja: ante la duda, no se reemite. Los estados se
+     * leen todos de una vez (`statusesOf()`), no uno por tarjeta: esto corre con
+     * la cadena de `audit_log` tomada.
+     */
+    private static function holderIsNotOffboarded(?EmploymentStatus $status): bool
+    {
+        return $status instanceof EmploymentStatus && $status !== EmploymentStatus::TERMINATED;
+    }
+
+    /**
+     * @param  array{cards: list<Credential>, report: SigningKeyRotationReport}  $plan
+     */
+    private function reissue(array $plan, RotateSigningKeyCommand $command): SigningKeyRotationReport
+    {
+        $report = $plan['report'];
         $now = $this->clock->now();
 
-        foreach ($cards as $card) {
+        foreach ($plan['cards'] as $card) {
             $this->reissueOne($card, $now, $command->actorUserId);
         }
 

@@ -6,7 +6,9 @@ namespace App\Modules\Workforce\Application\Port;
 
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\EmployeeNationalIdAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Employee;
 
 /**
@@ -16,6 +18,12 @@ use App\Modules\Workforce\Domain\Model\Employee;
  * Eloquent (ADR-025, restriccion 2): es lo que impide que la capa de aplicacion
  * acabe con un `->save()` a mano y con la persistencia repartida por todas
  * partes.
+ *
+ * **No hay un metodo que escriba la fila entera** (ADR-046 §3). Cada escritura
+ * elige sus columnas —{@see self::saveProfile()}, {@see self::saveTermination()}—
+ * y lleva el predicado `status <> 'terminated'`: con un `save()` generico, una
+ * modificacion de nombre que leyo la ficha antes de una baja reescribia el estado
+ * y deshacia la baja (R7-RV-01, R4-BE-01).
  *
  * **El documento de identidad entra por aqui y no vuelve a salir.** `add()` y
  * `updateNationalId()` lo reciben en claro y lo convierten en digest con
@@ -36,18 +44,61 @@ interface EmployeeRepository
      *
      * @throws \App\Modules\Workforce\Domain\Exception\EmployeeCodeAlreadyTaken
      * @throws EmployeeEmailAlreadyTaken
+     * @throws EmployeeNationalIdAlreadyTaken
      */
     public function add(Employee $employee, ?string $nationalId = null): void;
 
     /**
-     * Persiste los cambios de un empleado que ya existe, identificado por su
-     * UUID.
+     * Lectura para **leer**. Un caso de uso que va a escribir la ficha no la usa:
+     * usa {@see self::findForUpdate()} (ADR-046 §2).
+     */
+    public function findByUuid(string $uuid): ?Employee;
+
+    /**
+     * Lectura para **escribir** (ADR-046 §2): toma la fila con
+     * `SELECT … FOR NO KEY UPDATE`, solo sobre `employees` y sin `JOIN`, hasta el
+     * final de la transaccion de quien llama.
+     *
+     * Es el candado que toma un `UPDATE` que no cambia la clave: serializa a los
+     * escritores de la ficha entre si y **no choca** con el `FOR KEY SHARE` de
+     * las claves ajenas, asi que un fichaje, una ausencia o una tarjeta de esa
+     * persona no esperan. `FOR UPDATE` queda prohibido en esta tabla.
+     *
+     * **Se llama con la cadena de auditoria ya tomada**
+     * (`SerializedLedgerWrite::withChainLock()`): el orden unico es filas padre →
+     * cadena → `employees` → `credentials` (ADR-046 §1). Fuera de una
+     * transaccion el candado se soltaria al terminar la sentencia y no
+     * serializaria nada.
+     */
+    public function findForUpdate(string $uuid): ?Employee;
+
+    /**
+     * Escribe lo que cambia una modificacion de la ficha (ADR-046 §3):
+     * `first_name`, `last_name`, `email`, `department_id`, `locale` y
+     * `teleworking`, y `status` **solo** si `$statusChanged` (suspension o
+     * reincorporacion). **Nunca** `terminated_at`, `id`, `uuid` ni
+     * `employee_code` (A-5): los tres ultimos tienen indice unico completo, y
+     * un **cambio** de su valor tomaria `FOR UPDATE` (el mismo valor no: Postgres
+     * compara el viejo con el nuevo). No escribirlos impide que llegue a ocurrir.
+     *
+     * `WHERE uuid = ? AND status <> 'terminated'`: cero filas afectadas es
+     * {@see EmployeeAlreadyTerminated}. El candado es lo que impide la carrera;
+     * el predicado la convierte en un `409` honesto si algun camino se saltara la
+     * lectura bloqueante.
      *
      * @throws EmployeeEmailAlreadyTaken
+     * @throws EmployeeAlreadyTerminated
      */
-    public function save(Employee $employee): void;
+    public function saveProfile(Employee $employee, bool $statusChanged): void;
 
-    public function findByUuid(string $uuid): ?Employee;
+    /**
+     * Escribe la baja (ADR-046 §3): `status` y `terminated_at`, y nada mas. Con el
+     * mismo predicado `status <> 'terminated'` y la misma lectura de cero filas
+     * que {@see self::saveProfile()}: una baja no se repite ni pisa otra.
+     *
+     * @throws EmployeeAlreadyTerminated
+     */
+    public function saveTermination(Employee $employee): void;
 
     /**
      * Pagina de la plantilla que cumple los filtros, ordenada de forma estable.

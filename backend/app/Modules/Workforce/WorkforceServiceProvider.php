@@ -21,6 +21,7 @@ use App\Modules\Workforce\Application\Port\EmployeeImportSource;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
+use App\Modules\Workforce\Application\Port\ParentRowLocks;
 use App\Modules\Workforce\Application\Port\PinHasher;
 use App\Modules\Workforce\Application\Port\PinMetrics;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
@@ -51,6 +52,7 @@ use App\Modules\Workforce\Infrastructure\Adapter\LaravelWorkforceEventPublisher;
 use App\Modules\Workforce\Infrastructure\Adapter\SanctumPortalSessionIssuer;
 use App\Modules\Workforce\Infrastructure\Adapter\SimpleExcelImportSource;
 use App\Modules\Workforce\Infrastructure\Metrics\RedisPinMetrics;
+use App\Modules\Workforce\Infrastructure\Persistence\DatabaseParentRowLocks;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentAbsenceRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentDepartmentRepository;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentEmployeeImportDirectory;
@@ -86,6 +88,9 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(EmployeeRepository::class, EloquentEmployeeRepository::class);
         $this->app->bind(SiteRepository::class, EloquentSiteRepository::class);
         $this->app->bind(DepartmentRepository::class, EloquentDepartmentRepository::class);
+
+        // ADR-046 §1.1 punto 2: las filas padre de la ficha, antes de la cadena.
+        $this->app->bind(ParentRowLocks::class, DatabaseParentRowLocks::class);
 
         /*
          * Importacion masiva de plantilla (tarea 5.5, RF-GP-05).

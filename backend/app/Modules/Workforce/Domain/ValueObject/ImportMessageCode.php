@@ -70,6 +70,17 @@ enum ImportMessageCode: string
     case HIRED_AT_NOT_UPDATED = 'hired_at_not_updated';
 
     /**
+     * La linea es de una persona **dada de baja** (2.2.0, RN-14, ADR-046 §5).
+     *
+     * La importacion no modifica la ficha de una baja ni la da de alta otra vez:
+     * se rechaza la linea y el resto del fichero se aplica. Antes esa linea
+     * llegaba a la modificacion, el dominio la rechazaba y tumbaba el lote entero
+     * con un `409` que no nombraba ninguna linea. Se arregla quitando la linea
+     * del fichero.
+     */
+    case EMPLOYEE_TERMINATED = 'employee_terminated';
+
+    /**
      * Aviso: el fichero trae una columna que el importador no usa.
      *
      * No rechaza nada —una exportacion de nomina trae veinte columnas y a

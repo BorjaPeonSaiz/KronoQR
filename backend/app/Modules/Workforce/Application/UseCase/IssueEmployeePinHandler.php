@@ -6,10 +6,12 @@ namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\Pin\PinGenerator;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\PinHasher;
+use App\Modules\Workforce\Application\Port\PinMaterial;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
 use Random\RandomException;
@@ -17,11 +19,22 @@ use Random\RandomException;
 /**
  * Emite el PIN de una persona (RF-ID-09).
  *
- * **No abre transaccion, y es deliberado.** Es un paso de otra cosa: del alta
- * (RF-GP-01, tarea 1.6) y del restablecimiento. Los dos llamantes abren la suya
- * y este paso entra dentro, que es lo que hace que un empleado sin PIN no pueda
- * existir —si la emision falla, el alta no se confirma— y que un
- * restablecimiento a medias no deje a nadie sin poder entrar al portal.
+ * Es un paso de otra cosa: del alta (RF-GP-01, tarea 1.6) y del
+ * restablecimiento. En el alta corre dentro de la transaccion que la abre, que
+ * es lo que hace que un empleado sin PIN no pueda existir: si la emision falla,
+ * el alta no se confirma.
+ *
+ * **Bajo el candado de la cadena** (ADR-046 §1, tabla de §1.2). La escritura de
+ * la ficha y el asiento van dentro de `withChainLock()`, en el orden unico
+ * cadena → `employees`: hasta la 2.2.0 se escribia la fila y despues el asiento,
+ * al reves que la baja, y una baja y un restablecimiento simultaneos podian
+ * cerrar un ciclo. Dentro del alta el candado es reentrante: la transaccion es
+ * la suya.
+ *
+ * **El hash NO se calcula aqui** (A-3). bcrypt cuesta unos 160 ms en
+ * produccion y aqui dentro correria con la cadena tomada, congelando los
+ * fichajes del hotel. Llega ya calculado en el comando; quien llama lo obtiene
+ * con {@see self::freshMaterial()} antes de abrir nada.
  *
  * **Restablecer desbloquea.** El contador de intentos fallidos (RS-12) se limpia
  * aqui y no en el llamante: un PIN nuevo con el bloqueo del anterior todavia
@@ -44,45 +57,50 @@ final readonly class IssueEmployeePinHandler
         private PinAttempts $attempts,
         private WorkforceEventPublisher $events,
         private Clock $clock,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
-     * @return IssuedPin|null `null` si el empleado no existe: quien llama lo traduce a 404.
+     * Un PIN nuevo y su hash. **Se llama fuera de toda transaccion y antes de la
+     * cadena** (A-3): es el trabajo caro de la emision.
      *
      * @throws RandomException si el sistema no puede dar aleatoriedad
      */
+    public function freshMaterial(): PinMaterial
+    {
+        return $this->hasher->hash($this->generator->generate());
+    }
+
+    /**
+     * @return IssuedPin|null `null` si el empleado no existe: quien llama lo traduce a 404.
+     */
     public function handle(IssueEmployeePinCommand $command): ?IssuedPin
     {
-        // EL HASH SE CALCULA AQUI SALVO QUE YA VENGA HECHO. La importacion
-        // masiva lo trae precalculado porque bcrypt cuesta unos 160 ms y 500 de
-        // ellos dentro de una transaccion monopolizan el candado global de
-        // `audit_log` —y con el, los fichajes del hotel—. El resto de llamantes
-        // no pasan nada y se comportan como siempre.
-        $material = $command->material ?? $this->hasher->hash($this->generator->generate());
+        return $this->serialized->withChainLock(function () use ($command): ?IssuedPin {
+            $issuedAt = $this->clock->now();
 
-        $issuedAt = $this->clock->now();
+            if (! $this->pins->issue($command->employeeUuid, $command->material->hash, $issuedAt)) {
+                return null;
+            }
 
-        if (! $this->pins->issue($command->employeeUuid, $material->hash, $issuedAt)) {
-            return null;
-        }
+            $this->attempts->clear($command->employeeUuid);
 
-        $this->attempts->clear($command->employeeUuid);
+            // Dentro de la transaccion: el listener de auditoria es sincrono, asi
+            // que si el asiento falla la emision no se confirma (ADR-027, regla
+            // dura 6). Un PIN emitido sin traza es peor que uno no emitido,
+            // porque el segundo se repite y el primero no se descubre.
+            $this->events->publish(new EmployeePinIssued(
+                employeeUuid: $command->employeeUuid,
+                siteId: $command->siteId,
+                reset: $command->reset,
+                occurredAt: $issuedAt,
+            ));
 
-        // Dentro de la transaccion de quien llama: el listener de auditoria es
-        // sincrono, asi que si el asiento falla la emision no se confirma
-        // (ADR-027, regla dura 6). Un PIN emitido sin traza es peor que uno no
-        // emitido, porque el segundo se repite y el primero no se descubre.
-        $this->events->publish(new EmployeePinIssued(
-            employeeUuid: $command->employeeUuid,
-            siteId: $command->siteId,
-            reset: $command->reset,
-            occurredAt: $issuedAt,
-        ));
-
-        return new IssuedPin(
-            employeeUuid: $command->employeeUuid,
-            pin: $material->pin,
-            issuedAt: $issuedAt,
-        );
+            return new IssuedPin(
+                employeeUuid: $command->employeeUuid,
+                pin: $command->material->pin,
+                issuedAt: $issuedAt,
+            );
+        });
     }
 }

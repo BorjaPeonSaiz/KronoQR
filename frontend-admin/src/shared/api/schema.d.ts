@@ -1212,6 +1212,12 @@ export interface paths {
          *     sin PIN no puede fichar por respaldo (RF-AT-11) ni entrar al portal
          *     (RL-05), y ese estado no debe poder existir. El PIN viaja **una sola
          *     vez**, en esta respuesta: despues solo se restablece.
+         *
+         *     **Un correo o un documento que ya son de otra persona** dan `409`
+         *     (`urn:kronoqr:problem:conflict`), tambien si esa otra escritura
+         *     —una modificacion o una importacion— llega a la vez: el servidor
+         *     reintenta una vez la que PostgreSQL deshace y responde el `409` del
+         *     dato duplicado, nunca un `500` ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md) §1.3).
          */
         post: operations["createEmployee"];
         delete?: never;
@@ -1267,6 +1273,16 @@ export interface paths {
          *     con consecuencias —revoca la credencial y cierra el computo (RN-14)— y
          *     tiene su propio endpoint, `POST /employees/{uuid}/offboard`. Este
          *     `PATCH` solo alterna entre `active` y `suspended`.
+         *
+         *     **Una ficha dada de baja no se modifica** (`409` con `type`
+         *     `urn:kronoqr:problem:employee-terminated`, distinto del `409` generico
+         *     del correo duplicado). Una modificacion y
+         *     una baja de la misma persona que llegan a la vez se aplican una detras
+         *     de otra, nunca entrelazadas ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md)):
+         *     o la modificacion entra primero y la baja despues, o la baja entra
+         *     primero y la modificacion responde `409`. **Ninguna escritura deshace
+         *     una baja**, y el asiento `employee.updated` describe siempre el cambio
+         *     que de verdad se aplico.
          */
         patch: operations["updateEmployee"];
         trace?: never;
@@ -1305,6 +1321,50 @@ export interface paths {
          *     (RN-14)». Sus sesiones abiertas del portal se cierran. Un escaneo
          *     posterior de su tarjeta recibe el mismo rechazo generico que un codigo
          *     inexistente (regla dura 17).
+         *
+         *     **La baja es efectiva en el momento en que se registra**, sea cual sea
+         *     `terminated_at`, y **tambien el mismo dia del cese**: registrada a las
+         *     10:00 con `terminated_at` de hoy, la persona ya no ficha a las 15:00.
+         *     Por eso se registra cuando la persona ha terminado su ultimo turno. Si
+         *     tenia un turno abierto, su salida se rechaza y el turno queda abierto
+         *     para que se cierre con una correccion (RF-PA-04, RF-PR-01).
+         *
+         *     **`terminated_at` no puede ser posterior a hoy** (RN-14, decision del
+         *     propietario de 02-10-2026). «Hoy» es la **fecha civil del centro**
+         *     (`Site.timezone`, ADR-040) en el instante en que el servidor recibe la
+         *     peticion, no la fecha UTC ni la del navegador: a las 00:30 del dia 3
+         *     en el centro, el 3 ya se admite aunque en UTC aun sea el 2. Una fecha
+         *     posterior responde `422` con el detalle en `errors.terminated_at`, **no
+         *     cambia nada y no deja asiento**, como cualquier otro `422`. Tampoco
+         *     puede ser anterior a la fecha de alta (`422`, mismo campo). Hacia atras
+         *     no hay mas limite: una baja que se registra dias despues de producirse
+         *     es el caso normal, y los tramos que la persona fichara despues de esa
+         *     fecha se conservan tal cual (regla dura 5).
+         *
+         *     **Una contratacion que no llego a empezar** (fecha de alta posterior a
+         *     hoy, con el mismo «hoy» del centro de arriba y no con otro reloj) solo
+         *     admite como fecha de cese **la propia fecha de alta**: es una
+         *     baja sin efectos, porque la persona nunca llego a trabajar. Cualquier
+         *     otra fecha da `422` en `terminated_at` y el mensaje dice cual es la
+         *     admitida.
+         *
+         *     **Sin centro configurado no hay baja** (`409`, `urn:kronoqr:problem:conflict`):
+         *     «hoy» se resuelve con la zona del centro y nunca cae a UTC. Repetir la
+         *     baja de quien ya esta de baja es `409` con
+         *     `urn:kronoqr:problem:employee-terminated`.
+         *
+         *     **Tras la baja, los dias trabajados hasta el cese se completan a mano**
+         *     con `POST /api/v1/shift-entries` (RF-PA-04), siempre que la jornada este
+         *     entre la fecha de alta y la de cese.
+         *
+         *     **No hay baja programada en esta version**: un fin de contrato futuro
+         *     se registra el ultimo dia, al terminar el turno. Es de la 2.3.0.
+         *
+         *     **Bajas anteriores a la 2.2.0 con fecha de cese futura.** Una
+         *     instalacion que viene de la 2.1.0 puede tener fichas `terminated` con
+         *     `terminated_at` posterior a hoy. No se migran ni se reactivan: se
+         *     devuelven tal cual, y esa persona no ficha desde que se registro su
+         *     baja.
          */
         post: operations["offboardEmployee"];
         delete?: never;
@@ -1350,6 +1410,10 @@ export interface paths {
          *
          *     **No dice si el empleado existe.** Un `uuid` desconocido y uno fuera del
          *     alcance de quien pregunta responden lo mismo, `404` (regla dura 17).
+         *
+         *     **A una persona dada de baja no se le restablece el PIN** (RN-14,
+         *     ADR-046): `409` con `urn:kronoqr:problem:employee-terminated`, sin
+         *     cambiar el hash ni dejar asiento.
          */
         post: operations["resetEmployeePin"];
         delete?: never;
@@ -1388,7 +1452,11 @@ export interface paths {
          *     Registrar la entrega de un PIN que no se ha emitido es un `409`: no se
          *     puede entregar lo que no existe. Repetir la entrega tambien lo es, por
          *     lo mismo que la revocacion de una credencial —sobrescribirla cambiaria
-         *     el momento y el responsable que ya constan en `audit_log`—.
+         *     el momento y el responsable que ya constan en `audit_log`—. Los dos
+         *     llevan `urn:kronoqr:problem:conflict`.
+         *
+         *     **A una persona dada de baja no se le registra la entrega** (RN-14,
+         *     ADR-046): `409` con `urn:kronoqr:problem:employee-terminated`.
          */
         post: operations["recordEmployeePinDelivery"];
         delete?: never;
@@ -2249,6 +2317,16 @@ export interface paths {
          *     navegador). Un registro horario anota lo que ya ha ocurrido: rellenar la
          *     jornada teorica por adelantado o cerrar un turno con la salida
          *     «prevista» da `422` con el error colgado del campo.
+         *
+         *     **Quien puede recibir un tramo** (RN-14, 2.2.0). Una persona en alta,
+         *     como hasta ahora; y una persona **dada de baja** si `work_date` esta
+         *     entre su fecha de alta y su fecha de cese, ambas incluidas: es como se
+         *     completan los dias trabajados que no constaron —un olvido de los
+         *     ultimos dias, un fichaje de la cola offline que llego despues de la
+         *     baja—. Una jornada posterior al cese o anterior al alta de una persona
+         *     de baja da `422` en `work_date`. Una persona suspendida, o que no
+         *     existe, da `422` en `employee_uuid`, como hasta ahora. El escaneo del
+         *     quiosco no cambia: una persona de baja no ficha.
          */
         post: operations["addShiftEntry"];
         delete?: never;
@@ -6349,7 +6427,10 @@ export interface components {
             /**
              * Format: date
              * @description Fecha de cese. Obligatoria en cuanto el estado es `terminated`: sin
-             *     ella, la retencion de RL-02 no sabe cuando empieza a contar.
+             *     ella, la retencion de RL-02 no sabe cuando empieza a contar. Desde
+             *     la 2.2.0 nunca es posterior a la fecha en que se registro la baja
+             *     (RN-14); una ficha dada de baja con la 2.1.0 puede traer una fecha
+             *     futura, y se devuelve tal cual.
              */
             terminated_at: string | null;
             /** @example es */
@@ -6533,8 +6614,13 @@ export interface components {
         OffboardEmployeeRequest: {
             /**
              * Format: date
-             * @description Fecha de cese, **nunca anterior a la de alta**. Es el dato desde el
-             *     que cuenta la retencion de RL-02.
+             * @description Fecha de cese, **nunca anterior a la de alta ni posterior a hoy**
+             *     (RN-14). «Hoy» es la fecha civil del centro (`Site.timezone`) en el
+             *     momento en que el servidor recibe la peticion; una fecha futura
+             *     responde `422` en este campo. Hoy mismo se admite. Si la fecha de
+             *     alta es posterior a ese mismo hoy, la unica admitida es la propia fecha de
+             *     alta. Es el dato desde el que cuenta la retencion de RL-02. La baja
+             *     es efectiva al registrarla, no en esta fecha.
              */
             terminated_at: string;
             /**
@@ -11097,6 +11183,15 @@ export interface components {
              *     fichero entero. `hired_at_not_updated` es un aviso de fila y no la
              *     impide. Los demas rechazan la fila que los lleva.
              *
+             *     **`employee_terminated`** (2.2.0): la fila corresponde a una persona
+             *     dada de baja. La importacion no modifica su ficha ni la da de alta
+             *     otra vez (RN-14); el resto del fichero se aplica. `apply` vuelve a
+             *     comprobar el fichero, asi que una baja registrada entre la peticion
+             *     de comprobar y la de aplicar sale aqui, con `200`. Solo si la baja
+             *     se confirma durante la propia peticion `apply` la aplicacion entera
+             *     responde `409` sin escribir nada; al repetirla, la fila sale con
+             *     este codigo ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md)).
+             *
              *     **`email_taken` se emite en dos situaciones**, y las dos protegen lo
              *     mismo —que el registro horario de alguien no acabe a nombre de otro—:
              *     cuando la fila trae documento y su correo pertenece **a otra persona**
@@ -11105,7 +11200,7 @@ export interface components {
              *     comprobacion, antes de escribir nada.
              * @enum {string}
              */
-            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "unknown_column";
+            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "unknown_column";
             /** @enum {string} */
             severity: "error" | "warning";
             /** @description Columna del fichero a la que se refiere, si es a una. */
@@ -11305,13 +11400,38 @@ export interface components {
         };
         /**
          * @description La operacion choca con el estado actual del recurso: un correo o un
-         *     nombre ya usados, o una baja sobre alguien que ya estaba de baja.
+         *     nombre ya usados. Una persona ya dada de baja tiene su propio `type`
+         *     (`EmployeeConflict`).
          *
          *     Es `409` y no `422` porque la peticion es valida en si misma; lo que no
          *     encaja es el estado del sistema. La distincion importa al cliente: ante
          *     un `409` no sirve corregir el formulario, hay que releer el recurso.
          */
         Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description La operacion sobre la ficha de una persona choca con su estado. **`type`
+         *     distingue las causas**, porque a quien las recibe le cambia la accion
+         *     siguiente:
+         *
+         *     - `urn:kronoqr:problem:employee-terminated` — **la persona ya esta dada
+         *       de baja** (RN-14, ADR-046). Su ficha no se modifica, no se da de baja
+         *       otra vez, y su PIN no se restablece ni se entrega. No hay nada que
+         *       corregir en el formulario: se recarga la ficha. Tambien sale cuando
+         *       la baja de otra persona del panel confirma mientras esta peticion
+         *       esperaba: la peticion la ve y no la deshace.
+         *     - `urn:kronoqr:problem:conflict` — cualquier otro choque del endpoint:
+         *       un correo que ya es de otra persona, un PIN sin emitir o ya
+         *       entregado, una instalacion sin centro. Se corrige lo indicado en
+         *       `detail` sin perder lo escrito.
+         */
+        EmployeeConflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -13065,7 +13185,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["EmployeeConflict"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -13103,8 +13223,21 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
+            409: components["responses"]["EmployeeConflict"];
+            /**
+             * @description La peticion no cumple el contrato. Ademas de los errores de forma,
+             *     `errors.terminated_at` señala una fecha de cese **posterior a hoy en
+             *     la zona del centro** o **anterior a la fecha de alta**. No se ha
+             *     cambiado nada: ni el estado, ni las credenciales, ni `audit_log`.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -13140,6 +13273,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["EmployeeConflict"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -13172,7 +13306,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["EmployeeConflict"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -14099,9 +14233,12 @@ export interface operations {
              *     **`type` distingue las dos causas:**
              *
              *     - `urn:kronoqr:problem:validation-failed` — un campo falta, no vale,
-             *       referencia algo que no existe, o la jornada o alguna de las dos
+             *       referencia algo que no existe, la jornada o alguna de las dos
              *       marcas es **futura** (F1): mas alla del momento del servidor mas el
-             *       margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`.
+             *       margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`, o la persona esta de
+             *       baja y `work_date` cae **fuera de su periodo de empleo** —despues
+             *       de la fecha de cese o antes de la de alta— (RN-14), en
+             *       `errors.work_date`.
              *     - `urn:kronoqr:problem:correction-would-change-work-date` — la hora de
              *       entrada llevaria la jornada a **otro dia civil** (RN-05, ADR-035).
              *       Es `422` y no `409` porque no hay nada que releer: mover horas de un
@@ -16200,6 +16337,18 @@ export interface operations {
             /**
              * @description `confirm_checksum` no coincide con el fichero enviado: **no es el que
              *     se valido**. Se vuelve a validar y se aplica con el resumen nuevo.
+             *
+             *     Tambien, y sin escribir nada, si una persona del fichero se da de
+             *     baja **durante** esta misma peticion de aplicar, entre su
+             *     comprobacion y su escritura (ADR-046). Al repetirla, esa fila sale
+             *     rechazada con `employee_terminated`. Una baja registrada antes,
+             *     entre la peticion de validar y esta, no da `409`: esta peticion
+             *     vuelve a comprobar el fichero y la fila sale rechazada en el
+             *     informe.
+             *
+             *     **`type` distingue las dos causas**: el fichero distinto es
+             *     `urn:kronoqr:problem:conflict`; la baja durante la aplicacion es
+             *     `urn:kronoqr:problem:employee-terminated`.
              */
             409: {
                 headers: {

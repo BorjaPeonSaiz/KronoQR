@@ -54,6 +54,7 @@ final readonly class CorrectAbsenceHandler
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private ConnectionInterface $connection,
+        private AbsenceEmploymentRecheck $recheck,
     ) {}
 
     /**
@@ -131,6 +132,11 @@ final readonly class CorrectAbsenceHandler
                 reason: $command->reason,
                 occurredAt: $this->clock->now(),
             ));
+
+            // RN-14, ADR-046: la ficha de arriba se leyo antes de la cadena; con
+            // ella ya tomada por el asiento, una baja que confirmara entre medias
+            // se ve ahora, y la correccion se deshace entera.
+            $this->recheck->assertStillWithinEmployment($corrected);
 
             return $stored;
         });

@@ -236,7 +236,8 @@
       "action": "Dar de baja",
       "confirmAction": "Confirmar la baja",
       "alreadyTerminated": "Esta persona está de baja desde el {date}. Su historial sigue disponible.",
-      "dateHint": "Nunca anterior a la fecha de alta. Desde ella empieza a contar la retención del registro.",
+      "dateHint": "No puede ser posterior a hoy ni anterior a la fecha de alta. Desde ella empieza a contar la retención del registro.",
+      "dateInFuture": "La fecha de cese no puede ser posterior a hoy ({today}). Regístrala el último día, cuando haya terminado su turno.",
       "reasonLabel": "Motivo del cese",
       "reasonHint": "Queda en el registro de auditoría. Sin datos de salud ni juicios de valor.",
       "reasonPlaceholder": "Elige un motivo",
@@ -249,8 +250,13 @@
         "other": "Otro motivo"
       },
       "consequenceCredential": "Su tarjeta QR queda revocada y deja de servir en el quiosco.",
-      "consequenceScan": "A partir de la fecha de cese no puede fichar.",
+      "consequenceScan": "La baja es efectiva al confirmarla, también si la fecha de cese es hoy: deja de poder fichar en el acto y no tiene vuelta atrás. Los días trabajados hasta el cese que falten se pueden completar después, a mano, desde su registro horario.",
+      "consequenceOpenShift": "Si tiene un turno abierto, su salida ya no se podrá fichar: ciérralo después con una corrección.",
+      "futureHire": "Aún no ha empezado: la baja se registra con su fecha de alta y no deja ningún día trabajado.",
       "consequenceHistory": "No se borra nada: su registro horario se conserva y se puede seguir consultando."
+    },
+    "conflict": {
+      "terminated": "Esta persona ya está dada de baja. Se ha recargado la ficha con su estado actual: lo que intentabas hacer no se ha aplicado."
     },
     "announce": {
       "results": "Resultados de la plantilla: {count}.",
@@ -673,6 +679,8 @@
       "contextWorkDate": "Jornada del {date}, en horario de {zone}.",
       "workDateLabel": "Jornada",
       "workDateHint": "El día al que pertenece este tramo. No tiene por qué coincidir con la fecha de la hora de entrada: la vuelta de una pausa de madrugada sigue perteneciendo al día en que empezó el turno.",
+      "workDateRange": "Esta persona está de baja: solo se admiten jornadas entre su alta ({from}) y su cese ({to}).",
+      "employeeLabel": "Persona",
       "clockInLabel": "Hora de entrada",
       "clockOutLabel": "Hora de salida",
       "zoneHint": "Escribe la hora en la zona horaria del centro ({zone}), no en la de tu ordenador.",

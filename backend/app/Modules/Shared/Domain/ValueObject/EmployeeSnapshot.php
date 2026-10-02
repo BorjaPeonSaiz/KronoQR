@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Domain\ValueObject;
 
+use DateTimeImmutable;
 use InvalidArgumentException;
 
 /**
@@ -35,6 +36,14 @@ final readonly class EmployeeSnapshot
         public int $siteId,
         /** Departamento, si lo tiene. Es a quien se asigna la incidencia que genere este fichaje. */
         public ?int $departmentId = null,
+        /**
+         * Fecha civil de alta (`employees.hired_at`, `Y-m-d`). La usa el alta
+         * manual de tramos para saber que jornadas se le pueden anotar a una
+         * persona de baja (RN-14, 2.2.0). El fichaje no la mira.
+         */
+        public ?string $hiredOn = null,
+        /** Fecha civil de cese (`employees.terminated_at`, `Y-m-d`), o `null` si no esta de baja. */
+        public ?string $terminatedOn = null,
     ) {
         if ($employeeUuid === '') {
             throw new InvalidArgumentException('EmployeeSnapshot necesita el UUID del empleado.');
@@ -54,6 +63,35 @@ final readonly class EmployeeSnapshot
 
         if ($departmentId !== null && $departmentId < 1) {
             throw new InvalidArgumentException('El departamento de EmployeeSnapshot, si existe, es un identificador valido.');
+        }
+
+        self::assertCivilDate('hiredOn', $hiredOn);
+        self::assertCivilDate('terminatedOn', $terminatedOn);
+
+        // `Y-m-d` ordena igual como cadena que como fecha. Es la misma regla que
+        // `employees_chk_terminated_after_hired`: una instantanea que la rompiera
+        // describiria una ficha que la base no admite.
+        if ($hiredOn !== null && $terminatedOn !== null && $terminatedOn < $hiredOn) {
+            throw new InvalidArgumentException('La fecha de cese de EmployeeSnapshot no puede ser anterior a la de alta.');
+        }
+    }
+
+    /**
+     * Una fecha civil `Y-m-d` que existe en el calendario, o nada.
+     *
+     * La vuelta a texto es lo que caza `2026-02-31`, que `createFromFormat`
+     * desborda a marzo sin quejarse.
+     */
+    private static function assertCivilDate(string $field, ?string $value): void
+    {
+        if ($value === null) {
+            return;
+        }
+
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+
+        if (! $date instanceof DateTimeImmutable || $date->format('Y-m-d') !== $value) {
+            throw new InvalidArgumentException('EmployeeSnapshot::'.$field.' tiene que ser una fecha civil Y-m-d valida.');
         }
     }
 

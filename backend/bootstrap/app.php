@@ -18,6 +18,7 @@ use App\Modules\Attendance\Domain\Exception\InvalidCorrectionReason;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftAlreadyOpen;
 use App\Modules\Attendance\Domain\Exception\ShiftMarkInFuture;
+use App\Modules\Attendance\Domain\Exception\WorkDateOutsideEmployment;
 use App\Modules\Compliance\Application\Exception\IncidentNotFound;
 use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
@@ -476,7 +477,14 @@ return Application::configure(basePath: dirname(__DIR__))
             $exception->getMessage(),
         ));
 
-        $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
+        /*
+         * La persona ya esta de baja (RN-14, ADR-046): `409` con `type` propio,
+         * `urn:kronoqr:problem:employee-terminated`. La modificacion de la ficha
+         * devuelve tambien el `409` generico del correo duplicado, y el panel
+         * tiene que distinguirlos: uno se corrige en el formulario y el otro
+         * obliga a recargar la ficha.
+         */
+        $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::employeeTerminated($exception->getMessage()));
 
         $exceptions->render(static fn (WorkforceConflict $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 
@@ -518,8 +526,19 @@ return Application::configure(basePath: dirname(__DIR__))
             'timezone' => ['La zona horaria no existe. Usa un identificador IANA como Europe/Madrid.'],
         ]));
 
+        /*
+         * La fecha de cese no es admisible (RF-GP-03, RN-14): anterior al alta,
+         * posterior a hoy en el centro (2.2.0), o distinta del alta cuando el
+         * alta aun no ha llegado. `422` colgado de `terminated_at`, en el idioma
+         * negociado y con las fechas concretas, y sin nada escrito: el dominio
+         * lo decide antes de tocar la ficha.
+         */
         $exceptions->render(static fn (InvalidEmploymentPeriod $exception): mixed => ProblemDetails::validationFailed([
-            'terminated_at' => ['La fecha de cese no puede ser anterior a la de alta.'],
+            'terminated_at' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
         ]));
 
         /*
@@ -864,6 +883,20 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->render(static fn (EmployeeCannotBeClocked $exception): mixed => ProblemDetails::validationFailed([
             'employee_uuid' => ['Esa persona no existe o no esta en alta: no se le pueden registrar horas.'],
+        ]));
+
+        /*
+         * RN-14 (2.2.0): a una persona de baja solo se le completan a mano las
+         * jornadas entre su alta y su cese. Fuera de ese periodo, `422` en
+         * `work_date` con las dos fechas, en el idioma negociado. Solo lo lanza
+         * el alta manual; el escaneo no pasa por aqui.
+         */
+        $exceptions->render(static fn (WorkDateOutsideEmployment $exception): mixed => ProblemDetails::validationFailed([
+            'work_date' => [ProblemDetails::translated(
+                $exception->translationKey,
+                $exception->parameters,
+                $exception->getMessage(),
+            )],
         ]));
 
         /*

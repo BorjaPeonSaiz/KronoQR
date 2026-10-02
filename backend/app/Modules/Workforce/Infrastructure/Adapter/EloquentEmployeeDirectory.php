@@ -30,7 +30,7 @@ final readonly class EloquentEmployeeDirectory implements EmployeeDirectory
     public function find(string $employeeUuid): ?EmployeeSnapshot
     {
         $row = Employee::query()
-            ->select(['uuid', 'employee_code', 'first_name', 'last_name', 'status', 'site_id', 'department_id'])
+            ->select(['uuid', 'employee_code', 'first_name', 'last_name', 'status', 'site_id', 'department_id', 'hired_at', 'terminated_at'])
             ->where('uuid', $employeeUuid)
             ->first();
 
@@ -47,6 +47,10 @@ final readonly class EloquentEmployeeDirectory implements EmployeeDirectory
             status: EmploymentStatus::from($row->status),
             siteId: $row->site_id,
             departmentId: $row->department_id,
+            // Fechas civiles tal cual estan en la columna `date`: el alta manual
+            // de tramos acota con ellas las jornadas de una baja (RN-14, 2.2.0).
+            hiredOn: $row->hired_at->format('Y-m-d'),
+            terminatedOn: $row->terminated_at?->format('Y-m-d'),
         );
     }
 

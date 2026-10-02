@@ -22,4 +22,23 @@ final readonly class EloquentEmploymentStatusLookup implements EmploymentStatusL
 
         return \is_string($status) ? EmploymentStatus::tryFrom($status) : null;
     }
+
+    public function statusesOf(array $employeeIds): array
+    {
+        if ($employeeIds === []) {
+            return [];
+        }
+
+        $statuses = [];
+
+        foreach ($this->connection->table('employees')->whereIn('id', $employeeIds)->get(['id', 'status']) as $row) {
+            $status = \is_string($row->status ?? null) ? EmploymentStatus::tryFrom($row->status) : null;
+
+            if ($status instanceof EmploymentStatus) {
+                $statuses[(int) $row->id] = $status;
+            }
+        }
+
+        return $statuses;
+    }
 }

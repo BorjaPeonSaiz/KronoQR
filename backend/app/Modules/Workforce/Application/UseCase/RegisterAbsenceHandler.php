@@ -60,6 +60,7 @@ final readonly class RegisterAbsenceHandler
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private ConnectionInterface $connection,
+        private AbsenceEmploymentRecheck $recheck,
     ) {}
 
     /**
@@ -108,6 +109,11 @@ final readonly class RegisterAbsenceHandler
                 hasNote: $stored->hasNote(),
                 occurredAt: $this->clock->now(),
             ));
+
+            // RN-14, ADR-046: la ficha de arriba se leyo sin candado; con la
+            // cadena ya tomada por el asiento, una baja que confirmara entre
+            // medias se ve ahora y deshace el registro entero.
+            $this->recheck->assertStillWithinEmployment($absence);
 
             return $stored;
         });

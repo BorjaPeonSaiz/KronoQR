@@ -962,6 +962,33 @@ conviene saber:
   la siguiente actualización, y los informes rescatados siguen en
   `BACKUP_PATH/reports/retention`.
 
+**Al actualizar desde la 2.1.0: bajas con fecha de cese futura.** La 2.1.0
+admitía registrar una baja con una fecha de cese posterior al día en que se
+registraba, y la aplicaba en el acto: desde ese momento la persona no podía
+fichar y su tarjeta quedaba revocada. Desde la 2.2.0 una fecha de cese posterior
+a hoy se rechaza (la baja se registra cuando la persona ha terminado su último
+turno: [`guia-rrhh.md`](guia-rrhh.md) §8, «…una persona causa baja»). Las que
+ya se registraron así **no se migran ni se reactivan**: siguen de baja, con su
+fecha. Lo que tiene que saber RRHH:
+
+- **Los informes por periodo las cuentan de alta hasta su fecha de cese**, así
+  que los días entre el registro de la baja y la fecha de cese salen como días
+  de alta **sin actividad**. No es un fallo del informe: es que esa persona no
+  pudo fichar esos días.
+- **Si trabajó esos días, se pueden completar ahora a mano**: desde la 2.2.0
+  se admite añadir un tramo a una persona de baja en cualquier jornada entre
+  su fecha de alta y su fecha de cese, las dos incluidas, con su motivo y su
+  asiento, como cualquier tramo manual. Nunca un día que todavía no ha llegado.
+  Cómo se hace: guía de RRHH, «Después de la baja: completar los días que
+  falten».
+
+Cómo localizarlas, sin tocar la base de datos: en el panel, **Plantilla**, filtro
+**«Situación laboral»** en **«De baja»**, y abre la ficha de cada persona:
+**«Fecha de cese»** está en sus datos. Son las que tienen una fecha de cese
+posterior al día en que actualizaste a la 2.2.0. Pásale la lista a RRHH: que
+complete los días que esas personas sí trabajaron y que sepa leer los días sin
+actividad de esos informes. En el sistema no hay que hacer nada más.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.

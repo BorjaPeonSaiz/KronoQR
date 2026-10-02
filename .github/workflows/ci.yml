@@ -2187,9 +2187,17 @@ jobs:
         # `docker compose cp` de verdad sobre el `scheduler` PARADO de la version
         # anterior. Medido en docker-in-docker (2.1.0 -> 2.2.0): instalar,
         # sembrar y actualizar, 2 min 20 s; la comprobacion, 1 s.
+        #
+        # El servicio del que salen depende de la version anterior. En la 2.1.0
+        # cada contenedor tenia su propio `storage/app` y el informe sembrado
+        # en `scheduler` solo se ve ahi. Desde la 2.2.0 (ADR-045) `storage/app`
+        # es un volumen compartido: `update.sh` recorre `app`, `horizon` y
+        # `scheduler`, lo encuentra en el primero y ya no lo repite. Exigir
+        # «de scheduler» puso en rojo esta etapa en cuanto la version anterior
+        # fue una con el volumen; lo que importa es que se rescate, de donde sea.
         run: |
           set -euo pipefail
-          grep -q 'Informes de retencion de scheduler' paquete-nuevo/salida-u1.log
+          grep -Eq 'Informes de retencion de (app|horizon|scheduler)' paquete-nuevo/salida-u1.log
           bash .github/scripts/retention-rescue-e2e.sh check paquete-nuevo
 
       - name: "U1 · Ningun secreto en la salida, el informe ni el detalle"

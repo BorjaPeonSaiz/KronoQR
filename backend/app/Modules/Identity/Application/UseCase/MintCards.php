@@ -19,9 +19,9 @@ use App\Modules\Identity\Domain\ValueObject\CredentialSecret;
 use App\Modules\Identity\Domain\ValueObject\PrintableCard;
 use App\Modules\Identity\Domain\ValueObject\QrSigningKey;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 use DateTimeImmutable;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * **El acto de acuñar el QR**: firma los tokens, dibuja el PDF y marca las
@@ -48,7 +48,8 @@ use Illuminate\Database\ConnectionInterface;
  * 4. **Renderizar el QR y el PDF SIN transaccion abierta.** Browsershot arranca un
  *    Chromium: es un proceso externo que puede tardar segundos y que no debe
  *    sostener bloqueos de fila sobre `credentials` mientras tanto.
- * 5. **Abrir la transaccion**, llamar a `Credential::printedWith()`, persistir con
+ * 5. **Abrir la transaccion con la cadena de `audit_log` ya tomada**
+ *    (`withChainLock()`, ADR-046), llamar a `Credential::printedWith()`, persistir con
  *    un `UPDATE ... WHERE printed_at IS NULL` cuyo recuento de filas se comprueba
  *    —si es 0, alguien imprimio en paralelo: `rollback` y `409`—, publicar
  *    `CredentialPrinted` y confirmar.
@@ -80,7 +81,7 @@ final readonly class MintCards
         private CardRenderer $renderer,
         private IdentityEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -133,7 +134,12 @@ final readonly class MintCards
         $now = $this->clock->now();
 
         // ---- Paso 5: la transaccion --------------------------------------------
-        $views = $this->connection->transaction(
+        // Con la cadena de `audit_log` tomada ANTES que las filas de
+        // `credentials` (ADR-046 §1.2): es el orden de la baja, que revoca
+        // tarjetas despues de tomar la cadena. Los secretos y el PDF quedan
+        // fuera, arriba. Una tarjeta revocada entre medias no se marca impresa:
+        // `markPrinted` devuelve `false` y el lote entero revierte con `409`.
+        $views = $this->serialized->withChainLock(
             fn (): array => $this->persist($minted, $key, $now, $batch, $actorUserId),
         );
 

@@ -974,6 +974,34 @@ volume is created on its own at the first start. What is worth knowing:
 - **If you roll back to 2.1.0**, the volume stays intact and unused until the
   next update, and the rescued reports stay in `BACKUP_PATH/reports/retention`.
 
+**When updating from 2.1.0: offboardings with a future termination date.**
+2.1.0 accepted recording an offboarding with a termination date later than the
+day it was recorded, and applied it on the spot: from that moment the person
+could not clock and their card was revoked. From 2.2.0 a termination date later
+than today is rejected (offboarding is recorded once the person has finished
+their last shift: [`hr-guide.md`](hr-guide.md) §8, "…a person leaves"). Those
+already recorded that way **are neither migrated nor reactivated**: they stay
+offboarded, with their date. What HR needs to know:
+
+- **Period reports count them as employed up to their termination date**, so
+  the days between the offboarding being recorded and the termination date come
+  out as employed days **with no activity**. It is not a report fault: that
+  person could not clock on those days.
+- **If they worked on those days, they can now be filled in by hand**: from
+  2.2.0 an entry can be added to an offboarded person on any working day
+  between their start date and their termination date, both included, with its
+  reason and its audit entry, like any manual entry. Never a day that has not
+  arrived yet. How it is done: HR guide, "After offboarding: filling in the
+  missing days".
+
+How to find them, without touching the database: in the panel, **Workforce**,
+filter **"Employment status"** set to **"Former staff"**, and open each
+person's record: **"Termination date"** is in their details. They are the ones
+with a termination date later than the day you updated to 2.2.0. Hand the list
+to HR: they should fill in the days those people did work and know how to read
+the days with no activity in those reports. Nothing else needs doing in the
+system.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which

@@ -28,7 +28,8 @@ final readonly class RegisterEmployeeCommand
          * `audit_log` tomado 80 segundos —bloqueando cada fichaje del hotel— y se
          * pasaban del `max_execution_time` de 60 s.
          *
-         * El alta individual no lo pasa y se comporta como siempre.
+         * El alta individual no lo pasa: el caso de uso lo calcula tambien
+         * antes de abrir su transaccion (ADR-046, A-3).
          */
         public ?PinMaterial $pinMaterial = null,
         /**
