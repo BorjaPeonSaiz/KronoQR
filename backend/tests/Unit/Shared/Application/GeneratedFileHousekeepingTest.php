@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\GeneratedFileMetrics;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\FileTimestamps;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileClass;
@@ -71,6 +72,26 @@ final class InMemoryGeneratedFileStore implements GeneratedFileStore
     {
         return $this->discard;
     }
+
+    public function rootExists(GeneratedFileArea $area): bool
+    {
+        return $this->rootAvailable;
+    }
+
+    public bool $rootAvailable = true;
+}
+
+/** Ejecuta el trabajo sin base de datos y cuenta cuantas veces se tomo el «candado». */
+final class PassThroughLedgerWrite implements SerializedLedgerWrite
+{
+    public int $locks = 0;
+
+    public function withChainLock(callable $work): mixed
+    {
+        $this->locks++;
+
+        return $work();
+    }
 }
 
 final class RecordingGeneratedFileMetricsDouble implements GeneratedFileMetrics
@@ -91,6 +112,11 @@ final class RecordingGeneratedFileMetricsDouble implements GeneratedFileMetrics
     public function missing(GeneratedFileClass $class): void
     {
         $this->calls[] = 'missing:'.$class->value;
+    }
+
+    public function removeFailed(GeneratedFileClass $class): void
+    {
+        $this->calls[] = 'remove_failed:'.$class->value;
     }
 
     public function overdue(GeneratedFileClass $class, int $count): void
@@ -124,7 +150,7 @@ function ahoraDeLimpieza(): DateTimeImmutable
 it('borra solo lo que ninguna fila protege y supera su edad minima', function (): void {
     $almacen = new InMemoryGeneratedFileStore(['protegido' => 99_999, 'viejo' => 7_201, 'reciente' => 60, 'justo' => 7_200]);
     $metricas = new RecordingGeneratedFileMetricsDouble;
-    $limpieza = new GeneratedFileHousekeeping($almacen, $metricas, new RecordingHousekeepingLogger);
+    $limpieza = new GeneratedFileHousekeeping($almacen, $metricas, new RecordingHousekeepingLogger, new PassThroughLedgerWrite);
 
     $borrados = $limpieza->sweepOrphans(
         areaDePrueba(),
@@ -148,12 +174,12 @@ it('cuenta los rechazos y no los cuenta como borrados', function (): void {
         ],
     );
     $metricas = new RecordingGeneratedFileMetricsDouble;
-    $limpieza = new GeneratedFileHousekeeping($almacen, $metricas, new RecordingHousekeepingLogger);
+    $limpieza = new GeneratedFileHousekeeping($almacen, $metricas, new RecordingHousekeepingLogger, new PassThroughLedgerWrite);
 
     $borrados = $limpieza->sweepOrphans(areaDePrueba(), static fn (): int => 1, ahoraDeLimpieza());
 
     expect($borrados)->toBe(0)
-        ->and($metricas->calls)->toBe(['refused:report_export']);
+        ->and($metricas->calls)->toBe(['refused:report_export', 'remove_failed:report_export']);
 })->group('RF-IN-06');
 
 it('el log de los huerfanos lleva la clase y la cifra, nunca un uuid ni una ruta', function (): void {
@@ -162,6 +188,7 @@ it('el log de los huerfanos lleva la clase y la cifra, nunca un uuid ni una ruta
         new InMemoryGeneratedFileStore([GENERATED_FILE_HOUSEKEEPING_UUID => 99_999]),
         new RecordingGeneratedFileMetricsDouble,
         $logger,
+        new PassThroughLedgerWrite,
     );
 
     $limpieza->sweepOrphans(areaDePrueba(), static fn (): int => 1, ahoraDeLimpieza());
@@ -179,7 +206,7 @@ it('el log de los huerfanos lleva la clase y la cifra, nunca un uuid ni una ruta
 
 it('sin nada que borrar no escribe ningun log', function (): void {
     $logger = new RecordingHousekeepingLogger;
-    $limpieza = new GeneratedFileHousekeeping(new InMemoryGeneratedFileStore([]), new RecordingGeneratedFileMetricsDouble, $logger);
+    $limpieza = new GeneratedFileHousekeeping(new InMemoryGeneratedFileStore([]), new RecordingGeneratedFileMetricsDouble, $logger, new PassThroughLedgerWrite);
 
     expect($limpieza->sweepOrphans(areaDePrueba(), static fn (): int => 1, ahoraDeLimpieza()))->toBe(0)
         ->and($logger->records)->toBe([]);
@@ -191,6 +218,7 @@ it('un fichero de fila que cae fuera de su raiz sube la metrica de rechazos', fu
         new InMemoryGeneratedFileStore([], [], RecordedFileLocation::OutsideArea, GeneratedFileRemoval::Refused),
         $metricas,
         new RecordingHousekeepingLogger,
+        new PassThroughLedgerWrite,
     );
 
     expect($limpieza->locateRecorded(areaDePrueba(), '/etc/passwd'))->toBe(RecordedFileLocation::OutsideArea)
@@ -204,6 +232,7 @@ it('un fichero de fila presente o ausente no sube ninguna metrica', function ():
         new InMemoryGeneratedFileStore([], [], RecordedFileLocation::Missing, GeneratedFileRemoval::Absent),
         $metricas,
         new RecordingHousekeepingLogger,
+        new PassThroughLedgerWrite,
     );
 
     expect($limpieza->locateRecorded(areaDePrueba(), '/srv/raiz/x/y'))->toBe(RecordedFileLocation::Missing)
@@ -214,7 +243,7 @@ it('un fichero de fila presente o ausente no sube ninguna metrica', function ():
 it('el fichero desaparecido sube su metrica y avisa sin uuid', function (): void {
     $metricas = new RecordingGeneratedFileMetricsDouble;
     $logger = new RecordingHousekeepingLogger;
-    $limpieza = new GeneratedFileHousekeeping(new InMemoryGeneratedFileStore([]), $metricas, $logger);
+    $limpieza = new GeneratedFileHousekeeping(new InMemoryGeneratedFileStore([]), $metricas, $logger, new PassThroughLedgerWrite);
 
     $limpieza->fileMissing(GeneratedFileClass::DataExport);
 
@@ -225,7 +254,7 @@ it('el fichero desaparecido sube su metrica y avisa sin uuid', function (): void
 it('cuenta y publica los ficheros que superan el plazo de aviso, sin tocarlos', function (): void {
     $almacen = new InMemoryGeneratedFileStore(['a' => 31 * 86400, 'b' => 30 * 86400, 'c' => 86400]);
     $metricas = new RecordingGeneratedFileMetricsDouble;
-    $limpieza = new GeneratedFileHousekeeping($almacen, $metricas, new RecordingHousekeepingLogger);
+    $limpieza = new GeneratedFileHousekeeping($almacen, $metricas, new RecordingHousekeepingLogger, new PassThroughLedgerWrite);
 
     $vencidos = $limpieza->reportOverdue(areaDePrueba(GeneratedFileClass::LegalExportConsole), 30 * 86400, ahoraDeLimpieza());
 
@@ -234,3 +263,60 @@ it('cuenta y publica los ficheros que superan el plazo de aviso, sin tocarlos', 
         ->and($metricas->calls)->toBe(['overdue:legal_export_console=1'])
         ->and($limpieza->countOlderThan(areaDePrueba(), 86399, ahoraDeLimpieza()))->toBe(3);
 })->group('RF-IN-05', 'RL-19');
+
+it('un borrado que el sistema de ficheros niega sube su metrica y no cuenta como borrado', function (): void {
+    $almacen = new InMemoryGeneratedFileStore(['sin-permiso' => 99_999], ['sin-permiso' => GeneratedFileRemoval::Failed]);
+    $metricas = new RecordingGeneratedFileMetricsDouble;
+    $limpieza = new GeneratedFileHousekeeping($almacen, $metricas, new RecordingHousekeepingLogger, new PassThroughLedgerWrite);
+
+    expect($limpieza->sweepOrphans(areaDePrueba(), static fn (): int => 1, ahoraDeLimpieza()))->toBe(0)
+        ->and($metricas->calls)->toBe(['remove_failed:report_export']);
+})->group('RF-IN-06', 'RL-11');
+
+it('el fichero de una fila que no se puede borrar sube su metrica', function (): void {
+    $metricas = new RecordingGeneratedFileMetricsDouble;
+    $limpieza = new GeneratedFileHousekeeping(
+        new InMemoryGeneratedFileStore([], [], RecordedFileLocation::Present, GeneratedFileRemoval::Failed),
+        $metricas,
+        new RecordingHousekeepingLogger,
+        new PassThroughLedgerWrite,
+    );
+
+    expect($limpieza->discardRecorded(areaDePrueba(), '/srv/raiz/x/y'))->toBe(GeneratedFileRemoval::Failed)
+        ->and($metricas->calls)->toBe(['remove_failed:report_export']);
+})->group('RF-PD-14', 'RL-11');
+
+it('sin raiz no hay conciliacion: lo dice en un aviso, sin ruta', function (): void {
+    $almacen = new InMemoryGeneratedFileStore([]);
+    $logger = new RecordingHousekeepingLogger;
+    $limpieza = new GeneratedFileHousekeeping($almacen, new RecordingGeneratedFileMetricsDouble, $logger, new PassThroughLedgerWrite);
+
+    expect($limpieza->isAvailable(areaDePrueba()))->toBeTrue()
+        ->and($logger->records)->toBe([]);
+
+    $almacen->rootAvailable = false;
+
+    expect($limpieza->isAvailable(areaDePrueba()))->toBeFalse()
+        ->and($logger->records)->toBe([['warning', 'generated_files.root_unavailable', ['class' => 'report_export']]]);
+})->group('RF-PD-14', 'RL-15');
+
+it('marca y publica el fichero desaparecido solo si fue esta llamada quien marco la fila', function (): void {
+    $metricas = new RecordingGeneratedFileMetricsDouble;
+    $candado = new PassThroughLedgerWrite;
+    $limpieza = new GeneratedFileHousekeeping(new InMemoryGeneratedFileStore([]), $metricas, new RecordingHousekeepingLogger, $candado);
+    $publicados = 0;
+    $publicar = static function () use (&$publicados): void {
+        $publicados++;
+    };
+
+    $primera = $limpieza->purgeMissing(GeneratedFileClass::DataExport, static fn (): bool => true, $publicar);
+    // La segunda pasada encuentra la fila ya marcada: el UPDATE condicional no cambia nada.
+    $segunda = $limpieza->purgeMissing(GeneratedFileClass::DataExport, static fn (): bool => false, $publicar);
+
+    expect($primera)->toBeTrue()
+        ->and($segunda)->toBeFalse()
+        ->and($publicados)->toBe(1)
+        ->and($metricas->calls)->toBe(['missing:data_export'])
+        // Las dos bajo el candado de la cadena, que es lo que las serializa.
+        ->and($candado->locks)->toBe(2);
+})->group('RF-PD-14', 'RL-15');

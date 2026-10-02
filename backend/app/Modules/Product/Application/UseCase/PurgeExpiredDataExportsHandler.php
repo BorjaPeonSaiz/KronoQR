@@ -15,6 +15,7 @@ use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileClass;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileEntry;
+use App\Modules\Shared\Domain\ValueObject\GeneratedFileRemoval;
 use App\Modules\Shared\Domain\ValueObject\RecordedFileLocation;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -72,7 +73,6 @@ final readonly class PurgeExpiredDataExportsHandler
         private DataExportRepository $exports,
         private GeneratedFileHousekeeping $files,
         private ProductEventPublisher $events,
-        private SerializedLedgerWrite $serialized,
         private Clock $clock,
         /** `GeneratedFileAreas::dataExportArchives()`: los ZIP. */
         private GeneratedFileArea $archives,
@@ -103,22 +103,42 @@ final readonly class PurgeExpiredDataExportsHandler
          */
         $released = $this->exports->failStale($now->modify('-'.$staleAfter.' seconds'), $now);
 
-        $purged = 0;
-
-        foreach ($this->exports->expired($now) as $export) {
-            if ($export->filePath !== null) {
-                $this->files->discardRecorded($this->archives, $export->filePath);
-            }
-
-            $this->exports->markPurged($export->id, $now);
-            $purged++;
+        // Sin la raiz de los ZIP no se concilia nada: una raiz ausente —un
+        // `scheduler` sin el volumen— no dice nada de las filas (ADR-045).
+        if (! $this->files->isAvailable($this->archives)) {
+            return new DataExportMaintenance(0, $released);
         }
+
+        $purged = $this->purgeExpired($now);
 
         $missing = $this->reconcileRows($now);
 
         $orphans = $this->sweepOrphans($now, $staleAfter);
 
         return new DataExportMaintenance($purged, $released, $orphans, $missing);
+    }
+
+    /**
+     * La purga por caducidad. Un fichero que el sistema de ficheros no deja
+     * borrar NO marca la fila: sigue `completed` con su ruta, la siguiente
+     * pasada lo reintenta y `generated_files_remove_failed_total` lo dice
+     * (ADR-045: si un fichero sobrevive a su plazo, se sabe).
+     */
+    private function purgeExpired(DateTimeImmutable $now): int
+    {
+        $purged = 0;
+
+        foreach ($this->exports->expired($now) as $export) {
+            $outcome = $export->filePath === null
+                ? GeneratedFileRemoval::Absent
+                : $this->files->discardRecorded($this->archives, $export->filePath);
+
+            if ($outcome !== GeneratedFileRemoval::Failed && $this->exports->markPurged($export->id, $now)) {
+                $purged++;
+            }
+        }
+
+        return $purged;
     }
 
     /**
@@ -145,26 +165,31 @@ final readonly class PurgeExpiredDataExportsHandler
                 continue;
             }
 
-            $this->recordMissing($export, $now);
-            $missing++;
+            if ($this->recordMissing($export, $now)) {
+                $missing++;
+            }
         }
 
         return $missing;
     }
 
-    private function recordMissing(DataExport $export, DateTimeImmutable $now): void
+    /**
+     * Marca la fila y sella `data_export.file_missing` **solo si esta pasada la
+     * marco**: la regla comun de `GeneratedFileHousekeeping::purgeMissing()`
+     * —candado de la cadena primero, `UPDATE` condicional despues—. Otra pasada
+     * que leyo la misma fila no deja un segundo asiento ni pisa `purged_at`.
+     */
+    private function recordMissing(DataExport $export, DateTimeImmutable $now): bool
     {
-        $this->serialized->withChainLock(function () use ($export, $now): void {
-            $this->exports->markPurged($export->id, $now);
-
-            $this->events->publish(new DataExportFileMissing(
+        return $this->files->purgeMissing(
+            GeneratedFileClass::DataExport,
+            fn (): bool => $this->exports->markPurged($export->id, $now),
+            fn () => $this->events->publish(new DataExportFileMissing(
                 uuid: $export->uuid,
                 expiresAt: $export->expiresAt?->setTimezone(new \DateTimeZone('UTC'))->format(DateTimeInterface::RFC3339) ?? '',
                 detectedAt: $now,
-            ));
-        });
-
-        $this->files->fileMissing(GeneratedFileClass::DataExport);
+            )),
+        );
     }
 
     /**

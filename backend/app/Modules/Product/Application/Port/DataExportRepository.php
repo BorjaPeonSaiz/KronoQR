@@ -104,8 +104,15 @@ interface DataExportRepository
      */
     public function failStale(DateTimeImmutable $staleBefore, DateTimeImmutable $now): int;
 
-    /** Marca la purga y limpia la ruta. La fila **no** se borra (regla dura 5). */
-    public function markPurged(int $id, DateTimeImmutable $purgedAt): void;
+    /**
+     * Marca la purga y limpia la ruta. La fila **no** se borra (regla dura 5).
+     *
+     * **Condicional**: solo una fila `completed` que aun no tiene `purged_at`.
+     * Devuelve si la ha marcado esta llamada. Dos pasadas de purga que leyeron
+     * la misma fila (el planificador y una ejecucion a mano) no pisan
+     * `purged_at` ni sellan dos veces `data_export.file_missing`.
+     */
+    public function markPurged(int $id, DateTimeImmutable $purgedAt): bool;
 
     /** Suma una descarga y anota la fecha. */
     public function recordDownload(int $id, DateTimeImmutable $downloadedAt): void;

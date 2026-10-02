@@ -24,6 +24,9 @@ final class RecordingGeneratedFileMetrics implements GeneratedFileMetrics
     /** @var list<string> */
     public array $missing = [];
 
+    /** @var list<string> */
+    public array $removeFailed = [];
+
     /** @var array<string, int> */
     public array $overdue = [];
 
@@ -40,6 +43,11 @@ final class RecordingGeneratedFileMetrics implements GeneratedFileMetrics
     public function missing(GeneratedFileClass $class): void
     {
         $this->missing[] = $class->value;
+    }
+
+    public function removeFailed(GeneratedFileClass $class): void
+    {
+        $this->removeFailed[] = $class->value;
     }
 
     public function overdue(GeneratedFileClass $class, int $count): void

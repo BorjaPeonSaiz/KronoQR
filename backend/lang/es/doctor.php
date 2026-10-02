@@ -333,6 +333,14 @@ return [
                     .'conservarian durante meses ficheros que caducan en dias.',
                 'warning_outside_volume' => 'Estos directorios estan fuera de storage/app: :names. Fuera del volumen '
                     .'compartido, lo que escribe un contenedor no lo ve otro.',
+                'failure_outside_volume' => 'Estos directorios estan fuera de storage/app: :names. En produccion, '
+                    .'fuera del volumen compartido, la exportacion pedida desde el panel no se puede descargar y las '
+                    .'purgas no ven los ficheros con datos personales.',
+            ],
+            'stray_entries' => [
+                'ok' => 'No hay ficheros generados abandonados en storage/app fuera de los directorios configurados.',
+                'warning' => 'Hay ficheros generados en :names, dentro de storage/app pero fuera de los directorios '
+                    .'configurados. Ninguna purga los mira: suelen ser restos de una raiz que se cambio.',
             ],
             'legal_exports_console' => [
                 'ok' => 'Ninguna exportacion legal de consola lleva mas de :days dias en el servidor.',
@@ -705,6 +713,13 @@ return [
                     .'se guardan con las copias. Despues recrea los contenedores.',
                 'warning_outside_volume' => "Quita esas variables del .env para volver a su valor de serie, o\n"
                     .'apuntalas a un subdirectorio de /var/www/html/storage/app. Despues recrea los contenedores.',
+                'failure_outside_volume' => "Quita esas variables del .env para volver a su valor de serie, o\n"
+                    .'apuntalas a un subdirectorio de /var/www/html/storage/app. Despues recrea los contenedores.',
+            ],
+            'stray_entries' => [
+                'warning' => "Si cambiaste PRODUCT_DATA_EXPORT_PATH o REPORTING_EXPORT_PATH, vacia la carpeta\n"
+                    ."anterior: contiene datos personales que ya nadie va a borrar. Para verla:\n"
+                    .'  docker compose exec app ls -la /var/www/html/storage/app',
             ],
             'legal_exports_console' => [
                 'warning' => "Si ya entregaste esas exportaciones a la Inspeccion, borralas. Desde el directorio de\n"

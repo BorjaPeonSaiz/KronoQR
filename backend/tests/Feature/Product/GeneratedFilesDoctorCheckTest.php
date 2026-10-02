@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Application\Port\DoctorTranslator;
 use App\Modules\Product\Application\UseCase\RunDoctorHandler;
 use App\Modules\Product\Domain\ValueObject\DoctorCheck;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
@@ -9,6 +10,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\GeneratedFilesProbe;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use Tests\Support\Shared\GeneratedFilesSandbox;
 use Tests\Support\Time\FrozenTime;
@@ -63,6 +65,7 @@ function sondaDeFicheros(
         consoleWarningDays: 30,
         files: app(GeneratedFileHousekeeping::class),
         clock: app(Clock::class),
+        store: app(GeneratedFileStore::class),
     );
 }
 
@@ -125,6 +128,35 @@ it('falla si una raiz de clase se pisa con BACKUP_PATH', function (): void {
     expect($hallazgo->status)->toBe(DoctorStatus::Failure)
         ->and($hallazgo->variant)->toBe('backup_path');
 })->group('RF-PD-13');
+
+it('en produccion falla con una raiz fuera de storage/app: es R3-PL-01 otra vez', function (): void {
+    $storageApp = GeneratedFilesSandbox::directory('storage-app');
+
+    $hallazgo = hallazgoDeFicheros(sondaDeFicheros($storageApp, [
+        'PRODUCT_DATA_EXPORT_PATH' => GeneratedFilesSandbox::directory('srv-exports'),
+    ], entorno: 'production'), 'files.class_roots');
+
+    expect($hallazgo->status)->toBe(DoctorStatus::Failure)
+        ->and($hallazgo->variant)->toBe('outside_volume')
+        ->and($hallazgo->params)->toBe(['names' => 'PRODUCT_DATA_EXPORT_PATH']);
+})->group('RF-PD-13');
+
+it('avisa de ficheros generados en storage/app fuera de las raices configuradas', function (): void {
+    // Lo que deja cambiar PRODUCT_DATA_EXPORT_PATH: la raiz antigua con ZIP que
+    // ninguna purga mira ya.
+    $storageApp = GeneratedFilesSandbox::directory('storage-app');
+    GeneratedFilesSandbox::file($storageApp.'/exports-antiguo/kronoqr-export-2.1.0-20260101T000000Z.zip');
+    GeneratedFilesSandbox::file($storageApp.'/notas/leeme.txt');
+    GeneratedFilesSandbox::file($storageApp.'/exports/kronoqr-export-2.2.0-20261002T000000Z.zip');
+
+    $hallazgo = hallazgoDeFicheros(sondaDeFicheros($storageApp), 'files.stray_entries');
+    $limpio = hallazgoDeFicheros(sondaDeFicheros(GeneratedFilesSandbox::directory('storage-limpio')), 'files.stray_entries');
+
+    expect($hallazgo->status)->toBe(DoctorStatus::Warning)
+        // Solo la carpeta con ficheros de una clase; ni la configurada ni la ajena.
+        ->and($hallazgo->params)->toBe(['names' => 'exports-antiguo'])
+        ->and($limpio->status)->toBe(DoctorStatus::Ok);
+})->group('RF-PD-13', 'RL-11');
 
 it('avisa de una raiz fuera de storage/app, que ningun otro contenedor ve', function (): void {
     $storageApp = GeneratedFilesSandbox::directory('storage-app');
@@ -217,7 +249,8 @@ it('cada hallazgo de la familia files tiene texto y que hacer en los dos idiomas
         ['retention_reports', 'warning', 'missing'], ['retention_reports', 'warning', 'inside_storage'],
         ['class_roots', 'ok', null], ['class_roots', 'failure', 'overlap'],
         ['class_roots', 'failure', 'storage_root'], ['class_roots', 'failure', 'backup_path'],
-        ['class_roots', 'warning', 'outside_volume'],
+        ['class_roots', 'warning', 'outside_volume'], ['class_roots', 'failure', 'outside_volume'],
+        ['stray_entries', 'ok', null], ['stray_entries', 'warning', null],
         ['legal_exports_console', 'ok', null], ['legal_exports_console', 'warning', null],
     ];
 
@@ -234,11 +267,70 @@ it('cada hallazgo de la familia files tiene texto y que hacer en los dos idiomas
     }
 })->group('RF-PD-13');
 
-it('product:doctor incluye las cuatro comprobaciones de ficheros', function (): void {
+it('product:doctor incluye las cinco comprobaciones de ficheros', function (): void {
     $ids = array_map(
         static fn (DoctorCheck $check): string => $check->id,
         app(RunDoctorHandler::class)->handle('es')->checks,
     );
 
-    expect($ids)->toContain('files.storage_volume', 'files.retention_reports', 'files.class_roots', 'files.legal_exports_console');
+    expect($ids)->toContain('files.storage_volume', 'files.retention_reports', 'files.class_roots', 'files.stray_entries', 'files.legal_exports_console');
+})->group('RF-PD-13');
+
+/**
+ * Los marcadores `:algo` que el traductor no sustituyo en un texto ya renderizado.
+ *
+ * @return list<string>
+ */
+function marcadoresSinSustituir(string $texto): array
+{
+    preg_match_all('/(?<![A-Za-z0-9\/]):[a-z][a-z_]*/', $texto, $marcadores);
+
+    return $marcadores[0];
+}
+
+it('ningun texto de product:doctor deja un marcador :algo sin sustituir', function (): void {
+    // El fallo que encontro la instalacion real: `ok()` recibe primero los
+    // detalles y despues los parametros, y `files.retention_reports` imprimia
+    // «se escriben en :path». La prueba de «cada hallazgo lleva su texto» solo
+    // miraba que la clave existiera, no que el texto saliera completo.
+    foreach (['es', 'en'] as $idioma) {
+        foreach (app(RunDoctorHandler::class)->handle($idioma)->checks as $check) {
+            expect(marcadoresSinSustituir($check->summary.' '.($check->fix ?? '')))
+                ->toBe([], $idioma.' '.$check->id.': '.$check->summary);
+        }
+    }
+})->group('RF-PD-13');
+
+it('ningun resultado posible de las sondas files.* deja un marcador sin sustituir', function (): void {
+    $storageApp = GeneratedFilesSandbox::directory('storage-app');
+    GeneratedFilesSandbox::file($storageApp.'/viejo/kronoqr-export-2.1.0-X.zip');
+    GeneratedFilesSandbox::file($storageApp.'/legal-exports/registro-horario-2026-01-01_2026-01-31.csv');
+    FrozenTime::at(gmdate('Y-m-d H:i:s', time() + 31 * 86400));
+    $fuera = GeneratedFilesSandbox::directory('fuera');
+
+    $sondas = [
+        sondaDeFicheros($storageApp),
+        sondaDeFicheros($storageApp, entorno: 'production'),
+        sondaDeFicheros($storageApp, entorno: 'production', aplicacion: '/proc'),
+        sondaDeFicheros(sys_get_temp_dir().'/kronoqr-no-existe-'.bin2hex(random_bytes(4))),
+        sondaDeFicheros($storageApp, informes: $storageApp.'/retention-reports'),
+        sondaDeFicheros($storageApp, informes: '/no/existe/reports/retention'),
+        sondaDeFicheros($storageApp, ['A' => $storageApp.'/x', 'B' => $storageApp.'/x/y']),
+        sondaDeFicheros($storageApp, ['A' => $storageApp]),
+        sondaDeFicheros($storageApp, ['A' => $fuera], entorno: 'production'),
+        sondaDeFicheros($storageApp, ['A' => $fuera]),
+    ];
+
+    $traductor = app(DoctorTranslator::class);
+
+    foreach ($sondas as $sonda) {
+        foreach ($sonda->run() as $hallazgo) {
+            foreach (['es', 'en'] as $idioma) {
+                $texto = (string) $traductor->translate($hallazgo->messageKey(), $hallazgo->params, $idioma)
+                    .' '.($hallazgo->fixKey() === null ? '' : (string) $traductor->translate($hallazgo->fixKey(), $hallazgo->params, $idioma));
+
+                expect(marcadoresSinSustituir($texto))->toBe([], $idioma.' '.$hallazgo->messageKey().': '.$texto);
+            }
+        }
+    }
 })->group('RF-PD-13');

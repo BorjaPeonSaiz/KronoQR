@@ -9,13 +9,13 @@ use App\Modules\Reporting\Application\Port\ReportingEventPublisher;
 use App\Modules\Reporting\Domain\Event\ReportExportFileMissing;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportMaintenance;
-use App\Modules\Reporting\Domain\ValueObject\ReportExportStatus;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileClass;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileEntry;
+use App\Modules\Shared\Domain\ValueObject\GeneratedFileRemoval;
 use App\Modules\Shared\Domain\ValueObject\RecordedFileLocation;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -74,7 +74,6 @@ final readonly class PurgeExpiredReportExports
         private ReportExportRepository $exports,
         private GeneratedFileHousekeeping $files,
         private ReportingEventPublisher $events,
-        private SerializedLedgerWrite $serialized,
         private Clock $clock,
         /** `GeneratedFileAreas::reportExports()`: los directorios `<uuid>/`. */
         private GeneratedFileArea $area,
@@ -94,20 +93,40 @@ final readonly class PurgeExpiredReportExports
 
         $released = $this->exports->failStale($now->modify('-'.$staleAfter.' seconds'), $now);
 
-        $purged = 0;
-
-        foreach ($this->exports->expired($now) as $export) {
-            if ($export->filePath !== null) {
-                $this->files->discardRecorded($this->area, $export->filePath);
-            }
-
-            $this->exports->save($export->purge($now));
-            $purged++;
+        // Sin raiz no se concilia nada: una raiz ausente —un `scheduler` sin el
+        // volumen— no dice nada de las filas (ADR-045).
+        if (! $this->files->isAvailable($this->area)) {
+            return new ReportExportMaintenance(0, $released);
         }
+
+        $purged = $this->purgeExpired($now);
 
         $missing = $this->reconcileRows($now);
 
         return new ReportExportMaintenance($purged, $released, $this->sweepOrphans($now, $staleAfter), $missing);
+    }
+
+    /**
+     * La purga por caducidad, con la marca condicional: nunca pisa el
+     * `purged_at` de otra pasada (regla dura 5). Un fichero que el sistema de
+     * ficheros no deja borrar NO marca la fila: la siguiente pasada lo reintenta
+     * y `generated_files_remove_failed_total` lo dice (ADR-045).
+     */
+    private function purgeExpired(DateTimeImmutable $now): int
+    {
+        $purged = 0;
+
+        foreach ($this->exports->expired($now) as $export) {
+            $outcome = $export->filePath === null
+                ? GeneratedFileRemoval::Absent
+                : $this->files->discardRecorded($this->area, $export->filePath);
+
+            if ($outcome !== GeneratedFileRemoval::Failed && $this->exports->markPurged($export->purge($now))) {
+                $purged++;
+            }
+        }
+
+        return $purged;
     }
 
     /**
@@ -129,12 +148,12 @@ final readonly class PurgeExpiredReportExports
             if ($location === RecordedFileLocation::OutsideArea || $export->expired($now)) {
                 // Fuera de su raiz: se marca y no se borra nada (C3). Caducada:
                 // la purga normal de una fila que se cruzo con esta pasada.
-                $this->exports->save($export->purge($now));
+                $this->exports->markPurged($export->purge($now));
 
                 continue;
             }
 
-            if ($this->recordMissing($export->uuid, $now)) {
+            if ($this->recordMissing($export, $now)) {
                 $missing++;
             }
         }
@@ -143,36 +162,22 @@ final readonly class PurgeExpiredReportExports
     }
 
     /**
-     * Marca la fila y sella el asiento en la misma transaccion, con el candado
-     * de la cadena tomado primero y la fila releida bloqueada despues: una
-     * descarga que se cruzara no pierde su `download_count` por un `save()` con
-     * la instancia de antes.
+     * Marca la fila y sella `report_export.file_missing` **solo si esta pasada
+     * la marco**: la regla comun de `GeneratedFileHousekeeping::purgeMissing()`
+     * —candado de la cadena primero, `UPDATE` condicional despues—. Otra pasada
+     * que leyo la misma fila no deja un segundo asiento ni pisa `purged_at`.
      */
-    private function recordMissing(string $uuid, DateTimeImmutable $now): bool
+    private function recordMissing(ReportExport $export, DateTimeImmutable $now): bool
     {
-        $recorded = $this->serialized->withChainLock(function () use ($uuid, $now): bool {
-            $fresh = $this->exports->lockByUuid($uuid);
-
-            if (! $fresh instanceof ReportExport || $fresh->status !== ReportExportStatus::Completed || $fresh->purgedAt !== null) {
-                return false;
-            }
-
-            $this->exports->save($fresh->purge($now));
-
-            $this->events->publish(new ReportExportFileMissing(
-                uuid: $fresh->uuid,
-                expiresAt: $fresh->expiresAt?->setTimezone(new DateTimeZone('UTC'))->format(DateTimeInterface::RFC3339) ?? '',
+        return $this->files->purgeMissing(
+            GeneratedFileClass::ReportExport,
+            fn (): bool => $this->exports->markPurged($export->purge($now)),
+            fn () => $this->events->publish(new ReportExportFileMissing(
+                uuid: $export->uuid,
+                expiresAt: $export->expiresAt?->setTimezone(new DateTimeZone('UTC'))->format(DateTimeInterface::RFC3339) ?? '',
                 detectedAt: $now,
-            ));
-
-            return true;
-        });
-
-        if ($recorded) {
-            $this->files->fileMissing(GeneratedFileClass::ReportExport);
-        }
-
-        return $recorded;
+            )),
+        );
     }
 
     /**

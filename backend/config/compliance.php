@@ -226,9 +226,15 @@ return [
          * `product:doctor` avisa si apunta dentro de storage/app, que es una ruta
          * efimera para esto.
          */
-        'report_path' => env(
-            'COMPLIANCE_RETENTION_REPORT_PATH',
-            rtrim((string) env('BACKUP_PATH', '/var/backups/fichaje'), '/').'/reports/retention',
+        // EL UNICO RESOLVEDOR de esta ruta: lo leen el almacen de informes y la
+        // sonda `files.retention_reports` de `product:doctor`. Sin definir o
+        // VACIA (`COMPLIANCE_RETENTION_REPORT_PATH=`) vale lo mismo: el valor de
+        // serie. Antes el vacio lo resolvia el almacen y la sonda comprobaba ''.
+        'report_path' => rtrim(
+            ((string) env('COMPLIANCE_RETENTION_REPORT_PATH', '')) !== ''
+                ? (string) env('COMPLIANCE_RETENTION_REPORT_PATH')
+                : rtrim((string) env('BACKUP_PATH', '/var/backups/fichaje'), '/').'/reports/retention',
+            '/',
         ),
 
         /* Directorio del log tecnico. Se declara para poder apuntarlo en pruebas. */

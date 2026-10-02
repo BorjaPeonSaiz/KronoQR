@@ -12,6 +12,7 @@ use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
+use App\Modules\Shared\Infrastructure\Console\InstallationText;
 use App\Modules\Shared\Infrastructure\Format\ByteSize;
 use Illuminate\Console\Command;
 use Throwable;
@@ -163,8 +164,8 @@ final class ProductExportAllCommand extends Command
         $bundles = $diagnostics->handle();
 
         $this->line($report->purged === 0
-            ? 'No hay ninguna exportacion integra caducada que purgar.'
-            : 'Purgadas '.$report->purged.' exportaciones integras caducadas. Las filas se conservan con su estado.');
+            ? self::text('generated-files.data_exports.nothing_expired')
+            : self::text('generated-files.data_exports.purged', ['count' => $report->purged]));
 
         if ($report->released > 0) {
             /*
@@ -173,14 +174,12 @@ final class ProductExportAllCommand extends Command
              * el producto se ha desbloqueado solo —y que si se repite cada hora,
              * lo que hay que mirar es el trabajador de cola—.
              */
-            $this->line('Liberadas '.$report->released.' exportaciones que se quedaron a medias '
-                .'(motivo «stale»): ya se puede pedir una nueva.');
+            $this->line(self::text('generated-files.data_exports.released', ['count' => $report->released]));
         }
 
         if ($report->orphans > 0) {
             // Sin nombres ni rutas, igual que el log: solo la cifra (regla dura 21).
-            $this->line('Borrados '.$report->orphans.' restos sin exportacion viva (un ZIP sin fila, o el '
-                .'directorio de trabajo de una generacion interrumpida).');
+            $this->line(self::text('generated-files.data_exports.orphans', ['count' => $report->orphans]));
         }
 
         if ($report->missing > 0) {
@@ -190,17 +189,25 @@ final class ProductExportAllCommand extends Command
              * alguien lo borro o se lo llevo, y el asiento de auditoria es lo
              * que permite acotar cuando.
              */
-            $this->line('ATENCION: '.$report->missing.' exportaciones han perdido su fichero antes de caducar. '
-                .'Queda asiento «data_export.file_missing» en la auditoria. Si no acabas de restaurar una '
-                .'copia, averigua quien lo borro o se lo llevo.');
+            $this->line(self::text('generated-files.data_exports.missing', ['count' => $report->missing]));
         }
 
         if ($bundles > 0) {
             // Solo la cifra: ni nombres de fichero ni rutas (regla dura 21).
-            $this->line('Borrados '.$bundles.' paquetes de diagnostico que superaban su plazo '
-                .'(PRODUCT_DIAGNOSTICS_RETENTION_DAYS).');
+            $this->line(self::text('generated-files.data_exports.diagnostics', ['count' => $bundles]));
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Un texto de `lang/*\/generated-files.php` en el idioma de la INSTALACION,
+     * no en `APP_LOCALE` (ver `InstallationText`).
+     *
+     * @param  array<string, int>  $replace
+     */
+    private static function text(string $key, array $replace = []): string
+    {
+        return app(InstallationText::class)->line($key, $replace);
     }
 }

@@ -263,13 +263,21 @@ it('lo efimero que cruza contenedores vive en storage/app y lo desechable no', f
  * @param  callable(): T  $work
  * @return T
  */
-function generatedFilesInventoryWithDefaults(callable $work): mixed
+function generatedFilesInventoryWithDefaults(callable $work, ?string $reportPath = null): mixed
 {
     $variable = 'COMPLIANCE_RETENTION_REPORT_PATH';
     $saved = [$_ENV[$variable] ?? null, $_SERVER[$variable] ?? null, getenv($variable)];
 
     unset($_ENV[$variable], $_SERVER[$variable]);
     putenv($variable);
+
+    // `$reportPath` simula la linea del `.env`: nula, sin la linea; '' es
+    // `COMPLIANCE_RETENTION_REPORT_PATH=` vacia.
+    if ($reportPath !== null) {
+        $_ENV[$variable] = $reportPath;
+        $_SERVER[$variable] = $reportPath;
+        putenv($variable.'='.$reportPath);
+    }
 
     $application = new Application(generatedFilesInventoryBackend());
 
@@ -288,6 +296,9 @@ function generatedFilesInventoryWithDefaults(callable $work): mixed
         Facade::clearResolvedInstances();
         Facade::setFacadeApplication(null);
         Container::setInstance(null);
+
+        unset($_ENV[$variable], $_SERVER[$variable]);
+        putenv($variable);
 
         if (\is_string($saved[0])) {
             $_ENV[$variable] = $saved[0];
@@ -364,4 +375,19 @@ it('el informe de retencion resuelve por defecto bajo BACKUP_PATH, no en storage
 
     expect($default)->toBe(rtrim($backup, '/').'/reports/retention')
         ->and(PathOverlap::contains($storage, $default))->toBeFalse();
+})->group('RF-PR-03');
+
+it('con la variable de los informes de retencion vacia, la ruta es la de serie y no una cadena vacia', function (): void {
+    // Un solo resolvedor: el almacen de informes y la sonda de `product:doctor`
+    // leen el mismo valor. Antes, con `COMPLIANCE_RETENTION_REPORT_PATH=`, el
+    // almacen escribia en BACKUP_PATH/reports/retention y la sonda comprobaba ''.
+    [$vacia, $sinLinea, $propia] = [
+        generatedFilesInventoryWithDefaults(static fn (): string => Config::string('compliance.retention.report_path'), ''),
+        generatedFilesInventoryWithDefaults(static fn (): string => Config::string('compliance.retention.report_path')),
+        generatedFilesInventoryWithDefaults(static fn (): string => Config::string('compliance.retention.report_path'), '/srv/informes/'),
+    ];
+
+    expect($vacia)->toBe($sinLinea)
+        ->and($vacia)->toEndWith('/reports/retention')
+        ->and($propia)->toBe('/srv/informes');
 })->group('RF-PR-03');

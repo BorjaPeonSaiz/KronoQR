@@ -9,6 +9,7 @@ use App\Modules\Compliance\Application\UseCase\GenerateLegalExport;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportPeriod;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportScope;
+use App\Modules\Shared\Infrastructure\Console\InstallationText;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -114,7 +115,7 @@ final class LegalExportCommand extends Command
         // borra sola. En el idioma de la instalacion, como el resto de textos
         // que lee una persona.
         $this->newLine();
-        $this->warn(__('legal-export.console.delete_after_delivery'));
+        $this->warn(app(InstallationText::class)->line('legal-export.console.delete_after_delivery'));
 
         return self::SUCCESS;
     }

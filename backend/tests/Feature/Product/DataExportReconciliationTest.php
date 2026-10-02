@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Application\Port\DataExportArchiveWriter;
+use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Application\UseCase\PurgeExpiredDataExportsHandler;
 use App\Modules\Product\Domain\ValueObject\DataExportMaintenance;
 use App\Modules\Shared\Application\Port\Clock;
@@ -11,6 +12,7 @@ use Illuminate\Support\Str;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Product\DataExports;
+use Tests\Support\Product\InterleavingDataExportRepository;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Shared\GeneratedFilesSandbox;
 use Tests\Support\Shared\RecordingGeneratedFileMetrics;
@@ -337,4 +339,89 @@ it('el comando dice en voz alta cuantas desaparecieron, sin nombres ni rutas', f
         ->and($salida)->toContain('data_export.file_missing')
         ->and($salida)->not->toContain((string) $exportacion->fileName)
         ->and($salida)->not->toContain(raizDeExportaciones());
+})->group('RF-PD-14', 'RL-15');
+
+it('dos pasadas intercaladas sellan un solo file_missing y no pisan purged_at', function (): void {
+    // I1/F4: el planificador y una ejecucion a mano leen la misma fila antes de
+    // marcarla. La segunda corre entera en el hueco entre la lectura y la marca
+    // de la primera.
+    $metricas = RecordingGeneratedFileMetrics::install();
+    $exportacion = DataExports::completed();
+    unlink((string) $exportacion->filePath);
+
+    $segundaPasada = gmdate('Y-m-d H:i:s', time() + 600);
+    $real = app(DataExportRepository::class);
+
+    app()->instance(DataExportRepository::class, new InterleavingDataExportRepository(
+        $real,
+        static function () use ($segundaPasada): void {
+            FrozenTime::at($segundaPasada);
+            purgarExportaciones();
+        },
+    ));
+
+    $primera = purgarExportaciones();
+
+    expect($primera->missing)->toBe(0)
+        ->and(asientosFileMissing())->toHaveCount(1)
+        ->and($metricas->missing)->toBe(['data_export'])
+        // `purged_at` es el de la pasada que marco, la segunda; la primera no lo pisa.
+        ->and(DataExports::find($exportacion->uuid)->purgedAt?->format('Y-m-d H:i:s'))->toBe($segundaPasada);
+})->group('RF-PD-14', 'RL-15');
+
+it('la purga por caducidad tampoco pisa el purged_at de otra pasada', function (): void {
+    $exportacion = DataExports::completed(expiresAt: app(Clock::class)->now()->modify('-1 hour'));
+    $repositorio = app(DataExportRepository::class);
+
+    $primera = $repositorio->markPurged($exportacion->id, new DateTimeImmutable('2026-10-01T10:00:00Z'));
+    $segunda = $repositorio->markPurged($exportacion->id, new DateTimeImmutable('2026-10-02T10:00:00Z'));
+
+    expect($primera)->toBeTrue()
+        ->and($segunda)->toBeFalse()
+        ->and(DataExports::find($exportacion->uuid)->purgedAt?->format('Y-m-d'))->toBe('2026-10-01');
+})->group('RF-PD-14');
+
+it('si el sistema de ficheros no deja borrar el ZIP vencido, la fila no se marca y se cuenta', function (): void {
+    // I3: `exports/` creado por root con un `exec -u root`. La fila dice la
+    // verdad —el fichero sigue ahi— y la siguiente pasada lo reintenta.
+    $metricas = RecordingGeneratedFileMetrics::install();
+    $exportacion = DataExports::completed(expiresAt: app(Clock::class)->now()->modify('-1 hour'));
+    chmod(raizDeExportaciones(), 0o500);
+
+    try {
+        $resultado = purgarExportaciones();
+    } finally {
+        chmod(raizDeExportaciones(), 0o700);
+    }
+
+    $fila = DataExports::find($exportacion->uuid);
+
+    expect($resultado->purged)->toBe(0)
+        ->and($fila->status->value)->toBe('completed')
+        ->and($fila->filePath)->toBe($exportacion->filePath)
+        ->and(is_file((string) $exportacion->filePath))->toBeTrue()
+        ->and($metricas->removeFailed)->toBe(['data_export']);
+
+    // Y en cuanto se arregla el permiso, la siguiente pasada la purga.
+    expect(purgarExportaciones()->purged)->toBe(1)
+        ->and(DataExports::find($exportacion->uuid)->status->value)->toBe('purged');
+})->group('RF-PD-14', 'RL-11');
+
+it('sin la raiz de los ZIP no concilia: no marca filas ni sella file_missing', function (): void {
+    // Un `scheduler` levantado sin el volumen `app-storage`: para el, ningun
+    // ZIP existe. Marcarlas todas como desaparecidas seria sellar una
+    // exfiltracion que no ha ocurrido.
+    $metricas = RecordingGeneratedFileMetrics::install();
+    $vigente = DataExports::completed();
+    $vencida = DataExports::completed(expiresAt: app(Clock::class)->now()->modify('-1 hour'));
+    config(['product.data_export_path' => sys_get_temp_dir().'/kronoqr-sin-volumen-'.bin2hex(random_bytes(4))]);
+
+    $resultado = purgarExportaciones();
+
+    expect($resultado->missing)->toBe(0)
+        ->and($resultado->purged)->toBe(0)
+        ->and(DataExports::find($vigente->uuid)->status->value)->toBe('completed')
+        ->and(DataExports::find($vencida->uuid)->status->value)->toBe('completed')
+        ->and(asientosFileMissing())->toBe([])
+        ->and($metricas->missing)->toBe([]);
 })->group('RF-PD-14', 'RL-15');

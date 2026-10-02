@@ -43,6 +43,7 @@ use App\Modules\Reporting\Application\Port\WorkDayCompletionReader;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Application\Port\WorkedTimeMetrics;
 use App\Modules\Reporting\Application\Query\GeneratePeriodReport;
+use App\Modules\Reporting\Application\UseCase\DownloadReportExport;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
 use App\Modules\Reporting\Application\UseCase\RequestReportExport;
@@ -614,13 +615,27 @@ final class ReportingServiceProvider extends ServiceProvider
                 exports: $app->make(ReportExportRepository::class),
                 files: $app->make(GeneratedFileHousekeeping::class),
                 events: $app->make(ReportingEventPublisher::class),
-                serialized: $app->make(SerializedLedgerWrite::class),
                 clock: $app->make(Clock::class),
                 // La raiz se lee aqui, en el borde (regla dura 14), y con ella el
                 // patron exacto de la clase: solo directorios `<uuid>/` (ADR-045).
                 area: GeneratedFileAreas::reportExports(Config::string('reporting.export.path')),
                 staleAfterSeconds: Config::integer('reporting.export.stale_after_seconds'),
                 retentionDays: Config::integer('reporting.export.retention_days'),
+            ),
+        );
+
+        // La descarga por enlace solo entrega un fichero que el localizador
+        // confinado da por presente dentro de su raiz y con su patron (ADR-045,
+        // F3): una fila alterada con `file_path='/proc/self/environ'` responde 404.
+        $this->app->bind(
+            DownloadReportExport::class,
+            static fn (Application $app): DownloadReportExport => new DownloadReportExport(
+                exports: $app->make(ReportExportRepository::class),
+                files: $app->make(GeneratedFileHousekeeping::class),
+                area: GeneratedFileAreas::reportExports(Config::string('reporting.export.path')),
+                events: $app->make(ReportingEventPublisher::class),
+                clock: $app->make(Clock::class),
+                serialized: $app->make(SerializedLedgerWrite::class),
             ),
         );
 

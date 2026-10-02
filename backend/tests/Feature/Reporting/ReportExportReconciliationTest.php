@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\Port\ReportExportStorage;
 use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportMaintenance;
@@ -212,4 +213,53 @@ it('el comando avisa de los ficheros desaparecidos sin nombres ni rutas', functi
         ->and($salida)->toContain('report_export.file_missing')
         ->and($salida)->not->toContain((string) $informe->fileName)
         ->and($salida)->not->toContain($informe->uuid);
+})->group('RF-IN-06', 'RL-15');
+
+it('marcar la purga es condicional: una segunda marca no pisa purged_at ni cuenta', function (): void {
+    // I1/F4: dos pasadas que leyeron la misma fila. La que llega segunda no
+    // marca nada, asi que tampoco publica `report_export.file_missing`.
+    $informe = ReportExports::completedFor(quienPideElInforme());
+    $repositorio = app(ReportExportRepository::class);
+
+    $primera = $repositorio->markPurged($informe->purge(new DateTimeImmutable('2026-10-01T10:00:00Z')));
+    $segunda = $repositorio->markPurged($informe->purge(new DateTimeImmutable('2026-10-02T10:00:00Z')));
+
+    $fila = ReportExports::find($informe->uuid);
+
+    expect($primera)->toBeTrue()
+        ->and($segunda)->toBeFalse()
+        ->and($fila->purgedAt?->format('Y-m-d'))->toBe('2026-10-01')
+        // Minimizada (RL-11) por la primera marca.
+        ->and($fila->scope)->toBeNull();
+})->group('RF-IN-06', 'RL-15', 'RL-11');
+
+it('si el sistema de ficheros no deja borrar el informe vencido, la fila no se marca y se cuenta', function (): void {
+    $metricas = RecordingGeneratedFileMetrics::install();
+    $informe = ReportExports::completedFor(quienPideElInforme(), expiresAt: app(Clock::class)->now()->modify('-1 hour'));
+    $directorio = \dirname((string) $informe->filePath);
+    chmod($directorio, 0o500);
+
+    try {
+        $resultado = purgarInformes();
+    } finally {
+        chmod($directorio, 0o700);
+    }
+
+    expect($resultado->purged)->toBe(0)
+        ->and(ReportExports::find($informe->uuid)->status->value)->toBe('completed')
+        ->and(is_file((string) $informe->filePath))->toBeTrue()
+        ->and($metricas->removeFailed)->toBe(['report_export']);
+})->group('RF-IN-06', 'RL-11');
+
+it('sin la raiz de los informes no concilia: no marca filas ni sella file_missing', function (): void {
+    $metricas = RecordingGeneratedFileMetrics::install();
+    $informe = ReportExports::completedFor(quienPideElInforme());
+    Config::set('reporting.export.path', sys_get_temp_dir().'/kronoqr-sin-volumen-'.bin2hex(random_bytes(4)));
+
+    $resultado = purgarInformes();
+
+    expect($resultado->missing)->toBe(0)
+        ->and(ReportExports::find($informe->uuid)->status->value)->toBe('completed')
+        ->and(DB::table('audit_log')->where('action', 'report_export.file_missing')->count())->toBe(0)
+        ->and($metricas->missing)->toBe([]);
 })->group('RF-IN-06', 'RL-15');

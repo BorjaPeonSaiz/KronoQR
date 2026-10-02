@@ -515,8 +515,12 @@ $retentionDryRun->onFailure(LogScheduledCommandFailure::of('compliance:apply-ret
  * siempre si nadie generara otro.
  *
  * `withoutOverlapping` por si una purga de muchos ficheros grandes se solapara
- * con la siguiente hora; repetirla es seguro —marcar una fila ya purgada no
- * cambia nada— asi que es higiene, no correccion.
+ * con la siguiente hora. Es higiene, no correccion: `withoutOverlapping` solo
+ * protege la ejecucion programada, y la guia manda lanzar `--purge` a mano. Lo
+ * que hace segura una pasada simultanea es la marca condicional (`UPDATE …
+ * WHERE purged_at IS NULL`, bajo el candado de la cadena): de dos pasadas que
+ * leyeron la misma fila solo una la marca, y solo esa sella
+ * `data_export.file_missing`. Nunca se pisa `purged_at` (regla dura 5).
  */
 Schedule::command('product:export-all', ['--purge'])
     ->hourly()
@@ -554,9 +558,11 @@ Schedule::command('product:export-all', ['--purge'])
  * REPORTING_EXPORT_PATH: con la variable mal apuntada a storage/app, no borra
  * nada de las demas clases.
  *
- * `withoutOverlapping` es higiene y no correccion: repetir la pasada es seguro
- * —marcar una fila ya purgada no cambia nada— pero dos a la vez borrando los
- * mismos ficheros no aporta nada.
+ * `withoutOverlapping` es higiene y no correccion: lo que hace segura una pasada
+ * simultanea (una a mano y la programada) es la marca condicional bajo el
+ * candado de la cadena —solo una marca la fila y solo esa sella
+ * `report_export.file_missing`; `purged_at` no se pisa—, pero dos a la vez
+ * borrando los mismos ficheros no aportan nada.
  */
 Schedule::command('reporting:purge-expired-exports')
     ->dailyAt('04:25')

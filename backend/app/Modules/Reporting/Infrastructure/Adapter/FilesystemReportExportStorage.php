@@ -8,6 +8,7 @@ use App\Modules\Reporting\Application\Port\ReportExportStorage;
 use App\Modules\Reporting\Domain\Exception\ReportExportWriteFailed;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
+use App\Modules\Shared\Domain\ValueObject\RecordedFileLocation;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStore;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 
@@ -80,9 +81,10 @@ final readonly class FilesystemReportExportStorage implements ReportExportStorag
         return $path;
     }
 
+    /** Confinado como el borrado (ADR-045, C3/F3): fuera de la raiz no «existe». */
     public function exists(string $path): bool
     {
-        return $path !== '' && is_file($path);
+        return $path !== '' && $this->files->locate($this->area(), $path) === RecordedFileLocation::Present;
     }
 
     public function sizeOf(string $path): int

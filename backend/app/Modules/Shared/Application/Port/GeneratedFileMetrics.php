@@ -33,6 +33,13 @@ interface GeneratedFileMetrics
     public function missing(GeneratedFileClass $class): void;
 
     /**
+     * `generated_files_remove_failed_total{class}`: el sistema de ficheros nego
+     * un borrado que tocaba (permisos, solo lectura). El fichero sigue en el
+     * disco y la fila no se marca: se reintenta en la siguiente pasada.
+     */
+    public function removeFailed(GeneratedFileClass $class): void;
+
+    /**
      * `generated_files_overdue{class}`: cuantos ficheros siguen en el disco mas
      * alla de su plazo de aviso. Hoy solo `legal_export_console` (> 30 dias).
      */

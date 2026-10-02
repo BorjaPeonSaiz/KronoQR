@@ -123,6 +123,19 @@ interface ReportExportRepository
     public function save(ReportExport $export): void;
 
     /**
+     * Persiste el resultado de {@see ReportExport::purge()} **solo si la fila
+     * sigue `completed` y sin `purged_at`**, y dice si la ha marcado esta
+     * llamada.
+     *
+     * La purga no usa {@see self::save()}: guardaria las diecinueve columnas de
+     * una instantanea leida antes, pisando el `purged_at` de otra pasada (regla
+     * dura 5) o el `download_count` de una descarga que se cruzara. Con esta, dos
+     * pasadas que leyeron la misma fila marcan una vez y sellan un solo
+     * `report_export.file_missing`.
+     */
+    public function markPurged(ReportExport $purged): bool;
+
+    /**
      * Sella por donde se aviso, y **solo eso**.
      *
      * Metodo propio en lugar de `save()` porque el aviso ocurre **fuera de

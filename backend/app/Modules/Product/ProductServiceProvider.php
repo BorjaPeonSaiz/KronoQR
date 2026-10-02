@@ -933,6 +933,8 @@ final class ProductServiceProvider extends ServiceProvider
                 // Cadena de `audit_log` y despues fila, el orden de toda
                 // escritura auditada: la purga toma los dos igual (ADR-045, C5).
                 serialized: $app->make(SerializedLedgerWrite::class),
+                files: $app->make(GeneratedFileHousekeeping::class),
+                archives: GeneratedFileAreas::dataExportArchives(Config::string('product.data_export_path')),
             ),
         );
 
@@ -942,7 +944,6 @@ final class ProductServiceProvider extends ServiceProvider
                 exports: $app->make(DataExportRepository::class),
                 files: $app->make(GeneratedFileHousekeeping::class),
                 events: $app->make(ProductEventPublisher::class),
-                serialized: $app->make(SerializedLedgerWrite::class),
                 clock: $app->make(Clock::class),
                 // Las tres clases de la raiz de exportaciones (ADR-045, tabla de
                 // huerfanos): el ZIP, el espacio de trabajo y el temporal de
@@ -1856,7 +1857,9 @@ final class ProductServiceProvider extends ServiceProvider
                         storageAppPath: storage_path('app'),
                         applicationPath: base_path(),
                         environment: Config::string('app.env'),
-                        retentionReportPath: Config::string('compliance.retention.report_path', ''),
+                        // La misma ruta que usa el almacen de informes: la resuelve
+                        // `config/compliance.php`, tambien con la variable vacia.
+                        retentionReportPath: Config::string('compliance.retention.report_path'),
                         backupPath: Config::string('backup.path'),
                         classRoots: GeneratedFileAreas::configuredRoots(),
                         consoleExports: GeneratedFileAreas::legalExportConsole(
@@ -1865,6 +1868,7 @@ final class ProductServiceProvider extends ServiceProvider
                         consoleWarningDays: Config::integer('compliance.legal_export_console_warning_days', 30),
                         files: $app->make(GeneratedFileHousekeeping::class),
                         clock: $app->make(Clock::class),
+                        store: $app->make(GeneratedFileStore::class),
                     ),
                     new ApplicationProbe(
                         timezone: Config::string('app.timezone'),

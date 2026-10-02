@@ -101,7 +101,6 @@ it('atribuye los tres asientos a quien pidio la exportacion, incluida la generac
 
     app(DownloadDataExportHandler::class)->handle(
         uuid: $export->uuid,
-        fileExists: static fn (string $path): bool => is_file($path),
         downloadedByUserId: $usuario->id,
     );
 

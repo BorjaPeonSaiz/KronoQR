@@ -9,8 +9,10 @@ use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\PathOverlap;
+use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 
 /**
  * Sondas `files.*` de `product:doctor`: donde viven los ficheros que genera el
@@ -55,6 +57,7 @@ final readonly class GeneratedFilesProbe implements DoctorProbe
         private int $consoleWarningDays,
         private GeneratedFileHousekeeping $files,
         private Clock $clock,
+        private GeneratedFileStore $store,
     ) {}
 
     public function family(): string
@@ -68,8 +71,64 @@ final readonly class GeneratedFilesProbe implements DoctorProbe
             $this->storageVolume(),
             $this->retentionReports(),
             $this->classRoots(),
+            $this->strayEntries(),
             $this->consoleExports(),
         ];
+    }
+
+    /**
+     * Ficheros con nombre de una clase generada en un directorio de primer nivel
+     * de `storage/app` que NO es ninguna raiz configurada.
+     *
+     * Es lo que deja cambiar `PRODUCT_DATA_EXPORT_PATH` o `REPORTING_EXPORT_PATH`:
+     * la purga solo mira la raiz nueva, y la anterior se queda con ZIP e informes
+     * que ya nadie va a borrar. Aviso y nunca fallo: no rompe nada, pero es un
+     * plazo de retencion que no se esta cumpliendo.
+     */
+    private function strayEntries(): DoctorFinding
+    {
+        $roots = array_map($this->resolved(...), $this->classRoots);
+        $stray = [];
+
+        foreach (glob(rtrim($this->storageAppPath, '/').'/*', GLOB_ONLYDIR) ?: [] as $directory) {
+            if (is_link($directory) || \in_array($this->resolved($directory), $roots, true)) {
+                continue;
+            }
+
+            if ($this->holdsGeneratedFiles($directory)) {
+                $stray[] = basename($directory);
+            }
+        }
+
+        if ($stray === []) {
+            // Detalles no vacios: el contrato del diagnostico exige un objeto, y
+            // un array PHP vacio se serializa como lista.
+            return DoctorFinding::ok('files.stray_entries', ['directories' => []]);
+        }
+
+        return DoctorFinding::warning(
+            'files.stray_entries',
+            params: ['names' => implode(', ', $stray)],
+            details: ['directories' => $stray],
+        );
+    }
+
+    private function holdsGeneratedFiles(string $directory): bool
+    {
+        foreach ([
+            GeneratedFileAreas::dataExportArchives($directory),
+            GeneratedFileAreas::dataExportArchiveTemporaries($directory),
+            GeneratedFileAreas::dataExportWorkspaces($directory),
+            GeneratedFileAreas::reportExports($directory),
+            GeneratedFileAreas::legalExportTemporaries($directory),
+            GeneratedFileAreas::diagnostics($directory),
+        ] as $area) {
+            if ($this->store->entries($area) !== []) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function storageVolume(): DoctorFinding
@@ -123,7 +182,9 @@ final readonly class GeneratedFilesProbe implements DoctorProbe
             return DoctorFinding::warning('files.retention_reports', params: $params, details: ['path' => $path]);
         }
 
-        return DoctorFinding::ok('files.retention_reports', ['path' => $path]);
+        // `ok()` recibe los DETALLES primero y los parametros del texto despues:
+        // sin el tercer argumento el informe imprimia «:path» literal.
+        return DoctorFinding::ok('files.retention_reports', ['path' => $path], ['path' => $path]);
     }
 
     private function classRoots(): DoctorFinding
@@ -157,11 +218,15 @@ final readonly class GeneratedFilesProbe implements DoctorProbe
         ));
 
         if ($outside !== []) {
-            return DoctorFinding::warning(
+            // En produccion es FALLO, igual que `files.storage_volume`: una raiz
+            // fuera del volumen compartido es R3-PL-01 otra vez —lo que escribe
+            // `horizon` no lo ve `app`—. Fuera de produccion, aviso.
+            return new DoctorFinding(
                 'files.class_roots',
-                'outside_volume',
+                $this->environment === 'production' ? DoctorStatus::Failure : DoctorStatus::Warning,
                 ['names' => implode(', ', $outside)],
                 ['outside_volume' => $outside],
+                'outside_volume',
             );
         }
 

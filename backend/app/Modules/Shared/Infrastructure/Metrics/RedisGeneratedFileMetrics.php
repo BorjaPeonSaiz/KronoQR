@@ -36,6 +36,8 @@ final readonly class RedisGeneratedFileMetrics implements GeneratedFileMetrics
 
     public const string OVERDUE = self::KEY_PREFIX.'generated_files_overdue';
 
+    public const string REMOVE_FAILED_TOTAL = self::KEY_PREFIX.'generated_files_remove_failed_total';
+
     public function __construct(private Redis $redis) {}
 
     public function orphanRemoved(GeneratedFileClass $class): void
@@ -51,6 +53,11 @@ final readonly class RedisGeneratedFileMetrics implements GeneratedFileMetrics
     public function missing(GeneratedFileClass $class): void
     {
         $this->command('HINCRBY', [self::MISSING_TOTAL, self::field($class), 1]);
+    }
+
+    public function removeFailed(GeneratedFileClass $class): void
+    {
+        $this->command('HINCRBY', [self::REMOVE_FAILED_TOTAL, self::field($class), 1]);
     }
 
     public function overdue(GeneratedFileClass $class, int $count): void

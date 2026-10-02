@@ -50,13 +50,50 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
             throw new RuntimeException('No se ha podido crear el directorio de informes «'.$directory.'».');
         }
 
-        $path = $directory.'/'.$this->filename($report);
+        [$path, $handle] = $this->createExclusively($directory, $this->filename($report));
 
-        if (file_put_contents($path, $this->render($report)) === false) {
-            throw new RuntimeException('No se ha podido escribir el informe de retencion en «'.$path.'».');
+        try {
+            // `0640` ANTES de escribir el contenido, y explicito: con `file_put_contents`
+            // el modo era el de la umask del proceso (`0666` con un `exec` de umask
+            // `0000`). Es el modo que fija ADR-045 y el que deja el rescate de
+            // `update.sh`.
+            @chmod($path, 0o640);
+
+            if (fwrite($handle, $this->render($report)) === false) {
+                throw new RuntimeException('No se ha podido escribir el informe de retencion en «'.$path.'».');
+            }
+        } finally {
+            fclose($handle);
         }
 
         return $path;
+    }
+
+    /**
+     * Crea el fichero con `x` —falla si ya existe— para **no pisar nunca un
+     * informe**: dos pasadas en el mismo segundo, o un informe rescatado de la
+     * 2.1.0 con el mismo nombre, conservan el suyo y este recibe un sufijo.
+     *
+     * @return array{string, resource}
+     */
+    private function createExclusively(string $directory, string $fileName): array
+    {
+        $base = substr($fileName, 0, -4);
+
+        for ($attempt = 0; $attempt < 100; $attempt++) {
+            $path = $directory.'/'.($attempt === 0 ? $fileName : $base.'-'.$attempt.'.txt');
+            $handle = @fopen($path, 'xb');
+
+            if ($handle !== false) {
+                return [$path, $handle];
+            }
+
+            if (! file_exists($path)) {
+                break;
+            }
+        }
+
+        throw new RuntimeException('No se ha podido crear el informe de retencion en «'.$directory.'».');
     }
 
     private function filename(RetentionReport $report): string
@@ -172,14 +209,8 @@ final readonly class FileRetentionReportStore implements RetentionReportStore
 
     private function directory(): string
     {
-        $configured = Config::string('compliance.retention.report_path', '');
-
-        // Vacio —`COMPLIANCE_RETENTION_REPORT_PATH=` en el `.env`— vale lo mismo
-        // que sin definir: junto a las copias, nunca en la capa del contenedor
-        // (ADR-045).
-        return rtrim(
-            $configured === '' ? rtrim(Config::string('backup.path'), '/\\').'/reports/retention' : $configured,
-            '/\\',
-        );
+        // La ruta la resuelve `config/compliance.php` y solo ella (tambien el
+        // caso de la variable vacia): la misma que comprueba `product:doctor`.
+        return rtrim(Config::string('compliance.retention.report_path'), '/\\');
     }
 }

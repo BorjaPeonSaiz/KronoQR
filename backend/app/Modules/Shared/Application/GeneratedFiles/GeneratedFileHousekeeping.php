@@ -6,6 +6,7 @@ namespace App\Modules\Shared\Application\GeneratedFiles;
 
 use App\Modules\Shared\Application\Port\GeneratedFileMetrics;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\SpanScope;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileClass;
@@ -54,7 +55,65 @@ final readonly class GeneratedFileHousekeeping
         private GeneratedFileStore $store,
         private GeneratedFileMetrics $metrics,
         private LoggerInterface $logger,
+        private SerializedLedgerWrite $serialized,
     ) {}
+
+    /**
+     * ¿Se puede conciliar esta clase? Solo si su raiz existe.
+     *
+     * Sin raiz no se concilia NADA de la clase: ni se marcan filas ni se publica
+     * `*.file_missing`. Un `scheduler` levantado sin el volumen `app-storage`
+     * —un override de compose, un montaje que fallo— veria desaparecidas todas
+     * las exportaciones vigentes y las sellaria como una posible exfiltracion.
+     * Se avisa y se sale; la siguiente pasada lo vuelve a intentar.
+     */
+    public function isAvailable(GeneratedFileArea $area): bool
+    {
+        if ($this->store->rootExists($area)) {
+            return true;
+        }
+
+        $this->logger->warning('generated_files.root_unavailable', ['class' => $area->class->value]);
+
+        return false;
+    }
+
+    /**
+     * Marca una fila cuyo fichero desaparecio antes de caducar y, **solo si fue
+     * esta llamada quien la marco**, publica el hecho y sube la metrica (C5).
+     *
+     * Es la regla comun de las dos purgas, en un solo sitio:
+     *
+     * - Todo ocurre con el candado de la cadena de `audit_log` tomado PRIMERO y
+     *   la fila despues, el orden de toda escritura auditada
+     *   ({@see SerializedLedgerWrite}).
+     * - `$markPurged` tiene que ser condicional —`WHERE purged_at IS NULL`— y
+     *   devolver si cambio la fila. Dos pasadas que leyeron la misma fila antes
+     *   de marcarla (el planificador y una ejecucion a mano) se serializan en el
+     *   candado; la segunda no marca nada, no publica nada y no pisa
+     *   `purged_at` (regla dura 5). Un solo asiento y una sola subida.
+     *
+     * @param  callable(): bool  $markPurged
+     * @param  callable(): void  $publish
+     */
+    public function purgeMissing(GeneratedFileClass $class, callable $markPurged, callable $publish): bool
+    {
+        $marked = $this->serialized->withChainLock(static function () use ($markPurged, $publish): bool {
+            if (! $markPurged()) {
+                return false;
+            }
+
+            $publish();
+
+            return true;
+        });
+
+        if ($marked) {
+            $this->fileMissing($class);
+        }
+
+        return $marked;
+    }
 
     /**
      * Borra los restos de una clase que ya superan su edad minima y que ninguna
@@ -90,6 +149,9 @@ final readonly class GeneratedFileHousekeeping
                 } elseif ($outcome === GeneratedFileRemoval::Refused) {
                     $this->metrics->refused($area->class);
                     $refused++;
+                } elseif ($outcome === GeneratedFileRemoval::Failed) {
+                    // El log, con el motivo, lo escribe el adaptador.
+                    $this->metrics->removeFailed($area->class);
                 }
             }
         } finally {
@@ -120,6 +182,13 @@ final readonly class GeneratedFileHousekeeping
 
         if ($outcome === GeneratedFileRemoval::Refused) {
             $this->refusedRecorded($area->class);
+        }
+
+        if ($outcome === GeneratedFileRemoval::Failed) {
+            // El log, con el motivo, lo escribe el adaptador. Quien llama NO
+            // marca la fila: se reintenta en la siguiente pasada y la fila sigue
+            // diciendo la verdad —el fichero esta ahi— (ADR-045, garantia).
+            $this->metrics->removeFailed($area->class);
         }
 
         return $outcome;

@@ -9,8 +9,11 @@ use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Domain\Event\DataExportDownloaded;
 use App\Modules\Product\Domain\Exception\DataExportNotReady;
 use App\Modules\Product\Domain\Model\DataExport;
+use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
+use App\Modules\Shared\Domain\ValueObject\RecordedFileLocation;
 
 /**
  * Autoriza la entrega del ZIP y **deja el asiento antes de entregarlo**
@@ -45,18 +48,24 @@ final readonly class DownloadDataExportHandler
         private ProductEventPublisher $events,
         private Clock $clock,
         private SerializedLedgerWrite $serialized,
+        /**
+         * El localizador confinado (ADR-045, F3). Antes decidia el controlador
+         * con un `is_file()` sobre la ruta de la fila: una fila alterada con
+         * `file_path='/proc/self/environ'` entregaba los secretos del proceso.
+         * Ahora solo se entrega un ZIP presente dentro de su raiz, con su patron y
+         * sin enlaces; lo demas es `404` sin causa y sube `refused`.
+         */
+        private GeneratedFileHousekeeping $files,
+        /** `GeneratedFileAreas::dataExportArchives()`. */
+        private GeneratedFileArea $archives,
     ) {}
 
     /**
-     * @param  callable(string): bool  $fileExists  Si el ZIP sigue en el disco. Lo decide el
-     *                                              borde, que es quien puede tocar el sistema
-     *                                              de ficheros: el caso de uso no abre
-     *                                              ficheros ni sabe que hay un disco.
      * @param  ?int  $downloadedByUserId  La cuenta que se lo lleva.
      *
      * @throws DataExportNotReady si la exportacion sigue `pending` o `running`
      */
-    public function handle(string $uuid, callable $fileExists, ?int $downloadedByUserId): ?DataExport
+    public function handle(string $uuid, ?int $downloadedByUserId): ?DataExport
     {
         $export = $this->exports->findByUuid($uuid);
 
@@ -68,7 +77,8 @@ final readonly class DownloadDataExportHandler
             throw new DataExportNotReady($uuid);
         }
 
-        if (! $export->isDownloadable() || ! $fileExists((string) $export->filePath)) {
+        if (! $export->isDownloadable()
+            || $this->files->locateRecorded($this->archives, (string) $export->filePath) !== RecordedFileLocation::Present) {
             return null;
         }
 

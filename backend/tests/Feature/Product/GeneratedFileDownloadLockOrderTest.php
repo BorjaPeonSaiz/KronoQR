@@ -93,7 +93,6 @@ it('la descarga de la exportacion integra toma la cadena antes que la fila', fun
 
     $sentencias = sentenciasDeLaDescarga(static fn () => app(DownloadDataExportHandler::class)->handle(
         $exportacion->uuid,
-        static fn (string $path): bool => is_file($path),
         null,
     ));
 

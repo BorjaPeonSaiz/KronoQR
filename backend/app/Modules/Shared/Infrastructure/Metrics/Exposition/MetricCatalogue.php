@@ -306,6 +306,13 @@ final class MetricCatalogue
                 ['class'],
             ),
             new MetricDefinition(
+                'generated_files_remove_failed_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'Borrados que el sistema de ficheros nego (permisos). El fichero sigue en el disco y su fila no se marca: se reintenta.',
+                ['class'],
+            ),
+            new MetricDefinition(
                 'generated_files_overdue',
                 MetricType::Gauge,
                 MetricStorage::LabelledHash,

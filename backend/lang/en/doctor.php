@@ -294,6 +294,14 @@ return [
                     .'keep for months files that expire in days.',
                 'warning_outside_volume' => 'These directories are outside storage/app: :names. Outside the shared '
                     .'volume, what one container writes another does not see.',
+                'failure_outside_volume' => 'These directories are outside storage/app: :names. In production, '
+                    .'outside the shared volume, exports requested from the panel cannot be downloaded and the purges '
+                    .'do not see the files with personal data.',
+            ],
+            'stray_entries' => [
+                'ok' => 'No abandoned generated files in storage/app outside the configured directories.',
+                'warning' => 'There are generated files in :names, inside storage/app but outside the configured '
+                    .'directories. No purge looks at them: they are usually left over from a root that was changed.',
             ],
             'legal_exports_console' => [
                 'ok' => 'No console legal export has been on the server for more than :days days.',
@@ -652,6 +660,13 @@ return [
                     .'kept with the backups. Then recreate the containers.',
                 'warning_outside_volume' => "Remove those variables from .env to return to their defaults, or point\n"
                     .'them to a subdirectory of /var/www/html/storage/app. Then recreate the containers.',
+                'failure_outside_volume' => "Remove those variables from .env to return to their defaults, or point\n"
+                    .'them to a subdirectory of /var/www/html/storage/app. Then recreate the containers.',
+            ],
+            'stray_entries' => [
+                'warning' => "If you changed PRODUCT_DATA_EXPORT_PATH or REPORTING_EXPORT_PATH, empty the old\n"
+                    ."folder: it holds personal data nobody is going to delete anymore. To see it:\n"
+                    .'  docker compose exec app ls -la /var/www/html/storage/app',
             ],
             'legal_exports_console' => [
                 'warning' => "If you have already handed those exports to the Labour Inspectorate, delete them.\n"

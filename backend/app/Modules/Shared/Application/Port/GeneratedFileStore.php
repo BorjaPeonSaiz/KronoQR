@@ -53,4 +53,10 @@ interface GeneratedFileStore
      * directorio de la entrada si queda vacio.
      */
     public function discard(GeneratedFileArea $area, string $recordedPath): GeneratedFileRemoval;
+
+    /**
+     * ¿Existe la raiz de la clase y es un directorio? Sin ella no se concilia:
+     * una raiz ausente no dice nada de las filas (ADR-045).
+     */
+    public function rootExists(GeneratedFileArea $area): bool;
 }

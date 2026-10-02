@@ -116,6 +116,11 @@ final readonly class FilesystemGeneratedFileStore implements GeneratedFileStore
             : $this->removeFile($area, $path);
     }
 
+    public function rootExists(GeneratedFileArea $area): bool
+    {
+        return $this->resolvedRoot($area) !== null;
+    }
+
     public function locate(GeneratedFileArea $area, string $recordedPath): RecordedFileLocation
     {
         return $this->resolveRecorded($area, $recordedPath)[0];
@@ -134,7 +139,7 @@ final readonly class FilesystemGeneratedFileStore implements GeneratedFileStore
         }
 
         if (! @unlink($file)) {
-            return GeneratedFileRemoval::Failed;
+            return $this->failed($area, $file);
         }
 
         if ($area->holdsDirectories()) {
@@ -253,7 +258,7 @@ final readonly class FilesystemGeneratedFileStore implements GeneratedFileStore
             return $this->refuse($area, 'not_a_file');
         }
 
-        return @unlink($path) ? GeneratedFileRemoval::Removed : GeneratedFileRemoval::Failed;
+        return @unlink($path) ? GeneratedFileRemoval::Removed : $this->failed($area, $path);
     }
 
     /**
@@ -280,11 +285,28 @@ final readonly class FilesystemGeneratedFileStore implements GeneratedFileStore
 
         foreach ($files as $file) {
             if (! @unlink($file)) {
-                return GeneratedFileRemoval::Failed;
+                return $this->failed($area, $file);
             }
         }
 
-        return @rmdir($path) ? GeneratedFileRemoval::Removed : GeneratedFileRemoval::Failed;
+        return @rmdir($path) ? GeneratedFileRemoval::Removed : $this->failed($area, $path);
+    }
+
+    /**
+     * El sistema de ficheros nego el borrado. Log de aviso con la clase y el
+     * MOTIVO, nunca la ruta ni el nombre (regla dura 21): `directory_not_writable`
+     * cuando el directorio que lo contiene no admite escritura del usuario de la
+     * aplicacion —el caso real: `exports/` creado por `root` con un `exec -u
+     * root`—, y `unlink_failed` en cualquier otro caso.
+     */
+    private function failed(GeneratedFileArea $area, string $path): GeneratedFileRemoval
+    {
+        $this->logger->warning('generated_files.remove_failed', [
+            'class' => $area->class->value,
+            'reason' => is_writable(\dirname($path)) ? 'unlink_failed' : 'directory_not_writable',
+        ]);
+
+        return GeneratedFileRemoval::Failed;
     }
 
     /** La raiz resuelta, o nula si no existe o no es un directorio. */

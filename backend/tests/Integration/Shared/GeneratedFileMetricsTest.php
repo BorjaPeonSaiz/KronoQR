@@ -25,6 +25,7 @@ function seriesDeFicherosGenerados(): array
         RedisGeneratedFileMetrics::ORPHANS_REMOVED_TOTAL,
         RedisGeneratedFileMetrics::REFUSED_TOTAL,
         RedisGeneratedFileMetrics::MISSING_TOTAL,
+        RedisGeneratedFileMetrics::REMOVE_FAILED_TOTAL,
         RedisGeneratedFileMetrics::OVERDUE,
     ];
 }
@@ -33,13 +34,14 @@ beforeEach(function (): void {
     app(Redis::class)->connection()->command('DEL', seriesDeFicherosGenerados());
 });
 
-it('publica las cuatro series con su nombre y solo la etiqueta class', function (): void {
+it('publica las cinco series con su nombre y solo la etiqueta class', function (): void {
     $metricas = new RedisGeneratedFileMetrics(app(Redis::class));
 
     $metricas->orphanRemoved(GeneratedFileClass::DataExportWork);
     $metricas->orphanRemoved(GeneratedFileClass::DataExportWork);
     $metricas->refused(GeneratedFileClass::ReportExport);
     $metricas->missing(GeneratedFileClass::DataExport);
+    $metricas->removeFailed(GeneratedFileClass::Diagnostics);
     $metricas->overdue(GeneratedFileClass::LegalExportConsole, 3);
     $metricas->overdue(GeneratedFileClass::LegalExportConsole, 1);
 
@@ -49,11 +51,13 @@ it('publica las cuatro series con su nombre y solo la etiqueta class', function 
         'kronoqr:metrics:generated_files_orphans_removed_total',
         'kronoqr:metrics:generated_files_refused_total',
         'kronoqr:metrics:generated_files_missing_total',
+        'kronoqr:metrics:generated_files_remove_failed_total',
         'kronoqr:metrics:generated_files_overdue',
     ])
         ->and($leer(RedisGeneratedFileMetrics::ORPHANS_REMOVED_TOTAL))->toBe(['class=data_export_work' => '2'])
         ->and($leer(RedisGeneratedFileMetrics::REFUSED_TOTAL))->toBe(['class=report_export' => '1'])
         ->and($leer(RedisGeneratedFileMetrics::MISSING_TOTAL))->toBe(['class=data_export' => '1'])
+        ->and($leer(RedisGeneratedFileMetrics::REMOVE_FAILED_TOTAL))->toBe(['class=diagnostics' => '1'])
         // Un gauge: el ultimo valor, no la suma.
         ->and($leer(RedisGeneratedFileMetrics::OVERDUE))->toBe(['class=legal_export_console' => '1']);
 })->group('RQ-06', 'RL-15');
@@ -68,6 +72,7 @@ it('el catalogo de /metrics las declara con la unica etiqueta class', function (
         'generated_files_orphans_removed_total',
         'generated_files_refused_total',
         'generated_files_missing_total',
+        'generated_files_remove_failed_total',
         'generated_files_overdue',
     ]);
 

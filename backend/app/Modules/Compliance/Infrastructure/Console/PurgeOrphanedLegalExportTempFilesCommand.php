@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Infrastructure\Console;
 
 use App\Modules\Compliance\Application\UseCase\SweepLegalExportFiles;
+use App\Modules\Shared\Infrastructure\Console\InstallationText;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -57,14 +58,29 @@ final class PurgeOrphanedLegalExportTempFilesCommand extends Command
             'console_overdue' => $result['overdue'],
         ]);
 
-        $this->info('Temporales huerfanos borrados: '.$result['removed'].' (ventana: '.$retentionHours.' h).');
+        $this->info(self::text('generated-files.legal_exports.temporaries', [
+            'count' => $result['removed'],
+            'hours' => $retentionHours,
+        ]));
 
         if ($result['overdue'] > 0) {
-            $this->warn('Hay '.$result['overdue'].' exportaciones legales de consola con mas de '
-                .config()->integer('compliance.legal_export_console_warning_days').' dias en el servidor. '
-                .'No se borran solas: borralas en cuanto las hayas entregado.');
+            $this->warn(self::text('generated-files.legal_exports.console_overdue', [
+                'count' => $result['overdue'],
+                'days' => config()->integer('compliance.legal_export_console_warning_days'),
+            ]));
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Un texto de `lang/*\/generated-files.php` en el idioma de la INSTALACION,
+     * no en `APP_LOCALE` (ver `InstallationText`).
+     *
+     * @param  array<string, int>  $replace
+     */
+    private static function text(string $key, array $replace = []): string
+    {
+        return app(InstallationText::class)->line($key, $replace);
     }
 }
