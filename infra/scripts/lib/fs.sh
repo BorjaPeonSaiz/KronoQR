@@ -110,3 +110,43 @@ kq_publish_as_app() {
     cat >"$dest"
   ) <"$source_file"
 }
+
+# Crea UN directorio de la aplicacion (0750, dueño 1000:1000) bajo un arbol que
+# escribe el runtime —BACKUP_PATH—, COMO EL UID DE LA APLICACION y sin `-p`.
+# `kq_ensure_app_dir DIR`; si lo crea, deja `KQ_DIR_CREATED=1`.
+#
+# POR QUE NO `install -d -o 1000` COMO ROOT (ronda 4 del bloque 16). El runtime
+# es dueño de BACKUP_PATH y puede dejar `reports` como enlace simbolico a donde
+# quiera: `[ -d reports ]` lo da por bueno y `install -d .../reports/retention`
+# como root creaba un directorio 1000:1000 en el destino del enlace. Ahora root
+# no crea nada ahi: lo crea el uid 1000, de modo que un enlace plantado solo le
+# da lo que ese uid ya podia hacer, y un enlace que YA existe se rechaza.
+#
+# Devuelve: 0 existe o creado · 1 no se pudo crear · 2 hace falta `setpriv`
+# (somos root y no esta) · 3 existe y es un enlace o no es un directorio.
+# shellcheck disable=SC2034 # lo leen los llamadores.
+KQ_DIR_CREATED=0
+kq_ensure_app_dir() {
+  local dir="$1"
+  KQ_DIR_CREATED=0
+  if [ -L "${dir}" ]; then
+    return 3
+  fi
+  if [ -d "${dir}" ]; then
+    return 0
+  fi
+  [ ! -e "${dir}" ] || return 3
+  if [ "$(id -u)" = "0" ]; then
+    command -v setpriv >/dev/null 2>&1 || return 2
+    setpriv --reuid=1000 --regid=1000 --clear-groups mkdir -m 0750 -- "${dir}" 2>/dev/null || return 1
+  else
+    mkdir -m 0750 -- "${dir}" 2>/dev/null || return 1
+  fi
+  # Lo creado tiene que ser un directorio real, no un enlace colocado en medio.
+  if [ -L "${dir}" ] || [ ! -d "${dir}" ]; then
+    return 3
+  fi
+  # shellcheck disable=SC2034
+  KQ_DIR_CREATED=1
+  return 0
+}

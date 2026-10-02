@@ -1172,6 +1172,12 @@ ensure_backup_directories() {
 # (mismo criterio que arriba): un `reports/` con informes de una instalacion
 # anterior no se toca.
 #
+# Se crean COMO EL UID 1000 y sin seguir enlaces (lib/fs.sh, `kq_ensure_app_dir`):
+# un `BACKUP_PATH` que ya existia de una instalacion anterior lo escribe el runtime
+# y puede traer `reports` como enlace; con `install -d` como root, `retention` se
+# creaba en el destino del enlace. En una instalacion limpia el runtime aun no
+# existe y el riesgo no es real, pero un solo camino es mas facil de razonar.
+#
 # No es bloqueante: sin el directorio la purga sigue funcionando y su asiento de
 # auditoria es la constancia (ADR-045); se pierde la copia legible, y se avisa.
 ensure_retention_reports_directory() {
@@ -1179,15 +1185,17 @@ ensure_retention_reports_directory() {
   local retention="${reports}/retention"
   local dir
 
+  local status
   for dir in "${reports}" "${retention}"; do
-    [ -d "${dir}" ] && continue
-    if install -d -o 1000 -g 1000 -m 0750 "${dir}" 2>/dev/null ||
-      install -d -m 0750 "${dir}" 2>/dev/null; then
-      register_undo "$(kq_format undo_retention_dir "${dir}")" "rm -rf '${dir}'"
-    else
+    status=0
+    kq_ensure_app_dir "${dir}" || status=$?
+    if [ "${status}" -ne 0 ]; then
       kq_msg check_warn "$(kq_format c_retention_dir "${dir}")"
       kq_msg fix "$(kq_format f_retention_dir "${retention}")"
       return 0
+    fi
+    if [ "${KQ_DIR_CREATED}" -eq 1 ]; then
+      register_undo "$(kq_format undo_retention_dir "${dir}")" "rm -rf '${dir}'"
     fi
   done
   return 0

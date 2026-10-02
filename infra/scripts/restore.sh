@@ -60,6 +60,9 @@
 #           restaurada: sus ficheros quedan huerfanos y se borran al cumplir su
 #           plazo, sin asiento.
 #     El informe lo anuncia.
+#     El aviso solo se imprime con `AUDITAR=1` (la base de destino es la de la
+#     instalacion): con `--audit-by-caller` (la vuelta atras de update.sh) no, y
+#     es aceptable porque durante el mantenimiento no se genera ningun fichero.
 #   · Los informes de retencion (BACKUP_PATH/reports/retention) tampoco se
 #     tocan: un informe de purga describe un hecho que ocurrio aunque la base
 #     vuelva a un momento anterior.

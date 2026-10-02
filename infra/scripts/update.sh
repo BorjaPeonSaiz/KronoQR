@@ -135,9 +135,6 @@ readonly KQ_WAIT_WORKERS=90
 # Matriz de versiones soportadas (doc 02 §11.6.5): la menor vigente y las DOS
 # anteriores.
 readonly KQ_SUPPORT_WINDOW_MINORS=2
-# uid con el que corre la aplicacion en su contenedor; es quien lee el informe
-# al armar el paquete de diagnostico (tarea 5.9).
-readonly KQ_APP_UID=1000
 readonly KQ_CONTAINER_MIGRATIONS="/var/www/html/database/migrations"
 readonly KQ_CONTAINER_SCRIPTS="/opt/kronoqr/scripts"
 readonly KQ_MIN_DOCKER_FREE_GIB=2
@@ -956,10 +953,8 @@ resolve_failed_step() {
 open_report() {
   local dir="${CFG_BACKUP_PATH}/reports"
 
-  if [ ! -d "${dir}" ]; then
-    install -d -o "${KQ_APP_UID}" -g "${KQ_APP_UID}" -m 0750 "${dir}" 2>/dev/null ||
-      install -d -m 0750 "${dir}" 2>/dev/null || return 1
-  fi
+  # Si no existe, la crea el uid 1000 (lib/fs.sh); un enlace colgante se rechaza.
+  kq_ensure_app_dir "${dir}" || return 1
   STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kq-update.XXXXXX" 2>/dev/null)" || return 1
   REPORT_WORK="${STAGE_DIR}/report.log"
   DETAIL_WORK="${STAGE_DIR}/detail.log"
@@ -1689,12 +1684,11 @@ readonly KQ_RETENTION_REPORT_NAME='^retencion-(propuesta|purga)-[A-Za-z0-9._-]+\
 # Crea reports/ y reports/retention con dueño 1000:1000 y modo 0750. Idempotente.
 ensure_retention_reports_dir() {
   local reports="${CFG_BACKUP_PATH}/reports" dir
+  # Como uid 1000 y rechazando enlaces (lib/fs.sh, `kq_ensure_app_dir`): BACKUP_PATH
+  # lo escribe el runtime y un `reports` plantado como enlace haria que root
+  # crease `retention` donde el enlace apunte.
   for dir in "${reports}" "${reports}/retention"; do
-    [ -d "${dir}" ] && continue
-    if ! install -d -o "${KQ_APP_UID}" -g "${KQ_APP_UID}" -m 0750 "${dir}" 2>/dev/null &&
-      ! install -d -m 0750 "${dir}" 2>/dev/null; then
-      return 1
-    fi
+    kq_ensure_app_dir "${dir}" || return 1
   done
   return 0
 }
