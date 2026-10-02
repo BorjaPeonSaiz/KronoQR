@@ -213,21 +213,30 @@ test(
   { tag: ['@RF-PD-15', '@RF-KI-03'] },
   async ({ page }) => {
     await stubKioskApi(page)
-    // El latido esta completamente roto: ni contesta.
-    await page.route('**/api/v1/kiosk/heartbeat', async (route) => route.abort('failed'))
+    // El latido esta completamente roto: ni contesta. La peticion queda
+    // retenida hasta el final de la prueba, de modo que si la confirmacion
+    // dependiera del latido, esperaria aqui y la prueba fallaria por el
+    // `expect.timeout`, no por un cronometro.
+    let releaseHeartbeat: () => void = () => undefined
+    const heartbeatGate = new Promise<void>((resolve) => {
+      releaseHeartbeat = resolve
+    })
+    await page.route('**/api/v1/kiosk/heartbeat', async (route) => {
+      await heartbeatGate
+      await route.abort('failed').catch(() => undefined)
+    })
     const stub = await stubScanApi(page, { outcome: 'clock_in' })
 
     await page.goto('/')
 
-    // La confirmacion sigue siendo local e instantanea (RNF-P-03): un latido
-    // que ni siquiera contesta no puede retrasar esto ni un milisegundo,
-    // porque no hay ningun `await` entre el escaneo y la confirmacion que
-    // dependa del canal de telemetria.
+    // La confirmacion y el envio del fichaje ocurren con el latido SIN
+    // resolver. El presupuesto de 300 ms (RNF-P-03) NO se afirma aqui: es de
+    // rendimiento y depende de la carga de la maquina; se mide en
+    // `tests/unit/ScanView.spec.ts` y en `scan.spec.ts` / `qr-decode-budget.spec.ts`.
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
-    const latency = Number(await page.getByTestId('scan-latency-ms').textContent())
-    expect(latency).toBeLessThan(300)
-
     await expect.poll(() => stub.recorded.length).toBeGreaterThan(0)
+
+    releaseHeartbeat()
   },
 )
 
