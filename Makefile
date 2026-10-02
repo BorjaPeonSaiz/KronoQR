@@ -407,7 +407,8 @@ else
 	dur=$$(grep 'Duration:' .unit-suite.log | grep -oE '[0-9]+\.[0-9]+' | tail -1); \
 	skip_rc=0; \
 	if [ -n "$(UNIT_MAX_SKIPPED)" ] && [ $$status -eq 0 ]; then \
-		bash .github/scripts/pest-max-skipped.sh check "$(UNIT_MAX_SKIPPED)" .unit-suite.log || skip_rc=$$?; \
+		: "Ruta absoluta: en la CI RUN_APP es «cd backend &&» y esta linea ya corre dentro de backend/."; \
+		bash "$(CURDIR)/.github/scripts/pest-max-skipped.sh" check "$(UNIT_MAX_SKIPPED)" .unit-suite.log || skip_rc=$$?; \
 	fi; \
 	rm -f .unit-suite.log; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
