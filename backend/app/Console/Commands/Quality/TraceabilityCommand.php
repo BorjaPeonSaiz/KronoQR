@@ -58,11 +58,17 @@ final class TraceabilityCommand extends Command
         /** @var array<string, list<string>> $paths */
         $paths = config()->array('quality.test_paths');
 
+        // Solo las rutas: la cifra de cada fichero la usa QualityGatesTest para
+        // atarla al INTEGRATION_MAX_SKIPPED de ci.yml, no la matriz.
+        /** @var array<string, int> $skippedInCi */
+        $skippedInCi = config()->array('quality.skipped_in_ci', []);
+
         return new TraceabilityReport(
             RequirementCatalog::fromFile($docs.'/'.config()->string('quality.requirements_file')),
             (new TagScanner($paths, dirname(base_path())))->scan(),
             new PhaseOrder($order),
             config()->integer('quality.current_phase'),
+            array_map(strval(...), array_keys($skippedInCi)),
         );
     }
 

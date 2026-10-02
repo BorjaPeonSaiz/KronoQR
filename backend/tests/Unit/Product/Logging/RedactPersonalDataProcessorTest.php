@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Product\Infrastructure\Logging\RedactPersonalDataProcessor;
 use Monolog\Level;
 use Monolog\LogRecord;
+use Tests\Support\Time\WallClockBudget;
 
 /*
  * EL LOG TECNICO PASA POR EL MISMO SANEADOR QUE `error_events` (L1, regla dura
@@ -163,5 +164,7 @@ it('cuesta poco por linea', function (): void {
 
     $mediaMs = (hrtime(true) - $inicio) / $vueltas / 1_000_000;
 
-    expect($mediaMs)->toBeLessThan(0.5);
+    // Sin instrumentacion se afirma; bajo `make coverage` y la mutacion, que
+    // corren con Xdebug en modo coverage, se anuncia (CI-COB-01).
+    WallClockBudget::expectBelowMilliseconds($mediaMs, 0.5, 'RF-PD-15');
 })->group('RF-PD-15');

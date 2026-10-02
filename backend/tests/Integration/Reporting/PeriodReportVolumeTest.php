@@ -11,6 +11,7 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -30,7 +31,8 @@ use Tests\Support\Workforce\WorkforceFixtures;
  *      scan* sobre `daily_totals`**. Es la comprobacion que sigue valiendo
  *      manana en una maquina mas rapida; el reloj no.
  *   2. **El tiempo**: por debajo del presupuesto. Es la que traduce el plan a lo
- *      que nota quien cierra una nomina.
+ *      que nota quien cierra una nomina. Se afirma solo sin instrumentacion de
+ *      cobertura ({@see WallClockBudget}); bajo Xdebug se anuncia y no se afirma.
  *
  * ## Las filas de `daily_totals` se escriben directamente
  *
@@ -173,8 +175,12 @@ it('genera el informe mensual de 500 empleados dentro del presupuesto de RNF-P-0
 
     expect($informe->rowCount())->toBe(EMPLEADOS)
         // 31 dias de enero x 480 minutos por persona.
-        ->and($informe->rows[0]->workedMinutes)->toBe(31 * 480)
-        ->and($tardo)->toBeLessThan(5.0);
+        ->and($informe->rows[0]->workedMinutes)->toBe(31 * 480);
+
+    // El reloj solo se afirma sin instrumentacion: bajo `make coverage` Xdebug
+    // mide su propio coste (5,88 s el 02-10-2026, CI-COB-01) y la prueba se queda
+    // con el resultado de arriba y con el plan de la de abajo.
+    WallClockBudget::expectBelow($tardo, 5.0, 'RNF-P-05');
 })->group('RNF-P-05', 'RF-IN-01');
 
 it('resuelve la consulta mensual sin recorrer daily_totals entera', function (): void {

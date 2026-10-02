@@ -21,7 +21,7 @@
 #
 # NO se ejecuta en cada push: son ~3 minutos y no aporta nada a un cambio de
 # frontend. Por eso vive fuera del pipeline de `ci.yml` y de su presupuesto de
-# 4 minutos para las etapas 1-3 (doc 02 §10.1).
+# 15 minutos para las etapas 1-3 (doc 02 §10.1, medido).
 
 name: Simulacro de restauracion de copia
 

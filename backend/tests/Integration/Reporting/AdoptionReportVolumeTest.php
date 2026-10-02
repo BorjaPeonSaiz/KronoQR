@@ -19,6 +19,7 @@ use Illuminate\Support\Str;
 use Mockery\MockInterface;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -245,8 +246,10 @@ it('compone el cuadro de dos periodos sobre dos años de historico dentro del pr
         ->and($cuadro->indicator(AdoptionIndicatorKey::WorkDaysCompleteRatio)?->current)->toBeGreaterThan(95.0)
         // Y con periodo anterior, que es la mitad del trabajo: enero se compara
         // contra los 31 dias que terminan el 31 de diciembre.
-        ->and($cuadro->indicator(AdoptionIndicatorKey::WorkDaysCompleteRatio)?->previous)->not->toBeNull()
-        ->and($tardo)->toBeLessThan(5.0);
+        ->and($cuadro->indicator(AdoptionIndicatorKey::WorkDaysCompleteRatio)?->previous)->not->toBeNull();
+
+    // Sin instrumentacion se afirma; bajo `make coverage` se anuncia (CI-COB-01).
+    WallClockBudget::expectBelow($tardo, 5.0, 'RNF-P-05');
 })->group('RNF-P-05', 'RF-IN-08');
 
 it('resuelve el recuento de jornadas completas sin recorrer dos años de shift_entries', function (): void {

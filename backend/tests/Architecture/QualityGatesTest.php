@@ -117,16 +117,125 @@ it('exige el MSI del 80 por ciento sobre el dominio, acotado y con OPcache apaga
     expect($makefile)->toContain('--path=$$paths');
 
     // Y que la CI ejecute de verdad los DOS objetivos, no solo el completo.
-    // El job `unit` corre `mutate-changed` en cada push y `mutate` completo
-    // en el disparo manual; el job `mutation` corre `mutate` completo de
-    // noche y tambien en el disparo manual. Sin los dos jobs, un umbral que
-    // solo corre en el portatil de quien lo escribio no es una puerta.
+    // El job `unit` corre `mutate-changed` en cada push y en el disparo manual;
+    // el job `mutation` corre `mutate` completo de noche y tambien en el
+    // disparo manual. Sin los dos jobs, un umbral que solo corre en el portatil
+    // de quien lo escribio no es una puerta.
     $ci = repoContents('.github/workflows/ci.yml');
 
     expect($ci)->toContain('make mutate-changed');
     expect($ci)->toMatch('/\bmake mutate\b(?!-changed)/');
     expect($ci)->toMatch('/^\s*mutation:\s*$/m');
+
+    // El 80 % sobre el CONJUNTO de ficheros de dominio que el cambio toca (Pest
+    // da una sola nota por ejecucion, no una por fichero) tiene que evaluarse
+    // tambien en el disparo manual (R6-DV-01/02, R2-QB-01): el job `unit`
+    // ejecuta `mutate-changed` en los dos eventos y la pasada GLOBAL (`make
+    // mutate`) vive solo en el job `mutation`. La base es `origin/main` en toda
+    // rama, para que el check «③» del mismo SHA diga lo mismo en push y en
+    // manual; solo en un push a `main` es el `before` del push.
+    expect(preg_match('/^  unit:\n(.*?)^  integration:\n/ms', $ci, $unit))->toBe(1);
+    expect($unit[1] ?? '')->toContain('make mutate-changed MUTATE_BASE=')
+        ->and($unit[1] ?? '')->toContain('base="origin/main"')
+        ->and($unit[1] ?? '')->toContain('"${GITHUB_REF}" = "refs/heads/main"')
+        ->and($unit[1] ?? '')->not->toMatch('/\bmake mutate\b(?!-changed)/');
+    expect(preg_match('/^  mutation:\n(.*?)\z/ms', $ci, $mutation))->toBe(1);
+    expect($mutation[1] ?? '')->toMatch('/\bmake mutate\b(?!-changed)/');
+
+    // Sin mutantes (una rama cuyo unico cambio de dominio es una interfaz): solo
+    // se da por bueno si NO hay clases, traits ni enums entre lo cambiado. Un
+    // `--ignore-min-score-on-zero-mutations` a ciegas dejaria pasar una clase
+    // nueva sin ninguna prueba (con `--covered-only` sale tambien con cero
+    // mutantes).
+    expect($makefile)->toContain("grep -q 'No mutations created'")
+        ->and($makefile)->toContain('solo_interfaces')
+        ->and($makefile)->not->toMatch('/--min=80\s+--ignore-min-score/');
 })->group('RNF-M-01', 'RQ-10');
+
+it('hace que los runs de distinto evento no se cancelen entre si y que ninguna omision de Unit, Contract, Feature e Integracion pase en silencio', function (): void {
+    // R6-DV-01: con un grupo de concurrencia comun, el disparo manual y el
+    // `schedule` cancelaban al run del `push`, que cubre otra cosa. El grupo
+    // lleva el evento.
+    $ci = repoContents('.github/workflows/ci.yml');
+
+    expect($ci)->toContain('group: ci-${{ github.ref }}-${{ github.event_name }}');
+
+    // R6-DV-07: una prueba `skipped` ni falla ni avisa, y la trazabilidad la
+    // cuenta como cobertura. El job de integracion falla si omite mas de las
+    // 19 conocidas (FpmPoolRenderTest, que necesita la imagen de la
+    // aplicacion); Unit y Contract/Feature (job ③) no tienen ninguna omision
+    // conocida y toleran 0. La logica es UN script, el mismo para las tres
+    // suites. El Chrome de las pruebas de sellado de PDF lo instala una accion
+    // que COMPRUEBA que arranca.
+    expect($ci)->toMatch('/make test-integration INTEGRATION_MAX_SKIPPED=\d+/')
+        ->and($ci)->toContain('make test-unit UNIT_MAX_SKIPPED=0')
+        ->and($ci)->toContain('make test-contract CONTRACT_MAX_SKIPPED=0')
+        ->and($ci)->toContain('uses: ./.github/actions/chrome-for-pdf')
+        ->and($ci)->not->toContain('sudo npm install --global');
+    $makefile = repoContents('Makefile');
+    expect($makefile)->toContain('INTEGRATION_MAX_SKIPPED')
+        ->and($makefile)->toContain('UNIT_MAX_SKIPPED')
+        ->and($makefile)->toContain('CONTRACT_MAX_SKIPPED')
+        ->and(substr_count($makefile, '.github/scripts/pest-max-skipped.sh'))->toBeGreaterThanOrEqual(3);
+    expect(is_file(Repo::file('.github/scripts/pest-max-skipped.sh')))->toBeTrue();
+
+    // La version de puppeteer de la accion (la de la CI) es la de la imagen del
+    // producto: sin esto pueden divergir sin que nada lo vigile, y la CI
+    // probaria los PDF con un Chrome distinto del que entrega el producto.
+    preg_match('/default:\s*"(\d+\.\d+\.\d+)"/', repoContents('.github/actions/chrome-for-pdf/action.yml'), $enAccion);
+    preg_match('/puppeteer@(\d+\.\d+\.\d+)/', repoContents('infra/docker/php/Dockerfile'), $enImagen);
+    expect($enAccion[1] ?? null)->not->toBeNull()
+        ->and($enAccion[1] ?? null)->toBe($enImagen[1] ?? 'sin-version');
+    expect(repoContents('.github/actions/chrome-for-pdf/action.yml'))
+        ->toContain('LARAVEL_PDF_CHROME_PATH')
+        ->toContain('if [ ! -x "${chrome}" ]');
+})->group('RQ-10', 'RQ-13');
+
+it('ata las pruebas que la CI omite siempre al numero de omitidas que tolera el job de integracion', function (): void {
+    // R2-QA-01. `quality.skipped_in_ci` dice a la matriz que pruebas condicionadas
+    // no se ejecutan NUNCA en la CI (y por tanto no cubren nada), y
+    // INTEGRATION_MAX_SKIPPED dice al job ④ cuantas omitidas tolera. Son la
+    // misma lista contada de dos formas: si se separan, o la puerta de omitidas
+    // deja pasar una prueba nueva que nunca corre, o la matriz deja de contar
+    // como cobertura pruebas que ya se ejecutan.
+    $config = repoContents('backend/config/quality.php');
+
+    expect(preg_match("/'skipped_in_ci'\\s*=>\\s*\\[(?<body>[^\\]]*)\\]/", $config, $bloque))
+        ->toBe(1, 'quality.skipped_in_ci tiene que ser una lista literal en config/quality.php.');
+
+    preg_match_all("/'(?<path>[^']+)'\\s*=>\\s*(?<count>\\d+)\\s*,/", $bloque['body'] ?? '', $entradas);
+
+    expect($entradas['path'])->not->toBe([])
+        ->and($bloque['body'] ?? '')->not->toContain('env(');
+
+    preg_match_all('/make test-integration INTEGRATION_MAX_SKIPPED=(\d+)/', repoContents('.github/workflows/ci.yml'), $puerta);
+
+    expect($puerta[1])->toHaveCount(1, 'ci.yml tiene que llamar UNA vez a make test-integration con INTEGRATION_MAX_SKIPPED.');
+    expect(array_sum(array_map(intval(...), $entradas['count'])))->toBe(
+        (int) $puerta[1][0],
+        'La suma de quality.skipped_in_ci y el INTEGRATION_MAX_SKIPPED de ci.yml tienen que bajar (o subir) juntas.'
+    );
+
+    // Y cada fichero declarado existe y tiene de verdad saltos condicionados:
+    // una entrada huerfana descontaria cobertura de pruebas que ya no estan.
+    $fuentes = array_map(static fn (string $fichero): string => repoContents('backend/'.$fichero), $entradas['path']);
+
+    expect($fuentes)->each->toMatch('/->\s*skip\s*\(\s*!/');
+})->group('RQ-13');
+
+it('escanea con gitleaks solo el historico del commit en push y todas las referencias de noche', function (): void {
+    // R6-DV-03: sin acotar, gitleaks recorre todas las referencias y un valor de
+    // prueba en una rama sin integrar pone en rojo `main` y las demas ramas.
+    $ci = repoContents('.github/workflows/ci.yml');
+    $makefile = repoContents('Makefile');
+
+    expect($makefile)->toContain('--log-opts="--full-history HEAD"')
+        ->and($makefile)->toContain('SECRETS_SCAN_SCOPE');
+    expect($ci)->toContain('make secrets-scan SECRETS_SCAN_SCOPE=head')
+        ->and($ci)->toContain('make secrets-scan SECRETS_SCAN_SCOPE=all');
+    expect(preg_match('/^  secrets-history:\n(.*?)\z/ms', $ci, $nocturno))->toBe(1);
+    expect($nocturno[1] ?? '')->toContain("if: github.event_name == 'schedule'");
+})->group('RS-10');
 
 it('declara las cinco suites de la piramide de pruebas', function (): void {
     // RQ-14: la cobertura por niveles no la decide quien implementa. La

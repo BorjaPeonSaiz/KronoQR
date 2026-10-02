@@ -387,6 +387,12 @@ endif
 # vez.
 UNIT_SUITE_MAX_SECONDS ?= 5
 
+# Maximo de pruebas omitidas (`skipped`) que tolera `test-unit`; vacio, sin
+# comprobar (local). La CI lo fija a 0: la suite unitaria no tiene ninguna
+# omision conocida (2772 pruebas, 0 omitidas en los runs medidos). Ver el
+# comentario de `INTEGRATION_MAX_SKIPPED`.
+UNIT_MAX_SKIPPED ?=
+
 # La duracion se lee de la linea "Duration:" de Pest —el tiempo de la suite, no
 # el del arranque de artisan ni el de docker exec— y se compara con awk porque
 # sh no sabe de decimales. Si el formato de salida de Pest cambiara y la linea
@@ -399,8 +405,14 @@ else
 	status=$$?; \
 	cat .unit-suite.log; \
 	dur=$$(grep 'Duration:' .unit-suite.log | grep -oE '[0-9]+\.[0-9]+' | tail -1); \
+	skip_rc=0; \
+	if [ -n "$(UNIT_MAX_SKIPPED)" ] && [ $$status -eq 0 ]; then \
+		: "Ruta absoluta: en la CI RUN_APP es «cd backend &&» y esta linea ya corre dentro de backend/."; \
+		bash "$(CURDIR)/.github/scripts/pest-max-skipped.sh" check "$(UNIT_MAX_SKIPPED)" .unit-suite.log || skip_rc=$$?; \
+	fi; \
 	rm -f .unit-suite.log; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
+	if [ $$skip_rc -ne 0 ]; then exit $$skip_rc; fi; \
 	if [ -z "$$dur" ]; then \
 		echo "[make] AVISO: no se pudo leer la duracion de la suite; el presupuesto de $(UNIT_SUITE_MAX_SECONDS) s no se ha comprobado."; \
 	elif awk "BEGIN { exit !($$dur > $(UNIT_SUITE_MAX_SECONDS)) }"; then \
@@ -412,11 +424,25 @@ else
 	fi
 endif
 
-test-integration: ## Repositorios contra PostgreSQL real
+# Puerta contra las omisiones silenciosas (R6-DV-07, R2-QA-01). Una prueba
+# `skipped` no falla ni avisa, y `qa:traceability` la cuenta como cobertura: 24
+# pruebas de esta suite salieron omitidas en cada run de la CI durante semanas
+# sin que nadie lo viera. Con `INTEGRATION_MAX_SKIPPED=<n>` el objetivo falla si
+# la suite omite MAS de n pruebas. Vacio (el valor por defecto, en local) no
+# comprueba nada: en un portatil sin Chromium o sin php-fpm omitir es esperable.
+# La CI lo fija en ci.yml, job `integration`, con el numero y el motivo.
+#
+# La logica (leer la linea `Tests:` de Pest y fallar si no aparece) vive en
+# .github/scripts/pest-max-skipped.sh, la misma para las tres suites de la CI.
+INTEGRATION_MAX_SKIPPED ?=
+
+test-integration: ## Repositorios contra PostgreSQL real (INTEGRATION_MAX_SKIPPED=n falla si se omiten mas de n pruebas)
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
-else
+else ifeq ($(INTEGRATION_MAX_SKIPPED),)
 	$(RUN_APP) php artisan test --testsuite=Integration
+else
+	@bash .github/scripts/pest-max-skipped.sh run "$(INTEGRATION_MAX_SKIPPED)" "$(RUN_APP) php artisan test --testsuite=Integration"
 endif
 
 # Contract y Feature juntas y en cada push desde el cierre de la Fase 0.
@@ -436,11 +462,18 @@ endif
 # pero Contract y Feature se quedan aqui: son las baratas, y las baratas van en
 # cada push junto a la mutacion, no en un job aparte que solo anadiria el coste
 # de arrancar otro runner por segundos de prueba.
+# Maximo de pruebas omitidas que tolera `test-contract`; vacio, sin comprobar. La
+# CI lo fija a 0 (2283 pruebas, 0 omitidas en los runs medidos; ver
+# `INTEGRATION_MAX_SKIPPED`).
+CONTRACT_MAX_SKIPPED ?=
+
 test-contract: ## Contrato OpenAPI y feature, las dos suites que la CI ejecuta en cada push
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
-else
+else ifeq ($(CONTRACT_MAX_SKIPPED),)
 	$(RUN_APP) php artisan test --testsuite=Contract,Feature
+else
+	@bash .github/scripts/pest-max-skipped.sh run "$(CONTRACT_MAX_SKIPPED)" "$(RUN_APP) php artisan test --testsuite=Contract,Feature"
 endif
 
 # Etapa 2 de la CI junto a Deptrac. Son las dos mitades de la misma frontera:
@@ -877,9 +910,31 @@ endif
 # delimitada por el propio escaneo). Al pasar limpio HOY, este objetivo es
 # BLOQUEANTE desde el primer dia (doc 02 §9.2): no lleva `continue-on-error` en
 # la CI.
-secrets-scan: ## gitleaks sobre el historico completo (umbral: 0 hallazgos, bloqueante)
-	$(GITLEAKS) git --config .gitleaks.toml --exit-code 1 -v .
-	@echo "[make] gitleaks: 0 hallazgos en el historico."
+#
+# ALCANCE (R6-DV-03, 02-10-2026). Sin `--log-opts`, gitleaks recorre TODAS las
+# referencias (`--all`): ramas ajenas, sin integrar, incluidas. Como la CI hace
+# `fetch-depth: 0`, un valor de prueba en una rama cualquiera ponia en rojo
+# `main` y todas las demas ramas (PR #103 y #104). Por eso hay dos alcances:
+#
+#   SECRETS_SCAN_SCOPE=head  el historico alcanzable desde HEAD (el commit del
+#                            run). Es lo que usa la CI en push y en el disparo
+#                            manual: lo que ESTE cambio introduce o arrastra.
+#   SECRETS_SCAN_SCOPE=all   todas las referencias. Lo usa el job nocturno
+#                            `secrets-history` y es el valor por defecto en
+#                            local, donde lo que se busca es no dejar nada.
+SECRETS_SCAN_SCOPE ?= all
+
+ifeq ($(SECRETS_SCAN_SCOPE),head)
+GITLEAKS_LOG_OPTS := --log-opts="--full-history HEAD"
+else ifeq ($(SECRETS_SCAN_SCOPE),all)
+GITLEAKS_LOG_OPTS :=
+else
+$(error SECRETS_SCAN_SCOPE debe ser "head" o "all", no "$(SECRETS_SCAN_SCOPE)")
+endif
+
+secrets-scan: ## gitleaks sobre el historico (SECRETS_SCAN_SCOPE=head|all; umbral: 0 hallazgos, bloqueante)
+	$(GITLEAKS) git --config .gitleaks.toml --exit-code 1 $(GITLEAKS_LOG_OPTS) -v .
+	@echo "[make] gitleaks: 0 hallazgos en el historico ($(SECRETS_SCAN_SCOPE))."
 
 # SBOM CycloneDX del arbol de fuentes (composer.lock y package-lock.json): un
 # inventario de que trae cada version publicada, independiente de cualquier
@@ -1051,13 +1106,40 @@ else
 	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --parallel --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
 endif
 
-# `mutate` completo tarda 37-42 min medidos en la CI (comentario de arriba) y
-# el doc 02 §10.1 exige que las etapas 1-3 respondan en menos de 4 minutos en
-# cada push: los dos hechos juntos no caben en el mismo sitio. Decision
+# `mutate` completo tarda 37-57 min medidos en la CI (comentario de arriba) y
+# no cabe en las etapas 1-3 de cada push (doc 02 §10.1). Decision
 # (24-09-2026): en cada push se muta SOLO lo que el push cambia; la mutacion
 # COMPLETA queda para la noche (`schedule`) y para el disparo manual
-# (`workflow_dispatch`, el que se hace siempre antes de abrir una PR), en
-# ci.yml.
+# (`workflow_dispatch`, el que se hace siempre antes de abrir una PR), en el
+# job `mutation` de ci.yml.
+#
+# Base del diff, igual en push y en disparo manual (02-10-2026): en una rama que
+# NO es `main` es `origin/main` (merge-base, `git diff origin/main...HEAD`), asi
+# que ③ evalua lo mismo en los dos eventos y el check «③ Unitarias + Mutacion»
+# del mismo SHA no puede discrepar; solo en un push a `main` la base es el
+# `before` del push (para un merge commit, el diff de la rama integrada). Sin
+# ficheros de dominio cambiados termina en verde sin trabajo.
+#
+# QUE MIDE EL UMBRAL, SIN ADORNOS (corregido tras la revision del 02-10-2026).
+# `--min=80` NO es «80 % a cada fichero»: Pest calcula UNA nota para el CONJUNTO
+# de ficheros de `--path` (MutationTestRunner, MutationRepository::score()), asi
+# que es el 80 % sobre el conjunto de ficheros de dominio que el cambio toca. Un
+# fichero flojo puede quedar tapado por otros del mismo cambio. La pasada por
+# fichero seria iterar `--path` de uno en uno (mas lenta, mismo coste en total
+# pero sin paralelismo entre ficheros) y NO esta decidida: la politica vigente
+# es la del 24-09-2026, el umbral sobre el subconjunto que cambia.
+#
+# SIN MUTANTES. Con cero mutantes Pest da nota 0 y falla («No mutations
+# created»; `ignoreMinScoreOnZeroMutations` es false). Lo que se distingue:
+#   - todos los ficheros cambiados son interfaces (no hay clase, trait ni enum:
+#     no hay cuerpo que mutar): se da por bueno, con un mensaje;
+#   - hay clases, traits o enums: SIGUE fallando. Con `--covered-only` una clase
+#     de dominio nueva SIN pruebas tambien sale con cero mutantes, y esa es
+#     justo la que la puerta tiene que parar. Por eso NO se usa
+#     `--ignore-min-score-on-zero-mutations`, que dejaria pasarla.
+#   Limite conocido: un enum que solo tiene casos (sin metodos) tambien da cero
+#   mutantes y sale rojo; se arregla con una prueba que lo recorra o, si no hay
+#   nada que probar, hablandolo en la revision.
 #
 # Por que esto no relaja RQ-10. El umbral --min=80 se sigue aplicando, entero,
 # sobre el subconjunto que cambia: un push que introduce una regla de negocio
@@ -1093,12 +1175,28 @@ else
 	fi; \
 	files="$$(git diff --name-only --diff-filter=ACMR "$${base}...HEAD" -- 'backend/app/Modules/*/Domain/*.php' | sed 's#^backend/##')"; \
 	if [ -z "$$files" ]; then \
-		echo "[make] Sin ficheros de app/Modules/*/Domain cambiados frente a $$base: mutacion acotada omitida; la completa corre de noche (schedule) y en el disparo manual (workflow_dispatch)."; \
+		echo "[make] Sin ficheros de app/Modules/*/Domain cambiados frente a $$base: mutacion acotada omitida; la completa corre de noche (schedule) y en el disparo manual (job mutation)."; \
 		exit 0; \
 	fi; \
 	paths="$$(printf '%s\n' "$$files" | tr '\n' ',' | sed 's/,$$//')"; \
 	echo "[make] Mutando lo cambiado frente a $$base: $$paths"; \
-	$(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=':$$(pwd)/tools/mutation' $(PEST) --mutate --parallel --path=$$paths --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80"
+	log="$$(mktemp)"; st="$$(mktemp)"; \
+	( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=':$$(pwd)/tools/mutation' $(PEST) --mutate --parallel --path=$$paths --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80"; echo $$? >"$$st" ) 2>&1 | tee "$$log"; \
+	rc="$$(cat "$$st" 2>/dev/null)"; rc="$${rc:-1}"; \
+	if [ "$$rc" -ne 0 ] && grep -q 'No mutations created' "$$log"; then \
+		solo_interfaces=1; \
+		for f in $$files; do \
+			if grep -qE '^[[:space:]]*((final|abstract|readonly)[[:space:]]+)*(class|trait|enum)[[:space:]]' "backend/$$f"; then solo_interfaces=0; fi; \
+		done; \
+		if [ "$$solo_interfaces" -eq 1 ]; then \
+			echo "[make] Sin mutantes: todos los ficheros de dominio cambiados son interfaces (sin cuerpo que mutar). Se da por bueno."; \
+			rc=0; \
+		else \
+			echo "[make] ERROR: sin mutantes, pero entre lo cambiado hay clases, traits o enums. Una clase de dominio sin pruebas que la cubran (--covered-only) sale asi: escribe las pruebas unitarias."; \
+		fi; \
+	fi; \
+	rm -f "$$log" "$$st"; \
+	exit "$$rc"
 endif
 
 e2e: ## Playwright: quiosco con camara simulada, panel de gestion y portal

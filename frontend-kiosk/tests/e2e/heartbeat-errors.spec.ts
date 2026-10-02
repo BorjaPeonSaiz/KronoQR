@@ -6,13 +6,14 @@
 //   1. Que un fallo REAL de la aplicacion en marcha -no uno inventado en un
 //      test unitario- acaba de verdad en el cuerpo del siguiente latido, y
 //      que la respuesta del servidor vacia lo que se envio.
-//   2. Que un latido roto NUNCA retrasa un fichaje (regla dura 19, al reves):
+//   2. Que un latido roto NUNCA bloquea un fichaje (regla dura 19, al reves):
 //      reportar errores es un canal de telemetria, no una dependencia del
 //      camino de escaneo.
 
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import {
+  delayCameraStart,
   stubHeartbeatWithErrorCapture,
   stubHeartbeatWithTokenRotation,
   stubKioskApi,
@@ -209,25 +210,43 @@ test(
 )
 
 test(
-  'un latido roto NUNCA bloquea ni retrasa un fichaje (regla dura 19)',
+  'un latido roto NUNCA bloquea un fichaje: se confirma y se envia con el latido aun pendiente (regla dura 19)',
   { tag: ['@RF-PD-15', '@RF-KI-03'] },
   async ({ page }) => {
     await stubKioskApi(page)
-    // El latido esta completamente roto: ni contesta.
-    await page.route('**/api/v1/kiosk/heartbeat', async (route) => route.abort('failed'))
+    // La camara arranca con retraso (`delayCameraStart`): el latido, que sale
+    // al montar la pantalla, queda retenido ANTES de que exista un escaneo.
+    await delayCameraStart(page, 1_500)
+    // El latido esta completamente roto: ni contesta. La peticion queda
+    // retenida hasta el final de la prueba, de modo que si la confirmacion
+    // dependiera del latido, esperaria aqui y la prueba fallaria por el
+    // `expect.timeout`, no por un cronometro.
+    let heartbeatHeld = false
+    let releaseHeartbeat: () => void = () => undefined
+    const heartbeatGate = new Promise<void>((resolve) => {
+      releaseHeartbeat = resolve
+    })
+    await page.route('**/api/v1/kiosk/heartbeat', async (route) => {
+      heartbeatHeld = true
+      await heartbeatGate
+      await route.abort('failed').catch(() => undefined)
+    })
     const stub = await stubScanApi(page, { outcome: 'clock_in' })
 
     await page.goto('/')
 
-    // La confirmacion sigue siendo local e instantanea (RNF-P-03): un latido
-    // que ni siquiera contesta no puede retrasar esto ni un milisegundo,
-    // porque no hay ningun `await` entre el escaneo y la confirmacion que
-    // dependa del canal de telemetria.
-    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
-    const latency = Number(await page.getByTestId('scan-latency-ms').textContent())
-    expect(latency).toBeLessThan(300)
+    // Primero: el latido salio y esta retenido. Sin esto la prueba pasaria
+    // sin probar nada si el latido dejara de enviarse al montar.
+    await expect.poll(() => heartbeatHeld).toBe(true)
 
+    // Despues: la confirmacion y el envio del fichaje ocurren con el latido
+    // SIN resolver. El presupuesto de 300 ms (RNF-P-03) NO se afirma aqui: es
+    // de rendimiento y depende de la carga de la maquina; lo afirman
+    // `tests/unit/ScanView.spec.ts` (118) y `tests/e2e/scan.spec.ts` (111).
+    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
     await expect.poll(() => stub.recorded.length).toBeGreaterThan(0)
+
+    releaseHeartbeat()
   },
 )
 

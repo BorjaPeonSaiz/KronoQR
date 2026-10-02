@@ -42,3 +42,6 @@ Thumbs.db
 
 # Engram (memoria local de Claude Code): nunca se versiona
 .engram/
+
+# Fichero temporal de `make test-unit` (la puerta de omitidas usa mktemp)
+.unit-suite.log

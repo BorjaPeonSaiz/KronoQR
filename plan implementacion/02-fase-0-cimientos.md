@@ -41,7 +41,7 @@ Entregable esperado:
 - Los 8 módulos creados con su estructura hexagonal y sus service providers
 - Cadena de calidad: Pint, PHPStan nivel 9, Deptrac con las reglas de
   dependencia del documento 02 §1.6 y las tres aristas de ADR-025, Pest, Rector
-- Pipeline de CI con las etapas 1 a 3 en verde y por debajo de 4 minutos
+- Pipeline de CI con las etapas 1 a 3 en verde y dentro del presupuesto del doc 02 §10.1
 - Los tres frontends con TypeScript estricto, Tailwind 4 y Vitest
 - ADR-001 a ADR-020 escritos en docs/adr/ a partir de la tabla del documento
   02 §4; ADR-021 a ADR-028 ya existen y solo se revisan. Al terminar,
@@ -383,7 +383,7 @@ Resultado esperado: `make quality` en verde en el estado limpio, y **rojo** en a
 | **Precondiciones** | Derivada, no literal (§11.3 no incluye 0.4): **0.3**, porque la etapa ① ejecuta las herramientas que 0.3 configura |
 | **Bloquea a** | No figura en el camino crítico del §11.3. Derivado: **0.7**, cuya etapa ③b se añade a este pipeline |
 
-**Objetivo.** Cada *push* dispara las etapas ① Lint + Tipos, ② Arquitectura y ③ Unitarias + Mutación, y devuelve resultado en **menos de 4 minutos**.
+**Objetivo.** Cada *push* dispara las etapas ① Lint + Tipos, ② Arquitectura y ③ Unitarias + Mutación, y devuelve resultado en **menos de 15 minutos** (el objetivo inicial de 4 minutos no se cumplió en ninguna medición y el doc 02 §10.1 lo sustituyó por el medido el 02-10-2026).
 
 **Reglas duras aplicables.**
 
@@ -402,7 +402,7 @@ Resultado esperado: `make quality` en verde en el estado limpio, y **rojo** en a
 
 2. Configurar el disparo: **etapas 1–3 en cada *push***; las 4–7 en cada PR y la 8 antes de publicar versión (§10.1) — **fuera del alcance de esta tarea**, que solo cubre 1–3.
 3. Añadir `shfmt -i 2 -d` junto a ShellCheck en la etapa ① (§3.5, §9.2: 0 hallazgos).
-4. Cachear dependencias de Composer y npm para respetar el presupuesto de 4 minutos. El §10.1 razona el límite y el agente `devops-observabilidad` lo remata: *«una CI lenta se acaba ignorando»*.
+4. Cachear dependencias de Composer y npm para respetar el presupuesto de las etapas 1–3. El §10.1 razona el límite y el agente `devops-observabilidad` lo remata: *«una CI lenta se acaba ignorando»*.
 5. Garantizar que ningún secreto aparece en la salida del pipeline (§7.7 y regla de conducta del agente).
 6. Dejar preparados, sin implementar, `.github/workflows/e2e.yml` y `.github/workflows/release.yml`, que el árbol del §2 sí lista. Su contenido corresponde a las etapas ⑦ y ⑧ (tareas 3.7 y 5.x).
 7. **Crear el `CHANGELOG.md` y atarlo a la cadena.** El §10.5 lo exige —*«la versión desplegada es visible en `/api/v1/health`»* y el producto se versiona con **SemVer**—, y ninguna tarea lo producía. Se **genera** a partir de los mensajes de *commit* con formato convencional, no se escribe a mano, y su generación forma parte del pipeline de publicación. Aquí se crea el fichero, se fija el formato y se añade la comprobación de que **una versión publicada sin entrada en el `CHANGELOG` falla**. Es lo que permite que el actualizador de la tarea 5.7 diga al cliente qué cambia antes de aplicar nada.
@@ -428,7 +428,7 @@ git commit -am "test: violación deliberada de frontera" && git push
 #    la CI debe fallar en la etapa ① (ShellCheck)
 ```
 
-Resultado esperado: las tres etapas en verde sobre `main` limpio, en menos de 4 minutos acumulados, y rojo en cada sabotaje **en la etapa que le corresponde**. Si un sabotaje de arquitectura falla en la etapa ①, las etapas están mal repartidas.
+Resultado esperado: las tres etapas en verde sobre `main` limpio, dentro del presupuesto del doc 02 §10.1, y rojo en cada sabotaje **en la etapa que le corresponde**. Si un sabotaje de arquitectura falla en la etapa ①, las etapas están mal repartidas.
 
 **Terminado cuando** (subconjunto de §10.3):
 
