@@ -6,7 +6,6 @@ namespace App\Modules\Product\Infrastructure\Diagnostics;
 
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
-use DateTimeImmutable;
 use RuntimeException;
 use Throwable;
 
@@ -59,35 +58,6 @@ final readonly class JsonDiagnosticsBundleWriter implements DiagnosticsBundleWri
         @chmod($target, 0o600);
 
         return (string) (realpath($target) ?: $target);
-    }
-
-    public function purgeOlderThan(DateTimeImmutable $moment): int
-    {
-        $files = glob(rtrim($this->defaultDirectory, '/').'/*.json');
-
-        if ($files === false) {
-            return 0;
-        }
-
-        $limit = $moment->getTimestamp();
-        $removed = 0;
-
-        foreach ($files as $file) {
-            $modified = @filemtime($file);
-
-            // Un fichero cuya fecha no se puede leer NO se borra: en caso de
-            // duda se conserva, porque borrar de mas en el disco de un cliente
-            // es peor que dejar un fichero de mas.
-            if ($modified === false || $modified >= $limit) {
-                continue;
-            }
-
-            if (@unlink($file)) {
-                $removed++;
-            }
-        }
-
-        return $removed;
     }
 
     public function read(string $path): ?array

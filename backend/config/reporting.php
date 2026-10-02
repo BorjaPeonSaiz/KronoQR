@@ -170,6 +170,13 @@ return [
          * `GET /reports/exports/{uuid}/download` con su token (ADR-041).
          *
          * Directorio a `0700` y fichero a `0600`, como la exportacion integra.
+         *
+         * En el volumen compartido `app-storage` (ADR-045): el fichero lo
+         * escribe `horizon`, lo sirve `app` y lo purga `scheduler`. Tiene que
+         * quedar dentro de `/var/www/html/storage/app` y no coincidir ni
+         * solaparse con ninguna otra raiz de clase: la purga solo toca
+         * directorios `<uuid>/` de un nivel bajo esta raiz, sin seguir enlaces,
+         * y `product:doctor` falla si la raiz es `storage/app` o pisa otra.
          */
         'path' => env('REPORTING_EXPORT_PATH', storage_path('app/reports')),
 
@@ -229,6 +236,10 @@ return [
          * podria pedir otro. Pasado este plazo, la proxima vez que pida uno —o en
          * la purga de la madrugada siguiente— la fila se marca como fallida y se
          * desbloquea sola.
+         *
+         * Y el DOBLE de este plazo es la edad minima del directorio a medias de
+         * una fila que no llego a `completed` antes de que la purga lo borre
+         * (ADR-045): no se compite nunca con un trabajo que sigue escribiendo.
          */
         'stale_after_seconds' => (int) env('REPORTING_EXPORT_STALE_AFTER', 3600),
 

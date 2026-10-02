@@ -6,6 +6,8 @@ namespace App\Modules\Shared;
 
 use App\Modules\Shared\Application\Port\AuthenticationMetrics;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\GeneratedFileMetrics;
+use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
@@ -13,10 +15,14 @@ use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
 use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
+use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStore;
 use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
+use App\Modules\Shared\Infrastructure\Metrics\RedisGeneratedFileMetrics;
 use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\ServiceProvider;
+use Psr\Log\LoggerInterface;
 
 /**
  * Modulo Shared — objetos de valor comunes, tipos base y contratos
@@ -83,5 +89,18 @@ final class SharedServiceProvider extends ServiceProvider
                 max(0, Config::integer('security.rejection_floor_ms', 25)),
             ),
         );
+
+        // Los ficheros que genera el producto en el volumen `app-storage`
+        // (ADR-045). Vive aqui porque los purgan tres modulos que no pueden
+        // importarse entre si —`Product`, `Reporting` y `Compliance`— y el
+        // confinamiento (C3) tiene que ser el MISMO para los tres: una copia por
+        // modulo seria tres sitios donde olvidarse de no seguir un enlace.
+        $this->app->singleton(
+            GeneratedFileStore::class,
+            static fn (Application $app): FilesystemGeneratedFileStore => new FilesystemGeneratedFileStore(
+                $app->make(LoggerInterface::class),
+            ),
+        );
+        $this->app->singleton(GeneratedFileMetrics::class, RedisGeneratedFileMetrics::class);
     }
 }

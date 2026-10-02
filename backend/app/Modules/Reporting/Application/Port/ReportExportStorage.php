@@ -67,20 +67,10 @@ interface ReportExportStorage
      * dueño.
      *
      * Se borra por `uuid` y no por ruta precisamente porque la ruta es lo que no
-     * se sabe.
+     * se sabe. La red de debajo —cuando ni siquiera llega a ejecutarse el
+     * `failed()` del trabajo— es el barrido de huerfanos de la purga diaria, con
+     * su edad minima (ADR-045): ya no pasa por este puerto, sino por la
+     * conciliacion compartida de `Shared`.
      */
     public function deleteAllFor(string $uuid): void;
-
-    /**
-     * Los `uuid` que tienen algo escrito en `REPORTING_EXPORT_PATH`.
-     *
-     * La otra mitad de la limpieza de huerfanos: cruzado con los `uuid` de las
-     * filas que **si** tienen derecho a un fichero, la diferencia es basura de
-     * generaciones que murieron sin cerrarse. Es la red de debajo de
-     * {@see self::deleteAllFor()}, para el caso en que ni siquiera se llegara a
-     * ejecutar el `failed()` del trabajo.
-     *
-     * @return list<string>
-     */
-    public function storedUuids(): array;
 }

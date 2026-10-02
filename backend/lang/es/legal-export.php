@@ -111,4 +111,16 @@ return [
         'voided' => 'Anulacion de tramo',
     ],
 
+    /*
+     * Lo que dice `compliance:legal-export` al terminar (ADR-045 §f). La copia
+     * de consola NO se borra sola: es la que se entrega a la Inspeccion, bajo
+     * custodia de quien la genero. Ya no desaparece al recrear el contenedor, asi
+     * que el comando lo dice en voz alta, y a los 30 dias avisan `product:doctor`
+     * y una metrica con alerta.
+     */
+    'console' => [
+        'delete_after_delivery' => 'Este fichero contiene datos personales de la plantilla y NO se borra solo. '
+            .'Sacalo del servidor para entregarlo y borralo en cuanto lo hayas entregado.',
+    ],
+
 ];

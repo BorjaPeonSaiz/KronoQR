@@ -279,6 +279,46 @@ final class MetricCatalogue
                 'Fichajes con PIN por centro. Una subida delata tarjetas rotas o una remesa sin entregar.',
                 ['site'],
             ),
+
+            // ---------------------------------------------------------------
+            // Ficheros generados (ADR-045, C5 y C10). Una sola etiqueta,
+            // `class`, del catalogo cerrado `GeneratedFileClass`.
+            // ---------------------------------------------------------------
+            new MetricDefinition(
+                'generated_files_orphans_removed_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'Restos sin fila viva borrados por la conciliacion de ficheros generados, por clase. Sin uuid ni ruta.',
+                ['class'],
+            ),
+            new MetricDefinition(
+                'generated_files_refused_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'Entradas que la purga se nego a tocar por confinamiento: fuera de su raiz, enlace o subdirectorio.',
+                ['class'],
+            ),
+            new MetricDefinition(
+                'generated_files_missing_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'Exportaciones cuyo fichero desaparecio ANTES de caducar. Cada una deja asiento file_missing (RL-15).',
+                ['class'],
+            ),
+            new MetricDefinition(
+                'generated_files_remove_failed_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'Borrados que el sistema de ficheros nego (permisos). El fichero sigue en el disco y su fila no se marca: se reintenta.',
+                ['class'],
+            ),
+            new MetricDefinition(
+                'generated_files_overdue',
+                MetricType::Gauge,
+                MetricStorage::LabelledHash,
+                'Ficheros que siguen en el disco mas alla de su plazo de aviso; hoy, exportaciones legales de consola de mas de 30 dias.',
+                ['class'],
+            ),
         ];
     }
 

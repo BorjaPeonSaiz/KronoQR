@@ -103,6 +103,15 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         'application_errors_total',
         'compliance_profile_changes_total',
         'db_query_duration_seconds',
+        // ADR-045 (C5, C10): la conciliacion de ficheros generados. Una sola
+        // etiqueta, `class`, del catalogo cerrado `GeneratedFileClass`; nunca
+        // `uuid`, nombre de fichero ni ruta. Es lo que soporte necesita para
+        // contestar «la exportacion no se descarga» o «suena la alerta de
+        // fichero desaparecido» sin pedir una segunda ronda.
+        'generated_files_missing_total',
+        'generated_files_orphans_removed_total',
+        'generated_files_overdue',
+        'generated_files_refused_total',
         'http_request_duration_seconds',
         'http_requests_total',
         'incident_resolution_seconds',

@@ -1611,6 +1611,10 @@ jobs:
           # Permisos del .env (§7.7) y del archivo de WAL (uid de PostgreSQL).
           test "$(sudo stat -c '%a' .env)" = "600"
           test "$(sudo stat -c '%u:%g:%a' /var/backups/fichaje/wal)" = "70:70:750"
+          # ADR-045: informes de retencion junto a las copias, con el uid de la
+          # aplicacion, y el volumen de ficheros generados creado por Compose.
+          test "$(sudo stat -c '%u:%g:%a' /var/backups/fichaje/reports/retention)" = "1000:1000:750"
+          test -n "$(docker volume ls -q --filter name=^kronoqr_app-storage$)"
 
       - name: "C · Las dos sondas responden lo que dice el contrato"
         run: |
@@ -1822,6 +1826,26 @@ jobs:
           sudo docker compose --env-file .env -f docker-compose.yml exec -T prometheus \
             wget -qO- 'http://127.0.0.1:9090/api/v1/targets' || true
           exit 1
+
+      - name: "H · Ficheros generados: genera horizon, descarga app, purga scheduler (ADR-045)"
+        # R3-PL-01, BLOQUEANTE DE LA 2.2.0. app, horizon y scheduler son tres
+        # contenedores de la misma imagen y, hasta el volumen `app-storage`, cada
+        # uno tenia su propio storage/app: la exportacion integra pedida desde el
+        # panel la escribia horizon y app respondia 404. Ninguna prueba de Pest
+        # puede verlo (un solo proceso), asi que se recorre aqui, sobre la
+        # instalacion de G: exportacion pedida por la API como la pide el panel
+        # (admin con 2FA) y descargada con su huella; recreacion de los tres;
+        # informe de retencion leido en el anfitrion y la consulta de
+        # operacion.md §3.1 tal cual; un ZIP borrado a mano (asiento
+        # file_missing y metrica); caducidad (la purga de scheduler lo borra);
+        # `kill` de horizon a mitad (el .work-<uuid> queda y la purga lo
+        # retira); doctor.sh en verde y storage/app app:app 700 en la imagen.
+        #
+        # Los plazos se acortan, no se esperan: el detalle esta en la cabecera
+        # del script. Medido en docker-in-docker: 70-80 s.
+        env:
+          KQ_E2E_APP_IMAGE: kronoqr/app:ci
+        run: bash .github/scripts/generated-files-e2e.sh paquete-g
 
       - name: Trivy sobre la imagen de borde recien construida (bloqueante)
         # Por `make`, como TODAS las demas invocaciones de Trivy del
@@ -2092,6 +2116,15 @@ jobs:
           grep -q '^users=1$' conteos-antes.txt
           compose exec -T app php artisan compliance:verify-audit-chain
 
+      - name: "Informes de retencion de la version anterior, con trampas, para el rescate de U1 (ADR-045)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Hasta la 2.1.0 vivian dentro del contenedor y una actualizacion los
+        # borraba. Se siembran en el `scheduler` anterior dos validos, un enlace,
+        # otro nombre y uno anidado, y en BACKUP_PATH/reports/retention un enlace
+        # plantado desde `app` hacia un fichero de root (F1). Lo que se exige
+        # esta en la cabecera de .github/scripts/retention-rescue-e2e.sh.
+        run: bash .github/scripts/retention-rescue-e2e.sh seed paquete-anterior
+
       - name: "U1 · Actualizar: salida 0, version nueva, datos intactos e informe en el servidor"
         if: steps.anterior.outputs.skip != 'true'
         run: |
@@ -2149,22 +2182,41 @@ jobs:
           sudo grep -q "^IMAGE_TAG=${new}$" paquete-nuevo/.env
           test "$(sudo stat -c '%u' paquete-nuevo/certs/tls.key)" = "101"
 
+      - name: "U1 · Rescate de los informes de retencion: solo los validos, 0640, sin seguir enlaces"
+        if: steps.anterior.outputs.skip != 'true'
+        # `docker compose cp` de verdad sobre el `scheduler` PARADO de la version
+        # anterior. Medido en docker-in-docker (2.1.0 -> 2.2.0): instalar,
+        # sembrar y actualizar, 2 min 20 s; la comprobacion, 1 s.
+        run: |
+          set -euo pipefail
+          grep -q 'Informes de retencion de scheduler' paquete-nuevo/salida-u1.log
+          bash .github/scripts/retention-rescue-e2e.sh check paquete-nuevo
+
       - name: "U1 · Ningun secreto en la salida, el informe ni el detalle"
         if: steps.anterior.outputs.skip != 'true'
         # Valor a valor, contra el .env recien escrito (.github/scripts/assert-no-secrets.sh).
-        # El detalle tecnico es solo de root y el informe del uid de la aplicacion.
+        # El informe se publica en BACKUP_PATH/reports como uid 1000 (lo lee el paquete
+        # de diagnostico). El detalle tecnico NO esta ahi: vive solo en
+        # /var/log/kronoqr, root:root 0600, fuera del alcance del runtime (puede
+        # llevar datos personales). Los comodines los expande root.
         run: |
           set -euo pipefail
-          # `update-*.log` cubre el informe y el detalle; el comodin lo expande root.
           mapfile -t informes < <(sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log')
-          test "${#informes[@]}" -ge 2
-          bash .github/scripts/assert-no-secrets.sh paquete-nuevo/.env paquete-nuevo/salida-u1.log "${informes[@]}"
+          mapfile -t detalles < <(sudo sh -c 'ls /var/log/kronoqr/update-*.detalle.log')
+          test "${#informes[@]}" -ge 1
+          test "${#detalles[@]}" -ge 1
+          # Tambien la copia local del informe que queda junto al detalle.
+          mapfile -t locales < <(sudo sh -c 'ls /var/log/kronoqr/update-*.log')
+          bash .github/scripts/assert-no-secrets.sh paquete-nuevo/.env paquete-nuevo/salida-u1.log "${informes[@]}" "${locales[@]}"
           for fichero in "${informes[@]}"; do
-            case "${fichero}" in
-            *.detalle.log) test "$(sudo stat -c '%u:%a' "${fichero}")" = "0:600" ;;
-            *) test "$(sudo stat -c '%u:%a' "${fichero}")" = "1000:640" ;;
-            esac
+            test "$(sudo stat -c '%u:%a' "${fichero}")" = "1000:640"
           done
+          for fichero in "${locales[@]}"; do
+            test "$(sudo stat -c '%u:%a' "${fichero}")" = "0:600"
+          done
+          test "$(sudo stat -c '%u:%a' /var/log/kronoqr)" = "0:700"
+          # Y NINGUN detalle en el directorio que escribe el runtime.
+          test -z "$(sudo sh -c 'ls /var/backups/fichaje/reports/*.detalle.log 2>/dev/null')"
 
       - name: "U2 · Segunda ejecucion: salida 3 y el sistema sigue en pie"
         if: steps.anterior.outputs.skip != 'true'
@@ -2192,7 +2244,7 @@ jobs:
           old="${{ steps.anterior.outputs.old_version }}"
           new="${{ steps.anterior.outputs.new_version }}"
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml down -v --remove-orphans
-          sudo rm -rf /var/backups/fichaje
+          sudo rm -rf /var/backups/fichaje /var/log/kronoqr
           sudo rm -f paquete-nuevo/.env
           sudo rm -rf paquete-nuevo/certs
           mkdir -p paquete-nuevo/certs
@@ -2275,7 +2327,7 @@ jobs:
         # este, no el de exito: es el que hay que revisar.
         run: |
           set -euo pipefail
-          mapfile -t informes < <(sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log')
+          mapfile -t informes < <(sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log /var/log/kronoqr/update-*.log')
           bash .github/scripts/assert-no-secrets.sh paquete-anterior/.env paquete-nuevo/salida-u3.log "${informes[@]}"
 
       - name: "U3 · Y tras la vuelta atras se puede reintentar: salida 0"
@@ -2306,7 +2358,7 @@ jobs:
             sudo docker compose --env-file "${dir}/.env" -f "${dir}/docker-compose.yml" logs --tail 80 app nginx postgres || true
           done
           echo "=============== informes ==============="
-          sudo sh -c 'for f in /var/backups/fichaje/reports/update-*.log; do echo "--- $f"; cat "$f"; done' || true
+          sudo sh -c 'for f in /var/backups/fichaje/reports/update-*.log /var/log/kronoqr/update-*.log; do echo "--- $f"; cat "$f"; done' || true
 
       - name: Subir las salidas del actualizador
         if: always() && steps.anterior.outputs.skip != 'true'

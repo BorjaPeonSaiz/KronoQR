@@ -6,10 +6,10 @@ namespace App\Modules\Product\Infrastructure\Console;
 
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
+use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
-use App\Modules\Shared\Application\Port\Clock;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository as Config;
 use Throwable;
@@ -65,7 +65,7 @@ final class ProductDiagnosticsCommand extends Command
     public function handle(
         GenerateDiagnosticsBundleHandler $diagnostics,
         DiagnosticsBundleWriter $writer,
-        Clock $clock,
+        SweepExpiredDiagnosticsBundles $sweep,
         Config $config,
     ): int {
         $verify = $this->option('verify');
@@ -74,7 +74,7 @@ final class ProductDiagnosticsCommand extends Command
             return $this->verify($writer, $verify);
         }
 
-        $purged = $this->purge($writer, $clock, $config);
+        $purged = $this->purge($sweep);
 
         $options = $this->requestedOptions($config);
 
@@ -209,12 +209,15 @@ final class ProductDiagnosticsCommand extends Command
      * Borra los paquetes anteriores que ya han caducado, antes de escribir uno
      * nuevo (**RL-19**).
      *
-     * ## Por que aqui y no en una tarea programada
+     * ## Aqui Y en la pasada horaria
      *
-     * Porque este comando es el unico momento en el que alguien esta mirando. Una
-     * tarea nocturna que borrase ficheros del disco del cliente por su cuenta
-     * seria una sorpresa; hacerlo al generar convierte el borrado en parte de un
-     * acto que la persona acaba de pedir, y ademas lo dice en la salida.
+     * Hasta la 2.1.0 solo se hacia aqui, porque una tarea que borrase ficheros
+     * del cliente por su cuenta parecia una sorpresa, y el ultimo paquete
+     * desaparecia de todas formas al recrear el contenedor. Con el volumen
+     * persistente (ADR-045 §g, C4) ya no desaparece, y por eso la pasada horaria
+     * de `product:export-all --purge` barre tambien. Aqui se conserva porque es
+     * el momento en que alguien esta mirando, y lo dice en la salida. Los dos
+     * pasan por el mismo caso de uso: patron exacto, un nivel, sin enlaces.
      *
      * ## Por que hay que borrarlos
      *
@@ -227,12 +230,10 @@ final class ProductDiagnosticsCommand extends Command
      * Un fallo del borrado no impide generar: quedarse sin diagnostico porque no
      * se pudo limpiar un fichero viejo seria el peor intercambio posible.
      */
-    private function purge(DiagnosticsBundleWriter $writer, Clock $clock, Config $config): int
+    private function purge(SweepExpiredDiagnosticsBundles $sweep): int
     {
-        $days = max(1, $config->integer('product.diagnostics_retention_days', 7));
-
         try {
-            return $writer->purgeOlderThan($clock->now()->modify('-'.$days.' days'));
+            return $sweep->handle();
         } catch (Throwable) {
             return 0;
         }

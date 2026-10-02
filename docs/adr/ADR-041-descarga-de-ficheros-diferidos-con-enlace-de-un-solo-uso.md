@@ -87,6 +87,9 @@ En concreto:
 6. **El fichero caduca y la fila no.** A los `REPORTING_EXPORT_RETENTION_DAYS` (7 de serie) una tarea
    diaria borra el fichero y deja la fila en `purged` (regla dura 5); la descarga de una fila `purged`
    responde `404` y la exportación sigue apareciendo en la lista con lo que se pidió y cuándo.
+   *Precisado por [ADR-045](ADR-045-los-ficheros-generados-viven-en-un-volumen-compartido.md) §d:
+   `purged` significa «el fichero ya no existe», por caducidad o porque desapareció antes, y en ese
+   caso `purged_at` es anterior a `expires_at` y queda `report_export.file_missing`.*
 7. **Cada descarga deja asiento** `report_export.downloaded` (RS-05, ADR-037) con el contador y la
    huella del fichero, nunca un nombre ni la ruta absoluta (regla dura 21).
 

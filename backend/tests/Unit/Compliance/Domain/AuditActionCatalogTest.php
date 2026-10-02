@@ -168,6 +168,22 @@ it('no abre familia nueva del bloque D al anadir los informes en diferido', func
     expect(AuditAction::ReportExportDownloaded->requiresSystemActor())->toBeFalse();
 })->group('RS-07', 'RF-IN-06');
 
+it('sella el fichero que desaparece antes de caducar sin abrir familia nueva', function (): void {
+    /*
+     * ADR-045 §d, condicion C5, y doc 01 Anexo B. Cada una cae en la familia de
+     * su prefijo —donde estan el resto de asientos de esa exportacion— y las dos
+     * las escribe una tarea programada, sin ser acciones `system.*`: el actor es
+     * `system` porque nadie esta detras, no porque sea un hecho del ciclo de vida
+     * de la instalacion.
+     */
+    expect(AuditAction::DataExportFileMissing->value)->toBe('data_export.file_missing')
+        ->and(AuditAction::DataExportFileMissing->event())->toBe(AuditableEvent::LegalExport)
+        ->and(AuditAction::ReportExportFileMissing->value)->toBe('report_export.file_missing')
+        ->and(AuditAction::ReportExportFileMissing->event())->toBe(AuditableEvent::PersonalDataAccess)
+        ->and(AuditAction::DataExportFileMissing->requiresSystemActor())->toBeFalse()
+        ->and(AuditAction::ReportExportFileMissing->requiresSystemActor())->toBeFalse();
+})->group('RS-07', 'RL-15', 'RF-PD-14', 'RF-IN-06');
+
 it('sella la exportacion del cuadro de impacto sin abrir familia nueva', function (): void {
     /*
      * `adoption_report.exported` (tarea 3.13, RF-IN-08).

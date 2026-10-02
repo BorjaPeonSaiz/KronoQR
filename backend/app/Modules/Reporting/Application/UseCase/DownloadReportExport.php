@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Application\UseCase;
 
 use App\Modules\Reporting\Application\Port\ReportExportRepository;
-use App\Modules\Reporting\Application\Port\ReportExportStorage;
 use App\Modules\Reporting\Application\Port\ReportingEventPublisher;
 use App\Modules\Reporting\Domain\Event\ReportExportDownloaded;
 use App\Modules\Reporting\Domain\Exception\ReportExportLinkUnavailable;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
+use App\Modules\Shared\Domain\ValueObject\RecordedFileLocation;
 use DateTimeImmutable;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Consume el enlace de un solo uso y autoriza la entrega del fichero
@@ -62,10 +64,16 @@ final readonly class DownloadReportExport
 {
     public function __construct(
         private ReportExportRepository $exports,
-        private ReportExportStorage $storage,
+        /**
+         * El localizador confinado (ADR-045, F3): la descarga entrega lo que esta
+         * dentro de `REPORTING_EXPORT_PATH`, en un `<uuid>/`, sin enlaces. Una
+         * fila alterada que apunte a `/proc/self/environ` no saca nada.
+         */
+        private GeneratedFileHousekeeping $files,
+        private GeneratedFileArea $area,
         private ReportingEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -76,7 +84,12 @@ final readonly class DownloadReportExport
     public function handle(string $uuid, string $token): ?ReportExport
     {
         /** @var ReportExport|null $export */
-        $export = $this->connection->transaction(function () use ($uuid, $token): ?ReportExport {
+        // Candado de la cadena de `audit_log` ANTES que el `FOR UPDATE` de la
+        // fila (ADR-010, ADR-045 §d): es el orden de la purga diaria cuando un
+        // fichero desaparece antes de caducar. Al reves se cerraria un abrazo
+        // mortal. El `FOR UPDATE` sigue dentro: el enlace es de un solo uso
+        // (ADR-041) porque dos peticiones con el mismo token se serializan aqui.
+        $export = $this->serialized->withChainLock(function () use ($uuid, $token): ?ReportExport {
             $export = $this->exports->lockByUuid($uuid);
             $now = $this->clock->now();
 
@@ -125,9 +138,10 @@ final readonly class DownloadReportExport
      *    exportacion existe y esta lista?» componiendo una URL a mano.
      *    `downloaded_at` es lo que las separa, y es un hecho de la fila.
      * 3. **El enlace no ha caducado**, que es el otro `410`.
-     * 4. **El fichero sigue en el disco.** Se comprueba DESPUES del token y ANTES
-     *    de consumirlo: si alguien vacio el directorio a mano, lo correcto es
-     *    `404` y no gastar el enlace contra nada.
+     * 4. **El fichero sigue en el disco, dentro de su raiz.** Se comprueba
+     *    DESPUES del token y ANTES de consumirlo: si alguien vacio el directorio
+     *    a mano, o la fila apunta fuera de `REPORTING_EXPORT_PATH`, lo correcto
+     *    es `404` y no gastar el enlace contra nada.
      *
      * @throws ReportExportLinkUnavailable si el enlace se uso o caduco
      */
@@ -149,6 +163,9 @@ final readonly class DownloadReportExport
             throw ReportExportLinkUnavailable::expired();
         }
 
-        return $this->storage->exists((string) $export->filePath);
+        // Confinado (ADR-045, F3): presente DENTRO de su raiz, con su patron y
+        // sin enlaces. Fuera de eso, `404` sin decir por que —el `refused` sube
+        // en la metrica—, y el enlace no se gasta.
+        return $this->files->locateRecorded($this->area, (string) $export->filePath) === RecordedFileLocation::Present;
     }
 }

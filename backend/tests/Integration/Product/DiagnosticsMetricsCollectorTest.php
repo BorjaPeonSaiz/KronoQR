@@ -9,6 +9,8 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\MetricsCollector;
 use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisLicenseMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisSettingsMetrics;
+use App\Modules\Shared\Domain\ValueObject\GeneratedFileClass;
+use App\Modules\Shared\Infrastructure\Metrics\RedisGeneratedFileMetrics;
 use Illuminate\Contracts\Redis\Factory as Redis;
 
 /*
@@ -154,3 +156,60 @@ it('el SCAN encuentra una combinacion de etiquetas que ningun otro proceso escri
         app(Redis::class)->connection()->command('DEL', [$ghostKey]);
     }
 })->group('RF-PD-09', 'ADR-020');
+
+/**
+ * El valor de un campo de un hash de metricas, o 0 si no existe todavia.
+ */
+function metricsCollectorHashValue(string $logicalKey, string $field): int
+{
+    $raw = app(Redis::class)->connection()->command('HGET', [$logicalKey, $field]);
+
+    return is_numeric($raw) ? (int) $raw : 0;
+}
+
+it('el paquete lleva las cuatro series de ficheros generados, solo con la etiqueta class', function (): void {
+    // ADR-045 (C5, C10). Soporte necesita estas cifras para contestar «la
+    // exportacion no se descarga» o «suena la alerta de fichero desaparecido»
+    // sin pedir una segunda ronda; y no pueden llevar mas que la clase: nunca
+    // un uuid, un nombre de fichero ni una ruta (regla dura 21).
+    $metrics = new RedisGeneratedFileMetrics(app(Redis::class));
+    $field = 'class='.GeneratedFileClass::Diagnostics->value;
+    $overdueField = 'class='.GeneratedFileClass::LegalExportConsole->value;
+
+    $before = [
+        'orphans' => metricsCollectorHashValue(RedisGeneratedFileMetrics::ORPHANS_REMOVED_TOTAL, $field),
+        'refused' => metricsCollectorHashValue(RedisGeneratedFileMetrics::REFUSED_TOTAL, $field),
+        'missing' => metricsCollectorHashValue(RedisGeneratedFileMetrics::MISSING_TOTAL, $field),
+    ];
+    $previousOverdue = app(Redis::class)->connection()->command('HGET', [RedisGeneratedFileMetrics::OVERDUE, $overdueField]);
+
+    try {
+        $metrics->orphanRemoved(GeneratedFileClass::Diagnostics);
+        $metrics->refused(GeneratedFileClass::Diagnostics);
+        $metrics->missing(GeneratedFileClass::Diagnostics);
+        $metrics->overdue(GeneratedFileClass::LegalExportConsole, 3);
+
+        $section = app(MetricsCollector::class)->collect(DiagnosticsOptions::anonymized());
+
+        expect(metricsCollectorLabel($section, 'generated_files_orphans_removed_total', $field))->toBe($before['orphans'] + 1)
+            ->and(metricsCollectorLabel($section, 'generated_files_refused_total', $field))->toBe($before['refused'] + 1)
+            ->and(metricsCollectorLabel($section, 'generated_files_missing_total', $field))->toBe($before['missing'] + 1)
+            ->and(metricsCollectorLabel($section, 'generated_files_overdue', $overdueField))->toBe(3);
+
+        $classes = array_map(static fn (GeneratedFileClass $class): string => 'class='.$class->value, GeneratedFileClass::cases());
+
+        foreach (['generated_files_orphans_removed_total', 'generated_files_refused_total', 'generated_files_missing_total', 'generated_files_overdue'] as $series) {
+            /** @var array<string, int> $values */
+            $values = $section[$series];
+
+            expect(array_diff(array_keys($values), $classes))
+                ->toBe([], $series.' lleva una etiqueta que no es una clase del catalogo cerrado.');
+        }
+    } finally {
+        if (is_numeric($previousOverdue)) {
+            app(Redis::class)->connection()->command('HSET', [RedisGeneratedFileMetrics::OVERDUE, $overdueField, (int) $previousOverdue]);
+        } else {
+            app(Redis::class)->connection()->command('HDEL', [RedisGeneratedFileMetrics::OVERDUE, $overdueField]);
+        }
+    }
+})->group('RF-PD-09', 'ADR-020', 'RL-15');

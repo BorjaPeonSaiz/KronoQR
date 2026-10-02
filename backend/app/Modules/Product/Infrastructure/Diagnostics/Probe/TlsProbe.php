@@ -72,7 +72,12 @@ final readonly class TlsProbe implements DoctorProbe
             // `APP_URL` en `http://` es lo normal en desarrollo y un problema en
             // produccion, pero eso lo dice `app.*`: aqui no hay certificado que
             // mirar y no se inventa un veredicto.
-            return [DoctorFinding::warning('tls.certificate', 'not_https', details: ['scheme' => $scheme])];
+            return [DoctorFinding::warning(
+                'tls.certificate',
+                'not_https',
+                params: ['scheme' => $scheme],
+                details: ['scheme' => $scheme],
+            )];
         }
 
         return [$this->certificate($host, $port)];

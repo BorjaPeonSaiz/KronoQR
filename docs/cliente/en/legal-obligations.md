@@ -254,6 +254,9 @@ Policy per data type, which is the one the system applies:
 | Record of weekly summary sends (`weekly_summary_deliveries`) | **No automatic purge** | It keeps counts and the recipient account; **no data about the staff** |
 | Report files generated in the background (`report_exports`): named hours of the staff, ready to download | **7 days** by default | Your installation (`REPORTING_EXPORT_RETENTION_DAYS`, [`configuration.md`](configuration.md) §6.25). They are downloaded with a single-use link; when they expire, the file is deleted and the note that it existed is left without any person identifiers or scope |
 | ZIP of the full export (§7 quater) | **7 days** by default | Your installation (`PRODUCT_DATA_EXPORT_RETENTION_DAYS`). It contains all the personal data of the installation; while it exists, its custody is yours. The note that it existed is kept |
+| Diagnostic bundle generated from the console | **7 days** by default | Your installation (`PRODUCT_DIAGNOSTICS_RETENTION_DAYS`). An hourly task deletes it on its own. It is anonymised unless you decide to include personal data ([`operation.md`](operation.md) §12.3) |
+| Export of the working-time record for the Labour Inspectorate generated from the console | **Until you delete it** | You. It is a copy handed to a third party under your custody and the system does not delete it on its own; it warns when one has been on the server for more than 30 days ([`requerimiento-inspeccion.md`](../../runbooks/requerimiento-inspeccion.md) §7, in Spanish) |
+| Retention reports (proposal and purge) | **No automatic purge** | They hold no personal data: scopes, tables, counts and dates. They live next to the backups, in `BACKUP_PATH/reports/retention` |
 
 **A weekly summary email that has been delivered is a copy outside the
 product.** It lives in the manager's mailbox, it can be forwarded and printed,
@@ -293,9 +296,13 @@ configuration**. The full procedure is in
    position, not "the IT department".
 2. **Read the report before authorising.** It says which tables, which date
    range and how many records.
-3. **File the purge report** together with the authorisation. It is what
-   proves, two years later, that what had to be deleted was deleted, and only
-   that.
+3. **File the purge report** together with the authorisation. The file stays
+   on the server, in `BACKUP_PATH/reports/retention`, and is the readable copy
+   of what was deleted. **The evidence that counts is its entry in the audit
+   log** (`retention.purge_executed`), chained and unalterable; both carry the
+   same confirmation token and it is worth checking one against the other when
+   filing ([`operation.md`](operation.md) §3.1). If two years later the file
+   is missing or does not match, the entry prevails.
 4. **Keep the password of the `fichaje_maintenance` role** off the application
    server — password manager, sealed envelope, whatever you use for the rest of
    your critical credentials.
@@ -474,12 +481,29 @@ workforce, so you treat it as such:
 
 - Only the **installation administrator** can request it; not HR, not the
   auditor, and **vendor support never**, under any scope.
-- Requesting it, generating it and **every download** are recorded in your
-  audit log (`data_export.requested`, `data_export.generated`,
-  `data_export.downloaded`): in the event of a personal data breach you can
-  answer who took what and when (§2).
-- The file **expires**: after seven days (configurable) the system deletes it
-  from the server; the note that it existed is kept.
+- Requesting it, generating it and **every download from the panel** are
+  recorded in your audit log (`data_export.requested`,
+  `data_export.generated`, `data_export.downloaded`): in the event of a
+  personal data breach you can answer who took what and when (§2).
+- **Downloading from the panel is the only route that leaves that trail.** The
+  file can also be taken off the server from the console, with
+  `docker compose cp`, and that route **leaves no download entry**: the product
+  cannot know who did it. If your IT uses the console —for instance, because
+  the file is too large for the browser—, have them write down who took it,
+  when and where to, and keep that note with your record of processing
+  activities.
+- The file **expires**: after seven days (configurable, it can be lowered to
+  one) the system deletes it from the server; the note that it existed is
+  kept. **It is not part of the backups**, so it does not come back on a
+  restore either: after a restore you request another.
+- **While it is on the server, it is in clear text**, just like the database it
+  comes from. Whoever administers the server —`root` or any member of the
+  `docker` group, which in practice amounts to the same— can read it, just as
+  they can read the database. That is why we recommend **encrypting the
+  server's disk** (the one with Docker's data and the one with the backups)
+  and **limiting who belongs to the `docker` group**: these are measures of
+  your system, not of the product ([`operation.md`](operation.md) §13.6,
+  [`hardening.md`](hardening.md) §3).
 - Once outside the system, the file is yours and so are the obligations that
   come with it: encryption, custody and deletion when the retention period
   ends (§4). Do not send it to anyone without a basis for doing so.

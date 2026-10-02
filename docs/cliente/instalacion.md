@@ -21,7 +21,7 @@ Vue.** Hace falta un servidor Linux con Docker y treinta minutos.
 | CPU | 2 núcleos | 4 núcleos |
 | RAM | 4 GB | 8 GB |
 | Disco | 40 GB SSD | 100 GB SSD |
-| Sistema | **Linux** con **Docker 24 o superior** y **Compose v2** | Íd. |
+| Sistema | **Linux** con **Docker 24 o superior** y **Compose v2**, y `setpriv` (paquete `util-linux`, de serie en Debian, Ubuntu y RHEL 7 o posterior; lo usa `update.sh`) | Íd. |
 | Red | Alcanzable desde la red interna. Salida a internet **opcional** | Íd. |
 
 **¿Da la talla este servidor para mi cambio de turno?** El mínimo está

@@ -123,6 +123,19 @@ interface ReportExportRepository
     public function save(ReportExport $export): void;
 
     /**
+     * Persiste el resultado de {@see ReportExport::purge()} **solo si la fila
+     * sigue `completed` y sin `purged_at`**, y dice si la ha marcado esta
+     * llamada.
+     *
+     * La purga no usa {@see self::save()}: guardaria las diecinueve columnas de
+     * una instantanea leida antes, pisando el `purged_at` de otra pasada (regla
+     * dura 5) o el `download_count` de una descarga que se cruzara. Con esta, dos
+     * pasadas que leyeron la misma fila marcan una vez y sellan un solo
+     * `report_export.file_missing`.
+     */
+    public function markPurged(ReportExport $purged): bool;
+
+    /**
      * Sella por donde se aviso, y **solo eso**.
      *
      * Metodo propio en lugar de `save()` porque el aviso ocurre **fuera de
@@ -140,20 +153,19 @@ interface ReportExportRepository
     ): void;
 
     /**
-     * Los `uuid` de las exportaciones que **todavia tienen derecho a un fichero**
-     * en el disco: `completed` y sin purgar.
+     * Las exportaciones que **todavia dicen tener fichero** en el disco:
+     * `completed`, sin purgar y con ruta, caducadas o no.
      *
-     * Existe para la limpieza de huerfanos de `PurgeExpiredReportExports`
+     * Existe para la conciliacion de `PurgeExpiredReportExports` (ADR-045)
      * —nombrado en prosa porque un `use` de un caso de uso desde un puerto es la
-     * frontera que Deptrac rechaza—:
-     * todo lo demas que haya en `REPORTING_EXPORT_PATH` es basura de una
-     * generacion que murio sin poder cerrarse —`$timeout` agotado, el trabajador
-     * sin memoria, un `SIGTERM`—, y esa basura son las horas de la plantilla
-     * escritas a medias en un fichero que ninguna fila menciona.
+     * frontera que Deptrac rechaza—: cada una se comprueba contra el disco, y la
+     * que ya no tiene fichero pasa a `purged`. Las que si lo tienen son, junto a
+     * las que estan en curso, lo unico que protege un directorio `<uuid>/` del
+     * barrido de huerfanos.
      *
-     * @return list<string>
+     * @return list<ReportExport>
      */
-    public function uuidsWithFile(): array;
+    public function completedWithFile(): array;
 
     /**
      * Marca como `failed` con motivo `stale` las que llevan demasiado tiempo sin

@@ -43,6 +43,7 @@ use App\Modules\Reporting\Application\Port\WorkDayCompletionReader;
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Application\Port\WorkedTimeMetrics;
 use App\Modules\Reporting\Application\Query\GeneratePeriodReport;
+use App\Modules\Reporting\Application\UseCase\DownloadReportExport;
 use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
 use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
 use App\Modules\Reporting\Application\UseCase\RequestReportExport;
@@ -104,13 +105,17 @@ use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWeeklySummaryDelive
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWeeklySummaryRecipients;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayCompletionReader;
 use App\Modules\Reporting\Infrastructure\Persistence\DatabaseWorkDayJournalReader;
+use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
+use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\ConnectionInterface;
@@ -560,8 +565,9 @@ final class ReportingServiceProvider extends ServiceProvider
 
         $this->app->bind(
             ReportExportStorage::class,
-            static fn (): FilesystemReportExportStorage => new FilesystemReportExportStorage(
+            static fn (Application $app): FilesystemReportExportStorage => new FilesystemReportExportStorage(
                 Config::string('reporting.export.path'),
+                $app->make(GeneratedFileStore::class),
             ),
         );
 
@@ -606,10 +612,30 @@ final class ReportingServiceProvider extends ServiceProvider
         $this->app->bind(
             PurgeExpiredReportExports::class,
             static fn (Application $app): PurgeExpiredReportExports => new PurgeExpiredReportExports(
-                $app->make(ReportExportRepository::class),
-                $app->make(ReportExportStorage::class),
-                $app->make(Clock::class),
-                Config::integer('reporting.export.stale_after_seconds'),
+                exports: $app->make(ReportExportRepository::class),
+                files: $app->make(GeneratedFileHousekeeping::class),
+                events: $app->make(ReportingEventPublisher::class),
+                clock: $app->make(Clock::class),
+                // La raiz se lee aqui, en el borde (regla dura 14), y con ella el
+                // patron exacto de la clase: solo directorios `<uuid>/` (ADR-045).
+                area: GeneratedFileAreas::reportExports(Config::string('reporting.export.path')),
+                staleAfterSeconds: Config::integer('reporting.export.stale_after_seconds'),
+                retentionDays: Config::integer('reporting.export.retention_days'),
+            ),
+        );
+
+        // La descarga por enlace solo entrega un fichero que el localizador
+        // confinado da por presente dentro de su raiz y con su patron (ADR-045,
+        // F3): una fila alterada con `file_path='/proc/self/environ'` responde 404.
+        $this->app->bind(
+            DownloadReportExport::class,
+            static fn (Application $app): DownloadReportExport => new DownloadReportExport(
+                exports: $app->make(ReportExportRepository::class),
+                files: $app->make(GeneratedFileHousekeeping::class),
+                area: GeneratedFileAreas::reportExports(Config::string('reporting.export.path')),
+                events: $app->make(ReportingEventPublisher::class),
+                clock: $app->make(Clock::class),
+                serialized: $app->make(SerializedLedgerWrite::class),
             ),
         );
 

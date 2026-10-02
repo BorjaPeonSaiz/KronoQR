@@ -123,11 +123,17 @@ Schedule::command('credentials:status', ['--quiet-table'])
  * Temporales huerfanos de la exportacion legal (RF-IN-05, hallazgo MEDIO-3
  * del cierre de la Fase 1, tarea 1.17).
  *
- * SOLO storage/framework/legal-exports/, el temporal de la descarga HTTP que
+ * SOLO storage/app/tmp/legal-exports/, el temporal de la descarga HTTP que
  * `LegalExportController` no llega a borrar si el cliente aborta a medias.
- * NUNCA toca storage/app/legal-exports/, la copia deliberada de
+ * Vivia en storage/framework, en la capa de `app`, y esta linea corre en
+ * `scheduler`: no lo veia. Ahora esta en el volumen compartido `app-storage`
+ * (ADR-045), y solo se borran ficheros `registro-horario-*.csv` de un nivel,
+ * sin seguir enlaces, con la edad `max(mtime, ctime)`.
+ * NUNCA borra storage/app/legal-exports/, la copia deliberada de
  * `compliance:legal-export` que se entrega a Inspeccion: esa la custodia y
- * la borra quien la genero (docs/runbooks/requerimiento-inspeccion.md §6).
+ * la borra quien la genero (docs/runbooks/requerimiento-inspeccion.md §6). Lo
+ * que si hace es CONTAR las que llevan mas de 30 dias y publicarlo en
+ * `generated_files_overdue{class="legal_export_console"}`, con alerta.
  *
  * CADA HORA, con una ventana de
  * config('compliance.legal_export_temp_retention_hours') (6 h por defecto):
@@ -491,9 +497,30 @@ $retentionDryRun->onFailure(LogScheduledCommandFailure::of('compliance:apply-ret
  * una copia completa de mis datos, y cuando?» hay que poder contestarlo años
  * despues.
  *
+ * Y CONCILIA FILA Y FICHERO EN LOS DOS SENTIDOS (ADR-045). El ZIP vive en el
+ * volumen `app-storage`, que esta linea ve igual que `horizon`, que lo escribe,
+ * y que no entra en la copia de seguridad. La fila `completed` sin ZIP pasa a
+ * `purged`, y si aun no habia caducado deja `data_export.file_missing` y sube
+ * `generated_files_missing_total`: es un borrado a mano o una exfiltracion. El
+ * ZIP sin fila viva se borra al superar el plazo de retencion, y el
+ * `.work-<uuid>/` de una generacion interrumpida —con todos los datos en
+ * claro— y el temporal de `ZipArchive`, a las 2 × `stale_after`. Todo dentro de
+ * PRODUCT_DATA_EXPORT_PATH, a un nivel, por patron exacto y sin seguir enlaces.
+ *
+ * Y BARRE LOS PAQUETES DE DIAGNOSTICO de mas de PRODUCT_DIAGNOSTICS_RETENTION_DAYS
+ * dias (ADR-045 §g, C4): solo `kronoqr-diagnostics-*.json` de primer nivel en
+ * PRODUCT_DIAGNOSTICS_PATH. Antes solo los borraba el siguiente
+ * `product:diagnostics`, y el ultimo desaparecia al recrear el contenedor; con
+ * el volumen persistente, un paquete con datos personales se quedaria para
+ * siempre si nadie generara otro.
+ *
  * `withoutOverlapping` por si una purga de muchos ficheros grandes se solapara
- * con la siguiente hora; repetirla es seguro —marcar una fila ya purgada no
- * cambia nada— asi que es higiene, no correccion.
+ * con la siguiente hora. Es higiene, no correccion: `withoutOverlapping` solo
+ * protege la ejecucion programada, y la guia manda lanzar `--purge` a mano. Lo
+ * que hace segura una pasada simultanea es la marca condicional (`UPDATE …
+ * WHERE purged_at IS NULL`, bajo el candado de la cadena): de dos pasadas que
+ * leyeron la misma fila solo una la marca, y solo esa sella
+ * `data_export.file_missing`. Nunca se pisa `purged_at` (regla dura 5).
  */
 Schedule::command('product:export-all', ['--purge'])
     ->hourly()
@@ -523,9 +550,19 @@ Schedule::command('product:export-all', ['--purge'])
  * NADA SE BORRA DE LA BASE DE DATOS (regla dura 5). La fila pasa a `purged` y
  * sigue en la lista con sus fechas, su huella y su recuento.
  *
- * `withoutOverlapping` es higiene y no correccion: repetir la pasada es seguro
- * —marcar una fila ya purgada no cambia nada— pero dos a la vez borrando los
- * mismos ficheros no aporta nada.
+ * Y CONCILIA, igual que la exportacion integra (ADR-045): la fila sin fichero
+ * pasa a `purged` —con `report_export.file_missing` si aun no habia caducado— y
+ * el directorio `<uuid>/` sin fila viva se borra entero al superar su edad
+ * minima (el plazo de retencion, o 2 × REPORTING_EXPORT_STALE_AFTER si su fila
+ * no llego a `completed`). Solo directorios `<uuid>/` de un nivel bajo
+ * REPORTING_EXPORT_PATH: con la variable mal apuntada a storage/app, no borra
+ * nada de las demas clases.
+ *
+ * `withoutOverlapping` es higiene y no correccion: lo que hace segura una pasada
+ * simultanea (una a mano y la programada) es la marca condicional bajo el
+ * candado de la cadena —solo una marca la fila y solo esa sella
+ * `report_export.file_missing`; `purged_at` no se pisa—, pero dos a la vez
+ * borrando los mismos ficheros no aportan nada.
  */
 Schedule::command('reporting:purge-expired-exports')
     ->dailyAt('04:25')

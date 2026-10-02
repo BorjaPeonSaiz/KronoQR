@@ -277,6 +277,14 @@ Outside the product, and entirely yours. The minimum:
   getent group docker
   ```
 
+- **Encrypt the disk.** The database and the files the product generates
+  —the full export holds all the workforce's data— are in clear text on the
+  disk where Docker keeps its data (usually `/var/lib/docker`), and the
+  backups, although encrypted, live in `BACKUP_PATH`. Encrypt both, with your
+  operating system's or virtualisation platform's tool: it is what protects the
+  data if the disk or the virtual machine leaves the building. The product
+  cannot do it for you: a key kept on the same server does not protect against
+  whoever already controls it ([`operation.md`](operation.md) §13.6).
 - **SSH with a key, never with a password**, and no direct `root` access:
 
   ```bash
@@ -333,6 +341,7 @@ Outside the product, and entirely yours. The minimum:
   connection to use. If you touch either value, keep the margin.
 
 > **Closes:** access to the host, escalation through the `docker` group,
+> reading of clear-text data from a disk that leaves the building,
 > reading of the installation's secrets, false incidents from a drifted
 > clock, and an error history left without a connection at the worst moment.
 > · **Owner:** you.

@@ -212,17 +212,27 @@ final readonly class DatabaseDataExportRepository implements DataExportRepositor
         ]);
     }
 
-    public function markPurged(int $id, DateTimeImmutable $purgedAt): void
+    public function markPurged(int $id, DateTimeImmutable $purgedAt): bool
     {
-        $this->connection->table('data_exports')->where('id', $id)->update([
-            'status' => DataExportStatus::Purged->value,
-            'purged_at' => self::utc($purgedAt),
-            // La ruta se limpia para que nadie intente servir un fichero que ya
-            // no existe. El NOMBRE se conserva: es lo que permite reconocer la
-            // exportacion en una conversacion años despues.
-            'file_path' => null,
-            'updated_at' => self::utc($purgedAt),
-        ]);
+        /*
+         * Un `UPDATE … WHERE purged_at IS NULL` y no leer-y-escribir: la
+         * condicion y el cambio son una sola sentencia con la fila bloqueada, asi
+         * que de dos pasadas simultaneas solo una afecta a la fila. La otra recibe
+         * cero y no publica nada (regla dura 5: `purged_at` no se pisa).
+         */
+        return $this->connection->table('data_exports')
+            ->where('id', $id)
+            ->where('status', DataExportStatus::Completed->value)
+            ->whereNull('purged_at')
+            ->update([
+                'status' => DataExportStatus::Purged->value,
+                'purged_at' => self::utc($purgedAt),
+                // La ruta se limpia para que nadie intente servir un fichero que ya
+                // no existe. El NOMBRE se conserva: es lo que permite reconocer la
+                // exportacion en una conversacion años despues.
+                'file_path' => null,
+                'updated_at' => self::utc($purgedAt),
+            ]) === 1;
     }
 
     public function recordDownload(int $id, DateTimeImmutable $downloadedAt): void
@@ -242,6 +252,16 @@ final readonly class DatabaseDataExportRepository implements DataExportRepositor
         $rows = $this->connection->select(
             self::SELECT." WHERE e.purged_at IS NULL AND e.status = 'completed' AND e.expires_at <= ? ORDER BY e.id",
             [self::utc($now)],
+        );
+
+        return $this->hydrateAll($rows);
+    }
+
+    public function completedWithFile(): array
+    {
+        /** @var list<object> $rows */
+        $rows = $this->connection->select(
+            self::SELECT." WHERE e.purged_at IS NULL AND e.status = 'completed' AND e.file_path IS NOT NULL ORDER BY e.id",
         );
 
         return $this->hydrateAll($rows);

@@ -4,27 +4,48 @@ declare(strict_types=1);
 
 /*
  * Retencion de los ficheros que produce la exportacion legal (RF-IN-05,
- * doc 02 Anexo C).
+ * doc 02 Anexo C, ADR-045).
  *
- * Dos rutas y solo una se limpia sola:
+ * Dos rutas, las dos dentro del volumen `app-storage` (ADR-045), y solo una se
+ * limpia sola:
  *
  *   - storage/app/legal-exports/ es la copia DELIBERADA que escribe
  *     `compliance:legal-export` (via consola) para entregar a la Inspeccion.
  *     Su custodia y su borrado son responsabilidad de quien la genero, no de
- *     un cron: ver docs/runbooks/requerimiento-inspeccion.md §6.
- *   - storage/framework/legal-exports/ es el temporal que
+ *     un cron: ver docs/runbooks/requerimiento-inspeccion.md §6. Como ya no
+ *     desaparece al recrear el contenedor, `product:doctor` y una metrica con
+ *     alerta avisan cuando lleva mas de 30 dias en el servidor.
+ *   - storage/app/tmp/legal-exports/ es el temporal que
  *     `LegalExportController` (via HTTP) crea para servir la descarga y borra
  *     con `deleteFileAfterSend()` al terminar. Si el cliente aborta la
  *     descarga a medias, ese borrado nunca corre y el fichero -con datos
- *     personales de la plantilla- queda huerfano en disco.
- *
- * Este fichero solo gobierna la segunda ruta.
+ *     personales de la plantilla- queda huerfano en disco. Vivia en
+ *     storage/framework, en la capa de cada contenedor: lo escribia `app` y lo
+ *     purgaba `scheduler`, que no lo veia.
  */
 
 return [
 
     /*
-     * Horas que un temporal huerfano de storage/framework/legal-exports/
+     * Las dos raices, FIJAS y sin variable de entorno a proposito: tienen que
+     * estar dentro del volumen compartido para que la purga del `scheduler` vea
+     * lo que escribe `app`, y una ruta configurable que saliera de el
+     * reproduciria R3-PL-01. Son raices de clase de ADR-045: `product:doctor`
+     * comprueba que no se solapan con ninguna otra.
+     */
+    'legal_export_temp_path' => storage_path('app/tmp/legal-exports'),
+    'legal_export_console_path' => storage_path('app/legal-exports'),
+
+    /*
+     * Dias a partir de los cuales una exportacion legal de consola que sigue en
+     * el servidor merece un aviso (ADR-045 §f). NO se borra: es custodia humana.
+     * Lo que ocurre a los 30 dias es que `product:doctor` avisa y la serie
+     * `generated_files_overdue{class="legal_export_console"}` deja de ser cero.
+     */
+    'legal_export_console_warning_days' => 30,
+
+    /*
+     * Horas que un temporal huerfano de storage/app/tmp/legal-exports/
      * puede vivir antes de que `compliance:purge-legal-export-temp` lo borre.
      * Generoso a proposito: una descarga en curso sobre una red mala y un
      * periodo largo no debe competir con la ventana y acabar borrada a mitad
@@ -182,11 +203,39 @@ return [
          * sitio: el fabricante no accede a los datos del cliente (ADR-020).
          *
          * NO se limpia solo, al contrario que los temporales de la exportacion
-         * legal: es la constancia de que se purgo, quien lo autorizo y cuanto se
-         * llevo. Un cron que borrara los informes de purga borraria justo la
-         * prueba de que la purga fue regular.
+         * legal: es la copia legible de la constancia de que se purgo, quien lo
+         * autorizo y cuanto se llevo. Un cron que borrara los informes de purga
+         * borraria justo lo que lee quien defiende la purga.
+         *
+         * POR DEFECTO EN `BACKUP_PATH/reports/retention` (ADR-045), junto a los
+         * informes de `update.sh` y `restore.sh`, derivado de `BACKUP_PATH` como
+         * el textfile de metricas de `observability`. Antes vivia en
+         * storage/app, en la capa de cada contenedor: la propuesta semanal se
+         * quedaba en `scheduler`, la purga real con `run --rm app` se perdia con
+         * el contenedor y cualquier actualizacion borraba el resto. No llevan
+         * datos personales (ambitos, tablas, recuentos, fechas, centro y token),
+         * asi que pueden vivir sin cifrar; la poda de copias no toca `reports/`.
+         *
+         * LA CONSTANCIA CON VALOR ES EL ASIENTO `retention.purge_executed` de
+         * `audit_log`, encadenado: el fichero es su copia legible y se contrasta
+         * con el por el token de confirmacion que llevan los dos. El runtime
+         * puede reescribir `BACKUP_PATH` (A3-R2), asi que el fichero no prueba
+         * nada por si solo.
+         *
+         * `COMPLIANCE_RETENTION_REPORT_PATH` lo sigue pudiendo sobrescribir;
+         * `product:doctor` avisa si apunta dentro de storage/app, que es una ruta
+         * efimera para esto.
          */
-        'report_path' => env('COMPLIANCE_RETENTION_REPORT_PATH', storage_path('app/retention-reports')),
+        // EL UNICO RESOLVEDOR de esta ruta: lo leen el almacen de informes y la
+        // sonda `files.retention_reports` de `product:doctor`. Sin definir o
+        // VACIA (`COMPLIANCE_RETENTION_REPORT_PATH=`) vale lo mismo: el valor de
+        // serie. Antes el vacio lo resolvia el almacen y la sonda comprobaba ''.
+        'report_path' => rtrim(
+            ((string) env('COMPLIANCE_RETENTION_REPORT_PATH', '')) !== ''
+                ? (string) env('COMPLIANCE_RETENTION_REPORT_PATH')
+                : rtrim((string) env('BACKUP_PATH', '/var/backups/fichaje'), '/').'/reports/retention',
+            '/',
+        ),
 
         /* Directorio del log tecnico. Se declara para poder apuntarlo en pruebas. */
         'technical_log_path' => env('COMPLIANCE_TECHNICAL_LOG_PATH', storage_path('logs')),

@@ -9,6 +9,7 @@ use App\Modules\Compliance\Application\UseCase\GenerateLegalExport;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportPeriod;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportScope;
+use App\Modules\Shared\Infrastructure\Console\InstallationText;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -33,6 +34,14 @@ use Illuminate\Support\Facades\Log;
  * **nunca lleva el nombre de una persona** (regla dura 21)—. La ruta se imprime
  * al terminar, porque un comando que escribe un fichero y no dice donde obliga a
  * buscarlo.
+ *
+ * ## Y recuerda que no se borra solo (ADR-045 §f)
+ *
+ * `storage/app/legal-exports/` vive en el volumen persistente `app-storage`: la
+ * copia ya no desaparece al recrear el contenedor, y nadie la borra por su
+ * cuenta porque es custodia humana. El comando termina diciendo «borralo en
+ * cuanto lo hayas entregado», y a los 30 dias avisan `product:doctor` y la
+ * serie `generated_files_overdue{class="legal_export_console"}`.
  *
  * ## Queda auditado igual que la descarga
  *
@@ -102,6 +111,12 @@ final class LegalExportCommand extends Command
             ['Fichero', $export->path],
         ]);
 
+        // ADR-045 §f: la copia de consola vive en el volumen persistente y no se
+        // borra sola. En el idioma de la instalacion, como el resto de textos
+        // que lee una persona.
+        $this->newLine();
+        $this->warn(app(InstallationText::class)->line('legal-export.console.delete_after_delivery'));
+
         return self::SUCCESS;
     }
 
@@ -118,7 +133,8 @@ final class LegalExportCommand extends Command
             return $output;
         }
 
-        return storage_path('app/legal-exports/registro-horario-'.$slug.'.csv');
+        return rtrim(config()->string('compliance.legal_export_console_path'), '/')
+            .'/registro-horario-'.$slug.'.csv';
     }
 
     private function stringOption(string $name): string

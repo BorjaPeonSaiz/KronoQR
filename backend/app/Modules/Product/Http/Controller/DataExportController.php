@@ -89,11 +89,10 @@ final class DataExportController extends Controller
         try {
             $export = $exports->handle(
                 uuid: $uuid,
-                // El caso de uso no toca el sistema de ficheros; esta es la
-                // mitad que si puede. Existe porque una fila `completed` cuyo
-                // fichero alguien borro a mano para hacer sitio tiene que
-                // responder `404` en lugar de reventar.
-                fileExists: static fn (string $path): bool => $path !== '' && is_file($path),
+                // El caso de uso decide si el ZIP se puede entregar, con el
+                // localizador confinado de su clase (ADR-045, F3): presente
+                // dentro de su raiz, con su patron y sin enlaces. El controlador
+                // ya no mira el disco.
                 downloadedByUserId: self::actorUserId($request),
             );
         } catch (DataExportNotReady) {

@@ -42,7 +42,7 @@ panel esté desplegado.
 
 ```bash
 # En el servidor del cliente, desde el directorio de la instalación
-docker compose -f infra/compose.prod.yaml exec -T app \
+docker compose exec -T app \
   php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31
 ```
 
@@ -65,6 +65,11 @@ Exportacion legal generada.
 **Apunta las tres cifras.** Son las que quedan en `audit_log` y las que
 permiten, meses después, demostrar que lo entregado es lo que se generó.
 
+El fichero queda en el volumen de ficheros generados de la instalación
+([`../cliente/operacion.md`](../cliente/operacion.md) §13.6), que sobrevive a
+reinicios y actualizaciones: **no desaparece solo**. El comando termina
+recordándolo: bórralo en cuanto lo hayas entregado (§7).
+
 Variantes:
 
 ```bash
@@ -75,10 +80,16 @@ Variantes:
 … php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31 --output=/var/backups/fichaje/requerimiento-2026-02.csv
 ```
 
+> **Con `--output` dentro de `BACKUP_PATH`**, el fichero queda en la carpeta de
+> copias del servidor, junto a todo lo que tu sistema de copias se lleve de
+> ahí. `product:doctor` **no lo vigila** (solo mira la carpeta por defecto) y
+> nadie lo borra: si usas esta variante, el borrado del §7 es igual de tuyo y
+> además tienes que acordarte de dónde lo dejaste.
+
 Sacar el fichero del contenedor:
 
 ```bash
-docker compose -f infra/compose.prod.yaml cp \
+docker compose cp \
   app:/var/www/html/storage/app/legal-exports/registro-horario-2026-01-01_2026-01-31.csv .
 ```
 
@@ -167,7 +178,7 @@ producto):
 Necesitas su `employee_uuid`. Si no lo tienes a mano:
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T postgres \
+docker compose exec -T postgres \
   psql -U fichaje_app -d fichaje -c \
   "SELECT uuid, employee_code FROM employees WHERE employee_code = 'E0042';"
 ```
@@ -206,7 +217,7 @@ Toda generación —por consola o por panel— escribe en `audit_log` (regla dur
 RS-05):
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T postgres \
+docker compose exec -T postgres \
   psql -U fichaje_app -d fichaje -c \
   "SELECT occurred_at, actor_type, actor_id, payload
      FROM audit_log
@@ -228,27 +239,63 @@ La métrica `legal_exports_total{scope}` sube en los dos casos
 exportar la plantilla completa todas las semanas está haciendo otra cosa distinta
 de contestar a un requerimiento.
 
+**Lo que no queda registrado: sacar el fichero del servidor.** Desde el panel,
+generar y descargar son el mismo acto y la cuenta queda en el asiento. Por
+consola, en cambio, el asiento dice que se generó, pero copiarlo fuera con
+`docker compose cp` (§1) **no deja ningún rastro en el producto**, igual que no
+lo deja cualquier otra lectura de alguien con acceso a Docker en el servidor.
+Si te preguntan quién se llevó el fichero, la respuesta sale de tu registro de
+entrega —a quién, cuándo y por qué canal se entregó a la Inspección—, no de
+`audit_log`. Apúntalo al entregarlo.
+
+**Lo que sí vigila el producto es que no se quede olvidado.** Mientras el fichero
+siga en `storage/app/legal-exports/`, `product:doctor` avisa cuando alguno pasa
+de 30 días en el servidor, y la alerta `FicheroGeneradoSinRetirarPasadoSuPlazo`
+suena al IT ([`ficheros-generados.md`](ficheros-generados.md) §4). Ver §7.
+
 ---
 
 ## 7. Después de entregar: custodia y borrado del fichero
 
 El fichero que generó `compliance:legal-export` sigue en
-`storage/app/legal-exports/` dentro del contenedor. **Nadie lo borra
-automáticamente** (a propósito: es la única copia que se entrega a un
+`storage/app/legal-exports/`, dentro del volumen de ficheros generados. Ese
+volumen **sobrevive a reinicios y actualizaciones** —hasta la 2.1.0 el fichero
+desaparecía de rebote al recrear el contenedor; desde la 2.2.0 ya no— y **nadie
+lo borra automáticamente** (a propósito: es la única copia que se entrega a un
 tercero, y un cron que la hiciera desaparecer sin que nadie lo decidiera
-convertiría una limpieza en una pérdida de prueba). La custodia es
-responsabilidad de quien la generó, con el mismo criterio que un documento en
-papel:
+convertiría una limpieza en una pérdida de prueba). Tampoco entra en la copia
+de seguridad. La custodia es responsabilidad de quien la generó, con el mismo
+criterio que un documento en papel, y el producto te lo recuerda:
+
+- el propio comando termina diciendo que lo borres en cuanto lo hayas
+  entregado;
+- `product:doctor` avisa cuando alguno lleva **más de 30 días** en el servidor;
+- y a la vez suena la alerta `FicheroGeneradoSinRetirarPasadoSuPlazo`, que no
+  se apaga hasta que el fichero desaparece
+  ([`ficheros-generados.md`](ficheros-generados.md) §4).
+
+**Esa vigilancia solo cubre la carpeta por defecto.** Si lo generaste con
+`--output` hacia otra ruta (por ejemplo, dentro de `BACKUP_PATH`, §1), ni
+`product:doctor` ni la alerta de los 30 días saben que existe: la custodia y el
+borrado son solo de quien lo generó, y tiene que acordarse de dónde lo dejó.
+
+Para ver cuáles siguen ahí:
+
+```bash
+docker compose exec -T app sh -c 'ls -l storage/app/legal-exports/ 2>/dev/null'
+```
 
 1. **Mientras dura el procedimiento con Inspección**, consérvalo donde lo
-   dejaste (dentro del contenedor, o la copia que sacaste con `docker compose
-   cp` a la máquina desde la que se entregó). No hace falta guardarlo en dos
-   sitios: `audit_log` ya prueba qué se generó y cuándo.
+   dejaste (en el servidor, o la copia que sacaste con `docker compose cp` a la
+   máquina desde la que se entregó). No hace falta guardarlo en dos sitios:
+   `audit_log` ya prueba qué se generó y cuándo. Si el procedimiento dura más
+   de 30 días, el aviso de `product:doctor` y la alerta son esperados: no lo
+   borres antes de tiempo por quitártelos de encima.
 2. **Cuando el procedimiento se cierra** (resolución, archivo, o simplemente
    pasado el plazo de alegaciones sin novedad), bórralo:
 
    ```bash
-   docker compose -f infra/compose.prod.yaml exec -T app \
+   docker compose exec -T app \
      rm -f storage/app/legal-exports/registro-horario-2026-01-01_2026-01-31.csv
    ```
 
@@ -265,7 +312,7 @@ papel:
    mismo criterio de los puntos 1-2 a cada uno según se cierre su propio
    procedimiento.
 
-**El temporal de la descarga por panel (`storage/framework/legal-exports/`,
+**El temporal de la descarga por panel (`storage/app/tmp/legal-exports/`,
 §2) es distinto y no necesita este procedimiento**: `compliance:purge-legal-export-temp`
 lo borra solo, cada hora, pasada una ventana de
 `COMPLIANCE_LEGAL_EXPORT_TEMP_RETENTION_HOURS` (6 horas por defecto). Esa

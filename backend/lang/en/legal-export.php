@@ -106,4 +106,12 @@ return [
         'voided' => 'Entry voided',
     ],
 
+    /*
+     * What `compliance:legal-export` prints when it finishes (ADR-045 §f).
+     */
+    'console' => [
+        'delete_after_delivery' => 'This file contains personal data of the workforce and is NOT deleted '
+            .'automatically. Take it off the server to hand it over, and delete it as soon as you have delivered it.',
+    ],
+
 ];

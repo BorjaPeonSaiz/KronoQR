@@ -89,6 +89,28 @@ x-app-image: &app-image
     # No hace falta reiniciar para cambiar el logotipo: se sustituye el fichero y
     # la peticion siguiente ya lo sirve, con huella nueva en la URL.
     - ${BRANDING_PATH:-./branding}:/var/kronoqr/branding:ro
+    #
+    # Ficheros que el producto genera y que CRUZAN contenedores (ADR-045,
+    # R3-PL-01): la exportacion integra y los informes en diferido los escribe
+    # `horizon` y los sirve `app`; las purgas corren en `scheduler`; el paquete
+    # de diagnostico y la exportacion legal por consola salen de `app`. Sin este
+    # volumen cada contenedor tenia su propio `storage/app` en su capa de
+    # escritura: la descarga respondia 404, las purgas no veian nada y todo
+    # desaparecia al recrear el contenedor.
+    #
+    # LECTURA Y ESCRITURA en los tres: los tres escriben o borran. Volumen CON
+    # NOMBRE y no ruta del servidor: nace con el dueño y el modo de la imagen
+    # (`app:app 0700`, Dockerfile), no expone los ZIP al uid 1000 del anfitrion
+    # y no hay nada que decidir en la instalacion (ADR-017).
+    #
+    # NO entra en la copia ni lo repone `restore.sh`: todo lo que contiene caduca
+    # a los 7 dias o se regenera desde el volcado cifrado. NO lo montan `reverb`
+    # (`volumes: []`), `nginx`, `migrate` ni `restore`. Se borra con `down -v`,
+    # igual que `postgres-data`.
+    #
+    # Solo `storage/app`: ni `storage/` entero ni `storage/framework` (cachés y
+    # vistas compiladas deben poder desecharse con la imagen).
+    - app-storage:/var/www/html/storage/app
   networks:
     - app
   restart: unless-stopped
@@ -703,7 +725,8 @@ services:
     <<: *app-image
     command: ["reverb"]
     # Sin volúmenes: `reverb` solo habla WebSocket con Redis y no lee ni escribe
-    # ni las copias (BACKUP_PATH) ni el logotipo de la marca que monta el ancla.
+    # ni las copias (BACKUP_PATH), ni el logotipo de la marca, ni los ficheros
+    # generados (`app-storage`) que monta el ancla.
     # La clave explícita gana sobre la del ancla en la fusión de YAML.
     volumes: []
     environment:
@@ -1039,6 +1062,8 @@ networks:
 
 volumes:
   postgres-data:
+  # Ficheros generados que cruzan contenedores (ADR-045). Ver `x-app-image`.
+  app-storage:
   redis-data:
   prometheus-data:
   alertmanager-data:

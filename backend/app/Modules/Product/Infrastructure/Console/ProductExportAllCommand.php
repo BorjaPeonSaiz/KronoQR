@@ -8,9 +8,11 @@ use App\Modules\Product\Application\Command\RequestDataExportCommand;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Application\UseCase\PurgeExpiredDataExportsHandler;
 use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
+use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
+use App\Modules\Shared\Infrastructure\Console\InstallationText;
 use App\Modules\Shared\Infrastructure\Format\ByteSize;
 use Illuminate\Console\Command;
 use Throwable;
@@ -46,8 +48,17 @@ use Throwable;
  *
  * ## `--purge` no genera nada
  *
- * Borra los ficheros vencidos y marca sus filas. Es lo que el planificador
- * ejecuta cada hora; a mano sirve para hacer sitio en el disco sin esperar.
+ * Borra los ficheros vencidos y marca sus filas, y concilia fila y fichero en
+ * los dos sentidos (ADR-045): la fila cuyo ZIP ya no esta pasa a `purged`, y el
+ * ZIP o el `.work-<uuid>/` que ninguna fila viva nombra se borra al superar su
+ * edad minima. Todo dentro de `PRODUCT_DATA_EXPORT_PATH` y por patron exacto de
+ * nombre. Es lo que el planificador ejecuta cada hora; a mano sirve para hacer
+ * sitio en el disco sin esperar.
+ *
+ * En la misma pasada barre los paquetes de diagnostico de mas de
+ * `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` dias (ADR-045 §g, C4): es la pasada
+ * horaria de los ficheros del modulo, y un paquete pedido con datos personales
+ * no puede esperar a que alguien genere el siguiente para desaparecer.
  *
  * ## Codigos de salida
  *
@@ -64,7 +75,7 @@ use Throwable;
 final class ProductExportAllCommand extends Command
 {
     protected $signature = 'product:export-all
-        {--purge : No genera nada: borra los ficheros de exportaciones ya caducadas y marca sus filas}';
+        {--purge : No genera nada: borra los ficheros caducados, marca sus filas y concilia fila y fichero}';
 
     protected $description = 'Exporta TODOS los datos de la instalacion a un ZIP con un CSV por tabla, o purga los caducados';
 
@@ -72,9 +83,10 @@ final class ProductExportAllCommand extends Command
         RequestDataExportHandler $request,
         GenerateDataExportHandler $generate,
         PurgeExpiredDataExportsHandler $purge,
+        SweepExpiredDiagnosticsBundles $diagnostics,
     ): int {
         if ($this->option('purge') === true) {
-            return $this->purge($purge);
+            return $this->purge($purge, $diagnostics);
         }
 
         try {
@@ -146,13 +158,14 @@ final class ProductExportAllCommand extends Command
         return self::SUCCESS;
     }
 
-    private function purge(PurgeExpiredDataExportsHandler $purge): int
+    private function purge(PurgeExpiredDataExportsHandler $purge, SweepExpiredDiagnosticsBundles $diagnostics): int
     {
         $report = $purge->handle();
+        $bundles = $diagnostics->handle();
 
         $this->line($report->purged === 0
-            ? 'No hay ninguna exportacion integra caducada que purgar.'
-            : 'Purgadas '.$report->purged.' exportaciones integras caducadas. Las filas se conservan con su estado.');
+            ? self::text('generated-files.data_exports.nothing_expired')
+            : self::text('generated-files.data_exports.purged', ['count' => $report->purged]));
 
         if ($report->released > 0) {
             /*
@@ -161,10 +174,40 @@ final class ProductExportAllCommand extends Command
              * el producto se ha desbloqueado solo —y que si se repite cada hora,
              * lo que hay que mirar es el trabajador de cola—.
              */
-            $this->line('Liberadas '.$report->released.' exportaciones que se quedaron a medias '
-                .'(motivo «stale»): ya se puede pedir una nueva.');
+            $this->line(self::text('generated-files.data_exports.released', ['count' => $report->released]));
+        }
+
+        if ($report->orphans > 0) {
+            // Sin nombres ni rutas, igual que el log: solo la cifra (regla dura 21).
+            $this->line(self::text('generated-files.data_exports.orphans', ['count' => $report->orphans]));
+        }
+
+        if ($report->missing > 0) {
+            /*
+             * En voz alta: un ZIP con la plantilla entera ha desaparecido antes
+             * de caducar. Tras una restauracion es lo esperado; fuera de eso,
+             * alguien lo borro o se lo llevo, y el asiento de auditoria es lo
+             * que permite acotar cuando.
+             */
+            $this->line(self::text('generated-files.data_exports.missing', ['count' => $report->missing]));
+        }
+
+        if ($bundles > 0) {
+            // Solo la cifra: ni nombres de fichero ni rutas (regla dura 21).
+            $this->line(self::text('generated-files.data_exports.diagnostics', ['count' => $bundles]));
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Un texto de `lang/*\/generated-files.php` en el idioma de la INSTALACION,
+     * no en `APP_LOCALE` (ver `InstallationText`).
+     *
+     * @param  array<string, int>  $replace
+     */
+    private static function text(string $key, array $replace = []): string
+    {
+        return app(InstallationText::class)->line($key, $replace);
     }
 }

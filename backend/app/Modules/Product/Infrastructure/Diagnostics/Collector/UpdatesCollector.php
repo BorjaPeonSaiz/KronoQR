@@ -32,11 +32,13 @@ use App\Modules\Product\Infrastructure\Diagnostics\UpdateReportAllowlist;
  * ## El `.detalle.log` NUNCA sale, y no es un olvido
  *
  * `update.sh` escribe dos ficheros a proposito: el informe (`0640`, legible por
- * la aplicacion) y el detalle (`0600` de root). El segundo lleva la salida
- * completa de las migraciones y de los contenedores, que **puede contener datos
- * personales** —un error de restriccion con el valor de la fila— y por eso el
- * instalador le pone unos permisos que esta aplicacion no puede sortear. Aqui se
- * repite la decision de forma explicita: se leen solo los `update-*.log`, y el
+ * la aplicacion, en `BACKUP_PATH/reports`) y el detalle (`0600` de root, en
+ * `/var/log/kronoqr/`, fuera de `BACKUP_PATH` y de cualquier volumen: la
+ * aplicacion ni siquiera lo ve). El segundo lleva la salida completa de las
+ * migraciones y de los contenedores, que **puede contener datos personales**
+ * —un error de restriccion con el valor de la fila— y por eso el actualizador lo
+ * deja donde esta aplicacion no puede alcanzarlo. Aqui se repite la decision de
+ * forma explicita: se leen solo los `update-*.log`, y el
  * filtro descarta cualquier cosa que contenga `.detalle.`.
  */
 final readonly class UpdatesCollector implements DiagnosticsCollector
@@ -107,8 +109,9 @@ final readonly class UpdatesCollector implements DiagnosticsCollector
             return [];
         }
 
-        // El detalle es 0600 de root y puede llevar datos personales. Fuera, de
-        // forma explicita, aunque los permisos ya lo impidieran: los permisos
+        // El detalle es 0600 de root, vive en /var/log/kronoqr y puede llevar datos
+        // personales: no deberia aparecer aqui nunca. Fuera, de forma explicita,
+        // aunque su ubicacion y sus permisos ya lo impidieran: los permisos
         // son del despliegue y esto es una decision del producto.
         $reports = array_values(array_filter(
             $found,

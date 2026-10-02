@@ -263,6 +263,53 @@ return [
             ],
         ],
 
+        'files' => [
+            'probe' => $probe,
+            'storage_volume' => [
+                'ok' => 'storage/app is a volume of its own and is writable: exports, reports and purges see the '
+                    .'same files in the three containers.',
+                'ok_not_checked' => 'storage/app is writable. Whether it is a volume of its own is not checked '
+                    .'because this is not a production installation.',
+                'failure' => 'The application cannot write to :path. Without it no exports, deferred reports or '
+                    .'diagnostics bundles can be generated.',
+                'failure_not_mounted' => ':path is NOT a volume of its own: each container has its own copy and '
+                    .'loses it on update. Exports requested from the panel cannot be downloaded and the purges do not '
+                    .'see the files with personal data.',
+            ],
+            'retention_reports' => [
+                'ok' => 'Retention reports are written to :path, next to the backups.',
+                'warning' => 'The application cannot write to :path: the weekly retention proposal and the purge '
+                    .'will not be able to leave their report.',
+                'warning_missing' => 'The retention report directory :path does not exist. It will be created on the '
+                    .'first run if the backup directory is writable.',
+                'warning_inside_storage' => 'COMPLIANCE_RETENTION_REPORT_PATH points to :path, inside storage/app.',
+            ],
+            'class_roots' => [
+                'ok' => 'Each class of generated file has its own directory and none overlaps another.',
+                'failure_overlap' => ':first and :second point to the same directory or one contains the other: the '
+                    .'purge of one could delete files of the other.',
+                'failure_storage_root' => ':name points to :path, which is storage/app or contains it: its purge '
+                    .'would see the files of every other class.',
+                'failure_backup_path' => ':name points to :path, which overlaps the backup directory. Backups would '
+                    .'keep for months files that expire in days.',
+                'warning_outside_volume' => 'These directories are outside storage/app: :names. Outside the shared '
+                    .'volume, what one container writes another does not see.',
+                'failure_outside_volume' => 'These directories are outside storage/app: :names. In production, '
+                    .'outside the shared volume, exports requested from the panel cannot be downloaded and the purges '
+                    .'do not see the files with personal data.',
+            ],
+            'stray_entries' => [
+                'ok' => 'No abandoned generated files in storage/app outside the configured directories.',
+                'warning' => 'There are generated files in :names, inside storage/app but outside the configured '
+                    .'directories. No purge looks at them: they are usually left over from a root that was changed.',
+            ],
+            'legal_exports_console' => [
+                'ok' => 'No console legal export has been on the server for more than :days days.',
+                'warning' => 'There are :count console legal export(s) older than :days days in :path. They contain '
+                    .'personal data of the workforce and are not deleted automatically.',
+            ],
+        ],
+
         'app' => [
             'probe' => $probe,
             'timezone_utc' => [
@@ -580,6 +627,54 @@ return [
                     .'minimum is in BACKUP_MIN_COPIES.',
                 'warning_missing' => 'Check that the path :path exists and is mounted.',
                 'warning_unknown' => 'Check that the path :path is mounted and accessible.',
+            ],
+        ],
+
+        'files' => [
+            'probe' => $probeFix,
+            'storage_volume' => [
+                'failure' => "Give the directory back to the application user. From the installation directory:\n"
+                    .'  docker compose exec -u root app chown app:app :path',
+                'failure_not_mounted' => "The docker-compose.yml does not mount the app-storage volume. Use the one\n"
+                    ."shipped with this version, which mounts it in app, horizon and scheduler, and recreate them:\n"
+                    ."  docker compose up -d app horizon scheduler\n"
+                    .'Then run ./doctor.sh, which checks that the three see the same files.',
+            ],
+            'retention_reports' => [
+                'warning' => "Give the application user (uid 1000) write access to :path and check that the\n"
+                    .'backup directory is not mounted read-only.',
+                'warning_missing' => "Create it on the server with 'sudo install -d -o 1000 -g 1000 -m 0750 :path' (and its\n"
+                    .'parent reports, with the same owner and mode). Without it the readable copy of the report is not '
+                    .'kept, and the purge still leaves its entry in the audit log.',
+                'warning_inside_storage' => "Retention reports belong in BACKUP_PATH/reports/retention, where a person\n"
+                    ."reads them without entering the container. Remove the key from the .env file to use the default,\n"
+                    .'and recreate the containers.',
+            ],
+            'class_roots' => [
+                'failure_overlap' => "Leave each variable at its default (remove it from .env) or give it a\n"
+                    ."directory of its own inside /var/www/html/storage/app. Then recreate the containers:\n"
+                    .'  docker compose up -d app horizon scheduler',
+                'failure_storage_root' => "Remove :name from .env to return to its default, or point it to a\n"
+                    .'subdirectory of its own in /var/www/html/storage/app. Then recreate the containers.',
+                'failure_backup_path' => "Remove :name from .env to return to its default: these files are not\n"
+                    .'kept with the backups. Then recreate the containers.',
+                'warning_outside_volume' => "Remove those variables from .env to return to their defaults, or point\n"
+                    .'them to a subdirectory of /var/www/html/storage/app. Then recreate the containers.',
+                'failure_outside_volume' => "Remove those variables from .env to return to their defaults, or point\n"
+                    .'them to a subdirectory of /var/www/html/storage/app. Then recreate the containers.',
+            ],
+            'stray_entries' => [
+                'warning' => "If you changed PRODUCT_DATA_EXPORT_PATH or REPORTING_EXPORT_PATH, empty the old\n"
+                    ."folder: it holds personal data nobody is going to delete anymore. To see it:\n"
+                    .'  docker compose exec app ls -la /var/www/html/storage/app',
+            ],
+            'legal_exports_console' => [
+                'warning' => "If you have already handed those exports to the Labour Inspectorate, delete them.\n"
+                    ."From the installation directory, to list them:\n"
+                    ."  docker compose exec app ls -l :path\n"
+                    ."and to delete one:\n"
+                    ."  docker compose exec app rm :path/<file>\n"
+                    .'Details: docs/runbooks/requerimiento-inspeccion.md, section 7.',
             ],
         ],
 

@@ -179,15 +179,17 @@ it('borra al arrancar los paquetes caducados y lo dice', function (): void {
     @mkdir(directorioDePaquetes(), 0o700, true);
 
     $viejo = directorioDePaquetes().'/kronoqr-diagnostics-2.0.0-20260101T000000Z.json';
-    $reciente = directorioDePaquetes().'/kronoqr-diagnostics-2.0.0-20260614T000000Z.json';
-
     file_put_contents($viejo, '{}');
-    file_put_contents($reciente, '{}');
 
-    // El reloj de la prueba esta en 2026-06-15 y la retencion es de 7 dias: el
-    // de enero cae, el de ayer no.
-    touch($viejo, (int) (new DateTimeImmutable('2026-05-01T00:00:00Z'))->getTimestamp());
-    touch($reciente, (int) (new DateTimeImmutable('2026-06-14T00:00:00Z'))->getTimestamp());
+    // La edad es `max(mtime, ctime)` (ADR-045, C9) y `ctime` es el instante
+    // real en que se creo el fichero: no se envejece el fichero, se adelanta el
+    // reloj. Con 7 dias de retencion, el creado hace «8 dias» cae…
+    FrozenTime::at(gmdate('Y-m-d H:i:s', time() + 8 * 86400));
+
+    // …y el creado «ayer» no.
+    $reciente = directorioDePaquetes().'/kronoqr-diagnostics-2.0.0-20260614T000000Z.json';
+    file_put_contents($reciente, '{}');
+    touch($reciente, time() + 7 * 86400);
 
     $result = runDiagnostics();
 
@@ -209,7 +211,9 @@ it('respeta el plazo configurado', function (): void {
     @mkdir(directorioDePaquetes(), 0o700, true);
     $deAyer = directorioDePaquetes().'/kronoqr-diagnostics-2.0.0-20260614T000000Z.json';
     file_put_contents($deAyer, '{}');
-    touch($deAyer, (int) (new DateTimeImmutable('2026-06-13T00:00:00Z'))->getTimestamp());
+
+    // Reloj adelantado dos dias: el fichero tiene dos dias para el barrido.
+    FrozenTime::at(gmdate('Y-m-d H:i:s', time() + 2 * 86400));
 
     runDiagnostics();
 

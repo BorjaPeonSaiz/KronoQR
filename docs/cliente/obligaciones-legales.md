@@ -246,6 +246,9 @@ Política por tipo de dato, que es la que aplica el sistema:
 | Registro de envíos del resumen semanal (`weekly_summary_deliveries`) | **Sin purga automática** | Guarda recuentos y la cuenta destinataria; **ningún dato de la plantilla** |
 | Ficheros de informes generados en segundo plano (`report_exports`): horas nominales de la plantilla, listos para descargar | **7 días** de serie | Tu instalación (`REPORTING_EXPORT_RETENTION_DAYS`, [`configuracion.md`](configuracion.md) §6.25). Se descargan con un enlace de un solo uso; al vencer, el fichero se borra y la anotación de que existió se queda sin identificadores de personas ni alcance |
 | ZIP de la exportación íntegra (§7 quater) | **7 días** de serie | Tu instalación (`PRODUCT_DATA_EXPORT_RETENTION_DAYS`). Contiene todos los datos personales de la instalación; mientras exista, su custodia es tuya. La anotación de que existió se conserva |
+| Paquete de diagnóstico generado por consola | **7 días** de serie | Tu instalación (`PRODUCT_DIAGNOSTICS_RETENTION_DAYS`). Lo borra solo una tarea horaria. Va anonimizado salvo que decidas incluir datos personales ([`operacion.md`](operacion.md) §12.3) |
+| Exportación del registro horario para la Inspección generada por consola | **Hasta que la borres** | Tú. Es una copia entregada a un tercero bajo tu custodia y el sistema no la borra sola; avisa cuando alguna lleva más de 30 días en el servidor ([`requerimiento-inspeccion.md`](../runbooks/requerimiento-inspeccion.md) §7) |
+| Informes de retención (propuesta y purga) | **Sin purga automática** | No llevan datos personales: ámbitos, tablas, recuentos y fechas. Viven junto a las copias, en `BACKUP_PATH/reports/retention` |
 
 **El correo del resumen semanal ya entregado es una copia fuera del producto.**
 Vive en el buzón del responsable, se puede reenviar e imprimir, y **su plazo de
@@ -283,8 +286,13 @@ El procedimiento completo está en
    cargo, no «el departamento de IT».
 2. **Leer el informe antes de autorizar.** Dice qué tablas, qué rango de fechas y
    cuántos registros.
-3. **Archivar el informe de purga** junto a la autorización. Es lo que acredita,
-   dos años después, que se borró lo que había que borrar y solo eso.
+3. **Archivar el informe de purga** junto a la autorización. El fichero queda en
+   el servidor, en `BACKUP_PATH/reports/retention`, y es la copia legible de lo
+   que se borró. **La constancia con valor es su asiento en el registro de
+   auditoría** (`retention.purge_executed`), encadenado e inalterable; los dos
+   llevan el mismo token de confirmación y conviene contrastarlos al archivar
+   ([`operacion.md`](operacion.md) §3.1). Si dos años después el fichero no
+   está o no coincide, manda el asiento.
 4. **Custodiar la contraseña del rol `fichaje_maintenance`** fuera del servidor de
    aplicación —gestor de contraseñas, sobre sellado, lo que uséis para el resto de
    credenciales críticas—.
@@ -452,11 +460,28 @@ plantilla, así que la tratas como tal:
 
 - Solo el **administrador de la instalación** puede pedirla; RRHH no, el
   auditor no, y **soporte del fabricante nunca**, con ningún alcance.
-- Pedirla, generarla y **cada descarga** quedan en tu registro de auditoría
-  (`data_export.requested`, `data_export.generated`, `data_export.downloaded`):
-  ante una brecha puedes responder quién se llevó qué y cuándo (§2).
-- El fichero **caduca**: a los siete días (configurable) el sistema lo borra
-  del servidor; la anotación de que existió se conserva.
+- Pedirla, generarla y **cada descarga desde el panel** quedan en tu registro
+  de auditoría (`data_export.requested`, `data_export.generated`,
+  `data_export.downloaded`): ante una brecha puedes responder quién se llevó
+  qué y cuándo (§2).
+- **La descarga desde el panel es el único camino que deja ese rastro.** El
+  fichero también se puede sacar del servidor por consola, con
+  `docker compose cp`, y esa salida **no deja asiento de descarga**: el
+  producto no puede saber quién lo hizo. Si tu IT usa la consola —por ejemplo,
+  porque el fichero es demasiado grande para el navegador—, que anote quién lo
+  sacó, cuándo y a dónde, y conserva esa nota con tu registro de actividades.
+- El fichero **caduca**: a los siete días (configurable, se puede bajar a uno)
+  el sistema lo borra del servidor; la anotación de que existió se conserva.
+  **No entra en las copias de seguridad**, así que tampoco vuelve al restaurar
+  una: tras una restauración se pide otra.
+- **Mientras está en el servidor, está en claro**, igual que la base de datos de
+  la que sale. Quien administra el servidor —`root` o cualquier miembro del
+  grupo `docker`, que en la práctica equivale a lo mismo— puede leerlo, igual
+  que puede leer la base de datos. Por eso recomendamos **cifrar el disco del
+  servidor** (el de los datos de Docker y el de las copias) y **limitar quién
+  pertenece al grupo `docker`**: son medidas de tu sistema, no del producto
+  ([`operacion.md`](operacion.md) §13.6,
+  [`endurecimiento.md`](endurecimiento.md) §3).
 - Una vez fuera del sistema, el fichero es tuyo y con él tus obligaciones:
   cifrado, custodia y borrado cuando venza la conservación (§4). No lo envíes
   a nadie sin base para hacerlo.

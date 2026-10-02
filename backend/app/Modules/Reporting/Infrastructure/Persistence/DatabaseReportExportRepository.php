@@ -268,6 +268,33 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
         ]);
     }
 
+    public function markPurged(ReportExport $purged): bool
+    {
+        /*
+         * Solo las columnas que cambia `ReportExport::purge()` —estado, la
+         * minimizacion (RL-11), la ruta, `purged_at` y el enlace que muere con el
+         * fichero— y **solo si la fila sigue `completed` sin `purged_at`**: una
+         * sola sentencia condicional, asi que de dos pasadas que leyeron la misma
+         * fila solo una la marca. La otra recibe cero, no publica nada y no pisa
+         * `purged_at` (regla dura 5) ni el `download_count` de una descarga que se
+         * cruzara.
+         */
+        return $this->connection->table('report_exports')
+            ->where('id', $purged->id)
+            ->where('status', ReportExportStatus::Completed->value)
+            ->whereNull('purged_at')
+            ->update([
+                'status' => $purged->status->value,
+                'parameters' => self::json($purged->parameters->toArray()),
+                'scope' => $purged->scope === null ? null : self::json(self::scopeToArray($purged->scope)),
+                'file_path' => $purged->filePath,
+                'purged_at' => self::nullableUtc($purged->purgedAt),
+                'download_token_hash' => $purged->downloadTokenHash,
+                'download_token_expires_at' => self::nullableUtc($purged->downloadTokenExpiresAt),
+                'updated_at' => self::utc($this->clock->now()),
+            ]) === 1;
+    }
+
     public function recordNotification(
         int $id,
         DateTimeImmutable $notifiedAt,
@@ -284,17 +311,14 @@ final readonly class DatabaseReportExportRepository implements ReportExportRepos
         ]);
     }
 
-    public function uuidsWithFile(): array
+    public function completedWithFile(): array
     {
-        /** @var list<string> $uuids */
-        $uuids = $this->connection->table('report_exports')
-            ->where('status', ReportExportStatus::Completed->value)
-            ->whereNull('purged_at')
-            ->pluck('uuid')
-            ->map(static fn (mixed $uuid): string => \is_string($uuid) ? $uuid : '')
-            ->all();
+        /** @var list<object> $rows */
+        $rows = $this->connection->select(
+            self::SELECT." WHERE e.purged_at IS NULL AND e.status = 'completed' AND e.file_path IS NOT NULL ORDER BY e.id",
+        );
 
-        return $uuids;
+        return $this->hydrateAll($rows);
     }
 
     public function failStale(DateTimeImmutable $staleBefore, DateTimeImmutable $now): int

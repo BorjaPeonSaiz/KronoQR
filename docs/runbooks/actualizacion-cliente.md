@@ -79,7 +79,23 @@ del paquete, `versions.txt`; no se edita.
    responden, que la clave de cifrado de las copias está en el `.env`, y **que
    la cadena de auditoría está íntegra antes de tocar nada** (§4).
 
-5. **Ejecútalo dentro de `tmux` o `screen`** (o con `nohup`). Si la sesión SSH
+5. **Comprueba que el servidor tiene `setpriv`** (paquete `util-linux`, de
+   serie en Debian, Ubuntu y RHEL 7 o posterior):
+
+   ```bash
+   command -v setpriv
+   ```
+
+   `update.sh` lo usa para dejar su informe, los informes de retención que
+   rescata y sus métricas en `BACKUP_PATH` **como el usuario de la
+   aplicación (uid 1000) y sin seguir enlaces**, que es lo que impide que un
+   contenedor comprometido convierta esa escritura de root en una escalada.
+   Sin él la actualización **no se detiene**: avisa, sigue, no rescata los
+   informes de retención y deja su propio informe en un directorio temporal,
+   diciendo cuál. Instálalo antes (`apt install util-linux` o
+   `dnf install util-linux`) y te ahorras copiarlo a mano.
+
+6. **Ejecútalo dentro de `tmux` o `screen`** (o con `nohup`). Si la sesión SSH
    se corta a mitad, el script atrapa la señal y deshace solo, pero el mensaje
    final se iría con la conexión y solo quedaría el informe en el servidor.
 
@@ -102,7 +118,7 @@ Lo que verás, y lo que significa cada paso:
 | 4 · Migraciones | Relanza PostgreSQL y Redis con las imágenes nuevas y aplica las migraciones **versión a versión**, con un punto de control entre cada una: `PUNTO DE CONTROL 2.2.0 alcanzado: 3 migraciones aplicadas en 4 s` | Igual |
 | 5 · Arranque y verificación | Arranca la aplicación nueva **sin borde** y la comprueba desde dentro: sondas, versión, cadena de auditoría, restricciones de RN-01 y RN-02. Solo si todo pasa arranca Nginx y los procesos de fondo, y vuelve a comprobar por loopback | Sigue encolando hasta que Nginx vuelve |
 | 6 · Vuelta atrás | Solo si el 4 o el 5 fallan: restaura la copia del paso 3 y relanza la versión anterior, sin preguntar (§5) | Igual: nada de lo encolado se pierde |
-| 7 · Informe | `BACKUP_PATH/reports/update-<fecha>.log`, siempre, también tras una vuelta atrás. Al lado, `update-<fecha>.detalle.log` con la salida cruda (migraciones, copia, restauración, logs): **solo root, puede llevar datos personales** | — |
+| 7 · Informe | `BACKUP_PATH/reports/update-<fecha>.log`, siempre, también tras una vuelta atrás (uid 1000, `0640`). **El detalle** `update-<fecha>.detalle.log` (salida cruda de migraciones, copia, restauración y logs; **puede llevar datos personales**) **no se publica ahí**: vive solo en `/var/log/kronoqr/`, `root:root 0600` en un directorio `0700`, junto a una copia local del informe. El informe aparece en `reports/` **al terminar** (o al salir por cualquier camino), **no mientras corre**: durante la ejecución se escribe en `/var/log/kronoqr/` y al final se publica como el uid de la aplicación con `setpriv` (paquete `util-linux`; la fase 1 avisa si falta). Si no se puede publicar, el script lo avisa y el informe queda a salvo en `/var/log/kronoqr/`: cópialo con la orden que indica el aviso | — |
 
 **Por qué el mantenimiento va antes de la copia**, y no al revés como lo
 enumera el plan: un fichaje aceptado *entre* la copia y el mantenimiento
@@ -215,7 +231,8 @@ Cuando la versión anterior responda, genera el paquete de diagnóstico y abre u
 caso al fabricante adjuntando el **informe** de `BACKUP_PATH/reports/`
 (`update-<fecha>.log`). **El paquete va anonimizado por defecto** y el informe
 no lleva secretos ni datos personales. El **detalle técnico**
-(`update-<fecha>.detalle.log`) es otra cosa: es solo de root, lleva la salida
+(`update-<fecha>.detalle.log`) es otra cosa: es de root con modo `0600` y está en
+`/var/log/kronoqr/` (no en `BACKUP_PATH`, que escribe la aplicación), lleva la salida
 cruda de migraciones, copia, restauración y logs, y **puede contener datos
 personales** (un `DETAIL: Failing row contains (...)` de PostgreSQL, por
 ejemplo). Revísalo antes de enviarlo, y envíalo solo si el fabricante lo pide.
@@ -233,6 +250,20 @@ ejemplo). Revísalo antes de enviarlo, y envíalo solo si el fabricante lo pide.
   dejaría al cliente sin correcciones de seguridad sobre su registro legal
   (ADR-019). El estado de la licencia se anota en el informe, nada más.
 - **El fichaje.** Ni durante la actualización ni si falla.
+
+**Lo que sí cambia al pasar de la 2.1.0: dónde viven los ficheros generados**
+(ADR-045). El primer arranque de la 2.2.0 crea el volumen `app-storage`;
+`update.sh` rescata a `BACKUP_PATH/reports/retention/` los informes de
+retención que encuentre en los contenedores de la 2.1.0 (solo
+`retencion-propuesta-*.txt` y `retencion-purga-*.txt`, sin sobrescribir, en
+`0640`; si falla, avisa y sigue), y **no** rescata las exportaciones, los
+informes en diferido, los paquetes de diagnóstico ni el estado de la
+telemetría. Tras la actualización puede sonar
+`FicheroGeneradoDesaparecidoAntesDeCaducar` por exportaciones que no habían
+caducado: es lo esperado. Lo que el cliente tiene que saber, con cómo citar el
+asiento de una purga cuyo informe se perdió, está en
+[`../cliente/operacion.md`](../cliente/operacion.md) §11, «Al actualizar desde
+la 2.1.0: los ficheros generados».
 
 ### 6.1 Desde la 2.1.0: cada contenedor recibe solo lo suyo (ADR-042)
 

@@ -12,7 +12,8 @@
 >
 > **Got a problem right now?** Go straight to **§18, "What to do if…"**:
 > tablets that ask to be paired again, Redis that will not start, a `402`,
-> reports that never finish and the failed nightly backup.
+> reports that never finish, the failed nightly backup, exports shown as
+> "Expired" after a restore and a purge whose report is missing.
 
 ---
 > **The commands in this guide are run from the package directory**, which is
@@ -34,7 +35,7 @@ All of this runs on its own in the `scheduler` container. What appears in the
 | 04:35 UTC, daily | Detection of anomalous credential usage patterns over the kiosk clockings of the last 30 days (§6) | Nothing: the incidents go to the department manager, not to IT |
 | Monday 05:10 UTC | **Retention proposal**: report of what would be purged | Read it once something has expired |
 | Hourly | Credential metrics and clean-up of temporary files | Nothing |
-| Hourly | Expired full data exports are purged: the ZIP is deleted, the record of it stays (§13) | Nothing |
+| Hourly | Expired full data exports are purged (the ZIP is deleted, the record of it stays), along with diagnostic bundles older than 7 days and the leftovers of interrupted generations (§12.2, §13 and §13.6) | Nothing |
 | 04:25 UTC, daily | Expired reports generated in the background are purged: the file is deleted, the record of it stays (§6 and §13) | Nothing |
 | Monday 05:40 UTC | **Telemetry**, only if you have enabled it (§13.4): the weekly report is sent to the destination you set | Nothing |
 | Monday 06:00 UTC | **Weekly summary by email** to each department manager, only if it is enabled in the panel (§6) | Nothing: it goes to the manager, not to IT |
@@ -45,19 +46,36 @@ All of this runs on its own in the `scheduler` container. What appears in the
 
 ## 2. The retention proposal (weekly, deletes nothing)
 
-Every Monday a report is left at:
+Every Monday a report is left **on the server, next to the backups**:
 
+```text
+BACKUP_PATH/reports/retention/retencion-propuesta-AAAAMMDD-HHMMSS.txt
 ```
-storage/app/retention-reports/retencion-propuesta-AAAAMMDD-HHMMSS.txt
+
+`BACKUP_PATH` is the backup destination in your `.env` (`/var/backups/fichaje`
+by default), and the containers mount it **at the same path** it has on the
+server. So the report is read from the server itself, without entering any
+container (change the path if your `BACKUP_PATH` is a different one):
+
+```bash
+sudo ls -lt /var/backups/fichaje/reports/retention/
+sudo less /var/backups/fichaje/reports/retention/retencion-propuesta-AAAAMMDD-HHMMSS.txt
 ```
 
 You can ask for it by hand at any time, and **it is safe**: it does not modify
-a single row.
+a single row. The report lands in the same folder.
 
 ```bash
-docker compose -f docker-compose.yml exec app \
-  php artisan compliance:apply-retention --dry-run
+docker compose exec app php artisan compliance:apply-retention --dry-run
 ```
+
+**The reports are not cleaned up on their own**: neither the product nor the
+backup pruning ever deletes them, and each one takes a few kilobytes. If you
+move the contents of `BACKUP_PATH` somewhere else, take `reports/` with it.
+
+> **Up to 2.1.0 the report was left inside a container** and was lost on
+> update. When moving to 2.2.0, `update.sh` rescues the ones it finds and puts
+> them in this folder (§11, "When updating from 2.1.0: the generated files").
 
 What the report says:
 
@@ -117,14 +135,65 @@ management account that authorises the purge.)
    whole**. The audit trail is never deleted row by row.
 5. The technical log and the error history older than 90 days are cleaned up.
 6. The report of what was purged is left at
-   `storage/app/retention-reports/retencion-purga-*.txt`.
+   `BACKUP_PATH/reports/retention/retencion-purga-AAAAMMDD-HHMMSS.txt`, on the
+   server. Even though the order is run with `run --rm` —a container that
+   disappears when it finishes—, the report stays: it is written to the backup
+   folder, not inside the container.
 
 **Afterwards:**
 
 - **Archive the report** together with the written authorisation.
+- **Check the report against its audit entry** (§3.1). It takes a minute, and
+  it is what makes the report worth something two years from now.
 - Run `docker compose exec app php artisan compliance:verify-audit-chain`. It has to finish green and
   say «Purga sellada reconocida: particion AAAA» (sealed purge recognised for
   partition YYYY). If it said anything else, that is a security incident.
+
+### 3.1 The report is the readable copy; the evidence is the audit entry
+
+**What proves a purge is the `retention.purge_executed` entry in the audit
+log**, not the file. The entry is hash-chained with all the others and is
+verified every night: nobody can change it without the verification giving it
+away. The file, on the other hand, is text in a folder on the server: whoever
+administers the machine can edit or delete it without a trace. That is why the
+file is what you read and attach, and the entry is what you cite if anyone
+disputes the purge.
+
+Both carry **the same confirmation token** (`PURGAR-AAAA-MM-DD-xxxxxx`). In the
+file it is on the line «Purga ejecutada con la confirmacion …» (purge executed
+with confirmation …). To see the entries:
+
+```bash
+docker compose exec -T postgres psql -U fichaje_app -d fichaje -c \
+  "SELECT occurred_at, payload->>'confirmation' AS confirmacion, payload->>'cutoff_date' AS corte, payload->>'retention_years' AS anos, payload->>'rows' AS filas, payload->'tables' AS tablas FROM audit_log WHERE action = 'retention.purge_executed' ORDER BY occurred_at;"
+```
+
+(The column aliases are in Spanish: `confirmacion` is the token, `corte` the
+cut-off date, `anos` the retention years, `filas` the rows and `tablas` the
+per-table counts.)
+
+**How to check it:** find the row whose `confirmacion` is the report's, and
+check that the cut-off date («anterior a AAAA-MM-DD», earlier than), the years
+and the per-table counts in the report's «Registro de jornada» (working-time
+record) section are the entry's.
+
+- **If they match**, the file is faithful to what happened. Archive it with the
+  authorisation.
+- **If they do not match**, the entry prevails. A report that says something
+  other than its entry has been modified by someone with access to the server:
+  treat it as a security incident
+  ([`../../runbooks/brecha-de-seguridad.md`](../../runbooks/brecha-de-seguridad.md),
+  in Spanish).
+- **If the file is not there** (it was lost in an update before 2.2.0, or
+  someone deleted it), the entry is enough: cite its date (`occurred_at`), the
+  action `retention.purge_executed` and the token. How to word it is in §18,
+  "…you need to prove a purge and its report is missing".
+
+If a purge only dropped audit partitions and deleted no row of the
+working-time record, there is no `retention.purge_executed` entry: what remains
+is one `retention.partition_sealed` and one `retention.partition_dropped` per
+year, with the number of rows and the hashes at both ends, and the seal in
+`audit_chain_anchors`, which is what `compliance:verify-audit-chain` recognises.
 
 ---
 
@@ -165,7 +234,7 @@ Metrics published for the `node-exporter` collector
 | `TECHNICAL_LOG_RETENTION_DAYS` | 90 | Days of technical log |
 | `ERROR_HISTORY_RETENTION_DAYS` | 90 | Days of error history |
 | `COMPLIANCE_RETENTION_BATCH_SIZE` | 1000 | Rows per delete statement. Raise it only if the purge takes too long |
-| `COMPLIANCE_RETENTION_REPORT_PATH` | `storage/app/retention-reports` | Where the reports are left. **They are not cleaned up on their own**: they are the evidence of the purge |
+| `COMPLIANCE_RETENTION_REPORT_PATH` | `BACKUP_PATH/reports/retention` | Where the proposal and purge reports are left. **They are not cleaned up on their own**: they are the readable copy of the evidence, which is the audit entry (§3.1). Leave it empty to use the default; if you change it, never inside `storage/app`, which is for files that expire: `product:doctor` warns about it |
 | `DB_MAINTENANCE_USERNAME` | `fichaje_maintenance` | Role that runs the audit purge |
 | `DB_MAINTENANCE_PASSWORD` | *(empty)* | **Not set in the `.env`.** It is supplied when the purge is run |
 
@@ -203,9 +272,12 @@ incident itself, is
 **Reports generated in the background** (HR asks for them from the panel:
 [`hr-guide.md`](hr-guide.md) §6.3) have their own six parameters and their own
 purge. The files are **per requesting person**, they live in
-`REPORTING_EXPORT_PATH` and the scheduler deletes them at 04:25 UTC as soon as
-they expire; the record that they existed is always kept. If you ever need to bring
-it forward:
+`REPORTING_EXPORT_PATH` —inside the generated-files volume, §13.6—, they are
+downloaded from the panel with a single-use link and the scheduler deletes them
+at 04:25 UTC as soon as they expire; the record that they existed is always
+kept. **They are not part of the backup and are not put back on restore**:
+after a restore, whoever needs the report asks for it again (§18, "…after
+restoring a backup"). If you ever need to bring the purge forward:
 
 ```bash
 docker compose exec app php artisan reporting:purge-expired-exports
@@ -213,7 +285,7 @@ docker compose exec app php artisan reporting:purge-expired-exports
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `REPORTING_EXPORT_PATH` | `storage/app/reports` | Where those files are written. **Never inside `BACKUP_PATH`**: they expire on their own and must not go into the backup |
+| `REPORTING_EXPORT_PATH` | `storage/app/reports` (in the `app-storage` volume) | Where those files are written. Leave it empty. If you change it, it has to stay **inside `/var/www/html/storage/app`** and must not match or overlap the other generated-file paths (§13.5); `product:doctor` fails if they overlap, and if they are outside it fails in production and warns elsewhere. **Never inside `BACKUP_PATH`**: they expire on their own and must not go into the backup |
 | `REPORTING_EXPORT_RETENTION_DAYS` | `7` | Days the file can be downloaded before the daily purge deletes it |
 | `REPORTING_EXPORT_LINK_TTL_MINUTES` | `15` | Minutes the download link is valid for; it is also **single-use** |
 | `REPORTING_EXPORT_TIMEOUT_SECONDS` | `600` | Limit on the deferred report's query. Raise it if a large export fails on time |
@@ -691,6 +763,10 @@ stopped running):
 | `KronoqrAuthFailureBurst` | > 20 failures in 5 min, one channel | Medium | Security | [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) (in Spanish) | Work out whether it is a person mistyping or an automated attempt |
 | `KronoqrAuthLockouts` | ≥ 3 distinct lockouts in 15 min, one channel | Medium | Security | [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) (in Spanish) | Scope how many accounts, and whether any got in before locking out |
 | `KronoqrAuthFailureSpike` | > 100 failures in 5 min, one channel | Critical | Security | [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) (in Spanish) | Preserve evidence before blocking the origin at the edge |
+| `FicheroGeneradoDesaparecidoAntesDeCaducar` | `generated_files_missing_total` goes up (within 30 min, or a new series), for 1 min | High | Security | [`ficheros-generados.md`](../../runbooks/ficheros-generados.md) (in Spanish) §2 | An export or a report lost its file before expiring. After restoring a backup or updating from 2.1.0 it is expected (§18); otherwise, read the `*.file_missing` entry and treat it as a possible breach |
+| `FicheroGeneradoSinRetirarPasadoSuPlazo` | `generated_files_overdue > 0` for 1 h: an export for the Labour Inspectorate has been on the server > 30 days | Medium | IT | [`ficheros-generados.md`](../../runbooks/ficheros-generados.md) (in Spanish) §4 | It is not deleted on its own: confirm it was handed over and delete it ([`requerimiento-inspeccion.md`](../../runbooks/requerimiento-inspeccion.md) §7, in Spanish) |
+| `PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo` | `generated_files_refused_total` goes up (within 1 h, or a new series), for 1 min | Medium | IT | [`ficheros-generados.md`](../../runbooks/ficheros-generados.md) (in Spanish) §5 | There is a link, a subdirectory or a foreign name in a folder of the volume, or overlapping `*_PATH` paths: `product:doctor` (§13.5) |
+| `PurgaDeFicherosGeneradosNoPuedeBorrar` | `generated_files_remove_failed_total` goes up (within 1 h, or a new series), for 1 min | Medium | IT | [`ficheros-generados.md`](../../runbooks/ficheros-generados.md) (in Spanish) §6 | The file system refused a deletion and a file with personal data is still there past its term; the usual cause is permissions (an export launched with `exec -u root`). Fix the folder owner and mode; the next hourly pass removes it |
 | `VentanaDeMantenimientoActiva` | While an update lasts, capped at 2 h | Info (does not notify) | — | [`actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) (in Spanish) | Nothing: it only silences other alerts while it lasts |
 
 **What the certificate alerts watch, and since when.**
@@ -814,7 +890,7 @@ The seven steps and what happens if each one fails:
 | 4 · Migrations | Automatic rollback → `4` | Backup restored, previous version running and verified | Send the report to the vendor before retrying: it says at which intermediate version it stopped |
 | 5 · Start-up and verification | Automatic rollback → `4` | Same as above. **The new version never received traffic**: it is verified without the edge | Same as above |
 | 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `docker compose exec app php artisan up`, **without restoring anything**) or the restore was left half-done (three orders and the path of the backup) | Runbook §5. The kiosks keep queueing meanwhile |
-| 7 · Report | — | `BACKUP_PATH/reports/update-<fecha>.log`, always; next to it, `update-<fecha>.detalle.log` (root only, raw output, **may contain personal data**) | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
+| 7 · Report | — | The **report** at `BACKUP_PATH/reports/update-<fecha>.log` (uid 1000, `0640`), always. The **detail** (`update-<fecha>.detalle.log`: raw output, **may contain personal data**) is **not there**: it lives only in `/var/log/kronoqr/` (`root:root 0600`, directory `0700`), next to a local copy of the report. The report appears in `reports/` **when the script finishes, not while it runs**; if it cannot be published, the script warns and says it is safe in `/var/log/kronoqr/`. `setpriv` (`util-linux` package) is required | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
 
 Steps 5 and 6 also leave their own entry in `audit_log` (`system.updated` or
 `system.restored_from_backup`): if for whatever reason it cannot be written,
@@ -830,7 +906,13 @@ verify the chain with it, so the report keeps the data and you write it with
 2.1.0), the data, the licence (an expired licence **does not prevent
 updating**), and clocking. **What is needed:** `BACKUP_ENCRYPTION_KEY` in the
 `.env` and space for the backup and for the migration; step 1 says so with
-figures.
+figures. And, from 2.2.0 on, **`setpriv`** on the server (`util-linux`
+package, standard on Debian, Ubuntu and RHEL 7 or later; check it with
+`command -v setpriv`): `update.sh` uses it to write its report, the rescued
+retention reports and its metrics into `BACKUP_PATH` as the application user
+and without following links. Without it, it does not stop: it warns, does not
+rescue the retention reports and leaves its report in a temporary directory,
+saying which.
 
 **When updating from 2.1.0: each container receives only its own.** Up to
 2.1.0 every application container received the whole `.env`, including the
@@ -854,6 +936,43 @@ know:
   handing out credentials: the containers receive the full `.env` again until
   you update once more. If the update was rolled back, do not leave it for
   months: the reason is in the report.
+
+**When updating from 2.1.0: the generated files.** Up to 2.1.0, what the
+product wrote to disk outside the database —the full data export, the
+background reports, the retention reports, the diagnostic bundle, the
+telemetry state— stayed **inside each container**, and was lost every time an
+update recreated it. From 2.2.0 on it lives in the `app-storage` volume, shared
+by the application containers (§13.6), and the retention reports live in
+`BACKUP_PATH/reports/retention` (§2). You do not have to do anything: the
+volume is created on its own at the first start. What is worth knowing:
+
+- **The retention reports are rescued, and only they.** Before recreating the
+  containers, `update.sh` copies the `retencion-propuesta-*.txt` and
+  `retencion-purga-*.txt` files it finds in the 2.1.0 ones to
+  `BACKUP_PATH/reports/retention/`, without overwriting any and with `0640`
+  permissions. The update report says how many it rescued and from where. If
+  the rescue fails, it warns you with the order to do it by hand and **the
+  update goes on**: an update is not rolled back because of a report.
+- **If your `.env` sets `COMPLIANCE_RETENTION_REPORT_PATH` inside
+  `storage/app`**, the rescue warns about it (and `product:doctor` afterwards):
+  remove that line from the `.env` to use the default.
+- **Not rescued, and lost**: the full export ZIPs, the background reports and
+  the diagnostic bundles that were in the containers. They are personal data
+  that expire after 7 days or disposable material, and there is no point in
+  giving them a new life in the new volume. Their records turn to
+  **"Expired"** in the first purge pass. If one had not expired yet, the
+  `data_export.file_missing` or `report_export.file_missing` entry is left as
+  well and the `FicheroGeneradoDesaparecidoAntesDeCaducar` alert may fire:
+  **after this update that is expected**. If you need an export, ask for it again.
+- **The telemetry identifier changes once**, if you had telemetry enabled
+  (§13.4). From here on it is kept across updates.
+- **What was already lost cannot be recovered**: the reports of purges run with
+  `run --rm`, which disappeared when the order finished, and everything earlier
+  updates deleted. **The evidence of each purge is still in the audit log**,
+  and that is the one that counts: how to find and cite it is in §3.1 and in
+  §18, "…you need to prove a purge and its report is missing".
+- **If you roll back to 2.1.0**, the volume stays intact and unused until the
+  next update, and the rescued reports stay in `BACKUP_PATH/reports/retention`.
 
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
@@ -929,7 +1048,11 @@ It checks the database (connection, pending migrations, that the application
 user **cannot** modify the audit trail, audit chain), queues (Redis, backlog,
 that there is a live worker), mail (transport configured and server
 reachable), TLS certificate (expiry and self-signed), permissions (working
-directories, backups, logo), disk space (application and backups) and settings
+directories, backups, logo), generated files (that the `app-storage` volume is
+mounted and writable, that its paths do not coincide with one another, that the
+retention reports folder is writable, and exports for the Labour Inspectorate
+forgotten on the server for more than 30 days; §13.6), disk space (application
+and backups) and settings
 (time zone in UTC, debug mode, invalid keys, differences between the `.env` and
 what is stored, licence and branding). **Every red line says what to do**,
 written for someone who does not know the system.
@@ -948,7 +1071,8 @@ roll back an update that has already been verified by other means.
 
 If the application **will not start** and you cannot run `artisan`, there is
 `./doctor.sh` (§8): it does what it can from outside —Docker, the state of each
-service, `.env`, disk, certificates, ports— and tells you how to start it.
+service, `.env`, disk, certificates, ports, the generated-files volume and its
+size— and tells you how to start it.
 
 ### 12.2 The diagnostic bundle: what it is and how it is generated
 
@@ -965,13 +1089,18 @@ through your contract's channel. **Support does not go into your server**
   docker compose exec app php artisan product:diagnostics
   ```
 
-  It leaves the file in `storage/app/diagnostics/` inside the container and
-  tells you the path, the size and the fingerprint. Copy it out with
+  It leaves the file in `storage/app/diagnostics/`, inside the generated-files
+  volume (§13.6), and tells you the path, the size and the fingerprint. Copy
+  it out with
   `docker compose cp app:/var/www/html/storage/app/diagnostics/<fichero> .`
-  and **delete it from the server once you have sent it**: it is disposable
-  material. In case that is forgotten, the command itself deletes on start-up
-  any bundle older than `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` days (7 by
-  default) and says so.
+  and **delete it from the server once you have sent it**
+  (`docker compose exec app rm -f storage/app/diagnostics/<fichero>`): it is
+  disposable material. In case that is forgotten, **the scheduler deletes
+  every hour any bundle older than `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` days**
+  (7 by default), and the command itself does the same on start-up and says
+  so. The volume persists across updates, so that sweep is what stops a
+  forgotten bundle —perhaps with personal data in it (§12.3)— from staying on
+  the server forever.
 
 It is **a single readable JSON file**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
 unencrypted on purpose: **open it before sending it** and check that it carries
@@ -1084,7 +1213,7 @@ administers the server changes them.
 | `PRODUCT_DIAGNOSTICS_MAX_BYTES` | `8388608` (8 MiB) | Maximum size of the bundle. Above it, sections are trimmed, starting with personal data, and the trimming is noted |
 | `PRODUCT_DIAGNOSTICS_RATE_LIMIT` | `3` | Bundles per minute and per account from the panel. Generating one walks the whole installation |
 | `PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS` | `31` | Maximum days of clock-ins that fit with "Include personal data". Raising it widens what leaves your server in one file |
-| `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` | `7` | Days a bundle generated from the console stays in `storage/app/diagnostics` before the next `product:diagnostics` deletes it |
+| `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` | `7` | Days a bundle generated from the console stays in `storage/app/diagnostics` before the scheduler's hourly pass deletes it (the next `product:diagnostics` also deletes it) |
 | `PRODUCT_SUPPORT_GRANT_DEFAULT_HOURS` | `24` | Duration of a grant if none is given |
 | `PRODUCT_SUPPORT_GRANT_MAX_HOURS` | `72` | Maximum duration accepted; anything longer is rejected |
 | `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` | `900` | How often, at most, a new `support_grant.used` is recorded per grant, so that a support session does not flood your audit trail |
@@ -1151,22 +1280,31 @@ You confirm the notice, the export is queued and the screen follows it
 (`Queued` → `Generating` → `Ready to download`); when it finishes, "Download"
 appears. There can only be **one in progress** at a time: if someone has
 already requested one, the panel shows you that one instead of starting
-another.
+another. **Downloading from the panel is the recommended route**: it is the
+only one that records who took the file (§13.3).
 
 **From the console**, on the spot and in the foreground:
 
-```
-docker compose --env-file .env -f compose.prod.yaml exec app php artisan product:export-all
+```bash
+docker compose exec app php artisan product:export-all
 ```
 
-It leaves the file in `storage/app/exports/` inside the container, prints the
-path, the size, the fingerprint and the row count of each file, and records the
-export just as if you had requested it from the panel (it appears in the same
-list and can be downloaded from there). To get it out of the container:
+It leaves the file in `storage/app/exports/`, inside the generated-files volume
+(§13.6), prints the path, the size, the fingerprint and the row count of each
+file, and records the export just as if you had requested it from the panel: it
+appears in the same list and **is downloaded from there**. If you would rather
+get it out from the console:
 
+```bash
+docker compose cp app:/var/www/html/storage/app/exports/<fichero> .
 ```
-docker compose --env-file .env -f compose.prod.yaml cp app:/var/www/html/storage/app/exports/<fichero> .
-```
+
+> **`docker compose cp` leaves no download entry.** What leaves the server that
+> way does not appear as `data_export.downloaded` in your audit trail, and in
+> the event of a breach you will not be able to answer from the product who
+> took that copy. If you use the console, write down yourself who took it, when
+> and where to, and keep that note with the rest of your record of processing
+> activities.
 
 **When the console is the better choice.** The panel downloads the whole ZIP
 into the browser's memory before saving it. Above ~1 GB —several years of a
@@ -1181,26 +1319,46 @@ default): every hour the expired ones are deleted and the export moves to
 `Expired` in the list; the record that it existed, with its counts and its
 fingerprint, is never deleted. If you need the file later, generate another.
 
+**It is not part of the backup, and a restore does not put it back.** It is a
+view of data that is already in the encrypted backup; putting it in there would
+stretch from 7 to 30 days the life of a file holding all your personal data.
+After restoring a backup, ask for a new export: it is generated from the
+restored data (§18, "…after restoring a backup").
+
 Your audit trail keeps `data_export.requested` (who requested it and through
 which channel), `data_export.generated` (counts, fingerprint and size) and
-**`data_export.downloaded` for every download**: in the event of a breach you
-can answer who took what and when.
+**`data_export.downloaded` for every download from the panel**: in the event of
+a breach you can answer who took what and when. What is taken out with
+`docker compose cp` leaves no such entry (§13.2).
 
+**If the file disappears before it expires**, the export still turns to
+"Expired", but the `data_export.file_missing` entry is also left (with the
+export's identifier, no path) and the `FicheroGeneradoDesaparecidoAntesDeCaducar`
+alert fires, addressed to the security officer (§10.4). Outside the two cases where
+it is expected —right after restoring a backup, or after updating from 2.1.0—,
+**treat it as a security event**: someone with access to the server has
+deleted or moved a file holding all the workforce's data
+([`../../runbooks/brecha-de-seguridad.md`](../../runbooks/brecha-de-seguridad.md),
+in Spanish). Background reports do the same with `report_export.file_missing`.
 
 **If it gets stuck on "Generating".** An export that is interrupted halfway
 —because you stopped the containers to update, or because the queue worker
 restarted— blocks nothing: once the maximum generation time (one hour) has
 passed, the system marks it as **failed** with reason `stale` as soon as
 someone requests another or in the next hourly purge, and you can generate
-again. There is no need to touch the database; if you really see one in
-progress for more than an hour without it moving to failed, run
+again. What it left half-written is deleted on its own in a later hourly
+purge, once twice that maximum time has passed. There is no need to touch the
+database or the disk; if you really see one in progress for more than an hour
+without it moving to failed, run
 `docker compose exec app php artisan product:export-all --purge` and request it
 again.
 
 **If it shows as "Could not be generated".** The reason the panel shows is a
 code, not free text, so that no data from a row is ever put on the screen or in
-the log: `write_failed` (could not write to `PRODUCT_DATA_EXPORT_PATH`: check
-the space and permissions of the directory), `database_error` (the database
+the log: `write_failed` (could not write to `PRODUCT_DATA_EXPORT_PATH`: it is
+almost always lack of space on Docker's disk; `./doctor.sh` says how much the
+generated-files volume takes up and `product:doctor` whether it can be written
+to), `database_error` (the database
 failed partway through: look at `product:doctor`), `stale` (interrupted, see
 above) or `unexpected` (anything else: the technical detail is in the
 application log with the export's `uuid`). Fix the cause and generate another.
@@ -1220,16 +1378,106 @@ shows you the document that would be sent before enabling anything, are in
 not respond, you will see no warning: it is noted in the technical log and
 retried the following week.
 
+The installation's random identifier lives in the generated-files volume
+(§13.6) and is kept across updates. **It changes once when updating from
+2.1.0**, and it changes when a backup is restored on a new server, because the
+volume does not travel in the backup. Only telemetry uses it, not the licence:
+its changing affects nothing else.
+
 ### 13.5 The parameters
 
 | Variable | Default | What it governs |
 | --- | --- | --- |
-| `PRODUCT_DATA_EXPORT_PATH` | `storage/app/exports` (in the container) | Where the ZIPs are written. Outside `BACKUP_PATH` on purpose: it is material that expires |
-| `PRODUCT_DATA_EXPORT_RETENTION_DAYS` | `7` | Days the ZIP can be downloaded before it is purged. The record is kept |
+| `PRODUCT_DATA_EXPORT_PATH` | `storage/app/exports` (in the `app-storage` volume) | Where the ZIPs are written. Outside `BACKUP_PATH` on purpose: it is material that expires. See the note below |
+| `PRODUCT_DATA_EXPORT_RETENTION_DAYS` | `7` | Days the ZIP can be downloaded before it is purged. The record is kept. It can be lowered to `1` if you would rather a full copy of your data did not spend more than a day on the server |
 | `PRODUCT_DATA_EXPORT_RATE_LIMIT` | `30` | Requests per minute **per account** to the list and the download; the per-IP-address bucket is four times larger (120), so that several administrators behind the same internet gateway do not block each other. The panel polls every 5 s while one is in progress |
 | `PRODUCT_DATA_EXPORT_STALE_AFTER` | `3600` | Seconds after which an export left half-done (container stopped, queue restarted) is marked as failed with reason `stale`, freeing up the next one. Do not lower it below what your largest export takes |
 | `TELEMETRY_ENABLED` | `false` | Whether telemetry is sent. `TELEMETRY_ENDPOINT` is also needed, and the licence has to include it |
 | `TELEMETRY_ENDPOINT` | empty | Where it is sent. Empty by default: you set it |
+
+**The four generated-file paths** —`PRODUCT_DATA_EXPORT_PATH`,
+`REPORTING_EXPORT_PATH`, `PRODUCT_DIAGNOSTICS_PATH` and `TELEMETRY_STATE_PATH`—
+are left empty, and hardly anyone has a reason to change them. If you do, two
+conditions: **they have to stay inside `/var/www/html/storage/app`**, which is
+where the volume is mounted (a path outside it is not seen by the other
+containers and is lost on the next update), and **they must not coincide or
+contain one another**, because each purge deletes in its own folder and only in
+its own. `product:doctor` fails if two coincide, if one contains another or if
+any of them is `storage/app` (or contains it) or overlaps `BACKUP_PATH`; and if any of them is outside `storage/app` it fails in production (that is the fault the volume fixes) and warns elsewhere. It also warns if it finds generated files in `storage/app` outside the configured paths, which is what is left after changing one of them: empty the old folder.
+
+### 13.6 Where the files the product generates live, and who can read them
+
+Almost everything the product keeps is in PostgreSQL. What it writes to disk
+apart from that are these files:
+
+| File | Where | How long it lives | Is it in the backup? |
+| --- | --- | --- | --- |
+| Full data export (ZIP, §13) | `app-storage` volume, `exports/` folder | 7 days; the hourly purge deletes it | No |
+| Reports generated in the background (§6) | `app-storage` volume, `reports/` folder | 7 days; the daily 04:25 UTC purge deletes them | No |
+| Diagnostic bundle generated from the console (§12.2) | `app-storage` volume, `diagnostics/` folder | 7 days; the hourly purge deletes it | No |
+| Export for the Labour Inspectorate generated from the console | `app-storage` volume, `legal-exports/` folder | **Until you delete it.** After 30 days, `product:doctor` and the `FicheroGeneradoSinRetirarPasadoSuPlazo` alert (§10.4) warn about it | No |
+| Temporary file of the Labour Inspectorate export requested from the panel | `app-storage` volume, `tmp/legal-exports/` folder | Deleted when the download finishes; if the download was cut off, the hourly purge deletes it after 6 hours | No |
+| Telemetry state (§13.4) | `app-storage` volume, `telemetry/` folder | Kept; it holds no personal data | No |
+| Retention reports (§2 and §3) | `BACKUP_PATH/reports/retention` | **Forever**: they are not cleaned up on their own | They live in the backup folder |
+
+**The `app-storage` volume** (Docker shows it as `kronoqr_app-storage`) is
+created by Docker at the first start and mounted by the three application
+containers —`app`, `horizon` and `scheduler`— at `/var/www/html/storage/app`.
+That is why what one generates the other sees: `horizon` generates the export,
+`app` serves it to the panel and `scheduler` purges it. There is nothing to
+configure, and `./doctor.sh` checks that all three mount it, that what one
+writes the other reads, that its root belongs to the `app` user with mode
+`0700`, and how much it takes up. To look yourself:
+
+```bash
+docker compose exec app sh -c 'du -sh storage/app storage/app/*'
+docker compose exec app sh -c 'ls -l storage/app/legal-exports/ 2>/dev/null'
+```
+
+The first says how much the volume and each folder take up; the second, which
+exports for the Labour Inspectorate are still on the server (if nothing comes
+out, there are none).
+
+**It is not part of the backup, and `restore.sh` does not put it back.**
+Everything in it expires within days or can be generated again from the
+database, which is in the backup. After a restore, what the database remembers
+and the volume no longer has shows as "Expired"; the export or the report is
+requested again (§18, "…after restoring a backup").
+
+**It takes up space on Docker's disk**, the same one as the database. A full
+export of four years of a large workforce can weigh hundreds of megabytes;
+until it expires, it counts.
+
+**The files in the volume are in clear text on the server, just like the
+PostgreSQL data.** The full export holds all the personal data of the
+workforce, unencrypted on purpose: it is the one you must be able to open
+without depending on anything
+([`legal-obligations.md`](legal-obligations.md) §7 quater), and encrypting it
+with a key kept on the same server would protect nothing against whoever can
+already read the database. What does protect it is **encrypting the server's
+disk**, and we recommend it: the disk where Docker keeps its data (usually
+`/var/lib/docker`, which holds the database and this volume) and the one for
+`BACKUP_PATH`. It is a measure of the operating system or of the
+virtualisation platform, and the decision is yours.
+
+**Belonging to the `docker` group amounts to having access to all the data.**
+Whoever is in that group can enter any container, copy any file from the volume
+and read the database, without going through the panel or leaving an entry.
+Treat it like administrator access ([`hardening.md`](hardening.md) §3).
+
+**The only audited way to take a file away is the panel.** A download from the
+panel leaves an entry (`data_export.downloaded`, `report_export.downloaded`);
+taking the same file out with `docker compose cp` leaves none. If you do,
+write it down yourself (§13.2).
+
+**Three alerts watch these files** (§10.4): one that disappears before
+expiring, an export for the Labour Inspectorate forgotten for more than 30 days
+and a purge that has refused to touch something. What to do with each:
+[`../../runbooks/ficheros-generados.md`](../../runbooks/ficheros-generados.md)
+(in Spanish).
+
+**`docker compose down -v` deletes the volume**, just as it deletes the
+database. Never use it on a production installation.
 
 ---
 
@@ -2030,3 +2278,73 @@ the cause:
 The full diagnosis, code by code, is in
 [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2
 (in Spanish).
+
+### …after restoring a backup, an export or a report shows as "Expired"
+
+**What is happening.** You restored everything correctly. The backup holds the
+database, but **not the generated files** (§13.6): the full export and the
+background reports expire within 7 days and can be generated again from the
+database, so they are not backed up. After a restore they can be out of step
+in both directions:
+
+- **The database remembers an export or a report whose file is no longer
+  there** —it was purged after the backup, or you restored onto a new server,
+  with an empty volume—. In the first purge pass (the hourly one for full
+  exports, the 04:25 UTC one for reports) it turns to **"Expired"** and leaves
+  the `data_export.file_missing` or `report_export.file_missing` entry; if it
+  had not expired yet, the `FicheroGeneradoDesaparecidoAntesDeCaducar` alert
+  may fire as well. **After a
+  restore that is expected**, and the `restore.sh` report (in
+  `BACKUP_PATH/reports/`) announces it.
+- **The volume has a file the restored database does not know about** —it was
+  generated after the backup—. Nobody can download it from the panel, and the
+  purge deletes it on its own when its period is up. There is nothing to do.
+
+**What to do.** Ask again for whatever you need: the full export from Licence →
+"Your data is yours" (§13.2), and each report from the panel, by whoever needs
+it. They are generated from the restored data, which is what you want. If
+`FicheroGeneradoDesaparecidoAntesDeCaducar` fires **without** there having been a restore or an update
+from 2.1.0, it is not this: read §13.3, "If the file disappears before it
+expires".
+
+**What has not been lost.** The retention reports are in
+`BACKUP_PATH/reports/retention` and the restore does not touch them: a purge
+report describes something that happened, even if the database goes back to an
+earlier moment.
+
+### …you need to prove a purge and its report is missing
+
+**When it happens.** You are asked to show that a retention purge was regular
+—a complaint, a data protection audit— and the `retencion-purga-*.txt` file is
+not in `BACKUP_PATH/reports/retention`. Up to 2.1.0 the reports of purges run
+with `run --rm` disappeared when the order finished, and the rest with every
+update; `update.sh` rescues, when moving to 2.2.0, the ones still left (§11),
+but not the ones already lost.
+
+**What counts is the audit entry, and it is still there.** Every purge that
+deleted working-time records left in the audit log a `retention.purge_executed`
+entry with the date, the cut-off date, the retention years, the per-table counts
+and the confirmation token. The audit log is kept for four years and is
+hash-chained: it is stronger evidence than the file, which was never more than
+its readable copy (§3.1).
+
+**What to do:**
+
+1. Check that the audit chain is intact:
+
+   ```bash
+   docker compose exec app php artisan compliance:verify-audit-chain
+   ```
+
+2. Get the entry with the query in §3.1 and find the purge by its date.
+3. Cite it like this in your reply or in your file: *"Retention purge executed
+   on YYYY-MM-DD at HH:MM UTC, recorded in the system's audit log as
+   `retention.purge_executed` with confirmation PURGAR-AAAA-MM-DD-xxxxxx:
+   working-time records earlier than YYYY-MM-DD, kept for N years; N rows,
+   broken down by table in the entry itself. The integrity of the audit log was
+   verified on YYYY-MM-DD."*
+4. Attach the output of both orders and the written authorisation that was
+   signed at the time.
+
+If the purge only dropped audit partitions, what you cite are its
+`retention.partition_sealed` and `retention.partition_dropped` entries (§3.1).

@@ -21,6 +21,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Reporting\RecordingQueuedJobFailureMetrics;
 use Tests\Support\Reporting\ReportExports;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -318,7 +319,14 @@ it('borra los ficheros huerfanos que ninguna fila menciona', function (): void {
      *
      * Aqui se simula exactamente eso: un directorio con un fichero dentro cuyo
      * `uuid` no corresponde a ninguna fila con derecho a fichero.
+     *
+     * Desde ADR-045 el barrido tiene edad minima —sin fila, el plazo de
+     * retencion—, asi que el reloj inyectado va ocho dias por delante del real:
+     * el directorio, recien creado, tiene ocho dias para la purga. La fila viva
+     * se crea despues de mover el reloj, para que siga vigente.
      */
+    FrozenTime::at(gmdate('Y-m-d H:i:s', time() + 8 * 86400));
+
     $viva = ReportExports::completedFor(cuentaQuePide());
 
     $raiz = Config::string('reporting.export.path');

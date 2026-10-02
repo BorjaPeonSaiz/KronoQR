@@ -1,0 +1,156 @@
+# KronoQR — alertas de los ficheros que genera el producto (ADR-045, doc 02
+# §8.2 y §8.4, bloque 16 de la 2.2.0).
+#
+# Norma que gobierna este fichero: CADA alerta lleva umbral, severidad,
+# destinatario y enlace a su runbook. Las tres apuntan al mismo
+# (`ficheros-generados.md`) porque comparten diagnostico: el volumen
+# `app-storage`, las filas de `data_exports`/`report_exports` y el asiento de
+# `audit_log`.
+#
+# LAS METRICAS. Las escribe la conciliacion de las purgas (`scheduler`) en Redis
+# y salen por `/metrics` con UNA sola etiqueta, `class`, de catalogo cerrado
+# (`data_export`, `data_export_work`, `report_export`, `legal_export_tmp`,
+# `legal_export_console`, `diagnostics`). Ninguna lleva uuid ni ruta.
+#
+# POR QUE LAS DOS DE CONTADOR LLEVAN UNA SEGUNDA MITAD. Un contador en Redis no
+# existe hasta su primer incremento: la serie nace ya con valor 1 y
+# `increase()` necesita dos muestras, asi que la PRIMERA vez que ocurre el
+# suceso `increase(...) > 0` no salta. El `or ... unless ... offset` cubre ese
+# caso: una serie que existe ahora y no existia hace una ventana es una serie
+# nueva, y su primer valor es un suceso. Pasada la ventana deja de cumplirse y
+# la alerta se apaga sola.
+#
+# NO HAY ALERTA PARA `generated_files_orphans_removed_total`: es informativa.
+# Un resto borrado de vez en cuando es la conciliacion haciendo su trabajo; si
+# sube todos los dias, los trabajos de generacion estan muriendo, y eso lo ven
+# antes `errores-en-el-panel.md` y `error_events`.
+#
+# CON REDIS CAIDO ESTAS SERIES DESAPARECEN EN VEZ DE SALTAR (R4-DV-01): la
+# ausencia de datos no es «todo bien». Lo cubre la alerta de la propia Redis,
+# no esta.
+#
+# MANTENIMIENTO: `component: generated-files` no figura entre los que silencia
+# la ventana de mantenimiento declarada: un fichero que desaparece durante una
+# actualizacion es justo lo que hay que saber.
+
+groups:
+  - name: kronoqr-generated-files
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # Una exportacion cuyo fichero desaparecio ANTES de caducar. Puede ser un
+      # borrado manual o una exfiltracion con `mv`, y RL-15 pide poder acotar el
+      # alcance. Cada una deja asiento `*.file_missing` en audit_log.
+      #
+      # ESPERADA tras restaurar una copia en un servidor nuevo o tras `down -v`
+      # (las exportaciones que figuraban en la copia como disponibles ya no tienen
+      # fichero) y tras actualizar desde la 2.1.0 (el volumen es nuevo y las filas
+      # antiguas no tienen fichero). Restaurar en el mismo servidor no toca el
+      # volumen. Las generadas DESPUES de la copia no tienen fila en la base
+      # restaurada: sus ficheros son huerfanos y se borran al cumplir su plazo,
+      # sin asiento ni esta alerta. Por eso es
+      # `high` y no `critical`, y no lleva `integrity`: no es una rotura de la
+      # cadena, es un hecho que hay que explicar.
+      #------------------------------------------------------------------------
+      - alert: FicheroGeneradoDesaparecidoAntesDeCaducar
+        expr: >-
+          (increase(generated_files_missing_total[30m]) > 0)
+          or
+          (generated_files_missing_total > 0 unless generated_files_missing_total offset 30m)
+        for: 1m
+        labels:
+          severity: high
+          destinatario: seguridad
+          component: generated-files
+        annotations:
+          summary: "Una exportacion o informe ha perdido su fichero antes de caducar"
+          description: >-
+            Una exportacion integra o un informe en diferido figuraba como
+            disponible y su fichero ya no esta en el volumen. Tras restaurar una
+            copia en un servidor nuevo (o tras `down -v`) o actualizar desde la 2.1.0 es
+            lo ESPERADO: las exportaciones que figuraban como disponibles pierden su
+            fichero, sus filas pasan a purged con un asiento file_missing y se vuelve a
+            pedir la exportacion. Al restaurar en el MISMO servidor el volumen no se
+            toca y no deberia aparecer. Si no hay ninguna de esas causas, alguien ha
+            borrado o sacado el fichero a mano: lee el asiento data_export.file_missing
+            o report_export.file_missing en audit_log y, si no hay explicacion, tratalo
+            como brecha.
+          runbook_url: docs/runbooks/ficheros-generados.md
+
+      #------------------------------------------------------------------------
+      # Un fichero con datos personales que nadie ha retirado. Hoy solo la
+      # exportacion legal por consola con mas de 30 dias: no se borra sola
+      # porque es una copia bajo custodia humana (ADR-045, apartado f).
+      #------------------------------------------------------------------------
+      - alert: FicheroGeneradoSinRetirarPasadoSuPlazo
+        expr: generated_files_overdue > 0
+        for: 1h
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: generated-files
+        annotations:
+          summary: "Hay ficheros generados con datos personales pasado su plazo de aviso"
+          description: >-
+            Una exportacion legal hecha por consola lleva mas de 30 dias en el
+            servidor. No se borra sola: es la copia que se entrego a la
+            Inspeccion y la custodia es de quien la genero. Confirma que ya se
+            entrego y borrala; si sigue haciendo falta, decide quien la custodia.
+          runbook_url: docs/runbooks/ficheros-generados.md
+
+      #------------------------------------------------------------------------
+      # La purga se nego a tocar algo: ruta fuera de su raiz, enlace simbolico,
+      # subdirectorio o nombre ajeno. No borra nada fuera de su sitio, pero que
+      # haya algo asi significa mala configuracion (dos raices solapadas) o que
+      # alguien ha dejado cosas en el volumen.
+      #------------------------------------------------------------------------
+      - alert: PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo
+        expr: >-
+          (increase(generated_files_refused_total[1h]) > 0)
+          or
+          (generated_files_refused_total > 0 unless generated_files_refused_total offset 1h)
+        for: 1m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: generated-files
+        annotations:
+          summary: "La purga de ficheros generados se ha negado a tocar algo"
+          description: >-
+            Dentro de la raiz de una clase hay un enlace simbolico, un
+            subdirectorio, un nombre que no es de ese producto, o una fila apunta
+            fuera de su raiz. La purga no ha borrado nada de eso. Comprueba que
+            las variables *_PATH de ficheros generados no se solapan
+            (product:doctor) y que nadie ha dejado ficheros a mano en el volumen.
+          runbook_url: docs/runbooks/ficheros-generados.md
+
+      #------------------------------------------------------------------------
+      # El sistema de ficheros nego un borrado que tocaba: el fichero SIGUE en
+      # disco pasado su plazo y su fila NO se marca `purged` (se reintenta en la
+      # pasada siguiente, cada hora, asi que la serie sigue subiendo mientras la
+      # causa persista y la alerta no se apaga sola). Hay datos personales
+      # sobreviviendo a su plazo, pero la causa habitual es de permisos —una
+      # exportacion lanzada con `exec -u root` deja una carpeta o un fichero que
+      # el usuario de la aplicacion ya no puede borrar—, no de seguridad: IT.
+      #------------------------------------------------------------------------
+      - alert: PurgaDeFicherosGeneradosNoPuedeBorrar
+        expr: >-
+          (increase(generated_files_remove_failed_total[1h]) > 0)
+          or
+          (generated_files_remove_failed_total > 0 unless generated_files_remove_failed_total offset 1h)
+        for: 1m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: generated-files
+        annotations:
+          summary: "La purga no puede borrar un fichero generado que ha caducado"
+          description: >-
+            Un fichero con datos personales sigue en el volumen pasado su plazo
+            porque el sistema de ficheros ha negado el borrado, y su fila no se
+            marca como purgada hasta que se borre. La causa habitual es de
+            permisos: algo lo creo con otro usuario (por ejemplo una exportacion
+            lanzada con exec -u root). Mira el dueño y el modo de la carpeta de
+            la clase, arreglalos sin borrar a mano mas de lo debido y la
+            siguiente pasada horaria lo retira.
+          runbook_url: docs/runbooks/ficheros-generados.md

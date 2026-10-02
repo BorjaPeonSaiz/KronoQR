@@ -1155,7 +1155,49 @@ ensure_backup_directories() {
     fi
   fi
 
+  ensure_retention_reports_directory
+
   [ "${created}" -eq 1 ] && kq_msg wal_dir "${wal}"
+  return 0
+}
+
+# Informes de retencion (ADR-045): `${BACKUP_PATH}/reports/retention`, junto a
+# los de update.sh y restore.sh. Lo escriben `scheduler` (propuesta semanal) y
+# `app` (`run --rm`, purga real), que corren como uid 1000, asi que el dueño es
+# 1000:1000 y el modo 0750 como el del resto del arbol de copias.
+#
+# `reports/` se crea ANTES que su hijo: `install -d` solo da dueño y modo a lo
+# ultimo de la ruta, y un `reports/` creado por el camino quedaria de root. Las
+# acciones de deshacer solo se registran para lo que ha creado ESTA ejecucion
+# (mismo criterio que arriba): un `reports/` con informes de una instalacion
+# anterior no se toca.
+#
+# Se crean COMO EL UID 1000 y sin seguir enlaces (lib/fs.sh, `kq_ensure_app_dir`):
+# un `BACKUP_PATH` que ya existia de una instalacion anterior lo escribe el runtime
+# y puede traer `reports` como enlace; con `install -d` como root, `retention` se
+# creaba en el destino del enlace. En una instalacion limpia el runtime aun no
+# existe y el riesgo no es real, pero un solo camino es mas facil de razonar.
+#
+# No es bloqueante: sin el directorio la purga sigue funcionando y su asiento de
+# auditoria es la constancia (ADR-045); se pierde la copia legible, y se avisa.
+ensure_retention_reports_directory() {
+  local reports="${CFG_BACKUP_PATH}/reports"
+  local retention="${reports}/retention"
+  local dir
+
+  local status
+  for dir in "${reports}" "${retention}"; do
+    status=0
+    kq_ensure_app_dir "${dir}" || status=$?
+    if [ "${status}" -ne 0 ]; then
+      kq_msg check_warn "$(kq_format c_retention_dir "${dir}")"
+      kq_msg fix "$(kq_format f_retention_dir "${retention}")"
+      return 0
+    fi
+    if [ "${KQ_DIR_CREATED}" -eq 1 ]; then
+      register_undo "$(kq_format undo_retention_dir "${dir}")" "rm -rf '${dir}'"
+    fi
+  done
   return 0
 }
 

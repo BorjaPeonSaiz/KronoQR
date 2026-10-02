@@ -349,6 +349,16 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
    lleva `period_from`, `period_to`, `scope`, `employees_exported` y los recuentos
    de filas: eso es, literalmente, el alcance de la brecha. El fichero está en
    `storage/app/legal-exports/` y **no lo limpia ningún cron**: compruébalo.
+   Dos indicios que ayudan a acotar: `product:doctor` avisa de las que llevan
+   más de 30 días en el servidor (y suena
+   `FicheroGeneradoSinRetirarPasadoSuPlazo`); y si la alerta
+   `FicheroGeneradoDesaparecidoAntesDeCaducar` sonó sin restauración ni
+   actualización de por medio, una exportación íntegra o un informe se borró o
+   se sacó a mano del volumen: los asientos `data_export.file_missing` y
+   `report_export.file_missing` dan el `uuid` y la hora
+   ([`ficheros-generados.md`](ficheros-generados.md) §2). Recuerda que sacar un
+   fichero con `docker compose cp` no deja ningún asiento: quien pertenece al
+   grupo `docker` puede llevárselo sin rastro en el producto.
 2. `report_export.requested` → `report_export.generated` →
    `report_export.downloaded` — **un informe en diferido** (horas por periodo o
    salida a nómina, `kind`) **se escribió en disco y alguien se lo llevó**. El
