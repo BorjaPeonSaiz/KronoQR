@@ -230,7 +230,16 @@ ENV APP_VERSION=${APP_VERSION}
 COPY --chown=app:app --from=vendor /var/www/html/ ./
 
 USER root
-RUN install -d -o app -g app /var/www/html/storage /var/www/html/bootstrap/cache
+# storage/app es la raiz del volumen `app-storage` (ADR-045, C6). Cuando
+# Docker monta un volumen con nombre VACIO sobre una ruta de la imagen, copia
+# primero el contenido, el dueño y el modo de esa ruta: el modo se fija aqui y
+# no en install.sh, y los escritores siguen creando sus subdirectorios con
+# 0700 y sus ficheros con 0600. Sin `-m`, el volumen nacia con el modo de la
+# mascara (0755) y la exportacion integra quedaba legible por quien entrase al
+# contenedor como otro usuario. doctor.sh comprueba dueño y modo en la
+# instalacion real.
+RUN install -d -o app -g app /var/www/html/storage /var/www/html/bootstrap/cache && \
+  install -d -m 0700 -o app -g app /var/www/html/storage/app
 USER app
 
 # Sin HEALTHCHECK en la imagen a proposito: la misma imagen sirve a fpm, a
