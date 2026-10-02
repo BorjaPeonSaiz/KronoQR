@@ -433,6 +433,13 @@ function installationSettingsEndpoints(): array
         'cambiar la configuracion de la instalacion' => ['PATCH', '/api/v1/settings', [
             'settings' => ['ATTENDANCE_MAX_SHIFT_HOURS' => 10],
         ]],
+        // MB2: la confirmacion de un acento sin contraste no abre ninguna puerta.
+        // Quien no puede cambiar la configuracion sigue recibiendo 403, no el 422
+        // del contraste ni un 200 por haber «confirmado».
+        'confirmar un acento sin contraste' => ['PATCH', '/api/v1/settings', [
+            'settings' => ['BRANDING_ACCENT_COLOR' => '#ffe14d'],
+            'confirm_low_contrast' => true,
+        ]],
     ];
 }
 

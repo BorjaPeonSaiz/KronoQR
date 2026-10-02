@@ -10,6 +10,9 @@ use App\Modules\Shared\Domain\ValueObject\Branding;
  * **No cubre RF-PD-08 y no lleva su etiqueta.** Aquel requisito pide la marca
  * APLICADA al quiosco, al panel, al portal y a los PDF, y eso lo cumple la
  * tarea 5.8. Aqui solo se comprueba el objeto de valor por el que llegara.
+ * La excepcion son las dos ultimas pruebas (MB3, 2.2.0): el acento oscurecido
+ * que entrega este objeto ES el que se imprime en los PDF, y esas si llevan la
+ * etiqueta de RF-PD-08.
  *
  * Cruza la frontera entre modulos —la consumen Identity, Compliance y las tres
  * SPA via Product— y por eso valida al construirse: quien la recibe dibuja con
@@ -45,3 +48,24 @@ it('rechaza una marca que no se puede dibujar', function (string $name, ?string 
     'con un color de tres digitos' => ['KronoQR', null, '#fff'],
     'con un color sin almohadilla' => ['KronoQR', null, '111827'],
 ])->group('RF-PD-01');
+
+it('entrega el acento oscurecido hasta leerse como texto sobre papel blanco', function (string $acento, string $impreso): void {
+    // MB3: el nombre de la cabecera del PDF sellado es texto de 10 pt sobre
+    // blanco. Un amarillo palido quedaria a 1,3:1; se oscurece hasta 4,5:1 y,
+    // si ya llega, sale intacto.
+    expect((new Branding('Hotel Marina', null, $acento))->accentForTextOnWhite())->toBe($impreso);
+})->with([
+    'un acento que ya llega' => ['#0f172a', '#0f172a'],
+    'el acento de serie' => ['#b8542a', '#b8542a'],
+    'en mayusculas, normalizado' => ['#0F5C8C', '#0f5c8c'],
+    'amarillo palido' => ['#ffe14d', '#867628'],
+    'casi blanco' => ['#fafafa', '#707070'],
+])->group('RF-PD-08');
+
+it('no cambia el acento que publica: el filete decorativo lo lleva tal cual', function (): void {
+    $branding = new Branding('Hotel Marina', null, '#ffe14d');
+
+    $branding->accentForTextOnWhite();
+
+    expect($branding->accentColor)->toBe('#ffe14d');
+})->group('RF-PD-08');

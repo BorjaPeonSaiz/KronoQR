@@ -201,13 +201,21 @@ una versión esperando— está en [`operacion.md`](operacion.md) §11.1.
 | --- | --- | --- |
 | `BRANDING_APP_NAME` | `KronoQR` | Nombre de la aplicación. Hasta 60 caracteres: es lo que cabe en la cabecera de la tarjeta impresa. |
 | `BRANDING_LOGO_PATH` | *(vacío)* | Ruta **absoluta en el servidor** a un PNG o un SVG. Vacío significa «el logotipo del producto», no «sin logotipo». |
-| `BRANDING_ACCENT_COLOR` | `#b8542a` | Color de acento, en notación `#rrggbb`. Cualquier otra forma se rechaza. |
+| `BRANDING_ACCENT_COLOR` | `#b8542a` | Color de acento, en notación `#rrggbb`. Cualquier otra forma se rechaza. Un color que no llega a 4,5:1 sobre el fondo claro del panel se guarda solo si lo confirmas (ver abajo). |
 
 **Dónde se ve.** En la cabecera y en el título de pestaña del panel, del portal y
 del quiosco; en la pantalla de acceso de los tres; en la tarjeta de credencial
 impresa; en la cabecera del informe de horas en PDF; y en la primera línea de la
 exportación para la Inspección. Un cambio se aplica **en la petición siguiente**,
 sin reiniciar nada. Las tarjetas ya impresas, naturalmente, no cambian.
+
+**Un color muy claro se avisa y se confirma.** El texto necesita un contraste
+mínimo de 4,5:1 para leerse. Si eliges un acento que no llega —un amarillo, un
+gris claro—, la pantalla **Marca** te lo dice y te pide marcar una casilla para
+guardarlo, y el servidor rechaza el cambio si llega sin esa confirmación
+(`"confirm_low_contrast": true` en la misma petición, si lo haces con `curl`).
+Una vez guardado, las pantallas y los PDF lo oscurecen lo justo para que se lea;
+el nombre de la instalación sale en la cabecera de los PDF tenga o no logotipo.
 
 **Lo que no cambia nunca**: los identificadores técnicos. El prefijo `FH1` de los
 códigos QR, los nombres de las tablas, las rutas de la API y los comandos siguen

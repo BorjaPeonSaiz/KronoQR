@@ -19,10 +19,18 @@ export function fetchInstallationSettings(): Promise<InstallationSettings> {
 
 export function updateInstallationSettings(
   changes: UpdateSettingsRequest['settings'],
+  options: { readonly confirmLowContrast?: boolean } = {},
 ): Promise<InstallationSettings> {
+  // `confirm_low_contrast` solo viaja cuando es `true`: sin el, el servidor
+  // rechaza un acento que no llega a 4,5:1 (MB2). Nunca se manda `false`.
+  const body: UpdateSettingsRequest =
+    options.confirmLowContrast === true
+      ? { settings: changes, confirm_low_contrast: true }
+      : { settings: changes }
+
   return requestJson<InstallationSettings>('/api/v1/settings', {
     method: 'PATCH',
-    body: { settings: changes },
+    body,
   })
 }
 

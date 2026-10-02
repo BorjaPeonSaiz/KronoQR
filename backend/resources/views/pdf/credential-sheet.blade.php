@@ -30,10 +30,10 @@
     se respeta tal cual: quien recorta las tarjetas las reparte en ese orden.
 --}}
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ $locale }}">
 <head>
     <meta charset="utf-8">
-    <title>Credenciales</title>
+    <title>{{ $title }}</title>
     @include('pdf._credential-styles')
     <style>
         .sheet {

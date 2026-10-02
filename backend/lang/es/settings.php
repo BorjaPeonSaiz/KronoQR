@@ -56,6 +56,10 @@ return [
         'not_allowed' => 'La clave «:key» solo admite :allowed, y ha recibido «:value».',
         'default_locale_not_available' => 'El idioma por defecto «:default» no está entre los idiomas disponibles (:available).',
         'strict_integer' => 'El valor de :attribute debe ser un número entero, sin comillas.',
+        // MB2. Dice que pasa si se guarda —el producto lo oscurece donde es
+        // texto— y que hacer, no solo que ha fallado.
+        'low_contrast_accent' => 'El color :value contrasta :ratio:1 sobre el fondo claro del panel y del portal, y el texto necesita al menos :minimum:1. '
+            .'Las pantallas y los PDF lo oscurecerán hasta que se lea bien. Para guardarlo así, confírmalo explícitamente.',
     ],
 
     /*
@@ -64,6 +68,9 @@ return [
      * abajo y no conoce `:key`.
      */
     'strict_integer' => 'El valor de :attribute debe ser un número entero, sin comillas.',
+
+    // MB2: `confirm_low_contrast` es booleano estricto, como los enteros.
+    'strict_boolean' => 'El valor de :attribute debe ser true o false.',
 
     /*
      * Por que no vale el fichero de `BRANDING_LOGO_PATH` (RF-PD-08, tarea 5.8).

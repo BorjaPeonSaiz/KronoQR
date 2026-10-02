@@ -1447,6 +1447,12 @@
       "accentColor": "El color de los botones principales, los enlaces y los elementos seleccionados. El resto de la paleta del producto no se toca.",
       "logoPath": "Ruta absoluta dentro del directorio de marca del servidor. Tiene que ser un PNG o un SVG de hasta 512 KiB y, si es PNG, de hasta 2048 píxeles de lado. Déjalo en blanco para usar el logotipo del producto."
     },
+    "accentContrast": {
+      "meets": "Contraste del acento sobre el fondo claro: {ratio}:1. Cumple el mínimo de {minimum}:1 de WCAG 2.2 AA.",
+      "fails": "Contraste del acento sobre el fondo claro: {ratio}:1. No llega al mínimo de {minimum}:1 de WCAG 2.2 AA: con este color los botones y los enlaces se leerían mal.",
+      "applied": "Para que se lea, el panel y el portal usarán una versión más oscura del mismo color ({color}). El quiosco lo aclara sobre su fondo oscuro.",
+      "confirm": "He leído el aviso y quiero guardar este color igualmente."
+    },
     "resetAccent": "Volver al color del producto",
     "preview": {
       "lightHeading": "Panel y portal",

@@ -4,12 +4,17 @@
 // doble de `fetch` global que usa el resto de la suite (`requestJson` de
 // `@kronoqr/web-kit/http` es lo que `createBrandingState` llama por defecto).
 import { PRODUCT_BRANDING } from '@kronoqr/web-kit/branding'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useBrandingStore } from '@/shared/branding/branding.store'
 import { brandingPayload } from './support/fixtures'
 import { createTestPinia, jsonResponse, stubFetch } from './support/harness'
 
+beforeEach(() => {
+  window.localStorage.clear()
+})
+
 afterEach(() => {
+  vi.unstubAllGlobals()
   document.documentElement.removeAttribute('data-kq-branded')
   document.documentElement.removeAttribute('style')
   document.title = ''
@@ -65,5 +70,28 @@ describe('tienda de marca del portal', () => {
     await branding.load()
 
     expect(branding.current).toEqual(PRODUCT_BRANDING)
+  })
+
+  it('MB4: tras cargar la marca, el siguiente arranque la pinta desde la copia, sin red', async () => {
+    createTestPinia()
+    stubFetch(() => jsonResponse(brandingPayload()))
+    await useBrandingStore().load()
+
+    // Otra carga completa de la pagina: store nuevo, red que no contesta.
+    createTestPinia()
+    document.title = ''
+    vi.stubGlobal('fetch', () => new Promise(() => undefined))
+    const store = useBrandingStore()
+    store.apply()
+
+    expect(store.current.applicationName).toBe('Hotel Marina')
+    expect(document.title).toBe('Hotel Marina')
+  })
+
+  it('MB4: una copia corrupta no impide arrancar con el producto', () => {
+    window.localStorage.setItem('kronoqr.branding', '{roto')
+    createTestPinia()
+
+    expect(useBrandingStore().current).toEqual(PRODUCT_BRANDING)
   })
 })

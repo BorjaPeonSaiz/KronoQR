@@ -10,13 +10,13 @@
     consecutivas, no una rejilla: para eso esta la hoja A4.
 --}}
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ $locale }}">
 <head>
     <meta charset="utf-8">
     {{-- El titulo va al metadato del PDF y de ahi al historial de descargas del
          navegador. Sin nombres: un PDF de tarjetas es un instrumento al
          portador (regla dura 21). --}}
-    <title>Credencial</title>
+    <title>{{ $title }}</title>
     @include('pdf._credential-styles')
     <style>
         .page {

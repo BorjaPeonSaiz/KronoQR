@@ -130,21 +130,154 @@ describe('BrandingView', () => {
     expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
   })
 
-  it('avisa cuando el color escrito no llega al contraste minimo, sin bloquear el guardado', async () => {
+  it('un color con contraste suficiente lo dice y no pide confirmacion', async () => {
     stubFetch(() => jsonResponse(RECIEN_INSTALADO))
 
     const wrapper = await mountView(BrandingView)
     await settle()
 
-    expect(wrapper.find('[data-test="contrast-warnings"]').exists()).toBe(false)
+    await wrapper.find('[data-test="accent-color-hex"]').setValue('#0f5c8c')
 
-    // Un amarillo palido: no alcanza 4.5:1 como texto de marca en ningun
-    // fondo del sistema visual (doc 06 §2).
+    const notice = wrapper.find('[data-test="accent-contrast"]')
+    expect(notice.attributes('data-meets')).toBe('true')
+    expect(notice.text()).toContain('Cumple el mínimo')
+    expect(wrapper.find('[data-test="accent-confirm"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('avisa en vivo del contraste de un color palido y no deja guardar sin confirmar (MB2)', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse({
+            data: [{ ...RECIEN_INSTALADO.data[1], value: '#f5e663', source: 'installation' }],
+            meta: { unknown_keys: [], invalid_keys: [] },
+          })
+        : jsonResponse(RECIEN_INSTALADO),
+    )
+
+    const wrapper = await mountView(BrandingView)
+    await settle()
+
+    // Con el acento de serie no hay aviso: cumple.
+    expect(wrapper.find('[data-test="accent-contrast"]').attributes('data-meets')).toBe('true')
+
+    // Un amarillo palido no llega a 4,5:1 sobre ningun fondo claro (doc 06 §2).
     await wrapper.find('[data-test="accent-color-hex"]').setValue('#f5e663')
 
-    expect(wrapper.find('[data-test="contrast-warnings"]').exists()).toBe(true)
-    // Es un aviso, no un bloqueo (doc 06 §7): el boton sigue habilitado.
+    const notice = wrapper.find('[data-test="accent-contrast"]')
+    expect(notice.attributes('data-meets')).toBe('false')
+    expect(notice.text()).toContain('No llega al mínimo de 4.5:1')
+    expect(notice.text()).toMatch(/\d\.\d{2}:1/)
+    expect(notice.text()).toContain('versión más oscura')
+    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+
+    // El envio del formulario tampoco guarda sin la casilla.
+    await wrapper.find('form').trigger('submit')
+    await settle()
+    expect(fetchSpy.mock.calls.some(([, init]) => (init as RequestInit).method === 'PATCH')).toBe(
+      false,
+    )
+
+    await wrapper.find('[data-test="accent-confirm"]').setValue(true)
     expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
+    // El flag viaja a nivel superior, junto a `settings`, solo con la casilla.
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      settings: { BRANDING_ACCENT_COLOR: '#f5e663' },
+      confirm_low_contrast: true,
+    })
+  })
+
+  it('sin acento que cambie, o con uno que cumple, el cuerpo no lleva confirm_low_contrast', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse({ ...RECIEN_INSTALADO, data: RECIEN_INSTALADO.data })
+        : jsonResponse(RECIEN_INSTALADO),
+    )
+
+    const wrapper = await mountView(BrandingView)
+    await settle()
+
+    // Solo el nombre.
+    await wrapper.find('[data-test="app-name"]').setValue('Hotel Marina')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    // Un acento que cumple, sin casilla.
+    await wrapper.find('[data-test="accent-color-hex"]').setValue('#0f5c8c')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const bodies = fetchSpy.mock.calls
+      .filter(([, init]) => (init as RequestInit).method === 'PATCH')
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>)
+
+    expect(bodies).toHaveLength(2)
+    for (const body of bodies) {
+      expect(body).not.toHaveProperty('confirm_low_contrast')
+    }
+  })
+
+  it('cambiar el color anula la confirmacion dada al anterior', async () => {
+    stubFetch(() => jsonResponse(RECIEN_INSTALADO))
+
+    const wrapper = await mountView(BrandingView)
+    await settle()
+
+    await wrapper.find('[data-test="accent-color-hex"]').setValue('#f5e663')
+    await wrapper.find('[data-test="accent-confirm"]').setValue(true)
+    await wrapper.find('[data-test="accent-color-hex"]').setValue('#ffe14d')
+
+    expect((wrapper.find('[data-test="accent-confirm"]').element as HTMLInputElement).checked).toBe(
+      false,
+    )
+    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('cambiar solo el nombre no pide confirmar un color que no se toca', async () => {
+    stubFetch(() =>
+      jsonResponse({
+        ...RECIEN_INSTALADO,
+        data: RECIEN_INSTALADO.data.map((entry) =>
+          entry.key === 'BRANDING_ACCENT_COLOR' ? { ...entry, value: '#f5e663' } : entry,
+        ),
+      }),
+    )
+
+    const wrapper = await mountView(BrandingView)
+    await settle()
+
+    expect(wrapper.find('[data-test="accent-contrast"]').attributes('data-meets')).toBe('false')
+    await wrapper.find('[data-test="app-name"]').setValue('Hotel Marina')
+
+    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('enseña bajo el campo del color el 422 del servidor, con su mensaje', async () => {
+    stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+            errors: {
+              'settings.BRANDING_ACCENT_COLOR': ['El color no tiene contraste suficiente.'],
+            },
+          })
+        : jsonResponse(RECIEN_INSTALADO),
+    )
+
+    const wrapper = await mountView(BrandingView)
+    await settle()
+
+    await wrapper.find('[data-test="accent-color-hex"]').setValue('#f5e663')
+    await wrapper.find('[data-test="accent-confirm"]').setValue(true)
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    expect(wrapper.text()).toContain('El color no tiene contraste suficiente.')
+    expect(wrapper.find('[data-test="accent-color-hex"]').attributes('aria-invalid')).toBe('true')
   })
 
   it('manda solo las claves que han cambiado', async () => {
