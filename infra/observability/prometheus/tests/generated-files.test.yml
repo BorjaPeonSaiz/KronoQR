@@ -1,0 +1,161 @@
+# KronoQR — pruebas de infra/observability/prometheus/rules/generated-files.yml
+# (ADR-045). Lo importante: la primera vez que ocurre el suceso la serie nace ya
+# con valor 1 y la alerta SALTA (`increase` solo no lo veria), y una serie
+# vieja que no se mueve no mantiene la alerta encendida para siempre.
+rule_files:
+  - ../rules/generated-files.yml
+
+evaluation_interval: 1m
+
+tests:
+  #-----------------------------------------------------------------------------
+  # missing: la serie nace con 1 (primer suceso) y dispara tras el `for: 1m`.
+  #-----------------------------------------------------------------------------
+  - name: missing_primer_suceso_dispara
+    interval: 1m
+    input_series:
+      - series: 'generated_files_missing_total{class="data_export"}'
+        values: "1x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FicheroGeneradoDesaparecidoAntesDeCaducar
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: seguridad
+              component: generated-files
+              class: data_export
+            exp_annotations:
+              summary: "Una exportacion o informe ha perdido su fichero antes de caducar"
+              description: >-
+                Una exportacion integra o un informe en diferido figuraba como
+                disponible y su fichero ya no esta en el volumen. Tras restaurar una
+                copia o actualizar desde la 2.1.0 es lo ESPERADO: sus filas pasan a
+                purged con un asiento file_missing y se vuelve a pedir la
+                exportacion. Si no ha habido ni una cosa ni la otra, alguien ha
+                borrado o sacado el fichero a mano: lee el asiento
+                data_export.file_missing o report_export.file_missing en audit_log
+                y, si no hay explicacion, tratalo como brecha.
+              runbook_url: docs/runbooks/ficheros-generados.md
+
+  #-----------------------------------------------------------------------------
+  # missing: un suceso NUEVO sobre una serie vieja (de 1 a 2) tambien dispara.
+  #-----------------------------------------------------------------------------
+  - name: missing_incremento_sobre_serie_vieja
+    interval: 1m
+    input_series:
+      - series: 'generated_files_missing_total{class="report_export"}'
+        values: "1x120 2x10"
+    alert_rule_test:
+      - eval_time: 119m
+        alertname: FicheroGeneradoDesaparecidoAntesDeCaducar
+        exp_alerts: []
+      - eval_time: 125m
+        alertname: FicheroGeneradoDesaparecidoAntesDeCaducar
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: seguridad
+              component: generated-files
+              class: report_export
+            exp_annotations:
+              summary: "Una exportacion o informe ha perdido su fichero antes de caducar"
+              description: >-
+                Una exportacion integra o un informe en diferido figuraba como
+                disponible y su fichero ya no esta en el volumen. Tras restaurar una
+                copia o actualizar desde la 2.1.0 es lo ESPERADO: sus filas pasan a
+                purged con un asiento file_missing y se vuelve a pedir la
+                exportacion. Si no ha habido ni una cosa ni la otra, alguien ha
+                borrado o sacado el fichero a mano: lee el asiento
+                data_export.file_missing o report_export.file_missing en audit_log
+                y, si no hay explicacion, tratalo como brecha.
+              runbook_url: docs/runbooks/ficheros-generados.md
+
+  #-----------------------------------------------------------------------------
+  # missing, limite: una serie vieja que no se mueve no mantiene la alerta.
+  #-----------------------------------------------------------------------------
+  - name: missing_serie_quieta_se_apaga
+    interval: 1m
+    input_series:
+      - series: 'generated_files_missing_total{class="data_export"}'
+        values: "3x200"
+    alert_rule_test:
+      - eval_time: 100m
+        alertname: FicheroGeneradoDesaparecidoAntesDeCaducar
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # overdue: > 0 sostenido una hora; con 0 nunca.
+  #-----------------------------------------------------------------------------
+  - name: overdue_sostenido_dispara
+    interval: 1m
+    input_series:
+      - series: 'generated_files_overdue{class="legal_export_console"}'
+        values: "1x100"
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: FicheroGeneradoSinRetirarPasadoSuPlazo
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: FicheroGeneradoSinRetirarPasadoSuPlazo
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: generated-files
+              class: legal_export_console
+            exp_annotations:
+              summary: "Hay ficheros generados con datos personales pasado su plazo de aviso"
+              description: >-
+                Una exportacion legal hecha por consola lleva mas de 30 dias en el
+                servidor. No se borra sola: es la copia que se entrego a la
+                Inspeccion y la custodia es de quien la genero. Confirma que ya se
+                entrego y borrala; si sigue haciendo falta, decide quien la custodia.
+              runbook_url: docs/runbooks/ficheros-generados.md
+
+  - name: overdue_cero_no_dispara
+    interval: 1m
+    input_series:
+      - series: 'generated_files_overdue{class="legal_export_console"}'
+        values: "0x200"
+    alert_rule_test:
+      - eval_time: 180m
+        alertname: FicheroGeneradoSinRetirarPasadoSuPlazo
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # refused: primera negativa (serie nueva) dispara; serie vieja quieta no.
+  #-----------------------------------------------------------------------------
+  - name: refused_primera_vez_dispara
+    interval: 1m
+    input_series:
+      - series: 'generated_files_refused_total{class="report_export"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: generated-files
+              class: report_export
+            exp_annotations:
+              summary: "La purga de ficheros generados se ha negado a tocar algo"
+              description: >-
+                Dentro de la raiz de una clase hay un enlace simbolico, un
+                subdirectorio, un nombre que no es de ese producto, o una fila apunta
+                fuera de su raiz. La purga no ha borrado nada de eso. Comprueba que
+                las variables *_PATH de ficheros generados no se solapan
+                (product:doctor) y que nadie ha dejado ficheros a mano en el volumen.
+              runbook_url: docs/runbooks/ficheros-generados.md
+
+  - name: refused_serie_quieta_no_dispara
+    interval: 1m
+    input_series:
+      - series: 'generated_files_refused_total{class="report_export"}'
+        values: "2x300"
+    alert_rule_test:
+      - eval_time: 200m
+        alertname: PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo
+        exp_alerts: []

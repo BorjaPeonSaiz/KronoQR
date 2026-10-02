@@ -931,6 +931,8 @@ Se implementa el catálogo del documento 01, §9.3. Norma de diseño: **cada ale
 
 Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas de mantenimiento declaradas, y escalado solo tras confirmar persistencia (`for: 5m`). Un único quiosco reiniciándose no debe despertar a nadie.
 
+**Alertas de los ficheros generados (ADR-045, `rules/generated-files.yml`, runbook [`ficheros-generados.md`](runbooks/ficheros-generados.md)).** `FicheroGeneradoDesaparecidoAntesDeCaducar` (`generated_files_missing_total` sube; severidad alta, responsable de seguridad; esperada tras una restauración o una actualización desde la 2.1.0), `FicheroGeneradoSinRetirarPasadoSuPlazo` (`generated_files_overdue > 0` durante 1 h; IT) y `PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo` (`generated_files_refused_total` sube; IT). Los contadores se evalúan con `increase` más la rama «serie nueva», porque un contador en Redis nace ya con valor 1. `generated_files_orphans_removed_total` es informativa y no alerta. Con Redis caído estas series desaparecen en vez de saltar (R4-DV-01, bloque 22).
+
 ---
 
 ## 9. Estrategia de pruebas
