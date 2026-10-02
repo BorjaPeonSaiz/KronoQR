@@ -8,6 +8,7 @@ use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\EmployeeNationalIdAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Employee;
 
 /**
@@ -43,6 +44,7 @@ interface EmployeeRepository
      *
      * @throws \App\Modules\Workforce\Domain\Exception\EmployeeCodeAlreadyTaken
      * @throws EmployeeEmailAlreadyTaken
+     * @throws EmployeeNationalIdAlreadyTaken
      */
     public function add(Employee $employee, ?string $nationalId = null): void;
 
@@ -75,8 +77,9 @@ interface EmployeeRepository
      * `first_name`, `last_name`, `email`, `department_id`, `locale` y
      * `teleworking`, y `status` **solo** si `$statusChanged` (suspension o
      * reincorporacion). **Nunca** `terminated_at`, `id`, `uuid` ni
-     * `employee_code` (A-5): los tres ultimos tienen indice unico completo y
-     * escribirlos, aunque fuera con el mismo valor, es el camino a `FOR UPDATE`.
+     * `employee_code` (A-5): los tres ultimos tienen indice unico completo, y
+     * un **cambio** de su valor tomaria `FOR UPDATE` (el mismo valor no: Postgres
+     * compara el viejo con el nuevo). No escribirlos impide que llegue a ocurrir.
      *
      * `WHERE uuid = ? AND status <> 'terminated'`: cero filas afectadas es
      * {@see EmployeeAlreadyTerminated}. El candado es lo que impide la carrera;

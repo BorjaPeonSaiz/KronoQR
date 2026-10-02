@@ -230,7 +230,7 @@ it('no repite una baja ya registrada', function (): void {
     Api::as($context['token'])
         ->post('/api/v1/employees/'.$uuid.'/offboard', ['terminated_at' => '2026-09-30'])
         ->assertValidResponse(409)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+        ->assertJsonPath('type', 'urn:kronoqr:problem:employee-terminated');
 })->group('RF-GP-03');
 
 it('publica los eventos de plantilla que otros modulos necesitan', function (): void {

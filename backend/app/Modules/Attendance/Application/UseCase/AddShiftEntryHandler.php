@@ -24,6 +24,7 @@ use App\Modules\Attendance\Domain\ValueObject\ShiftTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -72,6 +73,7 @@ final readonly class AddShiftEntryHandler
         private OperationalSettingsProvider $settings,
         private EventPublisher $events,
         private Clock $clock,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -144,6 +146,42 @@ final readonly class AddShiftEntryHandler
         $this->ledger->record($correction);
         $this->events->publish(...$events);
 
+        $this->recheckAfterAudit($employee->employeeUuid, $workDate);
+
         return CorrectedShift::of($workDay, $entry, $correction);
+    }
+
+    /**
+     * **La elegibilidad se vuelve a mirar con la cadena de `audit_log` ya
+     * tomada** (RN-14, ADR-046; revision del bloque 17).
+     *
+     * La instantanea de arriba se leyo sin candado: una baja que confirmara
+     * entre esa lectura y este punto, con un cese anterior a la jornada, dejaria
+     * un tramo posterior al cese. No se toma la cadena al principio —el alta
+     * inserta en `shift_entries`, que comprueba su clave ajena sobre el centro,
+     * y eso seria pedir una fila padre con la cadena en la mano (ADR-046 §1.1,
+     * punto 2)—: se toma aqui, al final, como el fichaje. Con ella tomada, la
+     * baja o ya confirmo —y esta lectura la ve— o confirmara despues de este
+     * tramo, que entonces es anterior a ella en la cadena, igual que un fichaje
+     * recibido justo antes. Si ya no es elegible, la excepcion deshace la
+     * transaccion entera: ni tramo, ni correccion, ni asiento.
+     *
+     * `withChainLock()` es reentrante: si el asiento del tramo ya la tomo, no
+     * espera.
+     *
+     * @throws EmployeeCannotBeClocked
+     * @throws WorkDateOutsideEmployment
+     */
+    private function recheckAfterAudit(string $employeeUuid, WorkDate $workDate): void
+    {
+        $this->serialized->withChainLock(function () use ($employeeUuid, $workDate): void {
+            $current = $this->employees->find($employeeUuid);
+
+            if (! $current instanceof EmployeeSnapshot || ! ManualEntryEligibility::of($current)->admitsEntries()) {
+                throw EmployeeCannotBeClocked::withUuid($employeeUuid);
+            }
+
+            ManualEntryEligibility::of($current)->assertWorkDateAllowed($workDate);
+        });
     }
 }

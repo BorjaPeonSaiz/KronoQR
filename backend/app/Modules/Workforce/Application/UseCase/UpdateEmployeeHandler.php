@@ -59,7 +59,7 @@ final readonly class UpdateEmployeeHandler
      */
     public function handle(UpdateEmployeeCommand $command): ?Employee
     {
-        return $this->connection->transaction(function () use ($command): ?Employee {
+        return EmployeeWriteRetry::run($this->connection, function () use ($command): ?Employee {
             if ($command->departmentGiven && $command->departmentId !== null) {
                 $this->parentRows->shareDepartments([$command->departmentId]);
             }

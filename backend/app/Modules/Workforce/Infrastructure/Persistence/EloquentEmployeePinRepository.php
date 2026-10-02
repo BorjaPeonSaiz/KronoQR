@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Infrastructure\Persistence;
 
+use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\PinDeliveryRecord;
 use App\Modules\Workforce\Application\Port\PinStatus;
+use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\PinAlreadyDelivered;
 use App\Modules\Workforce\Domain\Exception\PinNotIssued;
 use DateTimeImmutable;
@@ -62,6 +64,8 @@ final readonly class EloquentEmployeePinRepository implements EmployeePinReposit
     {
         $affected = Employee::query()
             ->where('uuid', $employeeUuid)
+            // RN-14, ADR-046: el mismo predicado que las escrituras de la ficha.
+            ->where('status', '<>', EmploymentStatus::TERMINATED->value)
             ->update([
                 'pin_hash' => $pinHash,
                 'pin_issued_at' => $issuedAt,
@@ -69,7 +73,16 @@ final readonly class EloquentEmployeePinRepository implements EmployeePinReposit
                 'pin_delivered_by_user_id' => null,
             ]);
 
-        return $affected > 0;
+        if ($affected > 0) {
+            return true;
+        }
+
+        // Cero filas: o no existe —404 para quien llama— o esta de baja.
+        if (Employee::query()->where('uuid', $employeeUuid)->exists()) {
+            throw EmployeeAlreadyTerminated::withUuid($employeeUuid);
+        }
+
+        return false;
     }
 
     public function recordDelivery(
@@ -83,6 +96,7 @@ final readonly class EloquentEmployeePinRepository implements EmployeePinReposit
 
         $affected = Employee::query()
             ->where('uuid', $employeeUuid)
+            ->where('status', '<>', EmploymentStatus::TERMINATED->value)
             ->whereNotNull('pin_issued_at')
             ->whereNull('pin_delivered_at')
             ->update([
@@ -136,8 +150,19 @@ final readonly class EloquentEmployeePinRepository implements EmployeePinReposit
         return $employee->pin_issued_at === null ? PinStatus::Pending : PinStatus::Issued;
     }
 
-    private function explainFailedDelivery(string $employeeUuid): PinNotIssued|PinAlreadyDelivered
+    private function explainFailedDelivery(string $employeeUuid): EmployeeAlreadyTerminated|PinNotIssued|PinAlreadyDelivered
     {
+        // La baja primero: a quien ya no trabaja no se le entrega nada, tenga o
+        // no un PIN pendiente (RN-14, ADR-046).
+        $terminated = Employee::query()
+            ->where('uuid', $employeeUuid)
+            ->where('status', EmploymentStatus::TERMINATED->value)
+            ->exists();
+
+        if ($terminated) {
+            return EmployeeAlreadyTerminated::withUuid($employeeUuid);
+        }
+
         $delivered = Employee::query()
             ->where('uuid', $employeeUuid)
             ->whereNotNull('pin_delivered_at')

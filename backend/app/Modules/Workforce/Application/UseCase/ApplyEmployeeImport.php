@@ -90,24 +90,30 @@ final readonly class ApplyEmployeeImport
 
     public function handle(ImportReport $report): ImportReport
     {
-        $departments = $this->directory->departmentsByNormalisedName();
-
         // TODO EL bcrypt, ANTES DE ABRIR LA TRANSACCION. Es la correccion de la
         // revision de la 5.5 y no es una optimizacion: es lo que hace que este
         // endpoint pueda existir al tamaño que documenta.
         $material = $this->pinMaterialFor($report);
 
-        $applied = $this->connection->transaction(function () use ($report, $departments, $material): array {
+        $applied = EmployeeWriteRetry::run($this->connection, function () use ($report, $material): array {
             // FILAS PADRE ANTES DEL PRIMER ASIENTO (ADR-046 §1.1 punto 2, §5).
             // El primer alta o modificacion toma la cadena de `audit_log` y no la
             // suelta hasta el commit; a partir de ahi, pedir una fila padre seria
             // pedirla con la cadena en la mano y cerrar un ciclo con el renombrado
             // de un departamento o del centro. Se toman aqui, de una vez, el centro
             // y TODOS los departamentos del mapa con el que se resuelve cada
-            // linea —el mismo `$departments`, no una segunda lectura—, ordenados
-            // por `id`. Las fichas no se bloquean de antemano: la cadena ya
-            // serializa a todos sus escritores.
+            // linea, ordenados por `id`. Las fichas no se bloquean de antemano: la
+            // cadena ya serializa a todos sus escritores.
+            //
+            // El mapa se lee AQUI DENTRO y no antes del bcrypt de las altas (que
+            // con 500 son hasta ~80 s): leido fuera, un departamento renombrado
+            // en esa ventana se resolvia con su nombre viejo. Dentro, entre la
+            // lectura y el candado caben milisegundos, y un renombrado en ese
+            // hueco resuelve el mismo `id` que si hubiera llegado justo despues
+            // de esta importacion; a partir del `FOR KEY SHARE` ya no puede
+            // renombrarse hasta el commit (ADR-046 §5).
             $this->parentRows->shareInstallationSite();
+            $departments = $this->directory->departmentsByNormalisedName();
             $this->parentRows->shareDepartments(array_values($departments));
 
             return $this->applyRows($report, $departments, $material);

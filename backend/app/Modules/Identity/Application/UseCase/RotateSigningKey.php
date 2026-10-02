@@ -140,9 +140,15 @@ final readonly class RotateSigningKey
      */
     private function plan(string $retiringKeyId, string $currentKeyId, bool $dryRun): array
     {
+        $signed = $this->credentials->activeSignedWith($retiringKeyId);
+        $statuses = $this->employmentStatus->statusesOf(array_values(array_unique(array_map(
+            static fn (Credential $card): int => $card->employeeId,
+            $signed,
+        ))));
+
         $cards = array_values(array_filter(
-            $this->credentials->activeSignedWith($retiringKeyId),
-            $this->holderIsNotOffboarded(...),
+            $signed,
+            static fn (Credential $card): bool => self::holderIsNotOffboarded($statuses[$card->employeeId] ?? null),
         ));
         $pending = $this->employeesWithPendingCredential($cards);
 
@@ -166,12 +172,12 @@ final readonly class RotateSigningKey
 
     /**
      * Un estado desconocido —la ficha no existe, lo que la clave ajena
-     * impide— se trata como baja: ante la duda, no se reemite.
+     * impide— se trata como baja: ante la duda, no se reemite. Los estados se
+     * leen todos de una vez (`statusesOf()`), no uno por tarjeta: esto corre con
+     * la cadena de `audit_log` tomada.
      */
-    private function holderIsNotOffboarded(Credential $card): bool
+    private static function holderIsNotOffboarded(?EmploymentStatus $status): bool
     {
-        $status = $this->employmentStatus->statusOf($card->employeeId);
-
         return $status instanceof EmploymentStatus && $status !== EmploymentStatus::TERMINATED;
     }
 

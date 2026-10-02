@@ -11,6 +11,7 @@ use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeCodeAlreadyTaken;
 use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\EmployeeNationalIdAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Employee as EmployeeEntity;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 use App\Modules\Workforce\Domain\ValueObject\ImportedEmployee;
@@ -115,9 +116,11 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
      *
      * Las dos escrituras de la ficha llevan este predicado. Ninguna escribe
      * `id`, `uuid` ni `employee_code` (A-5): los tres tienen indice unico
-     * completo, y un `UPDATE` que los escribiera —aunque fuera con el mismo
-     * valor— tomaria `FOR UPDATE` en lugar de `FOR NO KEY UPDATE` y haria
-     * esperar a los fichajes de esta persona.
+     * completo, y un `UPDATE` que **cambiara** su valor tomaria `FOR UPDATE` en
+     * lugar de `FOR NO KEY UPDATE` y haria esperar a los fichajes de esta
+     * persona. PostgreSQL compara el valor viejo con el nuevo: escribir el mismo
+     * no cambia el candado, pero no escribirlos nunca es lo que impide que un
+     * cambio futuro llegue a hacerlo.
      *
      * @return Builder<Employee>
      */
@@ -404,10 +407,20 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
             return;
         }
 
-        DB::update(
-            'UPDATE employees SET national_id_hash = digest(?, ?) WHERE uuid = ?',
-            [$normalised, 'sha256', $uuid],
-        );
+        try {
+            DB::update(
+                'UPDATE employees SET national_id_hash = digest(?, ?) WHERE uuid = ?',
+                [$normalised, 'sha256', $uuid],
+            );
+        } catch (QueryException $exception) {
+            // El indice unico parcial del documento: `409` como el del correo, y
+            // no un `500` (bloque 17). Cualquier otro fallo sube tal cual.
+            if (str_contains($exception->getMessage(), 'employees_national_id_hash_unique')) {
+                throw EmployeeNationalIdAlreadyTaken::make();
+            }
+
+            throw $exception;
+        }
     }
 
     private function translate(QueryException $exception, EmployeeCode $code): QueryException|EmployeeCodeAlreadyTaken|EmployeeEmailAlreadyTaken

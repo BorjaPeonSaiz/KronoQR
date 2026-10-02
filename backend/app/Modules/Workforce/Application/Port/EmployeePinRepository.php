@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\Port;
 
+use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\PinAlreadyDelivered;
 use App\Modules\Workforce\Domain\Exception\PinNotIssued;
 use DateTimeImmutable;
@@ -32,9 +33,14 @@ interface EmployeePinRepository
      * PIN nuevo no esta entregado por el hecho de que lo estuviera el que
      * sustituye.
      *
+     * **No escribe sobre una persona dada de baja** (RN-14, ADR-046): lleva el
+     * mismo predicado `status <> 'terminated'` que las escrituras de la ficha.
+     *
      * @param  string  $pinHash  El hash ya calculado por {@see PinHasher}. El PIN en claro
      *                           no se almacena ni pasa por este puerto (RF-ID-09).
      * @return bool `false` si el empleado no existe. Quien llama lo traduce a 404.
+     *
+     * @throws EmployeeAlreadyTerminated si la persona esta de baja
      */
     public function issue(string $employeeUuid, string $pinHash, DateTimeImmutable $issuedAt): bool;
 
@@ -46,6 +52,7 @@ interface EmployeePinRepository
      *                                       restriccion 2): la clave interna es cosa del adaptador.
      * @return PinDeliveryRecord|null `null` si el empleado no existe.
      *
+     * @throws EmployeeAlreadyTerminated si la persona esta de baja (RN-14): no se entrega nada a quien ya no trabaja
      * @throws PinNotIssued cuando no hay PIN que entregar
      * @throws PinAlreadyDelivered cuando ya consta entregado
      */

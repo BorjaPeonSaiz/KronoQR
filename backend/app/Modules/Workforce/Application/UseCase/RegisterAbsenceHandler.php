@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Workforce\Application\Command\RegisterAbsenceCommand;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -60,6 +61,7 @@ final readonly class RegisterAbsenceHandler
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -109,7 +111,35 @@ final readonly class RegisterAbsenceHandler
                 occurredAt: $this->clock->now(),
             ));
 
+            $this->recheckAfterAudit($absence);
+
             return $stored;
+        });
+    }
+
+    /**
+     * **El periodo de empleo se vuelve a mirar con la cadena de `audit_log` ya
+     * tomada** (RN-14, ADR-046; revision del bloque 17).
+     *
+     * La ficha de arriba se leyo sin candado: una baja que confirmara entre esa
+     * lectura y este punto, con un cese anterior a la ausencia, la dejaria fuera
+     * del periodo de empleo. No se toma la cadena al principio —la insercion
+     * comprueba su clave ajena sobre la ficha y bloquea antes las ausencias de
+     * la persona—: se toma aqui, al final. Con ella tomada, la baja o ya
+     * confirmo —y esta lectura la ve— o confirmara despues de esta ausencia. Si
+     * ya no cabe, la excepcion deshace la transaccion entera, asiento incluido.
+     * `withChainLock()` es reentrante: el asiento de la ausencia ya la tomo.
+     *
+     * @throws InvalidAbsencePeriod
+     */
+    private function recheckAfterAudit(Absence $absence): void
+    {
+        $this->serialized->withChainLock(function () use ($absence): void {
+            $current = $this->employees->findByUuid($absence->employeeUuid);
+
+            if ($current === null || ! $absence->fallsWithinEmployment($current->hiredAt, $current->terminatedAt)) {
+                throw InvalidAbsencePeriod::isOutsideEmployment($absence->isoStartsOn(), $absence->isoEndsOn());
+            }
         });
     }
 

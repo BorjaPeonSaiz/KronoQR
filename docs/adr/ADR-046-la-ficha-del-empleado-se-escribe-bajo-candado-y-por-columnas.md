@@ -119,6 +119,18 @@ cambia y el fichaje tampoco. Lo que se exige a cambio es lo del punto 2: quien t
 una fila padre. Hay dos caminos que lo harían, y los dos toman la fila antes: la modificación con
 cambio de departamento y la importación.
 
+**Caso conocido: la espera de un índice único.** El orden no cubre una espera que no es un candado de
+fila: la del índice único sobre una inserción sin confirmar. Un alta inserta `ana@hotel.es` antes de la
+cadena y después la espera; una modificación o una importación que ya tiene la cadena escribe ese
+mismo correo —o el mismo documento, `employees_national_id_hash_unique`— y espera a que el alta
+confirme para comprobar el índice. Es un ciclo y PostgreSQL deshace una de las dos (`40P01`). No se
+evita sin pasar el alta a cadena primero, que reabre los dos ciclos de arriba. **Tratamiento**: la
+transacción de fuera del alta, de la modificación y de la importación se **reintenta una vez**
+(`EmployeeWriteRetry`); el reintento encuentra confirmada a la otra y el índice responde el `409` de
+dato duplicado. Si vuelve a cruzarse, `409` `urn:kronoqr:problem:conflict` (`ConcurrentEmployeeWrite`):
+nunca un `500`. El choque con el índice del documento, que antes salía `500`, es también `409`
+(`EmployeeNationalIdAlreadyTaken`).
+
 ### 2. `FOR NO KEY UPDATE`, sobre `employees` y nada más
 
 La lectura bloqueante es `EmployeeRepository::findForUpdate(string $uuid): ?Employee`, que toma la
@@ -139,8 +151,9 @@ en esta tabla.
   cambiado (`suspend()`/`reinstate()`). Nunca escribe `terminated_at`.
 - **`saveTermination(Employee $employee)`** escribe `status` y `terminated_at`, y nada más.
 - **Ninguna de las dos escribe `id`, `uuid` ni `employee_code`** (A-5): los tres tienen índice único
-  completo y escribirlos, aunque fuera con el mismo valor que no cambia, es el camino por el que un
-  cambio futuro acabaría tomando `FOR UPDATE`.
+  completo, y un `UPDATE` que **cambie** su valor toma `FOR UPDATE`. PostgreSQL decide comparando
+  el valor viejo con el nuevo: escribir el mismo valor mantiene `FOR NO KEY UPDATE`. No
+  escribirlos nunca es lo que impide que un cambio futuro llegue a tomar `FOR UPDATE`.
 
 Las dos llevan `WHERE uuid = ? AND status <> 'terminated'` y comprueban las filas afectadas: **cero
 filas es `EmployeeAlreadyTerminated`** (`409`). El candado es lo que impide la carrera; el predicado es
@@ -170,7 +183,10 @@ operación de gestión que tenga la ficha. Pasa a ser **oportunista**:
 `RegisterEmployeeHandler` y `UpdateEmployeeHandler` por fila. Al abrir su transacción toma
 `FOR KEY SHARE` del centro y de **todos los departamentos del mapa `$departments`** con el que se
 resuelve cada fila, ordenados por `id` (§1.1, punto 2). El mapa se lee **una sola vez, dentro de la
-transacción y con ese candado**; hoy se lee fuera (`ApplyEmployeeImport.php:83`). No vale bloquear
+transacción**, justo después de tomar el centro y justo antes de bloquear sus departamentos, y no
+antes del bcrypt de las altas (hasta unos 80 s con 500). Entre la lectura y el candado caben
+milisegundos: un renombrado en ese hueco resuelve el mismo `id` que si hubiera llegado justo después
+de la importación, y a partir del `FOR KEY SHARE` ya no puede renombrarse hasta el commit. No vale bloquear
 «los del informe» ni hacer una segunda lectura: si una fila resolviera un `id` que no está en el
 conjunto bloqueado, la modificación pediría ese departamento con la cadena ya tomada y reabriría el
 ciclo con un renombrado. La cadena la toma el primer asiento y la piden otra vez, de forma reentrante, los
@@ -190,7 +206,8 @@ Una fila que corresponde a una persona **dada de baja**:
   comportamiento correcto: nada se escribe sobre una persona de baja y quien importa lo ve en la fila.
 - **Solo si la baja confirma dentro de la propia petición `apply`**, entre su planificación y su
   escritura, la fila llega como `update`, la lectura bloqueante ve `terminated` y la aplicación entera
-  responde `409` sin escribir nada y sin asiento del lote. Hay que volver a lanzarla, y entonces la
+  responde `409` con `type` `urn:kronoqr:problem:employee-terminated` sin escribir nada y sin
+  asiento del lote. Hay que volver a lanzarla, y entonces la
   fila sale `employee_terminated`.
 
 ### 6. Invariantes y pruebas

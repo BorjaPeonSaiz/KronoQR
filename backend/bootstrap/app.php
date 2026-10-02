@@ -477,7 +477,14 @@ return Application::configure(basePath: dirname(__DIR__))
             $exception->getMessage(),
         ));
 
-        $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
+        /*
+         * La persona ya esta de baja (RN-14, ADR-046): `409` con `type` propio,
+         * `urn:kronoqr:problem:employee-terminated`. La modificacion de la ficha
+         * devuelve tambien el `409` generico del correo duplicado, y el panel
+         * tiene que distinguirlos: uno se corrige en el formulario y el otro
+         * obliga a recargar la ficha.
+         */
+        $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::employeeTerminated($exception->getMessage()));
 
         $exceptions->render(static fn (WorkforceConflict $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 

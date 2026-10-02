@@ -473,3 +473,85 @@ it('treinta renombrados del centro a la vez que un fichaje y un alta: el fichaje
         ->and(DB::table('shift_entries')->count())->toBe(OFFBOARD_UPDATE_RACE_ROUNDS)
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
 })->group('RF-AT-07', 'RN-15', 'RF-GP-01', 'RL-04');
+
+it('treinta altas de tramo a la vez que una baja con cese anterior: ningun tramo queda escrito despues de la baja', function (): void {
+    // Revision del bloque 17: el alta manual lee la ficha sin candado y la
+    // vuelve a mirar con la cadena tomada, despues de su asiento. O el tramo
+    // entra antes que la baja en la cadena, o la ve y responde 422 sin escribir.
+    WorkforceFixtures::site('Hotel de la carrera');
+    $token = tokenDeLaCarrera();
+
+    $tanda = tandaContraLaBaja(static function (int $ronda) use ($token): array {
+        $persona = personaParaLaCarrera($ronda);
+
+        return [
+            static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->post('/api/v1/shift-entries', [
+                'employee_uuid' => $persona,
+                'work_date' => OFFBOARD_UPDATE_RACE_LAST_DAY,
+                'clocked_in_at' => OFFBOARD_UPDATE_RACE_LAST_DAY.'T06:00:00Z',
+                'clocked_out_at' => OFFBOARD_UPDATE_RACE_LAST_DAY.'T09:00:00Z',
+                'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+            ])),
+            // Cese el dia anterior a la jornada del tramo.
+            static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->post(
+                '/api/v1/employees/'.$persona.'/offboard',
+                ['terminated_at' => '2026-10-01'],
+            )),
+        ];
+    });
+
+    /** @var list<object{uuid: string}> $tramosTrasLaBaja */
+    $tramosTrasLaBaja = DB::select(<<<'SQL'
+        SELECT b.payload->>'employee_uuid' AS uuid
+          FROM audit_log b
+          JOIN audit_log t ON t.payload->>'employee_uuid' = b.payload->>'employee_uuid'
+         WHERE b.action = 'employee.offboarded'
+           AND t.action = 'shift_entry.created'
+           AND t.id > b.id
+    SQL);
+
+    expect(desenlacesImposibles($tanda['rondas']))->toBe([])
+        ->and($tanda['abrazos'])->toBe(0)
+        ->and(contradiccionesTrasLaCarrera())->toBe([])
+        ->and($tramosTrasLaBaja)->toBe([])
+        ->and(array_diff(array_keys(desenlacesEnLaPosicion($tanda['rondas'], 0)), ['http:201', 'http:422']))->toBe([])
+        ->and(desenlacesEnLaPosicion($tanda['rondas'], 1))->toBe(['http:200' => OFFBOARD_UPDATE_RACE_ROUNDS]);
+})->group('RN-14', 'RF-PA-04', 'RL-04');
+
+it('treinta altas a la vez que una modificacion que escribe el mismo correo: nunca un 5xx y el correo es de una sola persona', function (): void {
+    // ADR-046 §1.3, caso conocido: el alta inserta el correo antes de la
+    // cadena y la espera; la modificacion tiene la cadena y espera al indice
+    // unico. Si PostgreSQL rompe el ciclo, el caso de uso reintenta una vez y
+    // responde el 409 del correo duplicado. Los abrazos mortales no se cuentan
+    // aqui: son el caso conocido, y lo que importa es que no lleguen al cliente.
+    WorkforceFixtures::site('Hotel de la carrera');
+    $token = tokenDeLaCarrera();
+
+    $tanda = tandaContraLaBaja(static function (int $ronda) use ($token): array {
+        $persona = personaParaLaCarrera($ronda);
+        $correo = 'compartido.'.$ronda.'@example.test';
+
+        return [
+            static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->post('/api/v1/employees', [
+                'first_name' => 'Alta',
+                'last_name' => 'Ronda '.$ronda,
+                'email' => $correo,
+                'hired_at' => '2026-10-02',
+            ])),
+            static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->patch(
+                '/api/v1/employees/'.$persona,
+                ['email' => $correo],
+            )),
+        ];
+    });
+
+    $exitosPorRonda = array_map(
+        static fn (array $ronda): int => \count(array_filter($ronda, static fn (string $d): bool => \in_array($d, ['http:200', 'http:201'], true))),
+        $tanda['rondas'],
+    );
+
+    expect(desenlacesImposibles($tanda['rondas']))->toBe([])
+        ->and(array_diff(array_merge(...$tanda['rondas']), ['http:200', 'http:201', 'http:409']))->toBe([])
+        ->and(array_unique($exitosPorRonda))->toBe([1])
+        ->and(DB::table('employees')->where('email', 'like', 'compartido.%')->count())->toBe(OFFBOARD_UPDATE_RACE_ROUNDS);
+})->group('RF-GP-01', 'RL-04');

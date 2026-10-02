@@ -2430,6 +2430,12 @@ paths:
         sin PIN no puede fichar por respaldo (RF-AT-11) ni entrar al portal
         (RL-05), y ese estado no debe poder existir. El PIN viaja **una sola
         vez**, en esta respuesta: despues solo se restablece.
+
+        **Un correo o un documento que ya son de otra persona** dan `409`
+        (`urn:kronoqr:problem:conflict`), tambien si esa otra escritura
+        —una modificacion o una importacion— llega a la vez: el servidor
+        reintenta una vez la que PostgreSQL deshace y responde el `409` del
+        dato duplicado, nunca un `500` ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md) §1.3).
       tags: [Workforce]
       security:
         - managementToken: ['employees:*']
@@ -2564,7 +2570,9 @@ paths:
         tiene su propio endpoint, `POST /employees/{uuid}/offboard`. Este
         `PATCH` solo alterna entre `active` y `suspended`.
 
-        **Una ficha dada de baja no se modifica** (`409`). Una modificacion y
+        **Una ficha dada de baja no se modifica** (`409` con `type`
+        `urn:kronoqr:problem:employee-terminated`, distinto del `409` generico
+        del correo duplicado). Una modificacion y
         una baja de la misma persona que llegan a la vez se aplican una detras
         de otra, nunca entrelazadas ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md)):
         o la modificacion entra primero y la baja despues, o la baja entra
@@ -2621,7 +2629,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/EmployeeConflict'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -2676,8 +2684,10 @@ paths:
         otra fecha da `422` en `terminated_at` y el mensaje dice cual es la
         admitida.
 
-        **Sin centro configurado no hay baja** (`409`): «hoy» se resuelve con la
-        zona del centro y nunca cae a UTC.
+        **Sin centro configurado no hay baja** (`409`, `urn:kronoqr:problem:conflict`):
+        «hoy» se resuelve con la zona del centro y nunca cae a UTC. Repetir la
+        baja de quien ya esta de baja es `409` con
+        `urn:kronoqr:problem:employee-terminated`.
 
         **Tras la baja, los dias trabajados hasta el cese se completan a mano**
         con `POST /api/v1/shift-entries` (RF-PA-04), siempre que la jornada este
@@ -2734,7 +2744,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/EmployeeConflict'
         '422':
           description: |
             La peticion no cumple el contrato. Ademas de los errores de forma,
@@ -2804,6 +2814,10 @@ paths:
 
         **No dice si el empleado existe.** Un `uuid` desconocido y uno fuera del
         alcance de quien pregunta responden lo mismo, `404` (regla dura 17).
+
+        **A una persona dada de baja no se le restablece el PIN** (RN-14,
+        ADR-046): `409` con `urn:kronoqr:problem:employee-terminated`, sin
+        cambiar el hash ni dejar asiento.
       tags: [Workforce]
       security:
         - managementToken: ['employees:*']
@@ -2829,6 +2843,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/EmployeeConflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -2850,7 +2866,11 @@ paths:
         Registrar la entrega de un PIN que no se ha emitido es un `409`: no se
         puede entregar lo que no existe. Repetir la entrega tambien lo es, por
         lo mismo que la revocacion de una credencial —sobrescribirla cambiaria
-        el momento y el responsable que ya constan en `audit_log`—.
+        el momento y el responsable que ya constan en `audit_log`—. Los dos
+        llevan `urn:kronoqr:problem:conflict`.
+
+        **A una persona dada de baja no se le registra la entrega** (RN-14,
+        ADR-046): `409` con `urn:kronoqr:problem:employee-terminated`.
       tags: [Workforce]
       security:
         - managementToken: ['employees:*']
@@ -2875,7 +2895,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
+          $ref: '#/components/responses/EmployeeConflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -8674,11 +8694,21 @@ paths:
             entre la peticion de validar y esta, no da `409`: esta peticion
             vuelve a comprobar el fichero y la fila sale rechazada en el
             informe.
+
+            **`type` distingue las dos causas**: el fichero distinto es
+            `urn:kronoqr:problem:conflict`; la baja durante la aplicacion es
+            `urn:kronoqr:problem:employee-terminated`.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
               examples:
+                baja-durante-la-aplicacion:
+                  value:
+                    type: urn:kronoqr:problem:employee-terminated
+                    title: La persona ya esta dada de baja
+                    status: 409
+                    detail: El empleado 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 ya estaba dado de baja.
                 otro-fichero:
                   value:
                     type: urn:kronoqr:problem:conflict
@@ -10369,7 +10399,8 @@ components:
     Conflict:
       description: |
         La operacion choca con el estado actual del recurso: un correo o un
-        nombre ya usados, o una baja sobre alguien que ya estaba de baja.
+        nombre ya usados. Una persona ya dada de baja tiene su propio `type`
+        (`EmployeeConflict`).
 
         Es `409` y no `422` porque la peticion es valida en si misma; lo que no
         encaja es el estado del sistema. La distincion importa al cliente: ante
@@ -10379,6 +10410,39 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
           examples:
+            correo-duplicado:
+              value:
+                type: 'urn:kronoqr:problem:conflict'
+                title: Conflicto con el estado actual
+                status: 409
+                detail: Ya existe otro empleado con ese correo.
+    EmployeeConflict:
+      description: |
+        La operacion sobre la ficha de una persona choca con su estado. **`type`
+        distingue las causas**, porque a quien las recibe le cambia la accion
+        siguiente:
+
+        - `urn:kronoqr:problem:employee-terminated` — **la persona ya esta dada
+          de baja** (RN-14, ADR-046). Su ficha no se modifica, no se da de baja
+          otra vez, y su PIN no se restablece ni se entrega. No hay nada que
+          corregir en el formulario: se recarga la ficha. Tambien sale cuando
+          la baja de otra persona del panel confirma mientras esta peticion
+          esperaba: la peticion la ve y no la deshace.
+        - `urn:kronoqr:problem:conflict` — cualquier otro choque del endpoint:
+          un correo que ya es de otra persona, un PIN sin emitir o ya
+          entregado, una instalacion sin centro. Se corrige lo indicado en
+          `detail` sin perder lo escrito.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            ya-de-baja:
+              value:
+                type: 'urn:kronoqr:problem:employee-terminated'
+                title: La persona ya esta dada de baja
+                status: 409
+                detail: El empleado 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 ya estaba dado de baja.
             correo-duplicado:
               value:
                 type: 'urn:kronoqr:problem:conflict'

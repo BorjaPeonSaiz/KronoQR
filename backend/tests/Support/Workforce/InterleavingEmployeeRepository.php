@@ -43,16 +43,28 @@ final class InterleavingEmployeeRepository implements EmployeeRepository
 
     /**
      * @param  Closure(): void  $afterRead  Lo que corre en el hueco entre la lectura y la escritura.
+     * @param  bool  $onPlainRead  Disparar tras `findByUuid()` en lugar de tras
+     *                             `findForUpdate()`: para los casos de uso que
+     *                             leen la ficha sin candado y la vuelven a mirar
+     *                             despues de su asiento (el registro de una
+     *                             ausencia).
      */
     public function __construct(
         private readonly EmployeeRepository $inner,
         private readonly string $employeeUuid,
         private readonly Closure $afterRead,
+        private readonly bool $onPlainRead = false,
     ) {}
 
     public function findByUuid(string $uuid): ?Employee
     {
-        return $this->inner->findByUuid($uuid);
+        $employee = $this->inner->findByUuid($uuid);
+
+        if ($this->onPlainRead) {
+            $this->afterReadOf($uuid);
+        }
+
+        return $employee;
     }
 
     /**
@@ -63,7 +75,9 @@ final class InterleavingEmployeeRepository implements EmployeeRepository
     {
         $employee = $this->inner->findForUpdate($uuid);
 
-        $this->afterReadOf($uuid);
+        if (! $this->onPlainRead) {
+            $this->afterReadOf($uuid);
+        }
 
         return $employee;
     }
