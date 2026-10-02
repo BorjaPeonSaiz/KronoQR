@@ -1333,6 +1333,19 @@ export interface paths {
          *     es el caso normal, y los tramos que la persona fichara despues de esa
          *     fecha se conservan tal cual (regla dura 5).
          *
+         *     **Una contratacion que no llego a empezar** (fecha de alta posterior a
+         *     hoy) solo admite como fecha de cese **la propia fecha de alta**: es una
+         *     baja sin efectos, porque la persona nunca llego a trabajar. Cualquier
+         *     otra fecha da `422` en `terminated_at` y el mensaje dice cual es la
+         *     admitida.
+         *
+         *     **Sin centro configurado no hay baja** (`409`): «hoy» se resuelve con la
+         *     zona del centro y nunca cae a UTC.
+         *
+         *     **Tras la baja, los dias trabajados hasta el cese se completan a mano**
+         *     con `POST /api/v1/shift-entries` (RF-PA-04), siempre que la jornada este
+         *     entre la fecha de alta y la de cese.
+         *
          *     **No hay baja programada en esta version**: un fin de contrato futuro
          *     se registra el ultimo dia, al terminar el turno. Es de la 2.3.0.
          *
@@ -2285,6 +2298,16 @@ export interface paths {
          *     navegador). Un registro horario anota lo que ya ha ocurrido: rellenar la
          *     jornada teorica por adelantado o cerrar un turno con la salida
          *     «prevista» da `422` con el error colgado del campo.
+         *
+         *     **Quien puede recibir un tramo** (RN-14, 2.2.0). Una persona en alta,
+         *     como hasta ahora; y una persona **dada de baja** si `work_date` esta
+         *     entre su fecha de alta y su fecha de cese, ambas incluidas: es como se
+         *     completan los dias trabajados que no constaron —un olvido de los
+         *     ultimos dias, un fichaje de la cola offline que llego despues de la
+         *     baja—. Una jornada posterior al cese o anterior al alta de una persona
+         *     de baja da `422` en `work_date`. Una persona suspendida, o que no
+         *     existe, da `422` en `employee_uuid`, como hasta ahora. El escaneo del
+         *     quiosco no cambia: una persona de baja no ficha.
          */
         post: operations["addShiftEntry"];
         delete?: never;
@@ -6575,9 +6598,10 @@ export interface components {
              * @description Fecha de cese, **nunca anterior a la de alta ni posterior a hoy**
              *     (RN-14). «Hoy» es la fecha civil del centro (`Site.timezone`) en el
              *     momento en que el servidor recibe la peticion; una fecha futura
-             *     responde `422` en este campo. Hoy mismo se admite. Es el dato desde
-             *     el que cuenta la retencion de RL-02. La baja es efectiva al
-             *     registrarla, no en esta fecha.
+             *     responde `422` en este campo. Hoy mismo se admite. Si la fecha de
+             *     alta es posterior a hoy, la unica admitida es la propia fecha de
+             *     alta. Es el dato desde el que cuenta la retencion de RL-02. La baja
+             *     es efectiva al registrarla, no en esta fecha.
              */
             terminated_at: string;
             /**
@@ -14162,9 +14186,12 @@ export interface operations {
              *     **`type` distingue las dos causas:**
              *
              *     - `urn:kronoqr:problem:validation-failed` — un campo falta, no vale,
-             *       referencia algo que no existe, o la jornada o alguna de las dos
+             *       referencia algo que no existe, la jornada o alguna de las dos
              *       marcas es **futura** (F1): mas alla del momento del servidor mas el
-             *       margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`.
+             *       margen `ATTENDANCE_FUTURE_TOLERANCE_MINUTES`, o la persona esta de
+             *       baja y `work_date` cae **fuera de su periodo de empleo** —despues
+             *       de la fecha de cese o antes de la de alta— (RN-14), en
+             *       `errors.work_date`.
              *     - `urn:kronoqr:problem:correction-would-change-work-date` — la hora de
              *       entrada llevaria la jornada a **otro dia civil** (RN-05, ADR-035).
              *       Es `422` y no `409` porque no hay nada que releer: mover horas de un
