@@ -383,7 +383,7 @@ Resultado esperado: `make quality` en verde en el estado limpio, y **rojo** en a
 | **Precondiciones** | Derivada, no literal (§11.3 no incluye 0.4): **0.3**, porque la etapa ① ejecuta las herramientas que 0.3 configura |
 | **Bloquea a** | No figura en el camino crítico del §11.3. Derivado: **0.7**, cuya etapa ③b se añade a este pipeline |
 
-**Objetivo.** Cada *push* dispara las etapas ① Lint + Tipos, ② Arquitectura y ③ Unitarias + Mutación, y devuelve resultado en **menos de 4 minutos**.
+**Objetivo.** Cada *push* dispara las etapas ① Lint + Tipos, ② Arquitectura y ③ Unitarias + Mutación, y devuelve resultado en **menos de 15 minutos** (el objetivo inicial de 4 minutos no se cumplió en ninguna medición y el doc 02 §10.1 lo sustituyó por el medido el 02-10-2026).
 
 **Reglas duras aplicables.**
 
@@ -428,7 +428,7 @@ git commit -am "test: violación deliberada de frontera" && git push
 #    la CI debe fallar en la etapa ① (ShellCheck)
 ```
 
-Resultado esperado: las tres etapas en verde sobre `main` limpio, en menos de 4 minutos acumulados, y rojo en cada sabotaje **en la etapa que le corresponde**. Si un sabotaje de arquitectura falla en la etapa ①, las etapas están mal repartidas.
+Resultado esperado: las tres etapas en verde sobre `main` limpio, dentro del presupuesto del doc 02 §10.1, y rojo en cada sabotaje **en la etapa que le corresponde**. Si un sabotaje de arquitectura falla en la etapa ①, las etapas están mal repartidas.
 
 **Terminado cuando** (subconjunto de §10.3):
 

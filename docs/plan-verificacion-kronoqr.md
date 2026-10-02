@@ -114,7 +114,7 @@
 
 - [ ] **Backend:** `make quality` en verde (Pint, PHPStan 9, Deptrac, Rector dry-run), y cada `@phpstan-ignore` lleva su justificación.
   - 🤖 `backend-laravel` · Opus 5.5
-- [ ] **Cadena de calidad en CI:** está en la etapa ① del pipeline y las etapas 1–3 tardan menos de 4 minutos.
+- [ ] **Cadena de calidad en CI:** está en la etapa ① del pipeline y las etapas 1–3 tardan menos de 15 minutos (doc 02 §10.1).
   - 🤖 `devops-observabilidad` · Sonnet 5
 - [ ] **Scripts de infraestructura:** ShellCheck sin hallazgos y `shfmt -i 2` en `infra/scripts/`.
   - 🤖 `devops-observabilidad` · Sonnet 5

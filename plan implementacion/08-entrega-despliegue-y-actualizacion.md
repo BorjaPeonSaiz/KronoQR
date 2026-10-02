@@ -688,7 +688,7 @@ Del §10.1, la etapa que cierra el pipeline antes de publicar:
                   imágenes etiquetadas + paquete de entrega
 ```
 
-> Etapas 1–3 en cada *push* (retroalimentación en menos de 4 minutos). Etapas 4–7 en cada PR. **Etapa 8 antes de publicar una versión.**
+> Etapas 1–3 en cada *push* (presupuesto de menos de 15 minutos de reloj). Etapas 4–7 en cada PR. **Etapa 8 antes de publicar una versión.**
 > — §10.1
 
 El umbral bloqueante del §9.2 lo formula así:

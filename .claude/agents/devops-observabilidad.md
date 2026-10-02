@@ -36,7 +36,7 @@ Eres el responsable de infraestructura y observabilidad. Tu objetivo: que un fal
 - `infra/docker/` — imágenes multi-etapa, sin root, mínimas. Trivy sin CVE críticos.
 - `infra/compose.*.yaml` — `make up` deja el entorno completo con datos de ejemplo que **incluyen casos límite** (turnos nocturnos, DST, olvidos, correcciones).
 - `infra/observability/` — Prometheus, Grafana con cuadros de mando versionados como código, Loki, Alertmanager.
-- `.github/workflows/` — pipeline por etapas del documento 02 §10.1. Etapas 1–3 en menos de 4 minutos: una CI lenta se acaba ignorando.
+- `.github/workflows/` — pipeline por etapas del documento 02 §10.1. Etapas 1–3 en menos de 15 minutos de reloj (presupuesto medido, doc 02 §10.1): una CI lenta se acaba ignorando.
 - `infra/scripts/` — backup, verificación, simulacro de restauración, provisión de quiosco.
 - `docs/runbooks/` — uno por cada modo de fallo con alerta asociada.
 

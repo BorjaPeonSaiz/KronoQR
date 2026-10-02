@@ -340,7 +340,7 @@ Entregable esperado:
 - Los 8 módulos creados con su estructura hexagonal y sus service providers
 - Cadena de calidad: Pint, PHPStan nivel 9, Deptrac con las reglas de
   dependencia del documento 02 §1.6 y las tres aristas de ADR-025, Pest, Rector
-- Pipeline de CI con las etapas 1 a 3 en verde y por debajo de 4 minutos
+- Pipeline de CI con las etapas 1 a 3 en verde y dentro del presupuesto del documento 02 §10.1
 - Los tres frontends con TypeScript estricto, Tailwind 4 y Vitest
 - ADR-001 a ADR-020 escritos en docs/adr/ a partir de la tabla del documento
   02 §4; ADR-021 a ADR-028 ya existen y solo se revisan. Al terminar,

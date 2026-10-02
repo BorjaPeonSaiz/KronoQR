@@ -191,7 +191,7 @@ Y del §10.1, que reparte las puertas de calidad:
 
 | Cuándo | Etapas de la CI | Tiempo objetivo |
 |---|---|---|
-| **Cada push** | ① Lint + tipos · ② Arquitectura · ③ Unitarias + mutación · ③b Trazabilidad | Retroalimentación en **menos de 4 minutos** |
+| **Cada push** | ① Lint + tipos · ② Arquitectura · ③ Unitarias + mutación · ③b Trazabilidad | Retroalimentación en **menos de 15 minutos** (medido el 02-10-2026, doc 02 §10.1; el objetivo inicial eran 4) |
 | **Cada Pull Request** | ④ Integración + Feature · ⑤ Seguridad · ⑥ Frontend · ⑦ E2E | ~12 min |
 | **Antes de publicar versión** | ⑧ Instalación limpia + actualización desde versión anterior | ~4 min |
 
