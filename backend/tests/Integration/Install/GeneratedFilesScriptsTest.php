@@ -97,16 +97,17 @@ function ficherosGeneradosListado(string $dir): array
  */
 
 /*
- * `install` de verdad no puede dar el dueño 1000 si las pruebas no corren como
- * root o como el uid 1000 (el runner de la CI es el 1001). El sustituto anota
- * con que argumentos se le llamo —que es la decision del script— y crea el
- * directorio sin dueño, como haria el `install -d -m 0750` de reserva.
+ * Las pruebas no corren como root (el runner de la CI es el 1001), asi que el
+ * camino de root de `kq_ensure_app_dir` se ejercita sustituyendo `id` y
+ * `setpriv`: el sustituto anota con que credenciales y que orden se le pide
+ * —que es la decision del script— y la ejecuta como el usuario de la prueba.
  */
 const GENERATED_FILES_SCRIPTS_INSTALL_ANOTADO = <<<'BASH'
-    install() { local IFS=' '; printf '%s\n' "$*" >>"${ANOTACIONES}"; command install -d -m 0750 "${@: -1}"; }
+    id() { echo 0; }
+    setpriv() { local IFS=' '; printf '%s\n' "$*" >>"${ANOTACIONES}"; shift 3; "$@"; }
     BASH;
 
-it('install.sh crea reports y reports/retention con 1000:1000 y 0750, el padre primero', function (): void {
+it('install.sh crea reports y reports/retention como uid 1000 y en 0750, el padre primero', function (): void {
     $dir = ficherosGeneradosDirectorio('install-retencion');
     mkdir($dir.'/copias', 0o750);
 
@@ -117,8 +118,8 @@ it('install.sh crea reports y reports/retention con 1000:1000 y 0750, el padre p
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
         ->and(file($dir.'/install.log', FILE_IGNORE_NEW_LINES))->toBe([
-            '-d -o 1000 -g 1000 -m 0750 '.$dir.'/copias/reports',
-            '-d -o 1000 -g 1000 -m 0750 '.$dir.'/copias/reports/retention',
+            '--reuid=1000 --regid=1000 --clear-groups mkdir -m 0750 -- '.$dir.'/copias/reports',
+            '--reuid=1000 --regid=1000 --clear-groups mkdir -m 0750 -- '.$dir.'/copias/reports/retention',
         ])
         ->and(ficherosGeneradosModo($dir.'/copias/reports'))->toBe('750')
         ->and(ficherosGeneradosModo($dir.'/copias/reports/retention'))->toBe('750');
@@ -184,11 +185,45 @@ it('install.sh avisa y sigue si no puede crear la carpeta de informes, sin nada 
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
         ->and($proceso->getOutput())->toContain('No se ha podido crear '.$dir.'/copias/reports')
-        ->and($proceso->getOutput())->toContain('sudo install -d -o 1000 -g 1000 -m 0750 '.$dir.'/copias/reports/retention')
+        ->and($proceso->getOutput())->toContain($dir.'/copias/reports/retention')
         ->and($proceso->getOutput())->toContain('@@ deshacer=0');
 
     ficherosGeneradosBorrar($dir);
 })->group('RF-PD-02', 'RF-PR-03');
+
+/*
+ * Un enlace plantado por el runtime bajo BACKUP_PATH (que es del uid 1000):
+ * aunque apunte a un directorio valido, ni install.sh ni update.sh lo siguen.
+ * Antes, root creaba `retention` (1000:1000) alli donde apuntara `reports`.
+ */
+dataset('enlaces plantados bajo BACKUP_PATH', [
+    'reports es un enlace' => [static fn (string $dir): bool => symlink($dir.'/objetivo', $dir.'/copias/reports')],
+    'reports/retention es un enlace' => [static function (string $dir): void {
+        mkdir($dir.'/copias/reports', 0o750);
+        symlink($dir.'/objetivo', $dir.'/copias/reports/retention');
+    }],
+]);
+
+it('install.sh no sigue un enlace plantado en reports: avisa, sigue y el objetivo no gana nada', function (Closure $plantar): void {
+    $dir = ficherosGeneradosDirectorio('install-enlace');
+    mkdir($dir.'/copias', 0o750);
+    mkdir($dir.'/objetivo', 0o755);
+    $plantar($dir);
+
+    $proceso = ficherosGeneradosBash('install.sh', GENERATED_FILES_SCRIPTS_INSTALL_ANOTADO.'; kq_msg_init es; '
+        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; estado=0; ensure_retention_reports_directory || estado=$?; '
+        .'echo "@@ estado=${estado} deshacer=${#ROLLBACK_STACK[@]}"',
+        ['ANOTACIONES' => $dir.'/install.log'],
+    );
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('[aviso]')
+        ->and($proceso->getOutput())->toContain('No se ha podido crear')
+        ->and($proceso->getOutput())->toContain('@@ estado=0 deshacer=0')
+        ->and(ficherosGeneradosListado($dir.'/objetivo'))->toBe([]);
+
+    ficherosGeneradosBorrar($dir);
+})->with('enlaces plantados bajo BACKUP_PATH')->group('RF-PD-02', 'RF-PR-03');
 
 /*
  * ---------------------------------------------------------------------------
@@ -496,6 +531,44 @@ it('update.sh avisa y sigue si no puede crear la carpeta de destino', function (
     ficherosGeneradosBorrar($dir);
 })->group('RF-PD-10', 'RF-PR-03');
 
+it('update.sh no sigue un enlace plantado en reports: no rescata, avisa y sigue, y el objetivo no gana nada', function (Closure $plantar): void {
+    $dir = ficherosGeneradosDirectorio('update-enlace');
+    mkdir($dir.'/copias', 0o750);
+    mkdir($dir.'/objetivo', 0o755);
+    $plantar($dir);
+    ficherosGeneradosInforme($dir, 'scheduler', 'retencion-propuesta-20260105-054000.txt', 'no deberia salir');
+
+    ['proceso' => $proceso] = ficherosGeneradosRescate($dir);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('@@ salida=0')
+        ->and($proceso->getOutput())->toContain('No se ha podido crear '.$dir.'/copias/reports/retention')
+        ->and((string) file_get_contents($dir.'/anotaciones.log'))->toBe('')
+        ->and(ficherosGeneradosListado($dir.'/objetivo'))->toBe([]);
+
+    ficherosGeneradosBorrar($dir);
+})->with('enlaces plantados bajo BACKUP_PATH')->group('RF-PD-10', 'RF-PR-03');
+
+it('update.sh no abre su informe a traves de un reports plantado como enlace', function (): void {
+    $dir = ficherosGeneradosDirectorio('update-informe-enlace');
+    mkdir($dir.'/copias', 0o750);
+    mkdir($dir.'/objetivo', 0o755);
+    mkdir($dir.'/tmp', 0o700);
+    symlink($dir.'/objetivo', $dir.'/copias/reports');
+
+    $proceso = ficherosGeneradosBash('update.sh', 'kq_msg_init es; '
+        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; STARTED_UTC=20261002T020000Z; '
+        .'SOURCE_VERSION=2.1.0; TARGET_VERSION=2.2.0; CURRENT_DIR=/srv/a; PACKAGE_DIR=/srv/b; '
+        .'estado=0; open_report || estado=$?; echo "@@ abierto=${estado}"; publish_reports || true',
+        ['TMPDIR' => $dir.'/tmp'],
+    );
+
+    expect($proceso->getOutput())->not->toContain('@@ abierto=0')
+        ->and(ficherosGeneradosListado($dir.'/objetivo'))->toBe([]);
+
+    ficherosGeneradosBorrar($dir);
+})->group('RF-PD-10');
+
 it('update.sh rescata con los trabajadores ya parados y antes de recrear ningun contenedor', function (): void {
     // Antes de parar, scheduler podria escribir una propuesta durante la copia;
     // despues del paso 5, los contenedores con los informes ya no existen.
@@ -521,6 +594,47 @@ it('update.sh rescata con los trabajadores ya parados y antes de recrear ningun 
  * con el modo de la mascara y, como root, a traves de `setpriv` con el uid 1000.
  * ---------------------------------------------------------------------------
  */
+
+it('kq_ensure_app_dir responde segun lo que encuentra en la ruta', function (Closure $preparar, string $esperado): void {
+    $dir = ficherosGeneradosDirectorio('asegurar');
+    mkdir($dir.'/objetivo', 0o755);
+    $fragmento = $preparar($dir);
+
+    $proceso = ficherosGeneradosBash('lib/fs.sh', $fragmento.' estado=0; kq_ensure_app_dir '.escapeshellarg($dir.'/carpeta')
+        .' || estado=$?; echo "@@ ${estado} creado=${KQ_DIR_CREATED}"');
+
+    expect($proceso->getOutput())->toContain('@@ '.$esperado)
+        ->and(ficherosGeneradosListado($dir.'/objetivo'))->toBe([]);
+
+    ficherosGeneradosBorrar($dir);
+})->with([
+    'no existe: la crea' => [static fn (string $dir): string => '', '0 creado=1'],
+    'ya es un directorio' => [static function (string $dir): string {
+        mkdir($dir.'/carpeta');
+
+        return '';
+    }, '0 creado=0'],
+    'es un enlace a un directorio' => [static function (string $dir): string {
+        symlink($dir.'/objetivo', $dir.'/carpeta');
+
+        return '';
+    }, '3 creado=0'],
+    'es un enlace colgante' => [static function (string $dir): string {
+        symlink($dir.'/objetivo/nada', $dir.'/carpeta');
+
+        return '';
+    }, '3 creado=0'],
+    'es un fichero' => [static function (string $dir): string {
+        file_put_contents($dir.'/carpeta', 'x');
+
+        return '';
+    }, '3 creado=0'],
+    'como root y sin setpriv' => [static fn (string $dir): string => 'id() { echo 0; }; PATH=/sin-herramientas;', '2 creado=0'],
+    'un enlace aparece entre crear y comprobar' => [
+        static fn (string $dir): string => 'mkdir() { ln -s '.escapeshellarg($dir.'/objetivo').' "${@: -1}"; };',
+        '3 creado=0',
+    ],
+])->group('RF-PD-02', 'RF-PD-10');
 
 it('kq_publish_as_app crea el fichero con el modo de la mascara', function (string $mascara, string $modo): void {
     $dir = ficherosGeneradosDirectorio('publicar');
