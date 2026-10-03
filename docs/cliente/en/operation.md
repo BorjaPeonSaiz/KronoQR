@@ -729,6 +729,9 @@ stopped running):
 | `QuioscoSinLatido` | > 10 min without a heartbeat | Critical | IT | [`quiosco-no-responde.md`](../../runbooks/quiosco-no-responde.md) (in Spanish) | Check whether the tablet powers on and has network; if it does, wait for one heartbeat; if not, attend to it in person |
 | `ColaOfflineAtascada` | A device's queue > 50 items | High | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish) | Check `kiosk:health`: nothing is lost, but do not unpair that tablet yet |
 | `ColaOfflineSinVaciar` | The queue has not dropped to 0 in 2 h | High | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish) | Same: check the network or the certificate at that point |
+| `KioskQueueStorageDegraded` | The tablet has lost the storage for its queue, `for: 10m` | High | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded) (in Spanish) | Whatever is clocked now **is lost if the tablet restarts**: reload the app or free up space on the tablet. **Do not restart it** while it may hold clock-ins only in memory. Meanwhile the two queue alerts above stay silent: there is no size to measure (§16.3 bis) |
+| `KioskUnreportedDiscards` | Discarded clock-ins not yet reported to the server, `for: 30m` | Medium | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#8-descartes-sin-avisar-kioskunreporteddiscards) (in Spanish) | Check that tablet's network and its app version. Until it reports them, HR does not see the "Clocking discarded by the kiosk" incident ([`hr-guide.md`](hr-guide.md) §4.7) |
+| `ScanBatchItemNotProcessed` | 3 or more batch items not processed in 30 min on the same kiosk, `for: 5m` | Medium | IT | [`cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) (in Spanish) | One clock-in from that tablet has gone several syncs without the server managing to process it, and **the others from that kiosk wait behind it**: they are not lost, but they do not reach the record. Fix the cause on the server (look for `attendance.batch_scan_failed` in the `app` log). **Never clear the tablet's queue or unpair it** (§16.3 bis) |
 | `ErroresDeServidorEnElFichaje` | > 1 % of `5xx` on `/api/v1/scan*`, 5 min | Critical | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | `product:doctor` first: the database and disk are the most frequent cause |
 | `LatenciaDelFichajeAlta` | p95 of clock-ins > 500 ms, 10 min | High | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | Check whether it coincides with the shift change or with a recent update |
 | `SondaDelBordeFallida` | The server is not responding, `for: 5m` | Critical | IT | [`errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md) (in Spanish) | `docker compose ps` and the `postgres`/`redis` logs, before the panel |
@@ -1001,6 +1004,74 @@ with a termination date later than the day you updated to 2.2.0. Hand the list
 to HR: they should fill in the days those people did work and know how to read
 the days with no activity in those reports. Nothing else needs doing in the
 system.
+
+**When updating to 2.2.0: the kiosk privacy notice is configured from the
+panel.** The data protection notice the tablet shows when clocking (GDPR art.
+13) names the data controller and links to the full policy. Up to 2.1.0 those
+two items could only be set when building the tablet app, so in practice the
+generic text was shown. From 2.2.0 they are set in Panel → **Branding** →
+"Kiosk privacy notice", without touching the server
+([`configuration.md`](configuration.md) §2.2). Worth knowing:
+
+- **Nothing visible changes after updating**: both fields start empty and the
+  notice keeps its generic wording ("the company operating this workplace",
+  "the full policy is available at the front desk"). The notice **never
+  disappears**.
+- **Hand the task to whoever handles data protection**: ask them for the exact
+  legal name and the `https://` address of the policy approved for the staff,
+  and enter them yourself. With an address, the tablet also shows a QR code to
+  open it on a phone.
+- **The tablets pick it up** when the clocking screen loads or when the network
+  comes back; a tablet with an app older than 2.2.0 keeps the generic one until
+  it is updated (below, "the tablets").
+
+**When updating to 2.2.0: three incidents HR has never seen before.** They show
+up in the inbox without anything to switch on; HR has the explanation of each in
+[`hr-guide.md`](hr-guide.md) §4.1:
+
+- **"Clocking before the credential was withdrawn"** (§4.6 of that guide): a
+  card that was valid when it was scanned and reached the server after it had
+  been withdrawn —typically, the last day of someone who left while the tablet
+  was offline—. **The clocking is not recorded**; HR completes that day by
+  hand.
+- **"Clocking discarded by the kiosk"** (§4.7): the tablet sent a clocking the
+  server did not accept as valid, set it aside and reported it. **It is not
+  recorded**; HR reviews it and corrects it by hand. If it repeats on one
+  tablet, that tablet's app is out of date: update it.
+- **"PIN clocking not recorded"**: a PIN clocking attempt that was not accepted
+  and that the person did not repeat.
+
+**The incidents open from what arrives after the update**, not over history:
+what happened before is not reprocessed. **What does not change**: a late PIN
+clocking from a person who has already left **still opens no incident**, so HR
+still has to check by hand the last day of offboardings recorded while any
+tablet was offline.
+
+**When updating to 2.2.0: the tablets, after the server and with the queue
+empty.** 2.2.0 changes **how the tablet app empties its queue** (§16.3 bis): it
+records clock-ins strictly in order and, if the server rejects one as invalid,
+it keeps it aside and reports it instead of simply dropping it. **That is done
+by the new app, not by the server**: a tablet still running the 2.1.0 app
+against a 2.2.0 server does not have that safety net. So, in this order:
+
+1. **Before you start**, check in Panel → **Kiosks** that the "Pending" column
+   is at zero on every tablet you can, or that they at least have network. It is
+   not mandatory —2.2.0 is built to accept what 2.1.0 tablets send—, but the
+   less there is in flight during the change, the less there is to review
+   afterwards.
+2. **Update the server** as usual (above).
+3. **Move the tablets to 2.2.0 the same day, not weeks later.** The simplest
+   way is to let them do it themselves: set `KIOSK_UPDATE_WINDOW` to a slot
+   that starts now (§11.1); each tablet reloads itself as soon as its queue is
+   empty and nobody has clocked in the last few minutes, which is exactly the
+   safe condition. **Put the window back** once they are all up to date. If you
+   prefer to do it by hand on a particular tablet, leave kiosk mode with the IT
+   PIN and reload the app **only when its "Pending" is at zero**.
+4. **Check it** in the "Application version" column of **Kiosks**, or with
+   `docker compose exec app php artisan kiosk:health`.
+
+**Never clear the app's data or unpair a tablet to "force" the update**: its
+queue lives there, and the clock-ins it has not sent yet would go with it.
 
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
@@ -1639,7 +1710,7 @@ screen.
 | **Name and status** | The name the tablet was paired with, and whether it is still paired or has been unpaired | An unpaired kiosk stays in the list with its history: the replacement tablet is paired **with the same name** to keep it |
 | **Application version** | The version of the PWA that tablet has loaded | If a tablet falls behind after an update, you see it here. It catches up when the PWA is reloaded |
 | **Last contact** | The instant of the last heartbeat, **in the site's time zone**, and how old it is ("40 s ago") | The heartbeat arrives **every 60 seconds**. The age is measured against the **server's clock**, which travels in the response, never against the clock of the computer you are looking from: a panel with the wrong time does not invent dead kiosks |
-| **Pending** | How many clock-ins the tablet holds in its local queue without sending, and **how old the oldest one is** | "37 pending, the oldest 3 h ago" is a tablet that has been without network for three hours, not an error. The clock-ins are safe as long as the tablet is not unpaired and its site data is not cleared |
+| **Pending** | How many clock-ins the tablet holds in its local queue without sending, and **how old the oldest one is**. From 2.2.0, also **"Unknown"** when the tablet has lost the storage for its queue, and **how many discards it has not yet reported** to the server | "37 pending, the oldest 3 h ago" is a tablet that has been without network for three hours, not an error. The clock-ins are safe as long as the tablet is not unpaired and its site data is not cleared. **"Unknown" is not zero**: read §16.3 bis before touching that tablet |
 | **Battery** | The level and whether it is charging; **"not reported"** when the tablet does not publish the figure | Only Chrome on Android offers the battery level to the browser: a tablet that does not report it **is not faulty**, it simply does not tell. One that is draining **while not charging** is almost always an unplugged charger |
 | **Status** | The **verdict** (up to date, warning, failure, unpaired) and **its reason** | It is never told apart by colour alone: every row carries its text and its icon (§16.2) |
 
@@ -1663,11 +1734,14 @@ at the same time.
 | **Warning** | *Awaiting the first heartbeat* | Just paired and not talking yet. It resolves itself within a minute |
 | **Failure** | *No signal* | More than `KIOSK_HEALTH_SILENT_AFTER_SECONDS` (600 s, 10 minutes) without a heartbeat |
 | **Failure** | *Never seen* | Paired more than ten minutes ago and not one heartbeat |
+| **Failure** | *Queue in memory only* | The tablet **has lost the storage for its queue** and keeps clock-ins in memory, or has nowhere to keep them. It keeps clocking, but whatever it queues **is lost if it restarts**, and the number pending is "Unknown". From 2.2.0; see §16.3 bis |
+| **Warning** | *Unreported discards* | The tablet set aside clock-ins the server did not accept as valid and **has not yet managed to report them**: until it does, HR does not see them. From 2.2.0; see §16.3 bis |
 | **Unpaired** | *Unpaired* | No longer a source of clock-ins. It counts for no alert |
 
 When there is more than one reason, the row shows **the most serious one**, in
-this order: unpaired, never seen, no signal, late heartbeat, low battery,
-pending clock-ins, beating.
+this order: unpaired, never seen, awaiting the first heartbeat, no signal,
+queue in memory only, late heartbeat, unreported discards, low battery, pending
+clock-ins, beating.
 
 The legend at the foot of the screen **states your installation's real
 thresholds**, not assumed ones: if you change one, the legend changes with it.
@@ -1693,6 +1767,68 @@ The hours of whoever could not clock in are corrected afterwards from the panel
 with the reason `FALLO_TECNICO_QUIOSCO`, by asking the person. **A time is
 never invented.**
 
+### 16.3 bis The tablet's queue: in order, and what you see when something does not add up
+
+When the tablet gets its network back, it sends its queue **in the order the
+clock-ins happened**, and from 2.2.0 it keeps to that strictly: **a clock-in is
+not recorded while an earlier one from the same tablet is still waiting for the
+server's answer**. It is not a whim: the 07:00 clock-in and the 15:00 clock-out
+of the same person have to arrive in that order, or the clock-out would be
+taken for a clock-in.
+
+**If one gets stuck, the others wait behind it. They are not lost.** If the
+server cannot process a clock-in at that moment —it is starting up, the
+database is slow—, the tablet retries it later, and everything that came after
+it stays in the queue until it goes through. This applies to the whole tablet,
+not per person: without network the tablet does not know whose each card is,
+so it cannot let some through and hold others. In the panel it shows as
+**"Pending clock-ins"** with the oldest stuck at the same time, and if the server
+fails again and again on the same clock-in, `ScanBatchItemNotProcessed` fires
+(§10.4). It is a server fault, not a tablet fault: **do not clear the
+tablet's queue**, fix the cause on the server and follow
+[`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md)
+(in Spanish). A clock-in the server **rejects** —a revoked card, one that does
+not fit the working day ("Out-of-order clocking", [`hr-guide.md`](hr-guide.md)
+§4.4)— holds nothing up: it has an answer, and the queue moves on.
+
+**Two new situations on the "Kiosks" screen** (from 2.2.0):
+
+- **"Pending: Unknown"**, with the verdict at **failure**. The tablet **has lost
+  its storage** —the browser's, where it keeps the queue— and has switched to
+  keeping it in memory. It keeps accepting cards, but it does not know how many
+  clock-ins were left on disk, and so it does not make up a zero. Whatever is
+  clocked now **is lost if the tablet restarts or switches off**. What to do:
+  1. **Do not restart the tablet, reload the app or clear its data while it may
+     hold clock-ins only in memory**: any of the three wipes them. If there is
+     network, wait for it to sync; what it holds in memory is sent as usual.
+     The tablet also tries to recover its storage on its own every so often,
+     and if it succeeds it moves what it had in memory to disk and the row
+     shows a number again.
+  2. **Once it has nothing left to send** —check it on its diagnostic screen
+     (§16.5, "Queue" block)— and it still says "Unknown", **reload the app**
+     (leaving kiosk mode with the IT PIN).
+  3. If it does not come back, **free up space on the tablet** (downloads and
+     unrelated apps) and check that the browser is not in guest or private
+     mode. Reload again.
+  4. If it stays the same, replace the tablet
+     ([`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md),
+     in Spanish) **after** it has synced.
+
+  While it lasts the `KioskQueueStorageDegraded` alert fires (§10.4), and the
+  two stuck-queue alerts stay silent because there is no size to measure.
+- **"N discards not yet reported to the server"**, with the verdict at
+  **warning**. The tablet sent clock-ins the server **did not accept as
+  valid** —almost always, a tablet app older than the server after an
+  update—. So as not to hold up the queue it has set them aside, but it keeps
+  them and has to **report** them to the server, which is what opens the
+  "Clocking discarded by the kiosk" incident for HR
+  ([`hr-guide.md`](hr-guide.md) §4.7). Until the number drops to zero, HR does
+  not know about those clock-ins. What to do: check that the tablet has network
+  (the report goes out by itself as soon as it does), and **update its app** by
+  reloading it with the queue empty (§11, "the tablets"). **Do not unpair it or
+  clear its data**: those reports exist only on it. If it goes past 30 minutes
+  the `KioskUnreportedDiscards` alert fires (§10.4).
+
 ### 16.4 What to do when a row is not up to date
 
 **When —and only when— the verdict is not "up to date"**, the row carries a
@@ -1704,6 +1840,8 @@ summary:
 | --- | --- |
 | **Failure, no signal** | [`../../runbooks/quiosco-no-responde.md`](../../runbooks/quiosco-no-responde.md) (in Spanish) §2, which starts on this very screen |
 | **Warning, pending clock-ins** — the tablet **has network and still has clock-ins left to send** | [`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish). **Do not unpair that tablet**: you would lose the queue |
+| **Failure, queue in memory only** — "Pending: Unknown" | §16.3 bis and [`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish) §7. **Do not restart the tablet** until it has synced |
+| **Warning, unreported discards** | §16.3 bis and [`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md) (in Spanish) §8. Network first; then, update that tablet's app |
 | **Warning, low battery** | Go to the mounting point: unplugged charger, switched-off power strip or a broken cable |
 | **Warning, late heartbeat** | Nothing yet. If it does not return to "up to date" within ten minutes it becomes a failure and the alert fires |
 | **The tablet went back to the pairing screen on its own** | Someone unpaired it, or it went more than about 18 days without a heartbeat and its token expired before it could be renewed (§18): [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) (in Spanish) §6 |
@@ -1777,7 +1915,7 @@ is refused with a 403 (§12.4). The code is yours, like the compliance profile.
 | --- | --- |
 | **Camera** | Permission, chosen camera, real resolution, focus and zoom. **It warns without blocking** if the background comes out blurred, if focus is not continuous or if the resolution is below 1280×720: the three causes of "the code will not read" |
 | **Network** | Whether there is a connection, whether the server responds, when the last correct heartbeat was and **the tablet's clock skew** in seconds, with its sign. The screen sends a heartbeat as soon as it opens and keeps beating while it is open, so "server reachable" is a **live** signal, not the memory of the last heartbeat |
-| **Queue** | Pending clock-ins, how old the oldest is, whether the tablet's storage is durable and whether it is syncing right now |
+| **Queue** | Pending clock-ins, how old the oldest is, whether the tablet's storage is durable and whether it is syncing right now. From 2.2.0, also **how many discarded clock-ins it has not yet reported** to the server (§16.3 bis) |
 | **Roster** | How old the local copy of the workforce is and how many entries it has |
 | **Token** | Whether the tablet is paired, when its credential expires, its device identifier and the kiosk name. **The token is never shown**: only eight characters of its fingerprint, so you can compare it with the panel |
 | **Version** | The version of the PWA and the state of its update: "up to date" or "update pending: it will be applied in the HH:MM–HH:MM window", with the window in force (§11.1) |

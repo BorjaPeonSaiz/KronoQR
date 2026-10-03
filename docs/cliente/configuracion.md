@@ -202,6 +202,8 @@ una versión esperando— está en [`operacion.md`](operacion.md) §11.1.
 | `BRANDING_APP_NAME` | `KronoQR` | Nombre de la aplicación. Hasta 60 caracteres: es lo que cabe en la cabecera de la tarjeta impresa. |
 | `BRANDING_LOGO_PATH` | *(vacío)* | Ruta **absoluta en el servidor** a un PNG o un SVG. Vacío significa «el logotipo del producto», no «sin logotipo». |
 | `BRANDING_ACCENT_COLOR` | `#b8542a` | Color de acento, en notación `#rrggbb`. Cualquier otra forma se rechaza. Un color que no llega a 4,5:1 sobre el fondo claro del panel se guarda solo si lo confirmas (ver abajo). |
+| `PRIVACY_CONTROLLER_NAME` | *(vacío)* | **Responsable del tratamiento** que nombra el aviso de privacidad de la tablet: la razón social de tu empresa. Hasta 160 caracteres, en una sola línea. Vacío significa «el texto genérico», no «sin aviso». Desde la 2.2.0; ver «El aviso de privacidad del quiosco», más abajo. |
+| `PRIVACY_POLICY_URL` | *(vacío)* | Dirección de la **política de privacidad completa** que enlaza ese aviso. Empieza por `http://` o `https://`, hasta 512 caracteres. Vacío significa «la política está disponible en recepción». Desde la 2.2.0. |
 
 **Dónde se ve.** En la cabecera y en el título de pestaña del panel, del portal y
 del quiosco; en la pantalla de acceso de los tres; en la tarjeta de credencial
@@ -287,6 +289,74 @@ curl -sS -X PATCH https://TU-SERVIDOR/api/v1/settings \
   -H 'Content-Type: application/json' \
   -d '{"settings":{"BRANDING_LOGO_PATH":""}}'
 ```
+
+#### El aviso de privacidad del quiosco
+
+La tablet enseña, en la propia pantalla de fichaje, un **aviso de protección de
+datos**: quién trata el dato, para qué, con qué base, cuánto se conserva, qué
+derechos hay y dónde está la política completa. Es la primera capa de la
+información que el **art. 13 del RGPD** obliga a dar a la persona antes de
+tratar su dato, en el sitio donde se trata; la segunda capa es tu política
+completa ([`obligaciones-legales.md`](obligaciones-legales.md)).
+
+Dos datos de ese aviso son tuyos y **los pones tú desde el panel**, sin tocar
+el servidor ni recompilar nada:
+
+1. Panel → **Marca** (`/branding`), rol administrador, bloque **«Aviso de
+   privacidad del quiosco»**.
+2. **«Responsable del tratamiento»**: la razón social de tu empresa, tal como
+   quieres que se lea («Hoteles Marina del Sur, S.L.»).
+3. **«URL de la política de privacidad»**: la dirección completa de tu política.
+4. **«Guardar la marca»**. El cambio queda en la auditoría como cualquier otro
+   ajuste, con autor, valor anterior y nuevo.
+
+Si prefieres la consola, es la misma petición que el resto de la marca:
+
+```bash
+curl -sS -X PATCH https://TU-SERVIDOR/api/v1/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"settings":{"PRIVACY_CONTROLLER_NAME":"Hoteles Marina del Sur, S.L.","PRIVACY_POLICY_URL":"https://www.tuhotel.example/privacidad-plantilla"}}'
+```
+
+**Qué se ve en la tablet en cada caso:**
+
+| Lo que has configurado | Lo que dice el aviso |
+| --- | --- |
+| Nada (lo de serie) | «Responsable: la empresa titular de este centro de trabajo» y «Política completa disponible en recepción». **El aviso nunca desaparece** por falta de configuración: sale con su redacción genérica |
+| Solo el responsable | Tu razón social como responsable, y la política «disponible en recepción» |
+| Solo la URL | El responsable genérico, y la dirección de tu política |
+| Los dos | Tu razón social y la dirección de tu política |
+
+**Con URL, el aviso lleva también un código QR** que la tablet genera en el
+momento, para que la persona abra la política en su móvil sin teclear la
+dirección. Sin URL no hay QR.
+
+**Qué URL poner.** La de la política que **tu DPO, o quien lleve la protección
+de datos en tu empresa, haya aprobado** para la plantilla: es la que tiene que
+coincidir con el cartel de recepción y con lo que se informó a la
+representación de los trabajadores. KronoQR no redacta ni revisa esa política;
+solo la enlaza. Y que sea **`https://`**: el panel admite `http://`, pero una
+política servida sin cifrar se puede suplantar por el camino, y es lo primero
+que preguntará quien la revise. Comprueba que la dirección **se abre desde un
+móvil fuera de la red del hotel**: la persona la leerá con sus datos, no con tu
+wifi.
+
+**Se comprueba al guardar.** Un responsable con salto de línea o de más de 160
+caracteres, o una dirección que no empiece por `http://` o `https://`, que
+lleve espacios o pase de 512 caracteres, **no se guarda**: el panel lo marca en
+el propio campo y el servidor responde `422` con la clave que falla.
+
+**Cuándo lo ve la tablet.** El quiosco guarda el aviso con el resto de la marca
+para poder enseñarlo **sin red**: sin conexión, muestra lo último que recibió;
+una tablet que nunca lo recibió muestra el genérico. Lo vuelve a pedir al
+cargar la pantalla de fichaje y al recuperar la conexión; para verlo en el
+acto, recarga la pantalla del quiosco. Comprueba lo que sirve el servidor con
+`curl -sS https://TU-SERVIDOR/api/v1/branding`: el bloque `privacy_notice` trae
+los dos valores (`null` cuando están vacíos).
+
+**Para volver al texto genérico**, guarda el campo vacío (o la cadena vacía por
+API, como con el logotipo).
 
 #### El aspecto propio es una funcionalidad del plan; el nombre no
 
@@ -1191,6 +1261,29 @@ que tenía.
    reemplazado el fichero y `curl` devuelve el mismo `logo_url` de antes, es que
    el contenido es idéntico.
 
+### …he puesto el responsable o la política y la tablet sigue con el aviso genérico
+
+1. Mira qué sirve el servidor, sin token:
+
+   ```bash
+   curl -sS https://TU-SERVIDOR/api/v1/branding
+   ```
+
+   Busca el bloque `privacy_notice`. Si `controller_name` o `policy_url` salen
+   `null`, el cambio **no se guardó**: vuelve a la pantalla **Marca** y mira si
+   el campo tiene un error marcado (sección 2.2, «El aviso de privacidad del
+   quiosco»).
+
+2. Si el servidor ya los devuelve, el problema es la copia guardada en la
+   tablet: la renueva al cargar la pantalla de fichaje y al recuperar la red.
+   Recarga la pantalla del quiosco. Una tablet sin red sigue enseñando lo último
+   que recibió, que es lo correcto: el aviso no se queda en blanco por estar
+   desconectada.
+
+3. Si la dirección sale en el aviso pero **no hay código QR**, comprueba que
+   empieza por `http://` o `https://`: es la única forma que la tablet convierte
+   en enlace y en QR.
+
 ### …cambio un valor y no se aplica
 
 No debería pasar: el cambio surte efecto en la petición siguiente, sin reiniciar
@@ -1554,6 +1647,8 @@ petición siguiente sin reiniciar nada:
 | `BRANDING_APP_NAME` | Panel → **Marca** (`/branding`) | Sección 2.2 |
 | `BRANDING_LOGO_PATH` | Panel → **Marca** (`/branding`) | Sección 2.2 |
 | `BRANDING_ACCENT_COLOR` | Panel → **Marca** (`/branding`) | Sección 2.2 |
+| `PRIVACY_CONTROLLER_NAME` | Panel → **Marca** (`/branding`) → «Aviso de privacidad del quiosco» | Sección 2.2 |
+| `PRIVACY_POLICY_URL` | Panel → **Marca** (`/branding`) → «Aviso de privacidad del quiosco» | Sección 2.2 |
 | `LOCALE_DEFAULT` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.3 |
 | `LOCALE_AVAILABLE` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.3 |
 | `KIOSK_SERVICE_CODE` | Panel → **Ajustes operativos** (`/settings`) | Sección 6.0, aquí mismo |

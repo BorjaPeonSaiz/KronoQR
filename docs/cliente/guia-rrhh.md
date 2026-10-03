@@ -293,11 +293,16 @@ resolver solo. Se llena sola cada madrugada, al revisar el registro.
 | **Sin pausa registrada** | Media | Un tramo continuo por encima del umbral del convenio | **Se abre solo si el hotel tiene activado el fichaje de pausa.** Sin él, el sistema no puede distinguir «no descansó» de «descansó y no lo fichó», y no avisa de ninguna |
 | **Fichaje fuera de orden** | Media | Llegó un fichaje que no cabe en el registro de esa persona: una **salida** con hora anterior a la entrada que ya estaba abierta, o una **entrada** que caería dentro o antes de un tramo ya cerrado —aunque el tramo sea de otra jornada, como después de un turno de noche— | Casi siempre, una tablet que estuvo sin red: su cola llegó con retraso y desordenada. **El fichaje queda guardado y señalado para revisión, y la jornada no cambia sola** (§4.4) |
 | **Patrón anómalo de uso de la credencial** | Alta | Dos tarjetas de dos personas distintas se pasan **en la misma tablet con segundos de diferencia varios días** (3 de serie), o la **misma tarjeta** se pasa en **dos tablets distintas** antes de lo que se tarda en ir de una a otra | Casi siempre, dos compañeros que entran juntos, o dos tablets demasiado cerca. **Es un indicio para que lo mire una persona, no una conclusión.** No cambia ningún fichaje y no lo ve nadie fuera de la bandeja (§4.5) |
+| **Fichaje por PIN no registrado** | Media | Alguien intentó fichar en la tablet con **el código de una persona que puede fichar** y el PIN no se aceptó —equivocado, sin PIN emitido o bloqueado por intentos—, y esa persona **no fichó por ninguna vía** en los 10 minutos siguientes | Casi siempre, un PIN mal tecleado y la persona se fue creyendo que había fichado. **El fichaje no está en el registro**: si trabajó, se completa a mano (§5). La tablet le mostró el mismo mensaje que a cualquier intento fallido, a propósito |
+| **Fichaje anterior a la retirada de la credencial** | Media | Llegó al servidor el fichaje de una **tarjeta auténtica que valía cuando se pasó**, pero que ya estaba retirada cuando llegó: por la baja de su titular, por reemisión o por pérdida | Casi siempre, **el último día de alguien que se dio de baja** con la tablet sin red. **El fichaje no se registró**: hay que completar ese día con una corrección (§4.6) |
+| **Fichaje descartado por el quiosco** | Media | La tablet envió un fichaje que **el servidor no aceptó como válido** y lo apartó de su cola, avisando de ello | Casi siempre, **una tablet con la aplicación desactualizada** después de actualizar el servidor. **El fichaje no se registró**: se revisa y se corrige a mano (§4.7) |
 
-> **El filtro «Tipo» enseña los nueve, y cuántos se abren solos depende de un
-> ajuste.** Siete lo hacen siempre —descanso insuficiente, turno abierto,
+> **El filtro «Tipo» enseña los doce, y cuántos se abren solos depende de un
+> ajuste.** Diez lo hacen siempre —descanso insuficiente, turno abierto,
 > jornada demasiado larga, jornada demasiado corta, desfase de reloj, fichaje
-> fuera de orden y patrón anómalo de uso de la credencial—, y **«Sin pausa
+> fuera de orden, patrón anómalo de uso de la credencial, fichaje por PIN no
+> registrado, fichaje anterior a la retirada de la credencial y fichaje
+> descartado por el quiosco—, y **«Sin pausa
 > registrada» se suma a ellos en cuanto el hotel activa el fichaje de pausa**
 > (Panel → «Ajustes operativos» → «Fichaje de pausa»; lo explica
 > [`configuracion.md`](configuracion.md) §2.1). «Salida sin fichar» está en la
@@ -523,6 +528,107 @@ quién pasó la tarjeta.
 
 El procedimiento completo, con lo que se puede preguntar y lo que no, está en
 [`../runbooks/patron-anomalo-credencial.md`](../runbooks/patron-anomalo-credencial.md).
+
+### 4.6 «Fichaje anterior a la retirada de la credencial»: el último día que llegó tarde
+
+**Qué ha pasado.** Una tarjeta auténtica se pasó por una tablet cuando **todavía
+valía**, pero el fichaje llegó al servidor **cuando ya se había retirado**. El
+caso típico:
+
+- Una camarera de pisos termina su contrato el viernes y ficha la salida a las
+  15:00 en una tablet que lleva toda la tarde **sin red**. A las 16:00 RRHH
+  registra su baja, que revoca su tarjeta en el acto. A las 17:00 la tablet
+  recupera la conexión y envía la salida de las 15:00. Para entonces la tarjeta
+  ya no vale.
+
+Pasa igual con una tarjeta **reemitida o dada por perdida** entre el momento en
+que se pasó y el momento en que la tablet consiguió enviarla.
+
+**Qué hace el sistema con él:**
+
+- **No lo registra.** Para el servidor es una tarjeta retirada, y una tarjeta
+  retirada no ficha. La jornada no cambia y la tablet no lo reintenta.
+- **No lo pierde de vista.** Como su hora real es **anterior** a la retirada,
+  lo anota a nombre de su titular y, a la madrugada siguiente, la revisión abre
+  esta incidencia sobre esa persona y esa jornada: una sola, aunque hayan
+  llegado varios.
+- **Un fichaje posterior a la retirada no abre nada.** Es una tarjeta que ya no
+  valía cuando se pasó, y rechazarla es exactamente lo que tiene que pasar.
+
+**Qué te enseña la incidencia.** Pulsa «Resolver» y la ventana «Cerrar
+incidencia» muestra la **hora del fichaje** (en el horario del centro), el
+**identificador del escaneo**, cuántos llegaron así esa jornada, el mayor
+retraso con el que llegaron al servidor y **qué se retiró**: «la persona está
+de baja» o «solo la tarjeta (reemisión o pérdida)». Como en «Fichaje fuera de
+orden» (§4.4), abrir la ventana no resuelve nada.
+
+**Cómo se resuelve:**
+
+1. **Apunta la hora del fichaje** y cierra la ventana sin confirmar.
+2. **Abre el registro horario de la persona** en esa jornada. Lo normal es ver
+   un turno abierto sin su salida, o un día sin tramo.
+3. **Completa el día con una corrección** (§5): **«Corregir las horas»** si el
+   tramo existe y le falta la salida, **«Añadir un tramo»** si no hay ninguno.
+   Usa la hora real que confirme su responsable; la del fichaje es la mejor
+   pista, no una hora que se copie sin mirar. Motivo: **«Otro motivo»**, con lo
+   que pasó, por ejemplo «Fichaje del último día que llegó después de registrar
+   la baja».
+4. **Cierra la incidencia** como «Se ha corregido», con la nota de quién
+   confirmó la hora.
+
+**Si la persona está de baja**, esa corrección se puede hacer igualmente: sus
+días hasta la fecha de cese se completan a mano (§8, «…una persona causa baja»,
+«Después de la baja: completar los días que falten»).
+
+> **Esto cubre la tarjeta, no el PIN.** Si esa persona fichó su último día **con
+> su código y su PIN** en una tablet sin red, y el fichaje llegó después de
+> registrar la baja, **no se abre ninguna incidencia**: el sistema no lo anota a
+> su nombre. Por eso sigue valiendo el consejo de §8: **revisa a mano el último
+> día de cada baja** registrada mientras alguna tablet estaba sin red, y mejor
+> aún, espera a que esa tablet vacíe su cola antes de registrar la baja.
+
+### 4.7 «Fichaje descartado por el quiosco»: un fichaje que el servidor no supo leer
+
+**Qué ha pasado.** La tablet envió un fichaje y el servidor respondió que **la
+petición no era válida**: no que la tarjeta no valiera, sino que no entendía lo
+que le llegaba. Casi siempre ocurre **justo después de actualizar el
+servidor**, con una tablet que todavía lleva la versión anterior de la
+aplicación y envía algo que la versión nueva ya no acepta.
+
+**Qué hace el sistema con él:**
+
+- **No lo registra.** El servidor no llegó a decidir sobre ese fichaje, y no se
+  inventa un registro a partir de una petición que no sabe leer: la hora la
+  firma una persona.
+- **La tablet no lo pierde.** Lo saca de su cola para no atascar a los demás
+  fichajes, lo guarda aparte y **avisa al servidor**. Solo lo olvida cuando el
+  servidor confirma que el aviso ha quedado guardado. Esto lo hace la
+  aplicación de la tablet **desde la 2.2.0**: una tablet con una versión
+  anterior lo descartaba sin avisar a nadie, y por eso conviene actualizar las
+  tablets en cuanto se actualiza el servidor (más abajo).
+- **Con el aviso, la revisión de la madrugada abre esta incidencia**, si puede
+  saber de quién es: por la tarjeta, si es auténtica, o por el código de
+  empleado, si se fichó con PIN y es de una persona que puede fichar. Una por
+  persona y jornada.
+
+**Qué te enseña la incidencia.** La **hora del fichaje**, el **identificador del
+escaneo**, el **origen** (tarjeta o PIN), el quiosco, cuántos avisos llegaron esa
+jornada y el código de respuesta del servidor. Esos dos últimos datos son para
+IT; tú necesitas la hora.
+
+**Cómo se resuelve:** igual que la anterior. Apunta la hora, abre el registro
+horario de la persona, completa o corrige el tramo (§5) con el motivo **«Fallo
+técnico del quiosco»** y cierra la incidencia con su nota. Si la jornada ya
+estaba bien —porque la persona volvió a fichar al ver un mensaje raro, o porque
+alguien la corrigió antes—, ciérrala como «Revisada: no había nada que
+corregir».
+
+**Si se repite, avisa a IT con el nombre del quiosco.** Varios descartes de la
+misma tablet son la señal de que esa tablet lleva una versión de la aplicación
+anterior a la del servidor: **hay que actualizarla recargando la aplicación**,
+con su cola vacía
+([`operacion.md`](operacion.md) §11, «Al actualizar a la 2.2.0: las tablets»).
+Es un arreglo de un minuto para IT y evita que mañana haya otra.
 
 ---
 
@@ -1540,11 +1646,14 @@ registro y en la auditoría. Los casos habituales:
 - **Un olvido** de los últimos días que nadie había corregido.
 - **La tablet estuvo sin red el último día.** Sus fichajes de ese día se guardan
   en la tablet y se envían al volver la conexión; si llegan después de que
-  registraras la baja, **se rechazan** y no aparecen en su registro. Revisa su
-  último día y añade lo que falte, con **«Otro motivo»** y lo que pasó, por
-  ejemplo «Fichajes del último día que llegaron después de registrar la baja».
-  Si la tablet sigue sin red, espera a que vuelva y vacíe su cola antes de dar
-  de baja a nadie que fichara en ella.
+  registraras la baja, **se rechazan** y no aparecen en su registro. Si fichó
+  **con la tarjeta**, desde la 2.2.0 la bandeja te lo dice con la incidencia
+  **«Fichaje anterior a la retirada de la credencial»** (§4.6). Si fichó **con
+  su código y su PIN**, **no hay incidencia**: no te enterarás si no lo miras.
+  En los dos casos, revisa su último día y añade lo que falte, con **«Otro
+  motivo»** y lo que pasó, por ejemplo «Fichajes del último día que llegaron
+  después de registrar la baja». Si la tablet sigue sin red, espera a que
+  vuelva y vacíe su cola antes de dar de baja a nadie que fichara en ella.
 - **La baja se registró antes de terminar el turno.** Su salida se rechaza en la
   tablet y el turno queda abierto: saldrá como incidencia **«Turno abierto sin
   cerrar»** y se cierra igual que un olvido, con **«Corregir las horas»** y la
@@ -1606,6 +1715,10 @@ Suele ser una de dos cosas, y ninguna se arregla resolviéndolas una a una:
 - **Una tablet con la hora desviada** genera «Desfase de reloj» en cadena. Los
   fichajes están registrados; lo que hay que arreglar es la tablet, y eso es de
   IT ([`operacion.md`](operacion.md)).
+- **Una tablet con la aplicación atrasada** tras una actualización del servidor
+  genera «Fichaje descartado por el quiosco» en cadena. Aquí los fichajes **no**
+  están registrados: hay que completarlos a mano (§4.7), y que IT actualice esa
+  tablet antes de que llegue otro turno.
 
 ### …hay un aviso de licencia en el panel
 

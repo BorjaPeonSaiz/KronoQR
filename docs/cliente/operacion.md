@@ -716,6 +716,9 @@ la alimenta dejó de ejecutarse):
 | `QuioscoSinLatido` | > 10 min sin latido | Crítica | IT | [`quiosco-no-responde.md`](../runbooks/quiosco-no-responde.md) | Comprueba si la tablet enciende y tiene red; si sí, espera un latido; si no, atiéndela en persona |
 | `ColaOfflineAtascada` | Cola de un dispositivo > 50 elementos | Alta | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md) | Mira `kiosk:health`: no se pierde nada, pero no desvincules esa tablet todavía |
 | `ColaOfflineSinVaciar` | La cola no baja a 0 en 2 h | Alta | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md) | Igual: revisa la red o el certificado de ese punto |
+| `KioskQueueStorageDegraded` | La tablet ha perdido el almacenamiento de su cola, `for: 10m` | Alta | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded) | Lo que se fiche ahora **se pierde si la tablet se reinicia**: recarga la aplicación o libera espacio en la tablet. **No la reinicies** mientras pueda tener fichajes solo en memoria. Con esto, las dos alertas de cola de arriba callan: no hay tamaño que medir (§16.3 bis) |
+| `KioskUnreportedDiscards` | Fichajes descartados sin avisar al servidor, `for: 30m` | Media | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#8-descartes-sin-avisar-kioskunreporteddiscards) | Comprueba la red de esa tablet y su versión de la aplicación. Hasta que avise, RRHH no ve la incidencia «Fichaje descartado por el quiosco» ([`guia-rrhh.md`](guia-rrhh.md) §4.7) |
+| `ScanBatchItemNotProcessed` | 3 o más elementos de lote sin procesar en 30 min en un mismo quiosco, `for: 5m` | Media | IT | [`cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) | Un mismo fichaje de esa tablet lleva varias sincronizaciones sin que el servidor consiga procesarlo, y **los demás de ese quiosco esperan detrás**: no se pierden, pero no llegan al registro. Corrige la causa en el servidor (busca `attendance.batch_scan_failed` en el registro de `app`). **Nunca borres la cola de la tablet ni la desvincules** (§16.3 bis) |
 | `ErroresDeServidorEnElFichaje` | > 1 % de `5xx` en `/api/v1/scan*`, 5 min | Crítica | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `product:doctor` primero: base de datos y disco son la causa más frecuente |
 | `LatenciaDelFichajeAlta` | p95 del fichaje > 500 ms, 10 min | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | Mira si coincide con el cambio de turno o con una actualización reciente |
 | `SondaDelBordeFallida` | El servidor no responde, `for: 5m` | Crítica | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `docker compose ps` y los registros de `postgres`/`redis`, antes que el panel |
@@ -988,6 +991,77 @@ Cómo localizarlas, sin tocar la base de datos: en el panel, **Plantilla**, filt
 posterior al día en que actualizaste a la 2.2.0. Pásale la lista a RRHH: que
 complete los días que esas personas sí trabajaron y que sepa leer los días sin
 actividad de esos informes. En el sistema no hay que hacer nada más.
+
+**Al actualizar a la 2.2.0: el aviso de privacidad del quiosco se configura
+desde el panel.** El aviso de protección de datos que la tablet enseña al fichar
+(art. 13 RGPD) nombra al responsable del tratamiento y enlaza la política
+completa. Hasta la 2.1.0 esos dos datos solo se podían fijar al construir la
+aplicación de la tablet, así que en la práctica salía el texto genérico. Desde
+la 2.2.0 se ponen en Panel → **Marca** → «Aviso de privacidad del quiosco», sin
+tocar el servidor ([`configuracion.md`](configuracion.md) §2.2). Lo que
+conviene saber:
+
+- **Tras actualizar no cambia nada que se vea**: los dos campos nacen vacíos y
+  el aviso sigue con su redacción genérica («la empresa titular de este centro
+  de trabajo», «política completa disponible en recepción»). El aviso **no
+  desaparece** en ningún caso.
+- **Pásale el encargo a quien lleve la protección de datos**: que te dé la
+  razón social exacta y la dirección `https://` de la política aprobada para la
+  plantilla, y ponlas tú. Con dirección, la tablet enseña además un código QR
+  para abrirla en el móvil.
+- **Las tablets lo recogen** al cargar la pantalla de fichaje o al recuperar la
+  red; una tablet con la aplicación anterior a la 2.2.0 sigue con el genérico
+  hasta que se actualice (abajo, «las tablets»).
+
+**Al actualizar a la 2.2.0: tres incidencias que RRHH no había visto nunca.**
+Aparecen en la bandeja sin que haya que activar nada; RRHH tiene la explicación
+de cada una en [`guia-rrhh.md`](guia-rrhh.md) §4.1:
+
+- **«Fichaje anterior a la retirada de la credencial»** (§4.6 de esa guía): una
+  tarjeta que valía cuando se pasó y llegó al servidor después de retirarla
+  —típicamente, el último día de alguien que se dio de baja con la tablet sin
+  red—. **El fichaje no se registra**; RRHH completa ese día a mano.
+- **«Fichaje descartado por el quiosco»** (§4.7): la tablet envió un fichaje que
+  el servidor no aceptó como válido, lo apartó y lo avisó. **No se registra**;
+  RRHH lo revisa y lo corrige a mano. Si se repite en una tablet, esa tablet
+  tiene la aplicación atrasada: actualízala.
+- **«Fichaje por PIN no registrado»**: un intento de fichar por PIN que no se
+  aceptó y que la persona no repitió.
+
+**Las incidencias se abren a partir de lo que llega desde la actualización**,
+no sobre el histórico: lo que ocurrió antes no se reprocesa. **Lo que no
+cambia**: un fichaje por PIN de una persona ya dada de baja que llega tarde
+**sigue sin abrir incidencia**, así que RRHH tiene que seguir revisando a mano
+el último día de las bajas registradas con alguna tablet sin red.
+
+**Al actualizar a la 2.2.0: las tablets, después del servidor y con la cola
+vacía.** La 2.2.0 cambia **cómo vacía su cola la aplicación de la tablet**
+(§16.3 bis): registra los fichajes estrictamente en orden y, si el servidor
+rechaza uno por inválido, lo guarda aparte y lo avisa en vez de descartarlo
+sin más. **Eso lo hace la aplicación nueva, no el servidor**: una tablet que
+siga con la de la 2.1.0 contra un servidor 2.2.0 no tiene esa red. Por eso,
+en este orden:
+
+1. **Antes de empezar**, mira en Panel → **Quioscos** que la columna
+   «Pendientes» está a cero en todas las tablets que puedas, o que al menos
+   tienen red. No es obligatorio —la 2.2.0 está hecha para aceptar lo que
+   envían las tablets de la 2.1.0—, pero cuanto menos haya en vuelo durante el
+   cambio, menos hay que revisar después.
+2. **Actualiza el servidor** como siempre (arriba).
+3. **Pasa las tablets a la 2.2.0 ese mismo día, no en semanas.** Lo más
+   sencillo es dejar que lo hagan solas: pon `KIOSK_UPDATE_WINDOW` en una franja
+   que empiece ahora (§11.1); cada tablet se recarga sola en cuanto su cola está
+   vacía y nadie ha fichado en los últimos minutos, que es justo la condición
+   segura. **Devuelve la ventana a su valor** cuando todas estén al día. Si
+   prefieres hacerlo a mano en una tablet concreta, sal del modo quiosco con el
+   PIN de IT y recarga la aplicación **solo cuando su «Pendientes» esté a
+   cero**.
+4. **Compruébalo** en la columna «Versión de la aplicación» de **Quioscos**, o
+   con `docker compose exec app php artisan kiosk:health`.
+
+**Nunca borres los datos de la aplicación ni desvincules una tablet para
+«forzar» la actualización**: su cola vive ahí, y con ella se irían los
+fichajes que aún no ha enviado.
 
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
@@ -1610,7 +1684,7 @@ fichajes, y desvincularlo es retirarlo; no es una pantalla de consulta.
 | **Nombre y estado** | El nombre con el que se emparejó la tablet, y si sigue vinculada o está desvinculada | Un quiosco desvinculado se queda en la lista con su historia: la tablet de repuesto se vincula **con el mismo nombre** para conservarla |
 | **Versión de la aplicación** | La versión de la PWA que esa tablet tiene cargada | Si una tablet se queda atrás tras una actualización, aquí se ve. Se pone al día al recargar la PWA |
 | **Último contacto** | El instante del último latido, **en la zona horaria del centro**, y su antigüedad («hace 40 s») | El latido llega **cada 60 segundos**. La antigüedad se mide contra el **reloj del servidor**, que viaja en la respuesta, nunca contra el del ordenador desde el que miras: un panel con la hora mal puesta no inventa quioscos caídos |
-| **Pendientes** | Cuántos fichajes tiene la tablet en su cola local sin enviar, y **de cuándo es el más antiguo** | «37 pendientes, el más antiguo de hace 3 h» es una tablet que lleva tres horas sin red, no un error. Los fichajes están a salvo mientras la tablet no se desvincule ni se le borren los datos del sitio |
+| **Pendientes** | Cuántos fichajes tiene la tablet en su cola local sin enviar, y **de cuándo es el más antiguo**. Desde la 2.2.0, también **«Desconocido»** cuando la tablet ha perdido el almacenamiento de su cola, y **cuántos descartes tiene sin avisar** al servidor | «37 pendientes, el más antiguo de hace 3 h» es una tablet que lleva tres horas sin red, no un error. Los fichajes están a salvo mientras la tablet no se desvincule ni se le borren los datos del sitio. **«Desconocido» no es cero**: lee §16.3 bis antes de tocar esa tablet |
 | **Batería** | El nivel y si está cargando; **«no informa»** cuando la tablet no publica el dato | Solo Chrome sobre Android ofrece el nivel de batería al navegador: una tablet que no lo informa **no está averiada**, simplemente no lo cuenta. Una que se descarga **sin cargar** es casi siempre un cargador desenchufado |
 | **Estado** | El **veredicto** (al día, aviso, fallo, desvinculado) y **su razón** | Nunca se distingue solo por el color: cada fila lleva su texto y su icono (§16.2) |
 
@@ -1633,11 +1707,14 @@ dice `FALLO` y la alerta suena, del mismo quiosco y a la vez.
 | **Aviso** | *Esperando el primer latido* | Recién emparejada y todavía sin hablar. Se resuelve sola en un minuto |
 | **Fallo** | *Sin señal* | Más de `KIOSK_HEALTH_SILENT_AFTER_SECONDS` (600 s, 10 minutos) sin latido |
 | **Fallo** | *Nunca ha dado señal* | Emparejada hace más de diez minutos y sin un solo latido |
+| **Fallo** | *Cola solo en memoria* | La tablet **ha perdido el almacenamiento de su cola** y guarda los fichajes en memoria, o no tiene dónde guardarlos. Sigue fichando, pero lo que encole **se pierde si se reinicia**, y el número de pendientes es «Desconocido». Desde la 2.2.0; ver §16.3 bis |
+| **Aviso** | *Descartes sin avisar* | La tablet apartó fichajes que el servidor no aceptó como válidos y **todavía no ha conseguido avisar** de ellos: hasta que lo haga, RRHH no los ve. Desde la 2.2.0; ver §16.3 bis |
 | **Desvinculado** | *Desvinculado* | Ya no es un origen de fichajes. No cuenta para ninguna alerta |
 
 Cuando hay más de un motivo, la fila muestra **el más grave**, en este orden:
-desvinculado, nunca ha dado señal, sin señal, latido tardío, batería baja,
-fichajes pendientes, latiendo.
+desvinculado, nunca ha dado señal, esperando el primer latido, sin señal, cola
+solo en memoria, latido tardío, descartes sin avisar, batería baja, fichajes
+pendientes, latiendo.
 
 La leyenda al pie de la pantalla **dice los umbrales reales de tu
 instalación**, no unos supuestos: si cambias uno, la leyenda cambia con él. Y
@@ -1663,6 +1740,68 @@ Las horas de quien no pudo fichar se corrigen después desde el panel con el
 motivo `FALLO_TECNICO_QUIOSCO`, preguntando a la persona. **Nunca se inventa
 una hora.**
 
+### 16.3 bis La cola de la tablet: en orden, y lo que se ve cuando algo no cuadra
+
+Cuando la tablet recupera la red, envía su cola **en el orden en que se
+ficharon**, y desde la 2.2.0 lo respeta de forma estricta: **un fichaje no se
+registra mientras otro anterior de la misma tablet siga sin respuesta del
+servidor**. No es un capricho: la entrada de las 07:00 y la salida de las 15:00
+de la misma persona tienen que llegar en ese orden, o la salida se tomaría por
+una entrada.
+
+**Si uno se queda atascado, los demás esperan detrás. No se pierden.** Si el
+servidor no puede procesar un fichaje en ese momento —está arrancando, la base
+de datos tarda—, la tablet lo reintenta más tarde, y todo lo que vino detrás se
+queda en la cola hasta que ese pase. Esto vale para la tablet entera, no por
+persona: la tablet no sabe de quién es cada tarjeta sin red, así que no puede
+dejar pasar a unos y no a otros. En el panel se ve como **«Fichajes
+pendientes»** con el más antiguo clavado en la misma hora, y si el servidor
+falla una y otra vez con el mismo fichaje, suena `ScanBatchItemNotProcessed` (§10.4).
+Es una avería del servidor, no de la tablet: **no borres la cola de la tablet**,
+corrige la causa en el servidor y sigue
+[`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md).
+Un fichaje que el servidor **rechaza** —una tarjeta revocada, uno que no cabe en
+la jornada («Fichaje fuera de orden», [`guia-rrhh.md`](guia-rrhh.md) §4.4)— no
+atasca nada: tiene respuesta, y la cola sigue.
+
+**Dos situaciones nuevas en la pantalla «Quioscos»** (desde la 2.2.0):
+
+- **«Pendientes: Desconocido»**, con el veredicto en **fallo**. La tablet **ha
+  perdido su almacenamiento** —el del navegador, donde guarda la cola— y ha
+  pasado a guardar en memoria. Sigue aceptando tarjetas, pero no sabe cuántos
+  fichajes quedaron en el disco, y por eso no inventa un cero. Lo que se fiche
+  ahora **se pierde si la tablet se reinicia o se apaga**. Qué hacer:
+  1. **Ni reinicies la tablet, ni recargues la aplicación, ni borres sus datos
+     mientras pueda tener fichajes solo en memoria**: cualquiera de las tres
+     cosas los borra. Si hay red, espera a que sincronice; lo que tenga en
+     memoria se envía como siempre. Además, la tablet intenta recuperar su
+     almacenamiento por sí sola cada poco, y si lo consigue pasa al disco lo
+     que tenía en memoria y la fila vuelve a mostrar un número.
+  2. **Cuando ya no le quede nada por enviar** —compruébalo en su pantalla de
+     diagnóstico (§16.5, bloque «Cola»)— y siga en «Desconocido», **recarga la
+     aplicación** (saliendo del modo quiosco con el PIN de IT).
+  3. Si no vuelve, **libera espacio en la tablet** (descargas y aplicaciones
+     ajenas) y comprueba que el navegador no está en modo invitado o privado.
+     Recarga otra vez.
+  4. Si sigue igual, sustituye la tablet
+     ([`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md))
+     **después** de que haya sincronizado.
+
+  Mientras dure suena la alerta `KioskQueueStorageDegraded` (§10.4), y las dos
+  alertas de cola atascada callan porque no hay tamaño que medir.
+- **«N descartes sin avisar al servidor»**, con el veredicto en **aviso**. La
+  tablet envió fichajes que el servidor **no aceptó como válidos** —casi
+  siempre, una aplicación de la tablet más antigua que el servidor tras una
+  actualización—. Para no atascar la cola los ha apartado, pero los conserva y
+  tiene que **avisar** de ellos al servidor, que es lo que abre la incidencia
+  «Fichaje descartado por el quiosco» para RRHH
+  ([`guia-rrhh.md`](guia-rrhh.md) §4.7). Mientras el número no baje a cero,
+  RRHH no sabe de esos fichajes. Qué hacer: comprueba que la tablet tiene red
+  (el aviso sale solo en cuanto la tiene), y **actualiza su aplicación**
+  recargándola con la cola vacía (§11, «las tablets»). **No la desvincules ni
+  le borres los datos**: esos avisos solo existen en ella. Si pasa de 30
+  minutos suena la alerta `KioskUnreportedDiscards` (§10.4).
+
 ### 16.4 Qué hacer cuando una fila no está al día
 
 **Cuando —y solo cuando— el veredicto no es «al día»**, la fila trae un bloque
@@ -1673,6 +1812,8 @@ según la razón. Un quiosco que va bien no pide nada. El resumen:
 | --- | --- |
 | **Fallo, sin señal** | [`../runbooks/quiosco-no-responde.md`](../runbooks/quiosco-no-responde.md) §2, que arranca en esta misma pantalla |
 | **Aviso, fichajes pendientes** — la tablet **tiene red y sigue con fichajes sin enviar** | [`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md). **No desvincules esa tablet**: perderías la cola |
+| **Fallo, cola solo en memoria** — «Pendientes: Desconocido» | §16.3 bis y [`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md) §7. **No reinicies la tablet** hasta que haya sincronizado |
+| **Aviso, descartes sin avisar** | §16.3 bis y [`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md) §8. Red primero; después, actualizar la aplicación de esa tablet |
 | **Aviso, batería baja** | Ve al punto de montaje: cargador desenchufado, regleta apagada o cable partido |
 | **Aviso, latido tardío** | Nada todavía. Si no vuelve a «al día» en diez minutos pasará a fallo y sonará la alerta |
 | **La tablet volvió sola a la pantalla de emparejamiento** | Alguien la desvinculó, o pasó más de unos 18 días sin latido y su token caducó sin llegar a renovarse (§18): [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §6 |
@@ -1745,7 +1886,7 @@ cumplimiento.
 | --- | --- |
 | **Cámara** | Permiso, cámara elegida, resolución real, enfoque y zoom. **Avisa sin bloquear** si el fondo sale difuminado, si el enfoque no es continuo o si la resolución es menor de 1280×720: las tres causas de «el código no se lee» |
 | **Red** | Si hay conexión, si el servidor responde, cuándo fue el último latido correcto y **el desfase de reloj** de la tablet en segundos, con su signo. La pantalla manda un latido nada más abrirse y sigue latiendo mientras está abierta, así que «servidor alcanzable» es una señal **viva**, no el recuerdo del último latido |
-| **Cola** | Fichajes pendientes, de cuándo es el más antiguo, si el almacenamiento de la tablet es duradero y si está sincronizando ahora |
+| **Cola** | Fichajes pendientes, de cuándo es el más antiguo, si el almacenamiento de la tablet es duradero y si está sincronizando ahora. Desde la 2.2.0, también **cuántos fichajes descartados tiene sin avisar** al servidor (§16.3 bis) |
 | **Padrón** | De cuándo es la copia local de la plantilla y cuántas entradas tiene |
 | **Token** | Si la tablet está vinculada, cuándo caduca su credencial, su identificador de dispositivo y el nombre del quiosco. **El token no se muestra nunca**: solo ocho caracteres de su huella, para poder compararlo con el panel |
 | **Versión** | La versión de la PWA y el estado de su actualización: «al día» o «actualización pendiente: se aplicará en la ventana HH:MM–HH:MM», con la ventana vigente (§11.1) |
