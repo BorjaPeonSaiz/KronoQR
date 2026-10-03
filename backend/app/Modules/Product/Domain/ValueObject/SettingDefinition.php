@@ -407,13 +407,6 @@ final readonly class SettingDefinition
     }
 
     /**
-     * La forma exigida, tal cual: la propia expresion regular.
-     *
-     * **En ingles y sin adornos**, porque va al mensaje TECNICO de la excepcion
-     * y como parametro del mensaje traducido. Quien lo lee en un 422 lo recibe
-     * dentro de una frase que si esta en su idioma.
-     */
-    /**
      * `https`, con servidor y sin `usuario:clave@` en la autoridad. El `@` se
      * mira tambien a mano en la autoridad: `parse_url` solo lo reconoce como
      * credenciales si la direccion esta bien formada, y una mal formada con
@@ -436,6 +429,13 @@ final readonly class SettingDefinition
             && ! str_contains($authority, '@');
     }
 
+    /**
+     * La forma exigida, tal cual: la propia expresion regular.
+     *
+     * **En ingles y sin adornos**, porque va al mensaje TECNICO de la excepcion
+     * y como parametro del mensaje traducido. Quien lo lee en un 422 lo recibe
+     * dentro de una frase que si esta en su idioma.
+     */
     private function shape(): string
     {
         return $this->pattern ?? 'the shape declared by the key';

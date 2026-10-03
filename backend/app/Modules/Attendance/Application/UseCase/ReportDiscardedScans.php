@@ -99,6 +99,13 @@ final readonly class ReportDiscardedScans
                 $this->metrics->discardedScanReported($command->deviceUuid, $attribution->isAttributed());
             }
 
+            // El suelo DESPUES de escribir y propio del caso de uso (N2 del
+            // dictamen del bloque 18): el doble del suelo del resolutor, que ya
+            // rellena sus rechazos hasta el suyo. Con el mismo suelo no se
+            // rellenaba nada y una tarjeta vigente volvia antes que una retirada;
+            // con el doble, todo camino —tarjeta vigente, retirada o falsa,
+            // codigo, INSERT incluido— tarda lo mismo. Lo fija
+            // `AttendanceServiceProvider`.
             $this->floor->padTo($startedAt);
 
             $acknowledged[] = $report->scanId;

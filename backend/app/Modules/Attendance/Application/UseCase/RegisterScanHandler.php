@@ -419,9 +419,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
         }
 
         // El primer instante de la fecha civil del alta, en la zona del centro.
-        // `WorkDate` valida la fecha; el instante no lo da el reloj, lo da ella.
-        $hiredAt = (new DateTimeImmutable(WorkDate::fromIsoDate($employee->hiredOn, $timezone)->isoDate.' 00:00:00', $timezone))
-            ->setTimezone(new DateTimeZone('UTC'));
+        $hiredAt = WorkDate::fromIsoDate($employee->hiredOn, $timezone)->startsAt();
 
         return (new WithdrawnCredentialPolicy)->requiresReview($command->occurredAt, $hiredAt, $recordedAt);
     }

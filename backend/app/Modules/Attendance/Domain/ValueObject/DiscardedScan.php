@@ -80,6 +80,11 @@ final readonly class DiscardedScan
      * Los problemas de este producto que un quiosco puede recibir al enviar un
      * fichaje y que no son el rechazo generico: el catalogo cerrado del
      * `context` (F9). Lo demas es `other`.
+     *
+     * Sin `unauthenticated`, `forbidden`, `csrf-token-mismatch` ni
+     * `too-many-requests`: el quiosco no descarta por ellos (reautentica o
+     * reintenta). `DiscardedScanProblemCatalogTest` ata cada entrada a un
+     * `urn:kronoqr:problem:*` del contrato.
      */
     public const array KNOWN_PROBLEMS = [
         'invalid-request',
@@ -91,9 +96,5 @@ final readonly class DiscardedScan
         'not-found',
         'conflict',
         'http-error',
-        'unauthenticated',
-        'forbidden',
-        'csrf-token-mismatch',
-        'too-many-requests',
     ];
 }

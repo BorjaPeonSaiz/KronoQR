@@ -619,9 +619,8 @@ it('responde 200 con la marca del producto aunque la configuracion sea ilegible'
  * generica, y **la licencia no lo degrada nunca**: el aviso no es aspecto, es
  * informacion que el art. 13 RGPD obliga a dar (ADR-019).
  *
- * Nota: `guardarMarca()` valida la RESPUESTA del `PATCH` contra el contrato y no
- * la peticion: el contrato aun no declara las dos claves en el `propertyNames`
- * de `UpdateSettingsRequest` (ver el informe del bloque 18).
+ * El contrato las declara en el `SettingKey` de la respuesta y en el
+ * `propertyNames` de `UpdateSettingsRequest`.
  */
 
 it('publica el aviso de privacidad sin configurar como la redaccion generica', function (): void {

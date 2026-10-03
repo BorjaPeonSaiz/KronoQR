@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Domain\Policy;
 
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScan;
+use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
@@ -62,9 +63,9 @@ final readonly class DiscardedScanReviewPolicy
     private function validFrom(DiscardedScan $scan, DateTimeZone $siteTimezone): DateTimeImmutable
     {
         // Por tarjeta, su emision; por codigo, el primer instante del dia civil
-        // del alta en la zona del centro (un instante explicito, no el reloj).
-        // `DiscardedScan` garantiza que solo el aviso por tarjeta trae emision.
+        // del alta en la zona del centro. `DiscardedScan` garantiza que solo el
+        // aviso por tarjeta trae emision.
         return $scan->credentialIssuedAt
-            ?? (new DateTimeImmutable($scan->ownerHiredOn.' 00:00:00', $siteTimezone))->setTimezone(new DateTimeZone('UTC'));
+            ?? WorkDate::fromIsoDate($scan->ownerHiredOn, $siteTimezone)->startsAt();
     }
 }

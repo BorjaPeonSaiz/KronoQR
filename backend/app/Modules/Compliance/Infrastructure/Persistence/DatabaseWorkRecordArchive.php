@@ -22,11 +22,13 @@ use Illuminate\Database\ConnectionInterface;
  * 1. `shift_corrections` — cuelgan del tramo (RN-13).
  * 2. `incidents` — cuelgan del tramo y de la jornada.
  * 3. `scan_events` — cuelgan del tramo; los que no llegaron a producir ninguno
- *    (rechazos, duplicados) envejecen por su `occurred_at`.
+ *    (rechazos, duplicados) envejecen por `LEAST(occurred_at, recorded_at)`:
+ *    `occurred_at` lo pone la tablet, y uno de 2099 no se purgaria nunca (N1
+ *    del dictamen del bloque 18); `recorded_at` lo pone el servidor.
  * 3b. `discarded_scan_reports` — los avisos de fichaje descartado (RN-22,
- *    ADR-047): no cuelgan de nada y envejecen por su `occurred_at`, como los
- *    escaneos sin tramo. El rol de la aplicacion conserva `DELETE` sobre ellos
- *    para esto, y solo para esto: no tiene `UPDATE`.
+ *    ADR-047): no cuelgan de nada y envejecen igual que los escaneos sin tramo.
+ *    El rol de la aplicacion conserva `DELETE` sobre ellos para esto, y solo
+ *    para esto: no tiene `UPDATE`.
  * 4. `shift_entries` — el registro legal en si.
  * 5. `daily_totals` — la proyeccion, que no tiene padre.
  *
@@ -85,17 +87,17 @@ final readonly class DatabaseWorkRecordArchive implements WorkRecordArchive
                 FROM scan_events s
                 LEFT JOIN shift_entries se ON se.id = s.shift_entry_id
                 WHERE (se.id IS NOT NULL AND se.work_date < ?)
-                   OR (se.id IS NULL AND s.occurred_at < ?)
+                   OR (se.id IS NULL AND LEAST(s.occurred_at, s.recorded_at) < ?)
             SQL, [$date, $instant]),
             // RN-22 (ADR-047, F7): los avisos de fichaje descartado envejecen
-            // con `scan_events`, por su `occurred_at`. No cuelgan de nada ni
+            // con `scan_events`, por LEAST(occurred_at, recorded_at). No cuelgan de nada ni
             // nada cuelga de ellos.
             $this->tally('discarded_scan_reports', <<<'SQL'
                 SELECT count(*) AS row_count,
-                       min(d.occurred_at)::date::text AS oldest,
-                       max(d.occurred_at)::date::text AS newest
+                       min(LEAST(d.occurred_at, d.recorded_at))::date::text AS oldest,
+                       max(LEAST(d.occurred_at, d.recorded_at))::date::text AS newest
                 FROM discarded_scan_reports d
-                WHERE d.occurred_at < ?
+                WHERE LEAST(d.occurred_at, d.recorded_at) < ?
             SQL, [$instant]),
             $this->tally('shift_entries', <<<'SQL'
                 SELECT count(*) AS row_count,
@@ -153,7 +155,7 @@ final readonly class DatabaseWorkRecordArchive implements WorkRecordArchive
                     FROM scan_events s
                     LEFT JOIN shift_entries se ON se.id = s.shift_entry_id
                     WHERE (se.id IS NOT NULL AND se.work_date < ?)
-                       OR (se.id IS NULL AND s.occurred_at < ?)
+                       OR (se.id IS NULL AND LEAST(s.occurred_at, s.recorded_at) < ?)
                     LIMIT ?
                 )
             SQL, [$date, $instant, $limit]),
@@ -161,7 +163,7 @@ final readonly class DatabaseWorkRecordArchive implements WorkRecordArchive
                 DELETE FROM discarded_scan_reports WHERE id IN (
                     SELECT d.id
                     FROM discarded_scan_reports d
-                    WHERE d.occurred_at < ?
+                    WHERE LEAST(d.occurred_at, d.recorded_at) < ?
                     LIMIT ?
                 )
             SQL, [$instant, $limit]),

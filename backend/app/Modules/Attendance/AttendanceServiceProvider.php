@@ -28,6 +28,7 @@ use App\Modules\Attendance\Application\Port\WithdrawnCredentialScans;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
+use App\Modules\Attendance\Application\UseCase\ReportDiscardedScans;
 use App\Modules\Attendance\Application\UseCase\ScanRegistration;
 use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Http\Policy\ScanPolicy;
@@ -59,6 +60,7 @@ use App\Modules\Attendance\Infrastructure\Persistence\EloquentWorkDayRepository;
 use App\Modules\Attendance\Infrastructure\Persistence\ShiftEntry;
 use App\Modules\Attendance\Infrastructure\Projection\DailyTotalsProjector;
 use App\Modules\Attendance\Infrastructure\Projection\DatabaseDailyTotalsProjection;
+use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
@@ -141,6 +143,16 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(WithdrawnCredentialScans::class, DatabaseWithdrawnCredentialScans::class);
         $this->app->bind(DiscardedScans::class, DatabaseDiscardedScans::class);
         $this->app->bind(DiscardedScanReportLog::class, DatabaseDiscardedScanReportLog::class);
+
+        // N2 del dictamen del bloque 18: el aviso de descarte rellena cada
+        // aviso hasta el DOBLE del suelo de RS-03, despues del INSERT. El
+        // resolutor ya rellena sus rechazos hasta el suelo sencillo; con el
+        // mismo numero aqui una tarjeta vigente volvia antes que una retirada.
+        $this->app->when(ReportDiscardedScans::class)
+            ->needs(ConstantTimeFloor::class)
+            ->give(static fn (): ConstantTimeFloor => new ConstantTimeFloor(
+                2 * max(0, Config::integer('security.rejection_floor_ms', 25)),
+            ));
 
         // RF-PR-06 y RN-16 (tarea 3.11): los usos de credencial en quiosco sobre
         // los que la deteccion de patrones busca coincidencias sistematicas y

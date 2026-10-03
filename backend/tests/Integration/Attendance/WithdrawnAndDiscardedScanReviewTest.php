@@ -327,3 +327,18 @@ it('no abre nada con un aviso por codigo anterior al alta de la persona', functi
 
     expect(incidenciasDe('discarded_scan'))->toBe([]);
 })->group('RN-22', 'RF-PR-01');
+
+it('no abre scan_before_revocation con un escaneo mas antiguo que la ventana de revision', function (): void {
+    // La fila sigue atribuida y marcada (RN-20); solo no abre incidencia. Con
+    // un dia de ventana, un fichaje de 27 h antes de su recepcion queda fuera.
+    $escenario = escenarioDeRevision();
+    Config::set('attendance.discard_review_window_days', 1);
+    $retirada = Credentials::issueFor(AttendanceFixtures::employeeIdOf($escenario['employee']), revokedReason: 'lost')->toString();
+
+    fichajeConTarjeta($escenario['token'], $retirada, '2026-08-14T07:00:00Z')->assertStatus(422);
+
+    revisionDiaria();
+
+    expect(DB::table('scan_events')->where('flagged_for_review', true)->count())->toBe(1)
+        ->and(incidenciasDe('scan_before_revocation'))->toBe([]);
+})->group('RN-20', 'RF-PR-01');

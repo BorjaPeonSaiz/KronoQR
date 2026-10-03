@@ -120,3 +120,27 @@ it('purga los avisos vencidos con el registro de jornada y deja los vigentes', f
         ->and(DB::table('discarded_scan_reports')->where('scan_id', $vencido)->exists())->toBeFalse()
         ->and(DB::table('discarded_scan_reports')->where('scan_id', $vigente)->exists())->toBeTrue();
 })->group('RN-22', 'RL-02');
+
+it('purga por la recepcion un aviso y un rechazo sin tramo con un occurred_at futuro', function (): void {
+    // N1 del dictamen del bloque 18: `occurred_at` lo pone la tablet. Uno de
+    // 2099 con la recepcion vencida se purga igual: envejecen por
+    // `LEAST(occurred_at, recorded_at)`.
+    $fixture = avisosFixture();
+    $aviso = insertarAviso($fixture, ['occurred_at' => '2099-01-01 00:00:00+00', 'recorded_at' => '2021-03-01 10:00:00+00']);
+    $rechazo = Str::uuid7()->toString();
+
+    DB::table('scan_events')->insert([
+        'scan_id' => $rechazo, 'device_id' => $fixture['device'], 'employee_id' => null,
+        'occurred_at' => '2099-01-01 00:00:00+00', 'recorded_at' => '2021-03-01 10:00:00+00',
+        'origin' => 'qr_kiosk', 'intent' => 'auto', 'result' => 'rejected_signature',
+        'flagged_for_review' => false, 'client_meta' => '{}',
+    ]);
+
+    $archive = new DatabaseWorkRecordArchive(DB::connection());
+    $corte = new DateTimeImmutable('2022-01-01 00:00:00', new DateTimeZone('UTC'));
+
+    $archive->purge($corte, 100);
+
+    expect(DB::table('discarded_scan_reports')->where('scan_id', $aviso)->exists())->toBeFalse()
+        ->and(DB::table('scan_events')->where('scan_id', $rechazo)->exists())->toBeFalse();
+})->group('RN-22', 'RL-02');

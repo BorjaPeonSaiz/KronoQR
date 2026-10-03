@@ -26,7 +26,10 @@ return [
      *
      * NO es una clave de `installation_settings` ni del perfil de cumplimiento:
      * no cambia que se considera trabajo, solo cuanto se cree a la tablet.
+     *
+     * Minimo 1: un cero o un negativo haria fallar `DetectAnomaliesCommand` y,
+     * con el, la revision nocturna entera.
      */
-    'discard_review_window_days' => (int) env('ATTENDANCE_DISCARD_REVIEW_WINDOW_DAYS', 31),
+    'discard_review_window_days' => max(1, (int) env('ATTENDANCE_DISCARD_REVIEW_WINDOW_DAYS', 31)),
 
 ];

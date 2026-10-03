@@ -659,6 +659,14 @@ final readonly class DetectAttendanceAnomalies
         $groups = [];
 
         foreach ($this->withdrawnCredentialScans->withdrawnBetween($from, $now) as $scan) {
+            // La misma ventana de antiguedad que los descartes (revision de
+            // codigo del bloque 18): el `occurred_at` lo pone la tablet, y la
+            // cola de una tablet no guarda fichajes de hace meses. La fila sigue
+            // marcada; solo no abre incidencia.
+            if ($scan->occurredAt < $scan->recordedAt->modify('-'.$command->discardReviewWindowDays.' days')) {
+                continue;
+            }
+
             $workDate = WorkDate::fromInstant($scan->occurredAt, $timezone);
             $key = $scan->holderUuid.'|'.$workDate->isoDate;
 

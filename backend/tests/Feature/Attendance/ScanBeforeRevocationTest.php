@@ -2,12 +2,20 @@
 
 declare(strict_types=1);
 
+use App\Modules\Attendance\Application\Command\RegisterScanCommand;
+use App\Modules\Attendance\Application\Port\EmployeeDirectory;
+use App\Modules\Attendance\Application\Port\ScanIntent;
+use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
+use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
+use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
+use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeDirectory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Spectator\Spectator;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Attendance\AttendanceFixtures;
+use Tests\Support\Attendance\InterleavingEmployeeDirectory;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\Credentials;
@@ -245,3 +253,60 @@ it('no marca un escaneo de tarjeta retirada anterior a su emision', function ():
     expect(filaDelEscaneo($scanId)->employee_id)->toBe($titularId)
         ->and(filaDelEscaneo($scanId)->flagged_for_review)->toBeFalse();
 })->group('RN-20', 'RS-03');
+
+// --- N3: la carrera con la baja (`offboardedBeforeScanning`) ---------------
+
+/**
+ * La tarjeta resuelve con la persona activa y, justo despues de esa lectura,
+ * otra sesion registra la baja: el caso de uso la carga ya de baja.
+ */
+function bajaEntreResolucionYCarga(string $employeeUuid): void
+{
+    app()->instance(EmployeeDirectory::class, new InterleavingEmployeeDirectory(
+        app(EloquentEmployeeDirectory::class),
+        $employeeUuid,
+        static fn () => WorkforceFixtures::terminate($employeeUuid),
+    ));
+}
+
+it('marca y atribuye el escaneo de la carrera con la baja posterior al alta, y no el anterior', function (string $occurredAt, bool $marcado): void {
+    $escenario = AttendanceFixtures::scenario();
+    $titularId = AttendanceFixtures::employeeIdOf($escenario['employee']);
+    $tarjeta = Credentials::issueFor($titularId)->toString();
+    $scanId = Str::uuid7()->toString();
+
+    bajaEntreResolucionYCarga($escenario['employee']);
+
+    escanearTarjetaRetirada($escenario['token'], $tarjeta, $occurredAt, $scanId)->assertStatus(422);
+
+    // El alta es el 2026-01-01 en Madrid: las 23:00 UTC del 31 de diciembre.
+    expect(filaDelEscaneo($scanId)->result)->toBe('rejected_unknown')
+        ->and(filaDelEscaneo($scanId)->employee_id)->toBe($titularId)
+        ->and(filaDelEscaneo($scanId)->flagged_for_review)->toBe($marcado);
+})->with([
+    'posterior al alta' => ['2026-08-15T08:00:00Z', true],
+    'anterior al alta' => ['2025-12-31T22:59:59Z', false],
+])->group('RN-20', 'RN-14');
+
+it('no marca la carrera con la baja de un fichaje por PIN', function (): void {
+    // El PIN de una persona de baja queda fuera de RN-20 (ADR-043).
+    $escenario = AttendanceFixtures::scenario();
+    WorkforceFixtures::terminate($escenario['employee']);
+    $scanId = Str::uuid7()->toString();
+
+    app(RegisterScanHandler::class)->handle(
+        new RegisterScanCommand(
+            scanId: $scanId,
+            qrPayload: null,
+            occurredAt: new DateTimeImmutable('2026-08-15 08:00:00', new DateTimeZone('UTC')),
+            deviceId: $escenario['device'],
+            deviceUuid: $escenario['deviceUuid'],
+            origin: ScanOrigin::PIN_KIOSK,
+            intent: ScanIntent::AUTO,
+        ),
+        CredentialResolution::resolved($escenario['employee']),
+    );
+
+    expect(filaDelEscaneo($scanId)->result)->toBe('rejected_unknown')
+        ->and(filaDelEscaneo($scanId)->flagged_for_review)->toBeFalse();
+})->group('RN-20', 'RN-14');

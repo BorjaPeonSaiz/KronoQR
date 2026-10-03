@@ -384,6 +384,13 @@ it('cuesta lo mismo en consultas y en tiempo se atribuya o no, en lotes de diez'
 
     // La misma banda de 10 ms por aviso que `ConstantTimeRejectionTest`.
     expect(max($medias) - min($medias))->toBeLessThan(10.0, 'Los avisos se distinguen por tiempo: '.json_encode($medias));
+
+    // N2: el caso de uso rellena cada aviso hasta el DOBLE del suelo del
+    // resolutor, despues del INSERT. Una tarjeta vigente (sin suelo del
+    // resolutor) y una retirada (con el) tardan lo mismo: banda de 3 ms.
+    expect($medias['tarjeta vigente'])->toBeGreaterThanOrEqual(2 * $suelo * 0.9)
+        ->and(abs($medias['tarjeta vigente'] - $medias['tarjeta retirada']))
+        ->toBeLessThan(3.0, 'Vigente y retirada se distinguen por tiempo: '.json_encode($medias));
 })->group('RN-22', 'RS-03');
 
 it('limita los avisos por dispositivo en su zona propia, seis por minuto', function (): void {
