@@ -705,7 +705,7 @@ it('sustituye las horas pegadas a una letra, con punto o con am y pm', function 
     'iso sin fecha' => ['marca T22:00:00Z rechazada', 'marca [time] rechazada'],
     'con am' => ['entrada 10:30am rechazada', 'entrada [time] rechazada'],
     'con pm y espacio' => ['entrada 10:30 PM rechazada', 'entrada [time] rechazada'],
-    'con punto tras a las' => ['fichó a las 22.30 sin cierre', '… a las [time] sin cierre'],
+    'con punto tras a las' => ['fichó a las 22.30 sin cierre', 'fichó a las [time] sin cierre'],
     'con punto tras at' => ['recorded at 22.30', 'recorded at [time]'],
     'con segundos y fraccion' => ['at 06:00:00.123Z', 'at [time]'],
 ])->group('RF-PD-15', 'RL-19');
