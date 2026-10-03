@@ -130,4 +130,33 @@ describe('DevicesView — cola desconocida y descartes sin avisar', () => {
     )
     expect(dialog.text()).toContain(es.devices.queue.unknown)
   })
+
+  it('desvincular un quiosco con descartes sin avisar lo advierte aparte, con el recuento', async () => {
+    stubRoutes({
+      '/devices': () => jsonResponse(deviceList([device({ unreported_discards: 4 })])),
+    })
+
+    const wrapper = await mountView(DevicesView)
+    await settle()
+
+    await buttonWith(wrapper, es.devices.unpair.action).trigger('click')
+    await settle()
+
+    const alert = wrapper.get('[role="dialog"] [data-test="unpair-unreported-discards"]')
+
+    expect(alert.attributes('role')).toBe('alert')
+    expect(alert.text()).toContain('4 fichajes descartados')
+  })
+
+  it('sin descartes sin avisar, el diálogo de desvincular no lleva ese aviso', async () => {
+    stubRoutes({ '/devices': () => jsonResponse(deviceList([device()])) })
+
+    const wrapper = await mountView(DevicesView)
+    await settle()
+
+    await buttonWith(wrapper, es.devices.unpair.action).trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-test="unpair-unreported-discards"]').exists()).toBe(false)
+  })
 })

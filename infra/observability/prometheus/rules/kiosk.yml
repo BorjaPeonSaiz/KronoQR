@@ -190,3 +190,28 @@ groups:
             tablet: siguen en su cola, no se pierden, pero no llegan al
             registro hasta que se corrija la causa en el servidor.
           runbook_url: docs/runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed
+
+      #------------------------------------------------------------------------
+      # F8 (dictamen de seguridad). Descartes ATRIBUIDOS a una persona
+      # (`attributed="true"`): el aviso del quiosco ha resuelto a un empleado.
+      # Un quiosco que los genera cuando los demas no es la firma de una PWA
+      # desfasada o de un token robado fabricando avisos. `for: 0m`: el
+      # `increase` ya es una ventana de 1 h, no hace falta confirmar mas.
+      # Contador por dispositivo, sin PII.
+      #------------------------------------------------------------------------
+      - alert: KioskDiscardedScansAttributed
+        expr: sum by (device) (increase(kiosk_discarded_scans_total{attributed="true"}[1h])) > 0
+        for: 0m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: kiosk
+        annotations:
+          summary: "El quiosco {{ $labels.device }} ha descartado fichajes atribuidos a personas en la ultima hora"
+          description: >-
+            El quiosco {{ $labels.device }} ha avisado de fichajes que
+            descarto y que el servidor ha atribuido a personas (RN-22). Si
+            los demas quioscos no lo hacen, sospecha de una version de la
+            aplicacion desfasada en esa tablet o de un token de dispositivo
+            que no deberia estar enviando.
+          runbook_url: docs/runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed

@@ -417,3 +417,35 @@ tests:
                 siguen en su cola, no se pierden, pero no llegan al registro
                 hasta que se corrija la causa en el servidor.
               runbook_url: docs/runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed
+
+  #-----------------------------------------------------------------------------
+  # KioskDiscardedScansAttributed: un incremento atribuido dispara; uno no
+  # atribuido (attributed="false") no.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_discarded_scans_total{device="kiosk-recepcion",attributed="true"}'
+        values: "0 0 0 1 1 1 1 1 1 1"
+      - series: 'kiosk_discarded_scans_total{device="kiosk-spa",attributed="false"}'
+        values: "0 0 0 5 5 5 5 5 5 5"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: KioskDiscardedScansAttributed
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: KioskDiscardedScansAttributed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El quiosco kiosk-recepcion ha descartado fichajes atribuidos a personas en la ultima hora"
+              description: >-
+                El quiosco kiosk-recepcion ha avisado de fichajes que descarto
+                y que el servidor ha atribuido a personas (RN-22). Si los
+                demas quioscos no lo hacen, sospecha de una version de la
+                aplicacion desfasada en esa tablet o de un token de
+                dispositivo que no deberia estar enviando.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed

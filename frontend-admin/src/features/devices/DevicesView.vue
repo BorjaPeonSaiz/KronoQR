@@ -501,6 +501,19 @@ const buttonClass =
         {{ t('devices.unpair.pendingQueueUnknownWarning') }}
       </p>
 
+      <!-- Los descartes sin avisar solo existen en la tablet: al vaciarse se
+           pierden y no abren incidencia (RN-22). Aviso aparte de la cola. -->
+      <p
+        v-if="unpairTarget.unreported_discards > 0"
+        role="alert"
+        class="mt-4 rounded-kq border border-kq-danger bg-kq-danger-soft p-4 text-kq-danger"
+        data-test="unpair-unreported-discards"
+      >
+        {{
+          t('devices.unpair.unreportedDiscardsWarning', { count: unpairTarget.unreported_discards })
+        }}
+      </p>
+
       <p class="mt-4 text-sm text-kq-text-muted">{{ t('devices.unpair.notice') }}</p>
     </ConfirmDialog>
   </section>

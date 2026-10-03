@@ -1888,7 +1888,8 @@
       "pendingQueueWarning": "This kiosk has {count} unsynced clockings. If you unlink it now, they will only reach the timekeeping record if this same tablet is paired again (art. 34.9 of the Spanish Workers' Statute). Before unlinking, check that the tablet has been able to sync its queue (new-kiosk runbook, §5.1).",
       "notice": "You will be able to link a new tablet with the same name later: it will reactivate this same kiosk.",
       "announce": "Kiosk {name} has been unlinked.",
-      "pendingQueueUnknownWarning": "The tablet does not know how many clockings it has unsynced (its queue dropped to memory). Unlinking it now may leave out of the timekeeping record clockings that exist only on it (art. 34.9 of the Spanish Workers' Statute). Before unlinking, open its diagnostics screen."
+      "pendingQueueUnknownWarning": "The tablet does not know how many clockings it has unsynced (its queue dropped to memory). Unlinking it now may leave out of the timekeeping record clockings that exist only on it (art. 34.9 of the Spanish Workers' Statute). Before unlinking, open its diagnostics screen.",
+      "unreportedDiscardsWarning": "This tablet has {count} discarded clockings it has not yet reported to the server; if you unlink it now they will be lost and will not open an incident. Wait for it to sync."
     },
     "queue": {
       "unknown": "Unknown",

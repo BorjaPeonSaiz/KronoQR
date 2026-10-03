@@ -1888,7 +1888,8 @@
       "pendingQueueWarning": "Este quiosco tiene {count} fichajes sin sincronizar. Si se desvincula ahora, esos fichajes solo llegarán al registro horario si se vuelve a emparejar esta misma tablet (art. 34.9 ET). Antes de desvincular, comprueba que la tablet ha podido sincronizar su cola (runbook de alta de un nuevo quiosco, §5.1).",
       "notice": "Podrás vincular una tablet nueva con el mismo nombre más adelante: reactivará este mismo quiosco.",
       "announce": "Se ha desvinculado el quiosco {name}.",
-      "pendingQueueUnknownWarning": "La tablet no sabe cuántos fichajes tiene sin sincronizar (su cola cayó a memoria). Desvincularla ahora puede dejar fuera del registro horario fichajes que están solo en ella (art. 34.9 ET). Antes de desvincular, abre su pantalla de diagnóstico."
+      "pendingQueueUnknownWarning": "La tablet no sabe cuántos fichajes tiene sin sincronizar (su cola cayó a memoria). Desvincularla ahora puede dejar fuera del registro horario fichajes que están solo en ella (art. 34.9 ET). Antes de desvincular, abre su pantalla de diagnóstico.",
+      "unreportedDiscardsWarning": "Esta tablet tiene {count} fichajes descartados que aún no ha avisado al servidor; si la desvinculas ahora se perderán y no abrirán incidencia. Espera a que sincronice."
     },
     "queue": {
       "unknown": "Desconocido",
