@@ -135,6 +135,8 @@ export interface ScanQueue {
   release(scanIds: readonly string[]): void
   /** `true` si la fila mas antigua esta viajando ahora mismo (nadie tiene que sondearla). */
   isHeadInFlight(): boolean
+  /** `true` si `claim()` no entrega nada porque en un disco que no se ve puede haber filas anteriores (RN-21). */
+  isClaimBlocked(): boolean
   /**
    * Cola en memoria: intenta volver al disco (como mucho cada 60 s) y, si abre,
    * migra a el lo que hubiera en memoria. `true` si volvio a `durable`.
@@ -182,6 +184,13 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
   /** `true` si la ultima operacion sobre el respaldo en memoria fallo: ni eso acepta. */
   let memoryBroken = false
   let headId: string | null = null
+  /**
+   * Ultimo recuento CORRECTO del disco mientras estaba sano. Si se degrada con
+   * el disco a 0, lo de memoria es todo lo que hay y puede salir; con otro valor
+   * (o sin saberlo) puede haber fichajes ANTERIORES sin enviar en el disco, y
+   * nada de memoria sale antes de reabrir (RN-21, ADR-047).
+   */
+  let lastDiskCount: number | null = null
   let lastReopenAt: number | null = null
   /** Mientras se migra de memoria a disco, ninguna otra operacion toca el almacen. */
   let gate: Promise<void> | null = null
@@ -320,6 +329,7 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
       headId = oldest?.scan_id ?? null
 
       const kind = storageKind()
+      if (kind === 'durable') lastDiskCount = count
       const known = kind === 'durable' || (kind === 'memory' && !diskUnknown)
 
       // G1: como `claim()` para en la primera fila con espera, el momento en
@@ -424,6 +434,9 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
     },
 
     async claim(limit, claimOptions = {}) {
+      // RN-21 con la cola degradada: lo de memoria no puede adelantar a lo que
+      // siga en un disco que no se ve. Sale tras `tryReopen()`, mezclado y en orden.
+      if (diskUnknown && !store.durable && lastDiskCount !== 0) return []
       const nowMs = clock.now().getTime()
       let rows: QueuedScanRecord[]
       try {
@@ -576,6 +589,10 @@ export function createScanQueue(options: ScanQueueOptions): ScanQueue {
 
     release(scanIds) {
       for (const scanId of scanIds) leased.delete(scanId)
+    },
+
+    isClaimBlocked() {
+      return diskUnknown && !store.durable && lastDiskCount !== 0
     },
 
     isHeadInFlight() {

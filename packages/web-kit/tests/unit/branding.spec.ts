@@ -121,6 +121,8 @@ describe('parseBranding: aviso de privacidad (RF-KI-09, RL-09)', () => {
     ['sin host', 'https://'],
     ['con espacios', 'https://marina.example/a b'],
     ['http (sin TLS)', 'http://marina.example/privacidad'],
+    ['con userinfo', 'https://marina.example@evil.example/p'],
+    ['con barra invertida', 'https://marina.example\@evil.example/p'],
     ['con caracteres no ASCII', 'https://marina.example/privacidad/mariña'],
     ['de mas de 512 caracteres', 'https://marina.example/' + 'a'.repeat(512)],
     ['no es una cadena', 42],
@@ -136,6 +138,7 @@ describe('parseBranding: aviso de privacidad (RF-KI-09, RL-09)', () => {
 
   it.each([
     ['vacio', '   '],
+    ['con caracter de formato (ancho cero)', 'Hotel' + String.fromCharCode(0x200b) + 'Marina'],
     ['con salto de linea', 'Hotel' + String.fromCharCode(10) + 'Marina'],
     ['de mas de 160 caracteres', 'x'.repeat(161)],
     ['no es una cadena', { name: 'x' }],

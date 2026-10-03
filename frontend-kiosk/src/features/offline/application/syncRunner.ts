@@ -239,7 +239,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     // no hay nada con fecha que esperar.
     const next = stats.nextAttemptAt
     const delay =
-      !isOnline() || next === null || queue.isHeadInFlight()
+      !isOnline() || next === null || queue.isHeadInFlight() || queue.isClaimBlocked()
         ? IDLE_POLL_MS
         : Math.max(0, Math.min(next - nowMs, IDLE_POLL_MS))
     timer = setTimer(() => {

@@ -92,15 +92,20 @@ const LOGO_URL = /^\/api\/v1\/branding\/logo(?:\?v=[0-9a-f]{12})?$/
 const POLICY_URL = /^https:\/\/[!-~]+$/
 const POLICY_URL_MAX = 512
 const CONTROLLER_MAX = 160
-const CONTROL_CHARS = /[\u0000-\u001f\u007f]/
+// Controles (Cc) y de formato (Cf: ancho cero, marcas bidireccionales).
+const CONTROL_CHARS = /\p{Cc}|\p{Cf}/u
 
 function parsePolicyUrl(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > POLICY_URL_MAX || !POLICY_URL.test(value)) {
     return null
   }
+  // El navegador normaliza la barra invertida a `/`: otro host del que se lee.
+  if (value.includes('\\')) return null
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' && url.hostname !== '' ? value : null
+    // Sin userinfo: `https://hotel.example@evil.example` se lee como un host y lleva a otro.
+    const userinfo = url.username !== '' || url.password !== ''
+    return url.protocol === 'https:' && url.hostname !== '' && !userinfo ? value : null
   } catch {
     return null
   }

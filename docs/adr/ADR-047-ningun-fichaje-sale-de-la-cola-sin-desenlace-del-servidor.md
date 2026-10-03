@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. Revisión de `seguridad-cumplimiento` pendiente dentro del Bloque 18 |
+| **Estado** | Aceptada. Revisada por `seguridad-cumplimiento` el 3 de octubre de 2026 (diseño: aprobada con condiciones F1–F15; implementación: apta con correcciones, todas aplicadas antes de integrar) |
 | **Fecha** | 3 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (Bloque 18 de la 2.2.0, hallazgos R3-QA-02, R3-BE-03, R4-SC-03, R3-KI-01, R3-QA-05, R2-KI-05 y R17-SC-R2) |
 | **Afecta a** | Precisa [ADR-008](ADR-008-offline-first-con-idempotencia-por-scan-id.md) (punto 3: el borrado tras confirmación explícita vale también para lo que el servidor declara inválido) · Complementa [ADR-043](ADR-043-el-pin-rechazado-conserva-a-quien-correspondia-el-codigo.md) (no lo cambia) · `RegisterScanBatchHandler`, `ScanBatchOutcome`, `CredentialResolution`, `HmacSignatureVerifier`, `RegisterScanHandler`, `DetectAttendanceAnomalies` · `syncRunner.ts`, `scanQueue.ts` · tabla nueva `discarded_scan_reports` · `POST /api/v1/scan/discarded` |
@@ -44,6 +44,11 @@ incidencia. Nunca en ningún otro.**
 - **Quiosco.** Un tramo de la cola solo «progresa» si **todos** sus elementos tienen desenlace
   terminal; si uno se conserva para reintento, el drenaje se detiene ahí y aplaza lo que viene detrás.
   El prefijo que reclama la cola corta también en una fila que otro envío tiene en vuelo.
+  Con la cola degradada a memoria, nada de lo encolado en memoria se envía mientras en el disco que
+  no se ve pueda haber fichajes anteriores (el último recuento sano del disco no era 0, o no se llegó
+  a conocer): solo sale tras reabrir el disco y migrar, mezclado y en orden de `occurred_at`. El precio
+  es que, con IndexedDB roto de forma permanente, lo de memoria no sale hasta que alguien atienda la
+  alerta `KioskQueueStorageDegraded`; el empleado ya fue confirmado en pantalla y el latido lo declara.
 - La clave es el quiosco porque **nadie sabe de quién es el elemento atascado**: el servidor puede
   haber fallado resolviendo la credencial, y el quiosco sin red no puede emparejar un QR con un PIN de
   la misma persona.

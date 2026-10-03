@@ -495,6 +495,31 @@ describe('RN-22 / RN-21 — lote, descartes y avisos en el cliente HTTP (RF-KI-0
     })
   })
 
+  it.each([
+    'urn:kronoqr:problem:Invalid-Request',
+    'urn:kronoqr:problem:a b',
+    'urn:other:problem:x',
+    'urn:kronoqr:problem:',
+  ])('F9: un type raro (%s) viaja como null y el aviso se acusa', async (type) => {
+    const failing = createApiClient({
+      fetchImpl: (async () => jsonResponse(400, { type })) as unknown as typeof fetch,
+    })
+    const failure = await failing.recordScan(REQUEST)
+    expect(failure).toMatchObject({ cause: 'invalid', problemType: null })
+
+    const reporting = createApiClient({
+      fetchImpl: (async () =>
+        jsonResponse(200, { acknowledged: [REQUEST.scan_id] })) as unknown as typeof fetch,
+    })
+    const report = {
+      ...REPORT.reports.at(0),
+      problem_type: null,
+    } as (typeof REPORT.reports)[number]
+    expect(await reporting.reportDiscardedScans({ reports: [report] })).toMatchObject({
+      outcome: 'ok',
+    })
+  })
+
   it('`reportDiscardedScans` va a /scan/discarded, con token, y lee el acuse', async () => {
     const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse(200, { acknowledged: [REQUEST.scan_id] }),

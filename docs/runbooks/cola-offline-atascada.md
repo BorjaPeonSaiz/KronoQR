@@ -11,6 +11,7 @@
 | `KioskQueueStorageDegraded` | `kiosk_queue_storage_degraded == 1`, `for: 10m` | Alta | IT del cliente | [§7](#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded) |
 | `KioskUnreportedDiscards` | `kiosk_unreported_discards > 0`, `for: 30m` | Aviso | IT del cliente | [§8](#8-descartes-sin-avisar-kioskunreporteddiscards) |
 | `ScanBatchItemNotProcessed` | `increase(scan_batch_items_not_processed_total[30m]) >= 3`, `for: 5m` | Aviso | IT del cliente | [§9](#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) |
+| `KioskDiscardedScansAttributed` | `increase(kiosk_discarded_scans_total{attributed="true"}[1h]) > 0`, `for: 0m` | Aviso | IT del cliente | [§10](#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed) |
 
 **A las 06:30, quien la reciba hace esto:** mira `kiosk:health` para ver de
 qué quiosco es y cuánto lleva creciendo; si el resto de la instalación
@@ -337,6 +338,23 @@ descartes pendientes por dispositivo. Mismo panel de Grafana que §7.
 Esta alerta no contiene ni debe llevar datos de personas: usa el dispositivo y
 los recuentos; el detalle está en la incidencia.
 
+### Si es el propio aviso el que el servidor rechaza con 400
+
+Caso menos frecuente: la tablet sí llega al servidor, pero `POST /api/v1/scan/discarded`
+responde `400` porque el aviso no cumple el contrato (`scan_id` UUID v7,
+`occurred_at` en UTC con `Z`, `problem_type` con el patrón `urn:kronoqr:problem:*`;
+el quiosco ya normaliza `problem_type` a nulo si no lo cumple). Se reconoce
+porque **`unreported_discards` no baja aunque haya red y la versión sea la
+correcta**. Qué hacer:
+
+1. Mira los `error_events` de ese dispositivo: busca `kiosk.offline.discard_report_failed`
+   con `http_status` 400.
+2. Comprueba la versión de la PWA de la tablet y actualízala si está desfasada.
+3. Si el aviso sigue sin entrar, **anota a mano el fichaje** desde la pantalla
+   de diagnóstico de la tablet (RF-KI-08 muestra los descartados: `scan_id` y
+   hora) y pásalo a RRHH **antes de desvincular o limpiar la tablet** (§5):
+   es el único sitio donde existe.
+
 
 ## 9. Un elemento del lote que no se procesa (`ScanBatchItemNotProcessed`)
 
@@ -372,6 +390,43 @@ fallo de la instalación o un fichaje con un caso no previsto.
    fichajes reales, incluido el que falla y los que esperan detrás.
 3. En cuanto el servidor lo procese, la tablet vacía sola; comprueba con
    `kiosk:health` y espera a que la alerta se apague.
+
+## 10. Descartes atribuidos en un quiosco (`KioskDiscardedScansAttributed`)
+
+### Qué significa
+
+En la última hora, ese quiosco ha avisado de fichajes que descartó y que el
+servidor **ha atribuido a una persona** (`kiosk_discarded_scans_total{attributed="true"}`,
+RN-22). Que lo haga un solo quiosco mientras los demás no es la firma de dos
+cosas: **una PWA desfasada** que genera fichajes que el servidor no acepta, o
+**un token de dispositivo robado** que fabrica avisos contra personas. Cada
+aviso atribuido acaba en una incidencia «Fichaje descartado por el quiosco» de
+RRHH, así que no es ruido.
+
+### Qué comprobar
+
+1. **Versión de la PWA de ese dispositivo**: `php artisan kiosk:health` (columna
+   versión) o «Salud de quioscos». Si es anterior a la del resto de la
+   instalación, es el caso habitual: actualízala siguiendo
+   [`actualizacion-cliente.md`](actualizacion-cliente.md) (cola a 0 primero).
+2. **Las incidencias «Fichaje descartado por el quiosco» de ese día** en la
+   bandeja de RRHH, filtradas por ese dispositivo (el contexto trae su
+   `device_uuid`): ¿encajan con fichajes reales de ese hotel y horario, o son
+   horas y personas que no pasaron por esa tablet?
+3. **¿Debería ese quiosco estar enviando?** Si está en una ubicación y turno
+   donde nadie ficha, o no sabes dónde está físicamente, trátalo como token
+   robado.
+
+### Qué hacer
+
+- **Versión desfasada**: actualiza la tablet; la alerta se apaga sola al pasar
+  la hora sin nuevos descartes. RRHH resuelve las incidencias ya abiertas.
+- **El quiosco no es el que debería estar enviando**: **desvincúlalo** desde
+  «Quioscos» en el panel. Revoca el token **en el acto**. Antes comprueba su
+  cola si es una tablet real y localizada (§5: se descartan los pendientes); si
+  no la tienes, no esperes. Avisa a RRHH de que las incidencias de ese
+  dispositivo pueden ser falsas, y escala al responsable de seguridad.
+- Nunca borres datos de una tablet real con pendientes (§5).
 
 **Relacionados:** [`quiosco-no-responde.md`](quiosco-no-responde.md) ·
 [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) ·

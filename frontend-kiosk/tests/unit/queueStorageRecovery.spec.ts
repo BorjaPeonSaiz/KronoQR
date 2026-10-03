@@ -347,6 +347,36 @@ describe('ADR-047 — en cada drenaje se intenta volver al disco y se migra lo d
     expect(await openKioskDatabase(name).discarded.count()).toBe(1)
   })
 
+  it('RN-21: disco con 07:00 + memoria con 15:00 → nada se envia hasta reabrir; tras reabrir salen en orden', async () => {
+    const { queue, clock, setDiskHealthy, breakDisk } = await degradedQueue()
+    await queue.enqueue(scan(IDS[0], '2026-08-14T07:00:00.000Z'))
+    breakDisk()
+    await queue.enqueue(scan(IDS[1], '2026-08-14T15:00:00.000Z'))
+    expect(queue.stats().storage).toBe('memory')
+
+    // La de las 15:00 NO puede adelantar a la de las 07:00, que sigue en un disco que no se ve.
+    expect(queue.isClaimBlocked()).toBe(true)
+    expect(await queue.claim(10, { ignoreSchedule: true })).toEqual([])
+
+    setDiskHealthy(true)
+    clock.advance(61_000)
+    expect(await queue.tryReopen()).toBe(true)
+    const both = await queue.claim(10, { ignoreSchedule: true })
+    expect(both.map((row) => row.scan_id)).toEqual([IDS[0], IDS[1]])
+  })
+
+  it('RN-21: con el disco a 0 antes de degradar, lo de memoria SI sale', async () => {
+    const { queue, breakDisk } = await degradedQueue()
+    await queue.refresh()
+    expect(queue.stats().size).toBe(0)
+    breakDisk()
+    await queue.enqueue(scan(IDS[1], '2026-08-14T15:00:00.000Z'))
+
+    expect(queue.isClaimBlocked()).toBe(false)
+    const claimed = await queue.claim(10, { ignoreSchedule: true })
+    expect(claimed.map((row) => row.scan_id)).toEqual([IDS[1]])
+  })
+
   it('como mucho una vez por minuto, y si el disco sigue roto se queda en memoria con las filas intactas', async () => {
     const { queue, clock, setDiskHealthy, breakDisk } = await degradedQueue()
     breakDisk()

@@ -227,12 +227,14 @@ function causeForStatus(status: number): ApiFailureCause {
   return 'server'
 }
 
+const PROBLEM_TYPE = /^urn:kronoqr:problem:[a-z0-9-]+$/
+
 /** `type` de un problema de ESTE producto; `null` si no trae uno reconocible. */
 function problemTypeOf(body: Record<string, unknown>): string | null {
   const type = body['type']
-  return typeof type === 'string' && type.startsWith('urn:kronoqr:problem:')
-    ? type.slice(0, 120)
-    : null
+  // Mismo patron que el contrato de `POST /scan/discarded` (F9): un `type` que no
+  // lo cumpla daria 400 para siempre, asi que viaja como `null`.
+  return typeof type === 'string' && PROBLEM_TYPE.test(type) ? type : null
 }
 
 /**

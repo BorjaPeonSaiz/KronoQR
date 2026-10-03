@@ -3,7 +3,8 @@
 //
 // NO ES DECORATIVO: es un requisito legal, y por eso esta SIEMPRE en pantalla y
 // no detras de un boton. Lo que va detras de un boton es la capa 2 —la politica
-// completa— a la que se llega por enlace y por QR.
+// completa— de la que se enseña la direccion como TEXTO y como QR. Nunca como
+// enlace navegable: una tablet compartida no puede salir del quiosco (F14).
 //
 // Lo que dice la capa 1: quien es el responsable, para que trata los datos, con
 // que base juridica, cuanto los conserva y como ejercer los derechos. Y una
@@ -14,9 +15,9 @@
 // cliente y vienen de `GET /api/v1/branding` (`privacy_notice`), que el quiosco
 // ya guarda en `localStorage` y por tanto sigue enseñando sin red. Si nunca los
 // recibio, el aviso sigue apareciendo con una redaccion generica. `parseBranding`
-// ya ha descartado cualquier URL que no sea http(s); aqui se vuelve a comprobar
-// antes de pintar un `href`: es lo ultimo que se interpone entre una copia
-// manipulada y un enlace de `javascript:`.
+// ya ha descartado cualquier URL que no sea https ASCII; aqui se vuelve a
+// comprobar antes de pintar la direccion y generar el QR: es lo ultimo que se
+// interpone entre una copia manipulada de `localStorage` y la pantalla.
 import type { PrivacyNotice } from '@kronoqr/web-kit/branding'
 import type { QrPath } from '@kronoqr/web-kit/qr/renderQrPath'
 import { computed, ref, watch } from 'vue'

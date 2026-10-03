@@ -258,6 +258,17 @@ cruda de migraciones, copia, restauración y logs, y **puede contener datos
 personales** (un `DETAIL: Failing row contains (...)` de PostgreSQL, por
 ejemplo). Revísalo antes de enviarlo, y envíalo solo si el fabricante lo pide.
 
+**Las tablets y la vuelta atrás.** Una tablet que ya recargó la PWA 2.2.0 usa la
+**versión 2** de su base local (tabla `discarded`). Si se vuelve a la 2.1.0,
+Dexie da `VersionError` y la cola cae a memoria: lo que está en disco no se
+pierde, pero la tablet no lo ve ni lo drena. Por eso:
+
+- **Antes de volver atrás**, vacía la cola de cada tablet (`kiosk:health`, cola
+  a 0 y sin descartes sin avisar).
+- **Tras la vuelta atrás**, en cada tablet que había actualizado: borra los datos
+  del sitio y vuelve a emparejarla ([`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md)),
+  solo con la cola ya a cero.
+
 ---
 
 ## 6. Lo que no cambia nunca al actualizar
