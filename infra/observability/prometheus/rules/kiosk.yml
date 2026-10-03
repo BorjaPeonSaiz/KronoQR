@@ -111,3 +111,58 @@ groups:
             fichaje en el quiosco sigue funcionando; lo que esta en riesgo es
             que el registro tarde en reflejar lo que ya ha ocurrido.
           runbook_url: docs/runbooks/cola-offline-atascada.md
+
+      #------------------------------------------------------------------------
+      # RN-21/RN-22 (2.2.0). El latido declara `queue_storage` y la app publica
+      # `kiosk_queue_storage_degraded{device}` (1 = la cola cayo a memoria o no
+      # tiene almacenamiento).
+      #
+      # POR QUE ESTA ALERTA CUBRE EL HUECO DE LAS DOS DE COLA. Con la cola en
+      # memoria el tamano es desconocido (`pending_queue_size: null`) y la app
+      # DEJA DE PUBLICAR `kiosk_offline_queue_size` para ese dispositivo:
+      # ColaOfflineAtascada (`> 50`) y ColaOfflineSinVaciar (`min_over_time
+      # > 0`) no usan `absent()`, asi que sobre una serie que no existe no
+      # evaluan nada y callan. Es deliberado: "desconocido" no es "0" ni "mas
+      # de 50", y no se inventa un valor. El hueco lo cierra esta regla, que
+      # es la que avisa de que ese quiosco tiene la cola sin garantias.
+      #------------------------------------------------------------------------
+      - alert: KioskQueueStorageDegraded
+        expr: kiosk_queue_storage_degraded == 1
+        for: 10m
+        labels:
+          severity: high
+          destinatario: it-cliente
+          component: kiosk
+        annotations:
+          summary: "La cola del quiosco {{ $labels.device }} ha caido a memoria"
+          description: >-
+            La tablet {{ $labels.device }} no puede guardar su cola offline en
+            el almacenamiento del navegador (RN-21): lo que se encole mientras
+            tanto SE PIERDE si la tablet o la aplicacion se reinicia, y su
+            tamano de cola es desconocido. El quiosco sigue fichando con
+            normalidad (regla dura 19). Recarga la aplicacion o libera
+            espacio en la tablet antes del siguiente corte de red.
+          runbook_url: docs/runbooks/cola-offline-atascada.md#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded
+
+      #------------------------------------------------------------------------
+      # RN-22: fichajes que la tablet descarto por un 400/422 y aun no ha
+      # conseguido avisar al servidor. Mientras no se avisa, NO hay incidencia
+      # para RRHH: el fichaje existe solo en la tablet. Aviso, no urgencia: el
+      # quiosco reintenta solo; si pasan 30 min es que el aviso no llega.
+      #------------------------------------------------------------------------
+      - alert: KioskUnreportedDiscards
+        expr: kiosk_unreported_discards > 0
+        for: 30m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: kiosk
+        annotations:
+          summary: "El quiosco {{ $labels.device }} tiene {{ $value }} fichajes descartados sin avisar"
+          description: >-
+            La tablet {{ $labels.device }} descarto {{ $value }} fichajes
+            (el servidor respondio 400/422) y lleva mas de 30 minutos sin
+            conseguir avisar de ello (RN-22). Hasta que lo logre, RRHH no ve
+            la incidencia de esos fichajes. Comprueba la conexion de esa
+            tablet y que su version de la aplicacion es la actual.
+          runbook_url: docs/runbooks/cola-offline-atascada.md#8-descartes-sin-avisar-kioskunreporteddiscards

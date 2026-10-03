@@ -447,6 +447,58 @@
         "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["sum"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Cola degradada y descartes sin avisar, por dispositivo",
+      "description": "kiosk_queue_storage_degraded: 1 = la cola de la tablet ha caído a memoria o no tiene almacenamiento (lo que se encole se pierde al reiniciar; su tamaño es desconocido y no aparece en el panel de cola). kiosk_unreported_discards: fichajes que el quiosco descartó por un 400/422 y aún no ha conseguido avisar al servidor (RN-22). Coherente con KioskQueueStorageDegraded y KioskUnreportedDiscards.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kiosk_queue_storage_degraded{device=~\"$device\"}",
+          "legendFormat": "cola degradada {{device}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "kiosk_unreported_discards{device=~\"$device\"}",
+          "legendFormat": "descartes sin avisar {{device}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "pointSize": 5,
+            "stacking": { "mode": "none", "group": "A" },
+            "axisPlacement": "auto",
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
     }
   ]
 }
