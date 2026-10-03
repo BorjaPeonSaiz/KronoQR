@@ -30,6 +30,23 @@
 #   --audit-by-caller  NO escribe el asiento de auditoria: lo escribe quien
 #                      llama. Solo lo usa update.sh en su vuelta atras, que
 #                      escribe el suyo con el paso y el motivo del fallo
+#   --expect-sha256 H  huella SHA-256 de CONFIANZA de la copia: manda sobre el `.sha256` de
+#                      BACKUP_PATH. La pasa update.sh en su vuelta atras (la calculo el
+#                      mismo y la guardo en /var/log/kronoqr, fuera del alcance del runtime)
+#   --accept-unauthenticated
+#                      acepta una copia de la 2.1.0 (cifrada pero SIN MAC). El
+#                      `.sha256` sigue siendo obligatorio. Se pasa por INVOCACION
+#                      (tambien vale KRONOQR_ACCEPT_UNAUTHENTICATED=1 en el entorno
+#                      de esa orden); lo que ponga el .env no cuenta (ADR-049, C12)
+#
+# INTEGRIDAD (ADR-049). La copia se LEE UNA SOLA VEZ a un directorio privado 0700 y
+# el MAC (autenticidad: nadie la ha alterado ni sustituido), el `.sha256`, el
+# manifiesto autenticado y el descifrado se hacen sobre ESA copia: quien escriba
+# en el destino no puede cambiarla entre la comprobacion y el uso. Falta el
+# `.sha256`, el MAC no cuadra, el nombre de la cabecera no es el del fichero, falta
+# el manifiesto autenticado o la copia es de la 2.1.0 sin bandera: salida 6, sin
+# tocar nada. La FECHA que se muestra y se escribe en el asiento es la de la
+# cabecera autenticada: comprueba que es la que esperas.
 #
 # EL ASIENTO DE AUDITORIA (PR1, regla dura 6, RL-04). Restaurar descarta un
 # intervalo del registro horario, y eso ha de constar DENTRO del registro: tras
@@ -80,9 +97,8 @@
 #
 #   0  Restaurado y verificado. La base anterior se conserva con su marca.
 #   1  Uso incorrecto, o falta --yes. Nada tocado.
-#   2  Requisitos no cumplidos: no hay copia, no conecta con PostgreSQL, la
-#      huella no coincide, no hay espacio, la clave no descifra o el volcado no
-#      es legible. NADA se ha tocado.
+#   2  Requisitos no cumplidos: no hay copia, no conecta con PostgreSQL, no hay
+#      espacio o el volcado no es legible. NADA se ha tocado.
 #   3  Estado previo incompatible: quedan conexiones abiertas contra la base de
 #      destino. NADA se ha tocado; el mensaje dice como cerrarlas.
 #   4  La restauracion ha fallado y se ha deshecho: la base de trabajo se ha
@@ -90,9 +106,11 @@
 #   5  Ha quedado algo a medias —tipicamente una base de trabajo con la copia
 #      ya restaurada— y hay que terminar el intercambio a mano. El mensaje dice
 #      que base es y que ordenes la activan.
-#   6  Verificacion posterior fallida. En este script, UNA sola causa: la base
-#      esta restaurada y en servicio pero el asiento `system.restored_from_backup`
-#      NO se ha escrito (ASIENTO PENDIENTE). No se deshace nada y NO se repite la
+#   6  Integridad: falta el .sha256, el MAC no cuadra, el nombre no es el de la
+#      cabecera, falta el manifiesto autenticado, la clave es otra, o la copia es
+#      de la 2.1.0 y no se ha pedido expresamente (NADA se ha tocado). O bien,
+#      tras restaurar: la base esta restaurada y en servicio pero el asiento
+#      `system.restored_from_backup` NO se ha escrito (ASIENTO PENDIENTE). No se deshace nada y NO se repite la
 #      restauracion: el mensaje y el informe traen la orden que lo escribe.
 #   7  GARANTIA DE SEGURIDAD ROTA (AUD-1, A3-01): la copia, al restaurarse, ha
 #      cambiado atributos o pertenencias de rol del cluster (por ejemplo
@@ -125,7 +143,23 @@ CONFIRMADO=0
 SOLO_LISTAR=0
 DIAS_ANTERIOR=7
 TRABAJO=""
+# INFORME es la ruta FINAL del informe (la que se cita en los mensajes);
+# INFORME_TRABAJO es donde se escribe mientras corre: un directorio privado 0700
+# del que ejecuta, nunca BACKUP_PATH (A3-R2). Al salir se PUBLICA en `reports/`
+# como uid 1000 con kq_publish_as_app (sin escribir por ruta como root).
 INFORME=""
+INFORME_TRABAJO=""
+# Integridad de la copia (ADR-049): se rellena al abrirla.
+INTEGRIDAD=""
+MANIFIESTO=""
+HUELLA_PRIVADA=""
+# La bandera de copias heredadas se toma de la linea de ordenes o del entorno de
+# ESTA invocacion; lo que traiga el .env no cuenta (C12): se captura antes de
+# cargarlo.
+ACEPTAR_HEREDADA=0
+[ "${KRONOQR_ACCEPT_UNAUTHENTICATED:-}" != "1" ] || ACEPTAR_HEREDADA=1
+# Huella de confianza aportada por quien llama (update.sh en la vuelta atras, C13).
+EXPECT_SHA256=""
 ASIENTO_POR_LLAMADOR=0
 AUDITAR=0
 ASIENTO_PENDIENTE=0
@@ -136,7 +170,20 @@ CADENA_DESCARTADA=""
 ARTISAN_DIR="${KQ_ARTISAN_DIR:-/var/www/html}"
 
 al_salir() {
+  publicar_informe || true
+  kqe_forget
   [ -n "$TRABAJO" ] && [ -d "$TRABAJO" ] && rm -rf "$TRABAJO"
+  return 0
+}
+
+# Publica el informe de trabajo en `reports/` como el uid de la aplicacion y sin
+# sobrescribir (A3-R2). Sin `setpriv` (root) o con el nombre ocupado, el informe
+# se CONSERVA en un directorio privado y se dice donde: un informe perdido seria
+# peor que uno publicado tarde (regla dura 6).
+publicar_informe() {
+  [ -n "$INFORME_TRABAJO" ] || return 0
+  kq_report_publish "$INFORME_TRABAJO" "$INFORME"
+  INFORME_TRABAJO=""
   return 0
 }
 
@@ -153,7 +200,7 @@ uso() {
 
 informar() {
   log "$*"
-  [ -n "$INFORME" ] && printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INFORME"
+  [ -z "$INFORME_TRABAJO" ] || printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INFORME_TRABAJO"
   return 0
 }
 
@@ -241,7 +288,13 @@ punta_cadena_descartada() {
 # Instante de la copia en UTC: el del manifiesto o, sin el, el de su nombre.
 instante_de_la_copia() {
   local valor
-  valor="$(manifest_field "${FICHERO%.dump.enc}.manifest.json" created_at 2>/dev/null || true)"
+  # La fecha de la CABECERA autenticada manda: el nombre del fichero y el
+  # manifiesto de una copia heredada los puede cambiar quien escriba en el destino.
+  if [ "$INTEGRIDAD" = "authenticated" ] && [ -n "$KQE_CREATED" ]; then
+    printf '%s' "$KQE_CREATED"
+    return 0
+  fi
+  valor="$(manifest_field "${MANIFIESTO}" created_at 2>/dev/null || true)"
   if [ -z "$valor" ]; then
     valor="$(basename -- "$FICHERO" | sed -n 's/.*\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)T\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)Z.*/\1-\2-\3T\4:\5:\6Z/p' || true)"
   fi
@@ -249,10 +302,8 @@ instante_de_la_copia() {
 }
 
 huella_de_la_copia() {
-  local valor=""
-  [ ! -f "${FICHERO}.sha256" ] || valor="$(cut -d' ' -f1 <"${FICHERO}.sha256" 2>/dev/null || true)"
-  [[ "$valor" =~ ^[0-9a-f]{64}$ ]] || valor=""
-  printf '%s' "$valor"
+  # La de la copia PRIVADA que se ha verificado y se descifra (ya comparada con el .sha256).
+  printf '%s' "$HUELLA_PRIVADA"
 }
 
 # Version del producto que ejecuta esta restauracion: la de la imagen.
@@ -298,6 +349,9 @@ escribir_asiento() {
     "from_version=${version}" \
     "to_version=${version}" \
     "backup_fingerprint=$(huella_de_la_copia)" \
+    "integrity=${INTEGRIDAD}" \
+    "kqe_created=$([ "$INTEGRIDAD" != "authenticated" ] || printf '%s' "$KQE_CREATED")" \
+    "kid=$([ "$INTEGRIDAD" != "authenticated" ] || printf '%s' "$KQE_KID")" \
     "chain_before=${CADENA_DESCARTADA}" \
     "report_id=$(basename -- "$INFORME" .log)")"
 
@@ -328,7 +382,7 @@ comprobar_precondiciones() {
   require_cmd pg_restore postgresql17-client
   require_cmd df coreutils
   require_encryption_key
-  ensure_backup_tree
+  ensure_backup_tree reports
 
   [ -n "$FICHERO" ] || FICHERO="$(latest_dump_file)"
   [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die "${KQ_EXIT_REQUIREMENTS}" \
@@ -337,11 +391,8 @@ comprobar_precondiciones() {
   psql -Atqc 'SELECT 1' >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se puede conectar a PostgreSQL en ${PGHOST}:${PGPORT} como ${PGUSER}. Levanta el servicio ('docker compose up -d postgres') y vuelve a lanzar esto. No se ha tocado nada."
 
-  # Huella: si no coincide, la copia esta corrupta y no se toca la instalacion.
-  if [ -f "${FICHERO}.sha256" ]; then
-    [ "$(cut -d' ' -f1 <"${FICHERO}.sha256")" = "$(sha256_of "$FICHERO")" ] || die "${KQ_EXIT_REQUIREMENTS}" \
-      "la huella SHA-256 de '${FICHERO}' no coincide con la registrada: esta corrupta. Prueba con la copia anterior ('restore.sh --list') y avisa al responsable de seguridad. No se ha tocado nada."
-  fi
+  # La huella, el MAC y el manifiesto se comprueban en preparar_volcado, sobre una
+  # copia PRIVADA de los bytes (ADR-049): no se vuelve a leer del destino.
 
   # Espacio: la copia descomprime a bastante mas de lo que ocupa cifrada. Se
   # exige cinco veces su tamano, que es el margen con el que un volcado
@@ -357,14 +408,25 @@ comprobar_precondiciones() {
   comprobar_asiento_posible
 }
 
-# Descifra a un directorio privado y comprueba que pg_restore lo entiende.
-# Aqui todavia no se ha tocado la instalacion.
+# Abre la copia: UNA lectura a un directorio privado y todo lo demas (MAC, huella,
+# manifiesto, descifrado) sobre ESA copia (TOCTOU, ADR-049). Aqui todavia no se
+# ha tocado la instalacion.
 preparar_volcado() {
   TRABAJO="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-restore.XXXXXX")"
   chmod 0700 "$TRABAJO"
 
-  decrypt_stream <"$FICHERO" >"${TRABAJO}/copia.dump" 2>/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
-    "no se puede descifrar '${FICHERO}' con la BACKUP_ENCRYPTION_KEY actual. Si la clave se roto, usa la anterior: una copia solo se abre con la clave con la que se hizo. No se ha tocado nada."
+  kq_open_dump_copy "$FICHERO" "$TRABAJO" "$ACEPTAR_HEREDADA" "${KQ_EXIT_VERIFY_FAILED}"
+
+  if [ "$INTEGRIDAD" = "authenticated" ]; then
+    informar "Copia AUTENTICADA (KQE1, kid ${KQE_KID}), creada el ${KQE_CREATED} segun su cabecera. Comprueba que es la fecha que esperas."
+    kqe_decrypt_copy >"${TRABAJO}/copia.dump" 2>/dev/null || die "${KQ_EXIT_VERIFY_FAILED}" \
+      "'${FICHERO}' se autentica pero no se puede descifrar. No se ha tocado nada."
+  else
+    informar "Copia heredada de la 2.1.0, SIN autenticar (aceptada con --accept-unauthenticated)."
+    kqe_decrypt_legacy_copy >"${TRABAJO}/copia.dump" 2>/dev/null || die "${KQ_EXIT_VERIFY_FAILED}" \
+      "no se puede descifrar '${FICHERO}' con la BACKUP_ENCRYPTION_KEY actual. Si la clave se roto, usa la anterior (BACKUP_ENCRYPTION_KEY_PREVIOUS): una copia solo se abre con la clave con la que se hizo. No se ha tocado nada."
+  fi
+  kqe_forget
 
   pg_restore --list "${TRABAJO}/copia.dump" >"${TRABAJO}/indice.txt" 2>/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
     "'${FICHERO}' se descifra pero no es un volcado legible. Usa la copia anterior ('restore.sh --list'). No se ha tocado nada."
@@ -414,7 +476,7 @@ restaurar() {
 
   informar "Restaurando el volcado (esto es lo que mas tarda)"
   if ! pg_restore --dbname="$base_nueva" --no-owner "${privilegios[@]}" --exit-on-error \
-    "${TRABAJO}/copia.dump" >>"${INFORME:-/dev/null}" 2>&1; then
+    "${TRABAJO}/copia.dump" >>"${INFORME_TRABAJO:-/dev/null}" 2>&1; then
     guardar_roles "$base_nueva"
     psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
     die "${KQ_EXIT_ROLLED_BACK}" "la restauracion ha fallado; la base de trabajo se ha eliminado y '${BASE_DESTINO}' sigue como estaba. Revisa el informe '${INFORME}' y prueba con la copia anterior."
@@ -476,8 +538,8 @@ comprobar_restauracion() {
   tablas="$(psql -d "$base" -Atqc "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname !~ '^pg_'")"
   informar "Tablas restauradas: ${tablas}"
 
-  manifiesto="${FICHERO%.dump.enc}.manifest.json"
-  if [ ! -f "$manifiesto" ]; then
+  manifiesto="$MANIFIESTO"
+  if [ -z "$manifiesto" ] || [ ! -f "$manifiesto" ]; then
     err "AVISO: sin manifiesto no se pueden comparar conteos. Se continua, pero anotalo en el parte."
     return 0
   fi
@@ -512,15 +574,15 @@ purgar_bases_anteriores() {
 #------------------------------------------------------------------------------
 
 resumen_dry_run() {
-  local manifiesto
-  manifiesto="${FICHERO%.dump.enc}.manifest.json"
+  local manifiesto="$MANIFIESTO"
 
   printf '\n'
   printf 'Precondiciones de la restauracion\n'
   printf '  copia .................. %s\n' "$FICHERO"
-  printf '  creada ................. %s\n' "$(manifest_field "$manifiesto" created_at || echo "sin manifiesto")"
+  printf '  creada ................. %s (%s)\n' "$(instante_de_la_copia)" "$([ "$INTEGRIDAD" = "authenticated" ] && echo "fecha de la cabecera autenticada" || echo "SIN AUTENTICAR: copia heredada")"
+  printf '  integridad ............. %s\n' "$INTEGRIDAD"
   printf '  tablas en la copia ..... %s\n' "$(manifest_field "$manifiesto" table_count || echo "sin manifiesto")"
-  printf '  huella ................. verificada\n'
+  printf '  huella ................. verificada (sobre los mismos bytes que se descifran)\n'
   printf '  descifrado ............. correcto\n'
   printf '  base de destino ........ %s en %s:%s\n' "$BASE_DESTINO" "$PGHOST" "$PGPORT"
   printf '  conexiones abiertas .... %s (deben ser 0 al restaurar)\n' "$(conexiones_abiertas)"
@@ -575,6 +637,15 @@ main() {
       ASIENTO_POR_LLAMADOR=1
       shift
       ;;
+    --accept-unauthenticated)
+      ACEPTAR_HEREDADA=1
+      shift
+      ;;
+    --expect-sha256)
+      EXPECT_SHA256="${2:-}"
+      [[ "$EXPECT_SHA256" =~ ^[0-9a-f]{64}$ ]] || die "${KQ_EXIT_USAGE}" "--expect-sha256 necesita una huella SHA-256 de 64 hexadecimales."
+      shift 2
+      ;;
     --list)
       SOLO_LISTAR=1
       shift
@@ -594,7 +665,7 @@ main() {
   load_backup_config
 
   if [ "$SOLO_LISTAR" -eq 1 ]; then
-    ensure_backup_tree
+    ensure_backup_tree none
     "${SCRIPT_DIR}/backup.sh" list
     return 0
   fi
@@ -614,8 +685,9 @@ main() {
   # El informe se abre ANTES de tocar nada y se conserva aunque la
   # restauracion falle: es la prueba de que se restauro, quien y cuando.
   INFORME="${BACKUP_DIR_REPORTS}/restore-$(timestamp_utc).log"
-  : >"$INFORME"
-  chmod 0640 "$INFORME"
+  INFORME_TRABAJO="${TRABAJO}/informe.log"
+  : >"$INFORME_TRABAJO"
+  informar "Integridad de la copia: ${INTEGRIDAD}$([ "$INTEGRIDAD" != "authenticated" ] || printf ', creada el %s (cabecera autenticada)' "$KQE_CREATED")"
   informar "Restauracion iniciada por '$(id -un 2>/dev/null || echo desconocido)' desde '$(hostname 2>/dev/null || echo desconocido)'"
   informar "Copia: ${FICHERO}"
   informar "Destino: ${BASE_DESTINO} en ${PGHOST}:${PGPORT}"

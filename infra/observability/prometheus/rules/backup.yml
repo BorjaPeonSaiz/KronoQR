@@ -14,7 +14,7 @@
 # no es una tendencia que mirar. Lo que si hay es `for:`, para no despertar a
 # nadie por un fichero de metricas escrito a medias.
 #
-# Las metricas las escriben infra/scripts/backup.sh y restore-drill.sh en
+# Las metricas las escriben infra/scripts/backup.sh, restore-drill.sh y wal-metrics.sh en
 # BACKUP_PATH/metrics, y las sirve node-exporter (colector textfile).
 
 groups:
@@ -84,26 +84,94 @@ groups:
           runbook_url: docs/runbooks/restaurar-backup.md
 
       #------------------------------------------------------------------------
-      # RPO. El WAL archivado es lo que separa "perdimos 15 minutos" de
-      # "perdimos el dia".
+      # RPO (RNF-D-02, R5-DV-01, ADR-049). Las cuatro reglas leen la serie
+      # CONTINUA `kronoqr_wal_*` que wal-metrics.sh publica cada minuto desde el
+      # `scheduler`; hasta la 2.2.0 era una foto al terminar la copia nocturna y un
+      # archivado parado a las 10:00 no se veia hasta las 03:15 del dia siguiente.
+      #
+      # `kronoqr_wal_unarchived_age_seconds` es la EXPOSICION REAL: cuanto lleva sin
+      # protegerse el dato mas antiguo no archivado, INCLUIDO el segmento en curso.
+      # 0 si no hay nada pendiente: en una madrugada sin escrituras PostgreSQL no
+      # cierra segmentos y la edad del ultimo archivado crece sin problema alguno
+      # (por eso no se usa).
       #------------------------------------------------------------------------
       - alert: ArchivadoDeWalDetenido
         expr: >-
-          kronoqr_backup_wal_last_archived_age_seconds > 1800
-          or increase(kronoqr_backup_wal_archive_failures_total[1h]) > 0
+          kronoqr_wal_unarchived_age_seconds > (kronoqr_wal_archive_timeout_seconds + 600)
+          or kronoqr_wal_unarchived_segments >= 3
+        for: 3m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "El archivado de WAL esta detenido o va muy atrasado"
+          description: >-
+            Hay datos escritos que llevan sin archivarse mas de archive_timeout
+            (15 min) mas 10 min de margen, o hay 3 segmentos completos sin
+            archivar. El RPO deja de ser 15 min (RNF-D-02) y, mientras dure,
+            PostgreSQL conserva el WAL sin reciclar hasta llenar el disco de datos
+            y pararse. La metrica no espera a la copia nocturna.
+          runbook_url: docs/runbooks/restaurar-backup.md
+
+      - alert: ArchivadoDeWalFallando
+        expr: kronoqr_wal_archive_failing == 1
         for: 10m
         labels:
           severity: critical
           destinatario: it-cliente
           component: backup
         annotations:
-          summary: "El archivado de WAL esta detenido o falla"
+          summary: "El ultimo intento de archivado de WAL ha fallado y no se ha recuperado"
           description: >-
-            Hace mas de 30 min que no se archiva un segmento, con
-            archive_timeout=900 s, o ha habido fallos de archivado en la ultima
-            hora. Dos consecuencias, y la segunda es la urgente: el RPO deja de
-            ser 15 min (RNF-D-02), y PostgreSQL conserva el WAL sin reciclar
-            hasta llenar el disco de datos y pararse.
+            Un fallo suelto que se recupera no salta; este lleva mas de 10 min.
+            Causas habituales: destino no montado o sin permisos, disco lleno, o
+            falta la clave del WAL (BACKUP_WAL_KEY): el archivado nunca escribe un
+            segmento en claro. El log de postgres dice cual.
+          runbook_url: docs/runbooks/restaurar-backup.md
+
+      #------------------------------------------------------------------------
+      # Sin medida no se sabe si hay RPO. El latido del propio exportador: si el
+      # `scheduler` muere (y con el, las copias) o wal-metrics.sh no puede leer
+      # PostgreSQL, ninguna otra regla de este grupo cambia y nadie se entera.
+      #------------------------------------------------------------------------
+      - alert: MedicionDeWalAusente
+        expr: >-
+          (time() - kronoqr_wal_exporter_last_run_timestamp_seconds) > 300
+          or absent(kronoqr_wal_exporter_last_run_timestamp_seconds)
+        for: 5m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "No llega la medida del RPO"
+          description: >-
+            El exportador de wal-metrics.sh lleva mas de 5 min sin publicar, o
+            nunca ha publicado. Casi siempre es el contenedor scheduler parado
+            (que tambien hace las copias) o PostgreSQL inalcanzable con el rol de
+            copias. Mientras no haya medida no se sabe si el RPO se cumple.
+          runbook_url: docs/runbooks/restaurar-backup.md
+
+      #------------------------------------------------------------------------
+      # Deriva de configuracion. Sin archive_timeout, el RPO es «lo que tarde en
+      # llenarse un segmento de 16 MB», no 15 minutos.
+      #------------------------------------------------------------------------
+      - alert: ArchiveTimeoutFueraDeRango
+        expr: >-
+          kronoqr_wal_archive_timeout_seconds == 0
+          or kronoqr_wal_archive_timeout_seconds > 900
+        for: 10m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: backup
+        annotations:
+          summary: "archive_timeout esta desactivado o por encima de 900 s"
+          description: >-
+            RNF-D-02 exige RPO de 15 min y eso solo lo sostiene archive_timeout=900.
+            Lo fija infra/compose.prod.yaml: si alguien lo ha editado,
+            restaurarlo y recrear postgres.
           runbook_url: docs/runbooks/restaurar-backup.md
 
       #------------------------------------------------------------------------
@@ -113,11 +181,11 @@ groups:
       # dejo. Retiene WAL sin limite y llena el disco de datos; PostgreSQL lo
       # acota con max_slot_wal_keep_size (DB_MAX_SLOT_WAL_KEEP_GB), pero un slot
       # inesperado tambien es una senal de seguridad, por eso es critica.
-      # La metrica la escribe backup.sh en cada copia (diaria), asi que la
-      # alerta persiste hasta la siguiente copia tras retirar el slot.
+      # La metrica la escribe wal-metrics.sh cada minuto (antes, backup.sh en cada
+      # copia diaria: un slot nuevo tardaba hasta 24 h en verse).
       #------------------------------------------------------------------------
       - alert: SlotDeReplicacionParado
-        expr: kronoqr_backup_replication_slots_inactive > 0
+        expr: kronoqr_wal_replication_slots_inactive > 0
         for: 15m
         labels:
           severity: critical

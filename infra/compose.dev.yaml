@@ -235,14 +235,22 @@ services:
       # simulacro de restauracion se pueda ensayar aqui (tarea 1.18).
       KRONOQR_WAL_ARCHIVE_DIR: ${BACKUP_PATH:-/var/backups/fichaje}/wal
       KRONOQR_WAL_RETENTION_DAYS: ${BACKUP_WAL_RETENTION_DAYS:-8}
+      # Subclave del WAL (ADR-049), derivada de la clave de relleno de desarrollo
+      # (`kronoqr_local_dev_only_backup_key`) con `backup.sh derive-wal-key`: una
+      # prueba (BackupKeyDerivationTest) comprueba que sigue siendolo. Con otra
+      # BACKUP_ENCRYPTION_KEY en desarrollo, define tambien BACKUP_WAL_KEY.
+      BACKUP_WAL_KEY: ${BACKUP_WAL_KEY:-4deec0e109388ff8c0ed3ca348abba952eef5a59c6e87906f052e8453eff69ec}
+      # SOLO desarrollo: sin esto `archive-wal.sh` rechaza la clave de relleno.
+      KRONOQR_WAL_ALLOW_DEV_KEY: "1"
     # Regla dura 3: UTC desde el primer arranque, tambien si alguien recrea el
     # volumen con otra configuracion regional en la maquina.
     #
-    # Archivado de WAL activo tambien en desarrollo, con UNA diferencia
-    # deliberada respecto a produccion: aqui no se fija `archive_timeout`. En
-    # produccion vale 900 s y es lo que acota el RPO a 15 minutos (RNF-D-02);
-    # en una maquina de desarrollo forzaria un segmento de 16 MiB cada cuarto
-    # de hora para nada.
+    # Archivado de WAL activo tambien en desarrollo, IGUAL que en produccion,
+    # `archive_timeout` incluido (ADR-049). Antes aqui no se fijaba, con el argumento
+    # de no forzar un segmento de 16 MiB cada cuarto de hora; con el segmento
+    # comprimido y cifrado ocupa kilobytes, y la diferencia dejaba la alerta del RPO
+    # en `firing` permanente en desarrollo (R5-DV-01): una regla distinta por entorno
+    # es dos comportamientos que divergen.
     command:
       - postgres
       - -c
@@ -255,6 +263,8 @@ services:
       - wal_level=replica
       - -c
       - archive_mode=on
+      - -c
+      - archive_timeout=900
       - -c
       - archive_command=/usr/local/bin/kronoqr-archive-wal %p %f
       # Igual que en produccion (A3-05): un slot de replicacion huerfano no

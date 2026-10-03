@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+#
+# KronoQR — cifra EN SITIO los segmentos de WAL heredados de la 2.1.0 (R5-DV-02).
+#
+# La 2.1.0 archivaba cada segmento comprimido pero SIN CIFRAR (`<segmento>.gz`).
+# Este script los convierte a `<segmento>.gz.enc` (KQE1, ADR-049) como el usuario
+# `postgres` DENTRO del contenedor: root del anfitrion no opera por ruta en
+# `wal/`, que es de postgres (patron de lib/fs.sh). Lo lanzan:
+#
+#   · update.sh, de una vez, cuando postgres esta sano tras actualizar:
+#       docker compose exec -d -T postgres kronoqr-wal-migrate
+#   · archive-wal.sh, de forma oportuna y acotada (--max 25 --seconds 20), por si
+#     la primera ejecucion se interrumpio (reinicio, orden de parada).
+#   · una persona, a mano: es idempotente y se puede repetir las veces que haga falta.
+#
+#   kronoqr-wal-migrate [--max N] [--seconds S]     (0 = sin limite; por defecto sin limite)
+#
+# GARANTIAS, en este orden por cada segmento (ADR-049, C10):
+#   1. El `.gz` ya ES la carga: se cifra tal cual a `.<seg>.mig.<pid>.part` con
+#      cabecera `src=legacy` (cubierta por el MAC).
+#   2. `touch -r` copia el `mtime` del `.gz`: la purga por antiguedad
+#      (`-mtime +BACKUP_WAL_RETENTION_DAYS`) no los retiene 8 dias mas.
+#   3. Se VERIFICA el resultado (MAC + descifrado == .gz original).
+#   4. `mv` a `<seg>.gz.enc` y SOLO ENTONCES `rm` del `.gz`. Un corte entre medias
+#      deja los dos: manda el `.gz.enc`, y la siguiente pasada borra el `.gz`.
+# El `.gz.enc` ya existente con un `.gz` al lado se verifica antes de borrar el `.gz`.
+#
+# Codigos de salida: 0 hecho (o nada que hacer) · 1 algun segmento no se ha podido
+# migrar (el resto si; el mensaje dice cual) · 2 falta la clave o el destino.
+#
+# NINGUN SECRETO EN LA SALIDA.
+
+set -euo pipefail
+IFS=$'\n\t'
+export LC_ALL=C
+
+readonly DESTINO="${KRONOQR_WAL_ARCHIVE_DIR:-/var/backups/fichaje/wal}"
+readonly KQE_LIB="${KQE_LIB:-/usr/local/lib/kronoqr/kqe.sh}"
+
+err() {
+  printf 'kronoqr-wal-migrate: %s\n' "$*" >&2
+}
+
+maximo=0
+segundos=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --max)
+    maximo="${2:-0}"
+    shift 2
+    ;;
+  --seconds)
+    segundos="${2:-0}"
+    shift 2
+    ;;
+  *)
+    err "uso: kronoqr-wal-migrate [--max N] [--seconds S]"
+    exit 2
+    ;;
+  esac
+done
+[[ "$maximo" =~ ^[0-9]+$ ]] && [[ "$segundos" =~ ^[0-9]+$ ]] || {
+  err "--max y --seconds son numeros enteros."
+  exit 2
+}
+
+# shellcheck source=/dev/null
+. "$KQE_LIB"
+kqe_wal_key_valid "${BACKUP_WAL_KEY:-}" || {
+  err "falta BACKUP_WAL_KEY (o no es valida): no se puede cifrar. Calculala con 'backup.sh derive-wal-key --write-env .env' y recrea postgres."
+  exit 2
+}
+[ -d "$DESTINO" ] && [ -w "$DESTINO" ] || {
+  err "el destino '${DESTINO}' no existe o no se puede escribir."
+  exit 2
+}
+
+# Candado atomico. Uno viejo (> 60 min) se considera de un proceso muerto.
+candado="${DESTINO}/.migrate.lock"
+if ! mkdir "$candado" 2>/dev/null; then
+  if [ -n "$(find "$candado" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+    rmdir "$candado" 2>/dev/null || true
+    mkdir "$candado" 2>/dev/null || exit 0
+  else
+    exit 0
+  fi
+fi
+
+trabajo="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-migrate.XXXXXX")"
+chmod 0700 "$trabajo"
+parte=""
+al_salir() {
+  [ -z "$parte" ] || rm -f -- "$parte" 2>/dev/null || true
+  rm -rf -- "$trabajo" 2>/dev/null || true
+  rmdir "$candado" 2>/dev/null || true
+}
+trap al_salir EXIT
+
+inicio="$(date +%s)"
+hechos=0
+fallos=0
+
+while IFS= read -r gz; do
+  [ -n "$gz" ] || continue
+  if [ "$maximo" -gt 0 ] && [ "$hechos" -ge "$maximo" ]; then
+    break
+  fi
+  if [ "$segundos" -gt 0 ] && [ "$(($(date +%s) - inicio))" -ge "$segundos" ]; then
+    break
+  fi
+
+  base="$(basename -- "$gz")"
+  nombre="${base%.gz}"
+  if [[ ! "$nombre" =~ $KQE_WAL_NAME_RE ]]; then
+    continue
+  fi
+  enc="${DESTINO}/${nombre}.gz.enc"
+
+  # Ya cifrado: el `.gz` sobra, pero solo se borra si el `.gz.enc` se verifica.
+  if [ -f "$enc" ]; then
+    if kqe_open "$enc" "$trabajo" wal "$nombre" && kqe_decrypt_copy | cmp -s - "$gz"; then
+      rm -f -- "$gz"
+      hechos=$((hechos + 1))
+    else
+      err "'${nombre}' tiene .gz y .gz.enc pero el .gz.enc no verifica (${KQE_REASON:-distinto}). Se conserva el .gz."
+      fallos=$((fallos + 1))
+    fi
+    continue
+  fi
+
+  parte="${DESTINO}/.${nombre}.mig.$$.part"
+  if ! kqe_encrypt wal "$nombre" "$parte" legacy <"$gz"; then
+    err "no se ha podido cifrar '${nombre}' (disco lleno o clave no valida)."
+    rm -f -- "$parte"
+    fallos=$((fallos + 1))
+    continue
+  fi
+  touch -r "$gz" "$parte"
+  chmod 0640 "$parte" 2>/dev/null || true
+  if ! { kqe_open "$parte" "$trabajo" wal "$nombre" && kqe_decrypt_copy | cmp -s - "$gz"; }; then
+    err "'${nombre}' cifrado no se verifica (${KQE_REASON:-distinto}). Se conserva el .gz."
+    rm -f -- "$parte"
+    fallos=$((fallos + 1))
+    continue
+  fi
+  sync
+  if mv -f -- "$parte" "$enc"; then
+    parte=""
+    rm -f -- "$gz"
+    hechos=$((hechos + 1))
+  else
+    err "no se ha podido publicar '${nombre}.gz.enc'. Se conserva el .gz."
+    rm -f -- "$parte"
+    fallos=$((fallos + 1))
+  fi
+done < <(find "$DESTINO" -maxdepth 1 -type f -name '*.gz' ! -name '.*' | sort)
+
+quedan="$(find "$DESTINO" -maxdepth 1 -type f -name '*.gz' ! -name '.*' | wc -l | tr -d '[:space:]')"
+if [ "$hechos" -gt 0 ] || [ "$fallos" -gt 0 ]; then
+  err "cifrados ${hechos} segmentos heredados; fallos ${fallos}; quedan ${quedan} en claro."
+fi
+[ "$fallos" -eq 0 ]

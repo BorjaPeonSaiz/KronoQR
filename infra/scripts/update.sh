@@ -118,6 +118,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/env-file.sh"
 # shellcheck source=lib/fs.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/fs.sh"
+# shellcheck source=lib/kqe.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/kqe.sh"
 # shellcheck source=lib/app-commands.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/app-commands.sh"
 
@@ -953,9 +955,14 @@ resolve_failed_step() {
 #     cambia en cada version (el paquete nuevo pasa a ser la instalacion y el
 #     anterior queda como vuelta atras); (4) es donde un administrador busca
 #     registros. Es un directorio de root: crearlo y escribir ahi por ruta es
-#     seguro. OJO: nada lo purga todavia —el paquete no instala ninguna regla
-#     de logrotate— y el detalle puede llevar datos personales: su plazo de
-#     conservacion esta pendiente (bloque 20 del plan de la 2.2.0).
+#     seguro, SIEMPRE QUE TODA la ruta lo sea: `kq_path_trusted` (lib/fs.sh) exige
+#     que cada tramo, el padre incluido, sea real, de root y sin escritura para
+#     grupo ni otros (A3-R2). El detalle puede llevar datos personales y tiene
+#     PLAZO: 30 dias (KRONOQR_LOG_RETENTION_DAYS, minimo 7) para
+#     `update-*.detalle.log` y la huella propia de la copia previa, 90 para el
+#     resumen local. Lo purga este script al arrancar (`purge_update_logs`) y
+#     doctor.sh como root; no se instala logrotate. El candado de la actualizacion
+#     tambien vive aqui (`update.lock`, con su pid), fuera del alcance del runtime.
 #   · EL INFORME (resumen, sin secretos ni datos personales) se escribe primero
 #     en ese mismo directorio —`update-<UTC>.log`, root 0600, copia local que no
 #     se pierde si la publicacion falla— y `publish_reports` lo copia al final a
@@ -972,6 +979,10 @@ KQ_UPDATE_LOG_DIR="${KRONOQR_LOG_DIR:-/var/log/kronoqr}"
 # es un enlace y queda 0700; 1 si no se puede.
 ensure_update_log_dir() {
   local dir="${KQ_UPDATE_LOG_DIR}"
+  # El PADRE tambien: root escribe por ruta aqui, y un padre que escribe otro
+  # usuario le permitiria cambiar este directorio por un enlace (A3-R2). Cada tramo
+  # de la ruta tiene que ser real, de root y sin escritura para grupo ni otros.
+  kq_path_trusted "$(dirname -- "${dir}")" || return 1
   [ ! -L "${dir}" ] || return 1
   if [ ! -d "${dir}" ]; then
     [ ! -e "${dir}" ] || return 1
@@ -981,6 +992,23 @@ ensure_update_log_dir() {
   # Tiene que ser de quien ejecuta (root): un directorio ajeno no es de fiar.
   [ "$(stat -c '%u' -- "${dir}" 2>/dev/null)" = "$(id -u)" ] || return 1
   chmod 0700 -- "${dir}" 2>/dev/null || return 1
+  kq_path_trusted "${dir}" || return 1
+  return 0
+}
+
+# Plazo de conservacion del detalle tecnico (C19, ADR-049, obligaciones-legales.md §4).
+# `update-*.detalle.log` puede llevar datos personales (salida cruda de migraciones y
+# logs): 30 dias de serie (KRONOQR_LOG_RETENTION_DAYS, minimo 7), junto con la huella
+# propia de la copia previa. El resumen local `update-*.log` no lleva datos personales y
+# se conserva 90 dias. Se purga al empezar cada actualizacion y desde doctor.sh; lo hace
+# root en SU directorio, ya validado. Si no se actualiza ni se ejecuta doctor.sh en
+# meses, el borrado espera a la siguiente ejecucion.
+purge_update_logs() {
+  local dir="${KQ_UPDATE_LOG_DIR}" days="${KRONOQR_LOG_RETENTION_DAYS:-30}"
+  [[ "${days}" =~ ^[0-9]+$ ]] && [ "${days}" -ge 7 ] || days=30
+  [ -d "${dir}" ] && [ ! -L "${dir}" ] || return 0
+  find "${dir}" -maxdepth 1 -type f \( -name 'update-*.detalle.log' -o -name 'update-*.copia.sha256' \) -mtime +"${days}" -delete 2>/dev/null || true
+  find "${dir}" -maxdepth 1 -type f -name 'update-*.log' ! -name 'update-*.detalle.log' -mtime +90 -delete 2>/dev/null || true
   return 0
 }
 
@@ -1090,6 +1118,7 @@ readonly -a PRECONDITION_CHECKS=(
   check_installation
   check_source_version
   check_backup_config
+  check_wal_key
   check_space
   check_images
   check_services
@@ -1344,32 +1373,44 @@ check_backup_config() {
     return 0
   fi
 
-  LOCK_DIR="${CFG_BACKUP_PATH}/update.lock"
-  if mkdir "${LOCK_DIR}" 2>/dev/null; then
-    LOCK_OWNED=1
-    # No se escribe el pid dentro: LOCK_DIR esta en BACKUP_PATH (1000, lo escribe
-    # el runtime) y un `> ${LOCK_DIR}/pid` como root seguiria un enlace plantado
-    # en su lugar. Nadie lo leia.
-    check_pass "$(kq_text u_c_lock)"
-  else
-    local age="?"
-    if command -v stat >/dev/null 2>&1; then
-      age="$(($(now_epoch) - $(stat -c '%Y' "${LOCK_DIR}" 2>/dev/null || now_epoch)))s"
-    fi
-    check_fail "$(kq_text u_c_lock)" \
-      "$(kq_format u_f_lock "${LOCK_DIR}" "${age}" "${CFG_BACKUP_PATH}/reports" "${LOCK_DIR}")"
-    say ""
-    kq_msg u_req_summary_fail "${CHECKS_FAILED}" "${SOURCE_VERSION:-?}"
-    err "$(kq_format exit_line "${KQ_EXIT_REQUIREMENTS}" "$(kq_exit_name "${KQ_EXIT_REQUIREMENTS}")")"
-    exit "${KQ_EXIT_REQUIREMENTS}"
-  fi
-
+  # El directorio de registros de root, validado (el padre incluido), y la purga de
+  # lo que ya caduco. VA ANTES del candado: el candado vive aqui (C20).
   if ensure_update_log_dir; then
     check_pass "$(kq_format u_c_log_dir "${KQ_UPDATE_LOG_DIR}")"
   else
     check_fail "$(kq_format u_c_log_dir "${KQ_UPDATE_LOG_DIR}")" \
       "$(kq_format u_f_log_dir "${KQ_UPDATE_LOG_DIR}" "${KQ_UPDATE_LOG_DIR}")"
     return 0
+  fi
+  purge_update_logs
+
+  # El candado va en el directorio de root (no en BACKUP_PATH, que escribe el
+  # runtime: ahi podia plantar `update.lock` y bloquear actualizaciones). `mkdir` es
+  # atomico; dentro se deja el pid para distinguir un candado vivo de uno residual.
+  LOCK_DIR="${KQ_UPDATE_LOG_DIR}/update.lock"
+  if mkdir "${LOCK_DIR}" 2>/dev/null; then
+    LOCK_OWNED=1
+    printf '%s\n' "$$" >"${LOCK_DIR}/pid" 2>/dev/null || true
+    check_pass "$(kq_text u_c_lock)"
+  else
+    local age="?" lock_pid pid_state
+    if command -v stat >/dev/null 2>&1; then
+      age="$(($(now_epoch) - $(stat -c '%Y' "${LOCK_DIR}" 2>/dev/null || now_epoch)))s"
+    fi
+    lock_pid="$(head -n 1 "${LOCK_DIR}/pid" 2>/dev/null || true)"
+    if [ "$(stat -c '%u' "${LOCK_DIR}" 2>/dev/null || echo x)" != "$(id -u)" ]; then
+      pid_state="$(kq_text u_lock_foreign)"
+    elif [[ "${lock_pid}" =~ ^[0-9]+$ ]] && kill -0 "${lock_pid}" 2>/dev/null; then
+      pid_state="$(kq_format u_lock_alive "${lock_pid}")"
+    else
+      pid_state="$(kq_text u_lock_dead)"
+    fi
+    check_fail "$(kq_text u_c_lock)" \
+      "$(kq_format u_f_lock "${LOCK_DIR}" "${age}" "${pid_state}" "${KQ_UPDATE_LOG_DIR}" "${LOCK_DIR}")"
+    say ""
+    kq_msg u_req_summary_fail "${CHECKS_FAILED}" "${SOURCE_VERSION:-?}"
+    err "$(kq_format exit_line "${KQ_EXIT_REQUIREMENTS}" "$(kq_exit_name "${KQ_EXIT_REQUIREMENTS}")")"
+    exit "${KQ_EXIT_REQUIREMENTS}"
   fi
 
   if command -v setpriv >/dev/null 2>&1; then
@@ -1398,6 +1439,51 @@ database_size_bytes() {
 
 # Espacio para la copia Y para la migracion: una migracion que anade una
 # columna a una tabla grande puede duplicarla temporalmente (doc 08 §3).
+# La subclave del WAL (ADR-049). Se deriva de la maestra ANTES de parar nada: si no
+# se puede, o si lo que hay en el .env no es la derivada, NO se toca la instalacion
+# (C8). Y, con segmentos ya cifrados, el `kid` de la cabecera del mas reciente tiene
+# que ser el de la derivada: una rotacion de BACKUP_ENCRYPTION_KEY sin volver a
+# derivar se descubriria el dia de la recuperacion.
+WAL_KEY_DERIVED=""
+check_wal_key() {
+  [ -n "${CURRENT_ENV}" ] || return 0
+  local master actual want_kid header have_kid
+
+  master="$(env_value "${CURRENT_ENV}" "BACKUP_ENCRYPTION_KEY")"
+  [ -n "${master}" ] || return 0 # ya lo dice check_backup_config
+  if ! kqe_require; then
+    check_fail "$(kq_text u_c_wal_key)" "$(kq_text u_f_wal_key_openssl)"
+    return 0
+  fi
+  WAL_KEY_DERIVED="$(kqe_derive_wal_key "${master}")" || WAL_KEY_DERIVED=""
+  if ! kqe_wal_key_valid "${WAL_KEY_DERIVED}"; then
+    WAL_KEY_DERIVED=""
+    check_fail "$(kq_text u_c_wal_key)" "$(kq_text u_f_wal_key_openssl)"
+    return 0
+  fi
+
+  actual="$(env_value "${CURRENT_ENV}" "BACKUP_WAL_KEY")"
+  if [ -n "${actual}" ] && [ "${actual}" != "${WAL_KEY_DERIVED}" ]; then
+    check_fail "$(kq_text u_c_wal_key)" "$(kq_format u_f_wal_key_env "${CURRENT_ENV}")"
+    return 0
+  fi
+
+  # El kid del segmento cifrado mas reciente (cabecera en claro). En 2.1.0 no hay ninguno.
+  if [ "${DOCKER_OK}" -eq 1 ] && [ -n "${CURRENT_COMPOSE}" ]; then
+    # shellcheck disable=SC2016 # lo expande el shell DEL CONTENEDOR.
+    header="$(compose_current exec -T postgres sh -c 'd="${KRONOQR_WAL_ARCHIVE_DIR:-/var/backups/fichaje/wal}"; f="$(ls -t "$d" 2>/dev/null | grep "\.gz\.enc$" | head -n 1)"; [ -n "$f" ] && head -c 300 "$d/$f" | head -n 1' 2>/dev/null || true)"
+    have_kid="$(printf '%s' "${header}" | sed -n 's/^KQE1 kind=wal kid=\([0-9a-f]\{8\}\) .*/\1/p')"
+    if [ -n "${have_kid}" ]; then
+      want_kid="$(kqe_wal_kid "${WAL_KEY_DERIVED}")"
+      if [ "${have_kid}" != "${want_kid}" ]; then
+        check_fail "$(kq_text u_c_wal_key)" "$(kq_text u_f_wal_key_kid)"
+        return 0
+      fi
+    fi
+  fi
+  check_pass "$(kq_text u_c_wal_key)"
+}
+
 check_space() {
   [ "${DOCKER_OK}" -eq 1 ] && [ -n "${CURRENT_ENV}" ] || return 0
 
@@ -1619,6 +1705,16 @@ phase_preconditions() {
 # instalacion sigue intacta hasta el paso 4. Cualquier fallo aqui es un 2: la
 # instalacion no se ha tocado, y el mensaje dice que quedo escrito.
 #------------------------------------------------------------------------------
+# Escribe BACKUP_WAL_KEY (derivada, ya comprobada) en el .env que levantara la version
+# nueva. Antes de parar nada: si falla, la instalacion no se ha tocado.
+write_wal_key() {
+  local target="$1"
+  [ -n "${WAL_KEY_DERIVED}" ] || return 0
+  if ! kq_env_set "${target}" "BACKUP_WAL_KEY" "${WAL_KEY_DERIVED}" || ! chmod 0600 "${target}"; then
+    die "${KQ_EXIT_REQUIREMENTS}" "$(kq_format u_f_prepare_env "${target}")"
+  fi
+}
+
 prepare_package() {
   local certs_from certs_to
 
@@ -1628,6 +1724,7 @@ prepare_package() {
     if ! cp -p "${ENV_FILE}" "${ROLLBACK_ENV}" || ! chmod 0600 "${ROLLBACK_ENV}"; then
       die "${KQ_EXIT_REQUIREMENTS}" "$(kq_format u_f_prepare_env "${ROLLBACK_ENV}")"
     fi
+    write_wal_key "${ENV_FILE}"
     return 0
   fi
 
@@ -1639,6 +1736,7 @@ prepare_package() {
     ! kq_env_set "${ENV_FILE}" "IMAGE_TAG" "${TARGET_VERSION}" || ! chmod 0600 "${ENV_FILE}"; then
     die "${KQ_EXIT_REQUIREMENTS}" "$(kq_format u_f_prepare_env "${ENV_FILE}")"
   fi
+  write_wal_key "${ENV_FILE}"
 
   case "${CFG_TLS_CERT_DIR}" in
   "" | /*) ;;
@@ -1930,10 +2028,21 @@ phase_backup() {
   # omite y el asiento se escribe igual sin ella.
   BACKUP_TAKEN_AT="$(date -u -d "@${mtime}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
   BACKUP_SHA256=""
-  if command -v sha256sum >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+  BACKUP_LEGACY=0
+  # Una copia de la 2.1.0 (`Salted__`) NO tiene MAC: la vuelta atras solo puede
+  # restaurarla comparando con una huella calculada AQUI, por este script, y guardada
+  # donde el runtime no llega (C13). Por eso, para ella, la huella no es opcional y
+  # no lleva tope de tiempo.
+  [ "$(head -c 8 "${BACKUP_FILE}" 2>/dev/null)" != "Salted__" ] || BACKUP_LEGACY=1
+  if [ "${BACKUP_LEGACY}" -eq 1 ] && command -v sha256sum >/dev/null 2>&1; then
+    BACKUP_SHA256="$(sha256sum "${BACKUP_FILE}" 2>/dev/null | cut -d' ' -f1 || true)"
+  elif command -v sha256sum >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
     BACKUP_SHA256="$(timeout "${KQ_BACKUP_FINGERPRINT_TIMEOUT_SECONDS}" sha256sum "${BACKUP_FILE}" 2>/dev/null | cut -d' ' -f1 || true)"
   fi
   [[ "${BACKUP_SHA256}" =~ ^[0-9a-f]{64}$ ]] || BACKUP_SHA256=""
+  if [ -n "${BACKUP_SHA256}" ] && [ -d "${KQ_UPDATE_LOG_DIR}" ]; then
+    (umask 077 && printf '%s  %s\n' "${BACKUP_SHA256}" "${name}" >"${KQ_UPDATE_LOG_DIR}/update-${STARTED_UTC}.copia.sha256") 2>/dev/null || true
+  fi
 
   BACKUP_RESULT="$(kq_text u_report_ok)"
   say "$(kq_format u_backup_done "${BACKUP_FILE}")"
@@ -2154,6 +2263,12 @@ phase_start_and_verify() {
     >>"$(detail_sink)" 2>&1 || rollback_and_die "$(kq_format u_f_app_up "${TARGET_VERSION}")" service_start_failed
   wait_for_healthy compose_new app "${KQ_WAIT_APPLICATION}" ||
     rollback_and_die "$(kq_format u_f_app_up "${TARGET_VERSION}")" service_start_failed
+
+  # Segmentos de WAL heredados de la 2.1.0 (en claro): se cifran EN SITIO, como el
+  # usuario postgres dentro de su contenedor, en segundo plano y sin deshacer nada si
+  # falla (archive-wal.sh lo continua; doctor.sh informa de los que queden). ADR-049.
+  detail_note "--- kronoqr-wal-migrate (segmentos heredados en claro, en segundo plano) ---"
+  compose_new exec -d -T postgres kronoqr-wal-migrate >>"$(detail_sink)" 2>&1 || true
 
   for path in /api/v1/health /api/v1/ready; do
     if app_probe "${path}" && [ "${PROBE_STATUS}" = "200" ]; then
@@ -2448,8 +2563,22 @@ rollback_and_die() {
   # `--audit-by-caller`: el asiento de la vuelta atras lo escribe este script
   # mas abajo, con el paso y el motivo del fallo; restore.sh no deja otro (PR1).
   detail_note "--- restore.sh --file ${BACKUP_FILE} --yes --audit-by-caller ---"
+  # La copia previa es la que ESTE script acaba de crear (nombre de LATEST y mtime >=
+  # arranque, comprobados en el paso 3). Se le pasa la huella que CALCULO EL, guardada
+  # en el directorio de root (no el .sha256 de BACKUP_PATH, que el runtime puede
+  # reescribir): restore.sh la compara con los bytes de SU copia privada. Si ademas
+  # es una copia de la 2.1.0 (sin MAC) y solo entonces, se acepta con la bandera.
+  local -a restore_extra=()
+  local own_sha=""
+  if [ -f "${KQ_UPDATE_LOG_DIR}/update-${STARTED_UTC}.copia.sha256" ]; then
+    own_sha="$(cut -d' ' -f1 <"${KQ_UPDATE_LOG_DIR}/update-${STARTED_UTC}.copia.sha256" 2>/dev/null || true)"
+  fi
+  if [[ "${own_sha}" =~ ^[0-9a-f]{64}$ ]] && [ "${own_sha}" = "${BACKUP_SHA256}" ]; then
+    restore_extra+=(--expect-sha256 "${own_sha}")
+    [ "${BACKUP_LEGACY:-0}" -ne 1 ] || restore_extra+=(--accept-unauthenticated)
+  fi
   compose_new run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller \
-    >>"$(detail_sink)" 2>&1
+    "${restore_extra[@]}" >>"$(detail_sink)" 2>&1
   code=$?
   if [ "${code}" -ne 0 ]; then
     err "$(kq_format u_f_rollback_restore "${code}" "$(kq_exit_name "${code}")")"

@@ -148,7 +148,8 @@ RUN set -eux; \
 # Se enumeran uno a uno y no se copia el directorio entero a proposito: en
 # infra/scripts/ tambien viven herramientas del repositorio (changelog.sh) que
 # no pintan nada en el servidor de un cliente.
-COPY infra/scripts/backup.sh infra/scripts/restore.sh infra/scripts/restore-drill.sh /opt/kronoqr/scripts/
+# wal-metrics.sh es el exportador del RPO (ADR-049): lo lanza el scheduler cada minuto.
+COPY infra/scripts/backup.sh infra/scripts/restore.sh infra/scripts/restore-drill.sh infra/scripts/wal-metrics.sh /opt/kronoqr/scripts/
 COPY infra/scripts/lib/ /opt/kronoqr/scripts/lib/
 RUN chmod 0755 /opt/kronoqr/scripts/*.sh
 

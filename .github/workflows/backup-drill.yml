@@ -104,6 +104,16 @@ jobs:
         # invocaciones no puedan divergir sin que nadie lo note.
         run: |
           make build-ci-images
+          # ADR-049: PostgreSQL recibe la SUBCLAVE del WAL, derivada de la maestra con la
+          # misma funcion que usan install.sh y update.sh. Es una clave de usar y tirar; se
+          # enmascara igualmente en el log. El archivo de WAL va al anfitrion (propiedad del
+          # uid 70 de postgres) para que el simulacro pitr lo monte en solo lectura.
+          mkdir -p "$BACKUP_PATH"
+          sudo install -d -o 70 -g 70 -m 0750 "$BACKUP_PATH/wal"
+          BACKUP_WAL_KEY="$(bash infra/scripts/backup.sh derive-wal-key --print)"
+          echo "::add-mask::${BACKUP_WAL_KEY}"
+          echo "BACKUP_WAL_KEY=${BACKUP_WAL_KEY}" >>"$GITHUB_ENV"
+          export BACKUP_WAL_KEY
           docker run -d --name kronoqr-pg \
             -e POSTGRES_DB="$DB_DATABASE" \
             -e POSTGRES_USER="$DB_USERNAME" \
@@ -111,6 +121,8 @@ jobs:
             -e DB_BACKUP_USERNAME="$BACKUP_DB_USERNAME" \
             -e DB_BACKUP_PASSWORD="$BACKUP_DB_PASSWORD" \
             -e KRONOQR_WAL_ARCHIVE_DIR=/var/backups/fichaje/wal \
+            -e BACKUP_WAL_KEY \
+            -v "$BACKUP_PATH/wal:/var/backups/fichaje/wal" \
             -p 5432:5432 \
             kronoqr/postgres:ci \
             postgres -c timezone=UTC -c log_timezone=UTC \
@@ -225,10 +237,10 @@ jobs:
         run: |
           mkdir -p "$BACKUP_PATH"
           bash infra/scripts/backup.sh run --mode dump
-          # La particion creada DESPUES del rol esta en el volcado. La copia se
-          # descifra con las mismas funciones que usa backup.sh.
+          # La particion creada DESPUES del rol esta en el volcado. La copia se abre con las
+          # mismas funciones que usa backup.sh (KQE1: se verifica el MAC y despues se descifra).
           copia="$(ls "$BACKUP_PATH"/daily/*.dump.enc | tail -n 1)"
-          bash -c '. infra/scripts/lib/backup-common.sh; load_backup_config; decrypt_stream < "$1" | pg_restore --list' _ "$copia" |
+          bash -c '. infra/scripts/lib/backup-common.sh; load_backup_config; require_encryption_key; d="$(mktemp -d)"; kqe_open "$1" "$d" dump "$(basename "$1" .dump.enc)" && kqe_decrypt_copy | pg_restore --list' _ "$copia" |
             grep -q 'TABLE DATA public audit_log_2027' ||
             { echo '::error::La particion de audit_log creada despues del rol no esta en la copia.'; exit 1; }
 
@@ -236,12 +248,13 @@ jobs:
         run: |
           bash infra/scripts/backup.sh run --mode base
           ls -l "$BACKUP_PATH"/base/*.tar.gz.enc
+          head -n 1 "$(ls "$BACKUP_PATH"/base/*.tar.gz.enc | tail -n 1)" | grep -q '^KQE1 kind=base '
 
-      - name: La copia esta CIFRADA (RL-12)
+      - name: La copia esta CIFRADA y AUTENTICADA (RL-12, R5-DV-04)
         # Que no se pueda leer sin la clave no es una opinion: se comprueba.
         run: |
           copia="$(ls "$BACKUP_PATH"/daily/*.dump.enc | tail -n 1)"
-          head -c 6 "$copia" | grep -q "Salted" || { echo "::error::La copia no tiene cabecera de cifrado."; exit 1; }
+          head -c 4 "$copia" | grep -q "KQE1" || { echo "::error::La copia no tiene cabecera KQE1."; exit 1; }
           if grep -qa "PGDMP" "$copia"; then echo "::error::La copia contiene la cabecera del volcado EN CLARO."; exit 1; fi
           if grep -qa "employee_code" "$copia"; then echo "::error::Se leen nombres de columna en claro dentro de la copia."; exit 1; fi
           if BACKUP_ENCRYPTION_KEY=clave_que_no_es bash infra/scripts/backup.sh verify >/dev/null 2>&1; then
@@ -249,12 +262,64 @@ jobs:
           fi
           echo "Copia cifrada: ilegible sin la clave, y la clave equivocada no la abre."
 
+      - name: R5-DV-02 — el WAL archivado esta CIFRADO y sin clave el archivado FALLA
+        # El hallazgo, invertido: antes `gunzip | strings | grep -c "scan_id|employee|kiosk"` daba
+        # 2088 sobre un segmento archivado. Ahora el segmento no empieza por 1f8b, no se
+        # descomprime y no deja ver nada; y sin clave (o con la de desarrollo) el archivado
+        # devuelve 1 y PostgreSQL conserva el WAL, en vez de escribir un solo segmento en claro.
+        env:
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          q() { psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atqc "$1"; }
+          q "CREATE TABLE IF NOT EXISTS ci_wal_probe(id serial primary key, scan_id text, employee text, kiosk text)"
+          q "INSERT INTO ci_wal_probe(scan_id, employee, kiosk) SELECT 'scan_id-' || g, 'employee-' || g, 'kiosk-' || g FROM generate_series(1, 3000) g" >/dev/null
+          q "SELECT pg_switch_wal()" >/dev/null
+          sleep 2
+          q "SELECT pg_switch_wal()" >/dev/null
+          for _ in $(seq 1 30); do
+            [ "$(sudo sh -c "ls '$BACKUP_PATH'/wal/*.gz.enc 2>/dev/null | wc -l")" -ge 2 ] && break
+            sleep 2
+          done
+          [ "$(sudo sh -c "ls '$BACKUP_PATH'/wal/*.gz.enc | wc -l")" -ge 2 ] || { echo "::error::PostgreSQL no archiva segmentos."; exit 1; }
+          [ "$(sudo sh -c "ls '$BACKUP_PATH'/wal/*.gz 2>/dev/null | wc -l")" = "0" ] || { echo "::error::Hay segmentos .gz EN CLARO en el archivo de WAL."; exit 1; }
+          nuevo="$(sudo sh -c "ls -t '$BACKUP_PATH'/wal/*.gz.enc | head -n 1")"
+          [ "$(sudo head -c 2 "$nuevo" | od -An -tx1 | tr -d ' \n')" != "1f8b" ] || { echo "::error::El segmento archivado es un gzip legible."; exit 1; }
+          if sudo gunzip -c "$nuevo" >/dev/null 2>&1; then echo "::error::El segmento se descomprime sin la clave."; exit 1; fi
+          coincidencias="$(sudo sh -c "cat '$BACKUP_PATH'/wal/*.gz.enc | strings | grep -c -E 'scan_id|employee|kiosk' || true")"
+          [ "$coincidencias" = "0" ] || { echo "::error::El archivo de WAL deja ver $coincidencias coincidencias de scan_id|employee|kiosk."; exit 1; }
+          # Sin clave, o con la de desarrollo: el archivado FALLA (exit 1) y no escribe nada.
+          docker exec kronoqr-pg sh -c 'head -c 4096 /dev/urandom > /tmp/seg-ci'
+          if docker exec -e BACKUP_WAL_KEY= kronoqr-pg kronoqr-archive-wal /tmp/seg-ci 0000000100000000000000FD; then
+            echo "::error::El archivado ha funcionado SIN clave."; exit 1
+          fi
+          if docker exec -e BACKUP_WAL_KEY=4deec0e109388ff8c0ed3ca348abba952eef5a59c6e87906f052e8453eff69ec kronoqr-pg kronoqr-archive-wal /tmp/seg-ci 0000000100000000000000FD; then
+            echo "::error::El archivado ha funcionado con la clave de desarrollo."; exit 1
+          fi
+          sudo test ! -e "$BACKUP_PATH/wal/0000000100000000000000FD.gz.enc"
+          echo "WAL cifrado y autenticado; sin clave no se archiva."
+
       - name: Archivado de WAL en marcha (RPO <= 15 min)
         run: |
           sleep 5
           PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc \
-            "SELECT CASE WHEN archived_count > 0 AND failed_count = 0 THEN 'ok' ELSE 'mal' END FROM pg_stat_archiver" |
+            "SELECT CASE WHEN archived_count > 0 THEN 'ok' ELSE 'mal' END FROM pg_stat_archiver" |
             grep -qx ok || { echo "::error::El archivado de WAL no funciona: sin el no hay RPO de 15 minutos."; exit 1; }
+
+      - name: R5-DV-01 — la metrica del RPO la publica wal-metrics.sh con el rol de solo lectura
+        # Sin pg_monitor ni privilegios nuevos (C17): pg_stat_archiver, pg_current_wal_insert_lsn y
+        # pg_settings son publicos. Y la exposicion vuelve a 0 tras archivar.
+        env:
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bash infra/scripts/wal-metrics.sh
+          m="$BACKUP_PATH/metrics/kronoqr_wal.prom"
+          grep -q '^kronoqr_wal_archive_timeout_seconds 60$' "$m"
+          grep -q '^kronoqr_wal_archive_failing 0$' "$m"
+          grep -q '^kronoqr_wal_exporter_last_run_timestamp_seconds ' "$m"
+          [ "$(psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc "SELECT count(*) FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid JOIN pg_roles u ON u.oid = am.member WHERE u.rolname = 'fichaje_backup' AND r.rolname = 'pg_monitor'")" = "0" ]
+          echo "kronoqr_wal.prom publicado con el rol fichaje_backup, sin pg_monitor."
 
       - name: Idempotencia — dos copias seguidas no corrompen la anterior
         run: |
@@ -300,20 +365,18 @@ jobs:
 
       - name: A3-05 — un slot de replicacion parado se ve en la metrica
         # `fichaje_backup` tiene REPLICATION y puede crear un slot. La copia lo
-        # detecta y lo publica (alerta SlotDeReplicacionParado); al retirarlo, vuelve a 0.
+        # detecta y lo publica cada minuto (wal-metrics.sh; antes, al terminar la copia diaria) para
+        # la alerta SlotDeReplicacionParado; al retirarlo, vuelve a 0.
         run: |
           set -euo pipefail
           w() { PGPASSWORD="$BACKUP_DB_PASSWORD" psql -h "$DB_HOST" -U "$BACKUP_DB_USERNAME" -d "$DB_DATABASE" -Atc "$1"; }
-          metrica() { grep '^kronoqr_backup_replication_slots_inactive ' "$BACKUP_PATH"/metrics/kronoqr_backup_run.prom | cut -d' ' -f2; }
-          bash infra/scripts/backup.sh run --mode dump >/dev/null
+          metrica() { bash infra/scripts/wal-metrics.sh >/dev/null; grep '^kronoqr_wal_replication_slots_inactive ' "$BACKUP_PATH"/metrics/kronoqr_wal.prom | cut -d' ' -f2; }
           test "$(metrica)" = "0"
           w "SELECT pg_create_physical_replication_slot('kq_slot_de_prueba')" >/dev/null
           sleep 1
-          bash infra/scripts/backup.sh run --mode dump >/dev/null
           test "$(metrica)" = "1" || { echo "::error::Un slot de replicacion parado no aparece en la metrica."; exit 1; }
           w "SELECT pg_drop_replication_slot('kq_slot_de_prueba')" >/dev/null
           sleep 1
-          bash infra/scripts/backup.sh run --mode dump >/dev/null
           test "$(metrica)" = "0"
 
       - name: A3-01 — restore.sh y el simulacro no dejan que una copia toque los roles
@@ -335,7 +398,10 @@ jobs:
 
           for sentencia in "ALTER ROLE fichaje_app SUPERUSER;" "GRANT pg_write_all_data TO fichaje_app;" "CREATE ROLE kq_intruso SUPERUSER LOGIN;"; do
             bash .github/scripts/forge-role-escalation-dump.sh /tmp/manipulada.dump "$sentencia"
-            bash -c '. infra/scripts/lib/backup-common.sh; load_backup_config; encrypt_stream < /tmp/manipulada.dump' >"$BACKUP_PATH/daily/kronoqr-29990101T000000Z.dump.enc"
+            # El atacante de A3-01 tiene la clave del scheduler: la copia manipulada esta bien
+            # SELLADA (KQE1, su .sha256 y su manifiesto autenticado), y es la guarda de roles la que
+            # tiene que pararla.
+            bash .github/scripts/forge-sealed-copy.sh /tmp/manipulada.dump "$BACKUP_PATH" kronoqr-29990101T000000Z
             codigo=0
             bash infra/scripts/restore.sh --file "$BACKUP_PATH/daily/kronoqr-29990101T000000Z.dump.enc" --database fichaje_destino --yes || codigo=$?
             [ "$codigo" -eq 7 ] || { echo "::error::restore.sh con «$sentencia» debia salir con 7 y salio con $codigo."; exit 1; }
@@ -353,7 +419,7 @@ jobs:
           [ "$codigo" -eq 7 ] || { echo "::error::El simulacro modo database con una copia manipulada debia salir con 7 y salio con $codigo."; exit 1; }
           test "$(es_super)" = "f"
 
-          rm -f "$BACKUP_PATH/daily/kronoqr-29990101T000000Z.dump.enc"
+          rm -f "$BACKUP_PATH"/daily/kronoqr-29990101T000000Z.*
           # Sin falso positivo: una copia buena, en modo database, pasa.
           bash infra/scripts/restore-drill.sh --mode database
           q "DROP DATABASE IF EXISTS fichaje_destino" >/dev/null
@@ -373,6 +439,130 @@ jobs:
           fi
           cp /tmp/copia-buena.enc "$copia"
           echo "El simulacro rechaza una copia corrupta."
+
+      - name: R5-DV-04 — un bit cambiado, un .sha256 borrado, una copia renombrada o un manifiesto alterado NO restauran
+        # Antes: AES-CBC no autentica y un bit cambiado daba exit=0; el .sha256 era OPCIONAL, asi que
+        # borrarlo y modificar el .enc pasaba. Ahora todo eso sale con 6 y la base no se toca. Y el gancho
+        # TOCTOU (KQE_TEST_HOOK_AFTER_VERIFY) cambia un bit del ORIGEN despues de verificar: la
+        # restauracion usa la copia ya verificada o falla, nunca aplica un volcado alterado.
+        env:
+          PGHOST: ${{ env.DB_HOST }}
+          PGPORT: ${{ env.DB_PORT }}
+          PGUSER: ${{ env.DB_USERNAME }}
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          q() { psql -d postgres -Atqc "$1"; }
+          bash infra/scripts/backup.sh run --mode dump >/dev/null
+          copia="$BACKUP_PATH/daily/$(cat "$BACKUP_PATH"/daily/LATEST)"
+          nombre="$(basename "$copia" .dump.enc)"
+          cp -p "$copia" /tmp/buena.enc
+          cp -p "$BACKUP_PATH/daily/$nombre.manifest.json" /tmp/buena.manifest.json
+          dry() { bash infra/scripts/restore.sh --database fichaje_dry --dry-run "$@" >/dev/null 2>&1; }
+          esperar6() {
+            codigo=0; dry "$@" || codigo=$?
+            [ "$codigo" -eq 6 ] || { echo "::error::$DESC debia salir con 6 y salio con $codigo."; exit 1; }
+          }
+          dry --file "$copia" || { echo "::error::La copia buena no pasa el dry-run."; exit 1; }
+          # a) un bit cambiado en la cabecera, el cuerpo y el trailer
+          for desplazamiento in 10 300 -3; do
+            cp -p /tmp/buena.enc "$copia"
+            if [ "$desplazamiento" -lt 0 ]; then
+              tam="$(stat -c %s "$copia")"; pos=$((tam + desplazamiento))
+            else
+              pos="$desplazamiento"
+            fi
+            printf 'Z' | dd of="$copia" bs=1 seek="$pos" conv=notrunc status=none
+            DESC="Un bit cambiado en la posicion $pos"; esperar6 --file "$copia"
+          done
+          cp -p /tmp/buena.enc "$copia"
+          # b) el .sha256 borrado y el .enc modificado (el ataque del hallazgo)
+          mv "$copia.sha256" /tmp/buena.sha256
+          printf 'Z' | dd of="$copia" bs=1 seek=300 conv=notrunc status=none
+          DESC=".sha256 borrado + .enc modificado"; esperar6 --file "$copia"
+          cp -p /tmp/buena.enc "$copia"
+          DESC="Sin .sha256"; esperar6 --file "$copia"
+          mv /tmp/buena.sha256 "$copia.sha256"
+          # c) renombrada: la cabecera dice otro nombre
+          cp -p "$copia" "$BACKUP_PATH/daily/kronoqr-20240101T000000Z.dump.enc"
+          cp -p "$copia.sha256" "$BACKUP_PATH/daily/kronoqr-20240101T000000Z.dump.enc.sha256"
+          cp -p /tmp/buena.manifest.json "$BACKUP_PATH/daily/kronoqr-20240101T000000Z.manifest.json"
+          cp -p "$BACKUP_PATH/daily/$nombre.manifest.mac" "$BACKUP_PATH/daily/kronoqr-20240101T000000Z.manifest.mac"
+          DESC="Una copia renombrada"; esperar6 --file "$BACKUP_PATH/daily/kronoqr-20240101T000000Z.dump.enc"
+          rm -f "$BACKUP_PATH"/daily/kronoqr-20240101T000000Z.*
+          # d) manifiesto alterado, y sin su MAC
+          echo ' ' >>"$BACKUP_PATH/daily/$nombre.manifest.json"
+          DESC="Un manifiesto alterado"; esperar6 --file "$copia"
+          cp -p /tmp/buena.manifest.json "$BACKUP_PATH/daily/$nombre.manifest.json"
+          mv "$BACKUP_PATH/daily/$nombre.manifest.mac" /tmp/buena.manifest.mac
+          DESC="Sin el MAC del manifiesto"; esperar6 --file "$copia"
+          mv /tmp/buena.manifest.mac "$BACKUP_PATH/daily/$nombre.manifest.mac"
+          dry --file "$copia" || { echo "::error::La copia restaurada a su estado original ya no pasa."; exit 1; }
+          # e) TOCTOU: el gancho cambia un bit del origen justo DESPUES de verificar. El simulacro en
+          #    modo database (que si pasa en este cluster) tiene que COMPLETARSE con la copia ya
+          #    verificada: si leyera otra vez del origen, pg_restore se encontraria un volcado alterado.
+          cat >/tmp/gancho.sh <<'HOOK'
+          #!/bin/sh
+          printf 'Z' | dd of="$1" bs=1 seek=300 conv=notrunc status=none
+          HOOK
+          chmod +x /tmp/gancho.sh
+          codigo=0
+          KQE_TEST_HOOK_AFTER_VERIFY=/tmp/gancho.sh bash infra/scripts/restore-drill.sh --mode database --file "$copia" >/dev/null 2>&1 || codigo=$?
+          [ "$codigo" -eq 0 ] || { echo "::error::Con el origen alterado DESPUES de verificar, el simulacro debia usar la copia ya verificada (0) y salio con $codigo."; exit 1; }
+          # El origen SI quedo alterado por el gancho: ya no verifica.
+          codigo=0; dry --file "$copia" || codigo=$?
+          [ "$codigo" -eq 6 ] || { echo "::error::El gancho no altero el origen: la prueba TOCTOU no prueba nada."; exit 1; }
+          cp -p /tmp/buena.enc "$copia"
+          echo "Integridad autenticada: toda alteracion hace fallar la restauracion con 6."
+
+      - name: R5-DV-02 / RNF-D-02 — copia fisica + WAL cifrado reconstruyen la base (restore-drill --mode pitr)
+        # Lo que ninguna otra comprobacion ejercita: copia fisica + WAL archivado y CIFRADO, en un
+        # contenedor limpio con la imagen de postgres del producto. Y los fallos que tienen que
+        # DETENER la recuperacion (exit 200 del restore_command, FATAL), no promocionar con datos de
+        # menos: un segmento intermedio ausente, un bit cambiado, un heredado sin la bandera.
+        env:
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          q() { psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atqc "$1"; }
+          wal() { sudo sh -c "$1"; }
+          drill() { bash infra/scripts/restore-drill.sh --mode pitr --image kronoqr/postgres:ci --wal-source "$BACKUP_PATH/wal" --timeout 150 "$@"; }
+          # Una copia fisica NUEVA y WAL posterior a ella: tres segmentos como minimo.
+          bash infra/scripts/backup.sh run --mode base >/dev/null
+          for n in 1 2 3; do
+            q "INSERT INTO ci_wal_probe(scan_id, employee, kiosk) SELECT 'p$n-' || g, 'e-' || g, 'k-' || g FROM generate_series(1, 200) g" >/dev/null
+            q "SELECT pg_switch_wal()" >/dev/null
+            sleep 2
+          done
+          sleep 8
+          # a) camino feliz
+          drill || { echo "::error::El simulacro pitr no pasa con copia fisica y WAL cifrado."; exit 1; }
+          grep -q 'wal_integrity=authenticated' "$BACKUP_PATH"/reports/drill-*.log
+          # b) segmento intermedio ausente con otro posterior: la recuperacion se DETIENE
+          mapfile -t segs < <(wal "ls '$BACKUP_PATH'/wal/*.gz.enc" | grep -E '/[0-9A-F]{24}\.gz\.enc$' | sort)
+          [ "${#segs[@]}" -ge 3 ]
+          medio="${segs[$(( ${#segs[@]} - 2 ))]}"
+          wal "mv '$medio' '/tmp/segmento-medio.keep'"
+          codigo=0; drill >/dev/null 2>&1 || codigo=$?
+          wal "mv '/tmp/segmento-medio.keep' '$medio'"
+          [ "$codigo" -eq 6 ] || { echo "::error::Con un segmento intermedio ausente el simulacro debia fallar (6) y salio con $codigo: la recuperacion NO se ha detenido."; exit 1; }
+          grep -q "aborted_at:$(basename "$medio" .gz.enc)" "$BACKUP_PATH"/reports/drill-*.log ||
+            { echo "::error::El informe no dice en que segmento se aborto."; exit 1; }
+          # c) un bit cambiado en un segmento
+          wal "cp -p '$medio' /tmp/segmento-medio.keep && printf Z | dd of='$medio' bs=1 seek=150 conv=notrunc status=none"
+          codigo=0; drill >/dev/null 2>&1 || codigo=$?
+          wal "cp -p /tmp/segmento-medio.keep '$medio'"
+          [ "$codigo" -eq 6 ] || { echo "::error::Con un bit cambiado en un segmento el simulacro debia fallar (6) y salio con $codigo."; exit 1; }
+          # d) un segmento heredado (.gz sin cifrar): solo con la bandera, y se cuenta
+          bash -c '. infra/scripts/lib/backup-common.sh; load_backup_config; require_encryption_key; kq_wal_key_ensure; d="$(mktemp -d)"; n="$(basename "$1" .gz.enc)"; sudo cat "$1" > "$d/in"; kqe_open "$d/in" "$d" wal "$n" && kqe_decrypt_copy > /tmp/heredado.gz' _ "$medio"
+          wal "rm -f '$medio' && cp /tmp/heredado.gz '$BACKUP_PATH/wal/$(basename "$medio" .gz.enc).gz' && chown 70:70 '$BACKUP_PATH/wal/$(basename "$medio" .gz.enc).gz'"
+          codigo=0; drill >/dev/null 2>&1 || codigo=$?
+          [ "$codigo" -eq 6 ] || { echo "::error::Un segmento heredado sin la bandera debia detener la recuperacion y salio con $codigo."; exit 1; }
+          drill --accept-unauthenticated || { echo "::error::Con --accept-unauthenticated un segmento heredado debia reproducirse."; exit 1; }
+          grep -q 'legacy_wal=1' "$BACKUP_PATH"/reports/drill-*.log
+          wal "rm -f '$BACKUP_PATH/wal/$(basename "$medio" .gz.enc).gz' && cp -p /tmp/segmento-medio.keep '$medio'"
+          drill || { echo "::error::El simulacro pitr no vuelve a pasar con el archivo restaurado."; exit 1; }
+          echo "pitr: camino feliz, hueco, bit cambiado y heredado, como dice el ADR-049."
 
       - name: Informe del simulacro (evidencia de RNF-D-05 y RQ-09)
         if: always()

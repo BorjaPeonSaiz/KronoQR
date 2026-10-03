@@ -40,7 +40,12 @@ readonly -a KEYS=(
   BACKUP_DB_PASSWORD
   IDENTITY_PIN_SEALING_SECRET_KEY
   GRAFANA_ADMIN_PASSWORD
+  BACKUP_WAL_KEY
 )
+
+# Claves que un .env de la version anterior (2.1.0) todavia no tiene: vacias no son un
+# fallo, pero si estan, su valor tampoco puede aparecer en ninguna salida (ADR-049, C7).
+readonly -a OPTIONAL_KEYS=(BACKUP_WAL_KEY)
 
 status=0
 for file in "$@"; do
@@ -52,6 +57,9 @@ for file in "$@"; do
   for key in "${KEYS[@]}"; do
     value="$(sudo sed -n "s/^${key}=//p" "${ENV_FILE}" | head -1)"
     if [ -z "${value}" ]; then
+      case " ${OPTIONAL_KEYS[*]} " in
+      *" ${key} "*) continue ;;
+      esac
       printf 'assert-no-secrets: %s esta vacio en %s\n' "${key}" "${ENV_FILE}" >&2
       status=1
       continue

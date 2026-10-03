@@ -150,3 +150,42 @@ kq_ensure_app_dir() {
   KQ_DIR_CREATED=1
   return 0
 }
+
+# Un directorio en el que root puede ESCRIBIR POR RUTA sin que nadie mas pueda
+# plantarle nada (A3-R2): cada tramo de la ruta, hasta `/`, es un directorio REAL
+# (ni enlaces simbolicos en el camino), del que ejecuta (o de root) y SIN permiso
+# de escritura para grupo ni otros. Sin excepciones para el bit `sticky`: un
+# `/tmp` no es de fiar para un registro con datos personales. `kq_path_trusted DIR`
+# acepta una ruta que todavia no existe: se valida el ancestro existente mas
+# cercano. Devuelve 0 si es de fiar, 1 si no.
+#
+# POR QUE EXISTE. `ensure_update_log_dir` solo comprobaba el propio directorio: un
+# `KRONOQR_LOG_DIR` bajo un padre que escribe otro usuario reabria el vector
+# (el otro cambia el directorio por un enlace) aunque el directorio fuera de root.
+kq_path_trusted() {
+  local path="$1" real up_to owner mode me
+  me="$(id -u)"
+
+  # Normaliza: sin barra final (salvo `/`), y absoluta.
+  case "${path}" in
+  /*) ;;
+  *) return 1 ;;
+  esac
+  [ "${path}" = "/" ] || path="${path%/}"
+
+  up_to="$(kq_existing_ancestor "${path}")"
+  # Ningun tramo existente puede ser (ni pasar por) un enlace simbolico.
+  real="$(cd -- "${up_to}" 2>/dev/null && pwd -P)" || return 1
+  [ "${real}" = "${up_to}" ] || return 1
+
+  while :; do
+    [ -d "${up_to}" ] && [ ! -L "${up_to}" ] || return 1
+    owner="$(stat -c '%u' -- "${up_to}" 2>/dev/null)" || return 1
+    mode="$(stat -c '%a' -- "${up_to}" 2>/dev/null)" || return 1
+    [ "${owner}" = "0" ] || [ "${owner}" = "${me}" ] || return 1
+    [ "$((8#${mode} & 8#022))" -eq 0 ] || return 1
+    [ "${up_to}" != "/" ] || break
+    up_to="$(dirname -- "${up_to}")"
+  done
+  return 0
+}

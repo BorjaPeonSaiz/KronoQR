@@ -63,6 +63,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/env-file.sh"
 # shellcheck source=lib/fs.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/fs.sh"
+# shellcheck source=lib/kqe.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/kqe.sh"
 
 #------------------------------------------------------------------------------
 # Umbrales.
@@ -275,6 +277,9 @@ run_delegated_doctor() {
   # a PostgreSQL con el superusuario, que el contenedor `app` no tiene): su
   # fallo tambien cuenta para el codigo de salida.
   check_backup_role
+  check_backup_wal
+  check_backup_mounts
+  check_update_logs
   check_edge_networks
   check_redis_restart_loop
   check_app_storage
@@ -329,6 +334,9 @@ run_external_checks() {
   check_services_state
   check_env_permissions
   check_backup_role
+  check_backup_wal
+  check_backup_mounts
+  check_update_logs
   check_edge_networks
   check_redis_restart_loop
   check_app_storage
@@ -395,6 +403,94 @@ check_env_permissions() {
 # trust), asi que no hace falta ninguna contraseña. Es la sonda gemela de la
 # comprobacion de `backup.sh`: una cubre la instalacion en reposo y la otra, el
 # instante de copiar.
+# Clave del WAL y archivo cifrado (ADR-049). Se mira desde fuera porque es lo que
+# nadie ve hasta el dia de la recuperacion:
+#   · BACKUP_WAL_KEY del .env es la DERIVADA de BACKUP_ENCRYPTION_KEY (una rotacion sin
+#     recalcularla, o una edicion a mano, dejaria segmentos que la restauracion no sabria
+#     abrir). No se imprime ningun valor.
+#   · El `kid` de la cabecera del segmento cifrado mas reciente es el de esa derivada.
+#   · Quedan segmentos heredados en claro (aviso: la migracion los cifra sola).
+#   · KRONOQR_ACCEPT_UNAUTHENTICATED no esta en el .env (C12): la bandera de copias
+#     heredadas se pasa por invocacion, nunca se deja puesta.
+check_backup_wal() {
+  local master actual derived header have_kid want_kid legacy
+
+  if grep -qE '^[[:space:]]*(export[[:space:]]+)?KRONOQR_ACCEPT_UNAUTHENTICATED=' "${CURRENT_ENV}" 2>/dev/null; then
+    check_fail "$(kq_text d_c_accept_unauth)" "$(kq_format d_f_accept_unauth "${CURRENT_ENV}")"
+  fi
+
+  master="$(env_value "${CURRENT_ENV}" BACKUP_ENCRYPTION_KEY)"
+  [ -n "${master}" ] || return 0
+  if ! kqe_require; then
+    check_warn "$(kq_text d_c_wal_key)" "$(kq_text d_w_wal_key_openssl)"
+    return 0
+  fi
+  derived="$(kqe_derive_wal_key "${master}")" || derived=""
+  actual="$(env_value "${CURRENT_ENV}" BACKUP_WAL_KEY)"
+  if ! kqe_wal_key_valid "${derived}"; then
+    check_warn "$(kq_text d_c_wal_key)" "$(kq_text d_w_wal_key_openssl)"
+    return 0
+  fi
+  if [ "${actual}" != "${derived}" ]; then
+    check_fail "$(kq_text d_c_wal_key)" "$(kq_format d_f_wal_key_mismatch "${CURRENT_ENV}")"
+    return 0
+  fi
+
+  # shellcheck disable=SC2016 # lo expande el shell DEL CONTENEDOR.
+  header="$(compose_current exec -T postgres sh -c 'd="${KRONOQR_WAL_ARCHIVE_DIR:-/var/backups/fichaje/wal}"; f="$(ls -t "$d" 2>/dev/null | grep "\.gz\.enc$" | head -n 1)"; [ -n "$f" ] && head -c 300 "$d/$f" | head -n 1' 2>/dev/null || true)"
+  have_kid="$(printf '%s' "${header}" | sed -n 's/^KQE1 kind=wal kid=\([0-9a-f]\{8\}\) .*/\1/p')"
+  if [ -n "${have_kid}" ]; then
+    want_kid="$(kqe_wal_kid "${derived}")"
+    if [ "${have_kid}" != "${want_kid}" ]; then
+      check_fail "$(kq_text d_c_wal_key)" "$(kq_text d_f_wal_key_kid)"
+      return 0
+    fi
+  fi
+  check_pass "$(kq_text d_c_wal_key)"
+
+  # shellcheck disable=SC2016
+  legacy="$(compose_current exec -T postgres sh -c 'ls "${KRONOQR_WAL_ARCHIVE_DIR:-/var/backups/fichaje/wal}"/*.gz 2>/dev/null | wc -l' 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ "${legacy}" =~ ^[0-9]+$ ]] && [ "${legacy}" -gt 0 ]; then
+    check_warn "$(kq_format d_c_wal_legacy "${legacy}")" "$(kq_text d_w_wal_legacy)"
+  fi
+}
+
+# La raiz de BACKUP_PATH es de SOLO LECTURA para el runtime (A3-R2): `horizon` no puede
+# escribir ahi. Si puede, el compose es el de la 2.1.0 (o alguien lo ha editado) y las
+# copias vuelven a estar al alcance de quien ejecute codigo en la aplicacion.
+check_backup_mounts() {
+  local state
+  # shellcheck disable=SC2016 # lo expande el shell DEL CONTENEDOR.
+  state="$(compose_current exec -T horizon sh -c 'p="${BACKUP_PATH:-/var/backups/fichaje}"; if touch "$p/.doctor-probe" 2>/dev/null; then rm -f "$p/.doctor-probe"; echo writable; else echo readonly; fi' 2>/dev/null || true)"
+  state="$(printf '%s' "${state}" | tr -d '[:space:]')"
+  case "${state}" in
+  readonly) check_pass "$(kq_text d_c_backup_root)" ;;
+  writable) check_fail "$(kq_text d_c_backup_root)" "$(kq_format d_f_backup_root_writable "${CURRENT_COMPOSE}")" ;;
+  esac
+  return 0
+}
+
+# Plazo de conservacion del detalle de update.sh (C19): 30 dias (KRONOQR_LOG_RETENTION_DAYS,
+# minimo 7) para `update-*.detalle.log` y la huella de la copia previa, 90 para el resumen
+# local. Como root se purga; sin serlo, se avisa si hay algo caducado.
+check_update_logs() {
+  local dir="${KRONOQR_LOG_DIR:-/var/log/kronoqr}" days="${KRONOQR_LOG_RETENTION_DAYS:-30}" old
+  [[ "${days}" =~ ^[0-9]+$ ]] && [ "${days}" -ge 7 ] || days=30
+  [ -d "${dir}" ] || return 0
+
+  if [ "$(id -u)" = "0" ] && kq_path_trusted "${dir}"; then
+    find "${dir}" -maxdepth 1 -type f \( -name 'update-*.detalle.log' -o -name 'update-*.copia.sha256' \) -mtime +"${days}" -delete 2>/dev/null || true
+    find "${dir}" -maxdepth 1 -type f -name 'update-*.log' ! -name 'update-*.detalle.log' -mtime +90 -delete 2>/dev/null || true
+    check_pass "$(kq_format d_c_update_logs "${dir}" "${days}")"
+    return 0
+  fi
+  old="$(find "${dir}" -maxdepth 1 -type f -name 'update-*.detalle.log' -mtime +"${days}" 2>/dev/null | wc -l | tr -d '[:space:]')"
+  if [[ "${old}" =~ ^[0-9]+$ ]] && [ "${old}" -gt 0 ]; then
+    check_warn "$(kq_format d_c_update_logs_old "${dir}" "${old}" "${days}")" "$(kq_format d_w_update_logs_old "${dir}")"
+  fi
+  return 0
+}
+
 check_backup_role() {
   local role state
 

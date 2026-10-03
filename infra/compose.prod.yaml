@@ -63,14 +63,56 @@ name: kronoqr
 x-app-image: &app-image
   image: &php-image ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
   volumes:
-    # Destino de las copias, en el disco del cliente y montado en la MISMA ruta
-    # dentro del contenedor. Asi `php artisan backup:run` escribe donde dice el
-    # .env sin que backup.sh tenga que saber si corre dentro o fuera de Docker.
+    # DESTINO DE LAS COPIAS (BACKUP_PATH), en el disco del cliente y montado en la
+    # MISMA ruta dentro del contenedor. Asi `php artisan backup:run` escribe donde
+    # dice el .env sin que backup.sh tenga que saber si corre dentro o fuera de
+    # Docker.
+    #
+    # LA RAIZ VA EN SOLO LECTURA PARA EL RUNTIME (A3-R2, ADR-049). Hasta la 2.1.0
+    # `app`, `horizon` y `scheduler` la montaban ENTERA en escritura: quien ejecutara
+    # codigo en cualquiera de ellos podia borrar copias, reescribir un `.sha256` o
+    # plantar una copia manipulada sin la clave. Ahora cada servicio escribe SOLO lo
+    # suyo, con montajes hijo en escritura sobre la raiz de solo lectura:
+    #
+    #   metrics/           `app`, `horizon`, `scheduler`, `restore` (textfile de metricas)
+    #   reports/retention  `app` (purga con `run --rm`) y `scheduler` (propuesta
+    #                      semanal). `horizon` NUNCA
+    #   daily/ y base/     solo `scheduler` (es quien hace las copias; A3-R1 sigue
+    #                      abierto, ADR-042: tiene la clave)
+    #   reports/           solo `restore` (su informe)
+    #   wal/               solo `postgres` (no lo montan los demas)
+    #
+    # `create_host_path: false` en TODOS: si falta un subdirectorio, `up` FALLA con
+    # un mensaje claro, en vez de que Docker cree un directorio de root que el uid
+    # 1000 no puede escribir (copias y metricas rotas sin ruido). install.sh y
+    # update.sh crean esos directorios, con el uid 1000, ANTES de levantar.
+    #
+    # Cada montaje es un ancla (`&v-...`): la lista `volumes:` de un servicio
+    # SUSTITUYE a la del ancla (no se fusiona), asi que horizon y scheduler listan
+    # los suyos con `*v-...`.
     #
     # La copia se queda aqui: el fabricante no la recibe ni la custodia (regla
     # dura 16, RL-14). Si BACKUP_PATH apunta a un recurso de red, debe estar
     # montado antes de levantar el servicio.
-    - ${BACKUP_PATH:-/var/backups/fichaje}:${BACKUP_PATH:-/var/backups/fichaje}
+    - &v-backup-root
+      type: bind
+      source: ${BACKUP_PATH:-/var/backups/fichaje}
+      target: ${BACKUP_PATH:-/var/backups/fichaje}
+      read_only: true
+      bind:
+        create_host_path: false
+    - &v-backup-metrics
+      type: bind
+      source: ${BACKUP_PATH:-/var/backups/fichaje}/metrics
+      target: ${BACKUP_PATH:-/var/backups/fichaje}/metrics
+      bind:
+        create_host_path: false
+    - &v-backup-retention
+      type: bind
+      source: ${BACKUP_PATH:-/var/backups/fichaje}/reports/retention
+      target: ${BACKUP_PATH:-/var/backups/fichaje}/reports/retention
+      bind:
+        create_host_path: false
     #
     # Directorio de marca: el logotipo del cliente, en SU disco (RF-PD-08).
     #
@@ -88,7 +130,7 @@ x-app-image: &app-image
     #
     # No hace falta reiniciar para cambiar el logotipo: se sustituye el fichero y
     # la peticion siguiente ya lo sirve, con huella nueva en la URL.
-    - ${BRANDING_PATH:-./branding}:/var/kronoqr/branding:ro
+    - &v-branding ${BRANDING_PATH:-./branding}:/var/kronoqr/branding:ro
     #
     # Ficheros que el producto genera y que CRUZAN contenedores (ADR-045,
     # R3-PL-01): la exportacion integra y los informes en diferido los escribe
@@ -110,7 +152,7 @@ x-app-image: &app-image
     #
     # Solo `storage/app`: ni `storage/` entero ni `storage/framework` (cachés y
     # vistas compiladas deben poder desecharse con la imagen).
-    - app-storage:/var/www/html/storage/app
+    - &v-storage app-storage:/var/www/html/storage/app
   networks:
     - app
   restart: unless-stopped
@@ -119,6 +161,30 @@ x-app-image: &app-image
     options:
       max-size: "20m"
       max-file: "5"
+
+# Montajes de BACKUP_PATH que NO lleva el ancla de arriba: solo los usan el
+# `scheduler` (daily/ y base/: es quien hace las copias) y `restore` (reports/: su
+# informe). Se definen aqui para poder citarlos con `*v-...` sin montarlos en `app`
+# (ADR-049, A3-R2). Misma regla: `create_host_path: false`.
+x-backup-mounts:
+  daily: &v-backup-daily
+    type: bind
+    source: ${BACKUP_PATH:-/var/backups/fichaje}/daily
+    target: ${BACKUP_PATH:-/var/backups/fichaje}/daily
+    bind:
+      create_host_path: false
+  base: &v-backup-base
+    type: bind
+    source: ${BACKUP_PATH:-/var/backups/fichaje}/base
+    target: ${BACKUP_PATH:-/var/backups/fichaje}/base
+    bind:
+      create_host_path: false
+  reports: &v-backup-reports
+    type: bind
+    source: ${BACKUP_PATH:-/var/backups/fichaje}/reports
+    target: ${BACKUP_PATH:-/var/backups/fichaje}/reports
+    bind:
+      create_host_path: false
 
 #------------------------------------------------------------------------------
 # ENTORNO DE LOS SERVICIOS DE RUNTIME (AUD-1, ADR-042, regla dura 6)
@@ -639,6 +705,12 @@ services:
       PGTZ: UTC
       KRONOQR_WAL_ARCHIVE_DIR: ${BACKUP_PATH:-/var/backups/fichaje}/wal
       KRONOQR_WAL_RETENTION_DAYS: ${BACKUP_WAL_RETENTION_DAYS:-8}
+      # Subclave del WAL (ADR-049): LO UNICO de la clave de copias que recibe este
+      # contenedor, derivada de BACKUP_ENCRYPTION_KEY por install.sh/update.sh. SIN
+      # valor por defecto y a proposito: sin ella `archive-wal.sh` FALLA (no archiva
+      # en claro) y PostgreSQL retiene el WAL. Nunca la clave de desarrollo
+      # (KRONOQR_WAL_ALLOW_DEV_KEY solo existe en compose.dev.yaml).
+      BACKUP_WAL_KEY:
     # Regla dura 3. Y archivado de WAL, que es lo que sostiene el RPO de 15 min
     # (RNF-D-02).
     #
@@ -718,6 +790,13 @@ services:
   horizon:
     <<: *app-image
     command: ["horizon"]
+    # `horizon` nunca escribe en BACKUP_PATH salvo `metrics/` (A3-R2): ni copias, ni
+    # informes de retencion.
+    volumes:
+      - *v-backup-root
+      - *v-backup-metrics
+      - *v-branding
+      - *v-storage
     environment:
       <<: *runtime-env
     depends_on:
@@ -743,6 +822,16 @@ services:
   scheduler:
     <<: *app-image
     command: ["scheduler"]
+    # Lanza las copias: escribe `daily/` y `base/` ademas de `metrics/` y
+    # `reports/retention` (A3-R2; con la clave, A3-R1 sigue abierto, ADR-042).
+    volumes:
+      - *v-backup-root
+      - *v-backup-metrics
+      - *v-backup-retention
+      - *v-backup-daily
+      - *v-backup-base
+      - *v-branding
+      - *v-storage
     environment:
       <<: *runtime-env
       # LO UNICO QUE EL PLANIFICADOR TIENE Y EL RESTO NO (AUD-1, ADR-042): lanza
@@ -826,8 +915,12 @@ services:
       - app
     volumes:
       # La misma ruta dentro y fuera, como en `app`: restore.sh lee de aqui las
-      # copias y escribe aqui su informe.
-      - ${BACKUP_PATH:-/var/backups/fichaje}:${BACKUP_PATH:-/var/backups/fichaje}
+      # copias y escribe SOLO su informe (`reports/`) y su metrica (`metrics/`). La
+      # raiz en solo lectura: el servicio que lleva la credencial del migrador no
+      # necesita borrar ni modificar copias (D10, ADR-049).
+      - *v-backup-root
+      - *v-backup-reports
+      - *v-backup-metrics
     environment:
       # Arranque de artisan para el asiento de auditoria de la restauracion (PR1):
       # restore.sh escribe `system.restored_from_backup` con el rol de migracion

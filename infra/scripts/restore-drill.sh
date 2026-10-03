@@ -13,10 +13,22 @@
 #   · CONTEOS. Cada tabla del manifiesto tiene en la copia restaurada al menos
 #     las filas que tenia al hacerla.
 #
+# Y, desde la 2.2.0 (ADR-049), con `--mode pitr`, lo que ninguna otra
+# comprobacion ejercita: que la copia FISICA mas el WAL archivado y CIFRADO
+# reconstruyen la base (RNF-D-02, «copias mas WAL»), con los segmentos recientes
+# cifrados y, si los hay, los heredados de la 2.1.0.
+#
 # No toca la instalacion: ni la base de produccion, ni los contenedores del
 # producto, ni las copias, que se abren en modo lectura. Al terminar, el
 # contenedor del simulacro se destruye con todo lo que contenia, incluido el
-# volcado descifrado, que nunca llega a tocar el disco del servidor.
+# volcado descifrado, que en el modo `container` nunca llega a tocar el disco
+# del servidor.
+#
+# INTEGRIDAD (ADR-049). Igual que restore.sh: la copia se LEE UNA SOLA VEZ a un
+# directorio privado 0700 y el MAC, el `.sha256` (obligatorio), el manifiesto
+# autenticado y el descifrado se hacen sobre ESA copia. Una copia alterada,
+# renombrada, sin `.sha256` o de la 2.1.0 sin `--accept-unauthenticated` hace
+# fallar el simulacro con salida 6: eso ya es el hallazgo.
 #
 # CADENCIA: trimestral (RNF-D-05). Se automatiza de dos maneras y las dos
 # valen: `.github/workflows/backup-drill.yml` en el repositorio del fabricante,
@@ -27,14 +39,24 @@
 #   restore-drill.sh                        simulacro sobre la ultima copia
 #   restore-drill.sh --file RUTA            sobre una copia concreta
 #   restore-drill.sh --mode database        sin Docker, en una base nueva
+#   restore-drill.sh --mode pitr            copia fisica + WAL cifrado, a un punto
 #   restore-drill.sh --keep                 no destruye el contenedor al acabar
 #
 # Opciones:
 #   --file RUTA     copia a restaurar. Por defecto la del puntero LATEST
+#   --base RUTA     (pitr) copia fisica. Por defecto la ultima de base/
+#   --wal-source X  (pitr) donde esta el archivo de WAL: una ruta o un volumen de
+#                   Docker, que se monta en solo lectura. Por defecto BACKUP_PATH/wal
 #   --image IMAGEN  imagen del contenedor limpio. Por defecto postgres:17-alpine
-#   --mode MODO     container (por defecto) o database
+#                   (en pitr, la imagen de postgres DEL PRODUCTO: trae las
+#                   herramientas que entienden el formato cifrado)
+#   --mode MODO     container (por defecto), database o pitr
 #   --timeout SEG   espera maxima a que arranque el contenedor. Por defecto 90
 #   --keep          conserva el contenedor para inspeccionarlo a mano
+#   --accept-unauthenticated
+#                   acepta una copia (y segmentos de WAL) de la 2.1.0, sin MAC.
+#                   El `.sha256` sigue siendo obligatorio. Por invocacion; el
+#                   .env no cuenta (C12)
 #
 # El modo `database` restaura en una base NUEVA del PostgreSQL configurado y la
 # elimina al terminar. Existe para la integracion continua, donde el runner ya
@@ -54,9 +76,11 @@
 #      pertenencias de rol del cluster. Se han intentado revertir. La copia esta
 #      manipulada: ver docs/runbooks/rotacion-secretos.md. En el modo por
 #      defecto el contenedor es de usar y tirar y sus roles no importan.
-#   6  EL SIMULACRO FALLA: la copia no se descifra, su huella no coincide o no
-#      se puede restaurar. Es el resultado que importa: significa que hoy no se
-#      podria recuperar el registro horario. Ver docs/runbooks/restaurar-backup.md.
+#   6  EL SIMULACRO FALLA: la copia no supera la comprobacion de integridad (MAC,
+#      huella, nombre, manifiesto), no se descifra o no se puede restaurar; o, en
+#      pitr, la recuperacion se ha abortado por un segmento de WAL alterado o
+#      ausente. Es el resultado que importa: significa que hoy no se podria
+#      recuperar el registro horario. Ver docs/runbooks/restaurar-backup.md.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -76,14 +100,29 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/backup-common.sh"
 
 FICHERO=""
-IMAGEN="${DRILL_POSTGRES_IMAGE:-postgres:17-alpine}"
+BASE_FISICA=""
+FUENTE_WAL=""
+IMAGEN="${DRILL_POSTGRES_IMAGE:-}"
 MODO="container"
 ESPERA=90
 CONSERVAR=0
 CONTENEDOR=""
 BASE_SIMULACRO=""
+TRABAJO=""
+# INFORME es la ruta FINAL; INFORME_TRABAJO donde se escribe mientras corre (un
+# directorio privado), y se PUBLICA al salir como uid 1000 (A3-R2).
 INFORME=""
+INFORME_TRABAJO=""
 ROLES_ANTES=""
+INTEGRIDAD=""
+MANIFIESTO=""
+HUELLA_PRIVADA=""
+DRILL_WAL_ENC=0
+DRILL_WAL_HEREDADOS=0
+# Bandera de copias heredadas: de la linea de ordenes o del entorno de ESTA
+# invocacion; el .env no cuenta (se captura antes de cargarlo).
+ACEPTAR_HEREDADA=0
+[ "${KRONOQR_ACCEPT_UNAUTHENTICATED:-}" != "1" ] || ACEPTAR_HEREDADA=1
 
 al_salir() {
   if [ -n "$CONTENEDOR" ] && [ "$CONSERVAR" -eq 0 ]; then
@@ -95,6 +134,12 @@ al_salir() {
     psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${BASE_SIMULACRO}\"" >/dev/null 2>&1 || true
   fi
   [ -z "$ROLES_ANTES" ] || rm -f "$ROLES_ANTES"
+  if [ -n "$INFORME_TRABAJO" ]; then
+    kq_report_publish "$INFORME_TRABAJO" "$INFORME"
+    INFORME_TRABAJO=""
+  fi
+  kqe_forget
+  [ -z "$TRABAJO" ] || [ ! -d "$TRABAJO" ] || rm -rf "$TRABAJO"
   return 0
 }
 
@@ -111,7 +156,7 @@ uso() {
 
 informar() {
   log "$*"
-  [ -n "$INFORME" ] && printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INFORME"
+  [ -z "$INFORME_TRABAJO" ] || printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INFORME_TRABAJO"
   return 0
 }
 
@@ -124,7 +169,8 @@ metricas_del_simulacro() {
   local exito_ts=0
   [ "$resultado" -eq 1 ] && exito_ts="$(now_epoch)"
 
-  write_metrics "${BACKUP_DIR_METRICS}/kronoqr_backup_drill.prom" <<EOF
+  {
+    cat <<EOF
 # HELP kronoqr_backup_restore_drill_last_result Resultado del ultimo simulacro de restauracion: 1 correcto, 0 fallido.
 # TYPE kronoqr_backup_restore_drill_last_result gauge
 kronoqr_backup_restore_drill_last_result ${resultado}
@@ -141,6 +187,17 @@ kronoqr_backup_restore_drill_tables ${tablas}
 # TYPE kronoqr_backup_restore_drill_rows gauge
 kronoqr_backup_restore_drill_rows ${filas}
 EOF
+    if [ "$MODO" = "pitr" ]; then
+      cat <<EOF
+# HELP kronoqr_backup_restore_drill_pitr_wal_segments Segmentos de WAL cifrados reproducidos por el ultimo simulacro pitr.
+# TYPE kronoqr_backup_restore_drill_pitr_wal_segments gauge
+kronoqr_backup_restore_drill_pitr_wal_segments ${DRILL_WAL_ENC}
+# HELP kronoqr_backup_restore_drill_pitr_legacy_wal_segments Segmentos heredados (2.1.0, sin autenticar) reproducidos por el ultimo simulacro pitr.
+# TYPE kronoqr_backup_restore_drill_pitr_legacy_wal_segments gauge
+kronoqr_backup_restore_drill_pitr_legacy_wal_segments ${DRILL_WAL_HEREDADOS}
+EOF
+    fi
+  } | write_metrics "${BACKUP_DIR_METRICS}/kronoqr_backup_drill.prom"
 }
 
 #------------------------------------------------------------------------------
@@ -202,24 +259,34 @@ crear_base_de_simulacro() {
     "no se ha podido crear la base del simulacro. El usuario ${PGUSER} necesita CREATEDB."
 }
 
+# Descifra la COPIA PRIVADA (la que ya se ha verificado) segun su formato.
+descifrar_copia() {
+  if [ "$INTEGRIDAD" = "authenticated" ]; then
+    kqe_decrypt_copy
+  else
+    kqe_decrypt_legacy_copy
+  fi
+}
+
 restaurar_en_destino() {
   if [ "$MODO" = "container" ]; then
     # El volcado descifrado entra por la entrada estandar del contenedor y
     # muere con el: el texto en claro no toca el disco del servidor.
-    decrypt_stream <"$FICHERO" |
+    descifrar_copia |
       docker exec -i "$CONTENEDOR" sh -c 'cat > /tmp/copia.dump' || die "${KQ_EXIT_VERIFY_FAILED}" \
-      "no se ha podido descifrar '${FICHERO}' con la clave actual. Si la clave se roto, el simulacro debe usar la que corresponda a esta copia."
+      "no se ha podido descifrar '${FICHERO}' con la clave actual. Si la clave se roto, el simulacro debe usar la que corresponda a esta copia (BACKUP_ENCRYPTION_KEY_PREVIOUS)."
     docker exec "$CONTENEDOR" pg_restore --username=postgres --dbname="$BASE_SIMULACRO" \
-      --no-owner --no-privileges --exit-on-error /tmp/copia.dump >>"${INFORME:-/dev/null}" 2>&1 || return 1
+      --no-owner --no-privileges --exit-on-error /tmp/copia.dump >>"${INFORME_TRABAJO:-/dev/null}" 2>&1 || return 1
   else
-    decrypt_stream <"$FICHERO" >"${TMPDIR:-/tmp}/kronoqr-drill.dump" || die "${KQ_EXIT_VERIFY_FAILED}" \
+    # El volcado descifrado vive en el directorio privado 0700 y se borra al salir.
+    descifrar_copia >"${TRABAJO}/drill.dump" || die "${KQ_EXIT_VERIFY_FAILED}" \
       "no se ha podido descifrar '${FICHERO}' con la clave actual."
     pg_restore --dbname="$BASE_SIMULACRO" --no-owner --no-privileges --exit-on-error \
-      "${TMPDIR:-/tmp}/kronoqr-drill.dump" >>"${INFORME:-/dev/null}" 2>&1 || {
-      rm -f "${TMPDIR:-/tmp}/kronoqr-drill.dump"
+      "${TRABAJO}/drill.dump" >>"${INFORME_TRABAJO:-/dev/null}" 2>&1 || {
+      rm -f "${TRABAJO}/drill.dump"
       return 1
     }
-    rm -f "${TMPDIR:-/tmp}/kronoqr-drill.dump"
+    rm -f "${TRABAJO}/drill.dump"
   fi
   return 0
 }
@@ -288,7 +355,7 @@ comprobar_integridad_referencial() {
 comprobar_conteos() {
   local manifiesto estables tablas filas
 
-  manifiesto="${FICHERO%.dump.enc}.manifest.json"
+  manifiesto="$MANIFIESTO"
   tablas="$(psql_q "$BASE_SIMULACRO" "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname !~ '^pg_'" | tr -d '[:space:]')"
   informar "Tablas en la copia restaurada: ${tablas:-0}"
   DRILL_TABLAS="${tablas:-0}"
@@ -298,7 +365,7 @@ comprobar_conteos() {
   # instalacion en marcha.
   [ "${tablas:-0}" -gt 0 ] || err "AVISO: la copia no contiene ninguna tabla. Si esta instalacion ya esta en produccion, esto es un incidente: comprueba que backup.sh se conecta a la base correcta (DB_DATABASE)."
 
-  if [ ! -f "$manifiesto" ]; then
+  if [ -z "$manifiesto" ] || [ ! -f "$manifiesto" ]; then
     err "No hay manifiesto para '${FICHERO}': no se pueden comparar conteos. El simulacro NO puede darse por bueno."
     return 1
   fi
@@ -309,6 +376,153 @@ comprobar_conteos() {
   estables="$(manifest_stable_tables "$manifiesto" | grep -c . || true)"
   informar "Conteos del manifiesto: ${filas} filas en ${tablas} tablas, ${estables} de ellas exigibles exactas."
   compare_table_counts "$BASE_SIMULACRO" "$manifiesto"
+}
+
+#------------------------------------------------------------------------------
+# --mode pitr: copia fisica + WAL archivado y CIFRADO (RNF-D-02, ADR-049)
+#------------------------------------------------------------------------------
+
+# La imagen de postgres DEL PRODUCTO: trae `kronoqr-restore-wal` y el formato KQE1.
+imagen_pitr() {
+  [ -z "$IMAGEN" ] || {
+    printf '%s' "$IMAGEN"
+    return 0
+  }
+  [ -n "${IMAGE_TAG:-}" ] || die "${KQ_EXIT_REQUIREMENTS}" \
+    "el modo pitr usa la imagen de postgres del producto y no se sabe cual: pon IMAGE_TAG en el .env o pasa --image <imagen> (por ejemplo ghcr.io/kronoqr/postgres:<version>). No se ha tocado nada."
+  printf '%s/postgres:%s' "${IMAGE_REGISTRY:-ghcr.io/kronoqr}" "$IMAGE_TAG"
+}
+
+simulacro_pitr() {
+  local base nombre estado=0 esperado=0 recuperando="" usuario imagen log_pg segmento abortada=0 guardada
+
+  require_cmd docker docker
+  docker info >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
+    "Docker no responde. El simulacro pitr necesita levantar un contenedor limpio. No se ha tocado nada."
+  imagen="$(imagen_pitr)"
+  docker image inspect "$imagen" >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
+    "no esta la imagen '${imagen}'. Descargala ('docker pull ${imagen}') o indica otra con --image. No se ha tocado nada."
+  kq_wal_key_ensure || die "${KQ_EXIT_REQUIREMENTS}" \
+    "no se puede obtener la clave del WAL: define BACKUP_ENCRYPTION_KEY (de la que se deriva) o BACKUP_WAL_KEY. No se ha tocado nada."
+
+  base="$BASE_FISICA"
+  [ -n "$base" ] || base="$(find "$BACKUP_DIR_BASE" -maxdepth 1 -type f -name "${BACKUP_PREFIX}-base-*.tar.gz.enc" 2>/dev/null | sort | tail -n 1)"
+  [ -n "$base" ] && [ -f "$base" ] || die "${KQ_EXIT_STATE_CONFLICT}" \
+    "no hay ninguna copia fisica en '${BACKUP_DIR_BASE}': sin ella el WAL no reconstruye nada. Lanza 'backup.sh run --mode base'."
+  [ -n "$FUENTE_WAL" ] || FUENTE_WAL="${BACKUP_PATH}/wal"
+  case "$FUENTE_WAL" in
+  /* | ?:*) [ -d "$FUENTE_WAL" ] || die "${KQ_EXIT_REQUIREMENTS}" "no existe el archivo de WAL '${FUENTE_WAL}'. Indica --wal-source." ;;
+  esac
+
+  # La copia fisica se abre IGUAL que un volcado: MAC, huella obligatoria, nombre.
+  nombre="$(basename -- "$base")"
+  nombre="${nombre%.tar.gz.enc}"
+  kqe_open "$base" "$TRABAJO" base "$nombre" || estado=$?
+  case "$estado" in
+  0) INTEGRIDAD="authenticated" ;;
+  10)
+    [ "$ACEPTAR_HEREDADA" -eq 1 ] || die "${KQ_EXIT_VERIFY_FAILED}" \
+      "'${base}' es una copia fisica de la 2.1.0: cifrada pero NO autenticada. Si es la que quieres, repite con --accept-unauthenticated (su .sha256 sigue siendo obligatorio). Ver docs/runbooks/restaurar-backup.md §6.8."
+    INTEGRIDAD="legacy_accepted"
+    ;;
+  15) die "${KQ_EXIT_REQUIREMENTS}" "${KQE_REASON}." ;;
+  *) die "${KQ_EXIT_VERIFY_FAILED}" "'${base}' NO supera la comprobacion de autenticidad: ${KQE_REASON}. El simulacro se detiene aqui: eso ya es el hallazgo." ;;
+  esac
+  guardada="$(kq_sha256_stored "${base}.sha256")"
+  HUELLA_PRIVADA="$(sha256_of "$KQE_COPY")"
+  if [ -z "$guardada" ] || [ "$guardada" != "$HUELLA_PRIVADA" ]; then
+    die "${KQ_EXIT_VERIFY_FAILED}" "la huella SHA-256 de '${base}' falta o no coincide: el simulacro se detiene aqui."
+  fi
+  if [ "$INTEGRIDAD" = "authenticated" ]; then
+    informar "Copia fisica AUTENTICADA (KQE1, kid ${KQE_KID}), creada el ${KQE_CREATED} segun su cabecera."
+  else
+    informar "Copia fisica heredada de la 2.1.0, SIN autenticar (aceptada con --accept-unauthenticated)."
+  fi
+
+  CONTENEDOR="kronoqr-drill-pitr-$(timestamp_utc)"
+  # La clave del WAL va por entorno, SIN valor en la linea de ordenes (C7). El WAL
+  # entra en solo lectura. Red cerrada: todo entra y sale por `docker exec`.
+  informar "Levantando contenedor limpio ${CONTENEDOR} (${imagen}) con el archivo de WAL en solo lectura"
+  docker run --detach --name "$CONTENEDOR" --network none \
+    -e BACKUP_WAL_KEY -e BACKUP_WAL_KEY_PREVIOUS -e KRONOQR_WAL_ARCHIVE_DIR=/wal -e KRONOQR_RESTORE_STATS=/tmp/stats \
+    -e "KRONOQR_ACCEPT_LEGACY_WAL=${ACEPTAR_HEREDADA}" \
+    -v "${FUENTE_WAL}:/wal:ro" \
+    --entrypoint sleep "$imagen" infinity >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
+    "no se ha podido crear el contenedor del simulacro con la imagen '${imagen}'."
+  docker exec "$CONTENEDOR" sh -c 'mkdir -m 0700 /tmp/pgdata /tmp/stats' ||
+    die "${KQ_EXIT_REQUIREMENTS}" "no se ha podido preparar el contenedor del simulacro."
+
+  informar "Desplegando la copia fisica verificada"
+  if ! { kqe_decrypt_copy_any | docker exec -i "$CONTENEDOR" tar -xzf - -C /tmp/pgdata; }; then
+    die "${KQ_EXIT_VERIFY_FAILED}" "no se ha podido desplegar '${base}' (descifrado o tar). La copia fisica no sirve."
+  fi
+  kqe_forget
+  docker exec "$CONTENEDOR" sh -c ': > /tmp/pgdata/recovery.signal'
+
+  # `postgres` directamente, con cada opcion como argumento propio (sin pasar por
+  # una cadena de shell). La clave del WAL NO esta en ninguna opcion.
+  usuario="${DB_MIGRATION_USERNAME:-fichaje_migrator}"
+  BASE_SIMULACRO="${DB_DATABASE:-fichaje}"
+  informar "Arrancando en recuperacion: restore_command=kronoqr-restore-wal, hasta el final del WAL, y promocion"
+  docker exec -d "$CONTENEDOR" sh -c 'exec "$@" >/tmp/pg.log 2>&1' sh \
+    postgres -D /tmp/pgdata -c port=5432 -c listen_addresses= -c unix_socket_directories=/tmp \
+    -c "restore_command=kronoqr-restore-wal %f %p" -c recovery_target_action=promote \
+    -c archive_mode=off -c archive_command=
+
+  while [ "$esperado" -lt "$ESPERA" ]; do
+    recuperando="$(docker exec "$CONTENEDOR" psql -h /tmp -U "$usuario" -d postgres -Atqc 'SELECT pg_is_in_recovery()' 2>/dev/null | tr -d '[:space:]' || true)"
+    [ "$recuperando" != "f" ] || break
+    # Si el servidor ha MUERTO, la recuperacion se ha abortado (exit 200 del restore_command).
+    if ! docker exec "$CONTENEDOR" sh -c '[ -f /tmp/pgdata/postmaster.pid ] && kill -0 "$(head -n 1 /tmp/pgdata/postmaster.pid)"' >/dev/null 2>&1; then
+      abortada=1
+      break
+    fi
+    sleep 2
+    esperado=$((esperado + 2))
+  done
+
+  log_pg="$(docker exec "$CONTENEDOR" cat /tmp/pg.log 2>/dev/null || true)"
+  DRILL_WAL_ENC="$(docker exec "$CONTENEDOR" sh -c 'ls /tmp/stats 2>/dev/null | grep -c "^enc\." || true' | tr -d '[:space:]')"
+  DRILL_WAL_HEREDADOS="$(docker exec "$CONTENEDOR" sh -c 'ls /tmp/stats 2>/dev/null | grep -c "^legacy\." || true' | tr -d '[:space:]')"
+  [[ "$DRILL_WAL_ENC" =~ ^[0-9]+$ ]] || DRILL_WAL_ENC=0
+  [[ "$DRILL_WAL_HEREDADOS" =~ ^[0-9]+$ ]] || DRILL_WAL_HEREDADOS=0
+
+  if [ "$recuperando" != "f" ]; then
+    # Aborto o no promocion: se recogen SOLO las lineas del restore_command y los
+    # FATAL (nombres de segmento y motivos; ni datos ni secretos) al informe.
+    segmento="$(printf '%s\n' "$log_pg" | sed -n "s/.*kronoqr-restore-wal: ERROR en el segmento '\([^']*\)'.*/\1/p" | head -n 1)"
+    printf '%s\n' "$log_pg" | grep -E "kronoqr-restore-wal|FATAL" | grep -v "is starting up" | head -n 20 | while IFS= read -r linea; do
+      informar "postgres: ${linea}"
+    done
+    if [ -n "$segmento" ]; then
+      informar "RECUPERACION ABORTADA en el segmento ${segmento}: wal_integrity=aborted_at:${segmento}"
+      err "La recuperacion se ha detenido a proposito en el segmento ${segmento}: el WAL no es de fiar desde ahi. Ver docs/runbooks/restaurar-backup.md §4.1."
+    elif [ "$abortada" -eq 1 ]; then
+      informar "El servidor de recuperacion ha terminado sin promocionar (ver las lineas de arriba)."
+    else
+      informar "No se ha completado la recuperacion en ${ESPERA} s."
+    fi
+    return 1
+  fi
+
+  informar "Recuperacion completada: wal_integrity=authenticated, legacy_wal=${DRILL_WAL_HEREDADOS}, segmentos cifrados reproducidos=${DRILL_WAL_ENC}"
+  if [ "$DRILL_WAL_HEREDADOS" -gt 0 ]; then
+    err "AVISO: se han reproducido ${DRILL_WAL_HEREDADOS} segmentos heredados de la 2.1.0 (sin cifrar ni autenticar)."
+  fi
+  if [ "$((DRILL_WAL_ENC + DRILL_WAL_HEREDADOS))" -lt 1 ]; then
+    err "El simulacro NO ha ejercitado el WAL: no hay segmentos posteriores a la copia fisica. Repite cuando haya WAL archivado."
+    return 1
+  fi
+
+  PSQL_CMD=(docker exec -i "$CONTENEDOR" psql -h /tmp -U "$usuario")
+  DRILL_TABLAS="$(psql_q "$BASE_SIMULACRO" "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname !~ '^pg_'" | tr -d '[:space:]')"
+  informar "Tablas en la base recuperada: ${DRILL_TABLAS:-0}"
+  comprobar_integridad_referencial
+}
+
+# Descifra la copia fisica privada segun su formato (autenticada o heredada).
+kqe_decrypt_copy_any() {
+  descifrar_copia
 }
 
 #------------------------------------------------------------------------------
@@ -324,6 +538,22 @@ main() {
       ;;
     --file=*)
       FICHERO="${1#*=}"
+      shift
+      ;;
+    --base)
+      BASE_FISICA="${2:-}"
+      shift 2
+      ;;
+    --base=*)
+      BASE_FISICA="${1#*=}"
+      shift
+      ;;
+    --wal-source)
+      FUENTE_WAL="${2:-}"
+      shift 2
+      ;;
+    --wal-source=*)
+      FUENTE_WAL="${1#*=}"
       shift
       ;;
     --image)
@@ -354,6 +584,10 @@ main() {
       CONSERVAR=1
       shift
       ;;
+    --accept-unauthenticated)
+      ACEPTAR_HEREDADA=1
+      shift
+      ;;
     -h | --help)
       uso
       return 0
@@ -363,54 +597,67 @@ main() {
   done
 
   case "$MODO" in
-  container | database) ;;
-  *) die "${KQ_EXIT_USAGE}" "modo '${MODO}' desconocido. Usa --mode container (por defecto) o --mode database." ;;
+  container | database | pitr) ;;
+  *) die "${KQ_EXIT_USAGE}" "modo '${MODO}' desconocido. Usa --mode container (por defecto), --mode database o --mode pitr." ;;
   esac
 
   load_backup_config
   require_cmd openssl openssl
   require_encryption_key
-  ensure_backup_tree
+  ensure_backup_tree reports metrics
+  [ -n "$IMAGEN" ] || [ "$MODO" = "pitr" ] || IMAGEN="postgres:17-alpine"
 
-  [ -n "$FICHERO" ] || FICHERO="$(latest_dump_file)"
-  [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die "${KQ_EXIT_STATE_CONFLICT}" \
-    "no hay ninguna copia sobre la que hacer el simulacro. Lanza 'backup.sh run' primero."
-
-  if [ -f "${FICHERO}.sha256" ]; then
-    [ "$(cut -d' ' -f1 <"${FICHERO}.sha256")" = "$(sha256_of "$FICHERO")" ] || die "${KQ_EXIT_VERIFY_FAILED}" \
-      "la copia '${FICHERO}' esta corrupta (su huella no coincide). El simulacro se detiene aqui: eso ya es el hallazgo."
-  fi
-
-  INFORME="${BACKUP_DIR_REPORTS}/drill-$(timestamp_utc).log"
-  : >"$INFORME"
-  chmod 0640 "$INFORME"
+  TRABAJO="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-drill.XXXXXX")"
+  chmod 0700 "$TRABAJO"
   DRILL_TABLAS=0
   DRILL_FILAS=0
 
-  informar "Simulacro de restauracion (RNF-D-05) sobre '${FICHERO}', modo ${MODO}."
+  INFORME="${BACKUP_DIR_REPORTS}/drill-$(timestamp_utc).log"
+  INFORME_TRABAJO="${TRABAJO}/informe.log"
+  : >"$INFORME_TRABAJO"
+
   inicio="$(now_epoch)"
   INICIO_SIMULACRO="$inicio"
 
-  if [ "$MODO" = "container" ]; then
-    levantar_contenedor_limpio
+  if [ "$MODO" = "pitr" ]; then
+    informar "Simulacro de restauracion (RNF-D-05), modo pitr: copia fisica + WAL archivado."
+    simulacro_pitr || resultado=1
   else
-    crear_base_de_simulacro
-  fi
+    [ -n "$FICHERO" ] || FICHERO="$(latest_dump_file)"
+    [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die "${KQ_EXIT_STATE_CONFLICT}" \
+      "no hay ninguna copia sobre la que hacer el simulacro. Lanza 'backup.sh run' primero."
 
-  if ! restaurar_en_destino; then
-    resultado=1
-    err "La restauracion en el destino limpio ha fallado. Revisa '${INFORME}'."
-  fi
+    # UNA lectura a un directorio privado; todo lo demas sobre esa copia (ADR-049).
+    kq_open_dump_copy "$FICHERO" "$TRABAJO" "$ACEPTAR_HEREDADA" "${KQ_EXIT_VERIFY_FAILED}"
+    informar "Simulacro de restauracion (RNF-D-05) sobre '${FICHERO}', modo ${MODO}."
+    if [ "$INTEGRIDAD" = "authenticated" ]; then
+      informar "Copia AUTENTICADA (KQE1, kid ${KQE_KID}), creada el ${KQE_CREATED} segun su cabecera."
+    else
+      informar "Copia heredada de la 2.1.0, SIN autenticar (aceptada con --accept-unauthenticated)."
+    fi
 
-  # A3-01, solo en `--mode database`: el archivo se ha ejecutado contra un
-  # cluster real. Se mira aunque la restauracion haya fallado.
-  if [ "$MODO" = "database" ]; then
-    guardar_roles
-  fi
+    if [ "$MODO" = "container" ]; then
+      levantar_contenedor_limpio
+    else
+      crear_base_de_simulacro
+    fi
 
-  if [ "$resultado" -eq 0 ]; then
-    comprobar_integridad_referencial || resultado=1
-    comprobar_conteos || resultado=1
+    if ! restaurar_en_destino; then
+      resultado=1
+      err "La restauracion en el destino limpio ha fallado. Revisa '${INFORME}'."
+    fi
+    kqe_forget
+
+    # A3-01, solo en `--mode database`: el archivo se ha ejecutado contra un
+    # cluster real. Se mira aunque la restauracion haya fallado.
+    if [ "$MODO" = "database" ]; then
+      guardar_roles
+    fi
+
+    if [ "$resultado" -eq 0 ]; then
+      comprobar_integridad_referencial || resultado=1
+      comprobar_conteos || resultado=1
+    fi
   fi
 
   duracion="$(($(now_epoch) - inicio))"

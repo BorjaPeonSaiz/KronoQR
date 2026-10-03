@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+#
+# KronoQR — `restore_command` de la recuperacion a un punto en el tiempo (RNF-D-02).
+#
+#   restore_command = 'kronoqr-restore-wal %f %p'
+#
+# Lee del archivo de WAL (KRONOQR_WAL_ARCHIVE_DIR) el segmento %f, lo verifica y lo
+# deja descifrado en %p. Entiende los dos formatos durante la transicion: el
+# cifrado y autenticado `<seg>.gz.enc` (KQE1, ADR-049) y el `<seg>.gz` heredado de
+# la 2.1.0, que solo se admite con KRONOQR_ACCEPT_LEGACY_WAL=1.
+#
+# LA REGLA QUE LO GOBIERNA, y por que existe (ADR-049, ALTO del dictamen):
+#
+#   PostgreSQL interpreta `exit 1` como «no hay mas WAL» y PROMOCIONA. Un `exit 1`
+#   por cualquier otro motivo trunca la recuperacion EN SILENCIO y pierde datos sin
+#   que nadie lo vea (RL-04). Un estado de salida MAYOR DE 125 es fatal: aborta la
+#   recuperacion. Por tanto:
+#
+#     exit 0    el segmento esta en %p, verificado.
+#     exit 1    SOLO si, tras una SEGUNDA comprobacion, no existe ni `%f.gz.enc`
+#               ni `%f.gz` Y no existe ningun segmento POSTERIOR de la misma linea
+#               temporal (los 8 primeros hex): el final real del archivo.
+#     exit 200  CUALQUIER otra cosa: MAC o clave malos, hueco con segmento
+#               posterior, fallo de lectura, fichero que desaparece o cambia
+#               entre la comprobacion y la lectura, parametros no permitidos. El
+#               mensaje (stderr, al log de PostgreSQL) dice el SEGMENTO, el MOTIVO
+#               y que hacer.
+#
+# TOCTOU: el segmento se COPIA UNA VEZ a un directorio privado junto a %p
+# (`.kqe.XXXXXX`, 0700) y se verifica y descifra SOLO esa copia, a `%p.tmp`; `mv`
+# a %p al final. Quien administra el recurso de red no puede cambiar el cuerpo
+# entre la verificacion y el uso. Orden de busqueda: `.gz.enc`; luego `.gz`; y
+# si el `.gz` ha desaparecido (la migracion lo acaba de cifrar), otra vez `.gz.enc`.
+#
+# La clave llega por entorno (`-e BACKUP_WAL_KEY`, sin valor en la linea de
+# ordenes); opcionalmente BACKUP_WAL_KEY_PREVIOUS para segmentos de antes de una
+# rotacion. NUNCA va en este `restore_command` ni en postgresql.auto.conf.
+#
+# NINGUN SECRETO EN LA SALIDA.
+
+set -euo pipefail
+IFS=$'\n\t'
+export LC_ALL=C
+
+readonly DESTINO="${KRONOQR_WAL_ARCHIVE_DIR:-/var/backups/fichaje/wal}"
+readonly KQE_LIB="${KQE_LIB:-/usr/local/lib/kronoqr/kqe.sh}"
+readonly FATAL=200
+
+err() {
+  printf 'kronoqr-restore-wal: %s\n' "$*" >&2
+}
+
+# fatal SEGMENTO MOTIVO QUE_HACER
+fatal() {
+  err "ERROR en el segmento '$1': $2. LA RECUPERACION SE DETIENE A PROPOSITO (no se promociona con datos de menos). $3 Ver docs/runbooks/restaurar-backup.md §4.1 y §6.4."
+  exit "$FATAL"
+}
+
+[ "$#" -eq 2 ] || {
+  err "uso: kronoqr-restore-wal <nombre %f> <ruta %p>. Lo invoca PostgreSQL como restore_command."
+  exit "$FATAL"
+}
+nombre="$1"
+destino="$2"
+
+# shellcheck source=/dev/null
+. "$KQE_LIB" || fatal "$nombre" "no se puede cargar ${KQE_LIB}" "La imagen esta incompleta: usa la imagen de postgres del producto."
+kqe_require || fatal "$nombre" "falta openssl con SHA3-256" "Usa la imagen de postgres del producto."
+
+if [[ ! "$nombre" =~ $KQE_WAL_NAME_RE ]]; then
+  # PostgreSQL pide, por ejemplo, ficheros de historia que no existen: eso es «no hay».
+  err "el nombre '${nombre}' no es un segmento ni un fichero de historia: se trata como inexistente."
+  exit 1
+fi
+
+[ -d "$DESTINO" ] || fatal "$nombre" "el archivo de WAL '${DESTINO}' no existe o no esta montado" "Monta el archivo de WAL en esa ruta (KRONOQR_WAL_ARCHIVE_DIR) y repite."
+
+dir_destino="$(dirname -- "$destino")"
+trabajo=""
+# shellcheck disable=SC2329 # la invoca el trap EXIT.
+al_salir() {
+  [ -z "$trabajo" ] || rm -rf -- "$trabajo" 2>/dev/null || true
+  rm -f -- "${destino}.tmp" 2>/dev/null || true
+}
+trap al_salir EXIT
+
+enc="${DESTINO}/${nombre}.gz.enc"
+heredado="${DESTINO}/${nombre}.gz"
+
+# Cuenta lo reproducido (solo si la prueba o el simulacro piden estadistica con
+# KRONOQR_RESTORE_STATS=<directorio>): sirve para el asiento (`legacy_wal`).
+estadistica() {
+  [ -n "${KRONOQR_RESTORE_STATS:-}" ] && [ -d "$KRONOQR_RESTORE_STATS" ] || return 0
+  : >"${KRONOQR_RESTORE_STATS}/$1.${nombre}" 2>/dev/null || true
+}
+
+crear_trabajo() {
+  trabajo="$(mktemp -d "${dir_destino}/.kqe.XXXXXX")" ||
+    fatal "$nombre" "no se puede crear un directorio de trabajo en '${dir_destino}'" "Comprueba que PostgreSQL puede escribir en su directorio de WAL."
+  chmod 0700 "$trabajo"
+}
+
+# Descifra el `.gz.enc` a `%p`. Cualquier fallo es fatal (200).
+usar_cifrado() {
+  crear_trabajo
+  if ! kqe_open "$enc" "$trabajo" wal "$nombre"; then
+    case "${KQE_STATUS}" in
+    13) fatal "$nombre" "clave distinta o cabecera alterada (kid)" "Si se roto BACKUP_ENCRYPTION_KEY, pon la subclave anterior en BACKUP_WAL_KEY_PREVIOUS (la que da 'backup.sh derive-wal-key --print' con la clave anterior) y repite." ;;
+    11) fatal "$nombre" "el MAC no cuadra: el fichero esta alterado o danado" "Corrupcion del recurso de red o manipulacion: si no hay una averia que lo explique, trata esto como incidente de seguridad (brecha-de-seguridad.md). Restaura el segmento desde otro soporte." ;;
+    15) fatal "$nombre" "no se ha podido leer '${enc}' (${KQE_REASON})" "Comprueba el recurso de red y los permisos del archivo de WAL." ;;
+    *) fatal "$nombre" "${KQE_REASON}" "El segmento no es el que se archivo. Restauralo desde otro soporte." ;;
+    esac
+  fi
+  if ! { kqe_decrypt_copy | gzip -dc >"${destino}.tmp"; } 2>/dev/null; then
+    fatal "$nombre" "se autentica pero no se descifra o descomprime" "El segmento es de otra clave o esta incompleto: restauralo desde otro soporte."
+  fi
+  mv -f -- "${destino}.tmp" "$destino"
+  estadistica enc
+  exit 0
+}
+
+# El heredado, sin cifrar ni autenticar: solo con la bandera, y sobre una copia
+# privada. Si ha desaparecido entre medias, devuelve 1 (el llamador reintenta `.gz.enc`).
+usar_heredado() {
+  if [ "${KRONOQR_ACCEPT_LEGACY_WAL:-}" != "1" ]; then
+    fatal "$nombre" "solo existe el formato heredado de la 2.1.0 (.gz), sin cifrar ni autenticar" "Si de verdad quieres reproducirlo, repite con la bandera --accept-unauthenticated (KRONOQR_ACCEPT_LEGACY_WAL=1). Si la actualizacion ya ha terminado, 'kronoqr-wal-migrate' lo cifra."
+  fi
+  crear_trabajo
+  if ! cat -- "$heredado" >"${trabajo}/legacy.gz" 2>/dev/null; then
+    rm -rf -- "$trabajo"
+    trabajo=""
+    return 1
+  fi
+  err "AVISO: el segmento '${nombre}' se reproduce desde el formato heredado (.gz): sin cifrar ni autenticar."
+  gzip -dc "${trabajo}/legacy.gz" >"${destino}.tmp" 2>/dev/null || fatal "$nombre" "el segmento heredado no se descomprime" "Restauralo desde otro soporte."
+  mv -f -- "${destino}.tmp" "$destino"
+  estadistica legacy
+  exit 0
+}
+
+if [ -f "$enc" ]; then
+  usar_cifrado
+fi
+if [ -f "$heredado" ]; then
+  usar_heredado || true
+  # Desaparecio entre la comprobacion y la lectura: probablemente cifrado hace un instante.
+  if [ -f "$enc" ]; then
+    usar_cifrado
+  fi
+  fatal "$nombre" "el segmento heredado ha desaparecido durante la lectura y no hay version cifrada" "Repite la recuperacion; si persiste, el archivo de WAL esta cambiando (otro proceso lo escribe)."
+fi
+
+# No existe. Segunda comprobacion (carrera con una migracion o con el archivado).
+sleep 0.3
+if [ -f "$enc" ]; then
+  usar_cifrado
+fi
+if [ -f "$heredado" ]; then
+  usar_heredado || true
+  if [ -f "$enc" ]; then
+    usar_cifrado
+  fi
+  fatal "$nombre" "el segmento heredado ha desaparecido durante la lectura" "Repite la recuperacion."
+fi
+
+# Sigue sin existir. ¿Es el final real del archivo o un hueco? Hueco = hay algun
+# segmento POSTERIOR de la misma linea temporal.
+if [[ "$nombre" =~ ^([0-9A-F]{8})([0-9A-F]{16})(\.partial)?$ ]]; then
+  linea="${BASH_REMATCH[1]}"
+  base_nombre="${nombre%.partial}"
+  while IFS= read -r posterior; do
+    [ -n "$posterior" ] || continue
+    posterior="${posterior##*/}"
+    posterior="${posterior%.gz.enc}"
+    posterior="${posterior%.gz}"
+    if [[ "$posterior" =~ ^${linea}[0-9A-F]{16}$ ]] && [[ "$posterior" > "$base_nombre" ]]; then
+      fatal "$nombre" "falta en el archivo y existen segmentos posteriores de la misma linea temporal (p. ej. ${posterior}): hay un HUECO en el WAL" "Alguien lo ha borrado o el destino ha perdido ficheros. Recuperalo desde otro soporte; sin el, la recuperacion no puede pasar de aqui."
+    fi
+  done < <(find "$DESTINO" -maxdepth 1 -type f \( -name "${linea}*.gz.enc" -o -name "${linea}*.gz" \) 2>/dev/null)
+fi
+
+# Final real del archivo (o fichero de historia que no existe).
+exit 1

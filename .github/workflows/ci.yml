@@ -1600,7 +1600,7 @@ jobs:
           # daria verde con cualquier fuga real.
           for clave in APP_KEY QR_SIGNING_KEY_CURRENT BACKUP_ENCRYPTION_KEY \
                        REVERB_APP_SECRET DB_PASSWORD DB_MIGRATION_PASSWORD BACKUP_DB_PASSWORD \
-                       IDENTITY_PIN_SEALING_SECRET_KEY GRAFANA_ADMIN_PASSWORD; do
+                       IDENTITY_PIN_SEALING_SECRET_KEY GRAFANA_ADMIN_PASSWORD BACKUP_WAL_KEY; do
             valor="$(sudo sed -n "s/^${clave}=//p" .env | head -1)"
             test -n "${valor}"
             if grep -qF -- "${valor}" salida-c.log; then
@@ -1614,6 +1614,13 @@ jobs:
           # ADR-045: informes de retencion junto a las copias, con el uid de la
           # aplicacion, y el volumen de ficheros generados creado por Compose.
           test "$(sudo stat -c '%u:%g:%a' /var/backups/fichaje/reports/retention)" = "1000:1000:750"
+          # ADR-049 / A3-R2: la raiz de las copias se monta en solo lectura y cada subdirectorio
+          # se monta aparte con create_host_path: false, asi que el instalador los crea TODOS
+          # con el uid de la aplicacion. La clave del WAL se DERIVA de la maestra y esta en el .env.
+          for d in daily base metrics reports; do
+            test "$(sudo stat -c '%u:%g:%a' "/var/backups/fichaje/${d}")" = "1000:1000:750"
+          done
+          sudo grep -Eq '^BACKUP_WAL_KEY=[0-9a-f]{64}$' .env
           test -n "$(docker volume ls -q --filter name=^kronoqr_app-storage$)"
 
       - name: "C · Las dos sondas responden lo que dice el contrato"
@@ -1846,6 +1853,18 @@ jobs:
         env:
           KQ_E2E_APP_IMAGE: kronoqr/app:ci
         run: bash .github/scripts/generated-files-e2e.sh paquete-g
+
+      - name: "I · Copias: WAL cifrado, copia autenticada, RPO continuo y montajes de BACKUP_PATH (ADR-049)"
+        # R5-DV-02, R5-DV-04, R5-DV-01 y A3-R2 (bloque 20). Lo que solo se ve en la instalacion
+        # que deja el instalador: PostgreSQL archiva CIFRADO con la clave que le llega por el
+        # .env y falla cerrado sin ella; la raiz de BACKUP_PATH es de solo lectura para el
+        # runtime (la matriz entera, `horizon` incluido); un bit cambiado, un `.sha256` borrado,
+        # una copia renombrada o un manifiesto alterado NO restauran; parar el archivado se ve
+        # en la metrica en menos de 2 minutos SIN esperar a ninguna copia (con el rol real
+        # fichaje_backup, sin pg_monitor); doctor.sh falla con una clave del WAL que no deriva
+        # de la maestra; y la clave no sale del contenedor de postgres. El detalle, en la
+        # cabecera del script.
+        run: bash .github/scripts/backup-wal-e2e.sh clean paquete-g
 
       - name: Trivy sobre la imagen de borde recien construida (bloqueante)
         # Por `make`, como TODAS las demas invocaciones de Trivy del
@@ -2125,6 +2144,14 @@ jobs:
         # esta en la cabecera de .github/scripts/retention-rescue-e2e.sh.
         run: bash .github/scripts/retention-rescue-e2e.sh seed paquete-anterior
 
+      - name: "Segmentos de WAL en claro de la version anterior, para cifrarlos en sitio al actualizar (ADR-049)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La 2.1.0 archivaba el WAL SIN CIFRAR. Se dejan >= 3 segmentos `.gz` y se anotan sus
+        # fechas: tras actualizar no puede quedar ninguno en claro (<= 120 s) y cada uno tiene
+        # que conservar su mtime. Si la version anterior ya archivase cifrado, la semilla se
+        # salta (no hay nada heredado que migrar).
+        run: bash .github/scripts/backup-wal-e2e.sh upgrade-seed paquete-anterior
+
       - name: "U1 · Actualizar: salida 0, version nueva, datos intactos e informe en el servidor"
         if: steps.anterior.outputs.skip != 'true'
         run: |
@@ -2199,6 +2226,15 @@ jobs:
           set -euo pipefail
           grep -Eq 'Informes de retencion de (app|horizon|scheduler)' paquete-nuevo/salida-u1.log
           bash .github/scripts/retention-rescue-e2e.sh check paquete-nuevo
+
+      - name: "U1 · WAL heredado cifrado en sitio, copia de la 2.1.0 con bandera explicita, restore_command y candado (ADR-049)"
+        if: steps.anterior.outputs.skip != 'true'
+        # En <= 120 s no queda ningun `.gz` en claro y cada heredado conserva su fecha; `restore.sh`
+        # sobre una copia de la 2.1.0 sale 6 sin `--accept-unauthenticated` y pasa con ella y su
+        # `.sha256`; `kronoqr-restore-wal` devuelve 200 ante un heredado sin bandera o un hueco y 1
+        # solo en el final real; el candado de la actualizacion no queda en BACKUP_PATH ni en
+        # /var/log/kronoqr; y los montajes son los de la matriz.
+        run: bash .github/scripts/backup-wal-e2e.sh upgrade-check paquete-nuevo
 
       - name: "U1 · Ningun secreto en la salida, el informe ni el detalle"
         if: steps.anterior.outputs.skip != 'true'
