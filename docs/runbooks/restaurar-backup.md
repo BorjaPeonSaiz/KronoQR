@@ -216,7 +216,7 @@ de `backup.sh verify` y nombra el **segmento** y el **motivo**:
 
 | Motivo | Qué significa | Qué hacer |
 | --- | --- | --- |
-| `clave distinta o cabecera alterada` (`kid` distinto) | El segmento se cifró con otra clave: casi siempre una rotación de `BACKUP_ENCRYPTION_KEY` sin conservar la anterior | Pon la clave anterior en `BACKUP_ENCRYPTION_KEY_PREVIOUS` (solo para restaurar) y repite. Si no la tienes, ese tramo de WAL no se puede reproducir: la recuperación llegará hasta el anterior |
+| `clave distinta o cabecera alterada` (`kid` distinto) | El segmento se cifró con otra clave: casi siempre una rotación de `BACKUP_ENCRYPTION_KEY` sin conservar la anterior | Pon la clave anterior en `BACKUP_ENCRYPTION_KEY_PREVIOUS` (solo para restaurar) y repite: `restore.sh`, el simulacro y `restore-drill --mode pitr` derivan de ella la subclave del WAL anterior solos. Para la recuperación manual de §6.4, ver cómo se obtiene allí. Si no la tienes, ese tramo de WAL no se puede reproducir: la recuperación llegará hasta el anterior |
 | `el MAC no cuadra: el fichero esta alterado o danado` (mismo `kid`) | El fichero no es el que se escribió: corrupción del recurso de red **o manipulación** | Trátalo como incidente de seguridad si no hay una avería de almacenamiento que lo explique ([`brecha-de-seguridad.md`](brecha-de-seguridad.md)). No lo uses |
 | `hueco` / segmento ausente con segmentos posteriores | Alguien ha borrado un segmento intermedio, o el destino perdió ficheros | Restaura la copia desde un soporte que lo conserve; si no existe, la recuperación **se detiene ahí** (a propósito, ver §6.4) |
 
@@ -429,6 +429,10 @@ docker run --rm --user 0:0 -e BACKUP_ENCRYPTION_KEY \
 
 # 3. Arráncalo en recuperación con el WAL archivado. La clave del WAL llega por entorno;
 #    NUNCA se escribe en postgresql.auto.conf ni en el restore_command.
+#    BACKUP_WAL_KEY_PREVIOUS solo hace falta si se rotó BACKUP_ENCRYPTION_KEY: es la
+#    subclave derivada de la maestra ANTERIOR (nunca una clave distinta):
+#      export BACKUP_WAL_KEY_PREVIOUS="$(BACKUP_ENCRYPTION_KEY="$ANTERIOR" sudo -E bash backup.sh derive-wal-key --print)"
+#    (con la anterior en la variable ANTERIOR de tu shell, sin escribirla en la orden).
 docker run --rm -e BACKUP_WAL_KEY -e BACKUP_WAL_KEY_PREVIOUS \
   -v pgdata-restaurado:/var/lib/postgresql/data \
   -v "${BACKUP_PATH}/wal:/wal:ro" -e KRONOQR_WAL_ARCHIVE_DIR=/wal "$IMG" \
