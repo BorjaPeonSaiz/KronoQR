@@ -255,3 +255,24 @@ it('sigue sustituyendo un codigo heredado corto que llega solo como valor', func
     // que la lista blanca deja pasar.
     expect(ErrorContextAllowlist::apply(['reason' => 'A1B2']))->toBe(['reason' => '[code]']);
 })->group('RF-PD-15', 'RL-19');
+
+it('sanea como texto un numero que llega bajo una clave que no es de recuento', function (string $clave, int|float $valor, string $esperado): void {
+    // Un telefono o un DNI sin letra mandados como numero no se guardan tal
+    // cual: solo las claves de recuento admiten un numero sin inspeccionar.
+    expect(ErrorContextAllowlist::apply([$clave => $valor]))->toBe([$clave => $esperado]);
+})->with([
+    'telefono bajo reason' => ['reason', 698765432, '[phone]'],
+    'dni sin letra como decimal bajo cause' => ['cause', 45678912.0, '[n]'],
+    'telefono bajo scope' => ['scope', 612345678, '[phone]'],
+    'estado corto bajo reason' => ['reason', 500, '500'],
+])->group('RF-PD-15', 'RL-19');
+
+it('conserva los numeros bajo las claves de recuento y los booleanos bajo cualquiera', function (): void {
+    expect(ErrorContextAllowlist::apply([
+        'attempts' => 3, 'http_status' => 500, 'line' => 698765432, 'silence_ms' => 1500.5,
+        'skew_seconds' => -30, 'entries' => 7, 'items' => 1, 'missing' => 0, 'purged' => 2, 'durable' => false,
+    ]))->toBe([
+        'attempts' => 3, 'http_status' => 500, 'line' => 698765432, 'silence_ms' => 1500.5,
+        'skew_seconds' => -30, 'durable' => false, 'entries' => 7, 'items' => 1, 'missing' => 0, 'purged' => 2,
+    ]);
+})->group('RF-PD-15');

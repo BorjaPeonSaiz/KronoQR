@@ -148,6 +148,17 @@ final readonly class ErrorContextAllowlist
      */
     public const string MESSAGE_KEY = 'message';
 
+    /**
+     * Las claves cuyo valor es un recuento o una medida y se guarda como
+     * numero sin inspeccionar (ADR-048: el riesgo aceptado de los enteros se
+     * acota a estas). Un numero bajo cualquier otra clave se sanea como texto.
+     *
+     * @var list<string>
+     */
+    private const array NUMERIC_KEYS = [
+        'attempts', 'http_status', 'line', 'silence_ms', 'skew_seconds', 'entries', 'items', 'missing', 'purged',
+    ];
+
     /** La clave que se normaliza a `pathname:linea` antes de sanear. */
     private const string SOURCE_KEY = 'source';
 
@@ -177,30 +188,46 @@ final readonly class ErrorContextAllowlist
         $allowed = [];
 
         foreach ($filtered as $key => $value) {
-            if (is_bool($value) || is_int($value) || is_float($value)) {
-                $allowed[$key] = $value;
+            $clean = self::value($key, $value);
 
-                continue;
+            if ($clean !== null) {
+                $allowed[$key] = $clean;
             }
-
-            if (is_string($value)) {
-                $text = $key === self::SOURCE_KEY ? self::scriptLocation($value) : $value;
-                $clean = self::withoutLoneCode(ErrorMessageSanitizer::sanitizeContextValue($text));
-
-                // Un valor que se queda en nada despues del saneado no aporta
-                // una clave vacia: aporta ruido. «En nada» es el texto de
-                // relleno: el saneador nunca devuelve la cadena vacia.
-                if ($clean !== ErrorMessageSanitizer::EMPTY_MESSAGE) {
-                    $allowed[$key] = $clean;
-                }
-
-                continue;
-            }
-
-            // Nulo, mapa, lista, objeto o recurso: fuera. Ver el docblock.
         }
 
         return $allowed;
+    }
+
+    /**
+     * Un valor admitido, listo para guardarse, o nulo si no se guarda.
+     *
+     * Un booleano no puede ser un dato de nadie; un numero solo pasa tal cual
+     * bajo una clave que es un recuento o una medida ({@see self::NUMERIC_KEYS}).
+     * Bajo cualquier otra, `reason: 698765432` es un telefono: se trata como
+     * texto y pasa por el mismo saneado. Un texto que se queda en nada (el texto
+     * de relleno del saneador) no aporta una clave vacia: aporta ruido. Nulo,
+     * mapa, lista, objeto o recurso: fuera (ver el docblock de la clase).
+     */
+    private static function value(string $key, mixed $value): bool|int|float|string|null
+    {
+        $number = is_int($value) || is_float($value);
+
+        if (is_bool($value) || ($number && in_array($key, self::NUMERIC_KEYS, true))) {
+            return $value;
+        }
+
+        if ($number) {
+            $value = (string) $value;
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $text = $key === self::SOURCE_KEY ? self::scriptLocation($value) : $value;
+        $clean = self::withoutLoneCode(ErrorMessageSanitizer::sanitizeContextValue($text));
+
+        return $clean === ErrorMessageSanitizer::EMPTY_MESSAGE ? null : $clean;
     }
 
     /**

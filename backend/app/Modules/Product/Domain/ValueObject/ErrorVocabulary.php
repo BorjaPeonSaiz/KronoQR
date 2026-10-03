@@ -92,6 +92,8 @@ final readonly class ErrorVocabulary
         'abarca', 'an', 'aria', 'bajo', 'bin', 'campo', 'day', 'dias', 'do', 'dura', 'field', 'grant', 'ha',
         'han', 'june', 'le', 'lo', 'long', 'may', 'mayo', 'na', 'page', 'read', 'real', 'regla', 'segunda',
         'segundo', 'son', 'su', 'uri',
+        // Del dictamen de seguridad de la implementacion.
+        'april', 'major',
         // Las de la primera semilla.
         'abril', 'ella', 'grace', 'julio', 'mark', 'mas', 'max', 'maximo', 'mayor', 'min', 'white',
     ];
@@ -278,7 +280,6 @@ final readonly class ErrorVocabulary
         'application',
         'applied',
         'apply',
-        'april',
         'apunta',
         'aqui',
         'archive',
@@ -1553,7 +1554,6 @@ final readonly class ErrorVocabulary
         'mailer',
         'main',
         'maintenance',
-        'major',
         'make',
         'malformed',
         'management',

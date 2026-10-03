@@ -710,8 +710,10 @@ function volumenCadenasDe(array $data): string
     $strings = [];
 
     array_walk_recursive($data, static function (mixed $value) use (&$strings): void {
-        if (\is_string($value)) {
-            $strings[] = $value;
+        // Tambien los numeros, como texto: un telefono que un cliente mando como
+        // entero bajo `reason` es tan fuga como el mismo telefono entre comillas.
+        if (\is_string($value) || \is_int($value) || \is_float($value)) {
+            $strings[] = (string) $value;
         }
     });
 

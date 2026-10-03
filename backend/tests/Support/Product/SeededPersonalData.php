@@ -104,7 +104,7 @@ final class SeededPersonalData
     public static function phones(): array
     {
         return [
-            '612 345 678', '612345678', '91 234 56 78', '912 34 56 78', '+34 612 345 678', '0034612345678',
+            '612 345 678', '612345678', '91 234 56 78', '912 34 56 78', '+34 612 345 678', '0034612345678', '698765432',
             '+44 20 7946 0958', '+33 1 23 45 67 89',
         ];
     }
@@ -237,6 +237,21 @@ final class SeededPersonalData
                 'kind' => self::employeeCodes()[2],
                 'problem_type' => 'urn:kronoqr:problem:'.$person(6),
                 'audio_state' => $person(7),
+            ],
+        ];
+
+        // Numeros, no texto, bajo claves de texto: un telefono y un DNI sin
+        // letra que un cliente manda como entero o decimal.
+        $reports[] = [
+            'code' => $codes[0],
+            'occurred_at' => '2026-10-03T09:00:00Z',
+            'app_version' => '2.2.0',
+            'context' => [
+                'message' => self::TECHNICAL.' con numeros',
+                'reason' => 698765432,
+                'cause' => 45678912.0,
+                'scope' => 612345678,
+                'line' => 42,
             ],
         ];
 
