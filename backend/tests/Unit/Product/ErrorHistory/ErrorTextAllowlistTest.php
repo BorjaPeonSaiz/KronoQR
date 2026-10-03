@@ -129,7 +129,8 @@ it('conserva un numero de linea en sus posiciones tecnicas (H3)', function (stri
     'js con columna' => ['app.js:1:123456'],
     'ts' => ['client.ts:4567'],
     'vue' => ['ScanView.vue:1234'],
-    'argumento' => ['Argument #1234 must be of type string'],
+    'argumento' => ['Argument #12 must be of type string'],
+    'marco de la traza' => ['#99 app.js:1:123456'],
     'seis cifras' => ['on line 123456'],
 ])->group('RF-PD-15', 'RL-19');
 
@@ -141,6 +142,8 @@ it('no convierte una posicion tecnica en un escondite (H3)', function (string $t
     'siete cifras' => ['on line 1234567', 'on line [n]'],
     'dos grupos cortos' => ['line 1234 56', 'line [n] 56'],
     'detras de una almohadilla' => ['#612345678', '#[n]'],
+    'codigo heredado detras de una almohadilla' => ['Empleado #739104', 'Empleado #[n]'],
+    'tres cifras detras de una almohadilla' => ['#123', '#123'],
 ])->group('RF-PD-15', 'RL-19');
 
 it('conserva los marcadores del propio saneado', function (): void {

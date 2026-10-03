@@ -99,6 +99,7 @@ it('si los dos estaban resueltos se queda la resolucion mas reciente', function 
 })->with([
     'la del absorbido es posterior' => ['2026-09-10T10:00:00Z', '2026-09-11T10:00:00Z', '0199a1f0-0000-7000-8000-00000000000b'],
     'la del superviviente es posterior' => ['2026-09-12T10:00:00Z', '2026-09-11T10:00:00Z', '0199a1f0-0000-7000-8000-00000000000a'],
+    'empate: se queda la del superviviente' => ['2026-09-11T10:00:00Z', '2026-09-11T10:00:00Z', '0199a1f0-0000-7000-8000-00000000000a'],
 ])->group('RF-PD-15');
 
 it('es idempotente: la segunda pasada no escribe nada', function (): void {
@@ -159,3 +160,25 @@ it('no hace nada con un historico vacio', function (): void {
 
     expect($resultado->rows)->toBe(0);
 })->group('RF-PD-15');
+
+it('funde con el grupo que aparece entre la busqueda y la escritura', function (): void {
+    // El sumidero sigue escribiendo mientras corre la migracion: si crea la
+    // huella nueva justo antes de la reescritura, el UNIQUE la rechaza y el
+    // caso de uso funde en lugar de abortar.
+    $sucio = InMemoryErrorHistory::group(1, 'No se pudo fichar a Rosa Ficticiana', occurrences: 2);
+    $history = new InMemoryErrorHistory([$sucio]);
+    $limpia = ResanitizeErrorHistory::sanitized($sucio)->fingerprint;
+
+    $history->beforeRewrite = static function (InMemoryErrorHistory $tabla) use ($limpia): void {
+        $tabla->put(InMemoryErrorHistory::group(99, 'No se pudo fichar a …', occurrences: 5, fingerprint: $limpia));
+    };
+
+    $resultado = new ResanitizeErrorHistory($history, resanitizeErrorHistoryLogger())->run();
+    $grupos = $history->all();
+
+    expect($grupos)->toHaveCount(1)
+        ->and($grupos[0]->id)->toBe(99)
+        ->and($grupos[0]->occurrences)->toBe(7)
+        ->and($resultado->merged)->toBe(1)
+        ->and($resultado->rewritten)->toBe(0);
+})->group('RF-PD-15', 'RL-19');

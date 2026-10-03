@@ -6,11 +6,8 @@ namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Port\ErrorHistoryRewriter;
 use App\Modules\Product\Domain\ValueObject\ErrorColumnSanitizer;
-use App\Modules\Product\Domain\ValueObject\ErrorContextAllowlist;
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
-use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
-use DateTimeImmutable;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -80,17 +77,23 @@ final readonly class ResanitizeErrorHistory
                     continue;
                 }
 
-                $holder = $this->groups->findByFingerprint($clean->fingerprint);
-
-                if ($holder instanceof ErrorEvent && $holder->id !== $group->id) {
-                    $this->groups->merge(self::merged($holder, $clean), $group->id);
+                if ($this->mergedInto($clean, $group->id)) {
                     $merged++;
 
                     continue;
                 }
 
-                $this->groups->rewrite($clean);
-                $rewritten++;
+                if ($this->groups->rewrite($clean)) {
+                    $rewritten++;
+
+                    continue;
+                }
+
+                // La huella la ha tomado otro grupo entre la busqueda y la
+                // escritura: el sumidero sigue escribiendo mientras esto corre.
+                if ($this->mergedInto($clean, $group->id)) {
+                    $merged++;
+                }
             }
         } while (\count($batch) === $size);
 
@@ -101,38 +104,64 @@ final readonly class ResanitizeErrorHistory
     }
 
     /**
-     * El grupo con las reglas de hoy.
+     * Funde `$absorbedId` en el grupo que ya tiene la huella de `$clean`, si lo
+     * hay y no es el mismo.
+     *
+     * @phpstan-impure Consulta y escribe la tabla: la segunda llamada, tras una
+     * reescritura rechazada, puede encontrar un grupo que la primera no vio.
+     */
+    private function mergedInto(ErrorEvent $clean, int $absorbedId): bool
+    {
+        $holder = $this->groups->findByFingerprint($clean->fingerprint);
+
+        if (! $holder instanceof ErrorEvent || $holder->id === $absorbedId) {
+            return false;
+        }
+
+        $this->groups->merge($holder->id, $absorbedId);
+
+        return true;
+    }
+
+    /**
+     * El grupo con las reglas de hoy: las de {@see ErrorColumnSanitizer::row()},
+     * las mismas que aplica `RecordErrorEvent` al escribir.
      */
     public static function sanitized(ErrorEvent $group): ErrorEvent
     {
-        $code = ErrorColumnSanitizer::code($group->source, $group->code);
-        $exceptionClass = ErrorColumnSanitizer::exceptionClass($group->exceptionClass);
-        $file = ErrorColumnSanitizer::file($group->file);
-        $message = ErrorMessageSanitizer::sanitize($group->message);
+        $row = ErrorColumnSanitizer::row(
+            $group->source,
+            $group->message,
+            $group->context,
+            $group->code,
+            $group->exceptionClass,
+            $group->file,
+            $group->appVersion,
+        );
 
         return new ErrorEvent(
             id: $group->id,
             fingerprint: ErrorFingerprint::forGroup(
                 $group->source,
-                $code,
-                $exceptionClass,
-                $file,
+                $row->code,
+                $row->exceptionClass,
+                $row->file,
                 $group->line,
-                $message,
+                $row->message,
             )->value,
             level: $group->level,
             source: $group->source,
             module: $group->module,
-            code: $code,
-            message: $message,
-            exceptionClass: $exceptionClass,
-            file: $file,
+            code: $row->code,
+            message: $row->message,
+            exceptionClass: $row->exceptionClass,
+            file: $row->file,
             line: $group->line,
-            context: ErrorContextAllowlist::apply($group->context),
+            context: $row->context,
             traceId: $group->traceId,
             deviceId: $group->deviceId,
             employeeUuid: $group->employeeUuid,
-            appVersion: ErrorColumnSanitizer::appVersion($group->appVersion),
+            appVersion: $row->appVersion,
             occurrences: $group->occurrences,
             firstSeenAt: $group->firstSeenAt,
             lastSeenAt: $group->lastSeenAt,
@@ -140,56 +169,6 @@ final readonly class ResanitizeErrorHistory
             resolvedByUuid: $group->resolvedByUuid,
             resolvedByName: $group->resolvedByName,
         );
-    }
-
-    /**
-     * El grupo que sobrevive a la fusion: el que ya tenia la huella, con los
-     * recuentos, los instantes y la resolucion de los dos.
-     */
-    public static function merged(ErrorEvent $survivor, ErrorEvent $absorbed): ErrorEvent
-    {
-        [$resolvedAt, $resolvedByUuid, $resolvedByName] = self::resolution($survivor, $absorbed);
-
-        return new ErrorEvent(
-            id: $survivor->id,
-            fingerprint: $survivor->fingerprint,
-            level: $survivor->level,
-            source: $survivor->source,
-            module: $survivor->module,
-            code: $survivor->code,
-            message: $survivor->message,
-            exceptionClass: $survivor->exceptionClass,
-            file: $survivor->file,
-            line: $survivor->line,
-            context: $survivor->context,
-            traceId: $survivor->traceId,
-            deviceId: $survivor->deviceId,
-            employeeUuid: $survivor->employeeUuid,
-            appVersion: $survivor->appVersion,
-            occurrences: $survivor->occurrences + $absorbed->occurrences,
-            firstSeenAt: min($survivor->firstSeenAt, $absorbed->firstSeenAt),
-            lastSeenAt: max($survivor->lastSeenAt, $absorbed->lastSeenAt),
-            resolvedAt: $resolvedAt,
-            resolvedByUuid: $resolvedByUuid,
-            resolvedByName: $resolvedByName,
-        );
-    }
-
-    /**
-     * Abierto si cualquiera lo estaba; si los dos estaban resueltos, la
-     * resolucion mas reciente con su autor.
-     *
-     * @return array{0: ?DateTimeImmutable, 1: ?string, 2: ?string}
-     */
-    private static function resolution(ErrorEvent $survivor, ErrorEvent $absorbed): array
-    {
-        if ($survivor->isOpen() || $absorbed->isOpen()) {
-            return [null, null, null];
-        }
-
-        $latest = $absorbed->resolvedAt > $survivor->resolvedAt ? $absorbed : $survivor;
-
-        return [$latest->resolvedAt, $latest->resolvedByUuid, $latest->resolvedByName];
     }
 
     /**

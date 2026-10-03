@@ -97,21 +97,21 @@ rules:
           - pattern-either:
               - pattern: Log::$METHOD($MSG, [..., $KEY => $VALUE, ...], ...)
               - pattern: $LOGGER->$METHOD($MSG, [..., $KEY => $VALUE, ...], ...)
-              - pattern: $LOGGER->log($LEVEL, $MSG, [..., $KEY => $VALUE, ...], ...)
+              - pattern: $LOGGER->$METHOD($LEVEL, $MSG, [..., $KEY => $VALUE, ...], ...)
           - metavariable-regex:
               metavariable: $METHOD
               regex: ^(debug|info|notice|warning|error|critical|alert|emergency|log)$
           - metavariable-regex:
               metavariable: $KEY
-              regex: ^['"](name|first_name|last_name|full_name|email|phone)['"]$
+              regex: ^['"](name|first_name|last_name|full_name|display_name|employee_name|user_name|email|phone|nombre|apellidos|correo|telefono)['"]$
       - patterns:
           - pattern-either:
               - pattern: Log::$METHOD($MSG, [..., $KEY => $OBJECT->$FIELD, ...], ...)
               - pattern: $LOGGER->$METHOD($MSG, [..., $KEY => $OBJECT->$FIELD, ...], ...)
-              - pattern: $LOGGER->log($LEVEL, $MSG, [..., $KEY => $OBJECT->$FIELD, ...], ...)
+              - pattern: $LOGGER->$METHOD($LEVEL, $MSG, [..., $KEY => $OBJECT->$FIELD, ...], ...)
           - metavariable-regex:
               metavariable: $METHOD
               regex: ^(debug|info|notice|warning|error|critical|alert|emergency|log)$
           - metavariable-regex:
               metavariable: $FIELD
-              regex: ^(first_name|last_name|email|firstName|lastName)$
+              regex: ^(name|first_name|last_name|full_name|display_name|email|phone|firstName|lastName|fullName|displayName|resolvedByName)$

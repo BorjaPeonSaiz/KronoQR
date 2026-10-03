@@ -672,3 +672,97 @@ it('exige diez cifras para llamar IBAN a lo que tiene su forma', function (): vo
     expect(ErrorMessageSanitizer::redact('cuenta ab12 cd34 ef56 gh78 ij90 fin'))->toBe('cuenta [iban] fin')
         ->and(ErrorMessageSanitizer::redact('cuenta ab12 cd34 ef56 gh78 ijk9 fin'))->toBe('cuenta ab12 cd34 ef56 gh78 ijk9 fin');
 })->group('RF-PD-15', 'RL-19');
+
+/*
+ * ---------------------------------------------------------------------------
+ * Revision del bloque 19: IBAN con forma de hexadecimal, horas pegadas, el
+ * estado HTTP de axios e idempotencia con fragmentos pegados.
+ * ---------------------------------------------------------------------------
+ */
+
+it('no protege como hexadecimal un IBAN compacto en minusculas', function (string $iban): void {
+    // `be71096123456769` son dieciseis caracteres hexadecimales con letra y
+    // cifra: la forma de un span. Sin la exclusion salia intacto.
+    expect(ErrorMessageSanitizer::sanitize('cuenta '.$iban.' rechazada'))->toBe('cuenta [iban] rechazada');
+})->with([
+    'belga compacto en minusculas' => ['be71096123456769'],
+    'belga compacto en mayusculas' => ['BE71096123456769'],
+    'belga con guiones' => ['be71-0961-2345-6769'],
+    'frances en minusculas' => ['fr7630006000011234567890189'],
+    'frances con espacios' => ['FR76 3000 6000 0112 3456 7890 189'],
+    'italiano en minusculas' => ['it60x0542811101000000123456'],
+    'italiano con espacios' => ['IT60 X054 2811 1010 0000 0123 456'],
+    'portugues con guiones' => ['pt50-0002-0123-1234-5678-9015-4'],
+    'britanico en minusculas' => ['gb29nwbk60161331926819'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye las horas pegadas a una letra, con punto o con am y pm', function (string $texto, string $esperado): void {
+    $una = ErrorMessageSanitizer::sanitize($texto);
+
+    expect($una)->toBe($esperado)
+        ->and(ErrorMessageSanitizer::sanitize($una))->toBe($una);
+})->with([
+    'iso sin fecha' => ['marca T22:00:00Z rechazada', 'marca [time] rechazada'],
+    'con am' => ['entrada 10:30am rechazada', 'entrada [time] rechazada'],
+    'con pm y espacio' => ['entrada 10:30 PM rechazada', 'entrada [time] rechazada'],
+    'con punto tras a las' => ['fichó a las 22.30 sin cierre', '… a las [time] sin cierre'],
+    'con punto tras at' => ['recorded at 22.30', 'recorded at [time]'],
+    'con segundos y fraccion' => ['at 06:00:00.123Z', 'at [time]'],
+])->group('RF-PD-15', 'RL-19');
+
+it('no confunde con una hora una posicion de fichero ni una version', function (string $texto): void {
+    expect(ErrorMessageSanitizer::sanitize($texto))->toBe($texto);
+})->with([
+    'columna' => ['app.js:1:12'],
+    'linea y columna de php' => ['Collector.php:12:34'],
+    'version con punto' => ['version 13.2 build 7.30'],
+])->group('RF-PD-15');
+
+it('conserva el estado HTTP de axios y sigue quitando un codigo detras de code', function (string $texto, string $esperado): void {
+    expect(ErrorMessageSanitizer::redact($texto))->toBe($esperado);
+})->with([
+    'axios' => ['Request failed with status code 500', 'Request failed with status code 500'],
+    'salida de un proceso' => ['exit code 137', 'exit code 137'],
+    'codigo con letra y cifra' => ['code AB12C3', 'code [code]'],
+    'codigo numerico largo' => ['code 739104', 'code [code]'],
+])->group('RF-PD-15', 'RL-19');
+
+it('es idempotente aunque los fragmentos lleguen pegados', function (string $texto): void {
+    /*
+     * Propiedad sobre un corpus generado con semilla fija: fragmentos con
+     * forma de dato pegados sin espacio, con espacio o con puntuacion. Un
+     * patron que dependa de `\b` cambia de opinion en la segunda pasada,
+     * cuando lo de al lado ya es un marcador.
+     */
+    $una = ErrorMessageSanitizer::sanitize($texto);
+    $texto1 = ErrorMessageSanitizer::redactText($texto);
+    $patrones = ErrorMessageSanitizer::redact($texto);
+
+    expect(ErrorMessageSanitizer::sanitize($una))->toBe($una, 'sanitize: '.$texto)
+        ->and(ErrorMessageSanitizer::redactText($texto1))->toBe($texto1, 'redactText: '.$texto)
+        ->and(ErrorMessageSanitizer::redact($patrones))->toBe($patrones, 'redact: '.$texto);
+})->with(static function (): iterable {
+    mt_srand(20261003);
+
+    $fragmentos = [
+        '::1', 'Ana', '10.0.0.5', 'Failing row contains (1, Ana)', '22:15', 'T22:00:00Z', 'E7K2M9QX4B',
+        '45678912K', 'x-7654321-l', 'a@b.es', 'line 1234', 'SQLSTATE[23505]', "'Rosa'", '«Luz»', '`x`',
+        '0199a1f0-0000-7000-8000-000000000000', 'a1b2c3d4e5f60718293a4b5c6d7e8f90', 'be71096123456769',
+        'ES91 2100 0418 4502 0005 1332', '+34 612 345 678', '1985', 'x7k2m9', 'Bearer abc.def', 'password=x',
+        'FH1.k1.tok.sig', 'code 739104', '#739104', 'Key (a)=(b) already exists', '2026-10-03', '14.03.2026',
+        '192.168.1.1', 'fe80::1', 'getUserMedia', 'TypeError', '10:30am', 'a las 22.30', 'status code 500',
+        'NAF 28/12345678/40', 'PAA654321', 'k98765432', '4111-1111-1111-1111', 'app.js:1:12', '…', '[n]',
+    ];
+    $separadores = ['', ' ', '', '-', '.', ':', ', ', '/'];
+
+    for ($i = 0; $i < 120; $i++) {
+        $texto = '';
+
+        for ($j = 0, $n = mt_rand(2, 5); $j < $n; $j++) {
+            $texto .= ($j === 0 ? '' : $separadores[mt_rand(0, \count($separadores) - 1)])
+                .$fragmentos[mt_rand(0, \count($fragmentos) - 1)];
+        }
+
+        yield 'pegado '.$i => [$texto];
+    }
+})->group('RF-PD-15', 'RL-19');

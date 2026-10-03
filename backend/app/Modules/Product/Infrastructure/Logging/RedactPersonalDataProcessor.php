@@ -109,7 +109,7 @@ final readonly class RedactPersonalDataProcessor implements ProcessorInterface
         'employee_uuid' => self::UUID,
     ];
 
-    private const string UUID = '/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/';
+    private const string UUID = '/^'.ErrorMessageSanitizer::UUID_PATTERN.'$/';
 
     /** @var Closure(string): string */
     private Closure $redact;

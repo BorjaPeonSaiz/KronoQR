@@ -7,10 +7,9 @@ namespace App\Modules\Product\Application\UseCase;
 use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Product\Application\Port\ErrorMetrics;
 use App\Modules\Product\Domain\ValueObject\ErrorColumnSanitizer;
-use App\Modules\Product\Domain\ValueObject\ErrorContextAllowlist;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
-use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorWriteOutcome;
+use App\Modules\Product\Domain\ValueObject\SanitizedErrorRow;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
@@ -112,9 +111,18 @@ final readonly class RecordErrorEvent implements ErrorEventSink
             // Las columnas se sanean ANTES de la huella (ADR-048): una huella
             // calculada sobre un `file` o una clase con un nombre dentro seria
             // un `sha256` sin sal de ese nombre, atacable por diccionario.
-            $report = $this->withinColumnWidths($report);
-            $message = ErrorMessageSanitizer::sanitize($report->message);
-            $context = ErrorContextAllowlist::apply($report->context);
+            $row = ErrorColumnSanitizer::row(
+                $report->source,
+                $report->message,
+                $report->context,
+                $report->code,
+                $report->exceptionClass,
+                $report->file,
+                $report->appVersion,
+            );
+            $report = $this->withinColumnWidths($report, $row);
+            $message = $row->message;
+            $context = $row->context;
             $fingerprint = $this->fingerprint($report, $message);
 
             // Decision 14: por encima del techo, la ocurrencia se cuenta en el
@@ -241,9 +249,9 @@ final readonly class RecordErrorEvent implements ErrorEventSink
     }
 
     /**
-     * El mismo informe con `app_version`, `code`, `exception_class` y `file`
-     * saneados (ADR-048, H7: {@see ErrorColumnSanitizer}) y recortados a la
-     * anchura de su columna (decision 14).
+     * El mismo informe con sus columnas de texto ya saneadas y recortadas a la
+     * anchura de su columna por {@see ErrorColumnSanitizer::row()} (ADR-048,
+     * H7; decision 14). Aqui solo se recorta `module`, que no es texto libre.
      *
      * **Un valor largo no puede hacer fallar el `INSERT` y perder el error.** Es
      * el peor modo de fallo que puede tener esta tabla: el fallo que mas cuesta
@@ -256,18 +264,18 @@ final readonly class RecordErrorEvent implements ErrorEventSink
      * una tilde por la mitad y deja una fila con un byte invalido que revienta
      * al serializar el paquete de diagnostico.
      */
-    private function withinColumnWidths(ErrorReport $report): ErrorReport
+    private function withinColumnWidths(ErrorReport $report, SanitizedErrorRow $row): ErrorReport
     {
         return new ErrorReport(
             source: $report->source,
             level: $report->level,
-            message: $report->message,
+            message: $row->message,
             occurredAt: $report->occurredAt,
-            appVersion: ErrorColumnSanitizer::appVersion($report->appVersion),
-            context: $report->context,
-            code: self::clip(ErrorColumnSanitizer::code($report->source, $report->code), ErrorColumnSanitizer::MAX_CODE),
-            exceptionClass: ErrorColumnSanitizer::exceptionClass($report->exceptionClass),
-            file: ErrorColumnSanitizer::file($report->file),
+            appVersion: $row->appVersion,
+            context: $row->context,
+            code: $row->code,
+            exceptionClass: $row->exceptionClass,
+            file: $row->file,
             line: $report->line,
             traceId: $report->traceId,
             deviceId: $report->deviceId,

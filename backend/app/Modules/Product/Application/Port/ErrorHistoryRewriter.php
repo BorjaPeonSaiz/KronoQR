@@ -36,12 +36,18 @@ interface ErrorHistoryRewriter
      * Sobrescribe el grupo `$group->id` con su huella, su mensaje, su contexto y
      * sus columnas de texto (`code`, `exception_class`, `file`, `app_version`).
      * No toca recuentos, instantes ni resolucion.
+     *
+     * @return bool `false` si la huella nueva la ha tomado otro grupo entre la
+     *              busqueda y la escritura (el sumidero no se detiene mientras
+     *              corre la migracion): quien llama los funde. Nunca lanza por eso.
      */
-    public function rewrite(ErrorEvent $group): void;
+    public function rewrite(ErrorEvent $group): bool;
 
     /**
-     * Escribe en `$survivor->id` sus recuentos, sus instantes y su resolucion, y
-     * borra el grupo `$absorbedId`, en una sola transaccion.
+     * Funde el grupo `$absorbedId` en `$survivorId` con
+     * {@see ErrorEvent::absorb()} y lo borra, en una sola transaccion y con las
+     * dos filas bloqueadas: una aparicion que llegue a la vez por el sumidero
+     * no puede perderse.
      */
-    public function merge(ErrorEvent $survivor, int $absorbedId): void;
+    public function merge(int $survivorId, int $absorbedId): void;
 }

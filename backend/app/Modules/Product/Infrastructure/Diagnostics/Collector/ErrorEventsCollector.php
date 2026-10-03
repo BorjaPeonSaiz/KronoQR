@@ -192,8 +192,17 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
      */
     private static function describe(ErrorEvent $event, bool $anonymized): array
     {
-        $message = ErrorMessageSanitizer::sanitize($event->message);
-        $context = ErrorContextAllowlist::apply($event->context);
+        $row = ErrorColumnSanitizer::row(
+            $event->source,
+            $event->message,
+            $event->context,
+            $event->code,
+            $event->exceptionClass,
+            $event->file,
+            $event->appVersion,
+        );
+        $message = $row->message;
+        $context = $row->context;
 
         if ($anonymized) {
             $message = ErrorMessageSanitizer::withoutUuids($message);
@@ -210,16 +219,16 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
             'level' => $event->level->value,
             'source' => $event->source->value,
             'module' => $event->module,
-            'code' => ErrorColumnSanitizer::code($event->source, $event->code),
+            'code' => $row->code,
             'message' => $message,
-            'exception_class' => ErrorColumnSanitizer::exceptionClass($event->exceptionClass),
-            'file' => ErrorColumnSanitizer::file($event->file),
+            'exception_class' => $row->exceptionClass,
+            'file' => $row->file,
             'line' => $event->line,
             'context' => json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'trace_id' => $event->traceId,
             'device_id' => $event->deviceId,
             self::EMPLOYEE_FIELD => $anonymized ? null : $event->employeeUuid,
-            'app_version' => ErrorColumnSanitizer::appVersion($event->appVersion),
+            'app_version' => $row->appVersion,
             'occurrences' => $event->occurrences,
             'first_seen_at' => self::utc($event->firstSeenAt),
             'last_seen_at' => self::utc($event->lastSeenAt),

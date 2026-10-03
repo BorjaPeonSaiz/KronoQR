@@ -41,8 +41,8 @@ final readonly class ErrorColumnSanitizer
     /** Un nombre de clase cualificado. */
     private const string CLASS_NAME = '/^[A-Za-z_\\\\][A-Za-z0-9_\\\\]*$/';
 
-    /** Un `SQLSTATE` o un entero corto: lo unico que se guarda como codigo de un error del servidor. */
-    private const string SERVER_CODE = '/^(?:[0-9A-Z]{5}|\d{1,6})$/';
+    /** Un `SQLSTATE` (que siempre lleva alguna cifra) o un entero corto: lo unico que se guarda como codigo de un error del servidor. */
+    private const string SERVER_CODE = '/^(?:(?=[0-9A-Z]*\d)[0-9A-Z]{5}|\d{1,6})$/';
 
     public static function appVersion(string $version): string
     {
@@ -94,20 +94,40 @@ final readonly class ErrorColumnSanitizer
     }
 
     /**
-     * La lista blanca con techo, sin texto de relleno: una columna vacia se
-     * queda vacia.
+     * **Una fila entera, saneada**: lo que guarda `RecordErrorEvent`, lo que
+     * reescribe `ResanitizeErrorHistory` y lo que vuelve a sanear el colector
+     * del paquete. Un solo sitio, para que los tres no puedan divergir.
+     *
+     * @param  array<array-key, mixed>  $context
+     */
+    public static function row(
+        ErrorSource $source,
+        string $message,
+        array $context,
+        ?string $code,
+        ?string $exceptionClass,
+        ?string $file,
+        string $appVersion,
+    ): SanitizedErrorRow {
+        $cleanCode = self::code($source, $code);
+
+        return new SanitizedErrorRow(
+            message: ErrorMessageSanitizer::sanitize($message),
+            context: ErrorContextAllowlist::apply($context),
+            code: $cleanCode === null ? null : mb_substr($cleanCode, 0, self::MAX_CODE),
+            exceptionClass: self::exceptionClass($exceptionClass),
+            file: self::file($file),
+            appVersion: self::appVersion($appVersion),
+        );
+    }
+
+    /**
+     * La lista blanca con techo, sin texto de relleno ni indicador de corte:
+     * una columna vacia se queda vacia. El recorte es el de
+     * {@see ErrorMessageSanitizer::bounded()}, que vuelve a filtrar lo cortado.
      */
     private static function filtered(string $text, int $limit): string
     {
-        $clean = trim(ErrorMessageSanitizer::redactText($text));
-
-        if (mb_strlen($clean) <= $limit) {
-            return $clean;
-        }
-
-        // Lo cortado se vuelve a filtrar, como en el mensaje: media palabra al
-        // final dejaria de ser idempotente al releerla. La segunda pasada solo
-        // acorta.
-        return mb_substr(trim(ErrorMessageSanitizer::redactText(mb_substr($clean, 0, $limit))), 0, $limit);
+        return ErrorMessageSanitizer::bounded($text, $limit, '');
     }
 }

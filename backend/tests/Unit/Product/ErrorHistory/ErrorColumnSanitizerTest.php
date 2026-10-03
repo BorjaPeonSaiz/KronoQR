@@ -58,6 +58,7 @@ it('del servidor solo conserva SQLSTATE, un entero corto o el desbordamiento', f
     'entero de siete' => ['1234567', null],
     'texto' => ['Ficticiana', null],
     'sqlstate en minusculas' => ['23p01', null],
+    'cinco letras sin cifra' => ['ABCDE', null],
     'desbordamiento' => ['overflow', 'overflow'],
     'nulo' => [null, null],
 ])->group('RF-PD-15', 'RL-19');
@@ -97,6 +98,7 @@ it('quita los espacios de los extremos de app_version', function (): void {
 
 it('recorta app_version por el principio y sin espacios al final del corte', function (): void {
     expect(ErrorColumnSanitizer::appVersion(str_repeat('ok.', 20)))->toBe(str_repeat('ok.', 10).'ok')
-        ->and(ErrorColumnSanitizer::appVersion(str_repeat('ok ', 10).'   x y z ok ok ok'))
-        ->toBe(rtrim(str_repeat('ok ', 10)));
+        ->and(ErrorColumnSanitizer::appVersion(str_repeat('ok ', 10).'x yy ok'))
+        // Los espacios se colapsan y el corte (en el espacio tras la «x») se recorta.
+        ->toBe(str_repeat('ok ', 10).'x');
 })->group('RF-PD-15');

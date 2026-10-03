@@ -71,7 +71,7 @@ final readonly class ErrorMessageNormalizer
         // 1. UUID en cualquiera de sus formas, incluida la de PostgreSQL en
         //    mayusculas.
         $normalized = (string) preg_replace(
-            '/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/',
+            '/\b'.ErrorMessageSanitizer::UUID_PATTERN.'\b/',
             '<uuid>',
             $normalized,
         );

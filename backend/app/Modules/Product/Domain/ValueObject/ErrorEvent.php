@@ -90,4 +90,47 @@ final readonly class ErrorEvent
     {
         return ! $this->resolvedAt instanceof DateTimeImmutable;
     }
+
+    /**
+     * Este grupo con las apariciones de `$other` sumadas (ADR-048 decision 9,
+     * H6): cuando el saneado deja a dos grupos con la misma huella.
+     *
+     * Suma `occurrences`, toma el `first_seen_at` mas antiguo y el
+     * `last_seen_at` mas reciente, y **queda abierto si cualquiera de los dos lo
+     * estaba**: un fallo que sigue abierto en otra fila no esta atendido. Si los
+     * dos estaban resueltos, se queda la resolucion mas reciente con su autor.
+     * El texto y la huella son los de este grupo.
+     */
+    public function absorb(self $other): self
+    {
+        $resolution = match (true) {
+            $this->isOpen() || $other->isOpen() => null,
+            $other->resolvedAt > $this->resolvedAt => $other,
+            default => $this,
+        };
+
+        return new self(
+            id: $this->id,
+            fingerprint: $this->fingerprint,
+            level: $this->level,
+            source: $this->source,
+            module: $this->module,
+            code: $this->code,
+            message: $this->message,
+            exceptionClass: $this->exceptionClass,
+            file: $this->file,
+            line: $this->line,
+            context: $this->context,
+            traceId: $this->traceId,
+            deviceId: $this->deviceId,
+            employeeUuid: $this->employeeUuid,
+            appVersion: $this->appVersion,
+            occurrences: $this->occurrences + $other->occurrences,
+            firstSeenAt: min($this->firstSeenAt, $other->firstSeenAt),
+            lastSeenAt: max($this->lastSeenAt, $other->lastSeenAt),
+            resolvedAt: $resolution?->resolvedAt,
+            resolvedByUuid: $resolution?->resolvedByUuid,
+            resolvedByName: $resolution?->resolvedByName,
+        );
+    }
 }

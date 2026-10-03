@@ -95,18 +95,34 @@ final readonly class ErrorMessageSanitizer
         .'authorization|auth|bearer|pin|hash|signature|sig|credential|'
         .'clave|contrasena|contrase\x{00F1}a|secreto|firma';
 
-    /** Un UUID, en cualquier caja. */
-    private const string UUID_PATTERN = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+    /**
+     * Un UUID, en cualquier caja, sin delimitadores. La unica copia de esta
+     * forma en el modulo: la usan tambien `ErrorMessageNormalizer` y el log
+     * tecnico para reconocer las claves de correlacion.
+     */
+    public const string UUID_PATTERN = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 
     /**
      * El paso 2. Por orden de alternativa: un payload de credencial (que no se
      * conserva: se convierte en `[secret]`), un UUID, un hexadecimal de las
      * cuatro longitudes con letra y cifra, y un `SQLSTATE[…]`.
+     *
+     * El hexadecimal NO se protege si tiene forma de IBAN —dos letras y solo
+     * cifras detras—: un IBAN belga compacto en minusculas (`be71096123456769`)
+     * son dieciseis caracteres hexadecimales con letra y cifra.
      */
-    private const string PROTECTED = '/(?<secret>\bFH1\.[A-Za-z0-9._~+\/-]+=*)'
+    private const string PROTECTED = '/(?<secret>(?<![\p{L}])FH1\.[A-Za-z0-9._~+\/-]+=*)'
         .'|(?<![0-9A-Za-z])(?:'.self::UUID_PATTERN
-        .'|(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])(?:[0-9a-f]{64}|[0-9a-f]{40}|[0-9a-f]{32}|[0-9a-f]{16}))(?![0-9A-Za-z])'
+        .'|(?![a-z]{2}\d+(?![0-9A-Za-z]))(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])(?:[0-9a-f]{64}|[0-9a-f]{40}|[0-9a-f]{32}|[0-9a-f]{16}))(?![0-9A-Za-z])'
         .'|SQLSTATE\[[0-9A-Z]{5}\]/u';
+
+    /**
+     * Lo que cuenta como «pegado» en los limites de cada patron: letras,
+     * cifras y los caracteres de los marcadores (`[`, `]`, `…`). Con `\b` un
+     * dato pegado a una letra no casaba en la primera pasada y si en la
+     * segunda, cuando la letra ya era `…`: el saneado dejaba de ser idempotente.
+     */
+    private const string EDGE = '\p{L}\p{N}\[\]\x{2026}';
 
     /** Primer caracter de uso privado de los marcadores del paso 2. */
     private const int PLACEHOLDER_BASE = 0xE000;
@@ -123,7 +139,9 @@ final readonly class ErrorMessageSanitizer
      */
     public static function sanitize(string $message): string
     {
-        return self::bounded($message, self::MAX_LENGTH);
+        $clean = self::bounded($message, self::MAX_LENGTH);
+
+        return $clean === '' ? self::EMPTY_MESSAGE : $clean;
     }
 
     /**
@@ -134,7 +152,9 @@ final readonly class ErrorMessageSanitizer
      */
     public static function sanitizeContextValue(string $value): string
     {
-        return self::bounded($value, self::MAX_CONTEXT_LENGTH);
+        $clean = self::bounded($value, self::MAX_CONTEXT_LENGTH);
+
+        return $clean === '' ? self::EMPTY_MESSAGE : $clean;
     }
 
     /**
@@ -184,7 +204,10 @@ final readonly class ErrorMessageSanitizer
     }
 
     /**
-     * Los seis pasos con techo.
+     * Los seis pasos con techo, sin texto de relleno: vacio si no queda nada.
+     * Es el UNICO recorte del historico de errores; las columnas lo usan sin
+     * indicador (`$ellipsis = ''`) porque en ellas no cabe un `…` que
+     * nadie ha escrito.
      *
      * Si hay que truncar, lo truncado **se vuelve a filtrar**: el corte puede
      * dejar media palabra (`Connec…`), y sin la segunda pasada el colector, que
@@ -192,15 +215,15 @@ final readonly class ErrorMessageSanitizer
      * idempotente. La segunda pasada solo puede acortar —cambia palabras por
      * `…` y cifras por `[n]`—, asi que el techo se sigue cumpliendo.
      */
-    private static function bounded(string $text, int $limit): string
+    public static function bounded(string $text, int $limit, string $ellipsis = '…'): string
     {
         $clean = trim(self::redactText(self::collapse(self::withoutReservedCharacters($text))));
 
         if (mb_strlen($clean) > $limit) {
-            $clean = self::truncate(trim(self::redactText(self::truncate($clean, $limit))), $limit);
+            $clean = self::truncate(trim(self::redactText(self::truncate($clean, $limit, $ellipsis))), $limit, $ellipsis);
         }
 
-        return $clean === '' ? self::EMPTY_MESSAGE : $clean;
+        return $clean;
     }
 
     /**
@@ -229,8 +252,8 @@ final readonly class ErrorMessageSanitizer
         $clean = self::passports($clean);
         $clean = self::documents($clean);
         $clean = self::socialSecurityNumbers($clean);
-        $clean = self::instants($clean);
         $clean = self::ipAddresses($clean);
+        $clean = self::instants($clean);
         $clean = self::phones($clean);
 
         return self::quoted($clean);
@@ -310,15 +333,15 @@ final readonly class ErrorMessageSanitizer
      * invalido que revienta al serializar el JSON del paquete de diagnostico —el
      * peor sitio para descubrirlo—.
      */
-    private static function truncate(string $text, int $limit): string
+    private static function truncate(string $text, int $limit, string $ellipsis): string
     {
         if (mb_strlen($text) <= $limit) {
             return $text;
         }
 
-        // El indicador es un caracter, asi que el resultado cabe justo en el
-        // techo: la columna no admite ni uno mas.
-        return mb_substr($text, 0, $limit - 1).'…';
+        // El indicador cuenta dentro del techo: la columna no admite ni un
+        // caracter mas.
+        return mb_substr($text, 0, $limit - mb_strlen($ellipsis)).$ellipsis;
     }
 
     /**
@@ -354,13 +377,13 @@ final readonly class ErrorMessageSanitizer
         $text = self::replace('/,\s*SQL:\s.*/su', '', $text);
 
         $text = self::replace(
-            '/\bFailing row contains\b.*/su',
+            '/(?<![\p{L}])Failing row contains(?![\p{L}]).*/su',
             'Failing row contains [redacted]',
             $text,
         );
 
         return self::replace(
-            '/\b(key)\s*\((?=[^=]*\)\s*=\s*\().*?(?=\s+(?:already exists|conflicts with|is not present|is still referenced)\b|$)/isu',
+            '/(?<![\p{L}])(key)\s*\((?=[^=]*\)\s*=\s*\().*?(?=\s+(?:already exists|conflicts with|is not present|is still referenced)\b|$)/isu',
             "\$1 ('…')=('…')",
             $text,
         );
@@ -371,12 +394,12 @@ final readonly class ErrorMessageSanitizer
         // Un payload de credencial completo (regla dura 10). El paso 2 ya los
         // ha convertido; se repite porque `redact()` es publico y una regla
         // que solo existe en un sitio es una regla que alguien quita.
-        $text = self::replace('/\bFH1\.[A-Za-z0-9._~+\/-]+=*/', '[secret]', $text);
+        $text = self::replace('/(?<![\p{L}])FH1\.[A-Za-z0-9._~+\/-]+=*/u', '[secret]', $text);
 
-        $text = self::replace('/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/i', '[secret]', $text);
+        $text = self::replace('/(?<![\p{L}])Bearer\s+[A-Za-z0-9._~+\/-]+=*/iu', '[secret]', $text);
 
         return self::replace(
-            '/\b('.self::SECRET_NAMES.')(\s*[=:]\s*)("[^"]*"|\'[^\']*\'|\S+)/iu',
+            '/(?<![\p{L}])('.self::SECRET_NAMES.')(?![\p{L}])(\s*[=:]\s*)("[^"]*"|\'[^\']*\'|\S+)/iu',
             '$1$2[secret]',
             $text,
         );
@@ -407,12 +430,12 @@ final readonly class ErrorMessageSanitizer
     {
         // Compacto o con un separador: `12345678Z`, `12345678-Z`, `X1234567L`,
         // `x-1234567-l`.
-        $text = self::replace('/\b(?:[XYZxyz][ .\-]?)?\d{7,8}[ .\-]?[A-Za-z]\b/', '[id]', $text);
+        $text = self::replace('/(?<!['.self::EDGE.'])(?:[XYZxyz][ .\-]?)?\d{7,8}[ .\-]?[A-Za-z](?!['.self::EDGE.'])/u', '[id]', $text);
 
         // Con separadores de miles, como se teclea a mano (F4c-2):
         // `12.345.678-Z`, `12 345 678 Z`, `x 1.234.567 l`.
         return self::replace(
-            '/(?<![\w.\-])(?:[XYZxyz][ .\-]?)?\d{1,2}[ .]\d{3}[ .]\d{3}[ .\-]?[A-Za-z](?!\w)/',
+            '/(?<!['.self::EDGE.'._\-])(?:[XYZxyz][ .\-]?)?\d{1,2}[ .]\d{3}[ .]\d{3}[ .\-]?[A-Za-z](?!['.self::EDGE.'_])/u',
             '[id]',
             $text,
         );
@@ -426,7 +449,7 @@ final readonly class ErrorMessageSanitizer
     private static function socialSecurityNumbers(string $text): string
     {
         return self::replace(
-            '/(?<![\p{L}\p{N}.\-\/])\d{2}[ \/\-]?\d{7,8}[ \/\-]?\d{2}(?![\p{L}\p{N}.\-\/])/u',
+            '/(?<!['.self::EDGE.'.\-\/])\d{2}[ \/\-]?\d{7,8}[ \/\-]?\d{2}(?!['.self::EDGE.'.\-\/])/u',
             '[id]',
             $text,
         );
@@ -445,8 +468,8 @@ final readonly class ErrorMessageSanitizer
     private static function ibans(string $text): string
     {
         return preg_replace_callback(
-            '/(?<![\p{L}\p{N}])[A-Za-z]{2}\d{2}[ \-]?[A-Za-z0-9]{4}'
-            .'(?:[ \-]?(?=[A-Za-z]*\d)[A-Za-z0-9]{4}){2,6}(?:[ \-]?(?=[A-Za-z]*\d)[A-Za-z0-9]{1,3})?(?![\p{L}\p{N}])/u',
+            '/(?<!['.self::EDGE.'])[A-Za-z]{2}\d{2}[ \-]?[A-Za-z0-9]{4}'
+            .'(?:[ \-]?(?=[A-Za-z]*\d)[A-Za-z0-9]{4}){2,6}(?:[ \-]?(?=[A-Za-z]*\d)[A-Za-z0-9]{1,3})?(?!['.self::EDGE.'])/u',
             static fn (array $match): string => preg_match_all('/\d/', $match[0]) >= 10 ? '[iban]' : $match[0],
             $text,
         ) ?? '';
@@ -474,26 +497,28 @@ final readonly class ErrorMessageSanitizer
         // La etiqueta completa: con `=`, `:` o `#` el valor cae lleve o no
         // cifras, porque solo puede ser un codigo.
         $text = self::replace(
-            '/\b(employee[_ \-]?code|c(?:o|\x{00F3})digo(?:[_ ]de)?[_ ]empleado)(\s*[=:#]\s*|\s+(?=\S*\d))(\S+)/iu',
+            '/(?<![\p{L}])(employee[_ \-]?code|c(?:o|\x{00F3})digo(?:[_ ]de)?[_ ]empleado)(\s*[=:#]\s*|\s+(?=\S*\d))(?![^\s\[\]\x{2026}]*[\[\]\x{2026}])(\S+)/iu',
             '$1$2[code]',
             $text,
         );
 
-        // La etiqueta corta, solo si lo que sigue lleva alguna cifra: sin esa
-        // condicion «code is required» perderia la palabra.
+        // La etiqueta corta, solo si lo que sigue tiene forma de codigo: letra Y
+        // cifra, o cuatro cifras o mas. Sin esa condicion «code is required»
+        // perderia la palabra, y «status code 500» —el mensaje de axios— el
+        // estado HTTP, que no identifica a nadie.
         $text = self::replace(
-            '/\b(c(?:o|\x{00F3})digo|code)(\s*[=:#]\s*|\s+)(?=\S*\d)(?!\[)(\S+)/iu',
+            '/(?<![\p{L}])(c(?:o|\x{00F3})digo|code)(\s*[=:#]\s*|\s+)(?=\S*\p{L}\S*\d|\S*\d\S*\p{L}|\S*\d{4})(?!\S*[\[\]\x{2026}])(\S+)/iu',
             '$1$2[code]',
             $text,
         );
 
         $text = self::replace(
-            '/\bE(?=[A-Z0-9]{8,9}\b)(?:(?=[A-Z0-9]*\d)[A-Z0-9]{8,9}|[ABCDEFGHJKMNPQRSTUVWXYZ]{9})\b/',
+            '/(?<!['.self::EDGE.'])E(?=[A-Z0-9]{8,9}(?!['.self::EDGE.']))(?:(?=[A-Z0-9]*\d)[A-Z0-9]{8,9}|[ABCDEFGHJKMNPQRSTUVWXYZ]{9})(?!['.self::EDGE.'])/u',
             '[code]',
             $text,
         );
 
-        return self::replace('/\be(?=[a-z0-9]*\d)[a-z0-9]{8,9}\b/', '[code]', $text);
+        return self::replace('/(?<!['.self::EDGE.'])e(?=[a-z0-9]*\d)[a-z0-9]{8,9}(?!['.self::EDGE.'])/u', '[code]', $text);
     }
 
     /**
@@ -504,12 +529,12 @@ final readonly class ErrorMessageSanitizer
     private static function passports(string $text): string
     {
         $text = self::replace(
-            '/\b(passport|pasaporte)((?:\s*(?:no\.?|n\x{00BA}|n\x{00B0}|number|n(?:u|\x{00FA})mero))?(?:\s*[=:#]\s*|\s+(?=\S*\d)))(\S+)/iu',
+            '/(?<![\p{L}])(passport|pasaporte)((?:\s*(?:no\.?|n\x{00BA}|n\x{00B0}|number|n(?:u|\x{00FA})mero))?(?:\s*[=:#]\s*|\s+(?=\S*\d)))(\S+)/iu',
             '$1$2[id]',
             $text,
         );
 
-        return self::replace('/(?<![\p{L}\p{N}])[A-Za-z]{1,3}\d{6,9}(?![\p{L}\p{N}])/u', '[id]', $text);
+        return self::replace('/(?<!['.self::EDGE.'])[A-Za-z]{1,3}\d{6,9}(?!['.self::EDGE.'])/u', '[id]', $text);
     }
 
     /**
@@ -521,13 +546,13 @@ final readonly class ErrorMessageSanitizer
     private static function phones(string $text): string
     {
         $text = self::replace(
-            '/(?<![\p{L}\p{N}+])(?:\+|00)\d{1,3}(?:[ .\-]?\d){6,12}(?![\p{L}\p{N}])/u',
+            '/(?<!['.self::EDGE.'+])(?:\+|00)\d{1,3}(?:[ .\-]?\d){6,12}(?!['.self::EDGE.'])/u',
             '[phone]',
             $text,
         );
 
         return self::replace(
-            '/(?<![\p{L}\p{N}.\-])\d(?:[ .\-]?\d){8}(?![\p{L}\p{N}.\-])/u',
+            '/(?<!['.self::EDGE.'.\-])\d(?:[ .\-]?\d){8}(?!['.self::EDGE.'.\-])/u',
             '[phone]',
             $text,
         );
@@ -542,11 +567,11 @@ final readonly class ErrorMessageSanitizer
      */
     private static function ipAddresses(string $text): string
     {
-        $text = self::replace('/(?<![\p{N}.])\d{1,3}(?:\.\d{1,3}){3}(?!\.?\p{N})/u', '[ip]', $text);
+        $text = self::replace('/(?<![\p{N}.\]])\d{1,3}(?:\.\d{1,3}){3}(?!\.?[\p{N}\[])/u', '[ip]', $text);
 
         return self::replace(
-            '/(?<![\p{L}\p{N}:])(?=[0-9a-f:]*[0-9a-f])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}'
-            .'|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?)(?![\p{L}\p{N}:])/iu',
+            '/(?<!['.self::EDGE.':])(?=[0-9a-f:]*[0-9a-f])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}'
+            .'|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?)(?!['.self::EDGE.':])/iu',
             '[ip]',
             $text,
         );
@@ -566,18 +591,31 @@ final readonly class ErrorMessageSanitizer
             $text,
         );
 
-        $text = self::replace('/\b\d{4}\/\d{1,2}\/\d{1,2}\b/', '[time]', $text);
-        $text = self::replace('/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/', '[time]', $text);
+        // Limites de CIFRA y no de palabra (`\b`): una hora pegada a una letra
+        // —`T22:00:00Z`, `10:30am`, `x22:15`— tambien es una hora, y con `\b`
+        // escapaba (y el resultado dejaba de ser idempotente).
+        $text = self::replace('/(?<![\p{N}\/])\d{4}\/\d{1,2}\/\d{1,2}(?![\p{N}\/])/u', '[time]', $text);
+        $text = self::replace('/(?<![\p{N}\/])\d{1,2}\/\d{1,2}\/\d{2,4}(?![\p{N}\/])/u', '[time]', $text);
 
         // `dd-mm-aaaa` y `dd.mm.aaaa` (F4c-2), con el MISMO separador las dos
         // veces y dia, mes y siglo plausibles.
         $text = self::replace(
-            '/\b(?:0?[1-9]|[12]\d|3[01])([\-.])(?:0?[1-9]|1[0-2])\1(?:19|20)\d{2}\b/',
+            '/(?<![\p{N}.\-])(?:0?[1-9]|[12]\d|3[01])([\-.])(?:0?[1-9]|1[0-2])\1(?:19|20)\d{2}(?![\p{N}])/u',
             '[time]',
             $text,
         );
 
-        return self::replace('/\b\d{1,2}:\d{2}(:\d{2})?\b/', '[time]', $text);
+        // `22.30` solo detras de «a las» o «at»: suelto es una version o un
+        // decimal.
+        $text = self::replace('/(?<![\p{L}])(a las|at)(\s+)\d{1,2}[.h]\d{2}(?![\p{N}])/iu', '$1$2[time]', $text);
+
+        // `hh:mm[:ss[.fff]]`, con la `T` de ISO delante, zona o am/pm detras.
+        // No detras de `:` ni de `.`: `app.js:1:12` es una posicion y no una hora.
+        return self::replace(
+            '/(?<!['.self::EDGE.':.])T?\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+\-]\d{2}:?\d{2}|\s?[ap]\.?m\.?)?(?!['.self::EDGE.'])/iu',
+            '[time]',
+            $text,
+        );
     }
 
     /**

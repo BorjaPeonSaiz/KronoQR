@@ -30,9 +30,10 @@ namespace App\Modules\Product\Domain\ValueObject;
  *   que este ENTERA en el vocabulario (`sha256`, `base64`, `utf8mb4`): asi caen
  *   `a1b2c3` o `x7k2m9`, que no tienen cuatro cifras seguidas.
  * - **Posiciones tecnicas (H3).** Detras de `line `, `línea `, `linea `,
- *   `.php:`, `.js:`, `.ts:`, `.vue:` (con su `:columna` si la lleva) y del `#`
- *   de un argumento, **un unico grupo de hasta seis cifras** se conserva: es el
- *   numero de linea que hace util una traza. Un grupo mas largo o seguido de
+ *   `.php:`, `.js:`, `.ts:`, `.vue:` (con su `:columna` si la lleva), **un
+ *   unico grupo de hasta seis cifras** se conserva: es el numero de linea que
+ *   hace util una traza. Detras de un `#` (`Argument #1`, `#12` de un marco),
+ *   solo hasta dos: `Empleado #739104` es un codigo. Un grupo mas largo o seguido de
  *   otro grupo no es un numero de linea y sigue las reglas de arriba
  *   (`line 612 345 678` → `line [n]`).
  *
@@ -71,6 +72,13 @@ final readonly class ErrorTextAllowlist
 
     /** Cifras de un numero de linea que todavia se conserva (H3). */
     private const int TECHNICAL_DIGITS = 6;
+
+    /**
+     * Cifras que se conservan detras de un `#` suelto: el numero de un
+     * argumento (`Argument #1`) o de un marco de la traza (`#12`). Con seis,
+     * `Empleado #739104` dejaba pasar un codigo de empleado heredado numerico.
+     */
+    private const int HASH_DIGITS = 2;
 
     /** H4: alfanumerico con al menos estas cifras… */
     private const int MIXED_DIGITS = 2;
@@ -133,7 +141,9 @@ final readonly class ErrorTextAllowlist
 
         // H3: un numero de linea es UN grupo corto. Con siete cifras ya ha
         // salido por arriba, asi que aqui solo falta exigir que sea uno.
-        if ($prefix !== '' && preg_match('/^\d{1,'.self::TECHNICAL_DIGITS.'}$/', $series) === 1) {
+        $limit = $prefix === '#' ? self::HASH_DIGITS : self::TECHNICAL_DIGITS;
+
+        if ($prefix !== '' && preg_match('/^\d{1,'.$limit.'}$/', $series) === 1) {
             return $prefix.$series;
         }
 

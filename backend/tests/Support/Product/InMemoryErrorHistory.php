@@ -15,6 +15,7 @@ use App\Modules\Product\Domain\ValueObject\ErrorWriteOutcome;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
+use Closure;
 use DateTimeImmutable;
 
 /**
@@ -38,6 +39,14 @@ final class InMemoryErrorHistory implements ErrorEventRepository, ErrorHistoryRe
     public int $rewrites = 0;
 
     public int $merges = 0;
+
+    /**
+     * Se ejecuta al empezar cada `rewrite()`: permite simular un grupo que el
+     * sumidero crea entre la busqueda y la escritura de la migracion.
+     *
+     * @var (Closure(self): void)|null
+     */
+    public ?Closure $beforeRewrite = null;
 
     /**
      * @param  list<ErrorEvent>  $groups
@@ -182,16 +191,38 @@ final class InMemoryErrorHistory implements ErrorEventRepository, ErrorHistoryRe
         return null;
     }
 
-    public function rewrite(ErrorEvent $group): void
+    public function rewrite(ErrorEvent $group): bool
     {
+        if ($this->beforeRewrite instanceof Closure) {
+            ($this->beforeRewrite)($this);
+        }
+
+        // Como el `UNIQUE` de la tabla: otra fila con esa huella hace fallar la
+        // escritura, y quien llama los funde.
+        $holder = $this->findByFingerprint($group->fingerprint);
+
+        if ($holder instanceof ErrorEvent && $holder->id !== $group->id) {
+            return false;
+        }
+
         $this->rewrites++;
+        $this->groups[$group->id] = $group;
+
+        return true;
+    }
+
+    /**
+     * Como `insert` directo en la tabla.
+     */
+    public function put(ErrorEvent $group): void
+    {
         $this->groups[$group->id] = $group;
     }
 
-    public function merge(ErrorEvent $survivor, int $absorbedId): void
+    public function merge(int $survivorId, int $absorbedId): void
     {
         $this->merges++;
+        $this->groups[$survivorId] = $this->groups[$survivorId]->absorb($this->groups[$absorbedId]);
         unset($this->groups[$absorbedId]);
-        $this->groups[$survivor->id] = $survivor;
     }
 }

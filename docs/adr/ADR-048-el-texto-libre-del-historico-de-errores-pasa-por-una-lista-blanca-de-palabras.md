@@ -53,21 +53,40 @@ vocabulario técnico cerrado del producto. Cualquier otra se sustituye por `…`
 1. **Palabras.** Cada secuencia de letras (`\p{L}+`) se parte por los cambios de mayúscula internos
    (`EmployeeCodeAlreadyTaken` → Employee|Code|Already|Taken, `getUserMedia` → get|User|Media) y se compara
    en minúsculas y sin tildes con `ErrorVocabulary`. **Si una parte no está en el vocabulario, se sustituye
-   la secuencia entera**, de modo que `McDonald` da `…` y no `Mc…`. Las secuencias de una sola letra
-   (`x`, `e`) pasan siempre. Varios `…` seguidos se funden en uno, para que no se sepa cuántas palabras tenía
-   el nombre.
+   la secuencia entera**, de modo que `McDonald` da `…` y no `Mc…`. Una letra suelta pasa solo si es
+   **latina** (`x`, `e`): en chino una letra es una palabra entera. Varios `…` seguidos se funden en uno,
+   para que no se sepa cuántas palabras tenía el nombre.
 2. **Cifras.** Ninguna lista de palabras puede filtrar un identificador numérico, así que los patrones se
-   mantienen y se amplían: IBAN en mayúsculas o minúsculas, compacto, con espacios o con guiones; NAF;
-   pasaportes con etiqueta o sin ella; teléfonos en todas sus formas; código de empleado en minúsculas o
-   detrás de «código» o «code»; correo Unicode; todas las variantes de comillas; IP v4 y v6 como `[ip]`. Por
-   encima de ellos actúa una regla general: **toda serie de grupos de cifras que sume 7 cifras o más, y toda
-   secuencia alfanumérica con 4 cifras seguidas o más, pasa a `[n]`**. La excepción son las posiciones
-   técnicas, cada una con su prueba (`line`, `.php:`, `SQLSTATE[`…).
-3. **Identificadores que se conservan.** Los UUID y los hexadecimales de exactamente 16, 32, 40 o 64
-   caracteres con alguna cifra (span, traza, commit, sha256) se apartan antes de aplicar los patrones y se
-   restauran al final. Es la forma en que una persona y un dispositivo aparecen en el histórico
-   (`employee_uuid`, `device_id`), y la traza que permite correlacionar. Se fijan esas longitudes, y no
-   «8 o más», porque con «8 o más» quedaría protegido un IBAN alemán en minúsculas.
+   mantienen y se amplían: IBAN en mayúsculas o minúsculas, compacto, con espacios o con guiones, siempre
+   que sume **10 cifras o más** y cada grupo tras el primero lleve alguna cifra (así no se come la palabra
+   que sigue); NAF; pasaportes con etiqueta o sin ella; teléfonos en todas sus formas; código de empleado en
+   minúsculas o detrás de su etiqueta completa, y detrás de la **etiqueta corta** («código», «code») solo si
+   el valor tiene forma de código —letra y cifra, o 4 cifras o más—, de modo que `status code 500` (axios) y
+   `exit code 137` conservan el número; correo Unicode; todas las variantes de comillas; horas también
+   pegadas a una `T`, con `am`/`pm` o como `22.30` detrás de «a las» o «at»; IP v4 y v6 como `[ip]`. Por
+   encima de ellos actúan tres reglas generales:
+   - **toda serie de grupos de cifras que sume 7 cifras o más** pasa a `[n]`;
+   - **toda secuencia alfanumérica con 4 cifras seguidas o más** pasa entera a `[n]`;
+   - **toda secuencia alfanumérica de 5 caracteres o más con 2 cifras o más y alguna letra** (H4: `a1b2c3`,
+     `x7k2m9`) pasa a `[n]`, salvo que esté entera en el vocabulario (`sha256`, `base64`, `utf8mb4`).
+
+   La excepción son las **posiciones técnicas** (H3), cada una con su prueba: detrás de `line`, `línea`,
+   `.php:`, `.js:`, `.ts:` o `.vue:` (y la columna de `.js:línea:columna`) se conserva **un único grupo de
+   hasta 6 cifras**; detrás de un `#` (`Argument #1`, `#12` de una traza), **hasta 2**, porque
+   `Empleado #739104` es un código. Un grupo más largo, o seguido de otro grupo, sigue las reglas generales.
+   Los límites de cada patrón tratan como «pegado» lo mismo una letra o una cifra que un marcador (`[`, `]`,
+   `…`): con `\b`, un dato pegado a una letra no casaba en la primera pasada y sí en la segunda, y el saneado
+   dejaba de ser idempotente. Una prueba de propiedad con fragmentos pegados lo vigila.
+3. **Identificadores que se conservan.** Los UUID (en cualquier caja) y los hexadecimales **en minúsculas**
+   de exactamente 16, 32, 40 o 64 caracteres **con al menos una letra y una cifra** (H1: span, traza,
+   commit, sha256) se apartan antes de aplicar los patrones y se restauran al final; también `SQLSTATE[…]`,
+   que puede llevar letras (`23P01`). Es la forma en que una persona y un dispositivo aparecen en el
+   histórico (`employee_uuid`, `device_id`), y la traza que permite correlacionar. Se fijan esas
+   longitudes, y no «8 o más», porque con «8 o más» quedaría protegido un IBAN alemán en minúsculas; se
+   exige letra porque un número de tarjeta de 16 cifras también es «hexadecimal»; se exigen minúsculas
+   porque un código de empleado heredado (mayúsculas y cifras) podría tener esa forma; y no se protege lo
+   que tiene forma de IBAN (dos letras y solo cifras: un IBAN belga compacto en minúsculas son 16
+   caracteres hexadecimales).
 4. **Contexto.** Las claves siguen siendo la lista cerrada de `ErrorContextAllowlist` y los valores anidados
    se siguen descartando. Los valores de texto pasan por la misma lista blanca, y el vocabulario hace de
    catálogo para todos: no hay un catálogo distinto para cada clave. `source` se reduce en el servidor a
