@@ -993,6 +993,67 @@ describe('G1/G2 — el orden sobrevive a un fallo y el drenaje no gira en vacio 
     await vi.waitFor(() => expect(calls).toBe(2))
   })
 
+  it('un escaneo nuevo NO se salta el retroceso; el evento online (wakeNow) si (bateria, RN-21)', async () => {
+    const bench = harness()
+    const runner = runnerFor(bench)
+    runner.start()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    // La cabeza esta aplazada (servidor en 503 continuado).
+    await bench.queue.enqueue(scan(OLD, '2026-08-14T08:00:00.000Z'))
+    await bench.queue.claim(1)
+    await bench.queue.retryLater([OLD], CLOCK.now())
+
+    // Entra un fichaje nuevo: queda detras de la cabeza y no dispara ninguna peticion.
+    const result = await runner.submit(scan(NEW, '2026-08-14T09:00:00.000Z'))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(result.kind).toBe('deferred')
+    expect(bench.api.syncScanBatch).not.toHaveBeenCalled()
+    expect(bench.api.recordScan).not.toHaveBeenCalled()
+
+    // Vuelve la red: ahi si, y en orden.
+    runner.wakeNow()
+    await vi.waitFor(() => expect(bench.batches).toHaveLength(1))
+    expect(bench.batches[0]?.scans.map((item) => item.scan_id)).toEqual([OLD, NEW])
+  })
+
+  it('cola en memoria y vacia: el drenaje se programa UNA vez a la espera larga, sin leer en bucle (G2)', async () => {
+    const delays: number[] = []
+    let lists = 0
+    const queue = createScanQueue({
+      openStorage: () => ({
+        ...createMemoryQueueStorage(),
+        durable: false,
+        list: async () => {
+          lists += 1
+          return []
+        },
+      }),
+      clock: CLOCK,
+    })
+    const runner = createSyncRunner({
+      api: harness().api,
+      queue,
+      clock: CLOCK,
+      isOnline: () => true,
+      setTimer: (_handler, delayMs) => {
+        delays.push(delayMs)
+        return 1
+      },
+      clearTimer: () => undefined,
+    })
+
+    runner.start()
+    await vi.waitFor(() => expect(delays.length).toBeGreaterThan(0))
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    const readsAfterDrain = lists
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    // Nunca a 0 ms: sin nada con fecha que esperar, el sondeo es el lento.
+    expect(new Set(delays)).toEqual(new Set([30_000]))
+    expect(lists).toBe(readsAfterDrain)
+  })
+
   it('sin red el drenaje se programa a la espera larga, no a 0 ms (G2)', async () => {
     const delays: number[] = []
     const bench = harness()

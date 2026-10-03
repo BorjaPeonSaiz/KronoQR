@@ -738,7 +738,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
 
     if (!alone || !isOnline()) {
       // Hay cola por delante (o no hay red): el orden manda. Se drena por lote.
-      wakeNow()
+      drainRespectingSchedule()
       return { kind: 'deferred' }
     }
 
@@ -747,7 +747,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     if (mine === undefined) {
       // Otro drenaje se lo ha llevado. Que lo termine el.
       queue.release(claimed.map((record) => record.scan_id))
-      wakeNow()
+      drainRespectingSchedule()
       return { kind: 'deferred' }
     }
     queue.release(
@@ -802,6 +802,17 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     await queue.retryLater([scan.scan_id], clock.now())
     scheduleNext()
     return { kind: 'deferred' }
+  }
+
+  /**
+   * Un escaneo nuevo drena RESPETANDO el retroceso: solo `online`, `visibilitychange`
+   * y el arranque (`wakeNow`) lo saltan. Con un servidor en 503 continuado, cada
+   * fichaje reenviando el lote entero agotaria la bateria; si la cabeza esta
+   * aplazada, el nuevo espera detras (RN-21).
+   */
+  function drainRespectingSchedule(): void {
+    if (!running) return
+    void drain()
   }
 
   function wakeNow(): void {
