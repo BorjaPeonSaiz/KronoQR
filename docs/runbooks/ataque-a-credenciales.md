@@ -403,6 +403,7 @@ Mismo mecanismo que el §5 de arriba (firewall del host, nunca tocar
 
 **El fabricante no accede a los datos del cliente** (ADR-020, regla dura 16).
 Los logs estructurados de este runbook se pueden compartir con el fabricante
-solo dentro del paquete de diagnóstico anonimizado; `ip_hash` no identifica a
-nadie sin `APP_KEY`, así que viaja bien en ese paquete, pero `subject_id`/
-`employee_uuid` de `audit_log` no.
+solo dentro del paquete de diagnóstico anonimizado (que no lleva `employee_uuid`
+ni UUID en el texto, y reduce el texto de los errores a palabras técnicas);
+`ip_hash` no identifica a nadie sin `APP_KEY`, pero `subject_id`/`employee_uuid`
+de `audit_log` no salen de la instalación.

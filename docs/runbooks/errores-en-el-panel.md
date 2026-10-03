@@ -146,15 +146,20 @@ Dos cosas con las que no hay que confundirlo:
   apagado, puedes no tener quien lo mire, y lo pierdes si reinstalas.
   `error_events` vive siempre, en la base de datos que respaldas.
 
-**Nunca lleva nombres, correos ni fichajes** — y no es una promesa sin
-mecanismo, esto es lo que lo consigue (regla dura 21):
+**No guarda fichajes y está hecho para no guardar nombres ni correos** — y no
+es una promesa sin mecanismo, esto es lo que lo consigue (regla dura 21,
+ADR-048):
 
-- **El mensaje se sanea en el servidor**, nunca confiando en que el cliente lo
-  haya hecho ya: correos, DNI/NIE, teléfonos, horas y fechas se sustituyen por
-  marcadores, y **todo texto entre comillas simples, dobles o angulares se
-  reemplaza igual** — es donde una excepción interpola un valor variable, y es
-  la única forma fiable de no dejar pasar un nombre de persona sin conocerlo
-  de antemano.
+- **El texto libre se filtra en el servidor con una lista blanca**, nunca
+  confiando en que el cliente lo haya hecho ya (desde la 2.2.0; hasta la 2.1.0
+  se limpiaba por patrones y un nombre sin comillas podía quedarse). Solo
+  sobreviven las palabras de un vocabulario técnico cerrado que forma parte
+  del producto; cualquier otra —un nombre, un apellido, una calle— se guarda
+  como `…`. Los números largos y los que tienen forma de documento, teléfono,
+  tarjeta, cuenta, número de afiliación, código de empleado, fecha, hora o
+  dirección IP se sustituyen por marcadores (`[n]`, `[id]`, `[time]`…). Una
+  prueba por versión comprueba que el vocabulario no contiene los nombres y
+  apellidos más frecuentes en España ni las nacionalidades más habituales.
 - **Un fallo de base de datos no imprime lo que se intentó guardar.** Una
   `QueryException` de Laravel, sin este saneado, interpolaría los valores en
   claro en el mensaje — el propio nombre y apellidos que se intentaban
@@ -166,8 +171,10 @@ mecanismo, esto es lo que lo consigue (regla dura 21):
   (`route`, `job`, `queue`, `command`, `http_status`…) con valores truncados;
   no hay una clave libre donde algo inesperado pueda colarse.
 
-Aun así, sigue siendo texto libre saneado por un patrón, no un campo
-estructurado: si alguna vez ves algo que no debería estar ahí, es exactamente
+**Lo que no se puede descartar del todo:** un nombre que coincida exactamente
+con una palabra del vocabulario y aparezca solo, sin apellido, se conservaría.
+Sigue siendo texto libre filtrado, no un campo estructurado: si alguna vez ves
+algo que no debería estar ahí, es exactamente
 el tipo de hallazgo que hay que reportar al fabricante (§8), no algo que
 debas «limpiar» tú mismo editando la fila (§7, no se edita a mano).
 
@@ -303,7 +310,9 @@ resolver es una decisión sobre tu instalación, no sobre el diagnóstico.
 
 El paquete de diagnóstico (`operacion.md` §12) incluye, **anonimizado por
 defecto**, el resumen por origen y nivel más los grupos del periodo —hasta
-500, por `last_seen_at`— con su `trace_id`. Es lo primero que pide soporte al
+500, por `last_seen_at`— con su texto reducido a palabras técnicas, su
+`device_id` y su `trace_id`; no lleva `employee_uuid` ni ningún otro UUID
+dentro del texto. Es lo primero que pide soporte al
 abrir una incidencia, y es lo único que necesita en la mayoría de los casos
 (runbook del fabricante,
 [`incidencia-sin-acceso.md`](incidencia-sin-acceso.md), §4.4). No hace falta
