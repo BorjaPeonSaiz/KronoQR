@@ -358,6 +358,9 @@ it('genera un paquete anonimizado sobre 500 empleados y 90 dias sin una sola PII
     foreach ($kiosks as $kiosk) {
         expect(array_keys($kiosk))->toBe([
             'uuid', 'status', 'app_version', 'last_seen_at', 'pending_queue_size',
+            // ADR-047 (2.2.0): donde guarda la cola y cuantos descartes no ha
+            // avisado. Solo recuentos.
+            'queue_storage', 'unreported_discards',
             // PR13: lo que hace falta para «el quiosco no sincroniza».
             'oldest_pending_at', 'battery_level', 'battery_charging', 'paired_at', 'token_expires_on',
         ]);

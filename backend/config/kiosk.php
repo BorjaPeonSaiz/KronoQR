@@ -91,6 +91,17 @@ return [
         'pin_scan_per_ip' => (int) env('KIOSK_PIN_SCAN_RATE_PER_IP', 60),
 
         /*
+         * `POST /api/v1/scan/discarded`, por dispositivo (RN-22, ADR-047).
+         *
+         * Seis por minuto, el numero que fija el contrato: con diez avisos por
+         * peticion, una lista de cuarenta descartes se vacia en una pasada, y
+         * un token de quiosco robado no siembra avisos mas deprisa que eso.
+         * Sin variable de entorno a proposito: es parte del contrato, no un
+         * ajuste del hotel.
+         */
+        'discarded_per_device' => 6,
+
+        /*
          * `GET /api/v1/kiosk/roster` y `POST /api/v1/kiosk/heartbeat`, por
          * dispositivo.
          *

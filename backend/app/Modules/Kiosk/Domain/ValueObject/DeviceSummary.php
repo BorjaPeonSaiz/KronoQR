@@ -32,7 +32,8 @@ final readonly class DeviceSummary
         public ?string $appVersion,
         public ?DateTimeImmutable $lastSeenAt,
         /** Lo declara el dispositivo y nadie lo comprueba: es operacion, no autoridad. */
-        public int $pendingQueueSize,
+        /** `null` = desconocido: la cola de la tablet salio de IndexedDB (ADR-047). */
+        public ?int $pendingQueueSize,
         /** `null` en los dispositivos dados de alta antes del emparejamiento por codigo. */
         public ?DateTimeImmutable $pairedAt,
         /** `occurred_at` del fichaje mas antiguo de su cola; `null` con la cola vacia o sin latido. */
@@ -46,5 +47,9 @@ final readonly class DeviceSummary
         public ?int $batteryLevel = null,
         /** Si estaba enchufada en su ultimo latido; `null` si no lo informa. */
         public ?bool $batteryCharging = null,
+        /** Donde guarda la tablet su cola segun su ultimo latido (ADR-047). */
+        public QueueStorage $queueStorage = QueueStorage::Durable,
+        /** Descartes sin avisar segun su ultimo latido (RN-22). */
+        public int $unreportedDiscards = 0,
     ) {}
 }

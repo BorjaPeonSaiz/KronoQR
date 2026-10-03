@@ -27,13 +27,26 @@ use App\Modules\Workforce\Infrastructure\Persistence\Employee;
  */
 final readonly class EloquentEmployeeDirectory implements EmployeeDirectory
 {
+    private const array COLUMNS = ['uuid', 'employee_code', 'first_name', 'last_name', 'status', 'site_id', 'department_id', 'hired_at', 'terminated_at'];
+
     public function find(string $employeeUuid): ?EmployeeSnapshot
     {
-        $row = Employee::query()
-            ->select(['uuid', 'employee_code', 'first_name', 'last_name', 'status', 'site_id', 'department_id', 'hired_at', 'terminated_at'])
-            ->where('uuid', $employeeUuid)
-            ->first();
+        return $this->snapshotOf(
+            Employee::query()->select(self::COLUMNS)->where('uuid', $employeeUuid)->first(),
+        );
+    }
 
+    public function findByCode(string $employeeCode): ?EmployeeSnapshot
+    {
+        // La misma consulta, exista o no el codigo (F5): un acceso al indice
+        // UNIQUE de `employee_code` y nada mas.
+        return $this->snapshotOf(
+            Employee::query()->select(self::COLUMNS)->where('employee_code', $employeeCode)->first(),
+        );
+    }
+
+    private function snapshotOf(?Employee $row): ?EmployeeSnapshot
+    {
         if (! $row instanceof Employee) {
             // `null` NO autoriza a bloquear a nadie en el quiosco (regla dura 19,
             // RN-15): quien decide que hacer con esto es el caso de uso.

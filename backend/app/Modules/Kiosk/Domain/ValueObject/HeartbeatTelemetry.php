@@ -44,16 +44,35 @@ final readonly class HeartbeatTelemetry
     public function __construct(
         /** Version de la PWA que corre en la tablet (RF-KI-07). */
         public string $appVersion,
-        /** Fichajes en su cola local sin sincronizar. */
-        public int $pendingQueueSize,
+        /**
+         * Fichajes en su cola local sin sincronizar. `null` = **desconocido**, y
+         * solo con la cola fuera de IndexedDB (ADR-047): un cero ahi apagaria la
+         * alerta de cola atascada justo cuando hay fichajes que no se ven.
+         */
+        public ?int $pendingQueueSize,
         /** `occurred_at` del mas antiguo de esa cola; `null` con la cola vacia. */
         public ?DateTimeImmutable $oldestPendingAt = null,
         /** Nivel de bateria en tanto por ciento; `null` si el navegador no lo sabe. */
         public ?int $batteryLevel = null,
         /** Si la tablet esta enchufada; `null` si el navegador no lo sabe. */
         public ?bool $batteryCharging = null,
+        /** Donde guarda la tablet su cola (ADR-047). Ausente en el latido = `durable`. */
+        public QueueStorage $queueStorage = QueueStorage::Durable,
+        /** Fichajes descartados cuyo aviso aun no tiene acuse (RN-22). Ausente = 0. */
+        public int $unreportedDiscards = 0,
     ) {
-        if ($pendingQueueSize < 0) {
+        if ($pendingQueueSize === null && $queueStorage->isDurable()) {
+            // El contrato: con la cola en IndexedDB la tablet siempre sabe
+            // cuantos tiene. El borde lo rechaza con un `400`; esto protege a
+            // quien construya el objeto desde codigo.
+            throw new InvalidArgumentException('Una cola en IndexedDB no puede declarar un tamano desconocido.');
+        }
+
+        if ($unreportedDiscards < 0) {
+            throw new InvalidArgumentException('Los descartes sin avisar no pueden ser negativos.');
+        }
+
+        if ($pendingQueueSize !== null && $pendingQueueSize < 0) {
             throw new InvalidArgumentException('La cola pendiente de un quiosco no puede ser negativa.');
         }
 

@@ -44,4 +44,9 @@ final class InterleavingEmployeeDirectory implements EmployeeDirectory
 
         return $snapshot;
     }
+
+    public function findByCode(string $employeeCode): ?EmployeeSnapshot
+    {
+        return $this->inner->findByCode($employeeCode);
+    }
 }

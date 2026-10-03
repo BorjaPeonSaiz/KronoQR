@@ -76,6 +76,16 @@ final readonly class EloquentScanLog implements ScanLog
      *
      * `ON CONFLICT DO NOTHING` es el mismo que compilaba `insertOrIgnore`: la
      * idempotencia sigue en el UNIQUE de `scan_id` (regla dura 8).
+     *
+     * ## RN-20: `employee_id` por el mismo camino (ADR-047)
+     *
+     * Desde la 2.2.0 un rechazo de tarjeta **autentica** retirada lleva a su
+     * titular en `employee_id`, y ese rechazo comparte suelo de tiempo con los
+     * demas (RS-03). Resolver el `id` con una consulta previa solo cuando hay
+     * titular seria, otra vez, un viaje de mas que solo paga la tarjeta real.
+     * Por eso `employee_id` se resuelve tambien **dentro** del `INSERT`, con
+     * la misma subconsulta y siempre: con y sin titular, la sentencia y el
+     * numero de viajes son los mismos.
      */
     public function record(ScanRecord $scan): bool
     {
@@ -86,7 +96,7 @@ final readonly class EloquentScanLog implements ScanLog
                     shift_entry_id, payload_fingerprint, client_meta, clock_skew_seconds,
                     flagged_for_review, worked_minutes, claimed_employee_id, pin_lockout
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, (SELECT id FROM employees WHERE uuid = CAST(? AS uuid)), ?, ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, (SELECT id FROM employees WHERE uuid = CAST(? AS uuid)), ?
                 )
@@ -95,7 +105,7 @@ final readonly class EloquentScanLog implements ScanLog
             [
                 $scan->scanId,
                 $scan->deviceId,
-                $scan->employeeUuid === null ? null : $this->employeeIdOf($scan->employeeUuid),
+                $scan->employeeUuid,
                 $this->toTimestamp($scan->occurredAt),
                 $this->toTimestamp($scan->recordedAt),
                 $scan->origin->value,

@@ -99,7 +99,7 @@ final class SettingsPolicy
      * Son las que no deciden «como funciona el producto» sino **de que responde
      * el hotel, a donde van los datos de su gente, con que cifra se juzga el
      * propio producto y si se vigila el fichaje por cuenta de otro**. Hoy son
-     * cinco y por cuatro motivos distintos:
+     * siete y por cinco motivos distintos:
      *
      * | Clave | Que decide |
      * |---|---|
@@ -108,6 +108,7 @@ final class SettingsPolicy
      * | `BASELINE_MANUAL_HOURS_PER_MONTH` | El denominador declarado del «−80 % de carga administrativa» del §1.3, que el sistema no puede medir (RF-IN-08). |
      * | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | Si se detecta el fichaje por cuenta de otro: **cero apaga la coincidencia de quiosco** (RF-PR-06). |
      * | `ATTENDANCE_PATTERN_MIN_REPEATS` | Cuanto tiene que repetirse un patron antes de abrir la incidencia; subirlo apaga el hallazgo por la via lenta (RF-PR-06). |
+     * | `PRIVACY_CONTROLLER_NAME`, `PRIVACY_POLICY_URL` | La declaracion legal del hotel ante su plantilla: quien responde del tratamiento y donde esta su politica (RL-09, art. 13 RGPD). |
      *
      * El fabricante configura la instalacion y diagnostica; no decide el
      * cumplimiento de su cliente, no enciende una salida de datos personales de

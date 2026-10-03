@@ -23,10 +23,12 @@ use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\DebouncePolicy;
 use App\Modules\Attendance\Domain\Policy\ReviewPolicy;
 use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
+use App\Modules\Attendance\Domain\Policy\WithdrawnCredentialPolicy;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ClockingResolution;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\OutOfOrderScan;
+use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\ScanRejectionReason;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
@@ -34,8 +36,10 @@ use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
+use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -160,7 +164,7 @@ use RuntimeException;
  *   forma de fila; lo unico que cambia es el valor de `scan_events.result`, que
  *   se queda del lado del servidor junto con el log y la metrica.
  */
-final readonly class RegisterScanHandler
+final readonly class RegisterScanHandler implements ScanRegistration
 {
     /**
      * Tres intentos y no mas.
@@ -328,15 +332,29 @@ final readonly class RegisterScanHandler
         if ($employeeUuid === null) {
             $reason = $resolution->rejectionReason();
 
+            // RN-20 (ADR-047): una tarjeta AUTENTICA que ya no vale atribuye la
+            // fila a su titular, y la marca si se uso antes de la retirada. Es
+            // lo unico que cambia: los mismos parametros de la misma sentencia
+            // de insercion (el patron de ADR-043, punto 4), el mismo evento y la
+            // misma respuesta. Sin credencial retirada, la retirada es la
+            // recepcion: la baja confirmo durante esta peticion o antes.
+            $holder = $resolution->holder();
+
             return $this->reject(
                 $command,
                 $recordedAt,
-                null,
+                $holder?->employeeUuid,
                 ScanResult::fromRejection(
                     $reason === null
                         ? ScanRejectionReason::UNKNOWN_CREDENTIAL
                         : ScanRejectionReason::fromCredentialRejection($reason),
                 ),
+                flaggedForReview: $holder instanceof CredentialHolder
+                    && (new WithdrawnCredentialPolicy)->requiresReview(
+                        $command->occurredAt,
+                        $holder->issuedAt,
+                        $holder->withdrawnAt ?? $recordedAt,
+                    ),
                 // RN-19 (ADR-043): el dueño del codigo de un PIN rechazado, solo
                 // para la fila. Nulo en todo lo demas.
                 pinClaim: $resolution->pinClaim(),
@@ -349,7 +367,13 @@ final readonly class RegisterScanHandler
         // mismo resultado: desde fuera no se distingue «no existe» de «esta de
         // baja» (regla dura 17).
         if (! $employee instanceof EmployeeSnapshot || ! $employee->canClock()) {
-            return $this->reject($command, $recordedAt, $employeeUuid, ScanResult::REJECTED_UNKNOWN);
+            return $this->reject(
+                $command,
+                $recordedAt,
+                $employeeUuid,
+                ScanResult::REJECTED_UNKNOWN,
+                flaggedForReview: $this->offboardedBeforeScanning($command, $recordedAt, $employee),
+            );
         }
 
         $timezone = $this->calendar->timezoneOf($employee->siteId);
@@ -359,6 +383,47 @@ final readonly class RegisterScanHandler
         }
 
         return $this->processResolved($command, $recordedAt, $employee, $timezone);
+    }
+
+    /**
+     * RN-20 en la carrera con la baja: la tarjeta resolvio —estaba vigente— y
+     * cuando se cargo a su titular ya estaba de baja.
+     *
+     * Solo con **tarjeta** (`qr_kiosk`): el PIN de una persona de baja queda
+     * fuera de RN-20 hasta que se amplie ADR-043 (doc 01, nota sobre RN-20). Y
+     * solo con la persona **de baja**: una suspendida no tiene instante con el
+     * que comparar. La retirada es la recepcion del escaneo.
+     *
+     * La cota inferior es el **alta** de la persona (F2 del dictamen del bloque
+     * 18): aqui la tarjeta resolvio y su emision no viaja, y el alta es anterior
+     * a cualquier tarjeta suya. Sin alta registrada o sin zona del centro no se
+     * afirma nada. Es una carrera de microsegundos con la baja: la consulta de
+     * la zona solo la paga ese camino.
+     */
+    private function offboardedBeforeScanning(
+        RegisterScanCommand $command,
+        DateTimeImmutable $recordedAt,
+        ?EmployeeSnapshot $employee,
+    ): bool {
+        if ($command->origin !== ScanOrigin::QR_KIOSK
+            || ! $employee instanceof EmployeeSnapshot
+            || $employee->status !== EmploymentStatus::TERMINATED
+            || $employee->hiredOn === null) {
+            return false;
+        }
+
+        $timezone = $this->calendar->timezoneOf($employee->siteId);
+
+        if (! $timezone instanceof DateTimeZone) {
+            return false;
+        }
+
+        // El primer instante de la fecha civil del alta, en la zona del centro.
+        // `WorkDate` valida la fecha; el instante no lo da el reloj, lo da ella.
+        $hiredAt = (new DateTimeImmutable(WorkDate::fromIsoDate($employee->hiredOn, $timezone)->isoDate.' 00:00:00', $timezone))
+            ->setTimezone(new DateTimeZone('UTC'));
+
+        return (new WithdrawnCredentialPolicy)->requiresReview($command->occurredAt, $hiredAt, $recordedAt);
     }
 
     /**
@@ -731,6 +796,8 @@ final readonly class RegisterScanHandler
      * bandeja de FICHAJES que validar, y una tarjeta que no resuelve no describe
      * el fichaje de nadie. El fichaje irreconciliable si: ahi hubo una persona
      * pasando su tarjeta y lo unico que falta es decidir que tramo describe.
+     * Y desde la 2.2.0 la tarjeta **autentica** usada antes de su retirada
+     * (RN-20): tambien describe el fichaje de alguien, el de su titular.
      *
      * **Que lee la revision diaria.** Para el desfase de reloj (RN-15), la marca.
      * Para RN-18, `result = 'rejected_out_of_order'` **y** la marca: el resultado
@@ -822,6 +889,23 @@ final readonly class RegisterScanHandler
             return null;
         }
 
+        // Un rechazo de verdad se reconstruye SIN buscar a nadie (RS-03, regla
+        // dura 17, F1 del dictamen del bloque 18). Desde RN-20 la fila de una
+        // tarjeta autentica retirada lleva a su titular; buscarlo aqui costaria
+        // dos consultas que el reenvio de una firma falsa no paga, despues del
+        // suelo y sin relleno: un oraculo de «esta tarjeta era de alguien». El
+        // anti-rebote no entra: es un desenlace aceptado y necesita a la persona.
+        if ($this->replaysWithoutLookup($recorded->result)) {
+            return RegisterScanResult::rejected(
+                scanId: $scanId,
+                result: $recorded->result,
+                occurredAt: $recorded->occurredAt,
+                recordedAt: $recorded->recordedAt,
+                employeeUuid: $recorded->employeeUuid,
+                isReplay: true,
+            );
+        }
+
         $employee = $recorded->employeeUuid === null ? null : $this->employees->find($recorded->employeeUuid);
         $timezone = $employee instanceof EmployeeSnapshot ? $this->calendar->timezoneOf($employee->siteId) : null;
 
@@ -842,7 +926,10 @@ final readonly class RegisterScanHandler
             return $this->replayDebounce($recorded->scanId, $recorded->occurredAt, $recorded->recordedAt, $employee, $recorded->workedMinutes);
         }
 
-        if ($recorded->result->isRejection() || $recorded->workDate === null) {
+        // Aqui ya no llega ningun rechazo: los de verdad salieron arriba y el
+        // anti-rebote justo encima. Queda el aceptado sin jornada, que solo
+        // produce una purga por retencion (RL-02).
+        if ($recorded->workDate === null) {
             return RegisterScanResult::rejected(
                 scanId: $scanId,
                 result: $recorded->result,
@@ -866,6 +953,15 @@ final readonly class RegisterScanHandler
             workedMinutes: $recorded->workedMinutes ?? 0,
             isReplay: true,
         );
+    }
+
+    /**
+     * Un rechazo de credencial o de regla (RN-18, RN-20): se reconstruye sin
+     * buscar a nadie. El anti-rebote no: es un desenlace aceptado (ADR-031).
+     */
+    private function replaysWithoutLookup(ScanResult $result): bool
+    {
+        return $result->isRejection() && ! $result->isDebounce();
     }
 
     private function replayDebounce(

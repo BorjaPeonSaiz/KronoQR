@@ -170,7 +170,9 @@ it('no filtra ninguna clave de configuracion que no sea marca ni idioma', functi
         ->and($cuerpo)->not->toContain('ATTENDANCE')
         ->and($cuerpo)->not->toContain('LICENSE')
         ->and(array_keys((array) $response->json()))
-        ->toBe(['application_name', 'accent_color', 'logo_url', 'locales']);
+        // RF-KI-09 (2.2.0): mas el aviso de privacidad, que el art. 13 RGPD
+        // obliga a dar y que por eso se publica.
+        ->toBe(['application_name', 'accent_color', 'logo_url', 'locales', 'privacy_notice']);
 })->group('RF-PD-08', 'RS-03');
 
 it('no revela la ruta del logotipo en el servidor del cliente', function (): void {
@@ -608,3 +610,100 @@ it('responde 200 con la marca del producto aunque la configuracion sea ilegible'
         // selector y al portal sin saber en que idioma pintarse.
         ->and($response->json('locales.available'))->toBe(['es', 'en']);
 })->group('RF-PD-08');
+
+// --- RF-KI-09, RL-09: el aviso de privacidad del quiosco (2.2.0) -------------
+
+/*
+ * `PRIVACY_CONTROLLER_NAME` y `PRIVACY_POLICY_URL` se editan con el `PATCH` de
+ * siempre y se publican aqui como `privacy_notice`. El vacio es la redaccion
+ * generica, y **la licencia no lo degrada nunca**: el aviso no es aspecto, es
+ * informacion que el art. 13 RGPD obliga a dar (ADR-019).
+ *
+ * Nota: `guardarMarca()` valida la RESPUESTA del `PATCH` contra el contrato y no
+ * la peticion: el contrato aun no declara las dos claves en el `propertyNames`
+ * de `UpdateSettingsRequest` (ver el informe del bloque 18).
+ */
+
+it('publica el aviso de privacidad sin configurar como la redaccion generica', function (): void {
+    Api::guest()->get('/api/v1/branding')
+        ->assertValidResponse(200)
+        ->assertJsonPath('privacy_notice.controller_name', null)
+        ->assertJsonPath('privacy_notice.policy_url', null);
+})->group('RF-KI-09', 'RL-09');
+
+it('publica el responsable y la direccion que el cliente ha configurado', function (): void {
+    guardarMarca([
+        'PRIVACY_CONTROLLER_NAME' => 'Hoteles Marina, S. L. — B12345678',
+        'PRIVACY_POLICY_URL' => 'https://hotelesmarina.example/privacidad?lang=es#empleados',
+    ]);
+
+    Api::guest()->get('/api/v1/branding')
+        ->assertValidResponse(200)
+        ->assertJsonPath('privacy_notice.controller_name', 'Hoteles Marina, S. L. — B12345678')
+        ->assertJsonPath('privacy_notice.policy_url', 'https://hotelesmarina.example/privacidad?lang=es#empleados');
+
+    // Y vaciarlas devuelve la redaccion generica.
+    guardarMarca(['PRIVACY_CONTROLLER_NAME' => '', 'PRIVACY_POLICY_URL' => '']);
+
+    Api::guest()->get('/api/v1/branding')
+        ->assertJsonPath('privacy_notice.controller_name', null)
+        ->assertJsonPath('privacy_notice.policy_url', null);
+})->group('RF-KI-09', 'RL-09', 'RF-PD-01');
+
+it('sirve el aviso de privacidad intacto sin la marca blanca en el plan o con la licencia vencida', function (string $situacion): void {
+    // ADR-019 y RL-09: el color y el logotipo se degradan; el aviso legal, no.
+    marcaDeCliente();
+    guardarMarca([
+        'PRIVACY_CONTROLLER_NAME' => 'Hoteles Marina, S. L.',
+        'PRIVACY_POLICY_URL' => 'https://hotelesmarina.example/privacidad',
+    ]);
+
+    $situacion === 'sin marca blanca' ? sinMarcaBlancaEnElPlan() : conLicenciaVencida();
+
+    Api::guest()->get('/api/v1/branding')
+        ->assertValidResponse(200)
+        ->assertJsonPath('accent_color', null)
+        ->assertJsonPath('logo_url', null)
+        ->assertJsonPath('privacy_notice.controller_name', 'Hoteles Marina, S. L.')
+        ->assertJsonPath('privacy_notice.policy_url', 'https://hotelesmarina.example/privacidad');
+})->with(['sin marca blanca', 'con la licencia vencida'])->group('RF-KI-09', 'RL-09', 'RF-PD-05');
+
+it('rechaza con 422 un aviso de privacidad que podria disfrazar a quien o adonde', function (string $key, string $value): void {
+    // F15 del dictamen del bloque 18. Nada se guarda.
+    Api::as(marcaToken())
+        ->patch('/api/v1/settings', ['settings' => [$key => $value]])
+        ->assertStatus(422);
+
+    expect(DB::table('installation_settings')->where('key', $key)->exists())->toBeFalse();
+})->with([
+    'javascript' => ['PRIVACY_POLICY_URL', 'javascript:alert(1)'],
+    'http sin cifrar' => ['PRIVACY_POLICY_URL', 'http://hotelesmarina.example/privacidad'],
+    'sin servidor' => ['PRIVACY_POLICY_URL', 'https:///privacidad'],
+    'credenciales en la autoridad' => ['PRIVACY_POLICY_URL', 'https://hotelesmarina.example@evil.example/privacidad'],
+    'usuario y clave' => ['PRIVACY_POLICY_URL', 'https://usuario:clave@hotelesmarina.example/'],
+    'barra invertida' => ['PRIVACY_POLICY_URL', 'https://evil.example\@hotelesmarina.example/'],
+    'no ASCII' => ['PRIVACY_POLICY_URL', 'https://hotelesmarína.example/privacidad'],
+    '513 caracteres' => ['PRIVACY_POLICY_URL', 'https://hotelesmarina.example/'.str_repeat('a', 513 - 30)],
+    'salto de linea en el nombre' => ['PRIVACY_CONTROLLER_NAME', "Hoteles Marina\nS. L."],
+    'marca bidireccional en el nombre' => ['PRIVACY_CONTROLLER_NAME', "Hoteles \u{202E}aniraM"],
+    'anchura cero en el nombre' => ['PRIVACY_CONTROLLER_NAME', "Hoteles\u{200B}Marina"],
+    '161 caracteres en el nombre' => ['PRIVACY_CONTROLLER_NAME', str_repeat('a', 161)],
+])->group('RF-KI-09', 'RL-09', 'RF-PD-01');
+
+it('deniega cambiar el aviso de privacidad a cada rol que no es administrador', function (UserRole $rol): void {
+    // Regla dura 18: el `PATCH` es de `admin` con `settings:*`.
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole($rol)))
+        ->patch('/api/v1/settings', ['settings' => ['PRIVACY_CONTROLLER_NAME' => 'Otro responsable']])
+        ->assertStatus(403);
+
+    Api::guest()
+        ->patch('/api/v1/settings', ['settings' => ['PRIVACY_POLICY_URL' => 'https://evil.example/']])
+        ->assertStatus(401);
+
+    expect(DB::table('installation_settings')->whereIn('key', ['PRIVACY_CONTROLLER_NAME', 'PRIVACY_POLICY_URL'])->exists())->toBeFalse();
+})->with([
+    'rrhh' => [UserRole::RRHH],
+    'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
+    'auditor' => [UserRole::AUDITOR],
+    'empleado' => [UserRole::EMPLEADO],
+])->group('RF-KI-09', 'RL-09', 'RS-04', 'RQ-07');

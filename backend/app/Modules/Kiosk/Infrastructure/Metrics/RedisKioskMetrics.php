@@ -53,6 +53,10 @@ final readonly class RedisKioskMetrics implements KioskMetrics
      */
     public const string BATTERY_LEVEL = self::KEY_PREFIX.'kiosk_battery_level';
 
+    public const string QUEUE_STORAGE_DEGRADED = self::KEY_PREFIX.'kiosk_queue_storage_degraded';
+
+    public const string UNREPORTED_DISCARDS = self::KEY_PREFIX.'kiosk_unreported_discards';
+
     /**
      * `kiosk_pairing_total{result,reason}` (RF-PD-06, doc 02 §8.2).
      *
@@ -73,15 +77,30 @@ final readonly class RedisKioskMetrics implements KioskMetrics
     public function heartbeat(
         string $deviceUuid,
         int $seenAtUnixSeconds,
-        int $pendingQueueSize,
+        ?int $pendingQueueSize,
         ?int $batteryLevel = null,
+        bool $queueStorageDegraded = false,
+        int $unreportedDiscards = 0,
     ): void {
         try {
             $connection = $this->redis->connection();
             $label = 'device='.$deviceUuid;
 
             $connection->command('HSET', [self::LAST_SEEN, $label, $seenAtUnixSeconds]);
-            $connection->command('HSET', [self::QUEUE_SIZE, $label, $pendingQueueSize]);
+            if ($pendingQueueSize === null) {
+                // ADR-047, F12: un tamano DESCONOCIDO retira la serie de este
+                // quiosco. Dejar el ultimo valor —quiza un cero— apagaria
+                // `ColaOfflineSinVaciar` justo cuando hay fichajes que no se ven;
+                // la falta de serie la cubre `kiosk_queue_storage_degraded`.
+                $connection->command('HDEL', [self::QUEUE_SIZE, $label]);
+            } else {
+                $connection->command('HSET', [self::QUEUE_SIZE, $label, $pendingQueueSize]);
+            }
+
+            // Siempre, tambien a cero: la serie tiene que BAJAR en cuanto la
+            // tablet vuelve a IndexedDB o una PWA anterior no declara nada.
+            $connection->command('HSET', [self::QUEUE_STORAGE_DEGRADED, $label, $queueStorageDegraded ? 1 : 0]);
+            $connection->command('HSET', [self::UNREPORTED_DISCARDS, $label, $unreportedDiscards]);
 
             if ($batteryLevel !== null) {
                 // **Sin `else`, y esa es la decision**: una tablet cuyo navegador

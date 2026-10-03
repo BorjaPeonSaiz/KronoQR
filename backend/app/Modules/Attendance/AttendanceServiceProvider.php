@@ -10,6 +10,8 @@ use App\Modules\Attendance\Application\Port\AnomalyMetrics;
 use App\Modules\Attendance\Application\Port\CorrectionMetrics;
 use App\Modules\Attendance\Application\Port\CredentialScans;
 use App\Modules\Attendance\Application\Port\DailyTotalsProjection;
+use App\Modules\Attendance\Application\Port\DiscardedScanReportLog;
+use App\Modules\Attendance\Application\Port\DiscardedScans;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
 use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
@@ -22,8 +24,11 @@ use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ShiftCorrectionLedger;
 use App\Modules\Attendance\Application\Port\ShiftEntryHistory;
 use App\Modules\Attendance\Application\Port\ShiftEntrySubject;
+use App\Modules\Attendance\Application\Port\WithdrawnCredentialScans;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
+use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
+use App\Modules\Attendance\Application\UseCase\ScanRegistration;
 use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Http\Policy\ScanPolicy;
 use App\Modules\Attendance\Http\Policy\ShiftEntryPolicy;
@@ -37,7 +42,10 @@ use App\Modules\Attendance\Infrastructure\Metrics\RedisScanMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileIncidentDetectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfilePatternDetectionMetrics;
 use App\Modules\Attendance\Infrastructure\Metrics\TextfileProjectionMetrics;
+use App\Modules\Attendance\Infrastructure\Persistence\DatabaseDiscardedScanReportLog;
+use App\Modules\Attendance\Infrastructure\Persistence\DatabaseDiscardedScans;
 use App\Modules\Attendance\Infrastructure\Persistence\DatabaseShiftCorrectionLedger;
+use App\Modules\Attendance\Infrastructure\Persistence\DatabaseWithdrawnCredentialScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentAnomalousPatternHistory;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentCredentialScans;
 use App\Modules\Attendance\Infrastructure\Persistence\EloquentFlaggedScans;
@@ -92,6 +100,10 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(ScanLog::class, EloquentScanLog::class);
         $this->app->bind(EventPublisher::class, LaravelEventBus::class);
 
+        // RN-21: el lote depende del contrato y no de la clase final, para que
+        // la regla del orquestador se pruebe sin base de datos.
+        $this->app->bind(ScanRegistration::class, RegisterScanHandler::class);
+
         // Correcciones (tarea 1.15). Las dos las sirve este mismo modulo:
         // `shift_corrections` es parte del registro horario —se consulta al
         // pintar una jornada y se exporta con el registro legal—, no auditoria
@@ -121,6 +133,14 @@ final class AttendanceServiceProvider extends ServiceProvider
         // RN-19 (ADR-043): los PIN rechazados con dueño y los fichajes que los
         // subsanan, leidos hacia atras por la misma revision diaria.
         $this->app->bind(RejectedPinScans::class, EloquentRejectedPinScans::class);
+
+        // RN-20 y RN-22 (ADR-047): las tarjetas autenticas usadas antes de su
+        // retirada y los avisos de fichaje descartado con dueño, leidos hacia
+        // atras por la misma revision diaria. El de escritura de los avisos es
+        // aparte: el detector no tiene por donde escribir.
+        $this->app->bind(WithdrawnCredentialScans::class, DatabaseWithdrawnCredentialScans::class);
+        $this->app->bind(DiscardedScans::class, DatabaseDiscardedScans::class);
+        $this->app->bind(DiscardedScanReportLog::class, DatabaseDiscardedScanReportLog::class);
 
         // RF-PR-06 y RN-16 (tarea 3.11): los usos de credencial en quiosco sobre
         // los que la deteccion de patrones busca coincidencias sistematicas y
@@ -324,6 +344,16 @@ final class AttendanceServiceProvider extends ServiceProvider
             'scan-pin',
             Config::integer('kiosk.rate_limits.pin_scan_per_device', 10),
             Config::integer('kiosk.rate_limits.pin_scan_per_ip', 60),
+        ));
+
+        // RN-22 (ADR-047, F8): los avisos de fichaje descartado. Zona propia,
+        // que no consume la de los escaneos; 6 por minuto y dispositivo vacian
+        // una lista de 40 en una pasada, y cada aviso paga el suelo de RS-03.
+        RateLimiter::for('scan-discarded', static fn (Request $request): array => KioskRateLimit::of(
+            $request,
+            'scan-discarded',
+            Config::integer('kiosk.rate_limits.discarded_per_device', 6),
+            $perIp,
         ));
     }
 }

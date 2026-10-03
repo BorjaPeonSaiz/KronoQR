@@ -87,19 +87,57 @@ function fourRejections(): array
     ];
 }
 
-it('devuelve exactamente el mismo desenlace en los seis rechazos', function (): void {
+it('devuelve el mismo rechazo en los seis casos y solo atribuye la tarjeta autentica retirada', function (): void {
+    // RS-03 y regla dura 17, reescrita para RN-20 (F3 del dictamen del bloque
+    // 18). Hacia fuera, los seis son el mismo «no»: ninguno resuelve y ninguno
+    // da `employeeUuid()`, tampoco cuando el servidor sabe de quien era la
+    // tarjeta. Hacia dentro, desde la 2.2.0 dos de ellos —la tarjeta revocada y
+    // la de la persona de baja, ambas con FIRMA VALIDA— llevan a su titular para
+    // la fila de `scan_events`; los demas no pueden atribuir nada. La misma
+    // respuesta HTTP la comprueba `Tests\Feature\Attendance\ScanBeforeRevocationTest`.
     $resolver = app(CredentialResolver::class);
+
+    $conTitular = [];
 
     foreach (fourRejections() as $caso => $payload) {
         $resolution = $resolver->resolve($payload);
 
         expect($resolution)->toBeInstanceOf(CredentialResolution::class)
             ->and($resolution->isResolved())->toBeFalse("El caso «{$caso}» no deberia resolverse.")
-            // Lo unico que sale hacia arriba es «no». El empleado no se filtra
-            // ni siquiera cuando el servidor sabe de quien era la tarjeta.
             ->and($resolution->employeeUuid())->toBeNull("El caso «{$caso}» ha filtrado el empleado.");
+
+        $holder = $resolution->holder();
+
+        if ($holder !== null) {
+            $conTitular[$caso] = $holder->withdrawnAt?->format('Y-m-d H:i:s');
+        }
     }
-})->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07');
+
+    // La revocada lleva su `revoked_at`; la de la persona de baja, ninguno: la
+    // tarjeta seguia vigente y el caso de uso compara con la recepcion.
+    expect($conTitular)->toBe([
+        'credencial revocada' => '2026-08-15 06:00:00',
+        'empleado de baja' => null,
+    ]);
+})->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07', 'RN-20');
+
+it('no atribuye una tarjeta real revocada si su firma no verifica', function (): void {
+    // F3: el resolutor busca la credencial aunque la firma falle (para igualar
+    // el trabajo). El titular solo viaja con la firma VERIFICADA: con el token
+    // de una tarjeta real revocada y el ultimo byte de la firma alterado, nadie.
+    $site = WorkforceFixtures::site();
+    $uuid = WorkforceFixtures::employee($site);
+    /** @var int $employeeId */
+    $employeeId = DB::table('employees')->where('uuid', $uuid)->value('id');
+
+    $alterada = Credentials::tampered(Credentials::issueFor($employeeId, revokedReason: 'lost'))->toString();
+
+    $resolution = app(CredentialResolver::class)->resolve($alterada);
+
+    expect($resolution->isResolved())->toBeFalse()
+        ->and($resolution->employeeUuid())->toBeNull()
+        ->and($resolution->holder())->toBeNull();
+})->group('RN-20', 'RS-03', 'RF-QR-02');
 
 it('ejecuta el mismo numero de consultas en todos los rechazos', function (): void {
     // La mitad estructural del tiempo constante. Un `return` temprano que

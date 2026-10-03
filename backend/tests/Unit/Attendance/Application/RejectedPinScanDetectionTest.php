@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Command\DetectAnomaliesCommand;
 use App\Modules\Attendance\Application\Port\AnomalyMetrics;
+use App\Modules\Attendance\Application\Port\DiscardedScans;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
 use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
 use App\Modules\Attendance\Application\Port\OutOfOrderScans;
 use App\Modules\Attendance\Application\Port\RejectedPinScans;
+use App\Modules\Attendance\Application\Port\WithdrawnCredentialScans;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\UseCase\AnomalyScanResult;
 use App\Modules\Attendance\Application\UseCase\DetectAttendanceAnomalies;
@@ -165,6 +167,20 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
             }
         },
         rejectedPinScans: $port,
+        withdrawnCredentialScans: new class implements WithdrawnCredentialScans
+        {
+            public function withdrawnBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array
+            {
+                return [];
+            }
+        },
+        discardedScans: new class implements DiscardedScans
+        {
+            public function attributedBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array
+            {
+                return [];
+            }
+        },
         sites: new class implements InstallationSiteProvider
         {
             public function installationSite(): InstallationSite

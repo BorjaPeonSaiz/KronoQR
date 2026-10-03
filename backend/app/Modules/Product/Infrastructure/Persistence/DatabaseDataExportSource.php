@@ -271,6 +271,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'daily_totals' => self::DAILY_TOTALS,
         'incidents' => self::INCIDENTS,
         'scan_events' => self::SCAN_EVENTS,
+        'discarded_scan_reports' => self::DISCARDED_SCAN_REPORTS,
         'audit_log' => self::AUDIT_LOG,
         'audit_chain_anchors' => self::AUDIT_CHAIN_ANCHORS,
         'users' => self::USERS,
@@ -524,6 +525,25 @@ final readonly class DatabaseDataExportSource implements DataExportSource
           LEFT JOIN employees ce      ON ce.id = sc.claimed_employee_id
           LEFT JOIN shift_entries se  ON se.id = sc.shift_entry_id
          ORDER BY sc.id
+        SQL;
+
+    private const string DISCARDED_SCAN_REPORTS = <<<'SQL'
+        SELECT dr.scan_id::text  AS scan_id,
+               d.uuid::text      AS device_uuid,
+               dr.origin,
+               to_char(dr.occurred_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS occurred_at,
+               to_char(dr.discarded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS discarded_at,
+               to_char(dr.recorded_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS recorded_at,
+               dr.http_status::text AS http_status,
+               dr.problem_type,
+               e.uuid::text      AS owner_employee_uuid,
+               dr.attribution,
+               to_char(dr.credential_issued_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS credential_issued_at,
+               dr.already_recorded::text AS already_recorded
+          FROM discarded_scan_reports dr
+          JOIN devices d         ON d.id = dr.device_id
+          LEFT JOIN employees e  ON e.id = dr.owner_employee_id
+         ORDER BY dr.id
         SQL;
 
     /*

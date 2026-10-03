@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Kiosk\Domain\ValueObject\HeartbeatTelemetry;
+use App\Modules\Kiosk\Domain\ValueObject\QueueStorage;
 
 /*
  * Lo que un quiosco declara de si mismo en cada latido (**RF-PA-07**, tarea
@@ -94,3 +95,27 @@ it('conserva el instante del fichaje mas antiguo de la cola', function (): void 
     expect($telemetry->oldestPendingAt?->format('Y-m-d H:i:s'))->toBe('2026-09-16 05:12:44')
         ->and($telemetry->pendingQueueSize)->toBe(37);
 })->group('RF-PA-07');
+
+it('solo admite una cola de tamano desconocido fuera de IndexedDB', function (): void {
+    // ADR-047: con la cola en disco la tablet siempre sabe cuantos tiene.
+    expect(fn (): HeartbeatTelemetry => new HeartbeatTelemetry(appVersion: '2.2.0', pendingQueueSize: null))
+        ->toThrow(InvalidArgumentException::class);
+
+    $enMemoria = new HeartbeatTelemetry(
+        appVersion: '2.2.0',
+        pendingQueueSize: null,
+        queueStorage: QueueStorage::Memory,
+        unreportedDiscards: 2,
+    );
+
+    expect($enMemoria->pendingQueueSize)->toBeNull()
+        ->and($enMemoria->queueStorage)->toBe(QueueStorage::Memory)
+        ->and($enMemoria->unreportedDiscards)->toBe(2)
+        // Lo que declara sin decirlo una PWA anterior a la 2.2.0.
+        ->and((new HeartbeatTelemetry(appVersion: '2.1.0', pendingQueueSize: 0))->queueStorage)->toBe(QueueStorage::Durable);
+})->group('RF-PA-07', 'RF-KI-04');
+
+it('rechaza un recuento negativo de descartes sin avisar', function (): void {
+    expect(fn (): HeartbeatTelemetry => new HeartbeatTelemetry(appVersion: '2.2.0', pendingQueueSize: 0, unreportedDiscards: -1))
+        ->toThrow(InvalidArgumentException::class);
+})->group('RF-PA-07', 'RN-22');

@@ -14473,6 +14473,8 @@ components:
               - KIOSK_UPDATE_QUIET_MINUTES
               - BASELINE_MANUAL_HOURS_PER_MONTH
               - ATTENDANCE_FUTURE_TOLERANCE_MINUTES
+              - PRIVACY_CONTROLLER_NAME
+              - PRIVACY_POLICY_URL
           additionalProperties:
             $ref: '#/components/schemas/SettingValue'
           examples:

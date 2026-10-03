@@ -46,6 +46,8 @@ return [
             'version' => 'Version',
             'last_seen' => 'Last contact',
             'queue' => 'Queue',
+            // ADR-047: unknown, never zero.
+            'queue_unknown' => '?',
             'battery' => 'Battery',
             'verdict' => 'Verdict',
         ],
@@ -110,6 +112,12 @@ return [
             'battery_low' => 'It has :level % battery left and is NOT charging. It is almost always an unplugged charger '
                 .'or a cable that came loose: plug it in before it dies mid-shift. '
                 .'While it has battery it keeps recording clock-ins normally.',
+            'queue_storage_degraded' => 'Its clock-in queue has fallen back to memory (or has nowhere to be stored): whatever is queued now is lost if the tablet restarts, '
+                .'and whatever was on disk cannot be seen. DO NOT RESTART OR UNPAIR IT: let it reopen its storage and sync, '
+                .'and follow the stuck queue runbook, section 7.',
+            'discards_unreported' => 'It has :discards clock-in(s) the server declared invalid whose report has not arrived yet: '
+                .'nobody will review them until it does. It is usually an outdated app after an update; '
+                .'DO NOT UNPAIR IT and follow the stuck queue runbook, section 8.',
         ],
 
         'fleet_empty' => 'No kiosk is paired yet. Pair the first one from the panel, under "Kiosks", '

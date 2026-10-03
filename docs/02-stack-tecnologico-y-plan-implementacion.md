@@ -785,6 +785,10 @@ scan_processing_duration_seconds                         histogram
 open_shifts_current{site,site_name,department}           gauge
 kiosk_last_seen_seconds{device}                          gauge
 kiosk_offline_queue_size{device}                         gauge
+kiosk_queue_storage_degraded{device}                     gauge
+kiosk_unreported_discards{device}                        gauge
+kiosk_discarded_scans_total{device,attributed}           counter
+scan_batch_items_not_processed_total{device}             counter
 kiosk_battery_level{device}                              gauge
 kiosk_pairing_total{result,reason}                       counter
 kiosk_token_rotations_total{result}                      counter

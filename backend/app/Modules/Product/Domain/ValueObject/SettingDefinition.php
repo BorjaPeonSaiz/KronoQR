@@ -71,6 +71,9 @@ final readonly class SettingDefinition
      */
     public const string LABEL_SEPARATOR = '=';
 
+    /** `https://` y ASCII imprimible sin `\` (0x21-0x5B y 0x5D-0x7E). */
+    public const string HTTPS_URL_PATTERN = '/^https:\/\/[!-\[\]-~]+$/';
+
     /**
      * @param  int|string|list<string>  $default
      * @param  list<string>|null  $allowed
@@ -87,6 +90,13 @@ final readonly class SettingDefinition
         public bool $allowsEmpty,
         public bool $confidential = false,
         public bool $allowsLabels = false,
+        /**
+         * La cadena es una direccion `https` con servidor y sin credenciales en
+         * la autoridad (`PRIVACY_POLICY_URL`, F15 del dictamen del bloque 18).
+         * El patron ya acota los caracteres; esto lo comprueba ademas
+         * `parse_url`, que es lo que de verdad decide como se lee la direccion.
+         */
+        public bool $httpsUrl = false,
     ) {}
 
     /**
@@ -127,6 +137,23 @@ final readonly class SettingDefinition
     ): self {
         return new self(
             SettingType::TEXT, $default, $impact, null, null, $pattern, null, $maximumLength, true, $confidential,
+        );
+    }
+
+    /**
+     * Una direccion **`https`**, opcional (vacia = «sin configurar»), con
+     * nombre de servidor y sin usuario ni contraseña en la autoridad
+     * (`PRIVACY_POLICY_URL`, RF-KI-09, F15 del dictamen del bloque 18).
+     *
+     * Solo ASCII imprimible y sin barra invertida: un dominio internacional va
+     * en punycode, y lo que no se pueda leer igual en el QR y en la pantalla no
+     * entra. El quiosco la enseña como texto y como QR, nunca como enlace.
+     */
+    public static function optionalHttpsUrl(int $maximumLength, SettingImpact $impact): self
+    {
+        return new self(
+            SettingType::TEXT, '', $impact, null, null, self::HTTPS_URL_PATTERN, null, $maximumLength, true,
+            httpsUrl: true,
         );
     }
 
@@ -279,6 +306,10 @@ final readonly class SettingDefinition
             throw InvalidSettingValue::malformed($key, $this->shape());
         }
 
+        if ($this->httpsUrl && ! self::isHttpsUrlWithHost($raw)) {
+            throw InvalidSettingValue::malformed($key, $this->shape());
+        }
+
         $this->assertAllowed($key, $raw);
 
         return $raw;
@@ -382,6 +413,29 @@ final readonly class SettingDefinition
      * y como parametro del mensaje traducido. Quien lo lee en un 422 lo recibe
      * dentro de una frase que si esta en su idioma.
      */
+    /**
+     * `https`, con servidor y sin `usuario:clave@` en la autoridad. El `@` se
+     * mira tambien a mano en la autoridad: `parse_url` solo lo reconoce como
+     * credenciales si la direccion esta bien formada, y una mal formada con
+     * `@` es justo la que engaña a un lector.
+     */
+    private static function isHttpsUrlWithHost(string $url): bool
+    {
+        $parts = parse_url($url);
+
+        if (! is_array($parts)) {
+            return false;
+        }
+
+        $authority = (string) preg_replace('/^https:\/\/([^\/?#]*).*$/s', '$1', $url);
+
+        return ($parts['scheme'] ?? null) === 'https'
+            && ($parts['host'] ?? '') !== ''
+            && ! isset($parts['user'])
+            && ! isset($parts['pass'])
+            && ! str_contains($authority, '@');
+    }
+
     private function shape(): string
     {
         return $this->pattern ?? 'the shape declared by the key';

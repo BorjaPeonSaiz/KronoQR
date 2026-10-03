@@ -29,4 +29,14 @@ interface EmployeeDirectory
      * ajeno a quien esta fichando.
      */
     public function find(string $employeeUuid): ?EmployeeSnapshot;
+
+    /**
+     * El empleado con ese **codigo de empleado**, o `null` si no existe (RN-22).
+     *
+     * Lo usa el aviso de fichaje descartado por PIN para atribuirlo a quien
+     * puede fichar. **Una sola consulta cuya forma no depende de que el codigo
+     * exista** (F5 del dictamen del bloque 18): el aviso rellena hasta el suelo
+     * de tiempo constante y no puede hacer trabajo de mas con un codigo real.
+     */
+    public function findByCode(string $employeeCode): ?EmployeeSnapshot;
 }

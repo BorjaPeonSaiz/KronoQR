@@ -14,9 +14,11 @@ use App\Modules\Identity\Domain\ValueObject\QrPayload;
 use App\Modules\Identity\Domain\ValueObject\QrSigningKey;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
+use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
+use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use Illuminate\Support\Facades\Log;
 use SensitiveParameter;
 
@@ -165,14 +167,21 @@ final readonly class HmacSignatureVerifier implements CredentialResolver
 
         // --- Paso 6: mismo desenlace y mismo tiempo para todo rechazo --------
         if ($reason instanceof CredentialRejectionReason) {
+            // RN-20: con la tarjeta autentica, el titular viaja para la fila
+            // —no para la respuesta—. Sin consulta nueva: todo lo que hace falta
+            // ya esta cargado, y el suelo de abajo iguala el reloj igual.
+            $holder = $this->holderOf($trusted, $credential, $employeeUuid, $employee);
+
             $this->recordRejection($reason, $employeeUuid);
             $this->floor->padTo($startedAt);
 
-            return CredentialResolution::rejected($reason);
+            return $holder instanceof CredentialHolder
+                ? CredentialResolution::rejectedWithHolder($reason, $holder)
+                : CredentialResolution::rejected($reason);
         }
 
         /** @var string $employeeUuid Lo garantiza `rejectionReason()`: sin UUID no se llega aqui. */
-        return CredentialResolution::resolved($employeeUuid);
+        return CredentialResolution::resolved($employeeUuid, $credential?->issuedAt);
     }
 
     /**
@@ -216,6 +225,46 @@ final readonly class HmacSignatureVerifier implements CredentialResolver
         }
 
         return null;
+    }
+
+    /**
+     * El titular de una tarjeta **autentica que ya no vale** (RN-20, ADR-047), o
+     * `null`.
+     *
+     * Solo con la firma verificada y la credencial encontrada, y solo en los dos
+     * casos que la regla nombra:
+     *
+     * - **La credencial esta retirada** (baja, reemision o perdida): el instante
+     *   es `credentials.revoked_at`, que la baja escribe dentro de su propia
+     *   transaccion.
+     * - **La credencial sigue vigente y el titular esta de baja** (la carrera
+     *   con la baja, o un dato anterior a RN-14 en la baja): sin instante; el
+     *   caso de uso compara con la recepcion del escaneo.
+     *
+     * **Una persona suspendida no dispara nada**: no hay instante de suspension
+     * con el que comparar. Como {@see rejectionReason()}, **no consulta nada**.
+     */
+    private function holderOf(
+        bool $trusted,
+        ?Credential $credential,
+        ?string $employeeUuid,
+        ?EmployeeSnapshot $employee,
+    ): ?CredentialHolder {
+        if (! $trusted || ! $credential instanceof Credential || $employeeUuid === null || ! $employee instanceof EmployeeSnapshot) {
+            return null;
+        }
+
+        if ($employee->status === EmploymentStatus::SUSPENDED) {
+            return null;
+        }
+
+        if (! $credential->isActive()) {
+            return CredentialHolder::of($employeeUuid, $credential->issuedAt, $credential->revokedAt);
+        }
+
+        return $employee->status === EmploymentStatus::TERMINATED
+            ? CredentialHolder::of($employeeUuid, $credential->issuedAt, null)
+            : null;
     }
 
     /**

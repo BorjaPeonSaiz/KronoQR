@@ -393,7 +393,7 @@ return [
             'columns' => [
                 'scan_id' => 'Identificador del escaneo, generado por la tablet. Es lo que hace que reenviar un fichaje desde la cola no lo duplique.',
                 'device_uuid' => 'Quiosco en el que ocurrio.',
-                'employee_uuid' => 'Persona reconocida. **Vacio en los intentos rechazados**: si la tarjeta no valia, no hay persona a la que atribuirlos.',
+                'employee_uuid' => 'Persona reconocida. **Vacio en los intentos rechazados** de una tarjeta que no se reconoce: no hay persona a la que atribuirlos. Desde la 2.2.0, una tarjeta autentica ya retirada —por baja, reemision o perdida— si lleva a su titular, aunque el fichaje se rechazara (RN-20).',
                 'occurred_at' => 'Cuando ocurrio de verdad, segun el quiosco (UTC). Es el momento con valor legal.',
                 'recorded_at' => 'Cuando llego al servidor (UTC). Puede ser horas despues si el quiosco estuvo sin red.',
                 'origin' => 'Por donde entro: tarjeta en el quiosco, PIN de respaldo o sincronizacion de la cola.',
@@ -406,6 +406,24 @@ return [
                 'client_meta' => 'Lo que la tablet informo de si misma en ese momento, en JSON.',
                 'claimed_employee_uuid' => 'En un fichaje por PIN rechazado, la persona a la que correspondia el codigo tecleado, si podia fichar (RN-19). No dice que esa persona fichara ni que se autenticara.',
                 'pin_lockout' => 'En esa misma fila, si el intento abrio o encontro el bloqueo por intentos del PIN.',
+            ],
+        ],
+
+        'discarded_scan_reports' => [
+            'summary' => 'Los fichajes que un quiosco saco de su cola porque el servidor declaro invalida la peticion —tipicamente una aplicacion de la tablet desfasada tras una actualizacion— y que el quiosco aviso (RN-22). **No son fichajes registrados**: si se pudieron atribuir a alguien, la revision diaria abrio una incidencia para que una persona los revise. No incluye el contenido del QR ni el codigo tecleado, que no se guardan.',
+            'columns' => [
+                'scan_id' => 'Identificador del fichaje, generado por la tablet. El mismo que habria tenido en `scan_events.csv`.',
+                'device_uuid' => 'Quiosco que lo descarto.',
+                'origin' => 'Por donde se ficho: tarjeta o PIN.',
+                'occurred_at' => 'Cuando ocurrio el fichaje, segun la tablet (UTC). **No es una hora registrada**.',
+                'discarded_at' => 'Cuando lo descarto la tablet, con su reloj (UTC).',
+                'recorded_at' => 'Cuando llego el aviso al servidor (UTC).',
+                'http_status' => 'El codigo con el que el servidor declaro invalida la peticion original.',
+                'problem_type' => 'El tipo de problema que recibio la tablet, si lo traia.',
+                'owner_employee_uuid' => 'Persona a la que se atribuyo el fichaje, si se pudo: por una tarjeta autentica o por el codigo de alguien que podia fichar. Vacio si no.',
+                'attribution' => 'Como se atribuyo: `credential` (tarjeta), `employee_code` (codigo por PIN) o `none`.',
+                'credential_issued_at' => 'Cuando se emitio la tarjeta que lo atribuyo (UTC). Solo con `credential`.',
+                'already_recorded' => 'Si ese fichaje ya estaba registrado al recibir el aviso. Entonces no abre nada.',
             ],
         ],
 

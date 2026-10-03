@@ -107,6 +107,11 @@ final class SettingsSurface
         // El margen de futuro del alta y la correccion manuales (F1). Con los
         // demas umbrales de fichaje: es uno mas de la misma familia.
         'ATTENDANCE_FUTURE_TOLERANCE_MINUTES' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
+        // El aviso de privacidad del quiosco (RF-KI-09, RL-09, 2.2.0). Con la
+        // marca y no con los umbrales: se publica por la misma `GET /branding`
+        // y es lo que el quiosco enseña en pantalla, como el nombre y el logo.
+        'PRIVACY_CONTROLLER_NAME' => ['view' => 'BrandingView.vue', 'route' => '/branding'],
+        'PRIVACY_POLICY_URL' => ['view' => 'BrandingView.vue', 'route' => '/branding'],
     ];
 
     /** La pantalla pactada para una clave, o cadena vacia si nadie la ha decidido. */

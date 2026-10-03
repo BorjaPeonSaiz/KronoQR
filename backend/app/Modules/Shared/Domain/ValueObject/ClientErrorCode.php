@@ -42,6 +42,10 @@ final class ClientErrorCode
         'kiosk.clock.skew_detected',
         'kiosk.heartbeat.failed',
         'kiosk.offline.confirm_not_persisted',
+        // ADR-047 (2.2.0): un fichaje sacado de la cola con su aviso pendiente,
+        // y un aviso que no consiguio salir (RN-22). Sin `scan_id`.
+        'kiosk.offline.discard_report_failed',
+        'kiosk.offline.item_discarded',
         'kiosk.offline.item_not_processed',
         'kiosk.offline.malformed_batch_response',
         'kiosk.offline.storage_unavailable',

@@ -113,4 +113,24 @@ interface ScanMetrics
      * adaptador.
      */
     public function scanOriginRecorded(ScanOrigin $origin): void;
+
+    /**
+     * `scan_batch_items_not_processed_total{device}` (RN-21, ADR-047, F11 del
+     * dictamen del bloque 18): un elemento de un lote que el servidor no
+     * consiguio decidir. Detras de el, el resto del lote vuelve aplazado; uno
+     * que falla de forma repetida atasca la cola del quiosco, y esta serie es la
+     * que lo hace visible (`ScanBatchItemNotProcessed`). Los aplazados no
+     * cuentan: no se miraron.
+     */
+    public function batchItemNotProcessed(string $deviceUuid): void;
+
+    /**
+     * `kiosk_discarded_scans_total{device,attributed}` (RN-22, ADR-047): un aviso
+     * de fichaje descartado **nuevo**, por quiosco y por si se pudo atribuir a
+     * alguien. Se cuenta al insertar, no al reenviar (F8 del dictamen del bloque
+     * 18): un quiosco que repite su lista no infla la serie. Sin `scan_id` ni
+     * empleado: un quiosco que descarta cuando los demas no, es la firma de una
+     * PWA desfasada —o de un token robado sembrando avisos—.
+     */
+    public function discardedScanReported(string $deviceUuid, bool $attributed): void;
 }

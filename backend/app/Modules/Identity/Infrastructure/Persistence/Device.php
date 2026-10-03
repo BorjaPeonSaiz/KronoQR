@@ -33,7 +33,9 @@ use Laravel\Sanctum\PersonalAccessToken;
  * @property string|null $token_hash
  * @property string|null $app_version
  * @property Carbon|null $last_seen_at
- * @property int $pending_queue_size
+ * @property int|null $pending_queue_size
+ * @property string $queue_storage
+ * @property int $unreported_discards
  * @property string $status
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()

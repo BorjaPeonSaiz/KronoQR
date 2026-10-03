@@ -78,6 +78,25 @@ enum IncidentType: string
     case RejectedPinScan = 'rejected_pin_scan';
 
     /**
+     * RN-20: **fichaje anterior a la retirada**. Una tarjeta autentica de esta
+     * persona, ya retirada —baja, reemision o perdida— o con su titular de baja,
+     * se uso antes de la retirada y llego despues. Se rechazo como siempre
+     * (RS-03) y quedo atribuida a su titular. Una por persona y jornada, sin
+     * `shift_entry_id`. Se cierra con un alta manual (RN-14 la admite hasta la
+     * fecha de cese) o descartandola con nota. Nada automatico.
+     */
+    case ScanBeforeRevocation = 'scan_before_revocation';
+
+    /**
+     * RN-22: **fichaje descartado por el quiosco**. El servidor declaro invalida
+     * la peticion de un fichaje de esta persona y el quiosco lo aviso por
+     * `POST /api/v1/scan/discarded`. **No se registro**. Una por persona y
+     * jornada, sin `shift_entry_id`. Se cierra con una correccion (RN-13) si
+     * trabajo o descartandola si no.
+     */
+    case DiscardedScan = 'discarded_scan';
+
+    /**
      * Con que urgencia entra en la bandeja.
      *
      * **La decide el tipo y no quien detecta**, que es lo que impide que dos

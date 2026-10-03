@@ -6,23 +6,27 @@ namespace App\Modules\Attendance\Application\UseCase;
 
 use App\Modules\Attendance\Application\Command\DetectAnomaliesCommand;
 use App\Modules\Attendance\Application\Port\AnomalyMetrics;
+use App\Modules\Attendance\Application\Port\DiscardedScans;
 use App\Modules\Attendance\Application\Port\EventPublisher;
 use App\Modules\Attendance\Application\Port\FlaggedScan;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
 use App\Modules\Attendance\Application\Port\IncidentDetectionMetrics;
 use App\Modules\Attendance\Application\Port\OutOfOrderScans;
 use App\Modules\Attendance\Application\Port\RejectedPinScans;
+use App\Modules\Attendance\Application\Port\WithdrawnCredentialScans;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Domain\Event\AttendanceAnomalyDetected;
 use App\Modules\Attendance\Domain\Event\AttendanceReviewCompleted;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\AnomalyDetectionPolicy;
+use App\Modules\Attendance\Domain\Policy\DiscardedScanReviewPolicy;
 use App\Modules\Attendance\Domain\Policy\PinAttemptRecoveryPolicy;
 use App\Modules\Attendance\Domain\Policy\ReviewPolicy;
 use App\Modules\Attendance\Domain\ValueObject\AnomalyType;
 use App\Modules\Attendance\Domain\ValueObject\ClockSkew;
 use App\Modules\Attendance\Domain\ValueObject\DetectedAnomaly;
+use App\Modules\Attendance\Domain\ValueObject\DiscardedScan;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
@@ -54,6 +58,8 @@ use Throwable;
  * | Escaneos marcados para revision | `lookbackDays` | RN-15, leyendo hacia atras `flagged_for_review` |
  * | Fichajes irreconciliables | `lookbackDays` | RN-18, leyendo hacia atras `result = 'rejected_out_of_order'` |
  * | Fichajes por PIN rechazados con dueño sin subsanar | `lookbackDays` (por `recorded_at`) | RN-19, leyendo hacia atras `claimed_employee_id` |
+ * | Tarjetas autenticas usadas antes de su retirada | `lookbackDays` (por `recorded_at`) | RN-20, leyendo hacia atras los rechazos atribuidos y marcados |
+ * | Fichajes descartados por el quiosco con dueño | `lookbackDays` (por `recorded_at`) | RN-22, leyendo hacia atras `discarded_scan_reports` |
  *
  * ## Los umbrales llegan por sus puertos, y son de dos clases
  *
@@ -78,6 +84,10 @@ final readonly class DetectAttendanceAnomalies
         private OutOfOrderScans $outOfOrderScans,
         /** RN-19: los PIN rechazados con dueño y los fichajes que los subsanan. */
         private RejectedPinScans $rejectedPinScans,
+        /** RN-20: las tarjetas autenticas usadas antes de su retirada. */
+        private WithdrawnCredentialScans $withdrawnCredentialScans,
+        /** RN-22: los avisos de fichaje descartado con duenño. */
+        private DiscardedScans $discardedScans,
         private InstallationSiteProvider $sites,
         private OperationalSettingsProvider $settings,
         private CompliancePolicyProvider $compliance,
@@ -121,6 +131,8 @@ final readonly class DetectAttendanceAnomalies
             ...$this->inspectFlaggedScans($command, $policy, $site->id, $timezone, $now),
             ...$this->inspectOutOfOrderScans($command, $site->id, $timezone, $now),
             ...$this->inspectRejectedPinScans($command, $site->id, $timezone, $now),
+            ...$this->inspectWithdrawnCredentialScans($command, $site->id, $timezone, $now),
+            ...$this->inspectDiscardedScans($command, $site->id, $timezone, $now),
         ];
 
         $failures = $this->publishEach($anomalies);
@@ -613,6 +625,158 @@ final readonly class DetectAttendanceAnomalies
                     // Con signo: una cola que drena tarde da positivo; un reloj
                     // adelantado, negativo.
                     'max_sync_delay_seconds' => $group['maxDelay'],
+                ],
+            );
+        }
+
+        return $anomalies;
+    }
+
+    /**
+     * RN-20: las tarjetas **autenticas** usadas antes de su retirada (ADR-047).
+     *
+     * El fichaje ya escribio la fila rechazada, atribuida a su titular y
+     * marcada —solo si su hora real cae entre la emision y la retirada—, y aqui
+     * se lee hacia atras por `recorded_at`, como RN-18 y RN-19. Se agrupa **por
+     * persona y jornada** —la fecha civil del `occurred_at` en la zona del
+     * centro (RN-05)— y sale una incidencia por grupo, sin tramo.
+     *
+     * El `context` lleva el `scan_id` y el instante del primero, cuantos fueron,
+     * el mayor retraso de sincronizacion y `withdrawal`. **Nunca el motivo libre
+     * de la revocacion** (regla dura 21): podria llevar cualquier cosa.
+     *
+     * @return list<DetectedAnomaly>
+     */
+    private function inspectWithdrawnCredentialScans(
+        DetectAnomaliesCommand $command,
+        int $siteId,
+        DateTimeZone $timezone,
+        DateTimeImmutable $now,
+    ): array {
+        $from = $now->modify('-'.$command->lookbackDays.' days');
+
+        /** @var array<string, array{holderUuid: string, workDate: WorkDate, scanId: string, occurredAt: DateTimeImmutable, attempts: int, maxDelay: int, withdrawal: string}> $groups */
+        $groups = [];
+
+        foreach ($this->withdrawnCredentialScans->withdrawnBetween($from, $now) as $scan) {
+            $workDate = WorkDate::fromInstant($scan->occurredAt, $timezone);
+            $key = $scan->holderUuid.'|'.$workDate->isoDate;
+
+            if (isset($groups[$key])) {
+                // El primero se queda: el puerto entrega en orden ascendente.
+                $groups[$key]['attempts']++;
+                $groups[$key]['maxDelay'] = max($groups[$key]['maxDelay'], $scan->syncDelaySeconds());
+
+                continue;
+            }
+
+            $groups[$key] = [
+                'holderUuid' => $scan->holderUuid,
+                'workDate' => $workDate,
+                'scanId' => $scan->scanId,
+                'occurredAt' => $scan->occurredAt,
+                'attempts' => 1,
+                'maxDelay' => $scan->syncDelaySeconds(),
+                'withdrawal' => $scan->withdrawal(),
+            ];
+        }
+
+        $anomalies = [];
+
+        foreach ($groups as $group) {
+            $anomalies[] = new DetectedAnomaly(
+                type: AnomalyType::SCAN_BEFORE_REVOCATION,
+                employeeUuid: $group['holderUuid'],
+                siteId: $siteId,
+                workDate: $group['workDate'],
+                shiftEntryUuid: null,
+                detectedAt: $now,
+                context: [
+                    'scan_id' => $group['scanId'],
+                    'occurred_at' => UtcInstant::of($group['occurredAt']),
+                    'attempts' => $group['attempts'],
+                    // Con signo, como en RN-19.
+                    'max_sync_delay_seconds' => $group['maxDelay'],
+                    'withdrawal' => $group['withdrawal'],
+                ],
+            );
+        }
+
+        return $anomalies;
+    }
+
+    /**
+     * RN-22: los fichajes que el quiosco descarto y aviso, **con dueño**
+     * (ADR-047).
+     *
+     * El puerto ya omite los que estaban registrados al recibirse y los cuyo
+     * `scan_id` exista hoy en `scan_events`. Aqui se quedan solo los que caen en
+     * la **ventana creible** de {@see DiscardedScanReviewPolicy} (F6 del dictamen
+     * del bloque 18) —ni posteriores a la recepcion mas el desfase admitido, ni
+     * anteriores a la emision de la tarjeta o al alta, ni mas antiguos que la
+     * ventana de la instalacion— y se agrupan **por persona y jornada**, como
+     * RN-19: la fecha civil del `occurred_at` en la zona del centro.
+     *
+     * El `context` lleva el primero —`scan_id`, instante, quiosco, via,
+     * respuesta— y cuantos avisos fueron. `problem` es un identificador del
+     * catalogo cerrado de este producto o `other` (F9): nunca el texto que trajo
+     * la tablet. **Nunca el contenido del QR ni el codigo**, que no se guardan.
+     *
+     * @return list<DetectedAnomaly>
+     */
+    private function inspectDiscardedScans(
+        DetectAnomaliesCommand $command,
+        int $siteId,
+        DateTimeZone $timezone,
+        DateTimeImmutable $now,
+    ): array {
+        $from = $now->modify('-'.$command->lookbackDays.' days');
+        $policy = new DiscardedScanReviewPolicy(
+            $this->settings->forSite($siteId)->maximumClockSkewMinutes * 60,
+            $command->discardReviewWindowDays,
+        );
+
+        /** @var array<string, array{first: DiscardedScan, workDate: WorkDate, reports: int}> $groups */
+        $groups = [];
+
+        foreach ($this->discardedScans->attributedBetween($from, $now) as $scan) {
+            if (! $policy->opensIncident($scan, $timezone)) {
+                continue;
+            }
+
+            $workDate = WorkDate::fromInstant($scan->occurredAt, $timezone);
+            $key = $scan->ownerUuid.'|'.$workDate->isoDate;
+
+            if (isset($groups[$key])) {
+                $groups[$key]['reports']++;
+
+                continue;
+            }
+
+            $groups[$key] = ['first' => $scan, 'workDate' => $workDate, 'reports' => 1];
+        }
+
+        $anomalies = [];
+
+        foreach ($groups as $group) {
+            $first = $group['first'];
+
+            $anomalies[] = new DetectedAnomaly(
+                type: AnomalyType::DISCARDED_SCAN,
+                employeeUuid: $first->ownerUuid,
+                siteId: $siteId,
+                workDate: $group['workDate'],
+                shiftEntryUuid: null,
+                detectedAt: $now,
+                context: [
+                    'scan_id' => $first->scanId,
+                    'occurred_at' => UtcInstant::of($first->occurredAt),
+                    'device_uuid' => $first->deviceUuid,
+                    'origin' => $first->origin->value,
+                    'http_status' => $first->httpStatus,
+                    'problem' => $first->problem(),
+                    'attribution' => $first->attribution->value,
+                    'reports' => $group['reports'],
                 ],
             );
         }

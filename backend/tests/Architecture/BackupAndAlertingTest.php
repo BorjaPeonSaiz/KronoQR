@@ -61,7 +61,9 @@ function exigeProcedimientoEnCadaAlerta(array $reglas): void
         expect($regla['annotations'] ?? [])->toHaveKeys(['summary', 'description', 'runbook_url'], $nombre.' no explica que hacer.');
 
         $runbook = $regla['annotations']['runbook_url'] ?? '';
-        expect(is_file(Repo::file($runbook)))->toBeTrue(
+        // El ancla (`#7-almacenamiento-...`) apunta a una seccion del runbook,
+        // no a otro fichero: se comprueba el fichero (ADR-047, 2.2.0).
+        expect(is_file(Repo::file((string) strtok($runbook, '#'))))->toBeTrue(
             $nombre.' apunta al runbook "'.$runbook.'", que no existe. Escribelo antes de crear la alerta.'
         );
     }

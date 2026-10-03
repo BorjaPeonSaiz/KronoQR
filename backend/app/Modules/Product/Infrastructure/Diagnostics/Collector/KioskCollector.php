@@ -68,6 +68,8 @@ final readonly class KioskCollector implements DiagnosticsCollector
         'app_version',
         'last_seen_at',
         'pending_queue_size',
+        'queue_storage',
+        'unreported_discards',
         'oldest_pending_at',
         'battery_level',
         'battery_charging',
@@ -98,6 +100,8 @@ final readonly class KioskCollector implements DiagnosticsCollector
                 'd.app_version',
                 'd.last_seen_at',
                 'd.pending_queue_size',
+                'd.queue_storage',
+                'd.unreported_discards',
                 'd.oldest_pending_at',
                 'd.battery_level',
                 'd.battery_charging',
@@ -147,7 +151,15 @@ final readonly class KioskCollector implements DiagnosticsCollector
             'status' => $allowed['status'],
             'app_version' => $allowed['app_version'],
             'last_seen_at' => UtcInstant::fromDatabase($allowed['last_seen_at']),
-            'pending_queue_size' => self::boundedInteger($allowed['pending_queue_size'], PHP_INT_MAX) ?? 0,
+            // ADR-047: `null` = desconocido —la cola de la tablet cayo a
+            // memoria— y NUNCA se convierte en cero en el paquete.
+            'pending_queue_size' => self::boundedInteger($allowed['pending_queue_size'], PHP_INT_MAX),
+            'queue_storage' => \in_array($allowed['queue_storage'], ['durable', 'memory', 'unavailable'], true)
+                ? $allowed['queue_storage']
+                : 'durable',
+            // Solo el recuento de descartes sin avisar (RN-22): ni `scan_id` ni
+            // persona.
+            'unreported_discards' => self::boundedInteger($allowed['unreported_discards'], PHP_INT_MAX) ?? 0,
             'oldest_pending_at' => UtcInstant::fromDatabase($allowed['oldest_pending_at']),
             'battery_level' => self::boundedInteger($allowed['battery_level'], 100),
             'battery_charging' => self::nullableBoolean($allowed['battery_charging']),

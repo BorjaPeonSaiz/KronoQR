@@ -7,6 +7,7 @@ use App\Modules\Kiosk\Domain\ValueObject\KioskHealthReason;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthRow;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthVerdict;
+use App\Modules\Kiosk\Domain\ValueObject\QueueStorage;
 
 /*
  * El veredicto de un quiosco, juzgado directamente sobre la clase que lo decide
@@ -158,3 +159,85 @@ it('nombra una sola causa, la de mayor prioridad, cuando se dan todas a la vez',
     'atrasado, 121 s' => ['2026-09-16 11:57:59', KioskHealthReason::Late],
     'al dia: manda la bateria sobre la cola' => ['2026-09-16 11:59:30', KioskHealthReason::BatteryLow],
 ])->group('RF-PA-07');
+
+// --- ADR-047: la cola fuera de IndexedDB y los descartes sin avisar ---------
+
+function quioscoConColaEn(
+    string $lastSeenAt,
+    QueueStorage $storage,
+    ?int $pendingQueueSize,
+    int $unreportedDiscards = 0,
+    ?int $batteryLevel = null,
+    ?bool $batteryCharging = null,
+): DeviceSummary {
+    return new DeviceSummary(
+        id: 1,
+        uuid: '0199a1f0-9c3d-7a21-9c1e-5f2b7d4e8a01',
+        name: 'Recepcion',
+        status: 'active',
+        appVersion: '2.2.0',
+        lastSeenAt: new DateTimeImmutable($lastSeenAt, new DateTimeZone('UTC')),
+        pendingQueueSize: $pendingQueueSize,
+        pairedAt: new DateTimeImmutable('2026-09-16 08:00:00', new DateTimeZone('UTC')),
+        batteryLevel: $batteryLevel,
+        batteryCharging: $batteryCharging,
+        queueStorage: $storage,
+        unreportedDiscards: $unreportedDiscards,
+    );
+}
+
+it('marca como fallo la cola que cayo a memoria, con su tamano desconocido y no cero', function (QueueStorage $storage): void {
+    $row = KioskHealthRow::of(
+        quioscoConColaEn('2026-09-16 11:59:30', $storage, null),
+        instanteDelJuicio(),
+        umbralesDeFabrica(),
+    );
+
+    expect($row->verdict)->toBe(KioskHealthVerdict::Failure)
+        ->and($row->reason)->toBe(KioskHealthReason::QueueStorageDegraded)
+        ->and($row->pendingQueueSize)->toBeNull();
+})->with([
+    'en memoria' => [QueueStorage::Memory],
+    'sin donde guardar' => [QueueStorage::Unavailable],
+])->group('RF-PA-07', 'RF-KI-04');
+
+it('avisa por los descartes sin avisar de un quiosco al dia', function (): void {
+    $row = KioskHealthRow::of(
+        quioscoConColaEn('2026-09-16 11:59:30', QueueStorage::Durable, 0, unreportedDiscards: 1),
+        instanteDelJuicio(),
+        umbralesDeFabrica(),
+    );
+
+    expect($row->verdict)->toBe(KioskHealthVerdict::Warning)
+        ->and($row->reason)->toBe(KioskHealthReason::DiscardsUnreported);
+})->group('RF-PA-07', 'RN-22');
+
+it('respeta el orden del contrato con las causas nuevas dandose a la vez', function (
+    string $lastSeenAt,
+    QueueStorage $storage,
+    KioskHealthReason $reason,
+): void {
+    // `DeviceHealth.reason`: revoked, never_seen, awaiting_first_heartbeat,
+    // silent, queue_storage_degraded, late, discards_unreported, battery_low,
+    // queue_pending, beating. El quiosco arrastra SIEMPRE descartes, bateria baja
+    // descargandose y cola; cambian el latido y el almacenamiento.
+    $row = KioskHealthRow::of(
+        quioscoConColaEn(
+            $lastSeenAt,
+            $storage,
+            $storage === QueueStorage::Durable ? 9 : null,
+            unreportedDiscards: 3,
+            batteryLevel: 4,
+            batteryCharging: false,
+        ),
+        instanteDelJuicio(),
+        umbralesDeFabrica(),
+    );
+
+    expect($row->reason)->toBe($reason);
+})->with([
+    'callado manda sobre la cola en memoria' => ['2026-09-16 09:00:00', QueueStorage::Memory, KioskHealthReason::Silent],
+    'la cola en memoria manda sobre el retraso' => ['2026-09-16 11:57:59', QueueStorage::Memory, KioskHealthReason::QueueStorageDegraded],
+    'el retraso manda sobre los descartes' => ['2026-09-16 11:57:59', QueueStorage::Durable, KioskHealthReason::Late],
+    'los descartes mandan sobre la bateria' => ['2026-09-16 11:59:30', QueueStorage::Durable, KioskHealthReason::DiscardsUnreported],
+])->group('RF-PA-07', 'RF-KI-04', 'RN-22');

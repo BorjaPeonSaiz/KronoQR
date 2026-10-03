@@ -23,8 +23,22 @@ use InvalidArgumentException;
  */
 final readonly class DetectAnomaliesCommand
 {
-    public function __construct(public int $lookbackDays)
-    {
+    /**
+     * @param  int  $discardReviewWindowDays  RN-22 (F6 del dictamen del bloque 18): cuantos
+     *                                        dias hacia atras desde su recepcion puede
+     *                                        caer un fichaje descartado para abrir
+     *                                        incidencia. Sale de
+     *                                        `config/attendance.php`; no es un ajuste
+     *                                        del perfil de cumplimiento.
+     */
+    public function __construct(
+        public int $lookbackDays,
+        public int $discardReviewWindowDays = 31,
+    ) {
+        if ($discardReviewWindowDays < 1) {
+            throw new InvalidArgumentException('La ventana de revision de los fichajes descartados es de al menos un dia.');
+        }
+
         if ($lookbackDays < 1) {
             throw new InvalidArgumentException(
                 'La ventana de deteccion es de al menos un dia, y ha llegado '.$lookbackDays.'. '

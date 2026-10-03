@@ -37,13 +37,16 @@ final readonly class KioskHealthRow
         public ?DateTimeImmutable $lastSeenAt,
         /** Segundos desde el ultimo latido; `null` si no ha latido nunca. */
         public ?int $secondsSinceLastSeen,
-        public int $pendingQueueSize,
+        /** `null` = desconocido (ADR-047): nunca se convierte en cero. */
+        public ?int $pendingQueueSize,
         public KioskHealthVerdict $verdict,
         public KioskHealthReason $reason,
         /** Nivel de bateria declarado en el ultimo latido; `null` si no lo informa. */
         public ?int $batteryLevel = null,
         /** Si estaba enchufada; `null` si no lo informa. */
         public ?bool $batteryCharging = null,
+        public QueueStorage $queueStorage = QueueStorage::Durable,
+        public int $unreportedDiscards = 0,
     ) {}
 
     /**
@@ -94,6 +97,8 @@ final readonly class KioskHealthRow
             reason: $reason,
             batteryLevel: $device->batteryLevel,
             batteryCharging: $device->batteryCharging,
+            queueStorage: $device->queueStorage,
+            unreportedDiscards: $device->unreportedDiscards,
         );
     }
 
@@ -111,26 +116,59 @@ final readonly class KioskHealthRow
         }
 
         if ($elapsed === null) {
-            $sincePaired = self::elapsed($device->pairedAt, $now);
-
-            return $sincePaired !== null && $sincePaired <= $thresholds->silentAfterSeconds
-                ? [KioskHealthVerdict::Warning, KioskHealthReason::AwaitingFirstHeartbeat]
-                : [KioskHealthVerdict::Failure, KioskHealthReason::NeverSeen];
+            return self::judgeUnseen($device, $now, $thresholds);
         }
 
+        return self::judgeSeen($device, $elapsed, $thresholds);
+    }
+
+    /**
+     * Sin ningun latido: recien vinculado —dentro de su plazo de gracia— o una
+     * tablet que no llego a arrancar.
+     *
+     * @return array{KioskHealthVerdict, KioskHealthReason}
+     */
+    private static function judgeUnseen(DeviceSummary $device, DateTimeImmutable $now, KioskHealthThresholds $thresholds): array
+    {
+        $sincePaired = self::elapsed($device->pairedAt, $now);
+
+        return $sincePaired !== null && $sincePaired <= $thresholds->silentAfterSeconds
+            ? [KioskHealthVerdict::Warning, KioskHealthReason::AwaitingFirstHeartbeat]
+            : [KioskHealthVerdict::Failure, KioskHealthReason::NeverSeen];
+    }
+
+    /**
+     * Con latido: el resto de la escala, de lo mas grave a lo menos (ver
+     * `DeviceHealth.reason` en el contrato).
+     *
+     * @return array{KioskHealthVerdict, KioskHealthReason}
+     */
+    private static function judgeSeen(DeviceSummary $device, int $elapsed, KioskHealthThresholds $thresholds): array
+    {
         if ($elapsed > $thresholds->silentAfterSeconds) {
             return [KioskHealthVerdict::Failure, KioskHealthReason::Silent];
+        }
+
+        // ADR-047: fallo, porque lo que se encola ahora se pierde al reiniciar
+        // la tablet. Detras del silencio y delante del retraso.
+        if (! $device->queueStorage->isDurable()) {
+            return [KioskHealthVerdict::Failure, KioskHealthReason::QueueStorageDegraded];
         }
 
         if ($elapsed > $thresholds->freshWithinSeconds) {
             return [KioskHealthVerdict::Warning, KioskHealthReason::Late];
         }
 
+        // RN-22: fichajes que nadie revisara hasta que su aviso salga.
+        if ($device->unreportedDiscards > 0) {
+            return [KioskHealthVerdict::Warning, KioskHealthReason::DiscardsUnreported];
+        }
+
         if (self::batteryIsLow($device, $thresholds)) {
             return [KioskHealthVerdict::Warning, KioskHealthReason::BatteryLow];
         }
 
-        if ($device->pendingQueueSize > 0) {
+        if (($device->pendingQueueSize ?? 0) > 0) {
             return [KioskHealthVerdict::Warning, KioskHealthReason::QueuePending];
         }
 

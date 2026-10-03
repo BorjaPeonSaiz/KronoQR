@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Infrastructure\Persistence;
 
 use App\Modules\Attendance\Application\Port\FlaggedScan;
 use App\Modules\Attendance\Application\Port\FlaggedScans;
+use App\Modules\Attendance\Application\Port\ScanResult;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 
@@ -36,6 +37,16 @@ final readonly class EloquentFlaggedScans implements FlaggedScans
             ->join('employees', 'employees.id', '=', 'scan_events.employee_id')
             ->leftJoin('shift_entries', 'shift_entries.id', '=', 'scan_events.shift_entry_id')
             ->where('scan_events.flagged_for_review', true)
+            // RN-20 (2.2.0): un rechazo de tarjeta autentica retirada tambien
+            // nace marcado y con titular, y su desfase puede ser enorme —viene
+            // de una cola que drena tarde—. Su hallazgo es otro
+            // (`scan_before_revocation`) y no puede abrir `clock_skew`: aqui
+            // solo entran los fichajes, nunca los rechazos de credencial.
+            ->whereNotIn('scan_events.result', [
+                ScanResult::REJECTED_UNKNOWN->value,
+                ScanResult::REJECTED_REVOKED->value,
+                ScanResult::REJECTED_SIGNATURE->value,
+            ])
             ->whereBetween('scan_events.occurred_at', [
                 $from->format('Y-m-d H:i:s.uP'),
                 $to->format('Y-m-d H:i:s.uP'),

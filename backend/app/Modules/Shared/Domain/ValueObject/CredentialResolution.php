@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Domain\ValueObject;
 
+use DateTimeImmutable;
 use InvalidArgumentException;
 
 /**
@@ -26,18 +27,20 @@ final readonly class CredentialResolution
         private ?string $employeeUuid,
         private ?CredentialRejectionReason $rejectionReason,
         private ?PinClaim $pinClaim = null,
+        private ?CredentialHolder $holder = null,
+        private ?DateTimeImmutable $issuedAt = null,
     ) {}
 
     /**
      * La credencial es valida, esta vigente y apunta a este empleado.
      */
-    public static function resolved(string $employeeUuid): self
+    public static function resolved(string $employeeUuid, ?DateTimeImmutable $issuedAt = null): self
     {
         if ($employeeUuid === '') {
             throw new InvalidArgumentException('Una credencial resuelta necesita el UUID del empleado.');
         }
 
-        return new self($employeeUuid, null);
+        return new self($employeeUuid, null, issuedAt: $issuedAt);
     }
 
     /**
@@ -59,6 +62,18 @@ final readonly class CredentialResolution
     public static function rejectedWithPinClaim(PinClaim $claim): self
     {
         return new self(null, CredentialRejectionReason::UNKNOWN, $claim);
+    }
+
+    /**
+     * Rechazo de una tarjeta **autentica** que ya no vale —credencial retirada o
+     * titular de baja— (RN-20, ADR-047). **Hacia fuera es el mismo rechazo** que
+     * {@see rejected()}: sin `employeeUuid()` y con el mismo motivo. El titular
+     * solo lo lee el caso de uso para atribuir la fila de `scan_events` y
+     * decidir si pide revision; nunca sube a la respuesta.
+     */
+    public static function rejectedWithHolder(CredentialRejectionReason $reason, CredentialHolder $holder): self
+    {
+        return new self(null, $reason, holder: $holder);
     }
 
     /**
@@ -93,5 +108,24 @@ final readonly class CredentialResolution
     public function pinClaim(): ?PinClaim
     {
         return $this->pinClaim;
+    }
+
+    /**
+     * El titular de una tarjeta autentica rechazada (RN-20), o `null`. Nunca
+     * viaja a una respuesta.
+     */
+    public function holder(): ?CredentialHolder
+    {
+        return $this->holder;
+    }
+
+    /**
+     * Emision de la credencial que resolvio (`credentials.issued_at`), o `null`
+     * si quien resolvio no la conoce. La usa el aviso de fichaje descartado
+     * (RN-22) como cota inferior de su revision; nunca viaja a una respuesta.
+     */
+    public function issuedAt(): ?DateTimeImmutable
+    {
+        return $this->issuedAt;
     }
 }

@@ -8,6 +8,7 @@ use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Shared\Application\Port\BrandingProvider;
 use App\Modules\Shared\Domain\ValueObject\Branding;
+use App\Modules\Shared\Domain\ValueObject\PrivacyNotice;
 
 /**
  * La marca de la instalacion, resuelta desde `installation_settings`
@@ -77,6 +78,18 @@ final class DbBrandingProvider implements BrandingProvider
             applicationName: $resolved->text(SettingKey::BRANDING_APP_NAME),
             logoPath: $logoPath === '' ? null : $logoPath,
             accentColor: $resolved->text(SettingKey::BRANDING_ACCENT_COLOR),
+            // RF-KI-09: vacio = «sin configurar» = la redaccion generica.
+            privacyNotice: new PrivacyNotice(
+                controllerName: self::configured($resolved->text(SettingKey::PRIVACY_CONTROLLER_NAME)),
+                policyUrl: self::configured($resolved->text(SettingKey::PRIVACY_POLICY_URL)),
+            ),
         );
+    }
+
+    private static function configured(string $value): ?string
+    {
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : $trimmed;
     }
 }

@@ -125,8 +125,13 @@ final class DataExportCatalog
      * `claimed_employee_uuid` y `pin_lockout`, a quien correspondia el codigo
      * de un fichaje por PIN rechazado. Dos columnas mas son un cambio de forma
      * por el mismo motivo.
+     *
+     * **`5` desde RN-22** (ADR-047, 2.2.0): el ZIP gana
+     * `discarded_scan_reports.csv`, los avisos de fichajes que un quiosco saco
+     * de su cola porque el servidor declaro invalida la peticion. Un fichero
+     * nuevo es un cambio de forma.
      */
-    public const string SCHEMA_VERSION = '4';
+    public const string SCHEMA_VERSION = '5';
 
     /**
      * Los conjuntos de datos que van al ZIP, **en el orden en que se escriben**.
@@ -319,6 +324,24 @@ final class DataExportCatalog
                 // RN-19 (ADR-043): el dueño del codigo por su UUID, nunca el `id`.
                 'claimed_employee_uuid',
                 'pin_lockout',
+            ]),
+
+            // RN-22 (ADR-047): los avisos de fichaje descartado. **Sin el
+            // contenido del QR ni el codigo tecleado**, que no se guardan: solo
+            // el resultado de atribuirlos.
+            ExportedDataset::csv('discarded_scan_reports', [
+                'scan_id',
+                'device_uuid',
+                'origin',
+                'occurred_at',
+                'discarded_at',
+                'recorded_at',
+                'http_status',
+                'problem_type',
+                'owner_employee_uuid',
+                'attribution',
+                'credential_issued_at',
+                'already_recorded',
             ]),
 
             // --- Las evidencias -----------------------------------------------

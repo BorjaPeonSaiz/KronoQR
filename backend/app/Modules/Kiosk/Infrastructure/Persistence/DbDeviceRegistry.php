@@ -7,6 +7,7 @@ namespace App\Modules\Kiosk\Infrastructure\Persistence;
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
 use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
 use App\Modules\Kiosk\Domain\ValueObject\ProvisionedDevice;
+use App\Modules\Kiosk\Domain\ValueObject\QueueStorage;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\QueryException;
@@ -84,6 +85,10 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
                 'oldest_pending_at' => null,
                 'battery_level' => null,
                 'battery_charging' => null,
+                // ADR-047: lo mismo con el estado de la cola de la tablet
+                // anterior.
+                'queue_storage' => QueueStorage::Durable->value,
+                'unreported_discards' => 0,
                 'updated_at' => $this->timestamp($now),
             ]);
 
@@ -194,7 +199,7 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
     {
         return [
             'id', 'uuid', 'name', 'status', 'app_version', 'last_seen_at', 'pending_queue_size', 'paired_at',
-            'oldest_pending_at', 'battery_level', 'battery_charging',
+            'oldest_pending_at', 'battery_level', 'battery_charging', 'queue_storage', 'unreported_discards',
         ];
     }
 
@@ -208,11 +213,13 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
          *     status: string,
          *     app_version: string|null,
          *     last_seen_at: string|null,
-         *     pending_queue_size: int|string,
+         *     pending_queue_size: int|string|null,
          *     paired_at: string|null,
          *     oldest_pending_at: string|null,
          *     battery_level: int|string|null,
          *     battery_charging: bool|null,
+         *     queue_storage: string,
+         *     unreported_discards: int|string,
          * } $row
          */
         return new DeviceSummary(
@@ -222,13 +229,16 @@ final readonly class DbDeviceRegistry implements DeviceRegistry
             status: $row->status === self::ACTIVE ? self::ACTIVE : self::REVOKED,
             appVersion: $row->app_version,
             lastSeenAt: $this->instant($row->last_seen_at),
-            pendingQueueSize: (int) $row->pending_queue_size,
+            // `null` se conserva: es «desconocido» (ADR-047), nunca cero.
+            pendingQueueSize: $row->pending_queue_size === null ? null : (int) $row->pending_queue_size,
             pairedAt: $this->instant($row->paired_at),
             oldestPendingAt: $this->instant($row->oldest_pending_at),
             // `null` se conserva: es «el navegador no informa», que no es cero
             // y no puede convertirse en un aviso de bateria baja.
             batteryLevel: $row->battery_level === null ? null : (int) $row->battery_level,
             batteryCharging: $row->battery_charging,
+            queueStorage: QueueStorage::tryFrom($row->queue_storage) ?? QueueStorage::Durable,
+            unreportedDiscards: (int) $row->unreported_discards,
         );
     }
 

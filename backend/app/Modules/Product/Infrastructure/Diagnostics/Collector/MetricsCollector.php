@@ -116,10 +116,16 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         'http_requests_total',
         'incident_resolution_seconds',
         'installation_setting_changes_total',
+        // ADR-047 (2.2.0): los recuentos de los descartes y el estado de la
+        // cola de cada quiosco. Solo recuentos por dispositivo: el paquete NO
+        // lee la tabla de avisos (RN-22).
+        'kiosk_discarded_scans_total',
         'kiosk_last_seen_seconds',
         'kiosk_offline_queue_size',
         'kiosk_pairing_total',
+        'kiosk_queue_storage_degraded',
         'kiosk_token_rotations_total',
+        'kiosk_unreported_discards',
         'kronoqr_auth_attempts_total',
         'license_limit_exceeded_total',
         'manual_corrections_total',
@@ -128,6 +134,7 @@ final readonly class MetricsCollector implements DiagnosticsCollector
         'queue_job_duration_seconds',
         'queue_jobs_failed_total',
         'report_exports_total',
+        'scan_batch_items_not_processed_total',
         'scan_batch_size',
         'scan_processing_duration_seconds',
         'scans_by_origin_total',

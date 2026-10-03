@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Attendance\Application\Port\CredentialResolver;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
+use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -429,3 +430,62 @@ it('atribuye igual una pausa encolada que una en linea, aunque llegue del reves'
         ->toBe(['auto', 'break_start', 'break_end', 'auto'])
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
 })->group('RF-AT-12', 'RF-AT-07', 'RF-KI-03', 'RN-05');
+
+// --- RN-21: lo que viene detras de un no procesado no lo adelanta (ADR-047) ----
+
+it('aplaza la salida si la entrada no se pudo procesar y las registra en orden al reenviar', function (): void {
+    // El caso de R3-QA-02: la entrada de las 07:00 falla de forma transitoria
+    // —aqui, resolviendo la credencial— y la salida de las 15:00 del mismo lote
+    // NO se procesa. Antes la salida abria un turno y la entrada, al reenviarse,
+    // ya no cabia (RN-18). Con RN-21 la salida vuelve aplazada y el reenvio deja
+    // una jornada correcta.
+    $escenario = escenarioDeLote();
+
+    $real = FakeCredentialResolver::new()->resolving(TARJETA_LOTE, $escenario['employee']);
+    $resolutor = new class($real) implements CredentialResolver
+    {
+        private int $llamadas = 0;
+
+        public function __construct(private readonly CredentialResolver $real) {}
+
+        public function resolve(string $qrPayload): CredentialResolution
+        {
+            if ($this->llamadas++ === 0) {
+                throw new RuntimeException('Fallo transitorio resolviendo la credencial.');
+            }
+
+            return $this->real->resolve($qrPayload);
+        }
+    };
+    app()->instance(CredentialResolver::class, $resolutor);
+
+    $entrada = escaneoEncolado('2026-03-14T07:00:00Z');
+    $salida = escaneoEncolado('2026-03-14T15:00:00Z');
+
+    $primera = sincronizar($escenario, [$salida, $entrada]);
+
+    $primera->assertStatus(207)->assertValidRequest()->assertValidResponse();
+
+    expect($primera->json('results.0.scan_id'))->toBe($entrada['scan_id'])
+        ->and($primera->json('results.0.status'))->toBe(503)
+        ->and($primera->json('results.0.outcome.type'))->toBe('urn:kronoqr:problem:scan-not-processed')
+        ->and($primera->json('results.1.scan_id'))->toBe($salida['scan_id'])
+        ->and($primera->json('results.1.status'))->toBe(503)
+        ->and($primera->json('results.1.outcome.type'))->toBe('urn:kronoqr:problem:scan-held-back')
+        ->and($primera->json('results.1.outcome.title'))->toBe('Escaneo aplazado')
+        // Ni una fila: ninguno de los dos llego a decidirse.
+        ->and(DB::table('scan_events')->count())->toBe(0)
+        ->and(DB::table('shift_entries')->count())->toBe(0);
+
+    $reenvio = sincronizar($escenario, [$salida, $entrada]);
+
+    $reenvio->assertStatus(207)->assertValidResponse();
+
+    expect($reenvio->json('results.0.outcome.action'))->toBe('clock_in')
+        ->and($reenvio->json('results.1.outcome.action'))->toBe('clock_out')
+        ->and($reenvio->json('results.1.outcome.worked_minutes'))->toBe(480)
+        ->and(DB::table('scan_events')->where('result', 'rejected_out_of_order')->count())->toBe(0)
+        ->and(DB::table('shift_entries')->count())->toBe(1)
+        ->and(DB::table('shift_entries')->value('status'))->toBe('closed')
+        ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
+})->group('RN-21', 'RF-KI-04', 'RF-AT-07');

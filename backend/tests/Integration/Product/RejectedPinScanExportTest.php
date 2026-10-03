@@ -60,5 +60,5 @@ it('exporta el dueño del codigo por su UUID y el bloqueo, en el orden del catal
         ->and($row['claimed_employee_uuid'] ?? null)->toBe($scenario['employee'])
         ->and($row['pin_lockout'] ?? null)->toBe('true')
         ->and($row['employee_uuid'] ?? null)->toBeNull()
-        ->and(DataExportCatalog::SCHEMA_VERSION)->toBe('4');
+        ->and(DataExportCatalog::SCHEMA_VERSION)->toBe('5');
 })->group('RN-19', 'RF-PD-14');
