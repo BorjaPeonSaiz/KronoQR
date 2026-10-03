@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. Diseño revisado por `seguridad-cumplimiento` el 3 de octubre de 2026 (aprobado con condiciones H1–H9, incorporadas); revisión de la implementación pendiente dentro del Bloque 19 |
+| **Estado** | Aceptada. Revisada por `seguridad-cumplimiento` el 3 de octubre de 2026 (diseño: aprobado con condiciones H1–H9; implementación: apta con correcciones, todas aplicadas antes de integrar) |
 | **Fecha** | 3 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (Bloque 19 de la 2.2.0, hallazgos PR12, R4-BE-02, R4-PL-01 y R6-PL-08) |
 | **Afecta a** | Precisa [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md) (cómo se cumple «anonimizado por defecto» en el histórico de errores; no cambia la decisión) · `ErrorMessageSanitizer`, `ErrorContextAllowlist`, `RecordErrorEvent`, `ErrorEventsCollector`, `RedactPersonalDataProcessor` · clases nuevas `ErrorVocabulary`, `ErrorTextAllowlist`, `ResanitizeErrorHistory` y `RedactingLogManager` · tabla `error_events` (migración de datos) · reglas duras 16 y 21 |
