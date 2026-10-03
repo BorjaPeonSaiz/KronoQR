@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Product\Domain\ValueObject\ErrorVocabulary;
 use Tests\Support\Product\FrequentPersonNames;
+use Tests\Support\Product\FrequentPersonNameSections;
 
 /*
  * EL VOCABULARIO TECNICO CERRADO (ADR-048, RF-PD-15, RL-19).
@@ -19,11 +20,36 @@ it('no comparte ninguna palabra con los nombres y apellidos frecuentes', functio
     $nombres = FrequentPersonNames::words();
     $choques = array_values(array_filter($nombres, ErrorVocabulary::contains(...)));
 
-    // El conjunto no puede estar vacio: una lista vacia pasaria siempre.
-    expect(count($nombres))->toBeGreaterThan(600)
+    // El conjunto no puede encoger: una lista corta pasaria siempre. 4 133
+    // palabras distintas el 03-10-2026 (H5).
+    expect(count($nombres))->toBeGreaterThan(4100)
         ->and($choques)->toBe([], count($choques).' palabra(s) del vocabulario son nombres o apellidos frecuentes y '
             .'tienen que salir de ErrorVocabulary (ADR-048, sin excepciones): '.implode(', ', $choques));
 })->group('RF-PD-15', 'RL-19');
+
+it('vigila al menos mil palabras distintas de cada lista de Espana', function (string $seccion): void {
+    // H5: mil nombres por sexo y mil apellidos (INE). Con menos, la disjuncion
+    // de arriba demostraria menos de lo que promete la guia.
+    expect(count(FrequentPersonNameSections::words($seccion)))->toBeGreaterThanOrEqual(1000);
+})->with([
+    'nombres de hombre' => ['Espana: nombres de hombre'],
+    'nombres de mujer' => ['Espana: nombres de mujer'],
+    'apellidos' => ['Espana: apellidos'],
+])->group('RF-PD-15', 'RL-19');
+
+it('vigila las nacionalidades habituales en hosteleria que pide el dictamen', function (string $seccion): void {
+    expect(FrequentPersonNameSections::words($seccion))->not->toBeEmpty();
+})->with([
+    'Rumania' => ['Rumania'],
+    'Marruecos' => ['Marruecos'],
+    'Colombia, Venezuela, Ecuador y Peru' => ['Colombia, Venezuela, Ecuador y Peru'],
+    'Ucrania' => ['Ucrania'],
+    'Filipinas' => ['Filipinas'],
+    'Reino Unido' => ['Reino Unido'],
+    'Italia' => ['Italia'],
+    'Portugal' => ['Portugal'],
+    'China' => ['China (romanizados)'],
+])->group('RF-PD-15', 'RL-19');
 
 it('esta ordenada byte a byte y sin repetidos, que es lo que permite buscar por biseccion', function (): void {
     $palabras = ErrorVocabulary::words();
