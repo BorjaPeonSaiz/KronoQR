@@ -240,7 +240,10 @@ Política por tipo de dato, que es la que aplica el sistema:
 | Registro de jornada y `audit_log` | **4 años** | El perfil de cumplimiento del centro (jurisdicción) |
 | Log técnico | **90 días** | Tu instalación |
 | Histórico de errores | **90 días** | Tu instalación |
-| Copias de seguridad | 30 días de serie | Tu instalación (`BACKUP_RETENTION_DAYS`) |
+| Copias de seguridad: cifradas y, desde la 2.2.0, también autenticadas | 30 días de serie | Tu instalación (`BACKUP_RETENTION_DAYS`) |
+| Archivo de WAL (`BACKUP_PATH/wal`): **todos** los cambios de la base, incluidos fichajes, personas y `audit_log`. **Cifrado y autenticado** desde la 2.2.0 | **8 días** de serie | Tu instalación (`BACKUP_WAL_RETENTION_DAYS`). Tiene que ser mayor que el intervalo entre copias físicas (semanal de serie) |
+| Detalle técnico de cada actualización (`/var/log/kronoqr/update-*.detalle.log`): **puede llevar datos personales** | **30 días** de serie | Tu instalación (`KRONOQR_LOG_RETENTION_DAYS`, mínimo 7). Lo borra `update.sh` en cada ejecución, y `doctor.sh` si se ejecuta como root: si pasan meses sin ninguno de los dos, el borrado espera a la siguiente ejecución |
+| Resumen de cada actualización (`update-*.log`), sin datos personales | **90 días** | Tu instalación |
 | Datos de contrato (horas pactadas, tipo de jornada, vigencia) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no los purga |
 | Ausencias (tipo, fechas, nota, versiones y anulaciones) | **Relación laboral + 4 años**, orientativo | **Pendiente de confirmar con tu asesoría laboral.** Hoy **se conservan**: el sistema no las purga. **Contienen dato de salud** |
 | Registro de envíos del resumen semanal (`weekly_summary_deliveries`) | **Sin purga automática** | Guarda recuentos y la cuenta destinataria; **ningún dato de la plantilla** |
@@ -325,7 +328,18 @@ Tener el registro cuatro años implica poder **recuperarlo**. El producto hace
 copia diaria y semanal y verifica que se pueden restaurar, pero:
 
 - **Sácalas del servidor.** Una copia en el mismo disco que la base de datos no
-  es una copia.
+  es una copia. Lo que saques lleva todos los datos personales de la
+  instalación, aunque cifrados: su custodia y su borrado a plazo son tuyos.
+- **Si actualizaste desde la 2.1.0, destruye las copias del WAL que sacaste
+  antes.** Hasta la 2.1.0 el WAL archivado (`BACKUP_PATH/wal`) **no iba
+  cifrado**: las copias que hicieras de esa carpeta en otros soportes contienen
+  datos personales en claro, y el producto no puede alcanzarlas para cifrarlas.
+  Si estuvieron al alcance de personas que no debían verlas, decidir si es una
+  brecha que notificar lo valora tu DPO
+  ([`operacion.md`](operacion.md) §11, notas de la 2.2.0).
+- **Las copias de la 2.1.0** que sigan dentro de su plazo están cifradas pero
+  no autenticadas: restaurarlas exige pedirlo expresamente y queda anotado en
+  el registro de auditoría ([`operacion.md`](operacion.md) §18).
 - **Haz el simulacro trimestral** de restauración
   ([`restaurar-backup.md`](../runbooks/restaurar-backup.md)). Una copia que nunca
   se ha restaurado es una hipótesis.

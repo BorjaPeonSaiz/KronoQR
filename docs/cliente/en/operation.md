@@ -34,6 +34,7 @@ All of this runs on its own in the `scheduler` container. What appears in the
 | 04:30 UTC, daily | Record review: open shifts, rest periods, anomalous working days | Resolve the incidents in the panel |
 | 04:35 UTC, daily | Detection of anomalous credential usage patterns over the kiosk clockings of the last 30 days (§6) | Nothing: the incidents go to the department manager, not to IT |
 | Monday 05:10 UTC | **Retention proposal**: report of what would be purged | Read it once something has expired |
+| Every minute | How long the oldest WAL has gone unarchived is measured, which is the real maximum loss if the server went down now (§10.4, WAL alerts) | Nothing, unless it alerts |
 | Hourly | Credential metrics and clean-up of temporary files | Nothing |
 | Hourly | Expired full data exports are purged (the ZIP is deleted, the record of it stays), along with diagnostic bundles older than 7 days and the leftovers of interrupted generations (§12.2, §13 and §13.6) | Nothing |
 | 04:25 UTC, daily | Expired reports generated in the background are purged: the file is deleted, the record of it stays (§6 and §13) | Nothing |
@@ -415,7 +416,7 @@ is in the message, which is what you have to read.**
 | `3` | **Incompatible prior state. NOTHING written** | `install.sh`: there is already an installation (use `update.sh`). `backup.sh`: there is no backup to verify, or the destination already exists. `restore.sh`: there are still open connections against the database. `update.sh`: already on the target version, or there is no installation to update. `doctor.sh`: **there is no installation to diagnose** on this server — if it is a new one, what you need is `install.sh` |
 | `4` | **Failed and everything done was undone** in that run. Can be retried | `install.sh`: containers, volumes and `.env` returned to their state. `backup.sh`: half-written files swept away, the previous backup intact. `restore.sh`: working database removed, the production one untouched. `update.sh`: pre-update backup restored and **previous version running and verified**. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
 | `5` | **Failed and NOT everything could be undone. Manual intervention required.** The message says exactly what is left and which order removes it | It is the only code that requires a person present. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
-| `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up, check the certificate and the logs. `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `restore.sh`: **the database is restored and in service, but the `system.restored_from_backup` entry in `audit_log` could not be written**; do not restore again, write the entry with the command in the message (`restaurar-backup.md` §6.7, in Spanish) `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`); with the application stopped, in one of the external checks. The message says what to read |
+| `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up, check the certificate and the logs. `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `restore.sh`: **the database is restored and in service, but the `system.restored_from_backup` entry in `audit_log` could not be written**; do not restore again, write the entry with the command in the message (`restaurar-backup.md` §6.7, in Spanish). `restore.sh`, `restore-drill.sh` and `backup.sh verify`, **since 2.2.0, also on integrity**: the `.sha256` is missing, the MAC does not match, the file name is not the one in its header, the authenticated manifest (`.manifest.mac`) is missing or does not match, or the backup is from 2.1.0 and was not explicitly requested; in that case **nothing has been touched** (§18, "…the restore refuses on integrity grounds"). `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`); with the application stopped, in one of the external checks. The message says what to read |
 | `7` | **Security guarantee broken. NOTHING applied.** A database role has more privileges than allowed, or a backup tried to change them (AUD-1). It is not a fault: it is a guarantee the product refuses to bypass | `backup.sh`: the role used to copy is a superuser, or can create roles or databases, or bypass RLS; no backup was written and the failed-backup alert fires. `restore.sh` and `restore-drill.sh --mode database`: the backup changed cluster roles when restored; no database was swapped and the roles were put back as they were. Follow `rotacion-secretos.md` («El rol de las copias es privilegiado») or `restaurar-backup.md` §6.6 (both in Spanish) |
 
 `install.sh` and `update.sh` invoke `product:doctor` in their verification
@@ -759,7 +760,10 @@ stopped running):
 | `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Next year's is missing, from November on | Medium | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check that the `scheduler` is running and that migration `2026_09_29_100000` is applied (`migrate:status` through the `migrate` service, see the runbook §5). It no longer depends on `DB_MIGRATION_USERNAME`: the application asks a database function for the partition |
 | `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Any | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | `backup:verify`, then retry with `backup:run`, both in the `scheduler` container (not `app`) |
 | `CopiaDeSeguridadAusente` | No metric in 30 min | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Check the `scheduler` and that `BACKUP_PATH` is mounted |
-| `ArchivadoDeWalDetenido` | > 30 min without archiving | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Urgent: without space, PostgreSQL ends up stopping entirely |
+| `ArchivadoDeWalDetenido` | The oldest unarchived data is more than 25 min old (`archive_timeout` + 10 min), or there are 3 complete segments unarchived; `for: 3m`. **It does not wait for the nightly backup** | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) §4 (in Spanish) | Urgent: while it lasts, the maximum loss is no longer 15 min and, without space, PostgreSQL ends up stopping entirely. `docker compose logs --tail=100 postgres` gives the cause |
+| `ArchivadoDeWalFallando` | The last archiving attempt failed and has not recovered; `for: 10m` | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) §4 (in Spanish) | Destination not mounted or without permissions, disk full, or `BACKUP_WAL_KEY` missing: archiving never writes unencrypted. The `postgres` log says which |
+| `MedicionDeWalAusente` | The WAL measurement has not been published for more than 5 min; `for: 5m` | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) §4.3 (in Spanish) | Without a measurement you do not know whether the RPO holds: check the `scheduler`, which also makes the backups |
+| `ArchiveTimeoutFueraDeRango` | `archive_timeout` is 0 or more than 900 s; `for: 10m` | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) §4.4 (in Spanish) | Someone has changed the PostgreSQL configuration: put back the package's and recreate `postgres` |
 | `SlotDeReplicacionParado` | ≥ 1 replication slot without a consumer for 15 min | Critical | IT | [`slot-replicacion-parado.md`](../../runbooks/slot-replicacion-parado.md) (in Spanish) | KronoQR uses none: a single one is already anomalous. It retains transaction log and can fill the data disk |
 | `DiscoDeCopiasCasiLleno` | < 20 % free on the backup volume | Medium | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Expand the disk, or lower `BACKUP_RETENTION_DAYS` |
 | `SimulacroDeRestauracionNuncaEjecutado` | None recorded yet | Medium | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | Run it: without it, nobody has checked that the backups actually restore |
@@ -894,7 +898,7 @@ The seven steps and what happens if each one fails:
 | 4 · Migrations | Automatic rollback → `4` | Backup restored, previous version running and verified | Send the report to the vendor before retrying: it says at which intermediate version it stopped |
 | 5 · Start-up and verification | Automatic rollback → `4` | Same as above. **The new version never received traffic**: it is verified without the edge | Same as above |
 | 6 · Rollback | Exits `5` | **Requires a person.** The message distinguishes two cases: only maintenance mode was left on (lift it with `docker compose exec app php artisan up`, **without restoring anything**) or the restore was left half-done (three orders and the path of the backup) | Runbook §5. The kiosks keep queueing meanwhile |
-| 7 · Report | — | The **report** at `BACKUP_PATH/reports/update-<fecha>.log` (uid 1000, `0640`), always. The **detail** (`update-<fecha>.detalle.log`: raw output, **may contain personal data**) is **not there**: it lives only in `/var/log/kronoqr/` (`root:root 0600`, directory `0700`), next to a local copy of the report. The report appears in `reports/` **when the script finishes, not while it runs**; if it cannot be published, the script warns and says it is safe in `/var/log/kronoqr/`. `setpriv` (`util-linux` package) is required | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
+| 7 · Report | — | The **report** at `BACKUP_PATH/reports/update-<fecha>.log` (uid 1000, `0640`), always. The **detail** (`update-<fecha>.detalle.log`: raw output, **may contain personal data**) is **not there**: it lives only in `/var/log/kronoqr/` (`root:root 0600`, directory `0700`), next to a local copy of the report. The report appears in `reports/` **when the script finishes, not while it runs**; if it cannot be published, the script warns and says it is safe in `/var/log/kronoqr/`. `setpriv` (`util-linux` package) is required. **How long they are kept** (since 2.2.0): the detail, **30 days** (`KRONOQR_LOG_RETENTION_DAYS` in the environment of whoever runs the script, minimum 7); the local summary `update-<fecha>.log`, without personal data, **90 days**. `update.sh` deletes them when it starts and `./doctor.sh` does too if you run it with `sudo`; if you neither update nor run `doctor.sh` for months, the deletion waits for the next run | Attach the report to the diagnostic bundle if you open a case; the detail file, only after reviewing it and if asked for |
 
 Steps 5 and 6 also leave their own entry in `audit_log` (`system.updated` or
 `system.restored_from_backup`): if for whatever reason it cannot be written,
@@ -1099,6 +1103,50 @@ that filter over the rows you already had. What is worth knowing:
 - **What you already sent to the manufacturer**: it treats bundles from
   earlier versions that it has received as bundles with personal data, and
   deletes them.
+
+**When updating to 2.2.0: backups and the WAL, encrypted and authenticated.**
+
+- **What changes.** Backups and the archived WAL are now **encrypted and
+  authenticated** (ADR-049): a file that has been altered, renamed or replaced
+  is detected on restore, and the restore refuses. **Up to 2.1.0 the archived
+  WAL was not encrypted.**
+- **What `update.sh` does by itself.** It computes `BACKUP_WAL_KEY` from
+  `BACKUP_ENCRYPTION_KEY` and writes it into the `.env`: you still keep **a
+  single** key safe. If it cannot compute it, it **stops before touching
+  anything**, with the cause and the command. In the following minutes it
+  encrypts the old WAL segments in place, with no extra downtime (`./doctor.sh`
+  says how many are left).
+- **What you have to do: destroy the unencrypted WAL copies.** Any copy of
+  `BACKUP_PATH/wal` you made before updating (another disk, another network
+  folder, another backup of the server) contains personal data **unencrypted**.
+  Destroy it. If it was within reach of people who should not see it, assess
+  with your DPO whether it is a breach
+  ([`legal-obligations.md`](legal-obligations.md) §4 and §6).
+- **2.1.0 backups** still in `daily/` and `base/` (up to
+  `BACKUP_RETENTION_DAYS`, 30 days by default) can be restored, but only by
+  asking explicitly (§18, "…the restore refuses on integrity grounds"). They
+  expire by themselves.
+- **Mounts.** The application no longer writes to the root of `BACKUP_PATH`. If
+  your destination is a network share with special permissions, check that
+  `daily/`, `base/`, `metrics/`, `reports/` and `reports/retention/` exist and
+  belong to user 1000 ([`installation.md`](installation.md) §6,
+  "`BACKUP_PATH`"). `update.sh` creates them if they are missing.
+- **The update lock now lives in `/var/log/kronoqr/update.lock`**, out of the
+  application's reach (before, in `BACKUP_PATH`; an old one there is ignored).
+  If an interrupted update leaves it in place, step 1 says so, with the process
+  that created it. Check that no `update.sh` is running (`pgrep -af update.sh`)
+  and remove it with `sudo rm -r /var/log/kronoqr/update.lock`.
+- **Rolling back to 2.1.0** uses the pre-update backup `update.sh` has just
+  taken, which still has the 2.1.0 format. It accepts it **only** if it matches
+  the fingerprint the script itself computed and stored in `/var/log/kronoqr/`,
+  not the `.sha256` next to the backup. After rolling back, what 2.2.0 wrote
+  (`.gz.enc` WAL, new backups) **cannot be read by the 2.1.0 `restore.sh`**: if
+  you need to restore one of those, do it with the 2.2.0 package.
+- **Alerts.** A stopped archiving is now detected in about 25 minutes, without
+  waiting for the nightly backup, and there are three more alerts (§10.4). If
+  you have your own silences or rules on `kronoqr_backup_wal_*` or
+  `kronoqr_backup_replication_slot*`, **they are renamed** to `kronoqr_wal_*`.
+- **Downtime:** none extra.
 
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
@@ -2499,6 +2547,84 @@ the cause:
 The full diagnosis, code by code, is in
 [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2
 (in Spanish).
+
+### …the restore refuses on integrity grounds (exit `6`, "unauthenticated backup")
+
+**What is happening.** Since 2.2.0 every backup carries a keyed signature (a
+MAC) over its content, its name and its creation date. `restore.sh`,
+`restore-drill.sh` and `backup.sh verify` check it **before** decrypting, and
+refuse, **without touching the database**, if:
+
+- the backup's `.sha256` is missing (it is mandatory);
+- the MAC does not match: the file has been altered or is damaged;
+- the file name is not the one its header states: it has been renamed or put in
+  place of another;
+- the dump's authenticated manifest (`.manifest.mac`) is missing or does not
+  match;
+- the backup is **from 2.1.0**, which has no MAC: it is an "unauthenticated
+  backup", and it is not used unless you ask for it explicitly.
+
+**Before confirming a restore, read the date `restore.sh` shows** ("copia
+creada el …", backup created on …). It comes from the authenticated header, not
+from the file name: if it is not the one you expect, someone has put an older
+backup in its place. Do not go on.
+
+**What to do**, depending on the message:
+
+| Message | What to do |
+| --- | --- |
+| `el MAC no cuadra` (the MAC does not match) | Do not use that backup: try the previous one (`restore.sh --list`). If no storage fault explains it, treat it as a security incident ([`brecha-de-seguridad.md`](../../runbooks/brecha-de-seguridad.md), in Spanish) |
+| `clave distinta o cabecera alterada` (different key or altered header) | Almost always, a rotation of `BACKUP_ENCRYPTION_KEY`: put the old one in `BACKUP_ENCRYPTION_KEY_PREVIOUS` (restore only) and repeat |
+| `sin .sha256` (no `.sha256`), or the manifest is missing | The backup is incomplete or has been tampered with. Do not use it |
+| `copia heredada de la 2.1.0` (backup inherited from 2.1.0) | See below |
+
+**Restoring a 2.1.0 backup.** It is encrypted but **not authenticated**: its
+`.sha256` proves nothing against someone who can write to the destination. If
+it is the one you need, ask for it **in the command itself** with
+`--accept-unauthenticated` (first with `--dry-run`):
+
+```bash
+docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --accept-unauthenticated --file <copia>.dump.enc --dry-run
+```
+
+- It only works for 2.1.0 backups, and the `.sha256` **is still mandatory** and
+  has to match.
+- It is passed **in every command**. Never put `KRONOQR_ACCEPT_UNAUTHENTICATED`
+  in the `.env`: it does not count, and `./doctor.sh` reports it as a failure.
+- **It is recorded**: the restore report notes it on its first line and the
+  `system.restored_from_backup` entry in the audit log carries
+  `integrity=legacy_accepted`.
+- It will disappear once no version earlier than 2.2.0 can be updated from.
+  2.1.0 backups expire by themselves after `BACKUP_RETENTION_DAYS`.
+
+The detail is in
+[`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §6.8
+(in Spanish).
+
+### …point-in-time recovery stops ("restore_command failed", `exit 200`)
+
+**What is happening.** While replaying the archived WAL over a physical copy,
+`kronoqr-restore-wal` has found a segment that **cannot be trusted**: the MAC
+does not match, it is encrypted with another key, an intermediate segment is
+missing or it could not be read. It returns `200` and PostgreSQL **aborts the
+recovery on purpose**: if it went on, the database would "recover successfully"
+up to the previous segment and data would be lost without anyone seeing it. The
+error names the segment and the reason.
+
+**What to do:**
+
+1. **Do not use or promote that database.** It stays in recovery, and that is
+   correct.
+2. Resolve the reason with the runbook table (§4.1): the old key if
+   `BACKUP_ENCRYPTION_KEY` was rotated, or the segment from another medium that
+   keeps it.
+3. If that is not possible, repeat with a `recovery_target_time` **earlier**
+   than that segment, and write down in the incident report how far you got.
+
+The full procedure, with the commands, is in
+[`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §6.4
+(in Spanish). Rehearse it first with `restore-drill.sh --mode pitr`, which does
+it in a clean container without touching anything (runbook §7).
 
 ### …after restoring a backup, an export or a report shows as "Expired"
 

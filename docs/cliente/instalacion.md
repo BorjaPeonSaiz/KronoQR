@@ -389,6 +389,11 @@ resuelve donde tiene que resolver.
 clave y pierdes el servidor, has perdido el registro horario, y el registro
 horario hay que conservarlo cuatro años por ley.
 
+**Es una sola clave.** En el `.env` verás también `BACKUP_WAL_KEY`: es la clave
+del WAL archivado, el instalador la **calcula a partir de
+`BACKUP_ENCRYPTION_KEY`** y se puede volver a calcular siempre desde ella. No
+hace falta guardarla aparte.
+
 ### 1.7 Abre el panel y termina el asistente
 
 `https://fichaje.tuhotel.local/admin/`.
@@ -674,7 +679,8 @@ transmiten a nadie**. El fabricante no los conoce y no puede recuperarlos.
 | `DB_MIGRATION_PASSWORD` | Rol de migración, propietario de la base. Solo lo reciben los servicios de un solo uso `migrate` y `restore` | Íd. |
 | `BACKUP_DB_PASSWORD` | Rol de copias `fichaje_backup`, de **solo lectura**. Solo lo recibe el `scheduler` | Íd. La copia diaria falla hasta que se rota |
 | `REVERB_APP_ID` / `_KEY` / `_SECRET` | Presencia en vivo del panel | Se rotan; solo afecta al tiempo real |
-| `BACKUP_ENCRYPTION_KEY` | Cifra las copias de seguridad | **Las copias dejan de poder restaurarse.** Custódiala fuera del servidor |
+| `BACKUP_ENCRYPTION_KEY` | Cifra y autentica las copias de seguridad | **Las copias dejan de poder restaurarse.** Custódiala fuera del servidor |
+| `BACKUP_WAL_KEY` | Cifra y autentica el WAL archivado (desde la 2.2.0). **No es un secreto nuevo**: se **deriva** de `BACKUP_ENCRYPTION_KEY` y solo la recibe PostgreSQL | Nada que custodiar aparte: se recalcula desde `BACKUP_ENCRYPTION_KEY` (§6, «`BACKUP_PATH`») |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | Abre los PIN que el quiosco sella sin red | Los fichajes por PIN encolados sin red no se podrían abrir |
 | `GRAFANA_ADMIN_PASSWORD` | Acceso al cuadro de mandos | Se rota en Grafana |
 
@@ -1021,6 +1027,22 @@ basta con omitirlos explícitamente, y esa decisión queda guardada.
 El que más se atasca es el **perfil de convenio**: no se puede omitir, hay que
 confirmarlo aunque lo dejes como viene. La razón está en la sección 1.7.
 
+### …los servicios no arrancan: «bind source path does not exist» en `BACKUP_PATH`
+
+Falta un subdirectorio de `BACKUP_PATH` (`daily`, `base`, `metrics`,
+`reports`, `reports/retention` o `wal`), casi siempre porque el destino se ha
+cambiado a un recurso de red nuevo o no está montado. Nada se ha estropeado:
+Docker se niega a crearlo como `root`. Comprueba que el destino está montado,
+crea el que nombra el error con las órdenes de §6, «`BACKUP_PATH`», y repite.
+
+### …`doctor.sh` dice que `BACKUP_WAL_KEY` no es la derivada
+
+PostgreSQL no está archivando el WAL (nunca archiva sin cifrar). Recalcula la
+clave y recrea `postgres`, como dice §6, «`BACKUP_PATH`». Si además dice que el
+último segmento se cifró con **otra** clave, es que se rotó
+`BACKUP_ENCRYPTION_KEY`: sigue
+[`rotacion-secretos.md`](../runbooks/rotacion-secretos.md) §5.
+
 ### …quiero volver a empezar la instalación desde cero
 
 Solo si estás seguro de que **no hay datos que conservar**:
@@ -1253,15 +1275,90 @@ red (NAS, cabina), **tiene que estar montado antes de levantar los servicios**:
 si no lo está, PostgreSQL no puede archivar el WAL y acaba llenando su propio
 disco.
 
-**Permisos que hay que dejar puestos** (los deja el instalador; conviene
-comprobarlos tras mover el destino):
+**Todo lo que se guarda aquí va cifrado y autenticado** (desde la 2.2.0): el
+volcado diario, la copia física semanal y también el **WAL archivado**
+(`wal/<segmento>.gz.enc`), que hasta la 2.1.0 se guardaba solo comprimido.
+«Autenticado» quiere decir que un fichero alterado, renombrado o sustituido
+por otro se detecta al restaurar, y la restauración se niega a usarlo. Lo que
+no impide es que alguien con acceso al destino **borre** ficheros: proteger el
+destino sigue siendo cosa tuya.
+
+**Qué hay dentro y quién escribe en cada sitio.** El instalador crea este
+árbol; la aplicación **ya no puede escribir en la raíz de `BACKUP_PATH`**, que
+monta en solo lectura, y cada contenedor solo escribe en lo suyo:
+
+| Directorio | Dueño y permisos | Quién escribe |
+| --- | --- | --- |
+| `BACKUP_PATH` (la raíz) | uid 1000, `0750` | Nadie desde los contenedores: la leen `app`, `horizon`, `scheduler` y `restore` |
+| `daily/` y `base/` | uid 1000, `0750` | Solo `scheduler` (volcado diario y copia física) |
+| `metrics/` | uid 1000, `0750` | `app`, `horizon`, `scheduler` y `restore` (métricas que lee la observabilidad) |
+| `reports/` | uid 1000, `0750` | `restore` (informes de restauración) y `update.sh` desde el servidor |
+| `reports/retention/` | uid 1000, `0750` | `app` y `scheduler` (informes de retención) |
+| `wal/` | uid 70 (PostgreSQL), `0750` | Solo `postgres` (WAL archivado) |
+
+**Si los creas tú a mano** —por ejemplo, tras cambiar el destino a un recurso
+de red—, usa exactamente estas órdenes (cambia la ruta por tu `BACKUP_PATH`).
+Dentro de `BACKUP_PATH` **no uses `install -d`**: seguiría un enlace simbólico
+que alguien hubiera dejado ahí. Los subdirectorios se crean como el usuario
+1000 con `sudo -u '#1000' mkdir`:
 
 ```bash
-# El árbol de copias lo escribe la aplicación, que corre como uid 1000
 sudo install -d -o 1000 -g 1000 -m 0750 /var/backups/fichaje
-# El archivo de WAL lo escribe PostgreSQL, que corre como su propio usuario
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/daily
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/base
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/metrics
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/reports
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/reports/retention
 sudo install -d -o 70 -g 70 -m 0750 /var/backups/fichaje/wal
 ```
+
+**Si falta uno, los servicios no arrancan, y es a propósito.** `docker compose
+up` se para con un error que nombra la ruta que falta (`bind source path does
+not exist: …/daily`, por ejemplo) en vez de crear un directorio de `root` donde
+la aplicación luego no podría escribir. Créalo con la orden de arriba y repite.
+`install.sh` y `update.sh` los crean si faltan.
+
+**Si el destino es un recurso de red (NAS, cabina), compruébalo antes de
+instalar:** tiene que estar montado, dejar que el uid 1000 sea dueño de la raíz
+y de esos cinco subdirectorios y que el uid 70 lo sea de `wal/`. Un recurso que
+asigna a todo un mismo usuario (`all_squash` en NFS, `uid=` fijo en CIFS) no
+sirve tal cual: pide a quien lo administra que respete los propietarios o que
+los fije así.
+
+**La clave del WAL: `BACKUP_WAL_KEY`.** PostgreSQL cifra el WAL con una clave
+propia, que el instalador escribe en el `.env` **calculándola a partir de
+`BACKUP_ENCRYPTION_KEY`**. No es una segunda clave que custodiar: se puede
+recalcular siempre desde la maestra, y la restauración la recalcula así. Solo la
+recibe el contenedor `postgres`, y con ella no se abren ni los volcados ni las
+copias físicas.
+
+- **Cómo comprobarla:** `./doctor.sh`. La línea «La clave del WAL deriva de
+  BACKUP_ENCRYPTION_KEY y es la del archivo» tiene que salir en `[ok]`.
+- **Si `doctor.sh` dice que no coincide**, o falta: recalcúlala y recrea
+  PostgreSQL. Hasta que lo hagas, PostgreSQL **no archiva** (nunca archiva sin
+  cifrar) y va reteniendo WAL en su disco, así que arréglalo el mismo día:
+
+  ```bash
+  sudo bash /opt/kronoqr/scripts/backup.sh derive-wal-key --write-env /opt/kronoqr/.env
+  docker compose up -d postgres
+  ```
+
+  Cambia `/opt/kronoqr` por el directorio de tu instalación.
+- **Nunca la inventes ni la copies de otro servidor.** Una clave que no es la
+  derivada cifra segmentos que la restauración no sabría abrir.
+- **Si has rotado `BACKUP_ENCRYPTION_KEY`**, la del WAL también cambia: sigue
+  [`rotacion-secretos.md`](../runbooks/rotacion-secretos.md) §5, que dice cómo
+  conservar la anterior mientras queden copias hechas con ella.
+
+**Si actualizas desde la 2.1.0: destruye las copias del WAL que hayas sacado
+del servidor.** Hasta la 2.1.0 el WAL archivado **no iba cifrado**, y contiene
+todos los datos de la base: fichajes, personas y registro de auditoría.
+`update.sh` cifra en sitio los segmentos que quedan en `BACKUP_PATH/wal`, pero
+no puede alcanzar las copias que hicieras de esa carpeta en otro disco, otra
+carpeta de red u otra copia de seguridad del servidor. **Destrúyelas.** Si
+estuvieron al alcance de personas que no debían verlas, valora con tu delegado
+de protección de datos (DPO) si es una brecha: esa decisión es vuestra, no del
+producto ([`obligaciones-legales.md`](obligaciones-legales.md) §4 y §6).
 
 **Cuánto ocupa.** Aproximadamente: el tamaño de la base comprimido, por
 `BACKUP_RETENTION_DAYS`, más una copia física semanal, más el WAL de

@@ -391,6 +391,11 @@ section "Custody of secrets". If you lose that key and lose the server, you
 have lost the working-time record, and the working-time record has to be kept
 for four years by law.
 
+**It is a single key.** In the `.env` you will also see `BACKUP_WAL_KEY`: it is
+the key of the archived WAL, the installer **computes it from
+`BACKUP_ENCRYPTION_KEY`** and it can always be computed again from it. There
+is no need to keep it separately.
+
 ### 1.7 Open the panel and finish the wizard
 
 `https://fichaje.tuhotel.local/admin/`.
@@ -691,7 +696,8 @@ them.
 | `DB_MIGRATION_PASSWORD` | Migration role, owner of the database. Only the one-shot `migrate` and `restore` services receive it | Same |
 | `BACKUP_DB_PASSWORD` | Backup role `fichaje_backup`, **read-only**. Only the `scheduler` receives it | Same. The daily backup fails until it is rotated |
 | `REVERB_APP_ID` / `_KEY` / `_SECRET` | Live presence in the panel | Rotated; only affects real time |
-| `BACKUP_ENCRYPTION_KEY` | Encrypts the backups | **The backups can no longer be restored.** Keep it outside the server |
+| `BACKUP_ENCRYPTION_KEY` | Encrypts and authenticates the backups | **The backups can no longer be restored.** Keep it outside the server |
+| `BACKUP_WAL_KEY` | Encrypts and authenticates the archived WAL (since 2.2.0). **It is not a new secret**: it is **derived** from `BACKUP_ENCRYPTION_KEY` and only PostgreSQL receives it | Nothing extra to keep safe: it is recomputed from `BACKUP_ENCRYPTION_KEY` (§6, "`BACKUP_PATH`") |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | Opens the PINs the kiosk seals without network | PIN clock-ins queued without network could not be opened |
 | `GRAFANA_ADMIN_PASSWORD` | Access to the dashboard | Rotated in Grafana |
 
@@ -1043,6 +1049,23 @@ The one that gets stuck most often is the **compliance profile**: it cannot be
 skipped, it has to be confirmed even if you leave it as it comes. The reason is
 in section 1.7.
 
+### …the services do not start: "bind source path does not exist" under `BACKUP_PATH`
+
+A subdirectory of `BACKUP_PATH` is missing (`daily`, `base`, `metrics`,
+`reports`, `reports/retention` or `wal`), almost always because the
+destination has been moved to a new network share or is not mounted. Nothing is
+broken: Docker refuses to create it as `root`. Check that the destination is
+mounted, create the one the error names with the commands in §6,
+"`BACKUP_PATH`", and try again.
+
+### …`doctor.sh` says `BACKUP_WAL_KEY` is not the derived one
+
+PostgreSQL is not archiving the WAL (it never archives unencrypted). Recompute
+the key and recreate `postgres`, as §6, "`BACKUP_PATH`", says. If it also says
+the latest segment was encrypted with a **different** key, `BACKUP_ENCRYPTION_KEY`
+was rotated: follow
+[`rotacion-secretos.md`](../../runbooks/rotacion-secretos.md) §5 (in Spanish).
+
 ### …I want to start the installation again from scratch
 
 Only if you are sure that **there is no data to keep**:
@@ -1277,15 +1300,91 @@ network share (NAS, storage array), **it has to be mounted before bringing the
 services up**: if it is not, PostgreSQL cannot archive the WAL and ends up
 filling its own disk.
 
-**Permissions that have to stay in place** (the installer sets them; worth
-checking after moving the destination):
+**Everything stored here is encrypted and authenticated** (since 2.2.0): the
+daily dump, the weekly physical copy and also the **archived WAL**
+(`wal/<segment>.gz.enc`), which up to 2.1.0 was only compressed.
+"Authenticated" means that a file that has been altered, renamed or replaced by
+another is detected on restore, and the restore refuses to use it. What it does
+not prevent is someone with access to the destination **deleting** files:
+protecting the destination is still up to you.
+
+**What is inside and who writes where.** The installer creates this tree; the
+application **can no longer write to the root of `BACKUP_PATH`**, which it
+mounts read-only, and each container only writes to its own part:
+
+| Directory | Owner and permissions | Who writes |
+| --- | --- | --- |
+| `BACKUP_PATH` (the root) | uid 1000, `0750` | Nobody from the containers: `app`, `horizon`, `scheduler` and `restore` read it |
+| `daily/` and `base/` | uid 1000, `0750` | Only `scheduler` (daily dump and physical copy) |
+| `metrics/` | uid 1000, `0750` | `app`, `horizon`, `scheduler` and `restore` (metrics read by the observability stack) |
+| `reports/` | uid 1000, `0750` | `restore` (restore reports) and `update.sh` from the host |
+| `reports/retention/` | uid 1000, `0750` | `app` and `scheduler` (retention reports) |
+| `wal/` | uid 70 (PostgreSQL), `0750` | Only `postgres` (archived WAL) |
+
+**If you create them by hand** — for example, after moving the destination to
+a network share — use exactly these commands (change the path to your
+`BACKUP_PATH`). Inside `BACKUP_PATH` **do not use `install -d`**: it would
+follow a symbolic link someone had left there. The subdirectories are created
+as user 1000 with `sudo -u '#1000' mkdir`:
 
 ```bash
-# The backup tree is written by the application, which runs as uid 1000
 sudo install -d -o 1000 -g 1000 -m 0750 /var/backups/fichaje
-# The WAL archive is written by PostgreSQL, which runs as its own user
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/daily
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/base
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/metrics
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/reports
+sudo -u '#1000' mkdir -m 0750 -- /var/backups/fichaje/reports/retention
 sudo install -d -o 70 -g 70 -m 0750 /var/backups/fichaje/wal
 ```
+
+**If one is missing, the services do not start, on purpose.** `docker compose
+up` stops with an error naming the missing path (`bind source path does not
+exist: …/daily`, for example) instead of creating a `root` directory the
+application could not write to later. Create it with the commands above and try
+again. `install.sh` and `update.sh` create them if they are missing.
+
+**If the destination is a network share (NAS, storage array), check it before
+installing:** it has to be mounted, let uid 1000 own the root and those five
+subdirectories, and let uid 70 own `wal/`. A share that maps everything to a
+single user (`all_squash` on NFS, a fixed `uid=` on CIFS) does not work as is:
+ask whoever runs it to respect the owners or to set them that way.
+
+**The WAL key: `BACKUP_WAL_KEY`.** PostgreSQL encrypts the WAL with its own
+key, which the installer writes into the `.env` **by computing it from
+`BACKUP_ENCRYPTION_KEY`**. It is not a second key to keep safe: it can always
+be recomputed from the master key, and the restore recomputes it that way. Only
+the `postgres` container receives it, and it does not open the dumps or the
+physical copies.
+
+- **How to check it:** `./doctor.sh`. The line "The WAL key derives from
+  BACKUP_ENCRYPTION_KEY and is the one the archive uses" has to come out
+  `[ok]`.
+- **If `doctor.sh` says it does not match**, or it is missing: recompute it and
+  recreate PostgreSQL. Until you do, PostgreSQL **does not archive** (it never
+  archives unencrypted) and keeps WAL on its own disk, so fix it the same day:
+
+  ```bash
+  sudo bash /opt/kronoqr/scripts/backup.sh derive-wal-key --write-env /opt/kronoqr/.env
+  docker compose up -d postgres
+  ```
+
+  Change `/opt/kronoqr` to your installation directory.
+- **Never make one up or copy it from another server.** A key that is not the
+  derived one encrypts segments the restore would not be able to open.
+- **If you have rotated `BACKUP_ENCRYPTION_KEY`**, the WAL key changes too:
+  follow [`rotacion-secretos.md`](../../runbooks/rotacion-secretos.md) §5 (in
+  Spanish), which explains how to keep the old one while backups made with it
+  remain.
+
+**If you update from 2.1.0: destroy the WAL copies you have taken off the
+server.** Up to 2.1.0 the archived WAL **was not encrypted**, and it contains
+all the data in the database: clock-ins, people and the audit log. `update.sh`
+encrypts in place the segments left in `BACKUP_PATH/wal`, but it cannot reach
+the copies you made of that folder on another disk, another network folder or
+another backup of the server. **Destroy them.** If they were within reach of
+people who should not see them, assess with your data protection officer (DPO)
+whether it is a breach: that decision is yours, not the product's
+([`legal-obligations.md`](legal-obligations.md) §4 and §6).
 
 **How much it takes up.** Roughly: the compressed size of the database, times
 `BACKUP_RETENTION_DAYS`, plus a weekly physical copy, plus the WAL of

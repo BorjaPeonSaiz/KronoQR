@@ -34,6 +34,7 @@ Todo esto corre solo en el contenedor `scheduler`. Lo que aparece en la columna
 | 04:30 UTC, a diario | Revisión del registro: turnos abiertos, descansos, jornadas anómalas | Resolver las incidencias en el panel |
 | 04:35 UTC, a diario | Detección de patrones anómalos de uso de credencial sobre los fichajes de quiosco de los últimos 30 días (§6) | Nada: las incidencias le llegan al responsable del departamento, no a IT |
 | Lunes 05:10 UTC | **Propuesta de retención**: informe de lo que se purgaría | Leerlo cuando haya algo vencido |
+| Cada minuto | Se mide cuánto lleva sin archivarse el WAL más antiguo, que es la pérdida máxima real si el servidor cayera ahora (§10.4, alertas del WAL) | Nada, salvo que avise |
 | Cada hora | Métricas de credenciales y limpieza de temporales | Nada |
 | Cada hora | Se purgan las exportaciones íntegras caducadas (se borra el ZIP, la anotación queda), los paquetes de diagnóstico de más de 7 días y los restos de las generaciones que se interrumpieron (§12.2, §13 y §13.6) | Nada |
 | 04:25 UTC, a diario | Se purgan los informes generados en segundo plano que han caducado: se borra el fichero, la anotación queda (§6 y §13) | Nada |
@@ -404,7 +405,7 @@ mensaje, que es lo que hay que leer.**
 | `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar. `doctor.sh`: **no hay ninguna instalación que diagnosticar** en este servidor — si es uno nuevo, lo que hace falta es `install.sh` |
 | `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada**. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
 | `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
-| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7) `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`); con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
+| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7). `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** (§18, «…la restauración se niega por integridad»). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`); con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
 | `7` | **Garantía de seguridad rota. NADA aplicado.** Un rol de la base de datos tiene más privilegios de los permitidos, o una copia ha intentado cambiarlos (AUD-1). No es una avería: es una garantía que el producto se niega a saltarse | `backup.sh`: el rol con el que se copia es superusuario, o puede crear roles o bases, o saltarse RLS; no se ha escrito ninguna copia y salta la alerta de copia fallida. `restore.sh` y `restore-drill.sh --mode database`: la copia ha cambiado roles del clúster al restaurarse; no se ha intercambiado ninguna base y se ha intentado devolver los roles a su estado. Sigue `rotacion-secretos.md` («El rol de las copias es privilegiado») o `restaurar-backup.md` §6.6 |
 
 `install.sh` y `update.sh` invocan `product:doctor` en su fase de verificación
@@ -746,7 +747,10 @@ la alimenta dejó de ejecutarse):
 | `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Falta la del año próximo, desde noviembre | Media | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba que el `scheduler` corre y que la migración `2026_09_29_100000` está aplicada (`migrate:status` por el servicio `migrate`, ver el runbook §5). Ya no depende de `DB_MIGRATION_USERNAME`: la partición la pide la aplicación a una función de la base |
 | `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Cualquiera | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | `backup:verify` y reintenta con `backup:run`, los dos en el contenedor `scheduler` (no en `app`) |
 | `CopiaDeSeguridadAusente` | Sin métrica en 30 min | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Comprueba el `scheduler` y que `BACKUP_PATH` está montado |
-| `ArchivadoDeWalDetenido` | > 30 min sin archivar | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Urgente: sin espacio, PostgreSQL termina parándose entero |
+| `ArchivadoDeWalDetenido` | El dato sin archivar más antiguo lleva más de 25 min (`archive_timeout` + 10 min), o hay 3 segmentos completos sin archivar; `for: 3m`. **No espera a la copia nocturna** | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) §4 | Urgente: mientras dure, la pérdida máxima deja de ser 15 min y, sin espacio, PostgreSQL termina parándose entero. `docker compose logs --tail=100 postgres` dice la causa |
+| `ArchivadoDeWalFallando` | El último intento de archivado falló y no se ha recuperado; `for: 10m` | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) §4 | Destino no montado o sin permisos, disco lleno, o falta `BACKUP_WAL_KEY`: el archivado nunca escribe en claro. El log de `postgres` dice cuál |
+| `MedicionDeWalAusente` | La medida del WAL lleva más de 5 min sin publicarse; `for: 5m` | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) §4.3 | Sin medida no se sabe si hay RPO: comprueba el `scheduler`, que es también el que hace las copias |
+| `ArchiveTimeoutFueraDeRango` | `archive_timeout` vale 0 o más de 900 s; `for: 10m` | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) §4.4 | Alguien ha cambiado la configuración de PostgreSQL: devuélvela a la del paquete y recrea `postgres` |
 | `SlotDeReplicacionParado` | ≥ 1 slot de replicación sin consumidor durante 15 min | Crítica | IT | [`slot-replicacion-parado.md`](../runbooks/slot-replicacion-parado.md) | KronoQR no usa ninguno: uno solo ya es anómalo. Retiene registro de transacciones y puede llenar el disco de datos |
 | `DiscoDeCopiasCasiLleno` | < 20 % libre en el volumen de copias | Media | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Amplía el disco o baja `BACKUP_RETENTION_DAYS` |
 | `SimulacroDeRestauracionNuncaEjecutado` | Ninguno registrado todavía | Media | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | Ejecútalo: sin él, nadie ha comprobado que las copias restauran de verdad |
@@ -879,7 +883,7 @@ Los siete pasos y lo que pasa si falla cada uno:
 | 4 · Migraciones | Vuelta atrás automática → `4` | Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante antes de reintentar: dice en qué versión intermedia se paró |
 | 5 · Arranque y verificación | Vuelta atrás automática → `4` | Igual que arriba. **La versión nueva nunca recibió tráfico**: se verifica sin borde | Igual que arriba |
 | 6 · Vuelta atrás | Sale `5` | **Requiere una persona.** El mensaje distingue dos casos: solo quedó el mantenimiento puesto (retirarlo con `docker compose exec app php artisan up`, **sin restaurar nada**) o la restauración quedó a medias (tres órdenes y la ruta de la copia) | Runbook §5. Los quioscos siguen encolando mientras tanto |
-| 7 · Informe | — | El **informe** en `BACKUP_PATH/reports/update-<fecha>.log` (uid 1000, `0640`), siempre. El **detalle** (`update-<fecha>.detalle.log`: salida cruda, **puede llevar datos personales**) **no está ahí**: vive solo en `/var/log/kronoqr/` (`root:root 0600`, directorio `0700`), junto a una copia local del informe. El informe aparece en `reports/` **al terminar, no mientras corre**; si no se puede publicar, el script avisa y dice que queda a salvo en `/var/log/kronoqr/`. Hace falta `setpriv` (paquete `util-linux`) | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
+| 7 · Informe | — | El **informe** en `BACKUP_PATH/reports/update-<fecha>.log` (uid 1000, `0640`), siempre. El **detalle** (`update-<fecha>.detalle.log`: salida cruda, **puede llevar datos personales**) **no está ahí**: vive solo en `/var/log/kronoqr/` (`root:root 0600`, directorio `0700`), junto a una copia local del informe. El informe aparece en `reports/` **al terminar, no mientras corre**; si no se puede publicar, el script avisa y dice que queda a salvo en `/var/log/kronoqr/`. Hace falta `setpriv` (paquete `util-linux`). **Cuánto se guardan** (desde la 2.2.0): el detalle, **30 días** (`KRONOQR_LOG_RETENTION_DAYS` en el entorno de quien ejecuta el script, mínimo 7); el resumen local `update-<fecha>.log`, sin datos personales, **90 días**. Los borra `update.sh` al arrancar y `./doctor.sh` si lo ejecutas con `sudo`; si no actualizas ni ejecutas `doctor.sh` en meses, el borrado espera a la siguiente vez | Adjuntar el informe al paquete de diagnóstico si se abre un caso; el detalle, solo tras revisarlo y si lo piden |
 
 Los pasos 5 y 6 dejan además su propio asiento en `audit_log` (`system.updated`
 o `system.restored_from_backup`): si por lo que sea no se puede escribir, la
@@ -1091,6 +1095,49 @@ conviene saber:
 - **Lo que ya enviaste al fabricante**: trata los paquetes de versiones
   anteriores que haya recibido como paquetes con datos personales y los
   borra.
+
+**Al actualizar a la 2.2.0: las copias y el WAL, cifrados y autenticados.**
+
+- **Qué cambia.** Las copias y el WAL archivado van ahora **cifrados y
+  autenticados** (ADR-049): un fichero alterado, renombrado o sustituido se
+  detecta al restaurar, y la restauración se niega. **Hasta la 2.1.0 el WAL
+  archivado no iba cifrado.**
+- **Qué hace `update.sh` solo.** Calcula `BACKUP_WAL_KEY` a partir de
+  `BACKUP_ENCRYPTION_KEY` y la escribe en el `.env`: sigues custodiando **una
+  sola** clave. Si no puede calcularla, **se detiene antes de tocar nada**, con
+  la causa y la orden. En los minutos siguientes cifra en sitio los segmentos de
+  WAL antiguos, sin parada adicional (`./doctor.sh` dice cuántos quedan).
+- **Qué tienes que hacer tú: destruir las copias del WAL en claro.** Cualquier
+  copia de `BACKUP_PATH/wal` que hicieras antes de actualizar (otro disco, otra
+  carpeta de red, otra copia de seguridad del servidor) contiene datos
+  personales **sin cifrar**. Destrúyela. Si estuvo al alcance de personas que no
+  debían verla, valora con tu DPO si es una brecha
+  ([`obligaciones-legales.md`](obligaciones-legales.md) §4 y §6).
+- **Las copias de la 2.1.0** que sigan en `daily/` y `base/` (hasta
+  `BACKUP_RETENTION_DAYS`, 30 días de serie) se pueden restaurar, pero solo
+  pidiéndolo expresamente (§18, «…la restauración se niega por integridad»).
+  Caducan solas.
+- **Montajes.** La aplicación ya no escribe en la raíz de `BACKUP_PATH`. Si tu
+  destino es un recurso de red con permisos especiales, comprueba que `daily/`,
+  `base/`, `metrics/`, `reports/` y `reports/retention/` existen y son del
+  usuario 1000 ([`instalacion.md`](instalacion.md) §6, «`BACKUP_PATH`»).
+  `update.sh` los crea si faltan.
+- **El candado de la actualización vive ahora en `/var/log/kronoqr/update.lock`**,
+  fuera del alcance de la aplicación (antes, en `BACKUP_PATH`; uno antiguo ahí se
+  ignora). Si una actualización interrumpida lo deja puesto, el paso 1 lo dice,
+  con el proceso que lo creó. Comprueba que no hay ningún `update.sh` en marcha
+  (`pgrep -af update.sh`) y retíralo con `sudo rm -r /var/log/kronoqr/update.lock`.
+- **La vuelta atrás a la 2.1.0** usa la copia previa que `update.sh` acaba de
+  hacer, que todavía tiene el formato de la 2.1.0. La acepta **solo** si coincide
+  con la huella que el propio script calculó y guardó en `/var/log/kronoqr/`,
+  no con el `.sha256` que hay junto a la copia. Tras volver, lo escrito por la
+  2.2.0 (WAL `.gz.enc`, copias nuevas) **no lo lee el `restore.sh` de la
+  2.1.0**: si necesitas restaurar una de esas, hazlo con el paquete de la 2.2.0.
+- **Alertas.** El archivado detenido se detecta ahora en unos 25 minutos, sin
+  esperar a la copia nocturna, y hay tres alertas más (§10.4). Si tienes
+  silencios o reglas propias sobre `kronoqr_backup_wal_*` o
+  `kronoqr_backup_replication_slot*`, **cambian de nombre** a `kronoqr_wal_*`.
+- **Parada:** ninguna adicional.
 
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
@@ -2463,6 +2510,81 @@ causa:
 
 El diagnóstico completo, código a código, está en
 [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2.
+
+### …la restauración se niega por integridad (salida `6`, «copia no autenticada»)
+
+**Qué pasa.** Desde la 2.2.0 cada copia lleva dentro una firma con clave (un
+MAC) sobre su contenido, su nombre y su fecha de creación. `restore.sh`,
+`restore-drill.sh` y `backup.sh verify` la comprueban **antes** de descifrar, y
+se niegan, **sin tocar la base**, si:
+
+- falta el `.sha256` de la copia (es obligatorio);
+- el MAC no cuadra: el fichero se ha alterado o está dañado;
+- el nombre del fichero no es el que dice su cabecera: la han renombrado o
+  puesto en lugar de otra;
+- falta o no cuadra el manifiesto autenticado (`.manifest.mac`) del volcado;
+- la copia es **de la 2.1.0**, que no lleva MAC: es una «copia no autenticada»,
+  y no se usa si no lo pides expresamente.
+
+**Antes de confirmar una restauración, lee la fecha que enseña `restore.sh`**
+(«copia creada el …»). Sale de la cabecera autenticada, no del nombre del
+fichero: si no es la que esperas, alguien ha puesto una copia anterior en su
+lugar. No sigas.
+
+**Qué hacer**, según el mensaje:
+
+| Mensaje | Qué hacer |
+| --- | --- |
+| `el MAC no cuadra` | No uses esa copia: prueba la anterior (`restore.sh --list`). Si no hay una avería de almacenamiento que lo explique, trátalo como incidente de seguridad ([`brecha-de-seguridad.md`](../runbooks/brecha-de-seguridad.md)) |
+| `clave distinta o cabecera alterada` | Casi siempre, una rotación de `BACKUP_ENCRYPTION_KEY`: pon la anterior en `BACKUP_ENCRYPTION_KEY_PREVIOUS` (solo para restaurar) y repite |
+| `sin .sha256`, o falta el manifiesto | La copia está incompleta o la han tocado. No la uses |
+| `copia heredada de la 2.1.0` | Ver abajo |
+
+**Restaurar una copia de la 2.1.0.** Está cifrada pero **no autenticada**: su
+`.sha256` no prueba nada frente a quien pueda escribir en el destino. Si es la
+que necesitas, pídelo **en la propia orden** con `--accept-unauthenticated`
+(primero con `--dry-run`):
+
+```bash
+docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --accept-unauthenticated --file <copia>.dump.enc --dry-run
+```
+
+- Solo sirve para copias de la 2.1.0, y el `.sha256` **sigue siendo
+  obligatorio** y tiene que coincidir.
+- Se pasa **en cada orden**. Nunca pongas `KRONOQR_ACCEPT_UNAUTHENTICATED` en el
+  `.env`: no cuenta, y `./doctor.sh` lo señala como fallo.
+- **Queda constancia**: el informe de la restauración lo anota en su primera
+  línea y el asiento `system.restored_from_backup` del registro de auditoría
+  lleva `integrity=legacy_accepted`.
+- Desaparecerá cuando ya no se pueda actualizar desde ninguna versión anterior a
+  la 2.2.0. Las copias de la 2.1.0 caducan solas a los `BACKUP_RETENTION_DAYS`.
+
+El detalle está en
+[`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.8.
+
+### …la recuperación a un punto en el tiempo se detiene («restore_command failed», `exit 200`)
+
+**Qué pasa.** Al reproducir el WAL archivado sobre una copia física,
+`kronoqr-restore-wal` ha encontrado un segmento que **no es de fiar**: el MAC no
+cuadra, está cifrado con otra clave, falta un segmento intermedio o no se ha
+podido leer. Devuelve `200` y PostgreSQL **aborta la recuperación a propósito**:
+si siguiera, la base «recuperaría con éxito» hasta el segmento anterior y se
+perderían datos sin que nadie lo viera. El error nombra el segmento y el motivo.
+
+**Qué hacer:**
+
+1. **No uses ni promociones esa base.** Se queda en recuperación, y es lo
+   correcto.
+2. Resuelve el motivo con la tabla del runbook (§4.1): la clave anterior si se
+   rotó `BACKUP_ENCRYPTION_KEY`, o el segmento desde otro soporte que lo
+   conserve.
+3. Si no se puede, repite con un `recovery_target_time` **anterior** a ese
+   segmento, y anota en el parte hasta dónde llegaste.
+
+El procedimiento completo, con las órdenes, está en
+[`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.4.
+Ensáyalo antes con `restore-drill.sh --mode pitr`, que lo hace en un contenedor
+limpio sin tocar nada (runbook §7).
 
 ### …después de restaurar una copia, una exportación o un informe sale «Caducada»
 

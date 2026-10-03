@@ -1796,7 +1796,7 @@ alter the record: it has no credential to do it with.
 | `nginx` | Always | None: only its allowed networks and the certificate | — |
 | `migrate` | Only when launched (`install.sh`, `update.sh` or by hand) and disappears when done | `DB_MIGRATION_USERNAME` and `DB_MIGRATION_PASSWORD` | `fichaje_migrator` |
 | `restore` | Only when restoring a backup, and disappears when done | The migration role's, and `BACKUP_ENCRYPTION_KEY` | `fichaje_migrator` |
-| `postgres` | Always | All of them, to create the roles when the database is initialised | — |
+| `postgres` | Always | All of them, to create the roles when the database is initialised. Also `BACKUP_WAL_KEY`, to encrypt the WAL it archives; it does **not** receive `BACKUP_ENCRYPTION_KEY` | — |
 
 | Role | What it can do | Who uses it and when |
 | --- | --- | --- |
@@ -2139,7 +2139,8 @@ keeps it. The procedure and the restoration are in
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
 | --- | --- | --- | --- | --- | --- |
 | `BACKUP_PATH` | `[CLIENTE]` | Destination of the backups, mounted at the same path inside the containers. See [`installation.md`](installation.md) §6 | `/var/backups/fichaje` | **On installing, always**, with a destination that is not on the same disk as the database. If it is a network share, **it has to be mounted before** bringing the services up | No |
-| `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Encrypts the backups. **Without it there is no backup**: the script refuses to start | (empty; `install.sh` generates it) | Never by hand. **It is the only one that has to be kept safe off the server**: without it nothing can be restored. See [`operation.md`](operation.md) §9 | No |
+| `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Encrypts and authenticates the backups. **Without it there is no backup**: the script refuses to start | (empty; `install.sh` generates it) | Never by hand. **It is the only one that has to be kept safe off the server**: without it nothing can be restored. See [`operation.md`](operation.md) §9 | No |
+| `BACKUP_WAL_KEY` | `[INSTALADOR]` | Encrypts and authenticates the archived WAL (since 2.2.0). It is **derived** from `BACKUP_ENCRYPTION_KEY` and only `postgres` receives it; it does not open dumps or physical copies. Without it, or if it is not the derived one, PostgreSQL **does not archive** (never in clear text) and `./doctor.sh` fails | (empty; `install.sh` and `update.sh` compute it) | Never by hand nor copied from another server. If it is missing or does not match, recompute it with `backup.sh derive-wal-key --write-env` ([`installation.md`](installation.md) §6, "`BACKUP_PATH`") | No |
 | `BACKUP_RETENTION_DAYS` | — | Days the daily backups are kept. See [`operation.md`](operation.md) §6 | `30` | If your backup policy is different. **Mind the disk space** before raising it | No |
 | `BACKUP_MIN_COPIES` | — | Backups that are never deleted, even if they have all expired | `3` | Almost never. It is the safety net that avoids being left with no backup at all | No |
 | `DB_MAX_SLOT_WAL_KEEP_GB` | — | Gigabytes of transaction log the database retains at most because of a stalled «replication slot». KronoQR uses none: it is the cap that stops one created by mistake from filling the disk | `5` | Almost never. Raise it only if the data disk allows it. If the «stalled replication slot» alert fires, follow `docs/runbooks/slot-replicacion-parado.md` | No |
