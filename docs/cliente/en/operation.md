@@ -1074,6 +1074,30 @@ against a 2.2.0 server does not have that safety net. So, in this order:
 **Never clear the app's data or unpair a tablet to "force" the update**: its
 queue lives there, and the clock-ins it has not sent yet would go with it.
 
+**When updating to 2.2.0: the error history is filtered again.** Up to
+2.1.0, the text of an error was only cleaned of emails, ID documents, phone
+numbers and whatever was between quotes, so a name without quotes could stay
+in the history and, with it, in the diagnostic bundle. 2.2.0 filters that text
+with a closed technical vocabulary (§12.2 and §15.1), and the update also runs
+that filter over the rows you already had. What is worth knowing:
+
+- **Old messages are rewritten and their fingerprints change.** It is
+  irreversible: what is removed cannot be recovered. Errors that only differed
+  by a person's name become a single group, which adds up the occurrences and
+  stays open if any of them was open. If an open support ticket, or your own
+  notes, quoted an error's fingerprint, you will not find it any more: look
+  it up by its code and its origin.
+- **Diagnostic bundles generated before the update may contain names.** Do
+  not send them. If any is left on the server, delete it
+  (`docker compose exec app rm -f storage/app/diagnostics/<fichero>`); if you
+  forget, the hourly purge removes it after 7 days (§12.2). If you copied any
+  off the server, delete it from wherever you kept it as well.
+- **A backup taken before the update keeps the old text**, but when you
+  restore it the migration runs again and leaves the history filtered.
+- **What you already sent to the manufacturer**: it treats bundles from
+  earlier versions that it has received as bundles with personal data, and
+  deletes them.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which
@@ -1217,10 +1241,32 @@ history (from the version that adds it), aggregate counters, the report of the
 last update (only the lines in the report format, and never its
 `.detalle.log`) and **only counts** of the audit trail.
 
-**What it does not carry, by default:** anyone's names, emails, documents,
-employee codes, clock-ins or working days. Employees appear only as an
-identifier. An automated test of the product checks this on a bundle generated
-with 500 employees and 90 days of clock-ins.
+**What it carries from the error history.** Each error appears with its code,
+its origin, its class, how many times it has happened and when it happened
+first and last. Of its text, only the words of a closed technical vocabulary
+that is part of the product are kept; any other word —a first name, a
+surname, a street— appears as "…". Long numbers, and those shaped like an ID
+document, phone number, card, bank account, social security number, employee
+code, date, time or IP address, appear as a marker (`[n]`, `[id]`, `[time]`…).
+**The anonymised bundle contains no employee identifier at all**, not even
+the internal one. It does carry two technical identifiers that do not
+correspond to a person: the tablet's (`device_id`) and the request's
+(`trace_id`), which only your installation can relate to its log.
+
+**What cannot be ruled out entirely.** A name that matches a word of the
+technical vocabulary exactly and appears on its own, without a surname, would
+be kept. With every release the product checks that the vocabulary contains
+none of the most frequent first names and surnames in Spain or in the
+nationalities most common in hospitality, but it cannot check it against
+every possible name. **Open it before sending it**: it is readable JSON.
+
+**How it is checked.** An automated test of the product generates a real
+bundle after injecting —through both routes by which the applications' errors
+arrive and through a server error; in the message, in the values, in the keys
+and in nested data— first names, surnames, emails, DNI, NIE, passports,
+social security numbers, bank accounts, cards, phone numbers and employee
+codes in all their forms, and checks that none of them appears, nor the
+internal identifier of any employee.
 
 #### What it carries about each tablet, your settings and volume (since 2.2.0)
 
@@ -1618,13 +1664,19 @@ It is not your audit trail (`audit_log`, four years, evidentiary value) nor
 your technical log (Loki, optional, you may not have it). It is the one thing
 that always exists, in the same database you back up daily, to answer
 **"what is failing, and since when?"** without having to know the system
-from the inside. **It never carries anyone's name, email or clock-ins**: only
-technical identifiers. This is not a promise without a mechanism — the server
-sanitises the message (emails, national ID numbers, phone numbers, times, and
-any text between quotes, which is where an exception interpolates a variable
-value), a database failure never prints what it was trying to save, and the
-context only accepts a closed list of technical keys. The full mechanism, one
-by one, is in
+from the inside. **It stores nobody's clock-ins, and it is built not to store
+names or emails.** Since 2.2.0 the server filters the text of each error as
+it saves it, with the same closed technical vocabulary described in §12.2: a
+word that is not in it —a first name, a surname— is stored as "…", and
+numbers shaped like an ID document, phone number, account, employee code,
+date, time or IP address, as a marker (`[n]`, `[id]`, `[time]`…). In
+addition, a database failure never prints what it was trying to save, and the
+context only accepts a closed list of technical keys. A person can only appear
+through their internal identifier (`employee_uuid`), which your installation
+keeps so the error can be related to what happened, and which **does not
+travel in the anonymised bundle**. What cannot be ruled out entirely is the
+same as in §12.2: a name that matches a word of the vocabulary and appears on
+its own. The full mechanism, one by one, is in
 [`../../runbooks/errores-en-el-panel.md`](../../runbooks/errores-en-el-panel.md)
 (in Spanish) §2.
 

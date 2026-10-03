@@ -166,7 +166,7 @@ Bloquearlo dejaría al hotel incumpliendo la ley por una acción del proveedor, 
 | Bandeja de incidencias | Lista de situaciones pendientes, asignadas al responsable que corresponde, con flujo de resolución |
 | Vista de cumplimiento | Avisos de descanso insuficiente entre jornadas, jornada diaria excesiva, falta de pausa —si se activa el fichaje de pausa— y exceso semanal (informativo), cada uno con el umbral del convenio a la vista |
 | Salud de las tablets | Última señal de vida, versión, fichajes pendientes de enviar y batería de cada quiosco |
-| Histórico de errores | Todo fallo del sistema queda guardado 90 días con su fecha, su origen y cuántas veces se ha repetido. Su informático lo consulta desde el panel, sin necesidad de saber leer registros técnicos, y viaja en el paquete de diagnóstico si hay que enviarlo al soporte. **Sin nombres ni datos de nadie** |
+| Histórico de errores | Todo fallo del sistema queda guardado 90 días con su fecha, su origen y cuántas veces se ha repetido. Su informático lo consulta desde el panel, sin necesidad de saber leer registros técnicos, y viaja en el paquete de diagnóstico si hay que enviarlo al soporte. **El texto de cada error se reduce a palabras técnicas**, para no guardar nombres ni números de documento |
 
 ### 5.4 Informes y exportaciones
 
@@ -245,7 +245,7 @@ Este punto suele generar dudas, así que conviene dejarlo claro:
 
 - **El hotel es el responsable del tratamiento.** Aloja los datos, controla los accesos y responde ante la Inspección y ante su plantilla.
 - **El fabricante no es encargado del tratamiento en la operación normal**, porque no aloja ni accede a los datos. Solo actúa como tal, y de forma acotada, durante una intervención de soporte expresamente autorizada.
-- **El fabricante no tiene acceso permanente.** Cuando hay una incidencia, el hotel genera un paquete de diagnóstico **anonimizado por defecto** y lo envía. Si en un caso concreto hiciera falta acceso directo, el hotel lo concede de forma expresa, con caducidad, con alcance limitado, revocable en cualquier momento y con cada acceso registrado y visible para el hotel.
+- **El fabricante no tiene acceso permanente.** Cuando hay una incidencia, el hotel genera un paquete de diagnóstico **anonimizado por defecto** —sin nombres, documentos ni identificadores de empleado, y con el texto de los errores reducido a palabras técnicas— y lo envía. Si en un caso concreto hiciera falta acceso directo, el hotel lo concede de forma expresa, con caducidad, con alcance limitado, revocable en cualquier momento y con cada acceso registrado y visible para el hotel.
 - **El hotel puede exportar todos sus datos** en formato abierto, cuando quiera y sin intervención del fabricante. Es su garantía de no quedar atrapado en el producto.
 
 ---
@@ -420,7 +420,7 @@ El aviso de caducidad aparece **30 días antes**, con la fecha y con lo que se d
 
 ### 10.6 Soporte y diagnóstico
 
-Cuando hay una incidencia, el administrador del hotel genera con un clic un **paquete de diagnóstico**: versión, configuración sin contraseñas, estado de los servicios, últimos errores, salud de las tablets y comprobaciones internas. **Sin datos personales, sin nombres, sin registros de jornada.** Se envía al soporte y este lo analiza.
+Cuando hay una incidencia, el administrador del hotel genera con un clic un **paquete de diagnóstico**: versión, configuración sin contraseñas, estado de los servicios, últimos errores, salud de las tablets y comprobaciones internas. **Sin nombres, documentos ni identificadores de empleado, sin registros de jornada, y con el texto de los errores reducido a palabras técnicas.** Es un fichero legible que el hotel puede abrir antes de enviarlo. Se envía al soporte y este lo analiza.
 
 Hay además un comando de **revisión de salud** que valida base de datos, colas, correo, certificados, permisos y espacio en disco, y devuelve un informe con lo que hay que corregir.
 

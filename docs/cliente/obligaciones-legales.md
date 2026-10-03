@@ -515,7 +515,7 @@ ampliado es expreso, temporal y queda auditado.
 | Situación | El hotel | El fabricante |
 | --- | --- | --- |
 | Operación ordinaria | **Responsable del tratamiento** y operador: aloja los datos, controla los accesos, responde ante la Inspección y ante la plantilla (RL-16) | **No es encargado**: no aloja ni accede a los datos (RL-17). No hay contrato de encargo que firmar para usar el producto |
-| Envías un paquete de diagnóstico **anonimizado** | Sigues siendo el responsable; no has comunicado datos personales | Recibe versión, configuración sin secretos, estado de servicios, salud de las tablets y recuentos. **Ningún dato personal**, y una prueba automática del producto lo garantiza |
+| Envías un paquete de diagnóstico **anonimizado** | Sigues siendo el responsable. El paquete está diseñado para que quien lo recibe no pueda identificar a ninguna persona con él; qué lleva y qué no, en [`operacion.md`](operacion.md) §12.2 | Recibe versión, configuración sin secretos, estado de servicios, salud de las tablets, recuentos y el histórico de errores con su texto filtrado (solo palabras técnicas). **Ningún nombre, correo, documento, cuenta, teléfono, código de empleado ni identificador de empleado**: una prueba automática del producto lo comprueba sobre un paquete sembrado con esos datos. Lo que queda fuera de esa garantía está en [`operacion.md`](operacion.md) §12.2 |
 | Envías un paquete **con datos personales** (casilla «Incluir datos personales», o `--with-personal-data`) | Decides comunicar datos a un tercero para un fin concreto: queda en tu auditoría (`diagnostics.personal_data_included`) y debes poder justificarlo | **Encargado del tratamiento para ese supuesto concreto** (RL-18): solo puede usarlos para esa incidencia, con confidencialidad, y debe borrarlos al terminar |
 | Concedes un **acceso de soporte** (panel → «Soporte», o `support:grant`) | Fijas el motivo, el alcance y la duración; puedes revocarlo en cualquier momento; en tu auditoría quedan la concesión, la revocación y **la actividad del acceso agrupada por ventanas de 15 minutos**, con la familia de rutas que se usó en cada ventana —no una línea por petición—, y el panel te dice cuándo se usó por última vez | **Encargado para ese supuesto concreto** (RL-18), con las mismas obligaciones; el acceso caduca solo y no puede ampliarse a sí mismo |
 
@@ -523,9 +523,14 @@ Para los dos últimos casos hace falta un **contrato de encargo del tratamiento*
 (art. 28 RGPD) limitado a soporte, con instrucciones documentadas,
 confidencialidad y prohibición de conservar datos al terminar. El fabricante lo
 entrega con el contrato del producto; si no lo tienes firmado, pídelo **antes**
-de marcar la casilla o de conceder el acceso, no después. El paquete
-anonimizado no lo necesita: es la vía normal de soporte, y por eso es la que
-sale por defecto.
+de marcar la casilla o de conceder el acceso, no después.
+
+El paquete anonimizado está pensado para no necesitarlo: es la vía normal de
+soporte, por eso sale por defecto, y no lleva nada con lo que el fabricante
+pueda identificar a una persona. Si tu DPO, a la vista de lo que contiene
+([`operacion.md`](operacion.md) §12.2), prefiere cubrirlo también, el contrato
+de encargo de soporte que entregamos con el producto sirve para este caso. Esa
+calificación es de tu asesoría y tu DPO, no del fabricante.
 
 ---
 
