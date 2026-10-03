@@ -384,3 +384,36 @@ tests:
                 incidencia de esos fichajes. Comprueba la conexion de esa
                 tablet y que su version de la aplicacion es la actual.
               runbook_url: docs/runbooks/cola-offline-atascada.md#8-descartes-sin-avisar-kioskunreporteddiscards
+
+  #-----------------------------------------------------------------------------
+  # ScanBatchItemNotProcessed: el contador sube 1 por minuto (>= 3 en 30 min a
+  # partir del minuto 3, `for: 5m`). Un dispositivo con solo 2 en total no
+  # dispara nunca.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'scan_batch_items_not_processed_total{device="kiosk-recepcion"}'
+        values: "0+1x40"
+      - series: 'scan_batch_items_not_processed_total{device="kiosk-spa"}'
+        values: "0 1 2 2x38"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ScanBatchItemNotProcessed
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ScanBatchItemNotProcessed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El servidor no ha procesado 10 elementos de lote del quiosco kiosk-recepcion en 30 min"
+              description: >-
+                Al sincronizar la cola de kiosk-recepcion, el servidor fallo
+                al procesar varios elementos del lote. Desde RN-21 un fichaje
+                que no se procesa detiene a los que van detras en esa tablet:
+                siguen en su cola, no se pierden, pero no llegan al registro
+                hasta que se corrija la causa en el servidor.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed

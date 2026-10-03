@@ -166,3 +166,27 @@ groups:
             la incidencia de esos fichajes. Comprueba la conexion de esa
             tablet y que su version de la aplicacion es la actual.
           runbook_url: docs/runbooks/cola-offline-atascada.md#8-descartes-sin-avisar-kioskunreporteddiscards
+
+      #------------------------------------------------------------------------
+      # Un elemento del lote que el servidor no procesa (error del servidor
+      # detras, log `attendance.batch_scan_failed`). Desde RN-21 ese fichaje
+      # bloquea el orden: los demas de ese quiosco esperan detras. Con 1 o 2 en
+      # media hora puede ser un tropiezo transitorio; 3 o mas en el mismo
+      # dispositivo es un patron. Contador por dispositivo, sin PII.
+      #------------------------------------------------------------------------
+      - alert: ScanBatchItemNotProcessed
+        expr: increase(scan_batch_items_not_processed_total[30m]) >= 3
+        for: 5m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: kiosk
+        annotations:
+          summary: "El servidor no ha procesado {{ $value }} elementos de lote del quiosco {{ $labels.device }} en 30 min"
+          description: >-
+            Al sincronizar la cola de {{ $labels.device }}, el servidor
+            fallo al procesar varios elementos del lote. Desde RN-21 un
+            fichaje que no se procesa detiene a los que van detras en esa
+            tablet: siguen en su cola, no se pierden, pero no llegan al
+            registro hasta que se corrija la causa en el servidor.
+          runbook_url: docs/runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed

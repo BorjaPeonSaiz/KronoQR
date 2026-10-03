@@ -10,6 +10,7 @@
 | `ColaOfflineSinVaciar` | la cola no ha bajado a 0 en las últimas 2 h, `for: 5m` | Alta | IT del cliente | [§2](#2-diagnóstico) |
 | `KioskQueueStorageDegraded` | `kiosk_queue_storage_degraded == 1`, `for: 10m` | Alta | IT del cliente | [§7](#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded) |
 | `KioskUnreportedDiscards` | `kiosk_unreported_discards > 0`, `for: 30m` | Aviso | IT del cliente | [§8](#8-descartes-sin-avisar-kioskunreporteddiscards) |
+| `ScanBatchItemNotProcessed` | `increase(scan_batch_items_not_processed_total[30m]) >= 3`, `for: 5m` | Aviso | IT del cliente | [§9](#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) |
 
 **A las 06:30, quien la reciba hace esto:** mira `kiosk:health` para ver de
 qué quiosco es y cuánto lleva creciendo; si el resto de la instalación
@@ -336,6 +337,41 @@ descartes pendientes por dispositivo. Mismo panel de Grafana que §7.
 Esta alerta no contiene ni debe llevar datos de personas: usa el dispositivo y
 los recuentos; el detalle está en la incidencia.
 
+
+## 9. Un elemento del lote que no se procesa (`ScanBatchItemNotProcessed`)
+
+### Qué significa
+
+Al sincronizar, la tablet envía su cola en lote y el servidor **falló al
+procesar un elemento** (un error del servidor, no un rechazo de tarjeta). La
+alerta salta con 3 o más en 30 min para un mismo dispositivo. Desde RN-21 ese
+fichaje **no se salta**: los demás fichajes de ese quiosco **esperan detrás**
+en su cola. No se pierde nada, pero nada de esa tablet llega al registro hasta
+que se corrige la causa. La cola crecerá y es probable que `ColaOfflineAtascada`
+suene también.
+
+### Qué mirar
+
+Busca en el log de la aplicación el evento `attendance.batch_scan_failed`; trae
+el `scan_id` (UUID, sin datos personales) y el error del servidor que hay
+detrás:
+
+```bash
+docker compose -f infra/compose.prod.yaml logs --since 1h app | grep attendance.batch_scan_failed
+```
+
+Con ese error (base de datos, bloqueo, restricción, versión) sabrás si es un
+fallo de la instalación o un fichaje con un caso no previsto.
+
+### Qué hacer
+
+1. **Corrige la causa en el servidor** (despliegue, migración, base de datos).
+   Si no es evidente, escala a soporte con el paquete de diagnóstico y el
+   `scan_id`.
+2. **Nunca borres la cola de la tablet ni la desvincules** (§5): contiene
+   fichajes reales, incluido el que falla y los que esperan detrás.
+3. En cuanto el servidor lo procese, la tablet vacía sola; comprueba con
+   `kiosk:health` y espera a que la alerta se apague.
 
 **Relacionados:** [`quiosco-no-responde.md`](quiosco-no-responde.md) ·
 [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) ·
