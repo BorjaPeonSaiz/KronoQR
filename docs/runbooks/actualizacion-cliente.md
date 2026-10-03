@@ -163,8 +163,10 @@ Las tablets se actualizan **después** del servidor y **con la cola a cero**:
   `operacion.md` §11): los mensajes antiguos se reescriben con el vocabulario
   técnico cerrado, es irreversible y **las huellas cambian**. Si una incidencia
   abierta con soporte citaba la huella de un error, búscalo por su código y su
-  origen. Una copia anterior a la actualización conserva el texto antiguo, pero
-  al restaurarla la migración vuelve a pasar.
+  origen. Una copia anterior a la actualización conserva el texto antiguo y, al
+  restaurarla, el panel lo muestra hasta la siguiente actualización o un
+  `migrate` (`restore.sh` no migra); el paquete de diagnóstico lo filtra
+  siempre al generarse.
 - **Borra los paquetes de diagnóstico generados antes de actualizar**: pueden
   llevar nombres y no deben enviarse. Si queda alguno en el servidor
   (`docker compose exec app rm -f storage/app/diagnostics/<fichero>`), bórralo;

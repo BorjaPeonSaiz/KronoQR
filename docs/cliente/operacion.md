@@ -1084,8 +1084,10 @@ conviene saber:
   te olvida, la purga horaria lo retira a los 7 días (§12.2). Si sacaste
   alguno del servidor, bórralo también de donde lo guardaras.
 - **Una copia de seguridad anterior a la actualización conserva el texto
-  antiguo**, pero al restaurarla la migración vuelve a pasar y deja el
-  histórico filtrado.
+  antiguo** y, al restaurarla, el panel vuelve a mostrarlo hasta que pase la
+  siguiente actualización (o un `migrate`), que lo filtra otra vez. El paquete
+  de diagnóstico, en cambio, lo filtra siempre al generarse, también sobre una
+  copia restaurada.
 - **Lo que ya enviaste al fabricante**: trata los paquetes de versiones
   anteriores que haya recibido como paquetes con datos personales y los
   borra.

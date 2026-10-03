@@ -1092,8 +1092,10 @@ that filter over the rows you already had. What is worth knowing:
   (`docker compose exec app rm -f storage/app/diagnostics/<fichero>`); if you
   forget, the hourly purge removes it after 7 days (§12.2). If you copied any
   off the server, delete it from wherever you kept it as well.
-- **A backup taken before the update keeps the old text**, but when you
-  restore it the migration runs again and leaves the history filtered.
+- **A backup taken before the update keeps the old text** and, once
+  restored, the panel shows it again until the next update (or a `migrate`)
+  filters it once more. The diagnostics bundle, by contrast, always filters it
+  when generated, also on a restored backup.
 - **What you already sent to the manufacturer**: it treats bundles from
   earlier versions that it has received as bundles with personal data, and
   deletes them.
