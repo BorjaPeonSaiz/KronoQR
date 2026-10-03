@@ -664,6 +664,9 @@ deps-audit-js: ## npm audit del workspace (RS-10): bloquea sobre produccion, inf
 
 sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)
 	$(SEMGREP) --config .semgrep --error --metrics=off --quiet
+	@# Las reglas se prueban a si mismas: cada `ruleid:` de la muestra tiene que
+	@# disparar y cada `ok:` no. Sin esto, una regla que no casa nunca pasaria.
+	$(SEMGREP) --test --metrics=off --config .semgrep/kronoqr-php.yaml .semgrep/kronoqr-php.php
 	@echo [make] Semgrep: 0 hallazgos de severidad alta.
 
 # Reglas COMUNITARIAS de Semgrep, distintas de las propias de .semgrep/ (que

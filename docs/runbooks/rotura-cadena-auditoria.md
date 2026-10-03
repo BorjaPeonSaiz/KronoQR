@@ -391,6 +391,7 @@ dura 19) y se reenvían solos, pero conviene confirmarlo.
 | Silencio de la verificación | IT del cliente | Dentro de la jornada |
 
 **El fabricante no accede a los datos del cliente** (ADR-020, regla dura 16). Lo
-que se le envía para diagnosticar es el paquete anonimizado; la salida de
+que se le envía para diagnosticar es el paquete anonimizado (sin `employee_uuid`, con el texto de
+los errores reducido a palabras técnicas); la salida de
 `compliance:verify-audit-chain` se puede compartir tal cual porque no lleva datos
 personales, pero el contenido de `audit_log` **no sale de la instalación**.

@@ -1064,6 +1064,34 @@ en este orden:
 «forzar» la actualización**: su cola vive ahí, y con ella se irían los
 fichajes que aún no ha enviado.
 
+**Al actualizar a la 2.2.0: el histórico de errores se vuelve a filtrar.**
+Hasta la 2.1.0, el texto de un error se limpiaba solo de correos, documentos,
+teléfonos y lo que fuera entre comillas, así que un nombre sin comillas podía
+quedarse en el histórico y, con él, en el paquete de diagnóstico. La 2.2.0
+filtra ese texto con un vocabulario técnico cerrado (§12.2 y §15.1), y la
+actualización pasa ese filtro también por las filas que ya tenías. Lo que
+conviene saber:
+
+- **Los mensajes antiguos se reescriben y sus huellas cambian.** Es
+  irreversible: lo que se quita no se recupera. Los errores que solo se
+  distinguían por el nombre de una persona pasan a ser un solo grupo, que
+  suma las veces y queda abierto si alguno lo estaba. Si en una incidencia
+  abierta con soporte, o en tus notas, citabas la huella de un error, ya no
+  la encontrarás: búscalo por su código y su origen.
+- **Los paquetes de diagnóstico generados antes de actualizar pueden llevar
+  nombres.** No los envíes. Si queda alguno en el servidor, bórralo
+  (`docker compose exec app rm -f storage/app/diagnostics/<fichero>`); si se
+  te olvida, la purga horaria lo retira a los 7 días (§12.2). Si sacaste
+  alguno del servidor, bórralo también de donde lo guardaras.
+- **Una copia de seguridad anterior a la actualización conserva el texto
+  antiguo** y, al restaurarla, el panel vuelve a mostrarlo hasta que pase la
+  siguiente actualización (o un `migrate`), que lo filtra otra vez. El paquete
+  de diagnóstico, en cambio, lo filtra siempre al generarse, también sobre una
+  copia restaurada.
+- **Lo que ya enviaste al fabricante**: trata los paquetes de versiones
+  anteriores que haya recibido como paquetes con datos personales y los
+  borra.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
@@ -1204,10 +1232,33 @@ contadores agregados, el informe de la última actualización (solo las líneas
 del formato del informe, y nunca su `.detalle.log`) y **solo recuentos** del
 registro de auditoría.
 
-**Qué no lleva, por defecto:** nombres, correos, documentos, códigos de
-empleado, fichajes ni jornadas de nadie. Los empleados aparecen solo como
-identificador. Una prueba automática del producto lo comprueba sobre un
-paquete generado con 500 empleados y 90 días de fichajes.
+**Qué lleva del histórico de errores.** Cada error aparece con su código, su
+origen, su clase, cuántas veces ha ocurrido y cuándo fue la primera y la
+última vez. De su texto solo se conservan las palabras de un vocabulario
+técnico cerrado que forma parte del producto; cualquier otra —un nombre, un
+apellido, una calle— aparece como «…». Los números largos y los que tienen
+forma de documento, teléfono, tarjeta, cuenta bancaria, número de afiliación,
+código de empleado, fecha, hora o dirección IP aparecen como un marcador
+(`[n]`, `[id]`, `[time]`…). **En el paquete anonimizado no aparece ningún
+identificador de empleado**, ni siquiera el interno. Sí van dos
+identificadores técnicos que no corresponden a una persona: el de la tablet
+(`device_id`) y el de la petición (`trace_id`), que solo tu instalación sabe
+relacionar con su log.
+
+**Lo que no se puede descartar del todo.** Un nombre que coincida exactamente
+con una palabra del vocabulario técnico y aparezca solo, sin apellido, se
+conservaría. El producto comprueba en cada versión que el vocabulario no
+contiene ninguno de los nombres y apellidos más frecuentes en España ni de las
+nacionalidades más habituales en hostelería, pero no puede comprobarlo contra
+todos los nombres posibles. **Ábrelo antes de enviarlo**: es un JSON legible.
+
+**Cómo se comprueba.** Una prueba automática del producto genera un paquete
+real después de introducir —por las dos vías por las que llegan los errores de
+las aplicaciones y por un error del servidor; en el mensaje, en los valores,
+en las claves y en datos anidados— nombres, apellidos, correos, DNI, NIE,
+pasaportes, números de afiliación, cuentas bancarias, tarjetas, teléfonos y
+códigos de empleado en todas sus formas, y comprueba que no aparece ninguno,
+ni el identificador interno de ningún empleado.
 
 #### Lo que lleva de cada tablet, de tus ajustes y del volumen (desde la 2.2.0)
 
@@ -1597,12 +1648,19 @@ No es tu auditoría (`audit_log`, cuatro años, valor probatorio) ni tu log
 técnico (Loki, opcional, puedes no tenerlo). Es lo único que existe siempre,
 en la misma base de datos que respaldas a diario, para responder a **«¿qué
 está fallando, y desde cuándo?»** sin tener que conocer el sistema por dentro.
-**Nunca lleva nombres, correos ni fichajes de nadie**: solo identificadores
-técnicos. No es una promesa sin mecanismo — el servidor sanea el mensaje
-(correos, DNI, teléfonos, horas y cualquier texto entre comillas, que es donde
-una excepción interpola un valor variable), un fallo de base de datos nunca
-imprime lo que se intentó guardar, y el contexto solo admite una lista cerrada
-de claves técnicas. El detalle completo, mecanismo a mecanismo, está en
+**No guarda fichajes de nadie, y está hecho para no guardar nombres ni
+correos.** Desde la 2.2.0 el servidor filtra el texto de cada error al
+guardarlo, con el mismo vocabulario técnico cerrado que describe §12.2: una
+palabra que no esté en él —un nombre, un apellido— se guarda como «…», y los
+números con forma de documento, teléfono, cuenta, código de empleado, fecha,
+hora o dirección IP, como un marcador (`[n]`, `[id]`, `[time]`…). Además, un
+fallo de base de datos nunca imprime lo que se intentó guardar, y el contexto
+solo admite una lista cerrada de claves técnicas. Una persona solo puede
+aparecer por su identificador interno (`employee_uuid`), que en tu
+instalación se conserva para poder relacionar el error con lo que pasó y que
+**no viaja en el paquete anonimizado**. Lo que no se puede descartar del todo
+es lo mismo que en §12.2: un nombre que coincida con una palabra del
+vocabulario y aparezca solo. El detalle, mecanismo a mecanismo, está en
 [`../runbooks/errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) §2.
 
 Un dato de nivel: **el nivel `critical` de un error de cliente solo lo produce

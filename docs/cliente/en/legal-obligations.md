@@ -538,7 +538,7 @@ temporary and audited.
 | Situation | The hotel | The vendor |
 | --- | --- | --- |
 | Ordinary operation | **Controller** and operator: hosts the data, controls access, answers to the Inspectorate and to the staff (RL-16) | **Is not a processor**: it neither hosts nor accesses the data (RL-17). There is no data processing agreement to sign in order to use the product |
-| You send an **anonymised** diagnostic bundle | You remain the controller; you have not disclosed personal data | Receives version, configuration without secrets, service status, tablet health and counts. **No personal data**, and an automated test in the product guarantees it |
+| You send an **anonymised** diagnostic bundle | You remain the controller. The bundle is designed so that whoever receives it cannot identify any person with it; what it carries and what it does not, in [`operation.md`](operation.md) §12.2 | Receives version, configuration without secrets, service status, tablet health, counts and the error history with its text filtered (technical words only). **No name, email, ID document, account, phone number, employee code or employee identifier**: an automated test in the product checks this on a bundle seeded with that data. What falls outside that guarantee is in [`operation.md`](operation.md) §12.2 |
 | You send a bundle **with personal data** ("Include personal data" checkbox, or `--with-personal-data`) | You decide to disclose data to a third party for a specific purpose: it is recorded in your audit log (`diagnostics.personal_data_included`) and you must be able to justify it | **Processor for that specific case** (RL-18): it may only use the data for that incident, under confidentiality, and must delete it when finished |
 | You grant **support access** (panel → "Support", or `support:grant`) | You set the reason, the scope and the duration; you can revoke it at any time; your audit log keeps the grant, the revocation and **the activity of the access grouped into 15-minute windows**, with the family of routes used in each window —not one line per request—, and the panel tells you when it was last used | **Processor for that specific case** (RL-18), with the same obligations; the access expires on its own and cannot extend itself |
 
@@ -546,8 +546,15 @@ For the last two cases a **data processing agreement** (art. 28 GDPR) limited
 to support is needed, with documented instructions, confidentiality and a
 prohibition on retaining data when finished. The vendor delivers it with the
 product contract; if you do not have it signed, ask for it **before** ticking
-the checkbox or granting the access, not after. The anonymised bundle does not
-need it: it is the normal support route, and that is why it is the default.
+the checkbox or granting the access, not after.
+
+The anonymised bundle is designed not to need it: it is the normal support
+route, that is why it is the default, and it carries nothing with which the
+vendor could identify a person. If your DPO, in view of what it contains
+([`operation.md`](operation.md) §12.2), prefers to cover it as well, the
+support data processing agreement we deliver with the product serves for this
+case. That assessment belongs to your advisers and your DPO, not to the
+vendor.
 
 ---
 

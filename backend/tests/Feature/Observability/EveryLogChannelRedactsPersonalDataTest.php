@@ -32,7 +32,9 @@ use Monolog\Processor\PsrLogMessageProcessor;
  *   fija la ultima prueba de este fichero.
  * - `null` descarta.
  * - `emergency` no es un canal: es la ruta del logger de emergencia que
- *   Laravel monta a mano cuando la configuracion falla, sin taps posibles.
+ *   Laravel monta a mano cuando la configuracion falla, sin taps posibles. El
+ *   saneado se lo pone `RedactingLogManager` (ADR-048), y lo fija
+ *   `tests/Integration/Logging/EmergencyChannelRedactsTest.php`.
  */
 const EVERY_LOG_CHANNEL_EXENTOS = ['stack', 'null', 'emergency'];
 

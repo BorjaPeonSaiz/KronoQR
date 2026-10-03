@@ -633,9 +633,11 @@ incidencia-sin-acceso.md por el orquestador; seguridad-cumplimiento con
 
 Los innegociables:
 - Anonimizado por defecto y VERIFICADO: cada sección del paquete es una
-  lista de permitidos; una prueba con volumen (500 empleados, 90 días)
-  busca nombres, correos, DNI, horas y la razón social en el paquete
-  completo. Empleados como employee_uuid, quioscos sin name, licencia sin
+  lista de permitidos; una prueba con un paquete sembrado con datos
+  personales ficticios en todas sus formas busca nombres, correos, DNI, horas y
+  la razón social en el paquete completo (ADR-048: texto por lista blanca de
+  palabras, sin employee_uuid ni UUID en el texto; solo device_id y trace_id).
+  Empleados sin identificador, quioscos sin name, licencia sin
   customer_name, auditoría solo en recuentos, nunca el .detalle.log
 - Configuración por lista blanca de claves; los secretos no aparecen ni
   «redactados»

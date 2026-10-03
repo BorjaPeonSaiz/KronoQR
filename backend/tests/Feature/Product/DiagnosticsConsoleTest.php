@@ -99,7 +99,12 @@ it('el paquete por defecto va anonimizado y lo dice', function (): void {
         ->and($manifest['generated_by'])->toBe('console')
         ->and($document)->not->toHaveKey('personal_data')
         ->and($result['output'])->toContain('Anonimo:  si')
-        ->and($result['output'])->toContain('no lleva nombres, ni correos, ni fichajes');
+        // Lo que dice es lo que comprueba la prueba sembrada (ADR-048), en los
+        // dos idiomas, y nada mas.
+        ->and($result['output'])->toContain('sin nombres, documentos ni identificadores de empleado')
+        ->and($result['output'])->toContain('Ábrelo antes de enviarlo.')
+        ->and($result['output'])->toContain('no names, documents or employee identifiers')
+        ->and($result['output'])->toContain('Open it before sending.');
 })->group('RF-PD-09', 'RL-19');
 
 it('--anonymized es un alias explicito y no cambia nada', function (): void {

@@ -70,3 +70,48 @@ rules:
         - /backend/**/*.php
     patterns:
       - pattern-regex: '@phpstan-ignore(-next-line|-line)?[ \t]+[A-Za-z][A-Za-z0-9_.,: \t]*$'
+
+  # --------------------------------------------------------------------------
+  # Regla dura 21 y ADR-048 (H9 del dictamen de seguridad del bloque 19): nunca
+  # nombres, correos ni telefonos en el CONTEXTO de una linea del log tecnico.
+  #
+  # Por que hace falta: `RedactPersonalDataProcessor` pasa el mensaje y las
+  # excepciones por la lista blanca por palabra, pero los valores del contexto
+  # solo por patrones (decision D3 de ADR-048: los escribe el codigo del
+  # producto y el vocabulario estropearia rutas y clases). Un nombre sin
+  # comillas no tiene patron. Esta regla es el control compensatorio: impide
+  # que el codigo lo meta ahi. Las personas van por `employee_uuid`.
+  - id: kronoqr-log-con-datos-de-persona
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Regla dura 21: este log mete en su contexto un nombre, un correo o un
+      telefono. El contexto del log tecnico solo pasa por patrones (ADR-048,
+      D3) y un nombre no tiene patron. Identifica a la persona con
+      `employee_uuid`, nunca con sus datos.
+    paths:
+      include:
+        - /backend/app/**
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: Log::$METHOD($MSG, [..., $KEY => $VALUE, ...], ...)
+              - pattern: $LOGGER->$METHOD($MSG, [..., $KEY => $VALUE, ...], ...)
+              - pattern: $LOGGER->$METHOD($LEVEL, $MSG, [..., $KEY => $VALUE, ...], ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(debug|info|notice|warning|error|critical|alert|emergency|log)$
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: ^['"](name|first_name|last_name|full_name|display_name|employee_name|user_name|email|phone|nombre|apellidos|correo|telefono)['"]$
+      - patterns:
+          - pattern-either:
+              - pattern: Log::$METHOD($MSG, [..., $KEY => $OBJECT->$FIELD, ...], ...)
+              - pattern: $LOGGER->$METHOD($MSG, [..., $KEY => $OBJECT->$FIELD, ...], ...)
+              - pattern: $LOGGER->$METHOD($LEVEL, $MSG, [..., $KEY => $OBJECT->$FIELD, ...], ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(debug|info|notice|warning|error|critical|alert|emergency|log)$
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: ^(name|first_name|last_name|full_name|display_name|email|phone|firstName|lastName|fullName|displayName|resolvedByName)$

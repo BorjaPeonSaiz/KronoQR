@@ -7,8 +7,11 @@ namespace App\Modules\Workforce\Domain\Exception;
 /**
  * El codigo de empleado no tiene forma de codigo de empleado.
  *
- * No lleva nunca datos de la persona en el mensaje: el codigo si, porque es
- * opaco por construccion y no identifica a nadie por si solo.
+ * **No lleva nunca el valor en el mensaje** (ADR-048, regla dura 21): un codigo
+ * de empleado, aunque sea opaco, identifica a una persona dentro de la
+ * instalacion y es la mitad de la credencial del portal (ADR-015). El mensaje de
+ * una excepcion acaba en el log tecnico y en `error_events`; la longitud basta
+ * para diagnosticar.
  */
 final class InvalidEmployeeCode extends WorkforceDomainException
 {
@@ -17,13 +20,13 @@ final class InvalidEmployeeCode extends WorkforceDomainException
         return new self('El codigo de empleado no puede estar vacio.');
     }
 
-    public static function tooLong(string $value, int $max): self
+    public static function tooLong(int $length, int $max): self
     {
-        return new self('El codigo de empleado «'.$value.'» supera los '.$max.' caracteres.');
+        return new self('El codigo de empleado tiene '.$length.' caracteres y el maximo son '.$max.'.');
     }
 
-    public static function malformed(string $value): self
+    public static function malformed(): self
     {
-        return new self('El codigo de empleado «'.$value.'» solo admite letras mayusculas y digitos.');
+        return new self('El codigo de empleado solo admite letras mayusculas y digitos.');
     }
 }

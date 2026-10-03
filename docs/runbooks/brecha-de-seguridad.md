@@ -602,7 +602,10 @@ como forma de «limpiar» nada.
 | Sospecha de un defecto del producto como causa | Fabricante, con el paquete de diagnóstico **anonimizado** | Dentro de la jornada |
 
 **El fabricante no accede a los datos del cliente** (ADR-020, regla dura 16). Lo
-que se le envía es el paquete de diagnóstico anonimizado; **el extracto de
+que se le envía es el paquete de diagnóstico anonimizado (sin identificador de
+empleado, con el texto de los errores reducido a palabras técnicas; no garantiza
+la ausencia absoluta de datos personales, así que revísalo antes de enviarlo);
+**el extracto de
 `audit_log`, los logs con IP y la copia de la base no salen de la instalación**
 salvo concesión expresa, temporal y auditada del cliente.
 

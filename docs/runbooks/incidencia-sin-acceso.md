@@ -16,10 +16,14 @@
 
 ## 1. Lo que no vas a hacer
 
-- **No vas a pedir nombres, correos ni fichajes.** El paquete anonimizado
-  identifica a los empleados por `employee_uuid` y a los quioscos por `uuid`,
-  y con eso se diagnostica: un `uuid` que se repite en tres errores es el mismo
-  patrón que un nombre que se repite en tres errores.
+- **No vas a pedir nombres, correos ni fichajes.** El paquete anonimizado no
+  lleva identificador de empleado, ni siquiera el interno: del histórico de
+  errores solo trae el texto reducido a palabras técnicas (lo demás aparece
+  como `…`) y dos identificadores técnicos, `device_id` (la tablet) y
+  `trace_id` (la petición). Con eso se diagnostica: un `device_id` o un código
+  de error que se repite en tres grupos es el patrón. Si el cliente te dice
+  que cree que apareció un nombre, trátalo como hallazgo (un nombre igual a una
+  palabra del vocabulario podría conservarse) y no lo reenvíes.
 - **No vas a pedir el `.env`, ni una clave, ni un volcado de base de datos.**
   El paquete lleva la configuración que hace falta para diagnosticar y ninguna
   secreta; si crees que te falta una clave, es que quieres saber si está bien

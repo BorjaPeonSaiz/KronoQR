@@ -61,3 +61,5 @@ Y el escenario en el que ese acceso se usa mal no es el del atacante externo, si
 - Prueba de *feature*: una concesión de soporte caducada no da acceso; una revocada tampoco; y todo uso queda en `audit_log` visible para el cliente (RF-PD-11).
 - Prueba de integración: `error_events` no almacena nombres ni horas de nadie; el contexto se limita a datos técnicos, `trace_id`, `employee_uuid` y `device_id`.
 - Prueba de arquitectura: ningún canal del producto envía datos al fabricante fuera del paquete de diagnóstico y de la telemetría opcional desactivada por defecto.
+
+> **Nota de precisión (2.2.0, Bloque 19).** «Anonimizado por defecto», aplicado al texto libre del histórico de errores (el mensaje y los valores de texto del contexto), se cumple con una **lista blanca de palabras técnicas**, no con patrones: cualquier palabra que no esté en el vocabulario cerrado del producto se sustituye por `…`. Los patrones se mantienen para los identificadores numéricos. Ver [ADR-048](ADR-048-el-texto-libre-del-historico-de-errores-pasa-por-una-lista-blanca-de-palabras.md), que define también la prueba de volumen sembrada que lo verifica. Esta decisión no cambia: la precisa.

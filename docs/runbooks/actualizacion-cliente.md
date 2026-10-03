@@ -159,6 +159,19 @@ Las tablets se actualizan **después** del servidor y **con la cola a cero**:
   el quiosco»** (`discarded_scan`, RN-22) en la bandeja de RRHH tras la revisión
   de la madrugada siguiente. No es un fallo de la actualización; la resuelve
   RRHH ([`cola-offline-atascada.md`](cola-offline-atascada.md) §8).
+- **Desde la 2.2.0, el histórico de errores se vuelve a filtrar** (ADR-048,
+  `operacion.md` §11): los mensajes antiguos se reescriben con el vocabulario
+  técnico cerrado, es irreversible y **las huellas cambian**. Si una incidencia
+  abierta con soporte citaba la huella de un error, búscalo por su código y su
+  origen. Una copia anterior a la actualización conserva el texto antiguo y, al
+  restaurarla, el panel lo muestra hasta la siguiente actualización o un
+  `migrate` (`restore.sh` no migra); el paquete de diagnóstico lo filtra
+  siempre al generarse.
+- **Borra los paquetes de diagnóstico generados antes de actualizar**: pueden
+  llevar nombres y no deben enviarse. Si queda alguno en el servidor
+  (`docker compose exec app rm -f storage/app/diagnostics/<fichero>`), bórralo;
+  la purga horaria lo retira a los 7 días. Si sacaste alguno del servidor,
+  bórralo también de donde lo guardaras.
 
 ---
 
@@ -250,8 +263,9 @@ la restaurada, porque el servidor no confirmó ningún fichaje durante ella.
 
 Cuando la versión anterior responda, genera el paquete de diagnóstico y abre un
 caso al fabricante adjuntando el **informe** de `BACKUP_PATH/reports/`
-(`update-<fecha>.log`). **El paquete va anonimizado por defecto** y el informe
-no lleva secretos ni datos personales. El **detalle técnico**
+(`update-<fecha>.log`). **El paquete va anonimizado por defecto** (sin identificador de empleado y con
+el texto de los errores reducido a palabras técnicas) y el informe no lleva
+secretos ni datos personales. El **detalle técnico**
 (`update-<fecha>.detalle.log`) es otra cosa: es de root con modo `0600` y está en
 `/var/log/kronoqr/` (no en `BACKUP_PATH`, que escribe la aplicación), lleva la salida
 cruda de migraciones, copia, restauración y logs, y **puede contener datos

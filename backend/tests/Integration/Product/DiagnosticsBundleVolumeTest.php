@@ -7,15 +7,23 @@ use App\Modules\Product\Application\UseCase\RecordErrorEvent;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
+use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
 use App\Modules\Shared\Domain\ValueObject\ErrorReport;
 use App\Modules\Shared\Domain\ValueObject\ErrorSource;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Http\Api;
+use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Product\ErrorHistoryConnection;
 use Tests\Support\Product\LicenseKeys;
+use Tests\Support\Product\SeededPersonalData;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -211,18 +219,13 @@ function instalacionConVolumen(): array
  * la misma persona». La prueba afirma que **viaja**, para que quede escrito que
  * es una decision y no un descuido, y que el nombre de esa misma persona no.
  *
- * ## Lo que esta prueba NO afirma, dicho para que nadie lea de mas
+ * ## El nombre suelto, sin comillas, lo cubren las pruebas sembradas de abajo
  *
- * Que un nombre **suelto, sin comillas, en prosa** no salga. No sale porque no
- * puede: «Ana Ruiz» es indistinguible de «Cocina Central» para cualquier
- * expresion regular, y {@see ErrorMessageSanitizer} lo dice con esas palabras.
- * Lo que el saneado cubre es **donde** aparece un nombre —interpolado entre
- * comillas, que es la convencion de PHP y de PostgreSQL— y las formas que si
- * son reconocibles: correo, DNI, telefono, hora, secreto. Un productor que
- * escriba `"fallo de ".$empleado->fullName()` sin comillas se lo lleva al
- * paquete, y ninguna prueba lo va a impedir: lo impide la revision de quien
- * escribe el mensaje. Sembrarlo aqui solo pondria la suite en rojo permanente
- * sin cerrar el hueco.
+ * Hasta la 2.2.0 esta prueba no podia afirmar que un nombre **suelto, en
+ * prosa** no saliera: {@see ErrorMessageSanitizer} era una lista negra de
+ * patrones. ADR-048 lo cambio por una lista blanca de palabras, y las pruebas
+ * «sembradas» del final de este fichero lo afirman por las tres puertas, en
+ * todas las formas que pidio el dictamen de seguridad del bloque 19.
  *
  * @return int Cuantos grupos quedaron escritos, contando desde el primero.
  */
@@ -557,12 +560,14 @@ it('lleva el historico de errores del periodo y ni una PII de las que los errore
         // Y la clave de contexto que nadie declaro: se cae entera, con su valor.
         ->and($json)->not->toContain('employee_name');
 
-    // --- Assert: el UUID si viaja, y es lo unico que identifica --------------
+    // --- Assert: ni el UUID del empleado; el de la tablet si ------------------
 
-    // ADR-020 lo admite donde haga falta, y aqui hace falta: sin el, soporte no
-    // puede decir que dos de los tres errores son de la misma persona. Es
-    // seudonimo y el hotel es el unico que puede resolverlo a un nombre.
-    expect($json)->toContain($employees[0])
+    // ADR-048 (H2): `employee_uuid` es un seudonimo cuya correspondencia tiene
+    // el hotel, asi que el paquete ANONIMIZADO no lo lleva —ni en la columna ni
+    // dentro del texto—. `device_id` identifica una tablet, no a una persona, y
+    // se queda. Con `--with-personal-data` el grupo sale completo (lo fija
+    // `ErrorEventsInDiagnosticsAndExportTest`).
+    expect($json)->not->toContain($employees[0])
         ->and($json)->toContain($deviceUuid);
 
     // Y lo que queda del mensaje sigue diciendo que paso, que es la otra mitad:
@@ -570,3 +575,279 @@ it('lleva el historico de errores del periodo y ni una PII de las que los errore
     expect($json)->toContain('SQLSTATE[23505]')
         ->and($json)->toContain('duplicate key value violates unique constraint');
 })->group('RL-19', 'RF-PD-15');
+
+/*
+ * ---------------------------------------------------------------------------
+ * LA PRUEBA SEMBRADA (ADR-048; RF-PD-15, RF-PD-09, RL-19; reglas duras 16 y 21;
+ * dictamen de seguridad del bloque 19: H2, H3, H4, H7 y «la prueba sembrada
+ * cubre ademas»).
+ *
+ * Sobre la misma instalacion de 500 empleados y 90 dias se siembran datos
+ * personales FICTICIOS por las tres puertas por las que un error entra en
+ * `error_events` —`POST /client-errors` con sesion de gestion y de portal, el
+ * latido del quiosco y una excepcion del servidor captada por el enganche—, en
+ * el mensaje, en las claves, en los valores, en valores anidados y en
+ * `app_version`. Luego se genera el paquete anonimizado y se busca cada valor
+ * en TODO su texto. Es la comprobacion que citan `operacion.md` §12.2 y
+ * `obligaciones-legales.md`: lo que esta prueba no afirma, la guia no lo puede
+ * prometer.
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * Lo que el dictamen pide sembrar y {@see SeededPersonalData} no trae: apellidos
+ * que son palabras (Mesa, Blanco, Mayor, Cruz, Vega, Campos), un correo con
+ * dominio Unicode, `line <telefono>` (H3), la fecha de nacimiento escrita, las
+ * IP y un nombre pegado en `app_version`.
+ */
+const DIAGNOSTICS_BUNDLE_VOLUME_EXTRA_PII = [
+    'Ofelia Mesa Blanco', 'Ruperta Mayor Cruz', 'Anselma Vega Campos',
+    'Ofelia', 'Ruperta', 'Anselma', 'Mesa', 'Blanco', 'Mayor', 'Cruz', 'Vega',
+    '698765432', '698 765 432', '15 de marzo de 1985', 'marzo de 1985',
+    '192.168.13.37', '2001:db8:85a3::8a2e:370:7334',
+    'renée.zoë@hôtel-exemple.fr', 'hôtel-exemple.fr',
+    'RosaFicticiana', 'OfeliaMesaBlanco',
+];
+
+/** Los codigos de catalogo de cada puerta de cliente, que se van alternando. */
+const DIAGNOSTICS_BUNDLE_VOLUME_WEB_CODES = ['web.unhandled_error', 'web.unhandled_rejection', 'web.vue_error'];
+
+const DIAGNOSTICS_BUNDLE_VOLUME_KIOSK_CODES = ['kiosk.camera.stream_lost', 'kiosk.heartbeat.failed', 'kiosk.unhandled_error'];
+
+/**
+ * Un informe de cliente con lo que faltaba, repartido entre las claves de texto
+ * admitidas (cada valor por debajo de los 200 caracteres del contrato), una
+ * clave que es un nombre y, si la puerta lo admite, un valor anidado. Lleva
+ * dentro el UUID de un empleado de la semilla, que tampoco puede salir (H2).
+ *
+ * @return array<string, mixed>
+ */
+function volumenInformeConLoQueFaltaba(string $code, string $employeeUuid, bool $nested): array
+{
+    $context = [
+        'message' => SeededPersonalData::TECHNICAL.' para Ofelia Mesa Blanco, Ruperta Mayor Cruz y Anselma Vega Campos',
+        'reason' => 'código 739104, line 698765432, line 698 765 432',
+        'cause' => 'GET /api/v1/me/days?t=x7k2m9 de quien nacio el 15 de marzo de 1985',
+        'hook' => 'desde 192.168.13.37 y 2001:db8:85a3::8a2e:370:7334',
+        'component' => 'renée.zoë@hôtel-exemple.fr',
+        'scope' => 'Employee '.$employeeUuid.' not found',
+        'source' => 'https://portal.hotel-ejemplo.es/me/days?t=x7k2m9#Ofelia',
+        'Ofelia Mesa Blanco' => 'una clave que es un nombre',
+    ];
+
+    $nestedValue = ['detalle' => ['persona' => 'Ruperta Mayor Cruz', 'ip' => '192.168.13.37']];
+
+    return [
+        'code' => $code,
+        'occurred_at' => '2026-10-03T09:00:00Z',
+        'app_version' => 'OfeliaMesaBlanco',
+        'context' => $nested ? [...$context, ...$nestedValue] : $context,
+    ];
+}
+
+/**
+ * Siembra por las tres puertas y devuelve el UUID del empleado con sesion de
+ * portal: es el `employee_uuid` que el control positivo busca con
+ * `--with-personal-data`.
+ *
+ * @param  list<string>  $employees  Los UUID de la semilla de volumen.
+ */
+function volumenSembrarPorLasTresPuertas(array $employees): string
+{
+    $quiosco = AttendanceFixtures::scenario();
+    $gestion = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+    $portal = PortalLogins::open($quiosco['employee']);
+
+    // 1 y 2. `POST /client-errors` con sesion de gestion y con sesion de portal.
+    foreach ([$gestion, $portal] as $token) {
+        Api::as($token)->post('/api/v1/client-errors', ['errors' => [
+            ...SeededPersonalData::clientReports(DIAGNOSTICS_BUNDLE_VOLUME_WEB_CODES),
+            volumenInformeConLoQueFaltaba('web.vue_error', $employees[1], nested: true),
+        ]])->assertStatus(202);
+    }
+
+    // 3. El latido del quiosco, con `client_errors`. Sin anidados: el contrato
+    //    del latido los rechaza con 400, y eso lo prueba
+    //    `HeartbeatClientErrorsPiiTest`.
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.0',
+        'pending_queue_size' => 0,
+        'client_errors' => [
+            ...SeededPersonalData::clientReports(DIAGNOSTICS_BUNDLE_VOLUME_KIOSK_CODES, nested: false),
+            volumenInformeConLoQueFaltaba('kiosk.unhandled_error', $employees[1], nested: false),
+        ],
+    ])->assertOk();
+
+    // 4. Una excepcion del servidor que interpola los valores, captada por el
+    //    enganche del manejador. Con la sesion del portal, para que el grupo
+    //    lleve `employee_uuid` y el paquete anonimizado tenga que quitarlo; y
+    //    con un nombre en la ruta, que acaba en `context.route`.
+    app()->make(ExecutionContext::class)->reset();
+
+    Route::middleware(['api', 'auth:sanctum'])->get(
+        '/api/v1/__b19/ofelia-mesa-blanco',
+        static fn () => throw new RuntimeException(
+            SeededPersonalData::message(3).' | Employee '.$employees[2].' (Ruperta Mayor Cruz) line 698765432'
+                .' desde 192.168.13.37 el 15 de marzo de 1985',
+        ),
+    );
+
+    Api::as($portal)->get('/api/v1/__b19/ofelia-mesa-blanco')->assertStatus(500);
+
+    return $quiosco['employee'];
+}
+
+/**
+ * Todas las cadenas de `$data`, sin sus claves ni sus numeros —una clave
+ * `max_…` o un recuento 1985 no son una fuga—, y con los UUID tapados: un grupo
+ * de cuatro hexadecimales de un UUID aleatorio podria ser «1985». Los UUID se
+ * comprueban aparte, contra la tabla de empleados.
+ *
+ * @param  array<array-key, mixed>  $data
+ */
+function volumenCadenasDe(array $data): string
+{
+    $strings = [];
+
+    array_walk_recursive($data, static function (mixed $value) use (&$strings): void {
+        // Tambien los numeros, como texto: un telefono que un cliente mando como
+        // entero bajo `reason` es tan fuga como el mismo telefono entre comillas.
+        if (\is_string($value) || \is_int($value) || \is_float($value)) {
+            $strings[] = (string) $value;
+        }
+    });
+
+    return (string) preg_replace(
+        '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i',
+        '[uuid]',
+        implode("\n", $strings),
+    );
+}
+
+/**
+ * Todo lo sembrado. Los valores que son SOLO un numero corto (`739104`,
+ * `28013`, `1985`) se buscan en la seccion de errores y no en todo el paquete:
+ * el informe del doctor o una version pueden llevar un numero asi por azar, y
+ * eso no es una fuga sino una prueba intermitente.
+ *
+ * @return array{everywhere: list<string>, errors_only: list<string>}
+ */
+function volumenValoresSembrados(): array
+{
+    $all = [...array_merge(...array_values(SeededPersonalData::all())), ...DIAGNOSTICS_BUNDLE_VOLUME_EXTRA_PII];
+    $shortNumbers = array_values(array_filter(
+        $all,
+        static fn (string $value): bool => preg_match('/^\d{1,6}$/', $value) === 1,
+    ));
+
+    return ['everywhere' => array_values(array_diff($all, $shortNumbers)), 'errors_only' => $shortNumbers];
+}
+
+it('genera un paquete anonimizado sin ninguno de los datos sembrados por las tres puertas ni el UUID de ningun empleado', function (): void {
+    // --- Arrange ------------------------------------------------------------
+
+    FrozenTime::at('2026-10-03 09:30:00');
+    $employees = instalacionConVolumen();
+    volumenSembrarPorLasTresPuertas($employees);
+
+    /** @var list<string> $todosLosUuid */
+    $todosLosUuid = DB::table('employees')->pluck('uuid')->all();
+
+    // --- Act ----------------------------------------------------------------
+
+    $bundle = app(GenerateDiagnosticsBundleHandler::class)
+        ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::User);
+
+    $json = $bundle->toJson();
+
+    /** @var array<string, mixed> $paquete */
+    $paquete = json_decode($json, true, flags: JSON_THROW_ON_ERROR);
+
+    /** @var array{status: string, groups: list<array{source: string}>} $errores */
+    $errores = $bundle->sections['error_events'];
+
+    $valores = volumenValoresSembrados();
+
+    $origenes = array_values(array_unique(array_column($errores['groups'], 'source')));
+    sort($origenes);
+
+    // --- Assert: la seccion trae lo sembrado (control positivo) --------------
+
+    // Sin esto, un historico vacio pasaria todo lo de abajo.
+    expect($errores['status'])->toBe('ok')
+        ->and($origenes)->toBe(['admin', 'api', 'kiosk', 'portal'])
+        ->and(volumenCadenasDe($errores))->toContain(SeededPersonalData::TECHNICAL);
+
+    // --- Assert: ni un dato sembrado, en ninguna forma ------------------------
+
+    expect(SeededPersonalData::leaksIn(volumenCadenasDe($paquete), $valores['everywhere']))
+        ->toBe([], 'El paquete anonimizado contiene datos sembrados.')
+        ->and(SeededPersonalData::leaksIn(volumenCadenasDe($errores), $valores['errors_only']))
+        ->toBe([], 'La seccion de errores contiene numeros sembrados.');
+
+    // --- Assert: ni uno de los 501 `employees.uuid` (H2) ----------------------
+
+    // 500 de la semilla de volumen y el del portal.
+    expect($todosLosUuid)->toHaveCount(501)
+        ->and(SeededPersonalData::uuidsIn($json, $todosLosUuid))->toBe([]);
+})->group('RF-PD-09', 'RF-PD-15', 'RL-19');
+
+it('con datos personales el grupo del portal si lleva su employee_uuid', function (): void {
+    // El control positivo de H2: la omision es del modo anonimizado, no un
+    // grupo que se haya quedado sin el dato por el camino.
+    FrozenTime::at('2026-10-03 09:30:00');
+    $employees = instalacionConVolumen();
+    $empleadoDelPortal = volumenSembrarPorLasTresPuertas($employees);
+
+    $bundle = app(GenerateDiagnosticsBundleHandler::class)
+        ->handle(DiagnosticsOptions::withPersonalData(7), DiagnosticsActor::User);
+
+    /** @var array{groups: list<array{source: string, employee_uuid: string|null}>} $errores */
+    $errores = $bundle->sections['error_events'];
+
+    $delPortal = array_values(array_filter(
+        $errores['groups'],
+        static fn (array $grupo): bool => $grupo['source'] === 'portal',
+    ));
+
+    expect($delPortal)->not->toBeEmpty()
+        ->and(array_values(array_unique(array_column($delPortal, 'employee_uuid'))))->toBe([$empleadoDelPortal]);
+})->group('RF-PD-09', 'RF-PD-15', 'RL-19');
+
+it('vuelve a sanear al empaquetar una fila que no paso por RecordErrorEvent', function (): void {
+    // La segunda red (ADR-048): una fila escrita por otro camino —una version
+    // anterior, una restauracion, un error futuro— sale del paquete saneada
+    // aunque la tabla la tenga en claro.
+    FrozenTime::at('2026-10-03 09:30:00');
+
+    DB::table('error_events')->insert([
+        'fingerprint' => hash('sha256', 'diagnostics-bundle-volume-segunda-red'),
+        'level' => 'error',
+        'source' => 'api',
+        'module' => 'attendance',
+        'message' => SeededPersonalData::TECHNICAL.' para Ofelia Mesa Blanco cuenta ES91 2100 0418 4502 0005 1332',
+        'context' => json_encode(['reason' => 'la credencial de Ruperta Mayor Cruz', 'route' => '/api/v1/scan']),
+        'app_version' => 'OfeliaMesaBlanco',
+        'occurrences' => 1,
+        'first_seen_at' => '2026-10-03T09:00:00Z',
+        'last_seen_at' => '2026-10-03T09:00:00Z',
+        'created_at' => '2026-10-03T09:00:00Z',
+        'updated_at' => '2026-10-03T09:00:00Z',
+    ]);
+
+    $sembrados = ['Ofelia Mesa Blanco', 'Ruperta Mayor Cruz', 'OfeliaMesaBlanco', 'ES91 2100 0418 4502 0005 1332'];
+
+    $bundle = app(GenerateDiagnosticsBundleHandler::class)
+        ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::User);
+
+    /** @var array{groups: list<array<string, mixed>>} $errores */
+    $errores = $bundle->sections['error_events'];
+
+    // La tabla los tiene en claro —si no, la prueba no probaria nada— y el
+    // paquete no.
+    expect(SeededPersonalData::leaksIn(SeededPersonalData::textOfRows(DB::table('error_events')->get()), $sembrados))
+        ->toBe($sembrados)
+        ->and($errores['groups'])->toHaveCount(1)
+        ->and(SeededPersonalData::leaksIn(volumenCadenasDe($errores), $sembrados))->toBe([])
+        ->and(volumenCadenasDe($errores))->toContain(SeededPersonalData::TECHNICAL);
+})->group('RF-PD-09', 'RF-PD-15', 'RL-19');
