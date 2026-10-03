@@ -48,7 +48,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
             try {
                 Employee::query()->create($this->toRow($employee));
             } catch (QueryException $exception) {
-                throw $this->translate($exception, $employee->code);
+                throw $this->translate($exception);
             }
 
             if ($nationalId !== null) {
@@ -95,7 +95,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         try {
             $affected = $this->stillEmployed($employee)->update($columns);
         } catch (QueryException $exception) {
-            throw $this->translate($exception, $employee->code);
+            throw $this->translate($exception);
         }
 
         $this->refuseIfNothingWritten($affected, $employee);
@@ -423,12 +423,12 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         }
     }
 
-    private function translate(QueryException $exception, EmployeeCode $code): QueryException|EmployeeCodeAlreadyTaken|EmployeeEmailAlreadyTaken
+    private function translate(QueryException $exception): QueryException|EmployeeCodeAlreadyTaken|EmployeeEmailAlreadyTaken
     {
         $message = $exception->getMessage();
 
         if (str_contains($message, 'employees_employee_code_unique')) {
-            return EmployeeCodeAlreadyTaken::forCode($code->value);
+            return EmployeeCodeAlreadyTaken::make();
         }
 
         if (str_contains($message, 'employees_email_unique')) {

@@ -55,11 +55,11 @@ final readonly class EmployeeCode
         }
 
         if (mb_strlen($normalized) > self::MAX_LENGTH) {
-            throw InvalidEmployeeCode::tooLong($normalized, self::MAX_LENGTH);
+            throw InvalidEmployeeCode::tooLong(mb_strlen($normalized), self::MAX_LENGTH);
         }
 
         if (preg_match('/^[A-Z0-9]+$/', $normalized) !== 1) {
-            throw InvalidEmployeeCode::malformed($normalized);
+            throw InvalidEmployeeCode::malformed();
         }
 
         return new self($normalized);

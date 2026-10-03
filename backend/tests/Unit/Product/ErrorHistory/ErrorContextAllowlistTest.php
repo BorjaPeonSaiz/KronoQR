@@ -169,3 +169,89 @@ it('no guarda una clave cuyo valor se queda en nada tras el saneado', function (
         'scope' => 'kiosk',
     ]))->toBe(['scope' => 'kiosk']);
 })->group('RF-PD-15', 'RL-19');
+
+/*
+ * ---------------------------------------------------------------------------
+ * ADR-048 (bloque 19): los valores de texto de cada clave admitida pasan por la
+ * lista blanca por palabra, y `source` se reduce a `pathname:linea`.
+ * ---------------------------------------------------------------------------
+ */
+
+it('no guarda un nombre bajo ninguna clave de texto admitida', function (string $clave): void {
+    $limpio = ErrorContextAllowlist::apply([$clave => 'fallo de Rosa Ficticiana', 'scope' => 'vue']);
+    $volcado = (string) json_encode($limpio, JSON_UNESCAPED_UNICODE);
+
+    expect($volcado)->not->toContain('Rosa')
+        ->and($volcado)->not->toContain('Ficticiana')
+        ->and($limpio['scope'])->toBe('vue');
+})->with([
+    'route', 'method', 'job', 'queue', 'command', 'cause', 'reason', 'error_type', 'component', 'hook', 'source',
+    'scope', 'kind', 'problem_type', 'outcome', 'audio_state',
+])->group('RF-PD-15', 'RL-19');
+
+it('no guarda un nombre en una clave numerica que llega como texto', function (): void {
+    // `line` y `http_status` se esperan enteros; si llegan como texto, son
+    // texto y pasan por la misma lista blanca.
+    expect(ErrorContextAllowlist::apply(['line' => 'Rosa Ficticiana', 'http_status' => 'Ficticiana 500']))
+        ->toBe(['http_status' => '… 500', 'line' => '…']);
+})->group('RF-PD-15', 'RL-19');
+
+it('reduce source a pathname:linea quitando origen, consulta y fragmento', function (string $source, string $esperado): void {
+    expect(ErrorContextAllowlist::apply(['source' => $source]))->toBe(['source' => $esperado]);
+})->with([
+    'url completa del quiosco' => ['https://kiosk.hotel-ejemplo.es/assets/index.js', '/assets/index.js'],
+    'con puerto' => ['http://192.168.1.10:5173/src/main.ts', '/src/main.ts'],
+    'con consulta' => ['https://kiosk.hotel-ejemplo.es/assets/index.js?t=x7k2m9&u=ficticiana', '/assets/index.js'],
+    'con fragmento' => ['https://kiosk.hotel-ejemplo.es/assets/index.js#Ficticiana', '/assets/index.js'],
+    'con linea' => ['https://kiosk.hotel-ejemplo.es/assets/index.js?v=3:42', '/assets/index.js:42'],
+    'con linea y columna' => ['https://kiosk.hotel-ejemplo.es/assets/index.js:42:7', '/assets/index.js:42:7'],
+    'blob' => ['blob:https://kiosk.hotel-ejemplo.es/0199a1f0-0000-7000-8000-000000000000', '/0199a1f0-0000-7000-8000-000000000000'],
+    'ya normalizado por web-kit' => ['/assets/index.js:42', '/assets/index.js:42'],
+    'hash de vite' => ['/assets/index-Bx3k9Lq.js:42', '/assets/index-[n].js:42'],
+])->group('RF-PD-15', 'RL-19');
+
+it('conserva entero todo valor que emiten hoy los clientes', function (string $clave, string $valor): void {
+    // La muestra de §1.4 del diseño. Que el vocabulario cubra TODOS los valores
+    // de los clientes lo comprueba `ErrorVocabularyCoverageTest` sobre los
+    // ficheros de los propios clientes.
+    expect(ErrorContextAllowlist::apply([$clave => $valor]))->toBe([$clave => $valor]);
+})->with([
+    ['scope', 'promise'],
+    ['cause', 'partial_acknowledgement'],
+    ['cause', 'client_errors_rejected'],
+    ['reason', 'no_media_devices'],
+    ['reason', 'warmup_failed'],
+    ['error_type', 'NotAllowedError'],
+    ['error_type', 'QuotaExceededError'],
+    ['audio_state', 'interrupted'],
+    ['kind', 'pin'],
+    ['outcome', 'already_current'],
+    ['problem_type', 'urn:kronoqr:problem:scan-held-back'],
+    ['component', '(anonimo)'],
+    ['hook', 'https://vuejs.org/error-reference/#runtime-1'],
+    ['hook', 'watcher callback'],
+    ['route', '/api/v1/kiosk/heartbeat'],
+    ['command', 'compliance:apply-retention'],
+])->group('RF-PD-15');
+
+it('es idempotente', function (): void {
+    $una = ErrorContextAllowlist::apply([
+        'reason' => 'fallo de Rosa Ficticiana con 45678912K',
+        'source' => 'https://kiosk.hotel-ejemplo.es/assets/index-Bx3k9Lq.js?t=1:42',
+        'line' => 42,
+        'durable' => false,
+    ]);
+
+    expect(ErrorContextAllowlist::apply($una))->toBe($una);
+})->group('RF-PD-15', 'RL-19');
+
+it('normaliza source aunque llegue con espacios alrededor', function (): void {
+    expect(ErrorContextAllowlist::apply(['source' => '  https://kiosk.hotel-ejemplo.es/assets/index.js:42 ']))
+        ->toBe(['source' => '/assets/index.js:42']);
+})->group('RF-PD-15', 'RL-19');
+
+it('sigue sustituyendo un codigo heredado corto que llega solo como valor', function (): void {
+    // Cuatro caracteres, el minimo de `EmployeeCode`, con las letras sueltas
+    // que la lista blanca deja pasar.
+    expect(ErrorContextAllowlist::apply(['reason' => 'A1B2']))->toBe(['reason' => '[code]']);
+})->group('RF-PD-15', 'RL-19');

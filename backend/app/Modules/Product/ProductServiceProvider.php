@@ -132,6 +132,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Product\Infrastructure\Export\TranslatedDataExportGuide;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
 use App\Modules\Product\Infrastructure\Listener\ObservePlanLimits;
+use App\Modules\Product\Infrastructure\Logging\RedactingLogManager;
 use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisErrorMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisLicenseMetrics;
@@ -271,6 +272,14 @@ final class ProductServiceProvider extends ServiceProvider
 
     public function register(): void
     {
+        /*
+         * El gestor de logs con el canal `emergency` saneado (ADR-048, regla
+         * dura 21). Sustituye al singleton `log` de `LogServiceProvider`: el
+         * logger de emergencia lo monta Laravel a mano y no lee `tap`. Ver
+         * {@see RedactingLogManager}.
+         */
+        $this->app->singleton('log', static fn (Application $app): RedactingLogManager => new RedactingLogManager($app));
+
         /*
          * `installation_settings` con la cache delante.
          *

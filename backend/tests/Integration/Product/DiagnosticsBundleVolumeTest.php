@@ -557,12 +557,14 @@ it('lleva el historico de errores del periodo y ni una PII de las que los errore
         // Y la clave de contexto que nadie declaro: se cae entera, con su valor.
         ->and($json)->not->toContain('employee_name');
 
-    // --- Assert: el UUID si viaja, y es lo unico que identifica --------------
+    // --- Assert: ni el UUID del empleado; el de la tablet si ------------------
 
-    // ADR-020 lo admite donde haga falta, y aqui hace falta: sin el, soporte no
-    // puede decir que dos de los tres errores son de la misma persona. Es
-    // seudonimo y el hotel es el unico que puede resolverlo a un nombre.
-    expect($json)->toContain($employees[0])
+    // ADR-048 (H2): `employee_uuid` es un seudonimo cuya correspondencia tiene
+    // el hotel, asi que el paquete ANONIMIZADO no lo lleva —ni en la columna ni
+    // dentro del texto—. `device_id` identifica una tablet, no a una persona, y
+    // se queda. Con `--with-personal-data` el grupo sale completo (lo fija
+    // `ErrorEventsInDiagnosticsAndExportTest`).
+    expect($json)->not->toContain($employees[0])
         ->and($json)->toContain($deviceUuid);
 
     // Y lo que queda del mensaje sigue diciendo que paso, que es la otra mitad:

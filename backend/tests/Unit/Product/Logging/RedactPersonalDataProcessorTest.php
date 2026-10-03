@@ -92,8 +92,9 @@ it('sustituye la excepcion por su forma normalizada, con la misma forma y sin el
 })->group('RF-PD-15', 'RL-08');
 
 it('deja la excepcion como esta si no habia nada que quitar', function (): void {
-    // El caso comun: el formateador la serializa igual que siempre.
-    $excepcion = new RuntimeException('El adaptador no respondio');
+    // El caso comun: el formateador la serializa igual que siempre. Un mensaje
+    // con palabras del vocabulario tecnico (ADR-048) no cambia.
+    $excepcion = new RuntimeException('Connection refused by the server');
 
     $record = (new RedactPersonalDataProcessor)(redactPersonalDataRecord('x', ['exception' => $excepcion]));
 
@@ -167,4 +168,94 @@ it('cuesta poco por linea', function (): void {
     // Sin instrumentacion se afirma; bajo `make coverage` y la mutacion, que
     // corren con Xdebug en modo coverage, se anuncia (CI-COB-01).
     WallClockBudget::expectBelowMilliseconds($mediaMs, 0.5, 'RF-PD-15');
+})->group('RF-PD-15');
+
+/*
+ * ---------------------------------------------------------------------------
+ * ADR-048 (bloque 19): el mensaje y las excepciones pasan por la lista blanca
+ * por palabra; las claves anidadas tambien; las de correlacion, solo con su
+ * forma.
+ * ---------------------------------------------------------------------------
+ */
+
+it('quita un nombre sin comillas del mensaje de la linea', function (): void {
+    $record = (new RedactPersonalDataProcessor)(redactPersonalDataRecord('No se pudo fichar a Rosa Ficticiana'));
+
+    expect($record->message)->not->toContain('Rosa')
+        ->and($record->message)->not->toContain('Ficticiana')
+        ->and($record->message)->toBe('No se pudo fichar a …');
+})->group('RF-PD-15', 'RL-19');
+
+it('quita un nombre del mensaje de una excepcion y del de su previa', function (): void {
+    $previa = new RuntimeException('Employee Luz Inventadez not found');
+    $excepcion = new RuntimeException('No se pudo fichar a Rosa Ficticiana', 0, $previa);
+
+    $record = (new RedactPersonalDataProcessor)(redactPersonalDataRecord('x', ['exception' => $excepcion]));
+    $volcado = json_encode($record->context, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+
+    expect($volcado)->not->toContain('Ficticiana')
+        ->and($volcado)->not->toContain('Inventadez')
+        ->and($volcado)->not->toContain('Rosa')
+        ->and($volcado)->toContain('Employee … not found');
+})->group('RF-PD-15', 'RL-19');
+
+it('sanea las claves de un mapa anidado y no pierde valores si chocan', function (): void {
+    $record = (new RedactPersonalDataProcessor)(redactPersonalDataRecord('workforce.import_failed', [
+        'rows' => [
+            'Rosa Ficticiana' => 'fila 1',
+            'Luz Inventadez' => 'fila 2',
+            'Will Testerson' => 'fila 3',
+            'error' => 'fila 4',
+        ],
+    ]));
+
+    /** @var array<string, mixed> $filas */
+    $filas = $record->context['rows'];
+
+    expect(array_keys($filas))->toBe(['…', '…#2', '…#3', 'error'])
+        ->and(array_values($filas))->toBe(['fila 1', 'fila 2', 'fila 3', 'fila 4'])
+        // Las del primer nivel las escribe el codigo: no se tocan.
+        ->and(array_keys($record->context))->toBe(['rows']);
+})->group('RF-PD-15', 'RL-19');
+
+it('solo deja pasar una clave de correlacion con su forma', function (string $clave, string $valor): void {
+    $record = (new RedactPersonalDataProcessor)(redactPersonalDataRecord('x', [$clave => $valor]));
+
+    expect($record->context[$clave])->toBe($valor);
+})->with([
+    'trace_id' => ['trace_id', REDACT_PROCESSOR_TRACE_ID],
+    'traceparent' => ['traceparent', '00-'.REDACT_PROCESSOR_TRACE_ID.'-00f067aa0ba902b7-01'],
+    'employee_uuid' => ['employee_uuid', REDACT_PROCESSOR_EMPLOYEE_UUID],
+    'device_id' => ['device_id', '0199A1F0-ABCD-7000-8000-00000000AB12'],
+    'scan_id' => ['scan_id', '0199a1f0-0000-7000-8000-000000000001'],
+])->group('RF-PD-15');
+
+it('sanea una clave de correlacion que no tiene su forma', function (string $clave, string $valor, string $prohibido): void {
+    $record = (new RedactPersonalDataProcessor)(redactPersonalDataRecord('x', [$clave => $valor]));
+
+    expect((string) json_encode($record->context[$clave]))->not->toContain($prohibido);
+})->with([
+    'employee_uuid con un correo' => ['employee_uuid', 'rosa.ficticiana@hotel-ejemplo.es', 'rosa.ficticiana'],
+    'device_id con un telefono' => ['device_id', 'tablet 612 345 678', '612 345 678'],
+    'trace_id con un dni' => ['trace_id', '45678912K', '45678912K'],
+])->group('RF-PD-15', 'RL-19');
+
+it('deja pasar una clave de correlacion que no es texto solo si la sanea', function (): void {
+    // Un `employee_uuid` numerico no tiene la forma: pasa por el camino normal,
+    // que deja los enteros como estan.
+    $record = (new RedactPersonalDataProcessor)(redactPersonalDataRecord('x', ['employee_uuid' => 42]));
+
+    expect($record->context['employee_uuid'])->toBe(42);
+})->group('RF-PD-15');
+
+it('los valores del contexto siguen pasando solo por patrones (D3)', function (): void {
+    // Una ruta o una clase que no esta en el vocabulario se conserva en el log
+    // local: lo escribe el codigo del producto. Un correo no.
+    $record = (new RedactPersonalDataProcessor)(redactPersonalDataRecord('x', [
+        'job' => 'App\\Modules\\Workforce\\Infrastructure\\Jobs\\ImportarPlantilla',
+        'reason' => 'aviso a rosa@hotel-ejemplo.es',
+    ]));
+
+    expect($record->context['job'])->toBe('App\\Modules\\Workforce\\Infrastructure\\Jobs\\ImportarPlantilla')
+        ->and($record->context['reason'])->toBe('aviso a [email]');
 })->group('RF-PD-15');

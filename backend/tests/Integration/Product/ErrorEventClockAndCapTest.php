@@ -236,10 +236,12 @@ it('por encima del techo, las huellas nuevas se cuentan en el grupo de desbordam
      * Mensajes que se diferencian EN PALABRAS y no en un numero: la
      * normalizacion sustituye las cifras por `<n>` a proposito, asi que «fallo
      * 1» y «fallo 2» son —correctamente— el mismo grupo. Para probar el techo
-     * hacen falta huellas de verdad distintas.
+     * hacen falta huellas de verdad distintas, y con palabras del vocabulario
+     * tecnico (ADR-048): dos mensajes que solo se distinguen por una palabra
+     * que no esta en el son, tambien correctamente, el mismo grupo.
      */
-    foreach (['camara', 'escaner', 'padron', 'almacen', 'reloj', 'padron cifrado'] as $que) {
-        $sumidero->record(informeCon('no responde el subsistema de '.$que, ERROR_CLOCK_NOW));
+    foreach (['camera', 'scanner', 'roster', 'storage', 'clock', 'database'] as $que) {
+        $sumidero->record(informeCon('Connection refused by the '.$que, ERROR_CLOCK_NOW));
     }
 
     // Tres grupos de verdad mas el de desbordamiento, con las tres apariciones
@@ -266,16 +268,16 @@ it('en el techo, un grupo que YA existe sigue contando sus apariciones', functio
     Config::set('product.errors_max_open_groups_per_source', 2);
 
     $sumidero = app(ErrorEventSink::class);
-    $sumidero->record(informeCon('el primero, que existe desde antes', ERROR_CLOCK_NOW));
-    $sumidero->record(informeCon('el segundo', ERROR_CLOCK_NOW));
+    $sumidero->record(informeCon('first error already exists', ERROR_CLOCK_NOW));
+    $sumidero->record(informeCon('another error', ERROR_CLOCK_NOW));
 
     // Ya en el techo: este abre desbordamiento.
-    $sumidero->record(informeCon('el tercero, que ya no cabe', ERROR_CLOCK_NOW));
+    $sumidero->record(informeCon('last error not recorded', ERROR_CLOCK_NOW));
 
     // Y el primero sigue subiendo.
-    $sumidero->record(informeCon('el primero, que existe desde antes', ERROR_CLOCK_NOW));
+    $sumidero->record(informeCon('first error already exists', ERROR_CLOCK_NOW));
 
-    $primero = DB::table('error_events')->where('message', 'el primero, que existe desde antes')->first();
+    $primero = DB::table('error_events')->where('message', 'first error already exists')->first();
 
     expect((int) ($primero->occurrences ?? 0))->toBe(2)
         ->and(DB::table('error_events')->where('code', RecordErrorEvent::OVERFLOW_CODE)->count())->toBe(1);
@@ -289,13 +291,13 @@ it('el techo es POR ORIGEN: un panel ruidoso no deja sin registrar al quiosco', 
     $sumidero = app(ErrorEventSink::class);
 
     // En palabras, no en un numero: ver la prueba anterior.
-    foreach (['grafico', 'tabla', 'filtro', 'exportacion'] as $que) {
-        $sumidero->record(informeCon('el panel no pinta el '.$que, ERROR_CLOCK_NOW, ErrorSource::Admin));
+    foreach (['table', 'filter', 'export', 'view'] as $que) {
+        $sumidero->record(informeCon('Cannot render the '.$que, ERROR_CLOCK_NOW, ErrorSource::Admin));
     }
 
-    $sumidero->record(informeCon('la camara no arranca', ERROR_CLOCK_NOW, ErrorSource::Kiosk));
+    $sumidero->record(informeCon('camera stream lost', ERROR_CLOCK_NOW, ErrorSource::Kiosk));
 
-    expect(DB::table('error_events')->where('source', 'kiosk')->where('message', 'la camara no arranca')->count())
+    expect(DB::table('error_events')->where('source', 'kiosk')->where('message', 'camera stream lost')->count())
         ->toBe(1)
         ->and(DB::table('error_events')->where('source', 'admin')->count())->toBe(3);
 })->group('RF-PD-15');
@@ -306,8 +308,8 @@ it('los grupos RESUELTOS no cuentan para el techo', function (): void {
     Config::set('product.errors_max_open_groups_per_source', 2);
 
     $sumidero = app(ErrorEventSink::class);
-    $sumidero->record(informeCon('uno', ERROR_CLOCK_NOW));
-    $sumidero->record(informeCon('dos', ERROR_CLOCK_NOW));
+    $sumidero->record(informeCon('one', ERROR_CLOCK_NOW));
+    $sumidero->record(informeCon('two', ERROR_CLOCK_NOW));
 
     $usuario = ManagementUsers::withRole(UserRole::ADMIN);
     $repositorio = app(ErrorEventRepository::class);
@@ -317,9 +319,9 @@ it('los grupos RESUELTOS no cuentan para el techo', function (): void {
         $repositorio->resolve($fila->id, $usuario->id, new DateTimeImmutable(ERROR_CLOCK_NOW));
     }
 
-    $sumidero->record(informeCon('tres, que si cabe', ERROR_CLOCK_NOW));
+    $sumidero->record(informeCon('still allowed after resolution', ERROR_CLOCK_NOW));
 
-    expect(DB::table('error_events')->where('message', 'tres, que si cabe')->count())->toBe(1)
+    expect(DB::table('error_events')->where('message', 'still allowed after resolution')->count())->toBe(1)
         ->and(DB::table('error_events')->where('code', RecordErrorEvent::OVERFLOW_CODE)->count())->toBe(0);
 })->group('RF-PD-15');
 
@@ -381,23 +383,32 @@ it('recorta code, exception_class y file a la anchura de su columna', function (
      * Y seria justo el fallo mas raro —el que mas cuesta diagnosticar— el que no
      * se guarda.
      */
+    /*
+     * Valores que sobreviven a la lista blanca de ADR-048 —palabras del
+     * vocabulario, una ruta del producto, un nombre de clase—: lo que se
+     * comprueba aqui es el recorte, no el filtrado. El codigo es de cliente
+     * porque el del servidor solo admite SQLSTATE o un entero corto.
+     */
     app(ErrorEventSink::class)->record(new ErrorReport(
-        source: ErrorSource::Api,
+        source: ErrorSource::Admin,
         level: ErrorLevel::Error,
         message: 'desbordado',
         occurredAt: new DateTimeImmutable(ERROR_CLOCK_NOW, new DateTimeZone('UTC')),
-        appVersion: str_repeat('9', 80),
+        appVersion: str_repeat('ok.', 30),
         context: [],
-        code: str_repeat('c', 300),
+        code: 'web.'.str_repeat('error.', 60).'x',
         exceptionClass: str_repeat('E', 400),
-        file: str_repeat('f', 400),
+        file: 'app/'.str_repeat('f/', 200).'X.php',
         line: 10,
         module: str_repeat('m', 100),
     ));
 
     $grupo = unicoGrupo();
 
-    expect(mb_strlen((string) $grupo->code))->toBe(80)
+    // El codigo se corta en 80 y la media palabra del corte pasa a `…`
+    // (ADR-048: lo truncado se vuelve a filtrar), asi que queda un poco por
+    // debajo del techo, nunca por encima.
+    expect(mb_strlen((string) $grupo->code))->toBeLessThanOrEqual(80)->toBeGreaterThan(70)
         ->and(mb_strlen((string) $grupo->exception_class))->toBe(255)
         ->and(mb_strlen((string) $grupo->file))->toBe(255)
         ->and(mb_strlen((string) $grupo->app_version))->toBe(32)

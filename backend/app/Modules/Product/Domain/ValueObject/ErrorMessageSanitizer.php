@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\ValueObject;
 
 /**
- * Quita del mensaje de un error **todo lo que pueda identificar a una persona o
- * abrir una puerta** (RF-PD-15, RL-19, regla dura 21, decision 5 de la ficha
- * 5.12).
+ * Quita del texto de un error **todo lo que pueda identificar a una persona o
+ * abrir una puerta** (RF-PD-15, RL-19, reglas duras 16 y 21, ADR-048).
  *
  * ## Es de SERVIDOR, y esa es la decision
  *
@@ -16,52 +15,49 @@ namespace App\Modules\Product\Domain\ValueObject;
  * estar en una version antigua, puede tener un fallo, y en el peor caso puede
  * no ser nuestro cliente. Este historico viaja dentro del paquete de
  * diagnostico hacia el fabricante (ADR-020), asi que la ultima linea de defensa
- * tiene que estar de este lado. La prueba que lo fija envia PII desde un cliente
- * y mira la tabla.
+ * tiene que estar de este lado.
  *
- * ## La regla que de verdad hace el trabajo: lo entrecomillado desaparece
+ * ## Lista blanca por palabra, no lista negra de formas (ADR-048)
  *
- * Las cinco primeras reglas atrapan formas conocidas —un correo, un DNI, un
- * telefono, una hora, un secreto—. **Ninguna atrapa un nombre de persona**, y un
- * nombre de persona no tiene forma reconocible: «Ana Ruiz» es indistinguible de
- * «Cocina Central» para cualquier expresion regular.
+ * Hasta la 2.2.0 esta clase solo tenia patrones —correos, DNI, telefonos, lo
+ * entrecomillado— y un nombre sin comillas pasaba: «Ana Ruiz» no se distingue
+ * de «Cocina Central» con ninguna expresion regular. Ahora el texto pasa por
+ * seis pasos, y el que hace el trabajo de fondo es el quinto:
  *
- * Lo que si es reconocible es **donde** aparece. Las excepciones interpolan
- * valores entrecomillados —`Employee 'Ana Ruiz' not found`, `SQLSTATE[23505]
- * Key (email)=(ana@hotel.es) already exists`— porque es la convencion de PHP, de
- * PostgreSQL y de casi todo lo demas. Asi que **todo texto entre comillas
- * simples, dobles o angulares se sustituye por `'…'`**, sin mirar lo que lleva
- * dentro.
+ * 1. **Colapsar** los espacios (solo {@see sanitize()}) y **quitar** los
+ *    caracteres de uso privado U+E000–U+F8FF, que se reservan para el paso 2.
+ * 2. **Proteger** lo que tiene que llegar intacto: los UUID en cualquier caja,
+ *    los hexadecimales en minusculas de exactamente 16, 32, 40 o 64 caracteres
+ *    con al menos una letra Y una cifra (span, traza, commit, sha256; H1: un
+ *    numero de tarjeta de 16 cifras NO es un hexadecimal) y los `SQLSTATE[…]`.
+ *    Un `FH1.…` se convierte aqui mismo en `[secret]`.
+ * 3. **Patrones** ({@see redact()}): SQL interpolado, secretos, correos, IBAN,
+ *    codigos de empleado, pasaportes, documentos, NAF, fechas y horas,
+ *    direcciones IP, telefonos y lo entrecomillado.
+ * 4. y 5. **Cifras y vocabulario** ({@see ErrorTextAllowlist}): toda palabra que
+ *    no este en {@see ErrorVocabulary} pasa a `…`, y toda cifra larga a `[n]`.
+ * 6. **Restaurar** lo protegido; en {@see sanitize()}, ademas, techo y texto de
+ *    relleno.
  *
- * Es deliberadamente destructivo. Se pierde informacion util —el nombre de la
- * columna que choco, por ejemplo— y a cambio se gana que un nombre no pueda
- * salir de la instalacion por esta via. Con el historico de errores viajando
- * hacia el fabricante, es el cambio correcto: lo que queda («SQLSTATE[23505]
- * duplicate key value violates unique constraint '…'») sigue diciendo que paso,
- * y el `trace_id` lleva a quien si tiene acceso hasta el log tecnico completo.
+ * ## Tres funciones publicas, tres usos
  *
- * ## El orden importa y es este
+ * - {@see redact()}: pasos 1 (sin colapsar), 2, 3 y 6. **Solo patrones.** Es lo
+ *   que aplica el log tecnico a los valores de su contexto, que escribe el
+ *   codigo del producto: con el vocabulario se estropearian rutas, clases y
+ *   nombres de trabajo en un log que no sale de la instalacion (D3).
+ * - {@see redactText()}: los seis pasos sin colapsar ni techo. Es lo que aplica
+ *   el log tecnico a su mensaje y a los mensajes de cada excepcion.
+ * - {@see sanitize()} y {@see sanitizeContextValue()}: los seis pasos con su
+ *   techo. Es lo que se guarda en `error_events` y lo que vuelve a aplicar el
+ *   colector del paquete al leer.
  *
- * 1. **Secretos** (`Bearer …`, `FH1.…`, `clave=valor`). Van primero porque un
- *    token lleva dentro cadenas que parecen otras cosas, y partirlo por la mitad
- *    con otra regla dejaria trozos reconocibles.
- * 2. **Correos**, antes que los numeros: `ana.ruiz+turno@hotel.es` tiene cifras
- *    que otra regla podria comerse dejando el dominio a la vista.
- * 3. **IBAN, codigo de empleado, pasaporte, documentos** (DNI y NIE, tambien
- *    con puntos y espacios) y **telefonos**, en ese orden: un IBAN son veinte
- *    cifras largas y un DNI ocho cifras y una letra, y el telefono acabaria
- *    mordiendoles las cifras.
- * 4. **Fechas y horas**, porque una hora de fichaje es un dato de jornada de una
- *    persona concreta y esta tabla no guarda jornadas.
- * 5. **Lo entrecomillado**, al final: es la regla mas destructiva y se aplica
- *    sobre lo que las demas ya han marcado, de modo que un `[email]` fuera de
- *    comillas sigue siendo legible.
+ * Las cuatro son **idempotentes** —sanear lo saneado no cambia nada— y **fallan
+ * cerrado**: si una expresion no se puede evaluar se pierde el texto, no se
+ * deja pasar sin sanear.
  *
  * ## Dominio puro
  *
- * Sin framework y sin estado: entra un texto, sale otro. Se puede probar entera
- * en una prueba unitaria sin base de datos, que es donde vive la lista de PII
- * que no puede pasar.
+ * Sin framework y sin estado: entra un texto, sale otro.
  */
 final readonly class ErrorMessageSanitizer
 {
@@ -77,11 +73,14 @@ final readonly class ErrorMessageSanitizer
 
     /**
      * Lo que devuelve {@see sanitize()} cuando no queda nada: un mensaje vacio,
-     * solo espacios o un texto que no se pudo sanear (falla cerrado, ver
-     * {@see redact()}). {@see ErrorContextAllowlist} lo usa para no guardar una
-     * clave de contexto que no dice nada.
+     * solo espacios o un texto que no se pudo sanear (falla cerrado).
+     * {@see ErrorContextAllowlist} lo usa para no guardar una clave de contexto
+     * que no dice nada.
      */
     public const string EMPTY_MESSAGE = '(sin mensaje)';
+
+    /** El marcador de un UUID en el paquete anonimizado (H2). */
+    public const string UUID = '[uuid]';
 
     /**
      * Nombres que, a la izquierda de un `=` o de un `:`, marcan lo de la derecha
@@ -96,6 +95,25 @@ final readonly class ErrorMessageSanitizer
         .'authorization|auth|bearer|pin|hash|signature|sig|credential|'
         .'clave|contrasena|contrase\x{00F1}a|secreto|firma';
 
+    /** Un UUID, en cualquier caja. */
+    private const string UUID_PATTERN = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+
+    /**
+     * El paso 2. Por orden de alternativa: un payload de credencial (que no se
+     * conserva: se convierte en `[secret]`), un UUID, un hexadecimal de las
+     * cuatro longitudes con letra y cifra, y un `SQLSTATE[…]`.
+     */
+    private const string PROTECTED = '/(?<secret>\bFH1\.[A-Za-z0-9._~+\/-]+=*)'
+        .'|(?<![0-9A-Za-z])(?:'.self::UUID_PATTERN
+        .'|(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])(?:[0-9a-f]{64}|[0-9a-f]{40}|[0-9a-f]{32}|[0-9a-f]{16}))(?![0-9A-Za-z])'
+        .'|SQLSTATE\[[0-9A-Z]{5}\]/u';
+
+    /** Primer caracter de uso privado de los marcadores del paso 2. */
+    private const int PLACEHOLDER_BASE = 0xE000;
+
+    /** Cuantos identificadores se pueden apartar en un mismo texto (U+E000–U+F8FF). */
+    private const int PLACEHOLDER_SLOTS = 0x18FF;
+
     /**
      * El mensaje, listo para guardarse.
      *
@@ -105,13 +123,7 @@ final readonly class ErrorMessageSanitizer
      */
     public static function sanitize(string $message): string
     {
-        $clean = trim(self::redact(self::collapse($message)));
-
-        if ($clean === '') {
-            return self::EMPTY_MESSAGE;
-        }
-
-        return self::truncate($clean, self::MAX_LENGTH);
+        return self::bounded($message, self::MAX_LENGTH);
     }
 
     /**
@@ -122,31 +134,92 @@ final readonly class ErrorMessageSanitizer
      */
     public static function sanitizeContextValue(string $value): string
     {
-        // Sin `trim()`: lo que devuelve `sanitize()` ya llega recortado —se
-        // recorta antes de truncar y el truncado termina en `…`—, y un segundo
-        // recorte no podia cambiar nada.
-        return self::truncate(self::sanitize($value), self::MAX_CONTEXT_LENGTH);
+        return self::bounded($value, self::MAX_CONTEXT_LENGTH);
     }
 
     /**
-     * Las reglas y nada mas: sin colapsar espacios, sin techo y sin texto de
-     * relleno (L1, regla dura 21).
+     * Los seis pasos, sin colapsar espacios ni techo (ADR-048).
      *
-     * Es lo que aplica el log tecnico a cada linea —mensaje, excepcion y
-     * valores de contexto—. No puede truncar: una linea de log de 3000
-     * caracteres es legitima y cortarla esconderia el diagnostico. Y no
-     * colapsa: una traza con saltos de linea sigue siendo legible en `stderr`.
+     * Es lo que aplica el log tecnico a su mensaje y al de cada excepcion: una
+     * linea de log de 3000 caracteres es legitima y una traza con saltos de
+     * linea sigue siendo legible en `stderr`.
+     */
+    public static function redactText(string $text): string
+    {
+        [$protected, $kept] = self::protect(self::withoutReservedCharacters($text));
+
+        return self::restore(ErrorTextAllowlist::apply(self::patterns($protected)), $kept);
+    }
+
+    /**
+     * Solo los patrones: sin vocabulario, sin colapsar espacios, sin techo y
+     * sin texto de relleno (L1, regla dura 21).
+     *
+     * Es lo que aplica el log tecnico a los valores de su contexto (D3, ver el
+     * docblock de la clase).
      *
      * **Falla cerrado.** Si una expresion no se puede evaluar —un texto con
      * bytes UTF-8 invalidos, el limite de retroceso de PCRE—, `preg_replace`
      * devuelve `null` y aqui se convierte en cadena vacia: se pierde el texto,
      * no se deja pasar sin sanear. Quien llama decide que escribir en su lugar.
-     *
-     * Es idempotente: sanear dos veces da lo mismo que una, que es lo que
-     * permite que la pila de canales de log aplique el processor una vez por
-     * canal sin estropear lo ya saneado.
      */
     public static function redact(string $text): string
+    {
+        [$protected, $kept] = self::protect(self::withoutReservedCharacters($text));
+
+        return self::restore(self::patterns($protected), $kept);
+    }
+
+    /**
+     * Todo UUID del texto, sustituido por `[uuid]` (H2).
+     *
+     * Lo aplica el colector del paquete **anonimizado**: el `employee_uuid` es
+     * un seudonimo (art. 4.5 RGPD) cuya correspondencia tiene el hotel, y un
+     * mensaje como «Employee 0199… has no open shift entry» lo llevaria dentro
+     * aunque la columna se omita.
+     */
+    public static function withoutUuids(string $text): string
+    {
+        return self::replace('/(?<![0-9A-Za-z])'.self::UUID_PATTERN.'(?![0-9A-Za-z])/u', self::UUID, $text);
+    }
+
+    /**
+     * Los seis pasos con techo.
+     *
+     * Si hay que truncar, lo truncado **se vuelve a filtrar**: el corte puede
+     * dejar media palabra (`Connec…`), y sin la segunda pasada el colector, que
+     * vuelve a sanear al leer, la convertiria en `…` y dejaria de ser
+     * idempotente. La segunda pasada solo puede acortar —cambia palabras por
+     * `…` y cifras por `[n]`—, asi que el techo se sigue cumpliendo.
+     */
+    private static function bounded(string $text, int $limit): string
+    {
+        $clean = trim(self::redactText(self::collapse(self::withoutReservedCharacters($text))));
+
+        if (mb_strlen($clean) > $limit) {
+            $clean = self::truncate(trim(self::redactText(self::truncate($clean, $limit))), $limit);
+        }
+
+        return $clean === '' ? self::EMPTY_MESSAGE : $clean;
+    }
+
+    /**
+     * El paso 3. El orden importa y es este:
+     *
+     * 1. **SQL interpolado**, lo primero: la consulta ENTERA es el problema.
+     * 2. **Secretos** (`Bearer …`, `clave=valor`): un token lleva dentro cadenas
+     *    que parecen otras cosas, y partirlo con otra regla dejaria trozos.
+     * 3. **Correos**, antes que los numeros: `ana.ruiz+turno@hotel.es` tiene
+     *    cifras que otra regla podria comerse dejando el dominio a la vista.
+     * 4. **IBAN, codigo de empleado, pasaporte, documentos y NAF**, de lo mas
+     *    largo a lo mas corto.
+     * 5. **Fechas y horas**, antes que telefonos e IP: `2026-10-01 12:30` no es
+     *    ni lo uno ni lo otro.
+     * 6. **IP y telefonos.**
+     * 7. **Lo entrecomillado**, al final: es la regla mas destructiva y se aplica
+     *    sobre lo que las demas ya han marcado.
+     */
+    private static function patterns(string $text): string
     {
         $clean = self::sql($text);
         $clean = self::secrets($clean);
@@ -155,26 +228,79 @@ final readonly class ErrorMessageSanitizer
         $clean = self::employeeCodes($clean);
         $clean = self::passports($clean);
         $clean = self::documents($clean);
-        $clean = self::phones($clean);
+        $clean = self::socialSecurityNumbers($clean);
         $clean = self::instants($clean);
+        $clean = self::ipAddresses($clean);
+        $clean = self::phones($clean);
 
         return self::quoted($clean);
     }
 
     /**
-     * El UNICO sitio donde se evalua una expresion, y donde se decide el fallo
-     * cerrado.
-     *
-     * `preg_replace()` devuelve `null` cuando no puede evaluar el patron —un
-     * texto con bytes UTF-8 invalidos contra un patron `/u`, el limite de
-     * retroceso de PCRE—. Ese `null` se convierte aqui en cadena vacia: se
-     * pierde el texto entero en lugar de dejarlo pasar sin sanear, y las reglas
-     * que vienen detras ya trabajan sobre la cadena vacia. Con la decision en un
-     * solo sitio, una prueba la fija para todas las reglas a la vez.
+     * El UNICO sitio donde se evalua una sustitucion fija, y donde se decide el
+     * fallo cerrado: `null` (patron que no se puede evaluar) pasa a cadena
+     * vacia, y las reglas que vienen detras trabajan sobre la cadena vacia.
      */
     private static function replace(string $pattern, string $replacement, string $text): string
     {
         return preg_replace($pattern, $replacement, $text) ?? '';
+    }
+
+    /**
+     * Quita los caracteres de uso privado, que el paso 2 usa como marcadores
+     * (sin esto, un texto que ya trajera uno podria hacerse pasar por un
+     * identificador protegido), y los de control salvo el tabulador y los
+     * saltos de linea: PostgreSQL rechaza un byte nulo en una columna de
+     * texto, y una clase anonima de PHP lo lleva en el nombre. Una fila que no
+     * se puede guardar es un error que se pierde.
+     */
+    private static function withoutReservedCharacters(string $text): string
+    {
+        return self::replace('/[\x{E000}-\x{F8FF}\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $text);
+    }
+
+    /**
+     * El paso 2: aparta lo que tiene que llegar intacto y deja en su lugar un
+     * caracter de uso privado. Si no quedan marcadores libres, el resto se deja
+     * sin apartar, y los patrones y la lista blanca lo trataran como a
+     * cualquier otro texto: se pierde un identificador, no se filtra nada.
+     *
+     * @return array{0: string, 1: array<string, string>}
+     */
+    private static function protect(string $text): array
+    {
+        $kept = [];
+
+        $protected = preg_replace_callback(
+            self::PROTECTED,
+            static function (array $match) use (&$kept): string {
+                if (($match['secret'] ?? '') !== '') {
+                    return '[secret]';
+                }
+
+                if (\count($kept) >= self::PLACEHOLDER_SLOTS) {
+                    return $match[0];
+                }
+
+                $placeholder = mb_chr(self::PLACEHOLDER_BASE + \count($kept), 'UTF-8');
+                $kept[$placeholder] = $match[0];
+
+                return $placeholder;
+            },
+            $text,
+        );
+
+        return $protected === null ? ['', []] : [$protected, $kept];
+    }
+
+    /**
+     * El paso 6.
+     *
+     * @param  array<string, string>  $kept
+     */
+    private static function restore(string $text, array $kept): string
+    {
+        return $kept === [] ? $text : strtr($text, $kept);
     }
 
     /**
@@ -211,89 +337,28 @@ final readonly class ErrorMessageSanitizer
      * La **red de seguridad contra `QueryException`**, y va la primera de todas
      * (decision 5, revision de seguridad).
      *
-     * ## Por que hace falta aunque el enganche ya lo evite
-     *
      * `QueryException::getMessage()` de Laravel pega al final del mensaje la
-     * consulta **con los parametros ya interpolados y sin comillas**:
+     * consulta **con los parametros ya interpolados y sin comillas**. El
+     * enganche de captacion compone el mensaje con `getSql()` —los `?` sin
+     * enlazar—, asi que en el camino normal esto no llega a activarse. Existe
+     * porque **el camino normal no es el unico**.
      *
-     *     …duplicate key value… (Connection: pgsql, SQL: insert into "employees"
-     *     ("first_name","last_name") values (Maria, Gonzalez Perez, EMP-0042))
-     *
-     * Ahi hay un nombre, un apellido y un codigo de empleado en claro; en un
-     * `update … set "pin_hash" = $2y$12$…` hay el hash del PIN de una persona.
-     * Nada de eso puede estar en una tabla que viaja al fabricante (regla dura
-     * 21, ADR-020), y el saneado general no lo atrapa porque los valores no van
-     * entrecomillados.
-     *
-     * El enganche de captacion compone el mensaje con `getSql()` —los `?` sin
-     * enlazar— en lugar de `getMessage()`, asi que en el camino normal esto no
-     * llega a activarse. Existe porque **el camino normal no es el unico**: un
-     * `report()` a mano, una excepcion envuelta por una libreria de terceros o un
-     * cliente que reenvie lo que vio en su consola llegan por otras puertas, y
-     * el saneado es la ultima linea antes de la columna.
-     *
-     * ## Dos reglas
-     *
-     * 1. **Todo lo que sigue a `, SQL: ` se corta.** No se sustituye por un
-     *    marcador con la consulta dentro: la consulta ENTERA es el problema.
-     *    Lo que queda —`SQLSTATE`, la restriccion que se violo— es lo que sirve
-     *    para diagnosticar.
-     * 2. **El `DETAIL: Key (columna)=(valor)` de PostgreSQL** pierde las dos
-     *    partes. La columna sola seria informacion util, pero el motor las
-     *    escribe pegadas y separar una expresion con parentesis anidados a base
-     *    de expresiones regulares es como se dejan pasar los casos raros. Queda
-     *    `Key ('…')=('…')`, que sigue diciendo «choco una clave» sin decir cual
-     *    ni de quien.
-     * 3. **El `DETAIL: Failing row contains (…)`**, que es la segunda fuga y la
-     *    peor: ante un `NOT NULL` o un `CHECK`, PostgreSQL vuelca **la fila
-     *    entera** —`(1, null, Maria, Gonzalez Perez, EMP-0042, …)`—. Ahi esta la
-     *    plantilla en claro. Se sustituye por `Failing row contains [redacted]`.
-     *
-     * ## Las tres son redes, no el mecanismo principal
-     *
-     * El enganche de captacion compone su mensaje con el SQL **sin valores** y
-     * separado por ` | sql: `, precisamente para que el corte de la primera regla
-     * no se lo lleve. Pero el enganche no es el unico productor: por
-     * `POST /api/v1/client-errors` entra lo que un navegador haya recogido, y
-     * manana entrara lo que escriba quien anada un `report()` a mano. El saneado
-     * es la ultima linea antes de la columna, y por eso las tres reglas viven
-     * aqui y no solo alli.
+     * 1. **Todo lo que sigue a `, SQL: ` se corta.**
+     * 2. **El `DETAIL: Failing row contains (…)`**, que vuelca la fila entera,
+     *    pasa a `Failing row contains [redacted]`.
+     * 3. **El `DETAIL: Key (columna)=(valor)`**, anidado incluido (F4c-2), pierde
+     *    las dos partes hasta la frase con la que PostgreSQL cierra el DETAIL.
      */
     private static function sql(string $text): string
     {
         $text = self::replace('/,\s*SQL:\s.*/su', '', $text);
 
-        /*
-         * HASTA EL FINAL, no hasta el primer parentesis de cierre: un valor de
-         * la fila puede llevar parentesis dentro —un apellido compuesto entre
-         * ellos, un texto de motivo— y un corte no voraz dejaria el resto de la
-         * fila a la vista. Lo que se pierde detras es la cola de la excepcion,
-         * que no diagnostica nada que `SQLSTATE` no diga ya.
-         */
         $text = self::replace(
             '/\bFailing row contains\b.*/su',
             'Failing row contains [redacted]',
             $text,
         );
 
-        /*
-         * El `Key (…)=(…)`, ANIDADO incluido (F4c-2). La version anterior
-         * cortaba en el primer `)`, y PostgreSQL anida parentesis en cuanto la
-         * clave es una expresion o una exclusion:
-         *
-         *     Key (employee_id, tstzrange(started_at, ended_at, '[)'::text))
-         *       =(4242, ["2026-03-14 07:02:00+00","2026-03-14 15:00:00+00"))
-         *       conflicts with existing key (…)=(…).
-         *
-         * Con `[^)]*` el patron no casaba y salian el `employee_id` y las dos
-         * horas del tramo. Contar parentesis no sirve: el rango semiabierto
-         * `[a,b)` del valor no esta equilibrado. Asi que se corta desde `Key (`
-         * hasta la frase con la que PostgreSQL cierra el DETAIL —`already
-         * exists`, `conflicts with`, `is not present`, `is still referenced`—
-         * o hasta el final del texto. La anticipacion `[^=]*\)\s*=\s*\(` exige
-         * que de verdad sea un `(columnas)=(valores)`: un «missing key (x)» de
-         * otro mensaje no se lleva el resto de la linea.
-         */
         return self::replace(
             '/\b(key)\s*\((?=[^=]*\)\s*=\s*\().*?(?=\s+(?:already exists|conflicts with|is not present|is still referenced)\b|$)/isu',
             "\$1 ('…')=('…')",
@@ -303,8 +368,9 @@ final readonly class ErrorMessageSanitizer
 
     private static function secrets(string $text): string
     {
-        // Un payload de credencial completo (regla dura 10). No es PII, pero es
-        // material firmado y no tiene por que salir de la instalacion.
+        // Un payload de credencial completo (regla dura 10). El paso 2 ya los
+        // ha convertido; se repite porque `redact()` es publico y una regla
+        // que solo existe en un sitio es una regla que alguien quita.
         $text = self::replace('/\bFH1\.[A-Za-z0-9._~+\/-]+=*/', '[secret]', $text);
 
         $text = self::replace('/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/i', '[secret]', $text);
@@ -316,10 +382,14 @@ final readonly class ErrorMessageSanitizer
         );
     }
 
+    /**
+     * Correos, tambien con tildes y otras escrituras en la parte local y en el
+     * dominio (`josé.núñez@hotel.es`).
+     */
     private static function emails(string $text): string
     {
         return self::replace(
-            '/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/',
+            '/[\p{L}\p{N}._%+\-]+@[\p{L}\p{N}.\-]+\.\p{L}{2,}/u',
             '[email]',
             $text,
         );
@@ -327,96 +397,109 @@ final readonly class ErrorMessageSanitizer
 
     /**
      * DNI y NIE espanoles: ocho cifras y una letra, o `X`/`Y`/`Z`, siete cifras
-     * y una letra.
+     * y una letra, en mayusculas o minusculas, compactos o con separadores.
      *
      * **No se comprueba la letra de control** a proposito: el objetivo no es
-     * validar documentos sino que no salgan, y un documento mal tecleado sigue
-     * identificando a alguien igual de bien.
+     * validar documentos sino que no salgan. El DNI sin letra lo atrapa la regla
+     * de las siete cifras de {@see ErrorTextAllowlist}.
      */
     private static function documents(string $text): string
     {
-        // Compacto: `12345678Z`, `12345678-Z`, `X1234567L`, `X-1234567-L`.
-        $text = self::replace('/\b(?:[XYZ][ .-]?|[xyz])?\d{7,8}[ .\-]?[A-Za-z]\b/', '[id]', $text);
+        // Compacto o con un separador: `12345678Z`, `12345678-Z`, `X1234567L`,
+        // `x-1234567-l`.
+        $text = self::replace('/\b(?:[XYZxyz][ .\-]?)?\d{7,8}[ .\-]?[A-Za-z]\b/', '[id]', $text);
 
         // Con separadores de miles, como se teclea a mano (F4c-2):
-        // `12.345.678-Z`, `12 345 678 Z`, `X 1.234.567 L`. Exige los DOS
-        // separadores entre grupos de tres cifras, que es lo que lo distingue
-        // de un numero tecnico.
+        // `12.345.678-Z`, `12 345 678 Z`, `x 1.234.567 l`.
         return self::replace(
-            '/(?<![\w.\-])(?:[XYZ][ .-]?|[xyz])?\d{1,2}[ .]\d{3}[ .]\d{3}[ .\-]?[A-Za-z](?!\w)/',
+            '/(?<![\w.\-])(?:[XYZxyz][ .\-]?)?\d{1,2}[ .]\d{3}[ .]\d{3}[ .\-]?[A-Za-z](?!\w)/',
             '[id]',
             $text,
         );
     }
 
     /**
-     * IBAN: dos letras de pais, dos cifras de control y de 12 a 31
-     * alfanumericos, compacto o en grupos de cuatro separados por un espacio
-     * (F4c-2).
+     * Numero de afiliacion a la Seguridad Social (NAF): dos cifras de
+     * provincia, siete u ocho de numero y dos de control, compacto o con
+     * espacio, barra o guion.
+     */
+    private static function socialSecurityNumbers(string $text): string
+    {
+        return self::replace(
+            '/(?<![\p{L}\p{N}.\-\/])\d{2}[ \/\-]?\d{7,8}[ \/\-]?\d{2}(?![\p{L}\p{N}.\-\/])/u',
+            '[id]',
+            $text,
+        );
+    }
+
+    /**
+     * IBAN de cualquier pais, **en mayusculas o en minusculas**, compacto o en
+     * grupos de cuatro separados por un espacio o un guion.
      *
-     * Va antes que documentos y telefonos: un IBAN espanol son veintidos cifras
-     * y esas reglas se comerian trozos dejando el resto a la vista.
-     *
-     * **Solo en mayusculas, a proposito.** En minusculas casaria con cualquier
-     * huella hexadecimal que empiece por dos letras y dos cifras —un `sha256`,
-     * un identificador de commit—, que si aparecen en mensajes tecnicos. Y sin
-     * guiones entre grupos: con ellos casaria un UUID en mayusculas. Un IBAN en
-     * minusculas o con guiones es el falso negativo que se acepta.
+     * El falso positivo que impedia aceptar minusculas y guiones —una huella
+     * hexadecimal, un UUID— ya no puede ocurrir: el paso 2 los aparta antes.
+     * Para no comerse la palabra que viene detras («… 1332 rechazada»), los
+     * grupos tras el primero tienen que llevar alguna cifra, y el total tiene
+     * que sumar diez cifras o mas.
      */
     private static function ibans(string $text): string
     {
-        return self::replace(
-            '/\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?\b/',
-            '[iban]',
+        return preg_replace_callback(
+            '/(?<![\p{L}\p{N}])[A-Za-z]{2}\d{2}[ \-]?[A-Za-z0-9]{4}'
+            .'(?:[ \-]?(?=[A-Za-z]*\d)[A-Za-z0-9]{4}){2,6}(?:[ \-]?(?=[A-Za-z]*\d)[A-Za-z0-9]{1,3})?(?![\p{L}\p{N}])/u',
+            static fn (array $match): string => preg_match_all('/\d/', $match[0]) >= 10 ? '[iban]' : $match[0],
             $text,
-        );
+        ) ?? '';
     }
 
     /**
      * El codigo de empleado (PR12, F4c-2): un identificador directo y la mitad
      * publica de la credencial del portal (ADR-015).
      *
-     * Su forma la fija `Workforce\Domain\ValueObject\EmployeeCode::generate()`:
-     * una `E` y nueve caracteres de un alfabeto sin ambiguos; la semilla de
-     * desarrollo usa `E` y nueve hexadecimales, y el contrato documenta ejemplos
-     * con ocho. Se atrapan dos cosas:
+     * 1. **Detras de su etiqueta**, ampliada (ADR-048): `employee_code=739104`,
+     *    `codigo de empleado: AB12`, y tambien solo «codigo», «código» o «code»
+     *    cuando lo que sigue lleva alguna cifra. Es lo que cubre el mensaje de
+     *    `EmployeeCodeAlreadyTaken` de versiones anteriores.
+     * 2. **La forma canonica** en mayusculas: `E` mas ocho o nueve mayusculas y
+     *    cifras con al menos una cifra, o nueve letras todas del alfabeto sin
+     *    ambiguos (un 6,8 % de los codigos generados no lleva cifras).
+     * 3. **La forma canonica en minusculas**, con al menos una cifra: sin cifra
+     *    seria una palabra cualquiera, y de esas se encarga el vocabulario.
      *
-     * 1. **La forma canonica**: `E` mas ocho o nueve mayusculas y cifras con al
-     *    menos una cifra, o nueve letras **todas del alfabeto sin ambiguos**
-     *    (un 6,8 % de los codigos generados no lleva cifras). Eso deja fuera
-     *    palabras en mayusculas como `EXCEPTIONS` o `EVERYTHING`, que llevan
-     *    `I`, `O` o `L`.
-     * 2. **Cualquier valor detras de su nombre** —`employee_code=739104`,
-     *    `codigo de empleado: AB12`—, porque `EmployeeCode::fromString()`
-     *    acepta codigos heredados de cualquier forma alfanumerica, y esos solo
-     *    se reconocen por la etiqueta.
-     *
-     * Lo que NO se atrapa: un codigo heredado sin etiqueta y sin la forma
-     * canonica. Es indistinguible de un numero cualquiera; el `Key (…)=(…)` y
-     * el corte del SQL cubren los dos sitios por donde de verdad aparece.
+     * Un codigo heredado sin etiqueta lo atrapan las reglas de cifras de
+     * {@see ErrorTextAllowlist}.
      */
     private static function employeeCodes(string $text): string
     {
+        // La etiqueta completa: con `=`, `:` o `#` el valor cae lleve o no
+        // cifras, porque solo puede ser un codigo.
         $text = self::replace(
             '/\b(employee[_ \-]?code|c(?:o|\x{00F3})digo(?:[_ ]de)?[_ ]empleado)(\s*[=:#]\s*|\s+(?=\S*\d))(\S+)/iu',
             '$1$2[code]',
             $text,
         );
 
-        return self::replace(
+        // La etiqueta corta, solo si lo que sigue lleva alguna cifra: sin esa
+        // condicion «code is required» perderia la palabra.
+        $text = self::replace(
+            '/\b(c(?:o|\x{00F3})digo|code)(\s*[=:#]\s*|\s+)(?=\S*\d)(?!\[)(\S+)/iu',
+            '$1$2[code]',
+            $text,
+        );
+
+        $text = self::replace(
             '/\bE(?=[A-Z0-9]{8,9}\b)(?:(?=[A-Z0-9]*\d)[A-Z0-9]{8,9}|[ABCDEFGHJKMNPQRSTUVWXYZ]{9})\b/',
             '[code]',
             $text,
         );
+
+        return self::replace('/\be(?=[a-z0-9]*\d)[a-z0-9]{8,9}\b/', '[code]', $text);
     }
 
     /**
-     * Pasaportes (F4c-2): el espanol son tres letras y seis cifras, y
-     * cualquiera, sea de donde sea, detras de la palabra.
-     *
-     * La forma sola es estrecha a proposito —mayusculas exactas y limites de
-     * palabra— para no comerse un identificador tecnico; lo que no tenga esa
-     * forma solo se reconoce por la etiqueta.
+     * Pasaportes (F4c-2): el espanol son tres letras y seis cifras, cualquiera
+     * detras de la palabra, y **los extranjeros sin etiqueta** (ADR-048): de una
+     * a tres letras y de seis a nueve cifras, en cualquier caja.
      */
     private static function passports(string $text): string
     {
@@ -426,22 +509,45 @@ final readonly class ErrorMessageSanitizer
             $text,
         );
 
-        return self::replace('/\b[A-Z]{3}\d{6}\b/', '[id]', $text);
+        return self::replace('/(?<![\p{L}\p{N}])[A-Za-z]{1,3}\d{6,9}(?![\p{L}\p{N}])/u', '[id]', $text);
     }
 
     /**
-     * Telefonos en el formato que se usa en Espana: nueve cifras, con o sin
-     * prefijo internacional y con o sin separadores.
-     *
-     * El patron exige **exactamente** tres grupos de tres cifras para no
-     * comerse un numero tecnico cualquiera: un `Content-Length: 123456789` es un
-     * falso positivo asumible; un `status 500` no puede serlo.
+     * Telefonos: con prefijo internacional (`+34`, `0034`, `+44 20 …`) y de seis
+     * a doce cifras detras, o nacionales de nueve cifras en cualquier
+     * agrupacion (3-3-3, 2-3-2-2, 3-2-2-2, 2-2-2-2-1…). Las formas que se
+     * escapen las atrapa la regla de las siete cifras.
      */
     private static function phones(string $text): string
     {
-        return self::replace(
-            '/(?<![\w.\-])(?:\+\d{1,3}[ .\-]?)?\d{3}[ .\-]?\d{3}[ .\-]?\d{3}(?![\w.\-])/',
+        $text = self::replace(
+            '/(?<![\p{L}\p{N}+])(?:\+|00)\d{1,3}(?:[ .\-]?\d){6,12}(?![\p{L}\p{N}])/u',
             '[phone]',
+            $text,
+        );
+
+        return self::replace(
+            '/(?<![\p{L}\p{N}.\-])\d(?:[ .\-]?\d){8}(?![\p{L}\p{N}.\-])/u',
+            '[phone]',
+            $text,
+        );
+    }
+
+    /**
+     * Direcciones IP v4 y v6 (ADR-048, decision conservadora): la del movil de
+     * un empleado en el portal es un dato personal.
+     *
+     * La v6 exige `::` o los ocho grupos, y no admite que empiece pegada a una
+     * letra: `Handler::method` no es una direccion.
+     */
+    private static function ipAddresses(string $text): string
+    {
+        $text = self::replace('/(?<![\p{N}.])\d{1,3}(?:\.\d{1,3}){3}(?!\.?\p{N})/u', '[ip]', $text);
+
+        return self::replace(
+            '/(?<![\p{L}\p{N}:])(?=[0-9a-f:]*[0-9a-f])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}'
+            .'|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?)(?![\p{L}\p{N}:])/iu',
+            '[ip]',
             $text,
         );
     }
@@ -450,9 +556,7 @@ final readonly class ErrorMessageSanitizer
      * Fechas e instantes completos primero, horas sueltas despues.
      *
      * **Una hora en un mensaje de error es sospechosa de ser una hora de
-     * fichaje**, y las horas de fichaje de una persona son datos de jornada:
-     * viven en `shift_entries` con cuatro anos de retencion y control de acceso,
-     * no en una tabla tecnica de 90 dias que sale hacia el fabricante.
+     * fichaje**, y las horas de fichaje de una persona son datos de jornada.
      */
     private static function instants(string $text): string
     {
@@ -466,8 +570,7 @@ final readonly class ErrorMessageSanitizer
         $text = self::replace('/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/', '[time]', $text);
 
         // `dd-mm-aaaa` y `dd.mm.aaaa` (F4c-2), con el MISMO separador las dos
-        // veces y dia, mes y siglo plausibles: sin eso, `13.0.1234` o un
-        // `1-2-3000` cualquiera pasarian por fecha.
+        // veces y dia, mes y siglo plausibles.
         $text = self::replace(
             '/\b(?:0?[1-9]|[12]\d|3[01])([\-.])(?:0?[1-9]|1[0-2])\1(?:19|20)\d{2}\b/',
             '[time]',
@@ -478,13 +581,19 @@ final readonly class ErrorMessageSanitizer
     }
 
     /**
-     * Todo lo entrecomillado, sin mirar dentro. Ver el docblock de la clase: es
-     * la unica regla que atrapa un nombre de persona.
+     * Todo lo entrecomillado, sin mirar dentro, con **las siete formas de
+     * comillas** (ADR-048): rectas dobles y simples, angulares `«»`, inglesas
+     * `“”` y `‘’`, alemanas `„“`, simples angulares `‹›` y comillas invertidas.
      */
     private static function quoted(string $text): string
     {
         $text = self::replace('/"[^"]*"/u', "'…'", $text);
         $text = self::replace('/\x{00AB}[^\x{00BB}]*\x{00BB}/u', "'…'", $text);
+        $text = self::replace('/\x{201E}[^\x{201C}\x{201D}]*[\x{201C}\x{201D}]/u', "'…'", $text);
+        $text = self::replace('/\x{201C}[^\x{201D}]*\x{201D}/u', "'…'", $text);
+        $text = self::replace('/\x{2018}[^\x{2019}]*\x{2019}/u', "'…'", $text);
+        $text = self::replace('/\x{2039}[^\x{203A}]*\x{203A}/u', "'…'", $text);
+        $text = self::replace('/`[^`]*`/u', "'…'", $text);
 
         return self::replace('/\'[^\']*\'/u', "'…'", $text);
     }

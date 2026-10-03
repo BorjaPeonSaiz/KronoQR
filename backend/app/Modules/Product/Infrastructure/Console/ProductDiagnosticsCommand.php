@@ -196,8 +196,13 @@ final class ProductDiagnosticsCommand extends Command
 
         if (! $options->includePersonalData) {
             $this->line('');
-            $this->line('Este paquete va anonimizado: no lleva nombres, ni correos, ni fichajes,');
-            $this->line('ni contraseñas, ni claves. Los empleados aparecen solo como identificador.');
+            // ADR-048: lo que dice aqui es lo que comprueba la prueba sembrada
+            // del paquete, ni mas ni menos. Va en los dos idiomas porque quien
+            // lo ejecuta puede ser el IT del hotel o el soporte del fabricante.
+            $this->line('Anonimizado: sin nombres, documentos ni identificadores de empleado; el texto');
+            $this->line('de los errores, solo con palabras técnicas. Ábrelo antes de enviarlo.');
+            $this->line('Anonymised: no names, documents or employee identifiers; error text reduced');
+            $this->line('to technical words. Open it before sending.');
         }
 
         $this->line('');

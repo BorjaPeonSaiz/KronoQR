@@ -10714,6 +10714,10 @@ export interface components {
              *     `groups` —hasta 500, `last_seen_at` descendente— con los mismos
              *     campos que `ErrorEvent`. Cada grupo entra por lista de permitidos:
              *     nunca un nombre, un correo ni una hora de fichaje (regla dura 21).
+             *     El texto se vuelve a filtrar al empaquetar (ADR-048). **En el
+             *     paquete anonimizado se omite `employee_uuid`** y todo UUID del
+             *     mensaje y del contexto aparece como `[uuid]`; con
+             *     `include_personal_data: true` el grupo sale completo.
              */
             error_events: {
                 [key: string]: unknown;
@@ -10847,7 +10851,11 @@ export interface components {
              */
             code: string | null;
             /**
-             * @description Mensaje saneado de la primera aparicion.
+             * @description Mensaje saneado de la primera aparicion. Filtrado por lista blanca
+             *     de palabras tecnicas (ADR-048): toda palabra fuera del vocabulario
+             *     cerrado del producto aparece como `…`, y las cifras con forma de
+             *     documento, telefono, cuenta, NAF, codigo de empleado, fecha, hora o
+             *     IP como un marcador (`[n]`, `[id]`, `[time]`…).
              * @example SQLSTATE[08006] connection to server at '…' failed
              */
             message: string;
@@ -10864,7 +10872,9 @@ export interface components {
              * @description Datos tecnicos por lista de permitidos: `route`, `method`, `status`,
              *     `job`, `queue`, `attempts`, `command`, `component`, `hook`, `cause`,
              *     `http_status`, `code`, `skew_seconds`, `queue_size`, `outcome`,
-             *     `reason`. Solo escalares, truncados a 200 caracteres.
+             *     `reason`. Solo escalares, truncados a 200 caracteres; los de texto,
+             *     filtrados por la misma lista blanca de palabras que `message`
+             *     (ADR-048), y `source` reducido a `pathname:linea`.
              */
             context: {
                 [key: string]: string | number | boolean;

@@ -107,6 +107,36 @@ final readonly class ErrorFingerprint
     }
 
     /**
+     * La huella que le toca a un grupo con estas columnas ya saneadas: la del
+     * desbordamiento si su codigo es el de desbordamiento, la de cliente si es
+     * de un cliente con codigo, y la de servidor en cualquier otro caso.
+     *
+     * Es la regla que aplica `RecordErrorEvent` al escribir y la que vuelve a
+     * aplicar `ResanitizeErrorHistory` al recalcular las huellas antiguas
+     * (ADR-048): con la decision en un solo sitio, las dos no pueden divergir.
+     *
+     * @param  string  $sanitizedMessage  Ya pasado por {@see ErrorMessageSanitizer}.
+     */
+    public static function forGroup(
+        ErrorSource $source,
+        ?string $code,
+        ?string $exceptionClass,
+        ?string $file,
+        ?int $line,
+        string $sanitizedMessage,
+    ): self {
+        if ($code === ErrorColumnSanitizer::OVERFLOW_CODE) {
+            return self::overflowFor($source);
+        }
+
+        if ($source->isClient() && $code !== null) {
+            return self::forClient($source, $code, $sanitizedMessage);
+        }
+
+        return self::forServer($source, $exceptionClass, $file, $line, $sanitizedMessage);
+    }
+
+    /**
      * La huella **fija** del grupo de desbordamiento de un origen (decision 14).
      *
      * Cuando un origen alcanza el techo de grupos abiertos

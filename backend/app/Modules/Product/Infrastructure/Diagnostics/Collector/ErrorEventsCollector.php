@@ -8,9 +8,11 @@ use App\Modules\Product\Application\Port\DiagnosticsCollector;
 use App\Modules\Product\Application\Port\ErrorEventQuery;
 use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
+use App\Modules\Product\Domain\ValueObject\ErrorColumnSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorContextAllowlist;
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 use App\Modules\Product\Domain\ValueObject\ErrorEventStatusFilter;
+use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\FieldAllowlist;
 use App\Modules\Shared\Application\Port\Clock;
 use DateInterval;
@@ -63,8 +65,18 @@ use Throwable;
  * `period_days` de {@see DiagnosticsOptions}, el mismo que acota `personal_data`,
  * para que las dos secciones hablen de la misma ventana y se puedan leer juntas.
  * Con el paquete anonimizado —el caso normal— eso son los siete dias por
- * omision. **La seccion sale igual con datos personales o sin ellos**: aqui no
- * hay ninguno.
+ * omision.
+ *
+ * ## En el anonimizado no hay identificador de empleado (H2, ADR-048)
+ *
+ * `employee_uuid` es un **seudonimo** (art. 4.5 RGPD): el hotel tiene la
+ * correspondencia con la persona. Por eso el paquete anonimizado **omite la
+ * columna** —ni siquiera la lleva a nulo— y sustituye **todo UUID** del mensaje
+ * y de los valores del contexto por `[uuid]`: un «Employee 0199… has no open
+ * shift entry» lo llevaria dentro aunque la columna faltara. `device_id` y
+ * `trace_id` se quedan: identifican una tablet y una peticion, no a una
+ * persona. Con `--with-personal-data` el grupo sale completo. La tabla local
+ * no cambia.
  */
 final readonly class ErrorEventsCollector implements DiagnosticsCollector
 {
@@ -100,6 +112,9 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
         'resolved_at',
     ];
 
+    /** La columna que el paquete anonimizado no lleva (H2). */
+    private const string EMPLOYEE_FIELD = 'employee_uuid';
+
     public function __construct(
         private ErrorEventRepository $errors,
         private Clock $clock,
@@ -129,8 +144,13 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
 
         // La lista se construye una vez y se aplica a todas las filas: impone el
         // orden declarado, de modo que dos paquetes de la misma instalacion se
-        // puedan comparar linea a linea con `diff`.
-        $allowlist = new FieldAllowlist(...self::GROUP_FIELDS);
+        // puedan comparar linea a linea con `diff`. En el anonimizado no lleva
+        // `employee_uuid` (H2): ver el docblock de la clase.
+        $anonymized = ! $options->includePersonalData;
+        $allowlist = new FieldAllowlist(...array_values(array_filter(
+            self::GROUP_FIELDS,
+            static fn (string $field): bool => ! ($anonymized && $field === self::EMPLOYEE_FIELD),
+        )));
 
         return [
             'status' => 'ok',
@@ -144,7 +164,7 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
             'total_groups' => $page->total,
             'truncated' => $page->total > self::MAX_GROUPS,
             'groups' => array_map(
-                static fn (ErrorEvent $event): array => $allowlist->apply(self::describe($event)),
+                static fn (ErrorEvent $event): array => $allowlist->apply(self::describe($event, $anonymized)),
                 $page->rows,
             ),
         ];
@@ -160,25 +180,46 @@ final readonly class ErrorEventsCollector implements DiagnosticsCollector
      * es una lista de permitidos con dieciseis claves y valores escalares
      * saneados. La de aqui protege las columnas; aquella protege el contexto.
      *
+     * ## Se vuelve a sanear al leer (ADR-048, H7)
+     *
+     * `message`, `context`, `code`, `exception_class`, `file` y `app_version`
+     * pasan otra vez por las mismas funciones que `RecordErrorEvent` aplica al
+     * escribir. Son idempotentes, asi que con una fila bien escrita no cambia
+     * nada; con una escrita por otro camino, o por una version anterior a la
+     * migracion de saneado, es la red que impide que salga.
+     *
      * @return array<string, mixed>
      */
-    private static function describe(ErrorEvent $event): array
+    private static function describe(ErrorEvent $event, bool $anonymized): array
     {
+        $message = ErrorMessageSanitizer::sanitize($event->message);
+        $context = ErrorContextAllowlist::apply($event->context);
+
+        if ($anonymized) {
+            $message = ErrorMessageSanitizer::withoutUuids($message);
+            $context = array_map(
+                static fn (bool|int|float|string $value): bool|int|float|string => \is_string($value)
+                    ? ErrorMessageSanitizer::withoutUuids($value)
+                    : $value,
+                $context,
+            );
+        }
+
         return [
             'fingerprint' => $event->fingerprint,
             'level' => $event->level->value,
             'source' => $event->source->value,
             'module' => $event->module,
-            'code' => $event->code,
-            'message' => $event->message,
-            'exception_class' => $event->exceptionClass,
-            'file' => $event->file,
+            'code' => ErrorColumnSanitizer::code($event->source, $event->code),
+            'message' => $message,
+            'exception_class' => ErrorColumnSanitizer::exceptionClass($event->exceptionClass),
+            'file' => ErrorColumnSanitizer::file($event->file),
             'line' => $event->line,
-            'context' => json_encode($event->context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'context' => json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'trace_id' => $event->traceId,
             'device_id' => $event->deviceId,
-            'employee_uuid' => $event->employeeUuid,
-            'app_version' => $event->appVersion,
+            self::EMPLOYEE_FIELD => $anonymized ? null : $event->employeeUuid,
+            'app_version' => ErrorColumnSanitizer::appVersion($event->appVersion),
             'occurrences' => $event->occurrences,
             'first_seen_at' => self::utc($event->firstSeenAt),
             'last_seen_at' => self::utc($event->lastSeenAt),

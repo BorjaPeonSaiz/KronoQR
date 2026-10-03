@@ -100,3 +100,31 @@ it('no confunde dos huellas por como se concatenan sus partes', function (): voi
 
     expect($otra->value)->not->toBe($una->value);
 })->group('RF-PD-15');
+
+it('forGroup elige la huella de desbordamiento, la de cliente o la de servidor (ADR-048)', function (): void {
+    // La misma regla al escribir (`RecordErrorEvent`) y al recalcular las
+    // huellas antiguas (`ResanitizeErrorHistory`): si divergieran, la migracion
+    // no fundiria lo que el sumidero agruparia.
+    expect(ErrorFingerprint::forGroup(ErrorSource::Kiosk, 'overflow', null, null, null, 'x')->value)
+        ->toBe(ErrorFingerprint::overflowFor(ErrorSource::Kiosk)->value)
+        ->and(ErrorFingerprint::forGroup(ErrorSource::Api, 'overflow', 'X', 'f.php', 1, 'x')->value)
+        ->toBe(ErrorFingerprint::overflowFor(ErrorSource::Api)->value)
+        ->and(ErrorFingerprint::forGroup(ErrorSource::Kiosk, 'kiosk.camera.unavailable', 'X', 'f.php', 1, 'x')->value)
+        ->toBe(ErrorFingerprint::forClient(ErrorSource::Kiosk, 'kiosk.camera.unavailable', 'x')->value)
+        ->and(ErrorFingerprint::forGroup(ErrorSource::Kiosk, null, 'X', 'f.php', 1, 'x')->value)
+        ->toBe(ErrorFingerprint::forServer(ErrorSource::Kiosk, 'X', 'f.php', 1, 'x')->value)
+        ->and(ErrorFingerprint::forGroup(ErrorSource::Api, '23505', 'X', 'f.php', 1, 'x')->value)
+        ->toBe(ErrorFingerprint::forServer(ErrorSource::Api, 'X', 'f.php', 1, 'x')->value);
+})->group('RF-PD-15');
+
+it('compone la huella con sus campos exactos, huecos incluidos', function (): void {
+    // La huella es lo que fusiona `ResanitizeErrorHistory`: si su composicion
+    // cambiara sin que nada fallara, las huellas antiguas y las nuevas dejarian
+    // de casar en silencio.
+    expect(ErrorFingerprint::forServer(ErrorSource::Api, null, null, null, 'boom')->value)
+        ->toBe(hash('sha256', 'api|||boom'))
+        ->and(ErrorFingerprint::forServer(ErrorSource::Api, 'X', 'f.php', null, 'boom')->value)
+        ->toBe(hash('sha256', 'api|X|f.php:0|boom'))
+        ->and(ErrorFingerprint::overflowFor(ErrorSource::Kiosk)->value)
+        ->toBe(hash('sha256', 'overflow|kiosk'));
+})->group('RF-PD-15');

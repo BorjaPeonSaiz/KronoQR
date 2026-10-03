@@ -239,6 +239,14 @@ return [
             'handler' => NullHandler::class,
         ],
 
+        /*
+         * No es un canal: es la ruta del logger que Laravel monta A MANO cuando
+         * el canal configurado no se puede construir, y ese montaje no lee ni
+         * `tap` ni `processors`. Por eso aqui no se declara `RedactPersonalData`
+         * (no tendria efecto): el saneado lo anade en el codigo
+         * `App\Modules\Product\Infrastructure\Logging\RedactingLogManager`
+         * (ADR-048, regla dura 21), y `EmergencyChannelRedactsTest` lo fija.
+         */
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],

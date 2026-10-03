@@ -55,9 +55,12 @@ namespace App\Modules\Product\Domain\ValueObject;
  *
  * Un valor que sea a su vez un mapa no entra —la lista no puede afirmar nada
  * sobre sus claves, y permitir `meta` colaria el objeto entero que llevara
- * dentro—, y los que entran pasan por {@see ErrorMessageSanitizer} y se truncan
- * a 200 caracteres. Un `reason` es texto libre escrito por quien programo el
- * cliente: puede llevar cualquier cosa dentro, exactamente igual que el mensaje.
+ * dentro—, y los que entran pasan por {@see ErrorMessageSanitizer} —con la
+ * lista blanca por palabra de ADR-048: el vocabulario hace de catalogo para
+ * todas las claves— y se truncan a 200 caracteres. Un `reason` es texto libre
+ * escrito por quien programo el cliente: puede llevar cualquier cosa dentro,
+ * exactamente igual que el mensaje. `source` se reduce antes a
+ * `pathname:linea` ({@see self::scriptLocation()}).
  *
  * ## Las claves ausentes se caen, no se rellenan con nulo
  *
@@ -145,6 +148,9 @@ final readonly class ErrorContextAllowlist
      */
     public const string MESSAGE_KEY = 'message';
 
+    /** La clave que se normaliza a `pathname:linea` antes de sanear. */
+    private const string SOURCE_KEY = 'source';
+
     /**
      * El contexto listo para guardarse.
      *
@@ -178,7 +184,8 @@ final readonly class ErrorContextAllowlist
             }
 
             if (is_string($value)) {
-                $clean = self::withoutLoneCode(ErrorMessageSanitizer::sanitizeContextValue($value));
+                $text = $key === self::SOURCE_KEY ? self::scriptLocation($value) : $value;
+                $clean = self::withoutLoneCode(ErrorMessageSanitizer::sanitizeContextValue($text));
 
                 // Un valor que se queda en nada despues del saneado no aporta
                 // una clave vacia: aporta ruido. «En nada» es el texto de
@@ -194,6 +201,26 @@ final readonly class ErrorContextAllowlist
         }
 
         return $allowed;
+    }
+
+    /**
+     * `source` reducido a `pathname:linea` (ADR-048, §1.4).
+     *
+     * Web-kit ya manda `pathname:linea`, pero el quiosco manda el
+     * `event.filename` completo, con su origen y su consulta, y una consulta es
+     * texto libre: `?t=x7k2m9&u=ana`. Se quita el esquema y el anfitrion (y el
+     * prefijo `blob:`), la consulta y el fragmento; si el valor acaba en
+     * `:linea` o `:linea:columna`, eso se conserva. Lo que queda pasa despues
+     * por el mismo saneado que cualquier otro valor: el hash de Vite del nombre
+     * del fichero (`index-Bx3k9Lq.js`) da `index-[n].js`.
+     */
+    private static function scriptLocation(string $value): string
+    {
+        $withoutOrigin = preg_replace('#^(?:blob:)?[a-z][a-z0-9+.\-]*://[^/?\#]*#i', '', trim($value)) ?? '';
+        $position = preg_match('/(?::\d+){1,2}$/', $withoutOrigin, $match) === 1 ? $match[0] : '';
+        $path = substr($withoutOrigin, 0, \strlen($withoutOrigin) - \strlen($position));
+
+        return (preg_replace('/[?#].*$/s', '', $path) ?? '').$position;
     }
 
     /**

@@ -140,9 +140,13 @@ it('el paquete NO saca el nombre de quien resolvio un error', function (): void 
         ->and($respuesta->json('error_events.summary.resolved'))->toBe(1);
 })->group('RF-PD-15', 'RL-19');
 
-it('la seccion sale igual con el paquete anonimizado y con datos personales', function (): void {
-    // Aqui no hay datos personales que incluir ni que omitir: la seccion es la
-    // misma en los dos paquetes.
+it('el paquete anonimizado no lleva employee_uuid y el que tiene datos personales si (H2)', function (): void {
+    /*
+     * `employee_uuid` es un seudonimo (art. 4.5 RGPD): el hotel sabe a quien
+     * corresponde. El anonimizado omite la columna —ni siquiera la lleva a
+     * nulo— (ADR-048); con datos personales sale entera, que es el control
+     * positivo. Todo lo demas del grupo es igual en los dos.
+     */
     grupoParaElPaquete();
 
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
@@ -152,8 +156,22 @@ it('la seccion sale igual con el paquete anonimizado y con datos personales', fu
         ->post('/api/v1/diagnostics/bundle', ['include_personal_data' => true, 'period_days' => 7])
         ->assertOk();
 
-    expect($completo->json('error_events.groups'))->toBe($anonimo->json('error_events.groups'));
-})->group('RF-PD-15', 'RL-19');
+    /** @var array<string, mixed> $grupoAnonimo */
+    $grupoAnonimo = $anonimo->json('error_events.groups.0');
+    /** @var array<string, mixed> $grupoCompleto */
+    $grupoCompleto = $completo->json('error_events.groups.0');
+
+    expect($grupoAnonimo)->not->toHaveKey('employee_uuid')
+        ->and((string) json_encode($anonimo->json('error_events')))->not->toContain('0199f0aa-2222-7000-8000-0123456789ab')
+        ->and($grupoCompleto['employee_uuid'])->toBe('0199f0aa-2222-7000-8000-0123456789ab')
+        // `device_id` y `trace_id` se quedan en los dos: no son de una persona.
+        ->and($grupoAnonimo['device_id'])->toBe('0199f0aa-1111-7000-8000-0123456789ab')
+        ->and($grupoAnonimo['trace_id'])->toBe(str_repeat('a1b2c3d4', 4));
+
+    unset($grupoCompleto['employee_uuid']);
+
+    expect($grupoAnonimo)->toBe($grupoCompleto);
+})->group('RF-PD-09', 'RF-PD-15', 'RL-19');
 
 it('la exportacion integra escribe error_events.csv con la tabla entera', function (): void {
     // Aqui SI sale el autor de la resolucion: son datos del cliente y el cliente

@@ -145,22 +145,51 @@ it('conserva lo que hace util el mensaje', function (): void {
 it('trunca a mil caracteres sin partir un caracter multibyte', function (): void {
     // `substr()` sobre UTF-8 parte una tilde por la mitad y deja un byte
     // invalido que revienta al serializar el JSON del paquete de diagnostico:
-    // el peor sitio para descubrirlo.
-    $limpio = ErrorMessageSanitizer::sanitize(str_repeat('á', 4000));
+    // el peor sitio para descubrirlo. Palabras del vocabulario con tilde, para
+    // que la lista blanca no las convierta antes en `…`.
+    $limpio = ErrorMessageSanitizer::sanitize(str_repeat('código ', 600));
 
-    expect(mb_strlen($limpio))->toBe(ErrorMessageSanitizer::MAX_LENGTH)
-        ->and(mb_check_encoding($limpio, 'UTF-8'))->toBeTrue();
+    expect(mb_strlen($limpio))->toBeLessThanOrEqual(ErrorMessageSanitizer::MAX_LENGTH)
+        ->and(mb_strlen($limpio))->toBeGreaterThan(ErrorMessageSanitizer::MAX_LENGTH - 10)
+        ->and(mb_check_encoding($limpio, 'UTF-8'))->toBeTrue()
+        ->and($limpio)->toEndWith('…');
 })->group('RF-PD-15');
 
 it('nunca devuelve un mensaje vacio', function (): void {
     // Una fila con `message: ''` en el panel parece un fallo del panel.
-    expect(ErrorMessageSanitizer::sanitize('   '))->toBe('(sin mensaje)');
+    expect(ErrorMessageSanitizer::sanitize('   '))->toBe('(sin mensaje)')
+        // Y el texto de relleno sobrevive a su propio saneado: el colector
+        // vuelve a sanear al leer.
+        ->and(ErrorMessageSanitizer::sanitize(ErrorMessageSanitizer::EMPTY_MESSAGE))
+        ->toBe(ErrorMessageSanitizer::EMPTY_MESSAGE);
 })->group('RF-PD-15');
 
 it('trunca los valores de contexto a doscientos caracteres', function (): void {
-    expect(mb_strlen(ErrorMessageSanitizer::sanitizeContextValue(str_repeat('x', 900))))
-        ->toBe(ErrorMessageSanitizer::MAX_CONTEXT_LENGTH);
+    expect(mb_strlen(ErrorMessageSanitizer::sanitizeContextValue(str_repeat('error ', 150))))
+        ->toBeLessThanOrEqual(ErrorMessageSanitizer::MAX_CONTEXT_LENGTH)
+        ->toBeGreaterThan(ErrorMessageSanitizer::MAX_CONTEXT_LENGTH - 10);
 })->group('RF-PD-15');
+
+it('vuelve a filtrar lo truncado, y por eso sigue siendo idempotente', function (string $texto): void {
+    /*
+     * El corte puede dejar media palabra («Connec…»). Sin la segunda pasada,
+     * el colector —que vuelve a sanear al leer— la convertiria en `…` y el
+     * mismo grupo diria dos cosas distintas en la tabla y en el paquete.
+     */
+    $una = ErrorMessageSanitizer::sanitize($texto);
+    $valor = ErrorMessageSanitizer::sanitizeContextValue($texto);
+
+    expect(ErrorMessageSanitizer::sanitize($una))->toBe($una)
+        ->and(ErrorMessageSanitizer::sanitizeContextValue($valor))->toBe($valor)
+        ->and(mb_strlen($una))->toBeLessThanOrEqual(ErrorMessageSanitizer::MAX_LENGTH)
+        ->and(mb_strlen($valor))->toBeLessThanOrEqual(ErrorMessageSanitizer::MAX_CONTEXT_LENGTH);
+})->with(static function (): iterable {
+    foreach ([0, 1, 2, 3, 4, 5, 6, 7] as $desplazamiento) {
+        yield 'corte desplazado '.$desplazamiento => [
+            str_repeat('x', $desplazamiento).' '.str_repeat('Connection refused 0199a1f0-0000-7000-8000-000000000000 ', 40),
+        ];
+    }
+})->group('RF-PD-15', 'RL-19');
 
 /*
  * ---------------------------------------------------------------------------
@@ -370,20 +399,27 @@ it('falla cerrado ante UTF-8 invalido: pierde el texto, no lo deja pasar sin san
 it('no trunca un texto que mide exactamente el techo', function (): void {
     // El techo es el `maxLength` del contrato y el de la columna: un mensaje que
     // cabe justo se guarda entero, sin el `…`.
-    $mensaje = str_repeat('x', ErrorMessageSanitizer::MAX_LENGTH);
-    $valor = str_repeat('y', ErrorMessageSanitizer::MAX_CONTEXT_LENGTH);
+    $mensaje = str_repeat('ok ', 333).'x';
+    $valor = str_repeat('ok ', 66).'ok';
 
-    expect(ErrorMessageSanitizer::sanitize($mensaje))->toBe($mensaje)
+    expect(mb_strlen($mensaje))->toBe(ErrorMessageSanitizer::MAX_LENGTH)
+        ->and(mb_strlen($valor))->toBe(ErrorMessageSanitizer::MAX_CONTEXT_LENGTH)
+        ->and(ErrorMessageSanitizer::sanitize($mensaje))->toBe($mensaje)
         ->and(ErrorMessageSanitizer::sanitizeContextValue($valor))->toBe($valor);
 })->group('RF-PD-15');
 
 it('al truncar conserva el principio del texto y cierra con el indicador', function (): void {
     // Lo que diagnostica —`SQLSTATE`, la clase de la excepcion— va al
     // principio: el corte se lleva la cola, nunca la cabeza.
-    expect(ErrorMessageSanitizer::sanitize('A'.str_repeat('x', 1500)))
-        ->toBe('A'.str_repeat('x', ErrorMessageSanitizer::MAX_LENGTH - 2).'…')
-        ->and(ErrorMessageSanitizer::sanitizeContextValue('B'.str_repeat('x', 500)))
-        ->toBe('B'.str_repeat('x', ErrorMessageSanitizer::MAX_CONTEXT_LENGTH - 2).'…');
+    $mensaje = ErrorMessageSanitizer::sanitize('SQLSTATE[23505] '.str_repeat('ok ', 600));
+    $valor = ErrorMessageSanitizer::sanitizeContextValue('TypeError '.str_repeat('ok ', 200));
+
+    expect($mensaje)->toStartWith('SQLSTATE[23505] ok ok')
+        ->and($mensaje)->toEndWith('…')
+        ->and(mb_strlen($mensaje))->toBe(ErrorMessageSanitizer::MAX_LENGTH)
+        ->and($valor)->toStartWith('TypeError ok ok')
+        ->and($valor)->toEndWith('…')
+        ->and(mb_strlen($valor))->toBeLessThanOrEqual(ErrorMessageSanitizer::MAX_CONTEXT_LENGTH);
 })->group('RF-PD-15');
 
 it('corta la consulta de una QueryException sin dejar marcador en su lugar', function (): void {
@@ -391,4 +427,248 @@ it('corta la consulta de una QueryException sin dejar marcador en su lugar', fun
     expect(ErrorMessageSanitizer::redact(
         'SQLSTATE[23505] duplicate key (Connection: pgsql, SQL: insert into t values (Maria))',
     ))->toBe('SQLSTATE[23505] duplicate key (Connection: pgsql');
+})->group('RF-PD-15', 'RL-19');
+
+/*
+ * ---------------------------------------------------------------------------
+ * ADR-048 (bloque 19 de la 2.2.0): lista blanca por palabra, patrones ampliados
+ * y las condiciones del dictamen de seguridad (H1, H3, H4). Una prueba por
+ * forma: la fuga que cerro el bloque era siempre la forma que nadie probo.
+ * ---------------------------------------------------------------------------
+ */
+
+it('no deja pasar un nombre sin comillas en ninguna forma', function (string $texto, string $prohibido): void {
+    expect(ErrorMessageSanitizer::sanitize($texto))->not->toContain($prohibido)
+        ->and(ErrorMessageSanitizer::redactText($texto))->not->toContain($prohibido);
+})->with([
+    'capitalizado' => ['Employee Rosa Ficticiana not found', 'Ficticiana'],
+    'mayusculas' => ['EMPLOYEE ROSA FICTICIANA NOT FOUND', 'FICTICIANA'],
+    'minusculas' => ['employee rosa ficticiana not found', 'ficticiana'],
+    'apellido, nombre' => ['Employee Ficticiana, Rosa not found', 'Rosa'],
+    'Li Wang' => ['No se pudo fichar a Li Wang', 'Wang'],
+    'Max Campos' => ['No se pudo fichar a Max Campos', 'Campos'],
+    'Max suelto' => ['No se pudo fichar a Max Campos', 'Max'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye cada forma de IBAN', function (string $iban): void {
+    expect(ErrorMessageSanitizer::redact('cuenta '.$iban.' rechazada'))->toBe('cuenta [iban] rechazada');
+})->with([
+    'mayusculas con espacios' => ['ES91 2100 0418 4502 0005 1332'],
+    'minusculas con espacios' => ['es91 2100 0418 4502 0005 1332'],
+    'compacto' => ['ES9121000418450200051332'],
+    'con guiones' => ['ES91-2100-0418-4502-0005-1332'],
+    'minusculas con guiones' => ['es91-2100-0418-4502-0005-1332'],
+    'aleman compacto' => ['DE89370400440532013000'],
+    'aleman en minusculas agrupado' => ['de89 3704 0044 0532 0130 00'],
+    'britanico con letras en el banco' => ['GB29 NWBK 6016 1331 9268 19'],
+])->group('RF-PD-15', 'RL-19');
+
+it('no confunde con un IBAN una palabra que empieza como uno', function (): void {
+    // `id42` y tres palabras de cuatro letras no suman diez cifras.
+    expect(ErrorMessageSanitizer::redact('id42 user test case'))->toBe('id42 user test case');
+})->group('RF-PD-15');
+
+it('sustituye cada forma de codigo de empleado', function (string $texto, string $prohibido): void {
+    expect(ErrorMessageSanitizer::sanitize($texto))->not->toContain($prohibido);
+})->with([
+    'canonico en mayusculas' => ['tarjeta E7K2M9QX4B revocada', 'E7K2M9QX4B'],
+    'canonico en minusculas' => ['tarjeta e7k2m9qx4b revocada', 'e7k2m9qx4b'],
+    'con etiqueta en castellano' => ['Ya existe un empleado con el codigo E7K2M9QX4B.', 'E7K2M9QX4B'],
+    'con etiqueta y tilde' => ['el código 739104 no existe', '739104'],
+    'con etiqueta en ingles' => ['employee code AB12C3 rejected', 'AB12C3'],
+    'con etiqueta corta en ingles' => ['code 739104 rejected', '739104'],
+    'heredado alfanumerico sin etiqueta' => ['tarjeta HTL2019X0042 revocada', 'HTL2019X0042'],
+    'heredado numerico sin etiqueta' => ['tarjeta 739104 revocada', '739104'],
+    'heredado corto sin etiqueta' => ['tarjeta AB12C3 revocada', 'AB12C3'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye la etiqueta corta solo si lo que sigue lleva cifras', function (): void {
+    expect(ErrorMessageSanitizer::redact('code 739104 rejected'))->toBe('code [code] rejected')
+        ->and(ErrorMessageSanitizer::redact('code is required'))->toBe('code is required');
+})->group('RF-PD-15');
+
+it('sustituye cada forma de DNI y NIE', function (string $documento): void {
+    expect(ErrorMessageSanitizer::redact('documento '.$documento.' duplicado'))->toBe('documento [id] duplicado');
+})->with([
+    'dni compacto' => ['45678912K'],
+    'dni con puntos y guion' => ['45.678.912-K'],
+    'dni con espacios' => ['45 678 912 K'],
+    'dni con guion' => ['45678912-K'],
+    'nie compacto' => ['X7654321L'],
+    'nie con guiones' => ['X-7654321-L'],
+    'nie en minusculas con guiones' => ['x-7654321-l'],
+    'nie en minusculas con espacios' => ['x 7654321 l'],
+    'nie con puntos' => ['Y 7.654.321 M'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye un DNI sin letra por la regla de las siete cifras', function (): void {
+    expect(ErrorMessageSanitizer::sanitize('document 45678912 duplicate'))->toBe('document [n] duplicate');
+})->group('RF-PD-15', 'RL-19');
+
+it('sustituye cada forma de pasaporte', function (string $texto, string $esperado): void {
+    expect(ErrorMessageSanitizer::redact($texto))->toBe($esperado);
+})->with([
+    'espanol' => ['pasaporte PAA654321 caducado', 'pasaporte [id] caducado'],
+    'espanol sin etiqueta' => ['documento PAA654321 caducado', 'documento [id] caducado'],
+    'extranjero sin etiqueta' => ['documento K98765432 caducado', 'documento [id] caducado'],
+    'extranjero en minusculas' => ['documento k98765432 caducado', 'documento [id] caducado'],
+    'extranjero de dos letras' => ['documento AB1234567 caducado', 'documento [id] caducado'],
+    'con etiqueta en ingles' => ['passport no. 987654321 expired', 'passport no. [id] expired'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye cada forma de NAF', function (string $naf): void {
+    expect(ErrorMessageSanitizer::redact('afiliacion '.$naf.' duplicada'))->toBe('afiliacion [id] duplicada');
+})->with([
+    'compacto' => ['281234567840'],
+    'con barras' => ['28/12345678/40'],
+    'con espacios' => ['28 12345678 40'],
+    'con guiones' => ['28-1234567-40'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye cada forma de telefono', function (string $telefono): void {
+    expect(ErrorMessageSanitizer::redact('contacto '.$telefono.' invalido'))->toBe('contacto [phone] invalido');
+})->with([
+    '3-3-3' => ['612 345 678'],
+    'compacto' => ['612345678'],
+    '2-3-2-2' => ['91 234 56 78'],
+    '3-2-2-2' => ['912 34 56 78'],
+    '2-2-2-2-1' => ['61 23 45 67 8'],
+    'con puntos' => ['612.345.678'],
+    'con prefijo +34' => ['+34 612 345 678'],
+    'con prefijo 0034' => ['0034612345678'],
+    'britanico' => ['+44 20 7946 0958'],
+    'frances' => ['+33 1 23 45 67 89'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye un correo con tildes o en otra escritura', function (string $correo): void {
+    expect(ErrorMessageSanitizer::redact('aviso a '.$correo.' rechazado'))->toBe('aviso a [email] rechazado');
+})->with([
+    'ascii' => ['rosa.ficticiana@hotel-ejemplo.es'],
+    'con tildes y eñe' => ['josé.ñúñez@hotel-ejemplo.es'],
+    'en mayusculas' => ['ROSA.FICTICIANA@HOTEL-EJEMPLO.ES'],
+    'dominio con tilde' => ['rosa@hotél-ejemplo.es'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye lo que va entre cualquiera de las siete comillas', function (string $texto): void {
+    expect(ErrorMessageSanitizer::redact('Employee '.$texto.' not found'))->toBe("Employee '…' not found");
+})->with([
+    'rectas dobles' => ['"Rosa Ficticiana"'],
+    'rectas simples' => ["'Rosa Ficticiana'"],
+    'angulares' => ['«Rosa Ficticiana»'],
+    'inglesas dobles' => ['“Rosa Ficticiana”'],
+    'inglesas simples' => ['‘Rosa Ficticiana’'],
+    'alemanas' => ['„Rosa Ficticiana“'],
+    'angulares simples' => ['‹Rosa Ficticiana›'],
+    'invertidas' => ['`Rosa Ficticiana`'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye las direcciones IP v4 y v6', function (string $ip): void {
+    expect(ErrorMessageSanitizer::redact('desde '.$ip.' rechazado'))->toBe('desde [ip] rechazado');
+})->with([
+    'v4' => ['192.168.1.10'],
+    'v6 completa' => ['2001:0db8:85a3:0000:0000:8a2e:0370:7334'],
+    'v6 abreviada' => ['fe80::1'],
+    'v6 de bucle' => ['::1'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye una tarjeta de 16 cifras: no es un hexadecimal que proteger (H1)', function (string $tarjeta): void {
+    expect(ErrorMessageSanitizer::sanitize('card '.$tarjeta.' rejected'))->toBe('card [n] rejected');
+})->with([
+    'compacta' => ['4111111111111111'],
+    'con espacios' => ['4111 1111 1111 1111'],
+    'con guiones' => ['4111-1111-1111-1111'],
+])->group('RF-PD-15', 'RL-19');
+
+it('conserva intactos los identificadores tecnicos protegidos', function (string $identificador): void {
+    $texto = 'Connection refused for '.$identificador.' at line 12';
+
+    expect(ErrorMessageSanitizer::sanitize($texto))->toBe($texto)
+        ->and(ErrorMessageSanitizer::redactText($texto))->toBe($texto);
+})->with([
+    'uuid en minusculas' => ['0199a1f0-0000-7000-8000-000000000000'],
+    'uuid en mayusculas' => ['0199A1F0-ABCD-7000-8000-00000000AB12'],
+    'span de 16' => ['00f067aa0ba902b7'],
+    'trace_id de 32' => ['a1b2c3d4e5f60718293a4b5c6d7e8f90'],
+    'sha1 de 40' => ['da39a3ee5e6b4b0d3255bfef95601890afd80709'],
+    'sha256 de 64' => ['e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'],
+])->group('RF-PD-15', 'RL-19');
+
+it('no protege un hexadecimal de otra longitud ni uno sin letras', function (string $hex): void {
+    expect(ErrorMessageSanitizer::sanitize('id '.$hex))->toBe('id [n]');
+})->with([
+    'quince' => ['00f067aa0ba902b'],
+    'diecisiete' => ['00f067aa0ba902b78'],
+    'dieciseis cifras' => ['1234567890123456'],
+])->group('RF-PD-15', 'RL-19');
+
+it('conserva SQLSTATE aunque su codigo lleve letras', function (): void {
+    expect(ErrorMessageSanitizer::sanitize('SQLSTATE[23P01]: Exclusion violation'))
+        ->toBe('SQLSTATE[23P01]: Exclusion violation');
+})->group('RF-PD-15');
+
+it('convierte un payload de credencial en [secret] antes de proteger nada', function (): void {
+    expect(ErrorMessageSanitizer::sanitize('tarjeta FH1.k1.0199a1f0-0000-7000-8000-000000000000.c2ln rechazada'))
+        ->toBe('tarjeta [secret] rechazada');
+})->group('RF-PD-15', 'RL-19');
+
+it('no deja que un caracter de uso privado del texto se haga pasar por un identificador', function (): void {
+    // El paso 2 usa U+E000… como marcadores. Uno que ya viniera en el texto se
+    // quita antes, o al restaurar se cambiaria por un identificador ajeno.
+    expect(ErrorMessageSanitizer::sanitize("error \u{E000} trace a1b2c3d4e5f60718293a4b5c6d7e8f90"))
+        ->toBe('error trace a1b2c3d4e5f60718293a4b5c6d7e8f90');
+})->group('RF-PD-15');
+
+it('conserva el dia de una fecha escrita y quita el año', function (): void {
+    expect(ErrorMessageSanitizer::sanitize('nacio el 15 de marzo de 1985'))->toBe('… el 15 de marzo de [n]');
+})->group('RF-PD-15', 'RL-19');
+
+it('quita matriculas y codigos postales', function (string $texto, string $esperado): void {
+    expect(ErrorMessageSanitizer::sanitize($texto))->toBe($esperado);
+})->with([
+    'matricula nueva' => ['vehiculo 1234 BCD', '… [n] …'],
+    'matricula antigua' => ['vehiculo M-1234-AB', '… M-[n]-…'],
+    'codigo postal' => ['cp 28013', '… [n]'],
+])->group('RF-PD-15', 'RL-19');
+
+it('sustituye por [uuid] todo UUID cuando se pide (H2)', function (): void {
+    expect(ErrorMessageSanitizer::withoutUuids(
+        'Employee 0199a1f0-0000-7000-8000-000000000000 and 0199A1F0-ABCD-7000-8000-00000000AB12, trace a1b2c3d4e5f60718293a4b5c6d7e8f90',
+    ))->toBe('Employee [uuid] and [uuid], trace a1b2c3d4e5f60718293a4b5c6d7e8f90')
+        ->and(ErrorMessageSanitizer::sanitize('[uuid]'))->toBe('[uuid]');
+})->group('RF-PD-15', 'RL-19');
+
+it('redactText filtra por palabra y redact solo por patrones', function (): void {
+    $texto = "Employee Rosa Ficticiana (rosa@hotel-ejemplo.es)\nline 2";
+
+    expect(ErrorMessageSanitizer::redactText($texto))->toBe("Employee … ([email])\nline 2")
+        ->and(ErrorMessageSanitizer::redact($texto))->toBe("Employee Rosa Ficticiana ([email])\nline 2");
+})->group('RF-PD-15', 'RL-19');
+
+it('es idempotente con la lista blanca', function (string $texto): void {
+    $una = ErrorMessageSanitizer::sanitize($texto);
+    $texto1 = ErrorMessageSanitizer::redactText($texto);
+
+    expect(ErrorMessageSanitizer::sanitize($una))->toBe($una)
+        ->and(ErrorMessageSanitizer::redactText($texto1))->toBe($texto1);
+})->with([
+    'de todo' => ['Rosa Ficticiana E7K2M9QX4B 45.678.912-K ES91 2100 0418 4502 0005 1332 "Ana" 14-03-2026 22:15 a@b.es'],
+    'tecnico' => ["TypeError: Cannot read properties of undefined (reading 'x') at app.js:1:123456"],
+    'con uuid y traza' => ['employee 0199a1f0-0000-7000-8000-000000000000 trace a1b2c3d4e5f60718293a4b5c6d7e8f90'],
+    'marcadores' => ['[email] [iban] [id] [code] [phone] [time] [ip] [secret] [uuid] [n] (sin mensaje)'],
+])->group('RF-PD-15', 'RL-19');
+
+it('falla cerrado tambien en redactText', function (): void {
+    expect(ErrorMessageSanitizer::redactText("Rosa Ficticiana \xC3\x28"))->toBe('');
+})->group('RF-PD-15', 'RL-19');
+
+it('trunca exactamente en el techo y deja el indicador en el ultimo caracter', function (): void {
+    // 16 caracteres de `SQLSTATE[23505] ` y 983 de `ok ok …`: el corte cae
+    // justo despues de un `ok` completo y el indicador ocupa el caracter mil.
+    expect(ErrorMessageSanitizer::sanitize('SQLSTATE[23505] '.str_repeat('ok ', 600)))
+        ->toBe('SQLSTATE[23505] '.str_repeat('ok ', 327).'ok…');
+})->group('RF-PD-15');
+
+it('exige diez cifras para llamar IBAN a lo que tiene su forma', function (): void {
+    expect(ErrorMessageSanitizer::redact('cuenta ab12 cd34 ef56 gh78 ij90 fin'))->toBe('cuenta [iban] fin')
+        ->and(ErrorMessageSanitizer::redact('cuenta ab12 cd34 ef56 gh78 ijk9 fin'))->toBe('cuenta ab12 cd34 ef56 gh78 ijk9 fin');
 })->group('RF-PD-15', 'RL-19');

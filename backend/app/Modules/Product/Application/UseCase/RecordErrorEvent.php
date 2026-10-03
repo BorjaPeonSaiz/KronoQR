@@ -6,6 +6,7 @@ namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Product\Application\Port\ErrorMetrics;
+use App\Modules\Product\Domain\ValueObject\ErrorColumnSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorContextAllowlist;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
 use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
@@ -83,13 +84,7 @@ use Throwable;
 final readonly class RecordErrorEvent implements ErrorEventSink
 {
     /** El codigo con el que se reconoce el grupo de desbordamiento (decision 14). */
-    public const string OVERFLOW_CODE = 'overflow';
-
-    /** Anchura de `error_events.code`. */
-    private const int MAX_CODE = 80;
-
-    /** Anchura de `error_events.exception_class` y de `error_events.file`. */
-    private const int MAX_CLASS = 255;
+    public const string OVERFLOW_CODE = ErrorColumnSanitizer::OVERFLOW_CODE;
 
     /**
      * El mensaje del grupo de desbordamiento. Fijo y **sin nada variable
@@ -114,6 +109,10 @@ final readonly class RecordErrorEvent implements ErrorEventSink
         try {
             $now = $this->clock->now();
 
+            // Las columnas se sanean ANTES de la huella (ADR-048): una huella
+            // calculada sobre un `file` o una clase con un nombre dentro seria
+            // un `sha256` sin sal de ese nombre, atacable por diccionario.
+            $report = $this->withinColumnWidths($report);
             $message = ErrorMessageSanitizer::sanitize($report->message);
             $context = ErrorContextAllowlist::apply($report->context);
             $fingerprint = $this->fingerprint($report, $message);
@@ -128,7 +127,7 @@ final readonly class RecordErrorEvent implements ErrorEventSink
             }
 
             $outcome = $this->errors->upsert(
-                report: $this->withinColumnWidths($report),
+                report: $report,
                 fingerprint: $fingerprint,
                 message: $message,
                 context: $context,
@@ -242,7 +241,8 @@ final readonly class RecordErrorEvent implements ErrorEventSink
     }
 
     /**
-     * El mismo informe con `code`, `exception_class` y `file` recortados a la
+     * El mismo informe con `app_version`, `code`, `exception_class` y `file`
+     * saneados (ADR-048, H7: {@see ErrorColumnSanitizer}) y recortados a la
      * anchura de su columna (decision 14).
      *
      * **Un valor largo no puede hacer fallar el `INSERT` y perder el error.** Es
@@ -263,11 +263,11 @@ final readonly class RecordErrorEvent implements ErrorEventSink
             level: $report->level,
             message: $report->message,
             occurredAt: $report->occurredAt,
-            appVersion: mb_substr($report->appVersion, 0, 32),
+            appVersion: ErrorColumnSanitizer::appVersion($report->appVersion),
             context: $report->context,
-            code: self::clip($report->code, self::MAX_CODE),
-            exceptionClass: self::clip($report->exceptionClass, self::MAX_CLASS),
-            file: self::clip($report->file, self::MAX_CLASS),
+            code: self::clip(ErrorColumnSanitizer::code($report->source, $report->code), ErrorColumnSanitizer::MAX_CODE),
+            exceptionClass: ErrorColumnSanitizer::exceptionClass($report->exceptionClass),
+            file: ErrorColumnSanitizer::file($report->file),
             line: $report->line,
             traceId: $report->traceId,
             deviceId: $report->deviceId,
@@ -319,12 +319,9 @@ final readonly class RecordErrorEvent implements ErrorEventSink
      */
     private function fingerprint(ErrorReport $report, string $message): ErrorFingerprint
     {
-        if ($report->source->isClient() && $report->code !== null) {
-            return ErrorFingerprint::forClient($report->source, $report->code, $message);
-        }
-
-        return ErrorFingerprint::forServer(
+        return ErrorFingerprint::forGroup(
             $report->source,
+            $report->code,
             $report->exceptionClass,
             $report->file,
             $report->line,

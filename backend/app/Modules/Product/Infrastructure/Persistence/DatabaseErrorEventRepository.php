@@ -6,6 +6,7 @@ namespace App\Modules\Product\Infrastructure\Persistence;
 
 use App\Modules\Product\Application\Port\ErrorEventQuery;
 use App\Modules\Product\Application\Port\ErrorEventRepository;
+use App\Modules\Product\Application\Port\ErrorHistoryRewriter;
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 use App\Modules\Product\Domain\ValueObject\ErrorEventPage;
 use App\Modules\Product\Domain\ValueObject\ErrorEventStatusFilter;
@@ -80,7 +81,7 @@ use Throwable;
  * porque la consulta se rompio en silencio es peor que una pantalla de error,
  * porque el IT del cliente concluiria que no esta pasando nada.
  */
-final readonly class DatabaseErrorEventRepository implements ErrorEventRepository
+final readonly class DatabaseErrorEventRepository implements ErrorEventRepository, ErrorHistoryRewriter
 {
     /**
      * Las columnas del listado, con el autor de la resolucion ya resuelto a
@@ -411,6 +412,81 @@ final readonly class DatabaseErrorEventRepository implements ErrorEventRepositor
         }
 
         return new ErrorEventSummary($perSource, $perLevel, $totalOpen, $totalResolved);
+    }
+
+    /*
+     * ---------------------------------------------------------------------
+     * ErrorHistoryRewriter (ADR-048, H6): el saneado de las filas anteriores a
+     * la 2.2.0. Lo lanza una migracion de datos con UNA conexion —la de la
+     * migracion— para las dos, asi que todo lo de aqui va por `$reads`.
+     * ---------------------------------------------------------------------
+     */
+
+    public function groupsAfter(int $afterId, int $limit): array
+    {
+        /** @var list<object> $rows */
+        $rows = $this->reads->select(
+            self::SELECT.' WHERE e.id > ? ORDER BY e.id LIMIT ?',
+            [$afterId, max(1, $limit)],
+        );
+
+        return array_map(self::hydrate(...), $rows);
+    }
+
+    public function findByFingerprint(string $fingerprint): ?ErrorEvent
+    {
+        /** @var list<object> $rows */
+        $rows = $this->reads->select(self::SELECT.' WHERE e.fingerprint = ?', [$fingerprint]);
+
+        return $rows === [] ? null : self::hydrate($rows[0]);
+    }
+
+    public function rewrite(ErrorEvent $group): void
+    {
+        // Sin tocar `updated_at`: el grupo no ha vuelto a ocurrir, solo ha
+        // cambiado como se escribe lo que ya estaba.
+        $this->reads->update(
+            <<<'SQL'
+                UPDATE error_events
+                   SET fingerprint = ?, message = ?, context = ?::jsonb, code = ?,
+                       exception_class = ?, file = ?, app_version = ?
+                 WHERE id = ?
+                SQL,
+            [
+                $group->fingerprint,
+                $group->message,
+                json_encode($group->context === [] ? new \stdClass : $group->context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                $group->code,
+                $group->exceptionClass,
+                $group->file,
+                $group->appVersion,
+                $group->id,
+            ],
+        );
+    }
+
+    public function merge(ErrorEvent $survivor, int $absorbedId): void
+    {
+        $this->reads->transaction(function () use ($survivor, $absorbedId): void {
+            $this->reads->delete('DELETE FROM error_events WHERE id = ?', [$absorbedId]);
+
+            $this->reads->update(
+                <<<'SQL'
+                    UPDATE error_events
+                       SET occurrences = ?, first_seen_at = ?, last_seen_at = ?, resolved_at = ?,
+                           resolved_by_user_id = (SELECT id FROM users WHERE uuid = ?::uuid)
+                     WHERE id = ?
+                    SQL,
+                [
+                    $survivor->occurrences,
+                    self::timestamp($survivor->firstSeenAt),
+                    self::timestamp($survivor->lastSeenAt),
+                    $survivor->resolvedAt instanceof DateTimeImmutable ? self::timestamp($survivor->resolvedAt) : null,
+                    $survivor->resolvedByUuid,
+                    $survivor->id,
+                ],
+            );
+        });
     }
 
     /**
