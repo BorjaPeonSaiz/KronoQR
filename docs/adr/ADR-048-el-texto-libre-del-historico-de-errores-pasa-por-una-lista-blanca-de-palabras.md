@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. Revisión de `seguridad-cumplimiento` pendiente dentro del Bloque 19 |
+| **Estado** | Aceptada. Diseño revisado por `seguridad-cumplimiento` el 3 de octubre de 2026 (aprobado con condiciones H1–H9, incorporadas); revisión de la implementación pendiente dentro del Bloque 19 |
 | **Fecha** | 3 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (Bloque 19 de la 2.2.0, hallazgos PR12, R4-BE-02, R4-PL-01 y R6-PL-08) |
 | **Afecta a** | Precisa [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md) (cómo se cumple «anonimizado por defecto» en el histórico de errores; no cambia la decisión) · `ErrorMessageSanitizer`, `ErrorContextAllowlist`, `RecordErrorEvent`, `ErrorEventsCollector`, `RedactPersonalDataProcessor` · clases nuevas `ErrorVocabulary`, `ErrorTextAllowlist`, `ResanitizeErrorHistory` y `RedactingLogManager` · tabla `error_events` (migración de datos) · reglas duras 16 y 21 |
@@ -139,9 +139,14 @@ vocabulario técnico cerrado del producto. Cualquier otra se sustituye por `…`
   diagnóstico (la cobertura).
 - **Al actualizar se vuelven a sanear las filas antiguas** y se recalculan sus huellas, con una migración de
   datos irreversible por diseño.
-- **`employee_uuid` sigue en el paquete.** Es un seudónimo cuya correspondencia solo conoce la instalación.
-  Las guías lo dicen así, y la afirmación de que el paquete anonimizado no necesita contrato de encargo
-  (RL-17) queda pendiente de que la confirme `seguridad-cumplimiento` en este bloque.
+- **`employee_uuid` no viaja en el paquete anonimizado, ni ningún UUID dentro del texto.** Es un seudónimo
+  (art. 4.5 RGPD) cuya correspondencia conoce la instalación, y el responsable valora la identificabilidad
+  desde su propia posición (TJUE, C-413/23 P): con el seudónimo dentro, el producto no podría afirmar que
+  no se comunican datos personales. El colector lo omite y sustituye los UUID del texto por `[uuid]`;
+  con `--with-personal-data` se conserva todo; en `error_events`, en local, la regla dura 21 sigue usando
+  `employee_uuid`. Se quedan `device_id` (una tablet compartida) y `trace_id`, que no corresponden a una
+  persona para quien recibe el paquete. Dictamen de `seguridad-cumplimiento` del 3 de octubre de 2026;
+  la calificación jurídica final es de la asesoría y el DPO del cliente.
 
 ## Verificación
 
