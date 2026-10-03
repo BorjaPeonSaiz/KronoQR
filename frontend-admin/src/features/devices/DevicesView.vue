@@ -44,6 +44,8 @@ import {
   batteryChargingKey,
   batteryPercentLabel,
   hasBatteryWarning,
+  queueSizeLabel as queueSizeOf,
+  queueStorageKey,
   reasonKey,
   rowToneClass,
   showsWhatToDo,
@@ -216,6 +218,11 @@ function closeUnpair(): void {
   unpairError.value = null
 }
 
+/** El tamaño de la cola, con «desconocido» (nunca 0) si la tablet no lo sabe. */
+function queueSizeLabel(device: Pick<Device, 'pending_queue_size'>): string {
+  return queueSizeOf(device, t('devices.queue.unknown'))
+}
+
 const unpairChanges = computed<Change[]>(() => {
   const target = unpairTarget.value
 
@@ -234,14 +241,17 @@ const unpairChanges = computed<Change[]>(() => {
     // dato antes de decidir, no porque esta accion la modifique.
     {
       label: t('devices.table.pendingQueue'),
-      from: String(target.pending_queue_size),
-      to: String(target.pending_queue_size),
+      from: queueSizeLabel(target),
+      to: queueSizeLabel(target),
     },
   ]
 })
 
 /** Si la tablet tiene fichajes sin sincronizar, desvincularla ahora arriesga el registro (art. 34.9 ET). */
 const unpairHasPendingQueue = computed(() => (unpairTarget.value?.pending_queue_size ?? 0) > 0)
+
+/** `null` = la tablet no sabe cuantos tiene (cola caida a memoria): se avisa igual, nunca se lee como 0. */
+const unpairQueueUnknown = computed(() => unpairTarget.value?.pending_queue_size === null)
 
 async function confirmUnpair(): Promise<void> {
   const target = unpairTarget.value
@@ -358,7 +368,21 @@ const buttonClass =
               </td>
               <td class="px-3 py-2">{{ device.app_version ?? t('common.empty') }}</td>
               <td class="px-3 py-2 tabular-nums">
-                <span>{{ device.pending_queue_size }}</span>
+                <span data-test="queue-size">{{ queueSizeLabel(device) }}</span>
+                <span
+                  v-if="queueStorageKey(device) !== null"
+                  class="block text-sm font-medium text-kq-danger"
+                  data-test="queue-storage"
+                >
+                  {{ t(queueStorageKey(device) ?? '') }}
+                </span>
+                <span
+                  v-if="device.unreported_discards > 0"
+                  class="block text-sm font-medium text-kq-warning"
+                  data-test="unreported-discards"
+                >
+                  {{ t('devices.queue.unreportedDiscards', { count: device.unreported_discards }) }}
+                </span>
                 <span
                   v-if="oldestPendingLabel(device) !== ''"
                   class="block text-sm text-kq-text-muted"
@@ -465,6 +489,28 @@ const buttonClass =
           t('devices.unpair.pendingQueueWarning', {
             count: unpairTarget.pending_queue_size,
           })
+        }}
+      </p>
+
+      <p
+        v-else-if="unpairQueueUnknown"
+        role="alert"
+        class="mt-4 rounded-kq border border-kq-danger bg-kq-danger-soft p-4 text-kq-danger"
+        data-test="unpair-queue-unknown"
+      >
+        {{ t('devices.unpair.pendingQueueUnknownWarning') }}
+      </p>
+
+      <!-- Los descartes sin avisar solo existen en la tablet: al vaciarse se
+           pierden y no abren incidencia (RN-22). Aviso aparte de la cola. -->
+      <p
+        v-if="unpairTarget.unreported_discards > 0"
+        role="alert"
+        class="mt-4 rounded-kq border border-kq-danger bg-kq-danger-soft p-4 text-kq-danger"
+        data-test="unpair-unreported-discards"
+      >
+        {{
+          t('devices.unpair.unreportedDiscardsWarning', { count: unpairTarget.unreported_discards })
         }}
       </p>
 

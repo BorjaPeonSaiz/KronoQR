@@ -214,7 +214,7 @@ fichaje-hotel/
 │   ├── 03-agentes-y-skills-ia.md
 │   ├── 04-decision-credencial.md
 │   ├── 05-presentacion-cliente.md   # Documento comercial entregable al cliente
-│   ├── adr/                         # ADR-001 … ADR-046
+│   ├── adr/                         # ADR-001 … ADR-047
 │   ├── api/openapi.yaml             # Contrato, fuente de verdad de la API
 │   ├── cliente/                     # Documentación que se entrega al cliente
 │   │   ├── instalacion.md
@@ -509,7 +509,7 @@ Formato resumido. Cada uno vive completo en `docs/adr/`.
 | **019** | **La caducidad de la licencia nunca bloquea el registro ni su consulta** | Bloquear el fichaje dejaría al cliente incumpliendo la ley por acción del fabricante, e impediría el acceso a datos que debe conservar 4 años | La palanca comercial son los avisos y las funcionalidades accesorias. Exige separar en el código lo que es "registro legal" de lo que es "producto" |
 | **020** | **El soporte se presta con paquete de diagnóstico, no con acceso permanente** | El fabricante no debe tener acceso continuado a los datos personales de la plantilla de sus clientes | Exportación anonimizada por defecto, y acceso puntual solo con concesión expresa, temporal, limitada y auditada. Obliga a que los errores sean autoexplicativos |
 
-Los veintitrés siguientes **no proceden de esta tabla**: nacieron al desarrollar el plan de implementación tarea por tarea, al aparecer decisiones que ningún documento determinaba. Viven completos en [`docs/adr/`](adr/): los ocho primeros desde antes de empezar la Fase 0, y ADR-029 desde la tarea 0.6, que documentó una decisión ya implementada en la 0.2.
+Los veintisiete siguientes **no proceden de esta tabla**: nacieron al desarrollar el plan de implementación tarea por tarea, al aparecer decisiones que ningún documento determinaba. Viven completos en [`docs/adr/`](adr/): los ocho primeros desde antes de empezar la Fase 0, y ADR-029 desde la tarea 0.6, que documentó una decisión ya implementada en la 0.2.
 
 | # | Decisión | Contexto y motivo | Consecuencias |
 |---|---|---|---|
@@ -539,6 +539,7 @@ Los veintitrés siguientes **no proceden de esta tabla**: nacieron al desarrolla
 | **044** | **El token del quiosco rota en el latido, con solape y reentrega** *(propuesta, pendiente de `seguridad-cumplimiento`)* | La verificación de la 2.1.0 (F1-1) encontró que la rotación al 80 % del §7.3 no se ejecutaba nunca y que, además, el emisor borraba el token anterior en la misma transacción: conectarla al latido tal cual convertía una respuesta perdida en una tablet fuera de servicio | El latido trae `rotated_token` solo cuando el token que lo firma ha pasado el umbral. El anterior sigue valiendo `IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS` (24 h) o hasta el primer uso del nuevo; si la tablet vuelve con el viejo, se retira el relevo no usado y se emite otro sin alargar el solape. El valor no se guarda en claro. La revocación sigue sin solape y la rotación nunca tumba el latido |
 | **045** | **Los ficheros que genera el producto viven en un volumen compartido, y su copia legible de la constancia vive junto a las copias** *(aceptada con las condiciones C1-C10 de `seguridad-cumplimiento`)* | La verificación de la 2.2.0 (R3-PL-01, 🔴) encontró que nada montaba `storage/`: la exportación íntegra la escribía `horizon` y `app` respondía `404`, las purgas del `scheduler` no veían los ficheros con datos personales, y los informes de retención se perdían en cada actualización | Volumen con nombre `app-storage` en `storage/app` de `app`, `horizon` y `scheduler` (`0700 app:app`), **fuera de la copia**: lo que guarda es efímero o se regenera del volcado. Los informes de retención van a `BACKUP_PATH/reports/retention`; **la constancia es el asiento `retention.purge_executed`** y el fichero, su copia legible. La purga concilia fila y fichero en los dos sentidos, confinada a la raíz y al patrón de cada clase, incluidos los restos de una generación interrumpida; un fichero que desaparece antes de caducar deja `*.file_missing`. Precisa ADR-020, 041 y 042 |
 | **046** | **La ficha del empleado se escribe bajo el candado de la cadena, con la fila bloqueada y solo por las columnas que cambian** | La verificación de la 2.2.0 (R7-RV-01, R4-BE-01, 🟠) reprodujo que una modificación o una importación simultánea a una baja dejaba a la persona `active`, sin tarjeta y con un `employee.offboarded` que la base contradecía: la ficha se leía sin candado y `save()` reescribía la fila entera | Orden único **filas padre (`sites`, `departments`, `users`, `devices`) → cadena → `employees` → `credentials`**: todo caso de uso que modifica una ficha o una tarjeta y deja asiento va en `withChainLock` (modificación, baja, importación, los tres del PIN, emisión, rotación, revocación, entrega e impresión de tarjetas) y toma antes cualquier fila padre que necesite; el bcrypt va fuera de la cadena y el rehash del PIN es oportunista y sin espera. Lectura con `findForUpdate()` y `FOR NO KEY UPDATE`, que no choca con las claves ajenas de fichajes, ausencias y tarjetas. `save()` sale del puerto: `saveProfile()` y `saveTermination()` escriben solo sus columnas con `WHERE status <> 'terminated'`. La importación rechaza las filas de personas de baja (`employee_terminated`). Precisa ADR-010 |
+| **047** | **Ningún fichaje sale de la cola del quiosco sin un desenlace del servidor** | La verificación de la 2.2.0 (R3-QA-02, R3-BE-03, R4-SC-03, R17-SC-R2, 🟠) encontró tres caminos por los que un fichaje ya confirmado en la tablet desaparecía o cambiaba de sentido: un lote que seguía tras un elemento no procesado y registraba la salida como entrada, un `400` que sacaba el fichaje de la cola sin rastro, y la tarjeta retirada después del fichaje cuyo rechazo quedaba sin persona | **Orden por quiosco** (RN-21): tras un `503` el resto del lote se devuelve aplazado (`scan-held-back`) y el quiosco no avanza mientras un elemento esté en reintento, también si está en vuelo. **Canal de descartes** (RN-22): lo que el servidor declara inválido pasa a una lista aparte y se avisa por `POST /api/v1/scan/discarded`, idempotente por `scan_id`, que guarda la atribución sin el payload y abre `discarded_scan` en la revisión diaria; el aviso no registra el fichaje. **La tarjeta auténtica retirada atribuye** (RN-20): `employee_id` del titular y marca de revisión si el fichaje es anterior a la retirada, con la misma respuesta (RS-03); incidencia `scan_before_revocation`. El PIN de una persona de baja queda fuera: exigiría ampliar ADR-043. Precisa ADR-008 |
 
 ---
 
@@ -655,9 +656,9 @@ sequenceDiagram
 |---|---|
 | **Exactamente una vez** | `scan_id` (UUID v7, generado en el cliente) con UNIQUE en `scan_events`. Un reenvío devuelve la respuesta original, no un error |
 | **Hora real preservada** | `occurred_at` viaja desde el cliente; el servidor añade `recorded_at`. El registro legal usa `occurred_at`, y ambos quedan visibles en la auditoría |
-| **Orden correcto** | El lote se procesa ordenado por `occurred_at`, no por orden de llegada. Crítico: entrada y salida offline deben aplicarse en secuencia |
+| **Orden correcto** | El lote se procesa ordenado por `occurred_at`, no por orden de llegada. Crítico: entrada y salida offline deben aplicarse en secuencia. **Nada adelanta a un fichaje sin decidir** (RN-21, [ADR-047](adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)): tras un elemento no procesado, el resto del lote vuelve aplazado (`503`, `scan-held-back`), y el quiosco detiene el drenaje en el primer elemento que se conserva para reintento o que otro envío tiene en vuelo. Por quiosco, no por persona |
 | **Desfase controlado** | Si el retraso supera el umbral, o si el reloj del dispositivo diverge del servidor, se genera una incidencia para validación humana (RN-15) |
-| **No se pierde nada** | La cola persiste en IndexedDB con transacciones. Solo se borra el elemento tras confirmación explícita del servidor |
+| **No se pierde nada** | La cola persiste en IndexedDB con transacciones. Solo se borra el elemento tras confirmación explícita del servidor. **Lo que el servidor declara inválido** (`400`) pasa a una lista aparte y se avisa por `POST /api/v1/scan/discarded`; solo se olvida con el acuse, y abre incidencia `discarded_scan` (RN-22). Si IndexedDB falla, se reabre antes de caer a memoria, y en memoria el latido declara la cola como **desconocida**, nunca como vacía |
 | **Degradación honesta** | Si el padrón cacheado no reconoce el token, el quiosco **igualmente encola** y avisa "fichaje registrado, pendiente de validar". Nunca se rechaza un fichaje por estar sin red |
 
 **Sobre el UUID v7:** se elige frente a v4 porque es ordenable temporalmente, lo que mantiene la localidad del índice en `scan_events` y evita la fragmentación de páginas que produciría un v4 aleatorio con millones de filas.
@@ -784,6 +785,10 @@ scan_processing_duration_seconds                         histogram
 open_shifts_current{site,site_name,department}           gauge
 kiosk_last_seen_seconds{device}                          gauge
 kiosk_offline_queue_size{device}                         gauge
+kiosk_queue_storage_degraded{device}                     gauge
+kiosk_unreported_discards{device}                        gauge
+kiosk_discarded_scans_total{device,attributed}           counter
+scan_batch_items_not_processed_total{device}             counter
 kiosk_battery_level{device}                              gauge
 kiosk_pairing_total{result,reason}                       counter
 kiosk_token_rotations_total{result}                      counter

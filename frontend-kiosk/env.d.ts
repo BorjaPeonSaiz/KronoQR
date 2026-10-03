@@ -17,14 +17,8 @@ declare const __APP_VERSION__: string
 declare const __KRONOQR_TEST_HOOKS__: boolean
 
 interface ImportMetaEnv {
-  /**
-   * Responsable del tratamiento que se muestra en el aviso de privacidad
-   * (RF-KI-09, RL-09). Es CONFIGURACION: cambia con cada cliente y por eso no
-   * puede vivir en el codigo (ADR-017, regla dura 13).
-   */
-  readonly VITE_PRIVACY_CONTROLLER?: string
-  /** URL de la politica de privacidad completa (capa 2 del aviso). */
-  readonly VITE_PRIVACY_POLICY_URL?: string
+  // El responsable y la politica del aviso de privacidad (RF-KI-09) ya NO son
+  // variables de entorno: vienen de `GET /api/v1/branding` (`privacy_notice`).
   /** Origen de la API. Vacio = mismo origen, que es lo normal en el quiosco. */
   readonly VITE_API_BASE_URL?: string
 }

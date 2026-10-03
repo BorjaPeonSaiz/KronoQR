@@ -900,7 +900,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: npm audit del workspace (0 criticas ni altas)
+      - name: npm audit del workspace (0 criticas ni altas en produccion; desarrollo informa)
         run: make deps-audit-js
 
       - name: Semgrep sobre las reglas propias (0 hallazgos de severidad alta)

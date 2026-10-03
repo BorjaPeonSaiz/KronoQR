@@ -203,6 +203,23 @@ reimpresión va por detrás y hay que revisar qué se ha retirado antes de tiemp
 
 Cuando `credentials:status --key-id=a3` no devuelva a nadie:
 
+**Requisito previo: ningún quiosco puede tener fichajes firmados con la clave
+que vas a retirar.** Antes de `credentials:retire-key`, comprueba que **todos**
+los quioscos tienen la cola a 0 y `queue_storage` en `durable`, en «Salud de
+quioscos» del panel o con:
+
+```bash
+docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health --json | jq '.devices[] | {name, queue_storage, pending_queue_size, verdict}'
+```
+
+Un quiosco con cola pendiente o con tamaño «desconocido» (cola en memoria)
+puede guardar fichajes leídos con una tarjeta de la clave vieja: si retiras la
+clave, llegarán como **firma inválida** y RN-20 no podrá atribuirlos a nadie.
+Espera a que vacíen (o resuelve antes [`cola-offline-atascada.md`](cola-offline-atascada.md)
+§7) y retira entonces.
+
+Cuando se cumpla:
+
 ```bash
 php artisan credentials:retire-key a3
 ```

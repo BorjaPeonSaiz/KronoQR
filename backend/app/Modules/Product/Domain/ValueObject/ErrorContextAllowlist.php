@@ -120,6 +120,10 @@ final readonly class ErrorContextAllowlist
         'durable',
         // Quiosco: el canal de la fila de cola descartada (`pin` o `qr`), sin dato alguno del fichaje (PIN-08).
         'kind',
+        // Quiosco (ADR-047): el `type` del problema con el que el servidor
+        // declaro invalido un fichaje descartado (`urn:kronoqr:problem:...` o
+        // `none`). Un identificador del producto, nunca el `detail`.
+        'problem_type',
         // Quiosco: desenlace de la adopcion de un relevo de token (`adopted`, `stale`...), sin el token (F1-1).
         'outcome',
         // Quiosco, cola offline y padron: cuantas cosas habia en juego.

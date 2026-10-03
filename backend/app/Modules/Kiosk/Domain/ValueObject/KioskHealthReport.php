@@ -140,6 +140,8 @@ final readonly class KioskHealthReport
                 'last_seen_at' => self::utc($row->lastSeenAt),
                 'seconds_since_last_seen' => $row->secondsSinceLastSeen,
                 'pending_queue_size' => $row->pendingQueueSize,
+                'queue_storage' => $row->queueStorage->value,
+                'unreported_discards' => $row->unreportedDiscards,
                 'battery_level' => $row->batteryLevel,
                 'battery_charging' => $row->batteryCharging,
                 'verdict' => $row->verdict->value,

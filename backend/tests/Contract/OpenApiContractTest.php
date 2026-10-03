@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Attendance\Http\Response\ScanHeldBackResponse;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use Spectator\RequestFactory;
 use Spectator\Spectator;
@@ -52,6 +53,10 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/scan/batch',
         // Tarea 1.12: fichaje de respaldo por PIN.
         '/api/v1/scan/pin',
+        // 2.2.0 (RN-22, ADR-047): el aviso de los fichajes que el quiosco saco
+        // de su cola porque el servidor declaro invalida la peticion. Bajo
+        // `/scan` y con `scan:write`, que ya tienen todos los quioscos.
+        '/api/v1/scan/discarded',
         '/api/v1/kiosk/roster',
         '/api/v1/kiosk/heartbeat',
         // Tarea 5.6: alta de un quiosco por codigo de emparejamiento (RF-PD-06).
@@ -812,6 +817,28 @@ it('hace imposible que el rechazo describa su causa', function (): void {
         expect($valores)->toBeArray()->toHaveCount(1);
     }
 })->group('RS-03', 'RF-QR-02');
+
+it('describe el aplazamiento del lote con el mismo texto fijo que lo serializa', function (): void {
+    // RN-21 (ADR-047). El `207` del lote admite un quinto desenlace, el
+    // aplazado, y sus cuatro miembros fijos tienen que coincidir con los de la
+    // respuesta del servidor: si se separan, el validador del cliente generado
+    // rechaza un aplazamiento legitimo y el quiosco lo trataria como respuesta
+    // malformada en vez de conservarlo.
+    $desenlaces = Contract::value('components', 'schemas', 'ScanBatchEntry', 'properties', 'outcome', 'oneOf');
+
+    expect($desenlaces)->toContain(['$ref' => '#/components/schemas/ScanHeldBack'])
+        ->and(Contract::value('components', 'schemas', 'ScanHeldBack', 'additionalProperties'))->toBeFalse()
+        ->and(Contract::value('components', 'schemas', 'ScanHeldBack', 'properties', 'type', 'enum'))
+        ->toBe([ScanHeldBackResponse::TYPE])
+        ->and(Contract::value('components', 'schemas', 'ScanHeldBack', 'properties', 'title', 'enum'))
+        ->toBe([ScanHeldBackResponse::TITLE])
+        ->and(Contract::value('components', 'schemas', 'ScanHeldBack', 'properties', 'detail', 'enum'))
+        ->toBe([ScanHeldBackResponse::DETAIL])
+        ->and(Contract::value('components', 'schemas', 'ScanHeldBack', 'properties', 'status', 'enum'))
+        ->toBe([503])
+        ->and(Contract::value('components', 'schemas', 'ScanBatchEntry', 'properties', 'status', 'enum'))
+        ->toBe([200, 422, 503]);
+})->group('RN-21', 'RF-KI-04', 'RQ-06');
 
 it('expresa el anti-rebote como desenlace aceptado y no como rechazo', function (): void {
     // RF-AT-06 y ADR-031. Un segundo escaneo dentro de la ventana de gracia no

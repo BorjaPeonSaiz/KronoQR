@@ -44,19 +44,30 @@ interface KioskMetrics
      *                                  Es un instante y no una antiguedad: la resta la
      *                                  hace Prometheus con `time()`, que es lo que
      *                                  mantiene la metrica correcta aunque nadie fiche.
-     * @param  int  $pendingQueueSize  Lo que el dispositivo declara tener sin sincronizar.
+     * @param  int|null  $pendingQueueSize  Lo que el dispositivo declara tener sin sincronizar, o
+     *                                      `null` si no lo sabe (cola fuera de IndexedDB, ADR-047).
+     *                                      **Con `null` la serie se retira**, no se deja con el ultimo
+     *                                      valor: un cero o un numero viejo apagarian la alerta de cola
+     *                                      atascada justo cuando hay fichajes que no se ven (F12).
      * @param  int|null  $batteryLevel  Nivel de bateria en tanto por ciento, o `null`.
      *                                  **Con `null` no se publica la serie**, y esa es la
      *                                  decision: un cero de relleno pondria en rojo cualquier
      *                                  panel de bateria por cada tablet cuyo navegador no
      *                                  implementa la Battery Status API, y una metrica ausente
      *                                  es exactamente lo que Prometheus sabe representar.
+     * @param  bool  $queueStorageDegraded  `kiosk_queue_storage_degraded{device}`: la cola salio de
+     *                                      IndexedDB. Se publica SIEMPRE, tambien a cero, para que la
+     *                                      serie baje en cuanto la tablet vuelve a disco.
+     * @param  int  $unreportedDiscards  `kiosk_unreported_discards{device}` (RN-22): descartes cuyo
+     *                                   aviso no tiene acuse.
      */
     public function heartbeat(
         string $deviceUuid,
         int $seenAtUnixSeconds,
-        int $pendingQueueSize,
+        ?int $pendingQueueSize,
         ?int $batteryLevel = null,
+        bool $queueStorageDegraded = false,
+        int $unreportedDiscards = 0,
     ): void;
 
     /**

@@ -622,6 +622,37 @@ it('no deja que un actor de soporte toque la deteccion de patrones de credencial
     'diagnostico sube las repeticiones' => [SupportScope::Diagnostics, 'ATTENDANCE_PATTERN_MIN_REPEATS', 30],
 ])->group('RF-PD-11', 'RF-PR-06', 'RS-04', 'ADR-009');
 
+it('no deja que un actor de soporte escriba el aviso de privacidad del quiosco', function (SupportScope $alcance, string $clave, string $valor): void {
+    // RL-09, RF-KI-09, ADR-020 y regla dura 16 (2.2.0, bloque 18). El responsable
+    // del tratamiento y la URL de la politica son LA DECLARACION LEGAL del hotel
+    // ante su plantilla (art. 13 RGPD), que la tablet enseña antes de cada
+    // fichaje. Quien mantiene el producto no firma por el responsable ni apunta
+    // a los empleados a una politica que el hotel no ha aprobado. `403`, como
+    // con las demas reservadas, y la peticion entera cae.
+    $token = SupportGrants::tokenFor($alcance);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => [$clave => $valor]])
+        ->assertStatus(403);
+
+    Api::as($token)
+        ->patch('/api/v1/settings', [
+            'settings' => [
+                'ATTENDANCE_DEBOUNCE_SECONDS' => 90,
+                $clave => $valor,
+            ],
+        ])
+        ->assertStatus(403);
+
+    expect(DB::table('installation_settings')->where('key', $clave)->exists())->toBeFalse()
+        ->and(DB::table('installation_settings')->where('key', 'ATTENDANCE_DEBOUNCE_SECONDS')->exists())->toBeFalse();
+})->with([
+    'configuracion escribe el responsable' => [SupportScope::Configuration, 'PRIVACY_CONTROLLER_NAME', 'Otro responsable'],
+    'diagnostico escribe el responsable' => [SupportScope::Diagnostics, 'PRIVACY_CONTROLLER_NAME', 'Otro responsable'],
+    'configuracion escribe la politica' => [SupportScope::Configuration, 'PRIVACY_POLICY_URL', 'https://politica.example/p'],
+    'diagnostico escribe la politica' => [SupportScope::Diagnostics, 'PRIVACY_POLICY_URL', 'https://politica.example/p'],
+])->group('RF-PD-11', 'RL-09', 'RF-KI-09', 'RS-04');
+
 it('el transito minimo entre quioscos SIGUE siendo ajustable por el soporte', function (): void {
     // La frontera de la decision, escrita. `ATTENDANCE_MIN_TRANSIT_SECONDS` no
     // entra en las reservadas y no es un olvido: ese umbral decide cuando un

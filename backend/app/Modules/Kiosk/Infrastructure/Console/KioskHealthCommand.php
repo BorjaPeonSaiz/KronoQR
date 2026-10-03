@@ -183,7 +183,7 @@ final class KioskHealthCommand extends Command
                 $this->say($translator, 'status.'.$row->status),
                 $row->appVersion ?? '-',
                 $this->lastSeen($row, $zone, $translator),
-                (string) $row->pendingQueueSize,
+                $row->pendingQueueSize === null ? $this->say($translator, 'column.queue_unknown') : (string) $row->pendingQueueSize,
                 $this->battery($row, $translator),
                 $this->say($translator, 'verdict.'.$row->verdict->value),
             ], $report->devices),
@@ -221,7 +221,8 @@ final class KioskHealthCommand extends Command
         foreach ($problems as $row) {
             $this->line('  '.$row->name.' — '.$this->say($translator, 'advice.'.$row->reason->value, [
                 'elapsed' => $this->duration($row->secondsSinceLastSeen ?? 0, $translator),
-                'queue' => $row->pendingQueueSize,
+                'queue' => $row->pendingQueueSize ?? '?',
+                'discards' => $row->unreportedDiscards,
                 'level' => $row->batteryLevel ?? 0,
             ]));
         }

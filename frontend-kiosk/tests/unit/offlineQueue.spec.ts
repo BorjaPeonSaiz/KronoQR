@@ -79,7 +79,7 @@ describe.each(backends)('cola de fichajes ($name)', (backend) => {
   })
 
   it('encola y lo publica en el contador sin que nadie pregunte', async () => {
-    const seen: number[] = []
+    const seen: Array<number | null> = []
     queue.subscribe((stats) => seen.push(stats.size))
 
     await queue.enqueue(scan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T05:58:31.000Z'))
@@ -238,7 +238,11 @@ describe('cola sin almacenamiento utilizable', () => {
     // Regla dura 19: el empleado ficha igual.
     expect(outcome.stored).toBe(true)
     expect(outcome.durable).toBe(false)
-    expect(queue.stats().size).toBe(1)
+    // ADR-047: en memoria no se ve el disco, asi que el total es DESCONOCIDO
+    // (nunca 0); lo unico que se sabe es lo que hay en el almacen activo.
+    expect(queue.stats().size).toBeNull()
+    expect(queue.stats().inStore).toBe(1)
+    expect(queue.stats().storage).toBe('memory')
     expect(failures).toHaveLength(1)
   })
 
@@ -250,14 +254,15 @@ describe('cola sin almacenamiento utilizable', () => {
         throw new Error('InvalidStateError')
       }),
     }
-    const queue = createScanQueue({ openStorage: () => broken })
+    const queue = createScanQueue({ openStorage: () => broken, sleep: async () => undefined })
 
     const outcome = await queue.enqueue(
       scan('0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90', '2026-08-14T05:58:31.000Z'),
     )
 
     expect(outcome.stored).toBe(true)
-    expect(queue.stats().size).toBe(1)
+    expect(queue.stats().size).toBeNull()
+    expect(queue.stats().inStore).toBe(1)
     expect(queue.stats().durable).toBe(false)
   })
 })

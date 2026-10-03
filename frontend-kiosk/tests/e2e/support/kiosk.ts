@@ -248,6 +248,14 @@ export interface BrandingStubOptions {
    * ejemplo del contrato (`docs/api/openapi.yaml`), con acento y logotipo.
    */
   readonly variant?: 'product' | 'hotel-marina'
+  /**
+   * `privacy_notice` de la marca (RF-KI-09, RL-09): lo que el aviso de privacidad
+   * enseña. Sin esto, los dos campos son `null` (aviso generico).
+   */
+  readonly privacyNotice?: {
+    readonly controllerName: string | null
+    readonly policyUrl: string | null
+  }
 }
 
 /**
@@ -261,6 +269,10 @@ export async function stubBrandingApi(
   options: BrandingStubOptions = {},
 ): Promise<void> {
   const variant = options.variant ?? 'product'
+  const privacyNotice = {
+    controller_name: options.privacyNotice?.controllerName ?? null,
+    policy_url: options.privacyNotice?.policyUrl ?? null,
+  }
   const body =
     variant === 'hotel-marina'
       ? {
@@ -268,12 +280,14 @@ export async function stubBrandingApi(
           accent_color: '#0f5c8c',
           logo_url: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
           locales: { default: 'es', available: ['es'] },
+          privacy_notice: privacyNotice,
         }
       : {
           application_name: 'KronoQR',
           accent_color: null,
           logo_url: null,
           locales: { default: 'es', available: ['es', 'en'] },
+          privacy_notice: privacyNotice,
         }
 
   await page.route('**/api/v1/branding', async (route: Route) => {

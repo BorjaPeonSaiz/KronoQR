@@ -78,6 +78,7 @@ it('no saca ningun identificador interno salvo en la auditoria', function (): vo
     $noSonClavesInternas = [
         'credentials.key_id',
         'scan_events.scan_id',
+        'discarded_scan_reports.scan_id',
         'license.license_id',
         'error_events.trace_id',
         'error_events.device_id',
@@ -197,6 +198,9 @@ it('declara los veintidos conjuntos del catalogo, sin efimeros ni fontaneria', f
         'daily_totals',
         'incidents',
         'scan_events',
+        // RN-22 (ADR-047, 2.2.0): los avisos de fichaje descartado, sin el
+        // contenido del QR ni el codigo, que no se guardan.
+        'discarded_scan_reports',
         'audit_log',
         'audit_chain_anchors',
         'users',

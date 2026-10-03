@@ -68,11 +68,15 @@ const accentConfirmed = ref(false)
 const appName = ref('')
 const accentColor = ref(PRODUCT_ACCENT_COLOR)
 const logoPath = ref('')
+const privacyControllerName = ref('')
+const privacyPolicyUrl = ref('')
 
 const fieldLabels = computed<Record<string, string>>(() => ({
   'settings.BRANDING_APP_NAME': t('branding.fields.appName'),
   'settings.BRANDING_ACCENT_COLOR': t('branding.fields.accentColor'),
   'settings.BRANDING_LOGO_PATH': t('branding.fields.logoPath'),
+  'settings.PRIVACY_CONTROLLER_NAME': t('branding.fields.privacyControllerName'),
+  'settings.PRIVACY_POLICY_URL': t('branding.fields.privacyPolicyUrl'),
 }))
 
 /**
@@ -99,6 +103,8 @@ function fill(catalog: InstallationSettings): void {
   appName.value = stringValue(catalog, 'BRANDING_APP_NAME')
   accentColor.value = stringValue(catalog, 'BRANDING_ACCENT_COLOR') || PRODUCT_ACCENT_COLOR
   logoPath.value = stringValue(catalog, 'BRANDING_LOGO_PATH')
+  privacyControllerName.value = stringValue(catalog, 'PRIVACY_CONTROLLER_NAME')
+  privacyPolicyUrl.value = stringValue(catalog, 'PRIVACY_POLICY_URL')
 }
 
 async function load(): Promise<void> {
@@ -131,6 +137,79 @@ onMounted(() => {
 function serverFieldErrors(key: string): readonly string[] {
   return isApiError(error.value) ? (error.value.fieldErrors[`settings.${key}`] ?? []) : []
 }
+
+/** Mismos limites que el contrato (`SettingKey`): el servidor sigue siendo quien valida. */
+const PRIVACY_CONTROLLER_MAX = 160
+const PRIVACY_URL_MAX = 512
+const PRIVACY_URL_SHAPE = /^https:\/\/[!-~]+$/
+// Controles (Cc) y caracteres Unicode de formato (Cf: bidi, anchura cero).
+const LINE_BREAK_OR_CONTROL = /\p{Cc}|\p{Cf}/u
+
+/** Un nombre de responsable vacio es valido: el quiosco usa su texto generico. */
+const privacyControllerLocalIssue = computed<'tooLong' | 'controlChars' | null>(() => {
+  const value = privacyControllerName.value.trim()
+
+  if (value.length > PRIVACY_CONTROLLER_MAX) {
+    return 'tooLong'
+  }
+
+  return LINE_BREAK_OR_CONTROL.test(value) ? 'controlChars' : null
+})
+
+/** Una URL vacia es valida: el quiosco manda a recepcion. */
+const privacyUrlLocalIssue = computed<'tooLong' | 'notAUrl' | null>(() => {
+  const value = privacyPolicyUrl.value.trim()
+
+  if (value === '') {
+    return null
+  }
+
+  if (value.length > PRIVACY_URL_MAX) {
+    return 'tooLong'
+  }
+
+  return privacyUrlHost(value) === null ? 'notAUrl' : null
+})
+
+/**
+ * El host al que apunta la URL, o `null` si no es valida: solo https, ASCII
+ * imprimible, con host y SIN usuario ni contrasena en la autoridad
+ * (`https://hotel.es@malo.tld` apunta a malo.tld, no a hotel.es).
+ */
+function privacyUrlHost(value: string): string | null {
+  if (!PRIVACY_URL_SHAPE.test(value)) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(value)
+
+    return parsed.hostname !== '' && parsed.username === '' && parsed.password === ''
+      ? parsed.hostname
+      : null
+  } catch {
+    return null
+  }
+}
+
+/** Lo que enseñara la tablet como destino; `null` si esta vacia o es invalida. */
+const privacyUrlDisplayHost = computed<string | null>(() => {
+  const value = privacyPolicyUrl.value.trim()
+
+  return value === '' ? null : privacyUrlHost(value)
+})
+
+const privacyControllerErrors = computed<readonly string[]>(() =>
+  privacyControllerLocalIssue.value !== null
+    ? [t(`branding.errors.privacyController.${privacyControllerLocalIssue.value}`)]
+    : serverFieldErrors('PRIVACY_CONTROLLER_NAME'),
+)
+
+const privacyUrlErrors = computed<readonly string[]>(() =>
+  privacyUrlLocalIssue.value !== null
+    ? [t(`branding.errors.privacyUrl.${privacyUrlLocalIssue.value}`)]
+    : serverFieldErrors('PRIVACY_POLICY_URL'),
+)
 
 /** Si lo escrito no tiene forma de color, sin llamar al servidor para saberlo. */
 const accentColorLocalIssue = computed<'notAHexColor' | null>(() =>
@@ -317,6 +396,24 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     changes['BRANDING_LOGO_PATH'] = trimmedLogoPath
   }
 
+  const trimmedController = privacyControllerName.value.trim()
+
+  if (
+    privacyControllerLocalIssue.value === null &&
+    trimmedController !== stringValue(current, 'PRIVACY_CONTROLLER_NAME')
+  ) {
+    changes['PRIVACY_CONTROLLER_NAME'] = trimmedController
+  }
+
+  const trimmedPolicyUrl = privacyPolicyUrl.value.trim()
+
+  if (
+    privacyUrlLocalIssue.value === null &&
+    trimmedPolicyUrl !== stringValue(current, 'PRIVACY_POLICY_URL')
+  ) {
+    changes['PRIVACY_POLICY_URL'] = trimmedPolicyUrl
+  }
+
   return changes
 })
 
@@ -334,6 +431,8 @@ const canSave = computed(
   () =>
     hasChanges.value &&
     appName.value.trim() !== '' &&
+    privacyControllerLocalIssue.value === null &&
+    privacyUrlLocalIssue.value === null &&
     accentColorLocalIssue.value === null &&
     (!needsAccentConfirmation.value || accentConfirmed.value) &&
     !saving.value,
@@ -679,6 +778,60 @@ async function save(): Promise<void> {
           />
         </template>
       </FormField>
+
+      <fieldset class="flex flex-col gap-4 rounded-kq border border-kq-border p-4">
+        <legend class="px-2 font-medium">{{ t('branding.privacy.heading') }}</legend>
+        <p class="text-sm text-kq-text-muted">{{ t('branding.privacy.intro') }}</p>
+
+        <FormField
+          :label="t('branding.fields.privacyControllerName')"
+          :hint="t('branding.hints.privacyControllerName')"
+          :errors="privacyControllerErrors"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <input
+              :id="id"
+              v-model="privacyControllerName"
+              type="text"
+              autocomplete="off"
+              data-test="privacy-controller-name"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+            />
+          </template>
+        </FormField>
+
+        <FormField
+          :label="t('branding.fields.privacyPolicyUrl')"
+          :hint="t('branding.hints.privacyPolicyUrl')"
+          :errors="privacyUrlErrors"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <input
+              :id="id"
+              v-model="privacyPolicyUrl"
+              type="url"
+              inputmode="url"
+              autocomplete="off"
+              spellcheck="false"
+              data-test="privacy-policy-url"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 font-mono text-kq-text"
+            />
+          </template>
+        </FormField>
+
+        <p
+          v-if="privacyUrlDisplayHost !== null"
+          class="text-sm text-kq-text"
+          role="status"
+          data-test="privacy-url-host"
+        >
+          {{ t('branding.privacy.shownHost', { host: privacyUrlDisplayHost }) }}
+        </p>
+      </fieldset>
 
       <div class="flex items-center gap-3">
         <button

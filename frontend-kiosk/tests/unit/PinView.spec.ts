@@ -5,6 +5,7 @@
 // ve y hace un empleado -- no los internos de la cola, que ya tienen su
 // propia bateria de pruebas.
 
+import 'fake-indexeddb/auto'
 import { mount } from '@vue/test-utils'
 import sodium from 'libsodium-wrappers'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,6 +14,7 @@ import PinView from '@/features/pin/ui/PinView.vue'
 import { routes } from '@/router'
 import { disposeOfflineQueue } from '@/features/offline/useOfflineQueue'
 import { createAppI18n } from '@/shared/i18n'
+import { resetKioskDatabase } from './support/resetKioskDatabase'
 
 let publicKeyBase64: string
 
@@ -90,6 +92,7 @@ async function pressDigits(wrapper: Awaited<ReturnType<typeof render>>['wrapper'
 
 beforeEach(async () => {
   await disposeOfflineQueue()
+  await resetKioskDatabase()
 })
 
 afterEach(async () => {

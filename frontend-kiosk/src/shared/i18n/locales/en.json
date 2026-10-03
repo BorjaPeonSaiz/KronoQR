@@ -9,6 +9,7 @@
     "offline": "Offline",
     "syncing": "Syncing",
     "pending": "0 records pending | 1 record pending | {count} records pending",
+    "pendingUnknown": "Pending: unknown",
     "offlineHint": "You can still clock in. Records are sent once the connection is back."
   },
   "scan": {
@@ -167,6 +168,7 @@
         "size": "Pending records",
         "oldest": "Oldest",
         "storage": "Storage",
+        "unreportedDiscards": "Discarded, not yet reported",
         "syncing": "Syncing"
       },
       "roster": {
@@ -207,6 +209,7 @@
       "absent": "No token",
       "durable": "Durable (IndexedDB)",
       "memory": "In memory (fallback)",
+      "unavailable": "Unavailable: sent immediately",
       "configured": "Configured",
       "notConfigured": "Not configured",
       "unpaired": "This tablet is not paired: there is no roster to show.",
@@ -229,6 +232,7 @@
     "rights": "Rights: access, rectification, erasure, restriction, objection and portability. Request them at the front desk or in the employee portal.",
     "noBiometrics": "This system does not process biometric data.",
     "policyLink": "Full policy: {url}",
+    "qrHost": "Address: {host}",
     "policyPending": "The full policy is available at the front desk.",
     "showQr": "Show policy QR code",
     "qrDialogTitle": "Full privacy policy",

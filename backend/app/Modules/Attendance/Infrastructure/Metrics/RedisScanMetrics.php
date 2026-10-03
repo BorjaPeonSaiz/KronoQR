@@ -57,6 +57,10 @@ final readonly class RedisScanMetrics implements ScanMetrics
 
     public const string SCANS_BY_ORIGIN = self::KEY_PREFIX.'scans_by_origin_total';
 
+    public const string BATCH_ITEMS_NOT_PROCESSED = self::KEY_PREFIX.'scan_batch_items_not_processed_total';
+
+    public const string DISCARDED_SCANS = self::KEY_PREFIX.'kiosk_discarded_scans_total';
+
     /**
      * Cubos en segundos, del contrato de Prometheus: cada uno cuenta las
      * observaciones **menores o iguales** que su limite.
@@ -207,6 +211,32 @@ final readonly class RedisScanMetrics implements ScanMetrics
             ]);
         } catch (Throwable) {
             // Ver `scanProcessed()`: el fichaje ya esta confirmado.
+        }
+    }
+
+    public function batchItemNotProcessed(string $deviceUuid): void
+    {
+        try {
+            $this->redis->connection()->command('HINCRBY', [
+                self::BATCH_ITEMS_NOT_PROCESSED,
+                'device='.$deviceUuid,
+                1,
+            ]);
+        } catch (Throwable) {
+            // Ver `scanProcessed()`: medir no puede romper una sincronizacion.
+        }
+    }
+
+    public function discardedScanReported(string $deviceUuid, bool $attributed): void
+    {
+        try {
+            $this->redis->connection()->command('HINCRBY', [
+                self::DISCARDED_SCANS,
+                'device='.$deviceUuid.',attributed='.($attributed ? 'true' : 'false'),
+                1,
+            ]);
+        } catch (Throwable) {
+            // Medir no puede tumbar un aviso que ya esta guardado.
         }
     }
 }

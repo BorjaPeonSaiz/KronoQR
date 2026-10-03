@@ -315,7 +315,6 @@
       "reread": "The contracts were read again because they had changed."
     }
   },
-
   "pin": {
     "heading": "Employee portal PIN",
     "explanation": "With their employee code and this PIN, the person checks their own time records in the portal. It is handed over in person, never by email.",
@@ -1192,7 +1191,9 @@
       "missing_clock_out": "Missing clock-out",
       "anomalous_pattern": "Anomalous credential usage pattern",
       "out_of_order_scan": "Out-of-order clocking",
-      "rejected_pin_scan": "PIN clocking not recorded"
+      "rejected_pin_scan": "PIN clocking not recorded",
+      "scan_before_revocation": "Clocking before the credential was withdrawn",
+      "discarded_scan": "Clocking discarded by the kiosk"
     },
     "outcomes": {
       "resolved": "Resolved",
@@ -1265,7 +1266,15 @@
         "first_occurred_at": "first clock event",
         "second_occurred_at": "second clock event",
         "first_scan_id": "first scan ID",
-        "second_scan_id": "second scan ID"
+        "second_scan_id": "second scan ID",
+        "attempts_scans": "rejected clockings that day",
+        "device_uuid": "kiosk identifier",
+        "origin": "report origin",
+        "http_status": "server response code",
+        "problem": "declared problem",
+        "reports": "kiosk reports that day",
+        "withdrawal": "what was withdrawn",
+        "attribution": "attributed by"
       },
       "patternLine": "Pattern: {pattern}",
       "patterns": {
@@ -1282,6 +1291,14 @@
       },
       "impossibleSequence": {
         "gap": "Interval between the two clock events: {gap} s (minimum transit time: {min} s)"
+      },
+      "withdrawalValues": {
+        "offboarding": "the person has left",
+        "credential": "only the card (reissue or loss)"
+      },
+      "attributionValues": {
+        "credential": "the card",
+        "employee_code": "the employee code"
       }
     },
     "employeeFilter": {
@@ -1448,12 +1465,16 @@
       "appName": "Application name",
       "accentColor": "Accent colour",
       "accentColorPicker": "Accent colour picker",
-      "logoPath": "Logo path"
+      "logoPath": "Logo path",
+      "privacyControllerName": "Data controller",
+      "privacyPolicyUrl": "Privacy policy URL"
     },
     "hints": {
       "appName": "Shown in the header of the three applications, in the browser tab title, and in the header of PDF reports and the Labour Inspectorate export.",
       "accentColor": "The colour of primary buttons, links and selected items. The rest of the product's palette is untouched.",
-      "logoPath": "Absolute path inside the server's brand directory. Must be a PNG or an SVG up to 512 KiB and, if PNG, up to 2048 pixels on a side. Leave it blank to use the product's own logo."
+      "logoPath": "Absolute path inside the server's brand directory. Must be a PNG or an SVG up to 512 KiB and, if PNG, up to 2048 pixels on a side. Leave it blank to use the product's own logo.",
+      "privacyControllerName": "Legal name of whoever processes the data (up to 160 characters, single line). Shown on the tablet before clocking. Leave it blank to use the kiosk's generic text.",
+      "privacyPolicyUrl": "Full address starting with https:// (up to 512 characters, ASCII characters only, no username or password). The tablet shows it as a link and a QR code. Leave it blank to say the policy is available at reception."
     },
     "accentContrast": {
       "meets": "Accent contrast on the light background: {ratio}:1. It meets the {minimum}:1 minimum of WCAG 2.2 AA.",
@@ -1501,7 +1522,15 @@
       }
     },
     "errors": {
-      "notAHexColor": "Enter a colour as #rrggbb, or use the picker."
+      "notAHexColor": "Enter a colour as #rrggbb, or use the picker.",
+      "privacyController": {
+        "tooLong": "The controller name allows up to 160 characters.",
+        "controlChars": "The controller name cannot contain line breaks or control characters."
+      },
+      "privacyUrl": {
+        "tooLong": "The address allows up to 512 characters.",
+        "notAUrl": "Enter an address starting with https://, using ASCII characters only, with no spaces and no username or password."
+      }
     },
     "license": {
       "notice": "Custom branding {reason}. What you save here is kept and will apply once the licence covers it; until then, the applications and the documents carry the product's own brand.",
@@ -1515,10 +1544,14 @@
       }
     },
     "save": "Save the brand",
-
     "saving": "Saving…",
     "saved": "Brand saved. The change is recorded in the audit trail and applied immediately.",
-    "failed": "The brand could not be saved."
+    "failed": "The brand could not be saved.",
+    "privacy": {
+      "heading": "Kiosk privacy notice",
+      "intro": "Before clocking, the tablet shows the employee who processes their data and where the full policy is (GDPR art. 13). It is the same information as the notice at reception.",
+      "shownHost": "Will be shown as: {host}"
+    }
   },
   "operationalSettings": {
     "heading": "Operational settings",
@@ -1795,7 +1828,9 @@
         "awaiting_first_heartbeat": "Just linked: it has not sent its first heartbeat yet.",
         "never_seen": "It has never beaten and has been linked longer than expected.",
         "revoked": "Unlinked: it no longer counts for anything.",
-        "battery_low": "Low battery and not charging."
+        "battery_low": "Low battery and not charging.",
+        "queue_storage_degraded": "The tablet's queue has dropped to memory: its clockings are not guaranteed to survive a restart.",
+        "discards_unreported": "The tablet has discarded clockings and has not yet been able to tell the server."
       },
       "whatToDoHeading": "What to do",
       "whatToDo": {
@@ -1806,7 +1841,9 @@
         "awaiting_first_heartbeat": "It is normal right after linking it. If it takes several minutes to beat, check the tablet's connection.",
         "never_seen": "Follow the «Kiosk not responding» runbook (docs/runbooks/quiosco-no-responde.md) §2 and run «php artisan kiosk:health» from the server.",
         "revoked": "This kiosk is unlinked: no action is needed.",
-        "battery_low": "Check the charger: the tablet's battery is low and it is not charging."
+        "battery_low": "Check the charger: the tablet's battery is low and it is not charging.",
+        "queue_storage_degraded": "Failure: how many clockings are pending is unknown. Do not restart or unlink the tablet; open its diagnostics screen, check storage and follow the \"Stuck offline queue\" runbook (docs/runbooks/cola-offline-atascada.md).",
+        "discards_unreported": "Warning: the tablet discarded clockings the server does not know about yet. Keep the tablet online; if the warning persists, check its discards list on the diagnostics screen and follow the \"Stuck offline queue\" runbook (docs/runbooks/cola-offline-atascada.md)."
       }
     },
     "battery": {
@@ -1850,7 +1887,17 @@
       "explanation": "Kiosk \"{name}\" will no longer be able to clock in immediately. Its clocking history is not deleted.",
       "pendingQueueWarning": "This kiosk has {count} unsynced clockings. If you unlink it now, they will only reach the timekeeping record if this same tablet is paired again (art. 34.9 of the Spanish Workers' Statute). Before unlinking, check that the tablet has been able to sync its queue (new-kiosk runbook, §5.1).",
       "notice": "You will be able to link a new tablet with the same name later: it will reactivate this same kiosk.",
-      "announce": "Kiosk {name} has been unlinked."
+      "announce": "Kiosk {name} has been unlinked.",
+      "pendingQueueUnknownWarning": "The tablet does not know how many clockings it has unsynced (its queue dropped to memory). Unlinking it now may leave out of the timekeeping record clockings that exist only on it (art. 34.9 of the Spanish Workers' Statute). Before unlinking, open its diagnostics screen.",
+      "unreportedDiscardsWarning": "This tablet has {count} discarded clockings it has not yet reported to the server; if you unlink it now they will be lost and will not open an incident. Wait for it to sync."
+    },
+    "queue": {
+      "unknown": "Unknown",
+      "unreportedDiscards": "{count} discards not yet reported to the server",
+      "storage": {
+        "memory": "Queue in memory only: it would be lost on restart",
+        "unavailable": "No queue storage on the tablet"
+      }
     }
   },
   "onboarding": {

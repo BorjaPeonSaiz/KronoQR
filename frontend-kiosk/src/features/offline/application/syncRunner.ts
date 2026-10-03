@@ -25,18 +25,31 @@
 // por `occurred_at` — una entrada por tarjeta y una salida por PIN, o al reves.
 // `splitRuns()` los agrupa en tramos maximos de la misma via SIN reordenarlos,
 // y el drenaje procesa un tramo entero (con su llamada de lote o su secuencia
-// de llamadas individuales) antes de tocar el siguiente. Si un tramo se atasca
-// —nada progresa—, TODO lo que vendria despues, tramo actual incluido, se
-// aplaza con el mismo retroceso: dejar que un PIN mas tardio adelante a un QR
-// varado seria romper exactamente la garantia que esto existe para mantener.
+// de llamadas individuales) antes de tocar el siguiente.
 //
-// QUE SACA UN ELEMENTO DE LA COLA. Solo `200`, `422` o `400` para ESE `scan_id`.
+// UN TRAMO SOLO «PROGRESA» SI TODOS SUS ELEMENTOS TIENEN DESENLACE (RN-21,
+// ADR-047). Si alguno se conserva para reintento —`503`, `ScanHeldBack`, ausente
+// de la respuesta— los decididos se confirman, el resto se aplaza y TODO lo que
+// vendria despues, tramo actual incluido, se aplaza con el mismo retroceso:
+// dejar que un PIN mas tardio adelante a un QR varado seria romper exactamente
+// la garantia que esto existe para mantener. Vale tambien contra un servidor
+// anterior que procesara elementos posteriores al fallido: se confirman (estan
+// registrados) y aun asi el drenaje se detiene ahi.
+//
+// QUE SACA UN ELEMENTO DE LA COLA DE ENVIO. Un desenlace del servidor para ESE
+// `scan_id`, y NADA SE BORRA SIN EL (ADR-008, ADR-047):
 // - `200`: registrado (o anti-rebote, que es un desenlace aceptado, ADR-031).
-// - `422`: el servidor decidio rechazarlo. Reintentar daria `422` para siempre.
-// - `400` (o un `422` no estandar) con cuerpo JSON: la peticion no vale y nunca
-//   valdra (PIN-08). Se descarta CON diagnostico. Un lote `400` se reenvia de uno
-//   en uno para aislar al envenenado. Un `400` sin cuerpo JSON (proxy) se reintenta.
-// - `503` (`ScanNotProcessed`): NO se decidio nada. Se conserva y se reintenta.
+//   Se BORRA.
+// - `422` estandar (`scan-rejected`): el servidor decidio rechazarlo. Reintentar
+//   daria `422` para siempre. Se BORRA.
+// - `400` (o un `422` que no es `scan-rejected`) con cuerpo JSON: la peticion no
+//   vale y nunca valdra (RN-22). NO se borra: se MUEVE a la lista de
+//   descartados, en la misma transaccion, y se AVISA al servidor
+//   (`POST /scan/discarded`) para que una persona lo revise. Es terminal para el
+//   orden: ya no bloquea la cola. Solo se olvida cuando el aviso es acusado.
+//   Un lote `400` se reenvia de uno en uno para aislar al envenenado. Un `400`
+//   sin cuerpo JSON (proxy) se reintenta.
+// - `503` (`ScanNotProcessed`, `ScanHeldBack`): NO se decidio nada. Se conserva.
 // - Fallo de transporte, 401, 403, 429, 5xx: no se toca nada. Se reintenta.
 //
 // BATERIA. Si el navegador dice que no hay red, no se hace la peticion: se
@@ -46,12 +59,22 @@
 
 import type { QueuedScan, ScanSubmissionResult } from '@/features/scan/application/ports'
 import type { ApiClient, ApiResult } from '@/shared/api/client'
-import type { PinScanRequest, ScanBatchEntry, ScanOk, ScanRequest } from '@/shared/api/types'
+import type {
+  DiscardedScanReport,
+  PinScanRequest,
+  ScanBatchEntry,
+  ScanOk,
+  ScanRequest,
+} from '@/shared/api/types'
 import { uuidV7 } from '@/shared/ids/uuidV7'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
 import { MAX_BATCH_SIZE, splitRuns } from '../domain/queueOrder'
-import type { QueuedPinScanRecord, QueuedQrScanRecord } from '../infrastructure/queueStorage'
+import type {
+  DiscardedScanRecord,
+  QueuedPinScanRecord,
+  QueuedQrScanRecord,
+} from '../infrastructure/queueStorage'
 import { isPinScanRecord } from '../infrastructure/queueStorage'
 import type { ScanQueue } from './scanQueue'
 
@@ -68,14 +91,24 @@ export const IDLE_POLL_MS = 30_000
  */
 export const MAX_BATCHES_PER_DRAIN = 10
 
+/** Avisos por peticion de `POST /scan/discarded` (contrato: maximo 10, RS-03). */
+export const DISCARD_REPORT_CHUNK_SIZE = 10
+
+/** Peticiones de aviso por drenaje: el mismo cinturon que `MAX_BATCHES_PER_DRAIN`. */
+export const MAX_DISCARD_CHUNKS_PER_DRAIN = 10
+
 export type SyncDiagnostic =
   | 'sync.transport_failed'
   | 'sync.unauthorized'
   | 'sync.throttled'
   | 'sync.malformed_response'
+  /** SOLO «conservado para reintento» (`503`): no se decidio nada. */
   | 'sync.item_not_processed'
   | 'sync.confirm_not_persisted'
-  | 'sync.item_invalid'
+  /** Sacado de la cola a la lista de descartados, con aviso pendiente (RN-22). */
+  | 'sync.item_discarded'
+  /** El aviso de un descartado no salio o no fue acusado. */
+  | 'sync.discard_report_failed'
 
 export interface SyncRunnerOptions {
   readonly api: ApiClient
@@ -129,6 +162,30 @@ function toPinRequest(record: QueuedPinScanRecord): PinScanRequest {
   }
 }
 
+/**
+ * El aviso de un descartado, campo a campo: sin `pin_sealed` ni nada que no
+ * este en el contrato. El `qr_payload` o el `employee_code` solo viajan a este
+ * endpoint, que los usa para atribuir y no los guarda.
+ */
+function toDiscardReport(entry: DiscardedScanRecord): DiscardedScanReport {
+  const common = {
+    scan_id: entry.scan_id,
+    occurred_at: entry.occurred_at,
+    http_status: entry.http_status,
+    problem_type: entry.problem_type,
+    discarded_at: entry.discarded_at,
+  }
+  return entry.kind === 'qr'
+    ? { ...common, kind: 'qr', qr_payload: entry.qr_payload }
+    : { ...common, kind: 'pin', employee_code: entry.employee_code }
+}
+
+/** Lo que se sabe de un `400`/`422` no estandar para decidir el descarte. */
+interface InvalidFailure {
+  readonly httpStatus?: number
+  readonly problemType?: string | null
+}
+
 function browserIsOnline(): boolean {
   if (typeof navigator === 'undefined') return true
   return navigator.onLine !== false
@@ -150,6 +207,10 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   let rerun = false
   /** El despertador pedido mientras se drenaba puede traer «acaba de volver la red». */
   let rerunIgnoreSchedule = false
+  /** El envio de avisos de descartados en curso (uno solo a la vez). */
+  let reportingDiscards = false
+  let reportDiscardsAgain = false
+  let reportDiscardsIgnoreSchedule = false
 
   function cancelTimer(): void {
     if (timer === null) return
@@ -162,15 +223,25 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     if (!running) return
 
     const stats = queue.stats()
-    if (stats.size === 0) return
+    // Con la cola en memoria («desconocido») se sigue sondeando aunque este
+    // vacia: cada drenaje intenta volver al disco (ADR-047).
+    if (stats.inStore === 0 && stats.unreportedDiscards === 0 && stats.storage === 'durable') {
+      return
+    }
 
     const nowMs = clock.now().getTime()
-    const due = stats.nextAttemptAt ?? nowMs
     // G2: sin red, `drain()` suelta las filas sin tocarlas y su espera sigue
     // siendo 0: programar con esa espera giraba en vacio (miles de lecturas de
     // IndexedDB por segundo). El evento `online` despierta de verdad
     // (`wakeNow`); esto es solo la red de seguridad de cuando ese evento no llega.
-    const delay = isOnline() ? Math.max(0, Math.min(due - nowMs, IDLE_POLL_MS)) : IDLE_POLL_MS
+    // Igual si la cabeza esta en vuelo (RN-21: `claim()` no puede tomar nada
+    // hasta que termine, y quien la tiene vuelve a programar al acabar) o si
+    // no hay nada con fecha que esperar.
+    const next = stats.nextAttemptAt
+    const delay =
+      !isOnline() || next === null || queue.isHeadInFlight() || queue.isClaimBlocked()
+        ? IDLE_POLL_MS
+        : Math.max(0, Math.min(next - nowMs, IDLE_POLL_MS))
     timer = setTimer(() => {
       timer = null
       void drain()
@@ -180,13 +251,54 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
   /** Aplica el resultado de un elemento del 207 sobre la cola. */
   function classify(entry: ScanBatchEntry): 'confirm' | 'retry' {
     if (entry.status === 200 || entry.status === 422) return 'confirm'
-    options.onDiagnostic?.('sync.item_not_processed', {
-      http_status: entry.status,
-      message: 'item_not_processed',
-    })
+    // `ScanHeldBack` es el servidor aplazando lo que venia DETRAS de un `503`
+    // (RN-21): no es un fallo propio, y reportarlo por cada elemento del lote
+    // inundaria el canal de errores con 49 copias de la misma causa.
+    const heldBack =
+      'type' in entry.outcome && entry.outcome.type === 'urn:kronoqr:problem:scan-held-back'
+    if (!heldBack) {
+      options.onDiagnostic?.('sync.item_not_processed', {
+        http_status: entry.status,
+        message: 'item_not_processed',
+      })
+    }
     return 'retry'
   }
 
+  /**
+   * RN-22. Mueve el fichaje a la lista de descartados (UNA transaccion) y deja
+   * constancia tecnica sin `scan_id` ni payload (regla dura 21). `false` si el
+   * movimiento no llego a escribirse: el fichaje sigue en la cola y quien llama
+   * lo aplaza. El aviso al servidor lo manda `flushDiscards`.
+   */
+  async function discardScan(
+    scan: QueuedScan | QueuedQrScanRecord | QueuedPinScanRecord,
+    failure: InvalidFailure,
+  ): Promise<boolean> {
+    const httpStatus = failure.httpStatus ?? 400
+    const problemType = failure.problemType ?? null
+    const moved = await queue.discard(scan, { http_status: httpStatus, problem_type: problemType })
+    if (!moved) {
+      options.onDiagnostic?.('sync.confirm_not_persisted', {
+        items: 1,
+        message: 'confirm_not_persisted',
+      })
+      return false
+    }
+    options.onDiagnostic?.('sync.item_discarded', {
+      http_status: httpStatus,
+      kind: scan.kind,
+      problem_type: problemType ?? 'none',
+      message: 'item_discarded',
+    })
+    return true
+  }
+
+  /**
+   * `true` solo si TODOS los elementos tienen desenlace terminal (RN-21): `200`,
+   * `422` estandar, o descartado con aviso pendiente. Cualquier otra cosa
+   * (`503`, `ScanHeldBack`, ausente) detiene el drenaje en este tramo.
+   */
   async function sendBatch(records: readonly QueuedQrScanRecord[]): Promise<boolean> {
     const result = await options.api.syncScanBatch({ scans: records.map(toRequest) }, newBatchKey())
 
@@ -272,7 +384,11 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       return false
     }
 
-    return confirmed.length > 0
+    // El tramo progresa solo si no queda NADA para reintento. Con un `503` (o un
+    // elemento ausente) los decididos ya estan confirmados, el resto aplazado, y
+    // el drenaje se detiene aqui: nada posterior se envia antes de que ese
+    // elemento tenga desenlace.
+    return retry.length === 0
   }
 
   /**
@@ -288,8 +404,6 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     records: readonly TRecord[],
     send: (record: TRecord) => Promise<ApiResult<ScanOk>>,
   ): Promise<boolean> {
-    let progressed = false
-
     for (let index = 0; index < records.length; index += 1) {
       const record = records[index]
       if (record === undefined) break
@@ -297,32 +411,21 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       const result = await send(record)
 
       if (result.outcome === 'failed' && result.cause === 'invalid') {
-        // PIN-08. El servidor ha decidido que ESTE fichaje no es valido
-        // (400/422): reenviarlo daria lo mismo para siempre y, como el orden se
-        // respeta, pararia todo lo que viene detras. Se confirma (se saca de la
-        // cola) y queda constancia tecnica, sin `scan_id` ni payload (regla 21).
-        // El empleado ya fue confirmado en pantalla (regla 19); la revision
-        // humana no tiene canal en el contrato: ver `docs/verificacion`.
+        // RN-22. El servidor ha decidido que ESTA peticion no vale (400, o un
+        // 422 que no es el rechazo estandar): reenviarla daria lo mismo para
+        // siempre y, como el orden se respeta, pararia todo lo que viene detras.
+        // NO se borra: se mueve a la lista de descartados y se avisa (ADR-047).
+        // El empleado ya fue confirmado en pantalla (regla 19).
         options.onReachability?.(true)
         options.onAuthOutcome?.(false)
-        options.onDiagnostic?.('sync.item_invalid', {
-          http_status: result.httpStatus ?? 0,
-          kind: isPinScanRecord(record) ? 'pin' : 'qr',
-          message: 'item_invalid_discarded',
-        })
-        const discarded = await queue.confirm([record.scan_id])
-        if (!discarded) {
-          options.onDiagnostic?.('sync.confirm_not_persisted', {
-            items: 1,
-            message: 'confirm_not_persisted',
-          })
+        const moved = await discardScan(record, result)
+        if (!moved) {
           await queue.retryLater(
             records.slice(index).map((item) => item.scan_id),
             clock.now(),
           )
-          return progressed
+          return false
         }
-        progressed = true
         continue
       }
 
@@ -352,7 +455,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
           records.slice(index).map((item) => item.scan_id),
           clock.now(),
         )
-        return progressed
+        return false
       }
 
       options.onReachability?.(true)
@@ -369,12 +472,186 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
           records.slice(index).map((item) => item.scan_id),
           clock.now(),
         )
-        return progressed
+        return false
       }
-      progressed = true
     }
 
-    return progressed
+    // Todos los elementos del tramo tienen desenlace (RN-21).
+    return true
+  }
+
+  /**
+   * RN-22. Manda al servidor los avisos de los descartados, en trozos de 10
+   * (RS-03), y SOLO borra de la lista los `scan_id` que vuelven en
+   * `acknowledged`. Devuelve `false` si hay que dejar de intentarlo ahora (fallo
+   * de transporte): lo que queda ya esta aplazado con el retroceso.
+   */
+  async function sendDiscardChunk(chunk: readonly DiscardedScanRecord[]): Promise<boolean> {
+    const result = await options.api.reportDiscardedScans({ reports: chunk.map(toDiscardReport) })
+
+    if (result.outcome === 'ok') {
+      options.onReachability?.(true)
+      options.onAuthOutcome?.(false)
+      const acknowledged = new Set<string>(result.data.acknowledged)
+      const done = chunk.filter((entry) => acknowledged.has(entry.scan_id))
+      const pending = chunk.filter((entry) => !acknowledged.has(entry.scan_id))
+      await queue.acknowledgeDiscarded(done.map((entry) => entry.scan_id))
+      if (pending.length > 0) {
+        // Acuse parcial: lo no acusado se queda en la lista y vuelve a avisarse.
+        options.onDiagnostic?.('sync.discard_report_failed', {
+          cause: 'partial_acknowledgement',
+          items: pending.length,
+          message: 'discard_report_not_acknowledged',
+        })
+        await queue.retryDiscardedLater(
+          pending.map((entry) => entry.scan_id),
+          clock.now(),
+        )
+      }
+      return true
+    }
+
+    if (result.outcome === 'failed' && result.cause === 'invalid') {
+      options.onReachability?.(true)
+      options.onAuthOutcome?.(false)
+      if (chunk.length > 1) {
+        // El lote no vale y no dice cual lo envenena: avisos sueltos, en orden.
+        for (const entry of chunk) {
+          if (!(await sendDiscardChunk([entry]))) return false
+        }
+        return true
+      }
+      // Uno que no vale ni solo: se queda en la lista (cuenta en el latido,
+      // `unreported_discards`) con retroceso, y se dice por que.
+      options.onDiagnostic?.('sync.discard_report_failed', {
+        cause: 'invalid',
+        http_status: result.httpStatus ?? 400,
+        items: 1,
+        message: 'discard_report_invalid',
+      })
+      await queue.retryDiscardedLater(
+        chunk.map((entry) => entry.scan_id),
+        clock.now(),
+      )
+      return true
+    }
+
+    if (result.outcome === 'failed') {
+      options.onReachability?.(false)
+      if (result.cause === 'unauthorized') options.onAuthOutcome?.(true)
+      if (result.cause !== 'offline') {
+        options.onDiagnostic?.('sync.discard_report_failed', {
+          cause: result.cause,
+          http_status: result.httpStatus ?? 0,
+          items: chunk.length,
+          message: 'discard_report_failed',
+        })
+      }
+    }
+    await queue.retryDiscardedLater(
+      chunk.map((entry) => entry.scan_id),
+      clock.now(),
+    )
+    return false
+  }
+
+  /** Una pasada de avisos: los que ya les toca (o todos, con `ignoreSchedule`). */
+  async function reportDiscardsOnce(ignoreSchedule: boolean): Promise<void> {
+    // Sin red no se gasta ni una peticion; sin avisos pendientes, ni una lectura.
+    if (!isOnline() || queue.stats().unreportedDiscards === 0) return
+
+    const due = await queue.discarded({ ignoreSchedule })
+    for (let chunkIndex = 0; chunkIndex < MAX_DISCARD_CHUNKS_PER_DRAIN; chunkIndex += 1) {
+      const start = chunkIndex * DISCARD_REPORT_CHUNK_SIZE
+      if (start >= due.length) return
+      const chunk = due.slice(start, start + DISCARD_REPORT_CHUNK_SIZE)
+      if (!(await sendDiscardChunk(chunk))) return
+    }
+  }
+
+  /** Un solo envio de avisos a la vez; una peticion que llega mientras tanto se atiende al terminar. */
+  async function flushDiscards(
+    flushOptions: { readonly ignoreSchedule?: boolean } = {},
+  ): Promise<void> {
+    if (reportingDiscards) {
+      reportDiscardsAgain = true
+      reportDiscardsIgnoreSchedule ||= flushOptions.ignoreSchedule === true
+      return
+    }
+    reportingDiscards = true
+    try {
+      let ignoreSchedule = flushOptions.ignoreSchedule === true
+      do {
+        reportDiscardsAgain = false
+        await reportDiscardsOnce(ignoreSchedule)
+        ignoreSchedule = reportDiscardsIgnoreSchedule
+        reportDiscardsIgnoreSchedule = false
+      } while (reportDiscardsAgain)
+    } finally {
+      reportingDiscards = false
+    }
+  }
+
+  /** Los fichajes pendientes, en orden y por tramos. Ver la cabecera. */
+  async function drainScans(initialIgnoreSchedule: boolean): Promise<void> {
+    let ignoreSchedule = initialIgnoreSchedule
+
+    for (let pass = 0; pass < MAX_BATCHES_PER_DRAIN; pass += 1) {
+      const claimed = await queue.claim(MAX_BATCH_SIZE, { ignoreSchedule })
+      if (claimed.length === 0) return
+
+      if (!isOnline()) {
+        // Ni se intenta: se ahorra la radio y el evento `online` despertara.
+        queue.release(claimed.map((record) => record.scan_id))
+        options.onReachability?.(false)
+        return
+      }
+
+      // Tramos de la misma via, EN EL ORDEN en que `claim()` ya los entrego
+      // (por `occurred_at`, mezclando QR y PIN si hace falta). Ver cabecera.
+      const runs = splitRuns(claimed)
+      let stalledAt = runs.length
+
+      for (let index = 0; index < runs.length; index += 1) {
+        const run = runs[index]
+        const first = run?.[0]
+        if (run === undefined || first === undefined) continue
+
+        // `run` ya viene con como maximo `MAX_BATCH_SIZE` elementos (es un
+        // subconjunto de `claimed`) y ya ordenado: una unica llamada de lote
+        // basta para la parte QR, sin volver a trocear.
+        const complete = isPinScanRecord(first)
+          ? await sendOneByOne(run as QueuedPinScanRecord[], (record) =>
+              options.api.recordPinScan(toPinRequest(record)),
+            )
+          : await sendBatch(run as QueuedQrScanRecord[])
+
+        // RN-21: solo se sigue si TODO el tramo tiene desenlace.
+        if (!complete) {
+          stalledAt = index
+          break
+        }
+      }
+
+      if (stalledAt < runs.length) {
+        // El tramo que se atasco ya ha aplazado lo suyo. Lo que viene
+        // DESPUES en este drenaje todavia no se ha tocado: si no se aplaza
+        // tambien, un PIN o un QR mas tardio se reclamaria en la siguiente
+        // pasada y adelantaria al que sigue varado.
+        const untouched = runs.slice(stalledAt + 1).flat()
+        if (untouched.length > 0) {
+          await queue.retryLater(
+            untouched.map((record) => record.scan_id),
+            clock.now(),
+          )
+        }
+        return
+      }
+
+      // Los siguientes lotes ya no se saltan la espera: solo el primero
+      // hereda el «acabo de volver la red».
+      ignoreSchedule = false
+    }
   }
 
   async function drain(drainOptions: { readonly ignoreSchedule?: boolean } = {}): Promise<void> {
@@ -390,63 +667,13 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     options.onSyncing?.(true)
 
     try {
-      let ignoreSchedule = drainOptions.ignoreSchedule === true
-
-      for (let pass = 0; pass < MAX_BATCHES_PER_DRAIN; pass += 1) {
-        const claimed = await queue.claim(MAX_BATCH_SIZE, { ignoreSchedule })
-        if (claimed.length === 0) return
-
-        if (!isOnline()) {
-          // Ni se intenta: se ahorra la radio y el evento `online` despertara.
-          queue.release(claimed.map((record) => record.scan_id))
-          options.onReachability?.(false)
-          return
-        }
-
-        // Tramos de la misma via, EN EL ORDEN en que `claim()` ya los entrego
-        // (por `occurred_at`, mezclando QR y PIN si hace falta). Ver cabecera.
-        const runs = splitRuns(claimed)
-        let stalledAt = runs.length
-
-        for (let index = 0; index < runs.length; index += 1) {
-          const run = runs[index]
-          const first = run?.[0]
-          if (run === undefined || first === undefined) continue
-
-          // `run` ya viene con como maximo `MAX_BATCH_SIZE` elementos (es un
-          // subconjunto de `claimed`) y ya ordenado: una unica llamada de lote
-          // basta para la parte QR, sin volver a trocear.
-          const progressed = isPinScanRecord(first)
-            ? await sendOneByOne(run as QueuedPinScanRecord[], (record) =>
-                options.api.recordPinScan(toPinRequest(record)),
-              )
-            : await sendBatch(run as QueuedQrScanRecord[])
-
-          if (!progressed) {
-            stalledAt = index
-            break
-          }
-        }
-
-        if (stalledAt < runs.length) {
-          // El tramo que se atasco ya ha aplazado lo suyo. Lo que viene
-          // DESPUES en este drenaje todavia no se ha tocado: si no se aplaza
-          // tambien, un PIN o un QR mas tardio se reclamaria en la siguiente
-          // pasada y adelantaria al que sigue varado.
-          const untouched = runs.slice(stalledAt + 1).flat()
-          if (untouched.length > 0) {
-            await queue.retryLater(
-              untouched.map((record) => record.scan_id),
-              clock.now(),
-            )
-          }
-          return
-        }
-
-        // Los siguientes lotes ya no se saltan la espera: solo el primero
-        // hereda el «acabo de volver la red».
-        ignoreSchedule = false
-      }
+      // ADR-047: con la cola en memoria, cada drenaje (como mucho cada 60 s)
+      // intenta volver al disco y, si abre, migra lo de memoria.
+      await queue.tryReopen()
+      await drainScans(drainOptions.ignoreSchedule === true)
+      // Los avisos de descartados van DESPUES de los fichajes y no dependen de
+      // ellos: una cola atascada por un `503` no debe callar un descarte.
+      await flushDiscards(drainOptions)
     } finally {
       draining = false
       options.onSyncing?.(false)
@@ -492,13 +719,11 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
         return { kind: 'rejected' }
       }
       if (rescue.outcome === 'failed' && rescue.cause === 'invalid') {
-        // PIN-08: decidido por el servidor; no hay nada que reintentar.
+        // RN-22: decidido por el servidor; no hay nada que reintentar. Se avisa
+        // igual (si hay donde guardar el aviso): es el unico rastro que queda.
         options.onAuthOutcome?.(false)
-        options.onDiagnostic?.('sync.item_invalid', {
-          http_status: rescue.httpStatus ?? 0,
-          kind: scan.kind,
-          message: 'item_invalid_discarded',
-        })
+        const moved = await discardScan(scan, rescue)
+        if (moved) void flushDiscards({ ignoreSchedule: true })
         return { kind: 'rejected' }
       }
       options.onReachability?.(false)
@@ -507,11 +732,13 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     }
 
     const stats = queue.stats()
-    const alone = stats.size <= 1
+    // Con la cola en memoria el disco no se ve: no se puede saber si hay algo
+    // por delante, y el orden manda. Se trata como «hay cola».
+    const alone = stats.size !== null && stats.size <= 1
 
     if (!alone || !isOnline()) {
       // Hay cola por delante (o no hay red): el orden manda. Se drena por lote.
-      wakeNow()
+      drainRespectingSchedule()
       return { kind: 'deferred' }
     }
 
@@ -520,7 +747,7 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     if (mine === undefined) {
       // Otro drenaje se lo ha llevado. Que lo termine el.
       queue.release(claimed.map((record) => record.scan_id))
-      wakeNow()
+      drainRespectingSchedule()
       return { kind: 'deferred' }
     }
     queue.release(
@@ -535,6 +762,9 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       options.onReachability?.(true)
       options.onAuthOutcome?.(false)
       await queue.confirm([scan.scan_id])
+      // Lo que se encolo mientras viajaba esta fila esperaba a que terminara
+      // (RN-21): ahora si puede salir.
+      scheduleNext()
       return result.data.action === 'debounced'
         ? { kind: 'debounced', response: result.data }
         : { kind: 'accepted', response: result.data }
@@ -545,28 +775,19 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
       options.onAuthOutcome?.(false)
       // Decidido por el servidor: reintentarlo daria `422` para siempre.
       await queue.confirm([scan.scan_id])
+      scheduleNext()
       return { kind: 'rejected' }
     }
 
     if (result.outcome === 'failed' && result.cause === 'invalid') {
-      // PIN-08: 400/422 del servidor. Terminal: se saca de la cola, con
-      // diagnostico, en vez de bloquear para siempre lo que venga detras.
+      // RN-22: 400, o 422 no estandar. Terminal para el orden: se MUEVE a la
+      // lista de descartados (no se borra) y se avisa al servidor.
       options.onReachability?.(true)
       options.onAuthOutcome?.(false)
-      options.onDiagnostic?.('sync.item_invalid', {
-        http_status: result.httpStatus ?? 0,
-        kind: scan.kind,
-        message: 'item_invalid_discarded',
-      })
-      const discarded = await queue.confirm([scan.scan_id])
-      if (!discarded) {
-        options.onDiagnostic?.('sync.confirm_not_persisted', {
-          items: 1,
-          message: 'confirm_not_persisted',
-        })
-        await queue.retryLater([scan.scan_id], clock.now())
-        scheduleNext()
-      }
+      const moved = await discardScan(mine, result)
+      if (!moved) await queue.retryLater([scan.scan_id], clock.now())
+      scheduleNext()
+      if (moved) void flushDiscards({ ignoreSchedule: true })
       return { kind: 'rejected' }
     }
 
@@ -581,6 +802,17 @@ export function createSyncRunner(options: SyncRunnerOptions): SyncRunner {
     await queue.retryLater([scan.scan_id], clock.now())
     scheduleNext()
     return { kind: 'deferred' }
+  }
+
+  /**
+   * Un escaneo nuevo drena RESPETANDO el retroceso: solo `online`, `visibilitychange`
+   * y el arranque (`wakeNow`) lo saltan. Con un servidor en 503 continuado, cada
+   * fichaje reenviando el lote entero agotaria la bateria; si la cabeza esta
+   * aplazada, el nuevo espera detras (RN-21).
+   */
+  function drainRespectingSchedule(): void {
+    if (!running) return
+    void drain()
   }
 
   function wakeNow(): void {

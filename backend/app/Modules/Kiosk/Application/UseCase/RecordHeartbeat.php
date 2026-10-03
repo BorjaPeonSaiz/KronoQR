@@ -119,6 +119,8 @@ final readonly class RecordHeartbeat
             $seenAt->getTimestamp(),
             $command->telemetry->pendingQueueSize,
             $command->telemetry->batteryLevel,
+            ! $command->telemetry->queueStorage->isDurable(),
+            $command->telemetry->unreportedDiscards,
         );
 
         return new HeartbeatOutcome(

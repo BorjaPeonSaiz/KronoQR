@@ -62,6 +62,7 @@ function apiReturning(
     requestPairing: vi.fn(),
     claimPairing: vi.fn(),
 
+    reportDiscardedScans: vi.fn(),
     fetchBranding: vi.fn(),
   }
 }
@@ -78,6 +79,7 @@ function apiFailingHeartbeat(
     fetchRoster: vi.fn(),
     requestPairing: vi.fn(),
     claimPairing: vi.fn(),
+    reportDiscardedScans: vi.fn(),
     fetchBranding: vi.fn(),
     sendHeartbeat: vi.fn(async () => ({ outcome: 'failed' as const, cause, httpStatus })),
   }
@@ -97,6 +99,7 @@ function apiRejecting400(invalidFields?: readonly string[]): ApiClient {
     fetchRoster: vi.fn(),
     requestPairing: vi.fn(),
     claimPairing: vi.fn(),
+    reportDiscardedScans: vi.fn(),
     fetchBranding: vi.fn(),
     sendHeartbeat: vi.fn(async () => ({
       outcome: 'failed' as const,
@@ -655,5 +658,61 @@ describe('latido del quiosco', () => {
       expect(readUpdateWindow()).toEqual(DEFAULT_UPDATE_WINDOW)
       expect(readUpdateQuietMinutes()).toBe(DEFAULT_UPDATE_QUIET_MINUTES)
     })
+  })
+})
+
+describe('latido: cola degradada y descartes sin avisar (ADR-047, RN-22, RF-KI-04, RF-PA-07)', () => {
+  it('con la cola en disco no escribe `queue_storage` (ausente = durable) ni `unreported_discards` a 0', () => {
+    const body = buildHeartbeatBody({
+      appVersion: '2.2.0',
+      pendingQueueSize: 3,
+      queueStorage: 'durable',
+      unreportedDiscards: 0,
+    })
+
+    expect(body).toEqual({ app_version: '2.2.0', pending_queue_size: 3 })
+  })
+
+  it('con la cola en memoria declara `null` y `memory`, nunca 0', () => {
+    const body = buildHeartbeatBody({
+      appVersion: '2.2.0',
+      pendingQueueSize: null,
+      queueStorage: 'memory',
+    })
+
+    expect(body.pending_queue_size).toBeNull()
+    expect(body.queue_storage).toBe('memory')
+  })
+
+  it('sin almacen util declara `unavailable`', () => {
+    const body = buildHeartbeatBody({
+      appVersion: '2.2.0',
+      pendingQueueSize: null,
+      queueStorage: 'unavailable',
+    })
+
+    expect(body.queue_storage).toBe('unavailable')
+    expect(body.pending_queue_size).toBeNull()
+  })
+
+  it('un `null` con la cola «durable» se corrige a `memory`: el servidor lo rechazaria con 400 y el latido no puede callarse', () => {
+    const body = buildHeartbeatBody({
+      appVersion: '2.2.0',
+      pendingQueueSize: null,
+      queueStorage: 'durable',
+    })
+
+    expect(body.pending_queue_size).toBeNull()
+    expect(body.queue_storage).toBe('memory')
+  })
+
+  it('declara cuantos descartados siguen sin avisar', () => {
+    const body = buildHeartbeatBody({
+      appVersion: '2.2.0',
+      pendingQueueSize: 0,
+      unreportedDiscards: 4,
+    })
+
+    expect(body.unreported_discards).toBe(4)
   })
 })

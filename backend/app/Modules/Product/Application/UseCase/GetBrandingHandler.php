@@ -93,6 +93,7 @@ final readonly class GetBrandingHandler
                 accentColor: self::isProductAccent($branding->accentColor) ? null : $branding->accentColor,
                 logo: $this->logos->current(),
                 locales: $this->locales->current(),
+                privacyNotice: $branding->privacyNotice,
             );
         } catch (Throwable $failure) {
             // Sin PII y sin valores: la clase de la excepcion y nada mas (regla

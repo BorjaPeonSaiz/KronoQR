@@ -18,6 +18,8 @@ import { parseBranding } from '@kronoqr/web-kit/branding'
 import { createTraceparent } from '@kronoqr/web-kit/traceparent'
 import type {
   Branding,
+  DiscardedScanReceipt,
+  DiscardedScanReportBatch,
   KioskHeartbeat,
   KioskHeartbeatRequest,
   KioskRoster,
@@ -70,6 +72,12 @@ export type ApiResult<TOk, TProblem = ScanRejected> =
        * el codigo de estado (tarea 5.12, RF-PD-15).
        */
       readonly invalidFields?: readonly string[]
+      /**
+       * Solo en `cause: 'invalid'` de un fichaje (RN-22): el `type` del problema
+       * recibido si era de este producto (`urn:kronoqr:problem:*`), o `null`.
+       * Es lo que viaja en el aviso de descartado; el `detail` no se transporta.
+       */
+      readonly problemType?: string | null
     }
 
 export interface ApiClientOptions {
@@ -106,6 +114,12 @@ export interface ApiClient {
    * elemento a elemento, por el UNIQUE de `scan_events.scan_id`.
    */
   syncScanBatch(request: ScanBatchRequest, batchKey: string): Promise<ApiResult<ScanBatchResponse>>
+  /**
+   * Aviso de fichajes descartados (RN-22, `POST /api/v1/scan/discarded`). Sin
+   * `Idempotency-Key`: es idempotente por `scan_id` en el servidor. Un `400`
+   * (`cause: 'invalid'`) significa que ALGUN aviso del lote no vale.
+   */
+  reportDiscardedScans(body: DiscardedScanReportBatch): Promise<ApiResult<DiscardedScanReceipt>>
   fetchRoster(): Promise<ApiResult<KioskRoster>>
   sendHeartbeat(body: KioskHeartbeatRequest): Promise<ApiResult<KioskHeartbeat>>
   /**
@@ -152,6 +166,14 @@ function isScanRejected(value: unknown): value is ScanRejected {
 
 function isScanBatchResponse(value: unknown): value is ScanBatchResponse {
   return isRecord(value) && Array.isArray(value['results'])
+}
+
+function isDiscardedScanReceipt(value: unknown): value is DiscardedScanReceipt {
+  return (
+    isRecord(value) &&
+    Array.isArray(value['acknowledged']) &&
+    value['acknowledged'].every((item) => typeof item === 'string')
+  )
 }
 
 function isKioskRoster(value: unknown): value is KioskRoster {
@@ -205,6 +227,16 @@ function causeForStatus(status: number): ApiFailureCause {
   return 'server'
 }
 
+const PROBLEM_TYPE = /^urn:kronoqr:problem:[a-z0-9-]+$/
+
+/** `type` de un problema de ESTE producto; `null` si no trae uno reconocible. */
+function problemTypeOf(body: Record<string, unknown>): string | null {
+  const type = body['type']
+  // Mismo patron que el contrato de `POST /scan/discarded` (F9): un `type` que no
+  // lo cumpla daria 400 para siempre, asi que viaja como `null`.
+  return typeof type === 'string' && PROBLEM_TYPE.test(type) ? type : null
+}
+
 /**
  * Fallo de un envio de fichaje (`/scan`, `/scan/pin`). Un `400` o un `422` que
  * no es el rechazo estandar, pero con cuerpo JSON (`ValidationProblem`), es
@@ -215,7 +247,12 @@ function causeForStatus(status: number): ApiFailureCause {
  */
 function scanFailureFor(status: number, body: unknown): ApiResult<never> {
   if ((status === 400 || status === 422) && isRecord(body)) {
-    return { outcome: 'failed', cause: 'invalid', httpStatus: status }
+    return {
+      outcome: 'failed',
+      cause: 'invalid',
+      httpStatus: status,
+      problemType: problemTypeOf(body),
+    }
   }
   return { outcome: 'failed', cause: causeForStatus(status), httpStatus: status }
 }
@@ -414,6 +451,25 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         return isScanBatchResponse(result.body)
           ? { outcome: 'ok', data: result.body }
           : { outcome: 'failed', cause: 'malformed', httpStatus: 207 }
+      }
+      // Un `400` con cuerpo JSON es el lote entero rechazado por mal formado
+      // (PIN-08): `cause: 'invalid'` para que el drenaje lo reparta de uno en
+      // uno. Antes caia en `server` y se reintentaba el mismo lote para siempre.
+      return scanFailureFor(result.status, result.body)
+    },
+
+    async reportDiscardedScans(body) {
+      const result = await send('/api/v1/scan/discarded', { method: 'POST', body })
+      if ('failure' in result) return { outcome: 'failed', cause: result.failure }
+      if (result.status === 200) {
+        return isDiscardedScanReceipt(result.body)
+          ? { outcome: 'ok', data: result.body }
+          : { outcome: 'failed', cause: 'malformed', httpStatus: 200 }
+      }
+      // Solo el `400` con cuerpo JSON es «este aviso no vale»; el resto (proxy,
+      // 401, 429, 5xx) es transitorio y se reintenta tal cual.
+      if (result.status === 400 && isRecord(result.body)) {
+        return { outcome: 'failed', cause: 'invalid', httpStatus: 400 }
       }
       return { outcome: 'failed', cause: causeForStatus(result.status), httpStatus: result.status }
     },

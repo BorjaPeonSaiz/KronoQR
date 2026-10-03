@@ -8,6 +8,10 @@
 | --- | --- | --- | --- | --- |
 | `ColaOfflineAtascada` | `kiosk_offline_queue_size > 50`, `for: 5m` | Alta | IT del cliente | [§2](#2-diagnóstico) |
 | `ColaOfflineSinVaciar` | la cola no ha bajado a 0 en las últimas 2 h, `for: 5m` | Alta | IT del cliente | [§2](#2-diagnóstico) |
+| `KioskQueueStorageDegraded` | `kiosk_queue_storage_degraded == 1`, `for: 10m` | Alta | IT del cliente | [§7](#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded) |
+| `KioskUnreportedDiscards` | `kiosk_unreported_discards > 0`, `for: 30m` | Aviso | IT del cliente | [§8](#8-descartes-sin-avisar-kioskunreporteddiscards) |
+| `ScanBatchItemNotProcessed` | `increase(scan_batch_items_not_processed_total[30m]) >= 3`, `for: 5m` | Aviso | IT del cliente | [§9](#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed) |
+| `KioskDiscardedScansAttributed` | `increase(kiosk_discarded_scans_total{attributed="true"}[1h]) > 0`, `for: 0m` | Aviso | IT del cliente | [§10](#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed) |
 
 **A las 06:30, quien la reciba hace esto:** mira `kiosk:health` para ver de
 qué quiosco es y cuánto lleva creciendo; si el resto de la instalación
@@ -252,6 +256,177 @@ por fin.
 | Cola que no baja tras resolver la causa aparente | **Descarta primero §4**; si no es eso, soporte del fabricante con el paquete de diagnóstico | El mismo día |
 | Incidencias «Fichaje fuera de orden» repetidas en el mismo quiosco (§4) | RRHH las resuelve; IT revisa la red y la hora de ese punto | Dentro de la semana |
 | Se desvinculó un quiosco con cola pendiente por error | RRHH: hay que reconstruir las horas perdidas por corrección manual | El mismo día |
+
+---
+
+## 7. Almacenamiento de la cola degradado (`KioskQueueStorageDegraded`)
+
+### Qué significa
+
+La tablet no ha podido abrir o seguir usando el almacenamiento local del
+navegador (IndexedDB) y guarda la cola **en memoria** (`memory`) o no tiene
+dónde guardarla (`unavailable`) (RN-21). El quiosco **sigue fichando** (regla
+dura 19), pero lo que se encole mientras dure **se pierde si la tablet o la
+aplicación se reinician**, y por eso su tamaño de cola es **desconocido**, no
+cero: la aplicación deja de publicar `kiosk_offline_queue_size` para ese
+dispositivo.
+
+**Por eso `ColaOfflineAtascada` y `ColaOfflineSinVaciar` callan en este caso**:
+no hay serie que evaluar. No es un fallo de esas alertas; este es el aviso que
+las sustituye. No lo tomes por «la cola está vacía».
+
+### Cómo comprobarlo en el panel
+
+En **Quioscos** (RF-PA-07), el dispositivo aparece con salud de **fallo**,
+razón `queue_storage_degraded`, y la cola pendiente como **«desconocido»**. En
+Grafana, panel «Cola degradada y descartes sin avisar» del cuadro *Operación de
+quioscos*. Desde la consola:
+
+```bash
+docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health --json | jq '.devices[] | {name, queue_storage, pending_queue_size, verdict}'
+```
+
+### Qué hacer
+
+1. **Con la red bien y el quiosco sin colas pendientes que proteger**: recarga
+   la aplicación (PWA) de la tablet. Si el almacenamiento vuelve, el siguiente
+   latido declara `durable` y la alerta se apaga sola.
+2. **Si sigue en `memory`/`unavailable`**: libera espacio en la tablet
+   (aplicaciones y descargas ajenas) y comprueba que el navegador no está en
+   modo privado/invitado. Recarga de nuevo.
+3. **No borres los datos de la aplicación ni reinicies la tablet** mientras
+   pueda haber fichajes solo en memoria: se pierden (§5). Si el servidor es
+   alcanzable, espera a que sincronice y confirma con `kiosk:health` que el
+   latido ya no declara cola pendiente antes de intervenir.
+4. Si no se recupera, sustituye la tablet siguiendo
+   [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) **después** de vaciar la
+   cola.
+
+## 8. Descartes sin avisar (`KioskUnreportedDiscards`)
+
+### Qué significa
+
+El servidor rechazó un fichaje de esa tablet con un `400`/`422` que no es un
+rechazo normal de tarjeta, y la tablet lo **descartó de su cola** para no
+bloquear el orden (RN-21). Debe **avisar** al servidor para que RRHH reciba la
+incidencia `discarded_scan` (RN-22), y lleva más de 30 minutos sin lograrlo
+(sin red hacia ese endpoint, aplicación desactualizada, aviso rechazado). El
+contador `kiosk_unreported_discards{device}` son los descartes pendientes de
+avisar. **Hasta que se avise, nadie en RRHH ve ese fichaje.**
+
+### Cómo comprobarlo en el panel
+
+En **Quioscos** (RF-PA-07), la razón `discards_unreported` y el número de
+descartes pendientes por dispositivo. Mismo panel de Grafana que §7.
+
+### Qué hacer
+
+1. Comprueba la conexión de esa tablet (§2 y §3): si hay red, el aviso se
+   reenvía solo y la alerta se apaga.
+2. Confirma que la versión de la aplicación del quiosco es la actual
+   (`kiosk:health`, columna versión); una PWA vieja con un servidor nuevo
+   puede seguir avisando, pero recarga la aplicación si lleva días abierta.
+3. Cuando el aviso llega, el servidor abre (en la revisión de la madrugada
+   siguiente) la incidencia **`discarded_scan`** en la bandeja de RRHH, si
+   puede atribuirla a una persona. **Revisa que aparezca**; la decisión sobre
+   las horas la toma RRHH ([`../cliente/guia-rrhh.md`](../cliente/guia-rrhh.md)).
+   El contador `kiosk_discarded_scans_total{device,attributed}` indica cuántos
+   se han recibido y cuántos se atribuyeron.
+4. **No vacíes la tablet ni la desvincules** con descartes sin avisar: son los
+   únicos que existen de esos fichajes (§5).
+
+Esta alerta no contiene ni debe llevar datos de personas: usa el dispositivo y
+los recuentos; el detalle está en la incidencia.
+
+### Si es el propio aviso el que el servidor rechaza con 400
+
+Caso menos frecuente: la tablet sí llega al servidor, pero `POST /api/v1/scan/discarded`
+responde `400` porque el aviso no cumple el contrato (`scan_id` UUID v7,
+`occurred_at` en UTC con `Z`, `problem_type` con el patrón `urn:kronoqr:problem:*`;
+el quiosco ya normaliza `problem_type` a nulo si no lo cumple). Se reconoce
+porque **`unreported_discards` no baja aunque haya red y la versión sea la
+correcta**. Qué hacer:
+
+1. Mira los `error_events` de ese dispositivo: busca `kiosk.offline.discard_report_failed`
+   con `http_status` 400.
+2. Comprueba la versión de la PWA de la tablet y actualízala si está desfasada.
+3. Si el aviso sigue sin entrar, **anota a mano el fichaje** desde la pantalla
+   de diagnóstico de la tablet (RF-KI-08 muestra los descartados: `scan_id` y
+   hora) y pásalo a RRHH **antes de desvincular o limpiar la tablet** (§5):
+   es el único sitio donde existe.
+
+
+## 9. Un elemento del lote que no se procesa (`ScanBatchItemNotProcessed`)
+
+### Qué significa
+
+Al sincronizar, la tablet envía su cola en lote y el servidor **falló al
+procesar un elemento** (un error del servidor, no un rechazo de tarjeta). La
+alerta salta con 3 o más en 30 min para un mismo dispositivo. Desde RN-21 ese
+fichaje **no se salta**: los demás fichajes de ese quiosco **esperan detrás**
+en su cola. No se pierde nada, pero nada de esa tablet llega al registro hasta
+que se corrige la causa. La cola crecerá y es probable que `ColaOfflineAtascada`
+suene también.
+
+### Qué mirar
+
+Busca en el log de la aplicación el evento `attendance.batch_scan_failed`; trae
+el `scan_id` (UUID, sin datos personales) y el error del servidor que hay
+detrás:
+
+```bash
+docker compose -f infra/compose.prod.yaml logs --since 1h app | grep attendance.batch_scan_failed
+```
+
+Con ese error (base de datos, bloqueo, restricción, versión) sabrás si es un
+fallo de la instalación o un fichaje con un caso no previsto.
+
+### Qué hacer
+
+1. **Corrige la causa en el servidor** (despliegue, migración, base de datos).
+   Si no es evidente, escala a soporte con el paquete de diagnóstico y el
+   `scan_id`.
+2. **Nunca borres la cola de la tablet ni la desvincules** (§5): contiene
+   fichajes reales, incluido el que falla y los que esperan detrás.
+3. En cuanto el servidor lo procese, la tablet vacía sola; comprueba con
+   `kiosk:health` y espera a que la alerta se apague.
+
+## 10. Descartes atribuidos en un quiosco (`KioskDiscardedScansAttributed`)
+
+### Qué significa
+
+En la última hora, ese quiosco ha avisado de fichajes que descartó y que el
+servidor **ha atribuido a una persona** (`kiosk_discarded_scans_total{attributed="true"}`,
+RN-22). Que lo haga un solo quiosco mientras los demás no es la firma de dos
+cosas: **una PWA desfasada** que genera fichajes que el servidor no acepta, o
+**un token de dispositivo robado** que fabrica avisos contra personas. Cada
+aviso atribuido acaba en una incidencia «Fichaje descartado por el quiosco» de
+RRHH, así que no es ruido.
+
+### Qué comprobar
+
+1. **Versión de la PWA de ese dispositivo**: `php artisan kiosk:health` (columna
+   versión) o «Salud de quioscos». Si es anterior a la del resto de la
+   instalación, es el caso habitual: actualízala siguiendo
+   [`actualizacion-cliente.md`](actualizacion-cliente.md) (cola a 0 primero).
+2. **Las incidencias «Fichaje descartado por el quiosco» de ese día** en la
+   bandeja de RRHH, filtradas por ese dispositivo (el contexto trae su
+   `device_uuid`): ¿encajan con fichajes reales de ese hotel y horario, o son
+   horas y personas que no pasaron por esa tablet?
+3. **¿Debería ese quiosco estar enviando?** Si está en una ubicación y turno
+   donde nadie ficha, o no sabes dónde está físicamente, trátalo como token
+   robado.
+
+### Qué hacer
+
+- **Versión desfasada**: actualiza la tablet; la alerta se apaga sola al pasar
+  la hora sin nuevos descartes. RRHH resuelve las incidencias ya abiertas.
+- **El quiosco no es el que debería estar enviando**: **desvincúlalo** desde
+  «Quioscos» en el panel. Revoca el token **en el acto**. Antes comprueba su
+  cola si es una tablet real y localizada (§5: se descartan los pendientes); si
+  no la tienes, no esperes. Avisa a RRHH de que las incidencias de ese
+  dispositivo pueden ser falsas, y escala al responsable de seguridad.
+- Nunca borres datos de una tablet real con pendientes (§5).
 
 **Relacionados:** [`quiosco-no-responde.md`](quiosco-no-responde.md) ·
 [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) ·

@@ -121,6 +121,28 @@ enum AnomalyType: string
     case REJECTED_PIN_SCAN = 'rejected_pin_scan';
 
     /**
+     * RN-20: **un fichaje anterior a la retirada de la credencial**. Una tarjeta
+     * autentica de esta persona —revocada por su baja, por reemision o por
+     * perdida, o con su titular ya de baja— se uso antes de la retirada y llego
+     * despues, tipicamente desde la cola offline del ultimo dia. Se rechazo como
+     * cualquier otro (RS-03) y la fila quedo atribuida y marcada (ADR-047).
+     *
+     * Se detecta leyendo hacia atras esas filas, sin tramo que señalar: una por
+     * persona y jornada. La cierra una persona —alta manual si trabajo, descarte
+     * con nota si no—; nada automatico.
+     */
+    case SCAN_BEFORE_REVOCATION = 'scan_before_revocation';
+
+    /**
+     * RN-22: **un fichaje que el quiosco descarto** porque el servidor declaro
+     * invalida la peticion —tipicamente una PWA desfasada tras una
+     * actualizacion— y que el quiosco aviso por `POST /api/v1/scan/discarded`
+     * (ADR-047). **No se registro**. Se detecta leyendo hacia atras
+     * `discarded_scan_reports` con dueño; una por persona y jornada, sin tramo.
+     */
+    case DISCARDED_SCAN = 'discarded_scan';
+
+    /**
      * La regla del **perfil de cumplimiento** cuyo umbral gobierna este hallazgo,
      * o `null` si el umbral que lo decide es operativo y no legal.
      *
@@ -148,6 +170,10 @@ enum AnomalyType: string
      *
      * `REJECTED_PIN_SCAN` tambien: la ventana de subsanacion de RN-19 es
      * estructural (doc 01 §4, nota «Sobre RN-19»).
+     *
+     * `SCAN_BEFORE_REVOCATION` y `DISCARDED_SCAN` (RN-20, RN-22, ADR-047),
+     * tambien: describen un fichaje real que no quedo registrado, y no hay
+     * umbral legal que los encienda o los apague.
      */
     public function complianceRule(): ?ComplianceRule
     {
@@ -155,8 +181,10 @@ enum AnomalyType: string
             self::INSUFFICIENT_REST => ComplianceRule::MinimumRestBetweenWorkDays,
             self::LONG_SHIFT => ComplianceRule::MaximumDailyWorkingTime,
             self::MISSING_BREAK => ComplianceRule::BreakInContinuousShift,
-            self::OPEN_SHIFT_EXPIRED, self::SHORT_SHIFT, self::CLOCK_SKEW,
-            self::OUT_OF_ORDER_SCAN, self::ANOMALOUS_PATTERN, self::REJECTED_PIN_SCAN => null,
+            // Todos los demas, sin umbral del perfil: ver el docblock. `default`
+            // y no la lista de casos por el tope de complejidad del §3.5;
+            // `IncidentTest` fija que los dos tipos de la 2.2.0 devuelven null.
+            default => null,
         };
     }
 

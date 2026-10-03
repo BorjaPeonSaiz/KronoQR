@@ -144,6 +144,13 @@ final class UpdateSettingsRequest extends FormRequest
         // apagar una deteccion desde fuera es peor que encenderla.
         SettingKey::ATTENDANCE_PATTERN_WINDOW_SECONDS->value,
         SettingKey::ATTENDANCE_PATTERN_MIN_REPEATS->value,
+        // RL-09, RF-KI-09 (2.2.0, bloque 18): son LA DECLARACION LEGAL del hotel
+        // ante su plantilla —quien responde del tratamiento y donde esta su
+        // politica, art. 13 RGPD—, que la tablet enseña antes de cada fichaje.
+        // Quien mantiene el producto no puede firmar por el responsable ni
+        // apuntar a los empleados a una politica que el hotel no ha aprobado.
+        SettingKey::PRIVACY_CONTROLLER_NAME->value,
+        SettingKey::PRIVACY_POLICY_URL->value,
     ];
 
     public function authorize(): bool

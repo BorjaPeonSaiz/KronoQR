@@ -41,6 +41,13 @@ final readonly class Branding
         public ?string $logoPath,
         /** Color de acento en notacion CSS de seis digitos (`#0f172a`). */
         public string $accentColor,
+        /**
+         * El aviso de privacidad del quiosco (RF-KI-09, RL-09, 2.2.0). **No es
+         * aspecto**: es informacion que el art. 13 RGPD obliga a dar, y por eso
+         * nunca se degrada con la licencia (ADR-019). De serie, la redaccion
+         * generica.
+         */
+        public PrivacyNotice $privacyNotice = new PrivacyNotice,
     ) {
         if (trim($applicationName) === '') {
             throw new InvalidArgumentException('La marca de la instalacion no puede tener el nombre de aplicacion vacio.');

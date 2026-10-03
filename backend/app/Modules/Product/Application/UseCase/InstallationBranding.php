@@ -7,6 +7,7 @@ namespace App\Modules\Product\Application\UseCase;
 use App\Modules\Shared\Domain\ValueObject\Branding;
 use App\Modules\Shared\Domain\ValueObject\LocalePolicy;
 use App\Modules\Shared\Domain\ValueObject\LogoImage;
+use App\Modules\Shared\Domain\ValueObject\PrivacyNotice;
 
 /**
  * La marca de la instalacion tal como la reciben las tres aplicaciones
@@ -42,6 +43,8 @@ final readonly class InstallationBranding
         /** El logotipo utilizable, o `null`. */
         public ?LogoImage $logo,
         public LocalePolicy $locales,
+        /** RF-KI-09: el aviso de privacidad. Nunca degradado por la licencia (ADR-019). */
+        public PrivacyNotice $privacyNotice = new PrivacyNotice,
     ) {}
 
     /**

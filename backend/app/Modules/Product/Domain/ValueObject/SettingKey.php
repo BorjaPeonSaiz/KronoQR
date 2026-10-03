@@ -368,6 +368,41 @@ enum SettingKey: string
     case ATTENDANCE_FUTURE_TOLERANCE_MINUTES = 'ATTENDANCE_FUTURE_TOLERANCE_MINUTES';
 
     /**
+     * El **responsable del tratamiento** que nombra el aviso de privacidad del
+     * quiosco (RF-KI-09, RL-09, art. 13 RGPD en capa 1), tal como lo quiere
+     * escribir el cliente.
+     *
+     * Vacio de serie, y el vacio significa «la redaccion generica» —«la empresa
+     * titular de este centro de trabajo»—: el aviso no desaparece nunca. Se
+     * publica por `GET /api/v1/branding` (`privacy_notice`) y el quiosco lo
+     * guarda para enseñarlo sin red.
+     *
+     * Hasta 160 caracteres, **sin saltos de linea ni caracteres de control ni de
+     * formato** (categorias Unicode `Cc` y `Cf`: nada de marcas bidireccionales
+     * ni de anchura cero que disfracen el nombre, F15 del dictamen del bloque
+     * 18). Antes era una variable de compilacion de la PWA que nadie fijaba
+     * (R6-KI-01).
+     *
+     * Impacto `PRESENTATION`: no mueve ni un minuto del registro.
+     */
+    case PRIVACY_CONTROLLER_NAME = 'PRIVACY_CONTROLLER_NAME';
+
+    /**
+     * La direccion de la **politica de privacidad completa**, capa 2 (RF-KI-09,
+     * RL-09).
+     *
+     * Vacia de serie: el aviso dice entonces que la politica completa esta
+     * disponible en recepcion. Hasta 512 caracteres, **solo `https`**, solo
+     * ASCII imprimible (un dominio internacional va en punycode), con nombre de
+     * servidor y sin usuario ni contraseña en la autoridad (F15): el quiosco la
+     * enseña como texto y como QR, y una direccion disfrazada enviaria al
+     * empleado a otro sitio. `javascript:` y compañia son `422`.
+     *
+     * Impacto `PRESENTATION`.
+     */
+    case PRIVACY_POLICY_URL = 'PRIVACY_POLICY_URL';
+
+    /**
      * Los idiomas que el producto trae traducidos.
      *
      * No es configuracion del cliente: es lo que hay en `lang/` y en los `i18n`
@@ -566,6 +601,16 @@ enum SettingKey: string
             // ser una tolerancia y vuelve a permitir anotar lo que no ha pasado.
             self::ATTENDANCE_FUTURE_TOLERANCE_MINUTES->value => SettingDefinition::integer(
                 5, 0, 60, SettingImpact::WORKED_HOURS,
+            ),
+            // EL AVISO DE PRIVACIDAD DEL QUIOSCO (RF-KI-09, RL-09, 2.2.0). Vacias
+            // de serie = la redaccion generica. El nombre rechaza los caracteres
+            // de control y de formato (`Cc`, `Cf`), saltos de linea incluidos;
+            // la direccion, todo lo que no sea `https` con servidor (F15).
+            self::PRIVACY_CONTROLLER_NAME->value => SettingDefinition::optionalText(
+                '', 160, SettingImpact::PRESENTATION, '/^[^\p{Cc}\p{Cf}]+$/u',
+            ),
+            self::PRIVACY_POLICY_URL->value => SettingDefinition::optionalHttpsUrl(
+                512, SettingImpact::PRESENTATION,
             ),
         ];
     }

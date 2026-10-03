@@ -30,6 +30,14 @@ export type ScanBatchEntry = components['schemas']['ScanBatchEntry']
 /** `503` elemento a elemento: no se decidio nada, el quiosco lo conserva y reintenta. */
 export type ScanNotProcessed = components['schemas']['ScanNotProcessed']
 
+/** Elemento de un 207 que el servidor no proceso porque uno anterior del lote quedo pendiente (RN-21). */
+export type ScanHeldBack = components['schemas']['ScanHeldBack']
+
+/** Avisos de fichajes descartados por el quiosco (RN-22). Maximo 10 por peticion. */
+export type DiscardedScanReportBatch = components['schemas']['DiscardedScanReportBatch']
+export type DiscardedScanReport = components['schemas']['DiscardedScanReport']
+export type DiscardedScanReceipt = components['schemas']['DiscardedScanReceipt']
+
 export type KioskRoster = components['schemas']['KioskRoster']
 export type KioskRosterEntry = components['schemas']['KioskRosterEntry']
 export type KioskHeartbeatRequest = components['schemas']['KioskHeartbeatRequest']

@@ -25,6 +25,8 @@ function filaDeQuioscoCompleta(): array
         'app_version' => '2.2.0',
         'last_seen_at' => '2026-09-30 08:00:00.123456+00',
         'pending_queue_size' => 37,
+        'queue_storage' => 'durable',
+        'unreported_discards' => 3,
         'oldest_pending_at' => '2026-09-29 05:58:31+00',
         'battery_level' => 14,
         'battery_charging' => false,
@@ -47,6 +49,8 @@ it('lleva caducidad del token, emparejamiento, pendiente mas antiguo y bateria e
             'app_version' => '2.2.0',
             'last_seen_at' => '2026-09-30T08:00:00.123456Z',
             'pending_queue_size' => 37,
+            'queue_storage' => 'durable',
+            'unreported_discards' => 3,
             'oldest_pending_at' => '2026-09-29T05:58:31.000000Z',
             'battery_level' => 14,
             'battery_charging' => false,
@@ -91,7 +95,11 @@ it('sin latido ni token, los campos nuevos son null y la clave sigue ahi', funct
     ]);
 
     expect(array_keys($kiosk))->toBe(KioskCollector::FIELDS)
-        ->and($kiosk['pending_queue_size'])->toBe(0)
+        // ADR-047: un tamano desconocido no se convierte en cero en el paquete.
+        ->and($kiosk['pending_queue_size'])->toBeNull()
+        // Sin dato, lo que declara sin decirlo una PWA anterior a la 2.2.0.
+        ->and($kiosk['queue_storage'])->toBe('durable')
+        ->and($kiosk['unreported_discards'])->toBe(0)
         ->and($kiosk['oldest_pending_at'])->toBeNull()
         ->and($kiosk['battery_level'])->toBeNull()
         ->and($kiosk['battery_charging'])->toBeNull()
@@ -126,3 +134,18 @@ it('acota la bateria a 0..100 y una fecha ilegible no rompe el paquete', functio
         ->and($kiosk['oldest_pending_at'])->toBeNull()
         ->and($kiosk['token_expires_on'])->toBeNull();
 })->group('RF-PD-09');
+
+it('lleva la cola en memoria como desconocida y solo el recuento de descartes', function (): void {
+    // ADR-047 y RN-22: el paquete sabe donde guarda la tablet su cola y cuantos
+    // descartes no ha avisado; nunca cuales ni de quien.
+    $kiosk = KioskCollector::present([
+        ...filaDeQuioscoCompleta(),
+        'pending_queue_size' => null,
+        'queue_storage' => 'memory',
+        'unreported_discards' => 2,
+    ]);
+
+    expect($kiosk['pending_queue_size'])->toBeNull()
+        ->and($kiosk['queue_storage'])->toBe('memory')
+        ->and($kiosk['unreported_discards'])->toBe(2);
+})->group('RF-PD-09', 'RF-PA-07', 'RN-22');

@@ -119,7 +119,11 @@ describe('cache de la marca en localStorage (MB4)', () => {
     await state.load()
 
     const saved: unknown = JSON.parse(storage.getItem(BRANDING_CACHE_KEY) ?? 'null')
-    expect(saved).toEqual(OTHER)
+    // El aviso de privacidad (RF-KI-09) viaja con la marca; sin configurar, a null.
+    expect(saved).toEqual({
+      ...OTHER,
+      privacy_notice: { controller_name: null, policy_url: null },
+    })
   })
 
   it('al arrancar parte de la marca guardada y la pinta sin esperar a la red', () => {

@@ -68,6 +68,20 @@ final readonly class WorkDate
     }
 
     /**
+     * El primer instante de esta fecha civil en su zona, en UTC.
+     *
+     * Lo usan las cotas inferiores de RN-20 y RN-22 —«no antes del alta»—, que
+     * comparan un instante con una fecha civil. Un solo sitio para esa
+     * conversion: con el cambio de hora (RN-09) la medianoche local no siempre
+     * dista lo mismo de la medianoche UTC. Es un instante explicito, no el reloj.
+     */
+    public function startsAt(): DateTimeImmutable
+    {
+        return (new DateTimeImmutable($this->isoDate.' 00:00:00', $this->timezone))
+            ->setTimezone(new DateTimeZone('UTC'));
+    }
+
+    /**
      * Dos jornadas son la misma si coinciden fecha y zona. La zona cuenta: el
      * mismo `2026-03-14` de dos centros en husos distintos son dos jornadas
      * diferentes, y `daily_totals` las indexa por empleado, que pertenece a uno.

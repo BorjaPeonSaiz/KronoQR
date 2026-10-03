@@ -11,7 +11,13 @@ import { createSyncRunner } from '@/features/offline/application/syncRunner'
 import type { SyncDiagnostic } from '@/features/offline/application/syncRunner'
 import { createMemoryQueueStorage } from '@/features/offline/infrastructure/queueStorage'
 import type { ApiClient, ApiResult } from '@/shared/api/client'
-import type { ScanBatchRequest, ScanBatchResponse, ScanOk } from '@/shared/api/types'
+import type {
+  DiscardedScanReceipt,
+  DiscardedScanReportBatch,
+  ScanBatchRequest,
+  ScanBatchResponse,
+  ScanOk,
+} from '@/shared/api/types'
 import { fixedClock } from '@/shared/time/clock'
 
 const PAYLOAD = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa'
@@ -62,6 +68,8 @@ interface Harness {
   readonly singles: string[]
   /** `scan_id` de cada llamada a `/scan/pin`, en el orden en que se hicieron. */
   readonly pinCalls: string[]
+  /** Cuerpos de `POST /scan/discarded`, en orden (RN-22). */
+  readonly reports: DiscardedScanReportBatch[]
   readonly diagnostics: SyncDiagnostic[]
   readonly queue: ScanQueue
 }
@@ -70,6 +78,8 @@ interface HarnessOptions {
   readonly onBatch?: (request: ScanBatchRequest) => ApiResult<ScanBatchResponse>
   readonly onSingle?: (scanId: string) => ApiResult<ScanOk>
   readonly onPin?: (scanId: string) => ApiResult<ScanOk>
+  /** Por defecto acusa todos los `scan_id` recibidos. */
+  readonly onReport?: (body: DiscardedScanReportBatch) => ApiResult<DiscardedScanReceipt>
 }
 
 function harness(options: HarnessOptions = {}): Harness {
@@ -77,6 +87,7 @@ function harness(options: HarnessOptions = {}): Harness {
   const batchKeys: string[] = []
   const singles: string[] = []
   const pinCalls: string[] = []
+  const reports: DiscardedScanReportBatch[] = []
   const diagnostics: SyncDiagnostic[] = []
 
   const api: ApiClient = {
@@ -114,16 +125,24 @@ function harness(options: HarnessOptions = {}): Harness {
         }
       )
     }),
+    reportDiscardedScans: vi.fn(async (body: DiscardedScanReportBatch) => {
+      reports.push(body)
+      return (
+        options.onReport?.(body) ?? {
+          outcome: 'ok' as const,
+          data: { acknowledged: body.reports.map((report) => report.scan_id) },
+        }
+      )
+    }),
     fetchRoster: vi.fn(),
     sendHeartbeat: vi.fn(),
     requestPairing: vi.fn(),
     claimPairing: vi.fn(),
-
     fetchBranding: vi.fn(),
   }
 
   const queue = createScanQueue({ openStorage: createMemoryQueueStorage, clock: CLOCK })
-  return { api, batches, batchKeys, singles, pinCalls, diagnostics, queue }
+  return { api, batches, batchKeys, singles, pinCalls, reports, diagnostics, queue }
 }
 
 function runnerFor(
@@ -743,15 +762,22 @@ describe('fichaje de respaldo por PIN (tarea 1.12, RF-AT-11)', () => {
   })
 })
 
-// PIN-08. Un 400/422 del servidor es el desenlace de ESE fichaje: se descarta
-// con diagnostico y la cola sigue. Antes se reintentaba para siempre y, como el
-// drenaje respeta el orden, un solo elemento envenenado paraba todo lo demas.
-describe('PIN-08 — un 400 es terminal (RF-KI-04, RF-AT-07)', () => {
-  const INVALID: ApiResult<ScanOk> = { outcome: 'failed', cause: 'invalid', httpStatus: 400 }
+// RN-22 / ADR-047 (antes PIN-08). Un 400, o un 422 que no es el rechazo
+// estandar, es el desenlace de ESE fichaje en cuanto al ORDEN: sale de la cola
+// de envio y la cola sigue. Pero NO se consolida como perdida: se MUEVE a la
+// lista de descartados y se AVISA al servidor (`POST /scan/discarded`) para que
+// una persona lo revise. Antes se borraba con un diagnostico y nadie lo veia.
+describe('RN-22 — un 400 se mueve a descartados y se avisa (RF-KI-04, RF-AT-07)', () => {
+  const INVALID: ApiResult<ScanOk> = {
+    outcome: 'failed',
+    cause: 'invalid',
+    httpStatus: 400,
+    problemType: 'urn:kronoqr:problem:invalid-request',
+  }
   const POISONED = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
   const GOOD = '0199f13a-7c22-7b41-9e88-0c4d5e6f7a81'
 
-  it('un PIN envenenado se descarta con diagnostico y el siguiente SI se envia', async () => {
+  it('un PIN envenenado se descarta (no se pierde) y el siguiente SI se envia', async () => {
     const bench = harness({
       onPin: (scanId) => (scanId === POISONED ? INVALID : accepted200(scanId)),
     })
@@ -763,7 +789,22 @@ describe('PIN-08 — un 400 es terminal (RF-KI-04, RF-AT-07)', () => {
 
     expect(bench.pinCalls).toEqual([POISONED, GOOD])
     expect(bench.queue.stats().size).toBe(0)
-    expect(bench.diagnostics).toContain('sync.item_invalid')
+    expect(bench.diagnostics).toContain('sync.item_discarded')
+    // El aviso salio, con lo que hace falta para atribuirlo y SIN el PIN.
+    expect(bench.reports).toHaveLength(1)
+    const [report] = bench.reports[0]?.reports ?? []
+    expect(report).toMatchObject({
+      scan_id: POISONED,
+      kind: 'pin',
+      employee_code: 'E7QK2MXPR',
+      http_status: 400,
+      problem_type: 'urn:kronoqr:problem:invalid-request',
+      occurred_at: '2026-08-14T08:00:00.000Z',
+    })
+    expect(JSON.stringify(bench.reports)).not.toContain('pin_sealed')
+    expect(JSON.stringify(bench.reports)).not.toContain('c2VhbGVk')
+    // Acusado: ya no queda nada pendiente de avisar.
+    expect(bench.queue.stats().unreportedDiscards).toBe(0)
   })
 
   it('un lote QR rechazado por mal formado se reenvia de uno en uno y solo cae el envenenado', async () => {
@@ -780,7 +821,12 @@ describe('PIN-08 — un 400 es terminal (RF-KI-04, RF-AT-07)', () => {
     // En orden de `occurred_at` y por el endpoint individual.
     expect(bench.singles).toEqual([POISONED, GOOD])
     expect(bench.queue.stats().size).toBe(0)
-    expect(bench.diagnostics).toEqual(['sync.item_invalid'])
+    expect(bench.diagnostics).toEqual(['sync.item_discarded'])
+    expect(bench.reports[0]?.reports[0]).toMatchObject({
+      scan_id: POISONED,
+      kind: 'qr',
+      qr_payload: PAYLOAD,
+    })
   })
 
   it('el diagnostico no lleva ni `scan_id` ni payload (regla dura 21)', async () => {
@@ -801,10 +847,14 @@ describe('PIN-08 — un 400 es terminal (RF-KI-04, RF-AT-07)', () => {
 
     expect(JSON.stringify(contexts)).not.toContain(POISONED)
     expect(JSON.stringify(contexts)).not.toContain('E7QK2MXPR')
-    expect(contexts[0]).toMatchObject({ http_status: 400, kind: 'pin' })
+    expect(contexts[0]).toMatchObject({
+      http_status: 400,
+      kind: 'pin',
+      problem_type: 'urn:kronoqr:problem:invalid-request',
+    })
   })
 
-  it('en el camino rapido, un 400 saca el fichaje de la cola y se enseña como rechazado', async () => {
+  it('en el camino rapido, un 400 saca el fichaje de la cola, se enseña como rechazado y se avisa', async () => {
     const bench = harness({ onSingle: () => INVALID })
     const runner = runnerFor(bench)
 
@@ -812,10 +862,47 @@ describe('PIN-08 — un 400 es terminal (RF-KI-04, RF-AT-07)', () => {
 
     expect(result).toEqual({ kind: 'rejected' })
     expect(bench.queue.stats().size).toBe(0)
-    expect(bench.diagnostics).toContain('sync.item_invalid')
+    expect(bench.diagnostics).toContain('sync.item_discarded')
+    await vi.waitFor(() => expect(bench.reports).toHaveLength(1))
+    expect(bench.reports[0]?.reports[0]?.scan_id).toBe(POISONED)
   })
 
-  it('un fallo transitorio (5xx) sigue conservando el fichaje', async () => {
+  it('un 422 que NO es el rechazo estandar tambien se descarta, no se borra', async () => {
+    const bench = harness({
+      onPin: () => ({ ...INVALID, httpStatus: 422, problemType: null }),
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(pinScan(POISONED, '2026-08-14T08:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(bench.reports[0]?.reports[0]).toMatchObject({ http_status: 422, problem_type: null })
+  })
+
+  it('un 422 estandar (`scan-rejected`) SI se borra: es un desenlace, no un descarte', async () => {
+    const bench = harness({
+      onPin: (scanId) => ({
+        outcome: 'rejected',
+        problem: {
+          type: 'urn:kronoqr:problem:scan-rejected',
+          title: 'Escaneo no valido',
+          status: 422,
+          detail: 'El escaneo no se ha podido registrar.',
+          scan_id: scanId,
+        },
+      }),
+    })
+    const runner = runnerFor(bench)
+
+    await bench.queue.enqueue(pinScan(POISONED, '2026-08-14T08:00:00.000Z'))
+    await runner.drain({ ignoreSchedule: true })
+
+    expect(bench.queue.stats().size).toBe(0)
+    expect(bench.reports).toHaveLength(0)
+    expect(bench.diagnostics).toEqual([])
+  })
+
+  it('un fallo transitorio (5xx) sigue conservando el fichaje, sin descartar nada', async () => {
     const bench = harness({
       onSingle: () => ({ outcome: 'failed', cause: 'server', httpStatus: 500 }),
     })
@@ -825,6 +912,7 @@ describe('PIN-08 — un 400 es terminal (RF-KI-04, RF-AT-07)', () => {
 
     expect(result).toEqual({ kind: 'deferred' })
     expect(bench.queue.stats().size).toBe(1)
+    expect(bench.queue.stats().unreportedDiscards).toBe(0)
   })
 })
 
@@ -905,6 +993,67 @@ describe('G1/G2 — el orden sobrevive a un fallo y el drenaje no gira en vacio 
     await vi.waitFor(() => expect(calls).toBe(2))
   })
 
+  it('un escaneo nuevo NO se salta el retroceso; el evento online (wakeNow) si (bateria, RN-21)', async () => {
+    const bench = harness()
+    const runner = runnerFor(bench)
+    runner.start()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    // La cabeza esta aplazada (servidor en 503 continuado).
+    await bench.queue.enqueue(scan(OLD, '2026-08-14T08:00:00.000Z'))
+    await bench.queue.claim(1)
+    await bench.queue.retryLater([OLD], CLOCK.now())
+
+    // Entra un fichaje nuevo: queda detras de la cabeza y no dispara ninguna peticion.
+    const result = await runner.submit(scan(NEW, '2026-08-14T09:00:00.000Z'))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(result.kind).toBe('deferred')
+    expect(bench.api.syncScanBatch).not.toHaveBeenCalled()
+    expect(bench.api.recordScan).not.toHaveBeenCalled()
+
+    // Vuelve la red: ahi si, y en orden.
+    runner.wakeNow()
+    await vi.waitFor(() => expect(bench.batches).toHaveLength(1))
+    expect(bench.batches[0]?.scans.map((item) => item.scan_id)).toEqual([OLD, NEW])
+  })
+
+  it('cola en memoria y vacia: el drenaje se programa UNA vez a la espera larga, sin leer en bucle (G2)', async () => {
+    const delays: number[] = []
+    let lists = 0
+    const queue = createScanQueue({
+      openStorage: () => ({
+        ...createMemoryQueueStorage(),
+        durable: false,
+        list: async () => {
+          lists += 1
+          return []
+        },
+      }),
+      clock: CLOCK,
+    })
+    const runner = createSyncRunner({
+      api: harness().api,
+      queue,
+      clock: CLOCK,
+      isOnline: () => true,
+      setTimer: (_handler, delayMs) => {
+        delays.push(delayMs)
+        return 1
+      },
+      clearTimer: () => undefined,
+    })
+
+    runner.start()
+    await vi.waitFor(() => expect(delays.length).toBeGreaterThan(0))
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    const readsAfterDrain = lists
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    // Nunca a 0 ms: sin nada con fecha que esperar, el sondeo es el lento.
+    expect(new Set(delays)).toEqual(new Set([30_000]))
+    expect(lists).toBe(readsAfterDrain)
+  })
+
   it('sin red el drenaje se programa a la espera larga, no a 0 ms (G2)', async () => {
     const delays: number[] = []
     const bench = harness()
@@ -924,8 +1073,10 @@ describe('G1/G2 — el orden sobrevive a un fallo y el drenaje no gira en vacio 
     await bench.queue.enqueue(scan(OLD, '2026-08-14T08:00:00.000Z'))
     await runner.drain({ ignoreSchedule: true })
 
+    // `start()` lanza su propio drenaje: el programado al terminar puede llegar
+    // despues de que este `drain()` devuelva el control.
+    await vi.waitFor(() => expect(delays.length).toBeGreaterThan(0))
     expect(bench.api.syncScanBatch).not.toHaveBeenCalled()
-    expect(delays.length).toBeGreaterThan(0)
     expect(Math.min(...delays)).toBeGreaterThanOrEqual(30_000)
   })
 })
@@ -1137,7 +1288,7 @@ describe('KT3 — rescate cuando no hay donde encolar (RF-KI-03)', () => {
     })
   })
 
-  it('un 400 del servidor (PIN-08) tambien es un rechazo, con diagnostico', async () => {
+  it('un 400 del servidor (RN-22) tambien es un rechazo, con diagnostico', async () => {
     const { bench, runner } = rescueHarness({
       onSingle: () => ({ outcome: 'failed', cause: 'invalid', httpStatus: 400 }),
     })
@@ -1145,7 +1296,7 @@ describe('KT3 — rescate cuando no hay donde encolar (RF-KI-03)', () => {
     expect(await runner.submit(scan(ID, '2026-08-14T08:00:00.000Z'))).toEqual({
       kind: 'rejected',
     })
-    expect(bench.diagnostics).toContain('sync.item_invalid')
+    expect(bench.diagnostics).toContain('sync.item_discarded')
   })
 
   it('sin red tampoco hay donde guardarlo: se dice `deferred`, sin lanzar y avisando al indicador', async () => {

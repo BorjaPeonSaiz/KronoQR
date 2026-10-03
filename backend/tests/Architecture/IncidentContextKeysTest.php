@@ -86,6 +86,31 @@ function incidentContextCatalogue(): array
             'lockout_attempts' => $minutos,
             'max_sync_delay_seconds' => $minutos,
         ],
+        // RN-20 (ADR-047). Como RN-19, mas `withdrawal`, un valor de un
+        // catalogo cerrado de dos (`offboarding`, `credential`). **Nunca el
+        // motivo libre de la revocacion**, que lo escribe una persona.
+        'SCAN_BEFORE_REVOCATION' => [
+            'scan_id' => ['type' => 'string', 'maxLength' => 64],
+            'occurred_at' => ['type' => 'string', 'maxLength' => 64],
+            'attempts' => $minutos,
+            'max_sync_delay_seconds' => $minutos,
+            'withdrawal' => ['type' => 'string', 'maxLength' => 32],
+        ],
+        // RN-22 (ADR-047). El quiosco por su UUID —un aparato, no una
+        // persona—, la via y la respuesta recibida, y `problem` del catalogo
+        // cerrado de este producto o `other` (F9 del dictamen del bloque 18).
+        // **Nunca el contenido del QR ni el codigo de empleado**, que no se
+        // guardan.
+        'DISCARDED_SCAN' => [
+            'scan_id' => ['type' => 'string', 'maxLength' => 64],
+            'occurred_at' => ['type' => 'string', 'maxLength' => 64],
+            'device_uuid' => ['type' => 'string', 'maxLength' => 64],
+            'origin' => ['type' => 'string', 'maxLength' => 16],
+            'http_status' => $minutos,
+            'problem' => ['type' => 'string', 'maxLength' => 64],
+            'attribution' => ['type' => 'string', 'maxLength' => 16],
+            'reports' => $minutos,
+        ],
         // RF-PR-06 y RN-16 (tarea 3.11). Un solo tipo de incidencia con DOS
         // formas, que `pattern` distingue, asi que esta entrada es la union de
         // las dos. Las cadenas son de tres clases y ninguna identifica a nadie:
@@ -445,7 +470,10 @@ it('mantiene el contrato de IncidentContext abierto a entero y cadena, y a nada 
 
     expect($schema !== false)->toBeTrue('No se encuentra el esquema IncidentContext en el contrato.');
 
-    $fragment = (string) substr((string) $schema, 0, 4000);
+    // Hasta el esquema siguiente y no un numero fijo de caracteres: la
+    // descripcion crece con cada tipo de incidencia (RN-20 y RN-22 la pasaron de
+    // 4000) y un corte fijo acababa dejando fuera justo el `anyOf`.
+    $fragment = (string) preg_replace('/\n    [A-Za-z][A-Za-z0-9]*:\n.*\z/s', '', substr((string) $schema, 1));
 
     expect($fragment)->toContain('additionalProperties:')
         ->toContain('- type: integer')

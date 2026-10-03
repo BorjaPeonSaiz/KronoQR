@@ -8,6 +8,7 @@ use App\Exceptions\ProblemDetails;
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Kiosk\Application\Command\RecordHeartbeatCommand;
 use App\Modules\Kiosk\Domain\ValueObject\HeartbeatTelemetry;
+use App\Modules\Kiosk\Domain\ValueObject\QueueStorage;
 use App\Modules\Kiosk\Http\Policy\KioskPolicy;
 use App\Modules\Kiosk\Http\Support\KioskDevice;
 use App\Modules\Shared\Domain\ValueObject\ClientErrorCode;
@@ -85,7 +86,9 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  */
 final class KioskHeartbeatRequest extends FormRequest
 {
-    use RejectsUnknownInput;
+    use RejectsUnknownInput {
+        withValidator as private rejectUnknownFields;
+    }
 
     /** Techo del contrato (`KioskHeartbeatRequest.client_errors.maxItems`). */
     private const int MAX_CLIENT_ERRORS = 50;
@@ -114,7 +117,19 @@ final class KioskHeartbeatRequest extends FormRequest
     {
         return [
             'app_version' => ['required', 'string', 'min:1', 'max:32', 'regex:'.self::APP_VERSION],
-            'pending_queue_size' => ['required', 'integer', 'min:0', 'max:100000'],
+            // `present` y `nullable` (ADR-047): el campo sigue siendo obligatorio,
+            // pero admite `null` = «no lo se» cuando la cola salio de IndexedDB.
+            // Que `null` solo valga con `queue_storage` distinto de `durable` lo
+            // comprueba `withValidator()`: con la cola en disco la tablet siempre
+            // sabe cuantos tiene, y un `null` ahi es un cliente roto (`400`).
+            'pending_queue_size' => ['present', 'nullable', 'integer', 'min:0', 'max:100000'],
+            // Opcionales: una PWA anterior a la 2.2.0 no los envia y su latido
+            // sigue valiendo igual (ausente = `durable` y `0`).
+            'queue_storage' => ['sometimes', 'string', 'in:'.implode(',', array_map(
+                static fn (QueueStorage $storage): string => $storage->value,
+                QueueStorage::cases(),
+            ))],
+            'unreported_discards' => ['sometimes', 'integer', 'min:0', 'max:100000'],
             'oldest_pending_at' => ['sometimes', 'string', 'regex:'.self::UTC_INSTANT],
             // `nullable` porque el contrato admite explicitamente `null`: una
             // tablet cuyo navegador no implementa la Battery Status API manda
@@ -184,7 +199,7 @@ final class KioskHeartbeatRequest extends FormRequest
             siteId: $device->siteId,
             telemetry: new HeartbeatTelemetry(
                 appVersion: $this->string('app_version')->value(),
-                pendingQueueSize: $this->integer('pending_queue_size'),
+                pendingQueueSize: $this->pendingQueueSize(),
                 oldestPendingAt: is_string($oldest)
                     ? new DateTimeImmutable($oldest, new DateTimeZone('UTC'))
                     : null,
@@ -194,11 +209,43 @@ final class KioskHeartbeatRequest extends FormRequest
                 // no es cero y no puede convertirse en un aviso de bateria baja.
                 batteryLevel: is_int($level) ? $level : null,
                 batteryCharging: is_bool($charging) ? $charging : null,
+                queueStorage: $this->queueStorage(),
+                unreportedDiscards: $this->filled('unreported_discards') ? $this->integer('unreported_discards') : 0,
             ),
             clientErrors: $this->clientErrors($device->uuid),
             // RF-ID-04 (ADR-044): del guard, nunca del cuerpo.
             presentedTokenId: $device->presentedTokenId,
         );
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $this->rejectUnknownFields($validator);
+
+        $validator->after(function (Validator $validator): void {
+            if ($this->input('pending_queue_size') === null && $this->queueStorage()->isDurable()) {
+                $validator->errors()->add(
+                    'pending_queue_size',
+                    'Un tamano de cola desconocido solo se admite con queue_storage distinto de durable.',
+                );
+            }
+        });
+    }
+
+    private function pendingQueueSize(): ?int
+    {
+        return $this->input('pending_queue_size') === null ? null : $this->integer('pending_queue_size');
+    }
+
+    /**
+     * Ausente = `durable`: es lo que declara sin decirlo una PWA anterior a la
+     * 2.2.0 (ADR-047).
+     */
+    private function queueStorage(): QueueStorage
+    {
+        $declared = $this->input('queue_storage');
+
+        return is_string($declared) ? (QueueStorage::tryFrom($declared) ?? QueueStorage::Durable) : QueueStorage::Durable;
     }
 
     /**

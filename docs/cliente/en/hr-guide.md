@@ -301,11 +301,15 @@ its own. It fills itself every night, when the record is reviewed.
 | **No break registered** | Medium | A continuous entry above the collective agreement's threshold | **It only opens by itself if the hotel has break clocking turned on.** Without it, the system cannot tell "they did not rest" from "they rested and did not clock it", and warns about none |
 | **Out-of-order clocking** | Medium | A clocking arrived that does not fit that person's record: a **clock-out** with a time earlier than the clock-in that was already open, or a **clock-in** that would fall inside or before an entry that is already closed —even if that entry belongs to another working day, such as after a night shift— | Almost always, a tablet that was offline: its queue arrived late and out of order. **The clocking is kept and flagged for review, and the working day does not change on its own** (§4.4) |
 | **Anomalous credential usage pattern** | High | Two cards of two different people are scanned **at the same tablet seconds apart on several days** (3 out of the box), or the **same card** is scanned at **two different tablets** sooner than it takes to walk from one to the other | Almost always, two colleagues who come in together, or two tablets too close to each other. **It is a clue for a person to look at, not a conclusion.** It changes no clocking and nobody outside the inbox sees it (§4.5) |
+| **PIN clocking not recorded** | Medium | Someone tried to clock in at the tablet with **the code of a person who can clock** and the PIN was not accepted —wrong, no PIN issued or locked after too many attempts—, and that person **did not clock by any means** in the next 10 minutes | Almost always, a mistyped PIN and the person left thinking they had clocked. **The clocking is not in the record**: if they worked, it is completed by hand (§5). The tablet showed them the same message as for any failed attempt, on purpose |
+| **Clocking before the credential was withdrawn** | Medium | The clocking of an **authentic card that was valid when it was scanned** reached the server, but the card had already been withdrawn when it arrived: because its holder left, or it was reissued or reported lost | Almost always, **the last day of someone who left** while the tablet was offline. **The clocking was not recorded**: that day has to be completed with a correction (§4.6) |
+| **Clocking discarded by the kiosk** | Medium | The tablet sent a clocking that **the server did not accept as valid**, and it set it aside from its queue and reported it | Almost always, **a tablet with an out-of-date app** after the server was updated. **The clocking was not recorded**: it is reviewed and corrected by hand (§4.7) |
 
-> **The "Type" filter shows all nine, and how many open by themselves depends
-> on a setting.** Seven always do —insufficient rest, open shift, shift too
-> long, shift too short, clock skew, out-of-order clocking and anomalous
-> credential usage pattern—, and **"No break registered" joins them as soon as
+> **The "Type" filter shows all twelve, and how many open by themselves depends
+> on a setting.** Ten always do —insufficient rest, open shift, shift too
+> long, shift too short, clock skew, out-of-order clocking, anomalous
+> credential usage pattern, PIN clocking not recorded, clocking before the
+> credential was withdrawn and clocking discarded by the kiosk—, and **"No break registered" joins them as soon as
 > the hotel turns on break clocking** (Panel → "Operational settings" → "Break
 > clocking"; it is explained in
 > [`configuration.md`](configuration.md) §2.1). "Missing clock-out" is in the
@@ -535,6 +539,109 @@ is, on purpose, what there is instead of a machine deciding who scanned.
 The full procedure, with what may be asked and what may not, is in
 [`../../runbooks/patron-anomalo-credencial.md`](../../runbooks/patron-anomalo-credencial.md)
 (in Spanish).
+
+### 4.6 "Clocking before the credential was withdrawn": the last day that arrived late
+
+**What happened.** An authentic card was scanned at a tablet while it **was
+still valid**, but the clocking reached the server **once it had already been
+withdrawn**. The typical case:
+
+- A room attendant's contract ends on Friday and she clocks out at 15:00 on a
+  tablet that has been **offline** all afternoon. At 16:00 HR records her
+  offboarding, which revokes her card on the spot. At 17:00 the tablet gets
+  its connection back and sends the 15:00 clock-out. By then the card is no
+  longer valid.
+
+The same happens with a card **reissued or reported lost** between the moment
+it was scanned and the moment the tablet managed to send it.
+
+**What the system does with it:**
+
+- **It does not record it.** For the server it is a withdrawn card, and a
+  withdrawn card does not clock. The working day does not change and the
+  tablet does not retry it.
+- **It does not lose sight of it.** Because its real time is **earlier** than
+  the withdrawal, it notes it against its holder and, the following early
+  morning, the review opens this incident on that person and that working
+  day: a single one, even if several arrived.
+- **A clocking later than the withdrawal opens nothing.** It is a card that was
+  no longer valid when it was scanned, and rejecting it is exactly what has to
+  happen.
+
+**What the incident shows you.** Press "Resolve" and the "Close incident" window
+shows the **clocking time** (in the workplace's time zone), the **scan
+identifier**, how many arrived like this that working day, the longest delay
+with which they reached the server and **what was withdrawn**: the person has
+left, or only the card (reissue or loss). As with "Out-of-order clocking"
+(§4.4), opening the window resolves nothing.
+
+**How it is resolved:**
+
+1. **Note down the clocking time** and close the window without confirming.
+2. **Open the person's time record** on that working day. Usually you will see
+   an open shift without its clock-out, or a day with no entry.
+3. **Complete the day with a correction** (§5): **"Correct the times"** if the
+   entry exists and lacks the clock-out, **"Add an entry"** if there is none.
+   Use the real time confirmed by their manager; the clocking time is the best
+   clue, not a time to copy without looking. Reason: **"Other reason"**, with
+   what happened, for example "Clocking from the last day that arrived after
+   the offboarding was recorded".
+4. **Close the incident** as "It has been corrected", with a note of who
+   confirmed the time.
+
+**If the person has left**, that correction can still be made: their days up to
+the termination date are completed by hand (§8, "…a person leaves", "After
+offboarding: filling in the missing days").
+
+> **This covers the card, not the PIN.** If that person clocked on their last
+> day **with their code and PIN** at an offline tablet, and the clocking arrived
+> after the offboarding was recorded, **no incident opens**: the system does not
+> note it against them. That is why the advice in §8 still holds: **check the
+> last day of every offboarding by hand** recorded while any tablet was offline,
+> and better still, wait for that tablet to empty its queue before recording
+> the offboarding.
+
+### 4.7 "Clocking discarded by the kiosk": a clocking the server could not read
+
+**What happened.** The tablet sent a clocking and the server answered that **the
+request was not valid**: not that the card was not valid, but that it did not
+understand what it received. It almost always happens **right after updating
+the server**, with a tablet that still runs the previous version of the app and
+sends something the new version no longer accepts.
+
+**What the system does with it:**
+
+- **It does not record it.** The server never got to decide on that clocking,
+  and a record is not invented from a request it cannot read: the time is
+  signed by a person.
+- **The tablet does not lose it.** It takes it out of its queue so as not to
+  hold up the other clockings, keeps it aside and **reports it to the
+  server**. It only forgets it once the server confirms the report has been
+  stored. The tablet app does this **from 2.2.0 on**: a tablet with an earlier
+  version used to discard it without telling anyone, which is why it is worth
+  updating the tablets as soon as the server is updated (below).
+- **With the report, the early-morning review opens this incident**, if it can
+  tell whose it is: by the card, if it is authentic, or by the employee code,
+  if it was clocked with a PIN and belongs to a person who can clock. One per
+  person and working day.
+
+**What the incident shows you.** The **clocking time**, the **scan identifier**,
+the **origin** (card or PIN), the kiosk, how many reports arrived that working
+day and the server's response code. Those last two are for IT; you need the
+time.
+
+**How it is resolved:** like the previous one. Note down the time, open the
+person's time record, complete or correct the entry (§5) with the reason
+**"Kiosk technical failure"** and close the incident with its note. If the
+working day was already right —because the person clocked again on seeing an
+odd message, or because someone corrected it earlier—, close it as "Reviewed:
+there was nothing to correct".
+
+**If it repeats, tell IT the kiosk's name.** Several discards from the same
+tablet are the sign that it runs an app version older than the server's: **it
+has to be updated by reloading the app**, with its queue empty
+([`operation.md`](operation.md) §11, "When updating to 2.2.0: the tablets").
+It is a one-minute fix for IT and prevents another one tomorrow.
 
 ---
 
@@ -1582,7 +1689,11 @@ stays in the record and in the audit log. The usual cases:
 - **The tablet had no network on the last day.** Their clockings from that day
   are kept on the tablet and sent when the connection returns; if they arrive
   after you recorded the offboarding, **they are rejected** and do not appear in
-  their record. Review their last day and add whatever is missing, with
+  their record. If they clocked **with the card**, from 2.2.0 the inbox tells
+  you so with the **"Clocking before the credential was withdrawn"** incident
+  (§4.6). If they clocked **with their code and PIN**, **there is no
+  incident**: you will not find out unless you look. In both cases, review
+  their last day and add whatever is missing, with
   **"Other reason"** and what happened, for example "Clockings from the last
   day that arrived after the offboarding was recorded". If the tablet is still
   without network, wait until it comes back and empties its queue before
@@ -1651,6 +1762,10 @@ one:
 - **A tablet with the wrong time** generates "Clock skew" one after another.
   The clockings are recorded; what has to be fixed is the tablet, and that
   belongs to IT ([`operation.md`](operation.md)).
+- **A tablet with an out-of-date app** after a server update generates
+  "Clocking discarded by the kiosk" one after another. Here the clockings are
+  **not** recorded: they have to be completed by hand (§4.7), and IT has to
+  update that tablet before the next shift arrives.
 
 ### …there is a licence notice in the panel
 

@@ -85,6 +85,9 @@ return [
         /* The impact dashboard baseline (RF-IN-08, task 3.13). */
         'BASELINE_MANUAL_HOURS_PER_MONTH' => 'hours per month consolidating timesheets before the system was installed',
         'ATTENDANCE_FUTURE_TOLERANCE_MINUTES' => 'future margin for manual entries and corrections (minutes)',
+        /* The kiosk privacy notice (RF-KI-09, RL-09, 2.2.0). */
+        'PRIVACY_CONTROLLER_NAME' => 'data controller named in the kiosk privacy notice',
+        'PRIVACY_POLICY_URL' => 'https address of the full privacy policy',
     ],
 
 ];

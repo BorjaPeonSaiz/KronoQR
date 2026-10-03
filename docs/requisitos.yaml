@@ -144,7 +144,7 @@
 - { id: RS-06,     fase: 2, titulo: "2FA obligatorio para admin, rrhh y auditor" }
 - { id: RS-07,     fase: 1, titulo: "El trail de auditoría es detectablemente manipulable: cada entrada encadena el hash de la anterior; la cadena se verifica a diario y cualquier rotu..." }
 
-# --- Fase 3 -------------------------------------------- (21 requisitos)
+# --- Fase 3 -------------------------------------------- (25 requisitos)
 - { id: RF-AT-10,  fase: 3, titulo: "Control de desfase de reloj" }
 - { id: RF-AT-12,  fase: 3, titulo: "El sistema soporta fichaje de pausa (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro" }
 - { id: RF-GP-04,  fase: 3, titulo: "Registro de ausencias (vacaciones, baja médica, permiso) para no contabilizar como absentismo no justificado" }
@@ -161,6 +161,9 @@
 - { id: RN-17,     fase: 3, titulo: "Jornada semanal ordinaria: se señala la semana del perfil que supera max_weekly_hours. Informativa, no abre incidencia (art. 34.1 ET, cómputo anual)" }
 - { id: RN-18,     fase: 3, titulo: "Fichaje irreconciliable: un escaneo que no encaja en la jornada —no posterior a la entrada del turno abierto, o solapado con un tramo ya cerrado—..." }
 - { id: RN-19,     fase: 3, titulo: "Fichaje por PIN no registrado: un intento por PIN rechazado con el código de una persona que puede fichar, sin subsanar en 10 minutos, abre incidencia..." }
+- { id: RN-20,     fase: 3, titulo: "Fichaje anterior a la retirada de la credencial: una tarjeta auténtica revocada después del fichaje se rechaza igual, queda atribuida y abre incidencia..." }
+- { id: RN-21,     fase: 3, titulo: "Orden de la cola offline: nada se registra mientras un fichaje anterior del mismo quiosco siga sin decidir..." }
+- { id: RN-22,     fase: 3, titulo: "Fichaje descartado por el quiosco: lo que el servidor declara inválido se conserva, se avisa y abre incidencia..." }
 - { id: RNF-D-01,  fase: 3, titulo: "Disponibilidad del servicio: 99,5 % mensual" }
 - { id: RNF-P-02,  fase: 3, titulo: "Latencia del endpoint de fichaje en servidor" }
 - { id: RNF-P-06,  fase: 3, titulo: "Pico de concurrencia soportado" }

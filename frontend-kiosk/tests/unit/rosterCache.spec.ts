@@ -36,6 +36,7 @@ function rosterApi(roster: KioskRoster, calls: { count: number }): ApiClient {
     requestPairing: vi.fn(),
     claimPairing: vi.fn(),
 
+    reportDiscardedScans: vi.fn(),
     fetchBranding: vi.fn(),
   }
 }
@@ -230,6 +231,7 @@ describe('padron cacheado en uso', () => {
       requestPairing: vi.fn(),
       claimPairing: vi.fn(),
 
+      reportDiscardedScans: vi.fn(),
       fetchBranding: vi.fn(),
     }
     const roster = createCachedRoster({
@@ -264,6 +266,7 @@ describe('padron cacheado en uso', () => {
       requestPairing: vi.fn(),
       claimPairing: vi.fn(),
 
+      reportDiscardedScans: vi.fn(),
       fetchBranding: vi.fn(),
     }
     const roster = createCachedRoster({

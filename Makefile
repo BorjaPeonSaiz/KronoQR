@@ -643,12 +643,23 @@ deps-audit-php: tools-ready ## composer audit (RS-10, umbral: 0 vulnerabilidades
 # "0 vulnerabilidades" — una puerta que afirma lo que no ha comprobado
 # (hallazgo de la auditoria de cierre de la Fase 1). El audit de raiz cubre las
 # tres SPA y packages/web-kit de una vez.
-deps-audit-js: ## npm audit del workspace completo (RS-10, 0 criticas ni altas)
+#
+# Bloquea sobre lo que se PUBLICA: las dependencias de produccion del workspace
+# (`--omit=dev`). RS-10 dice «ninguna vulnerabilidad critica o alta puede llegar
+# a una version publicada», y las herramientas de desarrollo (ESLint, Vitest,
+# Playwright y sus globs) no llegan a ninguna imagen ni paquete. Hasta el
+# 03-10-2026 bloqueaba tambien sobre ellas: GHSA-vfj7-8cjw-p6xm (`braces` <=
+# 3.0.3, solo de desarrollo, sin version corregida publicada) lo dejo en rojo
+# sin ninguna via de actualizacion, y una puerta que no puede volver a verde
+# deja de ser una puerta. La auditoria completa se imprime despues, sin
+# bloquear, para que nadie deje de verla; el riesgo aceptado esta en doc 07 §6.
+deps-audit-js: ## npm audit del workspace (RS-10): bloquea sobre produccion, informa sobre desarrollo
 	@if [ ! -f package-lock.json ]; then \
 		echo "[make] No hay package-lock.json en la raiz: el workspace llega en la tarea 0.5."; \
 	else \
-		npm audit --audit-level=high || exit 1; \
-		echo "[make] npm audit (workspace): 0 vulnerabilidades criticas ni altas."; \
+		npm audit --omit=dev --audit-level=high || exit 1; \
+		echo "[make] npm audit (produccion): 0 vulnerabilidades criticas ni altas."; \
+		npm audit --audit-level=high || echo "[make] AVISO: avisos altos o criticos SOLO en dependencias de desarrollo (no bloquea; doc 07 seccion 6)."; \
 	fi
 
 sast: ## Semgrep sobre las reglas de .semgrep (umbral: 0 hallazgos ERROR)

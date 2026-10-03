@@ -76,15 +76,18 @@ final readonly class ScanBatchTelemetry
         }
 
         $pending = 0;
+        $heldBack = 0;
 
         foreach ($outcomes as $outcome) {
-            if (! $outcome->wasProcessed()) {
+            if ($outcome->wasHeldBack()) {
+                $heldBack++;
+            } elseif (! $outcome->wasProcessed()) {
                 $pending++;
             }
         }
 
-        $span->end(['scan_batch.not_processed' => $pending]);
-        $this->log($batch, $deviceUuid, $pending, microtime(true) - $startedAt, $span);
+        $span->end(['scan_batch.not_processed' => $pending, 'scan_batch.held_back' => $heldBack]);
+        $this->log($batch, $deviceUuid, $pending, $heldBack, microtime(true) - $startedAt, $span);
 
         return $outcomes;
     }
@@ -104,13 +107,15 @@ final readonly class ScanBatchTelemetry
         }
     }
 
-    private function log(ScanBatch $batch, string $deviceUuid, int $pending, float $seconds, SpanScope $span): void
+    private function log(ScanBatch $batch, string $deviceUuid, int $pending, int $heldBack, float $seconds, SpanScope $span): void
     {
         $context = [
             'trace_id' => $span->traceId(),
             'device_id' => $deviceUuid,
             'batch_size' => $batch->size(),
             'not_processed' => $pending,
+            // RN-21: los que se aplazaron detras del no procesado, sin mirarlos.
+            'held_back' => $heldBack,
             'oldest_occurred_at' => $batch->earliest()->occurredAt->format('Y-m-d\TH:i:s.u\Z'),
             'duration_ms' => (int) round($seconds * 1000),
         ];

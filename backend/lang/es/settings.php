@@ -140,6 +140,9 @@ return [
         /* La línea base del cuadro de impacto (RF-IN-08, tarea 3.13). */
         'BASELINE_MANUAL_HOURS_PER_MONTH' => 'horas al mes consolidando hojas de horas antes de instalar el sistema',
         'ATTENDANCE_FUTURE_TOLERANCE_MINUTES' => 'margen de futuro del alta y la corrección manuales (minutos)',
+        /* El aviso de privacidad del quiosco (RF-KI-09, RL-09, 2.2.0). */
+        'PRIVACY_CONTROLLER_NAME' => 'responsable del tratamiento en el aviso de privacidad del quiosco',
+        'PRIVACY_POLICY_URL' => 'dirección https de la política de privacidad completa',
     ],
 
 ];

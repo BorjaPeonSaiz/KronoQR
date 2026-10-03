@@ -69,6 +69,12 @@ final readonly class DbDeviceFleet implements DeviceFleet
                     : $this->timestamp($telemetry->oldestPendingAt),
                 'battery_level' => $telemetry->batteryLevel,
                 'battery_charging' => $telemetry->batteryCharging,
+                // ADR-047 (2.2.0): donde guarda la tablet su cola y cuantos
+                // descartes no ha conseguido avisar. Siempre, como las tres de
+                // arriba: una PWA anterior que no los declara vuelve a
+                // `durable` y a `0`, que es lo que dice sin decirlo.
+                'queue_storage' => $telemetry->queueStorage->value,
+                'unreported_discards' => $telemetry->unreportedDiscards,
                 'updated_at' => $now,
             ]);
     }

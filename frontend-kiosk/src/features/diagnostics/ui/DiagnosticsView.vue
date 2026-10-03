@@ -26,7 +26,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
-import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
+import { readPrivacyNotice } from '@/shared/branding/useBranding'
 import { sha256Hex } from '@/shared/crypto/sha256'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import { useBatteryStatus } from '@/shared/media/useBatteryStatus'
@@ -299,7 +299,7 @@ const serviceWorkerActive =
   serviceWorkerSupported && typeof navigator !== 'undefined'
     ? navigator.serviceWorker.controller !== null
     : null
-const privacyConfig = readPrivacyNoticeConfig()
+const privacyNotice = readPrivacyNotice()
 // Actualizacion del quiosco (RF-KI-07/RF-KI-08, tarea 3.12). `isUpdatePending`
 // es el singleton de `registerServiceWorker.ts` (mismo criterio que
 // `getLastHeartbeatResult`); la ventana viene de lo que cache el ultimo
@@ -326,6 +326,8 @@ const snapshot = computed(() =>
       size: queueStats.value.size,
       oldestOccurredAt: queueStats.value.oldestOccurredAt,
       durable: queueStats.value.durable,
+      storage: queueStats.value.storage,
+      unreportedDiscards: queueStats.value.unreportedDiscards,
       syncing: syncing.value,
     },
     roster: {
@@ -348,7 +350,7 @@ const snapshot = computed(() =>
     },
     wakeLock: { supported: wakeLock.supported, active: wakeLock.active.value },
     pendingErrors: reporter.size(),
-    privacyControllerConfigured: privacyConfig.controller !== null,
+    privacyControllerConfigured: privacyNotice.controllerName !== null,
     update: { pending: updatePending, window: updateWindow },
   }),
 )
@@ -602,17 +604,17 @@ onBeforeUnmount(() => {
         <h2 class="text-lg font-bold">{{ t('diagnostics.sections.queue') }}</h2>
         <dl class="text-confirm-sm grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
           <dt>{{ t('diagnostics.rows.queue.size') }}</dt>
-          <dd data-testid="diagnostics-queue-size">{{ snapshot.queue.size }}</dd>
+          <dd data-testid="diagnostics-queue-size">
+            {{ snapshot.queue.size ?? t('diagnostics.values.unknown') }}
+          </dd>
           <dt>{{ t('diagnostics.rows.queue.oldest') }}</dt>
           <dd>{{ formatInstant(snapshot.queue.oldestOccurredAt) }}</dd>
           <dt>{{ t('diagnostics.rows.queue.storage') }}</dt>
-          <dd>
-            {{
-              snapshot.queue.durable
-                ? t('diagnostics.values.durable')
-                : t('diagnostics.values.memory')
-            }}
+          <dd data-testid="diagnostics-queue-storage">
+            {{ t('diagnostics.values.' + snapshot.queue.storage) }}
           </dd>
+          <dt>{{ t('diagnostics.rows.queue.unreportedDiscards') }}</dt>
+          <dd data-testid="diagnostics-queue-discards">{{ snapshot.queue.unreportedDiscards }}</dd>
           <dt>{{ t('diagnostics.rows.queue.syncing') }}</dt>
           <dd>{{ yesNo(snapshot.queue.syncing) }}</dd>
         </dl>

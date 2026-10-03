@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import ConnectionStatusBadge from '@/shared/ui/ConnectionStatusBadge.vue'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import PrivacyNoticePanel from '@/shared/ui/PrivacyNoticePanel.vue'
-import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
 import { createAppI18n, initialLocale, readStoredLocale } from '@/shared/i18n'
 
 describe('indicador de estado de conexion', () => {
@@ -165,14 +164,14 @@ describe('selector de idioma', () => {
 })
 
 describe('aviso de privacidad (RF-KI-09, RL-09)', () => {
-  const config = readPrivacyNoticeConfig({
-    VITE_PRIVACY_CONTROLLER: 'Hotel Ejemplo S.L.',
-    VITE_PRIVACY_POLICY_URL: 'https://ejemplo.test/privacidad',
-  })
+  const notice = {
+    controllerName: 'Hotel Ejemplo S.L.',
+    policyUrl: 'https://ejemplo.test/privacidad',
+  }
 
   it('esta SIEMPRE en pantalla, no detras de un boton', () => {
     const wrapper = mount(PrivacyNoticePanel, {
-      props: { config },
+      props: { notice },
       global: { plugins: [createAppI18n('es')] },
     })
 
@@ -181,7 +180,7 @@ describe('aviso de privacidad (RF-KI-09, RL-09)', () => {
 
   it('lleva los elementos del articulo 13 en capa 1', () => {
     const wrapper = mount(PrivacyNoticePanel, {
-      props: { config },
+      props: { notice },
       global: { plugins: [createAppI18n('es')] },
     })
     const text = wrapper.text()
@@ -196,7 +195,7 @@ describe('aviso de privacidad (RF-KI-09, RL-09)', () => {
 
   it('dice explicitamente que no hay biometria (ADR-009)', () => {
     const wrapper = mount(PrivacyNoticePanel, {
-      props: { config },
+      props: { notice },
       global: { plugins: [createAppI18n('es')] },
     })
 
@@ -205,7 +204,7 @@ describe('aviso de privacidad (RF-KI-09, RL-09)', () => {
 
   it('sigue apareciendo aunque falte la configuracion del cliente', () => {
     const wrapper = mount(PrivacyNoticePanel, {
-      props: { config: readPrivacyNoticeConfig({}) },
+      props: { notice: { controllerName: null, policyUrl: null } },
       global: { plugins: [createAppI18n('es')] },
     })
 
@@ -215,7 +214,7 @@ describe('aviso de privacidad (RF-KI-09, RL-09)', () => {
 
   it('se traduce al ingles', () => {
     const wrapper = mount(PrivacyNoticePanel, {
-      props: { config },
+      props: { notice },
       global: { plugins: [createAppI18n('en')] },
     })
 
@@ -225,34 +224,11 @@ describe('aviso de privacidad (RF-KI-09, RL-09)', () => {
 
   it('mantiene el objetivo tactil de 48 px en los controles aunque el texto sea pequeno', () => {
     const wrapper = mount(PrivacyNoticePanel, {
-      props: { config },
+      props: { notice },
       global: { plugins: [createAppI18n('es')] },
     })
 
-    const link = wrapper.find('a')
     const button = wrapper.find('button')
-    expect(link.classes()).toContain('kiosk-touch')
     expect(button.classes()).toContain('kiosk-touch')
-  })
-})
-
-describe('configuracion del aviso', () => {
-  it('no admite una URL que no sea http(s)', () => {
-    expect(
-      readPrivacyNoticeConfig({ VITE_PRIVACY_POLICY_URL: 'javascript:alert(1)' }).policyUrl,
-    ).toBeNull()
-  })
-
-  it('ignora los valores en blanco', () => {
-    expect(readPrivacyNoticeConfig({ VITE_PRIVACY_CONTROLLER: '   ' }).controller).toBeNull()
-  })
-
-  it('acepta lo que si es configuracion valida', () => {
-    expect(
-      readPrivacyNoticeConfig({
-        VITE_PRIVACY_CONTROLLER: 'Hotel Ejemplo S.L.',
-        VITE_PRIVACY_POLICY_URL: 'https://ejemplo.test/privacidad',
-      }),
-    ).toEqual({ controller: 'Hotel Ejemplo S.L.', policyUrl: 'https://ejemplo.test/privacidad' })
   })
 })

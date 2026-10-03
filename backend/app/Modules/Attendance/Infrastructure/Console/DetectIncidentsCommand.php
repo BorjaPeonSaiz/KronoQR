@@ -73,7 +73,11 @@ final class DetectIncidentsCommand extends Command
             return self::INVALID;
         }
 
-        $result = $detect->handle(new DetectAnomaliesCommand($days));
+        $result = $detect->handle(new DetectAnomaliesCommand(
+            $days,
+            // RN-22 (F6): la ventana de fechas creible de un fichaje descartado.
+            Config::integer('attendance.discard_review_window_days', 31),
+        ));
 
         if (! $result->ranOverASite) {
             $this->warn('Todavia no hay centro de trabajo: sin zona horaria no hay jornada que revisar (RF-PD-03).');

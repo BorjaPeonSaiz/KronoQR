@@ -117,6 +117,10 @@ final class LicensedBrandingProvider implements BrandingProvider
             // sin que ninguno de los dos sepa que existe una licencia.
             logoPath: null,
             accentColor: self::productAccent(),
+            // El aviso de privacidad, intacto: no es aspecto sino informacion que
+            // el art. 13 RGPD obliga a dar (RL-09), y la licencia nunca lo
+            // degrada (ADR-019).
+            privacyNotice: $configured->privacyNotice,
         );
     }
 

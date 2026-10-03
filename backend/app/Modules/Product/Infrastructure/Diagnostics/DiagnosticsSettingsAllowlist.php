@@ -40,6 +40,10 @@ use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
  * - `BASELINE_MANUAL_HOURS_PER_MONTH`: un dato de negocio del cliente que no
  *   gobierna ningun calculo del registro. Minimizacion: si no hace falta, no
  *   viaja.
+ * - `PRIVACY_CONTROLLER_NAME` y `PRIVACY_POLICY_URL` (RF-KI-09): el aviso de
+ *   privacidad del quiosco. Son la identidad del cliente —el responsable del
+ *   tratamiento puede ser una persona fisica— y su direccion, y no explican
+ *   ningun fallo del registro.
  *
  * ## Los rotulos de nomina tampoco
  *
@@ -92,6 +96,8 @@ final class DiagnosticsSettingsAllowlist
         SettingKey::BRANDING_ACCENT_COLOR,
         SettingKey::KIOSK_SERVICE_CODE,
         SettingKey::BASELINE_MANUAL_HOURS_PER_MONTH,
+        SettingKey::PRIVACY_CONTROLLER_NAME,
+        SettingKey::PRIVACY_POLICY_URL,
     ];
 
     /**

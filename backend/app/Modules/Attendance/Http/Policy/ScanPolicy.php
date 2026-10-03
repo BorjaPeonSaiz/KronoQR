@@ -97,4 +97,15 @@ final class ScanPolicy
     {
         return $this->record($actor);
     }
+
+    /**
+     * `POST /api/v1/scan/discarded` (RN-22, ADR-047): avisar de los fichajes que
+     * el quiosco descarto. Solo un quiosco: el mismo portador que fichó, con el
+     * mismo ambito `scan:write` que ya tienen todos (el middleware `ability:` lo
+     * comprueba ademas). Una cuenta de gestion, de cualquier rol, recibe `403`.
+     */
+    public function reportDiscarded(mixed $actor): bool
+    {
+        return $this->record($actor);
+    }
 }

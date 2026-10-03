@@ -45,7 +45,13 @@ const noteId = useId()
 const counterId = useId()
 
 const contextLines = computed(() =>
-  describeIncidentContext(props.incident.context, t, props.timeZone, locale.value),
+  describeIncidentContext(
+    props.incident.context,
+    t,
+    props.timeZone,
+    locale.value,
+    props.incident.type,
+  ),
 )
 
 const noteLength = computed(() => note.value.trim().length)

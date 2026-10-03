@@ -53,6 +53,17 @@ use Throwable;
  * sacaria de la cola y perderia una jornada; dejarlo escapar abortaria el envio
  * entero. Ver {@see ScanBatchOutcome}.
  *
+ * ## Pero lo que viene detras no lo adelanta (RN-21, ADR-047)
+ *
+ * **Tras el primer no procesado, ningun elemento posterior llega al caso de
+ * uso**: se devuelven aplazados, en su orden. Lo ya decidido antes no se toca —
+ * cada elemento confirmo su propia transaccion—. Un rechazo (`422`, tambien el
+ * de RN-18) es un desenlace y no detiene nada: solo lo detiene lo que el
+ * servidor no llego a decidir. La clave es el lote entero y no la persona: el
+ * fallo pudo saltar resolviendo la credencial, y entonces nadie sabe de quien
+ * era. El coste —los fichajes de otros esperan al siguiente reintento— esta
+ * aceptado en ADR-047: se retrasan, no se pierden.
+ *
  * **El fallo no se silencia**: sube a `error` con `scan_id` y `device_id` —jamas
  * el nombre de nadie (regla dura 21)— porque un lote con elementos no procesados
  * de forma repetida es una averia, no una incidencia de negocio.
@@ -69,7 +80,7 @@ use Throwable;
 final readonly class RegisterScanBatchHandler
 {
     public function __construct(
-        private RegisterScanHandler $scans,
+        private ScanRegistration $scans,
         private ScanMetrics $metrics,
         private Clock $clock,
         private LoggerInterface $logger,
@@ -84,9 +95,38 @@ final readonly class RegisterScanBatchHandler
         $this->measureSyncDelay($batch);
 
         $outcomes = [];
+        $heldBack = [];
+        $stalled = false;
 
         foreach ($batch->scans as $scan) {
-            $outcomes[] = $this->process($scan);
+            if ($stalled) {
+                // RN-21: no se llama al caso de uso. Ni una lectura, ni una
+                // fila, ni una metrica de escaneo: este elemento no se ha mirado.
+                $outcomes[] = ScanBatchOutcome::heldBack($scan->scanId);
+                $heldBack[] = $scan->scanId;
+
+                continue;
+            }
+
+            $outcome = $this->process($scan);
+            $outcomes[] = $outcome;
+
+            if (! $outcome->wasProcessed()) {
+                $stalled = true;
+                $this->metrics->batchItemNotProcessed($scan->deviceUuid);
+            }
+        }
+
+        if ($heldBack !== []) {
+            // Un solo apunte por lote, con los aplazados en su orden: uno por
+            // elemento multiplicaria el log del peor momento —la reconexion— por
+            // cincuenta. Los `scan_id` los genera la tablet y no identifican a
+            // nadie (regla dura 21).
+            $this->logger->warning('attendance.batch_scans_held_back', [
+                'device_id' => $batch->earliest()->deviceUuid,
+                'held_back' => \count($heldBack),
+                'scan_ids' => $heldBack,
+            ]);
         }
 
         return $outcomes;

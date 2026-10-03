@@ -41,7 +41,7 @@
 // incidencia-, que es donde vive el detalle que no cabe en un escalar.
 import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
-import type { IncidentContext } from '@/shared/api/types'
+import type { IncidentContext, IncidentType } from '@/shared/api/types'
 
 export type Translate = (key: string, params?: Record<string, unknown>) => string
 
@@ -345,12 +345,23 @@ function describeRejectedPinScan(
   t: Translate,
   consumed: Set<string>,
   lines: ContextLine[],
+  type?: IncidentType,
 ): void {
   for (const key of ['attempts', 'lockout_attempts'] as const) {
     const value = context[key]
 
     if (typeof value === 'number') {
-      lines.push(metricLine(key, String(value), t))
+      // `attempts` cuenta intentos por PIN en `rejected_pin_scan` y escaneos de
+      // tarjeta en `scan_before_revocation`: la etiqueta no puede decir «PIN» en la segunda.
+      const label =
+        key === 'attempts' && type !== undefined && type !== 'rejected_pin_scan'
+          ? 'incidents.context.metrics.attempts_scans'
+          : `incidents.context.metrics.${key}`
+
+      lines.push({
+        key,
+        text: t('incidents.context.metric', { metric: t(label), value: String(value) }),
+      })
       consumed.add(key)
     }
   }
@@ -376,6 +387,53 @@ function describeRejectedPinScan(
   consumed.add('max_sync_delay_seconds')
 }
 
+const WITHDRAWAL_VALUES: readonly string[] = ['offboarding', 'credential']
+const ATTRIBUTION_VALUES: readonly string[] = ['credential', 'employee_code']
+
+/**
+ * RN-20 (`scan_before_revocation`) y RN-22 (`discarded_scan`): las claves de
+ * contexto que el contrato enumera para las dos incidencias nuevas.
+ * `withdrawal` y `attribution` son enumerados y se traducen (un valor que el
+ * contrato aun no conozca se enseña en bruto); el resto va con su etiqueta y
+ * el valor tal cual llega. Nunca el motivo de la revocacion ni el contenido
+ * del QR: el contrato no los manda, y aqui tampoco se piden.
+ */
+function describeScanOutcome(
+  context: IncidentContext,
+  t: Translate,
+  consumed: Set<string>,
+  lines: ContextLine[],
+): void {
+  const enumerated = [
+    ['withdrawal', WITHDRAWAL_VALUES],
+    ['attribution', ATTRIBUTION_VALUES],
+  ] as const
+
+  for (const [key, known] of enumerated) {
+    const value = context[key]
+
+    if (typeof value === 'string') {
+      lines.push(
+        metricLine(
+          key,
+          known.includes(value) ? t(`incidents.context.${key}Values.${value}`) : value,
+          t,
+        ),
+      )
+      consumed.add(key)
+    }
+  }
+
+  for (const key of ['device_uuid', 'origin', 'http_status', 'problem', 'reports'] as const) {
+    const value = context[key]
+
+    if (typeof value === 'string' || typeof value === 'number') {
+      lines.push(metricLine(key, value === '' ? t('common.empty') : String(value), t))
+      consumed.add(key)
+    }
+  }
+}
+
 /**
  * Traduce el contexto de una incidencia a lineas legibles.
  *
@@ -393,6 +451,7 @@ export function describeIncidentContext(
   t: Translate,
   timeZone: string,
   locale: string,
+  type?: IncidentType,
 ): ContextLine[] {
   const thresholdMinutes = context['threshold_minutes']
   const consumed = new Set<string>()
@@ -445,7 +504,8 @@ export function describeIncidentContext(
     consumed.add('scans')
   }
 
-  describeRejectedPinScan(context, t, consumed, lines)
+  describeRejectedPinScan(context, t, consumed, lines, type)
+  describeScanOutcome(context, t, consumed, lines)
 
   const pattern = context['pattern']
 

@@ -62,6 +62,8 @@ return [
             'version' => 'Version',
             'last_seen' => 'Ultimo contacto',
             'queue' => 'Cola',
+            // ADR-047: el tamaño de una cola en memoria es «desconocido», nunca cero.
+            'queue_unknown' => '?',
             'battery' => 'Bateria',
             'verdict' => 'Veredicto',
         ],
@@ -135,6 +137,12 @@ return [
             'battery_low' => 'Le queda un :level % de bateria y NO esta cargando. Casi siempre es un cargador desenchufado '
                 .'o un cable que se ha soltado: enchufalo antes de que se apague en mitad del turno. '
                 .'Mientras tenga bateria sigue fichando con normalidad.',
+            'queue_storage_degraded' => 'Su cola de fichajes ha caido a memoria (o no tiene donde guardar): lo que se encole ahora se pierde si la tablet se reinicia, '
+                .'y lo que hubiera en el disco no se ve. NO LA REINICIES NI LA DESVINCULES: deja que vuelva a abrir su almacenamiento y sincronice, '
+                .'y sigue el runbook de la cola atascada, apartado 7.',
+            'discards_unreported' => 'Tiene :discards fichaje(s) que el servidor declaro invalidos y cuyo aviso todavia no ha llegado: '
+                .'nadie los revisara hasta que salga. Suele ser una aplicacion desfasada tras una actualizacion; '
+                .'NO LA DESVINCULES y sigue el runbook de la cola atascada, apartado 8.',
         ],
 
         'fleet_empty' => 'Todavia no hay ningun quiosco vinculado. Vincula el primero desde el panel, '

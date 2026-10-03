@@ -92,4 +92,20 @@ final class RecordingScanMetrics implements ScanMetrics
 
         return $count;
     }
+
+    /** @var list<string> */
+    public array $notProcessed = [];
+
+    public function batchItemNotProcessed(string $deviceUuid): void
+    {
+        $this->notProcessed[] = $deviceUuid;
+    }
+
+    /** @var list<array{device: string, attributed: bool}> */
+    public array $discarded = [];
+
+    public function discardedScanReported(string $deviceUuid, bool $attributed): void
+    {
+        $this->discarded[] = ['device' => $deviceUuid, 'attributed' => $attributed];
+    }
 }

@@ -11,15 +11,15 @@ npx playwright test --grep @RF-KI-09   # por etiqueta de requisito (§9.6)
 
 ## Que hay aqui
 
-| Fichero                 | Cubre                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| `scan.spec.ts`          | `@RF-KI-01`, `@RF-KI-02`, `@RF-KI-05`, `@RF-KI-06`, `@RF-KI-09`, `@RF-AT-05` |
-| `degraded.spec.ts`      | `@RF-KI-02`, `@RF-QR-05` — tarjeta deteriorada                               |
-| `accessibility.spec.ts` | `@RF-KI-06` con `@axe-core/playwright`, 0 violaciones criticas o graves      |
-| `offline.spec.ts`       | `@RF-KI-03`, `@RF-KI-04`, `@RQ-05` — cola offline y sincronizacion           |
-| `diagnostics.spec.ts`   | `@RF-KI-08` — pantalla de diagnostico                                        |
-| `update-window.spec.ts` | `@RF-KI-07`, `@RF-KI-04`, `@RQ-05`, `@RF-KI-08` — ventana de actualizacion   |
-| `pin-csp.spec.ts`       | `@RF-AT-11`, `@RS-09` — PIN sellado con WebAssembly bajo la CSP de Nginx     |
+| Fichero                 | Cubre                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| `scan.spec.ts`          | `@RF-KI-01`, `@RF-KI-02`, `@RF-KI-05`, `@RF-KI-06`, `@RF-KI-09`, `@RF-AT-05`             |
+| `degraded.spec.ts`      | `@RF-KI-02`, `@RF-QR-05` — tarjeta deteriorada                                           |
+| `accessibility.spec.ts` | `@RF-KI-06` con `@axe-core/playwright`, 0 violaciones criticas o graves                  |
+| `offline.spec.ts`       | `@RF-KI-03`, `@RF-KI-04`, `@RQ-05`, `@RN-21`, `@RN-22` — cola offline, orden y descartes |
+| `diagnostics.spec.ts`   | `@RF-KI-08` — pantalla de diagnostico                                                    |
+| `update-window.spec.ts` | `@RF-KI-07`, `@RF-KI-04`, `@RQ-05`, `@RF-KI-08` — ventana de actualizacion               |
+| `pin-csp.spec.ts`       | `@RF-AT-11`, `@RS-09` — PIN sellado con WebAssembly bajo la CSP de Nginx                 |
 
 ## Dos proyectos, y por que
 

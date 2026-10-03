@@ -74,6 +74,8 @@ it('decide la severidad de cada tipo del catalogo, sin ninguno por omision', fun
         'anomalous_pattern' => IncidentSeverity::High,
         'out_of_order_scan' => IncidentSeverity::Medium,
         'rejected_pin_scan' => IncidentSeverity::Medium,
+        'scan_before_revocation' => IncidentSeverity::Medium,
+        'discarded_scan' => IncidentSeverity::Medium,
     ];
 
     $actual = [];
@@ -83,7 +85,7 @@ it('decide la severidad de cada tipo del catalogo, sin ninguno por omision', fun
     }
 
     expect($actual)->toBe($expected);
-})->group('RF-PR-01', 'RN-19');
+})->group('RF-PR-01', 'RN-19', 'RN-20', 'RN-22');
 
 it('abre el fichaje por PIN no registrado como media y lo traduce desde la deteccion', function (): void {
     // RN-19: registro posiblemente incompleto que se corrige con traza, el
@@ -92,6 +94,18 @@ it('abre el fichaje por PIN no registrado como media y lo traduce desde la detec
         ->and(IncidentType::fromDetected('rejected_pin_scan'))->toBe(IncidentType::RejectedPinScan)
         ->and(IncidentType::fromDetected(AnomalyType::REJECTED_PIN_SCAN->value))->toBe(IncidentType::RejectedPinScan);
 })->group('RN-19', 'RF-PR-01');
+
+it('abre el fichaje anterior a la retirada y el descartado como medias y los traduce desde la deteccion', function (): void {
+    // RN-20 y RN-22 (ADR-047): las dos describen un registro posiblemente
+    // incompleto que se corrige con traza, el mismo criterio que RN-18 y RN-19.
+    expect(IncidentType::ScanBeforeRevocation->defaultSeverity())->toBe(IncidentSeverity::Medium)
+        ->and(IncidentType::DiscardedScan->defaultSeverity())->toBe(IncidentSeverity::Medium)
+        ->and(IncidentType::fromDetected(AnomalyType::SCAN_BEFORE_REVOCATION->value))->toBe(IncidentType::ScanBeforeRevocation)
+        ->and(IncidentType::fromDetected(AnomalyType::DISCARDED_SCAN->value))->toBe(IncidentType::DiscardedScan)
+        // Ninguna de las dos es una regla legal del perfil: no se suspenden.
+        ->and(AnomalyType::SCAN_BEFORE_REVOCATION->complianceRule())->toBeNull()
+        ->and(AnomalyType::DISCARDED_SCAN->complianceRule())->toBeNull();
+})->group('RN-20', 'RN-22', 'RF-PR-01');
 
 it('traduce cada tipo que la deteccion puede emitir', function (AnomalyType $detected): void {
     // Los dos catalogos viven en modulos que no pueden importarse entre si

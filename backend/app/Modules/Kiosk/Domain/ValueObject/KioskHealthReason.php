@@ -67,4 +67,20 @@ enum KioskHealthReason: string
      * informa no es una tablet averiada (decision 5 de la ficha 3.3).
      */
     case BatteryLow = 'battery_low';
+
+    /**
+     * La cola de la tablet salio de IndexedDB —memoria o nada— (ADR-047).
+     *
+     * **Fallo y no aviso**: lo que se encola ahora se pierde si la tablet se
+     * reinicia, y lo que habia en el disco no se ve. Por eso va detras del
+     * silencio —un quiosco que no habla no dice donde guarda nada— y delante
+     * del retraso.
+     */
+    case QueueStorageDegraded = 'queue_storage_degraded';
+
+    /**
+     * Hay fichajes descartados cuyo aviso aun no llego al servidor (RN-22,
+     * ADR-047): nadie los revisara hasta que el aviso salga.
+     */
+    case DiscardsUnreported = 'discards_unreported';
 }

@@ -23,7 +23,6 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
 import { useBranding } from '@/shared/branding/useBranding'
-import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import {
   APP_VERSION,
@@ -62,7 +61,6 @@ const deviceId = resolveDeviceId()
 // unico latido drene los errores de las tres fuentes (ver `errorReporter.ts`).
 const reporter = getErrorReporter({ appVersion: APP_VERSION, deviceId })
 const connectivity = useConnectivity()
-const privacyConfig = readPrivacyNoticeConfig()
 
 const api = createApiClient({
   ...(import.meta.env.VITE_API_BASE_URL === undefined
@@ -506,7 +504,7 @@ onUnmounted(() => {
       <!-- El acceso por PIN vive ahora en el centro de la pantalla de escaneo
            (junto al subtitulo, y como respaldo cuando la camara falla), no
            aqui: el aviso de privacidad se queda solo y ocupa todo el ancho. -->
-      <PrivacyNoticePanel class="min-w-0 flex-1" :config="privacyConfig" />
+      <PrivacyNoticePanel class="min-w-0 flex-1" :notice="branding.current.value.privacyNotice" />
 
       <button
         v-if="scanner.torchAvailable.value"

@@ -54,7 +54,10 @@ final class DeviceResource extends JsonResource
             'status' => $device->status,
             'app_version' => $device->appVersion,
             'last_seen_at' => self::utc($device->lastSeenAt),
+            // `null` = desconocido, nunca cero (ADR-047).
             'pending_queue_size' => $device->pendingQueueSize,
+            'queue_storage' => $device->queueStorage->value,
+            'unreported_discards' => $device->unreportedDiscards,
             'paired_at' => self::utc($device->pairedAt),
             'oldest_pending_at' => self::utc($device->oldestPendingAt),
             'battery_level' => $device->batteryLevel,

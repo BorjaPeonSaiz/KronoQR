@@ -355,6 +355,7 @@ describe('marca de la instalacion en la confirmacion (RF-PD-08)', () => {
           accentColor: null,
           logoUrl: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
           locales: { default: 'es', available: ['es'] },
+          privacyNotice: { controllerName: null, policyUrl: null },
         },
       },
       global: { plugins: [createAppI18n('es')] },

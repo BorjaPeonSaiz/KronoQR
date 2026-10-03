@@ -283,3 +283,169 @@ tests:
                 en riesgo es que el registro tarde en reflejar lo que ya ha
                 ocurrido.
               runbook_url: docs/runbooks/cola-offline-atascada.md
+
+  #-----------------------------------------------------------------------------
+  # KioskQueueStorageDegraded (RN-21): cola en memoria 10 min seguidos. A los 9
+  # min aun no; a los 10 si. Un quiosco que se recupera (valor 0) no dispara.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_queue_storage_degraded{device="kiosk-recepcion"}'
+        values: "1x20"
+      - series: 'kiosk_queue_storage_degraded{device="kiosk-spa"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: KioskQueueStorageDegraded
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: KioskQueueStorageDegraded
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "La cola del quiosco kiosk-recepcion ha caido a memoria"
+              description: >-
+                La tablet kiosk-recepcion no puede guardar su cola offline en
+                el almacenamiento del navegador (RN-21): lo que se encole
+                mientras tanto SE PIERDE si la tablet o la aplicacion se
+                reinicia, y su tamano de cola es desconocido. El quiosco sigue
+                fichando con normalidad (regla dura 19). Recarga la aplicacion
+                o libera espacio en la tablet antes del siguiente corte de red.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded
+
+  #-----------------------------------------------------------------------------
+  # El hueco de las alertas de cola: con la cola en memoria desaparece
+  # `kiosk_offline_queue_size` y ColaOfflineAtascada / ColaOfflineSinVaciar NO
+  # disparan (no hay serie), pero KioskQueueStorageDegraded SI. Se fija aqui
+  # para que nadie "arregle" esa ausencia sin saber que la cubre la otra.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_queue_storage_degraded{device="kiosk-recepcion"}'
+        values: "1x200"
+    alert_rule_test:
+      - eval_time: 2h10m
+        alertname: ColaOfflineAtascada
+        exp_alerts: []
+      - eval_time: 2h10m
+        alertname: ColaOfflineSinVaciar
+        exp_alerts: []
+      - eval_time: 2h10m
+        alertname: KioskQueueStorageDegraded
+        exp_alerts:
+          - exp_labels:
+              severity: high
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "La cola del quiosco kiosk-recepcion ha caido a memoria"
+              description: >-
+                La tablet kiosk-recepcion no puede guardar su cola offline en
+                el almacenamiento del navegador (RN-21): lo que se encole
+                mientras tanto SE PIERDE si la tablet o la aplicacion se
+                reinicia, y su tamano de cola es desconocido. El quiosco sigue
+                fichando con normalidad (regla dura 19). Recarga la aplicacion
+                o libera espacio en la tablet antes del siguiente corte de red.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded
+
+  #-----------------------------------------------------------------------------
+  # KioskUnreportedDiscards (RN-22): > 0 durante 30 min. A los 29 min no; a los
+  # 30 si. Un cero no dispara.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_unreported_discards{device="kiosk-recepcion"}'
+        values: "2x40"
+      - series: 'kiosk_unreported_discards{device="kiosk-spa"}'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: KioskUnreportedDiscards
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: KioskUnreportedDiscards
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El quiosco kiosk-recepcion tiene 2 fichajes descartados sin avisar"
+              description: >-
+                La tablet kiosk-recepcion descarto 2 fichajes (el servidor
+                respondio 400/422) y lleva mas de 30 minutos sin conseguir
+                avisar de ello (RN-22). Hasta que lo logre, RRHH no ve la
+                incidencia de esos fichajes. Comprueba la conexion de esa
+                tablet y que su version de la aplicacion es la actual.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#8-descartes-sin-avisar-kioskunreporteddiscards
+
+  #-----------------------------------------------------------------------------
+  # ScanBatchItemNotProcessed: el contador sube 1 por minuto (>= 3 en 30 min a
+  # partir del minuto 3, `for: 5m`). Un dispositivo con solo 2 en total no
+  # dispara nunca.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'scan_batch_items_not_processed_total{device="kiosk-recepcion"}'
+        values: "0+1x40"
+      - series: 'scan_batch_items_not_processed_total{device="kiosk-spa"}'
+        values: "0 1 2 2x38"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ScanBatchItemNotProcessed
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ScanBatchItemNotProcessed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El servidor no ha procesado 10 elementos de lote del quiosco kiosk-recepcion en 30 min"
+              description: >-
+                Al sincronizar la cola de kiosk-recepcion, el servidor fallo
+                al procesar varios elementos del lote. Desde RN-21 un fichaje
+                que no se procesa detiene a los que van detras en esa tablet:
+                siguen en su cola, no se pierden, pero no llegan al registro
+                hasta que se corrija la causa en el servidor.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed
+
+  #-----------------------------------------------------------------------------
+  # KioskDiscardedScansAttributed: un incremento atribuido dispara; uno no
+  # atribuido (attributed="false") no.
+  #-----------------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'kiosk_discarded_scans_total{device="kiosk-recepcion",attributed="true"}'
+        values: "0 0 0 1 1 1 1 1 1 1"
+      - series: 'kiosk_discarded_scans_total{device="kiosk-spa",attributed="false"}'
+        values: "0 0 0 5 5 5 5 5 5 5"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: KioskDiscardedScansAttributed
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: KioskDiscardedScansAttributed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-recepcion
+            exp_annotations:
+              summary: "El quiosco kiosk-recepcion ha descartado fichajes atribuidos a personas en la ultima hora"
+              description: >-
+                El quiosco kiosk-recepcion ha avisado de fichajes que descarto
+                y que el servidor ha atribuido a personas (RN-22). Si los
+                demas quioscos no lo hacen, sospecha de una version de la
+                aplicacion desfasada en esa tablet o de un token de
+                dispositivo que no deberia estar enviando.
+              runbook_url: docs/runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed

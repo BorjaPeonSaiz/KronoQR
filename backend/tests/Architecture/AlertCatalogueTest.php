@@ -185,6 +185,13 @@ it('declara cada alerta nueva con la severidad, el destinatario, la espera y el 
     'quiosco sin latido' => ['QuioscoSinLatido', 'critical', 'it-cliente', '5m', 'docs/runbooks/quiosco-no-responde.md'],
     'cola por encima de 50' => ['ColaOfflineAtascada', 'high', 'it-cliente', '5m', 'docs/runbooks/cola-offline-atascada.md'],
     'cola que no se vacia en 2 h' => ['ColaOfflineSinVaciar', 'high', 'it-cliente', '5m', 'docs/runbooks/cola-offline-atascada.md'],
+    // ADR-047 (2.2.0): la cola que cayo a memoria y los descartes sin avisar.
+    'cola del quiosco en memoria' => ['KioskQueueStorageDegraded', 'high', 'it-cliente', '10m', 'docs/runbooks/cola-offline-atascada.md#7-almacenamiento-de-la-cola-degradado-kioskqueuestoragedegraded'],
+    'descartes sin avisar' => ['KioskUnreportedDiscards', 'warning', 'it-cliente', '30m', 'docs/runbooks/cola-offline-atascada.md#8-descartes-sin-avisar-kioskunreporteddiscards'],
+    // RN-21: un elemento del lote que el servidor no consigue procesar.
+    'elemento del lote no procesado' => ['ScanBatchItemNotProcessed', 'warning', 'it-cliente', '5m', 'docs/runbooks/cola-offline-atascada.md#9-un-elemento-del-lote-que-no-se-procesa-scanbatchitemnotprocessed'],
+    // RN-22: un quiosco con descartes atribuidos a alguien.
+    'descartes atribuidos' => ['KioskDiscardedScansAttributed', 'warning', 'it-cliente', '0m', 'docs/runbooks/cola-offline-atascada.md#10-descartes-atribuidos-en-un-quiosco-kioskdiscardedscansattributed'],
     // API (filas «Tasa de error 5xx» y «Latencia p95» del endpoint de fichaje).
     'errores 5xx en el fichaje' => ['ErroresDeServidorEnElFichaje', 'critical', 'it-cliente', '1m', 'docs/runbooks/errores-en-el-panel.md'],
     'latencia p95 del fichaje' => ['LatenciaDelFichajeAlta', 'high', 'it-cliente', '1m', 'docs/runbooks/errores-en-el-panel.md'],
@@ -224,6 +231,10 @@ it('escribe en cada alerta nueva el umbral literal que publica el catalogo', fun
     'latido: los 600 segundos' => ['QuioscoSinLatido', '> 600'],
     'cola: la serie de la cola' => ['ColaOfflineAtascada', 'kiosk_offline_queue_size'],
     'cola: los 50 elementos' => ['ColaOfflineAtascada', '> 50'],
+    'cola en memoria: el gauge del almacenamiento' => ['KioskQueueStorageDegraded', 'kiosk_queue_storage_degraded == 1'],
+    'descartes: el gauge de los no avisados' => ['KioskUnreportedDiscards', 'kiosk_unreported_discards > 0'],
+    'lote: tres no procesados en media hora' => ['ScanBatchItemNotProcessed', 'increase(scan_batch_items_not_processed_total[30m]) >= 3'],
+    'descartes: los atribuidos de la ultima hora' => ['KioskDiscardedScansAttributed', 'kiosk_discarded_scans_total{attributed="true"}[1h]'],
     'cola: la ventana de dos horas' => ['ColaOfflineSinVaciar', '[2h]'],
     'cola: sin vaciarse ni una vez' => ['ColaOfflineSinVaciar', 'min_over_time'],
     '5xx: acotada al endpoint de fichaje' => ['ErroresDeServidorEnElFichaje', 'attendance'],

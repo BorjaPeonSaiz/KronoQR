@@ -49,6 +49,12 @@ final class BrandingResource extends JsonResource
                 'default' => $branding->locales->default,
                 'available' => $branding->locales->available,
             ],
+            // RF-KI-09, RL-09: lo que el art. 13 RGPD obliga a decir al empleado
+            // antes de tratar su dato. `null` = la redaccion generica.
+            'privacy_notice' => [
+                'controller_name' => $branding->privacyNotice->controllerName,
+                'policy_url' => $branding->privacyNotice->policyUrl,
+            ],
         ];
     }
 }

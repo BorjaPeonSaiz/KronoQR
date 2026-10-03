@@ -205,6 +205,8 @@ a version is waiting— is in [`operation.md`](operation.md) §11.1.
 | `BRANDING_APP_NAME` | `KronoQR` | Application name. Up to 60 characters: that is what fits in the header of the printed card. |
 | `BRANDING_LOGO_PATH` | *(empty)* | **Absolute path on the server** to a PNG or an SVG. Empty means “the product's logo”, not “no logo”. |
 | `BRANDING_ACCENT_COLOR` | `#b8542a` | Accent colour, in `#rrggbb` notation. Any other form is rejected. A colour that does not reach 4.5:1 on the panel's light background is saved only if you confirm it (see below). |
+| `PRIVACY_CONTROLLER_NAME` | *(empty)* | **Data controller** named by the privacy notice on the tablet: your company's legal name. Up to 160 characters, on a single line. Empty means “the generic text”, not “no notice”. Since 2.2.0; see “The kiosk privacy notice”, below. |
+| `PRIVACY_POLICY_URL` | *(empty)* | Address of the **full privacy policy** that notice links to. Starts with `http://` or `https://`, up to 512 characters. Empty means “the policy is available at the front desk”. Since 2.2.0. |
 
 **Where it shows.** In the header and in the browser tab title of the panel, the
 portal and the kiosk; on the sign-in screen of all three; on the printed
@@ -295,6 +297,74 @@ curl -sS -X PATCH https://TU-SERVIDOR/api/v1/settings \
   -H 'Content-Type: application/json' \
   -d '{"settings":{"BRANDING_LOGO_PATH":""}}'
 ```
+
+#### The kiosk privacy notice
+
+The tablet shows, on the clocking screen itself, a **data protection notice**:
+who processes the data, what for, on what basis, how long it is kept, what
+rights there are and where the full policy is. It is the first layer of the
+information that **GDPR art. 13** requires to be given to the person before
+their data is processed, at the place where it is processed; the second layer is
+your full policy ([`legal-obligations.md`](legal-obligations.md)).
+
+Two items of that notice are yours and **you set them from the panel**, without
+touching the server or rebuilding anything:
+
+1. Panel → **Branding** (`/branding`), administrator role, **“Kiosk privacy
+   notice”** block.
+2. **“Data controller”**: your company's legal name, as you want it to read
+   (“Hoteles Marina del Sur, S.L.”).
+3. **“Privacy policy URL”**: the full address of your policy.
+4. **“Save the brand”**. The change goes into the audit trail like any other
+   setting, with author, previous value and new value.
+
+If you prefer the console, it is the same request as the rest of the branding:
+
+```bash
+curl -sS -X PATCH https://TU-SERVIDOR/api/v1/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"settings":{"PRIVACY_CONTROLLER_NAME":"Hoteles Marina del Sur, S.L.","PRIVACY_POLICY_URL":"https://www.tuhotel.example/privacidad-plantilla"}}'
+```
+
+**What the tablet shows in each case:**
+
+| What you have configured | What the notice says |
+| --- | --- |
+| Nothing (the default) | “Controller: the company operating this workplace” and “The full policy is available at the front desk”. **The notice never disappears** for lack of configuration: it shows its generic wording |
+| Only the controller | Your legal name as controller, and the policy “available at the front desk” |
+| Only the URL | The generic controller, and the address of your policy |
+| Both | Your legal name and the address of your policy |
+
+**With a URL, the notice also carries a QR code** that the tablet generates on
+the spot, so the person can open the policy on their phone without typing the
+address. Without a URL there is no QR.
+
+**Which URL to set.** The one for the policy that **your DPO, or whoever handles
+data protection in your company, has approved** for the staff: it has to match
+the notice at reception and what was communicated to the workers'
+representatives. KronoQR neither drafts nor reviews that policy; it only links
+to it. And make it **`https://`**: the panel accepts `http://`, but a policy
+served unencrypted can be spoofed on the way, and it is the first thing whoever
+reviews it will ask about. Check that the address **opens from a phone outside
+the hotel's network**: the person will read it on their own mobile data, not on
+your wifi.
+
+**It is checked on save.** A controller with a line break or longer than 160
+characters, or an address that does not start with `http://` or `https://`,
+contains spaces or exceeds 512 characters, **is not saved**: the panel flags it
+on the field itself and the server answers `422` with the failing key.
+
+**When the tablet sees it.** The kiosk stores the notice with the rest of the
+branding so that it can show it **without network**: offline, it shows the last
+one it received; a tablet that never received it shows the generic one. It asks
+again when the clocking screen loads and when the connection comes back; to see
+it at once, reload the kiosk screen. Check what the server is serving with
+`curl -sS https://TU-SERVIDOR/api/v1/branding`: the `privacy_notice` block
+carries both values (`null` when they are empty).
+
+**To go back to the generic text**, save the field empty (or the empty string
+via the API, as with the logo).
 
 #### Custom appearance is a plan feature; the name is not
 
@@ -1209,6 +1279,29 @@ had.
    the file and `curl` returns the same `logo_url` as before, the content is
    identical.
 
+### …I have set the controller or the policy and the tablet still shows the generic notice
+
+1. Check what the server is serving, no token needed:
+
+   ```bash
+   curl -sS https://TU-SERVIDOR/api/v1/branding
+   ```
+
+   Look for the `privacy_notice` block. If `controller_name` or `policy_url`
+   come out as `null`, the change **was not saved**: go back to the
+   **Branding** screen and see whether the field shows an error (section 2.2,
+   “The kiosk privacy notice”).
+
+2. If the server already returns them, the problem is the copy stored on the
+   tablet: it renews it when the clocking screen loads and when the network
+   comes back. Reload the kiosk screen. A tablet without network keeps showing
+   the last one it received, which is correct: the notice does not go blank
+   because the tablet is offline.
+
+3. If the address shows in the notice but **there is no QR code**, check that
+   it starts with `http://` or `https://`: it is the only form the tablet turns
+   into a link and a QR.
+
 ### …I change a value and it is not applied
 
 It should not happen: the change takes effect on the next request, without
@@ -1578,6 +1671,8 @@ the next request without restarting anything:
 | `BRANDING_APP_NAME` | Panel → **Branding** (`/branding`) | Section 2.2 |
 | `BRANDING_LOGO_PATH` | Panel → **Branding** (`/branding`) | Section 2.2 |
 | `BRANDING_ACCENT_COLOR` | Panel → **Branding** (`/branding`) | Section 2.2 |
+| `PRIVACY_CONTROLLER_NAME` | Panel → **Branding** (`/branding`) → “Kiosk privacy notice” | Section 2.2 |
+| `PRIVACY_POLICY_URL` | Panel → **Branding** (`/branding`) → “Kiosk privacy notice” | Section 2.2 |
 | `LOCALE_DEFAULT` | Panel → **Operational settings** (`/settings`) | Section 2.3 |
 | `LOCALE_AVAILABLE` | Panel → **Operational settings** (`/settings`) | Section 2.3 |
 | `KIOSK_SERVICE_CODE` | Panel → **Operational settings** (`/settings`) | Section 6.0, right here |
@@ -1791,6 +1886,7 @@ line is a copy of the default value and **editing it does nothing**.
 | `ATTENDANCE_DEBOUNCE_SECONDS` | — | Debounce window between two scans by the same person. See **section 2.1** | `60` | In the panel. Here, never | **Yes** |
 | `ATTENDANCE_MAX_SHIFT_HOURS` | — | Duration from which a closed shift entry is anomalous. See **section 2.1** | `12` | In the panel. Here, never | **Yes** (opens incidents) |
 | `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` | — | Drift tolerated between the tablet's clock and the server's. **Raises an incident, never rejects the clock-in** (RF-AT-10). See **section 2.1** | `15` | In the panel. Here, never | **Yes** (opens incidents) |
+| `ATTENDANCE_DISCARD_REVIEW_WINDOW_DAYS` | — | Days back, counted from when the server receives it, within which a "Clock-in discarded by the kiosk" report can open its incident. The report is stored regardless; the window only stops a tablet with a wildly wrong clock —or a stolen token— from opening incidents on dates nobody will review | `31` | Almost never; only if the hotel reviews incidents more than a month late | Does not move minutes; **does open incidents** |
 | `ATTENDANCE_MIN_TRANSIT_SECONDS` | — | Minimum credible transit between two kiosks. See **section 2.1** | `120` | In the panel. Here, never | **Yes** (opens incidents) |
 | `ATTENDANCE_PATTERN_WINDOW_SECONDS` | — | Seconds below which two clock-ins by two different people at the same kiosk count as one coincidence. See **section 2.1** | `10` | In the panel. Here, never | It moves no minutes; **it does open incidents** (together with the next one) |
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | — | Days with a coincidence by the same pair before the "Anomalous credential usage pattern" incident opens. See **section 2.1** | `3` | In the panel. Here, never | It moves no minutes; **it does open incidents** |

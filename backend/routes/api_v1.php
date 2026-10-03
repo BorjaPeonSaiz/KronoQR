@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\ReadinessController;
+use App\Modules\Attendance\Http\Controller\DiscardedScanController;
 use App\Modules\Attendance\Http\Controller\PinScanController;
 use App\Modules\Attendance\Http\Controller\ScanBatchController;
 use App\Modules\Attendance\Http\Controller\ScanController;
@@ -183,6 +184,24 @@ Route::post('/scan/batch', ScanBatchController::class)
 Route::post('/scan/pin', PinScanController::class)
     ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, ThrottleScanFailOpen::zone('scan-pin')])
     ->name('attendance.scan.pin');
+
+/*
+ * POST /api/v1/scan/discarded — el aviso de los fichajes que el quiosco descarto
+ * porque el servidor declaro invalida la peticion (RN-22, ADR-047).
+ *
+ * MISMO AMBITO QUE `/scan`, `scan:write`, que ya tienen todos los quioscos: uno
+ * propio obligaria a reemparejar justo las tablets desfasadas que mas necesitan
+ * avisar. ZONA PROPIA, `scan-discarded`, por dispositivo: 6 peticiones por
+ * minuto (el contrato), que vacian una lista de 40 en una pasada y no consumen
+ * la cuota de los escaneos. Cada aviso paga el suelo de tiempo constante.
+ *
+ * Y CON EL `throttle` DEL FRAMEWORK, que falla CERRADO: aqui no hay ningun
+ * empleado esperando delante de la tablet. Si Redis no responde, el aviso
+ * devuelve un error y el quiosco conserva su lista y reintenta (ADR-047).
+ */
+Route::post('/scan/discarded', DiscardedScanController::class)
+    ->middleware(['auth:sanctum', 'ability:'.TokenAbility::SCAN_WRITE->value, 'throttle:scan-discarded'])
+    ->name('attendance.scan.discarded');
 
 /*
  * Correcciones trazadas del registro horario (RF-PA-04, RN-13, tarea 1.15).

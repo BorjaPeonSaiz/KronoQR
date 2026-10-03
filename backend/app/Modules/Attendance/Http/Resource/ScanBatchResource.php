@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Http\Resource;
 
 use App\Modules\Attendance\Application\UseCase\RegisterScanResult;
 use App\Modules\Attendance\Application\UseCase\ScanBatchOutcome;
+use App\Modules\Attendance\Http\Response\ScanHeldBackResponse;
 use App\Modules\Attendance\Http\Response\ScanNotProcessedResponse;
 use App\Modules\Attendance\Http\Response\ScanRejectedResponse;
 use Illuminate\Http\JsonResponse;
@@ -70,6 +71,15 @@ final class ScanBatchResource extends JsonResource
     private function entry(ScanBatchOutcome $outcome, Request $request): array
     {
         $result = $outcome->result;
+
+        // RN-21: detras del primer no procesado, todo sale aplazado.
+        if ($outcome->wasHeldBack()) {
+            return [
+                'scan_id' => $outcome->scanId,
+                'status' => JsonResponse::HTTP_SERVICE_UNAVAILABLE,
+                'outcome' => ScanHeldBackResponse::body($outcome->scanId),
+            ];
+        }
 
         if (! $result instanceof RegisterScanResult) {
             return [
