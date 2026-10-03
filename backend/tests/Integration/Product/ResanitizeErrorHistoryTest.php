@@ -84,7 +84,7 @@ it('deja las filas antiguas sin nombres y con huellas unicas, fundiendo las que 
         '2026-09-02 10:00:00+00', '2026-09-03 10:00:00+00', '2026-09-04 10:00:00+00', $admin->id, 'Ficticiana');
     resanitizeErrorHistoryLegacyRow($connection, 'No se pudo fichar a Will Testerson', [], 4,
         '2026-09-01 10:00:00+00', '2026-09-05 10:00:00+00');
-    resanitizeErrorHistoryLegacyRow($connection, 'TypeError: Cannot read properties of undefined', ['scope' => 'vue']);
+    resanitizeErrorHistoryLegacyRow($connection, 'TypeError: Cannot set properties of undefined', ['scope' => 'vue']);
 
     resanitizeErrorHistoryRun();
 

@@ -6,7 +6,6 @@ use App\Modules\Product\Application\UseCase\RecordErrorEvent;
 use App\Modules\Product\Domain\ValueObject\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorVocabulary;
 use Tests\Architecture\Support\Repo;
-use Tests\Support\Product\FrequentPersonNames;
 
 /*
  * EL VOCABULARIO CUBRE TODO LO QUE EL PRODUCTO EMITE (ADR-048, RF-PD-15).
@@ -19,8 +18,8 @@ use Tests\Support\Product\FrequentPersonNames;
  *
  * **Si falla, no es una fuga: es diagnostico que se pierde.** Se arregla
  * anadiendo la palabra a `ErrorVocabulary` (un PR revisado), salvo que sea un
- * nombre o apellido del conjunto de datos de `ErrorVocabularyTest`: esas se
- * pierden a proposito y aqui se toleran.
+ * nombre o apellido del conjunto de datos de `ErrorVocabularyTest`: esas van a
+ * `ErrorVocabulary::NAME_CLASHES`, se pierden a proposito y aqui se toleran.
  *
  * Se extrae de los ficheros, no de una segunda lista escrita a mano: dos listas
  * que tienen que decir lo mismo acaban diciendo cosas distintas.
@@ -61,13 +60,15 @@ function errorVocabularyCoverageWords(string $text): array
  */
 function errorVocabularyCoverageMissing(array $texts): array
 {
-    $names = array_map(ErrorVocabulary::fold(...), FrequentPersonNames::words());
+    // Solo las excluidas A PROPOSITO por ser nombres: una palabra que el
+    // producto emite y no esta en ninguna de las dos listas es un olvido.
+    $excluded = ErrorVocabulary::nameClashes();
     $missing = [];
 
     foreach ($texts as $where => $values) {
         foreach ($values as $value) {
             foreach (errorVocabularyCoverageWords($value) as $word) {
-                if (! ErrorVocabulary::contains($word) && ! in_array($word, $names, true)) {
+                if (! ErrorVocabulary::contains($word) && ! in_array($word, $excluded, true)) {
                     $missing[$word] = $word.' ('.$where.')';
                 }
             }
@@ -235,10 +236,21 @@ function errorVocabularyCoverageLogEvents(): array
 
     foreach (errorVocabularyCoverageFiles('backend/app', '.php') as $file) {
         preg_match_all(
-            '/(?:->|::)(?:debug|info|notice|warning|error|critical|alert|emergency)\(\s*[\'"]([a-z0-9_.:\-]+)[\'"]/',
+            '/(?:->|::)(?:debug|info|notice|warning|error|critical|alert|emergency|write)\(\s*[\'"]([a-z0-9_.:\-]+)[\'"]/',
             (string) file_get_contents($file),
             $matches,
         );
+
+        // Los nombres de evento que no se escriben en la llamada: los valores
+        // de los enumerados de acciones y eventos (`AuditAction::LoginSucceeded
+        // = 'auth.login_succeeded'`), que los envoltorios pasan al log.
+        preg_match_all(
+            '/\bcase\s+\w+\s*=\s*\'([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)\'/',
+            (string) file_get_contents($file),
+            $cases,
+        );
+
+        $matches[1] = [...$matches[1], ...$cases[1]];
 
         if ($matches[1] !== []) {
             $texts[basename($file)] = array_map(

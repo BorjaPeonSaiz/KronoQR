@@ -54,8 +54,10 @@ it('del servidor solo conserva SQLSTATE, un entero corto o el desbordamiento', f
     'sqlstate' => ['23505', '23505'],
     'sqlstate con letras' => ['23P01', '23P01'],
     'entero' => ['42', '42'],
-    'entero de seis' => ['123456', '123456'],
-    'entero de siete' => ['1234567', null],
+    'entero de cuatro' => ['1234', '1234'],
+    // Cinco cifras es tambien un SQLSTATE (23505): no se puede distinguir.
+    'cinco cifras, forma de SQLSTATE' => ['12345', '12345'],
+    'entero de seis' => ['739104', null],
     'texto' => ['Ficticiana', null],
     'sqlstate en minusculas' => ['23p01', null],
     'cinco letras sin cifra' => ['ABCDE', null],

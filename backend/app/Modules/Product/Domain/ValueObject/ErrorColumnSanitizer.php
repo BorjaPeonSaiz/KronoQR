@@ -41,8 +41,12 @@ final readonly class ErrorColumnSanitizer
     /** Un nombre de clase cualificado. */
     private const string CLASS_NAME = '/^[A-Za-z_\\\\][A-Za-z0-9_\\\\]*$/';
 
-    /** Un `SQLSTATE` (que siempre lleva alguna cifra) o un entero corto: lo unico que se guarda como codigo de un error del servidor. */
-    private const string SERVER_CODE = '/^(?:(?=[0-9A-Z]*\d)[0-9A-Z]{5}|\d{1,6})$/';
+    /**
+     * Un `SQLSTATE` (que siempre lleva alguna cifra) o un entero de hasta cuatro
+     * cifras: con seis cabria un codigo de empleado heredado numerico. Es lo
+     * unico que se guarda como codigo de un error del servidor.
+     */
+    private const string SERVER_CODE = '/^(?:(?=[0-9A-Z]*\d)[0-9A-Z]{5}|\d{1,4})$/';
 
     public static function appVersion(string $version): string
     {
@@ -74,7 +78,7 @@ final readonly class ErrorColumnSanitizer
     /**
      * El codigo de un error.
      *
-     * - **Del servidor**: solo un `SQLSTATE` o un entero corto (o el del grupo
+     * - **Del servidor**: solo un `SQLSTATE` o un entero de hasta cuatro cifras (o el del grupo
      *   de desbordamiento). Cualquier otra cosa se guarda como nulo: un codigo
      *   de excepcion de una libreria puede ser una cadena cualquiera.
      * - **De un cliente**: el del catalogo cerrado, que la peticion ya valida.

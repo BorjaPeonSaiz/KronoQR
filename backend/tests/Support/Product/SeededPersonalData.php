@@ -177,7 +177,7 @@ final class SeededPersonalData
     }
 
     /** El trozo tecnico de {@see self::message()}: tiene que salir tal cual. */
-    public const string TECHNICAL = 'TypeError: Cannot read properties of undefined';
+    public const string TECHNICAL = 'TypeError: Cannot set properties of undefined';
 
     /**
      * Cuantos mensajes distintos hacen falta para que cada valor aparezca al

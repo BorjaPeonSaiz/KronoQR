@@ -93,7 +93,7 @@ it('agrupa en uno el mismo fallo de dos personas distintas', function (): void {
         'code' => 'web.vue_error',
         'occurred_at' => '2026-10-03T09:00:00Z',
         'app_version' => '2.2.0',
-        'context' => ['message' => 'TypeError: Cannot read properties of undefined para '.$persona],
+        'context' => ['message' => 'TypeError: Cannot set properties of undefined para '.$persona],
     ];
 
     Api::as($gestion)
@@ -103,5 +103,5 @@ it('agrupa en uno el mismo fallo de dos personas distintas', function (): void {
     $fila = DB::table('error_events')->sole();
 
     expect((int) $fila->occurrences)->toBe(2)
-        ->and($fila->message)->toBe('TypeError: Cannot read properties of undefined para …');
+        ->and($fila->message)->toBe('TypeError: Cannot set properties of undefined para …');
 })->group('RF-PD-15', 'RL-19');

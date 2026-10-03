@@ -187,7 +187,10 @@ it('guarda el texto del error del navegador como mensaje, y no lo repite en el c
     $contexto = json_decode((string) ($fila->context ?? '{}'), true, 512, JSON_THROW_ON_ERROR);
 
     expect($fila?->message)->toContain('TypeError')
-        ->and($fila?->message)->toContain('Cannot read properties of undefined')
+        // `read` es tambien un apellido del conjunto de datos de ADR-048 y esta
+        // en `ErrorVocabulary::NAME_CLASHES`: sale como `…`. El resto del
+        // mensaje sigue diciendo que paso.
+        ->and($fila?->message)->toContain('Cannot … properties of undefined')
         /*
          * El contexto llega entero —eran las claves que la lista no tenia— y sin
          * `message`, que ha ascendido a columna.

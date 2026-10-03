@@ -75,11 +75,32 @@ final readonly class ErrorVocabulary
     ];
 
     /**
+     * **Palabras tecnicas EXCLUIDAS a proposito** porque coinciden con un nombre
+     * o apellido del conjunto de datos de `ErrorVocabularyTest` (ADR-048: sin
+     * excepciones). El producto las emite —`Cannot read properties of
+     * undefined`, `regla`, `campo`, `dias`—, y en el historico salen como `…`:
+     * es diagnostico que se pierde a cambio de que esos nombres no pasen.
+     *
+     * No es una lista de permitidos: no se consulta al sanear. Existe para que
+     * la exclusion sea visible y revisable en un PR, para que
+     * `ErrorVocabularyCoverageTest` no la confunda con un olvido y para que
+     * `ErrorVocabularyNameClashesTest` impida que vuelvan a `WORDS`.
+     *
+     * @var list<string>
+     */
+    private const array NAME_CLASHES = [
+        'abarca', 'an', 'aria', 'bajo', 'bin', 'campo', 'day', 'dias', 'do', 'dura', 'field', 'grant', 'ha',
+        'han', 'june', 'le', 'lo', 'long', 'may', 'mayo', 'na', 'page', 'read', 'real', 'regla', 'segunda',
+        'segundo', 'son', 'su', 'uri',
+        // Las de la primera semilla.
+        'abril', 'ella', 'grace', 'julio', 'mark', 'mas', 'max', 'maximo', 'mayor', 'min', 'white',
+    ];
+
+    /**
      * Ver el docblock de la clase. Una palabra por linea, en orden `strcmp`,
      * repartidas en una constante por inicial: un PR que anade una palabra
-     * toca una sola, y los detectores que buscan sentencias en el codigo
-     * (`EmployeeLockDisciplineTest` busca `truncate … users` hasta el primer
-     * `;`) no leen tres mil palabras seguidas como una sola sentencia.
+     * toca una sola, y una lista de tres mil lineas seguidas no parece codigo
+     * a los detectores que buscan sentencias en el texto.
      *
      * @var list<string>
      */
@@ -114,7 +135,6 @@ final readonly class ErrorVocabulary
 
     /** @var list<string> */
     private const array WORDS_A = [
-        'abarca',
         'abierta',
         'abiertos',
         'ability',
@@ -219,7 +239,6 @@ final readonly class ErrorVocabulary
         'ambiguous',
         'ambito',
         'among',
-        'an',
         'anade',
         'anadela',
         'anadelo',
@@ -267,7 +286,6 @@ final readonly class ErrorVocabulary
         'areas',
         'argument',
         'arguments',
-        'aria',
         'arithmetic',
         'armed',
         'arr',
@@ -347,7 +365,6 @@ final readonly class ErrorVocabulary
         'backup',
         'bad',
         'baja',
-        'bajo',
         'band',
         'bandeja',
         'banner',
@@ -374,7 +391,6 @@ final readonly class ErrorVocabulary
         'between',
         'bg',
         'bigint',
-        'bin',
         'bind',
         'binding',
         'blade',
@@ -433,6 +449,7 @@ final readonly class ErrorVocabulary
         'caducado',
         'caducidad',
         'cae',
+        'calculation',
         'calendar',
         'call',
         'callable',
@@ -443,7 +460,6 @@ final readonly class ErrorVocabulary
         'cambiarlo',
         'cambio',
         'camera',
-        'campo',
         'can',
         'canary',
         'cancelado',
@@ -703,7 +719,6 @@ final readonly class ErrorVocabulary
         'datetime',
         'dato',
         'datos',
-        'day',
         'days',
         'db',
         'dd',
@@ -798,7 +813,6 @@ final readonly class ErrorVocabulary
         'diagnostico',
         'diagnostics',
         'dialect',
-        'dias',
         'diciembre',
         'did',
         'didn',
@@ -834,7 +848,6 @@ final readonly class ErrorVocabulary
         'divergence',
         'division',
         'dni',
-        'do',
         'doc',
         'docs',
         'doctor',
@@ -854,12 +867,12 @@ final readonly class ErrorVocabulary
         'drift',
         'driver',
         'drop',
+        'dropped',
         'dry',
         'due',
         'dueno',
         'duplicate',
         'duplicated',
-        'dura',
         'durable',
         'duracion',
         'durado',
@@ -999,6 +1012,7 @@ final readonly class ErrorVocabulary
         'exclusion',
         'execabort',
         'execute',
+        'executed',
         'execution',
         'exhausted',
         'exige',
@@ -1082,7 +1096,6 @@ final readonly class ErrorVocabulary
         'fichajes',
         'fichar',
         'fichero',
-        'field',
         'fijar',
         'fila',
         'filas',
@@ -1178,7 +1191,6 @@ final readonly class ErrorVocabulary
         'gp',
         'grafana',
         'grammar',
-        'grant',
         'granted',
         'grants',
         'granularidad',
@@ -1197,14 +1209,12 @@ final readonly class ErrorVocabulary
 
     /** @var list<string> */
     private const array WORDS_H = [
-        'ha',
         'haber',
         'hace',
         'hacen',
         'hacia',
         'had',
         'hallazgo',
-        'han',
         'hand',
         'handle',
         'handler',
@@ -1408,7 +1418,6 @@ final readonly class ErrorVocabulary
         'jsonb',
         'jueves',
         'july',
-        'june',
         'junio',
         'just',
     ];
@@ -1450,7 +1459,6 @@ final readonly class ErrorVocabulary
         'latido',
         'layout',
         'lazy',
-        'le',
         'league',
         'least',
         'leaves',
@@ -1501,7 +1509,6 @@ final readonly class ErrorVocabulary
         'llegar',
         'llego',
         'lleva',
-        'lo',
         'load',
         'loaded',
         'loader',
@@ -1516,6 +1523,7 @@ final readonly class ErrorVocabulary
         'lockout',
         'locks',
         'log',
+        'logged',
         'logger',
         'logging',
         'logic',
@@ -1524,7 +1532,6 @@ final readonly class ErrorVocabulary
         'logout',
         'logs',
         'loki',
-        'long',
         'longer',
         'lookup',
         'loop',
@@ -1574,8 +1581,6 @@ final readonly class ErrorVocabulary
         'matriz',
         'maximum',
         'maxmemory',
-        'may',
-        'mayo',
         'mayusculas',
         'mb',
         'md',
@@ -1633,6 +1638,7 @@ final readonly class ErrorVocabulary
         'models',
         'modifica',
         'modificalo',
+        'modified',
         'modify',
         'module',
         'modules',
@@ -1663,7 +1669,6 @@ final readonly class ErrorVocabulary
 
     /** @var list<string> */
     private const array WORDS_N = [
-        'na',
         'nada',
         'nadie',
         'name',
@@ -1812,7 +1817,6 @@ final readonly class ErrorVocabulary
         'pa',
         'pactar',
         'pad',
-        'page',
         'paginator',
         'pair',
         'paired',
@@ -2046,14 +2050,12 @@ final readonly class ErrorVocabulary
         'reachable',
         'reached',
         'reaches',
-        'read',
         'readable',
         'reader',
         'readiness',
         'reading',
         'readonly',
         'ready',
-        'real',
         'realtime',
         'reason',
         'recalculated',
@@ -2108,10 +2110,10 @@ final readonly class ErrorVocabulary
         'registration',
         'registro',
         'registry',
-        'regla',
         'regular',
         'reimprime',
         'reindex',
+        'reissued',
         'reject',
         'rejected',
         'rejection',
@@ -2182,6 +2184,7 @@ final readonly class ErrorVocabulary
         'response',
         'restart',
         'restore',
+        'restored',
         'restrict',
         'resuelta',
         'resuelve',
@@ -2296,8 +2299,6 @@ final readonly class ErrorVocabulary
         'seeders',
         'seen',
         'segun',
-        'segunda',
-        'segundo',
         'segundos',
         'seis',
         'select',
@@ -2392,7 +2393,6 @@ final readonly class ErrorVocabulary
         'solicitudes',
         'solo',
         'soltarla',
-        'son',
         'soporte',
         'sorry',
         'sortear',
@@ -2441,7 +2441,6 @@ final readonly class ErrorVocabulary
         'strings',
         'strlen',
         'structure',
-        'su',
         'sub',
         'sube',
         'subido',
@@ -2454,6 +2453,7 @@ final readonly class ErrorVocabulary
         'substr',
         'subtitle',
         'subtle',
+        'succeeded',
         'success',
         'successful',
         'such',
@@ -2685,7 +2685,6 @@ final readonly class ErrorVocabulary
         'updates',
         'upgrade',
         'upload',
-        'uri',
         'url',
         'urn',
         'usa',
@@ -2910,5 +2909,16 @@ final readonly class ErrorVocabulary
     public static function words(): array
     {
         return self::WORDS;
+    }
+
+    /**
+     * Las palabras tecnicas excluidas por coincidir con un nombre. Ver
+     * {@see self::NAME_CLASHES}.
+     *
+     * @return list<string>
+     */
+    public static function nameClashes(): array
+    {
+        return self::NAME_CLASHES;
     }
 }

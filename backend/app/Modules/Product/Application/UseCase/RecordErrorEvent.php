@@ -90,7 +90,7 @@ final readonly class RecordErrorEvent implements ErrorEventSink
      * dentro**: es lo que hace que el grupo creado para contener la entropia no
      * la reintroduzca por la puerta de atras.
      */
-    private const string OVERFLOW_MESSAGE = 'Se ha alcanzado el techo de grupos de errores abiertos de este origen. '
+    private const string OVERFLOW_MESSAGE = 'Este origen ya esta en el techo de grupos de errores abiertos. '
         .'Las apariciones nuevas se cuentan aqui en lugar de crear una fila propia. '
         .'Atiende o resuelve los grupos abiertos de este origen para volver a ver el detalle.';
 

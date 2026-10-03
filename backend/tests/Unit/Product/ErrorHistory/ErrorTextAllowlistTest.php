@@ -39,7 +39,7 @@ it('conserva las palabras del vocabulario partiendo por los cambios de caja', fu
     'metodo' => ['getUserMedia'],
     'sigla delante' => ['HTTPError XMLHttpRequest'],
     'sigla detras' => ['IndexedDB'],
-    'error del navegador' => ['TypeError: Cannot read properties of undefined'],
+    'error del navegador' => ['TypeError: Cannot set properties of undefined'],
     'error de php' => ['Argument #1 must be of type string, null given'],
     'mensaje del producto' => ['Ya existe un empleado con ese codigo.'],
     'palabra entera aunque sus partes no esten' => ['PostgreSQL'],
