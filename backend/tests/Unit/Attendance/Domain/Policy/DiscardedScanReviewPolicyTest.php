@@ -68,6 +68,28 @@ it('no admite umbrales sin sentido', function (): void {
         ->and(fn (): DiscardedScanReviewPolicy => new DiscardedScanReviewPolicy(900, 0))->toThrow(InvalidArgumentException::class);
 })->group('RN-22');
 
+it('admite cero segundos de desfase y una ventana de un dia, en sus bordes exactos', function (): void {
+    // Los limites inferiores validos: sin tolerancia, nada posterior a la
+    // recepcion abre; con un dia de ventana, justo un dia antes si abre.
+    $policy = new DiscardedScanReviewPolicy(0, 1);
+    $utc = new DateTimeZone('UTC');
+
+    expect($policy->opensIncident(avisoRevisable(DISCARD_REVIEW_RECORDED), $utc))->toBeTrue()
+        ->and($policy->opensIncident(avisoRevisable('2026-08-15 10:00:01'), $utc))->toBeFalse()
+        ->and($policy->opensIncident(avisoRevisable('2026-08-14 10:00:00'), $utc))->toBeTrue()
+        ->and($policy->opensIncident(avisoRevisable('2026-08-14 09:59:59'), $utc))->toBeFalse();
+})->group('RN-22');
+
+it('acota por la emision de la tarjeta y no por el alta cuando atribuye la tarjeta', function (): void {
+    // La emision (2026-08-14 06:00) es posterior al alta (2026-08-01): un aviso
+    // del 2026-08-10 cae despues del alta pero antes de la emision.
+    $policy = new DiscardedScanReviewPolicy(900, 31);
+    $utc = new DateTimeZone('UTC');
+
+    expect($policy->opensIncident(avisoRevisable('2026-08-10 12:00:00', DiscardedScanAttributionMethod::CREDENTIAL), $utc))->toBeFalse()
+        ->and($policy->opensIncident(avisoRevisable('2026-08-10 12:00:00', DiscardedScanAttributionMethod::EMPLOYEE_CODE), $utc))->toBeTrue();
+})->group('RN-22');
+
 it('reduce el problema recibido a un catalogo cerrado de este producto', function (?string $type, string $expected): void {
     // F9: el `context` de la incidencia solo admite cadenas cortas y nunca el
     // texto libre que trajo la tablet.
