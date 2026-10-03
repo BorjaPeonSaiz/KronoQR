@@ -315,7 +315,6 @@
       "reread": "Los contratos se han vuelto a leer porque habían cambiado."
     }
   },
-
   "pin": {
     "heading": "PIN del portal del empleado",
     "explanation": "Con su código de empleado y este PIN, la persona consulta su propio registro horario en el portal. Se entrega en mano, nunca por correo.",
@@ -1192,7 +1191,9 @@
       "missing_clock_out": "Salida sin fichar",
       "anomalous_pattern": "Patrón anómalo de uso de la credencial",
       "out_of_order_scan": "Fichaje fuera de orden",
-      "rejected_pin_scan": "Fichaje por PIN no registrado"
+      "rejected_pin_scan": "Fichaje por PIN no registrado",
+      "scan_before_revocation": "Fichaje anterior a la retirada de la credencial",
+      "discarded_scan": "Fichaje descartado por el quiosco"
     },
     "outcomes": {
       "resolved": "Resuelta",
@@ -1265,7 +1266,15 @@
         "first_occurred_at": "primer fichaje",
         "second_occurred_at": "segundo fichaje",
         "first_scan_id": "identificador del primer escaneo",
-        "second_scan_id": "identificador del segundo escaneo"
+        "second_scan_id": "identificador del segundo escaneo",
+        "attempts_scans": "fichajes rechazados de la jornada",
+        "device_uuid": "identificador del quiosco",
+        "origin": "origen del aviso",
+        "http_status": "código de respuesta del servidor",
+        "problem": "problema declarado",
+        "reports": "avisos del quiosco en la jornada",
+        "withdrawal": "qué se retiró",
+        "attribution": "atribuido por"
       },
       "patternLine": "Patrón: {pattern}",
       "patterns": {
@@ -1282,6 +1291,14 @@
       },
       "impossibleSequence": {
         "gap": "Intervalo entre los dos fichajes: {gap} s (mínimo de tránsito: {min} s)"
+      },
+      "withdrawalValues": {
+        "offboarding": "la persona está de baja",
+        "credential": "solo la tarjeta (reemisión o pérdida)"
+      },
+      "attributionValues": {
+        "credential": "la tarjeta",
+        "employee_code": "el código de empleado"
       }
     },
     "employeeFilter": {
@@ -1448,12 +1465,16 @@
       "appName": "Nombre de la aplicación",
       "accentColor": "Color de acento",
       "accentColorPicker": "Selector de color de acento",
-      "logoPath": "Ruta del logotipo"
+      "logoPath": "Ruta del logotipo",
+      "privacyControllerName": "Responsable del tratamiento",
+      "privacyPolicyUrl": "URL de la política de privacidad"
     },
     "hints": {
       "appName": "Aparece en la cabecera de las tres aplicaciones, en el título de la pestaña y en la cabecera de los informes en PDF y de la exportación para la Inspección.",
       "accentColor": "El color de los botones principales, los enlaces y los elementos seleccionados. El resto de la paleta del producto no se toca.",
-      "logoPath": "Ruta absoluta dentro del directorio de marca del servidor. Tiene que ser un PNG o un SVG de hasta 512 KiB y, si es PNG, de hasta 2048 píxeles de lado. Déjalo en blanco para usar el logotipo del producto."
+      "logoPath": "Ruta absoluta dentro del directorio de marca del servidor. Tiene que ser un PNG o un SVG de hasta 512 KiB y, si es PNG, de hasta 2048 píxeles de lado. Déjalo en blanco para usar el logotipo del producto.",
+      "privacyControllerName": "Razón social de quien trata los datos (hasta 160 caracteres, en una sola línea). Se muestra en la tablet antes de fichar. Déjalo en blanco para usar el texto genérico del quiosco.",
+      "privacyPolicyUrl": "Dirección completa que empieza por https:// (hasta 512 caracteres, solo caracteres ASCII, sin usuario ni contraseña). La tablet la muestra como enlace y código QR. Déjala en blanco para indicar que la política está disponible en recepción."
     },
     "accentContrast": {
       "meets": "Contraste del acento sobre el fondo claro: {ratio}:1. Cumple el mínimo de {minimum}:1 de WCAG 2.2 AA.",
@@ -1501,7 +1522,15 @@
       }
     },
     "errors": {
-      "notAHexColor": "Escribe un color en formato #rrggbb, o usa el selector."
+      "notAHexColor": "Escribe un color en formato #rrggbb, o usa el selector.",
+      "privacyController": {
+        "tooLong": "El nombre del responsable admite hasta 160 caracteres.",
+        "controlChars": "El nombre del responsable no puede llevar saltos de línea ni caracteres de control."
+      },
+      "privacyUrl": {
+        "tooLong": "La dirección admite hasta 512 caracteres.",
+        "notAUrl": "Escribe una dirección que empiece por https://, solo con caracteres ASCII, sin espacios ni usuario y contraseña."
+      }
     },
     "license": {
       "notice": "La marca propia {reason}. Lo que guardes aquí se conserva y se aplicará cuando la licencia lo cubra; mientras tanto las aplicaciones y los documentos llevan la marca del producto.",
@@ -1515,10 +1544,14 @@
       }
     },
     "save": "Guardar la marca",
-
     "saving": "Guardando…",
     "saved": "Marca guardada. El cambio queda registrado en el trail de auditoría y se aplica en el acto.",
-    "failed": "No se ha podido guardar la marca."
+    "failed": "No se ha podido guardar la marca.",
+    "privacy": {
+      "heading": "Aviso de privacidad del quiosco",
+      "intro": "La tablet muestra al empleado quién trata sus datos y dónde está la política completa antes de fichar (art. 13 RGPD). Es la misma información que el cartel de recepción.",
+      "shownHost": "Se mostrará: {host}"
+    }
   },
   "operationalSettings": {
     "heading": "Ajustes operativos",
@@ -1795,7 +1828,9 @@
         "awaiting_first_heartbeat": "Recién vinculado: todavía no ha enviado su primer latido.",
         "never_seen": "Nunca ha latido y lleva vinculado más tiempo del esperado.",
         "revoked": "Desvinculado: ya no cuenta para nada.",
-        "battery_low": "Batería baja y sin cargar."
+        "battery_low": "Batería baja y sin cargar.",
+        "queue_storage_degraded": "La cola de la tablet ha caído a memoria: no hay garantía de que sus fichajes sobrevivan a un reinicio.",
+        "discards_unreported": "La tablet ha descartado fichajes y aún no ha podido avisar al servidor."
       },
       "whatToDoHeading": "Qué hacer",
       "whatToDo": {
@@ -1806,7 +1841,9 @@
         "awaiting_first_heartbeat": "Es normal justo después de vincularlo. Si tarda varios minutos en latir, revisa la conexión de la tablet.",
         "never_seen": "Sigue el procedimiento del runbook «Quiosco no responde» (docs/runbooks/quiosco-no-responde.md) §2 y ejecuta «php artisan kiosk:health» desde el servidor.",
         "revoked": "Este quiosco está desvinculado: no hace falta ninguna acción.",
-        "battery_low": "Revisa el cargador: la tablet tiene la batería baja y no está cargando."
+        "battery_low": "Revisa el cargador: la tablet tiene la batería baja y no está cargando.",
+        "queue_storage_degraded": "Fallo: no se sabe cuántos fichajes pendientes hay. No reinicies ni desvincules la tablet; abre su pantalla de diagnóstico, comprueba el almacenamiento y sigue el runbook «Cola offline atascada» (docs/runbooks/cola-offline-atascada.md).",
+        "discards_unreported": "Aviso: hay fichajes que la tablet descartó y el servidor aún no conoce. Mantén la tablet con red; si el aviso persiste, mira su lista de descartes en la pantalla de diagnóstico y sigue el runbook «Cola offline atascada» (docs/runbooks/cola-offline-atascada.md)."
       }
     },
     "battery": {
@@ -1850,7 +1887,16 @@
       "explanation": "El quiosco «{name}» dejará de poder fichar de inmediato. Su historial de fichajes no se borra.",
       "pendingQueueWarning": "Este quiosco tiene {count} fichajes sin sincronizar. Si se desvincula ahora, esos fichajes solo llegarán al registro horario si se vuelve a emparejar esta misma tablet (art. 34.9 ET). Antes de desvincular, comprueba que la tablet ha podido sincronizar su cola (runbook de alta de un nuevo quiosco, §5.1).",
       "notice": "Podrás vincular una tablet nueva con el mismo nombre más adelante: reactivará este mismo quiosco.",
-      "announce": "Se ha desvinculado el quiosco {name}."
+      "announce": "Se ha desvinculado el quiosco {name}.",
+      "pendingQueueUnknownWarning": "La tablet no sabe cuántos fichajes tiene sin sincronizar (su cola cayó a memoria). Desvincularla ahora puede dejar fuera del registro horario fichajes que están solo en ella (art. 34.9 ET). Antes de desvincular, abre su pantalla de diagnóstico."
+    },
+    "queue": {
+      "unknown": "Desconocido",
+      "unreportedDiscards": "{count} descartes sin avisar al servidor",
+      "storage": {
+        "memory": "Cola solo en memoria: se perdería al reiniciar",
+        "unavailable": "Sin almacenamiento de cola en la tablet"
+      }
     }
   },
   "onboarding": {

@@ -191,6 +191,8 @@ export function device(overrides: Partial<Device> = {}): Device {
     app_version: '1.4.2',
     last_seen_at: '2026-09-07T09:59:41.000000Z',
     pending_queue_size: 0,
+    queue_storage: 'durable',
+    unreported_discards: 0,
     paired_at: '2026-09-01T08:12:00.000000Z',
     oldest_pending_at: null,
     battery_level: 83,

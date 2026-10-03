@@ -43,6 +43,10 @@ const TYPES: readonly IncidentType[] = [
   // RN-19 «Fichaje por PIN no registrado»: la pasada nocturna la abre leyendo
   // `scan_events.claimed_employee_id` si nadie subsano el intento.
   'rejected_pin_scan',
+  // RN-20 y RN-22: el fichaje real que el registro no tiene (tarjeta retirada
+  // despues de usarse; descartado por el quiosco).
+  'scan_before_revocation',
+  'discarded_scan',
 ]
 const SEVERITIES: readonly IncidentSeverity[] = ['high', 'medium', 'low']
 

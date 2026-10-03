@@ -146,3 +146,20 @@ export function thresholdLabel(seconds: number): string {
 
   return remainderSeconds === 0 ? `${minutes} min` : `${minutes} min ${remainderSeconds} s`
 }
+
+/**
+ * Los fichajes sin sincronizar de una tablet. `null` -la cola cayo a memoria y
+ * la tablet no sabe cuantos quedaron en disco- es «desconocido»: **nunca 0**,
+ * porque «0» diria que no hay nada que perder (RN-21, RF-PA-07).
+ */
+export function queueSizeLabel(
+  device: Pick<Device, 'pending_queue_size'>,
+  unknown: string,
+): string {
+  return device.pending_queue_size === null ? unknown : String(device.pending_queue_size)
+}
+
+/** Clave i18n del aviso de almacenamiento de la cola, o `null` si es durable (sin aviso). */
+export function queueStorageKey(device: Pick<Device, 'queue_storage'>): string | null {
+  return device.queue_storage === 'durable' ? null : `devices.queue.storage.${device.queue_storage}`
+}

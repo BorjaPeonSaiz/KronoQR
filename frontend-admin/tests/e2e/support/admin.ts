@@ -240,6 +240,7 @@ export const PRODUCT_BRANDING: Branding = {
   accent_color: null,
   logo_url: null,
   locales: { default: 'es', available: ['es', 'en'] },
+  privacy_notice: { controller_name: null, policy_url: null },
 }
 
 /** La huella que lleva la URL del logotipo de ejemplo (`?v=`, contrato). */
@@ -251,6 +252,7 @@ export const HOTEL_BRANDING: Branding = {
   accent_color: '#0f5c8c',
   logo_url: `/api/v1/branding/logo?v=${LOGO_DIGEST}`,
   locales: { default: 'es', available: ['es'] },
+  privacy_notice: { controller_name: null, policy_url: null },
 }
 
 /**
@@ -1263,6 +1265,8 @@ export const DEVICE: Device = {
   app_version: '1.4.2',
   last_seen_at: '2026-09-07T09:59:41.000000Z',
   pending_queue_size: 0,
+  queue_storage: 'durable',
+  unreported_discards: 0,
   paired_at: '2026-09-01T08:12:00.000000Z',
   oldest_pending_at: null,
   battery_level: 83,
@@ -3108,6 +3112,8 @@ export async function stubManagementApi(
             app_version: null,
             last_seen_at: null,
             pending_queue_size: 0,
+            queue_storage: 'durable',
+            unreported_discards: 0,
             paired_at: '2026-09-07T10:00:00.000000Z',
             oldest_pending_at: null,
             battery_level: null,
