@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use PHPUnit\Framework\Assert;
 use Symfony\Component\Process\Process;
 use Tests\Architecture\Support\Repo;
 
@@ -84,7 +85,7 @@ function kqeFormatOpen(string $dir, string $file, string $kind = 'dump', string 
     $process = kqeFormatBash($script, $env);
     $out = explode("\n", $process->getOutput(), 3);
 
-    return ['code' => (int) ($out[0] ?? -1), 'reason' => $out[1] ?? '', 'plain' => $out[2] ?? ''];
+    return ['code' => (int) $out[0], 'reason' => $out[1] ?? '', 'plain' => $out[2] ?? ''];
 }
 
 /** Cambia un byte de un fichero en la posicion dada (negativa: desde el final). */
@@ -98,7 +99,7 @@ function kqeFormatFlip(string $file, int $position): void
 
 beforeEach(function (): void {
     if (! kqeFormatHasSha3()) {
-        $this->markTestSkipped('Este entorno no tiene openssl con SHA3-256 (1.1.1 o posterior).');
+        Assert::markTestSkipped('Este entorno no tiene openssl con SHA3-256 (1.1.1 o posterior).');
     }
 });
 

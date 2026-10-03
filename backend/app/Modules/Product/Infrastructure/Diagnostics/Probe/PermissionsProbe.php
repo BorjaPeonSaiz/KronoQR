@@ -8,8 +8,10 @@ use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Application\Port\LogoInspector;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
+use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Product\Domain\ValueObject\LogoRejection;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
+use App\Modules\Product\Infrastructure\Diagnostics\RuntimeService;
 use Throwable;
 
 /**
@@ -22,15 +24,35 @@ use Throwable;
  * el mismo —«a veces da error 500»— y la causa nunca esta donde se busca. Cuatro
  * comprobaciones de tres lineas ahorran la mitad de las llamadas de soporte.
  *
- * ## `permissions.backup_path` es la que no se puede fallar
+ * ## Las copias: lo que cada contenedor puede tocar (2.2.0, bloque 20, A3-R2)
  *
- * Si el directorio de copias no es escribible, **no hay copias**, y no hay
- * ningun otro sintoma hasta el dia que hagan falta. Va como `failure`.
+ * Hasta la 2.1.0 la sonda exigia que la raiz de `BACKUP_PATH` fuera escribible,
+ * porque `app`, `horizon` y `scheduler` la montaban entera en escritura: quien
+ * ejecutara codigo en cualquiera de ellos podia borrar copias o plantar una sin
+ * la clave. Desde la 2.2.0 la raiz se monta en solo lectura y cada servicio
+ * recibe en escritura solo lo suyo ({@see RuntimeService}). Las tres
+ * comprobaciones dicen exactamente eso:
+ *
+ * - `permissions.backup_path` — la raiz existe y se puede leer (si no, **no hay
+ *   copias**: `failure`) y NO se puede escribir. Escribible en produccion es el
+ *   `docker-compose.yml` de la 2.1.0 todavia en uso: `warning`, porque no rompe
+ *   nada hoy pero deja las copias al alcance de la aplicacion.
+ * - `permissions.backup_metrics` — `metrics/` existe y se puede escribir. Sin
+ *   eso no se publica ni el resultado de la copia ni el RPO, y las alertas de
+ *   las copias se quedan ciegas: `failure`.
+ * - `permissions.backup_copies` — `daily/` y `base/` existen (si no, no hay
+ *   copias: `failure`). Desde `scheduler` se tienen que poder escribir; desde
+ *   `app` y `horizon`, en produccion, NO (`warning` si se puede).
+ *
+ * Fuera de produccion no se avisa de lo escribible: el entorno de desarrollo
+ * monta un volumen con nombre en escritura, y un aviso permanente en
+ * desarrollo entrena a ignorar avisos.
  */
 final readonly class PermissionsProbe implements DoctorProbe
 {
     /**
      * @param  list<string>  $writablePaths  `storage/` y `bootstrap/cache`.
+     * @param  string  $metricsPath  El directorio del colector textfile (`BACKUP_PATH/metrics`).
      */
     public function __construct(
         private array $writablePaths,
@@ -38,6 +60,9 @@ final readonly class PermissionsProbe implements DoctorProbe
         private ?string $brandingLogoRoot,
         private GetSettingsHandler $settings,
         private LogoInspector $logos,
+        private string $metricsPath = '',
+        private string $environment = 'production',
+        private RuntimeService $service = RuntimeService::App,
     ) {}
 
     public function family(): string
@@ -50,6 +75,8 @@ final readonly class PermissionsProbe implements DoctorProbe
         return [
             $this->storage(),
             $this->backup(),
+            $this->backupMetrics(),
+            $this->backupCopies(),
             $this->brandingRoot(),
             $this->brandingLogo(),
         ];
@@ -84,15 +111,107 @@ final readonly class PermissionsProbe implements DoctorProbe
             );
         }
 
-        if (! is_writable($this->backupPath)) {
+        if (! is_readable($this->backupPath)) {
             return DoctorFinding::failure(
                 'permissions.backup_path',
+                'unreadable',
                 params: ['path' => $this->backupPath],
-                details: ['path' => $this->backupPath],
+                details: ['path' => $this->backupPath, 'readable' => false],
             );
         }
 
-        return DoctorFinding::ok('permissions.backup_path', ['path' => $this->backupPath]);
+        $details = ['path' => $this->backupPath, 'service' => $this->service->value];
+
+        if (is_writable($this->backupPath)) {
+            if ($this->isProduction()) {
+                return DoctorFinding::warning(
+                    'permissions.backup_path',
+                    'writable',
+                    params: ['path' => $this->backupPath, 'service' => $this->service->value],
+                    details: [...$details, 'writable' => true],
+                );
+            }
+
+            return new DoctorFinding(
+                'permissions.backup_path',
+                DoctorStatus::Ok,
+                ['path' => $this->backupPath],
+                [...$details, 'writable' => true, 'app_env' => $this->environment],
+                'not_checked',
+            );
+        }
+
+        return DoctorFinding::ok('permissions.backup_path', [...$details, 'writable' => false], ['path' => $this->backupPath]);
+    }
+
+    private function backupMetrics(): DoctorFinding
+    {
+        $path = $this->metricsPath !== '' ? $this->metricsPath : rtrim($this->backupPath, '/').'/metrics';
+        $params = ['path' => $path];
+
+        if (! is_dir($path)) {
+            return DoctorFinding::failure('permissions.backup_metrics', 'missing', $params, ['path' => $path]);
+        }
+
+        if (! is_writable($path)) {
+            return DoctorFinding::failure('permissions.backup_metrics', params: $params, details: ['path' => $path]);
+        }
+
+        return DoctorFinding::ok('permissions.backup_metrics', ['path' => $path], $params);
+    }
+
+    /**
+     * `daily/` (volcados) y `base/` (copias fisicas), que solo escribe el
+     * planificador.
+     */
+    private function backupCopies(): DoctorFinding
+    {
+        $root = rtrim($this->backupPath, '/');
+        $paths = [$root.'/daily', $root.'/base'];
+        $service = $this->service->value;
+
+        $missing = array_values(array_filter($paths, static fn (string $path): bool => ! is_dir($path)));
+
+        if ($missing !== []) {
+            return DoctorFinding::failure(
+                'permissions.backup_copies',
+                'missing',
+                ['paths' => implode(', ', $missing)],
+                ['missing' => $missing],
+            );
+        }
+
+        $writable = array_values(array_filter($paths, static fn (string $path): bool => is_writable($path)));
+
+        if ($this->service->writesBackups()) {
+            $blocked = array_values(array_diff($paths, $writable));
+
+            if ($blocked !== []) {
+                return DoctorFinding::failure(
+                    'permissions.backup_copies',
+                    params: ['paths' => implode(', ', $blocked)],
+                    details: ['not_writable' => $blocked, 'service' => $service],
+                );
+            }
+
+            return DoctorFinding::ok('permissions.backup_copies', ['paths' => $paths, 'service' => $service]);
+        }
+
+        if ($writable !== [] && $this->isProduction()) {
+            return DoctorFinding::warning(
+                'permissions.backup_copies',
+                'writable',
+                ['paths' => implode(', ', $writable), 'service' => $service],
+                ['writable' => $writable, 'service' => $service],
+            );
+        }
+
+        return DoctorFinding::ok('permissions.backup_copies', ['paths' => $paths, 'service' => $service, 'writable' => $writable]);
+    }
+
+    private function isProduction(): bool
+    {
+        return $this->environment === 'production';
     }
 
     private function brandingRoot(): DoctorFinding

@@ -7,6 +7,7 @@ namespace App\Modules\Product\Infrastructure\Diagnostics\Probe;
 use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
+use App\Modules\Product\Infrastructure\Diagnostics\RuntimeService;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
@@ -30,7 +31,9 @@ use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
  *   distinto del de la aplicacion) y se puede escribir. Fuera de produccion no
  *   se exige el montaje: el entorno de desarrollo monta el codigo entero.
  * - `files.retention_reports` — el directorio de los informes de retencion se
- *   puede escribir, y no esta dentro de `storage/app`.
+ *   puede escribir, y no esta dentro de `storage/app`. Desde `horizon` es al
+ *   reves (2.2.0, A3-R2): NO se tiene que poder escribir, porque ni la
+ *   propuesta ni la purga corren alli ({@see RuntimeService}).
  * - `files.class_roots` — las raices de clase no coinciden ni se solapan, ni son
  *   `storage/app`, ni estan dentro de `BACKUP_PATH`. **Falla**: con dos raices
  *   pisandose, una purga veria lo que no es suyo.
@@ -58,6 +61,7 @@ final readonly class GeneratedFilesProbe implements DoctorProbe
         private GeneratedFileHousekeeping $files,
         private Clock $clock,
         private GeneratedFileStore $store,
+        private RuntimeService $service = RuntimeService::App,
     ) {}
 
     public function family(): string
@@ -178,7 +182,32 @@ final readonly class GeneratedFilesProbe implements DoctorProbe
             return DoctorFinding::warning('files.retention_reports', 'missing', $params, ['path' => $path]);
         }
 
-        if (! is_writable($path)) {
+        $writable = is_writable($path);
+
+        if (! $this->service->writesRetentionReports()) {
+            // `horizon` (2.2.0, bloque 20, A3-R2): ni la propuesta ni la purga
+            // corren ahi, asi que NO debe poder escribir el informe que defiende
+            // una purga. Escribible en produccion es el docker-compose.yml de la
+            // 2.1.0 todavia en uso.
+            if ($writable && $this->environment === 'production') {
+                return DoctorFinding::warning(
+                    'files.retention_reports',
+                    'horizon_writable',
+                    $params,
+                    ['path' => $path, 'service' => $this->service->value, 'writable' => true],
+                );
+            }
+
+            return new DoctorFinding(
+                'files.retention_reports',
+                DoctorStatus::Ok,
+                $params,
+                ['path' => $path, 'service' => $this->service->value, 'writable' => $writable],
+                'read_only',
+            );
+        }
+
+        if (! $writable) {
             return DoctorFinding::warning('files.retention_reports', params: $params, details: ['path' => $path]);
         }
 

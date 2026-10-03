@@ -2,105 +2,70 @@
 
 declare(strict_types=1);
 
-use Symfony\Component\Yaml\Yaml;
 use Tests\Architecture\Support\ComposeEnvironment;
 use Tests\Architecture\Support\Repo;
 
 /*
- * Quien recibe la clave del WAL y lo que NO se deja puesto (ADR-049, condiciones C7 y
- * C12 del dictamen de seguridad), sobre el compose de produccion ya COMPUESTO.
+ * La clave de desarrollo del WAL y el `archive_timeout` del que depende el RPO,
+ * en los dos compose (ADR-049, condiciones C7 y C12 del dictamen; RL-12,
+ * RNF-D-02, RS-08).
  *
- *   · `BACKUP_WAL_KEY` llega SOLO al servicio `postgres`, y sin valor por defecto: la
- *     resuelve Compose desde el `.env`. Con un valor en el compose, la clave estaria en el
- *     repositorio; con un valor por defecto, un servidor sin clave archivaria con otra.
- *   · Ningun servicio de runtime (`app`, `horizon`, `scheduler`, `reverb`, `nginx`) la
- *     recibe: `scheduler` ya tiene la maestra y no necesita la derivada.
- *   · `KRONOQR_ACCEPT_UNAUTHENTICATED` (la bandera de copias de la 2.1.0) y
- *     `KRONOQR_WAL_ALLOW_DEV_KEY` (la clave de desarrollo) no estan en el compose de
- *     produccion ni en `.env.example`: la primera se pasa por invocacion, la segunda solo
- *     existe en `compose.dev.yaml`.
- *   · Dev: la clave de desarrollo y su permiso estan en dev y en ningun otro sitio.
+ * Lo demas del bloque 20 sobre el compose vive donde ya se miraba lo mismo:
+ * quien recibe `BACKUP_WAL_KEY`, que no tenga valor por defecto en produccion y
+ * que `KRONOQR_ACCEPT_UNAUTHENTICATED` no este en ningun compose ni en
+ * `.env.example`, en `RuntimeEnvironmentTest`; el reparto de montajes de
+ * `BACKUP_PATH`, en `BackupMountsComposeTest`.
+ *
+ *   · `KRONOQR_WAL_ALLOW_DEV_KEY` deja a `archive-wal.sh` aceptar la clave de
+ *     desarrollo, que esta publicada en el repositorio. En produccion seria un
+ *     WAL «cifrado» con una clave que conoce cualquiera: solo existe en dev.
+ *   · `archive_timeout=900` en los DOS: sin el, el RPO es «lo que tarde en
+ *     llenarse un segmento», y la regla `ArchiveTimeoutFueraDeRango` es la misma
+ *     en los dos entornos (D7: no se silencia nada por entorno).
  */
 
 const BACKUP_COMPOSE_SECRETS_PROD = 'infra/compose.prod.yaml';
+
 const BACKUP_COMPOSE_SECRETS_DEV = 'infra/compose.dev.yaml';
 
-it('entrega BACKUP_WAL_KEY solo a postgres', function (): void {
-    $services = ComposeEnvironment::services(BACKUP_COMPOSE_SECRETS_PROD);
-    $receivers = [];
+it('ningun servicio de produccion recibe el permiso de la clave de desarrollo del WAL', function (string $service): void {
+    expect(\in_array('KRONOQR_WAL_ALLOW_DEV_KEY', ComposeEnvironment::referencedNames(
+        ComposeEnvironment::service(BACKUP_COMPOSE_SECRETS_PROD, $service),
+    ), true))->toBeFalse(
+        "compose.prod.yaml: «{$service}» recibe KRONOQR_WAL_ALLOW_DEV_KEY: el WAL se cifraria con la clave de desarrollo, que es publica."
+    );
+})->with(static fn (): array => array_keys(ComposeEnvironment::services(BACKUP_COMPOSE_SECRETS_PROD)))->group('RL-12', 'RS-08');
 
-    foreach ($services as $name => $service) {
-        $environment = (array) ($service['environment'] ?? []);
-        if (array_key_exists('BACKUP_WAL_KEY', $environment)) {
-            $receivers[] = $name;
-        }
-    }
+it('deja la clave de desarrollo del WAL y su permiso en el postgres de desarrollo', function (): void {
+    $names = ComposeEnvironment::environmentNames(ComposeEnvironment::service(BACKUP_COMPOSE_SECRETS_DEV, 'postgres'));
 
-    expect($receivers)->toBe(['postgres']);
-})->group('RL-12', 'RS-08');
-
-it('no da valor ni valor por defecto a BACKUP_WAL_KEY en el compose de produccion', function (): void {
-    $document = Yaml::parse(Repo::contents(BACKUP_COMPOSE_SECRETS_PROD));
-    $environment = (array) ($document['services']['postgres']['environment'] ?? []);
-
-    expect($environment)->toHaveKey('BACKUP_WAL_KEY');
-    expect($environment['BACKUP_WAL_KEY'])->toBeNull('BACKUP_WAL_KEY tiene valor en el compose: tiene que resolverla Compose desde el .env.');
-
-    // Y ninguna interpolacion con valor por defecto en todo el fichero.
-    expect(Repo::contents(BACKUP_COMPOSE_SECRETS_PROD))->not->toMatch('/\$\{BACKUP_WAL_KEY[:?-]/');
-})->group('RL-12', 'RS-08');
-
-it('no menciona la bandera de copias heredadas ni el permiso de la clave de desarrollo en produccion', function (): void {
-    // Solo se mira lo que llega a un contenedor (variables y sus interpolaciones), no los comentarios.
-    foreach (ComposeEnvironment::services(BACKUP_COMPOSE_SECRETS_PROD) as $name => $service) {
-        $environment = (array) ($service['environment'] ?? []);
-        foreach (['KRONOQR_ACCEPT_UNAUTHENTICATED', 'KRONOQR_WAL_ALLOW_DEV_KEY'] as $variable) {
-            expect(array_key_exists($variable, $environment))->toBeFalse($name.' recibe '.$variable.' desde el compose de produccion.');
-        }
-    }
-    expect(Repo::contents(BACKUP_COMPOSE_SECRETS_PROD))->not->toMatch('/\$\{KRONOQR_(ACCEPT_UNAUTHENTICATED|WAL_ALLOW_DEV_KEY)/');
-})->group('RL-12', 'RS-08');
-
-it('no define en .env.example la bandera de copias heredadas', function (): void {
-    // Una clave del `.env` queda puesta para siempre: la bandera se pasa por invocacion.
-    expect(Repo::contents('.env.example'))->not->toMatch('/^\s*(export\s+)?KRONOQR_ACCEPT_UNAUTHENTICATED=/m');
-    // La subclave del WAL SI figura, vacia: la escriben install.sh y update.sh.
-    expect(Repo::contents('.env.example'))->toMatch('/^BACKUP_WAL_KEY=$/m');
-})->group('RL-12', 'RS-08');
-
-it('deja la clave de desarrollo y su permiso solo en compose.dev.yaml', function (): void {
-    $dev = Repo::contents(BACKUP_COMPOSE_SECRETS_DEV);
-
-    expect($dev)->toContain('KRONOQR_WAL_ALLOW_DEV_KEY');
-    expect($dev)->toContain('BACKUP_WAL_KEY');
-    expect($dev)->toContain('archive_timeout=900');
+    expect(\in_array('KRONOQR_WAL_ALLOW_DEV_KEY', $names, true))->toBeTrue(
+        'compose.dev.yaml: postgres no recibe KRONOQR_WAL_ALLOW_DEV_KEY y archive-wal.sh rechazaria la clave de desarrollo.'
+    );
+    expect(\in_array('BACKUP_WAL_KEY', $names, true))->toBeTrue('compose.dev.yaml: postgres no recibe BACKUP_WAL_KEY.');
 })->group('RL-12', 'RNF-D-02');
 
-it('fija archive_timeout=900 en produccion y en desarrollo', function (): void {
-    foreach ([BACKUP_COMPOSE_SECRETS_PROD, BACKUP_COMPOSE_SECRETS_DEV] as $file) {
-        $document = Yaml::parse(Repo::contents($file));
-        $command = array_map('strval', (array) ($document['services']['postgres']['command'] ?? []));
+it('fija archive_timeout=900 en produccion y en desarrollo', function (string $compose): void {
+    $command = ComposeEnvironment::service($compose, 'postgres')['command'] ?? [];
+    $arguments = \is_array($command)
+        ? array_map(static fn (mixed $argument): string => \is_scalar($argument) ? (string) $argument : '', $command)
+        : preg_split('/\s+/', \is_scalar($command) ? (string) $command : '');
 
-        expect(in_array('archive_timeout=900', $command, true))->toBeTrue($file.' no fija archive_timeout=900: el RPO deja de estar acotado (RNF-D-02).');
+    expect(\in_array('archive_timeout=900', $arguments ?: [], true))->toBeTrue(
+        $compose.': postgres no fija archive_timeout=900: el RPO deja de estar acotado (RNF-D-02).'
+    );
+})->with([BACKUP_COMPOSE_SECRETS_PROD, BACKUP_COMPOSE_SECRETS_DEV])->group('RNF-D-02');
+
+it('no deja la clave de desarrollo del WAL como valor por defecto fuera de desarrollo', function (): void {
+    // El valor por defecto de compose.dev.yaml es la derivada de la clave de
+    // relleno de desarrollo: que no aparezca en produccion ni en .env.example.
+    preg_match('/BACKUP_WAL_KEY:\s*\$\{BACKUP_WAL_KEY:-([0-9a-f]{64})\}/', Repo::contents(BACKUP_COMPOSE_SECRETS_DEV), $dev);
+
+    expect($dev[1] ?? '')->not->toBe('', 'compose.dev.yaml ya no da a postgres la clave de desarrollo del WAL.');
+
+    foreach ([BACKUP_COMPOSE_SECRETS_PROD, '.env.example'] as $file) {
+        expect(str_contains(Repo::contents($file), $dev[1] ?? 'sin-clave'))->toBeFalse(
+            $file.' contiene la clave de desarrollo del WAL.'
+        );
     }
-})->group('RNF-D-02');
-
-it('monta la raiz de BACKUP_PATH en solo lectura y cada hijo con create_host_path: false', function (): void {
-    $services = ComposeEnvironment::services(BACKUP_COMPOSE_SECRETS_PROD);
-    $base = '${BACKUP_PATH:-/var/backups/fichaje}';
-
-    foreach (['app', 'horizon', 'scheduler', 'restore'] as $name) {
-        $mounts = [];
-        foreach ((array) ($services[$name]['volumes'] ?? []) as $volume) {
-            if (\is_array($volume) && is_string($volume['target'] ?? null) && str_starts_with($volume['target'], $base)) {
-                $mounts[$volume['target']] = $volume;
-            }
-        }
-
-        expect(array_key_exists($base, $mounts))->toBeTrue($name.' no monta la raiz de BACKUP_PATH.');
-        expect($mounts[$base]['read_only'] ?? false)->toBeTrue($name.' monta la raiz de BACKUP_PATH en ESCRITURA (A3-R2).');
-        foreach ($mounts as $target => $volume) {
-            expect($volume['bind']['create_host_path'] ?? true)->toBeFalse($name.': '.$target.' no lleva create_host_path: false.');
-        }
-    }
-})->group('RS-07', 'RS-08');
+})->group('RL-12', 'RS-08');

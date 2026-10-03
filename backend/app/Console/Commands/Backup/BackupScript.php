@@ -29,8 +29,9 @@ final class BackupScript
      * Ejecuta un script de infra/scripts y devuelve su codigo de salida.
      *
      * @param  list<string>  $arguments
+     * @param  float|null  $timeout  Segundos; por defecto `backup.timeout`, el de una copia.
      */
-    public function run(string $script, array $arguments): int
+    public function run(string $script, array $arguments, ?float $timeout = null): int
     {
         $path = rtrim(config()->string('backup.script_path'), '/').'/'.$script;
 
@@ -47,7 +48,7 @@ final class BackupScript
         $process = new Process(
             command: ['bash', $path, ...$arguments],
             env: $this->environment(),
-            timeout: (float) config()->integer('backup.timeout'),
+            timeout: $timeout ?? (float) config()->integer('backup.timeout'),
         );
 
         try {

@@ -211,6 +211,48 @@ it('declara cada alerta nueva con la severidad, el destinatario, la espera y el 
     'entrega de alertas fallando' => ['EntregaDeAlertasFallando', 'high', 'it-cliente', '5m', 'docs/runbooks/entrega-de-alertas.md'],
 ])->group('RF-AT-10', 'RN-15', 'RNF-D-01', 'RF-PD-10');
 
+it('declara las alertas del RPO continuo con la severidad, el destinatario, la espera y el runbook del bloque 20', function (
+    string $alerta,
+    string $espera,
+): void {
+    // Fila «Copia de seguridad fallida o no verificada» del §9.3, vista desde el
+    // WAL (2.2.0, R5-DV-01, §5.3 del diseno): las cuatro son criticas, van al IT
+    // del cliente y remiten al §4 del runbook de restauracion. La espera es la
+    // mitad anti-fatiga: un fallo suelto que se recupera no despierta a nadie.
+    $regla = AlertRules::named($alerta);
+
+    expect($regla)->not->toBeNull('No existe la regla '.$alerta.' en '.AlertRules::DIRECTORY.'/.');
+    expect($regla['severity'] ?? '')->toBe('critical', $alerta.' cambia de severidad.');
+    expect($regla['destinatario'] ?? '')->toBe('it-cliente', $alerta.' cambia de destinatario.');
+    expect($regla['for'] ?? '')->toBe($espera, $alerta.' cambia su espera anti-fatiga.');
+    expect((string) strtok($regla['runbook'] ?? '', '#'))->toBe('docs/runbooks/restaurar-backup.md', $alerta.' apunta a otro procedimiento.');
+})->with([
+    'archivado detenido' => ['ArchivadoDeWalDetenido', '3m'],
+    'archivado fallando' => ['ArchivadoDeWalFallando', '10m'],
+    'medicion ausente' => ['MedicionDeWalAusente', '5m'],
+    'archive_timeout fuera de rango' => ['ArchiveTimeoutFueraDeRango', '10m'],
+])->group('RNF-D-02', 'RF-PR-04');
+
+it('escribe en cada alerta del RPO continuo el umbral del diseno', function (string $alerta, string $fragmento): void {
+    $regla = AlertRules::named($alerta);
+
+    expect($regla)->not->toBeNull('No existe la regla '.$alerta.'.');
+    expect(preg_replace('/\s+/', '', $regla['expr'] ?? ''))
+        ->toContain((string) preg_replace('/\s+/', '', $fragmento));
+})->with([
+    // RPO objetivo = archive_timeout, mas 10 minutos de margen.
+    'detenido: la exposicion real' => ['ArchivadoDeWalDetenido', 'kronoqr_wal_unarchived_age_seconds'],
+    'detenido: archive_timeout mas diez minutos' => ['ArchivadoDeWalDetenido', 'kronoqr_wal_archive_timeout_seconds + 600'],
+    // El atasco que progresa: la edad se reinicia en cada archivado.
+    'detenido: tres segmentos atascados' => ['ArchivadoDeWalDetenido', 'kronoqr_wal_unarchived_segments >= 3'],
+    'fallando: el fallo actual' => ['ArchivadoDeWalFallando', 'kronoqr_wal_archive_failing == 1'],
+    'medicion: el latido' => ['MedicionDeWalAusente', 'kronoqr_wal_exporter_last_run_timestamp_seconds'],
+    'medicion: cinco minutos sin medida' => ['MedicionDeWalAusente', '> 300'],
+    'medicion: tambien si la serie desaparece' => ['MedicionDeWalAusente', 'absent('],
+    'archive_timeout desactivado' => ['ArchiveTimeoutFueraDeRango', 'kronoqr_wal_archive_timeout_seconds == 0'],
+    'archive_timeout por encima de 15 minutos' => ['ArchiveTimeoutFueraDeRango', 'kronoqr_wal_archive_timeout_seconds > 900'],
+])->group('RNF-D-02', 'RF-PR-04');
+
 it('escribe en cada alerta nueva el umbral literal que publica el catalogo', function (string $alerta, string $fragmento): void {
     // El umbral es lo que convierte una alerta en una promesa comprobable: «>
     // 10 min sin latido», «> 1 % en 5 min», «< 21 dias», «< 20 %». Si la

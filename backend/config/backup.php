@@ -39,6 +39,21 @@ return [
     'path' => env('BACKUP_PATH', '/var/backups/fichaje'),
 
     /*
+     * En que contenedor corre este proceso: `app`, `horizon` o `scheduler`. Lo
+     * fija `infra/compose.prod.yaml` en cada servicio, con un valor literal, y
+     * no el cliente.
+     *
+     * Hace falta porque desde la 2.2.0 (bloque 20, A3-R2) cada servicio monta
+     * `BACKUP_PATH` de forma distinta: la raiz en solo lectura en todos, y en
+     * escritura solo lo que cada uno necesita —`metrics/` los tres,
+     * `reports/retention` `app` y `scheduler`, `daily/` y `base/` solo
+     * `scheduler`—. Lo que `product:doctor` debe encontrar escribible depende
+     * de donde se ejecuta. Por defecto `app`, que es donde lo lanzan
+     * `install.sh`, `update.sh` y `doctor.sh`.
+     */
+    'runtime_service' => env('KRONOQR_SERVICE', 'app'),
+
+    /*
      * Modo de la copia diaria. `dump` es el volcado logico; `full` añade la
      * copia fisica que, con el WAL archivado, sostiene el RPO de 15 min
      * (RNF-D-02). La copia fisica pesa como la base entera: se programa aparte,

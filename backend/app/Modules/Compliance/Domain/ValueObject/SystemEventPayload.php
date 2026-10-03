@@ -69,9 +69,36 @@ final readonly class SystemEventPayload
         ],
         'system.restored_from_backup' => [
             'required' => ['backup_file', 'backup_taken_at', 'failed_step', 'reason', 'from_version', 'to_version'],
-            'optional' => ['backup_fingerprint', 'chain_before', 'report_id'],
+            // Desde la 2.2.0 (ADR-049, condiciones C14–C16 del dictamen del
+            // bloque 20): como se comprobo la integridad de la copia y del WAL.
+            // OPCIONALES a proposito: una copia de la 2.1.0 no tiene cabecera
+            // KQE1 (ni `kqe_created` ni `kid`), y el asiento de una
+            // restauracion sin WAL no lleva `wal_integrity` ni `legacy_wal`.
+            'optional' => [
+                'backup_fingerprint', 'chain_before', 'report_id',
+                'integrity', 'kqe_created', 'kid', 'wal_integrity', 'legacy_wal',
+            ],
         ],
     ];
+
+    /**
+     * Huella de la subclave con la que se sello una copia KQE1 (`kid`, 8 hex en
+     * minusculas). No es secreta: identifica la clave sin revelarla (C3).
+     */
+    private const string KEY_ID = '/^[0-9a-f]{8}$/';
+
+    /**
+     * `authenticated`, o `aborted_at:<segmento>` cuando la recuperacion se paro
+     * en un segmento de WAL que no se pudo autenticar (C15). El segmento es un
+     * nombre de PostgreSQL —24 hex o la historia de un timeline—, nunca una ruta.
+     */
+    private const string WAL_INTEGRITY = '/^(?:authenticated|aborted_at:(?:[0-9A-F]{24}|[0-9A-F]{8}\.history))$/';
+
+    /**
+     * Tope de `legacy_wal`: los segmentos `.gz` sin autenticar reproducidos. Seis
+     * cifras sobran (16 MB por segmento son 16 TB de WAL); mas es un error.
+     */
+    private const int LEGACY_WAL_MAX = 999999;
 
     /** Version semantica del producto: `1.4.0`, `1.4.0-rc.1`. */
     private const string VERSION = '/^\d{1,4}\.\d{1,4}\.\d{1,4}(?:[-+][0-9A-Za-z.]{1,32})?$/';
@@ -150,12 +177,12 @@ final readonly class SystemEventPayload
     }
 
     /**
-     * Los ocho campos que son **una cadena con una forma**, con su expresion y
+     * Los once campos que son **una cadena con una forma**, con su expresion y
      * con lo que hay que decirle a quien se equivoque.
      *
      * Tabla y no ramas de un `match` por dos motivos: la mitad de los campos
      * comparten expresion —tres son `sha256`, dos son version— y separarlos en
-     * ramas invitaba a que manana dos huellas se validaran distinto. Los tres
+     * ramas invitaba a que manana dos huellas se validaran distinto. Los cinco
      * campos que **no** son una cadena con una forma no caben aqui y se resuelven
      * aparte en {@see self::assertShape()}.
      *
@@ -170,15 +197,18 @@ final readonly class SystemEventPayload
         'backup_file' => [self::FILE_NAME, 'un nombre de fichero sin ruta'],
         'report_id' => [self::REPORT_ID, 'el identificador del informe de actualizacion'],
         'backup_taken_at' => [self::INSTANT_UTC, 'un instante ISO-8601 en UTC terminado en Z'],
+        'kqe_created' => [self::INSTANT_UTC, 'un instante ISO-8601 en UTC terminado en Z'],
+        'kid' => [self::KEY_ID, '8 caracteres hexadecimales en minusculas'],
+        'wal_integrity' => [self::WAL_INTEGRITY, '«authenticated» o «aborted_at:<segmento de WAL>»'],
     ];
 
     /**
      * La forma que debe tener cada clave admitida.
      *
-     * Los tres campos que no estan en {@see self::SHAPES} son los que no son una
-     * cadena con una forma: dos son vocabularios cerrados —y la lista de valores
-     * la da el propio enum, para que anadir un motivo no obligue a tocar aqui— y
-     * `migrations_applied` puede ser un numero o una lista.
+     * Los cinco campos que no estan en {@see self::SHAPES} son los que no son una
+     * cadena con una forma: tres son vocabularios cerrados —en dos la lista de
+     * valores la da el propio enum, para que anadir un motivo no obligue a tocar
+     * aqui—, y `migrations_applied` y `legacy_wal` pueden ser un numero.
      */
     private static function assertShape(string $field, mixed $value): void
     {
@@ -200,8 +230,40 @@ final readonly class SystemEventPayload
                 SystemRestoreReason::cases(),
             )),
             'migrations_applied' => self::assertMigrations($value),
+            'integrity' => self::assertEnum($field, $value, self::BACKUP_INTEGRITY),
+            'legacy_wal' => self::assertLegacyWal($value),
             default => null,
         };
+    }
+
+    /**
+     * Como se acepto la copia restaurada (ADR-049, C14): sellada y verificada
+     * (`authenticated`) o una copia de la 2.1.0 sin MAC aceptada con
+     * `--accept-unauthenticated` y su `.sha256` (`legacy_accepted`).
+     *
+     * @var list<string>
+     */
+    private const array BACKUP_INTEGRITY = ['authenticated', 'legacy_accepted'];
+
+    /**
+     * Segmentos de WAL heredados (`.gz`, sin autenticar) que se reprodujeron en
+     * una recuperacion a un instante (C16). Entero, o su forma de texto: el
+     * script de shell arma el JSON con cadenas.
+     */
+    private static function assertLegacyWal(mixed $value): void
+    {
+        if (is_string($value) && preg_match('/^(?:0|[1-9]\d{0,5})$/', $value) === 1) {
+            return;
+        }
+
+        if (is_int($value) && $value >= 0 && $value <= self::LEGACY_WAL_MAX) {
+            return;
+        }
+
+        throw InvalidSystemEventPayload::malformedField(
+            'legacy_wal',
+            'un recuento entero entre 0 y '.self::LEGACY_WAL_MAX,
+        );
     }
 
     private static function assertMatches(string $field, mixed $value, string $pattern, string $expected): void

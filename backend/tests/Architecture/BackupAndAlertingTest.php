@@ -183,10 +183,36 @@ it('publica el resultado de la copia como metrica, no solo en un log', function 
         'kronoqr_backup_last_success_timestamp_seconds',
         'kronoqr_backup_last_verify_result',
         'kronoqr_backup_last_verified_timestamp_seconds',
-        'kronoqr_backup_wal_last_archived_age_seconds',
     ] as $metrica) {
         expect($backup)->toContain($metrica);
     }
+
+    // Bloque 20 (ADR-049, R5-DV-01): el estado del WAL ya NO sale de la copia
+    // nocturna —era una foto al dia— sino de `wal-metrics.sh`, cada minuto. Y
+    // con otro nombre: si los dos ficheros declararan la misma serie,
+    // node-exporter descartaria las dos.
+    expect($backup)->not->toContain('kronoqr_backup_wal_')
+        ->and($backup)->not->toContain('kronoqr_backup_replication_slot');
+
+    $wal = backupFile('infra/scripts/wal-metrics.sh');
+
+    foreach ([
+        'kronoqr_wal_unarchived_age_seconds',
+        'kronoqr_wal_unarchived_bytes',
+        'kronoqr_wal_unarchived_segments',
+        'kronoqr_wal_last_archived_age_seconds',
+        'kronoqr_wal_archive_failing',
+        'kronoqr_wal_archive_failures_total',
+        'kronoqr_wal_archived_total',
+        'kronoqr_wal_archive_timeout_seconds',
+        'kronoqr_wal_exporter_last_run_timestamp_seconds',
+        'kronoqr_wal_replication_slots_inactive',
+        'kronoqr_wal_replication_slot_retained_bytes',
+    ] as $metrica) {
+        expect($wal)->toContain($metrica);
+    }
+
+    expect($wal)->toContain('kq_write_metrics_atomic');
 
     expect(backupFile('infra/scripts/restore-drill.sh'))
         ->toContain('kronoqr_backup_restore_drill_last_success_timestamp_seconds');
@@ -788,7 +814,9 @@ it('PostgreSQL acota el WAL que puede retener un slot de replicacion y una alert
     $nombres = array_column(AlertRules::inFile('infra/observability/prometheus/rules/backup.yml'), 'alert');
 
     expect($nombres)->toContain('SlotDeReplicacionParado');
-    expect(backupFile('infra/scripts/backup.sh'))->toContain('kronoqr_backup_replication_slots_inactive');
+    // Desde el bloque 20 la serie la publica `wal-metrics.sh` cada minuto: un
+    // slot parado se ve en un minuto y no a la madrugada siguiente.
+    expect(backupFile('infra/scripts/wal-metrics.sh'))->toContain('kronoqr_wal_replication_slots_inactive');
 })->group('RF-PR-04', 'RNF-D-01');
 
 it('solo escribe desde los scripts pasos y motivos que el dominio admite', function (): void {
@@ -819,3 +847,112 @@ it('solo escribe desde los scripts pasos y motivos que el dominio admite', funct
         expect(SystemRestoreReason::tryFrom($reason))->not->toBeNull('reason='.$reason.' no es un SystemRestoreReason');
     }
 })->group('RL-04', 'RF-PD-10');
+
+// ---------------------------------------------------------------------------
+// Bloque 20 (2.2.0): RPO continuo, WAL cifrado e integridad autenticada
+// ---------------------------------------------------------------------------
+
+it('mide el WAL sin archivar cada minuto desde el planificador, sin solaparse (R5-DV-01)', function (): void {
+    // Hasta la 2.1.0 la edad del WAL la publicaba la copia de las 03:15: un
+    // archivado parado a las 10:00 no avisaba hasta el dia siguiente. La medida
+    // continua ES el requisito: sin esta linea, `MedicionDeWalAusente` suena y
+    // las otras tres alertas del WAL se quedan mudas.
+    $scheduler = backupFile('backend/routes/console.php');
+
+    expect($scheduler)->toContain("Schedule::command('backup:wal-metrics')");
+
+    $bloque = bloqueProgramado($scheduler, 'backup:wal-metrics');
+
+    expect($bloque)->toContain('->everyMinute()')
+        // El candado caduca a los 5 minutos: una medida colgada no deja sin
+        // medir mas que eso.
+        ->toContain('->withoutOverlapping(5)')
+        ->toContain('->runInBackground()');
+
+    // Delgado, como `backup:run`: la medida vive en el script que se entrega al
+    // cliente, con el rol de copia y sin privilegios nuevos.
+    expect(backupFile('backend/app/Console/Commands/Backup/WalMetricsCommand.php'))
+        ->toContain("run('wal-metrics.sh'");
+})->group('RNF-D-02', 'RL-12');
+
+it('solo escribe desde los scripts una integridad de copia que el dominio admite (ADR-049, C14)', function (): void {
+    // La misma deriva que `failed_step`/`reason`: un valor literal que el
+    // dominio rechaza deja el asiento pendiente en cada restauracion.
+    $values = [];
+
+    foreach (['infra/scripts/restore.sh', 'infra/scripts/update.sh', 'infra/scripts/lib/backup-common.sh'] as $script) {
+        preg_match_all('/INTEGRIDAD="([a-z_]+)"|"integrity=([a-z_]+)"/', backupFile($script), $matches, PREG_SET_ORDER);
+
+        foreach ($matches as $match) {
+            $values[] = ($match[2] ?? '') !== '' ? $match[2] : ($match[1] ?? '');
+        }
+    }
+
+    expect($values)->toContain('authenticated')->toContain('legacy_accepted');
+
+    foreach (array_unique($values) as $value) {
+        expect(\in_array($value, ['authenticated', 'legacy_accepted'], true))->toBeTrue(
+            'Un script escribe integrity='.$value.', que SystemEventPayload no admite.'
+        );
+    }
+})->group('RL-12', 'RL-04', 'RF-PD-10');
+
+/**
+ * Una alerta del WAL: mira sus series, es critica, va al IT del cliente con el
+ * runbook de restauracion y espera antes de avisar (anti-fatiga, doc 02 §8.4).
+ *
+ * @param  list<string>  $fragmentos
+ */
+function exigeAlertaDelWal(string $alerta, array $fragmentos): void
+{
+    $regla = AlertRules::named($alerta);
+
+    expect($regla)->not->toBeNull('No existe la regla '.$alerta.'.');
+
+    $expr = (string) preg_replace('/\s+/', '', $regla['expr'] ?? '');
+
+    foreach ($fragmentos as $fragmento) {
+        expect(str_contains($expr, $fragmento))->toBeTrue($alerta.' ya no mira '.$fragmento.'.');
+    }
+
+    expect($regla['severity'] ?? '')->toBe('critical', $alerta.' cambia de severidad.')
+        ->and($regla['destinatario'] ?? '')->toBe('it-cliente', $alerta.' cambia de destinatario.')
+        // El ancla apunta a la seccion del runbook; se compara el fichero.
+        ->and((string) strtok($regla['runbook'] ?? '', '#'))->toBe('docs/runbooks/restaurar-backup.md', $alerta.' apunta a otro procedimiento.')
+        ->and($regla['for'] ?? '')->not->toBe('', $alerta.' no tiene espera.');
+}
+
+it('vigila el RPO con la serie continua del WAL: parado, fallando, sin medida y sin archive_timeout (R5-DV-01)', function (): void {
+    // Las cuatro alertas del §5.3 del diseño del bloque 20. Todas al IT del
+    // cliente, criticas y con el runbook de restauracion (§4): es el mismo modo
+    // de fallo —el registro deja de estar a salvo— visto desde cuatro sitios.
+    $porNombre = [];
+
+    foreach (AlertRules::inFile('infra/observability/prometheus/rules/backup.yml') as $regla) {
+        $porNombre[$regla['alert'] ?? ''] = $regla;
+    }
+
+    $esperadas = [
+        // RPO objetivo = archive_timeout, mas 10 min de margen; y el atasco que
+        // progresa, que la edad sola taparia.
+        'ArchivadoDeWalDetenido' => ['kronoqr_wal_unarchived_age_seconds', 'kronoqr_wal_archive_timeout_seconds', 'kronoqr_wal_unarchived_segments'],
+        // Fallo ACTUAL, no un contador historico que no baja nunca.
+        'ArchivadoDeWalFallando' => ['kronoqr_wal_archive_failing'],
+        // El latido del propio exportador: sin medida no se sabe si hay RPO.
+        'MedicionDeWalAusente' => ['kronoqr_wal_exporter_last_run_timestamp_seconds', 'absent('],
+        // Deriva de configuracion: sin archive_timeout el RPO no esta acotado.
+        'ArchiveTimeoutFueraDeRango' => ['kronoqr_wal_archive_timeout_seconds'],
+    ];
+
+    foreach ($esperadas as $alerta => $fragmentos) {
+        expect($porNombre)->toHaveKey($alerta);
+        exigeAlertaDelWal($alerta, $fragmentos);
+    }
+
+    // La foto de la 2.1.0 no la mira ninguna regla: con dos ficheros declarando
+    // la misma serie, node-exporter descarta las dos y la alerta se queda muda.
+    foreach (AlertRules::all() as $regla) {
+        expect(str_contains($regla['expr'], 'kronoqr_backup_wal_'))->toBeFalse($regla['alert'].' mira la serie retirada kronoqr_backup_wal_*.')
+            ->and(str_contains($regla['expr'], 'kronoqr_backup_replication_slot'))->toBeFalse($regla['alert'].' mira la serie retirada de slots.');
+    }
+})->group('RNF-D-02', 'RF-PR-04', 'RL-12');

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\SystemEventPayload;
 use Symfony\Component\Process\Process;
 use Tests\Architecture\Support\Repo;
 
@@ -55,7 +57,11 @@ function restoreAuditScenario(string $body, array $env = []): array
     $script = 'set -euo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/restore.sh')).'; '
         .'ARTISAN_DIR='.escapeshellarg($dir.'/app').'; PGHOST=db; PGPORT=5432; PGUSER=fichaje_migrator; PGPASSWORD=secreto-de-prueba; '
         .'FICHERO='.escapeshellarg($dir.'/kronoqr-20260930T010203Z.dump.enc').'; BASE_DESTINO=fichaje; PGDATABASE=fichaje; '
-        .'INFORME='.escapeshellarg($dir.'/restore-20260930T020000Z.log').'; '.$body;
+        .'INFORME='.escapeshellarg($dir.'/restore-20260930T020000Z.log').'; '
+        // Desde la 2.2.0 (A3-R2) el informe se escribe en un directorio privado
+        // de quien restaura y se publica en reports/ al terminar: aqui los dos
+        // son el mismo fichero, que es el que la prueba lee.
+        .'INFORME_TRABAJO='.escapeshellarg($dir.'/restore-20260930T020000Z.log').'; '.$body;
 
     $process = new Process(['bash', '-c', $script], env: array_merge([
         'PATH' => $dir.'/bin:'.getenv('PATH'),
@@ -158,3 +164,32 @@ it('el cableado: el actualizador no duplica el asiento, el servicio restore arra
     expect(Repo::contents('docs/runbooks/restaurar-backup.md'))->toContain('### 6.7')->toContain('system.restored_from_backup');
     expect(Repo::contents('docs/cliente/operacion.md'))->toContain('system.restored_from_backup');
 })->group('RL-04', 'RS-07', 'RF-PR-04');
+
+it('anota la integridad de la copia en el asiento, y el dominio lo admite tal cual (ADR-049, C14)', function (string $estado, array $esperado, array $ausentes): void {
+    [$dir, $process] = restoreAuditScenario($estado.' CADENA_DESCARTADA="$(punta_cadena_descartada)"; escribir_asiento; echo "pendiente=${ASIENTO_PENDIENTE}"');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toContain('pendiente=0');
+
+    /** @var array<string, string> $payload */
+    $payload = json_decode((string) file_get_contents($dir.'/payload.json'), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($payload)->toMatchArray($esperado)
+        ->and($payload)->not->toHaveKeys($ausentes);
+
+    // Lo que compone el script tiene que pasar la lista cerrada del dominio: si
+    // no, el asiento queda pendiente en cada restauracion (la deriva de PR1).
+    expect(SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $payload)->payload->data)->toBe($payload);
+})->with([
+    'copia KQE1 autenticada' => [
+        'INTEGRIDAD=authenticated; KQE_CREATED=2026-09-30T01:02:03Z; KQE_KID=0a1b2c3d;',
+        ['integrity' => 'authenticated', 'kqe_created' => '2026-09-30T01:02:03Z', 'kid' => '0a1b2c3d', 'backup_taken_at' => '2026-09-30T01:02:03Z'],
+        [],
+    ],
+    // Sin cabecera no hay fecha autenticada ni kid: se omiten, no van vacios.
+    'copia de la 2.1.0 aceptada' => [
+        'INTEGRIDAD=legacy_accepted; KQE_CREATED=2026-09-30T01:02:03Z; KQE_KID=0a1b2c3d;',
+        ['integrity' => 'legacy_accepted'],
+        ['kqe_created', 'kid'],
+    ],
+])->group('RL-12', 'RL-04', 'RS-07', 'RF-PR-04');

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use PHPUnit\Framework\Assert;
 use Symfony\Component\Process\Process;
 use Tests\Architecture\Support\Repo;
 
@@ -47,7 +48,7 @@ function derivationHasSha3(): bool
 
 beforeEach(function (): void {
     if (! derivationHasSha3()) {
-        $this->markTestSkipped('Este entorno no tiene openssl con SHA3-256 (1.1.1 o posterior).');
+        Assert::markTestSkipped('Este entorno no tiene openssl con SHA3-256 (1.1.1 o posterior).');
     }
 });
 
@@ -69,7 +70,7 @@ it('coincide con una derivacion PBKDF2 independiente (openssl kdf)', function ()
     $probe = Process::fromShellCommandline('openssl kdf -help 2>&1 | head -n 1');
     $probe->run();
     if (! str_contains($probe->getOutput(), 'kdf')) {
-        $this->markTestSkipped('openssl sin el subcomando `kdf` (OpenSSL 3).');
+        Assert::markTestSkipped('openssl sin el subcomando `kdf` (OpenSSL 3).');
     }
 
     foreach (['kqwal-v1' => BACKUP_KEY_DERIVATION_DEV_WAL_KEY, 'kqe1-mac' => BACKUP_KEY_DERIVATION_DEV_KMAC] as $salt => $expected) {

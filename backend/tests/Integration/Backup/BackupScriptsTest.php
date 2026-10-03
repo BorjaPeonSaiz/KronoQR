@@ -147,7 +147,7 @@ it('devuelve los codigos de salida documentados ante un uso incorrecto', functio
     // esa es toda la razon: los cinco los teclea la misma persona.
     $ordenDesconocida = ejecutarScript('backup.sh', ['naoquesea']);
     expect($ordenDesconocida->getExitCode())->toBe(1)
-        ->and($ordenDesconocida->getErrorOutput())->toContain('run, verify, prune o list');
+        ->and($ordenDesconocida->getErrorOutput())->toContain('run, verify, prune, list o derive-wal-key');
 
     $modoInvalido = ejecutarScript('backup.sh', ['run', '--mode', 'naoquesea']);
     expect($modoInvalido->getExitCode())->toBe(1);
