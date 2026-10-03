@@ -55,9 +55,9 @@ incidencia. Nunca en ningún otro.**
   `occurred_at`, vía, código y tipo de problema recibidos, y el `qr_payload` o el `employee_code` que
   tenía. Solo lo olvida cuando el servidor devuelve su `scan_id` en `acknowledged`. Lo que no consigue
   avisar lo declara en el latido (`unreported_discards`).
-- El servidor guarda el aviso en `discarded_scan_reports` (solo `INSERT` y `SELECT`, UNIQUE por
+- El servidor guarda el aviso en `discarded_scan_reports` (sin `UPDATE`; `DELETE` solo para la purga de RL-02; UNIQUE por
   `scan_id`) **con el resultado de atribuirlo y sin el payload ni el código**. Atribuye solo si la
-  tarjeta es auténtica (mismo resolver y mismo suelo de tiempo que el escaneo) o, por PIN, si el código
+  tarjeta es auténtica (mismo resolver que el escaneo, y cada aviso rellena hasta el suelo de tiempo pase lo que pase, porque aquí la respuesta no dice nada) o, por PIN, si el código
   es de una persona que puede fichar. La incidencia `discarded_scan` la abre la revisión diaria, una
   por persona y jornada.
 - El aviso **no registra el fichaje**: el servidor acaba de decir que esa petición no vale, y
@@ -99,7 +99,7 @@ incidencia. Nunca en ningún otro.**
 - Aparecen dos tipos de incidencia (`scan_before_revocation`, `discarded_scan`) y una tabla con dato
   personal (el dueño atribuido), con la retención de `scan_events`, dentro de la exportación íntegra y
   fuera del paquete de diagnóstico.
-- Un token de quiosco robado puede, como mucho, provocar una incidencia `discarded_scan` al día a
+- Un token de quiosco robado puede, como mucho, provocar una incidencia `discarded_scan` por persona y jornada —y solo dentro de la ventana de fechas admitida: entre la emisión de la tarjeta o el alta y la recepción, con un tope de antigüedad configurado en el servidor— a
   quien tenga su tarjeta en la mano o a quien conozca su código de empleado —el mismo techo que RN-19—.
 - **Queda fuera**: el PIN de una persona de baja que llega tarde. Cubrirlo exige ampliar ADR-043
   (el `PinClaim` solo existe para quien puede fichar); hasta que se decida, la guía de RRHH pide

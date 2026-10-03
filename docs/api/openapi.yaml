@@ -924,14 +924,27 @@ paths:
         jornada— que se resuelve con una correccion (RN-13).
 
         **Atribucion, y por que no es un oraculo.** Por tarjeta, solo si el
-        `qr_payload` es **autentico**: se comprueba con el mismo resolver, las
-        mismas consultas y el mismo suelo de tiempo constante que `POST
-        /api/v1/scan` (RS-03), y una tarjeta revocada solo atribuye si el fichaje
-        es anterior a la revocacion (RN-20). Por PIN, solo si `employee_code` es de
-        una persona que puede fichar, el criterio de RN-19; **el PIN no viaja ni se
-        comprueba** y el aviso no cuenta para el bloqueo de RS-12. **La respuesta
-        es la misma se atribuya o no**, y no dice si abrira incidencia. El servidor
-        **no guarda** el payload ni el codigo: solo el resultado de atribuir.
+        `qr_payload` es **autentico**: se comprueba con el mismo resolver y las
+        mismas consultas que `POST /api/v1/scan` (RS-03), y una tarjeta revocada
+        solo atribuye si el fichaje es anterior a la revocacion (RN-20). Por PIN,
+        solo si `employee_code` es de una persona que puede fichar, el criterio
+        de RN-19; **el PIN no viaja ni se comprueba** y el aviso no cuenta para el
+        bloqueo de RS-12. **Cada aviso se rellena hasta el suelo de tiempo
+        constante pase lo que pase** —tarjeta vigente, retirada o falsa; codigo
+        existente, inexistente o de una persona de baja; `scan_id` ya registrado—
+        porque aqui, a diferencia del escaneo, la respuesta no dice nada y el
+        tiempo seria lo unico que hablara. **La respuesta es la misma se atribuya
+        o no**, y no dice si abrira incidencia. El servidor **no guarda** el
+        payload ni el codigo: solo el resultado de atribuir.
+
+        **La incidencia solo se abre dentro de una ventana de fechas.** El
+        `occurred_at` lo pone la tablet; para que un token robado no siembre una
+        incidencia por cada fecha que elija, la revision diaria solo abre
+        `discarded_scan` si el fichaje no es posterior a su recepcion (mas el
+        desfase admitido), no es anterior a la emision de la tarjeta (o al alta,
+        por PIN) ni mas antiguo que la ventana de revision de la instalacion
+        (31 dias de serie, en la configuracion del servidor, no en el perfil de
+        cumplimiento). El aviso se guarda igual.
 
         **Idempotente por `scan_id`** (regla dura 8): el mismo aviso dos veces, o
         dos avisos simultaneos del mismo `scan_id`, dejan una sola fila, y el
@@ -950,7 +963,8 @@ paths:
 
         **Como mucho 10 avisos por peticion**, por el suelo de tiempo de la
         atribucion. Limitado por dispositivo en una zona propia, que no consume la
-        de los escaneos.
+        de los escaneos: 6 peticiones por minuto, suficiente para vaciar una lista
+        de 40 descartes en una sola pasada y para nada mas.
       tags: [Attendance]
       security:
         - kioskToken: ['scan:write']
@@ -13472,13 +13486,17 @@ components:
             policy_url:
               type: ['string', 'null']
               maxLength: 512
-              pattern: '^https?://[^\s"<>]+$'
+              pattern: '^https://[!-~]+$'
               description: |
                 Direccion de la politica completa, capa 2 (`PRIVACY_POLICY_URL`).
-                Solo `http` o `https`: el quiosco la convierte en enlace y en QR,
-                y cualquier otro esquema seria una puerta a ejecutar codigo desde
-                un aviso legal. `null` mientras no se configure: el aviso dice
-                entonces que la politica completa esta disponible en recepcion.
+                Solo `https`, solo ASCII imprimible (un dominio internacional va
+                en punycode) y sin usuario ni contraseña en la autoridad: el
+                servidor rechaza con `422` lo que no cumpla al guardar. El quiosco
+                la enseña como texto y como QR, nunca como enlace navegable: una
+                tablet compartida no puede salir del quiosco por tocar un aviso
+                legal, y cualquier otro esquema seria una puerta a ejecutar codigo
+                desde el. `null` mientras no se configure: el aviso dice entonces
+                que la politica completa esta disponible en recepcion.
         application_name:
           type: string
           minLength: 1
@@ -13661,9 +13679,13 @@ components:
         `GET /api/v1/branding` (`privacy_notice`) y el quiosco las guarda para
         enseñarlas sin red. Vacias de serie, y el vacio significa «la redaccion
         generica»: el aviso no desaparece nunca. La primera admite hasta 160
-        caracteres sin saltos de linea ni caracteres de control; la segunda,
-        hasta 512, solo `http` o `https` y con nombre de servidor, porque el
-        quiosco la convierte en enlace y en QR. Impacto `presentation`: no mueven
+        caracteres sin saltos de linea, sin caracteres de control ni de formato
+        (categorias Unicode `Cc` y `Cf`: nada de marcas bidireccionales ni de
+        anchura cero que disfracen el texto); la segunda, hasta 512, solo
+        `https`, solo ASCII imprimible, con nombre de servidor y sin usuario ni
+        contraseña en la autoridad, porque el quiosco la enseña como texto y como
+        QR y una direccion disfrazada enviaria al empleado a otro sitio. Lo que
+        no cumpla se rechaza con `422`. Impacto `presentation`: no mueven
         ni un minuto del registro. Antes eran variables de compilacion de la PWA
         (`VITE_PRIVACY_*`) que nadie fijaba: toda instalacion enseñaba el texto
         generico (R6-KI-01).
