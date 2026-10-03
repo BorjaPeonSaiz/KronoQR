@@ -174,6 +174,7 @@ export function brandingPayload(overrides: Partial<Branding> = {}): Branding {
     accent_color: '#0f5c8c',
     logo_url: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
     locales: { default: 'es', available: ['es'] },
+    privacy_notice: { controller_name: null, policy_url: null },
     ...overrides,
   }
 }
