@@ -579,6 +579,18 @@ paths:
         impide registrar los demas, y una jornada no se pierde porque otra tarjeta
         estuviera revocada.
 
+        **Pero un elemento sin decidir detiene lo que viene detras** (RN-21,
+        [ADR-047](../adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)).
+        Si un elemento queda **no procesado** (`503`, `scan-not-processed`), los
+        posteriores del mismo lote **no se procesan**: se devuelven en su orden con
+        `503` y `scan-held-back` («aplazado»), y el quiosco los reintenta junto con
+        el que fallo. Lo ya decidido antes no se toca. Sin esto, con la entrada de
+        las 07:00 aplazada y la salida de las 15:00 procesada, la salida abria un
+        turno, y la entrada, al reenviarse, ya no cabia (RN-18). **La regla es por
+        lote y no por persona**: el servidor no sabe de quien es un elemento que
+        fallo, a lo mejor, resolviendo su credencial. Un rechazo (`422`) es un
+        desenlace y **no** detiene nada.
+
         **Idempotencia por `scan_id`, elemento a elemento** (regla dura 8). Reenviar
         el mismo lote —o un lote que solape con otro ya enviado— devuelve para cada
         `scan_id` la respuesta original, sin duplicar ni un tramo. La cabecera
@@ -651,6 +663,9 @@ paths:
             ordenado por `occurred_at`. Aun asi, el cliente debe emparejar por
             `scan_id` y no por posicion: es lo unico que sigue valiendo si un dia se
             reordena.
+
+            Detras de un `503` solo puede haber `503` (RN-21): el primero no
+            procesado y, despues, los aplazados.
           content:
             application/json:
               schema:
@@ -704,6 +719,29 @@ paths:
                           status: 422
                           detail: El escaneo no se ha podido registrar.
                           scan_id: 0199f0d4-88b1-7a55-8c07-2f9e1a7c4d31
+                uno-sin-procesar:
+                  summary: |
+                    La entrada de las 05:58 no se pudo procesar (fallo transitorio).
+                    La salida de las 14:03 no se adelanta: queda aplazada, y el
+                    quiosco reintenta las dos en orden (RN-21).
+                  value:
+                    results:
+                      - scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                        status: 503
+                        outcome:
+                          type: 'urn:kronoqr:problem:scan-not-processed'
+                          title: Escaneo no procesado
+                          status: 503
+                          detail: El escaneo no se ha podido procesar. Reintenta mas tarde.
+                          scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                      - scan_id: 0199f13a-7c22-7b41-9e88-0c4d5e6f7a81
+                        status: 503
+                        outcome:
+                          type: 'urn:kronoqr:problem:scan-held-back'
+                          title: Escaneo aplazado
+                          status: 503
+                          detail: El escaneo no se ha procesado porque uno anterior del lote sigue pendiente. Reintenta mas tarde.
+                          scan_id: 0199f13a-7c22-7b41-9e88-0c4d5e6f7a81
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -860,6 +898,114 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/scan/discarded:
+    post:
+      operationId: reportDiscardedScans
+      summary: Avisar de fichajes que el quiosco ha descartado
+      description: |
+        El quiosco avisa de los fichajes que **saco de su cola de envio porque el
+        servidor declaro invalida la peticion** —un `400`, o un `422` que no es el
+        rechazo generico `scan-rejected`— para que ninguno desaparezca sin que una
+        persona lo revise (RN-22, regla dura 19,
+        [ADR-047](../adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)).
+
+        **Por que existe.** Un `400` no se cura reintentando, y reintentarlo pararia
+        la cola entera (RN-21). Hasta la 2.2.0 el quiosco lo sacaba de la cola y
+        solo quedaba un diagnostico tecnico sin `scan_id` ni hora. El caso que lo
+        hace real es una actualizacion: la PWA cacheada en la tablet vacia su cola
+        contra una API ya actualizada que no acepta lo que ella envia, y la persona
+        ya se fue a casa con «Entrada registrada» en la pantalla.
+
+        **El aviso no registra el fichaje.** El servidor acaba de decir que esa
+        peticion no vale; registrarla por esta puerta seria escribir en el registro
+        legal algo que nadie ha validado. Lo que hace es guardar el aviso
+        (`discarded_scan_reports`) y, si lo puede **atribuir a una persona**, la
+        revision diaria abre una incidencia `discarded_scan` —una por persona y
+        jornada— que se resuelve con una correccion (RN-13).
+
+        **Atribucion, y por que no es un oraculo.** Por tarjeta, solo si el
+        `qr_payload` es **autentico**: se comprueba con el mismo resolver, las
+        mismas consultas y el mismo suelo de tiempo constante que `POST
+        /api/v1/scan` (RS-03), y una tarjeta revocada solo atribuye si el fichaje
+        es anterior a la revocacion (RN-20). Por PIN, solo si `employee_code` es de
+        una persona que puede fichar, el criterio de RN-19; **el PIN no viaja ni se
+        comprueba** y el aviso no cuenta para el bloqueo de RS-12. **La respuesta
+        es la misma se atribuya o no**, y no dice si abrira incidencia. El servidor
+        **no guarda** el payload ni el codigo: solo el resultado de atribuir.
+
+        **Idempotente por `scan_id`** (regla dura 8): el mismo aviso dos veces, o
+        dos avisos simultaneos del mismo `scan_id`, dejan una sola fila, y el
+        segundo recibe el mismo acuse. Un `scan_id` que ya estaba registrado en
+        `scan_events` se acusa igual y no abre nada.
+
+        **El quiosco solo olvida lo que se acusa.** Conserva cada fichaje
+        descartado en una lista aparte —no en la cola de envio, que ya no lo
+        espera— hasta que su `scan_id` vuelve en `acknowledged`. Lo que no consigue
+        avisar lo declara en el latido (`unreported_discards`).
+
+        **El esquema no cambia salvo para añadir campos opcionales.** Es el canal
+        de ultimo recurso precisamente cuando la tablet y el servidor no estan en
+        la misma version: una PWA anterior tiene que poder avisar a una API
+        posterior.
+
+        **Como mucho 10 avisos por peticion**, por el suelo de tiempo de la
+        atribucion. Limitado por dispositivo en una zona propia, que no consume la
+        de los escaneos.
+      tags: [Attendance]
+      security:
+        - kioskToken: ['scan:write']
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscardedScanReportBatch'
+            examples:
+              tras-una-actualizacion:
+                summary: |
+                  Dos fichajes que la API nueva rechazo con `400` cuando la PWA
+                  vieja vacio su cola
+                value:
+                  reports:
+                    - scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                      occurred_at: '2026-08-14T05:58:31Z'
+                      kind: qr
+                      http_status: 400
+                      problem_type: 'urn:kronoqr:problem:invalid-request'
+                      discarded_at: '2026-08-14T07:10:02Z'
+                      qr_payload: FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa
+                    - scan_id: 0199f2a1-3b7c-7e12-9f04-6a1b2c3d4e5f
+                      occurred_at: '2026-08-14T05:59:02Z'
+                      kind: pin
+                      http_status: 400
+                      problem_type: null
+                      discarded_at: '2026-08-14T07:10:03Z'
+                      employee_code: E7QK2MXPR
+      responses:
+        '200':
+          description: |
+            Avisos guardados. `acknowledged` lleva **todos** los `scan_id` del
+            cuerpo, tambien los que ya se conocian: son los que el quiosco puede
+            olvidar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscardedScanReceipt'
+              examples:
+                acuse:
+                  value:
+                    acknowledged:
+                      - 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                      - 0199f2a1-3b7c-7e12-9f04-6a1b2c3d4e5f
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/kiosk/roster:
     get:
       operationId: getKioskRoster
@@ -955,6 +1101,16 @@ paths:
         sobre el registro horario. Un quiosco que mienta sobre su cola no cambia ni
         un fichaje.
 
+        **Una cola desconocida no se declara vacia** (RF-KI-04,
+        [ADR-047](../adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)).
+        Si IndexedDB falla y la tablet no consigue reabrirlo, la cola cae a
+        memoria: lo que hubiera en el disco deja de verse. Entonces el latido
+        manda `queue_storage: memory` (o `unavailable`) y `pending_queue_size:
+        null`, y el panel marca el quiosco como averiado. Un cero ahi apagaria la
+        alerta de cola atascada justo cuando hay fichajes que no se ven.
+        `unreported_discards` cuenta los fichajes descartados (RN-22) cuyo aviso
+        no ha llegado todavia al servidor.
+
         **La respuesta lleva la hora del servidor** para que la tablet pueda medir su
         propio desfase de reloj y avisar (RF-AT-10). Nunca se le impide fichar por
         tenerlo mal: el desfase se registra en cada escaneo y se corrige despues
@@ -1003,6 +1159,16 @@ paths:
                   app_version: 1.4.2
                   pending_queue_size: 37
                   oldest_pending_at: '2026-08-14T05:58:31Z'
+              cola-en-memoria:
+                summary: |
+                  IndexedDB fallo y no se pudo reabrir: la cola esta en memoria y
+                  no sabe cuanto quedo en el disco. Tamaño desconocido, no cero.
+                  Ademas hay dos fichajes descartados sin avisar.
+                value:
+                  app_version: 2.2.0
+                  pending_queue_size: null
+                  queue_storage: memory
+                  unreported_discards: 2
               con-errores:
                 summary: |
                   Quiosco que reporta dos errores de camara desde el ultimo
@@ -1490,6 +1656,13 @@ paths:
         dispositivo los declara y nadie los comprueba. Un quiosco que mienta sobre
         su cola no cambia ni un fichaje.
 
+        **Una cola que la tablet no puede ver no es una cola vacia** (RN-21,
+        RN-22, [ADR-047](../adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)).
+        Si la cola ha caido a memoria, `queue_storage` lo dice, `pending_queue_size`
+        es `null` y la salud es `failure` (`queue_storage_degraded`).
+        `unreported_discards` cuenta los fichajes descartados cuyo aviso aun no ha
+        llegado al servidor (`discards_unreported`).
+
         **`admin` y solo `admin`, con ambito `settings:*`** (documento 02 §7.3,
         nota 5). Gestionar dispositivos es la misma potestad que configurar la
         instalacion: quien puede ver la flota es quien puede desvincularla. Un
@@ -1534,6 +1707,8 @@ paths:
                         app_version: 1.4.2
                         last_seen_at: '2026-09-07T09:59:41Z'
                         pending_queue_size: 0
+                        queue_storage: durable
+                        unreported_discards: 0
                         paired_at: '2026-09-01T08:12:00Z'
                         oldest_pending_at: null
                         battery_level: 100
@@ -1548,6 +1723,8 @@ paths:
                         app_version: 1.4.1
                         last_seen_at: '2026-09-07T06:31:02Z'
                         pending_queue_size: 37
+                        queue_storage: durable
+                        unreported_discards: 0
                         paired_at: '2026-09-02T11:40:00Z'
                         oldest_pending_at: '2026-09-07T05:58:31Z'
                         battery_level: 14
@@ -1562,6 +1739,8 @@ paths:
                         app_version: null
                         last_seen_at: null
                         pending_queue_size: 0
+                        queue_storage: durable
+                        unreported_discards: 0
                         paired_at: null
                         oldest_pending_at: null
                         battery_level: null
@@ -1643,6 +1822,8 @@ paths:
                     app_version: 1.4.2
                     last_seen_at: '2026-09-07T09:59:41Z'
                     pending_queue_size: 0
+                    queue_storage: durable
+                    unreported_discards: 0
                     paired_at: '2026-09-01T08:12:00Z'
                     oldest_pending_at: null
                     battery_level: 100
@@ -7266,16 +7447,25 @@ paths:
       description: |
         Lo que las tres aplicaciones necesitan para pintarse con la marca del
         cliente (RF-PD-08, regla dura 13): el nombre de la aplicacion, el color
-        de acento, donde esta el logotipo y que idiomas ofrece la instalacion.
+        de acento, donde esta el logotipo y que idiomas ofrece la instalacion. Y,
+        desde la 2.2.0, **la identidad del responsable del tratamiento y la
+        direccion de la politica de privacidad** que el quiosco enseña en su aviso
+        (RF-KI-09, RL-09).
 
         **Es publica, y tiene que serlo.** El quiosco y el portal la piden antes
         de identificar a nadie: la pantalla de espera de la tablet y la de acceso
-        del portal ya llevan la marca. Y **no filtra nada mas**: de las claves de
-        `installation_settings` solo salen las tres `BRANDING_*` y las dos
-        `LOCALE_*`, ya resueltas por la cascada de RF-PD-01; ningun umbral
-        operativo viaja por aqui. Lo que revela —el nombre del hotel y su color—
-        es lo mismo que revela la tarjeta impresa que cada empleado lleva en el
-        bolsillo.
+        del portal ya llevan la marca. **Lo que sale es una lista cerrada**: de las
+        claves de `installation_settings` solo las tres `BRANDING_*`, las dos
+        `LOCALE_*` y las dos `PRIVACY_*`, ya resueltas por la cascada de RF-PD-01;
+        ningun umbral operativo ni ningun ajuste de funcionamiento viaja por aqui.
+        Lo que revela —el nombre del hotel y su color— es lo mismo que revela la
+        tarjeta impresa que cada empleado lleva en el bolsillo. **El responsable y
+        la URL de la politica no son un dato operativo sino informacion que el
+        art. 13 RGPD obliga a dar** a la persona cuyo dato se trata, antes de
+        tratarlo y en el sitio donde se trata: es lo que el hotel imprime en el
+        cartel de recepcion y publica en su web. Que este endpoint sea publico es
+        lo que permite enseñarla en la tablet antes de que nadie fiche, y tambien
+        sin red, desde la ultima copia guardada.
 
         **`accent_color` es `null` mientras el cliente no haya elegido uno.** Con
         `null` las aplicaciones conservan el sistema visual del producto tal cual
@@ -7294,7 +7484,10 @@ paths:
         dice que hay otro logotipo.
 
         Sin ninguna fila guardada responde `200` con la marca del **producto**: el
-        valor por defecto **es** el producto, nunca la marca de otro cliente.
+        valor por defecto **es** el producto, nunca la marca de otro cliente. En
+        `privacy_notice`, sin configurar, los dos campos son `null` y el quiosco
+        enseña su aviso con la redaccion generica de sus textos (i18n): el aviso
+        **nunca desaparece** por falta de configuracion.
 
         Limitada por IP (`429`): la piden navegadores al arrancar, no personas.
       tags: [Product]
@@ -7316,8 +7509,11 @@ paths:
                     locales:
                       default: es
                       available: [es, en]
+                    privacy_notice:
+                      controller_name: null
+                      policy_url: null
                 hotel:
-                  summary: Un hotel con nombre, color y logotipo propios
+                  summary: Un hotel con nombre, color, logotipo y aviso de privacidad propios
                   value:
                     application_name: Hotel Marina
                     accent_color: '#0f5c8c'
@@ -7325,6 +7521,9 @@ paths:
                     locales:
                       default: es
                       available: [es]
+                    privacy_notice:
+                      controller_name: Hoteles Marina del Sur, S.L.
+                      policy_url: https://www.hotelmarina.example/privacidad-plantilla
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -11017,6 +11216,9 @@ components:
         `503` y no `500` porque describe la accion siguiente del cliente: reintentar
         con retroceso, no descartar. **Nunca aparece en `POST /api/v1/scan`**, que
         con un fallo asi responde `500` y el quiosco reintenta el envio completo.
+
+        **Lo que viene detras en el lote no se procesa** (RN-21): sale como
+        `ScanHeldBack`.
       additionalProperties: false
       required: [type, title, status, detail, scan_id]
       properties:
@@ -11036,6 +11238,44 @@ components:
           description: |
             Texto fijo, por lo mismo que en `ScanRejected`: la causa concreta vive en
             el log del servidor, no en la respuesta.
+        scan_id:
+          $ref: '#/components/schemas/ScanId'
+
+    ScanHeldBack:
+      type: object
+      title: ScanHeldBack
+      description: |
+        **El escaneo no se ha procesado porque uno anterior del mismo lote quedo
+        sin procesar** (RN-21,
+        [ADR-047](../adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)).
+        Tampoco es un rechazo: el servidor **no ha mirado** este escaneo, a
+        proposito, para no registrarlo antes que otro anterior que todavia no
+        tiene desenlace. El quiosco lo conserva y lo reintenta, igual que un
+        `ScanNotProcessed`.
+
+        Es un esquema aparte y no el mismo `scan-not-processed` para que el log, el
+        panel y las pruebas distingan el elemento que fallo de los que se
+        arrastraron. Para el cliente son lo mismo: `503`, conservar, reintentar.
+
+        **Se aplaza todo lo que viene detras en el lote, sea de quien sea**: el
+        servidor no sabe de quien era el elemento que fallo.
+      additionalProperties: false
+      required: [type, title, status, detail, scan_id]
+      properties:
+        type:
+          type: string
+          format: uri
+          enum: ['urn:kronoqr:problem:scan-held-back']
+        title:
+          type: string
+          enum: ['Escaneo aplazado']
+        status:
+          type: integer
+          enum: [503]
+        detail:
+          type: string
+          enum: ['El escaneo no se ha procesado porque uno anterior del lote sigue pendiente. Reintenta mas tarde.']
+          description: Texto fijo. No dice cual de los anteriores fallo ni por que.
         scan_id:
           $ref: '#/components/schemas/ScanId'
 
@@ -11111,18 +11351,132 @@ components:
             jornada; ningun reintento cambia ni una ni otra). El quiosco lo descarta
             en los dos casos, que es justo lo que hace que la cola vacie.
 
+            El `503` cubre tambien **dos** situaciones: el elemento que no se pudo
+            procesar (`scan-not-processed`) y los que venian detras en el lote y se
+            aplazaron para no adelantarlo (`scan-held-back`, RN-21).
+
             El quiosco decide con este numero que hace con el elemento de su cola:
-            `200` y `422` lo sacan de la cola, `503` lo conserva.
+            `200` y `422` lo sacan de la cola, `503` lo conserva **y detiene el
+            drenaje en ese punto**: nada posterior de su cola se envia hasta que
+            ese elemento tenga desenlace (RN-21).
         outcome:
           description: |
-            El cuerpo que habria devuelto el endpoint individual, sin cambios. Las
-            tres formas se distinguen sin ambiguedad: `action` discrimina las dos
-            aceptadas y `type` las dos de problema.
+            El cuerpo que habria devuelto el endpoint individual, sin cambios, o
+            el aplazamiento propio del lote. Las formas se distinguen sin
+            ambiguedad: `action` discrimina las dos aceptadas y `type` las tres de
+            problema.
           oneOf:
             - $ref: '#/components/schemas/ScanAccepted'
             - $ref: '#/components/schemas/ScanDebounced'
             - $ref: '#/components/schemas/ScanRejected'
             - $ref: '#/components/schemas/ScanNotProcessed'
+            - $ref: '#/components/schemas/ScanHeldBack'
+
+    DiscardedScanReportBatch:
+      type: object
+      title: DiscardedScanReportBatch
+      description: |
+        Avisos de fichajes descartados por el quiosco (RN-22). **Esquema
+        congelado**: solo crece con campos opcionales (ver
+        `POST /api/v1/scan/discarded`).
+      additionalProperties: false
+      required: [reports]
+      properties:
+        reports:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: |
+            Diez como maximo: la atribucion de cada tarjeta paga el suelo de
+            tiempo constante del resolver (RS-03). El quiosco reparte su lista en
+            trozos.
+          items:
+            $ref: '#/components/schemas/DiscardedScanReport'
+
+    DiscardedScanReport:
+      type: object
+      title: DiscardedScanReport
+      description: |
+        Un fichaje que el quiosco saco de su cola de envio porque el servidor
+        declaro invalida la peticion. Lleva lo que hace falta para que una persona
+        lo encuentre —`scan_id`, `occurred_at`, la via— y lo que el quiosco recibio,
+        mas lo minimo para atribuirlo: el `qr_payload` leido **o** el
+        `employee_code` tecleado. **Nunca el PIN** ni su sobre.
+      additionalProperties: false
+      required: [scan_id, occurred_at, kind, http_status, problem_type, discarded_at]
+      properties:
+        scan_id:
+          $ref: '#/components/schemas/ScanId'
+        occurred_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            El momento real del fichaje, el mismo que viajo en la peticion
+            descartada (regla dura 9). Es la hora que vera quien revise la
+            incidencia; **no es una hora registrada**.
+        kind:
+          type: string
+          enum: [qr, pin]
+          description: Por que via se ficho.
+        http_status:
+          type: integer
+          minimum: 400
+          maximum: 499
+          description: |
+            El codigo con el que el servidor declaro invalida la peticion: `400`,
+            o un `422` cuyo `type` no era `scan-rejected`.
+        problem_type:
+          type: ['string', 'null']
+          maxLength: 200
+          pattern: '^urn:kronoqr:problem:[a-z0-9-]+$'
+          description: |
+            El `type` del problema recibido, si era de este producto; `null` si la
+            respuesta no traia uno. Sirve para agrupar avisos por causa sin
+            transportar el `detail`.
+          examples:
+            - 'urn:kronoqr:problem:invalid-request'
+        discarded_at:
+          allOf:
+            - $ref: '#/components/schemas/UtcTimestamp'
+          description: |
+            Cuando lo descarto la tablet, **con su reloj**. Es informativo; el
+            servidor guarda ademas cuando recibio el aviso.
+        qr_payload:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: |
+            Solo con `kind: qr`. Lo que leyo la camara, tal cual, **sin `pattern`**:
+            lo que se quiere es poder atribuir una tarjeta autentica, y un patron
+            convertiria un payload raro en un aviso que no se puede entregar. El
+            servidor lo comprueba y **no lo guarda**.
+        employee_code:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: |
+            Solo con `kind: pin`. El codigo tecleado. El servidor lo usa para
+            atribuir el aviso si es de una persona que puede fichar (RN-19) y
+            **no lo guarda**.
+
+    DiscardedScanReceipt:
+      type: object
+      title: DiscardedScanReceipt
+      description: |
+        Acuse de los avisos guardados. Igual se atribuyan o no: no dice si habra
+        incidencia.
+      additionalProperties: false
+      required: [acknowledged]
+      properties:
+        acknowledged:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/ScanId'
+          description: |
+            Los `scan_id` que el quiosco ya puede olvidar: todos los del cuerpo,
+            tambien los que el servidor ya conocia.
 
     KioskRosterEntry:
       type: object
@@ -11231,20 +11585,48 @@ components:
           examples:
             - 1.4.2
         pending_queue_size:
-          type: integer
+          type: ['integer', 'null']
           minimum: 0
           maximum: 100000
           description: |
             Fichajes en la cola local sin sincronizar. El techo es proteccion de
             recursos, no una regla: una cola mayor que eso es una averia, no un dato.
+
+            **`null` = desconocido**, y solo se admite con `queue_storage`
+            distinto de `durable`: con la cola en IndexedDB la tablet siempre sabe
+            cuantos tiene. `null` con `durable` (o sin `queue_storage`) es `400`.
           examples:
             - 37
+        queue_storage:
+          type: string
+          enum: [durable, memory, unavailable]
+          description: |
+            Donde guarda la tablet su cola ahora mismo (ADR-047). Opcional:
+            **ausente significa `durable`**, que es lo que declara sin decirlo una
+            PWA anterior a la 2.2.0.
+
+            - `durable` — IndexedDB. Lo normal.
+            - `memory` — IndexedDB fallo y no se pudo reabrir; lo que se encola
+              ahora se pierde si la tablet se reinicia, y lo que hubiera en el
+              disco no se ve hasta que vuelva a abrir.
+            - `unavailable` — ni IndexedDB ni memoria aceptan escrituras: cada
+              fichaje se intenta enviar al instante.
+        unreported_discards:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          description: |
+            Fichajes que la tablet saco de su cola de envio porque el servidor
+            declaro invalida la peticion y cuyo aviso
+            (`POST /api/v1/scan/discarded`, RN-22) aun no tiene acuse. Opcional;
+            ausente significa `0`.
         oldest_pending_at:
           allOf:
             - $ref: '#/components/schemas/UtcTimestamp'
           description: |
             `occurred_at` del elemento mas antiguo de la cola. Opcional, y ausente
-            cuando la cola esta vacia.
+            cuando la cola esta vacia o cuando no se conoce (`queue_storage`
+            distinto de `durable`).
 
             Es lo que convierte «hay 37 pendientes» en «el mas antiguo es de hace tres
             horas», que es la diferencia entre una sincronizacion en curso y un
@@ -11898,6 +12280,8 @@ components:
         - app_version
         - last_seen_at
         - pending_queue_size
+        - queue_storage
+        - unreported_discards
         - paired_at
         - oldest_pending_at
         - battery_level
@@ -11951,7 +12335,7 @@ components:
             puesta en marcha es lo normal y en un hotel en funcionamiento es una
             tablet que no se llego a colgar de la pared.
         pending_queue_size:
-          type: integer
+          type: ['integer', 'null']
           minimum: 0
           maximum: 100000
           description: |
@@ -11961,6 +12345,29 @@ components:
 
             Es `0` cuando nunca ha latido, que no es lo mismo que «esta al dia»:
             eso lo dice `last_seen_at`.
+
+            **`null` significa «desconocido»**, nunca cero: la cola de la tablet
+            cayo a memoria y no sabe cuanto quedo en el disco (`queue_storage`
+            distinto de `durable`, RF-KI-04).
+        queue_storage:
+          type: string
+          enum: [durable, memory, unavailable]
+          description: |
+            Donde guarda la tablet su cola segun el ultimo latido (ADR-047).
+            `durable` es IndexedDB; `memory`, un respaldo que se pierde al
+            reiniciar la tablet; `unavailable`, ni lo uno ni lo otro. `durable`
+            mientras no haya latido o si la PWA es anterior a la 2.2.0 y no lo
+            declara.
+        unreported_discards:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          description: |
+            Fichajes que la tablet saco de su cola porque el servidor los declaro
+            invalidos y cuyo aviso (`POST /api/v1/scan/discarded`, RN-22) todavia
+            no ha llegado. `0` sin latido. Mayor que cero, el quiosco esta en
+            `warning` (`discards_unreported`): hay fichajes que nadie revisara
+            hasta que el aviso salga.
         paired_at:
           oneOf:
             - $ref: '#/components/schemas/UtcTimestamp'
@@ -12019,10 +12426,10 @@ components:
           type: string
           enum: [ok, warning, failure, revoked]
           description: |
-            `ok` late y no debe nada; `warning` late tarde, tiene cola, se
-            descarga o acaba de vincularse; `failure` lleva mas de
-            `silent_after_seconds` callado o nunca ha hablado; `revoked` esta
-            desvinculado y no cuenta para nada.
+            `ok` late y no debe nada; `warning` late tarde, tiene cola, tiene
+            descartes sin avisar, se descarga o acaba de vincularse; `failure`
+            lleva mas de `silent_after_seconds` callado, nunca ha hablado o tiene
+            la cola en memoria; `revoked` esta desvinculado y no cuenta para nada.
         reason:
           type: string
           enum:
@@ -12034,13 +12441,19 @@ components:
             - never_seen
             - revoked
             - battery_low
+            - queue_storage_degraded
+            - discards_unreported
           description: |
             **Una sola razon, la mas grave**, en este orden: `revoked`,
             `never_seen` (sin latido y vinculado hace mas de
             `silent_after_seconds`), `awaiting_first_heartbeat` (sin latido pero
             recien vinculado), `silent` (callado mas de `silent_after_seconds`),
-            `late` (mas de `fresh_within_seconds`), `battery_low` (por debajo de
-            `battery_low_percent` **y sin cargar**), `queue_pending`, `beating`.
+            `queue_storage_degraded` (`queue_storage` distinto de `durable`:
+            `failure`, porque lo que se encola ahora se pierde si la tablet se
+            reinicia), `late` (mas de `fresh_within_seconds`),
+            `discards_unreported` (`unreported_discards` mayor que cero:
+            `warning`), `battery_low` (por debajo de `battery_low_percent` **y sin
+            cargar**), `queue_pending`, `beating`.
         seconds_since_last_seen:
           type: ['integer', 'null']
           minimum: 0
@@ -13024,9 +13437,9 @@ components:
       title: Branding
       description: |
         La marca de la instalacion tal como la reciben las tres aplicaciones
-        (RF-PD-08, tarea 5.8). Es la proyeccion **publica** de cinco claves de
-        `installation_settings` —las tres `BRANDING_*` y las dos `LOCALE_*`—, ya
-        resueltas por la cascada de RF-PD-01. Se edita por
+        (RF-PD-08, tarea 5.8). Es la proyeccion **publica** de siete claves de
+        `installation_settings` —las tres `BRANDING_*`, las dos `LOCALE_*` y las
+        dos `PRIVACY_*`—, ya resueltas por la cascada de RF-PD-01. Se edita por
         `PATCH /api/v1/settings`, nunca por aqui.
 
         **Lo que se personaliza es lo que se ve en pantalla.** Los identificadores
@@ -13034,8 +13447,38 @@ components:
         y rutas— no forman parte de la marca y no se renombran: hacerlo dejaria
         sin poder fichar a quien lleva una tarjeta ya impresa.
       additionalProperties: false
-      required: [application_name, accent_color, logo_url, locales]
+      required: [application_name, accent_color, logo_url, locales, privacy_notice]
       properties:
+        privacy_notice:
+          type: object
+          additionalProperties: false
+          required: [controller_name, policy_url]
+          description: |
+            Lo que el aviso de privacidad del quiosco necesita del cliente
+            (RF-KI-09, RL-09, art. 13 RGPD en capa 1). **El quiosco lo guarda con
+            el resto de la marca** y lo sigue enseñando sin red; si nunca lo
+            recibio, enseña la redaccion generica. Un cliente que guardo una copia
+            anterior a la 2.2.0, sin este objeto, la trata como «sin configurar».
+          properties:
+            controller_name:
+              type: ['string', 'null']
+              minLength: 1
+              maxLength: 160
+              description: |
+                Responsable del tratamiento, tal como lo quiere escribir el
+                cliente (`PRIVACY_CONTROLLER_NAME`). `null` mientras no lo
+                configure: el aviso dice entonces «la empresa titular de este
+                centro de trabajo».
+            policy_url:
+              type: ['string', 'null']
+              maxLength: 512
+              pattern: '^https?://[^\s"<>]+$'
+              description: |
+                Direccion de la politica completa, capa 2 (`PRIVACY_POLICY_URL`).
+                Solo `http` o `https`: el quiosco la convierte en enlace y en QR,
+                y cualquier otro esquema seria una puerta a ejecutar codigo desde
+                un aviso legal. `null` mientras no se configure: el aviso dice
+                entonces que la politica completa esta disponible en recepcion.
         application_name:
           type: string
           minLength: 1
@@ -13211,6 +13654,19 @@ components:
         **No toca el fichaje del quiosco**, que nunca se rechaza por la hora
         (regla dura 19; su desfase lo gobierna `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES`).
         Impacto `worked_hours`: decide que minutos se pueden anotar a mano.
+
+        `PRIVACY_CONTROLLER_NAME` y `PRIVACY_POLICY_URL` (2.2.0, RF-KI-09, RL-09)
+        son el **aviso de privacidad del quiosco**: quien es el responsable del
+        tratamiento y donde esta la politica completa. Las publica
+        `GET /api/v1/branding` (`privacy_notice`) y el quiosco las guarda para
+        enseñarlas sin red. Vacias de serie, y el vacio significa «la redaccion
+        generica»: el aviso no desaparece nunca. La primera admite hasta 160
+        caracteres sin saltos de linea ni caracteres de control; la segunda,
+        hasta 512, solo `http` o `https` y con nombre de servidor, porque el
+        quiosco la convierte en enlace y en QR. Impacto `presentation`: no mueven
+        ni un minuto del registro. Antes eran variables de compilacion de la PWA
+        (`VITE_PRIVACY_*`) que nadie fijaba: toda instalacion enseñaba el texto
+        generico (R6-KI-01).
       enum:
         - ATTENDANCE_MAX_SHIFT_HOURS
         - ATTENDANCE_DEBOUNCE_SECONDS
@@ -13236,6 +13692,8 @@ components:
         - KIOSK_UPDATE_QUIET_MINUTES
         - BASELINE_MANUAL_HOURS_PER_MONTH
         - ATTENDANCE_FUTURE_TOLERANCE_MINUTES
+        - PRIVACY_CONTROLLER_NAME
+        - PRIVACY_POLICY_URL
 
     SettingValue:
       title: SettingValue
@@ -15528,6 +15986,26 @@ components:
           `lockout_attempts` y `max_sync_delay_seconds` (con signo). El instante
           del intento **no es una hora registrada**: la cierra una persona, con
           una correccion (RN-13) si trabajo o descartandola si no.
+        - `scan_before_revocation`: **fichaje anterior a la retirada** (RN-20).
+          Llego un escaneo de una tarjeta **autentica** de esta persona que ya
+          estaba revocada —por su baja, por reemision o por perdida— o cuyo
+          titular estaba de baja, y su hora real era **anterior** a la retirada:
+          una tarjeta que valia cuando se uso, tipicamente un fichaje de la cola
+          offline del ultimo dia. Se rechazo como siempre (RS-03) y quedo
+          atribuido a su titular. Una por persona y jornada, sin
+          `shift_entry_uuid`; el `context` lleva `scan_id` y `occurred_at` del
+          primero, `attempts`, `max_sync_delay_seconds` y `withdrawal`.
+          Se cierra con un alta manual de tramo (RN-14 la admite hasta la fecha
+          de cese) o descartandola con nota.
+        - `discarded_scan`: **fichaje descartado por el quiosco** (RN-22). El
+          servidor declaro invalida la peticion de un fichaje de esta persona
+          —tipicamente una aplicacion del quiosco desfasada tras una
+          actualizacion— y el quiosco lo aviso por `POST /api/v1/scan/discarded`.
+          **No se registro**. Una por persona y jornada, sin `shift_entry_uuid`;
+          el `context` lleva `scan_id` y `occurred_at` del primero,
+          `device_uuid`, `origin`, `http_status`, `problem`, `attribution` y
+          `reports`. Se cierra con una correccion (RN-13) si trabajo o
+          descartandola si no.
 
         **Ampliar este enum es aditivo** (ADR-012): un cliente que no conozca un
         valor lo enseña tal cual en la bandeja, y ninguna respuesta cambia de
@@ -15543,6 +16021,8 @@ components:
         - anomalous_pattern
         - out_of_order_scan
         - rejected_pin_scan
+        - scan_before_revocation
+        - discarded_scan
       example: insufficient_rest
 
     IncidentSeverity:
@@ -15718,6 +16198,19 @@ components:
         (el mayor `recorded_at − occurred_at`, con signo: una cola que drena
         tarde da positivo, un reloj adelantado negativo). **Ni el codigo de
         empleado ni el PIN**: la persona es la de la incidencia.
+
+        La incidencia `scan_before_revocation` (RN-20) lleva `scan_id` y
+        `occurred_at` del primer escaneo de la jornada, `attempts`,
+        `max_sync_delay_seconds` (como arriba) y `withdrawal`: `offboarding` si
+        la persona esta de baja, `credential` si lo retirado fue solo la tarjeta
+        (reemision o perdida). **Nunca** el motivo libre de la revocacion.
+
+        La incidencia `discarded_scan` (RN-22) lleva `scan_id` y `occurred_at`
+        del primer aviso de la jornada, `device_uuid`, `origin`, `http_status`,
+        `problem` (el final del `type` recibido, `invalid-request`, o vacio),
+        `attribution` (`credential` o `employee_code`) y `reports` (cuantos
+        avisos esa jornada). **Nunca** el contenido del QR ni el codigo de
+        empleado.
       additionalProperties:
         anyOf:
           - type: integer
@@ -17883,6 +18376,8 @@ components:
               - app_version
               - last_seen_at
               - pending_queue_size
+              - queue_storage
+              - unreported_discards
               - oldest_pending_at
               - battery_level
               - battery_charging
@@ -17901,6 +18396,18 @@ components:
                   - $ref: '#/components/schemas/UtcTimestamp'
                   - type: 'null'
               pending_queue_size:
+                description: |
+                  `null` = desconocido: la cola de la tablet cayo a memoria
+                  (`queue_storage`, ADR-047). Nunca se convierte en `0`.
+                type: ['integer', 'null']
+                minimum: 0
+              queue_storage:
+                type: string
+                enum: [durable, memory, unavailable]
+              unreported_discards:
+                description: |
+                  Fichajes descartados (RN-22) cuyo aviso no ha llegado al
+                  servidor, segun el ultimo latido. Solo el recuento.
                 type: integer
                 minimum: 0
               oldest_pending_at:

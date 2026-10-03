@@ -733,7 +733,7 @@ Esperado: p95 por debajo de 150 ms a 50 fichajes/s; ningún duplicado; `projecti
 |---|---|
 | **Horas** | 6–8 |
 | **Agente / Skill** | `qa-testing` |
-| **Requisitos** | RQ-04 (doc 02 §11). Relacionados: RQ-05 (ciclo offline completo), RF-QR-05 (corrección de errores nivel Q) y doc 01 §6.5 (accesibilidad) |
+| **Requisitos** | RQ-04 (doc 02 §11). Relacionados: RQ-05 (ciclo offline completo), RF-QR-05 (corrección de errores nivel Q) y doc 01 §6.5 (accesibilidad). Derivada: RN-21 «Orden de la cola offline» (verificación 2.2.0, bloque 18, [ADR-047](../docs/adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)), cuyo peor escenario prueba el E2E offline de esta tarea |
 | **Precondiciones** | Derivado: la PWA del quiosco (**1.8**), la cola offline (**1.9**), el PIN de respaldo (**1.12**) y las credenciales impresas (**1.5**, **1.10**) para poder generar el vídeo con un QR real |
 | **Bloquea a** | Publicación de versión: la etapa ⑦ del pipeline (§10.1) es E2E con cámara simulada y axe, y el §9.2 exige «todos los escenarios críticos en verde» y «0 violaciones críticas o graves» |
 
@@ -1168,7 +1168,7 @@ Esperado: un empleado con una baja de tres días no aparece como ausente injusti
 |---|---|
 | **Horas** | 5–7 |
 | **Agente / Skill** | `backend-laravel`, revisión de `seguridad-cumplimiento` |
-| **Requisitos** | RF-PR-06 (doc 02 §11 y Anexo A). Derivada: RN-19 «Fichaje por PIN no registrado» (verificación 2.2.0, bloque 5: [`../docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md`](../docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md), ADR-043), que reutiliza la misma cadena hallazgo → incidencia → bandeja |
+| **Requisitos** | RF-PR-06 (doc 02 §11 y Anexo A). Derivada: RN-19 «Fichaje por PIN no registrado» (verificación 2.2.0, bloque 5: [`../docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md`](../docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md), ADR-043), que reutiliza la misma cadena hallazgo → incidencia → bandeja. Y por la misma cadena, desde el bloque 18 de la verificación 2.2.0 ([ADR-047](../docs/adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)): RN-20 «Fichaje anterior a la retirada de la credencial» y RN-22 «Fichaje descartado por el quiosco» |
 | **Precondiciones** | Derivado: `scan_events` con `device_id` y `occurred_at` (**1.4**), la bandeja de incidencias (**2.5**), la detección programada (**2.6**) y la configuración con ámbito para los parámetros (**5.1**) |
 | **Bloquea a** | No figura dependencia en los documentos |
 
