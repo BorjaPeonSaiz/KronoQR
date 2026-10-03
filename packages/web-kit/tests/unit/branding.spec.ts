@@ -58,6 +58,7 @@ describe('parseBranding (RF-PD-08)', () => {
       accentColor: '#0f5c8c',
       logoUrl: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
       locales: { default: 'es', available: ['es'] },
+      privacyNotice: { controllerName: null, policyUrl: null },
     })
   })
 
@@ -85,6 +86,72 @@ describe('parseBranding (RF-PD-08)', () => {
     ['nulo', null],
   ])('rechaza una respuesta %s sin lanzar', (_case, value) => {
     expect(parseBranding(value)).toBeNull()
+  })
+})
+
+describe('parseBranding: aviso de privacidad (RF-KI-09, RL-09)', () => {
+  const NOTICE = {
+    controller_name: 'Hotel Marina S.L.',
+    policy_url: 'https://marina.example/privacidad',
+  }
+
+  it('una copia anterior a la 2.2.0, sin privacy_notice, es «sin configurar»', () => {
+    expect(parseBranding(PAYLOAD)?.privacyNotice).toEqual({ controllerName: null, policyUrl: null })
+  })
+
+  it('lee el responsable y la politica', () => {
+    expect(parseBranding({ ...PAYLOAD, privacy_notice: NOTICE })?.privacyNotice).toEqual({
+      controllerName: 'Hotel Marina S.L.',
+      policyUrl: 'https://marina.example/privacidad',
+    })
+  })
+
+  it('los dos campos a null son «sin configurar», no un error', () => {
+    const parsed = parseBranding({
+      ...PAYLOAD,
+      privacy_notice: { controller_name: null, policy_url: null },
+    })
+    expect(parsed?.privacyNotice).toEqual({ controllerName: null, policyUrl: null })
+  })
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['data:', 'data:text/html,<script>1</script>'],
+    ['ftp:', 'ftp://marina.example/privacidad'],
+    ['sin host', 'https://'],
+    ['con espacios', 'https://marina.example/a b'],
+    ['http (sin TLS)', 'http://marina.example/privacidad'],
+    ['con caracteres no ASCII', 'https://marina.example/privacidad/mariña'],
+    ['de mas de 512 caracteres', 'https://marina.example/' + 'a'.repeat(512)],
+    ['no es una cadena', 42],
+  ])('una URL %s se descarta (sin enlace), pero la marca sigue valiendo', (_case, url) => {
+    const parsed = parseBranding({
+      ...PAYLOAD,
+      privacy_notice: { controller_name: 'Hotel Marina S.L.', policy_url: url },
+    })
+    expect(parsed).not.toBeNull()
+    expect(parsed?.privacyNotice.policyUrl).toBeNull()
+    expect(parsed?.privacyNotice.controllerName).toBe('Hotel Marina S.L.')
+  })
+
+  it.each([
+    ['vacio', '   '],
+    ['con salto de linea', 'Hotel' + String.fromCharCode(10) + 'Marina'],
+    ['de mas de 160 caracteres', 'x'.repeat(161)],
+    ['no es una cadena', { name: 'x' }],
+  ])('un responsable %s se descarta', (_case, name) => {
+    const parsed = parseBranding({
+      ...PAYLOAD,
+      privacy_notice: { controller_name: name, policy_url: null },
+    })
+    expect(parsed?.privacyNotice.controllerName).toBeNull()
+  })
+
+  it('un privacy_notice con la forma rota (no es un objeto) es «sin configurar»', () => {
+    expect(parseBranding({ ...PAYLOAD, privacy_notice: 'x' })?.privacyNotice).toEqual({
+      controllerName: null,
+      policyUrl: null,
+    })
   })
 })
 
@@ -301,6 +368,7 @@ describe('applyBranding sobre el documento', () => {
     accentColor: '#0f5c8c',
     logoUrl: '/api/v1/branding/logo?v=3f9a1c2b7e4d',
     locales: { default: 'es', available: ['es'] },
+    privacyNotice: { controllerName: null, policyUrl: null },
   }
 
   it('aplica el acento, el titulo y el favicon del cliente', () => {

@@ -23,7 +23,7 @@ import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
-import { readPrivacyNoticeConfig } from '@/shared/config/privacy'
+import { readPrivacyNotice } from '@/shared/branding/useBranding'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import {
   APP_VERSION,
@@ -61,7 +61,8 @@ const deviceId = resolveDeviceId()
 // RF-PD-15): ver `errorReporter.ts`.
 const reporter = getErrorReporter({ appVersion: APP_VERSION, deviceId })
 const connectivity = useConnectivity()
-const privacyConfig = readPrivacyNoticeConfig()
+// La marca ya la leyo y guardo la pantalla de escaneo; aqui basta la copia.
+const privacyNotice = readPrivacyNotice()
 
 const api = createApiClient({
   ...(import.meta.env.VITE_API_BASE_URL === undefined
@@ -454,7 +455,7 @@ onUnmounted(() => {
     </section>
 
     <footer class="flex items-end justify-between gap-4 px-6 py-4">
-      <PrivacyNoticePanel class="min-w-0 flex-1" :config="privacyConfig" />
+      <PrivacyNoticePanel class="min-w-0 flex-1" :notice="privacyNotice" />
     </footer>
   </main>
 </template>

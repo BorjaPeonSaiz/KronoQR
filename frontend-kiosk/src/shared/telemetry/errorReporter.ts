@@ -81,6 +81,10 @@ export type ClientErrorCode =
   | 'kiosk.offline.sync_unauthorized'
   | 'kiosk.offline.sync_throttled'
   | 'kiosk.offline.item_not_processed'
+  // RN-22 (ADR-047). `item_discarded` lleva `http_status`, `kind` y `problem_type`,
+  // nunca `scan_id` ni payload.
+  | 'kiosk.offline.item_discarded'
+  | 'kiosk.offline.discard_report_failed'
   | 'kiosk.offline.malformed_batch_response'
   | 'kiosk.offline.confirm_not_persisted'
   | 'kiosk.roster.decrypt_failed'

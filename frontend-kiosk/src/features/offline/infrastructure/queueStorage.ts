@@ -74,6 +74,40 @@ export interface RetrySchedule {
   readonly next_attempt_at: number
 }
 
+/**
+ * Lo comun a un fichaje DESCARTADO (RN-22, ADR-047): el servidor declaro invalida
+ * la peticion (400, o un 422 que no es el rechazo estandar) y el quiosco lo
+ * saco de la cola de envio. Se conserva hasta que el servidor acusa el aviso
+ * (`POST /api/v1/scan/discarded`): hasta entonces es lo unico que queda de ese
+ * fichaje y una persona tiene que poder revisarlo.
+ *
+ * `attempts` y `next_attempt_at` gobiernan el retroceso del AVISO, con la misma
+ * escalera que la cola de envio.
+ */
+interface DiscardedScanRecordBase {
+  readonly scan_id: string
+  readonly occurred_at: string
+  readonly http_status: number
+  readonly problem_type: string | null
+  /** Reloj de la tablet, ISO 8601 UTC. Informativo. */
+  readonly discarded_at: string
+  readonly attempts: number
+  readonly next_attempt_at: number
+}
+
+export interface DiscardedQrScanRecord extends DiscardedScanRecordBase {
+  readonly kind: 'qr'
+  readonly qr_payload: string
+}
+
+/** NUNCA lleva `pin_sealed`: el PIN no se verifica en el aviso (RN-22). */
+export interface DiscardedPinScanRecord extends DiscardedScanRecordBase {
+  readonly kind: 'pin'
+  readonly employee_code: string
+}
+
+export type DiscardedScanRecord = DiscardedQrScanRecord | DiscardedPinScanRecord
+
 /** Padron cifrado en reposo (RL-12). Fuera del sobre solo va la fecha. */
 export interface EncryptedRosterRecord {
   readonly id: 'current'
@@ -105,6 +139,22 @@ export interface QueueStorage {
   /** Borrado transaccional. Solo se llama tras confirmacion explicita del servidor. */
   remove(scanIds: readonly string[]): Promise<void>
   reschedule(schedules: readonly RetrySchedule[]): Promise<void>
+  /**
+   * Mueve un fichaje de la cola de envio a la lista de descartados en UNA
+   * transaccion (`put` en `discarded` + `delete` en `scans`): jamas queda en
+   * ninguna de las dos listas ni en las dos. `record` puede no estar en la cola
+   * (el rescate de `submit()` cuando no hubo donde encolar): el borrado es
+   * entonces un no-op y el aviso se guarda igual.
+   */
+  discard(scanId: string, entry: DiscardedScanRecord): Promise<void>
+  /** Inserta/actualiza un descartado sin tocar la cola. Idempotente por `scan_id`. */
+  putDiscarded(entry: DiscardedScanRecord): Promise<void>
+  /** Hasta `limit` descartados, del mas antiguo al mas reciente. */
+  listDiscarded(limit: number): Promise<DiscardedScanRecord[]>
+  countDiscarded(): Promise<number>
+  /** Solo se llama con los `scan_id` que el servidor devolvio en `acknowledged`. */
+  removeDiscarded(scanIds: readonly string[]): Promise<void>
+  rescheduleDiscarded(schedules: readonly RetrySchedule[]): Promise<void>
   clear(): Promise<void>
   readRoster(): Promise<EncryptedRosterRecord | null>
   writeRoster(record: EncryptedRosterRecord): Promise<void>
@@ -120,6 +170,7 @@ export interface QueueStorage {
  */
 export function createMemoryQueueStorage(): QueueStorage {
   const rows = new Map<string, QueuedScanRecord>()
+  const discarded = new Map<string, DiscardedScanRecord>()
   let roster: EncryptedRosterRecord | null = null
 
   return {
@@ -157,8 +208,46 @@ export function createMemoryQueueStorage(): QueueStorage {
       }
     },
 
+    async discard(scanId, entry) {
+      discarded.set(entry.scan_id, entry)
+      rows.delete(scanId)
+    },
+
+    async putDiscarded(entry) {
+      discarded.set(entry.scan_id, entry)
+    },
+
+    async listDiscarded(limit) {
+      return [...discarded.values()]
+        .sort((left, right) => (left.discarded_at < right.discarded_at ? -1 : 1))
+        .slice(0, limit)
+    },
+
+    async countDiscarded() {
+      return discarded.size
+    },
+
+    async removeDiscarded(scanIds) {
+      for (const scanId of scanIds) discarded.delete(scanId)
+    },
+
+    async rescheduleDiscarded(schedules) {
+      for (const schedule of schedules) {
+        const current = discarded.get(schedule.scan_id)
+        if (current === undefined) continue
+        discarded.set(schedule.scan_id, {
+          ...current,
+          attempts: schedule.attempts,
+          next_attempt_at: schedule.next_attempt_at,
+        })
+      }
+    },
+
     async clear() {
+      // Desvinculacion: tambien los descartados, que llevan el `qr_payload` en
+      // claro (F10 del dictamen de seguridad). Ver `dexieStorage.ts`.
       rows.clear()
+      discarded.clear()
     },
 
     async readRoster() {

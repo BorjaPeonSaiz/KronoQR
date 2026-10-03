@@ -397,6 +397,8 @@ describe('fichajes que el servidor declara invalidos (PIN-08)', () => {
       outcome: 'failed',
       cause: 'invalid',
       httpStatus: 400,
+      // RN-22: el `type` de ESTE producto viaja en el aviso de descartado.
+      problemType: 'urn:kronoqr:problem:invalid-request',
     })
     expect(
       await client.recordPinScan({
@@ -436,5 +438,98 @@ describe('fichajes que el servidor declara invalidos (PIN-08)', () => {
 
     expect(await serverDown.recordScan(REQUEST)).toMatchObject({ cause: 'server' })
     expect(await unauthorized.recordScan(REQUEST)).toMatchObject({ cause: 'unauthorized' })
+  })
+})
+
+describe('RN-22 / RN-21 — lote, descartes y avisos en el cliente HTTP (RF-KI-04, RF-AT-07)', () => {
+  const BATCH = { scans: [REQUEST] }
+  const REPORT = {
+    reports: [
+      {
+        scan_id: REQUEST.scan_id,
+        occurred_at: REQUEST.occurred_at,
+        kind: 'qr' as const,
+        qr_payload: REQUEST.qr_payload,
+        http_status: 400,
+        problem_type: null,
+        discarded_at: '2026-08-14T09:30:00.000Z',
+      },
+    ],
+  }
+
+  it('un 400 con cuerpo JSON en el lote es `invalid` (se reparte de uno en uno), no `server`', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () =>
+        jsonResponse(400, {
+          type: 'urn:kronoqr:problem:invalid-request',
+          status: 400,
+        })) as unknown as typeof fetch,
+    })
+
+    expect(await client.syncScanBatch(BATCH, 'k1')).toMatchObject({
+      outcome: 'failed',
+      cause: 'invalid',
+      httpStatus: 400,
+      problemType: 'urn:kronoqr:problem:invalid-request',
+    })
+  })
+
+  it('un 400 sin cuerpo JSON en el lote (proxy) sigue siendo transitorio', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () => new Response('<html/>', { status: 400 })) as unknown as typeof fetch,
+    })
+
+    expect(await client.syncScanBatch(BATCH, 'k1')).toMatchObject({ cause: 'server' })
+  })
+
+  it('el `type` de un problema ajeno a este producto no viaja: `problemType` es null', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () =>
+        jsonResponse(422, { type: 'https://evil.example/x' })) as unknown as typeof fetch,
+    })
+
+    expect(await client.recordScan(REQUEST)).toMatchObject({
+      cause: 'invalid',
+      httpStatus: 422,
+      problemType: null,
+    })
+  })
+
+  it('`reportDiscardedScans` va a /scan/discarded, con token, y lee el acuse', async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () =>
+      jsonResponse(200, { acknowledged: [REQUEST.scan_id] }),
+    )
+    const client = createApiClient({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      deviceToken: () => 'tok',
+    })
+
+    const result = await client.reportDiscardedScans(REPORT)
+
+    expect(result).toEqual({ outcome: 'ok', data: { acknowledged: [REQUEST.scan_id] } })
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('/api/v1/scan/discarded')
+    const init = fetchImpl.mock.calls[0]?.[1]
+    expect((init?.headers as Record<string, string>)['Authorization']).toBe('Bearer tok')
+    expect(JSON.parse(String(init?.body))).toEqual(REPORT)
+  })
+
+  it('un acuse mal formado es `malformed`, no un acuse vacio', async () => {
+    const client = createApiClient({
+      fetchImpl: (async () => jsonResponse(200, { acknowledged: [1] })) as unknown as typeof fetch,
+    })
+
+    expect(await client.reportDiscardedScans(REPORT)).toMatchObject({ cause: 'malformed' })
+  })
+
+  it('un 400 con cuerpo es `invalid`; un 5xx, un 401 y un 429 son transitorios', async () => {
+    const respond = (status: number, body: unknown = { type: 'x' }) =>
+      createApiClient({
+        fetchImpl: (async () => jsonResponse(status, body)) as unknown as typeof fetch,
+      }).reportDiscardedScans(REPORT)
+
+    expect(await respond(400)).toMatchObject({ cause: 'invalid' })
+    expect(await respond(500)).toMatchObject({ cause: 'server' })
+    expect(await respond(401)).toMatchObject({ cause: 'unauthorized' })
+    expect(await respond(429)).toMatchObject({ cause: 'throttled' })
   })
 })

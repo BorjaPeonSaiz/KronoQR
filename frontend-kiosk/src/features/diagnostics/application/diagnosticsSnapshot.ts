@@ -11,6 +11,7 @@
 // quien ficha (regla dura 21).
 
 import type { CameraState } from '@/features/scan/composables/useCamera'
+import type { QueueStorageKind } from '@/features/offline/application/scanQueue'
 import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
 
 /**
@@ -68,9 +69,13 @@ export interface DiagnosticsSources {
     readonly lastHeartbeat: { readonly beatAt: string; readonly skewSeconds: number | null } | null
   }
   readonly queue: {
-    readonly size: number
+    /** `null` = desconocido (cola en memoria o sin almacen, ADR-047): jamas un 0. */
+    readonly size: number | null
     readonly oldestOccurredAt: string | null
     readonly durable: boolean
+    readonly storage: QueueStorageKind
+    /** Fichajes descartados (RN-22) cuyo aviso al servidor aun no tiene acuse. */
+    readonly unreportedDiscards: number
     readonly syncing: boolean
   }
   readonly roster: {

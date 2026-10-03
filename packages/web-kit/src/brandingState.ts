@@ -76,6 +76,10 @@ function toContract(branding: Branding): Record<string, unknown> {
     accent_color: branding.accentColor,
     logo_url: branding.logoUrl,
     locales: { default: branding.locales.default, available: [...branding.locales.available] },
+    privacy_notice: {
+      controller_name: branding.privacyNotice.controllerName,
+      policy_url: branding.privacyNotice.policyUrl,
+    },
   }
 }
 

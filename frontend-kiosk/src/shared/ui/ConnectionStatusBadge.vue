@@ -14,7 +14,8 @@ import type { ConnectivityStatus } from '@/shared/connectivity/useConnectivity'
 const props = withDefaults(
   defineProps<{
     status: ConnectivityStatus
-    pendingCount?: number
+    /** `null` = no se sabe (cola en memoria, ADR-047): se dice, no se pinta un 0. */
+    pendingCount?: number | null
     /** Hay un drenaje de la cola en curso (tarea 1.9). */
     syncing?: boolean
   }>(),
@@ -28,7 +29,11 @@ const isOffline = computed(() => props.status === 'offline')
 // «Sincronizando» solo cuando de verdad se esta enviando algo. Decirlo con la
 // cola vacia convertiria el indicador en ruido, y el valor de este indicador es
 // justamente que se pueda creer lo que dice.
-const isSyncing = computed(() => props.syncing && !isOffline.value && props.pendingCount > 0)
+const pendingUnknown = computed(() => props.pendingCount === null)
+const isSyncing = computed(
+  () =>
+    props.syncing && !isOffline.value && (pendingUnknown.value || (props.pendingCount ?? 0) > 0),
+)
 
 const label = computed(() => {
   if (isOffline.value) return t('connection.offline')
@@ -48,12 +53,15 @@ const label = computed(() => {
     aria-live="polite"
     data-testid="connection-status"
     :data-status="isOffline ? 'offline' : 'online'"
-    :data-pending="props.pendingCount"
+    :data-pending="props.pendingCount ?? 'unknown'"
   >
     <span aria-hidden="true" class="text-xl">{{ isOffline ? '⚠' : isSyncing ? '↻' : '●' }}</span>
     <span>{{ label }}</span>
-    <span v-if="props.pendingCount > 0" class="font-semibold">
-      · {{ t('connection.pending', { count: props.pendingCount }, props.pendingCount) }}
+    <span v-if="pendingUnknown" class="font-semibold" data-testid="pending-unknown">
+      · {{ t('connection.pendingUnknown') }}
+    </span>
+    <span v-else-if="(props.pendingCount ?? 0) > 0" class="font-semibold">
+      · {{ t('connection.pending', { count: props.pendingCount ?? 0 }, props.pendingCount ?? 0) }}
     </span>
   </div>
 </template>

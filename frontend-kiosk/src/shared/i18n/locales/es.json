@@ -9,6 +9,7 @@
     "offline": "Sin conexión",
     "syncing": "Sincronizando",
     "pending": "0 fichajes pendientes | 1 fichaje pendiente | {count} fichajes pendientes",
+    "pendingUnknown": "Pendientes: desconocido",
     "offlineHint": "Se puede fichar igual. Los registros se envían al recuperar la conexión."
   },
   "scan": {
@@ -167,6 +168,7 @@
         "size": "Fichajes pendientes",
         "oldest": "Más antiguo",
         "storage": "Almacenamiento",
+        "unreportedDiscards": "Descartados sin avisar",
         "syncing": "Sincronizando"
       },
       "roster": {
@@ -207,6 +209,7 @@
       "absent": "Sin token",
       "durable": "Persistente (IndexedDB)",
       "memory": "En memoria (respaldo)",
+      "unavailable": "No disponible: se envía al instante",
       "configured": "Configurado",
       "notConfigured": "Sin configurar",
       "unpaired": "Esta tablet no está emparejada: no hay padrón que mostrar.",
@@ -229,6 +232,7 @@
     "rights": "Derechos: acceso, rectificación, supresión, limitación, oposición y portabilidad. Solicítalos en recepción o en el portal del empleado.",
     "noBiometrics": "Este sistema no trata datos biométricos.",
     "policyLink": "Política completa: {url}",
+    "qrHost": "Dirección: {host}",
     "policyPending": "Política completa disponible en recepción.",
     "showQr": "Ver código QR de la política",
     "qrDialogTitle": "Política de privacidad completa",

@@ -103,10 +103,12 @@ const SYNC_DIAGNOSTIC_CODES = {
   'sync.unauthorized': 'kiosk.offline.sync_unauthorized',
   'sync.throttled': 'kiosk.offline.sync_throttled',
   'sync.malformed_response': 'kiosk.offline.malformed_batch_response',
+  // SOLO «conservado para reintento» (503). Un descarte ya no se disfraza de esto.
   'sync.item_not_processed': 'kiosk.offline.item_not_processed',
   'sync.confirm_not_persisted': 'kiosk.offline.confirm_not_persisted',
-  // PIN-08: sin codigo nuevo a proposito (el enum es cerrado tambien en backend).
-  'sync.item_invalid': 'kiosk.offline.item_not_processed',
+  // RN-22 (ADR-047): codigos propios del catalogo cerrado (backend y cliente).
+  'sync.item_discarded': 'kiosk.offline.item_discarded',
+  'sync.discard_report_failed': 'kiosk.offline.discard_report_failed',
 } as const satisfies Record<SyncDiagnostic, ClientErrorCode>
 
 const ROSTER_DIAGNOSTIC_CODES = {
@@ -255,7 +257,10 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       const stats = queue.stats()
       return {
         appVersion,
+        // `null` = desconocido (cola en memoria o sin almacen): jamas `0`.
         pendingQueueSize: stats.size,
+        queueStorage: stats.storage,
+        unreportedDiscards: stats.unreportedDiscards,
         oldestPendingAt: stats.oldestOccurredAt ?? undefined,
       }
     },
@@ -264,7 +269,9 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       const lastScanAtIso = readLastScanAt()
       return canApplyUpdate({
         now,
-        pendingScans: queue.stats().size,
+        // Con el disco sin ver cuentan las filas de memoria: son las que un
+        // reinicio (la actualizacion) perderia.
+        pendingScans: pendingOf(queue.stats()),
         lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
         window: readUpdateWindow(),
         quietMinutes: readUpdateQuietMinutes(),
@@ -307,7 +314,13 @@ export function getOfflineQueueController(options: OfflineQueueOptions): Offline
  * La usa la puerta de actualizacion del service worker desde `main.ts`.
  */
 export function pendingScanCount(): number {
-  return singleton?.stats().size ?? 0
+  const stats = singleton?.stats()
+  return stats === undefined ? 0 : pendingOf(stats)
+}
+
+/** Pendientes para la puerta de actualizacion: el recuento si se sabe, o lo que hay en el almacen activo. */
+function pendingOf(stats: QueueStats): number {
+  return stats.size ?? stats.inStore
 }
 
 /** Cierra el controlador unico. Solo pruebas y desvinculacion del dispositivo. */
@@ -332,7 +345,8 @@ export interface UseOfflineQueueOptions extends OfflineQueueOptions {
 export interface UseOfflineQueue {
   readonly submission: ScanSubmissionPort
   readonly roster: RosterLookupPort
-  readonly pendingCount: Readonly<Ref<number>>
+  /** `null` = desconocido (cola en memoria): el indicador lo dice, no pinta 0. */
+  readonly pendingCount: Readonly<Ref<number | null>>
   readonly syncing: Readonly<Ref<boolean>>
   /** Ver `OfflineQueueController.reportAuthOutcome`. Lo usa el latido de la pantalla. */
   reportAuthOutcome(unauthorized: boolean): void

@@ -136,6 +136,58 @@ test(
   },
 )
 
+test(
+  'el aviso de privacidad sale de la marca: responsable, direccion como TEXTO, QR local y NADA navegable (RF-KI-09, RL-09, F14)',
+  { tag: ['@RF-KI-09', '@RL-09'] },
+  async ({ page }) => {
+    await stubKioskApi(page)
+    await stubBrandingApi(page, {
+      variant: 'hotel-marina',
+      privacyNotice: {
+        controllerName: 'Hotel Marina S.L.',
+        policyUrl: 'https://marina.example/privacidad',
+      },
+    })
+
+    await page.goto('/')
+
+    const notice = page.getByTestId('privacy-notice')
+    await expect(notice).toContainText('Hotel Marina S.L.')
+    await expect(page.getByTestId('privacy-policy-url')).toContainText(
+      'https://marina.example/privacidad',
+    )
+    // F14: una tablet compartida no puede salir del quiosco por tocar un aviso legal.
+    await expect(notice.locator('a')).toHaveCount(0)
+    await expect(notice.locator('[href]')).toHaveCount(0)
+    const before = page.url()
+    await page.getByTestId('privacy-policy-url').click()
+    await notice.click({ position: { x: 20, y: 10 } })
+    expect(page.url()).toBe(before)
+    await expect(notice).toBeVisible()
+
+    // El QR se genera en local y el host se lee debajo.
+    await notice.getByRole('button').click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.locator('svg path')).toHaveCount(1)
+    await expect(dialog.getByTestId('privacy-qr-host')).toContainText('marina.example')
+    expect(page.url()).toBe(before)
+  },
+)
+
+test(
+  'sin responsable ni URL en la marca, el aviso es el generico y no ofrece QR (RF-KI-09)',
+  { tag: ['@RF-KI-09', '@RL-09'] },
+  async ({ page }) => {
+    await stubKioskApi(page)
+    await page.goto('/')
+
+    const notice = page.getByTestId('privacy-notice')
+    await expect(notice).toContainText('la empresa titular de este centro')
+    await expect(notice).toContainText('Política completa disponible en recepción')
+    await expect(notice.getByRole('button')).toHaveCount(0)
+  },
+)
+
 // LO QUE NO SE HA PODIDO AFIRMAR AQUI (documentado a proposito, brief de la
 // tarea): que el LOGOTIPO en si -sus bytes, no el nombre- sigue viendose tras
 // una recarga con la red muerta, servido por la cache `CacheFirst` del

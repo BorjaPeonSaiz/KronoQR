@@ -5,6 +5,7 @@
 // (esta pantalla tiene que funcionar SIN red, asi que fallar es justamente el
 // caso que importa) y una camara falsa minima.
 
+import 'fake-indexeddb/auto'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
@@ -15,6 +16,11 @@ import { sha256Hex } from '@/shared/crypto/sha256'
 import { createAppI18n } from '@/shared/i18n'
 import { disposeOfflineQueue, getOfflineQueueController } from '@/features/offline/useOfflineQueue'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
+import {
+  createDexieQueueStorage,
+  openKioskDatabase,
+} from '@/features/offline/infrastructure/dexieStorage'
+import { resetKioskDatabase } from './support/resetKioskDatabase'
 
 const DEVICE_ID = '0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81'
 const SERVICE_CODE = '48392017'
@@ -56,6 +62,7 @@ async function pressDigits(wrapper: Awaited<ReturnType<typeof render>>['wrapper'
 
 beforeEach(async () => {
   await disposeOfflineQueue()
+  await resetKioskDatabase()
   localStorage.clear()
   localStorage.setItem('kronoqr.kiosk.device_token', 'device-token-de-prueba')
   localStorage.setItem('kronoqr.kiosk.device_id', DEVICE_ID)
@@ -81,6 +88,33 @@ describe('pantalla de diagnostico — sin huella cacheada (decision 7)', () => {
     expect(wrapper.find('[data-testid="diagnostics-gate"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="diagnostics-content"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="diagnostics-no-code"]').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
+
+  it('RF-KI-08 · RN-22 · ADR-047: la cola dice cuantos descartados siguen sin avisar y el almacenamiento real', async () => {
+    // Un descartado cuyo aviso no ha salido, ya en disco cuando se abre la pantalla.
+    const disk = createDexieQueueStorage(openKioskDatabase())
+    await disk.putDiscarded({
+      kind: 'qr',
+      scan_id: '0199f3c1-4a2b-7e55-9c10-8d7e6f5a4b32',
+      qr_payload: 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa',
+      occurred_at: '2026-08-14T08:00:00.000Z',
+      http_status: 400,
+      problem_type: null,
+      discarded_at: '2026-08-14T09:30:00.000Z',
+      attempts: 0,
+      next_attempt_at: 0,
+    })
+    disk.close()
+
+    const { wrapper } = await render()
+
+    await vi.waitFor(() =>
+      expect(wrapper.get('[data-testid="diagnostics-queue-discards"]').text()).toBe('1'),
+    )
+    expect(wrapper.get('[data-testid="diagnostics-queue-storage"]').text()).toContain('Persistente')
+    expect(wrapper.get('[data-testid="diagnostics-queue-size"]').text()).toBe('0')
 
     wrapper.unmount()
   })
@@ -300,6 +334,11 @@ describe('latido propio y alcanzabilidad viva (revision de la 3.3, segunda vuelt
         // El latido SIEMPRE falla: si «alcanzable» viniera de ahi (fallo
         // corregido), esta fila nunca se moveria de «Se desconoce».
         if (url.includes('/api/v1/kiosk/heartbeat')) throw new TypeError('Failed to fetch')
+        // Si el drenaje de arranque se adelanta al envio directo, el escaneo viaja
+        // por el lote: el servidor SI contesta, y eso es lo que cuenta aqui.
+        if (url.includes('/api/v1/scan/batch')) {
+          return new Response(JSON.stringify({ results: [] }), { status: 207 })
+        }
         if (url.includes('/api/v1/scan')) {
           return new Response(
             JSON.stringify({

@@ -32,6 +32,18 @@ export interface LocalePolicy {
   readonly available: readonly string[]
 }
 
+/**
+ * Lo que el aviso de privacidad del quiosco necesita del cliente (RF-KI-09,
+ * RL-09, art. 13 RGPD en capa 1). `null` en cada campo = sin configurar: el
+ * quiosco enseña entonces la redaccion generica.
+ */
+export interface PrivacyNotice {
+  /** Responsable del tratamiento, tal como lo escribio el cliente. */
+  readonly controllerName: string | null
+  /** Politica completa (capa 2). SOLO `https`: acaba en texto y en un QR, nunca en un enlace. */
+  readonly policyUrl: string | null
+}
+
 /** La marca tal como la entrega `GET /api/v1/branding`, en camelCase. */
 export interface Branding {
   readonly applicationName: string
@@ -40,6 +52,7 @@ export interface Branding {
   /** URL relativa del logotipo con su huella en `v`, o `null` si no hay. */
   readonly logoUrl: string | null
   readonly locales: LocalePolicy
+  readonly privacyNotice: PrivacyNotice
 }
 
 /**
@@ -52,6 +65,7 @@ export const PRODUCT_BRANDING: Branding = Object.freeze({
   accentColor: null,
   logoUrl: null,
   locales: Object.freeze({ default: 'es', available: Object.freeze(['es', 'en']) }),
+  privacyNotice: Object.freeze({ controllerName: null, policyUrl: null }),
 })
 
 /**
@@ -72,6 +86,50 @@ export type TokenResolver = (token: string) => string
 const ACCENT = /^#[0-9a-f]{6}$/i
 /** La URL que publica el contrato: relativa, del propio origen, con o sin huella. */
 const LOGO_URL = /^\/api\/v1\/branding\/logo(?:\?v=[0-9a-f]{12})?$/
+
+// Solo https y ASCII imprimible, como el contrato (F15 del dictamen de
+// seguridad): la URL acaba en un QR que se ensena en una tablet compartida.
+const POLICY_URL = /^https:\/\/[!-~]+$/
+const POLICY_URL_MAX = 512
+const CONTROLLER_MAX = 160
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/
+
+function parsePolicyUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > POLICY_URL_MAX || !POLICY_URL.test(value)) {
+    return null
+  }
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname !== '' ? value : null
+  } catch {
+    return null
+  }
+}
+
+function parseControllerName(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed === '' || trimmed.length > CONTROLLER_MAX || CONTROL_CHARS.test(trimmed)) return null
+  return trimmed
+}
+
+/**
+ * `privacy_notice` es un dato LEGAL que se guarda en `localStorage`, donde
+ * cualquiera con las herramientas de desarrollo puede dejar otra cosa. Nunca
+ * tumba la marca: una copia anterior a la 2.2.0 (sin el objeto), o con la forma
+ * rota, es «sin configurar», y una URL que no es https ASCII se descarta (sin
+ * direccion ni QR), campo a campo.
+ */
+function parsePrivacyNotice(value: unknown): PrivacyNotice {
+  if (typeof value !== 'object' || value === null) {
+    return { controllerName: null, policyUrl: null }
+  }
+  const record = value as Record<string, unknown>
+  return {
+    controllerName: parseControllerName(record['controller_name']),
+    policyUrl: parsePolicyUrl(record['policy_url']),
+  }
+}
 
 /**
  * Valida la respuesta de `GET /api/v1/branding` y la traduce a `Branding`.
@@ -113,6 +171,7 @@ export function parseBranding(value: unknown): Branding | null {
     accentColor: accentColor === null ? null : accentColor.toLowerCase(),
     logoUrl,
     locales: { default: fallback, available: [...available] },
+    privacyNotice: parsePrivacyNotice(record['privacy_notice']),
   }
 }
 

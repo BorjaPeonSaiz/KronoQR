@@ -24,6 +24,7 @@
 
 import type { ApiClient } from '@/shared/api/client'
 import type { ClientErrorReport, KioskHeartbeatRequest } from '@/shared/api/types'
+import type { QueueStorageKind } from '@/features/offline/application/scanQueue'
 import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
 import { exceedsClockSkewTolerance } from '@/features/scan/domain/clockSkewMessage'
@@ -68,7 +69,16 @@ export const DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000
 /** Lo que el quiosco sabe de si mismo en el momento de latir. */
 export interface KioskTelemetrySnapshot {
   readonly appVersion: string
-  readonly pendingQueueSize: number
+  /**
+   * `null` = DESCONOCIDO (ADR-047): la cola cayo a memoria y no se ve lo que
+   * hay en disco. Nunca `0` por no saberlo. El contrato solo lo admite con
+   * `queueStorage` distinto de `durable`.
+   */
+  readonly pendingQueueSize: number | null
+  /** Donde esta guardando la tablet su cola. Ausente = `durable`. */
+  readonly queueStorage?: QueueStorageKind | undefined
+  /** Descartados (RN-22) cuyo aviso aun no tiene acuse. Ausente = 0. */
+  readonly unreportedDiscards?: number | undefined
   /** `occurred_at` del elemento mas antiguo de la cola, si hay cola (tarea 1.9). */
   readonly oldestPendingAt?: string | undefined
   /**
@@ -128,9 +138,24 @@ export function buildHeartbeatBody(
   snapshot: KioskTelemetrySnapshot,
   clientErrors: readonly ClientErrorEvent[] = [],
 ): KioskHeartbeatRequest {
+  // El contrato rechaza (400) un `null` con la cola en disco: si algo llegara
+  // inconsistente, se declara memoria antes que inventar un `0` o perder el latido.
+  const unknownSize = snapshot.pendingQueueSize === null
+  const storage: QueueStorageKind =
+    snapshot.queueStorage === undefined || snapshot.queueStorage === 'durable'
+      ? unknownSize
+        ? 'memory'
+        : 'durable'
+      : snapshot.queueStorage
   const body: KioskHeartbeatRequest = {
     app_version: snapshot.appVersion,
     pending_queue_size: snapshot.pendingQueueSize,
+    // Ausente = `durable` (PWA anteriores): solo se escribe si no lo es.
+    ...(storage === 'durable' ? {} : { queue_storage: storage }),
+    // Ausente = 0. Es lo que hace visible un descarte sin avisar (RN-22).
+    ...(snapshot.unreportedDiscards === undefined || snapshot.unreportedDiscards <= 0
+      ? {}
+      : { unreported_discards: snapshot.unreportedDiscards }),
   }
   // `exactOptionalPropertyTypes`: la clave no se escribe si no hay valor, en vez
   // de escribirse con `undefined`. El contrato dice «ausente cuando la cola esta

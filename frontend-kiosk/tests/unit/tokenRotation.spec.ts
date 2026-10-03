@@ -72,6 +72,7 @@ function apiStub(overrides: Partial<ApiClient> = {}): ApiClient {
     sendHeartbeat: vi.fn(),
     requestPairing: vi.fn(),
     claimPairing: vi.fn(),
+    reportDiscardedScans: vi.fn(),
     fetchBranding: vi.fn(),
     ...overrides,
   }

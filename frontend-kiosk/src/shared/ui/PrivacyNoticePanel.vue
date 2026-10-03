@@ -11,13 +11,37 @@
 // delante de una camara: aqui no hay biometria (ADR-009, regla dura 20).
 //
 // El responsable y la URL son CONFIGURACION (regla dura 13): cambian con cada
-// cliente. Si faltan, el aviso sigue apareciendo con una redaccion generica.
+// cliente y vienen de `GET /api/v1/branding` (`privacy_notice`), que el quiosco
+// ya guarda en `localStorage` y por tanto sigue enseñando sin red. Si nunca los
+// recibio, el aviso sigue apareciendo con una redaccion generica. `parseBranding`
+// ya ha descartado cualquier URL que no sea http(s); aqui se vuelve a comprobar
+// antes de pintar un `href`: es lo ultimo que se interpone entre una copia
+// manipulada y un enlace de `javascript:`.
+import type { PrivacyNotice } from '@kronoqr/web-kit/branding'
 import type { QrPath } from '@kronoqr/web-kit/qr/renderQrPath'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { PrivacyNoticeConfig } from '@/shared/config/privacy'
 
-const props = defineProps<{ config: PrivacyNoticeConfig }>()
+const props = defineProps<{ notice: PrivacyNotice }>()
+
+/**
+ * Solo https y ASCII imprimible (F15 del dictamen de seguridad): defensa en
+ * profundidad sobre `parseBranding`, que ya lo exige.
+ */
+const policyUrl = computed<string | null>(() => {
+  const url = props.notice.policyUrl
+  return url !== null && /^https:\/\/[!-~]+$/.test(url) ? url : null
+})
+
+/** El host que se enseña bajo el QR: lo unico que una persona puede comprobar de un vistazo. */
+const policyHost = computed<string>(() => {
+  if (policyUrl.value === null) return ''
+  try {
+    return new URL(policyUrl.value).host
+  } catch {
+    return ''
+  }
+})
 
 // El componente pinta dos raices —el aviso y, cuando toca, el dialogo del QR—,
 // asi que las clases del padre se aplican a mano sobre el aviso.
@@ -31,10 +55,10 @@ const qrFailed = ref(false)
 
 async function openDialog(): Promise<void> {
   dialogOpen.value = true
-  if (qr.value !== null || props.config.policyUrl === null) return
+  if (qr.value !== null || policyUrl.value === null) return
 
   const { renderQrPath } = await import('@kronoqr/web-kit/qr/renderQrPath')
-  const rendered = await renderQrPath(props.config.policyUrl)
+  const rendered = await renderQrPath(policyUrl.value)
   qr.value = rendered
   qrFailed.value = rendered === null
 }
@@ -44,13 +68,10 @@ function closeDialog(): void {
 }
 
 // Si cambia la configuracion (recarga de marca en 5.8), el QR se regenera.
-watch(
-  () => props.config.policyUrl,
-  () => {
-    qr.value = null
-    qrFailed.value = false
-  },
-)
+watch(policyUrl, () => {
+  qr.value = null
+  qrFailed.value = false
+})
 </script>
 
 <template>
@@ -66,9 +87,9 @@ watch(
     <p class="text-sm leading-snug">
       <span class="font-semibold text-kq-kiosk-text">{{ t('privacy.heading') }}:</span>
       {{
-        props.config.controller === null
+        props.notice.controllerName === null
           ? t('privacy.controllerUnknown')
-          : t('privacy.controllerKnown', { controller: props.config.controller })
+          : t('privacy.controllerKnown', { controller: props.notice.controllerName })
       }}
       {{ t('privacy.purpose') }} {{ t('privacy.basis') }} {{ t('privacy.retention') }}
       {{ t('privacy.rights') }} {{ t('privacy.noBiometrics') }}
@@ -77,17 +98,17 @@ watch(
     <!-- `kiosk-touch` fija el minimo de 48 px en el CONTROL, no en el texto:
          la fila se compacta pero el objetivo tactil no baja de tamano. -->
     <div class="mt-2 flex flex-wrap items-center gap-2">
-      <p v-if="props.config.policyUrl === null" class="text-sm">
+      <p v-if="policyUrl === null" class="text-sm">
         {{ t('privacy.policyPending') }}
       </p>
       <template v-else>
-        <a
-          class="kiosk-touch inline-flex items-center rounded-kq-sm border border-kq-kiosk-border px-3 text-sm font-medium text-kq-kiosk-text underline"
-          :href="props.config.policyUrl"
-          rel="noopener noreferrer"
-        >
-          {{ t('privacy.policyLink', { url: props.config.policyUrl }) }}
-        </a>
+        <!-- SIN ENLACE NAVEGABLE (F14 del dictamen de seguridad): la tablet es
+             compartida y tocar un aviso legal no puede sacar al empleado del
+             quiosco. La direccion va como TEXTO y como QR (RL-09 admite «enlace
+             o QR»): quien la quiera la lee en su movil. -->
+        <p class="min-w-0 break-all text-sm" data-testid="privacy-policy-url">
+          {{ t('privacy.policyLink', { url: policyUrl }) }}
+        </p>
         <button
           type="button"
           class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border px-3 text-sm font-medium text-kq-kiosk-text"
@@ -122,7 +143,10 @@ watch(
       </svg>
       <p v-else-if="qrFailed" class="mt-6 text-lg">{{ t('privacy.qrUnavailable') }}</p>
 
-      <p class="mt-4 break-all text-base">{{ props.config.policyUrl }}</p>
+      <p class="mt-4 text-base font-semibold" data-testid="privacy-qr-host">
+        {{ t('privacy.qrHost', { host: policyHost }) }}
+      </p>
+      <p class="mt-1 break-all text-base">{{ policyUrl }}</p>
 
       <button
         type="button"

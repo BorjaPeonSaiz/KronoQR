@@ -31,6 +31,7 @@ import {
   parseBranding,
   PRODUCT_BRANDING,
   type Branding,
+  type PrivacyNotice,
 } from '@kronoqr/web-kit/branding'
 import { readonly, ref, watch, type Ref } from 'vue'
 import { createApiClient, type ApiClient } from '@/shared/api/client'
@@ -79,6 +80,14 @@ function writeCachedBranding(raw: unknown, storage: Storage | null = safeStorage
  */
 export function applyCachedBranding(): void {
   applyBranding(readCachedBranding() ?? PRODUCT_BRANDING, { mode: 'kiosk' })
+}
+
+/**
+ * El aviso de privacidad de la copia guardada, sin red (RF-KI-09, RL-09). Sin
+ * copia, o con una anterior a la 2.2.0 que no lo traiga, es el generico.
+ */
+export function readPrivacyNotice(): PrivacyNotice {
+  return (readCachedBranding() ?? PRODUCT_BRANDING).privacyNotice
 }
 
 export interface UseBrandingOptions {

@@ -17,6 +17,11 @@
 // reconocerse tras una actualizacion, y eso es exactamente lo que la regla dura
 // 19 prohibe.
 //
+// LA v2 (RN-22, ADR-047) SI SUBE LA VERSION, pero solo para AÑADIR la tabla
+// `discarded`: no toca ni indexa nada de `scans`, asi que no migra ningun
+// fichaje pendiente. Los descartados viven en la misma base para que mover un
+// fichaje de `scans` a `discarded` sea una sola transaccion.
+//
 // QUE NO SE PERSISTE: EL ESTADO «EN VUELO». Si la tablet se apaga mientras una
 // peticion viaja, un elemento marcado como «enviandose» en disco quedaria
 // atrapado para siempre. Aqui el arrendamiento vive solo en memoria: tras un
@@ -25,13 +30,19 @@
 // que el servidor deduplica a un fichaje que nadie vuelve a mirar.
 
 import Dexie, { type Table } from 'dexie'
-import type { EncryptedRosterRecord, QueuedScanRecord, QueueStorage } from './queueStorage'
+import type {
+  DiscardedScanRecord,
+  EncryptedRosterRecord,
+  QueuedScanRecord,
+  QueueStorage,
+} from './queueStorage'
 
 export const DATABASE_NAME = 'kronoqr-kiosk'
 
 interface KioskDatabase extends Dexie {
   scans: Table<QueuedScanRecord, string>
   roster: Table<EncryptedRosterRecord, string>
+  discarded: Table<DiscardedScanRecord, string>
 }
 
 export function openKioskDatabase(name: string = DATABASE_NAME): KioskDatabase {
@@ -41,6 +52,13 @@ export function openKioskDatabase(name: string = DATABASE_NAME): KioskDatabase {
     // crea dos filas. `occurred_at` indexado porque es el orden de drenaje.
     scans: '&scan_id, occurred_at, next_attempt_at',
     roster: '&id',
+  })
+  // v2 (RN-22, ADR-047): la lista de fichajes descartados pendientes de aviso. Solo
+  // AÑADE una tabla: `scans` y `roster` se heredan tal cual de la v1, asi que una
+  // cola cargada en una tablet sin red sobrevive a la actualizacion sin migrar
+  // ni una fila (ver el comentario de la cabecera).
+  db.version(2).stores({
+    discarded: '&scan_id, discarded_at, next_attempt_at',
   })
   return db
 }
@@ -111,9 +129,56 @@ export function createDexieQueueStorage(db: KioskDatabase): QueueStorage {
       })
     },
 
+    async discard(scanId, entry) {
+      // UNA transaccion: el fichaje nunca esta en las dos listas ni en ninguna.
+      await db.transaction('rw', db.scans, db.discarded, async () => {
+        await db.discarded.put(entry)
+        await db.scans.delete(scanId)
+      })
+    },
+
+    async putDiscarded(entry) {
+      await db.transaction('rw', db.discarded, async () => {
+        await db.discarded.put(entry)
+      })
+    },
+
+    async listDiscarded(limit) {
+      return db.discarded.orderBy('discarded_at').limit(limit).toArray()
+    },
+
+    async countDiscarded() {
+      return db.discarded.count()
+    },
+
+    async removeDiscarded(scanIds) {
+      if (scanIds.length === 0) return
+      await db.transaction('rw', db.discarded, async () => {
+        await db.discarded.bulkDelete([...scanIds])
+      })
+    },
+
+    async rescheduleDiscarded(schedules) {
+      if (schedules.length === 0) return
+      await db.transaction('rw', db.discarded, async () => {
+        for (const schedule of schedules) {
+          await db.discarded.update(schedule.scan_id, {
+            attempts: schedule.attempts,
+            next_attempt_at: schedule.next_attempt_at,
+          })
+        }
+      })
+    },
+
     async clear() {
-      await db.transaction('rw', db.scans, async () => {
+      // Desvinculacion (F10 del dictamen de seguridad): la lista de descartados
+      // guarda el `qr_payload` EN CLARO hasta que el servidor acusa el aviso, y
+      // una tablet que se desvincula no puede conservar credenciales leidas. Se
+      // vacia JUNTO con la cola, en la misma transaccion. Fuera de este camino
+      // solo `removeDiscarded` (tras el acuse) borra un descartado.
+      await db.transaction('rw', db.scans, db.discarded, async () => {
         await db.scans.clear()
+        await db.discarded.clear()
       })
     },
 

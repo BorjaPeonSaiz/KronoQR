@@ -31,6 +31,7 @@ function offlineApi(): ApiClient {
     sendHeartbeat: vi.fn(async () => ({ outcome: 'failed', cause: 'offline' }) as const),
     requestPairing: vi.fn(),
     claimPairing: vi.fn(),
+    reportDiscardedScans: vi.fn(),
     fetchBranding: vi.fn(async () => ({ outcome: 'failed', cause: 'offline' }) as const),
   }
 }

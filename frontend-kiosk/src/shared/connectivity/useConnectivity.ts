@@ -22,10 +22,11 @@ export type ConnectivityStatus = 'online' | 'offline'
 
 export interface ConnectivityController {
   readonly status: Readonly<Ref<ConnectivityStatus>>
-  readonly pendingCount: Readonly<Ref<number>>
+  /** `null` = desconocido: la cola esta en memoria y no se ve lo que hay en disco (ADR-047). */
+  readonly pendingCount: Readonly<Ref<number | null>>
   /** Lo llama quien habla con el servidor: es la unica senal fiable de que hay red. */
   reportReachability(reachable: boolean): void
-  setPendingCount(count: number): void
+  setPendingCount(count: number | null): void
 }
 
 function currentStatus(): ConnectivityStatus {
@@ -35,7 +36,7 @@ function currentStatus(): ConnectivityStatus {
 
 export function useConnectivity(): ConnectivityController {
   const status = ref<ConnectivityStatus>(currentStatus())
-  const pendingCount = ref(0)
+  const pendingCount = ref<number | null>(0)
 
   const sync = (): void => {
     status.value = currentStatus()
@@ -60,7 +61,7 @@ export function useConnectivity(): ConnectivityController {
       status.value = reachable ? 'online' : 'offline'
     },
     setPendingCount(count) {
-      pendingCount.value = Math.max(0, count)
+      pendingCount.value = count === null ? null : Math.max(0, count)
     },
   }
 }
