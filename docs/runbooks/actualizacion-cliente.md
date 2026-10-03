@@ -139,6 +139,27 @@ colas de los quioscos y entra después, gane o pierda la actualización.
   siguiente actualización; su `.env` lleva los mismos secretos que el nuevo,
   salvo `BACKUP_DB_*` si vienes de la 2.1.0 (§6.1).
 
+**Después del servidor: las tablets** (`docs/cliente/operacion.md` §11, §11.1).
+Las tablets se actualizan **después** del servidor y **con la cola a cero**:
+
+- La PWA nueva solo se recarga sola cuando se cumplen a la vez la ventana
+  `KIOSK_UPDATE_WINDOW` (hora local del centro), la cola vacía y unos minutos
+  sin fichajes. Esperar a la franja de serie puede tardar horas; **la vía
+  recomendada es mover temporalmente `KIOSK_UPDATE_WINDOW` a una franja que
+  empiece ahora** (se cambia en el panel, «Ajustes operativos») y devolverla a
+  su valor cuando todas las tablets estén al día. Compruébalo en «Salud de
+  quioscos» o con `php artisan kiosk:health` (versión y cola de cada una).
+- Si prefieres hacerlo a mano en una tablet, recárgala **solo con «Pendientes»
+  a cero**.
+- **Nunca borres los datos de la aplicación ni desvincules una tablet con
+  fichajes pendientes**: se pierden (ver
+  [`cola-offline-atascada.md`](cola-offline-atascada.md) §5).
+- **Desde la 2.2.0, lo que una tablet antigua envíe y el servidor no acepte no se
+  pierde**: la tablet lo avisa y queda como incidencia **«Fichaje descartado por
+  el quiosco»** (`discarded_scan`, RN-22) en la bandeja de RRHH tras la revisión
+  de la madrugada siguiente. No es un fallo de la actualización; la resuelve
+  RRHH ([`cola-offline-atascada.md`](cola-offline-atascada.md) §8).
+
 ---
 
 ## 4. Códigos de salida
