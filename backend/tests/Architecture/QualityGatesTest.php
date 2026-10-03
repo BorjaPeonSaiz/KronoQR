@@ -427,6 +427,13 @@ it('analiza dependencias y codigo en cada integracion', function (): void {
     // Y el umbral: alto o critico bloquea, moderado no. Una puerta que salta
     // por un aviso informativo se acaba desactivando entera.
     expect(repoContents('Makefile'))->toContain('--audit-level=high');
+
+    // Y el alcance (03-10-2026): bloquea sobre lo que se publica —las dependencias
+    // de produccion— y solo informa sobre las de desarrollo, que no llegan a
+    // ninguna imagen ni paquete. Sin esto, un aviso sin version corregida en una
+    // herramienta de desarrollo deja la puerta en rojo sin ninguna via de salida.
+    expect(repoContents('Makefile'))->toContain('npm audit --omit=dev --audit-level=high || exit 1')
+        ->toContain('npm audit --audit-level=high || echo');
 })->group('RS-10');
 
 it('mantiene el hash señuelo del PIN al mismo coste que produce la instalacion', function (): void {
