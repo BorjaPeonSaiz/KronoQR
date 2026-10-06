@@ -989,6 +989,25 @@ docker compose exec app php artisan credentials:status --pending
 > de credenciales existe precisamente para que nadie descubra el problema delante
 > de la tablet a las 06:00.
 
+**Tampoco emite ningún PIN.** Las personas que entran por la importación quedan
+con el PIN **sin emitir**: no pueden fichar con PIN en la tablet ni entrar a su
+portal personal hasta que lo tengan. Lo emites tú desde la ficha de cada persona
+(«Emitir el PIN») **en el mismo momento en que le entregas la tarjeta**, y en ese
+acto le entregas también el PIN y registras la entrega.
+
+> **Por qué la importación no lo emite.** Un PIN solo se muestra **una vez**, en
+> la pantalla de quien lo emite, y después ya no lo puede ver nadie. Una
+> importación de cuarenta personas no tiene dónde enseñarte cuarenta PIN ni a
+> quién entregárselos, así que generarlos ahí sería crear PIN que nadie conoce y
+> que habría que volver a emitir uno a uno. Con la tarjeta en la mano, en cambio,
+> la persona se lleva las dos cosas a la vez: su tarjeta y su respaldo para el
+> día que la olvide.
+
+Para ver a quién le falta, en **Empleados** filtra por **Estado del PIN →
+«Sin emitir»**. El asistente de puesta en marcha te lleva a ese mismo listado
+nada más importar. En cuanto le emites el PIN a alguien, sale de ese filtro y
+pasa a «Emitido, pendiente de entregar» hasta que registras la entrega.
+
 ### 3 ter.6 Si tu fichero usa otros nombres de columna
 
 No hace falta tocar el programa: se añaden alias en el `.env` del servidor, en
@@ -1522,8 +1541,9 @@ Si tu plantilla es realmente mayor que el límite, súbelo con
 ### …he importado a toda la plantilla y nadie puede fichar
 
 Es lo esperado, y es el error más caro de esta guía si se descubre tarde:
-**importar no emite ninguna tarjeta**. Comprueba cuántas faltan y empieza ya, que
-imprimir y entregar lleva días:
+**importar no emite ninguna tarjeta ni ningún PIN**. Comprueba cuántas tarjetas
+faltan y empieza ya, que imprimir y entregar lleva días; el PIN de cada persona
+lo emites desde su ficha al entregarle la tarjeta (apartado 3 ter.5):
 
 ```bash
 docker compose exec app php artisan credentials:status --pending
