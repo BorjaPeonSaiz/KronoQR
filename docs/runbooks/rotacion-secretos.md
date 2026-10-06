@@ -278,7 +278,7 @@ parte de ella que recibe `postgres`. Al rotar la maestra hay que recalcularla,
 o el archivado seguiría cifrando con la derivada de la clave anterior:
 
 6. Antes del paso 3, **conserva la anterior como `BACKUP_ENCRYPTION_KEY_PREVIOUS`**
-   (solo para restaurar): los segmentos de WAL de los últimos
+   (solo para restaurar; se pasa con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run --rm restore`, no se deja en el `.env`): los segmentos de WAL de los últimos
    `BACKUP_WAL_RETENTION_DAYS` y las copias que siguen vivas solo se abren con ella.
    `restore.sh`, el simulacro y `kronoqr-restore-wal` la prueban por el `kid` de la
    cabecera de cada fichero y, si ninguna sirve, dicen **«clave distinta o cabecera

@@ -46,7 +46,7 @@ el procedimiento de la §6, medido.
 
 1. **Sin `BACKUP_ENCRYPTION_KEY` no hay restauración posible.** Una copia solo se
    abre con la clave con la que se hizo. Si se rotó, hace falta la anterior
-   (`BACKUP_ENCRYPTION_KEY_PREVIOUS`, solo para restaurar). La clave del WAL
+   (`BACKUP_ENCRYPTION_KEY_PREVIOUS`, solo para restaurar: se pasa con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run --rm restore`; no se deja en el `.env`). La clave del WAL
    (`BACKUP_WAL_KEY`) **se deriva** de esa misma clave: no hay una segunda que
    custodiar (`backup.sh derive-wal-key`).
 2. **La copia no sale de aquí.** Vive en la infraestructura del cliente; el
@@ -216,7 +216,7 @@ de `backup.sh verify` y nombra el **segmento** y el **motivo**:
 
 | Motivo | Qué significa | Qué hacer |
 | --- | --- | --- |
-| `clave distinta o cabecera alterada` (`kid` distinto) | El segmento se cifró con otra clave: casi siempre una rotación de `BACKUP_ENCRYPTION_KEY` sin conservar la anterior | Pon la clave anterior en `BACKUP_ENCRYPTION_KEY_PREVIOUS` (solo para restaurar) y repite: `restore.sh`, el simulacro y `restore-drill --mode pitr` derivan de ella la subclave del WAL anterior solos. Para la recuperación manual de §6.4, ver cómo se obtiene allí. Si no la tienes, ese tramo de WAL no se puede reproducir: la recuperación llegará hasta el anterior |
+| `clave distinta o cabecera alterada` (`kid` distinto) | El segmento se cifró con otra clave: casi siempre una rotación de `BACKUP_ENCRYPTION_KEY` sin conservar la anterior | Pasa la clave anterior con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` (`docker compose run --rm -e BACKUP_ENCRYPTION_KEY_PREVIOUS restore ...`; solo para restaurar) y repite: `restore.sh`, el simulacro y `restore-drill --mode pitr` derivan de ella la subclave del WAL anterior solos. Para la recuperación manual de §6.4, ver cómo se obtiene allí. Si no la tienes, ese tramo de WAL no se puede reproducir: la recuperación llegará hasta el anterior |
 | `el MAC no cuadra: el fichero esta alterado o danado` (mismo `kid`) | El fichero no es el que se escribió: corrupción del recurso de red **o manipulación** | Trátalo como incidente de seguridad si no hay una avería de almacenamiento que lo explique ([`brecha-de-seguridad.md`](brecha-de-seguridad.md)). No lo uses |
 | `hueco` / segmento ausente con segmentos posteriores | Alguien ha borrado un segmento intermedio, o el destino perdió ficheros | Restaura la copia desde un soporte que lo conserve; si no existe, la recuperación **se detiene ahí** (a propósito, ver §6.4) |
 
@@ -575,7 +575,7 @@ lugar: no sigas.
 | Mensaje | Qué hacer |
 | --- | --- |
 | `el MAC no cuadra` (mismo `kid`) | Corrupción o manipulación. Prueba con la anterior (`restore.sh --list`); si no hay avería que lo explique, [`brecha-de-seguridad.md`](brecha-de-seguridad.md) |
-| `clave distinta o cabecera alterada` | Rotación de clave: `BACKUP_ENCRYPTION_KEY_PREVIOUS` con la anterior, solo para restaurar |
+| `clave distinta o cabecera alterada` | Rotación de clave: pasa la anterior con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run restore`, solo para restaurar |
 | `sin .sha256` | La copia está incompleta o la han tocado. No la uses |
 | `copia heredada de la 2.1.0` | Ver abajo |
 

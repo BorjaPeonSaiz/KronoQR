@@ -840,6 +840,9 @@ services:
       # (pg_read_all_data + REPLICATION): no puede escribir una fila. La contrasena
       # del migrador (superusuario) no esta aqui ni en ningun runtime.
       BACKUP_ENCRYPTION_KEY:
+      # La clave ANTERIOR de una rotacion (solo se pasa con `-e` al restaurar o al verificar
+      # copias anteriores: ver docs/runbooks/rotacion-secretos.md). Sin valor por defecto.
+      BACKUP_ENCRYPTION_KEY_PREVIOUS:
       BACKUP_DB_USERNAME:
       BACKUP_DB_PASSWORD:
     depends_on:
@@ -947,6 +950,9 @@ services:
       DB_MAINTENANCE_USERNAME:
       BACKUP_PATH:
       BACKUP_ENCRYPTION_KEY:
+      # La clave ANTERIOR de una rotacion: el `docker compose run -e BACKUP_ENCRYPTION_KEY_PREVIOUS=...
+      # restore ...` documentado la necesita para abrir copias hechas antes de rotar.
+      BACKUP_ENCRYPTION_KEY_PREVIOUS:
       BACKUP_RETENTION_DAYS:
       BACKUP_MIN_COPIES:
 

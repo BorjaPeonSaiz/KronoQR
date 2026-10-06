@@ -2536,7 +2536,7 @@ lugar. No sigas.
 | Mensaje | Qué hacer |
 | --- | --- |
 | `el MAC no cuadra` | No uses esa copia: prueba la anterior (`restore.sh --list`). Si no hay una avería de almacenamiento que lo explique, trátalo como incidente de seguridad ([`brecha-de-seguridad.md`](../runbooks/brecha-de-seguridad.md)) |
-| `clave distinta o cabecera alterada` | Casi siempre, una rotación de `BACKUP_ENCRYPTION_KEY`: pon la anterior en `BACKUP_ENCRYPTION_KEY_PREVIOUS` (solo para restaurar) y repite |
+| `clave distinta o cabecera alterada` | Casi siempre, una rotación de `BACKUP_ENCRYPTION_KEY`: pasa la anterior con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run --rm restore` (solo para restaurar) y repite |
 | `sin .sha256`, o falta el manifiesto | La copia está incompleta o la han tocado. No la uses |
 | `copia heredada de la 2.1.0` | Ver abajo |
 

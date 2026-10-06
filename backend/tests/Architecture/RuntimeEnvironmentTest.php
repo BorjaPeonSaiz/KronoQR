@@ -64,7 +64,7 @@ const RUNTIME_ENVIRONMENT_FORBIDDEN = [
 ];
 
 /** El rol de copia (solo lectura) y la clave de cifrado de las copias: solo el planificador (ADR-042 §2). */
-const RUNTIME_ENVIRONMENT_SCHEDULER_ONLY = ['BACKUP_DB_USERNAME', 'BACKUP_DB_PASSWORD', 'BACKUP_ENCRYPTION_KEY'];
+const RUNTIME_ENVIRONMENT_SCHEDULER_ONLY = ['BACKUP_DB_USERNAME', 'BACKUP_DB_PASSWORD', 'BACKUP_ENCRYPTION_KEY', 'BACKUP_ENCRYPTION_KEY_PREVIOUS'];
 
 /**
  * NOMBRES de rol, nunca contraseñas: la configuracion los usa para escribir los
@@ -444,9 +444,9 @@ it('restore se conecta como migrador y recibe la clave de cifrado y el destino d
     expect(\in_array('DB_MIGRATION_PASSWORD', ComposeEnvironment::interpolatedIn((string) ($environment['PGPASSWORD'] ?? '')), true))->toBeTrue(
         'compose.prod.yaml: restore.PGPASSWORD no sale de DB_MIGRATION_PASSWORD.'
     );
-    expect(array_values(array_diff(['BACKUP_ENCRYPTION_KEY', 'BACKUP_PATH'], ComposeEnvironment::environmentNames($restore))))->toBe(
+    expect(array_values(array_diff(['BACKUP_ENCRYPTION_KEY', 'BACKUP_ENCRYPTION_KEY_PREVIOUS', 'BACKUP_PATH'], ComposeEnvironment::environmentNames($restore))))->toBe(
         [],
-        'compose.prod.yaml: restore necesita BACKUP_ENCRYPTION_KEY para descifrar y BACKUP_PATH para encontrar la copia.'
+        'compose.prod.yaml: restore necesita BACKUP_ENCRYPTION_KEY para descifrar (y BACKUP_ENCRYPTION_KEY_PREVIOUS para las copias anteriores a una rotacion) y BACKUP_PATH para encontrar la copia.'
     );
 })->group('RS-08', 'RL-04');
 

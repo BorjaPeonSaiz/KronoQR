@@ -2574,7 +2574,7 @@ backup in its place. Do not go on.
 | Message | What to do |
 | --- | --- |
 | `el MAC no cuadra` (the MAC does not match) | Do not use that backup: try the previous one (`restore.sh --list`). If no storage fault explains it, treat it as a security incident ([`brecha-de-seguridad.md`](../../runbooks/brecha-de-seguridad.md), in Spanish) |
-| `clave distinta o cabecera alterada` (different key or altered header) | Almost always, a rotation of `BACKUP_ENCRYPTION_KEY`: put the old one in `BACKUP_ENCRYPTION_KEY_PREVIOUS` (restore only) and repeat |
+| `clave distinta o cabecera alterada` (different key or altered header) | Almost always, a rotation of `BACKUP_ENCRYPTION_KEY`: pass the old one with `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` to `docker compose run --rm restore` (restore only) and repeat |
 | `sin .sha256` (no `.sha256`), or the manifest is missing | The backup is incomplete or has been tampered with. Do not use it |
 | `copia heredada de la 2.1.0` (backup inherited from 2.1.0) | See below |
 

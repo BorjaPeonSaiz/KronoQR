@@ -93,6 +93,7 @@ readonly LONGITUD_MINIMA_DE_SECRETO=8
 # Nombres que solo el planificador puede tener (copias con el rol de solo lectura).
 readonly -a SOLO_SCHEDULER=(
   BACKUP_ENCRYPTION_KEY
+  BACKUP_ENCRYPTION_KEY_PREVIOUS
   BACKUP_DB_USERNAME
   BACKUP_DB_PASSWORD
 )
