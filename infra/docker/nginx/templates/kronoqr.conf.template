@@ -352,10 +352,25 @@ server {
   }
 
   #--- Acceso al portal: zona propia, 10 r/m ---------------------------------
-  # Exacta (`=`): gana a `^~ /api/v1/me/` y a `^~ /api/`. Zona aparte para que
+  # Exactas (`=`): ganan a `^~ /api/v1/me/` y a `^~ /api/`. Zona aparte para que
   # consultar las jornadas (zone=portal) no gaste los intentos de acceso, y
   # viceversa. Mismo candado de red que el resto del portal (RF-ID-08).
+  # Son DOS bloques (con y sin barra final) porque Laravel enruta las dos
+  # variantes a la misma accion (rtrim) y una regex `~ ^/api/v1/me/login/?$`
+  # no sirve: con `^~` en el prefijo nginx no evalua las regex, asi que la
+  # variante con barra caeria en zone=portal y esquivaria el limite de 5 r/m.
+  # Con `merge_slashes` (por defecto) `//` ya se normaliza a `/`.
   location = /api/v1/me/login {
+    if ($kronoqr_portal_allowed = 0) {
+      return 403;
+    }
+    error_page 403 @kronoqr_me_forbidden;
+    limit_req zone=portal_login burst=5 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
+  location = /api/v1/me/login/ {
     if ($kronoqr_portal_allowed = 0) {
       return 403;
     }

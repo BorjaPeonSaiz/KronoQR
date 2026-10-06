@@ -278,6 +278,15 @@ panel_cerrado() {
   else
     printf '  [ok]    /api/v1/me/login         429 (zona portal_login agotada)\n'
   fi
+  # La variante con barra final llega a la misma accion en Laravel (rtrim): debe
+  # compartir zona, no caer en zone=portal.
+  codigo="$(curl -s -k -o /dev/null -w '%{http_code}' -X POST --max-time 10 "https://127.0.0.1:${puerto}/api/v1/me/login/" || echo 000)"
+  if [ "${codigo}" != 429 ]; then
+    printf '  [FALLA] /api/v1/me/login/ tras una rafaga devolvio %s, se esperaba 429\n' "${codigo}" >&2
+    fallo=1
+  else
+    printf '  [ok]    /api/v1/me/login/        429 (la barra final no esquiva la zona)\n'
+  fi
   con_xff "${puerto}" /api/v1/me/workdays 10.90.0.9 502 "la zona de consulta del portal no se gasta con los accesos"
 }
 
