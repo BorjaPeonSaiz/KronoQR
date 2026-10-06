@@ -45,17 +45,17 @@
 - { id: RF-AT-07,  fase: 1, titulo: "Los fichajes son idempotentes: un mismo scan_id procesado dos veces produce un único evento y la misma respuesta" }
 - { id: RF-AT-08,  fase: 1, titulo: "Un turno puede cruzar la medianoche sin ser dividido artificialmente" }
 - { id: RF-AT-09,  fase: 1, titulo: "El sistema registra siempre dos marcas de tiempo: occurred_at (momento real del escaneo, incluso offline) y recorded_at (momento de recepción en se..." }
-- { id: RF-AT-11,  fase: 1, titulo: "Entrada alternativa por PIN de 6 dígitos cuando el empleado no puede presentar su tarjeta" }
+- { id: RF-AT-11,  fase: 1, titulo: "Entrada alternativa por PIN de 6 u 8 cifras cuando el empleado no puede presentar su tarjeta" }
 - { id: RF-GP-01,  fase: 1, titulo: "CRUD de empleados: datos identificativos mínimos, departamento, fecha de alta y baja; el centro es el de la instalación (ADR-040)" }
 - { id: RF-GP-03,  fase: 1, titulo: "Baja de empleado: desactivación lógica, nunca borrado" }
-- { id: RF-ID-01,  fase: 1, titulo: "Autenticación de usuarios de gestión con contraseña, política de robustez, bloqueo por intentos y 2FA (TOTP) obligatorio para roles con acceso a da..." }
+- { id: RF-ID-01,  fase: 1, titulo: "Autenticación de usuarios de gestión con contraseña, política de robustez, bloqueo por intentos y 2FA (TOTP) obligatorio para los roles que alcanza..." }
 - { id: RF-ID-02,  fase: 1, titulo: "Modelo RBAC con roles: admin, rrhh, responsable_departamento, auditor, empleado, kiosk" }
 - { id: RF-ID-04,  fase: 1, titulo: "El quiosco se autentica con token de dispositivo de ámbito restringido (solo endpoints de fichaje y sincronización), revocable individualmente y ro..." }
 - { id: RF-ID-05,  fase: 1, titulo: "Portal personal del empleado: consulta de su propio registro y descarga de su histórico" }
 - { id: RF-ID-06,  fase: 1, titulo: "El empleado accede al portal con su código de empleado y su PIN, el mismo del respaldo del quiosco" }
 - { id: RF-ID-07,  fase: 1, titulo: "La sesión del portal tiene ámbito self:read: solo permite leer los datos del propio empleado" }
 - { id: RF-ID-08,  fase: 1, titulo: "El portal es accesible desde la red interna por defecto" }
-- { id: RF-ID-09,  fase: 1, titulo: "Provisión y restablecimiento del PIN. El sistema genera un PIN aleatorio de 6 dígitos al dar de alta al empleado, permite a RRHH restablecerlo y re..." }
+- { id: RF-ID-09,  fase: 1, titulo: "Provisión y restablecimiento del PIN. El sistema genera un PIN aleatorio de la longitud configurada en la instalación, 6 u 8 cifras (6 de serie; A..." }
 - { id: RF-KI-01,  fase: 1, titulo: "PWA instalable, a pantalla completa, con wake lock para evitar suspensión" }
 - { id: RF-KI-02,  fase: 1, titulo: "Escaneo continuo por cámara sin interacción del usuario" }
 - { id: RF-KI-03,  fase: 1, titulo: "Modo offline: cola local persistente (IndexedDB) de escaneos, con resolución local del empleado contra un padrón cacheado y cifrado, y confirmación..." }
@@ -94,7 +94,7 @@
 - { id: RS-02,     fase: 1, titulo: "El sistema limita la tasa del camino de fichaje por dispositivo y por IP, con respuestas de tiempo constante para evitar enumeración; el límite por sujeto se aplica al PIN (RS-12), no al escaneo de tarjeta (ADR-038)" }
 - { id: RS-03,     fase: 1, titulo: "Las respuestas de error no revelan si un código existe, está revocado o es inválido: mensaje genérico al usuario, detalle solo en el log del servidor" }
 - { id: RS-04,     fase: 1, titulo: "El token del quiosco tiene ámbito mínimo, caducidad y rotación automática; su compromiso no da acceso a datos de plantilla" }
-- { id: RS-12,     fase: 1, titulo: "El PIN de acceso al portal está protegido con bloqueo temporal por intentos fallidos y limitación de tasa por empleado y por IP" }
+- { id: RS-12,     fase: 1, titulo: "El PIN de acceso al portal está protegido con bloqueo temporal por intentos fallidos, limitación de tasa por empleado y por IP y bloqueo por origen en el portal (ADR-050)" }
 - { id: RS-13,     fase: 1, titulo: "Toda autenticación deja rastro consultable en los tres canales: acceso y cierre de gestión y apertura de bloqueo en audit_log; cada fallo en el log técnico y en kronoqr_auth_attempts_total (ADR-039)" }
 
 # --- Fase 2 -------------------------------------------- (45 requisitos)
@@ -141,7 +141,7 @@
 - { id: RNF-P-05,  fase: 2, titulo: "Generación de informe mensual de 500 empleados" }
 - { id: RQ-09,     fase: 1, titulo: "Prueba de restauración de copia automatizada y ejecutada al menos trimestralmente" }
 - { id: RS-05,     fase: 2, titulo: "Todo acceso a datos personales de terceros queda registrado en el trail de auditoría" }
-- { id: RS-06,     fase: 2, titulo: "2FA obligatorio para admin, rrhh y auditor" }
+- { id: RS-06,     fase: 2, titulo: "2FA obligatorio para admin, rrhh, auditor y responsable_departamento (ADR-050)" }
 - { id: RS-07,     fase: 1, titulo: "El trail de auditoría es detectablemente manipulable: cada entrada encadena el hash de la anterior; la cadena se verifica a diario y cualquier rotu..." }
 
 # --- Fase 3 -------------------------------------------- (25 requisitos)
