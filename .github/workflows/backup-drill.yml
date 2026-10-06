@@ -456,7 +456,9 @@ jobs:
         run: |
           set -euo pipefail
           q() { psql -d postgres -Atqc "$1"; }
-          bash infra/scripts/backup.sh run --mode dump >/dev/null
+          # La copia, con el rol de copias: el PGUSER del paso es el migrador (para psql y
+          # restore.sh) y backup.sh lo rechazaria con 7 (AUD-1), como comprueba A3-02.
+          PGUSER="$BACKUP_DB_USERNAME" PGPASSWORD="$BACKUP_DB_PASSWORD" bash infra/scripts/backup.sh run --mode dump >/dev/null
           copia="$BACKUP_PATH/daily/$(cat "$BACKUP_PATH"/daily/LATEST)"
           nombre="$(basename "$copia" .dump.enc)"
           cp -p "$copia" /tmp/buena.enc
@@ -530,8 +532,9 @@ jobs:
           q() { psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atqc "$1"; }
           wal() { sudo sh -c "$1"; }
           drill() { bash infra/scripts/restore-drill.sh --mode pitr --image kronoqr/postgres:ci --wal-source "$BACKUP_PATH/wal" --timeout 150 "$@"; }
-          # Una copia fisica NUEVA y WAL posterior a ella: tres segmentos como minimo.
-          bash infra/scripts/backup.sh run --mode base >/dev/null
+          # Una copia fisica NUEVA y WAL posterior a ella: tres segmentos como minimo. Con las
+          # credenciales del rol de copias: el PGPASSWORD del paso es el del migrador (para psql).
+          PGUSER="$BACKUP_DB_USERNAME" PGPASSWORD="$BACKUP_DB_PASSWORD" bash infra/scripts/backup.sh run --mode base >/dev/null
           for n in 1 2 3; do
             q "INSERT INTO ci_wal_probe(scan_id, employee, kiosk) SELECT 'p$n-' || g, 'e-' || g, 'k-' || g FROM generate_series(1, 200) g" >/dev/null
             q "SELECT pg_switch_wal()" >/dev/null
