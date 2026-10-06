@@ -333,7 +333,11 @@ kqe_open() {
   # recibe la ruta del ORIGEN. La prueba lo usa para cambiar un bit del origen y
   # comprobar que lo que se descifra sigue siendo la copia ya verificada. Es una
   # ruta a un ejecutable, nunca texto a evaluar.
-  if [ -n "${KQE_TEST_HOOK_AFTER_VERIFY:-}" ] && [ -x "${KQE_TEST_HOOK_AFTER_VERIFY}" ]; then
+  # Nunca como root (la biblioteca corre como root en el anfitrion y como postgres en la
+  # imagen): un binario del entorno no se ejecuta con esos privilegios salvo que quien
+  # prueba lo pida con KQE_ALLOW_TEST_HOOKS=1.
+  if [ -n "${KQE_TEST_HOOK_AFTER_VERIFY:-}" ] && [ -x "${KQE_TEST_HOOK_AFTER_VERIFY}" ] &&
+    { [ "$(id -u)" != "0" ] || [ "${KQE_ALLOW_TEST_HOOKS:-}" = "1" ]; }; then
     "${KQE_TEST_HOOK_AFTER_VERIFY}" "$src" || true
   fi
 

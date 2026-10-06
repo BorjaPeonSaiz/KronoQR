@@ -216,7 +216,7 @@ it('usa la copia ya verificada aunque el origen cambie despues (TOCTOU)', functi
     file_put_contents($hook, "#!/bin/sh\nprintf 'Z' | dd of=\"\$1\" bs=1 seek=120 conv=notrunc 2>/dev/null\n");
     chmod($hook, 0o755);
 
-    $open = kqeFormatOpen($box['dir'], $box['file'], env: ['KQE_TEST_HOOK_AFTER_VERIFY' => $hook]);
+    $open = kqeFormatOpen($box['dir'], $box['file'], env: ['KQE_TEST_HOOK_AFTER_VERIFY' => $hook, 'KQE_ALLOW_TEST_HOOKS' => '1']);
 
     // El gancho SI cambio el origen despues de verificar...
     $check = kqeFormatOpen($box['dir'], $box['file']);
@@ -224,6 +224,29 @@ it('usa la copia ya verificada aunque el origen cambie despues (TOCTOU)', functi
     // ... y lo que se descifro es la copia ya verificada.
     expect($open['code'])->toBe(0);
     expect($open['plain'])->toBe('contenido del volcado');
+})->group('RL-12', 'RS-07');
+
+it('como root no ejecuta el gancho de pruebas salvo que se pida con KQE_ALLOW_TEST_HOOKS=1', function (): void {
+    // La biblioteca corre como root en el anfitrion y como postgres en la imagen: un
+    // binario del entorno no puede ejecutarse con esos privilegios por accidente.
+    $box = kqeFormatSandbox();
+    $hook = $box['dir'].'/hook.sh';
+    file_put_contents($hook, "#!/bin/sh\ntouch \"\$1.gancho\"\n");
+    chmod($hook, 0o755);
+    // Un `id` falso que dice que somos root.
+    mkdir($box['dir'].'/bin');
+    file_put_contents($box['dir'].'/bin/id', "#!/bin/sh\necho 0\n");
+    chmod($box['dir'].'/bin/id', 0o755);
+    $path = $box['dir'].'/bin:'.(string) getenv('PATH');
+
+    $sin = kqeFormatOpen($box['dir'], $box['file'], env: ['KQE_TEST_HOOK_AFTER_VERIFY' => $hook, 'PATH' => $path]);
+    $existeSin = file_exists($box['file'].'.gancho');
+    $con = kqeFormatOpen($box['dir'], $box['file'], env: ['KQE_TEST_HOOK_AFTER_VERIFY' => $hook, 'PATH' => $path, 'KQE_ALLOW_TEST_HOOKS' => '1']);
+
+    expect($sin['code'])->toBe(0)
+        ->and($existeSin)->toBeFalse('Como root se ha ejecutado el gancho sin KQE_ALLOW_TEST_HOOKS=1.')
+        ->and($con['code'])->toBe(0)
+        ->and(file_exists($box['file'].'.gancho'))->toBeTrue('Con KQE_ALLOW_TEST_HOOKS=1 el gancho debia ejecutarse.');
 })->group('RL-12', 'RS-07');
 
 it('autentica el manifiesto contra su volcado y rechaza el alterado', function (): void {
