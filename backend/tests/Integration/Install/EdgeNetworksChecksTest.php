@@ -601,6 +601,6 @@ it('PP-09: update.sh anota portal_exposed como booleano true en el asiento y sol
 
     $lineas = explode("\n", trim($proceso->getOutput()));
 
-    expect($lineas[0] ?? '')->toBe('{"to_version":"2.2.0","portal_exposed":true}')
+    expect($lineas[0])->toBe('{"to_version":"2.2.0","portal_exposed":true}')
         ->and($lineas[1] ?? '')->toBe('{"to_version":"2.2.0"}');
 })->group('RF-PD-10', 'RF-ID-08');
