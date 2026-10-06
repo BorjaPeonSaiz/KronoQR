@@ -91,7 +91,7 @@ for variable in KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR METRICS_ALLOW_CIDR; do
   fi
 done
 
-# ADMIN_INTERNAL_CIDR (PP-10) es OPCIONAL: vacia, `/admin/` y `/api/v1/auth/*` no se
+# ADMIN_INTERNAL_CIDR (PP-10) es OPCIONAL: vacia, `/admin/`, `/api/v1/auth/*` y `/api/v1/setup/*` no se
 # filtran; con valor, UN solo CIDR IPv4 (la misma sintaxis que las tres redes).
 if [ -n "${ADMIN_INTERNAL_CIDR:-}" ]; then
   visible="${ADMIN_INTERNAL_CIDR//[^0-9A-Za-z./: ,-]/?}"
@@ -129,9 +129,9 @@ if [ "${invalidas}" -ne 0 ]; then
 fi
 
 if [ -n "${ADMIN_INTERNAL_CIDR:-}" ]; then
-  log "info" "ADMIN_INTERNAL_CIDR definida: /admin/ y /api/v1/auth/ solo se sirven a ese rango."
+  log "info" "ADMIN_INTERNAL_CIDR definida: /admin/, /api/v1/auth/ y /api/v1/setup/ solo se sirven a ese rango."
 else
-  log "info" "ADMIN_INTERNAL_CIDR vacia: /admin/ y /api/v1/auth/ no se filtran por red (decision del propietario, ver docs/cliente/endurecimiento.md)."
+  log "info" "ADMIN_INTERNAL_CIDR vacia: /admin/, /api/v1/auth/ y /api/v1/setup/ no se filtran por red (decision del propietario, ver docs/cliente/endurecimiento.md)."
 fi
 
 if [ "${PORTAL_INTERNAL_CIDR}" = "0.0.0.0/0" ]; then

@@ -260,8 +260,25 @@ panel_cerrado() {
 
   con_xff "${puerto}" /admin/ 10.90.0.9 403 "panel cerrado: fuera del rango"
   con_xff "${puerto}" /api/v1/auth/login 10.90.0.9 403 "autenticacion cerrada: fuera del rango"
+  con_xff "${puerto}" /api/v1/setup/administrator 10.90.0.9 403 "alta del primer administrador cerrada: fuera del rango"
   con_xff "${puerto}" /portal/ 10.90.0.9 200 "con el panel cerrado, el portal sigue su propio rango"
   con_xff "${puerto}" /healthz 10.90.0.9 200 "con el panel cerrado, /healthz responde"
+
+  # Zona portal_login: una rafaga sobre el acceso agota SU zona (429) y no la de
+  # consulta (/me/workdays sigue llegando a la aplicacion: 502 sin ella).
+  local _r codigo
+  for _r in $(seq 1 16); do
+    curl -s -k -o /dev/null --max-time 20 -X POST "https://127.0.0.1:${puerto}/api/v1/me/login" &
+  done
+  wait
+  codigo="$(curl -s -k -o /dev/null -w '%{http_code}' -X POST --max-time 10 "https://127.0.0.1:${puerto}/api/v1/me/login" || echo 000)"
+  if [ "${codigo}" != 429 ]; then
+    printf '  [FALLA] /api/v1/me/login tras una rafaga devolvio %s, se esperaba 429\n' "${codigo}" >&2
+    fallo=1
+  else
+    printf '  [ok]    /api/v1/me/login         429 (zona portal_login agotada)\n'
+  fi
+  con_xff "${puerto}" /api/v1/me/workdays 10.90.0.9 502 "la zona de consulta del portal no se gasta con los accesos"
 }
 
 main() {
