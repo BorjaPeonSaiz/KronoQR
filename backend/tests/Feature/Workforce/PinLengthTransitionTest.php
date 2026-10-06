@@ -5,11 +5,14 @@ declare(strict_types=1);
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -105,6 +108,34 @@ it('no invalida los PIN de seis emitidos antes de pasar a ocho', function (): vo
         'pin' => PortalLogins::PIN,
     ])->assertValidResponse(200);
 })->group('RF-ID-09', 'RF-ID-06');
+
+it('sigue dejando fichar en el quiosco con el PIN de seis emitido antes de pasar a ocho', function (): void {
+    // El fichaje de respaldo (RF-AT-11) tampoco mira la longitud: compara el
+    // hash. Con el ajuste en 8, quien conserva su PIN de 6 sigue fichando por
+    // `/scan/pin` hasta que se lo restablezcan (ADR-050 §1, «Transicion»), y
+    // el quiosco no le bloquea (regla dura 19).
+    $escenario = AttendanceFixtures::scenario();
+    EmployeePins::issue($escenario['employee'], PortalLogins::PIN);
+
+    ponerLongitudDelPin('8');
+
+    FrozenTime::at('2026-10-06 07:00:00');
+    $scanId = Str::uuid7()->toString();
+
+    $respuesta = Api::as($escenario['token'])
+        ->withHeaders(['Idempotency-Key' => $scanId])
+        ->post('/api/v1/scan/pin', [
+            'scan_id' => $scanId,
+            'occurred_at' => '2026-10-06T07:00:00Z',
+            'employee_code' => EmployeePins::codeOf($escenario['employee']),
+            'pin_sealed' => EmployeePins::seal(PortalLogins::PIN, EmployeePins::configureSealing()),
+        ]);
+
+    $respuesta->assertOk()->assertValidRequest()->assertValidResponse();
+
+    expect($respuesta->json('action'))->toBe('clock_in')
+        ->and(DB::table('employees')->where('uuid', $escenario['employee'])->value('pin_length'))->toBe(6);
+})->group('RF-ID-09', 'RF-AT-11');
 
 it('no saca pin_length por la ficha del empleado', function (): void {
     // Decir que companeros tienen el PIN corto es decir a quien atacar (ADR-050).
