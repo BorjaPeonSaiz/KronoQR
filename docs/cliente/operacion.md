@@ -1139,6 +1139,72 @@ conviene saber:
   `kronoqr_backup_replication_slot*`, **cambian de nombre** a `kronoqr_wal_*`.
 - **Parada:** ninguna adicional.
 
+**Al actualizar a la 2.2.0: el portal y el panel, mejor cerrados (sobre todo si
+están abiertos a internet).** Cuatro cambios; los dos primeros no exigen nada,
+los dos últimos piden una revisión el mismo día:
+
+- **El PIN puede ser de 6 u 8 cifras.** Sigue siendo de 6 de serie. Si el portal
+  es accesible desde fuera de la red del hotel, pásalo a 8 en el panel, con la
+  cuenta de administración: **Ajustes operativos → Acceso → Longitud del PIN**
+  (queda en el registro de auditoría). **No se anula ningún PIN**: los de 6 ya
+  entregados siguen valiendo y el portal y la tablet admiten de 6 a 8 cifras;
+  solo los que se emitan desde entonces —altas y restablecimientos— salen con
+  8. RRHH los va restableciendo y entregando en mano a medida que cada persona
+  pasa por la oficina ([`guia-rrhh.md`](guia-rrhh.md) §2.2). Cuántos quedan
+  —solo el número, nunca quiénes— lo dice la comprobación `access.short_pins`
+  de `product:doctor` (§12.1).
+- **Bloqueo por conexión en el portal.** 20 accesos fallidos al portal desde una
+  misma dirección en 15 minutos, con cualquier código, cierran el portal **a esa
+  dirección** durante una hora, también con el PIN correcto. La persona ve
+  «Demasiados intentos desde esta conexión» y los minutos que faltan. No afecta
+  al fichaje. Si cierra la wifi del hotel entera y no se puede esperar, levántalo
+  desde el directorio de la instalación con la dirección que aparece en el
+  asiento `auth.origin_locked` del registro de auditoría (el ejemplo es una
+  dirección de documentación; pon la tuya):
+
+  ```bash
+  docker compose exec app php artisan identity:origin-unlock 198.51.100.23
+  ```
+
+  Si hay un proxy delante del servidor y no has definido `TRUSTED_PROXY_CIDR`,
+  toda la plantilla llega con la IP del proxy y un solo bloqueo la deja fuera
+  entera: defínela ([`instalacion.md`](instalacion.md) §6). El procedimiento
+  completo, con qué hacer si se repite, está en
+  [`../runbooks/bloqueo-por-origen.md`](../runbooks/bloqueo-por-origen.md).
+- **Los responsables de departamento necesitan segundo factor.** Desde la 2.2.0
+  es obligatorio para los cuatro roles de gestión, porque el responsable corrige
+  jornadas. Nadie se queda fuera: quien no lo tenga lo da de alta en su
+  **primer acceso** al panel tras actualizar, con la aplicación de su teléfono.
+  **Mientras no entre, quien tenga solo su contraseña podría darlo de alta en su
+  lugar**, así que **pide a cada responsable que entre el mismo día** y, después,
+  revisa las altas: cada una deja un asiento `auth.two_factor_enabled` con la
+  hora y la IP desde la que se hizo.
+
+  ```bash
+  docker compose exec -T postgres psql -U fichaje_app -d fichaje -c \
+    "SELECT a.occurred_at, a.ip, u.uuid, u.email FROM audit_log a JOIN users u ON u.id = a.subject_id WHERE a.action = 'auth.two_factor_enabled' AND a.occurred_at > now() - interval '30 days' ORDER BY a.occurred_at;"
+  ```
+
+  Si su titular no reconoce un alta (otra hora, otra IP), retira ese segundo
+  factor con el `uuid` de la fila y dale una contraseña nueva; en su siguiente
+  acceso lo vuelve a dar de alta él:
+
+  ```bash
+  docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --reason="2FA no reconocido / 2FA not recognised"
+  docker compose exec app php artisan identity:reset-password responsable@tuhotel.example
+  ```
+
+  La comprobación `access.two_factor_pending` de `product:doctor` dice cuántas
+  cuentas de esos roles siguen sin segundo factor; cuando llegue a cero, la
+  ventana está cerrada. Si tu `.env` fija `IDENTITY_2FA_REQUIRED_ROLES` con
+  la lista antigua, la 2.2.0 la respeta y `access.two_factor_roles` avisa del
+  rol que falta.
+- **`ADMIN_INTERNAL_CIDR`, nueva y vacía.** Cierra el panel de gestión a la red
+  que pongas; vacía, no filtra nada, como hasta ahora. Si el portal está abierto
+  a internet, el panel también lo está mientras la dejes vacía:
+  [`configuracion.md`](configuracion.md) §6. `product:doctor` lo recuerda con
+  el aviso `network.admin`.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
@@ -1215,7 +1281,12 @@ sus rutas no coinciden entre sí, que la carpeta de los informes de retención s
 puede escribir, y exportaciones para la Inspección olvidadas en el servidor
 desde hace más de 30 días; §13.6), espacio en disco (aplicación y copias) y
 ajustes (zona horaria en UTC, modo depuración,
-claves no válidas, diferencias entre el `.env` y lo guardado, licencia y marca).
+claves no válidas, diferencias entre el `.env` y lo guardado, licencia y marca),
+redes del borde (desde dónde se abren el portal, el panel, los quioscos y
+`/metrics`) y acceso (desde la 2.2.0: PIN de 6 cifras con el portal abierto a
+internet, cuántas personas conservan un PIN de 6 con el ajuste en 8, roles de
+gestión sin segundo factor obligatorio y cuántas cuentas aún no lo han dado de
+alta; **solo cifras, nunca quiénes**).
 **Cada línea en rojo dice qué hacer**, redactado para quien no conoce el
 sistema.
 

@@ -905,7 +905,7 @@ responde y `ready` no, el problema es una dependencia, no la aplicación.
 ### …el portal del empleado devuelve 403 desde mi ordenador
 
 **Es lo correcto** si tu ordenador está fuera de `PORTAL_INTERNAL_CIDR`. El
-portal se abre con código de empleado y PIN de 6 dígitos, y una de las
+portal se abre con código de empleado y PIN, y una de las
 protecciones es que no sea alcanzable desde cualquier IP. Ver §6.
 
 Tres casos en los que el `403` sorprende y sigue siendo lo esperado:
@@ -1121,15 +1121,18 @@ Prometheus: sería perder las métricas y las alertas que dependen de ellas.
 PORTAL_INTERNAL_CIDR=10.0.10.0/24
 ```
 
-**Qué hace.** El portal del empleado (código de empleado + PIN de 6 dígitos)
-solo responde a las peticiones que llegan desde este rango. Cualquier otro
-origen recibe `403` en el propio servidor web, antes de llegar a la
-aplicación. Las tablets no pasan por aquí: este rango no afecta al fichaje.
+**Qué hace.** El portal del empleado (código de empleado + PIN de 6 cifras de
+serie, u 8 si lo configuras) solo responde a las peticiones que llegan desde
+este rango. Cualquier otro origen recibe `403` en el propio servidor web, antes
+de llegar a la aplicación. Las tablets no pasan por aquí: este rango no afecta
+al fichaje.
 
-**Por qué existe.** Un PIN de 6 dígitos es un espacio pequeño. Restringir el
-portal a la red interna es uno de los cuatro controles que lo compensan, junto
-con el bloqueo por intentos, el límite de peticiones por IP y que la sesión
-del portal solo pueda leer los datos del propio empleado.
+**Por qué existe.** Un PIN de 6 cifras es un espacio pequeño. Restringir el
+portal a la red interna es uno de los controles que lo compensan, junto con el
+bloqueo por intentos de cada empleado, el bloqueo por conexión (20 fallos en
+15 minutos desde una misma dirección la cierran una hora), el límite de
+peticiones por IP y que la sesión del portal solo pueda leer los datos del
+propio empleado.
 
 **Qué poner.** La LAN desde la que la plantilla abrirá el portal (la de los
 ordenadores de la oficina y del wifi de personal, por ejemplo `10.0.10.0/24`)
@@ -1165,6 +1168,25 @@ defecto. Se toma poniendo `PORTAL_INTERNAL_CIDR=0.0.0.0/0` y debe quedar
 anotada en el acta de entrega de la instalación: es lo que responde el día que
 alguien pregunte por qué el portal es alcanzable desde fuera del hotel. Qué se
 asume al hacerlo, y cuándo no conviene, está en el mismo runbook, §4.
+
+**Si lo abres a internet, haz además estas tres cosas** (el instalador y
+`product:doctor` te las recuerdan con un aviso, sin impedir nada):
+
+1. **PIN de 8 cifras.** Con 6, quien prueba desde muchas conexiones distintas
+   acaba acertando un PIN en cuestión de meses; con 8, en decenas de años. Se
+   cambia en el panel, con la cuenta de administración: **Ajustes operativos →
+   Acceso → Longitud del PIN**. Los PIN ya entregados siguen valiendo hasta que
+   RRHH los restablece; la comprobación `access.short_pins` de
+   `product:doctor` dice cuántos quedan (solo el número).
+2. **`ADMIN_INTERNAL_CIDR`.** El portal y el panel comparten dirección y puerto:
+   con el portal abierto, el panel de gestión también lo está salvo que lo
+   cierres a tu red con esta variable (explicada en
+   [`configuracion.md`](configuracion.md) §6). Dejarla vacía es una decisión
+   válida y la de serie; `product:doctor` la recuerda con un aviso
+   (`network.admin`).
+3. **`TRUSTED_PROXY_CIDR`** si hay un proxy delante (apartado siguiente): sin
+   ella, toda la plantilla llega con la IP del proxy y un solo bloqueo por
+   conexión la deja fuera entera.
 
 **Formato de las tres redes.** Cada variable (`KIOSK_VLAN_CIDR`,
 `PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR`) lleva **un solo** CIDR IPv4 con

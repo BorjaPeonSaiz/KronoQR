@@ -91,8 +91,9 @@ tenga significado. No se puede elegir.
 
 ### 2.2 El PIN: se ve una sola vez
 
-Al completar el alta, el sistema emite el **PIN de seis dígitos** del portal y
-**lo muestra una sola vez, en ese momento**. No se puede volver a consultar
+Al completar el alta, el sistema emite el **PIN** del portal —de 6 cifras, o de
+8 si la instalación lo tiene así configurado— y **lo muestra una sola vez, en
+ese momento**. No se puede volver a consultar
 después: si se pierde, la única salida es restablecerlo, que genera otro
 distinto y anula el anterior en el acto.
 
@@ -105,6 +106,17 @@ encima.
 **El PIN se entrega en mano, en persona.** No hay ningún envío electrónico: ni
 mensaje, ni enlace de recuperación. No es un descuido: una clave que viaja por
 un buzón acaba fichando por su titular sin que nadie se entere.
+
+**6 u 8 cifras.** La longitud la decide quien administra el sistema, en
+**Ajustes operativos → Acceso → Longitud del PIN**. Lo recomendable es pasar a 8
+cuando el portal se abre desde fuera de la red del hotel: un PIN de 8 cifras es
+cien veces más difícil de adivinar. **El cambio no anula ningún PIN**: los de 6
+que ya entregaste siguen valiendo, y solo los que emitas desde entonces —altas
+nuevas y restablecimientos— salen con 8. No hace falta llamar a toda la
+plantilla el mismo día: restablece el PIN de cada persona cuando pase por la
+oficina y entrégaselo en mano. Para saber **cuántos** quedan por cambiar —no
+quiénes—, pide a informática el resultado de la comprobación «PIN cortos» del
+diagnóstico del sistema ([`operacion.md`](operacion.md)).
 
 ### 2.3 Las horas contratadas
 
@@ -1705,6 +1717,19 @@ PIN en la tablet** mientras se averigua qué pasa: eso no espera. Si le ocurre a
 varias personas a la vez, o el tablero avisa de que hay tarjetas firmadas con
 una clave que el servidor ya no reconoce, **es cosa de IT**:
 [`operacion.md`](operacion.md).
+
+### …alguien no puede entrar al portal
+
+Pregúntale qué dice exactamente la pantalla:
+
+| Lo que ve | Qué significa | Qué hacer |
+| --- | --- | --- |
+| «El código de empleado o el PIN no son correctos» | Uno de los dos está mal tecleado, el PIN no es el que tiene apuntado, o su acceso está bloqueado unos minutos por fallos anteriores (la pantalla no distingue los casos, a propósito) | Que lo revise y espere unos minutos. Si no lo recuerda, restablécelo y entrégaselo en mano (§2.2). Restablecerlo también libera el bloqueo por intentos |
+| «Demasiados intentos seguidos» | Demasiadas peticiones en muy poco tiempo | Esperar unos segundos y volver a intentarlo |
+| «Demasiados intentos desde esta conexión» | **No es su PIN.** Desde esa red (la wifi del hotel, por ejemplo) ha habido muchos accesos fallidos, de cualquiera, y el portal se ha cerrado para esa conexión hasta una hora | Esperar, o entrar desde otra conexión. Si afecta a mucha gente a la vez o corre prisa, avisa a IT: puede levantarlo antes ([`operacion.md`](operacion.md)). Restablecer el PIN **no** lo levanta |
+
+Nada de esto le impide fichar: el portal y la tablet llevan la cuenta por
+separado.
 
 ### …la bandeja se llena de incidencias iguales
 

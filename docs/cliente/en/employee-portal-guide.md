@@ -35,13 +35,21 @@ It is not a fault, it is a security decision: the staff's working-time record is
 not published on the internet. Whoever administers the system decides that range
 with the `PORTAL_INTERNAL_CIDR` setting, explained in
 [`configuration.md`](configuration.md) §6.15. If your hotel needs access from
-outside, that is a decision taken there, knowing what it entails.
+outside, that is a decision taken there, knowing what it entails: the portal
+then also loads from home or from your phone, and the recommendation is for
+PINs to have 8 digits (below).
 
 ### Your code and your PIN
 
-You sign in with **your employee code and the six-digit PIN** that were handed to
-you in person together with your card. They are the same ones that let you clock
-in on the tablet when you do not have your card with you.
+You sign in with **your employee code and the PIN** that were handed to you in
+person together with your card. They are the same ones that let you clock in on
+the tablet when you do not have your card with you.
+
+**The PIN has 6 digits, or 8 if your hotel has decided so** —the usual choice
+when the portal opens from outside the hotel—. The screen accepts both lengths.
+If your hotel moves to 8 digits, **your 6-digit PIN keeps working** until Human
+Resources hands you a new one in person; you do not have to do anything until
+then.
 
 ![Portal sign-in screen](../img/en/portal-01-acceso.png)
 
@@ -56,6 +64,14 @@ and a PIN, and that is why the PIN is handed over in person.
 - **After several failed attempts access is blocked for a few minutes**, and it
   stays blocked even if you then type the correct PIN. Wait and try again; every
   failed attempt makes the wait longer.
+- **If the screen says "Too many attempts from this connection"**, it is not
+  your PIN: from the network you are signing in through (the hotel wifi, your
+  home one) there have been many failed attempts, yours or other people's, and
+  the portal has been closed **for that connection** for the minutes the screen
+  itself shows (one hour at most). Your PIN is still valid. Wait, sign in from
+  another connection —your phone's mobile data, for instance, if your hotel
+  allows signing in from outside— or tell Human Resources if it is urgent: whoever
+  runs the system can lift it earlier.
 - **If you have forgotten your PIN, ask Human Resources to reset it.** They will
   give you a new one **in person**, and the previous one stops working there and
   then. Resetting it also clears the block.

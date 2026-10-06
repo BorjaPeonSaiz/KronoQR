@@ -31,7 +31,7 @@ return [
     'result_rejected' => '"Invalid code": the tablet could not read your card. Clock in with your code and PIN and tell your manager.',
 
     'no_card_title' => '3. If you do not have the card',
-    'no_card_body' => 'Tap "Clock in with your code and PIN" on the tablet, type your employee code and your 6-digit PIN. Your entry counts just the same. If you lost the card, tell your manager that same day: it is cancelled and you get a new one.',
+    'no_card_body' => 'Tap "Clock in with your code and PIN" on the tablet, type your employee code and your PIN. Your entry counts just the same. If you lost the card, tell your manager that same day: it is cancelled and you get a new one.',
 
     'portal_title' => '4. Checking your record',
     'portal_body' => 'You can see your working days and download your record whenever you want, from a device on the hotel network or wherever your company tells you, at this address:',

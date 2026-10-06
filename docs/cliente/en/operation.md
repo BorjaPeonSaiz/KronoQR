@@ -1148,6 +1148,73 @@ that filter over the rows you already had. What is worth knowing:
   `kronoqr_backup_replication_slot*`, **they are renamed** to `kronoqr_wal_*`.
 - **Downtime:** none extra.
 
+**On updating to 2.2.0: the portal and the panel, better closed (above all if
+they are open to the internet).** Four changes; the first two require nothing,
+the last two call for a review on the same day:
+
+- **The PIN can have 6 or 8 digits.** It is still 6 by default. If the portal
+  is reachable from outside the hotel network, move it to 8 in the panel, with
+  the administration account: **Operational settings → Access → PIN length**
+  (it is recorded in the audit log). **No PIN is voided**: the 6-digit ones
+  already handed out keep working and the portal and the tablet accept 6 to 8
+  digits; only those issued from then on —new hires and resets— come out with
+  8. HR resets them and hands them over in person as each person comes by the
+  office ([`hr-guide.md`](hr-guide.md) §2.2). How many are left —only the
+  number, never who— is what the `access.short_pins` check of `product:doctor`
+  says (§12.1).
+- **Per-connection lockout on the portal.** 20 failed portal sign-ins from one
+  address within 15 minutes, with any code, close the portal **to that
+  address** for one hour, even with the right PIN. The person sees "Too many
+  attempts from this connection" and the minutes left. It does not affect
+  clocking in. If it closes the whole hotel wifi and waiting is not an option,
+  lift it from the installation directory with the address shown in the
+  `auth.origin_locked` entry of the audit log (the example is a documentation
+  address; put yours):
+
+  ```bash
+  docker compose exec app php artisan identity:origin-unlock 198.51.100.23
+  ```
+
+  If there is a proxy in front of the server and you have not set
+  `TRUSTED_PROXY_CIDR`, the whole staff arrives with the proxy's IP and a single
+  lockout keeps all of them out: set it ([`installation.md`](installation.md)
+  §6). The full procedure, including what to do if it keeps happening, is in
+  [`../../runbooks/bloqueo-por-origen.md`](../../runbooks/bloqueo-por-origen.md)
+  (in Spanish).
+- **Department managers need a second factor.** Since 2.2.0 it is mandatory
+  for the four management roles, because the manager corrects working days.
+  Nobody is locked out: whoever does not have one enrols it on their **first
+  sign-in** to the panel after updating, with the app on their phone. **Until
+  they sign in, someone holding only their password could enrol it in their
+  place**, so **ask every manager to sign in on the same day** and then review
+  the enrolments: each one leaves an `auth.two_factor_enabled` entry with the
+  time and the IP it was made from.
+
+  ```bash
+  docker compose exec -T postgres psql -U fichaje_app -d fichaje -c \
+    "SELECT a.occurred_at, a.ip, u.uuid, u.email FROM audit_log a JOIN users u ON u.id = a.subject_id WHERE a.action = 'auth.two_factor_enabled' AND a.occurred_at > now() - interval '30 days' ORDER BY a.occurred_at;"
+  ```
+
+  If the account holder does not recognise an enrolment (another time, another
+  IP), remove that second factor with the row's `uuid` and give them a new
+  password; on their next sign-in they enrol it again themselves:
+
+  ```bash
+  docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --reason="2FA no reconocido / 2FA not recognised"
+  docker compose exec app php artisan identity:reset-password responsable@tuhotel.example
+  ```
+
+  The `access.two_factor_pending` check of `product:doctor` says how many
+  accounts of those roles still have no second factor; when it reaches zero,
+  the window is closed. If your `.env` sets `IDENTITY_2FA_REQUIRED_ROLES` to the
+  old list, 2.2.0 respects it and `access.two_factor_roles` warns about the
+  missing role.
+- **`ADMIN_INTERNAL_CIDR`, new and empty.** It closes the management panel to
+  the network you set; empty, it filters nothing, as until now. If the portal is
+  open to the internet, so is the panel while you leave it empty:
+  [`configuration.md`](configuration.md) §6. `product:doctor` reminds you with
+  the `network.admin` warning.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which
@@ -1228,7 +1295,12 @@ retention reports folder is writable, and exports for the Labour Inspectorate
 forgotten on the server for more than 30 days; §13.6), disk space (application
 and backups) and settings
 (time zone in UTC, debug mode, invalid keys, differences between the `.env` and
-what is stored, licence and branding). **Every red line says what to do**,
+what is stored, licence and branding),
+edge networks (where the portal, the panel, the kiosks and `/metrics` open
+from) and access (since 2.2.0: 6-digit PIN with the portal open to the
+internet, how many people still have a 6-digit PIN with the setting on 8,
+management roles without a mandatory second factor and how many accounts have
+not enrolled it yet; **only numbers, never who**). **Every red line says what to do**,
 written for someone who does not know the system.
 
 | Code | Meaning |
