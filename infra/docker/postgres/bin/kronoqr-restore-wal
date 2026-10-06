@@ -111,11 +111,24 @@ usar_cifrado() {
     *) fatal "$nombre" "${KQE_REASON}" "El segmento no es el que se archivo. Restauralo desde otro soporte." ;;
     esac
   fi
+  # Un segmento heredado que `kronoqr-wal-migrate` cifro en sitio (`src=legacy`, bajo
+  # el MAC) sigue siendo lo que era: contenido de la 2.1.0 que nadie autentico. Cifrarlo
+  # no lo blanquea; se reproduce solo con la misma bandera que el `.gz` en claro.
+  if [ "$KQE_SRC" = "legacy" ]; then
+    if [ "${KRONOQR_ACCEPT_LEGACY_WAL:-}" != "1" ]; then
+      fatal "$nombre" "es un segmento de la 2.1.0 cifrado despues de archivarse (src=legacy): su contenido nunca se autentico" "Si de verdad quieres reproducirlo, repite con la bandera --accept-unauthenticated (KRONOQR_ACCEPT_LEGACY_WAL=1)."
+    fi
+    err "AVISO: el segmento '${nombre}' es heredado de la 2.1.0 (cifrado despues de archivarse): su contenido no esta autenticado."
+  fi
   if ! { kqe_decrypt_copy | gzip -dc >"${destino}.tmp"; } 2>/dev/null; then
     fatal "$nombre" "se autentica pero no se descifra o descomprime" "El segmento es de otra clave o esta incompleto: restauralo desde otro soporte."
   fi
   mv -f -- "${destino}.tmp" "$destino"
-  estadistica enc
+  if [ "$KQE_SRC" = "legacy" ]; then
+    estadistica legacy
+  else
+    estadistica enc
+  fi
   exit 0
 }
 
@@ -123,7 +136,7 @@ usar_cifrado() {
 # privada. Si ha desaparecido entre medias, devuelve 1 (el llamador reintenta `.gz.enc`).
 usar_heredado() {
   if [ "${KRONOQR_ACCEPT_LEGACY_WAL:-}" != "1" ]; then
-    fatal "$nombre" "solo existe el formato heredado de la 2.1.0 (.gz), sin cifrar ni autenticar" "Si de verdad quieres reproducirlo, repite con la bandera --accept-unauthenticated (KRONOQR_ACCEPT_LEGACY_WAL=1). Si la actualizacion ya ha terminado, 'kronoqr-wal-migrate' lo cifra."
+    fatal "$nombre" "solo existe el formato heredado de la 2.1.0 (.gz), sin cifrar ni autenticar" "Si de verdad quieres reproducirlo, repite con la bandera --accept-unauthenticated (KRONOQR_ACCEPT_LEGACY_WAL=1)."
   fi
   crear_trabajo
   if ! cat -- "$heredado" >"${trabajo}/legacy.gz" 2>/dev/null; then
