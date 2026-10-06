@@ -16,26 +16,23 @@ use Tests\Support\Workforce\EmployeePins;
 
 /*
  * El bloqueo del PIN POR EMPLEADO bajo concurrencia (RS-12, doc 02 §7.5,
- * ADR-015, ADR-043).
+ * ADR-015, ADR-043, ADR-050).
  *
- * Lo que vigila: que cada intento que se prueba contra el PIN real de una
- * persona quede contado, tambien cuando llegan todos a la vez. Veinticinco
- * procesos simultaneos con el mismo codigo y un PIN equivocado: los que pasan la
- * comprobacion del bloqueo antes de que se abra se comparan contra el PIN de
- * verdad (los demas, contra el señuelo), y **todos esos** tienen que estar en el
- * contador al terminar, con un solo asiento `auth.lockout_started`.
+ * Lo que vigila: que una rafaga no compre mas comparaciones contra el PIN real
+ * que las que caben antes del primer escalon. Veinticinco procesos simultaneos
+ * con el mismo codigo y un PIN equivocado: **como mucho tres** se comparan
+ * contra el PIN de verdad —los demas llegan bloqueados y se comparan contra el
+ * señuelo—, los tres quedan en el contador y hay un solo asiento
+ * `auth.lockout_started`.
  *
- * **Estuvo en rojo** hasta el bloque 12 de la 2.2.0, como su gemela del bloqueo
- * por origen (`PortalOriginConcurrencyTest`): medido el 06-10-2026, de nueve a
- * veinte intentos llegaban al PIN real y el contador guardaba de tres a nueve,
- * con hasta nueve asientos de apertura. `CachePinAttempts` leia, anadia la marca
- * y escribia sin candado; ahora cuenta con el candado del empleado cogido, en
- * Redis y en el disco.
- *
- * Lo que esta prueba **no** cierra, y lo dice: los intentos que pasan la
- * comprobacion a la vez siguen probandose todos antes de que el bloqueo se abra.
- * Ahora cuentan, y el siguiente escalon llega con ellos; frenarlos antes de la
- * comparacion es otra decision (reservar el intento antes de comparar).
+ * **Estuvo en rojo dos veces** en el bloque 12 de la 2.2.0. Sin candado (medido
+ * el 06-10-2026) de nueve a veinte intentos llegaban al PIN real y el contador
+ * guardaba de tres a nueve, con hasta nueve asientos de apertura. Con candado
+ * pero anotando el fallo DESPUES de comparar, los fallos ya no se perdian pero
+ * de 4 a 22 de 25 seguian comparandose contra el PIN real: la cota por empleado
+ * dependia del tamaño de la botnet. Ahora `HashedEmployeePinVerifier` reserva
+ * el intento con el candado del empleado cogido ANTES de comparar
+ * (`PinAttempts::reserve()`).
  *
  * Las dos puertas, porque las dos cuentan por este contador: el portal
  * (`/me/login`) y el fichaje de respaldo del quiosco (`/scan/pin`).
@@ -117,13 +114,13 @@ function pinLockoutConcurrencyScenario(): array
     return $escenario;
 }
 
-it('cuenta todos los fallos simultaneos contra el mismo empleado', function (PinOrigin $puerta, string ...$almacenes): void {
+it('compara como mucho tres intentos simultaneos contra el PIN real y los cuenta', function (PinOrigin $puerta, string ...$almacenes): void {
     pinLockoutConcurrencyCache(array_values($almacenes));
     $escenario = pinLockoutConcurrencyScenario();
 
-    // Cada intento que se compara contra el PIN real termina en un fallo
-    // anotado contra su UUID; los que llegan con el bloqueo ya abierto se anotan
-    // contra el señuelo. El decorador cuenta los primeros en todos los hijos.
+    // Cada intento que reserva sin encontrar el bloqueo abierto se compara
+    // contra el PIN real; los demas, contra el señuelo. El decorador cuenta los
+    // primeros, y los que abren el bloqueo, en todos los hijos.
     $recuento = new TalliedPinAttempts(
         app(PinAttempts::class),
         $escenario['employee'],
@@ -157,15 +154,16 @@ it('cuenta todos los fallos simultaneos contra el mismo empleado', function (Pin
         $probados = $recuento->tally();
 
         expect(array_unique(array_column($respuestas, 'status')))->toBe([$puerta === PinOrigin::PORTAL ? 401 : 422])
-            // Al menos el primer escalon: si no, nadie llego a bloquear.
-            ->and($probados)->toBeGreaterThanOrEqual(3)
-            // EL CENTRO DE LA PRUEBA: tantos fallos guardados como intentos se
-            // probaron contra el PIN real. Sin candado se quedaban en tres o
-            // cuatro de nueve o mas.
-            ->and(\is_array($guardados) ? \count($guardados) : 0)->toBe(min($probados, 20))
+            // EL CENTRO DE LA PRUEBA: como mucho tres comparaciones contra el PIN
+            // real de veinticinco, las que caben antes del primer escalon. Al
+            // menos una, o nadie habria llegado a reservar.
+            ->and($probados)->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(3)
+            // Y todas ellas contadas: reservar es anotar.
+            ->and(\is_array($guardados) ? \count($guardados) : 0)->toBe($probados)
             ->and($recuento->secondsUntilUnlock($escenario['employee'], $puerta))->toBeGreaterThan(0)
-            // Y un solo asiento: el del fallo que abrio el bloqueo, no uno por
-            // cada proceso que lo encontro abierto despues de contar el suyo.
+            // Un solo flanco y un solo asiento: el de la reserva que abrio el
+            // bloqueo, no uno por cada proceso que lo encontro abierto.
+            ->and($recuento->openedTally())->toBe(1)
             ->and(DB::table('audit_log')->where('action', 'auth.lockout_started')->count())->toBe(1);
     } finally {
         $recuento->clear($escenario['employee']);

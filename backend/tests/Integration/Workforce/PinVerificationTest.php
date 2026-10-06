@@ -183,6 +183,23 @@ it('acertar limpia el castigo acumulado', function (): void {
     expect(app(PinAttempts::class)->isLocked($empleado['uuid'], PinOrigin::KIOSK))->toBeFalse();
 })->group('RS-12');
 
+it('el acierto no queda contado como fallo aunque su reserva alcanzara el escalon', function (): void {
+    // El intento se reserva —se anota— antes de comparar (ADR-050). El tercero,
+    // tras dos fallos, alcanza el escalon al reservarse; si es el PIN bueno, el
+    // acierto borra la cuenta con su propia marca dentro y no deja a nadie
+    // bloqueado ni asiento de bloqueo.
+    $empleado = empleadoConPin();
+    $verificador = verificador();
+
+    $verificador->verify($empleado['code'], PIN_MALO, PinOrigin::KIOSK);
+    $verificador->verify($empleado['code'], PIN_MALO, PinOrigin::KIOSK);
+
+    expect($verificador->verify($empleado['code'], PIN_BUENO, PinOrigin::KIOSK)->isVerified())->toBeTrue()
+        ->and(app(PinAttempts::class)->isLocked($empleado['uuid'], PinOrigin::KIOSK))->toBeFalse()
+        ->and(app(Cache::class)->get('workforce:pin-failures:kiosk:'.$empleado['uuid']))->toBeNull()
+        ->and(DB::table('audit_log')->where('action', 'auth.lockout_started')->count())->toBe(0);
+})->group('RS-12', 'RF-AT-11');
+
 it('fallar en el quiosco no bloquea el portal', function (): void {
     $empleado = empleadoConPin();
     $verificador = verificador();

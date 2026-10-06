@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Support\Shared;
 
 use App\Modules\Shared\Application\Port\PinAttempts;
+use App\Modules\Shared\Domain\ValueObject\PinAttemptReservation;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 
 /**
@@ -45,11 +46,11 @@ final class RecordingPinAttempts implements PinAttempts
         return $this->inner->secondsUntilUnlock($employeeUuid, $origin);
     }
 
-    public function recordFailure(string $employeeUuid, PinOrigin $origin): int
+    public function reserve(?string $employeeUuid, PinOrigin $origin): PinAttemptReservation
     {
-        $this->calls[] = 'recordFailure:'.$origin->value;
+        $this->calls[] = 'reserve:'.$origin->value;
 
-        return $this->inner->recordFailure($employeeUuid, $origin);
+        return $this->inner->reserve($employeeUuid, $origin);
     }
 
     public function clear(string $employeeUuid): void

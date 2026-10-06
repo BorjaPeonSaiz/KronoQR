@@ -161,10 +161,11 @@ it('restablecer desbloquea el PIN inmediatamente, y en las dos puertas', functio
     /** @var PinAttempts $attempts */
     $attempts = app(PinAttempts::class);
 
-    // Tantos fallos como haga falta para bloquear con la politica de serie.
+    // Tres intentos reservados bloquean con la politica de serie; los
+    // siguientes llegan bloqueados y no anotan.
     for ($i = 0; $i < 10; $i++) {
-        $attempts->recordFailure($uuid, PinOrigin::KIOSK);
-        $attempts->recordFailure($uuid, PinOrigin::PORTAL);
+        $attempts->reserve($uuid, PinOrigin::KIOSK);
+        $attempts->reserve($uuid, PinOrigin::PORTAL);
     }
 
     expect($attempts->isLocked($uuid, PinOrigin::KIOSK))->toBeTrue()

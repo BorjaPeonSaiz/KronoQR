@@ -7,6 +7,7 @@ namespace App\Modules\Shared\Infrastructure\Adapter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Domain\Policy\PinLockoutPolicy;
+use App\Modules\Shared\Domain\ValueObject\PinAttemptReservation;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use App\Modules\Shared\Infrastructure\Cache\CacheMutex;
 use Illuminate\Contracts\Cache\Repository as Cache;
@@ -81,25 +82,30 @@ use Illuminate\Contracts\Cache\Repository as Cache;
  * contador guardaba de tres a nueve. Quien paralelizaba no llegaba al escalon
  * que le tocaba y el espacio de busqueda por empleado y dia dejaba de ser el
  * calculado (`PinLockoutConcurrencyTest`, bloque 12 de la 2.2.0). Por eso
- * {@see self::recordFailure()} y {@see self::clear()} trabajan con el candado
- * de la entrada cogido.
+ * {@see self::reserve()} y {@see self::clear()} trabajan con el candado de la
+ * entrada cogido.
  *
- * El candado es el de la cache —`SET NX` en Redis, `add` con `flock` en el disco,
- * y el almacen `failover` entrega el de quien responde—; un `increment` no valdria
- * porque la entrada es una lista de marcas y `FileStore::increment()` tampoco es
- * atomico. Su nombre lleva el `employee_uuid` y la puerta, igual que la clave: ni
- * el codigo de la tarjeta ni el nombre de nadie.
+ * ## Se reserva antes de comparar, no se anota despues
  *
- * **Nunca bloquea al empleado ni rompe RS-03.** Sin contienda cuesta un viaje mas
- * a la cache, el mismo en el camino del empleado real y en el del señuelo, asi que
- * los dos rechazos siguen costando lo mismo. Solo espera quien llega mientras otro
- * proceso cuenta un fallo **del mismo empleado y la misma puerta** —el del señuelo
- * del quiosco lo comparten los codigos inexistentes, que ya frena el limite por
- * dispositivo—, y la espera es por intentos y no por reloj (`Lock::block()` mide
- * con `now()`, que las pruebas detienen). Si tras {@see self::LOCK_ATTEMPTS}
- * intentos sigue ocupado, o el almacen no puede darlo, se cuenta sin el: un fallo
- * de mas o de menos en una avalancha, nunca un `500` ni un fichaje perdido (regla
- * dura 19).
+ * Con el candado solo, los fallos ya no se perdian, pero se anotaban **despues**
+ * de comparar: todo lo que llegaba antes de la primera anotacion pasaba la
+ * comprobacion del bloqueo y se comparaba contra el PIN real (de 4 a 22 de 25 en
+ * rafaga). {@see self::reserve()} lee el bloqueo y anota el intento en el mismo
+ * paso, con el candado cogido, y quien llama compara despues: de una rafaga solo
+ * llegan al hash real los intentos que caben antes del primer escalon. El que
+ * acierta borra la cuenta con {@see self::clear()}, y su marca con ella.
+ *
+ * El candado es {@see CacheMutex} —`SET NX` en Redis, `add` con `flock` en el
+ * disco, y el almacen `failover` entrega el de quien responde—; un `increment` no
+ * valdria porque la entrada es una lista de marcas y `FileStore::increment()`
+ * tampoco es atomico. Su nombre lleva el `employee_uuid` y la puerta, igual que la
+ * clave: ni el codigo de la tarjeta ni el nombre de nadie.
+ *
+ * **Nunca bloquea al empleado.** Solo espera quien llega mientras otro proceso
+ * reserva un intento **del mismo empleado y la misma puerta**, y la espera es por
+ * intentos y no por reloj. Si tras {@see self::LOCK_ATTEMPTS} intentos sigue
+ * ocupado, o el almacen no puede darlo, se reserva sin el: un intento de mas o de
+ * menos en una avalancha, nunca un `500` ni un fichaje perdido (regla dura 19).
  *
  * **Todos los umbrales son configuracion** (regla dura 13): `IDENTITY_PIN_*` en
  * `config/identity.php`. Se leen en cada llamada y no en el constructor para que
@@ -115,6 +121,20 @@ final readonly class CachePinAttempts implements PinAttempts
     private const string PREFIX = 'workforce:pin-failures:';
 
     private const string LOCK_PREFIX = 'workforce:pin-failures-lock:';
+
+    /**
+     * Sujeto señuelo contra el que se reservan los intentos de un codigo que no
+     * existe.
+     *
+     * El UUID nulo, que ninguna fila de `employees` puede tener: los UUID de la
+     * plantilla los genera PostgreSQL. Es al contador lo que el hash señuelo del
+     * verificador es a la comparacion —el trabajo se paga y el resultado se
+     * tira—. Los codigos inexistentes comparten esta sola entrada por puerta,
+     * acotada por la politica y con su TTL: quien prueba codigos al azar no puede
+     * llenar la cache. Puede llegar a «bloquearse», y da igual: el bloqueo solo
+     * gobierna el flujo cuando hay empleado detras.
+     */
+    private const string DECOY_SUBJECT = '00000000-0000-0000-0000-000000000000';
 
     /**
      * Intentos de coger el candado antes de contar sin el: medio segundo como
@@ -148,36 +168,45 @@ final readonly class CachePinAttempts implements PinAttempts
         );
     }
 
-    public function recordFailure(string $employeeUuid, PinOrigin $origin): int
+    public function reserve(?string $employeeUuid, PinOrigin $origin): PinAttemptReservation
     {
-        $key = $this->keyFor($employeeUuid, $origin);
+        $subject = $employeeUuid ?? self::DECOY_SUBJECT;
+        $key = $this->keyFor($subject, $origin);
 
-        return $this->mutex->guarded($this->lockFor($employeeUuid, $origin), function () use ($key, $employeeUuid, $origin): int {
+        return $this->mutex->guarded($this->lockFor($subject, $origin), function () use ($key, $subject, $origin): PinAttemptReservation {
             $policy = $this->policy();
 
             // Leido y escrito con el candado cogido: entre las dos cosas no se
-            // mete ningun otro fallo del mismo empleado por la misma puerta.
-            $failures = $this->failuresWithinWindow($employeeUuid, $origin, $policy);
+            // mete ningun otro intento del mismo empleado por la misma puerta.
+            $failures = $this->failuresWithinWindow($subject, $origin, $policy);
             $before = $this->secondsUntilUnlockOf($failures, $policy);
 
-            $failures[] = $this->now();
+            // Bloqueado no anota: el bloqueo de quien ya lo tiene no crece por
+            // insistir (RS-12). Abierto, el intento cuenta YA, antes de que nadie
+            // lo compare: es lo que deja fuera de la comparacion a los intentos
+            // simultaneos que no caben antes del escalon.
+            if ($before === 0) {
+                $failures[] = $this->now();
 
-            // Solo las mas recientes: `array_slice` con desplazamiento negativo se
-            // queda con la cola de la lista —y reindexa, asi que sigue siendo una
-            // lista—, que es la que decide tanto el escalon como el instante de
-            // desbloqueo.
-            $failures = \array_slice($failures, -$policy->trackedFailures());
+                // Solo las mas recientes: `array_slice` con desplazamiento
+                // negativo se queda con la cola de la lista —y reindexa, asi que
+                // sigue siendo una lista—, que es la que decide tanto el escalon
+                // como el instante de desbloqueo.
+                $failures = \array_slice($failures, -$policy->trackedFailures());
+            }
 
-            // El TTL se renueva en cada fallo, y esa renovacion **es** la ventana
-            // deslizante: la entrada muere sola cuando pasa el tiempo de olvido sin
-            // que nadie vuelva a fallar. Sin esto haria falta un barrido periodico
-            // para limpiar contadores de gente que se equivoco una vez en marzo.
+            // Se escribe SIEMPRE, tambien bloqueado y sin marca nueva: las dos
+            // ramas pagan el mismo viaje a la cache y el coste no dice si habia
+            // bloqueo (RS-03). El TTL se renueva en cada intento, y esa
+            // renovacion **es** la ventana deslizante: la entrada muere sola
+            // cuando pasa el tiempo de olvido sin que nadie vuelva a intentarlo.
+            // Renovarla sin marca nueva no cambia ninguna respuesta: las marcas se
+            // filtran por su instante al leer.
             $this->cache->put($key, $failures, $policy->resetSeconds());
 
-            // El flanco: este fallo abre el bloqueo solo si antes no lo habia.
-            // Un fallo simultaneo que llega con el bloqueo ya abierto por otro
-            // cuenta, pero no lo abre por segunda vez.
-            return $before > 0 ? 0 : $this->secondsUntilUnlockOf($failures, $policy);
+            return $before > 0
+                ? PinAttemptReservation::locked($before)
+                : PinAttemptReservation::open($this->secondsUntilUnlockOf($failures, $policy));
         });
     }
 

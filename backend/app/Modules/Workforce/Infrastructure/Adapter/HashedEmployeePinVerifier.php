@@ -29,20 +29,26 @@ use SensitiveParameter;
  *
  * ```
  * 1. Buscar al empleado por su codigo            1 consulta, exista o no
- * 2. Elegir el sujeto: el real, o el señuelo
- * 3. Leer el bloqueo del sujeto                  1 lectura de cache
- * 4. Comparar el PIN contra el hash o el señuelo 1 bcrypt          <- RS-03
- * 5. Anotar el fallo y releer el bloqueo         1 lectura + 1 escritura
+ * 2. Reservar el intento: el sujeto real, o el   candado + 1 lectura
+ *    señuelo si no hay nadie con ese codigo      + 1 escritura de cache
+ * 3. Comparar el PIN contra el hash o el señuelo 1 bcrypt          <- RS-03
  * ```
  *
  * **Los cinco rechazos ejecutan esa secuencia entera y en el mismo orden**:
  * aunque no haya nadie con ese codigo, aunque no haya PIN emitido, aunque la
  * persona este de baja y aunque el bloqueo ya estuviera puesto. Lo que cambia es
- * contra **quien**: un codigo que no existe se cuenta contra
- * {@see self::DECOY_SUBJECT}, un PIN que no se puede comparar se compara contra
- * {@see self::DECOY_HASH} y un empleado ya bloqueado anota su fallo tambien
- * contra el señuelo —su bloqueo no crece por insistir (RS-12)—. El resultado de
- * todo eso se descarta. Saltarse cualquiera de los pasos dejaria una diferencia
+ * contra **quien**: un codigo que no existe se reserva contra el señuelo del
+ * contador, un PIN que no se puede comparar se compara contra
+ * {@see self::DECOY_HASH} y un empleado ya bloqueado reserva sin anotar —su
+ * bloqueo no crece por insistir (RS-12)— pagando la misma lectura y la misma
+ * escritura. El resultado de todo eso se descarta.
+ *
+ * **Se reserva antes de comparar** (ADR-050). Anotando el fallo despues, todos
+ * los intentos simultaneos contra un codigo pasaban la comprobacion del bloqueo
+ * antes de que ninguno contara y se comparaban contra el PIN real —de 4 a 22 de
+ * 25 en rafaga—; reservando con el candado del empleado cogido, solo los que
+ * caben antes del primer escalon llegan al hash real. El que acierta borra la
+ * cuenta, con su propia marca dentro. Saltarse cualquiera de los pasos dejaria una diferencia
  * medible desde fuera: quien la midiera averiguaria que codigos de empleado
  * existen sin acertar ni un PIN (RS-03, regla dura 17).
  *
@@ -114,18 +120,6 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
      */
     private const string DECOY_HASH = '$2y$12$C6UzMDM.H6dfI/f/IKcEe.7ZBpRolkT/LNfWfeoQhh0Zc1a5tRfIu';
 
-    /**
-     * Sujeto señuelo contra el que se cuentan los intentos de un codigo que no
-     * existe.
-     *
-     * El UUID nulo, que ninguna fila de `employees` puede tener: los UUID de la
-     * plantilla los genera PostgreSQL. Es al contador lo que
-     * {@see self::DECOY_HASH} es a la comparacion —el trabajo se paga y el
-     * resultado se tira—, y sin el, un codigo inexistente se ahorraba una lectura
-     * y una escritura de cache que el codigo real si pagaba.
-     */
-    private const string DECOY_SUBJECT = '00000000-0000-0000-0000-000000000000';
-
     public function __construct(
         private PinAttempts $attempts,
         private AuthenticationJournal $journal,
@@ -139,19 +133,16 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
         $channel = $origin->authChannel();
         $employee = $this->findByCode($employeeCode);
 
-        // Contra quien se cuenta: la persona, o el señuelo si no hay ninguna.
-        $subject = $employee['uuid'] ?? self::DECOY_SUBJECT;
-
-        // Se lee SIEMPRE, y por eso se lee contra el señuelo cuando no hay
-        // empleado. Los segundos se guardan porque la rama bloqueada los
-        // necesita: preguntar dos veces seria una segunda llamada cuya presencia
-        // depende de la respuesta a la primera, que es justo la asimetria que
-        // este metodo evita.
-        $lockSeconds = $this->attempts->secondsUntilUnlock($subject, $origin);
+        // Se reserva SIEMPRE, antes de comparar, y contra el señuelo cuando no
+        // hay empleado (`null`). Con el candado del empleado cogido, el contador
+        // lee el bloqueo y, si no lo hay, anota ya este intento como fallo: los
+        // intentos simultaneos que no caben antes del escalon llegan bloqueados y
+        // no se comparan contra el PIN real (ADR-050, RS-12).
+        $reservation = $this->attempts->reserve($employee['uuid'] ?? null, $origin);
 
         // El bloqueo solo gobierna el flujo cuando hay alguien detras: el del
         // señuelo se lee y se descarta.
-        $locked = $employee !== null && $lockSeconds > 0;
+        $locked = $employee !== null && $reservation->isLocked();
 
         // Se compara SIEMPRE y contra algo: con el hash real solo cuando hay
         // empleado y NO esta bloqueado; con el señuelo en los otros cuatro
@@ -162,20 +153,13 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
             // El resultado de la comparacion de arriba se descarta a proposito:
             // se pago por el tiempo, no por la respuesta. Y el motivo del apunte
             // es el mismo que el de abajo: el log no separa lo que la respuesta
-            // no separa.
-            //
-            // El fallo se anota **contra el señuelo**: el bloqueo de quien ya lo
-            // esta no crece por insistir (RS-12) y el camino cuesta exactamente
-            // lo mismo que el de abajo. Sin esto, tres intentos contra un codigo
-            // bastaban para saber si existe: a partir del bloqueo, el suyo se
-            // ahorraba dos viajes a la cache que un codigo inexistente seguia
-            // pagando.
-            $this->recordFailure(self::DECOY_SUBJECT, $origin);
+            // no separa. La reserva no anoto nada: el bloqueo de quien ya lo
+            // esta no crece por insistir (RS-12).
             $this->journal->failed($channel, null, AuthFailureReason::INVALID_CREDENTIALS);
 
             // RN-19 (ADR-043): el dueño del codigo baja con el bloqueo, solo para
             // la fila de `scan_events`. Sin E/S nueva: todo esta ya en `$employee`.
-            return PinVerification::locked($lockSeconds, $this->claimOf($employee, lockout: true));
+            return PinVerification::locked($reservation->lockSeconds(), $this->claimOf($employee, lockout: true));
         }
 
         // RN-14 despues de la comparacion, no antes, para que dar de baja a
@@ -183,28 +167,27 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
         // inexistente entra por esta misma rama, contra el señuelo, para que el
         // trabajo restante sea el mismo.
         if ($employee === null || $this->isRejected($employee, $matches)) {
-            $opened = $this->recordFailure($subject, $origin);
             $this->journal->failed($channel, null, AuthFailureReason::INVALID_CREDENTIALS);
 
-            // El asiento del bloqueo, **en el flanco**: solo el fallo que lo
-            // abre. El flanco lo decide el contador con su candado cogido —este
-            // fallo lo abre si antes de anotarlo no habia bloqueo—, porque la rama
-            // de arriba no basta: intentos simultaneos la pasan todos antes de que
-            // ninguno cuente. Repetirlo mientras dura llenaria la cadena de
-            // ADR-010 con la insistencia de quien ataca. El señuelo llega hasta
-            // aqui y no anuncia nada: nadie esta detras de el.
+            // El fallo ya quedo anotado al reservar. El asiento del bloqueo, **en
+            // el flanco**: solo el intento cuya reserva lo abrio. El flanco lo
+            // decide el contador con su candado cogido, y como reservar con el
+            // bloqueo abierto no anota, ningun intento lo abre dos veces ni sube
+            // de escalon en silencio. El señuelo no anuncia nada: nadie esta
+            // detras de el.
+            $opened = $employee === null ? 0 : $reservation->openedSeconds();
+
             if ($employee !== null && $opened > 0) {
                 $this->journal->lockoutStarted($channel, $employee['uuid'], $opened);
             }
 
-            // RN-19: `$opened` solo significa algo con empleado detras; con un
-            // codigo inexistente `claimOf()` devuelve `null` de todos modos.
+            // RN-19: con un codigo inexistente `claimOf()` devuelve `null`.
             return PinVerification::rejected($this->claimOf($employee, lockout: $opened > 0));
         }
 
-        // Acertar borra el castigo acumulado en las dos puertas: el PIN es el
-        // bueno, asi que quien fallara antes era la misma persona teniendo un
-        // mal dia.
+        // Acertar borra el castigo acumulado en las dos puertas —y la marca que
+        // reservo este mismo intento, que no era un fallo—: el PIN es el bueno,
+        // asi que quien fallara antes era la misma persona teniendo un mal dia.
         $this->attempts->clear($employee['uuid']);
 
         $this->rehashIfStale($employee, $pin);
@@ -320,22 +303,6 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
     private function isRejected(array $employee, bool $matches): bool
     {
         return ! $matches || ! EmploymentStatus::from($employee['status'])->canClock();
-    }
-
-    /**
-     * Anota el fallo y devuelve los segundos del bloqueo que **abre este fallo**:
-     * cero si no alcanza un escalon, y cero tambien si otro fallo simultaneo del
-     * mismo empleado ya lo habia abierto.
-     *
-     * **Una sola llamada, la misma siempre**, tambien cuando el sujeto es el
-     * señuelo: el contador responde al anotar, con su candado cogido, y no hace
-     * falta un segundo viaje a la cache para saber como ha quedado. Ese segundo
-     * viaje era ademas el que convertia en varios flancos un solo bloqueo cuando
-     * los intentos llegaban a la vez (`PinLockoutConcurrencyTest`).
-     */
-    private function recordFailure(string $subject, PinOrigin $origin): int
-    {
-        return $this->attempts->recordFailure($subject, $origin);
     }
 
     /**

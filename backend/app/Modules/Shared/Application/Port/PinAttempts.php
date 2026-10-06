@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Application\Port;
 
+use App\Modules\Shared\Domain\ValueObject\PinAttemptReservation;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 
 /**
@@ -55,8 +56,8 @@ interface PinAttempts
     /**
      * Si el PIN de este empleado esta bloqueado ahora mismo **por esta puerta**.
      *
-     * Se comprueba **antes** de verificar el PIN: si no, el bloqueo seria un
-     * oraculo que confirma cuando se acierta.
+     * Solo lectura, para consultar el estado. El camino del PIN no pregunta con
+     * esto: reserva con {@see self::reserve()}, que lee y anota a la vez.
      */
     public function isLocked(string $employeeUuid, PinOrigin $origin): bool;
 
@@ -66,23 +67,39 @@ interface PinAttempts
     public function secondsUntilUnlock(string $employeeUuid, PinOrigin $origin): int;
 
     /**
-     * Anota un fallo y, alcanzado un escalon, bloquea (doc 02 §7.5).
+     * Reserva un intento **antes de comparar el PIN**: lee el bloqueo y, si no
+     * lo hay, anota ya el intento como fallo (doc 02 §7.5, ADR-050).
      *
      * El escalon lo decide `Shared\Domain\Policy\PinLockoutPolicy` con los
      * umbrales ya resueltos de la configuracion. Aqui solo se registra el hecho.
      *
-     * **Atomico frente a otros fallos del mismo empleado y la misma puerta**:
-     * leer los fallos, anadir este y guardarlos no admite que otro proceso se
-     * meta en medio. Con una lectura y una escritura sueltas, los intentos
-     * lanzados en paralelo contra un codigo se pisaban y el bloqueo no llegaba.
+     * **Por que antes y no despues.** Anotando el fallo despues de comparar,
+     * todos los intentos que llegaban a la vez pasaban la comprobacion del
+     * bloqueo antes de que ninguno contara, y se comparaban contra el PIN real:
+     * de 4 a 22 de 25 en una rafaga (`PinLockoutConcurrencyTest`, 06-10-2026). La
+     * cota por empleado dependia del tamaño de la botnet. Reservando con el
+     * candado del empleado y la puerta cogido, solo llegan a compararse los
+     * intentos que caben antes del primer escalon.
      *
-     * @return int Los segundos del bloqueo que **abre este fallo**: cero si no
-     *             alcanza ningun escalon y cero tambien si el bloqueo ya estaba
-     *             abierto antes de anotarlo —por un fallo simultaneo—. Es el
-     *             flanco con el que quien llama escribe un solo
-     *             `auth.lockout_started` por bloqueo.
+     * **Atomico frente a otros intentos del mismo empleado y la misma puerta**:
+     * leer, decidir y anotar no admite que otro proceso se meta en medio. Si el
+     * candado no se consigue, se reserva sin el (regla dura 19): un intento de
+     * mas o de menos en una avalancha, nunca un `500`.
+     *
+     * **Bloqueado no anota**: el bloqueo de quien ya lo tiene no crece por
+     * insistir (RS-12). Las dos ramas hacen el mismo trabajo contra la cache
+     * —leer y escribir—, de modo que el coste no dice si habia bloqueo (RS-03).
+     *
+     * **Si el PIN resulta ser el bueno**, quien llama invoca {@see self::clear()},
+     * que borra la cuenta entera y con ella la marca reservada: el acierto no
+     * queda contado como fallo. Sin reabrir la carrera: `clear()` toma el mismo
+     * candado, y una reserva simultanea o queda antes —y se borra con el resto
+     * del castigo del PIN que acaba de acertarse— o despues, y cuenta.
+     *
+     * @param  string|null  $employeeUuid  `null` si no hay nadie con ese codigo: se reserva contra
+     *                                     el señuelo, que paga el mismo trabajo y no bloquea a nadie.
      */
-    public function recordFailure(string $employeeUuid, PinOrigin $origin): int;
+    public function reserve(?string $employeeUuid, PinOrigin $origin): PinAttemptReservation;
 
     /**
      * Borra el contador de **todas** las puertas: acierto, o PIN restablecido.

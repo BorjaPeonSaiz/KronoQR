@@ -128,8 +128,7 @@ it('ejecuta la misma secuencia de operaciones del contador exista o no el codigo
         // Y no esta vacia: una implementacion que no tocara el contador en
         // ninguna de las dos ramas tambien pasaria la comparacion de arriba.
         ->and($conEmpleado[0])->toBe([
-            'secondsUntilUnlock:portal',
-            'recordFailure:portal',
+            'reserve:portal',
         ]);
 })->group('RS-03', 'RS-12', 'RF-ID-06');
 
@@ -209,7 +208,7 @@ it('no separa en el log el bloqueo del PIN equivocado', function (): void {
 })->group('RS-03', 'RS-12', 'RF-ID-06');
 
 it('no anota el fallo de quien ya esta bloqueado, para que el bloqueo no crezca por insistir', function (): void {
-    // El fallo del bloqueado se anota contra el señuelo: paga el mismo trabajo y
+    // La reserva del bloqueado no anota: paga la misma lectura y escritura y
     // no alarga el castigo de nadie (RS-12). Sin esto, quien insiste se bloquea
     // indefinidamente a si mismo — o a la persona cuyo codigo conoce.
     $empleado = empleadoDeLaSimetria();
