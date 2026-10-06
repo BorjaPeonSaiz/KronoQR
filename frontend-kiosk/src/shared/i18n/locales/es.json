@@ -87,10 +87,10 @@
       "continue": "Continuar"
     },
     "pin": {
-      "title": "Introduce tu PIN de 6 dígitos",
-      "progress": "{entered} de {total} dígitos introducidos",
+      "title": "Introduce tu PIN (de 6 a 8 dígitos)",
+      "progress": "{entered} dígitos introducidos (máximo {total})",
       "back": "Atrás",
-      "confirm": "Confirmar"
+      "confirm": "Aceptar"
     },
     "keypad": {
       "label": "Teclado numérico",

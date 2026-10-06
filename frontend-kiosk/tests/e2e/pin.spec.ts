@@ -86,6 +86,36 @@ test(
 )
 
 test(
+  'un PIN de 8 cifras no se envia solo: se envia con «Aceptar» (ADR-050)',
+  { tag: ['@RF-AT-11', '@RF-ID-09'] },
+  async ({ page }) => {
+    await stubKioskApiWithPin(page)
+    const pinApi = await stubPinScanApi(page, 'clock_in')
+
+    await page.goto('/')
+    await page.getByTestId('pin-entry-link').click()
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await expect(page.getByTestId('pin-step-pin')).toBeVisible()
+
+    await pressPinDigits(page, RAW_PIN)
+    await expect(page.getByTestId('pin-confirm')).toBeEnabled()
+    // Con 6 cifras no hay envio automatico: sigue el teclado.
+    await expect(page.getByTestId('scan-confirmation')).toHaveCount(0)
+    expect(pinApi.recorded).toHaveLength(0)
+
+    await pressPinDigits(page, '17')
+    await expect(page.getByTestId('pin-confirm')).toBeEnabled()
+    await page.getByTestId('pin-confirm').click()
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted', {
+      timeout: 10_000,
+    })
+    await expect.poll(() => pinApi.recorded.length).toBe(1)
+    expect(pinApi.recorded[0]?.pinSealed).not.toContain('48392017')
+  },
+)
+
+test(
   'en despliegue normal (respuesta sin retraso), jamas se ve «Comprobando…»: un solo pintado, un solo sonido',
   { tag: ['@RF-AT-11'] },
   async ({ page }) => {

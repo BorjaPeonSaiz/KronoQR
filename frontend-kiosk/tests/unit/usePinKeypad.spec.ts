@@ -6,7 +6,7 @@ describe('buffer del teclado numerico del PIN', () => {
     const pin = usePinKeypad()
 
     expect(pin.value.value).toBe('')
-    expect(pin.isComplete.value).toBe(false)
+    expect(pin.canSubmit.value).toBe(false)
   })
 
   it('junta digitos en orden', () => {
@@ -15,16 +15,16 @@ describe('buffer del teclado numerico del PIN', () => {
     for (const digit of ['4', '8', '3', '9', '2', '0']) pin.pressDigit(digit)
 
     expect(pin.value.value).toBe('483920')
-    expect(pin.isComplete.value).toBe(true)
+    expect(pin.canSubmit.value).toBe(true)
   })
 
-  it('no admite un septimo digito', () => {
+  it('no admite un noveno digito', () => {
     const pin = usePinKeypad()
-    for (const digit of ['4', '8', '3', '9', '2', '0']) pin.pressDigit(digit)
+    for (const digit of ['4', '8', '3', '9', '2', '0', '1', '6']) pin.pressDigit(digit)
 
     pin.pressDigit('7')
 
-    expect(pin.value.value).toBe('483920')
+    expect(pin.value.value).toBe('48392016')
   })
 
   it('ignora lo que no es un digito', () => {
@@ -62,13 +62,25 @@ describe('buffer del teclado numerico del PIN', () => {
     pin.clear()
 
     expect(pin.value.value).toBe('')
-    expect(pin.isComplete.value).toBe(false)
+    expect(pin.canSubmit.value).toBe(false)
   })
 
-  it('admite una longitud distinta de 6, para pruebas o para otros usos', () => {
-    const pin = usePinKeypad(4)
-    for (const digit of ['1', '2', '3', '4']) pin.pressDigit(digit)
+  it('no se envia solo: canSubmit es falso con 5, verdadero con 6, 7 y 8', () => {
+    const pin = usePinKeypad()
+    const states: boolean[] = []
+    for (const digit of ['4', '8', '3', '9', '2', '0', '1', '6']) {
+      pin.pressDigit(digit)
+      states.push(pin.canSubmit.value)
+    }
 
-    expect(pin.isComplete.value).toBe(true)
+    expect(states).toEqual([false, false, false, false, false, true, true, true])
+  })
+
+  it('admite una longitud maxima y minima distintas, para pruebas', () => {
+    const pin = usePinKeypad(4, 4)
+    for (const digit of ['1', '2', '3', '4', '5']) pin.pressDigit(digit)
+
+    expect(pin.value.value).toBe('1234')
+    expect(pin.canSubmit.value).toBe(true)
   })
 })

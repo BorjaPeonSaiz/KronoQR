@@ -17,13 +17,18 @@
 // el teclado nativo del dispositivo (`<input>`), que tiene todos los caracteres,
 // y el numerico dedicado es solo para el PIN.
 
-export const PIN_LENGTH = 6
+// ADR-050, punto 1: el servidor valida con la longitud del PIN emitido (6 u 8 segun el
+// ajuste del hotel), pero conviven PIN antiguos de 6 y nuevos de 8, y el teclado
+// no sabe cual toca a quien: acepta de 6 a 8 y envia con «Aceptar», nunca solo
+// al llegar a una longitud. El rechazo sigue siendo generico (regla dura 17).
+export const PIN_MIN_LENGTH = 6
+export const PIN_MAX_LENGTH = 8
 
 /** Techo de `PinScanRequest.employee_code` en el contrato. */
 export const MAX_EMPLOYEE_CODE_LENGTH = 32
 
-export function isSixDigitPin(value: string): boolean {
-  return /^[0-9]{6}$/.test(value)
+export function isValidPinShape(value: string): boolean {
+  return /^[0-9]{6,8}$/.test(value)
 }
 
 export function hasEmployeeCodeShape(value: string): boolean {
