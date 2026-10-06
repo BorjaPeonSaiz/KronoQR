@@ -114,3 +114,34 @@ groups:
             bloquear en el borde. El runbook explica como, sin tocar el rate
             limiting declarativo.
           runbook_url: docs/runbooks/ataque-a-credenciales.md
+
+      #------------------------------------------------------------------------
+      # Bloqueo por origen del portal (RS-12, ADR-050). La metrica cuenta UNA
+      # vez por apertura de bloqueo (el flanco), con `channel="portal"` y
+      # `outcome="origin_locked"`, y NO lleva la IP como etiqueta (cardinalidad
+      # y privacidad): el recuento es lo unico que se puede alertar; QUIEN es el
+      # origen lo dice el log (`auth.origin_locked`) y el runbook.
+      # Umbral N=5 por hora, ajustable aqui: con el portal en internet, un par
+      # de bloqueos sueltos es ruido de fondo; cinco en una hora son un ataque
+      # repartido o, lo que importa mas al hotel, TODA la plantilla detras de
+      # una misma IP (hairpin NAT, proxy sin TRUSTED_PROXY_CIDR) y el portal
+      # cerrado para todos. Destinatario: IT del cliente, que es quien desbloquea.
+      #------------------------------------------------------------------------
+      - alert: KronoqrPortalOriginLockouts
+        expr: sum(increase(kronoqr_auth_attempts_total{channel="portal", outcome="origin_locked"}[1h])) > 5
+        for: 1m
+        labels:
+          severity: warning
+          destinatario: it-cliente
+          component: auth
+          mitre_attack: T1110.003
+        annotations:
+          summary: "Mas de 5 bloqueos de origen en el portal en 1 h"
+          description: >-
+            MITRE ATT&CK T1110.003 (Password Spraying), o un origen compartido
+            mal resuelto. Mas de 5 direcciones han llegado al limite de fallos
+            del portal en la ultima hora y estan bloqueadas. Si es una sola
+            direccion que se repite, o la de la red del hotel, la plantilla
+            entera puede estar sin portal: comprueba primero hairpin NAT y
+            TRUSTED_PROXY_CIDR. Fichar NO se ve afectado.
+          runbook_url: docs/runbooks/bloqueo-por-origen.md
