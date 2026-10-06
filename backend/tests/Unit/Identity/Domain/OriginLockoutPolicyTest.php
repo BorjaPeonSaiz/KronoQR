@@ -132,3 +132,44 @@ it('no admite un techo negativo', function (): void {
     expect(static fn (): OriginLockAuditCeiling => new OriginLockAuditCeiling(-1))
         ->toThrow(InvalidArgumentException::class);
 })->group('RS-12');
+
+it('admite el minimo de uno en cada umbral', function (int $fallos, int $ventana, int $bloqueo): void {
+    // La frontera de «rechaza umbrales que no tienen sentido»: el cero se
+    // rechaza y el uno no.
+    expect(new OriginLockoutPolicy($fallos, $ventana, $bloqueo)->maxFailures())->toBe($fallos);
+})->with([
+    'un fallo' => [1, 900, 3600],
+    'ventana de un segundo' => [20, 1, 3600],
+    'bloqueo de un segundo' => [20, 900, 1],
+])->group('RS-12');
+
+it('saca de la ventana el fallo que cae justo en su borde', function (): void {
+    // La ventana es de 900 s hacia atras sin incluir el borde: un fallo de
+    // hace exactamente 900 s ya no cuenta.
+    $politica = politicaDeOrigen();
+
+    $estado = $politica->afterFailure(
+        new OriginAttemptHistory([1_791_000_000, 1_791_000_001], null),
+        1_791_000_900,
+    );
+
+    expect($estado->failures)->toBe([1_791_000_001, 1_791_000_900]);
+})->group('RS-12');
+
+it('detecta la apertura del bloqueo solo en el flanco', function (?int $antes, ?int $despues, bool $abierto): void {
+    // `opened()` decide si se escribe `auth.origin_locked`: un asiento por
+    // apertura, ni uno por cada peticion durante el bloqueo ni uno sin bloqueo.
+    $politica = politicaDeOrigen();
+
+    expect($politica->opened(
+        new OriginAttemptHistory([], $antes),
+        new OriginAttemptHistory([], $despues),
+        1_791_000_000,
+    ))->toBe($abierto);
+})->with([
+    'ni antes ni despues' => [null, null, false],
+    'se abre y queda un segundo' => [null, 1_791_000_001, true],
+    'se abre y queda una hora' => [null, 1_791_003_600, true],
+    'ya estaba abierto con un segundo' => [1_791_000_001, 1_791_003_600, false],
+    'el anterior caduco justo ahora' => [1_791_000_000, 1_791_003_600, true],
+])->group('RS-12', 'RS-13');

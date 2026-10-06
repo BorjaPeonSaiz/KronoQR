@@ -32,3 +32,8 @@ it('rechaza lo que no es una direccion', function (string $basura): void {
 it('lleva una direccion ausente o ilegible al origen comun, nunca fuera de la cuenta', function (?string $direccion): void {
     expect(RequestOrigin::fromRemoteAddress($direccion)->equals(RequestOrigin::unknown()))->toBeTrue();
 })->with([null, '', 'no-es-ip'])->group('RS-12');
+
+it('normaliza la direccion de la peticion como cualquier otra', function (): void {
+    expect(RequestOrigin::fromRemoteAddress('203.0.113.7')->key())->toBe('203.0.113.7')
+        ->and(RequestOrigin::fromRemoteAddress('2001:db8:1:2::1')->key())->toBe('2001:db8:1:2::/64');
+})->group('RS-12');
