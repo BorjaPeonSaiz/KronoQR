@@ -45,11 +45,11 @@ final class RecordingPinAttempts implements PinAttempts
         return $this->inner->secondsUntilUnlock($employeeUuid, $origin);
     }
 
-    public function recordFailure(string $employeeUuid, PinOrigin $origin): void
+    public function recordFailure(string $employeeUuid, PinOrigin $origin): int
     {
         $this->calls[] = 'recordFailure:'.$origin->value;
 
-        $this->inner->recordFailure($employeeUuid, $origin);
+        return $this->inner->recordFailure($employeeUuid, $origin);
     }
 
     public function clear(string $employeeUuid): void

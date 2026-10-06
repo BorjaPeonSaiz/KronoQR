@@ -187,11 +187,12 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
             $this->journal->failed($channel, null, AuthFailureReason::INVALID_CREDENTIALS);
 
             // El asiento del bloqueo, **en el flanco**: solo el fallo que lo
-            // abre. Que sea el flanco se sabe sin guardar nada —si ya estuviera
-            // bloqueado, la rama de arriba habria contestado—, y repetirlo
-            // mientras dura llenaria la cadena de ADR-010 con la insistencia de
-            // quien ataca. El señuelo llega hasta aqui y no anuncia nada: nadie
-            // esta detras de el.
+            // abre. El flanco lo decide el contador con su candado cogido —este
+            // fallo lo abre si antes de anotarlo no habia bloqueo—, porque la rama
+            // de arriba no basta: intentos simultaneos la pasan todos antes de que
+            // ninguno cuente. Repetirlo mientras dura llenaria la cadena de
+            // ADR-010 con la insistencia de quien ataca. El señuelo llega hasta
+            // aqui y no anuncia nada: nadie esta detras de el.
             if ($employee !== null && $opened > 0) {
                 $this->journal->lockoutStarted($channel, $employee['uuid'], $opened);
             }
@@ -322,23 +323,19 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
     }
 
     /**
-     * Anota el fallo y devuelve los segundos de bloqueo que quedan **despues** de
-     * anotarlo: cero si no hay bloqueo, y la duracion del escalon si este fallo
-     * acaba de abrirlo.
+     * Anota el fallo y devuelve los segundos del bloqueo que **abre este fallo**:
+     * cero si no alcanza un escalon, y cero tambien si otro fallo simultaneo del
+     * mismo empleado ya lo habia abierto.
      *
-     * **Las dos llamadas van juntas y siempre**, tambien cuando el sujeto es el
-     * señuelo. Preguntar «¿esta bloqueado?» y solo entonces «¿cuantos segundos?»
-     * eran dos viajes a la cache para el mismo dato, y el segundo solo ocurria
-     * cuando el primero decia que si: una llamada cuya presencia depende de la
-     * respuesta a la anterior es la asimetria que ADR-039 saca del camino del
-     * rechazo. `AuthenticateUserHandler` resuelve su flanco con este mismo
-     * idioma.
+     * **Una sola llamada, la misma siempre**, tambien cuando el sujeto es el
+     * señuelo: el contador responde al anotar, con su candado cogido, y no hace
+     * falta un segundo viaje a la cache para saber como ha quedado. Ese segundo
+     * viaje era ademas el que convertia en varios flancos un solo bloqueo cuando
+     * los intentos llegaban a la vez (`PinLockoutConcurrencyTest`).
      */
     private function recordFailure(string $subject, PinOrigin $origin): int
     {
-        $this->attempts->recordFailure($subject, $origin);
-
-        return $this->attempts->secondsUntilUnlock($subject, $origin);
+        return $this->attempts->recordFailure($subject, $origin);
     }
 
     /**

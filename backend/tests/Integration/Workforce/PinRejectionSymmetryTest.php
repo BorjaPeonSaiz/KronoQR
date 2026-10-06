@@ -130,7 +130,6 @@ it('ejecuta la misma secuencia de operaciones del contador exista o no el codigo
         ->and($conEmpleado[0])->toBe([
             'secondsUntilUnlock:portal',
             'recordFailure:portal',
-            'secondsUntilUnlock:portal',
         ]);
 })->group('RS-03', 'RS-12', 'RF-ID-06');
 

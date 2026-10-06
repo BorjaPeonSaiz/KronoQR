@@ -8,7 +8,12 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Domain\Policy\PinLockoutPolicy;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
+use Closure;
+use Illuminate\Contracts\Cache\Lock;
+use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Support\Sleep;
+use Throwable;
 
 /**
  * El bloqueo escalonado del PIN sobre la cache compartida (RS-12, doc 02 §7.5).
@@ -72,6 +77,34 @@ use Illuminate\Contracts\Cache\Repository as Cache;
  * (RS-03). La alternativa —no bloquear— deja un espacio de 10^6 abierto a
  * fuerza bruta, que es lo que RS-12 existe para impedir.
  *
+ * ## Un candado por empleado y puerta
+ *
+ * Anotar un fallo es leer la lista, anadir la marca y escribirla, y sin candado
+ * los fallos simultaneos contra el mismo codigo se pisaban: con veinticinco
+ * intentos a la vez, de nueve a veinte se probaban contra el PIN real y el
+ * contador guardaba de tres a nueve. Quien paralelizaba no llegaba al escalon
+ * que le tocaba y el espacio de busqueda por empleado y dia dejaba de ser el
+ * calculado (`PinLockoutConcurrencyTest`, bloque 12 de la 2.2.0). Por eso
+ * {@see self::recordFailure()} y {@see self::clear()} trabajan con el candado
+ * de la entrada cogido.
+ *
+ * El candado es el de la cache —`SET NX` en Redis, `add` con `flock` en el disco,
+ * y el almacen `failover` entrega el de quien responde—; un `increment` no valdria
+ * porque la entrada es una lista de marcas y `FileStore::increment()` tampoco es
+ * atomico. Su nombre lleva el `employee_uuid` y la puerta, igual que la clave: ni
+ * el codigo de la tarjeta ni el nombre de nadie.
+ *
+ * **Nunca bloquea al empleado ni rompe RS-03.** Sin contienda cuesta un viaje mas
+ * a la cache, el mismo en el camino del empleado real y en el del señuelo, asi que
+ * los dos rechazos siguen costando lo mismo. Solo espera quien llega mientras otro
+ * proceso cuenta un fallo **del mismo empleado y la misma puerta** —el del señuelo
+ * del quiosco lo comparten los codigos inexistentes, que ya frena el limite por
+ * dispositivo—, y la espera es por intentos y no por reloj (`Lock::block()` mide
+ * con `now()`, que las pruebas detienen). Si tras {@see self::LOCK_ATTEMPTS}
+ * intentos sigue ocupado, o el almacen no puede darlo, se cuenta sin el: un fallo
+ * de mas o de menos en una avalancha, nunca un `500` ni un fichaje perdido (regla
+ * dura 19).
+ *
  * **Todos los umbrales son configuracion** (regla dura 13): `IDENTITY_PIN_*` en
  * `config/identity.php`. Se leen en cada llamada y no en el constructor para que
  * una prueba pueda cambiarlos con `config()->set()` sin reconstruir el servicio.
@@ -84,6 +117,19 @@ final readonly class CachePinAttempts implements PinAttempts
      * compartir clave dejaria dos de ellos sin efecto.
      */
     private const string PREFIX = 'workforce:pin-failures:';
+
+    private const string LOCK_PREFIX = 'workforce:pin-failures-lock:';
+
+    /** Lo que vive el candado si el proceso que lo tiene muere sin soltarlo. */
+    private const int LOCK_SECONDS = 10;
+
+    /**
+     * Intentos de coger el candado antes de contar sin el: medio segundo como
+     * mucho, y solo con contienda sobre el mismo empleado y la misma puerta.
+     */
+    private const int LOCK_ATTEMPTS = 100;
+
+    private const int LOCK_RETRY_MICROSECONDS = 5_000;
 
     public function __construct(
         private Cache $cache,
@@ -98,8 +144,65 @@ final readonly class CachePinAttempts implements PinAttempts
     public function secondsUntilUnlock(string $employeeUuid, PinOrigin $origin): int
     {
         $policy = $this->policy();
-        $failures = $this->failuresWithinWindow($employeeUuid, $origin, $policy);
 
+        return $this->secondsUntilUnlockOf(
+            $this->failuresWithinWindow($employeeUuid, $origin, $policy),
+            $policy,
+        );
+    }
+
+    public function recordFailure(string $employeeUuid, PinOrigin $origin): int
+    {
+        $key = $this->keyFor($employeeUuid, $origin);
+
+        return $this->guarded($this->lockFor($employeeUuid, $origin), function () use ($key, $employeeUuid, $origin): int {
+            $policy = $this->policy();
+
+            // Leido y escrito con el candado cogido: entre las dos cosas no se
+            // mete ningun otro fallo del mismo empleado por la misma puerta.
+            $failures = $this->failuresWithinWindow($employeeUuid, $origin, $policy);
+            $before = $this->secondsUntilUnlockOf($failures, $policy);
+
+            $failures[] = $this->now();
+
+            // Solo las mas recientes: `array_slice` con desplazamiento negativo se
+            // queda con la cola de la lista —y reindexa, asi que sigue siendo una
+            // lista—, que es la que decide tanto el escalon como el instante de
+            // desbloqueo.
+            $failures = \array_slice($failures, -$policy->trackedFailures());
+
+            // El TTL se renueva en cada fallo, y esa renovacion **es** la ventana
+            // deslizante: la entrada muere sola cuando pasa el tiempo de olvido sin
+            // que nadie vuelva a fallar. Sin esto haria falta un barrido periodico
+            // para limpiar contadores de gente que se equivoco una vez en marzo.
+            $this->cache->put($key, $failures, $policy->resetSeconds());
+
+            // El flanco: este fallo abre el bloqueo solo si antes no lo habia.
+            // Un fallo simultaneo que llega con el bloqueo ya abierto por otro
+            // cuenta, pero no lo abre por segunda vez.
+            return $before > 0 ? 0 : $this->secondsUntilUnlockOf($failures, $policy);
+        });
+    }
+
+    public function clear(string $employeeUuid): void
+    {
+        foreach (PinOrigin::cases() as $origin) {
+            $key = $this->keyFor($employeeUuid, $origin);
+
+            // Con el candado, para que un fallo que estuviera contandose no
+            // reescriba despues la lista que se acaba de borrar (RF-ID-09).
+            $this->guarded($this->lockFor($employeeUuid, $origin), fn (): bool => $this->cache->forget($key));
+        }
+    }
+
+    /**
+     * Segundos hasta el desbloqueo con estos fallos: el ultimo fallo mas el
+     * escalon que le toca a cuantos son.
+     *
+     * @param  list<int>  $failures
+     */
+    private function secondsUntilUnlockOf(array $failures, PinLockoutPolicy $policy): int
+    {
         if ($failures === []) {
             return 0;
         }
@@ -110,39 +213,65 @@ final readonly class CachePinAttempts implements PinAttempts
             return 0;
         }
 
-        $unlocksAt = max($failures) + $lockSeconds;
-
-        return max(0, $unlocksAt - $this->now());
+        return max(0, max($failures) + $lockSeconds - $this->now());
     }
 
-    public function recordFailure(string $employeeUuid, PinOrigin $origin): void
+    /**
+     * Ejecuta `$work` con el candado `$lockName` cogido, o sin el si no se puede
+     * coger (ver el docblock de la clase).
+     *
+     * @template TResult
+     *
+     * @param  Closure(): TResult  $work
+     * @return TResult
+     */
+    private function guarded(string $lockName, Closure $work): mixed
     {
-        $policy = $this->policy();
+        $lock = $this->acquire($lockName);
 
-        $failures = $this->failuresWithinWindow($employeeUuid, $origin, $policy);
-        $failures[] = $this->now();
-
-        // Solo las mas recientes: `array_slice` con desplazamiento negativo se
-        // queda con la cola de la lista —y reindexa, asi que sigue siendo una
-        // lista—, que es la que decide tanto el escalon como el instante de
-        // desbloqueo.
-        $failures = \array_slice($failures, -$policy->trackedFailures());
-
-        // El TTL se renueva en cada fallo, y esa renovacion **es** la ventana
-        // deslizante: la entrada muere sola cuando pasa el tiempo de olvido sin
-        // que nadie vuelva a fallar. Sin esto haria falta un barrido periodico
-        // para limpiar contadores de gente que se equivoco una vez en marzo.
-        $this->cache->put(
-            $this->keyFor($employeeUuid, $origin),
-            $failures,
-            $policy->resetSeconds(),
-        );
+        try {
+            return $work();
+        } finally {
+            $this->release($lock);
+        }
     }
 
-    public function clear(string $employeeUuid): void
+    private function acquire(string $name): ?Lock
     {
-        foreach (PinOrigin::cases() as $origin) {
-            $this->cache->forget($this->keyFor($employeeUuid, $origin));
+        $store = $this->cache->getStore();
+
+        if (! $store instanceof LockProvider) {
+            return null;
+        }
+
+        try {
+            $lock = $store->lock($name, self::LOCK_SECONDS);
+
+            for ($attempt = 1; $attempt <= self::LOCK_ATTEMPTS; $attempt++) {
+                if ($lock->get() === true) {
+                    return $lock;
+                }
+
+                Sleep::usleep(self::LOCK_RETRY_MICROSECONDS);
+            }
+        } catch (Throwable) {
+            // Redis se cae entre la entrega del candado y su uso: los datos ya
+            // caen al disco por su cuenta, y el fallo se cuenta sin candado.
+        }
+
+        return null;
+    }
+
+    private function release(?Lock $lock): void
+    {
+        if (! $lock instanceof Lock) {
+            return;
+        }
+
+        try {
+            $lock->release();
+        } catch (Throwable) {
+            // Si no se puede soltar, caduca solo en LOCK_SECONDS.
         }
     }
 
@@ -180,6 +309,15 @@ final readonly class CachePinAttempts implements PinAttempts
     private function keyFor(string $employeeUuid, PinOrigin $origin): string
     {
         return self::PREFIX.$origin->value.':'.$employeeUuid;
+    }
+
+    /**
+     * El candado de una entrada: el mismo `employee_uuid` y la misma puerta que
+     * su clave, nunca el codigo de la tarjeta ni el nombre (regla dura 21).
+     */
+    private function lockFor(string $employeeUuid, PinOrigin $origin): string
+    {
+        return self::LOCK_PREFIX.$origin->value.':'.$employeeUuid;
     }
 
     private function now(): int

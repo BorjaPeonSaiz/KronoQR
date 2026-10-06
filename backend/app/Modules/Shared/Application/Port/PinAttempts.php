@@ -70,8 +70,19 @@ interface PinAttempts
      *
      * El escalon lo decide `Shared\Domain\Policy\PinLockoutPolicy` con los
      * umbrales ya resueltos de la configuracion. Aqui solo se registra el hecho.
+     *
+     * **Atomico frente a otros fallos del mismo empleado y la misma puerta**:
+     * leer los fallos, anadir este y guardarlos no admite que otro proceso se
+     * meta en medio. Con una lectura y una escritura sueltas, los intentos
+     * lanzados en paralelo contra un codigo se pisaban y el bloqueo no llegaba.
+     *
+     * @return int Los segundos del bloqueo que **abre este fallo**: cero si no
+     *             alcanza ningun escalon y cero tambien si el bloqueo ya estaba
+     *             abierto antes de anotarlo —por un fallo simultaneo—. Es el
+     *             flanco con el que quien llama escribe un solo
+     *             `auth.lockout_started` por bloqueo.
      */
-    public function recordFailure(string $employeeUuid, PinOrigin $origin): void;
+    public function recordFailure(string $employeeUuid, PinOrigin $origin): int;
 
     /**
      * Borra el contador de **todas** las puertas: acierto, o PIN restablecido.
