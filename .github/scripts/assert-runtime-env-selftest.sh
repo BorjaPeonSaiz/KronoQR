@@ -146,6 +146,7 @@ caso() {
 caso "pila correcta" 0
 caso "alias de BACKUP_ENCRYPTION_KEY en app" 1 'EXTRA_app=      FOO: ${BACKUP_ENCRYPTION_KEY}'
 caso "alias de BACKUP_DB_PASSWORD en horizon" 1 'EXTRA_horizon=      BAR: ${BACKUP_DB_PASSWORD}'
+caso "BACKUP_ENCRYPTION_KEY_PREVIOUS en app (solo el planificador puede llevarla, y no tiene por que)" 1 'EXTRA_app=      BACKUP_ENCRYPTION_KEY_PREVIOUS: clave-anterior-abcdefgh'
 caso "alias del migrador (.env con comillas y nota)" 1 'EXTRA_horizon=      BAZ: ${DB_MIGRATION_PASSWORD}'
 caso "PGPASSFILE en reverb" 1 'EXTRA_reverb=      PGPASSFILE: /x/pgpass'
 caso "PGSERVICEFILE en app" 1 'EXTRA_app=      PGSERVICEFILE: /x/svc'
