@@ -76,8 +76,9 @@ it('un segmento src=legacy cifrado en sitio no se reproduce sin la bandera y no 
     $process = restoreWalLegacyRun($box['dir']);
 
     expect($process->getExitCode())->toBe(200)
-        ->and($process->getErrorOutput())->toContain('src=legacy')->toContain('--accept-unauthenticated')->not->toContain('kronoqr-wal-migrate')
+        ->and($process->getErrorOutput())->toContain('src=legacy')->toContain('--accept-unauthenticated')
         ->and(file_exists($box['dir'].'/pg/out'))->toBeFalse();
+    expect($process->getErrorOutput())->not->toContain('kronoqr-wal-migrate');
 })->group('RL-12', 'RS-07');
 
 it('con la bandera se reproduce y cuenta como heredado, no como cifrado', function (): void {
