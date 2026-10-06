@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. Revisión de `seguridad-cumplimiento`: aprobada con cambios (M1-M3, B1-B2), incorporados; implementación pendiente de revisión |
+| **Estado** | Aceptada. Revisión de `seguridad-cumplimiento`: aprobada con cambios (M1-M3, B1-B2), incorporados. **Implementada**, y la implementación revisada por `revisor-codigo` y `seguridad-cumplimiento` el 06-10-2026 |
 | **Fecha** | 6 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (Bloque 12 de la 2.2.0, hallazgos PP-09, PP-10 y R4-QA-04) · `seguridad-cumplimiento` (revisión) |
 | **Afecta a** | Precisa [ADR-015](ADR-015-portal-con-codigo-y-pin.md) (la longitud del PIN y los «requisitos adicionales» de exponer el portal) y [ADR-039](ADR-039-que-hechos-de-autenticacion-dejan-asiento.md) (un hecho nuevo, el bloqueo por origen) · Respeta [ADR-014](ADR-014-la-credencial-es-una-tarjeta-fisica.md), [ADR-017](ADR-017-toda-diferencia-entre-clientes-es-configuracion.md), [ADR-038](ADR-038-limite-de-tasa-por-dispositivo-y-por-ip-no-por-credencial.md) y [ADR-043](ADR-043-el-pin-rechazado-conserva-a-quien-correspondia-el-codigo.md) · `docs/01` RF-ID-01, RF-ID-06, RF-ID-08, RF-ID-09, RS-06, RS-12 · `docs/api/openapi.yaml` · `docs/02` §7.3 y §7.5 |
@@ -99,11 +99,13 @@ Además del bloqueo por empleado, que se queda como está, el acceso al portal c
   verificador: el desenlace no depende del código ni del PIN y no toca el contador por empleado. No contradice RS-03,
   que protege la existencia y el estado de una credencial; esto habla de la red de quien pregunta, y ocultarlo solo
   serviría para que una persona legítima tras la misma IP creyera que su PIN está mal y siguiera fallando.
-- **Rastro** (precisa ADR-039). La **apertura** del bloqueo deja el asiento **`auth.origin_locked`** en `audit_log`:
-  actor `system`, origen en la columna `ip` en claro como los demás asientos `auth.*`, `payload` cerrado
-  `{channel: "portal", failures, seconds}`, escrito después de responder con `DeferredAuditEntry` por el mismo motivo
-  que `auth.lockout_started`. Además, un apunte `warning` con `ip_hash` y `kronoqr_auth_attempts_total{channel="portal",
-  outcome="origin_locked"}`, una vez por apertura (`AuthOutcome::ORIGIN_LOCKED`). Cada petición rechazada durante el
+- **Qué se anota** (precisa ADR-039). La **apertura** del bloqueo deja el asiento **`auth.origin_locked`** en
+  `audit_log`: actor `system`, **sin sujeto**, `payload` cerrado `{channel, failures, seconds, ip_hash}`; la IP en
+  claro va solo en la columna `ip`, como en el resto de asientos `auth.*` (ADR-039). Se escribe **después de
+  responder** con `DeferredAuditEntry`, por el mismo motivo que `auth.lockout_started`, y bajo el techo por hora del
+  punto siguiente. En el log técnico, un apunte `warning` con `{origin_hash, failures, lock_seconds, audited}` (este
+  último dice si hubo asiento o lo impidió el techo), y `kronoqr_auth_attempts_total{channel="portal",
+  outcome="origin_locked"}` una vez por apertura (`AuthOutcome::ORIGIN_LOCKED`). Cada petición rechazada durante el
   bloqueo cuenta como `outcome="failure"` con el motivo nuevo `AuthFailureReason::ORIGIN_LOCKED`; aquí la respuesta
   sí lo distingue, así que el log puede distinguirlo (ADR-039, «un solo motivo de fallo donde la respuesta es una sola»).
 - **Techo de asientos** (B1 de la revisión). Cada asiento pasa por el candado global de la cadena (ADR-010), el mismo
@@ -113,14 +115,16 @@ Además del bloqueo por empleado, que se queda como está, el acceso al portal c
   deja su apunte de log y su métrica, pero no su asiento; el primer bloqueo que no deja asiento en cada hora lo dice
   en el log (`auth.origin_lock_audit_ceiling_reached`).
 - **Desbloqueo manual** (M3 de la revisión). Comando `identity:origin-unlock <ip>`, que levanta el bloqueo de ese
-  origen (su `/32`, o su `/64` en IPv6) y deja el asiento **`auth.origin_unlocked`** (actor: quien lo ejecuta en el
-  servidor, `maintenance`; origen en `ip`). No hay endpoint: desbloquear es una operación de quien administra el
+  origen (su `/32`, o su `/64` en IPv6) y deja el asiento **`auth.origin_unlocked`**, **síncrono**: actor `system`,
+  sin sujeto, `payload` `{channel, ip_hash, had_state}` (`had_state` dice si había algo que levantar). No hay endpoint: desbloquear es una operación de quien administra el
   servidor, como `identity:2fa-reset`. La alerta sobre `kronoqr_auth_attempts_total{outcome="origin_locked"}` avisa al
   IT del cliente de que hay un origen bloqueado.
 - **Solo el portal.** No se aplica a `/api/v1/scan/pin`: el quiosco nunca bloquea al empleado (regla dura 19,
   ADR-038). La autenticación de gestión ya tiene su propio bloqueo por cuenta y por origen (RF-ID-01).
-- **nginx, coherente con lo anterior.** `POST /api/v1/me/login` sale de la `location ^~ /api/v1/me/` a una
-  `location = /api/v1/me/login` con zona propia **`portal_login`** (10 r/m por IP, `burst=5 nodelay`). La zona
+- **nginx, coherente con lo anterior.** `POST /api/v1/me/login` sale de la `location ^~ /api/v1/me/` a zona propia
+  **`portal_login`** (10 r/m por IP, `burst=5 nodelay`), que aplican **dos** `location =` con el mismo cuerpo,
+  `/api/v1/me/login` y `/api/v1/me/login/`: con `^~ /api/v1/me/` nginx no evalúa expresiones regulares, y la variante
+  con barra final caía en `zone=portal` (hallazgo de `revisor-codigo`). La zona
   `portal` (10 r/m, `burst=10`) se queda para la lectura del registro. Hoy comparten cubo, y tras una misma IP de
   salida consultar las jornadas propias consume los intentos de acceso de los compañeros, y al revés. El borde solo
   limita volumen; los fallos los cuenta la aplicación, que es quien sabe que lo son.
@@ -140,9 +144,12 @@ Lo implementó `devops-observabilidad` en esta misma rama (commit `549f3325`), y
   **`IDENTITY_PIN_LENGTH`** del punto 1. Recomienda además `ADMIN_INTERNAL_CIDR` (punto 4) y `TRUSTED_PROXY_CIDR` si
   hay un proxy delante (sin él, toda la plantilla comparte un origen y el punto 2 la bloquea entera).
 - **`product:doctor`** (sonda `EdgeNetworksProbe`) aplica la misma clasificación sobre `security.network.portal_internal`
-  y da `warn` cuando el portal es público. **Pendiente de este ADR** (no está aún): un hallazgo más cuando además
-  `IDENTITY_PIN_LENGTH` está en 6, otro cuando `ADMIN_INTERNAL_CIDR` está vacía, y el **recuento de personas en alta
-  que conservan un PIN de 6 cifras** cuando el ajuste está en 8. Solo el número, nunca quiénes (regla dura 21).
+  y da `warn` cuando el portal es público, con el hallazgo `network.admin` cuando además `ADMIN_INTERNAL_CIDR` está
+  vacía. La sonda **`AccessHardeningProbe`** completa el cuadro: `access.pin_length` (portal público con
+  `IDENTITY_PIN_LENGTH` en 6), `access.short_pins` (**recuento de personas en alta que conservan un PIN de 6 cifras**
+  con el ajuste en 8), `access.two_factor_roles` (un rol de los cuatro fuera de `IDENTITY_2FA_REQUIRED_ROLES`) y
+  `access.two_factor_pending` (cuentas de roles obligados sin segundo factor activo, la ventana de M1). Solo números,
+  nunca quiénes (regla dura 21).
 - **Constancia.** En la **actualización**, el asiento `system.updated` lleva la clave opcional **`portal_exposed: true`**
   cuando el portal no está en una red privada (la calcula `kq_portal_exposed` en `lib/checks.sh`; `SystemEventPayload`
   la admite; ausente significa red privada). Solo el booleano: **sin los CIDR**, porque el asiento viaja en el paquete
@@ -234,14 +241,13 @@ Anotados en el doc 07 §6 tras la revisión de `seguridad-cumplimiento` (filas A
    en ese momento.
 6. **Ventana de auto-alta del segundo factor de los responsables** (M1, punto 5): se suma a la fila 1 del doc 07 §6.
 7. **Sin Redis el portal no deja entrar** (ya era así, `cache.limiter` falla cerrado). El fichaje no se ve afectado.
-8. **Ráfaga antes del bloqueo.** El contador de fallos del PIN **por empleado y puerta** (ADR-015) se actualiza también
-   de forma atómica, con un candado de la caché por `employee_uuid` y puerta; si el candado no se consigue en un número
-   fijo de intentos, el fallo se cuenta sin él (el candado nunca retrasa ni bloquea el fichaje: regla dura 19). Lo que
-   queda: los intentos simultáneos que pasan la comprobación del bloqueo **antes** de que se abra se comparan todos y
-   todos cuentan (medidos 8 a 21 por ráfaga de 25), así que la cifra de ≈33-35 intentos por empleado y día del dictamen
-   es una cota por ráfaga, no por intento. Acotarlo exigiría reservar el intento antes de comparar el PIN: otra decisión.
-   Lo midió `PinLockoutConcurrencyTest`; sin candado llegaban al PIN real 9-20 intentos y se escribían hasta 9 asientos
-   `auth.lockout_started` por un solo bloqueo.
+8. **Ráfaga antes del bloqueo.** El intento se reserva **antes** de comparar el PIN, con el candado por `employee_uuid`
+   y puerta (`CacheMutex` sobre la caché `resilient`; el señuelo de códigos inexistentes usa un candado por HMAC del
+   código tecleado, para que una ráfaga cueste lo mismo exista o no el código: RS-03). Por ráfaga solo llegan al PIN
+   real los intentos que caben antes del escalón (3 de 25 medidos; antes 4-22). La cota diaria vuelve a ser por intento
+   e independiente del paralelismo: ≈32 por puerta y día (3, luego 1 cada 5, 15 y 60 min). Lo que queda: sin candado
+   (100×5 ms agotados o almacén que lanza) o si `failover` cambia de almacén en mitad de una ráfaga, una marca de más o
+   de menos o un asiento doble; nunca un `500` ni un escalón en silencio.
 
 ## Consecuencias
 
@@ -262,8 +268,8 @@ Anotados en el doc 07 §6 tras la revisión de `seguridad-cumplimiento` (filas A
 
 | Punto | Prueba que lo demuestra |
 |---|---|
-| 1 | `Unit/Shared/Domain/PinLengthTest` (dos casos, 7 imposible); `Unit/Workforce/PinGeneratorTest` (8 cifras con el ajuste en 8; lista de excluidos por longitud); `Feature/Workforce/PinLengthTransitionTest`: con el ajuste en 8, `pin/reset` emite 8 y escribe `pin_length = 8`, un PIN de 6 anterior sigue abriendo el portal y `/scan/pin`, 7 cifras es `401` y cuenta, 9 es `400`; `Feature/Product/SettingsTest`: `"7"` es `422`; contrato de `/me/login`, `IssuedPin` y ajustes; `frontend-kiosk` (teclado de 6 a 8 con «Aceptar») y E2E del portal con un PIN de 8 |
-| 2 | `Unit/Identity/Domain/OriginLockoutPolicyTest` (umbral, ventana deslizante, el bloqueo no se alarga) y `RequestOriginTest` (`/32`, `/64`, IPv4 mapeada); `Feature/Identity/PortalOriginLockoutTest`: el fallo 20 abre el bloqueo, el 21 recibe `429` con `Retry-After` **también con el PIN correcto**, el contador por empleado no se mueve durante el bloqueo, otro origen no se ve afectado, un acierto no reinicia la cuenta, un solo `auth.origin_locked` por apertura y la métrica, sin asiento por encima del techo por hora, y `identity:origin-unlock` levanta el bloqueo y deja `auth.origin_unlocked`; `Integration/Identity/CachePortalOriginAttemptsTest` con Redis caído (sigue contando en `file`); `RouteRateLimitZonesTest` y `QualityGatesTest` para `portal_login` |
+| 1 | `Unit/Shared/Domain/PinLengthTest` (dos casos, 7 imposible); `Unit/Workforce/PinGeneratorTest` (8 cifras con el ajuste en 8; lista de excluidos por longitud); `Feature/Workforce/PinLengthTransitionTest`: con el ajuste en 8, `pin/reset` emite 8 y escribe `pin_length = 8`, un PIN de 6 anterior sigue abriendo el portal y fichando por `/scan/pin` (caso del quiosco, con el sobre sellado), 7 cifras es `401` y cuenta, 9 es `400`; `Feature/Product/SettingsTest`: `"7"` es `422`; contrato de `/me/login`, `IssuedPin` y ajustes; `frontend-kiosk` (teclado de 6 a 8 con «Aceptar») y E2E del portal con un PIN de 8 |
+| 2 | `Unit/Identity/Domain/OriginLockoutPolicyTest` (umbral, ventana deslizante, el bloqueo no se alarga) y `RequestOriginTest` (`/32`, `/64`, IPv4 mapeada); `Feature/Identity/PortalOriginLockoutTest`: el fallo 20 abre el bloqueo, el 21 recibe `429` con `Retry-After` **también con el PIN correcto**, el contador por empleado no se mueve durante el bloqueo, otro origen no se ve afectado, un acierto no reinicia la cuenta, un solo `auth.origin_locked` por apertura y la métrica, sin asiento por encima del techo por hora, y `identity:origin-unlock` levanta el bloqueo y deja `auth.origin_unlocked`; `Integration/Identity/CachePortalOriginAttemptsTest` con Redis caído (sigue contando en `file`); `RouteRateLimitZonesTest` y `QualityGatesTest` para `portal_login`, también con la barra final (`/api/v1/me/login/`); `PortalOriginConcurrencyTest` (un solo asiento por apertura con peticiones simultáneas); `PinLockoutConcurrencyTest` (≤ 3 comparaciones del PIN y un solo `auth.lockout_started` por ráfaga); `CacheMutexTest`; la prueba del oráculo del señuelo con contienda (una ráfaga cuesta lo mismo exista o no el código) |
 | 3 | Pruebas de `lib/checks.sh` (privado, público, `0.0.0.0/0`, `169.254.0.0/16`, `100.64.0.0/10`): aviso sin cambiar el código de salida; `Unit/Product/EdgeNetworksProbeTest` (con los tres hallazgos pendientes); `system.updated` con `portal_exposed: true` solo cuando el rango es público y nunca con un CIDR en el `payload`; etapa de instalación limpia de la CI con `PORTAL_INTERNAL_CIDR=0.0.0.0/0` |
 | 4 | Prueba de la plantilla de nginx: con `ADMIN_INTERNAL_CIDR` definida, `403` en `/admin/`, `/api/v1/auth/login` y `/api/v1/setup/administrator` desde fuera y `200`/`401` desde dentro; vacía, sin filtro; `/api/v1/me/*` y `/api/v1/scan*` nunca afectados |
 | 5 | `TwoFactorAuthenticationTest` (hoy `:309-329` fija lo contrario): un responsable sin TOTP recibe `202` con `enrolment_required: true`; `product:doctor` avisa si falta un rol de los cuatro y da el recuento de cuentas obligadas sin segundo factor |
