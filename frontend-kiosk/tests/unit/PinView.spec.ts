@@ -226,6 +226,28 @@ describe('pantalla de PIN — flujo completo (RF-AT-11)', () => {
     wrapper.unmount()
   })
 
+  it('los puntos 7 y 8 son opcionales: 6 bastan y se rellenan al teclearlos (ADR-050)', async () => {
+    installFetch(publicKeyBase64)
+    const { wrapper } = await render()
+    await vi.waitFor(() =>
+      expect(wrapper.find('[data-testid="pin-step-code"]').exists()).toBe(true),
+    )
+    await wrapper.get('[data-testid="pin-code-input"]').setValue('E7QK2MXPR')
+    await wrapper.get('[data-testid="pin-code-continue"]').trigger('click')
+    const states = () =>
+      wrapper.findAll('[data-testid="pin-dot"]').map((dot) => dot.attributes('data-state'))
+
+    expect(states()).toEqual([...Array(6).fill('empty'), 'optional', 'optional'])
+    await pressDigits(wrapper, '483920')
+    expect(states()).toEqual([...Array(6).fill('filled'), 'optional', 'optional'])
+    expect(wrapper.get('[data-testid="pin-dots"]').attributes('aria-label')).toBe(
+      '6 dígitos introducidos (mínimo 6, máximo 8)',
+    )
+    await pressDigits(wrapper, '17')
+    expect(states()).toEqual(Array(8).fill('filled'))
+    wrapper.unmount()
+  })
+
   it('el PIN nunca se ve en pantalla: se pintan puntos, no cifras', async () => {
     installFetch(publicKeyBase64)
     const { wrapper } = await render()

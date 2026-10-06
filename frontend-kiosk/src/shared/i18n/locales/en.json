@@ -88,7 +88,7 @@
     },
     "pin": {
       "title": "Enter your PIN (6 to 8 digits)",
-      "progress": "{entered} digits entered (maximum {total})",
+      "progress": "{entered} digits entered (minimum {min}, maximum {total})",
       "back": "Back",
       "confirm": "Accept"
     },

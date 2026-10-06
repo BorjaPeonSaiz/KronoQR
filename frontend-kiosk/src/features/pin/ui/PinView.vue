@@ -48,7 +48,12 @@ import { useWakeLock } from '@/features/scan/composables/useWakeLock'
 import type { ScanConfirmation } from '@/features/scan/domain/scanOutcome'
 import { CONFIRMATION_DISPLAY_MS } from '@/features/scan/domain/scanOutcome'
 import { createPinPipeline } from '../application/pinPipeline'
-import { hasEmployeeCodeShape, normalizeEmployeeCode, PIN_MAX_LENGTH } from '../domain/pinCode'
+import {
+  hasEmployeeCodeShape,
+  normalizeEmployeeCode,
+  PIN_MAX_LENGTH,
+  PIN_MIN_LENGTH,
+} from '../domain/pinCode'
 import { usePinKeypad } from '../composables/usePinKeypad'
 import { usePinSealingStatus } from '../composables/usePinSealingStatus'
 import PinNumericKeypad from './PinNumericKeypad.vue'
@@ -410,7 +415,11 @@ onUnmounted(() => {
             class="flex justify-center gap-3"
             role="status"
             :aria-label="
-              t('pin.pin.progress', { entered: pin.value.value.length, total: PIN_MAX_LENGTH })
+              t('pin.pin.progress', {
+                entered: pin.value.value.length,
+                min: PIN_MIN_LENGTH,
+                total: PIN_MAX_LENGTH,
+              })
             "
             data-testid="pin-dots"
           >
@@ -419,7 +428,18 @@ onUnmounted(() => {
               :key="index"
               aria-hidden="true"
               class="h-5 w-5 rounded-full border-2 border-kq-kiosk-border"
-              :class="index <= pin.value.value.length ? 'bg-kq-kiosk-text' : 'bg-transparent'"
+              :class="[
+                index > PIN_MIN_LENGTH ? 'border-dashed' : '',
+                index <= pin.value.value.length ? 'bg-kq-kiosk-text' : 'bg-transparent',
+              ]"
+              data-testid="pin-dot"
+              :data-state="
+                index <= pin.value.value.length
+                  ? 'filled'
+                  : index > PIN_MIN_LENGTH
+                    ? 'optional'
+                    : 'empty'
+              "
             ></span>
           </div>
 

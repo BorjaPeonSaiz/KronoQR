@@ -88,7 +88,7 @@
     },
     "pin": {
       "title": "Introduce tu PIN (de 6 a 8 dígitos)",
-      "progress": "{entered} dígitos introducidos (máximo {total})",
+      "progress": "{entered} dígitos introducidos (mínimo {min}, máximo {total})",
       "back": "Atrás",
       "confirm": "Aceptar"
     },
