@@ -5,8 +5,6 @@ declare(strict_types=1);
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
-use Illuminate\Cache\ArrayStore;
-use Illuminate\Cache\Repository;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Sleep;
@@ -243,31 +241,7 @@ it('cuenta el fallo sin candado si otro proceso no lo suelta', function (): void
 
     expect($contador->recordFailure($uuid, PinOrigin::KIOSK))->toBe(300);
 
-    // La espera es por intentos y no por reloj: cien por fallo, tres fallos. Con
-    // el reloj detenido de las pruebas, una espera por tiempo no terminaria.
+    // Cien intentos por fallo, tres fallos: la mecanica del candado la fija
+    // `CacheMutexTest`; aqui, que el contador la usa con sus numeros.
     Sleep::assertSleptTimes(300);
 })->group('RS-12', 'RF-AT-11');
-
-it('cuenta el fallo sin candado si el almacen no puede darlo', function (): void {
-    // Redis se cae entre la entrega del candado y su uso: el fallo se cuenta
-    // igual, nunca un `500` en el portal ni un fichaje que no llega.
-    $almacen = new class extends ArrayStore
-    {
-        public function lock($name, $seconds = 0, $owner = null): never
-        {
-            throw new RuntimeException('Connection refused');
-        }
-    };
-
-    $contador = new CachePinAttempts(new Repository($almacen), FixedClock::at('2026-03-14 06:00:00'));
-    $uuid = Str::uuid7()->toString();
-
-    $contador->recordFailure($uuid, PinOrigin::PORTAL);
-    $contador->recordFailure($uuid, PinOrigin::PORTAL);
-
-    expect($contador->recordFailure($uuid, PinOrigin::PORTAL))->toBe(300);
-
-    $contador->clear($uuid);
-
-    expect($contador->isLocked($uuid, PinOrigin::PORTAL))->toBeFalse();
-})->group('RS-12', 'RF-ID-06');

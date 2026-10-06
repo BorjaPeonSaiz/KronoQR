@@ -40,6 +40,9 @@ const EMPLOYEE_LOCK_DISCIPLINE_ROW_LOCKS = [
     'Kiosk/Infrastructure/Persistence/DbDeviceRegistry.php' => 'devices, al emparejar',
     'Product/Infrastructure/Persistence/DatabaseErrorEventRepository.php' => 'error_events (FOR UPDATE OF e), al fundir grupos en la migracion de ADR-048',
     'Reporting/Infrastructure/Persistence/DatabaseReportExportRepository.php' => 'report_exports (FOR UPDATE OF e)',
+    // No es de fila: `LockProvider::lock()` de la cache, que el detector lexico
+    // no distingue de `Builder::lock()`. Ninguna tabla (ADR-050).
+    'Shared/Infrastructure/Cache/CacheMutex.php' => 'ninguna: candado de la cache (SET NX en Redis, flock en disco)',
     'Workforce/Infrastructure/Persistence/EloquentAbsenceRepository.php' => 'absences',
 ];
 

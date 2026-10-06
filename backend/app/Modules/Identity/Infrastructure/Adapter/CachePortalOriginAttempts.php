@@ -7,12 +7,9 @@ namespace App\Modules\Identity\Infrastructure\Adapter;
 use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Identity\Domain\ValueObject\OriginAttemptHistory;
 use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
+use App\Modules\Shared\Infrastructure\Cache\CacheMutex;
 use Closure;
-use Illuminate\Contracts\Cache\Lock;
-use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\Repository as Cache;
-use Illuminate\Support\Sleep;
-use Throwable;
 
 /**
  * La cuenta de fallos por origen del portal, sobre la cache **`resilient`**
@@ -46,11 +43,11 @@ use Throwable;
  * Con el mismo candado se cuenta el techo de asientos por hora
  * ({@see self::countLockOpening()}), por el mismo motivo.
  *
- * **La espera es por intentos y no por reloj.** `Lock::block()` mide el tiempo
- * con `now()`, que en las pruebas esta detenido y nunca agotaria la espera. Si
- * tras {@see self::LOCK_ATTEMPTS} intentos el candado sigue ocupado —o el
- * almacen no puede darlo—, la cuenta se hace sin el: un fallo de mas o de menos
- * en una avalancha que dura segundos, en vez de un `500` en el portal.
+ * El candado es {@see CacheMutex}, el mismo que el del contador del PIN: la
+ * espera es por intentos y no por reloj, y si tras {@see self::LOCK_ATTEMPTS}
+ * intentos sigue ocupado —o el almacen no puede darlo—, la cuenta se hace sin
+ * el: un fallo de mas o de menos en una avalancha que dura segundos, en vez de
+ * un `500` en el portal.
  */
 final readonly class CachePortalOriginAttempts implements PortalOriginAttempts
 {
@@ -60,15 +57,17 @@ final readonly class CachePortalOriginAttempts implements PortalOriginAttempts
 
     private const string LOCK_PREFIX = 'identity:portal-origin-lock:';
 
-    /** Lo que vive el candado si el proceso que lo tiene muere sin soltarlo. */
-    private const int LOCK_SECONDS = 10;
-
     /** Intentos de coger el candado antes de contar sin el: unos tres segundos. */
     private const int LOCK_ATTEMPTS = 300;
 
     private const int LOCK_RETRY_MICROSECONDS = 10_000;
 
-    public function __construct(private Cache $cache) {}
+    private CacheMutex $mutex;
+
+    public function __construct(private Cache $cache)
+    {
+        $this->mutex = new CacheMutex($cache, self::LOCK_ATTEMPTS, self::LOCK_RETRY_MICROSECONDS);
+    }
 
     public function historyFor(RequestOrigin $origin): OriginAttemptHistory
     {
@@ -147,7 +146,7 @@ final readonly class CachePortalOriginAttempts implements PortalOriginAttempts
 
     /**
      * Ejecuta `$work` con el candado de `$key` cogido, o sin el si no se puede
-     * coger (ver el docblock de la clase).
+     * coger ({@see CacheMutex}).
      *
      * @template TResult
      *
@@ -156,52 +155,7 @@ final readonly class CachePortalOriginAttempts implements PortalOriginAttempts
      */
     private function guarded(string $key, Closure $work): mixed
     {
-        $lock = $this->acquire(self::LOCK_PREFIX.$key);
-
-        try {
-            return $work();
-        } finally {
-            $this->release($lock);
-        }
-    }
-
-    private function acquire(string $name): ?Lock
-    {
-        $store = $this->cache->getStore();
-
-        if (! $store instanceof LockProvider) {
-            return null;
-        }
-
-        try {
-            $lock = $store->lock($name, self::LOCK_SECONDS);
-
-            for ($attempt = 1; $attempt <= self::LOCK_ATTEMPTS; $attempt++) {
-                if ($lock->get() === true) {
-                    return $lock;
-                }
-
-                Sleep::usleep(self::LOCK_RETRY_MICROSECONDS);
-            }
-        } catch (Throwable) {
-            // Redis se cae entre la entrega del candado y su uso: los datos ya
-            // caen al disco por su cuenta, y la cuenta se hace sin candado.
-        }
-
-        return null;
-    }
-
-    private function release(?Lock $lock): void
-    {
-        if (! $lock instanceof Lock) {
-            return;
-        }
-
-        try {
-            $lock->release();
-        } catch (Throwable) {
-            // Si no se puede soltar, caduca solo en LOCK_SECONDS.
-        }
+        return $this->mutex->guarded(self::LOCK_PREFIX.$key, $work);
     }
 
     private function keyFor(RequestOrigin $origin): string

@@ -9,8 +9,12 @@ use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Identity\Application\UseCase\AuthenticatePortalEmployeeHandler;
 use App\Modules\Identity\Domain\ValueObject\OriginAttemptHistory;
 use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
+use App\Modules\Identity\Infrastructure\Adapter\CachePortalOriginAttempts;
 use App\Modules\Shared\Application\Port\PinAttempts;
+use Illuminate\Cache\ArrayStore;
+use Illuminate\Cache\Repository;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Sleep;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Health\RedisOutage;
 use Tests\Support\Time\FrozenTime;
@@ -180,3 +184,29 @@ it('guarda la entrada en Redis con la retencion como caducidad', function (): vo
 
     expect($ttl)->toBeGreaterThanOrEqual(3599)->toBeLessThanOrEqual(3600);
 })->group('RS-12');
+
+it('cuenta el fallo sin candado si otro proceso no lo suelta', function (): void {
+    // Regla dura 19 y la misma promesa que el contador del PIN: el candado
+    // ordena la cuenta, no la condiciona. Con el del origen retenido —un proceso
+    // muerto con el cogido— se espera un numero fijo de intentos y el fallo se
+    // cuenta igual; ni excepcion, ni fallo perdido.
+    Sleep::fake();
+
+    $almacen = new ArrayStore;
+    $almacen->lock('identity:portal-origin-lock:'.CACHE_PORTAL_ORIGIN_KEY, 10)->get();
+
+    $origenes = new CachePortalOriginAttempts(new Repository($almacen));
+    $origen = RequestOrigin::of(CACHE_PORTAL_ORIGIN_IP);
+
+    [$antes, $despues] = $origenes->update(
+        $origen,
+        static fn (OriginAttemptHistory $estado): OriginAttemptHistory => new OriginAttemptHistory([...$estado->failures, 1_791_277_200], null),
+        900,
+    );
+
+    expect($antes->failures)->toBe([])
+        ->and($despues->failures)->toBe([1_791_277_200])
+        ->and($origenes->historyFor($origen)->failures)->toBe([1_791_277_200]);
+
+    Sleep::assertSleptTimes(300);
+})->group('RS-12', 'RF-ID-08');

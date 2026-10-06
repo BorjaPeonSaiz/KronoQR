@@ -8,12 +8,8 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Domain\Policy\PinLockoutPolicy;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
-use Closure;
-use Illuminate\Contracts\Cache\Lock;
-use Illuminate\Contracts\Cache\LockProvider;
+use App\Modules\Shared\Infrastructure\Cache\CacheMutex;
 use Illuminate\Contracts\Cache\Repository as Cache;
-use Illuminate\Support\Sleep;
-use Throwable;
 
 /**
  * El bloqueo escalonado del PIN sobre la cache compartida (RS-12, doc 02 §7.5).
@@ -120,9 +116,6 @@ final readonly class CachePinAttempts implements PinAttempts
 
     private const string LOCK_PREFIX = 'workforce:pin-failures-lock:';
 
-    /** Lo que vive el candado si el proceso que lo tiene muere sin soltarlo. */
-    private const int LOCK_SECONDS = 10;
-
     /**
      * Intentos de coger el candado antes de contar sin el: medio segundo como
      * mucho, y solo con contienda sobre el mismo empleado y la misma puerta.
@@ -131,10 +124,14 @@ final readonly class CachePinAttempts implements PinAttempts
 
     private const int LOCK_RETRY_MICROSECONDS = 5_000;
 
+    private CacheMutex $mutex;
+
     public function __construct(
         private Cache $cache,
         private Clock $clock,
-    ) {}
+    ) {
+        $this->mutex = new CacheMutex($cache, self::LOCK_ATTEMPTS, self::LOCK_RETRY_MICROSECONDS);
+    }
 
     public function isLocked(string $employeeUuid, PinOrigin $origin): bool
     {
@@ -155,7 +152,7 @@ final readonly class CachePinAttempts implements PinAttempts
     {
         $key = $this->keyFor($employeeUuid, $origin);
 
-        return $this->guarded($this->lockFor($employeeUuid, $origin), function () use ($key, $employeeUuid, $origin): int {
+        return $this->mutex->guarded($this->lockFor($employeeUuid, $origin), function () use ($key, $employeeUuid, $origin): int {
             $policy = $this->policy();
 
             // Leido y escrito con el candado cogido: entre las dos cosas no se
@@ -191,7 +188,7 @@ final readonly class CachePinAttempts implements PinAttempts
 
             // Con el candado, para que un fallo que estuviera contandose no
             // reescriba despues la lista que se acaba de borrar (RF-ID-09).
-            $this->guarded($this->lockFor($employeeUuid, $origin), fn (): bool => $this->cache->forget($key));
+            $this->mutex->guarded($this->lockFor($employeeUuid, $origin), fn (): bool => $this->cache->forget($key));
         }
     }
 
@@ -214,65 +211,6 @@ final readonly class CachePinAttempts implements PinAttempts
         }
 
         return max(0, max($failures) + $lockSeconds - $this->now());
-    }
-
-    /**
-     * Ejecuta `$work` con el candado `$lockName` cogido, o sin el si no se puede
-     * coger (ver el docblock de la clase).
-     *
-     * @template TResult
-     *
-     * @param  Closure(): TResult  $work
-     * @return TResult
-     */
-    private function guarded(string $lockName, Closure $work): mixed
-    {
-        $lock = $this->acquire($lockName);
-
-        try {
-            return $work();
-        } finally {
-            $this->release($lock);
-        }
-    }
-
-    private function acquire(string $name): ?Lock
-    {
-        $store = $this->cache->getStore();
-
-        if (! $store instanceof LockProvider) {
-            return null;
-        }
-
-        try {
-            $lock = $store->lock($name, self::LOCK_SECONDS);
-
-            for ($attempt = 1; $attempt <= self::LOCK_ATTEMPTS; $attempt++) {
-                if ($lock->get() === true) {
-                    return $lock;
-                }
-
-                Sleep::usleep(self::LOCK_RETRY_MICROSECONDS);
-            }
-        } catch (Throwable) {
-            // Redis se cae entre la entrega del candado y su uso: los datos ya
-            // caen al disco por su cuenta, y el fallo se cuenta sin candado.
-        }
-
-        return null;
-    }
-
-    private function release(?Lock $lock): void
-    {
-        if (! $lock instanceof Lock) {
-            return;
-        }
-
-        try {
-            $lock->release();
-        } catch (Throwable) {
-            // Si no se puede soltar, caduca solo en LOCK_SECONDS.
-        }
     }
 
     /**
