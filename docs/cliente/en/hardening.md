@@ -85,9 +85,9 @@ any other origin, before reaching the application. **Empty, the panel and the
 staff authentication are open to whoever reaches port 443**, and that is what
 matters most if you open the portal to the internet
 (`PORTAL_INTERNAL_CIDR=0.0.0.0/0`): the portal and the panel share host and
-port, so the panel is in plain sight too. The second factor is only mandatory
-for administration, HR and audit: a department manager, who corrects workdays,
-signs in with the password alone. What remains is the limit of 5 requests per
+port, so the panel is in plain sight too. The second factor is mandatory
+for administration, HR, audit and department managers (ADR-050). What remains
+in addition is the limit of 5 requests per
 minute on authentication and the account lockout. To open only the portal, fill
 in `ADMIN_INTERNAL_CIDR`. It does not affect the portal or the kiosks.
 
@@ -521,15 +521,18 @@ the next night's digest arrives.
 
 ## 8. Accounts and access
 
-- **Second factor mandatory.** By default it is required of the three roles
-  that reach data on the whole workforce: administrator, HR and auditor. The
-  department manager is not required to have it because their scope is limited
-  to their own department. If your security policy is stricter, add it without
-  touching anything else:
+- **Second factor mandatory.** By default it is required of the four roles
+  that can read or write other people's records through the panel:
+  administrator, HR, auditor and department manager (who corrects workdays,
+  ADR-050). The default value is:
 
   ```dotenv
   IDENTITY_2FA_REQUIRED_ROLES=admin,rrhh,auditor,responsable_departamento
   ```
+
+  Removing a role from the list is a decision worth recording in the
+  installation record: that account goes back to signing in with the password
+  alone.
 
   Whoever already has a second factor always uses it, even if their role does
   not require it.
@@ -671,7 +674,7 @@ there.
 | 13 | Last night's backup exists and was verified | `docker compose exec scheduler php artisan backup:verify` ([`operation.md`](operation.md) §2), or the observability alert | Daily (automatic) or weekly (manual, if you switched it off) |
 | 14 | Restore genuinely tested | Drill from [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) | **Quarterly** |
 | 15 | Email encryption mandatory | `sudo grep '^MAIL_SCHEME=' .env` | Delivery |
-| 16 | Second factor mandatory on the management accounts | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` still says `admin,rrhh,auditor`: an account with one of those roles and no second factor cannot log in | Quarterly |
+| 16 | Second factor mandatory on the management accounts | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` no longer includes `responsable_departamento`: an account with one of those roles and no second factor cannot log in | Quarterly |
 | 17 | No account belonging to someone who has left | Go through with HR who should have panel access and deactivate the rest: `docker compose exec app php artisan identity:deactivate-user <email> --reason="<reason>"`. Deactivation takes effect on the next request — including for sessions already open —, does not delete that account's history and is recorded with its author and its reason. **There is still no management-accounts screen in the panel**, and no order that lists them either: the starting list is the staff list, not the product's. You no longer need to open a `psql` session for this ([`operation.md`](operation.md) §9) | Quarterly and on every leaver |
 | 18 | No live support access without a reason | Panel → "Support" → "Support access grants" | Monthly |
 | 19 | Every tablet in kiosk mode and anchored | Physical walk-round: reboot one and check it starts on its own into the PWA | Quarterly |

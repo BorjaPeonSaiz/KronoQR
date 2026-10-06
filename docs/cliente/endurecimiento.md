@@ -84,10 +84,10 @@ cualquier otro origen, antes de llegar a la aplicación. **Vacía, el panel y la
 autenticación del personal quedan abiertos a quien alcance el puerto 443**, y
 eso es lo que más importa si abres el portal a internet
 (`PORTAL_INTERNAL_CIDR=0.0.0.0/0`): el portal y el panel comparten host y
-puerto, así que el panel también queda a la vista. El segundo factor solo es
-obligatorio para administración, RRHH y auditoría: un responsable de
-departamento, que corrige jornadas, entra con la contraseña sola. Lo que
-queda es el límite de 5 peticiones por minuto en la autenticación y el bloqueo
+puerto, así que el panel también queda a la vista. El segundo factor es
+obligatorio para administración, RRHH, auditoría y los responsables de
+departamento (ADR-050). Lo que
+queda además es el límite de 5 peticiones por minuto en la autenticación y el bloqueo
 de cuenta. Para abrir solo el portal, rellena `ADMIN_INTERNAL_CIDR`. No
 afecta al portal ni a los quioscos.
 
@@ -514,14 +514,17 @@ mirando que llega el resumen de la noche siguiente.
 
 ## 8. Cuentas y accesos
 
-- **Segundo factor obligatorio.** De serie lo exigen los tres roles que
-  alcanzan datos de toda la plantilla: administrador, RRHH y auditor. El
-  responsable de departamento no lo exige porque su alcance está acotado al
-  suyo. Si tu política de seguridad es más dura, añádelo sin tocar nada más:
+- **Segundo factor obligatorio.** De serie lo exigen los cuatro roles que
+  entran por el panel con capacidad de leer o escribir el registro de otros:
+  administrador, RRHH, auditor y responsable de departamento (que corrige
+  jornadas, ADR-050). El valor de serie es:
 
   ```dotenv
   IDENTITY_2FA_REQUIRED_ROLES=admin,rrhh,auditor,responsable_departamento
   ```
+
+  Quitar un rol de la lista es una decisión que conviene anotar en el acta:
+  esa cuenta pasa a entrar con la contraseña sola.
 
   Quien ya tiene segundo factor lo usa siempre, aunque su rol no lo exija.
 - **Un rol por función, y el más pequeño que sirva.** Hay cuatro:
@@ -659,7 +662,7 @@ está.
 | 13 | La copia de anoche existe y se verificó | `docker compose exec scheduler php artisan backup:verify` ([`operacion.md`](operacion.md) §2), o la alerta de la observabilidad | Diario (automático) o semanal (manual, si la apagaste) |
 | 14 | Restauración probada de verdad | Simulacro de [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) | **Trimestral** |
 | 15 | Correo cifrado de forma obligatoria | `sudo grep '^MAIL_SCHEME=' .env` | Entrega |
-| 16 | Segundo factor obligatorio en las cuentas de gestión | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` sigue diciendo `admin,rrhh,auditor`: una cuenta de esos roles sin segundo factor no puede entrar | Trimestral |
+| 16 | Segundo factor obligatorio en las cuentas de gestión | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` ya no incluye `responsable_departamento`: una cuenta de esos roles sin segundo factor no puede entrar | Trimestral |
 | 17 | Ninguna cuenta de quien ya no está | Repasa con RRHH quién debe tener panel y da de baja al resto: `docker compose exec app php artisan identity:deactivate-user <correo> --reason="<motivo>"`. La baja tiene efecto en la petición siguiente —también para las sesiones ya abiertas—, no borra el historial de esa cuenta y queda registrada con su autor y su motivo. **Sigue sin haber pantalla de cuentas de gestión en el panel**, y tampoco hay orden que las liste: la lista de partida es la de personal, no la del producto. Ya no hace falta abrir ninguna sesión de `psql` para esto ([`operacion.md`](operacion.md) §9) | Trimestral y en cada baja |
 | 18 | Ningún acceso de soporte vivo sin motivo | Panel → «Soporte» → «Accesos de soporte» | Mensual |
 | 19 | Todas las tablets en modo quiosco y ancladas | Recorrido físico: reiniciar una y comprobar que arranca sola en la PWA | Trimestral |
