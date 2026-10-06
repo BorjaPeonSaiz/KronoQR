@@ -46,4 +46,26 @@ describe('CompletionSummary', () => {
     expect(alert.text()).toContain(es.onboarding.completion.credentialsNone)
     expect(alert.text()).not.toContain(es.onboarding.completion.credentialsAdvice)
   })
+
+  describe('personas sin PIN tras la importacion', () => {
+    it.each([
+      [0, false],
+      [1, true],
+      [4, true],
+    ])('con %i altas importadas', async (count, shown) => {
+      const wrapper = await mountView(CompletionSummary, {
+        props: { completion: setupCompletion(), withoutPin: count },
+      })
+      const block = wrapper.find('[data-test="no-pin-summary"]')
+
+      expect(block.exists()).toBe(shown)
+
+      if (shown) {
+        expect(block.text()).toContain(count === 1 ? '1 persona sin PIN' : '4 personas sin PIN')
+        expect(wrapper.find('[data-test="no-pin-link"]').attributes('href')).toBe(
+          '/employees?pin_status=pending',
+        )
+      }
+    })
+  })
 })

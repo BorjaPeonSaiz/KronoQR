@@ -14,7 +14,9 @@ import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import type { SetupCompletion } from '@/shared/api/types'
 
-const props = defineProps<{ completion: SetupCompletion }>()
+const props = withDefaults(defineProps<{ completion: SetupCompletion; withoutPin?: number }>(), {
+  withoutPin: 0,
+})
 
 const { t } = useI18n()
 
@@ -56,6 +58,17 @@ const pending = computed(() => props.completion.summary.credentials_pending)
       </p>
       <p class="font-mono text-sm">{{ t('onboarding.completion.credentialsCommand') }}</p>
     </div>
+
+    <p v-if="withoutPin > 0" data-test="no-pin-summary">
+      {{ t('onboarding.completion.withoutPin', { count: withoutPin }, withoutPin) }}
+      <RouterLink
+        :to="{ name: 'employees', query: { pin_status: 'pending' } }"
+        class="font-semibold underline"
+        data-test="no-pin-link"
+      >
+        {{ t('onboarding.completion.withoutPinLink') }}
+      </RouterLink>
+    </p>
 
     <dl class="grid gap-3 sm:grid-cols-2" data-test="summary">
       <div>

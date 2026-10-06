@@ -134,14 +134,13 @@ describe('EmployeesImportStep', () => {
       expect(wrapper.find('[data-test="no-pin-notice"]').exists()).toBe(false)
     })
 
-    it('con 1 alta usa el singular y enlaza al listado filtrado', async () => {
+    it('con 1 alta usa el singular y y no enlaza (la guarda lo descartaria)', async () => {
       const wrapper = await applyWith(1)
       const notice = wrapper.find('[data-test="no-pin-notice"]')
 
       expect(notice.text()).toContain('1 persona sin PIN')
-      expect(wrapper.find('[data-test="no-pin-link"]').attributes('href')).toBe(
-        '/employees?pin_status=pending',
-      )
+      expect(wrapper.find('[data-test="no-pin-link"]').exists()).toBe(false)
+      expect(useSetupStore().importedWithoutPin).toBe(1)
     })
 
     it('con N altas usa el plural', async () => {

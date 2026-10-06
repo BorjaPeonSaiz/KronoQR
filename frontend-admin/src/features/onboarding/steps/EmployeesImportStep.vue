@@ -19,7 +19,6 @@
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
 import type { EmployeeImportReport } from '@/shared/api/types'
 import { importEmployees } from '../employeeImport.api'
 import { useSetupStore } from '../setup.store'
@@ -84,6 +83,7 @@ async function apply(): Promise<void> {
       mode: 'apply',
       confirmChecksum: report.value.file.sha256,
     })
+    setup.importedWithoutPin += report.value.summary.create
   } catch (caught) {
     error.value = caught
   } finally {
@@ -210,13 +210,6 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
             report.summary.create,
           )
         }}
-        <RouterLink
-          :to="{ name: 'employees', query: { pin_status: 'pending' } }"
-          class="font-semibold underline"
-          data-test="no-pin-link"
-        >
-          {{ t('onboarding.steps.employees.noPinLink') }}
-        </RouterLink>
       </p>
 
       <div class="overflow-x-auto">

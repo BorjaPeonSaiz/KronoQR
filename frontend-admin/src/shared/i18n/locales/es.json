@@ -585,6 +585,10 @@
         "explanation": "Se anotará que {name} ha recibido su tarjeta, con la fecha y contigo como responsable.",
         "action": "Confirmar la entrega",
         "sheetReminder": "En este mismo acto se entregan la tarjeta, el PIN y la hoja de instrucciones.",
+        "sheetReminderNoPin": "Con la tarjeta se entrega la hoja de instrucciones; el PIN queda pendiente de emitir.",
+        "pinPending": "Esta persona aún no tiene PIN: emítelo desde su ficha en este mismo acto.",
+        "pinPendingLink": "Abrir la ficha para emitir el PIN",
+        "pinChecking": "Comprobando si la persona ya tiene PIN…",
         "notice": "Queda en el registro de auditoría y no se puede repetir ni deshacer. Es lo que distingue «la tarjeta se perdió antes de dársela» de «el empleado la perdió»."
       },
       "revoke": {
@@ -1954,6 +1958,8 @@
       "credentialsPending": "Aún faltan {count} tarjetas por emitir e imprimir.",
       "credentialsNone": "No hay tarjetas pendientes de emitir.",
       "credentialsAdvice": "Sin tarjeta impresa y entregada, nadie puede fichar el primer día. Emitirlas e imprimirlas lleva días de logística: hazlo con antelación.",
+      "withoutPin": "{count} persona sin PIN | {count} personas sin PIN",
+      "withoutPinLink": "Ver las personas sin PIN",
       "credentialsLink": "Ir al panel de estado de credenciales",
       "credentialsCommand": "También puedes consultarlo desde la consola del servidor con: credentials:status --pending",
       "fields": {
@@ -2043,7 +2049,6 @@
         "truncated": "El fichero trae más líneas de las que se pueden aplicar de una vez. Divídelo en partes más pequeñas y vuelve a intentarlo: con el fichero así, no se aplica nada.",
         "fileWarnings": "Avisos del fichero entero, revísalos antes de continuar:",
         "noPinNotice": "Se ha dado de alta 1 persona sin PIN. Se emite desde su ficha al entregarle la tarjeta. | Se han dado de alta {count} personas sin PIN. Se emite desde su ficha al entregarles la tarjeta.",
-        "noPinLink": "Ver las personas sin PIN",
         "validatedSummary": "Simulación, nada se ha guardado todavía: {create} altas, {update} actualizaciones, {unchanged} sin cambios, {reject} rechazadas.",
         "appliedSummary": "Aplicado: {create} altas creadas, {update} actualizadas, {unchanged} sin cambios, {reject} rechazadas y no aplicadas.",
         "tableCaption": "Resultado línea a línea de la importación",

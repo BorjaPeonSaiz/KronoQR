@@ -203,6 +203,29 @@ describe('EmployeeDetailView', () => {
     expect(issued.text()).not.toContain(es.pin.actions.issue)
   })
 
+  it('si el PIN se emitio mientras tanto, el dialogo usa los textos de restablecimiento', async () => {
+    let employeeReads = 0
+
+    const wrapper = await mountDetail(employee({ pin_status: 'pending' }), (url, init) => {
+      if (url === `/api/v1/employees/${EMPLOYEE_UUID}` && (init?.method ?? 'GET') === 'GET') {
+        employeeReads += 1
+
+        return employeeReads > 1 ? jsonResponse(employee({ pin_status: 'issued' })) : null
+      }
+
+      return null
+    })
+
+    await buttonWith(wrapper, es.pin.actions.issue).trigger('click')
+    await settle()
+
+    const dialog = wrapper.find('[role="dialog"]')
+
+    expect(dialog.text()).toContain(es.pin.reset.explanation)
+    expect(dialog.text()).toContain(es.pin.reset.warning)
+    expect(dialog.text()).not.toContain(es.pin.issue.explanation)
+  })
+
   it('solo ofrece registrar la entrega del PIN cuando esta emitido y sin entregar', async () => {
     const issued = await mountDetail(employee({ pin_status: 'issued' }))
 

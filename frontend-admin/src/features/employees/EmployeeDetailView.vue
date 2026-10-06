@@ -317,6 +317,23 @@ const pinDeliveryChanges = computed<Change[]>(() => [
   },
 ])
 
+// Otra persona de RRHH pudo emitir el PIN desde que se cargo la ficha: se relee antes
+// de abrir el dialogo para que rotulo y advertencia reflejen el estado real. Si la
+// relectura falla, se mantiene el estado ya cargado.
+async function openPinReset(): Promise<void> {
+  try {
+    await queryClient.fetchQuery({
+      queryKey: ['employee', props.uuid] as const,
+      queryFn: () => getEmployee(props.uuid),
+      staleTime: 0,
+    })
+  } catch {
+    // Se sigue con el estado cargado.
+  }
+
+  confirmingPinReset.value = true
+}
+
 async function confirmPinReset(): Promise<void> {
   // El estado previo se fija antes de actuar: tras refrescar la ficha ya sera `issued`.
   const wasIssuing = pinIssuing.value
@@ -722,7 +739,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
           <button
             type="button"
             class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
-            @click="confirmingPinReset = true"
+            @click="openPinReset"
           >
             {{ pinIssuing ? t('pin.actions.issue') : t('pin.actions.reset') }}
           </button>

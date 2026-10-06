@@ -58,6 +58,12 @@ export const useSetupStore = defineStore('setup', () => {
    * configurado» antes del cierre de verdad).
    */
   const completion = ref<SetupCompletion | null>(null)
+  /**
+   * Altas creadas por la importacion masiva EN ESTA SESION: nacen sin PIN y el
+   * resumen final lo recuerda con un enlace (el paso no puede enlazar: la guarda
+   * de rutas lleva a `setup` mientras el asistente esta abierto).
+   */
+  const importedWithoutPin = ref(0)
 
   /** Si el asistente sigue abierto. `false` mientras no se sabe (por defecto no bloquea). */
   const available = computed(() => status.value?.available ?? false)
@@ -141,6 +147,7 @@ export const useSetupStore = defineStore('setup', () => {
     error,
     loaded,
     completion,
+    importedWithoutPin,
     available,
     steps,
     stepsKnown,
