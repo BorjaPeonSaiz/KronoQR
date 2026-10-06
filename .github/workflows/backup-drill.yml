@@ -309,16 +309,19 @@ jobs:
       - name: R5-DV-01 — la metrica del RPO la publica wal-metrics.sh con el rol de solo lectura
         # Sin pg_monitor ni privilegios nuevos (C17): pg_stat_archiver, pg_current_wal_insert_lsn y
         # pg_settings son publicos. Y la exposicion vuelve a 0 tras archivar.
-        env:
-          PGPASSWORD: ${{ env.DB_PASSWORD }}
+        # Sin PGPASSWORD a nivel de paso: backup-common.sh da prioridad a PGPASSWORD sobre
+        # BACKUP_DB_PASSWORD, y el exportador conectaria como fichaje_backup con la
+        # contrasena del migrador (lo que paso en la CI del 03-10-2026). El exportador va
+        # con las credenciales del rol de copias, como lo lanza el scheduler; la
+        # comprobacion de pertenencias, con las del migrador.
         run: |
           set -euo pipefail
-          bash infra/scripts/wal-metrics.sh
+          PGPASSWORD="$BACKUP_DB_PASSWORD" bash infra/scripts/wal-metrics.sh
           m="$BACKUP_PATH/metrics/kronoqr_wal.prom"
           grep -q '^kronoqr_wal_archive_timeout_seconds 60$' "$m"
           grep -q '^kronoqr_wal_archive_failing 0$' "$m"
           grep -q '^kronoqr_wal_exporter_last_run_timestamp_seconds ' "$m"
-          [ "$(psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc "SELECT count(*) FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid JOIN pg_roles u ON u.oid = am.member WHERE u.rolname = 'fichaje_backup' AND r.rolname = 'pg_monitor'")" = "0" ]
+          [ "$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_DATABASE" -Atc "SELECT count(*) FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid JOIN pg_roles u ON u.oid = am.member WHERE u.rolname = 'fichaje_backup' AND r.rolname = 'pg_monitor'")" = "0" ]
           echo "kronoqr_wal.prom publicado con el rol fichaje_backup, sin pg_monitor."
 
       - name: Idempotencia — dos copias seguidas no corrompen la anterior
