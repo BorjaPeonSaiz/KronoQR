@@ -2590,7 +2590,7 @@ docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh -
 - It only works for 2.1.0 backups, and the `.sha256` **is still mandatory** and
   has to match.
 - It is passed **in every command**. Never put `KRONOQR_ACCEPT_UNAUTHENTICATED`
-  in the `.env`: it does not count, and `./doctor.sh` reports it as a failure.
+  in the `.env` or in a cron table: it is ignored (only the `--accept-unauthenticated` option counts), and `./doctor.sh` reports it as a failure.
 - **It is recorded**: the restore report notes it on its first line and the
   `system.restored_from_backup` entry in the audit log carries
   `integrity=legacy_accepted`.

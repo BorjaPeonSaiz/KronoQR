@@ -119,10 +119,11 @@ MANIFIESTO=""
 HUELLA_PRIVADA=""
 DRILL_WAL_ENC=0
 DRILL_WAL_HEREDADOS=0
-# Bandera de copias heredadas: de la linea de ordenes o del entorno de ESTA
-# invocacion; el .env no cuenta (se captura antes de cargarlo).
+# Bandera de copias heredadas: SOLO de la linea de ordenes (--accept-unauthenticated). La
+# variable de entorno se heredaria de un perfil de root o de la crontab del simulacro y
+# dejaria la puerta abierta en cada ejecucion (C12): se ignora y se avisa.
 ACEPTAR_HEREDADA=0
-[ "${KRONOQR_ACCEPT_UNAUTHENTICATED:-}" != "1" ] || ACEPTAR_HEREDADA=1
+[ -z "${KRONOQR_ACCEPT_UNAUTHENTICATED:-}" ] || printf '%s AVISO: se ignora KRONOQR_ACCEPT_UNAUTHENTICATED; usa la opcion --accept-unauthenticated en esta orden.\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
 
 al_salir() {
   if [ -n "$CONTENEDOR" ] && [ "$CONSERVAR" -eq 0 ]; then

@@ -322,11 +322,11 @@ kq_open_copy() {
   case "$kind" in
   dump)
     ext=".dump.enc"
-    etiqueta="volcado"
+    etiqueta="un volcado"
     ;;
   base)
     ext=".tar.gz.enc"
-    etiqueta="copia fisica"
+    etiqueta="una copia fisica"
     ;;
   *) die "${KQ_EXIT_USAGE}" "kq_open_copy: tipo '${kind}' desconocido (dump o base)." ;;
   esac
@@ -339,7 +339,7 @@ kq_open_copy() {
   10)
     if [ "$aceptar" -eq 0 ]; then
       [ -z "$gancho" ] || "$gancho"
-      die "$fallo" "'${fichero}' es una ${etiqueta} de la 2.1.0: esta cifrada pero NO autenticada (solo la protege su .sha256, que quien escriba en el destino puede recalcular). Si es la que quieres, repite con --accept-unauthenticated (por invocacion, nunca en el .env). El .sha256 sigue siendo obligatorio. Procedimiento: docs/runbooks/restaurar-backup.md §6.8. No se ha tocado nada."
+      die "$fallo" "'${fichero}' es ${etiqueta} de la 2.1.0: esta cifrada pero NO autenticada (solo la protege su .sha256, que quien escriba en el destino puede recalcular). Si es la que quieres, repite con --accept-unauthenticated (por invocacion, nunca en el .env). El .sha256 sigue siendo obligatorio. Procedimiento: docs/runbooks/restaurar-backup.md §6.8. No se ha tocado nada."
     fi
     INTEGRIDAD="legacy_accepted"
     ;;

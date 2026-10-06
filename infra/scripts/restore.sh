@@ -36,8 +36,9 @@
 #   --accept-unauthenticated
 #                      acepta una copia de la 2.1.0 (cifrada pero SIN MAC). El
 #                      `.sha256` sigue siendo obligatorio. Se pasa por INVOCACION
-#                      (tambien vale KRONOQR_ACCEPT_UNAUTHENTICATED=1 en el entorno
-#                      de esa orden); lo que ponga el .env no cuenta (ADR-049, C12)
+#                      (solo la opcion: la variable KRONOQR_ACCEPT_UNAUTHENTICATED se ignora
+#                      aqui, porque se heredaria de un perfil o un cron); lo que ponga
+#                      el .env no cuenta (ADR-049, C12)
 #
 # INTEGRIDAD (ADR-049). La copia se LEE UNA SOLA VEZ a un directorio privado 0700 y
 # el MAC (autenticidad: nadie la ha alterado ni sustituido), el `.sha256`, el
@@ -153,11 +154,12 @@ INFORME_TRABAJO=""
 INTEGRIDAD=""
 MANIFIESTO=""
 HUELLA_PRIVADA=""
-# La bandera de copias heredadas se toma de la linea de ordenes o del entorno de
-# ESTA invocacion; lo que traiga el .env no cuenta (C12): se captura antes de
-# cargarlo.
+# La bandera de copias heredadas se toma SOLO de la linea de ordenes (--accept-unauthenticated).
+# La variable de entorno KRONOQR_ACCEPT_UNAUTHENTICATED se heredaria de un perfil de root o
+# de un cron y dejaria la puerta abierta en cada ejecucion (C12): aqui se ignora y se avisa.
 ACEPTAR_HEREDADA=0
-[ "${KRONOQR_ACCEPT_UNAUTHENTICATED:-}" != "1" ] || ACEPTAR_HEREDADA=1
+[ -z "${KRONOQR_ACCEPT_UNAUTHENTICATED:-}" ] || printf '%s AVISO: se ignora KRONOQR_ACCEPT_UNAUTHENTICATED; usa la opcion --accept-unauthenticated en esta orden.
+' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
 # Huella de confianza aportada por quien llama (update.sh en la vuelta atras, C13).
 EXPECT_SHA256=""
 ASIENTO_POR_LLAMADOR=0

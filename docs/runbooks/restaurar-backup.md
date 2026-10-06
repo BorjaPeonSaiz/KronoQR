@@ -593,7 +593,7 @@ Con la bandera, el `.sha256` **sigue siendo obligatorio** y debe coincidir, el
 informe lo anota en su primera línea y el asiento `system.restored_from_backup`
 lleva `integrity=legacy_accepted` (si no la usas: `integrity=authenticated`, con
 `kqe_created` y `kid`). `doctor.sh` avisa si `KRONOQR_ACCEPT_UNAUTHENTICATED` está
-en el `.env`. La vuelta atrás de `update.sh` la usa **solo** para la copia previa
+en el `.env` o en una tabla de cron, y `restore.sh` y `restore-drill.sh` ignoran esa variable: la bandera es solo la opción `--accept-unauthenticated`. La vuelta atrás de `update.sh` la usa **solo** para la copia previa
 que él mismo acaba de crear. La bandera desaparecerá cuando la versión mínima
 desde la que se puede actualizar sea la 2.2.0 o posterior.
 

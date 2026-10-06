@@ -92,6 +92,8 @@ KQ_MSG_ES[d_w_env_mode_unknown]="no se ha podido comprobar los permisos de %s (n
 
 KQ_MSG_ES[d_c_accept_unauth]="KRONOQR_ACCEPT_UNAUTHENTICATED esta en el .env"
 KQ_MSG_ES[d_f_accept_unauth]="%s define KRONOQR_ACCEPT_UNAUTHENTICATED: esa bandera deja restaurar copias de la 2.1.0 SIN autenticar y se pasa por invocacion, nunca se deja puesta (ADR-049). Borra la linea del .env."
+KQ_MSG_ES[d_c_accept_unauth_cron]="KRONOQR_ACCEPT_UNAUTHENTICATED esta en una tabla de cron"
+KQ_MSG_ES[d_f_accept_unauth_cron]="%s define KRONOQR_ACCEPT_UNAUTHENTICATED: un simulacro programado que acepta copias de la 2.1.0 SIN autenticar daria por buena una copia plantada. La bandera se pasa por invocacion (--accept-unauthenticated), nunca en una tarea programada (ADR-049). Borrala de esa linea."
 KQ_MSG_ES[d_c_wal_key]="La clave del WAL deriva de BACKUP_ENCRYPTION_KEY y es la del archivo"
 KQ_MSG_ES[d_w_wal_key_openssl]="no se ha podido derivar la clave del WAL: hace falta openssl con SHA3-256 (OpenSSL 1.1.1 o posterior) en este servidor."
 KQ_MSG_ES[d_f_wal_key_mismatch]="BACKUP_WAL_KEY de %s no es la derivada de BACKUP_ENCRYPTION_KEY (falta, se roto la clave sin recalcularla, o se edito a mano): PostgreSQL archivaria con una clave que la restauracion no recalcularia y dejaria de archivar si falta. Ejecuta 'sudo bash scripts/backup.sh derive-wal-key --write-env %s', recrea postgres ('docker compose up -d postgres') y repite. Ver docs/runbooks/restaurar-backup.md §4.2."
@@ -218,6 +220,8 @@ KQ_MSG_EN[d_w_env_mode_unknown]="could not check the permissions of %s (no 'stat
 
 KQ_MSG_EN[d_c_accept_unauth]="KRONOQR_ACCEPT_UNAUTHENTICATED is in the .env"
 KQ_MSG_EN[d_f_accept_unauth]="%s defines KRONOQR_ACCEPT_UNAUTHENTICATED: that flag lets you restore 2.1.0 backups WITHOUT authentication and is passed per invocation, never left on (ADR-049). Delete the line from the .env."
+KQ_MSG_EN[d_c_accept_unauth_cron]="KRONOQR_ACCEPT_UNAUTHENTICATED is in a cron table"
+KQ_MSG_EN[d_f_accept_unauth_cron]="%s defines KRONOQR_ACCEPT_UNAUTHENTICATED: a scheduled drill that accepts 2.1.0 backups WITHOUT authentication would pass a planted copy as good. The flag is passed per invocation (--accept-unauthenticated), never in a scheduled job (ADR-049). Remove it from that line."
 KQ_MSG_EN[d_c_wal_key]="The WAL key derives from BACKUP_ENCRYPTION_KEY and is the one the archive uses"
 KQ_MSG_EN[d_w_wal_key_openssl]="the WAL key could not be derived: this server needs openssl with SHA3-256 (OpenSSL 1.1.1 or later)."
 KQ_MSG_EN[d_f_wal_key_mismatch]="BACKUP_WAL_KEY in %s is not the one derived from BACKUP_ENCRYPTION_KEY (missing, the key was rotated without recomputing it, or it was edited by hand): PostgreSQL would archive with a key the restore would not recompute, and stop archiving if it is missing. Run 'sudo bash scripts/backup.sh derive-wal-key --write-env %s', recreate postgres ('docker compose up -d postgres') and check again. See docs/runbooks/restaurar-backup.md §4.2 (in Spanish)."

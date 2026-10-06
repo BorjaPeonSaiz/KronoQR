@@ -410,14 +410,22 @@ check_env_permissions() {
 #     abrir). No se imprime ningun valor.
 #   · El `kid` de la cabecera del segmento cifrado mas reciente es el de esa derivada.
 #   · Quedan segmentos heredados en claro (aviso: la migracion los cifra sola).
-#   · KRONOQR_ACCEPT_UNAUTHENTICATED no esta en el .env (C12): la bandera de copias
-#     heredadas se pasa por invocacion, nunca se deja puesta.
+#   · KRONOQR_ACCEPT_UNAUTHENTICATED no esta en el .env ni en una tabla de cron (C12): la
+#     bandera de copias heredadas se pasa por invocacion, nunca se deja puesta.
 check_backup_wal() {
-  local master actual derived header have_kid want_kid legacy
+  local master actual derived header have_kid want_kid legacy table
 
   if grep -qE '^[[:space:]]*(export[[:space:]]+)?KRONOQR_ACCEPT_UNAUTHENTICATED=' "${CURRENT_ENV}" 2>/dev/null; then
     check_fail "$(kq_text d_c_accept_unauth)" "$(kq_format d_f_accept_unauth "${CURRENT_ENV}")"
   fi
+  # Tampoco en una tabla de cron (el simulacro programado): root la lee y la variable se
+  # heredaria en cada ejecucion.
+  for table in /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/root /var/spool/cron/root; do
+    [ -f "${table}" ] && [ -r "${table}" ] || continue
+    if grep -qE '^[^#]*KRONOQR_ACCEPT_UNAUTHENTICATED' "${table}" 2>/dev/null; then
+      check_fail "$(kq_text d_c_accept_unauth_cron)" "$(kq_format d_f_accept_unauth_cron "${table}")"
+    fi
+  done
 
   master="$(env_value "${CURRENT_ENV}" BACKUP_ENCRYPTION_KEY)"
   [ -n "${master}" ] || return 0

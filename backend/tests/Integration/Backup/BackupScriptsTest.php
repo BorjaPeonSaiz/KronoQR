@@ -204,3 +204,27 @@ it('si no puede publicar el informe, lo conserva en un directorio privado y no e
         ->and(substr(sprintf('%o', fileperms(dirname($rescate))), -4))->toBe('0700')
         ->and((string) file_get_contents($rescate))->toBe("informe de prueba\n");
 })->group('RF-PR-04');
+
+it('restore.sh y restore-drill.sh ignoran KRONOQR_ACCEPT_UNAUTHENTICATED del entorno: solo vale la opcion', function (string $script): void {
+    // Una variable heredada de un perfil de root o de la crontab del simulacro dejaria
+    // abierta la restauracion de copias sin autenticar en cada ejecucion (ADR-049, C12).
+    $proceso = new Process(
+        ['bash', Repo::file('infra/scripts/'.$script), '--help'],
+        env: ['KRONOQR_ACCEPT_UNAUTHENTICATED' => '1'],
+        timeout: 60.0,
+    );
+    $proceso->run();
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('se ignora KRONOQR_ACCEPT_UNAUTHENTICATED');
+})->with(['restore.sh', 'restore-drill.sh'])->group('RL-12', 'RS-07');
+
+it('doctor.sh avisa de KRONOQR_ACCEPT_UNAUTHENTICATED tanto en el .env como en las tablas de cron, en los dos idiomas', function (): void {
+    $doctor = Repo::contents('infra/scripts/doctor.sh');
+    $mensajes = Repo::contents('infra/scripts/lib/messages-doctor.sh');
+
+    expect($doctor)->toContain('/etc/cron.d/*')->toContain('/var/spool/cron/crontabs/root')->toContain('d_f_accept_unauth_cron');
+    foreach (['ES', 'EN'] as $idioma) {
+        expect($mensajes)->toContain('KQ_MSG_'.$idioma.'[d_f_accept_unauth_cron]=');
+    }
+})->group('RL-12', 'RS-07');
