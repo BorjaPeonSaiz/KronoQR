@@ -161,4 +161,24 @@ useDefault = true
     #    `Malformed` y no dan acceso a nada.
     '''^KQL1\.eyJhIjoxfQ\.c2lnbmF0dXJh$''',
     '''^KQL1\.solo-una-parte$''',
+
+    # 24) backend/tests/Integration/Backup/BackupKeyDerivationTest.php,
+    #    .github/workflows/backup-drill.yml, .github/scripts/backup-wal-e2e.sh y
+    #    docs/adr/ADR-049: la SUBCLAVE DEL WAL derivada (PBKDF2, `kqwal-v1`) de la
+    #    clave de relleno de desarrollo `kronoqr_local_dev_only_backup_key`
+    #    (bloque 20 de la 2.2.0, ADR-049). Es un vector de prueba: fija el registro
+    #    de etiquetas de la derivacion y la CI comprueba que el archivado la RECHAZA.
+    #    Ninguna instalacion la tiene: install.sh deriva la suya de una clave
+    #    maestra aleatoria y la de desarrollo se rechaza fuera de compose.dev.
+    '''^4deec0e109388ff8c0ed3ca348abba952eef5a59c6e87906f052e8453eff69ec$''',
+    # 25) backend/tests/Integration/Backup/BackupKeyDerivationTest.php: la clave
+    #    de autenticacion (`kqe1-mac`) derivada de la misma clave de desarrollo.
+    #    Mismo motivo: vector de prueba de la jerarquia de claves, sin uso real.
+    '''^41ce46041f316587adc9a6ff6dc0f7acb18a9f51b0924e21e41e91c10e72ecf4$''',
+    # 26) y 27) backend/tests/Integration/Backup/KqeFormatTest.php: las dos
+    #    contraseñas literales con las que la prueba cifra y descifra un fichero
+    #    KQE1 de muestra (y comprueba que con la otra NO se abre). Cadenas
+    #    escritas a mano, con el nombre de la prueba dentro; no cifran ninguna copia.
+    '''^clave_de_prueba_de_kqe_1234567890abcdef$''',
+    '''^otra_clave_cualquiera_larga_1234$''',
   ]
