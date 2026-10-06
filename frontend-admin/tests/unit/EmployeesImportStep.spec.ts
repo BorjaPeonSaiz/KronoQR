@@ -105,6 +105,64 @@ describe('EmployeesImportStep', () => {
     expect(wrapper.find('[data-test="apply"]').attributes('disabled')).toBeDefined()
   })
 
+  describe('aviso de altas sin PIN', () => {
+    async function applyWith(create: number): Promise<Awaited<ReturnType<typeof mountView>>> {
+      const validated = employeeImportReport()
+      const applied = employeeImportReport({
+        mode: 'apply',
+        summary: { create, update: 0, unchanged: 0, reject: 0 },
+      })
+
+      stubFetch(async (_url, init) =>
+        jsonResponse((init?.body as FormData).get('mode') === 'apply' ? applied : validated),
+      )
+
+      const wrapper = await mountView(EmployeesImportStep, { pinia: createTestPinia() })
+
+      await selectFile(wrapper)
+      await wrapper.find('[data-test="validate"]').trigger('click')
+      await settle()
+      await wrapper.find('[data-test="apply"]').trigger('click')
+      await settle()
+
+      return wrapper
+    }
+
+    it('con 0 altas no avisa', async () => {
+      const wrapper = await applyWith(0)
+
+      expect(wrapper.find('[data-test="no-pin-notice"]').exists()).toBe(false)
+    })
+
+    it('con 1 alta usa el singular y enlaza al listado filtrado', async () => {
+      const wrapper = await applyWith(1)
+      const notice = wrapper.find('[data-test="no-pin-notice"]')
+
+      expect(notice.text()).toContain('1 persona sin PIN')
+      expect(wrapper.find('[data-test="no-pin-link"]').attributes('href')).toBe(
+        '/employees?pin_status=pending',
+      )
+    })
+
+    it('con N altas usa el plural', async () => {
+      const wrapper = await applyWith(3)
+
+      expect(wrapper.find('[data-test="no-pin-notice"]').text()).toContain('3 personas sin PIN')
+    })
+
+    it('en la simulacion todavia no avisa', async () => {
+      stubFetch(() => jsonResponse(employeeImportReport()))
+
+      const wrapper = await mountView(EmployeesImportStep, { pinia: createTestPinia() })
+
+      await selectFile(wrapper)
+      await wrapper.find('[data-test="validate"]').trigger('click')
+      await settle()
+
+      expect(wrapper.find('[data-test="no-pin-notice"]').exists()).toBe(false)
+    })
+  })
+
   it('aplica con el checksum de la validacion, y despues continua', async () => {
     const pinia = createTestPinia()
     const validated = employeeImportReport()

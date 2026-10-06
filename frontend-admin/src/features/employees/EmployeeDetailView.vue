@@ -296,6 +296,11 @@ const pinError = ref<unknown>(null)
 /** El PIN en claro, solo mientras el dialogo esta abierto. Nunca se persiste. */
 const revealedPin = ref<IssuedPin | null>(null)
 
+// Sin PIN (`pending`) no hay nada que restablecer: la misma accion `pin/reset` se
+// presenta como emision, con su propio rotulo y texto.
+const pinIssuing = computed(() => employee.value?.pin_status === 'pending')
+const pinResetKey = computed(() => (pinIssuing.value ? 'pin.issue' : 'pin.reset'))
+
 const pinResetChanges = computed<Change[]>(() => [
   {
     label: t('pin.field'),
@@ -716,7 +721,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
             class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
             @click="confirmingPinReset = true"
           >
-            {{ t('pin.actions.reset') }}
+            {{ pinIssuing ? t('pin.actions.issue') : t('pin.actions.reset') }}
           </button>
           <button
             v-if="employee.pin_status === 'issued'"
@@ -861,18 +866,18 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
 
     <ConfirmDialog
       v-if="confirmingPinReset"
-      :title="t('pin.reset.heading')"
-      :confirm-label="t('pin.reset.action')"
+      :title="t(`${pinResetKey}.heading`)"
+      :confirm-label="t(`${pinResetKey}.action`)"
       tone="danger"
       :busy="pinBusy"
       :error="pinError"
       @cancel="confirmingPinReset = false"
       @confirm="confirmPinReset"
     >
-      <p class="mb-4">{{ t('pin.reset.explanation') }}</p>
-      <ChangePreview :changes="pinResetChanges" :caption="t('pin.reset.heading')" />
+      <p class="mb-4">{{ t(`${pinResetKey}.explanation`) }}</p>
+      <ChangePreview :changes="pinResetChanges" :caption="t(`${pinResetKey}.heading`)" />
       <p class="mt-4 rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning">
-        {{ t('pin.reset.warning') }}
+        {{ t(`${pinResetKey}.warning`) }}
       </p>
     </ConfirmDialog>
 

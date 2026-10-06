@@ -19,6 +19,7 @@
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import type { EmployeeImportReport } from '@/shared/api/types'
 import { importEmployees } from '../employeeImport.api'
 import { useSetupStore } from '../setup.store'
@@ -195,6 +196,27 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
             ? t('onboarding.steps.employees.appliedSummary', report.summary)
             : t('onboarding.steps.employees.validatedSummary', report.summary)
         }}
+      </p>
+
+      <p
+        v-if="applied && report.summary.create > 0"
+        class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
+        data-test="no-pin-notice"
+      >
+        {{
+          t(
+            'onboarding.steps.employees.noPinNotice',
+            { count: report.summary.create },
+            report.summary.create,
+          )
+        }}
+        <RouterLink
+          :to="{ name: 'employees', query: { pin_status: 'pending' } }"
+          class="font-semibold underline"
+          data-test="no-pin-link"
+        >
+          {{ t('onboarding.steps.employees.noPinLink') }}
+        </RouterLink>
       </p>
 
       <div class="overflow-x-auto">

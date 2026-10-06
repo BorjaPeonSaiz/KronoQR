@@ -325,13 +325,20 @@
       "delivered": "Entregado"
     },
     "statusHint": {
-      "pending": "Esta persona no tiene PIN y no puede entrar al portal. Restablécelo para emitir uno.",
+      "pending": "Esta persona aún no tiene PIN: no puede fichar con PIN ni entrar al portal. El PIN se emite desde aquí al entregarle la tarjeta.",
       "issued": "El PIN existe pero todavía no consta entregado en mano.",
       "delivered": "Se entregó en mano, con fecha y responsable en el registro de auditoría."
     },
     "actions": {
+      "issue": "Emitir el PIN",
       "reset": "Restablecer el PIN",
       "registerDelivery": "Registrar la entrega del PIN"
+    },
+    "issue": {
+      "heading": "Emitir el PIN",
+      "explanation": "Se genera el primer PIN de esta persona (de 6 u 8 cifras, según el ajuste de la instalación). Hazlo al entregarle la tarjeta.",
+      "action": "Emitir y mostrar el PIN",
+      "warning": "El PIN se mostrará una sola vez, ahora. No se podrá volver a consultar: si se pierde, habrá que restablecerlo."
     },
     "reset": {
       "heading": "Restablecer el PIN",
@@ -2034,6 +2041,8 @@
         "applying": "Aplicando…",
         "truncated": "El fichero trae más líneas de las que se pueden aplicar de una vez. Divídelo en partes más pequeñas y vuelve a intentarlo: con el fichero así, no se aplica nada.",
         "fileWarnings": "Avisos del fichero entero, revísalos antes de continuar:",
+        "noPinNotice": "Se ha dado de alta 1 persona sin PIN. Se emite desde su ficha al entregarle la tarjeta. | Se han dado de alta {count} personas sin PIN. Se emite desde su ficha al entregarles la tarjeta.",
+        "noPinLink": "Ver las personas sin PIN",
         "validatedSummary": "Simulación, nada se ha guardado todavía: {create} altas, {update} actualizaciones, {unchanged} sin cambios, {reject} rechazadas.",
         "appliedSummary": "Aplicado: {create} altas creadas, {update} actualizadas, {unchanged} sin cambios, {reject} rechazadas y no aplicadas.",
         "tableCaption": "Resultado línea a línea de la importación",

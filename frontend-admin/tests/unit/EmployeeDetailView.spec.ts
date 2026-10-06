@@ -165,6 +165,29 @@ describe('EmployeeDetailView', () => {
     expect(wrapper.find('[data-test="pin-value"]').text()).toBe('483920')
   })
 
+  it('sin PIN rotula la accion como emision y no como restablecimiento', async () => {
+    const pending = await mountDetail(employee({ pin_status: 'pending' }))
+
+    expect(pending.text()).toContain(es.pin.statusHint.pending)
+    expect(pending.text()).toContain(es.pin.actions.issue)
+    expect(pending.text()).not.toContain(es.pin.actions.reset)
+
+    await buttonWith(pending, es.pin.actions.issue).trigger('click')
+    await settle()
+
+    const dialog = pending.find('[role="dialog"]')
+
+    expect(dialog.text()).toContain(es.pin.issue.explanation)
+    expect(dialog.text()).toContain(es.pin.issue.warning)
+    expect(dialog.text()).not.toContain(es.pin.reset.explanation)
+    expect(buttonWith(pending, es.pin.issue.action).exists()).toBe(true)
+
+    const issued = await mountDetail(employee({ pin_status: 'issued' }))
+
+    expect(issued.text()).toContain(es.pin.actions.reset)
+    expect(issued.text()).not.toContain(es.pin.actions.issue)
+  })
+
   it('solo ofrece registrar la entrega del PIN cuando esta emitido y sin entregar', async () => {
     const issued = await mountDetail(employee({ pin_status: 'issued' }))
 

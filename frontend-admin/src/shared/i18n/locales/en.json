@@ -325,13 +325,20 @@
       "delivered": "Handed over"
     },
     "statusHint": {
-      "pending": "This person has no PIN and cannot open the portal. Reset it to issue one.",
+      "pending": "This person has no PIN yet: they cannot clock in with a PIN or open the portal. The PIN is issued here when the card is handed over.",
       "issued": "The PIN exists but has not been recorded as handed over.",
       "delivered": "It was handed over in person, with the date and the responsible person in the audit log."
     },
     "actions": {
+      "issue": "Issue the PIN",
       "reset": "Reset the PIN",
       "registerDelivery": "Record the PIN handover"
+    },
+    "issue": {
+      "heading": "Issue the PIN",
+      "explanation": "The first PIN for this person is generated (6 or 8 digits, per the installation setting). Do it when handing over the card.",
+      "action": "Issue and show the PIN",
+      "warning": "The PIN will be shown once, now. It cannot be looked up again: if it is lost, it will have to be reset."
     },
     "reset": {
       "heading": "Reset the PIN",
@@ -2034,6 +2041,8 @@
         "applying": "Applying…",
         "truncated": "The file has more rows than can be applied at once. Split it into smaller parts and try again: with the file as it is, nothing gets applied.",
         "fileWarnings": "Warnings about the whole file, review them before continuing:",
+        "noPinNotice": "1 person was added without a PIN. It is issued from their record when the card is handed over. | {count} people were added without a PIN. It is issued from each record when the card is handed over.",
+        "noPinLink": "See people without a PIN",
         "validatedSummary": "Simulation, nothing has been saved yet: {create} to create, {update} to update, {unchanged} unchanged, {reject} rejected.",
         "appliedSummary": "Applied: {create} created, {update} updated, {unchanged} unchanged, {reject} rejected and not applied.",
         "tableCaption": "Line-by-line result of the import",
