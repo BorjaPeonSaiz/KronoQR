@@ -518,7 +518,10 @@ x-runtime-env: &runtime-env
   # Borde y observabilidad que la aplicacion tambien consulta. Las tres redes del
   # borde las aplica nginx; la aplicacion las lee solo para que `product:doctor`
   # (sonda `network.*`, PP-01) avise de un portal abierto a internet o de un
-  # rango de ejemplo. No son secretos.
+  # rango de ejemplo. No son secretos. ADMIN_INTERNAL_CIDR (PP-10) va
+  # sin valor por defecto de Compose a proposito: la aplicacion distingue «no la
+  # recibe» de «vacia» (security.php).
+  ADMIN_INTERNAL_CIDR:
   KIOSK_VLAN_CIDR:
   METRICS_ALLOW_CIDR:
   PORTAL_INTERNAL_CIDR:

@@ -116,7 +116,7 @@ readonly -a SOLO_SCHEDULER_OPCIONAL=(
 #   compose              BRANDING_PATH, HTTP_PORT, HTTPS_PORT, IMAGE_REGISTRY,
 #                        TLS_CERT_DIR: los consume Compose (montajes, puertos, imagen).
 #   grafana              GRAFANA_ADMIN_USER, GRAFANA_ADMIN_PASSWORD.
-#   nginx                KIOSK_VLAN_CIDR, PORTAL_INTERNAL_CIDR, ADMIN_INTERNAL_CIDR,
+#   nginx                KIOSK_VLAN_CIDR, PORTAL_INTERNAL_CIDR,
 #                        NGINX_CLIENT_MAX_BODY_SIZE,
 #                        TLS_CERT_FILE, TLS_KEY_FILE: el borde, no la aplicacion.
 readonly -a EXCLUIDAS=(
@@ -126,8 +126,6 @@ readonly -a EXCLUIDAS=(
   BRANDING_PATH HTTP_PORT HTTPS_PORT IMAGE_REGISTRY TLS_CERT_DIR
   GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD
   KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR NGINX_CLIENT_MAX_BODY_SIZE TLS_CERT_FILE TLS_KEY_FILE
-  # ADMIN_INTERNAL_CIDR (PP-10) tambien es del borde: la rinde 07-kronoqr-admin-net.envsh.
-  ADMIN_INTERNAL_CIDR
   # TRUSTED_PROXY_CIDR es de nginx (set_real_ip_from); DB_MAX_SLOT_WAL_KEEP_GB la
   # interpola Compose en el `command:` de postgres: la aplicacion no las lee.
   TRUSTED_PROXY_CIDR DB_MAX_SLOT_WAL_KEEP_GB
