@@ -193,3 +193,41 @@ it('anota la integridad de la copia en el asiento, y el dominio lo admite tal cu
         ['kqe_created', 'kid'],
     ],
 ])->group('RL-12', 'RL-04', 'RS-07', 'RF-PR-04');
+
+it('el asiento de la vuelta atras de update.sh anota la integridad de la copia, tambien con una de la 2.1.0', function (string $contenido, int $heredada, array $esperado, array $ausentes): void {
+    $dir = sys_get_temp_dir().'/kq-update-audit-'.bin2hex(random_bytes(4));
+    mkdir($dir, 0o700, true);
+    file_put_contents($dir.'/copia.dump.enc', $contenido);
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+        .'read_backup_integrity '.escapeshellarg($dir.'/copia.dump.enc').' '.$heredada.'; '
+        .'audit_json_object "backup_file=copia.dump.enc" "backup_taken_at=2026-09-30T01:02:03Z" "backup_fingerprint=$(printf "a%.0s" $(seq 64))" "report_id=update-20260930T020000Z" "integrity=${BACKUP_INTEGRITY}" "kqe_created=${BACKUP_KQE_CREATED}" "kid=${BACKUP_KID}" "failed_step=migrations" "reason=manual_restore" "from_version=2.1.0" "to_version=2.2.0" "chain_before=$(printf "b%.0s" $(seq 64))"';
+    $process = new Process(['bash', '-c', $script], timeout: 60.0);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    /** @var array<string, string> $payload */
+    $payload = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($payload)->toMatchArray($esperado)->and($payload)->not->toHaveKeys($ausentes);
+    expect(SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $payload)->payload->data)->toBe($payload);
+
+    // El asiento de la vuelta atras lleva los tres campos (la regresion: se perdian).
+    expect(Repo::contents('infra/scripts/update.sh'))
+        ->toContain('"integrity=${BACKUP_INTEGRITY}"')
+        ->toContain('"kid=${BACKUP_KID}"');
+})->with([
+    'copia KQE1' => [
+        "KQE1 kind=dump kid=0a1b2c3d iter=600000 created=2026-09-30T01:02:03Z name=kronoqr-20260930T010203Z\ncuerpo",
+        0,
+        ['integrity' => 'authenticated', 'kid' => '0a1b2c3d', 'kqe_created' => '2026-09-30T01:02:03Z'],
+        [],
+    ],
+    'copia de la 2.1.0' => [
+        'Salted__12345678cuerpo',
+        1,
+        ['integrity' => 'legacy_accepted'],
+        ['kid', 'kqe_created'],
+    ],
+])->group('RL-12', 'RL-04', 'RS-07', 'RF-PR-04');

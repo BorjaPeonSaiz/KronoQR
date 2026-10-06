@@ -244,6 +244,9 @@ STEP5_EXPOSED=0
 MIGRATIONS_APPLIED=0
 BACKUP_TAKEN_AT=""
 BACKUP_SHA256=""
+BACKUP_INTEGRITY=""
+BACKUP_KID=""
+BACKUP_KQE_CREATED=""
 CHAIN_BEFORE=""
 CHAIN_AFTER=""
 CHAIN_DISCARDED=""
@@ -2004,6 +2007,26 @@ backup_failed() {
   die "${KQ_EXIT_REQUIREMENTS}" "${message}"
 }
 
+# Lo que consta en el asiento de una vuelta atras (ADR-049 §4, RS-07): una copia de
+# la 2.1.0 queda anotada como aceptada sin autenticar; una KQE1, con su kid y la
+# fecha de su cabecera (que restore.sh ya habra autenticado al restaurarla).
+#   read_backup_integrity FICHERO ES_HEREDADA(0|1)
+read_backup_integrity() {
+  local file="$1" legacy="$2" header
+  BACKUP_INTEGRITY="authenticated"
+  BACKUP_KID=""
+  BACKUP_KQE_CREATED=""
+  if [ "${legacy}" -eq 1 ]; then
+    BACKUP_INTEGRITY="legacy_accepted"
+    return 0
+  fi
+  header="$(head -c 300 "${file}" 2>/dev/null | head -n 1 || true)"
+  if [[ "${header}" =~ ^KQE1\ kind=[a-z]+\ kid=([0-9a-f]{8})\ iter=[0-9]+\ created=([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)\ name= ]]; then
+    BACKUP_KID="${BASH_REMATCH[1]}"
+    BACKUP_KQE_CREATED="${BASH_REMATCH[2]}"
+  fi
+}
+
 phase_backup() {
   local code=0 name mtime
 
@@ -2045,6 +2068,7 @@ phase_backup() {
   # donde el runtime no llega (C13). Por eso, para ella, la huella no es opcional y
   # no lleva tope de tiempo.
   [ "$(head -c 8 "${BACKUP_FILE}" 2>/dev/null)" != "Salted__" ] || BACKUP_LEGACY=1
+  read_backup_integrity "${BACKUP_FILE}" "${BACKUP_LEGACY}"
   if [ "${BACKUP_LEGACY}" -eq 1 ] && command -v sha256sum >/dev/null 2>&1; then
     BACKUP_SHA256="$(sha256sum "${BACKUP_FILE}" 2>/dev/null | cut -d' ' -f1 || true)"
   elif command -v sha256sum >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
@@ -2657,6 +2681,9 @@ rollback_and_die() {
     "from_version=${SOURCE_VERSION}" \
     "to_version=${TARGET_VERSION}" \
     "backup_fingerprint=${BACKUP_SHA256}" \
+    "integrity=${BACKUP_INTEGRITY}" \
+    "kqe_created=${BACKUP_KQE_CREATED}" \
+    "kid=${BACKUP_KID}" \
     "chain_before=${CHAIN_DISCARDED}" \
     "report_id=update-${STARTED_UTC}")"
 
