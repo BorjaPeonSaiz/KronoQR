@@ -666,6 +666,21 @@ apellidos**. Si tu programa de nómina cruza por nombre y no por código, eso se
 va a notar; si cruza por `employee_code` —que es lo recomendable— no pasa nada.
 Antes de dejarlo fijo, genera un fichero de prueba con un periodo corto y ábrelo.
 
+### 2.6 Acceso al portal: la longitud del PIN
+
+| Clave | De serie | Valores | Qué pasa si la cambias |
+| --- | --- | --- | --- |
+| `IDENTITY_PIN_LENGTH` | `6` | `6` u `8` | Cifras con las que se **emiten** los PIN de la plantilla (alta y restablecimiento). **No invalida ningún PIN**: cada uno sigue valiendo con la longitud con la que se emitió hasta que se restablece, y el portal y el quiosco aceptan de 6 a 8 cifras. **Pon `8` si el portal es accesible desde fuera de una red privada** (`PORTAL_INTERNAL_CIDR`, sección 6) y restablece los PIN de la plantilla a medida que los entregues en mano. **El soporte del fabricante no puede tocarla** (403): cuánta fuerza tiene la llave del registro de tu plantilla lo decides tú. Desde la 2.2.0. |
+
+El portal añade además un **bloqueo por origen**: 20 accesos fallidos desde la
+misma dirección (o la misma red `/64` de IPv6) en 15 minutos cierran el portal
+a esa dirección durante 60 minutos, también con el PIN correcto. Los umbrales
+son las variables `IDENTITY_PORTAL_ORIGIN_*` de la sección 6. Si hay un proxy
+delante, define `TRUSTED_PROXY_CIDR`: sin ella toda la plantilla comparte la
+dirección del proxy y un bloqueo los deja fuera a todos. Para levantar un
+bloqueo antes de tiempo: `docker compose exec app php artisan identity:origin-unlock <ip>` (queda
+asiento en el registro de auditoría).
+
 ---
 
 ## 3. Cómo se cambia
@@ -1559,6 +1574,7 @@ docker compose exec app php artisan identity:create-user   # crea otra cuenta de
 docker compose exec app php artisan identity:reset-password # contraseña nueva, mostrada una vez
 docker compose exec app php artisan identity:deactivate-user # da de baja una cuenta
 docker compose exec app php artisan identity:2fa-reset     # retira un segundo factor
+docker compose exec app php artisan identity:origin-unlock <ip> # levanta el bloqueo por origen del portal
 ```
 
 ---
@@ -1658,6 +1674,7 @@ petición siguiente sin reiniciar nada:
 | `PAYROLL_EXPORT_DATE_FORMAT` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
 | `PAYROLL_EXPORT_ENCODING` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
 | `PAYROLL_EXPORT_HEADER_ROW` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
+| `IDENTITY_PIN_LENGTH` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.6 |
 
 **`KIOSK_SERVICE_CODE` — el código de servicio de la tablet.** Es el código
 numérico, de 8 a 12 cifras, con el que se abre la **pantalla de diagnóstico** de
@@ -1886,7 +1903,7 @@ su credencial es una tarjeta física y su acceso al portal es código y PIN.
 
 | Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
 | --- | --- | --- | --- | --- | --- |
-| `IDENTITY_2FA_REQUIRED_ROLES` | — | Roles obligados a llevar segundo factor | `admin,rrhh,auditor` | Añade `responsable_departamento` si tu política es más dura. Quitar un rol de la lista **no desactiva el segundo factor de quien ya lo activó** | No |
+| `IDENTITY_2FA_REQUIRED_ROLES` | — | Roles obligados a llevar segundo factor | `admin,rrhh,auditor,responsable_departamento` | Desde la 2.2.0 incluye al responsable, que corrige jornadas; quien no tenga TOTP lo da de alta en su primer acceso. Acortar la lista lo avisa `product:doctor`. Quitar un rol de la lista **no desactiva el segundo factor de quien ya lo activó** | No |
 | `IDENTITY_2FA_CHALLENGE_MINUTES` | — | Minutos que vive la media autenticación entre la contraseña y el código | `10` | Casi nunca. En minutos y no en horas a propósito | No |
 | `IDENTITY_2FA_MAX_ATTEMPTS` | — | Códigos fallados antes de bloquear | `5` | Casi nunca | No |
 | `IDENTITY_2FA_LOCKOUT_SECONDS` | — | Cuánto dura ese bloqueo | `900` (15 min) | Casi nunca | No |
@@ -1949,6 +1966,10 @@ Desde dónde se puede entrar al portal **no se decide aquí**: es
 | --- | --- | --- | --- | --- | --- |
 | `IDENTITY_PORTAL_SESSION_HOURS` | — | Vida de la sesión del portal | `2` | Casi nunca. Más corta que la del panel a propósito: el portal se abre desde un móvil personal. Restablecer el PIN de alguien **invalida sus sesiones en el acto**, así que este número no es lo que responde a un móvil perdido | No |
 | `IDENTITY_PORTAL_RATE_LIMIT` | — | Peticiones por minuto del portal, por IP **y** por código de empleado a la vez | `10` | Casi nunca. Se aplica por los dos ejes porque en un hotel toda la plantilla sale por la misma línea | No |
+| `IDENTITY_PORTAL_ORIGIN_MAX_FAILURES` | — | Accesos fallidos al portal desde una misma dirección (o su `/64` de IPv6), con cualquier código, que cierran el portal a esa dirección | `20` | Casi nunca. Ver sección 2.6. Bájalo si el portal está abierto a internet y quieres cortar antes; súbelo si mucha plantilla sale por una sola IP | No |
+| `IDENTITY_PORTAL_ORIGIN_WINDOW_SECONDS` | — | Ventana deslizante en la que se cuentan esos fallos, en segundos | `900` | Casi nunca | No |
+| `IDENTITY_PORTAL_ORIGIN_LOCKOUT_SECONDS` | — | Cuánto dura el bloqueo por origen, en segundos. Se responde `429` también con el PIN correcto | `3600` | Casi nunca. Para levantarlo antes: `identity:origin-unlock <ip>` | No |
+| `IDENTITY_ORIGIN_LOCK_AUDIT_CEILING_PER_HOUR` | — | Máximo de asientos `auth.origin_locked` por hora en el registro de auditoría. Por encima, el bloqueo se aplica igual y queda en el log técnico | `60` | Casi nunca. Protege el registro de auditoría, que comparte candado con los fichajes, de un barrido desde miles de direcciones | No |
 
 ### 6.14 Límites del camino del quiosco
 

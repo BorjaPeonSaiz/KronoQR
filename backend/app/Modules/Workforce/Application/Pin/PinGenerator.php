@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\Pin;
 
-use App\Modules\Workforce\Application\Port\PinPolicy;
+use App\Modules\Shared\Application\Port\PinLengthProvider;
+use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
 use Random\RandomException;
 use RuntimeException;
 
 /**
- * Genera el PIN de 6 digitos (RF-ID-09).
+ * Genera el PIN, de 6 u 8 cifras segun la instalacion (RF-ID-09, ADR-050).
  *
  * **`random_int` y nunca `rand` ni `mt_rand`.** Mersenne Twister es predecible:
  * observando unas cuantas salidas se reconstruye su estado y, con el, todas las
@@ -20,11 +21,18 @@ use RuntimeException;
  * si no hay entropia disponible, y eso es lo correcto: es preferible no dar de
  * alta a alguien que darle un PIN adivinable.
  *
+ * **La longitud la decide el ajuste auditado `IDENTITY_PIN_LENGTH`**, que llega
+ * por {@see PinLengthProvider} (regla dura 13). Se lee en cada emision: el
+ * cambio en el panel se aplica al siguiente alta o restablecimiento, y los PIN
+ * ya emitidos siguen valiendo con la suya.
+ *
  * **Por que se rechazan los patrones triviales.** Un espacio de 10^6 con los
  * tres primeros intentos evidentes no es un espacio de 10^6: con cinco intentos
  * antes del bloqueo (RS-12), `000000`, `123456` y `111111` cubren una parte
  * desproporcionada de lo que la gente acepta sin cambiar. La lista concreta es
- * **configuracion** y entra por {@see PinPolicyProvider} (regla dura 13).
+ * **configuracion** y entra por {@see PinPolicyProvider} (regla dura 13); admite
+ * entradas de las dos longitudes y aqui solo pueden coincidir las de la que se
+ * emite.
  *
  * **Rechazo y reintento, no correccion.** Un PIN prohibido se descarta y se
  * genera otro; no se «arregla» sumandole uno ni cambiandole un digito, porque
@@ -44,7 +52,10 @@ final readonly class PinGenerator
      */
     private const int MAX_ATTEMPTS = 20;
 
-    public function __construct(private PinPolicyProvider $policies) {}
+    public function __construct(
+        private PinPolicyProvider $policies,
+        private PinLengthProvider $lengths,
+    ) {}
 
     /**
      * @throws RandomException si el sistema no puede dar aleatoriedad
@@ -52,9 +63,10 @@ final readonly class PinGenerator
     public function generate(): string
     {
         $policy = $this->policies->policy();
+        $length = $this->lengths->current();
 
         for ($attempt = 1; $attempt <= self::MAX_ATTEMPTS; $attempt++) {
-            $pin = $this->sixDigits();
+            $pin = $this->digits($length);
 
             if (! $policy->forbids($pin)) {
                 return $pin;
@@ -68,15 +80,13 @@ final readonly class PinGenerator
     }
 
     /**
-     * Seis digitos con ceros a la izquierda: `000042` es tan valido como
+     * Las cifras pedidas con ceros a la izquierda: `000042` es tan valido como
      * `483920` y excluirlo dejaria fuera el 10 % del espacio.
      *
      * @throws RandomException
      */
-    private function sixDigits(): string
+    private function digits(PinLength $length): string
     {
-        $maximum = 10 ** PinPolicy::LENGTH - 1;
-
-        return str_pad((string) random_int(0, $maximum), PinPolicy::LENGTH, '0', STR_PAD_LEFT);
+        return str_pad((string) random_int(0, $length->maximum()), $length->value, '0', STR_PAD_LEFT);
     }
 }

@@ -7,6 +7,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\Pin\PinGenerator;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
@@ -79,7 +80,12 @@ final readonly class IssueEmployeePinHandler
         return $this->serialized->withChainLock(function () use ($command): ?IssuedPin {
             $issuedAt = $this->clock->now();
 
-            if (! $this->pins->issue($command->employeeUuid, $command->material->hash, $issuedAt)) {
+            // La longitud sale del PIN que se emite y no del ajuste: es la que
+            // tiene ESTE PIN, aunque el ajuste haya cambiado entre el calculo del
+            // hash y esta escritura (ADR-050).
+            $length = PinLength::from(\strlen($command->material->pin));
+
+            if (! $this->pins->issue($command->employeeUuid, $command->material->hash, $length, $issuedAt)) {
                 return null;
             }
 

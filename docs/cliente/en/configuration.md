@@ -676,6 +676,20 @@ your payroll software matches on name rather than on code, that will show; if it
 matches on `employee_code` —which is the sensible choice— nothing happens.
 Before settling on it, generate a test file for a short period and open it.
 
+### 2.6 Portal access: PIN length
+
+| Key | Default | Values | What happens if you change it |
+| --- | --- | --- | --- |
+| `IDENTITY_PIN_LENGTH` | `6` | `6` or `8` | Number of digits staff PINs are **issued** with (on hire and on reset). **It invalidates no PIN**: each one keeps working with the length it was issued with until it is reset, and the portal and the kiosk accept 6 to 8 digits. **Set it to `8` if the portal is reachable from outside a private network** (`PORTAL_INTERNAL_CIDR`, section 6) and reset your staff's PINs as you hand them over in person. **The vendor's support cannot touch it** (403): how strong the key to your staff's record is, is your decision. Since 2.2.0. |
+
+The portal also adds an **origin lockout**: 20 failed sign-ins from the same
+address (or the same IPv6 `/64` network) within 15 minutes close the portal to
+that address for 60 minutes, even with the right PIN. The thresholds are the
+`IDENTITY_PORTAL_ORIGIN_*` variables of section 6. If there is a proxy in
+front, set `TRUSTED_PROXY_CIDR`: without it all staff share the proxy's address
+and one lockout keeps them all out. To lift a lockout early:
+`docker compose exec app php artisan identity:origin-unlock <ip>` (it leaves an audit record).
+
 ---
 
 ## 3. How it is changed
@@ -1579,6 +1593,7 @@ docker compose exec app php artisan identity:create-user   # crea otra cuenta de
 docker compose exec app php artisan identity:reset-password # contraseña nueva, mostrada una vez
 docker compose exec app php artisan identity:deactivate-user # da de baja una cuenta
 docker compose exec app php artisan identity:2fa-reset     # retira un segundo factor
+docker compose exec app php artisan identity:origin-unlock <ip> # levanta el bloqueo por origen del portal
 ```
 
 ---
@@ -1682,6 +1697,7 @@ the next request without restarting anything:
 | `PAYROLL_EXPORT_DATE_FORMAT` | Panel → **Operational settings** (`/settings`) | Section 2.5 |
 | `PAYROLL_EXPORT_ENCODING` | Panel → **Operational settings** (`/settings`) | Section 2.5 |
 | `PAYROLL_EXPORT_HEADER_ROW` | Panel → **Operational settings** (`/settings`) | Section 2.5 |
+| `IDENTITY_PIN_LENGTH` | Panel → **Operational settings** (`/settings`) | Section 2.6 |
 
 **`KIOSK_SERVICE_CODE` — the tablet service code.** It is the numeric code, 8 to
 12 digits, that opens a kiosk's **diagnostics screen** (long press on the clock).
@@ -1909,7 +1925,7 @@ portal is code and PIN.
 
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
 | --- | --- | --- | --- | --- | --- |
-| `IDENTITY_2FA_REQUIRED_ROLES` | — | Roles required to carry a second factor | `admin,rrhh,auditor` | Add `responsable_departamento` if your policy is stricter. Removing a role from the list **does not disable the second factor of whoever already enabled it** | No |
+| `IDENTITY_2FA_REQUIRED_ROLES` | — | Roles required to carry a second factor | `admin,rrhh,auditor,responsable_departamento` | Since 2.2.0 it includes the department manager, who corrects working days; whoever has no TOTP enrols it on first sign-in. Shortening the list is flagged by `product:doctor`. Removing a role from the list **does not disable the second factor of whoever already enabled it** | No |
 | `IDENTITY_2FA_CHALLENGE_MINUTES` | — | Minutes the half-authentication between the password and the code lives | `10` | Almost never. In minutes and not in hours on purpose | No |
 | `IDENTITY_2FA_MAX_ATTEMPTS` | — | Failed codes before locking | `5` | Almost never | No |
 | `IDENTITY_2FA_LOCKOUT_SECONDS` | — | How long that lockout lasts | `900` (15 min) | Almost never | No |
@@ -1972,6 +1988,10 @@ Where the portal can be accessed from **is not decided here**: that is
 | --- | --- | --- | --- | --- | --- |
 | `IDENTITY_PORTAL_SESSION_HOURS` | — | Lifetime of the portal session | `2` | Almost never. Shorter than the panel's on purpose: the portal is opened from a personal phone. Resetting someone's PIN **invalidates their sessions immediately**, so this number is not what answers a lost phone | No |
 | `IDENTITY_PORTAL_RATE_LIMIT` | — | Requests per minute on the portal, per IP **and** per employee code at once | `10` | Almost never. It applies on both axes because in a hotel the whole staff goes out through the same line | No |
+| `IDENTITY_PORTAL_ORIGIN_MAX_FAILURES` | — | Failed portal sign-ins from one address (or its IPv6 `/64`), with any code, that close the portal to that address | `20` | Almost never. See section 2.6. Lower it if the portal is open to the internet and you want to cut earlier; raise it if many staff go out through a single IP | No |
+| `IDENTITY_PORTAL_ORIGIN_WINDOW_SECONDS` | — | Sliding window in which those failures are counted, in seconds | `900` | Almost never | No |
+| `IDENTITY_PORTAL_ORIGIN_LOCKOUT_SECONDS` | — | How long the origin lockout lasts, in seconds. It answers `429` even with the right PIN | `3600` | Almost never. To lift it early: `identity:origin-unlock <ip>` | No |
+| `IDENTITY_ORIGIN_LOCK_AUDIT_CEILING_PER_HOUR` | — | Maximum `auth.origin_locked` entries per hour in the audit log. Above it the lockout still applies and is recorded in the technical log | `60` | Almost never. It protects the audit log, which shares its lock with clock-ins, from a sweep from thousands of addresses | No |
 
 ### 6.14 Limits on the kiosk path
 

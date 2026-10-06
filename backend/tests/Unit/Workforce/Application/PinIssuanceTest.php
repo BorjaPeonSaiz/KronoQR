@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Application\Port\PinLengthProvider;
+use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Workforce\Application\Pin\PinGenerator;
 use App\Modules\Workforce\Application\Port\PinPolicy;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
@@ -23,20 +25,31 @@ use App\Modules\Workforce\Application\Port\PinPolicyProvider;
 /**
  * @param  list<string>  $forbidden
  */
-function pinGeneratorWith(array $forbidden): PinGenerator
+function pinGeneratorWith(array $forbidden, PinLength $length = PinLength::SIX): PinGenerator
 {
-    return new PinGenerator(new class($forbidden) implements PinPolicyProvider
-    {
-        /**
-         * @param  list<string>  $forbidden
-         */
-        public function __construct(private readonly array $forbidden) {}
-
-        public function policy(): PinPolicy
+    return new PinGenerator(
+        new class($forbidden) implements PinPolicyProvider
         {
-            return new PinPolicy($this->forbidden);
-        }
-    });
+            /**
+             * @param  list<string>  $forbidden
+             */
+            public function __construct(private readonly array $forbidden) {}
+
+            public function policy(): PinPolicy
+            {
+                return new PinPolicy($this->forbidden);
+            }
+        },
+        new class($length) implements PinLengthProvider
+        {
+            public function __construct(private readonly PinLength $length) {}
+
+            public function current(): PinLength
+            {
+                return $this->length;
+            }
+        },
+    );
 }
 
 it('genera siempre seis digitos', function (): void {
@@ -129,3 +142,42 @@ it('produce PIN distintos entre llamadas', function (): void {
 
     expect(\count(array_unique($pins)))->toBeGreaterThan(150);
 })->group('RF-ID-09');
+
+it('genera ocho cifras cuando la instalacion emite PIN de ocho', function (): void {
+    // ADR-050: con el portal abierto a internet, el PIN de 8 cifras es lo que
+    // frena a quien rota direcciones. `IssuedPin.pin` admite 6 u 8, nunca 7.
+    $generator = pinGeneratorWith([], PinLength::EIGHT);
+
+    for ($i = 0; $i < 500; $i++) {
+        expect($generator->generate())->toMatch('/^[0-9]{8}$/');
+    }
+})->group('RF-ID-09', 'RF-ID-08');
+
+it('con ocho cifras descarta los excluidos de ocho y no le afectan los de seis', function (): void {
+    // La lista de serie lleva las dos longitudes; el generador solo puede
+    // coincidir con las de la suya. Aqui se excluye un PIN de 8 concreto y se
+    // comprueba que no sale, y que tener excluidos de 6 no impide emitir.
+    $generator = pinGeneratorWith(['12345678', '123456', '000000'], PinLength::EIGHT);
+
+    for ($i = 0; $i < 300; $i++) {
+        expect($generator->generate())->not->toBe('12345678')->toMatch('/^[0-9]{8}$/');
+    }
+})->group('RF-ID-09', 'RS-12');
+
+it('la lista de excluidos admite seis u ocho cifras y rechaza siete', function (): void {
+    // Una entrada de 7 cifras no puede coincidir nunca con nada que el producto
+    // emita: es un error de tecleo en la configuracion.
+    expect(new PinPolicy(['123456', '12345678'])->forbids('12345678'))->toBeTrue()
+        ->and(static fn (): PinPolicy => new PinPolicy(['1234567']))->toThrow(InvalidArgumentException::class);
+})->group('RF-ID-09');
+
+it('la lista de serie excluye los triviales de ocho cifras', function (): void {
+    // La que trae `config/identity.php`. Se lee el fichero tal cual —sin
+    // aplicacion levantada— porque es la lista que de verdad se entrega.
+    /** @var array{pin: array{forbidden: list<string>}} $identity */
+    $identity = require dirname(__DIR__, 4).'/config/identity.php';
+
+    expect($identity['pin']['forbidden'])->toContain(
+        '00000000', '99999999', '12345678', '87654321', '01234567', '09876543',
+    );
+})->group('RF-ID-09', 'RS-12');

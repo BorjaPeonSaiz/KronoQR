@@ -112,6 +112,9 @@ final class SettingsSurface
         // y es lo que el quiosco enseña en pantalla, como el nombre y el logo.
         'PRIVACY_CONTROLLER_NAME' => ['view' => 'BrandingView.vue', 'route' => '/branding'],
         'PRIVACY_POLICY_URL' => ['view' => 'BrandingView.vue', 'route' => '/branding'],
+        // La longitud del PIN (RF-ID-09, ADR-050, 2.2.0). Con los ajustes
+        // operativos: la toca quien decide abrir el portal, una vez.
+        'IDENTITY_PIN_LENGTH' => ['view' => 'OperationalSettingsView.vue', 'route' => '/settings'],
     ];
 
     /** La pantalla pactada para una clave, o cadena vacia si nadie la ha decidido. */

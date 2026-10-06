@@ -559,10 +559,10 @@ it('deja el PIN en claro en una sola respuesta y en ninguna consulta', function 
         ->and(Contract::keys('components', 'schemas', 'PinDeliveryReceipt', 'properties'))
         ->toBe(['employee_uuid', 'delivered_at', 'delivered_by', 'pin_status']);
 
-    // Seis digitos, ni mas ni menos: el patron es lo que impide que un dia entre
-    // por aqui un «PIN» de cuatro.
+    // Seis u ocho cifras, ni siete ni cuatro (ADR-050): solo se emite una de las
+    // dos longitudes de `IDENTITY_PIN_LENGTH`.
     expect(Contract::text('components', 'schemas', 'IssuedPin', 'properties', 'pin', 'pattern'))
-        ->toBe('^[0-9]{6}$');
+        ->toBe('^(?:[0-9]{6}|[0-9]{8})$');
 })->group('RF-ID-09', 'RL-05');
 
 it('no ofrece ningun camino para enviar el PIN por correo', function (): void {
@@ -1422,11 +1422,12 @@ it('no describe la forma del codigo de empleado en el acceso al portal', functio
 
     /** @var array<string, mixed> $code */
     expect(array_key_exists('pattern', $code))->toBeFalse()
-        // El PIN si lo lleva, y no contradice lo anterior: su longitud es
-        // publica y no depende de si el codigo existe ni de si el PIN acierta.
+        // El PIN si lo lleva, y no contradice lo anterior: de 6 a 8 cifras sea
+        // cual sea el ajuste (ADR-050), asi que la forma no depende de si el
+        // codigo existe, de si el PIN acierta ni de la longitud configurada.
         ->and(Contract::text('components', 'schemas', 'PortalLoginRequest', 'properties', 'pin', 'pattern'))
-        ->toBe('^[0-9]{6}$');
-})->group('RS-03', 'RF-ID-06');
+        ->toBe('^[0-9]{6,8}$');
+})->group('RS-03', 'RF-ID-06', 'RF-ID-09');
 
 it('filtra la plantilla por situacion del PIN con el mismo catalogo que la devuelve', function (): void {
     // ADR-013: el contrato manda, y el cliente TypeScript de los tres frontends

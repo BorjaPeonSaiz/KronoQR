@@ -248,10 +248,11 @@ return [
      * PIN del empleado — RF-ID-09, y con el RF-AT-11 (fichaje de respaldo) y
      * RL-05 (acceso al registro propio en el portal).
      *
-     * LA LONGITUD NO ESTA AQUI, Y NO ES UN OLVIDO. Son seis digitos porque lo
-     * dice el requisito y porque el contrato los fija (`IssuedPin.pin`,
-     * `^[0-9]{6}$`): hacerla configurable significaria que una instalacion puede
-     * emitir PIN que su propio cliente TypeScript rechaza.
+     * LA LONGITUD NO ESTA AQUI, Y NO ES UN OLVIDO (ADR-050). Es el ajuste
+     * auditado `IDENTITY_PIN_LENGTH` de `installation_settings` —6 de serie u
+     * 8—, que se cambia en el panel y deja asiento: es una decision del
+     * responsable del tratamiento, no de quien administra el servidor. Los PIN
+     * emitidos con la otra longitud siguen valiendo hasta que se restablecen.
      */
     'pin' => [
 
@@ -266,9 +267,12 @@ return [
          * explicar.
          *
          * De serie: los diez repetidos y las doce secuencias de seis digitos
-         * consecutivos, ascendentes y descendentes, con vuelta por el cero. Un
-         * cliente con una politica mas dura anade los suyos —fechas tipicas, el
-         * codigo postal del hotel— sin tocar el repositorio.
+         * consecutivos, ascendentes y descendentes, con vuelta por el cero, y lo
+         * mismo en OCHO CIFRAS (ADR-050): los diez repetidos y las ocho
+         * secuencias. La lista admite las dos longitudes y el generador solo
+         * descarta las de la longitud con la que emite. Un cliente con una
+         * politica mas dura anade los suyos —fechas tipicas, el codigo postal
+         * del hotel— sin tocar el repositorio.
          */
         'forbidden' => array_values(array_filter(array_map(
             'trim',
@@ -280,6 +284,12 @@ return [
                 '012345', '123456', '234567', '345678', '456789', '567890',
                 // Descendentes.
                 '543210', '654321', '765432', '876543', '987654', '098765',
+                // Ocho cifras: repetidos.
+                '00000000', '11111111', '22222222', '33333333', '44444444',
+                '55555555', '66666666', '77777777', '88888888', '99999999',
+                // Ocho cifras: ascendentes y descendentes.
+                '01234567', '12345678', '23456789', '34567890',
+                '76543210', '87654321', '98765432', '09876543',
             ]))),
         ), static fn (string $pin): bool => $pin !== '')),
 

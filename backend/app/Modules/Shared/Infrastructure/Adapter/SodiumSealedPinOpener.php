@@ -52,8 +52,8 @@ final readonly class SodiumSealedPinOpener implements SealedPinOpener
     /**
      * Techo del criptograma aceptado, en bytes de PIN.
      *
-     * El PIN son seis digitos, asi que el sobre legitimo mide
-     * `SODIUM_CRYPTO_BOX_SEALBYTES + 6`. El margen esta para no clavar aqui una
+     * El PIN son 6 u 8 cifras (ADR-050), asi que el sobre legitimo mide
+     * `SODIUM_CRYPTO_BOX_SEALBYTES + 6` o `+ 8`. El margen esta para no clavar aqui una
      * longitud que el contrato ya fija en otro sitio —y que si algun dia cambia,
      * cambiaria alli—, no para admitir cualquier cosa: sin techo, un criptograma
      * de megabytes obligaria a descifrar antes de poder rechazarlo.

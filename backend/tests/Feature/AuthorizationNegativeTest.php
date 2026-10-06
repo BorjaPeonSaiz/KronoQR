@@ -433,6 +433,11 @@ function installationSettingsEndpoints(): array
         'cambiar la configuracion de la instalacion' => ['PATCH', '/api/v1/settings', [
             'settings' => ['ATTENDANCE_MAX_SHIFT_HOURS' => 10],
         ]],
+        // ADR-050: la longitud del PIN de la plantilla, impacto `access_control`.
+        // Solo `admin`; el soporte del fabricante tampoco (SupportTokenBehaviourTest).
+        'cambiar la longitud del PIN' => ['PATCH', '/api/v1/settings', [
+            'settings' => ['IDENTITY_PIN_LENGTH' => '8'],
+        ]],
         // MB2: la confirmacion de un acento sin contraste no abre ninguna puerta.
         // Quien no puede cambiar la configuracion sigue recibiendo 403, no el 422
         // del contraste ni un 200 por haber «confirmado».

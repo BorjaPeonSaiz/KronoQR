@@ -52,6 +52,7 @@ function conPinAlCosteAntiguo(string $employeeUuid, string $pin): string
 
     DB::table('employees')->where('uuid', $employeeUuid)->update([
         'pin_hash' => $antiguo,
+        'pin_length' => \strlen($pin),
         'pin_issued_at' => now(),
     ]);
 

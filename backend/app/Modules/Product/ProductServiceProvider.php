@@ -78,6 +78,7 @@ use App\Modules\Product\Infrastructure\Adapter\DbKioskServiceCodeProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbOperationalSettingsProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbPayrollLayoutProvider;
+use App\Modules\Product\Infrastructure\Adapter\DbPinLengthProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbWeeklySummaryPreference;
 use App\Modules\Product\Infrastructure\Adapter\Ed25519LicenseVerifier;
 use App\Modules\Product\Infrastructure\Adapter\LaravelProductEventPublisher;
@@ -167,6 +168,7 @@ use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PayrollLayoutProvider;
+use App\Modules\Shared\Application\Port\PinLengthProvider;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
@@ -387,6 +389,18 @@ final class ProductServiceProvider extends ServiceProvider
         $this->app->bind(
             WeeklySummaryPreference::class,
             static fn (Application $app): DbWeeklySummaryPreference => new DbWeeklySummaryPreference(
+                $app->make(GetSettingsHandler::class),
+            ),
+        );
+
+        /*
+         * La longitud con la que se emiten los PIN (RF-ID-09, ADR-050,
+         * `IDENTITY_PIN_LENGTH`). Mismo reparto: la pide `Workforce`, que no
+         * puede importar `Product`. `bind`: se pide una vez por emision.
+         */
+        $this->app->bind(
+            PinLengthProvider::class,
+            static fn (Application $app): DbPinLengthProvider => new DbPinLengthProvider(
                 $app->make(GetSettingsHandler::class),
             ),
         );

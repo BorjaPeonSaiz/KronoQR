@@ -88,6 +88,7 @@ return [
         /* The kiosk privacy notice (RF-KI-09, RL-09, 2.2.0). */
         'PRIVACY_CONTROLLER_NAME' => 'data controller named in the kiosk privacy notice',
         'PRIVACY_POLICY_URL' => 'https address of the full privacy policy',
+        'IDENTITY_PIN_LENGTH' => 'staff PIN length',
     ],
 
 ];

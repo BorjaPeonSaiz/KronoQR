@@ -88,6 +88,8 @@ final class Employee extends Model
     protected $hidden = [
         'national_id_hash',
         'pin_hash',
+        // ADR-050: decir que companeros tienen el PIN corto es decir a quien atacar.
+        'pin_length',
     ];
 
     /**

@@ -70,6 +70,19 @@ enum SettingImpact: string
     case DATA_DISCLOSURE = 'data_disclosure';
 
     /**
+     * Cambiarla **cambia como se autentica una persona**, sin tocar el registro
+     * horario ni los datos que salen (ADR-050).
+     *
+     * Hoy la lleva `IDENTITY_PIN_LENGTH`: pasar de 6 a 8 cifras es la respuesta
+     * a un portal accesible desde internet, y volver a 6 la deshace. No es
+     * `PRESENTATION`, que es lo que de verdad solo se ve, y en el asiento de
+     * `installation_setting.changed` tiene que poder separarse de un logotipo.
+     *
+     * **No enciende `affectsWorkedHours()`**: no mueve ni un minuto.
+     */
+    case ACCESS_CONTROL = 'access_control';
+
+    /**
      * El booleano del asiento de auditoria (paso 8 de la tarea 5.1).
      */
     public function affectsWorkedHours(): bool
