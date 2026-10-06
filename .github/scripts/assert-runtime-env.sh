@@ -122,6 +122,9 @@ readonly -a EXCLUIDAS=(
   # TRUSTED_PROXY_CIDR es de nginx (set_real_ip_from); DB_MAX_SLOT_WAL_KEEP_GB la
   # interpola Compose en el `command:` de postgres: la aplicacion no las lee.
   TRUSTED_PROXY_CIDR DB_MAX_SLOT_WAL_KEEP_GB
+  # BACKUP_WAL_KEY es la subclave del WAL derivada de BACKUP_ENCRYPTION_KEY (ADR-049):
+  # solo la recibe postgres, para su archive_command. app no la lee ni debe tenerla.
+  BACKUP_WAL_KEY
 )
 
 status=0
