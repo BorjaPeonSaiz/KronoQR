@@ -125,6 +125,18 @@ main() {
   # Fin del ultimo segmento archivado: nombre = linea temporal (8) + id (8) + segmento (8).
   pendientes_bytes=0
   pendientes_segmentos=0
+  # Un `.backup` (copia fisica) lleva el nombre de un segmento que el archivador ya habia
+  # archivado antes que el (va detras en el orden de nombres): su FIN es una cota que vale
+  # aunque no haya estado anterior (primera ejecucion tras la copia fisica, o estado
+  # reiniciado). Un `.partial` nombra el segmento EN CURSO al promocionar: lo archivado
+  # llega, como mucho, hasta su INICIO. Se toma el mayor entre la cota y lo recordado.
+  fin_nombre=0
+  if [[ "$archivado" =~ ^[0-9A-F]{8}([0-9A-F]{8})([0-9A-F]{8})\.[0-9A-F]{8}\.backup$ ]]; then
+    fin_nombre="$(((16#${BASH_REMATCH[1]} << 32) + (16#${BASH_REMATCH[2]} + 1) * segmento_bytes))"
+  elif [[ "$archivado" =~ ^[0-9A-F]{8}([0-9A-F]{8})([0-9A-F]{8})\.partial$ ]]; then
+    fin_nombre="$(((16#${BASH_REMATCH[1]} << 32) + 16#${BASH_REMATCH[2]} * segmento_bytes))"
+  fi
+  [ "$fin_nombre" -le "$ultimo_fin" ] || ultimo_fin="$fin_nombre"
   if [[ "$archivado" =~ ^[0-9A-F]{8}([0-9A-F]{8})([0-9A-F]{8})$ ]]; then
     fin_archivado="$(((16#${BASH_REMATCH[1]} << 32) + (16#${BASH_REMATCH[2]} + 1) * segmento_bytes))"
     if [ "$insercion" -gt "$fin_archivado" ]; then

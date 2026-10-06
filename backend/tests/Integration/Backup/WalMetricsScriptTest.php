@@ -267,6 +267,28 @@ it('tras una copia fisica (el ultimo archivado es el .backup) el segmento ya arc
         ->and($state)->toContain('dirty_since=0');
 })->group('RNF-D-02');
 
+it('tras una copia fisica sin ningun estado anterior, el segmento que nombra el .backup cuenta como archivado', function (string $lastArchived): void {
+    // Primera ejecucion justo despues de la copia fisica (o estado reiniciado): no hay
+    // `last_segment_end` que recordar. El `.backup` (y un `.partial`) llevan el nombre de
+    // un segmento que el archivador ya archivo antes que ellos: su fin es la cota. Sin
+    // esto, ⑧ veia segmentos «pendientes» que nunca se limpiaban hasta el siguiente
+    // segmento real, y una madrugada sin fichajes subiria el RPO sin dato en riesgo.
+    $sandbox = walMetricsSandbox();
+
+    $process = runWalMetrics($sandbox, ['STUB_ARCHIVER' => walMetricsArchiverRow(lastArchived: $lastArchived, insertLsn: '0/4000100', activity: 10)]);
+
+    $series = walMetricsSeries($sandbox);
+    $state = (string) file_get_contents($sandbox['metrics'].'/.wal-exporter.state');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($series['kronoqr_wal_unarchived_segments'])->toBe('0')
+        ->and($series['kronoqr_wal_unarchived_bytes'])->toBe((string) 0x100)
+        ->and($state)->toContain('last_segment_end='.(0x4000000));
+})->with([
+    'copia fisica' => '000000010000000000000003.00000028.backup',
+    'segmento parcial (en curso: lo archivado llega hasta su inicio)' => '000000010000000000000004.partial',
+])->group('RNF-D-02');
+
 it('tras una copia fisica sin fichajes no sube la edad de lo no archivado, y un .history tampoco borra el fin conocido', function (string $lastArchived): void {
     $sandbox = walMetricsSandbox();
     walMetricsState($sandbox, "archived_wal=000000010000000000000003\nlast_segment_end=".(0x4000000)."\ndirty_since=0\ndirty_lsn=0\nactivity=10\n");

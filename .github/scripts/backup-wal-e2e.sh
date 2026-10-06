@@ -337,8 +337,12 @@ mode_clean() {
   wait_for "as_root test -s '${BACKUP_PATH}/metrics/kronoqr_wal.prom'" 90 "kronoqr_wal.prom aparece en BACKUP_PATH/metrics"
   [ "$(metric kronoqr_wal.prom kronoqr_wal_archive_timeout_seconds)" = "900" ] || fail "archive_timeout no es 900 s en la metrica"
   ok "kronoqr_wal.prom publicado; archive_timeout=900"
+  # Con escrituras antes del cambio de segmento: pg_switch_wal() sobre un segmento vacio es
+  # un no-op y no archiva nada, y la comprobacion dependeria de lo que hubiera escrito el
+  # paso anterior (la copia fisica del paso 4 deja un `.backup` como ultimo archivado).
+  sql "INSERT INTO ci_wal_probe(scan_id, employee, kiosk) SELECT 'w-' || g, 'e-' || g, 'k-' || g FROM generate_series(1, 200) g"
   switch_wal
-  wait_for "dc exec -T scheduler bash /opt/kronoqr/scripts/wal-metrics.sh && [ \"\$(metric kronoqr_wal.prom kronoqr_wal_unarchived_segments)\" = '0' ]" 60 "la exposicion vuelve a 0 tras archivar"
+  wait_for "dc exec -T scheduler bash /opt/kronoqr/scripts/wal-metrics.sh && [ \"\$(metric kronoqr_wal.prom kronoqr_wal_unarchived_segments)\" = '0' ]" 90 "la exposicion vuelve a 0 tras archivar"
   ok "tras pg_switch_wal() sin segmentos pendientes"
 
   # PARAR EL ARCHIVADO: el directorio de WAL deja de ser escribible por postgres.
