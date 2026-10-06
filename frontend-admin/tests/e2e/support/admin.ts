@@ -40,6 +40,7 @@ import type {
   EmploymentContract,
   Incident,
   IncidentCollection,
+  IssuedPin,
   IssuedSupportGrant,
   License,
   LivePresenceBoard,
@@ -48,6 +49,7 @@ import type {
   PairingConfirmed,
   PeriodReport,
   PeriodReportRow,
+  PinDeliveryReceipt,
   Session,
   SetupStatus,
   Site,
@@ -3576,15 +3578,18 @@ export async function stubManagementApi(
           await json(route, 200, DEPARTMENTS)
           return
         case 'GET /api/v1/employees': {
-          // El unico filtro que el doble aplica de verdad es `teleworking`
-          // (RF-GP-01); los demas solo se comprueban en las pruebas unitarias.
+          // Los unicos filtros que el doble aplica de verdad son `teleworking`
+          // (RF-GP-01) y `pin_status` (RF-ID-09: el enlace «personas sin PIN»
+          // del asistente de importacion, RF-GP-05); los demas solo se
+          // comprueban en las pruebas unitarias.
           const teleworkingParam = url.searchParams.get('teleworking')
-          const matching =
-            teleworkingParam === null
-              ? employeesState
-              : employeesState.filter(
-                  (candidate) => candidate.teleworking === (teleworkingParam === 'true'),
-                )
+          const pinStatusParam = url.searchParams.get('pin_status')
+          const matching = employeesState.filter(
+            (candidate) =>
+              (teleworkingParam === null ||
+                candidate.teleworking === (teleworkingParam === 'true')) &&
+              (pinStatusParam === null || candidate.pin_status === pinStatusParam),
+          )
           const collection: EmployeeCollection = {
             data: matching,
             meta: { page: 1, per_page: 30, total: matching.length, total_pages: 1 },
@@ -3797,6 +3802,55 @@ export async function stubManagementApi(
 
           Object.assign(target, patch)
           await json(route, 200, target)
+          return
+        }
+        case `POST /api/v1/employees/${EMPLOYEE_UUID}/pin/reset`: {
+          // Emision o restablecimiento del PIN (RF-ID-09): la misma accion. Sobre
+          // una ficha `pending` es la primera emision (RF-GP-05); que el asiento
+          // diga `pin.issued` o `pin.reset` lo prueba el backend. Aqui basta con
+          // un PIN que enseñar una vez y la ficha pasando a `issued`.
+          const target = employeesState.find((candidate) => candidate.uuid === EMPLOYEE_UUID)
+
+          if (target === undefined) {
+            await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Empleado no encontrado')
+            return
+          }
+
+          Object.assign(target, { pin_status: 'issued' })
+          const issued: IssuedPin = {
+            employee_uuid: EMPLOYEE_UUID,
+            pin: '582913',
+            issued_at: '2026-09-08T09:00:00.000000Z',
+            pin_status: 'issued',
+          }
+
+          await json(route, 200, issued)
+          return
+        }
+        case `POST /api/v1/employees/${EMPLOYEE_UUID}/pin/deliver`: {
+          // Entrega en mano (RF-ID-09, RL-05). Como el servidor, no se registra
+          // dos veces: la segunda responde `409`.
+          const target = employeesState.find((candidate) => candidate.uuid === EMPLOYEE_UUID)
+
+          if (target === undefined) {
+            await problem(route, 404, 'urn:kronoqr:problem:not-found', 'Empleado no encontrado')
+            return
+          }
+
+          if (target.pin_status !== 'issued') {
+            await problem(route, 409, 'urn:kronoqr:problem:conflict', 'Conflicto')
+            return
+          }
+
+          Object.assign(target, { pin_status: 'delivered' })
+          const receipt: PinDeliveryReceipt = {
+            employee_uuid: EMPLOYEE_UUID,
+            delivered_at: '2026-09-08T09:01:00.000000Z',
+            delivered_by: USER.uuid,
+            pin_status: 'delivered',
+          }
+
+          await json(route, 200, receipt)
           return
         }
         case `POST /api/v1/employees/${EMPLOYEE_UUID}/offboard`: {

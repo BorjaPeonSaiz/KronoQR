@@ -188,18 +188,57 @@ it('exige la confirmacion para aplicar', function (): void {
     expect(DB::table('employees')->count())->toBe(0);
 })->group('RF-GP-05');
 
-it('emite el PIN de cada alta, igual que el alta individual', function (): void {
-    // La importacion reutiliza `RegisterEmployeeHandler` en lugar de un camino
-    // propio: sin PIN no se puede fichar por respaldo (RF-AT-11) ni entrar al
-    // portal (RL-05), y quien entrara por un camino paralelo tendria medio ciclo
-    // de vida.
+it('deja pendiente el PIN de cada alta', function (): void {
+    // RF-ID-09 y RF-GP-05: un PIN se muestra una sola vez y no cabe en un
+    // informe de quinientas filas. La importacion no lo emite; RRHH lo emite
+    // desde la ficha al entregar la tarjeta.
     WorkforceFixtures::site();
 
-    importAndApply(importerToken(), importHeaders()."\n"."Youssef,Amrani,12345678Z,,,2026-01-15\n")
+    importAndApply(importerToken(), importHeaders()."\n"
+        ."Youssef,Amrani,12345678Z,,,2026-01-15\n"
+        ."Marta,Vidal,87654321X,,,2026-02-01\n")
+        ->assertValidResponse(200)
+        ->assertJsonPath('summary.create', 2);
+
+    expect(DB::table('employees')->count())->toBe(2)
+        ->and(DB::table('employees')->whereNotNull('pin_hash')->count())->toBe(0)
+        ->and(DB::table('employees')->whereNotNull('pin_issued_at')->count())->toBe(0)
+        ->and(DB::table('employees')->whereNotNull('pin_length')->count())->toBe(0);
+})->group('RF-GP-05', 'RF-ID-09');
+
+it('muestra las altas importadas en el listado de PIN pendientes', function (): void {
+    // Pendiente no es escondido: el aviso del asistente enlaza a este filtro.
+    WorkforceFixtures::site();
+    $token = importerToken();
+
+    importAndApply($token, importHeaders()."\n"
+        ."Youssef,Amrani,12345678Z,,,2026-01-15\n"
+        ."Marta,Vidal,87654321X,,,2026-02-01\n")
         ->assertValidResponse(200);
 
-    expect(DB::table('employees')->whereNotNull('pin_hash')->count())->toBe(1);
+    Api::as($token)->get('/api/v1/employees', ['pin_status' => 'pending'])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('meta.total', 2)
+        ->assertJsonPath('data.0.pin_status', 'pending')
+        ->assertJsonPath('data.1.pin_status', 'pending');
 })->group('RF-GP-05', 'RF-ID-09');
+
+it('audita cada alta importada sin ningun pin.issued', function (): void {
+    // Regla dura 6: `employee.hired` con `via_import` por persona y
+    // `employee.imported` por lote. Un `pin.issued` aqui diria que existe un PIN
+    // que nadie ha visto.
+    WorkforceFixtures::site();
+
+    importAndApply(importerToken(), importHeaders()."\n"
+        ."Youssef,Amrani,12345678Z,,,2026-01-15\n"
+        ."Marta,Vidal,87654321X,,,2026-02-01\n")
+        ->assertValidResponse(200);
+
+    expect(DB::table('audit_log')->where('action', AuditAction::EmployeeHired->value)->where('payload->via_import', true)->count())->toBe(2)
+        ->and(DB::table('audit_log')->where('action', AuditAction::EmployeesImported->value)->count())->toBe(1)
+        ->and(DB::table('audit_log')->where('action', AuditAction::PinIssued->value)->count())->toBe(0);
+})->group('RF-GP-05', 'RF-ID-09', 'RL-04');
 
 it('genera el codigo de empleado y no lo lee del fichero', function (): void {
     // El codigo es opaco (doc 01 §5.5): uno tomado del sistema anterior seria un

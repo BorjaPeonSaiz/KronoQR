@@ -565,6 +565,18 @@ it('deja el PIN en claro en una sola respuesta y en ninguna consulta', function 
         ->toBe('^(?:[0-9]{6}|[0-9]{8})$');
 })->group('RF-ID-09', 'RL-05');
 
+it('no ofrece en el informe de importacion ningun hueco para un PIN', function (): void {
+    // RF-GP-05 y RF-ID-09: la importacion no emite PIN. Un PIN que se muestra
+    // una vez no cabe en un informe de quinientas filas, y un campo para el
+    // seria la invitacion a volver a emitirlo ahi.
+    expect(Contract::value('components', 'schemas', 'EmployeeImportReport', 'additionalProperties'))->toBeFalse()
+        ->and(Contract::keys('components', 'schemas', 'EmployeeImportReport', 'properties'))
+        ->toBe(['mode', 'file', 'summary', 'rows', 'truncated'])
+        ->and(Contract::value('components', 'schemas', 'EmployeeImportRow', 'additionalProperties'))->toBeFalse()
+        ->and(Contract::keys('components', 'schemas', 'EmployeeImportRow', 'properties'))
+        ->toBe(['line', 'label', 'outcome', 'employee_uuid', 'changes', 'messages']);
+})->group('RF-GP-05', 'RF-ID-09');
+
 it('no ofrece ningun camino para enviar el PIN por correo', function (): void {
     // Regla dura 12 y ADR-015: el producto no depende del correo del empleado y
     // la entrega del PIN es un acto presencial y registrado. Ni «reenviar PIN»,
