@@ -105,6 +105,18 @@ Have somewhere to write it down **before** pressing "Add employee". The PIN
 serves two purposes: signing in to the portal, and clocking at the tablet when
 the card is not to hand.
 
+**This applies to adding people one at a time, not to the import.** People who
+come in through a file upload are created with their PIN **not issued**: they
+cannot clock in with a PIN at the tablet or open their portal until they have
+one. On their record, the PIN state reads "Not issued" and the **"Issue the
+PIN"** button appears. Press it **when you are about to hand over their card**,
+not before: the PIN is shown once only, at that moment, and is handed over in
+person together with the card (section 2.6). To see who is missing one, filter
+**Employees** by **PIN state → "Not issued"**, from the menu and at any time;
+if the upload was done in the onboarding wizard, its final summary links to that
+same list. Why the import does not issue it is
+explained in [`configuration.md`](configuration.md), section 3 ter.5.
+
 **The PIN is handed over in person, face to face.** There is no electronic
 delivery at all: no message, no recovery link. It is not an oversight: a key
 that travels through a mailbox ends up clocking for its owner without anyone
@@ -178,10 +190,20 @@ What it says exactly, and why it is worth reading once before handing it out:
 ### 2.6 The handover: a single act
 
 **The card, the PIN and the sheet are handed over together, in person, at the
-same moment.** The handover dialog says so on screen. Afterwards the two
-handovers are recorded —"Record the handover" for the card and "Record the PIN
-handover"—, and they are logged with the date and with you as the person
-responsible.
+same moment.** The handover dialog says so on screen, and warns you if that
+person's PIN has not been issued yet. Afterwards the two handovers are recorded
+—"Record the handover" for the card and "Record the PIN handover"—, and they are
+logged with the date and with you as the person responsible.
+
+**If the record says "Not issued"** —the usual case for someone who came in
+through the import—, the PIN does not exist yet and there is nothing to hand
+over. The order, with the person in front of you, is this:
+
+1. On their record, press **"Issue the PIN"**. The PIN appears **once only**:
+   give it to them at that moment, together with the card and the sheet.
+2. The state changes to "Issued, not handed over yet". Press **"Record the PIN
+   handover"** and, on the credentials board, "Record the handover" for the
+   card.
 
 ![Employee record showing the status of their card and their PIN](../img/en/rrhh-04-ficha-empleado.png)
 

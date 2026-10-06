@@ -1004,8 +1004,10 @@ acto le entregas también el PIN y registras la entrega.
 > día que la olvide.
 
 Para ver a quién le falta, en **Empleados** filtra por **Estado del PIN →
-«Sin emitir»**. El asistente de puesta en marcha te lleva a ese mismo listado
-nada más importar. En cuanto le emites el PIN a alguien, sale de ese filtro y
+«Sin emitir»**; al listado se llega desde el menú en cualquier momento. Si
+importas dentro del asistente de puesta en marcha, el paso de importación te
+dice cuántas personas han quedado sin PIN, y el resumen final del asistente, al
+cerrarlo, enlaza a ese mismo listado filtrado. En cuanto le emites el PIN a alguien, sale de ese filtro y
 pasa a «Emitido, pendiente de entregar» hasta que registras la entrega.
 
 ### 3 ter.6 Si tu fichero usa otros nombres de columna

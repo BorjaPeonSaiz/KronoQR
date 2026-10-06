@@ -1018,8 +1018,10 @@ card**, and in that same act you give them the PIN and record the handover.
 > day they forget it.
 
 To see who is missing one, filter **Employees** by **PIN state → «Not
-issued»**. The onboarding wizard takes you to that same list right after
-importing. As soon as you issue someone's PIN, they leave that filter and move
+issued»**; you can reach that list from the menu at any time. If you import
+inside the onboarding wizard, the import step tells you how many people have
+been left without a PIN, and the wizard's final summary, when you close it,
+links to that same filtered list. As soon as you issue someone's PIN, they leave that filter and move
 to «Issued, not handed over yet» until you record the handover.
 
 ### 3 ter.6 If your file uses other column names
