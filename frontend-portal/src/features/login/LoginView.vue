@@ -39,7 +39,10 @@ const FALLBACK_LOCK_SECONDS = 60
 
 // Bloqueo del origen (ADR-050): cuenta atras de presentacion a partir de
 // `Retry-After`, sin reloj del dominio. No dice nada del codigo ni del PIN.
-const lockedSeconds = ref(0)
+// La hora limite se fija una vez con Date.now(); el intervalo solo refresca la vista, asi
+// que una pestaña en segundo plano no hace derivar la cuenta atras.
+const lockedUntil = ref(0)
+const nowMs = ref(Date.now())
 const lockedMinutes = ref(1)
 let lockTimer: ReturnType<typeof setInterval> | null = null
 
@@ -52,18 +55,23 @@ function stopLockTimer(): void {
 
 function startLock(seconds: number): void {
   stopLockTimer()
-  lockedSeconds.value = Math.max(1, seconds)
-  lockedMinutes.value = Math.ceil(lockedSeconds.value / 60)
+  const total = Math.max(1, seconds)
+  nowMs.value = Date.now()
+  lockedUntil.value = nowMs.value + total * 1000
+  lockedMinutes.value = Math.ceil(total / 60)
   lockTimer = setInterval(() => {
-    lockedSeconds.value -= 1
+    nowMs.value = Date.now()
 
-    if (lockedSeconds.value <= 0) {
-      lockedSeconds.value = 0
+    if (nowMs.value >= lockedUntil.value) {
+      lockedUntil.value = 0
       stopLockTimer()
     }
   }, 1000)
 }
 
+const lockedSeconds = computed(() =>
+  lockedUntil.value === 0 ? 0 : Math.max(0, Math.ceil((lockedUntil.value - nowMs.value) / 1000)),
+)
 const isLocked = computed(() => lockedSeconds.value > 0)
 const lockedClock = computed(() => {
   const minutes = Math.floor(lockedSeconds.value / 60)
@@ -100,7 +108,7 @@ async function submit(): Promise<void> {
 
   submitting.value = true
   error.value = null
-  lockedSeconds.value = 0
+  lockedUntil.value = 0
   stopLockTimer()
 
   try {
@@ -143,7 +151,10 @@ async function submit(): Promise<void> {
         class="mt-4 rounded-kq border border-kq-danger bg-kq-danger-soft p-4 text-kq-danger"
       >
         <p class="font-semibold">{{ t('login.originLocked.title') }}</p>
-        <p class="mt-1">{{ t('login.originLocked.advice', { minutes: lockedMinutes }) }}</p>
+        <p class="mt-1">
+          {{ t('login.originLocked.advice', { minutes: lockedMinutes }, lockedMinutes) }}
+          {{ t('login.originLocked.alternative') }}
+        </p>
       </div>
 
       <form class="mt-6 flex flex-col gap-5" novalidate @submit.prevent="submit">

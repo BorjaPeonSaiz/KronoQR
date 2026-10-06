@@ -272,7 +272,7 @@ describe('LoginView', () => {
     }
 
     it('muestra un mensaje propio, deshabilita el boton y descuenta hasta rehabilitarlo', async () => {
-      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
       stubFetch(() => lockedResponse())
 
       const wrapper = await mountView(LoginView)
@@ -306,8 +306,56 @@ describe('LoginView', () => {
       expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
     })
 
+    it('usa singular y plural en el consejo de espera', async () => {
+      for (const [seconds, text, locale] of [
+        [30, '1 minuto', 'es'],
+        [61, '2 minutos', 'es'],
+        [30, '1 minute', 'en'],
+        [61, '2 minutes', 'en'],
+      ] as const) {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+        stubFetch(
+          () =>
+            new Response(
+              JSON.stringify({
+                type: 'urn:kronoqr:problem:portal-origin-locked',
+                title: 'x',
+                status: 429,
+              }),
+              {
+                status: 429,
+                headers: {
+                  'Content-Type': 'application/problem+json',
+                  'Retry-After': String(seconds),
+                },
+              },
+            ),
+        )
+
+        const wrapper = await mountView(LoginView, { locale })
+
+        await fillAndSubmit(wrapper)
+        expect(wrapper.find('[role="alert"]').text()).toContain(text)
+        wrapper.unmount()
+        vi.useRealTimers()
+      }
+    })
+
+    it('la cuenta atras sale de la hora limite aunque el intervalo se retrase', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+      stubFetch(() => lockedResponse())
+
+      const wrapper = await mountView(LoginView)
+
+      await fillAndSubmit(wrapper)
+      vi.setSystemTime(Date.now() + 90_000)
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(wrapper.find('#login-locked-note').text()).toContain('0:29')
+    })
+
     it('un 429 sin ese type mantiene el comportamiento del limitador general', async () => {
-      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
       stubFetch(
         () =>
           new Response(JSON.stringify({ type: 'urn:x', title: 'x', status: 429 }), {
