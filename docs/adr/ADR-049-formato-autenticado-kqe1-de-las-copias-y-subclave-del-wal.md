@@ -130,8 +130,10 @@ sobre el WAL archivado no es de fiar sin una copia externa.
   purga por antigüedad no los retenga 8 días más. Orden: cifrar a `.part`, verificar, `mv` a `.gz.enc` y **solo entonces** `rm`
   del `.gz`. Lo lanza `update.sh` y lo continúa `archive-wal.sh` de forma oportuna. La purga recorre `*.gz` **y** `*.gz.enc`.
 - **Copias de la 2.1.0** (`Salted__`, sin MAC): se restauran solo con **`--accept-unauthenticated`**, que se pasa
-  **por invocación** (variable `KRONOQR_ACCEPT_UNAUTHENTICATED` solo con `-e`; nunca en el `.env` ni en el compose; `doctor.sh`
-  avisa si está). **El `.sha256` sigue siendo obligatorio** (y mientras la bandera exista no autentica nada: quien escribe en
+  **por invocación**: la opción de línea de órdenes en `restore.sh` y `restore-drill.sh` (los scripts del anfitrión ignoran la
+  variable `KRONOQR_ACCEPT_UNAUTHENTICATED` con un aviso, para que no llegue heredada del perfil de root o de una crontab);
+  la variable solo la lee `kronoqr-extract-base`, dentro de la imagen de PostgreSQL, con `docker run -e`. Nunca en el `.env`
+  ni en el compose; `doctor.sh` falla si está en el `.env` o en las tablas de cron. **El `.sha256` sigue siendo obligatorio** (y mientras la bandera exista no autentica nada: quien escribe en
   `BACKUP_PATH` lo recalcula). El asiento `system.restored_from_backup` lleva `integrity=legacy_accepted`.
 - **La vuelta atrás de `update.sh`** pasa la bandera **solo** para la copia previa que acaba de crear, comparando con el
   SHA-256 que **él mismo calculó** y guardó en `/var/log/kronoqr` (`root:root 0600`), no con el `.sha256` de `BACKUP_PATH`.
