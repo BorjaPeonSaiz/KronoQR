@@ -111,35 +111,38 @@ Además del bloqueo por empleado, que se queda como está, el acceso al portal c
 
 ### 3. Aviso cuando `PORTAL_INTERNAL_CIDR` no es una red privada
 
-- **Privada** es un rango contenido entero en `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` o `127.0.0.0/8`
-  (y, en IPv6, `fc00::/7` o `::1/128`). Cualquier otro, incluidos `0.0.0.0/0` y el CGNAT `100.64.0.0/10`, es
-  **público**.
-- **Severidad: aviso, no fallo.** Abrir el portal es una decisión legítima del cliente y de su DPO (doc 07 §4, «exponer el portal fuera de la red interna»); el
-  instalador no puede impedirla, solo asegurarse de que se toma sabiendo lo que implica. Ni `install.sh` ni
-  `update.sh` se detienen ni cambian su código de salida por esto.
+Lo implementó `devops-observabilidad` en esta misma rama (commit `549f3325`), y este punto fija lo que hace:
+
+- **Privada** es un rango contenido entero en `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`,
+  `169.254.0.0/16` o el CGNAT `100.64.0.0/10` (habitual en las VPN de malla). Cualquier otro, incluido `0.0.0.0/0`, es
+  **público**. Solo IPv4: el borde solo escucha en IPv4, así que no hay rangos IPv6 (ULA) que clasificar.
+- **Severidad: aviso, no fallo.** Abrir el portal es una decisión legítima del cliente y de su DPO (doc 07 §4,
+  «exponer el portal fuera de la red interna»); el instalador no puede impedirla, solo asegurarse de que se toma
+  sabiendo lo que implica. Ni `install.sh` ni `update.sh` se detienen ni cambian su código de salida por esto.
 - **`infra/scripts/lib/checks.sh`** (`check_network_cidrs`, que comparten `install.sh`, `update.sh` y `doctor.sh`)
-  escribe el aviso y recomienda, por este orden: **`IDENTITY_PIN_LENGTH=8`** desde el panel, `ADMIN_INTERNAL_CIDR`
-  (punto 4) y `TRUSTED_PROXY_CIDR` si hay un proxy delante (sin él, toda la plantilla comparte un origen y el punto 2
-  la bloquea entera).
+  escribe el aviso y recomienda el **PIN de 8 cifras**, que se configura en los ajustes del producto: es el ajuste
+  **`IDENTITY_PIN_LENGTH`** del punto 1. Recomienda además `ADMIN_INTERNAL_CIDR` (punto 4) y `TRUSTED_PROXY_CIDR` si
+  hay un proxy delante (sin él, toda la plantilla comparte un origen y el punto 2 la bloquea entera).
 - **`product:doctor`** (sonda `EdgeNetworksProbe`) aplica la misma clasificación sobre `security.network.portal_internal`
-  y da `warn` cuando el portal es público, con un hallazgo más cuando además el PIN está en 6, cuando
-  `ADMIN_INTERNAL_CIDR` está vacía, y con el **recuento de personas en alta que conservan un PIN de 6 cifras** cuando
-  el ajuste está en 8. Solo el número, nunca quiénes (regla dura 21).
-- **Constancia en `audit_log`.** Acción nueva **`system.network_exposure_recorded`**, con `payload` cerrado
-  `{portal_exposure: internal|public, admin_filter: open|restricted, source: install|update}`. **Sin los CIDR**: el
-  asiento viaja en el paquete de diagnóstico (ADR-020) y la topología de la red del hotel no tiene por qué ir con él.
-  La escriben `install.sh` al terminar y `update.sh` después de `system.updated`, con `compliance:record-system-event`,
-  y el comando **solo escribe si la clasificación cambia** respecto del último asiento de esa acción. Exponer el portal
-  cambia quién puede intentar leer datos personales: es un hecho con relevancia legal (regla dura 6).
+  y da `warn` cuando el portal es público. **Pendiente de este ADR** (no está aún): un hallazgo más cuando además
+  `IDENTITY_PIN_LENGTH` está en 6, otro cuando `ADMIN_INTERNAL_CIDR` está vacía, y el **recuento de personas en alta
+  que conservan un PIN de 6 cifras** cuando el ajuste está en 8. Solo el número, nunca quiénes (regla dura 21).
+- **Constancia.** En la **actualización**, el asiento `system.updated` lleva la clave opcional **`portal_exposed: true`**
+  cuando el portal no está en una red privada (la calcula `kq_portal_exposed` en `lib/checks.sh`; `SystemEventPayload`
+  la admite; ausente significa red privada). Solo el booleano: **sin los CIDR**, porque el asiento viaja en el paquete
+  de diagnóstico (ADR-020) y la topología de la red del hotel no tiene por qué ir con él. En la **instalación** no hay
+  asiento —`install.sh` no escribe ninguno: la cadena empieza con el alta del primer administrador—, y la constancia es
+  el aviso en el informe de instalación. Exponer el portal cambia quién puede intentar leer datos personales: es un
+  hecho con relevancia legal (regla dura 6), y por eso queda en la cadena en la primera actualización.
 
 ### 4. PP-10: `ADMIN_INTERNAL_CIDR`, opcional y vacía de serie
 
 Variable opcional del `.env` que cierra **`/admin/`** (los ficheros del panel) y **`/api/v1/auth/*`** (la única puerta
 por la que se obtiene un token de gestión) a un rango IPv4: fuera de él, `403` `problem+json` en nginx, antes de
-PHP-FPM. **Vacía, no filtra, y es el valor de serie por decisión del propietario.** No cubre el resto de `/api/v1/*`,
-que sin token de gestión no sirve nada, ni el portal ni los quioscos. Lo implementa `devops-observabilidad`
-(`07-kronoqr-admin-net.envsh`, `geo $kronoqr_admin_allowed`) y lo documentan `.env.example` y
-`docs/cliente/endurecimiento.md` §1.
+PHP-FPM, con cuerpo bilingüe y sin IP ni CIDR. **Vacía, no filtra, y es el valor de serie por decisión del propietario.** No cubre el resto de `/api/v1/*`,
+que sin token de gestión no sirve nada, ni el portal, ni los quioscos, ni `/metrics`. Lo implementó `devops-observabilidad` en esta rama (commit `21313850`:
+`07-kronoqr-admin-net.envsh`, `geo $kronoqr_admin_allowed`, `spa.conf`) y lo documentan `.env.example`,
+`docs/cliente/endurecimiento.md` §1 y `configuracion.md`, con sus versiones en inglés.
 
 ### 5. Segundo factor obligatorio también para `responsable_departamento`
 
@@ -195,8 +198,9 @@ aceptados en el doc 07; los enumera para que la aceptación sea explícita:
 3. **Panel abierto de serie** (PP-10). Con `ADMIN_INTERNAL_CIDR` vacía, `/admin/` y `/api/v1/auth/*` quedan a la vista
    de internet si el portal lo está. Quedan contraseña, segundo factor obligatorio para los cuatro roles, 5 r/m y el
    bloqueo de cuenta.
-4. **Cambios del `.env` a mano.** Si alguien abre el portal editando el `.env` y reiniciando sin `update.sh`, el asiento
-   `system.network_exposure_recorded` no se escribe hasta la siguiente actualización; `doctor.sh` y `product:doctor`
+4. **Constancia diferida.** Una instalación nueva con el portal abierto no deja asiento hasta su primera
+   actualización (solo el aviso del informe), y quien abre el portal editando el `.env` y reiniciando sin `update.sh`
+   tampoco: `portal_exposed` llega con el siguiente `system.updated`. `doctor.sh` y `product:doctor`
    sí lo avisan desde el primer momento.
 5. **La zona `portal_login` de nginx cuenta por dirección IPv6 completa**, no por `/64`; el `/64` lo aplica la
    aplicación.
@@ -208,8 +212,8 @@ aceptados en el doc 07; los enumera para que la aceptación sea explícita:
   `IDENTITY_PIN_LENGTH`, `SettingImpact` gana `access_control`, `/me/login` documenta el bloqueo por origen y su `429`
   con `urn:kronoqr:problem:portal-origin-locked`, y RS-06 en la descripción de `Identity` y de `/auth/login`.
   Todo aditivo en la v1 (ADR-012).
-- **Esquema:** `employees.pin_length` (expansión, reversible). `AuditAction` gana `auth.origin_locked` y
-  `system.network_exposure_recorded`, y `SystemEventPayload` las claves de la segunda.
+- **Esquema:** `employees.pin_length` (expansión, reversible). `AuditAction` gana `auth.origin_locked`.
+  `SystemEventPayload` ya admite `portal_exposed` en `system.updated` (commit `549f3325`).
 - **Doc 01:** RF-ID-01, RF-ID-06, RF-ID-08, RF-ID-09, RS-06, RS-12 y la fila de STRIDE del PIN; glosario,
   «bloqueo por origen». **Doc 02:** §7.3 (fila y nota 1 del responsable) y §7.5. **Doc 05:** «PIN de 6 dígitos» pasa a
   «de 6 u 8 cifras».
@@ -223,7 +227,7 @@ aceptados en el doc 07; los enumera para que la aceptación sea explícita:
 |---|---|
 | 1 | `Unit/Shared/Domain/PinLengthTest` (dos casos, 7 imposible); `Unit/Workforce/PinGeneratorTest` (8 cifras con el ajuste en 8; lista de excluidos por longitud); `Feature/Workforce/PinLengthTransitionTest`: con el ajuste en 8, `pin/reset` emite 8 y escribe `pin_length = 8`, un PIN de 6 anterior sigue abriendo el portal y `/scan/pin`, 7 cifras es `401` y cuenta, 9 es `400`; `Feature/Product/SettingsTest`: `"7"` es `422`; contrato de `/me/login`, `IssuedPin` y ajustes; `frontend-kiosk` (teclado de 6 a 8 con «Aceptar») y E2E del portal con un PIN de 8 |
 | 2 | `Unit/Identity/Domain/OriginLockoutPolicyTest` (umbral, ventana deslizante, el bloqueo no se alarga) y `RequestOriginTest` (`/32`, `/64`, IPv4 mapeada); `Feature/Identity/PortalOriginLockoutTest`: el fallo 20 abre el bloqueo, el 21 recibe `429` con `Retry-After` **también con el PIN correcto**, el contador por empleado no se mueve durante el bloqueo, otro origen no se ve afectado, un acierto no reinicia la cuenta, un solo `auth.origin_locked` por apertura y la métrica; `Integration/Identity/CachePortalOriginAttemptsTest` con Redis caído (sigue contando en `file`); `RouteRateLimitZonesTest` y `QualityGatesTest` para `portal_login` |
-| 3 | Pruebas de `lib/checks.sh` (privado, público, `0.0.0.0/0`, `100.64.0.0/10`, ULA): aviso sin cambiar el código de salida; `Unit/Product/EdgeNetworksProbeTest`; `Feature/Compliance/NetworkExposureEventTest` (no se repite si la clasificación no cambia, sin CIDR en el `payload`); etapa de instalación limpia de la CI con `PORTAL_INTERNAL_CIDR=0.0.0.0/0` |
+| 3 | Pruebas de `lib/checks.sh` (privado, público, `0.0.0.0/0`, `169.254.0.0/16`, `100.64.0.0/10`): aviso sin cambiar el código de salida; `Unit/Product/EdgeNetworksProbeTest` (con los tres hallazgos pendientes); `system.updated` con `portal_exposed: true` solo cuando el rango es público y nunca con un CIDR en el `payload`; etapa de instalación limpia de la CI con `PORTAL_INTERNAL_CIDR=0.0.0.0/0` |
 | 4 | Prueba de la plantilla de nginx: con `ADMIN_INTERNAL_CIDR` definida, `403` en `/admin/` y `/api/v1/auth/login` desde fuera y `200`/`401` desde dentro; vacía, sin filtro; `/api/v1/me/*` y `/api/v1/scan*` nunca afectados |
 | 5 | `TwoFactorAuthenticationTest` (hoy `:309-329` fija lo contrario): un responsable sin TOTP recibe `202` con `enrolment_required: true`; `product:doctor` avisa si falta un rol de los cuatro |
-| 6 | `Feature/Http/CorsOriginTest`: preflight desde el origen de `APP_URL` admitido, desde otro sin `Access-Control-Allow-Origin` |
+| 6 | `Feature/Http/CorsSameOriginTest`: preflight desde el origen de `APP_URL` admitido, desde otro sin `Access-Control-Allow-Origin` |
