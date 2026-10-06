@@ -47,7 +47,9 @@ return [
     // Vacia a proposito: ver arriba por que el origen va como patron.
     'allowed_origins' => [],
 
-    'allowed_origins_patterns' => ApplicationOrigin::corsPatternsFor(env('APP_URL')),
+    'allowed_origins_patterns' => // El mismo valor de serie que config/app.php ('url'): sin APP_URL en el entorno (la CI
+    // de Pest) el patron y config('app.url') tienen que seguir diciendo lo mismo.
+    ApplicationOrigin::corsPatternsFor(env('APP_URL', 'http://localhost')),
 
     // Las que envian las tres SPA; `Idempotency-Key` es la del fichaje (regla dura 8).
     'allowed_headers' => ['Accept', 'Accept-Language', 'Authorization', 'Content-Type', 'Idempotency-Key'],
