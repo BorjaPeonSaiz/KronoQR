@@ -193,3 +193,33 @@ it('rechaza un --data que no es un objeto JSON', function (?string $data): void 
     'vacio' => [''],
     'sin la opcion' => [null],
 ])->group('RF-PD-10');
+
+it('encadena el asiento de una restauracion con la integridad de la copia y del WAL (2.2.0)', function (): void {
+    // ADR-049, C14-C16: el asiento dice si la copia estaba sellada (KQE1) o era
+    // de la 2.1.0 aceptada sin MAC, con que clave y de cuando es su cabecera, y
+    // si la recuperacion a un instante leyo todo el WAL autenticado. Lo escribe
+    // restore.sh con valores de texto: el recuento llega como cadena.
+    $data = [
+        ...restorePayload(),
+        'integrity' => 'authenticated',
+        'kqe_created' => '2026-09-09T03:12:04Z',
+        'kid' => '9f3c01ab',
+        'wal_integrity' => 'aborted_at:00000001000000000000002A',
+        'legacy_wal' => '3',
+    ];
+
+    expect(recordSystemEvent('system.restored_from_backup', $data))->toBe(0);
+
+    expect(json_decode(lastAuditRow()->payload, true, 8, JSON_THROW_ON_ERROR))->toEqual($data)
+        ->and(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
+})->group('RL-12', 'RL-04', 'RNF-D-02', 'RF-PD-10');
+
+it('no escribe nada si la integridad de la copia sale del vocabulario cerrado', function (string $field, string $value): void {
+    expect(recordSystemEvent('system.restored_from_backup', [...restorePayload(), $field => $value]))->toBe(1)
+        ->and(DB::table(AuditLogSchema::TABLE)->count())->toBe(0);
+})->with([
+    'integridad inventada' => ['integrity', 'checked'],
+    'kid que no es una huella' => ['kid', 'clave-de-produccion'],
+    'motivo en texto libre' => ['wal_integrity', 'aborted_at:el MAC no cuadra'],
+    'recuento que no es un numero' => ['legacy_wal', 'muchos'],
+])->group('RL-12', 'RS-07', 'RF-PD-10');

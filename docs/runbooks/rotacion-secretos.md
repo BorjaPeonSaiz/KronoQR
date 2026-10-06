@@ -273,6 +273,27 @@ Rotarla **no vuelve a cifrar las copias antiguas**, y ese es el punto delicado:
 5. **No destruyas la clave anterior** hasta que caduque la última copia cifrada
    con ella. Anota la fecha.
 
+**La clave del WAL (`BACKUP_WAL_KEY`, ADR-049) se deriva de esta** y es la única
+parte de ella que recibe `postgres`. Al rotar la maestra hay que recalcularla,
+o el archivado seguiría cifrando con la derivada de la clave anterior:
+
+6. Antes del paso 3, **conserva la anterior como `BACKUP_ENCRYPTION_KEY_PREVIOUS`**
+   (solo para restaurar; se pasa con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run --rm restore`, no se deja en el `.env`): los segmentos de WAL de los últimos
+   `BACKUP_WAL_RETENTION_DAYS` y las copias que siguen vivas solo se abren con ella.
+   `restore.sh`, el simulacro y `kronoqr-restore-wal` la prueban por el `kid` de la
+   cabecera de cada fichero y, si ninguna sirve, dicen **«clave distinta o cabecera
+   alterada»** (no confundir con «el MAC no cuadra», que es un fichero alterado).
+7. Tras actualizar `BACKUP_ENCRYPTION_KEY` en el `.env`, recalcula la del WAL y recrea
+   PostgreSQL:
+   `sudo bash scripts/backup.sh derive-wal-key --write-env .env` y
+   `docker compose up -d postgres`. **`doctor.sh` falla** si `BACKUP_WAL_KEY` no es
+   la derivada de la maestra o si el `kid` del último segmento archivado no es el de
+   la derivada: así una rotación a medias se ve hoy y no el día de la recuperación.
+   `update.sh` hace la misma comprobación **antes** de parar nada y se niega a
+   actualizar si no cuadran.
+8. El archivo de WAL es de **8 días** (`BACKUP_WAL_RETENTION_DAYS`) y las copias de 30:
+   la clave anterior se retira cuando caduque lo más viejo cifrado con ella.
+
 ---
 
 ## 5 bis. Los tres secretos restantes del instalador

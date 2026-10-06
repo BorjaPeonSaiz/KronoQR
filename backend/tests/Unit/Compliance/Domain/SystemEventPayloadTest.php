@@ -276,3 +276,87 @@ it('acepta el asiento de una restauracion manual tal y como lo compone restore.s
 
     expect(SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $data)->payload->data)->toBe($data);
 })->group('RL-04', 'RF-PD-10');
+
+// ---------------------------------------------------------------------------
+// Integridad de la copia y del WAL (2.2.0, ADR-049, condiciones C14-C16)
+// ---------------------------------------------------------------------------
+
+it('acepta la integridad de la copia y del WAL tal y como la compone restore.sh', function (array $extra): void {
+    $data = [...restoredData(), ...$extra];
+
+    expect(SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $data)->payload->data)->toBe($data);
+})->with([
+    'copia KQE1 verificada' => [['integrity' => 'authenticated', 'kqe_created' => '2026-10-02T03:15:07Z', 'kid' => '0a1b2c3d']],
+    // Una copia de la 2.1.0 no tiene cabecera: ni fecha autenticada ni kid.
+    'copia de la 2.1.0 aceptada' => [['integrity' => 'legacy_accepted']],
+    'PITR completa' => [['integrity' => 'authenticated', 'wal_integrity' => 'authenticated', 'legacy_wal' => '0']],
+    'PITR con WAL heredado' => [['integrity' => 'authenticated', 'wal_integrity' => 'authenticated', 'legacy_wal' => 3]],
+    'PITR abortada en un segmento' => [['wal_integrity' => 'aborted_at:00000001000000000000002A']],
+    'PITR abortada en la historia de un timeline' => [['wal_integrity' => 'aborted_at:00000002.history']],
+    'recuento maximo' => [['legacy_wal' => 999999]],
+    'ningun segmento heredado' => [['legacy_wal' => 0]],
+])->group('RL-12', 'RL-04', 'RNF-D-02', 'RF-PD-10');
+
+it('no exige la integridad: el asiento de una copia sin cabecera sigue siendo valido', function (): void {
+    // Las copias de la 2.1.0 no traen `kqe_created` ni `kid`, y una restauracion
+    // sin WAL no lleva `wal_integrity`: un asiento sin esos datos vale
+    // infinitamente mas que ningun asiento.
+    expect(SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, restoredData())->payload->data)
+        ->not->toHaveKeys(['integrity', 'kqe_created', 'kid', 'wal_integrity', 'legacy_wal']);
+})->group('RL-12', 'RF-PD-10');
+
+it('cierra el vocabulario de la integridad de la copia y del WAL', function (string $field, mixed $value): void {
+    $data = restoredData();
+    $data[$field] = $value;
+
+    expect(fn () => SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $data))
+        ->toThrow(InvalidSystemEventPayload::class, 'no cumple su forma');
+})->with([
+    'integridad inventada' => ['integrity', 'verified'],
+    'integridad en mayusculas' => ['integrity', 'AUTHENTICATED'],
+    'integridad vacia' => ['integrity', ''],
+    'integridad no textual' => ['integrity', true],
+    'fecha de cabecera sin Z' => ['kqe_created', '2026-10-02T03:15:07'],
+    'fecha de cabecera en otra zona' => ['kqe_created', '2026-10-02T05:15:07+02:00'],
+    'kid en mayusculas' => ['kid', '0A1B2C3D'],
+    'kid corto' => ['kid', '0a1b2c3'],
+    'kid largo' => ['kid', '0a1b2c3d4'],
+    'kid que no es hexadecimal' => ['kid', 'zzzzzzzz'],
+    'integridad del WAL inventada' => ['wal_integrity', 'ok'],
+    'segmento en minusculas' => ['wal_integrity', 'aborted_at:00000001000000000000002a'],
+    'segmento corto' => ['wal_integrity', 'aborted_at:0000000100000000000002A'],
+    'segmento largo' => ['wal_integrity', 'aborted_at:00000001000000000000002AA'],
+    'segmento parcial' => ['wal_integrity', 'aborted_at:00000001000000000000002A.partial'],
+    'sin segmento' => ['wal_integrity', 'aborted_at:'],
+    'motivo en texto libre' => ['wal_integrity', 'aborted_at:MAC incorrecto en el segmento 2A'],
+    'recuento negativo' => ['legacy_wal', -1],
+    'recuento negativo en texto' => ['legacy_wal', '-1'],
+    'recuento con ceros a la izquierda' => ['legacy_wal', '007'],
+    'recuento de siete cifras' => ['legacy_wal', 1000000],
+    'recuento de siete cifras en texto' => ['legacy_wal', '1000000'],
+    'recuento decimal' => ['legacy_wal', 1.5],
+    'recuento en palabras' => ['legacy_wal', 'tres'],
+])->group('RL-12', 'RL-04', 'RS-07');
+
+it('no admite la integridad de la copia en el asiento de una actualizacion', function (string $field): void {
+    $data = updatedData();
+    $data[$field] = $field === 'legacy_wal' ? 0 : 'authenticated';
+
+    expect(fn () => SystemEventPayload::for(AuditAction::SystemUpdated, $data))
+        ->toThrow(InvalidSystemEventPayload::class, 'no esta en la lista cerrada');
+})->with(['integrity', 'wal_integrity', 'legacy_wal'])->group('RL-04');
+
+it('rechaza una ruta del servidor en el segmento de WAL', function (): void {
+    $data = restoredData();
+    $data['wal_integrity'] = 'aborted_at: /var/backups/fichaje/wal/00000001000000000000002A.gz.enc';
+
+    expect(fn () => SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $data))
+        ->toThrow(InvalidSystemEventPayload::class);
+})->group('RS-07', 'RL-12');
+
+it('dice que forma espera el recuento de WAL heredado', function (): void {
+    $data = [...restoredData(), 'legacy_wal' => -1];
+
+    expect(fn () => SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $data))
+        ->toThrow(InvalidSystemEventPayload::class, 'El campo «legacy_wal» del payload no cumple su forma: se esperaba un recuento entero entre 0 y 999999.');
+})->group('RL-12');

@@ -252,11 +252,34 @@ return [
                 'failure' => 'La aplicacion no puede escribir en: :paths. Sin eso no puede generar informes, '
                     .'ni guardar la cache, ni escribir su registro tecnico.',
             ],
+            // 2.2.0 (bloque 20, A3-R2): la raiz de las copias se monta en solo
+            // lectura y cada contenedor escribe solo en su subdirectorio.
             'backup_path' => [
-                'ok' => 'El directorio de copias de seguridad es escribible.',
-                'failure' => 'No se puede escribir en el directorio de copias :path. NO SE ESTAN HACIENDO '
-                    .'COPIAS, y no hay ningun otro sintoma hasta el dia que hagan falta.',
+                'ok' => 'El directorio de copias :path se puede leer y la aplicacion no puede escribir en el: '
+                    .'las copias solo las escribe la tarea de copia.',
+                'ok_not_checked' => 'El directorio de copias :path se puede leer. No se comprueba que este en solo '
+                    .'lectura porque esta instalacion no es de produccion.',
                 'failure_missing' => 'El directorio de copias :path no existe. NO SE ESTAN HACIENDO COPIAS.',
+                'failure_unreadable' => 'No se puede leer el directorio de copias :path. NO SE ESTAN HACIENDO '
+                    .'COPIAS, y no hay ningun otro sintoma hasta el dia que hagan falta.',
+                'warning_writable' => 'El contenedor «:service» puede escribir en el directorio de copias :path. Las '
+                    .'copias funcionan, pero quien ejecute codigo en la aplicacion podria borrarlas o dejar ficheros '
+                    .'junto a ellas: el docker-compose.yml en uso no es el de esta version.',
+            ],
+            'backup_metrics' => [
+                'ok' => 'Las metricas de las copias y del archivado se pueden escribir en :path.',
+                'failure' => 'No se puede escribir en :path. Ni las copias ni el archivado de la base de datos '
+                    .'pueden publicar su resultado, y las alertas que avisan de una copia fallida no saltaran.',
+                'failure_missing' => 'No existe el directorio de metricas :path. Las copias y el archivado no pueden '
+                    .'publicar su resultado, y las alertas que avisan de una copia fallida no saltaran.',
+            ],
+            'backup_copies' => [
+                'ok' => 'Los directorios de las copias (daily y base) existen y solo los escribe la tarea de copia.',
+                'failure' => 'La tarea de copia no puede escribir en: :paths. NO SE ESTAN HACIENDO COPIAS.',
+                'failure_missing' => 'No existen los directorios de las copias: :paths. NO SE ESTAN HACIENDO COPIAS.',
+                'warning_writable' => 'El contenedor «:service» puede escribir en :paths, donde estan las copias. '
+                    .'Solo deberia poder hacerlo la tarea de copia: el docker-compose.yml en uso no es el de esta '
+                    .'version.',
             ],
             'branding_root' => [
                 'ok' => 'El directorio del logotipo esta accesible.',
@@ -319,9 +342,14 @@ return [
                 'ok' => 'Los informes de retencion se escriben en :path, junto a las copias.',
                 'warning' => 'No se puede escribir en :path: la propuesta semanal de retencion y la purga no podran '
                     .'dejar su informe.',
-                'warning_missing' => 'No existe el directorio de informes de retencion :path. Se creara en la primera '
-                    .'pasada si el directorio de copias se puede escribir.',
+                'warning_missing' => 'No existe el directorio de informes de retencion :path. La propuesta semanal '
+                    .'de retencion y la purga no podran dejar su informe legible.',
                 'warning_inside_storage' => 'COMPLIANCE_RETENTION_REPORT_PATH apunta a :path, dentro de storage/app.',
+                'ok_read_only' => 'Los informes de retencion de :path se pueden leer y este contenedor no puede '
+                    .'escribirlos: solo los escriben la propuesta semanal y la purga.',
+                'warning_horizon_writable' => 'Este contenedor (horizon) puede escribir en :path, donde se guardan '
+                    .'los informes de retencion. Solo deberian poder hacerlo la propuesta semanal y la purga: el '
+                    .'docker-compose.yml en uso no es el de esta version.',
             ],
             'class_roots' => [
                 'ok' => 'Cada clase de fichero generado tiene su propio directorio y ninguno pisa a otro.',
@@ -624,13 +652,42 @@ return [
                     .'Suele pasar tras ejecutar un comando como root.',
             ],
             'backup_path' => [
-                'failure' => "Da permiso de escritura al usuario de la aplicacion sobre :path y comprueba que el\n"
-                    ."volumen no esta montado de solo lectura. Despues, lanza una copia manual para confirmar:\n"
-                    .'  ./backup.sh',
-                'failure_missing' => "Crea el directorio y dale permisos al usuario de la aplicacion:\n"
-                    ."  sudo install -d -m 0750 :path\n"
-                    ."Comprueba tambien que BACKUP_PATH del fichero .env apunta donde quieres. Despues:\n"
-                    .'  ./backup.sh',
+                'failure_missing' => "Crea el directorio y dale permisos al usuario de la aplicacion (uid 1000):\n"
+                    ."  sudo install -d -o 1000 -g 1000 -m 0750 :path\n"
+                    ."Comprueba tambien que BACKUP_PATH del fichero .env apunta donde quieres. Despues ejecuta\n"
+                    ."./update.sh, que crea dentro los directorios que necesita cada contenedor, o crealos tu\n"
+                    .'como se explica en docs/cliente/instalacion.md.',
+                'failure_unreadable' => "Devuelve el directorio al usuario de la aplicacion (uid 1000) desde el servidor:\n"
+                    ."  sudo chown 1000:1000 :path && sudo chmod 0750 :path\n"
+                    .'Si es un recurso de red, comprueba que el montaje deja leer a ese usuario.',
+                'warning_writable' => "Usa el docker-compose.yml de esta version, que monta el directorio de copias en solo\n"
+                    ."lectura y da escritura a cada contenedor solo donde la necesita. Desde el directorio de la\n"
+                    ."instalacion:\n"
+                    ."  ./update.sh\n"
+                    .'Si has editado el docker-compose.yml a mano, compara sus montajes con el del paquete.',
+            ],
+            'backup_metrics' => [
+                'failure' => "Devuelve el directorio al usuario de la aplicacion (uid 1000) desde el servidor:\n"
+                    ."  sudo chown 1000:1000 :path && sudo chmod 0750 :path\n"
+                    .'Si es un recurso de red, comprueba que el montaje deja escribir a ese usuario.',
+                'failure_missing' => "Crealo en el servidor como el usuario de la aplicacion (uid 1000):\n"
+                    ."  sudo -u '#1000' mkdir -m 0750 -- :path\n"
+                    .'Despues recrea los contenedores: docker compose up -d',
+            ],
+            'backup_copies' => [
+                'failure' => "Devuelve esos directorios al usuario de la aplicacion (uid 1000) desde el servidor:\n"
+                    ."  sudo chown 1000:1000 <directorio> && sudo chmod 0750 <directorio>\n"
+                    ."Despues lanza una copia manual para confirmar:\n"
+                    .'  docker compose exec scheduler php artisan backup:run',
+                'failure_missing' => "Crealos en el servidor como el usuario de la aplicacion (uid 1000), uno por uno:\n"
+                    ."  sudo -u '#1000' mkdir -m 0750 -- <directorio>\n"
+                    ."Despues recrea los contenedores y lanza una copia manual para confirmar:\n"
+                    ."  docker compose up -d\n"
+                    .'  docker compose exec scheduler php artisan backup:run',
+                'warning_writable' => "Usa el docker-compose.yml de esta version, que solo deja escribir las copias a la\n"
+                    ."tarea de copia. Desde el directorio de la instalacion:\n"
+                    ."  ./update.sh\n"
+                    .'Si has editado el docker-compose.yml a mano, compara sus montajes con el del paquete.',
             ],
             'branding_root' => [
                 'warning' => 'Comprueba que existe el directorio :path y que el usuario de la aplicacion puede '
@@ -696,9 +753,15 @@ return [
             'retention_reports' => [
                 'warning' => "Da permiso de escritura al usuario de la aplicacion (uid 1000) sobre :path y\n"
                     .'comprueba que el directorio de copias no esta montado de solo lectura.',
-                'warning_missing' => "Crealo en el servidor con 'sudo install -d -o 1000 -g 1000 -m 0750 :path' (y su padre\n"
-                    .'reports, con el mismo propietario y modo). Sin el, la copia legible del informe no se guarda, y la '
-                    .'purga deja igualmente su asiento en el registro de auditoria.',
+                'warning_missing' => "Crealo en el servidor como el usuario de la aplicacion (uid 1000), primero su padre\n"
+                    ."reports si tampoco existe:\n"
+                    ."  sudo -u '#1000' mkdir -m 0750 -- :path\n"
+                    .'Despues recrea los contenedores (docker compose up -d). Sin el, la copia legible del informe no se '
+                    .'guarda, y la purga deja igualmente su asiento en el registro de auditoria.',
+                'warning_horizon_writable' => "Usa el docker-compose.yml de esta version, que no monta ese directorio en\n"
+                    ."escritura en horizon. Desde el directorio de la instalacion:\n"
+                    ."  ./update.sh\n"
+                    .'Si has editado el docker-compose.yml a mano, compara sus montajes con el del paquete.',
                 'warning_inside_storage' => "Los informes de retencion pertenecen a BACKUP_PATH/reports/retention, que es\n"
                     ."donde los lee una persona sin entrar en el contenedor. Quita la clave del fichero .env para usar el\n"
                     .'valor por defecto, y recrea los contenedores.',

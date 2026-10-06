@@ -72,6 +72,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/env-file.sh"
 # shellcheck source=lib/fs.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/fs.sh"
+# shellcheck source=lib/kqe.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/kqe.sh"
 
 #------------------------------------------------------------------------------
 # Umbrales publicados (doc 02 §11.6.2). Son los MINIMOS, no los recomendados.
@@ -1041,6 +1043,10 @@ phase_secrets() {
   set_generated_secret "REVERB_APP_SECRET" "$(random_base64_32)" 40
 
   set_generated_secret "BACKUP_ENCRYPTION_KEY" "$(random_base64_32)" 40
+  # Subclave del WAL (ADR-049): la unica parte de la clave de copias que recibe
+  # PostgreSQL. Se DERIVA de la maestra: el cliente sigue custodiando UNA sola clave
+  # y `backup.sh derive-wal-key` la recalcula. Se comprueba como cualquier secreto.
+  set_generated_secret "BACKUP_WAL_KEY" "$(kqe_derive_wal_key "$(env_value "${ENV_FILE}" "BACKUP_ENCRYPTION_KEY")")" 64
   set_generated_secret "IDENTITY_PIN_SEALING_SECRET_KEY" "$(random_base64_32)" 40
   set_generated_secret "GRAFANA_ADMIN_PASSWORD" "$(random_password)" 32
 
@@ -1105,7 +1111,6 @@ wait_for_healthy() {
 # ejecucion. Un destino de copias que ya existia no se registra y no se toca.
 ensure_backup_directories() {
   local wal="${CFG_BACKUP_PATH}/wal"
-  local metrics="${CFG_BACKUP_PATH}/metrics"
   local created=0
 
   # El destino de copias lo escribe la aplicacion, que corre como uid 1000.
@@ -1136,63 +1141,40 @@ ensure_backup_directories() {
     created=1
   fi
 
-  # Lo lee node-exporter para publicar el resultado de la copia como metrica.
-  #
-  # La accion de deshacer se registra SOLO si la creacion ha salido bien. Antes
-  # se registraba siempre, por el `|| true`, y un directorio que no llego a
-  # existir hacia fallar su propio `rmdir`: convertia una vuelta atras limpia
-  # (4) en una incompleta (5), que es la que exige a alguien mirar el servidor.
-  if [ ! -d "${metrics}" ]; then
-    if install -d -o 1000 -g 1000 -m 0750 "${metrics}" 2>/dev/null ||
-      install -d -m 0750 "${metrics}" 2>/dev/null; then
-      register_undo "$(kq_format undo_metrics_dir "${metrics}")" "rm -rf '${metrics}'"
-    else
-      # No es bloqueante: sin el, se pierde la METRICA del resultado de la
-      # copia, no la copia. Pero se dice, porque si nadie lo arregla nadie se
-      # entera de que la copia de anoche fallo.
-      kq_msg check_warn "$(kq_format c_metrics_dir "${metrics}")"
-      kq_msg fix "$(kq_format f_metrics_dir "${metrics}")"
-    fi
-  fi
-
-  ensure_retention_reports_directory
+  # Subdirectorios de BACKUP_PATH que el runtime escribe. La raiz se monta en SOLO
+  # LECTURA y cada servicio escribe lo suyo (compose.prod.yaml, A3-R2): si falta uno,
+  # `docker compose up` FALLA (create_host_path: false), asi que aqui es bloqueante.
+  ensure_backup_subdirectories
 
   [ "${created}" -eq 1 ] && kq_msg wal_dir "${wal}"
   return 0
 }
 
-# Informes de retencion (ADR-045): `${BACKUP_PATH}/reports/retention`, junto a
-# los de update.sh y restore.sh. Lo escriben `scheduler` (propuesta semanal) y
-# `app` (`run --rm`, purga real), que corren como uid 1000, asi que el dueño es
-# 1000:1000 y el modo 0750 como el del resto del arbol de copias.
+# Subdirectorios de `${BACKUP_PATH}` que escribe la aplicacion (uid 1000):
 #
-# `reports/` se crea ANTES que su hijo: `install -d` solo da dueño y modo a lo
-# ultimo de la ruta, y un `reports/` creado por el camino quedaria de root. Las
-# acciones de deshacer solo se registran para lo que ha creado ESTA ejecucion
-# (mismo criterio que arriba): un `reports/` con informes de una instalacion
-# anterior no se toca.
+#   daily/ y base/       las copias (solo `scheduler`)
+#   metrics/             el textfile de metricas, que lee node-exporter (`app`, `horizon`, `scheduler`, `restore`)
+#   reports/             informes de restauracion y de actualizacion (`restore`; `update.sh` publica ahi)
+#   reports/retention/   informes de retencion (ADR-045: `scheduler` y `app`)
 #
-# Se crean COMO EL UID 1000 y sin seguir enlaces (lib/fs.sh, `kq_ensure_app_dir`):
-# un `BACKUP_PATH` que ya existia de una instalacion anterior lo escribe el runtime
-# y puede traer `reports` como enlace; con `install -d` como root, `retention` se
-# creaba en el destino del enlace. En una instalacion limpia el runtime aun no
-# existe y el riesgo no es real, pero un solo camino es mas facil de razonar.
+# Todos 1000:1000 y 0750, creados COMO EL UID 1000, sin `-p` y sin seguir enlaces
+# (lib/fs.sh, `kq_ensure_app_dir`): un `BACKUP_PATH` que ya existia de una instalacion
+# anterior lo escribe el runtime y puede traer `reports` como enlace; con
+# `install -d` como root, el hijo se creaba en el destino del enlace (F1). El padre
+# va antes que el hijo. Las acciones de deshacer solo se registran para lo que ha
+# creado ESTA ejecucion.
 #
-# No es bloqueante: sin el directorio la purga sigue funcionando y su asiento de
-# auditoria es la constancia (ADR-045); se pierde la copia legible, y se avisa.
-ensure_retention_reports_directory() {
-  local reports="${CFG_BACKUP_PATH}/reports"
-  local retention="${reports}/retention"
-  local dir
+# BLOQUEANTE desde la 2.2.0: compose.prod.yaml monta cada uno con
+# `create_host_path: false` y, si falta, `up` falla. Mejor fallar aqui, con el motivo.
+ensure_backup_subdirectories() {
+  local dir status
 
-  local status
-  for dir in "${reports}" "${retention}"; do
+  for dir in "${CFG_BACKUP_PATH}/metrics" "${CFG_BACKUP_PATH}/daily" "${CFG_BACKUP_PATH}/base" \
+    "${CFG_BACKUP_PATH}/reports" "${CFG_BACKUP_PATH}/reports/retention"; do
     status=0
     kq_ensure_app_dir "${dir}" || status=$?
     if [ "${status}" -ne 0 ]; then
-      kq_msg check_warn "$(kq_format c_retention_dir "${dir}")"
-      kq_msg fix "$(kq_format f_retention_dir "${retention}")"
-      return 0
+      rollback_and_die "$(kq_format f_backup_subdir "${dir}" "${dir}")"
     fi
     if [ "${KQ_DIR_CREATED}" -eq 1 ]; then
       register_undo "$(kq_format undo_retention_dir "${dir}")" "rm -rf '${dir}'"

@@ -96,6 +96,12 @@ readonly -a SOLO_SCHEDULER=(
   BACKUP_DB_USERNAME
   BACKUP_DB_PASSWORD
 )
+# Nombres que solo el planificador PUEDE tener, pero no tiene por que: la clave anterior
+# de las copias existe solo durante una rotacion y se pasa con -e (ADR-049); fuera de
+# ella, el planificador no la lleva y eso es lo correcto.
+readonly -a SOLO_SCHEDULER_OPCIONAL=(
+  BACKUP_ENCRYPTION_KEY_PREVIOUS
+)
 
 # Claves del .env que `app` NO recibe, cada una con su motivo. Esta lista es la
 # misma que la prueba de completitud (RuntimeEnvironmentTest): si se toca una, se
@@ -122,6 +128,9 @@ readonly -a EXCLUIDAS=(
   # TRUSTED_PROXY_CIDR es de nginx (set_real_ip_from); DB_MAX_SLOT_WAL_KEEP_GB la
   # interpola Compose en el `command:` de postgres: la aplicacion no las lee.
   TRUSTED_PROXY_CIDR DB_MAX_SLOT_WAL_KEEP_GB
+  # BACKUP_WAL_KEY es la subclave del WAL derivada de BACKUP_ENCRYPTION_KEY (ADR-049):
+  # solo la recibe postgres, para su archive_command. app no la lee ni debe tenerla.
+  BACKUP_WAL_KEY
 )
 
 status=0
@@ -275,6 +284,11 @@ for servicio in "${RUNTIME[@]}"; do
       fallo "scheduler no tiene ${nombre}: las copias programadas fallarian."
     fi
     if [ "${servicio}" != "scheduler" ] && [ "${tiene}" -eq 1 ]; then
+      fallo "${servicio} tiene ${nombre}: solo el planificador puede llevarla."
+    fi
+  done
+  for nombre in "${SOLO_SCHEDULER_OPCIONAL[@]}"; do
+    if [ "${servicio}" != "scheduler" ] && tiene_variable "${entorno}" "${nombre}"; then
       fallo "${servicio} tiene ${nombre}: solo el planificador puede llevarla."
     fi
   done

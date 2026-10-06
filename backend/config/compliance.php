@@ -218,8 +218,9 @@ return [
          *
          * LA CONSTANCIA CON VALOR ES EL ASIENTO `retention.purge_executed` de
          * `audit_log`, encadenado: el fichero es su copia legible y se contrasta
-         * con el por el token de confirmacion que llevan los dos. El runtime
-         * puede reescribir `BACKUP_PATH` (A3-R2), asi que el fichero no prueba
+         * con el por el token de confirmacion que llevan los dos. Desde la 2.2.0
+         * (A3-R2) `horizon` ya no puede escribir aqui, pero `app` y `scheduler`
+         * si (son quienes purgan y proponen), asi que el fichero sigue sin probar
          * nada por si solo.
          *
          * `COMPLIANCE_RETENTION_REPORT_PATH` lo sigue pudiendo sobrescribir;

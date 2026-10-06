@@ -150,3 +150,105 @@ kq_ensure_app_dir() {
   KQ_DIR_CREATED=1
   return 0
 }
+
+# Un directorio en el que root puede ESCRIBIR POR RUTA sin que el runtime pueda
+# plantarle nada (A3-R2): cada tramo de la ruta, hasta `/`, es un directorio REAL
+# (ni enlaces simbolicos en el camino), del que ejecuta (o de root), SIN permiso
+# de escritura para otros —sin excepciones para el bit `sticky`: un `/tmp` no es
+# de fiar para un registro con datos personales— y, si tiene escritura de GRUPO,
+# solo para un grupo del sistema (gid < 1000) al que no pertenezcan ni el
+# runtime (gid 1000) ni la cuenta uid 1000 del anfitrion. `kq_path_trusted DIR`
+# acepta una ruta que todavia no existe: se valida el ancestro existente mas
+# cercano. Devuelve 0 si es de fiar, 1 si no, y deja en `KQ_PATH_UNTRUSTED` el
+# tramo que no acepto (vacio si acepto todos) para que el mensaje lo nombre.
+#
+# POR QUE EXISTE. `ensure_update_log_dir` solo comprobaba el propio directorio: un
+# `KRONOQR_LOG_DIR` bajo un padre que escribe otro usuario reabria el vector
+# (el otro cambia el directorio por un enlace) aunque el directorio fuera de root.
+#
+# POR QUE LA ESCRITURA DE GRUPO SE ACEPTA EN UN GRUPO DEL SISTEMA. En Ubuntu
+# `/var/log` es `root:syslog 0775` (en Debian, `root:root 0755`): con la regla
+# «nunca escritura de grupo», `update.sh` se negaba a actualizar en todo Ubuntu
+# con el valor por defecto `/var/log/kronoqr`, y `doctor.sh` nunca purgaba el
+# detalle (C19). A3-R2 protege de lo que pueda hacer el RUNTIME (uid/gid 1000 o
+# lo que corra en su contenedor): un tramo en el que solo escribe un grupo del
+# sistema ajeno a ese uid no le da ninguna forma de cambiar el directorio por un
+# enlace. Residuo aceptado (dictamen de seguridad del bloque 20, doc 07 §6
+# A3-R2): un miembro de ese grupo del sistema —en Ubuntu, el demonio rsyslog—
+# comprometido podria hacerlo; es otro servicio del anfitrion y queda fuera de
+# la amenaza. Lo que no se acepta nunca: escritura para otros, un grupo con
+# gid >= 1000, o un grupo del sistema (`adm`, por ejemplo) al que el instalador
+# del servidor haya metido a la cuenta uid 1000.
+# shellcheck disable=SC2034  # la lee update.sh para nombrar el tramo rechazado
+KQ_PATH_UNTRUSTED=""
+
+# shellcheck disable=SC2034
+kq_path_trusted() {
+  local path="$1" real up_to me
+  me="$(id -u)"
+  KQ_PATH_UNTRUSTED=""
+
+  # Normaliza: sin barra final (salvo `/`), y absoluta.
+  case "${path}" in
+  /*) ;;
+  *)
+    KQ_PATH_UNTRUSTED="${path}"
+    return 1
+    ;;
+  esac
+  [ "${path}" = "/" ] || path="${path%/}"
+
+  up_to="$(kq_existing_ancestor "${path}")"
+  # Ningun tramo existente puede ser (ni pasar por) un enlace simbolico.
+  real="$(cd -- "${up_to}" 2>/dev/null && pwd -P)" || real=""
+  if [ "${real}" != "${up_to}" ]; then
+    KQ_PATH_UNTRUSTED="${up_to}"
+    return 1
+  fi
+
+  while :; do
+    if ! kq_path_segment_trusted "${up_to}" "${me}"; then
+      KQ_PATH_UNTRUSTED="${up_to}"
+      return 1
+    fi
+    [ "${up_to}" != "/" ] || break
+    up_to="$(dirname -- "${up_to}")"
+  done
+  return 0
+}
+
+# Un tramo de `kq_path_trusted`: directorio real, de root o de quien ejecuta,
+# sin escritura para otros y, con escritura de grupo, solo un grupo del sistema
+# ajeno al uid 1000.
+kq_path_segment_trusted() {
+  local dir="$1" me="$2" owner group mode
+
+  [ -d "${dir}" ] && [ ! -L "${dir}" ] || return 1
+  owner="$(stat -c '%u' -- "${dir}" 2>/dev/null)" || return 1
+  group="$(stat -c '%g' -- "${dir}" 2>/dev/null)" || return 1
+  mode="$(stat -c '%a' -- "${dir}" 2>/dev/null)" || return 1
+  [[ "${owner}" =~ ^[0-9]+$ ]] && [[ "${group}" =~ ^[0-9]+$ ]] && [[ "${mode}" =~ ^[0-7]+$ ]] || return 1
+  [ "${owner}" = "0" ] || [ "${owner}" = "${me}" ] || return 1
+  # Nunca escritura para otros (tampoco `1777`: el sticky no protege de un rename
+  # del propio dueño del enlace que se planta).
+  [ "$((8#${mode} & 8#002))" -eq 0 ] || return 1
+  if [ "$((8#${mode} & 8#020))" -ne 0 ]; then
+    kq_system_group_without_app "${group}" || return 1
+  fi
+  return 0
+}
+
+# Un grupo del sistema (gid < 1000) al que NO pertenece la cuenta uid 1000 del
+# anfitrion. El gid 1000 (el del runtime) queda fuera por la primera condicion.
+# Si no hay cuenta con uid 1000, no pertenece a ninguno.
+kq_system_group_without_app() {
+  local gid="$1" grupos g
+  [[ "${gid}" =~ ^[0-9]+$ ]] && [ "${gid}" -lt 1000 ] || return 1
+  # `id -G` separa por espacios y el IFS de esta biblioteca no los incluye.
+  local IFS=' '
+  read -r -a grupos <<<"$(id -G 1000 2>/dev/null || true)"
+  for g in "${grupos[@]}"; do
+    [ "${g}" != "${gid}" ] || return 1
+  done
+  return 0
+}

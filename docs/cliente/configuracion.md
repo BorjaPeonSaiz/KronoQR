@@ -1773,7 +1773,7 @@ alterar el registro: no tiene ninguna credencial con la que hacerlo.
 | `nginx` | Siempre | Ninguna: solo sus redes permitidas y el certificado | — |
 | `migrate` | Solo cuando se lanza (`install.sh`, `update.sh` o a mano) y desaparece al terminar | `DB_MIGRATION_USERNAME` y `DB_MIGRATION_PASSWORD` | `fichaje_migrator` |
 | `restore` | Solo al restaurar una copia, y desaparece al terminar | La del rol de migración y `BACKUP_ENCRYPTION_KEY` | `fichaje_migrator` |
-| `postgres` | Siempre | Todas, para crear los roles al inicializar la base | — |
+| `postgres` | Siempre | Todas, para crear los roles al inicializar la base. Además, `BACKUP_WAL_KEY` para cifrar el WAL que archiva; **no** recibe `BACKUP_ENCRYPTION_KEY` | — |
 
 | Rol | Qué puede | Quién lo usa y cuándo |
 | --- | --- | --- |
@@ -2115,7 +2115,8 @@ custodia. El procedimiento y la restauración están en
 | Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
 | --- | --- | --- | --- | --- | --- |
 | `BACKUP_PATH` | `[CLIENTE]` | Destino de las copias, montado en la misma ruta dentro de los contenedores. Ver [`instalacion.md`](instalacion.md) §6 | `/var/backups/fichaje` | **Al instalar, siempre**, por un destino que no esté en el mismo disco que la base de datos. Si es un recurso de red, **tiene que estar montado antes** de levantar los servicios | No |
-| `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Cifra las copias. **Sin ella no hay copia**: el script se niega a empezar | (vacía; la genera `install.sh`) | Nunca a mano. **Es la única que hay que custodiar fuera del servidor**: sin ella no se restaura nada. Ver [`operacion.md`](operacion.md) §9 | No |
+| `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Cifra y autentica las copias. **Sin ella no hay copia**: el script se niega a empezar | (vacía; la genera `install.sh`) | Nunca a mano. **Es la única que hay que custodiar fuera del servidor**: sin ella no se restaura nada. Ver [`operacion.md`](operacion.md) §9 | No |
+| `BACKUP_WAL_KEY` | `[INSTALADOR]` | Cifra y autentica el WAL archivado (desde la 2.2.0). Se **deriva** de `BACKUP_ENCRYPTION_KEY` y solo la recibe `postgres`; no abre volcados ni copias físicas. Sin ella, o si no es la derivada, PostgreSQL **no archiva** (nunca en claro) y `./doctor.sh` falla | (vacía; la calculan `install.sh` y `update.sh`) | Nunca a mano ni copiada de otro servidor. Si falta o no coincide, recalcúlala con `backup.sh derive-wal-key --write-env` ([`instalacion.md`](instalacion.md) §6, «`BACKUP_PATH`») | No |
 | `BACKUP_RETENTION_DAYS` | — | Días que se conservan las copias diarias. Ver [`operacion.md`](operacion.md) §6 | `30` | Si tu política de copias es otra. **Ojo con el espacio en disco** antes de subirlo | No |
 | `BACKUP_MIN_COPIES` | — | Copias que nunca se borran, aunque hayan caducado todas | `3` | Casi nunca. Es la red de seguridad que evita quedarse sin ninguna copia | No |
 | `DB_MAX_SLOT_WAL_KEEP_GB` | — | Gigabytes de registro de transacciones que la base de datos retiene como máximo por culpa de un «slot de replicación» parado. KronoQR no usa ninguno: es el tope que impide que uno creado por error llene el disco | `5` | Casi nunca. Sube el valor solo si el disco de datos lo permite. Si suena la alerta «slot de replicación parado», sigue `docs/runbooks/slot-replicacion-parado.md` | No |

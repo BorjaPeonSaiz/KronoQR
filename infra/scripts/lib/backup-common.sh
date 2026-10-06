@@ -50,21 +50,24 @@ readonly BACKUP_COMMON_DIR
 . "${BACKUP_COMMON_DIR}/env-file.sh"
 # shellcheck source=fs.sh disable=SC1091
 . "${BACKUP_COMMON_DIR}/fs.sh"
+# shellcheck source=kqe.sh disable=SC1091
+. "${BACKUP_COMMON_DIR}/kqe.sh"
 
-# Cifrado en reposo de las copias (RL-12).
+# Cifrado en reposo de las copias (RL-12) y su autenticidad (R5-DV-04).
 #
-# AES-256-CBC con derivacion PBKDF2-SHA512 y sal aleatoria, sobre `openssl`,
-# que esta en cualquier servidor Linux. Se descarto `age` —mas moderno y
-# autenticado— porque no viene de serie en las distribuciones que instala un
-# hotel, y una copia que no se puede descifrar en el servidor del cliente con
-# las herramientas del sistema es una copia inutil el dia que hace falta.
+# FORMATO ACTUAL: KQE1 (lib/kqe.sh, ADR-049): AES-256-CBC con derivacion
+# PBKDF2-SHA512 y sal aleatoria sobre `openssl` (que esta en cualquier servidor
+# Linux), MAS una cabecera y un MAC SHA3-256 con clave derivada que se verifica
+# antes de descifrar. Se descarto `age` (binario nuevo, identidad que custodiar,
+# no autentica al emisor): ADR-049, «Alternativas descartadas».
 #
-# CBC no autentica el texto cifrado, asi que la integridad NO se deja al modo
-# de cifrado: cada copia lleva su SHA-256 en un fichero aparte y `backup.sh
-# verify` descifra la copia entera y la pasa por `pg_restore --list`. Un byte
-# cambiado se detecta por las dos vias.
+# El `.sha256` sigue escribiendose, pero ya no es la defensa de integridad: lo es el
+# MAC. Las copias HEREDADAS de la 2.1.0 (sin cabecera ni MAC) solo se leen
+# (`kqe_decrypt_legacy_copy`); fabricarlas para las pruebas es cosa de
+# `.github/scripts/forge-legacy-copy.sh`. El cifrado y sus parametros viven en
+# kqe.sh (`KQE_ITER_DUMP`); aqui solo queda el nombre que declara el manifiesto.
+# shellcheck disable=SC2034 # lo escribe backup.sh en el manifiesto.
 readonly BACKUP_CIPHER="aes-256-cbc"
-readonly BACKUP_PBKDF2_ITER=600000
 
 # Prefijo de todos los ficheros de una instalacion. No lleva nada del cliente
 # (regla dura 13): el nombre es igual en todas las instalaciones.
@@ -194,52 +197,11 @@ require_encryption_key() {
     "BACKUP_ENCRYPTION_KEY no esta definida. Sin ella no se puede cifrar ni descifrar ninguna copia (RL-12). Definela en el .env de la instalacion; install.sh la genera y NO se puede recuperar si se pierde."
   [ "${#BACKUP_ENCRYPTION_KEY}" -ge 16 ] || die "${KQ_EXIT_REQUIREMENTS}" \
     "BACKUP_ENCRYPTION_KEY tiene menos de 16 caracteres. Genera una nueva con 'openssl rand -base64 48' y guardala en el gestor de secretos del cliente antes de sustituirla: las copias anteriores solo se descifran con la clave con la que se hicieron."
-  # Necesario para el respaldo `-pass env:` de openssl_pass_spec cuando la
+  # Necesario para el respaldo `-pass env:` de kqe.sh (_kqe_with_pass) cuando la
   # clave se ha leido de un fichero .env en vez de heredarla del entorno.
   export BACKUP_ENCRYPTION_KEY
-}
-
-# Como se le entrega la clave a openssl.
-#
-# Nunca por la linea de ordenes: `ps aux` de cualquier usuario del servidor la
-# veria. Nunca por un fichero temporal: quedaria en disco. Quedan dos vias, y
-# se prefiere la primera:
-#
-#   fd:3   la clave viaja por un descriptor de fichero que solo existe durante
-#          la llamada. Es lo que se usa en el servidor (Linux).
-#   env:   la variable de entorno del proceso, que solo puede leer su propio
-#          usuario (o root). No añade exposicion: la clave YA esta en el
-#          entorno del proceso que llama, que es de donde se lee.
-#
-# La deteccion existe porque algunas compilaciones de openssl —la de Git Bash
-# en Windows, sin ir mas lejos— rechazan `fd:`. Sin este respaldo, el simulacro
-# de restauracion no se puede ensayar en la maquina de quien lo escribe, y una
-# comprobacion que solo corre en produccion no la ejecuta nadie.
-openssl_pass_spec() {
-  if [ -n "${BACKUP_PASS_SPEC:-}" ]; then
-    printf '%s' "$BACKUP_PASS_SPEC"
-    return 0
-  fi
-  if printf 'x' | openssl enc -"${BACKUP_CIPHER}" -pbkdf2 -pass fd:3 3< <(printf 'k') >/dev/null 2>&1; then
-    BACKUP_PASS_SPEC="fd:3"
-  else
-    BACKUP_PASS_SPEC="env:BACKUP_ENCRYPTION_KEY"
-  fi
-  printf '%s' "$BACKUP_PASS_SPEC"
-}
-
-encrypt_stream() {
-  local spec
-  spec="$(openssl_pass_spec)"
-  openssl enc -"${BACKUP_CIPHER}" -md sha512 -pbkdf2 -iter "${BACKUP_PBKDF2_ITER}" \
-    -salt -pass "$spec" 3< <(printf '%s' "${BACKUP_ENCRYPTION_KEY}")
-}
-
-decrypt_stream() {
-  local spec
-  spec="$(openssl_pass_spec)"
-  openssl enc -d -"${BACKUP_CIPHER}" -md sha512 -pbkdf2 -iter "${BACKUP_PBKDF2_ITER}" \
-    -pass "$spec" 3< <(printf '%s' "${BACKUP_ENCRYPTION_KEY}")
+  kqe_require || die "${KQ_EXIT_REQUIREMENTS}" \
+    "este servidor tiene un openssl sin SHA3-256 (hace falta OpenSSL 1.1.1 o posterior) y el formato de las copias (KQE1, ADR-049) lo necesita. Actualiza el paquete openssl del servidor, o ejecuta este script dentro del contenedor (docker compose exec scheduler ...)."
 }
 
 sha256_of() {
@@ -269,26 +231,218 @@ now_epoch() {
   date -u +%s
 }
 
-# Crea el arbol de destino si falta. Idempotente: si ya existe no toca permisos
-# de un directorio que el cliente pueda haber ajustado a su almacenamiento.
+# Comprueba el arbol de destino y crea lo que falte SI se puede. Idempotente: si
+# ya existe no toca permisos de un directorio que el cliente pueda haber
+# ajustado a su almacenamiento.
+#
+#   ensure_backup_tree [daily|base|metrics|reports ...]
+#
+# Los nombres son los subdirectorios que ESTE proceso necesita poder ESCRIBIR. Sin
+# argumentos se exigen los cuatro (comportamiento de la 2.1.0). Desde la 2.2.0 la
+# raiz de BACKUP_PATH se monta en SOLO LECTURA en el runtime (A3-R2): ya no se
+# exige `-w` en la raiz, y cada proceso pide solo lo suyo (`backup.sh run`: daily,
+# base y metrics; `verify`: metrics; `restore.sh`: reports...). Un subdirectorio
+# que falta se crea como uid 1000 sin `-p` (lib/fs.sh) si la raiz lo permite; si
+# no, el mensaje dice como crearlo sin `install -d` por ruta.
 ensure_backup_tree() {
-  local dir
-  [ -d "$BACKUP_PATH" ] || die "${KQ_EXIT_REQUIREMENTS}" \
-    "el destino de copias '${BACKUP_PATH}' no existe. Creala y dale permiso de escritura al usuario que ejecuta la copia (uid 1000 dentro del contenedor 'app'), o corrige BACKUP_PATH en el .env."
-  [ -w "$BACKUP_PATH" ] || die "${KQ_EXIT_REQUIREMENTS}" \
-    "no se puede escribir en '${BACKUP_PATH}'. Comprueba el propietario del directorio: dentro del contenedor la copia corre como uid 1000. Ver docs/runbooks/restaurar-backup.md."
+  local dir name rc
+  local -a necesarios=("$@")
 
-  for dir in "$BACKUP_DIR_DUMP" "$BACKUP_DIR_BASE" "$BACKUP_DIR_METRICS" "$BACKUP_DIR_REPORTS"; do
+  [ -d "$BACKUP_PATH" ] || die "${KQ_EXIT_REQUIREMENTS}" \
+    "el destino de copias '${BACKUP_PATH}' no existe. Montalo (si es un recurso de red) o corrige BACKUP_PATH en el .env. Ver docs/runbooks/restaurar-backup.md."
+  [ "${#necesarios[@]}" -gt 0 ] || necesarios=(daily base metrics reports)
+
+  for name in daily base metrics reports; do
+    case "$name" in
+    daily) dir="$BACKUP_DIR_DUMP" ;;
+    base) dir="$BACKUP_DIR_BASE" ;;
+    metrics) dir="$BACKUP_DIR_METRICS" ;;
+    reports) dir="$BACKUP_DIR_REPORTS" ;;
+    esac
+
     if [ ! -d "$dir" ]; then
-      mkdir -p "$dir"
-      # Las copias son datos personales cifrados: el directorio no es de
-      # lectura publica. El de metricas TAMPOCO desde la tarea 5.4: node-exporter
-      # corre con el uid 1000, el mismo que escribe las copias
-      # (infra/compose.prod.yaml), asi que lo lee sin necesidad de que el
-      # directorio sea legible para todo el mundo.
-      chmod 0750 "$dir"
+      rc=0
+      kq_ensure_app_dir "$dir" || rc=$?
+      if [ "$rc" -ne 0 ] || [ ! -d "$dir" ]; then
+        die "${KQ_EXIT_REQUIREMENTS}" \
+          "falta el directorio '${dir}' y no se ha podido crear (en el servidor la raiz de copias esta montada en solo lectura para la aplicacion). Crealo en el servidor como el usuario 1000: sudo -u '#1000' mkdir -m 0750 -- '${dir}' (y su padre antes, si falta). Ver docs/runbooks/restaurar-backup.md."
+      fi
     fi
+
+    case " ${necesarios[*]} " in
+    *" ${name} "*)
+      [ -w "$dir" ] || die "${KQ_EXIT_REQUIREMENTS}" \
+        "no se puede escribir en '${dir}'. Dentro del contenedor la copia corre como uid 1000 y cada servicio solo escribe en lo suyo (compose.prod.yaml): ¿lo lanzas desde el servicio correcto ('scheduler' para copiar, 'restore' para restaurar)? Si es un recurso de red, comprueba que permite escribir al usuario 1000. Ver docs/runbooks/restaurar-backup.md."
+      ;;
+    esac
   done
+}
+
+# Re-ejecuta el script COMO EL UID DE LA APLICACION si se ejecuta como root
+# (A3-R2): root no debe crear ni renombrar por ruta ficheros de un arbol que
+# escribe el runtime. Exporta lo que el proceso hijo necesita porque el `.env` es
+# de root 0600 y el hijo ya no lo puede leer. Sin `setpriv` se niega a seguir.
+#
+#   kq_reexec_as_app "$0" "$@"
+kq_reexec_as_app() {
+  [ "$(id -u)" = "0" ] || return 0
+  [ -z "${KQ_ALREADY_DROPPED:-}" ] || return 0
+  command -v setpriv >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
+    "este script se ha lanzado como root y necesita 'setpriv' (paquete util-linux) para trabajar como el usuario 1000 de la aplicacion y no escribir por ruta como root en las copias. Instalalo, o lanza la orden dentro del contenedor ('docker compose exec scheduler ...')."
+  export BACKUP_PATH BACKUP_RETENTION_DAYS BACKUP_MIN_COPIES BACKUP_ENCRYPTION_KEY
+  [ -z "${BACKUP_ENCRYPTION_KEY_PREVIOUS:-}" ] || export BACKUP_ENCRYPTION_KEY_PREVIOUS
+  export BACKUP_ENV_FILE=/dev/null KQ_ALREADY_DROPPED=1
+  exec setpriv --reuid=1000 --regid=1000 --clear-groups -- bash "$@"
+}
+
+# Abre una copia (volcado o fisica) para verificarla, restaurarla o ensayar su
+# restauracion (ADR-049): UNA lectura a un directorio privado y todo lo demas sobre
+# esa copia (TOCTOU). UNA sola implementacion para `backup.sh verify`, `restore.sh` y
+# `restore-drill.sh`: lo que se comprueba antes de fiarse de una copia no puede
+# diferir de un script a otro.
+#
+#   kq_open_copy KIND FICHERO DIRECTORIO_PRIVADO ACEPTAR_HEREDADA CODIGO_DE_FALLO [GANCHO]
+#
+# KIND: `dump` (NOMBRE.dump.enc, con manifiesto autenticado) o `base` (copia fisica
+# NOMBRE.tar.gz.enc, sin manifiesto). ACEPTAR_HEREDADA: 0 la rechaza, 1 la acepta
+# porque quien llama paso `--accept-unauthenticated`, 2 la acepta solo para VERIFICAR
+# (nunca se va a restaurar: `backup.sh verify`). GANCHO: nombre de una funcion sin
+# argumentos que se ejecuta justo antes de cada `die` por fallo de la copia (verify
+# publica ahi su metrica).
+#
+# Deja: INTEGRIDAD (authenticated|legacy_accepted), HUELLA_PRIVADA, MANIFIESTO (ruta
+# de la COPIA del manifiesto, o vacio) y KQE_* (fecha, kid). Si algo no cuadra
+# termina con die y CODIGO_DE_FALLO. Los mensajes dicen que hacer y que NO se ha
+# tocado nada.
+# shellcheck disable=SC2034 # INTEGRIDAD, HUELLA_PRIVADA y MANIFIESTO los leen los llamadores.
+kq_open_copy() {
+  local kind="$1" fichero="$2" trabajo="$3" aceptar="$4" fallo="$5" gancho="${6:-}"
+  local nombre estado=0 guardada manifiesto_origen etiqueta ext
+
+  case "$kind" in
+  dump)
+    ext=".dump.enc"
+    etiqueta="un volcado"
+    ;;
+  base)
+    ext=".tar.gz.enc"
+    etiqueta="una copia fisica"
+    ;;
+  *) die "${KQ_EXIT_USAGE}" "kq_open_copy: tipo '${kind}' desconocido (dump o base)." ;;
+  esac
+
+  nombre="$(basename -- "$fichero")"
+  nombre="${nombre%"$ext"}"
+  kqe_open "$fichero" "$trabajo" "$kind" "$nombre" || estado=$?
+  case "$estado" in
+  0) INTEGRIDAD="authenticated" ;;
+  10)
+    if [ "$aceptar" -eq 0 ]; then
+      [ -z "$gancho" ] || "$gancho"
+      die "$fallo" "'${fichero}' es ${etiqueta} de la 2.1.0: esta cifrada pero NO autenticada (solo la protege su .sha256, que quien escriba en el destino puede recalcular). Si es la que quieres, repite con --accept-unauthenticated (por invocacion, nunca en el .env). El .sha256 sigue siendo obligatorio. Procedimiento: docs/runbooks/restaurar-backup.md §6.8. No se ha tocado nada."
+    fi
+    INTEGRIDAD="legacy_accepted"
+    ;;
+  15)
+    [ -z "$gancho" ] || "$gancho"
+    die "${KQ_EXIT_REQUIREMENTS}" "${KQE_REASON}. Comprueba que el destino de copias esta montado y que la copia existe. No se ha tocado nada."
+    ;;
+  *)
+    [ -z "$gancho" ] || "$gancho"
+    die "$fallo" "'${fichero}' NO supera la comprobacion de autenticidad: ${KQE_REASON}. No la uses: prueba con la copia anterior ('backup.sh list'), y si no hay una averia de almacenamiento que lo explique, avisa al responsable de seguridad. Si se roto BACKUP_ENCRYPTION_KEY, usa la anterior en BACKUP_ENCRYPTION_KEY_PREVIOUS. No se ha tocado nada."
+    ;;
+  esac
+
+  # La huella SHA-256 es OBLIGATORIA, y se compara con los bytes de la copia privada.
+  # Si quien llama aporta una huella de CONFIANZA (EXPECT_SHA256: la vuelta atras de
+  # update.sh, que la calculo el mismo y la guardo donde el runtime no llega, C13),
+  # manda ella y el `.sha256` de BACKUP_PATH no cuenta.
+  guardada="${EXPECT_SHA256:-}"
+  [ -n "$guardada" ] || guardada="$(kq_sha256_stored "${fichero}.sha256")"
+  HUELLA_PRIVADA="$(sha256_of "$KQE_COPY")"
+  if [ -z "$guardada" ] || [ "$guardada" != "$HUELLA_PRIVADA" ]; then
+    [ -z "$gancho" ] || "$gancho"
+    die "$fallo" "la huella SHA-256 de '${fichero}' falta o no coincide con la registrada: esta corrupta o alguien la ha tocado. Prueba con la copia anterior ('backup.sh list') y avisa al responsable de seguridad. No se ha tocado nada."
+  fi
+
+  MANIFIESTO=""
+  [ "$kind" = "dump" ] || return 0
+
+  # El manifiesto decide que conteos cuadran: en una copia KQE1 se AUTENTICA tambien.
+  manifiesto_origen="${fichero%.dump.enc}.manifest.json"
+  if [ "$INTEGRIDAD" = "authenticated" ]; then
+    if ! { [ -f "$manifiesto_origen" ] && [ -f "${manifiesto_origen%.json}.mac" ] &&
+      cp -- "$manifiesto_origen" "${trabajo}/manifest.json" && cp -- "${manifiesto_origen%.json}.mac" "${trabajo}/manifest.mac" &&
+      kqe_manifest_check "$nombre" "${trabajo}/manifest.json" "${trabajo}/manifest.mac"; }; then
+      [ -z "$gancho" ] || "$gancho"
+      die "$fallo" "el manifiesto de '${fichero}' falta, no tiene MAC o el MAC no cuadra: no se puede confiar en los conteos que declara. La copia se trata como inexistente: prueba con la anterior ('backup.sh list'). No se ha tocado nada."
+    fi
+    MANIFIESTO="${trabajo}/manifest.json"
+  else
+    if [ "$aceptar" -eq 2 ]; then
+      err "AVISO: '${fichero}' es una copia de la 2.1.0: esta cifrada pero NO autenticada (solo la protege su .sha256). Caduca sola; para restaurarla hace falta --accept-unauthenticated."
+    else
+      err "AVISO: copia de la 2.1.0 aceptada por bandera explicita: sin autenticar. Su manifiesto tampoco lo esta."
+    fi
+    if [ -f "$manifiesto_origen" ] && cp -- "$manifiesto_origen" "${trabajo}/manifest.json" 2>/dev/null; then
+      MANIFIESTO="${trabajo}/manifest.json"
+    else
+      err "AVISO: falta el manifiesto '${manifiesto_origen}'. El simulacro de restauracion no podra comparar conteos por tabla."
+    fi
+  fi
+}
+
+# Publica un informe de trabajo (directorio privado) en `reports/` como el uid de
+# la aplicacion y sin sobrescribir (A3-R2). Si no se puede, lo CONSERVA aparte y lo
+# dice: un informe perdido seria peor que uno publicado tarde.
+#
+#   kq_report_publish TRABAJO DESTINO
+kq_report_publish() {
+  local work="$1" final="$2" rc=0 rescate rescate_dir
+  [ -n "$work" ] && [ -s "$work" ] || return 0
+  kq_publish_as_app "$work" "$final" 027 2>/dev/null || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    # Nunca un nombre predecible en /tmp (directorio con sticky, donde otro usuario
+    # puede plantar un enlace: fs.sh ya lo dice): el directorio de registros de root
+    # si existe y es de fiar, y si no uno privado 0700 recien creado.
+    rescate_dir="${KRONOQR_LOG_DIR:-/var/log/kronoqr}"
+    if ! { [ -d "$rescate_dir" ] && [ -w "$rescate_dir" ] && kq_path_trusted "$rescate_dir"; }; then
+      rescate_dir="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-informe.XXXXXX" 2>/dev/null)" || rescate_dir=""
+    fi
+    rescate="${rescate_dir:-/nonexistent}/$(basename -- "$final")"
+    (umask 077 && cp -- "$work" "$rescate") 2>/dev/null || true
+    err "AVISO: no se ha podido publicar el informe en '${final}' (hace falta setpriv si se ejecuta como root, y que el nombre no exista). Queda en '${rescate}'. Adjuntalo al parte del incidente."
+  fi
+  return 0
+}
+
+# La subclave del WAL: la del entorno o, si no hay, la derivada de la maestra
+# (quien restaura la tiene; `postgres` no necesita derivarla).
+kq_wal_key_ensure() {
+  if ! kqe_wal_key_valid "${BACKUP_WAL_KEY:-}"; then
+    [ -n "${BACKUP_ENCRYPTION_KEY:-}" ] || return 1
+    BACKUP_WAL_KEY="$(kqe_derive_wal_key "$BACKUP_ENCRYPTION_KEY")" || return 1
+    kqe_wal_key_valid "$BACKUP_WAL_KEY" || return 1
+  fi
+  export BACKUP_WAL_KEY
+  # La de la clave ANTERIOR (rotacion), si se ha dado: para abrir segmentos de antes.
+  if [ -n "${BACKUP_ENCRYPTION_KEY_PREVIOUS:-}" ] && [ -z "${BACKUP_WAL_KEY_PREVIOUS:-}" ]; then
+    BACKUP_WAL_KEY_PREVIOUS="$(kqe_derive_wal_key "$BACKUP_ENCRYPTION_KEY_PREVIOUS")" || BACKUP_WAL_KEY_PREVIOUS=""
+  fi
+  if kqe_wal_key_valid "${BACKUP_WAL_KEY_PREVIOUS:-}"; then
+    export BACKUP_WAL_KEY_PREVIOUS
+  fi
+  return 0
+
+}
+
+# Huella esperada de un `.sha256`: 64 hex, o nada.
+kq_sha256_stored() {
+  local file="$1" value=""
+  [ -f "$file" ] || return 0
+  value="$(cut -d' ' -f1 <"$file" 2>/dev/null | head -n 1)"
+  [[ "$value" =~ ^[0-9a-f]{64}$ ]] || value=""
+  printf '%s' "$value"
 }
 
 # Escritura ATOMICA de un fichero de metricas para el colector textfile de
@@ -297,12 +451,14 @@ ensure_backup_tree() {
 #
 # Cada productor escribe SU fichero y sus propias metricas: dos ficheros con la
 # misma metrica hacen que node-exporter descarte los dos.
+#
+# Delega en `kq_write_metrics_atomic` (lib/fs.sh): como root escribe COMO EL UID
+# DE LA APLICACION (setpriv) y no por ruta, porque `metrics/` lo escribe el
+# runtime y un enlace plantado ahi no debe llevar a root a tocar otro fichero
+# (A3-R2, F1 del bloque 16). Si no se puede escribir, la metrica es de cortesia y
+# no tumba la operacion.
 write_metrics() {
-  local file="$1" tmp
-  tmp="${file}.$$.tmp"
-  cat >"$tmp"
-  chmod 0644 "$tmp"
-  mv -f "$tmp" "$file"
+  kq_write_metrics_atomic "$1" || return 0
 }
 
 # Espacio libre en el destino, publicado como metrica propia y no dejado a los

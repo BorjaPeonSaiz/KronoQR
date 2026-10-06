@@ -128,6 +128,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\QueueProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SettingsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\TlsProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\RuntimeService;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Product\Infrastructure\Export\TranslatedDataExportGuide;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
@@ -1851,6 +1852,11 @@ final class ProductServiceProvider extends ServiceProvider
                         brandingLogoRoot: Config::string('branding.logo_root'),
                         settings: $app->make(GetSettingsHandler::class),
                         logos: $app->make(LogoInspector::class),
+                        // Bloque 20 (A3-R2): la raiz de BACKUP_PATH va en solo
+                        // lectura y cada servicio escribe solo lo suyo.
+                        metricsPath: Config::string('observability.metrics.textfile_path'),
+                        environment: Config::string('app.env'),
+                        service: RuntimeService::fromConfig(Config::get('backup.runtime_service')),
                     ),
                     new DiskProbe(
                         storagePath: storage_path(),
@@ -1870,6 +1876,7 @@ final class ProductServiceProvider extends ServiceProvider
                         // `config/compliance.php`, tambien con la variable vacia.
                         retentionReportPath: Config::string('compliance.retention.report_path'),
                         backupPath: Config::string('backup.path'),
+                        service: RuntimeService::fromConfig(Config::get('backup.runtime_service')),
                         classRoots: GeneratedFileAreas::configuredRoots(),
                         consoleExports: GeneratedFileAreas::legalExportConsole(
                             Config::string('compliance.legal_export_console_path'),

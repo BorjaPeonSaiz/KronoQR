@@ -9,9 +9,10 @@
 #
 # Que produce, dentro de BACKUP_PATH (configuracion, regla dura 13):
 #
-#   daily/kronoqr-<UTC>.dump.enc         volcado logico cifrado (pg_dump -Fc)
-#   daily/kronoqr-<UTC>.dump.enc.sha256  huella del fichero cifrado
+#   daily/kronoqr-<UTC>.dump.enc         volcado logico cifrado y AUTENTICADO (KQE1, ADR-049)
+#   daily/kronoqr-<UTC>.dump.enc.sha256  huella del fichero cifrado (detecta corrupcion; no autentica)
 #   daily/kronoqr-<UTC>.manifest.json    conteos por tabla, LSN y metadatos
+#   daily/kronoqr-<UTC>.manifest.mac     MAC del manifiesto (obligatorio al restaurar)
 #   daily/LATEST                         nombre de la ultima copia verificada
 #   base/kronoqr-base-<UTC>.tar.gz.enc   copia FISICA (pg_basebackup), --mode base
 #   metrics/kronoqr_backup_*.prom        resultado para Prometheus (§8.2)
@@ -43,6 +44,7 @@
 #   backup.sh verify [--file RUTA]
 #   backup.sh prune
 #   backup.sh list
+#   backup.sh derive-wal-key (--print | --kid | --check-env FICHERO | --write-env FICHERO)
 #
 # Ejemplos:
 #   backup.sh run                       copia diaria, cifrada y verificada
@@ -225,49 +227,12 @@ kronoqr_backup_last_size_bytes{type="${tipo}"} ${tamano}
 kronoqr_backup_copies_total{type="dump"} $(contar_copias)
 EOF
     emit_volume_metrics
-    metricas_de_archivado_wal
   } | write_metrics "${BACKUP_DIR_METRICS}/kronoqr_backup_run.prom"
 }
 
-# El estado del archivado de WAL se pregunta a PostgreSQL, no al directorio:
-# pg_stat_archiver es la fuente autorizada y no exige montar el archivo de WAL
-# en el contenedor que hace la copia.
-metricas_de_archivado_wal() {
-  local fila edad fallos archivados fila_slots slots_inactivos slot_retenido
-  fila="$(psql -Atq -F'|' -c "SELECT coalesce(extract(epoch from now() - last_archived_time)::bigint, -1), failed_count, archived_count FROM pg_stat_archiver" 2>/dev/null || true)"
-  # A3-05. Slots de replicacion parados: retienen WAL sin limite y llenan el
-  # disco de datos. KronoQR no crea ninguno; el rol de copias (REPLICATION) si
-  # podria. Se lee de `pg_replication_slots`, visible para cualquier rol.
-  fila_slots="$(psql -Atq -F'|' -c "SELECT count(*) FILTER (WHERE NOT active), coalesce(max(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)), 0)::bigint FROM pg_replication_slots" 2>/dev/null || true)"
-  slots_inactivos="${fila_slots%%|*}"
-  slot_retenido="$(printf '%s' "$fila_slots" | cut -d'|' -f2)"
-  [ -n "${slots_inactivos//[^0-9]/}" ] || slots_inactivos=0
-  [ -n "${slot_retenido//[^0-9]/}" ] || slot_retenido=0
-  edad="${fila%%|*}"
-  fallos="$(printf '%s' "$fila" | cut -d'|' -f2)"
-  archivados="$(printf '%s' "$fila" | cut -d'|' -f3)"
-  [ -n "${edad//[^0-9-]/}" ] || edad=-1
-  [ -n "${fallos:-}" ] || fallos=0
-  [ -n "${archivados:-}" ] || archivados=0
-
-  cat <<EOF
-# HELP kronoqr_backup_wal_last_archived_age_seconds Antiguedad del ultimo segmento de WAL archivado; -1 si aun no se ha archivado ninguno.
-# TYPE kronoqr_backup_wal_last_archived_age_seconds gauge
-kronoqr_backup_wal_last_archived_age_seconds ${edad}
-# HELP kronoqr_backup_wal_archive_failures_total Intentos fallidos de archivado de WAL desde el ultimo reinicio de estadisticas.
-# TYPE kronoqr_backup_wal_archive_failures_total counter
-kronoqr_backup_wal_archive_failures_total ${fallos}
-# HELP kronoqr_backup_wal_archived_total Segmentos de WAL archivados desde el ultimo reinicio de estadisticas.
-# TYPE kronoqr_backup_wal_archived_total counter
-kronoqr_backup_wal_archived_total ${archivados}
-# HELP kronoqr_backup_replication_slots_inactive Slots de replicacion sin consumidor (retienen WAL). KronoQR no usa ninguno: distinto de 0 es un incidente.
-# TYPE kronoqr_backup_replication_slots_inactive gauge
-kronoqr_backup_replication_slots_inactive ${slots_inactivos}
-# HELP kronoqr_backup_replication_slot_retained_bytes WAL retenido por el slot que mas retiene, en bytes.
-# TYPE kronoqr_backup_replication_slot_retained_bytes gauge
-kronoqr_backup_replication_slot_retained_bytes ${slot_retenido}
-EOF
-}
+# El estado del archivado de WAL y de los slots de replicacion YA NO se publica
+# aqui (R5-DV-01): era una foto al terminar la copia nocturna. Lo publica
+# wal-metrics.sh cada minuto, con otros nombres (kronoqr_wal_*).
 
 metricas_de_verificacion() {
   local resultado="$1" momento="$2" edad="$3"
@@ -418,8 +383,8 @@ copia_logica() {
 
   TEMPORALES+=("$tmp")
   log "Volcando ${PGDATABASE} y cifrando en ${fichero}"
-  if ! { "${BACKUP_DUMP_COMMAND:-pg_dump}" --format=custom --compress=6 --no-password |
-    encrypt_stream; } >"$tmp"; then
+  if ! "${BACKUP_DUMP_COMMAND:-pg_dump}" --format=custom --compress=6 --no-password |
+    kqe_encrypt dump "${BACKUP_PREFIX}-${marca}" "$tmp"; then
     rm -f "$tmp"
     die "${KQ_EXIT_ROLLED_BACK}" "ha fallado el volcado o el cifrado. No se ha escrito ninguna copia nueva y la anterior sigue intacta. Revisa el espacio libre en '${BACKUP_PATH}' y los permisos del usuario ${PGUSER} sobre la base ${PGDATABASE}. El rol de copias es de solo lectura (pg_read_all_data): si alguien ha creado un objeto grande (lo_import), ese rol no puede leerlo y el volcado falla; KronoQR no los usa. Ver docs/runbooks/restaurar-backup.md."
   fi
@@ -446,6 +411,15 @@ copia_logica() {
   escribir_manifiesto "${BACKUP_DIR_DUMP}/${BACKUP_PREFIX}-${marca}.manifest.json" \
     "$fichero" "$huella" "$tamano" "$duracion" "$lsn_antes" "$lsn_despues" "$conteos" "$estables"
 
+  # El manifiesto decide que conteos «cuadran» al restaurar: se AUTENTICA con la
+  # misma clave que el volcado (ADR-049). Sin su MAC la restauracion se niega.
+  local mac_base="${BACKUP_DIR_DUMP}/${BACKUP_PREFIX}-${marca}.manifest"
+  TEMPORALES+=("${mac_base}.mac.part")
+  kqe_manifest_seal "${BACKUP_PREFIX}-${marca}" "${mac_base}.json" "${mac_base}.mac.part" ||
+    die "${KQ_EXIT_ROLLED_BACK}" "no se ha podido calcular el MAC del manifiesto. No se ha publicado ninguna copia nueva y la anterior sigue intacta."
+  chmod 0640 "${mac_base}.mac.part"
+  mv -f "${mac_base}.mac.part" "${mac_base}.mac"
+
   chmod 0640 "$tmp"
   mv -f "$tmp" "$destino"
   mv -f "${destino}.sha256.part" "${destino}.sha256"
@@ -470,8 +444,9 @@ copia_fisica() {
   require_cmd pg_basebackup postgresql17-client
   TEMPORALES+=("$tmp")
   log "Copia fisica con pg_basebackup (necesaria para el RPO de 15 min)"
-  if ! { pg_basebackup --format=tar --gzip --compress=6 --wal-method=fetch \
-    --checkpoint=fast --no-password --pgdata=- | encrypt_stream; } >"$tmp"; then
+  if ! pg_basebackup --format=tar --gzip --compress=6 --wal-method=fetch \
+    --checkpoint=fast --no-password --pgdata=- |
+    kqe_encrypt base "${BACKUP_PREFIX}-base-${marca}" "$tmp"; then
     rm -f "$tmp"
     die "${KQ_EXIT_ROLLED_BACK}" "ha fallado pg_basebackup. Comprueba que el usuario ${PGUSER} tiene el atributo REPLICATION o es superusuario y que pg_hba.conf admite conexiones de replicacion (infra/docker/postgres/conf/pg_hba.conf). El volcado logico de esta ejecucion, si lo hubo, sigue siendo valido."
   fi
@@ -528,7 +503,7 @@ cmd_run() {
   comprobar_herramientas
   comprobar_cliente_postgres
   require_encryption_key
-  ensure_backup_tree
+  ensure_backup_tree daily base metrics
   comprobar_conexion
   comprobar_rol_de_copia
   # Margen: el tamano de la base sin comprimir. El volcado comprimido ocupa
@@ -570,8 +545,13 @@ cmd_run() {
 # verify — una copia no verificada no es una copia
 #------------------------------------------------------------------------------
 
+# Gancho de kq_open_copy: la verificacion que falla publica su metrica antes de morir.
+metrica_de_fallo_de_verificacion() {
+  metricas_de_verificacion 0 "$(now_epoch)" -1
+}
+
 cmd_verify() {
-  local fichero="" huella_guardada huella_actual entradas edad manifiesto
+  local fichero="" entradas edad
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -594,7 +574,7 @@ cmd_verify() {
   comprobar_herramientas
   comprobar_cliente_postgres
   require_encryption_key
-  ensure_backup_tree
+  ensure_backup_tree metrics
 
   [ -n "$fichero" ] || fichero="$(latest_dump_file)"
   if [ -z "$fichero" ] || [ ! -f "$fichero" ]; then
@@ -604,35 +584,35 @@ cmd_verify() {
 
   log "Verificando ${fichero}"
 
-  # 1) Huella del fichero cifrado: detecta corrupcion en disco o en el destino
-  #    de red sin necesidad de la clave.
-  if [ -f "${fichero}.sha256" ]; then
-    huella_guardada="$(cut -d' ' -f1 <"${fichero}.sha256")"
-    huella_actual="$(sha256_of "$fichero")"
-    if [ "$huella_guardada" != "$huella_actual" ]; then
-      metricas_de_verificacion 0 "$(now_epoch)" -1
-      die "${KQ_EXIT_VERIFY_FAILED}" "la huella SHA-256 de '${fichero}' no coincide con la registrada al crearla: el fichero esta corrupto o alguien lo ha modificado. NO lo uses para restaurar. Usa la copia anterior ('backup.sh list') y avisa al responsable de seguridad."
-    fi
-  else
-    err "AVISO: '${fichero}' no tiene fichero .sha256. Se verifica igualmente descifrando, pero no se puede descartar corrupcion silenciosa."
-  fi
-
-  # 2) Descifrado completo y lectura del indice del volcado. Esto prueba tres
-  #    cosas a la vez: que la clave es la correcta, que el texto cifrado esta
-  #    entero y que dentro hay un volcado que pg_restore entiende.
-  #
-  #    El descifrado va a un temporal de un directorio privado y no al disco de
-  #    copias: pg_restore necesita un fichero legible, y el texto en claro no
-  #    debe quedar nunca junto a las copias. El trap lo borra pase lo que pase.
-  local temporal_dir claro
+  # Todo se hace sobre UNA copia privada de los bytes (0700): se verifica y se
+  # descifra el MISMO contenido, no el que haya en el recurso de red en cada
+  # momento (TOCTOU, ADR-049). El descifrado va tambien alli y no junto a las
+  # copias: el texto en claro no debe quedar nunca en BACKUP_PATH.
+  local temporal_dir claro estado=0
   temporal_dir="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-verify.XXXXXX")"
+  chmod 0700 "$temporal_dir"
   claro="${temporal_dir}/copia.dump"
-  TEMPORALES+=("$claro" "$temporal_dir")
+  TEMPORALES+=("$temporal_dir")
 
-  if ! decrypt_stream <"$fichero" >"$claro" 2>/dev/null; then
+  # 1) Autenticidad (MAC), cabecera, huella SHA-256 obligatoria y manifiesto
+  #    autenticado: la MISMA apertura que usan restore.sh y el simulacro
+  #    (kq_open_copy). Una copia heredada de la 2.1.0 se acepta aqui solo para
+  #    VERIFICAR (modo 2); restaurarla exige --accept-unauthenticated. Si algo falla
+  #    se publica antes la metrica de fallo.
+  kq_open_copy dump "$fichero" "$temporal_dir" 2 "${KQ_EXIT_VERIFY_FAILED}" metrica_de_fallo_de_verificacion
+
+  # 2) Descifrado completo y lectura del indice del volcado: que la clave es la
+  #    correcta, que el texto cifrado esta entero y que dentro hay un volcado que
+  #    pg_restore entiende.
+  if [ "$INTEGRIDAD" = "authenticated" ]; then
+    kqe_decrypt_copy >"$claro" 2>/dev/null || estado=1
+  else
+    kqe_decrypt_legacy_copy dump >"$claro" 2>/dev/null || estado=1
+  fi
+  if [ "$estado" -eq 1 ]; then
     rm -rf "$temporal_dir"
     metricas_de_verificacion 0 "$(now_epoch)" -1
-    die "${KQ_EXIT_VERIFY_FAILED}" "no se ha podido descifrar '${fichero}'. O BACKUP_ENCRYPTION_KEY no es la clave con la que se creo, o el fichero esta dañado. Comprueba la clave del .env; si se roto, la copia solo se abre con la clave anterior. Ver docs/runbooks/restaurar-backup.md."
+    die "${KQ_EXIT_VERIFY_FAILED}" "no se ha podido descifrar '${fichero}'. O BACKUP_ENCRYPTION_KEY no es la clave con la que se creo, o el fichero esta dañado. Comprueba la clave del .env; si se roto, la copia solo se abre con la clave anterior (BACKUP_ENCRYPTION_KEY_PREVIOUS, solo para restaurar). Ver docs/runbooks/restaurar-backup.md."
   fi
 
   if ! entradas="$(pg_restore --list "$claro" 2>/dev/null | grep -cE '^[0-9]+;' || true)"; then
@@ -644,9 +624,7 @@ cmd_verify() {
     die "${KQ_EXIT_VERIFY_FAILED}" "'${fichero}' se descifra pero no es un volcado que pg_restore pueda leer. La copia NO sirve para restaurar: usa la anterior ('backup.sh list') y lanza 'backup.sh run' en cuanto puedas. Ver docs/runbooks/restaurar-backup.md."
   fi
   rm -rf "$temporal_dir"
-
-  manifiesto="${fichero%.dump.enc}.manifest.json"
-  [ -f "$manifiesto" ] || err "AVISO: falta el manifiesto '${manifiesto}'. El simulacro de restauracion no podra comparar conteos por tabla."
+  kqe_forget
 
   edad="$(($(now_epoch) - $(stat -c %Y "$fichero" 2>/dev/null || now_epoch)))"
   metricas_de_verificacion 1 "$(now_epoch)" "$edad"
@@ -660,7 +638,7 @@ cmd_verify() {
 cmd_prune() {
   local total caducados fichero borrados=0 ultimo
 
-  ensure_backup_tree
+  ensure_backup_tree daily base
   total="$(contar_copias)"
   ultimo="$(basename "$(latest_dump_file 2>/dev/null || true)" 2>/dev/null || true)"
 
@@ -675,7 +653,7 @@ cmd_prune() {
     [ -n "$fichero" ] || continue
     [ "$((total - borrados))" -gt "$BACKUP_MIN_COPIES" ] || break
     [ "$(basename "$fichero")" != "$ultimo" ] || continue
-    rm -f "$fichero" "${fichero}.sha256" "${fichero%.dump.enc}.manifest.json"
+    rm -f "$fichero" "${fichero}.sha256" "${fichero%.dump.enc}.manifest.json" "${fichero%.dump.enc}.manifest.mac"
     borrados="$((borrados + 1))"
   done <<<"$caducados"
 
@@ -692,16 +670,81 @@ cmd_prune() {
 #------------------------------------------------------------------------------
 
 cmd_list() {
-  local fichero
-  ensure_backup_tree
-  printf '%-46s %10s  %s\n' "COPIA" "TAMANO" "VERIFICABLE"
+  local fichero formato
+  ensure_backup_tree none
+  printf '%-46s %10s  %-9s %s\n' "COPIA" "TAMANO" "FORMATO" "VERIFICABLE"
   while IFS= read -r fichero; do
     [ -n "$fichero" ] || continue
-    printf '%-46s %9s K  %s\n' \
+    formato="KQE1"
+    [ "$(head -c 8 "$fichero" 2>/dev/null)" != "Salted__" ] || formato="heredada"
+    printf '%-46s %9s K  %-9s %s\n' \
       "$(basename "$fichero")" \
       "$(($(wc -c <"$fichero") / 1024))" \
+      "$formato" \
       "$([ -f "${fichero}.sha256" ] && echo "sha256 + manifiesto" || echo "sin huella")"
   done < <(find "$BACKUP_DIR_DUMP" -maxdepth 1 -type f -name "${BACKUP_PREFIX}-*.dump.enc" 2>/dev/null | sort)
+}
+
+#------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+# derive-wal-key — la subclave que recibe PostgreSQL (ADR-049)
+#------------------------------------------------------------------------------
+
+# Deriva BACKUP_WAL_KEY de BACKUP_ENCRYPTION_KEY. Nunca imprime la clave salvo que
+# se pida con --print (para exportarla a mano en una restauracion).
+#
+#   --print            la clave, en la salida estandar
+#   --kid              su kid (8 hex, no secreto): lo que lleva la cabecera de cada segmento
+#   --check-env FILE   0 si BACKUP_WAL_KEY de FILE coincide con la derivada; 1 si no;
+#                      2 si FILE no la tiene. No imprime ningun valor
+#   --write-env FILE   la escribe en FILE (0600, atomico) y no imprime nada
+cmd_derive_wal_key() {
+  local accion="" fichero="" derivada actual
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    --print | --kid)
+      accion="${1#--}"
+      shift
+      ;;
+    --check-env | --write-env)
+      accion="${1#--}"
+      fichero="${2:-}"
+      [ -n "$fichero" ] || die "${KQ_EXIT_USAGE}" "$1 necesita la ruta del .env."
+      shift 2
+      ;;
+    -h | --help)
+      uso
+      return 0
+      ;;
+    *) die "${KQ_EXIT_USAGE}" "argumento desconocido '$1'. Uso: backup.sh derive-wal-key (--print | --kid | --check-env FICHERO | --write-env FICHERO)." ;;
+    esac
+  done
+  [ -n "$accion" ] || die "${KQ_EXIT_USAGE}" "indica que hacer: --print, --kid, --check-env FICHERO o --write-env FICHERO."
+
+  require_cmd openssl openssl
+  require_encryption_key
+  derivada="$(kqe_derive_wal_key "$BACKUP_ENCRYPTION_KEY")" || derivada=""
+  kqe_wal_key_valid "$derivada" || die "${KQ_EXIT_REQUIREMENTS}" \
+    "no se ha podido derivar la clave del WAL de BACKUP_ENCRYPTION_KEY. Comprueba que openssl funciona."
+
+  case "$accion" in
+  print) printf '%s\n' "$derivada" ;;
+  kid) kqe_wal_kid "$derivada" ;;
+  check-env)
+    actual=""
+    # Se lee el fichero SIN ejecutarlo y sin cargarlo en el entorno de este proceso.
+    actual="$(sed -n 's/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}BACKUP_WAL_KEY=//p' "$fichero" | tail -n 1 | tr -d "\"'[:space:]")"
+    [ -n "$actual" ] || return 2
+    [ "$actual" = "$derivada" ]
+    ;;
+  write-env)
+    kq_env_set "$fichero" BACKUP_WAL_KEY "$derivada" || die "${KQ_EXIT_REQUIREMENTS}" "no se ha podido escribir BACKUP_WAL_KEY en '${fichero}'. Comprueba que existe y que puedes escribirlo (es de root, modo 0600)."
+    chmod 0600 "$fichero" 2>/dev/null || true
+    log "BACKUP_WAL_KEY escrita en ${fichero}. Recrea PostgreSQL para que la lea: docker compose up -d postgres"
+    ;;
+  esac
 }
 
 #------------------------------------------------------------------------------
@@ -713,12 +756,24 @@ main() {
   load_backup_config
 
   case "$orden" in
+  run | verify | prune)
+    # Como root no se escribe por ruta en un arbol que escribe el runtime (A3-R2):
+    # se re-ejecuta como el uid 1000 de la aplicacion.
+    if [ "$(id -u)" = "0" ]; then
+      require_encryption_key
+      kq_reexec_as_app "${BASH_SOURCE[0]}" "$orden" "$@"
+    fi
+    ;;
+  esac
+
+  case "$orden" in
   run) cmd_run "$@" ;;
   verify) cmd_verify "$@" ;;
   prune) cmd_prune "$@" ;;
   list) cmd_list "$@" ;;
+  derive-wal-key) cmd_derive_wal_key "$@" ;;
   -h | --help | help) uso ;;
-  *) die "${KQ_EXIT_USAGE}" "orden desconocida '${orden}'. Usa run, verify, prune o list. 'backup.sh --help' las explica." ;;
+  *) die "${KQ_EXIT_USAGE}" "orden desconocida '${orden}'. Usa run, verify, prune, list o derive-wal-key. 'backup.sh --help' las explica." ;;
   esac
 }
 

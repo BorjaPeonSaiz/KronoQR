@@ -64,7 +64,7 @@ const RUNTIME_ENVIRONMENT_FORBIDDEN = [
 ];
 
 /** El rol de copia (solo lectura) y la clave de cifrado de las copias: solo el planificador (ADR-042 §2). */
-const RUNTIME_ENVIRONMENT_SCHEDULER_ONLY = ['BACKUP_DB_USERNAME', 'BACKUP_DB_PASSWORD', 'BACKUP_ENCRYPTION_KEY'];
+const RUNTIME_ENVIRONMENT_SCHEDULER_ONLY = ['BACKUP_DB_USERNAME', 'BACKUP_DB_PASSWORD', 'BACKUP_ENCRYPTION_KEY', 'BACKUP_ENCRYPTION_KEY_PREVIOUS'];
 
 /**
  * NOMBRES de rol, nunca contraseñas: la configuracion los usa para escribir los
@@ -109,6 +109,7 @@ const RUNTIME_ENVIRONMENT_NOT_FORWARDED = [
     'TLS_CERT_DIR' => 'la interpola Compose en el volumen del certificado de nginx',
     'BRANDING_PATH' => 'la interpola Compose en el volumen de marca; la aplicacion lee BRANDING_LOGO_ROOT',
     'DB_MAX_SLOT_WAL_KEEP_GB' => 'la interpola Compose en el `command:` de postgres (max_slot_wal_keep_size); ningun proceso de la aplicacion la lee',
+    'BACKUP_WAL_KEY' => 'subclave del WAL derivada de BACKUP_ENCRYPTION_KEY (ADR-049): solo la recibe postgres, para su archive_command',
 ];
 
 const RUNTIME_ENVIRONMENT_MOTIVO_DRIVER_SIN_USO = 'driver o servicio de Laravel que el producto no usa (PostgreSQL, Redis, SMTP y stderr/Loki son los suyos)';
@@ -133,6 +134,10 @@ const RUNTIME_ENVIRONMENT_CODE_DEFAULTS = [
     'SPEC_PATH' => RUNTIME_ENVIRONMENT_MOTIVO_PRUEBAS,
     'TINKER_TRUST_PROJECT' => RUNTIME_ENVIRONMENT_MOTIVO_PRUEBAS,
     'METRICS_TEXTFILE_PATH' => 'ruta fija dentro de BACKUP_PATH; la comparten los scripts de copia y node-exporter',
+    // Bloque 20 (A3-R2): en que contenedor corre product:doctor. Por defecto
+    // `app`, que es donde lo lanzan install.sh, update.sh y doctor.sh. Si el
+    // compose llega a fijarla por servicio (valor literal), sale de esta lista.
+    'KRONOQR_SERVICE' => 'contenedor en el que corre product:doctor; vale app, que es donde se ejecuta siempre',
     'DB_CACHE_CONNECTION' => RUNTIME_ENVIRONMENT_MOTIVO_DRIVER_SIN_USO,
     'DB_CACHE_TABLE' => RUNTIME_ENVIRONMENT_MOTIVO_DRIVER_SIN_USO,
     'DB_CACHE_LOCK_CONNECTION' => RUNTIME_ENVIRONMENT_MOTIVO_DRIVER_SIN_USO,
@@ -330,6 +335,65 @@ it('restore no recibe el rol de copia: restaura con el migrador', function (): v
     );
 })->group('RS-08');
 
+it('la subclave del WAL solo llega a postgres, que no recibe la clave maestra (ADR-049, C7)', function (): void {
+    // D2 y C7 del bloque 20. PostgreSQL cifra cada segmento en su
+    // `archive_command` con BACKUP_WAL_KEY, una subclave DERIVADA: un postgres
+    // comprometido abre el WAL, que ya lee, pero no los volcados ni las copias
+    // fisicas. Por eso la maestra no le llega y la derivada no llega a nadie mas;
+    // `restore` y el simulacro la reciben por invocacion (`-e BACKUP_WAL_KEY`).
+    $services = ComposeEnvironment::services(RUNTIME_ENVIRONMENT_PROD);
+
+    $receivers = array_keys(array_filter(
+        $services,
+        static fn (array $definition): bool => \in_array('BACKUP_WAL_KEY', ComposeEnvironment::referencedNames($definition), true),
+    ));
+
+    expect($receivers)->toBe(
+        ['postgres'],
+        'compose.prod.yaml: BACKUP_WAL_KEY llega a '.implode(', ', $receivers).'. Solo postgres la necesita (ADR-049): '
+        .'en x-runtime-env la tendria todo el runtime sin usarla.'
+    );
+
+    expect(\in_array('BACKUP_ENCRYPTION_KEY', runtimeEnvironmentReferencedBy('postgres'), true))->toBeFalse(
+        'compose.prod.yaml: postgres recibe BACKUP_ENCRYPTION_KEY. Un postgres comprometido abriria 30 dias de volcados '
+        .'y las copias fisicas: recibe solo la subclave del WAL (ADR-049, D2).'
+    );
+})->group('RL-12', 'RS-08', 'RNF-D-02');
+
+it('la subclave del WAL no tiene valor por defecto ni en el compose ni en .env.example (ADR-049)', function (): void {
+    // MEDIO del dictamen: una clave por defecto en produccion es una clave que
+    // conoce cualquiera con el paquete, y el WAL «cifrado» con ella esta en claro
+    // a efectos de RL-12. La genera install.sh/update.sh en el servidor.
+    $environment = ComposeEnvironment::environment(ComposeEnvironment::service(RUNTIME_ENVIRONMENT_PROD, 'postgres'));
+
+    expect(array_key_exists('BACKUP_WAL_KEY', $environment))->toBeTrue(
+        'compose.prod.yaml: postgres no recibe BACKUP_WAL_KEY: archive-wal.sh falla cerrado y PostgreSQL retiene el WAL.'
+    );
+
+    $value = $environment['BACKUP_WAL_KEY'] ?? null;
+
+    expect($value === null || preg_match('/^\$\{BACKUP_WAL_KEY(?::?\?[^}]*)?\}$/', $value) === 1)->toBeTrue(
+        'compose.prod.yaml: postgres.BACKUP_WAL_KEY vale «'.(string) $value.'». Tiene que llegar del .env sin valor por defecto '
+        .'(`BACKUP_WAL_KEY:` o `${BACKUP_WAL_KEY:?...}`).'
+    );
+    expect(Repo::contents(RUNTIME_ENVIRONMENT_PROD))->not->toMatch('/\$\{BACKUP_WAL_KEY:?-/');
+    expect(Repo::contents('.env.example'))->toMatch('/^BACKUP_WAL_KEY=[ \t]*(?:#.*)?$/m');
+})->group('RL-12', 'RS-08');
+
+it('la aceptacion de copias sin autenticar no vive ni en el compose ni en .env.example (C12)', function (): void {
+    // KRONOQR_ACCEPT_UNAUTHENTICATED abre la puerta a restaurar una copia de la
+    // 2.1.0 sin MAC. Es una decision por invocacion (`-e` en el `run` de
+    // restore), nunca un estado de la instalacion: en el .env o en el compose
+    // dejaria de verificarse la integridad de TODAS las restauraciones.
+    foreach ([RUNTIME_ENVIRONMENT_PROD, RUNTIME_ENVIRONMENT_DEV] as $compose) {
+        expect(str_contains(Repo::contents($compose), 'KRONOQR_ACCEPT_UNAUTHENTICATED'))->toBeFalse(
+            $compose.' nombra KRONOQR_ACCEPT_UNAUTHENTICATED: solo se pasa con -e por invocacion (C12).'
+        );
+    }
+
+    expect(DeclaredEnvironment::keysInEnvExample(Repo::contents('.env.example')))->not->toContain('KRONOQR_ACCEPT_UNAUTHENTICATED');
+})->group('RL-12', 'RS-08', 'RL-04');
+
 it('el planificador recibe la credencial de copia de solo lectura y la clave de cifrado', function (): void {
     $names = ComposeEnvironment::environmentNames(ComposeEnvironment::service(RUNTIME_ENVIRONMENT_PROD, 'scheduler'));
 
@@ -380,9 +444,9 @@ it('restore se conecta como migrador y recibe la clave de cifrado y el destino d
     expect(\in_array('DB_MIGRATION_PASSWORD', ComposeEnvironment::interpolatedIn((string) ($environment['PGPASSWORD'] ?? '')), true))->toBeTrue(
         'compose.prod.yaml: restore.PGPASSWORD no sale de DB_MIGRATION_PASSWORD.'
     );
-    expect(array_values(array_diff(['BACKUP_ENCRYPTION_KEY', 'BACKUP_PATH'], ComposeEnvironment::environmentNames($restore))))->toBe(
+    expect(array_values(array_diff(['BACKUP_ENCRYPTION_KEY', 'BACKUP_ENCRYPTION_KEY_PREVIOUS', 'BACKUP_PATH'], ComposeEnvironment::environmentNames($restore))))->toBe(
         [],
-        'compose.prod.yaml: restore necesita BACKUP_ENCRYPTION_KEY para descifrar y BACKUP_PATH para encontrar la copia.'
+        'compose.prod.yaml: restore necesita BACKUP_ENCRYPTION_KEY para descifrar (y BACKUP_ENCRYPTION_KEY_PREVIOUS para las copias anteriores a una rotacion) y BACKUP_PATH para encontrar la copia.'
     );
 })->group('RS-08', 'RL-04');
 

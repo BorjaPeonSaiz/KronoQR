@@ -9,7 +9,10 @@ verificada | cualquiera | Crítica | IT del cliente»*), definidas en
 | `CopiaDeSeguridadFallida` | cualquiera, `for: 5m` | Crítica | IT del cliente | [§2](#2-la-copia-ha-fallado) |
 | `CopiaDeSeguridadSinVerificar` | verificación en rojo o > 26 h sin verificar | Crítica | IT del cliente | [§2](#2-la-copia-ha-fallado) |
 | `CopiaDeSeguridadAusente` | no llega ninguna métrica, `for: 30m` | Crítica | IT del cliente | [§3](#3-no-llega-ninguna-métrica-el-silencio) |
-| `ArchivadoDeWalDetenido` | > 30 min sin archivar, o fallos en 1 h | Crítica | IT del cliente | [§4](#4-el-archivado-de-wal-está-detenido) |
+| `ArchivadoDeWalDetenido` | dato sin archivar desde hace más de `archive_timeout` + 10 min (≈ 25 min), o 3 segmentos completos sin archivar, `for: 3m` | Crítica | IT del cliente | [§4](#4-el-archivado-de-wal-está-detenido) |
+| `ArchivadoDeWalFallando` | el último intento de archivado falló y no se ha recuperado, `for: 10m` | Crítica | IT del cliente | [§4](#4-el-archivado-de-wal-está-detenido) |
+| `MedicionDeWalAusente` | el exportador del RPO lleva > 5 min sin publicar, `for: 5m` | Crítica | IT del cliente | [§4.3](#43-no-llega-la-medida-del-rpo) |
+| `ArchiveTimeoutFueraDeRango` | `archive_timeout` = 0 o > 900, `for: 10m` | Crítica | IT del cliente | [§4.4](#44-archive_timeout-fuera-de-rango) |
 | `DiscoDeCopiasCasiLleno` | < 20 % libre, `for: 15m` | Alta | IT del cliente | [§5](#5-disco-de-copias-casi-lleno) |
 | `SimulacroDeRestauracionCaducado` | simulacro fallido o > 100 días | Alta | IT del cliente | [§7](#7-simulacro-trimestral-rnf-d-05-rq-09) |
 
@@ -28,8 +31,10 @@ datos** por disco lleno.
 | --- | --- | --- |
 | `backup.sh run` | Volcado lógico cifrado + verificación | `BACKUP_PATH/daily/` |
 | `backup.sh run --mode base` | Copia **física** (`pg_basebackup`), semanal | `BACKUP_PATH/base/` |
-| `kronoqr-archive-wal` | Archiva un segmento de WAL cada 15 min como mucho | `BACKUP_PATH/wal/` |
-| `backup.sh verify` | Huella + descifrado + `pg_restore --list` | — |
+| `kronoqr-archive-wal` | Comprime, **cifra y autentica** (KQE1, ADR-049) un segmento de WAL cada 15 min como mucho | `BACKUP_PATH/wal/` (`<segmento>.gz.enc`) |
+| `kronoqr-restore-wal` | Es el `restore_command` de la recuperación a un punto en el tiempo (§6.4) | imagen de `postgres` |
+| `wal-metrics.sh` | Cada minuto, desde `scheduler`: cuánto lleva sin archivarse el dato más antiguo | `BACKUP_PATH/metrics/kronoqr_wal.prom` |
+| `backup.sh verify` | MAC (autenticidad) + `.sha256` + descifrado + `pg_restore --list` | — |
 | `restore.sh` | Restauración con intercambio de bases y vuelta atrás | `BACKUP_PATH/reports/` |
 | `restore-drill.sh` | Simulacro en contenedor limpio, trimestral | `BACKUP_PATH/reports/` |
 
@@ -40,7 +45,10 @@ el procedimiento de la §6, medido.
 **Las tres cosas que hay que saber sin buscarlas:**
 
 1. **Sin `BACKUP_ENCRYPTION_KEY` no hay restauración posible.** Una copia solo se
-   abre con la clave con la que se hizo. Si se rotó, hace falta la anterior.
+   abre con la clave con la que se hizo. Si se rotó, hace falta la anterior
+   (`BACKUP_ENCRYPTION_KEY_PREVIOUS`, solo para restaurar: se pasa con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run --rm restore`; no se deja en el `.env`). La clave del WAL
+   (`BACKUP_WAL_KEY`) **se deriva** de esa misma clave: no hay una segunda que
+   custodiar (`backup.sh derive-wal-key`).
 2. **La copia no sale de aquí.** Vive en la infraestructura del cliente; el
    fabricante no la recibe ni la custodia (regla dura 16, RL-14).
 3. **Nada de lo que imprimen estos scripts contiene datos personales**
@@ -181,9 +189,95 @@ docker compose exec postgres sh -c 'ls -1 "$PGDATA"/pg_wal | wc -l'
 | Sin permisos | `no se puede escribir en '...'` | `chown` al uid de `postgres` del contenedor |
 | Disco lleno | `no se ha podido comprimir` | [§5](#5-disco-de-copias-casi-lleno), **ya** |
 | Segmento distinto ya archivado | `ya esta archivado con un contenido DISTINTO` | Dos servidores archivando en el mismo destino: sepáralos antes de seguir |
+| **Falta la clave del WAL** | `falta BACKUP_WAL_KEY` o `BACKUP_WAL_KEY no es valida` | [§4.2](#42-falta-o-no-es-válida-la-clave-del-wal) |
+| **Clave de desarrollo en producción** | `BACKUP_WAL_KEY es la clave de desarrollo` | Mismo arreglo, [§4.2](#42-falta-o-no-es-válida-la-clave-del-wal) |
+
+**El archivado nunca escribe un segmento en claro**: sin clave válida
+**falla** (RL-12) y PostgreSQL retiene el WAL, así que la señal llega por
+`ArchivadoDeWalFallando` y, si dura, por `ArchivadoDeWalDetenido`.
 
 Cuando el destino vuelve a estar disponible, PostgreSQL reintenta solo. No hay
 que copiar nada a mano.
+
+**Cómo leer la métrica del RPO** (`kronoqr_wal_*`, la publica `wal-metrics.sh`
+cada minuto, en `BACKUP_PATH/metrics/kronoqr_wal.prom`):
+
+| Métrica | Sana | Qué dice |
+| --- | --- | --- |
+| `kronoqr_wal_unarchived_age_seconds` | de 0 a ≈ 900 | **El RPO real ahora mismo**: cuánto lleva sin archivarse el dato más antiguo, **incluido el segmento en curso**. Es la que dispara `ArchivadoDeWalDetenido` |
+| `kronoqr_wal_unarchived_segments` | 0 | Segmentos completos sin archivar (un archivado que va, pero atrasado) |
+| `kronoqr_wal_archive_failing` | 0 | 1 si el último intento falló y no se ha recuperado |
+| `kronoqr_wal_last_archived_age_seconds` | cualquiera | **Solo informativa.** Sin escrituras (madrugada) PostgreSQL no cierra segmentos y crece sin que haya ningún problema: no la uses para decidir |
+
+### 4.1 «El WAL no se descifra» (clave distinta o fichero alterado)
+
+El mensaje sale de `kronoqr-restore-wal`, de `restore-drill.sh --mode pitr` o
+de `backup.sh verify` y nombra el **segmento** y el **motivo**:
+
+| Motivo | Qué significa | Qué hacer |
+| --- | --- | --- |
+| `clave distinta o cabecera alterada` (`kid` distinto) | El segmento se cifró con otra clave: casi siempre una rotación de `BACKUP_ENCRYPTION_KEY` sin conservar la anterior | Pasa la clave anterior con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` (`docker compose run --rm -e BACKUP_ENCRYPTION_KEY_PREVIOUS restore ...`; solo para restaurar) y repite: `restore.sh`, el simulacro y `restore-drill --mode pitr` derivan de ella la subclave del WAL anterior solos. Para la recuperación manual de §6.4, ver cómo se obtiene allí. Si no la tienes, ese tramo de WAL no se puede reproducir: la recuperación llegará hasta el anterior |
+| `el MAC no cuadra: el fichero esta alterado o danado` (mismo `kid`) | El fichero no es el que se escribió: corrupción del recurso de red **o manipulación** | Trátalo como incidente de seguridad si no hay una avería de almacenamiento que lo explique ([`brecha-de-seguridad.md`](brecha-de-seguridad.md)). No lo uses |
+| `hueco` / segmento ausente con segmentos posteriores | Alguien ha borrado un segmento intermedio, o el destino perdió ficheros | Restaura la copia desde un soporte que lo conserve; si no existe, la recuperación **se detiene ahí** (a propósito, ver §6.4) |
+
+### 4.2 Falta o no es válida la clave del WAL
+
+Síntoma: `falta BACKUP_WAL_KEY` en `docker compose logs postgres`, o `doctor.sh`
+dice que la clave del WAL no deriva de la maestra. **PostgreSQL está reteniendo
+WAL**: arréglalo hoy.
+
+```bash
+# 1. Recalcula la clave a partir de la maestra (no se imprime nada si no pides nada más)
+sudo bash /opt/kronoqr/scripts/backup.sh derive-wal-key --write-env /opt/kronoqr/.env
+# 2. Recrea PostgreSQL para que la lea
+docker compose up -d postgres
+# 3. Comprueba que archiva (a los pocos segundos)
+docker compose exec postgres psql -U "$DB_USERNAME" -d "$DB_DATABASE" -c \
+  "SELECT pg_switch_wal()" && sleep 10 && docker compose exec postgres psql -U "$DB_USERNAME" -d "$DB_DATABASE" -tc \
+  "SELECT failed_count, last_archived_wal FROM pg_stat_archiver"
+```
+
+La clave del WAL **se deriva siempre de `BACKUP_ENCRYPTION_KEY`**: no inventes
+una a mano, porque la restauración la recalcula a partir de la maestra y no
+encontraría tus segmentos. `doctor.sh` compara la del `.env` con la derivada y
+con el `kid` del último segmento archivado.
+
+### 4.3 No llega la medida del RPO
+
+`MedicionDeWalAusente`: el exportador no publica. Es una avería **del
+`scheduler`**, que además es quien hace las copias:
+
+```bash
+docker compose ps scheduler
+docker compose logs --tail=50 scheduler | grep -i wal-metrics
+docker compose exec scheduler bash /opt/kronoqr/scripts/wal-metrics.sh   # sale con 2 y dice qué falta
+ls -l "${BACKUP_PATH}"/metrics/kronoqr_wal.prom
+```
+
+Mientras no haya medida **no se sabe si hay RPO**: comprueba a mano `pg_stat_archiver`
+(§4, paso 1) y atiende el `scheduler` hoy.
+
+### 4.4 `archive_timeout` fuera de rango
+
+Sin `archive_timeout=900` el RPO deja de ser 15 minutos: pasa a ser lo que
+tarde en llenarse un segmento de 16 MB. Lo fija `infra/compose.prod.yaml`
+(y `compose.dev.yaml`): si alguien lo ha editado, restáuralo y
+`docker compose up -d postgres`. `docker compose exec postgres psql -U "$DB_USERNAME" -d "$DB_DATABASE" -tc "SHOW archive_timeout"` debe decir `15min`.
+
+### 4.5 Segmentos antiguos sin cifrar (actualización desde la 2.1.0)
+
+La 2.1.0 archivaba el WAL **sin cifrar** (`<segmento>.gz`). `update.sh` los cifra
+en sitio en los minutos siguientes (dentro del contenedor de `postgres`, sin
+tocar su fecha) y el archivado nuevo ya cifra. Para ver cuántos faltan:
+
+```bash
+docker compose exec -T postgres sh -c 'ls "$KRONOQR_WAL_ARCHIVE_DIR"/*.gz 2>/dev/null | wc -l'
+# Si no baja a 0 en unos minutos, lánzalo a mano (es idempotente):
+docker compose exec -T postgres kronoqr-wal-migrate
+```
+
+**Las copias de `BACKUP_PATH/wal` que hicieras en otros soportes antes de
+actualizar contienen WAL en claro con datos personales: destrúyelas.**
 
 ---
 
@@ -310,29 +404,68 @@ Con los servicios parados, igual que en la restauración.
 ### 6.4 Recuperar a un punto en el tiempo (RPO de 15 min)
 
 El volcado diario devuelve el estado **de esa madrugada**. Para perder como
-mucho 15 minutos hay que reproducir el WAL archivado sobre la **copia física**:
+mucho 15 minutos hay que reproducir el WAL archivado sobre la **copia física**.
+Todo se hace con la imagen de PostgreSQL **del producto**, que trae las dos
+herramientas que entienden el formato cifrado (`kronoqr-extract-base` y
+`kronoqr-restore-wal`, ADR-049). La clave va **solo por entorno**
+(`-e NOMBRE`, sin valor en la orden):
 
 ```bash
+# 0. Ensáyalo SIEMPRE antes sobre un contenedor limpio, sin tocar nada:
+sudo bash /opt/kronoqr/scripts/restore-drill.sh --mode pitr
+
 # 1. Copia física más reciente
 ls -t "${BACKUP_PATH}"/base/
 
-# 2. Descífrala y despliégala sobre un PGDATA vacío
-openssl enc -d -aes-256-cbc -md sha512 -pbkdf2 -iter 600000 \
-  -in "${BACKUP_PATH}/base/<copia>.tar.gz.enc" | tar -xzf - -C /var/lib/postgresql/data-restaurado
+# 2. Verifica su autenticidad y despliégala sobre un PGDATA vacío. `--user 0:0`: las
+#    copias son del usuario 1000 (0750) y `postgres` no las lee; el PGDATA queda como
+#    `postgres`. `--recovery` deja `recovery.signal`.
+IMG="${IMAGE_REGISTRY:-ghcr.io/kronoqr}/postgres:${IMAGE_TAG}"
+docker volume create pgdata-restaurado
+docker run --rm --user 0:0 -e BACKUP_ENCRYPTION_KEY \
+  -v pgdata-restaurado:/restaurado \
+  -v "${BACKUP_PATH}/base:/base:ro" "$IMG" \
+  kronoqr-extract-base /base/<copia>.tar.gz.enc /restaurado --recovery
 
-# 3. Deja escrito el punto de recuperación y de dónde sacar el WAL
-cat >> /var/lib/postgresql/data-restaurado/postgresql.auto.conf <<'CONF'
-restore_command = 'gunzip -c /var/backups/fichaje/wal/%f.gz > %p'
-recovery_target_time = '2026-01-15 06:00:00+00'
-CONF
-touch /var/lib/postgresql/data-restaurado/recovery.signal
-
-# 4. Arranca ese PGDATA y espera a que termine la recuperación
+# 3. Arráncalo en recuperación con el WAL archivado. La clave del WAL llega por entorno;
+#    NUNCA se escribe en postgresql.auto.conf ni en el restore_command.
+#    BACKUP_WAL_KEY_PREVIOUS solo hace falta si se rotó BACKUP_ENCRYPTION_KEY: es la
+#    subclave derivada de la maestra ANTERIOR (nunca una clave distinta):
+#      export BACKUP_WAL_KEY_PREVIOUS="$(BACKUP_ENCRYPTION_KEY="$ANTERIOR" sudo -E bash backup.sh derive-wal-key --print)"
+#    (con la anterior en la variable ANTERIOR de tu shell, sin escribirla en la orden).
+docker run --rm -e BACKUP_WAL_KEY -e BACKUP_WAL_KEY_PREVIOUS \
+  -v pgdata-restaurado:/var/lib/postgresql/data \
+  -v "${BACKUP_PATH}/wal:/wal:ro" -e KRONOQR_WAL_ARCHIVE_DIR=/wal "$IMG" \
+  postgres -c restore_command='kronoqr-restore-wal %f %p' \
+           -c recovery_target_time='2026-01-15 06:00:00+00' -c recovery_target_action=promote
 ```
 
-`recovery_target_time` va **en UTC** (regla dura 3). Sin `recovery_target_time`
-se reproduce todo el WAL disponible, que es lo que se quiere tras una pérdida de
-disco.
+(Si `BACKUP_WAL_KEY` no está en tu entorno de `root`, exporta la que deriva
+`backup.sh derive-wal-key` antes de la orden; no la escribas en la línea.)
+`recovery_target_time` va **en UTC** (regla dura 3). Sin
+`recovery_target_time` se reproduce todo el WAL disponible, que es lo que se
+quiere tras una pérdida de disco.
+
+**La recuperación se detiene, a propósito, si el WAL no es de fiar.**
+`kronoqr-restore-wal` devuelve `exit 1` (PostgreSQL lo entiende como «no hay más
+WAL» y promociona) **solo** cuando, tras comprobarlo dos veces, **no existe ni el
+segmento ni ninguno posterior** de la misma línea temporal: el final real del
+archivo. En cualquier otro caso —el MAC no cuadra, la clave es distinta, falta
+un segmento intermedio, el fichero no se puede leer— devuelve **`exit 200`** y
+PostgreSQL **aborta con un error fatal** («restore_command failed»): sin esa
+parada, la base «recuperaría con éxito» hasta el segmento anterior y se
+perderían datos sin que nadie lo viera. El error nombra el segmento y el
+motivo (§4.1). Qué hacer:
+
+1. **No promociones ni uses esa base.** Se queda en recuperación: es lo correcto.
+2. Resuelve el motivo (§4.1): clave anterior, otro soporte con el segmento, etc.
+3. Si no se puede, repite con `recovery_target_time` **anterior** al segmento
+   que falla. El asiento de auditoría de esa restauración debe decir
+   `wal_integrity=aborted_at:<segmento>` y el LSN al que llegaste.
+
+Tras una recuperación **completa**, el asiento lleva `wal_integrity=authenticated`
+y `legacy_wal=N` (§6.8: cuántos segmentos heredados, sin autenticar, se
+reprodujeron).
 
 ---
 
@@ -425,6 +558,49 @@ en servicio**; solo falta el asiento. **No repitas la restauración.**
 4. Mientras esté pendiente, anótalo en el parte del incidente: es un hueco en el
    registro que hay que cerrar.
 
+### 6.8 La copia se niega por integridad (salida `6`) y las copias de la 2.1.0
+
+Desde la 2.2.0 las copias llevan un **MAC** dentro del fichero (ADR-049).
+`restore.sh` y `restore-drill.sh` **se niegan con salida `6`**, sin tocar nada,
+si: falta el `.sha256`; el MAC no cuadra (un bit cambiado en la cabecera, el
+cuerpo o el final); el nombre de la cabecera no es el del fichero (copia
+renombrada o sustituida); falta o no cuadra el `.manifest.mac`; o la copia es
+**de la 2.1.0** (sin MAC) y no se ha pedido expresamente.
+
+Antes de restaurar, **comprueba la fecha que enseña la herramienta**: sale de la
+cabecera autenticada (`copia creada el …`), no del nombre del fichero ni del
+`LATEST`. Si no es la que esperas, alguien ha puesto una copia anterior en su
+lugar: no sigas.
+
+| Mensaje | Qué hacer |
+| --- | --- |
+| `el MAC no cuadra` (mismo `kid`) | Corrupción o manipulación. Prueba con la anterior (`restore.sh --list`); si no hay avería que lo explique, [`brecha-de-seguridad.md`](brecha-de-seguridad.md) |
+| `clave distinta o cabecera alterada` | Rotación de clave: pasa la anterior con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run restore`, solo para restaurar |
+| `sin .sha256` | La copia está incompleta o la han tocado. No la uses |
+| `copia heredada de la 2.1.0` | Ver abajo |
+
+**Copias de la 2.1.0.** Están cifradas pero **no autenticadas**: el `.sha256`
+junto a ellas no prueba nada frente a quien pueda escribir en el destino. Se
+pueden restaurar con la bandera explícita, que **se pasa en cada orden y nunca
+se deja en el `.env`** (lo que ponga el `.env` no cuenta, y `doctor.sh` lo avisa):
+
+```bash
+docker compose run --rm --no-deps restore \
+  bash /opt/kronoqr/scripts/restore.sh --accept-unauthenticated --file <copia>.dump.enc --dry-run
+```
+
+Con la bandera, el `.sha256` **sigue siendo obligatorio** y debe coincidir, el
+informe lo anota en su primera línea y el asiento `system.restored_from_backup`
+lleva `integrity=legacy_accepted` (si no la usas: `integrity=authenticated`, con
+`kqe_created` y `kid`). `doctor.sh` avisa si `KRONOQR_ACCEPT_UNAUTHENTICATED` está
+en el `.env` o en una tabla de cron, y `restore.sh` y `restore-drill.sh` ignoran esa variable: la bandera es solo la opción `--accept-unauthenticated`. La vuelta atrás de `update.sh` la usa **solo** para la copia previa
+que él mismo acaba de crear. La bandera desaparecerá cuando la versión mínima
+desde la que se puede actualizar sea la 2.2.0 o posterior.
+
+**Tras volver a la 2.1.0**, lo escrito por la 2.2.0 (`.gz.enc`, copias KQE1) **no
+lo lee el `restore.sh` de la 2.1.0**: restaura con el paquete de la 2.2.0, que
+`update.sh` deja como «anterior».
+
 ---
 
 ## 7. Simulacro trimestral (RNF-D-05, RQ-09)
@@ -441,6 +617,9 @@ sudo bash /opt/kronoqr/scripts/restore-drill.sh
 
 # Sin Docker disponible, contra una instancia de PRUEBAS (nunca la de producción)
 sudo bash /opt/kronoqr/scripts/restore-drill.sh --mode database
+
+# Recuperación a un punto en el tiempo: copia física + WAL cifrado, en un contenedor limpio
+sudo bash /opt/kronoqr/scripts/restore-drill.sh --mode pitr
 ```
 
 El modo `database` **no** se lanza con el servicio `restore`: ese servicio

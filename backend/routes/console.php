@@ -54,6 +54,23 @@ Schedule::command('backup:run', ['--mode' => config()->string('backup.weekly_mod
     ->runInBackground();
 
 /*
+ * La medida continua del RPO (RNF-D-02; bloque 20, R5-DV-01): cuanto WAL esta
+ * sin archivar y desde cuando, cada minuto. Antes solo la publicaba la copia de
+ * madrugada, y un archivado parado a media manana no avisaba hasta el dia
+ * siguiente.
+ *
+ * `withoutOverlapping(5)`: el candado caduca a los 5 minutos, de modo que una
+ * medida colgada no deja sin medir mas que eso; el script ya se corta a los
+ * 50 s. Sin `LogScheduledCommandFailure`: un fallo aqui lo dice la alerta
+ * `MedicionDeWalAusente` (latido del propio fichero), y una fila por minuto en
+ * `error_events` solo seria ruido.
+ */
+Schedule::command('backup:wal-metrics')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->runInBackground();
+
+/*
  * Cadena de hash de la auditoria (RS-07, ADR-010, tarea 1.14).
  *
  * DIARIA, y la cadencia es el requisito, no una preferencia: RS-07 exige que

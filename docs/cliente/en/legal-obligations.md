@@ -248,7 +248,10 @@ Policy per data type, which is the one the system applies:
 | Working-time record and `audit_log` | **4 years** | The site's compliance profile (jurisdiction) |
 | Technical log | **90 days** | Your installation |
 | Error history | **90 days** | Your installation |
-| Backups | 30 days by default | Your installation (`BACKUP_RETENTION_DAYS`) |
+| Backups: encrypted and, since 2.2.0, also authenticated | 30 days by default | Your installation (`BACKUP_RETENTION_DAYS`) |
+| WAL archive (`BACKUP_PATH/wal`): **all** changes to the database, including clock-ins, people and `audit_log`. **Encrypted and authenticated** since 2.2.0 | **8 days** by default | Your installation (`BACKUP_WAL_RETENTION_DAYS`). It has to be greater than the interval between physical copies (weekly by default) |
+| Technical detail of each update (`/var/log/kronoqr/update-*.detalle.log`): **may contain personal data** | **30 days** by default | Your installation (`KRONOQR_LOG_RETENTION_DAYS`, minimum 7). `update.sh` deletes it on every run, and `doctor.sh` does too when run as root: if months go by without either, the deletion waits for the next run |
+| Summary of each update (`update-*.log`), without personal data | **90 days** | Your installation |
 | Contract data (agreed hours, type of working day, validity period) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **it is kept**: the system does not purge it |
 | Absences (type, dates, note, versions and voidings) | **Employment relationship + 4 years**, indicative | **Pending confirmation with your employment law advisers.** Today **they are kept**: the system does not purge them. **They contain health data** |
 | Record of weekly summary sends (`weekly_summary_deliveries`) | **No automatic purge** | It keeps counts and the recipient account; **no data about the staff** |
@@ -336,7 +339,18 @@ product takes a daily and a weekly backup and verifies that they can be
 restored, but:
 
 - **Take them off the server.** A copy on the same disk as the database is not
-  a backup.
+  a backup. What you take off carries all the personal data of the
+  installation, albeit encrypted: keeping it safe and deleting it on time are
+  up to you.
+- **If you updated from 2.1.0, destroy the WAL copies you took off before.** Up
+  to 2.1.0 the archived WAL (`BACKUP_PATH/wal`) **was not encrypted**: the
+  copies you made of that folder on other media contain personal data in clear
+  text, and the product cannot reach them to encrypt them. If they were within
+  reach of people who should not see them, whether it is a breach to notify is
+  for your DPO to assess ([`operation.md`](operation.md) §11, 2.2.0 notes).
+- **2.1.0 backups** still within their period are encrypted but not
+  authenticated: restoring them requires asking explicitly and it is recorded
+  in the audit log ([`operation.md`](operation.md) §18).
 - **Run the quarterly restore drill**
   ([`restaurar-backup.md`](../../runbooks/restaurar-backup.md), in Spanish). A
   backup that has never been restored is a hypothesis.

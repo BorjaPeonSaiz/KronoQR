@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+#
+# KronoQR — despliega una copia FISICA cifrada sobre un PGDATA vacio (RNF-D-02).
+#
+#   kronoqr-extract-base <copia.tar.gz.enc> <directorio_destino> [--recovery]
+#
+# Se lanza como root dentro del contenedor (`docker run --user 0:0`): las copias de
+# BACKUP_PATH son del usuario 1000 (0750/0640) y `postgres` (uid 70) no las lee. Si corre
+# como root, al terminar deja el PGDATA con el propietario `postgres`; la clave no se
+# imprime ni queda en disco.
+#
+# Es la primera mitad de la recuperacion a un punto en el tiempo (la segunda es
+# kronoqr-restore-wal como `restore_command`): verifica la AUTENTICIDAD de la copia
+# (MAC, KQE1, ADR-049) y la despliega. Corre como el usuario `postgres` de la imagen
+# del producto, asi que el PGDATA resultante ya tiene el propietario correcto.
+#
+#   --recovery   deja `recovery.signal` para arrancar en recuperacion
+#
+# TOCTOU: la copia se COPIA UNA VEZ a un directorio de trabajo privado (0700,
+# TMPDIR o KQE_WORKDIR_BASE) y se verifica y descifra SOLO esa copia. Una copia
+# fisica puede pesar varios GB: el directorio de trabajo necesita ese espacio.
+#
+# La clave llega por entorno: `docker run -e BACKUP_ENCRYPTION_KEY ...` (sin valor
+# en la linea de ordenes). Una copia HEREDADA de la 2.1.0 (sin MAC) solo se acepta
+# con KRONOQR_ACCEPT_UNAUTHENTICATED=1, y exige su `.sha256` junto a ella.
+#
+# Codigos de salida: 0 desplegada · 1 uso · 2 requisitos (clave, destino) ·
+# 6 la copia no supera la comprobacion de integridad (no se ha escrito nada).
+#
+# NINGUN SECRETO EN LA SALIDA.
+
+set -euo pipefail
+IFS=$'\n\t'
+
+readonly KQE_LIB="${KQE_LIB:-/usr/local/lib/kronoqr/kqe.sh}"
+
+err() {
+  printf 'kronoqr-extract-base: %s\n' "$*" >&2
+}
+
+fichero=""
+destino=""
+recuperacion=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --recovery)
+    recuperacion=1
+    shift
+    ;;
+  -*)
+    err "opcion desconocida '$1'. Uso: kronoqr-extract-base <copia.tar.gz.enc> <directorio_destino> [--recovery]"
+    exit 1
+    ;;
+  *)
+    if [ -z "$fichero" ]; then
+      fichero="$1"
+    elif [ -z "$destino" ]; then
+      destino="$1"
+    else
+      err "demasiados argumentos."
+      exit 1
+    fi
+    shift
+    ;;
+  esac
+done
+[ -n "$fichero" ] && [ -n "$destino" ] || {
+  err "uso: kronoqr-extract-base <copia.tar.gz.enc> <directorio_destino> [--recovery]"
+  exit 1
+}
+[ -f "$fichero" ] || {
+  err "no existe '${fichero}'."
+  exit 2
+}
+[ -d "$destino" ] && [ -w "$destino" ] || {
+  err "el destino '${destino}' no existe o no se puede escribir (tiene que ser un directorio del usuario postgres)."
+  exit 2
+}
+if [ -n "$(find "$destino" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+  err "el destino '${destino}' no esta vacio: no se despliega sobre datos existentes."
+  exit 2
+fi
+
+# shellcheck source=/dev/null
+. "$KQE_LIB"
+kqe_require || {
+  err "falta openssl con SHA3-256 en esta imagen."
+  exit 2
+}
+[ -n "${BACKUP_ENCRYPTION_KEY:-}" ] || {
+  err "falta BACKUP_ENCRYPTION_KEY: pasala con 'docker run -e BACKUP_ENCRYPTION_KEY ...' (sin valor en la orden)."
+  exit 2
+}
+
+trabajo="$(mktemp -d "${KQE_WORKDIR_BASE:-${TMPDIR:-/tmp}}/kronoqr-extract.XXXXXX")"
+chmod 0700 "$trabajo"
+trap 'rm -rf -- "$trabajo"' EXIT
+
+nombre="$(basename -- "$fichero")"
+nombre="${nombre%.tar.gz.enc}"
+estado=0
+kqe_open "$fichero" "$trabajo" base "$nombre" || estado=$?
+
+case "$estado" in
+0)
+  printf 'kronoqr-extract-base: copia autenticada, creada el %s (kid %s).\n' "$KQE_CREATED" "$KQE_KID"
+  kqe_decrypt_copy | tar -xzf - -C "$destino"
+  ;;
+10)
+  [ "${KRONOQR_ACCEPT_UNAUTHENTICATED:-}" = "1" ] || {
+    err "'${fichero}' es una copia de la 2.1.0: cifrada pero NO autenticada. Si es la que quieres, repite con -e KRONOQR_ACCEPT_UNAUTHENTICATED=1 (y su .sha256 al lado). Ver docs/runbooks/restaurar-backup.md §6.8."
+    exit 6
+  }
+  esperado=""
+  if [ -f "${fichero}.sha256" ]; then
+    esperado="$(cut -d' ' -f1 <"${fichero}.sha256" | head -n 1)"
+  fi
+  actual="$(sha256sum "$KQE_COPY" | cut -d' ' -f1)"
+  if [[ ! "$esperado" =~ ^[0-9a-f]{64}$ ]] || [ "$esperado" != "$actual" ]; then
+    err "'${fichero}' no tiene .sha256 o no coincide: no se despliega."
+    exit 6
+  fi
+  err "AVISO: copia heredada sin autenticar, aceptada por bandera explicita."
+  kqe_decrypt_legacy_copy base | tar -xzf - -C "$destino"
+  ;;
+*)
+  err "'${fichero}' NO supera la comprobacion de integridad: ${KQE_REASON}. No se ha escrito nada. Ver docs/runbooks/restaurar-backup.md §4.1 y §6.8."
+  exit 6
+  ;;
+esac
+
+chmod 0700 "$destino"
+[ "$recuperacion" -eq 0 ] || : >"${destino}/recovery.signal"
+if [ "$(id -u)" = "0" ]; then
+  chown -R postgres:postgres "$destino"
+fi
+printf 'kronoqr-extract-base: desplegada en %s.\n' "$destino"

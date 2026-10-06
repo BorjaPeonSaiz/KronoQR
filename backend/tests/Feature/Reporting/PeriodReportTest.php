@@ -357,9 +357,11 @@ it('deja constancia en audit_log de que se ha generado el informe', function ():
         // El conjunto es pequeño y sale de la instalacion: los afectados se
         // enumeran por su UUID publico, nunca por su nombre (RL-15).
         ->and($payload['employee_uuids'] ?? null)->toBe($contexto['employee'])
-        // Y nada de lo divulgado: ni una hora, ni un total, ni un nombre.
+        // Y nada de lo divulgado: ni una hora, ni un total, ni un nombre. El total se
+        // busca como palabra entera: los UUID de los afectados son hexadecimales al
+        // azar y uno de cada tantos lleva «480» dentro (la prueba fallaba sola en la CI).
         ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('Persona')
-        ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('480');
+        ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toMatch('/\b480\b/');
 })->group('RF-IN-01', 'RS-05');
 
 /*

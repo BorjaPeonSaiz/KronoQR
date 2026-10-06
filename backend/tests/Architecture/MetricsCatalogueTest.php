@@ -28,12 +28,15 @@ use Tests\Architecture\Support\ModuleTree;
  * ficha manda respetar, y una lista copiada aqui se desincronizaria con el
  * documento igual que el codigo se desincronizo con el.
  *
- * ## Las dos exclusiones, con su motivo
+ * ## Las tres exclusiones, con su motivo
  *
  * - **`kronoqr_backup_*`**: las escriben `infra/scripts/backup.sh` y
  *   `restore-drill.sh`, no la aplicacion. Tienen que seguir publicandose
  *   **cuando la aplicacion no arranca**, que es justo el dia que interesa saber
  *   si hay copia.
+ * - **`kronoqr_wal_*`** (2.2.0, ADR-049): las escribe `infra/scripts/wal-metrics.sh`
+ *   cada minuto desde el `scheduler`, con el rol de copia y no con el de la
+ *   aplicacion, por el mismo colector *textfile* que las de arriba.
  * - **Las del colector *textfile***: las produce un comando programado que corre
  *   y termina, y se publican por fichero `.prom`. No se duplican en `/metrics`
  *   porque una misma serie por dos objetivos de *scrape* daria dos series con
@@ -158,6 +161,7 @@ function seriesForTheEndpoint(): array
     return array_filter(
         documentedSeries(),
         static fn (string $name): bool => ! str_starts_with($name, 'kronoqr_backup_')
+            && ! str_starts_with($name, 'kronoqr_wal_')
             && ! \in_array($name, textfileSeries(), true),
         ARRAY_FILTER_USE_KEY,
     );

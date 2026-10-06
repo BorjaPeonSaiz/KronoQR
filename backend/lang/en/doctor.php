@@ -219,11 +219,33 @@ return [
                 'failure' => 'The application cannot write to: :paths. Without that it cannot generate reports, '
                     .'store its cache or write its technical log.',
             ],
+            // 2.2.0 (block 20, A3-R2): the backup root is mounted read-only and
+            // each container writes only to its own subdirectory.
             'backup_path' => [
-                'ok' => 'The backup directory is writable.',
-                'failure' => 'The backup directory :path is not writable. BACKUPS ARE NOT BEING TAKEN, and '
-                    .'there is no other symptom until the day you need one.',
+                'ok' => 'The backup directory :path can be read and the application cannot write to it: backups '
+                    .'are written by the backup task only.',
+                'ok_not_checked' => 'The backup directory :path can be read. Whether it is read-only is not checked '
+                    .'because this is not a production installation.',
                 'failure_missing' => 'The backup directory :path does not exist. BACKUPS ARE NOT BEING TAKEN.',
+                'failure_unreadable' => 'The backup directory :path cannot be read. BACKUPS ARE NOT BEING TAKEN, and '
+                    .'there is no other symptom until the day you need one.',
+                'warning_writable' => 'The «:service» container can write to the backup directory :path. Backups '
+                    .'work, but whoever runs code in the application could delete them or drop files next to them: '
+                    .'the docker-compose.yml in use is not the one of this version.',
+            ],
+            'backup_metrics' => [
+                'ok' => 'Backup and archiving metrics can be written to :path.',
+                'failure' => 'The application cannot write to :path. Neither the backups nor the database archiving '
+                    .'can publish their result, and the alerts that warn about a failed backup will not fire.',
+                'failure_missing' => 'The metrics directory :path does not exist. Backups and archiving cannot publish '
+                    .'their result, and the alerts that warn about a failed backup will not fire.',
+            ],
+            'backup_copies' => [
+                'ok' => 'The backup directories (daily and base) exist and only the backup task writes to them.',
+                'failure' => 'The backup task cannot write to: :paths. BACKUPS ARE NOT BEING TAKEN.',
+                'failure_missing' => 'The backup directories do not exist: :paths. BACKUPS ARE NOT BEING TAKEN.',
+                'warning_writable' => 'The «:service» container can write to :paths, where the backups live. Only '
+                    .'the backup task should be able to: the docker-compose.yml in use is not the one of this version.',
             ],
             'branding_root' => [
                 'ok' => 'The logo directory is accessible.',
@@ -280,9 +302,14 @@ return [
                 'ok' => 'Retention reports are written to :path, next to the backups.',
                 'warning' => 'The application cannot write to :path: the weekly retention proposal and the purge '
                     .'will not be able to leave their report.',
-                'warning_missing' => 'The retention report directory :path does not exist. It will be created on the '
-                    .'first run if the backup directory is writable.',
+                'warning_missing' => 'The retention report directory :path does not exist. The weekly retention '
+                    .'proposal and the purge will not be able to leave their readable report.',
                 'warning_inside_storage' => 'COMPLIANCE_RETENTION_REPORT_PATH points to :path, inside storage/app.',
+                'ok_read_only' => 'The retention reports in :path can be read and this container cannot write them: '
+                    .'only the weekly proposal and the purge write them.',
+                'warning_horizon_writable' => 'This container (horizon) can write to :path, where the retention '
+                    .'reports are kept. Only the weekly proposal and the purge should be able to: the '
+                    .'docker-compose.yml in use is not the one of this version.',
             ],
             'class_roots' => [
                 'ok' => 'Each class of generated file has its own directory and none overlaps another.',
@@ -574,13 +601,42 @@ return [
                     .'This usually happens after running a command as root.',
             ],
             'backup_path' => [
-                'failure' => "Give the application user write permission on :path and check that the volume is\n"
-                    ."not mounted read-only. Then run a manual backup to confirm:\n"
-                    .'  ./backup.sh',
-                'failure_missing' => "Create the directory and give it to the application user:\n"
-                    ."  sudo install -d -m 0750 :path\n"
-                    ."Check as well that BACKUP_PATH in the .env file points where you want. Then:\n"
-                    .'  ./backup.sh',
+                'failure_missing' => "Create the directory and give it to the application user (uid 1000):\n"
+                    ."  sudo install -d -o 1000 -g 1000 -m 0750 :path\n"
+                    ."Check as well that BACKUP_PATH in the .env file points where you want. Then run\n"
+                    ."./update.sh, which creates inside it the directories each container needs, or create them\n"
+                    .'yourself as explained in docs/cliente/en/installation.md.',
+                'failure_unreadable' => "Give the directory back to the application user (uid 1000) from the server:\n"
+                    ."  sudo chown 1000:1000 :path && sudo chmod 0750 :path\n"
+                    .'If it is a network share, check that the mount lets that user read it.',
+                'warning_writable' => "Use the docker-compose.yml of this version, which mounts the backup directory\n"
+                    ."read-only and gives each container write access only where it needs it. From the installation\n"
+                    ."directory:\n"
+                    ."  ./update.sh\n"
+                    .'If you edited docker-compose.yml by hand, compare its mounts with the one in the package.',
+            ],
+            'backup_metrics' => [
+                'failure' => "Give the directory back to the application user (uid 1000) from the server:\n"
+                    ."  sudo chown 1000:1000 :path && sudo chmod 0750 :path\n"
+                    .'If it is a network share, check that the mount lets that user write to it.',
+                'failure_missing' => "Create it on the server as the application user (uid 1000):\n"
+                    ."  sudo -u '#1000' mkdir -m 0750 -- :path\n"
+                    .'Then recreate the containers: docker compose up -d',
+            ],
+            'backup_copies' => [
+                'failure' => "Give those directories back to the application user (uid 1000) from the server:\n"
+                    ."  sudo chown 1000:1000 <directory> && sudo chmod 0750 <directory>\n"
+                    ."Then run a manual backup to confirm:\n"
+                    .'  docker compose exec scheduler php artisan backup:run',
+                'failure_missing' => "Create them on the server as the application user (uid 1000), one by one:\n"
+                    ."  sudo -u '#1000' mkdir -m 0750 -- <directory>\n"
+                    ."Then recreate the containers and run a manual backup to confirm:\n"
+                    ."  docker compose up -d\n"
+                    .'  docker compose exec scheduler php artisan backup:run',
+                'warning_writable' => "Use the docker-compose.yml of this version, which lets only the backup task\n"
+                    ."write the backups. From the installation directory:\n"
+                    ."  ./update.sh\n"
+                    .'If you edited docker-compose.yml by hand, compare its mounts with the one in the package.',
             ],
             'branding_root' => [
                 'warning' => 'Check that the directory :path exists and that the application user can read it. '
@@ -643,9 +699,15 @@ return [
             'retention_reports' => [
                 'warning' => "Give the application user (uid 1000) write access to :path and check that the\n"
                     .'backup directory is not mounted read-only.',
-                'warning_missing' => "Create it on the server with 'sudo install -d -o 1000 -g 1000 -m 0750 :path' (and its\n"
-                    .'parent reports, with the same owner and mode). Without it the readable copy of the report is not '
-                    .'kept, and the purge still leaves its entry in the audit log.',
+                'warning_missing' => "Create it on the server as the application user (uid 1000), its parent reports\n"
+                    ."first if that does not exist either:\n"
+                    ."  sudo -u '#1000' mkdir -m 0750 -- :path\n"
+                    .'Then recreate the containers (docker compose up -d). Without it the readable copy of the report is '
+                    .'not kept, and the purge still leaves its entry in the audit log.',
+                'warning_horizon_writable' => "Use the docker-compose.yml of this version, which does not mount that\n"
+                    ."directory writable in horizon. From the installation directory:\n"
+                    ."  ./update.sh\n"
+                    .'If you edited docker-compose.yml by hand, compare its mounts with the one in the package.',
                 'warning_inside_storage' => "Retention reports belong in BACKUP_PATH/reports/retention, where a person\n"
                     ."reads them without entering the container. Remove the key from the .env file to use the default,\n"
                     .'and recreate the containers.',

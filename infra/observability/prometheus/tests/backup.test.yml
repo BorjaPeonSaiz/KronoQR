@@ -147,21 +147,28 @@ tests:
         exp_alerts: []
 
   #-----------------------------------------------------------------------------
-  # ArchivadoDeWalDetenido: el ultimo segmento archivado tiene 2000 s, por
-  # encima de los 1800 del catalogo.
+  # ArchivadoDeWalDetenido (R5-DV-01, ADR-049). Umbral: archive_timeout (900) + 600
+  # = 1500 s de exposicion, con `for: 3m`. La serie es la que publica
+  # wal-metrics.sh cada minuto.
+  #
+  # Parada del archivado a las 10:00: la exposicion crece 60 s por minuto desde
+  # 0. Supera 1500 en el minuto 26 (1560) y, con el `for`, salta en el 29. Hasta
+  # la 2.2.0 esto no se veia hasta la copia de las 03:15 del dia siguiente.
   #-----------------------------------------------------------------------------
   - name: wal_detenido_dispara
     interval: 1m
     input_series:
-      - series: kronoqr_backup_wal_last_archived_age_seconds
-        values: "2000x15"
-      - series: kronoqr_backup_wal_archive_failures_total
-        values: "0x15"
+      - series: kronoqr_wal_unarchived_age_seconds
+        values: "0+60x40"
+      - series: kronoqr_wal_unarchived_segments
+        values: "0x40"
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "900x40"
     alert_rule_test:
-      - eval_time: 9m
+      - eval_time: 28m
         alertname: ArchivadoDeWalDetenido
         exp_alerts: []
-      - eval_time: 10m
+      - eval_time: 29m
         alertname: ArchivadoDeWalDetenido
         exp_alerts:
           - exp_labels:
@@ -169,30 +176,295 @@ tests:
               destinatario: it-cliente
               component: backup
             exp_annotations:
-              summary: "El archivado de WAL esta detenido o falla"
+              summary: "El archivado de WAL esta detenido o va muy atrasado"
               description: >-
-                Hace mas de 30 min que no se archiva un segmento, con
-                archive_timeout=900 s, o ha habido fallos de archivado en la
-                ultima hora. Dos consecuencias, y la segunda es la urgente:
-                el RPO deja de ser 15 min (RNF-D-02), y PostgreSQL conserva
-                el WAL sin reciclar hasta llenar el disco de datos y
-                pararse.
+                Hay datos escritos que llevan sin archivarse mas de
+                archive_timeout (15 min) mas 10 min de margen, o hay 3
+                segmentos completos sin archivar. El RPO deja de ser 15 min
+                (RNF-D-02) y, mientras dure, PostgreSQL conserva el WAL sin
+                reciclar hasta llenar el disco de datos y pararse. La metrica
+                no espera a la copia nocturna.
               runbook_url: docs/runbooks/restaurar-backup.md
 
   #-----------------------------------------------------------------------------
-  # Valor limite justo por debajo: exactamente 1800 s, sin fallos, para
-  # siempre. Nunca dispara.
+  # CICLO SANO: servidor con escrituras continuas. La exposicion sube hasta ~840 s
+  # y vuelve a 0 cada vez que archive_timeout cierra y archiva el segmento. Durante
+  # dos horas NUNCA dispara. (Es el caso que una regla sobre «edad del ultimo
+  # archivado» no distingue de una averia.)
+  #-----------------------------------------------------------------------------
+  - name: wal_ciclo_sano_no_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_unarchived_age_seconds
+        values: "0+60x14 0+60x14 0+60x14 0+60x14 0+60x14 0+60x14 0+60x14 0+60x14 0+60x14"
+      - series: kronoqr_wal_unarchived_segments
+        values: "0x126"
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "900x126"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # INACTIVIDAD (una madrugada sin fichajes): no hay dato pendiente, la exposicion
+  # es 0, aunque el ultimo segmento se archivara hace cuatro horas. Es el falso
+  # positivo de la regla antigua y NO debe disparar.
+  #-----------------------------------------------------------------------------
+  - name: wal_inactividad_no_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_unarchived_age_seconds
+        values: "0x120"
+      - series: kronoqr_wal_last_archived_age_seconds
+        values: "14400+60x120"
+      - series: kronoqr_wal_unarchived_segments
+        values: "0x120"
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "900x120"
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: exactamente 1500 s (archive_timeout + 600), para siempre. No
+  # dispara; 1501 si.
   #-----------------------------------------------------------------------------
   - name: wal_detenido_boundary
     interval: 1m
     input_series:
-      - series: kronoqr_backup_wal_last_archived_age_seconds
-        values: "1800x30"
-      - series: kronoqr_backup_wal_archive_failures_total
-        values: "0x30"
+      - series: kronoqr_wal_unarchived_age_seconds
+        values: "1500x40"
+      - series: kronoqr_wal_unarchived_segments
+        values: "0x40"
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "900x40"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts: []
+
+  - name: wal_detenido_un_segundo_mas
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_unarchived_age_seconds
+        values: "1501x40"
+      - series: kronoqr_wal_unarchived_segments
+        values: "0x40"
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "900x40"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "El archivado de WAL esta detenido o va muy atrasado"
+              description: >-
+                Hay datos escritos que llevan sin archivarse mas de
+                archive_timeout (15 min) mas 10 min de margen, o hay 3
+                segmentos completos sin archivar. El RPO deja de ser 15 min
+                (RNF-D-02) y, mientras dure, PostgreSQL conserva el WAL sin
+                reciclar hasta llenar el disco de datos y pararse. La metrica
+                no espera a la copia nocturna.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  #-----------------------------------------------------------------------------
+  # Atasco que AVANZA: el archivado va, pero atrasado, asi que la exposicion se
+  # reinicia en cada segmento y la regla de la edad no lo ve. Tres segmentos
+  # completos sin archivar disparan (a los 3 min); dos, no.
+  #-----------------------------------------------------------------------------
+  - name: wal_atrasado_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_unarchived_age_seconds
+        values: "0x20"
+      - series: kronoqr_wal_unarchived_segments
+        values: "3x20"
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "900x20"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "El archivado de WAL esta detenido o va muy atrasado"
+              description: >-
+                Hay datos escritos que llevan sin archivarse mas de
+                archive_timeout (15 min) mas 10 min de margen, o hay 3
+                segmentos completos sin archivar. El RPO deja de ser 15 min
+                (RNF-D-02) y, mientras dure, PostgreSQL conserva el WAL sin
+                reciclar hasta llenar el disco de datos y pararse. La metrica
+                no espera a la copia nocturna.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  - name: wal_dos_segmentos_no_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_unarchived_age_seconds
+        values: "0x20"
+      - series: kronoqr_wal_unarchived_segments
+        values: "2x20"
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "900x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ArchivadoDeWalDetenido
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ArchivadoDeWalFallando: el ultimo intento fallo y no se ha recuperado. A los
+  # 10 min (9 no).
+  #-----------------------------------------------------------------------------
+  - name: wal_fallando_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_archive_failing
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ArchivadoDeWalFallando
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ArchivadoDeWalFallando
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "El ultimo intento de archivado de WAL ha fallado y no se ha recuperado"
+              description: >-
+                Un fallo suelto que se recupera no salta; este lleva mas de
+                10 min. Causas habituales: destino no montado o sin permisos,
+                disco lleno, o falta la clave del WAL (BACKUP_WAL_KEY): el
+                archivado nunca escribe un segmento en claro. El log de
+                postgres dice cual.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  # Un fallo que se recupera antes de 10 min NO despierta a nadie.
+  - name: wal_fallo_transitorio_no_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_archive_failing
+        values: "0x5 1x8 0x20"
     alert_rule_test:
       - eval_time: 30m
-        alertname: ArchivadoDeWalDetenido
+        alertname: ArchivadoDeWalFallando
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # MedicionDeWalAusente: sin la serie (el scheduler no ha publicado nunca)
+  # dispara a los 5 min; con ella al dia, no; y si se detiene, dispara cuando el
+  # latido tiene mas de 5 min y han pasado 5 min mas.
+  #-----------------------------------------------------------------------------
+  - name: wal_medicion_ausente_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "900x30"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: MedicionDeWalAusente
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: MedicionDeWalAusente
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "No llega la medida del RPO"
+              description: >-
+                El exportador de wal-metrics.sh lleva mas de 5 min sin
+                publicar, o nunca ha publicado. Casi siempre es el contenedor
+                scheduler parado (que tambien hace las copias) o PostgreSQL
+                inalcanzable con el rol de copias. Mientras no haya medida no
+                se sabe si el RPO se cumple.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  - name: wal_medicion_al_dia_no_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_exporter_last_run_timestamp_seconds
+        values: "0+60x60"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: MedicionDeWalAusente
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # ArchiveTimeoutFueraDeRango: 0 (desactivado) o por encima de 900 dispara a los
+  # 10 min; 900 no.
+  #-----------------------------------------------------------------------------
+  - name: wal_timeout_desactivado_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ArchiveTimeoutFueraDeRango
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ArchiveTimeoutFueraDeRango
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "archive_timeout esta desactivado o por encima de 900 s"
+              description: >-
+                RNF-D-02 exige RPO de 15 min y eso solo lo sostiene
+                archive_timeout=900. Lo fija infra/compose.prod.yaml: si
+                alguien lo ha editado, restaurarlo y recrear postgres.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  - name: wal_timeout_demasiado_alto_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "1800x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ArchiveTimeoutFueraDeRango
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: backup
+            exp_annotations:
+              summary: "archive_timeout esta desactivado o por encima de 900 s"
+              description: >-
+                RNF-D-02 exige RPO de 15 min y eso solo lo sostiene
+                archive_timeout=900. Lo fija infra/compose.prod.yaml: si
+                alguien lo ha editado, restaurarlo y recrear postgres.
+              runbook_url: docs/runbooks/restaurar-backup.md
+
+  - name: wal_timeout_900_no_dispara
+    interval: 1m
+    input_series:
+      - series: kronoqr_wal_archive_timeout_seconds
+        values: "900x60"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: ArchiveTimeoutFueraDeRango
         exp_alerts: []
 
   #-----------------------------------------------------------------------------
@@ -201,7 +473,7 @@ tests:
   - name: slot_parado_dispara
     interval: 1m
     input_series:
-      - series: kronoqr_backup_replication_slots_inactive
+      - series: kronoqr_wal_replication_slots_inactive
         values: "1x30"
     alert_rule_test:
       - eval_time: 14m
@@ -230,7 +502,7 @@ tests:
   - name: slot_parado_boundary
     interval: 1m
     input_series:
-      - series: kronoqr_backup_replication_slots_inactive
+      - series: kronoqr_wal_replication_slots_inactive
         values: "0x60"
     alert_rule_test:
       - eval_time: 60m
@@ -238,12 +510,12 @@ tests:
         exp_alerts: []
 
   #-----------------------------------------------------------------------------
-  # Se retira el slot (la siguiente copia publica 0): la alerta se apaga.
+  # Se retira el slot (el exportador publica 0 al minuto siguiente): la alerta se apaga.
   #-----------------------------------------------------------------------------
   - name: slot_parado_se_resuelve
     interval: 1m
     input_series:
-      - series: kronoqr_backup_replication_slots_inactive
+      - series: kronoqr_wal_replication_slots_inactive
         values: "1x20 0x20"
     alert_rule_test:
       - eval_time: 25m

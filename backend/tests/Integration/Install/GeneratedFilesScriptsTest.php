@@ -51,7 +51,14 @@ function ficherosGeneradosBash(string $script, string $fragmento, array $env = [
 
 function ficherosGeneradosDirectorio(string $prefijo): string
 {
-    $dir = sys_get_temp_dir().'/kq-'.$prefijo.'-'.bin2hex(random_bytes(6));
+    // Bajo el HOME de quien ejecuta y no bajo /tmp: desde la 2.2.0 (A3-R2)
+    // `kq_path_trusted` rechaza cualquier ruta con un antecesor escribible por
+    // otros, sin excepcion para el bit sticky, y `update.sh` deja de usar su
+    // directorio de registros si esta bajo /tmp. HOME (/var/www en el
+    // contenedor, /home/runner en la CI) es del usuario y sin escritura ajena.
+    $home = getenv('HOME');
+    $base = \is_string($home) && $home !== '' && is_dir($home) && is_writable($home) ? $home : sys_get_temp_dir();
+    $dir = $base.'/.kq-'.$prefijo.'-'.bin2hex(random_bytes(6));
     mkdir($dir, 0o755, true);
 
     return $dir;
@@ -107,43 +114,58 @@ const GENERATED_FILES_SCRIPTS_INSTALL_ANOTADO = <<<'BASH'
     setpriv() { local IFS=' '; printf '%s\n' "$*" >>"${ANOTACIONES}"; shift 3; "$@"; }
     BASH;
 
-it('install.sh crea reports y reports/retention como uid 1000 y en 0750, el padre primero', function (): void {
+/**
+ * Los cinco subdirectorios de `BACKUP_PATH` que escribe el runtime, en el orden
+ * en que los crea `install.sh` (el padre antes que el hijo). Desde la 2.2.0
+ * (bloque 20, A3-R2) la raiz se monta en solo lectura y cada uno es un montaje
+ * propio con `create_host_path: false`: si falta, `docker compose up` falla.
+ *
+ * @return list<string>
+ */
+function ficherosGeneradosSubdirectoriosDeCopias(): array
+{
+    return ['metrics', 'daily', 'base', 'reports', 'reports/retention'];
+}
+
+it('install.sh crea los cinco subdirectorios de BACKUP_PATH como uid 1000 y en 0750, el padre primero', function (): void {
     $dir = ficherosGeneradosDirectorio('install-retencion');
     mkdir($dir.'/copias', 0o750);
 
     $proceso = ficherosGeneradosBash('install.sh', GENERATED_FILES_SCRIPTS_INSTALL_ANOTADO.'; kq_msg_init es; '
-        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; ensure_retention_reports_directory',
+        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; ensure_backup_subdirectories',
         ['ANOTACIONES' => $dir.'/install.log'],
     );
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
-        ->and(file($dir.'/install.log', FILE_IGNORE_NEW_LINES))->toBe([
-            '--reuid=1000 --regid=1000 --clear-groups mkdir -m 0750 -- '.$dir.'/copias/reports',
-            '--reuid=1000 --regid=1000 --clear-groups mkdir -m 0750 -- '.$dir.'/copias/reports/retention',
-        ])
-        ->and(ficherosGeneradosModo($dir.'/copias/reports'))->toBe('750')
-        ->and(ficherosGeneradosModo($dir.'/copias/reports/retention'))->toBe('750');
+        ->and(file($dir.'/install.log', FILE_IGNORE_NEW_LINES))->toBe(array_map(
+            static fn (string $sub): string => '--reuid=1000 --regid=1000 --clear-groups mkdir -m 0750 -- '.$dir.'/copias/'.$sub,
+            ficherosGeneradosSubdirectoriosDeCopias(),
+        ));
+
+    foreach (ficherosGeneradosSubdirectoriosDeCopias() as $sub) {
+        expect(ficherosGeneradosModo($dir.'/copias/'.$sub))->toBe('750', $sub);
+    }
 
     ficherosGeneradosBorrar($dir);
-})->group('RF-PD-02', 'RF-PR-03');
+})->group('RF-PD-02', 'RF-PR-03', 'RL-12');
 
-it('install.sh registra el deshacer de los dos directorios que crea, y deshacerlo los retira', function (): void {
+it('install.sh registra el deshacer de cada directorio que crea, y deshacerlo los retira', function (): void {
     $dir = ficherosGeneradosDirectorio('install-deshacer');
     mkdir($dir.'/copias', 0o750);
 
     $proceso = ficherosGeneradosBash('install.sh', GENERATED_FILES_SCRIPTS_INSTALL_ANOTADO.'; kq_msg_init es; '
-        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; ensure_retention_reports_directory; '
+        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; ensure_backup_subdirectories; '
         .'printf "%s\n" "${ROLLBACK_STACK[@]}"; '
         .'for ((i = ${#ROLLBACK_STACK[@]} - 1; i >= 0; i--)); do eval "${ROLLBACK_STACK[i]#*|}"; done',
         ['ANOTACIONES' => $dir.'/install.log'],
     );
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
-        ->and($proceso->getOutput())->toBe(
-            'directorio de informes '.$dir.'/copias/reports|rm -rf \''.$dir.'/copias/reports\''."\n"
-            .'directorio de informes '.$dir.'/copias/reports/retention|rm -rf \''.$dir.'/copias/reports/retention\''."\n"
-        )
-        ->and(is_dir($dir.'/copias/reports'))->toBeFalse()
+        ->and($proceso->getOutput())->toBe(implode('', array_map(
+            static fn (string $sub): string => 'directorio de informes '.$dir.'/copias/'.$sub.'|rm -rf \''.$dir.'/copias/'.$sub.'\''."\n",
+            ficherosGeneradosSubdirectoriosDeCopias(),
+        )))
+        ->and(ficherosGeneradosListado($dir.'/copias'))->toBe([])
         ->and(is_dir($dir.'/copias'))->toBeTrue();
 
     ficherosGeneradosBorrar($dir);
@@ -158,38 +180,37 @@ it('install.sh no registra el deshacer de un reports/ que ya existia, y no toca 
     file_put_contents($dir.'/copias/reports/update-20260901T020000Z.log', 'informe anterior');
 
     $proceso = ficherosGeneradosBash('install.sh', GENERATED_FILES_SCRIPTS_INSTALL_ANOTADO.'; kq_msg_init es; '
-        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; ensure_retention_reports_directory; '
+        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; ensure_backup_subdirectories; '
         .'printf "%s\n" "${ROLLBACK_STACK[@]}"',
         ['ANOTACIONES' => $dir.'/install.log'],
     );
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
-        ->and($proceso->getOutput())->toBe(
-            'directorio de informes '.$dir.'/copias/reports/retention|rm -rf \''.$dir.'/copias/reports/retention\''."\n"
-        )
+        ->and($proceso->getOutput())->not->toContain('copias/reports|')
+        ->and($proceso->getOutput())->toContain('directorio de informes '.$dir.'/copias/reports/retention|')
         ->and(file_get_contents($dir.'/copias/reports/update-20260901T020000Z.log'))->toBe('informe anterior');
 
     ficherosGeneradosBorrar($dir);
 })->group('RF-PD-02', 'RF-PR-03');
 
-it('install.sh avisa y sigue si no puede crear la carpeta de informes, sin nada que deshacer', function (): void {
-    // Sin la carpeta se pierde la copia legible; la constancia de la purga
-    // sigue siendo su asiento de auditoria. No es motivo para no instalar.
+it('install.sh se detiene, con el motivo y como crearlo sin root, si no puede crear un subdirectorio', function (): void {
+    // Desde la 2.2.0 es BLOQUEANTE: cada subdirectorio es un montaje con
+    // `create_host_path: false` y, sin el, `docker compose up` fallaria mas
+    // tarde y con peor mensaje. Mejor parar aqui y decir que hacer.
     $dir = ficherosGeneradosDirectorio('install-imposible');
     file_put_contents($dir.'/copias', 'un fichero donde deberia haber un directorio');
 
     $proceso = ficherosGeneradosBash('install.sh', 'kq_msg_init es; '
-        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; ensure_retention_reports_directory; '
-        .'echo "@@ deshacer=${#ROLLBACK_STACK[@]}"',
+        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; ensure_backup_subdirectories; echo "@@ siguio"',
     );
 
-    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
-        ->and($proceso->getOutput())->toContain('No se ha podido crear '.$dir.'/copias/reports')
-        ->and($proceso->getOutput())->toContain($dir.'/copias/reports/retention')
-        ->and($proceso->getOutput())->toContain('@@ deshacer=0');
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->not->toContain('@@ siguio')
+        ->and($proceso->getErrorOutput())->toContain('no se ha podido crear '.$dir.'/copias/metrics')
+        ->and($proceso->getErrorOutput())->toContain("sudo -u '#1000' mkdir -m 0750 -- ".$dir.'/copias/metrics');
 
     ficherosGeneradosBorrar($dir);
-})->group('RF-PD-02', 'RF-PR-03');
+})->group('RF-PD-02', 'RF-PR-03', 'RL-12');
 
 /*
  * Un enlace plantado por el runtime bajo BACKUP_PATH (que es del uid 1000):
@@ -204,22 +225,23 @@ dataset('enlaces plantados bajo BACKUP_PATH', [
     }],
 ]);
 
-it('install.sh no sigue un enlace plantado en reports: avisa, sigue y el objetivo no gana nada', function (Closure $plantar): void {
+it('install.sh no sigue un enlace plantado en reports: se detiene, deshace lo suyo y el objetivo no gana nada', function (Closure $plantar): void {
     $dir = ficherosGeneradosDirectorio('install-enlace');
     mkdir($dir.'/copias', 0o750);
     mkdir($dir.'/objetivo', 0o755);
     $plantar($dir);
 
     $proceso = ficherosGeneradosBash('install.sh', GENERATED_FILES_SCRIPTS_INSTALL_ANOTADO.'; kq_msg_init es; '
-        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; estado=0; ensure_retention_reports_directory || estado=$?; '
-        .'echo "@@ estado=${estado} deshacer=${#ROLLBACK_STACK[@]}"',
+        .'CFG_BACKUP_PATH='.escapeshellarg($dir.'/copias').'; ensure_backup_subdirectories; echo "@@ siguio"',
         ['ANOTACIONES' => $dir.'/install.log'],
     );
 
-    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
-        ->and($proceso->getOutput())->toContain('[aviso]')
-        ->and($proceso->getOutput())->toContain('No se ha podido crear')
-        ->and($proceso->getOutput())->toContain('@@ estado=0 deshacer=0')
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->not->toContain('@@ siguio')
+        ->and($proceso->getErrorOutput())->toContain('no se ha podido crear')
+        // Lo que creo esta ejecucion antes del enlace se retira en la vuelta atras.
+        ->and(is_dir($dir.'/copias/metrics'))->toBeFalse()
+        ->and(is_dir($dir.'/copias/daily'))->toBeFalse()
         ->and(ficherosGeneradosListado($dir.'/objetivo'))->toBe([]);
 
     ficherosGeneradosBorrar($dir);
@@ -774,6 +796,55 @@ it('update.sh no usa un directorio de registros que sea un enlace o que no sea s
     ficherosGeneradosBorrar($dir);
 })->group('RF-PD-10');
 
+/*
+ * `kq_path_trusted` con los permisos que tiene cada tramo en un servidor real. Sin
+ * root no se puede dar a un directorio un dueño o un grupo ajenos: se sustituyen
+ * `stat` (solo para el tramo bajo prueba) e `id -G 1000` (los grupos de la cuenta
+ * uid 1000 del anfitrion), como en los demas caminos de root de este fichero. El
+ * caso que importa es el `/var/log` de Ubuntu, `root:syslog 0775`: con la regla
+ * «nunca escritura de grupo» update.sh se negaba a actualizar en todo Ubuntu
+ * (⑧b del 03-10-2026), y doctor.sh nunca purgaba el detalle (C19).
+ */
+it('kq_path_trusted acepta la escritura de grupo solo en un grupo del sistema ajeno al uid 1000', function (string $dueno, string $grupo, string $modo, string $gruposDelUid1000, string $esperado): void {
+    $dir = ficherosGeneradosDirectorio('tramo');
+    mkdir($dir.'/log', 0o755);
+
+    $fragmento = 'stat() { if [ "${4:-}" = '.escapeshellarg($dir.'/log').' ]; then case "$2" in %u) echo '.$dueno.';; %g) echo '.$grupo.';; %a) echo '.$modo.';; esac; else command stat "$@"; fi; }; '
+        .'id() { if [ "${1:-}" = "-G" ]; then echo '.escapeshellarg($gruposDelUid1000).'; else command id "$@"; fi; }; '
+        .'estado=0; kq_path_trusted '.escapeshellarg($dir.'/log/kronoqr').' || estado=$?; echo "@@ ${estado} tramo=${KQ_PATH_UNTRUSTED}"';
+
+    $proceso = ficherosGeneradosBash('lib/fs.sh', $fragmento);
+
+    expect($proceso->getOutput())->toContain('@@ '.$esperado);
+
+    ficherosGeneradosBorrar($dir);
+})->with([
+    'root:root 0755 (el /var/log de Debian)' => ['0', '0', '755', '1000 4 24', '0 tramo='],
+    'root:syslog 0775 (el /var/log de Ubuntu)' => ['0', '110', '775', '1000 4 24', '0 tramo='],
+    'root:1000 0775: el grupo del runtime' => ['0', '1000', '775', '1000', '1 tramo='],
+    'root:root 0777: escritura para otros' => ['0', '0', '777', '1000', '1 tramo='],
+    'root:root 1777: el sticky no vale' => ['0', '0', '1777', '1000', '1 tramo='],
+    'root:adm 0775 con la cuenta uid 1000 en adm' => ['0', '4', '775', '1000 4 24', '1 tramo='],
+    'root:syslog 0775 sin ninguna cuenta uid 1000' => ['0', '110', '775', '', '0 tramo='],
+])->group('RF-PD-10');
+
+it('update.sh nombra el tramo que no acepta cuando el que falla es el padre del directorio de registros', function (): void {
+    $dir = ficherosGeneradosDirectorio('tramo-padre');
+    mkdir($dir.'/log', 0o755);
+
+    // El padre `log` pasa a 0777 en el `stat` sustituido; el directorio aun no existe.
+    $fragmento = 'stat() { if [ "${4:-}" = '.escapeshellarg($dir.'/log').' ] && [ "$2" = %a ]; then echo 777; else command stat "$@"; fi; }; '
+        .'KQ_UPDATE_LOG_DIR='.escapeshellarg($dir.'/log/kronoqr').'; '
+        .'estado=0; ensure_update_log_dir || estado=$?; echo "@@ registro=${estado} tramo=${KQ_PATH_UNTRUSTED}"';
+
+    $proceso = ficherosGeneradosBash('update.sh', $fragmento);
+
+    expect($proceso->getOutput())->toContain('@@ registro=1 tramo='.$dir.'/log')
+        ->and(is_dir($dir.'/log/kronoqr'))->toBeFalse();
+
+    ficherosGeneradosBorrar($dir);
+})->group('RF-PD-10');
+
 it('update.sh no sigue un enlace plantado con el nombre de su informe, y no pierde el informe', function (): void {
     // El mismo patron de F1 en `open_report`: el nombre lleva la hora de inicio
     // y reports/ es del uid 1000. Con el enlace en su sitio, la victima no
@@ -950,7 +1021,7 @@ function ficherosGeneradosRestauracion(int $auditar, string $idioma): array
     $dir = ficherosGeneradosDirectorio('restore-aviso');
 
     $proceso = ficherosGeneradosBash('restore.sh', 'load_backup_config() { :; }; comprobar_precondiciones() { :; }; '
-        .'preparar_volcado() { :; }; restaurar() { AUDITAR='.$auditar.'; }; '
+        .'preparar_volcado() { TRABAJO="$(mktemp -d)"; }; restaurar() { AUDITAR='.$auditar.'; }; '
         .'BACKUP_DIR_REPORTS='.escapeshellarg($dir).'; FICHERO=/var/backups/fichaje/daily/kronoqr-20260930T010203Z.dump.enc; '
         .'BASE_DESTINO=fichaje; PGHOST=postgres; PGPORT=5432; main --yes',
         ['KQ_LANG' => $idioma, 'KRONOQR_LANG' => $idioma],

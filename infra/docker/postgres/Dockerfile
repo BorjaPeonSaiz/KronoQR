@@ -68,7 +68,7 @@ ENV TZ=UTC \
 ARG APK_INDEX_STAMP=local
 RUN echo "apk index stamp: ${APK_INDEX_STAMP}" \
   && apk upgrade --no-cache libssl3 libcrypto3 libuuid \
-  && apk add --no-cache bash \
+  && apk add --no-cache bash openssl \
   && rm /usr/local/bin/gosu
 
 COPY infra/docker/postgres/initdb/ /docker-entrypoint-initdb.d/
@@ -83,8 +83,20 @@ RUN chmod 0755 /docker-entrypoint-initdb.d/02-application-roles.sh /docker-entry
 # ficheros de compose apunta aqui. El script decide si un segmento esta a salvo
 # y PostgreSQL le cree: por eso no es una linea de `cp` en el compose.
 COPY infra/docker/postgres/bin/archive-wal.sh /usr/local/bin/kronoqr-archive-wal
+# Formato KQE1 (ADR-049): UNA implementacion, la misma que usan los scripts del
+# producto (infra/scripts/lib/kqe.sh), y las herramientas de la recuperacion:
+# `restore_command`, despliegue de la copia fisica y migracion de los segmentos
+# heredados en claro. `openssl` (el CLI) se anade arriba: la imagen solo traia
+# `libcrypto3`, y el archivado cifra y autentica cada segmento. Hace falta
+# SHA3-256 (OpenSSL 1.1.1 o posterior).
+COPY infra/scripts/lib/kqe.sh /usr/local/lib/kronoqr/kqe.sh
+COPY infra/docker/postgres/bin/kronoqr-restore-wal /usr/local/bin/kronoqr-restore-wal
+COPY infra/docker/postgres/bin/kronoqr-extract-base /usr/local/bin/kronoqr-extract-base
+COPY infra/docker/postgres/bin/kronoqr-wal-migrate /usr/local/bin/kronoqr-wal-migrate
 RUN set -eux; \
-  chmod 0755 /usr/local/bin/kronoqr-archive-wal; \
+  chmod 0755 /usr/local/bin/kronoqr-archive-wal /usr/local/bin/kronoqr-restore-wal \
+    /usr/local/bin/kronoqr-extract-base /usr/local/bin/kronoqr-wal-migrate; \
+  chmod 0644 /usr/local/lib/kronoqr/kqe.sh; \
   # Punto de montaje del archivo de WAL, con el propietario correcto. Docker
   # copia la propiedad del directorio de la IMAGEN al inicializar un volumen
   # vacio: sin esta linea el volumen nace de root, el proceso de PostgreSQL

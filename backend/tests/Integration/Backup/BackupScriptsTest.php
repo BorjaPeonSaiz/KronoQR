@@ -69,24 +69,25 @@ it('cifra la copia de forma que no se puede leer sin la clave', function (): voi
     file_put_contents($claro, "PGDMP fichaje shift_entries employee_code\n");
 
     $cifrar = bashConLaBiblioteca(
-        'encrypt_stream <'.escapeshellarg($claro).' >'.escapeshellarg($cifrado)
+        'kqe_encrypt dump kronoqr-20261003T120000Z '.escapeshellarg($cifrado).' <'.escapeshellarg($claro)
     );
     expect($cifrar->isSuccessful())->toBeTrue($cifrar->getErrorOutput());
 
     $contenido = (string) file_get_contents($cifrado);
-    expect($contenido)->toStartWith('Salted__');
+    expect($contenido)->toStartWith('KQE1 kind=dump ');
     expect($contenido)->not->toContain('PGDMP');
     expect($contenido)->not->toContain('shift_entries');
     expect($contenido)->not->toContain('employee_code');
     // Y la clave tampoco esta dentro del fichero, que seria el chiste facil.
     expect($contenido)->not->toContain(CLAVE_DE_PRUEBA);
 
-    $descifrar = bashConLaBiblioteca('decrypt_stream <'.escapeshellarg($cifrado));
+    $abrir = 'kqe_open '.escapeshellarg($cifrado).' '.escapeshellarg($trabajo).' dump kronoqr-20261003T120000Z && kqe_decrypt_copy';
+    $descifrar = bashConLaBiblioteca($abrir);
     expect($descifrar->isSuccessful())->toBeTrue();
     expect($descifrar->getOutput())->toBe((string) file_get_contents($claro));
 
     $conOtraClave = bashConLaBiblioteca(
-        'decrypt_stream <'.escapeshellarg($cifrado),
+        $abrir,
         ['BACKUP_ENCRYPTION_KEY' => 'esta_no_es_la_clave_correcta_0000']
     );
     expect($conOtraClave->isSuccessful())->toBeFalse('Una clave equivocada ha descifrado la copia.');
@@ -147,7 +148,7 @@ it('devuelve los codigos de salida documentados ante un uso incorrecto', functio
     // esa es toda la razon: los cinco los teclea la misma persona.
     $ordenDesconocida = ejecutarScript('backup.sh', ['naoquesea']);
     expect($ordenDesconocida->getExitCode())->toBe(1)
-        ->and($ordenDesconocida->getErrorOutput())->toContain('run, verify, prune o list');
+        ->and($ordenDesconocida->getErrorOutput())->toContain('run, verify, prune, list o derive-wal-key');
 
     $modoInvalido = ejecutarScript('backup.sh', ['run', '--mode', 'naoquesea']);
     expect($modoInvalido->getExitCode())->toBe(1);
@@ -167,7 +168,7 @@ it('no imprime la clave de cifrado por ninguna via', function (): void {
     // descriptor de fichero o por el entorno, nunca por la linea de ordenes,
     // donde `ps` la veria desde cualquier sesion del servidor.
     $salida = bashConLaBiblioteca(
-        'require_encryption_key; openssl_pass_spec; echo; encrypt_stream </dev/null | wc -c'
+        'require_encryption_key; out="$(mktemp)"; kqe_encrypt dump kronoqr-x "$out" </dev/null; rm -f "$out"'
     );
 
     expect($salida->isSuccessful())->toBeTrue()
@@ -179,3 +180,51 @@ it('no imprime la clave de cifrado por ninguna via', function (): void {
         expect(Repo::contents('infra/scripts/'.$fichero))->not->toContain('-pass pass:');
     }
 })->group('RL-12');
+
+it('si no puede publicar el informe, lo conserva en un directorio privado y no en un nombre predecible de /tmp', function (): void {
+    // A3-R2: /tmp tiene sticky y otro usuario puede plantar ahi un enlace con el nombre
+    // que root va a escribir. El rescate va al directorio de registros de root si es de
+    // fiar o a uno recien creado, 0700.
+    $dir = sys_get_temp_dir().'/kq-informe-'.bin2hex(random_bytes(4));
+    mkdir($dir, 0o700, true);
+    file_put_contents($dir.'/informe.log', "informe de prueba\n");
+
+    $resultado = bashConLaBiblioteca(
+        'kq_publish_as_app() { return 1; }; kq_report_publish '.escapeshellarg($dir.'/informe.log').' /no/importa/restore-2026.log; echo fin',
+        ['KRONOQR_LOG_DIR' => $dir.'/no-existe', 'TMPDIR' => $dir],
+    );
+
+    preg_match("/Queda en '([^']+)'/", $resultado->getErrorOutput(), $partes);
+    $rescate = $partes[1] ?? '';
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($rescate)->not->toBe('')
+        ->and($rescate)->not->toBe($dir.'/kronoqr-informe-restore-2026.log')
+        ->and(is_file($rescate))->toBeTrue()
+        ->and(substr(sprintf('%o', fileperms(dirname($rescate))), -4))->toBe('0700')
+        ->and((string) file_get_contents($rescate))->toBe("informe de prueba\n");
+})->group('RF-PR-04');
+
+it('restore.sh y restore-drill.sh ignoran KRONOQR_ACCEPT_UNAUTHENTICATED del entorno: solo vale la opcion', function (string $script): void {
+    // Una variable heredada de un perfil de root o de la crontab del simulacro dejaria
+    // abierta la restauracion de copias sin autenticar en cada ejecucion (ADR-049, C12).
+    $proceso = new Process(
+        ['bash', Repo::file('infra/scripts/'.$script), '--help'],
+        env: ['KRONOQR_ACCEPT_UNAUTHENTICATED' => '1'],
+        timeout: 60.0,
+    );
+    $proceso->run();
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('se ignora KRONOQR_ACCEPT_UNAUTHENTICATED');
+})->with(['restore.sh', 'restore-drill.sh'])->group('RL-12', 'RS-07');
+
+it('doctor.sh avisa de KRONOQR_ACCEPT_UNAUTHENTICATED tanto en el .env como en las tablas de cron, en los dos idiomas', function (): void {
+    $doctor = Repo::contents('infra/scripts/doctor.sh');
+    $mensajes = Repo::contents('infra/scripts/lib/messages-doctor.sh');
+
+    expect($doctor)->toContain('/etc/cron.d/*')->toContain('/var/spool/cron/crontabs/root')->toContain('d_f_accept_unauth_cron');
+    foreach (['ES', 'EN'] as $idioma) {
+        expect($mensajes)->toContain('KQ_MSG_'.$idioma.'[d_f_accept_unauth_cron]=');
+    }
+})->group('RL-12', 'RS-07');

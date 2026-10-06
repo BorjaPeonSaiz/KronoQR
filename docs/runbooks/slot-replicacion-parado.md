@@ -5,7 +5,7 @@
 
 | Alerta | Umbral | Severidad | Destinatario |
 | --- | --- | --- | --- |
-| `SlotDeReplicacionParado` | `kronoqr_backup_replication_slots_inactive > 0`, `for: 15m` | Crítica | IT del cliente |
+| `SlotDeReplicacionParado` | `kronoqr_wal_replication_slots_inactive > 0`, `for: 15m` | Crítica | IT del cliente |
 
 **A las 06:30, quien la reciba hace esto:** lista los slots (§2), retira los que
 no reconozcas (§3) y averigua cómo nacieron (§4). **KronoQR no usa ningún slot de

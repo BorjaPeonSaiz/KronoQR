@@ -73,6 +73,7 @@ SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/scripts/lib/*.sh) \
             $(wildcard infra/docker/*/*.sh) \
             $(wildcard infra/docker/*/*/*.sh) \
+            $(wildcard infra/docker/postgres/bin/kronoqr-*) \
             $(wildcard infra/docker/*/*/*.envsh) \
             $(wildcard infra/observability/alertmanager/*.sh) \
             $(wildcard infra/observability/prometheus/*.sh) \
@@ -243,7 +244,7 @@ endif
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
         traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
-        backup backup-verify restore-drill observability-check
+        backup backup-verify restore-drill restore-drill-pitr observability-check
 
 help: ## Muestra esta ayuda
 	@echo "KronoQR - objetivos disponibles:"
@@ -291,6 +292,7 @@ help: ## Muestra esta ayuda
 	@echo "  make backup           Copia cifrada y verificada del entorno de desarrollo"
 	@echo "  make backup-verify    Verifica la ultima copia (huella, descifrado, indice)"
 	@echo "  make restore-drill    Simulacro: restaura en contenedor limpio y valida"
+	@echo "  make restore-drill-pitr  Simulacro: copia fisica + WAL cifrado (RNF-D-02)"
 	@echo "  make clean            Para el entorno y BORRA los volumenes"
 
 up: ## Levanta el entorno completo
@@ -1309,12 +1311,27 @@ restore-drill: ## Simulacro de restauracion en contenedor limpio (RNF-D-05, RQ-0
 	MSYS_NO_PATHCONV=1 docker run --rm -v kronoqr_backup-data:/from -v "$$destino_docker:/to" alpine \
 	  sh -c 'cp -r /from/. /to/' >/dev/null; \
 	clave="$$($(COMPOSE_DEV) exec -T app printenv BACKUP_ENCRYPTION_KEY | tr -d '\r')"; \
-	BACKUP_PATH="$$destino" BACKUP_ENCRYPTION_KEY="$$clave" bash infra/scripts/restore-drill.sh; \
+	BACKUP_PATH="$$destino" BACKUP_ENCRYPTION_KEY="$$clave" bash infra/scripts/restore-drill.sh $(DRILL_ARGS); \
 	resultado=$$?; \
 	MSYS_NO_PATHCONV=1 docker run --rm -v kronoqr_backup-data:/to -v "$$destino_docker:/from:ro" alpine \
 	  sh -c 'cp -f /from/metrics/kronoqr_backup_drill.prom /to/metrics/ 2>/dev/null || true' >/dev/null; \
 	exit $$resultado
 	@echo [make] Simulacro terminado. El informe esta en el directorio temporal que indica la ultima linea.
+
+# Copia FISICA + WAL archivado y CIFRADO, en un contenedor limpio con la imagen de
+# postgres del entorno (ADR-049, RNF-D-02): lo unico que ejercita «copias mas WAL».
+# El archivo de WAL de desarrollo es el volumen `wal-archive` y se monta en solo
+# lectura sin copiarlo. Necesita una copia fisica (`backup.sh run --mode base`). Para
+# copias de la 2.1.0 en el volumen de desarrollo: `make restore-drill-pitr DRILL_ARGS=--accept-unauthenticated`.
+restore-drill-pitr: ## Simulacro pitr: copia fisica + WAL cifrado (RNF-D-02, ADR-049)
+	@destino=$${TMPDIR:-/tmp}/kronoqr-drill; \
+	rm -rf "$$destino"; mkdir -p "$$destino"; \
+	destino_docker="$$(cygpath -w "$$destino" 2>/dev/null || echo "$$destino")"; \
+	MSYS_NO_PATHCONV=1 docker run --rm -v kronoqr_backup-data:/from -v "$$destino_docker:/to" alpine \
+	  sh -c 'cp -r /from/. /to/' >/dev/null; \
+	clave="$$($(COMPOSE_DEV) exec -T app printenv BACKUP_ENCRYPTION_KEY | tr -d '\r')"; \
+	BACKUP_PATH="$$destino" BACKUP_ENCRYPTION_KEY="$$clave" bash infra/scripts/restore-drill.sh --mode pitr \
+	  --image kronoqr/postgres:dev --wal-source kronoqr_wal-archive $(DRILL_ARGS)
 
 clean: ## Para el entorno y BORRA los volumenes de datos
 	$(COMPOSE_DEV) down -v --remove-orphans
