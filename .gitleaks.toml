@@ -181,4 +181,11 @@ useDefault = true
     #    escritas a mano, con el nombre de la prueba dentro; no cifran ninguna copia.
     '''^clave_de_prueba_de_kqe_1234567890abcdef$''',
     '''^otra_clave_cualquiera_larga_1234$''',
+    # 28) y 29) backend/tests/Integration/Backup/BackupKeyRotationTest.php: las dos
+    #    claves maestras literales («anterior» y «nueva») con las que la prueba de la
+    #    rotacion sella y vuelve a abrir una copia KQE1, un segmento de WAL y una copia
+    #    heredada (ADR-049, revision del bloque 20). Cadenas escritas a mano con el nombre
+    #    de la prueba dentro; ninguna instalacion las tiene.
+    '''^clave_anterior_de_la_rotacion_1234567890$''',
+    '''^clave_nueva_de_la_rotacion_abcdefghijklm$''',
   ]
