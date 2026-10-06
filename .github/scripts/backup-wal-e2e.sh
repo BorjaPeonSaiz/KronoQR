@@ -306,8 +306,10 @@ mode_clean() {
   as_root mv -f "${copia}.sha256.bak" "${copia}.sha256"
   [ "${rc}" = "6" ] || fail "sin .sha256 dio salida ${rc} y se esperaba 6"
   ok "sin .sha256 -> salida 6"
-  # Renombrada: la cabecera dice otro nombre.
-  as_root sh -c "cp '${copia}' '${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.dump.enc' && cp '${copia}.sha256' '${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.dump.enc.sha256' && cp '${BACKUP_PATH}/daily/${nombre}.manifest.json' '${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.manifest.json' && cp '${BACKUP_PATH}/daily/${nombre}.manifest.mac' '${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.manifest.mac'"
+  # Renombrada: la cabecera dice otro nombre. Con `-p`: root copia conservando dueño y modo
+  # (1000, 0640); sin ello la copia queda de root y el contenedor restore (uid 1000) no puede
+  # leerla, que es otro fallo (permiso denegado, salida 2), no el que se prueba aqui.
+  as_root sh -c "cp -p '${copia}' '${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.dump.enc' && cp -p '${copia}.sha256' '${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.dump.enc.sha256' && cp -p '${BACKUP_PATH}/daily/${nombre}.manifest.json' '${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.manifest.json' && cp -p '${BACKUP_PATH}/daily/${nombre}.manifest.mac' '${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.manifest.mac'"
   rc=0
   restore_dry --file "${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.dump.enc" >/dev/null 2>&1 || rc=$?
   as_root sh -c "rm -f '${BACKUP_PATH}'/daily/kronoqr-20240101T000000Z.*"

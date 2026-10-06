@@ -606,6 +606,8 @@ main() {
     [ -n "$FICHERO" ] || FICHERO="$(latest_dump_file)"
     [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die "${KQ_EXIT_STATE_CONFLICT}" \
       "no hay ninguna copia sobre la que hacer el simulacro. Lanza 'backup.sh run' primero."
+    [ -r "$FICHERO" ] || die "${KQ_EXIT_REQUIREMENTS}" \
+      "no se puede leer '${FICHERO}' (permiso denegado para el uid $(id -u)). Las copias las escribe el uid 1000 con modo 0640; si la has copiado a mano como root, dale ese dueño y modo (chown 1000:1000 y chmod 0640). No se ha tocado nada."
 
     # UNA lectura a un directorio privado; todo lo demas sobre esa copia (ADR-049).
     kq_open_copy dump "$FICHERO" "$TRABAJO" "$ACEPTAR_HEREDADA" "${KQ_EXIT_VERIFY_FAILED}"

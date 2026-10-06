@@ -389,6 +389,10 @@ comprobar_precondiciones() {
   [ -n "$FICHERO" ] || FICHERO="$(latest_dump_file)"
   [ -n "$FICHERO" ] && [ -f "$FICHERO" ] || die "${KQ_EXIT_REQUIREMENTS}" \
     "no hay ninguna copia que restaurar en '${BACKUP_DIR_DUMP}'. Comprueba BACKUP_PATH en el .env y que el almacenamiento de copias esta montado. Si el destino es un recurso de red, montalo antes. Ver docs/runbooks/restaurar-backup.md."
+  # Legible por quien ejecuta: una copia dejada por root sin permiso de lectura para el
+  # uid 1000 del contenedor restore no es un fallo de integridad (6) ni un error de bash (1).
+  [ -r "$FICHERO" ] || die "${KQ_EXIT_REQUIREMENTS}" \
+    "no se puede leer '${FICHERO}' (permiso denegado para el uid $(id -u)). Las copias las escribe el uid 1000 con modo 0640; si la has copiado a mano como root, dale ese dueño y modo (chown 1000:1000 y chmod 0640) y vuelve a lanzar esto. No se ha tocado nada."
 
   psql -Atqc 'SELECT 1' >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se puede conectar a PostgreSQL en ${PGHOST}:${PGPORT} como ${PGUSER}. Levanta el servicio ('docker compose up -d postgres') y vuelve a lanzar esto. No se ha tocado nada."
