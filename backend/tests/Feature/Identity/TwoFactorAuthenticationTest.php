@@ -43,7 +43,7 @@ beforeEach(function (): void {
     // propia prueba.
     RateLimiter::clear('auth-ip:127.0.0.1');
 
-    config()->set('identity.two_factor.required_roles', ['admin', 'rrhh', 'auditor']);
+    config()->set('identity.two_factor.required_roles', ['admin', 'rrhh', 'auditor', 'responsable_departamento']);
 });
 
 /**
@@ -306,9 +306,47 @@ it('rechaza un codigo con forma imposible', function (): void {
         ->assertStatus(422);
 })->group('RF-ID-01');
 
-it('no obliga a segundo factor a un rol que no lo tiene, y si a quien lo activo', function (): void {
-    // RS-06 obliga a `admin`, `rrhh` y `auditor`. El responsable no entra: su
-    // alcance esta acotado (RF-ID-03). Pero si el mismo lo activa, se le pide.
+it('obliga a segundo factor al responsable de departamento y le deja darlo de alta en su primer acceso', function (): void {
+    // ADR-050 §5: el responsable corrige jornadas (`attendance:correct`), asi
+    // que escribe el registro legal de su departamento y RS-06 le obliga desde
+    // la 2.2.0. Uno dado de alta antes, sin TOTP, no se queda fuera: recibe el
+    // `202` con `enrolment_required: true`, igual que un admin nuevo.
+    $responsable = ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO);
+
+    $reto = Api::guest()->post('/api/v1/auth/login', [
+        'email' => $responsable->email,
+        'password' => ManagementUsers::PASSWORD,
+    ])->assertValidResponse(202)->assertJsonPath('enrolment_required', true)->json('challenge_token');
+
+    expect($reto)->toBeString();
+    Auth::forgetGuards();
+
+    // Y el alta funciona con ese reto: no hay rol que lo impida.
+    $secreto = Api::as(\is_string($reto) ? $reto : '')->post('/api/v1/auth/2fa/enrol')
+        ->assertValidResponse(200)->json('secret');
+
+    Auth::forgetGuards();
+
+    Api::as(\is_string($reto) ? $reto : '')->post('/api/v1/auth/2fa/confirm', [
+        'code' => ManagementUsers::totpCodeFor(\is_string($secreto) ? $secreto : ''),
+    ])->assertValidResponse(200);
+})->group('RS-06', 'RF-ID-01', 'RF-ID-02');
+
+it('es el valor de serie de la instalacion, no solo de esta prueba', function (): void {
+    // La configuracion que se entrega, leida tal cual: si alguien vuelve a
+    // dejar fuera al responsable, esto lo dice antes que una revision.
+    /** @var array{two_factor: array{required_roles: list<string>}} $identity */
+    $identity = require base_path('config/identity.php');
+
+    expect($identity['two_factor']['required_roles'])
+        ->toBe(['admin', 'rrhh', 'auditor', 'responsable_departamento']);
+})->group('RS-06');
+
+it('no obliga a un rol que la instalacion saca de la lista, pero si a quien lo activo', function (): void {
+    // Sigue siendo configuracion (regla dura 13): un cliente puede acortarla, y
+    // `product:doctor` lo avisa. Quien activo su TOTP lo presenta siempre.
+    config()->set('identity.two_factor.required_roles', ['admin', 'rrhh', 'auditor']);
+
     $responsable = ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO);
 
     Api::guest()->post('/api/v1/auth/login', [

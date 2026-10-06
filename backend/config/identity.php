@@ -63,25 +63,32 @@ return [
         /*
          * ROLES OBLIGADOS A LLEVAR SEGUNDO FACTOR.
          *
-         * De serie, los tres literales de RS-06: `admin`, `rrhh` y `auditor`, que
-         * son los que alcanzan datos de TODA la plantilla. El
-         * `responsable_departamento` no entra porque su alcance esta acotado a su
-         * departamento (RF-ID-03).
+         * De serie, los CUATRO roles de RS-06 desde la 2.2.0 (ADR-050 §5):
+         * `admin`, `rrhh` y `auditor`, que alcanzan datos de toda la plantilla, y
+         * `responsable_departamento`, que ESCRIBE el registro horario legal de su
+         * departamento (`attendance:correct`). El alcance acotado de RF-ID-03
+         * limita cuanto lee, no que puede alterar: con una contrasena robada se
+         * rehace la nomina de un departamento entero.
          *
-         * CONTRADICCION DOCUMENTAL, RESUELTA POR CONFIGURACION. La tabla del doc
-         * 02 §7.3 escribe «Sesion + 2FA» tambien en la fila del responsable.
-         * Manda el doc 01 (orden de autoridad de `CLAUDE.md`), asi que el valor
-         * de serie son tres roles; y como esto es configuracion y no una
-         * constante (regla dura 13), un cliente con una politica mas dura anade
-         * `responsable_departamento` sin tocar el repositorio y sin una rama
-         * propia.
+         * SIN CONDICION DE RED. El codigo no puede saber si el panel es accesible
+         * desde internet (`ADMIN_INTERNAL_CIDR` vacia no significa expuesto, ni
+         * con valor significa interno), y una regla que depende de esa suposicion
+         * se apaga sola sin que nadie lo note.
+         *
+         * TRANSICION. Un responsable dado de alta antes sin TOTP no se queda
+         * fuera: `POST /api/v1/auth/login` le responde `202` con
+         * `enrolment_required: true` y pasa por `/auth/2fa/enrol` y
+         * `/auth/2fa/confirm` en su primer acceso, igual que un admin nuevo.
+         *
+         * Sigue siendo configuracion (regla dura 13): un cliente puede acortar la
+         * lista, y `product:doctor` avisa de cada uno de los cuatro que falte.
          *
          * QUIEN YA LO TIENE, LO USA, este o no en esta lista: quitar la
          * obligatoriedad no desactiva el segundo factor de quien lo activo.
          */
         'required_roles' => array_values(array_filter(array_map(
             'trim',
-            explode(',', (string) env('IDENTITY_2FA_REQUIRED_ROLES', 'admin,rrhh,auditor')),
+            explode(',', (string) env('IDENTITY_2FA_REQUIRED_ROLES', 'admin,rrhh,auditor,responsable_departamento')),
         ), static fn (string $role): bool => $role !== '')),
 
         /*
