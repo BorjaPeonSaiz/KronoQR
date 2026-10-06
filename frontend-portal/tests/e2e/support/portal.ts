@@ -32,6 +32,8 @@ export type PortalLocale = 'es' | 'en'
 export const EMPLOYEE_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
 export const PORTAL_EMPLOYEE_CODE = 'E7K2M9XQ4'
 export const PORTAL_PIN = '284016'
+/** PIN de 8 cifras: la instalacion puede configurarlo asi (ADR-050). */
+export const PORTAL_PIN_8 = '28401678'
 export const PORTAL_SESSION_TOKEN = '41|Zt6QpX1nR8vKcLm3bYdF9wS2eT5rU7iO0aP4sD8h'
 
 /** Clave de `sessionStorage` del portal (`session.store.ts`). */
@@ -373,7 +375,7 @@ export interface PortalApiOptions {
    * porque es un limite de trafico, no una confirmacion de que la cuenta
    * existe.
    */
-  loginOutcome?: 'ok' | 'invalid' | 'rateLimited'
+  loginOutcome?: 'ok' | 'invalid' | 'rateLimited' | 'originLocked'
   /** La marca que devuelve `GET /api/v1/branding`. Por omision, la del producto. */
   branding?: Branding
   /**
@@ -463,12 +465,28 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
             return
           }
 
+          if (loginOutcome === 'originLocked') {
+            // Bloqueo por origen (ADR-050): igual de generico, con `Retry-After`.
+            await route.fulfill({
+              status: 429,
+              contentType: 'application/problem+json',
+              headers: { 'Retry-After': '120' },
+              body: JSON.stringify({
+                type: 'urn:kronoqr:problem:portal-origin-locked',
+                title: 'Demasiados intentos',
+                status: 429,
+              }),
+            })
+
+            return
+          }
+
           const body = request.postDataJSON() as PortalLoginRequest
 
           if (
             loginOutcome === 'invalid' ||
             body.employee_code !== PORTAL_EMPLOYEE_CODE ||
-            body.pin !== PORTAL_PIN
+            (body.pin !== PORTAL_PIN && body.pin !== PORTAL_PIN_8)
           ) {
             // Una sola respuesta para cualquier rechazo (RS-03, regla dura 17):
             // el doble no distingue codigo inexistente de PIN incorrecto.

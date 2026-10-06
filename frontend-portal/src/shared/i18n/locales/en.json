@@ -14,9 +14,15 @@
     "heading": "Sign in to the portal",
     "employeeCode": "Employee code",
     "pin": "PIN",
+    "pinHint": "From 6 to 8 digits.",
     "submit": "Sign in",
     "submitting": "Signing in…",
-    "forgotPin": "Can't remember your PIN or your code? Ask Human Resources to reset it. It is never sent by email or by any link."
+    "forgotPin": "Can't remember your PIN or your code? Ask Human Resources to reset it. It is never sent by email or by any link.",
+    "originLocked": {
+      "title": "Too many attempts from this connection",
+      "advice": "Try again in {minutes} minutes. You can also try from another connection or ask Human Resources for help.",
+      "countdown": "The \"Sign in\" button will be available in {time}."
+    }
   },
   "common": {
     "updating": "Updating…"
