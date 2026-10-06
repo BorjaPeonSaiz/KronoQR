@@ -601,6 +601,20 @@ return [
                     ."Then apply the change:\n"
                     .'  docker compose up -d nginx',
             ],
+            'admin' => [
+                'warning_unfiltered' => "If you want the panel open, there is nothing to fix: note it in the installation\n"
+                    ."record (docs/cliente/endurecimiento.md, section 1.2, in Spanish).\n"
+                    ."To accept it only from the hotel network or from your VPN, put its range in the\n"
+                    .".env file and apply the change:\n"
+                    ."  ADMIN_INTERNAL_CIDR=10.20.0.0/16\n"
+                    ."  docker compose up -d nginx\n"
+                    ."First check that your own computer is inside that range: outside it, the panel\n"
+                    .'answers 403 and you would have to fix it from the server console.',
+                'failure_invalid' => "Fix it in the .env file: one single range in the a.b.c.d/n format, for\n"
+                    ."example 10.20.0.0/16, or leave it empty not to filter the panel by network.\n"
+                    ."Then apply the change:\n"
+                    .'  docker compose up -d nginx',
+            ],
             'kiosk_vlan' => [
                 'warning_open' => "Put only the tablets' network in the .env file and apply the change:\n"
                     ."  KIOSK_VLAN_CIDR=10.0.20.0/24\n"
