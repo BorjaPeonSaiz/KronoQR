@@ -173,3 +173,18 @@ it('detecta la apertura del bloqueo solo en el flanco', function (?int $antes, ?
     'ya estaba abierto con un segundo' => [1_791_000_001, 1_791_003_600, false],
     'el anterior caduco justo ahora' => [1_791_000_000, 1_791_003_600, true],
 ])->group('RS-12', 'RS-13');
+
+it('no toca un bloqueo abierto con un fallo rezagado', function (int $segundosDespues): void {
+    // Bajo concurrencia, un fallo que se comprobo antes de abrirse el bloqueo
+    // llega despues: no cuenta, no alarga y, sobre todo, no lo borra al rehacer
+    // la cuenta (PortalOriginConcurrencyTest).
+    $politica = politicaDeOrigen();
+
+    $bloqueado = tras($politica, 20, ORIGIN_LOCKOUT_POLICY_T0);
+    $abierto = ORIGIN_LOCKOUT_POLICY_T0 + 19;
+
+    expect($politica->afterFailure($bloqueado, $abierto + $segundosDespues))->toBe($bloqueado);
+})->with([
+    'en el mismo segundo' => [0],
+    'un segundo antes de levantarse' => [3599],
+])->group('RS-12');

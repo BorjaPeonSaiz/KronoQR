@@ -11,6 +11,7 @@ use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Identity\Application\Support\PortalAccessTelemetry;
 use App\Modules\Identity\Domain\Policy\OriginLockAuditCeiling;
 use App\Modules\Identity\Domain\Policy\OriginLockoutPolicy;
+use App\Modules\Identity\Domain\ValueObject\OriginAttemptHistory;
 use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
@@ -239,10 +240,15 @@ final readonly class AuthenticatePortalEmployeeHandler
     private function recordOriginFailure(RequestOrigin $origin): void
     {
         $now = $this->now();
-        $before = $this->origins->historyFor($origin);
-        $after = $this->originPolicy->afterFailure($before, $now);
 
-        $this->origins->save($origin, $after, $this->originPolicy->retentionSeconds());
+        // Leer, contar y guardar en un solo paso del almacen: con veinticinco
+        // fallos simultaneos del mismo origen, cada uno tiene que ver el del
+        // anterior, y solo uno de ellos ve abrirse el bloqueo.
+        [$before, $after] = $this->origins->update(
+            $origin,
+            fn (OriginAttemptHistory $current): OriginAttemptHistory => $this->originPolicy->afterFailure($current, $now),
+            $this->originPolicy->retentionSeconds(),
+        );
 
         if (! $this->originPolicy->opened($before, $after, $now)) {
             return;

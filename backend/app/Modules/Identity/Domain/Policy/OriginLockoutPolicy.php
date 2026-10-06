@@ -53,12 +53,21 @@ final readonly class OriginLockoutPolicy
     }
 
     /**
-     * El estado tras un fallo nuevo. **Solo se llama si el origen no estaba
-     * bloqueado**: quien llama lo ha comprobado antes con
-     * {@see self::secondsUntilUnlock()}.
+     * El estado tras un fallo nuevo.
+     *
+     * **Sobre un origen bloqueado no cambia nada** (decision 1): devuelve el
+     * mismo estado, sin contar el fallo ni alargar el bloqueo. Quien llama ya lo
+     * comprueba antes con {@see self::secondsUntilUnlock()}, pero entre esa
+     * comprobacion y la escritura otro proceso del mismo origen puede haber
+     * abierto el bloqueo; sin esta guarda, el fallo rezagado lo borraria al
+     * rehacer la cuenta desde cero.
      */
     public function afterFailure(OriginAttemptHistory $history, int $now): OriginAttemptHistory
     {
+        if ($this->secondsUntilUnlock($history, $now) > 0) {
+            return $history;
+        }
+
         $floor = $now - $this->windowSeconds;
 
         $failures = array_values(array_filter(

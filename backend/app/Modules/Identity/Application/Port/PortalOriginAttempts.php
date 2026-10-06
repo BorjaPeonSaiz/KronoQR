@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Application\Port;
 
 use App\Modules\Identity\Domain\ValueObject\OriginAttemptHistory;
 use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
+use Closure;
 
 /**
  * Donde se guarda la cuenta de fallos por origen del portal (RS-12, ADR-050 §2).
@@ -23,7 +24,22 @@ interface PortalOriginAttempts
 {
     public function historyFor(RequestOrigin $origin): OriginAttemptHistory;
 
-    /** Guarda el estado durante `$ttlSeconds`; pasado ese tiempo sin cambios, se olvida. */
+    /**
+     * Lee el estado del origen, le aplica `$transition` y guarda el resultado
+     * durante `$ttlSeconds`, **sin que otro proceso del mismo origen pueda
+     * meterse entre la lectura y la escritura**. Es lo que usa el caso de uso
+     * para contar un fallo: con un `historyFor()` y un `save()` sueltos, los
+     * fallos simultaneos se pisan y quien paraleliza no llega nunca al umbral.
+     *
+     * @param  Closure(OriginAttemptHistory): OriginAttemptHistory  $transition
+     * @return array{OriginAttemptHistory, OriginAttemptHistory} El estado de antes y el de despues.
+     */
+    public function update(RequestOrigin $origin, Closure $transition, int $ttlSeconds): array;
+
+    /**
+     * Guarda el estado durante `$ttlSeconds`; pasado ese tiempo sin cambios, se
+     * olvida. Sustituye lo que hubiera sin leerlo: para contar un fallo, {@see self::update()}.
+     */
     public function save(RequestOrigin $origin, OriginAttemptHistory $history, int $ttlSeconds): void;
 
     /**
