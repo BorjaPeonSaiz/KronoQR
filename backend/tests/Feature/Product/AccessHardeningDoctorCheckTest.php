@@ -94,6 +94,21 @@ it('sale en verde con el portal abierto y los PIN de 8 cifras', function (): voi
         ->and($comprobacion->summary)->toContain('8 cifras');
 })->group('RF-PD-13', 'RF-ID-09');
 
+it('lee la longitud del mismo puerto que el generador y no se cae con un valor ilegible', function (): void {
+    // La sonda pregunta a `PinLengthProvider`, el mismo puerto con el que se
+    // emiten los PIN: no puede contar una longitud distinta de la que se emite.
+    // Un valor que no es 6 ni 8 —escrito a mano en la tabla— lo denuncia
+    // `settings.invalid_keys`; la sonda toma 6 y sigue, porque un `doctor` que
+    // se cae no avisa de nada.
+    Config::set('security.edge_networks.portal_internal', '0.0.0.0/0');
+    accesoConLongitudDePin('7');
+
+    $comprobacion = comprobacionDeAcceso('access.pin_length');
+
+    expect($comprobacion->status)->toBe(DoctorStatus::Warning)
+        ->and($comprobacion->details['pin_length'] ?? null)->toBe(6);
+})->group('RF-PD-13', 'RF-ID-09');
+
 it('no pide 8 cifras con el portal en la red del hotel', function (): void {
     // 6 con el bloqueo por empleado basta en la red interna (ADR-015): avisar
     // aqui enseñaria a ignorar el aviso que si importa.

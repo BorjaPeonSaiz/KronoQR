@@ -2038,7 +2038,7 @@ final class ProductServiceProvider extends ServiceProvider
     private static function accessHardeningProbe(Application $app): AccessHardeningProbe
     {
         return new AccessHardeningProbe(
-            settings: $app->make(GetSettingsHandler::class),
+            pinLengthProvider: $app->make(PinLengthProvider::class),
             facts: new DatabaseAccessHardeningFacts(DB::connection()),
             portalInternal: self::text(Config::get('security.edge_networks.portal_internal')) ?? '',
             secondFactorRoles: array_values(array_filter(

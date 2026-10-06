@@ -6,12 +6,12 @@ namespace App\Modules\Product\Infrastructure\Diagnostics\Probe;
 
 use App\Modules\Product\Application\Port\AccessHardeningFacts;
 use App\Modules\Product\Application\Port\DoctorProbe;
-use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
-use App\Modules\Product\Domain\ValueObject\SettingKey;
+use App\Modules\Shared\Application\Port\PinLengthProvider;
 use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use ValueError;
 
 /**
  * Sondas `access.*` de `product:doctor`: como de cerrada esta la puerta del
@@ -64,7 +64,7 @@ final readonly class AccessHardeningProbe implements DoctorProbe
      *                                           hace `Identity` al aplicarla.
      */
     public function __construct(
-        private GetSettingsHandler $settings,
+        private PinLengthProvider $pinLengthProvider,
         private AccessHardeningFacts $facts,
         private string $portalInternal,
         private array $secondFactorRoles = [],
@@ -163,15 +163,22 @@ final readonly class AccessHardeningProbe implements DoctorProbe
     }
 
     /**
-     * La longitud con la que se emiten los PIN. Un valor ilegible ya lo
-     * denuncia `settings.invalid_keys`; aqui rige el de serie, que es lo que
-     * hace el generador.
+     * La longitud con la que se emiten los PIN, **del mismo puerto que usa el
+     * generador** (`PinLengthProvider`): la sonda no puede contar una longitud
+     * distinta de la que de verdad se emite.
+     *
+     * El generador deja subir un valor ilegible —es mejor un `500` en el panel
+     * que emitir un PIN de una longitud que nadie eligio—; la sonda no: un
+     * `doctor` que se cae no avisa de nada, y el valor ilegible ya lo denuncia
+     * `settings.invalid_keys`. Aqui se toma 6, la longitud de serie, y se sigue.
      */
     private function pinLength(): PinLength
     {
-        $raw = $this->settings->handle()->text(SettingKey::IDENTITY_PIN_LENGTH);
-
-        return PinLength::tryFrom((int) $raw) ?? PinLength::SIX;
+        try {
+            return $this->pinLengthProvider->current();
+        } catch (ValueError) {
+            return PinLength::SIX;
+        }
     }
 
     /**
