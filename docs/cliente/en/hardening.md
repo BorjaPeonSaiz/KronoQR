@@ -646,6 +646,8 @@ reach the edge should not reach it**: with §1 done properly, this information
 is only seen by whoever is already inside your network. That is why this
 section comes after the network one and not before.
 
+**CORS.** The API only authorises cross-origin requests from the installation's own origin: the scheme, host and port of `APP_URL`. There is nothing to configure: if `APP_URL` changes, it changes with it. A browser on another domain does not receive `Access-Control-Allow-Origin`, and requests without an `Origin` header (Prometheus, blackbox, `product:doctor`) are not affected. If `APP_URL` is empty or malformed, CORS is closed entirely and the kiosk, the panel and the portal keep working, because they are served from the same origin as the API.
+
 > **Closes:** nothing by itself. It documents what is **your network's
 > decision** and not the product's. · **Owner:** the vendor (that nothing more
 > gets out), you (the exposure).

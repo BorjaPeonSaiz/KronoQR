@@ -634,6 +634,8 @@ alcanzar el borde no debería alcanzarlo**: con el §1 bien hecho, esta
 información solo la ve quien ya está dentro de tu red. Esa es la razón de que
 este apartado vaya después del de red y no antes.
 
+**CORS.** La API solo autoriza peticiones entre orígenes desde el propio origen de la instalación: esquema, host y puerto de `APP_URL`. No hay nada que configurar: si cambia `APP_URL`, cambia con ella. Un navegador en otro dominio no recibe `Access-Control-Allow-Origin`, y las peticiones sin cabecera `Origin` (Prometheus, blackbox, `product:doctor`) no se ven afectadas. Si `APP_URL` está vacía o mal formada, CORS queda cerrado del todo y el quiosco, el panel y el portal siguen funcionando, porque se sirven desde el mismo origen que la API.
+
 > **Cierra:** nada por sí mismo. Documenta lo que es **decisión de tu red** y no
 > del producto. · **Dueño:** fabricante (que no salga nada más), tú (la
 > exposición).
