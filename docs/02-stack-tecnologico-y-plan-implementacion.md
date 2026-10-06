@@ -741,7 +741,7 @@ Refuerzo opcional: publicar semanalmente el último hash en un medio externo (co
 
 El PIN sirve para dos cosas: respaldo de fichaje en el quiosco (RF-AT-11) y acceso al portal personal (RF-ID-06). Tiene 6 cifras de serie u 8 si la instalación lo configura (`IDENTITY_PIN_LENGTH`, RF-ID-09, ADR-050). Un espacio de 10⁶ es pequeño, así que la protección es de proceso:
 
-- Bloqueo temporal creciente tras 3, 5 y 10 intentos fallidos, por empleado y por origen.
+- Bloqueo temporal creciente tras 3, 5 y 10 intentos fallidos, por empleado y por canal (quiosco y portal llevan contadores distintos).
 - Rate limiting independiente por IP.
 - En el portal, **bloqueo por origen**: 20 fallos en 15 minutos desde una IP (o un `/64` de IPv6), con cualquier código, la bloquean 60 minutos (RS-12, ADR-050). No se aplica al quiosco.
 - Portal restringido a red interna por defecto; exponerlo exige decisión explícita del cliente, el instalador y `product:doctor` lo avisan y recomiendan el PIN de 8 cifras (RF-ID-08, ADR-050).
