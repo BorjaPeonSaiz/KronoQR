@@ -147,7 +147,12 @@ test(
     await reveal.getByRole('button', { name: 'Registrar la entrega ahora' }).click()
 
     await expect(reveal).toBeHidden()
-    await expect(page.getByText('Entregado', { exact: true })).toBeVisible()
+    // El estado vive en la seccion del PIN: "Estado del PIN: Entregado" y no un
+    // nodo de texto suelto (la celda del tablero de credenciales dice «Entregada»).
+    const pinSection = page
+      .getByRole('heading', { name: 'PIN del portal del empleado' })
+      .locator('xpath=..')
+    await expect(pinSection).toContainText('Estado del PIN: Entregado')
     // Se muestra una sola vez: cerrado el dialogo, el PIN no esta en la pagina.
     await expect(page.getByText('582913')).toHaveCount(0)
     expect(
