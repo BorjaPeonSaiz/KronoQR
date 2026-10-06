@@ -100,3 +100,24 @@ it('rechaza lo que no es una direccion sin escribir nada', function (): void {
 
     expect(AuthenticationTrail::auditEntries())->toBe([]);
 })->group('RS-12');
+
+it('firma el desbloqueo con el mismo ip_hash que el bloqueo que levanta', function (): void {
+    // Sin la IP en ninguno de los dos, el ip_hash es lo unico que permite a
+    // quien audita emparejar el cierre con su apertura.
+    config()->set('identity.portal.rate_limit_per_minute', 10_000);
+    config()->set('identity.portal.origin_lockout.max_failures', 20);
+
+    foreach (range(1, 20) as $i) {
+        Api::guest()->fromIp(UNLOCK_ORIGIN_COMMAND_IP)->post('/api/v1/me/login', [
+            'employee_code' => 'NOEXISTE'.$i,
+            'pin' => '000999',
+        ])->assertStatus(401);
+    }
+
+    Artisan::call('identity:origin-unlock', ['ip' => UNLOCK_ORIGIN_COMMAND_IP]);
+
+    $porAccion = array_column(AuthenticationTrail::auditEntries(), 'payload', 'action');
+
+    expect($porAccion['auth.origin_unlocked']['ip_hash'])->toBeString()
+        ->toBe($porAccion['auth.origin_locked']['ip_hash']);
+})->group('RS-12', 'RS-13', 'RL-04');

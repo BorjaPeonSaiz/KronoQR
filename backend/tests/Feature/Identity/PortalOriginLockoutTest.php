@@ -302,3 +302,41 @@ it('acepta un PIN de ocho cifras y un PIN de seis anterior sigue valiendo', func
         'pin' => '483920',
     ])->assertValidResponse(401);
 })->group('RF-ID-09', 'RF-ID-06');
+
+it('con el techo en dos, el tercer bloqueo de la hora no deja asiento pero si metrica y log', function (): void {
+    config()->set('identity.portal.origin_lockout.audit_ceiling_per_hour', 2);
+
+    $metricas = AuthenticationTrail::countingMetrics();
+    /** @var list<array{message: string, context: array<string, mixed>}> $apuntes */
+    $apuntes = [];
+    AuthenticationTrail::captureLog($apuntes);
+
+    fallosDesdeElOrigen(20, '198.51.100.1');
+    fallosDesdeElOrigen(20, '198.51.100.2');
+    fallosDesdeElOrigen(20, '198.51.100.3');
+
+    $bloqueos = array_values(array_filter(
+        $apuntes,
+        static fn (array $apunte): bool => $apunte['message'] === 'auth.origin_locked',
+    ));
+
+    expect(DB::table('audit_log')->where('action', 'auth.origin_locked')->orderBy('id')->pluck('ip')->all())
+        ->toBe(['198.51.100.1', '198.51.100.2'])
+        ->and(array_column(array_column($bloqueos, 'context'), 'audited'))->toBe([true, true, false])
+        ->and($metricas->countOf(AuthChannel::PORTAL, AuthOutcome::ORIGIN_LOCKED))->toBe(3);
+})->group('RS-12', 'RS-13');
+
+it('vuelve a dejar asiento al empezar la hora siguiente', function (): void {
+    // El techo cuenta por hora natural UTC: lo gastado a las 09:59 no se
+    // arrastra a las 10:00.
+    config()->set('identity.portal.origin_lockout.audit_ceiling_per_hour', 1);
+
+    FrozenTime::at('2026-10-06 09:59:00');
+    fallosDesdeElOrigen(20, '198.51.100.1');
+
+    FrozenTime::at('2026-10-06 10:00:00');
+    fallosDesdeElOrigen(20, '198.51.100.2');
+
+    expect(DB::table('audit_log')->where('action', 'auth.origin_locked')->orderBy('id')->pluck('ip')->all())
+        ->toBe(['198.51.100.1', '198.51.100.2']);
+})->group('RS-12', 'RS-13');
