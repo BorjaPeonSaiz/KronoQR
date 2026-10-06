@@ -44,6 +44,7 @@ it('no deja salir ningun secreto ni ningun hash de credencial', function (): voi
     // Y el control de la propia lista: si alguien la vaciara, el bucle de arriba
     // pasaria sin comprobar nada.
     expect($prohibidas)->toContain('pin_hash')
+        ->and($prohibidas)->toContain('pin_length')
         ->and($prohibidas)->toContain('secret_hash')
         ->and($prohibidas)->toContain('token_hash')
         ->and($prohibidas)->toContain('signed_key')
