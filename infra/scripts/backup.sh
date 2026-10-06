@@ -545,8 +545,13 @@ cmd_run() {
 # verify — una copia no verificada no es una copia
 #------------------------------------------------------------------------------
 
+# Gancho de kq_open_copy: la verificacion que falla publica su metrica antes de morir.
+metrica_de_fallo_de_verificacion() {
+  metricas_de_verificacion 0 "$(now_epoch)" -1
+}
+
 cmd_verify() {
-  local fichero="" entradas edad manifiesto
+  local fichero="" entradas edad
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -583,54 +588,26 @@ cmd_verify() {
   # descifra el MISMO contenido, no el que haya en el recurso de red en cada
   # momento (TOCTOU, ADR-049). El descifrado va tambien alli y no junto a las
   # copias: el texto en claro no debe quedar nunca en BACKUP_PATH.
-  local temporal_dir claro nombre estado=0 huella_guardada huella_actual formato="KQE1"
+  local temporal_dir claro estado=0
   temporal_dir="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-verify.XXXXXX")"
   chmod 0700 "$temporal_dir"
   claro="${temporal_dir}/copia.dump"
   TEMPORALES+=("$temporal_dir")
-  nombre="$(basename -- "$fichero")"
-  nombre="${nombre%.dump.enc}"
 
-  # 1) Autenticidad (MAC) y cabecera: nombre, tipo, parametros.
-  kqe_open "$fichero" "$temporal_dir" dump "$nombre" || estado=$?
-  case "$estado" in
-  0) ;;
-  10) formato="heredada" ;;
-  *)
-    metricas_de_verificacion 0 "$(now_epoch)" -1
-    die "${KQ_EXIT_VERIFY_FAILED}" "'${fichero}' NO supera la comprobacion de autenticidad: ${KQE_REASON}. NO la uses para restaurar. Usa la copia anterior ('backup.sh list') y, si no hay una averia de almacenamiento que lo explique, avisa al responsable de seguridad. Ver docs/runbooks/restaurar-backup.md §6.8."
-    ;;
-  esac
+  # 1) Autenticidad (MAC), cabecera, huella SHA-256 obligatoria y manifiesto
+  #    autenticado: la MISMA apertura que usan restore.sh y el simulacro
+  #    (kq_open_copy). Una copia heredada de la 2.1.0 se acepta aqui solo para
+  #    VERIFICAR (modo 2); restaurarla exige --accept-unauthenticated. Si algo falla
+  #    se publica antes la metrica de fallo.
+  kq_open_copy dump "$fichero" "$temporal_dir" 2 "${KQ_EXIT_VERIFY_FAILED}" metrica_de_fallo_de_verificacion
 
-  # 2) Huella SHA-256 (OBLIGATORIA): sobre los mismos bytes que se verifican.
-  huella_guardada="$(kq_sha256_stored "${fichero}.sha256")"
-  huella_actual="$(sha256_of "$KQE_COPY")"
-  if [ -z "$huella_guardada" ] || [ "$huella_guardada" != "$huella_actual" ]; then
-    metricas_de_verificacion 0 "$(now_epoch)" -1
-    die "${KQ_EXIT_VERIFY_FAILED}" "la huella SHA-256 de '${fichero}' falta o no coincide con la registrada al crearla: el fichero esta corrupto o alguien lo ha modificado. NO lo uses para restaurar. Usa la copia anterior ('backup.sh list') y avisa al responsable de seguridad."
-  fi
-
-  # 3) Manifiesto autenticado (solo KQE1; el de una copia heredada no tiene MAC).
-  manifiesto="${fichero%.dump.enc}.manifest.json"
-  if [ "$formato" = "KQE1" ]; then
-    if ! { [ -f "$manifiesto" ] && [ -f "${manifiesto%.json}.mac" ] &&
-      cp -- "$manifiesto" "${temporal_dir}/manifest.json" && cp -- "${manifiesto%.json}.mac" "${temporal_dir}/manifest.mac" &&
-      kqe_manifest_check "$nombre" "${temporal_dir}/manifest.json" "${temporal_dir}/manifest.mac"; }; then
-      metricas_de_verificacion 0 "$(now_epoch)" -1
-      die "${KQ_EXIT_VERIFY_FAILED}" "el manifiesto de '${fichero}' falta, no tiene MAC o el MAC no cuadra: no se puede confiar en los conteos que declara. La copia se trata como inexistente. Usa la anterior ('backup.sh list')."
-    fi
-  else
-    err "AVISO: '${fichero}' es una copia de la 2.1.0: esta cifrada pero NO autenticada (solo la protege su .sha256). Caduca sola; para restaurarla hace falta --accept-unauthenticated."
-    [ -f "$manifiesto" ] || err "AVISO: falta el manifiesto '${manifiesto}'. El simulacro de restauracion no podra comparar conteos por tabla."
-  fi
-
-  # 4) Descifrado completo y lectura del indice del volcado: que la clave es la
+  # 2) Descifrado completo y lectura del indice del volcado: que la clave es la
   #    correcta, que el texto cifrado esta entero y que dentro hay un volcado que
   #    pg_restore entiende.
-  if [ "$formato" = "KQE1" ]; then
+  if [ "$INTEGRIDAD" = "authenticated" ]; then
     kqe_decrypt_copy >"$claro" 2>/dev/null || estado=1
   else
-    kqe_decrypt_legacy_copy >"$claro" 2>/dev/null || estado=1
+    kqe_decrypt_legacy_copy dump >"$claro" 2>/dev/null || estado=1
   fi
   if [ "$estado" -eq 1 ]; then
     rm -rf "$temporal_dir"

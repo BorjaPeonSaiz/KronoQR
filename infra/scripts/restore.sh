@@ -415,7 +415,7 @@ preparar_volcado() {
   TRABAJO="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-restore.XXXXXX")"
   chmod 0700 "$TRABAJO"
 
-  kq_open_dump_copy "$FICHERO" "$TRABAJO" "$ACEPTAR_HEREDADA" "${KQ_EXIT_VERIFY_FAILED}"
+  kq_open_copy dump "$FICHERO" "$TRABAJO" "$ACEPTAR_HEREDADA" "${KQ_EXIT_VERIFY_FAILED}"
 
   if [ "$INTEGRIDAD" = "authenticated" ]; then
     informar "Copia AUTENTICADA (KQE1, kid ${KQE_KID}), creada el ${KQE_CREATED} segun su cabecera. Comprueba que es la fecha que esperas."
@@ -423,7 +423,7 @@ preparar_volcado() {
       "'${FICHERO}' se autentica pero no se puede descifrar. No se ha tocado nada."
   else
     informar "Copia heredada de la 2.1.0, SIN autenticar (aceptada con --accept-unauthenticated)."
-    kqe_decrypt_legacy_copy >"${TRABAJO}/copia.dump" 2>/dev/null || die "${KQ_EXIT_VERIFY_FAILED}" \
+    kqe_decrypt_legacy_copy dump >"${TRABAJO}/copia.dump" 2>/dev/null || die "${KQ_EXIT_VERIFY_FAILED}" \
       "no se puede descifrar '${FICHERO}' con la BACKUP_ENCRYPTION_KEY actual. Si la clave se roto, usa la anterior (BACKUP_ENCRYPTION_KEY_PREVIOUS): una copia solo se abre con la clave con la que se hizo. No se ha tocado nada."
   fi
   kqe_forget

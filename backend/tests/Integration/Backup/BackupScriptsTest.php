@@ -69,24 +69,25 @@ it('cifra la copia de forma que no se puede leer sin la clave', function (): voi
     file_put_contents($claro, "PGDMP fichaje shift_entries employee_code\n");
 
     $cifrar = bashConLaBiblioteca(
-        'encrypt_stream <'.escapeshellarg($claro).' >'.escapeshellarg($cifrado)
+        'kqe_encrypt dump kronoqr-20261003T120000Z '.escapeshellarg($cifrado).' <'.escapeshellarg($claro)
     );
     expect($cifrar->isSuccessful())->toBeTrue($cifrar->getErrorOutput());
 
     $contenido = (string) file_get_contents($cifrado);
-    expect($contenido)->toStartWith('Salted__');
+    expect($contenido)->toStartWith('KQE1 kind=dump ');
     expect($contenido)->not->toContain('PGDMP');
     expect($contenido)->not->toContain('shift_entries');
     expect($contenido)->not->toContain('employee_code');
     // Y la clave tampoco esta dentro del fichero, que seria el chiste facil.
     expect($contenido)->not->toContain(CLAVE_DE_PRUEBA);
 
-    $descifrar = bashConLaBiblioteca('decrypt_stream <'.escapeshellarg($cifrado));
+    $abrir = 'kqe_open '.escapeshellarg($cifrado).' '.escapeshellarg($trabajo).' dump kronoqr-20261003T120000Z && kqe_decrypt_copy';
+    $descifrar = bashConLaBiblioteca($abrir);
     expect($descifrar->isSuccessful())->toBeTrue();
     expect($descifrar->getOutput())->toBe((string) file_get_contents($claro));
 
     $conOtraClave = bashConLaBiblioteca(
-        'decrypt_stream <'.escapeshellarg($cifrado),
+        $abrir,
         ['BACKUP_ENCRYPTION_KEY' => 'esta_no_es_la_clave_correcta_0000']
     );
     expect($conOtraClave->isSuccessful())->toBeFalse('Una clave equivocada ha descifrado la copia.');
@@ -167,7 +168,7 @@ it('no imprime la clave de cifrado por ninguna via', function (): void {
     // descriptor de fichero o por el entorno, nunca por la linea de ordenes,
     // donde `ps` la veria desde cualquier sesion del servidor.
     $salida = bashConLaBiblioteca(
-        'require_encryption_key; openssl_pass_spec; echo; encrypt_stream </dev/null | wc -c'
+        'require_encryption_key; out="$(mktemp)"; kqe_encrypt dump kronoqr-x "$out" </dev/null; rm -f "$out"'
     );
 
     expect($salida->isSuccessful())->toBeTrue()

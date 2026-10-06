@@ -61,12 +61,13 @@ readonly BACKUP_COMMON_DIR
 # antes de descifrar. Se descarto `age` (binario nuevo, identidad que custodiar,
 # no autentica al emisor): ADR-049, «Alternativas descartadas».
 #
-# `encrypt_stream`/`decrypt_stream` de abajo son el formato HEREDADO de la 2.1.0
-# (sin cabecera ni MAC): solo sirven para fabricar copias antiguas en las pruebas
-# y no las usa ningun script de operacion. El `.sha256` sigue escribiendose, pero
-# ya no es la defensa de integridad: lo es el MAC.
+# El `.sha256` sigue escribiendose, pero ya no es la defensa de integridad: lo es el
+# MAC. Las copias HEREDADAS de la 2.1.0 (sin cabecera ni MAC) solo se leen
+# (`kqe_decrypt_legacy_copy`); fabricarlas para las pruebas es cosa de
+# `.github/scripts/forge-legacy-copy.sh`. El cifrado y sus parametros viven en
+# kqe.sh (`KQE_ITER_DUMP`); aqui solo queda el nombre que declara el manifiesto.
+# shellcheck disable=SC2034 # lo escribe backup.sh en el manifiesto.
 readonly BACKUP_CIPHER="aes-256-cbc"
-readonly BACKUP_PBKDF2_ITER=600000
 
 # Prefijo de todos los ficheros de una instalacion. No lleva nada del cliente
 # (regla dura 13): el nombre es igual en todas las instalaciones.
@@ -196,54 +197,11 @@ require_encryption_key() {
     "BACKUP_ENCRYPTION_KEY no esta definida. Sin ella no se puede cifrar ni descifrar ninguna copia (RL-12). Definela en el .env de la instalacion; install.sh la genera y NO se puede recuperar si se pierde."
   [ "${#BACKUP_ENCRYPTION_KEY}" -ge 16 ] || die "${KQ_EXIT_REQUIREMENTS}" \
     "BACKUP_ENCRYPTION_KEY tiene menos de 16 caracteres. Genera una nueva con 'openssl rand -base64 48' y guardala en el gestor de secretos del cliente antes de sustituirla: las copias anteriores solo se descifran con la clave con la que se hicieron."
-  # Necesario para el respaldo `-pass env:` de openssl_pass_spec cuando la
+  # Necesario para el respaldo `-pass env:` de kqe.sh (_kqe_with_pass) cuando la
   # clave se ha leido de un fichero .env en vez de heredarla del entorno.
   export BACKUP_ENCRYPTION_KEY
   kqe_require || die "${KQ_EXIT_REQUIREMENTS}" \
     "este servidor tiene un openssl sin SHA3-256 (hace falta OpenSSL 1.1.1 o posterior) y el formato de las copias (KQE1, ADR-049) lo necesita. Actualiza el paquete openssl del servidor, o ejecuta este script dentro del contenedor (docker compose exec scheduler ...)."
-}
-
-# Como se le entrega la clave a openssl.
-#
-# Nunca por la linea de ordenes: `ps aux` de cualquier usuario del servidor la
-# veria. Nunca por un fichero temporal: quedaria en disco. Quedan dos vias, y
-# se prefiere la primera:
-#
-#   fd:3   la clave viaja por un descriptor de fichero que solo existe durante
-#          la llamada. Es lo que se usa en el servidor (Linux).
-#   env:   la variable de entorno del proceso, que solo puede leer su propio
-#          usuario (o root). No añade exposicion: la clave YA esta en el
-#          entorno del proceso que llama, que es de donde se lee.
-#
-# La deteccion existe porque algunas compilaciones de openssl —la de Git Bash
-# en Windows, sin ir mas lejos— rechazan `fd:`. Sin este respaldo, el simulacro
-# de restauracion no se puede ensayar en la maquina de quien lo escribe, y una
-# comprobacion que solo corre en produccion no la ejecuta nadie.
-openssl_pass_spec() {
-  if [ -n "${BACKUP_PASS_SPEC:-}" ]; then
-    printf '%s' "$BACKUP_PASS_SPEC"
-    return 0
-  fi
-  if printf 'x' | openssl enc -"${BACKUP_CIPHER}" -pbkdf2 -pass fd:3 3< <(printf 'k') >/dev/null 2>&1; then
-    BACKUP_PASS_SPEC="fd:3"
-  else
-    BACKUP_PASS_SPEC="env:BACKUP_ENCRYPTION_KEY"
-  fi
-  printf '%s' "$BACKUP_PASS_SPEC"
-}
-
-encrypt_stream() {
-  local spec
-  spec="$(openssl_pass_spec)"
-  openssl enc -"${BACKUP_CIPHER}" -md sha512 -pbkdf2 -iter "${BACKUP_PBKDF2_ITER}" \
-    -salt -pass "$spec" 3< <(printf '%s' "${BACKUP_ENCRYPTION_KEY}")
-}
-
-decrypt_stream() {
-  local spec
-  spec="$(openssl_pass_spec)"
-  openssl enc -d -"${BACKUP_CIPHER}" -md sha512 -pbkdf2 -iter "${BACKUP_PBKDF2_ITER}" \
-    -pass "$spec" 3< <(printf '%s' "${BACKUP_ENCRYPTION_KEY}")
 }
 
 sha256_of() {
@@ -337,32 +295,60 @@ kq_reexec_as_app() {
   exec setpriv --reuid=1000 --regid=1000 --clear-groups -- bash "$@"
 }
 
-# Abre un volcado para restaurarlo o ensayar su restauracion (ADR-049): UNA
-# lectura a un directorio privado y todo lo demas sobre esa copia (TOCTOU).
+# Abre una copia (volcado o fisica) para verificarla, restaurarla o ensayar su
+# restauracion (ADR-049): UNA lectura a un directorio privado y todo lo demas sobre
+# esa copia (TOCTOU). UNA sola implementacion para `backup.sh verify`, `restore.sh` y
+# `restore-drill.sh`: lo que se comprueba antes de fiarse de una copia no puede
+# diferir de un script a otro.
 #
-#   kq_open_dump_copy FICHERO DIRECTORIO_PRIVADO ACEPTAR_HEREDADA(0|1) CODIGO_DE_FALLO
+#   kq_open_copy KIND FICHERO DIRECTORIO_PRIVADO ACEPTAR_HEREDADA CODIGO_DE_FALLO [GANCHO]
+#
+# KIND: `dump` (NOMBRE.dump.enc, con manifiesto autenticado) o `base` (copia fisica
+# NOMBRE.tar.gz.enc, sin manifiesto). ACEPTAR_HEREDADA: 0 la rechaza, 1 la acepta
+# porque quien llama paso `--accept-unauthenticated`, 2 la acepta solo para VERIFICAR
+# (nunca se va a restaurar: `backup.sh verify`). GANCHO: nombre de una funcion sin
+# argumentos que se ejecuta justo antes de cada `die` por fallo de la copia (verify
+# publica ahi su metrica).
 #
 # Deja: INTEGRIDAD (authenticated|legacy_accepted), HUELLA_PRIVADA, MANIFIESTO (ruta
 # de la COPIA del manifiesto, o vacio) y KQE_* (fecha, kid). Si algo no cuadra
 # termina con die y CODIGO_DE_FALLO. Los mensajes dicen que hacer y que NO se ha
 # tocado nada.
 # shellcheck disable=SC2034 # INTEGRIDAD, HUELLA_PRIVADA y MANIFIESTO los leen los llamadores.
-kq_open_dump_copy() {
-  local fichero="$1" trabajo="$2" aceptar="$3" fallo="$4"
-  local nombre estado=0 guardada manifiesto_origen
+kq_open_copy() {
+  local kind="$1" fichero="$2" trabajo="$3" aceptar="$4" fallo="$5" gancho="${6:-}"
+  local nombre estado=0 guardada manifiesto_origen etiqueta ext
+
+  case "$kind" in
+  dump)
+    ext=".dump.enc"
+    etiqueta="volcado"
+    ;;
+  base)
+    ext=".tar.gz.enc"
+    etiqueta="copia fisica"
+    ;;
+  *) die "${KQ_EXIT_USAGE}" "kq_open_copy: tipo '${kind}' desconocido (dump o base)." ;;
+  esac
 
   nombre="$(basename -- "$fichero")"
-  nombre="${nombre%.dump.enc}"
-  kqe_open "$fichero" "$trabajo" dump "$nombre" || estado=$?
+  nombre="${nombre%"$ext"}"
+  kqe_open "$fichero" "$trabajo" "$kind" "$nombre" || estado=$?
   case "$estado" in
   0) INTEGRIDAD="authenticated" ;;
   10)
-    [ "$aceptar" -eq 1 ] || die "$fallo" \
-      "'${fichero}' es una copia de la 2.1.0: esta cifrada pero NO autenticada (solo la protege su .sha256, que quien escriba en el destino puede recalcular). Si es la copia que quieres, repite con --accept-unauthenticated (por invocacion, nunca en el .env). El .sha256 sigue siendo obligatorio. Procedimiento: docs/runbooks/restaurar-backup.md §6.8. No se ha tocado nada."
+    if [ "$aceptar" -eq 0 ]; then
+      [ -z "$gancho" ] || "$gancho"
+      die "$fallo" "'${fichero}' es una ${etiqueta} de la 2.1.0: esta cifrada pero NO autenticada (solo la protege su .sha256, que quien escriba en el destino puede recalcular). Si es la que quieres, repite con --accept-unauthenticated (por invocacion, nunca en el .env). El .sha256 sigue siendo obligatorio. Procedimiento: docs/runbooks/restaurar-backup.md §6.8. No se ha tocado nada."
+    fi
     INTEGRIDAD="legacy_accepted"
     ;;
-  15) die "${KQ_EXIT_REQUIREMENTS}" "${KQE_REASON}. Comprueba que el destino de copias esta montado y que la copia existe. No se ha tocado nada." ;;
+  15)
+    [ -z "$gancho" ] || "$gancho"
+    die "${KQ_EXIT_REQUIREMENTS}" "${KQE_REASON}. Comprueba que el destino de copias esta montado y que la copia existe. No se ha tocado nada."
+    ;;
   *)
+    [ -z "$gancho" ] || "$gancho"
     die "$fallo" "'${fichero}' NO supera la comprobacion de autenticidad: ${KQE_REASON}. No la uses: prueba con la copia anterior ('backup.sh list'), y si no hay una averia de almacenamiento que lo explique, avisa al responsable de seguridad. Si se roto BACKUP_ENCRYPTION_KEY, usa la anterior en BACKUP_ENCRYPTION_KEY_PREVIOUS. No se ha tocado nada."
     ;;
   esac
@@ -375,23 +361,33 @@ kq_open_dump_copy() {
   [ -n "$guardada" ] || guardada="$(kq_sha256_stored "${fichero}.sha256")"
   HUELLA_PRIVADA="$(sha256_of "$KQE_COPY")"
   if [ -z "$guardada" ] || [ "$guardada" != "$HUELLA_PRIVADA" ]; then
+    [ -z "$gancho" ] || "$gancho"
     die "$fallo" "la huella SHA-256 de '${fichero}' falta o no coincide con la registrada: esta corrupta o alguien la ha tocado. Prueba con la copia anterior ('backup.sh list') y avisa al responsable de seguridad. No se ha tocado nada."
   fi
 
+  MANIFIESTO=""
+  [ "$kind" = "dump" ] || return 0
+
   # El manifiesto decide que conteos cuadran: en una copia KQE1 se AUTENTICA tambien.
   manifiesto_origen="${fichero%.dump.enc}.manifest.json"
-  MANIFIESTO=""
   if [ "$INTEGRIDAD" = "authenticated" ]; then
     if ! { [ -f "$manifiesto_origen" ] && [ -f "${manifiesto_origen%.json}.mac" ] &&
       cp -- "$manifiesto_origen" "${trabajo}/manifest.json" && cp -- "${manifiesto_origen%.json}.mac" "${trabajo}/manifest.mac" &&
       kqe_manifest_check "$nombre" "${trabajo}/manifest.json" "${trabajo}/manifest.mac"; }; then
-      die "$fallo" "el manifiesto de '${fichero}' falta, no tiene MAC o el MAC no cuadra: no se puede confiar en los conteos que declara. Prueba con la copia anterior ('backup.sh list'). No se ha tocado nada."
+      [ -z "$gancho" ] || "$gancho"
+      die "$fallo" "el manifiesto de '${fichero}' falta, no tiene MAC o el MAC no cuadra: no se puede confiar en los conteos que declara. La copia se trata como inexistente: prueba con la anterior ('backup.sh list'). No se ha tocado nada."
     fi
     MANIFIESTO="${trabajo}/manifest.json"
   else
-    err "AVISO: copia de la 2.1.0 aceptada por bandera explicita: sin autenticar. Su manifiesto tampoco lo esta."
+    if [ "$aceptar" -eq 2 ]; then
+      err "AVISO: '${fichero}' es una copia de la 2.1.0: esta cifrada pero NO autenticada (solo la protege su .sha256). Caduca sola; para restaurarla hace falta --accept-unauthenticated."
+    else
+      err "AVISO: copia de la 2.1.0 aceptada por bandera explicita: sin autenticar. Su manifiesto tampoco lo esta."
+    fi
     if [ -f "$manifiesto_origen" ] && cp -- "$manifiesto_origen" "${trabajo}/manifest.json" 2>/dev/null; then
       MANIFIESTO="${trabajo}/manifest.json"
+    else
+      err "AVISO: falta el manifiesto '${manifiesto_origen}'. El simulacro de restauracion no podra comparar conteos por tabla."
     fi
   fi
 }

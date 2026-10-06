@@ -142,8 +142,9 @@ it('cifra las copias y no guarda la clave en el repositorio', function (): void 
     $lib = backupFile('infra/scripts/lib/backup-common.sh');
 
     expect($lib)->toContain('BACKUP_CIPHER="aes-256-cbc"');
-    expect($lib)->toContain('pbkdf2');
-    expect($lib)->toContain('BACKUP_PBKDF2_ITER=600000');
+    $kqe = backupFile('infra/scripts/lib/kqe.sh');
+    expect($kqe)->toContain('-pbkdf2');
+    expect($kqe)->toContain('KQE_ITER_DUMP=600000');
     // La clave nunca como argumento de openssl.
     expect($lib)->not->toContain('-pass pass:');
 

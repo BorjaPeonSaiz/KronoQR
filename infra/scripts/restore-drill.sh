@@ -260,11 +260,12 @@ crear_base_de_simulacro() {
 }
 
 # Descifra la COPIA PRIVADA (la que ya se ha verificado) segun su formato.
+#   descifrar_copia dump|base
 descifrar_copia() {
   if [ "$INTEGRIDAD" = "authenticated" ]; then
     kqe_decrypt_copy
   else
-    kqe_decrypt_legacy_copy
+    kqe_decrypt_legacy_copy "$1"
   fi
 }
 
@@ -272,14 +273,14 @@ restaurar_en_destino() {
   if [ "$MODO" = "container" ]; then
     # El volcado descifrado entra por la entrada estandar del contenedor y
     # muere con el: el texto en claro no toca el disco del servidor.
-    descifrar_copia |
+    descifrar_copia dump |
       docker exec -i "$CONTENEDOR" sh -c 'cat > /tmp/copia.dump' || die "${KQ_EXIT_VERIFY_FAILED}" \
       "no se ha podido descifrar '${FICHERO}' con la clave actual. Si la clave se roto, el simulacro debe usar la que corresponda a esta copia (BACKUP_ENCRYPTION_KEY_PREVIOUS)."
     docker exec "$CONTENEDOR" pg_restore --username=postgres --dbname="$BASE_SIMULACRO" \
       --no-owner --no-privileges --exit-on-error /tmp/copia.dump >>"${INFORME_TRABAJO:-/dev/null}" 2>&1 || return 1
   else
     # El volcado descifrado vive en el directorio privado 0700 y se borra al salir.
-    descifrar_copia >"${TRABAJO}/drill.dump" || die "${KQ_EXIT_VERIFY_FAILED}" \
+    descifrar_copia dump >"${TRABAJO}/drill.dump" || die "${KQ_EXIT_VERIFY_FAILED}" \
       "no se ha podido descifrar '${FICHERO}' con la clave actual."
     pg_restore --dbname="$BASE_SIMULACRO" --no-owner --no-privileges --exit-on-error \
       "${TRABAJO}/drill.dump" >>"${INFORME_TRABAJO:-/dev/null}" 2>&1 || {
@@ -394,7 +395,7 @@ imagen_pitr() {
 }
 
 simulacro_pitr() {
-  local base nombre estado=0 esperado=0 recuperando="" usuario imagen log_pg segmento abortada=0 guardada
+  local base esperado=0 recuperando="" usuario imagen log_pg segmento abortada=0
 
   require_cmd docker docker
   docker info >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
@@ -414,25 +415,8 @@ simulacro_pitr() {
   /* | ?:*) [ -d "$FUENTE_WAL" ] || die "${KQ_EXIT_REQUIREMENTS}" "no existe el archivo de WAL '${FUENTE_WAL}'. Indica --wal-source." ;;
   esac
 
-  # La copia fisica se abre IGUAL que un volcado: MAC, huella obligatoria, nombre.
-  nombre="$(basename -- "$base")"
-  nombre="${nombre%.tar.gz.enc}"
-  kqe_open "$base" "$TRABAJO" base "$nombre" || estado=$?
-  case "$estado" in
-  0) INTEGRIDAD="authenticated" ;;
-  10)
-    [ "$ACEPTAR_HEREDADA" -eq 1 ] || die "${KQ_EXIT_VERIFY_FAILED}" \
-      "'${base}' es una copia fisica de la 2.1.0: cifrada pero NO autenticada. Si es la que quieres, repite con --accept-unauthenticated (su .sha256 sigue siendo obligatorio). Ver docs/runbooks/restaurar-backup.md §6.8."
-    INTEGRIDAD="legacy_accepted"
-    ;;
-  15) die "${KQ_EXIT_REQUIREMENTS}" "${KQE_REASON}." ;;
-  *) die "${KQ_EXIT_VERIFY_FAILED}" "'${base}' NO supera la comprobacion de autenticidad: ${KQE_REASON}. El simulacro se detiene aqui: eso ya es el hallazgo." ;;
-  esac
-  guardada="$(kq_sha256_stored "${base}.sha256")"
-  HUELLA_PRIVADA="$(sha256_of "$KQE_COPY")"
-  if [ -z "$guardada" ] || [ "$guardada" != "$HUELLA_PRIVADA" ]; then
-    die "${KQ_EXIT_VERIFY_FAILED}" "la huella SHA-256 de '${base}' falta o no coincide: el simulacro se detiene aqui."
-  fi
+  # La copia fisica se abre IGUAL que un volcado (kq_open_copy): MAC, huella obligatoria, nombre.
+  kq_open_copy base "$base" "$TRABAJO" "$ACEPTAR_HEREDADA" "${KQ_EXIT_VERIFY_FAILED}"
   if [ "$INTEGRIDAD" = "authenticated" ]; then
     informar "Copia fisica AUTENTICADA (KQE1, kid ${KQE_KID}), creada el ${KQE_CREATED} segun su cabecera."
   else
@@ -453,7 +437,7 @@ simulacro_pitr() {
     die "${KQ_EXIT_REQUIREMENTS}" "no se ha podido preparar el contenedor del simulacro."
 
   informar "Desplegando la copia fisica verificada"
-  if ! { kqe_decrypt_copy_any | docker exec -i "$CONTENEDOR" tar -xzf - -C /tmp/pgdata; }; then
+  if ! { descifrar_copia base | docker exec -i "$CONTENEDOR" tar -xzf - -C /tmp/pgdata; }; then
     die "${KQ_EXIT_VERIFY_FAILED}" "no se ha podido desplegar '${base}' (descifrado o tar). La copia fisica no sirve."
   fi
   kqe_forget
@@ -518,11 +502,6 @@ simulacro_pitr() {
   DRILL_TABLAS="$(psql_q "$BASE_SIMULACRO" "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname !~ '^pg_'" | tr -d '[:space:]')"
   informar "Tablas en la base recuperada: ${DRILL_TABLAS:-0}"
   comprobar_integridad_referencial
-}
-
-# Descifra la copia fisica privada segun su formato (autenticada o heredada).
-kqe_decrypt_copy_any() {
-  descifrar_copia
 }
 
 #------------------------------------------------------------------------------
@@ -628,7 +607,7 @@ main() {
       "no hay ninguna copia sobre la que hacer el simulacro. Lanza 'backup.sh run' primero."
 
     # UNA lectura a un directorio privado; todo lo demas sobre esa copia (ADR-049).
-    kq_open_dump_copy "$FICHERO" "$TRABAJO" "$ACEPTAR_HEREDADA" "${KQ_EXIT_VERIFY_FAILED}"
+    kq_open_copy dump "$FICHERO" "$TRABAJO" "$ACEPTAR_HEREDADA" "${KQ_EXIT_VERIFY_FAILED}"
     informar "Simulacro de restauracion (RNF-D-05) sobre '${FICHERO}', modo ${MODO}."
     if [ "$INTEGRIDAD" = "authenticated" ]; then
       informar "Copia AUTENTICADA (KQE1, kid ${KQE_KID}), creada el ${KQE_CREATED} segun su cabecera."
