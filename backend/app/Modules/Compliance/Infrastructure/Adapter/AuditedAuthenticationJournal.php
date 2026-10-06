@@ -158,6 +158,77 @@ final readonly class AuditedAuthenticationJournal implements AuthenticationJourn
         $this->count($channel, AuthOutcome::LOCKOUT);
     }
 
+    public function originLocked(
+        AuthChannel $channel,
+        string $origin,
+        int $failures,
+        int $lockSeconds,
+        bool $audited,
+    ): void {
+        $seconds = max(0, $lockSeconds);
+        $originHash = $this->addresses->of($origin);
+
+        if ($audited) {
+            // Mismo trato que el bloqueo por empleado: preparado ahora, escrito
+            // al terminar la peticion (ADR-039). Sin sujeto: lo bloqueado es una
+            // red, no una persona ni una cuenta. La direccion va en la columna
+            // `ip`, como en todo asiento `auth.*`; en el payload, solo su seudonimo.
+            $this->deferred->afterResponse(new RecordAuditEntryCommand(
+                actor: $this->context->actor(),
+                action: AuditAction::OriginLocked,
+                subject: AuditSubject::none(),
+                payload: AuditPayload::of([
+                    'channel' => $channel->value,
+                    'failures' => $failures,
+                    'seconds' => $seconds,
+                    'ip_hash' => $originHash,
+                ]),
+                occurredAt: $this->clock->now(),
+                ip: $this->context->ip(),
+                userAgent: $this->context->userAgent(),
+            ));
+        }
+
+        // El apunte va siempre, tambien por encima del techo de asientos: es lo
+        // que deja ver el barrido entero aunque la cadena solo guarde los
+        // primeros (dictamen B1 de ADR-050).
+        $this->write('auth.origin_locked', $channel, null, [
+            'origin_hash' => $originHash ?? '',
+            'failures' => $failures,
+            'lock_seconds' => $seconds,
+            'audited' => $audited,
+        ]);
+
+        $this->count($channel, AuthOutcome::ORIGIN_LOCKED);
+    }
+
+    public function originUnlocked(AuthChannel $channel, string $origin, bool $hadState): void
+    {
+        $originHash = $this->addresses->of($origin);
+
+        // Sincrono y dentro del camino: si el asiento falla, el comando falla y
+        // no se levanta nada (regla dura 6). Lo provoca una persona con acceso
+        // al servidor, no quien ataca, asi que no hay techo que aplicar.
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->context->actor(),
+            action: AuditAction::OriginUnlocked,
+            subject: AuditSubject::none(),
+            payload: AuditPayload::of([
+                'channel' => $channel->value,
+                'ip_hash' => $originHash,
+                'had_state' => $hadState,
+            ]),
+            occurredAt: $this->clock->now(),
+            ip: $this->context->ip(),
+            userAgent: $this->context->userAgent(),
+        ));
+
+        $this->write('auth.origin_unlocked', $channel, null, [
+            'origin_hash' => $originHash ?? '',
+            'had_state' => $hadState,
+        ], LogLevel::INFO);
+    }
+
     public function loggedOut(AuthChannel $channel, ?string $subjectUuid): void
     {
         if ($channel->sessionEventsAreAudited() && $subjectUuid !== null) {

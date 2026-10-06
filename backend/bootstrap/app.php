@@ -26,6 +26,7 @@ use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
 use App\Modules\Identity\Application\Exception\ManagementAccountAlreadyExists;
 use App\Modules\Identity\Application\Exception\PortalAccessDenied;
+use App\Modules\Identity\Application\Exception\PortalOriginLocked;
 use App\Modules\Identity\Application\Exception\TwoFactorAlreadyEnabled;
 use App\Modules\Identity\Application\Exception\TwoFactorNotEnrolled;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyDelivered;
@@ -475,6 +476,17 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->render(static fn (PortalAccessDenied $exception): mixed => ProblemDetails::invalidCredentials(
             $exception->getMessage(),
+        ));
+
+        /*
+         * Bloqueo por ORIGEN del portal (ADR-050 §2, RS-12): `429` con
+         * `Retry-After`, y aqui si se anuncia. Se decide antes de mirar el codigo
+         * y el PIN, asi que no confirma nada de ninguna credencial (RS-03); habla
+         * de la red de quien pregunta, y ocultarlo solo haria que una persona
+         * legitima tras la misma IP creyera que su PIN esta mal.
+         */
+        $exceptions->render(static fn (PortalOriginLocked $exception): mixed => ProblemDetails::portalOriginLocked(
+            $exception->retryAfterSeconds,
         ));
 
         /*

@@ -200,6 +200,49 @@ return [
          * trafico que nunca llega a PHP.
          */
         'rate_limit_per_minute' => (int) env('IDENTITY_PORTAL_RATE_LIMIT', 10),
+
+        /*
+         * BLOQUEO POR ORIGEN DEL ACCESO AL PORTAL (RS-12, ADR-050 §2).
+         *
+         * Cuenta FALLOS —los cinco rechazos genericos de `/api/v1/me/login`—
+         * por origen, sea cual sea el codigo tecleado: la IP, o su `/64` si es
+         * IPv6. Al llegar a `max_failures` dentro de una ventana deslizante de
+         * `window_seconds`, el portal se cierra a ese origen `lockout_seconds`:
+         * `429` con `Retry-After`, tambien con el PIN correcto.
+         *
+         * NO SUSTITUYE A NADA. El limite de peticiones de arriba cuenta volumen;
+         * el bloqueo por empleado del bloque `pin` cuenta fallos contra UNA
+         * persona; este cuenta fallos desde UNA red contra cualquiera, que es lo
+         * que hace quien prueba un PIN facil contra toda la plantilla. Un acceso
+         * correcto no pone la cuenta a cero.
+         *
+         * 20 / 15 MIN / 60 MIN SON DECISION DE PRODUCTO (ADR-050), no una
+         * medicion: dan margen de sobra a una persona que se equivoca y a un
+         * turno entero tras el NAT del hotel, y cortan un barrido en minutos.
+         * Son parametros de seguridad y no umbrales legales, asi que viven aqui
+         * y no en el perfil de cumplimiento. SOLO EL PORTAL: el quiosco nunca
+         * bloquea a nadie (regla dura 19).
+         */
+        'origin_lockout' => [
+            'max_failures' => (int) env('IDENTITY_PORTAL_ORIGIN_MAX_FAILURES', 20),
+
+            'window_seconds' => (int) env('IDENTITY_PORTAL_ORIGIN_WINDOW_SECONDS', 900),
+
+            'lockout_seconds' => (int) env('IDENTITY_PORTAL_ORIGIN_LOCKOUT_SECONDS', 3600),
+
+            /*
+             * TECHO DE ASIENTOS `auth.origin_locked` POR HORA (dictamen de
+             * seguridad B1 de ADR-050).
+             *
+             * Cada asiento pasa por el candado global de la cadena de
+             * `audit_log` (ADR-010), el mismo que usa cada fichaje, y quien
+             * rota direcciones abre un bloqueo por direccion. Por encima del
+             * techo el bloqueo SE APLICA IGUAL; solo se omite el asiento, y
+             * quedan el log tecnico (con `ip_hash`) y la metrica
+             * `outcome="origin_locked"`. Cero: ningun asiento.
+             */
+            'audit_ceiling_per_hour' => (int) env('IDENTITY_ORIGIN_LOCK_AUDIT_CEILING_PER_HOUR', 60),
+        ],
     ],
 
     /*
@@ -322,7 +365,7 @@ return [
          * en uno de los dos. Sus valores de serie BAJAN de 5/900 a 3/300 con la
          * tarea 1.12, que es lo que el Anexo B pedia desde el principio.
          *
-         * POR EMPLEADO Y POR ORIGEN. El contador del quiosco y el del portal son
+         * POR EMPLEADO Y POR CANAL. El contador del quiosco y el del portal son
          * distintos (§7.5): sondear una puerta no puede cerrar la otra, porque
          * eso permitiria dejar a alguien sin fichar atacando su portal. Los
          * umbrales, en cambio, son los mismos para las dos.

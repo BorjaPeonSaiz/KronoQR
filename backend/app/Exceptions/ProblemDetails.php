@@ -42,6 +42,13 @@ final class ProblemDetails
 
     public const string TYPE_TOO_MANY_REQUESTS = 'urn:kronoqr:problem:too-many-requests';
 
+    /**
+     * Bloqueo por origen del acceso al portal (RS-12, ADR-050 §2). Habla de la
+     * red de quien pregunta, no de ninguna credencial: se responde asi tambien
+     * con el PIN correcto.
+     */
+    public const string TYPE_PORTAL_ORIGIN_LOCKED = 'urn:kronoqr:problem:portal-origin-locked';
+
     public const string TYPE_SERVICE_UNAVAILABLE = 'urn:kronoqr:problem:service-unavailable';
 
     /**
@@ -831,6 +838,21 @@ final class ProblemDetails
             'Demasiadas peticiones',
             JsonResponse::HTTP_TOO_MANY_REQUESTS,
             'Reintenta pasados unos segundos.',
+            headers: ['Retry-After' => (string) max(1, $retryAfterSeconds)],
+        );
+    }
+
+    /**
+     * El portal esta cerrado al origen de la peticion (ADR-050 §2). `detail`
+     * fijo: el portal enseña su propio texto a partir de `type`.
+     */
+    public static function portalOriginLocked(int $retryAfterSeconds): JsonResponse
+    {
+        return self::response(
+            self::TYPE_PORTAL_ORIGIN_LOCKED,
+            'Demasiados accesos fallidos',
+            JsonResponse::HTTP_TOO_MANY_REQUESTS,
+            'Demasiados accesos fallidos desde esta red. Vuelve a intentarlo mas tarde.',
             headers: ['Retry-After' => (string) max(1, $retryAfterSeconds)],
         );
     }

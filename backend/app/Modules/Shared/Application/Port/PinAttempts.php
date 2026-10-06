@@ -29,9 +29,9 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  * prueba PIN contra un codigo conocido desde varios quioscos. Los dos controles
  * conviven y ninguno sustituye al otro: RS-12 los enumera juntos.
  *
- * ## Por que la clave lleva el origen, y por que ya
+ * ## Por que la clave lleva el canal, y por que ya
  *
- * El §7.5 exige que el bloqueo sea **«por empleado y por origen»**, y aqui es
+ * El §7.5 exige que el bloqueo sea **«por empleado y por canal»**, y aqui es
  * donde esa frase se cumple o no se cumple. Con un contador unico por persona,
  * quien sondease el PIN de alguien contra el portal —accesible desde la red
  * interna del hotel, RF-ID-08— dejaria a esa persona sin poder fichar en el
@@ -76,7 +76,7 @@ interface PinAttempts
     /**
      * Borra el contador de **todas** las puertas: acierto, o PIN restablecido.
      *
-     * **Sin parametro de origen, y no es un olvido.** Los dos usos que tiene son
+     * **Sin parametro de canal, y no es un olvido.** Los dos usos que tiene son
      * los dos que no admiten matiz: al acertar, el castigo acumulado deja de
      * tener sentido; y al restablecer, el PIN anterior deja de existir —la unica
      * copia era el hash— asi que ningun contador levantado contra el describe ya

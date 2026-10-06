@@ -8,10 +8,12 @@ namespace App\Modules\Shared\Domain\ValueObject;
  * Por que puerta se esta tecleando el PIN (RS-12, doc 02 §7.5).
  *
  * **Existe porque el §7.5 exige que el bloqueo sea «por empleado y por
- * origen»**, y sin este tipo esa frase no tendria como escribirse. Un contador
- * unico por persona convertiria las dos puertas en una sola, y eso tiene una
- * consecuencia concreta y mala: quien sondease el portal de alguien —expuesto a
- * la red interna del hotel, RF-ID-08— dejaria a esa persona sin poder fichar en
+ * canal»** —quiosco o portal; el «origen» como direccion de red es otra cosa,
+ * el bloqueo por origen del portal de ADR-050—, y sin este tipo esa frase no
+ * tendria como escribirse. Un contador unico por persona convertiria las dos
+ * puertas en una sola, y eso tiene una consecuencia concreta y mala: quien
+ * sondease el portal de alguien —expuesto a la red interna del hotel,
+ * RF-ID-08— dejaria a esa persona sin poder fichar en
  * el quiosco a la manana siguiente. Es la regla dura 19 al reves, provocada
  * desde fuera y sin tocar el quiosco.
  *

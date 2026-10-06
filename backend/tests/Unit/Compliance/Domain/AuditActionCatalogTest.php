@@ -65,6 +65,8 @@ it('nombra el ciclo completo de cada familia que el bloque D enumera', function 
     'auth.login_succeeded',
     'auth.logout',
     'auth.lockout_started',
+    'auth.origin_locked',
+    'auth.origin_unlocked',
     // Provisiona, empareja o revoca un dispositivo.
     'device.provisioned',
     'device.paired',

@@ -96,7 +96,7 @@ it('desbloquea cuando pasa el tiempo del escalon', function (): void {
 })->group('RS-12', 'RF-AT-11');
 
 it('cuenta el quiosco y el portal por separado', function (): void {
-    // RS-12 y §7.5: «por empleado y por origen». Sin esta separacion, sondear el
+    // RS-12 y §7.5: «por empleado y por canal». Sin esta separacion, sondear el
     // PIN de alguien contra el portal —accesible desde la red interna del hotel,
     // RF-ID-08— le dejaria sin poder fichar a la manana siguiente: un ataque a
     // una puerta cerrando la otra, que es la regla dura 19 provocada desde

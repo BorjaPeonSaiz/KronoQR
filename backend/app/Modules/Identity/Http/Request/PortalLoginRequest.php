@@ -97,7 +97,19 @@ final class PortalLoginRequest extends FormRequest
             // distinguir mayusculas.
             employeeCode: $this->string('employee_code')->trim()->value(),
             pin: $this->string('pin')->value(),
+            // La direccion que entrega nginx (`REMOTE_ADDR`, corregida por
+            // `real_ip` si hay proxy de confianza), para el bloqueo por origen
+            // (ADR-050). Nunca `X-Forwarded-For`.
+            remoteAddress: $this->remoteAddress(),
         );
+    }
+
+    /** `REMOTE_ADDR` tal cual, sin pasar por las cabeceras de proxy. */
+    private function remoteAddress(): ?string
+    {
+        $address = $this->server('REMOTE_ADDR');
+
+        return \is_string($address) && $address !== '' ? $address : null;
     }
 
     protected function failedValidation(Validator $validator): void

@@ -111,6 +111,27 @@ enum AuditAction: string
     case Logout = 'auth.logout';
     case LockoutStarted = 'auth.lockout_started';
 
+    /**
+     * Se ha abierto un **bloqueo por origen** del portal (RS-12, ADR-050 §2):
+     * demasiados accesos fallidos desde una misma red, con cualquier codigo.
+     *
+     * Actor `system` —lo decide el servidor—, la direccion en la columna `ip`
+     * como en los demas `auth.*` (ADR-039) y en el `payload` solo
+     * `{channel, failures, seconds, ip_hash}`. Escrito despues de responder,
+     * como `auth.lockout_started`, y con un techo por hora: por encima, el
+     * bloqueo se aplica y solo queda el log tecnico (dictamen B1).
+     */
+    case OriginLocked = 'auth.origin_locked';
+
+    /**
+     * Alguien ha levantado a mano un bloqueo por origen
+     * (`identity:origin-unlock`, dictamen M3 de ADR-050).
+     *
+     * En el `payload` el `ip_hash` del origen, **nunca la IP**: el comando corre
+     * en el servidor y la columna `ip` no tiene nada que decir.
+     */
+    case OriginUnlocked = 'auth.origin_unlocked';
+
     // --- Segundo factor de gestion (RF-ID-01, RS-06, tarea 2.1) --------------
 
     case TwoFactorEnabled = 'auth.two_factor_enabled';

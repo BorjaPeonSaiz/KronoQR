@@ -37,4 +37,13 @@ enum AuthOutcome: string
     case FAILURE = 'failure';
 
     case LOCKOUT = 'lockout';
+
+    /**
+     * Se ABRIO un bloqueo por origen del portal (ADR-050 §2). Uno por apertura,
+     * igual que `lockout`, y separado de el porque cuenta otra cosa: una red que
+     * acumula fallos contra cualquier codigo, no una cuenta que alcanza su
+     * limite. Mezclarlos haria que `KronoqrAuthLockouts` leyera un barrido desde
+     * tres direcciones como tres cuentas atacadas.
+     */
+    case ORIGIN_LOCKED = 'origin_locked';
 }

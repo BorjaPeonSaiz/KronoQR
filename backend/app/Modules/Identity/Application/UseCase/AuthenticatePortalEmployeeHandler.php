@@ -6,7 +6,12 @@ namespace App\Modules\Identity\Application\UseCase;
 
 use App\Modules\Identity\Application\Command\AuthenticatePortalEmployeeCommand;
 use App\Modules\Identity\Application\Exception\PortalAccessDenied;
+use App\Modules\Identity\Application\Exception\PortalOriginLocked;
+use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Identity\Application\Support\PortalAccessTelemetry;
+use App\Modules\Identity\Domain\Policy\OriginLockAuditCeiling;
+use App\Modules\Identity\Domain\Policy\OriginLockoutPolicy;
+use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
@@ -66,6 +71,16 @@ use DateTimeImmutable;
  * existir entre la comprobacion del PIN y la emision del token. El puerto
  * devuelve `null` y aqui es el mismo rechazo, no un `500`.
  *
+ * ## Antes de todo, el bloqueo por origen (ADR-050 §2)
+ *
+ * Los cinco rechazos de arriba cuentan tambien **por origen** —la IP, o su `/64`
+ * en IPv6— con {@see OriginLockoutPolicy}: 20 fallos en 15 minutos cierran el
+ * portal a ese origen 60 minutos (valores de serie). Mientras dura, la peticion
+ * sale como {@see PortalOriginLocked} (`429`) **sin mirar el codigo ni el PIN**,
+ * asi que no dice nada de ninguna credencial ni suma al contador de nadie. Un
+ * acceso correcto no pone la cuenta a cero. No se aplica al quiosco: el fichaje
+ * no pasa por aqui (regla dura 19).
+ *
  * ## El PIN deja de existir en cuanto se ha usado
  *
  * `sodium_memzero()`, por lo mismo que en el fichaje por PIN: la variable local
@@ -115,9 +130,18 @@ final readonly class AuthenticatePortalEmployeeHandler
          * dura 13 y 14): el caso de uso no consulta `config()`.
          */
         private int $sessionHours,
+        /*
+         * El bloqueo por origen (ADR-050 §2): almacen, regla con los umbrales ya
+         * resueltos de `config/identity.php` y techo de asientos por hora. El
+         * caso de uso no consulta `config()` (reglas duras 13 y 14).
+         */
+        private PortalOriginAttempts $origins,
+        private OriginLockoutPolicy $originPolicy,
+        private OriginLockAuditCeiling $auditCeiling,
     ) {}
 
     /**
+     * @throws PortalOriginLocked si el portal esta cerrado al origen de la peticion
      * @throws PortalAccessDenied ante cualquiera de los cinco desenlaces de rechazo
      */
     public function handle(AuthenticatePortalEmployeeCommand $command): PortalSession
@@ -128,10 +152,33 @@ final readonly class AuthenticatePortalEmployeeHandler
     private function authenticate(AuthenticatePortalEmployeeCommand $command): PortalSession
     {
         $pin = $command->pin;
+        $origin = RequestOrigin::fromRemoteAddress($command->remoteAddress);
+
+        // ANTES de mirar el codigo y el PIN (ADR-050 §2): el desenlace no puede
+        // depender de la credencial, asi que no dice nada de ella (RS-03), y no
+        // toca el contador de ningun empleado. Tambien con el PIN correcto.
+        $lockedFor = $this->secondsUntilOriginUnlock($origin);
+
+        if ($lockedFor > 0) {
+            sodium_memzero($pin);
+
+            // `failure` con su motivo propio, que aqui si puede existir porque
+            // la respuesta ya lo distingue (ADR-039). No suma fallos ni alarga
+            // el bloqueo.
+            $this->journal->failed(AuthChannel::PORTAL, null, AuthFailureReason::ORIGIN_LOCKED);
+
+            throw new PortalOriginLocked($lockedFor);
+        }
 
         $verification = $this->pins->verify($command->employeeCode, $pin, PinOrigin::PORTAL);
 
         sodium_memzero($pin);
+
+        // Los cinco rechazos genericos cuentan para el origen; el sexto —la
+        // carrera de la sesion, mas abajo— no, porque el PIN era el bueno.
+        if ($verification->isLocked() || $verification->employeeUuid() === null) {
+            $this->recordOriginFailure($origin);
+        }
 
         // Los dos rechazos de aqui no apuntan nada: el verificador ya escribio su
         // `auth.login_failed` —el mismo para los dos, que es lo que exige RS-03—
@@ -176,6 +223,45 @@ final readonly class AuthenticatePortalEmployeeHandler
         $this->journal->succeeded(AuthChannel::PORTAL, $session->employeeUuid);
 
         return $session;
+    }
+
+    /** Segundos que le quedan al bloqueo por origen; cero si no hay. */
+    private function secondsUntilOriginUnlock(RequestOrigin $origin): int
+    {
+        return $this->originPolicy->secondsUntilUnlock($this->origins->historyFor($origin), $this->now());
+    }
+
+    /**
+     * Un fallo mas para el origen; si con el se abre el bloqueo, su rastro. El
+     * asiento de `audit_log` solo por debajo del techo por hora (dictamen B1):
+     * por encima, el bloqueo se aplica igual y queda el log y la metrica.
+     */
+    private function recordOriginFailure(RequestOrigin $origin): void
+    {
+        $now = $this->now();
+        $before = $this->origins->historyFor($origin);
+        $after = $this->originPolicy->afterFailure($before, $now);
+
+        $this->origins->save($origin, $after, $this->originPolicy->retentionSeconds());
+
+        if (! $this->originPolicy->opened($before, $after, $now)) {
+            return;
+        }
+
+        $openings = $this->origins->countLockOpening($this->auditCeiling->hourOf($now));
+
+        $this->journal->originLocked(
+            AuthChannel::PORTAL,
+            $origin->key(),
+            $this->originPolicy->maxFailures(),
+            $this->originPolicy->lockoutSeconds(),
+            $this->auditCeiling->allowsAuditEntry($openings),
+        );
+    }
+
+    private function now(): int
+    {
+        return $this->clock->now()->getTimestamp();
     }
 
     /**
