@@ -247,6 +247,44 @@ it('con escrituras nuevas y WAL sin archivar, la exposicion empieza a contar', f
         ->and($state)->toContain('activity=11');
 })->group('RNF-D-02');
 
+it('tras una copia fisica (el ultimo archivado es el .backup) el segmento ya archivado sigue cubriendo la exposicion', function (): void {
+    // Madrugada sin fichajes: la copia fisica deja como ultimo archivado el
+    // `.backup`, que no dice hasta donde llega el WAL. Hay que acordarse del fin del
+    // ultimo SEGMENTO real o la exposicion de antes de la copia no se cierra nunca y
+    // `kronoqr_wal_unarchived_age_seconds` sube sin que haya dato en riesgo.
+    $sandbox = walMetricsSandbox();
+    $segmentEnd = 0x4000000;
+    walMetricsState($sandbox, "archived_wal=000000010000000000000003\nlast_segment_end={$segmentEnd}\ndirty_since=".(time() - 500)."\ndirty_lsn=".(0x3000500)."\nactivity=10\n");
+
+    $process = runWalMetrics($sandbox, ['STUB_ARCHIVER' => walMetricsArchiverRow(lastArchived: '000000010000000000000003.00000028.backup', insertLsn: '0/4000100', activity: 10)]);
+
+    $series = walMetricsSeries($sandbox);
+    $state = (string) file_get_contents($sandbox['metrics'].'/.wal-exporter.state');
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($series['kronoqr_wal_unarchived_age_seconds'])->toBe('0')
+        ->and($state)->toContain("last_segment_end={$segmentEnd}")
+        ->and($state)->toContain('dirty_since=0');
+})->group('RNF-D-02');
+
+it('tras una copia fisica sin fichajes no sube la edad de lo no archivado, y un .history tampoco borra el fin conocido', function (string $lastArchived): void {
+    $sandbox = walMetricsSandbox();
+    walMetricsState($sandbox, "archived_wal=000000010000000000000003\nlast_segment_end=".(0x4000000)."\ndirty_since=0\ndirty_lsn=0\nactivity=10\n");
+
+    $process = runWalMetrics($sandbox, ['STUB_ARCHIVER' => walMetricsArchiverRow(lastArchived: $lastArchived, lastArchivedAge: 14400, insertLsn: '0/4000100', activity: 10)]);
+
+    $series = walMetricsSeries($sandbox);
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($series['kronoqr_wal_unarchived_age_seconds'])->toBe('0')
+        ->and($series['kronoqr_wal_unarchived_bytes'])->toBe((string) (0x4000100 - 0x4000000))
+        ->and((string) file_get_contents($sandbox['metrics'].'/.wal-exporter.state'))->toContain('last_segment_end='.(0x4000000));
+})->with([
+    'copia fisica' => '000000010000000000000003.00000028.backup',
+    'historia' => '00000002.history',
+    'parcial' => '000000010000000000000004.partial',
+])->group('RNF-D-02');
+
 // ---------------------------------------------------------------------------
 // El fichero de estado: lo pueden escribir app y horizon (BAJO del dictamen)
 // ---------------------------------------------------------------------------
@@ -271,7 +309,7 @@ it('un estado manipulado no ejecuta nada y se reinicia con valores validos', fun
         ->and(file_exists($canario))->toBeFalse()
         ->and(walMetricsSeries($sandbox)['kronoqr_wal_unarchived_age_seconds'])->toBe('0')
         // Se reescribe entero con lo que acaba de medir, en su forma cerrada.
-        ->and($state)->toMatch('/\Aarchived_wal=[0-9A-F]{24}\ndirty_since=\d+\ndirty_lsn=\d+\nactivity=\d+\n\z/');
+        ->and($state)->toMatch('/\Aarchived_wal=[0-9A-F]{24}\nlast_segment_end=\d+\ndirty_since=\d+\ndirty_lsn=\d+\nactivity=\d+\n\z/');
 })->group('RL-12', 'RNF-D-02');
 
 it('un estado con basura o un dirty_since del futuro se ignora en vez de inventar una edad', function (string $contenido): void {

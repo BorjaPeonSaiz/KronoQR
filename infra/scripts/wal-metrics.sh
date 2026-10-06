@@ -70,7 +70,7 @@ main() {
   local fila slots estado ahora segmento_bytes
   local actividad archivado edad_ultimo archivados fallos fallando lsn_insercion timeout slot_inactivos slot_retenido
   local fin_archivado insercion pendientes_bytes pendientes_segmentos dirty_since dirty_lsn prev_actividad edad
-  local linea
+  local linea ultimo_fin
 
   load_backup_config
   ensure_backup_tree metrics
@@ -96,6 +96,32 @@ main() {
 
   insercion="$(lsn_a_bytes "$lsn_insercion")" || die "${KQ_EXIT_REQUIREMENTS}" "LSN de PostgreSQL no valido."
 
+  # Estado entre ejecuciones. Solo enteros y un nombre de segmento, validados.
+  ahora="$(now_epoch)"
+  dirty_since=0
+  dirty_lsn=0
+  prev_actividad=-1
+  ultimo_fin=0
+  estado="${BACKUP_DIR_METRICS}/.wal-exporter.state"
+  if [ -f "$estado" ]; then
+    while IFS= read -r linea; do
+      if [[ "$linea" =~ ^dirty_since=([0-9]{1,12})$ ]]; then
+        dirty_since="${BASH_REMATCH[1]}"
+      elif [[ "$linea" =~ ^dirty_lsn=([0-9]{1,18})$ ]]; then
+        dirty_lsn="${BASH_REMATCH[1]}"
+      elif [[ "$linea" =~ ^last_segment_end=([0-9]{1,19})$ ]]; then
+        ultimo_fin="${BASH_REMATCH[1]}"
+      elif [[ "$linea" =~ ^activity=([0-9]{1,18})$ ]]; then
+        prev_actividad="${BASH_REMATCH[1]}"
+      fi
+    done < <(head -n 12 "$estado" 2>/dev/null || true)
+  fi
+  # Un `dirty_since` del futuro (reloj, fichero manipulado) no vale.
+  [ "$dirty_since" -le "$ahora" ] || {
+    dirty_since=0
+    dirty_lsn=0
+  }
+
   # Fin del ultimo segmento archivado: nombre = linea temporal (8) + id (8) + segmento (8).
   pendientes_bytes=0
   pendientes_segmentos=0
@@ -105,34 +131,23 @@ main() {
       pendientes_bytes="$((insercion - fin_archivado))"
       pendientes_segmentos="$((insercion / segmento_bytes - fin_archivado / segmento_bytes))"
     fi
+    ultimo_fin="$fin_archivado"
+  elif [ "$archivado" != "-" ] && [ "$ultimo_fin" -gt 0 ] && [ "$ultimo_fin" -le "$insercion" ]; then
+    # El ultimo archivado es un `.backup`, `.history` o `.partial` (tras una copia
+    # fisica el ultimo es el `.backup`): no dice hasta donde llega el WAL archivado.
+    # Se usa el fin del ultimo SEGMENTO real, guardado en la ejecucion anterior; sin
+    # esto, una madrugada sin fichajes tras una copia fisica dejaria «pendiente» el
+    # resto del segmento y subiria el RPO sin que haya dato en riesgo.
+    fin_archivado="$ultimo_fin"
+    if [ "$insercion" -gt "$fin_archivado" ]; then
+      pendientes_bytes="$((insercion - fin_archivado))"
+      pendientes_segmentos="$((insercion / segmento_bytes - fin_archivado / segmento_bytes))"
+    fi
   else
-    # Ninguno archivado aun (o el ultimo es un fichero de historia): se mide lo
-    # escrito en el segmento en curso.
+    # Ninguno archivado aun (o el ultimo es un fichero de historia y no hay
+    # segmento anterior conocido): se mide lo escrito en el segmento en curso.
     pendientes_bytes="$((insercion % segmento_bytes))"
   fi
-
-  # Estado entre ejecuciones. Solo enteros y un nombre de segmento, validados.
-  ahora="$(now_epoch)"
-  dirty_since=0
-  dirty_lsn=0
-  prev_actividad=-1
-  estado="${BACKUP_DIR_METRICS}/.wal-exporter.state"
-  if [ -f "$estado" ]; then
-    while IFS= read -r linea; do
-      if [[ "$linea" =~ ^dirty_since=([0-9]{1,12})$ ]]; then
-        dirty_since="${BASH_REMATCH[1]}"
-      elif [[ "$linea" =~ ^dirty_lsn=([0-9]{1,18})$ ]]; then
-        dirty_lsn="${BASH_REMATCH[1]}"
-      elif [[ "$linea" =~ ^activity=([0-9]{1,18})$ ]]; then
-        prev_actividad="${BASH_REMATCH[1]}"
-      fi
-    done < <(head -n 10 "$estado" 2>/dev/null || true)
-  fi
-  # Un `dirty_since` del futuro (reloj, fichero manipulado) no vale.
-  [ "$dirty_since" -le "$ahora" ] || {
-    dirty_since=0
-    dirty_lsn=0
-  }
 
   # POR QUE SE MIRA LA ACTIVIDAD Y NO SOLO LOS BYTES. PostgreSQL escribe registros
   # «no importantes» (instantaneas de transacciones en curso, cada 15 s) que NO
@@ -167,7 +182,7 @@ main() {
   [[ "$slot_inactivos" =~ ^[0-9]+$ ]] || slot_inactivos=0
   [[ "$slot_retenido" =~ ^[0-9]+$ ]] || slot_retenido=0
 
-  printf 'archived_wal=%s\ndirty_since=%s\ndirty_lsn=%s\nactivity=%s\n' "$archivado" "$dirty_since" "$dirty_lsn" "$actividad" |
+  printf 'archived_wal=%s\nlast_segment_end=%s\ndirty_since=%s\ndirty_lsn=%s\nactivity=%s\n' "$archivado" "$ultimo_fin" "$dirty_since" "$dirty_lsn" "$actividad" |
     kq_write_metrics_atomic "$estado" || err "AVISO: no se ha podido guardar el estado del exportador; la edad se medira desde ahora."
 
   cat <<EOF | kq_write_metrics_atomic "${BACKUP_DIR_METRICS}/kronoqr_wal.prom" ||
