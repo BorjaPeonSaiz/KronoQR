@@ -1,0 +1,91 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Modules\Identity\Application\Port\PortalOriginAttempts;
+use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
+use Tests\Support\Concurrency\ParallelRequests;
+use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Http\Api;
+use Tests\Support\Time\FrozenTime;
+
+/*
+ * El bloqueo por origen del portal BAJO CONCURRENCIA (RS-12, ADR-050 §2).
+ *
+ * `CachePortalOriginAttempts` lee, calcula y escribe sin candado: su docblock
+ * acepta que «dos fallos simultaneos del mismo origen pueden contar como uno».
+ * Lo que esta prueba vigila es que ese compromiso no se convierta en otra cosa:
+ * que quien lanza los intentos EN PARALELO desde una sola direccion no consiga
+ * mas intentos que quien los lanza en fila. Veinticinco procesos a la vez,
+ * cinco por encima del umbral de veinte: si la cuenta pierde mas de cinco
+ * incrementos, el bloqueo no llega y el siguiente intento entra a probar PIN.
+ *
+ * **En rojo y marcada `skip`**: medido el 06-10-2026, los veinticinco fallos
+ * simultaneos dejan en la cache entre uno y tres (los demas se pisan entre
+ * `historyFor()` y `save()`). Quien paraleliza multiplica por diez sus intentos.
+ *
+ * **Procesos de verdad** (`ParallelRequests`), sobre la cache compartida de una
+ * instalacion real: un bucle en el mismo proceso nunca pierde un incremento.
+ */
+
+uses(CommittedDatabase::class);
+
+const PORTAL_ORIGIN_CONCURRENCY_IP = '203.0.113.77';
+
+const PORTAL_ORIGIN_CONCURRENCY_ATTEMPTS = 25;
+
+beforeEach(function (): void {
+    config()->set('identity.portal.rate_limit_per_minute', 10_000);
+    config()->set('identity.portal.origin_lockout.max_failures', 20);
+    config()->set('identity.portal.origin_lockout.window_seconds', 900);
+    config()->set('identity.portal.origin_lockout.lockout_seconds', 3600);
+
+    FrozenTime::at('2026-10-06 09:00:00');
+});
+
+afterEach(function (): void {
+    app(PortalOriginAttempts::class)->forget(RequestOrigin::of(PORTAL_ORIGIN_CONCURRENCY_IP));
+});
+
+/**
+ * La cache `resilient` sobre un almacen que comparten los procesos, como en
+ * produccion; la de `phpunit.xml` es `array` y cada hijo tendria la suya.
+ *
+ * @param  list<string>  $almacenes
+ */
+function portalOriginConcurrencyCache(array $almacenes): void
+{
+    config()->set('cache.stores.resilient.stores', $almacenes);
+    config()->set('cache.prefix', 'kronoqr-test-origin-concurrency-');
+    config()->set('cache.stores.file.path', sys_get_temp_dir().'/kronoqr-origin-concurrency-cache');
+
+    app()->forgetInstance('cache');
+    app()->forgetInstance('cache.store');
+    app()->forgetInstance(PortalOriginAttempts::class);
+}
+
+it('cierra el portal al origen aunque los fallos lleguen todos a la vez', function (string ...$almacenes): void {
+    portalOriginConcurrencyCache(array_values($almacenes));
+
+    $respuestas = ParallelRequests::run(
+        PORTAL_ORIGIN_CONCURRENCY_ATTEMPTS,
+        static fn (int $indice) => Api::guest()->fromIp(PORTAL_ORIGIN_CONCURRENCY_IP)->post('/api/v1/me/login', [
+            'employee_code' => 'NOEXISTE'.$indice,
+            'pin' => '000999',
+        ]),
+    );
+
+    $siguiente = Api::guest()->fromIp(PORTAL_ORIGIN_CONCURRENCY_IP)->post('/api/v1/me/login', [
+        'employee_code' => 'NOEXISTE99',
+        'pin' => '000999',
+    ]);
+
+    expect(array_column($respuestas, 'status'))->each->toBeIn([401, 429])
+        ->and($siguiente->getStatusCode())->toBe(429);
+})->with([
+    'sobre Redis' => ['redis', 'file'],
+    'sobre el disco' => ['file'],
+])->skip(
+    'DEFECTO ABIERTO (bloque 12 de la 2.2.0): CachePortalOriginAttempts lee-calcula-escribe sin candado y '
+    .'25 fallos simultaneos cuentan como 1 a 3; el bloqueo nunca llega. Se quita el skip con la correccion.',
+)->group('RS-12', 'RF-ID-08');
