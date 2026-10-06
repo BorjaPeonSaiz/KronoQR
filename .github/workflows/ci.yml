@@ -2387,10 +2387,14 @@ jobs:
 
       - name: "U4 · La copia previa de la actualizacion se restaura en una base limpia (RF-PR-04, RQ-09)"
         if: steps.anterior.outputs.skip != 'true'
+        # La copia previa la hace la version ANTERIOR antes de actualizar: mientras esa version
+        # sea la 2.1.0 es un volcado sin autenticar y solo se restaura con la bandera explicita,
+        # que tambien acepta una copia KQE1 (ADR-049 §4). Cuando la version minima de origen sea
+        # >= 2.2.0 la bandera sobra y se retira (R6-DV-10).
         run: |
           set -euo pipefail
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
-            run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore-drill.sh --mode database
+            run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore-drill.sh --mode database --accept-unauthenticated
 
       - name: Diagnostico si algo ha fallado
         if: failure() && steps.anterior.outputs.skip != 'true'

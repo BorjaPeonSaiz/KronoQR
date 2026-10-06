@@ -270,8 +270,15 @@ mode_clean() {
   as_root test -s "${BACKUP_PATH}/daily/${nombre}.manifest.mac" || fail "falta el MAC del manifiesto"
   ok "volcado y copia fisica en KQE1, con cabecera y manifiesto autenticado"
 
+  # El stderr de cada dry-run queda en un fichero: cuando un caso no sale con el codigo
+  # esperado, se enseña (la salida de restore.sh dentro del contenedor no se ve de otro modo).
   restore_dry() {
-    dc run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore.sh --database kq_e2e --dry-run "$@"
+    dc run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore.sh --database kq_e2e --dry-run "$@" 2>"${WORK}/restore-dry.err"
+  }
+  restore_dry_err() {
+    printf -- "--- stderr del ultimo dry-run:
+" >&2
+    cat "${WORK}/restore-dry.err" >&2 2>/dev/null || true
   }
   restore_dry --file "${copia}" >/dev/null || fail "restore --dry-run de la copia buena fallo"
   ok "la copia buena pasa el dry-run"
@@ -304,7 +311,7 @@ mode_clean() {
   rc=0
   restore_dry --file "${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.dump.enc" >/dev/null 2>&1 || rc=$?
   as_root sh -c "rm -f '${BACKUP_PATH}'/daily/kronoqr-20240101T000000Z.*"
-  [ "${rc}" = "6" ] || fail "una copia renombrada dio salida ${rc} y se esperaba 6"
+  [ "${rc}" = "6" ] || { restore_dry_err; fail "una copia renombrada dio salida ${rc} y se esperaba 6"; }
   ok "copia renombrada -> salida 6"
   # Manifiesto alterado.
   as_root cp -p "${BACKUP_PATH}/daily/${nombre}.manifest.json" "${WORK}/manifest.bak"
