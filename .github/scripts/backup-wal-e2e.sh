@@ -311,7 +311,10 @@ mode_clean() {
   rc=0
   restore_dry --file "${BACKUP_PATH}/daily/kronoqr-20240101T000000Z.dump.enc" >/dev/null 2>&1 || rc=$?
   as_root sh -c "rm -f '${BACKUP_PATH}'/daily/kronoqr-20240101T000000Z.*"
-  [ "${rc}" = "6" ] || { restore_dry_err; fail "una copia renombrada dio salida ${rc} y se esperaba 6"; }
+  [ "${rc}" = "6" ] || {
+    restore_dry_err
+    fail "una copia renombrada dio salida ${rc} y se esperaba 6"
+  }
   ok "copia renombrada -> salida 6"
   # Manifiesto alterado.
   as_root cp -p "${BACKUP_PATH}/daily/${nombre}.manifest.json" "${WORK}/manifest.bak"
