@@ -40,10 +40,12 @@ use Random\RandomException;
  * **Restablecer desbloquea.** El contador de intentos fallidos (RS-12) se limpia
  * aqui y no en el llamante: un PIN nuevo con el bloqueo del anterior todavia
  * activo obligaria a esperar quince minutos delante del quiosco a alguien que
- * acaba de pedir ayuda porque no podia fichar. Se limpia **dentro** de la
- * transaccion aunque la cache no sea transaccional: si la escritura se revierte,
- * lo unico perdido es un contador de intentos, y equivocarse hacia el lado de
- * dejar entrar a quien ya se habia identificado es el error barato.
+ * acaba de pedir ayuda porque no podia fichar. Se limpia **despues** de soltar
+ * la cadena —tras el commit en el restablecimiento—, porque el candado de cache
+ * del contador puede esperar y la cadena la toma cada fichaje. En el alta corre
+ * aun dentro de la transaccion del alta, pero el empleado es nuevo y nadie
+ * compite por su candado. Un fallo contra el PIN anterior anotado entre el
+ * commit y la limpieza se borra con ella, que es lo que se quiere.
  *
  * **El PIN sale por el valor de retorno y por ningun otro sitio.** No entra en
  * el evento —que acaba en `audit_log` (regla dura 21)—, ni en el log, ni en la
@@ -77,7 +79,7 @@ final readonly class IssueEmployeePinHandler
      */
     public function handle(IssueEmployeePinCommand $command): ?IssuedPin
     {
-        return $this->serialized->withChainLock(function () use ($command): ?IssuedPin {
+        $issued = $this->serialized->withChainLock(function () use ($command): ?IssuedPin {
             $issuedAt = $this->clock->now();
 
             // La longitud sale del PIN que se emite y no del ajuste: es la que
@@ -88,8 +90,6 @@ final readonly class IssueEmployeePinHandler
             if (! $this->pins->issue($command->employeeUuid, $command->material->hash, $length, $issuedAt)) {
                 return null;
             }
-
-            $this->attempts->clear($command->employeeUuid);
 
             // Dentro de la transaccion: el listener de auditoria es sincrono, asi
             // que si el asiento falla la emision no se confirma (ADR-027, regla
@@ -108,5 +108,15 @@ final readonly class IssueEmployeePinHandler
                 issuedAt: $issuedAt,
             );
         });
+
+        // FUERA del candado de la cadena: `clear()` toma el candado de cache de
+        // cada puerta y, con contienda, puede esperar hasta medio segundo por
+        // puerta. Dentro de `withChainLock()` esa espera congelaria todos los
+        // fichajes del hotel (ADR-046).
+        if ($issued instanceof IssuedPin) {
+            $this->attempts->clear($command->employeeUuid);
+        }
+
+        return $issued;
     }
 }
