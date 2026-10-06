@@ -121,7 +121,7 @@ case "$estado" in
     exit 6
   fi
   err "AVISO: copia heredada sin autenticar, aceptada por bandera explicita."
-  kqe_decrypt_legacy_copy | tar -xzf - -C "$destino"
+  kqe_decrypt_legacy_copy base | tar -xzf - -C "$destino"
   ;;
 *)
   err "'${fichero}' NO supera la comprobacion de integridad: ${KQE_REASON}. No se ha escrito nada. Ver docs/runbooks/restaurar-backup.md §4.1 y §6.8."

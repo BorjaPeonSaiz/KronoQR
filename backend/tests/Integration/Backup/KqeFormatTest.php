@@ -195,19 +195,19 @@ it('distingue una copia heredada de la 2.1.0 (Salted__) y la descifra solo con k
     mkdir($dir.'/priv', 0o700, true);
     $legacy = $dir.'/heredada.enc';
     $make = Process::fromShellCommandline(
-        'printf "volcado heredado" | openssl enc -aes-256-cbc -md sha512 -pbkdf2 -iter 600000 -salt -pass env:KQ_TEST_PASS >'.escapeshellarg($legacy),
+        'printf "PGDMP volcado heredado" | openssl enc -aes-256-cbc -md sha512 -pbkdf2 -iter 600000 -salt -pass env:KQ_TEST_PASS >'.escapeshellarg($legacy),
         env: ['KQ_TEST_PASS' => KQE_FORMAT_KEY],
     );
     $make->run();
     expect($make->isSuccessful())->toBeTrue($make->getErrorOutput());
 
     $process = kqeFormatBash(
-        'rc=0; kqe_open '.escapeshellarg($legacy).' '.escapeshellarg($dir.'/priv').' dump x || rc=$?; echo "$rc"; kqe_decrypt_legacy_copy',
+        'rc=0; kqe_open '.escapeshellarg($legacy).' '.escapeshellarg($dir.'/priv').' dump x || rc=$?; echo "$rc"; kqe_decrypt_legacy_copy dump',
     );
     $lines = explode("\n", $process->getOutput(), 2);
 
     expect((int) $lines[0])->toBe(10);
-    expect($lines[1])->toBe('volcado heredado');
+    expect($lines[1])->toBe('PGDMP volcado heredado');
 })->group('RL-12', 'RS-07');
 
 it('usa la copia ya verificada aunque el origen cambie despues (TOCTOU)', function (): void {

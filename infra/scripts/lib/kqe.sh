@@ -75,7 +75,6 @@ _KQE_PASS=""
 _KQE_KMAC=""
 _KQE_SPEC=""
 _KQE_KID=""
-_KQE_KMAC_FOR=""
 
 kqe_forget() {
   _KQE_PASS=""
@@ -177,10 +176,7 @@ _kqe_key_for_encrypt() {
   else
     [ -n "${BACKUP_ENCRYPTION_KEY:-}" ] || return 1
     _KQE_PASS="${BACKUP_ENCRYPTION_KEY}"
-    if [ -z "$_KQE_KMAC" ] || [ "${_KQE_KMAC_FOR:-}" != "master" ]; then
-      _KQE_KMAC="$(_kqe_kmac_master "$_KQE_PASS")"
-      _KQE_KMAC_FOR="master"
-    fi
+    _KQE_KMAC="$(_kqe_kmac_master "$_KQE_PASS")"
   fi
   [[ "$_KQE_KMAC" =~ ^[0-9a-f]{64}$ ]] || return 1
   _KQE_KID="$(_kqe_kid_of "$_KQE_KMAC")"
@@ -388,15 +384,45 @@ kqe_decrypt_copy() {
 }
 
 # Descifra una copia HEREDADA (2.1.0) ya copiada por kqe_open (codigo 10).
+#   kqe_decrypt_legacy_copy [dump|base]
+#
+# Cada clave candidata (la actual y, si existe, la anterior) descifra a un fichero
+# del directorio privado de KQE_COPY (0600), NUNCA directamente a la salida: con la
+# clave equivocada `openssl enc -d` ya ha escrito casi todo el cuerpo (basura) cuando
+# falla el relleno, y a veces (~1/256) el relleno sale valido y devuelve 0. Por eso,
+# ademas del codigo de salida, se comprueba la FIRMA del contenido: `PGDMP` en un
+# volcado, `1f8b` (gzip) en una copia fisica. Solo el candidato que supera las dos
+# cosas se vuelca a la salida estandar.
 kqe_decrypt_legacy_copy() {
+  local want="${1:-}" cand out magic ok
   [ "$KQE_STATUS" = "10" ] && [ -f "$KQE_COPY" ] && [ -n "${BACKUP_ENCRYPTION_KEY:-}" ] || return 1
-  local cand
+  out="${KQE_COPY%/*}/kqe.legacy.out"
   for cand in "${BACKUP_ENCRYPTION_KEY}" "${BACKUP_ENCRYPTION_KEY_PREVIOUS:-}"; do
     [ -n "$cand" ] || continue
-    if _kqe_with_pass "$cand" openssl enc -d -aes-256-cbc -md sha512 -pbkdf2 -iter "$KQE_ITER_DUMP" <"$KQE_COPY" 2>/dev/null; then
+    rm -f -- "$out"
+    if ! (
+      set -C
+      umask 077
+      _kqe_with_pass "$cand" openssl enc -d -aes-256-cbc -md sha512 -pbkdf2 -iter "$KQE_ITER_DUMP" <"$KQE_COPY" >"$out"
+    ) 2>/dev/null; then
+      continue
+    fi
+    ok=0
+    case "$want" in
+    dump) [ "$(head -c 5 "$out")" = "PGDMP" ] && ok=1 ;;
+    base) [ "$(head -c 2 "$out" | od -An -tx1 | tr -d '[:space:]')" = "1f8b" ] && ok=1 ;;
+    *)
+      magic="$(head -c 2 "$out" | od -An -tx1 | tr -d '[:space:]')"
+      { [ "$(head -c 5 "$out")" = "PGDMP" ] || [ "$magic" = "1f8b" ]; } && ok=1
+      ;;
+    esac
+    if [ "$ok" -eq 1 ]; then
+      cat -- "$out"
+      rm -f -- "$out"
       return 0
     fi
   done
+  rm -f -- "$out"
   return 1
 }
 
