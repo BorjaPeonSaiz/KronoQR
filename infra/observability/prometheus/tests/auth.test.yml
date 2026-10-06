@@ -162,7 +162,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              destinatario: it-cliente
+              destinatario: seguridad
               component: auth
               mitre_attack: T1110.003
             exp_annotations:

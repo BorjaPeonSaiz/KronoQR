@@ -125,14 +125,15 @@ groups:
       # de bloqueos sueltos es ruido de fondo; cinco en una hora son un ataque
       # repartido o, lo que importa mas al hotel, TODA la plantilla detras de
       # una misma IP (hairpin NAT, proxy sin TRUSTED_PROXY_CIDR) y el portal
-      # cerrado para todos. Destinatario: IT del cliente, que es quien desbloquea.
+      # cerrado para todos. Destinatario: seguridad, como el resto de `kronoqr_auth_*`; quien desbloquea
+      # es el IT del hotel, al que el runbook se lo explica.
       #------------------------------------------------------------------------
       - alert: KronoqrPortalOriginLockouts
         expr: sum(increase(kronoqr_auth_attempts_total{channel="portal", outcome="origin_locked"}[1h])) > 5
         for: 1m
         labels:
           severity: warning
-          destinatario: it-cliente
+          destinatario: seguridad
           component: auth
           mitre_attack: T1110.003
         annotations:

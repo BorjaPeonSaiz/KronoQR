@@ -9,7 +9,7 @@ cual sea el código tecleado.
 19) y no se bloquea. Lo que se pierde es consultar el registro desde el portal;
 mientras tanto, RRHH puede exportar el registro de quien lo pida (RL-05).
 
-**Destinatario: IT del hotel.** Todo se hace en el servidor, desde el directorio
+**Destinatario: la alerta llega a Seguridad; la ejecuta el IT del hotel.** Todo se hace en el servidor, desde el directorio
 de la instalación (donde están `docker-compose.yml` y `.env`). La alerta no lleva
 la IP como etiqueta (privacidad y cardinalidad): la dirección sale del registro.
 
