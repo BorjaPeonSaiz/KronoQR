@@ -77,10 +77,14 @@ it('avisa, sin fallar, de un portal abierto a internet', function (): void {
 
     expect($comprobacion->status)->toBe(DoctorStatus::Warning)
         ->and($comprobacion->summary)->toContain('abierto a internet')
-        ->and($comprobacion->summary)->toContain('PIN de 6 digitos')
+        // La longitud ya no es fija (ADR-050): el texto no la afirma y remite a
+        // la comprobacion que si la mira, sin mandar al cliente a leer un ADR.
+        ->and($comprobacion->summary)->not->toContain('6 digitos')
         ->and($comprobacion->fix)->toContain('PORTAL_INTERNAL_CIDR')
-        ->and($comprobacion->fix)->toContain('endurecimiento.md');
-})->group('RF-PD-13', 'RF-ID-08');
+        ->and($comprobacion->fix)->toContain('endurecimiento.md')
+        ->and($comprobacion->fix)->toContain('access.pin_length')
+        ->and($comprobacion->fix)->not->toContain('ADR-');
+})->group('RF-PD-13', 'RF-ID-08', 'RF-ID-09');
 
 it('avisa de un portal abierto a direcciones que no son de una red privada', function (): void {
     conRedesDelBorde('10.0.20.0/24', '203.0.113.0/24', '172.29.0.20/32');
@@ -171,12 +175,76 @@ it('no publica ningun rango en los detalles ni en el texto', function (): void {
 it('lo dice tambien en ingles', function (): void {
     conRedesDelBorde('10.0.20.0/24', '0.0.0.0/0', '172.29.0.20/32');
 
-    expect(comprobacionDeRed('network.portal', 'en')->summary)
-        ->toContain('open to the internet')
-        ->toContain('6-digit PIN');
+    $resumen = comprobacionDeRed('network.portal', 'en')->summary;
+
+    expect($resumen)->toContain('open to the internet')
+        ->and($resumen)->not->toContain('6-digit');
 
     conRedesDelBorde('10.0.20.0/24', '10.0.0.0/33', '172.29.0.20/32');
 
     expect(comprobacionDeRed('network.portal', 'en')->summary)
         ->toContain('not a valid IPv4 network range');
 })->group('RF-PD-13', 'RF-ID-08');
+
+/*
+ * `ADMIN_INTERNAL_CIDR` (PP-10, ADR-050 §4). Vacia es el valor de serie y una
+ * decision del propietario: se avisa del riesgo aceptado, nunca se falla.
+ */
+
+/** Deja `ADMIN_INTERNAL_CIDR` como diga la prueba; nulo es «la aplicacion no la recibe». */
+function conRedDelPanel(?string $panel): void
+{
+    Config::set('security.edge_networks.admin_internal', $panel);
+}
+
+it('avisa, sin fallar, de un panel sin filtro de red', function (?string $valor): void {
+    conRedesDelBorde('10.0.20.0/24', '0.0.0.0/0', '172.29.0.20/32');
+    conRedDelPanel($valor);
+
+    $comprobacion = comprobacionDeRed('network.admin');
+
+    expect($comprobacion->status)->toBe(DoctorStatus::Warning)
+        ->and($comprobacion->summary)->toContain('no se filtran por red')
+        ->and($comprobacion->summary)->toContain('riesgo aceptado')
+        ->and($comprobacion->fix)->toContain('ADMIN_INTERNAL_CIDR=10.20.0.0/16')
+        ->and($comprobacion->fix)->toContain('docker compose up -d nginx');
+})->with([
+    'vacia (el valor de serie)' => '',
+    'abierta a cualquier origen' => '0.0.0.0/0',
+])->group('RF-PD-13', 'RS-06');
+
+it('sale en verde con el panel cerrado a una red, sin publicar el rango', function (): void {
+    conRedDelPanel('10.77.0.0/16');
+
+    $comprobacion = comprobacionDeRed('network.admin');
+    $publico = json_encode($comprobacion->details).$comprobacion->summary;
+
+    expect($comprobacion->status)->toBe(DoctorStatus::Ok)
+        ->and($publico)->not->toContain('10.77.');
+})->group('RF-PD-13', 'RS-05');
+
+it('falla con un rango del panel que nginx rechazaria', function (): void {
+    conRedDelPanel('10.0.0.0/33');
+
+    $comprobacion = comprobacionDeRed('network.admin');
+
+    expect($comprobacion->status)->toBe(DoctorStatus::Failure)
+        ->and($comprobacion->fix)->toContain('docker compose up -d nginx');
+})->group('RF-PD-13');
+
+it('declara que no ha comprobado el panel cuando la aplicacion no recibe la variable', function (): void {
+    conRedDelPanel(null);
+
+    $comprobacion = comprobacionDeRed('network.admin');
+
+    expect($comprobacion->status)->toBe(DoctorStatus::Ok)
+        ->and($comprobacion->summary)->toContain('no recibe ADMIN_INTERNAL_CIDR');
+})->group('RF-PD-13');
+
+it('avisa del panel sin filtro tambien en ingles', function (): void {
+    conRedDelPanel('');
+
+    expect(comprobacionDeRed('network.admin', 'en')->summary)
+        ->toContain('not filtered by network')
+        ->toContain('accepted risk');
+})->group('RF-PD-13', 'RS-06');

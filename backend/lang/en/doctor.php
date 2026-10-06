@@ -157,14 +157,29 @@ return [
                     .'opens from could not be checked.',
                 'warning_open' => 'The employee portal is open to the internet (PORTAL_INTERNAL_CIDR allows any '
                     .'origin). This is a legitimate customer decision, but the portal signs in with an employee '
-                    .'code and a 6-digit PIN: it should be on record and someone should watch the failed '
-                    .'attempts.',
+                    .'code and a PIN: it should be on record, someone should watch the failed attempts and the '
+                    .'PINs should have 8 digits (the «access.pin_length» check says how they stand).',
                 'warning_public' => 'PORTAL_INTERNAL_CIDR includes addresses that are not from a private network: '
                     .'the employee portal can be opened from those public internet addresses.',
                 'warning_sample' => 'PORTAL_INTERNAL_CIDR still holds the example value of the development '
                     .'network. On a real server that network does not exist and nobody can open the portal: the '
                     .'whole staff gets a 403.',
                 'failure_invalid' => 'PORTAL_INTERNAL_CIDR is not a valid IPv4 network range. The web server does '
+                    .'not start with that value, so nothing is served: neither the portal, nor the panel, nor the '
+                    .'kiosks.',
+            ],
+            'admin' => [
+                'ok' => 'The management panel and staff sign-in are only accepted from one specific network '
+                    .'(ADMIN_INTERNAL_CIDR).',
+                'ok_not_provided' => 'The application does not receive ADMIN_INTERNAL_CIDR, so where the '
+                    .'management panel opens from could not be checked.',
+                'warning_unfiltered' => 'The management panel (/admin/) and staff sign-in are not filtered by '
+                    .'network (ADMIN_INTERNAL_CIDR empty or open to any origin): they are reachable from wherever '
+                    .'the server is, and if the employee portal is open to the internet, so is the panel. This is '
+                    .'the default and an accepted risk, not a fault: the password, the mandatory second factor of '
+                    .'the management roles, the limit of 5 attempts per minute and the account lockout still '
+                    .'protect it.',
+                'failure_invalid' => 'ADMIN_INTERNAL_CIDR is not a valid IPv4 network range. The web server does '
                     .'not start with that value, so nothing is served: neither the portal, nor the panel, nor the '
                     .'kiosks.',
             ],
@@ -186,6 +201,29 @@ return [
                     .'state of the system, can be read from anywhere.',
                 'failure_invalid' => 'METRICS_ALLOW_CIDR is not a valid IPv4 network range. The web server does '
                     .'not start with that value.',
+            ],
+        ],
+
+        // --- Access to the portal and the panel (ADR-050) --------------------
+
+        'access' => [
+            'probe' => $probe,
+            'pin_length' => [
+                'ok' => 'The employee portal is not declared as reachable from the internet and PINs are issued '
+                    .'with :length digits, which is enough together with the attempt lockout.',
+                'ok_exposed' => 'The employee portal is reachable from the internet and PINs are issued with 8 '
+                    .'digits, which is the recommendation.',
+                'warning' => 'The employee portal is reachable from the internet and PINs are issued with 6 '
+                    .'digits. With 6 digits, someone trying from many different connections ends up guessing a '
+                    .'PIN within months; with 8, within decades. The per-connection lockout does not stop '
+                    .'someone who keeps changing address.',
+            ],
+            'short_pins' => [
+                'ok' => 'Every active person with a PIN already has an 8-digit PIN.',
+                'ok_six' => 'PINs are issued with 6 digits: there are no short PINs waiting to be reset.',
+                'warning' => ':count active person(s) still have a 6-digit PIN although PINs are now issued with '
+                    .'8. They can still sign in with it, nothing is broken, but until it is reset their PIN is '
+                    .'the easy one to guess. This report only gives the number, never who.',
             ],
         ],
 
@@ -531,13 +569,15 @@ return [
                     ."If not, put the hotel network or your VPN range in the .env file and apply the change:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
                     ."  docker compose up -d nginx\n"
-                    .'While the portal is open to the internet, turn on the 8-digit PIN (it is set in the product settings; ADR-050 describes it).',
+                    ."While the portal is open to the internet, issue 8-digit PINs and close the panel\n"
+                    .'to your network: see the «access.pin_length» and «network.admin» checks.',
                 'warning_public' => "If it must only open from the hotel network, put its private range in the .env\n"
                     ."file and apply the change:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
                     ."  docker compose up -d nginx\n"
                     ."If those public addresses are the ones you want, there is nothing to fix.\n"
-                    .'With the portal reachable from the internet, turn on the 8-digit PIN (it is set in the product settings; ADR-050 describes it).',
+                    ."With the portal reachable from the internet, issue 8-digit PINs and close the\n"
+                    .'panel to your network: see the «access.pin_length» and «network.admin» checks.',
                 'warning_sample' => "Find out which IP nginx sees for an employee (docs/runbooks/portal-403.md, in\n"
                     ."Spanish) and put its network in the .env file. Then apply the change:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
@@ -564,6 +604,25 @@ return [
                 'failure_invalid' => "Fix it in the .env file: one single range in the a.b.c.d/n format, for\n"
                     ."example 172.29.0.20/32. Then apply the change:\n"
                     .'  docker compose up -d nginx',
+            ],
+        ],
+
+        'access' => [
+            'probe' => $probeFix,
+            'pin_length' => [
+                'warning' => "Switch to 8-digit PINs from the panel, with an administration account:\n"
+                    ."  «Operational settings» -> «Access» -> «PIN length» -> 8 digits\n"
+                    ."The change is recorded in the audit log. PINs already handed out keep\n"
+                    ."working: HR resets them as they hand them out in person (check\n"
+                    ."«access.short_pins»). If the portal should not be open to the internet, fix\n"
+                    .'PORTAL_INTERNAL_CIDR (check «network.portal»).',
+            ],
+            'short_pins' => [
+                'warning' => "HR resets each person's PIN and hands it over in person, when they come by the\n"
+                    ."office; there is no need to do everyone on the same day:\n"
+                    ."  Panel -> «Workforce» -> the person -> «Reset the PIN»\n"
+                    ."The new PIN has 8 digits and the old one stops working at once.\n"
+                    .'This number goes down with every reset; run this diagnosis again to follow it.',
             ],
         ],
 

@@ -114,6 +114,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
 use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
 use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\AccessHardeningProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\AlertRecipientsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
@@ -138,6 +139,7 @@ use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisErrorMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisLicenseMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisSettingsMetrics;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseAccessHardeningFacts;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseComplianceProfileRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportSource;
@@ -1841,6 +1843,7 @@ final class ProductServiceProvider extends ServiceProvider
                      * despues con que certificado.
                      */
                     self::edgeNetworksProbe(),
+                    self::accessHardeningProbe($app),
                     new TlsProbe(
                         applicationUrl: Config::string('app.url'),
                         allowSelfSigned: Config::boolean('security.tls_allow_self_signed'),
@@ -2005,6 +2008,25 @@ final class ProductServiceProvider extends ServiceProvider
             kioskVlan: self::text(Config::get('security.edge_networks.kiosk_vlan')) ?? '',
             portalInternal: self::text(Config::get('security.edge_networks.portal_internal')) ?? '',
             metricsAllow: self::text(Config::get('security.edge_networks.metrics_allow')) ?? '',
+            // Nulo y vacia son dos cosas aqui: «no la recibo» frente a «la
+            // recibo vacia», que es el valor de serie (panel sin filtrar).
+            adminInternal: is_scalar($admin = Config::get('security.edge_networks.admin_internal'))
+                ? (string) $admin
+                : null,
+        );
+    }
+
+    /**
+     * La sonda `access.*` (ADR-050): longitud del PIN frente a la exposicion del
+     * portal y los recuentos de la transicion. Lee la base de datos, y por eso
+     * no va dentro de la de redes.
+     */
+    private static function accessHardeningProbe(Application $app): AccessHardeningProbe
+    {
+        return new AccessHardeningProbe(
+            settings: $app->make(GetSettingsHandler::class),
+            facts: new DatabaseAccessHardeningFacts(DB::connection()),
+            portalInternal: self::text(Config::get('security.edge_networks.portal_internal')) ?? '',
         );
     }
 }
