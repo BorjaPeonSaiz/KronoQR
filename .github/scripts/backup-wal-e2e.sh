@@ -404,13 +404,17 @@ mode_upgrade_seed() {
     switch_wal
     sleep 2
   done
-  wait_for "[ \"\$(as_root sh -c \"ls '${WAL_DIR}'/*.gz 2>/dev/null | wc -l\")\" -ge 3 ]" 90 "la 2.1.0 archiva >= 3 segmentos .gz"
+  # Primero se espera a que la version anterior archive ALGO (en claro o cifrado) y despues
+  # se mira que formato usa: desde que `main` lleva el bloque 20 la «version anterior» de
+  # ⑧b ya archiva `.gz.enc`, y esperar 90 s a tres `.gz` en claro fallaba siempre.
+  wait_for "[ \"\$(as_root sh -c \"ls '${WAL_DIR}'/*.gz '${WAL_DIR}'/*.gz.enc 2>/dev/null | wc -l\")\" -ge 3 ]" 90 "la version anterior archiva >= 3 segmentos"
   if [ "$(wal_enc_count)" != "0" ]; then
     # La version anterior ya archiva cifrado (no es una 2.1.0): no hay nada heredado.
     : >"${SEED_FILE}"
-    ok "la version anterior ya archiva cifrado: nada heredado que sembrar"
+    ok "la version anterior ya archiva cifrado ($(wal_enc_count) segmentos .gz.enc): nada heredado que sembrar"
     return 0
   fi
+  wait_for "[ \"\$(as_root sh -c \"ls '${WAL_DIR}'/*.gz 2>/dev/null | wc -l\")\" -ge 3 ]" 30 "la 2.1.0 archiva >= 3 segmentos .gz"
   as_root sh -c "ls -l --time-style=+%s '${WAL_DIR}'/*.gz | awk '{print \$6, \$7}'" >"${SEED_FILE}"
   as_root chmod 0644 "${SEED_FILE}"
   ok "$(wal_plain_count) segmentos en claro sembrados"
