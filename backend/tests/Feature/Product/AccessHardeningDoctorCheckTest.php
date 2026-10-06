@@ -5,9 +5,11 @@ declare(strict_types=1);
 use App\Modules\Product\Application\UseCase\RunDoctorHandler;
 use App\Modules\Product\Domain\ValueObject\DoctorCheck;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -156,3 +158,90 @@ it('cuenta los PIN cortos tambien en ingles', function (): void {
     expect(comprobacionDeAcceso('access.short_pins', 'en')->summary)
         ->toContain('1 active person(s)');
 })->group('RF-PD-13', 'RF-ID-09');
+
+/*
+ * Segundo factor de los roles de gestion (RS-06, ADR-050 §5 y M1 de su
+ * revision). `IDENTITY_2FA_REQUIRED_ROLES` puede acortarse —es configuracion,
+ * regla dura 13— pero tiene que verse; y tras actualizar, las cuentas de roles
+ * obligados sin TOTP tienen abierta la ventana de auto-alta hasta su primer
+ * acceso, asi que se cuentan. Solo el numero.
+ */
+
+/** Fija la lista de roles obligados como la dejaria el `.env`. */
+function accesoConRolesObligados(string $lista): void
+{
+    Config::set('identity.two_factor.required_roles', array_values(array_filter(
+        array_map('trim', explode(',', $lista)),
+        static fn (string $rol): bool => $rol !== '',
+    )));
+}
+
+it('sale en verde con los cuatro roles de gestion obligados a llevar segundo factor', function (): void {
+    accesoConRolesObligados('admin,rrhh,auditor,responsable_departamento');
+
+    $comprobacion = comprobacionDeAcceso('access.two_factor_roles');
+
+    expect($comprobacion->status)->toBe(DoctorStatus::Ok)
+        ->and($comprobacion->details)->toBe(['missing_roles' => []]);
+})->group('RF-PD-13', 'RS-06');
+
+it('avisa, sin fallar, de cada rol de gestion que falta en la lista', function (): void {
+    // La lista de la 2.1.0: sin el responsable, que corrige jornadas.
+    accesoConRolesObligados('admin, rrhh,auditor,no_es_un_rol');
+
+    $comprobacion = comprobacionDeAcceso('access.two_factor_roles');
+
+    expect($comprobacion->status)->toBe(DoctorStatus::Warning)
+        ->and($comprobacion->summary)->toContain('responsable_departamento')
+        ->and($comprobacion->details)->toBe(['missing_roles' => ['responsable_departamento']])
+        ->and($comprobacion->fix)->toContain('IDENTITY_2FA_REQUIRED_ROLES=admin,rrhh,auditor,responsable_departamento');
+
+    accesoConRolesObligados('');
+
+    expect(comprobacionDeAcceso('access.two_factor_roles')->details)
+        ->toBe(['missing_roles' => ['admin', 'rrhh', 'auditor', 'responsable_departamento']]);
+})->group('RF-PD-13', 'RS-06');
+
+it('cuenta las cuentas activas de roles obligados sin segundo factor, sin decir cuales', function (): void {
+    accesoConRolesObligados('admin,rrhh,auditor,responsable_departamento');
+
+    ManagementUsers::withActiveSecondFactor(ManagementUsers::withRole(UserRole::ADMIN));
+    ManagementUsers::withRole(UserRole::RRHH, 'sin-segundo-factor@kronoqr.test');
+    $responsable = ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO);
+    // Un alta a medias (secreto sin confirmar) no cierra la ventana.
+    $responsable->two_factor_secret = ManagementUsers::TOTP_SECRET;
+    $responsable->save();
+    // Desactivada: no puede entrar, no cuenta.
+    $baja = ManagementUsers::withRole(UserRole::AUDITOR);
+    $baja->is_active = false;
+    $baja->save();
+
+    $comprobacion = comprobacionDeAcceso('access.two_factor_pending');
+    $publico = json_encode($comprobacion->details).$comprobacion->summary.($comprobacion->fix ?? '');
+
+    expect($comprobacion->status)->toBe(DoctorStatus::Warning)
+        ->and($comprobacion->summary)->toStartWith('2 cuenta(s)')
+        ->and($comprobacion->details)->toBe(['pending_accounts' => 2])
+        ->and($comprobacion->fix)->toContain('auth.two_factor_enabled')
+        ->and($comprobacion->fix)->toContain('identity:2fa-reset')
+        ->and($publico)->not->toContain('sin-segundo-factor@')
+        ->and($publico)->not->toContain('Cuenta de prueba')
+        ->and($publico)->not->toContain($responsable->uuid);
+})->group('RF-PD-13', 'RS-06', 'RS-05');
+
+it('solo cuenta los roles que la instalacion obliga', function (): void {
+    accesoConRolesObligados('admin,rrhh,auditor');
+    ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO);
+
+    expect(comprobacionDeAcceso('access.two_factor_pending')->status)->toBe(DoctorStatus::Ok);
+})->group('RF-PD-13', 'RS-06');
+
+it('avisa del segundo factor tambien en ingles', function (): void {
+    accesoConRolesObligados('admin,rrhh,auditor');
+    ManagementUsers::withRole(UserRole::RRHH);
+
+    expect(comprobacionDeAcceso('access.two_factor_roles', 'en')->summary)
+        ->toContain('does not include responsable_departamento');
+    expect(comprobacionDeAcceso('access.two_factor_pending', 'en')->summary)
+        ->toStartWith('1 active account(s)');
+})->group('RF-PD-13', 'RS-06');

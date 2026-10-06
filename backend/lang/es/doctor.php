@@ -254,6 +254,20 @@ return [
                     .'de 8. Siguen pudiendo entrar con el, no hay nada roto, pero hasta que se restablezcan su '
                     .'PIN es el facil de adivinar. Este informe da solo el numero, nunca quienes.',
             ],
+            'two_factor_roles' => [
+                'ok' => 'El segundo factor es obligatorio para los cuatro roles de gestion: administracion, RRHH, '
+                    .'auditoria y responsable de departamento.',
+                'warning' => 'IDENTITY_2FA_REQUIRED_ROLES no incluye :roles: esas cuentas pueden entrar al panel '
+                    .'con la contraseña sola, y todas leen o corrigen el registro horario. El responsable de '
+                    .'departamento corrige jornadas: con su contraseña robada se rehace el registro de su '
+                    .'departamento.',
+            ],
+            'two_factor_pending' => [
+                'ok' => 'Todas las cuentas activas de los roles obligados tienen el segundo factor dado de alta.',
+                'warning' => ':count cuenta(s) activa(s) de roles obligados a llevar segundo factor todavia no lo '
+                    .'han dado de alta. Lo haran en su proximo acceso al panel, pero hasta entonces quien tenga '
+                    .'solo su contraseña podria darlo de alta en su lugar. Este informe da solo el numero.',
+            ],
         ],
 
         // --- Certificado -----------------------------------------------------
@@ -688,6 +702,24 @@ return [
                     ."  Panel -> «Plantilla» -> la persona -> «Restablecer el PIN»\n"
                     ."El PIN nuevo sale con 8 cifras y el anterior deja de valer en el acto.\n"
                     .'Este numero baja con cada restablecimiento; vuelve a ejecutar este diagnostico para seguirlo.',
+            ],
+            'two_factor_roles' => [
+                'warning' => "Si no es una decision tomada a proposito, pon los cuatro roles en el fichero\n"
+                    .".env y aplica el cambio:\n"
+                    ."  IDENTITY_2FA_REQUIRED_ROLES=admin,rrhh,auditor,responsable_departamento\n"
+                    ."  docker compose up -d app\n"
+                    .'Quien no tenga aun segundo factor lo dara de alta en su siguiente acceso al panel.',
+            ],
+            'two_factor_pending' => [
+                'warning' => "Pide a esas personas que entren al panel cuanto antes: en ese primer acceso el\n"
+                    ."panel les pide dar de alta el segundo factor con la aplicacion de su telefono.\n"
+                    ."Despues revisa en el registro de auditoria los asientos «auth.two_factor_enabled»:\n"
+                    ."cada alta lleva la hora y la IP desde la que se hizo. Si alguna no la reconoce su\n"
+                    ."titular, retira ese segundo factor y cambia la contraseña de la cuenta:\n"
+                    ."  docker compose exec app php artisan identity:2fa-reset <uuid-de-la-cuenta>\n"
+                    ."  docker compose exec app php artisan identity:reset-password <correo-de-la-cuenta>\n"
+                    ."Una cuenta que ya no usa nadie, desactivala:\n"
+                    .'  docker compose exec app php artisan identity:deactivate-user <correo-de-la-cuenta>',
             ],
         ],
 

@@ -2027,6 +2027,10 @@ final class ProductServiceProvider extends ServiceProvider
             settings: $app->make(GetSettingsHandler::class),
             facts: new DatabaseAccessHardeningFacts(DB::connection()),
             portalInternal: self::text(Config::get('security.edge_networks.portal_internal')) ?? '',
+            secondFactorRoles: array_values(array_filter(
+                Config::array('identity.two_factor.required_roles', []),
+                static fn (mixed $role): bool => \is_string($role),
+            )),
         );
     }
 }

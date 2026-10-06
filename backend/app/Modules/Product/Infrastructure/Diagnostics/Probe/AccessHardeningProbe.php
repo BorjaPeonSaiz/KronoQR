@@ -11,6 +11,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Shared\Domain\ValueObject\PinLength;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 
 /**
  * Sondas `access.*` de `product:doctor`: como de cerrada esta la puerta del
@@ -42,10 +43,31 @@ use App\Modules\Shared\Domain\ValueObject\PinLength;
  */
 final readonly class AccessHardeningProbe implements DoctorProbe
 {
+    /**
+     * Los roles que escriben o leen el registro de toda la plantilla o de un
+     * departamento, y que por eso llevan segundo factor de serie (RS-06,
+     * ADR-050 §5). El responsable de departamento entra por `attendance:correct`:
+     * con su contraseña sola se rehace la nomina de un departamento.
+     *
+     * @var list<UserRole>
+     */
+    public const array SECOND_FACTOR_ROLES = [
+        UserRole::ADMIN,
+        UserRole::RRHH,
+        UserRole::AUDITOR,
+        UserRole::RESPONSABLE_DEPARTAMENTO,
+    ];
+
+    /**
+     * @param  list<string>  $secondFactorRoles  `IDENTITY_2FA_REQUIRED_ROLES` tal como llega de
+     *                                           la configuracion: un nombre que no es un rol se ignora, igual que
+     *                                           hace `Identity` al aplicarla.
+     */
     public function __construct(
         private GetSettingsHandler $settings,
         private AccessHardeningFacts $facts,
         private string $portalInternal,
+        private array $secondFactorRoles = [],
     ) {}
 
     public function family(): string
@@ -60,10 +82,84 @@ final readonly class AccessHardeningProbe implements DoctorProbe
     {
         $length = $this->pinLength();
 
+        $required = $this->requiredRoles();
+
         return [
             $this->pinLengthForExposure($length),
             $this->shortPins($length),
+            $this->missingSecondFactorRoles($required),
+            $this->accountsPendingSecondFactor($required),
         ];
+    }
+
+    /**
+     * @return list<UserRole>
+     */
+    private function requiredRoles(): array
+    {
+        $roles = [];
+
+        foreach ($this->secondFactorRoles as $name) {
+            $role = UserRole::tryFrom(trim($name));
+
+            if ($role instanceof UserRole && ! \in_array($role, $roles, true)) {
+                $roles[] = $role;
+            }
+        }
+
+        return $roles;
+    }
+
+    /**
+     * Un aviso si falta alguno de los cuatro roles de gestion en
+     * `IDENTITY_2FA_REQUIRED_ROLES` (ADR-050 §5). Acortar la lista es
+     * configuracion legitima (regla dura 13), pero tiene que verse.
+     *
+     * @param  list<UserRole>  $required
+     */
+    private function missingSecondFactorRoles(array $required): DoctorFinding
+    {
+        $id = 'access.two_factor_roles';
+        $missing = array_values(array_map(
+            static fn (UserRole $role): string => $role->value,
+            array_filter(
+                self::SECOND_FACTOR_ROLES,
+                static fn (UserRole $role): bool => ! \in_array($role, $required, true),
+            ),
+        ));
+
+        if ($missing === []) {
+            return DoctorFinding::ok($id, ['missing_roles' => []]);
+        }
+
+        return DoctorFinding::warning(
+            $id,
+            params: ['roles' => implode(', ', $missing)],
+            details: ['missing_roles' => $missing],
+        );
+    }
+
+    /**
+     * Cuantas cuentas activas de los roles obligados no tienen aun segundo
+     * factor confirmado (M1 de la revision de ADR-050).
+     *
+     * Tras actualizar, cada responsable sin TOTP lo da de alta en su primer
+     * acceso, y hasta entonces **la ventana de auto-alta esta abierta**: quien
+     * tenga solo su contraseña puede quedarse con el segundo factor (doc 07 §6).
+     * Solo el numero: quien es lo ve el administrador en su panel.
+     *
+     * @param  list<UserRole>  $required
+     */
+    private function accountsPendingSecondFactor(array $required): DoctorFinding
+    {
+        $id = 'access.two_factor_pending';
+        $count = $this->facts->activeAccountsWithoutSecondFactor($required);
+
+        if ($count === 0) {
+            return DoctorFinding::ok($id, ['pending_accounts' => 0]);
+        }
+
+        return DoctorFinding::warning($id, params: ['count' => $count], details: ['pending_accounts' => $count]);
     }
 
     /**

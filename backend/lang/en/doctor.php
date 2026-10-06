@@ -225,6 +225,20 @@ return [
                     .'8. They can still sign in with it, nothing is broken, but until it is reset their PIN is '
                     .'the easy one to guess. This report only gives the number, never who.',
             ],
+            'two_factor_roles' => [
+                'ok' => 'The second factor is mandatory for the four management roles: administration, HR, audit '
+                    .'and department manager.',
+                'warning' => 'IDENTITY_2FA_REQUIRED_ROLES does not include :roles: those accounts can sign in to the '
+                    .'panel with the password alone, and all of them read or correct the time record. The '
+                    .'department manager corrects working days: with their stolen password the record of their '
+                    .'department can be rewritten.',
+            ],
+            'two_factor_pending' => [
+                'ok' => 'Every active account of the mandatory roles has its second factor enrolled.',
+                'warning' => ':count active account(s) of roles that must use a second factor have not enrolled '
+                    .'it yet. They will on their next panel sign-in, but until then someone holding only their '
+                    .'password could enrol it in their place. This report only gives the number.',
+            ],
         ],
 
         'tls' => [
@@ -623,6 +637,24 @@ return [
                     ."  Panel -> «Workforce» -> the person -> «Reset the PIN»\n"
                     ."The new PIN has 8 digits and the old one stops working at once.\n"
                     .'This number goes down with every reset; run this diagnosis again to follow it.',
+            ],
+            'two_factor_roles' => [
+                'warning' => "Unless it is a deliberate decision, put the four roles in the .env file and\n"
+                    ."apply the change:\n"
+                    ."  IDENTITY_2FA_REQUIRED_ROLES=admin,rrhh,auditor,responsable_departamento\n"
+                    ."  docker compose up -d app\n"
+                    .'Anyone without a second factor yet will enrol it on their next panel sign-in.',
+            ],
+            'two_factor_pending' => [
+                'warning' => "Ask those people to sign in to the panel as soon as possible: on that first\n"
+                    ."sign-in the panel asks them to enrol the second factor with the app on their phone.\n"
+                    ."Then review the «auth.two_factor_enabled» entries in the audit log: each\n"
+                    ."enrolment carries the time and the IP it was made from. If the account holder does\n"
+                    ."not recognise one, remove that second factor and change the account password:\n"
+                    ."  docker compose exec app php artisan identity:2fa-reset <account-uuid>\n"
+                    ."  docker compose exec app php artisan identity:reset-password <account-email>\n"
+                    ."An account nobody uses any more, deactivate it:\n"
+                    .'  docker compose exec app php artisan identity:deactivate-user <account-email>',
             ],
         ],
 
