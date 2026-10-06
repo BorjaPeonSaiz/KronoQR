@@ -139,7 +139,7 @@ it('olvida la entrada al cumplirse su retencion en el disco', function (): void 
     $almacen = cachePortalOriginSinRedis();
     $origen = RequestOrigin::of(CACHE_PORTAL_ORIGIN_IP);
 
-    $almacen->save($origen, new OriginAttemptHistory([1_791_277_200], null), 3600);
+    $almacen->update($origen, static fn (): OriginAttemptHistory => new OriginAttemptHistory([1_791_277_200], null), 3600);
 
     FrozenTime::at('2026-10-06 09:59:59');
     $unSegundoAntes = $almacen->historyFor($origen)->failures;
@@ -176,7 +176,7 @@ it('guarda la entrada en Redis con la retencion como caducidad', function (): vo
     $almacen = app(PortalOriginAttempts::class);
     $origen = RequestOrigin::of(CACHE_PORTAL_ORIGIN_IP);
 
-    $almacen->save($origen, new OriginAttemptHistory([], 1_791_280_800), 3600);
+    $almacen->update($origen, static fn (): OriginAttemptHistory => new OriginAttemptHistory([], 1_791_280_800), 3600);
 
     $ttl = Redis::connection(config()->string('cache.stores.redis.connection'))->ttl('kronoqr-test-origin-'.CACHE_PORTAL_ORIGIN_KEY);
 

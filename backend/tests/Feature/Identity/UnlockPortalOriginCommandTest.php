@@ -35,9 +35,9 @@ function origenBloqueadoParaElComando(string $ip = UNLOCK_ORIGIN_COMMAND_IP): Re
 {
     $origen = RequestOrigin::of($ip);
 
-    app(PortalOriginAttempts::class)->save(
+    app(PortalOriginAttempts::class)->update(
         $origen,
-        new OriginAttemptHistory([], (int) strtotime('2026-10-06 10:00:00 UTC')),
+        static fn (): OriginAttemptHistory => new OriginAttemptHistory([], (int) strtotime('2026-10-06 10:00:00 UTC')),
         3600,
     );
 

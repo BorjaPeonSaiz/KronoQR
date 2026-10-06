@@ -28,19 +28,13 @@ interface PortalOriginAttempts
      * Lee el estado del origen, le aplica `$transition` y guarda el resultado
      * durante `$ttlSeconds`, **sin que otro proceso del mismo origen pueda
      * meterse entre la lectura y la escritura**. Es lo que usa el caso de uso
-     * para contar un fallo: con un `historyFor()` y un `save()` sueltos, los
+     * para contar un fallo: con un `historyFor()` y una escritura sueltos, los
      * fallos simultaneos se pisan y quien paraleliza no llega nunca al umbral.
      *
      * @param  Closure(OriginAttemptHistory): OriginAttemptHistory  $transition
      * @return array{OriginAttemptHistory, OriginAttemptHistory} El estado de antes y el de despues.
      */
     public function update(RequestOrigin $origin, Closure $transition, int $ttlSeconds): array;
-
-    /**
-     * Guarda el estado durante `$ttlSeconds`; pasado ese tiempo sin cambios, se
-     * olvida. Sustituye lo que hubiera sin leerlo: para contar un fallo, {@see self::update()}.
-     */
-    public function save(RequestOrigin $origin, OriginAttemptHistory $history, int $ttlSeconds): void;
 
     /**
      * Borra la cuenta y el bloqueo de un origen (`identity:origin-unlock`).

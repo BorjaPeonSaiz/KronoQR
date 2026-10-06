@@ -102,11 +102,6 @@ final readonly class CachePortalOriginAttempts implements PortalOriginAttempts
         });
     }
 
-    public function save(RequestOrigin $origin, OriginAttemptHistory $history, int $ttlSeconds): void
-    {
-        $this->guarded($this->keyFor($origin), fn (): bool => $this->write($origin, $history, $ttlSeconds));
-    }
-
     public function forget(RequestOrigin $origin): bool
     {
         $key = $this->keyFor($origin);
