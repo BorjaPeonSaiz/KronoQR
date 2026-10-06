@@ -13,34 +13,39 @@ el método en la sección «Método» de ese plan y en «Método de trabajo acor
 CI manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge
 commit.** Lo integra quien ejecuta el bloque si la CI está en verde.
 
-**Integrados en `main`:** bloques 0 a 11 y 15 a 20. El último, **bloque 20 «Copias: WAL cifrado, RPO e integridad»**, es la PR #112
-(`main` `d8c6320e`, 06-10-2026): formato autenticado KQE1 para volcados, copias físicas y WAL; subclave del WAL solo en `postgres`;
-RPO continuo (`wal-metrics.sh` cada minuto); `BACKUP_PATH` en solo lectura para el runtime; A3-R2 cerrada en el doc 07 con los siete
-residuos de ADR-049 registrados; `kq_path_trusted` acepta escritura de grupo solo en un grupo del sistema ajeno al uid 1000 (en Ubuntu
-`/var/log` es `root:syslog 0775`: sin esto `update.sh` se negaba a actualizar); la bandera de copias de la 2.1.0 es solo la opción
-`--accept-unauthenticated`. Decisión: **ADR-049**.
+**Integrados en `main`:** bloques 0 a 12 y 15 a 20. El último, **bloque 12 «Portal abierto a internet: PP-09 y PP-10»**, es la PR #114
+(`main` `76183531`, 06-10-2026). Decisión: **ADR-050**. En resumen: PIN de 6 u 8 cifras como ajuste auditado `IDENTITY_PIN_LENGTH`
+(los emitidos conservan la suya; quiosco y portal aceptan de 6 a 8); bloqueo por origen en `/api/v1/me/login` (20 fallos en 15 min
+desde una IP o su `/64` → 60 min, `429` con `Retry-After`, asiento `auth.origin_locked` con techo por hora, comando
+`identity:origin-unlock <ip>`, alerta `KronoqrPortalOriginLockouts` y runbook); contadores atómicos con `CacheMutex` y **reserva del
+intento antes de comparar el PIN**; 2FA obligatorio también para `responsable_departamento`; `ADMIN_INTERNAL_CIDR` opcional y vacía de
+serie; aviso de portal expuesto en instalador, actualizador y `doctor`; CORS al origen de `APP_URL`; sondas `access.*` y
+`network.admin`; doc 07 filas A-19 a A-24 (PP-09, PP-10 y R4-QA-04 cerrados).
 
-**Siguiente acción:** abrir la rama del **bloque 12** («Portal abierto a internet: PP-09 y PP-10», rama `feat/portal-internet`) desde
-`origin/main`, siguiendo el plan. Orden que queda: **12 → 12b → 12c → 21 → 22 → 13 → 14 → final.** El bloque final repone las
-etiquetas `v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0` sigue en
-local).
+**Siguiente acción:** abrir la rama del **bloque 12b** («PIN de la importación masiva», rama `fix/pin-importacion-masiva`) desde
+`origin/main`, siguiendo el plan. Orden que queda: **12b → 12c → 21 → 22 → 13 → 14 → final.** El bloque final repone las etiquetas
+`v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0` sigue en local).
+Lo ya comprobado para el 12b: el estado «pendiente» cabe en las columnas actuales (`pin_hash` e `pin_issued_at` nulos a la vez), así
+que **no hace falta migración**; el listado ya filtra por `pin_status` (bloque 9) y la ficha ya muestra el estado con el botón de
+restablecer; el trabajo está en `ApplyEmployeeImport`, en `RegisterEmployeeHandler` (hoy emite siempre el PIN) y en las pruebas
+`EmployeeImportTest` y `EmployeeImportPerformanceTest`, que afirman justo lo contrario.
 
-**Lo que destapó el cierre del bloque 20 y conviene recordar** (detalle en Engram, tema `correcciones-2.2.0/bloque-20-copias-wal`):
+**Lo que destapó el cierre del bloque 12 y conviene recordar** (detalle en Engram, tema `correcciones-2.2.0/bloque-12-portal-internet`;
+lo del bloque 20 en `correcciones-2.2.0/bloque-20-copias-wal`):
 
-- `backup-wal-e2e.sh` (⑧ paso I y ⑧b U1) nunca había pasado entero: cada corrección destapaba el siguiente fallo (semilla en el
-  paquete equivocado, `read` con `IFS` sin espacio, copia renombrada creada por root e ilegible para el uid 1000, la búsqueda de la
-  clave en `/proc/*/cmdline` que se encontraba a sí misma, el exportador sin cota tras una copia física). Los E2E que silencian
-  stderr lo guardan ahora en fichero y lo enseñan al fallar.
-- La copia previa de una actualización desde la 2.1.0 es un volcado sin autenticar: U4 de ⑧b la restaura con la bandera explícita
-  hasta que la versión mínima de origen sea ≥ 2.2.0 (R6-DV-10).
+- La CI de Pest no tiene `APP_URL`: `config/cors.php` toma el mismo valor de serie que `config/app.php` o `CorsSameOriginTest` ve un
+  comodín.
+- ⑧b compara con `origin/main`, que desde el bloque 20 ya archiva el WAL cifrado: la semilla de «WAL en claro» de `backup-wal-e2e.sh`
+  detecta si la versión anterior ya cifra y queda vacía.
+- Cada palabra nueva en un mensaje de error entra en `ErrorVocabulary` (`ErrorVocabularyCoverageTest`); en local el bind mount oculta
+  esa prueba. Y los clientes TypeScript se regeneran tras **cualquier** retoque de `openapi.yaml`, aunque sea de texto.
+- QA destapó contadores de intentos no atómicos (90 % de pérdida bajo concurrencia) y seguridad elevó a ALTO la ráfaga antes del
+  bloqueo: de ahí `CacheMutex` y la reserva antes de comparar (3 comparaciones por ráfaga de 25, antes hasta 22).
 - `TraceabilityMatrixFreshnessTest` falla en Arquitectura si se añaden pruebas sin regenerar la matriz: `make traceability` al final
-  de cada bloque, sin agentes en marcha.
-- El log de un job de la CI solo se lee, mientras el run sigue en curso, con `gh api …/actions/jobs/{id}/logs --allow-escape-sequences`.
-- La puerta `deps-audit-js` bloquea sobre producción: `source-map-js` 1.2.2 entró en este bloque por GHSA-68fv-2mgg-jv7q.
-- `PeriodReportTest` («deja constancia…») fallaba sola cuando un UUID aleatorio llevaba «480» dentro: corregido con límite de palabra.
+  de cada bloque, sin agentes en marcha. El log de un job en curso solo se lee con `gh api …/actions/jobs/{id}/logs`.
 
-**Integrado también el 06-10-2026:** PR #110 (`laravel/reverb` 1.12.0) y #111 (menores de npm), de Dependabot; y borradas las 13 ramas
-remotas de bloques ya integrados. Quedan ~36 ramas locales contenidas en `main` sin borrar (el propietario no lo pidió).
+**Integrado también el 06-10-2026:** PR #110 (`laravel/reverb` 1.12.0) y #111 (menores de npm), de Dependabot; borradas las ramas
+remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` entre bloque y bloque.
 
 > La sección «Pendiente» de más abajo es anterior al plan de correcciones de la 2.2.0 (fases 3 y 4) y no se ha revisado contra él:
 > lo que siga vigente debería pasar al plan o a «Fuera de la 2.2.0, con motivo».
@@ -364,6 +369,9 @@ remotas de bloques ya integrados. Quedan ~36 ramas locales contenidas en `main` 
 
 ### Deuda técnica anotada
 
+- **Del cierre del bloque 12 (06-10-2026):** `PinScanTest.php:266` lleva una aserción de tiempo constante que no puede fallar
+  (umbral demasiado holgado): afinarla o sustituirla por la comparación estructural de `PinScanOpenPortalTest`. Y falta un E2E que
+  cruce las tres aplicaciones: ajuste a 8 cifras en el panel → restablecer el PIN → fichaje por PIN en el quiosco → acceso al portal.
 - Falta una captura de referencia del panel con `LicenseNotice` activo y las 14 secciones (hallazgo opcional de la revisión del
   menú lateral del 10-09-2026; la duplicación `guards.ts`/`AppShellView.vue` quedó pagada en la 3.4 con `shared/ui/navigation.ts`).
 - **Rector: 227 ficheros en rojo e ignorado** en `make quality` — aplicar esas reglas o retirarlas del
