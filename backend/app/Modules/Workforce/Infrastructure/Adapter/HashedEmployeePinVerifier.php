@@ -138,7 +138,7 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
         // lee el bloqueo y, si no lo hay, anota ya este intento como fallo: los
         // intentos simultaneos que no caben antes del escalon llegan bloqueados y
         // no se comparan contra el PIN real (ADR-050, RS-12).
-        $reservation = $this->attempts->reserve($employee['uuid'] ?? null, $origin);
+        $reservation = $this->attempts->reserve($employeeCode, $employee['uuid'] ?? null, $origin);
 
         // El bloqueo solo gobierna el flujo cuando hay alguien detras: el del
         // señuelo se lee y se descarta.

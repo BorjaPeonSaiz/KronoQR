@@ -164,8 +164,8 @@ it('restablecer desbloquea el PIN inmediatamente, y en las dos puertas', functio
     // Tres intentos reservados bloquean con la politica de serie; los
     // siguientes llegan bloqueados y no anotan.
     for ($i = 0; $i < 10; $i++) {
-        $attempts->reserve($uuid, PinOrigin::KIOSK);
-        $attempts->reserve($uuid, PinOrigin::PORTAL);
+        $attempts->reserve('E-0001', $uuid, PinOrigin::KIOSK);
+        $attempts->reserve('E-0001', $uuid, PinOrigin::PORTAL);
     }
 
     expect($attempts->isLocked($uuid, PinOrigin::KIOSK))->toBeTrue()

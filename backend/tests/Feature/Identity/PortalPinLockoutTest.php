@@ -173,9 +173,9 @@ it('deja intentarlo en el portal a quien esta bloqueado en el quiosco', function
     FrozenTime::at('2026-03-14 06:00:00');
 
     $contador = app(PinAttempts::class);
-    $contador->reserve($empleado['uuid'], PinOrigin::KIOSK);
-    $contador->reserve($empleado['uuid'], PinOrigin::KIOSK);
-    $contador->reserve($empleado['uuid'], PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $empleado['uuid'], PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $empleado['uuid'], PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $empleado['uuid'], PinOrigin::KIOSK);
 
     expect($contador->isLocked($empleado['uuid'], PinOrigin::KIOSK))->toBeTrue();
 

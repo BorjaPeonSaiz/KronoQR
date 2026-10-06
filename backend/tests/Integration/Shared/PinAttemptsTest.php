@@ -56,13 +56,13 @@ it('no bloquea hasta el tercer fallo', function (): void {
     $uuid = Str::uuid7()->toString();
     $contador = contadorEn('2026-03-14 06:00:00');
 
-    $contador->reserve($uuid, PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
     expect($contador->isLocked($uuid, PinOrigin::KIOSK))->toBeFalse();
 
-    $contador->reserve($uuid, PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
     expect($contador->isLocked($uuid, PinOrigin::KIOSK))->toBeFalse();
 
-    $contador->reserve($uuid, PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
     expect($contador->isLocked($uuid, PinOrigin::KIOSK))->toBeTrue()
         ->and($contador->secondsUntilUnlock($uuid, PinOrigin::KIOSK))->toBe(300);
 })->group('RS-12', 'RF-AT-11');
@@ -75,7 +75,7 @@ it('escala a quince y a sesenta minutos con el quinto y el decimo fallo', functi
     $instante = new DateTimeImmutable('2026-03-14 06:00:00');
 
     for ($i = 0; $i < 3; $i++) {
-        contadorEn($instante->format('Y-m-d H:i:s'))->reserve($uuid, PinOrigin::KIOSK);
+        contadorEn($instante->format('Y-m-d H:i:s'))->reserve('E-0001', $uuid, PinOrigin::KIOSK);
     }
 
     $aperturas = [];
@@ -84,7 +84,7 @@ it('escala a quince y a sesenta minutos con el quinto y el decimo fallo', functi
         $contador = contadorEn($instante->format('Y-m-d H:i:s'));
         $instante = $instante->modify('+'.$contador->secondsUntilUnlock($uuid, PinOrigin::KIOSK).' seconds');
 
-        $aperturas[$fallo] = contadorEn($instante->format('Y-m-d H:i:s'))->reserve($uuid, PinOrigin::KIOSK)->openedSeconds();
+        $aperturas[$fallo] = contadorEn($instante->format('Y-m-d H:i:s'))->reserve('E-0001', $uuid, PinOrigin::KIOSK)->openedSeconds();
     }
 
     expect($aperturas)->toBe([4 => 300, 5 => 900, 6 => 900, 7 => 900, 8 => 900, 9 => 900, 10 => 3600]);
@@ -96,7 +96,7 @@ it('desbloquea cuando pasa el tiempo del escalon', function (): void {
     $contador = contadorEn('2026-03-14 06:00:00');
 
     for ($i = 0; $i < 3; $i++) {
-        $contador->reserve($uuid, PinOrigin::KIOSK);
+        $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
     }
 
     // Un segundo antes: sigue bloqueado. Un segundo despues: ya no.
@@ -114,7 +114,7 @@ it('cuenta el quiosco y el portal por separado', function (): void {
     $contador = contadorEn('2026-03-14 06:00:00');
 
     for ($i = 0; $i < 10; $i++) {
-        $contador->reserve($uuid, PinOrigin::PORTAL);
+        $contador->reserve('E-0001', $uuid, PinOrigin::PORTAL);
     }
 
     expect($contador->isLocked($uuid, PinOrigin::PORTAL))->toBeTrue()
@@ -128,7 +128,7 @@ it('cuenta cada empleado por separado', function (): void {
     $contador = contadorEn('2026-03-14 06:00:00');
 
     for ($i = 0; $i < 3; $i++) {
-        $contador->reserve($unaPersona, PinOrigin::KIOSK);
+        $contador->reserve('E-0001', $unaPersona, PinOrigin::KIOSK);
     }
 
     expect($contador->isLocked($unaPersona, PinOrigin::KIOSK))->toBeTrue()
@@ -141,12 +141,12 @@ it('olvida los fallos tras veinticuatro horas sin ninguno', function (): void {
     // esta probando PIN.
     $uuid = Str::uuid7()->toString();
 
-    contadorEn('2026-03-14 06:00:00')->reserve($uuid, PinOrigin::KIOSK);
-    contadorEn('2026-03-14 06:00:10')->reserve($uuid, PinOrigin::KIOSK);
+    contadorEn('2026-03-14 06:00:00')->reserve('E-0001', $uuid, PinOrigin::KIOSK);
+    contadorEn('2026-03-14 06:00:10')->reserve('E-0001', $uuid, PinOrigin::KIOSK);
 
     // Mas de 24 h despues, el tercer fallo es el PRIMERO que cuenta.
     $pasadoManana = contadorEn('2026-03-15 07:00:00');
-    $pasadoManana->reserve($uuid, PinOrigin::KIOSK);
+    $pasadoManana->reserve('E-0001', $uuid, PinOrigin::KIOSK);
 
     expect($pasadoManana->isLocked($uuid, PinOrigin::KIOSK))->toBeFalse();
 })->group('RS-12', 'RF-AT-11');
@@ -158,18 +158,18 @@ it('desliza la ventana con cada fallo nuevo', function (): void {
     // para frenar.
     $uuid = Str::uuid7()->toString();
 
-    contadorEn('2026-03-14 06:00:00')->reserve($uuid, PinOrigin::KIOSK);
-    contadorEn('2026-03-15 05:00:00')->reserve($uuid, PinOrigin::KIOSK);
+    contadorEn('2026-03-14 06:00:00')->reserve('E-0001', $uuid, PinOrigin::KIOSK);
+    contadorEn('2026-03-15 05:00:00')->reserve('E-0001', $uuid, PinOrigin::KIOSK);
 
     $tercero = contadorEn('2026-03-16 04:00:00');
-    $tercero->reserve($uuid, PinOrigin::KIOSK);
+    $tercero->reserve('E-0001', $uuid, PinOrigin::KIOSK);
 
     // El primero ya caduco (48 h antes de este), pero el segundo sigue dentro:
     // dos fallos vigentes, todavia sin bloqueo.
     expect($tercero->isLocked($uuid, PinOrigin::KIOSK))->toBeFalse();
 
     $cuarto = contadorEn('2026-03-16 04:00:30');
-    $cuarto->reserve($uuid, PinOrigin::KIOSK);
+    $cuarto->reserve('E-0001', $uuid, PinOrigin::KIOSK);
 
     expect($cuarto->isLocked($uuid, PinOrigin::KIOSK))->toBeTrue();
 })->group('RS-12');
@@ -182,8 +182,8 @@ it('limpiar borra las dos puertas de una vez', function (): void {
     $contador = contadorEn('2026-03-14 06:00:00');
 
     for ($i = 0; $i < 10; $i++) {
-        $contador->reserve($uuid, PinOrigin::KIOSK);
-        $contador->reserve($uuid, PinOrigin::PORTAL);
+        $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
+        $contador->reserve('E-0001', $uuid, PinOrigin::PORTAL);
     }
 
     $contador->clear($uuid);
@@ -202,8 +202,8 @@ it('lee los umbrales de la configuracion y no de constantes', function (): void 
     $uuid = Str::uuid7()->toString();
     $contador = contadorEn('2026-03-14 06:00:00');
 
-    $contador->reserve($uuid, PinOrigin::KIOSK);
-    $contador->reserve($uuid, PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
 
     expect($contador->isLocked($uuid, PinOrigin::KIOSK))->toBeTrue()
         ->and($contador->secondsUntilUnlock($uuid, PinOrigin::KIOSK))->toBe(60);
@@ -219,7 +219,7 @@ it('devuelve el bloqueo solo en el intento que lo abre, y no anota los que llega
     $reservas = [];
 
     for ($i = 0; $i < 4; $i++) {
-        $reservas[] = $contador->reserve($uuid, PinOrigin::KIOSK);
+        $reservas[] = $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
     }
 
     expect(array_map(static fn (PinAttemptReservation $r): int => $r->openedSeconds(), $reservas))->toBe([0, 0, 300, 0])
@@ -229,7 +229,7 @@ it('devuelve el bloqueo solo en el intento que lo abre, y no anota los que llega
 
     // Pasado el bloqueo, la siguiente reserva cuenta y vuelve a abrir uno: un
     // flanco nuevo, todavia del escalon 1 con cuatro fallos.
-    expect(contadorEn('2026-03-14 06:05:00')->reserve($uuid, PinOrigin::KIOSK)->openedSeconds())->toBe(300);
+    expect(contadorEn('2026-03-14 06:05:00')->reserve('E-0001', $uuid, PinOrigin::KIOSK)->openedSeconds())->toBe(300);
 })->group('RS-12', 'RF-AT-11');
 
 it('escribe la entrada tambien cuando el intento llega bloqueado', function (): void {
@@ -242,7 +242,7 @@ it('escribe la entrada tambien cuando el intento llega bloqueado', function (): 
 
     app(Cache::class)->put($clave, [$ahora - 90_000, $ahora, $ahora, $ahora], 3600);
 
-    expect(contadorEn('2026-03-14 06:00:00')->reserve($uuid, PinOrigin::PORTAL)->isLocked())->toBeTrue()
+    expect(contadorEn('2026-03-14 06:00:00')->reserve('E-0001', $uuid, PinOrigin::PORTAL)->isLocked())->toBeTrue()
         ->and(app(Cache::class)->get($clave))->toBe([$ahora, $ahora, $ahora]);
 })->group('RS-03', 'RS-12');
 
@@ -251,7 +251,7 @@ it('reserva contra el señuelo cuando no hay empleado, sin tocar a nadie', funct
     $contador = contadorEn('2026-03-14 06:00:00');
 
     for ($i = 0; $i < 4; $i++) {
-        $contador->reserve(null, PinOrigin::KIOSK);
+        $contador->reserve('NOEXISTE', null, PinOrigin::KIOSK);
     }
 
     expect(app(Cache::class)->get('workforce:pin-failures:kiosk:00000000-0000-0000-0000-000000000000'))->toHaveCount(3)
@@ -271,10 +271,10 @@ it('cuenta el fallo sin candado si otro proceso no lo suelta', function (): void
 
     $contador = contadorEn('2026-03-14 06:00:00');
 
-    $contador->reserve($uuid, PinOrigin::KIOSK);
-    $contador->reserve($uuid, PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $uuid, PinOrigin::KIOSK);
 
-    expect($contador->reserve($uuid, PinOrigin::KIOSK)->openedSeconds())->toBe(300);
+    expect($contador->reserve('E-0001', $uuid, PinOrigin::KIOSK)->openedSeconds())->toBe(300);
 
     // Cien intentos por fallo, tres fallos: la mecanica del candado la fija
     // `CacheMutexTest`; aqui, que el contador la usa con sus numeros.

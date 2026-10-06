@@ -101,6 +101,10 @@ use Illuminate\Contracts\Cache\Repository as Cache;
  * tampoco es atomico. Su nombre lleva el `employee_uuid` y la puerta, igual que la
  * clave: ni el codigo de la tarjeta ni el nombre de nadie.
  *
+ * **El del señuelo no es uno compartido**, sino uno por codigo tecleado y puerta
+ * ({@see self::decoyLockFor()}): asi una rafaga con el mismo codigo espera lo
+ * mismo exista o no, y los codigos inexistentes no se esperan entre si (RS-03).
+ *
  * **Nunca bloquea al empleado.** Solo espera quien llega mientras otro proceso
  * reserva un intento **del mismo empleado y la misma puerta**, y la espera es por
  * intentos y no por reloj. Si tras {@see self::LOCK_ATTEMPTS} intentos sigue
@@ -168,12 +172,15 @@ final readonly class CachePinAttempts implements PinAttempts
         );
     }
 
-    public function reserve(?string $employeeUuid, PinOrigin $origin): PinAttemptReservation
+    public function reserve(string $employeeCode, ?string $employeeUuid, PinOrigin $origin): PinAttemptReservation
     {
         $subject = $employeeUuid ?? self::DECOY_SUBJECT;
         $key = $this->keyFor($subject, $origin);
+        $lock = $employeeUuid === null
+            ? $this->decoyLockFor($employeeCode, $origin)
+            : $this->lockFor($employeeUuid, $origin);
 
-        return $this->mutex->guarded($this->lockFor($subject, $origin), function () use ($key, $subject, $origin): PinAttemptReservation {
+        return $this->mutex->guarded($lock, function () use ($key, $subject, $origin): PinAttemptReservation {
             $policy = $this->policy();
 
             // Leido y escrito con el candado cogido: entre las dos cosas no se
@@ -285,6 +292,34 @@ final readonly class CachePinAttempts implements PinAttempts
     private function lockFor(string $employeeUuid, PinOrigin $origin): string
     {
         return self::LOCK_PREFIX.$origin->value.':'.$employeeUuid;
+    }
+
+    /**
+     * El candado del señuelo: **uno por codigo tecleado y puerta**, no uno
+     * compartido (RS-03, regla dura 17).
+     *
+     * Con un solo candado del señuelo por puerta, todos los codigos inexistentes
+     * esperaban unos a otros y los reales no: con contienda, un codigo
+     * inexistente tardaba 5 ms por reintento mas que uno real, y eso es un
+     * oraculo de existencia. Un candado al azar por peticion lo invertia: una
+     * rafaga con el mismo codigo se serializaba si el codigo existia —en el
+     * candado de su empleado— y no si no existia. Atado al codigo, una rafaga
+     * con el mismo codigo espera lo mismo exista o no, y codigos distintos no se
+     * esperan entre si, igual que empleados distintos.
+     *
+     * Mismo numero de viajes a la cache que el candado de un empleado. Lo que
+     * ordena es la entrada compartida del señuelo, y ahi perder un incremento
+     * entre dos codigos distintos no importa: nadie esta detras.
+     *
+     * El codigo va en HMAC con la clave de la aplicacion, normalizado a
+     * minusculas como lo compara `CITEXT`: ni el codigo impreso en la tarjeta ni
+     * nada que lo devuelva entra en el nombre del candado (regla dura 21).
+     */
+    private function decoyLockFor(string $employeeCode, PinOrigin $origin): string
+    {
+        $digest = hash_hmac('sha256', mb_strtolower($employeeCode), config()->string('app.key'));
+
+        return self::LOCK_PREFIX.$origin->value.':decoy:'.$digest;
     }
 
     private function now(): int

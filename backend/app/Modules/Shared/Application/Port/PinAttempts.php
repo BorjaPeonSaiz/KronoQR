@@ -96,10 +96,16 @@ interface PinAttempts
      * candado, y una reserva simultanea o queda antes —y se borra con el resto
      * del castigo del PIN que acaba de acertarse— o despues, y cuenta.
      *
+     * **El codigo tecleado solo ordena el señuelo.** Cuando no hay empleado, el
+     * candado del señuelo es uno por codigo y puerta, para que una rafaga con un
+     * mismo codigo espere lo mismo exista o no (RS-03, regla dura 17). Con
+     * empleado no se usa: su candado va por `employee_uuid`.
+     *
+     * @param  string  $employeeCode  El codigo tal como se tecleo.
      * @param  string|null  $employeeUuid  `null` si no hay nadie con ese codigo: se reserva contra
      *                                     el señuelo, que paga el mismo trabajo y no bloquea a nadie.
      */
-    public function reserve(?string $employeeUuid, PinOrigin $origin): PinAttemptReservation;
+    public function reserve(string $employeeCode, ?string $employeeUuid, PinOrigin $origin): PinAttemptReservation;
 
     /**
      * Borra el contador de **todas** las puertas: acierto, o PIN restablecido.

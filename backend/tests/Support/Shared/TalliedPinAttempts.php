@@ -37,9 +37,9 @@ final readonly class TalliedPinAttempts implements PinAttempts
         return $this->inner->secondsUntilUnlock($employeeUuid, $origin);
     }
 
-    public function reserve(?string $employeeUuid, PinOrigin $origin): PinAttemptReservation
+    public function reserve(string $employeeCode, ?string $employeeUuid, PinOrigin $origin): PinAttemptReservation
     {
-        $reservation = $this->inner->reserve($employeeUuid, $origin);
+        $reservation = $this->inner->reserve($employeeCode, $employeeUuid, $origin);
 
         // Solo las reservas que dejan comparar contra el PIN real: las que llegan
         // con el bloqueo abierto se comparan contra el señuelo.

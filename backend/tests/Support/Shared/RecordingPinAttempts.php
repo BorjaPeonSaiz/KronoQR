@@ -46,11 +46,11 @@ final class RecordingPinAttempts implements PinAttempts
         return $this->inner->secondsUntilUnlock($employeeUuid, $origin);
     }
 
-    public function reserve(?string $employeeUuid, PinOrigin $origin): PinAttemptReservation
+    public function reserve(string $employeeCode, ?string $employeeUuid, PinOrigin $origin): PinAttemptReservation
     {
         $this->calls[] = 'reserve:'.$origin->value;
 
-        return $this->inner->reserve($employeeUuid, $origin);
+        return $this->inner->reserve($employeeCode, $employeeUuid, $origin);
     }
 
     public function clear(string $employeeUuid): void
