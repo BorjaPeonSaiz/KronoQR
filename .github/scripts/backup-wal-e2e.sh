@@ -403,13 +403,14 @@ mode_upgrade_check() {
   wait_for "[ \"\$(as_root sh -c \"ls '${WAL_DIR}'/*.gz 2>/dev/null | wc -l\")\" = '0' ]" 120 "los .gz heredados se cifran en sitio"
   ok "0 segmentos en claro"
   [ -f "${SEED_FILE}" ] || fail "falta ${SEED_FILE} (modo upgrade-seed)"
-  while read -r _ nombre; do
+  # La semilla es «epoca ruta» separado por espacio, y el IFS de este script no lo lleva.
+  while IFS=" " read -r _ nombre; do
     nombre="$(basename "${nombre}" .gz)"
     as_root test -f "${WAL_DIR}/${nombre}.gz.enc" || fail "falta ${nombre}.gz.enc"
     as_root head -n 1 "${WAL_DIR}/${nombre}.gz.enc" | grep -qE ' src=legacy$' || fail "${nombre}.gz.enc no lleva src=legacy"
   done <"${SEED_FILE}"
   ok "los heredados estan cifrados con src=legacy"
-  while read -r epoch nombre; do
+  while IFS=" " read -r epoch nombre; do
     nombre="$(basename "${nombre}" .gz)"
     [ "$(as_root stat -c %Y "${WAL_DIR}/${nombre}.gz.enc")" = "${epoch}" ] || fail "${nombre}.gz.enc no conserva la fecha del .gz (la purga lo retendria mas)"
   done <"${SEED_FILE}"
