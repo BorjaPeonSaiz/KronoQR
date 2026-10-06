@@ -50,7 +50,7 @@ Assuming the URL `https://fichaje.tuhotel.local`:
 | `/kiosk/` | The tablets' PWA | **Only the kiosk VLAN** | **You** (VLAN and firewall) |
 | `/api/v1/scan`, `/api/v1/scan/batch`, `/api/v1/scan/pin` | The tablets, when clocking in | **Only the kiosk VLAN** | **You**. The product **raises the limit** inside `KIOSK_VLAN_CIDR` (§1.4); it does not restrict access |
 | `/api/v1/kiosk/*` (pairing, roster, heartbeat) | The tablets | **Only the kiosk VLAN**. The first two pairing routes —`POST /api/v1/kiosk/pair` and `/pair/claim`— are served **unauthenticated**: see §10 | **You** |
-| `/admin/` and the management API (`/api/v1/auth/*` and the rest of `/api/v1/*`) | The HR and IT panel | **Only the internal network or the VPN. Never the internet** | **You.** The product does **not** filter these paths by range |
+| `/admin/` and the management API (`/api/v1/auth/*` and the rest of `/api/v1/*`) | The HR and IT panel | **Only the internal network or the VPN. Never the internet** | **You**, with the VLAN and the firewall. **Optionally the product**: with `ADMIN_INTERNAL_CIDR` in the `.env` (§1.2), `/admin/` and `/api/v1/auth/*` answer `403` outside that range; empty by default, it does not filter. The rest of `/api/v1/*` is not filtered by range |
 | `/portal/` and `/api/v1/me/*` | The employee portal | Only `PORTAL_INTERNAL_CIDR`; any other origin receives `403` at the edge | **The product** |
 | `/metrics` | The metrics collector | Only `METRICS_ALLOW_CIDR`; any other origin receives `403` | **The product** |
 | `/api/v1/health`, `/api/v1/ready`, `/healthz` | Probes and `doctor` | Internal network. **Unauthenticated**: see §10 | **You** |
@@ -75,9 +75,21 @@ docker compose ps --format 'table {{.Service}}\t{{.Ports}}'
 
 ### 1.2 What the product filters, and what you have to filter
 
-Say it out loud before going on: **the product restricts the employee portal
-and the metrics by range, and nothing else.** The panel, the management API and
-the kiosk path are served to whoever reaches port 443.
+Say it out loud before going on: **by default, the product restricts the
+employee portal and the metrics by range, and nothing else.** The panel, the
+management API and the kiosk path are served to whoever reaches port 443.
+
+**`ADMIN_INTERNAL_CIDR` (optional, empty by default).** If you fill it in with the
+hotel LAN or your VPN, nginx answers `403` to `/admin/` and `/api/v1/auth/*` from
+any other origin, before reaching the application. **Empty, the panel and the
+staff authentication are open to whoever reaches port 443**, and that is what
+matters most if you open the portal to the internet
+(`PORTAL_INTERNAL_CIDR=0.0.0.0/0`): the portal and the panel share host and
+port, so the panel is in plain sight too. The second factor is only mandatory
+for administration, HR and audit: a department manager, who corrects workdays,
+signs in with the password alone. What remains is the limit of 5 requests per
+minute on authentication and the account lockout. To open only the portal, fill
+in `ADMIN_INTERNAL_CIDR`. It does not affect the portal or the kiosks.
 
 This is not an oversight. The edge does not know what your network is and
 cannot guess it without an over-permissive default ending up as everyone's. You

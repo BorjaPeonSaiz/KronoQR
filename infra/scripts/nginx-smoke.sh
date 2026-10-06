@@ -52,10 +52,12 @@ readonly CIDR_PORTAL="10.90.0.0/24"
 
 CONTENEDOR=""
 CONTENEDOR_PROXY=""
+CONTENEDOR_ADMIN=""
 
 al_salir() {
   [ -n "${CONTENEDOR}" ] && docker rm -f "${CONTENEDOR}" >/dev/null 2>&1
   [ -n "${CONTENEDOR_PROXY}" ] && docker rm -f "${CONTENEDOR_PROXY}" >/dev/null 2>&1
+  [ -n "${CONTENEDOR_ADMIN}" ] && docker rm -f "${CONTENEDOR_ADMIN}" >/dev/null 2>&1
   return 0
 }
 
@@ -224,6 +226,44 @@ proxy_de_confianza() {
   con_xff "${puerto}" /portal/ 203.0.113.9 403 "proxy de confianza: origen declarado fuera del portal"
 }
 
+# PP-10. Tercer borde, con ADMIN_INTERNAL_CIDR definida a un rango que no incluye
+# a este anfitrion: /admin/ y /api/v1/auth/* dan 403 (problem+json en la API), y
+# lo que no es del panel —el portal con su propio rango, /healthz— no cambia. El
+# borde principal, con la variable vacia, ya ha comprobado arriba que /admin/
+# sigue abierto (200).
+panel_cerrado() {
+  local puerto="$((PUERTO + 2))" contenedor _espera
+
+  contenedor="$(docker run -d --name "${NOMBRE}-admin" \
+    -e KIOSK_VLAN_CIDR=10.92.0.0/24 \
+    -e PORTAL_INTERNAL_CIDR=0.0.0.0/0 \
+    -e METRICS_ALLOW_CIDR=10.91.0.5/32 \
+    -e ADMIN_INTERNAL_CIDR="${CIDR_PORTAL}" \
+    -e TLS_ALLOW_SELF_SIGNED=true \
+    -e TLS_CERT_FILE=/etc/nginx/certs/tls.crt \
+    -e TLS_KEY_FILE=/etc/nginx/certs/tls.key \
+    -e NGINX_CLIENT_MAX_BODY_SIZE=8m \
+    --add-host app:127.0.0.1 --add-host reverb:127.0.0.1 \
+    -p "${puerto}:8443" "${IMAGEN}")"
+  CONTENEDOR_ADMIN="${contenedor}"
+
+  for _espera in $(seq 1 30); do
+    [ "$(docker inspect -f '{{.State.Health.Status}}' "${contenedor}" 2>/dev/null || echo x)" = "healthy" ] && break
+    if [ "$(docker inspect -f '{{.State.Running}}' "${contenedor}" 2>/dev/null || echo false)" != "true" ]; then
+      printf '  [FALLA] el borde con ADMIN_INTERNAL_CIDR no ha arrancado. Su registro:\n' >&2
+      docker logs "${contenedor}" 2>&1 | tail -20 >&2
+      fallo=1
+      return 0
+    fi
+    sleep 1
+  done
+
+  con_xff "${puerto}" /admin/ 10.90.0.9 403 "panel cerrado: fuera del rango"
+  con_xff "${puerto}" /api/v1/auth/login 10.90.0.9 403 "autenticacion cerrada: fuera del rango"
+  con_xff "${puerto}" /portal/ 10.90.0.9 200 "con el panel cerrado, el portal sigue su propio rango"
+  con_xff "${puerto}" /healthz 10.90.0.9 200 "con el panel cerrado, /healthz responde"
+}
+
 main() {
   [ "$#" -le 1 ] || {
     printf 'Uso: nginx-smoke.sh [IMAGEN]\n' >&2
@@ -351,6 +391,7 @@ main() {
   comprobar /admin/ 200 '<!doctype html'
 
   proxy_de_confianza
+  panel_cerrado
 
   if [ "${fallo}" -ne 0 ]; then
     printf '\nEl borde no responde lo que debe. Registro de errores:\n' >&2

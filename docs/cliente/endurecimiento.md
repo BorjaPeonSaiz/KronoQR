@@ -50,7 +50,7 @@ Suponiendo la URL `https://fichaje.tuhotel.local`:
 | `/kiosk/` | La PWA de las tablets | **Solo la VLAN de quioscos** | **Tú** (VLAN y cortafuegos) |
 | `/api/v1/scan`, `/api/v1/scan/batch`, `/api/v1/scan/pin` | Las tablets, al fichar | **Solo la VLAN de quioscos** | **Tú**. El producto **eleva el límite** dentro de `KIOSK_VLAN_CIDR` (§1.4); no restringe el acceso |
 | `/api/v1/kiosk/*` (emparejamiento, padrón, latido) | Las tablets | **Solo la VLAN de quioscos**. Las dos primeras del emparejamiento —`POST /api/v1/kiosk/pair` y `/pair/claim`— se sirven **sin autenticar**: ver §10 | **Tú** |
-| `/admin/` y la API de gestión (`/api/v1/auth/*` y el resto de `/api/v1/*`) | El panel de RRHH y de IT | **Solo la red interna o la VPN. Nunca internet** | **Tú.** El producto **no** filtra estas rutas por rango |
+| `/admin/` y la API de gestión (`/api/v1/auth/*` y el resto de `/api/v1/*`) | El panel de RRHH y de IT | **Solo la red interna o la VPN. Nunca internet** | **Tú**, con VLAN y cortafuegos. **Opcionalmente el producto**: con `ADMIN_INTERNAL_CIDR` en el `.env` (§1.2), `/admin/` y `/api/v1/auth/*` reciben `403` fuera de ese rango; vacía de serie, no filtra. El resto de `/api/v1/*` no se filtra por rango |
 | `/portal/` y `/api/v1/me/*` | El portal del empleado | Solo `PORTAL_INTERNAL_CIDR`; cualquier otro origen recibe `403` en el borde | **El producto** |
 | `/metrics` | El recolector de métricas | Solo `METRICS_ALLOW_CIDR`; cualquier otro origen recibe `403` | **El producto** |
 | `/api/v1/health`, `/api/v1/ready`, `/healthz` | Sondas y `doctor` | Red interna. **Sin autenticar**: ver §10 | **Tú** |
@@ -74,9 +74,22 @@ docker compose ps --format 'table {{.Service}}\t{{.Ports}}'
 
 ### 1.2 Lo que filtra el producto, y lo que tienes que filtrar tú
 
-Dilo en voz alta antes de seguir: **el producto restringe por rango el portal
-del empleado y las métricas, y nada más.** El panel, la API de gestión y el
-camino del quiosco se sirven a quien alcance el puerto 443.
+Dilo en voz alta antes de seguir: **de serie, el producto restringe por rango el
+portal del empleado y las métricas, y nada más.** El panel, la API de gestión y
+el camino del quiosco se sirven a quien alcance el puerto 443.
+
+**`ADMIN_INTERNAL_CIDR` (opcional, vacía de serie).** Si la rellenas con la LAN
+del hotel o tu VPN, nginx responde `403` a `/admin/` y a `/api/v1/auth/*` desde
+cualquier otro origen, antes de llegar a la aplicación. **Vacía, el panel y la
+autenticación del personal quedan abiertos a quien alcance el puerto 443**, y
+eso es lo que más importa si abres el portal a internet
+(`PORTAL_INTERNAL_CIDR=0.0.0.0/0`): el portal y el panel comparten host y
+puerto, así que el panel también queda a la vista. El segundo factor solo es
+obligatorio para administración, RRHH y auditoría: un responsable de
+departamento, que corrige jornadas, entra con la contraseña sola. Lo que
+queda es el límite de 5 peticiones por minuto en la autenticación y el bloqueo
+de cuenta. Para abrir solo el portal, rellena `ADMIN_INTERNAL_CIDR`. No
+afecta al portal ni a los quioscos.
 
 No es un descuido. El borde no sabe cuál es tu red y no puede adivinarla sin
 que un valor por defecto demasiado abierto acabe siendo el de todos. La

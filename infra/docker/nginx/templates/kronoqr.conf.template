@@ -87,6 +87,25 @@ geo $kronoqr_portal_allowed {
 }
 
 #------------------------------------------------------------------------------
+# Panel de gestion y su autenticacion, restringibles por red — PP-10 (2.2.0)
+#------------------------------------------------------------------------------
+# El portal y el panel comparten host y puerto 443. Con el portal abierto a
+# internet (PORTAL_INTERNAL_CIDR=0.0.0.0/0), `/admin/` y `/api/v1/auth/*`
+# —donde se autentican administracion, RRHH, auditoria y los responsables de
+# departamento— quedarian igual de alcanzables.
+#
+# ADMIN_INTERNAL_CIDR, OPCIONAL, cierra las dos rutas por rango. VACIA (el valor
+# de serie) NO filtra: es una decision del propietario, y el riesgo esta
+# documentado en .env.example y docs/cliente/endurecimiento.md. Vacia o con
+# valor, la rinde `07-kronoqr-admin-net.envsh` en KRONOQR_ADMIN_ALLOWED_CIDR
+# (0.0.0.0/0 cuando no hay filtro), para que el `geo` nunca quede con una
+# entrada rota. No cubre `/api/v1/me/*` (portal) ni `/api/v1/scan*` (quioscos).
+geo $kronoqr_admin_allowed {
+  default 0;
+  ${KRONOQR_ADMIN_ALLOWED_CIDR} 1;
+}
+
+#------------------------------------------------------------------------------
 # Compresion — PT-P2 (2.2.0)
 #------------------------------------------------------------------------------
 # Sin esto el bundle de cada SPA viajaba en claro: en la Wi-Fi de una tablet, la
@@ -319,7 +338,13 @@ server {
   }
 
   #--- Autenticacion del panel: 5 r/m ----------------------------------------
+  # PP-10: con ADMIN_INTERNAL_CIDR definida, fuera de su rango 403 antes de
+  # llegar a PHP-FPM; vacia, no filtra.
   location ^~ /api/v1/auth/ {
+    if ($kronoqr_admin_allowed = 0) {
+      return 403;
+    }
+    error_page 403 @kronoqr_admin_forbidden;
     limit_req zone=auth burst=5 nodelay;
     include /etc/nginx/snippets/api-error-pages.conf;
     include /etc/nginx/snippets/php-fpm.conf;
@@ -350,6 +375,16 @@ server {
     include /etc/nginx/snippets/security-headers.conf;
     add_header Cache-Control "no-store" always;
     return 403 '{"type":"urn:kronoqr:problem:forbidden","title":"Acceso no permitido desde esta red / Access not allowed from this network","status":403,"detail":"Accede desde la red del hotel o consulta con RRHH. / Connect from the hotel network or contact HR."}';
+  }
+
+  # Cuerpo del 403 del panel fuera de ADMIN_INTERNAL_CIDR (PP-10): el mismo
+  # problem+json bilingue, sin PII ni CIDR. Lo usan la API de autenticacion y
+  # los ficheros de /admin/ (spa.conf). ASCII, como el resto de la plantilla.
+  location @kronoqr_admin_forbidden {
+    default_type application/problem+json;
+    include /etc/nginx/snippets/security-headers.conf;
+    add_header Cache-Control "no-store" always;
+    return 403 '{"type":"urn:kronoqr:problem:forbidden","title":"Acceso no permitido desde esta red / Access not allowed from this network","status":403,"detail":"Accede al panel desde la red del hotel o consulta con TI. / Connect to the admin panel from the hotel network or contact IT."}';
   }
 
   # Pagina estatica del 403 del portal (la usa spa.conf). Interna: no se puede

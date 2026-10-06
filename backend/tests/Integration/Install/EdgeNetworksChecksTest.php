@@ -523,3 +523,26 @@ it('PP-03: el borde recibe TRUSTED_PROXY_CIDR y la plantilla la rinde', function
         ->and($plantilla)->not->toMatch('/^\s*set_real_ip_from\s/m')
         ->and($plantilla)->not->toMatch('/^\s*real_ip_header\s/m');
 })->group('RF-PD-02', 'RS-02');
+
+it('PP-10: el borde recibe ADMIN_INTERNAL_CIDR, la rinde sin dejar el geo roto y la usan el panel y la autenticacion', function (): void {
+    $compose = (string) file_get_contents(Repo::file('infra/compose.prod.yaml'));
+    $plantilla = (string) file_get_contents(Repo::file('infra/docker/nginx/templates/kronoqr.conf.template'));
+    $spa = (string) file_get_contents(Repo::file('infra/docker/nginx/extra/spa.conf'));
+    $envExample = (string) file_get_contents(Repo::file('.env.example'));
+
+    preg_match('/\n  nginx:\n.*?\n    environment:\n(.*?)\n    ports:/s', $compose, $m);
+
+    expect($m[1] ?? '')->toMatch('/^      ADMIN_INTERNAL_CIDR:$/m')
+        // El geo lee la variable YA RENDIDA (0.0.0.0/0 si esta vacia), nunca la cruda:
+        // vacia daria una entrada `geo` rota y nginx no arrancaria.
+        ->and($plantilla)->toContain('${KRONOQR_ADMIN_ALLOWED_CIDR} 1;')
+        ->and($plantilla)->not->toContain('${ADMIN_INTERNAL_CIDR}')
+        ->and($plantilla)->toMatch('/location \^~ \/api\/v1\/auth\/ \{\s+if \(\$kronoqr_admin_allowed = 0\) \{\s+return 403;/')
+        ->and($spa)->toMatch('/location \^~ \/admin\/ \{[^}]*\$kronoqr_admin_allowed = 0/s')
+        // Por defecto abierta: vacia en .env.example.
+        ->and($envExample)->toMatch('/^ADMIN_INTERNAL_CIDR=$/m');
+
+    $envsh = (string) file_get_contents(Repo::file('infra/docker/nginx/docker-entrypoint.d/07-kronoqr-admin-net.envsh'));
+
+    expect($envsh)->toContain('KRONOQR_ADMIN_ALLOWED_CIDR="${ADMIN_INTERNAL_CIDR:-0.0.0.0/0}"');
+})->group('RS-02', 'RF-PD-02');

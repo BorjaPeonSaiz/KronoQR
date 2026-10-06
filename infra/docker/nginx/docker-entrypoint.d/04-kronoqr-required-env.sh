@@ -91,6 +91,17 @@ for variable in KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR METRICS_ALLOW_CIDR; do
   fi
 done
 
+# ADMIN_INTERNAL_CIDR (PP-10) es OPCIONAL: vacia, `/admin/` y `/api/v1/auth/*` no se
+# filtran; con valor, UN solo CIDR IPv4 (la misma sintaxis que las tres redes).
+if [ -n "${ADMIN_INTERNAL_CIDR:-}" ]; then
+  visible="${ADMIN_INTERNAL_CIDR//[^0-9A-Za-z./: ,-]/?}"
+  if ! [[ "${ADMIN_INTERNAL_CIDR}" =~ ${CIDR_IPV4} ]]; then
+    log "error" "ADMIN_INTERNAL_CIDR='${visible}' no es un CIDR IPv4 valido (se espera a.b.c.d/n, por ejemplo 10.20.0.0/24, con un solo rango)."
+    log "error" "Que hacer: corrige ADMIN_INTERNAL_CIDR en el .env de la instalacion, o dejala vacia para no filtrar el panel por red. Una direccion suelta se escribe con /32; IPv6 no se admite. Explicado en docs/cliente/endurecimiento.md."
+    invalidas=1
+  fi
+fi
+
 # Opcional: solo se valida si viene. Una lista con comas, un CIDR por elemento.
 if [ -n "${TRUSTED_PROXY_CIDR:-}" ]; then
   visible="${TRUSTED_PROXY_CIDR//[^0-9A-Za-z./: ,-]/?}"
@@ -115,6 +126,12 @@ fi
 
 if [ "${invalidas}" -ne 0 ]; then
   exit 1
+fi
+
+if [ -n "${ADMIN_INTERNAL_CIDR:-}" ]; then
+  log "info" "ADMIN_INTERNAL_CIDR definida: /admin/ y /api/v1/auth/ solo se sirven a ese rango."
+else
+  log "info" "ADMIN_INTERNAL_CIDR vacia: /admin/ y /api/v1/auth/ no se filtran por red (decision del propietario, ver docs/cliente/endurecimiento.md)."
 fi
 
 if [ "${PORTAL_INTERNAL_CIDR}" = "0.0.0.0/0" ]; then

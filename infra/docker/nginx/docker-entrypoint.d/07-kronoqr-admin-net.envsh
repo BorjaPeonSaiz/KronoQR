@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# KronoQR — red desde la que se admite el panel de gestion y su autenticacion
+# (PP-10, 2.2.0).
+#
+# ES UN `.envsh` por la misma razon que `06-kronoqr-real-ip.envsh`: solo lo que
+# se CARGA deja variables en el entorno que lee el `20-envsubst-on-templates.sh`
+# de la imagen base. Aqui se rinde KRONOQR_ADMIN_ALLOWED_CIDR, que la plantilla
+# `kronoqr.conf.template` pone en el `geo $kronoqr_admin_allowed`.
+#
+# POR QUE NO BASTA CON `${ADMIN_INTERNAL_CIDR}` EN EL `geo`. ADMIN_INTERNAL_CIDR
+# es OPCIONAL y, vacia, el panel queda abierto (decision del propietario): una
+# entrada `geo` sin rango («  1;») es una directiva rota y nginx no arranca.
+# Vacia se rinde 0.0.0.0/0, que es exactamente «sin filtro». Con valor, el rango
+# tal cual; `04-kronoqr-required-env.sh` ya ha validado su sintaxis.
+#
+# `set -eu` y no `pipefail`: se carga dentro del shell del punto de entrada (ver
+# el 03 y el 06).
+
+set -eu
+
+KRONOQR_ADMIN_ALLOWED_CIDR="${ADMIN_INTERNAL_CIDR:-0.0.0.0/0}"
+export KRONOQR_ADMIN_ALLOWED_CIDR
