@@ -12,6 +12,8 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\RecordingPinMetrics;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -21,8 +23,10 @@ use Tests\Support\Workforce\WorkforceFixtures;
  *
  * Las cuatro afirmaciones que esta tarea existe para sostener:
  *
- *   1. Un empleado sin PIN no puede existir: el alta lo emite en la misma
- *      transaccion.
+ *   1. El alta individual no deja a nadie sin PIN: lo emite en la misma
+ *      transaccion. Solo la importacion masiva lo deja pendiente (RF-GP-05), y
+ *      la primera emision de un pendiente es un `pin.issued`, no un
+ *      restablecimiento: ni en `audit_log` ni en `pin_resets_total`.
  *   2. El PIN se muestra UNA vez. Volver a pedir la ficha no lo devuelve.
  *   3. Restablecer invalida el anterior y DESBLOQUEA: quien pide un PIN nuevo
  *      tiene que poder usarlo en el momento (RS-12).
@@ -84,9 +88,10 @@ it('emite el PIN en el alta y lo devuelve una sola vez', function (): void {
     expect($ficha->json('pin'))->toBeNull();
 })->group('RF-ID-09', 'RF-GP-01', 'RL-05');
 
-it('no deja existir a un empleado sin PIN', function (): void {
-    // La invariante completa: no hay ningun camino del alta que deje `pin_hash`
-    // a nulo, tampoco el del empleado sin correo ni el del alta sin departamento.
+it('no deja a nadie sin PIN en el alta individual', function (): void {
+    // Ningun camino del alta individual deja `pin_hash` a nulo, tampoco el del
+    // empleado sin correo ni el del alta sin departamento. La importacion
+    // masiva si lo deja pendiente, y eso lo prueba `EmployeeImportTest`.
     $context = pinContext();
 
     foreach ([['first_name' => 'Youssef', 'last_name' => 'Amrani'], ['first_name' => 'Lucia', 'last_name' => 'Ferrer', 'email' => 'lucia@hotel.example']] as $extra) {
@@ -311,3 +316,97 @@ it('no acepta que el cliente proponga un PIN', function (): void {
 
     expect(Hash::check('123456', $hash))->toBeFalse();
 })->group('RF-ID-09');
+
+// -----------------------------------------------------------------------------
+// Primera emision de un PIN pendiente (RF-GP-05, bloque 12b)
+// -----------------------------------------------------------------------------
+
+it('emitir el PIN de un pendiente deja pin.issued y ningun pin.reset', function (): void {
+    // Quien llega por la importacion masiva nace sin PIN. Su primer PIN no
+    // sustituye a ninguno: un `pin.reset` contaria en el registro la historia
+    // de un PIN que nunca existio.
+    $context = pinContext();
+    $pendiente = WorkforceFixtures::employee($context['site']);
+
+    Api::as($context['token'])->post('/api/v1/employees/'.$pendiente.'/pin/reset')
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('employee_uuid', $pendiente)
+        ->assertJsonPath('pin_status', 'issued');
+
+    expect(DB::table('audit_log')->where('action', 'pin.issued')->count())->toBe(1)
+        ->and(DB::table('audit_log')->where('action', 'pin.reset')->count())->toBe(0);
+})->group('RF-ID-09', 'RF-GP-05', 'RL-04');
+
+it('emitir el PIN de un pendiente no cuenta como restablecimiento', function (): void {
+    // `pin_resets_total{site}` mide PIN que no llegan a la gente; una temporada
+    // de contrataciones por importacion no puede parecerse a eso.
+    $metrics = new RecordingPinMetrics;
+    app()->instance(PinMetrics::class, $metrics);
+    $context = pinContext();
+    $pendiente = WorkforceFixtures::employee($context['site']);
+
+    Api::as($context['token'])->post('/api/v1/employees/'.$pendiente.'/pin/reset')->assertValidResponse(200);
+
+    expect($metrics->resets)->toBe([]);
+})->group('RF-ID-09', 'RF-GP-05');
+
+it('restablecer un PIN emitido sigue dejando pin.reset', function (): void {
+    $context = pinContext();
+    $conPin = WorkforceFixtures::employee($context['site']);
+    EmployeePins::issue($conPin, PortalLogins::PIN);
+
+    Api::as($context['token'])->post('/api/v1/employees/'.$conPin.'/pin/reset')->assertValidResponse(200);
+
+    expect(DB::table('audit_log')->where('action', 'pin.reset')->count())->toBe(1)
+        ->and(DB::table('audit_log')->where('action', 'pin.issued')->count())->toBe(0);
+})->group('RF-ID-09', 'RL-04');
+
+it('restablecer un PIN emitido sigue contando como restablecimiento', function (): void {
+    $metrics = new RecordingPinMetrics;
+    app()->instance(PinMetrics::class, $metrics);
+    $context = pinContext();
+    $conPin = WorkforceFixtures::employee($context['site']);
+    EmployeePins::issue($conPin, PortalLogins::PIN);
+
+    Api::as($context['token'])->post('/api/v1/employees/'.$conPin.'/pin/reset')->assertValidResponse(200);
+
+    expect($metrics->resets)->toBe([$context['site'] => 1]);
+})->group('RF-ID-09');
+
+it('el primer PIN de un pendiente entra al portal con seis cifras de serie', function (): void {
+    $context = pinContext();
+    $pendiente = WorkforceFixtures::employee($context['site']);
+
+    $pin = Api::as($context['token'])->post('/api/v1/employees/'.$pendiente.'/pin/reset')
+        ->assertValidResponse(200)
+        ->json('pin');
+
+    expect($pin)->toBeString()->toMatch('/^[0-9]{6}$/')
+        ->and(DB::table('employees')->where('uuid', $pendiente)->value('pin_length'))->toBe(6);
+
+    Api::guest()->post('/api/v1/me/login', [
+        'employee_code' => EmployeePins::codeOf($pendiente),
+        'pin' => $pin,
+    ])->assertValidResponse(200);
+})->group('RF-ID-09', 'RF-GP-05', 'RF-ID-06');
+
+it('el primer PIN de un pendiente sale con la longitud configurada y entra al portal', function (): void {
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->patch('/api/v1/settings', ['settings' => ['IDENTITY_PIN_LENGTH' => '8']])
+        ->assertValidResponse(200);
+    $context = pinContext();
+    $pendiente = WorkforceFixtures::employee($context['site']);
+
+    $pin = Api::as($context['token'])->post('/api/v1/employees/'.$pendiente.'/pin/reset')
+        ->assertValidResponse(200)
+        ->json('pin');
+
+    expect($pin)->toBeString()->toMatch('/^[0-9]{8}$/')
+        ->and(DB::table('employees')->where('uuid', $pendiente)->value('pin_length'))->toBe(8);
+
+    Api::guest()->post('/api/v1/me/login', [
+        'employee_code' => EmployeePins::codeOf($pendiente),
+        'pin' => $pin,
+    ])->assertValidResponse(200);
+})->group('RF-ID-09', 'RF-GP-05', 'RF-ID-06');

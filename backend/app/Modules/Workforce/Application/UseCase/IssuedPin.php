@@ -25,5 +25,14 @@ final readonly class IssuedPin
         public string $employeeUuid,
         public string $pin,
         public DateTimeImmutable $issuedAt,
+        /**
+         * Sustituyo a un PIN que ya existia: el asiento fue `pin.reset`.
+         *
+         * `false` en el alta individual y en la primera emision de un PIN
+         * pendiente —una persona importada, al entregarle la tarjeta—, aunque
+         * se pidiera desde «restablecer». Lo lee el restablecimiento para no
+         * contar en `pin_resets_total` lo que no fue un restablecimiento.
+         */
+        public bool $replacedPrevious,
     ) {}
 }

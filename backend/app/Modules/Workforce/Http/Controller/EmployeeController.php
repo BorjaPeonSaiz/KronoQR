@@ -19,6 +19,7 @@ use App\Modules\Workforce\Http\Resource\EmployeeResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use LogicException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -118,7 +119,12 @@ final class EmployeeController extends Controller
         // lleva la ficha y el PIN, y es la unica vez que ese PIN se muestra.
         $registered = $handler->handle($request->toCommand());
 
-        return (new EmployeeProvisionedResource($registered))
+        // El comando del alta individual nunca difiere el PIN (solo la
+        // importacion masiva puede): un nulo aqui es una incoherencia del caso
+        // de uso, no una respuesta que dar.
+        $pin = $registered->pin ?? throw new LogicException('El alta individual ha terminado sin emitir el PIN del empleado.');
+
+        return (new EmployeeProvisionedResource($registered->employee, $pin))
             ->response()
             ->setStatusCode(JsonResponse::HTTP_CREATED);
     }

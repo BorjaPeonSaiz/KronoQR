@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CredentialRowActions from '@/features/credentials/CredentialRowActions.vue'
 import es from '@/shared/i18n/locales/es.json'
-import { CREDENTIAL_UUID, boardRow, credential } from './support/fixtures'
+import { CREDENTIAL_UUID, EMPLOYEE_UUID, boardRow, credential, employee } from './support/fixtures'
 import { buttonWith, jsonResponse, mountView, settle, stubFetch } from './support/harness'
 
 /** El refresco que haria quien contiene el componente, cuando a la prueba no le importa. */
@@ -237,5 +237,92 @@ describe('CredentialRowActions', () => {
 
     expect(wrapper.find('[role="alert"]').text()).toContain(es.errors.network.title)
     expect(onChanged).not.toHaveBeenCalled()
+  })
+
+  describe('confirmacion de la entrega y estado del PIN', () => {
+    function stubEmployee(pinStatus: 'pending' | 'issued' | 'delivered'): void {
+      stubFetch((url) =>
+        url.endsWith(`/employees/${EMPLOYEE_UUID}`)
+          ? jsonResponse(employee({ pin_status: pinStatus }))
+          : jsonResponse(credential()),
+      )
+    }
+
+    async function openDeliver(): Promise<Awaited<ReturnType<typeof mountView>>> {
+      const wrapper = await mountView(CredentialRowActions, {
+        props: { row: boardRow({ status: 'pending_delivery' }), onChanged: noopChanged },
+      })
+
+      await buttonWith(wrapper, es.credentials.actions.deliver).trigger('click')
+      await settle()
+
+      return wrapper
+    }
+
+    it('con el PIN pendiente avisa, enlaza a la ficha y no dice que se entrega el PIN', async () => {
+      stubEmployee('pending')
+
+      const wrapper = await openDeliver()
+
+      expect(wrapper.find('[data-test="deliver-pin-pending"]').text()).toContain(
+        es.credentials.confirm.deliver.pinPending,
+      )
+      expect(wrapper.find('[data-test="deliver-pin-pending-link"]').attributes('href')).toContain(
+        `/employees/${EMPLOYEE_UUID}`,
+      )
+      expect(wrapper.find('[data-test="deliver-sheet-reminder"]').text()).toBe(
+        es.credentials.confirm.deliver.sheetReminderNoPin,
+      )
+      expect(wrapper.find('[data-test="deliver-sheet-reminder"]').text()).not.toContain('PIN y')
+    })
+
+    it.each(['issued', 'delivered'] as const)(
+      'con el PIN %s mantiene el recordatorio actual y no avisa',
+      async (pinStatus) => {
+        stubEmployee(pinStatus)
+
+        const wrapper = await openDeliver()
+
+        expect(wrapper.find('[data-test="deliver-pin-pending"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="deliver-pin-pending-link"]').exists()).toBe(false)
+        expect(wrapper.find('[data-test="deliver-sheet-reminder"]').text()).toBe(
+          es.credentials.confirm.deliver.sheetReminder,
+        )
+      },
+    )
+
+    it('si no puede leer la ficha (403) muestra el recordatorio generico y deja entregar', async () => {
+      stubFetch((url) =>
+        url.endsWith(`/employees/${EMPLOYEE_UUID}`)
+          ? jsonResponse({ title: 'Forbidden', status: 403 }, 403)
+          : jsonResponse(credential()),
+      )
+
+      const wrapper = await openDeliver()
+
+      expect(wrapper.find('[data-test="deliver-pin-pending"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="deliver-sheet-reminder"]').text()).toBe(
+        es.credentials.confirm.deliver.sheetReminder,
+      )
+      expect(
+        buttonWith(wrapper, es.credentials.confirm.deliver.action).attributes('disabled'),
+      ).toBeUndefined()
+    })
+
+    it('si la lectura falla por red no bloquea la entrega', async () => {
+      stubFetch(() => {
+        throw new TypeError('Failed to fetch')
+      })
+
+      const wrapper = await openDeliver()
+
+      expect(wrapper.find('[data-test="deliver-pin-checking"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="deliver-sheet-reminder"]').text()).toBe(
+        es.credentials.confirm.deliver.sheetReminder,
+      )
+      expect(
+        buttonWith(wrapper, es.credentials.confirm.deliver.action).attributes('disabled'),
+      ).toBeUndefined()
+    })
   })
 })

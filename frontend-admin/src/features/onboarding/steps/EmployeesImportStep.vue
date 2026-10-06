@@ -83,6 +83,7 @@ async function apply(): Promise<void> {
       mode: 'apply',
       confirmChecksum: report.value.file.sha256,
     })
+    setup.importedWithoutPin += report.value.summary.create
   } catch (caught) {
     error.value = caught
   } finally {
@@ -194,6 +195,20 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
           applied
             ? t('onboarding.steps.employees.appliedSummary', report.summary)
             : t('onboarding.steps.employees.validatedSummary', report.summary)
+        }}
+      </p>
+
+      <p
+        v-if="applied && report.summary.create > 0"
+        class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
+        data-test="no-pin-notice"
+      >
+        {{
+          t(
+            'onboarding.steps.employees.noPinNotice',
+            { count: report.summary.create },
+            report.summary.create,
+          )
         }}
       </p>
 

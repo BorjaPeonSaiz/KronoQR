@@ -1003,6 +1003,27 @@ docker compose exec app php artisan credentials:status --pending
 > exists precisely so that nobody discovers the problem in front of the tablet
 > at 06:00.
 
+**It does not issue any PIN either.** People who come in through the import are
+left with their PIN **not issued**: they cannot clock in with a PIN on the tablet
+or open their personal portal until they have one. You issue it from each
+person's record («Issue the PIN») **at the very moment you hand over their
+card**, and in that same act you give them the PIN and record the handover.
+
+> **Why the import does not issue it.** A PIN is shown **only once**, on the
+> screen of whoever issues it, and after that nobody can see it again. An import
+> of forty people has nowhere to show you forty PINs nor anyone to hand them to,
+> so generating them there would create PINs that nobody knows and that would
+> have to be issued again one by one. With the card in hand, on the other hand,
+> the person takes both things at once: their card and their fallback for the
+> day they forget it.
+
+To see who is missing one, filter **Employees** by **PIN state → «Not
+issued»**; you can reach that list from the menu at any time. If you import
+inside the onboarding wizard, the import step tells you how many people have
+been left without a PIN, and the wizard's final summary, when you close it,
+links to that same filtered list. As soon as you issue someone's PIN, they leave that filter and move
+to «Issued, not handed over yet» until you record the handover.
+
 ### 3 ter.6 If your file uses other column names
 
 There is no need to touch the program: aliases are added in the server's `.env`,
@@ -1540,8 +1561,9 @@ If your staff really is larger than the limit, raise it with
 ### …I have imported the whole staff and nobody can clock in
 
 It is expected, and it is the most expensive mistake in this guide if discovered
-late: **importing issues no card**. Check how many are missing and start now,
-because printing and handing over takes days:
+late: **importing issues no card and no PIN**. Check how many cards are missing
+and start now, because printing and handing over takes days; you issue each
+person's PIN from their record when you hand over the card (section 3 ter.5):
 
 ```bash
 docker compose exec app php artisan credentials:status --pending

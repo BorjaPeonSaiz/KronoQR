@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Workforce\Application\Command\PinProvisioning;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
-use App\Modules\Workforce\Application\Pin\PinGenerator;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Application\Port\ParentRowLocks;
-use App\Modules\Workforce\Application\Port\PinHasher;
-use App\Modules\Workforce\Application\Port\PinMaterial;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
 use App\Modules\Workforce\Domain\ValueObject\ImportColumnMap;
@@ -46,15 +44,19 @@ use App\Modules\Workforce\Domain\ValueObject\ImportRow;
  * ## Reutiliza el alta y la modificacion de siempre
  *
  * {@see RegisterEmployeeHandler} y {@see UpdateEmployeeHandler}, no un camino
- * propio. Un alta por importacion tiene que emitir su PIN —con su asiento
- * `pin.issued`—, publicar `EmployeeHired` y generar su codigo opaco reintentando
- * contra el `UNIQUE`, exactamente igual que un alta desde el panel. Un camino
- * paralelo seria un alta de segunda categoria, y las personas que entraran por
- * el tendrian medio ciclo de vida.
+ * propio. Un alta por importacion tiene que publicar `EmployeeHired` —con su
+ * asiento `employee.hired`— y generar su codigo opaco reintentando contra el
+ * `UNIQUE`, exactamente igual que un alta desde el panel. Un camino paralelo
+ * seria un alta de segunda categoria, y las personas que entraran por el
+ * tendrian medio ciclo de vida.
  *
- * Lo unico que se declara distinto es el **origen** (`viaImport`), y no cambia
- * el alta en nada: sirve para que el uso del plan se cuente **una vez por
- * importacion** y no una vez por fila (ADR-028, H-04 de la revision de la 3.8).
+ * Se declaran distintas dos cosas, cada una por su nombre:
+ *
+ * - el **origen** (`viaImport`), para que el uso del plan se cuente **una vez
+ *   por importacion** y no una vez por fila (ADR-028, H-04 de la revision de la
+ *   3.8);
+ * - el **PIN, pendiente** ({@see PinProvisioning::DeferredToCardHandover}).
+ *   Mas abajo, el porque.
  *
  * ## Una baja entre la comprobacion y la aplicacion tumba el lote (ADR-046 §5)
  *
@@ -72,6 +74,19 @@ use App\Modules\Workforce\Domain\ValueObject\ImportRow;
  * credenciales (RF-QR-08). **No cambia `hired_at`** de quien ya existe (regla
  * dura 5): el informe ya lo avisa y aqui simplemente no viaja, porque
  * {@see UpdateEmployeeCommand} no tiene ese campo.
+ *
+ * **No emite PIN** (RF-ID-09, RF-GP-05). Cada alta nace con el PIN pendiente:
+ * deja `employee.hired` con `via_import` y ningun `pin.issued`. Un PIN se
+ * muestra una sola vez y se entrega en mano junto a la tarjeta; en un informe de
+ * quinientas filas no lo veria nadie, y emitirlo para no ensenarlo dejaria
+ * secretos que habria que volver a emitir de todos modos. RRHH lo emite desde la
+ * ficha al entregar la tarjeta, y mientras tanto la persona sale en el listado
+ * con `pin_status=pending`: el pendiente esta a la vista, no escondido.
+ *
+ * De paso, la importacion **no calcula ningun bcrypt** (antes, unos 160 ms por
+ * alta con el coste 12 de produccion, 80 s para 500): ningun hash puede correr
+ * con la cadena de `audit_log` tomada ni acercar la peticion al
+ * `max_execution_time` (ADR-046 §1.1 punto 5).
  */
 final readonly class ApplyEmployeeImport
 {
@@ -80,8 +95,6 @@ final readonly class ApplyEmployeeImport
         private UpdateEmployeeHandler $update,
         private EmployeeImportDirectory $directory,
         private ParentRowLocks $parentRows,
-        private PinGenerator $pinGenerator,
-        private PinHasher $hasher,
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private EmployeeWriteRetry $retry,
@@ -89,12 +102,7 @@ final readonly class ApplyEmployeeImport
 
     public function handle(ImportReport $report): ImportReport
     {
-        // TODO EL bcrypt, ANTES DE ABRIR LA TRANSACCION. Es la correccion de la
-        // revision de la 5.5 y no es una optimizacion: es lo que hace que este
-        // endpoint pueda existir al tamaño que documenta.
-        $material = $this->pinMaterialFor($report);
-
-        $applied = $this->retry->run('employee.import', function () use ($report, $material): array {
+        $applied = $this->retry->run('employee.import', function () use ($report): array {
             // FILAS PADRE ANTES DEL PRIMER ASIENTO (ADR-046 §1.1 punto 2, §5).
             // El primer alta o modificacion toma la cadena de `audit_log` y no la
             // suelta hasta el commit; a partir de ahi, pedir una fila padre seria
@@ -104,9 +112,11 @@ final readonly class ApplyEmployeeImport
             // linea, ordenados por `id`. Las fichas no se bloquean de antemano: la
             // cadena ya serializa a todos sus escritores.
             //
-            // El mapa se lee AQUI DENTRO y no antes del bcrypt de las altas (que
-            // con 500 son hasta ~80 s): leido fuera, un departamento renombrado
-            // en esa ventana se resolvia con su nombre viejo. Dentro, entre la
+            // El mapa se lee AQUI DENTRO y no antes de abrir la transaccion:
+            // leido fuera, un departamento renombrado entre la lectura y la
+            // escritura se resolvia con su nombre viejo (cuando la importacion
+            // calculaba el bcrypt de las altas, esa ventana eran hasta ~80 s
+            // con 500 filas). Dentro, entre la
             // lectura y el candado caben milisegundos, y un renombrado en ese
             // hueco resuelve el mismo `id` que si hubiera llegado justo despues
             // de esta importacion; a partir del `FOR KEY SHARE` ya no puede
@@ -115,7 +125,7 @@ final readonly class ApplyEmployeeImport
             $departments = $this->directory->departmentsByNormalisedName();
             $this->parentRows->shareDepartments(array_values($departments));
 
-            return $this->applyRows($report, $departments, $material);
+            return $this->applyRows($report, $departments);
         });
 
         // El asiento del LOTE se publica DESPUES de confirmar, igual que el resto
@@ -142,67 +152,16 @@ final readonly class ApplyEmployeeImport
     }
 
     /**
-     * El PIN y su hash de cada alta, **calculados fuera de la transaccion**.
-     *
-     * ## Por que esto no es una optimizacion
-     *
-     * bcrypt con el coste 12 de produccion cuesta unos **160 ms por PIN**
-     * (medido en el contenedor). Con el calculo dentro de la transaccion, 500
-     * altas eran **80 segundos** con dos consecuencias que nadie habria
-     * relacionado con una importacion:
-     *
-     * 1. **El hotel deja de fichar.** El primer asiento del lote toma el
-     *    `pg_advisory_xact_lock` global de `audit_log` y no lo suelta hasta el
-     *    commit (ADR-010). Cada escaneo del quiosco se serializa detras: una
-     *    importacion a media mañana dejaba la tablet de la entrada esperando
-     *    minuto y medio.
-     * 2. **La peticion moria.** `max_execution_time` son 60 s, y el corte
-     *    llegaba **despues** de que quien importa hubiera confirmado — sin saber
-     *    si habia entrado alguien.
-     *
-     * Ninguna de las dos la veia la suite, y no puede verlas: `phpunit.xml` fija
-     * `BCRYPT_ROUNDS=4` (0,7 ms) para que las pruebas no tarden horas, asi que el
-     * sintoma —el tiempo— no se reproduce. `EmployeeImportPerformanceTest`
-     * afirma la propiedad **estructural** de la que dependen las dos: que cuando
-     * se calcula un hash, la transaccion del lote **todavia no esta abierta**.
-     * Eso si se rompe el dia que alguien mueva el calculo de sitio.
-     *
-     * ## Lo que NO cambia
-     *
-     * El todo-o-nada. Los hashes se calculan antes, pero se **escriben** dentro
-     * de la misma transaccion que el alta: un empleado sin PIN sigue sin poder
-     * existir, y una fila que falle sigue revirtiendo el lote entero.
-     *
-     * Solo se calcula para las filas que crean: `update` y `unchanged` no emiten
-     * PIN, y `reject` no escribe nada.
-     *
-     * @return array<int, PinMaterial> Indexado por el numero de linea del fichero.
-     */
-    private function pinMaterialFor(ImportReport $report): array
-    {
-        $material = [];
-
-        foreach ($report->rows as $row) {
-            if ($row->outcome === ImportOutcome::CREATE) {
-                $material[$row->line] = $this->hasher->hash($this->pinGenerator->generate());
-            }
-        }
-
-        return $material;
-    }
-
-    /**
      * @param  array<string, int>  $departments
-     * @param  array<int, PinMaterial>  $material
      * @return list<ImportRow>
      */
-    private function applyRows(ImportReport $report, array $departments, array $material): array
+    private function applyRows(ImportReport $report, array $departments): array
     {
         $rows = [];
 
         foreach ($report->rows as $row) {
             $rows[] = match ($row->outcome) {
-                ImportOutcome::CREATE => $this->create($row, $departments, $material[$row->line] ?? null),
+                ImportOutcome::CREATE => $this->create($row, $departments),
                 ImportOutcome::UPDATE => $this->modify($row, $departments),
                 // `unchanged` y `reject` no escriben: la primera porque no hay
                 // nada que cambiar y la segunda porque no se pudo interpretar.
@@ -216,7 +175,7 @@ final readonly class ApplyEmployeeImport
     /**
      * @param  array<string, int>  $departments
      */
-    private function create(ImportRow $row, array $departments, ?PinMaterial $material): ImportRow
+    private function create(ImportRow $row, array $departments): ImportRow
     {
         $employee = $row->employee;
 
@@ -235,13 +194,13 @@ final readonly class ApplyEmployeeImport
             nationalId: $employee->nationalId,
             hiredAt: self::hiredAtOf($employee),
             locale: $employee->locale ?? 'es',
-            // Ya calculado FUERA de la transaccion. Nunca es nulo para una fila
-            // `create`, y si lo fuera el alta lo generaria dentro: preferible una
-            // importacion lenta a una fila sin PIN, que es una persona que no
-            // puede fichar por respaldo (RF-AT-11) ni entrar al portal (RL-05).
-            pinMaterial: $material,
-            // Marca de origen, y no un alta distinta: lo unico que cambia es que
-            // el uso del plan se cuenta UNA VEZ por importacion —desde
+            // PIN pendiente, pedido por su nombre (RF-ID-09, RF-GP-05): se emite
+            // desde la ficha al entregar la tarjeta, que es cuando hay alguien
+            // delante para recibirlo. Sin hash que calcular, ninguna fila hace
+            // bcrypt.
+            pin: PinProvisioning::DeferredToCardHandover,
+            // Marca de origen, y no un alta distinta: con ella el uso del plan
+            // se cuenta UNA VEZ por importacion —desde
             // `EmployeesImported`, mas abajo— en lugar de una vez por fila. Con
             // la cuenta por fila, un hotel con plan de 80 que importara 300
             // personas escribia trescientos asientos `license.plan_exceeded`

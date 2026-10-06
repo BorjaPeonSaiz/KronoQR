@@ -29,10 +29,16 @@ use SensitiveParameter;
  *
  * ## La solucion: el calculo fuera, la escritura dentro
  *
- * Este objeto es el resultado del calculo. `ApplyEmployeeImport` lo produce para
- * todas las filas **antes** de abrir la transaccion, y dentro solo quedan las
- * inserciones y sus asientos. **El todo-o-nada no cambia**: si una fila falla, el
- * lote entero revierte igual que antes.
+ * Este objeto es el resultado del calculo. El alta individual y el
+ * restablecimiento lo obtienen **antes** de abrir su transaccion
+ * (`IssueEmployeePinHandler::freshMaterial()`), y dentro solo quedan la
+ * escritura y su asiento. **El todo-o-nada no cambia**: si el asiento falla, el
+ * PIN no se confirma.
+ *
+ * La importacion masiva ya no lo produce: sus altas nacen con el PIN pendiente
+ * y se emite al entregar la tarjeta (RF-GP-05), asi que el lote no calcula
+ * ningun hash. El problema de arriba sigue siendo el porque de este objeto en
+ * los otros dos caminos, a razon de 160 ms por PIN cada uno.
  *
  * ## Vive junto al puerto que lo devuelve
  *

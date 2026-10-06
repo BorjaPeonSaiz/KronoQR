@@ -103,6 +103,18 @@ Ten a mano dónde anotarlo **antes** de pulsar «Dar de alta». El PIN sirve par
 dos cosas: entrar al portal y fichar en la tablet cuando no se tiene la tarjeta
 encima.
 
+**Esto vale para el alta de una en una, no para la importación.** Las personas
+que entran por la carga de un fichero nacen con el PIN **sin emitir**: no pueden
+fichar con PIN en la tablet ni entrar a su portal hasta que lo tengan. En su
+ficha, el estado del PIN dice «Sin emitir» y aparece el botón **«Emitir el
+PIN»**. Púlsalo **cuando le vayas a entregar la tarjeta**, no antes: el PIN se
+muestra una sola vez, en ese momento, y se entrega en mano junto con la tarjeta
+(apartado 2.6). Para ver a quién le falta, en **Empleados** filtra por **Estado
+del PIN → «Sin emitir»**, desde el menú y en cualquier momento; si la carga se
+hizo en el asistente de puesta en marcha, su resumen final enlaza a ese mismo
+listado. Por qué la importación no lo emite está en
+[`configuracion.md`](configuracion.md), apartado 3 ter.5.
+
 **El PIN se entrega en mano, en persona.** No hay ningún envío electrónico: ni
 mensaje, ni enlace de recuperación. No es un descuido: una clave que viaja por
 un buzón acaba fichando por su titular sin que nadie se entere.
@@ -174,9 +186,20 @@ Qué dice exactamente, y por qué conviene leerla una vez antes de repartirla:
 ### 2.6 La entrega: un solo acto
 
 **La tarjeta, el PIN y la hoja se entregan juntos, en persona, en el mismo
-momento.** El diálogo de entrega lo recuerda en pantalla. Después se registran
-las dos entregas —«Registrar la entrega» de la tarjeta y «Registrar la entrega
-del PIN»—, que quedan anotadas con la fecha y contigo como responsable.
+momento.** El diálogo de entrega lo recuerda en pantalla, y te avisa si esa
+persona todavía tiene el PIN sin emitir. Después se registran las dos entregas
+—«Registrar la entrega» de la tarjeta y «Registrar la entrega del PIN»—, que
+quedan anotadas con la fecha y contigo como responsable.
+
+**Si la ficha dice «Sin emitir»** —lo normal con quien entró por la importación—,
+el PIN todavía no existe y no hay nada que entregar. El orden, con la persona
+delante, es este:
+
+1. En su ficha, pulsa **«Emitir el PIN»**. El PIN aparece **una sola vez**:
+   entrégaselo en ese momento, junto con la tarjeta y la hoja.
+2. El estado pasa a «Emitido, pendiente de entregar». Pulsa **«Registrar la
+   entrega del PIN»** y, en el tablero de credenciales, «Registrar la entrega» de
+   la tarjeta.
 
 ![Ficha de empleado con el estado de su tarjeta y su PIN](img/es/rrhh-04-ficha-empleado.png)
 

@@ -169,7 +169,10 @@ watch(activeKey, (key) => {
         <ErrorNotice v-else-if="!setup.loaded && setup.error !== null" :error="setup.error" />
 
         <template v-else-if="setup.completion !== null">
-          <CompletionSummary :completion="setup.completion" />
+          <CompletionSummary
+            :completion="setup.completion"
+            :without-pin="setup.importedWithoutPin"
+          />
         </template>
 
         <template v-else-if="!setup.available">

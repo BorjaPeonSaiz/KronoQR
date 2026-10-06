@@ -12,11 +12,13 @@ use SensitiveParameter;
  * ## Por que es un puerto y no una llamada a `Hash::make()`
  *
  * Porque el calculo tiene que poder ocurrir **donde decide el caso de uso** y no
- * donde ocurre la escritura. La importacion masiva lo hace **fuera** de su
- * transaccion —bcrypt cuesta unos 160 ms por PIN y 500 de ellos monopolizaban el
- * candado global de `audit_log` durante minuto y medio— mientras que el alta
- * individual lo hace donde siempre. Con el hash escondido en el repositorio, esa
- * eleccion no existia.
+ * donde ocurre la escritura. El alta individual y el restablecimiento lo hacen
+ * **fuera** del candado de la cadena —bcrypt cuesta unos 160 ms por PIN, y
+ * pagarlos con el candado global de `audit_log` tomado serializa cada fichaje del
+ * hotel detras— y la importacion masiva no calcula ninguno: sus altas nacen con
+ * el PIN pendiente y se emite al entregar la tarjeta (RF-GP-05; antes del bloque
+ * 12b de la 2.2.0, 500 hashes de un lote monopolizaban ese candado minuto y
+ * medio). Con el hash escondido en el repositorio, esa eleccion no existia.
  *
  * Y porque `Application` no usa facades (doc 02 §3.5, verificado por Deptrac).
  *

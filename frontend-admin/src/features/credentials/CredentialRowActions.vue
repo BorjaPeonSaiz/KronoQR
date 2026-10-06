@@ -14,8 +14,10 @@
 // dejar que se envíe).
 import { announce } from '@kronoqr/web-kit/announcer'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
+import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { getEmployee } from '@/features/employees/employees.api'
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
@@ -49,6 +51,19 @@ const busy = ref(false)
 const actionError = ref<unknown>(null)
 const revocationReasonKey = ref('')
 const revocationReasonText = ref('')
+
+// Estado del PIN de la persona, leido de la ficha SOLO al abrir la entrega. El
+// tablero no lo trae y el contrato no se toca. La lectura es informativa: si
+// falla (red, 403 por ambito), la entrega no se bloquea y se muestra el
+// recordatorio generico.
+const pinQuery = useQuery({
+  queryKey: computed(() => ['employee', props.row.employee_uuid] as const),
+  queryFn: () => getEmployee(props.row.employee_uuid),
+  enabled: computed(() => action.value === 'deliver'),
+  retry: false,
+})
+const pinPending = computed(() => pinQuery.data.value?.pin_status === 'pending')
+const pinChecking = computed(() => action.value === 'deliver' && pinQuery.isPending.value)
 
 const revocationReason = computed(() =>
   revocationReasonKey.value === 'other'
@@ -217,9 +232,36 @@ const selectClass =
       {{ t(`credentials.confirm.${action}.explanation`, { name: row.full_name }) }}
     </p>
 
-    <p v-if="action === 'deliver'" class="mb-4" data-test="deliver-sheet-reminder">
-      {{ t('credentials.confirm.deliver.sheetReminder') }}
-    </p>
+    <div v-if="action === 'deliver'" aria-live="polite">
+      <p
+        v-if="pinChecking"
+        class="mb-4 text-sm text-kq-text-muted"
+        data-test="deliver-pin-checking"
+      >
+        {{ t('credentials.confirm.deliver.pinChecking') }}
+      </p>
+      <div
+        v-else-if="pinPending"
+        class="mb-4 rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
+        data-test="deliver-pin-pending"
+      >
+        <p>{{ t('credentials.confirm.deliver.pinPending') }}</p>
+        <RouterLink
+          :to="{ name: 'employee', params: { uuid: row.employee_uuid } }"
+          class="mt-1 inline-block font-semibold underline"
+          data-test="deliver-pin-pending-link"
+        >
+          {{ t('credentials.confirm.deliver.pinPendingLink') }}
+        </RouterLink>
+      </div>
+      <p v-if="!pinChecking" class="mb-4" data-test="deliver-sheet-reminder">
+        {{
+          pinPending
+            ? t('credentials.confirm.deliver.sheetReminderNoPin')
+            : t('credentials.confirm.deliver.sheetReminder')
+        }}
+      </p>
+    </div>
 
     <div v-if="action === 'revoke'" class="mb-4 grid gap-4 sm:grid-cols-2">
       <div class="flex flex-col gap-1">

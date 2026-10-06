@@ -485,11 +485,11 @@ it('ignora los acentos en los dos sentidos', function (string $q, int $total): v
 /**
  * Tres personas, una en cada estado de PIN.
  *
- * `pending` se fabrica con el constructor de consultas y no por la API a
- * proposito: el alta emite el PIN en la misma transaccion (RF-ID-09), asi que no
- * hay ningun camino de la aplicacion que produzca ese estado. Existe en fichas
- * anteriores a RF-ID-09 y el catalogo lo conserva porque es un estado real de la
- * tabla.
+ * `pending` se fabrica con el constructor de consultas por economia: es la
+ * misma fila que deja la importacion masiva, que no emite PIN (RF-GP-05,
+ * RF-ID-09) —`pin_hash`, `pin_issued_at` y `pin_length` nulos—, y montar aqui
+ * un fichero solo añadiria ruido. Que la importacion produce de verdad ese
+ * estado, y que el filtro lo encuentra, lo afirma `EmployeeImportTest`.
  *
  * @return array{token: string, site: int, department: int, pending: string, issued: string, delivered: string}
  */

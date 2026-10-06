@@ -296,6 +296,11 @@ const pinError = ref<unknown>(null)
 /** El PIN en claro, solo mientras el dialogo esta abierto. Nunca se persiste. */
 const revealedPin = ref<IssuedPin | null>(null)
 
+// Sin PIN (`pending`) no hay nada que restablecer: la misma accion `pin/reset` se
+// presenta como emision, con su propio rotulo y texto.
+const pinIssuing = computed(() => employee.value?.pin_status === 'pending')
+const pinResetKey = computed(() => (pinIssuing.value ? 'pin.issue' : 'pin.reset'))
+
 const pinResetChanges = computed<Change[]>(() => [
   {
     label: t('pin.field'),
@@ -312,7 +317,27 @@ const pinDeliveryChanges = computed<Change[]>(() => [
   },
 ])
 
+// Otra persona de RRHH pudo emitir el PIN desde que se cargo la ficha: se relee antes
+// de abrir el dialogo para que rotulo y advertencia reflejen el estado real. Si la
+// relectura falla, se mantiene el estado ya cargado.
+async function openPinReset(): Promise<void> {
+  try {
+    await queryClient.fetchQuery({
+      queryKey: ['employee', props.uuid] as const,
+      queryFn: () => getEmployee(props.uuid),
+      staleTime: 0,
+    })
+  } catch {
+    // Se sigue con el estado cargado.
+  }
+
+  confirmingPinReset.value = true
+}
+
 async function confirmPinReset(): Promise<void> {
+  // El estado previo se fija antes de actuar: tras refrescar la ficha ya sera `issued`.
+  const wasIssuing = pinIssuing.value
+
   pinBusy.value = true
   pinError.value = null
 
@@ -320,7 +345,7 @@ async function confirmPinReset(): Promise<void> {
     revealedPin.value = await resetEmployeePin(props.uuid)
     confirmingPinReset.value = false
     await invalidate()
-    announce(t('pin.announce.reset'))
+    announce(t(wasIssuing ? 'pin.announce.issued' : 'pin.announce.reset'))
   } catch (caught) {
     if (isTerminatedConflict(caught)) {
       confirmingPinReset.value = false
@@ -714,9 +739,9 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
           <button
             type="button"
             class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
-            @click="confirmingPinReset = true"
+            @click="openPinReset"
           >
-            {{ t('pin.actions.reset') }}
+            {{ pinIssuing ? t('pin.actions.issue') : t('pin.actions.reset') }}
           </button>
           <button
             v-if="employee.pin_status === 'issued'"
@@ -861,18 +886,18 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
 
     <ConfirmDialog
       v-if="confirmingPinReset"
-      :title="t('pin.reset.heading')"
-      :confirm-label="t('pin.reset.action')"
+      :title="t(`${pinResetKey}.heading`)"
+      :confirm-label="t(`${pinResetKey}.action`)"
       tone="danger"
       :busy="pinBusy"
       :error="pinError"
       @cancel="confirmingPinReset = false"
       @confirm="confirmPinReset"
     >
-      <p class="mb-4">{{ t('pin.reset.explanation') }}</p>
-      <ChangePreview :changes="pinResetChanges" :caption="t('pin.reset.heading')" />
+      <p class="mb-4">{{ t(`${pinResetKey}.explanation`) }}</p>
+      <ChangePreview :changes="pinResetChanges" :caption="t(`${pinResetKey}.heading`)" />
       <p class="mt-4 rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning">
-        {{ t('pin.reset.warning') }}
+        {{ t(`${pinResetKey}.warning`) }}
       </p>
     </ConfirmDialog>
 

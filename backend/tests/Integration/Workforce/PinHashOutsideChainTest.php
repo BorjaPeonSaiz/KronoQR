@@ -18,6 +18,7 @@ use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\ChainProbingPinAttempts;
 use Tests\Support\Workforce\ChainProbingPinHasher;
+use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\ImportFiles;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -26,9 +27,10 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * (ADR-046 §1.1 punto 5 y §6 punto 4; condicion A-3; regla dura 19).
  *
  * Con la cadena tomada, los ~160 ms de bcrypt los esperaria cada fichaje del
- * hotel. Se comprueba en los tres caminos que emiten un PIN: el
- * restablecimiento, el alta y el alta por importacion. Y un control que
- * demuestra que la sonda ve la cadena cuando de verdad esta tomada.
+ * hotel. Se comprueba en los dos caminos que emiten un PIN: el
+ * restablecimiento y el alta individual. La importacion masiva ya no emite
+ * ninguno (RF-GP-05, bloque 12b): se afirma que no llama al hasher. Y un
+ * control que demuestra que la sonda ve la cadena cuando de verdad esta tomada.
  *
  * `CommittedDatabase`: con la transaccion envolvente de `RefreshDatabase`, un
  * asiento escrito al preparar el escenario dejaria la cadena tomada hasta el
@@ -57,6 +59,9 @@ function sondaDelPinFueraDeLaCadena(): ChainProbingPinHasher
 
 it('el restablecimiento calcula el PIN sin tener la cadena', function (): void {
     $persona = WorkforceFixtures::employee(WorkforceFixtures::site());
+    // Con un PIN que sustituir: sobre una ficha pendiente seria la primera
+    // emision y el asiento diria `pin.issued` (RF-GP-05).
+    EmployeePins::issue($persona, '374195');
     $sonda = sondaDelPinFueraDeLaCadena();
 
     app(ResetEmployeePinHandler::class)->handle(new ResetEmployeePinCommand($persona));
@@ -83,7 +88,7 @@ it('el alta calcula el PIN sin tener la cadena', function (): void {
         ->and(DB::table('employees')->count())->toBe(1);
 })->group('RF-ID-09', 'RF-GP-01');
 
-it('la importacion calcula los PIN de sus altas sin tener la cadena', function (): void {
+it('la importacion no calcula ningun PIN', function (): void {
     WorkforceFixtures::site();
     $path = (string) ImportFiles::csv(ImportFiles::rows(
         ['nombre', 'apellidos', 'dni', 'fecha_alta'],
@@ -96,12 +101,12 @@ it('la importacion calcula los PIN de sus altas sin tener la cadena', function (
 
     app(ImportEmployeesHandler::class)->handle(new ImportEmployeesCommand($path, apply: true, confirmChecksum: $huella), 500, $aliases);
 
-    expect($sonda->heldTheChain)->toBe([false, false])
+    expect($sonda->heldTheChain)->toBe([])
         ->and(DB::table('employees')->count())->toBe(2);
 })->group('RF-ID-09', 'RF-GP-05');
 
 it('el control: con la cadena tomada, la sonda la ve', function (): void {
-    // Demuestra que las tres de arriba pueden fallar.
+    // Demuestra que las dos primeras de arriba pueden fallar.
     $sonda = sondaDelPinFueraDeLaCadena();
 
     app(SerializedLedgerWrite::class)->withChainLock(static fn (): mixed => app(PinHasher::class)->hash('374195'));
@@ -113,6 +118,7 @@ it('el restablecimiento limpia el bloqueo del PIN sin tener la cadena', function
     // `clear()` toma el candado de cache de cada puerta y puede esperar con
     // contienda: dentro de la cadena, esa espera la pagaria cada fichaje.
     $persona = WorkforceFixtures::employee(WorkforceFixtures::site());
+    EmployeePins::issue($persona, '374195');
     $sonda = new ChainProbingPinAttempts(app(PinAttempts::class));
     app()->instance(PinAttempts::class, $sonda);
 

@@ -198,6 +198,11 @@ ciclo con un renombrado. La cadena la toma el primer asiento y la piden otra vez
 `withChainLock` de cada fila. **No se bloquean de antemano las fichas**: la cadena ya serializa a
 todos sus escritores.
 
+> **Nota (06-10-2026, bloque 12b).** Desde el bloque 12b la importación no emite PIN ni calcula
+> ningún hash (RF-GP-05, RF-ID-09): el bcrypt de las altas que se cita arriba, y la referencia de
+> §1.2 a «como ya hace la importación (A-3)», describen la importación anterior. La decisión de leer
+> y bloquear el mapa de departamentos dentro de la transacción se mantiene por los demás motivos.
+
 Una fila que corresponde a una persona **dada de baja**:
 
 - **Al planificar** (`PlanEmployeeImport`), se rechaza con el código nuevo `employee_terminated`. La

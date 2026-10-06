@@ -3039,6 +3039,15 @@ paths:
         **A una persona dada de baja no se le restablece el PIN** (RN-14,
         ADR-046): `409` con `urn:kronoqr:problem:employee-terminated`, sin
         cambiar el hash ni dejar asiento.
+
+        **Con `pin_status: pending` es la primera emision, no un
+        restablecimiento.** Es el caso de toda persona que entro por la
+        importacion masiva, que no emite PIN (RF-ID-09, RF-GP-05): el panel lo
+        ofrece como «Emitir el PIN» al entregar la tarjeta. La respuesta es la
+        misma, pero el asiento es `pin.issued` y no `pin.reset`, y no cuenta en
+        `pin_resets_total`: una incorporacion de cuarenta personas no es una
+        racha de PIN que no llegan a la gente. Que habia PIN anterior se decide
+        con la cadena de `audit_log` tomada, no antes.
       tags: [Workforce]
       security:
         - managementToken: ['employees:*']
@@ -8826,6 +8835,17 @@ paths:
         Importar sin emitir tarjetas reproduce exactamente el problema que ese
         panel existe para evitar.
 
+        **No emite PIN** (RF-ID-09, decision del propietario del 29-09-2026).
+        Cada alta de la importacion nace con `pin_status: pending`, sin
+        `pin_hash` ni `pin_issued_at`, y su asiento es `employee.hired` con
+        `via_import: true` y **sin** `pin.issued`. Un PIN solo se muestra una
+        vez, y esta respuesta no tiene a quien mostrarselo: emitirlo aqui era
+        crear un PIN que nadie conoce. RRHH lo emite desde la ficha **al
+        entregar la tarjeta**, con `POST /employees/{uuid}/pin/reset` y despues
+        `pin/deliver`; quien lo tiene pendiente sale en `GET /employees` con
+        `pin_status=pending`. El alta individual (`POST /employees`) sigue
+        emitiendolo siempre.
+
         El alta masiva queda en `audit_log` como `employee.imported`, con las
         cifras y la huella del fichero — nunca con nombres.
       tags: [Workforce]
@@ -13173,8 +13193,11 @@ components:
         Situacion del PIN de esta persona (RF-ID-09). **Es el estado, nunca el
         PIN**: el valor no vuelve a salir de la instalacion despues de emitirse.
 
-        - `pending`: no tiene PIN. Solo puede darse en fichas anteriores a
-          RF-ID-09: el alta lo emite en la misma transaccion.
+        - `pending`: no tiene PIN. Es el estado con el que nace **toda persona
+          que entra por la importacion masiva** (`POST /employees/import`, que
+          no emite PIN) hasta que RRHH se lo emite al entregar la tarjeta, y el
+          de las fichas anteriores a RF-ID-09. El alta individual nunca lo
+          produce: emite el PIN en la misma transaccion.
         - `issued`: emitido y **pendiente de entregar en mano**.
         - `delivered`: entregado, con fecha y responsable en `audit_log`.
 
@@ -19960,6 +19983,13 @@ components:
       title: EmployeeImportReport
       description: |
         El informe linea a linea que exige RF-GP-05, en los dos modos.
+
+        **Con `mode: apply`, cada fila `create` es una persona con el PIN
+        pendiente** (`pin_status: pending`, RF-ID-09): la importacion no emite
+        PIN. No hay un campo aparte que lo cuente porque seria siempre igual a
+        `summary.create`, y dos cifras que deben coincidir acaban un dia sin
+        coincidir. El panel avisa con esa cifra y enlaza al listado filtrado por
+        `pin_status=pending`.
       additionalProperties: false
       required: [mode, file, summary, rows, truncated]
       properties:

@@ -325,13 +325,20 @@
       "delivered": "Handed over"
     },
     "statusHint": {
-      "pending": "This person has no PIN and cannot open the portal. Reset it to issue one.",
+      "pending": "This person has no PIN yet: they cannot clock in with a PIN or open the portal. The PIN is issued here when the card is handed over.",
       "issued": "The PIN exists but has not been recorded as handed over.",
       "delivered": "It was handed over in person, with the date and the responsible person in the audit log."
     },
     "actions": {
+      "issue": "Issue the PIN",
       "reset": "Reset the PIN",
       "registerDelivery": "Record the PIN handover"
+    },
+    "issue": {
+      "heading": "Issue the PIN",
+      "explanation": "The first PIN for this person is generated (6 or 8 digits, per the installation setting). Do it when handing over the card.",
+      "action": "Issue and show the PIN",
+      "warning": "The PIN will be shown once, now. It cannot be looked up again: if it is lost, it will have to be reset."
     },
     "reset": {
       "heading": "Reset the PIN",
@@ -356,6 +363,7 @@
     },
     "announce": {
       "reset": "PIN reset. It is shown once only.",
+      "issued": "PIN issued. It is shown once only.",
       "delivered": "PIN handover recorded."
     }
   },
@@ -577,6 +585,10 @@
         "explanation": "It will be recorded that {name} received their card, with the date and you as the responsible person.",
         "action": "Confirm the handover",
         "sheetReminder": "This same act hands over the card, the PIN and the instructions sheet.",
+        "sheetReminderNoPin": "The card and the instructions sheet are handed over; the PIN is still pending issuance.",
+        "pinPending": "This person does not have a PIN yet: issue it from their record in this same act.",
+        "pinPendingLink": "Open the record to issue the PIN",
+        "pinChecking": "Checking whether the person already has a PIN…",
         "notice": "It goes into the audit log and cannot be repeated or undone. It is what tells «the card was lost before we gave it to them» apart from «the employee lost it»."
       },
       "revoke": {
@@ -1946,6 +1958,8 @@
       "credentialsPending": "There are still {count} cards to issue and print.",
       "credentialsNone": "No cards are pending issue.",
       "credentialsAdvice": "Without a printed, handed-over card, nobody can clock in on the first day. Issuing and printing takes days of logistics: do it in advance.",
+      "withoutPin": "{count} person without a PIN | {count} people without a PIN",
+      "withoutPinLink": "See people without a PIN",
       "credentialsLink": "Go to the credential status board",
       "credentialsCommand": "You can also check it from the server console with: credentials:status --pending",
       "fields": {
@@ -2034,6 +2048,7 @@
         "applying": "Applying…",
         "truncated": "The file has more rows than can be applied at once. Split it into smaller parts and try again: with the file as it is, nothing gets applied.",
         "fileWarnings": "Warnings about the whole file, review them before continuing:",
+        "noPinNotice": "1 person was added without a PIN. It is issued from their record when the card is handed over. | {count} people were added without a PIN. It is issued from each record when the card is handed over.",
         "validatedSummary": "Simulation, nothing has been saved yet: {create} to create, {update} to update, {unchanged} unchanged, {reject} rejected.",
         "appliedSummary": "Applied: {create} created, {update} updated, {unchanged} unchanged, {reject} rejected and not applied.",
         "tableCaption": "Line-by-line result of the import",
