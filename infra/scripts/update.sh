@@ -979,6 +979,8 @@ KQ_UPDATE_LOG_DIR="${KRONOQR_LOG_DIR:-/var/log/kronoqr}"
 # es un enlace y queda 0700; 1 si no se puede.
 ensure_update_log_dir() {
   local dir="${KQ_UPDATE_LOG_DIR}"
+  # shellcheck disable=SC2034  # la fija kq_path_trusted; aqui se limpia por si no llega a llamarse
+  KQ_PATH_UNTRUSTED=""
   # El PADRE tambien: root escribe por ruta aqui, y un padre que escribe otro
   # usuario le permitiria cambiar este directorio por un enlace (A3-R2). Cada tramo
   # de la ruta tiene que ser real, de root y sin escritura para grupo ni otros.
@@ -1377,6 +1379,13 @@ check_backup_config() {
   # lo que ya caduco. VA ANTES del candado: el candado vive aqui (C20).
   if ensure_update_log_dir; then
     check_pass "$(kq_format u_c_log_dir "${KQ_UPDATE_LOG_DIR}")"
+  elif [ -n "${KQ_PATH_UNTRUSTED:-}" ] && [ "${KQ_PATH_UNTRUSTED}" != "${KQ_UPDATE_LOG_DIR}" ]; then
+    # Lo que no se acepta es un TRAMO de la ruta, no el directorio: el mensaje lo
+    # nombra, porque el remedio es otro (el /var/log de Ubuntu, root:syslog 0775,
+    # lo admite kq_path_trusted; lib/fs.sh dice por que).
+    check_fail "$(kq_format u_c_log_dir "${KQ_UPDATE_LOG_DIR}")" \
+      "$(kq_format u_f_log_dir_parent "${KQ_PATH_UNTRUSTED}" "${KQ_UPDATE_LOG_DIR}")"
+    return 0
   else
     check_fail "$(kq_format u_c_log_dir "${KQ_UPDATE_LOG_DIR}")" \
       "$(kq_format u_f_log_dir "${KQ_UPDATE_LOG_DIR}" "${KQ_UPDATE_LOG_DIR}")"

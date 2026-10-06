@@ -796,6 +796,55 @@ it('update.sh no usa un directorio de registros que sea un enlace o que no sea s
     ficherosGeneradosBorrar($dir);
 })->group('RF-PD-10');
 
+/*
+ * `kq_path_trusted` con los permisos que tiene cada tramo en un servidor real. Sin
+ * root no se puede dar a un directorio un dueño o un grupo ajenos: se sustituyen
+ * `stat` (solo para el tramo bajo prueba) e `id -G 1000` (los grupos de la cuenta
+ * uid 1000 del anfitrion), como en los demas caminos de root de este fichero. El
+ * caso que importa es el `/var/log` de Ubuntu, `root:syslog 0775`: con la regla
+ * «nunca escritura de grupo» update.sh se negaba a actualizar en todo Ubuntu
+ * (⑧b del 03-10-2026), y doctor.sh nunca purgaba el detalle (C19).
+ */
+it('kq_path_trusted acepta la escritura de grupo solo en un grupo del sistema ajeno al uid 1000', function (string $dueno, string $grupo, string $modo, string $gruposDelUid1000, string $esperado): void {
+    $dir = ficherosGeneradosDirectorio('tramo');
+    mkdir($dir.'/log', 0o755);
+
+    $fragmento = 'stat() { if [ "${4:-}" = '.escapeshellarg($dir.'/log').' ]; then case "$2" in %u) echo '.$dueno.';; %g) echo '.$grupo.';; %a) echo '.$modo.';; esac; else command stat "$@"; fi; }; '
+        .'id() { if [ "${1:-}" = "-G" ]; then echo '.escapeshellarg($gruposDelUid1000).'; else command id "$@"; fi; }; '
+        .'estado=0; kq_path_trusted '.escapeshellarg($dir.'/log/kronoqr').' || estado=$?; echo "@@ ${estado} tramo=${KQ_PATH_UNTRUSTED}"';
+
+    $proceso = ficherosGeneradosBash('lib/fs.sh', $fragmento);
+
+    expect($proceso->getOutput())->toContain('@@ '.$esperado);
+
+    ficherosGeneradosBorrar($dir);
+})->with([
+    'root:root 0755 (el /var/log de Debian)' => ['0', '0', '755', '1000 4 24', '0 tramo='],
+    'root:syslog 0775 (el /var/log de Ubuntu)' => ['0', '110', '775', '1000 4 24', '0 tramo='],
+    'root:1000 0775: el grupo del runtime' => ['0', '1000', '775', '1000', '1 tramo='],
+    'root:root 0777: escritura para otros' => ['0', '0', '777', '1000', '1 tramo='],
+    'root:root 1777: el sticky no vale' => ['0', '0', '1777', '1000', '1 tramo='],
+    'root:adm 0775 con la cuenta uid 1000 en adm' => ['0', '4', '775', '1000 4 24', '1 tramo='],
+    'root:syslog 0775 sin ninguna cuenta uid 1000' => ['0', '110', '775', '', '0 tramo='],
+])->group('RF-PD-10');
+
+it('update.sh nombra el tramo que no acepta cuando el que falla es el padre del directorio de registros', function (): void {
+    $dir = ficherosGeneradosDirectorio('tramo-padre');
+    mkdir($dir.'/log', 0o755);
+
+    // El padre `log` pasa a 0777 en el `stat` sustituido; el directorio aun no existe.
+    $fragmento = 'stat() { if [ "${4:-}" = '.escapeshellarg($dir.'/log').' ] && [ "$2" = %a ]; then echo 777; else command stat "$@"; fi; }; '
+        .'KQ_UPDATE_LOG_DIR='.escapeshellarg($dir.'/log/kronoqr').'; '
+        .'estado=0; ensure_update_log_dir || estado=$?; echo "@@ registro=${estado} tramo=${KQ_PATH_UNTRUSTED}"';
+
+    $proceso = ficherosGeneradosBash('update.sh', $fragmento);
+
+    expect($proceso->getOutput())->toContain('@@ registro=1 tramo='.$dir.'/log')
+        ->and(is_dir($dir.'/log/kronoqr'))->toBeFalse();
+
+    ficherosGeneradosBorrar($dir);
+})->group('RF-PD-10');
+
 it('update.sh no sigue un enlace plantado con el nombre de su informe, y no pierde el informe', function (): void {
     // El mismo patron de F1 en `open_report`: el nombre lleva la hora de inicio
     // y reports/ es del uid 1000. Con el enlace en su sitio, la victima no
