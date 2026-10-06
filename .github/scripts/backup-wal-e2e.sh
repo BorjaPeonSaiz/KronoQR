@@ -72,6 +72,9 @@ IFS=$'\n\t'
 
 MODE="$1"
 PKG="$(cd -- "$2" && pwd)"
+# La semilla de ⑧b la escribe upgrade-seed con el paquete ANTERIOR y la lee upgrade-check
+# con el NUEVO: vive junto a los dos paquetes, no dentro de uno.
+SEED_FILE="$(dirname -- "${PKG}")/.wal-seed.txt"
 SUDO="${KQ_E2E_SUDO-sudo}"
 STEP=""
 
@@ -384,12 +387,12 @@ mode_upgrade_seed() {
   wait_for "[ \"\$(as_root sh -c \"ls '${WAL_DIR}'/*.gz 2>/dev/null | wc -l\")\" -ge 3 ]" 90 "la 2.1.0 archiva >= 3 segmentos .gz"
   if [ "$(wal_enc_count)" != "0" ]; then
     # La version anterior ya archiva cifrado (no es una 2.1.0): no hay nada heredado.
-    : >"${PKG}/.wal-seed.txt"
+    : >"${SEED_FILE}"
     ok "la version anterior ya archiva cifrado: nada heredado que sembrar"
     return 0
   fi
-  as_root sh -c "ls -l --time-style=+%s '${WAL_DIR}'/*.gz | awk '{print \$6, \$7}'" >"${PKG}/.wal-seed.txt"
-  as_root chmod 0644 "${PKG}/.wal-seed.txt"
+  as_root sh -c "ls -l --time-style=+%s '${WAL_DIR}'/*.gz | awk '{print \$6, \$7}'" >"${SEED_FILE}"
+  as_root chmod 0644 "${SEED_FILE}"
   ok "$(wal_plain_count) segmentos en claro sembrados"
 }
 
@@ -399,17 +402,17 @@ mode_upgrade_check() {
   step "1 · Tras actualizar no queda ningun .gz en claro (<= 120 s) y los heredados conservan su fecha"
   wait_for "[ \"\$(as_root sh -c \"ls '${WAL_DIR}'/*.gz 2>/dev/null | wc -l\")\" = '0' ]" 120 "los .gz heredados se cifran en sitio"
   ok "0 segmentos en claro"
-  [ -f "${PKG}/.wal-seed.txt" ] || fail "falta ${PKG}/.wal-seed.txt (modo upgrade-seed)"
+  [ -f "${SEED_FILE}" ] || fail "falta ${SEED_FILE} (modo upgrade-seed)"
   while read -r _ nombre; do
     nombre="$(basename "${nombre}" .gz)"
     as_root test -f "${WAL_DIR}/${nombre}.gz.enc" || fail "falta ${nombre}.gz.enc"
     as_root head -n 1 "${WAL_DIR}/${nombre}.gz.enc" | grep -qE ' src=legacy$' || fail "${nombre}.gz.enc no lleva src=legacy"
-  done <"${PKG}/.wal-seed.txt"
+  done <"${SEED_FILE}"
   ok "los heredados estan cifrados con src=legacy"
   while read -r epoch nombre; do
     nombre="$(basename "${nombre}" .gz)"
     [ "$(as_root stat -c %Y "${WAL_DIR}/${nombre}.gz.enc")" = "${epoch}" ] || fail "${nombre}.gz.enc no conserva la fecha del .gz (la purga lo retendria mas)"
-  done <"${PKG}/.wal-seed.txt"
+  done <"${SEED_FILE}"
   ok "la fecha (mtime) de cada heredado se conserva"
   # Y el archivado nuevo ya es cifrado.
   switch_wal
