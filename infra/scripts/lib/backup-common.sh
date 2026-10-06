@@ -398,11 +398,18 @@ kq_open_copy() {
 #
 #   kq_report_publish TRABAJO DESTINO
 kq_report_publish() {
-  local work="$1" final="$2" rc=0 rescate
+  local work="$1" final="$2" rc=0 rescate rescate_dir
   [ -n "$work" ] && [ -s "$work" ] || return 0
   kq_publish_as_app "$work" "$final" 027 2>/dev/null || rc=$?
   if [ "$rc" -ne 0 ]; then
-    rescate="${TMPDIR:-/tmp}/kronoqr-informe-$(basename -- "$final")"
+    # Nunca un nombre predecible en /tmp (directorio con sticky, donde otro usuario
+    # puede plantar un enlace: fs.sh ya lo dice): el directorio de registros de root
+    # si existe y es de fiar, y si no uno privado 0700 recien creado.
+    rescate_dir="${KRONOQR_LOG_DIR:-/var/log/kronoqr}"
+    if ! { [ -d "$rescate_dir" ] && [ -w "$rescate_dir" ] && kq_path_trusted "$rescate_dir"; }; then
+      rescate_dir="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-informe.XXXXXX" 2>/dev/null)" || rescate_dir=""
+    fi
+    rescate="${rescate_dir:-/nonexistent}/$(basename -- "$final")"
     (umask 077 && cp -- "$work" "$rescate") 2>/dev/null || true
     err "AVISO: no se ha podido publicar el informe en '${final}' (hace falta setpriv si se ejecuta como root, y que el nombre no exista). Queda en '${rescate}'. Adjuntalo al parte del incidente."
   fi

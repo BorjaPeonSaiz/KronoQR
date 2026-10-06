@@ -180,3 +180,27 @@ it('no imprime la clave de cifrado por ninguna via', function (): void {
         expect(Repo::contents('infra/scripts/'.$fichero))->not->toContain('-pass pass:');
     }
 })->group('RL-12');
+
+it('si no puede publicar el informe, lo conserva en un directorio privado y no en un nombre predecible de /tmp', function (): void {
+    // A3-R2: /tmp tiene sticky y otro usuario puede plantar ahi un enlace con el nombre
+    // que root va a escribir. El rescate va al directorio de registros de root si es de
+    // fiar o a uno recien creado, 0700.
+    $dir = sys_get_temp_dir().'/kq-informe-'.bin2hex(random_bytes(4));
+    mkdir($dir, 0o700, true);
+    file_put_contents($dir.'/informe.log', "informe de prueba\n");
+
+    $resultado = bashConLaBiblioteca(
+        'kq_publish_as_app() { return 1; }; kq_report_publish '.escapeshellarg($dir.'/informe.log').' /no/importa/restore-2026.log; echo fin',
+        ['KRONOQR_LOG_DIR' => $dir.'/no-existe', 'TMPDIR' => $dir],
+    );
+
+    preg_match("/Queda en '([^']+)'/", $resultado->getErrorOutput(), $partes);
+    $rescate = $partes[1] ?? '';
+
+    expect($resultado->getExitCode())->toBe(0, $resultado->getErrorOutput())
+        ->and($rescate)->not->toBe('')
+        ->and($rescate)->not->toBe($dir.'/kronoqr-informe-restore-2026.log')
+        ->and(is_file($rescate))->toBeTrue()
+        ->and(substr(sprintf('%o', fileperms(dirname($rescate))), -4))->toBe('0700')
+        ->and((string) file_get_contents($rescate))->toBe("informe de prueba\n");
+})->group('RF-PR-04');
