@@ -25,7 +25,9 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * **Dos endpoints y no uno con una bandera.** Restablecer genera una credencial
  * nueva; entregar afirma que llego a su destinatario. Son dos hechos con dos
  * asientos distintos en `audit_log` —`pin.reset` y `pin.delivered`— y quien
- * revise el trail tiene que poder distinguirlos.
+ * revise el trail tiene que poder distinguirlos. Sobre una ficha con el PIN
+ * pendiente (las altas de la importacion masiva, RF-GP-05) el primer endpoint es
+ * la primera emision y deja `pin.issued`, no `pin.reset`.
  *
  * **`404` para lo que no existe y para lo que no alcanza** (regla dura 17). Un
  * `uuid` desconocido responde igual que uno fuera del alcance de quien pregunta:

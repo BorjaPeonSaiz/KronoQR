@@ -21,10 +21,12 @@ use DateTimeImmutable;
  * evento acaba en logs y en metricas, y ahi solo se identifica por UUID (regla
  * dura 21).
  *
- * **`viaImport` dice por donde entro esta alta.** No la degrada en nada —es un
- * alta de primera, con su asiento y con su credencial y su PIN pendientes, que
- * se emiten al entregar la tarjeta (RF-GP-05)— pero permite que quien cuenta por operacion y no por persona espere al evento del
- * lote. Lo usa el observador de los limites del plan (ADR-028): una importacion
+ * **`viaImport` dice por donde entro esta alta.** No decide nada del alta —es
+ * un alta de primera, con su asiento y con su credencial pendiente; que el PIN
+ * nazca tambien pendiente y se emita al entregar la tarjeta (RF-GP-05) lo decide
+ * `RegisterEmployeeCommand::$pin`, no esta marca— pero permite que quien cuenta
+ * por operacion y no por persona espere al evento del lote. Lo usa el observador
+ * de los limites del plan (ADR-028): una importacion
  * de trescientas personas tiene que dejar **un** asiento de exceso y no
  * trescientos, todos bajo el candado global de `audit_log` (ADR-010, H-04 de la
  * revision de la 3.8). El valor por defecto es `false` —«no vengo de un lote»—
