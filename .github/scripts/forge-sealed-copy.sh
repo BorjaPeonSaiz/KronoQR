@@ -49,7 +49,9 @@ REPO_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
 daily="${BACKUP_PATH}/daily"
 destino="${daily}/${NAME}.dump.enc"
-modelo="$(find "${daily}" -maxdepth 1 -type f -name 'kronoqr-*.manifest.json' | sort | tail -n 1)"
+# Nunca el manifiesto de la propia copia forjada: al sellar dos veces con el mismo NOMBRE
+# (A3-01 itera tres sentencias), el suyo ordenaria el ultimo y `cp` fallaria sobre si mismo.
+modelo="$(find "${daily}" -maxdepth 1 -type f -name 'kronoqr-*.manifest.json' ! -name "${NAME}.manifest.json" | sort | tail -n 1)"
 [ -n "${modelo}" ] || {
   printf 'forge-sealed-copy: no hay ningun manifiesto en %s del que copiar\n' "${daily}" >&2
   exit 1
