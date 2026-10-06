@@ -89,6 +89,11 @@ Además del bloqueo por empleado, que se queda como está, el acceso al portal c
   **Sin Redis el acceso al portal ya está cerrado**, porque el limitador de la zona `portal` falla cerrado a propósito
   (`cache.limiter`); este ADR no lo cambia. La regla dura 19 protege el fichaje, no el portal, y el fichaje no pasa
   por aquí.
+- **Cómo se cuenta.** La cuenta de fallos por origen se actualiza con un **candado por origen** sobre la caché
+  `resilient` (Redis o disco), de modo que fallos simultáneos desde el mismo origen cuentan todos; un fallo que llega
+  con el bloqueo ya abierto no lo altera. Sin candado, leer-calcular-escribir perdía ~90 % de los incrementos con 25
+  intentos en paralelo (lo midió qa-testing, `PortalOriginConcurrencyTest`), y `Cache::increment` no vale en disco
+  porque `FileStore` tampoco es atómico. Si el candado no se consigue, se cuenta sin él: nunca un error.
 - **Qué se responde.** **`429`** con `Retry-After` (segundos que faltan) y el problema fijo
   **`urn:kronoqr:problem:portal-origin-locked`**. Se decide **antes** de leer el código de empleado o de llamar al
   verificador: el desenlace no depende del código ni del PIN y no toca el contador por empleado. No contradice RS-03,
