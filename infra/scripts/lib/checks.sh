@@ -294,6 +294,22 @@ check_network_cidrs() {
   check_trusted_proxy_cidr "${env_file}"
 }
 
+# El portal, esta expuesto a internet? Imprime `true` si PORTAL_INTERNAL_CIDR es
+# valido y es 0.0.0.0/0 o incluye direcciones que no son de una red privada, y
+# nada en cualquier otro caso (privado, vacio o invalido). Es el dato que
+# `update.sh` anota como `portal_exposed` en el asiento `system.updated`: la
+# constancia de que el propietario abrio el portal a proposito (RF-ID-08).
+kq_portal_exposed() {
+  local env_file="$1" portal
+
+  portal="$(env_value "${env_file}" "PORTAL_INTERNAL_CIDR")"
+  kq_cidr_valid "${portal}" || return 0
+
+  if [ "${portal#*/}" = "0" ] || ! kq_cidr_is_private "${portal}"; then
+    printf 'true'
+  fi
+}
+
 # TRUSTED_PROXY_CIDR (PP-03): opcional; lista de CIDR IPv4 separados por comas.
 check_trusted_proxy_cidr() {
   local env_file="$1" value proxy invalid=0 any=0

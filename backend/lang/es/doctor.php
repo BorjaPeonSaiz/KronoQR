@@ -581,12 +581,14 @@ return [
                     ."el acta de instalacion y revisa docs/cliente/endurecimiento.md.\n"
                     ."Si no, pon en el fichero .env la red del hotel o de tu VPN y aplica el cambio:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
-                    .'  docker compose up -d nginx',
+                    ."  docker compose up -d nginx\n"
+                    .'Mientras el portal este abierto a internet, activa el PIN de 8 digitos (se configura en los ajustes del producto; el ADR-050 lo describe).',
                 'warning_public' => "Si solo debe abrirse desde la red del hotel, pon en el fichero .env su rango\n"
                     ."privado y aplica el cambio:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
                     ."  docker compose up -d nginx\n"
-                    .'Si esas direcciones publicas son las que quieres, no hay nada que corregir.',
+                    ."Si esas direcciones publicas son las que quieres, no hay nada que corregir.\n"
+                    .'Con el portal alcanzable desde internet, activa el PIN de 8 digitos (se configura en los ajustes del producto; el ADR-050 lo describe).',
                 'warning_sample' => "Averigua con que IP ve nginx a un empleado (docs/runbooks/portal-403.md) y\n"
                     ."pon su red en el fichero .env. Despues aplica el cambio:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"

@@ -530,12 +530,14 @@ return [
                     ."in the installation record and review docs/cliente/endurecimiento.md (in Spanish).\n"
                     ."If not, put the hotel network or your VPN range in the .env file and apply the change:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
-                    .'  docker compose up -d nginx',
+                    ."  docker compose up -d nginx\n"
+                    .'While the portal is open to the internet, turn on the 8-digit PIN (it is set in the product settings; ADR-050 describes it).',
                 'warning_public' => "If it must only open from the hotel network, put its private range in the .env\n"
                     ."file and apply the change:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
                     ."  docker compose up -d nginx\n"
-                    .'If those public addresses are the ones you want, there is nothing to fix.',
+                    ."If those public addresses are the ones you want, there is nothing to fix.\n"
+                    .'With the portal reachable from the internet, turn on the 8-digit PIN (it is set in the product settings; ADR-050 describes it).',
                 'warning_sample' => "Find out which IP nginx sees for an employee (docs/runbooks/portal-403.md, in\n"
                     ."Spanish) and put its network in the .env file. Then apply the change:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
