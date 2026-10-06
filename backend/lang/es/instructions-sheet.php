@@ -55,7 +55,7 @@ return [
     'result_rejected' => '«Código no válido»: la tablet no ha podido leer tu tarjeta. Ficha con tu código y tu PIN y avisa a tu responsable.',
 
     'no_card_title' => '3. Si no tienes la tarjeta',
-    'no_card_body' => 'Pulsa «Ficha con tu código y PIN» en la tablet, escribe tu código de empleado y tu PIN de 6 dígitos. Tu fichaje cuenta igual. Si has perdido la tarjeta, díselo a tu responsable ese mismo día: se anula y te dan otra.',
+    'no_card_body' => 'Pulsa «Ficha con tu código y PIN» en la tablet, escribe tu código de empleado y tu PIN. Tu fichaje cuenta igual. Si has perdido la tarjeta, díselo a tu responsable ese mismo día: se anula y te dan otra.',
 
     'portal_title' => '4. Consultar tu registro',
     'portal_body' => 'Puedes ver tus jornadas y descargar tu registro cuando quieras, desde un equipo conectado a la red del hotel o desde donde te indique tu empresa, en esta dirección:',

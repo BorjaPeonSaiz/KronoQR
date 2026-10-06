@@ -923,7 +923,7 @@ dependency, not the application.
 ### …the employee portal returns 403 from my computer
 
 **It is correct** if your computer is outside `PORTAL_INTERNAL_CIDR`. The
-portal is opened with an employee code and a 6-digit PIN, and one of the
+portal is opened with an employee code and a PIN, and one of the
 protections is that it is not reachable from any IP. See §6.
 
 Three cases where the `403` is surprising and is still expected:
@@ -1147,15 +1147,17 @@ would mean losing the metrics and the alerts that depend on them.
 PORTAL_INTERNAL_CIDR=10.0.10.0/24
 ```
 
-**What it does.** The employee portal (employee code + 6-digit PIN) only
-responds to requests arriving from this range. Any other origin receives
-`403` at the web server itself, before reaching the application. The tablets
-do not go through here: this range does not affect clocking in.
+**What it does.** The employee portal (employee code + PIN, 6 digits by
+default or 8 if you configure it) only responds to requests arriving from this
+range. Any other origin receives `403` at the web server itself, before
+reaching the application. The tablets do not go through here: this range does
+not affect clocking in.
 
 **Why it exists.** A 6-digit PIN is a small space. Restricting the portal to
-the internal network is one of the four controls that compensate for it,
-together with lockout after failed attempts, the per-IP request limit and the
-fact that the portal session can only read the employee's own data.
+the internal network is one of the controls that compensate for it, together
+with each employee's attempt lockout, the per-connection lockout (20 failures
+in 15 minutes from one address close it for an hour), the per-IP request limit
+and the fact that the portal session can only read the employee's own data.
 
 **What to put.** The LAN from which the staff will open the portal (the office
 computers and the staff wifi, for example `10.0.10.0/24`) or the corporate VPN
@@ -1191,6 +1193,25 @@ default. It is taken by setting `PORTAL_INTERNAL_CIDR=0.0.0.0/0` and must be
 noted in the installation's handover record: it is what answers the day
 someone asks why the portal is reachable from outside the hotel. What you take
 on by doing it, and when it is not advisable, is in the same runbook, §4.
+
+**If you open it to the internet, also do these three things** (the installer
+and `product:doctor` remind you with a warning, without blocking anything):
+
+1. **8-digit PIN.** With 6, someone trying from many different connections ends
+   up guessing a PIN within months; with 8, within decades. It is changed in the
+   panel, with the administration account: **Operational settings → Access →
+   PIN length**. PINs already handed out keep working until HR resets them; the
+   `access.short_pins` check of `product:doctor` says how many are left (only
+   the number).
+2. **`ADMIN_INTERNAL_CIDR`.** The portal and the panel share address and port:
+   with the portal open, the management panel is open too unless you close it to
+   your network with this variable (explained in
+   [`configuration.md`](configuration.md) §6). Leaving it empty is a valid
+   decision and the default; `product:doctor` flags it with a warning
+   (`network.admin`).
+3. **`TRUSTED_PROXY_CIDR`** if there is a proxy in front (next section): without
+   it, the whole staff arrives with the proxy's IP and a single per-connection
+   lockout keeps all of them out.
 
 **Format of the three networks.** Each variable (`KIOSK_VLAN_CIDR`,
 `PORTAL_INTERNAL_CIDR`, `METRICS_ALLOW_CIDR`) takes **one** IPv4 CIDR with a

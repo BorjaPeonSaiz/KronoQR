@@ -5,8 +5,10 @@ declare(strict_types=1);
 use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
+use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Sleep;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Shared\AuthenticationTrail;
 use Tests\Support\Shared\RecordingPinAttempts;
@@ -128,9 +130,7 @@ it('ejecuta la misma secuencia de operaciones del contador exista o no el codigo
         // Y no esta vacia: una implementacion que no tocara el contador en
         // ninguna de las dos ramas tambien pasaria la comparacion de arriba.
         ->and($conEmpleado[0])->toBe([
-            'secondsUntilUnlock:portal',
-            'recordFailure:portal',
-            'secondsUntilUnlock:portal',
+            'reserve:portal',
         ]);
 })->group('RS-03', 'RS-12', 'RF-ID-06');
 
@@ -210,7 +210,7 @@ it('no separa en el log el bloqueo del PIN equivocado', function (): void {
 })->group('RS-03', 'RS-12', 'RF-ID-06');
 
 it('no anota el fallo de quien ya esta bloqueado, para que el bloqueo no crezca por insistir', function (): void {
-    // El fallo del bloqueado se anota contra el señuelo: paga el mismo trabajo y
+    // La reserva del bloqueado no anota: paga la misma lectura y escritura y
     // no alarga el castigo de nadie (RS-12). Sin esto, quien insiste se bloquea
     // indefinidamente a si mismo — o a la persona cuyo codigo conoce.
     $empleado = empleadoDeLaSimetria();
@@ -236,3 +236,65 @@ it('no anota el fallo de quien ya esta bloqueado, para que el bloqueo no crezca 
         ->and($alBloquear->retryAfterSeconds())->toBe(300)
         ->and($despuesDeInsistir->retryAfterSeconds())->toBe(300);
 })->group('RS-12', 'RF-ID-06');
+
+/**
+ * Retiene un candado del contador como lo tendria otro proceso a mitad de
+ * reservar.
+ */
+function retenerCandadoDeLaSimetria(string $nombre): void
+{
+    $almacen = app(Cache::class)->getStore();
+    \assert($almacen instanceof LockProvider);
+
+    expect($almacen->lock($nombre, 10)->get())->toBeTrue();
+}
+
+/** El candado del señuelo de un codigo concreto en el portal. */
+function candadoDelSenueloDeLaSimetria(string $codigo): string
+{
+    return 'workforce:pin-failures-lock:portal:decoy:'
+        .hash_hmac('sha256', mb_strtolower($codigo), config()->string('app.key'));
+}
+
+it('no hace esperar a un codigo inexistente por la contienda de otros codigos inexistentes', function (): void {
+    // Regla dura 17. Con un candado del señuelo compartido, cualquier rafaga de
+    // codigos inexistentes hacia esperar a todos los demas, y uno real no: con
+    // contienda, un codigo inexistente tardaba 5 ms por reintento mas. Se
+    // retienen el antiguo candado compartido y el del señuelo de OTRO codigo:
+    // este no espera a ninguno.
+    Sleep::fake();
+    espiaDelContador();
+
+    retenerCandadoDeLaSimetria('workforce:pin-failures-lock:portal:00000000-0000-0000-0000-000000000000');
+    retenerCandadoDeLaSimetria(candadoDelSenueloDeLaSimetria('OTROQUENOEXISTE'));
+
+    app(EmployeePinVerifier::class)->verify(CODIGO_QUE_NO_EXISTE, PIN_MALO_DE_LA_SIMETRIA, PinOrigin::PORTAL);
+
+    Sleep::assertNeverSlept();
+})->group('RS-03', 'RS-12', 'RF-ID-06');
+
+it('con contienda sobre el mismo codigo espera lo mismo exista o no', function (): void {
+    // La otra cara: una rafaga con un mismo codigo se serializa en el candado de
+    // su empleado si existe, y en el del señuelo de ESE codigo si no. Con los dos
+    // retenidos, los dos caminos agotan los mismos reintentos y cuentan sin
+    // candado (regla dura 19): ni oraculo, ni excepcion.
+    $empleado = empleadoDeLaSimetria();
+    espiaDelContador();
+
+    retenerCandadoDeLaSimetria('workforce:pin-failures-lock:portal:'.$empleado['uuid']);
+    retenerCandadoDeLaSimetria(candadoDelSenueloDeLaSimetria(CODIGO_QUE_NO_EXISTE));
+
+    $verificador = app(EmployeePinVerifier::class);
+
+    Sleep::fake();
+    $conEmpleado = $verificador->verify($empleado['code'], PIN_MALO_DE_LA_SIMETRIA, PinOrigin::PORTAL);
+    Sleep::assertSleptTimes(100);
+
+    Sleep::fake();
+    $sinEmpleado = $verificador->verify(mb_strtolower(CODIGO_QUE_NO_EXISTE), PIN_MALO_DE_LA_SIMETRIA, PinOrigin::PORTAL);
+    Sleep::assertSleptTimes(100);
+
+    expect($conEmpleado->isVerified())->toBeFalse()
+        ->and($sinEmpleado->isVerified())->toBeFalse()
+        ->and(app(PinAttempts::class)->isLocked($empleado['uuid'], PinOrigin::PORTAL))->toBeFalse();
+})->group('RS-03', 'RS-12', 'RF-ID-06');

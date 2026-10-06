@@ -50,7 +50,7 @@ Suponiendo la URL `https://fichaje.tuhotel.local`:
 | `/kiosk/` | La PWA de las tablets | **Solo la VLAN de quioscos** | **Tú** (VLAN y cortafuegos) |
 | `/api/v1/scan`, `/api/v1/scan/batch`, `/api/v1/scan/pin` | Las tablets, al fichar | **Solo la VLAN de quioscos** | **Tú**. El producto **eleva el límite** dentro de `KIOSK_VLAN_CIDR` (§1.4); no restringe el acceso |
 | `/api/v1/kiosk/*` (emparejamiento, padrón, latido) | Las tablets | **Solo la VLAN de quioscos**. Las dos primeras del emparejamiento —`POST /api/v1/kiosk/pair` y `/pair/claim`— se sirven **sin autenticar**: ver §10 | **Tú** |
-| `/admin/` y la API de gestión (`/api/v1/auth/*` y el resto de `/api/v1/*`) | El panel de RRHH y de IT | **Solo la red interna o la VPN. Nunca internet** | **Tú.** El producto **no** filtra estas rutas por rango |
+| `/admin/` y la API de gestión (`/api/v1/auth/*` y el resto de `/api/v1/*`) | El panel de RRHH y de IT | **Solo la red interna o la VPN. Nunca internet** | **Tú**, con VLAN y cortafuegos. **Opcionalmente el producto**: con `ADMIN_INTERNAL_CIDR` en el `.env` (§1.2), `/admin/` y `/api/v1/auth/*` reciben `403` fuera de ese rango; vacía de serie, no filtra. El resto de `/api/v1/*` no se filtra por rango |
 | `/portal/` y `/api/v1/me/*` | El portal del empleado | Solo `PORTAL_INTERNAL_CIDR`; cualquier otro origen recibe `403` en el borde | **El producto** |
 | `/metrics` | El recolector de métricas | Solo `METRICS_ALLOW_CIDR`; cualquier otro origen recibe `403` | **El producto** |
 | `/api/v1/health`, `/api/v1/ready`, `/healthz` | Sondas y `doctor` | Red interna. **Sin autenticar**: ver §10 | **Tú** |
@@ -74,9 +74,22 @@ docker compose ps --format 'table {{.Service}}\t{{.Ports}}'
 
 ### 1.2 Lo que filtra el producto, y lo que tienes que filtrar tú
 
-Dilo en voz alta antes de seguir: **el producto restringe por rango el portal
-del empleado y las métricas, y nada más.** El panel, la API de gestión y el
-camino del quiosco se sirven a quien alcance el puerto 443.
+Dilo en voz alta antes de seguir: **de serie, el producto restringe por rango el
+portal del empleado y las métricas, y nada más.** El panel, la API de gestión y
+el camino del quiosco se sirven a quien alcance el puerto 443.
+
+**`ADMIN_INTERNAL_CIDR` (opcional, vacía de serie).** Si la rellenas con la LAN
+del hotel o tu VPN, nginx responde `403` a `/admin/` y a `/api/v1/auth/*` desde
+cualquier otro origen, antes de llegar a la aplicación. **Vacía, el panel y la
+autenticación del personal quedan abiertos a quien alcance el puerto 443**, y
+eso es lo que más importa si abres el portal a internet
+(`PORTAL_INTERNAL_CIDR=0.0.0.0/0`): el portal y el panel comparten host y
+puerto, así que el panel también queda a la vista. El segundo factor es
+obligatorio para administración, RRHH, auditoría y los responsables de
+departamento (ADR-050). Lo que
+queda además es el límite de 5 peticiones por minuto en la autenticación y el bloqueo
+de cuenta. Para abrir solo el portal, rellena `ADMIN_INTERNAL_CIDR`. No
+afecta al portal ni a los quioscos.
 
 No es un descuido. El borde no sabe cuál es tu red y no puede adivinarla sin
 que un valor por defecto demasiado abierto acabe siendo el de todos. La
@@ -501,14 +514,17 @@ mirando que llega el resumen de la noche siguiente.
 
 ## 8. Cuentas y accesos
 
-- **Segundo factor obligatorio.** De serie lo exigen los tres roles que
-  alcanzan datos de toda la plantilla: administrador, RRHH y auditor. El
-  responsable de departamento no lo exige porque su alcance está acotado al
-  suyo. Si tu política de seguridad es más dura, añádelo sin tocar nada más:
+- **Segundo factor obligatorio.** De serie lo exigen los cuatro roles que
+  entran por el panel con capacidad de leer o escribir el registro de otros:
+  administrador, RRHH, auditor y responsable de departamento (que corrige
+  jornadas, ADR-050). El valor de serie es:
 
   ```dotenv
   IDENTITY_2FA_REQUIRED_ROLES=admin,rrhh,auditor,responsable_departamento
   ```
+
+  Quitar un rol de la lista es una decisión que conviene anotar en el acta:
+  esa cuenta pasa a entrar con la contraseña sola.
 
   Quien ya tiene segundo factor lo usa siempre, aunque su rol no lo exija.
 - **Un rol por función, y el más pequeño que sirva.** Hay cuatro:
@@ -618,6 +634,8 @@ alcanzar el borde no debería alcanzarlo**: con el §1 bien hecho, esta
 información solo la ve quien ya está dentro de tu red. Esa es la razón de que
 este apartado vaya después del de red y no antes.
 
+**CORS.** La API solo autoriza peticiones entre orígenes desde el propio origen de la instalación: esquema, host y puerto de `APP_URL`. No hay nada que configurar: si cambia `APP_URL`, cambia con ella. Un navegador en otro dominio no recibe `Access-Control-Allow-Origin`, y las peticiones sin cabecera `Origin` (Prometheus, blackbox, `product:doctor`) no se ven afectadas. Si `APP_URL` está vacía o mal formada, CORS queda cerrado del todo y el quiosco, el panel y el portal siguen funcionando, porque se sirven desde el mismo origen que la API.
+
 > **Cierra:** nada por sí mismo. Documenta lo que es **decisión de tu red** y no
 > del producto. · **Dueño:** fabricante (que no salga nada más), tú (la
 > exposición).
@@ -646,7 +664,7 @@ está.
 | 13 | La copia de anoche existe y se verificó | `docker compose exec scheduler php artisan backup:verify` ([`operacion.md`](operacion.md) §2), o la alerta de la observabilidad | Diario (automático) o semanal (manual, si la apagaste) |
 | 14 | Restauración probada de verdad | Simulacro de [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) | **Trimestral** |
 | 15 | Correo cifrado de forma obligatoria | `sudo grep '^MAIL_SCHEME=' .env` | Entrega |
-| 16 | Segundo factor obligatorio en las cuentas de gestión | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` sigue diciendo `admin,rrhh,auditor`: una cuenta de esos roles sin segundo factor no puede entrar | Trimestral |
+| 16 | Segundo factor obligatorio en las cuentas de gestión | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` ya no incluye `responsable_departamento`: una cuenta de esos roles sin segundo factor no puede entrar | Trimestral |
 | 17 | Ninguna cuenta de quien ya no está | Repasa con RRHH quién debe tener panel y da de baja al resto: `docker compose exec app php artisan identity:deactivate-user <correo> --reason="<motivo>"`. La baja tiene efecto en la petición siguiente —también para las sesiones ya abiertas—, no borra el historial de esa cuenta y queda registrada con su autor y su motivo. **Sigue sin haber pantalla de cuentas de gestión en el panel**, y tampoco hay orden que las liste: la lista de partida es la de personal, no la del producto. Ya no hace falta abrir ninguna sesión de `psql` para esto ([`operacion.md`](operacion.md) §9) | Trimestral y en cada baja |
 | 18 | Ningún acceso de soporte vivo sin motivo | Panel → «Soporte» → «Accesos de soporte» | Mensual |
 | 19 | Todas las tablets en modo quiosco y ancladas | Recorrido físico: reiniciar una y comprobar que arranca sola en la PWA | Trimestral |

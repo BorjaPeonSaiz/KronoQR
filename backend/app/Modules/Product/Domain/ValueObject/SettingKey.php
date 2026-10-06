@@ -13,6 +13,7 @@ use App\Modules\Shared\Domain\ValueObject\PayrollDelimiter;
 use App\Modules\Shared\Domain\ValueObject\PayrollEncoding;
 use App\Modules\Shared\Domain\ValueObject\PayrollHoursFormat;
 use App\Modules\Shared\Domain\ValueObject\PayrollLayout;
+use App\Modules\Shared\Domain\ValueObject\PinLength;
 
 /**
  * El catalogo de claves de configuracion de la instalacion (RF-PD-01, ADR-017).
@@ -403,6 +404,23 @@ enum SettingKey: string
     case PRIVACY_POLICY_URL = 'PRIVACY_POLICY_URL';
 
     /**
+     * RF-ID-09, ADR-050: **con cuantas cifras se emiten los PIN** de la
+     * plantilla, `"6"` (de serie) u `"8"`.
+     *
+     * Una eleccion y no un entero, porque siete no es un valor admitido
+     * ({@see PinLength}). Cambiarla **no invalida ningun PIN**: cada uno sigue
+     * valiendo con la longitud con la que se emitio hasta que se restablece, y
+     * el portal y el quiosco aceptan de 6 a 8 cifras. Se recomienda `"8"`
+     * cuando el portal es accesible desde fuera de una red privada.
+     *
+     * Impacto `ACCESS_CONTROL`: no mueve ni un minuto del registro, cambia como
+     * se autentica una persona. **Reservada al cliente** frente al soporte del
+     * fabricante (`UpdateSettingsRequest`): bajar la fuerza del PIN de la
+     * plantilla desde fuera es una decision del responsable del tratamiento.
+     */
+    case IDENTITY_PIN_LENGTH = 'IDENTITY_PIN_LENGTH';
+
+    /**
      * Los idiomas que el producto trae traducidos.
      *
      * No es configuracion del cliente: es lo que hay en `lang/` y en los `i18n`
@@ -611,6 +629,14 @@ enum SettingKey: string
             ),
             self::PRIVACY_POLICY_URL->value => SettingDefinition::optionalHttpsUrl(
                 512, SettingImpact::PRESENTATION,
+            ),
+            // LA LONGITUD DEL PIN (RF-ID-09, ADR-050). Los dos valores salen del
+            // enum que los garantiza: una tercera copia escrita a mano acabaria
+            // admitiendo un siete.
+            self::IDENTITY_PIN_LENGTH->value => SettingDefinition::choice(
+                (string) PinLength::SIX->value,
+                array_map(static fn (PinLength $length): string => (string) $length->value, PinLength::cases()),
+                SettingImpact::ACCESS_CONTROL,
             ),
         ];
     }

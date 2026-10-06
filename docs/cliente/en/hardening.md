@@ -50,7 +50,7 @@ Assuming the URL `https://fichaje.tuhotel.local`:
 | `/kiosk/` | The tablets' PWA | **Only the kiosk VLAN** | **You** (VLAN and firewall) |
 | `/api/v1/scan`, `/api/v1/scan/batch`, `/api/v1/scan/pin` | The tablets, when clocking in | **Only the kiosk VLAN** | **You**. The product **raises the limit** inside `KIOSK_VLAN_CIDR` (§1.4); it does not restrict access |
 | `/api/v1/kiosk/*` (pairing, roster, heartbeat) | The tablets | **Only the kiosk VLAN**. The first two pairing routes —`POST /api/v1/kiosk/pair` and `/pair/claim`— are served **unauthenticated**: see §10 | **You** |
-| `/admin/` and the management API (`/api/v1/auth/*` and the rest of `/api/v1/*`) | The HR and IT panel | **Only the internal network or the VPN. Never the internet** | **You.** The product does **not** filter these paths by range |
+| `/admin/` and the management API (`/api/v1/auth/*` and the rest of `/api/v1/*`) | The HR and IT panel | **Only the internal network or the VPN. Never the internet** | **You**, with the VLAN and the firewall. **Optionally the product**: with `ADMIN_INTERNAL_CIDR` in the `.env` (§1.2), `/admin/` and `/api/v1/auth/*` answer `403` outside that range; empty by default, it does not filter. The rest of `/api/v1/*` is not filtered by range |
 | `/portal/` and `/api/v1/me/*` | The employee portal | Only `PORTAL_INTERNAL_CIDR`; any other origin receives `403` at the edge | **The product** |
 | `/metrics` | The metrics collector | Only `METRICS_ALLOW_CIDR`; any other origin receives `403` | **The product** |
 | `/api/v1/health`, `/api/v1/ready`, `/healthz` | Probes and `doctor` | Internal network. **Unauthenticated**: see §10 | **You** |
@@ -75,9 +75,21 @@ docker compose ps --format 'table {{.Service}}\t{{.Ports}}'
 
 ### 1.2 What the product filters, and what you have to filter
 
-Say it out loud before going on: **the product restricts the employee portal
-and the metrics by range, and nothing else.** The panel, the management API and
-the kiosk path are served to whoever reaches port 443.
+Say it out loud before going on: **by default, the product restricts the
+employee portal and the metrics by range, and nothing else.** The panel, the
+management API and the kiosk path are served to whoever reaches port 443.
+
+**`ADMIN_INTERNAL_CIDR` (optional, empty by default).** If you fill it in with the
+hotel LAN or your VPN, nginx answers `403` to `/admin/` and `/api/v1/auth/*` from
+any other origin, before reaching the application. **Empty, the panel and the
+staff authentication are open to whoever reaches port 443**, and that is what
+matters most if you open the portal to the internet
+(`PORTAL_INTERNAL_CIDR=0.0.0.0/0`): the portal and the panel share host and
+port, so the panel is in plain sight too. The second factor is mandatory
+for administration, HR, audit and department managers (ADR-050). What remains
+in addition is the limit of 5 requests per
+minute on authentication and the account lockout. To open only the portal, fill
+in `ADMIN_INTERNAL_CIDR`. It does not affect the portal or the kiosks.
 
 This is not an oversight. The edge does not know what your network is and
 cannot guess it without an over-permissive default ending up as everyone's. You
@@ -509,15 +521,18 @@ the next night's digest arrives.
 
 ## 8. Accounts and access
 
-- **Second factor mandatory.** By default it is required of the three roles
-  that reach data on the whole workforce: administrator, HR and auditor. The
-  department manager is not required to have it because their scope is limited
-  to their own department. If your security policy is stricter, add it without
-  touching anything else:
+- **Second factor mandatory.** By default it is required of the four roles
+  that can read or write other people's records through the panel:
+  administrator, HR, auditor and department manager (who corrects workdays,
+  ADR-050). The default value is:
 
   ```dotenv
   IDENTITY_2FA_REQUIRED_ROLES=admin,rrhh,auditor,responsable_departamento
   ```
+
+  Removing a role from the list is a decision worth recording in the
+  installation record: that account goes back to signing in with the password
+  alone.
 
   Whoever already has a second factor always uses it, even if their role does
   not require it.
@@ -631,6 +646,8 @@ reach the edge should not reach it**: with §1 done properly, this information
 is only seen by whoever is already inside your network. That is why this
 section comes after the network one and not before.
 
+**CORS.** The API only authorises cross-origin requests from the installation's own origin: the scheme, host and port of `APP_URL`. There is nothing to configure: if `APP_URL` changes, it changes with it. A browser on another domain does not receive `Access-Control-Allow-Origin`, and requests without an `Origin` header (Prometheus, blackbox, `product:doctor`) are not affected. If `APP_URL` is empty or malformed, CORS is closed entirely and the kiosk, the panel and the portal keep working, because they are served from the same origin as the API.
+
 > **Closes:** nothing by itself. It documents what is **your network's
 > decision** and not the product's. · **Owner:** the vendor (that nothing more
 > gets out), you (the exposure).
@@ -659,7 +676,7 @@ there.
 | 13 | Last night's backup exists and was verified | `docker compose exec scheduler php artisan backup:verify` ([`operation.md`](operation.md) §2), or the observability alert | Daily (automatic) or weekly (manual, if you switched it off) |
 | 14 | Restore genuinely tested | Drill from [`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) | **Quarterly** |
 | 15 | Email encryption mandatory | `sudo grep '^MAIL_SCHEME=' .env` | Delivery |
-| 16 | Second factor mandatory on the management accounts | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` still says `admin,rrhh,auditor`: an account with one of those roles and no second factor cannot log in | Quarterly |
+| 16 | Second factor mandatory on the management accounts | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` no longer includes `responsable_departamento`: an account with one of those roles and no second factor cannot log in | Quarterly |
 | 17 | No account belonging to someone who has left | Go through with HR who should have panel access and deactivate the rest: `docker compose exec app php artisan identity:deactivate-user <email> --reason="<reason>"`. Deactivation takes effect on the next request — including for sessions already open —, does not delete that account's history and is recorded with its author and its reason. **There is still no management-accounts screen in the panel**, and no order that lists them either: the starting list is the staff list, not the product's. You no longer need to open a `psql` session for this ([`operation.md`](operation.md) §9) | Quarterly and on every leaver |
 | 18 | No live support access without a reason | Panel → "Support" → "Support access grants" | Monthly |
 | 19 | Every tablet in kiosk mode and anchored | Physical walk-round: reboot one and check it starts on its own into the PWA | Quarterly |

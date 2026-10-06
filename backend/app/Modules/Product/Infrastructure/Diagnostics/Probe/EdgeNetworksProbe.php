@@ -57,6 +57,25 @@ use App\Modules\Product\Domain\ValueObject\DoctorStatus;
  * Si la aplicacion no recibe la variable (un servicio sin ella, una prueba) el
  * hallazgo es `ok` con la variante `not_provided`, que lo declara: una
  * comprobacion que calla no es una comprobacion.
+ *
+ * ## La cuarta red: `ADMIN_INTERNAL_CIDR` (PP-10, ADR-050 §4)
+ *
+ * Cierra el panel y `/api/v1/auth/*` a un rango. Al contrario que las otras
+ * tres, **vacia es un valor legitimo y el de serie**: el propietario quiere el
+ * panel abierto. Por eso aqui se distingue «no la recibo» (`null`) de «la
+ * recibo vacia» (`''`): la segunda es un aviso informativo del riesgo aceptado
+ * —panel alcanzable desde donde lo sea el portal—, nunca un fallo, porque el
+ * instalador no puede imponer una red que el cliente no ha decidido.
+ *
+ * ## Lo que NO esta aqui: la longitud del PIN y los recuentos
+ *
+ * Los hallazgos que ADR-050 §3 pide junto a estos —portal expuesto con PIN de 6,
+ * personas con PIN de 6 pendientes de restablecer, segundo factor— necesitan
+ * la base de datos, y viven en {@see AccessHardeningProbe}. Si estuvieran aqui,
+ * una base de datos caida tumbaria la familia entera ({@see RunDoctorHandler})
+ * y con ella los cuatro hallazgos de red, que son justo los que no dependen de
+ * nada. La clasificacion del portal es una sola, {@see self::portalCategory()},
+ * para que las dos sondas no lleguen nunca a veredictos distintos.
  */
 final readonly class EdgeNetworksProbe implements DoctorProbe
 {
@@ -83,10 +102,18 @@ final readonly class EdgeNetworksProbe implements DoctorProbe
         '100.64.0.0/10',
     ];
 
+    /** Categorias de {@see self::portalCategory()} con las que el portal se alcanza desde internet. */
+    public const array EXPOSED_PORTAL_CATEGORIES = ['open', 'public'];
+
+    /**
+     * @param  string|null  $adminInternal  `ADMIN_INTERNAL_CIDR`: nulo si la aplicacion no
+     *                                      la recibe, cadena vacia si la recibe vacia (el valor de serie).
+     */
     public function __construct(
         private string $kioskVlan,
         private string $portalInternal,
         private string $metricsAllow,
+        private ?string $adminInternal = null,
     ) {}
 
     public function family(): string
@@ -101,39 +128,86 @@ final readonly class EdgeNetworksProbe implements DoctorProbe
     {
         return [
             $this->portal(),
+            $this->admin(),
             $this->openable('network.kiosk_vlan', $this->kioskVlan),
             $this->openable('network.metrics', $this->metricsAllow),
         ];
     }
 
-    private function portal(): DoctorFinding
+    /**
+     * Que es el rango del portal: `not_provided`, `invalid`, `open`
+     * (`0.0.0.0/0`), `sample` (la red de desarrollo), `public` o `private`.
+     *
+     * Publico y estatico porque lo comparte {@see AccessHardeningProbe}: la
+     * recomendacion del PIN de 8 cifras depende de esta misma respuesta, y dos
+     * clasificaciones acabarian discrepando en el borde de un rango.
+     */
+    public static function portalCategory(string $raw): string
     {
-        $id = 'network.portal';
-        $value = trim($this->portalInternal);
+        $value = trim($raw);
 
         if ($value === '') {
-            return $this->notProvided($id);
+            return 'not_provided';
         }
 
-        $bounds = $this->bounds($value);
+        $bounds = self::bounds($value);
 
         if ($bounds === null) {
-            return DoctorFinding::failure($id, 'invalid', details: ['category' => 'invalid']);
+            return 'invalid';
         }
 
-        if ($this->prefix($value) === 0) {
-            return DoctorFinding::warning($id, 'open', details: ['category' => 'open']);
+        if (self::prefix($value) === 0) {
+            return 'open';
         }
 
         if ($value === self::DEVELOPMENT_NETWORK_SAMPLE) {
-            return DoctorFinding::warning($id, 'sample', details: ['category' => 'sample']);
+            return 'sample';
         }
 
-        if (! $this->isPrivate($bounds)) {
-            return DoctorFinding::warning($id, 'public', details: ['category' => 'public']);
+        return self::isPrivate($bounds) ? 'private' : 'public';
+    }
+
+    private function portal(): DoctorFinding
+    {
+        $id = 'network.portal';
+        $category = self::portalCategory($this->portalInternal);
+
+        return match ($category) {
+            'not_provided' => $this->notProvided($id),
+            'invalid' => DoctorFinding::failure($id, 'invalid', details: ['category' => 'invalid']),
+            'open', 'sample', 'public' => DoctorFinding::warning($id, $category, details: ['category' => $category]),
+            default => DoctorFinding::ok($id, ['category' => 'private']),
+        };
+    }
+
+    /**
+     * `ADMIN_INTERNAL_CIDR` (PP-10). Vacia es el valor de serie y un riesgo
+     * aceptado por el propietario (ADR-050, residuo 3): se avisa para que conste,
+     * no para corregir nada que este roto.
+     */
+    private function admin(): DoctorFinding
+    {
+        $id = 'network.admin';
+
+        if ($this->adminInternal === null) {
+            return $this->notProvided($id);
         }
 
-        return DoctorFinding::ok($id, ['category' => 'private']);
+        $value = trim($this->adminInternal);
+
+        if ($value === '') {
+            return DoctorFinding::warning($id, 'unfiltered', details: ['category' => 'unfiltered']);
+        }
+
+        if (self::bounds($value) === null) {
+            return DoctorFinding::failure($id, 'invalid', details: ['category' => 'invalid']);
+        }
+
+        if (self::prefix($value) === 0) {
+            return DoctorFinding::warning($id, 'unfiltered', details: ['category' => 'open']);
+        }
+
+        return DoctorFinding::ok($id, ['category' => 'restricted']);
     }
 
     /**
@@ -147,11 +221,11 @@ final readonly class EdgeNetworksProbe implements DoctorProbe
             return $this->notProvided($id);
         }
 
-        if ($this->bounds($value) === null) {
+        if (self::bounds($value) === null) {
             return DoctorFinding::failure($id, 'invalid', details: ['category' => 'invalid']);
         }
 
-        if ($this->prefix($value) === 0) {
+        if (self::prefix($value) === 0) {
             return DoctorFinding::warning($id, 'open', details: ['category' => 'open']);
         }
 
@@ -173,7 +247,7 @@ final readonly class EdgeNetworksProbe implements DoctorProbe
      *
      * @return array{int, int}|null
      */
-    private function bounds(string $cidr): ?array
+    private static function bounds(string $cidr): ?array
     {
         $octet = '(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])';
 
@@ -188,7 +262,7 @@ final readonly class EdgeNetworksProbe implements DoctorProbe
         return [$start, $start + $size - 1];
     }
 
-    private function prefix(string $cidr): int
+    private static function prefix(string $cidr): int
     {
         return (int) substr($cidr, (int) strrpos($cidr, '/') + 1);
     }
@@ -196,10 +270,10 @@ final readonly class EdgeNetworksProbe implements DoctorProbe
     /**
      * @param  array{int, int}  $bounds
      */
-    private function isPrivate(array $bounds): bool
+    private static function isPrivate(array $bounds): bool
     {
         foreach (self::PRIVATE_NETWORKS as $network) {
-            $private = $this->bounds($network);
+            $private = self::bounds($network);
 
             if ($private !== null && $bounds[0] >= $private[0] && $bounds[1] <= $private[1]) {
                 return true;

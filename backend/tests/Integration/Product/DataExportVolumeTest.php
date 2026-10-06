@@ -81,6 +81,7 @@ function instalacionParaExportar(): array
             'email' => $index % 7 === 0 ? $index.'.marta@hotel-ejemplo.example' : null,
             // Los dos secretos de la ficha de una persona. Ninguno puede salir.
             'pin_hash' => HASH_DE_PIN_SEMBRADO,
+            'pin_length' => 6,
             'national_id_hash' => $index % 5 === 0 ? '49871234Z'.$index : null,
             'photo_path' => '/var/www/fotos/'.$index.'.jpg',
             'status' => 'active',

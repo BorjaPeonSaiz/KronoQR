@@ -76,6 +76,14 @@ return [
         'kiosk_vlan' => env('KIOSK_VLAN_CIDR', ''),
         'portal_internal' => env('PORTAL_INTERNAL_CIDR', ''),
         'metrics_allow' => env('METRICS_ALLOW_CIDR', ''),
+
+        /*
+         * `ADMIN_INTERNAL_CIDR` (PP-10, ADR-050 §4). SIN valor por defecto, a
+         * proposito: aqui `null` («la aplicacion no la recibe») y `''` («la
+         * recibe vacia», el valor de serie: panel sin filtrar) son dos
+         * hallazgos distintos de `network.admin`.
+         */
+        'admin_internal' => env('ADMIN_INTERNAL_CIDR'),
     ],
 
 ];

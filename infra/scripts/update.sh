@@ -903,6 +903,8 @@ audit_json_object() {
     first=0
     if [ "${key}" = "migrations_applied" ] && [[ "${value}" =~ ^[0-9]+$ ]]; then
       out+="\"${key}\":${value}"
+    elif [ "${key}" = "portal_exposed" ] && [ "${value}" = "true" ]; then
+      out+="\"${key}\":true"
     else
       out+="\"${key}\":\"$(audit_json_escape "${value}")\""
     fi
@@ -2364,7 +2366,8 @@ phase_start_and_verify() {
     "chain_before=${CHAIN_BEFORE}" \
     "chain_after=${CHAIN_AFTER}" \
     "backup_fingerprint=${BACKUP_SHA256}" \
-    "report_id=update-${STARTED_UTC}")"
+    "report_id=update-${STARTED_UTC}" \
+    "portal_exposed=$(kq_portal_exposed "${CURRENT_ENV}")")"
 
   detail_note "--- compliance:record-system-event system.updated ---"
   audit_status=0

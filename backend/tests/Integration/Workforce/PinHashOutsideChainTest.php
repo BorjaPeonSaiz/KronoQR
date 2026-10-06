@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Workforce\Application\Command\ImportEmployeesCommand;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Concurrency\ChildSessions;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Time\FrozenTime;
+use Tests\Support\Workforce\ChainProbingPinAttempts;
 use Tests\Support\Workforce\ChainProbingPinHasher;
 use Tests\Support\Workforce\ImportFiles;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -106,3 +108,16 @@ it('el control: con la cadena tomada, la sonda la ve', function (): void {
 
     expect($sonda->heldTheChain)->toBe([true]);
 })->group('RF-ID-09');
+
+it('el restablecimiento limpia el bloqueo del PIN sin tener la cadena', function (): void {
+    // `clear()` toma el candado de cache de cada puerta y puede esperar con
+    // contienda: dentro de la cadena, esa espera la pagaria cada fichaje.
+    $persona = WorkforceFixtures::employee(WorkforceFixtures::site());
+    $sonda = new ChainProbingPinAttempts(app(PinAttempts::class));
+    app()->instance(PinAttempts::class, $sonda);
+
+    app(ResetEmployeePinHandler::class)->handle(new ResetEmployeePinCommand($persona));
+
+    expect($sonda->heldTheChain)->toBe([false])
+        ->and(DB::table('audit_log')->where('action', 'pin.reset')->count())->toBe(1);
+})->group('RF-ID-09', 'RS-12');

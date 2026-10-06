@@ -12,6 +12,7 @@ import { expect, test } from '@playwright/test'
 import {
   PORTAL_EMPLOYEE_CODE,
   PORTAL_PIN,
+  PORTAL_PIN_8,
   PORTAL_SESSION_TOKEN,
   SESSION_STORAGE_KEY,
   logInToPortal,
@@ -188,5 +189,38 @@ test(
 
     await page.goto('/records')
     await expect(page).toHaveURL(/\/login\?redirect=(?:%2F|\/)records$/)
+  },
+)
+
+test(
+  'un PIN de 8 cifras entra igual que uno de 6',
+  { tag: ['@RL-05', '@RF-ID-08', '@RF-ID-09'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es' })
+
+    await logInToPortal(page, { employeeCode: PORTAL_EMPLOYEE_CODE, pin: PORTAL_PIN_8 })
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Mi registro horario' })).toBeVisible()
+  },
+)
+
+test(
+  'el bloqueo del origen avisa sin culpar, anuncia el mensaje y deshabilita el boton con su explicacion',
+  { tag: ['@RL-05', '@RF-ID-06', '@RS-12'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es', loginOutcome: 'originLocked' })
+
+    await submitLoginForm(page)
+
+    const alert = page.getByRole('alert')
+    await expect(alert).toContainText('Demasiados intentos desde esta conexión')
+    await expect(alert).toContainText('2 minutos')
+    await expect(alert).not.toContainText('PIN')
+
+    await page.locator('input[name="pin"]').fill(PORTAL_PIN)
+    const button = page.getByRole('button', { name: 'Entrar' })
+    await expect(button).toBeDisabled()
+    await expect(button).toHaveAccessibleDescription(/estará disponible en \d:\d{2}/)
+    await expect(page).toHaveURL(/\/login$/)
   },
 )

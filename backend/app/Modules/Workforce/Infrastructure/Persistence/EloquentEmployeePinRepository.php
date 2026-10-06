@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Infrastructure\Persistence;
 
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\PinDeliveryRecord;
 use App\Modules\Workforce\Application\Port\PinStatus;
@@ -60,7 +61,7 @@ final readonly class EloquentEmployeePinRepository implements EmployeePinReposit
      * fuerte que la anterior: no hay ninguna via por la que pueda acabar en el
      * texto de una consulta.
      */
-    public function issue(string $employeeUuid, string $pinHash, DateTimeImmutable $issuedAt): bool
+    public function issue(string $employeeUuid, string $pinHash, PinLength $pinLength, DateTimeImmutable $issuedAt): bool
     {
         $affected = Employee::query()
             ->where('uuid', $employeeUuid)
@@ -68,6 +69,7 @@ final readonly class EloquentEmployeePinRepository implements EmployeePinReposit
             ->where('status', '<>', EmploymentStatus::TERMINATED->value)
             ->update([
                 'pin_hash' => $pinHash,
+                'pin_length' => $pinLength->value,
                 'pin_issued_at' => $issuedAt,
                 'pin_delivered_at' => null,
                 'pin_delivered_by_user_id' => null,

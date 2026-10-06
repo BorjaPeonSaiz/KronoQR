@@ -186,8 +186,8 @@ return [
                     .'comprobar desde donde se abre el portal.',
                 'warning_open' => 'El portal del empleado esta abierto a internet (PORTAL_INTERNAL_CIDR permite '
                     .'cualquier origen). Es una decision legitima del cliente, pero el portal entra con codigo '
-                    .'de empleado y un PIN de 6 digitos: conviene que conste y que alguien vigile los intentos '
-                    .'fallidos.',
+                    .'de empleado y PIN: conviene que conste, que alguien vigile los intentos fallidos y que los '
+                    .'PIN sean de 8 cifras (la comprobacion «access.pin_length» dice como estan).',
                 'warning_public' => 'PORTAL_INTERNAL_CIDR incluye direcciones que no son de una red privada: el '
                     .'portal del empleado se puede abrir desde esas direcciones publicas de internet.',
                 'warning_sample' => 'PORTAL_INTERNAL_CIDR conserva el valor de ejemplo de la red de desarrollo. '
@@ -195,6 +195,21 @@ return [
                     .'recibe un 403.',
                 'failure_invalid' => 'PORTAL_INTERNAL_CIDR no es un rango de red IPv4 valido. El servidor web '
                     .'no arranca con ese valor, asi que no se sirve nada: ni el portal, ni el panel, ni los '
+                    .'quioscos.',
+            ],
+            'admin' => [
+                'ok' => 'El panel de gestion y el acceso del personal solo se admiten desde una red concreta '
+                    .'(ADMIN_INTERNAL_CIDR).',
+                'ok_not_provided' => 'La aplicacion no recibe ADMIN_INTERNAL_CIDR, asi que no se ha podido '
+                    .'comprobar desde donde se abre el panel de gestion.',
+                'warning_unfiltered' => 'El panel de gestion (/admin/) y el acceso del personal no se filtran por '
+                    .'red (ADMIN_INTERNAL_CIDR vacia o abierta a cualquier origen): se alcanzan desde donde se '
+                    .'alcance el servidor, y si el portal del empleado esta abierto a internet, el panel tambien. '
+                    .'Es el valor de serie y un riesgo aceptado, no una averia: siguen protegiendolo la '
+                    .'contraseña, el segundo factor obligatorio de los roles de gestion, el limite de 5 intentos '
+                    .'por minuto y el bloqueo de cuenta.',
+                'failure_invalid' => 'ADMIN_INTERNAL_CIDR no es un rango de red IPv4 valido. El servidor web no '
+                    .'arranca con ese valor, asi que no se sirve nada: ni el portal, ni el panel, ni los '
                     .'quioscos.',
             ],
             'kiosk_vlan' => [
@@ -215,6 +230,43 @@ return [
                     .'interno del sistema, se puede leer desde cualquier sitio.',
                 'failure_invalid' => 'METRICS_ALLOW_CIDR no es un rango de red IPv4 valido. El servidor web no '
                     .'arranca con ese valor.',
+            ],
+        ],
+
+        // --- Acceso al portal y al panel (ADR-050) ---------------------------
+
+        'access' => [
+            'probe' => $probe,
+            'pin_length' => [
+                'ok' => 'El portal del empleado no esta declarado como accesible desde internet y los PIN se '
+                    .'emiten de :length cifras, que con el bloqueo por intentos es suficiente.',
+                'ok_exposed' => 'El portal del empleado es accesible desde internet y los PIN se emiten de 8 '
+                    .'cifras, que es lo recomendado.',
+                'warning' => 'El portal del empleado es accesible desde internet y los PIN se emiten de 6 '
+                    .'cifras. Con 6 cifras, quien prueba desde muchas conexiones distintas acaba acertando un '
+                    .'PIN en cuestion de meses; con 8, en decenas de años. El bloqueo por conexion no frena a '
+                    .'quien cambia de direccion.',
+            ],
+            'short_pins' => [
+                'ok' => 'Todas las personas en alta con PIN tienen ya el PIN de 8 cifras.',
+                'ok_six' => 'Los PIN se emiten de 6 cifras: no hay PIN cortos pendientes de restablecer.',
+                'warning' => ':count persona(s) en alta conservan un PIN de 6 cifras aunque los PIN ya se emiten '
+                    .'de 8. Siguen pudiendo entrar con el, no hay nada roto, pero hasta que se restablezcan su '
+                    .'PIN es el facil de adivinar. Este informe da solo el numero, nunca quienes.',
+            ],
+            'two_factor_roles' => [
+                'ok' => 'El segundo factor es obligatorio para los cuatro roles de gestion: administracion, RRHH, '
+                    .'auditoria y responsable de departamento.',
+                'warning' => 'IDENTITY_2FA_REQUIRED_ROLES no incluye :roles: esas cuentas pueden entrar al panel '
+                    .'con la contraseña sola, y todas leen o corrigen el registro horario. El responsable de '
+                    .'departamento corrige jornadas: con su contraseña robada se rehace el registro de su '
+                    .'departamento.',
+            ],
+            'two_factor_pending' => [
+                'ok' => 'Todas las cuentas activas de los roles obligados tienen el segundo factor dado de alta.',
+                'warning' => ':count cuenta(s) activa(s) de roles obligados a llevar segundo factor todavia no lo '
+                    .'han dado de alta. Lo haran en su proximo acceso al panel, pero hasta entonces quien tenga '
+                    .'solo su contraseña podria darlo de alta en su lugar. Este informe da solo el numero.',
             ],
         ],
 
@@ -581,18 +633,36 @@ return [
                     ."el acta de instalacion y revisa docs/cliente/endurecimiento.md.\n"
                     ."Si no, pon en el fichero .env la red del hotel o de tu VPN y aplica el cambio:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
-                    .'  docker compose up -d nginx',
+                    ."  docker compose up -d nginx\n"
+                    ."Mientras el portal este abierto a internet, emite los PIN de 8 cifras y cierra el\n"
+                    .'panel a tu red: mira las comprobaciones «access.pin_length» y «network.admin».',
                 'warning_public' => "Si solo debe abrirse desde la red del hotel, pon en el fichero .env su rango\n"
                     ."privado y aplica el cambio:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
                     ."  docker compose up -d nginx\n"
-                    .'Si esas direcciones publicas son las que quieres, no hay nada que corregir.',
+                    ."Si esas direcciones publicas son las que quieres, no hay nada que corregir.\n"
+                    ."Con el portal alcanzable desde internet, emite los PIN de 8 cifras y cierra el\n"
+                    .'panel a tu red: mira las comprobaciones «access.pin_length» y «network.admin».',
                 'warning_sample' => "Averigua con que IP ve nginx a un empleado (docs/runbooks/portal-403.md) y\n"
                     ."pon su red en el fichero .env. Despues aplica el cambio:\n"
                     ."  PORTAL_INTERNAL_CIDR=10.20.0.0/16\n"
                     .'  docker compose up -d nginx',
                 'failure_invalid' => "Corrigelo en el fichero .env: un solo rango con el formato a.b.c.d/n, por\n"
                     ."ejemplo 10.20.0.0/16 (una direccion suelta se escribe con /32, y IPv6 no se admite).\n"
+                    ."Despues aplica el cambio:\n"
+                    .'  docker compose up -d nginx',
+            ],
+            'admin' => [
+                'warning_unfiltered' => "Si quieres el panel abierto, no hay nada que corregir: anotalo en el acta de\n"
+                    ."instalacion (docs/cliente/endurecimiento.md, apartado 1.2).\n"
+                    ."Para admitirlo solo desde la red del hotel o desde tu VPN, pon su rango en el\n"
+                    ."fichero .env y aplica el cambio:\n"
+                    ."  ADMIN_INTERNAL_CIDR=10.20.0.0/16\n"
+                    ."  docker compose up -d nginx\n"
+                    ."Antes, comprueba que tu propio ordenador esta dentro de ese rango: fuera de el,\n"
+                    .'el panel responde 403 y tendrias que corregirlo desde la consola del servidor.',
+                'failure_invalid' => "Corrigelo en el fichero .env: un solo rango con el formato a.b.c.d/n, por\n"
+                    ."ejemplo 10.20.0.0/16, o dejala vacia para no filtrar el panel por red.\n"
                     ."Despues aplica el cambio:\n"
                     .'  docker compose up -d nginx',
             ],
@@ -613,6 +683,43 @@ return [
                 'failure_invalid' => "Corrigelo en el fichero .env: un solo rango con el formato a.b.c.d/n, por\n"
                     ."ejemplo 172.29.0.20/32. Despues aplica el cambio:\n"
                     .'  docker compose up -d nginx',
+            ],
+        ],
+
+        'access' => [
+            'probe' => $probeFix,
+            'pin_length' => [
+                'warning' => "Pasa a PIN de 8 cifras desde el panel, con una cuenta de administracion:\n"
+                    ."  «Ajustes operativos» -> «Acceso» -> «Longitud del PIN» -> 8 cifras\n"
+                    ."El cambio queda en el registro de auditoria. Los PIN ya entregados siguen\n"
+                    ."valiendo: RRHH los restablece a medida que los entrega en mano (comprobacion\n"
+                    ."«access.short_pins»). Si el portal no deberia estar abierto a internet, corrige\n"
+                    .'PORTAL_INTERNAL_CIDR (comprobacion «network.portal»).',
+            ],
+            'short_pins' => [
+                'warning' => "RRHH restablece el PIN de cada persona y se lo entrega en mano, cuando pase por\n"
+                    ."la oficina; no hace falta hacerlo a todos el mismo dia:\n"
+                    ."  Panel -> «Plantilla» -> la persona -> «Restablecer el PIN»\n"
+                    ."El PIN nuevo sale con 8 cifras y el anterior deja de valer en el acto.\n"
+                    .'Este numero baja con cada restablecimiento; vuelve a ejecutar este diagnostico para seguirlo.',
+            ],
+            'two_factor_roles' => [
+                'warning' => "Si no es una decision tomada a proposito, pon los cuatro roles en el fichero\n"
+                    .".env y aplica el cambio:\n"
+                    ."  IDENTITY_2FA_REQUIRED_ROLES=admin,rrhh,auditor,responsable_departamento\n"
+                    ."  docker compose up -d app\n"
+                    .'Quien no tenga aun segundo factor lo dara de alta en su siguiente acceso al panel.',
+            ],
+            'two_factor_pending' => [
+                'warning' => "Pide a esas personas que entren al panel cuanto antes: en ese primer acceso el\n"
+                    ."panel les pide dar de alta el segundo factor con la aplicacion de su telefono.\n"
+                    ."Despues revisa en el registro de auditoria los asientos «auth.two_factor_enabled»:\n"
+                    ."cada alta lleva la hora y la IP desde la que se hizo. Si alguna no la reconoce su\n"
+                    ."titular, retira ese segundo factor y cambia la contraseña de la cuenta:\n"
+                    ."  docker compose exec app php artisan identity:2fa-reset <uuid-de-la-cuenta>\n"
+                    ."  docker compose exec app php artisan identity:reset-password <correo-de-la-cuenta>\n"
+                    ."Una cuenta que ya no usa nadie, desactivala:\n"
+                    .'  docker compose exec app php artisan identity:deactivate-user <correo-de-la-cuenta>',
             ],
         ],
 

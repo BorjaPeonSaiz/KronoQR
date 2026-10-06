@@ -19,6 +19,7 @@ use App\Modules\Identity\Application\Port\LoginAttempts;
 use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
 use App\Modules\Identity\Application\Port\ManagementAccountRegistry;
 use App\Modules\Identity\Application\Port\PortalAddressProvider;
+use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Identity\Application\Port\QrKeyProvider;
 use App\Modules\Identity\Application\Port\TwoFactorAuthenticator;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
@@ -38,12 +39,15 @@ use App\Modules\Identity\Application\UseCase\RotateSigningKey;
 use App\Modules\Identity\Application\UseCase\VerifyTwoFactorHandler;
 use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Identity\Domain\Policy\DeviceTokenRotationPolicy;
+use App\Modules\Identity\Domain\Policy\OriginLockAuditCeiling;
+use App\Modules\Identity\Domain\Policy\OriginLockoutPolicy;
 use App\Modules\Identity\Domain\Policy\TwoFactorRequirement;
 use App\Modules\Identity\Domain\ValueObject\DeviceStatus;
 use App\Modules\Identity\Http\Policy\CredentialPolicy;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotCardRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotInstructionsSheetRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\CacheLoginAttempts;
+use App\Modules\Identity\Infrastructure\Adapter\CachePortalOriginAttempts;
 use App\Modules\Identity\Infrastructure\Adapter\ConfiguredPortalAddress;
 use App\Modules\Identity\Infrastructure\Adapter\ConfiguredQrKeyProvider;
 use App\Modules\Identity\Infrastructure\Adapter\EloquentCredentialFingerprints;
@@ -66,6 +70,7 @@ use App\Modules\Identity\Infrastructure\Console\ResetTwoFactorCommand;
 use App\Modules\Identity\Infrastructure\Console\RetireSigningKeyCommand;
 use App\Modules\Identity\Infrastructure\Console\RevokeCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\RotateSigningKeyCommand;
+use App\Modules\Identity\Infrastructure\Console\UnlockPortalOriginCommand;
 use App\Modules\Identity\Infrastructure\Listener\RevokeCredentialsOnOffboarding;
 use App\Modules\Identity\Infrastructure\Metrics\TextfileCredentialMetrics;
 use App\Modules\Identity\Infrastructure\Persistence\Device;
@@ -95,6 +100,7 @@ use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
 use DateTimeInterface;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
@@ -234,6 +240,9 @@ final class IdentityServiceProvider extends ServiceProvider
                  */
                 DeactivateManagementUserCommand::class,
                 ResetManagementPasswordCommand::class,
+                // Levanta el bloqueo por origen del portal (ADR-050, dictamen M3).
+                // Sin endpoint: es operacion del servidor, con asiento.
+                UnlockPortalOriginCommand::class,
                 IssueCredentialCommand::class,
                 PrintCredentialCommand::class,
                 PrintCredentialBatchCommand::class,
@@ -612,6 +621,46 @@ final class IdentityServiceProvider extends ServiceProvider
                 telemetry: $app->make(PortalAccessTelemetry::class),
                 journal: $app->make(AuthenticationJournal::class),
                 sessionHours: max(1, Config::integer('identity.portal.token_hours', 2)),
+                origins: $app->make(PortalOriginAttempts::class),
+                originPolicy: $app->make(OriginLockoutPolicy::class),
+                auditCeiling: $app->make(OriginLockAuditCeiling::class),
+            ),
+        );
+
+        /*
+         * EL BLOQUEO POR ORIGEN DEL PORTAL (RS-12, ADR-050 §2).
+         *
+         * Los umbrales se resuelven aqui de `config/identity.php` y entran ya
+         * hechos en la politica (reglas duras 13 y 14). Acotados a 1 como
+         * minimo: un cero no significaria «desactivado», significaria bloquear
+         * al primer fallo o no recordar ninguno.
+         *
+         * Solo `/api/v1/me/login`. El quiosco (`/scan/pin`) no pasa por aqui y
+         * no debe: el fichaje nunca se bloquea (regla dura 19, ADR-038).
+         *
+         * Cache `resilient` explicita, y no la que resuelva el contenedor: es la
+         * que sigue contando en disco sin Redis.
+         */
+        $this->app->singleton(
+            PortalOriginAttempts::class,
+            static fn (Application $app): CachePortalOriginAttempts => new CachePortalOriginAttempts(
+                $app->make(CacheFactory::class)->store('resilient'),
+            ),
+        );
+
+        $this->app->bind(
+            OriginLockoutPolicy::class,
+            static fn (): OriginLockoutPolicy => new OriginLockoutPolicy(
+                maxFailures: max(1, Config::integer('identity.portal.origin_lockout.max_failures', 20)),
+                windowSeconds: max(1, Config::integer('identity.portal.origin_lockout.window_seconds', 900)),
+                lockoutSeconds: max(1, Config::integer('identity.portal.origin_lockout.lockout_seconds', 3600)),
+            ),
+        );
+
+        $this->app->bind(
+            OriginLockAuditCeiling::class,
+            static fn (): OriginLockAuditCeiling => new OriginLockAuditCeiling(
+                max(0, Config::integer('identity.portal.origin_lockout.audit_ceiling_per_hour', 60)),
             ),
         );
     }

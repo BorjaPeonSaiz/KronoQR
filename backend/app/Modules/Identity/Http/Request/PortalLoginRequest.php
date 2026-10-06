@@ -25,11 +25,14 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  *
  * ## `pin` si lleva patron, y no contradice lo anterior
  *
- * Seis digitos. La longitud del PIN es publica —el contrato la fija en
- * `IssuedPin.pin`, que es lo que el panel enseña al emitirlo— y **no depende de
- * si el codigo existe ni de si el PIN acierta**: un PIN correcto y uno
- * incorrecto tienen la misma forma. Validarla aqui frena a un cliente mal
- * escrito sin filtrar nada.
+ * De 6 a 8 cifras, **sea cual sea `IDENTITY_PIN_LENGTH`** (ADR-050). La forma
+ * admitida no depende de la configuracion ni de la persona: los PIN emitidos
+ * antes de cambiar el ajuste siguen valiendo con su longitud, y aceptar solo la
+ * configurada dejaria fuera a quien aun no ha recogido el nuevo. Asi la
+ * validacion **no revela que longitud espera la instalacion ni cual tiene el
+ * PIN de nadie** (RS-03): un 7 es un PIN incorrecto, `401` y un fallo en el
+ * contador, igual que uno de 6 equivocado. Validar la forma frena a un cliente
+ * mal escrito sin filtrar nada.
  *
  * ## El PIN viaja en claro, y aqui eso es lo correcto
  *
@@ -69,7 +72,7 @@ final class PortalLoginRequest extends FormRequest
     {
         return [
             'employee_code' => ['required', 'string', 'min:1', 'max:32'],
-            'pin' => ['required', 'string', 'regex:/^[0-9]{6}$/'],
+            'pin' => ['required', 'string', 'regex:/^[0-9]{6,8}$/'],
         ];
     }
 
@@ -82,7 +85,7 @@ final class PortalLoginRequest extends FormRequest
             // Habla de la FORMA del PIN, que es publica, y nunca de su
             // contenido: describir un secreto en un cuerpo de error es como se
             // filtra media credencial.
-            'pin.regex' => 'El PIN son seis digitos.',
+            'pin.regex' => 'El PIN son de 6 a 8 cifras.',
         ];
     }
 
@@ -94,7 +97,19 @@ final class PortalLoginRequest extends FormRequest
             // distinguir mayusculas.
             employeeCode: $this->string('employee_code')->trim()->value(),
             pin: $this->string('pin')->value(),
+            // La direccion que entrega nginx (`REMOTE_ADDR`, corregida por
+            // `real_ip` si hay proxy de confianza), para el bloqueo por origen
+            // (ADR-050). Nunca `X-Forwarded-For`.
+            remoteAddress: $this->remoteAddress(),
         );
+    }
+
+    /** `REMOTE_ADDR` tal cual, sin pasar por las cabeceras de proxy. */
+    private function remoteAddress(): ?string
+    {
+        $address = $this->server('REMOTE_ADDR');
+
+        return \is_string($address) && $address !== '' ? $address : null;
     }
 
     protected function failedValidation(Validator $validator): void

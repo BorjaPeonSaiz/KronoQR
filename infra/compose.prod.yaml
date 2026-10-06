@@ -350,9 +350,11 @@ x-runtime-env: &runtime-env
   IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD:
   IDENTITY_LOGIN_LOCKOUT_SECONDS:
   IDENTITY_LOGIN_MAX_ATTEMPTS:
+  IDENTITY_ORIGIN_LOCK_AUDIT_CEILING_PER_HOUR:
   IDENTITY_MANAGEMENT_RATE_LIMIT:
   IDENTITY_PASSWORD_MIN_LENGTH:
   IDENTITY_PIN_FORBIDDEN:
+  IDENTITY_PIN_LENGTH:
   IDENTITY_PIN_LOCKOUT_RESET_HOURS:
   IDENTITY_PIN_LOCKOUT_SECONDS:
   IDENTITY_PIN_LOCKOUT_TIER2_ATTEMPTS:
@@ -361,6 +363,9 @@ x-runtime-env: &runtime-env
   IDENTITY_PIN_LOCKOUT_TIER3_SECONDS:
   IDENTITY_PIN_MAX_ATTEMPTS:
   IDENTITY_PIN_SEALING_SECRET_KEY:
+  IDENTITY_PORTAL_ORIGIN_LOCKOUT_SECONDS:
+  IDENTITY_PORTAL_ORIGIN_MAX_FAILURES:
+  IDENTITY_PORTAL_ORIGIN_WINDOW_SECONDS:
   IDENTITY_PORTAL_RATE_LIMIT:
   IDENTITY_PORTAL_SESSION_HOURS:
   IDENTITY_SESSION_TOKEN_HOURS:
@@ -513,7 +518,10 @@ x-runtime-env: &runtime-env
   # Borde y observabilidad que la aplicacion tambien consulta. Las tres redes del
   # borde las aplica nginx; la aplicacion las lee solo para que `product:doctor`
   # (sonda `network.*`, PP-01) avise de un portal abierto a internet o de un
-  # rango de ejemplo. No son secretos.
+  # rango de ejemplo. No son secretos. ADMIN_INTERNAL_CIDR (PP-10) va
+  # sin valor por defecto de Compose a proposito: la aplicacion distingue «no la
+  # recibe» de «vacia» (security.php).
+  ADMIN_INTERNAL_CIDR:
   KIOSK_VLAN_CIDR:
   METRICS_ALLOW_CIDR:
   PORTAL_INTERNAL_CIDR:
@@ -636,6 +644,9 @@ services:
       METRICS_ALLOW_CIDR:
       # Opcionales. Sin valor por defecto de Compose: si no estan, la imagen y
       # 03-kronoqr-tls-paths.envsh ponen las suyas.
+      # PP-10: cierra /admin/ y /api/v1/auth/* por rango. Vacia = sin filtro.
+      # 07-kronoqr-admin-net.envsh la rinde y 04-kronoqr-required-env.sh la valida.
+      ADMIN_INTERNAL_CIDR:
       # PP-03: proxies de confianza (vacia = sin proxy). 04-kronoqr-required-env.sh
       # valida su sintaxis y 06-kronoqr-real-ip.envsh la rinde como set_real_ip_from.
       TRUSTED_PROXY_CIDR:

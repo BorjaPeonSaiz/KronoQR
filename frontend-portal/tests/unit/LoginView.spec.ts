@@ -1,3 +1,4 @@
+// Acceso al portal (RF-ID-06, RF-ID-08, RF-ID-09, RS-12, ADR-050).
 import { PRODUCT_BRANDING } from '@kronoqr/web-kit/branding'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LoginView from '@/features/login/LoginView.vue'
@@ -209,19 +210,179 @@ describe('LoginView', () => {
     expect((wrapper.find('input[type="password"]').element as HTMLInputElement).value).toBe('')
   })
 
-  it('no deja enviar un PIN que no tiene seis digitos', async () => {
-    const spy = stubFetch(() => jsonResponse(portalSession()))
+  it.each(['284016', '2840167', '28401678'])(
+    'acepta un PIN de 6 a 8 cifras (%s) y lo envia (RF-ID-08, RF-ID-09)',
+    async (pin) => {
+      const spy = stubFetch(() => jsonResponse(portalSession()))
+      const wrapper = await mountView(LoginView)
+
+      await fillAndSubmit(wrapper, pin)
+
+      expect(spy).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it.each(['12345', '284016789', 'abcdef'])(
+    'no deja enviar un PIN de formato incorrecto (%s) y no dice por que (RS-03)',
+    async (pin) => {
+      const spy = stubFetch(() => jsonResponse(portalSession()))
+      const wrapper = await mountView(LoginView)
+
+      await wrapper.find('input[type="text"]').setValue('E7K2M9XQ4')
+      await wrapper.find('input[type="password"]').setValue(pin)
+      await settle(1)
+
+      expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+
+      await wrapper.find('form').trigger('submit')
+      await settle(1)
+
+      expect(spy).not.toHaveBeenCalled()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    },
+  )
+
+  it('el campo del PIN es numerico, de hasta 8 cifras, sin autocompletado, y lo explica', async () => {
     const wrapper = await mountView(LoginView)
+    const input = wrapper.find('input[type="password"]')
 
-    await wrapper.find('input[type="text"]').setValue('E7K2M9XQ4')
-    await wrapper.find('input[type="password"]').setValue('123')
-    await settle(1)
+    expect(input.attributes('inputmode')).toBe('numeric')
+    expect(input.attributes('maxlength')).toBe('8')
+    expect(input.attributes('autocomplete')).toBe('off')
+    expect(wrapper.text()).toContain(es.login.pinHint)
+  })
 
-    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+  describe('bloqueo del origen (ADR-050, RS-12)', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
 
-    await wrapper.find('form').trigger('submit')
-    await settle(1)
+    function lockedResponse(): Response {
+      return new Response(
+        JSON.stringify({
+          type: 'urn:kronoqr:problem:portal-origin-locked',
+          title: 'x',
+          status: 429,
+        }),
+        {
+          status: 429,
+          headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '120' },
+        },
+      )
+    }
 
-    expect(spy).not.toHaveBeenCalled()
+    it('muestra un mensaje propio, deshabilita el boton y descuenta hasta rehabilitarlo', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+      stubFetch(() => lockedResponse())
+
+      const wrapper = await mountView(LoginView)
+
+      await fillAndSubmit(wrapper)
+
+      const alert = wrapper.find('[role="alert"]')
+
+      expect(alert.text()).toContain(es.login.originLocked.title)
+      expect(alert.text()).toContain('2 minutos')
+      expect(alert.text()).not.toContain(es.errors.invalidCredentials.title)
+      expect(alert.text()).not.toContain(es.errors.rateLimited.title)
+
+      await wrapper.find('input[type="password"]').setValue('284016')
+
+      const button = wrapper.find('button[type="submit"]')
+
+      expect(button.attributes('disabled')).toBeDefined()
+      expect(button.attributes('aria-describedby')).toBe('login-locked-note')
+      expect(wrapper.find('#login-locked-note').text()).toContain('2:00')
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(wrapper.find('#login-locked-note').text()).toContain('1:00')
+      expect(button.attributes('disabled')).toBeDefined()
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      await settle(1)
+
+      expect(wrapper.find('#login-locked-note').exists()).toBe(false)
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
+    })
+
+    it('usa singular y plural en el consejo de espera', async () => {
+      for (const [seconds, text, locale] of [
+        [30, '1 minuto', 'es'],
+        [61, '2 minutos', 'es'],
+        [30, '1 minute', 'en'],
+        [61, '2 minutes', 'en'],
+      ] as const) {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+        stubFetch(
+          () =>
+            new Response(
+              JSON.stringify({
+                type: 'urn:kronoqr:problem:portal-origin-locked',
+                title: 'x',
+                status: 429,
+              }),
+              {
+                status: 429,
+                headers: {
+                  'Content-Type': 'application/problem+json',
+                  'Retry-After': String(seconds),
+                },
+              },
+            ),
+        )
+
+        const wrapper = await mountView(LoginView, { locale })
+
+        await fillAndSubmit(wrapper)
+        expect(wrapper.find('[role="alert"]').text()).toContain(text)
+        wrapper.unmount()
+        vi.useRealTimers()
+      }
+    })
+
+    it('la cuenta atras sale de la hora limite aunque el intervalo se retrase', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+      stubFetch(() => lockedResponse())
+
+      const wrapper = await mountView(LoginView)
+
+      await fillAndSubmit(wrapper)
+      vi.setSystemTime(Date.now() + 90_000)
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(wrapper.find('#login-locked-note').text()).toContain('0:29')
+    })
+
+    it('un 429 sin ese type mantiene el comportamiento del limitador general', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+      stubFetch(
+        () =>
+          new Response(JSON.stringify({ type: 'urn:x', title: 'x', status: 429 }), {
+            status: 429,
+            headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '120' },
+          }),
+      )
+
+      const wrapper = await mountView(LoginView)
+
+      await fillAndSubmit(wrapper)
+      await wrapper.find('input[type="password"]').setValue('284016')
+
+      expect(wrapper.find('[role="alert"]').text()).toContain(es.errors.rateLimited.title)
+      expect(wrapper.text()).not.toContain(es.login.originLocked.title)
+      expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined()
+    })
+
+    it('un 401 sigue siendo el rechazo generico', async () => {
+      stubFetch(() => problemResponse(401, 'urn:kronoqr:problem:invalid-credentials'))
+
+      const wrapper = await mountView(LoginView)
+
+      await fillAndSubmit(wrapper, '28401678')
+
+      expect(wrapper.find('[role="alert"]').text()).toContain(es.errors.invalidCredentials.title)
+      expect(wrapper.text()).not.toContain(es.login.originLocked.title)
+    })
   })
 })

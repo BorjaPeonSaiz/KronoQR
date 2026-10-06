@@ -666,6 +666,21 @@ apellidos**. Si tu programa de nómina cruza por nombre y no por código, eso se
 va a notar; si cruza por `employee_code` —que es lo recomendable— no pasa nada.
 Antes de dejarlo fijo, genera un fichero de prueba con un periodo corto y ábrelo.
 
+### 2.6 Acceso al portal: la longitud del PIN
+
+| Clave | De serie | Valores | Qué pasa si la cambias |
+| --- | --- | --- | --- |
+| `IDENTITY_PIN_LENGTH` | `6` | `6` u `8` | Cifras con las que se **emiten** los PIN de la plantilla (alta y restablecimiento). **No invalida ningún PIN**: cada uno sigue valiendo con la longitud con la que se emitió hasta que se restablece, y el portal y el quiosco aceptan de 6 a 8 cifras. **Pon `8` si el portal es accesible desde fuera de una red privada** (`PORTAL_INTERNAL_CIDR`, sección 6) y restablece los PIN de la plantilla a medida que los entregues en mano. **El soporte del fabricante no puede tocarla** (403): cuánta fuerza tiene la llave del registro de tu plantilla lo decides tú. Desde la 2.2.0. |
+
+El portal añade además un **bloqueo por origen**: 20 accesos fallidos desde la
+misma dirección (o la misma red `/64` de IPv6) en 15 minutos cierran el portal
+a esa dirección durante 60 minutos, también con el PIN correcto. Los umbrales
+son las variables `IDENTITY_PORTAL_ORIGIN_*` de la sección 6. Si hay un proxy
+delante, define `TRUSTED_PROXY_CIDR`: sin ella toda la plantilla comparte la
+dirección del proxy y un bloqueo los deja fuera a todos. Para levantar un
+bloqueo antes de tiempo: `docker compose exec app php artisan identity:origin-unlock <ip>` (queda
+asiento en el registro de auditoría).
+
 ---
 
 ## 3. Cómo se cambia
@@ -1559,6 +1574,7 @@ docker compose exec app php artisan identity:create-user   # crea otra cuenta de
 docker compose exec app php artisan identity:reset-password # contraseña nueva, mostrada una vez
 docker compose exec app php artisan identity:deactivate-user # da de baja una cuenta
 docker compose exec app php artisan identity:2fa-reset     # retira un segundo factor
+docker compose exec app php artisan identity:origin-unlock <ip> # levanta el bloqueo por origen del portal
 ```
 
 ---
@@ -1658,6 +1674,7 @@ petición siguiente sin reiniciar nada:
 | `PAYROLL_EXPORT_DATE_FORMAT` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
 | `PAYROLL_EXPORT_ENCODING` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
 | `PAYROLL_EXPORT_HEADER_ROW` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.5 |
+| `IDENTITY_PIN_LENGTH` | Panel → **Ajustes operativos** (`/settings`) | Sección 2.6 |
 
 **`KIOSK_SERVICE_CODE` — el código de servicio de la tablet.** Es el código
 numérico, de 8 a 12 cifras, con el que se abre la **pantalla de diagnóstico** de
@@ -1886,7 +1903,7 @@ su credencial es una tarjeta física y su acceso al portal es código y PIN.
 
 | Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
 | --- | --- | --- | --- | --- | --- |
-| `IDENTITY_2FA_REQUIRED_ROLES` | — | Roles obligados a llevar segundo factor | `admin,rrhh,auditor` | Añade `responsable_departamento` si tu política es más dura. Quitar un rol de la lista **no desactiva el segundo factor de quien ya lo activó** | No |
+| `IDENTITY_2FA_REQUIRED_ROLES` | — | Roles obligados a llevar segundo factor | `admin,rrhh,auditor,responsable_departamento` | Desde la 2.2.0 incluye al responsable, que corrige jornadas; quien no tenga TOTP lo da de alta en su primer acceso. Acortar la lista lo avisa `product:doctor`. Quitar un rol de la lista **no desactiva el segundo factor de quien ya lo activó** | No |
 | `IDENTITY_2FA_CHALLENGE_MINUTES` | — | Minutos que vive la media autenticación entre la contraseña y el código | `10` | Casi nunca. En minutos y no en horas a propósito | No |
 | `IDENTITY_2FA_MAX_ATTEMPTS` | — | Códigos fallados antes de bloquear | `5` | Casi nunca | No |
 | `IDENTITY_2FA_LOCKOUT_SECONDS` | — | Cuánto dura ese bloqueo | `900` (15 min) | Casi nunca | No |
@@ -1897,8 +1914,9 @@ su credencial es una tarjeta física y su acceso al portal es código y PIN.
 
 ### 6.10 PIN del empleado y token del quiosco
 
-El PIN es de **seis dígitos** y esa longitud **no es configurable**: la fija el
-contrato de la API. Lo que sí se ajusta es qué PIN nunca se emiten y cómo se
+La **longitud** del PIN (6 cifras de serie, u 8) **no se ajusta aquí**: es la
+clave `IDENTITY_PIN_LENGTH` del panel (sección 2.6), que deja asiento en la
+auditoría. Lo que sí se ajusta aquí es qué PIN nunca se emiten y cómo se
 frena a quien los prueba. Los contadores son **por empleado y por origen**: el
 del quiosco y el del portal son distintos, para que sondear una puerta no deje
 a nadie sin poder fichar por la otra.
@@ -1948,6 +1966,10 @@ Desde dónde se puede entrar al portal **no se decide aquí**: es
 | --- | --- | --- | --- | --- | --- |
 | `IDENTITY_PORTAL_SESSION_HOURS` | — | Vida de la sesión del portal | `2` | Casi nunca. Más corta que la del panel a propósito: el portal se abre desde un móvil personal. Restablecer el PIN de alguien **invalida sus sesiones en el acto**, así que este número no es lo que responde a un móvil perdido | No |
 | `IDENTITY_PORTAL_RATE_LIMIT` | — | Peticiones por minuto del portal, por IP **y** por código de empleado a la vez | `10` | Casi nunca. Se aplica por los dos ejes porque en un hotel toda la plantilla sale por la misma línea | No |
+| `IDENTITY_PORTAL_ORIGIN_MAX_FAILURES` | — | Accesos fallidos al portal desde una misma dirección (o su `/64` de IPv6), con cualquier código, que cierran el portal a esa dirección | `20` | Casi nunca. Ver sección 2.6. Bájalo si el portal está abierto a internet y quieres cortar antes; súbelo si mucha plantilla sale por una sola IP | No |
+| `IDENTITY_PORTAL_ORIGIN_WINDOW_SECONDS` | — | Ventana deslizante en la que se cuentan esos fallos, en segundos | `900` | Casi nunca | No |
+| `IDENTITY_PORTAL_ORIGIN_LOCKOUT_SECONDS` | — | Cuánto dura el bloqueo por origen, en segundos. Se responde `429` también con el PIN correcto | `3600` | Casi nunca. Para levantarlo antes: `identity:origin-unlock <ip>` | No |
+| `IDENTITY_ORIGIN_LOCK_AUDIT_CEILING_PER_HOUR` | — | Máximo de asientos `auth.origin_locked` por hora en el registro de auditoría. Por encima, el bloqueo se aplica igual y queda en el log técnico | `60` | Casi nunca. Protege el registro de auditoría, que comparte candado con los fichajes, de un barrido desde miles de direcciones | No |
 
 ### 6.14 Límites del camino del quiosco
 
@@ -1962,7 +1984,7 @@ salen por la misma IP.
 | `KIOSK_BATCH_RATE_PER_DEVICE` | — | Envíos de lote por minuto y por tablet, que es como la tablet vacía su cola al recuperar la red | `60` | Casi nunca | No |
 | `KIOSK_TELEMETRY_RATE_PER_DEVICE` | — | Peticiones por minuto y por tablet del padrón y del latido | `60` | Casi nunca | No |
 | `KIOSK_RATE_PER_IP` | — | Todo el camino del quiosco, por origen | `600` | Casi nunca. Se fija al mismo valor que la zona interna del servidor web: más bajo, el techo real lo pondría la aplicación | No |
-| `KIOSK_PIN_SCAN_RATE_PER_DEVICE` | — | Fichajes por PIN por minuto y por tablet | `10` | Casi nunca. Dos órdenes de magnitud por debajo del resto a propósito: ahí no se frena un ritmo de fichaje, se frena la fuerza bruta sobre seis dígitos | No |
+| `KIOSK_PIN_SCAN_RATE_PER_DEVICE` | — | Fichajes por PIN por minuto y por tablet | `10` | Casi nunca. Dos órdenes de magnitud por debajo del resto a propósito: ahí no se frena un ritmo de fichaje, se frena la fuerza bruta sobre el PIN | No |
 | `KIOSK_PIN_SCAN_RATE_PER_IP` | — | Fichajes por PIN por minuto y por origen | `60` | Casi nunca, y por el mismo motivo | No |
 | `KIOSK_BATCH_MAX_SIZE` | — | Escaneos como máximo en un lote de sincronización | `50` | Nunca: también está en el contrato de la API, así que cambiarlo aquí no lo cambia en la tablet. **Bajarlo por debajo de 50 hace que el servidor rechace todos los lotes de las tablets (422) y su cola sin red no se vacíe nunca**: no cambia minutos, pierde fichajes enteros | No |
 | `KIOSK_HEALTH_FRESH_WITHIN_SECONDS` | — | Segundos de margen antes de que `php artisan kiosk:health` deje de dar por «al día» el último contacto de un quiosco | `120` | Casi nunca. El latido va cada 60 s, así que dos minutos son dos latidos perdidos: uno suelto puede ser un wifi que parpadea | No |
@@ -1979,6 +2001,7 @@ Los tres rangos están explicados con detalle, con síntomas y comprobaciones, e
 | `KIOSK_VLAN_CIDR` | `[CLIENTE]` | Rango de la VLAN de quioscos, al que se le eleva el límite de fichaje. Ver [`instalacion.md`](instalacion.md) §6 | `10.0.20.0/24` | **Al instalar, siempre.** Si los quioscos quedan fuera, el fallo es silencioso y se manifiesta como «el quiosco va lento a las 06:00» | No |
 | `PORTAL_INTERNAL_CIDR` | `[CLIENTE]` | Red desde la que se permite el portal del empleado. Fuera de ella se responde `403` antes de llegar a la aplicación. Ver [`instalacion.md`](instalacion.md) §6 | `172.28.0.0/16` (una red de desarrollo) | **Al instalar, siempre**, por la LAN real del hotel o la VPN. Exponerlo a internet es una decisión explícita que se toma poniendo `0.0.0.0/0`, nunca dejando el valor de serie; documéntala en el acta de entrega. Si da `403` a quien no debería: [`../runbooks/portal-403.md`](../runbooks/portal-403.md) | No |
 | `METRICS_ALLOW_CIDR` | `[CLIENTE]` | Único origen autorizado a leer las métricas. Todo lo demás recibe `403`, incluido el propio servidor. Ver [`instalacion.md`](instalacion.md) §6 | `172.29.0.20/32` (la IP fija de Prometheus: **es el valor correcto**) | Casi nunca: solo si otro recolector tuyo lee las métricas. El instalador lo acepta tal cual. Es una `/32` a propósito, y **un solo rango**: el borde (Nginx) no admite más de uno aunque la aplicación acepte varios separados por comas | No |
+| `ADMIN_INTERNAL_CIDR` | — | Red desde la que se admite el panel (`/admin/`) y la autenticación del personal (`/api/v1/auth/*`). Fuera de ella se responde `403` en el borde. Un solo CIDR IPv4. Ver [`endurecimiento.md`](endurecimiento.md) §1.2 | *(vacía: el panel no se filtra por red)* | Solo si quieres cerrar el panel a la LAN del hotel o a una VPN. **Si abres el portal a internet, rellénala**: portal y panel comparten host y puerto, y con ella vacía el panel también queda alcanzable (quedan la contraseña y el segundo factor obligatorio de los roles de gestión; `product:doctor` avisa con `network.admin`). No afecta al portal ni a los quioscos | No |
 | `TRUSTED_PROXY_CIDR` | — | Proxies de confianza **delante** del borde (proxy inverso, balanceador o CDN). El borde toma la IP real del visitante de `X-Forwarded-For`, solo cuando la petición llega de uno de ellos. Lista de CIDR IPv4 separados por comas. Ver [`instalacion.md`](instalacion.md) §6 | *(vacía: sin proxy, se usa la IP de la conexión)* | Solo si pones un proxy, un balanceador o una CDN delante. **Nunca `0.0.0.0/0`**: el borde no arranca y el instalador lo rechaza. Con ella puesta, deja `TRUSTED_PROXIES` vacía | No |
 | `TRUSTED_PROXIES` | — | En quién confía la aplicación para fijar la IP del cliente (`X-Forwarded-For`), lista de IP/CIDR separadas por comas | *(vacía: no se confía en ningún proxy)* | **Déjala vacía.** Con un proxy delante del borde, lo que se rellena es `TRUSTED_PROXY_CIDR`: el borde ya entrega a la aplicación la IP real, y rellenar las dos haría que la aplicación volviera a leer la cabecera sobre una IP que ya es la buena. Laravel trae de fábrica una heurística que confía en `X-Forwarded-For` cuando el `Host` termina en `.on-forge.com` —y el `Host` lo manda el propio cliente—; el producto la desactiva del todo y exige esta lista explícita | No |
 | `NGINX_CLIENT_MAX_BODY_SIZE` | — | Tamaño máximo de cuerpo que acepta el servidor web | `8m` | Casi nunca. Súbelo solo si subes también `WORKFORCE_IMPORT_MAX_FILE_KILOBYTES` por encima de eso | No |

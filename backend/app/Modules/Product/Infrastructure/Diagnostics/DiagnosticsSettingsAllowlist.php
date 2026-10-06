@@ -82,6 +82,9 @@ final class DiagnosticsSettingsAllowlist
         SettingKey::WEEKLY_SUMMARY_EMAIL,
         SettingKey::KIOSK_UPDATE_WINDOW,
         SettingKey::KIOSK_UPDATE_QUIET_MINUTES,
+        // `6` u `8` (ADR-050): explica un portal que «no acepta mi PIN» tras
+        // cambiarla, y no dice nada de nadie. Cuantos PIN quedan cortos no viaja.
+        SettingKey::IDENTITY_PIN_LENGTH,
     ];
 
     /**

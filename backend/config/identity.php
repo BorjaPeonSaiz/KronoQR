@@ -63,25 +63,32 @@ return [
         /*
          * ROLES OBLIGADOS A LLEVAR SEGUNDO FACTOR.
          *
-         * De serie, los tres literales de RS-06: `admin`, `rrhh` y `auditor`, que
-         * son los que alcanzan datos de TODA la plantilla. El
-         * `responsable_departamento` no entra porque su alcance esta acotado a su
-         * departamento (RF-ID-03).
+         * De serie, los CUATRO roles de RS-06 desde la 2.2.0 (ADR-050 §5):
+         * `admin`, `rrhh` y `auditor`, que alcanzan datos de toda la plantilla, y
+         * `responsable_departamento`, que ESCRIBE el registro horario legal de su
+         * departamento (`attendance:correct`). El alcance acotado de RF-ID-03
+         * limita cuanto lee, no que puede alterar: con una contrasena robada se
+         * rehace la nomina de un departamento entero.
          *
-         * CONTRADICCION DOCUMENTAL, RESUELTA POR CONFIGURACION. La tabla del doc
-         * 02 §7.3 escribe «Sesion + 2FA» tambien en la fila del responsable.
-         * Manda el doc 01 (orden de autoridad de `CLAUDE.md`), asi que el valor
-         * de serie son tres roles; y como esto es configuracion y no una
-         * constante (regla dura 13), un cliente con una politica mas dura anade
-         * `responsable_departamento` sin tocar el repositorio y sin una rama
-         * propia.
+         * SIN CONDICION DE RED. El codigo no puede saber si el panel es accesible
+         * desde internet (`ADMIN_INTERNAL_CIDR` vacia no significa expuesto, ni
+         * con valor significa interno), y una regla que depende de esa suposicion
+         * se apaga sola sin que nadie lo note.
+         *
+         * TRANSICION. Un responsable dado de alta antes sin TOTP no se queda
+         * fuera: `POST /api/v1/auth/login` le responde `202` con
+         * `enrolment_required: true` y pasa por `/auth/2fa/enrol` y
+         * `/auth/2fa/confirm` en su primer acceso, igual que un admin nuevo.
+         *
+         * Sigue siendo configuracion (regla dura 13): un cliente puede acortar la
+         * lista, y `product:doctor` avisa de cada uno de los cuatro que falte.
          *
          * QUIEN YA LO TIENE, LO USA, este o no en esta lista: quitar la
          * obligatoriedad no desactiva el segundo factor de quien lo activo.
          */
         'required_roles' => array_values(array_filter(array_map(
             'trim',
-            explode(',', (string) env('IDENTITY_2FA_REQUIRED_ROLES', 'admin,rrhh,auditor')),
+            explode(',', (string) env('IDENTITY_2FA_REQUIRED_ROLES', 'admin,rrhh,auditor,responsable_departamento')),
         ), static fn (string $role): bool => $role !== '')),
 
         /*
@@ -200,6 +207,49 @@ return [
          * trafico que nunca llega a PHP.
          */
         'rate_limit_per_minute' => (int) env('IDENTITY_PORTAL_RATE_LIMIT', 10),
+
+        /*
+         * BLOQUEO POR ORIGEN DEL ACCESO AL PORTAL (RS-12, ADR-050 §2).
+         *
+         * Cuenta FALLOS —los cinco rechazos genericos de `/api/v1/me/login`—
+         * por origen, sea cual sea el codigo tecleado: la IP, o su `/64` si es
+         * IPv6. Al llegar a `max_failures` dentro de una ventana deslizante de
+         * `window_seconds`, el portal se cierra a ese origen `lockout_seconds`:
+         * `429` con `Retry-After`, tambien con el PIN correcto.
+         *
+         * NO SUSTITUYE A NADA. El limite de peticiones de arriba cuenta volumen;
+         * el bloqueo por empleado del bloque `pin` cuenta fallos contra UNA
+         * persona; este cuenta fallos desde UNA red contra cualquiera, que es lo
+         * que hace quien prueba un PIN facil contra toda la plantilla. Un acceso
+         * correcto no pone la cuenta a cero.
+         *
+         * 20 / 15 MIN / 60 MIN SON DECISION DE PRODUCTO (ADR-050), no una
+         * medicion: dan margen de sobra a una persona que se equivoca y a un
+         * turno entero tras el NAT del hotel, y cortan un barrido en minutos.
+         * Son parametros de seguridad y no umbrales legales, asi que viven aqui
+         * y no en el perfil de cumplimiento. SOLO EL PORTAL: el quiosco nunca
+         * bloquea a nadie (regla dura 19).
+         */
+        'origin_lockout' => [
+            'max_failures' => (int) env('IDENTITY_PORTAL_ORIGIN_MAX_FAILURES', 20),
+
+            'window_seconds' => (int) env('IDENTITY_PORTAL_ORIGIN_WINDOW_SECONDS', 900),
+
+            'lockout_seconds' => (int) env('IDENTITY_PORTAL_ORIGIN_LOCKOUT_SECONDS', 3600),
+
+            /*
+             * TECHO DE ASIENTOS `auth.origin_locked` POR HORA (dictamen de
+             * seguridad B1 de ADR-050).
+             *
+             * Cada asiento pasa por el candado global de la cadena de
+             * `audit_log` (ADR-010), el mismo que usa cada fichaje, y quien
+             * rota direcciones abre un bloqueo por direccion. Por encima del
+             * techo el bloqueo SE APLICA IGUAL; solo se omite el asiento, y
+             * quedan el log tecnico (con `ip_hash`) y la metrica
+             * `outcome="origin_locked"`. Cero: ningun asiento.
+             */
+            'audit_ceiling_per_hour' => (int) env('IDENTITY_ORIGIN_LOCK_AUDIT_CEILING_PER_HOUR', 60),
+        ],
     ],
 
     /*
@@ -248,10 +298,11 @@ return [
      * PIN del empleado — RF-ID-09, y con el RF-AT-11 (fichaje de respaldo) y
      * RL-05 (acceso al registro propio en el portal).
      *
-     * LA LONGITUD NO ESTA AQUI, Y NO ES UN OLVIDO. Son seis digitos porque lo
-     * dice el requisito y porque el contrato los fija (`IssuedPin.pin`,
-     * `^[0-9]{6}$`): hacerla configurable significaria que una instalacion puede
-     * emitir PIN que su propio cliente TypeScript rechaza.
+     * LA LONGITUD NO ESTA AQUI, Y NO ES UN OLVIDO (ADR-050). Es el ajuste
+     * auditado `IDENTITY_PIN_LENGTH` de `installation_settings` —6 de serie u
+     * 8—, que se cambia en el panel y deja asiento: es una decision del
+     * responsable del tratamiento, no de quien administra el servidor. Los PIN
+     * emitidos con la otra longitud siguen valiendo hasta que se restablecen.
      */
     'pin' => [
 
@@ -266,9 +317,12 @@ return [
          * explicar.
          *
          * De serie: los diez repetidos y las doce secuencias de seis digitos
-         * consecutivos, ascendentes y descendentes, con vuelta por el cero. Un
-         * cliente con una politica mas dura anade los suyos —fechas tipicas, el
-         * codigo postal del hotel— sin tocar el repositorio.
+         * consecutivos, ascendentes y descendentes, con vuelta por el cero, y lo
+         * mismo en OCHO CIFRAS (ADR-050): los diez repetidos y las ocho
+         * secuencias. La lista admite las dos longitudes y el generador solo
+         * descarta las de la longitud con la que emite. Un cliente con una
+         * politica mas dura anade los suyos —fechas tipicas, el codigo postal
+         * del hotel— sin tocar el repositorio.
          */
         'forbidden' => array_values(array_filter(array_map(
             'trim',
@@ -280,6 +334,12 @@ return [
                 '012345', '123456', '234567', '345678', '456789', '567890',
                 // Descendentes.
                 '543210', '654321', '765432', '876543', '987654', '098765',
+                // Ocho cifras: repetidos.
+                '00000000', '11111111', '22222222', '33333333', '44444444',
+                '55555555', '66666666', '77777777', '88888888', '99999999',
+                // Ocho cifras: ascendentes y descendentes.
+                '01234567', '12345678', '23456789', '34567890',
+                '76543210', '87654321', '98765432', '09876543',
             ]))),
         ), static fn (string $pin): bool => $pin !== '')),
 
@@ -312,7 +372,7 @@ return [
          * en uno de los dos. Sus valores de serie BAJAN de 5/900 a 3/300 con la
          * tarea 1.12, que es lo que el Anexo B pedia desde el principio.
          *
-         * POR EMPLEADO Y POR ORIGEN. El contador del quiosco y el del portal son
+         * POR EMPLEADO Y POR CANAL. El contador del quiosco y el del portal son
          * distintos (§7.5): sondear una puerta no puede cerrar la otra, porque
          * eso permitiria dejar a alguien sin fichar atacando su portal. Los
          * umbrales, en cambio, son los mismos para las dos.

@@ -35,13 +35,19 @@ plantilla no se publica en internet. Quien administra el sistema decide ese
 rango con el parámetro `PORTAL_INTERNAL_CIDR`, explicado en
 [`configuracion.md`](configuracion.md) §6.15. Si vuestro hotel necesita el
 acceso desde fuera, es una decisión que se toma ahí, con conocimiento de lo que
-implica.
+implica: entonces el portal también carga desde casa o desde el móvil, y lo
+recomendable es que los PIN sean de 8 cifras (abajo).
 
 ### El código y el PIN
 
-Se entra con **el código de empleado y el PIN de seis dígitos** que se
-entregaron en mano junto con la tarjeta. Son los mismos que sirven para fichar
-en la tablet cuando no se lleva la tarjeta encima.
+Se entra con **el código de empleado y el PIN** que se entregaron en mano junto
+con la tarjeta. Son los mismos que sirven para fichar en la tablet cuando no se
+lleva la tarjeta encima.
+
+**El PIN tiene 6 cifras, o 8 si tu hotel lo ha decidido** —lo habitual cuando el
+portal se abre desde fuera del hotel—. La pantalla admite las dos longitudes.
+Si tu hotel pasa a 8 cifras, **tu PIN de 6 sigue valiendo** hasta que RRHH te
+dé uno nuevo en mano; no tienes que hacer nada hasta entonces.
 
 ![Pantalla de acceso al portal](img/es/portal-01-acceso.png)
 
@@ -56,6 +62,14 @@ PIN, y por eso el PIN se entrega en persona.
 - **Tras varios intentos fallidos el acceso se bloquea unos minutos**, y sigue
   bloqueado aunque después escribas el PIN correcto. Espera y prueba otra vez;
   cada intento fallido alarga la espera.
+- **Si la pantalla dice «Demasiados intentos desde esta conexión»**, no es tu
+  PIN: desde la red por la que estás entrando (la wifi del hotel, la de casa)
+  ha habido muchos intentos fallidos, tuyos o de otras personas, y el portal se
+  ha cerrado **para esa conexión** durante los minutos que indica la propia
+  pantalla (una hora como mucho). Tu PIN sigue siendo válido. Espera, entra desde
+  otra conexión —los datos del móvil, por ejemplo, si tu hotel permite entrar
+  desde fuera— o avisa a RRHH si corre prisa: quien administra el sistema
+  puede levantarlo antes.
 - **Si has olvidado el PIN, pídele a RRHH que te lo restablezca.** Te darán uno
   nuevo **en mano**, y el anterior deja de funcionar en el acto. Restablecerlo
   también libera el bloqueo.

@@ -335,7 +335,7 @@
     },
     "reset": {
       "heading": "Reset the PIN",
-      "explanation": "A new six-digit PIN is generated and the previous one stops working immediately. The failed-attempt lockout is cleared as well.",
+      "explanation": "A new PIN (6 or 8 digits, per the installation setting) is generated and the previous one stops working immediately. The lockout after failed attempts is also lifted.",
       "action": "Reset and show the PIN",
       "warning": "The new PIN will be shown once, now. It cannot be looked up again: if it is lost, it has to be reset once more."
     },
@@ -1586,7 +1586,8 @@
       "payrollHoursFormat": "Hours format",
       "payrollDateFormat": "Date format",
       "payrollEncoding": "Encoding",
-      "payrollHeaderRow": "Header row"
+      "payrollHeaderRow": "Header row",
+      "pinLength": "PIN length"
     },
     "hints": {
       "maxShiftHours": "Past this duration, a closed shift entry is flagged as anomalous and an incident is opened for review. It never closes a shift on its own. Accepted range: {minimum}–{maximum} hours.",
@@ -1611,7 +1612,8 @@
       "payrollHoursFormat": "«HH:MM» is what a person reads without ambiguity. The decimal formats exist because many payroll tools require them to add hours up automatically.",
       "payrollDateFormat": "«ISO» is YYYY-MM-DD; «DMY» is DD/MM/YYYY.",
       "payrollEncoding": "«UTF-8 with BOM» is what Excel on Windows expects without asking for the encoding. With «Latin-1», a character that does not exist in that encoding is replaced with «?» without failing the download.",
-      "payrollHeaderRow": "With the header row disabled, the file starts straight with the data: some automated import tools reject it if it carries one."
+      "payrollHeaderRow": "With the header row disabled, the file starts straight with the data: some automated import tools reject it if it carries one.",
+      "pinLength": "Number of digits of the PINs issued from now on (6 by default). With 8 digits the portal better resists PIN-guessing attempts, useful if it is open to the internet. It affects the portal and the kiosk; PINs already issued keep working at their length until they are reset."
     },
     "breakClockingOptions": {
       "enabled": "Enabled",
@@ -1647,7 +1649,13 @@
     "save": "Save the settings",
     "saving": "Saving…",
     "saved": "Settings saved. The change is recorded in the audit trail.",
-    "failed": "The settings could not be saved."
+    "failed": "The settings could not be saved.",
+    "accessHeading": "Access",
+    "pinLengthOptions": "{count} digits",
+    "impacts": {
+      "access_control": "This change affects access to the portal and the kiosk, not the recorded hours. PINs already issued keep working until you reset them."
+    },
+    "pinLengthChange": "PIN length: from {from} to {to} digits."
   },
   "license": {
     "heading": "Licence",

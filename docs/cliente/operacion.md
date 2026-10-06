@@ -758,6 +758,7 @@ la alimenta dejó de ejecutarse):
 | `KronoqrAuthFailureBurst` | > 20 fallos en 5 min, un canal | Media | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Determina si es una persona equivocándose o un intento automatizado |
 | `KronoqrAuthLockouts` | ≥ 3 bloqueos distintos en 15 min, un canal | Media | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Acota cuántas cuentas y si alguna llegó a entrar antes del bloqueo |
 | `KronoqrAuthFailureSpike` | > 100 fallos en 5 min, un canal | Crítica | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Preserva la evidencia antes de bloquear el origen en el borde |
+| `KronoqrPortalOriginLockouts` | > 5 bloqueos de origen del portal en 1 h; `for: 1m` | Media | Seguridad | [`bloqueo-por-origen.md`](../runbooks/bloqueo-por-origen.md) | Distingue un ataque repartido de toda la plantilla detrás de una misma IP (hairpin NAT, `TRUSTED_PROXY_CIDR`); fichar no se ve afectado |
 | `FicheroGeneradoDesaparecidoAntesDeCaducar` | Sube `generated_files_missing_total` (en 30 min, o serie nueva), durante 1 min | Alta | Seguridad | [`ficheros-generados.md`](../runbooks/ficheros-generados.md) §2 | Una exportación o un informe perdió su fichero antes de caducar. Tras restaurar una copia o actualizar desde la 2.1.0 es lo esperado (§18); si no, lee el asiento `*.file_missing` y trátalo como posible brecha |
 | `FicheroGeneradoSinRetirarPasadoSuPlazo` | `generated_files_overdue > 0` durante 1 h: una exportación para la Inspección lleva > 30 días en el servidor | Media | IT | [`ficheros-generados.md`](../runbooks/ficheros-generados.md) §4 | No se borra sola: confirma que se entregó y bórrala ([`requerimiento-inspeccion.md`](../runbooks/requerimiento-inspeccion.md) §7) |
 | `PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo` | Sube `generated_files_refused_total` (en 1 h, o serie nueva), durante 1 min | Media | IT | [`ficheros-generados.md`](../runbooks/ficheros-generados.md) §5 | Hay un enlace, un subdirectorio o un nombre ajeno en una carpeta del volumen, o rutas `*_PATH` solapadas: `product:doctor` (§13.5) |
@@ -1139,6 +1140,72 @@ conviene saber:
   `kronoqr_backup_replication_slot*`, **cambian de nombre** a `kronoqr_wal_*`.
 - **Parada:** ninguna adicional.
 
+**Al actualizar a la 2.2.0: el portal y el panel, mejor cerrados (sobre todo si
+están abiertos a internet).** Cuatro cambios; los dos primeros no exigen nada,
+los dos últimos piden una revisión el mismo día:
+
+- **El PIN puede ser de 6 u 8 cifras.** Sigue siendo de 6 de serie. Si el portal
+  es accesible desde fuera de la red del hotel, pásalo a 8 en el panel, con la
+  cuenta de administración: **Ajustes operativos → Acceso → Longitud del PIN**
+  (queda en el registro de auditoría). **No se anula ningún PIN**: los de 6 ya
+  entregados siguen valiendo y el portal y la tablet admiten de 6 a 8 cifras;
+  solo los que se emitan desde entonces —altas y restablecimientos— salen con
+  8. RRHH los va restableciendo y entregando en mano a medida que cada persona
+  pasa por la oficina ([`guia-rrhh.md`](guia-rrhh.md) §2.2). Cuántos quedan
+  —solo el número, nunca quiénes— lo dice la comprobación `access.short_pins`
+  de `product:doctor` (§12.1).
+- **Bloqueo por conexión en el portal.** 20 accesos fallidos al portal desde una
+  misma dirección en 15 minutos, con cualquier código, cierran el portal **a esa
+  dirección** durante una hora, también con el PIN correcto. La persona ve
+  «Demasiados intentos desde esta conexión» y los minutos que faltan. No afecta
+  al fichaje. Si cierra la wifi del hotel entera y no se puede esperar, levántalo
+  desde el directorio de la instalación con la dirección que aparece en el
+  asiento `auth.origin_locked` del registro de auditoría (el ejemplo es una
+  dirección de documentación; pon la tuya):
+
+  ```bash
+  docker compose exec app php artisan identity:origin-unlock 198.51.100.23
+  ```
+
+  Si hay un proxy delante del servidor y no has definido `TRUSTED_PROXY_CIDR`,
+  toda la plantilla llega con la IP del proxy y un solo bloqueo la deja fuera
+  entera: defínela ([`instalacion.md`](instalacion.md) §6). El procedimiento
+  completo, con qué hacer si se repite, está en
+  [`../runbooks/bloqueo-por-origen.md`](../runbooks/bloqueo-por-origen.md).
+- **Los responsables de departamento necesitan segundo factor.** Desde la 2.2.0
+  es obligatorio para los cuatro roles de gestión, porque el responsable corrige
+  jornadas. Nadie se queda fuera: quien no lo tenga lo da de alta en su
+  **primer acceso** al panel tras actualizar, con la aplicación de su teléfono.
+  **Mientras no entre, quien tenga solo su contraseña podría darlo de alta en su
+  lugar**, así que **pide a cada responsable que entre el mismo día** y, después,
+  revisa las altas: cada una deja un asiento `auth.two_factor_enabled` con la
+  hora y la IP desde la que se hizo.
+
+  ```bash
+  docker compose exec -T postgres psql -U fichaje_app -d fichaje -c \
+    "SELECT a.occurred_at, a.ip, u.uuid, u.email FROM audit_log a JOIN users u ON u.id = a.subject_id WHERE a.action = 'auth.two_factor_enabled' AND a.occurred_at > now() - interval '30 days' ORDER BY a.occurred_at;"
+  ```
+
+  Si su titular no reconoce un alta (otra hora, otra IP), retira ese segundo
+  factor con el `uuid` de la fila y dale una contraseña nueva; en su siguiente
+  acceso lo vuelve a dar de alta él:
+
+  ```bash
+  docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --reason="2FA no reconocido / 2FA not recognised"
+  docker compose exec app php artisan identity:reset-password responsable@tuhotel.example
+  ```
+
+  La comprobación `access.two_factor_pending` de `product:doctor` dice cuántas
+  cuentas de esos roles siguen sin segundo factor; cuando llegue a cero, la
+  ventana está cerrada. Si tu `.env` fija `IDENTITY_2FA_REQUIRED_ROLES` con
+  la lista antigua, la 2.2.0 la respeta y `access.two_factor_roles` avisa del
+  rol que falta.
+- **`ADMIN_INTERNAL_CIDR`, nueva y vacía.** Cierra el panel de gestión a la red
+  que pongas; vacía, no filtra nada, como hasta ahora. Si el portal está abierto
+  a internet, el panel también lo está mientras la dejes vacía:
+  [`configuracion.md`](configuracion.md) §6. `product:doctor` lo recuerda con
+  el aviso `network.admin`.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
@@ -1215,7 +1282,12 @@ sus rutas no coinciden entre sí, que la carpeta de los informes de retención s
 puede escribir, y exportaciones para la Inspección olvidadas en el servidor
 desde hace más de 30 días; §13.6), espacio en disco (aplicación y copias) y
 ajustes (zona horaria en UTC, modo depuración,
-claves no válidas, diferencias entre el `.env` y lo guardado, licencia y marca).
+claves no válidas, diferencias entre el `.env` y lo guardado, licencia y marca),
+redes del borde (desde dónde se abren el portal, el panel, los quioscos y
+`/metrics`) y acceso (desde la 2.2.0: PIN de 6 cifras con el portal abierto a
+internet, cuántas personas conservan un PIN de 6 con el ajuste en 8, roles de
+gestión sin segundo factor obligatorio y cuántas cuentas aún no lo han dado de
+alta; **solo cifras, nunca quiénes**).
 **Cada línea en rojo dice qué hacer**, redactado para quien no conoce el
 sistema.
 
@@ -1366,7 +1438,7 @@ con motivo, alcance y duración, y lo puedes revocar en cualquier momento.
 | --- | --- | --- |
 | `diagnostics` (por defecto) | Generar el paquete **anonimizado** y consultar errores | Ver a nadie |
 | `read_only` | Además, **leer la plantilla y el registro horario de una persona** (su ficha y sus jornadas), **cada lectura auditada** como divulgación de datos personales, y la auditoría | Cambiar nada. **Ni el registro de ausencias** —dato de salud: el tipo «Baja médica» y su nota—, **ni la presencia en vivo, ni el resumen de cumplimiento por persona**: no hacen falta para diagnosticar un cálculo de horas, y ninguno lo alcanza ningún acceso de soporte (403 con cualquier alcance; ausencias cerradas en el cierre de la Fase 3, presencia y cumplimiento el 24-09-2026 por decisión de producto del fabricante, igual para todas las instalaciones) |
-| `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos), **ni activar o desactivar el fichaje de pausa** (`ATTENDANCE_BREAK_CLOCKING`: decide qué se considera incidencia, igual que el perfil; si lo intenta obtiene un 403), **ni tocar las dos claves de detección de patrones** (`ATTENDANCE_PATTERN_WINDOW_SECONDS` y `ATTENDANCE_PATTERN_MIN_REPEATS`: con `0` en la primera se apaga la detección de coincidencias de RF-PR-06, la mitigación que compensa no tener biometría, y esa decisión es del hotel; también 403), **ni activar o desactivar el resumen semanal por correo** (`WEEKLY_SUMMARY_EMAIL`: decide que cada lunes salgan por correo nombres y horas de tu plantilla; también 403), **ni declarar ni cambiar las horas de hojas anteriores al sistema** (`BASELINE_MANUAL_HOURS_PER_MONTH`: es el denominador declarado del objetivo comercial del cuadro de impacto y describe tu proceso anterior a la instalación, que solo tú conoces; también 403), **ni ver ni cambiar el código de servicio del quiosco**: lo recibe vacío y marcado como redactado, y si intenta cambiarlo obtiene un 403 (§16.5) |
+| `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos), **ni activar o desactivar el fichaje de pausa** (`ATTENDANCE_BREAK_CLOCKING`: decide qué se considera incidencia, igual que el perfil; si lo intenta obtiene un 403), **ni tocar las dos claves de detección de patrones** (`ATTENDANCE_PATTERN_WINDOW_SECONDS` y `ATTENDANCE_PATTERN_MIN_REPEATS`: con `0` en la primera se apaga la detección de coincidencias de RF-PR-06, la mitigación que compensa no tener biometría, y esa decisión es del hotel; también 403), **ni activar o desactivar el resumen semanal por correo** (`WEEKLY_SUMMARY_EMAIL`: decide que cada lunes salgan por correo nombres y horas de tu plantilla; también 403), **ni declarar ni cambiar las horas de hojas anteriores al sistema** (`BASELINE_MANUAL_HOURS_PER_MONTH`: es el denominador declarado del objetivo comercial del cuadro de impacto y describe tu proceso anterior a la instalación, que solo tú conoces; también 403), **ni cambiar la longitud del PIN** (`IDENTITY_PIN_LENGTH`: decide cuánta fuerza tiene la llave del registro de tu plantilla; también 403), **ni ver ni cambiar el código de servicio del quiosco**: lo recibe vacío y marcado como redactado, y si intenta cambiarlo obtiene un 403 (§16.5) |
 
 Con ningún alcance puede activar licencias, conceder o revocar accesos,
 emitir o revocar tarjetas, corregir fichajes, generar informes de nómina o la

@@ -120,7 +120,7 @@ aviso del botón insiste en generar el lote solo con la impresora lista.
 Díselo tú, en el momento, y ahórrate la incidencia de mañana:
 
 - **Puede fichar desde ya** con «Ficha con tu código y PIN» en la tablet:
-  su código de empleado y su PIN de seis dígitos. El fichaje cuenta igual.
+  su código de empleado y su PIN. El fichaje cuenta igual.
 - **Su registro no se ve afectado**: los tramos por PIN aparecen en su jornada
   igual que los de tarjeta, marcados con su origen.
 - **Su tarjeta antigua ya no vale**, aunque aparezca. Si la encuentra, que la

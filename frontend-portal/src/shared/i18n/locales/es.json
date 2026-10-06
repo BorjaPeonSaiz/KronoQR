@@ -14,9 +14,16 @@
     "heading": "Acceso al portal",
     "employeeCode": "Código de empleado",
     "pin": "PIN",
+    "pinHint": "De 6 a 8 cifras.",
     "submit": "Entrar",
     "submitting": "Entrando…",
-    "forgotPin": "¿No recuerdas tu PIN o tu código? Pide a Recursos Humanos que te lo restablezca. No se envía por correo electrónico ni por ningún enlace."
+    "forgotPin": "¿No recuerdas tu PIN o tu código? Pide a Recursos Humanos que te lo restablezca. No se envía por correo electrónico ni por ningún enlace.",
+    "originLocked": {
+      "title": "Demasiados intentos desde esta conexión",
+      "advice": "Inténtalo de nuevo en {minutes} minuto. | Inténtalo de nuevo en {minutes} minutos.",
+      "alternative": "Puedes seguir intentándolo desde otra conexión o pedir ayuda a Recursos Humanos.",
+      "countdown": "El botón «Entrar» estará disponible en {time}."
+    }
   },
   "common": {
     "updating": "Actualizando…"

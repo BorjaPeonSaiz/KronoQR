@@ -360,3 +360,16 @@ it('dice que forma espera el recuento de WAL heredado', function (): void {
     expect(fn () => SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, $data))
         ->toThrow(InvalidSystemEventPayload::class, 'El campo «legacy_wal» del payload no cumple su forma: se esperaba un recuento entero entre 0 y 999999.');
 })->group('RL-12');
+
+it('PP-10: anota que el portal esta expuesto a internet, solo como true', function (): void {
+    $data = [...updatedData(), 'portal_exposed' => true];
+
+    expect(SystemEventPayload::for(AuditAction::SystemUpdated, $data)->payload->data)->toBe($data);
+})->group('RL-04', 'RS-07', 'RF-PD-10', 'RF-ID-08');
+
+it('PP-10: portal_exposed no admite false, texto ni otro valor, ni en la vuelta atras', function (mixed $value): void {
+    expect(fn () => SystemEventPayload::for(AuditAction::SystemUpdated, [...updatedData(), 'portal_exposed' => $value]))
+        ->toThrow(InvalidSystemEventPayload::class, 'portal_exposed');
+    expect(fn () => SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, [...restoredData(), 'portal_exposed' => true]))
+        ->toThrow(InvalidSystemEventPayload::class, 'no esta en la lista cerrada');
+})->with([false, 'true', 1, null])->group('RL-04', 'RS-07', 'RF-PD-10', 'RF-ID-08');

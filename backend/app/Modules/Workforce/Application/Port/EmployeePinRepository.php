@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\Port;
 
+use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\PinAlreadyDelivered;
 use App\Modules\Workforce\Domain\Exception\PinNotIssued;
@@ -38,11 +39,13 @@ interface EmployeePinRepository
      *
      * @param  string  $pinHash  El hash ya calculado por {@see PinHasher}. El PIN en claro
      *                           no se almacena ni pasa por este puerto (RF-ID-09).
+     * @param  PinLength  $pinLength  Con cuantas cifras se emitio (ADR-050). Se escribe en la
+     *                                misma sentencia que el hash y no sale por la API.
      * @return bool `false` si el empleado no existe. Quien llama lo traduce a 404.
      *
      * @throws EmployeeAlreadyTerminated si la persona esta de baja
      */
-    public function issue(string $employeeUuid, string $pinHash, DateTimeImmutable $issuedAt): bool;
+    public function issue(string $employeeUuid, string $pinHash, PinLength $pinLength, DateTimeImmutable $issuedAt): bool;
 
     /**
      * Anota la entrega presencial: cuando y quien la hizo.

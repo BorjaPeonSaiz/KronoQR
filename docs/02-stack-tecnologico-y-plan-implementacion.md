@@ -214,7 +214,7 @@ fichaje-hotel/
 │   ├── 03-agentes-y-skills-ia.md
 │   ├── 04-decision-credencial.md
 │   ├── 05-presentacion-cliente.md   # Documento comercial entregable al cliente
-│   ├── adr/                         # ADR-001 … ADR-049
+│   ├── adr/                         # ADR-001 … ADR-050
 │   ├── api/openapi.yaml             # Contrato, fuente de verdad de la API
 │   ├── cliente/                     # Documentación que se entrega al cliente
 │   │   ├── instalacion.md
@@ -542,6 +542,7 @@ Los veintisiete siguientes **no proceden de esta tabla**: nacieron al desarrolla
 | **047** | **Ningún fichaje sale de la cola del quiosco sin un desenlace del servidor** | La verificación de la 2.2.0 (R3-QA-02, R3-BE-03, R4-SC-03, R17-SC-R2, 🟠) encontró tres caminos por los que un fichaje ya confirmado en la tablet desaparecía o cambiaba de sentido: un lote que seguía tras un elemento no procesado y registraba la salida como entrada, un `400` que sacaba el fichaje de la cola sin rastro, y la tarjeta retirada después del fichaje cuyo rechazo quedaba sin persona | **Orden por quiosco** (RN-21): tras un `503` el resto del lote se devuelve aplazado (`scan-held-back`) y el quiosco no avanza mientras un elemento esté en reintento, también si está en vuelo. **Canal de descartes** (RN-22): lo que el servidor declara inválido pasa a una lista aparte y se avisa por `POST /api/v1/scan/discarded`, idempotente por `scan_id`, que guarda la atribución sin el payload y abre `discarded_scan` en la revisión diaria; el aviso no registra el fichaje. **La tarjeta auténtica retirada atribuye** (RN-20): `employee_id` del titular y marca de revisión si el fichaje es anterior a la retirada, con la misma respuesta (RS-03); incidencia `scan_before_revocation`. El PIN de una persona de baja queda fuera: exigiría ampliar ADR-043. Precisa ADR-008 |
 | **048** | **El texto libre del histórico de errores pasa por una lista blanca de palabras** *(aceptada; revisión de `seguridad-cumplimiento` pendiente dentro del Bloque 19)* | La verificación de la 2.2.0 (PR12, R4-BE-02, R4-PL-01, R6-PL-08, 🟠) sembró datos en un paquete de diagnóstico real y 8 de 27 valores salieron. Destacan los nombres sin comillas, que ningún patrón reconoce. Las guías prometían «ningún dato personal» con una prueba que no sembraba nombres | En `error_events` (el mensaje, los valores de texto del contexto, `app_version` y `file`), **una palabra solo se conserva si está en el vocabulario técnico cerrado; si no, pasa a `…`**. Se filtra al escribir y otra vez al empaquetar, y la huella se calcula sobre el texto filtrado. Los patrones siguen para lo numérico y se amplían, y las series de 7 cifras o más o con 4 cifras seguidas pasan a `[n]`. Marcador y no hash, porque un hash con sal es un seudónimo. Una prueba exige que el vocabulario no comparta palabras con nombres y apellidos frecuentes. Las filas antiguas se vuelven a sanear y se fusionan al actualizar. El canal `emergency` recibe el processor en el código. El contrato no cambia. Precisa ADR-020 |
 | **049** | **Las copias (volcado, copia física y WAL) se guardan en un formato cifrado y autenticado, KQE1, con una subclave propia para el WAL** *(aceptada; revisión de `seguridad-cumplimiento` del diseño: aprobada con condiciones C1-C20, incorporadas; implementación pendiente de revisión)* | La verificación de la 2.2.0 (R5-DV-02, R5-DV-04, R5-DV-01, 🟠) encontró el WAL archivado en claro, un cifrado AES-CBC que no detecta un bit cambiado con un `.sha256` opcional y sin clave, y un RPO que solo se medía al terminar la copia nocturna. `openssl enc` no admite AEAD y todo MAC con clave del CLI la pone en `argv` | Un formato único: cabecera (`kind`, `kid`, `iter`, `created`, `name`), el `openssl enc` AES-256-CBC de siempre y un MAC SHA3-256 con clave derivada que **se verifica antes de descifrar y sobre los mismos bytes que se descifran**. El WAL lleva una **subclave** derivada de `BACKUP_ENCRYPTION_KEY` (`BACKUP_WAL_KEY`) que es lo único que recibe `postgres`; las etiquetas de derivación son un registro versionado. `archive-wal.sh` falla cerrado sin clave; `kronoqr-restore-wal` devuelve `exit 200` (fatal) ante un MAC malo o un hueco, y `exit 1` solo en el final real del archivo. Las copias de la 2.1.0 se restauran solo con `--accept-unauthenticated`, por invocación, hasta que la versión mínima de actualización sea ≥ 2.2.0. Un almacenamiento WORM o el servicio de copias fuera del runtime (2.3.0, con `age`) queda como evolución. Precisa ADR-042 y ADR-045 |
+| **050** | **Portal accesible desde internet: PIN de 6 u 8 cifras, bloqueo por origen, aviso del instalador y segundo factor del responsable** *(aceptada; revisión de `seguridad-cumplimiento`: aprobada con cambios M1-M3 y B1-B2, incorporados)* | ADR-015 prometía «requisitos adicionales» al abrir el portal a internet y no existían (PP-09): código y PIN de 6 cifras frente a internet, del orden de un PIN acertado cada pocos meses con IP repartidas. El panel comparte host y puerto (PP-10) y el responsable, que corrige jornadas, entraba sin segundo factor (R4-QA-04) | Ajuste auditado `IDENTITY_PIN_LENGTH` (6 de serie u 8), leído por el puerto `PinLengthProvider`; los PIN emitidos siguen valiendo con su longitud y el portal y el quiosco aceptan de 6 a 8 cifras. **Bloqueo por origen** en `POST /me/login`: 20 fallos en 15 min desde una IP o un `/64` la cierran 60 min con `429` `portal-origin-locked`, antes de mirar el código, y deja `auth.origin_locked`; no se aplica al quiosco. Aviso (nunca fallo) del instalador y de `product:doctor` cuando `PORTAL_INTERNAL_CIDR` no es privada, con `portal_exposed` en `system.updated`. `ADMIN_INTERNAL_CIDR` opcional y vacía de serie. RS-06 incluye a `responsable_departamento`. CORS al origen de `APP_URL`. Precisa ADR-015 y ADR-039 |
 
 ---
 
@@ -705,7 +706,7 @@ add_header Cross-Origin-Resource-Policy "same-origin" always;
 |---|---|---|---|
 | Quiosco | `scan:write`, `roster:read`, `heartbeat:write` | 90 días | Automática al 80 % de vida, en el latido, con solape del anterior ([ADR-044](adr/ADR-044-el-token-del-quiosco-rota-en-el-latido-con-solape.md)) |
 | Empleado (portal) | `self:read` | Sesión corta | — |
-| Responsable | `attendance:read`, `attendance:correct`, `incidents:*`, `employees:read` (ámbito departamento) | Sesión | — |
+| Responsable | `attendance:read`, `attendance:correct`, `incidents:*`, `employees:read` (ámbito departamento) | Sesión + 2FA | — |
 | RRHH | + `employees:*`, `reports:*`, `credentials:*` | Sesión + 2FA | — |
 | Auditor | `attendance:read`, `audit:read`, `reports:legal` (solo lectura, ámbito completo) | Sesión + 2FA | — |
 | Administrador de instalación | + `settings:*`, `license:*`, `support:*`, `diagnostics:*` | Sesión + 2FA | — |
@@ -714,7 +715,7 @@ Un token de quiosco comprometido **no da acceso a la plantilla completa**: `rost
 
 > **Cinco precisiones, y por qué esta tabla las necesitaba.** Las tres primeras las introdujo la tarea 2.1; la cuarta, la 5.2; la quinta, la 5.6.
 >
-> **1. La fila del responsable ya no dice «+ 2FA», y no es un descuido.** RS-06 obliga a segundo factor a `admin`, `rrhh` y `auditor` —los tres roles que alcanzan datos de **toda** la plantilla— y no al responsable de departamento, cuyo alcance está acotado por RF-ID-03. Cuando este documento y el 01 discrepan manda el 01 (orden de autoridad de `CLAUDE.md`). La lectura anterior sigue siendo alcanzable sin tocar el repositorio: la lista de roles obligados es configuración (`IDENTITY_2FA_REQUIRED_ROLES`, regla dura 13), y un cliente con una política más dura añade ahí a sus responsables. Y quien active su TOTP por su cuenta lo presentará siempre, esté o no su rol en la lista.
+> **1. La fila del responsable vuelve a decir «+ 2FA» desde la 2.2.0 ([ADR-050](adr/ADR-050-portal-accesible-desde-internet.md)).** El responsable corrige jornadas (`attendance:correct`): escribe el registro horario legal de su departamento, y con el panel alcanzable desde internet entraba con la contraseña sola (R4-QA-04). RS-06 lo incluye ya, y el valor de serie de `IDENTITY_2FA_REQUIRED_ROLES` pasa a ser `admin,rrhh,auditor,responsable_departamento`; un cliente puede acortar la lista y `product:doctor` lo avisa. Lo que sigue es la justificación anterior, que el ADR-050 sustituye: **la fila del responsable ya no decía «+ 2FA», y no era un descuido.** RS-06 obliga a segundo factor a `admin`, `rrhh` y `auditor` —los tres roles que alcanzan datos de **toda** la plantilla— y no al responsable de departamento, cuyo alcance está acotado por RF-ID-03. Cuando este documento y el 01 discrepan manda el 01 (orden de autoridad de `CLAUDE.md`). La lectura anterior sigue siendo alcanzable sin tocar el repositorio: la lista de roles obligados es configuración (`IDENTITY_2FA_REQUIRED_ROLES`, regla dura 13), y un cliente con una política más dura añade ahí a sus responsables. Y quien active su TOTP por su cuenta lo presentará siempre, esté o no su rol en la lista.
 >
 > **2. La familia `employees:*` se parte en dos.** El Anexo B del documento 01 sitúa `GET /employees` en «manager+», que incluye al responsable; esta tabla no le daba ningún ámbito de plantilla, así que RF-ID-03 —«un responsable solo accede a los empleados de su departamento»— era inaplicable: no accedía a **ninguno**. Se resuelve con un ámbito de lectura propio, `employees:read`, que llevan también `rrhh` y `admin`, en lugar de concederle la familia entera: con un solo ámbito, dejarle leer era dejarle escribir y la única defensa quedaba en la policy, cuando este mismo apartado exige que sean dos controles.
 >
@@ -738,11 +739,12 @@ Refuerzo opcional: publicar semanalmente el último hash en un medio externo (co
 
 ### 7.5 Protección del PIN
 
-El PIN de 6 dígitos sirve para dos cosas: respaldo de fichaje en el quiosco (RF-AT-11) y acceso al portal personal (RF-ID-06). Un espacio de 10⁶ es pequeño, así que la protección es de proceso:
+El PIN sirve para dos cosas: respaldo de fichaje en el quiosco (RF-AT-11) y acceso al portal personal (RF-ID-06). Tiene 6 cifras de serie u 8 si la instalación lo configura (`IDENTITY_PIN_LENGTH`, RF-ID-09, ADR-050). Un espacio de 10⁶ es pequeño, así que la protección es de proceso:
 
-- Bloqueo temporal creciente tras 3, 5 y 10 intentos fallidos, por empleado y por origen.
+- Bloqueo temporal creciente tras 3, 5 y 10 intentos fallidos, por empleado y por canal (quiosco y portal llevan contadores distintos).
 - Rate limiting independiente por IP.
-- Portal restringido a red interna por defecto; exponerlo exige decisión explícita del cliente.
+- En el portal, **bloqueo por origen**: 20 fallos en 15 minutos desde una IP (o un `/64` de IPv6), con cualquier código, la bloquean 60 minutos (RS-12, ADR-050). No se aplica al quiosco.
+- Portal restringido a red interna por defecto; exponerlo exige decisión explícita del cliente, el instalador y `product:doctor` lo avisan y recomiendan el PIN de 8 cifras (RF-ID-08, ADR-050).
 - El ámbito de una sesión de portal alcanza **solo los datos del propio empleado**, así que un compromiso no escala.
 - En el quiosco, el fichaje por PIN queda **marcado para revisión del responsable**, lo que hace visible cualquier uso anómalo.
 
@@ -1592,6 +1594,12 @@ IDENTITY_PIN_LOCKOUT_TIER2_SECONDS=900 # 15 min
 IDENTITY_PIN_LOCKOUT_TIER3_ATTEMPTS=10
 IDENTITY_PIN_LOCKOUT_TIER3_SECONDS=3600  # 60 min
 IDENTITY_PIN_LOCKOUT_RESET_HOURS=24    # Ventana deslizante: sin fallos en 24 h vuelve a cero
+IDENTITY_PORTAL_ORIGIN_MAX_FAILURES=20     # RS-12, ADR-050 · bloqueo por origen de /me/login
+IDENTITY_PORTAL_ORIGIN_WINDOW_SECONDS=900  # 15 min, ventana deslizante. IP o su /64 en IPv6
+IDENTITY_PORTAL_ORIGIN_LOCKOUT_SECONDS=3600  # 60 min, 429 tambien con el PIN correcto
+IDENTITY_ORIGIN_LOCK_AUDIT_CEILING_PER_HOUR=60  # Techo de asientos auth.origin_locked por hora
+                                       # (ADR-010: mismo candado que el fichaje). Por encima,
+                                       # el bloqueo se aplica y solo queda log y metrica
 IDENTITY_PIN_SEALING_SECRET_KEY=       # RF-AT-11 · X25519 en base64, generada en el servidor
                                        # del cliente. La pública se deriva y se sirve en
                                        # GET /kiosk/roster. Vacía = sin fichaje por PIN

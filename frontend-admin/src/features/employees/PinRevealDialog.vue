@@ -7,6 +7,8 @@
 //    pidio y **no se escribe en ningun sitio**: ni `localStorage`, ni
 //    `sessionStorage`, ni la tienda de Pinia, ni la cache de consultas. Al
 //    cerrar el dialogo, el padre pone su `ref` a `null` y el valor desaparece.
+//  - El PIN tiene 6 u 8 cifras (`IDENTITY_PIN_LENGTH`, ADR-050): se enseña la
+//    cadena que llega, sea cual sea su longitud, sin asumir seis.
 //  - No se puede cerrar por descuido: `dismissible: false` desactiva Escape y
 //    el velo. Solo se sale por una accion explicita, y esa accion dice
 //    literalmente que el PIN no se va a poder volver a consultar.
@@ -57,7 +59,8 @@ async function registerDelivery(): Promise<void> {
     </p>
 
     <p
-      class="mt-4 rounded-kq border-2 border-kq-border-strong bg-kq-surface-alt py-6 text-center font-mono text-4xl tracking-[0.4em] text-kq-text"
+      class="mt-4 rounded-kq border-2 border-kq-border-strong bg-kq-surface-alt py-6 text-center font-mono text-kq-text"
+      :class="pin.pin.length > 6 ? 'text-3xl tracking-[0.25em]' : 'text-4xl tracking-[0.4em]'"
       data-test="pin-value"
     >
       {{ pin.pin }}

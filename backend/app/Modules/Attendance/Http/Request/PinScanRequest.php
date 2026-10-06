@@ -53,7 +53,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  *
  * ## Lo que este `FormRequest` NO hace
  *
- * **No comprueba que el PIN tenga seis digitos**, porque no puede: llega
+ * **No comprueba que el PIN tenga 6 u 8 cifras**, porque no puede: llega
  * cerrado. Lo hace el hash, que no coincide con nada que no sea el PIN emitido.
  * Y **no declara el origen**: este endpoint es el del PIN y su `ScanOrigin` lo
  * fija el caso de uso, no la peticion.
@@ -98,7 +98,7 @@ final class PinScanRequest extends FormRequest
             'scan_id' => ['required', 'string', 'regex:'.self::UUID_V7],
             'occurred_at' => ['required', 'string', 'regex:'.self::UTC_INSTANT],
             'employee_code' => ['required', 'string', 'min:1', 'max:32'],
-            // 72 caracteres es el sobre de un PIN de seis digitos; el rango deja
+            // 72 o 76 caracteres son el sobre de un PIN de 6 u 8 cifras (ADR-050); el rango deja
             // sitio a un relleno distinto sin admitir nada que merezca la pena
             // intentar descifrar.
             'pin_sealed' => ['required', 'string', 'min:64', 'max:160', 'regex:'.self::BASE64],

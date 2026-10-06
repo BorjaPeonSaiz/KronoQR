@@ -97,6 +97,8 @@ final class EmployeeSeeder extends Seeder
                 'employee_code' => $this->opaqueCode($ordinal),
                 'email' => null,
                 'pin_hash' => $pinHash,
+                // ADR-050: con el hash, siempre (`employees_chk_pin_length_with_hash`).
+                'pin_length' => \strlen(self::DEVELOPMENT_PIN),
                 // `pin_issued_at` va con el hash y no es opcional: la
                 // restriccion `employees_chk_pin_issue_is_complete` de la tarea
                 // 1.13 exige que las dos columnas esten o falten a la vez. Un PIN

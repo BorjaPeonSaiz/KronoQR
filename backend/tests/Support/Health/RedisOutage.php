@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Support\Health;
 
+use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\RedisMetricReader;
 use App\Support\Observability\Metrics\RedisMetricWriter;
@@ -69,6 +70,7 @@ final class RedisOutage
             'queue', 'queue.connection',
             RateLimiter::class,
             PinAttempts::class,
+            PortalOriginAttempts::class,
             RedisMetricWriter::class,
             RedisMetricReader::class,
         ] as $abstract) {

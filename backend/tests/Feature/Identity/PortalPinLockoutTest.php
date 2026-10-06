@@ -146,7 +146,7 @@ it('bloquea el portal al tercer fallo, y con el PIN correcto', function (): void
 })->group('RS-12', 'RF-ID-06');
 
 it('cuenta los fallos del portal contra su propio origen y no contra el del quiosco', function (): void {
-    // §7.5: «por empleado y por origen». Es lo que impide que sondear el portal
+    // §7.5: «por empleado y por canal». Es lo que impide que sondear el portal
     // de alguien —accesible desde la red interna del hotel, RF-ID-08— le deje
     // sin poder fichar a la mañana siguiente. La regla dura 19 al reves,
     // provocada desde fuera.
@@ -173,9 +173,9 @@ it('deja intentarlo en el portal a quien esta bloqueado en el quiosco', function
     FrozenTime::at('2026-03-14 06:00:00');
 
     $contador = app(PinAttempts::class);
-    $contador->recordFailure($empleado['uuid'], PinOrigin::KIOSK);
-    $contador->recordFailure($empleado['uuid'], PinOrigin::KIOSK);
-    $contador->recordFailure($empleado['uuid'], PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $empleado['uuid'], PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $empleado['uuid'], PinOrigin::KIOSK);
+    $contador->reserve('E-0001', $empleado['uuid'], PinOrigin::KIOSK);
 
     expect($contador->isLocked($empleado['uuid'], PinOrigin::KIOSK))->toBeTrue();
 

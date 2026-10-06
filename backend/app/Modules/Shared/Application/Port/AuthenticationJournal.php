@@ -102,6 +102,45 @@ interface AuthenticationJournal
     ): void;
 
     /**
+     * Se acaba de abrir un **bloqueo por origen** del portal (RS-12, ADR-050 §2).
+     *
+     * Una vez por apertura, en el flanco. Escribe `auth.origin_locked` en el log
+     * tecnico y cuenta `outcome="origin_locked"` **siempre**; el asiento
+     * `auth.origin_locked` de `audit_log`, despues de responder, **solo si
+     * `$audited`**: quien llama aplica antes el techo de asientos por hora
+     * (`OriginLockAuditCeiling`), porque cada asiento pasa por el candado de la
+     * cadena (ADR-010).
+     *
+     * @param  string  $origin  La clave normalizada del origen (`RequestOrigin::key()`), **en
+     *                          claro**. La implementacion la convierte en `ip_hash` antes de
+     *                          escribirla en ningun sitio (regla dura 21); la IP en claro solo
+     *                          llega a la columna `audit_log.ip`, como en todo asiento `auth.*`.
+     * @param  int  $failures  Fallos que lo abrieron.
+     * @param  int  $lockSeconds  Duracion del bloqueo.
+     */
+    public function originLocked(
+        AuthChannel $channel,
+        string $origin,
+        int $failures,
+        int $lockSeconds,
+        bool $audited,
+    ): void;
+
+    /**
+     * Alguien ha levantado a mano el bloqueo por origen (`identity:origin-unlock`,
+     * dictamen de seguridad M3 de ADR-050).
+     *
+     * Asiento **sincrono** `auth.origin_unlocked` con el `ip_hash` del origen y
+     * nunca la IP en claro: lo provoca una persona con acceso al servidor, no
+     * quien ataca, y la regla dura 6 quiere que si el asiento falla no se
+     * levante nada.
+     *
+     * @param  string  $origin  Clave normalizada del origen, en claro. Ver {@see self::originLocked()}.
+     * @param  bool  $hadState  Si habia cuenta o bloqueo que borrar.
+     */
+    public function originUnlocked(AuthChannel $channel, string $origin, bool $hadState): void;
+
+    /**
      * Alguien ha cerrado su sesion y su token queda revocado.
      *
      * Escribe `auth.logged_out` en el log tecnico **en todos los canales** y el

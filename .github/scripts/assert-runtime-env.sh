@@ -116,7 +116,8 @@ readonly -a SOLO_SCHEDULER_OPCIONAL=(
 #   compose              BRANDING_PATH, HTTP_PORT, HTTPS_PORT, IMAGE_REGISTRY,
 #                        TLS_CERT_DIR: los consume Compose (montajes, puertos, imagen).
 #   grafana              GRAFANA_ADMIN_USER, GRAFANA_ADMIN_PASSWORD.
-#   nginx                KIOSK_VLAN_CIDR, PORTAL_INTERNAL_CIDR, NGINX_CLIENT_MAX_BODY_SIZE,
+#   nginx                KIOSK_VLAN_CIDR, PORTAL_INTERNAL_CIDR,
+#                        NGINX_CLIENT_MAX_BODY_SIZE,
 #                        TLS_CERT_FILE, TLS_KEY_FILE: el borde, no la aplicacion.
 readonly -a EXCLUIDAS=(
   ALERT_MAINTENANCE_WEEKDAY ALERT_MAINTENANCE_START ALERT_MAINTENANCE_END

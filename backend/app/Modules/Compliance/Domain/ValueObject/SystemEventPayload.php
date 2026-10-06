@@ -65,7 +65,7 @@ final readonly class SystemEventPayload
     private const array SPEC = [
         'system.updated' => [
             'required' => ['from_version', 'to_version', 'migrations_applied'],
-            'optional' => ['chain_before', 'chain_after', 'backup_fingerprint', 'report_id'],
+            'optional' => ['chain_before', 'chain_after', 'backup_fingerprint', 'report_id', 'portal_exposed'],
         ],
         'system.restored_from_backup' => [
             'required' => ['backup_file', 'backup_taken_at', 'failed_step', 'reason', 'from_version', 'to_version'],
@@ -230,6 +230,7 @@ final readonly class SystemEventPayload
                 SystemRestoreReason::cases(),
             )),
             'migrations_applied' => self::assertMigrations($value),
+            'portal_exposed' => self::assertPortalExposed($value),
             'integrity' => self::assertEnum($field, $value, self::BACKUP_INTEGRITY),
             'legacy_wal' => self::assertLegacyWal($value),
             default => null,
@@ -244,6 +245,20 @@ final readonly class SystemEventPayload
      * @var list<string>
      */
     private const array BACKUP_INTEGRITY = ['authenticated', 'legacy_accepted'];
+
+    /**
+     * `portal_exposed` (PP-10/ADR-050): solo existe, y vale `true`, cuando el
+     * portal del empleado esta abierto a internet (`PORTAL_INTERNAL_CIDR` es
+     * `0.0.0.0/0` o incluye direcciones publicas). Se OMITE en cualquier otro
+     * caso: la constancia es la presencia del dato, nunca un `false` que invite a
+     * leer como «comprobado» lo que simplemente no se miro.
+     */
+    private static function assertPortalExposed(mixed $value): void
+    {
+        if ($value !== true) {
+            throw InvalidSystemEventPayload::malformedField('portal_exposed', 'el booleano true (se omite si el portal no esta expuesto)');
+        }
+    }
 
     /**
      * Segmentos de WAL heredados (`.gz`, sin autenticar) que se reprodujeron en

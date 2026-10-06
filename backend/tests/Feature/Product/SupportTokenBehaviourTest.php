@@ -651,7 +651,11 @@ it('no deja que un actor de soporte escriba el aviso de privacidad del quiosco',
     'diagnostico escribe el responsable' => [SupportScope::Diagnostics, 'PRIVACY_CONTROLLER_NAME', 'Otro responsable'],
     'configuracion escribe la politica' => [SupportScope::Configuration, 'PRIVACY_POLICY_URL', 'https://politica.example/p'],
     'diagnostico escribe la politica' => [SupportScope::Diagnostics, 'PRIVACY_POLICY_URL', 'https://politica.example/p'],
-])->group('RF-PD-11', 'RL-09', 'RF-KI-09', 'RS-04');
+    // ADR-050: la fuerza del PIN de la plantilla es decision del responsable
+    // del tratamiento. Bajarla de 8 a 6 desde fuera devolveria el riesgo de PP-09.
+    'configuracion cambia la longitud del PIN' => [SupportScope::Configuration, 'IDENTITY_PIN_LENGTH', '6'],
+    'diagnostico cambia la longitud del PIN' => [SupportScope::Diagnostics, 'IDENTITY_PIN_LENGTH', '8'],
+])->group('RF-PD-11', 'RL-09', 'RF-KI-09', 'RS-04', 'RF-ID-09');
 
 it('el transito minimo entre quioscos SIGUE siendo ajustable por el soporte', function (): void {
     // La frontera de la decision, escrita. `ATTENDANCE_MIN_TRANSIT_SECONDS` no

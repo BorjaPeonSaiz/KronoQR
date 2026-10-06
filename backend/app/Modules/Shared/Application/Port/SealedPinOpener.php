@@ -46,9 +46,10 @@ use SensitiveParameter;
  *   la sirve `GET /api/v1/kiosk/roster` en `pin_sealing_public_key`, junto al
  *   padron, porque es un dato mas de los que el quiosco necesita para funcionar
  *   sin red.
- * - El mensaje es el PIN en ASCII, seis digitos, **sin relleno ni terminador**.
- * - El criptograma resultante son 54 bytes (48 de sobre + 6 de PIN), o 72
- *   caracteres en base64 estandar.
+ * - El mensaje es el PIN en ASCII, 6 u 8 cifras (ADR-050), **sin relleno ni
+ *   terminador**.
+ * - El criptograma resultante son 54 o 56 bytes (48 de sobre + 6 u 8 de PIN), o
+ *   72 o 76 caracteres en base64 estandar.
  * - En el navegador: `sodium.crypto_box_seal(pin, publicKey)` de
  *   `libsodium-wrappers`.
  *

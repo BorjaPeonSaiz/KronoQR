@@ -523,3 +523,84 @@ it('PP-03: el borde recibe TRUSTED_PROXY_CIDR y la plantilla la rinde', function
         ->and($plantilla)->not->toMatch('/^\s*set_real_ip_from\s/m')
         ->and($plantilla)->not->toMatch('/^\s*real_ip_header\s/m');
 })->group('RF-PD-02', 'RS-02');
+
+it('PP-10: el borde recibe ADMIN_INTERNAL_CIDR, la rinde sin dejar el geo roto y la usan el panel y la autenticacion', function (): void {
+    $compose = (string) file_get_contents(Repo::file('infra/compose.prod.yaml'));
+    $plantilla = (string) file_get_contents(Repo::file('infra/docker/nginx/templates/kronoqr.conf.template'));
+    $spa = (string) file_get_contents(Repo::file('infra/docker/nginx/extra/spa.conf'));
+    $envExample = (string) file_get_contents(Repo::file('.env.example'));
+
+    preg_match('/\n  nginx:\n.*?\n    environment:\n(.*?)\n    ports:/s', $compose, $m);
+
+    expect($m[1] ?? '')->toMatch('/^      ADMIN_INTERNAL_CIDR:$/m')
+        // El geo lee la variable YA RENDIDA (0.0.0.0/0 si esta vacia), nunca la cruda:
+        // vacia daria una entrada `geo` rota y nginx no arrancaria.
+        ->and($plantilla)->toContain('${KRONOQR_ADMIN_ALLOWED_CIDR} 1;')
+        ->and($plantilla)->not->toContain('${ADMIN_INTERNAL_CIDR}')
+        ->and($plantilla)->toMatch('/location \^~ \/api\/v1\/auth\/ \{\s+if \(\$kronoqr_admin_allowed = 0\) \{\s+return 403;/')
+        ->and($spa)->toMatch('/location \^~ \/admin\/ \{[^}]*\$kronoqr_admin_allowed = 0/s')
+        // Por defecto abierta: vacia en .env.example.
+        ->and($envExample)->toMatch('/^ADMIN_INTERNAL_CIDR=$/m');
+
+    $envsh = (string) file_get_contents(Repo::file('infra/docker/nginx/docker-entrypoint.d/07-kronoqr-admin-net.envsh'));
+
+    expect($envsh)->toContain('KRONOQR_ADMIN_ALLOWED_CIDR="${ADMIN_INTERNAL_CIDR:-0.0.0.0/0}"');
+})->group('RS-02', 'RF-PD-02');
+
+it('PP-09: el aviso de un portal abierto o publico recomienda el PIN de 8 digitos, en los dos idiomas', function (string $cidr): void {
+    $es = redesComprobar('check_network_cidrs "$ENV_FILE" /srv/kq/docker-compose.yml skip-missing', [
+        ...EDGE_NETWORKS_CHECKS_REDES_OK, 'PORTAL_INTERNAL_CIDR' => $cidr,
+    ]);
+
+    // Aviso, jamas un fallo: el propietario abre el portal a proposito.
+    expect($es['fallos'])->toBe(0)
+        ->and($es['avisos'])->toBeGreaterThan(0)
+        ->and($es['salida'])->toContain('PIN de 8 digitos')
+        ->and($es['salida'])->toContain('ADR-050');
+
+    $catalogo = (string) file_get_contents(Repo::file('infra/scripts/lib/messages.sh'));
+
+    expect($catalogo)->toContain('turn on the 8-digit PIN');
+})->with(['abierto' => '0.0.0.0/0', 'publico' => '203.0.113.0/24'])->group('RF-PD-02', 'RF-ID-08', 'RS-12');
+
+it('PP-09: un rango privado que no incluye este servidor no recomienda el PIN: es otro aviso', function (): void {
+    $resultado = redesComprobar('check_network_cidrs "$ENV_FILE" /srv/kq/docker-compose.yml skip-missing', [
+        ...EDGE_NETWORKS_CHECKS_REDES_OK, 'KIOSK_VLAN_CIDR' => '10.0.20.0/24', 'PORTAL_INTERNAL_CIDR' => '10.0.0.0/16',
+    ]);
+
+    expect($resultado['salida'])->not->toContain('PIN de 8 digitos');
+})->group('RF-PD-02', 'RF-ID-08');
+
+it('PP-09: kq_portal_exposed dice true solo con el portal abierto o con direcciones publicas', function (string $cidr, string $esperado): void {
+    $resultado = redesComprobar('printf "[%s]" "$(kq_portal_exposed "$ENV_FILE")"', [
+        ...EDGE_NETWORKS_CHECKS_REDES_OK, 'PORTAL_INTERNAL_CIDR' => $cidr,
+    ]);
+
+    expect($resultado['salida'])->toContain('['.$esperado.']');
+})->with([
+    'abierto' => ['0.0.0.0/0', 'true'],
+    'publico' => ['203.0.113.0/24', 'true'],
+    'se sale de 172.16/12' => ['172.16.0.0/11', 'true'],
+    'rfc1918 10/8' => ['10.0.0.0/16', ''],
+    'rfc1918 192.168/16' => ['192.168.1.0/24', ''],
+    'bucle local' => ['127.0.0.0/8', ''],
+    'invalido' => ['no-es-un-cidr', ''],
+    'vacio' => ['', ''],
+])->group('RF-PD-02', 'RF-ID-08');
+
+it('PP-09: update.sh anota portal_exposed como booleano true en el asiento y solo cuando procede', function (): void {
+    $proceso = Process::fromShellCommandline(
+        'bash -c '.escapeshellarg(
+            'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+            .'printf "%s\n%s" "$(audit_json_object "to_version=2.2.0" "portal_exposed=true")" '
+            .'"$(audit_json_object "to_version=2.2.0" "portal_exposed=")"'
+        ),
+        timeout: 60.0,
+    );
+    $proceso->run();
+
+    $lineas = explode("\n", trim($proceso->getOutput()));
+
+    expect($lineas[0])->toBe('{"to_version":"2.2.0","portal_exposed":true}')
+        ->and($lineas[1] ?? '')->toBe('{"to_version":"2.2.0"}');
+})->group('RF-PD-10', 'RF-ID-08');

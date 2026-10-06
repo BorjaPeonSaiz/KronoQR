@@ -93,8 +93,9 @@ with a meaning. It cannot be chosen.
 
 ### 2.2 The PIN: shown once only
 
-When the person is added, the system issues the **six-digit PIN** for the
-portal and **shows it once only, at that moment**. It cannot be looked up
+When the person is added, the system issues the **PIN** for the portal —with
+6 digits, or 8 if the installation is configured that way— and **shows it once
+only, at that moment**. It cannot be looked up
 afterwards: if it is lost, the only way out is to reset it, which generates a
 different one and voids the previous one on the spot.
 
@@ -108,6 +109,17 @@ the card is not to hand.
 delivery at all: no message, no recovery link. It is not an oversight: a key
 that travels through a mailbox ends up clocking for its owner without anyone
 noticing.
+
+**6 or 8 digits.** The length is decided by whoever runs the system, under
+**Operational settings → Access → PIN length**. The recommendation is to move to
+8 when the portal opens from outside the hotel network: an 8-digit PIN is a
+hundred times harder to guess. **The change voids no PIN**: the 6-digit ones you
+already handed out keep working, and only those you issue from then on —new
+hires and resets— come out with 8. There is no need to call the whole staff in
+on the same day: reset each person's PIN when they come by the office and hand
+it over in person. To know **how many** are left —not who—, ask IT for the
+result of the "short PINs" check of the system diagnosis
+([`operation.md`](operation.md)).
 
 ### 2.3 Contracted hours
 
@@ -1750,6 +1762,19 @@ with their code and their PIN at the tablet** while what is going on is worked
 out: that does not wait. If it happens to several people at once, or the board
 warns that there are cards signed with a key the server no longer recognises,
 **it is a matter for IT**: [`operation.md`](operation.md).
+
+### …somebody cannot sign in to the portal
+
+Ask them what exactly the screen says:
+
+| What they see | What it means | What to do |
+| --- | --- | --- |
+| "The employee code or the PIN are not correct" | One of the two is mistyped, the PIN is not the one they have written down, or their access is blocked for a few minutes after earlier failures (the screen does not tell the cases apart, on purpose) | Have them check it and wait a few minutes. If they do not remember it, reset it and hand it over in person (§2.2). Resetting it also clears the attempt lockout |
+| "Too many attempts in a row" | Too many requests in a very short time | Wait a few seconds and try again |
+| "Too many attempts from this connection" | **It is not their PIN.** From that network (the hotel wifi, for instance) there have been many failed sign-ins, by anyone, and the portal has been closed for that connection for up to one hour | Wait, or sign in from another connection. If it affects many people at once or it is urgent, tell IT: they can lift it earlier ([`operation.md`](operation.md)). Resetting the PIN does **not** lift it |
+
+None of this stops them clocking in: the portal and the tablet keep separate
+counts.
 
 ### …the inbox fills up with identical incidents
 

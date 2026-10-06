@@ -190,7 +190,7 @@ describe('pantalla de PIN — flujo completo (RF-AT-11)', () => {
     await wrapper.get('[data-testid="pin-back-to-code"]').trigger('click')
 
     expect(wrapper.find('[data-testid="pin-step-code"]').exists()).toBe(true)
-    // El boton de confirmar solo se activa con los 6 digitos: si el buffer no
+    // El boton de confirmar solo se activa con 6 a 8 digitos: si el buffer no
     // se hubiera vaciado, volver a este paso y luego al del PIN lo dejaria
     // completo con menos de 6 pulsaciones.
     await wrapper.get('[data-testid="pin-code-continue"]').trigger('click')
@@ -198,6 +198,53 @@ describe('pantalla de PIN — flujo completo (RF-AT-11)', () => {
       true,
     )
 
+    wrapper.unmount()
+  })
+
+  it('no envia a la sexta cifra: Aceptar se habilita con 6, 7 y 8 y solo envia al pulsarlo (ADR-050, RF-AT-11)', async () => {
+    installFetch(publicKeyBase64)
+    const { wrapper } = await render()
+    await vi.waitFor(() =>
+      expect(wrapper.find('[data-testid="pin-step-code"]').exists()).toBe(true),
+    )
+    await wrapper.get('[data-testid="pin-code-input"]').setValue('E7QK2MXPR')
+    await wrapper.get('[data-testid="pin-code-continue"]').trigger('click')
+    const accept = () => wrapper.get<HTMLButtonElement>('[data-testid="pin-confirm"]').element
+
+    await pressDigits(wrapper, '48392')
+    expect(accept().disabled).toBe(true)
+
+    for (const next of ['0', '1', '6']) {
+      await pressDigits(wrapper, next)
+      await vi.waitFor(() => expect(accept().disabled).toBe(false))
+      // Sin envio automatico: sigue el teclado y no hay confirmacion.
+      expect(wrapper.find('[data-testid="scan-confirmation"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="pin-step-pin"]').exists()).toBe(true)
+    }
+    expect(accept().textContent?.trim()).toBe('Aceptar')
+
+    wrapper.unmount()
+  })
+
+  it('los puntos 7 y 8 son opcionales: 6 bastan y se rellenan al teclearlos (ADR-050)', async () => {
+    installFetch(publicKeyBase64)
+    const { wrapper } = await render()
+    await vi.waitFor(() =>
+      expect(wrapper.find('[data-testid="pin-step-code"]').exists()).toBe(true),
+    )
+    await wrapper.get('[data-testid="pin-code-input"]').setValue('E7QK2MXPR')
+    await wrapper.get('[data-testid="pin-code-continue"]').trigger('click')
+    const states = () =>
+      wrapper.findAll('[data-testid="pin-dot"]').map((dot) => dot.attributes('data-state'))
+
+    expect(states()).toEqual([...Array(6).fill('empty'), 'optional', 'optional'])
+    await pressDigits(wrapper, '483920')
+    expect(states()).toEqual([...Array(6).fill('filled'), 'optional', 'optional'])
+    expect(wrapper.get('[data-testid="pin-dots"]').attributes('aria-label')).toBe(
+      '6 dígitos introducidos (mínimo 6, máximo 8)',
+    )
+    await pressDigits(wrapper, '17')
+    expect(states()).toEqual(Array(8).fill('filled'))
     wrapper.unmount()
   })
 
@@ -227,7 +274,7 @@ describe('pantalla de PIN — flujo completo (RF-AT-11)', () => {
     await wrapper.get('[data-testid="pin-code-continue"]').trigger('click')
     await pressDigits(wrapper, '483920')
 
-    // «Confirmar» se activa con los 6 digitos Y la clave publica ya cargada
+    // «Aceptar» se activa con 6 a 8 digitos Y la clave publica ya cargada
     // (esta ultima puede tardar el primer instante tras un arranque en frio,
     // ver `canConfirm` en el componente).
     await vi.waitFor(() =>

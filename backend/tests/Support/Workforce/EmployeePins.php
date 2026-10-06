@@ -33,6 +33,7 @@ final class EmployeePins
             ->where('uuid', $employeeUuid)
             ->update([
                 'pin_hash' => Hash::make($pin),
+                'pin_length' => \strlen($pin),
                 'pin_issued_at' => now(),
             ]);
 

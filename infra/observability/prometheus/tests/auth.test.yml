@@ -147,3 +147,45 @@ tests:
       - eval_time: 10m
         alertname: KronoqrAuthFailureSpike
         exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # KronoqrPortalOriginLockouts: 6 bloqueos de origen en 1 h, por encima de 5.
+  #-----------------------------------------------------------------------------
+  - name: origin_locked_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_auth_attempts_total{channel="portal", outcome="origin_locked"}'
+        values: "0 0 1 1 2 2 3 3 4 4 5 5 6 6 6 6 6"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: KronoqrPortalOriginLockouts
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: seguridad
+              component: auth
+              mitre_attack: T1110.003
+            exp_annotations:
+              summary: "Mas de 5 bloqueos de origen en el portal en 1 h"
+              description: >-
+                MITRE ATT&CK T1110.003 (Password Spraying), o un origen
+                compartido mal resuelto. Mas de 5 direcciones han llegado al
+                limite de fallos del portal en la ultima hora y estan
+                bloqueadas. Si es una sola direccion que se repite, o la de la
+                red del hotel, la plantilla entera puede estar sin portal:
+                comprueba primero hairpin NAT y TRUSTED_PROXY_CIDR. Fichar NO
+                se ve afectado.
+              runbook_url: docs/runbooks/bloqueo-por-origen.md
+
+  #-----------------------------------------------------------------------------
+  # Valor limite: exactamente 5 bloqueos en la hora. Nunca dispara (`> 5`).
+  #-----------------------------------------------------------------------------
+  - name: origin_locked_boundary
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_auth_attempts_total{channel="portal", outcome="origin_locked"}'
+        values: "0 0 1 1 2 2 3 3 4 4 5 5 5 5 5 5 5"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: KronoqrPortalOriginLockouts
+        exp_alerts: []

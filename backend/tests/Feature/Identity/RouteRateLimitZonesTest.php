@@ -6,6 +6,7 @@ use App\Modules\Attendance\Http\Middleware\ThrottleScanFailOpen;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route as Router;
+use Tests\Architecture\Support\Repo;
 use Tests\Support\Database\RefreshDatabase;
 
 /*
@@ -300,3 +301,145 @@ it('exige zona propia por IP a la descarga de informes en diferido, que no lleva
     // fichero entero en memoria.
     expect($descarga->gatherMiddleware())->not->toContain('auth:sanctum');
 })->group('RS-02', 'RF-IN-06');
+
+/*
+ * ---------------------------------------------------------------------------
+ * El acceso al portal en el borde: zona `portal_login` (ADR-050 §2)
+ * ---------------------------------------------------------------------------
+ *
+ * La zona de aplicacion de `/me/login` es `portal`, como el resto del portal;
+ * lo que la separa es Nginx: `location = /api/v1/me/login` y su gemelo con
+ * barra final, con su propia `zone=portal_login`, para que consultar las jornadas no gaste los intentos
+ * de acceso y al reves. Se cruzan el router y la plantilla: una ruta del portal
+ * nueva que Nginx atendiera con otra zona, o un `location` del portal que se
+ * colara entre los dos, rompen esto el dia en que se escriben.
+ */
+
+/**
+ * El cuerpo de un `location` de la plantilla de Nginx, por su cabecera exacta.
+ */
+function routeZonesNginxLocation(string $header): string
+{
+    $template = Repo::contents('infra/docker/nginx/templates/kronoqr.conf.template');
+
+    expect(preg_match('/  '.preg_quote($header, '/').' \{(.*?)\n  \}/s', $template, $match))
+        ->toBe(1, 'No se encuentra «'.$header.'» en la plantilla de Nginx.');
+
+    return $match[1] ?? '';
+}
+
+/**
+ * Las URI del portal que el router sirve, sin la barra inicial.
+ *
+ * @return list<string>
+ */
+function routeZonesPortalUris(): array
+{
+    $uris = array_map(
+        static fn (Route $route): string => $route->uri(),
+        array_values(array_filter(
+            Router::getRoutes()->getRoutes(),
+            static fn (Route $route): bool => str_starts_with($route->uri(), 'api/v1/me/'),
+        )),
+    );
+
+    sort($uris);
+
+    return array_values(array_unique($uris));
+}
+
+/**
+ * Los `location` de la plantilla que tocan el portal, con su modificador.
+ *
+ * @return list<string>
+ */
+function routeZonesPortalLocations(): array
+{
+    preg_match_all(
+        '/^\s*location\s+(\S+\s+)?(\/api\/v1\/me\S*)\s*\{/m',
+        Repo::contents('infra/docker/nginx/templates/kronoqr.conf.template'),
+        $matches,
+        PREG_SET_ORDER,
+    );
+
+    return array_map(static fn (array $m): string => trim($m[1].$m[2]), $matches);
+}
+
+/**
+ * El `location` del portal que Nginx elige para una URI, con su modificador:
+ * primero la coincidencia exacta (`=`) y, si no la hay, el prefijo mas largo.
+ * Basta con eso porque los prefijos del portal son `^~`: con `^~`, Nginx no
+ * llega a evaluar ninguna regex.
+ */
+function routeZonesPortalLocationFor(string $uri): ?string
+{
+    $locations = routeZonesPortalLocations();
+
+    if (\in_array('= '.$uri, $locations, true)) {
+        return '= '.$uri;
+    }
+
+    $elegido = null;
+
+    foreach ($locations as $location) {
+        $prefijo = preg_replace('/^\S+\s+/', '', $location) ?? $location;
+
+        if (! str_starts_with($location, '= ') && str_starts_with($uri, $prefijo)
+            && ($elegido === null || \strlen($prefijo) > \strlen(preg_replace('/^\S+\s+/', '', $elegido) ?? $elegido))) {
+            $elegido = $location;
+        }
+    }
+
+    return $elegido;
+}
+
+it('declara la zona portal_login en Nginx y se la da solo al acceso del portal', function (string $cabecera): void {
+    $template = Repo::contents('infra/docker/nginx/templates/kronoqr.conf.template');
+    $acceso = routeZonesNginxLocation($cabecera);
+
+    expect($template)->toMatch('/^limit_req_zone \$binary_remote_addr\s+zone=portal_login:10m\s+rate=10r\/m;$/m')
+        // Dos usos y solo dos: el acceso con barra final y sin ella.
+        ->and(substr_count($template, 'zone=portal_login '))->toBe(2)
+        ->and($acceso)->toContain('limit_req zone=portal_login burst=5 nodelay;')
+        ->and($acceso)->not->toContain('zone=portal burst')
+        // El mismo candado de red que el resto del portal (RF-ID-08).
+        ->and($acceso)->toContain('$kronoqr_portal_allowed')
+        // Y el mismo cuerpo en las dos variantes: si una se corrigiera y la otra
+        // no, la barra final volveria a ser un desvio.
+        ->and($acceso)->toBe(routeZonesNginxLocation('location = /api/v1/me/login'));
+})->with([
+    'sin barra final' => ['location = /api/v1/me/login'],
+    'con barra final' => ['location = /api/v1/me/login/'],
+])->group('RS-12', 'RS-02', 'RF-ID-08');
+
+it('manda a portal_login el acceso con y sin barra final, y el resto del portal a portal', function (string $uri, string $esperado, string $zona): void {
+    // Laravel recorta la barra final y sirve `/me/login/` con la misma accion
+    // que `/me/login`: si Nginx la mandara a `zone=portal`, el limite de 5 r/m
+    // del acceso se esquivaria con una barra.
+    $location = routeZonesPortalLocationFor($uri);
+
+    expect($location)->toBe($esperado)
+        ->and(routeZonesNginxLocation('location '.$esperado))->toContain('limit_req zone='.$zona.' burst=');
+})->with([
+    'acceso' => ['/api/v1/me/login', '= /api/v1/me/login', 'portal_login'],
+    'acceso con barra final' => ['/api/v1/me/login/', '= /api/v1/me/login/', 'portal_login'],
+    'consulta de jornadas' => ['/api/v1/me/workdays', '^~ /api/v1/me/', 'portal'],
+    'subruta del acceso' => ['/api/v1/me/login/otra', '^~ /api/v1/me/', 'portal'],
+])->group('RS-12', 'RS-02', 'RF-ID-08');
+
+it('deja el resto del portal en la zona portal de Nginx', function (): void {
+    $resto = routeZonesNginxLocation('location ^~ /api/v1/me/');
+
+    expect($resto)->toContain('limit_req zone=portal burst=10 nodelay;')
+        ->and($resto)->not->toContain('portal_login')
+        // Solo estos dos `location` atienden el portal: cualquier otro mas
+        // largo le quitaria rutas a uno de los dos sin que se viera aqui.
+        ->and(routeZonesPortalLocations())->toBe(['= /api/v1/me/login', '= /api/v1/me/login/', '^~ /api/v1/me/']);
+})->group('RS-12', 'RS-02', 'RF-ID-08');
+
+it('sirve el acceso del portal en el router con la ruta exacta que Nginx separa', function (): void {
+    // Si la ruta cambiara de URI, el `location =` dejaria de casar y el acceso
+    // caeria en la zona de las consultas: el control existiria solo en papel.
+    expect(routeZonesPortalUris())->toContain('api/v1/me/login')
+        ->and(routeZonesPortalUris())->toContain('api/v1/me/workdays');
+})->group('RS-12', 'RF-ID-08');

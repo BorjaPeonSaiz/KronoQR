@@ -33,6 +33,16 @@ describe('PinRevealDialog', () => {
     expect(wrapper.text()).toContain(es.pin.reveal.onlyOnce)
   })
 
+  it('enseña un PIN de 8 cifras entero y tampoco lo guarda (ADR-050)', async () => {
+    const wrapper = await mountView(PinRevealDialog, {
+      props: { ...props(), pin: { ...PIN, pin: '48392017' } },
+    })
+
+    expect(wrapper.find('[data-test="pin-value"]').text()).toBe('48392017')
+    expect(window.sessionStorage.length).toBe(0)
+    expect(window.localStorage.length).toBe(0)
+  })
+
   it('no escribe el PIN en ningun almacenamiento del navegador', async () => {
     await mountView(PinRevealDialog, { props: props() })
 

@@ -143,6 +143,7 @@ return [
         /* El aviso de privacidad del quiosco (RF-KI-09, RL-09, 2.2.0). */
         'PRIVACY_CONTROLLER_NAME' => 'responsable del tratamiento en el aviso de privacidad del quiosco',
         'PRIVACY_POLICY_URL' => 'dirección https de la política de privacidad completa',
+        'IDENTITY_PIN_LENGTH' => 'longitud del PIN de la plantilla',
     ],
 
 ];

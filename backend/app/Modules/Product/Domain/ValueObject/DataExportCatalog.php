@@ -634,6 +634,9 @@ final class DataExportCatalog
     {
         return [
             'pin_hash',
+            // Que PIN son cortos es a quien atacar (ADR-050): mismo criterio que
+            // su hash, aunque no sea un secreto por si solo.
+            'pin_length',
             'national_id_hash',
             'photo_path',
             'secret_hash',

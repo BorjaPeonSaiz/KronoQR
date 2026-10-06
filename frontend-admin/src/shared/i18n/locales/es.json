@@ -335,7 +335,7 @@
     },
     "reset": {
       "heading": "Restablecer el PIN",
-      "explanation": "Se genera un PIN nuevo de seis dígitos y el anterior deja de funcionar en el acto. También se libera el bloqueo por intentos fallidos.",
+      "explanation": "Se genera un PIN nuevo (de 6 u 8 cifras, según el ajuste de la instalación) y el anterior deja de funcionar en el acto. También se libera el bloqueo por intentos fallidos.",
       "action": "Restablecer y mostrar el PIN",
       "warning": "El PIN nuevo se mostrará una sola vez, ahora. No se podrá volver a consultar: si se pierde, hay que restablecerlo otra vez."
     },
@@ -1586,7 +1586,8 @@
       "payrollHoursFormat": "Formato de las horas",
       "payrollDateFormat": "Formato de las fechas",
       "payrollEncoding": "Codificación",
-      "payrollHeaderRow": "Fila de cabecera"
+      "payrollHeaderRow": "Fila de cabecera",
+      "pinLength": "Longitud del PIN"
     },
     "hints": {
       "maxShiftHours": "A partir de esta duración, un tramo cerrado se marca como anómalo y se abre una incidencia para revisión. No cierra ningún turno por su cuenta. Rango admitido: {minimum}–{maximum} horas.",
@@ -1611,7 +1612,8 @@
       "payrollHoursFormat": "«HH:MM» es el que lee una persona sin ambigüedad. Los formatos decimales existen porque muchos programas de nómina los exigen para sumarlos automáticamente.",
       "payrollDateFormat": "«ISO» es AAAA-MM-DD; «DMY» es DD/MM/AAAA.",
       "payrollEncoding": "«UTF-8 con BOM» es lo que espera Excel en Windows sin preguntar la codificación. Con «Latin-1», un carácter que no exista en esa codificación se sustituye por «?» sin que falle la descarga.",
-      "payrollHeaderRow": "Con la fila desactivada, el fichero empieza directamente por los datos: algunos programas de importación automática la rechazan si la llevan."
+      "payrollHeaderRow": "Con la fila desactivada, el fichero empieza directamente por los datos: algunos programas de importación automática la rechazan si la llevan.",
+      "pinLength": "Cifras de los PIN que se emiten desde ahora (6 de serie). Con 8 cifras el portal resiste mejor los intentos de adivinar un PIN, útil si está abierto a internet. Afecta al portal y al quiosco; los PIN ya emitidos siguen valiendo con su longitud hasta que se restablezcan."
     },
     "breakClockingOptions": {
       "enabled": "Activado",
@@ -1647,7 +1649,13 @@
     "save": "Guardar los ajustes",
     "saving": "Guardando…",
     "saved": "Ajustes guardados. El cambio queda registrado en el trail de auditoría.",
-    "failed": "No se han podido guardar los ajustes."
+    "failed": "No se han podido guardar los ajustes.",
+    "accessHeading": "Acceso",
+    "pinLengthOptions": "{count} cifras",
+    "impacts": {
+      "access_control": "Este cambio afecta al acceso al portal y al quiosco, no a las horas registradas. Los PIN ya emitidos siguen valiendo hasta que los restablezcas."
+    },
+    "pinLengthChange": "Longitud del PIN: de {from} a {to} cifras."
   },
   "license": {
     "heading": "Licencia",

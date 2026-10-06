@@ -144,7 +144,7 @@ Si tu hotel usa el fichaje de pausa, verás un botón «Pausa» en la tablet: cu
 
 ### 3. Si no tienes la tarjeta
 
-Pulsa «Ficha con tu código y PIN» en la tablet, escribe tu código de empleado y tu PIN de 6 dígitos. Tu fichaje cuenta igual. Si has perdido la tarjeta, díselo a tu responsable ese mismo día: se anula y te dan otra.
+Pulsa «Ficha con tu código y PIN» en la tablet, escribe tu código de empleado y tu PIN. Tu fichaje cuenta igual. Si has perdido la tarjeta, díselo a tu responsable ese mismo día: se anula y te dan otra.
 
 ### 4. Consultar tu registro
 

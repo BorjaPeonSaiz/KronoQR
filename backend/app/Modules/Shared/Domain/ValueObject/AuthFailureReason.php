@@ -54,4 +54,15 @@ enum AuthFailureReason: string
      * existir, o dejo de tener centro, entre la comprobacion y la emision.
      */
     case SESSION_NOT_ISSUED = 'session_not_issued';
+
+    /**
+     * El portal estaba cerrado al ORIGEN de la peticion (RS-12, ADR-050 §2), asi
+     * que ni se miro el codigo ni el PIN.
+     *
+     * Puede tener motivo propio porque **la respuesta ya lo distingue**: `429`
+     * con `urn:kronoqr:problem:portal-origin-locked`. No dice nada de ninguna
+     * credencial, sino de la red de quien pregunta (ADR-039, «un solo motivo de
+     * fallo donde la respuesta es una sola»).
+     */
+    case ORIGIN_LOCKED = 'origin_locked';
 }

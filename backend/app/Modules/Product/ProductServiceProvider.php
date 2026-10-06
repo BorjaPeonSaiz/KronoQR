@@ -78,6 +78,7 @@ use App\Modules\Product\Infrastructure\Adapter\DbKioskServiceCodeProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbOperationalSettingsProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbPayrollLayoutProvider;
+use App\Modules\Product\Infrastructure\Adapter\DbPinLengthProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbWeeklySummaryPreference;
 use App\Modules\Product\Infrastructure\Adapter\Ed25519LicenseVerifier;
 use App\Modules\Product\Infrastructure\Adapter\LaravelProductEventPublisher;
@@ -114,6 +115,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
 use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
 use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\AccessHardeningProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\AlertRecipientsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
@@ -138,6 +140,7 @@ use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisErrorMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisLicenseMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisSettingsMetrics;
+use App\Modules\Product\Infrastructure\Persistence\DatabaseAccessHardeningFacts;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseComplianceProfileRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportRepository;
 use App\Modules\Product\Infrastructure\Persistence\DatabaseDataExportSource;
@@ -165,6 +168,7 @@ use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PayrollLayoutProvider;
+use App\Modules\Shared\Application\Port\PinLengthProvider;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
@@ -385,6 +389,18 @@ final class ProductServiceProvider extends ServiceProvider
         $this->app->bind(
             WeeklySummaryPreference::class,
             static fn (Application $app): DbWeeklySummaryPreference => new DbWeeklySummaryPreference(
+                $app->make(GetSettingsHandler::class),
+            ),
+        );
+
+        /*
+         * La longitud con la que se emiten los PIN (RF-ID-09, ADR-050,
+         * `IDENTITY_PIN_LENGTH`). Mismo reparto: la pide `Workforce`, que no
+         * puede importar `Product`. `bind`: se pide una vez por emision.
+         */
+        $this->app->bind(
+            PinLengthProvider::class,
+            static fn (Application $app): DbPinLengthProvider => new DbPinLengthProvider(
                 $app->make(GetSettingsHandler::class),
             ),
         );
@@ -1841,6 +1857,7 @@ final class ProductServiceProvider extends ServiceProvider
                      * despues con que certificado.
                      */
                     self::edgeNetworksProbe(),
+                    self::accessHardeningProbe($app),
                     new TlsProbe(
                         applicationUrl: Config::string('app.url'),
                         allowSelfSigned: Config::boolean('security.tls_allow_self_signed'),
@@ -2005,6 +2022,29 @@ final class ProductServiceProvider extends ServiceProvider
             kioskVlan: self::text(Config::get('security.edge_networks.kiosk_vlan')) ?? '',
             portalInternal: self::text(Config::get('security.edge_networks.portal_internal')) ?? '',
             metricsAllow: self::text(Config::get('security.edge_networks.metrics_allow')) ?? '',
+            // Nulo y vacia son dos cosas aqui: «no la recibo» frente a «la
+            // recibo vacia», que es el valor de serie (panel sin filtrar).
+            adminInternal: is_scalar($admin = Config::get('security.edge_networks.admin_internal'))
+                ? (string) $admin
+                : null,
+        );
+    }
+
+    /**
+     * La sonda `access.*` (ADR-050): longitud del PIN frente a la exposicion del
+     * portal y los recuentos de la transicion. Lee la base de datos, y por eso
+     * no va dentro de la de redes.
+     */
+    private static function accessHardeningProbe(Application $app): AccessHardeningProbe
+    {
+        return new AccessHardeningProbe(
+            pinLengthProvider: $app->make(PinLengthProvider::class),
+            facts: new DatabaseAccessHardeningFacts(DB::connection()),
+            portalInternal: self::text(Config::get('security.edge_networks.portal_internal')) ?? '',
+            secondFactorRoles: array_values(array_filter(
+                Config::array('identity.two_factor.required_roles', []),
+                static fn (mixed $role): bool => \is_string($role),
+            )),
         );
     }
 }

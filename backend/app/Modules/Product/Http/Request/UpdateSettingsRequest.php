@@ -151,6 +151,12 @@ final class UpdateSettingsRequest extends FormRequest
         // apuntar a los empleados a una politica que el hotel no ha aprobado.
         SettingKey::PRIVACY_CONTROLLER_NAME->value,
         SettingKey::PRIVACY_POLICY_URL->value,
+        // RF-ID-09, ADR-050 (2.2.0, bloque 12): la FUERZA DEL PIN de toda la
+        // plantilla. Bajarla de 8 a 6 con el portal abierto a internet devuelve
+        // el riesgo de PP-09, y quien decide cuanto riesgo asume sobre el acceso
+        // a los datos de su gente es el responsable del tratamiento, no quien
+        // mantiene el producto.
+        SettingKey::IDENTITY_PIN_LENGTH->value,
     ];
 
     public function authorize(): bool

@@ -87,10 +87,10 @@
       "continue": "Continue"
     },
     "pin": {
-      "title": "Enter your 6-digit PIN",
-      "progress": "{entered} of {total} digits entered",
+      "title": "Enter your PIN (6 to 8 digits)",
+      "progress": "{entered} digits entered (minimum {min}, maximum {total})",
       "back": "Back",
-      "confirm": "Confirm"
+      "confirm": "Accept"
     },
     "keypad": {
       "label": "Numeric keypad",

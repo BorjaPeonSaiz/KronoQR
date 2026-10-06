@@ -17,6 +17,7 @@ function catalog(
   weeklySummaryEmail: 'enabled' | 'disabled' = 'disabled',
   kioskUpdateWindow = '03:00-05:00',
   kioskUpdateQuietMinutes = 10,
+  pinLength: '6' | '8' = '6',
 ): unknown {
   return {
     data: [
@@ -128,6 +129,16 @@ function catalog(
         affects_worked_hours: false,
         source: breakClocking === 'disabled' ? 'product_default' : 'installation',
         constraints: { allowed: ['enabled', 'disabled'] },
+      },
+      // RF-ID-09, RS-12, ADR-050: eleccion "6"/"8", impacto `access_control`.
+      {
+        key: 'IDENTITY_PIN_LENGTH',
+        value: pinLength,
+        type: 'text',
+        impact: 'access_control',
+        affects_worked_hours: false,
+        source: pinLength === '6' ? 'product_default' : 'installation',
+        constraints: { allowed: ['6', '8'] },
       },
       // Resumen semanal (RF-PR-05) y ventana de actualizacion del quiosco
       // (RF-KI-07), tarea 3.12: TODAVIA no en el enum `SettingKey` del
@@ -526,5 +537,75 @@ describe('OperationalSettingsView — ventana de actualizacion del quiosco (RF-K
 
     expect(wrapper.text()).toContain(es.operationalSettings.fields.kioskUpdateQuietMinutes)
     expect(wrapper.text()).toContain('El valor tiene que estar entre 0 y 120 minutos.')
+  })
+})
+
+describe('OperationalSettingsView — longitud del PIN (RF-ID-09, RS-12, ADR-050)', () => {
+  it('lista el ajuste con 6 de serie y sin aviso de impacto', async () => {
+    stubFetch(() => jsonResponse(catalog()))
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    expect(wrapper.find('[data-test="pin-length"]').element).toHaveProperty('value', '6')
+    expect(wrapper.find('[data-test="access-control-warning"]').exists()).toBe(false)
+  })
+
+  it('pasar a 8 muestra el impacto access_control y manda el valor como cadena', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse(catalog('48392017', 'disabled', 'disabled', '03:00-05:00', 10, '8'))
+        : jsonResponse(catalog()),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="pin-length"]').setValue('8')
+
+    const warning = wrapper.find('[data-test="access-control-warning"]')
+
+    expect(warning.exists()).toBe(true)
+    expect(warning.text()).toContain(es.operationalSettings.impacts.access_control)
+    expect(warning.text()).toContain('6')
+    expect(warning.text()).toContain('8')
+
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
+
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      settings: { IDENTITY_PIN_LENGTH: '8' },
+    })
+    expect(wrapper.find('[data-test="pin-length"]').element).toHaveProperty('value', '8')
+  })
+
+  it('volver a 6 desde 8 manda "6" y deshacer el cambio apaga el aviso', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? jsonResponse(catalog())
+        : jsonResponse(catalog('48392017', 'disabled', 'disabled', '03:00-05:00', 10, '8')),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    expect(wrapper.find('[data-test="pin-length"]').element).toHaveProperty('value', '8')
+
+    await wrapper.find('[data-test="pin-length"]').setValue('6')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
+
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      settings: { IDENTITY_PIN_LENGTH: '6' },
+    })
+
+    await wrapper.find('[data-test="pin-length"]').setValue('8')
+    await wrapper.find('[data-test="pin-length"]').setValue('6')
+
+    expect(wrapper.find('[data-test="access-control-warning"]').exists()).toBe(false)
   })
 })

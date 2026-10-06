@@ -147,7 +147,7 @@ If your hotel uses break clocking, you will see a "Break" button on the tablet: 
 
 ### 3. If you do not have the card
 
-Tap "Clock in with your code and PIN" on the tablet, type your employee code and your 6-digit PIN. Your entry counts just the same. If you lost the card, tell your manager that same day: it is cancelled and you get a new one.
+Tap "Clock in with your code and PIN" on the tablet, type your employee code and your PIN. Your entry counts just the same. If you lost the card, tell your manager that same day: it is cancelled and you get a new one.
 
 ### 4. Checking your record
 

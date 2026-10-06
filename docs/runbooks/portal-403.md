@@ -156,19 +156,32 @@ la instalación**: es lo que responde el día que alguien pregunte por qué el
 portal es alcanzable desde fuera.
 
 **Lo que se asume, dicho sin rodeos.** El portal se abre con código de empleado
-y PIN de **6 dígitos**. Restringirlo a la red interna es uno de los cuatro
-controles que compensan un PIN tan corto; al abrirlo quedan los otros tres:
+y PIN, de **6 cifras** de serie. Restringirlo a la red interna es uno de los
+controles que compensan un PIN tan corto; al abrirlo quedan los demás:
 
 1. **Bloqueo por intentos**, creciente, por empleado.
-2. **Límite de peticiones por IP y por código de empleado**.
-3. La sesión del portal **solo alcanza los datos de esa persona**, nunca los de
+2. **Bloqueo por conexión** (desde la 2.2.0): 20 accesos fallidos desde una
+   misma dirección en 15 minutos, con cualquier código, cierran el portal a esa
+   dirección una hora. La persona ve «Demasiados intentos desde esta conexión».
+   Se levanta antes con
+   `docker compose exec app php artisan identity:origin-unlock <ip>`.
+3. **Límite de peticiones por IP y por código de empleado**.
+4. La sesión del portal **solo alcanza los datos de esa persona**, nunca los de
    otra.
 
-**Hoy, abrir el portal no cambia nada más que el rango**: el acceso sigue siendo
-código y PIN de 6 dígitos, ahora frente a cualquiera. Está previsto que una
-versión posterior exija un **PIN más largo (8 dígitos)** cuando el portal esté
-abierto a internet. Cuando tu versión lo traiga —lo dirán las notas de la
-versión—, actívalo el mismo día y pide a la plantilla que cambie el PIN.
+Ninguno frena a quien prueba desde muchas direcciones distintas: con 6 cifras
+acaba acertando un PIN en cuestión de meses. Por eso, **el mismo día que lo
+abras**:
+
+- **Pasa a PIN de 8 cifras** (desde la 2.2.0): panel → **Ajustes operativos →
+  Acceso → Longitud del PIN**. Los PIN de 6 ya entregados siguen valiendo hasta
+  que RRHH los restablece; `product:doctor` dice cuántos quedan
+  (`access.short_pins`, solo el número).
+- **Decide sobre el panel.** Comparte dirección y puerto con el portal: con el
+  portal abierto, el panel de gestión también lo está salvo que lo cierres a tu
+  red con `ADMIN_INTERNAL_CIDR`
+  ([`../cliente/configuracion.md`](../cliente/configuracion.md) §6). Vacía es el
+  valor de serie y una decisión válida; anótala en el acta igual que esta.
 
 **Cuándo NO conviene abrirlo:**
 
@@ -184,7 +197,7 @@ versión—, actívalo el mismo día y pide a la plantilla que cambie el PIN.
   [`ataque-a-credenciales.md`](ataque-a-credenciales.md).
 - **Si el servidor está detrás de un proxy o una CDN sin `TRUSTED_PROXY_CIDR`**
   (§3.1): el límite por IP vería una sola IP para todo el mundo y dejaría de
-  proteger.
+  proteger, y un solo bloqueo por conexión dejaría fuera a toda la plantilla.
 
 **Y cerrarlo otra vez** es volver a poner el rango de la LAN y aplicar (§5). Las
 sesiones de portal ya abiertas desde fuera dejan de poder pedir datos en el

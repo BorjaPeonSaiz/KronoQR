@@ -144,7 +144,7 @@ it('restablecer desbloquea el PIN inmediatamente, y en las dos puertas', functio
     // delante del quiosco, que es exactamente lo que la regla dura 19 prohibe.
     //
     // LAS DOS PUERTAS, y esa es la mitad que la tarea 1.12 anadio: desde que el
-    // contador se lleva por empleado Y POR ORIGEN (§7.5), restablecer tiene que
+    // contador se lleva por empleado Y POR CANAL (§7.5), restablecer tiene que
     // limpiar los dos. Si limpiara solo uno, quien pidiera un PIN nuevo despues
     // de bloquearse en el portal seguiria sin poder fichar en el quiosco, y el
     // sintoma —«me han dado un PIN nuevo y sigue sin funcionar»— apuntaria a
@@ -161,10 +161,11 @@ it('restablecer desbloquea el PIN inmediatamente, y en las dos puertas', functio
     /** @var PinAttempts $attempts */
     $attempts = app(PinAttempts::class);
 
-    // Tantos fallos como haga falta para bloquear con la politica de serie.
+    // Tres intentos reservados bloquean con la politica de serie; los
+    // siguientes llegan bloqueados y no anotan.
     for ($i = 0; $i < 10; $i++) {
-        $attempts->recordFailure($uuid, PinOrigin::KIOSK);
-        $attempts->recordFailure($uuid, PinOrigin::PORTAL);
+        $attempts->reserve('E-0001', $uuid, PinOrigin::KIOSK);
+        $attempts->reserve('E-0001', $uuid, PinOrigin::PORTAL);
     }
 
     expect($attempts->isLocked($uuid, PinOrigin::KIOSK))->toBeTrue()

@@ -25,16 +25,21 @@ readonly ENTRYPOINT="${SCRIPT_DIR}/../docker/nginx/docker-entrypoint.d/04-kronoq
 
 readonly REAL_IP_ENVSH="${SCRIPT_DIR}/../docker/nginx/docker-entrypoint.d/06-kronoqr-real-ip.envsh"
 
+readonly ADMIN_NET_ENVSH="${SCRIPT_DIR}/../docker/nginx/docker-entrypoint.d/07-kronoqr-admin-net.envsh"
+
 fallo=0
 
 # TRUSTED_PROXY_CIDR de los casos (PP-03). Vacia salvo en los que la prueban.
 PROXIES=""
 
+# ADMIN_INTERNAL_CIDR de los casos (PP-10). Vacia salvo en los que la prueban.
+ADMIN_NET=""
+
 # caso DESCRIPCION SALIDA_ESPERADA TEXTO_ESPERADO KIOSK PORTAL METRICS
 caso() {
   local descripcion="$1" esperada="$2" texto="$3" kiosk="$4" portal="$5" metricas="$6" salida codigo=0
 
-  salida="$(env TRUSTED_PROXY_CIDR="${PROXIES}" KIOSK_VLAN_CIDR="${kiosk}" PORTAL_INTERNAL_CIDR="${portal}" \
+  salida="$(env TRUSTED_PROXY_CIDR="${PROXIES}" ADMIN_INTERNAL_CIDR="${ADMIN_NET}" KIOSK_VLAN_CIDR="${kiosk}" PORTAL_INTERNAL_CIDR="${portal}" \
     METRICS_ALLOW_CIDR="${metricas}" bash "${ENTRYPOINT}" 2>&1)" || codigo=$?
 
   if [ "${codigo}" != "${esperada}" ]; then
@@ -66,6 +71,30 @@ real_ip() {
   fi
 
   printf '  [ok]    %s\n' "${descripcion}"
+}
+
+# admin_net DESCRIPCION VALOR ESPERADO: lo que rinde 07-kronoqr-admin-net.envsh en
+# KRONOQR_ADMIN_ALLOWED_CIDR, cargado con `.` en `sh`. Con VALOR vacio la variable
+# ni siquiera esta definida, como cuando Compose no la recibe.
+admin_net() {
+  local descripcion="$1" valor="$2" esperado="$3" salida
+
+  if [ -n "${valor}" ]; then
+    salida="$(ADMIN_INTERNAL_CIDR="${valor}" sh -c '. "$1"; printf "%s" "${KRONOQR_ADMIN_ALLOWED_CIDR}"' sh "${ADMIN_NET_ENVSH}" 2>&1)" || true
+  else
+    # shellcheck disable=SC2016
+    salida="$(env -u ADMIN_INTERNAL_CIDR sh -c '. "$1"; printf "%s" "${KRONOQR_ADMIN_ALLOWED_CIDR}"' sh "${ADMIN_NET_ENVSH}" 2>&1)" || true
+  fi
+
+  if [ "${salida}" != "${esperado}" ]; then
+    printf '  [FALLA] %s: rindio "%s", se esperaba "%s"
+' "${descripcion}" "${salida}" "${esperado}" >&2
+    fallo=1
+    return 0
+  fi
+
+  printf '  [ok]    %s
+' "${descripcion}"
 }
 
 main() {
@@ -104,6 +133,21 @@ main() {
   caso "basura en el proxy no rompe el registro" 1 "no es un CIDR IPv4 valido" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
   PROXIES=""
   caso "sin proxy no se dice nada de proxies" 0 "CIDR IPv4 validos" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+
+  # PP-10: ADMIN_INTERNAL_CIDR es opcional y se valida solo si viene.
+  ADMIN_NET="10.20.0.0/24"
+  caso "red del panel valida" 0 "ADMIN_INTERNAL_CIDR definida" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  ADMIN_NET="10.20.0.0/33"
+  caso "red del panel con prefijo /33" 1 "ADMIN_INTERNAL_CIDR='10.20.0.0/33'" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  ADMIN_NET="10.0.0.0/8,172.16.0.0/12"
+  caso "dos rangos en la red del panel" 1 "no es un CIDR IPv4 valido" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  ADMIN_NET='10.0.0.0/8"}'
+  caso "basura en la red del panel no rompe el registro" 1 "ADMIN_INTERNAL_CIDR=" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+  ADMIN_NET=""
+  caso "red del panel vacia: abierta, y lo dice" 0 "ADMIN_INTERNAL_CIDR vacia" 10.0.20.0/24 172.28.0.0/16 172.29.0.20/32
+
+  admin_net "red del panel vacia rinde 0.0.0.0/0 (sin filtro)" "" "0.0.0.0/0"
+  admin_net "red del panel con valor se rinde tal cual" "10.20.0.0/24" "10.20.0.0/24"
 
   real_ip "sin proxy no rinde directivas" "" "# TRUSTED_PROXY_CIDR vacio: no hay proxy de confianza; se usa la IP del socket."
   real_ip "un proxy" "10.0.0.5/32" "set_real_ip_from 10.0.0.5/32;

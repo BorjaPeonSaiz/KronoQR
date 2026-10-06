@@ -1,28 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import {
   hasEmployeeCodeShape,
-  isSixDigitPin,
+  isValidPinShape,
   MAX_EMPLOYEE_CODE_LENGTH,
   normalizeEmployeeCode,
-  PIN_LENGTH,
+  PIN_MAX_LENGTH,
+  PIN_MIN_LENGTH,
 } from '@/features/pin/domain/pinCode'
 
-describe('forma del PIN de 6 digitos', () => {
-  it('acepta exactamente 6 digitos', () => {
-    expect(isSixDigitPin('483920')).toBe(true)
-    expect(PIN_LENGTH).toBe(6)
+describe('forma del PIN de 6 a 8 digitos (ADR-050)', () => {
+  it('fija el rango en 6 a 8', () => {
+    expect(PIN_MIN_LENGTH).toBe(6)
+    expect(PIN_MAX_LENGTH).toBe(8)
   })
 
-  it('rechaza cualquier otra longitud', () => {
-    expect(isSixDigitPin('48392')).toBe(false)
-    expect(isSixDigitPin('4839201')).toBe(false)
-    expect(isSixDigitPin('')).toBe(false)
+  it.each(['483920', '4839201', '48392016'])('acepta %s', (pin) => {
+    expect(isValidPinShape(pin)).toBe(true)
+  })
+
+  it('rechaza 5 y 9 digitos y el vacio', () => {
+    expect(isValidPinShape('48392')).toBe(false)
+    expect(isValidPinShape('483920165')).toBe(false)
+    expect(isValidPinShape('')).toBe(false)
   })
 
   it('rechaza cualquier caracter que no sea digito', () => {
-    expect(isSixDigitPin('48392a')).toBe(false)
-    expect(isSixDigitPin('483 20')).toBe(false)
-    expect(isSixDigitPin('483-20')).toBe(false)
+    expect(isValidPinShape('48392a')).toBe(false)
+    expect(isValidPinShape('483 20')).toBe(false)
+    expect(isValidPinShape('483-20')).toBe(false)
+    expect(isValidPinShape('48392016\n')).toBe(false)
   })
 })
 

@@ -25,11 +25,11 @@ it('nombra los tres canales exactamente como los nombran la metrica y el asiento
     ))->toBe(['management', 'portal', 'kiosk_pin']);
 })->group('RS-12');
 
-it('nombra los tres desenlaces exactamente como los nombra la etiqueta outcome', function (): void {
+it('nombra los cuatro desenlaces exactamente como los nombra la etiqueta outcome', function (): void {
     expect(array_map(
         static fn (AuthOutcome $outcome): string => $outcome->value,
         AuthOutcome::cases(),
-    ))->toBe(['success', 'failure', 'lockout']);
+    ))->toBe(['success', 'failure', 'lockout', 'origin_locked']);
 })->group('RS-12');
 
 it('resuelve el tipo de sujeto por el canal, para que no lo declare quien deja el rastro', function (): void {
@@ -69,5 +69,6 @@ it('no nombra ningun motivo de fallo que separe lo que la respuesta no separa', 
         'locked',
         'sealed_pin_unreadable',
         'session_not_issued',
+        'origin_locked',
     ]);
 })->group('RS-03', 'RS-12');
