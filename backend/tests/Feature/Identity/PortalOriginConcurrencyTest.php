@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
+use App\Modules\Shared\Application\Port\PinAttempts;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\Concurrency\ParallelRequests;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Http\Api;
@@ -53,6 +55,10 @@ afterEach(function (): void {
  */
 function portalOriginConcurrencyCache(array $almacenes): void
 {
+    // Tambien la cache por defecto, como su gemela `PinLockoutConcurrencyTest`:
+    // el contador por empleado y los limitadores comparten almacen entre los
+    // procesos, como en una instalacion real.
+    config()->set('cache.default', 'resilient');
     config()->set('cache.stores.resilient.stores', $almacenes);
     config()->set('cache.prefix', 'kronoqr-test-origin-concurrency-');
     config()->set('cache.stores.file.path', sys_get_temp_dir().'/kronoqr-origin-concurrency-cache');
@@ -61,6 +67,7 @@ function portalOriginConcurrencyCache(array $almacenes): void
     app()->forgetInstance('cache');
     app()->forgetInstance('cache.store');
     app()->forgetInstance(PortalOriginAttempts::class);
+    app()->forgetInstance(PinAttempts::class);
 }
 
 it('cierra el portal al origen aunque los fallos lleguen todos a la vez', function (string ...$almacenes): void {
@@ -80,7 +87,10 @@ it('cierra el portal al origen aunque los fallos lleguen todos a la vez', functi
     ]);
 
     expect(array_column($respuestas, 'status'))->each->toBeIn([401, 429])
-        ->and($siguiente->getStatusCode())->toBe(429);
+        ->and($siguiente->getStatusCode())->toBe(429)
+        // Y un solo asiento: el del fallo que abrio el bloqueo, no uno por cada
+        // proceso que lo encontro abierto (ADR-050 §2).
+        ->and(DB::table('audit_log')->where('action', 'auth.origin_locked')->count())->toBe(1);
 })->with([
     'sobre Redis' => ['redis', 'file'],
     'sobre el disco' => ['file'],
