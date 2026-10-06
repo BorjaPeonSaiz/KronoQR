@@ -83,6 +83,28 @@ test(
 )
 
 test(
+  'cambiar la longitud del PIN a 8 avisa del impacto y persiste tras recargar',
+  { tag: ['@RF-ID-09', '@RS-12'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/settings')
+
+    await expect(page.getByTestId('pin-length')).toHaveValue('6')
+
+    await page.getByTestId('pin-length').selectOption('8')
+    await expect(page.getByTestId('access-control-warning')).toBeVisible()
+    await page.getByTestId('save').click()
+
+    await expect(page.getByTestId('saved')).toBeVisible()
+
+    await page.reload()
+    await expect(page.getByTestId('pin-length')).toHaveValue('8')
+  },
+)
+
+test(
   'un umbral fuera de rango se rechaza con el mensaje del servidor, sin perder lo escrito',
   { tag: ['@RF-PD-01'] },
   async ({ page }) => {

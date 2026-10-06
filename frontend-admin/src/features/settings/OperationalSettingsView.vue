@@ -99,6 +99,9 @@ const KIOSK_UPDATE_QUIET_MINUTES_KEY = 'KIOSK_UPDATE_QUIET_MINUTES' satisfies Se
 // contrato (segunda vuelta de la tarea 3.13): `satisfies SettingKey` hace que
 // un cambio de nombre ahi falle aqui, mismo criterio que
 // `KIOSK_UPDATE_QUIET_MINUTES_KEY`.
+// Longitud del PIN (RF-ID-09, ADR-050): eleccion `"6"`/`"8"`, string segun el contrato.
+const PIN_LENGTH_KEY = 'IDENTITY_PIN_LENGTH' satisfies SettingKey
+const PIN_LENGTH_FALLBACK = '6'
 const BASELINE_MANUAL_HOURS_KEY = 'BASELINE_MANUAL_HOURS_PER_MONTH' satisfies SettingKey
 
 /** `HH:MM-HH:MM`, la misma forma que valida el servidor (decision 9 de la ficha 3.12): puede cruzar la medianoche, eso no lo dice el formato, lo permite. */
@@ -221,6 +224,7 @@ const localeAvailable = ref<string[]>([])
 const serviceCode = ref('')
 /** `enabled`/`disabled` (RF-AT-12, tarea 3.5). `disabled` de serie, como en el catalogo. */
 const breakClocking = ref('disabled')
+const pinLength = ref(PIN_LENGTH_FALLBACK)
 
 /** `disabled`/`enabled` (RF-PR-05, tarea 3.12). `disabled` de serie: el resumen es opcional (doc 05 §5.7). */
 const weeklySummaryEmail = ref('disabled')
@@ -296,6 +300,15 @@ const breakClockingOptions = computed<readonly string[]>(() => {
   const catalog = settings.value
 
   return catalog === null ? [] : (entryOf(catalog, BREAK_CLOCKING_KEY)?.constraints?.allowed ?? [])
+})
+
+/** Las longitudes que el catalogo admite para `IDENTITY_PIN_LENGTH` (`constraints.allowed`); `6`/`8` del contrato si el catalogo aun no las trae. */
+const pinLengthOptions = computed<readonly string[]>(() => {
+  const catalog = settings.value
+  const allowed =
+    catalog === null ? undefined : entryOf(catalog, PIN_LENGTH_KEY)?.constraints?.allowed
+
+  return allowed !== undefined && allowed.length > 0 ? allowed : ['6', '8']
 })
 
 /**
@@ -431,6 +444,7 @@ function fill(catalog: InstallationSettings): void {
   serviceCode.value = serviceCodeRedacted.value ? '' : stringValue(catalog, 'KIOSK_SERVICE_CODE')
 
   breakClocking.value = breakClockingValueOf(catalog)
+  pinLength.value = closedTextValueOf(catalog, PIN_LENGTH_KEY, PIN_LENGTH_FALLBACK)
 
   weeklySummaryEmail.value = closedTextValueOf(catalog, WEEKLY_SUMMARY_EMAIL_KEY, 'disabled')
   kioskUpdateWindow.value = closedTextValueOf(catalog, KIOSK_UPDATE_WINDOW_KEY, '03:00-05:00')
@@ -483,6 +497,7 @@ const fieldLabels = computed<Record<string, string>>(() => ({
   ),
   'settings.KIOSK_SERVICE_CODE': t('operationalSettings.fields.kioskServiceCode'),
   'settings.ATTENDANCE_BREAK_CLOCKING': t('operationalSettings.fields.breakClocking'),
+  'settings.IDENTITY_PIN_LENGTH': t('operationalSettings.fields.pinLength'),
   'settings.WEEKLY_SUMMARY_EMAIL': t('operationalSettings.fields.weeklySummaryEmail'),
   'settings.KIOSK_UPDATE_WINDOW': t('operationalSettings.fields.kioskUpdateWindow'),
   'settings.KIOSK_UPDATE_QUIET_MINUTES': t('operationalSettings.fields.kioskUpdateQuietMinutes'),
@@ -683,6 +698,11 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     changes['ATTENDANCE_BREAK_CLOCKING'] = breakClocking.value
   }
 
+  // Longitud del PIN (RF-ID-09, ADR-050): va como cadena, segun el contrato.
+  if (pinLength.value !== closedTextValueOf(current, PIN_LENGTH_KEY, PIN_LENGTH_FALLBACK)) {
+    changes[PIN_LENGTH_KEY] = pinLength.value
+  }
+
   // Resumen semanal (RF-PR-05) y ventana de actualizacion del quiosco
   // (RF-KI-07), tarea 3.12.
   const previousWeeklySummaryEmail = closedTextValueOf(
@@ -818,6 +838,22 @@ const affectsWorkedHoursPending = computed(() => {
   )
 })
 
+/**
+ * Si el cambio pendiente toca alguna clave de impacto `access_control`
+ * (`impact` de `GET /api/v1/settings`, ADR-050): hoy solo la longitud del
+ * PIN. Se lee del catalogo, no de una lista copiada aqui.
+ */
+const accessControlPending = computed(() => {
+  const current = settings.value
+
+  return (
+    current !== null &&
+    Object.keys(pendingChanges.value).some(
+      (key) => entryOf(current, key)?.impact === 'access_control',
+    )
+  )
+})
+
 async function save(): Promise<void> {
   if (!canSave.value) {
     return
@@ -913,6 +949,50 @@ async function save(): Promise<void> {
       >
         {{ t('operationalSettings.affectsWorkedHoursWarning') }}
       </p>
+
+      <!-- Acceso: longitud del PIN (RF-ID-09, RS-12, ADR-050). Solo si el
+           catalogo trae la clave. -->
+      <fieldset v-if="entryOf(settings, PIN_LENGTH_KEY) !== undefined" class="flex flex-col gap-4">
+        <legend class="text-lg font-medium text-kq-text">
+          {{ t('operationalSettings.accessHeading') }}
+        </legend>
+
+        <FormField
+          :label="t('operationalSettings.fields.pinLength')"
+          :hint="t('operationalSettings.hints.pinLength')"
+          :errors="serverFieldErrors(PIN_LENGTH_KEY)"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <select
+              :id="id"
+              v-model="pinLength"
+              data-test="pin-length"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              class="w-48 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+            >
+              <option v-for="option of pinLengthOptions" :key="option" :value="option">
+                {{ t('operationalSettings.pinLengthOptions', { count: option }) }}
+              </option>
+            </select>
+          </template>
+        </FormField>
+
+        <p
+          v-if="accessControlPending"
+          role="alert"
+          class="rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
+          data-test="access-control-warning"
+        >
+          {{ t('operationalSettings.impacts.access_control') }}
+          {{
+            t('operationalSettings.pinLengthChange', {
+              from: closedTextValueOf(settings, PIN_LENGTH_KEY, PIN_LENGTH_FALLBACK),
+              to: pinLength,
+            })
+          }}
+        </p>
+      </fieldset>
 
       <!-- Resumen semanal por correo (RF-PR-05, tarea 3.12): opcional y
            apagado de serie (doc 05 §5.7 «correo opcional»). -->

@@ -2113,6 +2113,7 @@ export async function stubManagementApi(
   let localeDefault = options.operationalSettings?.localeDefault ?? 'es'
   let localeAvailable = options.operationalSettings?.localeAvailable ?? ['es', 'en']
   let kioskServiceCode = options.operationalSettings?.kioskServiceCode ?? ''
+  let identityPinLength = '6'
   let attendanceBreakClocking = options.operationalSettings?.breakClocking ?? 'disabled'
 
   // Salida a nomina (RF-IN-07, tarea 3.9): las seis claves `PAYROLL_EXPORT_*`,
@@ -2261,6 +2262,16 @@ export async function stubManagementApi(
           affects_worked_hours: false,
           source: attendanceBreakClocking === 'disabled' ? 'product_default' : 'installation',
           constraints: { allowed: ['enabled', 'disabled'] },
+        },
+        // ADR-050, RF-ID-09: eleccion "6"/"8", impacto `access_control`.
+        {
+          key: 'IDENTITY_PIN_LENGTH',
+          value: identityPinLength,
+          type: 'text',
+          impact: 'access_control',
+          affects_worked_hours: false,
+          source: identityPinLength === '6' ? 'product_default' : 'installation',
+          constraints: { allowed: ['6', '8'] },
         },
         {
           key: 'LOCALE_DEFAULT',
@@ -3323,6 +3334,12 @@ export async function stubManagementApi(
             ]
           }
 
+          const pinLengthRaw = patch.settings['IDENTITY_PIN_LENGTH']
+
+          if (pinLengthRaw !== undefined && pinLengthRaw !== '6' && pinLengthRaw !== '8') {
+            errors['settings.IDENTITY_PIN_LENGTH'] = ['El valor tiene que ser «6» o «8».']
+          }
+
           const localeDefaultRaw = patch.settings['LOCALE_DEFAULT']
           const localeAvailableRaw = patch.settings['LOCALE_AVAILABLE']
 
@@ -3509,6 +3526,10 @@ export async function stubManagementApi(
 
           if (breakClockingRaw === 'enabled' || breakClockingRaw === 'disabled') {
             attendanceBreakClocking = breakClockingRaw
+          }
+
+          if (pinLengthRaw === '6' || pinLengthRaw === '8') {
+            identityPinLength = pinLengthRaw
           }
 
           const weeklySummaryEmailRaw = patch.settings['WEEKLY_SUMMARY_EMAIL']

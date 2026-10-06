@@ -226,8 +226,9 @@ export interface paths {
         /**
          * Fichaje de respaldo por PIN en el quiosco
          * @description Registra un fichaje cuando el empleado **no puede presentar su tarjeta**
-         *     (RF-AT-11): se identifica con su codigo de empleado y su PIN de seis digitos,
-         *     los mismos con los que entra al portal personal (ADR-015, regla dura 12).
+         *     (RF-AT-11): se identifica con su codigo de empleado y su PIN de 6 u 8 cifras
+         *     (la longitud con la que se emitio, RF-ID-09, ADR-050), los mismos con los que
+         *     entra al portal personal (ADR-015, regla dura 12).
          *
          *     **No es un extra.** El documento 01 §3.1 lo dice literalmente: *«es lo que
          *     impide que una tarjeta olvidada se convierta en una jornada sin registro y en
@@ -849,9 +850,12 @@ export interface paths {
          *     una misma cuenta u origen, el endpoint responde `429` con `Retry-After`
          *     durante el periodo de bloqueo, aunque la contrasena sea correcta.
          *
-         *     **Segundo factor obligatorio para los roles de alcance global**
-         *     (RS-06: `admin`, `rrhh` y `auditor`) y para cualquier cuenta que ya haya
-         *     activado su TOTP. Para ellas este endpoint **no** devuelve una sesion:
+         *     **Segundo factor obligatorio para los roles de gestion** (RS-06:
+         *     `admin`, `rrhh`, `auditor` y, desde la 2.2.0, `responsable_departamento`,
+         *     que corrige jornadas; ADR-050) y para cualquier cuenta que ya haya
+         *     activado su TOTP. Para ellas este endpoint **no** devuelve una sesion
+         *     (un responsable que todavia no tiene TOTP recibe el `202` con
+         *     `enrolment_required: true` y lo da de alta en ese momento):
          *     devuelve `202` con un `TwoFactorChallenge`, y la sesion se emite en
          *     `POST /api/v1/auth/2fa/verify`.
          *
@@ -1105,6 +1109,22 @@ export interface paths {
          *     **Y un limite de peticiones por origen que no lo sustituye** (§7.1, 10
          *     r/m): uno frena a quien prueba muchos PIN de una persona y el otro a
          *     quien prueba un PIN de mucha gente. Ninguno ve lo que ve el otro.
+         *
+         *     **Bloqueo por origen** (RS-12, [ADR-050](../adr/ADR-050-portal-accesible-desde-internet.md)).
+         *     Ademas, los rechazos se cuentan por origen —la IP, o su `/64` si es
+         *     IPv6—: 20 fallos en 15 minutos, sea cual sea el codigo tecleado, cierran
+         *     este endpoint a ese origen durante 60 minutos (valores de serie,
+         *     configurables). Mientras dura, la respuesta es `429` con `Retry-After` y
+         *     `urn:kronoqr:problem:portal-origin-locked`, **tambien con el PIN
+         *     correcto**, y se decide antes de mirar el codigo: no dice nada de
+         *     ninguna credencial (RS-03) y no suma al contador de ningun empleado. Un
+         *     acceso correcto no pone esa cuenta a cero. No se aplica al quiosco
+         *     (`/api/v1/scan/pin`): el fichaje nunca se bloquea (regla dura 19).
+         *
+         *     **El PIN tiene 6 u 8 cifras** (RF-ID-09): la instalacion emite con la
+         *     longitud de `IDENTITY_PIN_LENGTH`, y los PIN emitidos antes de cambiarla
+         *     siguen valiendo con la suya. Por eso la forma admitida es de 6 a 8 cifras
+         *     sea cual sea el ajuste; uno de 7 es simplemente un PIN incorrecto.
          */
         post: operations["logInToPortal"];
         delete?: never;
@@ -1502,8 +1522,10 @@ export interface paths {
         put?: never;
         /**
          * Restablecimiento del PIN
-         * @description Genera un PIN nuevo de 6 digitos, invalida el anterior sustituyendo su
-         *     hash y **reinicia el contador de bloqueo por intentos** (RF-ID-09,
+         * @description Genera un PIN nuevo **con la longitud configurada en la instalacion**
+         *     (`IDENTITY_PIN_LENGTH`, 6 u 8 cifras; RF-ID-09, ADR-050), invalida el
+         *     anterior sustituyendo su hash y **reinicia el contador de bloqueo por
+         *     intentos** (RF-ID-09,
          *     RF-ID-06, RF-AT-11). Quien pide un PIN nuevo tiene que poder usarlo en
          *     el momento, aunque estuviera bloqueado.
          *
@@ -5072,7 +5094,7 @@ export interface components {
          *     (RF-AT-11).
          *
          *     **Las credenciales son las mismas que las del portal** (ADR-015, regla dura
-         *     12): codigo de empleado y PIN de seis digitos. No hay una segunda credencial
+         *     12): codigo de empleado y PIN de 6 u 8 cifras (RF-ID-09, ADR-050). No hay una segunda credencial
          *     que emitir, entregar ni restablecer, y restablecer el PIN arregla las dos
          *     puertas a la vez.
          *
@@ -5100,8 +5122,8 @@ export interface components {
             employee_code: string;
             /**
              * Format: password
-             * @description El PIN de seis digitos **cerrado con la clave publica de la instalacion**, en
-             *     base64.
+             * @description El PIN —de 6 a 8 cifras— **cerrado con la clave publica de la instalacion**,
+             *     en base64.
              *
              *     ```
              *     pin_sealed = base64( crypto_box_seal( "123456", pin_sealing_public_key ) )
@@ -5111,8 +5133,10 @@ export interface components {
              *       navegador: `sodium.crypto_box_seal(pin, publicKey)` de `libsodium-wrappers`.
              *     - `pin_sealing_public_key` lo sirve `GET /api/v1/kiosk/roster`, junto al
              *       padron, y se refresca en el mismo ciclo.
-             *     - El mensaje es el PIN en ASCII, seis digitos, sin relleno ni terminador. El
-             *       criptograma resultante son 54 bytes, 72 caracteres en base64.
+             *     - El mensaje es el PIN en ASCII, de 6 a 8 cifras, sin relleno ni terminador.
+             *       El criptograma resultante son de 54 a 56 bytes, 72 o 76 caracteres en
+             *       base64. El quiosco no conoce la longitud configurada: acepta de 6 a 8
+             *       cifras y envia con «Aceptar» (ADR-050).
              *
              *     **Por que cerrado y no en claro sobre TLS.** El quiosco no puede esperar a
              *     tener red para aceptar un fichaje (regla dura 19): confirma en local y
@@ -6531,8 +6555,8 @@ export interface components {
         /**
          * PortalLoginRequest
          * @description Las dos mitades de la credencial del portal (RF-ID-06, ADR-015): el
-         *     codigo de empleado, que va impreso en la tarjeta, y el PIN de seis
-         *     digitos, que solo sabe su titular.
+         *     codigo de empleado, que va impreso en la tarjeta, y el PIN de 6 u 8
+         *     cifras, que solo sabe su titular.
          */
         PortalLoginRequest: {
             /**
@@ -6548,10 +6572,15 @@ export interface components {
              */
             employee_code: string;
             /**
-             * @description PIN de seis digitos, en claro sobre TLS. **Aqui si lleva patron y no
+             * @description PIN de 6 a 8 cifras, en claro sobre TLS. **Aqui si lleva patron y no
              *     contradice lo anterior**: la longitud del PIN es publica —el contrato
              *     la fija en `IssuedPin.pin`— y no depende de si el codigo existe ni de
              *     si el PIN acierta.
+             *
+             *     **De 6 a 8 y no la longitud configurada** (ADR-050): un PIN emitido
+             *     antes de cambiar `IDENTITY_PIN_LENGTH` sigue valiendo con la suya, y
+             *     la forma admitida no depende de la configuracion. Siete cifras pasan
+             *     la validacion y dan `401`, como cualquier PIN incorrecto.
              *
              *     Nunca se registra, ni en un log, ni en una traza, ni en un volcado de
              *     excepcion (regla dura 21).
@@ -6778,10 +6807,13 @@ export interface components {
             /** Format: uuid */
             employee_uuid: string;
             /**
-             * @description Seis digitos, de un generador criptograficamente seguro y sin los
-             *     patrones triviales que la instalacion excluye por configuracion
-             *     (regla dura 13).
+             * @description Seis u ocho cifras, segun `IDENTITY_PIN_LENGTH` en el momento de la
+             *     emision (RF-ID-09, ADR-050), de un generador criptograficamente seguro
+             *     y sin los patrones triviales que la instalacion excluye por
+             *     configuracion (regla dura 13). Nunca siete: solo se emite una de las
+             *     dos longitudes.
              * @example 483920
+             * @example 48392017
              */
             pin: string;
             /**
@@ -7211,9 +7243,20 @@ export interface components {
          *     ni un minuto del registro. Antes eran variables de compilacion de la PWA
          *     (`VITE_PRIVACY_*`) que nadie fijaba: toda instalacion enseñaba el texto
          *     generico (R6-KI-01).
+         *
+         *     `IDENTITY_PIN_LENGTH` (2.2.0, RF-ID-09, RF-ID-08,
+         *     [ADR-050](../adr/ADR-050-portal-accesible-desde-internet.md)) es la
+         *     **longitud con la que se emiten los PIN** de la plantilla: `"6"` (de
+         *     serie) u `"8"`. Una eleccion y no un entero, porque siete no es un valor
+         *     admitido; cualquier otro es `422`. Cambiarla **no invalida ningun PIN**:
+         *     cada uno sigue valiendo con la longitud con la que se emitio hasta que se
+         *     restablece, y el portal y el quiosco aceptan de 6 a 8 cifras. Se
+         *     recomienda `"8"` cuando el portal es accesible desde fuera de una red
+         *     privada, y `product:doctor` lo avisa. Impacto `access_control`: no mueve
+         *     ni un minuto del registro, cambia como se autentica una persona.
          * @enum {string}
          */
-        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW" | "WEEKLY_SUMMARY_EMAIL" | "KIOSK_UPDATE_WINDOW" | "KIOSK_UPDATE_QUIET_MINUTES" | "BASELINE_MANUAL_HOURS_PER_MONTH" | "ATTENDANCE_FUTURE_TOLERANCE_MINUTES" | "PRIVACY_CONTROLLER_NAME" | "PRIVACY_POLICY_URL";
+        SettingKey: "ATTENDANCE_MAX_SHIFT_HOURS" | "ATTENDANCE_DEBOUNCE_SECONDS" | "ATTENDANCE_MAX_CLOCK_SKEW_MINUTES" | "ATTENDANCE_MIN_TRANSIT_SECONDS" | "ATTENDANCE_PATTERN_WINDOW_SECONDS" | "ATTENDANCE_PATTERN_MIN_REPEATS" | "ATTENDANCE_BREAK_CLOCKING" | "BRANDING_APP_NAME" | "BRANDING_LOGO_PATH" | "BRANDING_ACCENT_COLOR" | "LOCALE_DEFAULT" | "LOCALE_AVAILABLE" | "KIOSK_SERVICE_CODE" | "PAYROLL_EXPORT_COLUMNS" | "PAYROLL_EXPORT_DELIMITER" | "PAYROLL_EXPORT_HOURS_FORMAT" | "PAYROLL_EXPORT_DATE_FORMAT" | "PAYROLL_EXPORT_ENCODING" | "PAYROLL_EXPORT_HEADER_ROW" | "WEEKLY_SUMMARY_EMAIL" | "KIOSK_UPDATE_WINDOW" | "KIOSK_UPDATE_QUIET_MINUTES" | "BASELINE_MANUAL_HOURS_PER_MONTH" | "ATTENDANCE_FUTURE_TOLERANCE_MINUTES" | "PRIVACY_CONTROLLER_NAME" | "PRIVACY_POLICY_URL" | "IDENTITY_PIN_LENGTH";
         /**
          * SettingValue
          * @description El valor de una clave. `installation_settings.value` es `JSONB` porque el
@@ -7251,8 +7294,12 @@ export interface components {
          *       buzon de cada responsable de departamento. Es el cambio con mas
          *       consecuencias en privacidad que un administrador puede hacer desde el
          *       panel, y en el mismo cajon que un logotipo no se distingue de el.
+         *     - `access_control` — no toca el registro horario ni los datos que salen,
+         *       pero **cambia como se autentica una persona**. Hoy lo lleva
+         *       `IDENTITY_PIN_LENGTH` (ADR-050). Tampoco enciende
+         *       `affects_worked_hours`.
          *
-         *     Son cuatro y no un booleano porque marcar los tres umbrales de revision
+         *     Son cinco y no un booleano porque marcar los tres umbrales de revision
          *     como «afecta a las horas» diluiria la señal justo donde importa, y
          *     marcarlos como «no afecta» perderia que alteran el expediente de
          *     cumplimiento. El booleano que el asiento de auditoria necesita sigue
@@ -7260,7 +7307,7 @@ export interface components {
          *     enciende**, porque no mueve ni un minuto.
          * @enum {string}
          */
-        SettingImpact: "worked_hours" | "compliance_review" | "presentation" | "data_disclosure";
+        SettingImpact: "worked_hours" | "compliance_review" | "presentation" | "data_disclosure" | "access_control";
         /**
          * SettingSource
          * @description Que escalon de la cascada ha ganado: `installation` si hay fila guardada,
@@ -11868,6 +11915,36 @@ export interface components {
             };
         };
         /**
+         * @description El acceso al portal no se evalua ahora, por uno de dos motivos que **no
+         *     dicen nada de ninguna credencial** (RS-03): los dos hablan del origen de
+         *     la peticion, no del codigo ni del PIN.
+         *
+         *     - `urn:kronoqr:problem:too-many-requests` — se ha superado el limite de
+         *       peticiones por IP o por codigo (§7.1, 10 r/m).
+         *     - `urn:kronoqr:problem:portal-origin-locked` — **bloqueo por origen**
+         *       (RS-12, [ADR-050](../adr/ADR-050-portal-accesible-desde-internet.md)):
+         *       demasiados accesos fallidos desde esta IP (o este `/64` de IPv6) en poco
+         *       tiempo, con cualquier codigo. Se responde asi **tambien con el PIN
+         *       correcto** y sin comprobarlo, y no suma al contador de ningun empleado.
+         *       Un acceso correcto no lo levanta: se espera `Retry-After`.
+         *
+         *     `Retry-After` dice los segundos que faltan en los dos casos. El portal
+         *     enseña un texto propio a partir de `type`; `detail` es fijo.
+         */
+        PortalLoginThrottled: {
+            headers: {
+                /**
+                 * @description Segundos que faltan para que se vuelva a evaluar un acceso desde este origen.
+                 * @example 2400
+                 */
+                "Retry-After": number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description La funcionalidad **accesoria** que se pide no esta disponible con la
          *     licencia activada (RF-PD-05, ADR-019, ADR-023).
          *
@@ -13251,7 +13328,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["PortalAccessDenied"];
-            429: components["responses"]["TooManyRequests"];
+            429: components["responses"]["PortalLoginThrottled"];
         };
     };
     logOutOfPortal: {
