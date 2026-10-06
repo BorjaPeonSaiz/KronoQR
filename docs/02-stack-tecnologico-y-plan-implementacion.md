@@ -1594,6 +1594,12 @@ IDENTITY_PIN_LOCKOUT_TIER2_SECONDS=900 # 15 min
 IDENTITY_PIN_LOCKOUT_TIER3_ATTEMPTS=10
 IDENTITY_PIN_LOCKOUT_TIER3_SECONDS=3600  # 60 min
 IDENTITY_PIN_LOCKOUT_RESET_HOURS=24    # Ventana deslizante: sin fallos en 24 h vuelve a cero
+IDENTITY_PORTAL_ORIGIN_MAX_FAILURES=20     # RS-12, ADR-050 · bloqueo por origen de /me/login
+IDENTITY_PORTAL_ORIGIN_WINDOW_SECONDS=900  # 15 min, ventana deslizante. IP o su /64 en IPv6
+IDENTITY_PORTAL_ORIGIN_LOCKOUT_SECONDS=3600  # 60 min, 429 tambien con el PIN correcto
+IDENTITY_ORIGIN_LOCK_AUDIT_CEILING_PER_HOUR=60  # Techo de asientos auth.origin_locked por hora
+                                       # (ADR-010: mismo candado que el fichaje). Por encima,
+                                       # el bloqueo se aplica y solo queda log y metrica
 IDENTITY_PIN_SEALING_SECRET_KEY=       # RF-AT-11 · X25519 en base64, generada en el servidor
                                        # del cliente. La pública se deriva y se sirve en
                                        # GET /kiosk/roster. Vacía = sin fichaje por PIN
