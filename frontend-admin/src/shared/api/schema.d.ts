@@ -1099,7 +1099,7 @@ export interface paths {
          *     propio bloqueo en un oraculo. Quien necesite saber por que no entra
          *     pregunta a RRHH, que es quien puede restablecer el PIN.
          *
-         *     **Bloqueo creciente por empleado y por origen** (RS-12, §7.5): 3 fallos
+         *     **Bloqueo creciente por empleado y por canal** (RS-12, §7.5): 3 fallos
          *     bloquean 5 min, 5 fallos 15 min y 10 fallos 60 min, con la cuenta a cero
          *     tras 24 h sin fallar. El contador del portal es **distinto** del del
          *     quiosco: sondear una puerta no puede dejar a nadie sin poder fichar por
@@ -1118,7 +1118,8 @@ export interface paths {
          *     `urn:kronoqr:problem:portal-origin-locked`, **tambien con el PIN
          *     correcto**, y se decide antes de mirar el codigo: no dice nada de
          *     ninguna credencial (RS-03) y no suma al contador de ningun empleado. Un
-         *     acceso correcto no pone esa cuenta a cero. No se aplica al quiosco
+         *     acceso correcto no pone esa cuenta a cero; ademas de esperar, lo levanta
+         *     el comando `identity:origin-unlock`. No se aplica al quiosco
          *     (`/api/v1/scan/pin`): el fichaje nunca se bloquea (regla dura 19).
          *
          *     **El PIN tiene 6 u 8 cifras** (RF-ID-09): la instalacion emite con la
@@ -11926,7 +11927,8 @@ export interface components {
          *       demasiados accesos fallidos desde esta IP (o este `/64` de IPv6) en poco
          *       tiempo, con cualquier codigo. Se responde asi **tambien con el PIN
          *       correcto** y sin comprobarlo, y no suma al contador de ningun empleado.
-         *       Un acceso correcto no lo levanta: se espera `Retry-After`.
+         *       Un acceso correcto no lo levanta: se espera `Retry-After`, o lo
+         *       levanta quien administra el servidor (`identity:origin-unlock`).
          *
          *     `Retry-After` dice los segundos que faltan en los dos casos. El portal
          *     enseña un texto propio a partir de `type`; `detail` es fijo.
