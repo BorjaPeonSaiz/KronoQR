@@ -956,8 +956,9 @@ resolve_failed_step() {
 #     anterior queda como vuelta atras); (4) es donde un administrador busca
 #     registros. Es un directorio de root: crearlo y escribir ahi por ruta es
 #     seguro, SIEMPRE QUE TODA la ruta lo sea: `kq_path_trusted` (lib/fs.sh) exige
-#     que cada tramo, el padre incluido, sea real, de root y sin escritura para
-#     grupo ni otros (A3-R2). El detalle puede llevar datos personales y tiene
+#     que cada tramo, el padre incluido, sea real, de root, sin escritura para
+#     otros y, si la tiene el grupo, solo de un grupo del sistema ajeno al uid
+#     1000 (A3-R2). El detalle puede llevar datos personales y tiene
 #     PLAZO: 30 dias (KRONOQR_LOG_RETENTION_DAYS, minimo 7) para
 #     `update-*.detalle.log` y la huella propia de la copia previa, 90 para el
 #     resumen local. Lo purga este script al arrancar (`purge_update_logs`) y
@@ -983,7 +984,8 @@ ensure_update_log_dir() {
   KQ_PATH_UNTRUSTED=""
   # El PADRE tambien: root escribe por ruta aqui, y un padre que escribe otro
   # usuario le permitiria cambiar este directorio por un enlace (A3-R2). Cada tramo
-  # de la ruta tiene que ser real, de root y sin escritura para grupo ni otros.
+  # de la ruta tiene que ser real, de root, sin escritura para otros y, si la tiene
+  # el grupo, solo de un grupo del sistema ajeno al uid 1000.
   kq_path_trusted "$(dirname -- "${dir}")" || return 1
   [ ! -L "${dir}" ] || return 1
   if [ ! -d "${dir}" ]; then
