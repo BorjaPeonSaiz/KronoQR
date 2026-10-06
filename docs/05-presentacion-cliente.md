@@ -45,7 +45,7 @@ El resultado habitual es una hoja de papel en recepción, horas apuntadas a mano
 
 Si ese día tiene jornada partida, simplemente pasa la tarjeta cada vez que entra y cada vez que sale. El sistema cuenta todos los tramos.
 
-**¿Y si se ha olvidado la tarjeta?** Introduce su código de empleado y un **PIN de 6 dígitos** en la misma tablet. El fichaje queda registrado igual, marcado como "por PIN" para que el responsable lo revise. Nunca se queda un día sin registrar por un olvido.
+**¿Y si se ha olvidado la tarjeta?** Introduce su código de empleado y su **PIN** (6 cifras, u 8 si el hotel lo decide) en la misma tablet. El fichaje queda registrado igual, marcado como "por PIN" para que el responsable lo revise. Nunca se queda un día sin registrar por un olvido.
 
 **¿Y si el empleado quiere ver sus horas?** Entra desde cualquier navegador a su **portal personal** con su código y su PIN, y consulta sus jornadas, sus tramos y sus totales, y se descarga su histórico. No necesita correo electrónico ni instalar nada.
 
@@ -138,7 +138,7 @@ Bloquearlo dejaría al hotel incumpliendo la ley por una acción del proveedor, 
 | Turnos nocturnos | Se registran completos, atribuidos al día de inicio |
 | Doble marca de tiempo | Hora real del fichaje y hora de recepción en el servidor, siempre ambas |
 | Control de reloj | Si la tablet tiene la hora desviada más allá del margen admitido, se avisa y se marca para revisión |
-| PIN de respaldo | Fichaje con código de empleado y PIN de 6 dígitos cuando falta la tarjeta |
+| PIN de respaldo | Fichaje con código de empleado y PIN de 6 cifras (u 8, configurable) cuando falta la tarjeta |
 | Fichaje de pausa | Opcional, se activa desde el panel: quien sale a descansar pulsa «Pausa» y pasa la tarjeta; para volver, solo pasa la tarjeta |
 | Sin duplicados | Si la tablet reenvía un fichaje por un problema de red, el sistema reconoce que es el mismo y no lo duplica |
 
@@ -257,7 +257,7 @@ Este punto suele generar dudas, así que conviene dejarlo claro:
 | Alguien fabrica la tarjeta de un compañero | Imposible sin la clave del servidor: el código va firmado criptográficamente |
 | Alguien prueba códigos al azar hasta acertar | El espacio de códigos es astronómico y hay límite de intentos por tablet, por tarjeta y por origen |
 | El sistema revela si un código existe o está revocado | No lo hace: todos los rechazos dan el mismo mensaje y tardan lo mismo. El detalle solo va al registro interno |
-| Alguien adivina un PIN por fuerza bruta | Bloqueo temporal creciente tras 3, 5 y 10 intentos, límite por IP, y portal restringido a la red interna salvo decisión expresa del hotel |
+| Alguien adivina un PIN por fuerza bruta | Bloqueo temporal creciente tras 3, 5 y 10 intentos, límite y bloqueo por IP, y portal restringido a la red interna salvo decisión expresa del hotel; si lo abre, el sistema le avisa y le recomienda el PIN de 8 cifras |
 | Roban la tablet | Su acceso solo sirve para fichar y sincronizar; se revoca desde el panel y los datos que guarda están cifrados y son mínimos |
 | Alguien modifica horas directamente en la base de datos | La cadena de auditoría lo detecta y se dispara una alerta. Además, el usuario de la aplicación no tiene permiso para modificar ni borrar el registro de auditoría |
 | Un empleado niega haber fichado, o niega una corrección | Todo escaneo queda registrado, aceptado o no, con quién, cuándo y desde dónde |

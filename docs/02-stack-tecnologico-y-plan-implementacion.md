@@ -214,7 +214,7 @@ fichaje-hotel/
 │   ├── 03-agentes-y-skills-ia.md
 │   ├── 04-decision-credencial.md
 │   ├── 05-presentacion-cliente.md   # Documento comercial entregable al cliente
-│   ├── adr/                         # ADR-001 … ADR-049
+│   ├── adr/                         # ADR-001 … ADR-050
 │   ├── api/openapi.yaml             # Contrato, fuente de verdad de la API
 │   ├── cliente/                     # Documentación que se entrega al cliente
 │   │   ├── instalacion.md
@@ -705,7 +705,7 @@ add_header Cross-Origin-Resource-Policy "same-origin" always;
 |---|---|---|---|
 | Quiosco | `scan:write`, `roster:read`, `heartbeat:write` | 90 días | Automática al 80 % de vida, en el latido, con solape del anterior ([ADR-044](adr/ADR-044-el-token-del-quiosco-rota-en-el-latido-con-solape.md)) |
 | Empleado (portal) | `self:read` | Sesión corta | — |
-| Responsable | `attendance:read`, `attendance:correct`, `incidents:*`, `employees:read` (ámbito departamento) | Sesión | — |
+| Responsable | `attendance:read`, `attendance:correct`, `incidents:*`, `employees:read` (ámbito departamento) | Sesión + 2FA | — |
 | RRHH | + `employees:*`, `reports:*`, `credentials:*` | Sesión + 2FA | — |
 | Auditor | `attendance:read`, `audit:read`, `reports:legal` (solo lectura, ámbito completo) | Sesión + 2FA | — |
 | Administrador de instalación | + `settings:*`, `license:*`, `support:*`, `diagnostics:*` | Sesión + 2FA | — |
@@ -714,7 +714,7 @@ Un token de quiosco comprometido **no da acceso a la plantilla completa**: `rost
 
 > **Cinco precisiones, y por qué esta tabla las necesitaba.** Las tres primeras las introdujo la tarea 2.1; la cuarta, la 5.2; la quinta, la 5.6.
 >
-> **1. La fila del responsable ya no dice «+ 2FA», y no es un descuido.** RS-06 obliga a segundo factor a `admin`, `rrhh` y `auditor` —los tres roles que alcanzan datos de **toda** la plantilla— y no al responsable de departamento, cuyo alcance está acotado por RF-ID-03. Cuando este documento y el 01 discrepan manda el 01 (orden de autoridad de `CLAUDE.md`). La lectura anterior sigue siendo alcanzable sin tocar el repositorio: la lista de roles obligados es configuración (`IDENTITY_2FA_REQUIRED_ROLES`, regla dura 13), y un cliente con una política más dura añade ahí a sus responsables. Y quien active su TOTP por su cuenta lo presentará siempre, esté o no su rol en la lista.
+> **1. La fila del responsable vuelve a decir «+ 2FA» desde la 2.2.0 ([ADR-050](adr/ADR-050-portal-accesible-desde-internet.md)).** El responsable corrige jornadas (`attendance:correct`): escribe el registro horario legal de su departamento, y con el panel alcanzable desde internet entraba con la contraseña sola (R4-QA-04). RS-06 lo incluye ya, y el valor de serie de `IDENTITY_2FA_REQUIRED_ROLES` pasa a ser `admin,rrhh,auditor,responsable_departamento`; un cliente puede acortar la lista y `product:doctor` lo avisa. Lo que sigue es la justificación anterior, que el ADR-050 sustituye: **la fila del responsable ya no decía «+ 2FA», y no era un descuido.** RS-06 obliga a segundo factor a `admin`, `rrhh` y `auditor` —los tres roles que alcanzan datos de **toda** la plantilla— y no al responsable de departamento, cuyo alcance está acotado por RF-ID-03. Cuando este documento y el 01 discrepan manda el 01 (orden de autoridad de `CLAUDE.md`). La lectura anterior sigue siendo alcanzable sin tocar el repositorio: la lista de roles obligados es configuración (`IDENTITY_2FA_REQUIRED_ROLES`, regla dura 13), y un cliente con una política más dura añade ahí a sus responsables. Y quien active su TOTP por su cuenta lo presentará siempre, esté o no su rol en la lista.
 >
 > **2. La familia `employees:*` se parte en dos.** El Anexo B del documento 01 sitúa `GET /employees` en «manager+», que incluye al responsable; esta tabla no le daba ningún ámbito de plantilla, así que RF-ID-03 —«un responsable solo accede a los empleados de su departamento»— era inaplicable: no accedía a **ninguno**. Se resuelve con un ámbito de lectura propio, `employees:read`, que llevan también `rrhh` y `admin`, en lugar de concederle la familia entera: con un solo ámbito, dejarle leer era dejarle escribir y la única defensa quedaba en la policy, cuando este mismo apartado exige que sean dos controles.
 >
@@ -738,11 +738,12 @@ Refuerzo opcional: publicar semanalmente el último hash en un medio externo (co
 
 ### 7.5 Protección del PIN
 
-El PIN de 6 dígitos sirve para dos cosas: respaldo de fichaje en el quiosco (RF-AT-11) y acceso al portal personal (RF-ID-06). Un espacio de 10⁶ es pequeño, así que la protección es de proceso:
+El PIN sirve para dos cosas: respaldo de fichaje en el quiosco (RF-AT-11) y acceso al portal personal (RF-ID-06). Tiene 6 cifras de serie u 8 si la instalación lo configura (`IDENTITY_PIN_LENGTH`, RF-ID-09, ADR-050). Un espacio de 10⁶ es pequeño, así que la protección es de proceso:
 
 - Bloqueo temporal creciente tras 3, 5 y 10 intentos fallidos, por empleado y por origen.
 - Rate limiting independiente por IP.
-- Portal restringido a red interna por defecto; exponerlo exige decisión explícita del cliente.
+- En el portal, **bloqueo por origen**: 20 fallos en 15 minutos desde una IP (o un `/64` de IPv6), con cualquier código, la bloquean 60 minutos (RS-12, ADR-050). No se aplica al quiosco.
+- Portal restringido a red interna por defecto; exponerlo exige decisión explícita del cliente, el instalador y `product:doctor` lo avisan y recomiendan el PIN de 8 cifras (RF-ID-08, ADR-050).
 - El ámbito de una sesión de portal alcanza **solo los datos del propio empleado**, así que un compromiso no escala.
 - En el quiosco, el fichaje por PIN queda **marcado para revisión del responsable**, lo que hace visible cualquier uso anómalo.
 
