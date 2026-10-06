@@ -376,7 +376,11 @@ mode_clean() {
   ok "app, horizon, scheduler, reverb y nginx no reciben la clave del WAL"
   dc logs --no-color postgres 2>&1 | leaks_wal_key && fail "la clave del WAL aparece en el log de postgres"
   # shellcheck disable=SC2016
-  if dc exec -T postgres sh -c 'cat /proc/[0-9]*/cmdline 2>/dev/null | tr "\0" " " | grep -qF -- "$BACKUP_WAL_KEY"'; then
+  # Sin pasar la clave por argv a ningun proceso (ni al propio grep: en una tuberia cada
+  # tramo expande sus palabras ya bifurcado, y `cat /proc/*/cmdline` veia al `grep` con
+  # la clave en su linea de ordenes y se encontraba a si mismo). Todo con builtins.
+  # shellcheck disable=SC2016 # `$BACKUP_WAL_KEY` lo expande el sh del contenedor.
+  if dc exec -T postgres sh -c 'todo=""; for p in /proc/[0-9]*; do todo="${todo} $(tr "\0" " " <"${p}/cmdline" 2>/dev/null)"; done; case "${todo}" in *"${BACKUP_WAL_KEY}"*) exit 0 ;; *) exit 1 ;; esac'; then
     fail "la clave del WAL aparece en la linea de ordenes de un proceso de postgres"
   fi
   ok "la clave no esta en el log de postgres ni en ninguna linea de ordenes"
