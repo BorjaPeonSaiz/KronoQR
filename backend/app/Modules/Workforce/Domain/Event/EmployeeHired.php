@@ -22,8 +22,8 @@ use DateTimeImmutable;
  * dura 21).
  *
  * **`viaImport` dice por donde entro esta alta.** No la degrada en nada —es un
- * alta de primera, con su PIN, su credencial pendiente y su asiento— pero
- * permite que quien cuenta por operacion y no por persona espere al evento del
+ * alta de primera, con su asiento y con su credencial y su PIN pendientes, que
+ * se emiten al entregar la tarjeta (RF-GP-05)— pero permite que quien cuenta por operacion y no por persona espere al evento del
  * lote. Lo usa el observador de los limites del plan (ADR-028): una importacion
  * de trescientas personas tiene que dejar **un** asiento de exceso y no
  * trescientos, todos bajo el candado global de `audit_log` (ADR-010, H-04 de la

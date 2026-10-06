@@ -63,14 +63,19 @@ final readonly class ResetEmployeePinHandler
         $issued = $this->issue->handle(new IssueEmployeePinCommand(
             employeeUuid: $command->employeeUuid,
             siteId: $employee->siteId,
-            // Siempre `reset`: aunque la ficha no tuviera PIN —una anterior a
-            // RF-ID-09—, quien pulsa este boton esta restableciendo, y el
-            // asiento tiene que decir lo que de verdad paso.
+            // Se pide sustituir, y la emision decide con la cadena tomada si
+            // de verdad habia algo que sustituir: sobre un PIN pendiente —toda
+            // persona importada (RF-GP-05)— esta es su primera emision y el
+            // asiento dice `pin.issued`, porque es lo que de verdad paso.
             reset: true,
             material: $material,
         ));
 
-        if ($issued instanceof IssuedPin) {
+        // Solo cuenta lo que fue un restablecimiento. La primera emision de un
+        // pendiente es una entrega de tarjeta, y sumarla haria que una
+        // temporada de contrataciones importadas se pareciera a un problema de
+        // entrega de PIN.
+        if ($issued instanceof IssuedPin && $issued->replacedPrevious) {
             $this->metrics->pinReset($employee->siteId);
         }
 

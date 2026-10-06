@@ -11,11 +11,14 @@ namespace App\Modules\Workforce\Application\Port;
  * instalacion despues de emitirlo: el panel necesita saber a quien le falta
  * recibirlo, y eso no exige conocer ningun PIN.
  *
- * `pending` solo aparece en fichas anteriores a RF-ID-09 —el alta emite el PIN
- * en la misma transaccion (tarea 1.13)— y en las que un dia lo pierdan por una
- * migracion. Se mantiene en el catalogo porque es un estado real de la tabla:
- * fingir que no existe haria que el panel mostrara «emitido» a alguien que no
- * puede entrar al portal.
+ * `pending` es el estado de **toda persona importada** (RF-GP-05): la
+ * importacion masiva no emite PIN, porque un PIN se muestra una sola vez y se
+ * entrega en mano con la tarjeta; RRHH lo emite desde la ficha en ese momento.
+ * Tambien lo tienen las fichas anteriores a RF-ID-09. El alta individual nunca
+ * lo deja: emite en su misma transaccion (tarea 1.13). Es el estado por el que
+ * filtra «Sin emitir» en el listado, y por eso tiene que ser verdad: mostrar
+ * «emitido» a alguien que no lo tiene esconderia a quien no puede fichar por
+ * respaldo ni entrar al portal.
  */
 enum PinStatus: string
 {

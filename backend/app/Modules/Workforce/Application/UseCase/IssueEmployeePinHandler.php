@@ -13,6 +13,7 @@ use App\Modules\Workforce\Application\Pin\PinGenerator;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\PinHasher;
 use App\Modules\Workforce\Application\Port\PinMaterial;
+use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeePinIssued;
 use Random\RandomException;
@@ -20,10 +21,20 @@ use Random\RandomException;
 /**
  * Emite el PIN de una persona (RF-ID-09).
  *
- * Es un paso de otra cosa: del alta (RF-GP-01, tarea 1.6) y del
- * restablecimiento. En el alta corre dentro de la transaccion que la abre, que
- * es lo que hace que un empleado sin PIN no pueda existir: si la emision falla,
- * el alta no se confirma.
+ * Es un paso de otra cosa: del alta individual (RF-GP-01, tarea 1.6) y del
+ * restablecimiento. En el alta individual corre dentro de la transaccion que la
+ * abre, que es lo que impide que de ella salga alguien sin PIN: si la emision
+ * falla, el alta no se confirma. La importacion masiva no pasa por aqui: deja
+ * el PIN pendiente a proposito (RF-GP-05), y la primera emision de ese
+ * pendiente llega despues por el restablecimiento, al entregar la tarjeta.
+ *
+ * **`pin.issued` o `pin.reset` lo decide la ficha, no quien llama.** Pedir un
+ * restablecimiento sobre una ficha sin PIN es su primera emision, y el asiento
+ * tiene que decirlo: un `pin.reset` de un PIN que nunca existio falsearia el
+ * trail, y cada persona importada inflaria `pin_resets_total`. El estado se lee
+ * **dentro** de la cadena porque la cadena serializa a todos los escritores de
+ * la ficha: dos «Emitir» simultaneos sobre un pendiente dan un `pin.issued` y un
+ * `pin.reset`, que es exactamente lo que paso.
  *
  * **Bajo el candado de la cadena** (ADR-046 §1, tabla de §1.2). La escritura de
  * la ficha y el asiento van dentro de `withChainLock()`, en el orden unico
@@ -87,6 +98,13 @@ final readonly class IssueEmployeePinHandler
             // hash y esta escritura (ADR-050).
             $length = PinLength::from(\strlen($command->material->pin));
 
+            // Antes de escribir y con la cadena tomada: si la ficha estaba
+            // pendiente, esto es su primera emision aunque se pidiera como
+            // restablecimiento. `null` es una ficha que no existe, y entonces
+            // `issue()` devuelve `false` justo debajo.
+            $replacedPrevious = $command->reset
+                && $this->pins->statusFor($command->employeeUuid) !== PinStatus::Pending;
+
             if (! $this->pins->issue($command->employeeUuid, $command->material->hash, $length, $issuedAt)) {
                 return null;
             }
@@ -98,7 +116,7 @@ final readonly class IssueEmployeePinHandler
             $this->events->publish(new EmployeePinIssued(
                 employeeUuid: $command->employeeUuid,
                 siteId: $command->siteId,
-                reset: $command->reset,
+                reset: $replacedPrevious,
                 occurredAt: $issuedAt,
             ));
 
@@ -106,6 +124,7 @@ final readonly class IssueEmployeePinHandler
                 employeeUuid: $command->employeeUuid,
                 pin: $command->material->pin,
                 issuedAt: $issuedAt,
+                replacedPrevious: $replacedPrevious,
             );
         });
 

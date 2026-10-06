@@ -18,6 +18,7 @@ use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\ChainProbingPinAttempts;
 use Tests\Support\Workforce\ChainProbingPinHasher;
+use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\ImportFiles;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -57,6 +58,9 @@ function sondaDelPinFueraDeLaCadena(): ChainProbingPinHasher
 
 it('el restablecimiento calcula el PIN sin tener la cadena', function (): void {
     $persona = WorkforceFixtures::employee(WorkforceFixtures::site());
+    // Con un PIN que sustituir: sobre una ficha pendiente seria la primera
+    // emision y el asiento diria `pin.issued` (RF-GP-05).
+    EmployeePins::issue($persona, '374195');
     $sonda = sondaDelPinFueraDeLaCadena();
 
     app(ResetEmployeePinHandler::class)->handle(new ResetEmployeePinCommand($persona));
@@ -113,6 +117,7 @@ it('el restablecimiento limpia el bloqueo del PIN sin tener la cadena', function
     // `clear()` toma el candado de cache de cada puerta y puede esperar con
     // contienda: dentro de la cadena, esa espera la pagaria cada fichaje.
     $persona = WorkforceFixtures::employee(WorkforceFixtures::site());
+    EmployeePins::issue($persona, '374195');
     $sonda = new ChainProbingPinAttempts(app(PinAttempts::class));
     app()->instance(PinAttempts::class, $sonda);
 
