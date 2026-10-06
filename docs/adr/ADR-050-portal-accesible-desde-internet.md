@@ -234,6 +234,14 @@ Anotados en el doc 07 §6 tras la revisión de `seguridad-cumplimiento` (filas A
    en ese momento.
 6. **Ventana de auto-alta del segundo factor de los responsables** (M1, punto 5): se suma a la fila 1 del doc 07 §6.
 7. **Sin Redis el portal no deja entrar** (ya era así, `cache.limiter` falla cerrado). El fichaje no se ve afectado.
+8. **Ráfaga antes del bloqueo.** El contador de fallos del PIN **por empleado y puerta** (ADR-015) se actualiza también
+   de forma atómica, con un candado de la caché por `employee_uuid` y puerta; si el candado no se consigue en un número
+   fijo de intentos, el fallo se cuenta sin él (el candado nunca retrasa ni bloquea el fichaje: regla dura 19). Lo que
+   queda: los intentos simultáneos que pasan la comprobación del bloqueo **antes** de que se abra se comparan todos y
+   todos cuentan (medidos 8 a 21 por ráfaga de 25), así que la cifra de ≈33-35 intentos por empleado y día del dictamen
+   es una cota por ráfaga, no por intento. Acotarlo exigiría reservar el intento antes de comparar el PIN: otra decisión.
+   Lo midió `PinLockoutConcurrencyTest`; sin candado llegaban al PIN real 9-20 intentos y se escribían hasta 9 asientos
+   `auth.lockout_started` por un solo bloqueo.
 
 ## Consecuencias
 
