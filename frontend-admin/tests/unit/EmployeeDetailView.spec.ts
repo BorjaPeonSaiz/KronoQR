@@ -146,7 +146,7 @@ describe('EmployeeDetailView', () => {
   })
 
   it('restablece el PIN y lo enseña una sola vez', async () => {
-    const wrapper = await mountDetail(employee(), (url, init) =>
+    const wrapper = await mountDetail(employee({ pin_status: 'issued' }), (url, init) =>
       url.endsWith('/pin/reset') && init?.method === 'POST'
         ? jsonResponse({
             employee_uuid: EMPLOYEE_UUID,
@@ -163,10 +163,20 @@ describe('EmployeeDetailView', () => {
     await settle()
 
     expect(wrapper.find('[data-test="pin-value"]').text()).toBe('483920')
+    expect(announcement.value).toBe(es.pin.announce.reset)
   })
 
   it('sin PIN rotula la accion como emision y no como restablecimiento', async () => {
-    const pending = await mountDetail(employee({ pin_status: 'pending' }))
+    const pending = await mountDetail(employee({ pin_status: 'pending' }), (url, init) =>
+      url.endsWith('/pin/reset') && init?.method === 'POST'
+        ? jsonResponse({
+            employee_uuid: EMPLOYEE_UUID,
+            pin: '483920',
+            issued_at: '2026-08-20T09:14:03.512Z',
+            pin_status: 'issued',
+          })
+        : null,
+    )
 
     expect(pending.text()).toContain(es.pin.statusHint.pending)
     expect(pending.text()).toContain(es.pin.actions.issue)
@@ -181,6 +191,11 @@ describe('EmployeeDetailView', () => {
     expect(dialog.text()).toContain(es.pin.issue.warning)
     expect(dialog.text()).not.toContain(es.pin.reset.explanation)
     expect(buttonWith(pending, es.pin.issue.action).exists()).toBe(true)
+
+    await buttonWith(pending, es.pin.issue.action).trigger('click')
+    await settle()
+
+    expect(announcement.value).toBe(es.pin.announce.issued)
 
     const issued = await mountDetail(employee({ pin_status: 'issued' }))
 

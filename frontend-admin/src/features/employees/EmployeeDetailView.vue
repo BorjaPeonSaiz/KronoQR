@@ -318,6 +318,9 @@ const pinDeliveryChanges = computed<Change[]>(() => [
 ])
 
 async function confirmPinReset(): Promise<void> {
+  // El estado previo se fija antes de actuar: tras refrescar la ficha ya sera `issued`.
+  const wasIssuing = pinIssuing.value
+
   pinBusy.value = true
   pinError.value = null
 
@@ -325,7 +328,7 @@ async function confirmPinReset(): Promise<void> {
     revealedPin.value = await resetEmployeePin(props.uuid)
     confirmingPinReset.value = false
     await invalidate()
-    announce(t('pin.announce.reset'))
+    announce(t(wasIssuing ? 'pin.announce.issued' : 'pin.announce.reset'))
   } catch (caught) {
     if (isTerminatedConflict(caught)) {
       confirmingPinReset.value = false

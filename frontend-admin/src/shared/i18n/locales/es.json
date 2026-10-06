@@ -363,6 +363,7 @@
     },
     "announce": {
       "reset": "PIN restablecido. Se muestra una sola vez.",
+      "issued": "PIN emitido. Se muestra una sola vez.",
       "delivered": "Entrega del PIN registrada."
     }
   },

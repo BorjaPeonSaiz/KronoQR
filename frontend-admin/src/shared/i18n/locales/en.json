@@ -363,6 +363,7 @@
     },
     "announce": {
       "reset": "PIN reset. It is shown once only.",
+      "issued": "PIN issued. It is shown once only.",
       "delivered": "PIN handover recorded."
     }
   },
