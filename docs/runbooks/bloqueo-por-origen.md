@@ -15,11 +15,41 @@ la IP como etiqueta (privacidad y cardinalidad): la dirección sale del registro
 
 ## 1. ¿Ataque o plantilla bloqueada por error?
 
-El umbral está pensado para distinguirlos. Mira cuántos orígenes hay y quiénes son:
+El umbral está pensado para distinguirlos. Mira cuántos orígenes hay:
 
 ```bash
 docker compose logs --no-log-prefix --since 1h app | grep 'auth.origin_locked'
 ```
+
+El log **no lleva la IP** (regla dura 21): solo `origin_hash`, un seudónimo que no se
+entiende a simple vista. Para saber **quiénes** son, hay dos caminos:
+
+- **`audit_log.ip` (lo normal).** Cada apertura deja un asiento `auth.origin_locked`
+  con la IP en claro en la columna `ip`:
+
+  ```bash
+  docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -c \n    "SELECT occurred_at, ip, payload->>'channel' AS channel,
+            payload->>'failures' AS failures, payload->>'ip_hash' AS ip_hash
+       FROM audit_log
+      WHERE action = 'auth.origin_locked'
+        AND occurred_at > now() - interval '1 hour'
+      ORDER BY occurred_at DESC"
+  ```
+
+- **Recalcular el hash (si no hay fila).** Con una IP candidata se calcula su
+  `ip_hash` y se compara con el `origin_hash` del log: receta de
+  [`ataque-a-credenciales.md`](ataque-a-credenciales.md) §4.3.
+
+Dos salvedades:
+
+- **Techo de asientos por hora.** Por encima de él el bloqueo se aplica igual, pero
+  **no se escribe fila en `audit_log`**: solo quedan el log y la métrica. Si la
+  consulta devuelve menos filas que aperturas cuenta la alerta, estás en un barrido
+  grande (casi seguro §4) y las IP que faltan solo se pueden contrastar con el
+  recálculo del hash.
+- **IPv6.** El bloqueo y el hash son del **`/64` normalizado**, no de la dirección
+  completa: al recalcular, usa el `/64` (los 4 primeros grupos, forma canónica) y no
+  la IP del equipo. La columna `ip` guarda la dirección que hizo la petición.
 
 | Lo que ves | Qué es | Siguiente paso |
 | --- | --- | --- |
@@ -50,6 +80,8 @@ Desbloquear sin arreglar esto solo lo retrasa: volverá a pasar.
    desbloqueo de §3 es el control, y conviene que el hotel acceda por su red.
 
 ## 3. Cómo desbloquear una IP
+
+La IP en claro sale de la consulta a `audit_log` del §1.
 
 ```bash
 docker compose exec app php artisan identity:origin-unlock 203.0.113.9
