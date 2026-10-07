@@ -481,9 +481,16 @@ it('exige el ambito employees:* en todo endpoint que ESCRIBE plantilla', functio
         '/api/v1/site',
     ];
 
+    // La LECTURA de departamentos no es escritura de plantilla: la leen los
+    // cuatro roles de gestion (bloque 21 de la 2.2.0) y tiene su propia prueba.
+    $lecturasDeCatalogo = [
+        'get /api/v1/departments',
+        'get /api/v1/departments/{id}',
+    ];
+
     foreach ($paths as $path) {
         foreach (Contract::keys('paths', $path) as $method) {
-            if ($method === 'parameters') {
+            if ($method === 'parameters' || in_array($method.' '.$path, $lecturasDeCatalogo, true)) {
                 continue;
             }
 
@@ -509,6 +516,25 @@ it('exige el ambito estrecho employees:read en las dos rutas de lectura de plant
         ->and(Contract::value('paths', '/api/v1/employees/{uuid}', 'get', 'security'))
         ->toBe([['managementToken' => ['employees:read']]]);
 })->group('RF-ID-03', 'RQ-07');
+
+it('abre la lectura de departamentos a employees:read o attendance:read y nada mas', function (): void {
+    // Bloque 21 de la 2.2.0 (R6-BD-01, R4-QA-03): la leen los cuatro roles de
+    // gestion. `admin`, `rrhh` y el responsable llevan `employees:read`; el
+    // `auditor`, solo `attendance:read`. Dos requisitos separados es «o». Si
+    // alguno volviera a `employees:*`, el responsable y el auditor perderian el
+    // catalogo; si ganara un ambito de quiosco o de portal, lo leerian ellos.
+    $lectura = [
+        ['managementToken' => ['employees:read']],
+        ['managementToken' => ['attendance:read']],
+    ];
+
+    expect(Contract::value('paths', '/api/v1/departments', 'get', 'security'))->toBe($lectura)
+        ->and(Contract::value('paths', '/api/v1/departments/{id}', 'get', 'security'))->toBe($lectura)
+        ->and(Contract::value('paths', '/api/v1/departments', 'post', 'security'))
+        ->toBe([['managementToken' => ['employees:*']]])
+        ->and(Contract::value('paths', '/api/v1/departments/{id}', 'patch', 'security'))
+        ->toBe([['managementToken' => ['employees:*']]]);
+})->group('RF-ID-03', 'RF-GP-01', 'RS-04', 'RQ-06', 'RQ-07');
 
 it('mantiene el correo del empleado opcional en el contrato', function (): void {
     // Regla dura 12 y ADR-015. El contrato es el sitio donde esto se rompe sin

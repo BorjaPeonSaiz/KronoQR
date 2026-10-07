@@ -507,13 +507,33 @@ it('deniega a un token de quiosco cualquier endpoint de gestion', function (stri
     Api::as(ManagementUsers::kioskToken())->call($method, $uri, $body)->assertStatus(403);
 })->with(managementEndpoints())->group('RS-04', 'RS-05', 'RQ-07', 'RF-ID-04');
 
+/**
+ * Los endpoints de gestion que un `auditor` sigue sin poder tocar.
+ *
+ * Es la matriz entera menos las dos LECTURAS del catalogo de departamentos, que
+ * el bloque 21 de la 2.2.0 abre a los cuatro roles de gestion (decision del
+ * propietario de 02-10-2026). Crear y renombrar se quedan: son `rrhh+`. El `200`
+ * de las dos lecturas se prueba en
+ * `Tests\Feature\Workforce\DepartmentReadAccessTest`.
+ *
+ * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+ */
+function endpointsDeniedToAuditor(): array
+{
+    $endpoints = managementEndpoints();
+
+    unset($endpoints['listar departamentos'], $endpoints['ver un departamento']);
+
+    return $endpoints;
+}
+
 it('deniega a un auditor escribir o leer plantilla', function (string $method, string $uri, array $body): void {
     // El auditor es de solo lectura y su ambito es `attendance:read`,
     // `audit:read` y `reports:legal` (§7.3): la plantilla no esta ahi.
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
-})->with(managementEndpoints())->group('RS-05', 'RQ-07', 'RF-ID-02');
+})->with(endpointsDeniedToAuditor())->group('RS-05', 'RQ-07', 'RF-ID-02');
 
 /**
  * Los endpoints de gestion que un `responsable_departamento` **sigue** sin poder
@@ -563,6 +583,13 @@ function endpointsDeniedToDepartmentManager(): array
         // absentismo de una persona, y eso es de `rrhh+`.
         $endpoints['listar ausencias'],
         $endpoints['ver una ausencia'],
+        // Y las DOS lecturas del catalogo de departamentos desde el bloque 21 de
+        // la 2.2.0: las leen los cuatro roles de gestion y **sin acotar**, porque
+        // es un catalogo y no datos de personas. Crear y renombrar se quedan en
+        // la matriz. El `200` se prueba en
+        // `Tests\Feature\Workforce\DepartmentReadAccessTest`.
+        $endpoints['listar departamentos'],
+        $endpoints['ver un departamento'],
     );
 
     return $endpoints;

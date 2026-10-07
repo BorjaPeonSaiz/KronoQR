@@ -2332,7 +2332,24 @@ export interface paths {
         /**
          * Listado de departamentos
          * @description Departamentos de la instalacion. Es la lista con la que el panel
-         *     construye el selector del alta de empleado.
+         *     construye el selector del alta de empleado y los filtros por
+         *     departamento de la presencia y de la plantilla.
+         *
+         *     **La leen los cuatro roles de gestion**: `admin`, `rrhh`,
+         *     `responsable_departamento` y `auditor`. Es un catalogo de la
+         *     instalacion y no un dato de personas, asi que **no se acota por
+         *     departamento**: un responsable ve la lista entera, incluidos los
+         *     departamentos que no dirige, y con ella quien dirige cada uno
+         *     (`manager_name`). El alcance de RF-ID-03 se aplica sobre las personas
+         *     (`GET /employees`, presencia, jornadas), no sobre este catalogo.
+         *     Crear, renombrar y elegir responsable siguen siendo de `admin` y
+         *     `rrhh` (y lo ultimo, solo de `admin`): un `responsable_departamento` o
+         *     un `auditor` que lo intenten reciben `403`.
+         *
+         *     **Un acceso de soporte del fabricante no lo lee** (`403`), con ningun
+         *     alcance: hasta esta version la lectura exigia `employees:*`, que ningun
+         *     alcance concede, y abrirla a los cuatro roles no amplia lo que ve el
+         *     fabricante (regla dura 16, ADR-020).
          */
         get: operations["listDepartments"];
         put?: never;
@@ -2364,7 +2381,9 @@ export interface paths {
         };
         /**
          * Detalle de un departamento
-         * @description Centro al que pertenece y nombre del departamento.
+         * @description Nombre y responsable del departamento. Lo leen los cuatro roles de
+         *     gestion, sin acotar por departamento, por lo mismo que el listado
+         *     (`GET /api/v1/departments`): es catalogo, no datos de personas.
          */
         get: operations["getDepartment"];
         put?: never;

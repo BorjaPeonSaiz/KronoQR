@@ -348,6 +348,8 @@ function supportReadPaths(): array
     /** @var int|string|null $employeeId */
     $employeeId = DB::table('employees')->where('uuid', $employeeUuid)->value('id');
 
+    $departmentId = WorkforceFixtures::department($siteId, 'Recepcion');
+
     $absenceUuid = Str::uuid7()->toString();
 
     // Una baja medica con nota: el peor caso que la pantalla de ausencias puede
@@ -370,6 +372,9 @@ function supportReadPaths(): array
         'api/v1/absences' => '/api/v1/absences?from=2026-06-01&to=2026-06-30',
         'api/v1/absences/{uuid}' => '/api/v1/absences/'.$absenceUuid,
         'api/v1/compliance/summary' => '/api/v1/compliance/summary?from=2026-06-01&to=2026-06-07',
+        // Alcanzable por `read_only` desde el bloque 21 (`employees:read` o
+        // `attendance:read`) y cerrada por `DepartmentPolicy`.
+        'api/v1/departments/{id}' => '/api/v1/departments/'.$departmentId,
         // El descargable no existe y no hace falta que exista: el controlador
         // autoriza contra la CLASE antes de resolver nada, asi que un `403` aqui
         // es de `DataExportPolicy` y de nadie mas.
@@ -579,3 +584,28 @@ it('no deja al fabricante ver la presencia en vivo ni el resumen de cumplimiento
     expect($abiertas)->not->toContain('GET /api/v1/attendance/live')
         ->and($abiertas)->not->toContain('GET /api/v1/compliance/summary');
 })->with(SupportScope::cases())->group('RF-PD-11', 'RL-19', 'RF-PA-01', 'RF-PA-06', 'ADR-020');
+
+it('no deja al fabricante leer el catalogo de departamentos', function (SupportScope $scope): void {
+    /*
+     * Bloque 21 de la 2.2.0 (R6-BD-01, R4-QA-03). La lectura de departamentos
+     * pasa de `employees:*` —que ningun alcance concede— a `employees:read` o
+     * `attendance:read`, para que la lean los cuatro roles de gestion. Con
+     * `read_only` el AMBITO las alcanza ahora; lo que las deja fuera de la
+     * comparacion es que responden `403`, y eso lo pone `DepartmentPolicy`.
+     *
+     * Se cierran para que abrir el catalogo a los roles del hotel no amplie de
+     * rebote lo que ve el fabricante: `manager_name` es el nombre de una cuenta
+     * de gestion, y esas cuentas no las lista ningun acceso de soporte (regla
+     * dura 16, ADR-020).
+     */
+
+    // arrange
+    $paths = supportReadPaths();
+
+    // act
+    $abiertas = supportReadRoutesLeftOpenFor($scope, SupportGrants::tokenFor($scope), $paths);
+
+    // assert
+    expect($abiertas)->not->toContain('GET /api/v1/departments')
+        ->and($abiertas)->not->toContain('GET /api/v1/departments/{id}');
+})->with(SupportScope::cases())->group('RF-PD-11', 'RL-19', 'RF-ID-03', 'ADR-020');
