@@ -1344,7 +1344,7 @@ docker compose exec app php artisan product:doctor --lang=en
 
 Comprueba base de datos (conexión, migraciones pendientes, que el usuario de la
 aplicación **no** pueda modificar el registro de auditoría, cadena de
-auditoría), colas (Redis, atraso, que haya un trabajador vivo), correo
+auditoría), colas (Redis, atraso, que haya un trabajador vivo: el servicio `horizon`), correo
 (transporte configurado y servidor alcanzable), certificado TLS (caducidad y
 autofirmado), permisos (directorios de trabajo, copias, logotipo), ficheros
 generados (que el volumen `app-storage` está montado y se puede escribir, que

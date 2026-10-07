@@ -1365,7 +1365,7 @@ machines.)
 
 It checks the database (connection, pending migrations, that the application
 user **cannot** modify the audit trail, audit chain), queues (Redis, backlog,
-that there is a live worker), mail (transport configured and server
+that there is a live worker: the `horizon` service), mail (transport configured and server
 reachable), TLS certificate (expiry and self-signed), permissions (working
 directories, backups, logo), generated files (that the `app-storage` volume is
 mounted and writable, that its paths do not coincide with one another, that the

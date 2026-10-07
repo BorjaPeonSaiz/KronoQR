@@ -572,19 +572,19 @@ return [
             ],
             'backlog' => [
                 'warning' => "Mira si el proceso que consume la cola esta vivo:\n"
-                    ."  docker compose ps worker\n"
+                    ."  docker compose ps horizon\n"
                     .'Si lo esta, es un pico normal y bajara solo. Vuelve a mirarlo en diez minutos.',
                 'failure' => "Reinicia el proceso que consume la cola:\n"
-                    ."  docker compose restart worker\n"
-                    ."  docker compose logs --tail=100 worker\n"
+                    ."  docker compose restart horizon\n"
+                    ."  docker compose logs --tail=100 horizon\n"
                     ."Si los trabajos estan fallando en lugar de acumularse, la lista de fallidos se ve con:\n"
                     .'  php artisan queue:failed',
                 'warning_unknown' => 'Comprueba que Redis responde y vuelve a ejecutar este comando.',
             ],
             'worker' => [
                 'warning' => "Arranca o reinicia el proceso que consume la cola:\n"
-                    ."  docker compose ps worker\n"
-                    ."  docker compose restart worker\n"
+                    ."  docker compose ps horizon\n"
+                    ."  docker compose restart horizon\n"
                     .'Fichar no depende de el; los avisos y los informes si.',
                 'warning_unknown' => 'Comprueba que Redis responde y vuelve a ejecutar este comando.',
             ],
