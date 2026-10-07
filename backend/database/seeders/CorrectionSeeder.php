@@ -6,7 +6,6 @@ namespace Database\Seeders;
 
 use DateTimeImmutable;
 use DateTimeZone;
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -43,7 +42,7 @@ use Illuminate\Support\Str;
  * filas a mano en esa tabla romperia la cadena de hash (ADR-027). El trail de
  * una instalacion real se llena usando el producto, no sembrandolo.
  */
-final class CorrectionSeeder extends Seeder
+final class CorrectionSeeder extends DevelopmentSeeder
 {
     private const string TIMEZONE = 'Europe/Madrid';
 

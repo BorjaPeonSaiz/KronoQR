@@ -213,7 +213,14 @@ COPY --chown=app:app VERSION ./VERSION
 # esqueleto minimo se recrea aqui, antes de la unica orden de esta etapa que lo
 # necesita. La etapa prod, mas abajo, es quien deja storage/ y bootstrap/cache/
 # con la propiedad definitiva en la imagen final.
-RUN mkdir -p bootstrap/cache storage/app storage/framework/cache/data \
+#
+# La semilla de desarrollo (database/seeders/) NO viaja en la imagen del
+# cliente (SC7-03): crea cuentas con una contraseña publicada. La excluye
+# .dockerignore, y el `test ! -e` es la segunda cerradura, por si alguien
+# cambia el contexto o el COPY: la imagen no se construye. Lo comprueba
+# SeedersOutOfProductionImageTest.
+RUN test ! -e database/seeders && \
+  mkdir -p bootstrap/cache storage/app storage/framework/cache/data \
   storage/framework/sessions storage/framework/testing storage/framework/views \
   storage/logs && \
   composer dump-autoload --no-dev --optimize --classmap-authoritative

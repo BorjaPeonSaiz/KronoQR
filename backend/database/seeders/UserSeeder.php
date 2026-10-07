@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use DateTimeInterface;
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -25,7 +24,7 @@ use Illuminate\Support\Str;
  * Todas comparten contrasena de desarrollo, y se hashea **una sola vez**: 600
  * llamadas a bcrypt tardan mas que todo el resto de la semilla junta.
  */
-final class UserSeeder extends Seeder
+final class UserSeeder extends DevelopmentSeeder
 {
     /**
      * Contrasena de la semilla. Es un valor de desarrollo y no sale de aqui:

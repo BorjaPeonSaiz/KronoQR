@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -14,7 +13,7 @@ use Illuminate\Support\Facades\DB;
  * producto se vende como una licencia por hotel. El nombre es ficticio y no
  * viene de ningun cliente (regla dura 13).
  */
-final class SiteSeeder extends Seeder
+final class SiteSeeder extends DevelopmentSeeder
 {
     private const string NAME = 'Hotel Marina';
 

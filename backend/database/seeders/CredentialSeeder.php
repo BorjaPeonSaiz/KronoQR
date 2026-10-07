@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -23,7 +22,7 @@ use Illuminate\Support\Str;
  * `key_id` es el de la clave activa del Anexo B del doc 02 (`a3`). Existe para
  * poder rotar la firma sin reimprimir 600 tarjetas.
  */
-final class CredentialSeeder extends Seeder
+final class CredentialSeeder extends DevelopmentSeeder
 {
     private const string SIGNING_KEY_ID = 'a3';
 

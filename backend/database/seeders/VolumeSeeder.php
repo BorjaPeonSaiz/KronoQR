@@ -6,7 +6,6 @@ namespace Database\Seeders;
 
 use DateTimeImmutable;
 use DateTimeZone;
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -35,7 +34,7 @@ use Illuminate\Support\Str;
  * 7). Es la misma forma que tendra el recalculo del caso de uso: la proyeccion
  * se reconstruye, nunca se incrementa.
  */
-final class VolumeSeeder extends Seeder
+final class VolumeSeeder extends DevelopmentSeeder
 {
     /** Ventana del §11 del doc 02 para la semilla de desarrollo. */
     private const int DAYS = 90;

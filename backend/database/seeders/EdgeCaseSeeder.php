@@ -6,7 +6,6 @@ namespace Database\Seeders;
 
 use DateTimeImmutable;
 use DateTimeZone;
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -46,7 +45,7 @@ use Illuminate\Support\Str;
  * (`shift_entries_no_overlap`). Con empleados propios, cada caso limite se lee
  * solo y ninguno depende del orden de las semillas.
  */
-final class EdgeCaseSeeder extends Seeder
+final class EdgeCaseSeeder extends DevelopmentSeeder
 {
     private const string TIMEZONE = 'Europe/Madrid';
 

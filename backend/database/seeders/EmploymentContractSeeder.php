@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -47,7 +46,7 @@ use Illuminate\Support\Facades\DB;
  * `RegisterEmploymentContract` significaria seiscientos asientos de
  * `audit_log` que describen un hecho que nunca ocurrio en ninguna empresa.
  */
-final class EmploymentContractSeeder extends Seeder
+final class EmploymentContractSeeder extends DevelopmentSeeder
 {
     /** Horas semanales que se reparten, en el orden en que se asignan. */
     private const array WEEKLY_HOURS = [40.0, 37.5, 30.0, 20.0];

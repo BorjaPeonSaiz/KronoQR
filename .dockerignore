@@ -20,6 +20,21 @@ infra/docker/nginx/certs/
 backend/vendor/
 node_modules/
 
+# LA SEMILLA DE DESARROLLO NO ENTRA EN NINGUNA IMAGEN (SC7-03).
+#
+# `UserSeeder` crea cuentas admin, rrhh y auditor con una contraseña publicada,
+# y el resto siembra plantilla y fichajes inventados: en el servidor de un
+# cliente no tiene ningun uso legitimo. Lo que el producto necesita para
+# arrancar (catalogo de roles, perfil de cumplimiento, umbrales) lo siembran
+# sus migraciones, que si viajan. En desarrollo el codigo llega por bind
+# mount, asi que esta linea no le quita nada a `make seed`.
+#
+# Segunda cerradura: la etapa `vendor` de infra/docker/php/Dockerfile falla si
+# el directorio llega igualmente, y `DevelopmentSeeder` se niega a correr con
+# APP_ENV=production. `SeedersOutOfProductionImageTest` vigila las tres cosas.
+# No hay `database/factories/`: si algun dia la hay, va aqui al lado.
+backend/database/seeders/
+
 # Estado de ejecucion
 backend/storage/
 backend/bootstrap/cache/
