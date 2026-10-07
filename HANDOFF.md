@@ -13,25 +13,49 @@ el método en la sección «Método» de ese plan y en «Método de trabajo acor
 CI manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge
 commit.** Lo integra quien ejecuta el bloque si la CI está en verde.
 
-**Integrados en `main`:** bloques 0 a 12, 12b y 15 a 20. El último, **bloque 12b «PIN de la importación masiva»**, es la PR #116
-(`main` `06d6440d`, 07-10-2026): la importación masiva **no emite PIN**; la persona importada nace con el PIN pendiente («Sin emitir»
-en listado y ficha) y RRHH lo emite con el flujo de una sola vez al entregar la tarjeta. `RegisterEmployeeCommand` lo expresa con el
-enum `PinProvisioning` (`IssueNow` de serie; diferido solo con `viaImport`); la primera emisión sobre un pendiente deja `pin.issued` y
-no cuenta en `pin_resets_total`; sin migración. Panel: «Emitir el PIN» en la ficha, aviso en el asistente, enlace al listado filtrado
-desde el **resumen final** (dentro del asistente ningún enlace sale de `/setup`), y el diálogo de entrega del tablero de credenciales
-avisa si el PIN está pendiente. Doc 07 fila **A-25**; guía de RRHH es/en §2.2 y §2.6. El anterior, el **bloque 12 «Portal abierto a
-internet»** (PR #114, `76183531`, ADR-050): PIN de 6 u 8 cifras (`IDENTITY_PIN_LENGTH`), bloqueo por origen en `/api/v1/me/login` con
-`identity:origin-unlock`, reserva del intento antes de comparar, 2FA para `responsable_departamento`, `ADMIN_INTERNAL_CIDR`, CORS a
-`APP_URL`, filas A-19 a A-24.
+**Integrados en `main`:** bloques 0 a 12, 12b, 12c y 15 a 20. El último, **bloque 12c «Pantalla de cuentas de gestión»**, es la
+PR #118 (`main` `e4477672`, 07-10-2026). Decisión: **ADR-051** (aceptado con los cambios de `seguridad-cumplimiento`). Contrato primero:
+`/api/v1/management-accounts` (listar, crear, baja, restablecer contraseña y 2FA) y `POST /api/v1/auth/password`, bajo el ámbito nuevo
+`accounts:*` (solo `admin`, fuera de todo alcance de soporte). La contraseña que fija otra persona se devuelve **una sola vez**, caduca
+a las `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` (72) y hasta cambiarla la sesión nace con el único ámbito `password:change` (todo responde
+`403 password-change-required`: falla cerrado). Reautenticación del admin que actúa (TOTP o contraseña actual) en el alta y los
+restablecimientos; motivo obligatorio; sin baja propia ni de la última admin; 404 único «no existe»/«ya de baja»; la baja revoca tokens
+y los accesos de soporte concedidos por la cuenta. Orden único de candados cadena → padrón → fila (`ConfirmTwoFactor`, `Deactivate`,
+`ResetPassword` y `CreateFirstAdministrator` pasan a `withChainLock`; `users` `FOR NO KEY UPDATE`; el renombrado del departamento toma la
+fila `FOR UPDATE` antes de la cadena). **Alcance añadido en el bloque (flagado al propietario, sin objeción):** `manager_user_uuid` en
+`PATCH /departments/{id}` con `role_assignment.changed` por cuenta: el responsable de departamento ya no se asigna por SQL. Métrica
+`kronoqr_management_account_changes_total{action,role}` y alertas `KronoqrManagementTwoFactorReset` y `KronoqrManagementAdminAccountCreated`
+al receptor `seguridad`; runbook `cuentas-de-gestion.md`; doc 07 filas 195/225/234 (cerrada)/294 y **A-26 a A-28**; RF-ID-10 y tarea 4.1
+del plan de la fase 4. Panel: sección «Cuentas», «Cambiar mi contraseña» con flujo obligado, pantalla «Departamentos» con selector de
+responsable, `TotpCodeInput` compartido. **Tras actualizar a la 2.2.0 el admin tiene que volver a entrar** (los tokens anteriores no llevan
+`accounts:*`). Los anteriores: 12b «PIN de la importación masiva» (PR #116, `06d6440d`: la importación no emite PIN, nace pendiente y se
+emite al entregar la tarjeta) y 12 «Portal abierto a internet» (PR #114, `76183531`, ADR-050).
 
-**Siguiente acción:** abrir la rama del **bloque 12c** («Pantalla de cuentas de gestión», rama `feat/cuentas-de-gestion`) desde
-`origin/main`, siguiendo el plan: **contrato primero** (listar, crear, dar de baja, restablecer contraseña y 2FA, cambio de contraseña
-propio; policy solo `admin` con 403 por cada rol), reutilizando los handlers de `identity:deactivate-user` e `identity:reset-password`.
-Orden que queda: **12c → 21 → 22 → 13 → 14 → final.** El bloque final repone las etiquetas `v2.1.0` (sobre `9282af6`) **y `v2.0.0`**,
-que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0` sigue en local).
+**Siguiente acción:** abrir la rama del **bloque 21** («Panel: permisos y pantallas que faltan», rama `feat/panel-permisos-y-pantallas`)
+desde `origin/main`, siguiendo el plan: `GET /departments` legible por responsable y auditor (contrato primero, policy y pruebas de los
+cuatro roles; decisión del propietario del 02-10-2026: lectura abierta), pantalla de departamentos con **crear y renombrar** y nombre del
+centro (la pantalla `/departments` del 12c ya existe con el selector de responsable: ampliarla, no duplicarla), camino directo al detalle
+de jornada para responsable y auditor, avisos de la presencia en vivo, «antes → después» en perfil de cumplimiento y ajustes, unitarias
+de `CorrectionDialog`, y «Descargar mi historial» del portal al 200 %. Orden que queda: **21 → 22 → 13 → 14 → final.** El bloque final
+repone las etiquetas `v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0`
+sigue en local).
 
-**Lo que destapó el cierre de los bloques 12 y 12b y conviene recordar** (detalle en Engram, temas
-`correcciones-2.2.0/bloque-12-portal-internet`, `bloque-12b-pin-importacion` y `bloque-12b-revisiones`):
+**Lo que destapó el cierre del bloque 12c y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-12c-cuentas-gestion`
+y `bloque-12c-revisiones`; lo de los bloques 12 y 12b en `bloque-12-portal-internet`, `bloque-12b-pin-importacion` y
+`bloque-12b-revisiones`):
+
+- **Los E2E escritos sin ejecutar costaron tres vueltas de CI.** Playwright trata `aria-disabled` como deshabilitado (`toHaveAttribute` y
+  `click({ force: true })`), `getByText` sin `exact` casa el resumen de errores y el campo, y las etiquetas de `FormField` llevan el
+  asterisco (usar `data-test`). Pedir al agente del panel E2E con `data-test` y sin `toBeEnabled`/`getByLabel` exacto, o correr
+  Playwright en el host.
+- **Un `UPDATE` que cambia una columna de un índice único toma `FOR UPDATE`** aunque la fila se hubiera bloqueado `FOR NO KEY UPDATE`: con
+  la cadena ya tomada hay ciclo con los `KEY SHARE` de las claves ajenas (ADR-046 §1.1.3/§1.1.4). Silenciar `EmployeeLockDisciplineTest`
+  era el síntoma, no la solución.
+- gitleaks `generic-api-key` dispara por el nombre de la constante (`TARGET`, `PASSWORD`) aunque el valor sea un UUID de prueba: perdonar
+  por valor exacto en `.gitleaks.toml`, nunca por ruta.
+- Un agente con contexto enorme (más de 700 k tokens) dejó de entregar sus informes: verificar el árbol con las herramientas y commitear.
+- Precedente mantenido: CI manual completa en verde en el commit N y CI del push completa en verde en el N+1 cuando el cambio es trivial
+  (una aserción, una entrada de allowlist).
 
 - **Los contenedores `node-*` del compose de desarrollo son Alpine (musl): el Chromium de Playwright no arranca ahí.** Los E2E se
   validan en el job ⑦ de la CI o con `make e2e` en el host; no instalar navegadores en los contenedores.
@@ -57,8 +81,10 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ### Del usuario
 
-- **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel (sí; tarea ad hoc pendiente, reparto en el bloque
-  «Fase 4» de «Por tarea»).
+- **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel: **hecha en el bloque 12c** (PR #118, ADR-051).
+  Quedan dos cosas del propietario: (a) confirmar el **alcance añadido** del responsable de departamento por la API
+  (`manager_user_uuid`, solo `admin`); (b) el **plazo de retención** del nombre y el correo de las cuentas dadas de baja y de los motivos
+  libres de `audit_log` (doc 07 A-27), con la asesoría o el DPO del cliente.
   La línea base del runner y la fila del modelo de amenazas (reloj del quiosco) ya se hicieron en `chore/restos-3.8`.
 - **Decididas el 24-09-2026 (tras el cierre de la Fase 3), aplicadas en `docs/decisiones-post-cierre-3`:** (1) **un acceso de
   soporte `read_only` ya no alcanza la presencia en vivo ni el resumen de cumplimiento por persona** (policies con `isSupportActor()`,
@@ -372,6 +398,13 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ### Deuda técnica anotada
 
+- **Del cierre del bloque 12c (07-10-2026):** `UpdateDepartmentRequest` comprueba el ámbito `accounts:*` con un `tokenCan()` a mano y
+  una copia del literal (atada por `DepartmentManagerAbilityTest`): lo limpio es un puerto `ManagementActor::tokenGrants()` en Shared.
+  Unos 25 docblocks anteriores al bloque citan ADR-027 («audit_log particionado») donde quieren decir ADR-010 («auditoría en la misma
+  transacción»): corregirlos de una vez. La baja y los restablecimientos revocan tokens pero no cortan una conexión Reverb ya abierta
+  (ADR-051 residuo 6; contención: reiniciar `reverb`): cerrar las conexiones del usuario al revocar, bloque 22 u otro.
+  `AdministratorStep.spec.ts` falla en local por la importación dinámica de `@zxing/library` (pasa en la CI): hacerla determinista.
+  No hay cuadro de Grafana de seguridad/autenticación (ninguno menciona `kronoqr_auth`): la serie de cuentas no tiene panel.
 - **Del cierre del bloque 12b (07-10-2026):** falta la prueba de dos «Emitir el PIN» simultáneos sobre un pendiente (por diseño uno
   deja `pin.issued` y el otro `pin.reset`); `PinIssuanceEndpointsTest` «no deja a nadie sin PIN en el alta individual» sigue con un
   `foreach` contra la convención de §3.5; averiguar qué crea `backend/storage/framework/legal-exports/` (apareció el 06-10-2026 a las
