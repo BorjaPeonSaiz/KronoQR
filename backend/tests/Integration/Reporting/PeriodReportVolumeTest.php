@@ -244,3 +244,59 @@ it('resuelve la consulta mensual sin recorrer daily_totals entera', function ():
 
     expect($plan)->not->toContain('Seq Scan on daily_totals');
 })->group('RNF-P-05');
+
+/*
+ * Las dos agregaciones que el informe hace en PostgreSQL y no en el dominio, con
+ * el mismo volumen (doc 02 §9.5, «informe o exportacion: integracion con
+ * volumen»; T2 de la verificacion de la 2.1.0). Sin estas dos, RF-IN-02 y
+ * RF-IN-03 solo se comprobaban con una docena de filas en las pruebas de
+ * feature, donde un `GROUP BY` mal escrito y uno bien escrito dan lo mismo.
+ */
+
+/**
+ * La consulta mensual de enero sobre el volumen sembrado.
+ *
+ * @param  array{site: int, from: string, to: string}  $volumen
+ */
+function informeMensualDelVolumen(array $volumen, ReportGrouping $agrupacion): PeriodReportQuery
+{
+    return new PeriodReportQuery(
+        scope: AccessScope::unrestricted(),
+        range: DateRange::between($volumen['from'], $volumen['to']),
+        granularity: ReportGranularity::Month,
+        grouping: $agrupacion,
+        departmentId: null,
+        employeeUuid: null,
+    );
+}
+
+it('agrega por departamento el mes de 500 empleados', function (): void {
+    $volumen = volumenDeInforme();
+
+    /** @var GeneratePeriodReport $caso */
+    $caso = app(GeneratePeriodReport::class);
+
+    $informe = $caso->handle(informeMensualDelVolumen($volumen, ReportGrouping::Department), maxRangeDays: 92, maxRows: 20000);
+
+    // Diez departamentos de 50 personas: 50 x 31 dias x 480 minutos cada uno.
+    expect($informe->rowCount())->toBe(10)
+        ->and(array_unique(array_map(static fn ($fila): int => $fila->workedMinutes, $informe->rows)))->toBe([744000])
+        ->and(array_unique(array_map(static fn ($fila): int => $fila->daysWithActivity, $informe->rows)))->toBe([1550]);
+})->group('RF-IN-02', 'RNF-P-05');
+
+it('compara lo trabajado con lo contratado en el mes de 500 empleados', function (): void {
+    $volumen = volumenDeInforme();
+
+    /** @var GeneratePeriodReport $caso */
+    $caso = app(GeneratePeriodReport::class);
+
+    $informe = $caso->handle(informeMensualDelVolumen($volumen, ReportGrouping::Employee), maxRangeDays: 92, maxRows: 20000);
+    $fila = $informe->rows[0];
+
+    // 40 h semanales prorrateadas a 31 dias: 40 x 31 x 60 / 7 = 10.628,57,
+    // redondeado a 10.629 minutos. Se trabajaron 14.880 (31 x 480).
+    expect($fila->contractedMinutes)->toBe(10629)
+        ->and($fila->deviationMinutes())->toBe(4251)
+        ->and($fila->overtimeMinutes())->toBe(4251)
+        ->and($fila->daysWithoutContract)->toBe(0);
+})->group('RF-IN-03', 'RNF-P-05');

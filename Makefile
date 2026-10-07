@@ -369,7 +369,10 @@ else
 	$(RUN_APP) php artisan test
 endif
 
-# El presupuesto de la suite unitaria (doc 02 §9.2, doc 03). El plan lo cita
+# El presupuesto de la suite unitaria, y su UNICA fuente (Q1 de la 2.1.0): doc
+# 02 §9.2, doc 03 y backend/phpunit.xml remiten a esta variable y
+# backend/tests/Architecture/UnitSuiteBudgetTest.php falla si alguno da otra
+# cifra. Se cambia aqui y en esas tres frases a la vez. El plan lo cita
 # tres veces como bloqueante del camino critico y era el unico umbral de la
 # tabla sin herramienta que lo verificase — y ya estaba superado (2,6-2,7 s
 # medidos en el cierre de la Fase 1) sin que nada avisara. El valor es mas

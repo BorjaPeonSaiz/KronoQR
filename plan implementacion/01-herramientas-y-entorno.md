@@ -376,7 +376,7 @@ Umbral bloqueante literal del §9.2. Todo esto lo configura la tarea 0.7 y vive 
 | **Trazabilidad** | `qa:traceability --check` (§9.6) | 0 requisitos implementados sin prueba que los referencie (RQ-13) |
 | **Instalación** | Script en CI: instalación limpia + actualización desde versión anterior | Verde antes de publicar (RQ-11) |
 
-**Cobertura, del §9.2 y de RNF-M-01:** dominio ≥ 90 %, global backend ≥ 75 %, frontend ≥ 70 %. Suite unitaria completa por debajo de 2 s (`CLAUDE.md`).
+**Cobertura, del §9.2 y de RNF-M-01:** dominio ≥ 90 %, global backend ≥ 75 %, frontend ≥ 70 %. Suite unitaria completa dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile` (hoy 5 s; lo comprueba `make test-unit`).
 
 ---
 

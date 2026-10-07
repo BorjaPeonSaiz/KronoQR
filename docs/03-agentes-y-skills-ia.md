@@ -379,8 +379,9 @@ Pruebas obligatorias: los dos cambios de hora de Europe/Madrid en ambos
 sentidos, turno 22:00→06:00, límites exactos de duración mínima y máxima,
 jornada partida de 4 tramos.
 
-Criterio de terminado: `make test-unit` en verde en menos de 2 segundos,
-cobertura del dominio ≥ 90 %, y `make mutate` con MSI ≥ 80 %.
+Criterio de terminado: `make test-unit` en verde dentro del presupuesto de
+`UNIT_SUITE_MAX_SECONDS` del `Makefile` (5 s, doc 02 §9.2), cobertura del
+dominio ≥ 90 %, y `make mutate` con MSI ≥ 80 %.
 
 Esta es la tarea del camino crítico. No pases a otra cosa hasta cerrarla.
 ```
