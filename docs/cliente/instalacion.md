@@ -345,9 +345,20 @@ Todos los mensajes del instalador están en los dos idiomas.
 
 ### 1.4 Instala
 
+**Si entras al servidor por SSH, lánzalo dentro de `tmux`** (o de `screen`).
+Así, si se corta la conexión, la instalación sigue y puedes volver a verla al
+reconectar con `tmux attach -t kronoqr`. Si no lo tienes,
+`sudo apt install tmux` en Debian o Ubuntu.
+
 ```bash
+tmux new -s kronoqr
 sudo ./install.sh
 ```
+
+Si aun así se interrumpe a mitad —se corta la conexión sin `tmux`, alguien
+pulsa Ctrl+C o se detiene el proceso—, el instalador **deshace lo que había
+hecho** y sale con `4`: vuelve a ejecutarlo. Lo explican la tabla de §2 y
+«…se cortó la conexión a mitad de la instalación» en §5.
 
 Tarda entre tres y quince minutos, según lo que tarde en descargar las
 imágenes. Verás las cinco fases. Al terminar:
@@ -662,6 +673,7 @@ o un runbook sin leerse cada script.
 | `3` | **Hay una instalación previa. NADA escrito.** | El instalador **no reinstala encima**: destruiría el registro horario. Para actualizar, `./update.sh` (ver [`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md)). Para ver cómo está, `./doctor.sh`. |
 | `4` | **Falló y deshizo todo lo que había hecho.** El servidor vuelve a estar como antes. | El mensaje dice la causa. Corrígela y vuelve a ejecutar el instalador: es seguro. |
 | `5` | **Falló y NO pudo deshacerlo todo.** Requiere intervención. | El mensaje enumera **exactamente qué ha quedado** y qué orden lo retira. Hazlo y vuelve a ejecutar. Es el único código que exige a alguien delante. |
+| `129`, `130`, `143` | **Interrumpido antes de escribir nada** (fases 1 y 2): `129` es un corte de la sesión SSH, `130` un Ctrl+C y `143` un `kill`. NADA escrito. | Vuelve a ejecutarlo, mejor dentro de `tmux` (§1.4). Desde la fase 3 una interrupción **no** sale con estos códigos: se trata como un fallo, deshace lo hecho y sale con `4` (o `5` si algo no se pudo deshacer). |
 | `6` | **Instalado, pero la verificación final no pasó.** Los servicios están en pie y **no se ha deshecho nada**. | Casi siempre es el certificado o el nombre del servidor. Revisa `docker compose logs nginx app` y el punto «no responde» de §5. Los datos están a salvo. |
 
 ---
@@ -1046,6 +1058,24 @@ clave y recrea `postgres`, como dice §6, «`BACKUP_PATH`». Si además dice que
 último segmento se cifró con **otra** clave, es que se rotó
 `BACKUP_ENCRYPTION_KEY`: sigue
 [`rotacion-secretos.md`](../runbooks/rotacion-secretos.md) §5.
+
+### …se cortó la conexión a mitad de la instalación
+
+Vuelve a entrar en el servidor. Si lo lanzaste dentro de `tmux`, la
+instalación ha seguido sola: `tmux attach -t kronoqr` y la verás donde va.
+
+Si no, el corte la interrumpió. Desde la fase 3 el instalador deshace lo que
+había hecho antes de terminar, aunque ya no veas su mensaje. Vuelve a lanzarlo,
+esta vez dentro de `tmux` (§1.4):
+
+- **Arranca y llega a la fase 3**: la vuelta atrás se completó y la instalación
+  sigue con normalidad. No tienes que hacer nada más.
+- **Sale con `3` («Se ha encontrado una instalacion previa»)** y no tienes
+  ninguna instalación de KronoQR en marcha: la vuelta atrás no pudo terminar,
+  por ejemplo porque el servidor se apagó en ese momento. La lista que imprime
+  dice qué ha quedado. Como en esa instalación todavía no hay datos de nadie,
+  retíralo con el procedimiento de «…quiero volver a empezar la instalación
+  desde cero», justo debajo, y vuelve a ejecutar.
 
 ### …quiero volver a empezar la instalación desde cero
 

@@ -347,9 +347,20 @@ message exists in both languages.
 
 ### 1.4 Install
 
+**If you reach the server over SSH, launch it inside `tmux`** (or `screen`).
+That way, if the connection drops, the installation carries on and you can see
+it again after reconnecting with `tmux attach -t kronoqr`. If you do not have
+it, `sudo apt install tmux` on Debian or Ubuntu.
+
 ```bash
+tmux new -s kronoqr
 sudo ./install.sh
 ```
+
+If it is still interrupted halfway —the connection drops without `tmux`,
+someone presses Ctrl+C or the process is stopped—, the installer **undoes what
+it had done** and exits with `4`: run it again. The table in §2 and "…the
+connection dropped in the middle of the installation" in §5 explain it.
 
 It takes between three and fifteen minutes, depending on how long the images
 take to download. You will see the five phases. At the end:
@@ -678,6 +689,7 @@ job or a runbook without reading every script.
 | `3` | **There is a previous installation. NOTHING written.** | The installer **does not reinstall on top**: it would destroy the working-time record. To update, `./update.sh` (see [`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md), in Spanish). To see how it is, `./doctor.sh`. |
 | `4` | **Failed and undid everything it had done.** The server is back as it was. | The message says the cause. Fix it and run the installer again: it is safe. |
 | `5` | **Failed and could NOT undo everything.** Requires intervention. | The message lists **exactly what is left** and which command removes it. Do it and run again. It is the only code that needs someone in front of it. |
+| `129`, `130`, `143` | **Interrupted before writing anything** (phases 1 and 2): `129` is a dropped SSH session, `130` a Ctrl+C and `143` a `kill`. NOTHING written. | Run it again, preferably inside `tmux` (§1.4). From phase 3 on, an interruption does **not** exit with these codes: it is treated as a failure, what was done is undone and it exits with `4` (or `5` if something could not be undone). |
 | `6` | **Installed, but the final verification did not pass.** The services are up and **nothing has been undone**. | Almost always the certificate or the server name. Check `docker compose logs nginx app` and the "does not respond" item in §5. The data is safe. |
 
 ---
@@ -1069,6 +1081,24 @@ the key and recreate `postgres`, as §6, "`BACKUP_PATH`", says. If it also says
 the latest segment was encrypted with a **different** key, `BACKUP_ENCRYPTION_KEY`
 was rotated: follow
 [`rotacion-secretos.md`](../../runbooks/rotacion-secretos.md) §5 (in Spanish).
+
+### …the connection dropped in the middle of the installation
+
+Log back into the server. If you launched it inside `tmux`, the installation
+has carried on by itself: `tmux attach -t kronoqr` and you will see where it is.
+
+If not, the drop interrupted it. From phase 3 on, the installer undoes what it
+had done before finishing, even though you no longer see its message. Launch it
+again, this time inside `tmux` (§1.4):
+
+- **It starts and reaches phase 3**: the rollback completed and the
+  installation carries on normally. There is nothing else to do.
+- **It exits with `3` ("A previous KronoQR installation was found")** and you
+  have no KronoQR installation running: the rollback could not finish, for
+  example because the server was shut down at that moment. The list it prints
+  says what is left. Since that installation does not hold anyone's data yet,
+  remove it with the procedure in "…I want to start the installation again
+  from scratch", just below, and run again.
 
 ### …I want to start the installation again from scratch
 

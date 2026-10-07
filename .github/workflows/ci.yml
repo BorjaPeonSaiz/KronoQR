@@ -1586,6 +1586,98 @@ jobs:
           test "${codigo}" -eq 0 || { echo "El reintento deberia salir 0 y salio ${codigo}"; exit 1; }
 
 
+      - name: "J · Interrumpido en la fase 4 (SIGTERM): vuelta atras COMPLETA, salida 4"
+        # R6-PL-01. Un corte de SSH (SIGHUP), un `kill` (SIGTERM) o Ctrl+C
+        # (SIGINT) a mitad de la fase 4 dejaban el .env con secretos, los
+        # contenedores y los volumenes, y el reintento salia 3: el mismo
+        # callejon sin salida que el escenario E cerro para los errores. Desde
+        # entonces install.sh arma INT, TERM y HUP junto con el ERR de la fase 3.
+        #
+        # Se interrumpe con SIGTERM porque es la unica de las tres que se puede
+        # mandar de forma fiable a un proceso en segundo plano: bash IGNORA
+        # SIGINT en lo que lanza con `&` desde un guion, y SIGHUP sigue el mismo
+        # camino de codigo que SIGTERM (lo cubre la prueba de senales del
+        # instalador). Se manda al `bash ./install.sh` y no a `sudo`: es el
+        # proceso que tiene los traps. Sus subshells tienen la misma linea de
+        # ordenes y tambien la reciben, que es justo el caso que la guarda de
+        # BASHPID tiene que aguantar sin deshacer dos veces.
+        #
+        # Va DETRAS de E y DELANTE de C, como E: usa el mismo proyecto de
+        # Compose (`kronoqr`) y tiene que dejar el runner como lo encontro.
+        run: |
+          set -euo pipefail
+          sudo rm -rf paquete-j && sudo cp -a paquete paquete-j
+          sudo chown -R "$(id -u):$(id -g)" paquete-j
+          bash .github/scripts/prepare-package-env.sh paquete-j \
+            --backup-path /var/backups/fichaje-j --http-port 8082 --https-port 8445
+          cd paquete-j
+          cp .env .env.antes
+
+          sudo ./install.sh >salida-j.log 2>&1 &
+          lanzador=$!
+
+          # Espera por CONDICION: la fase 4 empezada Y contenedores del proyecto
+          # creados, que es cuando la vuelta atras tiene algo que deshacer.
+          en_fase_4=0
+          for _ in $(seq 1 300); do
+            if grep -q 'Fase 4 de 5' salida-j.log &&
+              [ -n "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)" ]; then
+              en_fase_4=1
+              break
+            fi
+            if ! kill -0 "${lanzador}" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          if [ "${en_fase_4}" -ne 1 ]; then
+            cat salida-j.log
+            echo "El instalador no llego a la fase 4 con contenedores creados: no hay nada que interrumpir."
+            exit 1
+          fi
+
+          sudo pkill -TERM -f '^bash \./install\.sh'
+
+          set +e
+          wait "${lanzador}"
+          codigo=$?
+          set -e
+          tail -40 salida-j.log
+
+          if grep -q 'instalado y verificado' salida-j.log; then
+            echo "La instalacion termino antes de la senal: el escenario no ha probado nada."
+            exit 1
+          fi
+          test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
+          grep -q 'senal TERM' salida-j.log
+          grep -q 'tmux' salida-j.log
+          grep -q 'Vuelta atras completada' salida-j.log
+
+          # Lo mismo que exige E: maquina limpia y .env byte a byte el del cliente.
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+          test ! -d /var/backups/fichaje-j
+          sudo cmp .env.antes .env
+          test ! -e .env.kronoqr-pre-install
+
+      - name: "J · Y el reintento no sale 3"
+        # `--check-only` solo ejecuta la fase 1, asi que las TRES senales de la
+        # fase 2 («instalacion previa», salida 3) se comprueban una a una: sin
+        # contenedores, sin volumenes y sin APP_KEY en el .env. Con las tres
+        # ausentes y la fase 1 en verde, un `./install.sh` de verdad pasaria.
+        run: |
+          set -euo pipefail
+          cd paquete-j
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=kronoqr)"
+          test -z "$(docker volume ls -q --filter name=^kronoqr_)"
+          grep -q '^APP_KEY=$' .env
+          set +e
+          sudo ./install.sh --check-only >reintento-j.log 2>&1
+          codigo=$?
+          set -e
+          tail -10 reintento-j.log
+          test "${codigo}" -eq 0 || { echo "El reintento deberia salir 0 y salio ${codigo}"; exit 1; }
+
       - name: "C · Instalacion limpia siguiendo solo la guia"
         run: |
           set -euo pipefail
@@ -1879,7 +1971,7 @@ jobs:
         # Los dos paquetes: el de la instalacion buena y el del escenario de
         # fallo seguro. Cual de los dos existe depende de donde se haya roto.
         run: |
-          for dir in paquete paquete-e paquete-g; do
+          for dir in paquete paquete-e paquete-j paquete-g; do
             [ -d "${dir}" ] || continue
             echo "=============== ${dir} ==============="
             [ -f "${dir}/.env" ] || continue
@@ -1911,6 +2003,8 @@ jobs:
             paquete/salida-d.log
             paquete-e/salida-e.log
             paquete-e/reintento-e.log
+            paquete-j/salida-j.log
+            paquete-j/reintento-j.log
             paquete-g/salida-g.log
             paquete-g/doctor-g.log
           retention-days: 14

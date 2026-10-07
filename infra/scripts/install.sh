@@ -43,6 +43,21 @@
 #   6  Verificacion posterior fallida, con los servicios en pie. No se deshace
 #      nada: la instalacion y sus datos existen.
 #
+# INTERRUPCIONES (R6-PL-01). Un corte de la sesion SSH (SIGHUP, 129), un `kill`
+# (SIGTERM, 143) o Ctrl+C (SIGINT, 130) se tratan como un fallo mas:
+#   · en las fases 1 y 2 no se ha escrito nada y el script muere con 129, 130
+#     o 143; se puede volver a ejecutar sin mas;
+#   · desde la fase 3 hasta el final de la 5 disparan la MISMA vuelta atras que
+#     un error y el script sale con 4 (todo deshecho) o 5 (algo a medias).
+#     Antes de esto, un corte dejaba el .env con secretos, contenedores y
+#     volumenes, y el reintento salia con 3 («instalacion previa»): un callejon
+#     sin salida en el servidor del cliente.
+# Una vez empezada, la vuelta atras NO se interrumpe: ignora nuevas senales
+# para que un segundo Ctrl+C no corte un `docker compose down` a medias.
+# Por SSH, ejecutalo dentro de `tmux` o `screen` (o con `nohup`): asi un corte
+# de la conexion no interrumpe la instalacion, y si la interrumpe, el mensaje
+# final no se pierde con ella.
+#
 # NO EXISTE install.ps1 (ADR-022). Los requisitos publicados son Linux con
 # Docker; un cliente con solo infraestructura Windows instala sobre una maquina
 # virtual Linux, y eso se dice en docs/cliente/instalacion.md antes de empezar.
@@ -124,6 +139,11 @@ CHECKS_WARNED=0
 # Se recorren en orden inverso. Cada entrada es "etiqueta|orden".
 declare -a ROLLBACK_STACK=()
 declare -a TEMP_FILES=()
+
+# 1 mientras la vuelta atras esta en marcha. Una senal que llega justo cuando
+# empieza (el ERR de la orden que una Ctrl+C acaba de matar y el INT de la
+# propia Ctrl+C, por ejemplo) no puede lanzar una segunda vuelta atras encima.
+ROLLING_BACK=0
 
 # Valores leidos del .env del cliente. Se rellenan en la fase 1.
 CFG_APP_URL=""
@@ -219,9 +239,34 @@ rollback_and_die() {
   # vez y desde main. En una subshell se sale sin tocar nada y se deja que el
   # padre decida con lo que de verdad sabe: la longitud del secreto que ha
   # recibido (`set_generated_secret`).
+  #
+  # Con las SENALES (INT, TERM, HUP) la subshell no llega hasta aqui: bash
+  # devuelve a su valor heredado los traps de senal al crear una subshell, asi
+  # que una senal que le llega a ella la mata sin mas y es el padre —que la
+  # recibe tambien, o ve fallar la orden— quien deshace. La guarda sigue
+  # haciendo falta por el ERR, que si se hereda.
   if [ "${BASHPID}" != "$$" ]; then
     return 1
   fi
+
+  # UNA SOLA VUELTA ATRAS. Si ya esta en marcha, el manejador que se cuela
+  # (una senal pendiente que bash entrega entre dos ordenes) vuelve sin hacer
+  # nada y la que estaba en curso sigue donde iba.
+  if [ "${ROLLING_BACK}" -eq 1 ]; then
+    return 0
+  fi
+  ROLLING_BACK=1
+
+  # Y SIN INTERRUPCIONES. Una vez empezada, deshacer a medias es lo unico peor
+  # que no deshacer: se ignoran nuevas senales —un segundo Ctrl+C, el HUP que
+  # repite el cierre de la sesion— y las heredan ignoradas los `docker compose
+  # down` que se lanzan desde aqui. PIPE tambien: si la salida iba por un
+  # `| tee` que murio con la sesion, escribir no puede matar al script a mitad.
+  # Sin `set -e` ni ERR: un `err` que falla porque la terminal ya no existe no
+  # puede cortar la lista; cada orden de deshacer comprueba su propio estado.
+  trap - ERR
+  trap '' INT TERM HUP PIPE
+  set +e
 
   err ""
   err "ERROR: ${reason}"
@@ -256,6 +301,23 @@ rollback_and_die() {
   err "$(kq_format rollback_incomplete "${COMPOSE_FILE}" "${ENV_FILE}")"
   err "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
   exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
+}
+
+# Desde la fase 3 hasta el final de la 5, un fallo Y UNA INTERRUPCION deshacen
+# lo hecho (R6-PL-01). Se arman y se retiran JUNTOS, como en update.sh: un ERR
+# armado sin las senales dejaba que un corte de SSH a mitad de la fase 4
+# abandonara el .env con secretos, los contenedores y los volumenes, y el
+# reintento salia con 3. El nombre de la senal va en el mensaje porque es lo
+# que distingue un corte de la conexion (HUP) de alguien que lo detuvo (INT).
+arm_rollback_traps() {
+  trap 'rollback_and_die "$(kq_format f_unexpected "${LINENO}")"' ERR
+  trap 'rollback_and_die "$(kq_format f_interrupted INT)"' INT
+  trap 'rollback_and_die "$(kq_format f_interrupted TERM)"' TERM
+  trap 'rollback_and_die "$(kq_format f_interrupted HUP)"' HUP
+}
+
+disarm_rollback_traps() {
+  trap - ERR INT TERM HUP
 }
 
 #------------------------------------------------------------------------------
@@ -999,7 +1061,7 @@ phase_secrets() {
   # Se arma AQUI y no antes a proposito: durante la fase 1 no hay nada que
   # deshacer y un fallo tiene que seguir saliendo 2 («nada escrito»). `set -E`
   # es lo que hace que el manejador se herede dentro de las funciones.
-  trap 'rollback_and_die "$(kq_format f_unexpected "${LINENO}")"' ERR
+  arm_rollback_traps
 
   # Copia del .env del cliente ANTES de tocarlo. Es lo que restaura la vuelta
   # atras: sus valores y sus comentarios no son nuestros para perderlos.
@@ -1007,11 +1069,16 @@ phase_secrets() {
   # 0600 de inmediato: `cp -p` hereda los permisos del original, que suele ser
   # 0644 recien copiado de la plantilla, y este fichero puede llevar ya el
   # MAIL_PASSWORD que el cliente rellenó.
+  #
+  # La accion de deshacer se registra ANTES de la copia y tolera que la copia
+  # no exista: una senal que llegue entre el `cp` y el registro dejaria, si no,
+  # la copia huerfana (con el MAIL_PASSWORD del cliente) y sin quien la retire.
+  # La etiqueta sale del catalogo: `discard_undo` la busca por ese mismo texto.
   backup_env="${ENV_FILE}.kronoqr-pre-install"
+  register_undo "$(kq_format undo_env "${ENV_FILE}")" \
+    "if [ -f '${backup_env}' ]; then mv -f '${backup_env}' '${ENV_FILE}'; fi"
   cp -p "${ENV_FILE}" "${backup_env}"
   chmod 0600 "${backup_env}"
-  register_undo "${ENV_FILE} devuelto a como estaba antes de instalar" \
-    "mv -f '${backup_env}' '${ENV_FILE}'"
 
   chmod 0600 "${ENV_FILE}"
 
@@ -1414,8 +1481,9 @@ main() {
 
   # Desarmado. A partir de este punto la instalacion EXISTE y sus datos
   # tambien: deshacerla porque falle al imprimir el informe final seria
-  # exactamente el fallo que este manejador existe para evitar.
-  trap - ERR
+  # exactamente el fallo que este manejador existe para evitar. Las senales se
+  # desarman a la vez: un corte despues de aqui ya no deja nada a medias.
+  disarm_rollback_traps
 
   # La copia previa del .env del cliente ya no hace falta y puede llevar su
   # MAIL_PASSWORD. Se retira de la pila de deshacer ANTES de borrarla: si no,

@@ -31,6 +31,11 @@
 #   4  FALLO CON VUELTA ATRAS COMPLETADA. Algo salio mal a mitad y el script
 #      DESHIZO lo que habia hecho en esta ejecucion. La maquina vuelve a estar
 #      como antes de ejecutarlo. Se puede reintentar tras corregir la causa.
+#        · install.sh y update.sh llegan tambien aqui por una INTERRUPCION
+#          (Ctrl+C = SIGINT, kill = SIGTERM, corte de SSH = SIGHUP) desde que
+#          empiezan a escribir: se trata como un fallo y se deshace. El proceso
+#          NO sale con 130, 143 ni 129 en ese tramo; antes de el, si (nada
+#          escrito). Por SSH, dentro de tmux o screen.
 #
 #   5  FALLO CON VUELTA ATRAS INCOMPLETA. Algo salio mal y el script NO pudo
 #      deshacerlo todo. HAY QUE INTERVENIR A MANO, y el mensaje dice
