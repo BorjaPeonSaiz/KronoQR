@@ -8,6 +8,7 @@ use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
+use Tests\Support\Database\QueryPlans;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -30,7 +31,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * PUERTO real y se hace `EXPLAIN` sobre lo que emitio el adaptador. Un SQL
  * copiado a mano se queda viejo en cuanto alguien toca el adaptador y a partir
  * de ahi esta prueba certifica un plan que el producto ya no ejecuta — que es
- * peor que no tenerla.
+ * peor que no tenerla. La captura y el recorrido del plan viven en
+ * `Tests\Support\Database\QueryPlans`, que comparten las pruebas de indices del
+ * diario de jornadas, la bandeja de incidencias y la exportacion legal.
  *
  * VOLUMEN DELIBERADO: veinte mil filas. Sobre una tabla de veinte, PostgreSQL
  * elige un recorrido completo porque es mas barato, y la prueba fallaria sin
@@ -122,123 +125,6 @@ function historicoDeEscaneos(): string
 }
 
 /**
- * El SQL que el PUERTO emite sobre `scan_events`, con sus bindings.
- *
- * @return list<array{sql: string, bindings: list<mixed>}>
- */
-function consultasDelPuerto(Closure $llamada): array
-{
-    $capturadas = [];
-
-    DB::listen(static function ($query) use (&$capturadas): void {
-        $capturadas[] = ['sql' => $query->sql, 'bindings' => $query->bindings];
-    });
-
-    $llamada();
-
-    return array_values(array_filter(
-        $capturadas,
-        static fn (array $query): bool => str_contains($query['sql'], 'scan_events')
-            && str_starts_with(ltrim(strtolower($query['sql'])), 'select'),
-    ));
-}
-
-/**
- * Lo mismo, pero para las consultas que tocan `shift_entries`.
- *
- * Dos funciones y no una con parametro: son dos tablas con dos preguntas
- * distintas y el filtro se lee mejor en el nombre que en un argumento suelto.
- *
- * @return list<array{sql: string, bindings: list<mixed>}>
- */
-function consultasDeTramos(Closure $llamada): array
-{
-    $capturadas = [];
-
-    DB::listen(static function ($query) use (&$capturadas): void {
-        $capturadas[] = ['sql' => $query->sql, 'bindings' => $query->bindings];
-    });
-
-    $llamada();
-
-    return array_values(array_filter(
-        $capturadas,
-        static fn (array $query): bool => str_contains($query['sql'], 'shift_entries')
-            && str_starts_with(ltrim(strtolower($query['sql'])), 'select'),
-    ));
-}
-
-/**
- * El plan de ejecucion de esa consulta, ya aplanado en nodos.
- *
- * SE RECORRE EL ARBOL Y NO SE BUSCAN SUBCADENAS. La consulta lleva un
- * `LEFT JOIN` con `shift_entries`, asi que el JSON del plan contiene a la vez
- * «Seq Scan» y «scan_events» en cuanto la segunda tabla se recorre entera —lo
- * que es correcto cuando es pequeña—. Comprobarlo con `str_contains` daba un
- * fallo que aparecia y desaparecia segun cuantos tramos hubiera sembrados.
- *
- * (El mismo recorrido vive en `load-tests/k6/support.php` para la verificacion
- * posterior a la prueba de carga. No se comparte a proposito: son dos arboles
- * distintos del repositorio y atar la suite del backend a `load-tests/` por ocho
- * lineas costaria mas de lo que ahorra.)
- *
- * @param  array{sql: string, bindings: list<mixed>}  $query
- * @return list<array<string, mixed>>
- */
-function nodosDelPlan(array $query): array
-{
-    $explained = DB::select('EXPLAIN (FORMAT JSON) '.$query['sql'], $query['bindings']);
-    $raiz = raizDelPlan((string) ($explained[0]->{'QUERY PLAN'} ?? ''));
-
-    return $raiz === null ? [] : nodosBajo($raiz);
-}
-
-/**
- * El nodo raiz del JSON de `EXPLAIN`, o `null` si no se pudo leer.
- *
- * @return array<mixed, mixed>|null
- */
-function raizDelPlan(string $explained): ?array
-{
-    /** @var mixed $decoded */
-    $decoded = json_decode($explained, true);
-    /** @var mixed $first */
-    $first = is_array($decoded) ? ($decoded[0] ?? null) : null;
-    /** @var mixed $root */
-    $root = is_array($first) ? ($first['Plan'] ?? null) : null;
-
-    return is_array($root) ? $root : null;
-}
-
-/**
- * @param  array<mixed, mixed>  $raiz
- * @return list<array<string, mixed>>
- */
-function nodosBajo(array $raiz): array
-{
-    /** @var list<array<string, mixed>> $nodes */
-    $nodes = [];
-    /** @var list<array<string, mixed>> $pending */
-    $pending = [$raiz];
-
-    while ($pending !== []) {
-        $current = array_pop($pending);
-        $nodes[] = $current;
-
-        /** @var mixed $children */
-        $children = $current['Plans'] ?? [];
-
-        foreach (is_array($children) ? $children : [] as $child) {
-            if (is_array($child)) {
-                $pending[] = $child;
-            }
-        }
-    }
-
-    return $nodes;
-}
-
-/**
  * Comprueba que `scan_events` se resuelve por su indice y sin recorrerla entera.
  *
  * El indice es un parametro porque no todas las consultas calientes se sirven
@@ -249,7 +135,7 @@ function nodosBajo(array $raiz): array
  */
 function resuelvePorElIndice(array $query, string $indice = 'scan_events_employee_id_occurred_at_index'): void
 {
-    $nodes = nodosDelPlan($query);
+    $nodes = QueryPlans::nodes($query);
 
     expect($nodes)->not->toBeEmpty('El plan de ejecucion no se pudo leer');
 
@@ -270,7 +156,7 @@ it('resuelve el ultimo escaneo aceptado por el indice del historico', function (
     $employeeUuid = historicoDeEscaneos();
     $scanLog = app(ScanLog::class);
 
-    $queries = consultasDelPuerto(static fn () => $scanLog->lastAcceptedScanOf($employeeUuid));
+    $queries = QueryPlans::selectsOn('scan_events', static fn () => $scanLog->lastAcceptedScanOf($employeeUuid));
 
     expect($queries)->not->toBeEmpty();
 
@@ -282,7 +168,7 @@ it('resuelve la ventana anti-rebote por el mismo indice', function (): void {
     $scanLog = app(ScanLog::class);
     $instant = new DateTimeImmutable('2022-06-01 08:00:00', new DateTimeZone('UTC'));
 
-    $queries = consultasDelPuerto(
+    $queries = QueryPlans::selectsOn('scan_events',
         static fn () => $scanLog->acceptedScansAdjacentTo($employeeUuid, $instant)
     );
 
@@ -351,7 +237,7 @@ it('resuelve los fichajes irreconciliables por el indice parcial de las marcadas
 
     $port = app(OutOfOrderScans::class);
 
-    $queries = consultasDelPuerto(static fn () => $port->outOfOrderBetween(
+    $queries = QueryPlans::selectsOn('scan_events', static fn () => $port->outOfOrderBetween(
         new DateTimeImmutable('2026-03-01 00:00:00', new DateTimeZone('UTC')),
         new DateTimeImmutable('2026-03-31 00:00:00', new DateTimeZone('UTC')),
     ));
@@ -442,7 +328,7 @@ it('resuelve el solape de RN-18 por el indice de la propia restriccion de exclus
     $repository = app(WorkDayRepository::class);
     $instant = new DateTimeImmutable('2024-06-01 08:00:00', new DateTimeZone('UTC'));
 
-    $queries = consultasDeTramos(
+    $queries = QueryPlans::selectsOn('shift_entries',
         static fn () => $repository->closedEntryEndingAfter($employeeUuid, $instant)
     );
 
@@ -456,7 +342,7 @@ it('resuelve el solape de RN-18 por el indice de la propia restriccion de exclus
 
     expect($solape)->toHaveCount(1, 'La consulta del solape no se emitio o dejo de usar tstzrange.');
 
-    $nodes = nodosDelPlan($solape[0]);
+    $nodes = QueryPlans::nodes($solape[0]);
 
     expect($nodes)->not->toBeEmpty('El plan de ejecucion no se pudo leer');
 
