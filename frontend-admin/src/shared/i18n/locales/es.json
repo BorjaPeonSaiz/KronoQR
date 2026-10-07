@@ -169,11 +169,7 @@
       "expires": "Caduca el {when}. Pasado ese momento ya no sirve para entrar.",
       "handDelivery": "Entrégala en mano o de viva voz. No se envía por correo. Con ella solo se puede entrar y fijar una contraseña propia.",
       "handedOverLabel": "La he entregado en mano a {name}",
-      "acknowledge": "Cerrar: ya no se mostrará más",
-      "copy": "Copiar al portapapeles",
-      "copiedButton": "Copiada",
-      "copied": "Contraseña copiada al portapapeles.",
-      "copyFailed": "No se ha podido copiar. Anótala a mano."
+      "acknowledge": "Cerrar: ya no se mostrará más"
     },
     "actions": {
       "create": "Nueva cuenta",

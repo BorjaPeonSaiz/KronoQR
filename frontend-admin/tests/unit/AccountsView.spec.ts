@@ -490,10 +490,12 @@ describe('AccountsView: reautenticacion de quien actua', () => {
     const pinia = createTestPinia()
     const session = useSessionStore(pinia)
 
-    session.user = {
-      ...managementUser({ uuid: OWN_UUID, roles: ['admin'], abilities: ['accounts:*'] }),
+    session.user = managementUser({
+      uuid: OWN_UUID,
+      roles: ['admin'],
+      abilities: ['accounts:*'],
       two_factor_enabled: false,
-    } as ReturnType<typeof managementUser>
+    })
     session.token = 'un-token'
     session.status = 'authenticated'
 

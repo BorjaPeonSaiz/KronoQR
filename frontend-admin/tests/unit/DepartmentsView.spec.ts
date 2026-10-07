@@ -29,10 +29,10 @@ const OTHER = managementAccount({
   name: 'Jefatura de Sala',
 })
 
-function departments(managerUuid: string | null = null) {
+function departments(managerUuid: string | null = null, managerName: string | null = null) {
   return {
     data: [
-      { id: 3, name: 'Cocina', manager_user_uuid: managerUuid },
+      { id: 3, name: 'Cocina', manager_user_uuid: managerUuid, manager_name: managerName },
       { id: 4, name: 'Recepción' },
     ],
   }
@@ -81,7 +81,7 @@ afterEach(() => {
 
 describe('DepartmentsView', () => {
   it('admin: muestra el responsable actual por su nombre y ofrece solo cuentas activas', async () => {
-    stubFetch(api(departments(ACCOUNT_UUID)))
+    stubFetch(api(departments(ACCOUNT_UUID, 'Jefatura de Cocina')))
 
     const wrapper = await mountAs(['accounts:*', 'employees:*'])
 
@@ -163,8 +163,8 @@ describe('DepartmentsView', () => {
     expect(wrapper.find('#manager-3').attributes('aria-describedby')).toBe('manager-error-3')
   })
 
-  it('rrhh: solo lectura, sin selector ni peticion de cuentas', async () => {
-    const spy = stubFetch(api(departments(ACCOUNT_UUID)))
+  it('rrhh: solo lectura con el nombre del responsable, sin selector ni peticion de cuentas', async () => {
+    const spy = stubFetch(api(departments(ACCOUNT_UUID, 'Jefatura de Cocina')))
 
     const wrapper = await mountAs(['employees:*'])
 
@@ -172,7 +172,7 @@ describe('DepartmentsView', () => {
 
     expect(wrapper.find('select').exists()).toBe(false)
     expect(wrapper.find('[data-test="save-manager-3"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="department-3"]').text()).toContain(es.departments.hasManager)
+    expect(wrapper.find('[data-test="department-3"]').text()).toContain('Jefatura de Cocina')
     expect(spy.mock.calls.some((call) => String(call[0]).includes('management-accounts'))).toBe(
       false,
     )

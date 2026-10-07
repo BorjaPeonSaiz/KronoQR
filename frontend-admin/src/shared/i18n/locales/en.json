@@ -169,11 +169,7 @@
       "expires": "It expires on {when}. After that it can no longer be used to sign in.",
       "handDelivery": "Hand it over in person or by voice. It is not sent by email. It only allows signing in and setting a password of their own.",
       "handedOverLabel": "I have handed it over to {name} in person",
-      "acknowledge": "Close: it will not be shown again",
-      "copy": "Copy to clipboard",
-      "copiedButton": "Copied",
-      "copied": "Password copied to the clipboard.",
-      "copyFailed": "Could not copy. Write it down by hand."
+      "acknowledge": "Close: it will not be shown again"
     },
     "actions": {
       "create": "New account",

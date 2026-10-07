@@ -7,9 +7,8 @@
 // lo ven en solo lectura. La policy del servidor autoriza de verdad (regla dura
 // 18); a quien no es `admin` ni siquiera se le ofrece el selector.
 //
-// El contrato de `Department` solo trae el `uuid` del responsable: el nombre se
-// resuelve con las cuentas, que solo lee `admin`. Quien no puede leerlas ve
-// «con responsable» / «sin responsable», sin nombre.
+// El nombre del responsable llega en `Department.manager_name`, para todos los roles:
+// las cuentas solo se piden (y solo las lee `admin`) para llenar el selector.
 import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
@@ -45,6 +44,7 @@ const { data: managers } = useQuery({
   enabled: canAssign,
 })
 
+// Solo `admin` las tiene (y solo para el selector y para señalar una cuenta de baja).
 const accountsByUuid = computed(
   () => new Map((managers.value?.data ?? []).map((account) => [account.uuid, account])),
 )
@@ -84,13 +84,7 @@ function managerName(department: Department): string {
     return t('departments.noManager')
   }
 
-  const account = accountsByUuid.value.get(uuid)
-
-  if (account === undefined) {
-    return canAssign.value ? t('departments.unknownManager') : t('departments.hasManager')
-  }
-
-  return account.name
+  return department.manager_name ?? t('departments.hasManager')
 }
 
 function managerDeactivated(department: Department): boolean {

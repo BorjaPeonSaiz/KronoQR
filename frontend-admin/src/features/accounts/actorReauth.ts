@@ -25,14 +25,10 @@ export type ActorReauthField = 'actor_totp_code' | 'actor_current_password'
 export function useActorReauth() {
   const session = useSessionStore()
 
-  // `ManagementUser` aun no declara si la cuenta tiene segundo factor; se lee
-  // con tolerancia. Sin el dato se pide el codigo: `admin` lo lleva siempre
-  // (RS-06).
-  const usesPassword = computed(() => {
-    const flag = (session.user as { two_factor_enabled?: boolean } | null)?.two_factor_enabled
-
-    return flag === false
-  })
+  // `two_factor_enabled` de `/auth/me`: sin segundo factor confirmado se pide la
+  // contrasena. Si no llega (campo opcional), se trata como «pedir TOTP»: `admin`
+  // lo lleva siempre (RS-06) y el servidor rechaza lo que no encaje.
+  const usesPassword = computed(() => session.user?.two_factor_enabled === false)
   const field = computed<ActorReauthField>(() =>
     usesPassword.value ? 'actor_current_password' : 'actor_totp_code',
   )

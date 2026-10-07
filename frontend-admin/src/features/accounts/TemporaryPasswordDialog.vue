@@ -7,6 +7,8 @@
 //    `sessionStorage`, ni la tienda de Pinia, ni la cache de consultas. Al
 //    cerrar, el padre pone su `ref` a `null` y el valor desaparece. El unico
 //    sitio al que sale, y solo si la persona lo pide, es el portapapeles.
+//  - No hay boton de copiar, como en el PIN: un secreto en el portapapeles acaba en
+//    otras aplicaciones (y pegado en un chat). Se entrega de viva voz o en papel.
 //  - No se cierra por descuido: sin Escape ni velo. Solo con la casilla
 //    «la he entregado en mano» marcada, y el boton dice que no se podra volver
 //    a ver. Si se pierde, se restablece y se emite otra.
@@ -14,7 +16,6 @@
 //    endpoint de acuse para las cuentas, asi que la casilla solo habilita el
 //    cierre; el asiento de auditoria ya lo escribio la emision.
 //  - La caducidad se enseña en la zona horaria del centro, con la zona escrita.
-import { announce } from '@kronoqr/web-kit/announcer'
 import { formatInstantWithZone } from '@kronoqr/web-kit/datetime'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -35,19 +36,6 @@ const emit = defineEmits<{ acknowledged: [] }>()
 const { t, locale } = useI18n()
 
 const handedOver = ref(false)
-const copied = ref(false)
-
-async function copy(value: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(value)
-    copied.value = true
-    announce(t('accounts.reveal.copied'))
-  } catch {
-    // Sin permiso o sin API de portapapeles: la contrasena sigue a la vista.
-    copied.value = false
-    announce(t('accounts.reveal.copyFailed'))
-  }
-}
 </script>
 
 <template>
@@ -66,17 +54,6 @@ async function copy(value: string): Promise<void> {
     >
       {{ password.password }}
     </p>
-
-    <div class="mt-3">
-      <button
-        type="button"
-        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
-        data-test="copy-password"
-        @click="copy(password.password)"
-      >
-        {{ copied ? t('accounts.reveal.copiedButton') : t('accounts.reveal.copy') }}
-      </button>
-    </div>
 
     <p
       role="alert"
