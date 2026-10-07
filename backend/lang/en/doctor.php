@@ -521,19 +521,19 @@ return [
             ],
             'backlog' => [
                 'warning' => "Check whether the queue worker is alive:\n"
-                    ."  docker compose ps worker\n"
+                    ."  docker compose ps horizon\n"
                     .'If it is, this is a normal spike and it will drain on its own. Check again in ten minutes.',
                 'failure' => "Restart the queue worker:\n"
-                    ."  docker compose restart worker\n"
-                    ."  docker compose logs --tail=100 worker\n"
+                    ."  docker compose restart horizon\n"
+                    ."  docker compose logs --tail=100 horizon\n"
                     ."If jobs are failing rather than piling up, list the failed ones with:\n"
                     .'  php artisan queue:failed',
                 'warning_unknown' => 'Check that Redis responds and run this command again.',
             ],
             'worker' => [
                 'warning' => "Start or restart the queue worker:\n"
-                    ."  docker compose ps worker\n"
-                    ."  docker compose restart worker\n"
+                    ."  docker compose ps horizon\n"
+                    ."  docker compose restart horizon\n"
                     .'Clocking in does not depend on it; notifications and reports do.',
                 'warning_unknown' => 'Check that Redis responds and run this command again.',
             ],

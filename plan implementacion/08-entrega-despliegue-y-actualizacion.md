@@ -731,7 +731,7 @@ El único paso que sigue siendo manual es **crear la etiqueta**: `release.yml` n
 
 ### 8.3 Lo que la etapa 8 no cubre y hay que recordar
 
-- **La prueba de carga** (`RQ-08`, k6, `RNF-P-06`: 50 fichajes/s con p95 < 150 ms) se ejecuta **antes de cada versión mayor**, no en cada publicación.
+- **La prueba de carga** (`RQ-08`, k6, `RNF-P-06`: 50 fichajes/s con p95 < 150 ms) se ejecuta **antes de cada versión menor y mayor** (`vX.Y.0`; la etiqueta la lanza también `load-test.yml`), no en cada parche ni en cada publicación.
 - **La prueba de resistencia de 12 h** del quiosco en dispositivo real (Anexo A) no es automatizable en CI: es prueba de campo.
 - **La revisión de seguridad externa** (`RS-11`, tarea 3.8) es previa a la primera versión comercial y anual.
 - **La instalación limpia hecha por una persona ajena siguiendo solo la guía** (criterio de terminado del doc 03 §6.5, tarea 5.11) no la sustituye ningún script: la CI prueba que los comandos funcionan, no que la guía se entienda.

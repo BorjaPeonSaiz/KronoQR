@@ -39,6 +39,15 @@ $redisTimeouts = [
     'read_timeout' => (float) env('REDIS_READ_TIMEOUT', 2.0),
 ];
 
+/*
+ * CUANTO RECUERDA UN CORTACIRCUITOS QUE SU DEPENDENCIA ESTA CAIDA (R3-CH-01,
+ * R3-CH-02): 10 s de serie, `0` lo apaga, y nunca mas de 60 s. Ese techo es
+ * la mitad de la defensa contra un reloj que retrocede (la otra esta en
+ * `CircuitBreaker::isPlausible()`): un plazo de horas puesto por error dejaria
+ * la instalacion respondiendo `503` sin haber nada caido.
+ */
+$circuitSeconds = static fn (mixed $seconds): float => min(60.0, max(0.0, is_numeric($seconds) ? (float) $seconds : 10.0));
+
 return [
 
     /*
@@ -332,6 +341,50 @@ return [
         'application' => env('DB_USERNAME', 'fichaje_app'),
         'migration' => env('DB_MIGRATION_USERNAME', 'fichaje_migrator'),
         'maintenance' => env('DB_MAINTENANCE_USERNAME', 'fichaje_maintenance'),
+    ],
+
+    /*
+     * EL CORTACIRCUITOS DE REDIS (R3-CH-01). Ver `App\Support\Redis\RedisCircuitBreaker`.
+     *
+     * Con Redis caido, cada acceso de una peticion —cache, limitador, sesion,
+     * cola, metricas— volvia a intentar conectar, y cada intento podia costar
+     * el tiempo de conexion o, con el contenedor desaparecido del DNS, unos 4 s
+     * de resolucion: un PIN tardaba hasta 45 s y el pool de PHP-FPM se agotaba.
+     * Tras el primer fallo, durante `seconds` ningun proceso vuelve a intentarlo
+     * y todo cae al instante a su respaldo; despues, una comprobacion acotada
+     * decide si se reintenta. 10 s: lo bastante corto para que el producto
+     * vuelva a Redis casi en cuanto Redis vuelve, lo bastante largo para que una
+     * averia cueste un intento cada 10 s y no uno por acceso. `0` lo desactiva
+     * (la suite de pruebas lo desactiva por defecto: ver `phpunit.xml`).
+     *
+     * Fuera del bloque `redis` a proposito: el gestor de Redis trata cada clave
+     * de ese bloque como el nombre de una conexion.
+     */
+    'redis_circuit_breaker' => [
+        'seconds' => $circuitSeconds(env('REDIS_CIRCUIT_BREAKER_SECONDS', 10)),
+        'state_file' => storage_path('framework/redis-circuit-open'),
+    ],
+
+    /*
+     * EL CORTACIRCUITOS DE POSTGRESQL (R3-CH-02). Ver
+     * `App\Support\Database\DatabaseCircuitBreaker`.
+     *
+     * Mismo mecanismo y mismo plazo que el de Redis, por otra razon de fondo:
+     * con PostgreSQL inalcanzable, Laravel reintenta la conexion en el conector
+     * y otra vez en la consulta, y el historico de errores lo vuelve a intentar
+     * por su propia conexion. Un fichaje por PIN tardaba 31 s en dar un `500`.
+     * Con el circuito, el primer intento fallido lo abre, la peticion responde
+     * `503` con `Retry-After` igual a `seconds`, y las siguientes responden lo
+     * mismo al instante, sin red, hasta que una comprobacion acotada por
+     * `DB_CONNECT_TIMEOUT` vea el servidor de nuevo. Solo lo abre un fallo de
+     * «no hay servidor» (DNS, rechazo, tiempo agotado, arranque o parada): una
+     * contrasena mala o `too many clients` siguen como hasta ahora. Uno para
+     * todas las conexiones `pgsql`, que apuntan al mismo servidor. `0` lo
+     * desactiva (la suite de pruebas lo desactiva por defecto).
+     */
+    'database_circuit_breaker' => [
+        'seconds' => $circuitSeconds(env('DB_CIRCUIT_BREAKER_SECONDS', 10)),
+        'state_file' => storage_path('framework/database-circuit-open'),
     ],
 
     /*

@@ -78,6 +78,19 @@ info:
     muestran «actualizacion en curso». Las dos sondas quedan fuera a proposito:
     son lo que mira la infraestructura para saber que el proceso vive.
 
+    **Base de datos inalcanzable (R3-CH-02, RNF-D-03).** Cuando la instalacion
+    no alcanza su base de datos, CUALQUIER ruta que la necesite responde `503`
+    como `problem+json` con `type: urn:kronoqr:problem:service-unavailable` y
+    cabecera `Retry-After` (segundos, minimo 1): el plazo durante el cual el
+    servidor no volvera a intentar la conexion. Responde al instante, sin
+    esperar a la red, y el cuerpo no nombra el servicio caido ni su
+    direccion. Se describe aqui y no ruta a ruta porque no depende de la ruta.
+    Puede que el fichaje se haya registrado o no —la conexion puede perderse
+    despues de confirmarlo—; el reenvio con el mismo `scan_id` e
+    `Idempotency-Key` es seguro porque es idempotente (regla dura 8). El
+    quiosco lo conserva en su cola y lo reenvia pasado `Retry-After` (regla
+    dura 19).
+
     **Idempotencia.** Las escrituras del quiosco llevan `Idempotency-Key` y son
     idempotentes por `scan_id` (regla dura 8): un reenvio devuelve la respuesta
     original, nunca un error ni un duplicado.
@@ -11720,9 +11733,10 @@ components:
     ServiceUnavailable:
       description: |
         La instalacion no esta en condiciones de atender la operacion, y no es
-        culpa de quien la pide: falta configuracion del servidor. Hoy solo lo
-        produce la emision de credenciales cuando no hay clave de firma
-        configurada (doc 02 Anexo B, §7.7).
+        culpa de quien la pide: falta configuracion del servidor. Lo produce la
+        emision de credenciales cuando no hay clave de firma configurada (doc 02
+        Anexo B, §7.7). La base de datos inalcanzable tiene su propia respuesta,
+        `DependencyUnavailable`, con `Retry-After`.
 
         Es `503` y no `500` porque la accion siguiente es distinta: hay que
         avisar a quien administra la instalacion, no reportar un fallo del

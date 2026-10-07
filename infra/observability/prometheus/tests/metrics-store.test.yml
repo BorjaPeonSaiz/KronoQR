@@ -1,0 +1,158 @@
+# KronoQR — pruebas unitarias de infra/observability/prometheus/rules/metrics-store.yml
+# (bloque 22, R4-DV-01).
+rule_files:
+  - ../rules/metrics-store.yml
+  - ../rules/kiosk.yml
+
+evaluation_interval: 15s
+
+tests:
+  #-----------------------------------------------------------------------------
+  # Almacen caido: gauge a 0 durante 1 minuto -> dispara.
+  #-----------------------------------------------------------------------------
+  - name: almacen_caido_dispara
+    interval: 1m
+    input_series:
+      - series: "kronoqr_metrics_store_up"
+        values: "1 1 1 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: AlmacenDeMetricasCaido
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: AlmacenDeMetricasCaido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: metrics
+            exp_annotations:
+              summary: "El almacen de metricas (Redis) no responde: las alertas de quiosco y cola no son fiables"
+              description: >-
+                La aplicacion responde, pero su almacen de metricas (Redis) no.
+                Mientras dure, las alertas de quiosco (latido, cola offline) y las
+                de errores y latencia del fichaje NO son fiables: sus series han
+                desaparecido y un quiosco caido o una cola atascada no se
+                veria, ni se avisaria de su resolucion. Alertmanager las inhibe
+                mientras esta alerta este activa. El fichaje sigue funcionando (los
+                quioscos encolan, regla dura 19): lo que falta es visibilidad.
+                Tampoco pueden saltar las de autenticacion (auth.yml), firma QR
+                (RechazoDeFirmaQr), gestion de cuentas ni errores criticos: sus series
+                viven en Redis. Mientras dure, revisa los intentos de acceso en el
+                registro de auditoria del panel.
+                Restablece Redis antes de fiarte de un cuadro en verde.
+              runbook_url: docs/runbooks/almacen-de-metricas-caido.md
+
+  #-----------------------------------------------------------------------------
+  # Almacen sano: ninguna de las dos dispara.
+  #-----------------------------------------------------------------------------
+  - name: almacen_sano_no_dispara
+    interval: 1m
+    input_series:
+      - series: "kronoqr_metrics_store_up"
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AlmacenDeMetricasCaido
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: AlmacenDeMetricasAusente
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Serie ausente: la gauge existia y deja de publicarse -> Ausente (no Caido).
+  #-----------------------------------------------------------------------------
+  - name: almacen_ausente_dispara
+    interval: 1m
+    input_series:
+      - series: "kronoqr_metrics_store_up"
+        values: "1 1 1 _ _ _ _ _ _ _ _ _ _ _ _ _"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AlmacenDeMetricasAusente
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: AlmacenDeMetricasAusente
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: metrics
+            exp_annotations:
+              summary: "La aplicacion no publica metricas: no se sabe si el almacen de metricas responde"
+              description: >-
+                Prometheus no recibe ni siquiera la serie que indica si el
+                almacen de metricas esta vivo. O la aplicacion (PHP-FPM, Nginx, la
+                ruta /metrics) no responde al scrape, o Prometheus no la alcanza.
+                Mientras dure, las alertas de quiosco y cola NO son fiables y
+                Alertmanager las inhibe. Es distinta de `SondaDelBordeFallida`,
+                que comprueba /health y /ready desde fuera: pueden sonar juntas o
+                por separado. El fichaje de los quioscos sigue encolando (regla
+                dura 19). Tampoco pueden saltar las de autenticacion (auth.yml), firma
+                QR (RechazoDeFirmaQr), gestion de cuentas ni errores criticos: sus series
+                viven en Redis. Mientras dure, revisa los intentos de acceso en el
+                registro de auditoria del panel.
+              runbook_url: docs/runbooks/almacen-de-metricas-caido.md
+      - eval_time: 12m
+        alertname: AlmacenDeMetricasCaido
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # El escenario real de R4-DV-01: Redis cae, la serie del quiosco desaparece
+  # (QuioscoSinLatido se "resuelve" en Prometheus) pero la gauge pasa a 0 y la
+  # nueva alerta queda activa. Alertmanager inhibe lo demas (ver
+  # alertmanager.yml.template).
+  #-----------------------------------------------------------------------------
+  - name: caida_de_redis_resuelve_el_quiosco_pero_deja_activa_la_nueva
+    interval: 1m
+    input_series:
+      # Latido antiguo (epoch 1) hasta el minuto 9; despues la serie desaparece.
+      - series: 'kiosk_last_seen_seconds{device="kiosk-1"}'
+        values: "1x17 _x20"
+      - series: "kronoqr_metrics_store_up"
+        values: "1x17 0x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: QuioscoSinLatido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: kiosk
+              device: kiosk-1
+            exp_annotations:
+              summary: "El quiosco kiosk-1 lleva mas de 10 min sin latido"
+              description: >-
+                El dispositivo kiosk-1 no envia
+                POST /api/v1/kiosk/heartbeat desde hace mas de 10 minutos. El
+                fichaje en ESE quiosco puede estar afectado (red caida, tablet
+                apagada, aplicacion colgada); el resto de quioscos del centro
+                siguen operando con normalidad. Comprueba la tablet antes de que
+                empiece el siguiente cambio de turno.
+              runbook_url: docs/runbooks/quiosco-no-responde.md
+      - eval_time: 30m
+        alertname: QuioscoSinLatido
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: AlmacenDeMetricasCaido
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: it-cliente
+              component: metrics
+            exp_annotations:
+              summary: "El almacen de metricas (Redis) no responde: las alertas de quiosco y cola no son fiables"
+              description: >-
+                La aplicacion responde, pero su almacen de metricas (Redis) no.
+                Mientras dure, las alertas de quiosco (latido, cola offline) y las
+                de errores y latencia del fichaje NO son fiables: sus series han
+                desaparecido y un quiosco caido o una cola atascada no se
+                veria, ni se avisaria de su resolucion. Alertmanager las inhibe
+                mientras esta alerta este activa. El fichaje sigue funcionando (los
+                quioscos encolan, regla dura 19): lo que falta es visibilidad.
+                Tampoco pueden saltar las de autenticacion (auth.yml), firma QR
+                (RechazoDeFirmaQr), gestion de cuentas ni errores criticos: sus series
+                viven en Redis. Mientras dure, revisa los intentos de acceso en el
+                registro de auditoria del panel.
+                Restablece Redis antes de fiarte de un cuadro en verde.
+              runbook_url: docs/runbooks/almacen-de-metricas-caido.md

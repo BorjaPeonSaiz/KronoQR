@@ -12767,9 +12767,10 @@ export interface components {
         };
         /**
          * @description La instalacion no esta en condiciones de atender la operacion, y no es
-         *     culpa de quien la pide: falta configuracion del servidor. Hoy solo lo
-         *     produce la emision de credenciales cuando no hay clave de firma
-         *     configurada (doc 02 Anexo B, §7.7).
+         *     culpa de quien la pide: falta configuracion del servidor. Lo produce la
+         *     emision de credenciales cuando no hay clave de firma configurada (doc 02
+         *     Anexo B, §7.7). La base de datos inalcanzable tiene su propia respuesta,
+         *     `DependencyUnavailable`, con `Retry-After`.
          *
          *     Es `503` y no `500` porque la accion siguiente es distinta: hay que
          *     avisar a quien administra la instalacion, no reportar un fallo del

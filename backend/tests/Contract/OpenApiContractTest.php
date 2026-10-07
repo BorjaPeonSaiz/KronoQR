@@ -847,6 +847,20 @@ it('tiene una unica respuesta de rechazo de escaneo', function (): void {
         ))->toBe(['$ref' => '#/components/schemas/ScanRejected']);
 })->group('RS-03', 'RF-QR-02');
 
+it('describe como respuesta global el 503 de base de datos inalcanzable, con Retry-After y reenvio idempotente (R3-CH-02)', function (): void {
+    // No se declara ruta a ruta porque no depende de la ruta: lo produce el
+    // manejador de excepciones en cualquiera que necesite la base. Lo que el
+    // contrato tiene que decir es el tipo, la cabecera y que el reenvio es
+    // seguro aunque el fichaje pudiera haberse registrado (regla dura 8).
+    $descripcion = Contract::value('info', 'description');
+
+    expect($descripcion)->toBeString()
+        ->toContain('Base de datos inalcanzable')
+        ->toContain('urn:kronoqr:problem:service-unavailable')
+        ->toContain('Retry-After')
+        ->toContain('Puede que el fichaje se haya registrado o no');
+})->group('RQ-06', 'RNF-D-03');
+
 it('hace imposible que el rechazo describa su causa', function (): void {
     // Que sea imposible es el punto, y no que este bien escrito hoy. Todos los
     // campos estan fijados a un valor unico y no se admiten miembros adicionales:

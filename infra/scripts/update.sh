@@ -136,6 +136,10 @@ readonly KQ_COMPOSE_PROJECT="kronoqr"
 readonly KQ_POLL_SECONDS=2
 readonly KQ_WAIT_DEPENDENCIES=180
 readonly KQ_WAIT_APPLICATION=180
+# Gracia de las sondas /api/v1/health y /api/v1/ready: el tiempo del
+# cortacircuitos de la aplicacion (10 s) y dos de margen. Ver kq_retry_probe.
+# shellcheck disable=SC2034  # la lee kq_retry_probe (lib/checks.sh), no este fichero.
+readonly KQ_READY_GRACE_SECONDS=12
 readonly KQ_WAIT_WORKERS=90
 # Matriz de versiones soportadas (doc 02 §11.6.5): la menor vigente y las DOS
 # anteriores.
@@ -864,6 +868,12 @@ app_probe() {
   PROBE_STATUS="$(printf '%s\n' "${raw}" | awk 'BEGIN{s=200} /^[Ss]tatus: [0-9]+/{s=$2} /^$/{exit} END{print s}')"
   PROBE_BODY="$(printf '%s\n' "${raw}" | awk 'body{print} /^$/{body=1}')"
   return 0
+}
+
+# app_probe con exito Y 200, como una sola orden para kq_retry_probe. Deja
+# PROBE_STATUS y PROBE_BODY del ultimo intento para el informe.
+app_probe_ok() {
+  app_probe "$1" && [ "${PROBE_STATUS}" = "200" ]
 }
 
 json_field() {
@@ -2308,7 +2318,7 @@ phase_start_and_verify() {
   compose_new exec -d -T postgres kronoqr-wal-migrate >>"$(detail_sink)" 2>&1 || true
 
   for path in /api/v1/health /api/v1/ready; do
-    if app_probe "${path}" && [ "${PROBE_STATUS}" = "200" ]; then
+    if kq_retry_probe "${path}" app_probe_ok "${path}"; then
       kq_msg check_ok "$(kq_format u_verify_probe_ok "${path}" "${PROBE_STATUS}")"
       remember_check "${path}" "$(kq_text u_report_ok)"
     else
@@ -2470,7 +2480,7 @@ phase_start_and_verify() {
   STEP5_EXPOSED=1
 
   for path in /api/v1/health /api/v1/ready; do
-    if body="$(edge_probe "${path}")"; then
+    if body="$(kq_retry_probe "${path}" edge_probe "${path}")"; then
       kq_msg check_ok "$(kq_format u_edge_probe_ok "${path}" "${TARGET_VERSION}")"
       remember_check "edge ${path}" "$(kq_text u_report_ok)"
     else
@@ -2643,7 +2653,7 @@ rollback_and_die() {
   compose_rollback exec -T app php artisan up >>"$(detail_sink)" 2>&1
   write_maintenance_metric 0 "${MAINTENANCE_SINCE}"
 
-  body="$(edge_probe /api/v1/health)" || {
+  body="$(kq_retry_probe /api/v1/health edge_probe /api/v1/health)" || {
     err "$(kq_format u_f_rollback_relaunch "${SOURCE_VERSION}")"
     rollback_incomplete "${reason}"
   }
@@ -2652,7 +2662,7 @@ rollback_and_die() {
     err "$(kq_format u_f_verify_version "${reported}" "${SOURCE_VERSION}")"
     rollback_incomplete "${reason}"
   }
-  edge_probe /api/v1/ready >/dev/null || {
+  kq_retry_probe /api/v1/ready edge_probe /api/v1/ready >/dev/null || {
     err "$(kq_format u_f_rollback_relaunch "${SOURCE_VERSION}")"
     rollback_incomplete "${reason}"
   }

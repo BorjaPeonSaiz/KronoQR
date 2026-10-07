@@ -761,6 +761,29 @@ final class ProblemDetails
     }
 
     /**
+     * La base de datos no responde (R3-CH-02): `503` con `Retry-After`.
+     *
+     * Mismo tipo que {@see self::serviceUnavailable()} —a quien lo recibe le
+     * toca lo mismo: no es culpa suya, reintentar mas tarde— y con
+     * `Retry-After`, que es el plazo del cortacircuitos: antes de ese momento
+     * el servidor ni siquiera volvera a intentar la conexion. El quiosco
+     * conserva el fichaje en su cola y lo reenvia (regla dura 19).
+     *
+     * **El detalle es fijo y no nombra nada**: ni base de datos, ni host, ni
+     * puerto. Quien administra lo ve en `database.circuit_opened` y en `/ready`.
+     */
+    public static function dependencyUnavailable(int $retryAfterSeconds): JsonResponse
+    {
+        return self::response(
+            self::TYPE_SERVICE_UNAVAILABLE,
+            'Servicio no disponible',
+            JsonResponse::HTTP_SERVICE_UNAVAILABLE,
+            'El servicio no esta disponible en este momento. Reintenta pasados unos segundos.',
+            headers: ['Retry-After' => (string) max(1, $retryAfterSeconds)],
+        );
+    }
+
+    /**
      * La instancia no esta lista para recibir trafico.
      *
      * **No acepta ningun detalle, y esa firma es el control**: el cuerpo es

@@ -9,3 +9,6 @@ schedule-*
 services.json
 # Fixtures de la prueba de carga k6: llevan tokens de dispositivo y payloads firmados.
 k6-fixtures.json
+# Estado de los cortacircuitos de Redis y PostgreSQL (R3-CH-01, R3-CH-02): por contenedor y desechable.
+*-circuit-open
+*-circuit-open.*.tmp

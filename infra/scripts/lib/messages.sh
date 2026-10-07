@@ -54,7 +54,9 @@ Opciones:
 Codigos de salida: 0 correcto · 1 uso incorrecto · 2 requisitos no cumplidos
 (nada escrito) · 3 hay una instalacion previa (nada escrito) · 4 fallo con
 vuelta atras completada · 5 fallo con vuelta atras INCOMPLETA · 6 verificacion
-posterior fallida. Tabla completa en docs/cliente/operacion.md."
+posterior fallida. Si se interrumpe (corte de SSH, Ctrl+C, kill) desde la fase 3,
+deshace lo hecho y sale con 4 o 5: por SSH, lanzalo dentro de tmux o screen.
+Tabla completa en docs/cliente/operacion.md."
 
 KQ_MSG_ES[phase_1]="Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada."
 KQ_MSG_ES[phase_2]="Fase 2 de 5 — buscando una instalacion previa."
@@ -203,6 +205,8 @@ KQ_MSG_ES[c_retention_dir]="No se ha podido crear %s"
 KQ_MSG_ES[f_retention_dir]="crealo como el usuario 1000 de la aplicacion: sudo -u '#1000' mkdir -m 0750 -- %s (y su directorio padre reports, con el mismo comando, si falta). No uses 'install -d' sobre una ruta dentro de BACKUP_PATH. Si ya existe como enlace simbolico no se sigue: retiralo y repite. No impide instalar: sin el, los informes de retencion no se guardan en el servidor, aunque la purga sigue dejando su asiento en el registro de auditoria."
 KQ_MSG_ES[f_secret_generation]="no se ha podido generar el secreto %s: se han obtenido %d caracteres y hacen falta al menos %d. Comprueba que openssl funciona ('openssl rand -base64 32') y que hay espacio en disco. El valor NO se ha escrito."
 KQ_MSG_ES[f_unexpected]="fallo inesperado en la linea %s del instalador. Es un defecto del producto: guarda esta salida completa y mandasela al fabricante."
+KQ_MSG_ES[f_interrupted]="instalacion interrumpida (senal %s): se corto la sesion SSH, alguien pulso Ctrl+C o se detuvo el proceso. Se deshace lo hecho para que puedas volver a ejecutar ./install.sh desde el principio. Si entras por SSH, lanzalo dentro de tmux o screen (por ejemplo: tmux new -s kronoqr) para que un corte de la conexion no lo interrumpa."
+KQ_MSG_ES[probe_waiting]="  %s todavia no responde: la aplicacion puede estar terminando de arrancar. Se reintenta durante %s segundos."
 KQ_MSG_ES[undo_env]="%s devuelto a como estaba antes de instalar"
 KQ_MSG_ES[undo_services]="servicios y volumenes creados por esta instalacion"
 KQ_MSG_ES[undo_backup_dir]="directorio de copias %s"
@@ -313,6 +317,8 @@ Options:
 Exit codes: 0 success · 1 wrong usage · 2 requirements not met (nothing
 written) · 3 previous installation found (nothing written) · 4 failure, rolled
 back · 5 failure, rollback INCOMPLETE · 6 post-install verification failed.
+If interrupted (SSH drop, Ctrl+C, kill) from phase 3 on, it undoes what it did
+and exits with 4 or 5: over SSH, launch it inside tmux or screen.
 Full table in docs/cliente/operacion.md."
 
 KQ_MSG_EN[phase_1]="Phase 1 of 5 — checking requirements. Nothing is written yet."
@@ -462,6 +468,8 @@ KQ_MSG_EN[c_retention_dir]="Could not create %s"
 KQ_MSG_EN[f_retention_dir]="create it as the application's user 1000: sudo -u '#1000' mkdir -m 0750 -- %s (and its parent directory reports, with the same command, if missing). Do not use 'install -d' on a path inside BACKUP_PATH. If it already exists as a symbolic link it is not followed: remove it and run again. It does not stop the install: without it, retention reports are not kept on the server, although the purge still leaves its entry in the audit log."
 KQ_MSG_EN[f_secret_generation]="could not generate the secret %s: %d characters were obtained and at least %d are needed. Check that openssl works ('openssl rand -base64 32') and that there is free disk space. The value was NOT written."
 KQ_MSG_EN[f_unexpected]="unexpected failure on line %s of the installer. This is a product defect: save this whole output and send it to the manufacturer."
+KQ_MSG_EN[f_interrupted]="installation interrupted (signal %s): the SSH session dropped, someone pressed Ctrl+C or the process was stopped. What was done is being undone so you can run ./install.sh again from the start. If you connect over SSH, launch it inside tmux or screen (for example: tmux new -s kronoqr) so a dropped connection does not interrupt it."
+KQ_MSG_EN[probe_waiting]="  %s does not respond yet: the application may still be finishing its start-up. Retrying for %s seconds."
 KQ_MSG_EN[undo_env]="%s restored to how it was before installing"
 KQ_MSG_EN[undo_services]="services and volumes created by this installation"
 KQ_MSG_EN[undo_backup_dir]="backup directory %s"

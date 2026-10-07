@@ -35,7 +35,7 @@ final readonly class TraceabilityReport
     private const array CADENCE = [
         'pest' => 'Pest, en cada push',
         'playwright' => 'Playwright, en cada push',
-        'k6' => 'k6, a mano y en cada etiqueta vX.0.0',
+        'k6' => 'k6, a mano y en cada etiqueta vX.Y.0',
     ];
 
     /**
@@ -51,7 +51,7 @@ final readonly class TraceabilityReport
     private const array EVERY_PUSH = ['pest', 'playwright'];
 
     /** El marcador corto de lo que no corre en cada push. */
-    private const array OFF_CADENCE = ['k6' => 'k6: a mano y en cada etiqueta vX.0.0'];
+    private const array OFF_CADENCE = ['k6' => 'k6: a mano y en cada etiqueta vX.Y.0'];
 
     /** El marcador de las pruebas que la CI omite siempre y que no cubren nada. */
     private const string NEVER_IN_CI = 'la CI la omite siempre: no cuenta como cobertura';
@@ -257,10 +257,10 @@ final readonly class TraceabilityReport
             '',
             '- **Pest, en cada push** — etapas ①–④ del pipeline (doc 02 §10.1).',
             '- **Playwright, en cada push** — etapa ⑦, E2E con cámara simulada.',
-            '- **k6, a mano y en cada etiqueta `vX.0.0`** — la prueba de carga dura minutos y necesita la',
+            '- **k6, a mano y en cada etiqueta `vX.Y.0`** — la prueba de carga dura minutos y necesita la',
             '  pila levantada, así que está fuera del pipeline de cada cambio (RQ-08, doc 02 §10.1). Una',
             '  entrada de k6 acredita que el umbral **se midió en la última versión mayor**, no que se',
-            '  esté verificando hoy. Se marca `(k6: a mano y en cada etiqueta vX.0.0)`.',
+            '  esté verificando hoy. Se marca `(k6: a mano y en cada etiqueta vX.Y.0)`.',
             '',
             '**Una entrada sin marcador se verifica en cada push.** Solo se anota lo que se aparta de ahí,',
             'que es lo único que hay que ver de un vistazo.',

@@ -60,6 +60,14 @@ use Tests\Architecture\Support\ModuleTree;
 const GENERATED_FILES_INVENTORY = [
     'config/branding.php' => ['storage_path:app/branding' => 'dev_only'],
     'config/cache.php' => ['storage_path:framework/cache/data' => 'disposable'],
+    // R3-CH-01: el estado del cortacircuitos de Redis. Por contenedor a
+    // proposito —cada uno aprende por si mismo que Redis no responde— y
+    // desechable: perderlo solo cuesta un intento de conexion.
+    'config/database.php' => [
+        'storage_path:framework/redis-circuit-open' => 'disposable',
+        // R3-CH-02: el del cortacircuitos de PostgreSQL, por el mismo motivo.
+        'storage_path:framework/database-circuit-open' => 'disposable',
+    ],
     'config/compliance.php' => [
         'storage_path:app/tmp/legal-exports' => 'shared',
         'storage_path:app/legal-exports' => 'shared',
