@@ -122,6 +122,17 @@ it('firma con la clave vigente al imprimir, no con la de la emision', function (
         ->and($printed->signedWithKey('b7'))->toBeTrue();
 })->group('RF-QR-07');
 
+it('una credencial impresa no esta firmada con otra clave que la suya', function (): void {
+    // RF-QR-08: el panel de rotacion cuenta las activas firmadas con la clave
+    // vieja para saber si ya se puede retirar. Si una credencial dijera que esta
+    // firmada con cualquier clave, la vieja no se retiraria nunca —o, al reves,
+    // se contarian como pendientes las ya reimpresas—. Mata M3: cambiar el `&&`
+    // de `signedWithKey` por `||` no hacia fallar ninguna prueba.
+    $printed = printedCredential(credentialKey('b7'));
+
+    expect($printed->signedWithKey('a3'))->toBeFalse();
+})->group('RF-QR-07', 'RF-QR-08');
+
 it('no se imprime dos veces', function (): void {
     // El nucleo de ADR-034: «reimprimir» solo puede significar acuñar otro token,
     // y eso mata la tarjeta que quiza ya esta en un bolsillo. Es tambien lo que
