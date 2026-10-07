@@ -39,6 +39,15 @@ $redisTimeouts = [
     'read_timeout' => (float) env('REDIS_READ_TIMEOUT', 2.0),
 ];
 
+/*
+ * CUANTO RECUERDA UN CORTACIRCUITOS QUE SU DEPENDENCIA ESTA CAIDA (R3-CH-01,
+ * R3-CH-02): 10 s de serie, `0` lo apaga, y nunca mas de 60 s. Ese techo es
+ * la mitad de la defensa contra un reloj que retrocede (la otra esta en
+ * `CircuitBreaker::isPlausible()`): un plazo de horas puesto por error dejaria
+ * la instalacion respondiendo `503` sin haber nada caido.
+ */
+$circuitSeconds = static fn (mixed $seconds): float => min(60.0, max(0.0, is_numeric($seconds) ? (float) $seconds : 10.0));
+
 return [
 
     /*
@@ -352,7 +361,7 @@ return [
      * de ese bloque como el nombre de una conexion.
      */
     'redis_circuit_breaker' => [
-        'seconds' => (float) env('REDIS_CIRCUIT_BREAKER_SECONDS', 10),
+        'seconds' => $circuitSeconds(env('REDIS_CIRCUIT_BREAKER_SECONDS', 10)),
         'state_file' => storage_path('framework/redis-circuit-open'),
     ],
 
@@ -374,7 +383,7 @@ return [
      * desactiva (la suite de pruebas lo desactiva por defecto).
      */
     'database_circuit_breaker' => [
-        'seconds' => (float) env('DB_CIRCUIT_BREAKER_SECONDS', 10),
+        'seconds' => $circuitSeconds(env('DB_CIRCUIT_BREAKER_SECONDS', 10)),
         'state_file' => storage_path('framework/database-circuit-open'),
     ],
 

@@ -36,6 +36,30 @@ final readonly class BoundedReachability
     /** `getent`'s exit code for "no such key": the name does not resolve. */
     private const int GETENT_NOT_FOUND = 2;
 
+    /**
+     * The same check on a Laravel connection array (`url`, or `host` and
+     * `port`), the one place the two connectors and `/ready` share.
+     *
+     * `true` when the array does not describe a TCP endpoint this check
+     * understands —a Unix socket, a read/write split, no array at all—: then
+     * the real driver decides, as it did before the check existed.
+     */
+    public function reachableConnection(mixed $connection, int $defaultPort, float $seconds): bool
+    {
+        $endpoint = \is_array($connection) ? Endpoint::fromConfig($connection, $defaultPort) : null;
+
+        return ! $endpoint instanceof Endpoint || $this->reachable($endpoint->host, $endpoint->port, $seconds);
+    }
+
+    /**
+     * A driver's connection timeout as a budget for this check: `$fallback`
+     * when it is missing, zero or not a number.
+     */
+    public static function budget(mixed $timeout, float $fallback): float
+    {
+        return is_numeric($timeout) && (float) $timeout > 0.0 ? (float) $timeout : $fallback;
+    }
+
     public function reachable(string $host, int $port, float $seconds): bool
     {
         $deadline = hrtime(true) + (int) ($seconds * 1e9);
@@ -73,6 +97,13 @@ final readonly class BoundedReachability
 
         if (filter_var($bare, FILTER_VALIDATE_IP) !== false) {
             return [$bare];
+        }
+
+        // A host name never starts with a dash, and `getent` would read one as
+        // an option. Not `getent ahosts -- name`: Alpine's `getent` takes `--`
+        // for the key itself and then resolves nothing.
+        if ($bare === '' || str_starts_with($bare, '-')) {
+            return [];
         }
 
         try {

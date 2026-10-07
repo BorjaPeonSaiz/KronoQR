@@ -149,3 +149,33 @@ it('una ruta de estado que no se puede escribir no rompe nada y recuerda en memo
 
     expect($breaker->state())->toBe(CircuitState::Open);
 })->group('RNF-D-03', 'RF-AT-10');
+
+it('no se fia de un fichero con un instante mas lejano que el plazo: lo trata como entreabierto', function (): void {
+    // El reloj de pared corregido hacia atras (un RTC adelantado que corrige
+    // NTP, una maquina virtual restaurada) deja en el fichero un instante de
+    // horas por delante. Fiarse de el seria responder que la dependencia esta
+    // caida durante horas, y reiniciar el contenedor no lo arreglaria.
+    $file = redisCircuitBreakerTestFile();
+    $clock = new MockClock('2026-10-07 09:00:00');
+    file_put_contents($file, \sprintf('%.6F', (float) $clock->now()->format('U.u') + 3 * 3600));
+
+    $breaker = redisCircuitBreakerTestBreaker($file, $clock, new RecordingLogger);
+
+    expect($breaker->state())->toBe(CircuitState::HalfOpen);
+
+    // Y el siguiente fallo escribe un instante sensato: un plazo, no tres horas.
+    $breaker->recordFailure(new RedisException('Connection refused'));
+    $clock->sleep(10.5);
+
+    expect($breaker->state())->toBe(CircuitState::HalfOpen);
+})->group('RNF-D-03', 'RF-AT-10');
+
+it('tampoco se fia de su propia memoria si el reloj retrocede despues de abrir', function (): void {
+    $clock = new MockClock('2026-10-07 09:00:00');
+    $breaker = redisCircuitBreakerTestBreaker('/proc/no-se-puede-escribir/aqui', $clock, new RecordingLogger);
+
+    $breaker->recordFailure(new RedisException('Connection refused'));
+    $clock->modify('-1 hour');
+
+    expect($breaker->state())->not->toBe(CircuitState::Open);
+})->group('RNF-D-03', 'RF-AT-10');

@@ -839,17 +839,27 @@ it('tiene una unica respuesta de rechazo de escaneo', function (): void {
     // Doc 02 §5.2, punto 6: todos los rechazos devuelven la misma respuesta.
     // Prefijo que no es FH1, clave desconocida, firma que no valida, credencial
     // revocada, empleado de baja: una sola forma para las cinco.
-    //
-    // El `503` (R3-CH-02) no es un rechazo ni dice nada de la credencial: sale
-    // antes de leerla, igual para cualquier tarjeta, cuando la base de datos no
-    // responde, y el quiosco conserva el fichaje para reenviarlo.
     expect(Contract::keys('paths', '/api/v1/scan', 'post', 'responses'))
-        ->toBe(['200', '400', '401', '403', '422', '429', '503'])
+        ->toBe(['200', '400', '401', '403', '422', '429'])
         ->and(Contract::value(
             'paths', '/api/v1/scan', 'post', 'responses', '422',
             'content', 'application/problem+json', 'schema',
         ))->toBe(['$ref' => '#/components/schemas/ScanRejected']);
 })->group('RS-03', 'RF-QR-02');
+
+it('describe como respuesta global el 503 de base de datos inalcanzable, con Retry-After y reenvio idempotente (R3-CH-02)', function (): void {
+    // No se declara ruta a ruta porque no depende de la ruta: lo produce el
+    // manejador de excepciones en cualquiera que necesite la base. Lo que el
+    // contrato tiene que decir es el tipo, la cabecera y que el reenvio es
+    // seguro aunque el fichaje pudiera haberse registrado (regla dura 8).
+    $descripcion = Contract::value('info', 'description');
+
+    expect($descripcion)->toBeString()
+        ->toContain('Base de datos inalcanzable')
+        ->toContain('urn:kronoqr:problem:service-unavailable')
+        ->toContain('Retry-After')
+        ->toContain('Puede que el fichaje se haya registrado o no');
+})->group('RQ-06', 'RNF-D-03');
 
 it('hace imposible que el rechazo describa su causa', function (): void {
     // Que sea imposible es el punto, y no que este bien escrito hoy. Todos los

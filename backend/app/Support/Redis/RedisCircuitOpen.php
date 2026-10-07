@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Redis;
 
 use RedisException;
+use Throwable;
 
 /**
  * Thrown instead of connecting while the Redis circuit is open (R3-CH-01).
@@ -23,5 +24,21 @@ final class RedisCircuitOpen extends RedisException
     public static function make(): self
     {
         return new self('Redis is marked as unavailable; not retrying the connection yet.');
+    }
+
+    /**
+     * Whether `$failure`, or anything in its `previous` chain, is this
+     * exception: the exception handler does not report those (the outage is
+     * already logged once, as `redis.circuit_opened`).
+     */
+    public static function isCauseOf(Throwable $failure): bool
+    {
+        for ($current = $failure; $current instanceof Throwable; $current = $current->getPrevious()) {
+            if ($current instanceof self) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

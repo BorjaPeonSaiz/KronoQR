@@ -93,7 +93,7 @@ final readonly class DependencyProbe
         // the PING fails at once, so checking reachability first would only add
         // up to the budget to every probe; when the check fails, the circuit
         // opens for the requests too.
-        if ($this->databaseBreaker->state() !== CircuitState::Open && ! $this->reaches($this->databaseEndpoint())) {
+        if ($this->databaseBreaker->state() !== CircuitState::Open && ! $this->databaseReachable()) {
             $this->databaseBreaker->recordFailure(new EndpointUnreachable);
 
             return new DependencyFailure('database', EndpointUnreachable::class);
@@ -105,7 +105,7 @@ final readonly class DependencyProbe
             return new DependencyFailure('database', (DatabaseUnavailable::foundIn($exception) ?? $exception)::class);
         }
 
-        if ($this->redisBreaker->state() !== CircuitState::Open && ! $this->reaches($this->redisEndpoint())) {
+        if ($this->redisBreaker->state() !== CircuitState::Open && ! $this->redisReachable()) {
             $this->redisBreaker->recordFailure(new EndpointUnreachable);
 
             return new DependencyFailure('redis', EndpointUnreachable::class);
@@ -120,36 +120,27 @@ final readonly class DependencyProbe
         return null;
     }
 
-    private function reaches(?Endpoint $endpoint): bool
-    {
-        if (! $endpoint instanceof Endpoint) {
-            return true;
-        }
-
-        return $this->reachability->reachable($endpoint->host, $endpoint->port, self::BUDGET_SECONDS);
-    }
-
     /**
-     * Host and port of the default database connection, or `null` when they
-     * cannot be told apart from the configuration —a read/write split, a Unix
-     * socket, a connection that does not exist—: then the real query decides,
-     * as it did before the budget existed.
+     * The default database connection: `null` when it does not exist, and then
+     * the real query decides.
      */
-    private function databaseEndpoint(): ?Endpoint
+    private function databaseReachable(): bool
     {
         $name = $this->config->get('database.default');
         $connection = \is_string($name) ? $this->config->get('database.connections.'.$name) : null;
 
-        return \is_array($connection) ? Endpoint::fromConfig($connection, 5432) : null;
+        return $this->reachability->reachableConnection($connection, Endpoint::POSTGRES_PORT, self::BUDGET_SECONDS);
     }
 
     /**
-     * Same for the default Redis connection, the one the PING below uses.
+     * The default Redis connection, the one the PING below uses.
      */
-    private function redisEndpoint(): ?Endpoint
+    private function redisReachable(): bool
     {
-        $connection = $this->config->get('database.redis.default');
-
-        return \is_array($connection) ? Endpoint::fromConfig($connection, 6379) : null;
+        return $this->reachability->reachableConnection(
+            $this->config->get('database.redis.default'),
+            Endpoint::REDIS_PORT,
+            self::BUDGET_SECONDS,
+        );
     }
 }

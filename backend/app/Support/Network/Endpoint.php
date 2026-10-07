@@ -15,6 +15,10 @@ namespace App\Support\Network;
  */
 final readonly class Endpoint
 {
+    public const int POSTGRES_PORT = 5432;
+
+    public const int REDIS_PORT = 6379;
+
     public function __construct(
         public string $host,
         public int $port,

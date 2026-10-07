@@ -57,9 +57,20 @@ final class DatabaseUnavailable extends PDOException
         'the database system is shutting down',
     ];
 
+    /**
+     * SQLSTATE `08006`, «connection failure», the class the driver itself
+     * reports for these errors. Without it the wrapping `QueryException` carries
+     * SQLSTATE `0`, and whoever classifies failures by SQLSTATE —`product:doctor`
+     * among them— reads an outage as a product defect.
+     */
+    public const string SQLSTATE = '08006';
+
     public function __construct(string $message, public readonly int $retryAfterSeconds)
     {
         parent::__construct($message);
+
+        $this->code = self::SQLSTATE;
+        $this->errorInfo = [self::SQLSTATE, null, null];
     }
 
     public static function circuitOpen(int $retryAfterSeconds): self

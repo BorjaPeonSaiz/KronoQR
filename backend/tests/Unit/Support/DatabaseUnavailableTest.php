@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Application\Port\ProbeFailureClassifier;
+use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
 use App\Support\Database\DatabaseCircuitBreaker;
 use App\Support\Database\DatabaseUnavailable;
 use App\Support\Resilience\CircuitState;
+use Illuminate\Database\QueryException;
 use Symfony\Component\Clock\MockClock;
 use Tests\Support\Observability\RecordingLogger;
 
@@ -47,7 +50,7 @@ it('se encuentra en la cadena de excepciones y no lleva host ni usuario (regla d
         ->and($fallo->retryAfterSeconds)->toBe(10)
         ->and($fallo->getPrevious())->toBeNull()
         ->and($fallo->getMessage())->not->toContain('postgres');
-})->group('RNF-D-03', 'RQ-06');
+})->group('RNF-D-03');
 
 it('el circuito de la base avisa con su propio nombre y da Retry-After redondeado hacia arriba', function (): void {
     $logger = new RecordingLogger;
@@ -67,3 +70,13 @@ it('el circuito de la base avisa con su propio nombre y da Retry-After redondead
         }
     }
 })->group('RNF-D-03');
+
+it('lleva el SQLSTATE de conexion y product:doctor lo clasifica como base de datos, no como fallo del producto (R3-CH-02)', function (): void {
+    // Sin SQLSTATE, el `QueryException` que la envuelve llevaba `0` y el doctor
+    // decia «fallo del producto, avisa a soporte» con PostgreSQL caido.
+    $consulta = new QueryException('pgsql', 'select 1', [], DatabaseUnavailable::circuitOpen(10));
+
+    expect($consulta->getCode())->toBe('08006')
+        ->and($consulta->errorInfo[0] ?? null)->toBe('08006')
+        ->and((new ConnectionProbeFailureClassifier)->unavailableService($consulta))->toBe(ProbeFailureClassifier::DATABASE);
+})->group('RNF-D-03', 'RF-PD-13');

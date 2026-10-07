@@ -46,8 +46,6 @@ use PDOException;
  */
 class CircuitBreakingPostgresConnector extends PostgresConnector
 {
-    private const int DEFAULT_PORT = 5432;
-
     /** Budget of the half-open check when the connection sets no timeout. */
     private const float DEFAULT_PROBE_SECONDS = 2.0;
 
@@ -118,24 +116,12 @@ class CircuitBreakingPostgresConnector extends PostgresConnector
      */
     private function looksReachable(array $config): bool
     {
-        $endpoint = Endpoint::fromConfig($config, self::DEFAULT_PORT);
-
-        // A Unix socket or a read/write split: let the real attempt decide.
-        if (! $endpoint instanceof Endpoint) {
-            return true;
-        }
-
-        return $this->reachability->reachable($endpoint->host, $endpoint->port, $this->probeSeconds($config));
-    }
-
-    /**
-     * @param  array<string, mixed>  $config
-     */
-    private function probeSeconds(array $config): float
-    {
         $options = $config['options'] ?? [];
-        $timeout = \is_array($options) ? ($options[PDO::ATTR_TIMEOUT] ?? null) : null;
 
-        return is_numeric($timeout) && (float) $timeout > 0.0 ? (float) $timeout : self::DEFAULT_PROBE_SECONDS;
+        return $this->reachability->reachableConnection(
+            $config,
+            Endpoint::POSTGRES_PORT,
+            BoundedReachability::budget(\is_array($options) ? ($options[PDO::ATTR_TIMEOUT] ?? null) : null, self::DEFAULT_PROBE_SECONDS),
+        );
     }
 }

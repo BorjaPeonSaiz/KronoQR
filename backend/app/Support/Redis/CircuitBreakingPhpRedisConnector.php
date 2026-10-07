@@ -35,8 +35,6 @@ class CircuitBreakingPhpRedisConnector extends PhpRedisConnector
     /** Budget of the half-open check when the connection sets no timeout. */
     private const float DEFAULT_PROBE_SECONDS = 1.0;
 
-    private const int DEFAULT_PORT = 6379;
-
     public function __construct(
         private readonly RedisCircuitBreaker $breaker,
         private readonly BoundedReachability $reachability,
@@ -93,24 +91,10 @@ class CircuitBreakingPhpRedisConnector extends PhpRedisConnector
     private function looksReachable(array $config): bool
     {
         // The framework has already resolved `url` into `host` and `port` here.
-        $endpoint = Endpoint::fromConfig($config, self::DEFAULT_PORT);
-
-        // A Unix socket, or something this check does not understand: let the
-        // real attempt decide, as the framework would.
-        if (! $endpoint instanceof Endpoint) {
-            return true;
-        }
-
-        return $this->reachability->reachable($endpoint->host, $endpoint->port, $this->probeSeconds($config));
-    }
-
-    /**
-     * @param  array<string, mixed>  $config
-     */
-    private function probeSeconds(array $config): float
-    {
-        $timeout = $config['timeout'] ?? null;
-
-        return is_numeric($timeout) && (float) $timeout > 0.0 ? (float) $timeout : self::DEFAULT_PROBE_SECONDS;
+        return $this->reachability->reachableConnection(
+            $config,
+            Endpoint::REDIS_PORT,
+            BoundedReachability::budget($config['timeout'] ?? null, self::DEFAULT_PROBE_SECONDS),
+        );
     }
 }

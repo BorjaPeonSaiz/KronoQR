@@ -32,6 +32,14 @@ final readonly class ConnectionProbeFailureClassifier implements ProbeFailureCla
                 return self::REDIS;
             }
 
+            // The circuit breaker's own exception (R3-CH-02) carries SQLSTATE
+            // `08006` and would match below; named as well so that a change of
+            // code there cannot turn an outage into "a product defect". By name,
+            // like Predis: this module does not depend on `App\Support`.
+            if (is_a($current, 'App\Support\Database\DatabaseUnavailable')) {
+                return self::DATABASE;
+            }
+
             if ($current instanceof PDOException && str_starts_with(self::sqlState($current), '08')) {
                 return self::DATABASE;
             }

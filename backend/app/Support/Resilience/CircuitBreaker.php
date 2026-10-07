@@ -98,7 +98,7 @@ abstract class CircuitBreaker
 
         $now = $this->now();
 
-        if ($this->openUntil > $now) {
+        if ($this->openUntil > $now && $this->isPlausible($this->openUntil, $now)) {
             return CircuitState::Open;
         }
 
@@ -112,7 +112,24 @@ abstract class CircuitBreaker
 
         $this->openUntil = $persisted;
 
-        return $persisted > $now ? CircuitState::Open : CircuitState::HalfOpen;
+        return $persisted > $now && $this->isPlausible($persisted, $now) ? CircuitState::Open : CircuitState::HalfOpen;
+    }
+
+    /**
+     * Whether an "open until" instant could have been written by this breaker:
+     * no further ahead than one TTL.
+     *
+     * An instant further ahead means the wall clock went BACK after it was
+     * written —a fast hardware clock corrected by NTP, a VM restored from a
+     * snapshot— or that the file was not written by us. Trusting it would keep
+     * the dependency "down" for as long as the clock moved, and restarting the
+     * container would not help: the file survives it. It counts as half-open
+     * instead, so the next attempt runs the bounded check and either closes the
+     * circuit or writes a sane instant.
+     */
+    private function isPlausible(float $openUntil, float $now): bool
+    {
+        return $openUntil - $now <= $this->openSeconds;
     }
 
     public function recordFailure(Throwable $failure): void
