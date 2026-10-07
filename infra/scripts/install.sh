@@ -109,6 +109,7 @@ readonly KQ_WAIT_DEPENDENCIES=180
 readonly KQ_WAIT_APPLICATION=180
 # Gracia de las sondas /api/v1/health y /api/v1/ready: el tiempo del
 # cortacircuitos de la aplicacion (10 s) y dos de margen. Ver kq_retry_probe.
+# shellcheck disable=SC2034  # la lee kq_retry_probe (lib/checks.sh), no este fichero.
 readonly KQ_READY_GRACE_SECONDS=12
 
 # El uid con el que corre el borde HTTP dentro del contenedor
