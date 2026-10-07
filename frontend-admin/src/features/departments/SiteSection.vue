@@ -71,6 +71,7 @@ async function saved(name: string): Promise<void> {
     <NameChangeDialog
       v-if="renaming && site !== undefined"
       :title="t('site.renameTitle')"
+      :failed-announcement="t('site.announce.failed')"
       :field-label="t('site.name')"
       :current-name="site.name"
       :save="save"

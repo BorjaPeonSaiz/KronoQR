@@ -28,6 +28,9 @@ import type { LivePresenceQuery } from './live.api'
 import { RealtimeClient } from './realtime/pusherClient'
 import type { RealtimeState, SocketFactory } from './realtime/pusherClient'
 
+/** Techo del reintento de la foto en tiempo real. */
+const MAX_RETRY_DELAY_MS = 60_000
+
 /** Por que via se mantiene la foto al dia. `idle` = todavia no se ha pedido. */
 export type PresenceTransport = 'idle' | 'realtime' | 'polling'
 
@@ -98,6 +101,11 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
 
   let client: RealtimeClient | null = null
   let pollTimer: ReturnType<typeof setTimeout> | undefined
+  /** Reintento de la foto tras un fallo con el canal vivo: en tiempo real nadie sondea, y sin esto el aviso se quedaria pegado. */
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  let retryAttempts = 0
+  /** La instancia del canal cuyos cambios de estado cuentan; un cierre intencionado la anula. */
+  let activeChannel: symbol | null = null
   /** Ultimo `occurred_at` aplicado por persona, para descartar mensajes reordenados. */
   const latestByEmployee = new Map<string, string>()
 
@@ -126,6 +134,23 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     latestByEmployee.clear()
   }
 
+  function clearRetry(): void {
+    clearTimeout(retryTimer)
+    retryTimer = undefined
+    retryAttempts = 0
+  }
+
+  /** Backoff acotado: el intervalo de sondeo, duplicado en cada intento, hasta un minuto. */
+  function scheduleRetry(): void {
+    clearTimeout(retryTimer)
+    const delay = Math.min(pollIntervalMs.value * 2 ** retryAttempts, MAX_RETRY_DELAY_MS)
+
+    retryAttempts += 1
+    retryTimer = setTimeout(() => {
+      void load()
+    }, delay)
+  }
+
   async function load(kind: PresenceFailureKind = 'poll'): Promise<void> {
     loading.value = entries.value.length === 0 && meta.value === null
     error.value = null
@@ -134,9 +159,13 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
       const board = await listLivePresence(filters.value)
 
       applyBoard(board.data, board.meta)
+      clearRetry()
     } catch (caught) {
       error.value = caught
       refreshFailure.value = { kind, error: caught }
+      if (transport.value === 'realtime') {
+        scheduleRetry()
+      }
     } finally {
       loading.value = false
     }
@@ -213,11 +242,13 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
   }
 
   function startPolling(): void {
+    clearRetry()
     transport.value = 'polling'
     schedulePoll()
   }
 
   function stopRealtime(): void {
+    activeChannel = null
     client?.close()
     client = null
     realtimeState.value = 'down'
@@ -235,6 +266,9 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     const realtime = current.realtime
 
     stopRealtime()
+    const channel = Symbol('presence-channel')
+
+    activeChannel = channel
     client = new RealtimeClient({
       key: realtime.key ?? '',
       path: realtime.path,
@@ -249,9 +283,16 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
         }
       },
       onStateChange: (state) => {
+        if (activeChannel !== channel) {
+          return
+        }
+
         realtimeState.value = state
+        // Sin canales (un responsable sin departamentos) no hay nada que reconectar.
+        const hasChannels = realtime.channels.length > 0
+
         realtimeFailed.value =
-          state === 'down' ? true : state === 'live' ? false : realtimeFailed.value
+          state === 'down' ? hasChannels : state === 'live' ? false : realtimeFailed.value
 
         if (state === 'live') {
           // Lo que haya pasado mientras el canal estaba caido no ha llegado por
@@ -294,9 +335,10 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
 
   /** Cierra canal y sondeo. Al salir de la pantalla. */
   function disconnect(): void {
-    realtimeFailed.value = false
     stopPolling()
+    clearRetry()
     stopRealtime()
+    realtimeFailed.value = false
     transport.value = 'idle'
   }
 

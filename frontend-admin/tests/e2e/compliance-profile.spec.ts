@@ -8,7 +8,7 @@
 // un rol sin `settings:*` no ve la entrada ni puede llegar a la pantalla.
 import { expect, test } from '@playwright/test'
 import { logInAsAdmin, logInAsManager, stubManagementApi } from './support/admin'
-import { confirmChanges } from './support/confirm'
+import { cancelChanges, confirmChanges } from './support/confirm'
 
 test(
   'un responsable de departamento no ve «Cumplimiento» en la navegacion, ni puede llegar a la pantalla',
@@ -119,7 +119,7 @@ test(
     await expect(preview).toBeVisible()
     await expect(preview.locator('tbody tr')).toHaveCount(1)
 
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancelar' }).click()
+    await cancelChanges(page)
     await expect(preview).toHaveCount(0)
     await expect(page.getByTestId('saved')).toHaveCount(0)
     await expect(page.getByTestId('min-rest-hours')).toHaveValue('10')

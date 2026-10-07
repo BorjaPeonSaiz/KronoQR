@@ -44,7 +44,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ATTENDANCE_CORRECT } from '@/features/auth/abilities'
+import { ATTENDANCE_CORRECT, EMPLOYEES_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import { getEmployee } from '@/features/employees/employees.api'
 import type { CorrectedShiftEntry, WorkDayShiftEntry } from '@/shared/api/types'
@@ -62,6 +62,9 @@ const session = useSessionStore()
 const queryClient = useQueryClient()
 
 const canCorrect = computed(() => session.can(ATTENDANCE_CORRECT))
+
+/** La ficha exige `employees:*`; quien solo llega desde la presencia (responsable) vuelve a ella. */
+const canOpenEmployee = computed(() => session.can(EMPLOYEES_MANAGE))
 
 /** Lo que hay abierto: nada, o el dialogo de una de las tres operaciones de RF-PA-04. */
 type DialogState =
@@ -228,10 +231,11 @@ watch(data, (value) => {
 <template>
   <section>
     <RouterLink
-      :to="{ name: 'employee', params: { uuid } }"
+      :to="canOpenEmployee ? { name: 'employee', params: { uuid } } : { name: 'live' }"
       class="text-kq-primary-strong underline"
+      data-test="back-link"
     >
-      {{ t('workdays.backToEmployee') }}
+      {{ t(canOpenEmployee ? 'workdays.backToEmployee' : 'workdays.backToLive') }}
     </RouterLink>
 
     <header class="mt-4 flex flex-wrap items-start justify-between gap-4">

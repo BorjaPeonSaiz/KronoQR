@@ -41,6 +41,7 @@ const { t } = useI18n()
     <template #actions>
       <button
         type="button"
+        data-test="confirm-dialog-cancel"
         class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
         @click="emit('cancel')"
       >
@@ -48,6 +49,7 @@ const { t } = useI18n()
       </button>
       <button
         type="button"
+        data-test="confirm-dialog-confirm"
         :disabled="busy || confirmDisabled"
         :aria-busy="busy"
         class="rounded-kq-sm px-4 py-2 font-semibold disabled:opacity-60"

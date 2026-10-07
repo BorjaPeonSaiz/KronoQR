@@ -1180,6 +1180,7 @@
     "fromEmployee": "Las horas registradas de esta persona, día a día, con el historial de correcciones de cada jornada. Consultarlo no cambia nada del registro.",
     "linkFromEmployee": "Ver el registro horario de esta persona",
     "backToEmployee": "Volver a la ficha de la persona",
+    "backToLive": "Volver a la presencia",
     "loading": "Cargando el registro horario…",
     "zoneNotice": "Las horas se muestran en la zona horaria del centro donde se fichó, no en la del ordenador desde el que miras.",
     "auditNotice": "Consultar el registro de otra persona queda anotado en la auditoría, con quién ha mirado, de quién y qué periodo.",
@@ -1279,7 +1280,6 @@
     "counts": {
       "present": "Dentro ahora",
       "absent": "Fuera ahora",
-      "snapshot": "Foto del servidor",
       "lastUpdate": "Última actualización",
       "snapshotAt": "{moment} ({zone})"
     },
@@ -1521,8 +1521,7 @@
       "title": "Confirmar los cambios del perfil de cumplimiento",
       "explanation": "Revisa qué umbrales van a cambiar y desde qué valor. Rige desde ahora, sin retroactividad, y queda registrado en el trail de auditoría.",
       "caption": "Campos del perfil de cumplimiento que cambian, con su valor actual y el nuevo",
-      "confirm": "Confirmar y guardar",
-      "empty": "(vacío)"
+      "confirm": "Confirmar y guardar"
     },
     "save": "Guardar el perfil",
     "saving": "Guardando…",
@@ -1830,7 +1829,6 @@
       "explanation": "Revisa qué ajustes van a cambiar y desde qué valor. El cambio queda registrado en el trail de auditoría.",
       "caption": "Ajustes operativos que cambian, con su valor actual y el nuevo",
       "confirm": "Confirmar y guardar",
-      "empty": "(vacío)",
       "set": "Definido (no se muestra)",
       "notSet": "Sin definir"
     },
@@ -2514,7 +2512,8 @@
     "rename": "Renombrar centro",
     "renameTitle": "Renombrar el centro",
     "announce": {
-      "saved": "Centro renombrado como {name}."
+      "saved": "Centro renombrado como {name}.",
+      "failed": "No se ha cambiado el nombre del centro."
     }
   }
 }

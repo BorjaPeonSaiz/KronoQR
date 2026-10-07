@@ -394,6 +394,7 @@ const selectClass =
     <NameChangeDialog
       v-if="renaming !== null"
       :title="t('departments.rename.title', { name: renaming.name })"
+      :failed-announcement="t('departments.announce.renameFailed')"
       :field-label="t('departments.rename.field')"
       :current-name="renaming.name"
       :save="saveRename"

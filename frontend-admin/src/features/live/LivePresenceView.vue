@@ -91,12 +91,6 @@ const noticeKind = computed<'filter' | 'poll' | 'realtime' | null>(() => {
   return store.realtimeFailed ? 'realtime' : null
 })
 
-watch(noticeKind, (kind) => {
-  if (kind !== null) {
-    announce(t(`live.notice.${kind}`, { moment: generatedAtLabel.value, zone: store.timeZone }))
-  }
-})
-
 function submitFilters(): void {
   void store.applyFilters({
     status: statusFilter.value,

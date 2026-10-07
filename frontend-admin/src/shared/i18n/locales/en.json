@@ -1180,6 +1180,7 @@
     "fromEmployee": "The hours recorded for this person, day by day, with the amendment history of each day. Reading it changes nothing in the record.",
     "linkFromEmployee": "View this person's time record",
     "backToEmployee": "Back to the person's record",
+    "backToLive": "Back to live presence",
     "loading": "Loading the time record…",
     "zoneNotice": "Times are shown in the time zone of the site where the person clocked in, not in the one of the computer you are looking from.",
     "auditNotice": "Reading someone else's time record is written to the audit log, with who looked, at whom and for what period.",
@@ -1279,7 +1280,6 @@
     "counts": {
       "present": "In now",
       "absent": "Out now",
-      "snapshot": "Server snapshot",
       "lastUpdate": "Last update",
       "snapshotAt": "{moment} ({zone})"
     },
@@ -1521,8 +1521,7 @@
       "title": "Confirm the compliance profile changes",
       "explanation": "Review which thresholds will change and from which value. It applies from now on, with no retroactivity, and is recorded in the audit trail.",
       "caption": "Compliance profile fields that change, with their current and new value",
-      "confirm": "Confirm and save",
-      "empty": "(empty)"
+      "confirm": "Confirm and save"
     },
     "save": "Save profile",
     "saving": "Saving…",
@@ -1830,7 +1829,6 @@
       "explanation": "Review which settings will change and from which value. The change is recorded in the audit trail.",
       "caption": "Operational settings that change, with their current and new value",
       "confirm": "Confirm and save",
-      "empty": "(empty)",
       "set": "Set (not shown)",
       "notSet": "Not set"
     },
@@ -2514,7 +2512,8 @@
     "rename": "Rename site",
     "renameTitle": "Rename the site",
     "announce": {
-      "saved": "Site renamed to {name}."
+      "saved": "Site renamed to {name}.",
+      "failed": "The site name was not changed."
     }
   }
 }

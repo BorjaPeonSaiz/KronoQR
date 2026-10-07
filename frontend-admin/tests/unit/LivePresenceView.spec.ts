@@ -1,5 +1,4 @@
 // Pantalla de presencia en vivo (RF-PA-01, RF-PA-02, RNF-D-03).
-import { announcement } from '@kronoqr/web-kit/announcer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import { useLivePresenceStore } from '@/features/live/presence.store'
@@ -142,8 +141,20 @@ describe('LivePresenceView', () => {
     expect(router.currentRoute.value.name).toBe('live')
   })
 
+  function signInAs(role: string, abilities: string[]): ReturnType<typeof createTestPinia> {
+    const pinia = createTestPinia()
+    const session = useSessionStore(pinia)
+    session.token = 'token'
+    session.status = 'authenticated'
+    session.user = managementUser({ roles: [role as never], abilities })
+
+    return pinia
+  }
+
   it('cada fila enlaza al detalle de jornada de esa persona en el dia de su entrada, en la zona del centro', async () => {
-    const wrapper = await mountView(LivePresenceView)
+    const wrapper = await mountView(LivePresenceView, {
+      pinia: signInAs('rrhh', ['attendance:read', 'employees:*']),
+    })
     await settle()
 
     const link = wrapper.find('[data-test="entry-workdays-link"]')
@@ -159,14 +170,28 @@ describe('LivePresenceView', () => {
   })
 
   it.each([
-    ['responsable_departamento', ['attendance:read', 'attendance:correct', 'employees:read']],
-    ['auditor', ['attendance:read', 'reports:legal']],
-  ])('%s llega desde la presencia al detalle de jornada', async (role, abilities) => {
-    const pinia = createTestPinia()
-    const session = useSessionStore(pinia)
-    session.token = 'token'
-    session.status = 'authenticated'
-    session.user = managementUser({ roles: [role as never], abilities })
+    ['admin', true],
+    ['rrhh', true],
+    ['responsable_departamento', true],
+    ['auditor', false],
+  ])('%s: el enlace a la jornada se muestra = %s', async (role, shown) => {
+    const wrapper = await mountView(LivePresenceView, {
+      pinia: signInAs(role, ['attendance:read']),
+    })
+    await settle()
+
+    expect(wrapper.find('[data-test="entry-workdays-link"]').exists()).toBe(shown)
+    expect(wrapper.find('[data-test="entry-name"]').text()).toBe('Youssef Amrani')
+
+    wrapper.unmount()
+  })
+
+  it('un responsable de departamento llega a la ruta del detalle de jornada', async () => {
+    signInAs('responsable_departamento', [
+      'attendance:read',
+      'attendance:correct',
+      'employees:read',
+    ])
     const router = createTestRouter()
     registerAuthGuard(router)
 
@@ -212,8 +237,8 @@ describe('LivePresenceView', () => {
       const notice = wrapper.find('[data-test="refresh-notice"]')
 
       expect(notice.attributes('data-kind')).toBe('poll')
-      expect(announcement.value).toBe(notice.text())
-      expect(announcement.value).toBe(
+      expect(notice.attributes('role')).toBe('status')
+      expect(notice.text()).toBe(
         es.live.notice.poll
           .replace('{moment}', '14/3/26, 10:12')
           .replace('{zone}', 'Europe/Madrid'),
@@ -243,8 +268,12 @@ describe('LivePresenceView', () => {
       await settle()
 
       expect(wrapper.find('[data-test="refresh-notice"]').attributes('data-kind')).toBe('filter')
-      expect(announcement.value).toBe(wrapper.find('[data-test="refresh-notice"]').text())
-      expect(announcement.value).not.toContain('live.notice')
+      expect(wrapper.find('[data-test="refresh-notice"]').attributes('role')).toBe('status')
+      expect(wrapper.find('[data-test="refresh-notice"]').text()).toBe(
+        es.live.notice.filter
+          .replace('{moment}', '14/3/26, 10:12')
+          .replace('{zone}', 'Europe/Madrid'),
+      )
       expect(wrapper.find('[data-test="presence-entry"]').exists()).toBe(true)
 
       wrapper.unmount()
@@ -259,8 +288,12 @@ describe('LivePresenceView', () => {
       await settle()
 
       expect(wrapper.find('[data-test="refresh-notice"]').attributes('data-kind')).toBe('realtime')
-      expect(announcement.value).toBe(wrapper.find('[data-test="refresh-notice"]').text())
-      expect(announcement.value).not.toContain('live.notice')
+      expect(wrapper.find('[data-test="refresh-notice"]').attributes('role')).toBe('status')
+      expect(wrapper.find('[data-test="refresh-notice"]').text()).toBe(
+        es.live.notice.realtime
+          .replace('{moment}', '14/3/26, 10:12')
+          .replace('{zone}', 'Europe/Madrid'),
+      )
 
       store.realtimeFailed = false
       await settle()
@@ -268,6 +301,38 @@ describe('LivePresenceView', () => {
       expect(wrapper.find('[data-test="refresh-notice"]').exists()).toBe(false)
 
       wrapper.unmount()
+    })
+
+    it('en tiempo real un fallo de la foto se reintenta solo y el aviso se retira al recuperarse', async () => {
+      vi.useFakeTimers()
+
+      try {
+        const store = useLivePresenceStore(createTestPinia())
+
+        await store.load()
+        store.transport = 'realtime'
+
+        failing = true
+        await store.load()
+
+        expect(store.refreshFailure?.kind).toBe('poll')
+
+        failing = false
+        await vi.advanceTimersByTimeAsync(15_000)
+
+        expect(store.refreshFailure).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('cerrar la pantalla no deja el canal marcado como caido', async () => {
+      const store = useLivePresenceStore(createTestPinia())
+
+      store.realtimeFailed = true
+      store.disconnect()
+
+      expect(store.realtimeFailed).toBe(false)
     })
   })
 })

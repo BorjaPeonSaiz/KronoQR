@@ -323,10 +323,10 @@ function cancelConfirmation(): void {
 
 function describe(value: number | string | string[] | undefined): string {
   if (Array.isArray(value)) {
-    return value.length === 0 ? t('compliance.preview.empty') : value.join(', ')
+    return value.length === 0 ? t('common.empty') : value.join(', ')
   }
 
-  return value === undefined || value === '' ? t('compliance.preview.empty') : String(value)
+  return value === undefined || value === '' ? t('common.empty') : String(value)
 }
 
 /** Solo los campos que cambian: etiqueta, valor actual y valor nuevo. */

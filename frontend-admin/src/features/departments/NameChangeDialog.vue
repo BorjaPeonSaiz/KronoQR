@@ -20,6 +20,8 @@ const props = defineProps<{
   title: string
   fieldLabel: string
   currentName: string
+  /** Lo que se anuncia si la peticion falla: depende de que se renombra (departamento, centro). */
+  failedAnnouncement: string
   /** Hace la peticion; lanza si falla. */
   save: (name: string) => Promise<void>
 }>()
@@ -62,7 +64,7 @@ async function confirm(): Promise<void> {
     emit('saved', trimmed.value)
   } catch (caught) {
     error.value = caught
-    announce(t('departments.announce.renameFailed'))
+    announce(props.failedAnnouncement)
   } finally {
     submitting.value = false
   }

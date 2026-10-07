@@ -4269,6 +4269,14 @@ export async function stubManagementApi(
           return
         }
         case `GET /api/v1/employees/${EMPLOYEE_UUID}/workdays`:
+          // `WorkDayJournalPolicy::readers()`: admin, rrhh y responsable. El auditor no
+          // lee el detalle de jornada (decision pendiente del propietario): 403 como el servidor.
+          if (currentUser.roles.includes('auditor')) {
+            await problem(route, 403, 'urn:kronoqr:problem:forbidden', 'Sin permiso')
+
+            return
+          }
+
           await json(route, 200, workdaysState)
           return
         case 'POST /api/v1/shift-entries': {

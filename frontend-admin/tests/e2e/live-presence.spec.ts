@@ -305,27 +305,42 @@ test(
   },
 )
 
-// R3-PA-05 (doc 05 §3.2): responsable y auditor llegan al detalle de jornada
-// desde la fila de la presencia, en el dia de la entrada en la zona del centro.
-for (const role of ['manager', 'auditor'] as const) {
-  test(
-    `${role}: el nombre de la fila lleva al detalle de jornada de esa persona`,
-    { tag: ['@RF-PA-01', '@RF-PA-03'] },
-    async ({ context, page }) => {
-      await fakeReverb(context)
-      await stubManagementApi(page, { role })
-      await (role === 'manager' ? logInAsManager(page) : logInAsAuditor(page))
-      await page.goto('/live')
+// R3-PA-05 (doc 05 §3.2): el responsable llega al detalle de jornada desde la
+// fila de la presencia, en el dia de la entrada en la zona del centro. El
+// auditor NO lo lee (WorkDayJournalPolicy::readers(), decision pendiente del
+// propietario): no se le ofrece un enlace que acabaria en 403.
+test(
+  'el responsable abre desde la fila de presencia el detalle de jornada de esa persona',
+  { tag: ['@RF-PA-01', '@RF-PA-03'] },
+  async ({ context, page }) => {
+    await fakeReverb(context)
+    await stubManagementApi(page, { role: 'manager' })
+    await logInAsManager(page)
+    await page.goto('/live')
 
-      await page.getByTestId('entry-workdays-link').first().click()
+    await page.getByTestId('entry-workdays-link').first().click()
 
-      await expect(page).toHaveURL(
-        new RegExp(`/employees/${LIVE_ENTRY.employee_uuid}/workdays\?from=[\d-]+&to=[\d-]+$`),
-      )
-      await expect(page).not.toHaveURL(/\/forbidden/)
-    },
-  )
-}
+    await expect(page).toHaveURL(
+      new RegExp(`/employees/${LIVE_ENTRY.employee_uuid}/workdays[?]from=[0-9-]+&to=[0-9-]+$`),
+    )
+    await expect(page.getByTestId('person')).toBeVisible()
+    await expect(page.getByTestId('back-link')).toContainText('Volver a la presencia')
+  },
+)
+
+test(
+  'el auditor ve la presencia pero no se le ofrece el enlace a la jornada',
+  { tag: ['@RF-PA-01', '@regla-dura-18'] },
+  async ({ context, page }) => {
+    await fakeReverb(context)
+    await stubManagementApi(page, { role: 'auditor' })
+    await logInAsAuditor(page)
+    await page.goto('/live')
+
+    await expect(page.getByTestId('presence-entry').first()).toBeVisible()
+    await expect(page.getByTestId('entry-workdays-link')).toHaveCount(0)
+  },
+)
 
 // R2-PA-01, R3-PA-01, R3-PA-02: con datos ya en pantalla, un fallo se avisa sin
 // tapar la lista, y el aviso se retira al recuperarse.

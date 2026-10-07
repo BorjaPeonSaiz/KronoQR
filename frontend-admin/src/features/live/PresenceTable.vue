@@ -15,6 +15,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
+import { useSessionStore } from '@/features/auth/session.store'
 import type { LivePresenceEntry } from '@/shared/api/types'
 
 const props = defineProps<{
@@ -29,6 +30,19 @@ const VIRTUALIZE_FROM = 80
 const ROW_HEIGHT_PX = 52
 
 const { t, locale } = useI18n()
+const session = useSessionStore()
+
+/**
+ * `WorkDayJournalPolicy::readers()`: administracion, RRHH y responsable de
+ * departamento. El auditor NO lee el detalle de jornada (decision pendiente del
+ * propietario): un enlace que acaba en 403 crea frustracion, no la evita. La
+ * autorizacion real es del servidor.
+ */
+const canReadWorkDays = computed(() =>
+  session.roles.some(
+    (role) => role === 'admin' || role === 'rrhh' || role === 'responsable_departamento',
+  ),
+)
 
 const scroller = ref<HTMLElement | null>(null)
 
@@ -201,6 +215,7 @@ function originLabel(entry: LivePresenceEntry): string {
         >
           <span role="cell" class="truncate font-medium" data-test="entry-name">
             <RouterLink
+              v-if="canReadWorkDays"
               :to="workdaysLink(row.entry)"
               class="underline decoration-kq-border-strong underline-offset-2"
               data-test="entry-workdays-link"
@@ -208,6 +223,7 @@ function originLabel(entry: LivePresenceEntry): string {
             >
               {{ row.entry.full_name }}
             </RouterLink>
+            <template v-else>{{ row.entry.full_name }}</template>
           </span>
           <span role="cell" class="truncate text-kq-text-muted">
             {{ row.entry.department?.name ?? t('live.table.noDepartment') }}
