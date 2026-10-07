@@ -1629,9 +1629,15 @@ jobs:
               en_fase_4=1
               break
             fi
-            if ! kill -0 "${lanzador}" 2>/dev/null; then
-              break
-            fi
+            # Vivo o no, por `ps` y no por `kill -0`: el lanzador es `sudo`, y
+            # segun la version de la imagen del runner su uid real ya es root y
+            # `kill -0` devuelve EPERM aunque siga vivo. Asi fallo el 07-10-2026
+            # (imagen 20260901): el bucle se rendia en la primera vuelta y el
+            # instalador terminaba entero sin senal. Un zombi (`Z`) ya salio.
+            estado="$(ps -o stat= -p "${lanzador}" 2>/dev/null || true)"
+            case "${estado}" in
+              '' | Z*) break ;;
+            esac
             sleep 1
           done
           if [ "${en_fase_4}" -ne 1 ]; then
