@@ -124,7 +124,7 @@ cleanup() {
     dc start redis >&2 || printf 'No se pudo arrancar redis: ejecuta docker compose start redis a mano.\n' >&2
   fi
   if [ "${SEEDED}" = 1 ]; then
-    dc exec -T -e K6_ACKNOWLEDGE_TEST_DATABASE=yes app sh -c \
+    dc exec -T -e APP_ENV=staging -e K6_ACKNOWLEDGE_TEST_DATABASE=yes app sh -c \
       "php artisan tinker --execute=\"include '/tmp/k6/cleanup-after-load.php';\"" >&2 ||
       printf 'No se pudieron revocar los tokens sinteticos: revisa load-tests/k6/cleanup-after-load.php.\n' >&2
     dc exec -T app rm -rf /tmp/k6 >&2 || true
@@ -152,8 +152,14 @@ provision() {
     dc cp "${K6_DIR}/${tool}" "app:/tmp/k6/${tool}"
   done
   SEEDED=1
+  # APP_ENV=staging SOLO en el proceso de tinker: el aprovisionador se niega a
+  # correr con app()->isProduction() y la instalacion del paquete es production.
+  # La imagen no cachea la configuracion, asi que la variable del proceso basta
+  # y la pila instalada no cambia (load-test.yml si cambia el .env de toda la
+  # pila, porque mide la carga entera). Esto solo corre en la CI.
+
   dc exec -T \
-    -e K6_ACKNOWLEDGE_TEST_DATABASE=yes -e K6_EMPLOYEES=4 -e K6_DEVICES=1 -e K6_INSTANCES=1 \
+    -e APP_ENV=staging -e K6_ACKNOWLEDGE_TEST_DATABASE=yes -e K6_EMPLOYEES=4 -e K6_DEVICES=1 -e K6_INSTANCES=1 \
     -e K6_SCAN_CARDS=1 -e K6_RESEND_CARDS=1 -e K6_BATCH_CARDS=2 -e K6_REJECT_PAYLOADS=1 \
     -e K6_OUT_OF_ORDER_PAYLOADS=1 -e K6_HISTORY_DAYS=0 -e K6_HISTORY_EMPLOYEES=0 app sh -c \
     "php artisan tinker --execute=\"include '/tmp/k6/provision-fixtures.php';\"" >"${WORK}/provision.log" 2>&1 || true
