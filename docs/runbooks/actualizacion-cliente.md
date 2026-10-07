@@ -252,7 +252,8 @@ sudo docker compose --env-file $ANTERIOR/.env -f $ANTERIOR/docker-compose.yml ex
 ```
 
 Si `restore.sh` se niega por **conexiones abiertas** (salida `3`), algún
-contenedor de aplicación sigue en pie: `docker ps` y párralo. Si sale `2`, la
+contenedor de aplicación sigue en pie. Antes de rendirse espera diez segundos a que se cierren las que acaban de
+pararse y, si no, lista el rol y la aplicación de cada una: `docker ps` y párralo. Si sale `2`, la
 copia no se descifra o no se lee: prueba con la anterior (`restore.sh --list`, por el mismo servicio `restore`) y
 lee [`restaurar-backup.md`](restaurar-backup.md) §6, que tiene los tiempos que
 caben en el RTO de 4 h.
