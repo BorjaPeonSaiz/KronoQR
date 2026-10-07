@@ -85,7 +85,9 @@ test.describe('administracion de cuentas', () => {
       await expect(page.locator(`#${hintId}`)).toContainText('Es tu cuenta')
       await expect(own).toContainText('Es tu cuenta')
 
-      await deactivate.click()
+      // aria-disabled no es `disabled`: Playwright lo considera no accionable, asi que se fuerza
+      // el clic para comprobar que, aun asi, no abre nada.
+      await deactivate.click({ force: true })
 
       await expect(page.getByRole('dialog')).toHaveCount(0)
     },
