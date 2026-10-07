@@ -13,56 +13,51 @@ el método en la sección «Método» de ese plan y en «Método de trabajo acor
 CI manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge
 commit.** Lo integra quien ejecuta el bloque si la CI está en verde.
 
-**Integrados en `main`:** bloques 0 a 12, 12b, 12c y 15 a 22. El último, **bloque 22 «Operación y resiliencia»**, es la PR #122
-(`main` `77cfe20b`, 07-10-2026). **Con Redis o PostgreSQL caídos el fichaje responde en un tiempo acotado:** cortacircuitos del cliente
-Redis (`CircuitBreakingPhpRedisConnector`: la primera conexión fallida abre el circuito, estado en memoria y en
-`storage/framework/redis-circuit-open`, `REDIS_CIRCUIT_BREAKER_SECONDS` 10 s acotado a 60; abierto, todo intento lanza
-`RedisCircuitOpen`, que hereda de `RedisException`, y la caché `resilient`, la cola `failover-after-commit`, `ThrottleScanFailOpen` y
-las métricas hacen lo de siempre sin esperar) y de PostgreSQL (`CircuitBreakingPostgresConnector` como `db.connector.pgsql`, un solo
-circuito para `pgsql`, `error_events`, migrador y mantenimiento; «no hay servidor» → `DatabaseUnavailable` con SQLSTATE 08006, fuera de
-los reintentos del framework, traducida en `bootstrap/app.php` a **503 problem+json con `Retry-After`** en cualquier ruta, sin
-informar; el quiosco conserva y reenvía). `/ready` comprueba DNS y TCP con tope de 2 s y comparte los dos circuitos. Medido: PIN con
-Redis parado de 8-12 s a menos de 1,1 s; con PostgreSQL parado de 500 en 31 s a 503 en 0,5 s; en el runner Linux la primera petición
-paga 5 s de DNS y las siguientes responden en 0,02 s (paso K del job ⑧, que para `redis` sobre la instalación del paquete y mide
-fichajes autenticados). `/metrics` publica `kronoqr_metrics_store_up` y alertas `AlmacenDeMetricasCaido`/`AlmacenDeMetricasAusente`
-(`component: metrics`) con inhibición acotada de las de quiosco y las dos del fichaje; `AlertmanagerConfigTest` vigila toda inhibición;
-doc 07 **A-29** (sin Redis, las alertas que leen sus series quedan ciegas: también auth, firma QR, gestión de cuentas y errores
-críticos). `product:doctor` dice `horizon` (`DoctorRemedyServicesTest` cruza los remedios con los servicios de `compose.prod.yaml`).
-`install.sh` atrapa `INT/TERM/HUP` y deshace (escenario J del job ⑧ con SIGTERM en la fase 4; `InstallInterruptionTest`; guías con
-`tmux` y códigos 129/130/143; copia del `.env` atómica; `/ready` con reintento de 12 s en `install.sh` y `update.sh`).
-`load-test.yml` se lanza con cada `vX.Y.0`; run manual sobre la rama en verde con p95 de 181 ms (línea base 469 ms). Los anteriores:
+**Integrados en `main`:** bloques 0 a 13, 12b, 12c y 15 a 22. El último, **bloque 13 «Rendimiento de base de datos»**, es la PR #124
+(`main` `6882124b`, 07-10-2026). **Todo el diario de un mes se sirve por índice** (`WorkDayJournalIndexUsageTest`): índices
+`scan_events_shift_entry_id_occurred_at_index` y parcial `shift_entries_superseded_by_id_index` (`2026_10_08_100000`), y
+`clockingMarks()` dividido en `lineage()` (CTE recursiva) más la consulta de escaneos con la estirpe como `VALUES`, porque el
+planificador estima una CTE recursiva a ciegas y con ella elegía `Hash Join` y `Seq Scan` aunque existiera el índice (`currentEntries`
+de 7 077 a 209 buffers; `clockingMarks` de 474 a 123). La bandeja de incidencias ordena por el índice de expresión
+`incidents_status_urgency_index` (la expresión `CASE severity…` va duplicada en la migración y en `DatabaseIncidentBoard::ORDER`, con
+comentarios cruzados y una prueba de plan que falla si divergen) y la exportación legal va por `shift_entries_work_date_index`
+(`2026_10_08_100100`). **Migraciones:** `LimitsMigrationLocks` usa `SET LOCAL` (lanza fuera de transacción), y ofrece
+`withLockWaitOnly()` (solo `lock_timeout`, restaura la sesión en `finally`), `validateConstraint()` (fuera de transacción: el
+`VALIDATE` toma solo `SHARE UPDATE EXCLUSIVE`), `createIndexConcurrently()` (borra un índice `INVALID` previo y lanza si no queda
+válido) y `dropIndexConcurrently()`. Las cinco migraciones posteriores a la 2.1.0 con `VALIDATE` son no transaccionales (DDL en
+`DB::transaction()`, `VALIDATE` fuera, `up()` idempotente, `down()` que comprueba filas **tras** el primer `ALTER` y se detiene);
+las siete de la 2.1.0 con el patrón antiguo no se tocan (lista cerrada en `MigrationSafetyTest`, que también prohíbe `VALIDATE
+CONSTRAINT` y `CREATE INDEX CONCURRENTLY` literales en migraciones nuevas). La skill `migracion-segura` ya enseña el patrón
+correcto. **Las pruebas de plan analizan con el rol de migración sobre datos confirmados** (`CommittedDatabase` +
+`QueryPlans::analyze()`): `ANALYZE` con `fichaje_app` no falla pero no hace nada, y `ScanLogIndexUsageTest` y
+`AdoptionReportVolumeTest` certificaban planes por heurística. Los anteriores: 22 «Operación y resiliencia» (PR #122, `77cfe20b`),
 21 «Panel: permisos y pantallas» (PR #120, `d83828dc`), 12c «Cuentas de gestión» (PR #118, ADR-051; **tras actualizar a la 2.2.0 el
 admin tiene que volver a entrar**), 12b (PR #116) y 12 (PR #114, ADR-050).
 
-**Siguiente acción:** abrir la rama del **bloque 13** («Rendimiento de base de datos», rama `perf/indices-jornada`) desde
-`origin/main`, siguiendo el plan: DB1/DB2 migración expand con `CREATE INDEX CONCURRENTLY` (`scan_events(shift_entry_id, occurred_at)`
-y parcial sobre `shift_entries(superseded_by_id)`) y reescritura de las dos subconsultas por tramo y la CTE recursiva de
-`DatabaseWorkDayJournalReader`; DB4/DB3 `SET LOCAL` en `LimitsMigrationLocks` y separar `DROP`/`ADD NOT VALID` de `VALIDATE`; DB5-DB8
-solo lo que queda en `DatabaseIncidentBoard.php` (índice de la bandeja y `work_date` primero en la exportación legal). Terminado cuando
-el EXPLAIN del diario del portal deja de hacer Seq Scan (`ScanLogIndexUsageTest`) y `make load-test` no empeora. Orden que queda:
-**13 → 14 → final.** El bloque final repone las etiquetas `v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el
-remoto solo existe `v1.0.0`; `v2.0.0` sigue en local).
+**Siguiente acción:** abrir la rama del **bloque 14** («Pruebas, puertas de calidad y documentos de arquitectura») desde
+`origin/main`, siguiendo el plan (incluidos los añadidos: R6-AR-01 `UPDATE`/`DELETE` del rol sobre `shift_entries` o enmienda de
+ADR-042, R6-AR-02 ADR de la zona horaria del histórico, R1-AR-01 guarda de helpers globales en `Domain/`, y la línea de doc 07 que
+pide la revisión de seguridad del 13: migraciones no transaccionales desde la 2.2.0, contención `update.sh` restaura la copia,
+evidencia `MigrationSafetyTest` y `MigrationLockLimitsTest`). Orden que queda: **14 → final.** **El bloque final (publicar la 2.2.0) NO se ejecuta hasta que el propietario lo ordene expresamente** (07-10-2026): al integrar el 14, parar y avisar. El bloque final repone las etiquetas
+`v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0` sigue en local).
 
-**Lo que destapó el cierre del bloque 22 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-22-operacion-resiliencia`,
-`bloque-22-revisiones` y `bloque-22-pendientes`; lo del 21 en `bloque-21-panel-permisos` y `bloque-21-e2e-presencia`):
+**Lo que destapó el cierre del bloque 13 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-13-rendimiento-bd`
+y `bloque-13-revisiones`; lo del 22 en `bloque-22-operacion-resiliencia`, `bloque-22-revisiones` y `bloque-22-pendientes`):
 
-- **Apagar un mecanismo en `phpunit.xml` deja sin probar a quien lo consume.** El cortacircuitos va apagado en la suite
-  (`REDIS_/DB_CIRCUIT_BREAKER_SECONDS=0`) y nadie vio que el clasificador del doctor devolvía «fallo del producto» ante
-  `DatabaseUnavailable` sin SQLSTATE. Las pruebas que lo necesitan lo encienden con su propio fichero de estado, y
-  `CircuitBreakerWiringTest` comprueba el cableado real: el closure de `extend()` del gestor de Redis **no puede ser `static`**.
-- Un reloj de pared que retrocede (RTC adelantado + chrony) deja un «abierto hasta» de horas: el estado persistido se descarta si está
-  más lejos que el plazo. Los ficheros `storage/framework/{redis,database}-circuit-open` viven en la capa del contenedor y
-  `docker compose restart app` no los borra: el runbook `almacen-de-metricas-caido.md` §3.4 dice cómo.
-- Una sonda de caos tiene que **autenticarse**: el primer paso K medía el 401 de `auth:sanctum`. Ahora aprovisiona un quiosco con el
-  aprovisionador de k6 y mide `POST /scan` y `/scan/pin` reales (200 o 422). `getent ahosts -- host` no funciona en Alpine.
-- Toda inhibición nueva de Alertmanager entra en `AlertmanagerConfigTest` (resuelve destinos por `component` o `alertname`); la
-  «resuelta» falsa de `QuioscoSinLatido` se cierra casi del todo con `for: 15s` e intervalo de 15 s en `AlmacenDeMetricasCaido`.
-- `bash` ignora SIGINT en lo lanzado con `&`: el escenario J usa SIGTERM con `pkill -TERM -f '^bash \./install\.sh'` (al bash con los
-  traps, no a `sudo`). Las guías mandan instalar dentro de `tmux`.
-- Las de bloques anteriores siguen valiendo: E2E del panel con `data-test` y sin `.first()` en listas ordenadas (Playwright no corre en
-  los contenedores `node-*`); la matriz lleva líneas de los E2E (`make traceability`, diez minutos, sin agentes); gitleaks por valor
-  exacto; `TraceabilityMatrixFreshnessTest` falla hasta regenerar; el log de un job se lee con `gh api …/actions/jobs/{id}/logs`;
-  precedente de CI manual completa en N y push en N+1 para cambios triviales; Trivy de imágenes puede fallar por un 404 del espejo.
+- **`ANALYZE` ejecutado por un rol que no es dueño de la tabla no falla: avisa y no hace nada.** Toda prueba de plan siembra con
+  `CommittedDatabase`, analiza con `QueryPlans::analyze()` (rol de migración) y después mide. Una prueba que afirma «no hay Seq Scan»
+  sobre `reltuples = -1` certifica una heurística, no un plan.
+- **Una CTE recursiva se estima a ciegas** (diez veces el término inicial): si el resultado se une con una tabla grande, resolver la
+  CTE aparte y pasar el resultado como `VALUES` deja al planificador con las filas reales. Forzar `LATERAL` enciende el JIT
+  (`jit_above_cost` 100 000, sin ajuste en `infra/`) y cuesta más que el recorrido.
+- **Un índice de expresión solo sirve si la expresión del `ORDER BY` es textualmente idéntica** a la del índice: por eso la bandeja
+  lleva la expresión duplicada y vigilada por una prueba.
+- **`SET LOCAL` fuera de transacción solo avisa**, y `CREATE INDEX CONCURRENTLY IF NOT EXISTS` da por bueno un índice `INVALID`: los
+  ayudantes del trait comprueban `transactionLevel()` e `indisvalid` en vez de confiar en el docblock.
+- Las de bloques anteriores siguen valiendo: apagar un mecanismo en `phpunit.xml` deja sin probar a quien lo consume; E2E del panel
+  con `data-test` y sin `.first()` en listas ordenadas; la matriz lleva líneas de los E2E (`make traceability`, diez minutos, sin
+  agentes); gitleaks por valor exacto; `TraceabilityMatrixFreshnessTest` falla hasta regenerar; el log de un job se lee con
+  `gh api …/actions/jobs/{id}/logs`; Trivy de imágenes puede fallar por un 404 del espejo.
 
 **Integrado también el 06-10-2026:** PR #110 (`laravel/reverb` 1.12.0) y #111 (menores de npm), de Dependabot; borradas las ramas
 remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` entre bloque y bloque.
@@ -396,6 +391,8 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ### Deuda técnica anotada
 
+- **Bloque 13 (07-10-2026), para la 2.2.x:** DB5 (el informe de adopción con `AT TIME ZONE` sigue con `Seq Scan` de `scan_events`), DB7 (dos GIN sin uso) y DB9; el `count(*)` de `IncidentBoard::page()` recorre todas las incidencias del estado en cada visita (con `resolved`, casi todo el histórico); el JIT de PostgreSQL está activo por defecto (`jit_above_cost` 100 000, sin ajuste en `infra/`: valorar `jit=off` o subir el umbral, devops); una prueba de concurrencia con `pg_locks` e `INSERT` concurrente que reproduzca R5-BD-01 (qa-testing, opcional); `AdoptionReportVolumeTest` pasa de 285 s a 366 s por el vaciado de `CommittedDatabase`. El docblock de `2026_09_30_120000` ya no afirma los privilegios de `fichaje_app`, que tiene `UPDATE`/`DELETE` por defecto sobre las tablas del registro (va con R6-AR-01 del bloque 14).
+
 - **Del cierre del bloque 22 (07-10-2026):** `update.sh` deja las señales en su valor por defecto durante su propia vuelta atrás (un
   segundo Ctrl+C o un HUP repetido la corta a medias): aplicarle la guarda no reentrante y el `trap ''` de `install.sh`. El instalador
   no guarda su salida en un fichero (sin `tmux` se pierde el mensaje final). La inhibición de las «resueltas» en Alertmanager no está
@@ -403,8 +400,9 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
   cerrado, las peticiones en vuelo al empezar una avería siguen pagando el DNS completo una vez (decisión: no lanzar un proceso por
   petición). **El escenario J del job ⑧ falló una vez de forma intermitente** (el instalador en segundo plano murió en silencio
   al entrar en la fase 3, sin código ni mensaje; en cuatro pasadas más fue bien): el paso traza ahora el instalador (`bash -x` a
-  `salida-j.trace`, impreso sin secretos) y dice el código de salida si se repite. Si vuelve a pasar, mirar esa traza antes de tocar
-  nada.
+  `salida-j.trace`, impreso sin secretos) y dice el código de salida si se repite. El 07-10-2026 (bloque 13) falló dos veces seguidas por otra causa, ya corregida: `kill -0` sobre el lanzador `sudo` daba EPERM
+  en la imagen 20260901 del runner y el bucle se rendía a la primera; ahora mira con `ps -o stat=`. Si vuelve a fallar, mirar la
+  traza y la versión de la imagen en la cabecera del log antes de tocar nada.
 - **Del cierre del bloque 12c (07-10-2026):** `UpdateDepartmentRequest` comprueba el ámbito `accounts:*` con un `tokenCan()` a mano y
   una copia del literal (atada por `DepartmentManagerAbilityTest`): lo limpio es un puerto `ManagementActor::tokenGrants()` en Shared.
   Unos 25 docblocks anteriores al bloque citan ADR-027 («audit_log particionado») donde quieren decir ADR-010 («auditoría en la misma
