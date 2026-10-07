@@ -1614,7 +1614,10 @@ jobs:
           cd paquete-j
           cp .env .env.antes
 
-          sudo ./install.sh >salida-j.log 2>&1 &
+          # Con traza (`bash -x` a un fichero aparte, fd 9): si el instalador
+          # muriera antes de la fase 4 se imprime, filtrando las lineas con
+          # secretos. La linea de ordenes del hijo pasa a ser `bash -x ./install.sh`.
+          sudo bash -c 'exec 9>salida-j.trace; export BASH_XTRACEFD=9; exec bash -x ./install.sh' >salida-j.log 2>&1 &
           lanzador=$!
 
           # Espera por CONDICION: la fase 4 empezada Y contenedores del proyecto
@@ -1632,12 +1635,18 @@ jobs:
             sleep 1
           done
           if [ "${en_fase_4}" -ne 1 ]; then
+            set +e
+            wait "${lanzador}"
+            codigo=$?
+            set -e
             cat salida-j.log
-            echo "El instalador no llego a la fase 4 con contenedores creados: no hay nada que interrumpir."
+            echo "--- traza (ultimas 60 lineas, sin secretos)"
+            sudo grep -vE 'set_env_value|set_generated_secret|random_|_KEY|PASSWORD|SECRET' salida-j.trace | tail -60 || true
+            echo "El instalador no llego a la fase 4 con contenedores creados (salio con ${codigo}): no hay nada que interrumpir."
             exit 1
           fi
 
-          sudo pkill -TERM -f '^bash \./install\.sh'
+          sudo pkill -TERM -f '^bash -x \./install\.sh'
 
           set +e
           wait "${lanzador}"
