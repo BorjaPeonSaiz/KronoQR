@@ -123,12 +123,16 @@ function formatTooltipValue(value: unknown): string {
  * la proxima actualizacion.
  */
 function buildOption(): Record<string, unknown> {
+  // U1, lista cerrada: los respaldos solo se usan sin `window` (SSR, jsdom), donde ECharts
+  // necesita un color real y `currentColor` no lo entiende. En el navegador mandan los tokens.
+  /* eslint-disable kronoqr-colors/no-literal-colors -- respaldos fuera del navegador, ver arriba */
   const primary = readToken('--kq-color-primary-strong', '#b8542a')
   const accent = readToken('--kq-color-accent', '#7a9b76')
   const warning = readToken('--kq-color-warning', '#8a5312')
   const muted = readToken('--kq-color-text-muted', '#6b5d54')
   const textColor = readToken('--kq-color-text', '#3a2e28')
   const borderColor = readToken('--kq-color-border', '#eaddcf')
+  /* eslint-enable kronoqr-colors/no-literal-colors */
   const animation = !prefersReducedMotion()
 
   const common = {
