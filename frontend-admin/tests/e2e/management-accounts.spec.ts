@@ -75,7 +75,14 @@ test.describe('administracion de cuentas', () => {
 
       await expect(own).toContainText('(tu cuenta)')
       await expect(deactivate).toHaveAttribute('aria-disabled', 'true')
-      await expect(deactivate).toBeEnabled()
+      // Sigue en el orden de tabulacion (no es `disabled`): enfocable y con su explicacion.
+      await expect(deactivate).toBeVisible()
+      await deactivate.focus()
+      await expect(deactivate).toBeFocused()
+      const hintId = await deactivate.getAttribute('aria-describedby')
+
+      expect(hintId).not.toBeNull()
+      await expect(page.locator(`#${hintId}`)).toContainText('Es tu cuenta')
       await expect(own).toContainText('Es tu cuenta')
 
       await deactivate.click()
@@ -99,7 +106,7 @@ test.describe('administracion de cuentas', () => {
       await dialog.getByRole('button', { name: 'Crear cuenta' }).click()
 
       // Un codigo incorrecto se explica junto al campo y no cierra el alta.
-      await expect(dialog.getByText('El código no es correcto.')).toBeVisible()
+      await expect(dialog.getByText('El código no es correcto.', { exact: true })).toBeVisible()
 
       await dialog.getByLabel(/Tu código del segundo factor/).fill(TOTP_CODE)
       await dialog.getByRole('button', { name: 'Crear cuenta' }).click()
@@ -297,9 +304,9 @@ test.describe('contraseña temporal', () => {
     'una contraseña actual incorrecta se explica en el campo y no cierra la sesión',
     { tag: ['@RF-ID-10'] },
     async ({ page }) => {
-      await page.getByLabel('Contraseña actual').fill('no-es-esta')
-      await page.getByLabel('Contraseña nueva', { exact: true }).fill('Una-propia-larga-9!')
-      await page.getByLabel('Repite la contraseña nueva').fill('Una-propia-larga-9!')
+      await page.getByTestId('current-password').fill('no-es-esta')
+      await page.getByTestId('new-password').fill('Una-propia-larga-9!')
+      await page.getByTestId('confirm-password').fill('Una-propia-larga-9!')
       await page.getByRole('button', { name: 'Cambiar contraseña' }).click()
 
       await expect(page.getByText('La contraseña actual no es correcta.')).toBeVisible()
@@ -308,9 +315,9 @@ test.describe('contraseña temporal', () => {
   )
 
   test('al cambiarla entra en el panel', { tag: ['@RF-ID-10'] }, async ({ page }) => {
-    await page.getByLabel('Contraseña actual').fill(TEMPORARY_LOGIN_PASSWORD)
-    await page.getByLabel('Contraseña nueva', { exact: true }).fill('Una-propia-larga-9!')
-    await page.getByLabel('Repite la contraseña nueva').fill('Una-propia-larga-9!')
+    await page.getByTestId('current-password').fill(TEMPORARY_LOGIN_PASSWORD)
+    await page.getByTestId('new-password').fill('Una-propia-larga-9!')
+    await page.getByTestId('confirm-password').fill('Una-propia-larga-9!')
     await page.getByRole('button', { name: 'Cambiar contraseña' }).click()
 
     await page.waitForURL('**/employees')
