@@ -104,3 +104,15 @@ La conexión `pgsql_migrator` solo la usan las migraciones y las pruebas. Una pr
 - Migración: `down()` quita la función sin tocar las particiones que creó, y volver a migrar la recrea con los mismos permisos.
 - Instalación limpia (etapa ⑧) y actualización 2.1.0 → 2.2.0 en dind (etapa ⑧b): `.github/scripts/assert-runtime-env.sh` lee con `docker compose exec … env` el entorno real de cada contenedor de runtime y falla si alguno contiene `DB_MIGRATION_*` o una credencial que no le corresponde. `doctor.sh` queda en verde.
 - Restauración: los atributos de los roles del clúster son los mismos antes y después de `pg_restore`.
+
+## Enmienda 08-10-2026 (bloque 14 de la 2.2.0, hallazgo R6-AR-01): lo que este ADR garantiza hoy, y lo que no
+
+**Motivo.** La re-verificación de la 2.2.0 (R6-AR-01, que recoge R4-SC-04) encontró que el título y la decisión prometen más de lo que el esquema cumple. El contexto presenta `shift_entries` y `audit_log` como protegidas, pero el rol de la aplicación conserva `SELECT, INSERT, UPDATE, DELETE` sobre **todas** las tablas salvo `audit_log` y `audit_chain_anchors`, por los privilegios por defecto de `2026_08_19_099000_provision_database_privileges`.
+
+**Lo que este ADR garantiza, dicho con exactitud:**
+
+- Ningún proceso de runtime posee la credencial del rol de migración, que es superusuario y propietario, ni la del rol de mantenimiento. Esa parte se cumple y la vigilan las pruebas de arquitectura y `assert-runtime-env.sh`.
+- `audit_log` y sus particiones no se pueden modificar ni borrar con la credencial del runtime, y la cadena lo detecta si se intenta por fuera.
+- **El registro horario** (`shift_entries`, `shift_corrections`, `scan_events`, `discarded_scan_reports`, `incidents` y `daily_totals`) **sí se puede modificar y borrar con la credencial del runtime**, y hoy nada lo concilia con sus asientos de `audit_log`. La manipulación es detectable en principio, porque los asientos `shift_entry.*` conservan las marcas, pero nada la detecta.
+
+Hasta que se implemente [ADR-057](ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md) (retirar `DELETE` y el `UPDATE` que no hace falta, un *trigger* de transiciones en `shift_entries`, la purga por una función acotada y la conciliación diaria), el título de este ADR se lee como: **«el runtime no tiene ninguna credencial que pueda alterar la auditoría ni el esquema»**. Doc 07 (AUD-1 y la fila `T1565.001`) tiene que decir lo mismo.
