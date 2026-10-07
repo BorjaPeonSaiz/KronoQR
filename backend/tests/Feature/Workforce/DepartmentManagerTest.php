@@ -6,6 +6,7 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
 use Spectator\Spectator;
@@ -397,3 +398,28 @@ it('lista los departamentos con su responsable sin una consulta por departamento
 
     expect($consultas)->toHaveCount(1);
 })->group('RF-ID-10');
+
+it('quita el alcance a la cuenta desplazada en su siguiente peticion, sin volver a entrar', function (): void {
+    // ADR-051, verificacion 5: el alcance por departamento se resuelve en cada
+    // peticion desde `departments.manager_user_id`, no se congela en el token.
+    $escenario = responsableEscenario();
+    $antiguo = responsableCuenta('Responsable saliente');
+    $nuevo = responsableCuenta('Responsable entrante');
+    DB::table('departments')->where('id', $escenario['department'])->update(['manager_user_id' => $antiguo->id]);
+    $persona = WorkforceFixtures::employee($escenario['site'], $escenario['department']);
+    $sesionDelAntiguo = ManagementUsers::tokenFor($antiguo);
+
+    Api::as($sesionDelAntiguo)->get('/api/v1/employees')->assertStatus(200)->assertJsonPath('data.0.uuid', $persona);
+    Auth::forgetGuards();
+
+    Api::as($escenario['token'])
+        ->patch('/api/v1/departments/'.$escenario['department'], ['manager_user_uuid' => $nuevo->uuid])
+        ->assertStatus(200);
+    Auth::forgetGuards();
+
+    Api::as($sesionDelAntiguo)->get('/api/v1/employees')->assertValidResponse(200)->assertJsonPath('meta.total', 0);
+    Auth::forgetGuards();
+    Api::as($sesionDelAntiguo)->get('/api/v1/employees/'.$persona)->assertStatus(403);
+    Auth::forgetGuards();
+    Api::as(ManagementUsers::tokenFor($nuevo))->get('/api/v1/employees/'.$persona)->assertStatus(200);
+})->group('RF-ID-10', 'RF-ID-03', 'RS-05');

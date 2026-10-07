@@ -4,27 +4,37 @@ declare(strict_types=1);
 
 namespace Tests\Support\Concurrency;
 
+use App\Modules\Identity\Application\Command\DeactivateManagementAccountCommand;
 use App\Modules\Identity\Application\Command\DeliverCredentialCommand;
 use App\Modules\Identity\Application\Command\IssueCredentialCommand;
 use App\Modules\Identity\Application\Command\PrintCredentialCommand;
+use App\Modules\Identity\Application\Command\ResetManagementPasswordCommand;
+use App\Modules\Identity\Application\Command\ResetManagementTwoFactorCommand;
 use App\Modules\Identity\Application\Command\RevokeCredentialCommand;
 use App\Modules\Identity\Application\Command\RotateSigningKeyCommand;
 use App\Modules\Identity\Application\Port\CardRenderer;
+use App\Modules\Identity\Application\UseCase\DeactivateManagementAccountHandler;
 use App\Modules\Identity\Application\UseCase\DeliverCredential;
 use App\Modules\Identity\Application\UseCase\IssueCredential;
 use App\Modules\Identity\Application\UseCase\PrintCredential;
+use App\Modules\Identity\Application\UseCase\ResetManagementPasswordHandler;
+use App\Modules\Identity\Application\UseCase\ResetTwoFactorHandler;
 use App\Modules\Identity\Application\UseCase\RevokeCredential;
 use App\Modules\Identity\Application\UseCase\RotateSigningKey;
 use App\Modules\Shared\Infrastructure\Persistence\AuditChainLock;
 use App\Modules\Workforce\Application\Command\ImportEmployeesCommand;
 use App\Modules\Workforce\Application\Command\OffboardEmployeeCommand;
 use App\Modules\Workforce\Application\Command\RecordPinDeliveryCommand;
+use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
 use App\Modules\Workforce\Application\Command\ResetEmployeePinCommand;
+use App\Modules\Workforce\Application\Command\UpdateDepartmentCommand;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
 use App\Modules\Workforce\Application\UseCase\ImportEmployeesHandler;
 use App\Modules\Workforce\Application\UseCase\OffboardEmployeeHandler;
 use App\Modules\Workforce\Application\UseCase\RecordPinDeliveryHandler;
+use App\Modules\Workforce\Application\UseCase\RegisterEmployeeHandler;
 use App\Modules\Workforce\Application\UseCase\ResetEmployeePinHandler;
+use App\Modules\Workforce\Application\UseCase\UpdateDepartmentHandler;
 use App\Modules\Workforce\Application\UseCase\UpdateEmployeeHandler;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -200,6 +210,41 @@ final class UseCaseInOtherProcess
             )),
             'print_credential' => static fn (): mixed => app(PrintCredential::class)->handle(
                 PrintCredentialCommand::forCredential($spec['credential']),
+            ),
+            // Cuentas de gestion (RF-ID-10, ADR-051 §6), por consola: sin
+            // quien actua ni reautenticacion, que no toman candados.
+            'deactivate_management_account' => static fn (): mixed => app(DeactivateManagementAccountHandler::class)->handle(
+                new DeactivateManagementAccountCommand(accountUuid: $spec['account'], reason: 'Orden de candados'),
+            ),
+            'reset_management_password' => static fn (): mixed => app(ResetManagementPasswordHandler::class)->handle(
+                new ResetManagementPasswordCommand(accountUuid: $spec['account'], reason: 'Orden de candados'),
+            ),
+            'reset_management_two_factor' => static fn (): mixed => app(ResetTwoFactorHandler::class)->handle(
+                new ResetManagementTwoFactorCommand(accountUuid: $spec['account'], reason: 'Orden de candados'),
+            ),
+            'assign_department_manager' => static fn (): mixed => app(UpdateDepartmentHandler::class)->handle(new UpdateDepartmentCommand(
+                id: (int) $spec['department'],
+                managerGiven: true,
+                managerUserUuid: $spec['manager'],
+            )),
+            'rename_department' => static fn (): mixed => app(UpdateDepartmentHandler::class)->handle(new UpdateDepartmentCommand(
+                id: (int) $spec['department'],
+                name: $spec['name'],
+            )),
+            // Dentro de una transaccion de fuera A PROPOSITO: asi
+            // `EmployeeWriteRetry` no reintenta un `40P01` y el abrazo se ve
+            // como `sqlstate:40P01` en lugar de esconderse tras un reintento
+            // que por HTTP no siempre le toca a esta parte.
+            'register_employee_in_transaction' => static fn (): mixed => DB::transaction(
+                static fn (): mixed => app(RegisterEmployeeHandler::class)->handle(new RegisterEmployeeCommand(
+                    departmentId: (int) $spec['department'],
+                    firstName: 'Persona',
+                    lastName: 'De la carrera',
+                    email: null,
+                    nationalId: null,
+                    hiredAt: '2026-10-01',
+                    locale: 'es',
+                )),
             ),
             // El orden PROHIBIDO, a mano: la ficha primero y la cadena despues.
             // Es el control de las pruebas de orden de candados, lo que demuestra
