@@ -43,6 +43,9 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
+import ChangePreview from '@/shared/ui/ChangePreview.vue'
+import type { Change } from '@/shared/ui/change'
+import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import type { ComplianceProfileBody, UpdateComplianceProfileRequest } from '@/shared/api/types'
 import { fetchComplianceProfile, updateComplianceProfile } from './complianceProfile.api'
 import { fetchInstallationSettings, stringValue } from './settings.api'
@@ -305,6 +308,77 @@ const changesDetection = computed(() => {
 /** Si el cambio pendiente toca el plazo de conservacion, que es el irreversible. */
 const changesRetention = computed(() => 'retention_years' in pendingChanges.value)
 
+/** Se pide confirmacion con el antes y el despues de cada campo que cambia (R3-PA-09). */
+const confirming = ref(false)
+
+function askConfirmation(): void {
+  if (canSave.value) {
+    confirming.value = true
+  }
+}
+
+function cancelConfirmation(): void {
+  confirming.value = false
+}
+
+function describe(value: number | string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value.length === 0 ? t('common.empty') : value.join(', ')
+  }
+
+  return value === undefined || value === '' ? t('common.empty') : String(value)
+}
+
+/** Solo los campos que cambian: etiqueta, valor actual y valor nuevo. */
+const previewChanges = computed<Change[]>(() => {
+  const current = profile.value
+  const pending = pendingChanges.value
+
+  if (current === null) {
+    return []
+  }
+
+  const rows: Change[] = []
+  const scalars = [
+    ['name', 'name', 'name'],
+    ['min_rest_hours', 'minRestHours', 'min_rest_hours'],
+    ['max_daily_hours', 'maxDailyHours', 'max_daily_hours'],
+    ['max_weekly_hours', 'maxWeeklyHours', 'max_weekly_hours'],
+    ['break_required_after_hours', 'breakRequiredAfterHours', 'break_required_after_hours'],
+    ['retention_years', 'retentionYears', 'retention_years'],
+  ] as const
+
+  for (const [key, label] of scalars) {
+    const next = pending[key]
+
+    if (next !== undefined) {
+      rows.push({
+        label: t(`compliance.fields.${label}`),
+        from: describe(current[key]),
+        to: describe(next),
+      })
+    }
+  }
+
+  if (pending.week_starts_on !== undefined) {
+    rows.push({
+      label: t('compliance.fields.weekStartsOn'),
+      from: t(`compliance.weekDays.${current.week_starts_on}`),
+      to: t(`compliance.weekDays.${pending.week_starts_on}`),
+    })
+  }
+
+  if (pending.holiday_calendar !== undefined) {
+    rows.push({
+      label: t('compliance.fields.holidayCalendar'),
+      from: describe(current.holiday_calendar),
+      to: describe(pending.holiday_calendar),
+    })
+  }
+
+  return rows
+})
+
 async function save(): Promise<void> {
   if (!canSave.value) {
     return
@@ -317,8 +391,11 @@ async function save(): Promise<void> {
   try {
     fill((await updateComplianceProfile(pendingChanges.value)).data)
     saved.value = true
+    confirming.value = false
     announce(t('compliance.saved'))
   } catch (failure) {
+    // El fallo se enseña en la pantalla, con los nombres de campo del 422.
+    confirming.value = false
     error.value = failure
     announce(t('compliance.failed'))
   } finally {
@@ -354,7 +431,7 @@ async function save(): Promise<void> {
       v-if="profile !== null"
       class="flex max-w-3xl flex-col gap-4"
       novalidate
-      @submit.prevent="save"
+      @submit.prevent="askConfirmation"
     >
       <FormField :label="t('compliance.fields.name')" :hint="t('compliance.hints.name')">
         <template #default="{ id, describedBy }">
@@ -577,5 +654,22 @@ async function save(): Promise<void> {
 
       <p class="text-sm text-kq-text-muted">{{ t('compliance.audited') }}</p>
     </form>
+
+    <ConfirmDialog
+      v-if="confirming"
+      :title="t('compliance.preview.title')"
+      :confirm-label="t('compliance.preview.confirm')"
+      :busy="saving"
+      :error="null"
+      @cancel="cancelConfirmation"
+      @confirm="save"
+    >
+      <p class="mb-4">{{ t('compliance.preview.explanation') }}</p>
+      <ChangePreview
+        :changes="previewChanges"
+        :caption="t('compliance.preview.caption')"
+        data-test="change-preview"
+      />
+    </ConfirmDialog>
   </section>
 </template>

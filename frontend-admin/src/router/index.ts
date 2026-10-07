@@ -308,12 +308,14 @@ export const routes: RouteRecordRaw[] = [
         meta: { ability: DIAGNOSTICS_MANAGE },
       },
       {
-        // Departamentos y su responsable (RF-ID-03). Ambito `employees:*`; el selector de
-        // responsable solo se ofrece con `accounts:*` (admin) y el servidor lo exige.
+        // Departamentos y su responsable (RF-ID-03). Lectura abierta a los cuatro roles
+        // (R6-BD-01): `employees:read` (responsable) o `attendance:read` (auditor). Crear y
+        // renombrar exigen `employees:*` y el selector de responsable `accounts:*`; la
+        // vista los oculta y el servidor los exige.
         path: 'departments',
         name: 'departments',
         component: DepartmentsView,
-        meta: { ability: EMPLOYEES_MANAGE },
+        meta: { abilities: [EMPLOYEES_READ, ATTENDANCE_READ] },
       },
       {
         // Cuentas de gestion (RF-ID-10). Ambito `accounts:*`, solo `admin`. La

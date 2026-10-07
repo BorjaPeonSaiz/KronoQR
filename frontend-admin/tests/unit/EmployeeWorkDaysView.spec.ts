@@ -17,6 +17,7 @@ import {
   employee,
   employeeWorkDays,
   managementUser,
+  SHIFT_ENTRY_UUID,
   shiftEntry,
   workDay,
 } from './support/fixtures'
@@ -374,6 +375,64 @@ describe('EmployeeWorkDaysView', () => {
     expect(requestedUrls.some((url) => url.includes('/shift-entries'))).toBe(true)
     // El registro se vuelve a pedir tras el exito, para enseñar el total recalculado.
     expect(requestedUrls.filter((url) => url.includes('/workdays')).length).toBeGreaterThan(1)
+  })
+
+  it('anular un tramo cierra el dialogo, lo anuncia y recarga la jornada una vez (@RN-13 @RF-PA-04)', async () => {
+    const payload = employeeWorkDays()
+    const requests: string[] = []
+
+    stubFetch((url, init) => {
+      const path = new URL(url, 'http://localhost').pathname
+
+      requests.push(`${init?.method ?? 'GET'} ${path}`)
+
+      if (path.endsWith('/void')) {
+        return jsonResponse({
+          employee_uuid: EMPLOYEE_UUID,
+          work_date: '2026-03-14',
+          action: 'voided',
+          shift_entry_uuid: SHIFT_ENTRY_UUID,
+          superseded_shift_entry_uuid: null,
+          version: 2,
+          status: 'voided',
+          clocked_in_at: '2026-03-14T05:00:00.000000Z',
+          clocked_out_at: '2026-03-14T13:05:00.000000Z',
+          daily_total_minutes: 0,
+        })
+      }
+
+      if (path.endsWith('/workdays')) {
+        return jsonResponse(payload)
+      }
+
+      return jsonResponse(employee())
+    })
+
+    const pinia = createTestPinia()
+    const session = useSessionStore(pinia)
+
+    session.token = 'token'
+    session.status = 'authenticated'
+    session.user = managementUser({ roles: ['rrhh'], abilities: ['attendance:correct'] })
+
+    const wrapper = await mountView(EmployeeWorkDaysView, { props: { uuid: EMPLOYEE_UUID }, pinia })
+    await settle()
+
+    await wrapper.find('[data-test="entry-void"]').trigger('click')
+    await settle(1)
+    await wrapper.find('[data-test="dialog-reason"]').setValue('ERROR_DE_ESCANEO_DUPLICADO')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(announcement.value).toBe(es.corrections.action.voided)
+    expect(requests).toEqual([
+      `GET /api/v1/employees/${EMPLOYEE_UUID}/workdays`,
+      `GET /api/v1/employees/${EMPLOYEE_UUID}`,
+      `POST /api/v1/shift-entries/${SHIFT_ENTRY_UUID}/void`,
+      `GET /api/v1/employees/${EMPLOYEE_UUID}/workdays`,
+    ])
   })
 
   it('anuncia cuantas jornadas se han encontrado, sin mover el foco', async () => {

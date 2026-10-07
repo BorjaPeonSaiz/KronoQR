@@ -1404,11 +1404,10 @@ Route::middleware([
         ->whereUuid('uuid')
         ->name('absences.void');
 
-    Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
+    // La LECTURA de departamentos no esta aqui: vive en su propio grupo, mas
+    // abajo, porque la leen los cuatro roles de gestion y este grupo exige
+    // `employees:*`.
     Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');
-    Route::get('/departments/{id}', [DepartmentController::class, 'show'])
-        ->whereNumber('id')
-        ->name('departments.show');
     Route::patch('/departments/{id}', [DepartmentController::class, 'update'])
         ->whereNumber('id')
         ->name('departments.update');
@@ -1417,6 +1416,42 @@ Route::middleware([
     // instalacion (ADR-040). Sin alta —la hace la puesta en marcha— ni baja.
     Route::get('/site', [SiteController::class, 'show'])->name('site.show');
     Route::patch('/site', [SiteController::class, 'update'])->name('site.update');
+});
+
+/*
+ * LECTURA DEL CATALOGO DE DEPARTAMENTOS: los cuatro roles de gestion (bloque 21
+ * de la 2.2.0, R6-BD-01 y R4-QA-03; decision del propietario de 02-10-2026).
+ *
+ * `employees:read` O `attendance:read`, y no uno solo. `admin`, `rrhh` y el
+ * `responsable_departamento` llevan `employees:read`; el `auditor` no lleva
+ * ningun ambito de plantilla —su funcion es el registro horario ante la
+ * Inspeccion— pero los cuatro llevan `attendance:read`, que es el ambito de lectura
+ * comun a toda cuenta de gestion. Darle `employees:read` al auditor para esto le
+ * abriria el ambito de `GET /employees` y de las ausencias, y la unica defensa
+ * quedaria en sus policies: se prefiere no tocar el reparto de ambitos. El
+ * middleware `ability` acepta CUALQUIERA de la lista (como `/reports/legal-export`).
+ *
+ * Ninguno de los dos ambitos abre una escritura de departamentos: crear y
+ * renombrar siguen en el grupo de `employees:*` y en `DepartmentPolicy::writers()`.
+ *
+ * Un acceso de soporte `read_only` lleva los dos ambitos y alcanza la ruta, pero
+ * no la lee: lo cierra `DepartmentPolicy`, para que abrir el catalogo a los
+ * cuatro roles no amplie lo que ve el fabricante (regla dura 16, ADR-020). Lo
+ * enumera `SupportScopeRoutesTest`, que sigue comprobando ademas que ninguno de
+ * los dos ambitos abre una ruta que no sea `GET`.
+ *
+ * `throttle:management` por lo mismo que el resto de la gestion: sale de las
+ * mismas pantallas y con el mismo token.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::EMPLOYEES_READ->value.','.TokenAbility::ATTENDANCE_READ->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
+    Route::get('/departments/{id}', [DepartmentController::class, 'show'])
+        ->whereNumber('id')
+        ->name('departments.show');
 });
 
 /*

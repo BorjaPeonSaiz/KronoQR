@@ -28,8 +28,19 @@ import type { LivePresenceQuery } from './live.api'
 import { RealtimeClient } from './realtime/pusherClient'
 import type { RealtimeState, SocketFactory } from './realtime/pusherClient'
 
+/** Techo del reintento de la foto en tiempo real. */
+const MAX_RETRY_DELAY_MS = 60_000
+
 /** Por que via se mantiene la foto al dia. `idle` = todavia no se ha pedido. */
 export type PresenceTransport = 'idle' | 'realtime' | 'polling'
+
+/** Que tipo de peticion fallo, para decir al usuario que ha pasado y que datos esta viendo. */
+export type PresenceFailureKind = 'poll' | 'filter'
+
+export interface PresenceFailure {
+  kind: PresenceFailureKind
+  error: unknown
+}
 
 /** Como comparar dos nombres del mismo modo en el que ordena el servidor: apellidos, nombre y UUID de desempate. */
 function compareEntries(left: LivePresenceEntry, right: LivePresenceEntry): number {
@@ -81,9 +92,20 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
   const realtimeState = ref<RealtimeState>('down')
   /** `Date.now()` del navegador en el momento en que llego `meta.generated_at`. */
   const receivedAt = ref(0)
+  /** Instante (ISO, UTC) del ultimo dato recibido con exito: foto, o mensaje del canal. No la hora del intento. */
+  const lastUpdatedAt = ref<string | null>(null)
+  /** El ultimo refresco HTTP fallido con datos previos en pantalla; se limpia al recibir uno bueno. */
+  const refreshFailure = ref<PresenceFailure | null>(null)
+  /** El canal se ha caido (y se reintenta): se limpia al volver a estar vivo. */
+  const realtimeFailed = ref(false)
 
   let client: RealtimeClient | null = null
   let pollTimer: ReturnType<typeof setTimeout> | undefined
+  /** Reintento de la foto tras un fallo con el canal vivo: en tiempo real nadie sondea, y sin esto el aviso se quedaria pegado. */
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  let retryAttempts = 0
+  /** La instancia del canal cuyos cambios de estado cuentan; un cierre intencionado la anula. */
+  let activeChannel: symbol | null = null
   /** Ultimo `occurred_at` aplicado por persona, para descartar mensajes reordenados. */
   const latestByEmployee = new Map<string, string>()
 
@@ -107,10 +129,29 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     entries.value = [...data].sort(compareEntries)
     meta.value = boardMeta
     receivedAt.value = Date.now()
+    lastUpdatedAt.value = boardMeta.generated_at
+    refreshFailure.value = null
     latestByEmployee.clear()
   }
 
-  async function load(): Promise<void> {
+  function clearRetry(): void {
+    clearTimeout(retryTimer)
+    retryTimer = undefined
+    retryAttempts = 0
+  }
+
+  /** Backoff acotado: el intervalo de sondeo, duplicado en cada intento, hasta un minuto. */
+  function scheduleRetry(): void {
+    clearTimeout(retryTimer)
+    const delay = Math.min(pollIntervalMs.value * 2 ** retryAttempts, MAX_RETRY_DELAY_MS)
+
+    retryAttempts += 1
+    retryTimer = setTimeout(() => {
+      void load()
+    }, delay)
+  }
+
+  async function load(kind: PresenceFailureKind = 'poll'): Promise<void> {
     loading.value = entries.value.length === 0 && meta.value === null
     error.value = null
 
@@ -118,8 +159,13 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
       const board = await listLivePresence(filters.value)
 
       applyBoard(board.data, board.meta)
+      clearRetry()
     } catch (caught) {
       error.value = caught
+      refreshFailure.value = { kind, error: caught }
+      if (transport.value === 'realtime') {
+        scheduleRetry()
+      }
     } finally {
       loading.value = false
     }
@@ -138,6 +184,7 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     }
 
     latestByEmployee.set(entry.employee_uuid, occurredAt)
+    lastUpdatedAt.value = new Date(serverNowMs()).toISOString()
 
     const index = entries.value.findIndex((item) => item.employee_uuid === entry.employee_uuid)
     const before = index >= 0 ? entries.value[index] : undefined
@@ -195,11 +242,13 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
   }
 
   function startPolling(): void {
+    clearRetry()
     transport.value = 'polling'
     schedulePoll()
   }
 
   function stopRealtime(): void {
+    activeChannel = null
     client?.close()
     client = null
     realtimeState.value = 'down'
@@ -217,6 +266,9 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     const realtime = current.realtime
 
     stopRealtime()
+    const channel = Symbol('presence-channel')
+
+    activeChannel = channel
     client = new RealtimeClient({
       key: realtime.key ?? '',
       path: realtime.path,
@@ -231,7 +283,16 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
         }
       },
       onStateChange: (state) => {
+        if (activeChannel !== channel) {
+          return
+        }
+
         realtimeState.value = state
+        // Sin canales (un responsable sin departamentos) no hay nada que reconectar.
+        const hasChannels = realtime.channels.length > 0
+
+        realtimeFailed.value =
+          state === 'down' ? hasChannels : state === 'live' ? false : realtimeFailed.value
 
         if (state === 'live') {
           // Lo que haya pasado mientras el canal estaba caido no ha llegado por
@@ -269,13 +330,15 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
   /** Cambia los filtros y vuelve a pedir la foto. El canal no depende de los filtros. */
   async function applyFilters(next: LivePresenceQuery): Promise<void> {
     filters.value = { ...next }
-    await load()
+    await load('filter')
   }
 
   /** Cierra canal y sondeo. Al salir de la pantalla. */
   function disconnect(): void {
     stopPolling()
+    clearRetry()
     stopRealtime()
+    realtimeFailed.value = false
     transport.value = 'idle'
   }
 
@@ -286,6 +349,9 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     loading,
     error,
     transport,
+    lastUpdatedAt,
+    refreshFailure,
+    realtimeFailed,
     realtimeState,
     realtimeAvailable,
     timeZone,

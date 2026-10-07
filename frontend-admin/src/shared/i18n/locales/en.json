@@ -1180,6 +1180,7 @@
     "fromEmployee": "The hours recorded for this person, day by day, with the amendment history of each day. Reading it changes nothing in the record.",
     "linkFromEmployee": "View this person's time record",
     "backToEmployee": "Back to the person's record",
+    "backToLive": "Back to live presence",
     "loading": "Loading the time record…",
     "zoneNotice": "Times are shown in the time zone of the site where the person clocked in, not in the one of the computer you are looking from.",
     "auditNotice": "Reading someone else's time record is written to the audit log, with who looked, at whom and for what period.",
@@ -1279,7 +1280,7 @@
     "counts": {
       "present": "In now",
       "absent": "Out now",
-      "snapshot": "Server snapshot",
+      "lastUpdate": "Last update",
       "snapshotAt": "{moment} ({zone})"
     },
     "status": {
@@ -1303,13 +1304,19 @@
       "origin": "Origin",
       "notInside": "Out",
       "noDepartment": "No department",
-      "previousDay": "{time} (previous day)"
+      "previousDay": "{time} (previous day)",
+      "openWorkDay": "View the work day of {name}"
     },
     "origin": {
       "qr_kiosk": "Card at the kiosk",
       "pin_kiosk": "PIN at the kiosk",
       "manual_admin": "Manual entry from the console",
       "import": "Initial import"
+    },
+    "notice": {
+      "poll": "The list could not be refreshed (network or server failure). The data shown is from the last successful update, on {moment} ({zone}); it will retry by itself.",
+      "filter": "The chosen filter could not be applied. The list is still the one from the last successful update, on {moment} ({zone}), and may not match the filter.",
+      "realtime": "The real-time connection dropped and is being retried. Meanwhile the list refreshes by polling; last successful update on {moment} ({zone})."
     },
     "transport": {
       "connecting": "Connecting to live updates…",
@@ -1510,6 +1517,12 @@
     "complianceViewEffect": "This affects the compliance view, not the incident inbox: the reckoning under art. 34.1 ET is annual, so the weekly alert is informative.",
     "retentionWarning": "You are about to change how many years records are kept. Lowering it widens what the purge treats as expired, over data you are legally required to keep. No purge runs on its own: the retention command proposes in simulation first and requires an explicit confirmation.",
     "notAppliedYet": "The holiday calendar is applied by the period hours report (RF-GP-04): public holidays do not count as unexplained absence. It does not affect any incident.",
+    "preview": {
+      "title": "Confirm the compliance profile changes",
+      "explanation": "Review which thresholds will change and from which value. It applies from now on, with no retroactivity, and is recorded in the audit trail.",
+      "caption": "Compliance profile fields that change, with their current and new value",
+      "confirm": "Confirm and save"
+    },
     "save": "Save profile",
     "saving": "Saving…",
     "saved": "Profile saved. The change is recorded in the audit trail.",
@@ -1811,6 +1824,14 @@
     },
     "affectsWorkedHoursWarning": "You are about to change a threshold that can change the minutes recorded. The change is audited with your name, the date, the previous value and the new one.",
     "audited": "Every changed key leaves its own audit trail entry (calculation_setting.changed) with the previous value, the new one, who changed it and when.",
+    "preview": {
+      "title": "Confirm the settings changes",
+      "explanation": "Review which settings will change and from which value. The change is recorded in the audit trail.",
+      "caption": "Operational settings that change, with their current and new value",
+      "confirm": "Confirm and save",
+      "set": "Set (not shown)",
+      "notSet": "Not set"
+    },
     "save": "Save the settings",
     "saving": "Saving…",
     "saved": "Settings saved. The change is recorded in the audit trail.",
@@ -2451,7 +2472,8 @@
       "caption": "Site departments and their manager",
       "name": "Department",
       "manager": "Manager",
-      "assign": "Assign manager"
+      "assign": "Assign manager",
+      "actions": "Actions"
     },
     "noManager": "No manager",
     "hasManager": "Has a manager",
@@ -2462,7 +2484,36 @@
     "displaceNotice": "If you choose another account, the current manager stops managing this department.",
     "announce": {
       "saved": "Manager of {name} updated.",
-      "failed": "The manager of {name} was not changed."
+      "failed": "The manager of {name} was not changed.",
+      "created": "Department {name} created.",
+      "createFailed": "Department {name} was not created.",
+      "renamed": "Department renamed to {name}.",
+      "renameFailed": "The department name was not changed."
+    },
+    "subtitleRead": "Read-only view of the site departments and who manages them. Only HR and administration staff can change them.",
+    "create": {
+      "label": "New department name",
+      "submit": "Add department"
+    },
+    "rename": {
+      "action": "Rename",
+      "title": "Rename \"{name}\"",
+      "field": "Department name",
+      "confirm": "Save name",
+      "previewCaption": "Name change: current value and new value"
+    }
+  },
+  "site": {
+    "heading": "Site",
+    "loading": "Loading the site…",
+    "name": "Site name",
+    "timezone": "Time zone",
+    "timezoneNote": "The time zone cannot be changed here: it decides which work day each shift belongs to, and changing it will be handled separately.",
+    "rename": "Rename site",
+    "renameTitle": "Rename the site",
+    "announce": {
+      "saved": "Site renamed to {name}.",
+      "failed": "The site name was not changed."
     }
   }
 }

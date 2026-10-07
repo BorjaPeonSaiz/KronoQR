@@ -78,7 +78,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <section>
+  <section class="min-w-0">
     <header>
       <h1 class="font-heading text-2xl font-bold text-kq-text">{{ t('myExport.title') }}</h1>
       <p class="mt-2 max-w-prose text-kq-text-muted">{{ t('myExport.intro') }}</p>
@@ -90,12 +90,18 @@ async function submit(): Promise<void> {
       <li>{{ t('myExport.contents.format') }}</li>
     </ul>
 
-    <form class="mt-6 flex max-w-3xl flex-wrap items-end gap-4" novalidate @submit.prevent="submit">
-      <fieldset class="flex flex-wrap items-end gap-4 border-0 p-0">
+    <form
+      data-test="export-form"
+      class="mt-6 flex max-w-3xl flex-wrap items-end gap-4"
+      novalidate
+      @submit.prevent="submit"
+    >
+      <fieldset class="flex min-w-0 max-w-full flex-wrap items-end gap-4 border-0 p-0">
         <legend class="sr-only">{{ t('myExport.filters.legend') }}</legend>
 
         <FormField
           v-slot="field"
+          class="min-w-0 max-w-full break-words"
           :label="t('myExport.filters.from')"
           :hint="t('myExport.filters.fromHint')"
           label-class="text-lg font-medium text-kq-text"
@@ -105,12 +111,13 @@ async function submit(): Promise<void> {
             v-model="range.from"
             type="date"
             :aria-describedby="field.describedBy"
-            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
+            class="min-h-12 w-full min-w-0 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
           />
         </FormField>
 
         <FormField
           v-slot="field"
+          class="min-w-0 max-w-full break-words"
           :label="t('myExport.filters.to')"
           :hint="t('myExport.filters.toHint')"
           :errors="rangeErrors"
@@ -122,12 +129,12 @@ async function submit(): Promise<void> {
             type="date"
             :aria-describedby="field.describedBy"
             :aria-invalid="field.invalid"
-            class="min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
+            class="min-h-12 w-full min-w-0 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-lg"
           />
         </FormField>
       </fieldset>
 
-      <fieldset class="flex min-w-0 flex-col gap-1 border-0 p-0">
+      <fieldset class="flex min-w-0 max-w-full flex-col gap-1 border-0 p-0">
         <legend class="text-lg font-medium text-kq-text">{{ t('myExport.format.legend') }}</legend>
         <label
           v-for="option of FORMATS"
@@ -143,7 +150,7 @@ async function submit(): Promise<void> {
             :value="option"
             class="size-6 accent-kq-primary-strong"
           />
-          <span>{{ t(`myExport.format.${option}`) }}</span>
+          <span class="min-w-0 break-words">{{ t(`myExport.format.${option}`) }}</span>
         </label>
       </fieldset>
 
@@ -151,7 +158,8 @@ async function submit(): Promise<void> {
         type="submit"
         :disabled="!canSubmit"
         :aria-busy="submitting"
-        class="min-h-12 rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-lg font-semibold text-kq-on-primary disabled:opacity-50"
+        data-test="export-submit"
+        class="min-h-12 max-w-full break-words rounded-kq-sm bg-kq-primary-strong px-4 py-2 text-lg font-semibold text-kq-on-primary disabled:opacity-50"
       >
         {{ submitting ? t('myExport.downloading') : t(`myExport.download.${format}`) }}
       </button>
@@ -169,7 +177,7 @@ async function submit(): Promise<void> {
         type="button"
         data-test="use-csv"
         :disabled="submitting"
-        class="mt-3 min-h-12 rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-lg font-semibold text-kq-text"
+        class="mt-3 min-h-12 max-w-full break-words rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-lg font-semibold text-kq-text"
         @click="retryWithCsv"
       >
         {{ t('myExport.pdfUnavailable.useCsv') }}

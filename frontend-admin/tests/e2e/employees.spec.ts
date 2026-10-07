@@ -260,7 +260,7 @@ test(
     await expect(row).toContainText('No teletrabaja')
     await expect(row).toContainText('Teletrabaja')
 
-    await dialog.getByRole('button', { name: 'Confirmar y guardar' }).click()
+    await dialog.getByTestId('confirm-dialog-confirm').click()
     await expect(dialog).toBeHidden()
 
     const patch = stub.requests.find(

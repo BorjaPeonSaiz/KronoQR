@@ -1,3 +1,4 @@
+import type { VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
 import es from '@/shared/i18n/locales/es.json'
@@ -82,6 +83,15 @@ beforeEach(() => {
   clearAnnouncement()
 })
 
+/** Confirma el dialogo de «antes -> despues» si se ha abierto (R3-PA-09). */
+async function confirmSave(wrapper: VueWrapper): Promise<void> {
+  const button = wrapper
+    .findAll('button')
+    .find((candidate) => candidate.text() === es.compliance.preview.confirm)
+
+  await button?.trigger('click')
+}
+
 describe('perfil de cumplimiento', () => {
   it('carga el perfil y avisa de que los umbrales mueven la deteccion', async () => {
     stubProfileApi(() => jsonResponse(profile))
@@ -161,6 +171,7 @@ describe('perfil de cumplimiento', () => {
 
     await wrapper.find('[data-test="min-rest-hours"]').setValue('10')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -224,6 +235,7 @@ describe('perfil de cumplimiento', () => {
     // oficial. Las lineas en blanco no viajan.
     await wrapper.find('[data-test="holiday-calendar"]').setValue('2026-01-01\n\n2026-12-25\n')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -247,6 +259,7 @@ describe('perfil de cumplimiento', () => {
 
     await wrapper.find('[data-test="max-daily-hours"]').setValue('90')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     // Sin `fieldLabels`, el aviso diria «max_daily_hours», que es el nombre de la
@@ -402,5 +415,66 @@ describe('perfil de cumplimiento: entrada que no es un numero', () => {
 
     expect(wrapper.text()).not.toContain(es.compliance.errors.required)
     expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeUndefined()
+  })
+
+  describe('antes -> despues (R3-PA-09)', () => {
+    it('pide confirmacion con solo los campos que cambian y no escribe hasta confirmar', async () => {
+      const fetchSpy = stubProfileApi((_url, init) =>
+        init?.method === 'PATCH'
+          ? jsonResponse({ data: { ...profile.data, min_rest_hours: 10, retention_years: 5 } })
+          : jsonResponse(profile),
+      )
+
+      const wrapper = await mountView(ComplianceProfileView)
+      await settle()
+
+      await wrapper.find('[data-test="min-rest-hours"]').setValue('10')
+      await wrapper.find('[data-test="retention-years"]').setValue('5')
+      await wrapper.find('[data-test="save"]').trigger('submit')
+      await settle()
+
+      const rows = wrapper.findAll('[data-test="change-preview"] tbody tr')
+
+      expect(rows).toHaveLength(2)
+      expect(rows[0]?.text()).toContain(es.compliance.fields.minRestHours)
+      expect(rows[0]?.text()).toContain('12')
+      expect(rows[0]?.text()).toContain('10')
+      expect(rows[1]?.text()).toContain(es.compliance.fields.retentionYears)
+      expect(wrapper.text()).not.toContain(es.compliance.fields.maxDailyHours + 'Valor')
+      expect(fetchSpy.mock.calls.some(([, init]) => (init as RequestInit).method === 'PATCH')).toBe(
+        false,
+      )
+
+      await confirmSave(wrapper)
+      await settle()
+
+      expect(fetchSpy.mock.calls.some(([, init]) => (init as RequestInit).method === 'PATCH')).toBe(
+        true,
+      )
+      expect(wrapper.find('[data-test="change-preview"]').exists()).toBe(false)
+    })
+
+    it('cancelar la confirmacion no guarda nada y conserva lo escrito', async () => {
+      const fetchSpy = stubProfileApi(() => jsonResponse(profile))
+
+      const wrapper = await mountView(ComplianceProfileView)
+      await settle()
+
+      await wrapper.find('[data-test="min-rest-hours"]').setValue('10')
+      await wrapper.find('[data-test="save"]').trigger('submit')
+      await settle()
+
+      const cancel = wrapper.findAll('button').find((button) => button.text() === es.common.cancel)
+      await cancel?.trigger('click')
+      await settle()
+
+      expect(wrapper.find('[data-test="change-preview"]').exists()).toBe(false)
+      expect(fetchSpy.mock.calls.some(([, init]) => (init as RequestInit).method === 'PATCH')).toBe(
+        false,
+      )
+      expect((wrapper.find('[data-test="min-rest-hours"]').element as HTMLInputElement).value).toBe(
+        '10',
+      )
+    })
   })
 })

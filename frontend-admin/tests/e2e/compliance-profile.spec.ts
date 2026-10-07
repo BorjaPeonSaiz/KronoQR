@@ -8,6 +8,7 @@
 // un rol sin `settings:*` no ve la entrada ni puede llegar a la pantalla.
 import { expect, test } from '@playwright/test'
 import { logInAsAdmin, logInAsManager, stubManagementApi } from './support/admin'
+import { cancelChanges, confirmChanges } from './support/confirm'
 
 test(
   'un responsable de departamento no ve «Cumplimiento» en la navegacion, ni puede llegar a la pantalla',
@@ -47,6 +48,8 @@ test(
     await expect(page.getByTestId('pending-detection-warning')).toBeVisible()
 
     await page.getByTestId('save').click()
+
+    await confirmChanges(page)
     await expect(page.getByTestId('saved')).toBeVisible()
 
     // El cambio persiste tras recargar: lo guardo el servidor.
@@ -96,5 +99,29 @@ test(
     )
     await page.getByTestId('break-required-after-hours').fill('5')
     await expect(page.getByTestId('pending-detection-warning')).toBeVisible()
+  },
+)
+
+// R3-PA-09: antes de guardar se ve el antes y el despues de lo que cambia, y
+// solo de lo que cambia.
+test(
+  'guardar pide confirmacion con solo los campos que cambian, y cancelar no escribe nada',
+  { tag: ['@RF-PD-07'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+    await page.goto('/compliance-profile')
+
+    await page.getByTestId('min-rest-hours').fill('10')
+    await page.getByTestId('save').click()
+
+    const preview = page.getByTestId('change-preview')
+    await expect(preview).toBeVisible()
+    await expect(preview.locator('tbody tr')).toHaveCount(1)
+
+    await cancelChanges(page)
+    await expect(preview).toHaveCount(0)
+    await expect(page.getByTestId('saved')).toHaveCount(0)
+    await expect(page.getByTestId('min-rest-hours')).toHaveValue('10')
   },
 )

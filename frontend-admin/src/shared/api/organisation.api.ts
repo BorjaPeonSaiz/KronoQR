@@ -13,10 +13,16 @@ import type {
   DepartmentCollection,
   Site,
   UpdateDepartmentRequest,
+  UpdateSiteRequest,
 } from './types'
 
 export function getSite(): Promise<Site> {
   return requestJson<Site>('/api/v1/site')
+}
+
+/** Renombra el centro. La zona horaria no se envia desde el panel (R6-AR-02). */
+export function updateSite(body: UpdateSiteRequest): Promise<Site> {
+  return requestJson<Site>('/api/v1/site', { method: 'PATCH', body })
 }
 
 export function listDepartments(): Promise<DepartmentCollection> {

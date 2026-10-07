@@ -67,6 +67,9 @@ import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import ChangePreview from '@/shared/ui/ChangePreview.vue'
+import type { Change } from '@/shared/ui/change'
+import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import type {
   InstallationSetting,
   InstallationSettings,
@@ -101,7 +104,6 @@ const KIOSK_UPDATE_QUIET_MINUTES_KEY = 'KIOSK_UPDATE_QUIET_MINUTES' satisfies Se
 // `KIOSK_UPDATE_QUIET_MINUTES_KEY`.
 // Longitud del PIN (RF-ID-09, ADR-050): eleccion `"6"`/`"8"`, string segun el contrato.
 const PIN_LENGTH_KEY = 'IDENTITY_PIN_LENGTH' satisfies SettingKey
-const PIN_LENGTH_FALLBACK = '6'
 const BASELINE_MANUAL_HOURS_KEY = 'BASELINE_MANUAL_HOURS_PER_MONTH' satisfies SettingKey
 
 /** `HH:MM-HH:MM`, la misma forma que valida el servidor (decision 9 de la ficha 3.12): puede cruzar la medianoche, eso no lo dice el formato, lo permite. */
@@ -119,6 +121,19 @@ const PAYROLL_HOURS_FORMAT_KEY = 'PAYROLL_EXPORT_HOURS_FORMAT' satisfies Setting
 const PAYROLL_DATE_FORMAT_KEY = 'PAYROLL_EXPORT_DATE_FORMAT' satisfies SettingKey
 const PAYROLL_ENCODING_KEY = 'PAYROLL_EXPORT_ENCODING' satisfies SettingKey
 const PAYROLL_HEADER_ROW_KEY = 'PAYROLL_EXPORT_HEADER_ROW' satisfies SettingKey
+
+/** Los valores de serie del catalogo: la unica copia que usan los refs, `fill()`, `pendingChanges` y la vista previa. */
+const DEFAULTS = {
+  breakClocking: 'disabled',
+  pinLength: '6',
+  weeklySummaryEmail: 'disabled',
+  kioskUpdateWindow: '03:00-05:00',
+  payrollDelimiter: 'semicolon',
+  payrollHoursFormat: 'hhmm',
+  payrollDateFormat: 'iso',
+  payrollEncoding: 'utf8_bom',
+  payrollHeaderRow: 'enabled',
+} as const
 
 /** El catalogo cerrado de columnas (decision 5 de la ficha): el mismo que valida el servidor. Un `id` fuera de esta lista es `422` al guardar, aqui y en el backend. */
 const PAYROLL_COLUMN_IDS = [
@@ -223,13 +238,13 @@ const localeDefault = ref('')
 const localeAvailable = ref<string[]>([])
 const serviceCode = ref('')
 /** `enabled`/`disabled` (RF-AT-12, tarea 3.5). `disabled` de serie, como en el catalogo. */
-const breakClocking = ref('disabled')
-const pinLength = ref(PIN_LENGTH_FALLBACK)
+const breakClocking = ref<string>(DEFAULTS.breakClocking)
+const pinLength = ref<string>(DEFAULTS.pinLength)
 
 /** `disabled`/`enabled` (RF-PR-05, tarea 3.12). `disabled` de serie: el resumen es opcional (doc 05 §5.7). */
-const weeklySummaryEmail = ref('disabled')
+const weeklySummaryEmail = ref<string>(DEFAULTS.weeklySummaryEmail)
 /** `HH:MM-HH:MM` en hora local del centro (RF-KI-07, tarea 3.12). `03:00-05:00` de serie. */
-const kioskUpdateWindow = ref('03:00-05:00')
+const kioskUpdateWindow = ref<string>(DEFAULTS.kioskUpdateWindow)
 /** Entero 0-120 (RF-KI-07, tarea 3.12), como cadena para `v-model`. `10` de serie. */
 const kioskUpdateQuietMinutes = ref<number | string>('10')
 
@@ -261,12 +276,12 @@ const serviceCodeRedacted = ref(false)
 // expresar. Un `<textarea>` con una entrada por linea es el control minimo
 // que sostiene las dos cosas a la vez.
 const payrollColumnsText = ref('')
-const payrollDelimiter = ref('semicolon')
-const payrollHoursFormat = ref('hhmm')
-const payrollDateFormat = ref('iso')
-const payrollEncoding = ref('utf8_bom')
+const payrollDelimiter = ref<string>(DEFAULTS.payrollDelimiter)
+const payrollHoursFormat = ref<string>(DEFAULTS.payrollHoursFormat)
+const payrollDateFormat = ref<string>(DEFAULTS.payrollDateFormat)
+const payrollEncoding = ref<string>(DEFAULTS.payrollEncoding)
 /** `enabled`/`disabled`: si el fichero lleva fila de cabecera. `enabled` de serie. */
-const payrollHeaderRow = ref('enabled')
+const payrollHeaderRow = ref<string>(DEFAULTS.payrollHeaderRow)
 
 /** La fila de una clave del catalogo ya cargado, o `undefined` si no llego a resolverse. */
 function entryOf(catalog: InstallationSettings, key: string): InstallationSetting | undefined {
@@ -323,7 +338,7 @@ const pinLengthOptions = computed<readonly string[]>(() => {
 function breakClockingValueOf(catalog: InstallationSettings): string {
   const stored = stringValue(catalog, BREAK_CLOCKING_KEY)
 
-  return stored === '' ? 'disabled' : stored
+  return stored === '' ? DEFAULTS.breakClocking : stored
 }
 
 /**
@@ -444,10 +459,18 @@ function fill(catalog: InstallationSettings): void {
   serviceCode.value = serviceCodeRedacted.value ? '' : stringValue(catalog, 'KIOSK_SERVICE_CODE')
 
   breakClocking.value = breakClockingValueOf(catalog)
-  pinLength.value = closedTextValueOf(catalog, PIN_LENGTH_KEY, PIN_LENGTH_FALLBACK)
+  pinLength.value = closedTextValueOf(catalog, PIN_LENGTH_KEY, DEFAULTS.pinLength)
 
-  weeklySummaryEmail.value = closedTextValueOf(catalog, WEEKLY_SUMMARY_EMAIL_KEY, 'disabled')
-  kioskUpdateWindow.value = closedTextValueOf(catalog, KIOSK_UPDATE_WINDOW_KEY, '03:00-05:00')
+  weeklySummaryEmail.value = closedTextValueOf(
+    catalog,
+    WEEKLY_SUMMARY_EMAIL_KEY,
+    DEFAULTS.weeklySummaryEmail,
+  )
+  kioskUpdateWindow.value = closedTextValueOf(
+    catalog,
+    KIOSK_UPDATE_WINDOW_KEY,
+    DEFAULTS.kioskUpdateWindow,
+  )
   // Sin `fallback` (segunda vuelta, hallazgo del revisor en la 3.11
   // aplicado aqui): si la clave no tiene fila propia se ve `0`, no un
   // valor de serie que nadie ha configurado.
@@ -455,11 +478,27 @@ function fill(catalog: InstallationSettings): void {
   baselineManualHoursPerMonth.value = integerValue(catalog, BASELINE_MANUAL_HOURS_KEY)
 
   payrollColumnsText.value = payrollColumnsValueOf(catalog).join('\n')
-  payrollDelimiter.value = closedTextValueOf(catalog, PAYROLL_DELIMITER_KEY, 'semicolon')
-  payrollHoursFormat.value = closedTextValueOf(catalog, PAYROLL_HOURS_FORMAT_KEY, 'hhmm')
-  payrollDateFormat.value = closedTextValueOf(catalog, PAYROLL_DATE_FORMAT_KEY, 'iso')
-  payrollEncoding.value = closedTextValueOf(catalog, PAYROLL_ENCODING_KEY, 'utf8_bom')
-  payrollHeaderRow.value = closedTextValueOf(catalog, PAYROLL_HEADER_ROW_KEY, 'enabled')
+  payrollDelimiter.value = closedTextValueOf(
+    catalog,
+    PAYROLL_DELIMITER_KEY,
+    DEFAULTS.payrollDelimiter,
+  )
+  payrollHoursFormat.value = closedTextValueOf(
+    catalog,
+    PAYROLL_HOURS_FORMAT_KEY,
+    DEFAULTS.payrollHoursFormat,
+  )
+  payrollDateFormat.value = closedTextValueOf(
+    catalog,
+    PAYROLL_DATE_FORMAT_KEY,
+    DEFAULTS.payrollDateFormat,
+  )
+  payrollEncoding.value = closedTextValueOf(catalog, PAYROLL_ENCODING_KEY, DEFAULTS.payrollEncoding)
+  payrollHeaderRow.value = closedTextValueOf(
+    catalog,
+    PAYROLL_HEADER_ROW_KEY,
+    DEFAULTS.payrollHeaderRow,
+  )
 }
 
 async function load(): Promise<void> {
@@ -699,7 +738,7 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
   }
 
   // Longitud del PIN (RF-ID-09, ADR-050): va como cadena, segun el contrato.
-  if (pinLength.value !== closedTextValueOf(current, PIN_LENGTH_KEY, PIN_LENGTH_FALLBACK)) {
+  if (pinLength.value !== closedTextValueOf(current, PIN_LENGTH_KEY, DEFAULTS.pinLength)) {
     changes[PIN_LENGTH_KEY] = pinLength.value
   }
 
@@ -708,7 +747,7 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
   const previousWeeklySummaryEmail = closedTextValueOf(
     current,
     WEEKLY_SUMMARY_EMAIL_KEY,
-    'disabled',
+    DEFAULTS.weeklySummaryEmail,
   )
 
   if (weeklySummaryEmail.value !== previousWeeklySummaryEmail) {
@@ -716,7 +755,11 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
   }
 
   const trimmedUpdateWindow = kioskUpdateWindow.value.trim()
-  const previousUpdateWindow = closedTextValueOf(current, KIOSK_UPDATE_WINDOW_KEY, '03:00-05:00')
+  const previousUpdateWindow = closedTextValueOf(
+    current,
+    KIOSK_UPDATE_WINDOW_KEY,
+    DEFAULTS.kioskUpdateWindow,
+  )
 
   if (kioskUpdateWindowLocalIssue.value === null && trimmedUpdateWindow !== previousUpdateWindow) {
     changes[KIOSK_UPDATE_WINDOW_KEY] = trimmedUpdateWindow
@@ -772,27 +815,27 @@ const pendingChanges = computed<UpdateSettingsRequest['settings']>(() => {
     [
       PAYROLL_DELIMITER_KEY,
       payrollDelimiter.value,
-      closedTextValueOf(current, PAYROLL_DELIMITER_KEY, 'semicolon'),
+      closedTextValueOf(current, PAYROLL_DELIMITER_KEY, DEFAULTS.payrollDelimiter),
     ],
     [
       PAYROLL_HOURS_FORMAT_KEY,
       payrollHoursFormat.value,
-      closedTextValueOf(current, PAYROLL_HOURS_FORMAT_KEY, 'hhmm'),
+      closedTextValueOf(current, PAYROLL_HOURS_FORMAT_KEY, DEFAULTS.payrollHoursFormat),
     ],
     [
       PAYROLL_DATE_FORMAT_KEY,
       payrollDateFormat.value,
-      closedTextValueOf(current, PAYROLL_DATE_FORMAT_KEY, 'iso'),
+      closedTextValueOf(current, PAYROLL_DATE_FORMAT_KEY, DEFAULTS.payrollDateFormat),
     ],
     [
       PAYROLL_ENCODING_KEY,
       payrollEncoding.value,
-      closedTextValueOf(current, PAYROLL_ENCODING_KEY, 'utf8_bom'),
+      closedTextValueOf(current, PAYROLL_ENCODING_KEY, DEFAULTS.payrollEncoding),
     ],
     [
       PAYROLL_HEADER_ROW_KEY,
       payrollHeaderRow.value,
-      closedTextValueOf(current, PAYROLL_HEADER_ROW_KEY, 'enabled'),
+      closedTextValueOf(current, PAYROLL_HEADER_ROW_KEY, DEFAULTS.payrollHeaderRow),
     ],
   ]
 
@@ -854,6 +897,92 @@ const accessControlPending = computed(() => {
   )
 })
 
+/** Se pide confirmacion con el antes y el despues de cada ajuste que cambia (R3-PA-09). */
+const confirming = ref(false)
+
+function askConfirmation(): void {
+  if (canSave.value) {
+    confirming.value = true
+  }
+}
+
+function cancelConfirmation(): void {
+  confirming.value = false
+}
+
+/** Los valores de serie, por clave, que `fill()` aplica cuando la clave aun no tiene fila propia. */
+const PREVIEW_FALLBACKS: Readonly<Record<string, string>> = {
+  [PIN_LENGTH_KEY]: DEFAULTS.pinLength,
+  [WEEKLY_SUMMARY_EMAIL_KEY]: DEFAULTS.weeklySummaryEmail,
+  [KIOSK_UPDATE_WINDOW_KEY]: DEFAULTS.kioskUpdateWindow,
+  [PAYROLL_DELIMITER_KEY]: DEFAULTS.payrollDelimiter,
+  [PAYROLL_HOURS_FORMAT_KEY]: DEFAULTS.payrollHoursFormat,
+  [PAYROLL_DATE_FORMAT_KEY]: DEFAULTS.payrollDateFormat,
+  [PAYROLL_ENCODING_KEY]: DEFAULTS.payrollEncoding,
+  [PAYROLL_HEADER_ROW_KEY]: DEFAULTS.payrollHeaderRow,
+  [BREAK_CLOCKING_KEY]: DEFAULTS.breakClocking,
+}
+
+/**
+ * Un valor tal como se le ensena a quien confirma. El codigo de servicio del
+ * quiosco nunca sale en claro (decision 6 de la ficha 3.3): solo si hay o no.
+ */
+function previewValue(
+  key: string,
+  value: number | string | readonly string[] | null | undefined,
+): string {
+  if (key === 'KIOSK_SERVICE_CODE') {
+    return value === undefined || value === null || value === ''
+      ? t('operationalSettings.preview.notSet')
+      : t('operationalSettings.preview.set')
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    if (key.startsWith('LOCALE_')) {
+      return value.map(localeLabel).join(', ')
+    }
+
+    return value.length === 0 ? t('common.empty') : value.join(', ')
+  }
+
+  if (value === undefined || value === null || value === '') {
+    return t('common.empty')
+  }
+
+  if (key === BREAK_CLOCKING_KEY) {
+    return t(`operationalSettings.breakClockingOptions.${String(value)}`)
+  }
+
+  if (key === 'LOCALE_DEFAULT') {
+    return localeLabel(String(value))
+  }
+
+  return String(value)
+}
+
+/** Solo las claves que cambian: etiqueta, valor actual y valor nuevo. */
+const previewChanges = computed<Change[]>(() => {
+  const current = settings.value
+
+  if (current === null) {
+    return []
+  }
+
+  return Object.entries(pendingChanges.value).map(([key, next]) => {
+    const stored =
+      key === PAYROLL_COLUMNS_KEY
+        ? payrollColumnsValueOf(current)
+        : (entryOf(current, key)?.value ?? PREVIEW_FALLBACKS[key])
+    const previous = stored === '' ? PREVIEW_FALLBACKS[key] : stored
+
+    return {
+      label: fieldLabels.value[`settings.${key}`] ?? key,
+      from: previewValue(key, previous),
+      to: previewValue(key, next),
+    }
+  })
+})
+
 async function save(): Promise<void> {
   if (!canSave.value) {
     return
@@ -866,8 +995,10 @@ async function save(): Promise<void> {
   try {
     fill(await updateInstallationSettings(pendingChanges.value))
     saved.value = true
+    confirming.value = false
     announce(t('operationalSettings.saved'))
   } catch (failure) {
+    confirming.value = false
     error.value = failure
     announce(t('operationalSettings.failed'))
   } finally {
@@ -891,7 +1022,7 @@ async function save(): Promise<void> {
       v-if="settings !== null"
       class="flex max-w-3xl flex-col gap-6"
       novalidate
-      @submit.prevent="save"
+      @submit.prevent="askConfirmation"
     >
       <fieldset class="flex flex-col gap-4">
         <legend class="text-lg font-medium text-kq-text">
@@ -987,7 +1118,7 @@ async function save(): Promise<void> {
           {{ t('operationalSettings.impacts.access_control') }}
           {{
             t('operationalSettings.pinLengthChange', {
-              from: closedTextValueOf(settings, PIN_LENGTH_KEY, PIN_LENGTH_FALLBACK),
+              from: closedTextValueOf(settings, PIN_LENGTH_KEY, DEFAULTS.pinLength),
               to: pinLength,
             })
           }}
@@ -1366,5 +1497,22 @@ async function save(): Promise<void> {
         </p>
       </div>
     </form>
+
+    <ConfirmDialog
+      v-if="confirming"
+      :title="t('operationalSettings.preview.title')"
+      :confirm-label="t('operationalSettings.preview.confirm')"
+      :busy="saving"
+      :error="null"
+      @cancel="cancelConfirmation"
+      @confirm="save"
+    >
+      <p class="mb-4">{{ t('operationalSettings.preview.explanation') }}</p>
+      <ChangePreview
+        :changes="previewChanges"
+        :caption="t('operationalSettings.preview.caption')"
+        data-test="change-preview"
+      />
+    </ConfirmDialog>
   </section>
 </template>

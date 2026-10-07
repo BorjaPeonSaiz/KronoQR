@@ -29,6 +29,7 @@ import type {
   CreateEmploymentContractRequest,
   CredentialStatusBoard,
   DataExport,
+  Department,
   DepartmentCollection,
   Device,
   DeviceList,
@@ -2026,6 +2027,11 @@ export async function stubManagementApi(
   // objeto, nunca llega a `null`.
   const absencesState: Absence[] = (options.absences ?? []).map((candidate) => ({ ...candidate }))
 
+  // Departamentos y centro (RF-ID-03, bloque 21): mutables, para que crear y
+  // renombrar se vean en el listado siguiente como en el servidor.
+  const departmentsState: Department[] = DEPARTMENTS.data.map((candidate) => ({ ...candidate }))
+  let siteState: Site = { ...SITE }
+
   function canWriteEmployees(): boolean {
     return currentUser.abilities.includes('*') || currentUser.abilities.includes('employees:*')
   }
@@ -2530,6 +2536,38 @@ export async function stubManagementApi(
         query: url.search.slice(1),
         body,
       })
+
+      // Renombrado de un departamento (identificador dinamico en la ruta).
+      if (method === 'PATCH' && /^\/api\/v1\/departments\/\d+$/.test(url.pathname)) {
+        const id = Number(url.pathname.split('/').at(-1))
+        const body = request.postDataJSON() as { name?: string }
+        const target = departmentsState.find((candidate) => candidate.id === id)
+
+        if (target === undefined) {
+          await problem(route, 404, 'urn:kronoqr:problem:not-found', 'No encontrado')
+          return
+        }
+
+        if (
+          body.name !== undefined &&
+          departmentsState.some((candidate) => candidate.id !== id && candidate.name === body.name)
+        ) {
+          await validationProblem(
+            route,
+            'urn:kronoqr:problem:validation-failed',
+            'Petición no válida',
+            { name: ['Ya existe un departamento con ese nombre.'] },
+          )
+          return
+        }
+
+        if (body.name !== undefined) {
+          target.name = body.name
+        }
+
+        await json(route, 200, target)
+        return
+      }
 
       // La bandeja de incidencias tiene un identificador dinamico en la ruta de
       // resolver (`/incidents/{id}/resolve`), asi que no encaja en el `switch`
@@ -3840,11 +3878,40 @@ export async function stubManagementApi(
           return
         }
         case 'GET /api/v1/site':
-          await json(route, 200, SITE)
+          await json(route, 200, siteState)
           return
+        case 'PATCH /api/v1/site': {
+          const patch = request.postDataJSON() as { name?: string }
+
+          siteState = { ...siteState, ...(patch.name === undefined ? {} : { name: patch.name }) }
+          await json(route, 200, siteState)
+          return
+        }
         case 'GET /api/v1/departments':
-          await json(route, 200, DEPARTMENTS)
+          await json(route, 200, { data: departmentsState })
           return
+        case 'POST /api/v1/departments': {
+          const body = request.postDataJSON() as { name: string }
+
+          if (departmentsState.some((candidate) => candidate.name === body.name)) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Petición no válida',
+              { name: ['Ya existe un departamento con ese nombre.'] },
+            )
+            return
+          }
+
+          const created: Department = {
+            id: Math.max(...departmentsState.map((candidate) => candidate.id)) + 1,
+            name: body.name,
+          }
+
+          departmentsState.push(created)
+          await json(route, 201, created)
+          return
+        }
         case 'GET /api/v1/employees': {
           // Los unicos filtros que el doble aplica de verdad son `teleworking`
           // (RF-GP-01) y `pin_status` (RF-ID-09: el enlace «personas sin PIN»
@@ -4202,6 +4269,14 @@ export async function stubManagementApi(
           return
         }
         case `GET /api/v1/employees/${EMPLOYEE_UUID}/workdays`:
+          // `WorkDayJournalPolicy::readers()`: admin, rrhh y responsable. El auditor no
+          // lee el detalle de jornada (decision pendiente del propietario): 403 como el servidor.
+          if (currentUser.roles.includes('auditor')) {
+            await problem(route, 403, 'urn:kronoqr:problem:forbidden', 'Sin permiso')
+
+            return
+          }
+
           await json(route, 200, workdaysState)
           return
         case 'POST /api/v1/shift-entries': {

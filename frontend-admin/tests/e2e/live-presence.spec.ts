@@ -9,7 +9,14 @@
 import type { BrowserContext, Page, WebSocketRoute } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import type { LivePresenceBoard, LivePresenceEntry } from '@/shared/api/types'
-import { LIVE_BOARD, LIVE_ENTRY, logIn, stubManagementApi } from './support/admin'
+import {
+  LIVE_BOARD,
+  LIVE_ENTRY,
+  logIn,
+  logInAsAuditor,
+  logInAsManager,
+  stubManagementApi,
+} from './support/admin'
 
 interface FakeReverb {
   readonly sockets: WebSocketRoute[]
@@ -187,6 +194,10 @@ test(
     await expect(transport).toHaveText('Tiempo real no disponible: la lista se actualiza cada 1 s')
     await expect(transport).toHaveAttribute('role', 'status')
 
+    // R3-PA-01: el canal que no se establece se avisa aparte del indicador, y la lista sigue.
+    await expect(page.getByTestId('refresh-notice')).toHaveAttribute('data-kind', 'realtime')
+    await expect(page.getByTestId('presence-entry').first()).toBeVisible()
+
     await expect
       .poll(
         () => api.requests.filter((request) => request.path === '/api/v1/attendance/live').length,
@@ -295,5 +306,82 @@ test(
     )
     expect(lcp).toBeGreaterThan(0)
     expect(lcp).toBeLessThan(1_500)
+  },
+)
+
+// R3-PA-05 (doc 05 §3.2): el responsable llega al detalle de jornada desde la
+// fila de la presencia, en el dia de la entrada en la zona del centro. El
+// auditor NO lo lee (WorkDayJournalPolicy::readers(), decision pendiente del
+// propietario): no se le ofrece un enlace que acabaria en 403.
+test(
+  'el responsable abre desde la fila de presencia el detalle de jornada de esa persona',
+  { tag: ['@RF-PA-01', '@RF-PA-03'] },
+  async ({ context, page }) => {
+    await fakeReverb(context)
+    await stubManagementApi(page, { role: 'manager' })
+    await logInAsManager(page)
+    await page.goto('/live')
+
+    // La lista va ordenada por nombre: se pulsa el enlace de la fila de esa persona, no el primero.
+    await page
+      .locator(`[data-test="presence-entry"][data-employee="${LIVE_ENTRY.employee_uuid}"]`)
+      .getByTestId('entry-workdays-link')
+      .click()
+
+    await expect(page).toHaveURL(
+      new RegExp(`/employees/${LIVE_ENTRY.employee_uuid}/workdays[?]from=[0-9-]+&to=[0-9-]+$`),
+    )
+    await expect(page.getByTestId('person')).toBeVisible()
+    await expect(page.getByTestId('back-link')).toContainText('Volver a la presencia')
+  },
+)
+
+test(
+  'el auditor ve la presencia pero no se le ofrece el enlace a la jornada',
+  { tag: ['@RF-PA-01', '@regla-dura-18'] },
+  async ({ context, page }) => {
+    await fakeReverb(context)
+    await stubManagementApi(page, { role: 'auditor' })
+    await logInAsAuditor(page)
+    await page.goto('/live')
+
+    await expect(page.getByTestId('presence-entry').first()).toBeVisible()
+    await expect(page.getByTestId('entry-workdays-link')).toHaveCount(0)
+  },
+)
+
+// R2-PA-01, R3-PA-02: con datos ya en pantalla, un sondeo que falla se avisa sin
+// tapar la lista, y el aviso se retira al recuperarse. La instalacion tiene el
+// tiempo real desactivado: asi el sondeo es la via normal y el unico aviso
+// posible es el del sondeo (el de la reconexion del canal, R3-PA-01, lo
+// comprueba la prueba de Reverb caido).
+test(
+  'un sondeo que falla avisa sin tapar la lista y el aviso desaparece al recuperarse',
+  { tag: ['@RF-PA-01', '@RNF-D-03'] },
+  async ({ page }) => {
+    const board: LivePresenceBoard = {
+      ...LIVE_BOARD,
+      meta: {
+        ...LIVE_BOARD.meta,
+        realtime: {
+          ...LIVE_BOARD.meta.realtime,
+          enabled: false,
+          key: null,
+          poll_interval_seconds: 1,
+        },
+      },
+    }
+    await openLive(page, board)
+    await expect(page.getByTestId('refresh-notice')).toHaveCount(0)
+
+    await page.route('**/api/v1/attendance/live*', (route) => route.fulfill({ status: 503 }))
+    await expect(page.getByTestId('refresh-notice')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('refresh-notice')).toHaveAttribute('data-kind', 'poll')
+    await expect(page.getByTestId('refresh-notice')).toHaveAttribute('aria-live', 'polite')
+    await expect(page.getByTestId('presence-entry').first()).toBeVisible()
+    await expect(page.getByTestId('generated-at')).toContainText('Europe/Madrid')
+
+    await page.unroute('**/api/v1/attendance/live*')
+    await expect(page.getByTestId('refresh-notice')).toHaveCount(0, { timeout: 8_000 })
   },
 )

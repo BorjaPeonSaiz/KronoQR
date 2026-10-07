@@ -11,6 +11,7 @@
 import type { Download } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { logInAsAdmin, logInAsManager, stubManagementApi } from './support/admin'
+import { confirmChanges } from './support/confirm'
 
 /** El texto del fichero descargado, sin volcarlo a disco. */
 async function readDownloadText(download: Download): Promise<string> {
@@ -90,6 +91,7 @@ test(
         ].join('\n'),
       )
     await page.getByTestId('save').click()
+    await confirmChanges(page)
     await expect(page.getByTestId('saved')).toBeVisible()
 
     // 3) La previsualización de «Nómina» refleja el ajuste nuevo, y la

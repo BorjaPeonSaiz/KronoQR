@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import CorrectionDialog from '@/features/workdays/CorrectionDialog.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { CorrectedShiftEntry } from '@/shared/api/types'
-import { EMPLOYEE_UUID, shiftEntry } from './support/fixtures'
+import { EMPLOYEE_UUID, SHIFT_ENTRY_UUID, shiftEntry } from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
 
 const CORRECTED: CorrectedShiftEntry = {
@@ -25,6 +25,26 @@ const CORRECTED: CorrectedShiftEntry = {
   clocked_in_at: '2026-03-14T05:00:00.000000Z',
   clocked_out_at: '2026-03-14T13:00:00.000000Z',
   daily_total_minutes: 480,
+}
+
+interface SentRequest {
+  path: string
+  method: string
+  body: unknown
+}
+
+/** Las peticiones que llegaron a `fetch`, con el cuerpo ya leido como JSON. */
+function sentRequests(spy: ReturnType<typeof stubFetch>): SentRequest[] {
+  return spy.mock.calls.map((call) => {
+    const init = call[1] as RequestInit | undefined
+    const body: unknown = JSON.parse(String(init?.body ?? 'null'))
+
+    return {
+      path: new URL(String(call[0]), 'http://localhost').pathname,
+      method: init?.method ?? 'GET',
+      body,
+    }
+  })
 }
 
 describe('CorrectionDialog, modo «add»', () => {
@@ -515,6 +535,88 @@ describe('CorrectionDialog, modo «correct»', () => {
     // Y la previsualizacion no dice "→ Sin cerrar": no hay fila de cambio.
     expect(wrapper.find('[data-test="dialog-preview"]').exists()).toBe(false)
   })
+  it('una correccion de hora con exito manda solo la salida en UTC y entrega la respuesta (@RN-13 @RF-PA-04)', async () => {
+    const MODIFIED: CorrectedShiftEntry = {
+      ...CORRECTED,
+      action: 'modified',
+      shift_entry_uuid: '0199f2c1-2222-7000-8000-0123456789ab',
+      superseded_shift_entry_uuid: SHIFT_ENTRY_UUID,
+      version: 3,
+      clocked_in_at: '2026-03-14T05:00:00.000000Z',
+      clocked_out_at: '2026-03-14T13:30:00.000000Z',
+      daily_total_minutes: 510,
+    }
+    const spy = stubFetch(() => jsonResponse(MODIFIED))
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    // 14:30 en Madrid el 14 de marzo (CET, +01:00) es 13:30 UTC.
+    await wrapper.find('[data-test="dialog-clock-out"]').setValue('2026-03-14T14:30')
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(sentRequests(spy)).toEqual([
+      {
+        path: `/api/v1/shift-entries/${SHIFT_ENTRY_UUID}`,
+        method: 'PATCH',
+        body: {
+          reason_code: 'AJUSTE_ACORDADO_CON_RRHH',
+          reason_text: null,
+          clocked_out_at: '2026-03-14T13:30:00.000Z',
+        },
+      },
+    ])
+    expect(wrapper.emitted('success')).toEqual([[MODIFIED]])
+    expect(wrapper.emitted('stale')).toBeUndefined()
+    expect(wrapper.emitted('cancel')).toBeUndefined()
+  })
+
+  it('un 422 de validacion deja el dialogo abierto con el error pegado al campo (@RN-13 @RF-PA-04)', async () => {
+    stubFetch(() =>
+      problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+        errors: { clocked_out_at: ['La salida no puede ser anterior a la entrada.'] },
+      }),
+    )
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'correct',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-clock-out"]').setValue('2026-03-14T05:30')
+    await wrapper.find('[data-test="dialog-reason"]').setValue('AJUSTE_ACORDADO_CON_RRHH')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    const clockOut = wrapper.find('[data-test="dialog-clock-out"]')
+    const errorId = clockOut.attributes('aria-describedby')?.split(' ').at(-1)
+
+    expect(clockOut.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.find(`#${errorId}`).text()).toBe('La salida no puede ser anterior a la entrada.')
+    expect((clockOut.element as HTMLInputElement).value).toBe('2026-03-14T05:30')
+    expect(wrapper.find('[data-test="dialog-submit"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.emitted('success')).toBeUndefined()
+    expect(wrapper.emitted('cancel')).toBeUndefined()
+    expect(wrapper.emitted('stale')).toBeUndefined()
+  })
 })
 
 describe('CorrectionDialog, modo «void»', () => {
@@ -553,5 +655,72 @@ describe('CorrectionDialog, modo «void»', () => {
 
     expect(preview.text()).toContain('14:05')
     expect(preview.text()).toContain(es.workdays.history.noEntryAfter)
+  })
+  it('anular manda solo el motivo, sin ninguna hora, y entrega la respuesta (@RN-13 @RF-PA-04)', async () => {
+    const VOIDED: CorrectedShiftEntry = {
+      ...CORRECTED,
+      action: 'voided',
+      shift_entry_uuid: SHIFT_ENTRY_UUID,
+      superseded_shift_entry_uuid: null,
+      version: 2,
+      status: 'voided',
+      clocked_in_at: '2026-03-14T05:00:00.000000Z',
+      clocked_out_at: '2026-03-14T13:05:00.000000Z',
+      daily_total_minutes: 0,
+    }
+    const spy = stubFetch(() => jsonResponse(VOIDED))
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'void',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-reason"]').setValue('ERROR_DE_ESCANEO_DUPLICADO')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(sentRequests(spy)).toEqual([
+      {
+        path: `/api/v1/shift-entries/${SHIFT_ENTRY_UUID}/void`,
+        method: 'POST',
+        body: { reason_code: 'ERROR_DE_ESCANEO_DUPLICADO', reason_text: null },
+      },
+    ])
+    expect(wrapper.emitted('success')).toEqual([[VOIDED]])
+    expect(wrapper.emitted('stale')).toBeUndefined()
+  })
+
+  it('anular con «otros» manda la justificacion escrita y nada mas (@RN-13 @RF-PA-04)', async () => {
+    const spy = stubFetch(() => jsonResponse({ ...CORRECTED, action: 'voided', status: 'voided' }))
+
+    const wrapper = await mountView(CorrectionDialog, {
+      props: {
+        mode: 'void',
+        employeeUuid: EMPLOYEE_UUID,
+        employeeName: 'Youssef Amrani',
+        timeZone: 'Europe/Madrid',
+        workDate: '2026-03-14',
+        entry: shiftEntry(),
+      },
+    })
+
+    await wrapper.find('[data-test="dialog-reason"]').setValue('OTROS')
+    await wrapper
+      .find('[data-test="dialog-reason-text"]')
+      .setValue('Fichaje hecho con la tarjeta de un compañero.')
+    await settle(1)
+    await wrapper.find('#correction-form').trigger('submit')
+    await settle()
+
+    expect(sentRequests(spy).map((request) => request.body)).toEqual([
+      { reason_code: 'OTROS', reason_text: 'Fichaje hecho con la tarjeta de un compañero.' },
+    ])
   })
 })
