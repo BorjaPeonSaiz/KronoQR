@@ -845,6 +845,7 @@ license_limit_exceeded_total{limit}                      counter
 
 # Autenticación — OWASP A09
 kronoqr_auth_attempts_total{channel,outcome}             counter
+kronoqr_management_account_changes_total{action,role}       counter
 
 # Credenciales y respaldo
 employees_without_delivered_credential{site,site_name}   gauge

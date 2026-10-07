@@ -1,0 +1,85 @@
+# KronoQR — pruebas unitarias de rules/management-accounts.yml (bloque 12c, ADR-051).
+rule_files:
+  - ../rules/management-accounts.yml
+
+evaluation_interval: 1m
+
+tests:
+
+  #-----------------------------------------------------------------------------
+  # KronoqrManagementTwoFactorReset: un restablecimiento de 2FA dispara; un alta
+  # de rol rrhh o un cambio de contrasena no.
+  #-----------------------------------------------------------------------------
+  - name: two_factor_reset_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_management_account_changes_total{action="two_factor_reset", role="rrhh"}'
+        values: "0 0 0 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: KronoqrManagementTwoFactorReset
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: seguridad
+              component: auth
+              mitre_attack: T1098
+            exp_annotations:
+              summary: "Se ha restablecido el segundo factor de una cuenta de gestion"
+              description: >-
+                MITRE ATT&CK T1098 (Account Manipulation). Un administrador ha
+                retirado el 2FA de una cuenta de gestion; hasta que su titular lo
+                vuelva a configurar, la cuenta entra solo con la contrasena.
+                Confirma con el administrador y con el titular que fue intencionado
+                (asiento `auth.two_factor_reset` en audit_log, con actor y motivo).
+                Si nadie lo reconoce, es un incidente de cuentas.
+              runbook_url: docs/runbooks/ataque-a-credenciales.md
+
+  - name: two_factor_reset_ajeno_no_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_management_account_changes_total{action="password_changed", role="admin"}'
+        values: "0 1 2 3 4 5"
+      - series: 'kronoqr_management_account_changes_total{action="two_factor_reset", role="admin"}'
+        values: "0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: KronoqrManagementTwoFactorReset
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # KronoqrManagementAdminAccountCreated: solo el alta con role="admin".
+  #-----------------------------------------------------------------------------
+  - name: admin_creado_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_management_account_changes_total{action="created", role="admin"}'
+        values: "0 0 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: KronoqrManagementAdminAccountCreated
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              destinatario: seguridad
+              component: auth
+              mitre_attack: T1136
+            exp_annotations:
+              summary: "Se ha dado de alta una cuenta de gestion con rol admin"
+              description: >-
+                MITRE ATT&CK T1136 (Create Account). Se ha creado una cuenta con
+                permisos de administrador desde el panel. Comprueba en audit_log el
+                asiento `user.created` (actor y motivo) y confirma con quien la
+                pidio. Si nadie la reconoce, desactivala y trata la sesion del actor
+                como comprometida.
+              runbook_url: docs/runbooks/ataque-a-credenciales.md
+
+  - name: alta_rrhh_no_dispara
+    interval: 1m
+    input_series:
+      - series: 'kronoqr_management_account_changes_total{action="created", role="rrhh"}'
+        values: "0 0 1 2 3 4"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: KronoqrManagementAdminAccountCreated
+        exp_alerts: []
