@@ -19,6 +19,8 @@ import type {
   Incident,
   IncidentCollection,
   IssuedSupportGrant,
+  ManagementAccount,
+  ManagementAccountCollection,
   ManagementUser,
   PairingConfirmed,
   Session,
@@ -29,6 +31,7 @@ import type {
   Site,
   SupportGrant,
   SupportGrantCollection,
+  TemporaryPasswordIssued,
   TwoFactorChallenge,
   TwoFactorEnrolment,
   WorkDayCorrection,
@@ -521,6 +524,44 @@ export function employmentContract(
     valid_from: '2026-03-16',
     valid_to: null,
     is_current: true,
+    ...overrides,
+  }
+}
+
+export const ACCOUNT_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91'
+
+export function managementAccount(overrides: Partial<ManagementAccount> = {}): ManagementAccount {
+  return {
+    uuid: ACCOUNT_UUID,
+    name: 'Jefatura de Cocina',
+    email: 'cocina@hotel.example',
+    locale: 'es',
+    roles: ['responsable_departamento'],
+    scope: { kind: 'departments', department_ids: [3] },
+    status: 'active',
+    two_factor_enabled: true,
+    password_status: 'own',
+    last_login_at: '2026-10-06T07:42:10Z',
+    created_at: '2026-09-02T09:05:00Z',
+    ...overrides,
+  }
+}
+
+export function managementAccountCollection(
+  data: ManagementAccount[],
+  total = data.length,
+): ManagementAccountCollection {
+  return { data, meta: { page: 1, per_page: 25, total, total_pages: Math.ceil(total / 25) || 1 } }
+}
+
+export function temporaryPassword(
+  overrides: Partial<TemporaryPasswordIssued> = {},
+): TemporaryPasswordIssued {
+  return {
+    account_uuid: ACCOUNT_UUID,
+    password: 'Kd2pQ9vLmN4tZbYc#F1w',
+    issued_at: '2026-10-07T08:00:00Z',
+    expires_at: '2026-10-10T08:00:00Z',
     ...overrides,
   }
 }

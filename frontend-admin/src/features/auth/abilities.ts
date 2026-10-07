@@ -162,3 +162,14 @@ export function hasAbility(granted: readonly string[], required: string): boolea
 export function canVoidShiftEntry(roles: readonly string[]): boolean {
   return roles.includes('admin') || roles.includes('rrhh')
 }
+
+/**
+ * Administracion de las cuentas de gestion: listar, dar de alta y de baja,
+ * restablecer contrasena y segundo factor (RF-ID-10, doc 02 §7.3).
+ *
+ * Ambito propio y solo del rol `admin`: quien puede entrar en la instalacion es
+ * la lista mas sensible que hay, y ni un acceso de soporte la alcanza (ADR-020).
+ * El cambio de la contrasena PROPIA (`POST /auth/password`) no lo exige: basta
+ * una sesion completa.
+ */
+export const ACCOUNTS_MANAGE = 'accounts:*'

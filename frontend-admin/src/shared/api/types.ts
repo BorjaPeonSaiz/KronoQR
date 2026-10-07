@@ -49,6 +49,7 @@ export type ActivateLicenseRequest = Schemas['ActivateLicenseRequest']
 export type Department = Schemas['Department']
 export type DepartmentCollection = Schemas['DepartmentCollection']
 export type CreateDepartmentRequest = Schemas['CreateDepartmentRequest']
+export type UpdateDepartmentRequest = Schemas['UpdateDepartmentRequest']
 
 // Configuracion de la instalacion (RF-PD-01, tarea 5.1). El paso de
 // organizacion del asistente (tarea 5.5) escribe `BRANDING_APP_NAME` y las
@@ -277,3 +278,16 @@ export type AdoptionOriginShare = Schemas['AdoptionOriginShare']
 // `GET /reports/adoption/export` (los tres formatos, sin valor por omision:
 // quien pulsa un boton de descarga ya ha elegido uno).
 export type AdoptionExportFormat = Parameters_['AdoptionExportFormat']
+
+// Cuentas de gestion administradas desde el panel (RF-ID-10, bloque 12c).
+export type ManagementAccount = Schemas['ManagementAccount']
+export type ManagementAccountCollection = Schemas['ManagementAccountCollection']
+export type ManagementAccountProvisioned = Schemas['ManagementAccountProvisioned']
+export type ManagementAccountStatus = Schemas['ManagementAccountStatus']
+export type ManagementRole = Schemas['ManagementRole']
+export type PasswordStatus = Schemas['PasswordStatus']
+export type TemporaryPasswordIssued = Schemas['TemporaryPasswordIssued']
+export type CreateManagementAccountRequest = Schemas['CreateManagementAccountRequest']
+export type DeactivateManagementAccountRequest = Schemas['DeactivateManagementAccountRequest']
+export type ResetManagementTwoFactorRequest = Schemas['ResetManagementTwoFactorRequest']
+export type ChangeOwnPasswordRequest = Schemas['ChangeOwnPasswordRequest']

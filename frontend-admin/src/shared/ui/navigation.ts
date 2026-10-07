@@ -16,6 +16,7 @@
 // La autorizacion real esta en la policy de cada endpoint (regla dura 18):
 // esto solo evita frustracion, nunca protege un dato.
 import {
+  ACCOUNTS_MANAGE,
   ATTENDANCE_READ,
   CREDENTIALS_MANAGE,
   DIAGNOSTICS_MANAGE,
@@ -40,6 +41,7 @@ export interface NavigationSection {
 /** El menu completo, en el orden en que se ofrece (`AppShellView.vue`). */
 export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   { name: 'employees', labelKey: 'app.nav.employees', abilities: [EMPLOYEES_MANAGE] },
+  { name: 'departments', labelKey: 'app.nav.departments', abilities: [EMPLOYEES_MANAGE] },
   {
     // Ausencias (RF-GP-04, tarea 3.10): vacaciones, baja medica y permiso,
     // sin flujo de aprobacion (doc 05 §8, Fase 4). Ambito de LECTURA de
@@ -104,6 +106,13 @@ export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   },
   { name: 'devices', labelKey: 'app.nav.devices', abilities: [SETTINGS_MANAGE] },
   { name: 'branding', labelKey: 'app.nav.branding', abilities: [SETTINGS_MANAGE] },
+  {
+    // Cuentas de gestion (RF-ID-10): quien puede entrar en el panel y con que rol.
+    // Solo `admin` lleva `accounts:*` (doc 02 §7.3).
+    name: 'accounts',
+    labelKey: 'app.nav.accounts',
+    abilities: [ACCOUNTS_MANAGE],
+  },
   { name: 'license', labelKey: 'app.nav.license', abilities: [LICENSE_MANAGE] },
   {
     // Soporte (RF-PD-09, RF-PD-11, tarea 5.9): la alcanza quien lleva

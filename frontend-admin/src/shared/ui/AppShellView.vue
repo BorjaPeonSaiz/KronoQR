@@ -31,9 +31,13 @@ interface NavItem {
 // actual y se filtra por lo que la sesion alcanza, en el MISMO orden en que
 // se declaran.
 const navigation = computed<NavItem[]>(() =>
-  NAVIGATION_SECTIONS.filter((item) => item.abilities.some((ability) => session.can(ability))).map(
-    (item) => ({ name: item.name, label: t(item.labelKey) }),
-  ),
+  // Con una contrasena temporal (RF-ID-10) no hay secciones que ofrecer: la guarda del
+  // router no las dejaria abrir, y un menu de enlaces muertos solo confunde.
+  session.passwordChangeRequired
+    ? []
+    : NAVIGATION_SECTIONS.filter((item) =>
+        item.abilities.some((ability) => session.can(ability)),
+      ).map((item) => ({ name: item.name, label: t(item.labelKey) })),
 )
 
 /**
@@ -87,7 +91,7 @@ async function signOut(): Promise<void> {
           <p class="text-xs text-kq-text-muted">{{ t('app.title') }}</p>
         </div>
 
-        <nav :aria-label="t('app.nav.label')" class="md:flex-1">
+        <nav v-if="navigation.length > 0" :aria-label="t('app.nav.label')" class="md:flex-1">
           <!-- Hueco de 6 px entre secciones: el anillo de foco (3 px, a 2 px
                de la caja) tiene que caber sin tocar a la vecina, porque
                `--kq-color-focus` es el mismo tono que el fondo de la activa
@@ -122,6 +126,14 @@ async function signOut(): Promise<void> {
           <p class="min-w-0 text-xs text-kq-text-muted">
             {{ t('app.signedInAs', { name: session.displayName, roles: roleLabels }) }}
           </p>
+          <RouterLink
+            v-if="!session.passwordChangeRequired"
+            :to="{ name: 'change-password' }"
+            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-center text-kq-text hover:bg-kq-surface-alt"
+            :aria-current="route.name === 'change-password' ? 'page' : undefined"
+          >
+            {{ t('app.changePassword') }}
+          </RouterLink>
           <button
             type="button"
             class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"

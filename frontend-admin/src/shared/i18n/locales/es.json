@@ -7,6 +7,7 @@
     "nav": {
       "label": "Secciones del panel",
       "employees": "Plantilla",
+      "departments": "Departamentos",
       "absences": "Ausencias",
       "credentials": "Credenciales",
       "legalExport": "Inspección",
@@ -22,7 +23,8 @@
       "branding": "Marca",
       "license": "Licencia",
       "support": "Soporte",
-      "errors": "Errores"
+      "errors": "Errores",
+      "accounts": "Cuentas"
     },
     "roles": {
       "admin": "Administración",
@@ -31,7 +33,8 @@
       "auditor": "Auditoría",
       "empleado": "Empleado",
       "kiosk": "Quiosco"
-    }
+    },
+    "changePassword": "Cambiar mi contraseña"
   },
   "auth": {
     "heading": "Acceso al panel de gestión",
@@ -57,6 +60,160 @@
       "enrolSubmitting": "Activando…",
       "enrolStepAnnouncement": "Configura tu segundo factor antes de poder entrar.",
       "back": "Volver al acceso"
+    }
+  },
+  "changePassword": {
+    "heading": "Cambiar mi contraseña",
+    "intro": "Escribe tu contraseña actual y la nueva. Tu sesión actual sigue abierta.",
+    "forcedHeading": "Elige tu contraseña",
+    "forcedIntro": "Has entrado con una contraseña temporal. Antes de usar el panel tienes que fijar la tuya: es la única acción disponible, además de cerrar sesión.",
+    "current": "Contraseña actual",
+    "new": "Contraseña nueva",
+    "confirm": "Repite la contraseña nueva",
+    "policyHint": "Debe cumplir la política de contraseñas de la instalación. Si falta alguna regla, el servidor te dirá cuál.",
+    "mismatch": "Las dos contraseñas nuevas no coinciden.",
+    "sameAsCurrent": "La contraseña nueva debe ser distinta de la actual.",
+    "otherSessions": "Al cambiarla se cierran todas las demás sesiones de tu cuenta, en cualquier otro dispositivo.",
+    "submit": "Cambiar contraseña",
+    "done": "Contraseña cambiada. Las demás sesiones de tu cuenta se han cerrado.",
+    "announce": {
+      "changed": "Contraseña cambiada.",
+      "failed": "No se ha cambiado la contraseña. Revisa los datos indicados."
+    },
+    "conflict": "Tu contraseña ha cambiado mientras tanto, en otra sesión. Vuelve a entrar y repite el cambio si sigue haciendo falta.",
+    "tooLong": "La contraseña nueva es demasiado larga: el máximo es de 72 bytes (los acentos y símbolos ocupan más de uno)."
+  },
+  "accounts": {
+    "title": "Cuentas de gestión",
+    "subtitle": "Quién puede entrar en el panel, con qué rol y en qué estado. Una baja no borra nada: la cuenta y su historial se conservan.",
+    "loading": "Cargando las cuentas…",
+    "filters": {
+      "legend": "Filtros de cuentas",
+      "search": "Buscar",
+      "searchPlaceholder": "Nombre o correo",
+      "status": "Estado",
+      "statusAll": "Todas",
+      "role": "Rol",
+      "roleAll": "Todos"
+    },
+    "status": {
+      "active": "Activa",
+      "deactivated": "De baja"
+    },
+    "twoFactor": {
+      "enabled": "Activo",
+      "disabled": "No activo"
+    },
+    "password": {
+      "own": "Propia",
+      "temporary": "Temporal",
+      "temporary_expired": "Temporal caducada"
+    },
+    "table": {
+      "caption": "Cuentas de gestión. Último acceso en la zona horaria del centro: {timezone}.",
+      "name": "Nombre",
+      "email": "Correo",
+      "role": "Rol",
+      "status": "Estado",
+      "twoFactor": "Segundo factor",
+      "password": "Contraseña",
+      "lastLogin": "Último acceso",
+      "actions": "Acciones",
+      "you": "(tu cuenta)",
+      "neverLoggedIn": "Nunca ha entrado",
+      "noActions": "Sin acciones: cuenta dada de baja",
+      "reachesNobody": "No alcanza a nadie: no es responsable de ningún departamento.",
+      "assignDepartment": "Asignar departamento"
+    },
+    "empty": {
+      "title": "Sin cuentas",
+      "description": "Todavía no hay cuentas de gestión que mostrar.",
+      "filtered": "Ninguna cuenta coincide con los filtros. Prueba a limpiarlos."
+    },
+    "pagination": {
+      "label": "Paginación de cuentas"
+    },
+    "announce": {
+      "results": "{count} cuentas",
+      "created": "Cuenta de {name} creada. Anota la contraseña temporal: solo se muestra una vez.",
+      "deactivated": "Cuenta de {name} dada de baja.",
+      "twoFactorReset": "Segundo factor de {name} retirado.",
+      "passwordReset": "Contraseña de {name} restablecida. Anota la contraseña temporal: solo se muestra una vez.",
+      "gone": "La cuenta ya no existe o ya estaba de baja. Se ha actualizado la lista."
+    },
+    "blocked": {
+      "own": "Es tu cuenta: no puedes hacerlo sobre ti. Pídeselo a otra persona con rol de administración.",
+      "ownPassword": "Es tu cuenta: cambia tu contraseña desde «Cambiar mi contraseña».",
+      "noTwoFactor": "Esta cuenta no tiene segundo factor activo: no hay nada que retirar."
+    },
+    "fields": {
+      "name": "Nombre",
+      "nameHint": "El de la persona, no el del puesto: es el que aparece como autor de una corrección.",
+      "email": "Correo electrónico",
+      "emailHint": "Es su identificador de acceso. El producto no le envía nada por correo.",
+      "role": "Rol",
+      "roleHint": "Un responsable de departamento no alcanza a nadie hasta que se le asigna un departamento.",
+      "locale": "Idioma del panel"
+    },
+    "create": {
+      "heading": "Nueva cuenta de gestión",
+      "submit": "Crear cuenta",
+      "passwordNotice": "El servidor genera una contraseña temporal que se muestra una sola vez y se entrega en mano. No se envía por correo.",
+      "emailTaken": "Ya hay una cuenta con este correo, activa o dada de baja. Usa otro correo."
+    },
+    "reveal": {
+      "heading": "Contraseña temporal",
+      "forCreated": "Cuenta creada para {name} ({email}).",
+      "forReset": "Contraseña restablecida para {name} ({email}). Sus sesiones abiertas se han cerrado.",
+      "onlyOnce": "Esta contraseña se muestra una sola vez y no se podrá volver a consultar. Si se pierde, habrá que restablecerla.",
+      "expires": "Caduca el {when}. Pasado ese momento ya no sirve para entrar.",
+      "handDelivery": "Entrégala en mano o de viva voz. No se envía por correo. Con ella solo se puede entrar y fijar una contraseña propia.",
+      "handedOverLabel": "La he entregado en mano a {name}",
+      "acknowledge": "Cerrar: ya no se mostrará más",
+      "copy": "Copiar al portapapeles",
+      "copiedButton": "Copiada",
+      "copied": "Contraseña copiada al portapapeles.",
+      "copyFailed": "No se ha podido copiar. Anótala a mano."
+    },
+    "actions": {
+      "create": "Nueva cuenta",
+      "previewCaption": "Qué cambia en la cuenta de {name}",
+      "reasonLabel": "Motivo",
+      "reasonHint": "Obligatorio. Queda en el registro de auditoría. Sin datos de salud ni juicios de valor.",
+      "deactivate": {
+        "button": "Dar de baja",
+        "rowLabel": "Dar de baja la cuenta de {name}",
+        "heading": "Dar de baja la cuenta",
+        "confirm": "Dar de baja",
+        "explanation": "La cuenta de {name} ({email}) dejará de poder entrar y todas sus sesiones abiertas se cerrarán.",
+        "notice": "No se borra nada y no hay reactivación: si la persona vuelve, se le crea una cuenta nueva. Queda constancia de quién, cuándo y por qué.",
+        "conflictHint": "No se ha dado de baja. No se admite sobre tu propia cuenta ni sobre la última cuenta de administración activa: crea otra antes."
+      },
+      "resetPassword": {
+        "button": "Restablecer contraseña",
+        "rowLabel": "Restablecer la contraseña de {name}",
+        "heading": "Restablecer la contraseña",
+        "confirm": "Restablecer contraseña",
+        "explanation": "Se generará una contraseña temporal para {name} ({email}). Se mostrará una sola vez y se entrega en mano.",
+        "notice": "Se cerrarán todas sus sesiones abiertas y hasta que fije la suya no podrá hacer nada más. El segundo factor no se toca.",
+        "conflictHint": "No se admite sobre tu propia cuenta: usa «Cambiar mi contraseña»."
+      },
+      "resetTwoFactor": {
+        "button": "Restablecer 2FA",
+        "rowLabel": "Restablecer el segundo factor de {name}",
+        "heading": "Restablecer el segundo factor",
+        "confirm": "Retirar segundo factor",
+        "explanation": "Se retirará el segundo factor de {name} ({email}) para que lo active de nuevo en su próximo acceso.",
+        "notice": "Se cerrarán todas sus sesiones. Hasta que lo active de nuevo, quien conozca su contraseña podría activarlo por ella: por eso queda constancia de quién lo hizo y por qué.",
+        "conflictHint": "No se ha cambiado nada. No se admite sobre tu propia cuenta ni sobre una cuenta sin segundo factor activo."
+      }
+    },
+    "reauth": {
+      "totpLabel": "Tu código del segundo factor",
+      "totpHint": "Seis dígitos de tu aplicación de autenticación. Confirma que eres tú quien hace esto.",
+      "passwordLabel": "Tu contraseña actual",
+      "passwordHint": "Tu cuenta no tiene segundo factor confirmado, así que se pide tu contraseña para confirmar que eres tú.",
+      "wait": "Demasiados intentos. Podrás volver a confirmar dentro de {seconds} s."
     }
   },
   "common": {
@@ -2284,6 +2441,32 @@
     },
     "pagination": {
       "label": "Paginación del histórico de errores"
+    }
+  },
+  "departments": {
+    "title": "Departamentos",
+    "subtitle": "El responsable de un departamento es quien ve a su plantilla. Asignarlo desplaza al anterior.",
+    "loading": "Cargando los departamentos…",
+    "empty": {
+      "title": "Sin departamentos",
+      "description": "Todavía no hay departamentos en el centro."
+    },
+    "table": {
+      "caption": "Departamentos del centro y su responsable",
+      "name": "Departamento",
+      "manager": "Responsable",
+      "assign": "Asignar responsable"
+    },
+    "noManager": "Sin responsable",
+    "hasManager": "Con responsable",
+    "unknownManager": "Cuenta no encontrada en la lista de responsables",
+    "deactivatedHint": "Su cuenta está dada de baja: el departamento se comporta como si no tuviera responsable.",
+    "assignLabel": "Responsable de {name}",
+    "save": "Guardar",
+    "displaceNotice": "Si eliges otra cuenta, la responsable actual deja de dirigir este departamento.",
+    "announce": {
+      "saved": "Responsable de {name} actualizado.",
+      "failed": "No se ha cambiado el responsable de {name}."
     }
   }
 }

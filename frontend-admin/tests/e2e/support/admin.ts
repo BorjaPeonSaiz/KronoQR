@@ -45,6 +45,8 @@ import type {
   License,
   LivePresenceBoard,
   LivePresenceEntry,
+  ManagementAccount,
+  ManagementAccountProvisioned,
   ManagementUser,
   PairingConfirmed,
   PeriodReport,
@@ -1385,6 +1387,56 @@ export const DATA_EXPORT_RUNNING: DataExport = {
 }
 
 /** Una peticion a la API tal y como salio del panel. */
+// --- Cuentas de gestion (RF-ID-10, bloque 12c) --------------------------------
+export const ACCOUNT_COOK_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91'
+export const ACCOUNT_NEW_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b92'
+/** La contrasena temporal que el doble devuelve una sola vez. */
+export const TEMPORARY_PASSWORD = 'Kd2pQ9vLmN4tZbYc#F1w'
+/** La contrasena temporal con la que entra la cuenta del flujo obligado. */
+export const TEMPORARY_LOGIN_PASSWORD = 'Temporal#7Hq2'
+
+export const ACCOUNT_OWN: ManagementAccount = {
+  uuid: ADMIN_USER.uuid,
+  name: ADMIN_USER.name,
+  email: ADMIN_USER.email,
+  locale: 'es',
+  roles: ['admin'],
+  scope: { kind: 'all', department_ids: [] },
+  status: 'active',
+  two_factor_enabled: true,
+  password_status: 'own',
+  last_login_at: '2026-10-06T07:42:10Z',
+  created_at: '2026-09-02T09:05:00Z',
+}
+
+export const ACCOUNT_COOK: ManagementAccount = {
+  uuid: ACCOUNT_COOK_UUID,
+  name: 'Jefatura de Cocina',
+  email: 'cocina@hotel.example',
+  locale: 'es',
+  roles: ['responsable_departamento'],
+  scope: { kind: 'departments', department_ids: [3] },
+  status: 'active',
+  two_factor_enabled: true,
+  password_status: 'own',
+  last_login_at: '2026-10-06T07:42:10Z',
+  created_at: '2026-09-02T09:05:00Z',
+}
+
+export const ACCOUNT_DEACTIVATED: ManagementAccount = {
+  uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b99',
+  name: 'Ex Recepción',
+  email: 'ex@hotel.example',
+  locale: 'es',
+  roles: ['rrhh'],
+  scope: { kind: 'all', department_ids: [] },
+  status: 'deactivated',
+  two_factor_enabled: false,
+  password_status: 'own',
+  last_login_at: null,
+  created_at: '2026-08-01T09:00:00Z',
+}
+
 export interface RecordedRequest {
   readonly method: string
   readonly path: string
@@ -1688,6 +1740,21 @@ export interface ManagementApiOptions {
    */
   readonly correctionOutcome?:
     'ok' | 'superseded' | 'shiftAlreadyOpen' | 'overlap' | 'workDateChange'
+  /**
+   * Las cuentas de gestion que devuelve `GET /api/v1/management-accounts`
+   * (RF-ID-10). Por omision, la propia del `admin`, la de cocina y una de baja.
+   * El doble las mantiene mutables: alta, baja y restablecimientos las cambian.
+   * Las operaciones piden el codigo `TOTP_CODE` en `actor_totp_code`: otro
+   * valor responde `422` en ese campo, como el servidor.
+   */
+  readonly managementAccounts?: ManagementAccount[]
+  /**
+   * La cuenta que entra lo hace con una contrasena temporal (RF-ID-10):
+   * `GET /auth/me` dice `password_change_required: true` y toda otra ruta de
+   * gestion responde `403 password-change-required` hasta que
+   * `POST /auth/password` la cambia (actual: `TEMPORARY_LOGIN_PASSWORD`).
+   */
+  readonly temporaryPassword?: boolean
 }
 
 async function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -1879,6 +1946,13 @@ export async function stubManagementApi(
   const currentUser: ManagementUser =
     options.locale === undefined ? baseUser : { ...baseUser, locale: options.locale }
   const currentSession: Session = { ...SESSION, user: currentUser }
+  // Cuentas de gestion (RF-ID-10): estado mutable y marca de contrasena temporal.
+  const accountsState: ManagementAccount[] = (
+    options.managementAccounts ?? [ACCOUNT_OWN, ACCOUNT_COOK, ACCOUNT_DEACTIVATED]
+  ).map((candidate) => ({ ...candidate }))
+  let passwordChangeRequired = options.temporaryPassword === true
+  const userNow = (): ManagementUser =>
+    passwordChangeRequired ? { ...currentUser, password_change_required: true } : currentUser
 
   // Si `resolveOutcome` es `conflict`, la incidencia se da por cerrada -por
   // otra persona- justo cuando llega el `POST /resolve`: antes de eso la
@@ -3052,6 +3126,23 @@ export async function stubManagementApi(
         return
       }
 
+      // Contrasena temporal: todo lo que no sea la salida responde 403 (RF-ID-10).
+      if (
+        passwordChangeRequired &&
+        !url.pathname.startsWith('/api/v1/auth/') &&
+        url.pathname !== '/api/v1/setup/status' &&
+        url.pathname !== '/api/v1/branding'
+      ) {
+        await problem(
+          route,
+          403,
+          'urn:kronoqr:problem:password-change-required',
+          'Cambia primero tu contraseña',
+        )
+
+        return
+      }
+
       switch (`${method} ${url.pathname}`) {
         case 'GET /api/v1/devices':
           await json(route, 200, { devices, meta: devicesMeta })
@@ -3151,6 +3242,183 @@ export async function stubManagementApi(
           await json(route, 200, confirmed)
           return
         }
+        case 'POST /api/v1/auth/password': {
+          const body = request.postDataJSON() as { current_password: string; new_password: string }
+
+          if (body.current_password !== TEMPORARY_LOGIN_PASSWORD) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Petición no válida',
+              { current_password: ['La contraseña actual no es correcta.'] },
+            )
+
+            return
+          }
+
+          passwordChangeRequired = false
+          await route.fulfill({ status: 204 })
+          return
+        }
+        case 'GET /api/v1/management-accounts': {
+          const status = url.searchParams.get('status')
+          const role = url.searchParams.get('role')
+          const q = (url.searchParams.get('q') ?? '').toLowerCase()
+          const data = [...accountsState]
+            .filter((account) => status === null || account.status === status)
+            .filter((account) => role === null || account.roles.some((item) => item === role))
+            .filter(
+              (account) =>
+                q === '' ||
+                account.name.toLowerCase().includes(q) ||
+                account.email.toLowerCase().includes(q),
+            )
+            // Activas primero, y por nombre dentro de cada grupo (el orden es contrato).
+            .sort((a, b) =>
+              a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'active' ? -1 : 1,
+            )
+
+          await json(route, 200, {
+            data,
+            meta: { page: 1, per_page: 25, total: data.length, total_pages: 1 },
+          })
+          return
+        }
+        case 'POST /api/v1/management-accounts': {
+          const body = request.postDataJSON() as {
+            name: string
+            email: string
+            role: ManagementAccount['roles'][number]
+            locale?: string
+            actor_totp_code?: string
+          }
+
+          if (body.actor_totp_code !== TOTP_CODE) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Petición no válida',
+              { actor_totp_code: ['El código no es correcto.'] },
+            )
+
+            return
+          }
+
+          if (accountsState.some((account) => account.email === body.email)) {
+            await problem(
+              route,
+              409,
+              'urn:kronoqr:problem:conflict',
+              'Conflicto con el estado actual',
+            )
+
+            return
+          }
+
+          const account: ManagementAccount = {
+            uuid: ACCOUNT_NEW_UUID,
+            name: body.name,
+            email: body.email,
+            locale: body.locale ?? 'es',
+            roles: [body.role],
+            scope:
+              body.role === 'responsable_departamento'
+                ? { kind: 'departments', department_ids: [] }
+                : { kind: 'all', department_ids: [] },
+            status: 'active',
+            two_factor_enabled: false,
+            password_status: 'temporary',
+            last_login_at: null,
+            created_at: '2026-10-07T08:00:00Z',
+          }
+
+          accountsState.push(account)
+
+          const provisioned: ManagementAccountProvisioned = {
+            account,
+            temporary_password: {
+              account_uuid: account.uuid,
+              password: TEMPORARY_PASSWORD,
+              issued_at: '2026-10-07T08:00:00Z',
+              expires_at: '2026-10-10T08:00:00Z',
+            },
+          }
+
+          await json(route, 201, provisioned)
+          return
+        }
+        case `POST /api/v1/management-accounts/${ACCOUNT_COOK_UUID}/deactivate`: {
+          const found = accountsState.find((account) => account.uuid === ACCOUNT_COOK_UUID)
+
+          if (found === undefined || found.status === 'deactivated') {
+            await problem(route, 404, 'urn:kronoqr:problem:not-found', 'No encontrado')
+
+            return
+          }
+
+          found.status = 'deactivated'
+          await json(route, 200, found)
+          return
+        }
+        case `POST /api/v1/management-accounts/${ACCOUNT_COOK_UUID}/password/reset`: {
+          const body = request.postDataJSON() as { actor_totp_code?: string }
+
+          if (body.actor_totp_code !== TOTP_CODE) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Petición no válida',
+              { actor_totp_code: ['El código no es correcto.'] },
+            )
+
+            return
+          }
+
+          const found = accountsState.find((account) => account.uuid === ACCOUNT_COOK_UUID)
+
+          if (found !== undefined) {
+            found.password_status = 'temporary'
+          }
+
+          await json(route, 200, {
+            account_uuid: ACCOUNT_COOK_UUID,
+            password: TEMPORARY_PASSWORD,
+            issued_at: '2026-10-07T09:14:03Z',
+            expires_at: '2026-10-10T09:14:03Z',
+          })
+          return
+        }
+        case `POST /api/v1/management-accounts/${ACCOUNT_COOK_UUID}/two-factor/reset`: {
+          const body = request.postDataJSON() as { actor_totp_code?: string }
+
+          if (body.actor_totp_code !== TOTP_CODE) {
+            await validationProblem(
+              route,
+              'urn:kronoqr:problem:validation-failed',
+              'Petición no válida',
+              { actor_totp_code: ['El código no es correcto.'] },
+            )
+
+            return
+          }
+
+          const found = accountsState.find((account) => account.uuid === ACCOUNT_COOK_UUID)
+
+          if (found === undefined || !found.two_factor_enabled) {
+            await problem(
+              route,
+              409,
+              'urn:kronoqr:problem:conflict',
+              'Conflicto con el estado actual',
+            )
+
+            return
+          }
+
+          found.two_factor_enabled = false
+          await json(route, 200, found)
+          return
+        }
         case 'POST /api/v1/auth/login':
           if (loginOutcome === 'invalid') {
             await problem(
@@ -3172,12 +3440,12 @@ export async function stubManagementApi(
               body: JSON.stringify(TWO_FACTOR_ENROLMENT_CHALLENGE),
             })
           } else {
-            await json(route, 200, currentSession)
+            await json(route, 200, { ...currentSession, user: userNow() })
           }
           return
         case 'POST /api/v1/auth/2fa/verify':
           if (codeFrom(route) === TOTP_CODE) {
-            await json(route, 200, currentSession)
+            await json(route, 200, { ...currentSession, user: userNow() })
           } else {
             await problem(
               route,
@@ -3192,7 +3460,7 @@ export async function stubManagementApi(
           return
         case 'POST /api/v1/auth/2fa/confirm':
           if (codeFrom(route) === TOTP_CODE) {
-            await json(route, 200, currentSession)
+            await json(route, 200, { ...currentSession, user: userNow() })
           } else {
             await problem(
               route,
@@ -3203,7 +3471,7 @@ export async function stubManagementApi(
           }
           return
         case 'GET /api/v1/auth/me':
-          await json(route, 200, currentUser)
+          await json(route, 200, userNow())
           return
         case 'POST /api/v1/auth/logout':
           await route.fulfill({ status: 204 })

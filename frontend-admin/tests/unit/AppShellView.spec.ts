@@ -64,6 +64,14 @@ describe('AppShellView', () => {
     expect(wrapper.text()).not.toContain(es.app.nav.credentials)
   })
 
+  it('solo ofrece «Cuentas» a quien lleva accounts:* (RF-ID-10)', async () => {
+    const admin = await mountShell(['accounts:*', 'employees:*'])
+    const hr = await mountShell(['employees:*', 'reports:*'])
+
+    expect(admin.text()).toContain(es.app.nav.accounts)
+    expect(hr.text()).not.toContain(es.app.nav.accounts)
+  })
+
   it('no ofrece ninguna seccion a quien no tiene ambitos de gestion', async () => {
     const wrapper = await mountShell(['attendance:read'])
 

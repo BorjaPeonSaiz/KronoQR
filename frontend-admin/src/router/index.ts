@@ -2,6 +2,7 @@ import NotFoundView from '@kronoqr/web-kit/components/NotFoundView.vue'
 import type { RouteRecordRaw } from 'vue-router'
 import { createRouter, createWebHistory } from 'vue-router'
 import {
+  ACCOUNTS_MANAGE,
   ATTENDANCE_READ,
   CREDENTIALS_MANAGE,
   DIAGNOSTICS_MANAGE,
@@ -14,9 +15,12 @@ import {
   SETTINGS_MANAGE,
   SUPPORT_MANAGE,
 } from '@/features/auth/abilities'
+import AccountsView from '@/features/accounts/AccountsView.vue'
 import AbsenceListView from '@/features/absences/AbsenceListView.vue'
 import AdoptionDashboardView from '@/features/reports/AdoptionDashboardView.vue'
 import LoginView from '@/features/auth/LoginView.vue'
+import ChangePasswordView from '@/features/auth/ChangePasswordView.vue'
+import DepartmentsView from '@/features/departments/DepartmentsView.vue'
 import ComplianceView from '@/features/compliance/ComplianceView.vue'
 import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
 import DevicesView from '@/features/devices/DevicesView.vue'
@@ -302,6 +306,30 @@ export const routes: RouteRecordRaw[] = [
         name: 'errors',
         component: ErrorsView,
         meta: { ability: DIAGNOSTICS_MANAGE },
+      },
+      {
+        // Departamentos y su responsable (RF-ID-03). Ambito `employees:*`; el selector de
+        // responsable solo se ofrece con `accounts:*` (admin) y el servidor lo exige.
+        path: 'departments',
+        name: 'departments',
+        component: DepartmentsView,
+        meta: { ability: EMPLOYEES_MANAGE },
+      },
+      {
+        // Cuentas de gestion (RF-ID-10). Ambito `accounts:*`, solo `admin`. La
+        // policy del servidor es la que autoriza de verdad (regla dura 18).
+        path: 'accounts',
+        name: 'accounts',
+        component: AccountsView,
+        meta: { ability: ACCOUNTS_MANAGE },
+      },
+      {
+        // Cambio de la contrasena PROPIA (RF-ID-10). Sin ambito: basta una sesion
+        // completa, y es la UNICA pantalla que alcanza quien entra con una
+        // contrasena temporal (la guarda no le deja salir de ella).
+        path: 'account/password',
+        name: 'change-password',
+        component: ChangePasswordView,
       },
       { path: 'forbidden', name: 'forbidden', component: ForbiddenView },
       {

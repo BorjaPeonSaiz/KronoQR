@@ -7,6 +7,7 @@
 //     mitad del asistente—; y en cuanto el asistente se cierra, deja de poder
 //     visitarse (es de un solo uso).
 //  1. Sin sesion valida, manda al acceso y se acuerda de a donde iba.
+//  1b. Con una contrasena temporal (RF-ID-10), solo deja ver el cambio de contrasena.
 //  2. Si la pantalla exige un ambito que el token no tiene, lleva a la primera
 //     seccion que si puede usar, y solo si no hay ninguna enseña «sin permiso».
 //
@@ -63,6 +64,12 @@ export function registerAuthGuard(router: Router): void {
 
     if (!session.isAuthenticated) {
       return { name: 'login', query: { redirect: to.fullPath } }
+    }
+
+    // Contrasena temporal (RF-ID-10): hasta cambiarla, la unica pantalla es la del
+    // cambio. Cerrar sesion no es una ruta, asi que sigue disponible en el marco.
+    if (session.passwordChangeRequired) {
+      return to.name === 'change-password' ? true : { name: 'change-password' }
     }
 
     // `abilities` (en O) cubre pantallas como «Soporte» (tarea 5.9), que

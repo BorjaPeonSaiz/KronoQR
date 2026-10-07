@@ -4,6 +4,7 @@
 // (ADR-015, regla dura 12). Este panel es solo para personal de gestion.
 import { request, requestJson } from '@kronoqr/web-kit/http'
 import type {
+  ChangeOwnPasswordRequest,
   LoginRequest,
   ManagementUser,
   Session,
@@ -72,4 +73,14 @@ export async function logOut(): Promise<void> {
 
 export function fetchCurrentUser(): Promise<ManagementUser> {
   return requestJson<ManagementUser>('/api/v1/auth/me')
+}
+
+/**
+ * Cambio de la contrasena PROPIA (RF-ID-10). Sin `uuid`: la cuenta la resuelve
+ * el token. `204`; un `422` lleva el fallo en `errors.current_password` (la
+ * actual no coincide) o `errors.new_password` (la politica, o igual a la
+ * actual) y **no** cierra la sesion: es un `422` y no un `401` a proposito.
+ */
+export async function changeOwnPassword(body: ChangeOwnPasswordRequest): Promise<void> {
+  await request<null>('/api/v1/auth/password', { method: 'POST', body })
 }
