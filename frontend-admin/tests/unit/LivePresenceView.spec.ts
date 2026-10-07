@@ -1,4 +1,5 @@
 // Pantalla de presencia en vivo (RF-PA-01, RF-PA-02, RNF-D-03).
+import { announcement } from '@kronoqr/web-kit/announcer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
 import { useLivePresenceStore } from '@/features/live/presence.store'
@@ -211,6 +212,12 @@ describe('LivePresenceView', () => {
       const notice = wrapper.find('[data-test="refresh-notice"]')
 
       expect(notice.attributes('data-kind')).toBe('poll')
+      expect(announcement.value).toBe(notice.text())
+      expect(announcement.value).toBe(
+        es.live.notice.poll
+          .replace('{moment}', '14/3/26, 10:12')
+          .replace('{zone}', 'Europe/Madrid'),
+      )
       expect(notice.attributes('aria-live')).toBe('polite')
       expect(notice.text()).toContain('10:12')
       expect(wrapper.find('[data-test="presence-entry"]').exists()).toBe(true)
@@ -236,6 +243,8 @@ describe('LivePresenceView', () => {
       await settle()
 
       expect(wrapper.find('[data-test="refresh-notice"]').attributes('data-kind')).toBe('filter')
+      expect(announcement.value).toBe(wrapper.find('[data-test="refresh-notice"]').text())
+      expect(announcement.value).not.toContain('live.notice')
       expect(wrapper.find('[data-test="presence-entry"]').exists()).toBe(true)
 
       wrapper.unmount()
@@ -250,6 +259,8 @@ describe('LivePresenceView', () => {
       await settle()
 
       expect(wrapper.find('[data-test="refresh-notice"]').attributes('data-kind')).toBe('realtime')
+      expect(announcement.value).toBe(wrapper.find('[data-test="refresh-notice"]').text())
+      expect(announcement.value).not.toContain('live.notice')
 
       store.realtimeFailed = false
       await settle()

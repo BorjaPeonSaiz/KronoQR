@@ -93,7 +93,7 @@ const noticeKind = computed<'filter' | 'poll' | 'realtime' | null>(() => {
 
 watch(noticeKind, (kind) => {
   if (kind !== null) {
-    announce(t(`live.notice.`, { moment: generatedAtLabel.value, zone: store.timeZone }))
+    announce(t(`live.notice.${kind}`, { moment: generatedAtLabel.value, zone: store.timeZone }))
   }
 })
 
