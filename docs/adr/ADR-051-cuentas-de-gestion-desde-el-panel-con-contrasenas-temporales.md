@@ -2,250 +2,314 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Propuesto. Pasa a «Aceptado» tras la revisión de `seguridad-cumplimiento`, que corre sobre la nota de diseño del bloque 12c |
+| **Estado** | Aceptado. Revisión de `seguridad-cumplimiento` del 07-10-2026: aprobado con cambios (los diez del informe de revisión del diseño del bloque 12c), incorporados |
 | **Fecha** | 7 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 12c de la 2.2.0, sobre la decisión de producto del propietario del 22-09-2026) · `seguridad-cumplimiento` (revisión) |
-| **Afecta a** | Precisa [ADR-039](ADR-039-que-hechos-de-autenticacion-dejan-asiento.md) (un hecho de autenticación nuevo que **no** deja asiento: el fallo de la contraseña actual en el cambio propio) · Respeta [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-012](ADR-012-api-versionada-en-la-ruta.md), [ADR-015](ADR-015-portal-con-codigo-y-pin.md), [ADR-016](ADR-016-producto-licenciado-on-premise.md), [ADR-019](ADR-019-la-licencia-nunca-bloquea-el-registro.md), [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md), [ADR-027](ADR-027-audit-log-particionado.md) y [ADR-050](ADR-050-portal-accesible-desde-internet.md) · `docs/01` RF-ID-10 (nuevo), RF-ID-01, RF-ID-02 y Anexo B · `docs/api/openapi.yaml` · `docs/02` §7.3 (nota 7) · `plan implementacion/07-fase-4-evolucion.md` tarea 4.1 |
-| **Requisitos** | RF-ID-10, RF-ID-01, RF-ID-02, RS-03, RS-05, RS-06, RL-16, reglas duras 5, 6, 12, 16, 18 y 21 |
-| **Hallazgos** | H-03 de la revisión interna ASVS de 2026-09 (doc 07, fila «El producto no tiene baja de cuentas de gestión») |
+| **Afecta a** | Precisa [ADR-039](ADR-039-que-hechos-de-autenticacion-dejan-asiento.md): un hecho nuevo de autenticación, el fallo de la contraseña actual en el cambio propio, que no deja asiento salvo cuando abre el bloqueo · Respeta [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-012](ADR-012-api-versionada-en-la-ruta.md), [ADR-015](ADR-015-portal-con-codigo-y-pin.md), [ADR-016](ADR-016-producto-licenciado-on-premise.md), [ADR-019](ADR-019-la-licencia-nunca-bloquea-el-registro.md), [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md) y [ADR-050](ADR-050-portal-accesible-desde-internet.md) · `docs/01`: RF-ID-10 (nuevo), RF-ID-01, RF-ID-02, RF-ID-03, Anexo B y §8.1 · `docs/api/openapi.yaml` · `docs/02` §7.3, nota 7 · `plan implementacion/07-fase-4-evolucion.md`, tarea 4.1 |
+| **Requisitos** | RF-ID-10, RF-ID-01, RF-ID-02, RF-ID-03, RS-03, RS-05, RS-06, RL-16 y reglas duras 5, 6, 12, 16, 18 y 21 |
+| **Hallazgos** | H-03 de la revisión interna ASVS de 2026-09 (doc 07, fila «El producto no tiene baja de cuentas de gestión») · revisión del diseño del bloque 12c: A1 a A3, M1 a M6 y B1 a B7 |
 
 ## Contexto
 
-Hasta la 2.1, el ciclo de vida de una cuenta de gestión solo existía en consola: `identity:create-user`,
-`identity:deactivate-user` e `identity:reset-password` (estos dos, desde la 3.8) e `identity:2fa-reset`. La razón quedó
-escrita en los docblocks de los handlers y en la nota del Anexo B del doc 01: un «dale de baja» o un «quítale el segundo
-factor» por API es, en manos de un `admin` comprometido, la vía más cómoda de preparar el acceso a la cuenta de otro.
+Hasta la 2.1, el ciclo de vida de una cuenta de gestión solo existía en consola:
+
+- `identity:create-user`;
+- `identity:deactivate-user` e `identity:reset-password`, ambos desde la 3.8;
+- `identity:2fa-reset`.
+
+La razón estaba escrita en los docblocks de los handlers y en la nota del Anexo B del doc 01: un «dale de baja» o un
+«quítale el segundo factor» por API sería, en manos de un `admin` comprometido, la vía más cómoda para preparar el
+acceso a la cuenta de otro.
 
 **El coste real fue el contrario.** Un hotel no tiene por qué tener SSH ni a nadie que sepa usarlo (RF-PD-06). Mientras
 la baja exigiera una consola, el jefe de recepción que se iba conservaba una cuenta válida, con acceso a la corrección
 de jornadas, hasta que alguien abría un caso con el fabricante. El propietario decidió el 22-09-2026 que habría pantalla
-de cuentas de gestión, y el 24-09-2026 le acotó el alcance.
+de cuentas de gestión y el 24-09-2026 acotó su alcance.
 
-Al diseñarla aparecieron cuatro problemas que la consola no tenía, o tenía sin que se notara:
+Llevar esto a HTTP hace visibles problemas que en la consola no se notaban:
 
-1. **Una contraseña fijada por otra persona es una credencial compartida.** `identity:reset-password` genera una y la
-   enseña una vez, pero nada obliga a cambiarla ni hace que caduque. En consola eso afectaba a pocas cuentas; con un
-   botón en el panel, afecta a todas.
-2. **El panel permite dejar la instalación sin administrador.** La consola no conoce a quien la ejecuta. El panel sí,
-   y con él caben dos errores: darse de baja a uno mismo o dar de baja a la última cuenta `admin` activa. Cualquiera de
-   los dos solo tiene arreglo desde SSH.
-3. **`settings:*` no basta.** Las rutas solo de `admin` viajan bajo `settings:*` (doc 02 §7.3, notas 4 a 6), y un acceso
-   de soporte con alcance `configuration` lleva ese ámbito (`SupportScope`). Crear una cuenta `admin` es justo como un
-   acceso temporal de soporte se vuelve permanente.
-4. **Los handlers de la consola toman los candados al revés.** Escriben la fila de `users` y después el listener de
-   auditoría toma el candado de la cadena. Por HTTP y con concurrencia, eso es un abrazo mortal con cualquier camino
-   que los tome en el otro orden (ADR-010).
+1. **Una contraseña fijada por otra persona es una credencial compartida.** `identity:reset-password` la genera y la
+   enseña una vez, pero nada obliga a cambiarla ni la hace caducar.
+2. **Desde el panel se puede dejar la instalación sin administrador.** Basta con que alguien se dé de baja a sí mismo o
+   dé de baja a la última `admin` activa. Las dos cosas solo se arreglan por SSH.
+3. **`settings:*` lo lleva también el soporte** con alcance `configuration` (`SupportScope`). Crear una cuenta `admin`
+   es exactamente cómo un acceso temporal de soporte se vuelve permanente.
+4. **Una sesión de `admin` robada se convierte en persistencia.** Basta con dejarse una cuenta propia o rehacer las
+   credenciales de otra (revisión del diseño, A2; ASVS V3.7.1).
+5. **Los handlers de la consola toman los candados al revés** (fila → cadena). Por HTTP y con concurrencia, eso es un
+   abrazo mortal con cualquier camino que los tome en el orden contrario (ADR-010).
 
 ## Decisión
 
 ### 1. Seis rutas, por `uuid`, bajo `/management-accounts`
 
-`GET` y `POST /api/v1/management-accounts`, `POST …/{uuid}/deactivate`, `POST …/{uuid}/password/reset` y
-`POST …/{uuid}/two-factor/reset`, de `admin`; y `POST /api/v1/auth/password`, el cambio de la contraseña **propia**,
-para cualquier rol de gestión. El nombre es el del lenguaje ubicuo («cuenta de gestión») y el que ya usa el código
-(`ManagementAccount*`). `/users` sería ambiguo en un producto donde también usan el sistema el empleado en su portal y
-el soporte del fabricante.
+Son dos grupos:
 
-Las cuentas se identifican **por `uuid` y nunca por el correo**, que acabaría en el historial del navegador y en los
-registros del servidor web.
+- **Para `admin`:**
+  - `GET` y `POST /api/v1/management-accounts`;
+  - `POST …/{uuid}/deactivate`;
+  - `POST …/{uuid}/password/reset`;
+  - `POST …/{uuid}/two-factor/reset`.
+- **Para cualquier rol de gestión:** `POST /api/v1/auth/password`, el cambio de la contraseña **propia**.
 
-**Nada se borra** (regla dura 5). La baja es `is_active = false`: la cuenta sigue siendo la autora de lo que firmó y
-sigue contando para la guarda de `POST /setup/administrator`. **No hay reactivación** en esta versión: quien vuelve
-recibe una cuenta nueva.
+El nombre `management-accounts` es el término del lenguaje ubicuo y el que ya usa el código (`ManagementAccount*`).
 
-La baja **responde lo mismo, `404`, a «no existe» y a «ya estaba de baja»**, sin cambiar nada y sin asiento (RS-03). La
-consola sigue distinguiéndolos, porque no es una superficie HTTP.
+Las cuentas se identifican **por `uuid`, nunca por el correo**: el correo acabaría en el historial del navegador y en
+los registros del servidor web.
 
-**Sin puerta de licencia** (ADR-019): dar de baja la cuenta de quien se fue es una medida de seguridad, no una función
-accesoria.
+**Nada se borra** (regla dura 5):
+
+- La baja pone `is_active = false`. La cuenta sigue siendo la autora de lo que firmó y sigue contando para la guarda de
+  `POST /setup/administrator`.
+- **No hay reactivación.** Quien vuelve recibe una cuenta nueva.
+
+La baja **responde lo mismo, `404`, a «no existe» y a «ya estaba de baja»**, sin asiento (RS-03). Además:
+
+- Cierra todas las sesiones de la cuenta, incluida su suscripción al canal en tiempo real.
+- **Retira los accesos de soporte vigentes que esa cuenta concedió.** `Identity` publica la baja, `Product` revoca cada
+  concesión y cada revocación deja su propio asiento. Un acceso temporal no sobrevive a quien respondía de él, aunque
+  su tope sea `PRODUCT_SUPPORT_GRANT_MAX_HOURS`.
+
+**Sin puerta de licencia** (ADR-019). Dar de baja la cuenta de quien se fue es una medida de seguridad, no una
+funcionalidad accesoria.
 
 ### 2. Ámbito propio `accounts:*`, solo de `admin`, y una policy que rechaza a todo actor de soporte
 
-Es la excepción explícita a las notas 4 a 6 del doc 02 §7.3, recogida en la nota 7. **Dos controles y no uno** (regla
-dura 18): ningún alcance de soporte concede `accounts:*`, y además `ManagementAccountPolicy` rechaza a todo actor de
-soporte, como ya hace `DataExportPolicy` (regla dura 16, ADR-020).
+Es la excepción explícita a las notas 4 a 6 del doc 02 §7.3 (nota 7). **Dos controles, no uno** (regla dura 18):
 
-El cambio de la contraseña propia **no lleva ámbito**: basta una sesión completa sobre la propia cuenta. Una sesión
-`2fa:pending` recibe `401`, como en `GET /auth/me`.
+- ningún alcance de soporte concede `accounts:*`;
+- además, `ManagementAccountPolicy` rechaza a todo actor de soporte.
 
-Las abilities se fijan al emitir el token. Una sesión abierta antes de actualizar no lleva `accounts:*` hasta que el
-`admin` vuelve a entrar, como mucho tras la duración de una sesión.
+`POST /auth/password` no lleva ámbito, pero **también responde `403` a cualquier actor de soporte**, con su prueba por
+alcance. Quien firma un acceso de soporte no es una cuenta de gestión y no tiene contraseña que cambiar.
 
-### 3. Toda contraseña fijada por otra persona es temporal
+**Asignar responsable a un departamento** (`manager_user_uuid` en `PATCH /departments/{id}`) exige también
+`accounts:*`. Elegir responsable es elegir entre cuentas de gestión y conceder alcance sobre personas.
 
-- **La genera el servidor.** Su longitud es la mayor entre 20 y `IDENTITY_PASSWORD_MIN_LENGTH`, y lleva las cuatro
-  clases que exige la política de RF-ID-01, así que la cumple por construcción. No usa los caracteres que se confunden
-  al leerlos y teclearlos (`l I O 0 1`). El generador es criptográfico.
-- **Se muestra una sola vez**, en la respuesta que la emite (`TemporaryPasswordIssued`), y **se entrega en mano**
-  (regla dura 12). No va en `audit_log`, ni en un log, ni en ninguna otra respuesta. Si se pierde, se restablece.
-- **Caduca** a las `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` (72 de serie, de 1 a 720; regla dura 13). Una vez caducada,
-  el acceso responde lo mismo que una contraseña incorrecta y en el mismo tiempo (RS-03). El listado lo muestra como
-  `password_status: temporary_expired`, y el `admin` emite otra.
-- **Obliga a cambiarla.** Mientras la cuenta tenga una (`users.temporary_password_expires_at` no nulo), toda ruta de
-  gestión salvo `GET /auth/me`, `POST /auth/logout` y `POST /auth/password` responde `403` con
-  `urn:kronoqr:problem:password-change-required`. El panel distingue ese `type` y lleva a la pantalla de cambio.
-  `ManagementUser` gana `password_change_required`, opcional para que el cambio sea aditivo (ADR-012).
+Las abilities se fijan al emitir el token. Una sesión abierta antes de actualizar no tiene `accounts:*` hasta que el
+`admin` vuelve a entrar.
 
-El 2FA no cambia. El titular lo da de alta en su primer acceso con el reto que ya devuelve `POST /auth/login`, y
-generarlo en el alta haría pasar el secreto de una persona por la pantalla de otra.
+### 3. Toda contraseña fijada por otra persona es temporal, y la sesión que abre falla cerrada
 
-El **cambio propio** exige la contraseña actual, también con la sesión abierta. Si no coincide, responde `422`, no
-`401`, porque la sesión sigue siendo válida. Cada fallo cuenta en el mismo bloqueo por cuenta que `POST /auth/login`, y
-con el bloqueo abierto responde `429`. El fallo **no** deja asiento, solo log técnico (ADR-039). Un cambio correcto
-cierra las demás sesiones de la cuenta y conserva la actual.
+**Cómo se genera y se entrega:**
 
-`identity:create-user` deja de pedir la contraseña con eco apagado y entrega una temporal, como `identity:reset-password`:
-hay un solo camino para fijar una contraseña ajena. El asistente de puesta en marcha (`POST /setup/administrator`) sigue
-fijando una contraseña **propia**, porque quien la escribe es su titular.
+- **La genera el servidor.** Su longitud es la mayor entre 20 y `IDENTITY_PASSWORD_MIN_LENGTH`, siempre ASCII y nunca
+  más de 72 bytes. Lleva las cuatro clases de la política de RF-ID-01, sin `l I O 0 1`, y sale de un generador
+  criptográfico.
+- **Se muestra una sola vez**, en la respuesta que la emite (`TemporaryPasswordIssued`, con `Cache-Control: no-store`).
+- **Se entrega en mano** (regla dura 12). No va en `audit_log`, ni en un log, ni en ninguna otra respuesta.
+
+**Caduca** a las `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` (72 de serie, **de 1 a 168**). Caducada, el acceso responde lo
+mismo que una contraseña incorrecta y en el mismo tiempo (RS-03). La caducidad se comprueba en todos los caminos que
+emiten sesión, no solo en el acceso: `/auth/login`, `/auth/2fa/verify`, `/auth/2fa/confirm` y el cambio propio.
+
+**La sesión falla cerrada.** Una sesión abierta con una contraseña temporal emite un token con el **único** ámbito
+`password:change`, el mismo patrón que `2fa:pending`. Con ese token:
+
+- Solo alcanza `POST /auth/password`, `GET /auth/me` y `POST /auth/logout`.
+- Toda ruta que exige un ámbito lo rechaza sin comprobación nueva en cada sitio, incluida la autorización del canal en
+  tiempo real (`/broadcasting/auth`).
+- El rechazo se presenta como `403` `urn:kronoqr:problem:password-change-required`.
+- Al cambiar la contraseña, el mismo token recibe en la misma transacción los ámbitos de su rol.
+
+**Por qué un ámbito y no un middleware de grupo.** Un middleware falla abierto en toda ruta que alguien olvide meter en
+el grupo, y la revisión contó unas cuarenta (A1). La prueba recorre `Router::getRoutes()`, como `RouteRateLimitZonesTest`.
+
+**El cambio propio:**
+
+- **Exige la contraseña actual.** Si no coincide responde `422`, nunca `401`.
+- **Tiene un contador propio por cuenta**, `password-change|<uuid>`, distinto del de `/auth/login`, que se lleva por
+  correo y origen.
+- **Al abrir el bloqueo**, la petición responde `429` con `Retry-After`, **revoca el token con el que se hizo** y deja
+  `auth.lockout_started`. Quien prueba contraseñas con una sesión robada la pierde. Los fallos sueltos solo van al log
+  técnico (ADR-039).
+- **La nueva** cumple la política de RF-ID-01, no pasa de 72 bytes y no repite la actual.
+- **La escritura es condicionada** (M1). Dentro del candado se comprueba que el hash leído al comparar sigue vigente y
+  que el token de la sesión sigue existiendo. Si el hash cambió, `409`; si el token desapareció, `401`.
+- **Cierra las demás sesiones de la cuenta** y conserva la actual.
+
+**El 2FA no se genera en el alta.** Lo da de alta su titular en su primer acceso.
+
+**Una sola manera de fijar la contraseña de otra persona.** `identity:create-user` deja de pedir la contraseña y entrega
+una temporal. El asistente (`POST /setup/administrator`) sigue fijando una contraseña **propia**, porque quien la teclea
+es su titular.
 
 ### 4. La instalación nunca se queda sin administrador, y nadie se da de baja a sí mismo
 
-Son invariantes del conjunto de cuentas, y por eso viven en el dominio (`ManagementAccountDeactivationGuard`) y no en
-un controlador. Se aplican **también en la consola**: la regla no depende de por dónde se pida la baja.
+Son invariantes del conjunto de cuentas. Viven en el dominio (`ManagementAccountDeactivationGuard`) y se aplican
+**también en la consola**. Todos estos casos responden `409`:
 
-- La baja de la propia cuenta responde `409`. La baja de un `admin` la decide otro `admin`.
-- La baja de la última cuenta `admin` activa responde `409`, en el panel y en `identity:deactivate-user`. Primero se
-  crea otra.
-- Restablecer la contraseña o el 2FA de la **propia** cuenta responde `409`. La contraseña propia se cambia con
-  `POST /auth/password`, que exige la actual.
-- Restablecer el 2FA de una cuenta que no lo tiene confirmado responde `409`: no hay nada que retirar, y no deja un
-  asiento que no cuenta nada.
+- la baja de la propia cuenta;
+- la baja de la última `admin` activa, desde el panel o desde `identity:deactivate-user`;
+- el restablecimiento de la contraseña o del 2FA de la propia cuenta;
+- el restablecimiento del 2FA de una cuenta sin 2FA confirmado.
 
-Las dos primeras se comprueban **bajo un candado del padrón de cuentas**. Es el mismo `pg_advisory_xact_lock` que ya
-serializa la creación del primer administrador, movido a una constante compartida de `Identity`. Así, dos `admin` que
-se dan de baja el uno al otro a la vez no dejan la instalación sin ninguno.
+Las dos primeras se comprueban **bajo el candado del padrón de cuentas**. Es el mismo `pg_advisory_xact_lock` del primer
+administrador, movido a una constante compartida de `Identity`.
 
-### 5. El alta no asigna departamentos
+### 5. El alta no asigna departamentos; el departamento asigna su responsable
 
-Un `responsable_departamento` nace con `scope.kind: departments` y la lista vacía: no alcanza a nadie. El responsable es
-un atributo **del departamento** (`departments.manager_user_id`, módulo `Workforce`). `Identity` no tiene arista hacia
-`Workforce` (doc 02 §1.6, Deptrac), y asignar un responsable **desplaza al anterior**, que pierde su alcance. Ese
-desplazamiento es un cambio de permisos de otra persona y merece su propio asiento; no puede ser un efecto secundario
-del alta de una cuenta.
+Un `responsable_departamento` nace con `scope.kind: departments` y la lista vacía. El responsable es un atributo **del
+departamento** (`departments.manager_user_id`, módulo `Workforce`) y se fija con `manager_user_uuid` en
+`PATCH /departments/{id}`:
 
-**Esto deja un hueco**, en «Residuos»: hoy el producto no tiene ningún camino para asignar responsable sin SQL.
+- **Solo `admin`**, porque exige `accounts:*` además de `employees:*`.
+- **Deja un asiento `role_assignment.changed` por cada cuenta afectada**: la que deja de ser responsable y la que pasa
+  a serlo, con el `department_id` y si se concede o se retira.
+- **Solo admite una cuenta activa con ese rol.** Si no lo es, responde `422` en el campo, con un solo mensaje para las
+  tres causas (no existe, está de baja, tiene otro rol). Es `422` y no `404` porque el recurso de la ruta existe.
+
+Así `Identity` no escribe en `Workforce`, y el desplazamiento del responsable anterior tiene su propio asiento.
 
 ### 6. Un único orden de candados para todo lo que audita una cuenta
 
-1. **Cadena de `audit_log`** (`SerializedLedgerWrite::withChainLock`, ADR-010).
-2. **Candado del padrón de cuentas** (solo la baja y el primer administrador).
-3. **Fila de `users`** (`SELECT … FOR UPDATE`).
-4. **`personal_access_tokens`**.
-5. **Asiento** (reentrante).
+**El orden es: cadena de `audit_log` (`withChainLock`, ADR-010) → candado del padrón de cuentas (solo la baja y el primer
+administrador) → fila de `users` (`FOR UPDATE`) → `personal_access_tokens` → asiento (reentrante).**
 
-**Fuera de todo candado** van generar la contraseña, hashearla, comparar un hash y limpiar el contador de intentos.
-bcrypt o argon cuestan decenas de milisegundos, y dentro de la cadena congelarían cada fichaje del hotel, como ya
-documenta la emisión del PIN.
+**Fuera de todo candado** van generar la contraseña, hashearla, comparar un hash y limpiar contadores.
 
-Este orden obliga a corregir tres caminos existentes que hoy lo toman al revés (fila → cadena):
+Hay que corregir los caminos que hoy toman los candados al revés:
 
 - `DeactivateManagementAccountHandler`;
 - `ResetManagementPasswordHandler`;
-- `ConfirmTwoFactorHandler`. Este es el que hace real el ciclo: el titular confirma su TOTP mientras un `admin` se lo
-  retira.
+- `ConfirmTwoFactorHandler`. Con este el ciclo es **real** con `two-factor/reset`.
 
-`CreateFirstAdministratorHandler` se alinea también. No cierra un ciclo real hoy, pero con un solo orden no hay que
-razonar por qué uno no hace daño.
+`CreateFirstAdministratorHandler` se alinea también.
 
-### Auditoría
+### 7. Reautenticación del `admin` que actúa
+
+`POST /management-accounts`, `…/password/reset` y `…/two-factor/reset` exigen en la misma petición una de estas dos
+pruebas de quien actúa:
+
+- el código vigente de su autenticador, `actor_totp_code`;
+- si su cuenta no tiene 2FA confirmado, su contraseña, `actor_current_password`.
+
+El código comparte el contador `2fa|<actor>` y la protección contra la reutilización de su franja con
+`/auth/2fa/verify`. Un fallo responde `422` en el campo; con el bloqueo abierto, `429` con `Retry-After`.
+
+Una sesión robada, sin el teléfono de quien la abrió, ya no sirve para dejarse una cuenta propia ni para rehacer las
+credenciales de otra (A2).
+
+**Motivo obligatorio.** `…/password/reset` exige motivo, igual que la baja y el 2FA, y el motivo entra en el payload de
+`user.password_reset`. Ningún texto libre de estas rutas debe llevar datos de salud ni juicios de valor.
+
+### Auditoría, métrica y alerta
 
 | Hecho | Acción | Novedad |
 |---|---|---|
 | Alta | `user.created` + `role_assignment.changed` | `user.created` es nueva |
-| Baja | `user.deactivated` (actor, motivo) | ya existía (3.8) |
-| Restablecer contraseña | `user.password_reset` (actor) | ya existía (3.8) |
-| Restablecer 2FA | `auth.two_factor_reset` (actor, motivo) | ya existía (2.1) |
+| Baja | `user.deactivated` (actor, motivo) + `support_grant.revoked` por cada concesión retirada | la retirada de concesiones es nueva |
+| Restablecer contraseña | `user.password_reset` (actor, **motivo**) | el motivo es nuevo |
+| Restablecer 2FA | `auth.two_factor_reset` (actor, motivo) | ya existía |
 | Cambio propio | `user.password_changed` | nueva |
+| Bloqueo del cambio propio | `auth.lockout_started` | canal nuevo del hecho existente |
+| Responsable de departamento | `role_assignment.changed` × 2 | por cuenta afectada |
 
-Todos los asientos son síncronos y van en la misma transacción (ADR-027). Llevan el `uuid` de la cuenta y del actor, y
-nunca el nombre, el correo ni nada derivado de la contraseña (regla dura 21).
+Todos son síncronos y van en la misma transacción que el hecho (ADR-010: un fallo al auditar bloquea la acción).
+Llevan los `uuid` de la cuenta y del actor; nunca nombre, correo ni nada derivado de una contraseña (regla dura 21).
+
+**Métrica `kronoqr_management_account_changes_total{action, role}`, sin `uuid`.** `action` es uno de `created`,
+`deactivated`, `password_reset`, `two_factor_reset` o `password_changed`, y `role` es el rol de la cuenta afectada.
+
+**Alerta al receptor de seguridad** en **cada** `two_factor_reset` y en **cada alta con rol `admin`**, con runbook en
+`docs/runbooks/ataque-a-credenciales.md`.
+
+**La métrica, la alerta y el runbook son condición de cierre del bloque 12c**, no una mejora posterior. Le tocan a
+`devops-observabilidad`.
 
 ## Alternativas descartadas
 
 | Alternativa | Por qué se descarta |
 |---|---|
-| **Seguir solo por consola** | Es el estado que produjo H-03: el cliente sin SSH no da de baja a nadie, y RF-PD-06 dice por escrito que la consola no puede hacer falta |
-| **Bajo `settings:*`, como los quioscos y la exportación de datos** | Un solo control (la policy) frente al soporte con alcance `configuration`, que lleva ese ámbito. Crear una cuenta `admin` es como un acceso temporal se vuelve permanente |
-| **Contraseña generada sin caducidad ni cambio obligatorio** | Credencial compartida a largo plazo (ASVS 2.3.1): el `admin` que la entregó la conoce mientras nadie la cambie, que puede ser siempre |
-| **Invitación o enlace de activación por correo** | Regla dura 12 y ADR-015: el producto no depende del correo de nadie, y la instalación puede no tener salida a internet (ADR-016) |
-| **Asignar departamentos en el alta** | Es una escritura de `Workforce` hecha desde `Identity`, y desplaza en silencio al responsable anterior, sin su asiento |
+| **Seguir solo por consola** | Es el estado que produjo H-03, y RF-PD-06 dice por escrito que la consola no puede hacer falta |
+| **Gestionar cuentas bajo `settings:*`** | Deja un solo control frente al soporte con alcance `configuration` |
+| **Marcar la contraseña temporal con un middleware de grupo** | Falla abierto en cada ruta que se olvide meter en el grupo (A1). Un ámbito único falla cerrado |
+| **Contraseña generada sin caducidad ni cambio obligatorio** | Es una credencial compartida a largo plazo (ASVS 2.3.1) |
+| **Invitación o enlace de activación por correo** | Lo prohíben la regla dura 12, ADR-015 y ADR-016 |
+| **Que la sesión del `admin` baste para crear cuentas y rehacer credenciales** | Una sesión robada se convierte en persistencia (A2) |
+| **Contar el fallo del cambio propio en el contador de `/auth/login`** | Ese contador se lleva por correo y origen: una sesión robada prueba contraseñas sin acercarse a él (M2) |
+| **Asignar departamentos en el alta** | `Identity` escribiría en `Workforce` y desplazaría al responsable anterior sin dejar su asiento |
 | **Permitir la baja de la última `admin` con un aviso** | El aviso se acepta con un clic, y la salida es SSH |
-| **Distinguir «no existe» de «ya de baja» en la API** | Por la consola no hay oráculo que proteger; por HTTP sí, y la segunda pulsación de un botón no es un hecho nuevo |
-| **Restablecer contraseña y 2FA en una sola acción** | Convierte «dame la cuenta entera de esta persona» en un clic. Son dos hechos con dos asientos, a propósito |
+| **Restablecer contraseña y 2FA en una sola acción** | Convierte «dame la cuenta entera de esta persona» en un solo clic |
+| **Prohibir el restablecimiento del 2FA de otra `admin`, o dejarlo solo en consola** | La revisión no lo recomienda: el teléfono perdido de la única otra `admin` volvería a exigir SSH |
 
 ## Residuos y riesgos que se aceptan (doc 07 §6)
 
-1. **Suplantación en dos pasos por un `admin` comprometido.** `two-factor/reset` por API cambia lo que la nota del
-   Anexo B daba por cerrado. Con la contraseña y el 2FA de otra cuenta restablecidos, quien controle una sesión `admin`
-   entra como esa persona y firma correcciones con su nombre. Es la amenaza de repudio sobre el registro legal. Ya
-   podía hacerlo sin este ADR —un `admin` crea una cuenta nueva con el rol que quiera—, pero a su propio nombre. Lo
-   nuevo es **hacerlo bajo la identidad de otro**.
+1. **Suplantación por un `admin` con la contraseña y el TOTP comprometidos.** Con las dos cosas, el atacante supera la
+   reautenticación del §7. Puede restablecer la contraseña y el 2FA de otra cuenta, entrar como esa persona y firmar
+   correcciones con su nombre: repudio sobre el registro legal (`T1098`). Un `admin` ya podía crear una cuenta con el
+   rol que quisiera, pero a su propio nombre; lo nuevo es hacerlo **bajo la identidad de otro**. Controles:
+   - dos acciones con dos asientos, cada uno con actor y motivo;
+   - nunca sobre la propia cuenta;
+   - las sesiones de la persona suplantada caen, así que lo nota en su siguiente petición;
+   - cada `two_factor_reset` avisa al receptor de seguridad;
+   - la consola sigue siendo la vía de recuperación.
 
-   **Mitigación propuesta, para que la confirme `seguridad-cumplimiento`:**
+   **Riesgo residual:** queda detectable y no repudiable, pero no impedido.
 
-   - **Dos acciones, dos asientos, nunca una.** `user.password_reset` y `auth.two_factor_reset` llevan siempre el
-     **actor**, y el 2FA además un **motivo obligatorio**. La secuencia «restablecer contraseña y 2FA de la misma cuenta
-     por el mismo actor en poco tiempo» queda en la cadena, sin poder borrarse ni repudiarse.
-   - **Nunca sobre la propia cuenta.** Un `admin` no puede usar estas rutas para rehacer sus propias credenciales y
-     borrar su rastro de acceso.
-   - **Se cierran las sesiones del afectado.** Las sesiones abiertas de la persona suplantada caen en la misma
-     transacción. La víctima lo nota en su siguiente petición, en vez de compartir la cuenta en silencio.
-   - **Alerta al receptor de seguridad.** Se propone una regla en el catálogo de alertas (tarea 3.2) sobre
-     `kronoqr_management_account_changes_total{action="two_factor_reset"}`. Disparo: un restablecimiento de 2FA
-     precedido en menos de 24 h por un `password_reset` de la misma cuenta, o más de N restablecimientos por día. Va al
-     receptor de seguridad que la instalación ya tiene configurado para el bloqueo por origen (ADR-050), con runbook en
-     `docs/runbooks/ataque-a-credenciales.md`. **La métrica y la regla no existen todavía**; son trabajo de
-     `devops-observabilidad` en este bloque o en el 22.
-   - **La consola sigue existiendo** y sigue siendo el camino de recuperación cuando el panel está comprometido.
+2. **Ventana de auto-alta del 2FA tras un restablecimiento.** Quien conozca la contraseña de esa cuenta puede activar su
+   propio TOTP antes que el titular. En las altas, la ventana la acota la caducidad de la temporal; tras un
+   `two-factor/reset` con la contraseña de siempre, no tiene caducidad. Controles:
+   - `auth.two_factor_enabled` deja momento e IP;
+   - la alerta del restablecimiento;
+   - el reto dura minutos.
 
-   Riesgo residual: un `admin` comprometido que actúa una sola vez, fuera de horas y sin repetir el patrón, no dispara
-   la alerta. Queda **detectable y no repudiable**, que no es lo mismo que impedido.
+3. **La temporal pasa por la pantalla del `admin`**, que puede anotarla. Controles: el cambio obligatorio en el primer
+   acceso, la caducidad y que solo se muestra una vez.
 
-2. **Ventana de auto-alta del 2FA a petición de un `admin`.** Tras `two-factor/reset`, quien conozca la contraseña de esa
-   cuenta puede activar su propio TOTP antes que el titular. Es la ventana ya aceptada en el doc 07 §6 (fila 1), pero
-   ahora se abre por API. Se mantienen los mismos controles: `auth.two_factor_enabled` con momento e IP, y el reto dura
-   minutos.
-
-3. **La temporal viaja por la pantalla del `admin`.** Se muestra una vez y no se guarda, pero un `admin` malintencionado
-   la anota. El control es el cambio obligatorio en el primer acceso y la caducidad. Si el titular no entra a tiempo,
-   la temporal caduca sin haber servido.
-
-4. **Responsable sin departamento.** Hasta que exista un camino en el producto para fijar `departments.manager_user_id`,
-   una cuenta `responsable_departamento` no alcanza a nadie salvo editando esa columna por SQL. Se propone añadir
-   `manager_user_uuid` a `PATCH /departments/{id}`, con su propio asiento. **Pendiente de decidir** si entra en el
-   bloque 12c o en el 21.
+4. **Las cuentas dadas de baja conservan nombre, correo y los motivos libres** mientras sigan siendo actores de asientos
+   y correcciones, porque los necesita la prueba legal. Seudonimizarlas cuando ningún registro vivo las cite es una
+   tarea de retención pendiente (M6), no de este bloque.
 
 5. **Las sesiones abiertas antes de actualizar no ven «Cuentas»** hasta que el `admin` vuelve a entrar. Se avisa en las
    notas de la versión.
 
+**Cerrado y no residual:** la asignación de responsable por SQL. Lo resuelve `manager_user_uuid` en
+`PATCH /departments/{id}` (§5).
+
 ## Consecuencias
 
-- **Contrato** (antes que el código, `36ae8677`): las seis rutas, `accounts:*` en `managementToken`,
-  `ManagementAccount*`, `TemporaryPasswordIssued`, `PasswordStatus`, el tipo
-  `urn:kronoqr:problem:password-change-required` y `ManagementUser.password_change_required`. Todo es aditivo en la v1.
-- **Esquema:** `users.temporary_password_expires_at` (expansión, reversible) y el permiso `accounts:*` con su pivote de
-  `admin`. **`AuditAction`** gana `user.created` y `user.password_changed`.
-- **Código:** puertos `TemporaryPasswordGenerator`, `PasswordHasher` y `ManagementAccountDirectory`.
-  `ManagementAccountLifecycle` pasa a trabajar por `uuid` y con hash. Los handlers de baja y restablecimiento pasan a
-  `withChainLock`, y también `ConfirmTwoFactorHandler`. Hay un caso de uso nuevo de alta, que también usa la consola, y
-  un comando nuevo, `identity:list-users`.
-- **Docblocks que dejan de ser ciertos y se reescriben:** «por qué es un comando y no un endpoint», en
-  `DeactivateManagementAccountHandler` y `ResetTwoFactorHandler`, y «esto no se alcanza por HTTP», en
-  `ManagementAccountLifecycle`.
-- **Doc 01:** RF-ID-10, Anexo A (fase 4), Anexo B y su nota sobre el 2FA, y cuatro escenarios en §11. **Doc 02:** §7.3,
-  fila de `admin` y nota 7. **Doc 07:** las filas «El producto no tiene baja de cuentas de gestión» y la de la ventana
-  de auto-alta, a cargo de `seguridad-cumplimiento`. **Plan:** tarea 4.1.
-- **Cliente:** la guía de RRHH y `configuracion.md` dejan de remitir a la consola o a `psql` para las cuentas. Hay
-  runbooks nuevos de alta y baja de cuentas y una variable nueva, `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`.
+- **Contrato** (antes que el código):
+  - las seis rutas;
+  - `manager_user_uuid` en `Department` y `UpdateDepartmentRequest`;
+  - los ámbitos `accounts:*` y `password:change`;
+  - `ManagementAccount*`, `TemporaryPasswordIssued` y `PasswordStatus`;
+  - `ActorTotpCode` y `ActorCurrentPassword`;
+  - la respuesta `ActorReauthenticationFailed`;
+  - el tipo `urn:kronoqr:problem:password-change-required`;
+  - `ManagementUser.password_change_required`.
+
+  Todo es aditivo en la v1.
+- **Esquema:**
+  - `users.temporary_password_expires_at`, una expansión reversible;
+  - el permiso `accounts:*` del rol `admin`; `TokenAbility` gana `accounts:*` y `password:change` (este, como `2fa:pending`, no es permiso de ningún rol);
+  - `AuditAction` gana `user.created` y `user.password_changed`.
+- **Código:**
+  - puertos `TemporaryPasswordGenerator`, `PasswordHasher` y `ManagementAccountDirectory`;
+  - los handlers de baja, restablecimiento y confirmación del 2FA pasan a `withChainLock`;
+  - caso de uso nuevo de alta, usado también por la consola;
+  - comando nuevo `identity:list-users`;
+  - evento de baja que escucha `Product` para retirar las concesiones de soporte;
+  - `new_password` y `current_password` fuera del *flash* de sesión;
+  - `IDENTITY_PASSWORD_MIN_LENGTH` no puede pasar de 72.
+- **Docblocks que dejan de ser ciertos y se reescriben:** «por qué es un comando y no un endpoint» y «esto no se alcanza
+  por HTTP».
+- **Documentación:**
+  - Doc 01: RF-ID-10, el Anexo A, el Anexo B, §11 y §8.1 con `T1098`, `T1136` y `T1531`.
+  - Doc 02: §7.3, la tabla de ADR y la nota 7.
+  - Doc 07: lo actualiza `producto-licencia` con la evidencia final.
+  - Plan: tarea 4.1.
+  - Cliente: la guía de RRHH y `configuracion.md` sin `psql`, y los runbooks de alta y baja de cuentas.
 
 ## Verificación
 
 | Punto | Prueba que lo demuestra |
 |---|---|
-| 1 | Feature + contrato de las seis rutas. `404` idéntico para «no existe» y «ya de baja», sin asiento. Los tokens anteriores de la cuenta responden `401` tras la baja. Ninguna ruta lleva `feature-not-licensed` |
-| 2 | Autorización negativa en cada ruta de `accounts:*`: `rrhh`, `responsable_departamento` y `auditor` reciben `403`. El soporte recibe `403` **con cada alcance, incluido `configuration`**, y también los tokens de quiosco y de portal. Sin token y con `2fa:pending`, `401`. Tres copias de `accounts:*` (enum, contrato y migración) que no divergen |
-| 3 | Unitaria de `PasswordStatus` en la frontera exacta de la caducidad, con `Clock` fijo. Unitaria del generador (longitud, cuatro clases, sin ambiguos, cumple la política). Feature del recorrido alta → `202` → TOTP → `403 password-change-required` → `POST /auth/password` → acceso. Una temporal caducada da el mismo `401` que una contraseña errónea. En el cambio propio, una actual errónea da `422` y, tras el bloqueo, `429` |
-| 4 | Unitaria de `ManagementAccountDeactivationGuard`. Integración con dos conexiones que dan de baja a la vez a las dos únicas `admin` activas: una sola prospera. `identity:deactivate-user` rechaza la última `admin` |
-| 5 | `POST /management-accounts` con `department_ids` responde `422` (`additionalProperties: false`). Un responsable recién creado tiene `scope.department_ids` vacío |
-| 6 | Unitaria con un `SerializedLedgerWrite` de prueba que registra el orden: no se hashea dentro del candado y la fila se toma después de la cadena. Integración de `ConfirmTwoFactorHandler` y `two-factor/reset` concurrentes sobre la misma cuenta sin `deadlock_detected` |
-| Residuo 1 | Cuando exista la regla: prueba de la regla de alertas con `promtool test rules` (patrón de la tarea 3.2) |
+| 1 | Feature y contrato de las seis rutas. `404` idéntico para «no existe» y «ya de baja», sin asiento. Los tokens anteriores de la cuenta responden `401` tras la baja. La suscripción Reverb se corta. Las concesiones de soporte vigentes del actor dado de baja quedan revocadas |
+| 2 | Autorización negativa en cada ruta de `accounts:*`: `403` para `rrhh`, `responsable_departamento` y `auditor`, para el soporte con **cada** alcance y para los tokens de quiosco y de portal; `401` sin token y con `2fa:pending`. `POST /auth/password`: `403` para el soporte con cada alcance. Las tres copias de `accounts:*` coinciden. `SupportScopeRoutesTest` sin las rutas nuevas |
+| 3 | `PasswordStatus` en la frontera exacta de la caducidad, con `Clock` fijo. Una temporal caducada da el mismo `401` en `login`, `2fa/verify` y `2fa/confirm`. Prueba sobre `Router::getRoutes()`: toda ruta con ámbito rechaza `password:change` con `password-change-required`, incluido `/broadcasting/auth`. Recorrido completo de la temporal. Generador: longitud, cuatro clases, sin ambiguos y como mucho 72 bytes. Cambio propio: `422`; el contador propio abre el bloqueo con `429`, el token revocado y `auth.lockout_started`; escritura condicionada con `409` y `401` |
+| 4 | `ManagementAccountDeactivationGuard` en unitaria. Integración con dos conexiones sobre las dos únicas `admin`: prospera una. `identity:deactivate-user` rechaza la última |
+| 5 | `department_ids` en el alta responde `422`. `PATCH /departments/{id}`: `manager_user_uuid` de `rrhh` responde `403` y no cambia nada; una cuenta inexistente, de baja o con otro rol responde el mismo `422`; quedan dos asientos `role_assignment.changed` y la cuenta desplazada pierde el alcance en su siguiente petición |
+| 6 | Doble de `SerializedLedgerWrite` que registra el orden de los candados. `ConfirmTwoFactorHandler` y `two-factor/reset` concurrentes sin `deadlock_detected` |
+| 7 | Las tres rutas sin código, con un código erróneo y con un código ya usado en su franja responden `422`; tras el umbral, `429`; con contraseña en lugar de código desde una cuenta con 2FA, `422` |
+| Alerta | `promtool test rules`: dispara en cada `two_factor_reset` y en cada alta `admin`. La métrica no lleva etiqueta de `uuid` |

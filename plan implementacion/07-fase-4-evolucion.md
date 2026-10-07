@@ -89,7 +89,7 @@ Una línea de esta fase puede adelantarse cuando el propietario lo decide con un
 **Reglas duras aplicables.**
 
 - **5**: la baja pone `is_active = false` y nunca borra. La cuenta sigue siendo la autora de lo que firmó y cuenta para la guarda del primer administrador.
-- **6**: alta, baja, restablecimientos y cambio propio escriben en `audit_log` en la misma transacción (ADR-027), con el orden único de candados de ADR-051.
+- **6**: alta, baja, restablecimientos y cambio propio escriben en `audit_log` en la misma transacción (ADR-010), con el orden único de candados de ADR-051.
 - **12**: ninguna contraseña viaja por correo. La temporal se muestra una vez y se entrega en mano.
 - **16**: ningún acceso de soporte del fabricante gestiona cuentas, con ningún alcance.
 - **18**: cada ruta con su policy (solo `admin`) y su prueba de `403` por cada rol, por soporte, por quiosco y por portal.

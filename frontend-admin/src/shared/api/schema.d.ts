@@ -1076,35 +1076,54 @@ export interface paths {
          * @description La persona que ha entrado cambia **su propia** contrasena, presentando
          *     la actual (RF-ID-10, RF-ID-01). Es el unico camino por el que el
          *     titular de una cuenta de gestion fija una contrasena elegida por el:
-         *     las que entrega `POST /management-accounts` y
+         *     las que entregan `POST /management-accounts` y
          *     `POST /management-accounts/{uuid}/password/reset` son **temporales**.
          *
          *     **Cualquier rol de gestion, y solo sobre si mismo.** No hay `uuid` en
          *     la ruta ni en el cuerpo: la cuenta la resuelve el token, asi que no hay
          *     ninguna URL que manipular para cambiar la contrasena de otra persona.
-         *     Para eso esta el restablecimiento, que es de `admin` y deja otro
-         *     asiento. Sin ambito propio: basta una sesion completa. Una sesion
-         *     **pendiente** de segundo factor (`2fa:pending`) recibe `401`, como en
-         *     `GET /auth/me`.
+         *     Sin ambito propio: basta una sesion completa, tambien la que solo lleva
+         *     `password:change`. Una sesion **pendiente** de segundo factor
+         *     (`2fa:pending`) recibe `401`, como en `GET /auth/me`. **Un acceso de
+         *     soporte del fabricante recibe `403`, con cualquier alcance** (regla
+         *     dura 16, ADR-020): su titular no es una cuenta de gestion y no tiene
+         *     contrasena que cambiar aqui.
          *
-         *     **Es la salida de la contrasena temporal.** Mientras la cuenta tenga una
-         *     (`password_change_required: true` en `GET /auth/me`), toda ruta de
-         *     gestion salvo esta, `GET /auth/me` y `POST /auth/logout` responde `403`
-         *     con `urn:kronoqr:problem:password-change-required`. Al cambiarla, la
-         *     marca desaparece en la misma transaccion.
+         *     **Es la salida de la contrasena temporal** (ADR-051). Una sesion abierta
+         *     con una contrasena temporal nace con el **unico** ambito
+         *     `password:change`, como la sesion pendiente de segundo factor nace con
+         *     `2fa:pending`: solo alcanza esta ruta, `GET /auth/me` y
+         *     `POST /auth/logout`, y cualquier otra responde `403` con
+         *     `urn:kronoqr:problem:password-change-required`. Al cambiarla, **en la
+         *     misma transaccion** el token de esta sesion recibe los ambitos de su
+         *     rol y la marca desaparece: no hace falta volver a entrar.
          *
          *     **La contrasena actual es obligatoria aunque la sesion este abierta.**
          *     Una sesion robada —un portatil desbloqueado en recepcion— no debe
          *     bastar para quedarse con la cuenta. Si no coincide, `422` con el error
          *     en `errors.current_password`, y **no `401`**: la sesion sigue siendo
-         *     valida y el panel no debe volver al acceso. Cada fallo cuenta para el
-         *     bloqueo por intentos de RF-ID-01, el mismo contador que
-         *     `POST /auth/login`; con el bloqueo abierto, `429` con `Retry-After`. El
-         *     fallo **no** deja asiento, solo log tecnico (ADR-039).
+         *     valida y el panel no debe volver al acceso.
+         *
+         *     **Los fallos cuentan en un contador propio** (`password-change|<uuid>`),
+         *     no en el del acceso, que se lleva por correo y origen. Al alcanzar el
+         *     umbral del bloqueo de cuenta de RF-ID-01, la peticion responde `429`
+         *     con `Retry-After`, **revoca el token con el que se hizo** y deja el
+         *     asiento `auth.lockout_started`: quien prueba contrasenas con una sesion
+         *     robada la pierde. Los fallos sueltos **no** dejan asiento, solo log
+         *     tecnico (ADR-039).
          *
          *     **La politica de robustez de RF-ID-01 se aplica aqui**, que es donde se
-         *     fija la contrasena (`IDENTITY_PASSWORD_MIN_LENGTH`, regla dura 13). Una
-         *     contrasena nueva igual a la actual es `422` en `errors.new_password`.
+         *     fija la contrasena (`IDENTITY_PASSWORD_MIN_LENGTH`, regla dura 13), con
+         *     un **tope de 72 bytes** en UTF-8, que es lo que el algoritmo de hash
+         *     llega a leer: una contrasena mas larga se rechaza con `422` en vez de
+         *     truncarse en silencio. Una contrasena nueva igual a la actual es `422`
+         *     en `errors.new_password`.
+         *
+         *     **La escritura es condicionada.** Dentro del candado se comprueba que el
+         *     hash leido al comparar sigue siendo el vigente y que el token de esta
+         *     sesion sigue existiendo. Si entretanto un `admin` restablecio la
+         *     contrasena, `409` (`urn:kronoqr:problem:conflict`) sin cambiar nada; si
+         *     la sesion se cerro —una baja, un restablecimiento—, `401`.
          *
          *     **Cierra las demas sesiones de la cuenta y conserva esta.** Quien cambia
          *     su contrasena porque sospecha es quien mas necesita que la otra sesion
@@ -1164,15 +1183,26 @@ export interface paths {
          * Alta de cuenta de gestion
          * @description Crea una cuenta del panel de gestion con su rol (RF-ID-10, RF-ID-02).
          *
+         *     **El `admin` que la crea se reautentica en la misma peticion**
+         *     (ADR-051 §7): con el codigo de su autenticador en `actor_totp_code` o,
+         *     si su cuenta no tiene segundo factor confirmado, con su contrasena en
+         *     `actor_current_password`. Una sesion de `admin` robada no basta para
+         *     dejarse una cuenta propia en la instalacion. Un codigo o una contrasena
+         *     que no valen responden `422` en ese campo, cuentan en el mismo
+         *     contador del segundo factor de la cuenta que actua y, con el bloqueo
+         *     abierto, `429` con `Retry-After`. Un codigo ya usado en su franja no
+         *     vale otra vez.
+         *
          *     **La contrasena la genera el servidor y es temporal.** Viaja **una sola
-         *     vez**, en esta respuesta, y se entrega **en mano** (regla dura 12): no
-         *     hay invitacion por correo, ni enlace de activacion, ni ningun envio.
-         *     Quien la recibe entra con ella, activa su segundo factor si su rol lo
-         *     exige (RS-06, `IDENTITY_2FA_REQUIRED_ROLES`) con el reto que ya devuelve
-         *     `POST /auth/login`, y **antes de poder hacer nada mas** fija la suya con
-         *     `POST /auth/password`. Caduca a las `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`
-         *     (72 de serie) sin usarse para eso; caducada, el acceso responde lo
-         *     mismo que una contrasena incorrecta (RS-03) y se emite otra con
+         *     vez**, en esta respuesta (`Cache-Control: no-store`), y se entrega
+         *     **en mano** (regla dura 12): no hay invitacion por correo, ni enlace de
+         *     activacion, ni ningun envio. Quien la recibe entra con ella, activa su
+         *     segundo factor si su rol lo exige (RS-06,
+         *     `IDENTITY_2FA_REQUIRED_ROLES`) con el reto que ya devuelve
+         *     `POST /auth/login`, y su sesion solo alcanza `POST /auth/password` hasta
+         *     que fija la suya. Caduca a las `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`
+         *     (72 de serie, de 1 a 168); caducada, el acceso responde lo mismo que
+         *     una contrasena incorrecta (RS-03) y se emite otra con
          *     `POST /management-accounts/{uuid}/password/reset`.
          *
          *     **El segundo factor no se genera aqui.** Lo da de alta su titular en su
@@ -1181,11 +1211,10 @@ export interface paths {
          *
          *     **El alcance por departamento no viaja aqui.** Un
          *     `responsable_departamento` nace con `scope.kind: departments` y la lista
-         *     vacia —no alcanza a nadie— hasta que se le asigna un departamento. El
-         *     responsable es un atributo del departamento
-         *     (`departments.manager_user_id`), y asignarlo desplaza al anterior: es
-         *     una escritura de `Workforce` con su propio asiento, no un efecto
-         *     secundario del alta de una cuenta.
+         *     vacia —no alcanza a nadie— hasta que se le asigna un departamento con
+         *     `PATCH /departments/{id}` (`manager_user_uuid`). El responsable es un
+         *     atributo del departamento, y asignarlo desplaza al anterior: es una
+         *     escritura de `Workforce` con su propio asiento.
          *
          *     **`admin` y solo `admin`, con ambito `accounts:*`**; los demas roles y
          *     cualquier acceso de soporte, `403` (regla dura 18).
@@ -1194,10 +1223,11 @@ export interface paths {
          *     (`urn:kronoqr:problem:conflict`). Las bajas conservan su correo: el
          *     historico no se reasigna a otra persona.
          *
-         *     **Auditado en la misma transaccion** (regla dura 6, ADR-027):
+         *     **Auditado en la misma transaccion** (regla dura 6, ADR-010):
          *     `user.created` y `role_assignment.changed`, con el `admin` como actor y
          *     el `uuid` de la cuenta nueva. Ni el correo, ni el nombre, ni la
-         *     contrasena (regla dura 21).
+         *     contrasena (regla dura 21). Un alta con rol `admin` avisa ademas al
+         *     receptor de seguridad de la instalacion.
          */
         post: operations["createManagementAccount"];
         delete?: never;
@@ -1228,15 +1258,21 @@ export interface paths {
          * Baja de una cuenta de gestion
          * @description Retira el acceso al panel a una cuenta (RF-ID-10, RS-05, RL-16):
          *     `status` pasa a `deactivated` y **todas** sus sesiones y retos abiertos
-         *     dejan de valer en la misma transaccion. Aunque un token sobreviviera, no
-         *     autorizaria: la comprobacion de cada peticion consulta tambien el estado
-         *     de la cuenta.
+         *     dejan de valer en la misma transaccion, incluida su suscripcion al
+         *     canal en tiempo real. Aunque un token sobreviviera, no autorizaria: la
+         *     comprobacion de cada peticion consulta tambien el estado de la cuenta.
+         *
+         *     **Con ella caen los accesos de soporte que esa cuenta concedio** y
+         *     siguen vigentes (`/support/grants`): un acceso temporal no sobrevive a
+         *     quien respondia de el. Cada uno queda revocado con su propio asiento.
          *
          *     **Nunca un borrado** (regla dura 5). La cuenta sigue ahi, con su
          *     historial, como actor de lo que firmo; y sigue contando para la guarda
          *     de `POST /setup/administrator`, de modo que dar de baja a todo el mundo
          *     no reabre la creacion publica de un administrador. No hay reactivacion
-         *     en esta version: quien vuelve recibe una cuenta nueva.
+         *     en esta version: quien vuelve recibe una cuenta nueva. Un departamento
+         *     cuyo responsable esta de baja se comporta como un departamento sin
+         *     responsable: ni avisos ni resumenes van a esa cuenta.
          *
          *     **Una sola respuesta para «no existe» y «ya estaba de baja»**: `404`, sin
          *     cambiar nada y sin asiento. La segunda pulsacion de un boton no es un
@@ -1294,10 +1330,17 @@ export interface paths {
          *     de que otra persona la conoce. No hay recuperacion por correo (regla
          *     dura 12): la entrega es en mano, como la del alta.
          *
-         *     **Viaja una sola vez**, en esta respuesta, con las mismas reglas que la
-         *     del alta: caduca a las `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` y,
-         *     hasta que su titular fije la suya con `POST /auth/password`, la cuenta
-         *     no puede hacer nada mas.
+         *     **Con motivo obligatorio y reautenticacion del `admin` que actua**
+         *     (ADR-051 §7): el motivo entra en el asiento, y el codigo del
+         *     autenticador (`actor_totp_code`) —o la contrasena si su cuenta no tiene
+         *     segundo factor confirmado (`actor_current_password`)— se comprueba como
+         *     en el alta: `422` en el campo si no vale, `429` con `Retry-After` con
+         *     el bloqueo abierto.
+         *
+         *     **Viaja una sola vez**, en esta respuesta (`Cache-Control: no-store`),
+         *     con las mismas reglas que la del alta: caduca a las
+         *     `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` y, hasta que su titular fije la
+         *     suya con `POST /auth/password`, sus sesiones solo alcanzan esa ruta.
          *
          *     **Cierra todas las sesiones de la cuenta** en la misma transaccion. De
          *     los dos motivos para restablecer —olvido y sospecha— en el que importa
@@ -1317,8 +1360,9 @@ export interface paths {
          *     **`admin` y solo `admin`, con ambito `accounts:*`**; los demas roles y
          *     cualquier acceso de soporte, `403` (regla dura 18).
          *
-         *     **Auditado** (regla dura 6): `user.password_reset` con el actor y el
-         *     `uuid` de la cuenta. La contrasena no entra en ningun asiento ni log.
+         *     **Auditado** (regla dura 6): `user.password_reset` con el actor, el
+         *     motivo y el `uuid` de la cuenta. La contrasena no entra en ningun
+         *     asiento ni log.
          */
         post: operations["resetManagementAccountPassword"];
         delete?: never;
@@ -1351,6 +1395,11 @@ export interface paths {
          *     dar de alta en su siguiente acceso (RF-ID-10, RS-06): el telefono
          *     perdido o cambiado. Lo mismo que `identity:2fa-reset`, desde el panel.
          *
+         *     **Con motivo obligatorio y reautenticacion del `admin` que actua**
+         *     (ADR-051 §7), como el alta y el restablecimiento de la contrasena:
+         *     `422` en el campo si el codigo o la contrasena del actor no valen,
+         *     `429` con `Retry-After` con el bloqueo abierto.
+         *
          *     **Cierra todas las sesiones de la cuenta** en la misma transaccion.
          *     Retirar el segundo factor sin echar a quien ya esta dentro no retira
          *     nada.
@@ -1358,7 +1407,9 @@ export interface paths {
          *     **Abre una ventana, y se dice.** Hasta que el titular vuelva a activar
          *     su TOTP, quien conozca su contrasena puede activarlo por el (el mismo
          *     riesgo aceptado del alta, doc 07). Por eso la contrasena **no** se
-         *     restablece aqui, y el asiento deja quien lo hizo y por que.
+         *     restablece aqui, el asiento deja quien lo hizo y por que, y **cada
+         *     restablecimiento avisa al receptor de seguridad** de la instalacion
+         *     (ADR-051, residuo 1).
          *
          *     **No se admite** —`409` (`urn:kronoqr:problem:conflict`), sin cambiar
          *     nada y sin asiento— **sobre la propia cuenta** ni sobre una cuenta
@@ -2304,14 +2355,45 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Renombrado de un departamento
-         * @description Cambia el nombre del departamento.
+         * Renombrado y responsable de un departamento
+         * @description Cambia el nombre del departamento, su responsable, o las dos cosas.
+         *     Basta con enviar una.
          *
          *     **No se puede mover a otro centro.** Sus empleados estan adscritos al
          *     centro del departamento, y arrastrarlos con un renombrado cambiaria la
          *     zona horaria con la que se calcula su jornada (RN-05) sin que nadie lo
          *     pidiera. Mover a una persona de centro es una operacion sobre la
          *     persona, no sobre el departamento.
+         *
+         *     **El responsable** (`manager_user_uuid`, RF-ID-03, RF-ID-10) es lo que
+         *     da alcance a una cuenta `responsable_departamento`: sin el, esa cuenta
+         *     no alcanza a nadie. Un departamento tiene como mucho un responsable, y
+         *     una cuenta puede dirigir varios. `null` deja el departamento sin
+         *     responsable.
+         *
+         *     - **Es un cambio de permisos de dos personas**, no un dato del
+         *       departamento: quien deja de ser responsable pierde el alcance sobre
+         *       esa gente y quien pasa a serlo lo gana. Por eso deja **un asiento
+         *       `role_assignment.changed` por cada cuenta afectada** (la que sale y
+         *       la que entra), con el actor, el `department_id` y si se concede o se
+         *       retira (regla dura 6, RS-05). El renombrado sigue dejando
+         *       `department.renamed`.
+         *     - **Solo `admin` puede enviarlo**: ademas de `employees:*`, exige el
+         *       ambito `accounts:*`. Quien elige un responsable elige entre las
+         *       cuentas de gestion, que solo `admin` puede listar, y concede un
+         *       alcance sobre personas. Una peticion de `rrhh` que lo incluya recibe
+         *       `403` y no cambia nada, tampoco el nombre; `rrhh` sigue pudiendo
+         *       renombrar.
+         *     - **Tiene que ser una cuenta activa con el rol
+         *       `responsable_departamento`.** Si no lo es —no existe, esta dada de
+         *       baja o tiene otro rol—, `422` en `errors.manager_user_uuid`, con un
+         *       solo mensaje para las tres causas. Es `422` y no `404` porque el
+         *       recurso de la ruta, el departamento, existe: lo que no vale es una
+         *       referencia del cuerpo, que es como el contrato trata cualquier
+         *       identificador referenciado (`ValidationFailed`).
+         *     - **El efecto es inmediato**: el alcance se relee en cada peticion, asi
+         *       que la cuenta que sale pierde el acceso en su peticion siguiente y no
+         *       cuando caduque su sesion.
          */
         patch: operations["updateDepartment"];
         trace?: never;
@@ -7036,11 +7118,12 @@ export interface components {
             scope: components["schemas"]["AccessScope"];
             /**
              * @description `true` mientras la cuenta entre con una contrasena **temporal**
-             *     —la del alta o la de un restablecimiento— (RF-ID-10). Con ella
-             *     puesta, toda ruta de gestion salvo `GET /auth/me`,
-             *     `POST /auth/logout` y `POST /auth/password` responde `403` con
-             *     `urn:kronoqr:problem:password-change-required`, y el panel lleva a
-             *     la persona a cambiarla antes de enseñarle nada. Opcional en v1
+             *     —la del alta o la de un restablecimiento— (RF-ID-10, ADR-051). El
+             *     token de esa sesion lleva entonces el **unico** ambito
+             *     `password:change`: alcanza `GET /auth/me`, `POST /auth/logout` y
+             *     `POST /auth/password`, y cualquier otra ruta responde `403` con
+             *     `urn:kronoqr:problem:password-change-required`. El panel lleva a la
+             *     persona a cambiarla antes de enseñarle nada. Opcional en v1
              *     (ADR-012): su ausencia significa `false`.
              */
             password_change_required?: boolean;
@@ -7105,7 +7188,8 @@ export interface components {
             /**
              * @description Alcance por departamento (RF-ID-03), leido en el momento de la
              *     consulta. Un `responsable_departamento` sin departamento asignado
-             *     lleva `kind: departments` con la lista vacia: no alcanza a nadie.
+             *     lleva `kind: departments` con la lista vacia: no alcanza a nadie
+             *     hasta que se le asigna con `PATCH /departments/{id}`.
              */
             scope: components["schemas"]["AccessScope"];
             status: components["schemas"]["ManagementAccountStatus"];
@@ -7133,11 +7217,31 @@ export interface components {
             meta: components["schemas"]["PageMeta"];
         };
         /**
+         * ActorTotpCode
+         * @description Codigo vigente del autenticador **de la cuenta que hace la peticion**,
+         *     no de la afectada (ADR-051 §7). Reautentica al `admin` en las acciones
+         *     que crean o rehacen la credencial de otra persona: una sesion robada no
+         *     basta. Se comprueba con el mismo contador de intentos y la misma
+         *     proteccion contra reutilizacion de franja que `POST /auth/2fa/verify`.
+         *     Obligatorio si la cuenta que actua tiene segundo factor confirmado.
+         */
+        ActorTotpCode: string;
+        /**
+         * ActorCurrentPassword
+         * @description Contrasena vigente **de la cuenta que hace la peticion**. Solo vale si
+         *     esa cuenta **no** tiene segundo factor confirmado (un rol fuera de
+         *     `IDENTITY_2FA_REQUIRED_ROLES`); con segundo factor, se exige
+         *     `actor_totp_code` y este campo responde `422`.
+         */
+        ActorCurrentPassword: string;
+        /**
          * CreateManagementAccountRequest
          * @description Alta de una cuenta de gestion. **Sin contrasena**: la genera el
          *     servidor (`TemporaryPasswordIssued`). **Sin departamentos**: el
-         *     responsable de un departamento se asigna en el departamento, no en la
-         *     cuenta.
+         *     responsable de un departamento se asigna en el departamento
+         *     (`PATCH /departments/{id}`), no en la cuenta. **Con la
+         *     reautenticacion de quien la crea**: exactamente uno de
+         *     `actor_totp_code` y `actor_current_password`.
          */
         CreateManagementAccountRequest: {
             /**
@@ -7162,14 +7266,17 @@ export interface components {
              * @example es
              */
             locale?: string;
-        };
+            actor_totp_code?: components["schemas"]["ActorTotpCode"];
+            actor_current_password?: components["schemas"]["ActorCurrentPassword"];
+        } & (unknown | unknown);
         /**
          * TemporaryPasswordIssued
          * @description Una contrasena temporal recien emitida (RF-ID-10). **Es la unica
          *     representacion en la que existe en claro**, y solo en la respuesta que
-         *     la genera: se guarda su hash, no se escribe en `audit_log` ni en ningun
-         *     log, no se envia por correo (regla dura 12) y no hay ningun endpoint que
-         *     la devuelva despues. Si se pierde, se restablece.
+         *     la genera, servida con `Cache-Control: no-store`: se guarda su hash, no
+         *     se escribe en `audit_log` ni en ningun log, no se envia por correo
+         *     (regla dura 12) y no hay ningun endpoint que la devuelva despues. Si se
+         *     pierde, se restablece.
          *
          *     El panel la muestra en un dialogo de una sola vez, con confirmacion
          *     explicita, y no la guarda en `sessionStorage` ni en estado persistido,
@@ -7184,16 +7291,17 @@ export interface components {
              *     clases que exige la politica de RF-ID-01 —asi la cumple por
              *     construccion— y **sin los caracteres que se confunden al leerlos y
              *     teclearlos** (`l`, `I`, `O`, `0`, `1`): se entrega de viva voz o en
-             *     papel.
-             * @example Kd2pQ9vLmN4tZbYc#F1w
+             *     papel. Todos sus caracteres son ASCII, asi que nunca pasa de los 72
+             *     bytes que lee el hash.
+             * @example Kd2pQ9vLmN4tZbYc#F7w
              */
             password: string;
             /** @description Instante de emision, en UTC (regla dura 3). */
             issued_at: components["schemas"]["UtcTimestamp"];
             /**
              * @description Desde este instante la contrasena ya no sirve para entrar
-             *     (`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`, 72 de serie). Una
-             *     contrasena temporal que no caduca acaba siendo la definitiva.
+             *     (`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`, 72 de serie, de 1 a 168).
+             *     Una contrasena temporal que no caduca acaba siendo la definitiva.
              */
             expires_at: components["schemas"]["UtcTimestamp"];
         };
@@ -7219,15 +7327,34 @@ export interface components {
             reason: string;
         };
         /**
+         * ResetManagementPasswordRequest
+         * @description El motivo es obligatorio y entra en el asiento `user.password_reset`:
+         *     cambiarle la contrasena a otra persona es la via mas comoda de
+         *     prepararse el acceso a su cuenta, asi que queda escrito por que se
+         *     hizo. Sin datos de salud ni juicios de valor. **Con la reautenticacion
+         *     de quien la restablece**: exactamente uno de `actor_totp_code` y
+         *     `actor_current_password`.
+         */
+        ResetManagementPasswordRequest: {
+            /** @example Olvido tras las vacaciones; se la entrego en mano */
+            reason: string;
+            actor_totp_code?: components["schemas"]["ActorTotpCode"];
+            actor_current_password?: components["schemas"]["ActorCurrentPassword"];
+        } & (unknown | unknown);
+        /**
          * ResetManagementTwoFactorRequest
          * @description El motivo es obligatorio: retirar el segundo factor de otra persona es
          *     la via mas comoda de prepararse el acceso a su cuenta, asi que el
-         *     asiento dice por que se hizo.
+         *     asiento dice por que se hizo. Sin datos de salud ni juicios de valor.
+         *     **Con la reautenticacion de quien lo retira**: exactamente uno de
+         *     `actor_totp_code` y `actor_current_password`.
          */
         ResetManagementTwoFactorRequest: {
             /** @example Telefono extraviado; lo da de alta de nuevo hoy */
             reason: string;
-        };
+            actor_totp_code?: components["schemas"]["ActorTotpCode"];
+            actor_current_password?: components["schemas"]["ActorCurrentPassword"];
+        } & (unknown | unknown);
         /**
          * ChangeOwnPasswordRequest
          * @description Cambio de la contrasena propia (RF-ID-10).
@@ -7242,10 +7369,12 @@ export interface components {
             /**
              * @description La contrasena nueva. Cumple la politica de RF-ID-01
              *     (`IDENTITY_PASSWORD_MIN_LENGTH`, letras mayusculas y minusculas,
-             *     cifras y simbolos) y es distinta de la actual. La politica se
-             *     comprueba en el servidor y un `422` dice que regla falta; el
-             *     `minLength` del esquema no la describe a proposito, porque es
-             *     configuracion de cada instalacion (regla dura 13).
+             *     cifras y simbolos), es distinta de la actual y **no pasa de 72
+             *     bytes en UTF-8**, que es lo que lee el algoritmo de hash: con
+             *     caracteres no ASCII caben menos de 72 caracteres, y por eso el
+             *     limite real lo comprueba el servidor y responde `422`. El
+             *     `minLength` del esquema no describe la politica a proposito, porque
+             *     es configuracion de cada instalacion (regla dura 13).
              */
             new_password: string;
         };
@@ -7543,16 +7672,20 @@ export interface components {
         /**
          * Department
          * @description Departamento (documento 01 §5.5).
-         *
-         *     **No lleva responsable todavia.** `departments.manager_user_id` existe en
-         *     el esquema, pero asignarlo solo tiene efecto con el ambito por
-         *     departamento de RF-ID-03, que es de la tarea 2.1. Exponerlo antes seria
-         *     prometer un control de acceso que aun no se aplica.
          */
         Department: {
             /** Format: int64 */
             id: number;
             name: string;
+            /**
+             * @description `uuid` publico de la cuenta `responsable_departamento` que lo dirige
+             *     (`departments.manager_user_id`, RF-ID-03), o `null` si no tiene. Es
+             *     lo que da alcance a esa cuenta. Si la cuenta esta dada de baja, el
+             *     departamento se comporta como sin responsable —ni avisos ni
+             *     resumenes van a ella— y el panel lo señala. Opcional en v1
+             *     (ADR-012): su ausencia equivale a `null`.
+             */
+            manager_user_uuid?: string | null;
         };
         /**
          * DepartmentCollection
@@ -7570,11 +7703,19 @@ export interface components {
         };
         /**
          * UpdateDepartmentRequest
-         * @description Renombrado del departamento. Es lo unico que cambia: no hay otro centro
-         *     al que moverlo (ADR-040).
+         * @description Renombrado del departamento, cambio de su responsable, o las dos cosas.
+         *     Al menos una. No hay otro centro al que moverlo (ADR-040).
          */
         UpdateDepartmentRequest: {
-            name: string;
+            name?: string;
+            /**
+             * @description Cuenta activa con rol `responsable_departamento` que pasa a dirigir
+             *     el departamento, o `null` para dejarlo sin responsable. **Solo
+             *     `admin`** (exige tambien `accounts:*`). Una cuenta que no existe,
+             *     esta de baja o tiene otro rol responde `422` en este campo, con un
+             *     solo mensaje para las tres causas.
+             */
+            manager_user_uuid?: string | null;
         };
         /**
          * Branding
@@ -12347,10 +12488,13 @@ export interface components {
          *     por rol (regla dura 18).
          *
          *     **En una sesion de gestion con contrasena temporal**, el `type` es
-         *     `urn:kronoqr:problem:password-change-required`: no falta ningun
-         *     ambito, falta que su titular fije su propia contrasena con
-         *     `POST /api/v1/auth/password` (RF-ID-10). El panel lo distingue por el
-         *     `type` y lleva a esa pantalla, en lugar de mostrar «acceso denegado».
+         *     `urn:kronoqr:problem:password-change-required`. El token de esa sesion
+         *     lleva el unico ambito `password:change` (ADR-051), asi que cualquier
+         *     ruta que exija un ambito lo rechaza; lo que se le dice a quien llama no
+         *     es que le falte un permiso, sino que su titular tiene que fijar su
+         *     propia contrasena con `POST /api/v1/auth/password` (RF-ID-10). El panel
+         *     lo distingue por el `type` y lleva a esa pantalla, en lugar de mostrar
+         *     «acceso denegado».
          */
         Forbidden: {
             headers: {
@@ -12457,6 +12601,24 @@ export interface components {
          *     camino tiene su propia respuesta generica (regla dura 17).
          */
         ValidationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ValidationProblem"];
+            };
+        };
+        /**
+         * @description La peticion no cumple el contrato, o **la reautenticacion de quien la
+         *     hace no vale** (ADR-051 §7). `errors.actor_totp_code` señala un codigo
+         *     incorrecto, caducado o ya usado en su franja —o que la cuenta que actua
+         *     tiene segundo factor y no lo envio—; `errors.actor_current_password`,
+         *     una contrasena que no coincide. Cada fallo cuenta en el contador de
+         *     segundo factor de la cuenta que actua: con el bloqueo abierto la
+         *     respuesta pasa a ser `429` con `Retry-After`. No se ha cambiado nada y
+         *     no hay asiento.
+         */
+        ActorReauthenticationFailed: {
             headers: {
                 [name: string]: unknown;
             };
@@ -13912,8 +14074,9 @@ export interface operations {
         responses: {
             /**
              * @description Contrasena cambiada. Las demas sesiones de la cuenta han dejado de
-             *     valer; esta sigue abierta. Si la cuenta tenia una contrasena
-             *     temporal, `GET /auth/me` devuelve ya `password_change_required: false`.
+             *     valer; esta sigue abierta y, si era una sesion `password:change`,
+             *     lleva ya los ambitos de su rol. `GET /auth/me` devuelve
+             *     `password_change_required: false`.
              */
             204: {
                 headers: {
@@ -13922,10 +14085,25 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description La contrasena cambio entre la comprobacion y la escritura (un
+             *     restablecimiento de un `admin`). No se ha cambiado nada: hay que
+             *     volver a entrar con la contrasena que corresponda.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /**
              * @description No se ha cambiado nada. `errors.current_password` dice que la
              *     contrasena actual no coincide; `errors.new_password`, que regla de
-             *     la politica falta o que es igual a la actual.
+             *     la politica falta, que supera los 72 bytes o que es igual a la
+             *     actual.
              */
             422: {
                 headers: {
@@ -14014,6 +14192,8 @@ export interface operations {
              */
             201: {
                 headers: {
+                    /** @description Siempre `no-store`: el cuerpo lleva una contrasena en claro. */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -14023,7 +14203,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
+            422: components["responses"]["ActorReauthenticationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -14096,11 +14276,17 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetManagementPasswordRequest"];
+            };
+        };
         responses: {
             /** @description Contrasena restablecida. **Es la unica vez que se muestra.** */
             200: {
                 headers: {
+                    /** @description Siempre `no-store`: el cuerpo lleva una contrasena en claro. */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -14111,6 +14297,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ActorReauthenticationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -14152,7 +14339,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
-            422: components["responses"]["ValidationFailed"];
+            422: components["responses"]["ActorReauthenticationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
