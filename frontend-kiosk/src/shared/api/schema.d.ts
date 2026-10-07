@@ -1062,6 +1062,323 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambio de la contrasena propia
+         * @description La persona que ha entrado cambia **su propia** contrasena, presentando
+         *     la actual (RF-ID-10, RF-ID-01). Es el unico camino por el que el
+         *     titular de una cuenta de gestion fija una contrasena elegida por el:
+         *     las que entrega `POST /management-accounts` y
+         *     `POST /management-accounts/{uuid}/password/reset` son **temporales**.
+         *
+         *     **Cualquier rol de gestion, y solo sobre si mismo.** No hay `uuid` en
+         *     la ruta ni en el cuerpo: la cuenta la resuelve el token, asi que no hay
+         *     ninguna URL que manipular para cambiar la contrasena de otra persona.
+         *     Para eso esta el restablecimiento, que es de `admin` y deja otro
+         *     asiento. Sin ambito propio: basta una sesion completa. Una sesion
+         *     **pendiente** de segundo factor (`2fa:pending`) recibe `401`, como en
+         *     `GET /auth/me`.
+         *
+         *     **Es la salida de la contrasena temporal.** Mientras la cuenta tenga una
+         *     (`password_change_required: true` en `GET /auth/me`), toda ruta de
+         *     gestion salvo esta, `GET /auth/me` y `POST /auth/logout` responde `403`
+         *     con `urn:kronoqr:problem:password-change-required`. Al cambiarla, la
+         *     marca desaparece en la misma transaccion.
+         *
+         *     **La contrasena actual es obligatoria aunque la sesion este abierta.**
+         *     Una sesion robada —un portatil desbloqueado en recepcion— no debe
+         *     bastar para quedarse con la cuenta. Si no coincide, `422` con el error
+         *     en `errors.current_password`, y **no `401`**: la sesion sigue siendo
+         *     valida y el panel no debe volver al acceso. Cada fallo cuenta para el
+         *     bloqueo por intentos de RF-ID-01, el mismo contador que
+         *     `POST /auth/login`; con el bloqueo abierto, `429` con `Retry-After`. El
+         *     fallo **no** deja asiento, solo log tecnico (ADR-039).
+         *
+         *     **La politica de robustez de RF-ID-01 se aplica aqui**, que es donde se
+         *     fija la contrasena (`IDENTITY_PASSWORD_MIN_LENGTH`, regla dura 13). Una
+         *     contrasena nueva igual a la actual es `422` en `errors.new_password`.
+         *
+         *     **Cierra las demas sesiones de la cuenta y conserva esta.** Quien cambia
+         *     su contrasena porque sospecha es quien mas necesita que la otra sesion
+         *     se cierre; y echarle a el de la que esta usando no protege nada.
+         *
+         *     **Auditado** (regla dura 6): asiento `user.password_changed` con el
+         *     `uuid` de la cuenta como actor y sujeto. Ni la contrasena ni nada
+         *     derivado de ella.
+         */
+        post: operations["changeOwnPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/management-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cuentas de gestion de la instalacion
+         * @description Las cuentas del panel de gestion, activas y dadas de baja (RF-ID-10):
+         *     quien tiene acceso, con que rol y alcance, si tiene el segundo factor
+         *     activo y si su contrasena sigue siendo temporal.
+         *
+         *     **Es la lista que la guia de endurecimiento manda revisar cada
+         *     trimestre y en cada baja de personal**, contrastandola con la lista de
+         *     plantilla. Hasta la 2.2.0 eso exigia una consola en el servidor.
+         *
+         *     **`admin` y solo `admin`, con ambito `accounts:*`** (regla dura 18).
+         *     Los demas roles de gestion reciben `403`, y tambien **un acceso de
+         *     soporte del fabricante, con cualquier alcance** (ADR-020): la lista de
+         *     quien puede entrar en la instalacion no es un dato que el soporte
+         *     necesite para diagnosticar nada.
+         *
+         *     **Incluye las dadas de baja**, salvo que se filtre por `status`. Una
+         *     cuenta dada de baja no se borra (regla dura 5) y sigue siendo el actor
+         *     de los asientos y correcciones que firmo: esconderla haria ilegible el
+         *     «¿quien era esta persona?» que se pregunta al leer `audit_log`.
+         *
+         *     **El orden es parte del contrato**: activas primero y, dentro de cada
+         *     grupo, por nombre. Se pagina como `GET /employees`, con los mismos
+         *     `page` y `per_page`, y los filtros actuan sobre el conjunto entero, no
+         *     sobre la pagina devuelta.
+         *
+         *     **Nunca lleva ningun secreto**: ni el hash de la contrasena, ni la
+         *     temporal, ni el secreto TOTP, ni tokens. `password_status` y
+         *     `two_factor_enabled` dicen el estado, no el valor.
+         */
+        get: operations["listManagementAccounts"];
+        put?: never;
+        /**
+         * Alta de cuenta de gestion
+         * @description Crea una cuenta del panel de gestion con su rol (RF-ID-10, RF-ID-02).
+         *
+         *     **La contrasena la genera el servidor y es temporal.** Viaja **una sola
+         *     vez**, en esta respuesta, y se entrega **en mano** (regla dura 12): no
+         *     hay invitacion por correo, ni enlace de activacion, ni ningun envio.
+         *     Quien la recibe entra con ella, activa su segundo factor si su rol lo
+         *     exige (RS-06, `IDENTITY_2FA_REQUIRED_ROLES`) con el reto que ya devuelve
+         *     `POST /auth/login`, y **antes de poder hacer nada mas** fija la suya con
+         *     `POST /auth/password`. Caduca a las `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`
+         *     (72 de serie) sin usarse para eso; caducada, el acceso responde lo
+         *     mismo que una contrasena incorrecta (RS-03) y se emite otra con
+         *     `POST /management-accounts/{uuid}/password/reset`.
+         *
+         *     **El segundo factor no se genera aqui.** Lo da de alta su titular en su
+         *     primer acceso: generarlo aqui haria pasar el secreto de una persona por
+         *     la pantalla de otra.
+         *
+         *     **El alcance por departamento no viaja aqui.** Un
+         *     `responsable_departamento` nace con `scope.kind: departments` y la lista
+         *     vacia —no alcanza a nadie— hasta que se le asigna un departamento. El
+         *     responsable es un atributo del departamento
+         *     (`departments.manager_user_id`), y asignarlo desplaza al anterior: es
+         *     una escritura de `Workforce` con su propio asiento, no un efecto
+         *     secundario del alta de una cuenta.
+         *
+         *     **`admin` y solo `admin`, con ambito `accounts:*`**; los demas roles y
+         *     cualquier acceso de soporte, `403` (regla dura 18).
+         *
+         *     **Un correo que ya es de otra cuenta, activa o dada de baja**, da `409`
+         *     (`urn:kronoqr:problem:conflict`). Las bajas conservan su correo: el
+         *     historico no se reasigna a otra persona.
+         *
+         *     **Auditado en la misma transaccion** (regla dura 6, ADR-027):
+         *     `user.created` y `role_assignment.changed`, con el `admin` como actor y
+         *     el `uuid` de la cuenta nueva. Ni el correo, ni el nombre, ni la
+         *     contrasena (regla dura 21).
+         */
+        post: operations["createManagementAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/management-accounts/{uuid}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la cuenta de gestion (`users.uuid`, UUID
+                 *     v7), el mismo que devuelve `GET /auth/me`. Nunca la clave interna, y
+                 *     nunca el correo: un correo en una URL acaba en el historial del
+                 *     navegador y en los registros de acceso del servidor web.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91
+                 */
+                uuid: components["parameters"]["ManagementAccountUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Baja de una cuenta de gestion
+         * @description Retira el acceso al panel a una cuenta (RF-ID-10, RS-05, RL-16):
+         *     `status` pasa a `deactivated` y **todas** sus sesiones y retos abiertos
+         *     dejan de valer en la misma transaccion. Aunque un token sobreviviera, no
+         *     autorizaria: la comprobacion de cada peticion consulta tambien el estado
+         *     de la cuenta.
+         *
+         *     **Nunca un borrado** (regla dura 5). La cuenta sigue ahi, con su
+         *     historial, como actor de lo que firmo; y sigue contando para la guarda
+         *     de `POST /setup/administrator`, de modo que dar de baja a todo el mundo
+         *     no reabre la creacion publica de un administrador. No hay reactivacion
+         *     en esta version: quien vuelve recibe una cuenta nueva.
+         *
+         *     **Una sola respuesta para «no existe» y «ya estaba de baja»**: `404`, sin
+         *     cambiar nada y sin asiento. La segunda pulsacion de un boton no es un
+         *     hecho nuevo, y el panel ya sabe releer la lista ante un `404`.
+         *
+         *     **Dos bajas que no se admiten**, las dos `409`
+         *     (`urn:kronoqr:problem:conflict`), sin cambiar nada:
+         *
+         *     - **la propia cuenta**: quien se da de baja a si mismo pierde la sesion
+         *       desde la que podria deshacerlo, y la baja de un `admin` la decide
+         *       otro `admin`;
+         *     - **la ultima cuenta `admin` activa**: dejaria la instalacion sin nadie
+         *       capaz de gestionar cuentas ni configuracion, y la unica salida seria
+         *       una consola en el servidor.
+         *
+         *     Las dos comprobaciones se hacen **bajo candado**: dos `admin` que se dan
+         *     de baja el uno al otro a la vez no pueden dejar la instalacion sin
+         *     ninguno.
+         *
+         *     **`admin` y solo `admin`, con ambito `accounts:*`**; los demas roles y
+         *     cualquier acceso de soporte, `403` (regla dura 18).
+         *
+         *     **Auditada** (regla dura 6): `user.deactivated` con el actor, el motivo
+         *     y el `uuid` de la cuenta. Es `POST` y no `DELETE` porque no borra nada.
+         */
+        post: operations["deactivateManagementAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/management-accounts/{uuid}/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la cuenta de gestion (`users.uuid`, UUID
+                 *     v7), el mismo que devuelve `GET /auth/me`. Nunca la clave interna, y
+                 *     nunca el correo: un correo en una URL acaba en el historial del
+                 *     navegador y en los registros de acceso del servidor web.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91
+                 */
+                uuid: components["parameters"]["ManagementAccountUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restablecimiento de la contrasena de otra cuenta
+         * @description Sustituye la contrasena de una cuenta por una **temporal** generada por
+         *     el servidor (RF-ID-10, RS-06), para quien la olvido o ante la sospecha
+         *     de que otra persona la conoce. No hay recuperacion por correo (regla
+         *     dura 12): la entrega es en mano, como la del alta.
+         *
+         *     **Viaja una sola vez**, en esta respuesta, con las mismas reglas que la
+         *     del alta: caduca a las `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` y,
+         *     hasta que su titular fije la suya con `POST /auth/password`, la cuenta
+         *     no puede hacer nada mas.
+         *
+         *     **Cierra todas las sesiones de la cuenta** en la misma transaccion. De
+         *     los dos motivos para restablecer —olvido y sospecha— en el que importa
+         *     quien esta dentro lleva una sesion viva.
+         *
+         *     **El segundo factor no se toca.** Si tambien hay que retirarlo es
+         *     `POST /management-accounts/{uuid}/two-factor/reset`, otro hecho con su
+         *     propio asiento: juntarlos convertiria esto en «dame la cuenta entera de
+         *     esta persona» en una sola pulsacion.
+         *
+         *     **Sobre la propia cuenta no**: `409`, y el `detail` remite a
+         *     `POST /auth/password`, que exige la contrasena actual.
+         *
+         *     **Una cuenta que no existe o que esta dada de baja** responde `404`: a
+         *     una baja no se le devuelve el acceso cambiandole la contrasena.
+         *
+         *     **`admin` y solo `admin`, con ambito `accounts:*`**; los demas roles y
+         *     cualquier acceso de soporte, `403` (regla dura 18).
+         *
+         *     **Auditado** (regla dura 6): `user.password_reset` con el actor y el
+         *     `uuid` de la cuenta. La contrasena no entra en ningun asiento ni log.
+         */
+        post: operations["resetManagementAccountPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/management-accounts/{uuid}/two-factor/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la cuenta de gestion (`users.uuid`, UUID
+                 *     v7), el mismo que devuelve `GET /auth/me`. Nunca la clave interna, y
+                 *     nunca el correo: un correo en una URL acaba en el historial del
+                 *     navegador y en los registros de acceso del servidor web.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91
+                 */
+                uuid: components["parameters"]["ManagementAccountUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restablecimiento del segundo factor de otra cuenta
+         * @description Retira el segundo factor de una cuenta para que su titular lo vuelva a
+         *     dar de alta en su siguiente acceso (RF-ID-10, RS-06): el telefono
+         *     perdido o cambiado. Lo mismo que `identity:2fa-reset`, desde el panel.
+         *
+         *     **Cierra todas las sesiones de la cuenta** en la misma transaccion.
+         *     Retirar el segundo factor sin echar a quien ya esta dentro no retira
+         *     nada.
+         *
+         *     **Abre una ventana, y se dice.** Hasta que el titular vuelva a activar
+         *     su TOTP, quien conozca su contrasena puede activarlo por el (el mismo
+         *     riesgo aceptado del alta, doc 07). Por eso la contrasena **no** se
+         *     restablece aqui, y el asiento deja quien lo hizo y por que.
+         *
+         *     **No se admite** —`409` (`urn:kronoqr:problem:conflict`), sin cambiar
+         *     nada y sin asiento— **sobre la propia cuenta** ni sobre una cuenta
+         *     **sin segundo factor activo**, donde no hay nada que retirar.
+         *
+         *     **Una cuenta que no existe o que esta dada de baja** responde `404`.
+         *
+         *     **`admin` y solo `admin`, con ambito `accounts:*`**; los demas roles y
+         *     cualquier acceso de soporte, `403` (regla dura 18).
+         *
+         *     **Auditado** (regla dura 6): `auth.two_factor_reset` con el actor, el
+         *     motivo y el `uuid` de la cuenta. Ni el secreto ni nada derivado de el.
+         */
+        post: operations["resetManagementAccountTwoFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/login": {
         parameters: {
             query?: never;
@@ -6717,6 +7034,220 @@ export interface components {
              *     no cuando caduque su sesion.
              */
             scope: components["schemas"]["AccessScope"];
+            /**
+             * @description `true` mientras la cuenta entre con una contrasena **temporal**
+             *     —la del alta o la de un restablecimiento— (RF-ID-10). Con ella
+             *     puesta, toda ruta de gestion salvo `GET /auth/me`,
+             *     `POST /auth/logout` y `POST /auth/password` responde `403` con
+             *     `urn:kronoqr:problem:password-change-required`, y el panel lleva a
+             *     la persona a cambiarla antes de enseñarle nada. Opcional en v1
+             *     (ADR-012): su ausencia significa `false`.
+             */
+            password_change_required?: boolean;
+        };
+        /**
+         * ManagementRole
+         * @description Los cuatro roles de RF-ID-02 que entran al panel de gestion. `empleado`
+         *     y `kiosk` no son cuentas de gestion: el empleado entra a su portal con
+         *     codigo y PIN (ADR-015) y el quiosco con token de dispositivo.
+         * @enum {string}
+         */
+        ManagementRole: "admin" | "rrhh" | "responsable_departamento" | "auditor";
+        /**
+         * ManagementAccountStatus
+         * @description `active` puede entrar; `deactivated` esta dada de baja y no entra, pero
+         *     sigue existiendo con su historial (regla dura 5).
+         * @enum {string}
+         */
+        ManagementAccountStatus: "active" | "deactivated";
+        /**
+         * PasswordStatus
+         * @description De quien es la contrasena vigente de la cuenta, **nunca su valor** (RF-ID-10).
+         *
+         *     - `own` — la fijo su titular, en el asistente de puesta en marcha o
+         *       con `POST /auth/password`.
+         *     - `temporary` — la genero el servidor en el alta o en un
+         *       restablecimiento y su titular aun no la ha cambiado. Con ella se
+         *       entra, pero solo para cambiarla.
+         *     - `temporary_expired` — temporal y caducada: ya no sirve para entrar.
+         *       Se emite otra con `POST /management-accounts/{uuid}/password/reset`.
+         * @enum {string}
+         */
+        PasswordStatus: "own" | "temporary" | "temporary_expired";
+        /**
+         * ManagementAccount
+         * @description Una cuenta del panel de gestion vista por quien las administra
+         *     (RF-ID-10). Tiene la forma de `ManagementUser` —la de `GET /auth/me`—
+         *     **sin `abilities`**, que son del token de una sesion y no de la cuenta,
+         *     y con lo que hace falta para decidir que hacer con ella: estado,
+         *     segundo factor y de quien es la contrasena.
+         *
+         *     **Ningun secreto viaja aqui**: ni hash, ni contrasena temporal, ni
+         *     secreto TOTP. La temporal existe solo en la respuesta que la emite
+         *     (`TemporaryPasswordIssued`), y por eso son dos esquemas y no uno.
+         */
+        ManagementAccount: {
+            /**
+             * Format: uuid
+             * @description Identificador publico de la cuenta. La clave interna no sale nunca.
+             */
+            uuid: string;
+            name: string;
+            /**
+             * Format: email
+             * @description Identificador de acceso al panel. **No es un canal**: el producto no
+             *     envia por el ninguna credencial (regla dura 12).
+             */
+            email: string;
+            /** @example es */
+            locale: string;
+            roles: components["schemas"]["UserRole"][];
+            /**
+             * @description Alcance por departamento (RF-ID-03), leido en el momento de la
+             *     consulta. Un `responsable_departamento` sin departamento asignado
+             *     lleva `kind: departments` con la lista vacia: no alcanza a nadie.
+             */
+            scope: components["schemas"]["AccessScope"];
+            status: components["schemas"]["ManagementAccountStatus"];
+            /**
+             * @description `true` si la cuenta tiene un segundo factor **confirmado**. `false`
+             *     en una cuenta nueva, tras un restablecimiento o con un alta a medias
+             *     que nunca se confirmo.
+             */
+            two_factor_enabled: boolean;
+            password_status: components["schemas"]["PasswordStatus"];
+            /**
+             * @description Ultimo acceso completo al panel, en UTC (regla dura 3). `null` si
+             *     nunca ha entrado.
+             */
+            last_login_at: components["schemas"]["UtcTimestamp"] | null;
+            /** @description Alta de la cuenta, en UTC. */
+            created_at: components["schemas"]["UtcTimestamp"];
+        };
+        /**
+         * ManagementAccountCollection
+         * @description Pagina de cuentas de gestion.
+         */
+        ManagementAccountCollection: {
+            data: components["schemas"]["ManagementAccount"][];
+            meta: components["schemas"]["PageMeta"];
+        };
+        /**
+         * CreateManagementAccountRequest
+         * @description Alta de una cuenta de gestion. **Sin contrasena**: la genera el
+         *     servidor (`TemporaryPasswordIssued`). **Sin departamentos**: el
+         *     responsable de un departamento se asigna en el departamento, no en la
+         *     cuenta.
+         */
+        CreateManagementAccountRequest: {
+            /**
+             * @description Nombre visible en el panel y en la autoria de las correcciones. Es
+             *     el de la persona, no el del puesto, si el hotel quiere poder decir
+             *     quien corrigio una jornada.
+             * @example Direccion RRHH
+             */
+            name: string;
+            /**
+             * Format: email
+             * @description Identificador de acceso, **insensible a mayusculas** (`citext`) y
+             *     unico entre todas las cuentas, tambien las dadas de baja.
+             * @example rrhh@hotel.example
+             */
+            email: string;
+            role: components["schemas"]["ManagementRole"];
+            /**
+             * @description Idioma del panel para esta cuenta, uno de los activos en la
+             *     instalacion (`APP_SUPPORTED_LOCALES`). Sin el, el de la instalacion
+             *     (`APP_LOCALE`).
+             * @example es
+             */
+            locale?: string;
+        };
+        /**
+         * TemporaryPasswordIssued
+         * @description Una contrasena temporal recien emitida (RF-ID-10). **Es la unica
+         *     representacion en la que existe en claro**, y solo en la respuesta que
+         *     la genera: se guarda su hash, no se escribe en `audit_log` ni en ningun
+         *     log, no se envia por correo (regla dura 12) y no hay ningun endpoint que
+         *     la devuelva despues. Si se pierde, se restablece.
+         *
+         *     El panel la muestra en un dialogo de una sola vez, con confirmacion
+         *     explicita, y no la guarda en `sessionStorage` ni en estado persistido,
+         *     igual que el PIN (`IssuedPin`).
+         */
+        TemporaryPasswordIssued: {
+            /** Format: uuid */
+            account_uuid: string;
+            /**
+             * @description Generada con un generador criptograficamente seguro, con la longitud
+             *     mayor entre 20 y `IDENTITY_PASSWORD_MIN_LENGTH`, con las cuatro
+             *     clases que exige la politica de RF-ID-01 —asi la cumple por
+             *     construccion— y **sin los caracteres que se confunden al leerlos y
+             *     teclearlos** (`l`, `I`, `O`, `0`, `1`): se entrega de viva voz o en
+             *     papel.
+             * @example Kd2pQ9vLmN4tZbYc#F1w
+             */
+            password: string;
+            /** @description Instante de emision, en UTC (regla dura 3). */
+            issued_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Desde este instante la contrasena ya no sirve para entrar
+             *     (`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`, 72 de serie). Una
+             *     contrasena temporal que no caduca acaba siendo la definitiva.
+             */
+            expires_at: components["schemas"]["UtcTimestamp"];
+        };
+        /**
+         * ManagementAccountProvisioned
+         * @description Alta completa: la cuenta y su contrasena temporal. **Dos objetos y no
+         *     uno**, por lo mismo que `EmployeeProvisioned`: `ManagementAccount` es lo
+         *     que se lista y se vuelve a pedir, y la contrasena es un secreto que
+         *     existe en esta respuesta y en ninguna otra.
+         */
+        ManagementAccountProvisioned: {
+            account: components["schemas"]["ManagementAccount"];
+            temporary_password: components["schemas"]["TemporaryPasswordIssued"];
+        };
+        /**
+         * DeactivateManagementAccountRequest
+         * @description El motivo es obligatorio y sin valor por defecto: es lo que explica
+         *     meses despues por que una persona dejo de tener acceso. Sin datos de
+         *     salud ni juicios de valor.
+         */
+        DeactivateManagementAccountRequest: {
+            /** @example Deja el hotel al final de la temporada */
+            reason: string;
+        };
+        /**
+         * ResetManagementTwoFactorRequest
+         * @description El motivo es obligatorio: retirar el segundo factor de otra persona es
+         *     la via mas comoda de prepararse el acceso a su cuenta, asi que el
+         *     asiento dice por que se hizo.
+         */
+        ResetManagementTwoFactorRequest: {
+            /** @example Telefono extraviado; lo da de alta de nuevo hoy */
+            reason: string;
+        };
+        /**
+         * ChangeOwnPasswordRequest
+         * @description Cambio de la contrasena propia (RF-ID-10).
+         */
+        ChangeOwnPasswordRequest: {
+            /**
+             * @description La contrasena vigente —tambien si es la temporal—. Sin `minLength`
+             *     real, como en `LoginRequest`: la politica se aplica al fijar, no al
+             *     usar.
+             */
+            current_password: string;
+            /**
+             * @description La contrasena nueva. Cumple la politica de RF-ID-01
+             *     (`IDENTITY_PASSWORD_MIN_LENGTH`, letras mayusculas y minusculas,
+             *     cifras y simbolos) y es distinta de la actual. La politica se
+             *     comprueba en el servidor y un `422` dice que regla falta; el
+             *     `minLength` del esquema no la describe a proposito, porque es
+             *     configuracion de cada instalacion (regla dura 13).
+             */
+            new_password: string;
         };
         /**
          * EmploymentStatus
@@ -11814,6 +12345,12 @@ export interface components {
          * @description El token es valido pero no tiene el ambito necesario, o la policy deniega el
          *     acceso a estos datos. Cada endpoint tiene su prueba de autorizacion negativa
          *     por rol (regla dura 18).
+         *
+         *     **En una sesion de gestion con contrasena temporal**, el `type` es
+         *     `urn:kronoqr:problem:password-change-required`: no falta ningun
+         *     ambito, falta que su titular fije su propia contrasena con
+         *     `POST /api/v1/auth/password` (RF-ID-10). El panel lo distingue por el
+         *     `type` y lleva a esa pantalla, en lugar de mostrar «acceso denegado».
          */
         Forbidden: {
             headers: {
@@ -12136,6 +12673,34 @@ export interface components {
          * @example 0199f3c9-1b7d-7a44-8e02-3c4d5e6f7a81
          */
         DeviceUuid: string;
+        /**
+         * @description Identificador **publico** de la cuenta de gestion (`users.uuid`, UUID
+         *     v7), el mismo que devuelve `GET /auth/me`. Nunca la clave interna, y
+         *     nunca el correo: un correo en una URL acaba en el historial del
+         *     navegador y en los registros de acceso del servidor web.
+         * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91
+         */
+        ManagementAccountUuid: string;
+        /**
+         * @description Busqueda libre sobre las cuentas de gestion, con las mismas reglas que
+         *     la `q` de `GET /employees`: insensible a mayusculas y a acentos, por
+         *     subcadena, recortada, y una `q` vacia equivale a no enviarla. Casa
+         *     contra el nombre y el correo; basta con que case uno de los dos. Se
+         *     combina con `AND` con los demas filtros y no altera la paginacion.
+         * @example cocina
+         */
+        ManagementAccountSearch: string;
+        /**
+         * @description Limita el resultado a las cuentas activas o a las dadas de baja. Sin
+         *     filtro se devuelven las dos: una baja no se borra (regla dura 5).
+         * @example active
+         */
+        ManagementAccountStatusFilter: components["schemas"]["ManagementAccountStatus"];
+        /**
+         * @description Limita el resultado a las cuentas que tienen ese rol.
+         * @example responsable_departamento
+         */
+        ManagementRoleFilter: components["schemas"]["ManagementRole"];
         /**
          * @description Identificador del departamento (documento 01 §5.5).
          * @example 3
@@ -13329,6 +13894,265 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    changeOwnPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeOwnPasswordRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Contrasena cambiada. Las demas sesiones de la cuenta han dejado de
+             *     valer; esta sigue abierta. Si la cuenta tenia una contrasena
+             *     temporal, `GET /auth/me` devuelve ya `password_change_required: false`.
+             */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            /**
+             * @description No se ha cambiado nada. `errors.current_password` dice que la
+             *     contrasena actual no coincide; `errors.new_password`, que regla de
+             *     la politica falta o que es igual a la actual.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listManagementAccounts: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Busqueda libre sobre las cuentas de gestion, con las mismas reglas que
+                 *     la `q` de `GET /employees`: insensible a mayusculas y a acentos, por
+                 *     subcadena, recortada, y una `q` vacia equivale a no enviarla. Casa
+                 *     contra el nombre y el correo; basta con que case uno de los dos. Se
+                 *     combina con `AND` con los demas filtros y no altera la paginacion.
+                 * @example cocina
+                 */
+                q?: components["parameters"]["ManagementAccountSearch"];
+                /**
+                 * @description Limita el resultado a las cuentas activas o a las dadas de baja. Sin
+                 *     filtro se devuelven las dos: una baja no se borra (regla dura 5).
+                 * @example active
+                 */
+                status?: components["parameters"]["ManagementAccountStatusFilter"];
+                /**
+                 * @description Limita el resultado a las cuentas que tienen ese rol.
+                 * @example responsable_departamento
+                 */
+                role?: components["parameters"]["ManagementRoleFilter"];
+                /**
+                 * @description Pagina solicitada, empezando en 1.
+                 * @example 1
+                 */
+                page?: components["parameters"]["Page"];
+                /**
+                 * @description Elementos por pagina. El techo es deliberado: una plantilla de 600
+                 *     personas no se sirve entera en una respuesta, y el panel virtualiza la
+                 *     lista (documento 02, Anexo A).
+                 * @example 25
+                 */
+                per_page?: components["parameters"]["PerPage"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de cuentas de gestion. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAccountCollection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createManagementAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateManagementAccountRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Cuenta creada, con su contrasena temporal. **La contrasena solo
+             *     aparece aqui**: no vuelve en ninguna consulta posterior.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAccountProvisioned"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    deactivateManagementAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la cuenta de gestion (`users.uuid`, UUID
+                 *     v7), el mismo que devuelve `GET /auth/me`. Nunca la clave interna, y
+                 *     nunca el correo: un correo en una URL acaba en el historial del
+                 *     navegador y en los registros de acceso del servidor web.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91
+                 */
+                uuid: components["parameters"]["ManagementAccountUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeactivateManagementAccountRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Cuenta dada de baja. El cuerpo es la cuenta **ya dada de baja**, para
+             *     que el panel repinte la fila sin volver a pedir la lista.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAccount"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description La baja dejaria a la instalacion sin quien la gestione: es la propia
+             *     cuenta, o es la ultima `admin` activa. No se ha cambiado nada.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resetManagementAccountPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la cuenta de gestion (`users.uuid`, UUID
+                 *     v7), el mismo que devuelve `GET /auth/me`. Nunca la clave interna, y
+                 *     nunca el correo: un correo en una URL acaba en el historial del
+                 *     navegador y en los registros de acceso del servidor web.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91
+                 */
+                uuid: components["parameters"]["ManagementAccountUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contrasena restablecida. **Es la unica vez que se muestra.** */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemporaryPasswordIssued"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resetManagementAccountTwoFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** de la cuenta de gestion (`users.uuid`, UUID
+                 *     v7), el mismo que devuelve `GET /auth/me`. Nunca la clave interna, y
+                 *     nunca el correo: un correo en una URL acaba en el historial del
+                 *     navegador y en los registros de acceso del servidor web.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91
+                 */
+                uuid: components["parameters"]["ManagementAccountUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetManagementTwoFactorRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Segundo factor retirado. El cuerpo es la cuenta con
+             *     `two_factor_enabled: false`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagementAccount"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
