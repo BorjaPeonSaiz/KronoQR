@@ -26,62 +26,94 @@ use Illuminate\Support\Facades\DB;
  * ## Patron `/migracion-segura`: expand puro
  *
  * Copia de `2026_09_30_120200_allow_rejected_pin_scan_incident_type`: `DROP` +
- * `ADD ... NOT VALID` + `VALIDATE`. El `CHECK` admite dos tipos **mas** y
- * ninguna fila existente deja de cumplirlo. El contrato ya los admite
- * (`IncidentType`, aditivo por ADR-012).
+ * `ADD ... NOT VALID` en una transaccion corta y `VALIDATE` despues de
+ * confirmarla (`LimitsMigrationLocks::validateConstraint()`, hallazgo DB3). El
+ * `CHECK` admite dos tipos **mas** y ninguna fila existente deja de cumplirlo.
+ * El contrato ya los admite (`IncidentType`, aditivo por ADR-012).
  *
  * ## `down()` verificado
  *
- * Vuelve al catalogo de diez tipos y **falla a proposito** si ya hay
+ * Vuelve al catalogo de diez tipos y **se detiene a proposito** si ya hay
  * incidencias de cualquiera de los dos tipos nuevos: nada se borra (regla dura
- * 5). Se prueba en `tests/Integration/Schema/WithdrawnAndDiscardedScanMigrationsTest.php`
+ * 5). Lo comprueba dentro de la transaccion, con la tabla bloqueada por el
+ * `ADD`, y lanza antes del `COMMIT`. Se prueba en `tests/Integration/Schema/WithdrawnAndDiscardedScanMigrationsTest.php`
  * ademas de `MigrationsRoundTripTest`.
  */
 return new class extends Migration
 {
     use LimitsMigrationLocks;
 
+    /**
+     * El `VALIDATE` va fuera de la transaccion que cambia el `CHECK`: ver
+     * {@see LimitsMigrationLocks}.
+     *
+     * @var bool
+     */
+    public $withinTransaction = false;
+
     private const string CONSTRAINT = 'incidents_chk_type';
+
+    /** El catalogo al que vuelve `down()`: el de `2026_09_30_120200`. */
+    private const array PREVIOUS_TYPES = [
+        'open_shift_expired', 'short_shift', 'long_shift', 'missing_break',
+        'insufficient_rest', 'clock_skew', 'missing_clock_out', 'anomalous_pattern',
+        'out_of_order_scan', 'rejected_pin_scan',
+    ];
 
     public function up(): void
     {
-        $this->limitLockWait();
+        DB::transaction(function (): void {
+            $this->limitLockWait();
 
-        DB::statement('ALTER TABLE incidents DROP CONSTRAINT '.self::CONSTRAINT);
+            DB::statement('ALTER TABLE incidents DROP CONSTRAINT IF EXISTS '.self::CONSTRAINT);
 
-        DB::statement(<<<'SQL'
-            ALTER TABLE incidents
-                ADD CONSTRAINT incidents_chk_type
-                CHECK (type IN (
-                    'open_shift_expired', 'short_shift', 'long_shift', 'missing_break',
-                    'insufficient_rest', 'clock_skew', 'missing_clock_out', 'anomalous_pattern',
-                    'out_of_order_scan', 'rejected_pin_scan', 'scan_before_revocation', 'discarded_scan'
-                ))
-                NOT VALID
-        SQL);
+            DB::statement(<<<'SQL'
+                ALTER TABLE incidents
+                    ADD CONSTRAINT incidents_chk_type
+                    CHECK (type IN (
+                        'open_shift_expired', 'short_shift', 'long_shift', 'missing_break',
+                        'insufficient_rest', 'clock_skew', 'missing_clock_out', 'anomalous_pattern',
+                        'out_of_order_scan', 'rejected_pin_scan', 'scan_before_revocation', 'discarded_scan'
+                    ))
+                    NOT VALID
+            SQL);
+        });
 
-        DB::statement('ALTER TABLE incidents VALIDATE CONSTRAINT '.self::CONSTRAINT);
+        $this->validateConstraint('incidents', self::CONSTRAINT);
     }
 
     public function down(): void
     {
-        $this->limitLockWait();
+        DB::transaction(function (): void {
+            $this->limitLockWait();
 
-        DB::statement('ALTER TABLE incidents DROP CONSTRAINT '.self::CONSTRAINT);
+            DB::statement('ALTER TABLE incidents DROP CONSTRAINT IF EXISTS '.self::CONSTRAINT);
 
-        DB::statement(<<<'SQL'
-            ALTER TABLE incidents
-                ADD CONSTRAINT incidents_chk_type
-                CHECK (type IN (
-                    'open_shift_expired', 'short_shift', 'long_shift', 'missing_break',
-                    'insufficient_rest', 'clock_skew', 'missing_clock_out', 'anomalous_pattern',
-                    'out_of_order_scan', 'rejected_pin_scan'
-                ))
-                NOT VALID
-        SQL);
+            DB::statement(<<<'SQL'
+                ALTER TABLE incidents
+                    ADD CONSTRAINT incidents_chk_type
+                    CHECK (type IN (
+                        'open_shift_expired', 'short_shift', 'long_shift', 'missing_break',
+                        'insufficient_rest', 'clock_skew', 'missing_clock_out', 'anomalous_pattern',
+                        'out_of_order_scan', 'rejected_pin_scan'
+                    ))
+                    NOT VALID
+            SQL);
 
-        // Se valida a proposito: con incidencias de RN-20 o RN-22 escritas, la
-        // reversion se detiene en vez de dejar un catalogo que miente.
-        DB::statement('ALTER TABLE incidents VALIDATE CONSTRAINT '.self::CONSTRAINT);
+            // Se comprueba DESPUES del `ADD`, dentro de la transaccion: el `ACCESS
+            // EXCLUSIVE` que tomo impide que entre una fila nueva entre la
+            // comprobacion y el `COMMIT`. Si hay alguna, la excepcion deshace el
+            // `DROP` y el `ADD`: nada se ha tocado (regla dura 5).
+            if (DB::table('incidents')->whereNotIn('type', self::PREVIOUS_TYPES)->exists()) {
+                throw new RuntimeException(
+                    'incidents tiene incidencias scan_before_revocation o discarded_scan (RN-20, RN-22): volver al '
+                    .'catalogo anterior de '.self::CONSTRAINT.' dejaria un catalogo que miente. Nada se ha tocado; '
+                    .'decide que hacer con esas incidencias antes de revertir.'
+                );
+            }
+        });
+
+        // Toda fila cumple: se acaba de comprobar con la tabla bloqueada.
+        $this->validateConstraint('incidents', self::CONSTRAINT);
     }
 };

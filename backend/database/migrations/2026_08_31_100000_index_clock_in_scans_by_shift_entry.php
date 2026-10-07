@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Support\Database\LimitsMigrationLocks;
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
 
 /**
  * `scan_events_clock_in_shift_entry_index` — el quiosco de origen de un turno
@@ -42,10 +42,13 @@ use Illuminate\Support\Facades\DB;
  *
  *   - **La migracion deja de ser atomica** (`$withinTransaction = false`):
  *     `CREATE INDEX CONCURRENTLY` no puede ejecutarse dentro de una transaccion.
- *   - **Si falla a mitad, el indice queda `INVALID`** y hay que borrarlo a mano
- *     antes de reintentar. Por eso el `up()` usa `IF NOT EXISTS`: un reintento
- *     tras un `DROP INDEX` no choca, y uno sin borrar tampoco rompe el
- *     despliegue. El sintoma se ve con
+ *   - **Si falla a mitad, el indice queda `INVALID`.** No hay que borrarlo a
+ *     mano: `LimitsMigrationLocks::createIndexConcurrently()` borra el indice
+ *     `INVALID` con ese nombre antes de construir, construye con `IF NOT
+ *     EXISTS` y comprueba `indisvalid` al terminar; si no lo es, lanza y la
+ *     migracion no queda anotada, asi que basta con repetir `migrate`. Hasta la
+ *     2.2.0 el `IF NOT EXISTS` desnudo daba por bueno el `INVALID` en el
+ *     reintento. El sintoma, por si acaso, se ve con
  *     `SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid`.
  *
  * **Sin `statement_timeout`, y es deliberado.** El trait
@@ -55,10 +58,16 @@ use Illuminate\Support\Facades\DB;
  * s es exactamente como se produce el indice `INVALID` que se acaba de describir.
  * `lock_timeout` si se establece —y bajo—: la construccion concurrente espera al
  * final a que terminen las transacciones abiertas, y ahi si conviene rendirse
- * pronto en lugar de encolar bloqueos detras.
+ * pronto en lugar de encolar bloqueos detras. Las dos cosas las hace
+ * `LimitsMigrationLocks::withLockWaitOnly()` —por debajo de
+ * `createIndexConcurrently()`—, que ademas devuelve la sesion a como estaba
+ * (2.2.0, hallazgo DB4: el ayudante privado que habia aqui antes no anulaba un
+ * `statement_timeout` heredado).
  */
 return new class extends Migration
 {
+    use LimitsMigrationLocks;
+
     /**
      * `CREATE INDEX CONCURRENTLY` no se ejecuta dentro de una transaccion.
      *
@@ -70,31 +79,14 @@ return new class extends Migration
 
     public function up(): void
     {
-        $this->limitLockWaitOnly();
-
-        // El nombre del indice es una constante de esta clase y nunca entrada
-        // externa: PostgreSQL no admite parametros enlazados en un identificador.
-        DB::statement(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS '.self::INDEX
-            ." ON scan_events (shift_entry_id, occurred_at DESC) WHERE result = 'clock_in'"
-        );
+        $this->createIndexConcurrently(self::INDEX, "ON scan_events (shift_entry_id, occurred_at DESC) WHERE result = 'clock_in'");
     }
 
     public function down(): void
     {
-        $this->limitLockWaitOnly();
-
         // Tambien `CONCURRENTLY`: borrar un indice toma `ACCESS EXCLUSIVE` sobre
         // la tabla, y una vuelta atras no puede parar los fichajes mas de lo que
         // los paro la ida.
-        DB::statement('DROP INDEX CONCURRENTLY IF EXISTS '.self::INDEX);
-    }
-
-    /**
-     * Solo `lock_timeout`. Ver el porque en el docblock de la clase.
-     */
-    private function limitLockWaitOnly(): void
-    {
-        DB::connection($this->getConnection())->statement("SET lock_timeout = '3s'");
+        $this->dropIndexConcurrently(self::INDEX);
     }
 };

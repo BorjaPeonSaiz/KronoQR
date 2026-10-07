@@ -31,12 +31,20 @@ use Psr\Log\LoggerInterface;
  *
  * Con la tarea 2.5 hay una quinta, las incidencias, y **solo cuando se piden**:
  * el panel las incrusta en el detalle (RF-PA-05) y el portal del empleado no. Y
- * con la 3.5 una sexta, las marcas de pausa de cada tramo ({@see
- * clockingMarks()}), agrupada por tramo y solo si el rango trajo alguno.
+ * con la 3.5 las marcas de pausa de cada tramo ({@see clockingMarks()}),
+ * agrupadas por tramo y solo si el rango trajo alguno: desde la 2.2.0 son dos
+ * consultas, la cadena de versiones y sus escaneos (hallazgo DB2).
  *
- * Los tres filtros por empleado y rango caen sobre
+ * **Todo el detalle de un mes se sirve por indices** (RNF-P-02), y lo vigila
+ * `tests/Integration/Reporting/WorkDayJournalIndexUsageTest.php`. Los tres
+ * filtros por empleado y rango caen sobre
  * `shift_entries_employee_id_work_date_index` y sobre el UNIQUE de
  * `daily_totals`, que existen desde la migracion inicial precisamente para esto.
+ * Lo que toca `scan_events` —las marcas `recorded_at` y {@see clockingMarks()}—
+ * va por `scan_events_shift_entry_id_occurred_at_index`, y la subida por la
+ * cadena de versiones por `shift_entries_superseded_by_id_index`; los dos de
+ * `2026_10_08_100000_index_work_day_journal_lookups` (hallazgos DB1 y DB2: antes
+ * eran unos 270 buffers por tramo y dos `Seq Scan` por consulta).
  *
  * ## Vigente y no vigente
  *
@@ -58,7 +66,7 @@ use Psr\Log\LoggerInterface;
  * `opened_by` y `closed_by` salen de `scan_events.result` de esos mismos
  * escaneos, y se correlacionan **por el desenlace** y no por el instante: lo que
  * abre es `clock_in` o `break_end` y lo que cierra es `clock_out` o
- * `break_start` (ADR-024). Van en una **quinta consulta** —{@see
+ * `break_start` (ADR-024). Van en consultas aparte —{@see
  * clockingMarks()}— y no en subconsultas correlacionadas porque hay que subir
  * por la cadena de versiones: una correccion no crea escaneos, y mirando solo la
  * version vigente la marca de pausa desaparecia en cuanto alguien corregia el
@@ -265,17 +273,31 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
      * justo en el registro que alguien acaba de tocar — que es el que mas se
      * mira. El tiempo seguia bien; lo que se perdia era poder explicarlo.
      *
-     * ## Como se sigue la cadena
+     * ## Como se sigue la cadena: la estirpe primero, sus escaneos despues
      *
-     * Con un `WITH RECURSIVE` que sube de la version vigente a sus antepasados
-     * —`prev.superseded_by_id = descendiente`— y recoge los escaneos de toda la
-     * estirpe. `ARRAY_AGG(...) FILTER (...)` ordenado por `occurred_at` toma el
-     * primero que abre y el ultimo que cierra.
+     * Primero la estirpe ({@see lineage()}): un `WITH RECURSIVE` que sube de la
+     * version vigente a sus antepasados. Despues, los escaneos de toda la
+     * estirpe, con la estirpe ya resuelta como lista literal: `ARRAY_AGG(...)
+     * FILTER (...)` ordenado por `occurred_at` toma el primero que abre y el
+     * ultimo que cierra.
      *
-     * **Una consulta para todo el rango, agrupada por tramo**, no una por fila:
-     * el detalle de un mes pasa de cuatro `SELECT` a cinco (seis con
+     * **Iba en una sola consulta hasta la 2.2.0, y por eso dejo de ir** (hallazgo
+     * DB2). PostgreSQL estima una consulta recursiva a ciegas —diez veces las
+     * filas del termino inicial, multiplicadas por lo que crea que devuelve cada
+     * paso—: con un mes de treinta tramos calculaba miles de filas de estirpe y,
+     * con esa cifra, unia `scan_events` con `Hash Join` y `Seq Scan` de la tabla
+     * entera aunque existiera el indice. Forzar el bucle anidado con `LATERAL`
+     * cambiaba el recorrido por el indice pero inflaba el coste estimado hasta
+     * encender el compilador JIT, que tardaba mas que el recorrido. Con la
+     * estirpe como `VALUES`, el planificador sabe cuantas filas son —las de
+     * verdad, un par por tramo— y va por
+     * `scan_events_shift_entry_id_occurred_at_index`.
+     *
+     * **Dos consultas para todo el rango, agrupadas por tramo**, no una por fila:
+     * el detalle de un mes pasa de cuatro `SELECT` a seis (siete con
      * incidencias), no a uno por tramo. Con la lista vacia ni siquiera se
-     * pregunta.
+     * pregunta. Un tramo a mano no tiene escaneos en ninguna version y no sale
+     * aqui: {@see currentEntries()} le da `clock_in` y `clock_out`.
      *
      * @param  list<int>  $entryIds  `shift_entries.id` de las versiones vigentes del rango
      * @return array<int, array{opened_by: string|null, closed_by: string|null}>
@@ -286,28 +308,20 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
             return [];
         }
 
-        $placeholders = implode(', ', array_fill(0, count($entryIds), '?'));
+        $lineage = $this->lineage($entryIds);
+        $values = implode(', ', array_fill(0, \count($lineage), '(CAST(? AS bigint), CAST(? AS bigint))'));
 
         /** @var list<object> $rows */
         $rows = $this->connection->select(<<<SQL
-            WITH RECURSIVE lineage(current_id, entry_id) AS (
-                SELECT se.id, se.id
-                  FROM shift_entries se
-                 WHERE se.id IN ({$placeholders})
-                 UNION ALL
-                SELECT l.current_id, previous.id
-                  FROM shift_entries previous
-                  JOIN lineage l ON previous.superseded_by_id = l.entry_id
-            )
             SELECT l.current_id,
                    (ARRAY_AGG(ev.result ORDER BY ev.occurred_at)
                       FILTER (WHERE ev.result IN ('clock_in', 'break_end')))[1] AS opened_by,
                    (ARRAY_AGG(ev.result ORDER BY ev.occurred_at DESC)
                       FILTER (WHERE ev.result IN ('clock_out', 'break_start')))[1] AS closed_by
-              FROM lineage l
+              FROM (VALUES {$values}) AS l(current_id, entry_id)
               JOIN scan_events ev ON ev.shift_entry_id = l.entry_id
              GROUP BY l.current_id
-        SQL, $entryIds);
+        SQL, array_merge(...$lineage));
 
         $marks = [];
 
@@ -321,6 +335,55 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
         }
 
         return $marks;
+    }
+
+    /**
+     * Cada version vigente con ella misma y con todos sus antepasados, como
+     * pares `[vigente, version]`.
+     *
+     * Un `WITH RECURSIVE` que sube de cada version a la que sustituyo
+     * —`previous.superseded_by_id = descendiente`—, servido por
+     * `shift_entries_superseded_by_id_index`, que es parcial: solo las versiones
+     * sustituidas. El `IS NOT NULL` explicito no cambia el resultado —la
+     * igualdad ya descarta los nulos— y es lo que deja usar ese indice parcial
+     * tambien cuando el planificador elige un `Hash Join` o un `Merge Join` y
+     * recorre el lado interno entero: recorre las versiones sustituidas, que son
+     * pocas, y no la tabla.
+     *
+     * Devuelve los pares y no los escaneos a proposito: ver {@see clockingMarks()}.
+     *
+     * @param  non-empty-list<int>  $entryIds
+     * @return non-empty-list<array{int, int}>
+     */
+    private function lineage(array $entryIds): array
+    {
+        $placeholders = implode(', ', array_fill(0, \count($entryIds), '?'));
+
+        /** @var list<object> $rows */
+        $rows = $this->connection->select(<<<SQL
+            WITH RECURSIVE lineage(current_id, entry_id) AS (
+                SELECT se.id, se.id
+                  FROM shift_entries se
+                 WHERE se.id IN ({$placeholders})
+                 UNION ALL
+                SELECT l.current_id, previous.id
+                  FROM shift_entries previous
+                  JOIN lineage l ON previous.superseded_by_id = l.entry_id
+                 WHERE previous.superseded_by_id IS NOT NULL
+            )
+            SELECT current_id, entry_id FROM lineage
+        SQL, $entryIds);
+
+        $pairs = [];
+
+        foreach ($rows as $raw) {
+            $row = Row::of($raw);
+            $pairs[] = [$row->int('current_id'), $row->int('entry_id')];
+        }
+
+        // Nunca vacia: el termino inicial devuelve cada version vigente, que
+        // existe porque acaba de leerse en esta misma peticion.
+        return $pairs === [] ? array_map(static fn (int $id): array => [$id, $id], $entryIds) : $pairs;
     }
 
     /**

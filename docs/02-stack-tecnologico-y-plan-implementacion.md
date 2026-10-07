@@ -1193,7 +1193,7 @@ Norma absoluta: **ninguna migración renombra o elimina una columna en el mismo 
 2. **Migrate** — código que escribe en ambas y lee de la nueva; relleno por lotes en cola. Desplegar.
 3. **Contract** — eliminar la estructura antigua, en un despliegue posterior y solo tras verificar que nadie la usa.
 
-En PostgreSQL, además: `CREATE INDEX CONCURRENTLY`, `lock_timeout` bajo, y prohibición de `ALTER TABLE ... SET NOT NULL` sobre tablas grandes sin restricción `NOT VALID` previa.
+En PostgreSQL, además: `CREATE INDEX CONCURRENTLY`, `lock_timeout` bajo, y prohibición de `ALTER TABLE ... SET NOT NULL` sobre tablas grandes sin restricción `NOT VALID` previa. El `VALIDATE CONSTRAINT` va **fuera** de la transacción que crea la restricción —dentro, el `ACCESS EXCLUSIVE` del `ADD` dura todo el recorrido— y los topes de espera son `SET LOCAL`, que no se heredan de una migración a la siguiente (`App\Support\Database\LimitsMigrationLocks`, verificado por `MigrationSafetyTest` y `MigrationLockLimitsTest`).
 
 ### 10.5 Ramas y versionado
 

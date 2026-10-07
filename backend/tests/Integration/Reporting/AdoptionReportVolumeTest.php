@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Mockery\MockInterface;
 use Tests\Support\Attendance\AttendanceFixtures;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Database\QueryPlans;
 use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -85,7 +86,20 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * eso es una migracion de expansion que hoy no hace falta.
  */
 
-uses(RefreshDatabase::class);
+/*
+ * ## Estadisticas reales, y por eso la siembra se confirma
+ *
+ * Un plan solo dice algo si el planificador conoce el volumen. `ANALYZE` exige
+ * ser el dueño de la tabla, que es el rol de migracion: hasta la 2.2.0 esta
+ * prueba lo lanzaba con el rol de la aplicacion dentro de la transaccion de
+ * `RefreshDatabase`, PostgreSQL respondia con un aviso y planificaba con
+ * `reltuples = -1` —una fila estimada por nodo sobre 730 000—. Ahora la
+ * siembra se confirma ({@see CommittedDatabase}) y se analiza con
+ * {@see QueryPlans::analyze()}, que ademas comprueba que las estadisticas
+ * quedaron.
+ */
+
+uses(CommittedDatabase::class);
 
 /** La plantilla del Anexo A del doc 02: «virtualizacion para 500 empleados». */
 const EMPLEADOS_DEL_CUADRO = 500;
@@ -210,11 +224,7 @@ function volumenDelCuadro(): array
          CROSS JOIN (VALUES (6), (14)) AS t(h)
         SQL, [$device, PRIMER_DIA_DEL_CUADRO, $ultimoDia]);
 
-    DB::statement('ANALYZE shift_entries');
-    DB::statement('ANALYZE scan_events');
-    DB::statement('ANALYZE daily_totals');
-    DB::statement('ANALYZE employees');
-    DB::statement('ANALYZE employment_contracts');
+    QueryPlans::analyze('shift_entries', 'scan_events', 'daily_totals', 'employees', 'employment_contracts');
 
     return ['site' => $site];
 }

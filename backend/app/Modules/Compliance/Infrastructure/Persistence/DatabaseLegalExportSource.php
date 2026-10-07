@@ -53,7 +53,10 @@ use Illuminate\Database\ConnectionInterface;
  *
  * Un turno de noche sale como **un solo tramo**, en la jornada en la que empezo:
  * el filtro es por `work_date` y no por la fecha civil de las marcas (RN-05,
- * regla dura 4).
+ * regla dura 4). Ese filtro lo sirve `shift_entries_work_date_index` cuando se
+ * exporta toda la plantilla (hallazgo DB8: antes recorria el historico entero),
+ * y `shift_entries_employee_id_work_date_index` cuando se exporta una persona;
+ * lo vigila `tests/Integration/Compliance/LegalExportIndexUsageTest.php`.
  *
  * ## Cursor de servidor, no un `SELECT` completo
  *

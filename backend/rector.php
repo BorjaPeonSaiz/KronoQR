@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Rector\CodeQuality\Rector\Identical\FlipTypeControlToUseExclusiveTypeRector;
 use Rector\Config\RectorConfig;
+use RectorLaravel\Rector\Class_\AnonymousMigrationsRector;
 use RectorLaravel\Set\LaravelSetList;
 
 /*
@@ -40,6 +41,14 @@ return RectorConfig::configure()
         // pregunta por el nulo explicitamente. Es preferencia de estilo, no
         // correccion: por eso se desactiva aqui y no se discute en revision.
         FlipTypeControlToUseExclusiveTypeRector::class,
+
+        // Toma por migracion toda clase que extienda `Migration` y la convierte
+        // en `return new class`. Esta no es un fichero de migracion: es el doble
+        // de prueba de `LimitsMigrationLocks`, y necesita nombre para que
+        // PHPStan vea sus metodos.
+        AnonymousMigrationsRector::class => [
+            __DIR__.'/tests/Support/Database/LockLimitedMigration.php',
+        ],
     ])
     // El cache dentro del proyecto: el contenedor se recrea y /tmp se va con el.
     ->withCache(__DIR__.'/storage/framework/cache/rector')

@@ -42,18 +42,32 @@ Schema::table('shift_entries', function (Blueprint $table) {
 
 ```sql
 -- Índices sobre tablas con datos: sin bloqueo de escritura
-CREATE INDEX CONCURRENTLY idx_nombre ON tabla (columna);
--- Requiere migración fuera de transacción:
--- public $withinTransaction = false;
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_nombre ON tabla (columna);
+-- Requiere migración fuera de transacción (public $withinTransaction = false)
+-- y SIN statement_timeout: un índice sobre millones de filas tarda más de 30 s,
+-- y abortarlo lo deja INVALID. Solo lock_timeout, y que no quede en la sesión.
 
--- NOT NULL en dos pasos, para no escanear la tabla bajo bloqueo
-ALTER TABLE t ADD CONSTRAINT c CHECK (col IS NOT NULL) NOT VALID;
-ALTER TABLE t VALIDATE CONSTRAINT c;   -- escaneo sin bloqueo exclusivo
+-- NOT NULL (o un CHECK nuevo) en dos pasos, para no escanear la tabla bajo bloqueo
+ALTER TABLE t ADD CONSTRAINT c CHECK (col IS NOT NULL) NOT VALID;  -- transacción 1
+ALTER TABLE t VALIDATE CONSTRAINT c;                              -- transacción 2
 
--- Evitar esperas indefinidas en la cola de bloqueos
-SET lock_timeout = '3s';
-SET statement_timeout = '30s';
+-- Evitar esperas indefinidas en la cola de bloqueos, SOLO para la transacción
+-- de la migración: SET a secas sobrevive al COMMIT y lo hereda la siguiente
+-- migración del mismo `artisan migrate` (incluida la de CONCURRENTLY).
+SET LOCAL lock_timeout = '3s';
+SET LOCAL statement_timeout = '30s';
 ```
+
+**El `VALIDATE` va en otra transacción que el `ADD … NOT VALID`, o no sirve de nada.** El
+`VALIDATE` solo toma `SHARE UPDATE EXCLUSIVE` si la transacción que hizo el `ADD`/`DROP` ya ha
+confirmado; en la misma transacción, el `ACCESS EXCLUSIVE` del `ALTER` sigue vivo durante todo el
+recorrido de la tabla y las escrituras esperan (hallazgo DB3 de la verificación de la 2.1.0,
+reproducido con `pg_locks`). Por eso el Migrator de Laravel, que envuelve `up()` en una
+transacción, no vale aquí tal cual: la migración declara `$withinTransaction = false`, hace el
+DDL dentro de `DB::transaction()` y valida fuera, con los ayudantes del trait
+`App\Support\Database\LimitsMigrationLocks` (`limitLockWait()` solo dentro de una transacción;
+el de validar, solo fuera). Un `down()` que dependa de que el `VALIDATE` falle para «no tocar
+nada» ya no es atómico: comprueba las filas antes de ejecutar el primer `ALTER`.
 
 ## Restricciones de integridad del dominio
 
@@ -117,7 +131,8 @@ Una migración cuyo `down()` no se ha probado no tiene `down()`.
 - [ ] Plan de despliegue escrito, indicando qué va en cada uno de los despliegues
 - [ ] Sin `UPDATE` masivo dentro de la migración; el relleno va por cola en lotes
 - [ ] `CREATE INDEX CONCURRENTLY` en tablas con datos
-- [ ] `lock_timeout` establecido
+- [ ] `lock_timeout` y `statement_timeout` con `SET LOCAL` dentro de la transacción de la migración; nada queda en la sesión
+- [ ] Todo `VALIDATE CONSTRAINT` en una transacción distinta del `ADD … NOT VALID` (`$withinTransaction = false`)
 - [ ] Tipos correctos: `TIMESTAMPTZ`, `JSONB`, `UUID`, enteros para duraciones
 - [ ] Restricciones de RN-01 y RN-02 presentes y verificadas
 - [ ] `down()` probado
