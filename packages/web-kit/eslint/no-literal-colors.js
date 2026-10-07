@@ -17,16 +17,16 @@
 // QUE NO ALCANZA. Los bloques `<style>` de los `.vue` y los `.css`: ESLint no
 // los analiza y Stylelint no esta instalado (no se anade una dependencia por
 // esto). Los `.css` ya los cubre `base.spec.ts` de cada SPA; un `<style>` con
-// color propio queda sin vigilar y se vigila hoy con revision (ver informe del
-// bloque 14).
+// color propio queda sin vigilar y se vigila hoy con revision (ver
+// docs/06-guia-visual.md).
 //
 // EXCEPCION. El fichero que DEFINE valores de color por contrato del producto
 // (acento de serie, pares de contraste) se excluye por ruta, en la
 // configuracion de web-kit, con el motivo escrito alli. Para un caso suelto:
 // `// eslint-disable-next-line kronoqr-colors/no-literal-colors -- <motivo>`.
 
-// Los de 3 o 4 cifras exigen alguna letra a-f: `#123` es un numero de incidencia, `#1a3` un color.
-const HEX_COLOR = /(?<![\w&#-])#(?:[0-9a-f]{8}|[0-9a-f]{6}|(?=[0-9]*[a-f])[0-9a-f]{3,4})(?![\w-])/i
+// Hex de 3, 4, 6 u 8 cifras; tambien los grises de solo cifras (`#000`, `#333`, `#999`).
+const HEX_COLOR = /(?<![\w&#-])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![\w-])/i
 const COLOR_FUNCTION = /(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/i
 
 const MESSAGE =
