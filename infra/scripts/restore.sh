@@ -453,8 +453,22 @@ restaurar() {
   base_nueva="${BASE_DESTINO}_restore_${marca}"
   base_anterior="${BASE_DESTINO}_pre_restore_${marca}"
 
+  # UNA ESPERA CORTA ANTES DE RENDIRSE. Tras `docker compose stop`, el proceso
+  # de PostgreSQL de una conexion recien cerrada sigue en pg_stat_activity unos
+  # instantes: contarlo a la primera hacia fallar a quien acababa de seguir la
+  # guia al pie de la letra (y al paso 7 de generated-files-e2e.sh, el
+  # 07-10-2026). Una conexion de verdad sigue ahi a los diez segundos.
   abiertas="$(conexiones_abiertas)"
+  local intento=0
+  while [ "$abiertas" -gt 0 ] && [ "$intento" -lt 20 ]; do
+    sleep 0.5
+    intento=$((intento + 1))
+    abiertas="$(conexiones_abiertas)"
+  done
   if [ "$abiertas" -gt 0 ]; then
+    informar "Conexiones abiertas contra ${BASE_DESTINO} (rol, aplicacion, estado):"
+    psql -Atqc "SELECT usename || ' | ' || coalesce(nullif(application_name, ''), '-') || ' | ' || coalesce(state, '-') FROM pg_stat_activity WHERE datname = '${BASE_DESTINO}' AND pid <> pg_backend_pid()" 2>/dev/null |
+      while IFS= read -r linea; do informar "  ${linea}"; done
     die "${KQ_EXIT_STATE_CONFLICT}" "hay ${abiertas} conexiones abiertas contra '${BASE_DESTINO}'. Para primero lo que escribe: 'docker compose stop app horizon scheduler reverb'. El fichaje sigue funcionando en los quioscos, que encolan en local (regla dura 19). No se ha tocado nada."
   fi
 
