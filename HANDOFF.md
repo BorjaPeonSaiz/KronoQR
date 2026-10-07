@@ -13,36 +13,39 @@ el método en la sección «Método» de ese plan y en «Método de trabajo acor
 CI manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge
 commit.** Lo integra quien ejecuta el bloque si la CI está en verde.
 
-**Integrados en `main`:** bloques 0 a 12 y 15 a 20. El último, **bloque 12 «Portal abierto a internet: PP-09 y PP-10»**, es la PR #114
-(`main` `76183531`, 06-10-2026). Decisión: **ADR-050**. En resumen: PIN de 6 u 8 cifras como ajuste auditado `IDENTITY_PIN_LENGTH`
-(los emitidos conservan la suya; quiosco y portal aceptan de 6 a 8); bloqueo por origen en `/api/v1/me/login` (20 fallos en 15 min
-desde una IP o su `/64` → 60 min, `429` con `Retry-After`, asiento `auth.origin_locked` con techo por hora, comando
-`identity:origin-unlock <ip>`, alerta `KronoqrPortalOriginLockouts` y runbook); contadores atómicos con `CacheMutex` y **reserva del
-intento antes de comparar el PIN**; 2FA obligatorio también para `responsable_departamento`; `ADMIN_INTERNAL_CIDR` opcional y vacía de
-serie; aviso de portal expuesto en instalador, actualizador y `doctor`; CORS al origen de `APP_URL`; sondas `access.*` y
-`network.admin`; doc 07 filas A-19 a A-24 (PP-09, PP-10 y R4-QA-04 cerrados).
+**Integrados en `main`:** bloques 0 a 12, 12b y 15 a 20. El último, **bloque 12b «PIN de la importación masiva»**, es la PR #116
+(`main` `06d6440d`, 07-10-2026): la importación masiva **no emite PIN**; la persona importada nace con el PIN pendiente («Sin emitir»
+en listado y ficha) y RRHH lo emite con el flujo de una sola vez al entregar la tarjeta. `RegisterEmployeeCommand` lo expresa con el
+enum `PinProvisioning` (`IssueNow` de serie; diferido solo con `viaImport`); la primera emisión sobre un pendiente deja `pin.issued` y
+no cuenta en `pin_resets_total`; sin migración. Panel: «Emitir el PIN» en la ficha, aviso en el asistente, enlace al listado filtrado
+desde el **resumen final** (dentro del asistente ningún enlace sale de `/setup`), y el diálogo de entrega del tablero de credenciales
+avisa si el PIN está pendiente. Doc 07 fila **A-25**; guía de RRHH es/en §2.2 y §2.6. El anterior, el **bloque 12 «Portal abierto a
+internet»** (PR #114, `76183531`, ADR-050): PIN de 6 u 8 cifras (`IDENTITY_PIN_LENGTH`), bloqueo por origen en `/api/v1/me/login` con
+`identity:origin-unlock`, reserva del intento antes de comparar, 2FA para `responsable_departamento`, `ADMIN_INTERNAL_CIDR`, CORS a
+`APP_URL`, filas A-19 a A-24.
 
-**Siguiente acción:** abrir la rama del **bloque 12b** («PIN de la importación masiva», rama `fix/pin-importacion-masiva`) desde
-`origin/main`, siguiendo el plan. Orden que queda: **12b → 12c → 21 → 22 → 13 → 14 → final.** El bloque final repone las etiquetas
-`v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0` sigue en local).
-Lo ya comprobado para el 12b: el estado «pendiente» cabe en las columnas actuales (`pin_hash` e `pin_issued_at` nulos a la vez), así
-que **no hace falta migración**; el listado ya filtra por `pin_status` (bloque 9) y la ficha ya muestra el estado con el botón de
-restablecer; el trabajo está en `ApplyEmployeeImport`, en `RegisterEmployeeHandler` (hoy emite siempre el PIN) y en las pruebas
-`EmployeeImportTest` y `EmployeeImportPerformanceTest`, que afirman justo lo contrario.
+**Siguiente acción:** abrir la rama del **bloque 12c** («Pantalla de cuentas de gestión», rama `feat/cuentas-de-gestion`) desde
+`origin/main`, siguiendo el plan: **contrato primero** (listar, crear, dar de baja, restablecer contraseña y 2FA, cambio de contraseña
+propio; policy solo `admin` con 403 por cada rol), reutilizando los handlers de `identity:deactivate-user` e `identity:reset-password`.
+Orden que queda: **12c → 21 → 22 → 13 → 14 → final.** El bloque final repone las etiquetas `v2.1.0` (sobre `9282af6`) **y `v2.0.0`**,
+que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0` sigue en local).
 
-**Lo que destapó el cierre del bloque 12 y conviene recordar** (detalle en Engram, tema `correcciones-2.2.0/bloque-12-portal-internet`;
-lo del bloque 20 en `correcciones-2.2.0/bloque-20-copias-wal`):
+**Lo que destapó el cierre de los bloques 12 y 12b y conviene recordar** (detalle en Engram, temas
+`correcciones-2.2.0/bloque-12-portal-internet`, `bloque-12b-pin-importacion` y `bloque-12b-revisiones`):
 
-- La CI de Pest no tiene `APP_URL`: `config/cors.php` toma el mismo valor de serie que `config/app.php` o `CorsSameOriginTest` ve un
-  comodín.
-- ⑧b compara con `origin/main`, que desde el bloque 20 ya archiva el WAL cifrado: la semilla de «WAL en claro» de `backup-wal-e2e.sh`
-  detecta si la versión anterior ya cifra y queda vacía.
-- Cada palabra nueva en un mensaje de error entra en `ErrorVocabulary` (`ErrorVocabularyCoverageTest`); en local el bind mount oculta
-  esa prueba. Y los clientes TypeScript se regeneran tras **cualquier** retoque de `openapi.yaml`, aunque sea de texto.
-- QA destapó contadores de intentos no atómicos (90 % de pérdida bajo concurrencia) y seguridad elevó a ALTO la ráfaga antes del
-  bloqueo: de ahí `CacheMutex` y la reserva antes de comparar (3 comparaciones por ráfaga de 25, antes hasta 22).
-- `TraceabilityMatrixFreshnessTest` falla en Arquitectura si se añaden pruebas sin regenerar la matriz: `make traceability` al final
-  de cada bloque, sin agentes en marcha. El log de un job en curso solo se lee con `gh api …/actions/jobs/{id}/logs`.
+- **Los contenedores `node-*` del compose de desarrollo son Alpine (musl): el Chromium de Playwright no arranca ahí.** Los E2E se
+  validan en el job ⑦ de la CI o con `make e2e` en el host; no instalar navegadores en los contenedores.
+- Dentro del asistente de puesta en marcha **ningún `RouterLink` sale de `/setup`** (la guarda manda todo ahí hasta cerrarlo): un
+  enlace a otra sección va al resumen final. Las pruebas de componente con router simulado no detectan guardas.
+- El tablero de credenciales es de `Identity` y no conoce el `pin_status` de `Workforce`: cruzar módulos se evita leyendo la ficha
+  desde el panel al abrir el diálogo.
+- Una aserción `getByText('…', { exact: true })` no encuentra un texto que es parte de otro («Estado del PIN: Entregado»): asertar
+  con `toContainText` sobre la sección. `make traceability` tarda unos diez minutos y escribe el fichero al terminar: sin agentes.
+- La CI de Pest no tiene `APP_URL`: `config/cors.php` toma el mismo valor de serie que `config/app.php`. ⑧b compara con `origin/main`
+  (ya cifra el WAL): la semilla de «WAL en claro» detecta si la versión anterior ya cifra. Cada palabra nueva de un mensaje de error
+  entra en `ErrorVocabulary`; los clientes TypeScript se regeneran tras **cualquier** retoque de `openapi.yaml`.
+- `TraceabilityMatrixFreshnessTest` falla en Arquitectura si se añaden pruebas sin regenerar la matriz. El log de un job en curso solo
+  se lee con `gh api …/actions/jobs/{id}/logs`.
 
 **Integrado también el 06-10-2026:** PR #110 (`laravel/reverb` 1.12.0) y #111 (menores de npm), de Dependabot; borradas las ramas
 remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` entre bloque y bloque.
@@ -82,9 +85,9 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 - **Generar el par ed25519 una vez** (`php tools/license-issuer/generate-keypair.php`), privada al
   gestor de secretos, pública como valor por defecto de `env('LICENSE_PUBLIC_KEY', '')` en
   `backend/config/license.php`. `make release-gate` lo exige en cada etiqueta `vX.Y.Z`.
-- **Los PIN de la importación masiva se emiten y nadie los conoce** (regla dura 5 rozada): elegir entre
-  (a) devolverlos en el informe de aplicación, (b) no emitir PIN al importar y dejarlo pendiente y
-  visible, (c) restablecimiento masivo — y documentarla en `configuracion.md` §3 ter.
+- **Decidir si hace falta una señal persistente de «tarjeta entregada y PIN sin emitir»** (sugerencia de la revisión de seguridad
+  del bloque 12b): un hallazgo de `product:doctor` o una cifra en el cuadro de impacto (doc 05 ya cuenta «gente sin tarjeta
+  entregada»), solo recuento. Hoy el aviso vive en el listado filtrado, la ficha, el asistente y el diálogo de entrega del tablero.
 - Hardware: tarjeta impresa y plastificada escaneada en quiosco real; resistencia 12 h en tablet;
   recalibración de estimación R16.
 - Plazo de purga de `employment_contracts` **y de `absences`** con la asesoría laboral (hasta entonces se conservan; `absences`
@@ -369,6 +372,10 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ### Deuda técnica anotada
 
+- **Del cierre del bloque 12b (07-10-2026):** falta la prueba de dos «Emitir el PIN» simultáneos sobre un pendiente (por diseño uno
+  deja `pin.issued` y el otro `pin.reset`); `PinIssuanceEndpointsTest` «no deja a nadie sin PIN en el alta individual» sigue con un
+  `foreach` contra la convención de §3.5; averiguar qué crea `backend/storage/framework/legal-exports/` (apareció el 06-10-2026 a las
+  14:12 y nada del código escribe ahí: las exportaciones van a `storage/app/legal-exports` y `storage/app/tmp/legal-exports`).
 - **Del cierre del bloque 12 (06-10-2026):** `PinScanTest.php:266` lleva una aserción de tiempo constante que no puede fallar
   (umbral demasiado holgado): afinarla o sustituirla por la comparación estructural de `PinScanOpenPortalTest`. Y falta un E2E que
   cruce las tres aplicaciones: ajuste a 8 cifras en el panel → restablecer el PIN → fichaje por PIN en el quiosco → acceso al portal.
