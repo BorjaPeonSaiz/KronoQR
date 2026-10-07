@@ -745,6 +745,129 @@ it('no silencia ni inhibe nunca el enrutado de alertas ni lo que hay que ver dur
     );
 })->group('RF-PD-10', 'RS-07');
 
+/**
+ * Un emparejador `component`/`alertname` partido en (clave, valores), o `null`
+ * si es de otra etiqueta (`severity`...).
+ *
+ * @return array{0: string, 1: list<string>}|null
+ */
+function emparejadorDeDestino(string $emparejador): ?array
+{
+    if (preg_match('/^\s*(component|alertname)\s*(=~|=)\s*"?([^"]*)"?\s*$/', $emparejador, $m) !== 1) {
+        return null;
+    }
+
+    return [$m[1], $m[2] === '=~' ? explode('|', $m[3]) : [$m[3]]];
+}
+
+/**
+ * Los componentes que alcanza el destino de UNA inhibicion (`*` si no lo acota).
+ *
+ * @param  list<string>  $destino
+ * @param  array<string, string>  $componentesPorAlerta
+ * @return array{componentes: list<string>, alertas: list<string>}
+ */
+function alcanceDeUnDestino(array $destino, array $componentesPorAlerta): array
+{
+    $componentes = [];
+    $alertas = [];
+
+    foreach ($destino as $emparejador) {
+        $partido = emparejadorDeDestino($emparejador);
+
+        if ($partido === null) {
+            continue;
+        }
+
+        foreach ($partido[1] as $valor) {
+            if ($partido[0] === 'alertname') {
+                $alertas[] = $valor;
+            }
+
+            $componentes[] = $partido[0] === 'component' ? $valor : ($componentesPorAlerta[$valor] ?? '?'.$valor);
+        }
+    }
+
+    return [
+        'componentes' => $componentes === [] ? ['*'] : array_values(array_unique($componentes)),
+        'alertas' => array_values(array_unique($alertas)),
+    ];
+}
+
+/**
+ * Lo que alcanza CADA inhibicion, sea cual sea su origen.
+ *
+ * `componentesInhibidosPorMantenimiento` solo mira las reglas cuyo origen es
+ * `VentanaDeMantenimientoActiva`; desde el bloque 22 (R4-DV-01) hay una segunda
+ * fuente, el almacen de metricas caido, y una tercera cualquiera dejaria de
+ * estar vigilada. Esto resuelve el DESTINO de todas las reglas: por
+ * `component` directamente y por `alertname` cruzando `rules/*.yml` para sacar
+ * el componente de cada alerta. Un destino sin `component` ni `alertname`
+ * (solo `severity`, por ejemplo) alcanza TODO y se anota como `*`.
+ *
+ * @param  array<string, mixed>  $documento
+ * @return list<array{origen: string, componentes: list<string>, alertas: list<string>}>
+ */
+function destinosDeTodasLasInhibiciones(array $documento): array
+{
+    $componentesPorAlerta = [];
+
+    foreach (AlertRules::all() as $regla) {
+        $componentesPorAlerta[$regla['alert']] = $regla['component'];
+    }
+
+    /** @var list<array<string, mixed>> $inhibiciones */
+    $inhibiciones = \is_array($documento['inhibit_rules'] ?? null) ? $documento['inhibit_rules'] : [];
+
+    $resultado = [];
+
+    foreach ($inhibiciones as $regla) {
+        /** @var list<string> $destino */
+        $destino = is_array($regla['target_matchers'] ?? null) ? $regla['target_matchers'] : [];
+
+        $resultado[] = [
+            'origen' => (string) json_encode($regla['source_matchers'] ?? [], JSON_UNESCAPED_SLASHES),
+        ] + alcanceDeUnDestino($destino, $componentesPorAlerta);
+    }
+
+    return $resultado;
+}
+
+it('ninguna inhibicion, de ningun origen, alcanza una familia que nunca puede quedar muda', function (): void {
+    // A-7 y A-29 del doc 07. Antes solo se vigilaba la fuente «mantenimiento»;
+    // con el almacen de metricas caido hay una segunda, y la regla es la misma
+    // para todas: lo que sostiene el valor probatorio (copia, auditoria,
+    // autenticacion, incidencias, proyeccion, errores), la entrega de alertas,
+    // el propio aviso del almacen (`metrics`) y la firma QR (`scan`) no se
+    // inhibe nunca, venga de donde venga.
+    $documento = alertmanagerRenderizado(entornoDeAlertas(CORREOS_DE_ALERTA));
+
+    $intocables = ['alerting', 'backup', 'audit', 'auth', 'incidents', 'projection', 'errors', 'metrics', 'scan'];
+
+    $destinos = destinosDeTodasLasInhibiciones($documento);
+
+    expect(\count($destinos))->toBeGreaterThanOrEqual(4, 'Se han dejado de leer las inhibiciones de la plantilla.');
+
+    foreach ($destinos as $destino) {
+        expect(array_values(array_intersect($destino['componentes'], $intocables)))->toBe(
+            [],
+            'Una inhibicion (origen '.$destino['origen'].') alcanza una familia intocable.'
+        );
+        expect(\in_array('*', $destino['componentes'], true))->toBeFalse(
+            'Una inhibicion (origen '.$destino['origen'].') no acota su destino por component ni alertname: alcanzaria todo.'
+        );
+        expect(\in_array('?', array_map(static fn (string $c): string => $c[0] ?? '', $destino['componentes']), true))->toBeFalse(
+            'Una inhibicion nombra una alerta que no existe en rules/*.yml: '.implode(',', $destino['componentes'])
+        );
+
+        foreach ($destino['alertas'] as $alerta) {
+            expect(str_starts_with($alerta, 'AlmacenDeMetricas'))->toBeFalse(
+                'Ninguna inhibicion puede tener por destino las alertas del almacen de metricas.'
+            );
+        }
+    }
+})->group('RF-PD-10', 'RS-07');
+
 it('agrupa las alertas de quiosco por alerta, para que cinco tablets sean un solo aviso', function (): void {
     // DECISION 17(e). El §8.4 promete que «cinco quioscos a la vez llegan como
     // una sola notificacion», y con `group_by: [alertname, site, device]` eso era

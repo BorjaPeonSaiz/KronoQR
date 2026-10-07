@@ -109,7 +109,7 @@ La segunda orden recorta la última escritura corrupta y termina con `All AOF
 files and manifest are valid`. **En Redis no hay nada del registro horario**: lo
 que se pierde son, como mucho, trabajos que estaban en cola en ese instante.
 En cuanto Redis está sano, el resto de servicios se reconecta solo; si
-`./doctor.sh` sigue viendo algo parado, `docker compose up -d` lo levanta todo.
+`./doctor.sh` sigue viendo algo parado, `docker compose up -d` lo levanta todo. Si `/ready` sigue en `503` con Redis ya sano, borra las marcas del cortacircuitos: [`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md) §3.4. Mientras Redis estuvo caído, las alertas de quiosco y cola no eran fiables (mismo runbook).
 
 **Si `redis-check-aof` no consigue repararlo**, se arranca Redis vacío, con las
 órdenes de [`../cliente/operacion.md`](../cliente/operacion.md) §18 («…Redis se

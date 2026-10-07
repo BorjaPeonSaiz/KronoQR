@@ -15,20 +15,36 @@
 # de la red del compose, que es el caso malo).
 #
 # QUE HACE.
-#   0. Comprueba que la instalacion esta sana (/ready 200) y mide la referencia
-#      con Redis arriba.
+#   0. Comprueba que la instalacion esta sana (/ready 200), aprovisiona UN
+#      quiosco y unas pocas tarjetas sinteticas con el aprovisionador de la
+#      prueba de carga (`load-tests/k6/provision-fixtures.php`, en tamano
+#      minimo) y mide la referencia con Redis arriba.
 #   1. `docker compose stop redis`.
-#   2. Mide DOS rondas de tres peticiones: GET /api/v1/health, GET
-#      /api/v1/ready y POST /api/v1/scan/pin con cuerpo invalido (422 sin
-#      tocar Redis). La primera ronda abre el cortacircuitos y puede ser lenta;
-#      la segunda debe ser rapida.
+#   2. Mide DOS rondas de cuatro peticiones: GET /api/v1/health, GET
+#      /api/v1/ready y, AUTENTICADAS con el token de un quiosco sintetico (con
+#      `scan:write`) y con una `Idempotency-Key` nueva cada vez, POST
+#      /api/v1/scan con una tarjeta bien formada y firmada pero desconocida
+#      (rechazo generico 422, RS-03) y POST /api/v1/scan/pin con cuerpo vacio
+#      (422 de validacion). Asi la peticion atraviesa `auth:sanctum`,
+#      `ThrottleScanFailOpen`, la cache, la cola y el controlador: sin token
+#      se quedaria en un 401 que no toca nada de eso. Ninguna de las dos
+#      escribe un fichaje. La primera ronda abre el cortacircuitos y puede ser
+#      lenta; la segunda debe ser rapida.
 #   3. `docker compose start redis` y espera a que /ready vuelva a 200.
 #   4. Imprime la tabla y FALLA si alguna medida de la ultima ronda supera el
-#      umbral, o si el fichaje por PIN responde 5xx con Redis parado (regla
-#      dura 19: el fichaje no se bloquea).
+#      umbral, o si el fichaje autenticado responde otra cosa que 200 o 422
+#      (401, 5xx o sin respuesta) en cualquier ronda (regla dura 19: el
+#      fichaje no se bloquea).
 #
-# DEJA LA INSTALACION COMO ESTABA: un `trap` arranca `redis` de nuevo pase lo
-# que pase, y si ya estaba parado al empezar, lo avisa y sale sin tocar nada.
+# DEJA LA INSTALACION COMO ESTABA, SALVO UNA COSA: un `trap` arranca `redis` de
+# nuevo pase lo que pase y revoca el token y las tarjetas sinteticas
+# (`cleanup-after-load.php`); si redis ya estaba parado al empezar, lo avisa y
+# sale sin tocar nada. Lo que el aprovisionador no borra —por la regla dura 5—
+# son el centro, el departamento y los empleados sinteticos «k6»: esto es solo
+# para el runner de la CI, que se tira al terminar.
+#
+# SOLO CI. Con `sudo` y `KQ_E2E_BASE_URL` apuntando a una instalacion real
+# pararia su Redis y sembraria datos: se niega a correr fuera de GitHub Actions.
 #
 # Uso:
 #   chaos-redis-probe.sh DIRECTORIO_DEL_PAQUETE
@@ -37,17 +53,23 @@
 #   KQ_E2E_BASE_URL            (https://kronoqr.ci.local) donde responde el borde.
 #   KQ_E2E_SUDO                (sudo) prefijo para docker y el .env. Vacio si ya
 #                              se es root.
-#   KQ_PROBE_MAX_SECONDS       (3) tope de /health y de /scan/pin en la ultima ronda.
+#   KQ_PROBE_MAX_SECONDS       (3) tope de /health y de los dos fichajes en la ultima ronda.
 #   KQ_PROBE_READY_MAX_SECONDS (3) tope de /ready en la ultima ronda.
 #   KQ_PROBE_ROUNDS            (2) rondas con Redis parado; se evalua la ultima.
 #   KQ_PROBE_REQUEST_TIMEOUT   (30) tope duro por peticion, para no colgar la CI.
 #   KQ_PROBE_RECOVERY_TIMEOUT  (120) segundos esperando a /ready 200 tras arrancar.
 #
-# Necesita: docker con el plugin compose, curl, awk.
+# Necesita: docker con el plugin compose, curl, awk, jq, od, y el repositorio
+# (usa `load-tests/k6/`).
 # Codigos de salida: 0 dentro del umbral · 1 algo no se cumple · 2 uso incorrecto.
 
 set -euo pipefail
 IFS=$'\n\t'
+
+[ "${GITHUB_ACTIONS:-}" = true ] || {
+  printf 'chaos-redis-probe.sh para un servicio y siembra datos: solo se ejecuta en la CI (GITHUB_ACTIONS=true). No lo lances contra una instalacion real.\n' >&2
+  exit 2
+}
 
 [ "$#" -eq 1 ] || {
   printf 'uso: chaos-redis-probe.sh DIRECTORIO_DEL_PAQUETE\n' >&2
@@ -55,6 +77,7 @@ IFS=$'\n\t'
 }
 
 PKG="$(cd -- "$1" && pwd)"
+K6_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../load-tests/k6" && pwd)"
 BASE_URL="${KQ_E2E_BASE_URL:-https://kronoqr.ci.local}"
 SUDO="${KQ_E2E_SUDO-sudo}"
 MAX_SECONDS="${KQ_PROBE_MAX_SECONDS:-3}"
@@ -65,6 +88,9 @@ RECOVERY_TIMEOUT="${KQ_PROBE_RECOVERY_TIMEOUT:-120}"
 
 WORK="$(mktemp -d)"
 REDIS_STOPPED_BY_US=0
+SEEDED=0
+DEVICE_TOKEN=""
+UNKNOWN_CARD=""
 TABLE="${WORK}/table"
 
 # --- utilidades --------------------------------------------------------------
@@ -90,24 +116,65 @@ dc() {
   as_root docker compose --env-file "${PKG}/.env" -f "${PKG}/docker-compose.yml" "$@"
 }
 
-# Pase lo que pase, la instalacion se queda con Redis arriba.
+# Pase lo que pase, la instalacion se queda con Redis arriba y sin tokens vivos.
 cleanup() {
   local code=$?
   if [ "${REDIS_STOPPED_BY_US}" = 1 ]; then
     printf '\nRestaurando: arrancando redis de nuevo.\n' >&2
     dc start redis >&2 || printf 'No se pudo arrancar redis: ejecuta docker compose start redis a mano.\n' >&2
   fi
+  if [ "${SEEDED}" = 1 ]; then
+    dc exec -T -e K6_ACKNOWLEDGE_TEST_DATABASE=yes app sh -c \
+      "php artisan tinker --execute=\"include '/tmp/k6/cleanup-after-load.php';\"" >&2 ||
+      printf 'No se pudieron revocar los tokens sinteticos: revisa load-tests/k6/cleanup-after-load.php.\n' >&2
+    dc exec -T app rm -rf /tmp/k6 >&2 || true
+  fi
   rm -rf "${WORK}"
   exit "${code}"
 }
 trap cleanup EXIT
 
-# measure METODO RUTA [CUERPO_JSON] -> "CODIGO SEGUNDOS"
+# UUID v7 (48 bits de milisegundos + aleatorio): la Idempotency-Key y el scan_id.
+uuid7() {
+  local ms rnd
+  ms="$(printf '%012x' "$(date +%s%3N)")"
+  rnd="$(od -An -N10 -tx1 /dev/urandom | tr -d ' \n')"
+  printf '%s-%s-7%s-%x%s-%s\n' "${ms:0:8}" "${ms:8:4}" "${rnd:0:3}" $((8 + 0x${rnd:3:1} % 4)) "${rnd:4:3}" "${rnd:7:12}"
+}
+
+# Aprovisiona un quiosco y tarjetas sinteticas minimas con el aprovisionador de
+# la prueba de carga y deja en DEVICE_TOKEN y UNKNOWN_CARD lo que hace falta
+# para fichar de verdad (autenticado) sin escribir ningun fichaje.
+provision() {
+  local tool fixtures
+  dc exec -T app sh -c 'mkdir -p /tmp/k6 && rm -f /tmp/k6/k6-fixtures.json'
+  for tool in support.php provision-fixtures.php cleanup-after-load.php; do
+    dc cp "${K6_DIR}/${tool}" "app:/tmp/k6/${tool}"
+  done
+  SEEDED=1
+  dc exec -T \
+    -e K6_ACKNOWLEDGE_TEST_DATABASE=yes -e K6_EMPLOYEES=4 -e K6_DEVICES=1 -e K6_INSTANCES=1 \
+    -e K6_SCAN_CARDS=1 -e K6_RESEND_CARDS=1 -e K6_BATCH_CARDS=2 -e K6_REJECT_PAYLOADS=1 \
+    -e K6_OUT_OF_ORDER_PAYLOADS=1 -e K6_HISTORY_DAYS=0 -e K6_HISTORY_EMPLOYEES=0 app sh -c \
+    "php artisan tinker --execute=\"include '/tmp/k6/provision-fixtures.php';\"" >"${WORK}/provision.log" 2>&1 || true
+  # Tinker sale 0 aunque el include falle: el exito se lee del artefacto.
+  dc exec -T app test -f /tmp/k6/k6-fixtures.json ||
+    fail "el aprovisionamiento no dejo fixtures. Salida: $(tail -n 15 "${WORK}/provision.log")"
+  fixtures="$(dc exec -T app cat /tmp/k6/k6-fixtures.json)"
+  DEVICE_TOKEN="$(jq -r '.device_tokens[0] // empty' <<<"${fixtures}")"
+  UNKNOWN_CARD="$(jq -r '.unknown_payloads[0] // empty' <<<"${fixtures}")"
+  [ -n "${DEVICE_TOKEN}" ] && [ -n "${UNKNOWN_CARD}" ] ||
+    fail 'los fixtures no traen token de quiosco o tarjeta desconocida.'
+}
+
+# measure METODO RUTA [CUERPO_JSON] [auth] -> "CODIGO SEGUNDOS"
+# Con `auth`: token del quiosco sintetico y una Idempotency-Key nueva.
 measure() {
-  local method="$1" path="$2" data="${3:-}"
+  local method="$1" path="$2" data="${3:-}" auth="${4:-}"
   local -a args=(-sS -k -o /dev/null --max-time "${REQUEST_TIMEOUT}" -w '%{http_code} %{time_total}'
     -X "${method}" -H 'Accept: application/json')
   [ -z "${data}" ] || args+=(-H 'Content-Type: application/json' --data "${data}")
+  [ -z "${auth}" ] || args+=(-H "Authorization: Bearer ${DEVICE_TOKEN}" -H "Idempotency-Key: $(uuid7)")
   curl "${args[@]}" "${BASE_URL}${path}" 2>/dev/null || true
 }
 
@@ -115,14 +182,17 @@ ready_code() {
   curl -sS -k -o /dev/null --max-time 10 -w '%{http_code}' "${BASE_URL}/api/v1/ready" 2>/dev/null || true
 }
 
-# Una ronda: anota tres lineas "RONDA ENDPOINT CODIGO SEGUNDOS" en la tabla.
+# Una ronda: anota cuatro lineas "RONDA|ENDPOINT|CODIGO|SEGUNDOS" en la tabla.
 run_round() {
-  local label="$1" out
+  local label="$1" out body
   out="$(measure GET /api/v1/health)"
   printf '%s|GET /api/v1/health|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
   out="$(measure GET /api/v1/ready)"
   printf '%s|GET /api/v1/ready|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
-  out="$(measure POST /api/v1/scan/pin '{}')"
+  body="{\"scan_id\":\"$(uuid7)\",\"occurred_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"qr_payload\":\"${UNKNOWN_CARD}\",\"intent\":\"auto\"}"
+  out="$(measure POST /api/v1/scan "${body}" auth)"
+  printf '%s|POST /api/v1/scan|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
+  out="$(measure POST /api/v1/scan/pin '{}' auth)"
   printf '%s|POST /api/v1/scan/pin|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
 }
 
@@ -137,6 +207,10 @@ dc ps --status running --services | grep -qx redis ||
 printf '  ok · /ready 200 y redis en marcha\n'
 
 # --- medida ------------------------------------------------------------------
+
+step 'Aprovisionando un quiosco sintetico'
+provision
+printf '  ok · token de quiosco y tarjeta desconocida listos\n'
 
 step 'Referencia con Redis arriba'
 run_round 'base'
@@ -178,8 +252,26 @@ if [ "${recovered}" != 1 ]; then
   problems=$((problems + 1))
 fi
 
-# Solo se evalua la ultima ronda: la primera abre el cortacircuitos.
-while IFS='|' read -r label endpoint code seconds; do
+# El fichaje autenticado solo puede dar 200 o 422 (un rechazo legitimo), en TODAS
+# las rondas, la de referencia incluida: un 401 es que la medida no atraviesa lo
+# que dice medir, y un 5xx o 000 es un fichaje bloqueado (regla dura 19).
+while IFS='|' read -r label endpoint code _; do
+  case "${endpoint}" in
+  *scan | *scan/pin)
+    case "${code}" in
+    200 | 422) ;;
+    *)
+      printf 'FALLO: %s responde %s en la ronda %s: se esperaba 200 o 422 (rechazo legitimo). Un 401 es que el token no vale; un 5xx o 000, que el fichaje se bloquea con Redis parado (regla dura 19).\n' \
+        "${endpoint}" "${code}" "${label}" >&2
+      problems=$((problems + 1))
+      ;;
+    esac
+    ;;
+  esac
+done <"${TABLE}"
+
+# En el tiempo solo se evalua la ultima ronda: la primera abre el cortacircuitos.
+while IFS='|' read -r label endpoint _ seconds; do
   [ "${label}" = "${ROUNDS}" ] || continue
   limit="${MAX_SECONDS}"
   case "${endpoint}" in *ready) limit="${READY_MAX_SECONDS}" ;; esac
@@ -188,21 +280,11 @@ while IFS='|' read -r label endpoint code seconds; do
       "${endpoint}" "${seconds}" "${limit}" "${label}" >&2
     problems=$((problems + 1))
   fi
-  case "${endpoint}" in
-  *scan/pin)
-    case "${code}" in
-    5* | 000)
-      printf 'FALLO: el fichaje por PIN responde %s con Redis parado: el fichaje no puede bloquearse por Redis (regla dura 19).\n' "${code}" >&2
-      problems=$((problems + 1))
-      ;;
-    esac
-    ;;
-  esac
 done <"${TABLE}"
 
 if [ "${problems}" -gt 0 ]; then
   fail "${problems} medida(s) fuera de lo esperado (umbral: ${MAX_SECONDS} s, /ready ${READY_MAX_SECONDS} s)."
 fi
 
-printf '\nok · la ultima ronda queda dentro de %s s (/ready %s s) y la instalacion vuelve a 200.\n' \
+printf '\nok · la ultima ronda queda dentro de %s s (/ready %s s), el fichaje responde 200 o 422 y la instalacion vuelve a 200.\n' \
   "${MAX_SECONDS}" "${READY_MAX_SECONDS}"

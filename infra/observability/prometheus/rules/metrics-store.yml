@@ -36,11 +36,16 @@
 # metrics`, que ninguna ruta silencia. Destinatario: IT del cliente.
 groups:
   - name: kronoqr-metrics-store
-    interval: 60s
+    # 15 s y no 60 s: las alertas de quiosco se "resuelven" en la primera
+    # evaluacion tras desaparecer su serie; cuanto antes este activa esta, antes
+    # las inhibe Alertmanager y menos probable es que el group_interval (5 min)
+    # caiga en el hueco y envie una notificacion de "resuelta" falsa. `== 0` no
+    # oscila (la gauge es 0 o 1), asi que basta una espera de un ciclo.
+    interval: 15s
     rules:
       - alert: AlmacenDeMetricasCaido
         expr: kronoqr_metrics_store_up == 0
-        for: 1m
+        for: 15s
         labels:
           severity: critical
           destinatario: it-cliente
@@ -55,6 +60,10 @@ groups:
             veria, ni se avisaria de su resolucion. Alertmanager las inhibe
             mientras esta alerta este activa. El fichaje sigue funcionando (los
             quioscos encolan, regla dura 19): lo que falta es visibilidad.
+            Tampoco pueden saltar las de autenticacion (auth.yml), firma QR
+            (RechazoDeFirmaQr), gestion de cuentas ni errores criticos: sus series
+            viven en Redis. Mientras dure, revisa los intentos de acceso en el
+            registro de auditoria del panel.
             Restablece Redis antes de fiarte de un cuadro en verde.
           runbook_url: docs/runbooks/almacen-de-metricas-caido.md
 
@@ -80,5 +89,8 @@ groups:
             Alertmanager las inhibe. Es distinta de `SondaDelBordeFallida`,
             que comprueba /health y /ready desde fuera: pueden sonar juntas o
             por separado. El fichaje de los quioscos sigue encolando (regla
-            dura 19).
+            dura 19). Tampoco pueden saltar las de autenticacion (auth.yml), firma
+            QR (RechazoDeFirmaQr), gestion de cuentas ni errores criticos: sus series
+            viven en Redis. Mientras dure, revisa los intentos de acceso en el
+            registro de auditoria del panel.
           runbook_url: docs/runbooks/almacen-de-metricas-caido.md

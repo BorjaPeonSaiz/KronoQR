@@ -4,7 +4,7 @@ rule_files:
   - ../rules/metrics-store.yml
   - ../rules/kiosk.yml
 
-evaluation_interval: 1m
+evaluation_interval: 15s
 
 tests:
   #-----------------------------------------------------------------------------
@@ -36,6 +36,10 @@ tests:
                 veria, ni se avisaria de su resolucion. Alertmanager las inhibe
                 mientras esta alerta este activa. El fichaje sigue funcionando (los
                 quioscos encolan, regla dura 19): lo que falta es visibilidad.
+                Tampoco pueden saltar las de autenticacion (auth.yml), firma QR
+                (RechazoDeFirmaQr), gestion de cuentas ni errores criticos: sus series
+                viven en Redis. Mientras dure, revisa los intentos de acceso en el
+                registro de auditoria del panel.
                 Restablece Redis antes de fiarte de un cuadro en verde.
               runbook_url: docs/runbooks/almacen-de-metricas-caido.md
 
@@ -84,7 +88,10 @@ tests:
                 Alertmanager las inhibe. Es distinta de `SondaDelBordeFallida`,
                 que comprueba /health y /ready desde fuera: pueden sonar juntas o
                 por separado. El fichaje de los quioscos sigue encolando (regla
-                dura 19).
+                dura 19). Tampoco pueden saltar las de autenticacion (auth.yml), firma
+                QR (RechazoDeFirmaQr), gestion de cuentas ni errores criticos: sus series
+                viven en Redis. Mientras dure, revisa los intentos de acceso en el
+                registro de auditoria del panel.
               runbook_url: docs/runbooks/almacen-de-metricas-caido.md
       - eval_time: 12m
         alertname: AlmacenDeMetricasCaido
@@ -143,5 +150,9 @@ tests:
                 veria, ni se avisaria de su resolucion. Alertmanager las inhibe
                 mientras esta alerta este activa. El fichaje sigue funcionando (los
                 quioscos encolan, regla dura 19): lo que falta es visibilidad.
+                Tampoco pueden saltar las de autenticacion (auth.yml), firma QR
+                (RechazoDeFirmaQr), gestion de cuentas ni errores criticos: sus series
+                viven en Redis. Mientras dure, revisa los intentos de acceso en el
+                registro de auditoria del panel.
                 Restablece Redis antes de fiarte de un cuadro en verde.
               runbook_url: docs/runbooks/almacen-de-metricas-caido.md
