@@ -10,7 +10,10 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
+use App\Modules\Compliance\Infrastructure\Audit\ManagementUserDirectory;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Domain\Event\DepartmentCreated;
+use App\Modules\Workforce\Domain\Event\DepartmentManagerChanged;
 use App\Modules\Workforce\Domain\Event\DepartmentRenamed;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
@@ -57,6 +60,7 @@ final readonly class RecordWorkforceChange
     public function __construct(
         private RecordAuditEntry $audit,
         private CurrentAuditContext $context,
+        private ManagementUserDirectory $users,
     ) {}
 
     public function hired(EmployeeHired $event): void
@@ -113,6 +117,38 @@ final readonly class RecordWorkforceChange
         $this->record(AuditAction::DepartmentRenamed, AuditSubject::of('department', $event->departmentId), [
             'changed_fields' => $event->changedFields,
         ], $event->occurredAt());
+    }
+
+    /**
+     * El responsable de un departamento ha cambiado (RF-ID-03, RF-ID-10,
+     * ADR-051 §5): **un `role_assignment.changed` por cada cuenta afectada**,
+     * la que deja de dirigirlo (`revoked`) y la que pasa a dirigirlo
+     * (`granted`). Es un cambio de permisos de dos personas, y cada una tiene
+     * que poder reconstruir el suyo consultando sus propios asientos.
+     *
+     * Mismo asiento que el alta de una cuenta con rol (`subject` la cuenta,
+     * `user_uuid` y `role`), mas el `department_id` y el sentido. Solo uuid,
+     * nunca el nombre (regla dura 21).
+     */
+    public function departmentManagerChanged(DepartmentManagerChanged $event): void
+    {
+        $changes = [
+            'revoked' => $event->previousManagerUuid,
+            'granted' => $event->newManagerUuid,
+        ];
+
+        foreach ($changes as $change => $userUuid) {
+            if ($userUuid === null) {
+                continue;
+            }
+
+            $this->record(AuditAction::RoleAssignmentChanged, AuditSubject::of('user', $this->users->idOf($userUuid)), [
+                'user_uuid' => $userUuid,
+                'role' => UserRole::RESPONSABLE_DEPARTAMENTO->value,
+                'department_id' => $event->departmentId,
+                'change' => $change,
+            ], $event->occurredAt());
+        }
     }
 
     /**

@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Http\Resource;
 
-use App\Modules\Workforce\Domain\Model\Department;
+use App\Modules\Workforce\Application\Port\DepartmentView;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * Serializacion del esquema `Department` del contrato.
  *
- * @property-read Department $resource
+ * `manager_user_uuid` y `manager_name` salen aunque la cuenta este dada de
+ * baja: es el panel quien lo interpreta y lo señala (RF-ID-10).
+ *
+ * @property-read DepartmentView $resource
  */
 final class DepartmentResource extends JsonResource
 {
@@ -22,12 +25,14 @@ final class DepartmentResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        /** @var Department $department */
-        $department = $this->resource;
+        /** @var DepartmentView $view */
+        $view = $this->resource;
 
         return [
-            'id' => $department->id,
-            'name' => $department->name,
+            'id' => $view->department->id,
+            'name' => $view->department->name,
+            'manager_user_uuid' => $view->managerUserUuid,
+            'manager_name' => $view->managerName,
         ];
     }
 }

@@ -47,4 +47,20 @@ final class DepartmentPolicy
     {
         return $actor->actsAs(...self::writers());
     }
+
+    /**
+     * Elegir el responsable de un departamento (RF-ID-10, ADR-051 §5): **solo
+     * `admin`, y nunca un acceso de soporte**.
+     *
+     * Elegir responsable es elegir entre las cuentas de gestion, que solo
+     * `admin` puede listar, y conceder alcance sobre personas. Un acceso de
+     * soporte se presenta como `admin` ante las policies, y por eso se le
+     * rechaza aparte, igual que `ManagementAccountPolicy`: el ambito
+     * `accounts:*` que exige ademas el `FormRequest` no lo concede ningun
+     * alcance de soporte, pero se quieren dos controles y no uno.
+     */
+    public function assignManager(ManagementActor $actor): bool
+    {
+        return ! $actor->isSupportActor() && $actor->actsAs(UserRole::ADMIN);
+    }
 }
