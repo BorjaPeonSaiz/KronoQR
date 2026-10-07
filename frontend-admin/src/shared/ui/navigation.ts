@@ -41,7 +41,12 @@ export interface NavigationSection {
 /** El menu completo, en el orden en que se ofrece (`AppShellView.vue`). */
 export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   { name: 'employees', labelKey: 'app.nav.employees', abilities: [EMPLOYEES_MANAGE] },
-  { name: 'departments', labelKey: 'app.nav.departments', abilities: [EMPLOYEES_MANAGE] },
+  {
+    // Lectura abierta a los cuatro roles (R6-BD-01); crear y renombrar los decide la vista.
+    name: 'departments',
+    labelKey: 'app.nav.departments',
+    abilities: [EMPLOYEES_READ, ATTENDANCE_READ],
+  },
   {
     // Ausencias (RF-GP-04, tarea 3.10): vacaciones, baja medica y permiso,
     // sin flujo de aprobacion (doc 05 §8, Fase 4). Ambito de LECTURA de

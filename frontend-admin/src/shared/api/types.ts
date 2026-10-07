@@ -49,6 +49,7 @@ export type ActivateLicenseRequest = Schemas['ActivateLicenseRequest']
 export type Department = Schemas['Department']
 export type DepartmentCollection = Schemas['DepartmentCollection']
 export type CreateDepartmentRequest = Schemas['CreateDepartmentRequest']
+export type UpdateSiteRequest = Schemas['UpdateSiteRequest']
 export type UpdateDepartmentRequest = Schemas['UpdateDepartmentRequest']
 
 // Configuracion de la instalacion (RF-PD-01, tarea 5.1). El paso de

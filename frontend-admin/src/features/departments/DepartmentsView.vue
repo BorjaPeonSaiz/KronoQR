@@ -12,16 +12,19 @@
 import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
+import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listManagementAccounts } from '@/features/accounts/accounts.api'
-import { ACCOUNTS_MANAGE } from '@/features/auth/abilities'
+import { ACCOUNTS_MANAGE, EMPLOYEES_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
-import { listDepartments, updateDepartment } from '@/shared/api/organisation.api'
+import { createDepartment, listDepartments, updateDepartment } from '@/shared/api/organisation.api'
 import type { Department, ManagementAccount } from '@/shared/api/types'
+import NameChangeDialog from './NameChangeDialog.vue'
+import SiteSection from './SiteSection.vue'
 
 const { t } = useI18n()
 const session = useSessionStore()
@@ -30,6 +33,8 @@ const queryClient = useQueryClient()
 const MANAGERS_PER_PAGE = 100
 
 const canAssign = computed(() => session.can(ACCOUNTS_MANAGE))
+// Crear y renombrar: `admin` y `rrhh` (`employees:*`). Responsable y auditor lo leen.
+const canWrite = computed(() => session.can(EMPLOYEES_MANAGE))
 
 async function loadActiveManagers(): Promise<ManagementAccount[]> {
   const first = await listManagementAccounts({
@@ -161,6 +166,60 @@ async function save(department: Department): Promise<void> {
   }
 }
 
+// Alta de un departamento: el nombre es unico dentro del centro (422 si se repite).
+const newName = ref('')
+const creating = ref(false)
+const createError = ref<unknown>(null)
+
+const createNameErrors = computed(() =>
+  isApiError(createError.value) ? (createError.value.fieldErrors['name'] ?? []) : [],
+)
+const createOtherError = computed(() =>
+  isApiError(createError.value) &&
+  createError.value.kind === 'validation' &&
+  createNameErrors.value.length > 0
+    ? null
+    : createError.value,
+)
+
+async function create(): Promise<void> {
+  const name = newName.value.trim()
+
+  if (name === '' || creating.value) {
+    return
+  }
+
+  creating.value = true
+  createError.value = null
+
+  try {
+    await createDepartment({ name })
+    newName.value = ''
+    announce(t('departments.announce.created', { name }))
+    await queryClient.invalidateQueries({ queryKey: ['departments'] })
+  } catch (caught) {
+    createError.value = caught
+    announce(t('departments.announce.createFailed', { name }))
+  } finally {
+    creating.value = false
+  }
+}
+
+// Renombrado: dialogo con «antes → despues» (`NameChangeDialog`).
+const renaming = ref<Department | null>(null)
+
+async function saveRename(name: string): Promise<void> {
+  if (renaming.value !== null) {
+    await updateDepartment(renaming.value.id, { name })
+  }
+}
+
+async function renameSaved(name: string): Promise<void> {
+  announce(t('departments.announce.renamed', { name }))
+  renaming.value = null
+  await queryClient.invalidateQueries({ queryKey: ['departments'] })
+}
+
 const selectClass =
   'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
 </script>
@@ -168,7 +227,46 @@ const selectClass =
 <template>
   <section>
     <h1 class="text-2xl font-bold">{{ t('departments.title') }}</h1>
-    <p class="mt-1 text-kq-text-muted">{{ t('departments.subtitle') }}</p>
+    <p class="mt-1 text-kq-text-muted">
+      {{ canWrite ? t('departments.subtitle') : t('departments.subtitleRead') }}
+    </p>
+
+    <form
+      v-if="canWrite"
+      class="mt-4 flex flex-wrap items-end gap-3"
+      novalidate
+      data-test="department-create"
+      @submit.prevent="create"
+    >
+      <FormField
+        v-slot="field"
+        :label="t('departments.create.label')"
+        :errors="createNameErrors"
+        required
+      >
+        <input
+          :id="field.id"
+          v-model="newName"
+          type="text"
+          maxlength="120"
+          autocomplete="off"
+          :class="selectClass"
+          :aria-invalid="field.invalid"
+          :aria-describedby="field.describedBy"
+          data-test="department-create-name"
+        />
+      </FormField>
+      <button
+        type="submit"
+        :disabled="creating"
+        :aria-busy="creating"
+        class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 font-semibold text-kq-on-primary disabled:opacity-60"
+        data-test="department-create-submit"
+      >
+        {{ creating ? t('common.saving') : t('departments.create.submit') }}
+      </button>
+      <ErrorNotice v-if="createOtherError !== null" :error="createOtherError" class="basis-full" />
+    </form>
 
     <LoadingPanel v-if="isPending" :label="t('departments.loading')" class="mt-4" />
     <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" />
@@ -197,6 +295,9 @@ const selectClass =
               <th scope="col" class="px-3 py-2">{{ t('departments.table.manager') }}</th>
               <th v-if="canAssign" scope="col" class="px-3 py-2">
                 {{ t('departments.table.assign') }}
+              </th>
+              <th v-if="canWrite" scope="col" class="px-3 py-2">
+                {{ t('departments.table.actions') }}
               </th>
             </tr>
           </thead>
@@ -273,10 +374,33 @@ const selectClass =
                   class="mt-2"
                 />
               </td>
+              <td v-if="canWrite" class="px-3 py-2">
+                <button
+                  type="button"
+                  class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
+                  :data-test="`rename-${department.id}`"
+                  @click="renaming = department"
+                >
+                  {{ t('departments.rename.action') }}
+                  <span class="sr-only">{{ department.name }}</span>
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
     </template>
+
+    <NameChangeDialog
+      v-if="renaming !== null"
+      :title="t('departments.rename.title', { name: renaming.name })"
+      :field-label="t('departments.rename.field')"
+      :current-name="renaming.name"
+      :save="saveRename"
+      @saved="renameSaved"
+      @cancel="renaming = null"
+    />
+
+    <SiteSection v-if="canWrite" />
   </section>
 </template>

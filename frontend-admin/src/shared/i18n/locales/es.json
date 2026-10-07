@@ -1280,6 +1280,7 @@
       "present": "Dentro ahora",
       "absent": "Fuera ahora",
       "snapshot": "Foto del servidor",
+      "lastUpdate": "Última actualización",
       "snapshotAt": "{moment} ({zone})"
     },
     "status": {
@@ -1303,13 +1304,19 @@
       "origin": "Origen",
       "notInside": "Fuera",
       "noDepartment": "Sin departamento",
-      "previousDay": "{time} (día anterior)"
+      "previousDay": "{time} (día anterior)",
+      "openWorkDay": "Ver la jornada de {name}"
     },
     "origin": {
       "qr_kiosk": "Tarjeta en el quiosco",
       "pin_kiosk": "PIN en el quiosco",
       "manual_admin": "Alta manual desde el panel",
       "import": "Carga inicial"
+    },
+    "notice": {
+      "poll": "No se ha podido actualizar la lista (fallo de red o del servidor). Se muestran los datos de la última actualización correcta, el {moment} ({zone}); se reintentará solo.",
+      "filter": "No se ha podido aplicar el filtro elegido. La lista sigue siendo la de la última actualización correcta, el {moment} ({zone}), y puede no corresponder al filtro.",
+      "realtime": "La conexión en tiempo real se ha cortado y se está reintentando. Mientras tanto la lista se actualiza por sondeo; última actualización correcta el {moment} ({zone})."
     },
     "transport": {
       "connecting": "Conectando con el tiempo real…",
@@ -1510,6 +1517,13 @@
     "complianceViewEffect": "Esto mueve la vista de cumplimiento, no la bandeja de incidencias: el cómputo del art. 34.1 ET es anual y el aviso semanal es informativo.",
     "retentionWarning": "Vas a cambiar los años de conservación del registro. Bajarlo amplía lo que la purga considera vencido, sobre datos que hay obligación legal de conservar. Ninguna purga se ejecuta sola: la orden de retención propone primero en simulación y exige una confirmación explícita.",
     "notAppliedYet": "El calendario de festivos lo aplica el informe de horas por periodo (RF-GP-04): los festivos no cuentan como absentismo no justificado. No afecta a ninguna incidencia.",
+    "preview": {
+      "title": "Confirmar los cambios del perfil de cumplimiento",
+      "explanation": "Revisa qué umbrales van a cambiar y desde qué valor. Rige desde ahora, sin retroactividad, y queda registrado en el trail de auditoría.",
+      "caption": "Campos del perfil de cumplimiento que cambian, con su valor actual y el nuevo",
+      "confirm": "Confirmar y guardar",
+      "empty": "(vacío)"
+    },
     "save": "Guardar el perfil",
     "saving": "Guardando…",
     "saved": "Perfil guardado. El cambio queda registrado en el trail de auditoría.",
@@ -1811,6 +1825,15 @@
     },
     "affectsWorkedHoursWarning": "Vas a cambiar un umbral que puede modificar los minutos que quedan registrados. El cambio queda auditado con tu nombre, la fecha, el valor anterior y el nuevo.",
     "audited": "Cada clave modificada deja su propio apunte en el trail de auditoría (calculation_setting.changed) con el valor anterior, el nuevo, quién lo cambió y cuándo.",
+    "preview": {
+      "title": "Confirmar los cambios de los ajustes",
+      "explanation": "Revisa qué ajustes van a cambiar y desde qué valor. El cambio queda registrado en el trail de auditoría.",
+      "caption": "Ajustes operativos que cambian, con su valor actual y el nuevo",
+      "confirm": "Confirmar y guardar",
+      "empty": "(vacío)",
+      "set": "Definido (no se muestra)",
+      "notSet": "Sin definir"
+    },
     "save": "Guardar los ajustes",
     "saving": "Guardando…",
     "saved": "Ajustes guardados. El cambio queda registrado en el trail de auditoría.",
@@ -2451,7 +2474,8 @@
       "caption": "Departamentos del centro y su responsable",
       "name": "Departamento",
       "manager": "Responsable",
-      "assign": "Asignar responsable"
+      "assign": "Asignar responsable",
+      "actions": "Acciones"
     },
     "noManager": "Sin responsable",
     "hasManager": "Con responsable",
@@ -2462,7 +2486,35 @@
     "displaceNotice": "Si eliges otra cuenta, la responsable actual deja de dirigir este departamento.",
     "announce": {
       "saved": "Responsable de {name} actualizado.",
-      "failed": "No se ha cambiado el responsable de {name}."
+      "failed": "No se ha cambiado el responsable de {name}.",
+      "created": "Departamento {name} creado.",
+      "createFailed": "No se ha creado el departamento {name}.",
+      "renamed": "Departamento renombrado como {name}.",
+      "renameFailed": "No se ha cambiado el nombre del departamento."
+    },
+    "subtitleRead": "Consulta de los departamentos del centro y de quién los dirige. Solo el personal de RRHH y administración puede cambiarlos.",
+    "create": {
+      "label": "Nombre del nuevo departamento",
+      "submit": "Añadir departamento"
+    },
+    "rename": {
+      "action": "Renombrar",
+      "title": "Renombrar «{name}»",
+      "field": "Nombre del departamento",
+      "confirm": "Guardar nombre",
+      "previewCaption": "Cambio de nombre: valor actual y valor nuevo"
+    }
+  },
+  "site": {
+    "heading": "Centro",
+    "loading": "Cargando el centro…",
+    "name": "Nombre del centro",
+    "timezone": "Zona horaria",
+    "timezoneNote": "La zona horaria no se cambia desde aquí: decide a qué jornada pertenece cada turno y su cambio se tratará aparte.",
+    "rename": "Renombrar centro",
+    "renameTitle": "Renombrar el centro",
+    "announce": {
+      "saved": "Centro renombrado como {name}."
     }
   }
 }

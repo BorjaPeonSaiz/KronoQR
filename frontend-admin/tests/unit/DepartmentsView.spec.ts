@@ -10,6 +10,7 @@ import {
   managementUser,
 } from './support/fixtures'
 import {
+  buttonWith,
   createTestPinia,
   jsonResponse,
   mountView,
@@ -227,5 +228,184 @@ describe('DepartmentsView', () => {
     expect(spy.mock.calls.some((call) => String(call[0]).includes('management-accounts'))).toBe(
       false,
     )
+  })
+})
+
+const SITE_BODY = { id: 1, name: 'Hotel Marina', timezone: 'Europe/Madrid' }
+
+function writeApi(
+  deps: unknown,
+  write: (url: string, init: RequestInit) => Response = () => jsonResponse({}),
+) {
+  return (url: string, init?: RequestInit) => {
+    if (url === '/api/v1/site' && (init?.method ?? 'GET') === 'GET') {
+      return jsonResponse(SITE_BODY)
+    }
+
+    if (init?.method === 'POST' || init?.method === 'PATCH') {
+      return write(url, init)
+    }
+
+    return api(deps)(url, init)
+  }
+}
+
+function writes(spy: ReturnType<typeof stubFetch>) {
+  return spy.mock.calls.filter((call) =>
+    ['POST', 'PATCH'].includes(String((call[1] as RequestInit | undefined)?.method)),
+  )
+}
+
+const VALIDATION_DUPLICATE = () =>
+  problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+    errors: { name: ['Ya existe un departamento con ese nombre.'] },
+  })
+
+describe('DepartmentsView: crear, renombrar y centro', () => {
+  it('rrhh: crea un departamento con su nombre recortado, lo anuncia y vacia el campo', async () => {
+    const spy = stubFetch(writeApi(departments()))
+
+    const wrapper = await mountAs(['employees:*'])
+
+    await settle()
+    await wrapper.find('[data-test="department-create-name"]').setValue('  Mantenimiento ')
+    await wrapper.find('[data-test="department-create"]').trigger('submit')
+    await settle()
+
+    const post = writes(spy)[0]
+
+    expect(String(post?.[0])).toBe('/api/v1/departments')
+    expect((post?.[1] as RequestInit).method).toBe('POST')
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toEqual({ name: 'Mantenimiento' })
+    expect(announcement.value).toContain('Mantenimiento')
+    expect(
+      (wrapper.find('[data-test="department-create-name"]').element as HTMLInputElement).value,
+    ).toBe('')
+  })
+
+  it('un 422 por nombre repetido se pinta junto al campo y no vacia lo escrito', async () => {
+    stubFetch(writeApi(departments(), VALIDATION_DUPLICATE))
+
+    const wrapper = await mountAs(['employees:*'])
+
+    await settle()
+    await wrapper.find('[data-test="department-create-name"]').setValue('Cocina')
+    await wrapper.find('[data-test="department-create"]').trigger('submit')
+    await settle()
+
+    expect(wrapper.find('[data-test="department-create"]').text()).toContain(
+      'Ya existe un departamento con ese nombre.',
+    )
+    expect(
+      (wrapper.find('[data-test="department-create-name"]').element as HTMLInputElement).value,
+    ).toBe('Cocina')
+    expect(wrapper.find('[data-test="department-create-name"]').attributes('aria-invalid')).toBe(
+      'true',
+    )
+  })
+
+  it('renombra mostrando antes y despues, y solo envia el nombre', async () => {
+    const spy = stubFetch(writeApi(departments()))
+
+    const wrapper = await mountAs(['employees:*'])
+
+    await settle()
+    await wrapper.find('[data-test="rename-3"]').trigger('click')
+
+    const dialog = wrapper.find('[role="dialog"]')
+    const confirm = buttonWith(dialog, es.departments.rename.confirm)
+
+    // Sin cambio no se puede confirmar.
+    expect(confirm.attributes('disabled')).toBeDefined()
+
+    await dialog.find('[data-test="rename-input"]').setValue('Cocina y office')
+
+    const cells = dialog.findAll('[data-test="rename-preview"] tbody td').map((td) => td.text())
+
+    expect(cells).toEqual(['Cocina', 'Cocina y office'])
+    expect(writes(spy)).toHaveLength(0)
+
+    await confirm.trigger('click')
+    await settle()
+
+    const patch = writes(spy)[0]
+
+    expect(String(patch?.[0])).toBe('/api/v1/departments/3')
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      name: 'Cocina y office',
+    })
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(announcement.value).toContain('Cocina y office')
+  })
+
+  it('un 422 al renombrar se queda en el dialogo, junto al campo', async () => {
+    stubFetch(writeApi(departments(), VALIDATION_DUPLICATE))
+
+    const wrapper = await mountAs(['employees:*'])
+
+    await settle()
+    await wrapper.find('[data-test="rename-3"]').trigger('click')
+    await wrapper.find('[data-test="rename-input"]').setValue('Recepción')
+    await buttonWith(wrapper.find('[role="dialog"]'), es.departments.rename.confirm).trigger(
+      'click',
+    )
+    await settle()
+
+    const dialog = wrapper.find('[role="dialog"]')
+
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.text()).toContain('Ya existe un departamento con ese nombre.')
+  })
+
+  it.each([
+    ['responsable', ['employees:read']],
+    ['auditor', ['attendance:read', 'audit:read', 'reports:legal']],
+  ])('%s: solo lectura, sin alta, renombrado, selector ni centro', async (_role, abilities) => {
+    const spy = stubFetch(writeApi(departments(ACCOUNT_UUID, 'Jefatura de Cocina')))
+
+    const wrapper = await mountAs(abilities)
+
+    await settle()
+
+    expect(wrapper.find('[data-test="department-3"]').text()).toContain('Jefatura de Cocina')
+    expect(wrapper.find('[data-test="department-create"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="rename-3"]').exists()).toBe(false)
+    expect(wrapper.find('select').exists()).toBe(false)
+    expect(wrapper.find('[data-test="site-section"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain(es.departments.subtitleRead)
+    expect(spy.mock.calls.some((call) => String(call[0]).includes('/api/v1/site'))).toBe(false)
+  })
+
+  it('centro: muestra nombre y zona horaria en solo lectura, y renombra con antes y despues', async () => {
+    const spy = stubFetch(writeApi(departments()))
+
+    const wrapper = await mountAs(['employees:*'])
+
+    await settle()
+
+    expect(wrapper.find('[data-test="site-name"]').text()).toContain('Hotel Marina')
+    expect(wrapper.find('[data-test="site-timezone"]').text()).toBe('Europe/Madrid')
+    expect(wrapper.find('[data-test="site-timezone-note"]').text()).toBe(es.site.timezoneNote)
+
+    await wrapper.find('[data-test="site-rename"]').trigger('click')
+
+    const dialog = wrapper.find('[role="dialog"]')
+
+    await dialog.find('[data-test="rename-input"]').setValue('Hotel Marina Playa')
+    expect(dialog.findAll('[data-test="rename-preview"] tbody td').map((td) => td.text())).toEqual([
+      'Hotel Marina',
+      'Hotel Marina Playa',
+    ])
+    await buttonWith(dialog, es.departments.rename.confirm).trigger('click')
+    await settle()
+
+    const patch = writes(spy)[0]
+
+    expect(String(patch?.[0])).toBe('/api/v1/site')
+    // La zona horaria nunca viaja desde el panel.
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      name: 'Hotel Marina Playa',
+    })
+    expect(announcement.value).toContain('Hotel Marina Playa')
   })
 })
