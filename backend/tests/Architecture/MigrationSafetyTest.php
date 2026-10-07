@@ -238,3 +238,111 @@ it('no confunde con un error el patron expand correcto', function (string $up): 
         "DB::statement('CREATE TABLE shift_corrections (id bigserial PRIMARY KEY, reason text NOT NULL)');",
     ],
 ])->group('RNF-D-04');
+
+/**
+ * **Las migraciones que validan en la misma transaccion en que crean**, y por
+ * que se quedan asi.
+ *
+ * `ADD CONSTRAINT ... NOT VALID` y `VALIDATE CONSTRAINT` en la misma transaccion
+ * del migrador mantienen el `ACCESS EXCLUSIVE` del `ADD` durante todo el
+ * recorrido del `VALIDATE`: el patron en dos pasos no sirve de nada (hallazgos
+ * DB3, R5-BD-01). Desde la 2.2.0 se valida con
+ * `LimitsMigrationLocks::validateConstraint()`, fuera de transaccion.
+ *
+ * Estas siete son de la 2.1.0 o anteriores y **no se reescriben**: ya se
+ * aplicaron en toda instalacion desplegada —cambiarlas no cambiaria nada en
+ * ninguna— y en una instalacion nueva corren sobre tablas vacias o casi, donde
+ * el `VALIDATE` es instantaneo. Es la misma regla que el docblock del trait.
+ *
+ * El trinquete de siempre: la lista se compara exacta y su tamaño se afirma.
+ * Solo se puede vaciar.
+ *
+ * @return array<string, string>
+ */
+function migrationSafetyValidatesInsideTransaction(): array
+{
+    $publicada = 'Publicada en la 2.1.0 o antes: aplicada en toda instalacion; en una nueva corre sobre tablas vacias.';
+
+    return [
+        '2026_08_20_100200_add_pin_provisioning_to_employees_table.php' => $publicada,
+        '2026_09_06_100000_bound_compliance_profile_thresholds.php' => $publicada,
+        '2026_09_11_100100_allow_support_grant_audit_actor.php' => $publicada,
+        '2026_09_16_100000_add_health_telemetry_to_devices_table.php' => $publicada,
+        '2026_09_18_100000_allow_out_of_order_scan_result.php' => $publicada,
+        '2026_09_18_100100_exempt_out_of_order_scan_from_worked_minutes.php' => $publicada,
+        '2026_09_18_100200_allow_out_of_order_scan_incident_type.php' => $publicada,
+    ];
+}
+
+/**
+ * Lo que una migracion hace mal con un `VALIDATE`, leido sin comentarios: un
+ * docblock que explique el patron no es una sentencia.
+ *
+ * @return list<string>
+ */
+function migrationSafetyValidateViolations(string $source): array
+{
+    $code = '';
+
+    foreach (token_get_all($source) as $token) {
+        if (\is_array($token) && \in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+            continue;
+        }
+
+        $code .= \is_array($token) ? $token[1] : $token;
+    }
+
+    $violations = [];
+
+    if (preg_match('/VALIDATE\s+CONSTRAINT/i', $code) === 1) {
+        $violations[] = 'VALIDATE CONSTRAINT literal en vez de validateConstraint()';
+    }
+
+    if (str_contains($code, '->validateConstraint(')
+        && preg_match('/\$withinTransaction\s*=\s*false\s*;/', $code) !== 1) {
+        $violations[] = 'validateConstraint() sin $withinTransaction = false';
+    }
+
+    return $violations;
+}
+
+it('valida cada restriccion fuera de la transaccion que la crea', function (string $file): void {
+    $violations = migrationSafetyValidateViolations((string) file_get_contents($file));
+
+    $esperado = isset(migrationSafetyValidatesInsideTransaction()[basename($file)])
+        ? ['VALIDATE CONSTRAINT literal en vez de validateConstraint()']
+        : [];
+
+    expect($violations)->toBe($esperado, basename($file).': el VALIDATE va con '
+        .'LimitsMigrationLocks::validateConstraint(), en una migracion con $withinTransaction = false, '
+        .'despues del DB::transaction() que crea la restriccion NOT VALID.');
+})->with(migrationFiles())->group('RNF-D-04');
+
+it('mantiene acotadas las migraciones que validan dentro de su transaccion', function (): void {
+    $existentes = array_keys(migrationFiles());
+
+    foreach (array_keys(migrationSafetyValidatesInsideTransaction()) as $conocida) {
+        expect($existentes)->toContain($conocida);
+    }
+
+    expect(migrationSafetyValidatesInsideTransaction())->toHaveCount(7);
+})->group('RNF-D-04');
+
+it('señala el VALIDATE dentro de la transaccion cuando alguien lo escribe', function (string $source, array $expected): void {
+    // La prueba del detector, con el control negativo al final.
+    expect(migrationSafetyValidateViolations($source))->toBe($expected);
+})->with([
+    'VALIDATE literal' => [
+        "<?php DB::statement('ALTER TABLE incidents VALIDATE CONSTRAINT incidents_chk_type');",
+        ['VALIDATE CONSTRAINT literal en vez de validateConstraint()'],
+    ],
+    'ayudante en una migracion transaccional' => [
+        "<?php \$this->validateConstraint('incidents', 'incidents_chk_type');",
+        ['validateConstraint() sin $withinTransaction = false'],
+    ],
+    'la forma correcta, con el patron explicado en un comentario' => [
+        "<?php /** ALTER TABLE x VALIDATE CONSTRAINT y */ public \$withinTransaction = false;\n"
+        ."\$this->validateConstraint('incidents', 'incidents_chk_type');",
+        [],
+    ],
+])->group('RNF-D-04');

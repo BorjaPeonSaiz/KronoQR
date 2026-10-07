@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Support\Database\LimitsMigrationLocks;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -29,13 +30,20 @@ use Illuminate\Support\Facades\DB;
  * fichajes (regla dura 19), la migracion deja de ser atomica
  * (`$withinTransaction = false`) y, si falla a mitad, el indice queda `INVALID`
  * y hay que borrarlo a mano antes de reintentar (`IF NOT EXISTS` evita el
- * choque). Solo `lock_timeout`, sin `statement_timeout`.
+ * choque). Solo `lock_timeout` y sin tope de duracion: lo garantiza
+ * `LimitsMigrationLocks::withLockWaitOnly()`, que fija `statement_timeout = 0`
+ * mientras dura la construccion y devuelve la sesion a como estaba. Hasta la
+ * 2.2.0 esta frase era falsa: el `SET statement_timeout = '30s'` de sesion de
+ * la migracion anterior del mismo `artisan migrate` llegaba hasta aqui
+ * (hallazgo DB4, R5-BD-02).
  *
  * `down()`: `DROP INDEX CONCURRENTLY IF EXISTS`, verificado por
  * `PinClaimMigrationsTest` y `MigrationsRoundTripTest`.
  */
 return new class extends Migration
 {
+    use LimitsMigrationLocks;
+
     /**
      * `CREATE INDEX CONCURRENTLY` no se ejecuta dentro de una transaccion.
      *
@@ -47,28 +55,16 @@ return new class extends Migration
 
     public function up(): void
     {
-        $this->limitLockWaitOnly();
-
         // El nombre del indice es una constante de esta clase y nunca entrada
         // externa: PostgreSQL no admite parametros enlazados en un identificador.
-        DB::statement(
+        $this->withLockWaitOnly(static fn (): bool => DB::statement(
             'CREATE INDEX CONCURRENTLY IF NOT EXISTS '.self::INDEX
             .' ON scan_events (recorded_at) WHERE claimed_employee_id IS NOT NULL'
-        );
+        ));
     }
 
     public function down(): void
     {
-        $this->limitLockWaitOnly();
-
-        DB::statement('DROP INDEX CONCURRENTLY IF EXISTS '.self::INDEX);
-    }
-
-    /**
-     * Solo `lock_timeout`. Ver el porque en el docblock de la clase.
-     */
-    private function limitLockWaitOnly(): void
-    {
-        DB::connection($this->getConnection())->statement("SET lock_timeout = '3s'");
+        $this->withLockWaitOnly(static fn (): bool => DB::statement('DROP INDEX CONCURRENTLY IF EXISTS '.self::INDEX));
     }
 };

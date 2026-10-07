@@ -30,8 +30,10 @@ use Illuminate\Support\Facades\DB;
  * | **2 (migrate)** | *No aplica.* El valor de serie es la verdad de toda fila existente: ninguna tablet anterior a la 2.2.0 declaraba otra cosa. | — |
  * | **3 (contract)** | *No aplica.* | — |
  *
- * Los `CHECK` entran `NOT VALID` y se validan aparte, que no bloquea las
- * escrituras del latido.
+ * Los `CHECK` entran `NOT VALID` y se validan aparte, **despues de confirmar**
+ * la transaccion que los crea (`LimitsMigrationLocks::validateConstraint()`,
+ * hallazgo DB3), que no bloquea las escrituras del latido. Dentro de ella, el
+ * `ACCESS EXCLUSIVE` del `ADD` habria durado todo el `VALIDATE`.
  *
  * ## `down()` verificado
  *
@@ -46,51 +48,59 @@ return new class extends Migration
 {
     use LimitsMigrationLocks;
 
-    public function up(): void
-    {
-        $this->limitLockWait();
+    /**
+     * Los `VALIDATE` van fuera de la transaccion que crea las columnas y los
+     * `CHECK`: ver {@see LimitsMigrationLocks}.
+     *
+     * @var bool
+     */
+    public $withinTransaction = false;
 
-        DB::statement("ALTER TABLE devices ADD COLUMN queue_storage varchar(16) NOT NULL DEFAULT 'durable'");
-        DB::statement('ALTER TABLE devices ADD COLUMN unreported_discards integer NOT NULL DEFAULT 0');
-        DB::statement('ALTER TABLE devices ALTER COLUMN pending_queue_size DROP NOT NULL');
-
-        DB::statement(<<<'SQL'
-            ALTER TABLE devices
-                ADD CONSTRAINT devices_chk_queue_storage
-                CHECK (queue_storage IN ('durable', 'memory', 'unavailable')) NOT VALID
-        SQL);
-
-        DB::statement(<<<'SQL'
-            ALTER TABLE devices
-                ADD CONSTRAINT devices_chk_unreported_discards_range
-                CHECK (unreported_discards BETWEEN 0 AND 100000) NOT VALID
-        SQL);
-
+    /** @var array<string, string> Nombre => expresion de cada `CHECK`. */
+    private const array CHECKS = [
+        'devices_chk_queue_storage' => "queue_storage IN ('durable', 'memory', 'unavailable')",
+        'devices_chk_unreported_discards_range' => 'unreported_discards BETWEEN 0 AND 100000',
         // El contrato, en el esquema: un tamaño desconocido solo con la cola
         // fuera de IndexedDB. Con la cola en disco la tablet siempre sabe.
-        DB::statement(<<<'SQL'
-            ALTER TABLE devices
-                ADD CONSTRAINT devices_chk_unknown_queue_size_only_when_degraded
-                CHECK (pending_queue_size IS NOT NULL OR queue_storage <> 'durable') NOT VALID
-        SQL);
+        'devices_chk_unknown_queue_size_only_when_degraded' => "pending_queue_size IS NOT NULL OR queue_storage <> 'durable'",
+    ];
 
-        DB::statement('ALTER TABLE devices VALIDATE CONSTRAINT devices_chk_queue_storage');
-        DB::statement('ALTER TABLE devices VALIDATE CONSTRAINT devices_chk_unreported_discards_range');
-        DB::statement('ALTER TABLE devices VALIDATE CONSTRAINT devices_chk_unknown_queue_size_only_when_degraded');
+    public function up(): void
+    {
+        // Idempotente: si un `VALIDATE` se interrumpe, el siguiente `migrate`
+        // vuelve a entrar aqui con las columnas ya creadas.
+        DB::transaction(function (): void {
+            $this->limitLockWait();
+
+            DB::statement("ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_storage varchar(16) NOT NULL DEFAULT 'durable'");
+            DB::statement('ALTER TABLE devices ADD COLUMN IF NOT EXISTS unreported_discards integer NOT NULL DEFAULT 0');
+            DB::statement('ALTER TABLE devices ALTER COLUMN pending_queue_size DROP NOT NULL');
+
+            foreach (self::CHECKS as $name => $expression) {
+                DB::statement('ALTER TABLE devices DROP CONSTRAINT IF EXISTS '.$name);
+                DB::statement('ALTER TABLE devices ADD CONSTRAINT '.$name.' CHECK ('.$expression.') NOT VALID');
+            }
+        });
+
+        foreach (array_keys(self::CHECKS) as $name) {
+            $this->validateConstraint('devices', $name);
+        }
     }
 
     public function down(): void
     {
-        $this->limitLockWait();
+        DB::transaction(function (): void {
+            $this->limitLockWait();
 
-        DB::statement('ALTER TABLE devices DROP CONSTRAINT IF EXISTS devices_chk_unknown_queue_size_only_when_degraded');
-        DB::statement('ALTER TABLE devices DROP CONSTRAINT IF EXISTS devices_chk_unreported_discards_range');
-        DB::statement('ALTER TABLE devices DROP CONSTRAINT IF EXISTS devices_chk_queue_storage');
+            foreach (array_reverse(array_keys(self::CHECKS)) as $name) {
+                DB::statement('ALTER TABLE devices DROP CONSTRAINT IF EXISTS '.$name);
+            }
 
-        DB::statement('UPDATE devices SET pending_queue_size = 0 WHERE pending_queue_size IS NULL');
-        DB::statement('ALTER TABLE devices ALTER COLUMN pending_queue_size SET NOT NULL');
+            DB::statement('UPDATE devices SET pending_queue_size = 0 WHERE pending_queue_size IS NULL');
+            DB::statement('ALTER TABLE devices ALTER COLUMN pending_queue_size SET NOT NULL');
 
-        DB::statement('ALTER TABLE devices DROP COLUMN IF EXISTS unreported_discards');
-        DB::statement('ALTER TABLE devices DROP COLUMN IF EXISTS queue_storage');
+            DB::statement('ALTER TABLE devices DROP COLUMN IF EXISTS unreported_discards');
+            DB::statement('ALTER TABLE devices DROP COLUMN IF EXISTS queue_storage');
+        });
     }
 };

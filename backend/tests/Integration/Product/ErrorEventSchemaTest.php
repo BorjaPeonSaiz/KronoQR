@@ -103,11 +103,13 @@ it('la migracion se deshace y se reaplica dejando la tabla igual', function (): 
     DB::setDefaultConnection('pgsql_migrator');
 
     try {
-        $migracion->down();
+        // En una transaccion, como lo ejecuta `Migrator::runMigration()`: desde la
+        // 2.2.0 `limitLockWait()` usa `SET LOCAL` y se niega a correr sin ella.
+        DB::connection('pgsql_migrator')->transaction(static fn () => $migracion->down());
 
         expect(Schema::connection('pgsql_migrator')->hasTable('error_events'))->toBeFalse();
 
-        $migracion->up();
+        DB::connection('pgsql_migrator')->transaction(static fn () => $migracion->up());
     } finally {
         DB::setDefaultConnection('pgsql');
     }

@@ -34,7 +34,12 @@ use Illuminate\Support\Facades\Schema;
  *
  * `update.sh` migra con la instalacion en mantenimiento, asi que ningun proceso
  * del binario anterior escribe `pin_hash` sin `pin_length` entre el relleno y la
- * restriccion.
+ * restriccion. Columna, relleno y `CHECK ... NOT VALID` van en una transaccion;
+ * los `VALIDATE`, despues de confirmarla
+ * (`LimitsMigrationLocks::validateConstraint()`, hallazgo DB3). La prueba de
+ * ida y vuelta vive en `tests/Integration/Schema/PinLengthMigrationRoundTripTest.php`:
+ * una migracion no transaccional no se puede ensayar dentro de la transaccion
+ * de una prueba.
  *
  * ## `down()`
  *
@@ -45,40 +50,58 @@ return new class extends Migration
 {
     use LimitsMigrationLocks;
 
+    /**
+     * Los `VALIDATE` van fuera de la transaccion que crea la columna y los
+     * `CHECK`: ver {@see LimitsMigrationLocks}.
+     *
+     * @var bool
+     */
+    public $withinTransaction = false;
+
+    /** @var array<string, string> Nombre => expresion de cada `CHECK`. */
+    private const array CHECKS = [
+        'employees_chk_pin_length_admissible' => 'pin_length IS NULL OR pin_length IN (6, 8)',
+        'employees_chk_pin_length_with_hash' => '(pin_hash IS NULL) = (pin_length IS NULL)',
+    ];
+
     public function up(): void
     {
-        $this->limitLockWait();
+        // Idempotente: si un `VALIDATE` se interrumpe, el siguiente `migrate`
+        // vuelve a entrar aqui con la columna ya creada y rellena.
+        DB::transaction(function (): void {
+            $this->limitLockWait();
 
-        DB::statement('ALTER TABLE employees ADD COLUMN IF NOT EXISTS pin_length smallint');
+            DB::statement('ALTER TABLE employees ADD COLUMN IF NOT EXISTS pin_length smallint');
 
-        // Relleno: la plantilla es de cientos de filas, no de millones, y la
-        // tabla no esta en el camino del fichaje para escrituras.
-        DB::statement('UPDATE employees SET pin_length = 6 WHERE pin_hash IS NOT NULL AND pin_length IS NULL');
+            // Relleno: la plantilla es de cientos de filas, no de millones, y la
+            // tabla no esta en el camino del fichaje para escrituras.
+            DB::statement('UPDATE employees SET pin_length = 6 WHERE pin_hash IS NOT NULL AND pin_length IS NULL');
 
-        $this->addValidatedCheck('employees_chk_pin_length_admissible', 'pin_length IS NULL OR pin_length IN (6, 8)');
-        $this->addValidatedCheck('employees_chk_pin_length_with_hash', '(pin_hash IS NULL) = (pin_length IS NULL)');
+            // `NOT VALID` aqui y `VALIDATE` despues del `COMMIT`: la primera
+            // sentencia no escanea la tabla y la segunda no bloquea las escrituras.
+            foreach (self::CHECKS as $name => $expression) {
+                DB::statement('ALTER TABLE employees DROP CONSTRAINT IF EXISTS '.$name);
+                DB::statement('ALTER TABLE employees ADD CONSTRAINT '.$name.' CHECK ('.$expression.') NOT VALID');
+            }
+        });
+
+        foreach (array_keys(self::CHECKS) as $name) {
+            $this->validateConstraint('employees', $name);
+        }
     }
 
     public function down(): void
     {
-        $this->limitLockWait();
+        DB::transaction(function (): void {
+            $this->limitLockWait();
 
-        foreach (['employees_chk_pin_length_with_hash', 'employees_chk_pin_length_admissible'] as $constraint) {
-            DB::statement('ALTER TABLE employees DROP CONSTRAINT IF EXISTS '.$constraint);
-        }
+            foreach (array_reverse(array_keys(self::CHECKS)) as $name) {
+                DB::statement('ALTER TABLE employees DROP CONSTRAINT IF EXISTS '.$name);
+            }
 
-        if (Schema::hasColumn('employees', 'pin_length')) {
-            DB::statement('ALTER TABLE employees DROP COLUMN pin_length');
-        }
-    }
-
-    /**
-     * `NOT VALID` y despues `VALIDATE`: la primera sentencia no escanea la tabla
-     * y la segunda no bloquea las escrituras.
-     */
-    private function addValidatedCheck(string $name, string $expression): void
-    {
-        DB::statement('ALTER TABLE employees ADD CONSTRAINT '.$name.' CHECK ('.$expression.') NOT VALID');
-        DB::statement('ALTER TABLE employees VALIDATE CONSTRAINT '.$name);
+            if (Schema::hasColumn('employees', 'pin_length')) {
+                DB::statement('ALTER TABLE employees DROP COLUMN pin_length');
+            }
+        });
     }
 };

@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Feature\Quality\Support\Commands;
@@ -180,9 +179,12 @@ it('se niega a reducir el catalogo de incidencias si hay alguna de las dos nueva
     try {
         expect(fn (): array => Commands::run('migrate:rollback --database='.withdrawnDiscardedConnection()
             .' --step='.withdrawnDiscardedStepsBefore(WITHDRAWN_DISCARDED_MIGRATIONS[0])))
-            ->toThrow(QueryException::class, 'incidents_chk_type');
+            ->toThrow(RuntimeException::class, 'incidents_chk_type');
 
-        expect(withdrawnDiscardedConstraint('incidents_chk_type'))->toContain($type);
+        // Y VALIDA: el `down()` se detiene antes del `COMMIT`, no deja el
+        // catalogo reducido y `NOT VALID` (hallazgo DB3).
+        expect(withdrawnDiscardedConstraint('incidents_chk_type'))->toContain($type)
+            ->and(DB::connection(withdrawnDiscardedConnection())->table('pg_constraint')->where('conname', 'incidents_chk_type')->value('convalidated'))->toBeTrue();
     } finally {
         withdrawnDiscardedMigrate();
     }

@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Feature\Quality\Support\Commands;
@@ -172,9 +171,12 @@ it('se niega a reducir el catalogo si hay incidencias rejected_pin_scan', functi
 
     try {
         expect(fn (): array => Commands::run('migrate:rollback --database='.pinClaimMigrationsConnection().' --step='.pinClaimMigrationsStepsBefore(PIN_CLAIM_MIGRATIONS[2])))
-            ->toThrow(QueryException::class, 'incidents_chk_type');
+            ->toThrow(RuntimeException::class, 'incidents_chk_type');
 
-        expect(pinClaimMigrationsConstraint('incidents_chk_type'))->toContain('rejected_pin_scan');
+        // Y VALIDA: el `down()` se detiene antes del `COMMIT`, no deja el
+        // catalogo reducido y `NOT VALID` (hallazgo DB3).
+        expect(pinClaimMigrationsConstraint('incidents_chk_type'))->toContain('rejected_pin_scan')
+            ->and(DB::connection(pinClaimMigrationsConnection())->table('pg_constraint')->where('conname', 'incidents_chk_type')->value('convalidated'))->toBeTrue();
     } finally {
         pinClaimMigrationsMigrate();
     }
