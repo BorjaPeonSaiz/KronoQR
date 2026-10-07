@@ -357,6 +357,28 @@ return [
     ],
 
     /*
+     * EL CORTACIRCUITOS DE POSTGRESQL (R3-CH-02). Ver
+     * `App\Support\Database\DatabaseCircuitBreaker`.
+     *
+     * Mismo mecanismo y mismo plazo que el de Redis, por otra razon de fondo:
+     * con PostgreSQL inalcanzable, Laravel reintenta la conexion en el conector
+     * y otra vez en la consulta, y el historico de errores lo vuelve a intentar
+     * por su propia conexion. Un fichaje por PIN tardaba 31 s en dar un `500`.
+     * Con el circuito, el primer intento fallido lo abre, la peticion responde
+     * `503` con `Retry-After` igual a `seconds`, y las siguientes responden lo
+     * mismo al instante, sin red, hasta que una comprobacion acotada por
+     * `DB_CONNECT_TIMEOUT` vea el servidor de nuevo. Solo lo abre un fallo de
+     * «no hay servidor» (DNS, rechazo, tiempo agotado, arranque o parada): una
+     * contrasena mala o `too many clients` siguen como hasta ahora. Uno para
+     * todas las conexiones `pgsql`, que apuntan al mismo servidor. `0` lo
+     * desactiva (la suite de pruebas lo desactiva por defecto).
+     */
+    'database_circuit_breaker' => [
+        'seconds' => (float) env('DB_CIRCUIT_BREAKER_SECONDS', 10),
+        'state_file' => storage_path('framework/database-circuit-open'),
+    ],
+
+    /*
     |--------------------------------------------------------------------------
     | Redis Databases
     |--------------------------------------------------------------------------

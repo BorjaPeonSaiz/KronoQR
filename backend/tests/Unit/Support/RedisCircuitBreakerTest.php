@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Support\Redis\CircuitState;
 use App\Support\Redis\RedisCircuitBreaker;
+use App\Support\Resilience\CircuitState;
 use Symfony\Component\Clock\MockClock;
 use Tests\Support\Observability\RecordingLogger;
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Support\Database\CircuitBreakingPostgresConnector;
+use App\Support\Database\DatabaseCircuitBreaker;
 use App\Support\Environment\ProductionSafetyGuard;
 use App\Support\Network\BoundedReachability;
 use App\Support\Queue\AfterCommitFailoverConnector;
@@ -51,6 +53,7 @@ final class AppServiceProvider extends ServiceProvider
         });
 
         $this->registerRedisCircuitBreaker();
+        $this->registerDatabaseCircuitBreaker();
     }
 
     /**
@@ -84,6 +87,30 @@ final class AppServiceProvider extends ServiceProvider
                 new BoundedReachability,
             ));
         });
+    }
+
+    /**
+     * The PostgreSQL circuit breaker (R3-CH-02): same mechanism, own state. See
+     * {@see DatabaseCircuitBreaker}.
+     *
+     * `db.connector.pgsql` is the binding `ConnectionFactory` looks up before
+     * building its own connector, so every `pgsql` connection goes through it.
+     * `bind` and not `singleton` for the connector: the factory asks for one per
+     * connection, and the shared state lives in the breaker.
+     */
+    private function registerDatabaseCircuitBreaker(): void
+    {
+        $this->app->singleton(DatabaseCircuitBreaker::class, static fn (Application $app): DatabaseCircuitBreaker => new DatabaseCircuitBreaker(
+            stateFile: config()->string('database.database_circuit_breaker.state_file'),
+            openSeconds: config()->float('database.database_circuit_breaker.seconds', 10.0),
+            clock: new NativeClock,
+            logger: $app->make(LoggerInterface::class),
+        ));
+
+        $this->app->bind('db.connector.pgsql', static fn (Application $app): CircuitBreakingPostgresConnector => new CircuitBreakingPostgresConnector(
+            $app->make(DatabaseCircuitBreaker::class),
+            new BoundedReachability,
+        ));
     }
 
     public function boot(): void

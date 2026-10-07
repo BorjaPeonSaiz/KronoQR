@@ -127,13 +127,15 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <!--
-            El cortacircuitos de Redis (R3-CH-01) APAGADO en la suite. Recuerda
-            la caida en un fichero que sobrevive al proceso: una prueba que tira
-            Redis dejaria a la siguiente sin Redis durante su TTL. Las pruebas
-            del cortacircuitos lo encienden a mano, con su propio fichero
-            (`tests/Feature/Health/RedisCircuitBreakerTest.php`).
+            Los cortacircuitos de Redis y de PostgreSQL (R3-CH-01, R3-CH-02)
+            APAGADOS en la suite. Recuerdan la caida en un fichero que
+            sobrevive al proceso: una prueba que tira Redis o la base dejaria a
+            la siguiente sin ellos durante su TTL. Las pruebas de cada
+            cortacircuitos lo encienden a mano, con su propio fichero
+            (`tests/Feature/Health/ScanWith*CircuitOpenTest.php`).
         -->
         <env name="REDIS_CIRCUIT_BREAKER_SECONDS" value="0" force="true"/>
+        <env name="DB_CIRCUIT_BREAKER_SECONDS" value="0" force="true"/>
 
         <!--
             Claves de firma de credenciales para la suite (doc 02 §5.1).
@@ -196,6 +198,7 @@
         <server name="QUEUE_CONNECTION" value="sync" force="true"/>
         <server name="SESSION_DRIVER" value="array" force="true"/>
         <server name="REDIS_CIRCUIT_BREAKER_SECONDS" value="0" force="true"/>
+        <server name="DB_CIRCUIT_BREAKER_SECONDS" value="0" force="true"/>
 
         <!-- Las dos lineas o ninguna: ver el comentario de arriba. -->
         <server name="QR_SIGNING_KEY_CURRENT_ID" value="a3" force="true"/>

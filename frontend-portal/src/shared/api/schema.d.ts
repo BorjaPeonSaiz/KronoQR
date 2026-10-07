@@ -12766,10 +12766,35 @@ export interface components {
             };
         };
         /**
+         * @description **La base de datos no responde** (R3-CH-02, RNF-D-03). El servidor la ha
+         *     encontrado inalcanzable —en esta peticion o en una de los ultimos
+         *     segundos— y no volvera a intentarlo hasta pasado `Retry-After`, que es el
+         *     plazo de su cortacircuitos. Responde al instante, sin esperar a la red.
+         *
+         *     Para el quiosco es un `503` mas: **conserva el fichaje en su cola y lo
+         *     reenvia**, con la misma `Idempotency-Key`, pasado `Retry-After` (regla
+         *     dura 19). Nada se ha registrado: el reenvio es seguro. El cuerpo no nombra
+         *     el servicio caido ni su direccion.
+         */
+        DependencyUnavailable: {
+            headers: {
+                /**
+                 * @description Segundos que conviene esperar antes de reintentar; el plazo del cortacircuitos.
+                 * @example 10
+                 */
+                "Retry-After": number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description La instalacion no esta en condiciones de atender la operacion, y no es
-         *     culpa de quien la pide: falta configuracion del servidor. Hoy solo lo
-         *     produce la emision de credenciales cuando no hay clave de firma
-         *     configurada (doc 02 Anexo B, §7.7).
+         *     culpa de quien la pide: falta configuracion del servidor. Lo produce la
+         *     emision de credenciales cuando no hay clave de firma configurada (doc 02
+         *     Anexo B, §7.7). La base de datos inalcanzable tiene su propia respuesta,
+         *     `DependencyUnavailable`, con `Retry-After`.
          *
          *     Es `503` y no `500` porque la accion siguiente es distinta: hay que
          *     avisar a quien administra la instalacion, no reportar un fallo del
@@ -13527,6 +13552,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     syncScanBatch: {
@@ -13582,6 +13608,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     recordPinScan: {
@@ -13646,6 +13673,7 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
         };
     };
     reportDiscardedScans: {

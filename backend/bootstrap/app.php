@@ -71,6 +71,7 @@ use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
 use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
+use App\Support\Database\DatabaseUnavailable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -1232,6 +1233,32 @@ return Application::configure(basePath: dirname(__DIR__))
          * `HttpException` que devuelve `render` de arriba; aqui solo llega lo que
          * nadie tradujo.
          */
+        /*
+         * POSTGRESQL INALCANZABLE: `503` CON `Retry-After`, Y SIN INFORMAR (R3-CH-02).
+         *
+         * El conector de PostgreSQL con cortacircuitos convierte «no hay
+         * servidor» en `DatabaseUnavailable`, y el framework la envuelve en un
+         * `QueryException`; se busca en la cadena `previous`. Va justo antes del
+         * `500` generico para que cualquier traduccion especifica de arriba siga
+         * ganando. Vale para toda ruta, no solo el fichaje: a quien la recibe le
+         * toca lo mismo en todas —reintentar pasado `Retry-After`—, y el quiosco
+         * conserva el fichaje en su cola ante cualquier `503`.
+         *
+         * Y NO SE INFORMA: ni `error_events` ni una linea de log por peticion. La
+         * averia ya consta una vez, como `database.circuit_opened`; informar cada
+         * peticion volveria a la base caida desde el historico de errores y
+         * escribiria cientos de lineas por segundo durante la caida.
+         */
+        $exceptions->dontReportWhen(static fn (Throwable $exception): bool => DatabaseUnavailable::foundIn($exception) instanceof DatabaseUnavailable);
+
+        $exceptions->render(static function (Throwable $exception): mixed {
+            $unavailable = DatabaseUnavailable::foundIn($exception);
+
+            return $unavailable instanceof DatabaseUnavailable
+                ? ProblemDetails::dependencyUnavailable($unavailable->retryAfterSeconds)
+                : null;
+        });
+
         $exceptions->render(static function (Throwable $exception): mixed {
             if ($exception instanceof HttpResponseException) {
                 return null;

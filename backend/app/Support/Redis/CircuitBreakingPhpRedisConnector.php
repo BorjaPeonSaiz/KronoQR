@@ -6,6 +6,7 @@ namespace App\Support\Redis;
 
 use App\Support\Network\BoundedReachability;
 use App\Support\Network\Endpoint;
+use App\Support\Resilience\CircuitState;
 use Illuminate\Redis\Connectors\PhpRedisConnector;
 use Redis;
 use RedisException;

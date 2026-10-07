@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Support\Health;
 
+use App\Support\Database\DatabaseCircuitBreaker;
+use App\Support\Database\DatabaseUnavailable;
 use App\Support\Network\BoundedReachability;
 use App\Support\Network\Endpoint;
-use App\Support\Redis\CircuitState;
 use App\Support\Redis\RedisCircuitBreaker;
+use App\Support\Resilience\CircuitState;
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Database\ConnectionResolverInterface as Connections;
@@ -53,12 +55,13 @@ use Throwable;
  * refused port is a `503` in under three seconds, logged as
  * {@see EndpointUnreachable}.
  *
- * Redis shares the circuit breaker with the requests ({@see RedisCircuitBreaker}),
- * both ways: a failed reachability check here opens it —so the requests stop
- * trying too—, and while it is open the PING fails at once without spending
- * the budget. `/ready` may therefore report Redis as down for up to the
- * breaker's TTL after Redis comes back. That is deliberate: the readiness
- * probe sees what the requests see.
+ * Each dependency shares its circuit breaker with the requests
+ * ({@see DatabaseCircuitBreaker}, {@see RedisCircuitBreaker}), both ways: a
+ * failed reachability check here opens it —so the requests stop trying too—,
+ * and while it is open the query or the PING fails at once without spending
+ * the budget. `/ready` may therefore report a dependency as down for up to the
+ * breaker TTL after it comes back. That is deliberate: the readiness probe sees
+ * what the requests see.
  *
  * ## No es la sonda de vida
  *
@@ -80,26 +83,30 @@ final readonly class DependencyProbe
         private Redis $redis,
         private Config $config,
         private BoundedReachability $reachability,
-        private RedisCircuitBreaker $breaker,
+        private RedisCircuitBreaker $redisBreaker,
+        private DatabaseCircuitBreaker $databaseBreaker,
     ) {}
 
     public function firstFailure(): ?DependencyFailure
     {
-        if (! $this->reaches($this->databaseEndpoint())) {
+        // Same for both dependencies: with the circuit already open the query or
+        // the PING fails at once, so checking reachability first would only add
+        // up to the budget to every probe; when the check fails, the circuit
+        // opens for the requests too.
+        if ($this->databaseBreaker->state() !== CircuitState::Open && ! $this->reaches($this->databaseEndpoint())) {
+            $this->databaseBreaker->recordFailure(new EndpointUnreachable);
+
             return new DependencyFailure('database', EndpointUnreachable::class);
         }
 
         try {
             $this->connections->connection()->select('select 1');
         } catch (Throwable $exception) {
-            return new DependencyFailure('database', $exception::class);
+            return new DependencyFailure('database', (DatabaseUnavailable::foundIn($exception) ?? $exception)::class);
         }
 
-        // With the circuit already open the PING below fails at once: checking
-        // reachability first would only add up to the budget to every probe.
-        // When the check fails, the circuit opens for the requests too.
-        if ($this->breaker->state() !== CircuitState::Open && ! $this->reaches($this->redisEndpoint())) {
-            $this->breaker->recordFailure(new EndpointUnreachable);
+        if ($this->redisBreaker->state() !== CircuitState::Open && ! $this->reaches($this->redisEndpoint())) {
+            $this->redisBreaker->recordFailure(new EndpointUnreachable);
 
             return new DependencyFailure('redis', EndpointUnreachable::class);
         }

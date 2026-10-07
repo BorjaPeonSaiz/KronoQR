@@ -839,8 +839,12 @@ it('tiene una unica respuesta de rechazo de escaneo', function (): void {
     // Doc 02 §5.2, punto 6: todos los rechazos devuelven la misma respuesta.
     // Prefijo que no es FH1, clave desconocida, firma que no valida, credencial
     // revocada, empleado de baja: una sola forma para las cinco.
+    //
+    // El `503` (R3-CH-02) no es un rechazo ni dice nada de la credencial: sale
+    // antes de leerla, igual para cualquier tarjeta, cuando la base de datos no
+    // responde, y el quiosco conserva el fichaje para reenviarlo.
     expect(Contract::keys('paths', '/api/v1/scan', 'post', 'responses'))
-        ->toBe(['200', '400', '401', '403', '422', '429'])
+        ->toBe(['200', '400', '401', '403', '422', '429', '503'])
         ->and(Contract::value(
             'paths', '/api/v1/scan', 'post', 'responses', '422',
             'content', 'application/problem+json', 'schema',

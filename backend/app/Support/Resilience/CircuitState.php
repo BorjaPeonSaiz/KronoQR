@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace App\Support\Redis;
+namespace App\Support\Resilience;
 
 /**
- * Where the Redis circuit stands for the next connection attempt.
+ * Where a dependency's circuit stands for the next connection attempt.
  */
 enum CircuitState
 {
-    /** Redis answered last time, or never failed: connect normally. */
+    /** The dependency answered last time, or never failed: connect normally. */
     case Closed;
 
-    /** Redis failed less than the configured TTL ago: do not even try. */
+    /** It failed less than the configured TTL ago: do not even try. */
     case Open;
 
     /**
