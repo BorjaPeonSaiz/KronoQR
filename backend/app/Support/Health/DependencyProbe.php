@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace App\Support\Health;
 
+use App\Support\Network\BoundedReachability;
+use App\Support\Network\Endpoint;
+use App\Support\Redis\CircuitState;
+use App\Support\Redis\RedisCircuitBreaker;
+use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Database\ConnectionResolverInterface as Connections;
 use Throwable;
@@ -37,6 +42,24 @@ use Throwable;
  * sin decir cual—, asi que seguir preguntando solo anade latencia a una
  * instalacion que ya esta en problemas.
  *
+ * ## A time budget per dependency that includes DNS (R3-CH-02)
+ *
+ * Before the real query, each dependency's host must resolve and accept a TCP
+ * connection within {@see self::BUDGET_SECONDS}, checked by
+ * {@see BoundedReachability}. Driver timeouts do not cover name resolution:
+ * with the PostgreSQL container gone, `/ready` took 15.7 s —four ~3.9 s DNS
+ * lookups, one per driver attempt—, and an orchestrator with a 1-5 s probe saw
+ * "the probe does not answer" instead of "not ready". Now a missing host or a
+ * refused port is a `503` in under three seconds, logged as
+ * {@see EndpointUnreachable}.
+ *
+ * Redis shares the circuit breaker with the requests ({@see RedisCircuitBreaker}),
+ * both ways: a failed reachability check here opens it —so the requests stop
+ * trying too—, and while it is open the PING fails at once without spending
+ * the budget. `/ready` may therefore report Redis as down for up to the
+ * breaker's TTL after Redis comes back. That is deliberate: the readiness
+ * probe sees what the requests see.
+ *
  * ## No es la sonda de vida
  *
  * `GET /api/v1/health` no pasa por aqui a proposito: una sonda de vida que toca
@@ -45,17 +68,40 @@ use Throwable;
  */
 final readonly class DependencyProbe
 {
+    /**
+     * Seconds each dependency gets to resolve its host and accept a TCP
+     * connection before `/ready` gives up on it (R3-CH-02). With both checks
+     * failing at the limit the probe still answers in under three seconds.
+     */
+    public const float BUDGET_SECONDS = 2.0;
+
     public function __construct(
         private Connections $connections,
         private Redis $redis,
+        private Config $config,
+        private BoundedReachability $reachability,
+        private RedisCircuitBreaker $breaker,
     ) {}
 
     public function firstFailure(): ?DependencyFailure
     {
+        if (! $this->reaches($this->databaseEndpoint())) {
+            return new DependencyFailure('database', EndpointUnreachable::class);
+        }
+
         try {
             $this->connections->connection()->select('select 1');
         } catch (Throwable $exception) {
             return new DependencyFailure('database', $exception::class);
+        }
+
+        // With the circuit already open the PING below fails at once: checking
+        // reachability first would only add up to the budget to every probe.
+        // When the check fails, the circuit opens for the requests too.
+        if ($this->breaker->state() !== CircuitState::Open && ! $this->reaches($this->redisEndpoint())) {
+            $this->breaker->recordFailure(new EndpointUnreachable);
+
+            return new DependencyFailure('redis', EndpointUnreachable::class);
         }
 
         try {
@@ -65,5 +111,38 @@ final readonly class DependencyProbe
         }
 
         return null;
+    }
+
+    private function reaches(?Endpoint $endpoint): bool
+    {
+        if (! $endpoint instanceof Endpoint) {
+            return true;
+        }
+
+        return $this->reachability->reachable($endpoint->host, $endpoint->port, self::BUDGET_SECONDS);
+    }
+
+    /**
+     * Host and port of the default database connection, or `null` when they
+     * cannot be told apart from the configuration —a read/write split, a Unix
+     * socket, a connection that does not exist—: then the real query decides,
+     * as it did before the budget existed.
+     */
+    private function databaseEndpoint(): ?Endpoint
+    {
+        $name = $this->config->get('database.default');
+        $connection = \is_string($name) ? $this->config->get('database.connections.'.$name) : null;
+
+        return \is_array($connection) ? Endpoint::fromConfig($connection, 5432) : null;
+    }
+
+    /**
+     * Same for the default Redis connection, the one the PING below uses.
+     */
+    private function redisEndpoint(): ?Endpoint
+    {
+        $connection = $this->config->get('database.redis.default');
+
+        return \is_array($connection) ? Endpoint::fromConfig($connection, 6379) : null;
     }
 }

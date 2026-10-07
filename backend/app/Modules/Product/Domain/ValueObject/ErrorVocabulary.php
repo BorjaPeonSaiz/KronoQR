@@ -532,6 +532,7 @@ final readonly class ErrorVocabulary
         'ciclo',
         'cierra',
         'cierre',
+        'circuit',
         'circular',
         'cita',
         'civil',

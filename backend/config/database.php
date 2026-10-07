@@ -335,6 +335,28 @@ return [
     ],
 
     /*
+     * EL CORTACIRCUITOS DE REDIS (R3-CH-01). Ver `App\Support\Redis\RedisCircuitBreaker`.
+     *
+     * Con Redis caido, cada acceso de una peticion —cache, limitador, sesion,
+     * cola, metricas— volvia a intentar conectar, y cada intento podia costar
+     * el tiempo de conexion o, con el contenedor desaparecido del DNS, unos 4 s
+     * de resolucion: un PIN tardaba hasta 45 s y el pool de PHP-FPM se agotaba.
+     * Tras el primer fallo, durante `seconds` ningun proceso vuelve a intentarlo
+     * y todo cae al instante a su respaldo; despues, una comprobacion acotada
+     * decide si se reintenta. 10 s: lo bastante corto para que el producto
+     * vuelva a Redis casi en cuanto Redis vuelve, lo bastante largo para que una
+     * averia cueste un intento cada 10 s y no uno por acceso. `0` lo desactiva
+     * (la suite de pruebas lo desactiva por defecto: ver `phpunit.xml`).
+     *
+     * Fuera del bloque `redis` a proposito: el gestor de Redis trata cada clave
+     * de ese bloque como el nombre de una conexion.
+     */
+    'redis_circuit_breaker' => [
+        'seconds' => (float) env('REDIS_CIRCUIT_BREAKER_SECONDS', 10),
+        'state_file' => storage_path('framework/redis-circuit-open'),
+    ],
+
+    /*
     |--------------------------------------------------------------------------
     | Redis Databases
     |--------------------------------------------------------------------------

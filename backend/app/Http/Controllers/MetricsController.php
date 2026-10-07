@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Middleware\RestrictToMetricsNetwork;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\RedisMetricReader;
+use App\Support\Observability\Metrics\MetricsStoreProbe;
 use App\Support\Observability\Metrics\QueueDepthCollector;
 use Illuminate\Http\Response;
 use Prometheus\MetricFamilySamples;
@@ -55,13 +56,20 @@ final readonly class MetricsController
     public function __construct(
         private RedisMetricReader $reader,
         private QueueDepthCollector $queues,
+        private MetricsStoreProbe $store,
     ) {}
 
     public function __invoke(): Response
     {
+        // The store is asked FIRST and once: if it does not answer, its series
+        // are not even attempted, and `kronoqr_metrics_store_up 0` says why
+        // they are missing (R3-CH-01).
+        $storeUp = $this->store->isUp();
+
         $families = [
-            ...$this->fromRedis(),
+            ...($storeUp ? $this->fromRedis() : []),
             ...$this->fromQueues(),
+            ...$this->storeHealth($storeUp),
         ];
 
         return new Response(
@@ -84,6 +92,20 @@ final readonly class MetricsController
         } catch (Throwable) {
             return [];
         }
+    }
+
+    /**
+     * @return list<MetricFamilySamples>
+     */
+    private function storeHealth(bool $up): array
+    {
+        try {
+            $family = $this->store->family($up);
+        } catch (Throwable) {
+            return [];
+        }
+
+        return $family instanceof MetricFamilySamples ? [$family] : [];
     }
 
     /**

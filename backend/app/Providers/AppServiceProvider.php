@@ -5,14 +5,21 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Support\Environment\ProductionSafetyGuard;
+use App\Support\Network\BoundedReachability;
 use App\Support\Queue\AfterCommitFailoverConnector;
+use App\Support\Redis\CircuitBreakingPhpRedisConnector;
+use App\Support\Redis\RedisCircuitBreaker;
 use Illuminate\Cache\Events\CacheFailedOver;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Queue\Events\QueueFailedOver;
 use Illuminate\Queue\QueueManager;
+use Illuminate\Redis\RedisManager;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\Clock\NativeClock;
 
 /**
  * Configuracion transversal de la aplicacion que no pertenece a ningun modulo.
@@ -24,7 +31,8 @@ use Illuminate\Support\ServiceProvider;
  * Viven aqui la guarda de arranque de produccion, que no es de ningun modulo
  * porque no es del producto sino del DESPLIEGUE, y la degradacion de la cache y
  * de la cola cuando Redis no responde (CH1), que es de su configuracion y no de
- * quien las usa.
+ * quien las usa, con el cortacircuitos que evita reintentar Redis en cada acceso
+ * mientras esta caido (R3-CH-01).
  */
 final class AppServiceProvider extends ServiceProvider
 {
@@ -40,6 +48,41 @@ final class AppServiceProvider extends ServiceProvider
                     $app->make(Dispatcher::class),
                 ),
             );
+        });
+
+        $this->registerRedisCircuitBreaker();
+    }
+
+    /**
+     * The Redis circuit breaker (R3-CH-01): once Redis fails, no process tries
+     * again for a few seconds and everything falls back at once. See
+     * {@see RedisCircuitBreaker} for the why and the trade-offs.
+     *
+     * A singleton so that one request —or one long-lived worker— shares a
+     * single view of the circuit, and an `afterResolving` because the Redis
+     * manager is a deferred provider: nothing is built unless Redis is used.
+     */
+    private function registerRedisCircuitBreaker(): void
+    {
+        $this->app->singleton(RedisCircuitBreaker::class, static fn (Application $app): RedisCircuitBreaker => new RedisCircuitBreaker(
+            stateFile: config()->string('database.redis_circuit_breaker.state_file'),
+            openSeconds: config()->float('database.redis_circuit_breaker.seconds', 10.0),
+            clock: new NativeClock,
+            logger: $app->make(LoggerInterface::class),
+        ));
+
+        $this->app->afterResolving('redis', static function (mixed $redis, Application $app): void {
+            if (! $redis instanceof RedisManager) {
+                return; // A test double bound in its place.
+            }
+
+            // NOT static: `extend()` rebinds the closure to the manager, and a
+            // static closure cannot be bound — the framework would silently
+            // fall back to its own connector.
+            $redis->extend('phpredis', fn (): CircuitBreakingPhpRedisConnector => new CircuitBreakingPhpRedisConnector(
+                $app->make(RedisCircuitBreaker::class),
+                new BoundedReachability,
+            ));
         });
     }
 
