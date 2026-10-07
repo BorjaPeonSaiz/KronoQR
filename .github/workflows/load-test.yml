@@ -23,11 +23,13 @@
 # mismo que se entrega.
 #
 # CUANDO CORRE. A mano (`workflow_dispatch`, con `instances`/`duration`
-# propios) y en cada etiqueta `vX.0.0` -una version MAYOR-, como red de
-# seguridad si alguien etiqueta una sin haberla corrido antes: el
+# propios) y en cada etiqueta `vX.Y.0` -una version MENOR o MAYOR-, como
+# red de seguridad si alguien etiqueta una sin haberla corrido antes: el
 # procedimiento de publicacion del plan 08 la ejecuta a mano antes de
-# etiquetar, y esto es lo que impide que una mayor sin la carga verificada
-# pase desapercibida. Nunca en cada push: cuesta demasiado y nadie la espera
+# etiquetar, y esto es lo que impide que una menor o una mayor sin la carga
+# verificada pase desapercibida (bloque 22, R5-QA-01: antes solo `v*.0.0`, y
+# una menor puede traer cambios de rendimiento; los parches `vX.Y.Z` no
+# la lanzan). Nunca en cada push: cuesta demasiado y nadie la espera
 # ahi (mismo criterio que la etapa ⑧ de `ci.yml`).
 #
 # Secretos: ninguno. Igual que `ci.yml`, no lee `secrets.*` y no escribe
@@ -53,7 +55,7 @@ on:
         default: ""
   push:
     tags:
-      - "v*.0.0"
+      - "v*.*.0"
 
 permissions:
   contents: read
