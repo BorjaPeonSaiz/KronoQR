@@ -22,19 +22,22 @@
 #   1. `docker compose stop redis`.
 #   2. Mide DOS rondas de cuatro peticiones: GET /api/v1/health, GET
 #      /api/v1/ready y, AUTENTICADAS con el token de un quiosco sintetico (con
-#      `scan:write`) y con una `Idempotency-Key` nueva cada vez, POST
-#      /api/v1/scan con una tarjeta bien formada y firmada pero desconocida
-#      (rechazo generico 422, RS-03) y POST /api/v1/scan/pin con cuerpo vacio
-#      (422 de validacion). Asi la peticion atraviesa `auth:sanctum`,
-#      `ThrottleScanFailOpen`, la cache, la cola y el controlador: sin token
-#      se quedaria en un 401 que no toca nada de eso. Ninguna de las dos
-#      escribe un fichaje. La primera ronda abre el cortacircuitos y puede ser
-#      lenta; la segunda debe ser rapida.
+#      `scan:write`) y con la `Idempotency-Key` igual al `scan_id` del cuerpo
+#      (el contrato lo exige; si no, 400 antes de llegar a nada), dos POST
+#      /api/v1/scan: una tarjeta VALIDA de un empleado sintetico (200: escribe
+#      un fichaje en el runner, que se tira; una tarjeta distinta por ronda
+#      para no caer en el anti-rebote) y una bien formada y firmada pero
+#      DESCONOCIDA (rechazo generico 422, RS-03). Asi la peticion atraviesa
+#      `auth:sanctum`, `ThrottleScanFailOpen`, la cache, la cola, el caso de
+#      uso y la base de datos: sin token se quedaria en un 401 que no toca
+#      nada de eso. /scan/pin no se mide: exige un PIN sellado que el
+#      aprovisionador no entrega. La primera ronda abre el cortacircuitos y
+#      puede ser lenta; la segunda debe ser rapida.
 #   3. `docker compose start redis` y espera a que /ready vuelva a 200.
 #   4. Imprime la tabla y FALLA si alguna medida de la ultima ronda supera el
-#      umbral, o si el fichaje autenticado responde otra cosa que 200 o 422
-#      (401, 5xx o sin respuesta) en cualquier ronda (regla dura 19: el
-#      fichaje no se bloquea).
+#      umbral, o si el fichaje autenticado responde otra cosa que lo esperado
+#      (200 la tarjeta valida, 422 la desconocida; nunca 401, 5xx o sin
+#      respuesta) en cualquier ronda (regla dura 19: el fichaje no se bloquea).
 #
 # DEJA LA INSTALACION COMO ESTABA, SALVO UNA COSA: un `trap` arranca `redis` de
 # nuevo pase lo que pase y revoca el token y las tarjetas sinteticas
@@ -91,6 +94,7 @@ REDIS_STOPPED_BY_US=0
 SEEDED=0
 DEVICE_TOKEN=""
 UNKNOWN_CARD=""
+declare -a VALID_CARDS=()
 TABLE="${WORK}/table"
 
 # --- utilidades --------------------------------------------------------------
@@ -169,18 +173,20 @@ provision() {
   fixtures="$(dc exec -T app cat /tmp/k6/k6-fixtures.json)"
   DEVICE_TOKEN="$(jq -r '.device_tokens[0] // empty' <<<"${fixtures}")"
   UNKNOWN_CARD="$(jq -r '.unknown_payloads[0] // empty' <<<"${fixtures}")"
-  [ -n "${DEVICE_TOKEN}" ] && [ -n "${UNKNOWN_CARD}" ] ||
-    fail 'los fixtures no traen token de quiosco o tarjeta desconocida.'
+  mapfile -t VALID_CARDS < <(jq -r '.payloads[]? // empty' <<<"${fixtures}")
+  [ -n "${DEVICE_TOKEN}" ] && [ -n "${UNKNOWN_CARD}" ] && [ "${#VALID_CARDS[@]}" -gt 0 ] ||
+    fail 'los fixtures no traen token de quiosco, tarjeta desconocida o tarjetas validas.'
 }
 
-# measure METODO RUTA [CUERPO_JSON] [auth] -> "CODIGO SEGUNDOS"
-# Con `auth`: token del quiosco sintetico y una Idempotency-Key nueva.
+# measure METODO RUTA [CUERPO_JSON] [SCAN_ID] -> "CODIGO SEGUNDOS"
+# Con SCAN_ID: token del quiosco sintetico y la Idempotency-Key, que el contrato
+# exige IGUAL al `scan_id` del cuerpo (si no, 400 antes de llegar a nada).
 measure() {
-  local method="$1" path="$2" data="${3:-}" auth="${4:-}"
+  local method="$1" path="$2" data="${3:-}" scan_id="${4:-}"
   local -a args=(-sS -k -o /dev/null --max-time "${REQUEST_TIMEOUT}" -w '%{http_code} %{time_total}'
     -X "${method}" -H 'Accept: application/json')
   [ -z "${data}" ] || args+=(-H 'Content-Type: application/json' --data "${data}")
-  [ -z "${auth}" ] || args+=(-H "Authorization: Bearer ${DEVICE_TOKEN}" -H "Idempotency-Key: $(uuid7)")
+  [ -z "${scan_id}" ] || args+=(-H "Authorization: Bearer ${DEVICE_TOKEN}" -H "Idempotency-Key: ${scan_id}")
   curl "${args[@]}" "${BASE_URL}${path}" 2>/dev/null || true
 }
 
@@ -188,18 +194,29 @@ ready_code() {
   curl -sS -k -o /dev/null --max-time 10 -w '%{http_code}' "${BASE_URL}/api/v1/ready" 2>/dev/null || true
 }
 
+# scan_body TARJETA -> cuerpo JSON de un fichaje; deja el scan_id en SCAN_ID.
+scan_body() {
+  SCAN_ID="$(uuid7)"
+  printf '{"scan_id":"%s","occurred_at":"%s","qr_payload":"%s","intent":"auto"}' \
+    "${SCAN_ID}" "$(date -u +%Y-%m-%dT%H:%M:%S.000000Z)" "$1"
+}
+
 # Una ronda: anota cuatro lineas "RONDA|ENDPOINT|CODIGO|SEGUNDOS" en la tabla.
+# INDICE elige la tarjeta valida de la ronda (una distinta por ronda: el
+# anti-rebote de la instalacion ignoraria un segundo pase de la misma tarjeta).
 run_round() {
-  local label="$1" out body
+  local label="$1" index="$2" out body card
   out="$(measure GET /api/v1/health)"
   printf '%s|GET /api/v1/health|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
   out="$(measure GET /api/v1/ready)"
   printf '%s|GET /api/v1/ready|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
-  body="{\"scan_id\":\"$(uuid7)\",\"occurred_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"qr_payload\":\"${UNKNOWN_CARD}\",\"intent\":\"auto\"}"
-  out="$(measure POST /api/v1/scan "${body}" auth)"
-  printf '%s|POST /api/v1/scan|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
-  out="$(measure POST /api/v1/scan/pin '{}' auth)"
-  printf '%s|POST /api/v1/scan/pin|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
+  card="${VALID_CARDS[$((index % ${#VALID_CARDS[@]}))]}"
+  body="$(scan_body "${card}")"
+  out="$(measure POST /api/v1/scan "${body}" "${SCAN_ID}")"
+  printf '%s|POST /api/v1/scan (valida)|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
+  body="$(scan_body "${UNKNOWN_CARD}")"
+  out="$(measure POST /api/v1/scan "${body}" "${SCAN_ID}")"
+  printf '%s|POST /api/v1/scan (desconocida)|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
 }
 
 # --- precondiciones ----------------------------------------------------------
@@ -219,7 +236,7 @@ provision
 printf '  ok · token de quiosco y tarjeta desconocida listos\n'
 
 step 'Referencia con Redis arriba'
-run_round 'base'
+run_round 'base' 0
 
 step 'Parando redis (sin eliminarlo)'
 REDIS_STOPPED_BY_US=1
@@ -228,7 +245,7 @@ dc stop redis
 round=1
 while [ "${round}" -le "${ROUNDS}" ]; do
   step "Ronda ${round} de ${ROUNDS} con Redis parado"
-  run_round "${round}"
+  run_round "${round}" "${round}"
   round=$((round + 1))
 done
 
@@ -258,22 +275,22 @@ if [ "${recovered}" != 1 ]; then
   problems=$((problems + 1))
 fi
 
-# El fichaje autenticado solo puede dar 200 o 422 (un rechazo legitimo), en TODAS
-# las rondas, la de referencia incluida: un 401 es que la medida no atraviesa lo
-# que dice medir, y un 5xx o 000 es un fichaje bloqueado (regla dura 19).
+# El fichaje autenticado tiene que dar lo esperado en TODAS las rondas, la de
+# referencia incluida: 200 la tarjeta valida y 422 la desconocida. Un 400 o un
+# 401 es que la medida no atraviesa lo que dice medir; un 5xx o 000 es un
+# fichaje bloqueado (regla dura 19).
 while IFS='|' read -r label endpoint code _; do
+  expected=""
   case "${endpoint}" in
-  *scan | *scan/pin)
-    case "${code}" in
-    200 | 422) ;;
-    *)
-      printf 'FALLO: %s responde %s en la ronda %s: se esperaba 200 o 422 (rechazo legitimo). Un 401 es que el token no vale; un 5xx o 000, que el fichaje se bloquea con Redis parado (regla dura 19).\n' \
-        "${endpoint}" "${code}" "${label}" >&2
-      problems=$((problems + 1))
-      ;;
-    esac
-    ;;
+  *'(valida)') expected=200 ;;
+  *'(desconocida)') expected=422 ;;
   esac
+  [ -n "${expected}" ] || continue
+  if [ "${code}" != "${expected}" ]; then
+    printf 'FALLO: %s responde %s en la ronda %s: se esperaba %s. Un 400 o 401 es que la medida no llega al fichaje; un 5xx o 000, que el fichaje se bloquea con Redis parado (regla dura 19).\n' \
+      "${endpoint}" "${code}" "${label}" "${expected}" >&2
+    problems=$((problems + 1))
+  fi
 done <"${TABLE}"
 
 # En el tiempo solo se evalua la ultima ronda: la primera abre el cortacircuitos.
@@ -292,5 +309,5 @@ if [ "${problems}" -gt 0 ]; then
   fail "${problems} medida(s) fuera de lo esperado (umbral: ${MAX_SECONDS} s, /ready ${READY_MAX_SECONDS} s)."
 fi
 
-printf '\nok · la ultima ronda queda dentro de %s s (/ready %s s), el fichaje responde 200 o 422 y la instalacion vuelve a 200.\n' \
+printf '\nok · la ultima ronda queda dentro de %s s (/ready %s s), el fichaje responde lo esperado (200 la tarjeta valida, 422 la desconocida) y la instalacion vuelve a 200.\n' \
   "${MAX_SECONDS}" "${READY_MAX_SECONDS}"
