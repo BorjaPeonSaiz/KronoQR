@@ -56,7 +56,10 @@ abstract class DevelopmentSeeder extends Seeder
     {
         $environment = $this->environment();
 
-        if ($environment === null || $environment === 'production') {
+        // Lista de permitidos y no de prohibidos (revision de seguridad del
+        // bloque 14): un APP_ENV inesperado —`staging`, `prod`, uno mal
+        // escrito— tambien se niega, igual que un entorno que no se sabe.
+        if (! in_array($environment, ['local', 'testing'], true)) {
             throw new RuntimeException(
                 'The development seeders refuse to run in production: they create demo accounts with a published password and invented attendance records.',
             );
