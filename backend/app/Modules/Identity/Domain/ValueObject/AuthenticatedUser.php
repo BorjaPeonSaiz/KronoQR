@@ -53,6 +53,13 @@ final readonly class AuthenticatedUser
          * pasar por aqui, asi que no pasa.
          */
         public bool $secondFactorActive = false,
+        /**
+         * De quien es la contrasena vigente (RF-ID-10): propia, temporal o
+         * temporal caducada, resuelto con el reloj al leer la cuenta. Con una
+         * temporal, la sesion que se emita solo sirve para cambiarla; con una
+         * caducada, no sirve para nada. El estado y nunca el valor.
+         */
+        public PasswordStatus $passwordStatus = PasswordStatus::Own,
     ) {
         if ($uuid === '') {
             throw new InvalidArgumentException('AuthenticatedUser necesita el UUID publico de la cuenta.');
@@ -76,6 +83,15 @@ final readonly class AuthenticatedUser
             // forma mas cara de descubrir que falto un paso al crearla.
             throw new InvalidArgumentException('AuthenticatedUser necesita al menos un rol (RF-ID-02).');
         }
+    }
+
+    /**
+     * Si tiene que fijar su propia contrasena antes de hacer nada mas: es lo que
+     * `GET /auth/me` publica como `password_change_required`.
+     */
+    public function passwordChangeRequired(): bool
+    {
+        return $this->passwordStatus->requiresChange();
     }
 
     /**

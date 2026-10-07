@@ -17,6 +17,12 @@ final readonly class MetricDefinition
 {
     /**
      * @param  list<string>  $labels  En el mismo orden en que las escribe el adaptador.
+     * @param  list<string>  $zeroSeries  Combinaciones de etiquetas —con el mismo formato
+     *                                    `k=v,k=v` que el campo del HASH— que se publican a
+     *                                    `0` mientras no tengan valor. Para las series de las
+     *                                    que cuelga una alerta con `increase()`: un contador que
+     *                                    nace ya en 1 no tiene muestra previa, y su primer salto
+     *                                    no lo ve ninguna regla. Solo `LabelledHash`.
      */
     public function __construct(
         public string $name,
@@ -24,6 +30,7 @@ final readonly class MetricDefinition
         public MetricStorage $storage,
         public string $help,
         public array $labels = [],
+        public array $zeroSeries = [],
     ) {}
 
     /**

@@ -187,11 +187,14 @@ return [
         // Todos los campos que valida una FormRequest de la API, para que el
         // mensaje nombre lo que la persona ve en pantalla y no el nombre de
         // la clave.
+        'actor_current_password' => 'tu contraseña',
+        'actor_totp_code' => 'código de tu autenticador',
         'annual_hours' => 'horas anuales',
         'app_version' => 'versión de la aplicación',
         'clocked_in_at' => 'hora de entrada',
         'clocked_out_at' => 'hora de salida',
         'code' => 'código',
+        'current_password' => 'contraseña actual',
         'department_id' => 'departamento',
         'device_name' => 'nombre del dispositivo',
         'email' => 'correo electrónico',
@@ -210,6 +213,7 @@ return [
         'locale' => 'idioma',
         'name' => 'nombre',
         'national_id' => 'documento de identidad',
+        'new_password' => 'contraseña nueva',
         'note' => 'nota',
         'occurred_at' => 'momento del fichaje',
         'oldest_pending_at' => 'fichaje pendiente más antiguo',
@@ -228,6 +232,7 @@ return [
         'reason_code' => 'código de motivo',
         'reason_text' => 'texto del motivo',
         'reissue' => 'reemisión',
+        'role' => 'rol',
         'scan_id' => 'identificador del fichaje',
         'scans' => 'fichajes',
         'scans.*.intent' => 'intención',

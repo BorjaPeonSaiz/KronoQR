@@ -296,6 +296,14 @@ final class MetricCatalogue
                 'Intentos de autenticacion por canal y desenlace. Ninguna etiqueta identifica a nadie (regla dura 21).',
                 ['channel', 'outcome'],
             ),
+            new MetricDefinition(
+                'kronoqr_management_account_changes_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'Cambios en las cuentas de gestion por accion y rol de la cuenta afectada (RF-ID-10). Sin uuid.',
+                ['action', 'role'],
+                self::managementAccountZeroSeries(),
+            ),
 
             // ---------------------------------------------------------------
             // Credenciales.
@@ -356,5 +364,32 @@ final class MetricCatalogue
     public static function names(): array
     {
         return array_map(static fn (MetricDefinition $definition): string => $definition->name, self::all());
+    }
+
+    /**
+     * Las combinaciones `action × role` de `kronoqr_management_account_changes_total`
+     * que se publican a cero desde el primer scrape (RF-ID-10).
+     *
+     * De ellas cuelgan dos alertas de seguridad con `increase()` —restablecer un
+     * segundo factor, dar de alta un `admin`— que saltan en el PRIMER suceso; sin
+     * la muestra a cero, ese primero no lo ve ninguna regla. Las acciones van
+     * escritas aqui porque `Shared` no puede importar el catalogo de `Identity`
+     * (doc 02 §1.6), y los cuatro roles de gestion de RF-ID-02 tambien: esta
+     * capa no alcanza el dominio compartido (Deptrac). Si cambia el catalogo de
+     * roles, `ManagementAccountMetricsTest` lo detecta.
+     *
+     * @return list<string>
+     */
+    private static function managementAccountZeroSeries(): array
+    {
+        $series = [];
+
+        foreach (['created', 'deactivated', 'password_reset', 'two_factor_reset', 'password_changed'] as $action) {
+            foreach (['admin', 'rrhh', 'responsable_departamento', 'auditor'] as $role) {
+                $series[] = 'action='.$action.',role='.$role;
+            }
+        }
+
+        return $series;
     }
 }

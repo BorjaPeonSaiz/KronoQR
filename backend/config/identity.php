@@ -285,13 +285,32 @@ return [
         /*
          * Longitud minima de la contrasena de gestion (RF-ID-01). La politica
          * completa —mayusculas, minusculas, digitos y simbolos— se aplica al
-         * FIJAR la contrasena, en `identity:create-user`.
+         * FIJAR la contrasena: el asistente de puesta en marcha y el cambio de
+         * la contrasena propia (`POST /auth/password`, RF-ID-10).
+         *
+         * Entre 8 y 72: por debajo de 8 lo sube el suelo de la politica, y por
+         * encima de 72 `bcrypt` dejaria de leer el final de la contrasena.
+         * `ManagementPasswordPolicy` recorta a ese rango.
          *
          * Sin comprobacion contra filtraciones publicas: esa regla consulta un
          * servicio externo por HTTP y el producto se instala en servidores sin
          * salida a internet (ADR-016).
          */
         'min_length' => (int) env('IDENTITY_PASSWORD_MIN_LENGTH', 12),
+    ],
+
+    /*
+     * CONTRASENA TEMPORAL — RF-ID-10, ADR-051.
+     *
+     * La que genera el servidor en un alta o en un restablecimiento y se
+     * entrega en mano. Caduca a las `ttl_hours` horas si su titular no la ha
+     * cambiado, porque una temporal que no caduca acaba siendo la definitiva y
+     * la conocen dos personas. Entre 1 y 168 (una semana); fuera de ese rango
+     * el caso de uso no se construye, en vez de emitir temporales que no
+     * caducan cuando nadie lo pidio.
+     */
+    'temporary_password' => [
+        'ttl_hours' => (int) env('IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS', 72),
     ],
 
     /*

@@ -4,48 +4,32 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Infrastructure\Console;
 
+use App\Modules\Identity\Application\Command\DeactivateManagementAccountCommand;
+use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
 use App\Modules\Identity\Application\UseCase\AccountDeactivationOutcome;
 use App\Modules\Identity\Application\UseCase\DeactivateManagementAccountHandler;
-use Illuminate\Console\Command;
 
 /**
  * `php artisan identity:deactivate-user` — da de baja una cuenta de gestion
- * (RS-05, RS-06, RL-16).
+ * (RS-05, RS-06, RL-16, RF-ID-10).
  *
- * **Por que existe.** Hasta la tarea 3.8 el producto no tenia ninguna forma de
- * retirarle el acceso a una cuenta: `users.is_active` se consultaba al
- * autenticar, pero las dos unicas escrituras del campo lo ponian a `true`. La
- * unica salida era editar la fila a mano en PostgreSQL —fuera del producto y
- * fuera del trail—, y mientras tanto quien se iba del hotel conservaba una
- * cuenta valida con acceso a los datos de toda la plantilla y a la correccion de
- * jornadas. Es el hallazgo H-03 de la revision interna ASVS de 2026-09.
+ * **Por que existe, si ya esta el panel.** Desde la 2.2.0 la baja se hace desde
+ * el panel (`POST /api/v1/management-accounts/{uuid}/deactivate`); esto queda
+ * para cuando el panel no esta disponible, y pasa por el **mismo** caso de uso:
+ * tampoco da de baja la ultima cuenta `admin` activa, porque es una invariante
+ * de la instalacion y no una regla de pantalla.
  *
- * **Por que es un comando y no un endpoint.** Lo mismo que `identity:2fa-reset`:
- * el Anexo B del doc 01 no tiene ninguna ruta de gestion de usuarios, y un «da
- * de baja a esta persona» por API seria, en manos de un `admin` comprometido, la
- * forma mas comoda de dejar la instalacion sin nadie que pueda revisar lo que
- * hizo. La pantalla del panel es una decision de producto pendiente (ficha 3.8,
- * decision 16).
- *
- * **Se identifica por correo y no por UUID**, al reves que `identity:2fa-reset`,
- * y la diferencia es deliberada. Este comando existe para sustituir a la consulta
- * `psql` que la fila 17 de `docs/cliente/endurecimiento.md` obligaba a hacer cada
- * trimestre: exigir el UUID obligaria a volver a esa consulta para averiguarlo,
- * que es justo lo que se esta quitando de la guia. El correo es el identificador
- * de acceso, es el que el cliente tiene en su lista de personal y es el mismo que
- * pide `identity:create-user`. **La direccion no sale de la busqueda**: ni el
- * asiento ni la salida del comando la repiten (regla dura 21).
- *
- * **Nunca el nombre de la persona en la salida**, ni siquiera para confirmar: este
- * comando se ejecuta con la salida redirigida a un fichero de operacion tan a
- * menudo como `identity:create-user`.
+ * **Se identifica por correo y no por UUID**, a proposito: es el identificador
+ * que el cliente tiene en su lista de personal. El correo se traduce a `uuid`
+ * aqui y no sale de la busqueda: ni el asiento ni la salida lo repiten (regla
+ * dura 21). **Distingue «no existe» de «ya estaba de baja»**, al contrario que
+ * la API: esto es consola del servidor del cliente, no un oraculo de
+ * enumeracion.
  *
  * **Lo que la baja NO hace.** No borra nada (regla dura 5) y no reabre el alta
- * publica del primer administrador: esa guarda cuenta tambien las cuentas
- * desactivadas, y por eso dar de baja a la unica persona con acceso no convierte
- * `POST /setup/administrator` en una puerta abierta.
+ * publica del primer administrador.
  */
-final class DeactivateManagementUserCommand extends Command
+final class DeactivateManagementUserCommand extends AbstractManagementAccountCommand
 {
     protected $signature = 'identity:deactivate-user
         {email : Correo de la cuenta, que es su identificador de acceso}
@@ -53,31 +37,32 @@ final class DeactivateManagementUserCommand extends Command
 
     protected $description = 'Da de baja una cuenta de gestion: deja de poder entrar (RS-05, RS-06).';
 
-    public function handle(DeactivateManagementAccountHandler $handler): int
+    public function handle(DeactivateManagementAccountHandler $handler, ManagementAccountLifecycle $accounts): int
     {
-        // El argumento es obligatorio en la firma: Symfony rechaza la llamada sin
-        // el antes de llegar aqui, asi que solo queda estrechar el tipo.
-        $email = trim((string) $this->argument('email'));
+        $uuid = $accounts->uuidOfAccount($this->stringArgument('email'));
 
-        $reason = $this->option('reason');
-        $reason = \is_string($reason) && trim($reason) !== ''
-            // Un motivo por omision y no una cadena vacia: el asiento tiene que
-            // decir algo. «Sin motivo declarado» es informacion; el vacio no.
-            ? trim($reason)
-            : 'Sin motivo declarado';
-
-        $outcome = $handler->handle($email, $reason);
+        $outcome = $uuid === null
+            ? AccountDeactivationOutcome::NotFound
+            : $handler->handle(new DeactivateManagementAccountCommand($uuid, $this->reason()));
 
         return match ($outcome) {
             AccountDeactivationOutcome::NotFound => $this->refuse(
                 'No existe ninguna cuenta de gestion con ese correo.'
             ),
-            // No es un error del operador: es la confirmacion de que no habia
-            // nada que hacer. Se devuelve `FAILURE` igualmente para que un script
-            // que encadene bajas no de por hecho que acaba de cerrar un acceso
-            // que en realidad ya estaba cerrado.
+            // No es un error del operador, pero se devuelve `FAILURE` para que un
+            // script que encadene bajas no de por cerrado un acceso que ya lo
+            // estaba.
             AccountDeactivationOutcome::AlreadyInactive => $this->refuse(
                 'Esa cuenta ya estaba dada de baja. No se ha cambiado nada ni se ha escrito ningun asiento.'
+            ),
+            // En consola no hay sesion, asi que no puede ser la propia cuenta;
+            // el caso existe para la API y se cubre por completitud.
+            AccountDeactivationOutcome::OwnAccount => $this->refuse(
+                'No se puede dar de baja la propia cuenta.'
+            ),
+            AccountDeactivationOutcome::LastActiveAdmin => $this->refuse(
+                'Es la ultima cuenta admin activa de la instalacion. Crea otra con identity:create-user '
+                .'antes de dar de baja esta. No se ha cambiado nada.'
             ),
             AccountDeactivationOutcome::Deactivated => $this->confirmDeactivation(),
         };

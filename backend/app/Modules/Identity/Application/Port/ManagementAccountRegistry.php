@@ -6,12 +6,12 @@ namespace App\Modules\Identity\Application\Port;
 
 use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
-use SensitiveParameter;
+use DateTimeImmutable;
 
 /**
- * Alta de cuentas de gestion (RF-ID-01, RF-ID-02).
+ * Alta de cuentas de gestion (RF-ID-01, RF-ID-02, RF-ID-10).
  *
- * **Puerto propio y no dos metodos mas en {@see UserAccounts}.** Aquel es «las
+ * **Puerto propio y no metodos mas en {@see UserAccounts}.** Aquel es «las
  * cuentas vistas por quien autentica» y no tiene ninguna escritura: darle un
  * `create()` significaria que el caso de uso que comprueba una contrasena
  * tambien puede crear cuentas, y eso es exactamente la clase de poder que no se
@@ -31,17 +31,31 @@ interface ManagementAccountRegistry
     public function anyManagementAccountExists(): bool;
 
     /**
+     * ¿Hay alguna cuenta —activa o dada de baja— con ese correo?
+     *
+     * Las bajas conservan su correo: el historico no se reasigna a otra persona.
+     */
+    public function emailTaken(string $email): bool;
+
+    /**
      * Crea la cuenta con su rol y devuelve como la vera el resto del sistema.
      *
-     * La contrasena llega **en claro** y se hashea en el adaptador, que es quien
-     * conoce el algoritmo configurado; nunca se almacena tal cual y nunca vuelve
-     * a salir.
+     * **Recibe el hash, no la contrasena**: se calcula antes, fuera del candado
+     * de la cadena de auditoria ({@see PasswordHasher}). `$temporaryExpiresAt`
+     * no nulo crea la cuenta con contrasena **temporal** que caduca en ese
+     * instante (RF-ID-10); `null`, con la contrasena que eligio su titular —el
+     * primer administrador del asistente—.
+     *
+     * Si el `UNIQUE (users.email)` salta en carrera con otra alta del mismo
+     * correo, el adaptador lanza `ManagementAccountEmailTaken` (de la capa de
+     * aplicacion; nombrada en texto porque un puerto no importa esa capa).
      */
     public function create(
         string $name,
         string $email,
-        #[SensitiveParameter] string $password,
+        string $passwordHash,
         string $locale,
         UserRole $role,
+        ?DateTimeImmutable $temporaryExpiresAt,
     ): AuthenticatedUser;
 }

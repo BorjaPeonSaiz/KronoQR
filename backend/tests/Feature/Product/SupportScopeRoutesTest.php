@@ -235,7 +235,9 @@ it('ningun alcance alcanza una ruta de escritura que no sea de configuracion', f
 
 it('ningun alcance lleva un ambito que el contrato prohibe', function (SupportScope $scope): void {
     // La lista literal de la tabla de `POST /api/v1/support/grants`.
-    foreach (['license:*', 'support:*', 'employees:*', 'credentials:*', 'attendance:correct', 'reports:*', 'reports:legal'] as $prohibido) {
+    // `accounts:*` (RF-ID-10): crear una cuenta `admin` es como un acceso
+    // temporal se vuelve permanente. `password:change` no es de nadie.
+    foreach (['license:*', 'support:*', 'employees:*', 'credentials:*', 'attendance:correct', 'reports:*', 'reports:legal', 'accounts:*', 'password:change'] as $prohibido) {
         expect($scope->abilities())->not->toContain($prohibido);
     }
 })->with(SupportScope::cases())->group('RF-PD-11', 'RL-19');

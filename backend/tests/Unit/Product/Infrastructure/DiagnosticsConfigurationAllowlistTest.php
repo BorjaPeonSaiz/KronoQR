@@ -182,6 +182,9 @@ it('ninguna clave PERMITIDA tiene forma de secreto', function (): void {
         // En que fraccion de su vida se renueva el token de un quiosco (PR13),
         // no el token: un decimal como `0.8`.
         'IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD',
+        // Cuantas horas vive una contrasena TEMPORAL de gestion (RF-ID-10), no
+        // la contrasena: explica «la contrasena que me dieron ya no vale».
+        'IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS',
     ];
 
     $suspicious = array_values(array_filter(
@@ -211,6 +214,7 @@ it('las excepciones de forma siguen siendo magnitudes y no secretos', function (
     'IDENTITY_DEVICE_TOKEN_DAYS',
     'IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS',
     'IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD',
+    'IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS',
 ])->group('RF-PD-09', 'RS-08');
 it('si deja salir los umbrales operativos, que es para lo que existe la seccion', function (string $key): void {
     // La otra mitad: una lista de permitidos vacia pasaria la prueba de arriba y

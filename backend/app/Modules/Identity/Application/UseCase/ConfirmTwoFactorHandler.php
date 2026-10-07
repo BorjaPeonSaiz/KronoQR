@@ -16,11 +16,12 @@ use App\Modules\Identity\Application\Port\TwoFactorAuthenticator;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
 use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
+use App\Modules\Identity\Domain\ValueObject\PasswordStatus;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
-use Illuminate\Database\ConnectionInterface;
 
 /**
  * Activacion del segundo factor con el primer codigo del autenticador (**RS-06**,
@@ -29,7 +30,7 @@ use Illuminate\Database\ConnectionInterface;
  * ## Un caso de uso, una transaccion
  *
  * Confirmar el secreto y publicar `auth.two_factor_enabled` ocurren **dentro de la
- * misma transaccion** (ADR-027): el listener de auditoria es sincrono, asi que si
+ * misma transaccion** (ADR-010): el listener de auditoria es sincrono, asi que si
  * el asiento falla, la activacion no se confirma. Una credencial de acceso activa
  * sin traza es peor que una no activada, porque la segunda se repite y la primera
  * no se descubre.
@@ -63,7 +64,7 @@ final readonly class ConfirmTwoFactorHandler
         private Clock $clock,
         private AuthenticationJournal $journal,
         private IdentityEventPublisher $events,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
     /**
@@ -82,7 +83,9 @@ final readonly class ConfirmTwoFactorHandler
 
         $user = $this->accounts->findByUuid($command->userUuid);
 
-        if ($user === null) {
+        // Una temporal caducada no abre sesion por ningun camino (RF-ID-10,
+        // RS-03): la misma respuesta que un codigo incorrecto.
+        if ($user === null || $user->passwordStatus === PasswordStatus::TemporaryExpired) {
             throw new AuthenticationFailed;
         }
 
@@ -114,12 +117,16 @@ final readonly class ConfirmTwoFactorHandler
 
         $now = $this->clock->now();
 
-        $this->connection->transaction(function () use ($command, $slice, $now): void {
+        // Cadena de auditoria PRIMERO y fila despues (ADR-010): es el
+        // orden de `ResetTwoFactorHandler`, que retira este mismo secreto desde
+        // el panel. Con `transaction` a secas la fila se escribia antes de que el
+        // listener tomara la cadena, y una retirada simultanea cerraba un abrazo.
+        $this->serialized->withChainLock(function () use ($command, $slice, $now): void {
             $this->secrets->confirm($command->userUuid, $now);
             $this->secrets->rememberAcceptedSlice($command->userUuid, $slice);
 
             // Dentro de la transaccion a proposito: el listener de auditoria es
-            // sincrono y su fallo tiene que deshacer la activacion (ADR-027).
+            // sincrono y su fallo tiene que deshacer la activacion (ADR-010).
             $this->events->publish(new TwoFactorEnabled($command->userUuid, $now));
         });
 

@@ -141,6 +141,8 @@ it('deja sin valor la sesion abierta de la cuenta desactivada en la peticion sig
      * vez: el comando **revoca todos los tokens** de la cuenta, y ademas el
      * callback de Sanctum consulta `is_active` en cada peticion.
      */
+    // Con otra `admin` activa: la ultima no se puede dar de baja (RF-ID-10).
+    ManagementUsers::withRole(UserRole::ADMIN);
     $user = ManagementUsers::withRole(UserRole::ADMIN);
 
     $sesion = ManagementUsers::tokenFor($user);
@@ -204,29 +206,30 @@ it('falla sin escribir nada cuando no hay ninguna cuenta con ese correo', functi
             ->count())->toBe(0);
 })->group('RS-05', 'RS-06');
 
-it('no reabre el alta publica del primer administrador al dar de baja al unico que hay', function (): void {
+it('no da de baja la ultima admin activa, y el alta publica sigue cerrada', function (): void {
     /*
-     * **La cautela que convierte una tarea rutinaria de RRHH en una escalada de
-     * privilegios si se hace mal.** `POST /api/v1/setup/administrator` es la
-     * unica escritura publica del producto y su unica guarda es que no exista
-     * **ninguna** cuenta de gestion, activa o desactivada. Si contara solo las
-     * activas, dar de baja a la ultima persona con acceso dejaria la creacion de
-     * un administrador abierta a quien alcanzara la red del hotel.
-     *
-     * `SetupWizardTest` ya lo afirma poniendo `is_active` a mano; esta lo afirma
-     * por el camino que ahora existe de verdad, que es el comando.
+     * Desde la 2.2.0 (RF-ID-10) la consola aplica la misma invariante que el
+     * panel: la ultima `admin` activa no se da de baja, porque dejaria la
+     * instalacion sin nadie capaz de gestionarla. Y, como antes, el alta
+     * publica del primer administrador sigue cerrada: cuenta tambien las bajas
+     * (`SetupWizardTest` lo afirma poniendo `is_active` a mano).
      */
-    $user = ManagementUsers::withRole(UserRole::ADMIN);
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
 
-    [$exit] = Commands::run('identity:deactivate-user '.$user->email.' --reason="Baja"');
+    [$exit, $salida] = Commands::run('identity:deactivate-user '.$admin->email.' --reason="Baja"');
+    [$bajaRrhh] = Commands::run('identity:deactivate-user '.$rrhh->email.' --reason="Baja"');
 
-    expect($exit)->toBe(0)
-        ->and(User::query()->where('is_active', true)->count())->toBe(0);
+    expect($exit)->toBe(1)
+        ->and($salida)->toContain('ultima cuenta admin activa')
+        ->and($bajaRrhh)->toBe(0)
+        ->and(User::query()->where('is_active', true)->pluck('uuid')->all())->toBe([$admin->uuid])
+        ->and(DB::table('audit_log')
+            ->where('action', AuditAction::ManagementAccountDeactivated->value)
+            ->count())->toBe(1);
 
     Api::guest()->post('/api/v1/setup/administrator', altaDelPrimerAdministrador())->assertStatus(409);
-
-    expect(User::query()->count())->toBe(1);
-})->group('RS-05', 'RS-06', 'RL-16', 'RF-PD-03');
+})->group('RF-ID-10', 'RS-05', 'RS-06', 'RL-16', 'RF-PD-03');
 
 it('restablece la contrasena, la enseña una sola vez y deja el asiento', function (): void {
     $user = ManagementUsers::withRole(UserRole::RRHH, 'jefatura@hotel.example');
@@ -330,3 +333,62 @@ it('no restablece la contrasena de una cuenta dada de baja', function (): void {
             ->where('action', AuditAction::ManagementPasswordReset->value)
             ->count())->toBe(0);
 })->group('RS-06');
+
+it('da de alta por consola con una temporal que se enseña una vez, caduca y deja sus dos asientos', function (): void {
+    // RF-ID-10: el mismo caso de uso que el panel. Ya no pide la contrasena.
+    [$exit, $output] = Commands::run(
+        'identity:create-user --name="Direccion RRHH" --email=consola@hotel.example --role=rrhh'
+    );
+
+    $temporal = contrasenaGeneradaEn($output);
+
+    expect($exit)->toBe(0)
+        ->and($temporal)->not->toBe('')
+        ->and($output)->toContain('TEMPORAL')
+        ->and($output)->not->toContain('consola@hotel.example')
+        ->and(User::query()->where('email', 'consola@hotel.example')->value('temporary_password_expires_at'))->not->toBeNull();
+
+    $acciones = DB::table('audit_log')->orderBy('id')->pluck('action')->all();
+
+    expect($acciones)->toContain(AuditAction::ManagementAccountCreated->value)
+        ->and($acciones)->toContain(AuditAction::RoleAssignmentChanged->value);
+
+    $alta = DB::table('audit_log')->where('action', AuditAction::ManagementAccountCreated->value)->first();
+
+    expect($alta?->actor_type)->toBe('system')
+        ->and((string) json_encode($alta))->toContain('console')
+        ->and((string) json_encode($alta))->not->toContain($temporal);
+
+    [$repetida] = Commands::run('identity:create-user --name=Otra --email=consola@hotel.example --role=auditor');
+
+    expect($repetida)->toBe(1);
+})->group('RF-ID-10', 'RF-ID-02', 'RS-05');
+
+it('lista las cuentas de gestion por consola sin escribir nada', function (): void {
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH, 'lista@hotel.example');
+    ManagementUsers::withRole(UserRole::KIOSK);
+
+    $antes = DB::table('audit_log')->count();
+
+    [$exit, $output] = Commands::run('identity:list-users --role=rrhh');
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain($rrhh->uuid)
+        ->and($output)->toContain('lista@hotel.example')
+        ->and($output)->toContain('own')
+        ->and(DB::table('audit_log')->count())->toBe($antes);
+
+    [$filtroMalo] = Commands::run('identity:list-users --status=borrada');
+
+    expect($filtroMalo)->toBe(1);
+})->group('RF-ID-10');
+
+it('no retira por consola un segundo factor que la cuenta no tiene, ni deja asiento', function (): void {
+    $auditor = ManagementUsers::withRole(UserRole::AUDITOR);
+
+    [$exit, $output] = Commands::run('identity:2fa-reset '.$auditor->uuid.' --reason="Telefono"');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('no tenia segundo factor activo')
+        ->and(DB::table('audit_log')->where('action', AuditAction::TwoFactorReset->value)->count())->toBe(0);
+})->group('RF-ID-10', 'RS-06');

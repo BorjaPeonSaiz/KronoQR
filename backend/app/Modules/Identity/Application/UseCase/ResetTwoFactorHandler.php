@@ -4,92 +4,126 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\UseCase;
 
+use App\Modules\Identity\Application\Command\ActorProof;
+use App\Modules\Identity\Application\Command\ResetManagementTwoFactorCommand;
+use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
+use App\Modules\Identity\Application\Exception\ActorReauthenticationFailed;
 use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
+use App\Modules\Identity\Application\Port\ManagementAccountChange;
+use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
-use App\Modules\Identity\Application\Port\UserAccounts;
+use App\Modules\Identity\Application\Support\ActorReauthentication;
+use App\Modules\Identity\Application\Support\ManagementAccountTelemetry;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
 use App\Modules\Shared\Application\Port\Clock;
-use Illuminate\Database\ConnectionInterface;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 
 /**
- * Retira el segundo factor de una cuenta de gestion (**RS-06**,
+ * Retira el segundo factor de una cuenta de gestion (**RF-ID-10**, **RS-06**;
+ * `POST /api/v1/management-accounts/{uuid}/two-factor/reset` e
  * `identity:2fa-reset`).
  *
- * ## Por que existe y por que es de consola
+ * ## Por que existe, y por que tambien por el panel
  *
- * Sin esto, perder el telefono deja a alguien fuera de su cuenta para siempre, y
- * a una instalacion con un solo administrador **sin panel**. Con codigos de
- * recuperacion habria una segunda salida, pero esos codigos son otra credencial
- * que emitir, entregar y custodiar —el mismo problema que ADR-014 resolvio para
- * la tarjeta— y en la primera version se deja fuera a proposito (deuda anotada).
+ * Sin esto, perder el telefono deja a alguien fuera de su cuenta para siempre.
+ * Hasta la 2.2.0 solo se podia por consola, con el argumento de que por API seria
+ * la forma mas comoda de que un `admin` comprometido se preparara el acceso a la
+ * cuenta de otro; el coste real fue que un hotel sin acceso al servidor no podia
+ * hacerlo. El propietario decidio el panel (doc 01, Anexo B) y el riesgo se
+ * mitiga en lugar de evitarse: **motivo obligatorio, reautenticacion del `admin`
+ * que actua, nunca sobre la propia cuenta, nunca junto con la contrasena** (dos
+ * acciones, dos asientos), y una alerta de seguridad en cada uso.
  *
- * **Es un comando y no un endpoint** porque no hay ninguna ruta de gestion de
- * usuarios en el Anexo B: crear cuentas ya se hace con `identity:create-user`, y
- * la puesta en marcha de la Fase 5 llamara a los dos. Un endpoint de «quitale el
- * segundo factor a esta persona» tambien seria, en manos de un `admin`
- * comprometido, la forma mas comoda de preparar el acceso a la cuenta de otro; en
- * consola queda restringido a quien tiene el servidor y **siempre** deja asiento.
+ * ## Lo que no retira nada no deja asiento
  *
- * ## Un caso de uso, una transaccion
+ * Una cuenta sin segundo factor confirmado responde `NotEnrolled` (`409`) sin
+ * escribir nada: un asiento de restablecimiento sin nada restablecido ensuciaria
+ * la pregunta que el asiento existe para responder.
  *
- * Retirar el secreto y publicar `auth.two_factor_reset` van juntos (ADR-027): si
- * el asiento falla, el segundo factor sigue en su sitio. Una credencial retirada
- * sin traza es justo el hecho que alguien querria que no constara.
+ * ## Un caso de uso, una transaccion, y el orden de los candados
  *
- * ## Y con el secreto se van las sesiones
+ * Retirar el secreto, cerrar **todas** las sesiones y publicar
+ * `auth.two_factor_reset` van juntos dentro de `withChainLock` (ADR-010), con la
+ * fila bloqueada **despues** del candado de la cadena. `ConfirmTwoFactorHandler`
+ * toma el mismo orden: si su titular confirma su TOTP mientras un `admin` se lo
+ * retira, uno espera al otro en lugar de abrazarse.
  *
- * **Retirar el segundo factor sin cerrar lo que ya esta abierto no retira nada.**
- * Los dos motivos por los que se ejecuta este comando son el telefono perdido y la
- * sospecha de que la cuenta esta en manos de otro, y en el segundo —el que
- * importa— quien esta dentro lleva una sesion de gestion viva de hasta doce horas:
- * el comando le quitaria una credencial que ya no necesita y le dejaria el acceso
- * intacto. Se revocan **todos** los tokens de la cuenta, sesiones y retos, y en la
- * **misma transaccion** que el asiento: si la auditoria falla, ni se retira el
- * secreto ni se echa a nadie.
- *
- * Es la excepcion a la regla de {@see AccessTokenIssuer::revoke()} —cerrar sesion
- * en un sitio no echa a nadie de otro—, y por eso el puerto tiene dos metodos y no
- * un parametro: aqui se echa a todo el mundo a proposito.
+ * Es el punto que conviene endurecer si `seguridad-cumplimiento` lo pide (por
+ * ejemplo, impedirlo sobre otra cuenta `admin`): la cuenta objetivo esta en
+ * `$account` con sus roles, bajo candado.
  */
 final readonly class ResetTwoFactorHandler
 {
     public function __construct(
-        private UserAccounts $accounts,
+        private ManagementAccountLifecycle $accounts,
         private TwoFactorSecrets $secrets,
         private AccessTokenIssuer $tokens,
+        private ActorReauthentication $reauthentication,
         private IdentityEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
+        private ManagementAccountTelemetry $telemetry,
     ) {}
 
     /**
-     * @param  string|null  $actorUuid  Quien lo ejecuta, si se sabe. En consola es `null`
-     *                                  y el asiento sale a nombre del sistema, que es la
-     *                                  respuesta honesta.
-     * @return bool `false` si esa cuenta no existe. No se lanza excepcion: quien llama es
-     *              un comando que ya sabe decirlo mejor que un `500`.
+     * @throws ActorReauthenticationFailed si quien actua no confirma su identidad
+     * @throws AccountTemporarilyLocked con el bloqueo de intentos de codigo de quien actua abierto
      */
-    public function handle(string $userUuid, string $reason, ?string $actorUuid = null): bool
+    public function handle(ResetManagementTwoFactorCommand $command): TwoFactorResetOutcome
     {
-        if ($this->accounts->findByUuid($userUuid) === null) {
-            return false;
+        return $this->telemetry->measure(
+            ManagementAccountChange::TwoFactorReset,
+            $command->accountUuid,
+            $command->actorUuid,
+            fn (): TwoFactorResetOutcome => $this->reset($command),
+            static fn (TwoFactorResetOutcome $outcome): string => $outcome->name,
+        );
+    }
+
+    private function reset(ResetManagementTwoFactorCommand $command): TwoFactorResetOutcome
+    {
+        if ($command->actorUuid !== null) {
+            $this->reauthentication->confirm($command->actorUuid, $command->proof ?? new ActorProof(null, null));
         }
 
         $now = $this->clock->now();
 
-        $this->connection->transaction(function () use ($userUuid, $reason, $actorUuid, $now): void {
-            $this->secrets->forget($userUuid);
+        /** @var array{0: TwoFactorResetOutcome, 1: list<UserRole>} $result */
+        $result = $this->serialized->withChainLock(function () use ($command, $now): array {
+            $account = $this->accounts->lockAccount($command->accountUuid);
 
-            // Dentro de la transaccion, con el secreto y el asiento: las tres
-            // cosas ocurren o no ocurre ninguna. Una cuenta que perdio su segundo
-            // factor y conserva su sesion abierta es el peor de los tres estados
-            // intermedios posibles.
-            $this->tokens->revokeAllFor($userUuid);
+            if ($account === null || ! $account->active) {
+                return [TwoFactorResetOutcome::NotFound, []];
+            }
 
-            $this->events->publish(new TwoFactorReset($userUuid, $reason, $actorUuid, $now));
+            if ($command->actorUuid !== null && $command->actorUuid === $account->uuid) {
+                return [TwoFactorResetOutcome::OwnAccount, []];
+            }
+
+            if (! $account->twoFactorConfirmed) {
+                return [TwoFactorResetOutcome::NotEnrolled, []];
+            }
+
+            $this->secrets->forget($account->uuid);
+
+            // Retirar el segundo factor sin echar a quien ya esta dentro no
+            // retira nada: en el caso que importa —la sospecha— quien esta dentro
+            // lleva una sesion viva de hasta doce horas.
+            $this->tokens->revokeAllFor($account->uuid);
+
+            $this->events->publish(new TwoFactorReset($account->uuid, $command->reason, $command->actorUuid, $now));
+
+            return [TwoFactorResetOutcome::Reset, $account->roles];
         });
 
-        return true;
+        [$outcome, $roles] = $result;
+
+        if ($outcome === TwoFactorResetOutcome::Reset) {
+            $this->telemetry->count(ManagementAccountChange::TwoFactorReset, $roles);
+        }
+
+        return $outcome;
     }
 }

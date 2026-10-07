@@ -34,7 +34,49 @@ final readonly class SanctumAccessTokenIssuer implements AccessTokenIssuer
     {
         $expiresAt = $this->clock->now()->modify('+'.$this->sessionHours().' hours');
 
-        return $this->issue($user, $deviceName, $user->abilityNames(), $expiresAt);
+        // RF-ID-10, ADR-051: con contrasena temporal, la sesion solo sirve para
+        // cambiarla. Aqui y solo aqui: es el unico sitio por el que sale una
+        // sesion de gestion, asi que ningun camino de acceso puede olvidarlo.
+        $abilities = $user->passwordChangeRequired()
+            ? [TokenAbility::PASSWORD_CHANGE->value]
+            : $user->abilityNames();
+
+        return $this->issue($user, $deviceName, $abilities, $expiresAt);
+    }
+
+    public function revokeAllExcept(string $userUuid, int|string $keepTokenId): void
+    {
+        $account = User::query()->where('uuid', $userUuid)->first();
+
+        if (! $account instanceof User) {
+            return;
+        }
+
+        Sanctum::personalAccessTokenModel()::query()
+            ->where('tokenable_type', $account->getMorphClass())
+            ->where('tokenable_id', $account->getKey())
+            ->whereKeyNot($keepTokenId)
+            ->delete();
+    }
+
+    public function promoteToFullSession(AuthenticatedUser $user, int|string $tokenId): bool
+    {
+        $account = User::query()->where('uuid', $user->uuid)->first();
+
+        if (! $account instanceof User) {
+            return false;
+        }
+
+        // `update()` sobre la consulta, y no `save()` sobre el modelo: el
+        // recuento de filas es lo que dice si el token sigue existiendo. La
+        // columna es JSON y el constructor de consultas no aplica el cast.
+        $updated = Sanctum::personalAccessTokenModel()::query()
+            ->whereKey($tokenId)
+            ->where('tokenable_type', $account->getMorphClass())
+            ->where('tokenable_id', $account->getKey())
+            ->update(['abilities' => json_encode($user->abilityNames(), JSON_THROW_ON_ERROR)]);
+
+        return $updated === 1;
     }
 
     /**

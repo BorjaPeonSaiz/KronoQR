@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product;
 
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
+use App\Modules\Identity\Domain\Event\ManagementAccountDeactivated;
 use App\Modules\Product\Application\Port\ComplianceProfileMetrics;
 use App\Modules\Product\Application\Port\ComplianceProfileRepository;
 use App\Modules\Product\Application\Port\DataExportArchiveWriter;
@@ -135,6 +136,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 use App\Modules\Product\Infrastructure\Export\TranslatedDataExportGuide;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
 use App\Modules\Product\Infrastructure\Listener\ObservePlanLimits;
+use App\Modules\Product\Infrastructure\Listener\RevokeSupportGrantsOnAccountDeactivation;
 use App\Modules\Product\Infrastructure\Logging\RedactingLogManager;
 use App\Modules\Product\Infrastructure\Metrics\RedisComplianceProfileMetrics;
 use App\Modules\Product\Infrastructure\Metrics\RedisErrorMetrics;
@@ -1732,6 +1734,14 @@ final class ProductServiceProvider extends ServiceProvider
         // descarta por `viaImport` (H-04 de la 3.8, ADR-010).
         Event::listen(EmployeesImported::class, [ObservePlanLimits::class, 'onEmployeesImported']);
         Event::listen(DeviceTokenIssued::class, [ObservePlanLimits::class, 'onDeviceTokenIssued']);
+
+        // RF-ID-10, RF-PD-11: la baja de una cuenta de gestion retira, en su
+        // misma transaccion, los accesos de soporte vigentes que esa cuenta
+        // concedio. Un acceso temporal no sobrevive a quien respondia de el.
+        Event::listen(
+            ManagementAccountDeactivated::class,
+            [RevokeSupportGrantsOnAccountDeactivation::class, 'handle'],
+        );
     }
 
     /**

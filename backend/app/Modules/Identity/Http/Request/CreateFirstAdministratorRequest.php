@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
 use App\Modules\Identity\Application\Command\CreateFirstAdministratorCommand;
+use App\Modules\Identity\Http\Rule\ManagementPasswordPolicy;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
@@ -43,9 +44,6 @@ use Illuminate\Validation\Rules\Password;
  */
 final class CreateFirstAdministratorRequest extends FormRequest
 {
-    /** Suelo de la longitud minima. Ni el `.env` del cliente puede bajar de aqui. */
-    private const int PASSWORD_FLOOR = 8;
-
     use RejectsUnknownInput;
 
     public function authorize(): bool
@@ -65,7 +63,7 @@ final class CreateFirstAdministratorRequest extends FormRequest
             // dos pestañas lo intentan a la vez, y el caso de uso ya rechaza la
             // segunda por «ya hay cuentas».
             'email' => ['required', 'string', 'email:rfc', 'max:190'],
-            'password' => ['required', 'string', 'max:200', $this->passwordPolicy()],
+            'password' => ['required', ...ManagementPasswordPolicy::rules()],
             'locale' => ['sometimes', 'string', 'min:2', 'max:10'],
             'device_name' => ['sometimes', 'string', 'max:60'],
         ];
@@ -80,14 +78,5 @@ final class CreateFirstAdministratorRequest extends FormRequest
             locale: $this->string('locale', 'es')->trim()->value(),
             deviceName: $this->string('device_name', 'Panel de gestion')->trim()->value(),
         );
-    }
-
-    private function passwordPolicy(): Password
-    {
-        return Password::min(max(self::PASSWORD_FLOOR, config()->integer('identity.password.min_length')))
-            ->letters()
-            ->mixedCase()
-            ->numbers()
-            ->symbols();
     }
 }

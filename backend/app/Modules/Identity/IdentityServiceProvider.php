@@ -16,16 +16,23 @@ use App\Modules\Identity\Application\Port\DeviceTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Identity\Application\Port\LoginAttempts;
+use App\Modules\Identity\Application\Port\ManagementAccountDirectory;
 use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
+use App\Modules\Identity\Application\Port\ManagementAccountMetrics;
 use App\Modules\Identity\Application\Port\ManagementAccountRegistry;
+use App\Modules\Identity\Application\Port\PasswordHasher;
 use App\Modules\Identity\Application\Port\PortalAddressProvider;
 use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Identity\Application\Port\QrKeyProvider;
+use App\Modules\Identity\Application\Port\TemporaryPasswordGenerator;
 use App\Modules\Identity\Application\Port\TwoFactorAuthenticator;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
 use App\Modules\Identity\Application\Port\UserAccounts;
+use App\Modules\Identity\Application\Query\ManagementAccountView;
+use App\Modules\Identity\Application\Support\ActorReauthentication;
 use App\Modules\Identity\Application\Support\CredentialTelemetry;
 use App\Modules\Identity\Application\Support\PortalAccessTelemetry;
+use App\Modules\Identity\Application\Support\TemporaryPasswordSettings;
 use App\Modules\Identity\Application\UseCase\AuthenticatePortalEmployeeHandler;
 use App\Modules\Identity\Application\UseCase\AuthenticateUserHandler;
 use App\Modules\Identity\Application\UseCase\ConfirmTwoFactorHandler;
@@ -43,7 +50,9 @@ use App\Modules\Identity\Domain\Policy\OriginLockAuditCeiling;
 use App\Modules\Identity\Domain\Policy\OriginLockoutPolicy;
 use App\Modules\Identity\Domain\Policy\TwoFactorRequirement;
 use App\Modules\Identity\Domain\ValueObject\DeviceStatus;
+use App\Modules\Identity\Domain\ValueObject\TemporaryPasswordLifetime;
 use App\Modules\Identity\Http\Policy\CredentialPolicy;
+use App\Modules\Identity\Http\Policy\ManagementAccountPolicy;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotCardRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotInstructionsSheetRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\CacheLoginAttempts;
@@ -55,7 +64,9 @@ use App\Modules\Identity\Infrastructure\Adapter\EndroidQrEncoder;
 use App\Modules\Identity\Infrastructure\Adapter\Google2faAuthenticator;
 use App\Modules\Identity\Infrastructure\Adapter\HmacSignatureVerifier;
 use App\Modules\Identity\Infrastructure\Adapter\LaravelIdentityEventPublisher;
+use App\Modules\Identity\Infrastructure\Adapter\LaravelPasswordHasher;
 use App\Modules\Identity\Infrastructure\Adapter\RandomCredentialSecretFactory;
+use App\Modules\Identity\Infrastructure\Adapter\RandomTemporaryPasswordGenerator;
 use App\Modules\Identity\Infrastructure\Adapter\SanctumAccessTokenIssuer;
 use App\Modules\Identity\Infrastructure\Adapter\SanctumDeviceTokenIssuer;
 use App\Modules\Identity\Infrastructure\Console\CreateManagementUserCommand;
@@ -63,6 +74,7 @@ use App\Modules\Identity\Infrastructure\Console\CredentialStatusCommand;
 use App\Modules\Identity\Infrastructure\Console\DeactivateManagementUserCommand;
 use App\Modules\Identity\Infrastructure\Console\DeliverCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\IssueCredentialCommand;
+use App\Modules\Identity\Infrastructure\Console\ListManagementUsersCommand;
 use App\Modules\Identity\Infrastructure\Console\PrintCredentialBatchCommand;
 use App\Modules\Identity\Infrastructure\Console\PrintCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\ResetManagementPasswordCommand;
@@ -72,10 +84,12 @@ use App\Modules\Identity\Infrastructure\Console\RevokeCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\RotateSigningKeyCommand;
 use App\Modules\Identity\Infrastructure\Console\UnlockPortalOriginCommand;
 use App\Modules\Identity\Infrastructure\Listener\RevokeCredentialsOnOffboarding;
+use App\Modules\Identity\Infrastructure\Metrics\RedisManagementAccountMetrics;
 use App\Modules\Identity\Infrastructure\Metrics\TextfileCredentialMetrics;
 use App\Modules\Identity\Infrastructure\Persistence\Device;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentCredentialRepository;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentDeviceRepository;
+use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountDirectory;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountLifecycle;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentManagementAccountRegistry;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentTwoFactorSecrets;
@@ -189,6 +203,8 @@ final class IdentityServiceProvider extends ServiceProvider
          */
         $this->app->bind(ManagementAccountLifecycle::class, EloquentManagementAccountLifecycle::class);
 
+        $this->registerManagementAccounts();
+
         $this->app->bind(AccessTokenIssuer::class, SanctumAccessTokenIssuer::class);
 
         $this->app->bind(
@@ -212,6 +228,15 @@ final class IdentityServiceProvider extends ServiceProvider
 
         Gate::policy(Credential::class, CredentialPolicy::class);
 
+        // RF-ID-10: las cuentas de gestion desde el panel (`admin`, nunca un
+        // acceso de soporte). Contra la vista de lectura, nunca contra el modelo
+        // Eloquent. La de la contrasena propia (`OwnPasswordPolicy`) no pasa por
+        // el `Gate`: a esa ruta llegan quiosco y portal, que no son `Authorizable`.
+        Gate::policy(
+            ManagementAccountView::class,
+            ManagementAccountPolicy::class,
+        );
+
         // RN-14 (N1): la baja de una persona le retira la credencial y le cierra
         // el portal, en la misma transaccion y con su asiento. Sincrono a
         // proposito (ADR-027): ver el listener.
@@ -221,25 +246,20 @@ final class IdentityServiceProvider extends ServiceProvider
             // Los del Anexo C del doc 02, ya completos: la tarea 2.12 añadio
             // `credentials:rotate-key` y su cierre, `credentials:retire-key`.
             $this->commands([
-                CreateManagementUserCommand::class,
-                // La unica via para retirar un segundo factor (RS-06). No hay
-                // endpoint: no existe ninguna ruta de gestion de usuarios en el
-                // Anexo B, y un «quitale el 2FA a esta persona» por API seria, en
-                // manos de un administrador comprometido, la forma mas comoda de
-                // preparar el acceso a la cuenta de otro.
-                ResetTwoFactorCommand::class,
                 /*
-                 * Ciclo de vida de la cuenta de gestion (tarea 3.8, H-03).
-                 * Tampoco tienen endpoint, y por el mismo motivo que el de
-                 * arriba: no hay ninguna ruta de gestion de usuarios en el Anexo
-                 * B, y «da de baja a esta persona» o «cambiale la contrasena» por
-                 * API serian, en manos de un `admin` comprometido, la forma mas
-                 * comoda de quedarse solo en la instalacion o de prepararse el
-                 * acceso a la cuenta de otro. La pantalla del panel es una
-                 * decision de producto pendiente (ficha 3.8, decision 16).
+                 * Ciclo de vida de la cuenta de gestion (tarea 3.8, H-03;
+                 * RF-ID-10). Desde la 2.2.0 tambien tiene pantalla
+                 * (`/management-accounts`), y los comandos pasan por los MISMOS
+                 * casos de uso: quedan para cuando el panel no esta disponible.
+                 * Las mismas invariantes —nunca la ultima `admin` activa— y los
+                 * mismos asientos, con el sistema como autor.
                  */
+                CreateManagementUserCommand::class,
+                ResetTwoFactorCommand::class,
                 DeactivateManagementUserCommand::class,
                 ResetManagementPasswordCommand::class,
+                // Solo lee. Su salida lleva correos: lo advierte su `--help`.
+                ListManagementUsersCommand::class,
                 // Levanta el bloqueo por origen del portal (ADR-050, dictamen M3).
                 // Sin endpoint: es operacion del servidor, con asiento.
                 UnlockPortalOriginCommand::class,
@@ -256,6 +276,43 @@ final class IdentityServiceProvider extends ServiceProvider
                 RetireSigningKeyCommand::class,
             ]);
         }
+    }
+
+    /**
+     * Cuentas de gestion desde el panel (**RF-ID-10**, ADR-051).
+     *
+     * **La vida de la contrasena temporal entra resuelta** desde la
+     * configuracion, como el resto de umbrales (regla dura 13): el caso de uso
+     * no lee `config()`. Un valor fuera de [1, 168] rompe al resolver el caso de
+     * uso con un mensaje claro, en vez de emitir temporales que no caducan.
+     */
+    private function registerManagementAccounts(): void
+    {
+        $this->app->bind(
+            TemporaryPasswordGenerator::class,
+            RandomTemporaryPasswordGenerator::class,
+        );
+        $this->app->bind(
+            PasswordHasher::class,
+            LaravelPasswordHasher::class,
+        );
+        $this->app->bind(
+            ManagementAccountDirectory::class,
+            EloquentManagementAccountDirectory::class,
+        );
+        $this->app->singleton(
+            ManagementAccountMetrics::class,
+            RedisManagementAccountMetrics::class,
+        );
+        $this->app->bind(
+            TemporaryPasswordSettings::class,
+            static fn (): TemporaryPasswordSettings => new TemporaryPasswordSettings(
+                new TemporaryPasswordLifetime(
+                    Config::integer('identity.temporary_password.ttl_hours', 72),
+                ),
+                Config::integer('identity.password.min_length', 12),
+            ),
+        );
     }
 
     /**
@@ -324,6 +381,10 @@ final class IdentityServiceProvider extends ServiceProvider
             VerifyTwoFactorHandler::class,
             ConfirmTwoFactorHandler::class,
             EnrolTwoFactorHandler::class,
+            // RF-ID-10: la reautenticacion del `admin` que actua sobre otra
+            // cuenta comparte el contador de intentos de codigo de su propia
+            // cuenta (`2fa|<uuid>`): alternar puertas no duplica intentos.
+            ActorReauthentication::class,
         ])
             ->needs(LoginAttempts::class)
             ->give($codeAttempts);

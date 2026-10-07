@@ -12,6 +12,7 @@ use App\Modules\Identity\Application\Port\LoginAttempts;
 use App\Modules\Identity\Application\Port\TwoFactorAuthenticator;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
 use App\Modules\Identity\Application\Port\UserAccounts;
+use App\Modules\Identity\Domain\ValueObject\PasswordStatus;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
@@ -114,7 +115,11 @@ final readonly class VerifyTwoFactorHandler
             $this->secrets->lastAcceptedSliceFor($command->userUuid),
         );
 
-        if ($user === null || $secret === null || $slice === null) {
+        // Una temporal caducada entre el acceso y el codigo no abre sesion
+        // (RF-ID-10, RS-03): misma respuesta, y mismo contador, que un codigo
+        // incorrecto.
+        if ($user === null || $secret === null || $slice === null
+            || $user->passwordStatus === PasswordStatus::TemporaryExpired) {
             $this->attempts->recordFailure($command->throttleKey);
             $this->journal->failed(
                 AuthChannel::MANAGEMENT,

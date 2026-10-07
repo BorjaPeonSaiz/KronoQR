@@ -10,27 +10,26 @@ use App\Modules\Identity\Domain\ValueObject\IssuedAccessToken;
 use LogicException;
 
 /**
- * Apunta a quien se le cierran las sesiones, sin Sanctum ni base de datos
- * (RS-05, RS-06).
- *
- * **Lo que esta clase existe para poder afirmar** es la mitad que se olvida de
- * una baja: marcar `is_active` a `false` y dejar viva la sesion abierta en una
- * tablet no da de baja a nadie durante las doce horas siguientes. Con el puerto
- * por medio, eso se comprueba sin emitir un token de verdad.
- *
- * **Los otros tres metodos lanzan.** Ninguno de los dos casos de uso del ciclo
- * de vida tiene por que emitir un token ni revocar uno suelto: si algun dia lo
- * hicieran, la prueba unitaria se rompe y lo dice, que es mejor que un cuerpo
- * vacio que se lo traga.
+ * El emisor de tokens visto por los casos de uso del ciclo de vida de una
+ * cuenta: solo revoca y promociona, y anota a quien. Emitir una sesion no es
+ * cosa de esos casos de uso, y si lo intentaran la prueba fallaria aqui.
  */
 final class RecordingAccessTokens implements AccessTokenIssuer
 {
-    /**
-     * Los uuid cuyas sesiones se han cerrado del todo, en orden de llamada.
-     *
-     * @var list<string>
-     */
+    /** @var list<string> */
     public array $revokedAccounts = [];
+
+    /** @var list<int|string> */
+    public array $revokedTokens = [];
+
+    /** @var list<array{0: string, 1: int|string}> */
+    public array $revokedAllExcept = [];
+
+    /** @var list<array{0: string, 1: int|string, 2: list<string>}> */
+    public array $promoted = [];
+
+    /** Lo que responde `promoteToFullSession`: `false` simula un token ya revocado. */
+    public bool $tokenStillExists = true;
 
     public function issueFor(AuthenticatedUser $user, string $deviceName): IssuedAccessToken
     {
@@ -44,11 +43,23 @@ final class RecordingAccessTokens implements AccessTokenIssuer
 
     public function revoke(int|string $tokenId): void
     {
-        throw new LogicException('Una baja o un cambio de contrasena cierran TODAS las sesiones, no una.');
+        $this->revokedTokens[] = $tokenId;
     }
 
     public function revokeAllFor(string $userUuid): void
     {
         $this->revokedAccounts[] = $userUuid;
+    }
+
+    public function revokeAllExcept(string $userUuid, int|string $keepTokenId): void
+    {
+        $this->revokedAllExcept[] = [$userUuid, $keepTokenId];
+    }
+
+    public function promoteToFullSession(AuthenticatedUser $user, int|string $tokenId): bool
+    {
+        $this->promoted[] = [$user->uuid, $tokenId, $user->abilityNames()];
+
+        return $this->tokenStillExists;
     }
 }

@@ -36,6 +36,9 @@ final class ProblemDetails
 
     public const string TYPE_FORBIDDEN = 'urn:kronoqr:problem:forbidden';
 
+    /** Sesion con contrasena temporal: solo puede cambiarla (RF-ID-10, ADR-051). */
+    public const string TYPE_PASSWORD_CHANGE_REQUIRED = 'urn:kronoqr:problem:password-change-required';
+
     public const string TYPE_NOT_FOUND = 'urn:kronoqr:problem:not-found';
 
     public const string TYPE_CONFLICT = 'urn:kronoqr:problem:conflict';
@@ -666,6 +669,22 @@ final class ProblemDetails
             'Recurso no encontrado',
             JsonResponse::HTTP_NOT_FOUND,
             $detail ?? 'No existe el recurso solicitado.',
+        );
+    }
+
+    /**
+     * `403` de una sesion abierta con contrasena **temporal** (RF-ID-10,
+     * ADR-051): el token solo lleva `password:change`. No le falta ningun
+     * permiso a la persona: le falta fijar su propia contrasena, y el panel lo
+     * distingue por el `type` para llevarla a esa pantalla.
+     */
+    public static function passwordChangeRequired(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_PASSWORD_CHANGE_REQUIRED,
+            'Cambio de contrasena pendiente',
+            JsonResponse::HTTP_FORBIDDEN,
+            $detail,
         );
     }
 

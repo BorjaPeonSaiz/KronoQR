@@ -167,6 +167,22 @@ enum AuditAction: string
      */
     case ManagementPasswordReset = 'user.password_reset';
 
+    /**
+     * Se ha dado de alta una cuenta de gestion con contrasena temporal
+     * (RF-ID-10; panel o `identity:create-user`). El rol va en su propio
+     * asiento, `role_assignment.changed`. Lleva el `uuid` de la cuenta, que la
+     * contrasena es temporal y si vino del panel o de la consola; nunca el
+     * nombre, el correo ni la contrasena (regla dura 21).
+     */
+    case ManagementAccountCreated = 'user.created';
+
+    /**
+     * El titular de una cuenta de gestion ha cambiado su propia contrasena
+     * (RF-ID-10, `POST /auth/password`): actor y sujeto son la misma cuenta.
+     * Ni la contrasena ni nada derivado de ella.
+     */
+    case ManagementPasswordChanged = 'user.password_changed';
+
     // --- Acceso denegado por alcance (RF-ID-03, RS-05, tarea 2.1) -----------
 
     case AccessDenied = 'access.denied';

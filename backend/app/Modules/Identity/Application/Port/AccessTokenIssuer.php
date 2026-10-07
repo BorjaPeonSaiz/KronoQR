@@ -24,6 +24,12 @@ interface AccessTokenIssuer
      * `$deviceName` es el nombre con el que se listara y se podra revocar esa
      * sesion concreta. No lleva PII: es «Panel de gestion», no el nombre de una
      * persona.
+     *
+     * **Con contrasena temporal, el token lleva un unico ambito,
+     * `password:change`, y no los del rol** (RF-ID-10). Se decide aqui, en el
+     * unico sitio por el que sale una sesion de gestion, para que ningun camino
+     * de acceso —contrasena, verificacion o alta del segundo factor— pueda
+     * olvidarlo.
      */
     public function issueFor(AuthenticatedUser $user, string $deviceName): IssuedAccessToken;
 
@@ -73,4 +79,29 @@ interface AccessTokenIssuer
      * queda escrito.
      */
     public function revokeAllFor(string $userUuid): void;
+
+    /**
+     * Revoca todos los tokens de una cuenta **menos uno**: el de la sesion desde
+     * la que se pide (RF-ID-10, `POST /auth/password`).
+     *
+     * Quien cambia su contrasena porque sospecha es quien mas necesita que la
+     * otra sesion se cierre; y echarle a el de la que esta usando no protege
+     * nada. Metodo propio y no un parametro opcional de
+     * {@see self::revokeAllFor()}, por lo mismo que alli: echar a todo el mundo
+     * es una decision y no un valor por omision.
+     */
+    public function revokeAllExcept(string $userUuid, int|string $keepTokenId): void;
+
+    /**
+     * Convierte la sesion de contrasena temporal (`password:change`) en una
+     * sesion completa con **los ambitos del rol** de la cuenta (RF-ID-10).
+     *
+     * Se llama en la misma transaccion que el cambio de contrasena: si el
+     * asiento falla, el token sigue sin servir para nada mas. Conserva su
+     * caducidad: cambiar la contrasena no alarga la sesion.
+     *
+     * @return bool `false` si ese token ya no existe o no es de esa cuenta —una
+     *              revocacion se cruzo con el cambio—. Quien llama deshace todo.
+     */
+    public function promoteToFullSession(AuthenticatedUser $user, int|string $tokenId): bool;
 }

@@ -93,7 +93,9 @@ use App\Modules\Identity\Domain\Event\CredentialPrinted;
 use App\Modules\Identity\Domain\Event\CredentialRevoked;
 use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Identity\Domain\Event\DeviceTokenRevoked;
+use App\Modules\Identity\Domain\Event\ManagementAccountCreated;
 use App\Modules\Identity\Domain\Event\ManagementAccountDeactivated;
+use App\Modules\Identity\Domain\Event\ManagementPasswordChanged;
 use App\Modules\Identity\Domain\Event\ManagementPasswordReset;
 use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
 use App\Modules\Identity\Domain\Event\SigningKeyRetired;
@@ -130,6 +132,7 @@ use App\Modules\Workforce\Domain\Event\AbsenceCorrected;
 use App\Modules\Workforce\Domain\Event\AbsenceRegistered;
 use App\Modules\Workforce\Domain\Event\AbsenceVoided;
 use App\Modules\Workforce\Domain\Event\DepartmentCreated;
+use App\Modules\Workforce\Domain\Event\DepartmentManagerChanged;
 use App\Modules\Workforce\Domain\Event\DepartmentRenamed;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
@@ -739,6 +742,8 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(EmployeeOffboarded::class, [RecordWorkforceChange::class, 'offboarded']);
         Event::listen(DepartmentCreated::class, [RecordWorkforceChange::class, 'departmentCreated']);
         Event::listen(DepartmentRenamed::class, [RecordWorkforceChange::class, 'departmentRenamed']);
+        // RF-ID-10, ADR-051 §5: un `role_assignment.changed` por cuenta afectada.
+        Event::listen(DepartmentManagerChanged::class, [RecordWorkforceChange::class, 'departmentManagerChanged']);
     }
 
     /**
@@ -1013,6 +1018,18 @@ final class ComplianceServiceProvider extends ServiceProvider
         Event::listen(
             ManagementPasswordReset::class,
             [RecordManagementAccountLifecycle::class, 'handlePasswordReset'],
+        );
+
+        // El alta desde el panel o la consola y el cambio de la contrasena
+        // propia (RF-ID-10, 2.2.0). Sincronos como los de arriba (ADR-010): si
+        // el asiento falla, ni se crea la cuenta ni cambia la contrasena.
+        Event::listen(
+            ManagementAccountCreated::class,
+            [RecordManagementAccountLifecycle::class, 'handleAccountCreated'],
+        );
+        Event::listen(
+            ManagementPasswordChanged::class,
+            [RecordManagementAccountLifecycle::class, 'handlePasswordChanged'],
         );
     }
 }
