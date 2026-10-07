@@ -167,6 +167,29 @@ inhibit_rules:
     target_matchers:
       - component =~ "kiosk|api|tls|host"
 
+  # Almacen de metricas caido o mudo (bloque 22, R4-DV-01). Las series de
+  # quiosco (latido, cola) y las de errores/latencia del fichaje viven en
+  # Redis y desaparecen con el: sin esta regla, `QuioscoSinLatido` y compania
+  # se "resolvian" justo cuando la situacion era peor, y Alertmanager lo
+  # notificaba como una buena noticia. Mientras `AlmacenDeMetricasCaido` o
+  # `AlmacenDeMetricasAusente` esten activas, esas alertas no son fiables y se
+  # inhiben (tambien las "resueltas": una alerta inhibida no se notifica).
+  #
+  # ACOTADA A PROPOSITO: solo `component="kiosk"` y las dos alertas del fichaje
+  # que leen `http_requests_*`. NO inhibe `SondaDelBordeFallida` (sonda externa,
+  # no depende de Redis), ni copia, auditoria, integridad ni autenticacion, ni
+  # las propias alertas del almacen (su componente es `metrics`). Sin `equal`:
+  # es un estado de la instalacion entera. Va despues de la de severidad: la
+  # prueba de arquitectura espera esa en primer lugar.
+  - source_matchers:
+      - alertname =~ "AlmacenDeMetricasCaido|AlmacenDeMetricasAusente"
+    target_matchers:
+      - alertname =~ "ErroresDeServidorEnElFichaje|LatenciaDelFichajeAlta"
+  - source_matchers:
+      - alertname =~ "AlmacenDeMetricasCaido|AlmacenDeMetricasAusente"
+    target_matchers:
+      - component = "kiosk"
+
 time_intervals:
   # Ventana de mantenimiento declarada. La instalacion la ajusta a su horario
   # con ALERT_MAINTENANCE_WEEKDAY/START/END: el cambio de turno de las 06:00

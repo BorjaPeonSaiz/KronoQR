@@ -1,0 +1,84 @@
+# KronoQR — vigilancia del almacen de metricas del producto (bloque 22,
+# hallazgo R4-DV-01 de la reverificacion 2.2.0).
+#
+# EL PROBLEMA. Las metricas de negocio del producto (`kiosk_last_seen_seconds`,
+# `kiosk_offline_queue_size`, `http_requests_total`, `queue_jobs_pending`...)
+# las escribe la aplicacion en Redis y `/metrics` las lee de ahi. Si Redis cae,
+# esas series DESAPARECEN de Prometheus: `QuioscoSinLatido` pasaba de 29
+# quioscos a 0 y se "resolvia" justo cuando la situacion era peor, y la unica
+# senal era `SondaDelBordeFallida`, 6,5 minutos despues. Una serie que
+# desaparece no es una serie en cero.
+#
+# LA SOLUCION. `/metrics` publica `kronoqr_metrics_store_up`: 1 si el almacen
+# responde, 0 si no. Es una metrica explicita y mas honesta que `absent()` sobre
+# una serie de quiosco, que con cero quioscos vinculados tambien esta ausente
+# sin que nada falle. Dos reglas:
+#
+#   - `AlmacenDeMetricasCaido`: la aplicacion SI responde y dice que su
+#     almacen no. Es lo esperado cuando Redis cae.
+#   - `AlmacenDeMetricasAusente`: la aplicacion no publica ni la propia gauge.
+#     Es otro fallo (PHP-FPM, Nginx, la ruta /metrics, el scrape) y se separa
+#     de `SondaDelBordeFallida`, que mira `/health` y `/ready` desde fuera, no
+#     el scrape de metricas.
+#
+# EL EFECTO EN EL RESTO. Alertmanager inhibe las alertas de quiosco y las de
+# latencia/errores del fichaje mientras cualquiera de las dos este activa
+# (alertmanager.yml.template): no son fiables sin sus series y, sobre todo, no
+# deben notificar "resueltas" que no lo estan.
+#
+# IMPACTO EN EL FICHAJE: NINGUNO por si misma. Con Redis caido el fichaje sigue
+# (cache y cola con respaldo, limitador que falla abierto en /scan*; regla dura
+# 19). Lo que se pierde es la VISIBILIDAD: eso es lo que esta alerta devuelve.
+#
+# NO LLEVA `component: kiosk|api|tls|host`, A PROPOSITO: la ventana de
+# mantenimiento declarada silencia esos cuatro y una caida del almacen durante
+# un mantenimiento es justo cuando hay que saberlo. Va como `component:
+# metrics`, que ninguna ruta silencia. Destinatario: IT del cliente.
+groups:
+  - name: kronoqr-metrics-store
+    interval: 60s
+    rules:
+      - alert: AlmacenDeMetricasCaido
+        expr: kronoqr_metrics_store_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: metrics
+        annotations:
+          summary: "El almacen de metricas (Redis) no responde: las alertas de quiosco y cola no son fiables"
+          description: >-
+            La aplicacion responde, pero su almacen de metricas (Redis) no.
+            Mientras dure, las alertas de quiosco (latido, cola offline) y las
+            de errores y latencia del fichaje NO son fiables: sus series han
+            desaparecido y un quiosco caido o una cola atascada no se
+            veria, ni se avisaria de su resolucion. Alertmanager las inhibe
+            mientras esta alerta este activa. El fichaje sigue funcionando (los
+            quioscos encolan, regla dura 19): lo que falta es visibilidad.
+            Restablece Redis antes de fiarte de un cuadro en verde.
+          runbook_url: docs/runbooks/almacen-de-metricas-caido.md
+
+      #------------------------------------------------------------------------
+      # El silencio: si la aplicacion no publica ni la gauge, no hay forma de
+      # distinguir "el almacen esta bien" de "nadie lo esta midiendo". Distinta
+      # de SondaDelBordeFallida (que mira /health y /ready desde fuera).
+      #------------------------------------------------------------------------
+      - alert: AlmacenDeMetricasAusente
+        expr: absent(kronoqr_metrics_store_up)
+        for: 2m
+        labels:
+          severity: critical
+          destinatario: it-cliente
+          component: metrics
+        annotations:
+          summary: "La aplicacion no publica metricas: no se sabe si el almacen de metricas responde"
+          description: >-
+            Prometheus no recibe ni siquiera la serie que indica si el
+            almacen de metricas esta vivo. O la aplicacion (PHP-FPM, Nginx, la
+            ruta /metrics) no responde al scrape, o Prometheus no la alcanza.
+            Mientras dure, las alertas de quiosco y cola NO son fiables y
+            Alertmanager las inhibe. Es distinta de `SondaDelBordeFallida`,
+            que comprueba /health y /ready desde fuera: pueden sonar juntas o
+            por separado. El fichaje de los quioscos sigue encolando (regla
+            dura 19).
+          runbook_url: docs/runbooks/almacen-de-metricas-caido.md
