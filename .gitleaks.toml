@@ -188,4 +188,11 @@ useDefault = true
     #    de la prueba dentro; ninguna instalacion las tiene.
     '''^clave_anterior_de_la_rotacion_1234567890$''',
     '''^clave_nueva_de_la_rotacion_abcdefghijklm$''',
+    # 30) backend/tests/Feature/Identity/ManagementAccountsAuthorizationTest.php y
+    #    backend/tests/Unit/Identity/Domain/TemporaryPasswordTest.php: UUID v7 fijo con el
+    #    que las pruebas del bloque 12c (ADR-051) nombran la cuenta de gestion objetivo de
+    #    la autorizacion negativa y la «otra» contraseña temporal. La regla por defecto
+    #    `generic-api-key` lo captura por el nombre de la constante (TARGET, PASSWORD), no
+    #    por su forma: es un identificador escrito a mano, sin uso fuera de las pruebas.
+    '''^0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91$''',
   ]
