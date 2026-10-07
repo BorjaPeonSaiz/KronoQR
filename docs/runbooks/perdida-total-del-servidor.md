@@ -26,7 +26,7 @@ puede completarse. Revísala en el simulacro trimestral
 | --- | --- | --- |
 | **Las copias** (`BACKUP_PATH`: `daily/`, `base/`, `wal/`) | **Fuera del servidor y fuera de su edificio** (NAS en otra sala o sede, cabina, nube del cliente **dentro de la UE**, RL-14). No basta con otro disco del mismo servidor | **No hay registro que recuperar.** Las copias del propio disco se pierden con él |
 | **`BACKUP_ENCRYPTION_KEY`** | Fuera del servidor: gestor de contraseñas de la empresa o sobre cerrado en caja fuerte ([`../cliente/operacion.md`](../cliente/operacion.md) §9). **Nunca** solo en el servidor ni junto a las copias | Las copias son bytes sin valor. El fabricante no la tiene ni puede recuperarla |
-| **Una copia del `.env`** (o, como mínimo, `APP_KEY`, `QR_SIGNING_KEY_CURRENT` y su `_ID`, y `IDENTITY_PIN_SEALING_SECRET_KEY`) | Con la clave anterior, en el mismo sitio y con el mismo cuidado | Ver §3: sin `QR_SIGNING_KEY_CURRENT` **hay que reimprimir todas las tarjetas** ([`../cliente/instalacion.md`](../cliente/instalacion.md) §3) |
+| **Los secretos que se reponen**: `APP_KEY`, `QR_SIGNING_KEY_CURRENT` y `QR_SIGNING_KEY_PREVIOUS` con sus `_ID`, e `IDENTITY_PIN_SEALING_SECRET_KEY`. No el `.env` entero: lleva las contraseñas de la base de datos, incluida la del superusuario, que no se reponen (§3.3) | Con la clave anterior, en el mismo sitio y con el mismo cuidado: quien tenga la clave de firma de los QR puede fabricar tarjetas válidas. **Se renueva después de cada rotación** ([`rotacion-secretos.md`](rotacion-secretos.md), [`rotacion-clave-qr.md`](rotacion-clave-qr.md)) | Ver §3: sin `QR_SIGNING_KEY_CURRENT` **hay que reimprimir todas las tarjetas** ([`../cliente/instalacion.md`](../cliente/instalacion.md) §3) |
 | **El paquete de entrega de la versión instalada** (el `.tar.gz` y `SHA256SUMS`) | Con el IT o en la release del fabricante | Pídelo al fabricante: sin él no hay `install.sh` de esa versión |
 | **El certificado TLS y su clave** del nombre del servidor | Fuera del servidor | Se emite uno nuevo **para el mismo nombre** (§4) |
 | **La clave de licencia** | Con quien la recibió | Se pide otra al fabricante; **no es un secreto y no impide fichar** (ADR-019) |
@@ -110,8 +110,9 @@ que quede en el historial** (edita el fichero):
 | Variable | Si la tienes | Si no la tienes |
 | --- | --- | --- |
 | `BACKUP_ENCRYPTION_KEY` | Imprescindible. Sin ella no se abre ninguna copia (ve a §7) | — |
-| `APP_KEY` | Repónla | Las sesiones y los datos cifrados con ella no se leen |
+| `APP_KEY` | Repónla | Las sesiones y los datos cifrados con ella no se leen. En concreto, el secreto del segundo factor de cada cuenta de gestión va cifrado con ella: **ninguna cuenta pasa el 2FA** hasta que se le reinicia con `docker compose exec app php artisan identity:2fa-reset`, cuenta por cuenta, y vuelve a darse de alta |
 | `QR_SIGNING_KEY_CURRENT` y `QR_SIGNING_KEY_CURRENT_ID` | Repónlas: las tarjetas impresas siguen valiendo | **Reimprime todas las tarjetas** ([`rotacion-clave-qr.md`](rotacion-clave-qr.md), [`tarjeta-perdida-o-rota.md`](tarjeta-perdida-o-rota.md)) |
+| `QR_SIGNING_KEY_PREVIOUS` y `QR_SIGNING_KEY_PREVIOUS_ID` (solo si la pérdida cae en mitad de una rotación de la clave QR) | Repónlas: las tarjetas aún firmadas con la clave anterior siguen valiendo hasta que acabe la rotación | Las tarjetas que no se habían reimpreso con la clave nueva dejan de valer: reimprímelas |
 | `IDENTITY_PIN_SEALING_SECRET_KEY` | Repónla | Los fichajes por PIN encolados sin red antes de la pérdida no se podrían abrir |
 
 Las contraseñas de los roles de base de datos (`DB_PASSWORD`,

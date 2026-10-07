@@ -444,10 +444,13 @@ nadie. **El fabricante no los conoce y no puede recuperarlos.** La lista
 completa, con la consecuencia de perder cada uno, está en
 [`instalacion.md`](instalacion.md), sección 3.
 
-**Si se pierde el servidor entero, hace falta también una copia del `.env`**, guardada fuera de él con la misma
-custodia que la clave de copias. Una instalación nueva genera `APP_KEY`, `QR_SIGNING_KEY_*` y
-`IDENTITY_PIN_SEALING_SECRET_KEY` nuevas: sin las de antes, ninguna tarjeta impresa vale y hay que reimprimirlas
-todas. El procedimiento completo está en
+**Si se pierde el servidor entero, hacen falta también otros secretos del `.env`**, guardados fuera de él con la
+misma custodia que la clave de copias: `APP_KEY`, `QR_SIGNING_KEY_CURRENT` y `QR_SIGNING_KEY_PREVIOUS` con sus
+`_ID`, e `IDENTITY_PIN_SEALING_SECRET_KEY`. Una instalación nueva los genera nuevos: sin los de antes, ninguna
+tarjeta impresa vale y hay que reimprimirlas todas, y sin `APP_KEY` ninguna cuenta de gestión pasa el segundo factor.
+No guardes el `.env` entero: lleva contraseñas de la base de datos que no se reponen. **Quien tenga la clave de
+firma de los QR puede fabricar tarjetas válidas**: trátala como la llave maestra del edificio. Renueva esta copia
+después de cada rotación de secretos. El procedimiento completo está en
 [`../runbooks/perdida-total-del-servidor.md`](../runbooks/perdida-total-del-servidor.md).
 
 ### `BACKUP_ENCRYPTION_KEY`: esta sale del servidor
@@ -1493,6 +1496,11 @@ anonimizado** y en tu auditoría aparece `diagnostics.personal_data_included`.
 Al enviarlo comunicas datos personales a un tercero: mira
 [`obligaciones-legales.md`](obligaciones-legales.md) §8 antes, y ten firmado
 el contrato de encargo.
+
+**El producto no cifra este fichero**, para que puedas abrirlo y revisar qué
+sale antes de enviarlo. Envíalo solo por el canal cifrado que fije tu contrato
+de soporte y de encargo, nunca por correo sin cifrar, y bórralo del servidor y
+de tu equipo en cuanto lo hayas enviado.
 
 ### 12.4 Conceder a soporte un acceso temporal
 

@@ -456,10 +456,13 @@ nobody. **The vendor does not know them and cannot recover them.** The full
 list, with the consequence of losing each one, is in
 [`installation.md`](installation.md), section 3.
 
-**If the whole server is lost, you also need a copy of the `.env`**, kept off the server with the same custody as
-the backup key. A new installation generates new `APP_KEY`, `QR_SIGNING_KEY_*` and
-`IDENTITY_PIN_SEALING_SECRET_KEY`: without the old ones, no printed card is valid and every card has to be reprinted.
-The full procedure is in
+**If the whole server is lost, you also need other secrets from the `.env`**, kept off the server with the same
+custody as the backup key: `APP_KEY`, `QR_SIGNING_KEY_CURRENT` and `QR_SIGNING_KEY_PREVIOUS` with their `_ID`, and
+`IDENTITY_PIN_SEALING_SECRET_KEY`. A new installation generates new ones: without the old ones, no printed card is
+valid and every card has to be reprinted, and without `APP_KEY` no management account passes the second factor. Do
+not keep the whole `.env`: it holds database passwords that are not restored. **Whoever has the QR signing key can
+make valid cards**: treat it like the building's master key. Renew this copy after every secret rotation. The full
+procedure is in
 [`../../runbooks/perdida-total-del-servidor.md`](../../runbooks/perdida-total-del-servidor.md) (in Spanish).
 
 ### `BACKUP_ENCRYPTION_KEY`: this one leaves the server
@@ -1514,6 +1517,11 @@ incidents. The bundle is marked as **not anonymised** and
 you are communicating personal data to a third party: read
 [`legal-obligations.md`](legal-obligations.md) §8 first, and have the
 processing agreement signed.
+
+**The product does not encrypt this file**, so that you can open it and check
+what leaves before sending it. Send it only through the encrypted channel set by
+your support and processing agreement, never by unencrypted email, and delete it
+from the server and from your computer as soon as you have sent it.
 
 ### 12.4 Granting support temporary access
 

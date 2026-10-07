@@ -57,6 +57,6 @@ Quitar un campo de una respuesta de `v1` es un cambio incompatible (ADR-012), y 
 ## Verificación
 
 - Unitaria: con registro horario existente, el centro rechaza el cambio de zona y acepta el de nombre.
-- *Feature*: `PATCH /site` con otra zona tras el primer tramo devuelve `409` sin asiento; sin tramos devuelve `200` con `site.updated`. Autorización negativa por cada rol que no sea `admin`.
+- *Feature*: `PATCH /site` con otra zona tras el primer tramo devuelve `409` sin asiento; sin tramos devuelve `200` con `site.updated`. Autorización negativa por cada rol que no sea `admin` ni `rrhh`, que son los dos que hoy admite `PATCH /site`.
 - Integración: un primer fichaje concurrente con el cambio de zona no deja la zona cambiada con tramos atribuidos a la anterior.
 - Consola: el comando exige motivo, deja `site.updated` con el motivo y el recuento, y no modifica ninguna fila de `shift_entries`.
