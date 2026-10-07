@@ -47,9 +47,15 @@ use Illuminate\Database\ConnectionInterface;
  * en la misma pasada —que comparten `detected_at` al microsegundo— podrian salir
  * en distinto orden en dos paginas consecutivas y una de ellas no aparecer nunca.
  *
- * Con `status = 'open'`, que es el caso por omision, el orden y el filtro caen
- * sobre `incidents_open_by_assignee`; para las cerradas se recorre menos de lo
- * que parece porque siempre se pide con filtros.
+ * El filtro por `status` y el orden completo caen sobre
+ * `incidents_status_urgency_index` (`2026_10_08_100100`, hallazgo DB6): la
+ * pagina lee sus entradas del indice ya ordenadas, sin `Sort` y sin recorrer la
+ * tabla, para cualquier estado. Hasta la 2.2.0 era `Seq Scan` mas `top-N
+ * heapsort` en cada visita: `incidents_open_by_assignee` empieza por el
+ * responsable y no sirve a una bandeja sin el. **La expresion de {@see ORDER}
+ * es la del indice, literal a literal**; si cambia una, tiene que cambiar la
+ * otra con una migracion nueva, y `IncidentBoardIndexUsageTest` falla mientras
+ * no coincidan.
  *
  * ## Lee tablas de otros modulos
  *
@@ -102,7 +108,15 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
           LEFT JOIN users ru ON ru.id = i.resolved_by_user_id
         SQL;
 
-    /** Lo urgente arriba. Ver el docblock de la clase: el orden alfabetico miente. */
+    /**
+     * Lo urgente arriba. Ver el docblock de la clase: el orden alfabetico miente.
+     *
+     * El `CASE` es, caracter a caracter salvo el alias `i.`, la expresion de
+     * `incidents_status_urgency_index` en
+     * `database/migrations/2026_10_08_100100_index_incident_board_and_legal_export.php`.
+     * No se toca uno sin el otro: con una expresion distinta el indice deja de
+     * dar el orden y la bandeja vuelve a ordenar la tabla en memoria.
+     */
     private const string ORDER = <<<'SQL'
         ORDER BY CASE i.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
                  i.detected_at DESC,
