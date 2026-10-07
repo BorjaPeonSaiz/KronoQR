@@ -1373,8 +1373,10 @@ PUT    /api/v1/setup/steps/{step}          Marcar paso hecho u omitido  [rol: ad
 POST   /api/v1/setup/complete              Cerrar el asistente          [rol: admin]
 
 POST   /api/v1/employees/import            Importación de plantilla     [rol: rrhh, modo simulación]
-GET    /api/v1/employees, /departments, /site, /contracts, /absences
+GET    /api/v1/employees, /site, /contracts, /absences
                                             Consulta y listado            [rol: manager+]
+GET    /api/v1/departments, /departments/{id}
+                                            Catálogo de departamentos     [los cuatro roles de gestión; escritura: admin y RRHH; responsable: solo admin con accounts:*]
 POST/PATCH /api/v1/employees, /departments, /contracts, /absences
 PATCH  /api/v1/site                         El centro de la instalación (ADR-040): sin alta ni lista  [rol: rrhh+]
                                             Alta y modificación           [rol: rrhh+]
