@@ -19,9 +19,11 @@ groups:
       # `for:`. QUIEN lo hizo y con que motivo lo dice `audit_log`, no la metrica.
       #
       # Cobertura: un contador que nace ya en 1 no tiene muestra previa y
-      # `increase` no ve ese primer salto; la aplicacion debe inicializar la
-      # serie a 0 al arrancar (si no, el primer evento tras un reinicio puede
-      # pasar sin alerta). El asiento de `audit_log` existe igualmente.
+      # `increase` no ve ese primer salto. Por eso la aplicacion ya expone a 0
+      # cada combinacion `action` x `role` antes del primer evento
+      # (`MetricDefinition::$zeroSeries` en `MetricCatalogue`), y el primer
+      # evento tras un reinicio tambien dispara. El asiento de `audit_log`
+      # existe igualmente.
       #------------------------------------------------------------------------
       - alert: KronoqrManagementTwoFactorReset
         expr: sum(increase(kronoqr_management_account_changes_total{action="two_factor_reset"}[5m])) > 0

@@ -481,6 +481,21 @@ su sesión o sus credenciales están comprometidas, después la cuenta creada o
 afectada, y deja la contraseña y el 2FA del titular legítimo para el final,
 cuando ya no haya sesiones ajenas abiertas. Cada comando escribe su asiento.
 
+**Contención inmediata, después de los comandos anteriores.** Ni la baja ni los
+restablecimientos cortan una conexión en tiempo real ya abierta (la pantalla de
+Presencia): la del atacante puede seguir recibiendo avisos hasta que se
+reconecte. Reinicia el servicio de tiempo real desde el directorio de la
+instalación:
+
+```bash
+# Corta TODAS las conexiones en tiempo real del panel. No afecta al fichaje: el quiosco no usa Reverb
+docker compose restart reverb
+```
+
+Corta las conexiones de **todas** las personas del panel, que se reconectan solas
+en segundos; las de las cuentas con los tokens revocados ya no pueden. **El
+fichaje no se entera**: las tablets no usan este servicio (regla dura 19).
+
 ### 9.4 Cuándo escalar
 
 - Nadie reconoce la operación, o el actor niega haberla hecho: **incidente de

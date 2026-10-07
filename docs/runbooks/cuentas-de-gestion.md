@@ -116,9 +116,18 @@ responsable: RRHH y administración lo siguen viendo entero.
 
 **Una conexión en tiempo real ya abierta** (la pantalla de Presencia que
 estuviera mirando) puede seguir recibiendo avisos hasta que se recargue o se
-reconecte; cualquier petición nueva ya se rechaza. Si la baja es por un
-incidente de seguridad, sigue además
-[`ataque-a-credenciales.md`](ataque-a-credenciales.md) §9.3.
+reconecte; cualquier petición nueva ya se rechaza. Lo mismo pasa con los
+restablecimientos de contraseña y de 2FA (sección 4). **Si la baja o el
+restablecimiento es por sospecha**, corta esas conexiones desde el directorio
+de la instalación —todas las del panel se reconectan solas en segundos, las
+revocadas ya no; el fichaje no se entera, porque las tablets no usan este
+servicio— y sigue además
+[`ataque-a-credenciales.md`](ataque-a-credenciales.md) §9.3:
+
+```bash
+# Corta TODAS las conexiones en tiempo real del panel. No afecta al fichaje: el quiosco no usa Reverb
+docker compose restart reverb
+```
 
 ---
 
@@ -165,6 +174,8 @@ responsable de seguridad. Asiento: `auth.two_factor_reset`.
 **Nunca las dos cosas a la vez sin motivo claro.** Restablecer contraseña **y**
 segundo factor de la misma cuenta es entregar la cuenta entera: es exactamente
 el patrón que vigila [`ataque-a-credenciales.md`](ataque-a-credenciales.md) §9.
+Si restableces por sospecha, corta después las conexiones en tiempo real con
+`docker compose restart reverb` (sección 2).
 
 ### 4.3 Cambiar la propia contraseña
 
