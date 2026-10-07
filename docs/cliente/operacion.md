@@ -444,6 +444,12 @@ nadie. **El fabricante no los conoce y no puede recuperarlos.** La lista
 completa, con la consecuencia de perder cada uno, está en
 [`instalacion.md`](instalacion.md), sección 3.
 
+**Si se pierde el servidor entero, hace falta también una copia del `.env`**, guardada fuera de él con la misma
+custodia que la clave de copias. Una instalación nueva genera `APP_KEY`, `QR_SIGNING_KEY_*` y
+`IDENTITY_PIN_SEALING_SECRET_KEY` nuevas: sin las de antes, ninguna tarjeta impresa vale y hay que reimprimirlas
+todas. El procedimiento completo está en
+[`../runbooks/perdida-total-del-servidor.md`](../runbooks/perdida-total-del-servidor.md).
+
 ### `BACKUP_ENCRYPTION_KEY`: esta sale del servidor
 
 Es la única que hay que custodiar **fuera** de la máquina, y el motivo es

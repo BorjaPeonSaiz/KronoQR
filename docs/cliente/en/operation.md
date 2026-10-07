@@ -456,6 +456,12 @@ nobody. **The vendor does not know them and cannot recover them.** The full
 list, with the consequence of losing each one, is in
 [`installation.md`](installation.md), section 3.
 
+**If the whole server is lost, you also need a copy of the `.env`**, kept off the server with the same custody as
+the backup key. A new installation generates new `APP_KEY`, `QR_SIGNING_KEY_*` and
+`IDENTITY_PIN_SEALING_SECRET_KEY`: without the old ones, no printed card is valid and every card has to be reprinted.
+The full procedure is in
+[`../../runbooks/perdida-total-del-servidor.md`](../../runbooks/perdida-total-del-servidor.md) (in Spanish).
+
 ### `BACKUP_ENCRYPTION_KEY`: this one leaves the server
 
 It is the only one that has to be kept **off** the machine, and the reason is

@@ -79,8 +79,10 @@ que también cubre el emparejamiento de la primera tablet.
 3. **El rango de red de las tablets** (`KIOSK_VLAN_CIDR`) y el de la red desde
    la que se podrá abrir el portal del empleado (`PORTAL_INTERNAL_CIDR`). Los
    dos están explicados en §6.
-4. **Dónde se guardan las copias de seguridad** (`BACKUP_PATH`), y si ese
-   destino es un recurso de red, **montado antes de instalar**.
+4. **Dónde se guardan las copias de seguridad** (`BACKUP_PATH`): en un
+   destino **que no sea el disco del propio servidor** y **alojado en la Unión
+   Europea** (§6, «`BACKUP_PATH`»). Si es un recurso de red, **montado antes de
+   instalar**.
 5. **La clave de licencia**, si ya la tienes. Si no, instala igualmente: se
    activa después y el sistema **ficha con normalidad sin ella**.
 
@@ -1331,6 +1333,25 @@ red (NAS, cabina), **tiene que estar montado antes de levantar los servicios**:
 si no lo está, PostgreSQL no puede archivar el WAL y acaba llenando su propio
 disco.
 
+**Elige el destino con dos condiciones, que el producto no puede comprobar por
+ti** (el instalador no sabe dónde está físicamente un recurso de red):
+
+1. **Dentro de la Unión Europea, y el servidor también.** Los datos del
+   registro horario tienen que estar alojados en la UE, en la infraestructura
+   del propio cliente (RL-14). Eso incluye el servidor, el NAS o cabina de las
+   copias y, si usas la nube, la región del proveedor. Una copia en un servicio
+   cuyo centro de datos está fuera de la UE incumple lo mismo que un servidor
+   fuera de ella.
+2. **No solo en el disco del servidor.** Una copia que vive en el mismo disco,
+   o en la misma máquina, que la base de datos se pierde con ella en un
+   incendio, un robo o un fallo del disco, y el registro horario hay que
+   conservarlo cuatro años. Pon `BACKUP_PATH` en otro equipo, o mantén ahí
+   una réplica en otro equipo y en otro edificio. Si el servidor se pierde por
+   completo, el procedimiento es
+   [`../runbooks/perdida-total-del-servidor.md`](../runbooks/perdida-total-del-servidor.md):
+   necesita estas copias y la clave de §1.6 (`BACKUP_ENCRYPTION_KEY`), también
+   **fuera del servidor**.
+
 **Todo lo que se guarda aquí va cifrado y autenticado** (desde la 2.2.0): el
 volcado diario, la copia física semanal y también el **WAL archivado**
 (`wal/<segmento>.gz.enc`), que hasta la 2.1.0 se guardaba solo comprimido.
@@ -1458,9 +1479,12 @@ públicas, no hace falta.
 ```bash
 registro="ghcr.io/kronoqr"
 version="$(cat VERSION)"
-for imagen in php nginx postgres; do
-  docker pull "${registro}/${imagen}:${version}"
-done
+# images.lock (en el paquete) fija el digest de cada imagen: se descarga ESA
+# imagen exacta y se le pone la etiqueta de la versión para guardarla.
+while read -r imagen digest; do
+  docker pull "${registro}/${imagen}@${digest}"
+  docker tag "${registro}/${imagen}@${digest}" "${registro}/${imagen}:${version}"
+done <images.lock
 docker pull redis:7-alpine
 
 docker save -o "imagenes-${version}.tar" \
@@ -1473,7 +1497,25 @@ docker save -o "imagenes-${version}.tar" \
 Copia ese fichero al servidor del hotel (USB, recurso interno). Allí, el `.env`
 tiene que llevar **el mismo** `IMAGE_REGISTRY` que usaste arriba: las imágenes
 cargadas se buscan por su nombre completo y, con otro registro, el instalador
-intentaría descargarlas. Después:
+intentaría descargarlas.
+
+**Las imágenes del paquete se fijan por digest** (`images.lock`): el
+`docker-compose.yml` pide `php:<versión>@sha256:…`, y una imagen cargada con
+`docker load` conserva la etiqueta pero no siempre el digest, así que el
+instalador no la reconocería e intentaría descargarla. En un servidor sin
+internet, **añade al final del `.env`, antes de instalar**, estas tres líneas
+(vacías a propósito: vuelven a la etiqueta de la versión):
+
+```dotenv
+IMAGE_DIGEST_PHP=
+IMAGE_DIGEST_NGINX=
+IMAGE_DIGEST_POSTGRES=
+```
+
+La integridad de las imágenes la dio entonces la descarga por digest de la
+máquina con internet. Con internet en el servidor **no hagas esto**: el digest
+es lo que garantiza que corres los mismos bytes que el resto de clientes de esa
+versión. Después:
 
 ```bash
 docker load -i "imagenes-$(cat VERSION).tar"

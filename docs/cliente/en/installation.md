@@ -78,8 +78,9 @@ brightness, the Android update window and the network — is in the runbook
 3. **The tablets' network range** (`KIOSK_VLAN_CIDR`) and the range of the
    network from which the employee portal can be opened
    (`PORTAL_INTERNAL_CIDR`). Both are explained in §6.
-4. **Where backups are stored** (`BACKUP_PATH`), and if that destination is a
-   network share, **mounted before installing**.
+4. **Where backups are stored** (`BACKUP_PATH`): on a destination that is
+   **not the server's own disk** and is **hosted in the European Union** (§6,
+   "`BACKUP_PATH`"). If it is a network share, **mounted before installing**.
 5. **The licence key**, if you already have it. If not, install anyway: it is
    activated afterwards and the system **clocks in and out normally without
    it**.
@@ -1355,6 +1356,23 @@ network share (NAS, storage array), **it has to be mounted before bringing the
 services up**: if it is not, PostgreSQL cannot archive the WAL and ends up
 filling its own disk.
 
+**Choose the destination with two conditions the product cannot check for you**
+(the installer cannot know where a network share physically is):
+
+1. **Inside the European Union, and so is the server.** Working-time data must
+   be hosted in the EU, on the customer's own infrastructure (RL-14). That
+   covers the server, the NAS or storage array holding the backups and, if you
+   use a cloud, the provider's region. A copy on a service whose data centre is
+   outside the EU breaks the same rule as a server outside it.
+2. **Not only on the server's disk.** A copy that lives on the same disk, or in
+   the same machine, as the database is lost with it in a fire, a theft or a
+   disk failure, and the working-time record must be kept for four years. Put
+   `BACKUP_PATH` on another machine, or keep a replica there on another machine
+   in another building. If the server is lost completely, the procedure is
+   [`../../runbooks/perdida-total-del-servidor.md`](../../runbooks/perdida-total-del-servidor.md):
+   it needs these copies and the key of §1.6 (`BACKUP_ENCRYPTION_KEY`), also
+   **outside the server**.
+
 **Everything stored here is encrypted and authenticated** (since 2.2.0): the
 daily dump, the weekly physical copy and also the **archived WAL**
 (`wal/<segment>.gz.enc`), which up to 2.1.0 was only compressed.
@@ -1484,9 +1502,12 @@ public, there is no need.
 ```bash
 registro="ghcr.io/kronoqr"
 version="$(cat VERSION)"
-for imagen in php nginx postgres; do
-  docker pull "${registro}/${imagen}:${version}"
-done
+# images.lock (in the package) pins each image's digest: that exact image is
+# downloaded and given the version tag so it can be saved.
+while read -r imagen digest; do
+  docker pull "${registro}/${imagen}@${digest}"
+  docker tag "${registro}/${imagen}@${digest}" "${registro}/${imagen}:${version}"
+done <images.lock
 docker pull redis:7-alpine
 
 docker save -o "imagenes-${version}.tar" \
@@ -1499,7 +1520,25 @@ docker save -o "imagenes-${version}.tar" \
 Copy that file to the hotel's server (USB, internal share). There, the `.env`
 must carry **the same** `IMAGE_REGISTRY` you used above: loaded images are
 looked up by their full name and, with a different registry, the installer
-would try to download them. Then:
+would try to download them.
+
+**The package pins its images by digest** (`images.lock`): `docker-compose.yml`
+asks for `php:<version>@sha256:...`, and an image loaded with `docker load`
+keeps its tag but not always its digest, so the installer would not recognise
+it and would try to download it. On a server without internet access, **add
+these three lines at the end of the `.env`, before installing** (empty on
+purpose: they fall back to the version tag):
+
+```dotenv
+IMAGE_DIGEST_PHP=
+IMAGE_DIGEST_NGINX=
+IMAGE_DIGEST_POSTGRES=
+```
+
+The images' integrity was then given by the digest download on the machine with
+internet. With internet on the server **do not do this**: the digest is what
+guarantees you run the same bytes as every other customer of that version.
+Then:
 
 ```bash
 docker load -i "imagenes-$(cat VERSION).tar"
