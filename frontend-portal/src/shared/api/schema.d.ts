@@ -7127,6 +7127,15 @@ export interface components {
              *     (ADR-012): su ausencia significa `false`.
              */
             password_change_required?: boolean;
+            /**
+             * @description `true` si la cuenta de la sesion tiene un segundo factor
+             *     **confirmado**. El panel lo usa para saber que reautenticacion
+             *     pedir en las acciones que la exigen (ADR-051 §7): el codigo del
+             *     autenticador (`actor_totp_code`) si es `true`, la contrasena
+             *     (`actor_current_password`) si es `false`. Dice el estado, nunca el
+             *     secreto. Opcional en v1 (ADR-012): su ausencia significa `false`.
+             */
+            two_factor_enabled?: boolean;
         };
         /**
          * ManagementRole
@@ -7686,6 +7695,18 @@ export interface components {
              *     (ADR-012): su ausencia equivale a `null`.
              */
             manager_user_uuid?: string | null;
+            /**
+             * @description Nombre de la **cuenta de gestion** responsable (`users.name`), o
+             *     `null` si el departamento no tiene responsable. Viaja para que
+             *     `rrhh` y los responsables vean quien dirige cada departamento sin
+             *     poder listar las cuentas, que solo lista `admin`
+             *     (`GET /management-accounts`). Es el nombre de la cuenta, no el de
+             *     un empleado de la plantilla. **Una cuenta dada de baja sigue
+             *     saliendo** con su nombre: el departamento se comporta como sin
+             *     responsable y el panel lo señala. Opcional en v1 (ADR-012): su
+             *     ausencia equivale a `null`.
+             */
+            manager_name?: string | null;
         };
         /**
          * DepartmentCollection
