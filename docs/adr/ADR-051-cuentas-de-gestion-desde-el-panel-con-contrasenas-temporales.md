@@ -65,7 +65,7 @@ los registros del servidor web.
 
 La baja **responde lo mismo, `404`, a «no existe» y a «ya estaba de baja»**, sin asiento (RS-03). Además:
 
-- Cierra todas las sesiones de la cuenta, incluida su suscripción al canal en tiempo real.
+- Revoca todos los tokens de la cuenta: su petición siguiente recibe `401`, y una suscripción nueva o una reconexión al canal en tiempo real fallan. Una conexión WebSocket ya abierta **no** se corta en el acto (residuo 6).
 - **Retira los accesos de soporte vigentes que esa cuenta concedió.** `Identity` publica la baja, `Product` revoca cada
   concesión y cada revocación deja su propio asiento. Un acceso temporal no sobrevive a quien respondía de él, aunque
   su tope sea `PRODUCT_SUPPORT_GRANT_MAX_HOURS`.
@@ -264,6 +264,19 @@ Llevan los `uuid` de la cuenta y del actor; nunca nombre, correo ni nada derivad
 5. **Las sesiones abiertas antes de actualizar no ven «Cuentas»** hasta que el `admin` vuelve a entrar. Se avisa en las
    notas de la versión.
 
+6. **Una conexión en vivo ya abierta sobrevive a la baja** (hallazgo B7 de la revisión, confirmado por `backend-laravel`).
+   La baja revoca los tokens de Sanctum, de modo que cualquier petición, suscripción nueva o reconexión falla. Pero una
+   conexión WebSocket de Reverb **ya abierta** sigue recibiendo los eventos `presence.updated` del canal de presencia
+   hasta que el navegador la cierra o se reconecta, y la reconexión ya falla. Hoy no hay ningún mecanismo para cerrarla
+   desde el servidor.
+   - **Alcance:** solo lectura de la presencia en tiempo real (quién está fichado ahora), dentro del alcance que tenía esa
+     cuenta. No escribe nada y no da acceso a ninguna otra ruta.
+   - **Lo mismo ocurre** con los restablecimientos de contraseña y de segundo factor y con el cambio propio, que también
+     revocan tokens.
+   - **Palanca futura:** cerrar desde Reverb las conexiones del usuario al revocar sus tokens, con un evento de revocación
+     que el servidor de WebSocket atienda. Candidato: bloque 22 (operación y resiliencia) u otro posterior, con dueño
+     `backend-laravel`.
+
 **Cerrado y no residual:** la asignación de responsable por SQL. Lo resuelve `manager_user_uuid` en
 `PATCH /departments/{id}` (§5).
 
@@ -305,7 +318,7 @@ Llevan los `uuid` de la cuenta y del actor; nunca nombre, correo ni nada derivad
 
 | Punto | Prueba que lo demuestra |
 |---|---|
-| 1 | Feature y contrato de las seis rutas. `404` idéntico para «no existe» y «ya de baja», sin asiento. Los tokens anteriores de la cuenta responden `401` tras la baja. La suscripción Reverb se corta. Las concesiones de soporte vigentes del actor dado de baja quedan revocadas |
+| 1 | Feature y contrato de las seis rutas. `404` idéntico para «no existe» y «ya de baja», sin asiento. Los tokens anteriores de la cuenta responden `401` tras la baja. Una suscripción nueva y una reconexión a Reverb fallan (la conexión ya abierta no se corta: residuo 6). Las concesiones de soporte vigentes del actor dado de baja quedan revocadas |
 | 2 | Autorización negativa en cada ruta de `accounts:*`: `403` para `rrhh`, `responsable_departamento` y `auditor`, para el soporte con **cada** alcance y para los tokens de quiosco y de portal; `401` sin token y con `2fa:pending`. `POST /auth/password`: `403` para el soporte con cada alcance. Las tres copias de `accounts:*` coinciden. `SupportScopeRoutesTest` sin las rutas nuevas |
 | 3 | `PasswordStatus` en la frontera exacta de la caducidad, con `Clock` fijo. Una temporal caducada da el mismo `401` en `login`, `2fa/verify` y `2fa/confirm`. Prueba sobre `Router::getRoutes()`: toda ruta con ámbito rechaza `password:change` con `password-change-required`, incluido `/broadcasting/auth`. Recorrido completo de la temporal. Generador: longitud, cuatro clases, sin ambiguos y como mucho 72 bytes. Cambio propio: `422`; el contador propio abre el bloqueo con `429`, el token revocado y `auth.lockout_started`; escritura condicionada con `409` y `401` |
 | 4 | `ManagementAccountDeactivationGuard` en unitaria. Integración con dos conexiones sobre las dos únicas `admin`: prospera una. `identity:deactivate-user` rechaza la última |

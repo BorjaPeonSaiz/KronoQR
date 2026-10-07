@@ -1125,9 +1125,13 @@ export interface paths {
          *     contrasena, `409` (`urn:kronoqr:problem:conflict`) sin cambiar nada; si
          *     la sesion se cerro —una baja, un restablecimiento—, `401`.
          *
-         *     **Cierra las demas sesiones de la cuenta y conserva esta.** Quien cambia
-         *     su contrasena porque sospecha es quien mas necesita que la otra sesion
-         *     se cierre; y echarle a el de la que esta usando no protege nada.
+         *     **Revoca los tokens de las demas sesiones de la cuenta y conserva
+         *     este.** Quien cambia su contrasena porque sospecha es quien mas necesita
+         *     que la otra sesion caiga; y echarle a el de la que esta usando no
+         *     protege nada.
+         *     Una conexion en vivo ya abierta con la presencia en tiempo real sigue
+         *     recibiendo hasta que se reconecta, y la reconexion falla (ADR-051,
+         *     residuo 6).
          *
          *     **Auditado** (regla dura 6): asiento `user.password_changed` con el
          *     `uuid` de la cuenta como actor y sujeto. Ni la contrasena ni nada
@@ -1257,10 +1261,18 @@ export interface paths {
         /**
          * Baja de una cuenta de gestion
          * @description Retira el acceso al panel a una cuenta (RF-ID-10, RS-05, RL-16):
-         *     `status` pasa a `deactivated` y **todas** sus sesiones y retos abiertos
-         *     dejan de valer en la misma transaccion, incluida su suscripcion al
-         *     canal en tiempo real. Aunque un token sobreviviera, no autorizaria: la
+         *     `status` pasa a `deactivated` y **todos** sus tokens —sesiones y retos
+         *     abiertos— se revocan en la misma transaccion: su peticion siguiente
+         *     recibe `401`. Aunque un token sobreviviera, no autorizaria: la
          *     comprobacion de cada peticion consulta tambien el estado de la cuenta.
+         *
+         *     **Lo que no corta en el acto: una conexion en vivo ya abierta.** Si esa
+         *     cuenta tenia el panel abierto, su conexion WebSocket con el canal de
+         *     presencia en tiempo real (`presence.updated`) sigue recibiendo eventos
+         *     hasta que se cierra o se reconecta; la reconexion y cualquier
+         *     suscripcion nueva fallan, porque `/broadcasting/auth` exige un token
+         *     valido. Es un canal de solo lectura y no escribe nada (ADR-051,
+         *     residuo 6).
          *
          *     **Con ella caen los accesos de soporte que esa cuenta concedio** y
          *     siguen vigentes (`/support/grants`): un acceso temporal no sobrevive a
@@ -1342,9 +1354,12 @@ export interface paths {
          *     `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` y, hasta que su titular fije la
          *     suya con `POST /auth/password`, sus sesiones solo alcanzan esa ruta.
          *
-         *     **Cierra todas las sesiones de la cuenta** en la misma transaccion. De
+         *     **Revoca todos los tokens de la cuenta** en la misma transaccion. De
          *     los dos motivos para restablecer —olvido y sospecha— en el que importa
          *     quien esta dentro lleva una sesion viva.
+         *     Una conexion en vivo ya abierta con la presencia en tiempo real sigue
+         *     recibiendo hasta que se reconecta, y la reconexion falla (ADR-051,
+         *     residuo 6).
          *
          *     **El segundo factor no se toca.** Si tambien hay que retirarlo es
          *     `POST /management-accounts/{uuid}/two-factor/reset`, otro hecho con su
@@ -1400,9 +1415,12 @@ export interface paths {
          *     `422` en el campo si el codigo o la contrasena del actor no valen,
          *     `429` con `Retry-After` con el bloqueo abierto.
          *
-         *     **Cierra todas las sesiones de la cuenta** en la misma transaccion.
+         *     **Revoca todos los tokens de la cuenta** en la misma transaccion.
          *     Retirar el segundo factor sin echar a quien ya esta dentro no retira
          *     nada.
+         *     Una conexion en vivo ya abierta con la presencia en tiempo real sigue
+         *     recibiendo hasta que se reconecta, y la reconexion falla (ADR-051,
+         *     residuo 6).
          *
          *     **Abre una ventana, y se dice.** Hasta que el titular vuelva a activar
          *     su TOTP, quien conozca su contrasena puede activarlo por el (el mismo
