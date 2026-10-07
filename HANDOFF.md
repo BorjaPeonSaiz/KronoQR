@@ -13,63 +13,56 @@ el método en la sección «Método» de ese plan y en «Método de trabajo acor
 CI manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge
 commit.** Lo integra quien ejecuta el bloque si la CI está en verde.
 
-**Integrados en `main`:** bloques 0 a 12, 12b, 12c y 15 a 20. El último, **bloque 12c «Pantalla de cuentas de gestión»**, es la
-PR #118 (`main` `e4477672`, 07-10-2026). Decisión: **ADR-051** (aceptado con los cambios de `seguridad-cumplimiento`). Contrato primero:
-`/api/v1/management-accounts` (listar, crear, baja, restablecer contraseña y 2FA) y `POST /api/v1/auth/password`, bajo el ámbito nuevo
-`accounts:*` (solo `admin`, fuera de todo alcance de soporte). La contraseña que fija otra persona se devuelve **una sola vez**, caduca
-a las `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` (72) y hasta cambiarla la sesión nace con el único ámbito `password:change` (todo responde
-`403 password-change-required`: falla cerrado). Reautenticación del admin que actúa (TOTP o contraseña actual) en el alta y los
-restablecimientos; motivo obligatorio; sin baja propia ni de la última admin; 404 único «no existe»/«ya de baja»; la baja revoca tokens
-y los accesos de soporte concedidos por la cuenta. Orden único de candados cadena → padrón → fila (`ConfirmTwoFactor`, `Deactivate`,
-`ResetPassword` y `CreateFirstAdministrator` pasan a `withChainLock`; `users` `FOR NO KEY UPDATE`; el renombrado del departamento toma la
-fila `FOR UPDATE` antes de la cadena). **Alcance añadido en el bloque (flagado al propietario, sin objeción):** `manager_user_uuid` en
-`PATCH /departments/{id}` con `role_assignment.changed` por cuenta: el responsable de departamento ya no se asigna por SQL. Métrica
-`kronoqr_management_account_changes_total{action,role}` y alertas `KronoqrManagementTwoFactorReset` y `KronoqrManagementAdminAccountCreated`
-al receptor `seguridad`; runbook `cuentas-de-gestion.md`; doc 07 filas 195/225/234 (cerrada)/294 y **A-26 a A-28**; RF-ID-10 y tarea 4.1
-del plan de la fase 4. Panel: sección «Cuentas», «Cambiar mi contraseña» con flujo obligado, pantalla «Departamentos» con selector de
-responsable, `TotpCodeInput` compartido. **Tras actualizar a la 2.2.0 el admin tiene que volver a entrar** (los tokens anteriores no llevan
-`accounts:*`). Los anteriores: 12b «PIN de la importación masiva» (PR #116, `06d6440d`: la importación no emite PIN, nace pendiente y se
-emite al entregar la tarjeta) y 12 «Portal abierto a internet» (PR #114, `76183531`, ADR-050).
+**Integrados en `main`:** bloques 0 a 12, 12b, 12c y 15 a 21. El último, **bloque 21 «Panel: permisos y pantallas que faltan»**, es
+la PR #120 (`main` `d83828dc`, 07-10-2026). `GET /departments` y `/{id}` legibles por los cuatro roles de gestión: grupo de rutas con
+`employees:read` **o** `attendance:read` (`CheckForAnyAbility`), `DepartmentPolicy::canRead()` cierra los tres alcances de soporte,
+contrato con los dos ámbitos, pruebas de los cuatro roles y del soporte (`DepartmentReadAccessTest`). Pantalla «Departamentos» del 12c
+ampliada con **crear, renombrar con motivo y el nombre del centro** (`updateSite`), en `/departments` para `employees:read` o
+`attendance:read`. Presencia en vivo: enlace al detalle de jornada en cada fila **solo para admin, rrhh y responsable** (el auditor no
+lee jornadas ni la presencia: `WorkDayJournalPolicy::readers()` y `LivePresencePolicy`, tarea 1.17; decisión pendiente abajo), avisos no
+bloqueantes de sondeo, filtro y reconexión del canal (`refresh-notice` con `data-kind`), reintento con backoff acotado en tiempo real,
+«última actualización» que refleja lo recibido y «Volver a la presencia». Perfil de cumplimiento y ajustes operativos con «antes →
+después» (`ChangePreview`) y confirmación. Unitarias de `CorrectionDialog` y `EmployeeWorkDaysView`; portal: «Descargar mi historial»
+sin desbordar al 200 %. Doc 07 A-17/A-27, doc 02 §7.3 nota 8, doc 01 Anexo B, `operacion.md` §12.4. Los anteriores: 12c «Cuentas de
+gestión» (PR #118, `e4477672`, ADR-051: `/api/v1/management-accounts`, contraseñas temporales con `password:change`, `accounts:*` solo
+`admin`, `manager_user_uuid` en `PATCH /departments/{id}`; **tras actualizar a la 2.2.0 el admin tiene que volver a entrar**), 12b «PIN de
+la importación masiva» (PR #116, `06d6440d`) y 12 «Portal abierto a internet» (PR #114, `76183531`, ADR-050).
 
-**Siguiente acción:** abrir la rama del **bloque 21** («Panel: permisos y pantallas que faltan», rama `feat/panel-permisos-y-pantallas`)
-desde `origin/main`, siguiendo el plan: `GET /departments` legible por responsable y auditor (contrato primero, policy y pruebas de los
-cuatro roles; decisión del propietario del 02-10-2026: lectura abierta), pantalla de departamentos con **crear y renombrar** y nombre del
-centro (la pantalla `/departments` del 12c ya existe con el selector de responsable: ampliarla, no duplicarla), camino directo al detalle
-de jornada para responsable y auditor, avisos de la presencia en vivo, «antes → después» en perfil de cumplimiento y ajustes, unitarias
-de `CorrectionDialog`, y «Descargar mi historial» del portal al 200 %. Orden que queda: **21 → 22 → 13 → 14 → final.** El bloque final
+**Siguiente acción:** abrir la rama del **bloque 22** («Operación y resiliencia», rama `fix/operacion-y-resiliencia`) desde
+`origin/main`, siguiendo el plan: R3-CH-01/R3-CH-02 el fichaje responde en un tiempo acotado con Redis o PostgreSQL caídos (medir antes
+en Linux: la cifra de 12-45 s es de Docker Desktop), R4-DV-01 las alertas de negocio saltan cuando Redis cae en vez de desaparecer con
+sus métricas, R4-DV-02 `product:doctor` nombra `horizon`, R6-PL-01 `install.sh` deshace lo hecho ante un corte de SSH, un `kill` o
+Ctrl+C, R5-QA-01 `load-test.yml` lanzable a mano y con cualquier `v*.*.0`. Orden que queda: **22 → 13 → 14 → final.** El bloque final
 repone las etiquetas `v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0`
 sigue en local).
 
-**Lo que destapó el cierre del bloque 12c y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-12c-cuentas-gestion`
-y `bloque-12c-revisiones`; lo de los bloques 12 y 12b en `bloque-12-portal-internet`, `bloque-12b-pin-importacion` y
-`bloque-12b-revisiones`):
+**Lo que destapó el cierre del bloque 21 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-21-panel-permisos`
+y `bloque-21-e2e-presencia`; lo de los bloques 12, 12b y 12c en `bloque-12-portal-internet`, `bloque-12b-pin-importacion`,
+`bloque-12b-revisiones`, `bloque-12c-cuentas-gestion` y `bloque-12c-revisiones`):
 
-- **Los E2E escritos sin ejecutar costaron tres vueltas de CI.** Playwright trata `aria-disabled` como deshabilitado (`toHaveAttribute` y
-  `click({ force: true })`), `getByText` sin `exact` casa el resumen de errores y el campo, y las etiquetas de `FormField` llevan el
-  asterisco (usar `data-test`). Pedir al agente del panel E2E con `data-test` y sin `toBeEnabled`/`getByLabel` exacto, o correr
-  Playwright en el host.
-- **Un `UPDATE` que cambia una columna de un índice único toma `FOR UPDATE`** aunque la fila se hubiera bloqueado `FOR NO KEY UPDATE`: con
-  la cadena ya tomada hay ciclo con los `KEY SHARE` de las claves ajenas (ADR-046 §1.1.3/§1.1.4). Silenciar `EmployeeLockDisciplineTest`
-  era el síntoma, no la solución.
-- gitleaks `generic-api-key` dispara por el nombre de la constante (`TARGET`, `PASSWORD`) aunque el valor sea un UUID de prueba: perdonar
-  por valor exacto en `.gitleaks.toml`, nunca por ruta.
-- Un agente con contexto enorme (más de 700 k tokens) dejó de entregar sus informes: verificar el árbol con las herramientas y commitear.
-- Precedente mantenido: CI manual completa en verde en el commit N y CI del push completa en verde en el N+1 cuando el cambio es trivial
-  (una aserción, una entrada de allowlist).
-
-- **Los contenedores `node-*` del compose de desarrollo son Alpine (musl): el Chromium de Playwright no arranca ahí.** Los E2E se
-  validan en el job ⑦ de la CI o con `make e2e` en el host; no instalar navegadores en los contenedores.
-- Dentro del asistente de puesta en marcha **ningún `RouterLink` sale de `/setup`** (la guarda manda todo ahí hasta cerrarlo): un
-  enlace a otra sección va al resumen final. Las pruebas de componente con router simulado no detectan guardas.
-- El tablero de credenciales es de `Identity` y no conoce el `pin_status` de `Workforce`: cruzar módulos se evita leyendo la ficha
-  desde el panel al abrir el diálogo.
-- Una aserción `getByText('…', { exact: true })` no encuentra un texto que es parte de otro («Estado del PIN: Entregado»): asertar
-  con `toContainText` sobre la sección. `make traceability` tarda unos diez minutos y escribe el fichero al terminar: sin agentes.
-- La CI de Pest no tiene `APP_URL`: `config/cors.php` toma el mismo valor de serie que `config/app.php`. ⑧b compara con `origin/main`
-  (ya cifra el WAL): la semilla de «WAL en claro» detecta si la versión anterior ya cifra. Cada palabra nueva de un mensaje de error
-  entra en `ErrorVocabulary`; los clientes TypeScript se regeneran tras **cualquier** retoque de `openapi.yaml`.
-- `TraceabilityMatrixFreshnessTest` falla en Arquitectura si se añaden pruebas sin regenerar la matriz. El log de un job en curso solo
-  se lee con `gh api …/actions/jobs/{id}/logs`.
+- **Los E2E escritos sin ejecutar siguen costando vueltas de CI** (Playwright no arranca en los contenedores `node-*`, que son Alpine):
+  en una lista ordenada por el servidor no se elige a una persona con `.first()` (fila por `data-employee`); tirar Reverb para probar
+  el aviso del sondeo tapa lo que se quiere afirmar, porque la caída del canal tiene su propio aviso (apagar `meta.realtime` en la
+  foto). Siguen valiendo las del 12c: `aria-disabled` cuenta como deshabilitado (`toHaveAttribute`, `click({ force: true })`),
+  `getByText` sin `exact` casa el resumen de errores, las etiquetas de `FormField` llevan asterisco (`data-test`).
+- `ability:a,b` (`CheckForAnyAbility`) en un grupo de rutas abre una lectura a dos ámbitos sin tocar las policies de escritura; la
+  policy sigue cerrando el soporte y la prueba negativa pasa a ser «los cuatro roles sí, los tres alcances de soporte no».
+- Un enlace que acaba en 403 no es un enlace: el panel lo oculta a quien no puede leer el destino y el E2E afirma la ausencia del
+  enlace además del 403 del doble.
+- La matriz de trazabilidad lleva **líneas** de los E2E: mover cuatro líneas en un spec obliga a regenerarla (`make traceability`,
+  diez minutos, sin agentes) o `TraceabilityMatrixFreshnessTest` falla en Arquitectura.
+- El Trivy de imágenes puede caer por un 404 transitorio del espejo de la base de vulnerabilidades (`mirror.gcr.io`): si el mismo job
+  pasa en el otro run del mismo commit, relanzar sin tocar nada.
+- Un agente con contexto enorme (más de 700 k tokens) deja de entregar sus informes: verificar el árbol con las herramientas y
+  commitear. Precedente mantenido: CI manual completa en verde en el commit N y CI del push completa en verde en el N+1 cuando el
+  cambio es trivial.
+- gitleaks `generic-api-key` dispara por el nombre de la constante aunque el valor sea un UUID de prueba: perdonar por valor exacto en
+  `.gitleaks.toml`, nunca por ruta. Un `UPDATE` sobre una columna de índice único toma `FOR UPDATE`: con la cadena tomada hay ciclo
+  con los `KEY SHARE` de las claves ajenas (ADR-046).
+- Dentro del asistente de puesta en marcha ningún `RouterLink` sale de `/setup`. El tablero de credenciales no conoce `pin_status`: se
+  lee la ficha al abrir el diálogo. La CI de Pest no tiene `APP_URL`; cada palabra nueva de un mensaje de error entra en
+  `ErrorVocabulary`; los clientes TypeScript se regeneran tras **cualquier** retoque de `openapi.yaml`. El log de un job en curso se
+  lee con `gh api …/actions/jobs/{id}/logs`.
 
 **Integrado también el 06-10-2026:** PR #110 (`laravel/reverb` 1.12.0) y #111 (menores de npm), de Dependabot; borradas las ramas
 remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` entre bloque y bloque.
@@ -86,6 +79,11 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
   (`manager_user_uuid`, solo `admin`); (b) el **plazo de retención** del nombre y el correo de las cuentas dadas de baja y de los motivos
   libres de `audit_log` (doc 07 A-27), con la asesoría o el DPO del cliente.
   La línea base del runner y la fila del modelo de amenazas (reloj del quiosco) ya se hicieron en `chore/restos-3.8`.
+- **Decidir si el auditor lee el detalle de jornada y la presencia en vivo (bloque 21, 07-10-2026).** Hoy `WorkDayJournalPolicy::readers()`
+  es admin, rrhh y responsable, y `LivePresencePolicy` tampoco admite al auditor (tarea 1.17: su camino es la exportación legal). El plan
+  (R3-PA-05) pedía «camino directo al detalle de jornada para responsable y auditor»: el panel solo enseña el enlace a quien puede leer
+  jornadas, y abrirla al auditor contradice doc 05 §3.4 y exige un ADR. Si se abre, la fila del catálogo de roles, las dos policies, las
+  pruebas negativas y el panel cambian juntos.
 - **Decididas el 24-09-2026 (tras el cierre de la Fase 3), aplicadas en `docs/decisiones-post-cierre-3`:** (1) **un acceso de
   soporte `read_only` ya no alcanza la presencia en vivo ni el resumen de cumplimiento por persona** (policies con `isSupportActor()`,
   prueba por alcance, lista cerrada de `SupportScopeRoutesTest` sin esas dos rutas; sigue leyendo plantilla y el registro horario de
