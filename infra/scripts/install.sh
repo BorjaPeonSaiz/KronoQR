@@ -107,6 +107,9 @@ readonly KQ_MIN_DISK_GIB=40
 readonly KQ_POLL_SECONDS=2
 readonly KQ_WAIT_DEPENDENCIES=180
 readonly KQ_WAIT_APPLICATION=180
+# Gracia de las sondas /api/v1/health y /api/v1/ready: el tiempo del
+# cortacircuitos de la aplicacion (10 s) y dos de margen. Ver kq_retry_probe.
+readonly KQ_READY_GRACE_SECONDS=12
 
 # El uid con el que corre el borde HTTP dentro del contenedor
 # (nginx-unprivileged, infra/docker/nginx/Dockerfile). Lo necesita la fase 1
@@ -1074,11 +1077,22 @@ phase_secrets() {
   # no exista: una senal que llegue entre el `cp` y el registro dejaria, si no,
   # la copia huerfana (con el MAIL_PASSWORD del cliente) y sin quien la retire.
   # La etiqueta sale del catalogo: `discard_undo` la busca por ese mismo texto.
+  #
+  # Y la copia solo aparece COMPLETA (revision de seguridad del bloque 22): se
+  # escribe en un temporal —0600 desde que nace, por el `umask 077`— y se
+  # renombra al final, que es atomico. Un `cp` cortado por disco lleno o por el
+  # mismo SIGHUP que corta la sesion deja, como mucho, el temporal (lo barre el
+  # trap EXIT); la accion de deshacer nunca ve una copia truncada que mover
+  # encima de un .env intacto. Propietario y fechas se copian del original.
   backup_env="${ENV_FILE}.kronoqr-pre-install"
+  local backup_tmp="${backup_env}.tmp.$$"
+  TEMP_FILES+=("${backup_tmp}")
   register_undo "$(kq_format undo_env "${ENV_FILE}")" \
     "if [ -f '${backup_env}' ]; then mv -f '${backup_env}' '${ENV_FILE}'; fi"
-  cp -p "${ENV_FILE}" "${backup_env}"
-  chmod 0600 "${backup_env}"
+  (umask 077 && cp -- "${ENV_FILE}" "${backup_tmp}")
+  chown "$(stat -c %u:%g -- "${ENV_FILE}")" -- "${backup_tmp}"
+  touch -r "${ENV_FILE}" -- "${backup_tmp}"
+  mv -f -- "${backup_tmp}" "${backup_env}"
 
   chmod 0600 "${ENV_FILE}"
 
@@ -1382,7 +1396,7 @@ phase_verify() {
   heading "$(kq_text phase_5)"
 
   for path in /api/v1/health /api/v1/ready; do
-    if probe "${path}"; then
+    if kq_retry_probe "${path}" probe "${path}"; then
       kq_msg check_ok "$(kq_format verify_probe "${path}")"
     else
       err ""

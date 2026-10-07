@@ -1596,9 +1596,10 @@ jobs:
         # Se interrumpe con SIGTERM porque es la unica de las tres que se puede
         # mandar de forma fiable a un proceso en segundo plano: bash IGNORA
         # SIGINT en lo que lanza con `&` desde un guion, y SIGHUP sigue el mismo
-        # camino de codigo que SIGTERM (lo cubre la prueba de senales del
-        # instalador). Se manda al `bash ./install.sh` y no a `sudo`: es el
-        # proceso que tiene los traps. Sus subshells tienen la misma linea de
+        # camino de codigo que SIGTERM (lo cubre, sin Docker y con HUP incluido,
+        # backend/tests/Integration/Install/InstallInterruptionTest.php).
+        # Se manda al `bash ./install.sh` y no a `sudo`: es el proceso que
+        # tiene los traps. Sus subshells tienen la misma linea de
         # ordenes y tambien la reciben, que es justo el caso que la guarda de
         # BASHPID tiene que aguantar sin deshacer dos veces.
         #

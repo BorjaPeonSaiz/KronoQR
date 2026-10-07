@@ -420,3 +420,33 @@ check_operational_settings() {
     fi
   done
 }
+
+# Repite una sonda hasta que responda o pasen KQ_READY_GRACE_SECONDS (12 s),
+# consultando cada KQ_POLL_SECONDS. Uso: kq_retry_probe RUTA orden [args...]
+#
+# POR QUE NO BASTA UN INTENTO (revision del bloque 22). Desde la 2.2.0 la
+# aplicacion tiene cortacircuitos hacia Redis y PostgreSQL: si al arrancar
+# encuentra una de las dos un instante antes de que acepte conexiones, abre el
+# circuito durante REDIS_/DB_CIRCUIT_BREAKER_SECONDS (10 s por defecto) y
+# /api/v1/ready responde 503 hasta que se cierra. Un unico intento convertia
+# ese parpadeo en una instalacion o una actualizacion deshechas. 12 s = el
+# tiempo del circuito y dos de margen; no mas, para que un fallo de verdad se
+# diga pronto.
+#
+# Las llamadas que capturan la salida (`body="$(kq_retry_probe ...)"`) reciben
+# solo la de la sonda: el aviso de espera va a stderr. La orden se evalua como
+# condicion, asi que su fallo no dispara el `trap ERR` de quien la llama.
+kq_retry_probe() {
+  local path="$1" deadline announced=0
+  shift
+  deadline=$((SECONDS + KQ_READY_GRACE_SECONDS))
+
+  until "$@"; do
+    [ "${SECONDS}" -lt "${deadline}" ] || return 1
+    if [ "${announced}" -eq 0 ]; then
+      printf '%s\n' "$(kq_format probe_waiting "${path}" "${KQ_READY_GRACE_SECONDS}")" >&2 || true
+      announced=1
+    fi
+    sleep "${KQ_POLL_SECONDS}"
+  done
+}
