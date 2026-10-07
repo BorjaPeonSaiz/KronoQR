@@ -194,11 +194,11 @@ ready_code() {
   curl -sS -k -o /dev/null --max-time 10 -w '%{http_code}' "${BASE_URL}/api/v1/ready" 2>/dev/null || true
 }
 
-# scan_body TARJETA -> cuerpo JSON de un fichaje; deja el scan_id en SCAN_ID.
+# scan_body SCAN_ID TARJETA -> cuerpo JSON de un fichaje (el scan_id lo genera
+# quien llama: una sustitucion de ordenes es una subshell y no devolveria nada).
 scan_body() {
-  SCAN_ID="$(uuid7)"
   printf '{"scan_id":"%s","occurred_at":"%s","qr_payload":"%s","intent":"auto"}' \
-    "${SCAN_ID}" "$(date -u +%Y-%m-%dT%H:%M:%S.000000Z)" "$1"
+    "$1" "$(date -u +%Y-%m-%dT%H:%M:%S.000000Z)" "$2"
 }
 
 # Una ronda: anota cuatro lineas "RONDA|ENDPOINT|CODIGO|SEGUNDOS" en la tabla.
@@ -211,11 +211,13 @@ run_round() {
   out="$(measure GET /api/v1/ready)"
   printf '%s|GET /api/v1/ready|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
   card="${VALID_CARDS[$((index % ${#VALID_CARDS[@]}))]}"
-  body="$(scan_body "${card}")"
-  out="$(measure POST /api/v1/scan "${body}" "${SCAN_ID}")"
+  scan_id="$(uuid7)"
+  body="$(scan_body "${scan_id}" "${card}")"
+  out="$(measure POST /api/v1/scan "${body}" "${scan_id}")"
   printf '%s|POST /api/v1/scan (valida)|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
-  body="$(scan_body "${UNKNOWN_CARD}")"
-  out="$(measure POST /api/v1/scan "${body}" "${SCAN_ID}")"
+  scan_id="$(uuid7)"
+  body="$(scan_body "${scan_id}" "${UNKNOWN_CARD}")"
+  out="$(measure POST /api/v1/scan "${body}" "${scan_id}")"
   printf '%s|POST /api/v1/scan (desconocida)|%s\n' "${label}" "${out// /|}" >>"${TABLE}"
 }
 
