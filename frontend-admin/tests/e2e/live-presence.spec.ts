@@ -9,7 +9,14 @@
 import type { BrowserContext, Page, WebSocketRoute } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import type { LivePresenceBoard, LivePresenceEntry } from '@/shared/api/types'
-import { LIVE_BOARD, LIVE_ENTRY, logIn, stubManagementApi } from './support/admin'
+import {
+  LIVE_BOARD,
+  LIVE_ENTRY,
+  logIn,
+  logInAsAuditor,
+  logInAsManager,
+  stubManagementApi,
+} from './support/admin'
 
 interface FakeReverb {
   readonly sockets: WebSocketRoute[]
@@ -295,5 +302,55 @@ test(
     )
     expect(lcp).toBeGreaterThan(0)
     expect(lcp).toBeLessThan(1_500)
+  },
+)
+
+// R3-PA-05 (doc 05 §3.2): responsable y auditor llegan al detalle de jornada
+// desde la fila de la presencia, en el dia de la entrada en la zona del centro.
+for (const role of ['manager', 'auditor'] as const) {
+  test(
+    `${role}: el nombre de la fila lleva al detalle de jornada de esa persona`,
+    { tag: ['@RF-PA-01', '@RF-PA-03'] },
+    async ({ context, page }) => {
+      await fakeReverb(context)
+      await stubManagementApi(page, { role })
+      await (role === 'manager' ? logInAsManager(page) : logInAsAuditor(page))
+      await page.goto('/live')
+
+      await page.getByTestId('entry-workdays-link').first().click()
+
+      await expect(page).toHaveURL(
+        new RegExp(`/employees/${LIVE_ENTRY.employee_uuid}/workdays\?from=[\d-]+&to=[\d-]+$`),
+      )
+      await expect(page).not.toHaveURL(/\/forbidden/)
+    },
+  )
+}
+
+// R2-PA-01, R3-PA-01, R3-PA-02: con datos ya en pantalla, un fallo se avisa sin
+// tapar la lista, y el aviso se retira al recuperarse.
+test(
+  'un sondeo que falla avisa sin tapar la lista y el aviso desaparece al recuperarse',
+  { tag: ['@RF-PA-01', '@RNF-D-03'] },
+  async ({ context, page }) => {
+    await fakeReverb(context, 'down')
+    const board: LivePresenceBoard = {
+      ...LIVE_BOARD,
+      meta: {
+        ...LIVE_BOARD.meta,
+        realtime: { ...LIVE_BOARD.meta.realtime, poll_interval_seconds: 1 },
+      },
+    }
+    await openLive(page, board)
+    await expect(page.getByTestId('refresh-notice')).toHaveCount(0)
+
+    await page.route('**/api/v1/attendance/live*', (route) => route.fulfill({ status: 503 }))
+    await expect(page.getByTestId('refresh-notice')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByTestId('refresh-notice')).toHaveAttribute('aria-live', 'polite')
+    await expect(page.getByTestId('presence-entry').first()).toBeVisible()
+    await expect(page.getByTestId('generated-at')).toContainText('Europe/Madrid')
+
+    await page.unroute('**/api/v1/attendance/live*')
+    await expect(page.getByTestId('refresh-notice')).toHaveCount(0, { timeout: 8_000 })
   },
 )

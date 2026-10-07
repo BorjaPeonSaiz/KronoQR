@@ -31,6 +31,14 @@ import type { RealtimeState, SocketFactory } from './realtime/pusherClient'
 /** Por que via se mantiene la foto al dia. `idle` = todavia no se ha pedido. */
 export type PresenceTransport = 'idle' | 'realtime' | 'polling'
 
+/** Que tipo de peticion fallo, para decir al usuario que ha pasado y que datos esta viendo. */
+export type PresenceFailureKind = 'poll' | 'filter'
+
+export interface PresenceFailure {
+  kind: PresenceFailureKind
+  error: unknown
+}
+
 /** Como comparar dos nombres del mismo modo en el que ordena el servidor: apellidos, nombre y UUID de desempate. */
 function compareEntries(left: LivePresenceEntry, right: LivePresenceEntry): number {
   const byName = left.full_name.localeCompare(right.full_name, undefined, { sensitivity: 'base' })
@@ -81,6 +89,12 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
   const realtimeState = ref<RealtimeState>('down')
   /** `Date.now()` del navegador en el momento en que llego `meta.generated_at`. */
   const receivedAt = ref(0)
+  /** Instante (ISO, UTC) del ultimo dato recibido con exito: foto, o mensaje del canal. No la hora del intento. */
+  const lastUpdatedAt = ref<string | null>(null)
+  /** El ultimo refresco HTTP fallido con datos previos en pantalla; se limpia al recibir uno bueno. */
+  const refreshFailure = ref<PresenceFailure | null>(null)
+  /** El canal se ha caido (y se reintenta): se limpia al volver a estar vivo. */
+  const realtimeFailed = ref(false)
 
   let client: RealtimeClient | null = null
   let pollTimer: ReturnType<typeof setTimeout> | undefined
@@ -107,10 +121,12 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     entries.value = [...data].sort(compareEntries)
     meta.value = boardMeta
     receivedAt.value = Date.now()
+    lastUpdatedAt.value = boardMeta.generated_at
+    refreshFailure.value = null
     latestByEmployee.clear()
   }
 
-  async function load(): Promise<void> {
+  async function load(kind: PresenceFailureKind = 'poll'): Promise<void> {
     loading.value = entries.value.length === 0 && meta.value === null
     error.value = null
 
@@ -120,6 +136,7 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
       applyBoard(board.data, board.meta)
     } catch (caught) {
       error.value = caught
+      refreshFailure.value = { kind, error: caught }
     } finally {
       loading.value = false
     }
@@ -138,6 +155,7 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     }
 
     latestByEmployee.set(entry.employee_uuid, occurredAt)
+    lastUpdatedAt.value = new Date(serverNowMs()).toISOString()
 
     const index = entries.value.findIndex((item) => item.employee_uuid === entry.employee_uuid)
     const before = index >= 0 ? entries.value[index] : undefined
@@ -232,6 +250,8 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
       },
       onStateChange: (state) => {
         realtimeState.value = state
+        realtimeFailed.value =
+          state === 'down' ? true : state === 'live' ? false : realtimeFailed.value
 
         if (state === 'live') {
           // Lo que haya pasado mientras el canal estaba caido no ha llegado por
@@ -269,11 +289,12 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
   /** Cambia los filtros y vuelve a pedir la foto. El canal no depende de los filtros. */
   async function applyFilters(next: LivePresenceQuery): Promise<void> {
     filters.value = { ...next }
-    await load()
+    await load('filter')
   }
 
   /** Cierra canal y sondeo. Al salir de la pantalla. */
   function disconnect(): void {
+    realtimeFailed.value = false
     stopPolling()
     stopRealtime()
     transport.value = 'idle'
@@ -286,6 +307,9 @@ export const useLivePresenceStore = defineStore('livePresence', () => {
     loading,
     error,
     transport,
+    lastUpdatedAt,
+    refreshFailure,
+    realtimeFailed,
     realtimeState,
     realtimeAvailable,
     timeZone,

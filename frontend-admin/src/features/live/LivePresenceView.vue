@@ -73,8 +73,29 @@ const degraded = computed(
 )
 
 const generatedAtLabel = computed(() =>
-  store.meta === null ? '' : formatInstant(store.meta.generated_at, store.timeZone, locale.value),
+  store.lastUpdatedAt === null
+    ? ''
+    : formatInstant(store.lastUpdatedAt, store.timeZone, locale.value),
 )
+
+/** Aviso no bloqueante cuando hay datos previos: que ha fallado y que se esta viendo. */
+const noticeKind = computed<'filter' | 'poll' | 'realtime' | null>(() => {
+  if (store.meta === null) {
+    return null
+  }
+
+  if (store.refreshFailure !== null) {
+    return store.refreshFailure.kind
+  }
+
+  return store.realtimeFailed ? 'realtime' : null
+})
+
+watch(noticeKind, (kind) => {
+  if (kind !== null) {
+    announce(t(`live.notice.`, { moment: generatedAtLabel.value, zone: store.timeZone }))
+  }
+})
 
 function submitFilters(): void {
   void store.applyFilters({
@@ -159,7 +180,7 @@ const selectClass =
         </dd>
       </div>
       <div>
-        <dt class="text-sm text-kq-text-muted">{{ t('live.counts.snapshot') }}</dt>
+        <dt class="text-sm text-kq-text-muted">{{ t('live.counts.lastUpdate') }}</dt>
         <dd class="text-kq-text" data-test="generated-at">
           {{ t('live.counts.snapshotAt', { moment: generatedAtLabel, zone: store.timeZone }) }}
         </dd>
@@ -208,6 +229,17 @@ const selectClass =
         </div>
       </fieldset>
     </form>
+
+    <p
+      v-if="noticeKind !== null"
+      role="status"
+      aria-live="polite"
+      class="mt-4 rounded-kq-sm border border-kq-warning bg-kq-warning-soft px-3 py-2 text-kq-warning"
+      data-test="refresh-notice"
+      :data-kind="noticeKind"
+    >
+      {{ t(`live.notice.${noticeKind}`, { moment: generatedAtLabel, zone: store.timeZone }) }}
+    </p>
 
     <LoadingPanel v-if="store.loading" :label="t('live.loading')" class="mt-4" />
 

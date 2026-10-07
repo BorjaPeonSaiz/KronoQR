@@ -67,6 +67,9 @@ import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import ChangePreview from '@/shared/ui/ChangePreview.vue'
+import type { Change } from '@/shared/ui/change'
+import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import type {
   InstallationSetting,
   InstallationSettings,
@@ -854,6 +857,92 @@ const accessControlPending = computed(() => {
   )
 })
 
+/** Se pide confirmacion con el antes y el despues de cada ajuste que cambia (R3-PA-09). */
+const confirming = ref(false)
+
+function askConfirmation(): void {
+  if (canSave.value) {
+    confirming.value = true
+  }
+}
+
+function cancelConfirmation(): void {
+  confirming.value = false
+}
+
+/** Los valores de serie que `fill()` aplica cuando la clave aun no tiene fila propia. */
+const PREVIEW_FALLBACKS: Readonly<Record<string, string>> = {
+  [PIN_LENGTH_KEY]: PIN_LENGTH_FALLBACK,
+  [WEEKLY_SUMMARY_EMAIL_KEY]: 'disabled',
+  [KIOSK_UPDATE_WINDOW_KEY]: '03:00-05:00',
+  [PAYROLL_DELIMITER_KEY]: 'semicolon',
+  [PAYROLL_HOURS_FORMAT_KEY]: 'hhmm',
+  [PAYROLL_DATE_FORMAT_KEY]: 'iso',
+  [PAYROLL_ENCODING_KEY]: 'utf8_bom',
+  [PAYROLL_HEADER_ROW_KEY]: 'enabled',
+  [BREAK_CLOCKING_KEY]: 'disabled',
+}
+
+/**
+ * Un valor tal como se le ensena a quien confirma. El codigo de servicio del
+ * quiosco nunca sale en claro (decision 6 de la ficha 3.3): solo si hay o no.
+ */
+function previewValue(
+  key: string,
+  value: number | string | readonly string[] | null | undefined,
+): string {
+  if (key === 'KIOSK_SERVICE_CODE') {
+    return value === undefined || value === null || value === ''
+      ? t('operationalSettings.preview.notSet')
+      : t('operationalSettings.preview.set')
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    if (key.startsWith('LOCALE_')) {
+      return value.map(localeLabel).join(', ')
+    }
+
+    return value.length === 0 ? t('operationalSettings.preview.empty') : value.join(', ')
+  }
+
+  if (value === undefined || value === null || value === '') {
+    return t('operationalSettings.preview.empty')
+  }
+
+  if (key === BREAK_CLOCKING_KEY) {
+    return t(`operationalSettings.breakClockingOptions.${String(value)}`)
+  }
+
+  if (key === 'LOCALE_DEFAULT') {
+    return localeLabel(String(value))
+  }
+
+  return String(value)
+}
+
+/** Solo las claves que cambian: etiqueta, valor actual y valor nuevo. */
+const previewChanges = computed<Change[]>(() => {
+  const current = settings.value
+
+  if (current === null) {
+    return []
+  }
+
+  return Object.entries(pendingChanges.value).map(([key, next]) => {
+    const stored =
+      key === PAYROLL_COLUMNS_KEY
+        ? payrollColumnsValueOf(current)
+        : (entryOf(current, key)?.value ?? PREVIEW_FALLBACKS[key])
+    const previous = stored === '' ? PREVIEW_FALLBACKS[key] : stored
+
+    return {
+      label: fieldLabels.value[`settings.${key}`] ?? key,
+      from: previewValue(key, previous),
+      to: previewValue(key, next),
+    }
+  })
+})
+
 async function save(): Promise<void> {
   if (!canSave.value) {
     return
@@ -866,8 +955,10 @@ async function save(): Promise<void> {
   try {
     fill(await updateInstallationSettings(pendingChanges.value))
     saved.value = true
+    confirming.value = false
     announce(t('operationalSettings.saved'))
   } catch (failure) {
+    confirming.value = false
     error.value = failure
     announce(t('operationalSettings.failed'))
   } finally {
@@ -891,7 +982,7 @@ async function save(): Promise<void> {
       v-if="settings !== null"
       class="flex max-w-3xl flex-col gap-6"
       novalidate
-      @submit.prevent="save"
+      @submit.prevent="askConfirmation"
     >
       <fieldset class="flex flex-col gap-4">
         <legend class="text-lg font-medium text-kq-text">
@@ -1366,5 +1457,22 @@ async function save(): Promise<void> {
         </p>
       </div>
     </form>
+
+    <ConfirmDialog
+      v-if="confirming"
+      :title="t('operationalSettings.preview.title')"
+      :confirm-label="t('operationalSettings.preview.confirm')"
+      :busy="saving"
+      :error="null"
+      @cancel="cancelConfirmation"
+      @confirm="save"
+    >
+      <p class="mb-4">{{ t('operationalSettings.preview.explanation') }}</p>
+      <ChangePreview
+        :changes="previewChanges"
+        :caption="t('operationalSettings.preview.caption')"
+        data-test="change-preview"
+      />
+    </ConfirmDialog>
   </section>
 </template>

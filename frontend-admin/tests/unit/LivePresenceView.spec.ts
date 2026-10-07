@@ -1,6 +1,7 @@
 // Pantalla de presencia en vivo (RF-PA-01, RF-PA-02, RNF-D-03).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LivePresenceView from '@/features/live/LivePresenceView.vue'
+import { useLivePresenceStore } from '@/features/live/presence.store'
 import { useSessionStore } from '@/features/auth/session.store'
 import { registerAuthGuard } from '@/router/guards'
 import es from '@/shared/i18n/locales/es.json'
@@ -138,5 +139,124 @@ describe('LivePresenceView', () => {
     await router.isReady()
 
     expect(router.currentRoute.value.name).toBe('live')
+  })
+
+  it('cada fila enlaza al detalle de jornada de esa persona en el dia de su entrada, en la zona del centro', async () => {
+    const wrapper = await mountView(LivePresenceView)
+    await settle()
+
+    const link = wrapper.find('[data-test="entry-workdays-link"]')
+
+    expect(link.attributes('href')).toBe(
+      '/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/workdays?from=2026-03-14&to=2026-03-14',
+    )
+    expect(link.attributes('aria-label')).toBe(
+      es.live.table.openWorkDay.replace('{name}', 'Youssef Amrani'),
+    )
+
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['responsable_departamento', ['attendance:read', 'attendance:correct', 'employees:read']],
+    ['auditor', ['attendance:read', 'reports:legal']],
+  ])('%s llega desde la presencia al detalle de jornada', async (role, abilities) => {
+    const pinia = createTestPinia()
+    const session = useSessionStore(pinia)
+    session.token = 'token'
+    session.status = 'authenticated'
+    session.user = managementUser({ roles: [role as never], abilities })
+    const router = createTestRouter()
+    registerAuthGuard(router)
+
+    await router.push(
+      '/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/workdays?from=2026-03-14&to=2026-03-14',
+    )
+    await router.isReady()
+
+    expect(router.currentRoute.value.name).toBe('employee-workdays')
+  })
+
+  describe('avisos con datos previos (R2-PA-01, R3-PA-01, R3-PA-02)', () => {
+    const LATER: LivePresenceBoard = {
+      ...BOARD,
+      meta: { ...BOARD.meta, generated_at: '2026-03-14T09:20:00.000000Z' },
+    }
+    let failing = false
+    let board: LivePresenceBoard = BOARD
+
+    beforeEach(() => {
+      failing = false
+      board = BOARD
+      stubFetch((url) => {
+        if (url.includes('/api/v1/attendance/live')) {
+          return failing ? jsonResponse({}, 503) : jsonResponse(board)
+        }
+
+        return jsonResponse({ data: [{ id: 3, name: 'Cocina' }] })
+      })
+    })
+
+    it('un sondeo fallido avisa sin bloquear, conserva la marca del ultimo dato bueno y se retira al recuperarse', async () => {
+      const wrapper = await mountView(LivePresenceView)
+      await settle()
+
+      expect(wrapper.find('[data-test="refresh-notice"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="generated-at"]').text()).toContain('10:12')
+
+      failing = true
+      await useLivePresenceStore().load()
+      await settle()
+
+      const notice = wrapper.find('[data-test="refresh-notice"]')
+
+      expect(notice.attributes('data-kind')).toBe('poll')
+      expect(notice.attributes('aria-live')).toBe('polite')
+      expect(notice.text()).toContain('10:12')
+      expect(wrapper.find('[data-test="presence-entry"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="generated-at"]').text()).toContain('10:12')
+
+      failing = false
+      board = LATER
+      await useLivePresenceStore().load()
+      await settle()
+
+      expect(wrapper.find('[data-test="refresh-notice"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="generated-at"]').text()).toContain('10:20')
+
+      wrapper.unmount()
+    })
+
+    it('un cambio de filtro que falla avisa de que la lista puede no corresponder al filtro', async () => {
+      const wrapper = await mountView(LivePresenceView)
+      await settle()
+
+      failing = true
+      await wrapper.find('#live-status-filter').setValue('absent')
+      await settle()
+
+      expect(wrapper.find('[data-test="refresh-notice"]').attributes('data-kind')).toBe('filter')
+      expect(wrapper.find('[data-test="presence-entry"]').exists()).toBe(true)
+
+      wrapper.unmount()
+    })
+
+    it('una reconexion fallida del canal avisa y se retira cuando el canal vuelve', async () => {
+      const wrapper = await mountView(LivePresenceView)
+      await settle()
+
+      const store = useLivePresenceStore()
+      store.realtimeFailed = true
+      await settle()
+
+      expect(wrapper.find('[data-test="refresh-notice"]').attributes('data-kind')).toBe('realtime')
+
+      store.realtimeFailed = false
+      await settle()
+
+      expect(wrapper.find('[data-test="refresh-notice"]').exists()).toBe(false)
+
+      wrapper.unmount()
+    })
   })
 })

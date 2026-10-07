@@ -5,6 +5,7 @@
 // tarea: texto opcional, con forma fija en el propio panel y vacio siempre
 // valido. Tambien cubre el campo de la tarea 3.5, «Fichaje de pausa»
 // (`ATTENDANCE_BREAK_CLOCKING`, RF-AT-12).
+import type { VueWrapper } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import OperationalSettingsView from '@/features/settings/OperationalSettingsView.vue'
 import es from '@/shared/i18n/locales/es.json'
@@ -227,6 +228,15 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/** Confirma el dialogo de «antes -> despues» si se ha abierto (R3-PA-09). */
+async function confirmSave(wrapper: VueWrapper): Promise<void> {
+  const button = wrapper
+    .findAll('button')
+    .find((candidate) => candidate.text() === es.operationalSettings.preview.confirm)
+
+  await button?.trigger('click')
+}
+
 describe('OperationalSettingsView — código de servicio del quiosco (RF-KI-08)', () => {
   it('carga el codigo ya guardado', async () => {
     stubFetch(() => jsonResponse(catalog('48392017')))
@@ -274,6 +284,7 @@ describe('OperationalSettingsView — código de servicio del quiosco (RF-KI-08)
 
     await wrapper.find('[data-test="kiosk-service-code"]').setValue('')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -294,6 +305,7 @@ describe('OperationalSettingsView — código de servicio del quiosco (RF-KI-08)
 
     await wrapper.find('[data-test="kiosk-service-code"]').setValue('91827364')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -318,6 +330,7 @@ describe('OperationalSettingsView — código de servicio del quiosco (RF-KI-08)
 
     await wrapper.find('[data-test="kiosk-service-code"]').setValue('91827364')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     expect(wrapper.text()).toContain(es.operationalSettings.fields.kioskServiceCode)
@@ -348,6 +361,7 @@ describe('OperationalSettingsView — fichaje de pausa (RF-AT-12, tarea 3.5)', (
 
     await wrapper.find('[data-test="break-clocking"]').setValue('enabled')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -386,6 +400,7 @@ describe('OperationalSettingsView — fichaje de pausa (RF-AT-12, tarea 3.5)', (
 
     await wrapper.find('[data-test="break-clocking"]').setValue('enabled')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     expect(wrapper.text()).toContain(es.operationalSettings.fields.breakClocking)
@@ -418,6 +433,7 @@ describe('OperationalSettingsView — resumen semanal por correo (RF-PR-05, tare
 
     await wrapper.find('[data-test="weekly-summary-email"]').setValue('enabled')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -470,6 +486,7 @@ describe('OperationalSettingsView — ventana de actualizacion del quiosco (RF-K
 
     await wrapper.find('[data-test="kiosk-update-window"]').setValue('23:00-02:00')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -505,6 +522,7 @@ describe('OperationalSettingsView — ventana de actualizacion del quiosco (RF-K
 
     await wrapper.find('[data-test="kiosk-update-quiet-minutes"]').setValue('20')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -533,6 +551,7 @@ describe('OperationalSettingsView — ventana de actualizacion del quiosco (RF-K
 
     await wrapper.find('[data-test="kiosk-update-quiet-minutes"]').setValue('200')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     expect(wrapper.text()).toContain(es.operationalSettings.fields.kioskUpdateQuietMinutes)
@@ -571,6 +590,7 @@ describe('OperationalSettingsView — longitud del PIN (RF-ID-09, RS-12, ADR-050
     expect(warning.text()).toContain('8')
 
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -595,6 +615,7 @@ describe('OperationalSettingsView — longitud del PIN (RF-ID-09, RS-12, ADR-050
 
     await wrapper.find('[data-test="pin-length"]').setValue('6')
     await wrapper.find('[data-test="save"]').trigger('submit')
+    await confirmSave(wrapper)
     await settle()
 
     const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
@@ -607,5 +628,57 @@ describe('OperationalSettingsView — longitud del PIN (RF-ID-09, RS-12, ADR-050
     await wrapper.find('[data-test="pin-length"]').setValue('6')
 
     expect(wrapper.find('[data-test="access-control-warning"]').exists()).toBe(false)
+  })
+
+  it('pide confirmacion con solo los ajustes que cambian y no escribe hasta confirmar (R3-PA-09)', async () => {
+    const fetchSpy = stubFetch((_url, init) =>
+      init?.method === 'PATCH' ? jsonResponse(catalog()) : jsonResponse(catalog()),
+    )
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="debounce-seconds"]').setValue('30')
+    await wrapper.find('[data-test="break-clocking"]').setValue('enabled')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const rows = wrapper.findAll('[data-test="change-preview"] tbody tr')
+
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.text()).toContain(es.operationalSettings.fields.debounceSeconds)
+    expect(rows[0]?.text()).toContain('60')
+    expect(rows[0]?.text()).toContain('30')
+    expect(rows[1]?.text()).toContain(es.operationalSettings.fields.breakClocking)
+    expect(rows[1]?.text()).toContain(es.operationalSettings.breakClockingOptions.disabled)
+    expect(rows[1]?.text()).toContain(es.operationalSettings.breakClockingOptions.enabled)
+    expect(fetchSpy.mock.calls.some(([, init]) => (init as RequestInit).method === 'PATCH')).toBe(
+      false,
+    )
+
+    await confirmSave(wrapper)
+    await settle()
+
+    const patch = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit).method === 'PATCH')
+
+    expect(JSON.parse(String((patch?.[1] as RequestInit).body))).toEqual({
+      settings: { ATTENDANCE_DEBOUNCE_SECONDS: 30, ATTENDANCE_BREAK_CLOCKING: 'enabled' },
+    })
+  })
+
+  it('el codigo de servicio del quiosco no aparece en claro en la confirmacion', async () => {
+    stubFetch(() => jsonResponse(catalog('48392017')))
+
+    const wrapper = await mountView(OperationalSettingsView)
+    await settle()
+
+    await wrapper.find('[data-test="kiosk-service-code"]').setValue('91827364')
+    await wrapper.find('[data-test="save"]').trigger('submit')
+    await settle()
+
+    const preview = wrapper.find('[data-test="change-preview"]').text()
+
+    expect(preview).not.toContain('48392017')
+    expect(preview).not.toContain('91827364')
   })
 })

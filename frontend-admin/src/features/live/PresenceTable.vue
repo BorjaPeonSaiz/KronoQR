@@ -9,11 +9,12 @@
 // LAS HORAS SE MUESTRAN EN LA ZONA DEL CENTRO, con la zona escrita en la
 // cabecera (regla dura 3). El tiempo transcurrido se calcula contra el reloj del
 // servidor que entrega el store, nunca contra el del navegador.
-import { formatZoneLabel, minutesBetween } from '@kronoqr/web-kit/datetime'
+import { formatZoneLabel, minutesBetween, todayInZone } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import type { LivePresenceEntry } from '@/shared/api/types'
 
 const props = defineProps<{
@@ -119,6 +120,30 @@ function elapsedLabel(entry: LivePresenceEntry): string {
   return t('live.duration', durationParts(minutes))
 }
 
+/**
+ * El detalle de jornada de esa persona en el dia de su entrada, en la zona del
+ * centro (regla dura 3); si no esta dentro, en el dia actual del servidor. El
+ * rango viaja en la URL: sin el, el servidor devolveria los ultimos 31 dias.
+ */
+function workdaysLink(entry: LivePresenceEntry): {
+  name: string
+  params: { uuid: string }
+  query: { from: string; to: string }
+} {
+  const reference =
+    entry.clocked_in_at === null ? new Date(props.serverNowMs) : new Date(entry.clocked_in_at)
+  const day = todayInZone(
+    props.timeZone,
+    Number.isNaN(reference.getTime()) ? new Date(props.serverNowMs) : reference,
+  )
+
+  return {
+    name: 'employee-workdays',
+    params: { uuid: entry.employee_uuid },
+    query: { from: day, to: day },
+  }
+}
+
 function originLabel(entry: LivePresenceEntry): string {
   if (entry.origin === null) {
     return '—'
@@ -175,7 +200,14 @@ function originLabel(entry: LivePresenceEntry): string {
           :data-status="row.entry.status"
         >
           <span role="cell" class="truncate font-medium" data-test="entry-name">
-            {{ row.entry.full_name }}
+            <RouterLink
+              :to="workdaysLink(row.entry)"
+              class="underline decoration-kq-border-strong underline-offset-2"
+              data-test="entry-workdays-link"
+              :aria-label="t('live.table.openWorkDay', { name: row.entry.full_name })"
+            >
+              {{ row.entry.full_name }}
+            </RouterLink>
           </span>
           <span role="cell" class="truncate text-kq-text-muted">
             {{ row.entry.department?.name ?? t('live.table.noDepartment') }}

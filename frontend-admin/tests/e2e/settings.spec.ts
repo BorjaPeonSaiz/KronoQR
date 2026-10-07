@@ -10,6 +10,7 @@
 // vea la entrada ni pueda llegar a la pantalla escribiendo la URL a mano.
 import { expect, test } from '@playwright/test'
 import { logInAsAdmin, logInAsAuditor, stubManagementApi } from './support/admin'
+import { confirmChanges } from './support/confirm'
 
 test(
   'un auditor no ve «Ajustes operativos» en la navegacion, ni puede llegar a la pantalla',
@@ -50,6 +51,8 @@ test(
 
     await page.getByTestId('save').click()
 
+    await confirmChanges(page)
+
     await expect(page.getByTestId('saved')).toBeVisible()
     await expect(page.getByTestId('debounce-seconds')).toHaveValue('90')
 
@@ -74,6 +77,7 @@ test(
 
     await page.getByTestId('break-clocking').selectOption('enabled')
     await page.getByTestId('save').click()
+    await confirmChanges(page)
 
     await expect(page.getByTestId('saved')).toBeVisible()
 
@@ -96,6 +100,7 @@ test(
     await page.getByTestId('pin-length').selectOption('8')
     await expect(page.getByTestId('access-control-warning')).toBeVisible()
     await page.getByTestId('save').click()
+    await confirmChanges(page)
 
     await expect(page.getByTestId('saved')).toBeVisible()
 
@@ -115,6 +120,7 @@ test(
 
     await page.getByTestId('max-shift-hours').fill('30')
     await page.getByTestId('save').click()
+    await confirmChanges(page)
 
     await expect(page.getByRole('alert')).toContainText('Duración máxima de un tramo (h)')
     // Lo escrito NO se pierde: sigue en el campo para poder corregirlo.
@@ -156,6 +162,7 @@ test(
 
     await page.getByTestId('locale-available-en').check()
     await page.getByTestId('save').click()
+    await confirmChanges(page)
 
     await expect(page.getByTestId('saved')).toBeVisible()
 
@@ -181,6 +188,7 @@ test(
     await page.getByTestId('pattern-window-seconds').fill('15')
     await page.getByTestId('pattern-min-repeats').fill('4')
     await page.getByTestId('save').click()
+    await confirmChanges(page)
 
     await expect(page.getByTestId('saved')).toBeVisible()
 
@@ -208,6 +216,7 @@ test(
 
     await page.getByTestId('kiosk-service-code').fill('48392017')
     await page.getByTestId('save').click()
+    await confirmChanges(page)
 
     await expect(page.getByTestId('saved')).toBeVisible()
 
@@ -248,6 +257,7 @@ test(
 
     await page.getByTestId('kiosk-service-code').fill('')
     await page.getByTestId('save').click()
+    await confirmChanges(page)
 
     await expect(page.getByTestId('saved')).toBeVisible()
 
@@ -287,6 +297,7 @@ test(
         await page.getByTestId('kiosk-update-window').fill('23:00-02:00')
         await page.getByTestId('kiosk-update-quiet-minutes').fill('20')
         await page.getByTestId('save').click()
+        await confirmChanges(page)
       })(),
     ])
 
@@ -338,6 +349,7 @@ test(
 
     await page.getByTestId('weekly-summary-email').selectOption('enabled')
     await page.getByTestId('save').click()
+    await confirmChanges(page)
 
     await expect(page.getByTestId('saved')).toBeVisible()
 
