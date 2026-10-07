@@ -68,6 +68,15 @@ interface SupportGrantRepository
     public function authorByEmail(string $email): ?SupportGrantAuthor;
 
     /**
+     * La cuenta de gestion con ese `uuid` publico, activa o no, o `null`.
+     *
+     * Para atribuir la revocacion que provoca la baja de una cuenta (RF-ID-10)
+     * a quien hizo esa baja: el evento de `Identity` trae su `uuid` y el asiento
+     * guarda la clave interna, como en la revocacion desde el panel.
+     */
+    public function authorByUuid(string $uuid): ?SupportGrantAuthor;
+
+    /**
      * La unica cuenta de gestion activa de la instalacion, si hay exactamente
      * una.
      *

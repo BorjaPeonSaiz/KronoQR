@@ -264,7 +264,7 @@ it('no deja darse de baja a si misma ni deja la instalacion sin admin', function
 })->group('RF-ID-10', 'RS-05');
 
 it('retira los accesos de soporte vigentes que concedio la cuenta dada de baja', function (): void {
-    [, $token] = adminDeCuentas();
+    [$admin, $token] = adminDeCuentas();
     $otraAdmin = ManagementUsers::withRole(UserRole::ADMIN);
     $grant = SupportGrants::issue(grantedByUserId: $otraAdmin->id);
 
@@ -274,6 +274,17 @@ it('retira los accesos de soporte vigentes que concedio la cuenta dada de baja',
         ->assertStatus(200);
 
     expect(DB::table('support_grants')->where('uuid', $grant->grant->uuid)->value('revoked_at'))->not->toBeNull();
+
+    // El asiento dice quien hizo la baja y por que cayo el acceso.
+    $entry = DB::table('audit_log')->where('action', 'support_grant.revoked')->first();
+    $payload = json_decode(\is_string($entry?->payload) ? $entry->payload : '{}', true);
+
+    expect($payload)->toMatchArray([
+        'grant_uuid' => $grant->grant->uuid,
+        'revoked_by_user_id' => $admin->id,
+        'cause' => 'account_deactivated',
+        'deactivated_account_uuid' => $otraAdmin->uuid,
+    ])->and($entry?->actor_id)->toBe($admin->id);
 
     Api::as($grant->token)->get('/api/v1/diagnostics/errors')->assertStatus(401);
 })->group('RF-ID-10', 'RF-PD-11');

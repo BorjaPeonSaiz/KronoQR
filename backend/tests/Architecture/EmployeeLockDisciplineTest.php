@@ -37,10 +37,6 @@ use Tests\Architecture\Support\ModuleTree;
 const EMPLOYEE_LOCK_DISCIPLINE_ROW_LOCKS = [
     'Attendance/Infrastructure/Projection/DatabaseDailyTotalsProjection.php' => 'daily_totals (FOR UPDATE OF d)',
     'Identity/Infrastructure/Adapter/SanctumDeviceTokenIssuer.php' => 'devices, antes de la cadena (§1.1 punto 4)',
-    // RF-ID-10: la fila de la cuenta de gestion, DESPUES de la cadena y del
-    // padron de cuentas (orden unico cadena → padron → fila). Ninguna sobre
-    // `employees`.
-    'Identity/Infrastructure/Persistence/EloquentManagementAccountLifecycle.php' => 'users, despues de la cadena y del padron de cuentas',
     'Kiosk/Infrastructure/Persistence/DbDeviceRegistry.php' => 'devices, al emparejar',
     'Product/Infrastructure/Persistence/DatabaseErrorEventRepository.php' => 'error_events (FOR UPDATE OF e), al fundir grupos en la migracion de ADR-048',
     'Reporting/Infrastructure/Persistence/DatabaseReportExportRepository.php' => 'report_exports (FOR UPDATE OF e)',
@@ -48,6 +44,9 @@ const EMPLOYEE_LOCK_DISCIPLINE_ROW_LOCKS = [
     // no distingue de `Builder::lock()`. Ninguna tabla (ADR-050).
     'Shared/Infrastructure/Cache/CacheMutex.php' => 'ninguna: candado de la cache (SET NX en Redis, flock en disco)',
     'Workforce/Infrastructure/Persistence/EloquentAbsenceRepository.php' => 'absences',
+    // ADR-046 §1.1 punto 3: el renombrado toma su fila ANTES de la cadena,
+    // porque `name` esta en un indice unico completo.
+    'Workforce/Infrastructure/Persistence/EloquentDepartmentRepository.php' => 'departments, antes de la cadena (§1.1 punto 3)',
 ];
 
 /**

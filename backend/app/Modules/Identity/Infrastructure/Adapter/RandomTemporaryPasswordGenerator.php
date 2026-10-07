@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Infrastructure\Adapter;
 
 use App\Modules\Identity\Application\Port\TemporaryPasswordGenerator;
+use App\Modules\Identity\Domain\Policy\ManagementPasswordLength;
 
 /**
  * Contrasenas temporales que cumplen la politica de RF-ID-01 **por
@@ -34,12 +35,10 @@ final readonly class RandomTemporaryPasswordGenerator implements TemporaryPasswo
         '!#$%&*+-=?@',
     ];
 
-    /** Lo que lee `bcrypt`: mas alla, la contrasena se truncaria en silencio. */
-    private const int MAX_LENGTH = 72;
-
     public function generate(int $minLength): string
     {
-        $length = min(self::MAX_LENGTH, max(self::MIN_GENERATED_LENGTH, $minLength));
+        // Nunca por encima de lo que lee `bcrypt` (todo ASCII: 1 byte por caracter).
+        $length = min(ManagementPasswordLength::MAX_BYTES, max(self::MIN_GENERATED_LENGTH, $minLength));
 
         // Primero un caracter de cada clase y despues el relleno: un muestreo
         // uniforme sobre el alfabeto entero puede no dar ni una mayuscula en

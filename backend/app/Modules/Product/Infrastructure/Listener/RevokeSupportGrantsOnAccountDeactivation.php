@@ -21,6 +21,6 @@ final readonly class RevokeSupportGrantsOnAccountDeactivation
 
     public function handle(ManagementAccountDeactivated $event): void
     {
-        $this->revoke->handle($event->userUuid, $event->occurredAt());
+        $this->revoke->handle($event->userUuid, $event->actorUuid, $event->occurredAt());
     }
 }

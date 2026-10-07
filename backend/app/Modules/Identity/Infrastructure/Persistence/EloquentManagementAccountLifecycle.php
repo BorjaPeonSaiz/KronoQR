@@ -41,7 +41,7 @@ final readonly class EloquentManagementAccountLifecycle implements ManagementAcc
 
     public function lockAccount(string $uuid): ?AccountSnapshot
     {
-        $user = User::query()->where('uuid', $uuid)->lockForUpdate()->first();
+        $user = User::query()->where('uuid', $uuid)->lock('for no key update')->first();
 
         if (! $user instanceof User) {
             return null;

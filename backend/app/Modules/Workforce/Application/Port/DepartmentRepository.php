@@ -25,11 +25,12 @@ interface DepartmentRepository
     public function findById(int $id): ?Department;
 
     /**
-     * El departamento con su fila tomada `FOR NO KEY UPDATE`, el mismo candado
-     * que tomaria su `UPDATE`. **Dentro de una transaccion abierta** y **antes
-     * de la cadena de auditoria** (ADR-046 §1.1: filas padre → cadena): no
-     * choca con el `FOR KEY SHARE` con el que una ficha comprueba su clave
-     * ajena, y si ordena dos cambios del mismo departamento.
+     * El departamento con su fila tomada `FOR UPDATE`, el candado al que sube
+     * el `UPDATE` de un renombrado porque `name` esta en un indice unico
+     * completo. **Dentro de una transaccion abierta** y **antes de la cadena de
+     * auditoria** (ADR-046 §1.1 punto 3: filas padre → cadena): una ficha que
+     * comprueba su clave ajena con `FOR KEY SHARE` espera a que termine, y
+     * nadie lo sube a `FOR UPDATE` con la cadena en la mano.
      */
     public function findForUpdate(int $id): ?Department;
 

@@ -41,8 +41,9 @@ use Illuminate\Database\ConnectionInterface;
  * ## Candados (ADR-046 §1.1, ADR-051 §6)
  *
  * Filas padre → cadena → `users`. La fila del departamento se toma
- * `FOR NO KEY UPDATE` **antes** de la cadena, como la toma el `UPDATE` de un
- * renombrado; con la cadena en la mano se lee la cuenta propuesta, y como la
+ * `FOR UPDATE` **antes** de la cadena (ADR-046 §1.1 punto 3): `name` esta en el
+ * indice unico completo y el `UPDATE` del renombrado subiria a ese candado con
+ * la cadena tomada. Con la cadena en la mano se lee la cuenta propuesta, y como la
  * baja de una cuenta toma la cadena antes de tocar su fila, la respuesta no
  * puede quedar vieja antes de confirmar. Los asientos se escriben dentro, con
  * la cadena reentrante: si fallan, no se confirma nada.

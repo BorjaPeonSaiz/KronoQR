@@ -9,6 +9,7 @@ use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\ManagementAccountChange;
 use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
+use App\Modules\Identity\Application\Support\ActingAccountCheck;
 use App\Modules\Identity\Application\Support\ManagementAccountRosterLock;
 use App\Modules\Identity\Application\Support\ManagementAccountTelemetry;
 use App\Modules\Identity\Domain\Event\ManagementAccountDeactivated;
@@ -88,6 +89,10 @@ final readonly class DeactivateManagementAccountHandler
         /** @var array{0: AccountDeactivationOutcome, 1: list<UserRole>} $result */
         $result = $this->serialized->withChainLock(function () use ($command, $now): array {
             ManagementAccountRosterLock::acquire($this->connection);
+
+            // Quien da de baja sigue activo AHORA, con el padron tomado: dos
+            // `admin` que se dan de baja a la vez no completan las dos bajas.
+            ActingAccountCheck::assertStillActive($this->accounts, $command->actorUuid);
 
             $account = $this->accounts->lockAccount($command->accountUuid);
 

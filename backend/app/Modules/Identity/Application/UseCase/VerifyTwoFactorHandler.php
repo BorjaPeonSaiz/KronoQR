@@ -118,8 +118,14 @@ final readonly class VerifyTwoFactorHandler
         // Una temporal caducada entre el acceso y el codigo no abre sesion
         // (RF-ID-10, RS-03): misma respuesta, y mismo contador, que un codigo
         // incorrecto.
+        //
+        // Y la franja se gasta AQUI, con una escritura condicionada, antes de
+        // emitir: si dos peticiones traen el mismo codigo a la vez, las dos lo
+        // verifican contra la misma franja anterior, pero solo una la escribe;
+        // la otra cuenta como un codigo incorrecto.
         if ($user === null || $secret === null || $slice === null
-            || $user->passwordStatus === PasswordStatus::TemporaryExpired) {
+            || $user->passwordStatus === PasswordStatus::TemporaryExpired
+            || ! $this->secrets->rememberAcceptedSlice($command->userUuid, $slice)) {
             $this->attempts->recordFailure($command->throttleKey);
             $this->journal->failed(
                 AuthChannel::MANAGEMENT,
@@ -133,10 +139,6 @@ final readonly class VerifyTwoFactorHandler
 
             throw new AuthenticationFailed;
         }
-
-        // Antes de emitir: si dos peticiones traen el mismo codigo a la vez, la
-        // segunda tiene que encontrarlo ya gastado.
-        $this->secrets->rememberAcceptedSlice($command->userUuid, $slice);
 
         $this->attempts->clear($command->throttleKey);
         $this->accounts->recordSuccessfulLogin($user->uuid, $this->clock->now());

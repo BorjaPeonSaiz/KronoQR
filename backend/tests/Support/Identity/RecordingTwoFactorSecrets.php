@@ -74,11 +74,11 @@ final class RecordingTwoFactorSecrets implements TwoFactorSecrets
         return $this->inner->lastAcceptedSliceFor($uuid);
     }
 
-    public function rememberAcceptedSlice(string $uuid, int $slice): void
+    public function rememberAcceptedSlice(string $uuid, int $slice): bool
     {
         $this->calls[] = 'rememberAcceptedSlice';
 
-        $this->inner->rememberAcceptedSlice($uuid, $slice);
+        return $this->inner->rememberAcceptedSlice($uuid, $slice);
     }
 
     /**

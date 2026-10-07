@@ -143,6 +143,17 @@ it('no acepta dos veces el mismo codigo en su franja', function (): void {
         ->toThrow(ActorReauthenticationFailed::class);
 })->group('RF-ID-10', 'RS-06');
 
+it('gasta el codigo: la segunda peticion con el mismo codigo falla y cuenta como intento', function (): void {
+    [$doubles, $handler] = restablecimientoCon();
+
+    expect($handler->handle(restablecer(InMemoryManagementAccounts::UUID))->status)->toBe(ManagementPasswordResetStatus::Reset);
+
+    expect(fn (): ManagementPasswordResetOutcome => $handler->handle(restablecer(InMemoryManagementAccounts::UUID)))
+        ->toThrow(ActorReauthenticationFailed::class);
+
+    expect($doubles->attempts->failures)->toBe(['2fa|'.PASSWORD_RESET_TEST_ACTOR => 1]);
+})->group('RF-ID-10', 'RS-06');
+
 it('responde con el bloqueo abierto sin mirar el codigo', function (): void {
     [$doubles, $handler] = restablecimientoCon();
     $doubles->attempts->failures['2fa|'.PASSWORD_RESET_TEST_ACTOR] = 3;

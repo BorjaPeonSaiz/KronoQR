@@ -6,6 +6,7 @@ use App\Modules\Identity\Application\Command\ActorProof;
 use App\Modules\Identity\Application\Command\CreateManagementAccountCommand;
 use App\Modules\Identity\Application\Exception\ActorReauthenticationFailed;
 use App\Modules\Identity\Application\Exception\ManagementAccountEmailTaken;
+use App\Modules\Identity\Application\Exception\ManagementSessionVanished;
 use App\Modules\Identity\Application\Port\ManagementAccountRegistry;
 use App\Modules\Identity\Application\UseCase\CreateManagementAccountHandler;
 use App\Modules\Identity\Application\UseCase\ManagementAccountProvisioned;
@@ -83,6 +84,7 @@ function altaDeCuentaCon(): array
         FixedClock::at('2026-10-07 08:00:00'),
         $doubles->ledger,
         $doubles->telemetry(),
+        $doubles->accounts,
     )];
 }
 
@@ -132,6 +134,19 @@ it('rechaza un correo ya usado sin crear nada', function (): void {
 
     expect(fn (): ManagementAccountProvisioned => $handler->handle(altaDe(UserRole::RRHH)))
         ->toThrow(ManagementAccountEmailTaken::class);
+
+    expect($registry->created)->toBe([])
+        ->and($doubles->events->published)->toBe([])
+        ->and($doubles->metrics->changes)->toBe([]);
+})->group('RF-ID-10');
+
+it('no crea nada si la admin que actua esta de baja al tomar la cadena', function (): void {
+    [$doubles, $registry, $handler] = altaDeCuentaCon();
+    // Se reautentico bien, pero otra `admin` le dio de baja entretanto.
+    $doubles->accounts->with(CREATE_ACCOUNT_TEST_ACTOR, 'admin@hotel.example', UserRole::ADMIN, active: false, twoFactor: true);
+
+    expect(fn (): ManagementAccountProvisioned => $handler->handle(altaDe(UserRole::ADMIN)))
+        ->toThrow(ManagementSessionVanished::class);
 
     expect($registry->created)->toBe([])
         ->and($doubles->events->published)->toBe([])

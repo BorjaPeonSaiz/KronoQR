@@ -83,6 +83,11 @@ final class InMemoryManagementAccounts implements ManagementAccountLifecycle
         return $this;
     }
 
+    public function has(string $uuid): bool
+    {
+        return isset($this->accounts[$uuid]);
+    }
+
     public function uuidOfAccount(string $email): ?string
     {
         foreach ($this->accounts as $uuid => $account) {

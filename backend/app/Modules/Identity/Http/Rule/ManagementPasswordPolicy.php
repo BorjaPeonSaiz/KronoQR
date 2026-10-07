@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Rule;
 
+use App\Modules\Identity\Domain\Policy\ManagementPasswordLength;
 use Closure;
 use Illuminate\Validation\Rules\Password;
 
@@ -27,9 +28,9 @@ use Illuminate\Validation\Rules\Password;
  */
 final class ManagementPasswordPolicy
 {
-    public const int FLOOR = 8;
+    public const int FLOOR = ManagementPasswordLength::FLOOR;
 
-    public const int MAX_BYTES = 72;
+    public const int MAX_BYTES = ManagementPasswordLength::MAX_BYTES;
 
     /**
      * @return list<mixed>
@@ -49,6 +50,6 @@ final class ManagementPasswordPolicy
 
     public static function minLength(): int
     {
-        return min(self::MAX_BYTES, max(self::FLOOR, config()->integer('identity.password.min_length')));
+        return ManagementPasswordLength::minimum(config()->integer('identity.password.min_length'));
     }
 }

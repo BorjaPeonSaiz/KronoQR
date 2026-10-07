@@ -11,9 +11,11 @@ use App\Modules\Identity\Application\Exception\ActorReauthenticationFailed;
 use App\Modules\Identity\Application\Exception\ManagementAccountEmailTaken;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\ManagementAccountChange;
+use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
 use App\Modules\Identity\Application\Port\ManagementAccountRegistry;
 use App\Modules\Identity\Application\Port\PasswordHasher;
 use App\Modules\Identity\Application\Port\TemporaryPasswordGenerator;
+use App\Modules\Identity\Application\Support\ActingAccountCheck;
 use App\Modules\Identity\Application\Support\ActorReauthentication;
 use App\Modules\Identity\Application\Support\ManagementAccountTelemetry;
 use App\Modules\Identity\Application\Support\TemporaryPasswordSettings;
@@ -63,6 +65,7 @@ final readonly class CreateManagementAccountHandler
         private Clock $clock,
         private SerializedLedgerWrite $serialized,
         private ManagementAccountTelemetry $telemetry,
+        private ManagementAccountLifecycle $lifecycle,
     ) {}
 
     /**
@@ -94,6 +97,8 @@ final readonly class CreateManagementAccountHandler
 
         $account = $this->serialized->withChainLock(
             function () use ($command, $password, $issuedAt, $expiresAt): AuthenticatedUser {
+                ActingAccountCheck::assertStillActive($this->lifecycle, $command->actorUuid);
+
                 if ($this->accounts->emailTaken($command->email)) {
                     throw new ManagementAccountEmailTaken;
                 }

@@ -13,6 +13,7 @@ use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\ManagementAccountChange;
 use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
+use App\Modules\Identity\Application\Support\ActingAccountCheck;
 use App\Modules\Identity\Application\Support\ActorReauthentication;
 use App\Modules\Identity\Application\Support\ManagementAccountTelemetry;
 use App\Modules\Identity\Domain\Event\TwoFactorReset;
@@ -92,6 +93,8 @@ final readonly class ResetTwoFactorHandler
 
         /** @var array{0: TwoFactorResetOutcome, 1: list<UserRole>} $result */
         $result = $this->serialized->withChainLock(function () use ($command, $now): array {
+            ActingAccountCheck::assertStillActive($this->accounts, $command->actorUuid);
+
             $account = $this->accounts->lockAccount($command->accountUuid);
 
             if ($account === null || ! $account->active) {

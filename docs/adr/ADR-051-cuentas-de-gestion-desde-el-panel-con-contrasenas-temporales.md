@@ -164,7 +164,7 @@ Así `Identity` no escribe en `Workforce`, y el desplazamiento del responsable a
 ### 6. Un único orden de candados para todo lo que audita una cuenta
 
 **El orden es: cadena de `audit_log` (`withChainLock`, ADR-010) → candado del padrón de cuentas (solo la baja y el primer
-administrador) → fila de `users` (`FOR UPDATE`) → `personal_access_tokens` → asiento (reentrante).**
+administrador) → fila de `users` (`FOR NO KEY UPDATE`, que no choca con el `FOR KEY SHARE` de los escritores con clave ajena a `users`; ADR-046 §1.1 punto 4) → `personal_access_tokens` → asiento (reentrante).**
 
 **Fuera de todo candado** van generar la contraseña, hashearla, comparar un hash y limpiar contadores.
 

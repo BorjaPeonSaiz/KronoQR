@@ -123,6 +123,8 @@ final readonly class ConfirmTwoFactorHandler
         // listener tomara la cadena, y una retirada simultanea cerraba un abrazo.
         $this->serialized->withChainLock(function () use ($command, $slice, $now): void {
             $this->secrets->confirm($command->userUuid, $now);
+            // Alta recien confirmada: no hay franja anterior (el alta la puso a
+            // nulo), asi que la escritura condicionada siempre entra.
             $this->secrets->rememberAcceptedSlice($command->userUuid, $slice);
 
             // Dentro de la transaccion a proposito: el listener de auditoria es

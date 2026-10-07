@@ -49,11 +49,12 @@ enum PasswordStatus: string
     }
 
     /**
-     * Si la cuenta tiene que fijar su propia contrasena antes de hacer nada mas.
+     * Si la cuenta no tiene una contrasena propia: su sesion lleva solo
+     * `password:change` y `GET /auth/me` publica `password_change_required`.
      *
-     * **Tambien la caducada**: con ella ya no se entra, pero una sesion abierta
-     * antes de la caducidad sigue existiendo, y lo unico que puede hacer es
-     * cambiarla.
+     * **Tambien la caducada**, pero con ella la sesion ya no sirve ni para
+     * cambiarla: el cambio propio la rechaza con `401`, igual que el acceso
+     * (RS-03). La salida es que un `admin` emita otra temporal.
      */
     public function requiresChange(): bool
     {

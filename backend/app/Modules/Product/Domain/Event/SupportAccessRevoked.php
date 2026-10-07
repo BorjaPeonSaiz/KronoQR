@@ -30,7 +30,8 @@ final readonly class SupportAccessRevoked implements DomainEvent
         public string $grantUuid,
         public string $scope,
         /**
-         * Quien la revoco, o `null` desde la consola.
+         * Quien la revoco, o `null` si no hubo sesion detras: la consola, o la
+         * baja por consola de la cuenta que la concedio.
          *
          * Nulo es informacion, no un hueco: distingue «la retiro Marta desde el
          * panel» de «la retiro quien tiene acceso al servidor», que son dos
@@ -40,6 +41,14 @@ final readonly class SupportAccessRevoked implements DomainEvent
         /** Si en el momento de revocarla el acceso todavia servia para algo. */
         public bool $wasActive,
         private DateTimeImmutable $occurredAt,
+        /**
+         * Por que se revoco cuando no fue una decision directa sobre esta
+         * concesion: `account_deactivated` si cayo con la baja de la cuenta que
+         * la concedio (RF-ID-10). `null` en la revocacion normal.
+         */
+        public ?string $cause = null,
+        /** El `uuid` de la cuenta dada de baja, con esa causa. Nunca correo ni nombre. */
+        public ?string $deactivatedAccountUuid = null,
     ) {}
 
     public function eventName(): string

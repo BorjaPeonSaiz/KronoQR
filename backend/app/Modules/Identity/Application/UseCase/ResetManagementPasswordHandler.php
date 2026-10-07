@@ -14,6 +14,7 @@ use App\Modules\Identity\Application\Port\ManagementAccountChange;
 use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
 use App\Modules\Identity\Application\Port\PasswordHasher;
 use App\Modules\Identity\Application\Port\TemporaryPasswordGenerator;
+use App\Modules\Identity\Application\Support\ActingAccountCheck;
 use App\Modules\Identity\Application\Support\ActorReauthentication;
 use App\Modules\Identity\Application\Support\ManagementAccountTelemetry;
 use App\Modules\Identity\Application\Support\TemporaryPasswordSettings;
@@ -97,6 +98,8 @@ final readonly class ResetManagementPasswordHandler
         /** @var array{0: ManagementPasswordResetStatus, 1: list<UserRole>} $result */
         $result = $this->serialized->withChainLock(
             function () use ($command, $password, $issuedAt, $expiresAt): array {
+                ActingAccountCheck::assertStillActive($this->accounts, $command->actorUuid);
+
                 $account = $this->accounts->lockAccount($command->accountUuid);
 
                 if ($account === null || ! $account->active) {

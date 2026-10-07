@@ -75,6 +75,13 @@ final readonly class DatabaseSupportGrantRepository implements SupportGrantRepos
         return self::authorFrom(Row::of($rows[0]));
     }
 
+    public function authorByUuid(string $uuid): ?SupportGrantAuthor
+    {
+        $rows = $this->connection->select('SELECT id, uuid, name FROM users WHERE uuid = ?', [$uuid]);
+
+        return $rows === [] ? null : self::authorFrom(Row::of($rows[0]));
+    }
+
     public function authorByEmail(string $email): ?SupportGrantAuthor
     {
         $rows = $this->connection->select(

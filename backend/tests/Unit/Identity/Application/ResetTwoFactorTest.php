@@ -61,7 +61,7 @@ it('retira el secreto, cierra todas las sesiones y publica quien y por que', fun
         ->and($event)->toBeInstanceOf(TwoFactorReset::class)
         ->and($doubles->metrics->changes)->toBe(['two_factor_reset:rrhh'])
         ->and($doubles->journal)->toBe(['chain-lock:open', 'chain-lock:close'])
-        ->and($doubles->accounts->locks)->toBe([InMemoryManagementAccounts::UUID]);
+        ->and($doubles->accounts->locks)->toBe([TWO_FACTOR_RESET_TEST_ACTOR, InMemoryManagementAccounts::UUID]);
 })->group('RF-ID-10', 'RS-06');
 
 it('no escribe nada sin segundo factor confirmado, sobre la propia o sobre una cuenta que no existe', function (

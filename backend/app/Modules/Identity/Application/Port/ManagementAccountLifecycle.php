@@ -42,8 +42,16 @@ interface ManagementAccountLifecycle
     public function uuidOfAccount(string $email): ?string;
 
     /**
-     * Bloquea la fila de la cuenta (`SELECT … FOR UPDATE`) y devuelve lo que
-     * hace falta para decidir sobre ella, o `null` si no existe.
+     * Bloquea la fila de la cuenta (`SELECT … FOR NO KEY UPDATE`) y devuelve lo
+     * que hace falta para decidir sobre ella, o `null` si no existe.
+     *
+     * **`FOR NO KEY UPDATE` y no `FOR UPDATE`** (ADR-046 §1.1 punto 4): se toma
+     * con la cadena de auditoria en la mano, y los escritores con clave ajena a
+     * `users` —el informe en diferido, la concesion de soporte— toman
+     * `FOR KEY SHARE` sobre esta fila ANTES de la cadena. Con `FOR UPDATE`
+     * chocarian y cerrarian un abrazo; con este candado no chocan, y sigue
+     * serializando entre si a los casos de uso del ciclo de vida. Ninguna de
+     * sus escrituras toca `id`, `uuid` ni `email`.
      *
      * Tiene que llamarse dentro de una transaccion: fuera, el candado se suelta
      * al terminar la sentencia y no protege nada.

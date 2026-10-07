@@ -53,6 +53,7 @@ use App\Modules\Identity\Domain\ValueObject\DeviceStatus;
 use App\Modules\Identity\Domain\ValueObject\TemporaryPasswordLifetime;
 use App\Modules\Identity\Http\Policy\CredentialPolicy;
 use App\Modules\Identity\Http\Policy\ManagementAccountPolicy;
+use App\Modules\Identity\Http\Rule\ManagementPasswordPolicy;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotCardRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\BrowsershotInstructionsSheetRenderer;
 use App\Modules\Identity\Infrastructure\Adapter\CacheLoginAttempts;
@@ -239,7 +240,7 @@ final class IdentityServiceProvider extends ServiceProvider
 
         // RN-14 (N1): la baja de una persona le retira la credencial y le cierra
         // el portal, en la misma transaccion y con su asiento. Sincrono a
-        // proposito (ADR-027): ver el listener.
+        // proposito (ADR-010): ver el listener.
         Event::listen(EmployeeOffboarded::class, [RevokeCredentialsOnOffboarding::class, 'handle']);
 
         if ($this->app->runningInConsole()) {
@@ -310,7 +311,8 @@ final class IdentityServiceProvider extends ServiceProvider
                 new TemporaryPasswordLifetime(
                     Config::integer('identity.temporary_password.ttl_hours', 72),
                 ),
-                Config::integer('identity.password.min_length', 12),
+                // Recortado a [8, 72], el mismo minimo que exige la politica.
+                ManagementPasswordPolicy::minLength(),
             ),
         );
     }

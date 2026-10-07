@@ -90,11 +90,12 @@ final readonly class ActorReauthentication
 
         $slice = $this->authenticator->verify($secret, $code, $this->secrets->lastAcceptedSliceFor($actorUuid));
 
-        if ($slice === null) {
+        // La franja se gasta con una escritura condicionada: de dos peticiones
+        // con el mismo codigo solo vale una, y la otra cuenta como fallo.
+        if ($slice === null || ! $this->secrets->rememberAcceptedSlice($actorUuid, $slice)) {
             $this->fail($actorUuid, $key, self::FIELD_TOTP);
         }
 
-        $this->secrets->rememberAcceptedSlice($actorUuid, $slice);
         $this->attempts->clear($key);
     }
 

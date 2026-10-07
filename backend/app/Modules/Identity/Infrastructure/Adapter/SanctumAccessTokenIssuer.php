@@ -191,9 +191,9 @@ final readonly class SanctumAccessTokenIssuer implements AccessTokenIssuer
 
         if (! $account instanceof User) {
             // Sin cuenta no hay tokens que revocar. No se lanza: quien llama
-            // —`ResetTwoFactorHandler`— ya comprobo que existe, y convertir una
-            // carrera improbable en un `500` dejaria la retirada del segundo
-            // factor a medias.
+            // —la baja y los dos restablecimientos— acaba de bloquear la fila
+            // de la cuenta, asi que esto no se alcanza; y si se alcanzara, un
+            // `500` no revocaria nada mas.
             return;
         }
 

@@ -55,7 +55,7 @@ escritores de las tablas padre. Lo que cambia es todo lo que está a la derecha 
    nuevo—, la toma con `SELECT … FOR KEY SHARE` **antes** de la cadena. Nunca toma una fila padre con
    la cadena en la mano.
 3. **Un escritor de una tabla padre que cambia una columna con índice único completo** (renombrar)
-   toma su fila **antes** de la cadena, que es lo que ya hacen `RenameDepartmentHandler` y
+   toma su fila **antes** de la cadena, que es lo que ya hacen `UpdateDepartmentHandler` y
    `UpdateSiteHandler`. No entra en `withChainLock()`.
 4. **Nada toma `FOR UPDATE` sobre `employees`**, ni explícito ni implícito: ningún `UPDATE` de la ficha
    escribe `id`, `uuid` ni `employee_code` (A-5). **Las tablas padre son `sites`, `departments`,
@@ -94,7 +94,7 @@ Todos en `backend/app/Modules/`. «Cambia» es lo que `backend-laravel` tiene qu
 
 | Caso de uso | Fichero | Por qué no cambia |
 |---|---|---|
-| Renombrar departamento | `Workforce/Application/UseCase/RenameDepartmentHandler.php` | Toma `FOR UPDATE` sobre su fila y después la cadena: punto 3 |
+| Renombrar departamento (y cambiar su responsable) | `Workforce/Application/UseCase/UpdateDepartmentHandler.php` | Toma `FOR UPDATE` sobre su fila y después la cadena: punto 3 |
 | Crear departamento | `Workforce/Application/UseCase/CreateDepartmentHandler.php` | Inserta (clave ajena a `sites`) y después la cadena: filas padre → cadena |
 | Crear y modificar el centro | `Workforce/Application/UseCase/CreateSiteHandler.php`, `UpdateSiteHandler.php` | Igual que el renombrado de departamento. El renombrado del centro hace esperar unos milisegundos a los fichajes, como hoy |
 | Cuentas de gestión (`users`) | `Identity/Application/UseCase/AuthenticateUserHandler.php`, `ConfirmTwoFactorHandler.php`, `EnrolTwoFactorHandler.php`, `VerifyTwoFactorHandler.php`, `ResetTwoFactorHandler.php`, `ResetManagementPasswordHandler.php`, `DeactivateManagementAccountHandler.php`, `CreateFirstAdministratorHandler.php`; `Identity/Infrastructure/Console/CreateManagementUserCommand.php` | Insertan o cambian columnas sin índice único (`is_active`, `last_login_at`, contraseña, 2FA): toman `FOR NO KEY UPDATE`, que no choca con el `FOR KEY SHARE` de las claves ajenas que apuntan a `users` |

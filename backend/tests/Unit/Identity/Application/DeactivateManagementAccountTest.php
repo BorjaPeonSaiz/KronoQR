@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Identity\Application\Command\DeactivateManagementAccountCommand;
+use App\Modules\Identity\Application\Exception\ManagementSessionVanished;
 use App\Modules\Identity\Application\UseCase\AccountDeactivationOutcome;
 use App\Modules\Identity\Application\UseCase\DeactivateManagementAccountHandler;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
@@ -27,6 +28,12 @@ const DEACTIVATION_TEST_SECOND_ADMIN = '0199c4a1-6f2d-7b10-9e3a-000000000043';
 
 function bajaDeCuentaCon(ManagementAccountDoubles $doubles): DeactivateManagementAccountHandler
 {
+    // Quien actua tiene que existir y estar activo: el caso de uso lo relee con
+    // el padron tomado. Como `rrhh`, para no contar como otra `admin`.
+    if (! $doubles->accounts->has(DEACTIVATION_TEST_ACTOR)) {
+        $doubles->accounts->with(DEACTIVATION_TEST_ACTOR, 'actor@hotel.example', UserRole::RRHH);
+    }
+
     return new DeactivateManagementAccountHandler(
         $doubles->accounts,
         $doubles->tokens,
@@ -65,8 +72,9 @@ it('toma la cadena, despues el padron y despues la fila: un solo orden de candad
 
     bajaDeCuentaCon($doubles)->handle(bajaDe(InMemoryManagementAccounts::UUID));
 
+    // Con el padron tomado: primero se relee a quien actua, despues la cuenta.
     expect($doubles->journal)->toBe(['chain-lock:open', 'roster-lock', 'chain-lock:close'])
-        ->and($doubles->accounts->locks)->toBe([InMemoryManagementAccounts::UUID]);
+        ->and($doubles->accounts->locks)->toBe([DEACTIVATION_TEST_ACTOR, InMemoryManagementAccounts::UUID]);
 })->group('RF-ID-10', 'RS-05');
 
 it('no lleva al evento mas que el uuid, el motivo y el actor', function (): void {
@@ -138,6 +146,22 @@ it('atribuye al sistema la baja de consola', function (): void {
 
     expect($doubles->events->deactivation()->actorUuid)->toBeNull();
 })->group('RL-16');
+
+it('aborta sin escribir ni asentar si quien da de baja ya esta de baja al tomar el padron', function (): void {
+    // Tiempo de comprobacion frente a tiempo de uso: la sesion se valido al
+    // entrar, pero otra `admin` le dio de baja mientras tanto.
+    $doubles = new ManagementAccountDoubles(InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example')
+        ->with(DEACTIVATION_TEST_ACTOR, 'actor@hotel.example', UserRole::ADMIN, active: false));
+
+    expect(fn (): AccountDeactivationOutcome => bajaDeCuentaCon($doubles)->handle(bajaDe(InMemoryManagementAccounts::UUID)))
+        ->toThrow(ManagementSessionVanished::class);
+
+    expect($doubles->accounts->deactivated)->toBe([])
+        ->and($doubles->tokens->revokedAccounts)->toBe([])
+        ->and($doubles->events->published)->toBe([])
+        ->and($doubles->metrics->changes)->toBe([])
+        ->and($doubles->accounts->locks)->toBe([DEACTIVATION_TEST_ACTOR]);
+})->group('RF-ID-10', 'RS-05');
 
 it('no hace nada fuera de la transaccion', function (): void {
     $doubles = new ManagementAccountDoubles(InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'));

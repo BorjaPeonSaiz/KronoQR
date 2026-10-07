@@ -27,6 +27,7 @@ use App\Modules\Identity\Application\Exception\ActorReauthenticationFailed;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
 use App\Modules\Identity\Application\Exception\ManagementAccountAlreadyExists;
 use App\Modules\Identity\Application\Exception\ManagementAccountEmailTaken;
+use App\Modules\Identity\Application\Exception\ManagementSessionVanished;
 use App\Modules\Identity\Application\Exception\PortalAccessDenied;
 use App\Modules\Identity\Application\Exception\PortalOriginLocked;
 use App\Modules\Identity\Application\Exception\TwoFactorAlreadyEnabled;
@@ -505,6 +506,10 @@ return Application::configure(basePath: dirname(__DIR__))
          * (`ActorReauthenticationFailed` del contrato), no `401`: la sesion
          * sigue valiendo.
          */
+        // Quien actuaba sobre una cuenta perdio el acceso a mitad de la
+        // operacion (una baja cruzada): su sesion ya no vale, `401`.
+        $exceptions->render(static fn (ManagementSessionVanished $exception): mixed => ProblemDetails::unauthenticated());
+
         $exceptions->render(static fn (ManagementAccountEmailTaken $exception): mixed => ProblemDetails::conflict(
             ProblemDetails::translated($exception->translationKey, [], $exception->getMessage()),
         ));

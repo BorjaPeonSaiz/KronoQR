@@ -61,22 +61,21 @@ interface AccessTokenIssuer
      * Revoca **todos** los tokens de una cuenta: sesiones abiertas y retos a
      * medias.
      *
-     * **La excepcion a la regla de arriba, y por eso es un metodo aparte.** Existe
-     * para retirar el segundo factor (`identity:2fa-reset`, RS-06), que es lo que
-     * se hace cuando alguien perdio el telefono — o cuando se sospecha que la
-     * cuenta esta en manos de otro. Dejar vivas las sesiones abiertas convertiria
-     * ese comando en una molestia para el legitimo dueño y en nada para quien
-     * ya estaba dentro: la credencial se retira y el acceso que produjo sigue
-     * funcionando hasta doce horas.
+     * **La excepcion a la regla de arriba, y por eso es un metodo aparte.** La
+     * usan los tres casos de uso que retiran el acceso de una cuenta, por panel
+     * o por consola (RS-06, RF-ID-10): **la baja**, **el restablecimiento de la
+     * contrasena** y **la retirada del segundo factor**. Los tres se hacen por
+     * perdida o por sospecha de que la cuenta esta en manos de otro, y dejar
+     * vivas las sesiones abiertas los convertiria en una molestia para el
+     * legitimo dueño y en nada para quien ya estaba dentro: la credencial se
+     * retira y el acceso que produjo sigue funcionando hasta doce horas.
      *
      * No distingue por ambito ni por nombre a proposito: si hay que echar a
      * alguien, se le echa de todas partes.
      *
      * **No devuelve cuantas cerro**, aunque el asiento de `audit_log` lo
-     * agradeceria: llevarlo hasta alli exigiria un campo nuevo en el evento de
-     * dominio `TwoFactorReset`, y el dominio no se toca desde aqui. Anotado como
-     * deuda; el hecho —que se retiro el segundo factor, con motivo y autor— ya
-     * queda escrito.
+     * agradeceria: llevarlo hasta alli exigiria un campo nuevo en cada evento de
+     * dominio. Anotado como deuda; el hecho —con motivo y autor— ya queda escrito.
      */
     public function revokeAllFor(string $userUuid): void;
 

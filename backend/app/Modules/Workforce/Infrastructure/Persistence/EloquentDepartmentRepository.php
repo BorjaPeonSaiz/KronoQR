@@ -71,9 +71,17 @@ final readonly class EloquentDepartmentRepository implements DepartmentRepositor
         return array_values(array_map($this->toEntity(...), $rows->all()));
     }
 
+    /**
+     * `FOR UPDATE` y no `FOR NO KEY UPDATE`: `name` esta en el indice unico
+     * completo `departments_site_id_name_unique`, asi que el `UPDATE` de un
+     * renombrado sube a `FOR UPDATE` por su cuenta. Tomado aqui, **antes** de la
+     * cadena (ADR-046 §1.1 punto 3), el renombrado no lo sube con la cadena en
+     * la mano. Siempre, aunque solo cambie el responsable: es barato y es el
+     * candado que pide el ADR.
+     */
     public function findForUpdate(int $id): ?DepartmentEntity
     {
-        $row = Department::query()->whereKey($id)->lock('for no key update')->first();
+        $row = Department::query()->whereKey($id)->lockForUpdate()->first();
 
         return $row instanceof Department ? $this->toEntity($row) : null;
     }

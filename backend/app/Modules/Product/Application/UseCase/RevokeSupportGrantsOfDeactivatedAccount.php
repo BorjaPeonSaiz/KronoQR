@@ -22,12 +22,18 @@ use DateTimeImmutable;
  * **No abre transaccion**: se ejecuta dentro de la de la baja, con el candado
  * de la cadena ya tomado (lo invoca el listener sincrono del evento de
  * `Identity`). Si algo falla aqui, la baja entera se deshace: o caen la cuenta y
- * sus accesos, o no cae nada. Cada acceso retirado deja su propio asiento
- * (`support.access_revoked`), con el sistema como autor: lo retira la baja, no
- * una persona que lo haya decidido sobre ese acceso.
+ * sus accesos, o no cae nada.
+ *
+ * **Cada acceso retirado deja su propio asiento** (`support_grant.revoked`),
+ * atribuido a **quien hizo la baja** —`revoked_by_user_id`, nulo si fue por
+ * consola— y con `cause: account_deactivated` y el `uuid` de la cuenta dada de
+ * baja en el payload: leido meses despues, el asiento explica por que se corto
+ * un acceso que nadie retiro a mano.
  */
 final readonly class RevokeSupportGrantsOfDeactivatedAccount
 {
+    public const string CAUSE = 'account_deactivated';
+
     public function __construct(
         private SupportGrantRepository $grants,
         private SupportTokenIssuer $tokens,
@@ -35,10 +41,12 @@ final readonly class RevokeSupportGrantsOfDeactivatedAccount
     ) {}
 
     /**
+     * @param  string|null  $actorUuid  Quien hizo la baja; `null` desde la consola.
      * @return int Cuantos accesos se han retirado.
      */
-    public function handle(string $accountUuid, DateTimeImmutable $now): int
+    public function handle(string $accountUuid, ?string $actorUuid, DateTimeImmutable $now): int
     {
+        $revokedBy = $actorUuid === null ? null : $this->grants->authorByUuid($actorUuid)?->id;
         $revoked = 0;
 
         foreach ($this->grants->active($now) as $grant) {
@@ -49,7 +57,7 @@ final readonly class RevokeSupportGrantsOfDeactivatedAccount
             // Escritura condicionada por `revoked_at IS NULL`, como en la
             // revocacion del panel: si otra peticion lo retiro a la vez, no se
             // escribe un segundo asiento del mismo hecho.
-            if ($this->grants->markRevoked($grant->id, $now, null) !== 1) {
+            if ($this->grants->markRevoked($grant->id, $now, $revokedBy) !== 1) {
                 continue;
             }
 
@@ -59,9 +67,11 @@ final readonly class RevokeSupportGrantsOfDeactivatedAccount
                 grantId: $grant->id,
                 grantUuid: $grant->uuid,
                 scope: $grant->scope->value,
-                revokedByUserId: null,
+                revokedByUserId: $revokedBy,
                 wasActive: true,
                 occurredAt: $now,
+                cause: self::CAUSE,
+                deactivatedAccountUuid: $accountUuid,
             ));
 
             $revoked++;

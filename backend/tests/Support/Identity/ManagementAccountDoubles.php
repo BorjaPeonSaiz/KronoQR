@@ -240,9 +240,16 @@ final class InMemoryTwoFactorSecrets implements TwoFactorSecrets
         return $this->slices[$uuid] ?? null;
     }
 
-    public function rememberAcceptedSlice(string $uuid, int $slice): void
+    /** Condicionada como el adaptador: solo una franja posterior. */
+    public function rememberAcceptedSlice(string $uuid, int $slice): bool
     {
+        if (isset($this->slices[$uuid]) && $this->slices[$uuid] >= $slice) {
+            return false;
+        }
+
         $this->slices[$uuid] = $slice;
+
+        return true;
     }
 }
 
