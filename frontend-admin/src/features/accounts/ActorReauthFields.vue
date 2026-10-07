@@ -4,6 +4,7 @@
 // `422` en este campo se pinta aqui, junto a el, y no en un aviso generico.
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { useI18n } from 'vue-i18n'
+import TotpCodeInput from '@/shared/ui/TotpCodeInput.vue'
 
 defineProps<{
   usesPassword: boolean
@@ -16,10 +17,6 @@ const { t } = useI18n()
 
 const inputClass =
   'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
-
-function onCode(event: Event): void {
-  value.value = (event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 6)
-}
 </script>
 
 <template>
@@ -43,20 +40,13 @@ function onCode(event: Event): void {
       :aria-describedby="field.describedBy"
       data-test="actor-reauth"
     />
-    <input
+    <TotpCodeInput
       v-else
       :id="field.id"
-      :value="value"
-      type="text"
-      inputmode="numeric"
-      autocomplete="one-time-code"
-      maxlength="6"
-      required
-      :class="inputClass"
+      v-model="value"
       :aria-invalid="field.invalid"
       :aria-describedby="field.describedBy"
       data-test="actor-reauth"
-      @input="onCode"
     />
   </FormField>
 </template>

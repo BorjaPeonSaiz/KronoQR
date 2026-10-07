@@ -5,8 +5,7 @@
 //  - La contrasena llega por `props` desde el estado efimero de la pantalla que
 //    la pidio y **no se escribe en ningun sitio**: ni `localStorage`, ni
 //    `sessionStorage`, ni la tienda de Pinia, ni la cache de consultas. Al
-//    cerrar, el padre pone su `ref` a `null` y el valor desaparece. El unico
-//    sitio al que sale, y solo si la persona lo pide, es el portapapeles.
+//    cerrar, el padre pone su `ref` a `null` y el valor desaparece.
 //  - No hay boton de copiar, como en el PIN: un secreto en el portapapeles acaba en
 //    otras aplicaciones (y pegado en un chat). Se entrega de viva voz o en papel.
 //  - No se cierra por descuido: sin Escape ni velo. Solo con la casilla

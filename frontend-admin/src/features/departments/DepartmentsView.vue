@@ -21,13 +21,36 @@ import { listManagementAccounts } from '@/features/accounts/accounts.api'
 import { ACCOUNTS_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import { listDepartments, updateDepartment } from '@/shared/api/organisation.api'
-import type { Department } from '@/shared/api/types'
+import type { Department, ManagementAccount } from '@/shared/api/types'
 
 const { t } = useI18n()
 const session = useSessionStore()
 const queryClient = useQueryClient()
 
+const MANAGERS_PER_PAGE = 100
+
 const canAssign = computed(() => session.can(ACCOUNTS_MANAGE))
+
+async function loadActiveManagers(): Promise<ManagementAccount[]> {
+  const first = await listManagementAccounts({
+    page: 1,
+    perPage: MANAGERS_PER_PAGE,
+    role: 'responsable_departamento',
+    status: 'active',
+  })
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(first.meta.total_pages - 1, 0) }, (_, index) =>
+      listManagementAccounts({
+        page: index + 2,
+        perPage: MANAGERS_PER_PAGE,
+        role: 'responsable_departamento',
+        status: 'active',
+      }),
+    ),
+  )
+
+  return [first, ...rest].flatMap((page) => page.data)
+}
 
 const {
   data: departments,
@@ -35,21 +58,22 @@ const {
   isPending,
 } = useQuery({ queryKey: ['departments', 'all'], queryFn: () => listDepartments() })
 
-// Todas las cuentas con rol de responsable, tambien las de baja: sirven para dar
-// nombre al actual y para avisar de que su cuenta ya no entra.
+// Cuentas activas con rol de responsable, TODAS: el contrato pagina (100 como mucho por
+// pagina), asi que se piden las paginas siguientes hasta cubrir `total_pages`. Un
+// selector con un recorte silencioso dejaria sin asignar a quien esta en la pagina 2.
+// Las de baja no se piden: no se pueden asignar, y un responsable de baja se avisa
+// aparte con su nombre (`manager_name`).
 const { data: managers } = useQuery({
   queryKey: ['management-accounts', 'managers'],
-  queryFn: () =>
-    listManagementAccounts({ page: 1, perPage: 100, role: 'responsable_departamento' }),
+  queryFn: loadActiveManagers,
   enabled: canAssign,
 })
 
-// Solo `admin` las tiene (y solo para el selector y para señalar una cuenta de baja).
-const accountsByUuid = computed(
-  () => new Map((managers.value?.data ?? []).map((account) => [account.uuid, account])),
-)
-const activeManagers = computed(() =>
-  (managers.value?.data ?? []).filter((account) => account.status === 'active'),
+// Solo `admin` las tiene (y solo para el selector y para señalar un responsable que ya no
+// esta entre las cuentas activas).
+const activeManagers = computed(() => managers.value ?? [])
+const activeManagerUuids = computed(
+  () => new Set(activeManagers.value.map((account) => account.uuid)),
 )
 
 // La eleccion pendiente de cada fila, mientras no se guarda.
@@ -90,7 +114,13 @@ function managerName(department: Department): string {
 function managerDeactivated(department: Department): boolean {
   const uuid = current(department)
 
-  return uuid !== null && accountsByUuid.value.get(uuid)?.status === 'deactivated'
+  // Asignado, pero ya no es una cuenta activa con rol de responsable (baja o cambio de rol).
+  return (
+    canAssign.value &&
+    managers.value !== undefined &&
+    uuid !== null &&
+    !activeManagerUuids.value.has(uuid)
+  )
 }
 
 function inlineErrors(departmentId: number): readonly string[] {

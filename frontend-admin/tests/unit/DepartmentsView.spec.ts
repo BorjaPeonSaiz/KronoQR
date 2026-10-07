@@ -55,7 +55,14 @@ function api(
 ) {
   return (url: string, init?: RequestInit) => {
     if (url.startsWith('/api/v1/management-accounts')) {
-      return jsonResponse(managementAccountCollection([COOK, GONE, OTHER]))
+      // Como el servidor: respeta `status`.
+      return jsonResponse(
+        managementAccountCollection(
+          [COOK, GONE, OTHER].filter(
+            (account) => !url.includes('status=active') || account.status === 'active',
+          ),
+        ),
+      )
     }
 
     if (init?.method === 'PATCH') {
@@ -161,6 +168,50 @@ describe('DepartmentsView', () => {
       'La cuenta no puede dirigir un departamento.',
     )
     expect(wrapper.find('#manager-3').attributes('aria-describedby')).toBe('manager-error-3')
+  })
+
+  it('pide solo cuentas activas con rol de responsable', async () => {
+    const spy = stubFetch(api(departments(ACCOUNT_UUID, 'Jefatura de Cocina')))
+
+    await mountAs(['accounts:*', 'employees:*'])
+    await settle()
+
+    const url = String(
+      spy.mock.calls.find((call) => String(call[0]).includes('management-accounts'))?.[0],
+    )
+
+    expect(url).toContain('status=active')
+    expect(url).toContain('role=responsable_departamento')
+  })
+
+  it('si hay mas de una pagina de responsables, pide las siguientes y las ofrece todas', async () => {
+    const second = managementAccount({
+      uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b55',
+      name: 'Jefatura de Pisos',
+    })
+    const spy = stubFetch((url, init) => {
+      if (url.startsWith('/api/v1/management-accounts')) {
+        const page = new URL(url, 'http://localhost').searchParams.get('page')
+
+        return jsonResponse({
+          data: page === '2' ? [second] : [COOK],
+          meta: { page: Number(page), per_page: 100, total: 101, total_pages: 2 },
+        })
+      }
+
+      return api(departments())(url, init)
+    })
+
+    const wrapper = await mountAs(['accounts:*', 'employees:*'])
+
+    await settle()
+
+    expect(spy.mock.calls.filter((call) => String(call[0]).includes('page=2'))).toHaveLength(1)
+    expect(wrapper.findAll('#manager-3 option').map((option) => option.text())).toEqual([
+      es.departments.noManager,
+      'Jefatura de Cocina',
+      'Jefatura de Pisos',
+    ])
   })
 
   it('rrhh: solo lectura con el nombre del responsable, sin selector ni peticion de cuentas', async () => {

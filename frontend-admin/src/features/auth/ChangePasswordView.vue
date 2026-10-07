@@ -28,7 +28,8 @@ import { changeOwnPassword } from './auth.api'
 import { useSessionStore } from './session.store'
 
 const MAX_LENGTH = 200
-// bcrypt solo mira los primeros 72 bytes: el servidor rechaza mas, y se avisa antes.
+// Limite de bytes de la contrasena nueva. Autoridad: el servidor
+// (ManagementPasswordPolicy); aqui solo se avisa antes de enviar.
 const MAX_BYTES = 72
 
 const { t } = useI18n()
