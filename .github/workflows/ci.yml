@@ -1958,6 +1958,14 @@ jobs:
         # cabecera del script.
         run: bash .github/scripts/backup-wal-e2e.sh clean paquete-g
 
+      - name: "K · Redis parado: el fichaje y las sondas responden en tiempo acotado (R3-CH-01)"
+        # Mide en Linux lo que R3-CH-01 midio en Docker Desktop (bloque 22). Con `redis`
+        # PARADO (sin eliminar: su nombre sale del DNS de la red) hace dos rondas de /health,
+        # /ready y POST /scan/pin, y falla si la segunda supera 3 s o si el fichaje responde
+        # 5xx. Arranca redis de nuevo al terminar, pase lo que pase. Va despues de G, H e I,
+        # que dependen del estado de Redis. El detalle, en la cabecera del script.
+        run: bash .github/scripts/chaos-redis-probe.sh paquete-g
+
       - name: Trivy sobre la imagen de borde recien construida (bloqueante)
         # Por `make`, como TODAS las demas invocaciones de Trivy del
         # repositorio. Este paso llamaba al binario `trivy` a pelo y el runner
