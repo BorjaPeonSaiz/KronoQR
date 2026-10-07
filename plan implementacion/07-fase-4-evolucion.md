@@ -97,80 +97,164 @@ Una línea de esta fase puede adelantarse cuando el propietario lo decide con un
 
 **Pasos.**
 
-1. **Contrato** (hecho en `36ae8677`): `GET`/`POST /api/v1/management-accounts`, `POST …/{uuid}/deactivate`, `…/password/reset`, `…/two-factor/reset` y `POST /api/v1/auth/password`; ámbito `accounts:*`; problema `urn:kronoqr:problem:password-change-required`; `ManagementUser.password_change_required`. Clientes TS regenerados.
-2. **Esquema** (`/migracion-segura`): `users.temporary_password_expires_at` (expansión, reversible) y el permiso `accounts:*` con su pivote de `admin`, con las cadenas escritas literalmente.
-3. **Dominio de `Identity`**: `PasswordStatus`, `TemporaryPasswordLifetime`, `TemporaryPassword` y `ManagementAccountDeactivationGuard` (propia cuenta, última admin activa); eventos `ManagementAccountCreated` y `ManagementPasswordChanged`.
-4. **Puertos y casos de uso** (`/crear-caso-de-uso`). La contraseña se genera y se hashea **fuera** de `withChainLock`.
-   - Puertos nuevos: `TemporaryPasswordGenerator`, `PasswordHasher` y `ManagementAccountDirectory`.
-   - `CreateManagementAccountHandler`, nuevo; `identity:create-user` pasa a usarlo y muestra la temporal una vez.
-   - `DeactivateManagementAccountHandler` y `ResetManagementPasswordHandler` pasan a identificar por UUID.
-   - `ResetTwoFactorHandler` se ajusta.
-   - `ChangeOwnPasswordHandler` y `ListManagementAccounts`, nuevos, más el comando `identity:list-users`.
-5. **Orden de candados**: cadena → candado del padrón de cuentas → fila `users`. `ConfirmTwoFactorHandler` y `CreateFirstAdministratorHandler` pasan también a `withChainLock`.
-6. **HTTP** (`/endpoint-api`):
-   - controladores finos, FormRequests y Resources que envuelven vistas, nunca el modelo;
-   - `ManagementAccountPolicy`: `admin` y nunca soporte;
-   - middleware `RequireOwnPassword` con sus tres exenciones;
-   - zona `management` y sin puerta de licencia (ADR-019).
-7. **Auditoría (`Compliance`)**: `user.created` y `user.password_changed`, nuevos en `AuditAction`, sellados por `RecordManagementAccountLifecycle`.
-8. **Panel**:
-   - sección «Cuentas» solo para `admin` (`navigation.ts`, `router/index.ts`), en la feature nueva `frontend-admin/src/features/accounts/`;
-   - listado y alta, con la temporal en un diálogo de una sola vez (patrón `PinRevealDialog`);
-   - baja y restablecimientos con `ConfirmDialog` + `ChangePreview`;
-   - cambio de contraseña propio en el perfil, al que se redirige ante `password-change-required`;
-   - i18n ES/EN.
-9. **Documentación del cliente**: guía de RRHH y `configuracion.md` sin `psql` para las cuentas, runbooks de alta y baja de cuentas y la variable `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`. En las notas de la versión: el `admin` vuelve a entrar tras actualizar para recibir `accounts:*`.
+1. **Contrato**, hecho antes que el código (ADR-051). Incluye:
+   - las rutas `GET`/`POST /api/v1/management-accounts`, `POST …/{uuid}/deactivate`, `…/password/reset`, `…/two-factor/reset` y `POST /api/v1/auth/password`;
+   - los ámbitos `accounts:*` y `password:change`, y el problema `urn:kronoqr:problem:password-change-required`;
+   - `ManagementUser.password_change_required`;
+   - la reautenticación del actor (`actor_totp_code` o `actor_current_password`, con la respuesta `ActorReauthenticationFailed`);
+   - el motivo obligatorio en `…/password/reset`;
+   - `Cache-Control: no-store` en las respuestas que llevan la temporal;
+   - `manager_user_uuid` en `Department` y `UpdateDepartmentRequest`.
+
+   Los clientes TS ya están regenerados.
+2. **Esquema** (`/migracion-segura`): `users.temporary_password_expires_at` (expansión, reversible) y el permiso `accounts:*` con su pivote de `admin`, con las cadenas escritas literalmente. `password:change` es un ámbito de token que no pertenece a ningún rol, igual que `2fa:pending`.
+3. **Dominio de `Identity`**:
+   - `PasswordStatus`, `TemporaryPasswordLifetime` (de 1 a 168 h) y `TemporaryPassword`;
+   - `ManagementAccountDeactivationGuard`, que rechaza la baja de la propia cuenta y la de la última admin activa;
+   - eventos `ManagementAccountCreated` y `ManagementPasswordChanged`.
+4. **Puertos y casos de uso** (`/crear-caso-de-uso`). Generar, hashear y comparar contraseñas ocurre siempre **fuera** de `withChainLock`.
+   - Puertos nuevos: `TemporaryPasswordGenerator` (ASCII, sin `l I O 0 1`, como mucho 72 bytes), `PasswordHasher` y `ManagementAccountDirectory`.
+   - `CreateManagementAccountHandler` es nuevo, y `identity:create-user` pasa a usarlo y a mostrar la temporal una sola vez.
+   - `DeactivateManagementAccountHandler` y `ResetManagementPasswordHandler` pasan a identificar por UUID. El segundo lleva motivo, que entra en `user.password_reset`.
+   - `ResetTwoFactorHandler` rechaza la propia cuenta y las cuentas sin 2FA confirmado.
+   - `ChangeOwnPasswordHandler` es nuevo:
+     - lleva su propio contador, `password-change|<uuid>`;
+     - al bloquear, revoca el token actual y escribe `auth.lockout_started`;
+     - la escritura es condicionada: devuelve `409` si el hash cambió entretanto y `401` si el token ya no existe;
+     - en la misma transacción, el token pasa de `password:change` a los ámbitos de su rol.
+   - `ListManagementAccounts` y el comando `identity:list-users` son nuevos.
+5. **Reautenticación del actor.** Alta, `password/reset` y `two-factor/reset` verifican `actor_totp_code` con el contador `2fa|<actor>` y la misma protección contra la reutilización de franja que `/auth/2fa/verify`. Si la cuenta que actúa no tiene 2FA confirmado, verifican `actor_current_password`. Un fallo devuelve `422` en el campo; con el bloqueo abierto, `429`.
+6. **Sesión con contraseña temporal.** El acceso emite el token con el **único** ámbito `password:change`. Esto vale para `/auth/login`, `/auth/2fa/verify` y `/auth/2fa/confirm`, y los tres comprueban también la caducidad. Cuando falta `MissingAbility` con ese ámbito, la respuesta es `403` `password-change-required`, también en `/broadcasting/auth`.
+7. **Orden de candados.** Siempre cadena → padrón de cuentas → fila `users`. Pasan a `withChainLock` `DeactivateManagementAccountHandler`, `ResetManagementPasswordHandler`, `ConfirmTwoFactorHandler` y `CreateFirstAdministratorHandler`.
+8. **La baja retira los accesos de soporte** vigentes que concedió esa cuenta. `Identity` publica un evento y `Product` revoca cada acceso con su asiento. La baja también corta la suscripción Reverb.
+9. **Responsable de departamento** (`Workforce`): `manager_user_uuid` en `PATCH /departments/{id}`.
+   - Exige además `accounts:*`. Si `rrhh` envía el campo, recibe `403` y no cambia nada.
+   - Responde `422` único si la cuenta no existe, está de baja o tiene otro rol que `responsable_departamento`.
+   - Escribe un `role_assignment.changed` por cada cuenta afectada (la que sale y la que entra).
+10. **HTTP** (`/endpoint-api`):
+    - controladores finos, FormRequests y Resources que envuelven vistas;
+    - `ManagementAccountPolicy`: solo `admin` y nunca soporte;
+    - `POST /auth/password` con `403` explícito para todo actor de soporte;
+    - zona `management` y sin puerta de licencia (ADR-019);
+    - `new_password` y `current_password` en el `dontFlash`.
+11. **Auditoría (`Compliance`)**: `user.created` y `user.password_changed` son nuevas en `AuditAction`. `RecordManagementAccountLifecycle` las sella junto con las existentes.
+12. **Métrica y alerta** (`devops-observabilidad`):
+    - `kronoqr_management_account_changes_total{action, role}`, sin `uuid`;
+    - alerta al receptor de seguridad en **cada** `two_factor_reset` y en **cada** alta con rol `admin`;
+    - runbook en `docs/runbooks/ataque-a-credenciales.md`.
+13. **Panel**:
+    - sección «Cuentas» solo para `admin`, en la feature nueva `frontend-admin/src/features/accounts/`;
+    - listado, y alta con la temporal en un diálogo de una sola vez (patrón `PinRevealDialog`);
+    - campo del código del autenticador en el alta y en los restablecimientos;
+    - baja y restablecimientos con `ConfirmDialog` + `ChangePreview`;
+    - cambio propio en el perfil, con redirección ante `password-change-required`;
+    - elección del responsable en la pantalla de departamentos, solo para `admin`;
+    - i18n ES/EN.
+14. **Documentación del cliente**:
+    - la guía de RRHH y `configuracion.md`, sin `psql` para las cuentas ni para el responsable de departamento;
+    - runbooks de alta y baja de cuentas;
+    - `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`;
+    - nota de la versión: el `admin` vuelve a entrar tras actualizar para recibir `accounts:*`.
 
 **Artefactos.**
 
 - `backend/app/Modules/Identity/Domain/`, `Application/` (`Port/`, `UseCase/`, `Query/`), `Infrastructure/` (`Adapter/`, `Persistence/`, `Console/`) y `Http/`.
+- `backend/app/Modules/Workforce/` (el responsable de departamento) y `backend/app/Modules/Product/` (la retirada de los accesos de soporte).
 - `backend/app/Modules/Compliance/Domain/ValueObject/AuditAction.php` y `Infrastructure/Listener/RecordManagementAccountLifecycle.php`.
-- `backend/database/migrations/`: columna de la contraseña temporal y permiso `accounts:*`.
+- `backend/database/migrations/`: la columna de la contraseña temporal y el permiso `accounts:*`.
 - `backend/config/identity.php` y `.env.example`.
-- `frontend-admin/src/features/accounts/` (nuevo), `navigation.ts`, `router/index.ts` y el perfil.
+- `infra/observability/`: la regla de alerta y su prueba.
+- `frontend-admin/src/features/accounts/` (nuevo), la pantalla de departamentos, `navigation.ts`, `router/index.ts` y el perfil.
 - `docs/api/openapi.yaml`, `docs/adr/ADR-051-…`, `docs/cliente/guia-rrhh.md`, `docs/cliente/en/hr-guide.md`, `docs/cliente/configuracion.md` y `docs/runbooks/`.
 
-**Pruebas exigidas.** Por §9.5: regla de negocio → **Unitaria**; esquema → **Integración**; endpoints → **Feature + Contrato** y **autorización negativa por cada rol**; recorrido de usuario → **E2E + axe**.
+**Pruebas exigidas.** Según §9.5: una regla de negocio exige **Unitaria**; un esquema, **Integración**; un endpoint, **Feature + Contrato** y **autorización negativa por cada rol**; un recorrido de usuario, **E2E + axe**.
 
-- Unitaria: `PasswordStatus` en la frontera exacta de la caducidad, con `Clock` fijo → `->group('RF-ID-10')`.
-- Unitaria: `ManagementAccountDeactivationGuard` con la propia cuenta, la última admin activa, una admin con otra activa y el actor nulo de la consola → `->group('RF-ID-10', 'RS-05')`.
-- Unitaria: el generador produce longitud max(20, mínimo configurado), con las cuatro clases y sin ningún carácter ambiguo, y cumple la política → `->group('RF-ID-10', 'RF-ID-01')`.
-- Unitaria: los handlers no hashean dentro del candado, y los desenlaces rechazados no escriben ni publican → `->group('RF-ID-10')`.
-- Integración: las migraciones son reversibles y las tres copias de `accounts:*` (enum, contrato y migración) coinciden → `->group('RF-ID-10', 'RS-04')`.
-- Integración: dos conexiones dan de baja a la vez a las dos únicas admin activas y queda exactamente una → `->group('RF-ID-10', 'RS-05')`.
-- Integración: los asientos no llevan nombre, correo ni contraseña → `->group('RS-05')`.
-- Feature + Contrato de las seis rutas → `->group('RF-ID-10', 'RS-03')`. Incluye:
-  - el `404` idéntico para «no existe» y «ya de baja», sin asiento;
-  - el `409` por la propia cuenta, la última admin, un correo ya usado y el 2FA no confirmado.
-- Feature: recorrido completo de la temporal: alta, `202`, alta del TOTP, `403 password-change-required`, `POST /auth/password` y acceso → `->group('RF-ID-10', 'RS-06')`.
-- Feature: la temporal caducada responde igual que una contraseña errónea; en el cambio propio, una contraseña actual errónea da `422`, y `429` tras el bloqueo → `->group('RF-ID-10', 'RS-03', 'RF-ID-01')`.
-- Autorización negativa en cada ruta de `accounts:*` → `->group('RF-ID-10', 'RF-ID-02')`:
-  - `rrhh`, `responsable_departamento` y `auditor` → `403`;
-  - soporte con cada uno de sus alcances → `403`;
-  - tokens de quiosco y de portal → `403`;
-  - sin token y con `2fa:pending` → `401`.
-- E2E + axe: alta con el diálogo de una sola vez, baja con confirmación y cambio propio forzado → `tag: ['@RF-ID-10']`.
+- **Unitaria:** `PasswordStatus` en la frontera exacta de la caducidad, con `Clock` fijo → `->group('RF-ID-10')`.
+- **Unitaria:** `ManagementAccountDeactivationGuard` con cuatro casos → `->group('RF-ID-10', 'RS-05')`:
+  - la propia cuenta;
+  - la última admin activa;
+  - una admin que tiene otra admin activa;
+  - el actor nulo de la consola.
+- **Unitaria:** el generador → `->group('RF-ID-10', 'RF-ID-01')`:
+  - la longitud es max(20, mínimo configurado) y nunca pasa de 72 bytes;
+  - incluye las cuatro clases y ningún carácter ambiguo;
+  - cumple la política.
+- **Unitaria:** los handlers con dobles → `->group('RF-ID-10')`:
+  - no hashean ni comparan dentro del candado;
+  - los desenlaces rechazados no escriben ni publican;
+  - un doble de `SerializedLedgerWrite` registra el orden de los candados.
+- **Integración:** las migraciones son reversibles y las tres copias de `accounts:*` (enum, contrato y migración) coinciden → `->group('RF-ID-10', 'RS-04')`.
+- **Integración:** dos conexiones dan de baja a la vez a las dos únicas admin activas, y queda exactamente una → `->group('RF-ID-10', 'RS-05')`.
+- **Integración:** `ConfirmTwoFactorHandler` y `two-factor/reset` concurrentes sobre la misma cuenta, sin `deadlock_detected` → `->group('RF-ID-10')`.
+- **Integración:** los asientos no llevan nombre, correo ni contraseña, y `user.password_reset` lleva el motivo → `->group('RS-05')`.
+- **Recorrido de `Router::getRoutes()`** (modelo `RouteRateLimitZonesTest`): toda ruta que exige un ámbito rechaza un token `password:change` con `403` `password-change-required`, incluida `/broadcasting/auth`. Solo `POST /auth/password`, `GET /auth/me` y `POST /auth/logout` lo admiten → `->group('RF-ID-10', 'RS-06')`.
+- **Feature + Contrato** de las seis rutas y de `PATCH /departments/{id}` → `->group('RF-ID-10', 'RS-03')`:
+  - `404` idéntico para «no existe» y «ya de baja», sin asiento;
+  - `409` por la propia cuenta, por la última admin, por un correo ya usado y por un 2FA no confirmado;
+  - `Cache-Control: no-store` en las respuestas con temporal.
+- **Feature: reautenticación del actor** en el alta y en los dos restablecimientos → `->group('RF-ID-10', 'RS-06')`:
+  - sin código, con un código erróneo, con un código ya usado en su franja, o con contraseña desde una cuenta con 2FA: `422`;
+  - tras el umbral: `429` con `Retry-After`.
+- **Feature: recorrido completo de la temporal** → `->group('RF-ID-10', 'RS-06')`:
+  - la secuencia es alta, `202`, alta del TOTP, sesión `password:change`, `403` en `/employees`, `POST /auth/password` y `200` en `/employees` con el mismo token;
+  - una temporal caducada da el mismo `401` que una contraseña errónea, en `login`, `2fa/verify` y `2fa/confirm`.
+- **Feature: cambio propio** → `->group('RF-ID-10', 'RF-ID-01', 'RS-03')`:
+  - con la contraseña actual errónea, `422`;
+  - con el contador `password-change|<uuid>` agotado, `429`, el token revocado y `auth.lockout_started`;
+  - escritura condicionada: `409` y `401`;
+  - más de 72 bytes, `422`.
+- **Feature: baja** → `->group('RF-ID-10', 'RS-05')`:
+  - los tokens anteriores dan `401`;
+  - la suscripción Reverb se corta;
+  - se revocan los accesos de soporte que concedió esa cuenta.
+- **Feature: responsable de departamento** → `->group('RF-ID-10', 'RF-ID-03')`:
+  - `manager_user_uuid` enviado por `rrhh` da `403` y no cambia nada;
+  - el mismo `422` si la cuenta no existe, está de baja o tiene otro rol;
+  - quedan dos asientos `role_assignment.changed`;
+  - la cuenta desplazada pierde el alcance en su siguiente petición.
+- **Autorización negativa en cada ruta de `accounts:*`** → `->group('RF-ID-10', 'RF-ID-02')`:
+  - `rrhh`, `responsable_departamento` y `auditor` reciben `403`;
+  - el soporte con **cada** alcance, incluido `configuration`, recibe `403`;
+  - los tokens de quiosco y de portal reciben `403`;
+  - sin token y con `2fa:pending` la respuesta es `401`;
+  - `SupportScopeRoutesTest` no incluye las rutas nuevas.
+- **Autorización negativa en `POST /auth/password`** → `->group('RF-ID-10', 'RF-ID-02')`:
+  - el soporte con cada alcance recibe `403`;
+  - los tokens de quiosco y de portal se rechazan;
+  - cada rol de gestión recibe `204` sobre sí mismo.
+- **Alerta:** `promtool test rules` comprueba que dispara en cada `two_factor_reset` y en cada alta `admin`, y que la métrica no lleva etiqueta de `uuid` → `->group('RF-ID-10')`.
+- **E2E + axe** → `tag: ['@RF-ID-10']`:
+  - alta con el código del autenticador y el diálogo de una sola vez;
+  - baja con confirmación;
+  - cambio propio forzado;
+  - asignación de responsable.
 
 **Verificación.**
 
 ```bash
-php artisan test tests/Unit/Identity tests/Feature/Identity tests/Integration/Identity tests/Contract
+php artisan test tests/Unit/Identity tests/Feature/Identity tests/Integration/Identity tests/Feature/Workforce tests/Contract
 php artisan test --group=RF-ID-10
 make e2e -- --grep @RF-ID-10
 php artisan docs:consistency --check
 ```
 
 Esperado:
-- una cuenta dada de baja deja de entrar en la petición siguiente y sigue en la lista;
-- la instalación no puede quedarse sin `admin` activa, ni por el panel ni por la consola;
-- ninguna contraseña aparece en `audit_log`, en un log ni en otra respuesta que la que la emite.
+
+- Una cuenta dada de baja deja de entrar en la petición siguiente y sigue en la lista.
+- La instalación no puede quedarse sin `admin` activa, ni por el panel ni por la consola.
+- Una sesión con contraseña temporal no alcanza nada más que el cambio de contraseña.
+- Una sesión de `admin` sin su autenticador no crea cuentas ni rehace credenciales.
+- Ninguna contraseña aparece en `audit_log`, en un log ni en una respuesta distinta de la que la emite.
 
 **Terminado cuando** (§10.3) se cumple todo esto:
-- Deptrac en verde y PHPStan 9 limpio;
-- pruebas unitarias, de integración, feature, contrato, autorización negativa y E2E;
-- trazabilidad de RF-ID-10 en verde;
-- contrato actualizado, migración reversible, auditoría escrita, instrumentación sin PII y textos en ES y EN;
-- ADR-051 aceptado tras la revisión de `seguridad-cumplimiento`, con las filas afectadas del doc 07 actualizadas.
+
+- Deptrac en verde y PHPStan 9 limpio.
+- Pruebas unitarias, de integración, feature, contrato, autorización negativa (por rol, por soporte con cada alcance, por quiosco y por portal) y E2E.
+- La prueba de `Router::getRoutes()` sobre `password:change` está en verde.
+- La trazabilidad de RF-ID-10 está en verde.
+- **La métrica `kronoqr_management_account_changes_total{action, role}`, la alerta al receptor de seguridad y su runbook existen y están probados.** Es condición de cierre del bloque 12c (ADR-051), no una mejora posterior.
+- Contrato actualizado, migración reversible, auditoría escrita, instrumentación sin PII y textos en ES y EN.
+- Las filas afectadas del doc 07 están actualizadas con la evidencia final.
 
 ---
 
