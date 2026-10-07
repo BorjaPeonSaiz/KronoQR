@@ -50,10 +50,16 @@ final readonly class RecordSupportGrantRevoked
                 'grant_id' => $event->grantId,
                 'grant_uuid' => $event->grantUuid,
                 'scope' => $event->scope,
-                // Nulo cuando la revoco la consola: ahi no hay sesion que
-                // atribuir, y eso tambien es informacion.
+                // Nulo cuando no hubo sesion detras —la consola, o una baja
+                // hecha por consola—: no hay a quien atribuirlo, y eso tambien
+                // es informacion. Con la baja desde el panel, quien la hizo.
                 'revoked_by_user_id' => $event->revokedByUserId,
                 'was_active' => $event->wasActive,
+                // RF-ID-10: cayo con la baja de la cuenta que lo concedio.
+                ...($event->cause === null ? [] : [
+                    'cause' => $event->cause,
+                    'deactivated_account_uuid' => $event->deactivatedAccountUuid,
+                ]),
             ]),
             occurredAt: $event->occurredAt(),
         ));

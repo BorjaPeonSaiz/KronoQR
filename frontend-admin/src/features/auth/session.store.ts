@@ -96,11 +96,18 @@ export const useSessionStore = defineStore('session', () => {
   const expiresAt = ref<string | null>(stored?.expiresAt ?? null)
   const user = ref<ManagementUser | null>(null)
   const status = ref<SessionStatus>(stored === null ? 'anonymous' : 'unknown')
+  // El servidor ha respondido `403 password-change-required` a alguna peticion: la
+  // cuenta entra con una contrasena temporal aunque `/auth/me` aun no lo dijera.
+  const passwordChangeFlagged = ref(false)
 
   const isAuthenticated = computed(() => token.value !== null && status.value !== 'anonymous')
   const abilities = computed<readonly string[]>(() => user.value?.abilities ?? [])
   const roles = computed<readonly UserRole[]>(() => user.value?.roles ?? [])
   const displayName = computed(() => user.value?.name ?? '')
+  /** Mientras sea `true`, el panel solo deja cambiar la contrasena o cerrar sesion (RF-ID-10). */
+  const passwordChangeRequired = computed(
+    () => passwordChangeFlagged.value || user.value?.password_change_required === true,
+  )
 
   /** Si la interfaz debe ofrecer una accion que exige este ambito. */
   function can(ability: string): boolean {
@@ -112,6 +119,7 @@ export const useSessionStore = defineStore('session', () => {
     expiresAt.value = null
     user.value = null
     status.value = 'anonymous'
+    passwordChangeFlagged.value = false
     writeStored(null)
   }
 
@@ -126,6 +134,7 @@ export const useSessionStore = defineStore('session', () => {
     expiresAt.value = session.expires_at
     user.value = session.user
     status.value = 'authenticated'
+    passwordChangeFlagged.value = false
     writeStored({ token: session.token, expiresAt: session.expires_at })
   }
 
@@ -172,6 +181,17 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  /** Marca la sesion como «contrasena temporal»: la guarda del router lleva a cambiarla. */
+  function flagPasswordChangeRequired(): void {
+    passwordChangeFlagged.value = true
+  }
+
+  /** Relee `/auth/me`: tras cambiar la contrasena la marca desaparece en el servidor. */
+  async function refreshUser(): Promise<void> {
+    user.value = await fetchCurrentUser()
+    passwordChangeFlagged.value = false
+  }
+
   async function logOut(): Promise<void> {
     try {
       await logOutRequest()
@@ -192,6 +212,9 @@ export const useSessionStore = defineStore('session', () => {
     abilities,
     roles,
     displayName,
+    passwordChangeRequired,
+    flagPasswordChangeRequired,
+    refreshUser,
     can,
     clear,
     applySession,

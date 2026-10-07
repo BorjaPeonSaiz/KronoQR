@@ -11,15 +11,17 @@ use Illuminate\Database\Eloquent\Model;
  * dominio es {@see \App\Modules\Workforce\Domain\Model\Department}.
  *
  * `manager_user_id` no es `fillable`: apunta a `users`, que es tabla de otro
- * modulo, y solo tiene efecto con el ambito por departamento de RF-ID-03 (tarea
- * 2.1). Escribirlo desde aqui seria prometer un control de acceso que todavia no
- * se aplica.
+ * modulo, y concede alcance sobre personas (RF-ID-03). Solo lo escribe
+ * `EloquentDepartmentRepository::assignManager()`, al que llega una cuenta ya
+ * comprobada por `UpdateDepartmentHandler` y con su asiento (RF-ID-10, ADR-051
+ * §5); un `fill()` con el cuerpo de una peticion no puede tocarlo.
  *
  * La tabla no tiene marcas de tiempo (doc 01 §5.5).
  *
  * @property int $id
  * @property int $site_id
  * @property string $name
+ * @property int|null $manager_user_id
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
  */

@@ -18,9 +18,11 @@ use InvalidArgumentException;
  * departamento les cambiaria la zona horaria con la que se calcula su jornada
  * (RN-05) sin que nadie lo pidiera.
  *
- * `manager_user_id` existe en el esquema y **no esta aqui**: solo tiene efecto
- * con el ambito por departamento de RF-ID-03, que es de la tarea 2.1, y ademas
- * apunta a `users`, que es una tabla de otro modulo.
+ * El responsable (`manager_user_id`) **no esta aqui** sino en `DepartmentView`
+ * (`Application/Port`): apunta a una cuenta de `users`, que es de otro modulo,
+ * y ninguna regla de este agregado lo usa. Se lee con el departamento para el
+ * panel y se escribe con su propio metodo del repositorio y su propio asiento
+ * (RF-ID-10, ADR-051 §5).
  */
 final readonly class Department
 {

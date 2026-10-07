@@ -1606,17 +1606,31 @@ code. **The account exists.** Sign in with your email and your password through
 the normal sign-in screen: since you do not have a second factor yet, the
 response itself will offer to set it up and will show you the QR again.
 
-If you have also lost the password, it is reset from the server (the trailing
-comments say “creates another management account” and “removes a second
-factor”):
+If you have also lost the password, **the normal route is the panel**: another
+person with the administration role resets it for you in Panel → **Accounts** →
+“Reset password” and hands you the temporary password in person. Management
+accounts —creation, deactivation, password and second factor— are handled from
+that screen since 2.2.0; the procedure is in
+[`../../runbooks/cuentas-de-gestion.md`](../../runbooks/cuentas-de-gestion.md)
+(in Spanish).
+
+**If you are the only administration account**, nobody can do it for you from
+the panel, and what remains is the server console, which is the recovery route.
+The new password is temporary: it is shown once only, expires after
+`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` (section 6.8) and, when you sign in,
+forces you to set your own:
 
 ```bash
-docker compose exec app php artisan identity:create-user   # crea otra cuenta de gestión
-docker compose exec app php artisan identity:reset-password # contraseña nueva, mostrada una vez
-docker compose exec app php artisan identity:deactivate-user # da de baja una cuenta
-docker compose exec app php artisan identity:2fa-reset     # retira un segundo factor
-docker compose exec app php artisan identity:origin-unlock <ip> # levanta el bloqueo por origen del portal
+# Lists the management accounts: UUID, email, role, status and whether they have a second factor
+docker compose exec app php artisan identity:list-users
+# New temporary password for that account, shown ONCE
+docker compose exec app php artisan identity:reset-password direccion@tuhotel.example --reason="Contraseña olvidada / Forgotten password"
 ```
+
+**No account and no department manager is ever changed through SQL.** Not to
+create, not to deactivate, not to assign a department: the panel and these
+commands record in the audit log who did it and why, and a direct edit of the
+database does not.
 
 ---
 
@@ -1936,7 +1950,8 @@ line is a copy of the default value and **editing it does nothing**.
 | `IDENTITY_LOGIN_MAX_ATTEMPTS` | — | Failed passwords **per account** before locking it | `5` | Raise it if your people complain about lockouts; lower it if your policy is stricter | No |
 | `IDENTITY_LOGIN_LOCKOUT_SECONDS` | — | How long that lockout lasts | `900` (15 min) | Same as above | No |
 | `IDENTITY_SESSION_TOKEN_HOURS` | — | Lifetime of the panel session | `12` | Lower it if the management computers are shared. **It does not affect the kiosk token**, which lasts 90 days | No |
-| `IDENTITY_PASSWORD_MIN_LENGTH` | — | Minimum length of the management password | `12` | Raise it if your policy requires it. **There is a floor of 8 in the code**: it cannot go below that | No |
+| `IDENTITY_PASSWORD_MIN_LENGTH` | — | Minimum length of the management password | `12` | Raise it if your policy requires it. **There is a floor of 8 and a ceiling of 72 in the code**: beyond 72 bytes the password is no longer read in full | No |
+| `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` | — | Hours for which the **temporary password** works that the panel (Panel → **Accounts**) generates when it creates a management account or resets its password, and also `identity:create-user` and `identity:reset-password`. It is handed over in person; its holder signs in with it and, before being able to do anything else, sets their own. Once expired it no longer lets anyone in and has to be reset. Accepts `1` to `168` (one week); outside that range, account creation and password resets fail with an error instead of issuing a password that never expires: fix it and restart `app` | `72` (three days) | Lower it if you hand the password over the same day; raise it, up to `168`, if the recipient takes a while to come by the hotel (weekend shifts, seasonal staff). The longer it is, the longer a password that somebody may have written down stays valid | No |
 | `IDENTITY_MANAGEMENT_RATE_LIMIT` | — | Requests per minute, per account and per origin, on the management routes that read or correct other people's data | `120` | Only if a large hotel sees `429` errors under normal use | No |
 
 ### 6.9 Second factor for management accounts

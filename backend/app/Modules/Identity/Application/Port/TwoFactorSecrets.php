@@ -80,7 +80,14 @@ interface TwoFactorSecrets
     public function lastAcceptedSliceFor(string $uuid): ?int;
 
     /**
-     * Recuerda la franja del codigo que se acaba de aceptar.
+     * Recuerda la franja del codigo que se acaba de aceptar, **solo si es
+     * posterior a la ultima recordada**, y dice si lo ha hecho.
+     *
+     * Es la anti-reutilizacion del codigo, y tiene que ser **atomica**: dos
+     * peticiones con el mismo codigo pasan las dos la verificacion —leen la
+     * misma franja anterior— y solo la escritura condicionada decide cual vale.
+     * `false` es «otra peticion ya uso este codigo»: quien llama lo trata como
+     * un codigo incorrecto.
      */
-    public function rememberAcceptedSlice(string $uuid, int $slice): void;
+    public function rememberAcceptedSlice(string $uuid, int $slice): bool;
 }

@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Infrastructure\Persistence;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +42,8 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string|null $two_factor_secret Cifrado en reposo por el cast `encrypted`.
  * @property Carbon|null $two_factor_confirmed_at Nulo mientras el alta esta a medias.
  * @property int|null $two_factor_last_slice Franja del ultimo codigo aceptado (antirreenvio).
+ * @property CarbonImmutable|null $temporary_password_expires_at Caducidad de la contrasena temporal (RF-ID-10); nulo si es propia.
+ * @property Carbon|null $created_at
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
  */
@@ -73,6 +76,7 @@ final class User extends Authenticatable implements ManagementActor
         'password',
         'locale',
         'is_active',
+        'temporary_password_expires_at',
     ];
 
     /**
@@ -126,7 +130,7 @@ final class User extends Authenticatable implements ManagementActor
      */
     public function accessScope(): AccessScope
     {
-        if ($this->actsAs(UserRole::ADMIN, UserRole::RRHH, UserRole::AUDITOR)) {
+        if ($this->actsAs(...self::unrestrictedRoles())) {
             return AccessScope::unrestricted();
         }
 
@@ -136,16 +140,48 @@ final class User extends Authenticatable implements ManagementActor
             ->pluck('id')
             ->all();
 
+        return self::accessScopeFrom([], array_values($departments));
+    }
+
+    /**
+     * La misma regla de {@see self::accessScope()} a partir de datos ya leidos:
+     * la usa el listado de cuentas (RF-ID-10), que agrega roles y departamentos
+     * de toda la pagina en una sola consulta en lugar de una por fila. Una sola
+     * regla escrita una sola vez.
+     *
+     * @param  list<UserRole>  $roles
+     * @param  list<mixed>  $departmentIds
+     */
+    public static function accessScopeFrom(array $roles, array $departmentIds): AccessScope
+    {
+        if (array_intersect(
+            array_map(static fn (UserRole $role): string => $role->value, $roles),
+            array_map(static fn (UserRole $role): string => $role->value, self::unrestrictedRoles()),
+        ) !== []) {
+            return AccessScope::unrestricted();
+        }
+
         $ids = [];
 
-        /** @var mixed $id */
-        foreach ($departments as $id) {
+        foreach ($departmentIds as $id) {
             if (is_numeric($id)) {
                 $ids[] = (int) $id;
             }
         }
 
+        sort($ids);
+
         return AccessScope::forDepartments(...$ids);
+    }
+
+    /**
+     * Los roles de alcance global: ven la plantilla entera.
+     *
+     * @return list<UserRole>
+     */
+    private static function unrestrictedRoles(): array
+    {
+        return [UserRole::ADMIN, UserRole::RRHH, UserRole::AUDITOR];
     }
 
     /**
@@ -178,6 +214,7 @@ final class User extends Authenticatable implements ManagementActor
             'two_factor_secret' => 'encrypted',
             'two_factor_confirmed_at' => 'datetime',
             'two_factor_last_slice' => 'integer',
+            'temporary_password_expires_at' => 'immutable_datetime',
         ];
     }
 }

@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Infrastructure\Persistence;
 
+use App\Modules\Identity\Application\Exception\ManagementAccountEmailTaken;
 use App\Modules\Identity\Application\Port\ManagementAccountRegistry;
 use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Str;
 use RuntimeException;
-use SensitiveParameter;
 
 /**
  * Alta de cuentas de gestion sobre Eloquent y `spatie/laravel-permission`.
@@ -30,10 +31,10 @@ use SensitiveParameter;
  * A proposito. Contar solo las activas convertiria «dar de baja a la unica
  * persona con acceso» en «reabrir la creacion publica de un administrador».
  *
- * ## La contrasena se hashea aqui
+ * ## La contrasena llega hasheada
  *
- * El modelo `User` la castea a `hashed`, asi que el valor en claro no llega a
- * escribirse ni a leerse nunca; llega a este metodo y muere en la insercion.
+ * Se hashea antes, fuera del candado de la cadena de auditoria (puerto
+ * `PasswordHasher`, RF-ID-10): aqui no llega ninguna contrasena en claro.
  *
  * ## Devuelve el mismo objeto de valor que {@see UserAccounts}
  *
@@ -61,26 +62,44 @@ final readonly class EloquentManagementAccountRegistry implements ManagementAcco
             ->exists();
     }
 
+    public function emailTaken(string $email): bool
+    {
+        // `users.email` es `citext`: la comparacion ya ignora mayusculas.
+        return User::query()->where('email', $email)->exists();
+    }
+
     public function create(
         string $name,
         string $email,
-        #[SensitiveParameter] string $password,
+        string $passwordHash,
         string $locale,
         UserRole $role,
+        ?\DateTimeImmutable $temporaryExpiresAt,
     ): AuthenticatedUser {
         // UUID v7 y no v4, como el resto del producto: es ordenable
         // temporalmente y mantiene la localidad de los indices que lo
         // referencian (doc 02 §6).
         $uuid = Str::uuid7()->toString();
 
-        $user = User::query()->create([
-            'uuid' => $uuid,
-            'name' => $name,
-            'email' => $email,
-            'password' => $password,
-            'locale' => $locale,
-            'is_active' => true,
-        ]);
+        try {
+            $user = User::query()->create([
+                'uuid' => $uuid,
+                'name' => $name,
+                'email' => $email,
+                // Ya es un hash (puerto `PasswordHasher`): el cast `hashed` lo
+                // reconoce, comprueba que es de la configuracion vigente y lo
+                // guarda tal cual.
+                'password' => $passwordHash,
+                'locale' => $locale,
+                'is_active' => true,
+                'temporary_password_expires_at' => $temporaryExpiresAt,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            // Dos altas simultaneas del mismo correo pasan las dos la
+            // comprobacion previa; el `UNIQUE (users.email)` decide cual entra.
+            // La otra recibe el mismo `409` que si hubiera llegado despues.
+            throw new ManagementAccountEmailTaken;
+        }
 
         $user->assignRole($role->value);
 

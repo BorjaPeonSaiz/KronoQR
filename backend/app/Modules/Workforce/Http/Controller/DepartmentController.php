@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Http\Controller;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Workforce\Application\Port\DepartmentView;
 use App\Modules\Workforce\Application\Query\DepartmentQueries;
 use App\Modules\Workforce\Application\UseCase\CreateDepartmentHandler;
-use App\Modules\Workforce\Application\UseCase\RenameDepartmentHandler;
+use App\Modules\Workforce\Application\UseCase\UpdateDepartmentHandler;
 use App\Modules\Workforce\Domain\Model\Department;
 use App\Modules\Workforce\Http\Request\IndexDepartmentRequest;
 use App\Modules\Workforce\Http\Request\StoreDepartmentRequest;
@@ -32,7 +33,7 @@ final class DepartmentController extends Controller
     {
         return response()->json([
             'data' => array_map(
-                static fn (Department $department): array => (new DepartmentResource($department))->toArray($request),
+                static fn (DepartmentView $department): array => (new DepartmentResource($department))->toArray($request),
                 $queries->all(),
             ),
         ]);
@@ -55,12 +56,12 @@ final class DepartmentController extends Controller
     {
         $department = $handler->handle($request->toCommand());
 
-        return (new DepartmentResource($department))
+        return (new DepartmentResource(new DepartmentView($department)))
             ->response()
             ->setStatusCode(JsonResponse::HTTP_CREATED);
     }
 
-    public function update(UpdateDepartmentRequest $request, int $id, RenameDepartmentHandler $handler): JsonResponse
+    public function update(UpdateDepartmentRequest $request, int $id, UpdateDepartmentHandler $handler): JsonResponse
     {
         $department = $handler->handle($request->toCommand($id));
 

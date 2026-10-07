@@ -6,7 +6,9 @@ namespace App\Modules\Identity\Infrastructure\Persistence;
 
 use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
+use App\Modules\Identity\Domain\ValueObject\PasswordStatus;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
+use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\Hash;
@@ -34,6 +36,20 @@ final readonly class EloquentUserAccounts implements UserAccounts
      */
     private const string DUMMY_HASH = '$2y$12$0PQ7pfj2Vt.Xj3Fd0Rj0K.9m5nBcVJ0dnGZ4L1YvKpQmS8xUeVsRe';
 
+    /**
+     * El reloj resuelve si una temporal ha caducado (regla dura 2): ni el
+     * adaptador ni el caso de uso preguntan la hora al sistema.
+     */
+    public function __construct(private Clock $clock) {}
+
+    private function passwordStatusOf(User $user): PasswordStatus
+    {
+        return PasswordStatus::of(
+            $user->temporary_password_expires_at?->toDateTimeImmutable(),
+            $this->clock->now(),
+        );
+    }
+
     public function verifyCredentials(string $email, string $password): ?AuthenticatedUser
     {
         $user = User::query()
@@ -45,7 +61,11 @@ final readonly class EloquentUserAccounts implements UserAccounts
         // el tiempo de respuesta de los dos casos.
         $matches = Hash::check($password, $user instanceof User ? $user->password : self::DUMMY_HASH);
 
-        if ($user === null || ! $matches || ! $user->is_active) {
+        // RF-ID-10, RS-03: una temporal caducada responde lo mismo que una
+        // contrasena incorrecta, y despues de comparar el hash, para que el
+        // tiempo de respuesta tampoco la distinga.
+        if ($user === null || ! $matches || ! $user->is_active
+            || $this->passwordStatusOf($user) === PasswordStatus::TemporaryExpired) {
             return null;
         }
 
@@ -129,6 +149,8 @@ final readonly class EloquentUserAccounts implements UserAccounts
             // factor y no debe hacer que el acceso se detenga esperando un codigo
             // que nadie puede generar.
             secondFactorActive: $user->two_factor_confirmed_at !== null,
+            // RF-ID-10: con una temporal, la sesion solo sirve para cambiarla.
+            passwordStatus: $this->passwordStatusOf($user),
         );
     }
 

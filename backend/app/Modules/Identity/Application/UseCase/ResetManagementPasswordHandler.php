@@ -4,92 +4,133 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\UseCase;
 
+use App\Modules\Identity\Application\Command\ActorProof;
+use App\Modules\Identity\Application\Command\ResetManagementPasswordCommand;
+use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
+use App\Modules\Identity\Application\Exception\ActorReauthenticationFailed;
 use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
+use App\Modules\Identity\Application\Port\ManagementAccountChange;
 use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
+use App\Modules\Identity\Application\Port\PasswordHasher;
+use App\Modules\Identity\Application\Port\TemporaryPasswordGenerator;
+use App\Modules\Identity\Application\Support\ActingAccountCheck;
+use App\Modules\Identity\Application\Support\ActorReauthentication;
+use App\Modules\Identity\Application\Support\ManagementAccountTelemetry;
+use App\Modules\Identity\Application\Support\TemporaryPasswordSettings;
 use App\Modules\Identity\Domain\Event\ManagementPasswordReset;
+use App\Modules\Identity\Domain\ValueObject\TemporaryPassword;
 use App\Modules\Shared\Application\Port\Clock;
-use Illuminate\Database\ConnectionInterface;
-use SensitiveParameter;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 
 /**
- * Sustituye la contrasena de una cuenta de gestion (**RS-06**, OWASP A07;
- * `identity:reset-password`, hallazgo H-03 de la revision interna ASVS de
- * 2026-09).
+ * Sustituye la contrasena de otra cuenta de gestion por una **temporal**
+ * (**RF-ID-10**, **RS-06**, OWASP A07;
+ * `POST /api/v1/management-accounts/{uuid}/password/reset` e
+ * `identity:reset-password`).
  *
  * ## Por que existe
  *
- * El producto no tenia ninguna forma de rotar la contrasena de una cuenta ya
- * creada: ni pantalla, ni endpoint, ni comando. La unica salida ante una
- * contrasena comprometida —o simplemente olvidada— era crear **otra cuenta**,
- * que es lo peor que puede hacerse con un registro horario: dos identidades para
- * la misma persona parten en dos la respuesta a «¿quien corrigio esta jornada?».
+ * Sin esto, ante una contrasena olvidada o comprometida la unica salida era
+ * crear **otra cuenta**, que parte en dos la respuesta a «¿quien corrigio esta
+ * jornada?». **No hay recuperacion por correo** (regla dura 12, ADR-015): la
+ * contrasena la genera el servidor y se entrega en mano, y caduca: una
+ * contrasena que conoce otra persona y no caduca es una credencial compartida.
  *
- * **Y no hay recuperacion por correo** (regla dura 12, ADR-015). El producto no
- * depende del correo de nadie, la instalacion puede no tener salida a internet
- * (ADR-016) y un enlace de restablecimiento es otra credencial que emitir y
- * custodiar. La contrasena nueva la genera el comando y se entrega **en mano**,
- * igual que la tarjeta.
+ * ## Lo que se comprueba y donde
+ *
+ * Fuera de todo candado: la reautenticacion del `admin` que actua, generar y
+ * hashear. Dentro, con la fila bloqueada: que la cuenta exista y este activa
+ * (si no, `NotFound`: a una baja no se le devuelve el acceso cambiandole la
+ * contrasena) y que no sea la propia (para eso esta el cambio propio, que pide
+ * la actual).
  *
  * ## Un caso de uso, una transaccion
  *
- * La contrasena nueva, la revocacion de los tokens y el asiento van juntos
- * (ADR-027). Si el asiento falla, la contrasena anterior sigue siendo la buena:
- * una sustitucion de credencial sin traza es exactamente el hecho que un
- * administrador comprometido querria que no constara.
- *
- * ## Y con la contrasena se van las sesiones
- *
- * Por la misma razon que en {@see ResetTwoFactorHandler}: de los dos motivos por
- * los que se ejecuta esto —olvido y sospecha—, en el que importa quien esta
- * dentro lleva una sesion viva de hasta doce horas. Cambiarle la contrasena sin
- * cerrarla le retiraria una credencial que ya no necesita.
- *
- * ## Lo que NO llega hasta aqui
- *
- * La politica de robustez de RF-ID-01 se aplica **donde se fija** la contrasena,
- * que es el comando: es el mismo sitio donde la aplica `identity:create-user` y
- * la misma razon —quien la genera es quien tiene que garantizar que cumple—.
- * Aqui la contrasena solo pasa de largo, marcada como sensible para que no
- * aparezca en un volcado de pila.
+ * La contrasena nueva, la revocacion de **todas** las sesiones y el asiento van
+ * juntos dentro de `withChainLock` (ADR-010). De los dos motivos para
+ * restablecer —olvido y sospecha—, en el que importa quien esta dentro lleva una
+ * sesion viva. **El segundo factor no se toca**: retirarlo es otro hecho con su
+ * propio asiento.
  */
 final readonly class ResetManagementPasswordHandler
 {
     public function __construct(
         private ManagementAccountLifecycle $accounts,
         private AccessTokenIssuer $tokens,
+        private TemporaryPasswordGenerator $generator,
+        private PasswordHasher $hasher,
+        private TemporaryPasswordSettings $settings,
+        private ActorReauthentication $reauthentication,
         private IdentityEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
+        private ManagementAccountTelemetry $telemetry,
     ) {}
 
     /**
-     * @param  string|null  $actorUuid  Quien la restablece, si se sabe. En consola es
-     *                                  `null` y el asiento sale a nombre del sistema.
-     * @return bool `false` si no hay ninguna cuenta **activa** con ese correo. No se
-     *              lanza excepcion: quien llama es un comando que ya sabe decirlo
-     *              mejor que un `500`. Una cuenta dada de baja no recupera el acceso
-     *              por cambiarle la contrasena, asi que restablecersela seria dar a
-     *              entender lo contrario.
+     * @throws ActorReauthenticationFailed si quien actua no confirma su identidad
+     * @throws AccountTemporarilyLocked con el bloqueo de intentos de codigo de quien actua abierto
      */
-    public function handle(string $email, #[SensitiveParameter] string $password, ?string $actorUuid = null): bool
+    public function handle(ResetManagementPasswordCommand $command): ManagementPasswordResetOutcome
     {
-        $uuid = $this->accounts->uuidOfActiveAccount($email);
+        return $this->telemetry->measure(
+            ManagementAccountChange::PasswordReset,
+            $command->accountUuid,
+            $command->actorUuid,
+            fn (): ManagementPasswordResetOutcome => $this->reset($command),
+            static fn (ManagementPasswordResetOutcome $outcome): string => $outcome->status->name,
+        );
+    }
 
-        if ($uuid === null) {
-            return false;
+    private function reset(ResetManagementPasswordCommand $command): ManagementPasswordResetOutcome
+    {
+        if ($command->actorUuid !== null) {
+            $this->reauthentication->confirm($command->actorUuid, $command->proof ?? new ActorProof(null, null));
         }
 
-        $now = $this->clock->now();
+        $plain = $this->generator->generate($this->settings->minLength);
+        $password = new TemporaryPassword($plain, $this->hasher->hash($plain));
+        $issuedAt = $this->clock->now();
+        $expiresAt = $this->settings->lifetime->expiresAt($issuedAt);
 
-        $this->connection->transaction(function () use ($uuid, $password, $actorUuid, $now): void {
-            $this->accounts->replacePassword($uuid, $password);
+        /** @var array{0: ManagementPasswordResetStatus, 1: list<UserRole>} $result */
+        $result = $this->serialized->withChainLock(
+            function () use ($command, $password, $issuedAt, $expiresAt): array {
+                ActingAccountCheck::assertStillActive($this->accounts, $command->actorUuid);
 
-            $this->tokens->revokeAllFor($uuid);
+                $account = $this->accounts->lockAccount($command->accountUuid);
 
-            $this->events->publish(new ManagementPasswordReset($uuid, $actorUuid, $now));
-        });
+                if ($account === null || ! $account->active) {
+                    return [ManagementPasswordResetStatus::NotFound, []];
+                }
 
-        return true;
+                if ($command->actorUuid !== null && $command->actorUuid === $account->uuid) {
+                    return [ManagementPasswordResetStatus::OwnAccount, []];
+                }
+
+                $this->accounts->replacePasswordHash($account->uuid, $password->hash, $expiresAt);
+                $this->tokens->revokeAllFor($account->uuid);
+                $this->events->publish(new ManagementPasswordReset(
+                    $account->uuid,
+                    $command->reason,
+                    $command->actorUuid,
+                    $issuedAt,
+                ));
+
+                return [ManagementPasswordResetStatus::Reset, $account->roles];
+            },
+        );
+
+        [$status, $roles] = $result;
+
+        if ($status !== ManagementPasswordResetStatus::Reset) {
+            return ManagementPasswordResetOutcome::of($status);
+        }
+
+        $this->telemetry->count(ManagementAccountChange::PasswordReset, $roles);
+
+        return ManagementPasswordResetOutcome::reset($password, $issuedAt, $expiresAt);
     }
 }

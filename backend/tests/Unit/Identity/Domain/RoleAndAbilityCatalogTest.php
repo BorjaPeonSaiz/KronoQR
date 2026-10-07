@@ -51,6 +51,10 @@ it('declara los ambitos del documento 02 §7.3 y ninguno mas', function (): void
         // ambito del §7.3 y no concede nada del producto: abre solo los tres
         // endpoints de `/auth/2fa/*`.
         '2fa:pending',
+        // RF-ID-10: administrar las cuentas de gestion, solo `admin`. Ambito
+        // propio y no `settings:*`, que lleva el soporte con alcance
+        // `configuration` (doc 02 §7.3, nota 7).
+        'accounts:*',
         'attendance:correct',
         'attendance:read',
         'audit:read',
@@ -63,6 +67,9 @@ it('declara los ambitos del documento 02 §7.3 y ninguno mas', function (): void
         'heartbeat:write',
         'incidents:*',
         'license:*',
+        // RF-ID-10, ADR-051: la sesion de contrasena temporal. Como
+        // `2fa:pending`, no cuelga de ningun rol y no concede nada del producto.
+        'password:change',
         'reports:*',
         'reports:legal',
         'roster:read',

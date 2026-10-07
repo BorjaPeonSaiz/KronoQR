@@ -11,7 +11,9 @@ use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Audit\ManagementUserDirectory;
+use App\Modules\Identity\Domain\Event\ManagementAccountCreated;
 use App\Modules\Identity\Domain\Event\ManagementAccountDeactivated;
+use App\Modules\Identity\Domain\Event\ManagementPasswordChanged;
 use App\Modules\Identity\Domain\Event\ManagementPasswordReset;
 use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
 use App\Modules\Identity\Domain\Event\TwoFactorEnabled;
@@ -111,9 +113,42 @@ final readonly class RecordManagementAccountLifecycle
             actor: $this->actor($event->actorUuid),
             action: AuditAction::ManagementPasswordReset,
             subject: AuditSubject::of('user', $this->users->idOf($event->userUuid)),
-            // Solo el uuid, y ni siquiera un motivo: el hecho auditable es que la
-            // credencial se sustituyo. La contrasena, su longitud y cualquier
-            // derivado suyo se quedan fuera del payload a proposito.
+            // El uuid y el motivo (obligatorio desde la 2.2.0, RF-ID-10). La
+            // contrasena, su longitud y cualquier derivado suyo se quedan fuera
+            // del payload a proposito.
+            payload: AuditPayload::of([
+                'user_uuid' => $event->userUuid,
+                'reason' => $event->reason,
+            ]),
+            occurredAt: $event->occurredAt(),
+        ));
+    }
+
+    public function handleAccountCreated(ManagementAccountCreated $event): void
+    {
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actor($event->actorUuid),
+            action: AuditAction::ManagementAccountCreated,
+            subject: AuditSubject::of('user', $this->users->idOf($event->userUuid)),
+            payload: AuditPayload::of([
+                'user_uuid' => $event->userUuid,
+                'password' => 'temporary',
+                // Sin sesion detras solo puede ser la consola: el panel siempre
+                // lleva al `admin` que actua.
+                'via' => $event->actorUuid === null ? 'console' : 'panel',
+            ]),
+            occurredAt: $event->occurredAt(),
+        ));
+    }
+
+    public function handlePasswordChanged(ManagementPasswordChanged $event): void
+    {
+        // Actor y sujeto son la misma cuenta: nadie mas puede cambiarla, porque
+        // hace falta la contrasena actual.
+        $this->audit->handle(new RecordAuditEntryCommand(
+            actor: $this->actor($event->userUuid),
+            action: AuditAction::ManagementPasswordChanged,
+            subject: AuditSubject::of('user', $this->users->idOf($event->userUuid)),
             payload: AuditPayload::of([
                 'user_uuid' => $event->userUuid,
             ]),

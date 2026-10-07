@@ -12,6 +12,8 @@ la cuarta en
 | `KronoqrAuthLockouts` | ≥ 3 bloqueos en 15 min por canal, `for: 1m` | Advertencia | T1110.004 (Credential Stuffing) | [§4](#4-diagnóstico) |
 | `KronoqrAuthFailureSpike` | > 100 fallos en 5 min por canal, `for: 1m` | Crítica | T1110 (posible T1110.004) | [§4](#4-diagnóstico) |
 | `RechazoDeFirmaQr` | > 20 escaneos con firma HMAC inválida en 15 min, `for: 5m` | Crítica | T1606 (Forjado de credenciales web) | [§8](#8-rechazodefirmaqr-t1606-alguien-prueba-payloads-de-qr-que-el-sistema-no-firmó) |
+| `KronoqrManagementTwoFactorReset` | Cada restablecimiento de 2FA (`increase` > 0 en 5 m), sin `for:` | Crítica | T1098 (Account Manipulation) | [§9](#9-restablecimiento-de-2fa-o-alta-de-admin-inesperados) |
+| `KronoqrManagementAdminAccountCreated` | Cada alta con rol `admin` (`increase` > 0 en 5 m), sin `for:` | Crítica | T1136 (Create Account) | [§9](#9-restablecimiento-de-2fa-o-alta-de-admin-inesperados) |
 
 **Impacto en el fichaje, que es lo primero que hay que saber: ninguno.** Estas
 cuatro alertas nunca impiden fichar. `KronoqrAuthLockouts` sí puede significar
@@ -299,6 +301,7 @@ tenido éxito.
 | `KronoqrAuthLockouts` | Responsable de seguridad | Dentro de la jornada; inmediato si afecta a `management` |
 | `KronoqrAuthFailureSpike` | Responsable de seguridad **y** IT del cliente (para el bloqueo de §5) | Inmediato |
 | `RechazoDeFirmaQr` (§8) | Responsable de seguridad | Inmediato — es un incidente, no una avería |
+| `KronoqrManagementTwoFactorReset` / `KronoqrManagementAdminAccountCreated` (§9) | Responsable de seguridad | Inmediato; el mismo día si el actor y el titular lo confirman |
 | Confirmado un `success` tras fallos sospechosos (§6) | Responsable de seguridad + persona titular de la cuenta | Inmediato |
 
 ---
@@ -407,3 +410,99 @@ solo dentro del paquete de diagnóstico anonimizado (que no lleva `employee_uuid
 ni UUID en el texto, y reduce el texto de los errores a palabras técnicas);
 `ip_hash` no identifica a nadie sin `APP_KEY`, pero `subject_id`/`employee_uuid`
 de `audit_log` no salen de la instalación.
+
+---
+
+## 9. Restablecimiento de 2FA o alta de admin inesperados
+
+**Qué dicen las alertas.** `KronoqrManagementTwoFactorReset`: alguien con rol
+`admin` ha retirado el segundo factor de una cuenta de gestión.
+`KronoqrManagementAdminAccountCreated`: se ha creado una cuenta con rol `admin`.
+Saltan con **cada** hecho, sin umbral: lo normal es que ocurran muy pocas veces
+al año y que quien las recibe sepa de antemano que iban a pasar. La métrica
+(`kronoqr_management_account_changes_total{action,role}`) no dice quién ni a
+quién, a propósito; eso está en `audit_log`.
+
+**Impacto en el fichaje: ninguno.** Es un riesgo de apropiación de cuentas
+(T1098, T1136), no una avería. Destinatario: responsable de seguridad.
+
+### 9.1 Qué comprobar en `audit_log`
+
+Desde el directorio de la instalación:
+
+```bash
+docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -c \
+  "SELECT occurred_at, action, actor_type, actor_id, ip, payload
+     FROM audit_log
+    WHERE action IN ('auth.two_factor_reset', 'user.created', 'user.password_reset')
+      AND occurred_at > now() - interval '1 day'
+    ORDER BY occurred_at DESC"
+```
+
+- `auth.two_factor_reset`: quién lo hizo (`actor_*`), sobre qué cuenta y el
+  `reason` que escribió. Un motivo vacío, genérico o que no cuadra con nada que
+  conozcas es una señal.
+- `user.created`: actor, rol asignado y motivo. Mira también si la cuenta nueva
+  tiene ya una sesión (`auth.login`) y desde qué `ip`.
+- `user.password_reset` del mismo actor y la misma cuenta cerca en el tiempo:
+  restablecer contraseña **y** 2FA sobre la misma cuenta es el patrón de una
+  apropiación completa.
+
+### 9.2 Verificarlo con las personas (fuera del sistema)
+
+1. Pregunta al **administrador actuante**, por un canal distinto del panel
+   (teléfono o en persona), si hizo la operación y por qué.
+2. Pregunta al **titular** de la cuenta afectada (o a quien pidió el alta) si lo
+   esperaba.
+3. Si ambos lo confirman y el motivo cuadra: anota la verificación en el
+   registro del incidente y cierra. No hace falta más.
+
+### 9.3 Revertir si no se reconoce
+
+Se puede hacer desde Panel → **Cuentas** con otra cuenta de administración de
+confianza ([`cuentas-de-gestion.md`](cuentas-de-gestion.md)), pero **si
+sospechas de las credenciales o del teléfono de quien administra, usa la
+consola de la instalación**, que no depende de ninguna sesión del panel (actúa
+con asiento de auditoría):
+
+```bash
+# Desactivar la cuenta sospechosa (alta de admin no reconocida, o cuenta afectada)
+docker compose exec app php artisan identity:deactivate-user <correo> --reason="..."
+
+# Invalidar la contraseña de la cuenta afectada (sustituye a la comprometida)
+docker compose exec app php artisan identity:reset-password <correo>
+
+# Volver a exigir segundo factor: el titular lo da de alta de nuevo al entrar
+docker compose exec app php artisan identity:2fa-reset <uuid> --reason="..."
+```
+
+Orden recomendado: desactiva primero la cuenta del **actor** si sospechas que
+su sesión o sus credenciales están comprometidas, después la cuenta creada o
+afectada, y deja la contraseña y el 2FA del titular legítimo para el final,
+cuando ya no haya sesiones ajenas abiertas. Cada comando escribe su asiento.
+
+**Contención inmediata, después de los comandos anteriores.** Ni la baja ni los
+restablecimientos cortan una conexión en tiempo real ya abierta (la pantalla de
+Presencia): la del atacante puede seguir recibiendo avisos hasta que se
+reconecte. Reinicia el servicio de tiempo real desde el directorio de la
+instalación:
+
+```bash
+# Corta TODAS las conexiones en tiempo real del panel. No afecta al fichaje: el quiosco no usa Reverb
+docker compose restart reverb
+```
+
+Corta las conexiones de **todas** las personas del panel, que se reconectan solas
+en segundos; las de las cuentas con los tokens revocados ya no pueden. **El
+fichaje no se entera**: las tablets no usan este servicio (regla dura 19).
+
+### 9.4 Cuándo escalar
+
+- Nadie reconoce la operación, o el actor niega haberla hecho: **incidente de
+  seguridad**. Trata sus credenciales y su 2FA como comprometidos (§6) y avisa al
+  responsable de protección de datos del hotel; si hay acceso a datos de
+  personas, el plazo de notificación de 72 h de la AEPD empieza a contar.
+- Se repite o hay más de una cuenta afectada: bloquea el origen (§5) y revisa
+  `auth.login` de la última semana.
+- Hay `KronoqrAuthLockouts` o `KronoqrAuthFailureBurst` sobre `management` en las
+  horas previas: es la misma campaña (§4).

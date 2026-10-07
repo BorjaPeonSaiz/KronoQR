@@ -44,6 +44,9 @@ const EMPLOYEE_LOCK_DISCIPLINE_ROW_LOCKS = [
     // no distingue de `Builder::lock()`. Ninguna tabla (ADR-050).
     'Shared/Infrastructure/Cache/CacheMutex.php' => 'ninguna: candado de la cache (SET NX en Redis, flock en disco)',
     'Workforce/Infrastructure/Persistence/EloquentAbsenceRepository.php' => 'absences',
+    // ADR-046 §1.1 punto 3: el renombrado toma su fila ANTES de la cadena,
+    // porque `name` esta en un indice unico completo.
+    'Workforce/Infrastructure/Persistence/EloquentDepartmentRepository.php' => 'departments, antes de la cadena (§1.1 punto 3)',
 ];
 
 /**

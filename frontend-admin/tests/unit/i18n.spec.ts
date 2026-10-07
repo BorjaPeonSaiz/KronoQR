@@ -80,6 +80,10 @@ describe('idiomas de la aplicacion', () => {
         (role) => `app.roles.${role}`,
       ),
       ...['active', 'suspended', 'terminated'].map((status) => `employees.status.${status}`),
+      // Cuentas de gestion (RF-ID-10): los dos enumerados del contrato que se pintan tal cual.
+      ...['active', 'deactivated'].map((status) => `accounts.status.${status}`),
+      ...['own', 'temporary', 'temporary_expired'].map((status) => `accounts.password.${status}`),
+      ...['active', 'suspended', 'terminated'].map((status) => `employees.status.${status}`),
       ...['pending', 'issued', 'delivered'].flatMap((status) => [
         `pin.status.${status}`,
         `pin.statusHint.${status}`,

@@ -23,8 +23,11 @@ use App\Modules\Compliance\Application\Exception\IncidentNotFound;
 use App\Modules\Compliance\Domain\Exception\IncidentAlreadyClosed;
 use App\Modules\Compliance\Domain\Exception\InvalidLegalExportRequest;
 use App\Modules\Identity\Application\Exception\AccountTemporarilyLocked;
+use App\Modules\Identity\Application\Exception\ActorReauthenticationFailed;
 use App\Modules\Identity\Application\Exception\AuthenticationFailed;
 use App\Modules\Identity\Application\Exception\ManagementAccountAlreadyExists;
+use App\Modules\Identity\Application\Exception\ManagementAccountEmailTaken;
+use App\Modules\Identity\Application\Exception\ManagementSessionVanished;
 use App\Modules\Identity\Application\Exception\PortalAccessDenied;
 use App\Modules\Identity\Application\Exception\PortalOriginLocked;
 use App\Modules\Identity\Application\Exception\TwoFactorAlreadyEnabled;
@@ -38,7 +41,9 @@ use App\Modules\Identity\Domain\Exception\CredentialRevocationNeedsReason;
 use App\Modules\Identity\Domain\Exception\EmployeeAlreadyHasCredential;
 use App\Modules\Identity\Domain\Exception\InvalidSigningKey;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
+use App\Modules\Identity\Http\Middleware\RejectPasswordChangeSession;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
+use App\Modules\Identity\Http\Support\PasswordChangeSession;
 use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
 use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
 use App\Modules\Product\Domain\Exception\InvalidSettingValue;
@@ -56,6 +61,7 @@ use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
 use App\Modules\Shared\Domain\Exception\AccessOutOfScope;
 use App\Modules\Shared\Domain\Exception\FeatureNotLicensed;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
+use App\Modules\Workforce\Application\Exception\DepartmentManagerNotEligible;
 use App\Modules\Workforce\Domain\Exception\AbsenceRequiresNote;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
@@ -181,6 +187,12 @@ return Application::configure(basePath: dirname(__DIR__))
              * que solo lleva `2fa:pending`.
              */
             'session.complete' => RejectPendingTwoFactorSession::class,
+            /*
+             * La sesion de contrasena temporal (`password:change`, RF-ID-10) en
+             * las rutas autenticadas que NO exigen ambito y no son una de las
+             * tres que esa sesion alcanza: hoy solo `POST /client-errors`.
+             */
+            'session.password-settled' => RejectPasswordChangeSession::class,
             /*
              * Las rutas que generan un DOCUMENTO (CSV, XLSX, PDF) lo declaran
              * con este alias y responden en el idioma de la instalacion, no en
@@ -339,13 +351,33 @@ return Application::configure(basePath: dirname(__DIR__))
          * fabricante dentro del paquete de diagnostico: si lleva credenciales, se
          * han filtrado.
          */
-        $exceptions->dontFlash(['password', 'password_confirmation', 'qr_payload', 'pin_sealed']);
+        $exceptions->dontFlash([
+            'password',
+            'password_confirmation',
+            'qr_payload',
+            'pin_sealed',
+            // Cuentas de gestion (RF-ID-10): el cambio de la contrasena propia y
+            // la reautenticacion de quien actua sobre otra cuenta.
+            'current_password',
+            'new_password',
+            'actor_current_password',
+            'actor_totp_code',
+        ]);
 
         $exceptions->render(static fn (ValidationException $exception): mixed => ProblemDetails::validationFailed($exception->errors()));
 
         $exceptions->render(static fn (AuthenticationException $exception): mixed => ProblemDetails::unauthenticated());
 
-        $exceptions->render(static fn (AuthorizationException $exception): mixed => ProblemDetails::forbidden());
+        /*
+         * La sesion de contrasena temporal (RF-ID-10, ADR-051) lleva el unico
+         * ambito `password:change`, asi que el middleware `ability` de cualquier
+         * ruta la rechaza con `MissingAbilityException`, que es una
+         * `AuthorizationException`. A esa persona no le falta un permiso: le
+         * falta fijar su contrasena, y el panel lo distingue por el `type`.
+         */
+        $exceptions->render(static fn (AuthorizationException $exception, Request $request): mixed => PasswordChangeSession::isOpen($request)
+            ? PasswordChangeSession::response()
+            : ProblemDetails::forbidden());
 
         /*
          * RF-ID-03: un responsable ha pedido datos de fuera de su departamento.
@@ -362,7 +394,13 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->render(static fn (AccessOutOfScope $exception): mixed => ProblemDetails::forbidden());
 
-        $exceptions->render(static fn (AccessDeniedHttpException $exception): mixed => ProblemDetails::forbidden());
+        // El framework convierte la `AuthorizationException` —tambien la
+        // `MissingAbilityException` del middleware `ability`— en esta ANTES de
+        // los traductores, asi que la sesion de contrasena temporal (RF-ID-10)
+        // se reconoce tambien aqui.
+        $exceptions->render(static fn (AccessDeniedHttpException $exception, Request $request): mixed => PasswordChangeSession::isOpen($request)
+            ? PasswordChangeSession::response()
+            : ProblemDetails::forbidden());
 
         $exceptions->render(static fn (ModelNotFoundException $exception): mixed => ProblemDetails::notFound());
 
@@ -462,6 +500,29 @@ return Application::configure(basePath: dirname(__DIR__))
         ));
 
         /*
+         * Cuentas de gestion desde el panel (RF-ID-10). Un correo que ya es de
+         * otra cuenta —tambien de una baja— es `409`; la reautenticacion de
+         * quien actua que falta o no vale es `422` en su campo
+         * (`ActorReauthenticationFailed` del contrato), no `401`: la sesion
+         * sigue valiendo.
+         */
+        // Quien actuaba sobre una cuenta perdio el acceso a mitad de la
+        // operacion (una baja cruzada): su sesion ya no vale, `401`.
+        $exceptions->render(static fn (ManagementSessionVanished $exception): mixed => ProblemDetails::unauthenticated());
+
+        $exceptions->render(static fn (ManagementAccountEmailTaken $exception): mixed => ProblemDetails::conflict(
+            ProblemDetails::translated($exception->translationKey, [], $exception->getMessage()),
+        ));
+
+        $exceptions->render(static fn (ActorReauthenticationFailed $exception): mixed => ProblemDetails::validationFailed([
+            $exception->field => [ProblemDetails::translated(
+                ActorReauthenticationFailed::TRANSLATION_KEY.'.'.$exception->field,
+                [],
+                $exception->getMessage(),
+            )],
+        ]));
+
+        /*
          * Portal del empleado (tarea 1.11, RF-ID-06, RS-03, RS-12).
          *
          * `401` PARA LAS CINCO CAUSAS, y sin `Retry-After` ni cuando el bloqueo
@@ -499,6 +560,22 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::employeeTerminated($exception->getMessage()));
 
         $exceptions->render(static fn (WorkforceConflict $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
+
+        /*
+         * El responsable propuesto para un departamento no es una cuenta activa
+         * con rol `responsable_departamento` (RF-ID-10, ADR-051 §5): `422` en
+         * `errors.manager_user_uuid`, **con un solo mensaje para las tres
+         * causas** —no existe, esta de baja, tiene otro rol—. Es `422` y no
+         * `404` porque el recurso de la ruta existe; lo que no vale es una
+         * referencia del cuerpo.
+         */
+        $exceptions->render(static fn (DepartmentManagerNotEligible $exception): mixed => ProblemDetails::validationFailed([
+            DepartmentManagerNotEligible::FIELD => [ProblemDetails::translated(
+                DepartmentManagerNotEligible::TRANSLATION_KEY,
+                [],
+                $exception->getMessage(),
+            )],
+        ]));
 
         /*
          * Importacion masiva de plantilla (tarea 5.5, RF-GP-05).

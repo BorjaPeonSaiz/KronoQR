@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Infrastructure\Persistence;
 
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
 use DateTimeImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use SensitiveParameter;
 
@@ -111,16 +112,22 @@ final readonly class EloquentTwoFactorSecrets implements TwoFactorSecrets
         return $this->find($uuid)?->two_factor_last_slice;
     }
 
-    public function rememberAcceptedSlice(string $uuid, int $slice): void
+    /**
+     * Un unico `UPDATE` condicionado, y no leer y despues guardar: con dos
+     * peticiones con el mismo codigo, las dos leerian la franja anterior y las
+     * dos la guardarian. Aqui solo una cambia la fila; la otra ve `0` filas y el
+     * codigo cuenta como ya usado.
+     */
+    public function rememberAcceptedSlice(string $uuid, int $slice): bool
     {
-        $user = $this->find($uuid);
+        $updated = User::query()
+            ->where('uuid', $uuid)
+            ->where(static function (Builder $query) use ($slice): void {
+                $query->whereNull('two_factor_last_slice')->orWhere('two_factor_last_slice', '<', $slice);
+            })
+            ->update(['two_factor_last_slice' => $slice]);
 
-        if (! $user instanceof User) {
-            return;
-        }
-
-        $user->two_factor_last_slice = $slice;
-        $user->save();
+        return $updated === 1;
     }
 
     private function find(string $uuid): ?User

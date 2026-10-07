@@ -1589,15 +1589,30 @@ tu correo y tu contraseña por la pantalla de acceso normal: como todavía no
 tienes segundo factor, la propia respuesta te ofrecerá darlo de alta y te
 enseñará el QR otra vez.
 
-Si además has perdido la contraseña, se restablece desde el servidor:
+Si además has perdido la contraseña, **la vía normal es el panel**: otra persona
+con rol de administración te la restablece en Panel → **Cuentas** →
+«Restablecer contraseña» y te entrega en mano la contraseña temporal. Las
+cuentas de gestión —alta, baja, contraseña y segundo factor— se llevan desde
+esa pantalla desde la 2.2.0; el procedimiento está en
+[`../runbooks/cuentas-de-gestion.md`](../runbooks/cuentas-de-gestion.md).
+
+**Si eres la única cuenta de administración**, nadie puede hacerlo por ti desde
+el panel y queda la consola del servidor, que es la vía de recuperación. La
+contraseña nueva es temporal: se muestra una sola vez, caduca a las
+`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` (sección 6.8) y al entrar te obliga a
+fijar la tuya:
 
 ```bash
-docker compose exec app php artisan identity:create-user   # crea otra cuenta de gestión
-docker compose exec app php artisan identity:reset-password # contraseña nueva, mostrada una vez
-docker compose exec app php artisan identity:deactivate-user # da de baja una cuenta
-docker compose exec app php artisan identity:2fa-reset     # retira un segundo factor
-docker compose exec app php artisan identity:origin-unlock <ip> # levanta el bloqueo por origen del portal
+# Lista las cuentas de gestión: UUID, correo, rol, estado y si tienen segundo factor
+docker compose exec app php artisan identity:list-users
+# Contraseña temporal nueva para esa cuenta, mostrada UNA vez
+docker compose exec app php artisan identity:reset-password direccion@tuhotel.example --reason="Contraseña olvidada / Forgotten password"
 ```
+
+**Ninguna cuenta ni ningún responsable de departamento se toca por SQL.** Ni
+para crear, ni para dar de baja, ni para asignar un departamento: el panel y
+estas órdenes dejan constancia en el registro de auditoría de quién lo hizo y
+por qué, y una edición directa de la base no.
 
 ---
 
@@ -1915,7 +1930,8 @@ salida a internet.
 | `IDENTITY_LOGIN_MAX_ATTEMPTS` | — | Contraseñas falladas **por cuenta** antes de bloquearla | `5` | Súbelo si tu gente se queja de bloqueos; bájalo si tu política es más dura | No |
 | `IDENTITY_LOGIN_LOCKOUT_SECONDS` | — | Cuánto dura ese bloqueo | `900` (15 min) | Íd. | No |
 | `IDENTITY_SESSION_TOKEN_HOURS` | — | Vida de la sesión del panel | `12` | Bájalo si los ordenadores de gestión son compartidos. **No afecta al token del quiosco**, que dura 90 días | No |
-| `IDENTITY_PASSWORD_MIN_LENGTH` | — | Longitud mínima de la contraseña de gestión | `12` | Súbelo si tu política lo pide. **Hay un suelo de 8 en el código**: por debajo no se puede bajar | No |
+| `IDENTITY_PASSWORD_MIN_LENGTH` | — | Longitud mínima de la contraseña de gestión | `12` | Súbelo si tu política lo pide. **Hay un suelo de 8 y un techo de 72 en el código**: por encima de 72 bytes la contraseña deja de leerse entera | No |
+| `IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` | — | Horas que sirve la **contraseña temporal** que genera el panel (Panel → **Cuentas**) al dar de alta una cuenta de gestión o restablecer su contraseña, y también `identity:create-user` e `identity:reset-password`. Se entrega en mano; su titular entra con ella y, antes de poder hacer nada más, fija la suya. Caducada, ya no sirve para entrar y hay que restablecerla. Admite de `1` a `168` (una semana); fuera de ese rango, el alta y el restablecimiento fallan con un error en vez de emitir una contraseña que no caduca: corrígela y reinicia `app` | `72` (tres días) | Bájala si entregas la contraseña en el mismo día; súbela, hasta `168`, si quien la recibe tarda en pasar por el hotel (turnos de fin de semana, temporada). Cuanto más larga, más tiempo vale una contraseña que alguien pudo anotar | No |
 | `IDENTITY_MANAGEMENT_RATE_LIMIT` | — | Peticiones por minuto, por cuenta y por origen, de las rutas de gestión que leen o corrigen datos de terceros | `120` | Solo si un hotel grande ve errores `429` con uso normal | No |
 
 ### 6.9 Segundo factor de las cuentas de gestión

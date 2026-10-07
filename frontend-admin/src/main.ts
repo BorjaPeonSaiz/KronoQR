@@ -14,6 +14,7 @@ import './assets/main.css'
 import { useSessionStore } from './features/auth/session.store'
 import { createAppRouter } from './router'
 import { registerAuthGuard } from './router/guards'
+import { installPasswordChangeInterceptor } from './shared/api/passwordChangeInterceptor'
 import { createAppQueryClient } from './shared/api/queryClient'
 import { useBrandingStore } from './shared/branding/branding.store'
 import { createAppI18n, isSupportedLocale, resolveLocale } from './shared/i18n'
@@ -93,6 +94,16 @@ watch(
     }
   },
 )
+
+// `403 password-change-required` (RF-ID-10): la cuenta entra con una contrasena
+// temporal y todo responde ese 403 hasta que la cambie. Se marca la sesion y se
+// lleva a cambiarla; la guarda del router impide salir de esa pantalla.
+installPasswordChangeInterceptor(() => {
+  if (!session.passwordChangeRequired) {
+    session.flagPasswordChangeRequired()
+    void router.push({ name: 'change-password' })
+  }
+})
 
 registerAuthGuard(router)
 

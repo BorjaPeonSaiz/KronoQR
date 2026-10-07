@@ -962,13 +962,17 @@ person would be a way of creating a new administrator without credentials.
 If you have also lost the password:
 
 ```bash
-# Generate a new password for the account that already exists. It is shown ONCE:
+# Generate a new TEMPORARY password for the account that already exists. It is shown ONCE:
 # write it down before closing the console, because it cannot be looked up again
-docker compose exec app php artisan identity:reset-password direccion@tuhotel.example
-
-# Or remove the second factor from that account, to set it up again
-docker compose exec app php artisan identity:2fa-reset
+docker compose exec app php artisan identity:reset-password direccion@tuhotel.example --reason="Contraseña olvidada / Forgotten password"
 ```
+
+Sign in with it before it expires (72 hours by default,
+`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`): the panel will first ask you to set up
+the second factor and then to set a password of your own. It is the console
+because there is not yet another administration account that could do it from
+the panel; as soon as there is one, the normal route is Panel → **Accounts**
+([`operation.md`](operation.md) §9).
 
 Creating another account is **not** the recommended way out: two accounts for the
 same person split in two the answer to "who corrected this working day?". If one

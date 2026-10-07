@@ -24,6 +24,12 @@ interface AccessTokenIssuer
      * `$deviceName` es el nombre con el que se listara y se podra revocar esa
      * sesion concreta. No lleva PII: es «Panel de gestion», no el nombre de una
      * persona.
+     *
+     * **Con contrasena temporal, el token lleva un unico ambito,
+     * `password:change`, y no los del rol** (RF-ID-10). Se decide aqui, en el
+     * unico sitio por el que sale una sesion de gestion, para que ningun camino
+     * de acceso —contrasena, verificacion o alta del segundo factor— pueda
+     * olvidarlo.
      */
     public function issueFor(AuthenticatedUser $user, string $deviceName): IssuedAccessToken;
 
@@ -55,22 +61,46 @@ interface AccessTokenIssuer
      * Revoca **todos** los tokens de una cuenta: sesiones abiertas y retos a
      * medias.
      *
-     * **La excepcion a la regla de arriba, y por eso es un metodo aparte.** Existe
-     * para retirar el segundo factor (`identity:2fa-reset`, RS-06), que es lo que
-     * se hace cuando alguien perdio el telefono — o cuando se sospecha que la
-     * cuenta esta en manos de otro. Dejar vivas las sesiones abiertas convertiria
-     * ese comando en una molestia para el legitimo dueño y en nada para quien
-     * ya estaba dentro: la credencial se retira y el acceso que produjo sigue
-     * funcionando hasta doce horas.
+     * **La excepcion a la regla de arriba, y por eso es un metodo aparte.** La
+     * usan los tres casos de uso que retiran el acceso de una cuenta, por panel
+     * o por consola (RS-06, RF-ID-10): **la baja**, **el restablecimiento de la
+     * contrasena** y **la retirada del segundo factor**. Los tres se hacen por
+     * perdida o por sospecha de que la cuenta esta en manos de otro, y dejar
+     * vivas las sesiones abiertas los convertiria en una molestia para el
+     * legitimo dueño y en nada para quien ya estaba dentro: la credencial se
+     * retira y el acceso que produjo sigue funcionando hasta doce horas.
      *
      * No distingue por ambito ni por nombre a proposito: si hay que echar a
      * alguien, se le echa de todas partes.
      *
      * **No devuelve cuantas cerro**, aunque el asiento de `audit_log` lo
-     * agradeceria: llevarlo hasta alli exigiria un campo nuevo en el evento de
-     * dominio `TwoFactorReset`, y el dominio no se toca desde aqui. Anotado como
-     * deuda; el hecho —que se retiro el segundo factor, con motivo y autor— ya
-     * queda escrito.
+     * agradeceria: llevarlo hasta alli exigiria un campo nuevo en cada evento de
+     * dominio. Anotado como deuda; el hecho —con motivo y autor— ya queda escrito.
      */
     public function revokeAllFor(string $userUuid): void;
+
+    /**
+     * Revoca todos los tokens de una cuenta **menos uno**: el de la sesion desde
+     * la que se pide (RF-ID-10, `POST /auth/password`).
+     *
+     * Quien cambia su contrasena porque sospecha es quien mas necesita que la
+     * otra sesion se cierre; y echarle a el de la que esta usando no protege
+     * nada. Metodo propio y no un parametro opcional de
+     * {@see self::revokeAllFor()}, por lo mismo que alli: echar a todo el mundo
+     * es una decision y no un valor por omision.
+     */
+    public function revokeAllExcept(string $userUuid, int|string $keepTokenId): void;
+
+    /**
+     * Convierte la sesion de contrasena temporal (`password:change`) en una
+     * sesion completa con **los ambitos del rol** de la cuenta (RF-ID-10).
+     *
+     * Se llama en la misma transaccion que el cambio de contrasena: si el
+     * asiento falla, el token sigue sin servir para nada mas. Conserva su
+     * caducidad: cambiar la contrasena no alarga la sesion.
+     *
+     * @return bool `false` si ese token ya no existe o no es de esa cuenta —una
+     *              revocacion se cruzo con el cambio—. Quien llama deshace todo.
+     */
+    public function promoteToFullSession(AuthenticatedUser $user, int|string $tokenId): bool;
 }

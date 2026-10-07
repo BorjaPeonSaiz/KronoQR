@@ -4,100 +4,150 @@ declare(strict_types=1);
 
 namespace Tests\Support\Identity;
 
+use App\Modules\Identity\Application\Port\AccountSnapshot;
 use App\Modules\Identity\Application\Port\ManagementAccountLifecycle;
-use App\Modules\Identity\Application\UseCase\DeactivateManagementAccountHandler;
-use App\Modules\Identity\Application\UseCase\ResetManagementPasswordHandler;
-use SensitiveParameter;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
+use DateTimeImmutable;
 
 /**
  * El padron de cuentas de gestion visto por el puerto del ciclo de vida, en
- * memoria y sin base de datos (RS-05, RS-06; hallazgo H-03 de la revision
- * interna ASVS de 2026-09).
+ * memoria y sin base de datos (RS-05, RS-06, RF-ID-10).
  *
- * **Guarda una sola cuenta a proposito.** Los dos casos de uso que usan el
- * puerto —{@see DeactivateManagementAccountHandler}
- * y {@see ResetManagementPasswordHandler}—
- * buscan por correo y actuan sobre lo que encuentran: lo que decide el desenlace
- * no es cuantas cuentas hay, sino en cual de los tres estados esta esa —activa,
- * dada de baja o inexistente—. Un padron con varias filas obligaria a la prueba
- * a explicar cual es la que importa.
- *
- * Los tres constructores con nombre dicen el caso que se esta probando sin
- * comentarios; `deactivated` y `passwords` dejan ver **lo que se escribio**, que
- * es lo que separa «no hizo nada» de «hizo algo que no se ve».
+ * Varias cuentas, porque desde la 2.2.0 la baja decide con el padron entero
+ * —«¿es la ultima `admin` activa?»—. Los constructores con nombre dicen el caso
+ * sin comentarios; `deactivated`, `passwords` y `locks` dejan ver **lo que se
+ * escribio y en que orden**, que es lo que separa «no hizo nada» de «hizo algo
+ * que no se ve».
  */
 final class InMemoryManagementAccounts implements ManagementAccountLifecycle
 {
-    /**
-     * El uuid publico de la cuenta del escenario.
-     *
-     * Es un UUID v7 escrito a mano y no generado: un valor fijo se puede afirmar
-     * tal cual en la prueba y aparece igual en el evento, que es donde se
-     * comprueba que viaja el uuid y no el correo (regla dura 21).
-     */
+    /** El uuid publico de la cuenta principal del escenario (UUID v7 escrito a mano). */
     public const string UUID = '0199c4a1-6f2d-7b10-9e3a-4c81d5f20b77';
 
-    /**
-     * Los uuid que se han dado de baja, en orden de llamada.
-     *
-     * @var list<string>
-     */
+    /** Hash de partida de cada cuenta del escenario. No es un hash real: el hasher es un doble. */
+    public const string INITIAL_HASH = 'hash:Contrasena-Actual-1!';
+
+    /** @var list<string> */
     public array $deactivated = [];
 
     /**
-     * La contrasena fijada para cada uuid, **tal cual llego al puerto**: el
-     * adaptador real la hashea, y aqui se conserva en claro justamente para
-     * poder afirmar que el caso de uso no la recorta ni la normaliza por el
-     * camino.
+     * Hash y caducidad fijados por uuid, tal cual llegaron al puerto.
      *
-     * @var array<string, string>
+     * @var array<string, array{hash: string, expires: ?DateTimeImmutable}>
      */
     public array $passwords = [];
 
-    private function __construct(
-        private readonly ?string $email,
-        private readonly string $uuid,
-        private bool $active,
-    ) {}
+    /**
+     * Cada `lockForUpdate`, en orden. Lo que deja afirmar que una decision se
+     * tomo con la fila bloqueada.
+     *
+     * @var list<string>
+     */
+    public array $locks = [];
 
-    public static function withActiveAccount(string $email, string $uuid = self::UUID): self
+    /**
+     * @var array<string, array{email: string, active: bool, roles: list<UserRole>, twoFactor: bool, hash: string}>
+     */
+    private array $accounts = [];
+
+    public static function empty(): self
     {
-        return new self($email, $uuid, true);
+        return new self;
+    }
+
+    public static function withActiveAccount(string $email, string $uuid = self::UUID, UserRole $role = UserRole::RRHH): self
+    {
+        return (new self)->with($uuid, $email, $role);
     }
 
     public static function withDeactivatedAccount(string $email, string $uuid = self::UUID): self
     {
-        return new self($email, $uuid, false);
+        return (new self)->with($uuid, $email, UserRole::RRHH, active: false);
     }
 
-    public static function withoutAnyAccount(): self
-    {
-        return new self(null, self::UUID, false);
+    public function with(
+        string $uuid,
+        string $email,
+        UserRole $role,
+        bool $active = true,
+        bool $twoFactor = false,
+    ): self {
+        $this->accounts[$uuid] = [
+            'email' => $email,
+            'active' => $active,
+            'roles' => [$role],
+            'twoFactor' => $twoFactor,
+            'hash' => self::INITIAL_HASH,
+        ];
+
+        return $this;
     }
 
-    public function uuidOfActiveAccount(string $email): ?string
+    public function has(string $uuid): bool
     {
-        return $this->accountExists($email) && $this->active ? $this->uuid : null;
+        return isset($this->accounts[$uuid]);
     }
 
-    public function accountExists(string $email): bool
+    public function uuidOfAccount(string $email): ?string
     {
-        // `null === string` es siempre falso, asi que el padron vacio no
-        // reconoce ningun correo sin necesidad de un caso aparte.
-        return $this->email === $email;
+        foreach ($this->accounts as $uuid => $account) {
+            if ($account['email'] === $email) {
+                return $uuid;
+            }
+        }
+
+        return null;
+    }
+
+    public function lockAccount(string $uuid): ?AccountSnapshot
+    {
+        $this->locks[] = $uuid;
+
+        $account = $this->accounts[$uuid] ?? null;
+
+        return $account === null
+            ? null
+            : new AccountSnapshot($uuid, $account['active'], $account['roles'], $account['twoFactor']);
+    }
+
+    public function countActiveAdmins(): int
+    {
+        return \count(array_filter(
+            $this->accounts,
+            static fn (array $account): bool => $account['active'] && \in_array(UserRole::ADMIN, $account['roles'], true),
+        ));
     }
 
     public function deactivate(string $uuid): void
     {
         $this->deactivated[] = $uuid;
 
-        // La cuenta queda de baja de verdad: repetir el comando tiene que
-        // encontrarse lo mismo que se encontraria en PostgreSQL.
-        $this->active = false;
+        if (isset($this->accounts[$uuid])) {
+            $this->accounts[$uuid]['active'] = false;
+        }
     }
 
-    public function replacePassword(string $uuid, #[SensitiveParameter] string $password): void
+    public function currentPasswordHash(string $uuid): ?string
     {
-        $this->passwords[$uuid] = $password;
+        $account = $this->accounts[$uuid] ?? null;
+
+        return $account !== null && $account['active'] ? $account['hash'] : null;
+    }
+
+    public function replacePasswordHash(string $uuid, string $hash, ?DateTimeImmutable $temporaryExpiresAt): void
+    {
+        $this->passwords[$uuid] = ['hash' => $hash, 'expires' => $temporaryExpiresAt];
+
+        if (isset($this->accounts[$uuid])) {
+            $this->accounts[$uuid]['hash'] = $hash;
+        }
+    }
+
+    /**
+     * Simula un restablecimiento cruzado: otra peticion cambio el hash.
+     */
+    public function overwriteHash(string $uuid, string $hash): void
+    {
+        $this->accounts[$uuid]['hash'] = $hash;
     }
 }

@@ -12,7 +12,7 @@ falta saber nada de sistemas.**
 > [`obligaciones-legales.md`](obligaciones-legales.md). Cada cosa se explica en
 > un solo sitio; aquí se enlaza.
 
-Los diez apartados de esta guía, por si buscas uno concreto:
+Los once apartados de esta guía, por si buscas uno concreto:
 
 1. [El vocabulario, primero](#1-el-vocabulario-primero)
 2. [Alta de una persona, de principio a fin](#2-alta-de-una-persona-de-principio-a-fin)
@@ -23,6 +23,7 @@ Los diez apartados de esta guía, por si buscas uno concreto:
     - [5 bis. Ausencias: vacaciones, bajas y permisos](#5-bis-ausencias-vacaciones-bajas-y-permisos)
 6. [Informes, exportaciones y la entrega a la Inspección](#6-informes-exportaciones-y-la-entrega-a-la-inspección)
 7. [El perfil de cumplimiento](#7-el-perfil-de-cumplimiento)
+    - [7 bis. Las cuentas del panel y los responsables de departamento](#7-bis-las-cuentas-del-panel-y-los-responsables-de-departamento)
 8. [Qué hacer si…](#8-qué-hacer-si)
 
 ---
@@ -1554,6 +1555,105 @@ cada umbral, valor a valor, está en [`configuracion.md`](configuracion.md) §2.
 
 ---
 
+## 7 bis. Las cuentas del panel y los responsables de departamento
+
+Este apartado es de quien tiene el rol de **administración**: es el único que
+ve la sección «Cuentas» del menú y el único que elige responsable en
+«Departamentos». Si tu cuenta es de RRHH, léelo igual: es lo que tienes que
+pedir cuando entra o se va alguien con acceso al panel.
+
+### 7 bis.1 Cuentas de acceso al panel
+
+Una **cuenta del panel** es el acceso de una persona que gestiona —dirección,
+RRHH, responsables de departamento, auditoría—. No tiene nada que ver con la
+tarjeta ni con el PIN de la plantilla: quien ficha no tiene cuenta del panel.
+
+**Quién las crea.** Una persona con rol de administración, en Panel →
+**Cuentas** → «Nueva cuenta»: nombre (el de la persona, no el del puesto, porque
+es el que firma las correcciones), correo y rol. El correo es solo su
+identificador para entrar: **el producto no le envía nada por correo**.
+
+**La contraseña temporal.** Al crear la cuenta, el panel genera una contraseña
+**temporal** y la enseña **una sola vez**. Anótala y entrégala **en mano** o de
+viva voz, nunca por correo ni por mensajería; marca «La he entregado en mano» y
+cierra. No se puede volver a consultar. **Caduca a los tres días** si no se usa
+(es el valor de serie; IT puede cambiarlo): pasado ese plazo ya no sirve y hay
+que restablecerla.
+
+**El primer acceso.** La persona entra con su correo y esa contraseña, y el
+panel le pide dos cosas antes de dejarle hacer nada más:
+
+1. **Dar de alta el segundo factor**: escanear con la aplicación de
+   autenticación de su teléfono (Google Authenticator, Authy o similar) el
+   código QR que aparece y teclear el código de seis cifras.
+2. **Fijar su propia contraseña**, que solo ella conoce.
+
+Hasta que lo haga, con la contraseña temporal solo puede cambiarla o salir.
+Pídele que entre **el mismo día** que se la entregas: mientras no active su
+segundo factor, quien conociera la temporal podría activarlo por ella.
+
+Cada persona cambia su contraseña cuando quiera desde **«Cambiar mi
+contraseña»**, bajo su nombre en el menú. Le pide la actual; al cambiarla se
+cierran sus sesiones en otros dispositivos.
+
+**Si alguien olvida la contraseña.** Una persona con rol de administración, en
+**Cuentas**, pulsa «Restablecer contraseña» en su fila, escribe el motivo y
+confirma con **su propio** código del segundo factor. Se genera una contraseña
+temporal nueva, que se entrega en mano igual que la primera; las sesiones
+abiertas de esa persona se cierran. Su segundo factor no se toca.
+
+**Si alguien pierde el móvil del segundo factor** (o lo cambia sin pasar la
+aplicación). En **Cuentas**, «Restablecer 2FA» en su fila, con motivo y tu
+código. En su siguiente acceso, con su contraseña de siempre, dará de alta el
+segundo factor en el teléfono nuevo. Hazlo cuando la persona esté delante o
+avisada, y que entre enseguida: hasta entonces, quien supiera su contraseña
+podría activarlo por ella. Cada restablecimiento del segundo factor avisa al
+responsable de seguridad, que puede preguntarte por él.
+
+**La baja de una cuenta.** Cuando alguien con acceso al panel deja el hotel o
+cambia a un puesto sin acceso, **dale de baja la cuenta el mismo día**: en
+**Cuentas**, «Dar de baja» en su fila, con motivo. Deja de poder entrar en el
+acto, también en las sesiones que tuviera abiertas. **No se borra nada**: todo
+lo que firmó sigue firmado con su nombre. Y no se reactiva: si vuelve, se le
+crea una cuenta nueva, con otro correo.
+
+Lo que el panel no deja hacer, a propósito: darte de baja a ti, dar de baja la
+última cuenta de administración, ni restablecer tu propia contraseña o tu
+segundo factor. Por eso conviene que haya **siempre dos personas con rol de
+administración**; si la única pierde el móvil, la recuperación la hace IT desde
+el servidor ([`operacion.md`](operacion.md) §9).
+
+Cada alta, baja y restablecimiento queda en el registro de auditoría, con quién
+lo hizo, cuándo y el motivo. **En el motivo, nada de datos de salud ni juicios
+de valor**: «Deja el hotel», «Olvidó la contraseña», «Cambió de móvil».
+
+### 7 bis.2 Responsable de departamento
+
+Un **responsable de departamento** ve, corrige y revisa las incidencias de la
+gente **de su departamento, y de nadie más**. Lo que le da ese alcance no es su
+cuenta, sino el departamento: **el responsable se asigna en el departamento**.
+
+**Cómo se asigna.** Con rol de administración, en Panel → **Departamentos**,
+elige en la fila del departamento la persona responsable y pulsa «Guardar». Solo
+aparecen cuentas activas con el rol de responsable de departamento: crea antes
+la cuenta en **Cuentas** si todavía no existe. Un departamento tiene un solo
+responsable; elegir a otro **desplaza al anterior**, que deja de ver a esa
+gente en su siguiente acción. Los dos cambios quedan en el registro de
+auditoría.
+
+**Un responsable sin departamento no ve a nadie.** Puede entrar en el panel,
+pero sus listas salen vacías. La lista de **Cuentas** lo avisa en su fila («No
+alcanza a nadie»), con un enlace para asignarle departamento. Es lo que pasa
+justo después de crear la cuenta, y también si alguien elige a otro responsable
+para su único departamento.
+
+**Si un responsable deja el puesto**, da de baja su cuenta (apartado anterior)
+y elige al nuevo en Departamentos. Mientras el departamento no tenga
+responsable activo, se comporta como si no lo tuviera: RRHH y administración lo
+siguen viendo entero.
+
+---
+
 ## 8. Qué hacer si…
 
 ### …una persona dice que su registro está mal
@@ -1670,6 +1770,10 @@ viernes 30 de octubre, con turno de 07:00 a 15:00.
 Recoge la tarjeta física si puedes; si no aparece, revócala igualmente —ya lo
 está por la baja— y anótalo.
 
+**Si además tenía cuenta en el panel de gestión**, la baja de su ficha no la
+toca: son cosas distintas. Pide a administración que la dé de baja en
+**Cuentas** el mismo día (§7 bis.1).
+
 #### Después de la baja: completar los días que falten
 
 Una persona de baja ya no ficha, pero **sus días hasta la fecha de cese se
@@ -1753,6 +1857,31 @@ Pregúntale qué dice exactamente la pantalla:
 
 Nada de esto le impide fichar: el portal y la tablet llevan la cuenta por
 separado.
+
+### …alguien no puede entrar al panel de gestión
+
+Esto es de las **cuentas del panel**, no del portal ni de la tablet. Casi
+siempre es uno de estos casos:
+
+- **Dice que la contraseña no es correcta y es la temporal que le diste.** Lo
+  más probable es que haya caducado (tres días de serie). En **Cuentas**, su
+  fila dice «Temporal caducada»: restablécela y entrégale la nueva en mano
+  (§7 bis.1).
+- **Ha olvidado su contraseña**, o la cuenta se ha bloqueado tras varios
+  intentos fallidos: espera un cuarto de hora y, si sigue sin recordarla,
+  restablécela (§7 bis.1).
+- **Ha perdido o cambiado el móvil del segundo factor**: «Restablecer 2FA»
+  (§7 bis.1).
+- **Su cuenta está dada de baja**: no se reactiva; si tiene que volver a
+  entrar, se le crea una cuenta nueva.
+- **Entra, pero no ve a nadie**: es un responsable sin departamento asignado
+  (§7 bis.2).
+- **Tiene rol de administración y no ve «Cuentas» en el menú** justo después de
+  una actualización: que cierre sesión y vuelva a entrar.
+
+Si la única persona con rol de administración es la que no puede entrar, la
+recuperación la hace IT desde el servidor ([`operacion.md`](operacion.md) §9).
+Nada de esto impide fichar a nadie.
 
 ### …la bandeja se llena de incidencias iguales
 

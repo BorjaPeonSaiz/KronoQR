@@ -206,11 +206,14 @@ return [
     'attributes' => [
         // Every field validated by a FormRequest of the API, so that a message
         // names what the person sees on screen and never the wire name.
+        'actor_current_password' => 'your password',
+        'actor_totp_code' => 'your authenticator code',
         'annual_hours' => 'annual hours',
         'app_version' => 'app version',
         'clocked_in_at' => 'clock-in time',
         'clocked_out_at' => 'clock-out time',
         'code' => 'code',
+        'current_password' => 'current password',
         'department_id' => 'department',
         'device_name' => 'device name',
         'email' => 'email address',
@@ -229,6 +232,7 @@ return [
         'locale' => 'language',
         'name' => 'name',
         'national_id' => 'national ID',
+        'new_password' => 'new password',
         'note' => 'note',
         'occurred_at' => 'time of the scan',
         'oldest_pending_at' => 'oldest pending scan',
@@ -247,6 +251,7 @@ return [
         'reason_code' => 'reason code',
         'reason_text' => 'reason text',
         'reissue' => 'reissue',
+        'role' => 'role',
         'scan_id' => 'scan identifier',
         'scans' => 'scans',
         'scans.*.intent' => 'intent',

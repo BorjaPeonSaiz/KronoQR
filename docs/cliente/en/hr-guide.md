@@ -12,7 +12,7 @@ need to know anything about systems.**
 > [`legal-obligations.md`](legal-obligations.md). Each thing is explained in one
 > single place; here it is linked.
 
-The ten sections of this guide, in case you are looking for one in
+The eleven sections of this guide, in case you are looking for one in
 particular:
 
 1. [Vocabulary first](#1-vocabulary-first)
@@ -24,6 +24,7 @@ particular:
     - [5 bis. Absences: holidays, sick leave and time off](#5-bis-absences-holidays-sick-leave-and-time-off)
 6. [Reports, exports and the Labour Inspectorate hand-over](#6-reports-exports-and-the-labour-inspectorate-hand-over)
 7. [The compliance profile](#7-the-compliance-profile)
+    - [7 bis. Panel accounts and department managers](#7-bis-panel-accounts-and-department-managers)
 8. [What to do if…](#8-what-to-do-if)
 
 ---
@@ -1587,6 +1588,107 @@ threshold, value by value, is in [`configuration.md`](configuration.md) §2.4.
 
 ---
 
+## 7 bis. Panel accounts and department managers
+
+This section is for whoever has the **administration** role: it is the only
+role that sees the "Accounts" section of the menu and the only one that chooses
+a manager in "Departments". If your account is an HR one, read it anyway: it is
+what you have to ask for when somebody with panel access joins or leaves.
+
+### 7 bis.1 Panel sign-in accounts
+
+A **panel account** is the access of a person who manages —management, HR,
+department managers, audit—. It has nothing to do with the staff's card or PIN:
+people who clock in do not have a panel account.
+
+**Who creates them.** A person with the administration role, in Panel →
+**Accounts** → "New account": name (the person's, not the job title's, because
+it is the one that signs corrections), email and role. The email is only their
+identifier for signing in: **the product sends them nothing by email**.
+
+**The temporary password.** When the account is created, the panel generates a
+**temporary** password and shows it **once only**. Write it down and hand it
+over **in person** or by word of mouth, never by email or messaging; tick "I
+have handed it over to … in person" and close. It cannot be looked up again. **It
+expires after three days** if it is not used (that is the default; IT can
+change it): after that it no longer works and has to be reset.
+
+**The first sign-in.** The person signs in with their email and that password,
+and the panel asks for two things before letting them do anything else:
+
+1. **Set up the second factor**: scan the QR code shown with the authenticator
+   app on their phone (Google Authenticator, Authy or similar) and type the
+   six-digit code.
+2. **Set their own password**, which only they know.
+
+Until they do, the temporary password only lets them change it or sign out. Ask
+them to sign in **the same day** you hand it over: while their second factor is
+not active, anyone who knew the temporary password could activate it in their
+place.
+
+Anyone can change their password whenever they like from **"Change my
+password"**, under their name in the menu. It asks for the current one; changing
+it closes their sessions on other devices.
+
+**If somebody forgets their password.** A person with the administration role,
+in **Accounts**, presses "Reset password" on their row, writes the reason and
+confirms with **their own** second-factor code. A new temporary password is
+generated and handed over in person just like the first one; that person's open
+sessions are closed. Their second factor is not touched.
+
+**If somebody loses the phone with their second factor** (or changes it without
+moving the app). In **Accounts**, "Reset 2FA" on their row, with a reason and
+your code. On their next sign-in, with their usual password, they will set up
+the second factor on the new phone. Do it while the person is present or
+warned, and have them sign in straight away: until then, anyone who knew their
+password could activate it in their place. Every second-factor reset alerts the
+security contact, who may ask you about it.
+
+**Deactivating an account.** When somebody with panel access leaves the hotel or
+moves to a job without access, **deactivate their account the same day**: in
+**Accounts**, "Deactivate" on their row, with a reason. They can no longer sign
+in from that moment, including in any sessions they had open. **Nothing is
+deleted**: everything they signed stays signed with their name. And it is not
+reactivated: if they come back, a new account is created for them, with a
+different email.
+
+What the panel does not let you do, on purpose: deactivate yourself, deactivate
+the last administration account, or reset your own password or your own second
+factor. That is why there should **always be two people with the
+administration role**; if the only one loses their phone, IT does the recovery
+from the server ([`operation.md`](operation.md) §9).
+
+Every creation, deactivation and reset goes into the audit log, with who did
+it, when and the reason. **No health data and no value judgements in the
+reason**: "Leaves the hotel", "Forgot the password", "Changed phone".
+
+### 7 bis.2 Department manager
+
+A **department manager** sees, corrects and reviews the incidents of the people
+**in their department, and nobody else**. What gives them that scope is not
+their account but the department: **the manager is assigned on the
+department**.
+
+**How it is assigned.** With the administration role, in Panel →
+**Departments**, choose the manager on the department's row and press "Save".
+Only active accounts with the department manager role appear: create the
+account in **Accounts** first if it does not exist yet. A department has a
+single manager; choosing another one **replaces the previous one**, who stops
+seeing those people on their next action. Both changes go into the audit log.
+
+**A manager with no department sees nobody.** They can sign in to the panel, but
+their lists come out empty. The **Accounts** list flags it on their row ("Reaches
+nobody"), with a link to assign them a department. That is what
+happens right after the account is created, and also if somebody chooses
+another manager for their only department.
+
+**If a manager leaves the post**, deactivate their account (previous section)
+and choose the new one in Departments. While the department has no active
+manager, it behaves as if it had none: HR and administration still see all of
+it.
+
+---
+
 ## 8. What to do if…
 
 ### …a person says their record is wrong
@@ -1711,6 +1813,10 @@ with a 07:00 to 15:00 shift.
 Collect the physical card if you can; if it does not turn up, revoke it anyway
 —it already is, because of the offboarding— and note it down.
 
+**If they also had a management panel account**, offboarding their record does
+not touch it: they are different things. Ask administration to deactivate it in
+**Accounts** the same day (§7 bis.1).
+
 #### After offboarding: filling in the missing days
 
 An offboarded person no longer clocks, but **their days up to the termination
@@ -1797,6 +1903,31 @@ Ask them what exactly the screen says:
 
 None of this stops them clocking in: the portal and the tablet keep separate
 counts.
+
+### …somebody cannot sign in to the management panel
+
+This is about **panel accounts**, not the portal or the tablet. It is almost
+always one of these cases:
+
+- **They say the password is wrong and it is the temporary one you gave
+  them.** Most likely it has expired (three days by default). In **Accounts**,
+  their row says "Temporary, expired": reset it and hand them the new one in
+  person (§7 bis.1).
+- **They have forgotten their password**, or the account is locked after
+  several failed attempts: wait a quarter of an hour and, if they still cannot
+  remember it, reset it (§7 bis.1).
+- **They have lost or changed the phone with their second factor**: "Reset 2FA"
+  (§7 bis.1).
+- **Their account is deactivated**: it is not reactivated; if they need to sign
+  in again, a new account is created for them.
+- **They sign in, but see nobody**: it is a manager with no department assigned
+  (§7 bis.2).
+- **They have the administration role and do not see "Accounts" in the menu**
+  right after an update: have them sign out and sign in again.
+
+If the only person with the administration role is the one who cannot sign in,
+IT does the recovery from the server ([`operation.md`](operation.md) §9). None
+of this stops anybody clocking in.
 
 ### …the inbox fills up with identical incidents
 

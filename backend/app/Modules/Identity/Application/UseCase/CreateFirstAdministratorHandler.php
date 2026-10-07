@@ -9,9 +9,12 @@ use App\Modules\Identity\Application\Exception\ManagementAccountAlreadyExists;
 use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
 use App\Modules\Identity\Application\Port\ManagementAccountRegistry;
+use App\Modules\Identity\Application\Port\PasswordHasher;
+use App\Modules\Identity\Application\Support\ManagementAccountRosterLock;
 use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
 use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\ConnectionInterface;
 
@@ -53,7 +56,7 @@ use Illuminate\Database\ConnectionInterface;
  * `role_assignment.changed` (regla dura 6, RS-05). Un `admin` creado sin traza
  * no tiene respuesta a «¿quien puso a esta persona al frente de la
  * instalacion?», que es la primera pregunta despues de un incidente. Va **dentro
- * de la transaccion** (ADR-027): si el asiento falla, la cuenta no se crea.
+ * de la transaccion** (ADR-010): si el asiento falla, la cuenta no se crea.
  *
  * **Sin actor en el asiento**, y no es un descuido: no hay ninguna sesion
  * detras, porque no puede haberla. Es lo mismo que hace `identity:create-user`
@@ -67,26 +70,14 @@ use Illuminate\Database\ConnectionInterface;
  */
 final readonly class CreateFirstAdministratorHandler
 {
-    /**
-     * Clave del candado consultivo del primer administrador.
-     *
-     * Misma convencion que el candado de `UpdateSettingsHandler`, en el modulo
-     * `Product` —nombrado en prosa y sin enlace, porque `Identity` no puede
-     * importar `Product` (doc 02 §1.6) y un `{@see}` con nombre completo lo
-     * convertiria en un `use` en la siguiente pasada del formateador—: un
-     * entero **fijo y unico en el producto**, compuesto del
-     * numero de fase y de tarea. El espacio de `pg_advisory_lock` es global a la
-     * base de datos, asi que dos usos distintos con el mismo numero se
-     * bloquearian entre si sin ninguna relacion. 5.5 → `5_050_001`.
-     */
-    private const int LOCK_KEY = 5_050_001;
-
     public function __construct(
         private ManagementAccountRegistry $accounts,
         private AccessTokenIssuer $tokens,
         private IdentityEventPublisher $events,
         private Clock $clock,
         private ConnectionInterface $connection,
+        private SerializedLedgerWrite $serialized,
+        private PasswordHasher $hasher,
     ) {}
 
     /**
@@ -94,8 +85,15 @@ final readonly class CreateFirstAdministratorHandler
      */
     public function handle(CreateFirstAdministratorCommand $command): LoginOutcome
     {
-        $user = $this->connection->transaction(
-            fn (): AuthenticatedUser => $this->registerTheFirstOne($command),
+        // El hash, FUERA de todo candado: cuesta decenas de milisegundos y la
+        // cadena de auditoria es la misma por la que pasa cada fichaje.
+        $hash = $this->hasher->hash($command->password);
+
+        // Orden unico del producto (ADR-010): cadena de auditoria, padron de
+        // cuentas y fila. Antes se tomaba el padron y despues la cadena; no habia
+        // ciclo real, pero un solo orden no exige razonarlo.
+        $user = $this->serialized->withChainLock(
+            fn (): AuthenticatedUser => $this->registerTheFirstOne($command, $hash),
         );
 
         return LoginOutcome::challenge(
@@ -135,9 +133,9 @@ final readonly class CreateFirstAdministratorHandler
      *
      * El candado se suelta al confirmar o al revertir: no hay forma de olvidarlo.
      */
-    private function registerTheFirstOne(CreateFirstAdministratorCommand $command): AuthenticatedUser
+    private function registerTheFirstOne(CreateFirstAdministratorCommand $command, string $hash): AuthenticatedUser
     {
-        $this->connection->statement('SELECT pg_advisory_xact_lock(?)', [self::LOCK_KEY]);
+        ManagementAccountRosterLock::acquire($this->connection);
 
         // DENTRO del candado, y por eso es correcta: quien llegue segundo espera
         // aqui a que el primero confirme, y entonces ve su cuenta.
@@ -145,17 +143,19 @@ final readonly class CreateFirstAdministratorHandler
             throw new ManagementAccountAlreadyExists;
         }
 
-        return $this->register($command);
+        return $this->register($command, $hash);
     }
 
-    private function register(CreateFirstAdministratorCommand $command): AuthenticatedUser
+    private function register(CreateFirstAdministratorCommand $command, string $hash): AuthenticatedUser
     {
         $user = $this->accounts->create(
             $command->name,
             $command->email,
-            $command->password,
+            $hash,
             $command->locale,
             UserRole::ADMIN,
+            // Contrasena propia: la eligio su titular en el asistente.
+            null,
         );
 
         $this->events->publish(new ManagementRoleAssigned(

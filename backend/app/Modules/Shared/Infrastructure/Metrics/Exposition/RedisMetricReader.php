@@ -142,6 +142,13 @@ final readonly class RedisMetricReader
     {
         $hash = $this->hash($connection, $definition->key(MetricCatalogue::KEY_PREFIX));
 
+        // Las combinaciones sembradas a cero que todavia no tienen valor: la
+        // alerta que cuelga de `increase()` necesita la muestra previa al primer
+        // salto (ver `MetricDefinition::$zeroSeries`).
+        foreach ($definition->zeroSeries as $labels) {
+            $hash[$labels] ??= 0;
+        }
+
         $samples = [];
 
         foreach ($hash as $labels => $value) {

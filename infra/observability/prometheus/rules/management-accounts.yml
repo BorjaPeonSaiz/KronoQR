@@ -1,0 +1,63 @@
+# KronoQR — cuentas de gestion desde el panel (RF-ID-10, ADR-051, bloque 12c).
+# Condicion de cierre de la revision de seguridad del diseno: alerta a seguridad en
+# CADA restablecimiento de 2FA y en cada alta con rol admin. Fichero propio y no
+# auth.yml porque aquellas alertas son de FALLOS de autenticacion y la
+# prueba de BackupAndAlertingTest las exige todas sobre kronoqr_auth_attempts_total.
+
+groups:
+  - name: kronoqr-management-accounts
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # Cuentas de gestion desde el panel (RF-ID-10, ADR-051; condicion de cierre
+      # del bloque 12c). `kronoqr_management_account_changes_total{action,role}`
+      # cuenta cada cambio sobre una cuenta; `role` es el de la cuenta AFECTADA y
+      # no hay ninguna etiqueta que identifique a nadie (cardinalidad, doc 07
+      # A-3). Cero es lo esperable: un restablecimiento de 2FA o un alta de
+      # administrador son raros y cada uno es la via mas directa para apropiarse
+      # de una cuenta (T1098, T1136), asi que salta CADA vez, sin umbral y sin
+      # `for:`. QUIEN lo hizo y con que motivo lo dice `audit_log`, no la metrica.
+      #
+      # Cobertura: un contador que nace ya en 1 no tiene muestra previa y
+      # `increase` no ve ese primer salto. Por eso la aplicacion ya expone a 0
+      # cada combinacion `action` x `role` antes del primer evento
+      # (`MetricDefinition::$zeroSeries` en `MetricCatalogue`), y el primer
+      # evento tras un reinicio tambien dispara. El asiento de `audit_log`
+      # existe igualmente.
+      #------------------------------------------------------------------------
+      - alert: KronoqrManagementTwoFactorReset
+        expr: sum(increase(kronoqr_management_account_changes_total{action="two_factor_reset"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+          destinatario: seguridad
+          component: auth
+          mitre_attack: T1098
+        annotations:
+          summary: "Se ha restablecido el segundo factor de una cuenta de gestion"
+          description: >-
+            MITRE ATT&CK T1098 (Account Manipulation). Un administrador ha
+            retirado el 2FA de una cuenta de gestion; hasta que su titular lo
+            vuelva a configurar, la cuenta entra solo con la contrasena.
+            Confirma con el administrador y con el titular que fue intencionado
+            (asiento `auth.two_factor_reset` en audit_log, con actor y motivo).
+            Si nadie lo reconoce, es un incidente de cuentas.
+          runbook_url: docs/runbooks/ataque-a-credenciales.md
+
+      - alert: KronoqrManagementAdminAccountCreated
+        expr: sum(increase(kronoqr_management_account_changes_total{action="created", role="admin"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+          destinatario: seguridad
+          component: auth
+          mitre_attack: T1136
+        annotations:
+          summary: "Se ha dado de alta una cuenta de gestion con rol admin"
+          description: >-
+            MITRE ATT&CK T1136 (Create Account). Se ha creado una cuenta con
+            permisos de administrador desde el panel. Comprueba en audit_log el
+            asiento `user.created` (actor y motivo) y confirma con quien la
+            pidio. Si nadie la reconoce, desactivala y trata la sesion del actor
+            como comprometida.
+          runbook_url: docs/runbooks/ataque-a-credenciales.md

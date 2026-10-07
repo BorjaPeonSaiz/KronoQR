@@ -17,15 +17,20 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Controller\CredentialController;
 use App\Modules\Identity\Http\Controller\CredentialStatusController;
 use App\Modules\Identity\Http\Controller\CurrentUserController;
+use App\Modules\Identity\Http\Controller\DeactivateManagementAccountController;
 use App\Modules\Identity\Http\Controller\DeliverCredentialController;
 use App\Modules\Identity\Http\Controller\FirstAdministratorController;
 use App\Modules\Identity\Http\Controller\InstructionsSheetController;
 use App\Modules\Identity\Http\Controller\LoginController;
 use App\Modules\Identity\Http\Controller\LogoutController;
+use App\Modules\Identity\Http\Controller\ManagementAccountController;
+use App\Modules\Identity\Http\Controller\OwnPasswordController;
 use App\Modules\Identity\Http\Controller\PortalLoginController;
 use App\Modules\Identity\Http\Controller\PortalLogoutController;
 use App\Modules\Identity\Http\Controller\PrintCredentialBatchController;
 use App\Modules\Identity\Http\Controller\PrintCredentialController;
+use App\Modules\Identity\Http\Controller\ResetManagementPasswordController;
+use App\Modules\Identity\Http\Controller\ResetManagementTwoFactorController;
 use App\Modules\Identity\Http\Controller\RevokeCredentialController;
 use App\Modules\Identity\Http\Controller\TwoFactorController;
 use App\Modules\Kiosk\Http\Controller\DeviceController;
@@ -1021,6 +1026,66 @@ Route::prefix('auth')->group(function (): void {
     Route::get('/me', CurrentUserController::class)
         ->middleware(['auth:sanctum', 'session.complete', 'throttle:management'])
         ->name('auth.me');
+
+    /*
+     * POST /api/v1/auth/password — EL CAMBIO DE LA CONTRASENA PROPIA (RF-ID-10).
+     *
+     * SIN AMBITO, COMO `me`: lo usan los cuatro roles de gestion y, sobre todo,
+     * la sesion de contrasena temporal, que solo lleva `password:change`
+     * (ADR-051). `session.complete` deja fuera la sesion pendiente de segundo
+     * factor; `OwnPasswordPolicy` deja fuera todo lo que no sea una cuenta de
+     * `users` —soporte, quiosco, portal— con `403`.
+     *
+     * `throttle:management` Y NO `throttle:auth`: aquella zona compone su clave
+     * con el `email` del cuerpo, y aqui no hay correo — la cuenta es la del
+     * token. El bloqueo por intentos lo lleva el caso de uso con su contador
+     * propio (`password-change|<uuid>`), y Nginx pone el techo de `^~
+     * /api/v1/auth/` en el borde.
+     */
+    Route::post('/password', OwnPasswordController::class)
+        ->middleware(['auth:sanctum', 'session.complete', 'throttle:management'])
+        ->name('auth.password');
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * CUENTAS DE GESTION (RF-ID-10, ADR-051, bloque 12c de la 2.2.0)
+ * ---------------------------------------------------------------------------
+ *
+ * Listar, crear, dar de baja y restablecer la contrasena o el segundo factor de
+ * las cuentas del panel, sin consola en el servidor.
+ *
+ * AMBITO PROPIO `accounts:*` Y NO `settings:*` (doc 02 §7.3, nota 7): un acceso
+ * de soporte con alcance `configuration` lleva `settings:*`, y crear una cuenta
+ * `admin` es como un acceso temporal se vuelve permanente. La otra mitad es
+ * `ManagementAccountPolicy`: `admin` y nunca un actor de soporte (regla dura
+ * 18). El `uuid` de la ruta es el publico de la cuenta: nunca el correo, que en
+ * una URL acaba en el historial y en los registros de acceso.
+ *
+ * `throttle:management`: cada escritura deja asiento bajo el candado global de
+ * ADR-010, el mismo por el que pasa cada fichaje.
+ *
+ * SIN PUERTA DE LICENCIA (ADR-019, regla dura 15): administrar quien entra en
+ * la instalacion no es una funcionalidad accesoria.
+ */
+Route::middleware([
+    'auth:sanctum',
+    'ability:'.TokenAbility::ACCOUNTS_ALL->value,
+    'throttle:management',
+])->group(function (): void {
+    Route::get('/management-accounts', [ManagementAccountController::class, 'index'])
+        ->name('identity.management-accounts.index');
+    Route::post('/management-accounts', [ManagementAccountController::class, 'store'])
+        ->name('identity.management-accounts.store');
+    Route::post('/management-accounts/{uuid}/deactivate', DeactivateManagementAccountController::class)
+        ->whereUuid('uuid')
+        ->name('identity.management-accounts.deactivate');
+    Route::post('/management-accounts/{uuid}/password/reset', ResetManagementPasswordController::class)
+        ->whereUuid('uuid')
+        ->name('identity.management-accounts.password.reset');
+    Route::post('/management-accounts/{uuid}/two-factor/reset', ResetManagementTwoFactorController::class)
+        ->whereUuid('uuid')
+        ->name('identity.management-accounts.two-factor.reset');
 });
 
 /*
@@ -1759,7 +1824,9 @@ Route::middleware([
  * instalacion tiene un problema.
  */
 Route::post('/client-errors', [ClientErrorController::class, 'store'])
-    ->middleware(['auth:sanctum', 'throttle:client-errors'])
+    // `session.password-settled` (RF-ID-10): la unica ruta autenticada sin
+    // ambito que la sesion de contrasena temporal no debe alcanzar.
+    ->middleware(['auth:sanctum', 'session.password-settled', 'throttle:client-errors'])
     ->name('product.client_errors.store');
 
 /*

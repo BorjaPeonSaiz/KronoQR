@@ -4,36 +4,26 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Infrastructure\Console;
 
+use App\Modules\Identity\Application\Command\ResetManagementTwoFactorCommand;
 use App\Modules\Identity\Application\UseCase\ResetTwoFactorHandler;
-use Illuminate\Console\Command;
+use App\Modules\Identity\Application\UseCase\TwoFactorResetOutcome;
 
 /**
  * `php artisan identity:2fa-reset` — retira el segundo factor de una cuenta de
- * gestion (RS-06).
+ * gestion (RS-06, RF-ID-10).
  *
- * **Por que existe.** Sin esto, perder el telefono deja a alguien fuera de su
- * cuenta para siempre, y a una instalacion con un solo administrador **sin
- * panel**. Es la unica salida que el producto ofrece hoy: los codigos de
- * recuperacion —la alternativa habitual— son otra credencial que emitir, entregar
- * y custodiar, el mismo problema que ADR-014 resolvio para la tarjeta, y quedan
- * anotados como deuda.
+ * El mismo caso de uso que
+ * `POST /api/v1/management-accounts/{uuid}/two-factor/reset`, para cuando el
+ * panel no esta: perder el telefono deja a alguien fuera de su cuenta, y a una
+ * instalacion con una sola `admin`, sin panel. **Siempre deja asiento**
+ * (`auth.two_factor_reset`) y cierra todas las sesiones de la cuenta.
  *
- * **Por que es un comando y no un endpoint.** El Anexo B del doc 01 no tiene
- * ninguna ruta de gestion de usuarios —crear cuentas ya es
- * `identity:create-user`— y un «quitale el segundo factor a esta persona» por API
- * seria, en manos de un administrador comprometido, la forma mas comoda de
- * preparar el acceso a la cuenta de otro. En consola queda restringido a quien
- * tiene el servidor del cliente.
- *
- * **Siempre deja asiento** (`auth.two_factor_reset`, regla dura 6): el caso de uso
- * lo publica dentro de la misma transaccion, asi que si la auditoria falla, el
- * segundo factor sigue en su sitio.
- *
- * **Se identifica por UUID y no por correo.** El UUID es el identificador publico
- * y el unico admitido en un log o en un asiento (regla dura 21); aceptar el correo
- * pondria una direccion en el historial del shell del servidor.
+ * **Una cuenta sin segundo factor confirmado no se toca**: no hay nada que
+ * retirar, y un asiento de restablecimiento sin nada restablecido ensuciaria el
+ * trail. **Se identifica por UUID**, el unico identificador admitido en un log o
+ * en un asiento (regla dura 21); `identity:list-users` lo muestra.
  */
-final class ResetTwoFactorCommand extends Command
+final class ResetTwoFactorCommand extends AbstractManagementAccountCommand
 {
     protected $signature = 'identity:2fa-reset
         {uuid : UUID publico de la cuenta (users.uuid)}
@@ -43,18 +33,19 @@ final class ResetTwoFactorCommand extends Command
 
     public function handle(ResetTwoFactorHandler $handler): int
     {
-        // El argumento es obligatorio en la firma: Symfony rechaza la llamada sin
-        // el antes de llegar aqui, asi que solo queda estrechar el tipo.
-        $uuid = (string) $this->argument('uuid');
+        $uuid = $this->stringArgument('uuid');
 
-        $reason = $this->option('reason');
-        $reason = \is_string($reason) && trim($reason) !== ''
-            ? trim($reason)
-            // Un motivo por omision y no una cadena vacia: el asiento tiene que
-            // decir algo. «Sin motivo declarado» es informacion; el vacio no.
-            : 'Sin motivo declarado';
+        $outcome = $handler->handle(new ResetManagementTwoFactorCommand($uuid, $this->reason()));
 
-        if (! $handler->handle($uuid, $reason)) {
+        if ($outcome === TwoFactorResetOutcome::NotEnrolled) {
+            $this->components->error(
+                'Esa cuenta no tenia segundo factor activo: no hay nada que retirar. No se ha escrito ningun asiento.'
+            );
+
+            return self::FAILURE;
+        }
+
+        if ($outcome !== TwoFactorResetOutcome::Reset) {
             $this->components->error('No existe ninguna cuenta de gestion activa con ese UUID.');
 
             return self::FAILURE;

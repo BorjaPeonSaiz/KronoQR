@@ -20,6 +20,7 @@ import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import TotpCodeInput from '@/shared/ui/TotpCodeInput.vue'
 import type { Session, TwoFactorChallenge } from '@/shared/api/types'
 import { useBrandingStore } from '@/shared/branding/branding.store'
 import { isTwoFactorChallenge, verifyTwoFactor } from './auth.api'
@@ -52,7 +53,7 @@ const challengeToken = ref<string | null>(null)
 const code = ref('')
 const codeSubmitting = ref(false)
 
-const codeInputRef = ref<HTMLInputElement | null>(null)
+const codeInputRef = ref<InstanceType<typeof TotpCodeInput> | null>(null)
 
 const codeIsValid = computed(() => /^[0-9]{6}$/.test(code.value))
 
@@ -69,11 +70,6 @@ function redirectTarget(): string {
 async function focusCode(): Promise<void> {
   await nextTick()
   codeInputRef.value?.focus()
-}
-
-/** Se quitan espacios y separadores: algunos autenticadores muestran el codigo en dos grupos de tres. */
-function onCodeInput(event: Event): void {
-  code.value = (event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 6)
 }
 
 /** Vuelve al primer paso. Con `notice`, explica por que (reto caducado o invalido). */
@@ -263,21 +259,15 @@ function onChallengeInvalid(caught: unknown): void {
             :errors="fieldErrors('code')"
             required
           >
-            <input
+            <TotpCodeInput
               :id="field.id"
               ref="codeInputRef"
-              :value="code"
-              type="text"
+              v-model="code"
               name="code"
-              inputmode="numeric"
-              autocomplete="one-time-code"
               pattern="[0-9]{6}"
-              maxlength="6"
-              required
               :aria-describedby="field.describedBy"
               :aria-invalid="field.invalid"
-              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-center text-lg tracking-[0.5em] text-kq-text placeholder:text-kq-text-muted"
-              @input="onCodeInput"
+              class="text-center text-lg tracking-[0.5em] placeholder:text-kq-text-muted"
             />
           </FormField>
 

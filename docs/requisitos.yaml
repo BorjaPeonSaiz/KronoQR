@@ -171,6 +171,9 @@
 - { id: RQ-08,     fase: 3, titulo: "Prueba de carga que valida RNF-P-06 antes de cada versión mayor" }
 - { id: RS-11,     fase: 3, titulo: "Revisión de seguridad externa antes de la primera versión comercial y con periodicidad anual" }
 
+# --- Fase 4 -------------------------------------------- (1 requisito)
+- { id: RF-ID-10,  fase: 4, titulo: "Cuentas de gestión desde el panel" }
+
 # --- Fase 5 -------------------------------------------- (23 requisitos)
 - { id: RF-GP-05,  fase: 5, titulo: "Importación masiva inicial de plantilla desde CSV o XLSX, con validación previa y modo simulación" }
 - { id: RF-PD-01,  fase: 5, titulo: "Cero configuración en código" }

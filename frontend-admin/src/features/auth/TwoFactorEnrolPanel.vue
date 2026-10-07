@@ -20,6 +20,7 @@ import type { QrPath } from '@kronoqr/web-kit/qr/renderQrPath'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Session, TwoFactorEnrolment } from '@/shared/api/types'
+import TotpCodeInput from '@/shared/ui/TotpCodeInput.vue'
 import { confirmTwoFactor, enrolTwoFactor } from './auth.api'
 
 const props = defineProps<{
@@ -42,7 +43,7 @@ const qr = ref<QrPath | null>(null)
 const qrFailed = ref(false)
 const error = ref<unknown>(null)
 
-const codeInputRef = ref<HTMLInputElement | null>(null)
+const codeInputRef = ref<InstanceType<typeof TotpCodeInput> | null>(null)
 const enrolHeadingRef = ref<HTMLHeadingElement | null>(null)
 
 const codeIsValid = computed(() => /^[0-9]{6}$/.test(code.value))
@@ -59,11 +60,6 @@ async function focusCode(): Promise<void> {
 async function focusHeading(): Promise<void> {
   await nextTick()
   enrolHeadingRef.value?.focus()
-}
-
-/** Se quitan espacios y separadores: algunos autenticadores muestran el codigo en dos grupos de tres. */
-function onCodeInput(event: Event): void {
-  code.value = (event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 6)
 }
 
 async function loadQr(otpauthUri: string): Promise<void> {
@@ -177,21 +173,15 @@ onMounted(() => {
           :errors="fieldErrors('code')"
           required
         >
-          <input
+          <TotpCodeInput
             :id="field.id"
             ref="codeInputRef"
-            :value="code"
-            type="text"
+            v-model="code"
             name="code"
-            inputmode="numeric"
-            autocomplete="one-time-code"
             pattern="[0-9]{6}"
-            maxlength="6"
-            required
             :aria-describedby="field.describedBy"
             :aria-invalid="field.invalid"
-            class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-center text-lg tracking-[0.5em] text-kq-text placeholder:text-kq-text-muted"
-            @input="onCodeInput"
+            class="text-center text-lg tracking-[0.5em] placeholder:text-kq-text-muted"
           />
         </FormField>
 

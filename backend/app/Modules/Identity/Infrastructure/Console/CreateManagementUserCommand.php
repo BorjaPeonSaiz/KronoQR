@@ -4,49 +4,35 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Infrastructure\Console;
 
-use App\Modules\Identity\Application\Port\IdentityEventPublisher;
-use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
-use App\Modules\Identity\Infrastructure\Persistence\User;
-use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Identity\Application\Command\CreateManagementAccountCommand;
+use App\Modules\Identity\Application\Exception\ManagementAccountEmailTaken;
+use App\Modules\Identity\Application\UseCase\CreateManagementAccountHandler;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
-use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rules\Password;
 
 /**
- * `php artisan identity:create-user` — crea una cuenta de gestion.
+ * `php artisan identity:create-user` — crea una cuenta de gestion con
+ * **contrasena temporal** (RF-ID-01, RF-ID-02, RF-ID-10).
  *
- * **Por que existe.** En la instalacion de un cliente no se ejecuta ningun
- * seeder, asi que sin esto no habria forma de crear la primera cuenta y el panel
- * no tendria puerta de entrada. El asistente de puesta en marcha (RF-PD-03,
- * Fase 5) hara lo mismo desde la interfaz y llamara aqui.
+ * **Por que existe, si ya esta el panel.** Para cuando el panel no esta: una
+ * instalacion cuya unica `admin` se fue sin dejar a nadie, o una operacion de
+ * soporte desde el servidor. Desde la 2.2.0 pasa por el mismo caso de uso que
+ * `POST /api/v1/management-accounts` y entrega lo mismo.
  *
- * **La contrasena no se pasa como argumento.** Se pide por consola con eco
- * apagado: un argumento queda en el historial del shell y en la lista de
- * procesos del servidor del cliente.
+ * **Cambio de comportamiento de la 2.2.0: ya no pide la contrasena.** La genera
+ * el servidor, se enseña **una vez** y caduca
+ * (`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`); su titular entra con ella, activa
+ * su segundo factor si su rol lo exige y fija la suya antes de poder hacer nada
+ * mas. Una contrasena elegida por quien no la va a usar acaba siendo la misma en
+ * todas las instalaciones que atiende ese tecnico, y una que no caduca es una
+ * credencial compartida.
  *
- * **La politica de robustez de RF-ID-01 se aplica aqui**, que es donde se FIJA
- * una contrasena, y no al usarla. Sin `uncompromised()`: esa regla consulta un
- * servicio externo por HTTP y este producto se instala en servidores sin salida
- * a internet (ADR-016), donde la comprobacion fallaria o —peor— colgaria la
- * creacion del primer administrador.
- *
- * **El rol asignado deja asiento** (`role_assignment.changed`, RS-05, bloque D).
- * Un rol decide quien puede corregir horas y quien ve la plantilla entera: sin
- * traza, «¿quien le dio acceso a esta persona al registro de todo el hotel?» no
- * tiene respuesta, y es la pregunta que se hace despues de un incidente. El alta y
- * el asiento van en la **misma transaccion** (ADR-027): si el asiento falla, la
- * cuenta no se crea.
- *
- * **El segundo factor NO se configura aqui** (RS-06). Una cuenta nueva de `admin`,
- * `rrhh` o `auditor` nace sin el, y lo da de alta su titular en su primer acceso
- * —`/auth/2fa/enrol` y `/auth/2fa/confirm`— con el reto que devuelve `/auth/login`.
- * Generarlo aqui obligaria a que el secreto de una persona pasara por la consola
- * de otra, que es exactamente lo que un segundo factor existe para evitar.
+ * **Sin el nombre ni el correo en la salida**: este comando se ejecuta a menudo
+ * con la salida redirigida a un fichero de instalacion. **Sin actor**: un comando
+ * de consola no tiene sesion detras, y los asientos (`user.created` y
+ * `role_assignment.changed`) salen a nombre del sistema.
  */
-final class CreateManagementUserCommand extends Command
+final class CreateManagementUserCommand extends AbstractManagementAccountCommand
 {
     protected $signature = 'identity:create-user
         {--name= : Nombre visible de la persona}
@@ -54,25 +40,25 @@ final class CreateManagementUserCommand extends Command
         {--role= : Rol del catalogo de RF-ID-02 (admin, rrhh, responsable_departamento, auditor)}
         {--locale=es : Idioma del panel para esta cuenta}';
 
-    protected $description = 'Crea una cuenta de gestion con su rol (RF-ID-01, RF-ID-02).';
+    protected $description = 'Crea una cuenta de gestion con su rol y una contrasena temporal (RF-ID-02, RF-ID-10).';
 
-    public function handle(IdentityEventPublisher $events, Clock $clock): int
+    public function handle(CreateManagementAccountHandler $handler): int
     {
         $name = $this->stringOption('name') ?? $this->asked('Nombre');
         $email = $this->stringOption('email') ?? $this->asked('Correo');
         $role = $this->stringOption('role') ?? $this->chosenRole();
-        $password = $this->secretly('Contrasena');
+        $locale = $this->stringOption('locale') ?? 'es';
 
         $validator = Validator::make(
-            ['name' => $name, 'email' => $email, 'role' => $role, 'password' => $password],
+            ['name' => $name, 'email' => $email, 'role' => $role, 'locale' => $locale],
             [
                 'name' => ['required', 'string', 'max:120'],
-                'email' => ['required', 'string', 'email:rfc', 'max:190', 'unique:users,email'],
+                'email' => ['required', 'string', 'email:rfc', 'max:190'],
                 'role' => ['required', 'string', 'in:'.implode(',', array_map(
                     static fn (UserRole $case): string => $case->value,
                     UserRole::managementRoles(),
                 ))],
-                'password' => ['required', 'string', $this->passwordPolicy()],
+                'locale' => ['required', 'string', 'min:2', 'max:10'],
             ],
         );
 
@@ -84,78 +70,26 @@ final class CreateManagementUserCommand extends Command
             return self::FAILURE;
         }
 
-        $uuid = Str::uuid7()->toString();
-
-        // Alta y asiento en la misma transaccion: el listener de auditoria es
-        // sincrono, asi que si la traza falla no queda una cuenta con rol sin
-        // constancia de quien se lo dio (ADR-027).
-        DB::transaction(function () use ($uuid, $name, $email, $password, $role, $events, $clock): void {
-            $user = User::query()->create([
-                'uuid' => $uuid,
-                'name' => $name,
-                'email' => $email,
-                'password' => $password,
-                'locale' => $this->stringOption('locale') ?? 'es',
-                'is_active' => true,
-            ]);
-
-            $user->assignRole($role);
-
-            $events->publish(new ManagementRoleAssigned(
-                userUuid: $uuid,
+        try {
+            $provisioned = $handler->handle(new CreateManagementAccountCommand(
+                name: $name,
+                email: $email,
                 role: UserRole::from($role),
-                // Sin actor: un comando de consola no tiene sesion detras, y
-                // atribuirselo a la ultima persona que entro al panel seria
-                // falsificar el trail.
-                actorUuid: null,
-                occurredAt: $clock->now(),
+                locale: $locale,
             ));
-        });
+        } catch (ManagementAccountEmailTaken) {
+            $this->components->error('Ya hay una cuenta de gestion con ese correo, activa o dada de baja.');
 
-        // Sin el correo ni el nombre en la salida: este comando se ejecuta a
-        // menudo con la salida redirigida a un fichero de instalacion.
-        $this->components->info('Cuenta de gestion creada con el rol '.$role.' y UUID '.$uuid.'.');
+            return self::FAILURE;
+        }
+
+        $this->components->info(
+            'Cuenta de gestion creada con el rol '.$role.' y UUID '.$provisioned->account->uuid.'.'
+        );
+
+        $this->showTemporaryPassword($provisioned->password->plain, $provisioned->expiresAt);
 
         return self::SUCCESS;
-    }
-
-    /**
-     * Politica de robustez de RF-ID-01, con la longitud minima configurable
-     * (regla dura 13: los umbrales son configuracion, no constantes).
-     */
-    private function passwordPolicy(): Password
-    {
-        return Password::min(max(8, config()->integer('identity.password.min_length')))
-            ->letters()
-            ->mixedCase()
-            ->numbers()
-            ->symbols();
-    }
-
-    private function stringOption(string $name): ?string
-    {
-        $value = $this->option($name);
-
-        return \is_string($value) && $value !== '' ? $value : null;
-    }
-
-    /**
-     * Las tres envolturas de abajo existen solo para tipar: los ayudantes de
-     * consola de Laravel devuelven `mixed`, y con PHPStan 9 eso obliga a
-     * estrechar el tipo en algun sitio. Mejor aqui, una vez, que en cada uso.
-     */
-    private function asked(string $question): string
-    {
-        $answer = $this->ask($question);
-
-        return \is_string($answer) ? trim($answer) : '';
-    }
-
-    private function secretly(string $question): string
-    {
-        $answer = $this->secret($question);
-
-        return \is_string($answer) ? $answer : '';
     }
 
     private function chosenRole(): string

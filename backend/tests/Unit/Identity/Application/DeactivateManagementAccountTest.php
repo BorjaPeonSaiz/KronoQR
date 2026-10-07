@@ -2,229 +2,176 @@
 
 declare(strict_types=1);
 
+use App\Modules\Identity\Application\Command\DeactivateManagementAccountCommand;
+use App\Modules\Identity\Application\Exception\ManagementSessionVanished;
 use App\Modules\Identity\Application\UseCase\AccountDeactivationOutcome;
 use App\Modules\Identity\Application\UseCase\DeactivateManagementAccountHandler;
-use Tests\Support\Database\AbortedTransactions;
-use Tests\Support\Database\ImmediateTransactions;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Tests\Support\Identity\InMemoryManagementAccounts;
-use Tests\Support\Identity\RecordingAccessTokens;
-use Tests\Support\Identity\RecordingIdentityEvents;
+use Tests\Support\Identity\ManagementAccountDoubles;
 use Tests\Support\Time\FixedClock;
 
 /*
  * La baja de una cuenta de gestion, sin framework y sin base de datos
- * (**RS-05**, **RS-06**, **RL-16**; hallazgo **H-03** de la revision interna
- * ASVS de 2026-09).
+ * (**RF-ID-10**, **RS-05**, **RS-06**, **RL-16**).
  *
- * ## Que se prueba aqui y que no
- *
- * `ManagementAccountLifecycleCommandsTest` (Feature) ya recorre el comando de
- * punta a punta: que `users.is_active` queda a `false`, que el asiento llega a
- * `audit_log` y que la sesion abierta deja de valer en la peticion siguiente.
- * Eso no se repite.
- *
- * Lo que vive aqui es la **maquina de desenlaces** del caso de uso, que es una
- * regla de aplicacion y no del esquema (doc 02 §9.5): cuando hay baja y cuando
- * no, que se publica y que no se publica, y a quien se le cierran las sesiones.
- * Con los puertos doblados, los tres estados —activa, ya de baja, inexistente—
- * se montan en una linea cada uno; con base de datos costarian tres altas y una
- * migracion, y la suite no bajaria de 2 s.
- *
- * **El reloj entra inyectado** (regla dura 2): `occurred_at` del asiento es el
- * instante del puerto `Clock`, no el del dia en que se ejecuta la suite. En Unit
- * no hay framework, asi que el doble es {@see FixedClock} y no `FrozenTime`, que
- * es lo que exige `FrozenTimeTest` para Feature, Integration y Contract.
+ * Lo que vive aqui es la maquina de desenlaces del caso de uso y el orden de
+ * los candados: cuando hay baja y cuando no, que se publica, a quien se le
+ * cierran las sesiones, y que todo eso ocurre con la cadena de auditoria
+ * tomada ANTES de bloquear la fila (ADR-010). El recorrido por HTTP y la
+ * concurrencia real estan en Feature e Integration.
  */
 
-/**
- * El caso de uso con sus cuatro puertos doblados y el reloj detenido.
- *
- * La transaccion **ejecuta** su cuerpo: lo que se observa despues en los dobles
- * es lo que el caso de uso hizo. La otra mitad —que no haga nada fuera de la
- * transaccion— se afirma abajo con {@see AbortedTransactions}.
- */
-function deactivationHandlerFor(
-    InMemoryManagementAccounts $accounts,
-    RecordingAccessTokens $tokens,
-    RecordingIdentityEvents $events,
-): DeactivateManagementAccountHandler {
+const DEACTIVATION_TEST_ACTOR = '0199c4a1-6f2d-7b10-9e3a-000000000042';
+
+const DEACTIVATION_TEST_SECOND_ADMIN = '0199c4a1-6f2d-7b10-9e3a-000000000043';
+
+function bajaDeCuentaCon(ManagementAccountDoubles $doubles): DeactivateManagementAccountHandler
+{
+    // Quien actua tiene que existir y estar activo: el caso de uso lo relee con
+    // el padron tomado. Como `rrhh`, para no contar como otra `admin`.
+    if (! $doubles->accounts->has(DEACTIVATION_TEST_ACTOR)) {
+        $doubles->accounts->with(DEACTIVATION_TEST_ACTOR, 'actor@hotel.example', UserRole::RRHH);
+    }
+
     return new DeactivateManagementAccountHandler(
-        $accounts,
-        $tokens,
-        $events,
+        $doubles->accounts,
+        $doubles->tokens,
+        $doubles->events,
         FixedClock::at('2026-09-22 08:15:00'),
-        ImmediateTransactions::connection(),
+        $doubles->ledger,
+        $doubles->connection(),
+        $doubles->telemetry(),
     );
 }
 
-/*
- * Los dos «no» de la baja: el padron y el desenlace que le toca a cada uno.
- *
- * El padron llega envuelto en una closure para que cada prueba monte el suyo:
- * un doble compartido entre dos pruebas arrastraria lo que la primera escribiera
- * y taparia justo el fallo que la segunda busca.
- */
-dataset('desenlaces de una baja que no llega a ocurrir', [
-    'la cuenta existe y ya estaba dada de baja' => [
-        fn (): InMemoryManagementAccounts => InMemoryManagementAccounts::withDeactivatedAccount('jefatura@hotel.example'),
-        AccountDeactivationOutcome::AlreadyInactive,
-    ],
-    'no hay ninguna cuenta con ese correo' => [
-        fn (): InMemoryManagementAccounts => InMemoryManagementAccounts::withoutAnyAccount(),
-        AccountDeactivationOutcome::NotFound,
-    ],
-]);
+function bajaDe(string $uuid, ?string $actor = DEACTIVATION_TEST_ACTOR): DeactivateManagementAccountCommand
+{
+    return new DeactivateManagementAccountCommand($uuid, 'Baja al cierre de temporada', $actor);
+}
 
-/*
- * Los mismos dos padrones sin el desenlace, para la prueba que habla de lo que
- * NO se escribe. Se declaran aparte y no se reutiliza el de arriba con un
- * parametro sobrante: un argumento que la prueba recibe y no mira es una
- * invitacion a afirmar sobre el sin querer.
- */
-dataset('cuentas de gestion sin acceso activo', [
-    'la cuenta existe y ya estaba dada de baja' => [
-        fn (): InMemoryManagementAccounts => InMemoryManagementAccounts::withDeactivatedAccount('jefatura@hotel.example'),
-    ],
-    'no hay ninguna cuenta con ese correo' => [
-        fn (): InMemoryManagementAccounts => InMemoryManagementAccounts::withoutAnyAccount(),
-    ],
-]);
+it('da de baja la cuenta, cierra sus sesiones, publica el hecho y lo cuenta', function (): void {
+    $doubles = new ManagementAccountDoubles(InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'));
 
-it('da de baja la cuenta activa y lo dice con el desenlace Deactivated', function (): void {
-    $accounts = InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example');
+    $outcome = bajaDeCuentaCon($doubles)->handle(bajaDe(InMemoryManagementAccounts::UUID));
 
-    $outcome = deactivationHandlerFor($accounts, new RecordingAccessTokens, new RecordingIdentityEvents)
-        ->handle('jefatura@hotel.example', 'Baja al cierre de temporada');
+    $event = $doubles->events->deactivation();
 
     expect($outcome)->toBe(AccountDeactivationOutcome::Deactivated)
-        ->and($accounts->deactivated)->toBe([InMemoryManagementAccounts::UUID]);
-})->group('RS-05', 'RS-06', 'RL-16');
+        ->and($doubles->accounts->deactivated)->toBe([InMemoryManagementAccounts::UUID])
+        ->and($doubles->tokens->revokedAccounts)->toBe([InMemoryManagementAccounts::UUID])
+        ->and($event->userUuid)->toBe(InMemoryManagementAccounts::UUID)
+        ->and($event->reason)->toBe('Baja al cierre de temporada')
+        ->and($event->actorUuid)->toBe(DEACTIVATION_TEST_ACTOR)
+        ->and($event->occurredAt()->format(DATE_ATOM))->toBe('2026-09-22T08:15:00+00:00')
+        ->and($doubles->metrics->changes)->toBe(['deactivated:rrhh']);
+})->group('RF-ID-10', 'RS-05', 'RL-16');
 
-it('cierra todas las sesiones de la cuenta que acaba de dar de baja', function (): void {
-    // La mitad que se olvida de una baja: marcar la cuenta y dejar viva la
-    // sesion abierta en una tablet no da de baja a nadie durante las doce horas
-    // siguientes, que es justo el tiempo que importa cuando la baja es por
-    // sospecha y no por calendario.
-    $tokens = new RecordingAccessTokens;
+it('toma la cadena, despues el padron y despues la fila: un solo orden de candados', function (): void {
+    $doubles = new ManagementAccountDoubles(InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'));
 
-    deactivationHandlerFor(
-        InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'),
-        $tokens,
-        new RecordingIdentityEvents,
-    )->handle('jefatura@hotel.example', 'Cuenta comprometida');
+    bajaDeCuentaCon($doubles)->handle(bajaDe(InMemoryManagementAccounts::UUID));
 
-    expect($tokens->revokedAccounts)->toBe([InMemoryManagementAccounts::UUID]);
-})->group('RS-05', 'RS-06');
+    // Con el padron tomado: primero se relee a quien actua, despues la cuenta.
+    expect($doubles->journal)->toBe(['chain-lock:open', 'roster-lock', 'chain-lock:close'])
+        ->and($doubles->accounts->locks)->toBe([DEACTIVATION_TEST_ACTOR, InMemoryManagementAccounts::UUID]);
+})->group('RF-ID-10', 'RS-05');
 
-it('publica la baja con el uuid, el motivo, el actor y el instante del reloj inyectado', function (): void {
-    $events = new RecordingIdentityEvents;
+it('no lleva al evento mas que el uuid, el motivo y el actor', function (): void {
+    $doubles = new ManagementAccountDoubles(InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'));
 
-    deactivationHandlerFor(
-        InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'),
-        new RecordingAccessTokens,
-        $events,
-    )->handle('jefatura@hotel.example', 'Baja al cierre de temporada', '0199c4a1-6f2d-7b10-9e3a-000000000042');
+    bajaDeCuentaCon($doubles)->handle(bajaDe(InMemoryManagementAccounts::UUID));
 
-    $deactivation = $events->deactivation();
+    $event = $doubles->events->deactivation();
 
-    expect($deactivation->eventName())->toBe('identity.management_account_deactivated')
-        ->and($deactivation->userUuid)->toBe(InMemoryManagementAccounts::UUID)
-        ->and($deactivation->reason)->toBe('Baja al cierre de temporada')
-        ->and($deactivation->actorUuid)->toBe('0199c4a1-6f2d-7b10-9e3a-000000000042')
-        ->and($deactivation->occurredAt()->format(DATE_ATOM))->toBe('2026-09-22T08:15:00+00:00');
+    expect(array_keys(get_object_vars($event)))->toBe(['userUuid', 'reason', 'actorUuid'])
+        ->and((string) json_encode($event))->not->toContain('jefatura@hotel.example');
 })->group('RS-05', 'RL-16');
 
-it('atribuye al sistema la baja que se ejecuta en consola sin sesion detras', function (): void {
-    // Atribuirsela a la ultima persona que entro al panel seria falsificar el
-    // trail: `null` es la respuesta honesta y el listener la traduce a `system`.
-    $events = new RecordingIdentityEvents;
+it('no escribe, no revoca, no publica ni cuenta cuando la baja no ocurre', function (
+    Closure $scenario,
+    string $target,
+    ?string $actor,
+    AccountDeactivationOutcome $expected,
+): void {
+    /** @var InMemoryManagementAccounts $accounts */
+    $accounts = $scenario();
+    $doubles = new ManagementAccountDoubles($accounts);
 
-    deactivationHandlerFor(
-        InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'),
-        new RecordingAccessTokens,
-        $events,
-    )->handle('jefatura@hotel.example', 'Fin de contrato');
+    $outcome = bajaDeCuentaCon($doubles)->handle(bajaDe($target, $actor));
 
-    expect($events->deactivation()->actorUuid)->toBeNull();
+    expect($outcome)->toBe($expected)
+        ->and($doubles->accounts->deactivated)->toBe([])
+        ->and($doubles->tokens->revokedAccounts)->toBe([])
+        ->and($doubles->events->published)->toBe([])
+        ->and($doubles->metrics->changes)->toBe([]);
+})->with([
+    'no existe' => [
+        InMemoryManagementAccounts::empty(...),
+        InMemoryManagementAccounts::UUID, DEACTIVATION_TEST_ACTOR, AccountDeactivationOutcome::NotFound,
+    ],
+    'ya estaba de baja' => [
+        fn (): InMemoryManagementAccounts => InMemoryManagementAccounts::withDeactivatedAccount('jefatura@hotel.example'),
+        InMemoryManagementAccounts::UUID, DEACTIVATION_TEST_ACTOR, AccountDeactivationOutcome::AlreadyInactive,
+    ],
+    'la propia cuenta' => [
+        fn (): InMemoryManagementAccounts => InMemoryManagementAccounts::empty()
+            ->with(DEACTIVATION_TEST_ACTOR, 'yo@hotel.example', UserRole::ADMIN)
+            ->with(DEACTIVATION_TEST_SECOND_ADMIN, 'otra@hotel.example', UserRole::ADMIN),
+        DEACTIVATION_TEST_ACTOR, DEACTIVATION_TEST_ACTOR, AccountDeactivationOutcome::OwnAccount,
+    ],
+    'la ultima admin activa, desde consola' => [
+        fn (): InMemoryManagementAccounts => InMemoryManagementAccounts::empty()
+            ->with(DEACTIVATION_TEST_SECOND_ADMIN, 'unica@hotel.example', UserRole::ADMIN)
+            ->with(DEACTIVATION_TEST_ACTOR, 'baja@hotel.example', UserRole::ADMIN, active: false),
+        DEACTIVATION_TEST_SECOND_ADMIN, null, AccountDeactivationOutcome::LastActiveAdmin,
+    ],
+])->group('RF-ID-10', 'RS-05', 'RL-16');
+
+it('da de baja una admin si queda otra activa', function (): void {
+    $doubles = new ManagementAccountDoubles(InMemoryManagementAccounts::empty()
+        ->with(DEACTIVATION_TEST_ACTOR, 'yo@hotel.example', UserRole::ADMIN)
+        ->with(DEACTIVATION_TEST_SECOND_ADMIN, 'otra@hotel.example', UserRole::ADMIN));
+
+    $outcome = bajaDeCuentaCon($doubles)->handle(bajaDe(DEACTIVATION_TEST_SECOND_ADMIN));
+
+    expect($outcome)->toBe(AccountDeactivationOutcome::Deactivated)
+        ->and($doubles->metrics->changes)->toBe(['deactivated:admin']);
+})->group('RF-ID-10', 'RS-05');
+
+it('atribuye al sistema la baja de consola', function (): void {
+    $doubles = new ManagementAccountDoubles(InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'));
+
+    bajaDeCuentaCon($doubles)->handle(bajaDe(InMemoryManagementAccounts::UUID, null));
+
+    expect($doubles->events->deactivation()->actorUuid)->toBeNull();
 })->group('RL-16');
 
-it('no lleva a la baja publicada ni el correo ni ningun dato mas que el uuid, el motivo y el actor', function (): void {
-    /*
-     * Regla dura 21. El evento es lo que un listener de `Compliance` sella en
-     * `audit_log`, y de ahi sale tambien el paquete de diagnostico que viaja al
-     * fabricante: un correo o un nombre aqui es una fuga, y el trail no se puede
-     * reescribir para quitarlo.
-     *
-     * Se afirma la lista **exacta** de campos publicos y no solo la ausencia del
-     * correo: un campo nuevo con el nombre del titular pasaria desapercibido a
-     * una comprobacion que solo buscara la direccion de este escenario.
-     */
-    $events = new RecordingIdentityEvents;
+it('aborta sin escribir ni asentar si quien da de baja ya esta de baja al tomar el padron', function (): void {
+    // Tiempo de comprobacion frente a tiempo de uso: la sesion se valido al
+    // entrar, pero otra `admin` le dio de baja mientras tanto.
+    $doubles = new ManagementAccountDoubles(InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example')
+        ->with(DEACTIVATION_TEST_ACTOR, 'actor@hotel.example', UserRole::ADMIN, active: false));
 
-    deactivationHandlerFor(
-        InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'),
-        new RecordingAccessTokens,
-        $events,
-    )->handle('jefatura@hotel.example', 'Baja al cierre de temporada');
+    expect(fn (): AccountDeactivationOutcome => bajaDeCuentaCon($doubles)->handle(bajaDe(InMemoryManagementAccounts::UUID)))
+        ->toThrow(ManagementSessionVanished::class);
 
-    $deactivation = $events->deactivation();
+    expect($doubles->accounts->deactivated)->toBe([])
+        ->and($doubles->tokens->revokedAccounts)->toBe([])
+        ->and($doubles->events->published)->toBe([])
+        ->and($doubles->metrics->changes)->toBe([])
+        ->and($doubles->accounts->locks)->toBe([DEACTIVATION_TEST_ACTOR]);
+})->group('RF-ID-10', 'RS-05');
 
-    expect(array_keys(get_object_vars($deactivation)))->toBe(['userUuid', 'reason', 'actorUuid'])
-        ->and((string) json_encode($deactivation))->not->toContain('jefatura@hotel.example');
-})->group('RS-05', 'RL-16');
+it('no hace nada fuera de la transaccion', function (): void {
+    $doubles = new ManagementAccountDoubles(InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example'));
+    $doubles->ledger->abort = true;
 
-it('distingue «ya estaba dada de baja» de «no existe esa cuenta»', function (
-    Closure $padron,
-    AccountDeactivationOutcome $expected
-): void {
-    // Confundir los dos mandaria al operador a buscar en el correo una errata
-    // que no hay. No es un oraculo de enumeracion: esto es consola del servidor
-    // del cliente, nunca HTTP.
-    $outcome = deactivationHandlerFor($padron(), new RecordingAccessTokens, new RecordingIdentityEvents)
-        ->handle('jefatura@hotel.example', 'Baja');
+    expect(fn (): AccountDeactivationOutcome => bajaDeCuentaCon($doubles)->handle(bajaDe(InMemoryManagementAccounts::UUID)))
+        ->toThrow(LogicException::class);
 
-    expect($outcome)->toBe($expected);
-})->with('desenlaces de una baja que no llega a ocurrir')->group('RS-05', 'RL-16');
-
-it('no desactiva, no revoca y no publica nada cuando no hay cuenta activa con ese correo', function (
-    Closure $padron
-): void {
-    // El trail cuenta HECHOS: repetir el comando no cambia nada, y un asiento
-    // por repeticion seria una via para llenar la cadena de ADR-010 —por la que
-    // pasa cada fichaje— con escrituras que no dicen nada nuevo.
-    $accounts = $padron();
-    $tokens = new RecordingAccessTokens;
-    $events = new RecordingIdentityEvents;
-
-    deactivationHandlerFor($accounts, $tokens, $events)->handle('jefatura@hotel.example', 'Baja');
-
-    expect($accounts->deactivated)->toBe([])
-        ->and($tokens->revokedAccounts)->toBe([])
-        ->and($events->published)->toBe([]);
-})->with('cuentas de gestion sin acceso activo')->group('RS-05', 'RS-06', 'RL-16');
-
-it('deja la baja, la revocacion y el asiento dentro de la transaccion, sin nada fuera', function (): void {
-    /*
-     * ADR-027: si el asiento falla, la cuenta sigue activa. Con la conexion que
-     * no ejecuta el cuerpo de la transaccion, lo que se observe en los dobles es
-     * por definicion lo que el caso de uso hace FUERA de ella — y tiene que ser
-     * nada. Que PostgreSQL revierta de verdad se prueba en Integration.
-     */
-    $accounts = InMemoryManagementAccounts::withActiveAccount('jefatura@hotel.example');
-    $tokens = new RecordingAccessTokens;
-    $events = new RecordingIdentityEvents;
-
-    $handler = new DeactivateManagementAccountHandler(
-        $accounts,
-        $tokens,
-        $events,
-        FixedClock::at('2026-09-22 08:15:00'),
-        AbortedTransactions::connection(),
-    );
-
-    $handler->handle('jefatura@hotel.example', 'Baja al cierre de temporada');
-
-    expect($accounts->deactivated)->toBe([])
-        ->and($tokens->revokedAccounts)->toBe([])
-        ->and($events->published)->toBe([]);
+    expect($doubles->accounts->deactivated)->toBe([])
+        ->and($doubles->tokens->revokedAccounts)->toBe([])
+        ->and($doubles->events->published)->toBe([])
+        ->and($doubles->metrics->changes)->toBe([]);
 })->group('RS-05', 'RL-16');

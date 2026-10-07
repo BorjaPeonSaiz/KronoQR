@@ -64,6 +64,8 @@ it('reparte los ambitos del documento 02 §7.3 rol por rol', function (string $r
         'attendance:read', 'attendance:correct', 'incidents:*',
         'employees:read', 'employees:*', 'credentials:*', 'reports:*', 'reports:legal',
         'audit:read', 'settings:*', 'license:*', 'support:*', 'diagnostics:*',
+        // RF-ID-10: las cuentas de gestion, solo `admin`.
+        'accounts:*',
     ]],
     'empleado' => ['empleado', ['self:read']],
     'kiosk' => ['kiosk', ['scan:write', 'roster:read', 'heartbeat:write']],
@@ -114,3 +116,28 @@ it('no concede a nadie el ambito de la sesion pendiente de segundo factor', func
 
     expect($granted)->toBe(0);
 })->group('RS-06', 'RF-ID-01');
+
+it('no concede a nadie el ambito de la sesion de contrasena temporal', function (): void {
+    // RF-ID-10, ADR-051: `password:change` lo emite el acceso a una cuenta con
+    // contrasena temporal. Si un rol lo tuviera, toda sesion de ese rol pareceria
+    // pendiente de cambiar su contrasena.
+    $granted = DB::table('role_has_permissions')
+        ->join('permissions', 'permissions.id', '=', 'role_has_permissions.permission_id')
+        ->where('permissions.name', TokenAbility::PASSWORD_CHANGE->value)
+        ->count();
+
+    expect($granted)->toBe(0);
+})->group('RF-ID-10');
+
+it('concede accounts:* solo a admin', function (): void {
+    // RF-ID-10, doc 02 §7.3 nota 7: ni `rrhh`, ni el auditor, ni ningun alcance
+    // de soporte (que no son roles) administran cuentas.
+    $roles = DB::table('role_has_permissions')
+        ->join('roles', 'roles.id', '=', 'role_has_permissions.role_id')
+        ->join('permissions', 'permissions.id', '=', 'role_has_permissions.permission_id')
+        ->where('permissions.name', TokenAbility::ACCOUNTS_ALL->value)
+        ->pluck('roles.name')
+        ->all();
+
+    expect($roles)->toBe(['admin']);
+})->group('RF-ID-10', 'RF-ID-02');

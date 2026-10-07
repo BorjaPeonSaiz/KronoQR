@@ -518,39 +518,78 @@ aplicación.
 
 ### Las cuentas del panel: alta, baja y contraseña
 
-Las cuentas de gestión se crean por consola y **se retiran por consola**. En esta
-versión **no hay pantalla de cuentas de gestión en el panel**, y por eso estas
-cuatro órdenes son todo el ciclo de vida de una cuenta. Las cuatro dejan
-constancia en el registro de auditoría, con su autor, su fecha y su motivo.
+**Desde la 2.2.0 las cuentas de gestión se llevan desde el panel**, con una
+cuenta de administración: Panel → **Cuentas**. Ahí está la lista —nombre,
+correo, rol, estado, segundo factor, si la contraseña es propia o temporal y
+último acceso— y las cuatro acciones: **alta**, **baja**, **restablecer
+contraseña** y **restablecer 2FA**. Las tres que crean o rehacen una credencial
+(alta y los dos restablecimientos) piden además, en el mismo diálogo, **tu**
+código del segundo factor —o tu contraseña, si tu cuenta no lo tiene—: una
+sesión abierta en un ordenador ajeno no basta. La baja y los dos
+restablecimientos piden un **motivo**, que queda en el registro de auditoría
+(sin datos de salud ni juicios de valor). El paso a paso y cómo comprobar
+después lo que se hizo están en
+[`../runbooks/cuentas-de-gestion.md`](../runbooks/cuentas-de-gestion.md).
+
+**La contraseña de una cuenta nueva o restablecida es temporal.** La genera el
+servidor, se muestra **una sola vez**, se entrega en mano y caduca a las
+`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` (72 de serie,
+[`configuracion.md`](configuracion.md) §6.8). Con ella el panel solo deja
+fijar una contraseña propia o salir. Cada persona cambia la suya cuando quiera
+desde «Cambiar mi contraseña», bajo su nombre en el menú.
+
+Lo que el panel **no** deja hacer, a propósito, y responde con un aviso: darte
+de baja a ti, dar de baja la **última** cuenta de administración activa,
+restablecer tu propia contraseña o tu propio segundo factor (para eso está
+«Cambiar mi contraseña»), y restablecer el segundo factor de quien no lo tiene
+activo. **Ten siempre dos cuentas de administración**: si la única pierde el
+móvil, solo queda la consola.
+
+**La consola sigue existiendo como vía de recuperación**, para cuando el panel
+no está disponible o nadie con rol de administración puede entrar. Aplica las
+mismas reglas —tampoco da de baja la última administración— y deja los mismos
+asientos, con «consola» como origen:
 
 ```bash
-# Alta de una cuenta con su rol. Pide la contraseña por consola, sin eco
+# Lista de cuentas: UUID, correo, rol, estado, 2FA y tipo de contraseña. Lleva correos: no la guardes en un fichero
+docker compose exec app php artisan identity:list-users
+
+# Alta con su rol. Pregunta nombre y correo, y muestra UNA vez la contraseña temporal
 docker compose exec app php artisan identity:create-user --role=rrhh
 
 # Baja. Deja de poder entrar, y sus sesiones abiertas dejan de valer al instante
 docker compose exec app php artisan identity:deactivate-user persona@tuhotel.example --reason="Baja del hotel"
 
-# Contraseña nueva, generada y mostrada UNA sola vez
-docker compose exec app php artisan identity:reset-password persona@tuhotel.example
+# Contraseña temporal nueva, mostrada UNA sola vez
+docker compose exec app php artisan identity:reset-password persona@tuhotel.example --reason="Contraseña olvidada / Forgotten password"
 
-# Retirar el segundo factor a quien perdió el móvil, para que lo dé de alta otra vez
-docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+# Retirar el segundo factor a quien perdió el móvil, para que lo dé de alta otra vez (UUID de la lista)
+docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --reason="Móvil perdido / Lost phone"
 ```
 
-Tres cosas que conviene saber de la baja:
+**El responsable de un departamento tampoco se fija por SQL.** Se elige en
+Panel → **Departamentos**, con la cuenta de administración
+([`guia-rrhh.md`](guia-rrhh.md) §7 bis.2), y queda en el registro de auditoría.
 
-- **No borra nada.** La cuenta se queda con todo su historial, que es justo lo
-  que permite responder meses después a «¿quién corrigió esta jornada?». Lo único
-  que pierde es la capacidad de entrar.
+Cuatro cosas que conviene saber de la baja:
+
+- **No borra nada y no tiene vuelta atrás.** La cuenta se queda con todo su
+  historial, que es justo lo que permite responder meses después a «¿quién
+  corrigió esta jornada?». Lo único que pierde es la capacidad de entrar. No hay
+  reactivación: si la persona vuelve, se le crea una cuenta nueva, y con otro
+  correo, porque el de una cuenta dada de baja ya no se admite.
 - **Tiene efecto en la petición siguiente**, no cuando caduque la sesión: si esa
   persona tenía el panel abierto en una tablet, deja de funcionar al instante.
-- **No reabre la creación del primer administrador.** Aunque des de baja a la
-  última cuenta que queda, esa puerta sigue cerrada — si se reabriera, dar de
-  baja a alguien sería una forma de crear un administrador sin credenciales.
+- **Retira los accesos de soporte que esa cuenta concedió** y seguían vigentes
+  (§12.4). Un acceso temporal del fabricante no sobrevive a quien respondía de él.
+- **No reabre la creación del primer administrador.** Esa puerta sigue cerrada
+  aunque haya cuentas dadas de baja — si se reabriera, dar de baja a alguien
+  sería una forma de crear un administrador sin credenciales.
 
-La contraseña que genera `identity:reset-password` **no se puede volver a
-consultar**: el producto guarda su huella, no la contraseña. Anótala al
-ejecutarlo y entrégala en mano, nunca por correo ni por mensajería.
+La contraseña temporal, la muestre el panel o `identity:reset-password`, **no
+se puede volver a consultar**: el producto guarda su huella, no la contraseña.
+Anótala en el momento y entrégala en mano, nunca por correo ni por mensajería.
+Si se pierde antes de entregarla, restablécela otra vez.
 
 ---
 
@@ -758,6 +797,9 @@ la alimenta dejó de ejecutarse):
 | `KronoqrAuthFailureBurst` | > 20 fallos en 5 min, un canal | Media | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Determina si es una persona equivocándose o un intento automatizado |
 | `KronoqrAuthLockouts` | ≥ 3 bloqueos distintos en 15 min, un canal | Media | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Acota cuántas cuentas y si alguna llegó a entrar antes del bloqueo |
 | `KronoqrAuthFailureSpike` | > 100 fallos en 5 min, un canal | Crítica | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) | Preserva la evidencia antes de bloquear el origen en el borde |
+| `KronoqrPortalOriginLockouts` | > 5 bloqueos de origen del portal en 1 h; `for: 1m` | Media | Seguridad | [`bloqueo-por-origen.md`](../runbooks/bloqueo-por-origen.md) | Distingue un ataque repartido de toda la plantilla detrás de una misma IP (hairpin NAT, `TRUSTED_PROXY_CIDR`); fichar no se ve afectado |
+| `KronoqrManagementTwoFactorReset` | Cada restablecimiento de 2FA de una cuenta de gestión (sin umbral) | Crítica | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) §9 | Confirma con el administrador y con el titular que fue intencionado; si nadie lo reconoce es un incidente de cuentas |
+| `KronoqrManagementAdminAccountCreated` | Cada alta de una cuenta de gestión con rol admin (sin umbral) | Crítica | Seguridad | [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md) §9 | Confirma con quien la pidió; si nadie la reconoce, desactívala |
 | `KronoqrPortalOriginLockouts` | > 5 bloqueos de origen del portal en 1 h; `for: 1m` | Media | Seguridad | [`bloqueo-por-origen.md`](../runbooks/bloqueo-por-origen.md) | Distingue un ataque repartido de toda la plantilla detrás de una misma IP (hairpin NAT, `TRUSTED_PROXY_CIDR`); fichar no se ve afectado |
 | `FicheroGeneradoDesaparecidoAntesDeCaducar` | Sube `generated_files_missing_total` (en 30 min, o serie nueva), durante 1 min | Alta | Seguridad | [`ficheros-generados.md`](../runbooks/ficheros-generados.md) §2 | Una exportación o un informe perdió su fichero antes de caducar. Tras restaurar una copia o actualizar desde la 2.1.0 es lo esperado (§18); si no, lee el asiento `*.file_missing` y trátalo como posible brecha |
 | `FicheroGeneradoSinRetirarPasadoSuPlazo` | `generated_files_overdue > 0` durante 1 h: una exportación para la Inspección lleva > 30 días en el servidor | Media | IT | [`ficheros-generados.md`](../runbooks/ficheros-generados.md) §4 | No se borra sola: confirma que se entregó y bórrala ([`requerimiento-inspeccion.md`](../runbooks/requerimiento-inspeccion.md) §7) |
@@ -1187,8 +1229,10 @@ los dos últimos piden una revisión el mismo día:
   ```
 
   Si su titular no reconoce un alta (otra hora, otra IP), retira ese segundo
-  factor con el `uuid` de la fila y dale una contraseña nueva; en su siguiente
-  acceso lo vuelve a dar de alta él:
+  factor y dale una contraseña nueva; en su siguiente acceso lo vuelve a dar de
+  alta él. Se hace en Panel → **Cuentas**, con «Restablecer 2FA» y después
+  «Restablecer contraseña» (§9); si el panel no está disponible, por consola,
+  con el `uuid` de la fila:
 
   ```bash
   docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --reason="2FA no reconocido / 2FA not recognised"
@@ -1205,6 +1249,31 @@ los dos últimos piden una revisión el mismo día:
   a internet, el panel también lo está mientras la dejes vacía:
   [`configuracion.md`](configuracion.md) §6. `product:doctor` lo recuerda con
   el aviso `network.admin`.
+
+**Al actualizar a la 2.2.0: las cuentas de gestión, desde el panel.** Alta,
+baja, restablecer contraseña y restablecer 2FA pasan a Panel → **Cuentas**
+(§9, «Las cuentas del panel»), y el responsable de cada departamento se elige en
+Panel → **Departamentos**. Tres cosas que hacer o saber el mismo día:
+
+- **Quien tenga la cuenta de administración tiene que cerrar sesión y volver a
+  entrar.** Los permisos de una sesión se fijan al abrirla, y las abiertas antes
+  de actualizar no llevan el de gestionar cuentas: hasta que vuelva a entrar,
+  no verá «Cuentas» en el menú y Departamentos no le dejará elegir responsable.
+  No es un fallo y no hace falta tocar nada más.
+- **Las contraseñas que se entregan desde ahora son temporales.** Caducan a las
+  72 horas (`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`) y obligan a fijar una
+  propia al entrar. `identity:create-user` ya no pregunta la contraseña: la
+  genera y la muestra una vez. Las contraseñas que ya existían no cambian.
+- **Repasa los responsables de departamento.** Si alguna vez se asignaron
+  editando la base de datos, compruébalos en la pantalla Departamentos y, desde
+  ahora, cámbialos solo ahí: cada cambio deja su asiento
+  `role_assignment.changed`. Un responsable sin departamento asignado entra en
+  el panel pero no ve a nadie.
+
+Cada alta de una cuenta con rol de administración y cada restablecimiento de un
+segundo factor avisa al destinatario de seguridad (§10.4,
+[`../runbooks/ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md)
+§9). Si vas a hacer varias el mismo día, díselo antes.
 
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las

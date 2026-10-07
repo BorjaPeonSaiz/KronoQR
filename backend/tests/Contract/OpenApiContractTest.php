@@ -95,6 +95,15 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/auth/2fa/confirm',
         '/api/v1/auth/logout',
         '/api/v1/auth/me',
+        // RF-ID-10, 2.2.0 (bloque 12c, ADR-051): el cambio de la contrasena
+        // propia —la salida de la sesion de contrasena temporal— y las cuentas
+        // de gestion desde el panel, con ambito propio `accounts:*`. Por `uuid`
+        // y nunca por correo; `POST` y no `DELETE` porque nada se borra.
+        '/api/v1/auth/password',
+        '/api/v1/management-accounts',
+        '/api/v1/management-accounts/{uuid}/deactivate',
+        '/api/v1/management-accounts/{uuid}/password/reset',
+        '/api/v1/management-accounts/{uuid}/two-factor/reset',
         // Tarea 1.11: portal del empleado (RF-ID-05..08, RL-05). Ninguna lleva
         // `{uuid}`: el empleado sale del token, no de la URL.
         '/api/v1/me/login',
@@ -644,6 +653,8 @@ it('declara todos los ambitos de token del documento 02 §7.3', function (): voi
         // Tarea 2.1: la sesion pendiente de segundo factor (RS-06). No es un
         // ambito del §7.3 y no concede nada del producto.
         '2fa:pending',
+        // RF-ID-10: las cuentas de gestion, solo `admin` (doc 02 §7.3, nota 7).
+        'accounts:*',
         'attendance:correct',
         'attendance:read',
         'audit:read',
@@ -655,6 +666,8 @@ it('declara todos los ambitos de token del documento 02 §7.3', function (): voi
         'heartbeat:write',
         'incidents:*',
         'license:*',
+        // RF-ID-10, ADR-051: la sesion de contrasena temporal, como `2fa:pending`.
+        'password:change',
         'reports:*',
         'reports:legal',
         'roster:read',

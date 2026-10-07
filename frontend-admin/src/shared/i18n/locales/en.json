@@ -7,6 +7,7 @@
     "nav": {
       "label": "Console sections",
       "employees": "Workforce",
+      "departments": "Departments",
       "absences": "Absences",
       "credentials": "Credentials",
       "legalExport": "Inspectorate",
@@ -22,7 +23,8 @@
       "branding": "Brand",
       "license": "Licence",
       "support": "Support",
-      "errors": "Errors"
+      "errors": "Errors",
+      "accounts": "Accounts"
     },
     "roles": {
       "admin": "Administration",
@@ -31,7 +33,8 @@
       "auditor": "Audit",
       "empleado": "Employee",
       "kiosk": "Kiosk"
-    }
+    },
+    "changePassword": "Change my password"
   },
   "auth": {
     "heading": "Sign in to the management console",
@@ -57,6 +60,156 @@
       "enrolSubmitting": "Activating…",
       "enrolStepAnnouncement": "Set up your second factor before you can sign in.",
       "back": "Back to sign in"
+    }
+  },
+  "changePassword": {
+    "heading": "Change my password",
+    "intro": "Enter your current password and the new one. Your current session stays open.",
+    "forcedHeading": "Choose your password",
+    "forcedIntro": "You signed in with a temporary password. Before using the panel you must set your own: it is the only action available, besides signing out.",
+    "current": "Current password",
+    "new": "New password",
+    "confirm": "Repeat the new password",
+    "policyHint": "It must meet the installation password policy. If a rule is missing, the server will tell you which one.",
+    "mismatch": "The two new passwords do not match.",
+    "sameAsCurrent": "The new password must be different from the current one.",
+    "otherSessions": "Changing it closes every other session of your account, on any other device.",
+    "submit": "Change password",
+    "done": "Password changed. The other sessions of your account have been closed.",
+    "announce": {
+      "changed": "Password changed.",
+      "failed": "The password was not changed. Check the fields indicated."
+    },
+    "conflict": "Your password changed in the meantime, in another session. Sign in again and repeat the change if it is still needed.",
+    "tooLong": "The new password is too long: the maximum is 72 bytes (accents and symbols take more than one)."
+  },
+  "accounts": {
+    "title": "Management accounts",
+    "subtitle": "Who can sign in to the panel, with which role and in which state. Deactivating deletes nothing: the account and its history are kept.",
+    "loading": "Loading accounts…",
+    "filters": {
+      "legend": "Account filters",
+      "search": "Search",
+      "searchPlaceholder": "Name or email",
+      "status": "Status",
+      "statusAll": "All",
+      "role": "Role",
+      "roleAll": "All"
+    },
+    "status": {
+      "active": "Active",
+      "deactivated": "Deactivated"
+    },
+    "twoFactor": {
+      "enabled": "Active",
+      "disabled": "Not active"
+    },
+    "password": {
+      "own": "Own",
+      "temporary": "Temporary",
+      "temporary_expired": "Temporary, expired"
+    },
+    "table": {
+      "caption": "Management accounts. Last sign-in shown in the site time zone: {timezone}.",
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "twoFactor": "Second factor",
+      "password": "Password",
+      "lastLogin": "Last sign-in",
+      "actions": "Actions",
+      "you": "(your account)",
+      "neverLoggedIn": "Never signed in",
+      "noActions": "No actions: account deactivated",
+      "reachesNobody": "Reaches nobody: not the manager of any department.",
+      "assignDepartment": "Assign a department"
+    },
+    "empty": {
+      "title": "No accounts",
+      "description": "There are no management accounts to show yet.",
+      "filtered": "No account matches the filters. Try clearing them."
+    },
+    "pagination": {
+      "label": "Accounts pagination"
+    },
+    "announce": {
+      "results": "{count} accounts",
+      "created": "Account for {name} created. Write down the temporary password: it is shown only once.",
+      "deactivated": "Account of {name} deactivated.",
+      "twoFactorReset": "Second factor of {name} removed.",
+      "passwordReset": "Password of {name} reset. Write down the temporary password: it is shown only once.",
+      "gone": "The account no longer exists or was already deactivated. The list has been refreshed."
+    },
+    "blocked": {
+      "own": "This is your account: you cannot do this to yourself. Ask another person with the admin role.",
+      "ownPassword": "This is your account: change your password from \"Change my password\".",
+      "noTwoFactor": "This account has no active second factor: there is nothing to remove."
+    },
+    "fields": {
+      "name": "Name",
+      "nameHint": "The name of the person, not of the post: it is shown as the author of a correction.",
+      "email": "Email",
+      "emailHint": "It is their sign-in identifier. The product sends nothing to it by email.",
+      "role": "Role",
+      "roleHint": "A department manager reaches nobody until a department is assigned to them.",
+      "locale": "Panel language"
+    },
+    "create": {
+      "heading": "New management account",
+      "submit": "Create account",
+      "passwordNotice": "The server generates a temporary password that is shown only once and handed over in person. It is not sent by email.",
+      "emailTaken": "An account with this email already exists, active or deactivated. Use another email."
+    },
+    "reveal": {
+      "heading": "Temporary password",
+      "forCreated": "Account created for {name} ({email}).",
+      "forReset": "Password reset for {name} ({email}). Their open sessions have been closed.",
+      "onlyOnce": "This password is shown only once and cannot be consulted again. If it is lost, it must be reset.",
+      "expires": "It expires on {when}. After that it can no longer be used to sign in.",
+      "handDelivery": "Hand it over in person or by voice. It is not sent by email. It only allows signing in and setting a password of their own.",
+      "handedOverLabel": "I have handed it over to {name} in person",
+      "acknowledge": "Close: it will not be shown again"
+    },
+    "actions": {
+      "create": "New account",
+      "previewCaption": "What changes in the account of {name}",
+      "reasonLabel": "Reason",
+      "reasonHint": "Required. It is kept in the audit log. No health data or value judgements.",
+      "deactivate": {
+        "button": "Deactivate",
+        "rowLabel": "Deactivate the account of {name}",
+        "heading": "Deactivate the account",
+        "confirm": "Deactivate",
+        "explanation": "The account of {name} ({email}) will no longer be able to sign in and all its open sessions will be closed.",
+        "notice": "Nothing is deleted and there is no reactivation: if the person returns, a new account is created. Who, when and why is recorded.",
+        "conflictHint": "It was not deactivated. This is not allowed on your own account or on the last active admin account: create another one first."
+      },
+      "resetPassword": {
+        "button": "Reset password",
+        "rowLabel": "Reset the password of {name}",
+        "heading": "Reset the password",
+        "confirm": "Reset password",
+        "explanation": "A temporary password will be generated for {name} ({email}). It is shown only once and handed over in person.",
+        "notice": "All their open sessions will be closed and until they set their own they cannot do anything else. The second factor is not touched.",
+        "conflictHint": "Not allowed on your own account: use \"Change my password\"."
+      },
+      "resetTwoFactor": {
+        "button": "Reset 2FA",
+        "rowLabel": "Reset the second factor of {name}",
+        "heading": "Reset the second factor",
+        "confirm": "Remove second factor",
+        "explanation": "The second factor of {name} ({email}) will be removed so they set it up again on their next sign-in.",
+        "notice": "All their sessions will be closed. Until they set it up again, anyone who knows their password could do it for them: that is why who did it and why is recorded.",
+        "conflictHint": "Nothing was changed. Not allowed on your own account or on an account without an active second factor."
+      }
+    },
+    "reauth": {
+      "totpLabel": "Your second-factor code",
+      "totpHint": "Six digits from your authenticator app. It confirms it is you doing this.",
+      "passwordLabel": "Your current password",
+      "passwordHint": "Your account has no confirmed second factor, so your password is asked to confirm it is you.",
+      "wait": "Too many attempts. You can confirm again in {seconds} s."
     }
   },
   "common": {
@@ -2284,6 +2437,32 @@
     },
     "pagination": {
       "label": "Error history pagination"
+    }
+  },
+  "departments": {
+    "title": "Departments",
+    "subtitle": "A department manager is the person who sees its staff. Assigning one replaces the previous one.",
+    "loading": "Loading departments…",
+    "empty": {
+      "title": "No departments",
+      "description": "There are no departments in the site yet."
+    },
+    "table": {
+      "caption": "Site departments and their manager",
+      "name": "Department",
+      "manager": "Manager",
+      "assign": "Assign manager"
+    },
+    "noManager": "No manager",
+    "hasManager": "Has a manager",
+    "unknownManager": "Account not found in the manager list",
+    "deactivatedHint": "Their account is deactivated: the department behaves as if it had no manager.",
+    "assignLabel": "Manager of {name}",
+    "save": "Save",
+    "displaceNotice": "If you choose another account, the current manager stops managing this department.",
+    "announce": {
+      "saved": "Manager of {name} updated.",
+      "failed": "The manager of {name} was not changed."
     }
   }
 }

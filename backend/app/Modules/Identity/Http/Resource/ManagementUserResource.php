@@ -19,7 +19,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 final class ManagementUserResource extends JsonResource
 {
-    public static $wrap = null;
+    public static $wrap;
 
     /**
      * @return array<string, mixed>
@@ -47,6 +47,13 @@ final class ManagementUserResource extends JsonResource
                 'kind' => $user->scope->isUnrestricted() ? 'all' : 'departments',
                 'department_ids' => $user->scope->departmentIds(),
             ],
+            // RF-ID-10: con una contrasena temporal, el panel lleva a la persona
+            // a cambiarla antes de enseñarle nada. Su sesion lleva ademas el
+            // unico ambito `password:change`, asi que esto no es la defensa: es
+            // la indicacion.
+            'password_change_required' => $user->passwordChangeRequired(),
+            // Solo con el segundo factor CONFIRMADO; un alta a medias es `false`.
+            'two_factor_enabled' => $user->secondFactorActive,
         ];
     }
 }

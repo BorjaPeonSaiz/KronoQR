@@ -46,6 +46,20 @@ enum TokenAbility: string
      */
     case TWO_FACTOR_PENDING = '2fa:pending';
 
+    /**
+     * Sesion de una cuenta con **contrasena temporal** (RF-ID-10).
+     *
+     * Mismo patron que `2fa:pending`, y por la misma razon: **fallar cerrado**.
+     * El token nace con este unico ambito, asi que toda ruta que exija uno
+     * —todas las de gestion— lo rechaza con el mismo middleware `ability` con
+     * el que rechaza a un quiosco, sin una comprobacion nueva que haya que
+     * acordarse de poner en cada grupo de rutas. Solo lo admiten
+     * `POST /auth/password`, `POST /auth/logout` y `GET /auth/me`; al cambiar
+     * la contrasena, el mismo token recibe los ambitos del rol en la misma
+     * transaccion. No cuelga de ningun rol.
+     */
+    case PASSWORD_CHANGE = 'password:change';
+
     // Gestion.
     case ATTENDANCE_READ = 'attendance:read';
     case ATTENDANCE_CORRECT = 'attendance:correct';
@@ -69,6 +83,19 @@ enum TokenAbility: string
     case LICENSE_ALL = 'license:*';
     case SUPPORT_ALL = 'support:*';
     case DIAGNOSTICS_ALL = 'diagnostics:*';
+
+    /**
+     * **Administrar las cuentas de gestion** (RF-ID-10): listarlas, crearlas,
+     * darlas de baja y restablecer su contrasena o su segundo factor. Solo
+     * `admin`.
+     *
+     * **Ambito propio y no `settings:*`**, aunque solo lo use `admin` (doc 02
+     * §7.3, nota 7): un acceso de soporte con alcance `configuration` lleva
+     * `settings:*`, y crear una cuenta `admin` es como un acceso temporal se
+     * vuelve permanente. Se quieren dos controles —este ambito y la policy que
+     * rechaza a todo actor de soporte— y no uno.
+     */
+    case ACCOUNTS_ALL = 'accounts:*';
 
     /**
      * Los tres ambitos —y solo los tres— que lleva el token de un quiosco
