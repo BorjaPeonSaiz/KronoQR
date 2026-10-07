@@ -57,7 +57,6 @@ final class QueryPlans
 
             $connection->statement('ANALYZE '.$table);
 
-            /** @var mixed $tuples */
             $tuples = $connection->table('pg_class')->where('relname', $table)->value('reltuples');
 
             if (! is_numeric($tuples) || (float) $tuples <= 0) {
@@ -126,9 +125,7 @@ final class QueryPlans
         $plan = isset($explained[0]) && \is_object($explained[0]) ? ($explained[0]->{'QUERY PLAN'} ?? null) : null;
         /** @var mixed $decoded */
         $decoded = json_decode(\is_string($plan) ? $plan : '', true);
-        /** @var mixed $first */
         $first = \is_array($decoded) ? ($decoded[0] ?? null) : null;
-        /** @var mixed $root */
         $root = \is_array($first) ? ($first['Plan'] ?? null) : null;
 
         return \is_array($root) ? $root : null;
@@ -168,13 +165,7 @@ final class QueryPlans
      */
     public static function scansSequentially(array $nodes, string $table): bool
     {
-        foreach ($nodes as $node) {
-            if (($node['Node Type'] ?? '') === 'Seq Scan' && ($node['Relation Name'] ?? '') === $table) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($nodes, static fn (array $node): bool => ($node['Node Type'] ?? '') === 'Seq Scan' && ($node['Relation Name'] ?? '') === $table);
     }
 
     /**
@@ -182,13 +173,7 @@ final class QueryPlans
      */
     public static function usesIndex(array $nodes, string $index): bool
     {
-        foreach ($nodes as $node) {
-            if (($node['Index Name'] ?? '') === $index) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($nodes, static fn (array $node): bool => ($node['Index Name'] ?? '') === $index);
     }
 
     /**

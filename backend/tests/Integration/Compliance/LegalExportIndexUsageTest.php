@@ -46,7 +46,7 @@ function historicoParaExportar(): void
         $employeeId = DB::table('employees')->where('uuid', $uuid)->value('id');
 
         for ($day = 0; $day < LEGAL_EXPORT_INDEX_DIAS; $day++) {
-            $date = (new DateTimeImmutable('2024-01-01', $utc))->modify('+'.$day.' days');
+            $date = new DateTimeImmutable('2024-01-01', $utc)->modify('+'.$day.' days');
 
             $rows[] = [
                 'uuid' => Str::uuid7()->toString(),
@@ -75,7 +75,7 @@ function historicoParaExportar(): void
 
 it('acota una semana de toda la plantilla por el indice de work_date', function (): void {
     historicoParaExportar();
-    $source = app(LegalExportSource::class);
+    $source = resolve(LegalExportSource::class);
 
     $records = 0;
     $declared = QueryPlans::capture(

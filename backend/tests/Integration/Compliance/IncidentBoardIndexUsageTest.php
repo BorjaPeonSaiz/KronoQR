@@ -54,7 +54,7 @@ function bandejaConVolumen(): void
         $employeeId = DB::table('employees')->where('uuid', $uuid)->value('id');
 
         for ($day = 0; $day < INCIDENT_BOARD_INDEX_DIAS; $day++) {
-            $date = (new DateTimeImmutable('2025-01-01', $utc))->modify('+'.$day.' days');
+            $date = new DateTimeImmutable('2025-01-01', $utc)->modify('+'.$day.' days');
             $detectedAt = $date->modify('+1 day')->setTime(3, 30, $i)->format('Y-m-d H:i:sP');
             $open = $day % 5 < 2;
 
@@ -88,7 +88,7 @@ function bandejaConVolumen(): void
 
 it('sirve la pagina de la bandeja por el indice, sin ordenar incidents', function (IncidentStatus $status): void {
     bandejaConVolumen();
-    $board = app(IncidentBoard::class);
+    $board = resolve(IncidentBoard::class);
 
     $page = null;
     $queries = QueryPlans::capture(

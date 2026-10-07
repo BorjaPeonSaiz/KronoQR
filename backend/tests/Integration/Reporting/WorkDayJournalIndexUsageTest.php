@@ -139,7 +139,7 @@ function workDayJournalIndexEmployees(int $site): array
  */
 function workDayJournalIndexDay(int $employeeId, int $site, int $day, array &$current, array &$scansByEntry, array &$corrected): void
 {
-    $workDate = (new DateTimeImmutable('2024-01-01', new DateTimeZone('UTC')))->modify('+'.$day.' days')->format('Y-m-d');
+    $workDate = new DateTimeImmutable('2024-01-01', new DateTimeZone('UTC'))->modify('+'.$day.' days')->format('Y-m-d');
     $at = static fn (string $time): string => $workDate.' '.$time.':00+00';
 
     if ($day % 7 === 3) {
@@ -187,7 +187,7 @@ function workDayJournalIndexScans(int $device, array $scansByEntry): void
     }
 
     for ($i = 0; $i < WORK_DAY_JOURNAL_INDEX_RECHAZOS; $i++) {
-        $occurredAt = (new DateTimeImmutable('2024-01-01 05:00:00', new DateTimeZone('UTC')))->modify('+'.$i.' minutes')->format('Y-m-d H:i:sP');
+        $occurredAt = new DateTimeImmutable('2024-01-01 05:00:00', new DateTimeZone('UTC'))->modify('+'.$i.' minutes')->format('Y-m-d H:i:sP');
         $scans[] = [
             ...workDayJournalIndexScan($device, null, null, 'rejected_unknown', $occurredAt),
             'worked_minutes' => null,
@@ -239,7 +239,7 @@ function workDayJournalIndexScan(int $deviceId, mixed $employeeId, ?int $shiftEn
         'employee_id' => $employeeId,
         'occurred_at' => $occurredAt,
         // Llega unos segundos despues: es la marca que el diario enseña aparte.
-        'recorded_at' => (new DateTimeImmutable($occurredAt))->modify('+3 seconds')->format('Y-m-d H:i:sP'),
+        'recorded_at' => new DateTimeImmutable($occurredAt)->modify('+3 seconds')->format('Y-m-d H:i:sP'),
         'origin' => 'qr_kiosk',
         'intent' => 'auto',
         'result' => $result,
@@ -266,7 +266,7 @@ function workDayJournalIndexIds(): array
 
 it('sirve el diario de un mes entero por indices, sin recorrer scan_events ni shift_entries', function (): void {
     $employeeUuid = diarioConVolumen();
-    $reader = app(WorkDayJournalReader::class);
+    $reader = resolve(WorkDayJournalReader::class);
 
     $journal = null;
     $queries = QueryPlans::capture(
