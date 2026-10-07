@@ -208,7 +208,7 @@ it('escribe en cada entrada cada cuanto se ejecuta esa prueba', function (): voi
 
     // Solo se marca lo que se aparta del caso normal: Pest y Playwright corren
     // en cada push y no llevan nada, que es lo que mantiene la matriz legible.
-    expect($output)->toContain('(k6: a mano y en cada etiqueta vX.0.0)');
+    expect($output)->toContain('(k6: a mano y en cada etiqueta vX.Y.0)');
     expect($output)->not->toContain('automática que la verifica en cada cambio');
 })->group('RQ-13');
 
