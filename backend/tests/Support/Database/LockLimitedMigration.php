@@ -50,4 +50,18 @@ final class LockLimitedMigration extends Migration
 
         return true;
     }
+
+    public function createIndex(string $index, string $definition): bool
+    {
+        $this->createIndexConcurrently($index, $definition);
+
+        return true;
+    }
+
+    public function dropIndex(string $index): bool
+    {
+        $this->dropIndexConcurrently($index);
+
+        return true;
+    }
 }

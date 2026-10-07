@@ -147,9 +147,13 @@ it('se niega a quitar las columnas si algun intento ya anota a su dueño', funct
         expect(fn (): array => Commands::run('migrate:rollback --database='.pinClaimMigrationsConnection().' --step='.$steps))
             ->toThrow(RuntimeException::class, 'claimed_employee_id');
 
-        // El dato sigue ahi: nada se ha borrado.
+        // El dato sigue ahi: nada se ha borrado. Y el `CHECK` tambien: `down()`
+        // lo quita ANTES de comprobar —para tener ya el bloqueo de la tabla— y
+        // la excepcion deshace ese `DROP CONSTRAINT` con la transaccion.
         expect(pinClaimMigrationsHasColumn('claimed_employee_id'))->toBeTrue()
-            ->and(DB::table('scan_events')->whereNotNull('claimed_employee_id')->count())->toBe(1);
+            ->and(DB::table('scan_events')->whereNotNull('claimed_employee_id')->count())->toBe(1)
+            ->and(DB::connection(pinClaimMigrationsConnection())->table('pg_constraint')
+                ->where('conname', 'scan_events_chk_pin_claim')->exists())->toBeTrue();
     } finally {
         // Las dos posteriores si se deshicieron; se reaplican para dejar el
         // esquema como lo encontro la suite.

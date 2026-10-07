@@ -98,3 +98,40 @@ it('rellena con seis los PIN existentes y sabe volver atras', function (): void 
         // de transaccion.
         ->and($validadas)->toBe(2);
 })->group('RF-ID-09', 'RNF-D-04');
+
+it('se detiene sin tocar nada si ya hay un PIN de ocho cifras', function (): void {
+    // ADR-050: tras pasar a ocho, la version anterior contaria ese PIN como de
+    // seis. Revertir borraria el unico registro de cuales son de ocho, asi que
+    // `down()` lanza dentro de su transaccion y los `DROP CONSTRAINT` se
+    // deshacen con ella (regla dura 5).
+    $name = pinLengthRoundTripConnection();
+    $uuid = WorkforceFixtures::employee(WorkforceFixtures::site('Hotel con PIN largo'));
+
+    DB::table('employees')->where('uuid', $uuid)->update([
+        'pin_hash' => '$2y$04$abcdefghijklmnopqrstuv',
+        'pin_issued_at' => '2026-10-06T09:00:00Z',
+        'pin_length' => 8,
+    ]);
+
+    try {
+        $steps = pinLengthRoundTripSteps();
+
+        expect(static fn (): array => Commands::run(
+            'migrate:rollback --database='.$name.' --step='.$steps
+            .' --path=database/migrations/'.PIN_LENGTH_ROUND_TRIP_MIGRATION.'.php'
+        ))->toThrow(RuntimeException::class, 'Nada se ha tocado');
+
+        $validadas = DB::connection($name)->table('pg_constraint')
+            ->whereIn('conname', ['employees_chk_pin_length_admissible', 'employees_chk_pin_length_with_hash'])
+            ->where('convalidated', true)
+            ->count();
+
+        expect(pinLengthRoundTripHasColumn())->toBeTrue()
+            ->and(DB::table('employees')->where('uuid', $uuid)->value('pin_length'))->toBe(8)
+            // Los `DROP CONSTRAINT` previos a la comprobacion se deshicieron.
+            ->and($validadas)->toBe(2)
+            ->and(DB::connection($name)->table('migrations')->where('migration', PIN_LENGTH_ROUND_TRIP_MIGRATION)->exists())->toBeTrue();
+    } finally {
+        Commands::run('migrate --database='.$name);
+    }
+})->group('RF-ID-09', 'RNF-D-04');

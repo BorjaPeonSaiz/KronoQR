@@ -41,10 +41,17 @@ use Illuminate\Support\Facades\Schema;
  * una migracion no transaccional no se puede ensayar dentro de la transaccion
  * de una prueba.
  *
- * ## `down()`
+ * ## `down()`, y que puede fallar a proposito
  *
- * Retira restricciones y columna. No pierde nada que no se pueda reconstruir:
- * hasta esta version todos los PIN tenian seis cifras.
+ * Retira restricciones y columna, **solo si todos los PIN emitidos tienen seis
+ * cifras**: es lo que la version anterior da por hecho, asi que en ese caso la
+ * columna no guarda nada que no se pueda reconstruir. En cuanto existe un PIN de
+ * ocho (ADR-050), quitarla borraria el unico registro de cuales lo son y la
+ * version anterior los contaria como de seis; `down()` se **detiene** con una
+ * excepcion sin tocar nada (regla dura 5, mismo criterio que
+ * `2026_09_30_120000_add_pin_claim_to_scan_events`). La comprobacion va despues
+ * de la primera sentencia que bloquea `employees`, para que no entre un PIN de
+ * ocho entre ella y el `DROP COLUMN`.
  */
 return new class extends Migration
 {
@@ -95,13 +102,28 @@ return new class extends Migration
         DB::transaction(function (): void {
             $this->limitLockWait();
 
+            // El primer `DROP CONSTRAINT` toma `ACCESS EXCLUSIVE` sobre
+            // `employees` hasta el `COMMIT`: desde aqui no se emite ningun PIN.
             foreach (array_reverse(array_keys(self::CHECKS)) as $name) {
                 DB::statement('ALTER TABLE employees DROP CONSTRAINT IF EXISTS '.$name);
             }
 
-            if (Schema::hasColumn('employees', 'pin_length')) {
-                DB::statement('ALTER TABLE employees DROP COLUMN pin_length');
+            if (! Schema::hasColumn('employees', 'pin_length')) {
+                return;
             }
+
+            // Se comprueba DESPUES del bloqueo: si hay algun PIN que no sea de
+            // seis cifras, la excepcion deshace los `DROP CONSTRAINT` y nada se
+            // ha tocado (ver el docblock, regla dura 5).
+            if (DB::table('employees')->whereNotNull('pin_length')->where('pin_length', '<>', 6)->exists()) {
+                throw new RuntimeException(
+                    'employees tiene PIN emitidos con una longitud distinta de seis cifras (ADR-050): la version '
+                    .'anterior los trataria como de seis y revertir borraria cuales son. Nada se ha tocado; '
+                    .'restablece esos PIN con seis cifras antes de revertir.'
+                );
+            }
+
+            DB::statement('ALTER TABLE employees DROP COLUMN pin_length');
         });
     }
 };

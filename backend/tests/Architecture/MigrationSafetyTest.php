@@ -346,3 +346,59 @@ it('señala el VALIDATE dentro de la transaccion cuando alguien lo escribe', fun
         [],
     ],
 ])->group('RNF-D-04');
+
+/**
+ * Lo que una migracion hace mal con un indice concurrente, leido sin
+ * comentarios: un docblock que cuente el patron no es una sentencia.
+ *
+ * `CREATE INDEX CONCURRENTLY IF NOT EXISTS` a mano da por bueno, en el
+ * reintento, el indice `INVALID` que dejo una construccion interrumpida: la
+ * migracion queda anotada y el indice se mantiene en cada escritura sin servir
+ * a ninguna lectura. `LimitsMigrationLocks::createIndexConcurrently()` lo borra
+ * antes de construir y comprueba `indisvalid` despues (revision del bloque 13
+ * de la 2.2.0). **Sin lista de excepciones**: las cuatro migraciones con
+ * `CONCURRENTLY` usan el ayudante.
+ *
+ * @return list<string>
+ */
+function migrationSafetyConcurrentIndexViolations(string $source): array
+{
+    $code = '';
+
+    foreach (token_get_all($source) as $token) {
+        if (\is_array($token) && \in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
+            continue;
+        }
+
+        $code .= \is_array($token) ? $token[1] : $token;
+    }
+
+    return preg_match('/CREATE\s+(UNIQUE\s+)?INDEX\s+CONCURRENTLY/i', $code) === 1
+        ? ['CREATE INDEX CONCURRENTLY literal en vez de createIndexConcurrently()']
+        : [];
+}
+
+it('construye cada indice concurrente con el ayudante que descarta los INVALID', function (string $file): void {
+    expect(migrationSafetyConcurrentIndexViolations((string) file_get_contents($file)))->toBe([], basename($file)
+        .': el indice va con LimitsMigrationLocks::createIndexConcurrently(), que borra un INVALID previo y '
+        .'comprueba indisvalid al terminar.');
+})->with(migrationFiles())->group('RNF-D-04');
+
+it('señala el CREATE INDEX CONCURRENTLY escrito a mano', function (string $source, array $expected): void {
+    // La prueba del detector, con el control negativo al final.
+    expect(migrationSafetyConcurrentIndexViolations($source))->toBe($expected);
+})->with([
+    'indice literal' => [
+        "<?php DB::statement('CREATE INDEX CONCURRENTLY IF NOT EXISTS x_index ON x (y)');",
+        ['CREATE INDEX CONCURRENTLY literal en vez de createIndexConcurrently()'],
+    ],
+    'indice unico literal' => [
+        "<?php DB::statement('create unique index concurrently x_unique ON x (y)');",
+        ['CREATE INDEX CONCURRENTLY literal en vez de createIndexConcurrently()'],
+    ],
+    'el ayudante, con el patron explicado en un comentario' => [
+        "<?php /** CREATE INDEX CONCURRENTLY IF NOT EXISTS */\n"
+        ."\$this->createIndexConcurrently('x_index', 'ON x (y)');",
+        [],
+    ],
+])->group('RNF-D-04');

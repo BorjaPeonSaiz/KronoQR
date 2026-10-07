@@ -53,9 +53,9 @@ use Illuminate\Support\Facades\DB;
  * repetir el `VALIDATE`.
  * `ON DELETE RESTRICT` porque de `employees` no se borra nada (regla dura 5).
  *
- * **Permisos**: los de `fichaje_app` sobre `scan_events` son por tabla
- * (`INSERT`, `SELECT`), asi que las columnas nuevas quedan cubiertas sin
- * `GRANT` nuevo.
+ * **Permisos**: los privilegios de `fichaje_app` sobre `scan_events` se
+ * conceden por tabla y no por columna, asi que las columnas nuevas quedan
+ * cubiertas sin `GRANT` nuevo.
  *
  * ## `down()` verificado, y que puede fallar a proposito
  *
@@ -63,7 +63,10 @@ use Illuminate\Support\Facades\DB;
  * una excepcion: quitar la columna borraria a quien correspondia cada intento,
  * que es el dato que sostiene incidencias ya abiertas (regla dura 5, mismo
  * criterio que `2026_09_18_100200_allow_out_of_order_scan_incident_type`). Sin
- * filas, quita el `CHECK`, la FK y las dos columnas. Se prueba en
+ * filas, quita el `CHECK`, la FK y las dos columnas. La comprobacion va
+ * **despues** de la primera sentencia que bloquea la tabla, no antes: un
+ * rechazo por PIN con dueño que entrara entre una y otra se perderia con el
+ * `DROP COLUMN`. Se prueba en
  * `tests/Integration/Schema/PinClaimMigrationsTest.php` ademas de
  * `MigrationsRoundTripTest`.
  */
@@ -120,7 +123,14 @@ return new class extends Migration
         DB::transaction(function (): void {
             $this->limitLockWait();
 
-            // Se detiene en vez de borrar: ver el docblock (regla dura 5).
+            // La primera sentencia toma `ACCESS EXCLUSIVE` sobre `scan_events` y
+            // lo mantiene hasta el `COMMIT`: desde aqui no entra ninguna fila.
+            DB::statement('ALTER TABLE scan_events DROP CONSTRAINT IF EXISTS scan_events_chk_pin_claim');
+
+            // Se comprueba DESPUES del bloqueo, dentro de la transaccion: antes,
+            // un rechazo por PIN con dueño confirmado entre la comprobacion y el
+            // `DROP COLUMN` se perderia. Si hay alguno, la excepcion deshace el
+            // `DROP CONSTRAINT`: nada se ha tocado (regla dura 5).
             if (DB::table('scan_events')->whereNotNull('claimed_employee_id')->exists()) {
                 throw new RuntimeException(
                     'scan_events tiene fichajes por PIN con claimed_employee_id (RN-19): revertir borraria a quien '
@@ -128,7 +138,6 @@ return new class extends Migration
                 );
             }
 
-            DB::statement('ALTER TABLE scan_events DROP CONSTRAINT IF EXISTS scan_events_chk_pin_claim');
             DB::statement('ALTER TABLE scan_events DROP CONSTRAINT IF EXISTS scan_events_claimed_employee_id_foreign');
             DB::statement('ALTER TABLE scan_events DROP COLUMN IF EXISTS pin_lockout');
             DB::statement('ALTER TABLE scan_events DROP COLUMN IF EXISTS claimed_employee_id');

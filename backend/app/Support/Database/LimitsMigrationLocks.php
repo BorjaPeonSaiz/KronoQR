@@ -9,6 +9,7 @@ use Illuminate\Database\Connection;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use LogicException;
+use RuntimeException;
 
 /**
  * Los topes de espera y de duracion que toda migracion de este producto
@@ -27,7 +28,7 @@ use LogicException;
  * reintenta en una ventana mas tranquila; una que bloquea el fichaje media hora
  * no se puede deshacer.
  *
- * ## Tres ayudantes, uno por forma de migracion
+ * ## Los ayudantes, uno por forma de migracion
  *
  * - {@see limitLockWait()} — la migracion **transaccional** de siempre. Los dos
  *   topes van con `SET LOCAL` y mueren con la transaccion. Hasta la 2.2.0 eran
@@ -51,6 +52,15 @@ use LogicException;
  *   en dos pasos no sirve de nada: la tabla queda bloqueada igual que con un
  *   `ADD CONSTRAINT` de golpe. Fuera, el `VALIDATE` toma solo `SHARE UPDATE
  *   EXCLUSIVE`, que no bloquea lecturas ni escrituras.
+ * - {@see createIndexConcurrently()} y {@see dropIndexConcurrently()} — el
+ *   `CREATE INDEX CONCURRENTLY` y su vuelta atras, sobre
+ *   {@see withLockWaitOnly()}. Una construccion concurrente interrumpida deja
+ *   el indice `INVALID`, y `IF NOT EXISTS` lo da por bueno en el reintento: la
+ *   migracion quedaria anotada con un indice que se mantiene en cada escritura
+ *   y no sirve a ninguna lectura (revision del bloque 13 de la 2.2.0). El
+ *   ayudante borra el `INVALID` antes de construir y comprueba `indisvalid`
+ *   despues. Una migracion no escribe `CREATE INDEX CONCURRENTLY` a mano: lo
+ *   impide `tests/Architecture/MigrationSafetyTest.php`.
  *
  * ## La forma de una migracion con `VALIDATE`
  *
@@ -178,6 +188,83 @@ trait LimitsMigrationLocks
     }
 
     /**
+     * `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, que nunca deja anotada la
+     * migracion con un indice `INVALID`.
+     *
+     * 1. Si ya existe un indice con ese nombre y `NOT indisvalid` —una
+     *    construccion anterior interrumpida: el `lock_timeout` de la espera
+     *    final a las transacciones abiertas, una cancelacion, una caida—, se
+     *    borra con `DROP INDEX CONCURRENTLY`. Sin esto, `IF NOT EXISTS` lo
+     *    saltaria y el reintento daria por terminado un indice que el
+     *    planificador nunca usa y que cada escritura sigue manteniendo.
+     * 2. Se construye con `IF NOT EXISTS`: repetir la migracion tras un fallo
+     *    en el segundo indice no choca con el primero, que ya es valido.
+     * 3. Se comprueba `indisvalid` y, si no lo es, se lanza: la migracion no
+     *    queda anotada y el siguiente `migrate` vuelve a entrar por el paso 1.
+     *
+     * Todo con {@see withLockWaitOnly()}: `lock_timeout` y sin tope de duracion.
+     *
+     * @param  string  $index  identificador simple; constante de la migracion
+     * @param  string  $definition  lo que va despues del nombre —`ON tabla (...)
+     *                              [WHERE ...]`—; constante de la migracion,
+     *                              nunca entrada externa
+     *
+     * @throws LogicException si hay una transaccion abierta o el identificador
+     *                        no es simple
+     * @throws RuntimeException si el indice no queda valido
+     */
+    protected function createIndexConcurrently(string $index, string $definition): void
+    {
+        $connection = $this->lockLimitedConnection();
+
+        $this->assertOutsideTransaction($connection, 'createIndexConcurrently()');
+        $this->assertSimpleIdentifier($index, 'createIndexConcurrently()');
+
+        if (preg_match('/\AON\s/', $definition) !== 1) {
+            throw new LogicException('La definicion de '.$index.' tiene que empezar por «ON tabla».');
+        }
+
+        $this->withLockWaitOnly(function () use ($connection, $index, $definition): void {
+            if ($this->indexValidity($connection, $index) === false) {
+                $connection->statement('DROP INDEX CONCURRENTLY IF EXISTS '.$index);
+            }
+
+            $connection->statement('CREATE INDEX CONCURRENTLY IF NOT EXISTS '.$index.' '.$definition);
+
+            if ($this->indexValidity($connection, $index) !== true) {
+                throw new RuntimeException(
+                    'El indice '.$index.' no ha quedado valido tras CREATE INDEX CONCURRENTLY. La migracion no se ha '
+                    .'anotado: vuelve a ejecutar `php artisan migrate`, que borra el indice invalido y lo reconstruye, '
+                    .'preferiblemente fuera de un cambio de turno.'
+                );
+            }
+        });
+    }
+
+    /**
+     * `DROP INDEX CONCURRENTLY IF EXISTS`, para el `down()` de una migracion de
+     * {@see createIndexConcurrently()}.
+     *
+     * Tambien concurrente: un `DROP INDEX` normal toma `ACCESS EXCLUSIVE` sobre
+     * la tabla, y una vuelta atras no puede parar los fichajes mas de lo que
+     * los paro la ida.
+     *
+     * @throws LogicException si hay una transaccion abierta o el identificador
+     *                        no es simple
+     */
+    protected function dropIndexConcurrently(string $index): void
+    {
+        $connection = $this->lockLimitedConnection();
+
+        $this->assertOutsideTransaction($connection, 'dropIndexConcurrently()');
+        $this->assertSimpleIdentifier($index, 'dropIndexConcurrently()');
+
+        $this->withLockWaitOnly(
+            static fn (): bool => $connection->statement('DROP INDEX CONCURRENTLY IF EXISTS '.$index)
+        );
+    }
+
+    /**
      * `ALTER TABLE ... VALIDATE CONSTRAINT`, fuera de transaccion y solo con
      * `lock_timeout` (ver el docblock del trait).
      *
@@ -196,11 +283,7 @@ trait LimitsMigrationLocks
         $this->assertOutsideTransaction($connection, 'validateConstraint()');
 
         foreach ([$table, $constraint] as $identifier) {
-            // PostgreSQL no admite parametros enlazados en un identificador; estos
-            // son constantes de la migracion, y se comprueba igual.
-            if (preg_match('/\A[a-z_][a-z0-9_]*\z/', $identifier) !== 1) {
-                throw new LogicException('Identificador no admitido en validateConstraint(): '.$identifier);
-            }
+            $this->assertSimpleIdentifier($identifier, 'validateConstraint()');
         }
 
         $this->withLockWaitOnly(
@@ -221,6 +304,36 @@ trait LimitsMigrationLocks
                 .'$withinTransaction = false y llamarlo fuera de DB::transaction().'
             );
         }
+    }
+
+    /**
+     * PostgreSQL no admite parametros enlazados en un identificador; los de una
+     * migracion son constantes suyas, y se comprueba igual.
+     */
+    private function assertSimpleIdentifier(string $identifier, string $helper): void
+    {
+        if (preg_match('/\A[a-z_][a-z0-9_]*\z/', $identifier) !== 1) {
+            throw new LogicException('Identificador no admitido en '.$helper.': '.$identifier);
+        }
+    }
+
+    /**
+     * `indisvalid` del indice `$index` del esquema en curso, o `null` si no
+     * existe.
+     */
+    private function indexValidity(Connection $connection, string $index): ?bool
+    {
+        /** @var list<object{valid: bool}> $rows */
+        $rows = $connection->select(<<<'SQL'
+            SELECT i.indisvalid AS valid
+              FROM pg_index i
+              JOIN pg_class c ON c.oid = i.indexrelid
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE c.relname = ?
+               AND n.nspname = current_schema()
+            SQL, [$index]);
+
+        return isset($rows[0]) ? $rows[0]->valid : null;
     }
 
     private function currentSetting(Connection $connection, string $setting): string

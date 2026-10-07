@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Support\Database\LimitsMigrationLocks;
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Los dos indices que sirven el diario de jornadas por indices de punta a punta
@@ -52,13 +51,15 @@ use Illuminate\Support\Facades\DB;
  * tablas tienen datos en toda instalacion desplegada y un `CREATE INDEX` normal
  * bloquearia los fichajes (regla dura 19, RNF-D-04). Asi que la migracion deja
  * de ser atomica (`$withinTransaction = false`), y si una construccion falla a
- * mitad su indice queda `INVALID` y hay que borrarlo a mano antes de reintentar
- * (`SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid`). `IF NOT
- * EXISTS` hace que repetir la migracion tras un fallo en el segundo indice no
- * choque con el primero. Solo `lock_timeout` y sin tope de duracion
- * (`LimitsMigrationLocks::withLockWaitOnly()`).
+ * mitad su indice queda `INVALID`. No hay que borrarlo a mano:
+ * `LimitsMigrationLocks::createIndexConcurrently()` borra el `INVALID` antes de
+ * construir, y lanza —sin anotar la migracion— si el indice no queda valido;
+ * basta con repetir `migrate`. Su `IF NOT EXISTS` hace que repetirla tras un
+ * fallo en el segundo indice no choque con el primero, ya valido. Solo
+ * `lock_timeout` y sin tope de duracion (`withLockWaitOnly()`, por debajo).
  *
- * `down()`: `DROP INDEX CONCURRENTLY IF EXISTS` de los dos, verificado por
+ * `down()`: `DROP INDEX CONCURRENTLY IF EXISTS` de los dos
+ * (`dropIndexConcurrently()`), verificado por
  * `MigrationsRoundTripTest`; el uso de los indices, por
  * `tests/Integration/Reporting/WorkDayJournalIndexUsageTest.php`.
  */
@@ -87,19 +88,15 @@ return new class extends Migration
 
     public function up(): void
     {
-        $this->withLockWaitOnly(static function (): void {
-            foreach (self::INDEXES as $name => $definition) {
-                DB::statement('CREATE INDEX CONCURRENTLY IF NOT EXISTS '.$name.' '.$definition);
-            }
-        });
+        foreach (self::INDEXES as $name => $definition) {
+            $this->createIndexConcurrently($name, $definition);
+        }
     }
 
     public function down(): void
     {
-        $this->withLockWaitOnly(static function (): void {
-            foreach (array_reverse(array_keys(self::INDEXES)) as $name) {
-                DB::statement('DROP INDEX CONCURRENTLY IF EXISTS '.$name);
-            }
-        });
+        foreach (array_reverse(array_keys(self::INDEXES)) as $name) {
+            $this->dropIndexConcurrently($name);
+        }
     }
 };
