@@ -6,6 +6,7 @@
 // backend, que es donde se escribe (regla dura 18); lo que SI es de este
 // nivel es que la descarga se dispara con el token de la sesion y que el
 // nombre del fichero no lleva el nombre de nadie (regla dura 21).
+import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import {
   PORTAL_SESSION_TOKEN,
@@ -133,3 +134,45 @@ test(
     expect(file.suggestedFilename()).toBe(`mi-registro-horario-${WORKDAYS_FROM}_${WORKDAYS_TO}.csv`)
   },
 )
+
+// Reflujo (WCAG 2.2 AA, 1.4.10; R7-PO-02): a 320 px CSS (zoom al 200 % sobre
+// 640 px) la pantalla no se desplaza en horizontal y los controles siguen
+// siendo operables.
+for (const width of [320, 195]) {
+  test(
+    `a ${width} px CSS «Descargar mi historial» no desborda y se puede operar`,
+    { tag: ['@RL-05', '@RF-ID-05'] },
+    async ({ page }) => {
+      await page.setViewportSize({ width, height: 568 })
+      await stubPortalApi(page, { locale: 'es' })
+      await logInToPortal(page)
+      await page.goto('/export')
+
+      const submit = page.getByTestId('export-submit')
+      await expect(submit).toBeVisible()
+
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      )
+      expect(overflow, 'la pagina no se desplaza en horizontal').toBeLessThanOrEqual(0)
+
+      // Cada control cabe dentro de la ventana.
+      for (const control of await page.getByTestId('export-form').locator('input, button').all()) {
+        const box = await control.boundingBox()
+        expect(box).not.toBeNull()
+        expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width + 1)
+      }
+
+      const results = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+        .analyze()
+      expect(
+        results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious'),
+      ).toEqual([])
+
+      const download = page.waitForEvent('download')
+      await submit.click()
+      await download
+    },
+  )
+}
