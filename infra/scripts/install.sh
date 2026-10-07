@@ -1296,6 +1296,14 @@ pull_images_if_needed() {
       rollback_and_die "$(kq_format f_images \
         "${PRODUCT_VERSION}" "${registry}" "${registry}" "${PRODUCT_VERSION}")"
     fi
+
+    # Una referencia fijada por digest (registro/php:<version>@sha256:...) no
+    # deja la etiqueta local: `restore-drill.sh --mode pitr` nombra la imagen
+    # de postgres por registro/postgres:<version>. Se etiqueta la imagen YA
+    # verificada por su digest; no se descarga nada por etiqueta.
+    if [ "${image}" != "${image%%@*}" ]; then
+      docker tag "${image}" "${image%%@*}" >/dev/null 2>&1 || true
+    fi
   done
 }
 

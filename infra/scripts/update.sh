@@ -1565,6 +1565,11 @@ check_images() {
         "$(kq_format u_f_images "${TARGET_VERSION}" "${registry:-?}" "${TARGET_VERSION}")"
       return 0
     fi
+    # Referencia fijada por digest: la descarga no deja la etiqueta local y
+    # `restore-drill.sh --mode pitr` nombra la imagen por etiqueta (A6-2).
+    if [ "${image}" != "${image%%@*}" ]; then
+      docker tag "${image}" "${image%%@*}" >/dev/null 2>&1 || true
+    fi
   done
   check_pass "$(kq_format u_c_images "${TARGET_VERSION}")"
 }

@@ -27,6 +27,14 @@
 #   1  falta un fichero obligatorio del paquete, o el destino no esta vacio
 #   2  error de uso
 #
+# IMAGENES FIJADAS POR DIGEST (A6-2). Si la variable KQ_IMAGES_LOCK apunta a un
+# fichero con tres lineas `php|nginx|postgres sha256:<64 hex>` (lo escribe
+# release.yml tras empujar las imagenes), el docker-compose.yml del paquete
+# queda con `image: registro/<imagen>:<version>@sha256:...` y el fichero se
+# copia como `images.lock`. Sin la variable (desarrollo y CI) el compose queda
+# por etiqueta. Un fichero mal formado, o con una imagen sin digest, es un error:
+# un paquete a medias fijado no se entrega.
+#
 # LO QUE NUNCA ENTRA, y se comprueba al final: `tools/` (el emisor de licencias
 # firma con la clave privada del fabricante y no tiene nada que hacer en el
 # servidor de un hotel; §7.7, RS-08), ningun `.env` con valores, y ningun
@@ -113,6 +121,26 @@ cp "${REPO_ROOT}/CHANGELOG.md" "${DEST}/docs/CHANGELOG.md"
 # (doc 08 §1.4). Mientras no exista en el repositorio, no se inventa.
 if [ -f "${REPO_ROOT}/LICENCIA.txt" ]; then
   cp "${REPO_ROOT}/LICENCIA.txt" "${DEST}/LICENCIA.txt"
+fi
+
+# Fijar las imagenes por digest, si la publicacion nos da los digests.
+if [ -n "${KQ_IMAGES_LOCK:-}" ]; then
+  [ -f "${KQ_IMAGES_LOCK}" ] || die 1 "KQ_IMAGES_LOCK apunta a '${KQ_IMAGES_LOCK}', que no existe. Lo escribe la etapa de imagenes de release.yml; sin el no se fijan los digests."
+  for image in php nginx postgres; do
+    digest="$(awk -v image="${image}" '$1 == image { print $2 }' "${KQ_IMAGES_LOCK}")"
+    if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+      die 1 "'${KQ_IMAGES_LOCK}' no trae un digest valido para '${image}' (esperado: '${image} sha256:<64 hex>', leido: '${digest}'). No se entrega un paquete con imagenes sin fijar."
+    fi
+    var="IMAGE_DIGEST_$(printf '%s' "${image}" | tr '[:lower:]' '[:upper:]')"
+    placeholder="\${${var}:-}"
+    [ "$(grep -cF "${placeholder}" "${DEST}/docker-compose.yml")" -eq 1 ] ||
+      die 1 "compose.prod.yaml debe llevar '${placeholder}' exactamente una vez (en la linea image: de ${image}) y no es asi."
+    # sed con delimitador | y el marcador escapado: el digest solo lleva [0-9a-f:].
+    sed -i "s|\\\$[{]${var}:-[}]|\${${var}-@${digest}}|" "${DEST}/docker-compose.yml"
+  done
+  [ "$(grep -c '@sha256:' "${DEST}/docker-compose.yml")" -eq 3 ] ||
+    die 1 "tras fijar los digests el docker-compose.yml no tiene exactamente tres referencias @sha256: (una por imagen)."
+  cp "${KQ_IMAGES_LOCK}" "${DEST}/images.lock"
 fi
 
 # Lo que no puede estar, comprobado y no supuesto.

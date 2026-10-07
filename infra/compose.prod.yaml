@@ -36,6 +36,18 @@
 # Quien la fija es install.sh, desde el fichero VERSION del paquete de entrega.
 # Si falta, Compose se para con el mensaje de abajo antes de crear nada.
 #
+# IMAGENES FIJADAS POR DIGEST (A6-2). La etiqueta sola no basta: aunque
+# release.yml ya no deja reescribir una version publicada, el paquete de entrega
+# fija ademas cada imagen por su DIGEST. `package.sh` (con KQ_IMAGES_LOCK, solo
+# en la publicacion) da su valor por defecto a las variables IMAGE_DIGEST_PHP,
+# IMAGE_DIGEST_NGINX e IMAGE_DIGEST_POSTGRES de las tres lineas `image:`: el
+# docker-compose.yml entregado resuelve a `registro/php:<version>@<digest>`,
+# y dos clientes con la misma version corren exactamente los mismos bytes.
+# En el repositorio (desarrollo y CI) las variables van vacias y vale la etiqueta.
+# Un IT sin salida a internet que cargue las imagenes con `docker load` sin su
+# digest puede declarar `IMAGE_DIGEST_PHP=` (vacia) en el .env para volver a la
+# etiqueta (docs/cliente/instalacion.md §7).
+#
 #------------------------------------------------------------------------------
 # PERFIL `observability` (prometheus, node-exporter, alertmanager, grafana,
 # loki, tempo, blackbox-exporter)
@@ -61,7 +73,7 @@
 name: kronoqr
 
 x-app-image: &app-image
-  image: &php-image ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
+  image: &php-image ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/php:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}${IMAGE_DIGEST_PHP:-}
   volumes:
     # DESTINO DE LAS COPIAS (BACKUP_PATH), en el disco del cliente y montado en la
     # MISMA ruta dentro del contenedor. Asi `php artisan backup:run` escribe donde
@@ -634,7 +646,7 @@ services:
       start_period: 30s
 
   nginx:
-    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/nginx:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
+    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/nginx:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}${IMAGE_DIGEST_NGINX:-}
     # Solo lo que el borde usa (plantilla kronoqr.conf.template y entrypoint.d).
     # Ni una credencial: PIN-10, mismo criterio que el resto de AUD-1.
     environment:
@@ -688,7 +700,7 @@ services:
         max-file: "5"
 
   postgres:
-    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/postgres:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}
+    image: ${IMAGE_REGISTRY:-ghcr.io/kronoqr}/postgres:${IMAGE_TAG:?falta IMAGE_TAG. En produccion no hay etiqueta por defecto y `latest` esta prohibido (doc 02 §11.6.1). install.sh la fija desde el fichero VERSION del paquete; si ejecutas Compose a mano, pon IMAGE_TAG=<version> en el .env}${IMAGE_DIGEST_POSTGRES:-}
     environment:
       POSTGRES_DB: ${DB_DATABASE:-fichaje}
       # El rol de ARRANQUE es el de MIGRACION, no el de la aplicacion (tarea
