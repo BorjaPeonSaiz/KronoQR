@@ -13,56 +13,56 @@ el método en la sección «Método» de ese plan y en «Método de trabajo acor
 CI manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge
 commit.** Lo integra quien ejecuta el bloque si la CI está en verde.
 
-**Integrados en `main`:** bloques 0 a 12, 12b, 12c y 15 a 21. El último, **bloque 21 «Panel: permisos y pantallas que faltan»**, es
-la PR #120 (`main` `d83828dc`, 07-10-2026). `GET /departments` y `/{id}` legibles por los cuatro roles de gestión: grupo de rutas con
-`employees:read` **o** `attendance:read` (`CheckForAnyAbility`), `DepartmentPolicy::canRead()` cierra los tres alcances de soporte,
-contrato con los dos ámbitos, pruebas de los cuatro roles y del soporte (`DepartmentReadAccessTest`). Pantalla «Departamentos» del 12c
-ampliada con **crear, renombrar con motivo y el nombre del centro** (`updateSite`), en `/departments` para `employees:read` o
-`attendance:read`. Presencia en vivo: enlace al detalle de jornada en cada fila **solo para admin, rrhh y responsable** (el auditor no
-lee jornadas ni la presencia: `WorkDayJournalPolicy::readers()` y `LivePresencePolicy`, tarea 1.17; decisión pendiente abajo), avisos no
-bloqueantes de sondeo, filtro y reconexión del canal (`refresh-notice` con `data-kind`), reintento con backoff acotado en tiempo real,
-«última actualización» que refleja lo recibido y «Volver a la presencia». Perfil de cumplimiento y ajustes operativos con «antes →
-después» (`ChangePreview`) y confirmación. Unitarias de `CorrectionDialog` y `EmployeeWorkDaysView`; portal: «Descargar mi historial»
-sin desbordar al 200 %. Doc 07 A-17/A-27, doc 02 §7.3 nota 8, doc 01 Anexo B, `operacion.md` §12.4. Los anteriores: 12c «Cuentas de
-gestión» (PR #118, `e4477672`, ADR-051: `/api/v1/management-accounts`, contraseñas temporales con `password:change`, `accounts:*` solo
-`admin`, `manager_user_uuid` en `PATCH /departments/{id}`; **tras actualizar a la 2.2.0 el admin tiene que volver a entrar**), 12b «PIN de
-la importación masiva» (PR #116, `06d6440d`) y 12 «Portal abierto a internet» (PR #114, `76183531`, ADR-050).
+**Integrados en `main`:** bloques 0 a 12, 12b, 12c y 15 a 22. El último, **bloque 22 «Operación y resiliencia»**, es la PR #122
+(`main` `77cfe20b`, 07-10-2026). **Con Redis o PostgreSQL caídos el fichaje responde en un tiempo acotado:** cortacircuitos del cliente
+Redis (`CircuitBreakingPhpRedisConnector`: la primera conexión fallida abre el circuito, estado en memoria y en
+`storage/framework/redis-circuit-open`, `REDIS_CIRCUIT_BREAKER_SECONDS` 10 s acotado a 60; abierto, todo intento lanza
+`RedisCircuitOpen`, que hereda de `RedisException`, y la caché `resilient`, la cola `failover-after-commit`, `ThrottleScanFailOpen` y
+las métricas hacen lo de siempre sin esperar) y de PostgreSQL (`CircuitBreakingPostgresConnector` como `db.connector.pgsql`, un solo
+circuito para `pgsql`, `error_events`, migrador y mantenimiento; «no hay servidor» → `DatabaseUnavailable` con SQLSTATE 08006, fuera de
+los reintentos del framework, traducida en `bootstrap/app.php` a **503 problem+json con `Retry-After`** en cualquier ruta, sin
+informar; el quiosco conserva y reenvía). `/ready` comprueba DNS y TCP con tope de 2 s y comparte los dos circuitos. Medido: PIN con
+Redis parado de 8-12 s a menos de 1,1 s; con PostgreSQL parado de 500 en 31 s a 503 en 0,5 s; en el runner Linux la primera petición
+paga 5 s de DNS y las siguientes responden en 0,02 s (paso K del job ⑧, que para `redis` sobre la instalación del paquete y mide
+fichajes autenticados). `/metrics` publica `kronoqr_metrics_store_up` y alertas `AlmacenDeMetricasCaido`/`AlmacenDeMetricasAusente`
+(`component: metrics`) con inhibición acotada de las de quiosco y las dos del fichaje; `AlertmanagerConfigTest` vigila toda inhibición;
+doc 07 **A-29** (sin Redis, las alertas que leen sus series quedan ciegas: también auth, firma QR, gestión de cuentas y errores
+críticos). `product:doctor` dice `horizon` (`DoctorRemedyServicesTest` cruza los remedios con los servicios de `compose.prod.yaml`).
+`install.sh` atrapa `INT/TERM/HUP` y deshace (escenario J del job ⑧ con SIGTERM en la fase 4; `InstallInterruptionTest`; guías con
+`tmux` y códigos 129/130/143; copia del `.env` atómica; `/ready` con reintento de 12 s en `install.sh` y `update.sh`).
+`load-test.yml` se lanza con cada `vX.Y.0`; run manual sobre la rama en verde con p95 de 181 ms (línea base 469 ms). Los anteriores:
+21 «Panel: permisos y pantallas» (PR #120, `d83828dc`), 12c «Cuentas de gestión» (PR #118, ADR-051; **tras actualizar a la 2.2.0 el
+admin tiene que volver a entrar**), 12b (PR #116) y 12 (PR #114, ADR-050).
 
-**Siguiente acción:** abrir la rama del **bloque 22** («Operación y resiliencia», rama `fix/operacion-y-resiliencia`) desde
-`origin/main`, siguiendo el plan: R3-CH-01/R3-CH-02 el fichaje responde en un tiempo acotado con Redis o PostgreSQL caídos (medir antes
-en Linux: la cifra de 12-45 s es de Docker Desktop), R4-DV-01 las alertas de negocio saltan cuando Redis cae en vez de desaparecer con
-sus métricas, R4-DV-02 `product:doctor` nombra `horizon`, R6-PL-01 `install.sh` deshace lo hecho ante un corte de SSH, un `kill` o
-Ctrl+C, R5-QA-01 `load-test.yml` lanzable a mano y con cualquier `v*.*.0`. Orden que queda: **22 → 13 → 14 → final.** El bloque final
-repone las etiquetas `v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0`
-sigue en local).
+**Siguiente acción:** abrir la rama del **bloque 13** («Rendimiento de base de datos», rama `perf/indices-jornada`) desde
+`origin/main`, siguiendo el plan: DB1/DB2 migración expand con `CREATE INDEX CONCURRENTLY` (`scan_events(shift_entry_id, occurred_at)`
+y parcial sobre `shift_entries(superseded_by_id)`) y reescritura de las dos subconsultas por tramo y la CTE recursiva de
+`DatabaseWorkDayJournalReader`; DB4/DB3 `SET LOCAL` en `LimitsMigrationLocks` y separar `DROP`/`ADD NOT VALID` de `VALIDATE`; DB5-DB8
+solo lo que queda en `DatabaseIncidentBoard.php` (índice de la bandeja y `work_date` primero en la exportación legal). Terminado cuando
+el EXPLAIN del diario del portal deja de hacer Seq Scan (`ScanLogIndexUsageTest`) y `make load-test` no empeora. Orden que queda:
+**13 → 14 → final.** El bloque final repone las etiquetas `v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el
+remoto solo existe `v1.0.0`; `v2.0.0` sigue en local).
 
-**Lo que destapó el cierre del bloque 21 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-21-panel-permisos`
-y `bloque-21-e2e-presencia`; lo de los bloques 12, 12b y 12c en `bloque-12-portal-internet`, `bloque-12b-pin-importacion`,
-`bloque-12b-revisiones`, `bloque-12c-cuentas-gestion` y `bloque-12c-revisiones`):
+**Lo que destapó el cierre del bloque 22 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-22-operacion-resiliencia`,
+`bloque-22-revisiones` y `bloque-22-pendientes`; lo del 21 en `bloque-21-panel-permisos` y `bloque-21-e2e-presencia`):
 
-- **Los E2E escritos sin ejecutar siguen costando vueltas de CI** (Playwright no arranca en los contenedores `node-*`, que son Alpine):
-  en una lista ordenada por el servidor no se elige a una persona con `.first()` (fila por `data-employee`); tirar Reverb para probar
-  el aviso del sondeo tapa lo que se quiere afirmar, porque la caída del canal tiene su propio aviso (apagar `meta.realtime` en la
-  foto). Siguen valiendo las del 12c: `aria-disabled` cuenta como deshabilitado (`toHaveAttribute`, `click({ force: true })`),
-  `getByText` sin `exact` casa el resumen de errores, las etiquetas de `FormField` llevan asterisco (`data-test`).
-- `ability:a,b` (`CheckForAnyAbility`) en un grupo de rutas abre una lectura a dos ámbitos sin tocar las policies de escritura; la
-  policy sigue cerrando el soporte y la prueba negativa pasa a ser «los cuatro roles sí, los tres alcances de soporte no».
-- Un enlace que acaba en 403 no es un enlace: el panel lo oculta a quien no puede leer el destino y el E2E afirma la ausencia del
-  enlace además del 403 del doble.
-- La matriz de trazabilidad lleva **líneas** de los E2E: mover cuatro líneas en un spec obliga a regenerarla (`make traceability`,
-  diez minutos, sin agentes) o `TraceabilityMatrixFreshnessTest` falla en Arquitectura.
-- El Trivy de imágenes puede caer por un 404 transitorio del espejo de la base de vulnerabilidades (`mirror.gcr.io`): si el mismo job
-  pasa en el otro run del mismo commit, relanzar sin tocar nada.
-- Un agente con contexto enorme (más de 700 k tokens) deja de entregar sus informes: verificar el árbol con las herramientas y
-  commitear. Precedente mantenido: CI manual completa en verde en el commit N y CI del push completa en verde en el N+1 cuando el
-  cambio es trivial.
-- gitleaks `generic-api-key` dispara por el nombre de la constante aunque el valor sea un UUID de prueba: perdonar por valor exacto en
-  `.gitleaks.toml`, nunca por ruta. Un `UPDATE` sobre una columna de índice único toma `FOR UPDATE`: con la cadena tomada hay ciclo
-  con los `KEY SHARE` de las claves ajenas (ADR-046).
-- Dentro del asistente de puesta en marcha ningún `RouterLink` sale de `/setup`. El tablero de credenciales no conoce `pin_status`: se
-  lee la ficha al abrir el diálogo. La CI de Pest no tiene `APP_URL`; cada palabra nueva de un mensaje de error entra en
-  `ErrorVocabulary`; los clientes TypeScript se regeneran tras **cualquier** retoque de `openapi.yaml`. El log de un job en curso se
-  lee con `gh api …/actions/jobs/{id}/logs`.
+- **Apagar un mecanismo en `phpunit.xml` deja sin probar a quien lo consume.** El cortacircuitos va apagado en la suite
+  (`REDIS_/DB_CIRCUIT_BREAKER_SECONDS=0`) y nadie vio que el clasificador del doctor devolvía «fallo del producto» ante
+  `DatabaseUnavailable` sin SQLSTATE. Las pruebas que lo necesitan lo encienden con su propio fichero de estado, y
+  `CircuitBreakerWiringTest` comprueba el cableado real: el closure de `extend()` del gestor de Redis **no puede ser `static`**.
+- Un reloj de pared que retrocede (RTC adelantado + chrony) deja un «abierto hasta» de horas: el estado persistido se descarta si está
+  más lejos que el plazo. Los ficheros `storage/framework/{redis,database}-circuit-open` viven en la capa del contenedor y
+  `docker compose restart app` no los borra: el runbook `almacen-de-metricas-caido.md` §3.4 dice cómo.
+- Una sonda de caos tiene que **autenticarse**: el primer paso K medía el 401 de `auth:sanctum`. Ahora aprovisiona un quiosco con el
+  aprovisionador de k6 y mide `POST /scan` y `/scan/pin` reales (200 o 422). `getent ahosts -- host` no funciona en Alpine.
+- Toda inhibición nueva de Alertmanager entra en `AlertmanagerConfigTest` (resuelve destinos por `component` o `alertname`); la
+  «resuelta» falsa de `QuioscoSinLatido` se cierra casi del todo con `for: 15s` e intervalo de 15 s en `AlmacenDeMetricasCaido`.
+- `bash` ignora SIGINT en lo lanzado con `&`: el escenario J usa SIGTERM con `pkill -TERM -f '^bash \./install\.sh'` (al bash con los
+  traps, no a `sudo`). Las guías mandan instalar dentro de `tmux`.
+- Las de bloques anteriores siguen valiendo: E2E del panel con `data-test` y sin `.first()` en listas ordenadas (Playwright no corre en
+  los contenedores `node-*`); la matriz lleva líneas de los E2E (`make traceability`, diez minutos, sin agentes); gitleaks por valor
+  exacto; `TraceabilityMatrixFreshnessTest` falla hasta regenerar; el log de un job se lee con `gh api …/actions/jobs/{id}/logs`;
+  precedente de CI manual completa en N y push en N+1 para cambios triviales; Trivy de imágenes puede fallar por un 404 del espejo.
 
 **Integrado también el 06-10-2026:** PR #110 (`laravel/reverb` 1.12.0) y #111 (menores de npm), de Dependabot; borradas las ramas
 remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` entre bloque y bloque.
@@ -396,6 +396,15 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ### Deuda técnica anotada
 
+- **Del cierre del bloque 22 (07-10-2026):** `update.sh` deja las señales en su valor por defecto durante su propia vuelta atrás (un
+  segundo Ctrl+C o un HUP repetido la corta a medias): aplicarle la guarda no reentrante y el `trap ''` de `install.sh`. El instalador
+  no guarda su salida en un fichero (sin `tmux` se pierde el mensaje final). La inhibición de las «resueltas» en Alertmanager no está
+  probada de extremo a extremo. R3-CH-03 sigue: las rutas que fallan cerradas con Redis caído dan 500 y no 503. Con el circuito
+  cerrado, las peticiones en vuelo al empezar una avería siguen pagando el DNS completo una vez (decisión: no lanzar un proceso por
+  petición). **El escenario J del job ⑧ falló una vez de forma intermitente** (el instalador en segundo plano murió en silencio
+  al entrar en la fase 3, sin código ni mensaje; en cuatro pasadas más fue bien): el paso traza ahora el instalador (`bash -x` a
+  `salida-j.trace`, impreso sin secretos) y dice el código de salida si se repite. Si vuelve a pasar, mirar esa traza antes de tocar
+  nada.
 - **Del cierre del bloque 12c (07-10-2026):** `UpdateDepartmentRequest` comprueba el ámbito `accounts:*` con un `tokenCan()` a mano y
   una copia del literal (atada por `DepartmentManagerAbilityTest`): lo limpio es un puerto `ManagementActor::tokenGrants()` en Shared.
   Unos 25 docblocks anteriores al bloque citan ADR-027 («audit_log particionado») donde quieren decir ADR-010 («auditoría en la misma
