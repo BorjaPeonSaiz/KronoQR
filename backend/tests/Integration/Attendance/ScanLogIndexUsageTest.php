@@ -8,8 +8,8 @@ use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
+use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Database\QueryPlans;
-use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -39,9 +39,18 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * elige un recorrido completo porque es mas barato, y la prueba fallaria sin
  * que hubiera nada roto. Con veinte mil, el recorrido deja de ser una opcion
  * razonable y el plan pasa a decir algo.
+ *
+ * ESTADISTICAS DE VERDAD, Y POR ESO SE CONFIRMA. El volumen solo dice algo si el
+ * planificador lo conoce, y para eso hace falta `ANALYZE` con el rol dueño de
+ * las tablas ({@see QueryPlans::analyze()}). Hasta la 2.2.0 esta prueba lo
+ * lanzaba con el rol de la aplicacion dentro de la transaccion de
+ * `RefreshDatabase`: PostgreSQL respondia con un aviso, no analizaba nada y el
+ * plan se decidia con `reltuples = -1`, es decir, con estimaciones de una fila
+ * por nodo. Con {@see CommittedDatabase} la siembra se confirma y la conexion
+ * del rol de migracion la ve.
  */
 
-uses(RefreshDatabase::class);
+uses(CommittedDatabase::class);
 
 /** Cuantas filas de historico se siembran. Ver el docblock: menos no prueba nada. */
 const FILAS_DE_HISTORICO = 20_000;
@@ -116,10 +125,10 @@ function historicoDeEscaneos(): string
 
     expect($written)->toBe(FILAS_DE_HISTORICO);
 
-    // Sin estadisticas frescas el planificador sigue creyendo que la tabla esta
-    // vacia y elige el recorrido completo: se estaria midiendo el momento en
-    // que paso autovacuum, no el plan.
-    DB::statement('ANALYZE scan_events');
+    // Estadisticas reales, con el rol dueño de la tabla: con el de la
+    // aplicacion `ANALYZE` solo avisa, y el planificador decidiria sin saber
+    // cuantas filas hay ni como se reparten por empleado.
+    QueryPlans::analyze('scan_events');
 
     return array_key_first($employees);
 }
@@ -233,7 +242,7 @@ it('resuelve los fichajes irreconciliables por el indice parcial de las marcadas
     DB::table('scan_events')->insert($rows);
 
     // Otra vez: el planificador tiene que saber que las marcadas son una minoria.
-    DB::statement('ANALYZE scan_events');
+    QueryPlans::analyze('scan_events');
 
     $port = app(OutOfOrderScans::class);
 
@@ -306,8 +315,8 @@ function historicoDeTramos(): string
 
     expect(DB::table('shift_entries')->count())->toBe(EMPLEADOS_DEL_HISTORICO * TRAMOS_POR_EMPLEADO);
 
-    // Sin estadisticas frescas el planificador cree que la tabla esta vacia.
-    DB::statement('ANALYZE shift_entries');
+    // Estadisticas reales, con el rol dueño de la tabla (ver arriba).
+    QueryPlans::analyze('shift_entries');
 
     return array_key_first($employees);
 }
