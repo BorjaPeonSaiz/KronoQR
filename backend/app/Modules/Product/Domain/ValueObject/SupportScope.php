@@ -213,7 +213,7 @@ enum SupportScope: string
      * | Alcance | Ambitos | Lo que abre de verdad |
      * | --- | --- | --- |
      * | `diagnostics` | `diagnostics:*` | El paquete anonimizado y el historico de errores |
-     * | `read_only` | + `attendance:read`, `employees:read`, `audit:read` | **Solo rutas `GET`**: jornadas y plantilla. **No** la presencia en vivo, el resumen de cumplimiento ni las ausencias: los cierran sus policies |
+     * | `read_only` | + `attendance:read`, `employees:read`, `audit:read` | **Solo rutas `GET`**: jornadas y plantilla. **No** la presencia en vivo, el resumen de cumplimiento, las ausencias ni el catalogo de departamentos: los cierran sus policies (el ultimo, `DepartmentPolicy::canRead()`) |
      * | `configuration` | + `settings:*` | Ajustes de instalacion y quioscos. **No** el perfil de cumplimiento: lo cierra su policy (RL-01, RL-02) |
      *
      * **Que los tres ambitos de lectura no abran ni una sola ruta de escritura no
