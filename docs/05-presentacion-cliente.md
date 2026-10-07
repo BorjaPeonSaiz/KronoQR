@@ -194,7 +194,8 @@ Alta y baja de empleados con los datos mínimos necesarios; departamentos y cont
 Seis perfiles: administrador, RRHH, responsable de departamento, auditor, empleado y quiosco.
 
 - Un responsable **solo ve a la gente de su departamento**. Si intenta acceder a otro, el sistema lo impide y lo deja registrado.
-- Los perfiles con acceso a toda la plantilla (administrador, RRHH y auditor) tienen **verificación en dos pasos obligatoria**.
+- Todos los perfiles de gestión —administrador, RRHH, auditor y también el responsable de departamento, porque corrige jornadas— tienen **verificación en dos pasos obligatoria**.
+- Las cuentas de gestión se crean, se dan de baja y se restablecen **desde el propio panel**, por el administrador: sin pedir nada al proveedor ni tocar el servidor. La contraseña inicial es temporal, se entrega en mano y caduca si no se usa; cada alta, baja y restablecimiento queda registrada con quién lo hizo y por qué.
 - La tablet tiene su propio acceso, limitado exclusivamente a fichar y sincronizar. Aunque alguien se llevara la tablet, **no obtendría el registro horario ni la ficha de nadie**: lo único que guarda es una lista cifrada con lo mínimo para saludar por su nombre a quien ficha —nombre de pila e inicial del apellido de la gente de ese centro—, y su acceso se revoca desde el panel en segundos.
 - La sesión del portal del empleado solo alcanza sus propios datos. Nunca los de un tercero.
 

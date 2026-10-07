@@ -459,7 +459,11 @@ docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -c \
 
 ### 9.3 Revertir si no se reconoce
 
-Todo se hace desde la consola de la instalación (actúa con asiento de auditoría):
+Se puede hacer desde Panel → **Cuentas** con otra cuenta de administración de
+confianza ([`cuentas-de-gestion.md`](cuentas-de-gestion.md)), pero **si
+sospechas de las credenciales o del teléfono de quien administra, usa la
+consola de la instalación**, que no depende de ninguna sesión del panel (actúa
+con asiento de auditoría):
 
 ```bash
 # Desactivar la cuenta sospechosa (alta de admin no reconocida, o cuenta afectada)

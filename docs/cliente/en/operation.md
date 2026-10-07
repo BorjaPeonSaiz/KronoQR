@@ -530,40 +530,85 @@ done inside the `postgres` container, not the application's.
 
 ### The panel accounts: creating, deactivating and the password
 
-Management accounts are created from the console and **are withdrawn from the
-console**. This version has **no management-accounts screen in the panel**, which
-is why these four orders are the whole life cycle of an account. All four leave a
-record in the audit log, with their author, their date and their reason.
+**Since 2.2.0, management accounts are handled from the panel**, with an
+administration account: Panel → **Accounts**. That is where the list is —name,
+email, role, status, second factor, whether the password is the holder's own or
+temporary, and last sign-in— together with the four actions: **create**,
+**deactivate**, **reset password** and **reset 2FA**. The three that create or
+remake a credential (creation and both resets) also ask, in the same dialog,
+for **your** second-factor code —or your password, if your account does not
+have one—: a session left open on someone else's computer is not enough.
+Deactivation and both resets ask for a **reason**, which goes into the audit log
+(no health data and no value judgements). The step-by-step procedure, and how
+to check afterwards what was done, are in
+[`../../runbooks/cuentas-de-gestion.md`](../../runbooks/cuentas-de-gestion.md)
+(in Spanish).
+
+**The password of a new or reset account is temporary.** The server generates
+it, it is shown **once only**, it is handed over in person and it expires after
+`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` (72 by default,
+[`configuration.md`](configuration.md) §6.8). With it, the panel only lets the
+holder set their own password or sign out. Anyone can change their own password
+whenever they like from “Change my password”, under their name in the menu.
+
+What the panel does **not** let you do, on purpose, and answers with a notice:
+deactivate yourself, deactivate the **last** active administration account,
+reset your own password or your own second factor (that is what “Change my
+password” is for), or reset the second factor of someone who does not have one
+active. **Always keep two administration accounts**: if the only one loses their
+phone, only the console is left.
+
+**The console still exists as the recovery route**, for when the panel is not
+available or nobody with the administration role can sign in. It applies the
+same rules —it will not deactivate the last administrator either— and leaves
+the same records, with “console” as their origin (the comments are in Spanish:
+“list”, “create”, “deactivate”, “new temporary password”, “remove the second
+factor”):
 
 ```bash
-# Alta de una cuenta con su rol. Pide la contraseña por consola, sin eco
+# Lista de cuentas: UUID, correo, rol, estado, 2FA y tipo de contraseña. Lleva correos: no la guardes en un fichero
+docker compose exec app php artisan identity:list-users
+
+# Alta con su rol. Pregunta nombre y correo, y muestra UNA vez la contraseña temporal
 docker compose exec app php artisan identity:create-user --role=rrhh
 
 # Baja. Deja de poder entrar, y sus sesiones abiertas dejan de valer al instante
 docker compose exec app php artisan identity:deactivate-user persona@tuhotel.example --reason="Baja del hotel"
 
-# Contraseña nueva, generada y mostrada UNA sola vez
-docker compose exec app php artisan identity:reset-password persona@tuhotel.example
+# Contraseña temporal nueva, mostrada UNA sola vez
+docker compose exec app php artisan identity:reset-password persona@tuhotel.example --reason="Contraseña olvidada / Forgotten password"
 
-# Retirar el segundo factor a quien perdió el móvil, para que lo dé de alta otra vez
-docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+# Retirar el segundo factor a quien perdió el móvil, para que lo dé de alta otra vez (UUID de la lista)
+docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --reason="Móvil perdido / Lost phone"
 ```
 
-Three things worth knowing about deactivation:
+**A department's manager is not set through SQL either.** It is chosen in
+Panel → **Departments**, with the administration account
+([`hr-guide.md`](hr-guide.md) §7 bis.2), and it is recorded in the audit log.
 
-- **It deletes nothing.** The account keeps its whole history, which is exactly
-  what makes it possible to answer, months later, "who corrected this working
-  day?". The only thing it loses is the ability to sign in.
+Four things worth knowing about deactivation:
+
+- **It deletes nothing and cannot be undone.** The account keeps its whole
+  history, which is exactly what makes it possible to answer, months later, "who
+  corrected this working day?". The only thing it loses is the ability to sign
+  in. There is no reactivation: if the person comes back, a new account is
+  created for them, with a different email, because the email of a deactivated
+  account is no longer accepted.
 - **It takes effect on the next request**, not when the session expires: if that
   person had the panel open on a tablet, it stops working immediately.
-- **It does not reopen the creation of the first administrator.** Even if you
-  deactivate the last account left, that door stays closed — if it reopened,
+- **It withdraws the support access grants that account issued** and that were
+  still in force (§12.4). A temporary access for the manufacturer does not
+  outlive the person who answered for it.
+- **It does not reopen the creation of the first administrator.** That door
+  stays closed even when there are deactivated accounts — if it reopened,
   removing someone would be a way of creating an administrator without
   credentials.
 
-The password that `identity:reset-password` generates **cannot be looked up
-again**: the product stores its digest, not the password. Write it down when you
-run it and hand it over in person, never by email or messaging.
+The temporary password, whether shown by the panel or by
+`identity:reset-password`, **cannot be looked up again**: the product stores its
+digest, not the password. Write it down at that moment and hand it over in
+person, never by email or messaging. If it is lost before being handed over,
+reset it again.
 
 ---
 
@@ -1200,8 +1245,10 @@ the last two call for a review on the same day:
   ```
 
   If the account holder does not recognise an enrolment (another time, another
-  IP), remove that second factor with the row's `uuid` and give them a new
-  password; on their next sign-in they enrol it again themselves:
+  IP), remove that second factor and give them a new password; on their next
+  sign-in they enrol it again themselves. It is done in Panel → **Accounts**,
+  with “Reset 2FA” and then “Reset password” (§9); if the panel is not
+  available, from the console, with the row's `uuid`:
 
   ```bash
   docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --reason="2FA no reconocido / 2FA not recognised"
@@ -1218,6 +1265,32 @@ the last two call for a review on the same day:
   open to the internet, so is the panel while you leave it empty:
   [`configuration.md`](configuration.md) §6. `product:doctor` reminds you with
   the `network.admin` warning.
+
+**When updating to 2.2.0: management accounts, from the panel.** Creating,
+deactivating, resetting the password and resetting 2FA move to Panel →
+**Accounts** (§9, “The panel accounts”), and each department's manager is
+chosen in Panel → **Departments**. Three things to do or know on the same day:
+
+- **Whoever holds the administration account has to sign out and sign in
+  again.** A session's permissions are fixed when it opens, and the sessions
+  opened before the update do not carry the one for managing accounts: until
+  they sign in again they will not see “Accounts” in the menu, and Departments
+  will not let them choose a manager. It is not a fault and nothing else needs
+  touching.
+- **Passwords handed out from now on are temporary.** They expire after 72
+  hours (`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`) and force the holder to set
+  their own when signing in. `identity:create-user` no longer asks for the
+  password: it generates it and shows it once. Existing passwords do not
+  change.
+- **Review the department managers.** If they were ever assigned by editing the
+  database, check them on the Departments screen and, from now on, change them
+  only there: each change leaves its `role_assignment.changed` record. A manager
+  with no department assigned can sign in to the panel but sees nobody.
+
+Every creation of an account with the administration role and every reset of a
+second factor alerts the security recipient (§10.4,
+[`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) §9, in
+Spanish). If you are going to do several on the same day, tell them beforehand.
 
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor

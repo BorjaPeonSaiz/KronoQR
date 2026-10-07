@@ -944,13 +944,17 @@ sería una forma de crear un administrador nuevo sin credenciales.
 Si además has perdido la contraseña:
 
 ```bash
-# Genera una contraseña nueva para la cuenta que ya existe. Se enseña UNA vez:
+# Genera una contraseña TEMPORAL nueva para la cuenta que ya existe. Se enseña UNA vez:
 # anótala antes de cerrar la consola, porque no se puede volver a consultar
-docker compose exec app php artisan identity:reset-password direccion@tuhotel.example
-
-# O retira el segundo factor de esa cuenta, para volver a darlo de alta
-docker compose exec app php artisan identity:2fa-reset
+docker compose exec app php artisan identity:reset-password direccion@tuhotel.example --reason="Contraseña olvidada / Forgotten password"
 ```
+
+Entra con ella antes de que caduque (72 horas de serie,
+`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`): el panel te pedirá primero dar de alta
+el segundo factor y después fijar una contraseña tuya. Es la consola porque
+todavía no hay otra cuenta de administración que pueda hacerlo desde el panel;
+en cuanto la haya, la vía normal es Panel → **Cuentas**
+([`operacion.md`](operacion.md) §9).
 
 Crear otra cuenta **no** es la salida recomendada: dos cuentas para la misma
 persona parten en dos la respuesta a «¿quién corrigió esta jornada?». Si aun así
