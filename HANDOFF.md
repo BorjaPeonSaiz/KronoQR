@@ -13,51 +13,70 @@ el método en la sección «Método» de ese plan y en «Método de trabajo acor
 CI manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge
 commit.** Lo integra quien ejecuta el bloque si la CI está en verde.
 
-**Integrados en `main`:** bloques 0 a 13, 12b, 12c y 15 a 22. El último, **bloque 13 «Rendimiento de base de datos»**, es la PR #124
-(`main` `6882124b`, 07-10-2026). **Todo el diario de un mes se sirve por índice** (`WorkDayJournalIndexUsageTest`): índices
-`scan_events_shift_entry_id_occurred_at_index` y parcial `shift_entries_superseded_by_id_index` (`2026_10_08_100000`), y
-`clockingMarks()` dividido en `lineage()` (CTE recursiva) más la consulta de escaneos con la estirpe como `VALUES`, porque el
-planificador estima una CTE recursiva a ciegas y con ella elegía `Hash Join` y `Seq Scan` aunque existiera el índice (`currentEntries`
-de 7 077 a 209 buffers; `clockingMarks` de 474 a 123). La bandeja de incidencias ordena por el índice de expresión
-`incidents_status_urgency_index` (la expresión `CASE severity…` va duplicada en la migración y en `DatabaseIncidentBoard::ORDER`, con
-comentarios cruzados y una prueba de plan que falla si divergen) y la exportación legal va por `shift_entries_work_date_index`
-(`2026_10_08_100100`). **Migraciones:** `LimitsMigrationLocks` usa `SET LOCAL` (lanza fuera de transacción), y ofrece
-`withLockWaitOnly()` (solo `lock_timeout`, restaura la sesión en `finally`), `validateConstraint()` (fuera de transacción: el
-`VALIDATE` toma solo `SHARE UPDATE EXCLUSIVE`), `createIndexConcurrently()` (borra un índice `INVALID` previo y lanza si no queda
-válido) y `dropIndexConcurrently()`. Las cinco migraciones posteriores a la 2.1.0 con `VALIDATE` son no transaccionales (DDL en
-`DB::transaction()`, `VALIDATE` fuera, `up()` idempotente, `down()` que comprueba filas **tras** el primer `ALTER` y se detiene);
-las siete de la 2.1.0 con el patrón antiguo no se tocan (lista cerrada en `MigrationSafetyTest`, que también prohíbe `VALIDATE
-CONSTRAINT` y `CREATE INDEX CONCURRENTLY` literales en migraciones nuevas). La skill `migracion-segura` ya enseña el patrón
-correcto. **Las pruebas de plan analizan con el rol de migración sobre datos confirmados** (`CommittedDatabase` +
-`QueryPlans::analyze()`): `ANALYZE` con `fichaje_app` no falla pero no hace nada, y `ScanLogIndexUsageTest` y
-`AdoptionReportVolumeTest` certificaban planes por heurística. Los anteriores: 22 «Operación y resiliencia» (PR #122, `77cfe20b`),
-21 «Panel: permisos y pantallas» (PR #120, `d83828dc`), 12c «Cuentas de gestión» (PR #118, ADR-051; **tras actualizar a la 2.2.0 el
-admin tiene que volver a entrar**), 12b (PR #116) y 12 (PR #114, ADR-050).
+**Integrados en `main`:** bloques 0 a 14, 12b, 12c y 15 a 22. **Solo queda el bloque final (publicar la 2.2.0), que NO se
+ejecuta hasta que el propietario lo ordene expresamente** (07-10-2026). El último, **bloque 14 «Pruebas, puertas de calidad y
+documentos de arquitectura»**, es la PR #128 (`main` `bfb3707a`, 08-10-2026; 27 commits). Lo que trae: **matriz de autorización
+generada del router** (`AuthorizationMatrixTest`, un caso por ruta y rol con el token de 2FA pendiente; sin Chromium, con los dobles
+de los renderizadores de PDF), `TestLevelGateTest` (nivel de prueba por requisito; huecos conocidos RF-PR-05 y RF-QR-04),
+`UnitSuiteBudgetTest`, `FrameworkHelpersTest` (ni facades ni helpers globales en `Domain/` ni `Application/`), regla ESLint
+`no-literal-colors`, `DevelopmentSeeder` solo en `local`/`testing` y fuera de la imagen del cliente, `POST /client-errors` con
+`session.complete`. **Versiones inmutables (ADR-053, A6-2):** `release.yml` no reescribe una versión publicada
+(`assert-image-tags-free.sh`; `first_publication` para la primera), el paquete fija sus imágenes por digest (`images.lock`,
+`IMAGE_DIGEST_*` en `compose.prod.yaml`), `install.sh`/`update.sh` etiquetan en local la imagen fijada aunque ya estuviera por su
+digest, y la **vuelta atrás in place** marca y vacía los digests en la copia del `.env`, que al completarse pasa a ser el `.env`
+(`kq_env_mark/drop/has_rollback_digests` en `lib/env-file.sh`; el reintento retira la marca). Job ⑧b con P0–P3 sobre un paquete
+fijado con registro local. **Conciliación registro ↔ auditoría (ADR-057 §4, decisión del propietario del 08-10-2026):**
+`compliance:reconcile-work-record` (04:15 UTC, 7 días; `--full` domingos 02:15), cinco clases de discrepancia, purgas solo
+admisibles (puerto `RetentionYearsFloor`), exención por año sellado limitada a la noche del 31-12, alertas en `work-record.yml`,
+runbook `discrepancia-registro-auditoria.md`; doc 05 §6.1, `obligaciones-legales.md` §5 y doc 07 dicen lo que detecta y su límite
+(asientos falsificados con la credencial del runtime: fila nueva aceptada). ADR-052 a 057 (056 aceptado para la 2.2.x; 057 con §1–§3
+en la 2.2.x) y enmiendas a 020, 027, 033, 040 y 042; `SECURITY.md` (contacto@kodigolab.es, acuse 48 h, evaluación 72 h; el canal
+privado de GitHub sigue desactivado); runbook de pérdida total del servidor con la custodia de secretos. Los anteriores: 13
+«Rendimiento de base de datos» (PR #124, `6882124b`), 22 (PR #122), 21 (PR #120), 12c (PR #118, ADR-051; **tras actualizar a la
+2.2.0 el admin tiene que volver a entrar**), 12b (PR #116) y 12 (PR #114, ADR-050).
 
-**Siguiente acción:** abrir la rama del **bloque 14** («Pruebas, puertas de calidad y documentos de arquitectura») desde
-`origin/main`, siguiendo el plan (incluidos los añadidos: R6-AR-01 `UPDATE`/`DELETE` del rol sobre `shift_entries` o enmienda de
-ADR-042, R6-AR-02 ADR de la zona horaria del histórico, R1-AR-01 guarda de helpers globales en `Domain/`, y la línea de doc 07 que
-pide la revisión de seguridad del 13: migraciones no transaccionales desde la 2.2.0, contención `update.sh` restaura la copia,
-evidencia `MigrationSafetyTest` y `MigrationLockLimitsTest`). Orden que queda: **14 → final.** **El bloque final (publicar la 2.2.0) NO se ejecuta hasta que el propietario lo ordene expresamente** (07-10-2026): al integrar el 14, parar y avisar. El bloque final repone las etiquetas
-`v2.1.0` (sobre `9282af6`) **y `v2.0.0`**, que tampoco está en GitHub (en el remoto solo existe `v1.0.0`; `v2.0.0` sigue en local).
+**Entrega como TFM (08-10-2026, PR #127 → `main` `2ac00130`):** el proyecto es también el Trabajo de Fin de Máster del propietario
+(Máster de Desarrollo con IA, BIG School). `README.md` sigue el orden que pide la entrega y `doc_master/` lleva memoria, despliegue
+con recorrido guiado, guion del vídeo y `presentacion.html` (el HTML del repositorio es la entrega; la copia publicada como artefacto no se usa). La contraseña de la cuenta de demostración y el teléfono para el código 2FA van en el formulario de
+entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador `[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en
+`kronoqr.kodigolab.es` (hoy 2.1.0), actualizar README §3.1/§6 y `doc_master/despliegue.md`.
 
-**Lo que destapó el cierre del bloque 13 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-13-rendimiento-bd`
-y `bloque-13-revisiones`; lo del 22 en `bloque-22-operacion-resiliencia`, `bloque-22-revisiones` y `bloque-22-pendientes`):
+**Siguiente acción: ninguna hasta que el propietario ordene el bloque final.** Cuando lo haga: rama `chore/release-2.2.0` desde
+`origin/main` siguiendo el plan (sección «Bloque final»); **antes de reponer `v2.1.0` (sobre `9282af6`) y `v2.0.0`** (en el remoto
+solo existe `v1.0.0`; `v2.0.0` sigue en local) desactivar `release.yml` (`gh workflow disable release.yml`), porque un push de
+etiqueta ejecuta el `release.yml` del commit etiquetado, sin la guarda de ADR-053, y reescribiría las imágenes `:2.1.0`. Al cerrar,
+dos cosas que dejó la conciliación, decididas por el propietario el 08-10-2026 para la 2.2.x: un «revisado» para la alerta
+`purge_out_of_bounds` (un asiento de purga no admisible queda para siempre en `audit_log` y cada pasada lo vuelve a contar) y el
+**suelo legal de `retention_years` por jurisdicción en el perfil, 4 para España** (R7-SC-01; hoy `minimum()` = 1 para todo campo
+entero del perfil), con `arquitecto-dominio` + `backend-laravel` + `frontend-panel`.
 
-- **`ANALYZE` ejecutado por un rol que no es dueño de la tabla no falla: avisa y no hace nada.** Toda prueba de plan siembra con
-  `CommittedDatabase`, analiza con `QueryPlans::analyze()` (rol de migración) y después mide. Una prueba que afirma «no hay Seq Scan»
-  sobre `reltuples = -1` certifica una heurística, no un plan.
-- **Una CTE recursiva se estima a ciegas** (diez veces el término inicial): si el resultado se une con una tabla grande, resolver la
-  CTE aparte y pasar el resultado como `VALUES` deja al planificador con las filas reales. Forzar `LATERAL` enciende el JIT
-  (`jit_above_cost` 100 000, sin ajuste en `infra/`) y cuesta más que el recorrido.
-- **Un índice de expresión solo sirve si la expresión del `ORDER BY` es textualmente idéntica** a la del índice: por eso la bandeja
-  lleva la expresión duplicada y vigilada por una prueba.
-- **`SET LOCAL` fuera de transacción solo avisa**, y `CREATE INDEX CONCURRENTLY IF NOT EXISTS` da por bueno un índice `INVALID`: los
-  ayudantes del trait comprueban `transactionLevel()` e `indisvalid` en vez de confiar en el docblock.
-- Las de bloques anteriores siguen valiendo: apagar un mecanismo en `phpunit.xml` deja sin probar a quien lo consume; E2E del panel
-  con `data-test` y sin `.first()` en listas ordenadas; la matriz lleva líneas de los E2E (`make traceability`, diez minutos, sin
-  agentes); gitleaks por valor exacto; `TraceabilityMatrixFreshnessTest` falla hasta regenerar; el log de un job se lee con
-  `gh api …/actions/jobs/{id}/logs`; Trivy de imágenes puede fallar por un 404 del espejo.
+**Lo que destapó el cierre del bloque 14 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-14-*`; lo del
+13 en `bloque-13-rendimiento-bd` y `bloque-13-revisiones`):
+
+- **La vuelta atrás in place dejaba la copia del `.env` con todos los secretos y un `.env` que levantaba la versión nueva** (desde
+  la 5.7; lo cazó el paso P2 nuevo de ⑧b). Ahora la copia pasa a ser el `.env`, con los digests vaciados y marcados
+  (`# KQ_ROLLBACK_DIGESTS`); unas vacías **sin** marca son el opt-out de un servidor sin internet y no se tocan.
+- **Una referencia por digest no deja la etiqueta local**: `docker pull repo:tag@sha256:…` y una imagen ya presente por su digest
+  necesitan `docker tag` aparte, o `restore-drill.sh` (que nombra por etiqueta) no la encuentra.
+- **La matriz de autorización no debe arrancar Chromium**: generar la hoja de instrucciones de verdad dio un `500` a un rol
+  autorizado por un fallo del proceso en el runner. Toda prueba que toque PDF inyecta `FakeCardRenderer` y
+  `FakeInstructionsSheetRenderer`.
+- **`cp -a` sobre un directorio ya instalado falla**: `install.sh` deja `certs/` y `branding/` de root; en la CI se superpone una
+  réplica intacta del paquete hecha antes de instalarlo.
+- **`AggregateBoundaryTest` lee comentarios**: un comentario que cita `ShiftEntry::nextVersion()` cuenta como llamada al agregado.
+- **La cadena de auditoría no autentica a quien escribe** (ADR-057, consecuencias): la conciliación compara con el último asiento y
+  da por bueno un tramo con asientos falsificados coherentes; aceptado en doc 07.
+- **La mutación completa puede pasar de 90 min en un runner lento**: hoy GitHub la canceló dos veces por tiempo (49 min en la
+  ejecución anterior del mismo dominio, MSI 88,22 %). Subir el `timeout-minutes` del job o sacarla de la puerta de cierre de bloque
+  es decisión del propietario; de momento no se toca.
+- **Trampas del entorno:** el heredoc del Bash tool se come las barras invertidas y falla con comillas simples (para PHP con
+  namespaces, Edit; para scripts, Write); el formateador quita los `use` si se añaden en un Edit anterior al que los usa; un
+  `make.exe` huérfano bloquea `Makefile` y `git checkout` falla con «unable to unlink» (matarlo por su PID de Windows con
+  `Stop-Process`; mientras tanto, `git show rev:Makefile > Makefile`).
+- Las de bloques anteriores siguen valiendo: pruebas de plan con `CommittedDatabase` + `QueryPlans::analyze()`; una CTE recursiva se
+  estima a ciegas; un índice de expresión exige el `ORDER BY` textual; `SET LOCAL` fuera de transacción solo avisa; la matriz lleva
+  líneas de los E2E (`make traceability`, diez minutos, sin agentes); `TraceabilityMatrixFreshnessTest` falla hasta regenerar; el
+  log de un job se lee con `gh api …/actions/jobs/{id}/logs`.
 
 **Integrado también el 06-10-2026:** PR #110 (`laravel/reverb` 1.12.0) y #111 (menores de npm), de Dependabot; borradas las ramas
 remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` entre bloque y bloque.
@@ -66,6 +85,18 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 > lo que siga vigente debería pasar al plan o a «Fuera de la 2.2.0, con motivo».
 
 ## Pendiente
+
+### Diferido a la 2.2.x por el bloque 14 (08-10-2026)
+
+ADR-057 §1–§3 (`REVOKE DELETE` y `UPDATE` por columnas, *trigger* de transiciones, purga por función `SECURITY DEFINER` con suelo
+legal); ADR-056 (zona horaria fija desde el primer fichaje); firma de imágenes con cosign; conciliación completa tras cada
+actualización; `redis:7-alpine` sin digest; mecanismo «revisado» para `purge_out_of_bounds`; suelo legal de `retention_years` por jurisdicción en el perfil, 4 para España
+(R7-SC-01, decidido el 08-10-2026); las semillas de desarrollo disparan la
+alerta de conciliación; huecos de nivel RF-PR-05 y RF-QR-04 en `TestLevelGateTest`; una sola regla de minutos en `Shared`; corrección
+N5 de ADR-055 (necesita RN-10 en doc 01); regla ESLint contra `localStorage` en panel y portal; anexo B del doc 01 frente a los roles
+de `GET /site`; CSP por ubicación; `restore-drill` usa `IMAGE_TAG`; `CLAUDE.md` dice «28 ADRs» (son 57); cifras de presupuesto en
+`.claude/agents`; del 13: DB5, DB7, DB9 (aceptado en doc 07), `count(*)` de la bandeja, JIT de Postgres, prueba de concurrencia con
+`pg_locks`.
 
 ### Del usuario
 
