@@ -33,7 +33,7 @@ Consecuencia práctica: el quiosco abierto en un navegador desde fuera de la VLA
 
 | Aplicación | Acceso |
 | --- | --- |
-| **Panel** (<https://kronoqr.kodigolab.es/admin/>) | Usuario `bpeonsai@gmail.com` · la contraseña y el acceso al segundo factor se facilitan en el formulario de entrega del TFM, no aquí |
+| **Panel** (<https://kronoqr.kodigolab.es/admin/>) | Usuario `bpeonsai@gmail.com` · la contraseña y el teléfono del alumno para el código del segundo factor se facilitan en el formulario de entrega del TFM, no aquí |
 | Portal del empleado | Código de empleado y PIN de cualquier empleado dado de alta desde el panel (§4, paso 2) |
 | Quiosco | Sin usuario: muestra un código de 6 dígitos que se teclea en el panel (§4, paso 4) |
 
@@ -45,7 +45,7 @@ El producto se entiende mejor recorriendo el ciclo completo. Cuesta unos diez mi
 
 <https://kronoqr.kodigolab.es/admin/> con el usuario de la tabla y la contraseña del formulario de entrega.
 
-**Segundo factor.** La cuenta tiene el 2FA obligatorio de los roles de gestión (RS‑06). Es un TOTP estándar, así que no hay un «código» fijo que entregar: el formulario de entrega incluye la **clave secreta** de la cuenta. Añádela a tu aplicación de autenticación (Google Authenticator, Authy o similar) como clave manual y el panel aceptará el código de 6 dígitos que la aplicación genera. Si al entrar el panel muestra un código QR y una clave secreta en vez de pedir el código, es que la cuenta está pendiente de dar de alta el segundo factor: escanea el QR (o teclea la clave) con la misma aplicación y confirma con el primer código.
+**Segundo factor.** La cuenta tiene el 2FA obligatorio de los roles de gestión (RS‑06): tras la contraseña, el panel pide un código de 6 dígitos que genera la aplicación de autenticación del móvil del alumno y que cambia cada 30 segundos. En el momento de entrar, **solicita el código por teléfono al alumno** (su número va en el formulario de entrega junto al usuario y la contraseña); tienes medio minuto para teclearlo, y si caduca basta con pedir el siguiente.
 
 La pantalla inicial es **Presencia**: quién está fichado ahora mismo, en tiempo real.
 

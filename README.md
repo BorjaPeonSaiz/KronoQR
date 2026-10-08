@@ -460,7 +460,7 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 
 | Aplicación | Dirección | Acceso |
 | --- | --- | --- |
-| **Panel de gestión** | <https://kronoqr.kodigolab.es/admin/> | Usuario: `bpeonsai@gmail.com` · La contraseña y el acceso al segundo factor se facilitan en el formulario de entrega del TFM, no en este repositorio público. |
+| **Panel de gestión** | <https://kronoqr.kodigolab.es/admin/> | Usuario: `bpeonsai@gmail.com` · La contraseña se facilita en el formulario de entrega del TFM, no en este repositorio público. La cuenta tiene segundo factor: el panel pide un código de 6 dígitos que genera el móvil del alumno; su teléfono va también en el formulario de entrega para solicitárselo en el momento de entrar. |
 | Portal del empleado | <https://kronoqr.kodigolab.es/portal/> | Con el código de empleado y el PIN de cualquier empleado dado de alta desde el panel (en la ficha del empleado se asigna el PIN). |
 | Quiosco | <https://kronoqr.kodigolab.es/kiosk/> | No tiene usuario: al abrirlo muestra un código de 6 dígitos que se teclea en el panel (*Quioscos → «Vincular quiosco»*). Después ficha con una tarjeta impresa desde el panel o con código de empleado y PIN. |
 
