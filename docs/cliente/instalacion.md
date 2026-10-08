@@ -1515,7 +1515,8 @@ IMAGE_DIGEST_POSTGRES=
 La integridad de las imágenes la dio entonces la descarga por digest de la
 máquina con internet. Con internet en el servidor **no hagas esto**: el digest
 es lo que garantiza que corres los mismos bytes que el resto de clientes de esa
-versión. Después:
+versión. Mientras esas tres líneas sigan en el `.env`, `install.sh`, `update.sh` y
+`doctor.sh` te lo recordarán con un aviso; cuando el servidor tenga internet, bórralas. Después:
 
 ```bash
 docker load -i "imagenes-$(cat VERSION).tar"

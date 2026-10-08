@@ -1538,6 +1538,8 @@ IMAGE_DIGEST_POSTGRES=
 The images' integrity was then given by the digest download on the machine with
 internet. With internet on the server **do not do this**: the digest is what
 guarantees you run the same bytes as every other customer of that version.
+While those three lines stay in the `.env`, `install.sh`, `update.sh` and
+`doctor.sh` will remind you with a warning; once the server has internet, delete them.
 Then:
 
 ```bash
