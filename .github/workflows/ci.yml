@@ -2538,7 +2538,7 @@ jobs:
           curl -fsS http://127.0.0.1:5000/v2/ >/dev/null
 
           # La version nueva (sana) y el borde roto, empujados con la etiqueta de la version.
-          docker tag "kronoqr/app:${new}"      "${reg}/php:${new}"
+          docker tag "kronoqr/php:${new}"      "${reg}/php:${new}"
           docker tag "kronoqr/postgres:${new}" "${reg}/postgres:${new}"
           docker tag "kronoqr/nginx:${new}"    "${reg}/nginx:${new}"
           docker push --quiet "${reg}/php:${new}"
