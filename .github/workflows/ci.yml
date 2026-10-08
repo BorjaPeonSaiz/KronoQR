@@ -2574,6 +2574,9 @@ jobs:
           done
           grep -q "@${d_nginx_roto}" paquete-fijado-roto/docker-compose.yml
           grep -q "@${d_nginx}" paquete-fijado-sano/docker-compose.yml
+          # P1 instala paquete-fijado-sano (deja .env, certs/ y branding/ de root):
+          # P3 superpone esta replica intacta, como haria un cliente con el tar.
+          cp -a paquete-fijado-sano paquete-fijado-sano-p3
 
       - name: "P1 · Instalacion limpia desde el paquete fijado: descarga por digest y deja la etiqueta"
         if: steps.anterior.outputs.skip != 'true'
@@ -2649,7 +2652,7 @@ jobs:
         run: |
           set -euo pipefail
           new="${{ steps.anterior.outputs.new_version }}"
-          cp -a paquete-fijado-sano/. paquete-anterior/
+          cp -a paquete-fijado-sano-p3/. paquete-anterior/
           cd paquete-anterior
           sudo ./update.sh >salida-p3.log 2>&1 || { tail -60 salida-p3.log; exit 1; }
           cd ..
