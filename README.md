@@ -11,6 +11,23 @@
 
 ---
 
+## Trabajo de Fin de Máster
+
+| | |
+| --- | --- |
+| **Alumno** | Borja Peón Saiz · <borja.peon.saiz@gmail.com> |
+| **Máster** | Máster de Desarrollo con IA · BIG School · Módulo 12, Proyecto Final |
+| **Repositorio** | <https://github.com/BorjaPeonSaiz/KronoQR> (público) |
+| **Despliegue en funcionamiento** | <https://kronoqr.kodigolab.es> · panel [`/admin/`](https://kronoqr.kodigolab.es/admin/) · quiosco [`/kiosk/`](https://kronoqr.kodigolab.es/kiosk/) · portal [`/portal/`](https://kronoqr.kodigolab.es/portal/) · estado [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health) |
+| **Usuario y contraseña de prueba** | Ver [§6](#6-usuario-y-contraseña-de-prueba) |
+| **Presentación (slides)** | [`doc_master/presentacion.html`](doc_master/presentacion.html) en el repositorio (se abre en cualquier navegador) · en línea: <https://claude.ai/artifact/3yStxZi8LUQoT6G9fQAsYb> |
+| **Vídeo** | _pendiente de publicar_ |
+| **Documentación del TFM** | [`doc_master/`](doc_master/): [memoria](doc_master/memoria.md), [despliegue](doc_master/despliegue.md), [presentación](doc_master/presentacion.html) y [guion del vídeo](doc_master/guion-video.md). La documentación técnica completa del producto vive en [`docs/`](docs/) (ver [§8](#8-documentación-de-referencia)) |
+
+> Este README sigue el orden que pide la documentación del proyecto final: descripción general, stack, instalación y ejecución, estructura, funcionalidades y usuario de prueba. Después añade la calidad, la seguridad y el índice de la documentación.
+
+---
+
 ## Índice
 
 1. [Descripción general](#1-descripción-general)
@@ -18,8 +35,9 @@
 3. [Instalación y ejecución](#3-instalación-y-ejecución)
 4. [Estructura del proyecto](#4-estructura-del-proyecto)
 5. [Funcionalidades principales](#5-funcionalidades-principales)
-6. [Calidad, pruebas y seguridad](#6-calidad-pruebas-y-seguridad)
-7. [Documentación de referencia](#7-documentación-de-referencia)
+6. [Usuario y contraseña de prueba](#6-usuario-y-contraseña-de-prueba)
+7. [Calidad, pruebas y seguridad](#7-calidad-pruebas-y-seguridad)
+8. [Documentación de referencia](#8-documentación-de-referencia)
 
 ---
 
@@ -102,7 +120,17 @@ El backend se organiza en ocho módulos con fronteras verificadas por Deptrac:
 | `Product` | Configuración de instalación, perfiles de cumplimiento, marca blanca, licencia, diagnóstico y soporte. |
 | `Shared` | Objetos de valor comunes, puertos transversales (`Clock`, proveedores de configuración) y contratos de eventos. |
 
-Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework) → `Application/` (casos de uso y puertos) → `Infrastructure/` (Eloquent, adaptadores, proyecciones) + `Http/` (controladores, requests, recursos, policies). Las decisiones que justifican este diseño están en [`docs/adr/`](docs/adr/) (42 ADR).
+Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework) → `Application/` (casos de uso y puertos) → `Infrastructure/` (Eloquent, adaptadores, proyecciones) + `Http/` (controladores, requests, recursos, policies). Las decisiones que justifican este diseño están en [`docs/adr/`](docs/adr/) (51 ADR).
+
+### 1.5 Cómo se ha construido: desarrollo asistido por IA
+
+El proyecto es el trabajo final de un máster de desarrollo con IA, y la forma de construirlo es parte del resultado. Todo el código se ha escrito con Claude Code a partir de una especificación y un plan de implementación redactados antes de la primera línea, con un andamiaje de tres capas:
+
+- [`CLAUDE.md`](CLAUDE.md): contexto permanente con 21 reglas duras (dominio puro, UTC, nada se borra, idempotencia por `scan_id`, cero biometría…) que se cargan en cada sesión.
+- **11 agentes** especializados en [`.claude/agents/`](.claude/agents/) (arquitecto de dominio, backend, tres frontends, QA, DevOps, producto, UI/UX, y dos de solo lectura: revisor de código y seguridad/cumplimiento) y **7 skills** en [`.claude/skills/`](.claude/skills/) con los procedimientos repetibles (caso de uso nuevo, endpoint, regla de negocio, migración segura, informe, revisión de cumplimiento).
+- **Plan por tareas** ([`docs/02`](docs/02-stack-tecnologico-y-plan-implementacion.md) §11 y [`plan implementacion/`](plan%20implementacion/)) donde cada tarea indica su agente, su skill y las pruebas exigidas; [`HANDOFF.md`](HANDOFF.md) conserva el estado entre sesiones.
+
+La memoria del TFM ([`doc_master/memoria.md`](doc_master/memoria.md)) explica el método, lo que funcionó y lo que no.
 
 ---
 
@@ -156,14 +184,27 @@ Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework
 | Calidad estática | Pint (preset `laravel`) · **PHPStan nivel 9** · Deptrac · Rector · ESLint · `vue-tsc` · ShellCheck · shfmt · Redocly |
 | Seguridad | Semgrep · gitleaks · Trivy · `composer audit` / `npm audit` · SBOM CycloneDX |
 | CI/CD | GitHub Actions (`ci.yml`, `release.yml`, `load-test.yml`, `backup-drill.yml`) · imágenes en GHCR |
+| Desarrollo con IA | Claude Code (agentes, skills, `CLAUDE.md`, `HANDOFF.md`) · Engram (memoria local entre sesiones) |
 
 ---
 
 ## 3. Instalación y ejecución
 
-Hay dos escenarios bien distintos: el **entorno de desarrollo** (este repositorio) y la **instalación en el servidor de un cliente** (el paquete de entrega de cada versión).
+Hay tres escenarios: el **entorno de desarrollo** (este repositorio), la **instalación en el servidor de un cliente** (el paquete de entrega de cada versión) y el **despliegue de demostración** que ya está en funcionamiento para evaluar el proyecto sin instalar nada.
 
-### 3.1 Entorno de desarrollo
+### 3.1 Despliegue en funcionamiento (demostración)
+
+| | |
+| --- | --- |
+| Dirección | <https://kronoqr.kodigolab.es> |
+| Versión desplegada | 2.1.0 (ver [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health)) |
+| Panel de gestión | <https://kronoqr.kodigolab.es/admin/> |
+| Quiosco de fichaje | <https://kronoqr.kodigolab.es/kiosk/> (necesita emparejarse desde el panel; ver [`doc_master/despliegue.md`](doc_master/despliegue.md)) |
+| Portal del empleado | <https://kronoqr.kodigolab.es/portal/> |
+
+Es una instalación real hecha con el mismo paquete y el mismo `install.sh` que recibe un cliente, en un servidor Linux con Docker. Las credenciales de prueba están en [§6](#6-usuario-y-contraseña-de-prueba) y el detalle del despliegue (qué se puede probar, cómo emparejar un quiosco en el propio navegador, qué está abierto a internet y por qué) en [`doc_master/despliegue.md`](doc_master/despliegue.md).
+
+### 3.2 Entorno de desarrollo
 
 #### Requisitos previos
 
@@ -177,7 +218,7 @@ Hay dos escenarios bien distintos: el **entorno de desarrollo** (este repositori
 #### Puesta en marcha
 
 ```bash
-git clone <url-del-repositorio> kronoqr
+git clone https://github.com/BorjaPeonSaiz/KronoQR.git kronoqr
 cd kronoqr
 
 make up      # Crea .env desde .env.example si no existe, construye y levanta los servicios
@@ -187,7 +228,7 @@ make seed    # Aplica migraciones y carga la semilla de desarrollo
 
 La primera ejecución de `make up` construye las imágenes e instala las dependencias del workspace de npm dentro de un volumen de Docker, por lo que tarda varios minutos; las siguientes son inmediatas e idempotentes.
 
-La **semilla de desarrollo** crea un centro, unos 250 empleados y 90 días de fichajes **con casos límite deliberados**: turnos nocturnos, cambios de horario (DST), olvidos de fichaje y correcciones. Incluye cuentas de gestión de prueba (`admin@kronoqr.test`, `rrhh@kronoqr.test`, `auditor@kronoqr.test` y un responsable por departamento); la contraseña de desarrollo está en [`backend/database/seeders/UserSeeder.php`](backend/database/seeders/UserSeeder.php).
+La **semilla de desarrollo** crea un centro, unos 250 empleados y 90 días de fichajes **con casos límite deliberados**: turnos nocturnos, cambios de horario (DST), olvidos de fichaje y correcciones. Incluye las cuentas de gestión y el PIN de empleado de [§6.2](#62-entorno-de-desarrollo-semilla).
 
 #### Servicios y direcciones
 
@@ -230,7 +271,7 @@ Servicios de Compose en desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizo
 
 Cada SPA tiene además sus propios scripts (`npm run dev`, `type-check`, `lint`, `test:unit`, `build`, `api:generate`), descritos en su README: [`frontend-kiosk`](frontend-kiosk/README.md), [`frontend-admin`](frontend-admin/README.md), [`frontend-portal`](frontend-portal/README.md) y [`packages/web-kit`](packages/web-kit/README.md).
 
-### 3.2 Instalación en el servidor del cliente
+### 3.3 Instalación en el servidor del cliente
 
 La instalación de producción la realiza el personal de IT del hotel **sin intervención del fabricante**, a partir del paquete `kronoqr-<versión>.tar.gz` que publica cada versión (imágenes en GHCR). La guía completa, con capturas y resolución de problemas, está en [`docs/cliente/instalacion.md`](docs/cliente/instalacion.md) (también [en inglés](docs/cliente/en/)).
 
@@ -323,18 +364,21 @@ kronoqr/
 ├── docs/
 │   ├── 01…07-*.md                # Especificación, stack y plan, agentes, credencial,
 │   │                             #   presentación al cliente, guía visual, seguridad
-│   ├── adr/                      # 41 registros de decisión de arquitectura
+│   ├── adr/                      # 51 registros de decisión de arquitectura
 │   ├── api/openapi.yaml          # Contrato de la API (fuente de verdad)
 │   ├── cliente/                  # Documentación entregable al cliente (es/en)
 │   ├── runbooks/                 # Procedimientos de operación e incidentes
 │   ├── seguridad/                # Revisión ASVS y paquete del revisor
+│   ├── verificacion/             # Verificación pre-release de la 2.1.0 y plan de la 2.2.0
 │   └── trazabilidad-pruebas.md   # Matriz requisito → prueba (generada)
 │
+├── doc_master/                   # Entrega del TFM: memoria, despliegue, slides, guion del vídeo
 ├── plan implementacion/          # Detalle tarea a tarea de cada fase
 ├── load-tests/k6/                # Pruebas de carga
 ├── tools/license-issuer/         # Emisor de licencias del fabricante (ed25519)
 ├── .github/workflows/            # CI, publicación, carga y simulacro de copias
 ├── .claude/                      # Agentes y skills de IA del proyecto
+├── CLAUDE.md · HANDOFF.md        # Reglas permanentes · memoria entre sesiones
 ├── Makefile                      # Interfaz oficial de todas las operaciones
 ├── CHANGELOG.md                  # Generado desde commits convencionales
 └── VERSION
@@ -387,7 +431,7 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 
 - Acceso con **código de empleado y PIN**, sin correo; rate limiting y bloqueo por intentos (RF‑ID‑05/06).
 - Consulta de jornadas y tramos propios y **descarga del histórico**, con ámbito exclusivo de lectura (`self:read`) (RF‑ID‑07).
-- Accesible desde la red interna por defecto (RF‑ID‑08).
+- Accesible desde la red interna por defecto; el cliente puede abrirlo a internet (RF‑ID‑08, ADR‑050).
 
 ### 5.6 Cumplimiento legal y privacidad
 
@@ -410,22 +454,52 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 
 ---
 
-## 6. Calidad, pruebas y seguridad
+## 6. Usuario y contraseña de prueba
 
-- **Pirámide de pruebas completa**: unitarias de dominio (milisegundos, sin base de datos), integración contra PostgreSQL real, feature/API, contrato contra `openapi.yaml`, arquitectura, mutación, E2E con Playwright y cámara simulada, accesibilidad con axe y carga con k6 (50 fichajes/s con p95 < 150 ms en el hardware de referencia).
+### 6.1 Despliegue en funcionamiento
+
+| Aplicación | Dirección | Acceso |
+| --- | --- | --- |
+| **Panel de gestión** | <https://kronoqr.kodigolab.es/admin/> | Usuario: `bpeonsai@gmail.com` · La contraseña se facilita en el formulario de entrega del TFM, no en este repositorio público. La cuenta tiene segundo factor: el panel pide un código de 6 dígitos que genera el móvil del alumno; su teléfono va también en el formulario de entrega para solicitárselo en el momento de entrar. |
+| Portal del empleado | <https://kronoqr.kodigolab.es/portal/> | Con el código de empleado y el PIN de cualquier empleado dado de alta desde el panel (en la ficha del empleado se asigna el PIN). |
+| Quiosco | <https://kronoqr.kodigolab.es/kiosk/> | No tiene usuario: al abrirlo muestra un código de 6 dígitos que se teclea en el panel (*Quioscos → «Vincular quiosco»*). Después ficha con una tarjeta impresa desde el panel o con código de empleado y PIN. |
+
+Es una cuenta de demostración sobre datos ficticios. El paso a paso para recorrer el producto de punta a punta (dar de alta un empleado, imprimir su tarjeta, emparejar un quiosco en el navegador, fichar y ver el resultado en el panel y en el portal) está en [`doc_master/despliegue.md`](doc_master/despliegue.md).
+
+### 6.2 Entorno de desarrollo (semilla)
+
+`make seed` carga estas cuentas, que solo existen en desarrollo (el instalador de producción no las crea):
+
+| Rol | Usuario | Contraseña |
+| --- | --- | --- |
+| Administrador | `admin@kronoqr.test` | `kronoqr-dev-only` |
+| RRHH | `rrhh@kronoqr.test` | `kronoqr-dev-only` |
+| Auditor | `auditor@kronoqr.test` | `kronoqr-dev-only` |
+| Responsable de departamento | uno por departamento, p. ej. `cocina@kronoqr.test` (ver [`UserSeeder.php`](backend/database/seeders/UserSeeder.php)) | `kronoqr-dev-only` |
+| Empleado (portal y quiosco) | cualquier código de empleado de la semilla | PIN `246813` |
+
+Los roles con acceso global (`admin`, `rrhh`, `auditor`) tienen 2FA obligatorio: en el primer acceso el panel muestra el QR para la aplicación de autenticación.
+
+---
+
+## 7. Calidad, pruebas y seguridad
+
+- **Pirámide de pruebas completa**: unitarias de dominio (milisegundos, sin base de datos), integración contra PostgreSQL real, feature/API, contrato contra `openapi.yaml`, arquitectura, mutación, E2E con Playwright y cámara simulada, accesibilidad con axe y carga con k6 (50 fichajes/s con p95 < 150 ms en el hardware de referencia). Más de 5 000 pruebas de Pest y más de 300 de Playwright, todas etiquetadas con el requisito que cubren.
 - **Autorización negativa por rol en cada endpoint**: cada policy tiene su prueba de que un rol no autorizado recibe 403.
 - **Trazabilidad requisito → prueba**: cada prueba se etiqueta con los requisitos que cubre (`->group('RN-05', 'RF-AT-08')`) y `qa:traceability --check` falla en la CI si un requisito implementado no tiene prueba ([`docs/trazabilidad-pruebas.md`](docs/trazabilidad-pruebas.md)).
 - **Umbrales**: PHPStan nivel 9, cobertura del dominio ≥ 90 % y global ≥ 75 %, MSI ≥ 80 % sobre el dominio, 0 hallazgos en ShellCheck, Semgrep y gitleaks.
-- **Pipeline de CI** en ocho etapas: lint y tipos → arquitectura → unitarias y mutación de lo cambiado → trazabilidad → integración y contrato → seguridad → frontend → E2E → instalación limpia desde el paquete de entrega.
-- **Seguridad**: modelo de amenazas STRIDE, revisión interna OWASP ASVS, autoevaluación OWASP SAMM 2.0 con evidencia ([`docs/07-seguridad-madurez-y-amenazas.md`](docs/07-seguridad-madurez-y-amenazas.md)), SBOM CycloneDX por versión.
+- **Pipeline de CI** en ocho etapas: lint y tipos → arquitectura → unitarias y mutación de lo cambiado → trazabilidad → integración y contrato → seguridad → frontend → E2E → instalación limpia desde el paquete de entrega y actualización desde la versión anterior.
+- **Seguridad**: modelo de amenazas STRIDE, revisión interna OWASP ASVS, autoevaluación OWASP SAMM 2.0 con evidencia ([`docs/07-seguridad-madurez-y-amenazas.md`](docs/07-seguridad-madurez-y-amenazas.md)), SBOM CycloneDX por versión y política de divulgación en [`SECURITY.md`](SECURITY.md).
+- **Verificación pre-release**: antes de dar la 2.1.0 por entregable se hizo una verificación completa con agentes en modo solo lectura ([`docs/verificacion/`](docs/verificacion/)), que produjo el plan de correcciones de la 2.2.0, en curso.
 - **Versionado** SemVer con `CHANGELOG.md` generado desde commits convencionales; la publicación se dispara al etiquetar `vX.Y.Z`.
 
 ---
 
-## 7. Documentación de referencia
+## 8. Documentación de referencia
 
 | Documento | Contenido |
 | --- | --- |
+| [Entrega del TFM](doc_master/) | Memoria, despliegue, presentación y guion del vídeo |
 | [01 · Especificaciones](docs/01-especificaciones-proyecto.md) | Requisitos funcionales (`RF-*`), reglas de negocio (`RN-*`), modelo de dominio, requisitos legales, de seguridad y de calidad, glosario |
 | [02 · Stack y plan de implementación](docs/02-stack-tecnologico-y-plan-implementacion.md) | Arquitectura (C4), stack, convenciones, seguridad, observabilidad, pruebas, CI/CD y plan por fases |
 | [03 · Agentes y skills de IA](docs/03-agentes-y-skills-ia.md) | Qué agente y qué skill usar en cada tarea |
@@ -437,8 +511,10 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 | [Contrato OpenAPI](docs/api/openapi.yaml) | Fuente de verdad de la API `/api/v1` |
 | [Documentación de cliente](docs/cliente/) | Instalación, configuración, operación, endurecimiento, guías de RRHH y del portal, obligaciones legales |
 | [Runbooks](docs/runbooks/) | Procedimientos de operación e incidentes |
+| [Verificación](docs/verificacion/) | Verificación pre-release de la 2.1.0 y plan de correcciones de la 2.2.0 |
 | [CHANGELOG](CHANGELOG.md) | Historial de versiones |
 | [CLAUDE.md](CLAUDE.md) | Reglas duras del proyecto y convenciones para contribuir |
+| [SECURITY.md](SECURITY.md) | Cómo reportar una vulnerabilidad |
 
 ---
 
