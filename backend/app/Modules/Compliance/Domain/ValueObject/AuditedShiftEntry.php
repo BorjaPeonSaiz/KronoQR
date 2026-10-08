@@ -272,7 +272,7 @@ final readonly class AuditedShiftEntry
 
         return match (true) {
             ! $after['knowsOut'] => $unknown,
-            // Sin salida no hay origen de salida (`ShiftEntry::nextVersion()`).
+            // Sin salida no hay origen de salida (lo que hace `nextVersion` en el tramo de Attendance).
             $after['out'] === null => ['known' => true, 'value' => null],
             self::string($marks->payload, 'action') === 'created',
             self::sideChanged($marks->payload, 'clocked_out_at') => ['known' => true, 'value' => self::MANUAL_SOURCE],

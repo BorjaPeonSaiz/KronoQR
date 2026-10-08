@@ -1546,8 +1546,8 @@ check_space() {
 check_images() {
   [ "${DOCKER_OK}" -eq 1 ] && [ -n "${CURRENT_ENV}" ] && [ -n "${TARGET_VERSION}" ] || return 0
 
-  local image registry announced=0
-  declare -a missing=()
+  local image registry announced=0 pinned_id
+  declare -a missing=() all=()
 
   # El opt-out del .env (IMAGE_DIGEST_*=) es invisible y persiste: aviso y
   # constancia en el informe.
@@ -1556,6 +1556,7 @@ check_images() {
 
   while IFS= read -r image; do
     [ -n "${image}" ] || continue
+    all+=("${image}")
     docker image inspect "${image}" >/dev/null 2>&1 || missing+=("${image}")
   done < <(IMAGE_TAG="${TARGET_VERSION}" docker compose --env-file "${CURRENT_ENV}" -f "${COMPOSE_FILE}" config --images 2>/dev/null || true)
 
@@ -1570,13 +1571,19 @@ check_images() {
         "$(kq_format u_f_images "${TARGET_VERSION}" "${registry:-?}" "${TARGET_VERSION}")"
       return 0
     fi
-    # Referencia fijada por digest: la descarga no deja la etiqueta local y
-    # `restore-drill.sh --mode pitr` nombra la imagen por etiqueta (A6-2).
-    if [ "${image}" != "${image%%@*}" ]; then
-      if ! docker tag "${image}" "${image%%@*}" >/dev/null 2>&1; then
-        check_warn "$(kq_format u_c_image_tag "${image%%@*}")" \
-          "$(kq_format u_f_image_tag "${image}" "${image%%@*}")"
-      fi
+  done
+
+  # Referencia fijada por digest: ni la descarga ni una imagen ya presente por su
+  # digest dejan la etiqueta local, y `restore-drill.sh --mode pitr` nombra la
+  # imagen por etiqueta (A6-2). Se etiqueta cuando falta o apunta a otra imagen.
+  for image in ${all+"${all[@]}"}; do
+    [ "${image}" != "${image%%@*}" ] || continue
+    pinned_id="$(docker image inspect -f '{{.Id}}' "${image}" 2>/dev/null || true)"
+    [ -n "${pinned_id}" ] || continue
+    [ "$(docker image inspect -f '{{.Id}}' "${image%%@*}" 2>/dev/null || true)" = "${pinned_id}" ] && continue
+    if ! docker tag "${image}" "${image%%@*}" >/dev/null 2>&1; then
+      check_warn "$(kq_format u_c_image_tag "${image%%@*}")" \
+        "$(kq_format u_f_image_tag "${image}" "${image%%@*}")"
     fi
   done
   check_pass "$(kq_format u_c_images "${TARGET_VERSION}")"

@@ -59,7 +59,7 @@ final class WorkRecordInstant
     /**
      * Si dos marcas son distintas **al segundo**, que es como lo decide el
      * registro cuando una correccion cambia el origen de un lado
-     * (`Attendance\Domain\Model\ShiftEntry::nextVersion()` compara
+     * (`nextVersion`, en el tramo de `Attendance\Domain\Model`, compara
      * `getTimestamp()`). Ilegible o ausente cuenta como distinta.
      */
     public static function differsToTheSecond(?string $before, ?string $after): bool

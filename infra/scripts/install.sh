@@ -1276,14 +1276,18 @@ ensure_backup_subdirectories() {
 # perfectamente presentes. Aqui, lo que esta no se toca.
 pull_images_if_needed() {
   local image registry announced=0
-  declare -a missing=()
+  declare -a missing=() all=()
 
   while IFS= read -r image; do
     [ -n "${image}" ] || continue
+    all+=("${image}")
     docker image inspect "${image}" >/dev/null 2>&1 || missing+=("${image}")
   done < <(compose config --images 2>/dev/null || true)
 
-  [ "${#missing[@]}" -eq 0 ] && return 0
+  if [ "${#missing[@]}" -eq 0 ]; then
+    tag_pinned_images ${all+"${all[@]}"}
+    return 0
+  fi
 
   registry="$(env_value "${ENV_FILE}" "IMAGE_REGISTRY")"
 
@@ -1297,15 +1301,29 @@ pull_images_if_needed() {
       rollback_and_die "$(kq_format f_images \
         "${PRODUCT_VERSION}" "${registry}" "${registry}" "${PRODUCT_VERSION}")"
     fi
+  done
 
-    # Una referencia fijada por digest (registro/php:<version>@sha256:...) no
-    # deja la etiqueta local: `restore-drill.sh --mode pitr` nombra la imagen
-    # de postgres por registro/postgres:<version>. Se etiqueta la imagen YA
-    # verificada por su digest; no se descarga nada por etiqueta.
-    if [ "${image}" != "${image%%@*}" ]; then
-      if ! docker tag "${image}" "${image%%@*}" >/dev/null 2>&1; then
-        kq_msg check_warn "$(kq_format c_image_tag_failed "${image%%@*}" "${image}" "${image%%@*}")"
-      fi
+  tag_pinned_images "${all[@]}"
+}
+
+# Una referencia fijada por digest (registro/php:<version>@sha256:...) no deja
+# la etiqueta local: `restore-drill.sh --mode pitr` nombra la imagen de postgres
+# por registro/postgres:<version>. Se etiqueta la imagen YA verificada por su
+# digest, y tambien cuando no hubo que descargarla: una imagen presente por su
+# digest pero sin la etiqueta (cargada con `docker load`, o con la etiqueta
+# borrada) se quedaba sin ella. No se descarga nada por etiqueta.
+tag_pinned_images() {
+  local image pinned_id
+
+  for image in "$@"; do
+    [ "${image}" != "${image%%@*}" ] || continue
+    # Ya etiquetada, y con la MISMA imagen: nada que hacer. Una etiqueta local que
+    # apunta a otra imagen (un `docker load` antiguo) se corrige.
+    pinned_id="$(docker image inspect -f "{{.Id}}" "${image}" 2>/dev/null || true)"
+    [ -n "${pinned_id}" ] || continue
+    [ "$(docker image inspect -f "{{.Id}}" "${image%%@*}" 2>/dev/null || true)" = "${pinned_id}" ] && continue
+    if ! docker tag "${image}" "${image%%@*}" >/dev/null 2>&1; then
+      kq_msg check_warn "$(kq_format c_image_tag_failed "${image%%@*}" "${image}" "${image%%@*}")"
     fi
   done
 }
