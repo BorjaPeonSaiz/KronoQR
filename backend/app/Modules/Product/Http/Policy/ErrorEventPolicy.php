@@ -49,6 +49,11 @@ use Illuminate\Database\Eloquent\Model;
  * el error es quien lo reporta, y un `empleado` con el portal abierto sufre
  * errores igual que un `admin`— y vale una **sesion de portal**.
  *
+ * Las dos sesiones a medias no llegan aqui: la pendiente de segundo factor la
+ * para `session.complete` con `401` (RS-06) y la de contrasena temporal,
+ * `session.password-settled` (RF-ID-10), ambas en la ruta. Esta policy no las
+ * distingue porque el `ManagementActor` no sabe con que token se presenta.
+ *
  * **Un token de dispositivo recibe `403`**, y no por desconfianza: el quiosco
  * **tiene su canal**, dentro del latido (decision 7), y abrirle un segundo
  * competiria con la cola de fichajes por la misma red que ya le falla — que es

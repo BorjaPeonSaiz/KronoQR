@@ -1861,7 +1861,10 @@ Route::middleware([
 Route::post('/client-errors', [ClientErrorController::class, 'store'])
     // `session.password-settled` (RF-ID-10): la unica ruta autenticada sin
     // ambito que la sesion de contrasena temporal no debe alcanzar.
-    ->middleware(['auth:sanctum', 'session.password-settled', 'throttle:client-errors'])
+    // `session.complete` (RS-06): tampoco la pendiente de segundo factor, que
+    // sin ambito que exigir llegaba a escribir en `error_events` con media
+    // autenticacion. `401`, como en `GET /auth/me`.
+    ->middleware(['auth:sanctum', 'session.complete', 'session.password-settled', 'throttle:client-errors'])
     ->name('product.client_errors.store');
 
 /*

@@ -77,9 +77,12 @@ const PRIMER_DIA = '2025-01-01';
  * minutos y llenaria la memoria del proceso, y lo que aqui se mide es el plan de
  * PostgreSQL, no la velocidad del cliente.
  *
+ * Por omision, los dos años del `EXPLAIN`; las pruebas que solo agregan enero
+ * de 2026 piden menos (ver {@see informeMensualDelVolumen()}).
+ *
  * @return array{site: int, from: string, to: string}
  */
-function volumenDeInforme(): array
+function volumenDeInforme(string $primerDia = PRIMER_DIA, int $dias = DIAS): array
 {
     $site = WorkforceFixtures::site('Hotel con volumen');
 
@@ -128,8 +131,8 @@ function volumenDeInforme(): array
         SELECT e.id, d::date, 480, 1, NULL, NULL, FALSE, FALSE, now()
           FROM employees e
          CROSS JOIN generate_series(?::date, ?::date, interval '1 day') AS d
-        SQL, [PRIMER_DIA, (new DateTimeImmutable(PRIMER_DIA, new DateTimeZone('UTC')))
-        ->modify('+'.(DIAS - 1).' days')
+        SQL, [$primerDia, (new DateTimeImmutable($primerDia, new DateTimeZone('UTC')))
+        ->modify('+'.($dias - 1).' days')
         ->format('Y-m-d')]);
 
     // Sin esto, el planificador trabaja con las estadisticas de una tabla vacia
@@ -251,7 +254,18 @@ it('resuelve la consulta mensual sin recorrer daily_totals entera', function ():
  * volumen»; T2 de la verificacion de la 2.1.0). Sin estas dos, RF-IN-02 y
  * RF-IN-03 solo se comprobaban con una docena de filas en las pruebas de
  * feature, donde un `GROUP BY` mal escrito y uno bien escrito dan lo mismo.
+ *
+ * No miden tiempo, asi que no siembran los dos años del `EXPLAIN`: les basta
+ * enero de 2026 con el mes de antes y el de despues, 500 x 90 = 45.000 filas.
+ * Los meses vecinos no sobran: son los que hacen fallar un filtro de fechas
+ * que se saliera del rango y sumara diciembre o febrero.
  */
+
+/** Primer dia del volumen de las agregaciones: diciembre de 2025. */
+const PERIOD_REPORT_VOLUME_PRIMER_DIA_AGREGACION = '2025-12-01';
+
+/** Diciembre, enero y febrero de 2026: 31 + 31 + 28. */
+const PERIOD_REPORT_VOLUME_DIAS_AGREGACION = 90;
 
 /**
  * La consulta mensual de enero sobre el volumen sembrado.
@@ -271,7 +285,7 @@ function informeMensualDelVolumen(array $volumen, ReportGrouping $agrupacion): P
 }
 
 it('agrega por departamento el mes de 500 empleados', function (): void {
-    $volumen = volumenDeInforme();
+    $volumen = volumenDeInforme(PERIOD_REPORT_VOLUME_PRIMER_DIA_AGREGACION, PERIOD_REPORT_VOLUME_DIAS_AGREGACION);
 
     /** @var GeneratePeriodReport $caso */
     $caso = app(GeneratePeriodReport::class);
@@ -282,10 +296,10 @@ it('agrega por departamento el mes de 500 empleados', function (): void {
     expect($informe->rowCount())->toBe(10)
         ->and(array_unique(array_map(static fn ($fila): int => $fila->workedMinutes, $informe->rows)))->toBe([744000])
         ->and(array_unique(array_map(static fn ($fila): int => $fila->daysWithActivity, $informe->rows)))->toBe([1550]);
-})->group('RF-IN-02', 'RNF-P-05');
+})->group('RF-IN-02');
 
 it('compara lo trabajado con lo contratado en el mes de 500 empleados', function (): void {
-    $volumen = volumenDeInforme();
+    $volumen = volumenDeInforme(PERIOD_REPORT_VOLUME_PRIMER_DIA_AGREGACION, PERIOD_REPORT_VOLUME_DIAS_AGREGACION);
 
     /** @var GeneratePeriodReport $caso */
     $caso = app(GeneratePeriodReport::class);
@@ -299,4 +313,4 @@ it('compara lo trabajado con lo contratado en el mes de 500 empleados', function
         ->and($fila->deviationMinutes())->toBe(4251)
         ->and($fila->overtimeMinutes())->toBe(4251)
         ->and($fila->daysWithoutContract)->toBe(0);
-})->group('RF-IN-03', 'RNF-P-05');
+})->group('RF-IN-03');

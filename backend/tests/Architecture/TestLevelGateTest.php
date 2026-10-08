@@ -235,6 +235,23 @@ function testLevelGateKnownGaps(): array
             // calculo es la de integracion con volumen, `PeriodReportVolumeTest`.
             TEST_LEVEL_GATE_UNITARIA => 'el agregado lo calcula la consulta SQL, no el dominio',
         ],
+        // Los dos que destapo conceder el contrato por prueba y no por fichero
+        // (bloque 14): tenian el nivel prestado de pruebas vecinas.
+        'RF-PR-05' => [
+            // El resumen semanal es un proceso programado que envia correo: no
+            // tiene endpoint propio cuya respuesta validar. Su unica superficie
+            // HTTP es el ajuste `WEEKLY_SUMMARY_EMAIL` de `PATCH /settings`.
+            // Pendiente de decidir si se reclasifica como `sin fila` o se
+            // valida el contrato de ese ajuste en una prueba etiquetada.
+            TEST_LEVEL_GATE_CONTRATO => 'proceso programado sin endpoint propio; la reclasificacion esta pendiente',
+        ],
+        'RF-QR-04' => [
+            // Ninguna prueba valida contra `openapi.yaml` la respuesta de
+            // `POST /credentials/{uuid}/print` ni `/credentials/print-batch`
+            // (un PDF que renderiza Chromium). Las de la disposicion de la
+            // tarjeta van contra el renderizador, no contra el endpoint.
+            TEST_LEVEL_GATE_CONTRATO => 'falta validar contra el contrato la respuesta PDF de la impresion',
+        ],
     ];
 }
 
@@ -275,10 +292,6 @@ function testLevelGateTestsByRequirement(): array
  */
 function testLevelGateLevelsOf(TaggedTest $test): array
 {
-    static $validatesContract = [];
-
-    $file = \dirname(__DIR__, 3).'/'.$test->file;
-
     $level = match (true) {
         $test->tool === 'playwright' => TEST_LEVEL_GATE_E2E,
         $test->tool !== 'pest' => '',
@@ -289,10 +302,62 @@ function testLevelGateLevelsOf(TaggedTest $test): array
         default => '',
     };
 
-    $validatesContract[$file] ??= $level === TEST_LEVEL_GATE_FEATURE
-        && str_contains((string) @file_get_contents($file), 'assertValidResponse');
+    return array_values(array_filter([
+        $level,
+        $level === TEST_LEVEL_GATE_FEATURE && testLevelGateValidatesContract($test) ? TEST_LEVEL_GATE_CONTRATO : '',
+    ]));
+}
 
-    return array_values(array_filter([$level, $validatesContract[$file] ? TEST_LEVEL_GATE_CONTRATO : '']));
+/**
+ * ¿Valida ESTA prueba su respuesta contra `openapi.yaml`?
+ *
+ * **Por prueba, no por fichero** (revision del bloque 14): con el fichero
+ * entero, un solo `assertValidResponse` le daba el contrato a todas las pruebas
+ * de al lado, validaran o no. Al pasar a por prueba salieron dos requisitos que
+ * solo tenian el contrato prestado (ver {@see testLevelGateKnownGaps()}).
+ *
+ * El cuerpo de la prueba va desde su `it(`/`test(` hasta la linea de su
+ * etiqueta, que es donde la situa el escaner. Cuenta tambien la llamada a una
+ * funcion **del mismo fichero** que valida (`ficharConDesfase()` en
+ * `ClockSkewIncidentTest`), porque es como se escriben muchas: un nivel de
+ * indireccion y solo en el fichero. Un ayudante de `tests/Support` que validara
+ * no contaria; hoy no hay ninguno.
+ */
+function testLevelGateValidatesContract(TaggedTest $test): bool
+{
+    static $files = [];
+
+    $file = \dirname(__DIR__, 3).'/'.$test->file;
+    $files[$file] ??= testLevelGateContractShapeOf((string) @file_get_contents($file));
+
+    $preceding = array_slice($files[$file]['lines'], 0, $test->line);
+    $starts = array_keys(array_filter($preceding, static fn (string $line): bool => preg_match('/^\s*(it|test)\(/', $line) === 1));
+    $body = implode("\n", array_slice($preceding, $starts === [] ? 0 : max($starts)));
+
+    $calls = array_filter(
+        $files[$file]['validatingHelpers'],
+        static fn (string $helper): bool => preg_match('/\b'.preg_quote($helper, '/').'\(/', $body) === 1,
+    );
+
+    return str_contains($body, 'assertValidResponse') || $calls !== [];
+}
+
+/**
+ * Las lineas de un fichero de pruebas y sus funciones de primer nivel que
+ * validan contra el contrato.
+ *
+ * @return array{lines: list<string>, validatingHelpers: list<string>}
+ */
+function testLevelGateContractShapeOf(string $source): array
+{
+    preg_match_all('/^function\s+(\w+)\s*\(.*?^\}/ms', $source, $functions, PREG_SET_ORDER);
+
+    $helpers = array_values(array_map(
+        static fn (array $function): string => $function[1],
+        array_filter($functions, static fn (array $function): bool => str_contains($function[0], 'assertValidResponse')),
+    ));
+
+    return ['lines' => explode("\n", $source), 'validatingHelpers' => $helpers];
 }
 
 /**
@@ -309,10 +374,16 @@ function testLevelGateRequirementsInScope(): array
     preg_match('/\'current_phase\'\s*=>\s*(\d+)/', $config, $current);
     preg_match('/\'phase_execution_order\'\s*=>\s*\[([\d,\s]+)\]/', $config, $order);
 
-    $phases = array_map(intval(...), array_map(trim(...), explode(',', $order[1] ?? '')));
+    // Si la forma de `config/quality.php` cambia y las expresiones dejan de
+    // casar, el alcance quedaria vacio y la puerta pasaria en verde sin mirar
+    // nada: se revienta aqui, con el motivo.
+    $phaseList = $order[1] ?? throw new RuntimeException('No se lee phase_execution_order de config/quality.php.');
+    $currentPhase = $current[1] ?? throw new RuntimeException('No se lee current_phase de config/quality.php.');
+
+    $phases = array_map(intval(...), array_map(trim(...), explode(',', $phaseList)));
 
     return RequirementCatalog::fromFile(Repo::file('docs/requisitos.yaml'))
-        ->inScope(new PhaseOrder($phases), (int) ($current[1] ?? -1));
+        ->inScope(new PhaseOrder($phases), (int) $currentPhase);
 }
 
 /**
@@ -380,6 +451,14 @@ it('exige a cada requisito implementado los niveles de prueba de su tipo', funct
     );
 })->group('RQ-14');
 
+it('deja en alcance los requisitos de las fases ya ejecutadas', function (): void {
+    // El control del alcance: con cero requisitos, la puerta de los huecos
+    // pasaria en verde sin comprobar nada. Hoy son 167 (todas las fases menos
+    // la 4, que es la en curso detras de la 3); 150 es un suelo holgado, y si
+    // baja de ahi algo ha dejado de leerse.
+    expect(\count(testLevelGateRequirementsInScope()))->toBeGreaterThan(150);
+})->group('RQ-14');
+
 it('explora el arbol de pruebas de todos los niveles', function (): void {
     // El control: si el extractor no viera nada, la prueba de arriba diria que
     // falta todo y nadie sabria por que. Y si no viera Playwright —un montaje
@@ -399,19 +478,59 @@ it('explora el arbol de pruebas de todos los niveles', function (): void {
     ]);
 })->group('RQ-14');
 
-it('da a cada prueba el nivel de su carpeta, y contrato a la de feature que valida contra openapi.yaml', function (string $tool, string $file, array $levels): void {
+/**
+ * La linea donde el escaner situa una prueba: la de su `->group(`, la primera
+ * a partir de su `it('…'`. Asi el caso de abajo no se ata a numeros de linea
+ * que cambian con cada edicion del fichero que mira. Sin nombre, la linea 1.
+ */
+function testLevelGateTagLineOf(string $relative, string $name): int
+{
+    // Sin nombre no se lee nada: los ficheros de Playwright y k6 no estan
+    // montados en el contenedor de PHP.
+    $lines = $name === '' ? [] : explode("\n", (string) file_get_contents(\dirname(__DIR__, 3).'/'.$relative));
+    $declared = array_key_first(array_filter($lines, static fn (string $line): bool => $name !== '' && str_contains($line, "it('".$name."'")));
+    $tags = array_filter(
+        $lines,
+        static fn (string $line, int $index): bool => $declared !== null && $index >= $declared && str_contains($line, '->group('),
+        ARRAY_FILTER_USE_BOTH,
+    );
+
+    return $tags === [] ? 1 : array_key_first($tags) + 1;
+}
+
+it('da a cada prueba el nivel de su carpeta, y contrato a la de feature que valida contra openapi.yaml', function (string $tool, string $file, string $name, array $levels): void {
     // R1-QA-02: contarlo solo por la carpeta `tests/Contract` daba 44 huecos
     // falsos. Las rutas son relativas al padre de `backend/`, como las da el
     // escaner: `backend/tests/…` en la CI y `html/tests/…` en el contenedor.
     $relative = str_starts_with($file, 'tests/') ? basename(\dirname(__DIR__, 2)).'/'.$file : $file;
+    $line = testLevelGateTagLineOf($relative, $name);
 
-    expect(testLevelGateLevelsOf(new TaggedTest($tool, $relative, 1, 'x', ['RF-AT-01'])))->toBe($levels);
+    expect(testLevelGateLevelsOf(new TaggedTest($tool, $relative, $line, 'x', ['RF-AT-01'])))->toBe($levels);
 })->with([
-    'unitaria' => ['pest', 'tests/Unit/Attendance/Domain/MidnightShiftTest.php', [TEST_LEVEL_GATE_UNITARIA]],
-    'integracion' => ['pest', 'tests/Integration/Reporting/PeriodReportVolumeTest.php', [TEST_LEVEL_GATE_INTEGRACION]],
-    'feature validada contra el contrato' => ['pest', 'tests/Feature/Attendance/ClockSkewIncidentTest.php', [TEST_LEVEL_GATE_FEATURE, TEST_LEVEL_GATE_CONTRATO]],
-    'feature sin contrato' => ['pest', 'tests/Feature/Attendance/AnomalyMetricsTest.php', [TEST_LEVEL_GATE_FEATURE]],
-    'arquitectura, que no es ningun nivel del §9.5' => ['pest', 'tests/Architecture/DomainPurityTest.php', []],
-    'playwright' => ['playwright', 'frontend-kiosk/tests/e2e/scan.spec.ts', [TEST_LEVEL_GATE_E2E]],
-    'k6' => ['k6', 'load-tests/k6/scan-peak.js', []],
+    'unitaria' => ['pest', 'tests/Unit/Attendance/Domain/MidnightShiftTest.php', '', [TEST_LEVEL_GATE_UNITARIA]],
+    'integracion' => ['pest', 'tests/Integration/Reporting/PeriodReportVolumeTest.php', '', [TEST_LEVEL_GATE_INTEGRACION]],
+    'feature que valida en la propia prueba' => [
+        'pest',
+        'tests/Feature/Identity/CredentialEndpointsTest.php',
+        'emite una credencial y la deja pendiente de imprimir, sin acuñar ningun QR',
+        [TEST_LEVEL_GATE_FEATURE, TEST_LEVEL_GATE_CONTRATO],
+    ],
+    'feature que valida en una funcion del fichero' => [
+        'pest',
+        'tests/Feature/Attendance/ClockSkewIncidentTest.php',
+        'registra el fichaje del quiosco desviado y abre la incidencia de la noche',
+        [TEST_LEVEL_GATE_FEATURE, TEST_LEVEL_GATE_CONTRATO],
+    ],
+    // El caso que la concesion por fichero daba mal: el fichero valida en otras
+    // pruebas, esta no.
+    'feature sin contrato en un fichero que si valida' => [
+        'pest',
+        'tests/Feature/Identity/CredentialEndpointsTest.php',
+        'una credencial impresa si la resuelve el quiosco',
+        [TEST_LEVEL_GATE_FEATURE],
+    ],
+    'feature sin contrato' => ['pest', 'tests/Feature/Attendance/AnomalyMetricsTest.php', '', [TEST_LEVEL_GATE_FEATURE]],
+    'arquitectura, que no es ningun nivel del §9.5' => ['pest', 'tests/Architecture/DomainPurityTest.php', '', []],
+    'playwright' => ['playwright', 'frontend-kiosk/tests/e2e/scan.spec.ts', '', [TEST_LEVEL_GATE_E2E]],
+    'k6' => ['k6', 'load-tests/k6/scan-peak.js', '', []],
 ])->group('RQ-14');
