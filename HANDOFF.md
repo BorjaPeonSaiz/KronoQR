@@ -37,17 +37,18 @@ privado de GitHub sigue desactivado); runbook de pérdida total del servidor con
 
 **Entrega como TFM (08-10-2026, PR #127 → `main` `2ac00130`):** el proyecto es también el Trabajo de Fin de Máster del propietario
 (Máster de Desarrollo con IA, BIG School). `README.md` sigue el orden que pide la entrega y `doc_master/` lleva memoria, despliegue
-con recorrido guiado, guion del vídeo y `presentacion.html` (también en <https://claude.ai/artifact/3yStxZi8LUQoT6G9fQAsYb>, privada
-hasta que él la comparta). La contraseña de la cuenta de demostración y el teléfono para el código 2FA van en el formulario de
-entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él). Cuando cambie la versión desplegada en
+con recorrido guiado, guion del vídeo y `presentacion.html` (el HTML del repositorio es la entrega; la copia publicada como artefacto no se usa). La contraseña de la cuenta de demostración y el teléfono para el código 2FA van en el formulario de
+entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador `[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en
 `kronoqr.kodigolab.es` (hoy 2.1.0), actualizar README §3.1/§6 y `doc_master/despliegue.md`.
 
 **Siguiente acción: ninguna hasta que el propietario ordene el bloque final.** Cuando lo haga: rama `chore/release-2.2.0` desde
 `origin/main` siguiendo el plan (sección «Bloque final»); **antes de reponer `v2.1.0` (sobre `9282af6`) y `v2.0.0`** (en el remoto
 solo existe `v1.0.0`; `v2.0.0` sigue en local) desactivar `release.yml` (`gh workflow disable release.yml`), porque un push de
 etiqueta ejecuta el `release.yml` del commit etiquetado, sin la guarda de ADR-053, y reescribiría las imágenes `:2.1.0`. Al cerrar,
-dos cosas del propietario que dejó la conciliación: una alerta `purge_out_of_bounds` no se puede silenciar (necesita un «revisado»
-en la 2.2.x) y el suelo de `retention_years` es 1, no los 4 españoles (va con R7-SC-01).
+dos cosas que dejó la conciliación, decididas por el propietario el 08-10-2026 para la 2.2.x: un «revisado» para la alerta
+`purge_out_of_bounds` (un asiento de purga no admisible queda para siempre en `audit_log` y cada pasada lo vuelve a contar) y el
+**suelo legal de `retention_years` por jurisdicción en el perfil, 4 para España** (R7-SC-01; hoy `minimum()` = 1 para todo campo
+entero del perfil), con `arquitecto-dominio` + `backend-laravel` + `frontend-panel`.
 
 **Lo que destapó el cierre del bloque 14 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-14-*`; lo del
 13 en `bloque-13-rendimiento-bd` y `bloque-13-revisiones`):
@@ -89,7 +90,8 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ADR-057 §1–§3 (`REVOKE DELETE` y `UPDATE` por columnas, *trigger* de transiciones, purga por función `SECURITY DEFINER` con suelo
 legal); ADR-056 (zona horaria fija desde el primer fichaje); firma de imágenes con cosign; conciliación completa tras cada
-actualización; `redis:7-alpine` sin digest; mecanismo «revisado» para `purge_out_of_bounds`; las semillas de desarrollo disparan la
+actualización; `redis:7-alpine` sin digest; mecanismo «revisado» para `purge_out_of_bounds`; suelo legal de `retention_years` por jurisdicción en el perfil, 4 para España
+(R7-SC-01, decidido el 08-10-2026); las semillas de desarrollo disparan la
 alerta de conciliación; huecos de nivel RF-PR-05 y RF-QR-04 en `TestLevelGateTest`; una sola regla de minutos en `Shared`; corrección
 N5 de ADR-055 (necesita RN-10 en doc 01); regla ESLint contra `localStorage` en panel y portal; anexo B del doc 01 frente a los roles
 de `GET /site`; CSP por ubicación; `restore-drill` usa `IMAGE_TAG`; `CLAUDE.md` dice «28 ADRs» (son 57); cifras de presupuesto en

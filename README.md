@@ -20,9 +20,9 @@
 | **Repositorio** | <https://github.com/BorjaPeonSaiz/KronoQR> (público) |
 | **Despliegue en funcionamiento** | <https://kronoqr.kodigolab.es> · panel [`/admin/`](https://kronoqr.kodigolab.es/admin/) · quiosco [`/kiosk/`](https://kronoqr.kodigolab.es/kiosk/) · portal [`/portal/`](https://kronoqr.kodigolab.es/portal/) · estado [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health) |
 | **Usuario y contraseña de prueba** | Ver [§6](#6-usuario-y-contraseña-de-prueba) |
-| **Presentación (slides)** | [`doc_master/presentacion.html`](doc_master/presentacion.html) en el repositorio (se abre en cualquier navegador) · en línea: <https://claude.ai/artifact/3yStxZi8LUQoT6G9fQAsYb> |
-| **Vídeo** | _pendiente de publicar_ |
-| **Documentación del TFM** | [`doc_master/`](doc_master/): [memoria](doc_master/memoria.md), [despliegue](doc_master/despliegue.md), [presentación](doc_master/presentacion.html) y [guion del vídeo](doc_master/guion-video.md). La documentación técnica completa del producto vive en [`docs/`](docs/) (ver [§8](#8-documentación-de-referencia)) |
+| **Presentación (slides)** | [`doc_master/presentacion.html`](doc_master/presentacion.html) en el repositorio (se abre en cualquier navegador; flechas o clic para avanzar) |
+| **Vídeo** | `[URL DEL VÍDEO — sustituir antes de entregar]` |
+| **Documentación del TFM** | En [`doc_master/`](doc_master/): [`memoria.md`](doc_master/memoria.md) (contexto, objetivos, método de trabajo con IA, arquitectura, calidad, seguridad, despliegue, resultados, lo aprendido, límites), [`despliegue.md`](doc_master/despliegue.md) (el despliegue en funcionamiento, credenciales de prueba y un recorrido guiado para evaluar el producto de punta a punta), [`presentacion.html`](doc_master/presentacion.html) (las slides) y [`guion-video.md`](doc_master/guion-video.md) (guion por minutos del vídeo). La documentación técnica completa del producto vive en [`docs/`](docs/) (ver [§8](#8-documentación-de-referencia)) |
 
 > Este README sigue el orden que pide la documentación del proyecto final: descripción general, stack, instalación y ejecución, estructura, funcionalidades y usuario de prueba. Después añade la calidad, la seguridad y el índice de la documentación.
 
