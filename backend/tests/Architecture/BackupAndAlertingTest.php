@@ -298,6 +298,30 @@ it('verifica la cadena de auditoria a diario, que es lo que RS-07 exige', functi
         ->toMatch('/compliance:verify-audit-chain\'\)\s*\n\s*->dailyAt\(/');
 })->group('RS-07');
 
+it('concilia el registro horario con su auditoria a diario y entero cada semana, registrando su fallo', function (): void {
+    // ADR-057 §4. La cadena protege audit_log, no shift_entries: sin estas dos
+    // lineas, una edicion directa del registro horario no la ve nadie y lo que
+    // el cliente tiene escrito (doc 05 §7, obligaciones-legales.md §5) deja de
+    // ser verdad. La diaria es la que avisa al dia siguiente; la semanal, la
+    // unica que ve un borrado antiguo.
+    $scheduler = backupFile('backend/routes/console.php');
+
+    expect(horaProgramada($scheduler, 'compliance:reconcile-work-record'))->not->toBe('')
+        ->and($scheduler)->toContain("Schedule::command('compliance:reconcile-work-record', ['--full'])")
+        ->and($scheduler)->toMatch('/compliance:reconcile-work-record\', \[\'--full\'\]\)\s*\n\s*->weeklyOn\(/');
+
+    foreach (["compliance:reconcile-work-record')", "compliance:reconcile-work-record', ['--full'])"] as $tarea) {
+        // Desde su `Schedule::command(` hasta el siguiente: el bloque de esa
+        // tarea y de ninguna otra.
+        $desde = (string) strstr($scheduler, "Schedule::command('".$tarea);
+        $bloque = substr($desde, 0, strpos($desde, 'Schedule::command(', 1) ?: \strlen($desde));
+
+        expect($bloque)->not->toBe('', 'No esta programada '.$tarea)
+            ->and($bloque)->toContain('->withoutOverlapping()')
+            ->and($bloque)->toContain('->onFailure(LogScheduledCommandFailure::of(');
+    }
+})->group('RS-07', 'RL-04');
+
 it('mantiene el simulacro de restauracion automatizado y trimestral', function (): void {
     // RNF-D-05 y RQ-09: prueba de restauracion automatizada y ejecutada al
     // menos trimestralmente. Que exista el script no basta; lo que se degrada

@@ -91,6 +91,51 @@ Schedule::command('compliance:verify-audit-chain')
     ->runInBackground();
 
 /*
+ * Conciliacion entre el registro horario y su auditoria (ADR-057 §4, RL-04,
+ * RS-07).
+ *
+ * LA CADENA DE ARRIBA PROTEGE `audit_log`, NO `shift_entries`. La aplicacion
+ * puede escribir en el registro horario, y una edicion directa —una hora
+ * cambiada, un tramo borrado o inventado, un tramo anulado sin correccion— deja
+ * la cadena en verde y la exportacion para la Inspeccion manipulada. Esta tarea
+ * cruza cada tramo con el ultimo asiento que la aplicacion escribio sobre el y
+ * alerta si no cuadran: `work_record_reconciliation_discrepancies` debe estar
+ * siempre a cero, y se responde con docs/runbooks/discrepancia-registro-auditoria.md.
+ *
+ * DOS CADENCIAS, y hacen falta las dos:
+ *
+ *   · DIARIA, 04:15 UTC, sobre los ultimos
+ *     `compliance.work_record_reconciliation.window_days` dias (7). Es lo que
+ *     hace verdad que una edicion de un fichaje reciente se detecta al dia
+ *     siguiente. Diez minutos despues de la verificacion de la cadena y antes
+ *     de la deteccion de incidencias (04:30): las dos leen el mismo registro y
+ *     no tienen por que coincidir en el mismo minuto. 2,5 s medidos con
+ *     cuatro años de 300 personas.
+ *   · SEMANAL, domingo 02:15 UTC, sobre TODO el registro (`--full`). Es la unica
+ *     que ve un borrado o una edicion de un tramo antiguo, cuyos asientos quedan
+ *     fuera de la ventana diaria. Antes de la creacion de particiones (02:45) y
+ *     de la copia (03:15), y nunca cerca del turno de las 06:00: lee las dos
+ *     tablas enteras (1 min 42 s medidos con el mismo volumen, en 128 MB).
+ *
+ * SOLO LEE, y en una instantanea `REPEATABLE READ, READ ONLY`: no bloquea ni un
+ * fichaje. `withoutOverlapping` porque dos pasadas a la vez solo duplican la
+ * lectura. `onFailure()` deja el codigo de salida en el log (ver la cabecera del
+ * fichero) y NUNCA su salida: aunque solo lleva identificadores, la regla dura
+ * 21 gobierna el habito. Termina en rojo con cualquier discrepancia.
+ */
+$reconcileWorkRecord = Schedule::command('compliance:reconcile-work-record')
+    ->dailyAt('04:15')
+    ->withoutOverlapping()
+    ->runInBackground();
+$reconcileWorkRecord->onFailure(LogScheduledCommandFailure::of('compliance:reconcile-work-record', $reconcileWorkRecord));
+
+$reconcileWorkRecordFull = Schedule::command('compliance:reconcile-work-record', ['--full'])
+    ->weeklyOn(0, '02:15')
+    ->withoutOverlapping()
+    ->runInBackground();
+$reconcileWorkRecordFull->onFailure(LogScheduledCommandFailure::of('compliance:reconcile-work-record --full', $reconcileWorkRecordFull));
+
+/*
  * Particiones anuales de `audit_log` (ADR-027).
  *
  * DIARIA aunque solo actue en noviembre y diciembre, y por dos motivos. El

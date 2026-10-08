@@ -226,7 +226,7 @@ Seis perfiles: administrador, RRHH, responsable de departamento, auditor, emplea
 | Acceso del trabajador a **su propio registro** | Portal personal con descarga de su histórico |
 | Formato **legible y tratable** | CSV, Excel y PDF, formatos abiertos y no propietarios |
 
-Sobre la inalterabilidad conviene ser preciso, porque es lo que diferencia este sistema de una hoja de cálculo: **cada acción con relevancia legal se anota en un registro de auditoría que solo admite añadir, nunca modificar ni borrar**, y cada anotación va encadenada criptográficamente con la anterior. Si alguien manipulase la base de datos por debajo, la cadena se rompería y el sistema lo detectaría y avisaría al día siguiente.
+Sobre la inalterabilidad conviene ser preciso, porque es lo que diferencia este sistema de una hoja de cálculo: **cada acción con relevancia legal se anota en un registro de auditoría que solo admite añadir, nunca modificar ni borrar**, y cada anotación va encadenada criptográficamente con la anterior. Si alguien manipulase la base de datos por debajo, el sistema lo detectaría: una anotación alterada rompe la cadena, y un tramo del registro horario cambiado, borrado o inventado deja de cuadrar con la anotación que se escribió con él. Las dos comprobaciones corren solas cada noche y avisan al día siguiente; si el tramo tocado tiene más de siete días, lo hace la comprobación completa de los domingos, en como mucho una semana.
 
 Eso permite afirmar ante una inspección no solo que "confiamos en que nadie lo tocó", sino que **cualquier manipulación sería detectable**.
 

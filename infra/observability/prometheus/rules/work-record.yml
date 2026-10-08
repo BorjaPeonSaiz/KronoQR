@@ -1,0 +1,115 @@
+# KronoQR — alertas de la conciliacion entre el registro horario y su auditoria
+# (ADR-057 §4, RL-04, RS-07, R6-AR-01).
+#
+# POR QUE HACE FALTA ADEMAS DE audit.yml. La cadena de hash protege audit_log,
+# no shift_entries. Con la credencial de la aplicacion se puede cambiar la hora
+# de un fichaje, borrar un tramo, inventarse uno o anularlo sin correccion, y la
+# cadena sigue en verde porque nadie la ha tocado. La exportacion para la
+# Inspeccion lee shift_entries y saldria manipulada. La conciliacion cruza cada
+# tramo con el ultimo asiento que la aplicacion escribio sobre el, en la misma
+# transaccion, y este fichero avisa cuando no cuadran.
+#
+# SIN UMBRAL, como la cadena. Una sola discrepancia es una escritura en el
+# registro horario por fuera de la aplicacion. Pero al contrario que la cadena,
+# un tramo descuadrado SI se puede devolver a lo que dice su asiento: la serie es
+# un gauge de la ultima pasada, y la alerta se apaga sola cuando la siguiente da
+# cero.
+#
+# DESTINATARIO: seguridad, como la rotura de la cadena (ADR-010): la respuesta
+# no es reiniciar nada, es acotar el alcance de un posible acceso indebido
+# (RL-15).
+#
+# Las metricas las escribe `php artisan compliance:reconcile-work-record` en
+# BACKUP_PATH/metrics, un fichero por alcance: `recent` (diaria, 04:15 UTC, los
+# ultimos 7 dias) y `full` (domingo 02:15 UTC, todo el registro). Las sirve
+# node-exporter por el colector textfile.
+
+groups:
+  - name: kronoqr-work-record
+    interval: 60s
+    rules:
+      #------------------------------------------------------------------------
+      # El registro horario no cuadra con su auditoria. Critica y sin umbral.
+      #
+      # `sum by (scope)` y no por tipo: un mismo ataque suele dejar varios
+      # tipos a la vez (un tramo borrado y otro inventado en su lugar), y una
+      # notificacion por tipo seria ruido. El tipo esta en la salida del
+      # comando y en el runbook.
+      #------------------------------------------------------------------------
+      - alert: DiscrepanciaEntreRegistroYAuditoria
+        expr: sum by (scope) (work_record_reconciliation_discrepancies) > 0
+        for: 1m
+        labels:
+          severity: critical
+          # Incidente de integridad: enruta al escalado inmediato de alertmanager.
+          integrity: "true"
+          destinatario: seguridad
+          component: audit
+        annotations:
+          summary: "El registro horario no cuadra con su auditoria ({{ $labels.scope }}): {{ $value }} tramo(s)"
+          description: >-
+            La conciliacion ha encontrado tramos de shift_entries que no
+            coinciden con el ultimo asiento que la aplicacion escribio sobre
+            ellos en audit_log: un tramo sin asiento, una hora o una persona
+            cambiadas, un tramo anulado sin correccion o un asiento cuyo tramo
+            ya no existe. Alguien ha escrito en el registro horario por fuera
+            de la aplicacion. El fichaje NO esta afectado y no hay que parar
+            nada: preserva la evidencia antes de tocar ninguna fila y no
+            generes exportaciones legales del periodo hasta aclararlo.
+          runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+
+      #------------------------------------------------------------------------
+      # Nadie esta conciliando a diario. El silencio es el peor de los fallos:
+      # sin esta regla, apagar la tarea programada seria la forma mas comoda de
+      # que la alerta de arriba no volviera a sonar nunca. 26 h, como la de la
+      # cadena, para que un retraso normal de la ventana nocturna no la dispare.
+      #------------------------------------------------------------------------
+      - alert: ConciliacionDelRegistroAusente
+        expr: >-
+          absent(work_record_reconciliation_last_run_timestamp_seconds{scope="recent"})
+          or (time() - work_record_reconciliation_last_run_timestamp_seconds{scope="recent"}) > 93600
+        for: 30m
+        labels:
+          severity: critical
+          destinatario: seguridad
+          component: audit
+        annotations:
+          summary: "Hace mas de 26 h que no se concilia el registro horario con su auditoria"
+          description: >-
+            Una edicion directa del registro horario solo se detecta al dia
+            siguiente si la conciliacion diaria se ejecuta. O el scheduler esta
+            parado, o compliance:reconcile-work-record falla antes de publicar
+            la metrica, o el destino de metricas no esta montado.
+          runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+
+      #------------------------------------------------------------------------
+      # Nadie esta conciliando el registro completo. Es la unica pasada que ve
+      # un borrado o una edicion de un tramo antiguo. Ocho dias: la semanal mas
+      # un dia de holgura.
+      #
+      # La ausencia de la serie NO dispara sola, a diferencia de la diaria: tras
+      # instalar o actualizar, la primera pasada completa puede tardar hasta un
+      # domingo, y una alerta de seguridad sonando seis dias sin motivo enseña a
+      # ignorarla. Dispara si la serie falta y la diaria lleva ya mas de siete
+      # dias publicandose: para entonces tenia que haber corrido un domingo.
+      #------------------------------------------------------------------------
+      - alert: ConciliacionCompletaDelRegistroAusente
+        expr: >-
+          (time() - work_record_reconciliation_last_run_timestamp_seconds{scope="full"}) > 691200
+          or (
+            absent(work_record_reconciliation_last_run_timestamp_seconds{scope="full"})
+            and on() (time() - min_over_time(timestamp(work_record_reconciliation_last_run_timestamp_seconds{scope="recent"})[8d:1h])) > 604800
+          )
+        for: 30m
+        labels:
+          severity: high
+          destinatario: seguridad
+          component: audit
+        annotations:
+          summary: "Hace mas de 8 dias que no se concilia el registro horario completo"
+          description: >-
+            La pasada semanal (compliance:reconcile-work-record --full, los
+            domingos) es la unica que detecta un borrado o una edicion de un
+            tramo antiguo. O el scheduler estuvo parado el domingo, o el
+            comando fallo antes de publicar la metrica.
+          runbook_url: docs/runbooks/discrepancia-registro-auditoria.md

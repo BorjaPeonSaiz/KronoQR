@@ -159,6 +159,31 @@ return [
     ],
 
     /*
+     * Conciliacion entre el registro horario y su auditoria (ADR-057 §4, RL-04,
+     * RS-07): `compliance:reconcile-work-record`.
+     *
+     * LA VENTANA DE LA PASADA DIARIA, en dias. Cada noche se cruzan los tramos
+     * con `work_date` de los ultimos N dias —y todo lo que la auditoria apunto en
+     * ese plazo, incluidas las correcciones de hoy sobre tramos antiguos— con su
+     * ultimo asiento de `audit_log`. Es lo que hace que una edicion directa de un
+     * fichaje reciente salga al dia siguiente.
+     *
+     * SIETE DIAS, por lo mismo que la deteccion de incidencias: es la semana de
+     * una nomina y cubre de sobra un fin de semana en el que nadie mira las
+     * alertas. Lo antiguo no queda sin mirar: el domingo corre la pasada completa
+     * (`--full`) sobre todo el registro, que es la que ve un borrado o una edicion
+     * de un tramo de hace meses. Medida, la completa tarda 1 min 42 s con cuatro
+     * años de 300 personas; la diaria, 2,5 s.
+     *
+     * NO ES UN UMBRAL LEGAL NI DE UN CLIENTE: dice hasta donde mira el proceso, no
+     * cuando algo esta mal (regla dura 13). Una pasada mas ancha para una
+     * ejecucion concreta es `--days`, una decision consciente de quien la lanza.
+     */
+    'work_record_reconciliation' => [
+        'window_days' => 7,
+    ],
+
+    /*
      * Retencion por tipo de dato (RL-11, RF-PR-03, tarea 2.10).
      *
      * AQUI NO ESTAN LOS ANOS DEL REGISTRO DE JORNADA NI DE `audit_log`, y no es

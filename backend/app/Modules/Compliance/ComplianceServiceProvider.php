@@ -26,6 +26,8 @@ use App\Modules\Compliance\Application\Port\LegalExportAudit;
 use App\Modules\Compliance\Application\Port\LegalExportMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
+use App\Modules\Compliance\Application\Port\WorkRecordAuditSource;
+use App\Modules\Compliance\Application\Port\WorkRecordReconciliationMetrics;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
 use App\Modules\Compliance\Application\UseCase\SweepLegalExportFiles;
 use App\Modules\Compliance\Domain\Model\Incident;
@@ -43,6 +45,7 @@ use App\Modules\Compliance\Infrastructure\Console\EnsureAuditPartitionsCommand;
 use App\Modules\Compliance\Infrastructure\Console\IncidentMetricsCommand;
 use App\Modules\Compliance\Infrastructure\Console\LegalExportCommand;
 use App\Modules\Compliance\Infrastructure\Console\PurgeOrphanedLegalExportTempFilesCommand;
+use App\Modules\Compliance\Infrastructure\Console\ReconcileWorkRecordCommand;
 use App\Modules\Compliance\Infrastructure\Console\RecordSystemEventCommand;
 use App\Modules\Compliance\Infrastructure\Console\VerifyAuditChainCommand;
 use App\Modules\Compliance\Infrastructure\Export\CsvLegalExportWriter;
@@ -78,6 +81,7 @@ use App\Modules\Compliance\Infrastructure\Metrics\RedisIncidentResolutionMetrics
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileAuditMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileIncidentMetrics;
 use App\Modules\Compliance\Infrastructure\Metrics\TextfileLegalExportMetrics;
+use App\Modules\Compliance\Infrastructure\Metrics\TextfileWorkRecordReconciliationMetrics;
 use App\Modules\Compliance\Infrastructure\Notification\MailIncidentNotifier;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditChainReader;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditLogPartitions;
@@ -87,6 +91,7 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentBoard;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentLedger;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentNotices;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportSource;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordAuditSource;
 use App\Modules\Identity\Domain\Event\CredentialDelivered;
 use App\Modules\Identity\Domain\Event\CredentialIssued;
 use App\Modules\Identity\Domain\Event\CredentialPrinted;
@@ -210,6 +215,18 @@ final class ComplianceServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(AuditMetrics::class, TextfileAuditMetrics::class);
+
+        /*
+         * La conciliacion entre el registro horario y su auditoria (ADR-057 §4).
+         * Sobre la conexion de la APLICACION y solo para leer: abre su propia
+         * transaccion `REPEATABLE READ, READ ONLY` y no escribe en ninguna tabla.
+         */
+        $this->app->bind(
+            WorkRecordAuditSource::class,
+            static fn (): DatabaseWorkRecordAuditSource => new DatabaseWorkRecordAuditSource(DB::connection()),
+        );
+
+        $this->app->singleton(WorkRecordReconciliationMetrics::class, TextfileWorkRecordReconciliationMetrics::class);
 
         /*
          * RS-05: todo acceso a datos personales de terceros deja traza.
@@ -365,6 +382,12 @@ final class ComplianceServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 VerifyAuditChainCommand::class,
+                /*
+                 * `compliance:reconcile-work-record` (ADR-057 §4). Se programa
+                 * dos veces en routes/console.php: la ventana de los ultimos
+                 * dias a diario y el registro completo una vez por semana.
+                 */
+                ReconcileWorkRecordCommand::class,
                 EnsureAuditPartitionsCommand::class,
                 /*
                  * `compliance:legal-export` (doc 02 Anexo C, plan 1.17 paso 7).

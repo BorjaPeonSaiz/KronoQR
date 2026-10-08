@@ -304,21 +304,43 @@ El procedimiento completo está en
 
 ## 5. Guardar la prueba de que el registro no se ha manipulado
 
-El sistema encadena por hash toda acción con relevancia legal y **verifica la
-cadena a diario**. Si esa verificación falla, no es una avería: es un incidente
-de seguridad, y tiene su procedimiento
-([`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md)).
+El sistema guarda dos pruebas, y las comprueba solo:
+
+- **La auditoría va encadenada por hash.** Toda acción con relevancia legal
+  queda anotada, y cada anotación lleva la huella de la anterior. La cadena se
+  **verifica a diario**: si alguien edita o borra una anotación, sale como una
+  rotura de la cadena
+  ([`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md)).
+- **El registro horario se concilia con su auditoría.** Cada fichaje, alta
+  manual, corrección o anulación deja, en la misma operación, su anotación con
+  las horas, la persona y la jornada. Cada noche se compara cada tramo de los
+  **últimos 7 días** con esa anotación, y cada domingo **todo** el registro.
+  Un tramo con una hora cambiada, inventado, borrado o anulado sin corrección
+  sale como una **discrepancia de la conciliación**
+  ([`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md)).
+
+Si cualquiera de las dos falla, no es una avería: es un posible incidente de
+seguridad, con alerta crítica al responsable de seguridad y su procedimiento.
+
+**Detectan, no impiden.** Quien tenga acceso a la base de datos con la
+credencial de la aplicación todavía puede escribir en el registro horario —la
+aplicación tiene que poder hacerlo para fichar—. Lo que el sistema garantiza es
+que esa escritura **no pasa inadvertida**: aparece en la conciliación y la
+anotación original sigue diciendo lo que de verdad ocurrió.
 
 Lo que te corresponde:
 
-- Que **alguien reciba** la alerta y sepa que es crítica.
+- Que **alguien reciba** las alertas del responsable de seguridad y sepa que
+  son críticas.
 - **No dar a la aplicación permisos de base de datos que no necesita.** El
   producto se instala con tres roles separados por este motivo; si alguien
   «simplifica» dándole a la aplicación el rol propietario, la garantía deja de
   existir sin que nada falle a la vista.
 - **No editar la base de datos a mano.** Ninguna corrección legítima necesita
-  hacerlo, y cualquiera que se haga así aparecerá al día siguiente como una
-  rotura de la cadena.
+  hacerlo. Una edición de la auditoría aparece al día siguiente como una
+  rotura de la cadena. Una edición directa del registro horario aparece como
+  una discrepancia de la conciliación: **al día siguiente** si el tramo es de
+  los últimos 7 días, y **en como mucho una semana** si es anterior.
 
 ---
 
