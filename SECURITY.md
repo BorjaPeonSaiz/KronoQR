@@ -10,14 +10,8 @@ prioridad sobre cualquier otro trabajo.
 **No abras una incidencia pública, ni un *pull request*, ni publiques el
 detalle** hasta que el fabricante confirme que hay corrección disponible.
 
-Notifícala **en privado** por uno de estos dos canales:
-
-1. **Contacto de seguridad del fabricante:** `[CONTACTO DEL FABRICANTE]`
-   *(pendiente de rellenar por el fabricante: dirección de correo o formulario
-   dedicado a seguridad; este documento no inventa uno)*.
-2. **Aviso privado de vulnerabilidades de GitHub** de este repositorio (pestaña
-   *Security → Report a vulnerability*), si el fabricante lo tiene activado
-   `[CONFIRMAR QUE ESTÁ ACTIVADO]`.
+Notifícala **en privado** por correo a **contacto@kodigolab.es**, con «Seguridad
+KronoQR» en el asunto. Responsable: Borja Peón Saiz.
 
 Si eres **cliente**, puedes usar además el canal de soporte de tu licencia, con
 la misma regla: sin datos personales en el mensaje.
@@ -42,13 +36,10 @@ la misma regla: sin datos personales en el mensaje.
 
 ## Qué puedes esperar de nosotros
 
-Plazos **objetivo**; el fabricante debe confirmarlos antes de publicar este
-documento `[PLAZOS A CONFIRMAR POR EL FABRICANTE]`:
-
-| Hito | Objetivo |
+| Hito | Plazo |
 | --- | --- |
-| Acuse de recibo | 3 días laborables |
-| Valoración inicial (¿es una vulnerabilidad? ¿qué gravedad?) | 10 días laborables |
+| Acuse de recibo | 48 horas |
+| Valoración inicial (¿es una vulnerabilidad? ¿qué gravedad?) | 72 horas |
 | Corrección de una vulnerabilidad **crítica o alta** | 30 días naturales desde la valoración, o un plan de mitigación comunicado en ese plazo |
 | Corrección de gravedad media o baja | En la siguiente versión menor |
 
