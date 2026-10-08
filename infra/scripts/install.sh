@@ -902,6 +902,7 @@ phase_requirements() {
     check_customer_values
     check_network_cidrs "${ENV_FILE}" "${COMPOSE_FILE}" skip-missing
     check_operational_settings "${ENV_FILE}" "${COMPOSE_FILE}"
+    check_image_digest_overrides "${ENV_FILE}" "$(dirname -- "${COMPOSE_FILE}")"
     check_app_url
     check_tls
     check_ports
@@ -1302,7 +1303,9 @@ pull_images_if_needed() {
     # de postgres por registro/postgres:<version>. Se etiqueta la imagen YA
     # verificada por su digest; no se descarga nada por etiqueta.
     if [ "${image}" != "${image%%@*}" ]; then
-      docker tag "${image}" "${image%%@*}" >/dev/null 2>&1 || true
+      if ! docker tag "${image}" "${image%%@*}" >/dev/null 2>&1; then
+        kq_msg check_warn "$(kq_format c_image_tag_failed "${image%%@*}" "${image}" "${image%%@*}")"
+      fi
     fi
   done
 }

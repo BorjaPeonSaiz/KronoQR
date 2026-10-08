@@ -66,3 +66,25 @@ it('fija en el paquete las tres imagenes por digest', function (): void {
     }
     expect(preg_match_all('/\$\{IMAGE_TAG:\?[^}]*\}\$\{IMAGE_DIGEST_[A-Z]+:-\}/', $compose))->toBe(3);
 })->group('RF-PD-02', 'RS-10');
+
+it('la vuelta atras in-place anula los digests, la primera publicacion es explicita y la CI ejercita el paquete fijado', function (): void {
+    $update = Repo::contents('infra/scripts/update.sh');
+    $guard = Repo::contents('.github/scripts/assert-image-tags-free.sh');
+    $release = Repo::contents('.github/workflows/release.yml');
+    $ci = Repo::contents('.github/workflows/ci.yml');
+
+    // Vuelta atras in-place: las tres variables, vacias, en la copia del .env.
+    foreach (['PHP', 'NGINX', 'POSTGRES'] as $imagen) {
+        expect($update)->toContain('kq_env_set "${ROLLBACK_ENV}" "IMAGE_DIGEST_'.$imagen.'" ""');
+    }
+
+    // El 403 de GHCR solo se acepta con la variable explicita y solo la pone la entrada manual.
+    expect($guard)->toContain('KQ_FIRST_PUBLICATION')
+        ->and($release)->toContain('first_publication')
+        ->and(substr_count($release, 'KQ_FIRST_PUBLICATION:'))->toBe(2);
+
+    // ⑧b arma un paquete CON images.lock y hace la vuelta atras in-place sobre el.
+    expect($ci)->toContain('KQ_IMAGES_LOCK=')
+        ->and($ci)->toContain('registry:2')
+        ->and($ci)->toContain('P2 · Vuelta atras IN PLACE');
+})->group('RF-PD-02', 'RS-10');

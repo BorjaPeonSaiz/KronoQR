@@ -1549,6 +1549,11 @@ check_images() {
   local image registry announced=0
   declare -a missing=()
 
+  # El opt-out del .env (IMAGE_DIGEST_*=) es invisible y persiste: aviso y
+  # constancia en el informe.
+  check_image_digest_overrides "${CURRENT_ENV}" "${PACKAGE_DIR}"
+  remember_check "image-digests" "${KQ_DIGEST_OVERRIDES:-$(kq_text u_report_ok)}"
+
   while IFS= read -r image; do
     [ -n "${image}" ] || continue
     docker image inspect "${image}" >/dev/null 2>&1 || missing+=("${image}")
@@ -1568,7 +1573,10 @@ check_images() {
     # Referencia fijada por digest: la descarga no deja la etiqueta local y
     # `restore-drill.sh --mode pitr` nombra la imagen por etiqueta (A6-2).
     if [ "${image}" != "${image%%@*}" ]; then
-      docker tag "${image}" "${image%%@*}" >/dev/null 2>&1 || true
+      if ! docker tag "${image}" "${image%%@*}" >/dev/null 2>&1; then
+        check_warn "$(kq_format u_c_image_tag "${image%%@*}")" \
+          "$(kq_format u_f_image_tag "${image}" "${image%%@*}")"
+      fi
     fi
   done
   check_pass "$(kq_format u_c_images "${TARGET_VERSION}")"
@@ -1752,7 +1760,15 @@ prepare_package() {
   if [ "${IN_PLACE}" -eq 1 ]; then
     ROLLBACK_COMPOSE="${COMPOSE_FILE}"
     ROLLBACK_ENV="${ENV_FILE}.kronoqr-pre-update"
-    if ! cp -p "${ENV_FILE}" "${ROLLBACK_ENV}" || ! chmod 0600 "${ROLLBACK_ENV}"; then
+    # El docker-compose.yml nuevo ya trae el digest de la version nueva como
+    # valor por defecto (A6-2), y la vuelta atras lo reutiliza con la etiqueta
+    # vieja: sin esto resolveria a php:<vieja>@<digest nuevo> y Docker levantaria
+    # la version NUEVA. Vacias (definidas, no ausentes) anulan el valor por
+    # defecto y la imagen vieja se resuelve por su etiqueta, que sigue en local.
+    if ! cp -p "${ENV_FILE}" "${ROLLBACK_ENV}" || ! chmod 0600 "${ROLLBACK_ENV}" ||
+      ! kq_env_set "${ROLLBACK_ENV}" "IMAGE_DIGEST_PHP" "" ||
+      ! kq_env_set "${ROLLBACK_ENV}" "IMAGE_DIGEST_NGINX" "" ||
+      ! kq_env_set "${ROLLBACK_ENV}" "IMAGE_DIGEST_POSTGRES" "" || ! chmod 0600 "${ROLLBACK_ENV}"; then
       die "${KQ_EXIT_REQUIREMENTS}" "$(kq_format u_f_prepare_env "${ROLLBACK_ENV}")"
     fi
     write_wal_key "${ENV_FILE}"

@@ -547,3 +547,72 @@ it('migra y restaura por los servicios puntuales, y crea el rol de copias antes 
         ->and($actualizador)->toContain('kq_env_set "${ENV_FILE}" "BACKUP_DB_PASSWORD" "${password}"')
         ->and($actualizador)->not->toMatch('/DB_BACKUP_PASSWORD=/');
 })->group('RS-07', 'RF-PD-10');
+
+it('en modo in-place la copia del .env de la vuelta atras anula los digests y el .env vivo no se toca (A6-2, ADR-053)', function (): void {
+    // El docker-compose.yml nuevo lleva el digest de la version nueva como valor
+    // por defecto y la vuelta atras in-place lo reutiliza: sin las tres variables
+    // VACIAS (definidas, no ausentes) en ROLLBACK_ENV, Docker mandaria por el
+    // digest y levantaria la version nueva sobre la copia restaurada. ⑧b (P2)
+    // lo ejercita de verdad con un registro local.
+    $proceso = bashConElActualizador(<<<'BASH'
+        d="$(mktemp -d)"
+        trap 'rm -rf "${d}"' EXIT
+        printf 'APP_KEY=base64:prueba\nIMAGE_TAG=2.1.0\nIMAGE_DIGEST_PHP=@sha256:viejo\n' >"${d}/.env"
+        IN_PLACE=1
+        ENV_FILE="${d}/.env"
+        COMPOSE_FILE="${d}/docker-compose.yml"
+        prepare_package
+        printf 'ROLLBACK_ENV=%s\n' "${ROLLBACK_ENV##*/}"
+        printf '%s\n' '--- rollback'
+        cat "${ROLLBACK_ENV}"
+        printf '%s\n' '--- vivo'
+        cat "${ENV_FILE}"
+        BASH);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput().$proceso->getOutput());
+
+    [$cabecera, $resto] = explode("--- rollback\n", $proceso->getOutput(), 2);
+    [$rollback, $vivo] = explode("--- vivo\n", $resto, 2);
+
+    expect($cabecera)->toContain('ROLLBACK_ENV=.env.kronoqr-pre-update')
+        ->and($rollback)->toContain("IMAGE_TAG=2.1.0\n")
+        ->and($rollback)->toMatch('/^IMAGE_DIGEST_PHP=$/m')
+        ->and($rollback)->toMatch('/^IMAGE_DIGEST_NGINX=$/m')
+        ->and($rollback)->toMatch('/^IMAGE_DIGEST_POSTGRES=$/m')
+        ->and($rollback)->not->toContain('sha256:viejo')
+        ->and($vivo)->toContain('IMAGE_DIGEST_PHP=@sha256:viejo')
+        ->and($vivo)->not->toContain('IMAGE_DIGEST_NGINX');
+})->group('RF-PD-10', 'RS-08');
+
+it('avisa cuando el .env declara IMAGE_DIGEST_* distintas de las del paquete y calla cuando coinciden o no estan', function (): void {
+    $lock = 'php sha256:'.str_repeat('a', 64)."\nnginx sha256:".str_repeat('b', 64)."\npostgres sha256:".str_repeat('c', 64)."\n";
+
+    $proceso = bashConElActualizador(<<<BASH
+        CHECKS_RUN=0; CHECKS_FAILED=0; CHECKS_WARNED=0
+        d="\$(mktemp -d)"
+        trap 'rm -rf "\${d}"' EXIT
+        printf '%s' '{$lock}' >"\${d}/images.lock"
+
+        printf 'APP_KEY=x\n' >"\${d}/.env"
+        check_image_digest_overrides "\${d}/.env" "\${d}" >/dev/null
+        printf 'sin-declarar=[%s]\n' "\${KQ_DIGEST_OVERRIDES}"
+
+        printf 'IMAGE_DIGEST_PHP=@sha256:%s\n' "$(printf 'a%.0s' $(seq 1 64))" >"\${d}/.env"
+        check_image_digest_overrides "\${d}/.env" "\${d}" >/dev/null
+        printf 'igual-al-paquete=[%s]\n' "\${KQ_DIGEST_OVERRIDES}"
+
+        printf 'IMAGE_DIGEST_PHP=\nIMAGE_DIGEST_POSTGRES=@sha256:otro\n' >"\${d}/.env"
+        salida="\$(check_image_digest_overrides "\${d}/.env" "\${d}")"
+        check_image_digest_overrides "\${d}/.env" "\${d}" >/dev/null
+        printf 'anuladas=[%s]\n' "\${KQ_DIGEST_OVERRIDES}"
+        printf 'salida=%s\n' "\${salida}"
+        BASH);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput().$proceso->getOutput());
+
+    expect($proceso->getOutput())
+        ->toContain("sin-declarar=[]\n")
+        ->toContain("igual-al-paquete=[]\n")
+        ->toContain("anuladas=[IMAGE_DIGEST_PHP, IMAGE_DIGEST_POSTGRES]\n")
+        ->toContain('IMAGE_DIGEST_PHP, IMAGE_DIGEST_POSTGRES');
+})->group('RF-PD-10', 'RS-08');

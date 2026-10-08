@@ -35,6 +35,22 @@ node_modules/
 # No hay `database/factories/`: si algun dia la hay, va aqui al lado.
 backend/database/seeders/
 
+# LAS PRUEBAS Y EL UTILLAJE DE DESARROLLO TAMPOCO (revision de seguridad del
+# bloque 14). `COPY backend/ ./` metia en la imagen de produccion las suites
+# (con escenarios de ataque y datos de ejemplo), phpunit.xml y la configuracion
+# de Pint, PHPStan, Deptrac y Rector: superficie sin ningun uso en el servidor
+# de un cliente. Ninguna etapa, job ni script de la CI ejecuta nada de esto
+# DENTRO de la imagen (en desarrollo y en CI el codigo llega por bind mount o
+# por el checkout). `SeedersOutOfProductionImageTest` vigila la exclusion y la
+# segunda cerradura de la etapa `vendor`.
+backend/tests/
+backend/tools/
+backend/phpunit.xml
+backend/phpstan.neon
+backend/deptrac.yaml
+backend/rector.php
+backend/pint.json
+
 # Estado de ejecucion
 backend/storage/
 backend/bootstrap/cache/

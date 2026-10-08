@@ -2514,10 +2514,152 @@ jobs:
           sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml \
             run --rm --no-deps -T restore bash /opt/kronoqr/scripts/restore-drill.sh --mode database --accept-unauthenticated
 
+      - name: "P0 · Registro local y paquetes FIJADOS POR DIGEST (A6-2, ADR-053)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Hasta aqui todos los paquetes se armaban SIN KQ_IMAGES_LOCK: el camino
+        # que recibe un cliente (docker-compose.yml con `@sha256:`, images.lock)
+        # solo se ejercitaba en release.yml, cuando ya no hay vuelta. Aqui se
+        # levanta un registro local, se empujan las imagenes de esta version, se
+        # escriben sus digests REALES en un images.lock y se arma el paquete con
+        # package.sh, igual que la publicacion. Son dos locks:
+        #   · sano: las tres imagenes buenas.
+        #   · roto: igual, pero el borde es alpine (termina al arrancar). Sustituye
+        #     al truco de U3 (reetiquetar), que con una referencia por digest no
+        #     serviria: Docker manda por el digest y no por la etiqueta.
+        # `registry:2` por etiqueta: es un andamio de la CI que no llega a ningun
+        # entregable; la imagen de un cliente nunca sale de aqui.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          new="${{ steps.anterior.outputs.new_version }}"
+          reg=localhost:5000/kronoqr
+          docker run -d --name registro-ci -p 127.0.0.1:5000:5000 registry:2
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:5000/v2/ >/dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:5000/v2/ >/dev/null
+
+          # La version nueva (sana) y el borde roto, empujados con la etiqueta de la version.
+          docker tag "kronoqr/app:${new}"      "${reg}/php:${new}"
+          docker tag "kronoqr/postgres:${new}" "${reg}/postgres:${new}"
+          docker tag "kronoqr/nginx:${new}"    "${reg}/nginx:${new}"
+          docker push --quiet "${reg}/php:${new}"
+          docker push --quiet "${reg}/postgres:${new}"
+          docker push --quiet "${reg}/nginx:${new}"
+          digest() { docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}'; }
+          d_php="$(digest "${reg}/php:${new}")"
+          d_pg="$(digest "${reg}/postgres:${new}")"
+          d_nginx="$(digest "${reg}/nginx:${new}")"
+          docker pull --quiet alpine:3.20 >/dev/null
+          docker tag alpine:3.20 "${reg}/nginx:${new}-roto"
+          docker push --quiet "${reg}/nginx:${new}-roto"
+          d_nginx_roto="$(digest "${reg}/nginx:${new}-roto")"
+          for d in "${d_php}" "${d_pg}" "${d_nginx}" "${d_nginx_roto}"; do
+            [[ "${d}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "digest ilegible: '${d}'"; exit 1; }
+          done
+          printf 'php %s\nnginx %s\npostgres %s\n' "${d_php}" "${d_nginx}" "${d_pg}" >images-sano.lock
+          printf 'php %s\nnginx %s\npostgres %s\n' "${d_php}" "${d_nginx_roto}" "${d_pg}" >images-roto.lock
+
+          # Las imagenes de la version ANTERIOR, solo con nombre local: son las que
+          # la vuelta atras tiene que encontrar por su etiqueta.
+          docker tag "kronoqr/php:${old}"      "${reg}/php:${old}"
+          docker tag "kronoqr/postgres:${old}" "${reg}/postgres:${old}"
+          docker tag "kronoqr/nginx:${old}"    "${reg}/nginx:${old}"
+
+          for variante in sano roto; do
+            KQ_IMAGES_LOCK="${PWD}/images-${variante}.lock" bash infra/scripts/package.sh "paquete-fijado-${variante}"
+            # La misma matriz de versiones ya ajustada del paquete nuevo (version
+            # sintetica o ciclo abierto): es lo unico que difiere del package.sh de arriba.
+            cp paquete-nuevo/VERSION paquete-nuevo/versions.txt "paquete-fijado-${variante}/"
+            test -f "paquete-fijado-${variante}/images.lock"
+            test "$(grep -c '@sha256:' "paquete-fijado-${variante}/docker-compose.yml")" -eq 3
+          done
+          grep -q "@${d_nginx_roto}" paquete-fijado-roto/docker-compose.yml
+          grep -q "@${d_nginx}" paquete-fijado-sano/docker-compose.yml
+
+      - name: "P1 · Instalacion limpia desde el paquete fijado: descarga por digest y deja la etiqueta"
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          new="${{ steps.anterior.outputs.new_version }}"
+          reg=localhost:5000/kronoqr
+          sudo docker compose --env-file paquete-nuevo/.env -f paquete-nuevo/docker-compose.yml down -v --remove-orphans
+          sudo rm -rf /var/backups/fichaje /var/log/kronoqr
+          # Fuera las referencias del registro: install.sh tiene que DESCARGARLAS por digest.
+          docker rmi "${reg}/php:${new}" "${reg}/postgres:${new}" "${reg}/nginx:${new}" "${reg}/nginx:${new}-roto"
+          bash .github/scripts/prepare-package-env.sh paquete-fijado-sano
+          sed -i "s|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=${reg}|" paquete-fijado-sano/.env
+          (cd paquete-fijado-sano && sudo ./install.sh >salida-p1.log 2>&1) || { tail -60 paquete-fijado-sano/salida-p1.log; exit 1; }
+          grep -q 'instalado y verificado' paquete-fijado-sano/salida-p1.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${new}\""
+          compose() { sudo docker compose --env-file paquete-fijado-sano/.env -f paquete-fijado-sano/docker-compose.yml "$@"; }
+          d_php="$(awk '$1 == "php" { print $2 }' paquete-fijado-sano/images.lock)"
+          # El contenedor corre la referencia FIJADA, no la etiqueta suelta...
+          sudo docker inspect -f '{{.Config.Image}}' "$(compose ps -q app)" | grep -qF "@${d_php}"
+          # ...y install.sh ha dejado la etiqueta local que `restore-drill.sh --mode pitr` nombra.
+          docker image inspect "${reg}/postgres:${new}" >/dev/null
+          ! grep -F '[aviso]' paquete-fijado-sano/salida-p1.log | grep -qi 'etiquetar'
+
+      - name: "P2 · Vuelta atras IN PLACE con el paquete fijado: vuelve a la version anterior, no a la nueva"
+        if: steps.anterior.outputs.skip != 'true'
+        # El escenario del bloqueante de la revision: el digest va como valor por
+        # defecto en el docker-compose.yml NUEVO, y en modo in-place la vuelta atras
+        # usa ese mismo compose con el .env viejo. Sin anular el digest, la imagen
+        # resolvia a php:<vieja>@<digest nuevo>, Docker levantaba la version NUEVA y
+        # la vuelta atras acababa en `rollback_incomplete`. Se instala la version
+        # anterior, se superpone el paquete roto (el borde es alpine) SOBRE el mismo
+        # directorio y se actualiza: tiene que salir con 4 y con la version anterior
+        # en pie, y el contenedor tiene que correr la IMAGEN anterior.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          reg=localhost:5000/kronoqr
+          sudo docker compose --env-file paquete-fijado-sano/.env -f paquete-fijado-sano/docker-compose.yml down -v --remove-orphans
+          sudo rm -rf /var/backups/fichaje /var/log/kronoqr
+          bash .github/scripts/prepare-package-env.sh paquete-anterior
+          sed -i "s|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=${reg}|" paquete-anterior/.env
+          (cd paquete-anterior && sudo ./install.sh >salida-p2-instalacion.log 2>&1) || { tail -60 paquete-anterior/salida-p2-instalacion.log; exit 1; }
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          id_vieja="$(docker image inspect -f '{{.Id}}' "${reg}/php:${old}")"
+          # IN PLACE: los ficheros del paquete nuevo sobre el directorio de la instalacion.
+          # El .env y certs/ no viajan en el paquete, asi que se conservan.
+          cp -a paquete-fijado-roto/. paquete-anterior/
+          grep -q '@sha256:' paquete-anterior/docker-compose.yml
+          cd paquete-anterior
+          set +e
+          sudo ./update.sh >salida-p2.log 2>&1
+          codigo=$?
+          set -e
+          cd ..
+          tail -60 paquete-anterior/salida-p2.log
+          test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
+          grep -q 'VUELTA ATRAS COMPLETADA' paquete-anterior/salida-p2.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          # La prueba que importa: el contenedor corre la IMAGEN anterior.
+          id_en_pie="$(sudo docker inspect -f '{{.Image}}' "$(compose ps -q app)")"
+          test "${id_en_pie}" = "${id_vieja}" || { echo "La vuelta atras ha dejado una imagen distinta de la anterior (${id_en_pie} frente a ${id_vieja})"; exit 1; }
+          # La copia del .env de la vuelta atras se retira siempre (lleva todos los secretos).
+          test ! -e paquete-anterior/.env.kronoqr-pre-update
+
+      - name: "P3 · Y tras esa vuelta atras, actualizar con el paquete fijado sano: salida 0 y la imagen fijada"
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          new="${{ steps.anterior.outputs.new_version }}"
+          cp -a paquete-fijado-sano/. paquete-anterior/
+          cd paquete-anterior
+          sudo ./update.sh >salida-p3.log 2>&1 || { tail -60 salida-p3.log; exit 1; }
+          cd ..
+          grep -q 'actualizado y verificado' paquete-anterior/salida-p3.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${new}\""
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          d_php="$(awk '$1 == "php" { print $2 }' paquete-anterior/images.lock)"
+          sudo docker inspect -f '{{.Config.Image}}' "$(compose ps -q app)" | grep -qF "@${d_php}"
+
       - name: Diagnostico si algo ha fallado
         if: failure() && steps.anterior.outputs.skip != 'true'
         run: |
-          for dir in paquete-anterior paquete-nuevo; do
+          for dir in paquete-anterior paquete-nuevo paquete-fijado-sano; do
             [ -f "${dir}/.env" ] || continue
             echo "=============== ${dir} ==============="
             sudo docker compose --env-file "${dir}/.env" -f "${dir}/docker-compose.yml" ps -a || true
@@ -2540,6 +2682,10 @@ jobs:
             paquete-nuevo/salida-u2.log
             paquete-nuevo/salida-u3.log
             paquete-nuevo/salida-u3b.log
+            paquete-fijado-sano/salida-p1.log
+            paquete-anterior/salida-p2-instalacion.log
+            paquete-anterior/salida-p2.log
+            paquete-anterior/salida-p3.log
           retention-days: 14
           if-no-files-found: warn
 

@@ -310,6 +310,43 @@ kq_portal_exposed() {
   fi
 }
 
+# IMAGE_DIGEST_* declaradas en el .env (A6-2). El paquete entregado fija cada
+# imagen por digest; declarar la variable en el .env la anula (vacia: el IT sin
+# salida a internet que carga las imagenes con `docker load`; con otro valor: un
+# digest que no es el del paquete). Es una salida legitima pero INVISIBLE y
+# persistente: este aviso la hace visible en install, update y doctor.
+#
+#   check_image_digest_overrides ENV_FILE PACKAGE_DIR
+#
+# Deja en KQ_DIGEST_OVERRIDES los nombres que difieren del `images.lock` del
+# paquete (cadena vacia si ninguno), para que el informe de update lo anote. Si
+# el paquete no trae `images.lock` (desarrollo y CI), lo esperado es no declarar
+# nada. Devuelve siempre 0.
+KQ_DIGEST_OVERRIDES=""
+check_image_digest_overrides() {
+  local env_file="$1" package_dir="$2" image var expected declared names=""
+
+  KQ_DIGEST_OVERRIDES=""
+  [ -f "${env_file}" ] || return 0
+
+  for image in php nginx postgres; do
+    var="IMAGE_DIGEST_$(printf '%s' "${image}" | tr '[:lower:]' '[:upper:]')"
+    grep -qE "^[[:space:]]*(export[[:space:]]+)?${var}=" "${env_file}" || continue
+    expected=""
+    if [ -f "${package_dir}/images.lock" ]; then
+      expected="$(awk -v image="${image}" '$1 == image { print $2 }' "${package_dir}/images.lock")"
+      [ -z "${expected}" ] || expected="@${expected}"
+    fi
+    declared="$(env_value "${env_file}" "${var}")"
+    [ "${declared}" = "${expected}" ] || names="${names:+${names}, }${var}"
+  done
+
+  [ -n "${names}" ] || return 0
+  # shellcheck disable=SC2034  # lo lee update.sh (informe); install y doctor no.
+  KQ_DIGEST_OVERRIDES="${names}"
+  check_warn "$(kq_format c_digest_override "${names}")" "$(kq_text w_digest_override)"
+}
+
 # TRUSTED_PROXY_CIDR (PP-03): opcional; lista de CIDR IPv4 separados por comas.
 check_trusted_proxy_cidr() {
   local env_file="$1" value proxy invalid=0 any=0

@@ -63,11 +63,13 @@
 #                      contenido, mismos bytes: sin metadatos de fecha ni de
 #                      propietario) y genera el SBOM CycloneDX y las sumas
 #                      SHA-256 del paquete y del SBOM juntos.
-#   6. `publicar`      crea -o actualiza, si ya existe por un `workflow_dispatch`
-#                      repetido- la release de GitHub con el paquete, el SBOM
+#   6. `publicar`      crea la release de GitHub con el paquete, el SBOM
 #                      y las sumas adjuntos, con las notas tomadas
 #                      LITERALMENTE de la seccion `## [<version>]` del
 #                      CHANGELOG (sin prosa inventada).
+#                      Si falla tras crearse, «Re-run failed jobs» de la misma
+#                      ejecucion la completa con los mismos digests y el mismo paquete;
+#                      la inmutabilidad la dan las imagenes y sus digests, no la release.
 #
 # UNA VERSION PUBLICADA ES INMUTABLE (A6-2, doc 02 §11.6.1). Dos cosas lo
 # garantizan:
@@ -132,6 +134,14 @@ on:
           registro: una version publicada es inmutable.
         required: true
         type: string
+      first_publication:
+        description: >-
+          SOLO la primera publicacion en un registro nuevo: GHCR responde 403 a
+          un paquete que aun no existe y la comprobacion de etiquetas libres se
+          para. Ver .github/scripts/assert-image-tags-free.sh.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -217,6 +227,7 @@ jobs:
         env:
           REGISTRO: ${{ needs.resolver.outputs.registro }}
           VERSION: ${{ needs.resolver.outputs.version }}
+          KQ_FIRST_PUBLICATION: ${{ github.event.inputs.first_publication == 'true' && '1' || '0' }}
         run: bash .github/scripts/assert-image-tags-free.sh "${REGISTRO}" "${VERSION}"
 
   gates:
@@ -362,6 +373,7 @@ jobs:
         env:
           REGISTRO: ${{ needs.resolver.outputs.registro }}
           VERSION: ${{ needs.resolver.outputs.version }}
+          KQ_FIRST_PUBLICATION: ${{ github.event.inputs.first_publication == 'true' && '1' || '0' }}
         run: bash .github/scripts/assert-image-tags-free.sh "${REGISTRO}" "${VERSION}"
 
       - name: Etiquetar y publicar php, nginx y postgres con la version (nunca latest)
@@ -376,7 +388,22 @@ jobs:
             remoto="${imagenes[${local_tag}]}"
             destino="${REGISTRO}/${remoto}:${VERSION}"
             docker tag "kronoqr/${local_tag}:ci" "${destino}"
-            docker push "${destino}"
+            # Tres intentos sobre la MISMA imagen local: un fallo de red
+            # transitorio no obliga a publicar un parche. Reintentar no cambia
+            # los bytes ni el digest; la inmutabilidad la comprueba el paso anterior.
+            pushed=0
+            for intento in 1 2 3; do
+              if docker push "${destino}"; then
+                pushed=1
+                break
+              fi
+              echo "::warning title=Push fallido::Intento ${intento}/3 de empujar ${destino}."
+              sleep $((intento * 10))
+            done
+            if [ "${pushed}" -ne 1 ]; then
+              echo "::error title=No se pudo empujar::${destino} no se ha podido empujar tras 3 intentos. Puede haber quedado alguna imagen ya publicada: comprueba el registro antes de repetir y, si hay alguna, publica un parche."
+              exit 1
+            fi
             echo "Publicada: ${destino}"
             # El digest se lee del REGISTRO (lo que otro cliente descargara),
             # no del almacen local.

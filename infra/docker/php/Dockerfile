@@ -220,6 +220,7 @@ COPY --chown=app:app VERSION ./VERSION
 # cambia el contexto o el COPY: la imagen no se construye. Lo comprueba
 # SeedersOutOfProductionImageTest.
 RUN test ! -e database/seeders && \
+  test ! -e tests && test ! -e tools && test ! -e phpunit.xml && \
   mkdir -p bootstrap/cache storage/app storage/framework/cache/data \
   storage/framework/sessions storage/framework/testing storage/framework/views \
   storage/logs && \

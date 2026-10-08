@@ -108,3 +108,42 @@ it('nada de lo que viaja en la imagen carga una semilla ni llama a db:seed', fun
     expect($culpables)->toBe([], "Codigo que viaja en la imagen de produccion depende de la semilla de desarrollo,\n"
         ."que la imagen no lleva (SC7-03). Si es dato de producto, va en una migracion:\n- ".implode("\n- ", $culpables));
 })->group('RS-08');
+
+it('las pruebas y el utillaje de desarrollo no viajan en la imagen y nada las ejecuta dentro de ella', function () use ($lineasEfectivas): void {
+    $excluidos = [
+        'backend/tests/', 'backend/tools/', 'backend/phpunit.xml', 'backend/phpstan.neon',
+        'backend/deptrac.yaml', 'backend/rector.php', 'backend/pint.json',
+    ];
+    $lineas = $lineasEfectivas('.dockerignore');
+    foreach ($excluidos as $ruta) {
+        expect($lineas)->toContain($ruta);
+    }
+
+    $reinclusiones = array_values(array_filter(
+        $lineas,
+        static fn (string $linea): bool => str_starts_with($linea, '!') && str_contains($linea, 'backend'),
+    ));
+    expect($reinclusiones)->toBe([], 'Una regla `!` de .dockerignore vuelve a meter pruebas o utillaje en la imagen.');
+
+    // Segunda cerradura: la etapa `vendor` no se construye si llegan igualmente.
+    $dockerfile = (string) file_get_contents(Repo::file(SEEDERS_OUT_OF_IMAGE_DOCKERFILE));
+    expect($dockerfile)->toMatch('/^RUN test ! -e database\/seeders && \\\\\R\s+test ! -e tests && test ! -e tools && test ! -e phpunit\.xml\b/m');
+
+    // Precondicion: ningun flujo de trabajo ni script de la CI ejecuta las
+    // suites DENTRO de la imagen de produccion (si lo hiciera, excluirlas la
+    // rompe). En CI las suites corren sobre el checkout o la imagen `dev`.
+    $culpables = [];
+    $ficheros = array_merge(
+        glob(Repo::file('.github/workflows').'/*.yml') ?: [],
+        glob(Repo::file('.github/scripts').'/*.sh') ?: [],
+    );
+    foreach ($ficheros as $fichero) {
+        foreach (explode("\n", (string) file_get_contents($fichero)) as $numero => $linea) {
+            if (preg_match('/kronoqr\/app:ci|kronoqr\/php:/', $linea) === 1
+                && preg_match('/\b(pest|phpunit|artisan test|qa:traceability)\b/', $linea) === 1) {
+                $culpables[] = basename($fichero).':'.($numero + 1);
+            }
+        }
+    }
+    expect($culpables)->toBe([], "Algo ejecuta pruebas dentro de la imagen de produccion, que ya no las lleva:\n- ".implode("\n- ", $culpables));
+})->group('RS-08');
