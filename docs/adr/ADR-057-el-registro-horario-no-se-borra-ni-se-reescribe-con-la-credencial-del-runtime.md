@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | **Propuesta, pendiente de decisión del propietario** (07-10-2026): su implementación es grande y toca el núcleo del registro legal; la 2.2.0 se queda con la enmienda de ADR-042, que dice lo que hoy se garantiza. **Implementación pendiente** (`backend-laravel`, con `devops-observabilidad` para `update.sh`). **Revisión de `seguridad-cumplimiento` pendiente** |
+| **Estado** | **Aceptada** por el propietario (08-10-2026). **§4 implementada en la 2.2.0** (conciliación diaria de los últimos 7 días y semanal completa: `compliance:reconcile-work-record`, `infra/observability/prometheus/rules/work-record.yml`, `docs/runbooks/discrepancia-registro-auditoria.md`; bloque 14, revisado por `seguridad-cumplimiento`). **§1-§3 aceptadas para la 2.2.x, implementación pendiente** (`backend-laravel`, con `devops-observabilidad` para `update.sh`). Hasta entonces el registro horario se protege por detección, no por privilegios, y la enmienda de ADR-042 sigue vigente para sus tablas |
 | **Fecha** | 8 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo R6-AR-01 de la [re-verificación](../verificacion/2.2.0-reverificacion-tandas-5-6-7.md), residuo de AUD-1 y R4-SC-04) |
 | **Afecta a** | Enmienda [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (lo que de verdad garantiza hoy) · Extiende a las tablas del registro horario el patrón de [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-027](ADR-027-audit-log-particionado.md) y [ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md) · Respeta [ADR-007](ADR-007-daily-totals-proyeccion-reconstruible.md), [ADR-026](ADR-026-la-correccion-supersede.md) y [ADR-035](ADR-035-la-correccion-estrena-identificador-y-no-cambia-de-jornada.md) · `backend/database/migrations/2026_08_19_099000_provision_database_privileges.php` · `Attendance/Infrastructure/Persistence/EloquentWorkDayRepository.php` · `Compliance/Infrastructure/Persistence/DatabaseWorkRecordArchive.php`, `DatabaseIncidentLedger.php`, `DatabaseIncidentNotices.php` · `Compliance/RetentionServiceProvider.php` · `infra/scripts/update.sh` (`verify_privileges`) |
@@ -63,6 +63,8 @@ Se hace con `REVOKE UPDATE, DELETE` sobre cada tabla y `GRANT UPDATE (columnas)`
 
 Un comando programado a diario cruza cada tramo vigente de los últimos días con el último asiento `shift_entry.*` de su `shift_entry_uuid`. Esos asientos ya llevan `clocked_in_at`, `clocked_out_at`, `work_date` y el antes y el después de las correcciones (`RecordShiftEntryAudit`). Falla, deja una métrica a 0 y hace sonar una alerta, igual que la verificación de la cadena, si un tramo no tiene asiento (un `INSERT` inventado), si sus marcas no coinciden con las del asiento (un `UPDATE` permitido con un valor falso) o si un asiento de un tramo dentro del plazo de retención no tiene fila (un borrado). **Es la única de las cuatro defensas que detecta un tramo insertado**, y la que convierte los residuos del punto siguiente en detectables.
 
+Además de la pasada diaria, una **pasada completa semanal** recorre todo el registro: es la única que ve una edición o un borrado de un tramo cuyos asientos ya quedaron fuera de la ventana.
+
 ## Lo que esto no impide, dicho con exactitud
 
 - **Insertar un tramo falso o cerrar un tramo abierto con una hora falsa** sigue siendo posible con la credencial del runtime, porque son exactamente las escrituras que el fichaje necesita. Lo detecta la conciliación del punto 4, no lo impide.
@@ -80,6 +82,10 @@ Un comando programado a diario cruza cada tramo vigente de los últimos días co
 | **Solo la conciliación** | Detecta, pero no impide el borrado, y un borrado se descubriría al día siguiente sobre un registro ya exportado |
 
 ## Consecuencias
+
+- **La conciliación no detecta una escritura acompañada de asientos falsificados.** La cadena de `audit_log` no lleva secreto (ADR-010): prueba que lo escrito no se cambia ni se borra sin romperla, no quién lo escribió. `fichaje_app` tiene `INSERT` sobre `audit_log` porque cada fichaje lo necesita, así que quien ejecute código con esa credencial puede añadir asientos `shift_entry.*` bien encadenados que «expliquen» un tramo inventado o una hora cambiada, y la conciliación, que compara con el **último** asiento, los da por buenos. Se conserva lo esencial: los asientos anteriores no se pueden tocar —la versión original sigue anotada— y los añadidos quedan para siempre con su `id`, su actor y su momento. La garantía es «ninguna escritura por fuera de la aplicación pasa inadvertida y lo anotado no se reescribe», no «ninguna manipulación pasa inadvertida», y así lo dicen doc 05 §6.1 y `obligaciones-legales.md` §5. Es el riesgo «La cadena de auditoría no autentica a quien escribe» de doc 07 §6.
+- **Un asiento de purga solo excusa un borrado si es admisible:** corte con formato de fecha, no posterior a la fecha del asiento menos su `retention_years`, y `retention_years` no inferior al suelo legal del perfil. Un `retention.purge_executed` que no cumpla sale como discrepancia; nunca tapa borrados.
+
 
 - **ADR-042 queda enmendado** (enmienda al final de ese ADR): hasta que este ADR esté implementado, su garantía alcanza a `audit_log` y a las credenciales, no a las tablas del registro horario.
 - **Las pruebas que hoy preparan escenarios modificando o borrando filas del registro con la conexión por defecto tienen que pasar a `pgsql_migrator`**, que es como ya simulan al atacante `AuditLogTest` y `RetentionTest`. Al menos `RejectedPinScanTest`, `DailyTotalsReconciliationTest`, `ScanLogTest`, `DataExportVolumeTest` y `AdoptionReportVolumeTest`.
