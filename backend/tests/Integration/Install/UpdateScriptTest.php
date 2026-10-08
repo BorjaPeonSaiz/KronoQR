@@ -584,6 +584,55 @@ it('en modo in-place la copia del .env de la vuelta atras anula los digests y el
         ->and($vivo)->not->toContain('IMAGE_DIGEST_NGINX');
 })->group('RF-PD-10', 'RS-08');
 
+it('tras una vuelta atras in place el reintento retira las vacias que puso update.sh, y solo esas (A6-2)', function (): void {
+    // La vuelta atras completada deja como .env la copia con IMAGE_DIGEST_*
+    // vacias y una marca. El reintento las retira (corre las imagenes fijadas)
+    // y el aviso de digests anulados no salta por ellas. Unas vacias SIN marca
+    // son el opt-out de un servidor sin internet: no se tocan y si avisan.
+    $proceso = bashConElActualizador(<<<'BASH'
+        CHECKS_RUN=0; CHECKS_FAILED=0; CHECKS_WARNED=0
+        d="$(mktemp -d)"
+        trap 'rm -rf "${d}"' EXIT
+        printf 'APP_KEY=base64:prueba\nIMAGE_TAG=2.1.0\n' >"${d}/.env"
+        kq_env_mark_rollback_digests "${d}/.env"
+        kq_env_mark_rollback_digests "${d}/.env"
+        printf 'marcas=%s\n' "$(grep -c '^# KQ_ROLLBACK_DIGESTS' "${d}/.env")"
+        check_image_digest_overrides "${d}/.env" "${d}" >/dev/null
+        printf 'aviso-con-marca=[%s]\n' "${KQ_DIGEST_OVERRIDES}"
+        IN_PLACE=1
+        ENV_FILE="${d}/.env"
+        COMPOSE_FILE="${d}/docker-compose.yml"
+        prepare_package
+        printf '%s\n' '--- vivo'
+        cat "${ENV_FILE}"
+        printf '%s\n' '--- rollback'
+        cat "${ROLLBACK_ENV}"
+        printf '%s\n' '--- operador'
+        printf 'php sha256:%064d\n' 0 >"${d}/images.lock"
+        printf 'APP_KEY=x\nIMAGE_DIGEST_PHP=\n' >"${d}/.env"
+        kq_env_drop_rollback_digests "${d}/.env"
+        cat "${d}/.env"
+        check_image_digest_overrides "${d}/.env" "${d}" >/dev/null
+        printf 'aviso-sin-marca=[%s]\n' "${KQ_DIGEST_OVERRIDES}"
+        BASH);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput().$proceso->getOutput());
+
+    [$cabecera, $resto] = explode("--- vivo\n", $proceso->getOutput(), 2);
+    [$vivo, $resto] = explode("--- rollback\n", $resto, 2);
+    [$rollback, $operador] = explode("--- operador\n", $resto, 2);
+
+    expect($cabecera)->toContain('marcas=1')
+        ->and($cabecera)->toContain('aviso-con-marca=[]')
+        ->and($vivo)->not->toContain('IMAGE_DIGEST_')
+        ->and($vivo)->not->toContain('KQ_ROLLBACK_DIGESTS')
+        ->and($vivo)->toContain("IMAGE_TAG=2.1.0\n")
+        ->and($rollback)->toMatch('/^IMAGE_DIGEST_PHP=$/m')
+        ->and($rollback)->toContain('# KQ_ROLLBACK_DIGESTS')
+        ->and($operador)->toMatch('/^IMAGE_DIGEST_PHP=$/m')
+        ->and($operador)->toContain('aviso-sin-marca=[IMAGE_DIGEST_PHP]');
+})->group('RF-PD-10', 'RS-08');
+
 it('avisa cuando el .env declara IMAGE_DIGEST_* distintas de las del paquete y calla cuando coinciden o no estan', function (): void {
     $lock = 'php sha256:'.str_repeat('a', 64)."\nnginx sha256:".str_repeat('b', 64)."\npostgres sha256:".str_repeat('c', 64)."\n";
 

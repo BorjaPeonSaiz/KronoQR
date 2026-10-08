@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Modules\Identity\Application\Port\CardRenderer;
+use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Routing\Route;
@@ -9,6 +11,8 @@ use Illuminate\Support\Facades\Route as Router;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Identity\FakeCardRenderer;
+use Tests\Support\Identity\FakeInstructionsSheetRenderer;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Product\LicenseKeys;
@@ -109,6 +113,12 @@ beforeEach(function (): void {
     // apartan.
     config()->set('identity.two_factor.rate_limit_per_minute', 1000);
     config()->set('product.diagnostics_rate_limit_per_minute', 1000);
+
+    // Sin Chromium: la matriz mide quien entra, no como se imprime. Con el
+    // navegador real, un arranque lento o fallido del runner daba `500` a un
+    // rol autorizado (la hoja de instrucciones en la CI del bloque 14).
+    app()->instance(CardRenderer::class, new FakeCardRenderer);
+    app()->instance(InstructionsSheetRenderer::class, new FakeInstructionsSheetRenderer);
 });
 
 const AUTHORIZATION_MATRIX_ADMIN = 'admin';

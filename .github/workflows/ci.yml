@@ -2638,8 +2638,11 @@ jobs:
           # La prueba que importa: el contenedor corre la IMAGEN anterior.
           id_en_pie="$(sudo docker inspect -f '{{.Image}}' "$(compose ps -q app)")"
           test "${id_en_pie}" = "${id_vieja}" || { echo "La vuelta atras ha dejado una imagen distinta de la anterior (${id_en_pie} frente a ${id_vieja})"; exit 1; }
-          # La copia del .env de la vuelta atras se retira siempre (lleva todos los secretos).
+          # La copia del .env de la vuelta atras pasa a ser el .env (lleva todos los
+          # secretos: no queda una segunda), con la etiqueta anterior y la marca.
           test ! -e paquete-anterior/.env.kronoqr-pre-update
+          sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
+          sudo grep -q '^# KQ_ROLLBACK_DIGESTS' paquete-anterior/.env
 
       - name: "P3 · Y tras esa vuelta atras, actualizar con el paquete fijado sano: salida 0 y la imagen fijada"
         if: steps.anterior.outputs.skip != 'true'

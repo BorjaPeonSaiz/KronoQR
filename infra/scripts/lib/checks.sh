@@ -328,6 +328,11 @@ check_image_digest_overrides() {
 
   KQ_DIGEST_OVERRIDES=""
   [ -f "${env_file}" ] || return 0
+  # Vacias puestas por una vuelta atras in place de update.sh, no por el
+  # operador: el siguiente update.sh las retira (lib/env-file.sh).
+  if kq_env_has_rollback_digests "${env_file}"; then
+    return 0
+  fi
 
   for image in php nginx postgres; do
     var="IMAGE_DIGEST_$(printf '%s' "${image}" | tr '[:lower:]' '[:upper:]')"

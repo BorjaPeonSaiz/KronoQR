@@ -73,10 +73,16 @@ it('la vuelta atras in-place anula los digests, la primera publicacion es explic
     $release = Repo::contents('.github/workflows/release.yml');
     $ci = Repo::contents('.github/workflows/ci.yml');
 
-    // Vuelta atras in-place: las tres variables, vacias, en la copia del .env.
+    // Vuelta atras in-place: las tres variables, vacias y con marca, en la copia
+    // del .env; al completarse, esa copia pasa a ser el .env (no queda una
+    // segunda copia de los secretos) y el reintento retira la marca.
+    $envFile = Repo::contents('infra/scripts/lib/env-file.sh');
     foreach (['PHP', 'NGINX', 'POSTGRES'] as $imagen) {
-        expect($update)->toContain('kq_env_set "${ROLLBACK_ENV}" "IMAGE_DIGEST_'.$imagen.'" ""');
+        expect($envFile)->toContain('IMAGE_DIGEST_'.$imagen);
     }
+    expect($update)->toContain('kq_env_mark_rollback_digests "${ROLLBACK_ENV}"')
+        ->and($update)->toContain('kq_env_drop_rollback_digests "${ENV_FILE}"')
+        ->and($update)->toContain('mv -f "${ROLLBACK_ENV}" "${ENV_FILE}"');
 
     // El 403 de GHCR solo se acepta con la variable explicita y solo la pone la entrada manual.
     expect($guard)->toContain('KQ_FIRST_PUBLICATION')
