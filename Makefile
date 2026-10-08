@@ -276,7 +276,7 @@ help: ## Muestra esta ayuda
 	@echo "  make sbom             SBOM CycloneDX en sbom/kronoqr-VERSION.cdx.json"
 	@echo "  make dast             ZAP baseline manual contra 'make up' (informe, fuera de ci.yml)"
 	@echo "  make build-ci-images  Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|app|nginx)"
-	@echo "  make release-gate     Falla si la entrega saldria sin clave publica del fabricante"
+	@echo "  make release-gate     Falla sin clave publica del fabricante o con marcadores en SECURITY.md"
 	@echo "  make nginx-smoke      Arranca la imagen del borde sola y pide las cinco rutas"
 	@echo "  make traceability     Matriz requisito - prueba (RQ-13)"
 	@echo "  make traceability-check  Falla si un requisito no tiene prueba"
@@ -369,7 +369,10 @@ else
 	$(RUN_APP) php artisan test
 endif
 
-# El presupuesto de la suite unitaria (doc 02 §9.2, doc 03). El plan lo cita
+# El presupuesto de la suite unitaria, y su UNICA fuente (Q1 de la 2.1.0): doc
+# 02 §9.2, doc 03 y backend/phpunit.xml remiten a esta variable y
+# backend/tests/Architecture/UnitSuiteBudgetTest.php falla si alguno da otra
+# cifra. Se cambia aqui y en esas tres frases a la vez. El plan lo cita
 # tres veces como bloqueante del camino critico y era el unico umbral de la
 # tabla sin herramienta que lo verificase — y ya estaba superado (2,6-2,7 s
 # medidos en el cierre de la Fase 1) sin que nada avisara. El valor es mas
@@ -782,7 +785,14 @@ APP_VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
 # propio par en cada ejecucion y jamas usa uno fijo del repositorio (§7.7, RS-08).
 # Por eso es un objetivo aparte, y la tarea 5.4 lo invocara desde el paso que
 # construye la imagen de entrega.
-release-gate: ## Falla si la imagen de entrega saldria sin clave publica del fabricante
+release-gate: ## Falla si la entrega saldria sin clave publica del fabricante o con SECURITY.md sin rellenar
+	@if grep -nE "\[(CONTACTO|CONFIRMAR|PLAZOS)" SECURITY.md; then \
+	  echo "[make] SECURITY.md aun lleva marcadores del propietario (lineas de arriba)."; \
+	  echo "[make] Una politica de divulgacion con [CONTACTO ...] o [PLAZOS ...] sin rellenar no se publica:"; \
+	  echo "[make] quien encuentre una vulnerabilidad no tendria a quien avisar. Rellena el contacto, confirma"; \
+	  echo "[make] que el aviso privado de GitHub esta activado y fija los plazos; despues repite."; \
+	  exit 1; \
+	fi
 	@if grep -qE "env\('LICENSE_PUBLIC_KEY', '[0-9a-fA-F]{64}'\)" backend/config/license.php; then \
 	  echo "[make] Clave publica del fabricante presente. Puerta de release en verde."; \
 	else \

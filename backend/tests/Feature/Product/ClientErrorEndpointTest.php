@@ -280,6 +280,20 @@ it('no hay canal anonimo', function (): void {
     Api::guest()->post('/api/v1/client-errors', ['errors' => [errorDePanel()]])->assertStatus(401);
 })->group('RF-PD-15');
 
+it('la sesion pendiente de segundo factor recibe 401 y no escribe nada', function (): void {
+    // Quien solo ha acertado la contrasena no ha terminado de entrar (RS-06):
+    // dejarle escribir filas seria abrir la base a media autenticacion. Es el
+    // mismo `401` que `GET /auth/me` y por el mismo middleware.
+    $pendiente = ManagementUsers::pendingTokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($pendiente)
+        ->post('/api/v1/client-errors', ['errors' => [errorDePanel()]])
+        ->assertStatus(401)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:unauthenticated');
+
+    expect(DB::table('error_events')->count())->toBe(0);
+})->group('RF-PD-15', 'RS-06');
+
 it('nunca devuelve el historico, solo el recuento aceptado', function (): void {
     // Que cualquier sesion pueda escribir aqui no puede convertirse en que pueda
     // leer lo que escriben las demas.

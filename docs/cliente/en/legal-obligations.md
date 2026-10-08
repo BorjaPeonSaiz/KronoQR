@@ -314,21 +314,52 @@ configuration**. The full procedure is in
 
 ## 5. Keep the proof that the record has not been tampered with
 
-The system hash-chains every action with legal relevance and **verifies the
-chain daily**. If that verification fails, it is not a malfunction: it is a
-security incident, and it has its own procedure
-([`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md), in
-Spanish).
+The system keeps two proofs, and checks them on its own:
+
+- **The audit trail is hash-chained.** Every action with legal relevance is
+  recorded, and each entry carries the fingerprint of the previous one. The
+  chain is **verified daily**: if someone edits or deletes an entry, it shows
+  up as a broken chain
+  ([`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md), in
+  Spanish).
+- **The time record is reconciled with its audit trail.** Every clock-in,
+  manual entry, correction or voiding writes, in the same operation, its audit
+  entry with the times, the person and the working day. Every night each shift
+  entry of the **last 7 days** is compared with that audit entry, and every
+  Sunday the **whole** record. A shift entry with a changed time, made up,
+  deleted or voided without a correction shows up as a **reconciliation
+  discrepancy**
+  ([`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md),
+  in Spanish).
+
+If either of them fails, it is not a malfunction: it is a possible security
+incident, with a critical alert to the security officer and its own procedure.
+
+**They detect, they do not prevent, and they have a limit.** Whoever has access
+to the database with the application's credential can still write to the time
+record — the application has to be able to, in order to clock in. What the
+system guarantees is that a write **made outside the application does not go
+unnoticed**: it shows up in the reconciliation, and the original audit entry
+still says what really happened. That same credential can also **add** audit
+entries (not change or delete existing ones): someone who used it to add
+entries that "explain" their change would not trigger any automatic check,
+although those entries would stay in the chain for good and would show when
+reviewing the shift entry's history. That is why what falls to you, below,
+matters so much.
 
 What falls to you:
 
-- That **someone receives** the alert and knows it is critical.
+- That **someone receives** the security officer's alerts and knows they are
+  critical.
 - **Do not give the application database permissions it does not need.** The
   product is installed with three separate roles for this reason; if someone
   "simplifies" by giving the application the owner role, the guarantee ceases
   to exist without anything visibly failing.
-- **Do not edit the database by hand.** No legitimate correction needs it, and
-  any made that way will show up the next day as a broken chain.
+- **Do not edit the database by hand.** No legitimate correction needs it. An
+  edit of the audit trail shows up the next day as a broken chain. A direct
+  edit of the time record shows up as a reconciliation discrepancy: **the next
+  day** if the shift entry is from the last 7 days, and **within a week at
+  most** if it is older.
 
 ---
 

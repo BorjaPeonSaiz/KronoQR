@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -19,7 +18,7 @@ use Illuminate\Support\Str;
  * tarea 1.5, y `Device` **no valida su propio token** (doc 01 §5.2). Sembrarlo
  * aqui seria inventar el formato de otro modulo.
  */
-final class DeviceSeeder extends Seeder
+final class DeviceSeeder extends DevelopmentSeeder
 {
     /** @var list<string> */
     private const array DEVICE_NAMES = ['Entrada de personal', 'Office de cocina'];

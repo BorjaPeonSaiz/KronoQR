@@ -118,6 +118,15 @@
    `text-kq-*`, `border-kq-*`, `ring-kq-*`...); `theme.spec.ts` comprueba que
    ninguno se queda sin exponer ni sin medir. */
 @theme inline {
+  /* Paleta por defecto de Tailwind desactivada (hallazgo U1): con ella `bg-red-500`
+     compila y pinta un color que ningun token gobierna ni la marca de 5.8 alcanza.
+     Se conservan `white` y `black` (texto de confirmacion del quiosco, doc 06);
+     `transparent`, `current` e `inherit` no salen del tema. Lo que cada SPA declare
+     en su propio `@theme` (los cinco de confirmacion) sigue valiendo. */
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-black: #000000;
+
   --color-kq-surface: var(--kq-color-surface);
   --color-kq-surface-raised: var(--kq-color-surface-raised);
   --color-kq-surface-alt: var(--kq-color-surface-alt);

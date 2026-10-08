@@ -101,6 +101,12 @@ function textfileSeries(): array
         'audit_chain_unknown_actions',
         'audit_log_partition_ready',
         'audit_log_partition_check_timestamp_seconds',
+        // Compliance\Infrastructure\Metrics\TextfileWorkRecordReconciliationMetrics
+        // (ADR-057 §4): la conciliacion del registro horario con su auditoria,
+        // un fichero `.prom` por alcance (`recent` y `full`).
+        'work_record_reconciliation_discrepancies',
+        'work_record_reconciliation_last_run_timestamp_seconds',
+        'work_record_reconciliation_entries_checked',
         // Identity\Infrastructure\Metrics\TextfileCredentialMetrics
         'employees_without_delivered_credential',
         'credentials_pending_print',

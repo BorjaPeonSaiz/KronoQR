@@ -140,6 +140,7 @@ watch(policyUrl, () => {
         :aria-label="t('privacy.qrDialogTitle')"
         shape-rendering="crispEdges"
       >
+        <!-- eslint-disable-next-line kronoqr-colors/no-literal-colors -- QR: negro puro sobre blanco por legibilidad del lector, no depende de la marca ni del tema (U1: excepcion cerrada) -->
         <path :d="qr.path" fill="#000000" />
       </svg>
       <p v-else-if="qrFailed" class="mt-6 text-lg">{{ t('privacy.qrUnavailable') }}</p>

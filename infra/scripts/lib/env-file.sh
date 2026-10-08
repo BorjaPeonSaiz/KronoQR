@@ -150,3 +150,57 @@ kq_env_set() {
     return 1
   }
 }
+
+# VUELTA ATRAS IN PLACE (A6-2). La version anterior solo arranca con el
+# docker-compose.yml nuevo si IMAGE_DIGEST_* van vacias en su .env (el compose
+# trae el digest NUEVO como valor por defecto). Tras una vuelta atras
+# completada, update.sh deja ese .env como el de la instalacion, con esta
+# marca: dice que las tres vacias las puso el, no el operador (el opt-out de un
+# servidor sin internet tambien es vaciarlas, y ese no se toca nunca).
+KQ_ROLLBACK_DIGESTS_MARKER="# KQ_ROLLBACK_DIGESTS: IMAGE_DIGEST_* vaciadas por la vuelta atras de update.sh; el siguiente update.sh las retira"
+
+#   kq_env_has_rollback_digests RUTA
+kq_env_has_rollback_digests() {
+  [ -f "$1" ] && grep -qxF "${KQ_ROLLBACK_DIGESTS_MARKER}" "$1"
+}
+
+# Vacia IMAGE_DIGEST_* y pone la marca. Mismo escritor atomico que kq_env_set.
+#
+#   kq_env_mark_rollback_digests RUTA
+kq_env_mark_rollback_digests() {
+  local file="$1" var
+
+  for var in IMAGE_DIGEST_PHP IMAGE_DIGEST_NGINX IMAGE_DIGEST_POSTGRES; do
+    kq_env_set "${file}" "${var}" "" || return 1
+  done
+  kq_env_has_rollback_digests "${file}" && return 0
+  printf '%s\n' "${KQ_ROLLBACK_DIGESTS_MARKER}" >>"${file}"
+}
+
+# Si la marca esta, retira la marca y las tres IMAGE_DIGEST_*: el paquete
+# vuelve a fijar sus imagenes por digest. Sin marca no toca nada.
+#
+#   kq_env_drop_rollback_digests RUTA
+kq_env_drop_rollback_digests() {
+  local file="$1" temp
+
+  kq_env_has_rollback_digests "${file}" || return 0
+  temp="$(mktemp "${file}.XXXXXX")" || return 1
+  chmod 0600 "${temp}" 2>/dev/null || true
+
+  if ! KQ_MARKER="${KQ_ROLLBACK_DIGESTS_MARKER}" awk '
+    $0 == ENVIRON["KQ_MARKER"] { next }
+    $0 ~ /^[[:space:]]*(export[[:space:]]+)?IMAGE_DIGEST_(PHP|NGINX|POSTGRES)=/ { next }
+    { print }
+  ' "${file}" >"${temp}"; then
+    rm -f "${temp}"
+    return 1
+  fi
+
+  chown --reference="${file}" "${temp}" 2>/dev/null || true
+  chmod --reference="${file}" "${temp}" 2>/dev/null || true
+  mv -f "${temp}" "${file}" || {
+    rm -f "${temp}"
+    return 1
+  }
+}

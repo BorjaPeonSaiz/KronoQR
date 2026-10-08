@@ -254,7 +254,7 @@ Del §9.4, escenario ineludible aplicable: **cadena de auditoría** (que el camb
 
 ```bash
 make quality          # Pint + PHPStan 9 + Deptrac + Rector dry-run → 0 errores
-make test-unit        # < 2 s, incluida la cascada
+make test-unit        # dentro de UNIT_SUITE_MAX_SECONDS (Makefile), incluida la cascada
 php artisan test --group=RF-PD-01
 php artisan qa:traceability --check
 php artisan compliance:verify-audit-chain   # verde tras varios PATCH

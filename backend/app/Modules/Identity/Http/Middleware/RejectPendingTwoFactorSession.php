@@ -19,10 +19,12 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * En casi toda la API basta: cada ruta exige su ambito con el middleware
  * `ability`, y un token que solo lleva `2fa:pending` no tiene ninguno de ellos.
- * La excepcion es `GET /api/v1/auth/me`, que **no puede exigir un ambito
- * concreto**: lo llaman los cuatro roles de gestion y cada uno lleva los suyos.
- * Sin este middleware, `me` seria el unico endpoint alcanzable con media
- * autenticacion.
+ * Las excepciones son las rutas que **no pueden exigir un ambito concreto**:
+ * `GET /api/v1/auth/me`, que llaman los cuatro roles de gestion con los suyos,
+ * y, desde el bloque 14 de la 2.2.0, `POST /api/v1/client-errors`, que acepta a
+ * cualquier sesion completa (revision de seguridad: una sesion pendiente podia
+ * escribir en `error_events`). Sin este middleware, las dos serian alcanzables
+ * con media autenticacion.
  *
  * Que lo que `me` devuelve sean los datos de quien ya acerto su contrasena, y no
  * de terceros, no lo hace inocuo: adelanta el rol y el **alcance por departamento**

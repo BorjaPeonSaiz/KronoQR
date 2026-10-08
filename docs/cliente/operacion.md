@@ -31,6 +31,8 @@ Todo esto corre solo en el contenedor `scheduler`. Lo que aparece en la columna
 | 02:45 UTC, a diario | Se comprueba que existe la partición anual de auditoría | Nada, salvo que avise |
 | 03:15 UTC, a diario | Copia de seguridad lógica | Sacarla del servidor |
 | 04:05 UTC, a diario | Se verifica la cadena de hash de la auditoría | Atender la alerta si suena: es crítica |
+| 04:15 UTC, a diario | Se concilia el registro horario de los últimos 7 días con su auditoría: cada tramo frente al último asiento que la aplicación escribió sobre él | Atender la alerta si suena: es crítica y de seguridad |
+| Domingo 02:15 UTC | La misma conciliación sobre **todo** el registro: es la que detecta un borrado o una edición de un tramo antiguo | Igual |
 | 04:30 UTC, a diario | Revisión del registro: turnos abiertos, descansos, jornadas anómalas | Resolver las incidencias en el panel |
 | 04:35 UTC, a diario | Detección de patrones anómalos de uso de credencial sobre los fichajes de quiosco de los últimos 30 días (§6) | Nada: las incidencias le llegan al responsable del departamento, no a IT |
 | Lunes 05:10 UTC | **Propuesta de retención**: informe de lo que se purgaría | Leerlo cuando haya algo vencido |
@@ -148,6 +150,12 @@ docker compose -f docker-compose.yml run --rm \
 - Lanza `docker compose exec app php artisan compliance:verify-audit-chain`. Tiene que terminar en verde
   y decir «Purga sellada reconocida: particion AAAA». Si dijera otra cosa, es un
   incidente de seguridad.
+- Lanza `docker compose exec app php artisan compliance:reconcile-work-record --full`.
+  También tiene que terminar en verde: la purga deja su asiento con la fecha de
+  corte, y la conciliación da por purgado lo anterior a ese corte, si el corte es
+  coherente con el plazo de retención. Una
+  discrepancia aquí es un borrado que **no** hizo la purga
+  ([`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md)).
 
 ### 3.1 El informe es la copia legible; la constancia es el asiento
 
@@ -443,6 +451,15 @@ El instalador genera todos los secretos **en tu servidor** y no los transmite a
 nadie. **El fabricante no los conoce y no puede recuperarlos.** La lista
 completa, con la consecuencia de perder cada uno, está en
 [`instalacion.md`](instalacion.md), sección 3.
+
+**Si se pierde el servidor entero, hacen falta también otros secretos del `.env`**, guardados fuera de él con la
+misma custodia que la clave de copias: `APP_KEY`, `QR_SIGNING_KEY_CURRENT` y `QR_SIGNING_KEY_PREVIOUS` con sus
+`_ID`, e `IDENTITY_PIN_SEALING_SECRET_KEY`. Una instalación nueva los genera nuevos: sin los de antes, ninguna
+tarjeta impresa vale y hay que reimprimirlas todas, y sin `APP_KEY` ninguna cuenta de gestión pasa el segundo factor.
+No guardes el `.env` entero: lleva contraseñas de la base de datos que no se reponen. **Quien tenga la clave de
+firma de los QR puede fabricar tarjetas válidas**: trátala como la llave maestra del edificio. Renueva esta copia
+después de cada rotación de secretos. El procedimiento completo está en
+[`../runbooks/perdida-total-del-servidor.md`](../runbooks/perdida-total-del-servidor.md).
 
 ### `BACKUP_ENCRYPTION_KEY`: esta sale del servidor
 
@@ -784,6 +801,9 @@ la alimenta dejó de ejecutarse):
 | `ReconciliacionDeProyeccionAusente` | > 26 h sin reconciliar | Media | IT | [`divergencia-proyeccion.md`](../runbooks/divergencia-proyeccion.md) | Comprueba que el `scheduler` sigue vivo y ejecuta `attendance:reconcile` a mano |
 | `RoturaDeCadenaDeAuditoria` | Cualquiera | Crítica | Seguridad | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Preserva la evidencia (§2 de ese runbook) antes de tocar nada |
 | `VerificacionDeAuditoriaAusente` | > 26 h sin verificar | Crítica | Seguridad | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba que el `scheduler` sigue vivo |
+| `DiscrepanciaEntreRegistroYAuditoria` | Cualquiera | Crítica | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Alguien ha escrito en el registro horario por fuera de la aplicación. Preserva la evidencia (§2 de ese runbook) antes de tocar nada y no generes exportaciones legales del periodo hasta aclararlo |
+| `ConciliacionDelRegistroAusente` | > 26 h sin conciliar | Crítica | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Comprueba que el `scheduler` sigue vivo y lanza `compliance:reconcile-work-record` a mano |
+| `ConciliacionCompletaDelRegistroAusente` | > 8 días sin la conciliación completa | Alta | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Lanza `compliance:reconcile-work-record --full` a mano. Tras instalar o actualizar no suena hasta que ha pasado un domingo |
 | `ParticionDeAuditoriaAusente` | Falta la partición del año en curso | Crítica | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | **El fichaje está caído**: `compliance:ensure-audit-partitions` ya |
 | `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Falta la del año próximo, desde noviembre | Media | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba que el `scheduler` corre y que la migración `2026_09_29_100000` está aplicada (`migrate:status` por el servicio `migrate`, ver el runbook §5). Ya no depende de `DB_MIGRATION_USERNAME`: la partición la pide la aplicación a una función de la base |
 | `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Cualquiera | Crítica | IT | [`restaurar-backup.md`](../runbooks/restaurar-backup.md) | `backup:verify` y reintenta con `backup:run`, los dos en el contenedor `scheduler` (no en `app`) |
@@ -1487,6 +1507,11 @@ anonimizado** y en tu auditoría aparece `diagnostics.personal_data_included`.
 Al enviarlo comunicas datos personales a un tercero: mira
 [`obligaciones-legales.md`](obligaciones-legales.md) §8 antes, y ten firmado
 el contrato de encargo.
+
+**El producto no cifra este fichero**, para que puedas abrirlo y revisar qué
+sale antes de enviarlo. Envíalo solo por el canal cifrado que fije tu contrato
+de soporte y de encargo, nunca por correo sin cifrar, y bórralo del servidor y
+de tu equipo en cuanto lo hayas enviado.
 
 ### 12.4 Conceder a soporte un acceso temporal
 

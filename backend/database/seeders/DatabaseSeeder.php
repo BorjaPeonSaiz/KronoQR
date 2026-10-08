@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-
 /**
  * Semilla de desarrollo (doc 02 §10.2).
  *
@@ -32,11 +30,18 @@ use Illuminate\Database\Seeder;
  * migraciones. Un seeder no se ejecuta en la instalacion de un cliente, y sin
  * esos dos conjuntos de valores el primer calculo de jornada no tendria umbral
  * que aplicar (regla dura 14). Son dato de producto, no dato de desarrollo.
+ *
+ * **Y no corre en produccion** (SC7-03): lo impide {@see DevelopmentSeeder},
+ * que comparten todas las semillas. La guarda se repite al principio de
+ * `run()` para que tampoco una llamada directa a este metodo —sin pasar por
+ * `__invoke`— pueda sembrar la instalacion de un cliente.
  */
-final class DatabaseSeeder extends Seeder
+final class DatabaseSeeder extends DevelopmentSeeder
 {
     public function run(): void
     {
+        $this->refuseInProduction();
+
         $this->call([
             SiteSeeder::class,
             DepartmentSeeder::class,

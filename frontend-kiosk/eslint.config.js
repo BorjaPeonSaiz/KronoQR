@@ -13,6 +13,7 @@ import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 import pluginVue from 'eslint-plugin-vue'
 import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
 import { noBareStrings } from '@kronoqr/web-kit/eslint/no-bare-strings'
+import { noLiteralColors } from '@kronoqr/web-kit/eslint/no-literal-colors'
 
 export default defineConfigWithVueTs(
   {
@@ -93,5 +94,7 @@ export default defineConfigWithVueTs(
   identifierLanguage(),
   // KI7-02: sin literales en las plantillas; los textos van en i18n.
   noBareStrings(),
+  // U1: sin colores literales; todo color sale de un token --kq-* (docs/06).
+  noLiteralColors(),
   skipFormatting,
 )

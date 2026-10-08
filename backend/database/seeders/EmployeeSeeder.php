@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -32,7 +31,7 @@ use Illuminate\Support\Str;
  * tengan sobre que probarse: el empleado de baja conserva su historial y sus
  * escaneos se rechazan.
  */
-final class EmployeeSeeder extends Seeder
+final class EmployeeSeeder extends DevelopmentSeeder
 {
     private const int EMPLOYEES_PER_SITE = 250;
 

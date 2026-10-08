@@ -6,6 +6,7 @@ import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 import pluginVue from 'eslint-plugin-vue'
 
 import { identifierLanguage } from './eslint/identifier-language.js'
+import { noLiteralColors } from './eslint/no-literal-colors.js'
 
 export default defineConfigWithVueTs(
   {
@@ -31,5 +32,8 @@ export default defineConfigWithVueTs(
   },
   // Identificadores en ingles en src/** (doc 02 §3.5, decision del 24-09-2026).
   identifierLanguage(),
+  // U1: sin colores literales (docs/06). Excepcion: los dos ficheros que fijan
+  // por contrato valores de color del producto (acento de serie y pares de contraste).
+  noLiteralColors(undefined, ['**/*.d.ts', 'src/branding.ts', 'src/themePairs.ts']),
   skipFormatting,
 )

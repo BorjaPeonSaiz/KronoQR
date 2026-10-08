@@ -159,3 +159,9 @@ SemVer piden.
   deja asiento.
 - **Contrato:** ninguna operación de `/api/v1` acepta ni devuelve `site_id`; `/api/v1/sites` no existe.
 - **Búsqueda en el árbol:** cero `site_id` en `frontend-admin/src` fuera de `schema.d.ts` generado.
+
+## Enmienda 08-10-2026 (bloque 14 de la 2.2.0, hallazgo R6-AR-02): la zona horaria se fija con el primer fichaje
+
+> **Aceptada por el propietario el 08-10-2026 para la 2.2.x**, como [ADR-056](ADR-056-la-zona-horaria-del-centro-queda-fija-desde-el-primer-fichaje.md). Hasta que se implemente, el punto 3 sigue vigente tal como está escrito arriba: `PATCH /site` puede cambiar la zona en cualquier momento, y el riesgo que describe esta enmienda sigue abierto.
+
+**Motivo.** La re-verificación de la 2.2.0 (R6-AR-02, a partir del F3 de la tanda 4) encontró que el punto 3 deja cambiar la zona del centro con `PATCH /site` en cualquier momento. Con fichajes ya hechos, eso repinta el histórico con la zona nueva mientras `work_date` conserva la atribución antigua. El punto 3 queda así: **`PATCH /site` cambia el nombre siempre, y la zona solo mientras no exista ningún tramo en `shift_entries`**. Después responde `409`, y corregir una zona mal puesta en la puesta en marcha es una acción de consola con motivo y asiento. La decisión, sus alternativas y lo que queda pendiente están en [ADR-056](ADR-056-la-zona-horaria-del-centro-queda-fija-desde-el-primer-fichaje.md). La zona por jornada y por tramo que devuelve la API, y la rama del portal para un «tramo de otra zona», son residuos del modelo multicentro anterior a esta decisión: valen siempre la zona del centro, y ADR-056 decide qué se hace con cada uno.

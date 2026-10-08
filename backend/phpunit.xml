@@ -24,8 +24,10 @@
     -->
     <!--
         Las cinco suites del doc 02 §2 y §9.1. Unit no toca base de datos ni
-        arranca el framework y debe terminar por debajo de 2 s: es la suite que
-        se ejecuta mientras se escribe una regla de negocio.
+        arranca el framework y debe terminar dentro del presupuesto de
+        `UNIT_SUITE_MAX_SECONDS` del Makefile (5 s), que es la unica fuente y la
+        que aplica `make test-unit`: es la suite que se ejecuta mientras se
+        escribe una regla de negocio.
         Contract y Architecture se pueblan en las tareas 0.6 y 0.3.
     -->
     <testsuites>
@@ -48,6 +50,7 @@
             directorio nuevo bajo `tests/Feature` hay que anadirlo aqui.
         -->
         <testsuite name="Feature">
+            <file>tests/Feature/AuthorizationMatrixTest.php</file>
             <file>tests/Feature/AuthorizationNegativeTest.php</file>
             <file>tests/Feature/ModuleServiceProvidersTest.php</file>
             <directory>tests/Feature/Attendance</directory>

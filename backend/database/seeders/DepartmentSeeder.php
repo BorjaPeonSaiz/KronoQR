@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -18,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  * El responsable (manager_user_id) se asigna en la tarea 1.3, que es la que
  * crea los usuarios.
  */
-final class DepartmentSeeder extends Seeder
+final class DepartmentSeeder extends DevelopmentSeeder
 {
     /**
      * @var list<string>

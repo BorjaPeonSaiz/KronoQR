@@ -333,6 +333,7 @@ run_external_checks() {
 
   check_services_state
   check_env_permissions
+  check_image_digest_overrides "${CURRENT_ENV}" "$(dirname -- "${CURRENT_COMPOSE}")"
   check_backup_role
   check_backup_wal
   check_backup_mounts

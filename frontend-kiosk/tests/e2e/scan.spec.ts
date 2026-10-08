@@ -45,7 +45,7 @@ async function expectNoAdditionalScans(
 
 test(
   'arranca la camara y decodifica sin que nadie toque la pantalla',
-  { tag: ['@RQ-04', '@RF-KI-01', '@RF-KI-02'] },
+  { tag: ['@RQ-04', '@RF-KI-01', '@RF-KI-02', '@RF-AT-01'] },
   async ({ page }) => {
     const stub = await stubScanApi(page, { outcome: 'clock_in', displayName: 'Lucia G.' })
 

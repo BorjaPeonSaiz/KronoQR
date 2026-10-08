@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -20,7 +19,7 @@ use Illuminate\Support\Facades\DB;
  * El reparto se hace por correo porque es lo unico estable de la semilla: los
  * identificadores cambian entre ejecuciones y los UUID son aleatorios.
  */
-final class RoleSeeder extends Seeder
+final class RoleSeeder extends DevelopmentSeeder
 {
     /**
      * @var array<string, string>

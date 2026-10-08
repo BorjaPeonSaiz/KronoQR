@@ -111,6 +111,22 @@ it('no puede existir una baja sin fecha de cese', function (): void {
         ->toThrow(InvalidArgumentException::class);
 })->group('RF-GP-03');
 
+it('no reactiva ni suspende a quien ya esta de baja', function (Closure $transicion): void {
+    // RN-14: la baja cierra el registro. Reactivar a alguien dado de baja le
+    // devolveria el fichaje con su tarjeta revocada a medias, y suspenderle
+    // cambiaria un estado final por uno reversible. Lo unico que cambia una baja
+    // es una correccion trazada (RN-13). Mata M2 de la verificacion de la 2.1.0:
+    // quitar `refuseIfTerminated()` de `suspend()` o de `reinstate()` no hacia
+    // fallar ninguna prueba.
+    $terminated = employeeUnderTest()->offboard(new DateTimeImmutable('2026-08-31'), new DateTimeImmutable('2026-10-02'));
+
+    expect(fn () => $transicion($terminated))
+        ->toThrow(EmployeeAlreadyTerminated::class);
+})->with([
+    'reactivar' => [static fn (Employee $employee): Employee => $employee->reinstate()],
+    'suspender' => [static fn (Employee $employee): Employee => $employee->suspend()],
+])->group('RF-GP-03', 'RN-14');
+
 it('distingue suspension de baja', function (): void {
     // Suspender no cierra el registro de nadie: no lleva fecha de cese y se
     // puede deshacer.

@@ -31,6 +31,8 @@ All of this runs on its own in the `scheduler` container. What appears in the
 | 02:45 UTC, daily | The yearly audit partition is checked to exist | Nothing, unless it warns you |
 | 03:15 UTC, daily | Logical backup | Take it off the server |
 | 04:05 UTC, daily | The audit hash chain is verified | Act on the alert if it fires: it is critical |
+| 04:15 UTC, daily | The time record of the last 7 days is reconciled with its audit trail: each shift entry against the last audit entry the application wrote about it | Act on the alert if it fires: it is critical and goes to security |
+| Sunday 02:15 UTC | The same reconciliation over the **whole** record: it is the one that detects a deletion or an edit of an old shift entry | Same |
 | 04:30 UTC, daily | Record review: open shifts, rest periods, anomalous working days | Resolve the incidents in the panel |
 | 04:35 UTC, daily | Detection of anomalous credential usage patterns over the kiosk clockings of the last 30 days (§6) | Nothing: the incidents go to the department manager, not to IT |
 | Monday 05:10 UTC | **Retention proposal**: report of what would be purged | Read it once something has expired |
@@ -149,6 +151,12 @@ management account that authorises the purge.)
 - Run `docker compose exec app php artisan compliance:verify-audit-chain`. It has to finish green and
   say «Purga sellada reconocida: particion AAAA» (sealed purge recognised for
   partition YYYY). If it said anything else, that is a security incident.
+- Run `docker compose exec app php artisan compliance:reconcile-work-record --full`.
+  It also has to finish green: the purge leaves its audit entry with the
+  cut-off date, and the reconciliation treats everything before that cut-off
+  as purged, if the cut-off is consistent with the retention period. A discrepancy here is a deletion that the purge did **not** make
+  ([`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md),
+  in Spanish).
 
 ### 3.1 The report is the readable copy; the evidence is the audit entry
 
@@ -455,6 +463,15 @@ The installer generates every secret **on your server** and transmits them to
 nobody. **The vendor does not know them and cannot recover them.** The full
 list, with the consequence of losing each one, is in
 [`installation.md`](installation.md), section 3.
+
+**If the whole server is lost, you also need other secrets from the `.env`**, kept off the server with the same
+custody as the backup key: `APP_KEY`, `QR_SIGNING_KEY_CURRENT` and `QR_SIGNING_KEY_PREVIOUS` with their `_ID`, and
+`IDENTITY_PIN_SEALING_SECRET_KEY`. A new installation generates new ones: without the old ones, no printed card is
+valid and every card has to be reprinted, and without `APP_KEY` no management account passes the second factor. Do
+not keep the whole `.env`: it holds database passwords that are not restored. **Whoever has the QR signing key can
+make valid cards**: treat it like the building's master key. Renew this copy after every secret rotation. The full
+procedure is in
+[`../../runbooks/perdida-total-del-servidor.md`](../../runbooks/perdida-total-del-servidor.md) (in Spanish).
 
 ### `BACKUP_ENCRYPTION_KEY`: this one leaves the server
 
@@ -803,6 +820,9 @@ stopped running):
 | `ReconciliacionDeProyeccionAusente` | > 26 h without reconciling | Medium | IT | [`divergencia-proyeccion.md`](../../runbooks/divergencia-proyeccion.md) (in Spanish) | Check that the `scheduler` is still alive and run `attendance:reconcile` by hand |
 | `RoturaDeCadenaDeAuditoria` | Any | Critical | Security | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Preserve the evidence (§2 of that runbook) before touching anything |
 | `VerificacionDeAuditoriaAusente` | > 26 h without verifying | Critical | Security | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check that the `scheduler` is still alive |
+| `DiscrepanciaEntreRegistroYAuditoria` | Any | Critical | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Someone has written to the time record outside the application. Preserve the evidence (§2 of that runbook) before touching anything, and do not generate legal exports of the period until it is cleared up |
+| `ConciliacionDelRegistroAusente` | > 26 h without reconciling | Critical | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Check that the `scheduler` is still alive and run `compliance:reconcile-work-record` by hand |
+| `ConciliacionCompletaDelRegistroAusente` | > 8 days without the full reconciliation | High | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Run `compliance:reconcile-work-record --full` by hand. After installing or updating it does not fire until a Sunday has gone by |
 | `ParticionDeAuditoriaAusente` | The current year's partition is missing | Critical | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | **Clock-ins are down**: run `compliance:ensure-audit-partitions` now |
 | `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Next year's is missing, from November on | Medium | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check that the `scheduler` is running and that migration `2026_09_29_100000` is applied (`migrate:status` through the `migrate` service, see the runbook §5). It no longer depends on `DB_MIGRATION_USERNAME`: the application asks a database function for the partition |
 | `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Any | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | `backup:verify`, then retry with `backup:run`, both in the `scheduler` container (not `app`) |
@@ -1508,6 +1528,11 @@ incidents. The bundle is marked as **not anonymised** and
 you are communicating personal data to a third party: read
 [`legal-obligations.md`](legal-obligations.md) §8 first, and have the
 processing agreement signed.
+
+**The product does not encrypt this file**, so that you can open it and check
+what leaves before sending it. Send it only through the encrypted channel set by
+your support and processing agreement, never by unencrypted email, and delete it
+from the server and from your computer as soon as you have sent it.
 
 ### 12.4 Granting support temporary access
 

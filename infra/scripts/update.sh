@@ -1546,13 +1546,30 @@ check_space() {
 check_images() {
   [ "${DOCKER_OK}" -eq 1 ] && [ -n "${CURRENT_ENV}" ] && [ -n "${TARGET_VERSION}" ] || return 0
 
-  local image registry announced=0
-  declare -a missing=()
+  local image registry announced=0 pinned_id name digest
+  declare -a missing=() all=() digest_env=()
+
+  # El opt-out del .env (IMAGE_DIGEST_*=) es invisible y persiste: aviso y
+  # constancia en el informe.
+  check_image_digest_overrides "${CURRENT_ENV}" "${PACKAGE_DIR}"
+  remember_check "image-digests" "${KQ_DIGEST_OVERRIDES:-$(kq_text u_report_ok)}"
+
+  # Las vacias de una vuelta atras anterior no se retiran hasta prepare_package
+  # (este paso no escribe la instalacion): las imagenes se resuelven ya con los
+  # digests del paquete, que son los que correra el reintento.
+  if kq_env_has_rollback_digests "${CURRENT_ENV}" && [ -f "${PACKAGE_DIR}/images.lock" ]; then
+    while read -r name digest; do
+      case "${name}" in php | nginx | postgres) ;; *) continue ;; esac
+      [ -n "${digest}" ] || continue
+      digest_env+=("IMAGE_DIGEST_$(printf '%s' "${name}" | tr '[:lower:]' '[:upper:]')=@${digest}")
+    done <"${PACKAGE_DIR}/images.lock"
+  fi
 
   while IFS= read -r image; do
     [ -n "${image}" ] || continue
+    all+=("${image}")
     docker image inspect "${image}" >/dev/null 2>&1 || missing+=("${image}")
-  done < <(IMAGE_TAG="${TARGET_VERSION}" docker compose --env-file "${CURRENT_ENV}" -f "${COMPOSE_FILE}" config --images 2>/dev/null || true)
+  done < <(env ${digest_env+"${digest_env[@]}"} IMAGE_TAG="${TARGET_VERSION}" docker compose --env-file "${CURRENT_ENV}" -f "${COMPOSE_FILE}" config --images 2>/dev/null || true)
 
   registry="$(env_value "${CURRENT_ENV}" "IMAGE_REGISTRY")"
   for image in ${missing+"${missing[@]}"}; do
@@ -1564,6 +1581,20 @@ check_images() {
       check_fail "$(kq_format u_c_images "${TARGET_VERSION}")" \
         "$(kq_format u_f_images "${TARGET_VERSION}" "${registry:-?}" "${TARGET_VERSION}")"
       return 0
+    fi
+  done
+
+  # Referencia fijada por digest: ni la descarga ni una imagen ya presente por su
+  # digest dejan la etiqueta local, y `restore-drill.sh --mode pitr` nombra la
+  # imagen por etiqueta (A6-2). Se etiqueta cuando falta o apunta a otra imagen.
+  for image in ${all+"${all[@]}"}; do
+    [ "${image}" != "${image%%@*}" ] || continue
+    pinned_id="$(docker image inspect -f '{{.Id}}' "${image}" 2>/dev/null || true)"
+    [ -n "${pinned_id}" ] || continue
+    [ "$(docker image inspect -f '{{.Id}}' "${image%%@*}" 2>/dev/null || true)" = "${pinned_id}" ] && continue
+    if ! docker tag "${image}" "${image%%@*}" >/dev/null 2>&1; then
+      check_warn "$(kq_format u_c_image_tag "${image%%@*}")" \
+        "$(kq_format u_f_image_tag "${image}" "${image%%@*}")"
     fi
   done
   check_pass "$(kq_format u_c_images "${TARGET_VERSION}")"
@@ -1747,7 +1778,17 @@ prepare_package() {
   if [ "${IN_PLACE}" -eq 1 ]; then
     ROLLBACK_COMPOSE="${COMPOSE_FILE}"
     ROLLBACK_ENV="${ENV_FILE}.kronoqr-pre-update"
-    if ! cp -p "${ENV_FILE}" "${ROLLBACK_ENV}" || ! chmod 0600 "${ROLLBACK_ENV}"; then
+    # El docker-compose.yml nuevo ya trae el digest de la version nueva como
+    # valor por defecto (A6-2), y la vuelta atras lo reutiliza con la etiqueta
+    # vieja: sin esto resolveria a php:<vieja>@<digest nuevo> y Docker levantaria
+    # la version NUEVA. Vacias (definidas, no ausentes) anulan el valor por
+    # defecto y la imagen vieja se resuelve por su etiqueta, que sigue en local.
+    # Si el .env viene de una vuelta atras anterior, sus vacias las puso este
+    # script (marca de lib/env-file.sh): se retiran y el reintento corre las
+    # imagenes fijadas por digest.
+    if ! kq_env_drop_rollback_digests "${ENV_FILE}" ||
+      ! cp -p "${ENV_FILE}" "${ROLLBACK_ENV}" || ! chmod 0600 "${ROLLBACK_ENV}" ||
+      ! kq_env_mark_rollback_digests "${ROLLBACK_ENV}" || ! chmod 0600 "${ROLLBACK_ENV}"; then
       die "${KQ_EXIT_REQUIREMENTS}" "$(kq_format u_f_prepare_env "${ROLLBACK_ENV}")"
     fi
     write_wal_key "${ENV_FILE}"
@@ -2583,6 +2624,11 @@ rollback_and_die() {
   if [ "${ROLLBACK_ARMED}" -le 1 ]; then
     # Solo el mantenimiento estaba puesto: retirarlo deja todo como estaba.
     if lift_maintenance; then
+      # La version anterior sigue en pie con su .env de siempre: la copia
+      # in-place sobra y lleva todos los secretos.
+      if [ "${IN_PLACE}" -eq 1 ] && [ -f "${ROLLBACK_ENV}" ]; then
+        rm -f "${ROLLBACK_ENV}"
+      fi
       ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "${reason}" "$(kq_text u_report_ok)")"
       FINAL_STATE="${SOURCE_VERSION}"
       err "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
@@ -2780,6 +2826,18 @@ rollback_and_die() {
     err ""
     err "$(kq_format u_rollback_aud1_reopened "${SOURCE_VERSION}" "${KQ_AUD1_FIXED_IN}")"
     remember_check "aud-1-reopened" "$(kq_format u_rollback_aud1_reopened "${SOURCE_VERSION}" "${KQ_AUD1_FIXED_IN}")"
+  fi
+
+  # IN PLACE: la version anterior corre con la copia `.kronoqr-pre-update`
+  # (IMAGE_TAG anterior, digests vaciados). Pasa a ser el .env de la
+  # instalacion: un `docker compose up` a mano levanta lo mismo que esta en
+  # pie, no la version nueva sobre la base restaurada, y no queda una segunda
+  # copia de los secretos. El reintento retira la marca (prepare_package).
+  if [ "${IN_PLACE}" -eq 1 ] && [ -f "${ROLLBACK_ENV}" ]; then
+    if ! mv -f "${ROLLBACK_ENV}" "${ENV_FILE}"; then
+      err "$(kq_format u_f_rollback_env "${ROLLBACK_ENV}" "${ENV_FILE}")"
+      remember_check "rollback-env" "$(kq_format u_f_rollback_env "${ROLLBACK_ENV}" "${ENV_FILE}")"
+    fi
   fi
 
   err ""

@@ -17,7 +17,7 @@ Eres el responsable de calidad del Sistema de Fichaje por QR. Tu criterio: **una
 
 | Qué se prueba | Nivel | Herramienta |
 |---|---|---|
-| Regla de negocio, cálculo, invariante | Unitaria, sin BD | Pest, `< 2 s` toda la suite |
+| Regla de negocio, cálculo, invariante | Unitaria, sin BD | Pest, toda la suite dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile` (hoy 5 s) |
 | Que la BD rechaza datos imposibles | Integración | Pest + PostgreSQL real |
 | Que un rol no puede acceder | Feature | Pest + prueba negativa obligatoria |
 | Que la respuesta cumple el contrato | Contrato | Spectator + `openapi.yaml` |
@@ -71,7 +71,7 @@ Cuando te pidan verificar si algo está probado, **no respondas de memoria ni po
 - Cobertura de `Modules/*/Domain`: ≥ 90 %
 - Cobertura global backend: ≥ 75 %; frontend: ≥ 70 %
 - **MSI de mutación sobre el dominio: ≥ 80 %**
-- Suite unitaria completa: < 2 s
+- Suite unitaria completa: dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile` (hoy 5 s), que comprueba `make test-unit`
 - Cero pruebas intermitentes. Una prueba que falla a veces se arregla o se borra, nunca se reintenta.
 
 ## Reglas de conducta
