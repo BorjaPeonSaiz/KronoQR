@@ -335,11 +335,17 @@ The system keeps two proofs, and checks them on its own:
 If either of them fails, it is not a malfunction: it is a possible security
 incident, with a critical alert to the security officer and its own procedure.
 
-**They detect; they do not prevent.** Whoever has access to the database with
-the application's credential can still write to the time record — the
-application has to be able to, in order to clock in. What the system
-guarantees is that such a write **does not go unnoticed**: it shows up in the
-reconciliation, and the original audit entry still says what really happened.
+**They detect, they do not prevent, and they have a limit.** Whoever has access
+to the database with the application's credential can still write to the time
+record — the application has to be able to, in order to clock in. What the
+system guarantees is that a write **made outside the application does not go
+unnoticed**: it shows up in the reconciliation, and the original audit entry
+still says what really happened. That same credential can also **add** audit
+entries (not change or delete existing ones): someone who used it to add
+entries that "explain" their change would not trigger any automatic check,
+although those entries would stay in the chain for good and would show when
+reviewing the shift entry's history. That is why what falls to you, below,
+matters so much.
 
 What falls to you:
 

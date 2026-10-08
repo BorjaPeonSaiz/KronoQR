@@ -172,8 +172,9 @@ return [
      * una nomina y cubre de sobra un fin de semana en el que nadie mira las
      * alertas. Lo antiguo no queda sin mirar: el domingo corre la pasada completa
      * (`--full`) sobre todo el registro, que es la que ve un borrado o una edicion
-     * de un tramo de hace meses. Medida, la completa tarda 1 min 42 s con cuatro
-     * años de 300 personas; la diaria, 2,5 s.
+     * de un tramo de hace meses. Medida, la completa tarda 2 min 45 s con cuatro
+     * años de 300 personas; la diaria, 3,5 s (876 000 tramos
+     * y 2,6 millones de asientos, dentro de 128 MB de memoria).
      *
      * NO ES UN UMBRAL LEGAL NI DE UN CLIENTE: dice hasta donde mira el proceso, no
      * cuando algo esta mal (regla dura 13). Una pasada mas ancha para una

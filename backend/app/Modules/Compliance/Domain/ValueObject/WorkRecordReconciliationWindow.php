@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Domain\ValueObject;
 
 use App\Modules\Compliance\Domain\Exception\InvalidWorkRecordReconciliationWindow;
-use App\Modules\Compliance\Domain\WorkRecordReconciliation;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -35,8 +34,8 @@ use DateTimeZone;
  * ## La completa no tiene limites
  *
  * Todos los tramos y todos los asientos vivos. Un asiento cuyo tramo ya no esta
- * se distingue de una purga legitima por la fecha de corte de la ultima purga
- * auditada, no por la ventana (ver {@see WorkRecordReconciliation}).
+ * se distingue de una purga legitima por el corte admitido de su centro
+ * ({@see WorkRecordPurgeBoundary}), no por la ventana.
  */
 final readonly class WorkRecordReconciliationWindow
 {

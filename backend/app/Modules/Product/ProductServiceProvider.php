@@ -87,6 +87,7 @@ use App\Modules\Product\Infrastructure\Adapter\LicensedBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\LicensedFeatureGate;
 use App\Modules\Product\Infrastructure\Adapter\LocalBrandingLogoReader;
 use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
+use App\Modules\Product\Infrastructure\Adapter\ProfileRetentionYearsFloor;
 use App\Modules\Product\Infrastructure\Adapter\QueuedDataExportDispatcher;
 use App\Modules\Product\Infrastructure\Adapter\SanctumSupportTokenIssuer;
 use App\Modules\Product\Infrastructure\Branding\LogoFileInspector;
@@ -171,6 +172,7 @@ use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\PayrollLayoutProvider;
 use App\Modules\Shared\Application\Port\PinLengthProvider;
+use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
@@ -406,6 +408,14 @@ final class ProductServiceProvider extends ServiceProvider
                 $app->make(GetSettingsHandler::class),
             ),
         );
+
+        /*
+         * El suelo de los años de conservacion del perfil (RL-02, ADR-057 §4).
+         * Mismo reparto: lo pide la conciliacion de `Compliance`, que no puede
+         * importar `Product`, para no creer un asiento de purga que dice haber
+         * conservado menos de lo que el perfil admite.
+         */
+        $this->app->singleton(RetentionYearsFloor::class, ProfileRetentionYearsFloor::class);
 
         /*
          * La marca (RF-PD-08), CON EL PLAN DELANTE (ADR-023).

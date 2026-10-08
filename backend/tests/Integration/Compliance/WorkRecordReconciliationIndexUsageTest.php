@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Compliance\Application\Port\WorkRecordAuditSource;
+use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationWindow;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -115,8 +116,11 @@ it('resuelve la ventana diaria por indice, sin recorrer ninguna particion de aud
     $pairs = 0;
     $declared = QueryPlans::capture(
         static function () use ($source, $window, &$pairs): void {
-            foreach ($source->pairs($window, 500) as $pair) {
-                $pairs++;
+            foreach ($source->read($window, 500) as $item) {
+                // El primero es el contexto de purgas, no un tramo.
+                if ($item instanceof WorkRecordPair) {
+                    $pairs++;
+                }
             }
         },
         static fn (string $sql): bool => str_starts_with(ltrim($sql), 'declare'),

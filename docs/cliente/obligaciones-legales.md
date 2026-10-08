@@ -322,11 +322,17 @@ El sistema guarda dos pruebas, y las comprueba solo:
 Si cualquiera de las dos falla, no es una avería: es un posible incidente de
 seguridad, con alerta crítica al responsable de seguridad y su procedimiento.
 
-**Detectan, no impiden.** Quien tenga acceso a la base de datos con la
-credencial de la aplicación todavía puede escribir en el registro horario —la
-aplicación tiene que poder hacerlo para fichar—. Lo que el sistema garantiza es
-que esa escritura **no pasa inadvertida**: aparece en la conciliación y la
-anotación original sigue diciendo lo que de verdad ocurrió.
+**Detectan, no impiden, y tienen un límite.** Quien tenga acceso a la base de
+datos con la credencial de la aplicación todavía puede escribir en el registro
+horario —la aplicación tiene que poder hacerlo para fichar—. Lo que el sistema
+garantiza es que una escritura **por fuera de la aplicación no pasa
+inadvertida**: aparece en la conciliación, y la anotación original sigue
+diciendo lo que de verdad ocurrió. Esa misma credencial también puede
+**añadir** anotaciones a la auditoría (no cambiar ni borrar las que hay): quien
+la usara para añadir anotaciones que «expliquen» su cambio no haría saltar
+ninguna comprobación automática, aunque esas anotaciones quedarían para siempre
+en la cadena y se verían al revisar el historial del tramo. Por eso importa
+tanto lo que te corresponde a continuación.
 
 Lo que te corresponde:
 

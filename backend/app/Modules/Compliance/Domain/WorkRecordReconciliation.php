@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Domain;
 
 use App\Modules\Compliance\Domain\ValueObject\AuditedShiftEntry;
+use App\Modules\Compliance\Domain\ValueObject\ExpectedCorrection;
 use App\Modules\Compliance\Domain\ValueObject\RecordedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancyKind;
+use App\Modules\Compliance\Domain\ValueObject\WorkRecordInstant;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
+use App\Modules\Compliance\Domain\ValueObject\WorkRecordPurgeBoundary;
 use DateTimeImmutable;
-use DateTimeZone;
-use Exception;
 
 /**
  * La regla de la conciliacion entre el registro horario y su auditoria
@@ -24,23 +25,29 @@ use Exception;
  * quien ejecute codigo con su credencial puede cambiar la entrada de un tramo,
  * borrarlo o inventarse uno **sin tocar la cadena**, que sigue en verde. La
  * exportacion para la Inspeccion lee `shift_entries` y saldria manipulada. Esta
- * regla compara cada tramo con el ultimo asiento que la aplicacion escribio
- * sobre el en la misma transaccion, y el asiento es lo que no se puede
- * reescribir.
+ * regla compara cada tramo con los asientos que la aplicacion escribio sobre el
+ * en la misma transaccion, y un asiento ya escrito no se puede reescribir sin
+ * romper la cadena.
+ *
+ * **Lo que no impide**: con la misma credencial se pueden **añadir** asientos
+ * nuevos y bien encadenados —la cadena no lleva secreto y la aplicacion tiene
+ * `INSERT` sobre `audit_log`—. Una escritura en el registro acompañada de su
+ * asiento falsificado cuadra. Lo recoge el runbook, «Lo que la conciliacion no
+ * ve».
  *
  * ## Que NO es una discrepancia, y por que
  *
  * Es la mitad de la regla, y es la que decide si la alerta se cree:
  *
- * - **Un tramo sin asiento cuya entrada cae en un año de `audit_log` ya
- *   purgado** (ADR-027). La particion se suelta entera cuando todo el año vence,
- *   pero un tramo de la noche del 31 de diciembre puede tener `work_date` del 1
- *   de enero siguiente y sobrevivir unos dias a su asiento.
- * - **Un asiento sin tramo cuya jornada es anterior al corte de la ultima purga
- *   auditada** (`retention.purge_executed`, RL-02). La purga borra los tramos y
- *   deja su propio asiento con la fecha de corte; un borrado que no lleva ese
- *   asiento no se puede disfrazar de purga, porque el asiento no se puede
- *   escribir sin la aplicacion ni borrar sin romper la cadena.
+ * - **Un tramo sin asiento de la noche del 31 de diciembre cuyo año de
+ *   `audit_log` ya esta purgado** (ADR-027). La particion se suelta entera
+ *   cuando todo el año vence, y un tramo que entra el 31 en UTC con `work_date`
+ *   del 1 o el 2 de enero sobrevive a su asiento. Solo ese caso: cualquier otro
+ *   tramo sin asiento es un `INSERT`.
+ * - **Un asiento sin tramo cuya jornada es anterior al corte admitido de su
+ *   centro** ({@see WorkRecordPurgeBoundary}): la purga borra los tramos y deja
+ *   su asiento con la fecha de corte, y ese asiento se comprueba antes de
+ *   creerlo.
  *
  * Y nada mas. No hay tolerancia ni umbral: una sola discrepancia es una
  * escritura en el registro por fuera de la aplicacion.
@@ -60,17 +67,16 @@ use Exception;
  * ## Pura
  *
  * Sin reloj, sin base de datos y sin `Illuminate` (regla dura 1). Recibe el par
- * ya leido y el contexto de purgas ya resuelto.
+ * ya leido y el limite de purgas ya resuelto.
  */
 final class WorkRecordReconciliation
 {
     private function __construct() {}
 
     /**
-     * Compara un tramo con su ultimo asiento, con las purgas que el par trae de
-     * la misma instantanea.
+     * Compara un tramo con sus asientos.
      */
-    public static function compare(WorkRecordPair $pair): ?WorkRecordDiscrepancy
+    public static function compare(WorkRecordPair $pair, WorkRecordPurgeBoundary $boundary): ?WorkRecordDiscrepancy
     {
         $recorded = $pair->recorded;
         $audited = $pair->audited;
@@ -80,13 +86,13 @@ final class WorkRecordReconciliation
         }
 
         if ($recorded instanceof RecordedShiftEntry) {
-            return self::auditPurgedAlongTheYear($recorded, $pair->sealedAuditYears)
+            return self::auditPurgedAlongTheYear($recorded, $boundary->sealedAuditYears)
                 ? null
                 : new WorkRecordDiscrepancy($pair->shiftEntryUuid, WorkRecordDiscrepancyKind::EntryWithoutAudit);
         }
 
         if ($audited instanceof AuditedShiftEntry) {
-            return self::entryPurged($audited, $pair->purgedThrough)
+            return self::entryPurged($audited, $boundary)
                 ? null
                 : new WorkRecordDiscrepancy(
                     $pair->shiftEntryUuid,
@@ -102,12 +108,13 @@ final class WorkRecordReconciliation
     /**
      * Minutos trabajados entre dos marcas, con la misma regla que el registro:
      * segundos enteros de diferencia divididos por sesenta, truncando
-     * (`Attendance\Domain\ValueObject\TimeRange::duration()`).
+     * (`Attendance\Domain\ValueObject\TimeRange::duration()` y
+     * `Reporting\Domain\ValueObject\ComplianceShiftSegment::minutes()`).
      *
      * Se repite aqui porque este modulo no puede importar `Attendance` (doc 02
-     * §1.6). Que las dos den lo mismo lo comprueba
-     * `tests/Unit/Compliance/Domain/WorkRecordReconciliationTest.php` contra la
-     * clase de `Attendance`: si una cambia, la prueba rompe antes que la alerta.
+     * §1.6). Que las tres den lo mismo lo comprueba
+     * `tests/Unit/Compliance/Domain/WorkRecordReconciliationTest.php` contra las
+     * otras dos: si una cambia, la prueba rompe antes que la alerta.
      */
     public static function workedMinutes(DateTimeImmutable $in, DateTimeImmutable $out): int
     {
@@ -142,7 +149,7 @@ final class WorkRecordReconciliation
     }
 
     /**
-     * Los campos de la fila que no dicen lo que dice el asiento.
+     * Los campos de la fila que no dicen lo que dicen los asientos.
      *
      * @return list<string>
      */
@@ -151,6 +158,7 @@ final class WorkRecordReconciliation
         $checks = [
             ...self::identityChecks($recorded, $audited),
             ...self::markChecks($recorded, $audited),
+            ...self::sourceChecks($recorded, $audited),
             ...self::stateChecks($recorded, $audited),
         ];
 
@@ -190,9 +198,23 @@ final class WorkRecordReconciliation
         $knowsOut = $audited->knowsClockOut;
 
         return [
-            'clocked_in_at' => $audited->clockedInAt === null || self::sameInstant($audited->clockedInAt, $recorded->clockedInAt),
-            'clocked_out_at' => ! $knowsOut || self::sameInstant($audited->clockedOutAt, $recorded->clockedOutAt),
+            'clocked_in_at' => $audited->clockedInAt === null || WorkRecordInstant::same($audited->clockedInAt, $recorded->clockedInAt),
+            'clocked_out_at' => ! $knowsOut || WorkRecordInstant::same($audited->clockedOutAt, $recorded->clockedOutAt),
             'duration_minutes' => ! $knowsOut || $audited->retires() || self::durationMatches($audited, $recorded),
+        ];
+    }
+
+    /**
+     * De donde vino cada marca —quiosco con tarjeta, con PIN, o una persona
+     * desde el panel—, que la exportacion legal enseña al lado de la hora.
+     *
+     * @return array<string, bool>
+     */
+    private static function sourceChecks(RecordedShiftEntry $recorded, AuditedShiftEntry $audited): array
+    {
+        return [
+            'clock_in_source' => $audited->clockInSource === null || $audited->clockInSource === $recorded->clockInSource,
+            'clock_out_source' => ! $audited->knowsClockOutSource || $audited->clockOutSource === $recorded->clockOutSource,
         ];
     }
 
@@ -211,20 +233,18 @@ final class WorkRecordReconciliation
     }
 
     /**
-     * Si el asiento es de una correccion y no esta su fila de
-     * `shift_corrections` —autor y motivo, RN-13—.
+     * Si alguno de los asientos es de una correccion y no esta su fila de
+     * `shift_corrections` con la misma accion, el mismo motivo y el mismo
+     * autor (RN-13).
      */
     private static function correctionMissing(RecordedShiftEntry $recorded, AuditedShiftEntry $audited): bool
     {
-        if ($audited->requiredCorrectionAction === null) {
-            return false;
-        }
-
-        $actions = $audited->correctionOnReplacement
-            ? $recorded->replacementCorrectionActions
-            : $recorded->correctionActions;
-
-        return ! \in_array($audited->requiredCorrectionAction, $actions, true);
+        return array_any(
+            $audited->requiredCorrections,
+            static fn (ExpectedCorrection $expected): bool => ! $expected->isMetBy(
+                $expected->onReplacement ? $recorded->replacementCorrections : $recorded->corrections,
+            ),
+        );
     }
 
     /**
@@ -240,8 +260,8 @@ final class WorkRecordReconciliation
             return $recorded->durationMinutes === null;
         }
 
-        $in = self::instant($audited->clockedInAt);
-        $out = self::instant($audited->clockedOutAt);
+        $in = WorkRecordInstant::parse($audited->clockedInAt);
+        $out = WorkRecordInstant::parse($audited->clockedOutAt);
 
         // Sin marcas legibles en el asiento no hay referencia: lo que no se
         // sabe no se compara (ya habra salido la marca ilegible).
@@ -253,32 +273,41 @@ final class WorkRecordReconciliation
     }
 
     /**
+     * La unica ausencia de asiento que tiene explicacion (ADR-027): un tramo que
+     * entra el 31 de diciembre de un año ya sellado, en UTC, y cuya jornada es
+     * el 1 o el 2 de enero siguiente, con un dia como mucho entre las dos fechas.
+     *
      * @param  list<int>  $sealedAuditYears
      */
     private static function auditPurgedAlongTheYear(RecordedShiftEntry $recorded, array $sealedAuditYears): bool
     {
-        $in = self::instant($recorded->clockedInAt);
+        $in = WorkRecordInstant::parse($recorded->clockedInAt);
 
-        return $in instanceof DateTimeImmutable && \in_array((int) $in->format('Y'), $sealedAuditYears, true);
-    }
-
-    private static function entryPurged(AuditedShiftEntry $audited, ?string $purgedThrough): bool
-    {
-        // `YYYY-MM-DD` se ordena igual como texto que como fecha. La purga borra
-        // `work_date < corte` (DatabaseWorkRecordArchive::purge), y es la misma
-        // desigualdad.
-        return $purgedThrough !== null
-            && $audited->workDate !== null
-            && $audited->workDate < $purgedThrough;
-    }
-
-    private static function sameInstant(?string $expected, ?string $actual): bool
-    {
-        if ($expected === null || $actual === null) {
-            return $expected === $actual;
+        if (! $in instanceof DateTimeImmutable || preg_match('/\A(\d{4})-01-0([12])\z/', $recorded->workDate, $parts) !== 1) {
+            return false;
         }
 
-        return self::normalized($expected) === self::normalized($actual);
+        $sealedYear = (int) $in->format('Y');
+        $daysApart = (int) $in->setTime(0, 0)->diff(WorkRecordInstant::parse($recorded->workDate.'T00:00:00Z') ?? $in)->format('%r%a');
+
+        return \in_array($sealedYear, $sealedAuditYears, true)
+            && (int) $parts[1] === $sealedYear + 1
+            && $daysApart >= 0
+            && $daysApart <= 1;
+    }
+
+    private static function entryPurged(AuditedShiftEntry $audited, WorkRecordPurgeBoundary $boundary): bool
+    {
+        $cutoff = $boundary->cutoffFor($audited->siteId);
+
+        // `YYYY-MM-DD` se ordena igual como texto que como fecha. La purga borra
+        // `work_date < corte` (DatabaseWorkRecordArchive::purge), y es la misma
+        // desigualdad. El corte ya esta validado; la jornada del asiento se
+        // exige con la misma forma para que un texto raro no pase por debajo.
+        return $cutoff !== null
+            && $audited->workDate !== null
+            && preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $audited->workDate) === 1
+            && $audited->workDate < $cutoff;
     }
 
     private static function sameUuid(?string $expected, ?string $actual): bool
@@ -288,29 +317,5 @@ final class WorkRecordReconciliation
         }
 
         return strtolower($expected) === strtolower($actual);
-    }
-
-    /**
-     * El instante en ISO-8601 UTC con microsegundos, o la cadena tal cual si no
-     * se puede leer: dos cadenas ilegibles distintas siguen siendo distintas.
-     */
-    private static function normalized(string $value): string
-    {
-        return self::instant($value)?->format('Y-m-d\TH:i:s.u\Z') ?? $value;
-    }
-
-    private static function instant(?string $value): ?DateTimeImmutable
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        try {
-            // Con el instante escrito y no «ahora»: esto lee una marca, no
-            // pregunta la hora (regla dura 2).
-            return new DateTimeImmutable($value, new DateTimeZone('UTC'))->setTimezone(new DateTimeZone('UTC'));
-        } catch (Exception) {
-            return null;
-        }
     }
 }

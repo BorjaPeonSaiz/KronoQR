@@ -154,7 +154,7 @@ management account that authorises the purge.)
 - Run `docker compose exec app php artisan compliance:reconcile-work-record --full`.
   It also has to finish green: the purge leaves its audit entry with the
   cut-off date, and the reconciliation treats everything before that cut-off
-  as purged. A discrepancy here is a deletion that the purge did **not** make
+  as purged, if the cut-off is consistent with the retention period. A discrepancy here is a deletion that the purge did **not** make
   ([`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md),
   in Spanish).
 

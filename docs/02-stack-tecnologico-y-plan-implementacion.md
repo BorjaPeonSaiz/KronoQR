@@ -845,6 +845,9 @@ audit_chain_rows_verified                                gauge
 audit_chain_unknown_actions                              gauge
 audit_log_partition_ready{horizon}                       gauge
 audit_log_partition_check_timestamp_seconds              gauge
+work_record_reconciliation_discrepancies{scope,kind}     gauge
+work_record_reconciliation_last_run_timestamp_seconds{scope} gauge
+work_record_reconciliation_entries_checked{scope}        gauge
 worked_minutes_total{site,department}                    counter
 report_exports_total{format}                             counter
 installation_setting_changes_total{affects_worked_hours} counter
@@ -917,7 +920,7 @@ de respaldo servida por el proceso que hay que restaurar no vale nada.
 `kronoqr_backup_restore_drill_duration_seconds` es la única medida real del
 **RTO**: si crece, el objetivo de 4 h se está estrechando.
 
-`projection_divergence_total` y `audit_chain_verification_failures_total` deben permanecer **siempre en cero**. Cualquier incremento es un incidente de integridad, no una métrica de tendencia.
+`projection_divergence_total` y `audit_chain_verification_failures_total` deben permanecer **siempre en cero**. Cualquier incremento es un incidente de integridad, no una métrica de tendencia. Lo mismo `work_record_reconciliation_discrepancies` (ADR-057 §4): tramos de `shift_entries` que no cuadran con sus asientos de `audit_log` y asientos de purga que no se pueden creer, por alcance (`recent`, la pasada diaria de los últimos 7 días; `full`, la semanal sobre todo el registro) y por tipo. Es un *gauge* de la última pasada de cada alcance y no un contador, porque un tramo descuadrado sí se puede devolver a lo que dice su asiento; las tres series las escribe `compliance:reconcile-work-record` por el colector *textfile*, un fichero por alcance.
 
 **Lo que `projection_divergence_total` y `projection_reconciliation_last_corrections` cuentan desde la tarea 3.6: solo divergencias confirmadas bajo candado.** La pasada de reconciliación inspecciona el día con dos lecturas —los tramos vigentes primero, las filas de la proyección después— y sin instantánea común, así que un fichaje que confirme entre las dos le deja una mitad nueva y otra vieja: eso *parece* una divergencia y no lo es. Corre a las 03:50 UTC, que en un hotel es hora de turno de noche, de modo que no es un caso de laboratorio. Desde la 3.6 la corrección **relee la jornada con la fila de `daily_totals` bloqueada** antes de escribir, y lo que ahí ya cuadra no toca ninguna de las dos series: se cuenta en `projection_reconciliation_last_self_resolved` —*gauge* de la última pasada, sin etiquetas— y se deja en el log como `attendance.projection_divergence_resolved_itself`. Si contara como divergencia, la alerta crítica de integridad sonaría cada madrugada y dejaría de significar «alguien escribió la tabla por un camino que no es el recálculo», que es lo único que tiene que significar. Por el mismo motivo **la contención tampoco cuenta como divergencia**: un `lock_timeout` (`55P03`) o un abrazo mortal (`40P01`) dicen que esa jornada no se llegó a comparar, y salen en `projection_reconciliation_last_failures` —hubo trabajo sin hacer— no en el contador de integridad.
 

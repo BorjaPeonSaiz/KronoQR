@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Application\Port;
 
+use App\Modules\Compliance\Domain\ValueObject\WorkRecordAuditContext;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationWindow;
 
@@ -19,9 +20,9 @@ use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationWindow;
 interface WorkRecordAuditSource
 {
     /**
-     * Cada tramo de la ventana emparejado con su ultimo asiento `shift_entry.*`,
-     * y con el corte de la ultima purga auditada y los años de auditoria
-     * purgados.
+     * **Primero, y siempre, un {@see WorkRecordAuditContext}** —los asientos de
+     * purga del registro y los años de `audit_log` sellados—; despues, cada
+     * tramo de la ventana emparejado con sus asientos `shift_entry.*`.
      *
      * **Todo en una sola instantanea.** El tramo y su asiento se escriben en la
      * misma transaccion; si la fila, el asiento o la purga se leyeran en
@@ -29,9 +30,9 @@ interface WorkRecordAuditSource
      * aparecerian como una discrepancia que no existe.
      *
      * **Por lotes**: la pasada completa recorre todo el plazo de conservacion y
-     * no puede cargarlo en memoria. El orden no esta garantizado.
+     * no puede cargarlo en memoria. El orden de los pares no esta garantizado.
      *
-     * @return iterable<WorkRecordPair>
+     * @return iterable<WorkRecordAuditContext|WorkRecordPair>
      */
-    public function pairs(WorkRecordReconciliationWindow $window, int $chunkSize): iterable;
+    public function read(WorkRecordReconciliationWindow $window, int $chunkSize): iterable;
 }

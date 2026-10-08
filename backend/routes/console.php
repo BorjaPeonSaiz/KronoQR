@@ -109,13 +109,13 @@ Schedule::command('compliance:verify-audit-chain')
  *     hace verdad que una edicion de un fichaje reciente se detecta al dia
  *     siguiente. Diez minutos despues de la verificacion de la cadena y antes
  *     de la deteccion de incidencias (04:30): las dos leen el mismo registro y
- *     no tienen por que coincidir en el mismo minuto. 2,5 s medidos con
+ *     no tienen por que coincidir en el mismo minuto. 3,5 s medidos con
  *     cuatro años de 300 personas.
  *   · SEMANAL, domingo 02:15 UTC, sobre TODO el registro (`--full`). Es la unica
  *     que ve un borrado o una edicion de un tramo antiguo, cuyos asientos quedan
  *     fuera de la ventana diaria. Antes de la creacion de particiones (02:45) y
  *     de la copia (03:15), y nunca cerca del turno de las 06:00: lee las dos
- *     tablas enteras (1 min 42 s medidos con el mismo volumen, en 128 MB).
+ *     tablas enteras (2 min 45 s medidos con el mismo volumen, en 128 MB).
  *
  * SOLO LEE, y en una instantanea `REPEATABLE READ, READ ONLY`: no bloquea ni un
  * fichaje. `withoutOverlapping` porque dos pasadas a la vez solo duplican la

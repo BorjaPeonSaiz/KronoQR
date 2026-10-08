@@ -25,8 +25,6 @@ final readonly class WorkRecordReconciliationResult
         public array $counts,
         public array $discrepancies,
         public bool $truncated = false,
-        /** Fecha de corte de la ultima purga auditada del registro, o `null` si no hubo ninguna. */
-        public ?string $purgedThrough = null,
     ) {}
 
     /**

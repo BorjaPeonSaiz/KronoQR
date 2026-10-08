@@ -21,8 +21,8 @@ namespace App\Modules\Compliance\Domain\ValueObject;
 final readonly class RecordedShiftEntry
 {
     /**
-     * @param  list<string>  $correctionActions  Acciones de las filas de `shift_corrections` que apuntan a este tramo.
-     * @param  list<string>  $replacementCorrectionActions  Las de la version que lo sustituyo, si la hay.
+     * @param  list<RecordedCorrection>  $corrections  Filas de `shift_corrections` que apuntan a este tramo.
+     * @param  list<RecordedCorrection>  $replacementCorrections  Las de la version que lo sustituyo, si la hay.
      */
     public function __construct(
         public string $uuid,
@@ -35,8 +35,11 @@ final readonly class RecordedShiftEntry
         public string $status,
         public int $version,
         public ?string $supersededByUuid,
-        public array $correctionActions = [],
-        public array $replacementCorrectionActions = [],
+        /** `qr_kiosk`, `pin_kiosk`, `manual_admin` o `import`: va en la exportacion legal. */
+        public string $clockInSource,
+        public ?string $clockOutSource,
+        public array $corrections = [],
+        public array $replacementCorrections = [],
     ) {}
 
     /**

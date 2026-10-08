@@ -152,7 +152,8 @@ docker compose -f docker-compose.yml run --rm \
   incidente de seguridad.
 - Lanza `docker compose exec app php artisan compliance:reconcile-work-record --full`.
   También tiene que terminar en verde: la purga deja su asiento con la fecha de
-  corte, y la conciliación da por purgado lo anterior a ese corte. Una
+  corte, y la conciliación da por purgado lo anterior a ese corte, si el corte es
+  coherente con el plazo de retención. Una
   discrepancia aquí es un borrado que **no** hizo la purga
   ([`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md)).
 
