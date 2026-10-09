@@ -2195,7 +2195,15 @@ jobs:
             # instalada y update.sh se negaria —bien— a adivinar (primera vez que
             # se vio: tarea 5.9, con dos migraciones nuevas; 5.7 y 5.8 no traian
             # ninguna).
+            # Si la version abierta todavia no trae migraciones (un ciclo recien
+            # abierto), esa ultima migracion es la frontera de la version
+            # anterior: repetirla es una matriz invalida y update.sh la rechaza.
+            # Es lo que congelaria un `chore(release)` sin migraciones: `-`.
             ultima="$(ls anterior/backend/database/migrations | sed -n 's/\.php$//p' | sort | tail -n 1)"
+            frontera_previa="$(grep -v '^#' paquete-nuevo/versions.txt | awk 'NF == 2 && $2 != "*" && $2 != "-" { b = $2 } END { print b }')"
+            if [ "${ultima}" = "${frontera_previa}" ]; then
+              ultima="-"
+            fi
             sed -i "s/^\([0-9][^ ]*\) \*$/\1 ${ultima}/" paquete-nuevo/versions.txt
             printf '%s *\n' "${new}" >>paquete-nuevo/versions.txt
           fi
