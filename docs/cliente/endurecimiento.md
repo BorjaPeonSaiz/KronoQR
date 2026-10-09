@@ -152,14 +152,14 @@ docker compose up -d nginx
 **Son un ejemplo, no una configuración soportada.** Los rangos son inventados:
 sustitúyelos por los tuyos. Manda el manual de tu cortafuegos.
 
-Con `ufw` (Debian/Ubuntu), suponiendo VLAN de quioscos `10.0.20.0/24`, red
+Con `ufw` (Debian/Ubuntu), suponiendo VLAN de quioscos `10.0.30.0/24`, red
 ofimática `10.0.10.0/24` y VPN `10.8.0.0/24`:
 
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow from 10.0.10.0/24 to any port 22 proto tcp comment 'SSH solo desde ofimatica'
-sudo ufw allow from 10.0.20.0/24 to any port 443 proto tcp comment 'KronoQR quioscos'
+sudo ufw allow from 10.0.30.0/24 to any port 443 proto tcp comment 'KronoQR quioscos'
 sudo ufw allow from 10.0.10.0/24 to any port 443 proto tcp comment 'KronoQR panel'
 sudo ufw allow from 10.8.0.0/24 to any port 443 proto tcp comment 'KronoQR VPN'
 sudo ufw enable
@@ -177,7 +177,7 @@ table inet kronoqr {
     ct state established,related accept
     iif "lo" accept
     ip saddr 10.0.10.0/24 tcp dport 22 accept
-    ip saddr { 10.0.20.0/24, 10.0.10.0/24, 10.8.0.0/24 } tcp dport 443 accept
+    ip saddr { 10.0.30.0/24, 10.0.10.0/24, 10.8.0.0/24 } tcp dport 443 accept
   }
 }
 REGLAS
@@ -456,6 +456,11 @@ Y estos son tuyos:
   [`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §2.
 - **Custodia física**: soporte anclado, a la vista del personal, sin acceso
   público.
+- **Fecha, hora y zona horaria automáticas en la tablet**, con la zona del
+  centro. La pantalla del quiosco enseña la hora del aparato en su propia zona,
+  no la del centro; el registro no se ve afectado, pero un empleado que ve una
+  hora distinta de la de su registro desconfía de él. Un reloj desviado más de
+  `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` abre además una incidencia por fichaje.
 - **La respuesta a un robo o a una pérdida es desvincular esa tablet**, de
   inmediato, desde «Quioscos» en el panel: es la acción que invalida el token.
   Después, si procede, trata el hecho como incidencia de seguridad
@@ -627,7 +632,7 @@ las conozcas antes de que te las enseñe un informe de auditoría:
 | --- | --- | --- |
 | **La versión instalada y el estado de la licencia**, en una palabra (`valid`, `expired`, `absent`…) | `GET /api/v1/health` | Es la única sonda que no exige sesión ni base de datos, y es lo que permite a `doctor` y al paquete de diagnóstico informar del estado. De ahí **no sale** el nombre del cliente, ni el plan, ni los límites, ni las fechas: eso exige cuenta de administrador. Una licencia caducada responde `200`, porque lo contrario haría que un orquestador retirara del servicio un sistema que ficha perfectamente |
 | **La marca de la instalación**: nombre visible, un color y el logotipo | `GET /api/v1/branding` y `/api/v1/branding/logo` | El quiosco y el portal la necesitan **antes** de identificar a nadie. Lo que revela es lo mismo que lleva impreso cada tarjeta y el rótulo de recepción. La respuesta está cerrada a cinco claves de presentación y tiene su propio límite por IP |
-| **Que la instalación se está actualizando ahora**, durante la ventana de mantenimiento | `503` con `Retry-After` en el panel y el portal | Es lo que permite a la tablet distinguir «no se decidió» de «rechazado» y **conservar el fichaje en su cola**. El cuerpo no dice de qué versión a cuál, ni cuánto falta, ni quién es el cliente |
+| **Que la instalación se está actualizando ahora**, durante la ventana de mantenimiento | `503` con `Retry-After` en toda la API (panel, portal y fichaje del quiosco), salvo las sondas `/api/v1/health` y `/api/v1/ready` | Es lo que permite a la tablet distinguir «no se decidió» de «rechazado» y **conservar el fichaje en su cola**. El cuerpo no dice de qué versión a cuál, ni cuánto falta, ni quién es el cliente |
 | **Que una tablet puede pedir un código de emparejamiento** | `POST /api/v1/kiosk/pair` y `POST /api/v1/kiosk/pair/claim` | Quien las llama todavía no tiene credencial: es justo la que viene a buscar. Ninguna de las dos vincula nada por sí sola —hace falta que un administrador confirme la solicitud desde el panel—, y la recogida no entrega el token sin un secreto de 32 bytes que nunca salió de la tablet. Cada una tiene su propio límite, las solicitudes vivas están acotadas y caducan solas, y el rechazo es **uno solo**: no distingue «no existe» de «ya no vale» |
 | **Que la instalación todavía no tiene ninguna cuenta de gestión** | `GET /api/v1/setup/status` y `POST /api/v1/setup/administrator` | Es la pantalla del «primer administrador», y **solo responde mientras no exista ninguna cuenta de gestión**: en cuanto hay una, se cierra sola y para siempre. Tiene su propio límite de intentos. Por eso el §1.3 insiste en no publicar el panel antes de terminar el paso 1 del asistente |
 

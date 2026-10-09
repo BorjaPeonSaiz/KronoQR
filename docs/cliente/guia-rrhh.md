@@ -811,7 +811,10 @@ Y dos enlaces:
   más; también los recuentos de las tarjetas son solo de su gente.
 - **RRHH** y **administrador** lo ven todo.
 - El **auditor** no entra en esta pantalla. Auditar es revisar lo que quedó
-  escrito, no gestionar el día a día.
+  escrito, no gestionar el día a día. **En la 2.2.0 su menú todavía le ofrece
+  «Cumplimiento» y «Presencia»**, y al abrirlas recibe un aviso de que no tiene
+  permiso: es un defecto conocido del menú, no de su cuenta, y no hay nada que
+  corregir en ella.
 
 **Cada consulta queda anotada en el registro de auditoría**, igual que consultar
 el registro horario de una persona (§3.2): quién ha mirado, qué periodo y con
@@ -1699,7 +1702,9 @@ perdido una tarjeta.
 
 La vía ordinaria es **el portal**: entra con su código y su PIN y se descarga su
 historial cuando quiera, sin pedírselo a nadie. Es lo que exige la ley y lo que
-evita convertir cada consulta en una gestión.
+evita convertir cada consulta en una gestión. Recuérdale que **ponga la fecha de
+inicio**: en blanco, la descarga trae solo los últimos 31 días, y cada descarga
+abarca como mucho 366.
 Entrégale [`guia-portal-empleado.md`](guia-portal-empleado.md).
 
 Si la petición llega **por escrito como ejercicio de un derecho** —acceso,
