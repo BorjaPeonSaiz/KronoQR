@@ -1,6 +1,7 @@
 # frontend-kiosk
 
-Quiosco de fichaje de KronoQR. Vue 3.5 + TypeScript estricto + Vite 6 + Tailwind 4 (doc 02 §3.3).
+Quiosco de fichaje de KronoQR. Vue 3.5 + TypeScript estricto + Vite 8 + Tailwind 4 (doc 02 §3.3), Node `>=24`
+(la imagen de Compose usa `node:25-alpine`).
 
 ## Comandos
 
@@ -12,6 +13,9 @@ npm run lint         # ESLint + Prettier, sin desviaciones
 npm run test:unit    # Vitest con cobertura, umbral 70 %
 npm run build        # construye y comprueba el presupuesto del Anexo A
 npm run api:generate # regenera el cliente HTTP desde docs/api/openapi.yaml
+npm run e2e:fixtures # regenera las imagenes QR de e2e/fixtures (ver su README)
+npm run test:e2e     # Playwright con camara simulada (ver tests/e2e/README.md)
+npm run docs:screenshots # capturas de la guia del quiosco
 ```
 
 ## `npm` se ejecuta en el host

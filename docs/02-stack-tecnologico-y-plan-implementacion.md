@@ -5,8 +5,8 @@
 |---|---|
 | **Producto** | **KronoQR** |
 | **Modelo de negocio** | Producto licenciado, desplegado en servidores del cliente |
-| **Fecha** | 11 de agosto de 2026 |
-| **Documentos hermanos** | `01-especificaciones-proyecto.md`, `03-agentes-y-skills-ia.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md` |
+| **Fecha** | 11 de agosto de 2026 · revisado contra la versión **2.2.0** el 9 de octubre de 2026 |
+| **Documentos hermanos** | `01-especificaciones-proyecto.md`, `03-agentes-y-skills-ia.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md`, `06-guia-visual.md`, `07-seguridad-madurez-y-amenazas.md` |
 | **Audiencia** | Arquitectura, Desarrollo, DevOps, QA |
 
 > Este documento asume leído el documento 01. Las referencias `RF-*`, `RN-*`, `RNF-*`, `RL-*`, `RS-*` y `RQ-*` apuntan a sus requisitos.
@@ -214,20 +214,26 @@ fichaje-hotel/
 │   ├── 03-agentes-y-skills-ia.md
 │   ├── 04-decision-credencial.md
 │   ├── 05-presentacion-cliente.md   # Documento comercial entregable al cliente
+│   ├── 06-guia-visual.md            # Sistema visual compartido de las tres SPA
+│   ├── 07-seguridad-madurez-y-amenazas.md  # SAMM, SDL, ATT&CK y riesgos aceptados
+│   ├── requisitos.yaml              # Anexo A del doc 01 legible por máquina (generado)
+│   ├── trazabilidad-pruebas.md      # Matriz requisito ↔ prueba (generada, §9.6)
 │   ├── adr/                         # ADR-001 … ADR-057
 │   ├── api/openapi.yaml             # Contrato, fuente de verdad de la API
-│   ├── cliente/                     # Documentación que se entrega al cliente
-│   │   ├── instalacion.md
-│   │   ├── operacion.md
-│   │   ├── configuracion.md
-│   │   └── obligaciones-legales.md
-│   └── runbooks/                    # Procedimientos de operación interna
+│   ├── cliente/                     # Documentación que se entrega al cliente (ES y en/)
+│   │   ├── instalacion.md, operacion.md, configuracion.md, endurecimiento.md
+│   │   ├── obligaciones-legales.md, preguntas-asesoria.md
+│   │   └── guia-rrhh.md, guia-portal-empleado.md, hoja-empleado.md
+│   ├── runbooks/                    # Procedimientos de operación interna
+│   ├── seguridad/                   # Revisión de seguridad (RS-11): paquete del revisor y revisiones
+│   └── verificacion/                # Registros de verificación de cada versión
 ├── .claude/
-│   ├── agents/                      # 10 agentes especializados
-│   └── skills/                      # 6 skills de generación
+│   ├── agents/                      # 11 agentes especializados
+│   └── skills/                      # 6 skills de generación (y code-analyzer, ver doc 03 §5)
 ├── .github/workflows/
 │   ├── ci.yml                       # Calidad, pruebas, seguridad, E2E con cámara simulada (etapas ①–⑧)
 │   ├── load-test.yml                # Carga k6 sobre el paquete de entrega (RQ-08, fuera de las ocho etapas)
+│   ├── backup-drill.yml             # Simulacro de copia y restauración
 │   └── release.yml                  # Publicación de versión e imágenes
 │
 ├── backend/
@@ -289,17 +295,21 @@ fichaje-hotel/
 │   └── e2e/fixtures/qr-video.y4m    # Vídeo con QR real para cámara simulada
 │
 ├── frontend-admin/                  # SPA del panel de gestión
-│   └── src/features/{live,workdays,incidents,reports,employees,credentials,devices,settings}/
+│   └── src/features/{live,workdays,incidents,compliance,absences,reports,employees,departments,
+│                                    #   credentials,devices,accounts,onboarding,settings,support,errors,auth}/
 │
 ├── frontend-portal/                 # Portal del empleado (web sencilla, responsive)
 │   └── src/features/{login,my-records,my-export}/
 │
+├── packages/web-kit/                # Cálculo, marca y tokens visuales compartidos por las tres SPA (ADR-036)
+│
 ├── infra/
-│   ├── docker/{php,nginx,postgres}/
+│   ├── docker/{php,nginx,node,postgres}/
 │   ├── compose.dev.yaml
 │   ├── compose.prod.yaml            # El que se entrega al cliente
 │   ├── observability/
-│   └── scripts/{install.sh,update.sh,backup.sh,restore.sh,doctor.sh}
+│   ├── versions.txt                 # Cadena de versiones que encadena el actualizador (§11.6.4)
+│   └── scripts/{install.sh,update.sh,backup.sh,restore.sh,restore-drill.sh,doctor.sh,package.sh,...}
 └── load-tests/k6/scan-peak.js
 ```
 
@@ -311,15 +321,15 @@ fichaje-hotel/
 
 | Componente | Elección | Versión | Motivo |
 |---|---|---|---|
-| Lenguaje | PHP | **8.4** (mínimo 8.3) | *Property hooks*, `#[\Override]` y mejor rendimiento. |
-| Framework | Laravel | **13.x** | Ecosistema maduro, herramientas integradas de autenticación, colas y programación. Verificar la versión mayor vigente al arrancar y actualizar **[ADR-030](adr/ADR-030-version-mayor-de-laravel.md)** si procede. |
+| Lenguaje | PHP | **8.4** (`composer.json`: `^8.4`) | *Property hooks*, `#[\Override]` y mejor rendimiento. |
+| Framework | Laravel | **13.x** (`^13.12`) | Ecosistema maduro, herramientas integradas de autenticación, colas y programación. Verificar la versión mayor vigente al arrancar y actualizar **[ADR-030](adr/ADR-030-version-mayor-de-laravel.md)** si procede. |
 | Autenticación | Laravel Sanctum + `pragmarx/google2fa` | ^4.0 / ^8.0 | Tokens con ámbitos y 2FA obligatorio para roles con acceso global. |
 | Colas | Redis + **Laravel Horizon** | ^5.0 | Visibilidad de trabajos. Redis se necesita igualmente para caché y rate limiting. |
 | Tiempo real | **Laravel Reverb** | ^1.0 | First-party, autoalojado, sin coste por mensaje. *Fallback* a sondeo cada 15 s si el WebSocket cae. |
 | Programación | Laravel Scheduler | — | Consolidaciones, incidencias, retención, copias. |
-| Autorización | Policies + `spatie/laravel-permission` | ^6.0 | RBAC con ámbito por departamento. |
+| Autorización | Policies + `spatie/laravel-permission` | ^8.0 | RBAC con ámbito por departamento. |
 | Generación QR | `endroid/qr-code` | ^5.0 | Librería directa y bien mantenida. Control sobre el nivel de corrección de errores, que aquí importa. |
-| PDF | `spatie/laravel-pdf` (Browsershot) | ^2.12 | **Tarjetas de credencial** e informes sellados. |
+| PDF | `spatie/laravel-pdf` + `spatie/browsershot` | ^2.12 / ^5.0 | **Tarjetas de credencial** e informes sellados. |
 | Exportaciones | `spatie/simple-excel` | ^3.0 | Streaming: no carga en memoria un mes de 500 empleados. |
 | Contrato API | `spectator` en pruebas + OpenAPI 3.1 | — | Contrato como fuente de verdad. |
 | Firma de licencia | `sodium` de PHP (ed25519) | nativo | Verificación local sin dependencias externas. |
@@ -369,7 +379,8 @@ El **Anexo D** recoge la equivalencia para MySQL 8 si la infraestructura de un c
 | Componente | Elección | Nota |
 |---|---|---|
 | Framework | Vue 3.5+ (Composition API, `<script setup>`) | Curva suave, buen rendimiento en hardware de tablet modesto. |
-| Lenguaje | **TypeScript 5.6+ en modo estricto** | En clientes que manipulan horas, colas offline e idempotencia, el tipado no es opcional. |
+| Lenguaje | **TypeScript 5.9 en modo estricto** | En clientes que manipulan horas, colas offline e idempotencia, el tipado no es opcional. |
+| Entorno | Node.js ≥ 24 (`engines` de los cuatro `package.json`; imágenes `node:25-alpine`) | — |
 | Build | Vite 8 | — |
 | CSS | Tailwind CSS 4 | — |
 | Estado | Pinia 4 | — |
@@ -380,8 +391,8 @@ El **Anexo D** recoge la equivalencia para MySQL 8 si la infraestructura de un c
 | **Cola offline (solo quiosco)** | **Dexie 4 (IndexedDB)** | Transaccional. `localStorage` es síncrono, con 5 MB y sin transacciones: inadecuado para una cola con garantías. |
 | Wake lock | Screen Wake Lock API con *fallback* | Evita que la tablet se suspenda. |
 | i18n | `vue-i18n` 11 | Español e inglés de serie, extensible. |
-| Tablas y datos (panel) | TanStack Table + TanStack Query | Virtualización para 500 empleados y caché de consultas. |
-| Gráficos (panel) | ECharts | Informes y tendencias, con tabla de datos alternativa. |
+| Tablas y datos (panel) | TanStack Table + TanStack Query + TanStack Virtual | Virtualización para 500 empleados y caché de consultas. |
+| Gráficos (panel) | ECharts 6 | Informes y tendencias, con tabla de datos alternativa. |
 
 > **El portal del empleado es una web sencilla, no una PWA.** No hay credencial que mostrar sin conexión, así que no necesita service worker, caché cifrada ni instalación. Es una página responsive de consulta. Esta decisión ahorra trabajo real y elimina toda una categoría de modos de fallo.
 
@@ -395,10 +406,10 @@ El **Anexo D** recoge la equivalencia para MySQL 8 si la infraestructura de un c
 | Base de datos | PostgreSQL 17 en contenedor | PostgreSQL 17 con WAL archiving |
 | Caché y colas | Redis 7 | Redis 7 con persistencia AOF |
 | Correo | Mailpit | SMTP del cliente |
-| Objetos | MinIO | Sistema de ficheros local o almacenamiento del cliente |
+| Ficheros generados | Volumen local | Volumen compartido `app-storage` ([ADR-045](adr/ADR-045-los-ficheros-generados-viven-en-un-volumen-compartido.md)) |
 | Observabilidad | Stack completo en Compose | Prometheus + Grafana + Loki + Alertmanager |
 
-Servicios de desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizon`, `reverb`, `scheduler`, `node-kiosk`, `node-admin`, `node-portal`, `mailpit`, `prometheus`, `grafana`, `loki`, `node-exporter`, `tempo`, `blackbox-exporter`. Un `make up` debe dejar el entorno completo funcionando con datos de ejemplo.
+Servicios de desarrollo: `app`, `nginx`, `postgres`, `redis`, `horizon`, `reverb`, `scheduler`, `node-kiosk`, `node-admin`, `node-portal`, `mailpit`, `prometheus`, `alertmanager`, `grafana`, `loki`, `node-exporter`, `tempo`, `blackbox-exporter`. Un `make up` debe dejar el entorno completo funcionando con datos de ejemplo.
 
 `tempo` y `blackbox-exporter` se añadieron en la tarea 3.1. `tempo` (Grafana Tempo, monolítico sobre sistema de ficheros) es el destino de las trazas OTLP que exporta la aplicación: sin él, el `trace_id` no se puede seguir del `fetch` del quiosco a la consulta SQL, por completa que esté la instrumentación. `blackbox-exporter` sondea `/api/v1/health` y `/api/v1/ready` desde fuera del proceso (uptime real, no solo «el proceso vive») y es el mismo exportador que la tarea 3.2 reutiliza para la caducidad del certificado TLS.
 
@@ -536,20 +547,20 @@ Los treinta y siete siguientes **no proceden de esta tabla**: nacieron al desarr
 | **041** | **Los ficheros generados en diferido se descargan con un enlace de un solo uso y caducidad, sin sesión** | RF-IN-06 promete «un enlace de descarga cuando esté listo» y al otro lado hay un fichero con el registro horario de la plantilla. Un enlace se abre con un clic y en ese clic no viaja ninguna cabecera `Authorization`, así que la sesión del panel no puede ser lo que lo protege; y el aviso puede salir por correo, un canal que el producto no controla | Token de 32 bytes del que solo se guarda el `sha256`, emitido **al consultar el estado** y rotado en cada consulta, con caducidad de minutos (`REPORTING_EXPORT_LINK_TTL_MINUTES`) y **consumido en la descarga**: reutilizarlo da `410`. La ruta va sin `auth:sanctum`, con zona de límite de tasa propia. **El correo lleva el enlace a la pantalla, nunca al fichero.** Solo el solicitante ve y descarga lo suyo (`404` para cualquier otro, también `admin`); cada descarga deja asiento y la fila sobrevive al fichero como `purged` |
 | **042** | **El runtime no tiene ninguna credencial que pueda alterar el registro** | La verificación de la 2.1.0 (AUD-1, 🔴 CRÍTICO) encontró la contraseña de `fichaje_migrator`, superusuario, en `app`, `horizon`, `reverb` y `scheduler` a través de `env_file: .env`, y al propio runtime usando `pgsql_migrator` a diario para crear la partición anual de `audit_log`. Con una ejecución de código en PHP se podía reescribir el registro y recalcular la cadena: la condición 1 de ADR-010, «no puede», era falsa | La partición la pide el rol de aplicación a una función `SECURITY DEFINER` (`audit_log_create_partition`) que solo crea el año UTC en curso o el siguiente, nunca uno sellado, y con los mismos permisos que las demás particiones. Las copias pasan a un rol de solo lectura, `fichaje_backup`. Migrar y restaurar son servicios de un solo uso (`migrate`, `restore`), los únicos con `DB_MIGRATION_*`. El runtime y `nginx` declaran `environment:` sin `env_file` (en desarrollo se conserva). Enmienda ADR-010, 027, 029 y 033. El migrador sigue siendo `SUPERUSER`: la evolución es un rol propietario `NOLOGIN` |
 | **043** | **El PIN rechazado conserva a quién correspondía el código, solo en la base de datos** | La verificación de la 2.1.0 (PIN-06, SC7-02) encontró que un PIN encolado que se rechaza al sincronizar, o un acierto que encuentra el bloqueo de RS-12, dejaba una jornada sin registro que nadie veía: el rechazo era indistinguible también dentro del servidor, y sin saber a quién correspondía el código no hay incidencia posible (RN-19) | `PinVerification` lleva en el rechazo un `PinClaim` opcional —dueño del código y bloqueo— solo si el código es de una persona que puede fichar; `employeeUuid()` sigue nulo. Viaja hasta la inserción de `scan_events` (`claimed_employee_id`, `pin_lockout`, con un `CHECK` que las ata a `pin_kiosk` + `rejected_unknown`) y ahí termina: ni respuesta, ni reenvío, ni `ScanRejected`, ni log técnico, ni paquete de diagnóstico. La incidencia `rejected_pin_scan` la abre la revisión diaria, no la petición. Precisa ADR-039 |
-| **044** | **El token del quiosco rota en el latido, con solape y reentrega** *(propuesta, pendiente de `seguridad-cumplimiento`)* | La verificación de la 2.1.0 (F1-1) encontró que la rotación al 80 % del §7.3 no se ejecutaba nunca y que, además, el emisor borraba el token anterior en la misma transacción: conectarla al latido tal cual convertía una respuesta perdida en una tablet fuera de servicio | El latido trae `rotated_token` solo cuando el token que lo firma ha pasado el umbral. El anterior sigue valiendo `IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS` (24 h) o hasta el primer uso del nuevo; si la tablet vuelve con el viejo, se retira el relevo no usado y se emite otro sin alargar el solape. El valor no se guarda en claro. La revocación sigue sin solape y la rotación nunca tumba el latido |
+| **044** | **El token del quiosco rota en el latido, con solape y reentrega** *(propuesta, pendiente del visto bueno de `seguridad-cumplimiento`; implementada en la 2.2.0 aunque el ADR conserva el estado «Propuesta»)* | La verificación de la 2.1.0 (F1-1) encontró que la rotación al 80 % del §7.3 no se ejecutaba nunca y que, además, el emisor borraba el token anterior en la misma transacción: conectarla al latido tal cual convertía una respuesta perdida en una tablet fuera de servicio | El latido trae `rotated_token` solo cuando el token que lo firma ha pasado el umbral. El anterior sigue valiendo `IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS` (24 h) o hasta el primer uso del nuevo; si la tablet vuelve con el viejo, se retira el relevo no usado y se emite otro sin alargar el solape. El valor no se guarda en claro. La revocación sigue sin solape y la rotación nunca tumba el latido |
 | **045** | **Los ficheros que genera el producto viven en un volumen compartido, y su copia legible de la constancia vive junto a las copias** *(aceptada con las condiciones C1-C10 de `seguridad-cumplimiento`)* | La verificación de la 2.2.0 (R3-PL-01, 🔴) encontró que nada montaba `storage/`: la exportación íntegra la escribía `horizon` y `app` respondía `404`, las purgas del `scheduler` no veían los ficheros con datos personales, y los informes de retención se perdían en cada actualización | Volumen con nombre `app-storage` en `storage/app` de `app`, `horizon` y `scheduler` (`0700 app:app`), **fuera de la copia**: lo que guarda es efímero o se regenera del volcado. Los informes de retención van a `BACKUP_PATH/reports/retention`; **la constancia es el asiento `retention.purge_executed`** y el fichero, su copia legible. La purga concilia fila y fichero en los dos sentidos, confinada a la raíz y al patrón de cada clase, incluidos los restos de una generación interrumpida; un fichero que desaparece antes de caducar deja `*.file_missing`. Precisa ADR-020, 041 y 042 |
 | **046** | **La ficha del empleado se escribe bajo el candado de la cadena, con la fila bloqueada y solo por las columnas que cambian** | La verificación de la 2.2.0 (R7-RV-01, R4-BE-01, 🟠) reprodujo que una modificación o una importación simultánea a una baja dejaba a la persona `active`, sin tarjeta y con un `employee.offboarded` que la base contradecía: la ficha se leía sin candado y `save()` reescribía la fila entera | Orden único **filas padre (`sites`, `departments`, `users`, `devices`) → cadena → `employees` → `credentials`**: todo caso de uso que modifica una ficha o una tarjeta y deja asiento va en `withChainLock` (modificación, baja, importación, los tres del PIN, emisión, rotación, revocación, entrega e impresión de tarjetas) y toma antes cualquier fila padre que necesite; el bcrypt va fuera de la cadena y el rehash del PIN es oportunista y sin espera. Lectura con `findForUpdate()` y `FOR NO KEY UPDATE`, que no choca con las claves ajenas de fichajes, ausencias y tarjetas. `save()` sale del puerto: `saveProfile()` y `saveTermination()` escriben solo sus columnas con `WHERE status <> 'terminated'`. La importación rechaza las filas de personas de baja (`employee_terminated`). Precisa ADR-010 |
 | **047** | **Ningún fichaje sale de la cola del quiosco sin un desenlace del servidor** | La verificación de la 2.2.0 (R3-QA-02, R3-BE-03, R4-SC-03, R17-SC-R2, 🟠) encontró tres caminos por los que un fichaje ya confirmado en la tablet desaparecía o cambiaba de sentido: un lote que seguía tras un elemento no procesado y registraba la salida como entrada, un `400` que sacaba el fichaje de la cola sin rastro, y la tarjeta retirada después del fichaje cuyo rechazo quedaba sin persona | **Orden por quiosco** (RN-21): tras un `503` el resto del lote se devuelve aplazado (`scan-held-back`) y el quiosco no avanza mientras un elemento esté en reintento, también si está en vuelo. **Canal de descartes** (RN-22): lo que el servidor declara inválido pasa a una lista aparte y se avisa por `POST /api/v1/scan/discarded`, idempotente por `scan_id`, que guarda la atribución sin el payload y abre `discarded_scan` en la revisión diaria; el aviso no registra el fichaje. **La tarjeta auténtica retirada atribuye** (RN-20): `employee_id` del titular y marca de revisión si el fichaje es anterior a la retirada, con la misma respuesta (RS-03); incidencia `scan_before_revocation`. El PIN de una persona de baja queda fuera: exigiría ampliar ADR-043. Precisa ADR-008 |
-| **048** | **El texto libre del histórico de errores pasa por una lista blanca de palabras** *(aceptada; revisión de `seguridad-cumplimiento` pendiente dentro del Bloque 19)* | La verificación de la 2.2.0 (PR12, R4-BE-02, R4-PL-01, R6-PL-08, 🟠) sembró datos en un paquete de diagnóstico real y 8 de 27 valores salieron. Destacan los nombres sin comillas, que ningún patrón reconoce. Las guías prometían «ningún dato personal» con una prueba que no sembraba nombres | En `error_events` (el mensaje, los valores de texto del contexto, `app_version` y `file`), **una palabra solo se conserva si está en el vocabulario técnico cerrado; si no, pasa a `…`**. Se filtra al escribir y otra vez al empaquetar, y la huella se calcula sobre el texto filtrado. Los patrones siguen para lo numérico y se amplían, y las series de 7 cifras o más o con 4 cifras seguidas pasan a `[n]`. Marcador y no hash, porque un hash con sal es un seudónimo. Una prueba exige que el vocabulario no comparta palabras con nombres y apellidos frecuentes. Las filas antiguas se vuelven a sanear y se fusionan al actualizar. El canal `emergency` recibe el processor en el código. El contrato no cambia. Precisa ADR-020 |
+| **048** | **El texto libre del histórico de errores pasa por una lista blanca de palabras** *(aceptada; revisada por `seguridad-cumplimiento` el 03-10-2026, diseño e implementación)* | La verificación de la 2.2.0 (PR12, R4-BE-02, R4-PL-01, R6-PL-08, 🟠) sembró datos en un paquete de diagnóstico real y 8 de 27 valores salieron. Destacan los nombres sin comillas, que ningún patrón reconoce. Las guías prometían «ningún dato personal» con una prueba que no sembraba nombres | En `error_events` (el mensaje, los valores de texto del contexto, `app_version` y `file`), **una palabra solo se conserva si está en el vocabulario técnico cerrado; si no, pasa a `…`**. Se filtra al escribir y otra vez al empaquetar, y la huella se calcula sobre el texto filtrado. Los patrones siguen para lo numérico y se amplían, y las series de 7 cifras o más o con 4 cifras seguidas pasan a `[n]`. Marcador y no hash, porque un hash con sal es un seudónimo. Una prueba exige que el vocabulario no comparta palabras con nombres y apellidos frecuentes. Las filas antiguas se vuelven a sanear y se fusionan al actualizar. El canal `emergency` recibe el processor en el código. El contrato no cambia. Precisa ADR-020 |
 | **049** | **Las copias (volcado, copia física y WAL) se guardan en un formato cifrado y autenticado, KQE1, con una subclave propia para el WAL** *(aceptada; revisión de `seguridad-cumplimiento` del diseño: aprobada con condiciones C1-C20, incorporadas; implementación pendiente de revisión)* | La verificación de la 2.2.0 (R5-DV-02, R5-DV-04, R5-DV-01, 🟠) encontró el WAL archivado en claro, un cifrado AES-CBC que no detecta un bit cambiado con un `.sha256` opcional y sin clave, y un RPO que solo se medía al terminar la copia nocturna. `openssl enc` no admite AEAD y todo MAC con clave del CLI la pone en `argv` | Un formato único: cabecera (`kind`, `kid`, `iter`, `created`, `name`), el `openssl enc` AES-256-CBC de siempre y un MAC SHA3-256 con clave derivada que **se verifica antes de descifrar y sobre los mismos bytes que se descifran**. El WAL lleva una **subclave** derivada de `BACKUP_ENCRYPTION_KEY` (`BACKUP_WAL_KEY`) que es lo único que recibe `postgres`; las etiquetas de derivación son un registro versionado. `archive-wal.sh` falla cerrado sin clave; `kronoqr-restore-wal` devuelve `exit 200` (fatal) ante un MAC malo o un hueco, y `exit 1` solo en el final real del archivo. Las copias de la 2.1.0 se restauran solo con `--accept-unauthenticated`, por invocación, hasta que la versión mínima de actualización sea ≥ 2.2.0. Un almacenamiento WORM o el servicio de copias fuera del runtime (2.3.0, con `age`) queda como evolución. Precisa ADR-042 y ADR-045 |
 | **050** | **Portal accesible desde internet: PIN de 6 u 8 cifras, bloqueo por origen, aviso del instalador y segundo factor del responsable** *(aceptada; revisión de `seguridad-cumplimiento`: aprobada con cambios M1-M3 y B1-B2, incorporados)* | ADR-015 prometía «requisitos adicionales» al abrir el portal a internet y no existían (PP-09): código y PIN de 6 cifras frente a internet, del orden de un PIN acertado cada pocos meses con IP repartidas. El panel comparte host y puerto (PP-10) y el responsable, que corrige jornadas, entraba sin segundo factor (R4-QA-04) | Ajuste auditado `IDENTITY_PIN_LENGTH` (6 de serie u 8), leído por el puerto `PinLengthProvider`; los PIN emitidos siguen valiendo con su longitud y el portal y el quiosco aceptan de 6 a 8 cifras. **Bloqueo por origen** en `POST /me/login`: 20 fallos en 15 min desde una IP o un `/64` la cierran 60 min con `429` `portal-origin-locked`, antes de mirar el código, y deja `auth.origin_locked`; no se aplica al quiosco. Aviso (nunca fallo) del instalador y de `product:doctor` cuando `PORTAL_INTERNAL_CIDR` no es privada, con `portal_exposed` en `system.updated`. `ADMIN_INTERNAL_CIDR` opcional y vacía de serie. RS-06 incluye a `responsable_departamento`. CORS al origen de `APP_URL`. Precisa ADR-015 y ADR-039 |
 | **051** | **Las cuentas de gestión se administran desde el panel, con contraseñas temporales y sin quedarse nunca sin administrador** *(aceptada; revisión de `seguridad-cumplimiento`: aprobada con cambios, incorporados)* | Hasta la 2.1 dar de baja una cuenta de gestión exigía una consola en el servidor (H-03): el jefe de recepción que se iba conservaba acceso a la corrección de jornadas. El propietario decidió la pantalla (22-09-2026). Por HTTP aparecen cuatro problemas que la consola escondía: la contraseña fijada por otro es una credencial compartida, el panel puede dejar la instalación sin `admin`, `settings:*` lo lleva el soporte y los handlers tomaban fila → cadena | Seis rutas (`/management-accounts*` y `POST /auth/password`) por `uuid`, con ámbito propio `accounts:*` y policy que rechaza al soporte. Toda contraseña fijada por otra persona es temporal: generada, mostrada una vez, entregada en mano, con caducidad (`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS`) y `403` `password-change-required` hasta cambiarla. La baja colapsa «no existe» y «ya de baja» en `404`, y no se admiten la propia ni la de la última `admin` activa, tampoco por consola. El alta no asigna departamentos. La sesión con temporal lleva el único ámbito `password:change` (falla cerrado, como `2fa:pending`). Alta y restablecimientos exigen reautenticación del `admin` (TOTP). La baja retira los accesos de soporte que la cuenta concedió. El responsable de departamento se asigna con `manager_user_uuid` en `PATCH /departments/{id}`, solo `admin`. Orden único de candados: cadena → padrón → fila. Riesgo aceptado: un `admin` con contraseña y TOTP comprometidos puede suplantar a otra cuenta; asiento con actor y motivo, y alerta al receptor de seguridad en cada restablecimiento de 2FA y en cada alta `admin` |
 | **052** | **Las sesiones son tokens Bearer de Sanctum guardados por cada SPA, sin cookies ni CSRF** *(aceptada; describe lo existente; revisión de `seguridad-cumplimiento` pendiente)* | El modelo de autenticación estaba repartido en siete ADR y en los docblocks de los almacenes de sesión, sin ninguno que lo decidiera como un todo (A6-1). Decide qué expone un XSS, qué tiene que prohibir la CSP y la forma de toda la API | Sanctum solo en modo token (`stateful` y `guard` vacíos). Cuatro titulares (cuenta de gestión, empleado, quiosco y concesión de soporte) y una sola comprobación de vigencia por petición que falla cerrada. `sessionStorage` en panel y portal, `localStorage` en el quiosco. Sin cookies no hay CSRF que proteger, y CORS queda en el propio origen. Un XSS se lleva el token de su SPA: por eso la CSP sin `'unsafe-inline'` ni `'unsafe-eval'` forma parte del modelo, y relajarla exige un ADR. Pendiente: una guarda de ESLint contra `localStorage` en panel y portal |
-| **053** | **Una versión publicada es inmutable y el paquete fija sus imágenes por digest** *(aceptada; implementa `devops-observabilidad` en el bloque 14)* | `release.yml` reescribía la etiqueta de una versión, `workflow_dispatch` repetía publicaciones y la instalación resolvía por etiqueta: dos clientes con la misma versión podían correr bytes distintos (A6-2). `SHA256SUMS` viaja en la misma release que el paquete | La publicación falla si la versión ya existe en el registro, antes de esperar a la CI y justo antes de empujar. El paquete reescribe las tres imágenes del producto a `…:<versión>@sha256:…` desde `KQ_IMAGES_LOCK`. Corregir una versión es publicar otra. La firma con cosign va a la 2.2.x. Pendiente: fijar por digest las imágenes de terceros (`redis:7-alpine` primero) y avisar cuando una instalación sin internet corre sin digest |
+| **053** | **Una versión publicada es inmutable y el paquete fija sus imágenes por digest** *(aceptada; implementada en el bloque 14 de la 2.2.0)* | `release.yml` reescribía la etiqueta de una versión, `workflow_dispatch` repetía publicaciones y la instalación resolvía por etiqueta: dos clientes con la misma versión podían correr bytes distintos (A6-2). `SHA256SUMS` viaja en la misma release que el paquete | La publicación falla si la versión ya existe en el registro, antes de esperar a la CI y justo antes de empujar. El paquete reescribe las tres imágenes del producto a `…:<versión>@sha256:…` desde `KQ_IMAGES_LOCK`. Corregir una versión es publicar otra. La firma con cosign va a la 2.2.x. Pendiente: fijar por digest las imágenes de terceros (`redis:7-alpine` primero) y avisar cuando una instalación sin internet corre sin digest |
 | **054** | **La vuelta atrás de una actualización es restaurar la copia, nunca `migrate:rollback`** *(aceptada; describe lo existente)* | La decisión solo vivía en un comentario de `update.sh`, ADR-042 ya dependía de ella y el §11.6.4 listaba los pasos en el orden antiguo (A6-3). Desde el bloque 13 de la 2.2.0 hay migraciones no transaccionales (`CREATE INDEX CONCURRENTLY`, `VALIDATE`) que pueden quedar a medias | Mantenimiento antes que copia, para que ningún fichaje confirmado quede fuera de la copia. `rollback_and_die` restaura la copia de esa ejecución en una base nueva, conserva la migrada, relanza la versión anterior y deja `system.restored_from_backup` con la punta descartada. El `down()` se prueba en la CI (`MigrationsRoundTripTest`), pero no es mecanismo de operación. Una actualización terminada con éxito se corrige con un parche, no con la copia previa |
 | **055** | **El veredicto de cumplimiento lo da la vista; la bandeja de incidencias no puede contradecirlo** *(aceptada; corrección de N5 pendiente)* | `AnomalyDetectionPolicy` (bandeja) y `ComplianceEvaluation` (vista) opinan sobre RN-10/11/12 sin que nada dijera cuál manda, y N5 demostró que divergen. Los predicados compartidos viven en `Shared/Domain`, contra el criterio de ADR-021 (A6-6) | La vista afirma y es reproducible. La bandeja solo decide qué interrumpe a una persona y puede callar, pero no afirmar lo que la vista niega. Los hechos (fin de la jornada anterior, total y tramo continuo) tienen una sola definición, que doc 01 §4 tiene que recoger antes de corregir N5. Excepción cerrada a ADR-021: `CompliancePolicy` y `PinLockoutPolicy` son las únicas reglas admitidas en `Shared/Domain` |
-| **056** | **La zona horaria del centro queda fija desde el primer fichaje, y es la del histórico** *(aceptada el 08-10-2026 para la 2.2.x; doc 01 §4 recoge la regla antes del código)* | `shift_entries` guarda `work_date` con la zona de cuando se fichó y no guarda la zona. Toda lectura usa `sites.timezone` del momento, y `PATCH /site` dejaba cambiarla con fichajes hechos: el histórico se repintaba y la exportación salía incoherente con RN-05 (R6-AR-02, F3) | Una sola zona para todo el histórico, la del centro. `PATCH /site` con otra zona responde `409` en cuanto existe un tramo. Una zona mal puesta en la puesta en marcha se corrige por consola, con motivo y asiento, sin recalcular `work_date`. `time_zone` por jornada y por tramo se conserva en `v1`, y el portal retira la rama muerta `otherTimeZone`. Enmienda ADR-040 |
-| **057** | **El registro horario no se borra ni se reescribe con la credencial del runtime** *(propuesta, pendiente de decisión del propietario; implementación pendiente de `backend-laravel`; revisión de `seguridad-cumplimiento` pendiente)* | ADR-042 prometía que el runtime no podía alterar el registro, pero `fichaje_app` conserva `UPDATE` y `DELETE` sobre todas las tablas del registro horario, y nada concilia `shift_entries` con sus asientos (R6-AR-01) | `REVOKE DELETE` sobre las seis tablas del registro; `UPDATE` solo por columnas en `shift_entries` e `incidents`, ninguno en `shift_corrections`, `scan_events` y `discarded_scan_reports`; un *trigger* en `shift_entries` que solo admite las transiciones del dominio; la purga de retención por una función `SECURITY DEFINER` que calcula ella misma la fecha de corte; y una conciliación diaria con los asientos `shift_entry.*`, la única defensa contra un tramo insertado. Enmienda ADR-042 |
+| **056** | **La zona horaria del centro queda fija desde el primer fichaje, y es la del histórico** *(aceptada el 08-10-2026 para la 2.2.x; la implementación espera a que doc 01 §4 recoja la regla)* | `shift_entries` guarda `work_date` con la zona de cuando se fichó y no guarda la zona. Toda lectura usa `sites.timezone` del momento, y `PATCH /site` dejaba cambiarla con fichajes hechos: el histórico se repintaba y la exportación salía incoherente con RN-05 (R6-AR-02, F3) | Una sola zona para todo el histórico, la del centro. `PATCH /site` con otra zona responde `409` en cuanto existe un tramo. Una zona mal puesta en la puesta en marcha se corrige por consola, con motivo y asiento, sin recalcular `work_date`. `time_zone` por jornada y por tramo se conserva en `v1`, y el portal retira la rama muerta `otherTimeZone`. Enmienda ADR-040 |
+| **057** | **El registro horario no se borra ni se reescribe con la credencial del runtime** *(aceptada por el propietario el 08-10-2026; §4, la conciliación, implementada en la 2.2.0; §1–§3 aceptadas para la 2.2.x, implementación pendiente de `backend-laravel`)* | ADR-042 prometía que el runtime no podía alterar el registro, pero `fichaje_app` conserva `UPDATE` y `DELETE` sobre todas las tablas del registro horario, y nada concilia `shift_entries` con sus asientos (R6-AR-01) | `REVOKE DELETE` sobre las seis tablas del registro; `UPDATE` solo por columnas en `shift_entries` e `incidents`, ninguno en `shift_corrections`, `scan_events` y `discarded_scan_reports`; un *trigger* en `shift_entries` que solo admite las transiciones del dominio; la purga de retención por una función `SECURITY DEFINER` que calcula ella misma la fecha de corte; y una conciliación diaria con los asientos `shift_entry.*`, la única defensa contra un tramo insertado. Enmienda ADR-042 |
 
 ---
 
@@ -1220,6 +1231,19 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**. La Fase 5 se numeró d
 
 La columna **Agente / Skill** indica quién ejecuta cada tarea. Los agentes están en `.claude/agents/` y las skills se invocan con `/nombre`. Ver documento 03.
 
+**Estado a la versión 2.2.0 (09-10-2026).** El cierre de una fase lo registra `current_phase` en `backend/config/quality.php` (hoy `3`, la última fase cerrada en el orden de ejecución), y desde ese momento `qa:traceability --check` exige prueba a todos sus requisitos.
+
+| Fase | Estado | Cierre | Primera versión publicada con la fase completa |
+|---|---|---|---|
+| 0 — Cimientos | Cerrada | 18-08-2026 | 1.0.0 |
+| 1 — MVP de fichaje | Cerrada | 27-08-2026 | 1.0.0 |
+| 2 — Gestión y cumplimiento | Cerrada | 31-08-2026 | 2.1.0 |
+| 5 — Productización | Cerrada | 10-09-2026 | 2.1.0 |
+| 3 — Operación y refuerzo | Cerrada (la revisión externa de la 3.8 sigue pendiente del tercero, §11.6.5) | 24-09-2026 | 2.1.0 |
+| 4 — Evolución | Sin empezar como fase. Solo la **tarea 4.1** (cuentas de gestión desde el panel, RF-ID-10, ADR-051) se adelantó y está entregada | — | 4.1 en la 2.2.0 |
+
+La 2.2.0 no abre tareas nuevas del plan salvo la 4.1: es la versión de correcciones de la verificación de la 2.1.0, con el plan por bloques en `docs/verificacion/2.2.0-plan-correcciones.md` y el detalle en `CHANGELOG.md`. Los requisitos que cambió están en el doc 01 (RF-ID-09 y RF-AT-11 con PIN de 6 u 8 cifras, RF-ID-01 con segundo factor también para el responsable de departamento, RF-ID-08 con bloqueo por origen, RF-ID-10 nuevo, RN-14 sin fecha de cese futura).
+
 ### 11.0 Qué son estas horas
 
 **Son horas de una persona desarrollando con el andamiaje de agentes del documento 03, no de desarrollo manual.** Decirlo importa: la misma cifra interpretada como horas manuales convierte la planificación en ficción.
@@ -1270,7 +1294,7 @@ Si se necesita una cifra de desarrollo **manual sin asistencia** para comparar c
 | 1.9 | Cola offline Dexie con sincronización, reintentos e indicador | 10–12 | RF-KI-03..04, RN-15, RL-12 | `frontend-quiosco` |
 | 1.10 | Generación de tarjetas en PDF, impresión masiva, registro de entrega y panel de estado | 6–8 | RF-QR-04..06, RF-QR-08 | `backend-laravel` + `frontend-panel` |
 | 1.11 | Portal del empleado: acceso con código y PIN, mi registro, mi exportación | 6–8 | RF-ID-05..08, RL-05, RS-13 | `frontend-portal-empleado` + `backend-laravel` |
-| 1.12 | PIN de respaldo de 6 dígitos en el quiosco, con bloqueo por intentos | 4–5 | RF-AT-11, RS-12, RS-13 | `backend-laravel` + `frontend-quiosco` |
+| 1.12 | PIN de respaldo en el quiosco (6 dígitos; desde la 2.2.0, 6 u 8 según `IDENTITY_PIN_LENGTH`, ADR-050), con bloqueo por intentos | 4–5 | RF-AT-11, RS-12, RS-13 | `backend-laravel` + `frontend-quiosco` |
 | 1.13 | Provisión, entrega y restablecimiento del PIN: generación en el alta, visualización de una sola vez, `pin_hash`, restablecimiento por RRHH y auditoría de las tres acciones | 4–5 | **RF-ID-09** | `backend-laravel` + `frontend-panel` |
 | 1.18 | Copias cifradas, verificadas, con prueba de restauración | 4–6 | RF-PR-04, RNF-D-02, RNF-D-05, RQ-09 | `devops-observabilidad` |
 
@@ -1324,7 +1348,7 @@ Convierte el sistema en un producto que un tercero puede comprar, instalar y ope
 
 *(Suma bruta 127–174 h; se aplica solapamiento realista entre 5.4, 5.5 y 5.7, que comparten andamiaje de despliegue.)*
 
-> **La 5.11b existe porque los cuatro manuales de la 5.11 son todos para el IT del cliente.** Ninguna tarea producía guía del panel para RRHH ni guía del portal, y **es RRHH quien opera la bandeja de incidencias, las correcciones trazadas y la exportación para Inspección**. Un portal cuyo acceso nadie explica cumple RL-05 de forma solo formal. No contradice el documento 05: su §10.8 promete esos cuatro manuales y no promete formación — es hueco de producto, no promesa incumplida.
+> **La 5.11b existe porque los cuatro manuales de la 5.11 son todos para el IT del cliente.** Ninguna tarea producía guía del panel para RRHH ni guía del portal, y **es RRHH quien opera la bandeja de incidencias, las correcciones trazadas y la exportación para Inspección**. Un portal cuyo acceso nadie explica cumple RL-05 de forma solo formal. No contradice el documento 05: su §10.8 prometía esos cuatro manuales y no promete formación — era hueco de producto, no promesa incumplida. Hoy el §10.8 enumera todo lo que se entrega, estas tres guías incluidas.
 
 > **La tarea 5.5 absorbió RF-GP-05** —importación masiva de plantilla— que estaba en la tarea 3.10 de la Fase 3. Motivo en el Anexo A del documento 01: la Fase 3 se ejecuta **después** de la 5, y un asistente de puesta en marcha que obliga a teclear a mano la plantilla de un hotel no es un producto instalable, que es el criterio con el que se juzga esta fase. Son **3–4 h que cambian de fase, no que se suman**: el esfuerzo total del proyecto no varía.
 
@@ -1356,6 +1380,8 @@ Convierte el sistema en un producto que un tercero puede comprar, instalar y ope
 
 Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y permisos con flujo de aprobación, integración directa con sistemas de nómina concretos, informes avanzados y consolidación multi-centro para cadenas. Coincide con lo anunciado al cliente en el documento 05, §11.
 
+**Adelantada a la 2.2.0: tarea 4.1, cuentas de gestión desde el panel** (RF-ID-10, [ADR-051](adr/ADR-051-cuentas-de-gestion-desde-el-panel-con-contrasenas-temporales.md); ficha en `plan implementacion/07-fase-4-evolucion.md`; `arquitecto-dominio` → `backend-laravel` + `frontend-panel` → `qa-testing` → `revisor-codigo` + `seguridad-cumplimiento`). Es la única tarea de la fase entregada; el resto sigue a decidir con datos de uso.
+
 ### 11.1 Resumen de esfuerzo
 
 | Alcance | Fases | Horas | ¿Vendible? |
@@ -1368,7 +1394,7 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 
 > **`0 + 1` cambió el 15 de agosto de 2026 (ADR-032).** Antes eran 133–172 h y el estado era «piloto interno controlado»: sin auditoría inmutable, correcciones trazadas ni exportación para Inspección, el registro no satisfacía el art. 34.9 ET. Cinco tareas de la Fase 2 se adelantaron a la Fase 1 (1.14–1.18); el total del proyecto no cambió, cambió de fase. `0 + 1 + 2` sigue siendo prácticamente la misma cifra (219–282 frente a 219–281): lo que antes estaba en la Fase 2 sigue estándolo en algún lado, solo que ahora la mitad de ello ya se hizo antes.
 
-> **La Fase 5 es lo que separa "un sistema" de "un producto".** Sin ella se puede entregar una instalación, pero cada cliente nuevo consume tiempo del equipo de desarrollo: instalar, configurar, actualizar y diagnosticar. Con veinte clientes eso no escala, y el negocio deja de ser vender software para pasar a ser consultoría. Las ~110 h de la Fase 5 son la inversión que hace que el cliente número veintiuno cueste lo mismo que el segundo.
+> **La Fase 5 es lo que separa "un sistema" de "un producto".** Sin ella se puede entregar una instalación, pero cada cliente nuevo consume tiempo del equipo de desarrollo: instalar, configurar, actualizar y diagnosticar. Con veinte clientes eso no escala, y el negocio deja de ser vender software para pasar a ser consultoría. Las 117–161 h de la Fase 5 son la inversión que hace que el cliente número veintiuno cueste lo mismo que el segundo.
 
 ### 11.2 Qué se sacrifica al recortar
 
@@ -1511,6 +1537,8 @@ Un cliente puede estar en la 1.2.0 cuando ya va la 1.6.0. El actualizador debe e
 
 > **Ejecutado en la tarea 5.7 (07-09-2026):** `update.sh` aplica el mantenimiento **antes** de la copia (la lista de arriba ya lo refleja desde ADR-054; hasta entonces decía copia y después mantenimiento) —mantenimiento y parada de `horizon`/`scheduler`, y después la copia— para que ningún fichaje aceptado por el servidor quede fuera de la copia que restauraría la vuelta atrás. La matriz del §11.6.5 es un dato del paquete (`versions.txt`), el punto de control entre versiones es una marca persistida en el informe con un lote de `migrations` por versión, y la vuelta atrás es siempre restaurar la copia y relanzar la versión anterior. El detalle está en `plan implementacion/08` §2.2 y en la ficha 5.7.
 
+> **Lado a lado, no encima, desde una versión anterior a la 2.2.0.** `update.sh` rechaza actualizar con el paquete descomprimido encima de una instalación anterior a la 2.2.0 (`KQ_IN_PLACE_MIN_SOURCE`): la copia previa y la vuelta atrás usarían el `compose` nuevo, con el que esa versión no sabe trabajar. No toca nada, la instalación sigue en marcha y el mensaje da las órdenes para hacerlo lado a lado (`docs/runbooks/actualizacion-cliente.md` §2). Al terminar, el directorio anterior se retira.
+
 ### 11.6.5 Matriz de versiones soportadas
 
 Se publica y se cumple: la versión menor vigente y las dos anteriores reciben correcciones de seguridad; el salto de versión mayor tiene ventana de migración anunciada con antelación. Sin esta disciplina, con veinte clientes se acaba manteniendo veinte productos.
@@ -1521,7 +1549,7 @@ Se publica y se cumple: la versión menor vigente y las dos anteriores reciben c
 
 Generado por el administrador del cliente con un clic o un comando. Contiene versión, configuración **sin secretos**, estado de los servicios, el **histórico de `error_events` del periodo** con su agrupación por huella y su `trace_id` (RF-PD-15), salud de quioscos, tamaño de las colas, resultado de `doctor` y métricas agregadas.
 
-**No contiene datos personales.** Los identificadores de empleado se sustituyen por sus UUID, y no se incluyen nombres, correos ni registros de jornada. Si un incidente concreto exige incluirlos, es una acción distinta, explícita, avisada en la interfaz y auditada.
+**No contiene datos personales** en su forma por defecto, la anonimizada: ni nombres, correos ni registros de jornada, y tampoco el `employee_uuid` de los errores, que sale vacío (`ErrorEventsCollector`); el texto libre de los errores pasa por la lista blanca de ADR-048. Si un incidente concreto exige incluir datos personales, es una acción distinta, explícita, reservada a `admin`, avisada y auditada (`--with-personal-data`, asiento `diagnostics.personal_data_included`, ADR-020 enmendado el 08-10-2026).
 
 ---
 
@@ -1757,6 +1785,7 @@ php artisan attendance:detect-incidents         # Turnos abiertos, duraciones an
 php artisan attendance:detect-patterns          # Patrones anómalos de uso de credencial (RF-PR-06)
 php artisan attendance:reconcile --from= --to=  # Recalcula proyecciones y alerta si divergen
 php artisan compliance:verify-audit-chain       # Verifica la cadena de hash
+php artisan compliance:reconcile-work-record [--full] [--days=]   # Concilia el registro horario con su auditoría (ADR-057 §4). Diaria 04:15 UTC sobre 7 días; --full los domingos 02:15
 php artisan compliance:apply-retention --dry-run   # PROPONE la purga por retención. No borra nada
 php artisan compliance:apply-retention --confirm=PURGAR-… --responsible=<id>   # La ejecuta. Exige la frase del informe y el rol de mantenimiento
 php artisan reporting:presence-metrics          # Recalcula open_shifts_current y websocket_connections_active (§8.2)
@@ -1765,6 +1794,7 @@ php artisan reporting:weekly-summary [--week=AAAA-Www]   # Resumen semanal por c
 # Calidad y trazabilidad
 php artisan qa:traceability                     # Matriz requisito → pruebas (RQ-13)
 php artisan qa:traceability --check             # Falla si un requisito implementado no tiene prueba
+php artisan docs:consistency --check             # Falla si los documentos que mandan divergen (RQ-12, RNF-M-04)
 php artisan compliance:legal-export --from= --to= --employee=
 
 # Credenciales
@@ -1777,6 +1807,14 @@ php artisan credentials:rotate-key               # Rotación con solape (--dry-r
 php artisan credentials:retire-key {key_id}      # Cierra el solape. Se niega si queda alguna tarjeta viva
 php artisan credentials:status --pending         # Quién no puede fichar todavía
 php artisan credentials:status --key-id=         # Quién sigue fichando con la clave saliente
+
+# Cuentas de gestión (RF-ID-10, ADR-051; la vía normal es Panel → Cuentas, la consola es recuperación)
+php artisan identity:list-users [--status=active|deactivated] [--role=]
+php artisan identity:create-user --name= --email= --role=   # Contraseña de un solo uso, mostrada una vez
+php artisan identity:deactivate-user {email} --reason=    # Nunca la última admin activa
+php artisan identity:reset-password {email} --reason=
+php artisan identity:2fa-reset {uuid} --reason=
+php artisan identity:origin-unlock {ip}         # Levanta el bloqueo por origen del portal (ADR-050)
 
 # Quioscos
 php artisan kiosk:pairing-code {code} --name=    # CONFIRMA el código que muestra la tablet y la vincula (vía alternativa al panel)

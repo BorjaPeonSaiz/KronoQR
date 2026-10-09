@@ -2,13 +2,13 @@
 
 Presencia en vivo con Reverb y respaldo por sondeo (RF-PA-01, RF-PA-02, ADR-011). Tarea 2.4.
 
-| Fichero                    | Qué es                                                                                                                            |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `live.api.ts`              | `GET /attendance/live` con los filtros del contrato y la firma de suscripción (`auth_endpoint`)                                   |
-| `realtime/pusherClient.ts` | Cliente mínimo del protocolo Pusher 7 (el de Reverb): saludo, firma de canales privados, latidos, reconexión con espera creciente |
-| `presence.store.ts`        | Foto + `presence.updated` aplicados fila a fila; sondeo cada `poll_interval_seconds` cuando el canal no está; reloj del servidor  |
-| `LivePresenceView.vue`     | Filtros, recuentos, indicador de vía (tiempo real / sondeo / desactivado) y estados vacío/carga/error                             |
-| `PresenceTable.vue`        | Lista, virtualizada a partir de 80 filas; horas en la zona del centro; tiempo transcurrido contra `meta.generated_at`             |
+| Fichero                    | Qué es                                                                                                                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `live.api.ts`              | `GET /attendance/live` con los filtros del contrato y la firma de suscripción (`auth_endpoint`)                                                                              |
+| `realtime/pusherClient.ts` | Cliente mínimo del protocolo Pusher 7 (el de Reverb): saludo, firma de canales privados, latidos, reconexión con espera creciente                                            |
+| `presence.store.ts`        | Foto + `presence.updated` aplicados fila a fila; sondeo cada `poll_interval_seconds` cuando el canal no está; reloj del servidor                                             |
+| `LivePresenceView.vue`     | Filtros, recuentos, indicador de vía (tiempo real / sondeo / desactivado) y estados vacío/carga/error                                                                        |
+| `PresenceTable.vue`        | Lista, virtualizada a partir de 80 filas; horas en la zona del centro; tiempo transcurrido contra `meta.generated_at`; enlace al detalle de jornada para quien lo puede leer |
 
 Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).
 

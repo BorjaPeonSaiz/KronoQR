@@ -349,7 +349,7 @@ Sin internet solo se pierden tres cosas accesorias: los certificados de segurida
 
 Es la pregunta que más debería importar, porque de esos números salen las nóminas:
 
-- **Más de 600 pruebas automáticas** se ejecutan cada vez que se toca una línea de código. Cerca de 400 de ellas se dedican en exclusiva a las reglas de cálculo del tiempo trabajado.
+- **Más de 5.000 pruebas automáticas** se ejecutan cada vez que se toca una línea de código. Más de 400 de ellas se dedican en exclusiva a las reglas de cálculo del tiempo trabajado.
 - Hay pruebas específicas para los casos que rompen a los sistemas genéricos: **turnos que cruzan medianoche**, **los dos cambios de hora del año** en ambos sentidos, tramos de duración extrema y fichajes que llegan desordenados desde la cola sin conexión.
 - Se prueba que **treinta personas fichando a la vez** no produzcan duplicados ni descuadres.
 - Se prueba el ciclo completo **sin red → reconexión → sincronización → totales**, con una tablet real y una cámara simulada que lee un QR de verdad.
@@ -443,7 +443,7 @@ Este reparto se incluye en el contrato y en la documentación entregada. La mayo
 
 ### 10.8 Documentación entregada
 
-Cuatro manuales: **instalación** (para el informático), **operación** (copias, actualizaciones, incidencias frecuentes), **configuración** (cada parámetro y qué hace) y **obligaciones legales** (qué le corresponde al hotel como empresa).
+Para el informático: **instalación**, **operación** (copias, actualizaciones, incidencias frecuentes), **configuración** (cada parámetro y qué hace) y **endurecimiento** (seguridad de la instalación: qué se publica, dónde vive cada secreto). Para el hotel como empresa: **obligaciones legales** (qué le corresponde) y las **preguntas para su asesoría**. Para el uso diario: la **guía del panel para RRHH**, la **guía del portal del empleado** y la **hoja de instrucciones** que se entrega con la tarjeta. Todo en español y en inglés.
 
 ---
 

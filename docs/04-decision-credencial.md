@@ -5,7 +5,7 @@
 |---|---|
 | **Decisión** | La credencial QR es una **tarjeta física impresa**. Única modalidad del producto |
 | **Registrada como** | ADR-014 |
-| **Fecha** | 11 de agosto de 2026 |
+| **Fecha** | 11 de agosto de 2026 · vigente en la versión 2.2.0 (revisado el 9 de octubre de 2026) |
 | **Contexto** | Producto licenciado, desplegado en servidores del cliente, vendible a múltiples hoteles |
 | **Documentos relacionados** | `01-especificaciones-proyecto.md` §3.2, `02-stack-tecnologico-y-plan-implementacion.md` §5 |
 
@@ -193,7 +193,7 @@ La credencial en móvil **no es funcionalidad prevista del producto**. Se evalua
 | **Registro de entrega** | Fecha y responsable, auditado. Distingue "se perdió antes de entregarla" de "el empleado la perdió", que son incidencias distintas |
 | **Panel de estado** | Quién la tiene emitida, pendiente de imprimir, pendiente de entregar o revocada. Evita descubrir a las 06:00 que alguien no puede fichar |
 | **Reposición** | Revocación y reimpresión en el día. Una tarjeta rota que tarda una semana son cinco días de fichajes por PIN |
-| **Respaldo obligatorio** | PIN de 6 dígitos en el quiosco (RF-AT-11). Es lo que impide que una tarjeta olvidada se convierta en una jornada sin registro |
+| **Respaldo obligatorio** | PIN de 6 u 8 cifras en el quiosco, según la instalación (RF-AT-11, ADR-050). Es lo que impide que una tarjeta olvidada se convierta en una jornada sin registro |
 
 ---
 

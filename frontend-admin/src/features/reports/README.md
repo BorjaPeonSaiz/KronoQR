@@ -1,21 +1,27 @@
 # reports
 
 Informes del panel. Tareas 1.17 (exportación para la Inspección), 2.8 (horas
-por periodo) y 3.13 (cuadro de impacto y adopción).
+por periodo), 2.9 (sus descargas), 3.9 (salida a nómina y exportaciones en
+segundo plano) y 3.13 (cuadro de impacto y adopción).
 
 Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).
 
 ## Qué hay aquí
 
-| Fichero                     | Qué hace                                                                                                                                 |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `legalExport.api.ts`        | Cliente de `GET /reports/legal-export` (RF-IN-05, RL-06). Descarga un CSV y lo suelta; no parsea nada.                                   |
-| `LegalExportView.vue`       | La pantalla del requerimiento de Inspección: periodo, alcance opcional por persona y las cifras que devolvió el servidor.                |
-| `periodReport.api.ts`       | Cliente de `GET /reports/period` (RF-IN-01..03), con los parámetros en camelCase que usa el panel.                                       |
-| `PeriodReportView.vue`      | Formulario de periodo, granularidad y agrupación; tabla de resultados; aviso de cobertura de contrato; criterios de inclusión visibles.  |
-| `PeriodReportTable.vue`     | Las filas: sujeto, periodo recortado, trabajadas, contratadas, desviación, exceso y los cuatro contadores de días.                       |
-| `adoptionReport.api.ts`     | Cliente de `GET /reports/adoption` y `.../export` (RF-IN-08, RNF-D-01). Ver «El cuadro de impacto y adopción» más abajo.                 |
-| `AdoptionDashboardView.vue` | «Impacto y adopción»: una tarjeta por indicador con objetivo del §1.3, rosco de origen y barras de comparación, criterios y exportación. |
+| Fichero                     | Qué hace                                                                                                                                     |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `legalExport.api.ts`        | Cliente de `GET /reports/legal-export` (RF-IN-05, RL-06). Descarga un CSV y lo suelta; no parsea nada.                                       |
+| `LegalExportView.vue`       | La pantalla del requerimiento de Inspección: periodo, alcance opcional por persona y las cifras que devolvió el servidor.                    |
+| `periodReport.api.ts`       | Cliente de `GET /reports/period` (RF-IN-01..03), con los parámetros en camelCase que usa el panel.                                           |
+| `PeriodReportView.vue`      | Formulario de periodo, granularidad y agrupación; tabla de resultados; aviso de cobertura de contrato; criterios de inclusión visibles.      |
+| `PeriodReportTable.vue`     | Las filas: sujeto, periodo recortado, trabajadas, contratadas, desviación, exceso y los cuatro contadores de días.                           |
+| `periodReportExport.api.ts` | Descarga del mismo informe por periodo en CSV, XLSX o PDF (RF-IN-04), con la misma consulta que la tabla.                                    |
+| `payrollExport.api.ts`      | Cliente de `GET /reports/payroll-export` (RF-IN-07): el fichero con la plantilla `PAYROLL_EXPORT_*` que tiene guardada el servidor.          |
+| `PayrollExportView.vue`     | «Nómina» (`/reports/payroll`): periodo, previsualización de las columnas configuradas en «Ajustes operativos» y descarga.                    |
+| `reportExports.api.ts`      | Exportaciones en segundo plano (RF-IN-06, ADR-041): pedir, listar, consultar y descargar con enlace caducable de un solo uso.                |
+| `ReportExportsPanel.vue`    | Las exportaciones del solicitante, con estado, descarga y criterios. No pide ninguna: eso lo hacen `PeriodReportView` y `PayrollExportView`. |
+| `adoptionReport.api.ts`     | Cliente de `GET /reports/adoption` y `.../export` (RF-IN-08, RNF-D-01). Ver «El cuadro de impacto y adopción» más abajo.                     |
+| `AdoptionDashboardView.vue` | «Impacto y adopción»: una tarjeta por indicador con objetivo del §1.3, rosco de origen y barras de comparación, criterios y exportación.     |
 
 ## Aquí no se calcula ninguna hora
 
@@ -51,7 +57,8 @@ hasta que hay las dos fechas, que además son obligatorias en el contrato.
 ## Un error retira el informe anterior
 
 Si el periodo pedido no cabe en una respuesta síncrona (`422`, RNF-P-05), la
-tabla anterior desaparece. Dejarla en pantalla junto al mensaje de error haría
+tabla anterior desaparece y la pantalla ofrece pedirlo como exportación en
+segundo plano (RF-IN-06), que aparece en `ReportExportsPanel.vue`. Dejarla en pantalla junto al mensaje de error haría
 creer que esas cifras valen para el periodo que se acaba de pedir, y no valen
 para ninguna.
 
@@ -68,18 +75,13 @@ Solo `admin` y `rrhh` (Anexo B del doc 01): ni `responsable_departamento` ni
 `auditor` ven la entrada del menú ni pueden abrir la pantalla por URL
 (`REPORTS_MANAGE`, el mismo ámbito que «Informes» y «Nómina»).
 
-### Tipos locales provisionales, calcados del contrato real
+### Tipos del contrato
 
-`backend-laravel` cerró `GET /api/v1/reports/adoption` en
-`docs/api/openapi.yaml` (esquemas `AdoptionReport`, `AdoptionIndicator`,
-`AdoptionTarget`…) mientras se escribía esta pantalla, pero
-`shared/api/schema.d.ts` todavía no se ha regenerado desde ese contrato. Los
-tipos de `adoptionReport.api.ts` son una copia literal de esos esquemas: en
-cuanto `schema.d.ts` incluya `Schemas['AdoptionReport']`, sustituirlos es un
-cambio de importación, no de forma. `tests/e2e/support/admin.ts` hace lo mismo
-con su propia copia local, y por el mismo motivo: importar el tipo desde
-`adoptionReport.api.ts` arrastraría el `import.meta.env` de
-`@kronoqr/web-kit/http` a un proyecto de TypeScript (`tsconfig.e2e.json`) que
+Las formas (`AdoptionReport`, `AdoptionIndicator`, `AdoptionTarget`…) salen de
+`shared/api/schema.d.ts`, regenerado desde `docs/api/openapi.yaml`, a través de
+`@/shared/api/types`. `tests/e2e/support/admin.ts` también lo importa de ahí, nunca
+desde `adoptionReport.api.ts`: eso arrastraría el `import.meta.env`
+de `@kronoqr/web-kit/http` a un proyecto de TypeScript (`tsconfig.e2e.json`) que
 no carga los tipos de Vite.
 
 ### Doce indicadores, seis con objetivo
@@ -125,9 +127,9 @@ envío programado y comparación contra el mismo periodo del año anterior:
 fuera de alcance de la tarea 3.13 (regla dura 21, un agregado de la
 instalación entera y no una herramienta de vigilancia por persona).
 
-## Lo que no está aquí, y de quién es
+## Las descargas salen del mismo resultado
 
-Las exportaciones CSV/XLSX/PDF del informe por periodo son la tarea 2.9, y se
-generan **desde el mismo objeto de resultado del servidor**: el fichero que
+Las exportaciones CSV/XLSX/PDF del informe por periodo (`periodReportExport.api.ts`)
+se generan **desde el mismo objeto de resultado del servidor**: el fichero que
 alguien adjunta a un correo y la tabla que ve en pantalla se calculan una sola
 vez para que no puedan discrepar.

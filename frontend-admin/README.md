@@ -1,6 +1,7 @@
 # frontend-admin
 
-Panel de gestion de KronoQR. Vue 3.5 + TypeScript estricto + Vite 6 + Tailwind 4 (doc 02 §3.3).
+Panel de gestion de KronoQR. Vue 3.5 + TypeScript estricto + Vite 8 + Tailwind 4 (doc 02 §3.3), Node `>=24`
+(la imagen de Compose usa `node:25-alpine`).
 
 ## Comandos
 
@@ -12,6 +13,8 @@ npm run lint         # ESLint + Prettier, sin desviaciones
 npm run test:unit    # Vitest con cobertura, umbral 70 %
 npm run build        # construye para produccion
 npm run api:generate # regenera el cliente HTTP desde docs/api/openapi.yaml
+npm run test:e2e     # Playwright (ver tests/e2e/README.md)
+npm run docs:screenshots # capturas de la guia del panel
 ```
 
 ## `npm` se ejecuta en el host

@@ -5,7 +5,7 @@
 |---|---|
 | **Fecha** | 11 de agosto de 2026 |
 | **Documentos hermanos** | `01-especificaciones-proyecto.md`, `02-stack-tecnologico-y-plan-implementacion.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md`, `06-guia-visual.md`, `07-seguridad-madurez-y-amenazas.md` |
-| **Estado** | Los agentes y skills descritos **están creados** en `.claude/` y son operativos |
+| **Estado** | Los once agentes y las seis skills descritos **están creados** en `.claude/` y son operativos. Revisado contra la versión **2.2.0** el 9 de octubre de 2026 |
 
 ---
 
@@ -32,7 +32,7 @@ Tres capas:
                             │
         ┌───────────────────┴───────────────────┐
         │  PLAN DE IMPLEMENTACIÓN (doc 02, §11) │
-        │  Cada una de las ~50 tareas indica    │
+        │  Cada una de sus 61 tareas indica     │
         │  su agente y su skill.                │
         └───────────────────────────────────────┘
 ```
@@ -76,7 +76,7 @@ El orden importa. **Diseñar antes de implementar y probar antes de codificar** 
 
 ### 2.2 Para ejecutar el plan
 
-**Consulta la columna `Agente / Skill` de las tablas del documento 02, §11.** Cada tarea, de la 0.1 a la 5.11, indica quién la ejecuta (el orden de ejecución es 0 → 1 → 2 → 5 → 3 → 4, así que la Fase 3 y sus tareas 3.1 a 3.12 van al final). Resumen por fase:
+**Consulta la columna `Agente / Skill` de las tablas del documento 02, §11.** Cada tarea, de la 0.1 a la 5.12 (más la 4.1, adelantada a la 2.2.0), indica quién la ejecuta (el orden de ejecución es 0 → 1 → 2 → 5 → 3 → 4, así que la Fase 3 y sus tareas 3.1 a 3.12 van al final). Resumen por fase:
 
 | Fase | Agentes protagonistas |
 |---|---|
@@ -84,7 +84,8 @@ El orden importa. **Diseñar antes de implementar y probar antes de codificar** 
 | **Fase 1 — MVP de fichaje** | `arquitecto-dominio` → `qa-testing` → `backend-laravel`, con `frontend-quiosco` y `frontend-portal-empleado` en paralelo |
 | **Fase 2 — Gestión y cumplimiento** | `backend-laravel` y `frontend-panel`, con revisión obligatoria de `seguridad-cumplimiento` en auditoría y rotación de claves |
 | **Fase 5 — Productización** | `producto-licencia` como protagonista, con apoyo de `devops-observabilidad` y de los tres agentes de frontend para la marca blanca |
-| **Fase 3 — Operación y refuerzo** | `devops-observabilidad` y `qa-testing` en la instrumentación y las pruebas; `backend-laravel` y `frontend-panel` en las tareas 3.9 a 3.12 (informes asíncronos, ausencias e importación, patrones anómalos, resumen semanal) |
+| **Fase 3 — Operación y refuerzo** | `devops-observabilidad` y `qa-testing` en la instrumentación y las pruebas; `backend-laravel` y `frontend-panel` en las tareas 3.9 a 3.13 (informes asíncronos, ausencias e importación, patrones anómalos, resumen semanal) |
+| **Fase 4 — Evolución** | Solo la tarea 4.1 (cuentas de gestión, adelantada a la 2.2.0): `arquitecto-dominio` → `backend-laravel` + `frontend-panel` → `qa-testing` → `revisor-codigo` + `seguridad-cumplimiento` |
 | **Cierre de cada fase** | `revisor-codigo` y `seguridad-cumplimiento` |
 
 ### 2.3 Qué invocar en trabajo ad-hoc
@@ -105,7 +106,7 @@ El orden importa. **Diseñar antes de implementar y probar antes de codificar** 
 
 ## 3. Contexto permanente — `CLAUDE.md`
 
-Se carga automáticamente en cada sesión. Contiene las 21 reglas duras del proyecto, la referencia a los cinco documentos —incluido el 05, que es lo que se le ha prometido al cliente— y los comandos del `make`.
+Se carga automáticamente en cada sesión. Contiene las 21 reglas duras del proyecto, la referencia a los siete documentos numerados (01 a 07) —incluido el 05, que es lo que se le ha prometido al cliente— y los comandos del `make`.
 
 Su razón de ser: **las reglas que se pueden olvidar son las que se olvidan.** Que el dominio sea puro, que el reloj se inyecte, que nada se borre, que todo fichaje sea idempotente, que la credencial sea una tarjeta y que nada específico de un cliente entre en el código — son invariantes del sistema, no recordatorios. Estar en el contexto permanente las convierte en el punto de partida de cada tarea en lugar de en un hallazgo de revisión.
 
@@ -119,19 +120,19 @@ Todos están creados en `.claude/agents/`.
 
 ### 4.1 Tabla resumen
 
-| Agente | Rol | Escribe | Cuándo |
-|---|---|---|---|
-| `arquitecto-dominio` | Guardián del modelo y las fronteras | Sí | **Antes** de escribir lógica de negocio |
-| `backend-laravel` | Implementación del backend | Sí | Casos de uso, adaptadores, endpoints, migraciones |
-| `frontend-quiosco` | PWA de la tablet | Sí | Escaneo, offline, sincronización, PIN, accesibilidad |
-| `frontend-panel` | SPA de gestión | Sí | Presencia en vivo, correcciones, credenciales, informes |
-| `frontend-portal-empleado` | Portal web del empleado | Sí | Acceso con código y PIN, mi registro, mi exportación |
-| `ui-ux` | Diseño de interfaz y experiencia de usuario | Sí | Sistema visual compartido, contraste WCAG, disposición y coherencia entre las tres SPA |
-| `qa-testing` | Pirámide de pruebas | Sí | Cobertura, casos límite, fallos intermitentes |
-| `seguridad-cumplimiento` | STRIDE, RGPD y art. 34.9 ET | **No** | Antes de cerrar algo que toque datos o autenticación |
-| `devops-observabilidad` | Infra, CI/CD, métricas, alertas | Sí | Entorno, empaquetado, instrumentación |
-| `producto-licencia` | Productización: configuración, licencia, instalador, soporte | Sí | Todo el módulo `Product` y la Fase 5 |
-| `revisor-codigo` | Revisión final | **No** | Último paso antes de integrar |
+| Agente | Rol | Escribe | Modelo | Cuándo |
+|---|---|---|---|---|
+| `arquitecto-dominio` | Guardián del modelo y las fronteras | Sí | `opus` | **Antes** de escribir lógica de negocio |
+| `backend-laravel` | Implementación del backend | Sí | `opus` | Casos de uso, adaptadores, endpoints, migraciones |
+| `frontend-quiosco` | PWA de la tablet | Sí | `sonnet` | Escaneo, offline, sincronización, PIN, accesibilidad |
+| `frontend-panel` | SPA de gestión | Sí | `sonnet` | Presencia en vivo, correcciones, credenciales, informes |
+| `frontend-portal-empleado` | Portal web del empleado | Sí | `sonnet` | Acceso con código y PIN, mi registro, mi exportación |
+| `ui-ux` | Diseño de interfaz y experiencia de usuario | Sí | `sonnet` | Sistema visual compartido, contraste WCAG, disposición y coherencia entre las tres SPA |
+| `qa-testing` | Pirámide de pruebas | Sí | `opus` | Cobertura, casos límite, fallos intermitentes |
+| `seguridad-cumplimiento` | STRIDE, RGPD y art. 34.9 ET | **No** | `opus` | Antes de cerrar algo que toque datos o autenticación |
+| `devops-observabilidad` | Infra, CI/CD, métricas, alertas | Sí | `sonnet` | Entorno, empaquetado, instrumentación |
+| `producto-licencia` | Productización: configuración, licencia, instalador, soporte | Sí | `opus` | Todo el módulo `Product` y la Fase 5 |
+| `revisor-codigo` | Revisión final | **No** | `opus` | Último paso antes de integrar |
 
 ### 4.2 Anatomía de los prompts
 
@@ -293,9 +294,9 @@ Instrucción explícita de no repetir lo que ya reportan Pint, PHPStan, Deptrac 
 
 ---
 
-## 5. Las seis skills
+## 5. Las skills
 
-Creadas en `.claude/skills/`. Se invocan con `/<nombre>`.
+Creadas en `.claude/skills/`. Se invocan con `/<nombre>`. Son **seis**; el directorio tiene un séptimo, `code-analyzer/`, que **no es una skill operativa** (ver la nota tras la tabla).
 
 | Skill | Qué automatiza | Pasos |
 |---|---|---|
@@ -305,6 +306,8 @@ Creadas en `.claude/skills/`. Se invocan con `/<nombre>`.
 | `migracion-segura` | Cambio de esquema sin bloqueos ni parada | 3 despliegues |
 | `revision-cumplimiento` | Checklist legal, de privacidad y de producto | 6 bloques |
 | `informe-nuevo` | Informe o exportación con rendimiento verificado | 8 |
+
+> **`code-analyzer/` no se carga como skill.** Solo tiene `README.md` y `skill.json`, sin el `SKILL.md` con cabecera que Claude Code necesita para registrarla, y su README documenta una orden (`claude analyze-code`) que no existe. Entró con el commit «Fase 1 Sin optimizar» y ningún paso del plan ni del método la usa. Para lo que dice cubrir (duplicación, lógica de dominio, excepciones) están `revisor-codigo`, `arquitecto-dominio` y la skill integrada `/code-review`. Queda anotado como decisión pendiente del propietario: convertirla en skill de verdad o retirarla.
 
 ### 5.1 Qué resuelve cada una
 
@@ -345,6 +348,8 @@ Entregable esperado:
 - ADR-001 a ADR-020 escritos en docs/adr/ a partir de la tabla del documento
   02 §4; ADR-021 a ADR-028 ya existen y solo se revisan. Al terminar,
   docs/adr/ tiene 28 ficheros
+  [nota de la revisión 2.2.0: el prompt es el de la Fase 0 y conserva su
+  cifra de entonces; hoy docs/adr/ tiene 57 ADR]
 - openapi.yaml inicial con /health y /scan
 - docs/requisitos.yaml y los comandos qa:traceability y docs:consistency
 
@@ -912,5 +917,6 @@ CLAUDE.md                                          Contexto permanente, 21 regla
 ├── endpoint-api/SKILL.md                          Contrato primero, 8 pasos
 ├── migracion-segura/SKILL.md                      Expand / migrate / contract
 ├── revision-cumplimiento/SKILL.md                 Checklist legal y de producto, 6 bloques
-└── informe-nuevo/SKILL.md                         Informes y exportaciones, 8 pasos
+├── informe-nuevo/SKILL.md                         Informes y exportaciones, 8 pasos
+└── code-analyzer/{README.md,skill.json}           Sin SKILL.md: no es una skill operativa (§5)
 ```

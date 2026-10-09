@@ -163,7 +163,7 @@
   - cobertura de `Domain` ≥ 90 %;
   - cobertura del backend ≥ 75 %;
   - cobertura del frontend ≥ 70 %;
-  - suite unitaria < 2 s.
+  - suite unitaria dentro del presupuesto de `UNIT_SUITE_MAX_SECONDS` del `Makefile`, 5 s (la única fuente; `UnitSuiteBudgetTest`).
   - 🤖 `qa-testing` · Opus 5.5
 - [ ] **Mutación sobre el dominio:** MSI ≥ 80 % con `pest --mutate`.
   - 🤖 `qa-testing` · Opus 5.5
@@ -456,7 +456,7 @@ Todos los de este bloque: 🤖 `seguridad-cumplimiento` · Opus 5.5.
 
 - [ ] `qa:traceability --check` en verde: ningún requisito implementado sin prueba.
 - [ ] `make quality` y `make test` en verde, y las tres SPA con build correcto.
-- [ ] Umbrales cumplidos: cobertura (90 / 75 / 70 %), MSI ≥ 80 % y unitarias < 2 s.
+- [ ] Umbrales cumplidos: cobertura (90 / 75 / 70 %), MSI ≥ 80 % y unitarias dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile`, 5 s.
 - [ ] **0 hallazgos 🔴 CRÍTICO ni 🟠 ALTO** de `seguridad-cumplimiento`.
 - [ ] **0 hallazgos 🔴 BLOQUEANTE** de `revisor-codigo`.
 - [ ] `projection_divergence_total` y `audit_chain_verification_failures_total` a cero en staging.

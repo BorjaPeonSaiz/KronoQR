@@ -12,16 +12,16 @@ npx playwright test --ui                # para depurar
 
 ## Qué hay aquí
 
-| Fichero                 | Cubre                                                                                                                                                                                                                                                                                                                             |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `login.spec.ts`         | `@RL-05`, `@RF-ID-06`, `@RF-ID-07` — acceso con código de empleado y PIN, guarda de rutas con `redirect`, PIN incorrecto con el mismo aviso genérico que el bloqueo por intentos (`429`, RS-03), el PIN nunca queda escrito ni en la URL, salida                                                                                  |
-| `my-records.spec.ts`    | `@RL-05`, `@RF-ID-05`, `@RN-13`, `@RL-04`, `@RF-ID-07` — jornadas con el total en horas y minutos, tramo corregido con motivo y valor anterior, un turno abierto marcado como tal, descuadre de totales sin elegir ninguno (RN-06), filtro de periodo, y el caso negativo (manipular la URL con el identificador de otra persona) |
-| `my-export.spec.ts`     | `@RL-05`, `@RF-ID-05` — descarga del CSV propio con `waitForEvent('download')`, nombre de fichero sin datos de nadie, periodo elegido, periodo inválido sin petición al servidor                                                                                                                                                  |
-| `branding.spec.ts`      | `@RF-PD-08` — nombre, color de acento y logotipo del cliente en el acceso y en el marco autenticado; vuelta a la marca del producto sin red o con una respuesta que no cuadra con el contrato                                                                                                                                     |
-| `accessibility.spec.ts` | con `@axe-core/playwright`, 0 violaciones críticas/graves en el acceso, el registro, la exportación y la página de «no encontrado»                                                                                                                                                                                                |
-| `client-errors.spec.ts` | `@RF-PD-15` — un error real se manda a `POST /api/v1/client-errors` al pasar a autenticado; un fallo del servidor al reportarlo no bloquea el portal ni reintenta en bucle                                                                                                                                                        |
-| `reflow.spec.ts`        | `@RF-ID-05`, `@RL-05` - «Mi registro» al 200 % de zoom (195 px CSS), a 320 px de reflujo y con el texto al 200 %: sin scroll horizontal de la página, sin cabeceras solapadas ni texto cortado (WCAG 1.4.4 y 1.4.10)                                                                                                              |
-| `favicon.spec.ts`       | `@RF-PD-08` - la página declara el icono SVG del producto y el servidor lo sirve                                                                                                                                                                                                                                                  |
+| Fichero                 | Cubre                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `login.spec.ts`         | `@RL-05`, `@RF-ID-05`, `@RF-ID-06`, `@RF-ID-07`, `@RF-ID-08`, `@RF-ID-09`, `@RS-12` — acceso con código de empleado y PIN (de 6 y de 8 cifras), guarda de rutas con `redirect`, PIN incorrecto con el mismo aviso genérico que el bloqueo por intentos (`429`, RS-03), bloqueo del origen con su aviso y el botón deshabilitado (ADR-050), el PIN nunca queda escrito ni en la URL, y salir cierra la sesión en el servidor y borra la local aunque el servidor no responda |
+| `my-records.spec.ts`    | `@RL-05`, `@RF-ID-05`, `@RN-13`, `@RL-04`, `@RF-ID-07`, `@RF-AT-12` — jornadas con el total en horas y minutos, tramo corregido con motivo y valor anterior, un turno abierto marcado como tal, descuadre de totales sin elegir ninguno (RN-06), pausa entre dos tramos, filtro de periodo, y el caso negativo (manipular la URL con el identificador de otra persona)                                                                                                      |
+| `my-export.spec.ts`     | `@RL-05`, `@RF-ID-05` — descarga del CSV y del PDF propios con `waitForEvent('download')`, nombre de fichero sin datos de nadie, periodo elegido, periodo inválido sin petición al servidor, y aviso con el CSV como alternativa si el PDF no está disponible (`503`)                                                                                                                                                                                                       |
+| `branding.spec.ts`      | `@RF-PD-08` — nombre, color de acento y logotipo del cliente en el acceso y en el marco autenticado; vuelta a la marca del producto sin red o con una respuesta que no cuadra con el contrato                                                                                                                                                                                                                                                                               |
+| `accessibility.spec.ts` | con `@axe-core/playwright`, 0 violaciones críticas/graves en el acceso, el registro, la exportación y la página de «no encontrado»                                                                                                                                                                                                                                                                                                                                          |
+| `client-errors.spec.ts` | `@RF-PD-15` — un error real se manda a `POST /api/v1/client-errors` al pasar a autenticado; un fallo del servidor al reportarlo no bloquea el portal ni reintenta en bucle                                                                                                                                                                                                                                                                                                  |
+| `reflow.spec.ts`        | `@RF-ID-05`, `@RL-05` - «Mi registro» al 200 % de zoom (195 px CSS), a 320 px de reflujo y con el texto al 200 %: sin scroll horizontal de la página, sin cabeceras solapadas ni texto cortado (WCAG 1.4.4 y 1.4.10)                                                                                                                                                                                                                                                        |
+| `favicon.spec.ts`       | `@RF-PD-08` - la página declara el icono SVG del producto y el servidor lo sirve                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### El caso negativo: nunca datos de un tercero (`my-records.spec.ts`)
 
@@ -70,14 +70,6 @@ convertidas en la respuesta (`clocked_in_at_local`, `performed_at_local`): si al
 reconvirtiera con la zona del navegador, una noche de cambio de hora dejaría de cuadrar, y
 por eso el navegador nunca comparte zona con los datos.
 
-## `@axe-core/playwright` sin declarar
-
-No está en `package.json` de este paquete: llega **hoisted** a la raíz del workspace de npm
-porque `frontend-admin` ya lo declara (mismo árbol de dependencias, ADR-036). Añadirlo aquí
-también exigiría un `npm install`, que en Windows con `node_modules/` presente rompe los
-binarios nativos de `@tailwindcss/oxide` — se importa tal cual, sin declararlo, y el `npm ci`
-de la CI (que instala desde la raíz) lo deja en el mismo sitio.
-
 ## El backend no participa
 
 Lo que se prueba aquí es el recorrido de la persona empleada por el portal. Lo que el
@@ -91,5 +83,9 @@ se quede esperando.
 - Los cuatro recorridos por una persona ajena a la implementación siguiendo solo
   `docs/cliente/guia-portal-empleado.md` (decisión 11 de la ficha 5.11b), no sustituidos por
   ningún E2E.
-- Ejecución en la CI: la etapa ⑦ (`.github/workflows/e2e.yml`) sigue siendo el marcador de la
-  tarea 3.7, también para el panel y el quiosco.
+
+## Dónde se ejecuta
+
+En la CI, en la etapa ⑦ (`.github/workflows/ci.yml`, una entrada de la matriz por aplicación), o
+en el host. No en el contenedor `node-portal`: es Alpine (musl) y el Chromium de Playwright no
+arranca ahí.

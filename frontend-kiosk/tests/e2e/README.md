@@ -4,31 +4,45 @@ Playwright con camara simulada (doc 02 §9.4 y §2). `make e2e` invoca `npm run 
 esta aplicacion.
 
 ```bash
-npm run test:e2e                       # los dos proyectos
+npm run test:e2e                       # todos los proyectos
 npx playwright test --project=kiosk-qr # solo el QR limpio
 npx playwright test --grep @RF-KI-09   # por etiqueta de requisito (§9.6)
 ```
 
 ## Que hay aqui
 
-| Fichero                 | Cubre                                                                                    |
-| ----------------------- | ---------------------------------------------------------------------------------------- |
-| `scan.spec.ts`          | `@RF-KI-01`, `@RF-KI-02`, `@RF-KI-05`, `@RF-KI-06`, `@RF-KI-09`, `@RF-AT-05`             |
-| `degraded.spec.ts`      | `@RF-KI-02`, `@RF-QR-05` — tarjeta deteriorada                                           |
-| `accessibility.spec.ts` | `@RF-KI-06` con `@axe-core/playwright`, 0 violaciones criticas o graves                  |
-| `offline.spec.ts`       | `@RF-KI-03`, `@RF-KI-04`, `@RQ-05`, `@RN-21`, `@RN-22` — cola offline, orden y descartes |
-| `diagnostics.spec.ts`   | `@RF-KI-08` — pantalla de diagnostico                                                    |
-| `update-window.spec.ts` | `@RF-KI-07`, `@RF-KI-04`, `@RQ-05`, `@RF-KI-08` — ventana de actualizacion               |
-| `pin-csp.spec.ts`       | `@RF-AT-11`, `@RS-09` — PIN sellado con WebAssembly bajo la CSP de Nginx                 |
+| Fichero                    | Cubre                                                                                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scan.spec.ts`             | `@RF-KI-01`, `@RF-KI-02`, `@RF-KI-05`, `@RF-KI-06`, `@RF-KI-09`, `@RF-AT-01`, `@RF-AT-05`, `@RL-09`, `@RQ-04` — escaneo y confirmacion             |
+| `degraded.spec.ts`         | `@RF-KI-02`, `@RF-QR-05`, `@RF-AT-05`, `@RQ-04` — tarjeta deteriorada                                                                              |
+| `worn.spec.ts`             | `@RF-QR-05`, `@RQ-04` — tarjeta gastada, al limite de la correccion de errores                                                                     |
+| `qr-decode-budget.spec.ts` | `@RF-QR-05`, `@RNF-P-03` — presupuesto de tiempo de la decodificacion                                                                              |
+| `layout.spec.ts`           | `@RF-KI-06` — disposicion de la pantalla, con la camara sin QR delante                                                                             |
+| `accessibility.spec.ts`    | `@RF-KI-05`, `@RF-KI-06`, `@RF-AT-05`, `@RF-AT-10`, `@RF-AT-12`, `@RF-PD-08`, `@RS-03` con `@axe-core/playwright`, 0 violaciones criticas o graves |
+| `offline.spec.ts`          | `@RF-KI-03`, `@RF-KI-04`, `@RF-AT-07`, `@RQ-05`, `@RN-18`, `@RN-21`, `@RN-22` — cola offline, orden y descartes                                    |
+| `break.spec.ts`            | `@RF-AT-12`, `@RF-AT-10` — fichaje de pausa y aviso de desfase                                                                                     |
+| `pin.spec.ts`              | `@RF-AT-11`, `@RF-ID-09`, `@RS-03`, `@RQ-05` — fichaje por PIN de 6 a 8 cifras                                                                     |
+| `pin-lockout.spec.ts`      | `@RF-AT-11`, `@RS-12`, `@RS-03` — bloqueo del PIN                                                                                                  |
+| `pin-csp.spec.ts`          | `@RF-AT-11`, `@RS-09` — PIN sellado con WebAssembly bajo la CSP de Nginx                                                                           |
+| `pairing.spec.ts`          | `@RF-PD-06` — emparejamiento                                                                                                                       |
+| `token-rotation.spec.ts`   | `@RF-ID-04`, `@RF-KI-03`, `@RQ-05` — relevo del token en el latido                                                                                 |
+| `heartbeat-errors.spec.ts` | `@RF-PD-15`, `@RF-ID-04`, `@RF-KI-03`, `@RQ-05` — errores enviados en el latido                                                                    |
+| `traceparent.spec.ts`      | `@RF-PD-15`, `@RF-KI-02` — cabecera `traceparent`                                                                                                  |
+| `branding.spec.ts`         | `@RF-PD-08`, `@RF-KI-03`, `@RF-KI-09`, `@RL-09` — marca y aviso de privacidad, tambien sin red                                                     |
+| `manifest.spec.ts`         | `@RF-KI-01`, `@RF-KI-08` — manifiesto de la PWA                                                                                                    |
+| `diagnostics.spec.ts`      | `@RF-KI-08`, `@RF-PD-06` — pantalla de diagnostico                                                                                                 |
+| `update-window.spec.ts`    | `@RF-KI-07`, `@RF-KI-04`, `@RQ-05`, `@RF-KI-08` — ventana de actualizacion                                                                         |
 
-## Dos proyectos, y por que
+## Varios proyectos, y por que
 
 Chromium admite **un solo** fichero de video falso por proceso: `--use-file-for-fake-video-capture`
-es un argumento de arranque, no algo que se cambie por pestana. Como hay que probar el QR
-limpio y el degradado, hay dos proyectos con dos navegadores:
+es un argumento de arranque, no algo que se cambie por pestana. Cada video es un proyecto con su
+propio navegador:
 
-- `kiosk-qr` → `e2e/fixtures/qr-video.y4m`
+- `kiosk-qr` → `e2e/fixtures/qr-video.y4m` (todo salvo los tres siguientes)
 - `kiosk-qr-degraded` → `e2e/fixtures/qr-video-degraded.y4m` (solo `degraded.spec.ts`)
+- `kiosk-qr-worn` → `e2e/fixtures/qr-video-worn.y4m` (solo `worn.spec.ts`)
+- `kiosk-layout` → `e2e/fixtures/qr-video-blank.y4m` (solo `layout.spec.ts`)
 
 Los videos se generan antes de arrancar el servidor; ver `e2e/fixtures/README.md`.
 
@@ -61,16 +75,19 @@ pone en rojo con otra CSP, se apunta `KRONOQR_SECURITY_HEADERS_SNIPPET` a una co
 modificada FUERA del repositorio; nunca se edita el snippet real para eso.
 `KRONOQR_E2E_PORT` mueve el puerto (4173 por defecto) si ya hay otro `vite preview` en marcha.
 
-## El backend no participa (todavia)
+## El backend no participa
 
-Las llamadas a `/api/v1/*` se interceptan con `page.route` en `support/kiosk.ts`. Lo que se
-prueba aqui es la **pantalla** del quiosco: que decodifica, que confirma en menos de 300 ms
-y que no bloquea a nadie cuando no hay servidor.
+Las llamadas a `/api/v1/*` se interceptan con `page.route` en `support/kiosk.ts` (y los dobles
+de la cola, del emparejamiento y del PIN en el resto de `support/`). Lo que se prueba aqui es la
+**pantalla** del quiosco: que decodifica, que confirma en menos de 300 ms y que no bloquea a
+nadie cuando no hay servidor. El ciclo offline completo —fichar sin red, verificar la cola en
+IndexedDB, reconectar y comprobar que se consolida con el `occurred_at` original— es
+`offline.spec.ts` (RQ-05).
 
-El **ciclo offline completo** —fichar sin red, verificar la cola en IndexedDB, reconectar y
-comprobar que se consolida con el `occurred_at` original— es de la **tarea 1.9**, que es la
-que construye la cola. Sera tambien el momento de apuntar el E2E contra el backend real,
-inyectando un payload firmado por `KIOSK_E2E_QR_PAYLOAD`.
+## Donde se ejecuta
+
+En la CI (etapa ⑦ de `.github/workflows/ci.yml`) o en el host. No en el contenedor
+`node-kiosk`: es Alpine (musl) y el Chromium de Playwright no arranca ahi.
 
 ## Lo que ningun comando de aqui cierra
 

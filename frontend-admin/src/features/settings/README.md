@@ -21,7 +21,14 @@ Hoy viven aqui cuatro pantallas:
   la tablet y reactiva RN-12 desde la siguiente revision nocturna;
   desactivarlo la suspende de nuevo sin cerrar ninguna incidencia ya abierta.
   Impacto `compliance_review`, auditado como el resto de claves de ese
-  impacto.
+  impacto. Ademas: los patrones de uso de credencial
+  (`ATTENDANCE_PATTERN_*`), la ventana de actualizacion del quiosco
+  (`KIOSK_UPDATE_*`), la plantilla de la salida a nomina (`PAYROLL_EXPORT_*`), la
+  linea base del cuadro de impacto (`BASELINE_MANUAL_HOURS_PER_MONTH`),
+  `WEEKLY_SUMMARY_EMAIL` y **`IDENTITY_PIN_LENGTH`** (RF-ID-09, ADR-050): 6 u 8
+  cifras, impacto `access_control`; la pantalla lo avisa antes de guardar y los
+  PIN ya entregados siguen valiendo. Todo cambio se confirma con su «antes →
+  despues» (`ChangePreview`).
 - **`ComplianceProfileView.vue`** — los umbrales **legales** del centro
   (tarea 5.2). **Desde la tarea 3.5**, pide tambien `GET /api/v1/settings` (en
   paralelo, mismo `settings.api.ts` que `OperationalSettingsView`) para saber
@@ -103,16 +110,10 @@ ese ámbito. La autorización real es la policy del servidor (regla dura 18);
 `canManage` en `DataExportPanel.vue` solo evita la frustración de un
 formulario que el servidor rechazaría con `403`.
 
-**Candidatos a `web-kit` que se quedaron locales.** `sizeLabel` (bytes a
-KiB/MiB/GiB/TiB, divisor 1024, mismo redondeo que
-`ProductExportAllCommand::humanBytes` y `DiskProbe` en la consola) y
+**Tamaño y motivo de fallo.** `sizeLabel` delega en `formatBytes` de
+`@kronoqr/web-kit` (unidades binarias, compartido con `ReportExportsPanel.vue`);
 `failureReasonLabel` (los cuatro códigos estables de `failure_reason` con su
-texto de reserva) viven en `DataExportPanel.vue` y no en
-`@kronoqr/web-kit`, que es donde tocaría si otra pantalla del panel o del
-portal necesitara enseñar un tamaño de fichero o un motivo de fallo con la
-misma forma. No se movieron porque extraerlas exige tocar el paquete
-compartido y, en este entorno Windows, `npm install` rompe el
-`package-lock` (nota del CLAUDE.md del proyecto): queda anotado aquí para
-quien haga esa extracción con el entorno arreglado.
+texto de reserva) sigue local en `DataExportPanel.vue` porque ninguna otra
+pantalla lo necesita.
 
 Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).

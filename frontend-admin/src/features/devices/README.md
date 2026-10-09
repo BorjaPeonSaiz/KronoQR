@@ -163,6 +163,19 @@ cabe entera en pantalla cambiaria selectores de pruebas y E2E sin ningun
 beneficio real. Si algun dia `GET /devices` paginara, la virtualizacion
 llegaria junto con la paginacion, no antes.
 
+## La cola de cada tablet: «desconocida» nunca es cero (RN-21, RN-22)
+
+La columna de cola pendiente pinta `pending_queue_size` y, si llega `null` -la
+cola de la tablet cayo a memoria y no sabe cuantos fichajes quedaron en disco-,
+«desconocida» (`devicePresentation.queueSizeLabel`), nunca `0`: un cero diria
+que no hay nada que perder. Una cola que no es durable (`queue_storage`) lleva
+su aviso (`queueStorageKey`), y los descartes del quiosco que aun no tienen
+incidencia (`unreported_discards`) se señalan en la fila.
+
+El dialogo de desvinculacion repite esos tres avisos antes de confirmar: cola
+pendiente, cola desconocida y descartes sin avisar. Desvincular no toca la cola
+(regla dura 19); se enseña para que quien confirma vea el dato antes de decidir.
+
 ## `KIOSK_SERVICE_CODE` vive en «Ajustes operativos», no aqui
 
 El codigo de servicio con el que se abre la pantalla de diagnostico de la
