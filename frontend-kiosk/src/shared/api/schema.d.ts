@@ -719,6 +719,9 @@ export interface paths {
          *     es `null` y la salud es `failure` (`queue_storage_degraded`).
          *     `unreported_discards` cuenta los fichajes descartados cuyo aviso aun no ha
          *     llegado al servidor (`discards_unreported`).
+         *     Un quiosco cuya `app_version` es anterior a la del servidor esta en
+         *     `warning` (`app_version_behind`): se pondra al dia solo, sin dejar de
+         *     fichar (regla dura 19).
          *
          *     **`admin` y solo `admin`, con ambito `settings:*`** (documento 02 §7.3,
          *     nota 5). Gestionar dispositivos es la misma potestad que configurar la
@@ -6109,8 +6112,9 @@ export interface components {
         /**
          * KioskHeartbeat
          * @description Lo que el servidor le devuelve al quiosco: su hora, cuantos errores de
-         *     cliente ha aceptado, los ajustes que la tablet necesita sin red y, solo
-         *     cuando toca, el relevo de su token (`rotated_token`).
+         *     cliente ha aceptado, los ajustes que la tablet necesita sin red, la
+         *     version minima de la PWA (`minimum_app_version`, cuando el servidor la
+         *     conoce) y, solo cuando toca, el relevo de su token (`rotated_token`).
          */
         KioskHeartbeat: {
             /**
@@ -6206,6 +6210,28 @@ export interface components {
                  */
                 quiet_minutes: number;
             };
+            /**
+             * @description **La version minima de la PWA del quiosco que publica el servidor**
+             *     (RF-KI-07, RF-PA-07). Es la version del propio servidor —la misma
+             *     `version` de `GET /health/live`—: quiosco y servidor salen del mismo
+             *     fichero `VERSION`, de modo que una tablet que declara en
+             *     `app_version` una version anterior a esta corre una PWA que ya no es
+             *     la desplegada.
+             *
+             *     **Una tablet por debajo se pone al dia en cuanto pueda, sin bloquear
+             *     el fichaje** (regla dura 19): sigue fichando y encolando con
+             *     normalidad, y solo se recarga con la cola vacia y sin escaneos en los
+             *     ultimos `update_window.quiet_minutes`. Que la tablet vaya por detras
+             *     no cambia ni un fichaje; en el panel el quiosco pasa a `warning`
+             *     (`DeviceHealth.reason` = `app_version_behind`).
+             *
+             *     **Opcional y aditivo.** El servidor lo **omite** —nunca lo manda a
+             *     `null`— si no puede resolver su propia version; entonces la tablet
+             *     sigue con su cadencia normal de actualizacion. Una PWA anterior a la
+             *     2.2.1 lo ignora.
+             * @example 2.2.1
+             */
+            minimum_app_version?: string;
             /**
              * @description **El relevo del token del quiosco** (RF-ID-04, documento 02 §7.3,
              *     [ADR-044](../adr/ADR-044-el-token-del-quiosco-rota-en-el-latido-con-solape.md)).
@@ -6627,9 +6653,16 @@ export interface components {
              */
             status: "active" | "revoked";
             /**
-             * @description Version de la PWA que declaro el ultimo latido. `null` mientras no haya
-             *     latido alguno —una tablet recien vinculada que aun no ha arrancado— o
-             *     en un quiosco revocado que nunca llego a usarse.
+             * @description Version de la PWA **declarada por la tablet en su ultimo latido**
+             *     (`KioskHeartbeatRequest.app_version`; antes del primero, la que
+             *     declaro al vincularse). Lo dice el dispositivo y nadie lo comprueba.
+             *     `null` mientras la tablet no haya declarado ninguna —un dispositivo sin
+             *     emparejamiento por codigo que aun no ha latido— o en un quiosco
+             *     revocado que nunca llego a usarse.
+             *
+             *     Si es anterior a la version del servidor (la que el latido devuelve en
+             *     `minimum_app_version`), o no es SemVer, la salud del quiosco es
+             *     `warning` con `app_version_behind`.
              * @example 1.4.2
              */
             app_version: string | null;
@@ -6718,7 +6751,8 @@ export interface components {
         DeviceHealth: {
             /**
              * @description `ok` late y no debe nada; `warning` late tarde, tiene cola, tiene
-             *     descartes sin avisar, se descarga o acaba de vincularse; `failure`
+             *     descartes sin avisar, se descarga, corre una PWA anterior a la del
+             *     servidor o acaba de vincularse; `failure`
              *     lleva mas de `silent_after_seconds` callado, nunca ha hablado o tiene
              *     la cola en memoria; `revoked` esta desvinculado y no cuenta para nada.
              * @enum {string}
@@ -6734,10 +6768,15 @@ export interface components {
              *     reinicia), `late` (mas de `fresh_within_seconds`),
              *     `discards_unreported` (`unreported_discards` mayor que cero:
              *     `warning`), `battery_low` (por debajo de `battery_low_percent` **y sin
-             *     cargar**), `queue_pending`, `beating`.
+             *     cargar**),
+             *     `app_version_behind` (`app_version` anterior a la version del
+             *     servidor —la `minimum_app_version` del latido— o que no es SemVer:
+             *     `warning`; la tablet se pone al dia sola en cuanto tiene la cola
+             *     vacia y nadie ficha, sin dejar de fichar entre tanto, regla dura 19),
+             *     `queue_pending`, `beating`.
              * @enum {string}
              */
-            reason: "beating" | "queue_pending" | "late" | "silent" | "awaiting_first_heartbeat" | "never_seen" | "revoked" | "battery_low" | "queue_storage_degraded" | "discards_unreported";
+            reason: "beating" | "queue_pending" | "late" | "silent" | "awaiting_first_heartbeat" | "never_seen" | "revoked" | "battery_low" | "queue_storage_degraded" | "discards_unreported" | "app_version_behind";
             /**
              * @description Segundos entre `meta.generated_at` y `last_seen_at`, calculados con el
              *     reloj del servidor. `null` sin latido. Es la misma cifra que
