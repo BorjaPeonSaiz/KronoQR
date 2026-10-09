@@ -102,8 +102,8 @@ brightness, the Android update window and the network — is in the runbook
 ### 1.1 Unpack the package
 
 ```bash
-tar xzf kronoqr-2.1.0.tar.gz
-cd kronoqr-2.1.0
+tar xzf kronoqr-2.2.0.tar.gz
+cd kronoqr-2.2.0
 ls
 ```
 
@@ -296,9 +296,9 @@ Expected output:
 
 ```
 Phase 1 of 5 — checking requirements. Nothing is written yet.
-  [ok]    Compose file /opt/kronoqr-2.1.0/docker-compose.yml
-  [ok]    Version being installed: 2.1.0
-  [ok]    Configuration template /opt/kronoqr-2.1.0/.env
+  [ok]    Compose file /opt/kronoqr-2.2.0/docker-compose.yml
+  [ok]    Version being installed: 2.2.0
+  [ok]    Configuration template /opt/kronoqr-2.2.0/.env
   [ok]    Permission to talk to Docker
   [ok]    Docker 27.3.1 (24 or newer required)
   [ok]    Docker Compose v2 (2.29.7)
@@ -326,13 +326,13 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    ALERT_EMAIL_*: there is at least one alert recipient
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    Name fichaje.tuhotel.local resolves from this server
-  [ok]    TLS certificate in /opt/kronoqr-2.1.0/certs
+  [ok]    TLS certificate in /opt/kronoqr-2.2.0/certs
   [ok]    The edge (uid 101) can read tls.crt
   [ok]    The edge (uid 101) can read tls.key
   [ok]    Port 80 free
   [ok]    Port 443 free
   [ok]    Writable: /var/backups/fichaje
-  [ok]    Writable: /opt/kronoqr-2.1.0
+  [ok]    Writable: /opt/kronoqr-2.2.0
   [ok]    Privileges to set the owner of the WAL archive
 
 Requirements met: 38 checks, 0 warnings.
@@ -367,7 +367,7 @@ It takes between three and fifteen minutes, depending on how long the images
 take to download. You will see the five phases. At the end:
 
 ```
-KronoQR 2.1.0 installed and verified.
+KronoQR 2.2.0 installed and verified.
 
   Admin panel:       https://fichaje.tuhotel.local/admin/
   Kiosk (tablet):    https://fichaje.tuhotel.local/kiosk/
@@ -378,7 +378,7 @@ the organisation, the site, the first administrator and the first kiosk.
 Until you finish it there is no account at all: the installer creates no
 users.
 
-DOCUMENTATION, in /opt/kronoqr-2.1.0/docs
+DOCUMENTATION, in /opt/kronoqr-2.2.0/docs
   ...
 
 BEFORE YOU LOG OUT: keep BACKUP_ENCRYPTION_KEY outside this server
@@ -1033,7 +1033,7 @@ What to do, in this order:
    append-only and cannot be rewritten:
 
    ```bash
-   cd /opt/kronoqr-2.1.0
+   cd /opt/kronoqr-2.2.0
    sudo docker compose --env-file .env -f docker-compose.yml \
      exec -T postgres psql -U fichaje_migrator -d fichaje -c \
      "SELECT occurred_at, action, ip, payload
@@ -1106,7 +1106,7 @@ again, this time inside `tmux` (§1.4):
 Only if you are sure that **there is no data to keep**:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+cd /opt/kronoqr-2.2.0
 sudo docker compose --env-file .env -f docker-compose.yml down -v --remove-orphans
 sudo rm -f .env
 sudo rm -rf /var/backups/fichaje

@@ -103,8 +103,8 @@ que también cubre el emparejamiento de la primera tablet.
 ### 1.1 Descomprime el paquete
 
 ```bash
-tar xzf kronoqr-2.1.0.tar.gz
-cd kronoqr-2.1.0
+tar xzf kronoqr-2.2.0.tar.gz
+cd kronoqr-2.2.0
 ls
 ```
 
@@ -295,9 +295,9 @@ Salida esperada:
 
 ```
 Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
-  [ok]    Fichero de compose /opt/kronoqr-2.1.0/docker-compose.yml
-  [ok]    Version que se instala: 2.1.0
-  [ok]    Plantilla de configuracion /opt/kronoqr-2.1.0/.env
+  [ok]    Fichero de compose /opt/kronoqr-2.2.0/docker-compose.yml
+  [ok]    Version que se instala: 2.2.0
+  [ok]    Plantilla de configuracion /opt/kronoqr-2.2.0/.env
   [ok]    Permiso para hablar con Docker
   [ok]    Docker 27.3.1 (se exige 24 o superior)
   [ok]    Docker Compose v2 (2.29.7)
@@ -325,13 +325,13 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    ALERT_EMAIL_*: hay al menos un destinatario de alertas
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    El nombre fichaje.tuhotel.local resuelve desde este servidor
-  [ok]    Certificado TLS en /opt/kronoqr-2.1.0/certs
+  [ok]    Certificado TLS en /opt/kronoqr-2.2.0/certs
   [ok]    El borde (uid 101) puede leer tls.crt
   [ok]    El borde (uid 101) puede leer tls.key
   [ok]    Puerto 80 libre
   [ok]    Puerto 443 libre
   [ok]    Se puede escribir en /var/backups/fichaje
-  [ok]    Se puede escribir en /opt/kronoqr-2.1.0
+  [ok]    Se puede escribir en /opt/kronoqr-2.2.0
   [ok]    Privilegios para asignar el propietario del archivo de WAL
 
 Requisitos cumplidos: 38 comprobaciones, 0 avisos.
@@ -366,7 +366,7 @@ Tarda entre tres y quince minutos, según lo que tarde en descargar las
 imágenes. Verás las cinco fases. Al terminar:
 
 ```
-KronoQR 2.1.0 instalado y verificado.
+KronoQR 2.2.0 instalado y verificado.
 
   Panel de gestion:    https://fichaje.tuhotel.local/admin/
   Quiosco (tablet):    https://fichaje.tuhotel.local/kiosk/
@@ -377,7 +377,7 @@ que crea la organizacion, el centro, el primer administrador y el primer
 quiosco. Hasta que lo termines no hay ninguna cuenta: el instalador no crea
 usuarios.
 
-DOCUMENTACION, en /opt/kronoqr-2.1.0/docs
+DOCUMENTACION, en /opt/kronoqr-2.2.0/docs
   ...
 
 ANTES DE CERRAR LA SESION: custodia BACKUP_ENCRYPTION_KEY fuera de este
@@ -1014,7 +1014,7 @@ Qué hacer, en este orden:
    puede reescribir:
 
    ```bash
-   cd /opt/kronoqr-2.1.0
+   cd /opt/kronoqr-2.2.0
    sudo docker compose --env-file .env -f docker-compose.yml \
      exec -T postgres psql -U fichaje_migrator -d fichaje -c \
      "SELECT occurred_at, action, ip, payload
@@ -1084,7 +1084,7 @@ esta vez dentro de `tmux` (§1.4):
 Solo si estás seguro de que **no hay datos que conservar**:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+cd /opt/kronoqr-2.2.0
 sudo docker compose --env-file .env -f docker-compose.yml down -v --remove-orphans
 sudo rm -f .env
 sudo rm -rf /var/backups/fichaje

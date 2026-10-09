@@ -9,7 +9,7 @@ Se vende a clientes distintos y **se despliega en el servidor de cada uno**. No 
 Antes de escribir código, lee lo que corresponda a tu tarea:
 
 - [docs/01-especificaciones-proyecto.md](docs/01-especificaciones-proyecto.md) — requisitos (`RF-*`), reglas de negocio (`RN-*`), modelo de dominio, requisitos legales (`RL-*`), seguridad (`RS-*`), calidad (`RQ-*`)
-- [docs/02-stack-tecnologico-y-plan-implementacion.md](docs/02-stack-tecnologico-y-plan-implementacion.md) — arquitectura, stack, 28 ADRs, seguridad, observabilidad, pruebas y plan por fases **con el agente asignado a cada tarea**
+- [docs/02-stack-tecnologico-y-plan-implementacion.md](docs/02-stack-tecnologico-y-plan-implementacion.md) — arquitectura, stack, 57 ADRs, seguridad, observabilidad, pruebas y plan por fases **con el agente asignado a cada tarea**
 - [docs/03-agentes-y-skills-ia.md](docs/03-agentes-y-skills-ia.md) — qué agente y qué skill usar en cada situación, y los prompts de arranque de cada hito
 - [docs/04-decision-credencial.md](docs/04-decision-credencial.md) — por qué la credencial es una tarjeta física
 - [docs/05-presentacion-cliente.md](docs/05-presentacion-cliente.md) — **lo que se le ha prometido al cliente.** Si lo que vas a implementar contradice este documento, o el documento promete algo que no existe como requisito, para y dilo
@@ -97,7 +97,7 @@ Consulta [docs/02-stack-tecnologico-y-plan-implementacion.md](docs/02-stack-tecn
 
 ## Agentes y skills
 
-Hay 10 agentes en `.claude/agents/` y 6 skills en `.claude/skills/`.
+Hay 11 agentes en `.claude/agents/` y 7 skills en `.claude/skills/`.
 
 **El plan de implementación del documento 02, §11, indica el agente y la skill de cada tarea.** Si estás ejecutando una tarea del plan, usa el que ahí se indica. Para trabajo ad-hoc, consulta [docs/03-agentes-y-skills-ia.md](docs/03-agentes-y-skills-ia.md).
 

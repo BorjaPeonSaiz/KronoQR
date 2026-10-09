@@ -2,7 +2,7 @@
 
 **Control de presencia y registro horario con valor legal para hoteles, mediante tarjeta QR y tablet‑quiosco.**
 
-![Versión](https://img.shields.io/badge/versión-2.1.0-1f6feb)
+![Versión](https://img.shields.io/badge/versión-2.2.0-1f6feb)
 ![PHP](https://img.shields.io/badge/PHP-8.4-777bb4)
 ![Laravel](https://img.shields.io/badge/Laravel-13-ff2d20)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791)
@@ -120,7 +120,7 @@ El backend se organiza en ocho módulos con fronteras verificadas por Deptrac:
 | `Product` | Configuración de instalación, perfiles de cumplimiento, marca blanca, licencia, diagnóstico y soporte. |
 | `Shared` | Objetos de valor comunes, puertos transversales (`Clock`, proveedores de configuración) y contratos de eventos. |
 
-Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework) → `Application/` (casos de uso y puertos) → `Infrastructure/` (Eloquent, adaptadores, proyecciones) + `Http/` (controladores, requests, recursos, policies). Las decisiones que justifican este diseño están en [`docs/adr/`](docs/adr/) (51 ADR).
+Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework) → `Application/` (casos de uso y puertos) → `Infrastructure/` (Eloquent, adaptadores, proyecciones) + `Http/` (controladores, requests, recursos, policies). Las decisiones que justifican este diseño están en [`docs/adr/`](docs/adr/) (57 ADR).
 
 ### 1.5 Cómo se ha construido: desarrollo asistido por IA
 
@@ -290,7 +290,7 @@ No existe instalador de Windows (ADR‑022): en infraestructuras Windows se inst
 #### Procedimiento resumido
 
 ```bash
-tar xzf kronoqr-2.1.0.tar.gz && cd kronoqr-2.1.0
+tar xzf kronoqr-2.2.0.tar.gz && cd kronoqr-2.2.0
 
 # 1. Certificado TLS, legible por el borde sin privilegios (uid 101)
 cp /ruta/certificado.crt certs/tls.crt && cp /ruta/clave.key certs/tls.key
@@ -490,7 +490,7 @@ Los roles con acceso global (`admin`, `rrhh`, `auditor`) tienen 2FA obligatorio:
 - **Umbrales**: PHPStan nivel 9, cobertura del dominio ≥ 90 % y global ≥ 75 %, MSI ≥ 80 % sobre el dominio, 0 hallazgos en ShellCheck, Semgrep y gitleaks.
 - **Pipeline de CI** en ocho etapas: lint y tipos → arquitectura → unitarias y mutación de lo cambiado → trazabilidad → integración y contrato → seguridad → frontend → E2E → instalación limpia desde el paquete de entrega y actualización desde la versión anterior.
 - **Seguridad**: modelo de amenazas STRIDE, revisión interna OWASP ASVS, autoevaluación OWASP SAMM 2.0 con evidencia ([`docs/07-seguridad-madurez-y-amenazas.md`](docs/07-seguridad-madurez-y-amenazas.md)), SBOM CycloneDX por versión y política de divulgación en [`SECURITY.md`](SECURITY.md).
-- **Verificación pre-release**: antes de dar la 2.1.0 por entregable se hizo una verificación completa con agentes en modo solo lectura ([`docs/verificacion/`](docs/verificacion/)), que produjo el plan de correcciones de la 2.2.0, en curso.
+- **Verificación pre-release**: antes de dar la 2.1.0 por entregable se hizo una verificación completa con agentes en modo solo lectura ([`docs/verificacion/`](docs/verificacion/)), que produjo el plan de correcciones de la 2.2.0; antes de publicarla se repitió la verificación sobre `main` (`docs/verificacion/2.2.0-verificacion-final-resumen.md`).
 - **Versionado** SemVer con `CHANGELOG.md` generado desde commits convencionales; la publicación se dispara al etiquetar `vX.Y.Z`.
 
 ---
