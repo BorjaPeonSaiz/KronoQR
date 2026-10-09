@@ -584,6 +584,297 @@ it('en modo in-place la copia del .env de la vuelta atras anula los digests y el
         ->and($vivo)->not->toContain('IMAGE_DIGEST_NGINX');
 })->group('RF-PD-10', 'RS-08');
 
+/**
+ * Un escenario in place parado en el paso 2 o 3, con `docker` sustituido por una
+ * funcion que apunta cada orden y falla solo en la que se le diga. Devuelve la
+ * salida, el codigo y, tras `--- docker`, `--- dir` y `--- env`, las ordenes de
+ * Compose, los ficheros que quedan en el directorio de la instalacion y su .env.
+ */
+function inPlaceParadoAntesDeMigrar(string $paso): Process
+{
+    $proceso = bashConElActualizador(<<<BASH
+        kq_msg_init es
+        d="\$(mktemp -d)"
+        log="\${d}/docker.log"
+        : >"\${log}"
+        trap 'printf "%s\\n" "--- docker"; cat "\${log}"; printf "%s\\n" "--- dir"; ls -A "\${d}"; printf "%s\\n" "--- env"; cat "\${d}/.env"; rm -rf "\${d}"' EXIT
+        docker() {
+          local IFS=' '
+          printf '%s\\n' "\$*" >>"\${log}"
+          case " \$* " in *" backup:run "*) return 1 ;; esac
+          return 0
+        }
+        printf 'APP_KEY=base64:prueba\\nIMAGE_TAG=2.2.0\\n' >"\${d}/.env"
+        : >"\${d}/docker-compose.yml"
+        IN_PLACE=1
+        ENV_FILE="\${d}/.env"; COMPOSE_FILE="\${d}/docker-compose.yml"; PACKAGE_DIR="\${d}"
+        CURRENT_DIR="\${d}"; CURRENT_ENV="\${d}/.env"; CURRENT_COMPOSE="\${d}/docker-compose.yml"
+        # In place solo se admite desde la 2.2.0 (check_in_place_source).
+        SOURCE_VERSION=2.2.0; TARGET_VERSION=2.3.0; CFG_BACKUP_PATH="\${d}/copias"
+        prepare_package
+        test -f "\${d}/.env.kronoqr-pre-update"
+        MAINTENANCE_SINCE="\$(now_epoch)"
+        ROLLBACK_ARMED=1
+        {$paso}
+        BASH);
+
+    return $proceso;
+}
+
+it('in place, si la copia previa falla, vuelve a ARRANCAR los procesos parados sin recrearlos y retira la copia del .env (V7-RV-1, V7-RV-2)', function (): void {
+    // El defecto: `lift_maintenance` hacia `up -d horizon scheduler` con el
+    // docker-compose.yml de la instalacion, que in place ya es el del paquete
+    // nuevo con el digest nuevo por defecto. Compose recreaba horizon y
+    // scheduler con la imagen NUEVA sobre el esquema VIEJO (y, sin --no-deps,
+    // postgres y redis si su definicion cambiaba) y el mensaje decia «no se ha
+    // tocado». Y la copia `.env.kronoqr-pre-update`, con todos los secretos, se
+    // quedaba en el directorio.
+    $proceso = inPlaceParadoAntesDeMigrar('STEP=3; phase_backup');
+
+    [$salida, $resto] = explode("--- docker\n", $proceso->getOutput(), 2);
+    [$docker, $resto] = explode("--- dir\n", $resto, 2);
+    [$dir, $env] = explode("--- env\n", $resto, 2);
+
+    expect($proceso->getExitCode())->toBe(2, $proceso->getErrorOutput().$proceso->getOutput())
+        ->and($proceso->getErrorOutput())->toContain('LA COPIA PREVIA HA FALLADO')
+        ->and($docker)->toContain('artisan backup:run')
+        ->and($docker)->toMatch('/ exec -T app php artisan up$/m')
+        ->and($docker)->toMatch('/ start horizon scheduler$/m')
+        // Ninguna orden que cree o recree contenedores de servicio.
+        ->and($docker)->not->toMatch('/ up -d/')
+        ->and($dir)->not->toContain('.env.kronoqr-pre-update')
+        // La copia pasa a ser el .env: con el compose nuevo que ya hay en el
+        // directorio, un `docker compose up` a mano levanta la imagen vieja.
+        ->and($env)->toContain("IMAGE_TAG=2.2.0\n")
+        ->and($env)->toMatch('/^IMAGE_DIGEST_PHP=$/m');
+    expect($salida)->toContain('Mantenimiento retirado');
+})->group('RF-PD-10', 'RS-08');
+
+it('in place, la vuelta atras que solo tenia que retirar el mantenimiento tampoco recrea nada (V7-RV-1)', function (): void {
+    // El otro camino que llegaba a lift_maintenance: una señal o un fallo en
+    // los pasos 2 o 3 (ROLLBACK_ARMED=1).
+    $proceso = inPlaceParadoAntesDeMigrar('STEP=2; rollback_and_die "prueba" maintenance_failed');
+
+    [, $resto] = explode("--- docker\n", $proceso->getOutput(), 2);
+    [$docker, $resto] = explode("--- dir\n", $resto, 2);
+    [$dir, $env] = explode("--- env\n", $resto, 2);
+
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput().$proceso->getOutput())
+        ->and($docker)->toMatch('/ start horizon scheduler$/m')
+        ->and($docker)->not->toMatch('/ up -d/')
+        ->and($dir)->not->toContain('.env.kronoqr-pre-update')
+        ->and($env)->toMatch('/^IMAGE_DIGEST_PHP=$/m');
+})->group('RF-PD-10');
+
+it('exige que el rol de la aplicacion no escriba en migrations tras migrar, y no tras restaurar una copia anterior (V4-SC-1)', function (): void {
+    // Tras migrar a la 2.2.0 la migracion que lo revoca ya esta aplicada: si el
+    // rol sigue pudiendo escribir en `migrations`, se deshace. Tras restaurar, la
+    // copia es de la version ANTERIOR (la 2.1.0 no lo revoca): exigirlo dejaria a
+    // medias una vuelta atras correcta.
+    $proceso = bashConElActualizador(<<<'BASH'
+        kq_msg_init es
+        respuesta_migrations=t
+        psql_migrator() {
+          case "$2" in
+          *"'migrations'"*) printf '%s' "${respuesta_migrations}" ;;
+          *"'shift_entries', 'INSERT'"*) printf 't' ;;
+          *) printf 'f' ;;
+          esac
+        }
+        r=0; verify_privileges compose_new migrations || r=$?; printf 'tras-migrar=%s\n' "${r}"
+        r=0; verify_privileges compose_new || r=$?; printf 'sin-alcance=%s\n' "${r}"
+        respuesta_migrations=f
+        r=0; verify_privileges compose_new migrations || r=$?; printf 'revocado=%s\n' "${r}"
+        BASH);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('tras-migrar=2')
+        ->and($proceso->getOutput())->toContain('sin-alcance=0')
+        ->and($proceso->getOutput())->toContain('revocado=0');
+
+    $actualizador = (string) file_get_contents(Repo::file('infra/scripts/update.sh'));
+    expect($actualizador)->toContain('verify_privileges compose_new migrations || privileges=$?')
+        ->and($actualizador)->toContain('u_f_verify_privileges_migrations');
+})->group('RF-PD-10', 'RS-07');
+
+it('al terminar lado a lado retira el directorio anterior: docker compose falla alli con un mensaje y se deshace con un mv (V7-SC-1)', function (): void {
+    $proceso = bashConElActualizador(<<<'BASH'
+        kq_msg_init es
+        base="$(mktemp -d)"
+        trap 'rm -rf "${base}"' EXIT
+        mkdir -p "${base}/kronoqr-2.1.0" "${base}/kronoqr-2.2.0"
+        printf 'name: kronoqr\n' >"${base}/kronoqr-2.1.0/docker-compose.yml"
+        printf 'APP_KEY=x\n' >"${base}/kronoqr-2.1.0/.env"
+        chmod 0644 "${base}/kronoqr-2.1.0/.env"
+        IN_PLACE=0; SOURCE_VERSION=2.1.0; TARGET_VERSION=2.2.0; STARTED_UTC=20261009T120000Z
+        CURRENT_DIR="${base}/kronoqr-2.1.0"; CURRENT_COMPOSE="${CURRENT_DIR}/docker-compose.yml"
+        PACKAGE_DIR="${base}/kronoqr-2.2.0"
+        retire_previous_directory
+        printf 'retirado=%s\n' "${RETIRED_COMPOSE##*/}"
+        printf '%s\n' '--- original'
+        cat "${CURRENT_DIR}/docker-compose.yml.retirado-2.1.0"
+        printf '%s\n' '--- stub'
+        cat "${CURRENT_DIR}/docker-compose.yml"
+        printf 'modo-env=%s\n' "$(stat -c '%a' "${CURRENT_DIR}/.env")"
+        printf '%s\n' '--- otra vez'
+        cp "${CURRENT_DIR}/docker-compose.yml" "${base}/stub-antes"
+        retire_previous_directory
+        printf 'retirado-2=[%s]\n' "${RETIRED_COMPOSE}"
+        cmp -s "${base}/stub-antes" "${CURRENT_DIR}/docker-compose.yml" && printf 'stub intacto\n'
+        ls -A "${CURRENT_DIR}"
+        BASH);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput().$proceso->getOutput());
+
+    [$cabecera, $resto] = explode("--- original\n", $proceso->getOutput(), 2);
+    [$original, $resto] = explode("--- stub\n", $resto, 2);
+    [$stub, $otraVez] = explode("--- otra vez\n", $resto, 2);
+
+    expect($cabecera)->toContain('retirado=docker-compose.yml.retirado-2.1.0')
+        ->and($original)->toBe("name: kronoqr\n")
+        // Otro proyecto, y una imagen que es una variable obligatoria sin valor:
+        // Compose falla al interpolar, antes de tocar nada, con este mensaje.
+        ->and($stub)->toContain('name: kronoqr-directorio-retirado')
+        ->and($stub)->toMatch('/^    image: "\$\{KRONOQR_DIRECTORIO_RETIRADO:\?ESTE DIRECTORIO ESTA RETIRADO[^"$}\\\\]*\}"$/m')
+        ->and($stub)->toContain('/kronoqr-2.2.0 (version 2.2.0)')
+        ->and($stub)->toContain('sudo mv ')
+        ->and($stub)->not->toContain('name: kronoqr'."\n")
+        // Su .env sigue ahi, pero en 0600 (lleva los mismos secretos).
+        ->and($stub)->toContain('modo-env=600')
+        // Repetirlo no hace nada: reconoce el sustituto y no lo «retira» a su vez,
+        // que dejaria el `mv` del mensaje devolviendo el sustituto.
+        ->and($otraVez)->toContain('retirado-2=[]')
+        ->and($otraVez)->toContain('stub intacto')
+        ->and($otraVez)->not->toContain('20261009T120000Z')
+        ->and($otraVez)->toContain("docker-compose.yml.retirado-2.1.0\n");
+})->group('RF-PD-10', 'RS-08');
+
+it('in place no retira nada: el directorio de la instalacion es el vigente (V7-SC-1)', function (): void {
+    $proceso = bashConElActualizador(<<<'BASH'
+        kq_msg_init es
+        d="$(mktemp -d)"
+        trap 'rm -rf "${d}"' EXIT
+        printf 'name: kronoqr\n' >"${d}/docker-compose.yml"
+        IN_PLACE=1; SOURCE_VERSION=2.1.0; TARGET_VERSION=2.2.0; STARTED_UTC=20261009T120000Z
+        CURRENT_DIR="${d}"; CURRENT_COMPOSE="${d}/docker-compose.yml"; PACKAGE_DIR="${d}"
+        retire_previous_directory
+        ls -A "${d}"
+        BASH);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and(trim($proceso->getOutput()))->toBe('docker-compose.yml');
+})->group('RF-PD-10');
+
+it('rechaza en el paso 1 actualizar in place desde una version anterior a la 2.2.0, sin tocar nada', function (): void {
+    // Desde la 2.1.0 la copia previa la haria la imagen nueva con el superusuario
+    // en BACKUP_DB_* (y el backup.sh nuevo lo rechaza), y la vuelta atras dejaria
+    // la 2.1.0 con montajes de copias que no sabe usar: ninguna copia nocturna.
+    $proceso = bashConElActualizador(<<<'BASH'
+        kq_msg_init es
+        TARGET_VERSION=2.2.0; CURRENT_DIR=/opt/kronoqr-2.1.0; CURRENT_COMPOSE=/opt/kronoqr-2.1.0/docker-compose.yml
+        CHECKS_RUN=0; CHECKS_FAILED=0; CHECKS_WARNED=0
+        IN_PLACE=1; SOURCE_VERSION=2.1.0; check_in_place_source; printf 'desde-2.1.0=%s\n' "${CHECKS_FAILED}"
+        CHECKS_FAILED=0; IN_PLACE=1; SOURCE_VERSION=2.2.0; TARGET_VERSION=2.3.0; check_in_place_source; printf 'desde-2.2.0=%s\n' "${CHECKS_FAILED}"
+        CHECKS_FAILED=0; IN_PLACE=0; SOURCE_VERSION=2.1.0; TARGET_VERSION=2.2.0; check_in_place_source; printf 'lado-a-lado=%s\n' "${CHECKS_FAILED}"
+        BASH);
+
+    $salida = $proceso->getOutput();
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($salida)->toContain('desde-2.1.0=1')
+        ->and($salida)->toContain('desde-2.2.0=0')
+        ->and($salida)->toContain('lado-a-lado=0')
+        ->and($salida)->toContain('no se puede actualizar con el paquete descomprimido ENCIMA')
+        // La orden para volver a lado a lado, con las rutas y versiones reales.
+        ->and($salida)->toContain('tar xzf kronoqr-2.1.0.tar.gz -O kronoqr-2.1.0/docker-compose.yml | sudo tee /opt/kronoqr-2.1.0/docker-compose.yml')
+        ->and($salida)->toContain('cd /opt && tar xzf kronoqr-2.2.0.tar.gz');
+
+    // Es una precondicion: va en la lista, justo despues de la version de origen.
+    $actualizador = (string) file_get_contents(Repo::file('infra/scripts/update.sh'));
+    expect($actualizador)->toContain("  check_source_version\n  check_in_place_source\n");
+})->group('RF-PD-10', 'RQ-11');
+
+/**
+ * prepare_package lado a lado con una carpeta de marca en el directorio actual.
+ * $antes prepara el directorio nuevo y $sustituto puede redefinir `cp`.
+ */
+function marcaAlActualizar(string $antes, string $sustituto = ''): Process
+{
+    return bashConElActualizador(<<<BASH
+        kq_msg_init es
+        base="\$(mktemp -d)"
+        trap 'rm -rf "\${base}"' EXIT
+        mkdir -p "\${base}/viejo/branding" "\${base}/nuevo"
+        printf 'PNG' >"\${base}/viejo/branding/logo.png"
+        printf 'APP_KEY=base64:prueba\nIMAGE_TAG=2.1.0\n' >"\${base}/viejo/.env"
+        IN_PLACE=0; TARGET_VERSION=2.2.0; CFG_TLS_CERT_DIR=""
+        CURRENT_DIR="\${base}/viejo"; CURRENT_ENV="\${base}/viejo/.env"
+        PACKAGE_DIR="\${base}/nuevo"; ENV_FILE="\${base}/nuevo/.env"
+        {$antes}
+        {$sustituto}
+        prepare_package
+        printf '%s\n' '--- nuevo'
+        ls -A "\${base}/nuevo/branding" 2>/dev/null || printf '(sin carpeta)\n'
+        BASH);
+}
+
+it('copia la carpeta de marca al directorio nuevo al actualizar lado a lado (RF-PD-08)', function (): void {
+    $proceso = marcaAlActualizar('');
+
+    [, $nuevo] = explode("--- nuevo\n", $proceso->getOutput(), 2);
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput().$proceso->getOutput())
+        ->and($proceso->getOutput())->toContain('Copiando la carpeta de marca')
+        ->and(trim($nuevo))->toBe('logo.png');
+})->group('RF-PD-08', 'RF-PD-10');
+
+it('la copia tambien si en un reintento Docker ya dejo la carpeta creada y vacia, y no toca una con contenido', function (): void {
+    $vacia = marcaAlActualizar('mkdir -p "${base}/nuevo/branding"');
+    [, $nuevo] = explode("--- nuevo\n", $vacia->getOutput(), 2);
+    expect($vacia->getExitCode())->toBe(0, $vacia->getErrorOutput().$vacia->getOutput())
+        ->and(trim($nuevo))->toBe('logo.png');
+
+    $propia = marcaAlActualizar('mkdir -p "${base}/nuevo/branding" && printf X >"${base}/nuevo/branding/otro.svg"');
+    [, $nuevo] = explode("--- nuevo\n", $propia->getOutput(), 2);
+    expect($propia->getExitCode())->toBe(0, $propia->getErrorOutput())
+        ->and($propia->getOutput())->not->toContain('Copiando la carpeta de marca')
+        ->and(trim($nuevo))->toBe('otro.svg');
+})->group('RF-PD-08', 'RF-PD-10');
+
+it('si no puede copiar la carpeta de marca avisa con la orden y sigue: sin logotipo se ficha igual', function (): void {
+    $proceso = marcaAlActualizar('', 'cp() { case "$*" in *branding*) return 1 ;; esac; command cp "$@"; }');
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput().$proceso->getOutput())
+        ->and($proceso->getOutput())->toContain('[aviso]')
+        ->and($proceso->getOutput())->toContain('sudo cp -a ');
+})->group('RF-PD-08', 'RF-PD-10');
+
+it('antes de deshacer por el permiso sobre migrations, el migrador lo retira otra vez y solo deshace si sigue (V4-SC-1)', function (): void {
+    $proceso = bashConElActualizador(<<<'BASH'
+        kq_msg_init es
+        CFG_DB_USERNAME=fichaje_app
+        estado=t
+        revoca=1
+        psql_migrator() {
+          case "$2" in
+          *"'migrations'"*) printf '%s' "${estado}" ;;
+          *"'shift_entries', 'INSERT'"*) printf 't' ;;
+          *) printf 'f' ;;
+          esac
+        }
+        compose_new() { [ "${revoca}" -eq 1 ] && estado=f; return 0; }
+        r=0; repair_migrations_privileges || r=$?; printf 'retirado-de-nuevo=%s\n' "${r}"
+        estado=t; revoca=0
+        r=0; repair_migrations_privileges || r=$?; printf 'sigue-pudiendo=%s\n' "${r}"
+        CFG_DB_USERNAME='x"; DROP'
+        r=0; repair_migrations_privileges || r=$?; printf 'nombre-raro=%s\n' "${r}"
+        BASH);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('retirado-de-nuevo=0')
+        ->and($proceso->getOutput())->toContain('sigue-pudiendo=2')
+        ->and($proceso->getOutput())->toContain('nombre-raro=1');
+})->group('RF-PD-10', 'RS-07');
+
 it('tras una vuelta atras in place el reintento retira las vacias que puso update.sh, y solo esas (A6-2)', function (): void {
     // La vuelta atras completada deja como .env la copia con IMAGE_DIGEST_*
     // vacias y una marca. El reintento las retira (corre las imagenes fijadas)

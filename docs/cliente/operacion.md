@@ -13,12 +13,16 @@
 > **¿Tienes un problema ahora mismo?** Ve directamente al **§18, «Qué hacer
 > si…»**: tablets que vuelven a emparejarse, Redis que no arranca, un `402`,
 > informes que no terminan, la copia nocturna fallida, exportaciones
-> «Caducadas» tras restaurar y una purga cuyo informe no está.
+> «Caducadas» tras restaurar, una purga cuyo informe no está, un directorio
+> «RETIRADO» tras actualizar y un planificador parado.
 
 ---
-> **Los comandos de esta guía se ejecutan desde el directorio del paquete**, que
-> es donde están `docker-compose.yml` y el `.env`. Si los lanzas desde otro
-> sitio, añade `-f /ruta/al/paquete/docker-compose.yml`.
+> **Los comandos de esta guía se ejecutan desde el directorio VIGENTE del
+> paquete**, que es donde están `docker-compose.yml` y el `.env`. Si los lanzas
+> desde otro sitio, añade `-f /ruta/al/paquete/docker-compose.yml`. **Tras
+> actualizar lado a lado, el vigente es el de la versión nueva**: `update.sh` lo
+> dice al terminar («DIRECTORIO VIGENTE») y retira el anterior, que desde
+> entonces hace fallar cualquier `docker compose` lanzado desde allí (§11).
 
 
 ## 1. El calendario, en una tabla
@@ -413,7 +417,7 @@ mensaje, que es lo que hay que leer.**
 | `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar. `doctor.sh`: **no hay ninguna instalación que diagnosticar** en este servidor — si es uno nuevo, lo que hace falta es `install.sh` |
 | `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada**. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
 | `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
-| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7). `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** (§18, «…la restauración se niega por integridad»). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`); con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
+| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7). `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** (§18, «…la restauración se niega por integridad»). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`) o porque `scheduler` u `horizon` están parados; con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
 | `7` | **Garantía de seguridad rota. NADA aplicado.** Un rol de la base de datos tiene más privilegios de los permitidos, o una copia ha intentado cambiarlos (AUD-1). No es una avería: es una garantía que el producto se niega a saltarse | `backup.sh`: el rol con el que se copia es superusuario, o puede crear roles o bases, o saltarse RLS; no se ha escrito ninguna copia y salta la alerta de copia fallida. `restore.sh` y `restore-drill.sh --mode database`: la copia ha cambiado roles del clúster al restaurarse; no se ha intercambiado ninguna base y se ha intentado devolver los roles a su estado. Sigue `rotacion-secretos.md` («El rol de las copias es privilegiado») o `restaurar-backup.md` §6.6 |
 | `129`, `130`, `143` | **Interrumpido antes de escribir nada**: `129` corte de la sesión SSH, `130` Ctrl+C, `143` `kill`. NADA escrito | `install.sh` y `update.sh`: solo en las fases que todavía no han tocado nada; desde que empiezan a escribir, una interrupción se trata como un fallo y sale con `4` o `5` tras deshacer. Ejecútalos dentro de `tmux` o `screen` (`instalacion.md` §1.4) |
 
@@ -471,7 +475,8 @@ cuatro años— se ha perdido.
 **Hazlo el día de la instalación, antes de cerrar la sesión:**
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# el directorio vigente de la instalación
+cd /opt/kronoqr-<version>
 sudo sed -n 's/^BACKUP_ENCRYPTION_KEY=//p' .env
 ```
 
@@ -938,6 +943,10 @@ sudo ./update.sh --check-only             # sin tocar nada: qué falta, si falta
 sudo ./update.sh                          # actualiza, verifica y vuelve atrás sola si falla
 ```
 
+**Al lado, no encima.** Descomprimido encima de una versión anterior a la 2.2.0,
+`update.sh` se niega en el paso 1 sin tocar nada e imprime las tres órdenes para
+hacerlo lado a lado ([`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md) §2).
+
 Los siete pasos y lo que pasa si falla cada uno:
 
 | Paso | Si falla | Estado en que queda | Qué hacer |
@@ -958,6 +967,23 @@ informe lo dice en su propia línea. El asiento de la vuelta atrás solo se escr
 que se vuelve ya conoce esa acción (desde la 2.2.0): una anterior no sabría verificar la cadena con
 él, así que el informe deja los datos y hay que escribirlo con `compliance:record-system-event`
 después de la siguiente actualización.
+
+**Desde qué directorio se trabaja después.** Tras una actualización lado a
+lado que termina bien, el directorio **vigente** es el de la versión nueva:
+`update.sh` lo dice en su última pantalla («DIRECTORIO VIGENTE: …») y, a
+partir de ahí, `docker compose`, `./doctor.sh`, `./backup.sh` y los cambios del
+`.env` o del logotipo se hacen desde él. El directorio anterior queda
+**retirado**: su `docker-compose.yml` pasa a llamarse
+`docker-compose.yml.retirado-<versión anterior>` y en su lugar hay uno que
+hace fallar cualquier orden de Compose lanzada desde allí con un mensaje que
+dice cuál es el vigente. Es a propósito: los dos directorios describen el mismo
+proyecto, y un `docker compose up -d` lanzado por costumbre desde el anterior
+bajaría la instalación a la versión anterior sobre una base ya migrada. Su
+`.env`, certificados y scripts siguen ahí, para la vuelta atrás a mano
+([`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md)
+§5.1). Si tienes un `cron` o un guion propio que apunte al directorio anterior,
+cámbialo. `./doctor.sh` avisa si lo ejecutas desde un directorio que no es el
+vigente. El logotipo, si estaba en `branding/` junto al compose, se copia solo.
 
 **Lo que no cambia:** tus secretos (el `.env` se copia tal cual y solo cambia
 `IMAGE_TAG`; la única excepción es la de abajo, al pasar de la 2.1.0), los
@@ -1398,6 +1424,20 @@ Si la aplicación **no arranca** y no puedes ejecutar `artisan`, está
 `./doctor.sh` (§8): hace desde fuera lo que puede —Docker, estado de cada
 servicio, `.env`, disco, certificados, puertos, el volumen de ficheros
 generados y su tamaño— y te dice cómo arrancarla.
+
+**Ejecuta `./doctor.sh` también con la aplicación en marcha.** Delega en
+`product:doctor`, que corre **dentro** de `app` y no ve los demás contenedores,
+y después comprueba desde fuera los tres procesos de fondo, con la orden para
+arrancar cada uno:
+
+| Servicio parado | Resultado | Por qué |
+| --- | --- | --- |
+| `scheduler` | **Fallo** (sale `6`) | Sin él no hay copia nocturna, ni verificación de la cadena de auditoría, ni conciliación del registro, ni purgas. El fichaje sigue y nada de eso avisa |
+| `horizon` | **Fallo** (sale `6`) | Sin él no termina ninguna exportación íntegra (la de la Inspección o la de un empleado que pide sus datos), ningún informe en diferido ni ningún aviso de incidencias. El fichaje sigue |
+| `reverb` | Aviso | Solo deja de actualizarse en vivo la presencia del panel; recargar da el dato bueno |
+
+También avisa si lo lanzas desde un directorio que no es el de la instalación
+vigente (el de antes de una actualización, por ejemplo).
 
 ### 12.2 El paquete de diagnóstico: qué es y cómo se genera
 
@@ -2823,3 +2863,50 @@ fue más que su copia legible (§3.1).
 
 Si la purga solo soltó particiones de auditoría, lo que hay que citar son sus
 asientos `retention.partition_sealed` y `retention.partition_dropped` (§3.1).
+
+### …`docker compose` dice «ESTE DIRECTORIO ESTA RETIRADO»
+
+**Síntoma.** Cualquier orden de Compose falla con `required variable
+KRONOQR_DIRECTORIO_RETIRADO is missing a value: ESTE DIRECTORIO ESTA RETIRADO
+(KronoQR 2.1.0). La instalacion vigente esta en /opt/kronoqr-2.2.0 …`.
+
+**Qué pasa.** Estás en el directorio de una versión **anterior** a la última
+actualización. `update.sh` lo retiró al terminar (§11) para que nadie bajara la
+instalación a esa versión por error. **No hay nada roto**: la instalación
+vigente sigue en marcha.
+
+**Qué hacer.** Ve al directorio que dice el mensaje y repite allí la orden:
+
+```bash
+cd /opt/kronoqr-<version>
+sudo docker compose ps
+```
+
+**No deshagas la retirada** (`mv` del `docker-compose.yml.retirado-…`) para
+«que funcione»: levantarías la versión anterior sobre una base ya migrada. Eso
+solo se hace dentro de una vuelta atrás a mano, decidida con el fabricante
+([`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md)
+§5.1).
+
+### …`./doctor.sh` dice que `scheduler` u `horizon` están parados
+
+**Síntoma.** `[FALLA] Servicio scheduler: exited` (o `horizon`), y `doctor.sh`
+sale con `6` aunque `product:doctor` diga que no hay nada roto.
+
+**Impacto.** El fichaje sigue. Pero sin `scheduler` no hay copia nocturna, ni
+verificación de la cadena de auditoría, ni conciliación del registro; y sin
+`horizon` no terminan las exportaciones íntegras, los informes en diferido ni
+los avisos de incidencias. Nada de eso avisa por sí solo si la observabilidad
+está apagada.
+
+**Qué hacer.** Arráncalos desde el directorio vigente y mira por qué se pararon:
+
+```bash
+sudo docker compose up -d scheduler horizon
+sudo docker compose logs --tail 100 scheduler horizon
+./doctor.sh
+```
+
+Si se vuelven a parar, adjunta esos registros al paquete de diagnóstico
+(§12.2). Después de arrancar `scheduler`, comprueba que la última copia es de
+hoy o de anoche ([`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2).

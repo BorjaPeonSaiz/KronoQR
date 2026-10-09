@@ -64,7 +64,8 @@ Solo dos servicios publican puerto en el servidor: el borde HTTP (`HTTP_PORT` y
 `HTTPS_PORT`, 80 y 443 de serie) y Grafana, atado a `127.0.0.1`. Compruébalo:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# el directorio vigente de la instalación (update.sh lo dice al terminar)
+cd /opt/kronoqr-<version>
 docker compose ps --format 'table {{.Service}}\t{{.Ports}}'
 ```
 
@@ -128,7 +129,8 @@ comprobar que la configuración se corresponde con la realidad**, desde el
 servidor y con las tablets ya montadas:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# el directorio vigente de la instalación (update.sh lo dice al terminar)
+cd /opt/kronoqr-<version>
 docker compose logs --tail 200 nginx | grep '"from_kiosk_vlan":0'
 ```
 
@@ -137,7 +139,8 @@ entró por la zona rápida. Si son las de tus tablets, corrige `KIOSK_VLAN_CIDR`
 en el `.env` y recarga el borde:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# el directorio vigente de la instalación (update.sh lo dice al terminar)
+cd /opt/kronoqr-<version>
 docker compose up -d nginx
 ```
 
@@ -262,7 +265,8 @@ el caso de haber renovado sin recargar, que es justo el error que deja a alguien
 creyendo que ya lo arregló.
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# el directorio vigente de la instalación (update.sh lo dice al terminar)
+cd /opt/kronoqr-<version>
 ./doctor.sh
 ```
 
@@ -496,7 +500,8 @@ Después de configurarlo, comprueba que el sistema alcanza el relevo y que no
 está mandando los correos a un fichero:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# el directorio vigente de la instalación (update.sh lo dice al terminar)
+cd /opt/kronoqr-<version>
 docker compose exec app php artisan product:doctor
 ```
 

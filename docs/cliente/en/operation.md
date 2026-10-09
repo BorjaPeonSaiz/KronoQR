@@ -13,12 +13,16 @@
 > **Got a problem right now?** Go straight to **§18, "What to do if…"**:
 > tablets that ask to be paired again, Redis that will not start, a `402`,
 > reports that never finish, the failed nightly backup, exports shown as
-> "Expired" after a restore and a purge whose report is missing.
+> "Expired" after a restore, a purge whose report is missing, a directory
+> "RETIRED" after an update and a stopped scheduler.
 
 ---
-> **The commands in this guide are run from the package directory**, which is
-> where `docker-compose.yml` and the `.env` live. If you run them from anywhere
-> else, add `-f /path/to/package/docker-compose.yml`.
+> **The commands in this guide are run from the CURRENT package directory**,
+> which is where `docker-compose.yml` and the `.env` live. If you run them from
+> anywhere else, add `-f /path/to/package/docker-compose.yml`. **After a
+> side-by-side update, the current one is the new version's**: `update.sh` says
+> so when it finishes ("CURRENT DIRECTORY") and retires the previous one, which
+> from then on makes any `docker compose` run from there fail (§11).
 
 
 ## 1. The calendar, in one table
@@ -424,7 +428,7 @@ is in the message, which is what you have to read.**
 | `3` | **Incompatible prior state. NOTHING written** | `install.sh`: there is already an installation (use `update.sh`). `backup.sh`: there is no backup to verify, or the destination already exists. `restore.sh`: there are still open connections against the database. `update.sh`: already on the target version, or there is no installation to update. `doctor.sh`: **there is no installation to diagnose** on this server — if it is a new one, what you need is `install.sh` |
 | `4` | **Failed and everything done was undone** in that run. Can be retried | `install.sh`: containers, volumes and `.env` returned to their state. `backup.sh`: half-written files swept away, the previous backup intact. `restore.sh`: working database removed, the production one untouched. `update.sh`: pre-update backup restored and **previous version running and verified**. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
 | `5` | **Failed and NOT everything could be undone. Manual intervention required.** The message says exactly what is left and which order removes it | It is the only code that requires a person present. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
-| `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up, check the certificate and the logs. `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `restore.sh`: **the database is restored and in service, but the `system.restored_from_backup` entry in `audit_log` could not be written**; do not restore again, write the entry with the command in the message (`restaurar-backup.md` §6.7, in Spanish). `restore.sh`, `restore-drill.sh` and `backup.sh verify`, **since 2.2.0, also on integrity**: the `.sha256` is missing, the MAC does not match, the file name is not the one in its header, the authenticated manifest (`.manifest.mac`) is missing or does not match, or the backup is from 2.1.0 and was not explicitly requested; in that case **nothing has been touched** (§18, "…the restore refuses on integrity grounds"). `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`); with the application stopped, in one of the external checks. The message says what to read |
+| `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up, check the certificate and the logs. `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `restore.sh`: **the database is restored and in service, but the `system.restored_from_backup` entry in `audit_log` could not be written**; do not restore again, write the entry with the command in the message (`restaurar-backup.md` §6.7, in Spanish). `restore.sh`, `restore-drill.sh` and `backup.sh verify`, **since 2.2.0, also on integrity**: the `.sha256` is missing, the MAC does not match, the file name is not the one in its header, the authenticated manifest (`.manifest.mac`) is missing or does not match, or the backup is from 2.1.0 and was not explicitly requested; in that case **nothing has been touched** (§18, "…the restore refuses on integrity grounds"). `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`) or because `scheduler` or `horizon` are stopped; with the application stopped, in one of the external checks. The message says what to read |
 | `7` | **Security guarantee broken. NOTHING applied.** A database role has more privileges than allowed, or a backup tried to change them (AUD-1). It is not a fault: it is a guarantee the product refuses to bypass | `backup.sh`: the role used to copy is a superuser, or can create roles or databases, or bypass RLS; no backup was written and the failed-backup alert fires. `restore.sh` and `restore-drill.sh --mode database`: the backup changed cluster roles when restored; no database was swapped and the roles were put back as they were. Follow `rotacion-secretos.md` («El rol de las copias es privilegiado») or `restaurar-backup.md` §6.6 (both in Spanish) |
 | `129`, `130`, `143` | **Interrupted before writing anything**: `129` dropped SSH session, `130` Ctrl+C, `143` `kill`. NOTHING written | `install.sh` and `update.sh`: only in the phases that have not touched anything yet; once they start writing, an interruption is treated as a failure and exits with `4` or `5` after rolling back. Run them inside `tmux` or `screen` (`installation.md` §1.4) |
 
@@ -483,7 +487,8 @@ be kept for four years— is gone.
 **Do it on installation day, before closing the session:**
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# the current installation directory
+cd /opt/kronoqr-<version>
 sudo sed -n 's/^BACKUP_ENCRYPTION_KEY=//p' .env
 ```
 
@@ -959,6 +964,11 @@ sudo ./update.sh                          # actualiza, verifica y vuelve atrás 
 nothing and says what is missing, if anything; the plain run updates, verifies
 and rolls back on its own if it fails.)
 
+**Next to it, not on top.** Unpacked on top of a version older than 2.2.0,
+`update.sh` refuses in step 1 without touching anything and prints the three
+commands to do it side by side
+([`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) §2, in Spanish).
+
 The seven steps and what happens if each one fails:
 
 | Step | If it fails | State it leaves | What to do |
@@ -979,6 +989,24 @@ report says so on its own line. The rollback entry is only written if the versio
 you roll back to already knows that action (from 2.2.0): an earlier one could not
 verify the chain with it, so the report keeps the data and you write it with
 `compliance:record-system-event` after the next update.
+
+**Which directory to work from afterwards.** After a side-by-side update that
+finishes well, the **current** directory is the new version's: `update.sh`
+says so on its last screen ("CURRENT DIRECTORY: …") and, from then on,
+`docker compose`, `./doctor.sh`, `./backup.sh` and changes to the `.env` or the
+logo are done from there. The previous directory is **retired**: its
+`docker-compose.yml` is renamed to `docker-compose.yml.retirado-<previous
+version>` and replaced by one that makes any Compose command run from there
+fail with a message saying which one is current. It is on purpose: both
+directories describe the same project, and a `docker compose up -d` run out of
+habit from the previous one would take the installation back to the previous
+version on an already migrated database. Its `.env`, certificates and scripts
+stay, for the manual rollback
+([`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md)
+§5.1, in Spanish). If you have a `cron` job or a script of your own pointing to
+the previous directory, change it. `./doctor.sh` warns if you run it from a
+directory that is not the current one. The logo, if it was in `branding/` next
+to the compose file, is copied over automatically.
 
 **What does not change:** your secrets (the `.env` is copied as is and only
 `IMAGE_TAG` changes; the only exception is the one below, when coming from
@@ -1418,6 +1446,20 @@ If the application **will not start** and you cannot run `artisan`, there is
 `./doctor.sh` (§8): it does what it can from outside —Docker, the state of each
 service, `.env`, disk, certificates, ports, the generated-files volume and its
 size— and tells you how to start it.
+
+**Run `./doctor.sh` with the application up too.** It delegates on
+`product:doctor`, which runs **inside** `app` and cannot see the other
+containers, and then checks the three background processes from outside, with
+the command to start each one:
+
+| Service stopped | Result | Why |
+| --- | --- | --- |
+| `scheduler` | **Failure** (exits `6`) | Without it there is no nightly backup, no audit chain verification, no work record reconciliation and no purges. Clocking goes on and none of that raises an alarm |
+| `horizon` | **Failure** (exits `6`) | Without it no full export (the Labour Inspectorate's, or an employee's asking for their data), no deferred report and no incident notice gets done. Clocking goes on |
+| `reverb` | Warning | Only the panel's live presence stops updating; reloading gives the right figure |
+
+It also warns if you run it from a directory that is not the current
+installation's (the one from before an update, for instance).
 
 ### 12.2 The diagnostic bundle: what it is and how it is generated
 
@@ -2871,3 +2913,54 @@ its readable copy (§3.1).
 
 If the purge only dropped audit partitions, what you cite are its
 `retention.partition_sealed` and `retention.partition_dropped` entries (§3.1).
+
+### …`docker compose` says "ESTE DIRECTORIO ESTA RETIRADO" (this directory is retired)
+
+**Symptom.** Any Compose command fails with `required variable
+KRONOQR_DIRECTORIO_RETIRADO is missing a value: THIS DIRECTORY IS RETIRED
+(KronoQR 2.1.0). The current installation is in /opt/kronoqr-2.2.0 …` (in the
+language `update.sh` ran in).
+
+**What is going on.** You are in the directory of a version **older** than the
+last update. `update.sh` retired it when it finished (§11) so that nobody takes
+the installation back to that version by mistake. **Nothing is broken**: the
+current installation is still running.
+
+**What to do.** Go to the directory the message names and run the command
+there:
+
+```bash
+cd /opt/kronoqr-<version>
+sudo docker compose ps
+```
+
+**Do not undo the retirement** (`mv` of `docker-compose.yml.retirado-…`) "to
+make it work": you would start the previous version on an already migrated
+database. That is only done within a manual rollback agreed with the
+manufacturer
+([`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md)
+§5.1, in Spanish).
+
+### …`./doctor.sh` says `scheduler` or `horizon` are stopped
+
+**Symptom.** `[FAIL] Service scheduler: exited` (or `horizon`), and `doctor.sh`
+exits `6` even though `product:doctor` says nothing is broken.
+
+**Impact.** Clocking goes on. But without `scheduler` there is no nightly
+backup, no audit chain verification and no work record reconciliation; and
+without `horizon` full exports, deferred reports and incident notices do not
+finish. None of that raises an alarm by itself if observability is off.
+
+**What to do.** Start them from the current directory and find out why they
+stopped:
+
+```bash
+sudo docker compose up -d scheduler horizon
+sudo docker compose logs --tail 100 scheduler horizon
+./doctor.sh
+```
+
+If they stop again, attach those logs to the diagnostics bundle (§12.2). After
+starting `scheduler`, check that the latest backup is from today or last night
+([`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2,
+in Spanish).

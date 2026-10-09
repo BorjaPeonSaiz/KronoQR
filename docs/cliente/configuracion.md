@@ -20,6 +20,14 @@ cambio no se aplica** y no hay ningún aviso que te lo diga.
 | **Umbrales legales**: descanso mínimo, jornada máxima, pausas, años de retención | Tabla `compliance_profiles` | `PATCH /api/v1/compliance-profile` (panel → «Perfil de cumplimiento», rol *administrador*) | No |
 | **Todo lo del despliegue**: rutas, credenciales, puertos, claves | Fichero `.env` del servidor | Editar y reiniciar los contenedores | **Sí** |
 
+> **El `.env` que cuenta es el del directorio VIGENTE** de la instalación, y
+> las órdenes `docker compose` de esta guía se lanzan desde él. Tras una
+> actualización lado a lado es el de la versión nueva: `update.sh` lo dice al
+> terminar («DIRECTORIO VIGENTE») y retira el anterior, desde el que cualquier
+> `docker compose` falla con un mensaje que remite al vigente
+> ([`operacion.md`](operacion.md) §11). Editar el `.env` del directorio
+> anterior no cambia nada.
+
 La regla para no equivocarse: **si lo cambiarías sin avisar a nadie de
 sistemas, es del panel; si tocarlo implica reiniciar el servicio, es del `.env`.**
 
@@ -258,6 +266,7 @@ sudo chmod 0644 /opt/kronoqr/branding/logo.png
 #    salen sin logotipo. Solo la primera vez: cambiar el FICHERO después no
 #    exige reiniciar nada.
 #    BRANDING_PATH=/opt/kronoqr/branding
+#    Desde el directorio VIGENTE de la instalación (sección 1).
 sudo docker compose up -d app horizon scheduler
 
 # 3. Guardar la ruta DE DENTRO del contenedor desde el panel, o por API.
@@ -1666,6 +1675,7 @@ y para que sepas de un vistazo si tocarla mueve horas de trabajo o no.
 Para aplicar un cambio:
 
 ```bash
+# <version> = la del directorio VIGENTE
 sudo nano /opt/kronoqr-<version>/.env
 cd /opt/kronoqr-<version>
 sudo docker compose up -d

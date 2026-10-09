@@ -65,7 +65,8 @@ Only two services publish a port on the server: the HTTP edge (`HTTP_PORT` and
 it:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# the current installation directory (update.sh says it when it finishes)
+cd /opt/kronoqr-<version>
 docker compose ps --format 'table {{.Service}}\t{{.Ports}}'
 ```
 
@@ -129,7 +130,8 @@ that the configuration matches reality**, from the server and with the tablets
 already mounted:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# the current installation directory (update.sh says it when it finishes)
+cd /opt/kronoqr-<version>
 docker compose logs --tail 200 nginx | grep '"from_kiosk_vlan":0'
 ```
 
@@ -138,7 +140,8 @@ did **not** come in through the fast zone. If they are your tablets', fix
 `KIOSK_VLAN_CIDR` in the `.env` and reload the edge:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# the current installation directory (update.sh says it when it finishes)
+cd /opt/kronoqr-<version>
 docker compose up -d nginx
 ```
 
@@ -264,7 +267,8 @@ catches the case of having renewed without reloading, which is exactly the
 mistake that leaves someone believing they have already fixed it.
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# the current installation directory (update.sh says it when it finishes)
+cd /opt/kronoqr-<version>
 ./doctor.sh
 ```
 
@@ -503,7 +507,8 @@ After configuring it, check that the system reaches the relay and that it is
 not sending the emails to a file:
 
 ```bash
-cd /opt/kronoqr-2.1.0
+# the current installation directory (update.sh says it when it finishes)
+cd /opt/kronoqr-<version>
 docker compose exec app php artisan product:doctor
 ```
 

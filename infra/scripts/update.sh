@@ -96,7 +96,11 @@
 #   · No exige licencia. Una licencia caducada no puede dejar a un cliente sin
 #     correcciones de seguridad sobre su registro legal (regla dura 15).
 #   · No regenera ningun secreto ni imprime ninguno (§7.7).
-#   · No borra la version anterior: su directorio queda intacto para volver.
+#   · No borra la version anterior. Al terminar bien una actualizacion lado a
+#     lado RETIRA su directorio: renombra su docker-compose.yml y deja en su
+#     lugar uno que hace fallar cualquier `docker compose` con un mensaje que
+#     dice cual es el directorio vigente (V7-SC-1). Todo lo demas queda intacto
+#     y se deshace con un `mv` (retire_previous_directory).
 #   · No retrocede versiones.
 
 set -Eeuo pipefail
@@ -239,6 +243,10 @@ FINAL_STATE=""
 # ADR-042). Una vuelta atras que deja la instalacion en una version anterior
 # tiene que decirlo (A3-08).
 readonly KQ_AUD1_FIXED_IN="2.2.0"
+# Primera version cuyo rol de aplicacion NO puede escribir en `migrations`
+# (V4-SC-1). verify_privileges lo exige siempre tras migrar; tras restaurar, solo
+# avisa, y solo si la copia es de esta version o posterior.
+readonly KQ_MIGRATIONS_REVOKED_IN="2.2.0"
 # Segunda mitad del paso 5 (RF-PD-10, SystemUpdateStep): 0 mientras se arranca
 # y se verifica sin exponer · 1 desde que el borde (nginx) se abre de verdad.
 # Decide si un fallo de ahi en adelante es `start_and_verify` o `expose`.
@@ -824,6 +832,21 @@ wait_for_healthy() {
   return 1
 }
 
+# El maestro de Horizon registrado y en marcha (`horizon:status` sale con 0;
+# 1 en pausa, 2 inactivo). Desde `app`, que llega al mismo Redis. Nunca deshace:
+# devuelve 1 si no llega a tiempo y quien llama decide.
+wait_for_horizon_heartbeat() {
+  local waited=0
+  while [ "${waited}" -lt "${KQ_WAIT_WORKERS}" ]; do
+    if compose_new exec -T app php artisan horizon:status >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "${KQ_POLL_SECONDS}"
+    waited=$((waited + KQ_POLL_SECONDS))
+  done
+  return 1
+}
+
 # Sonda por loopback a traves del borde. `--insecure` por el mismo motivo que
 # en install.sh: se comprueba que la aplicacion responde, no que el nombre del
 # certificado resuelva desde este servidor.
@@ -1136,6 +1159,7 @@ readonly -a PRECONDITION_CHECKS=(
   check_privileges
   check_installation
   check_source_version
+  check_in_place_source
   check_backup_config
   check_wal_key
   check_space
@@ -1283,6 +1307,28 @@ check_installation() {
   [ -n "${CFG_DB_DATABASE}" ] || CFG_DB_DATABASE="fichaje"
   [ -n "${CFG_DB_USERNAME}" ] || CFG_DB_USERNAME="fichaje_app"
   [ -n "${CFG_DB_MIGRATION_USERNAME}" ] || CFG_DB_MIGRATION_USERNAME="fichaje_migrator"
+}
+
+# IN PLACE SOLO DESDE LA 2.2.0. Con el paquete descomprimido encima, el compose
+# que queda en el directorio es ya el nuevo, y con el se hacen la copia previa y,
+# si algo falla, la vuelta atras. Desde una version anterior a la 2.2.0 las dos
+# fallan: la copia la hace la imagen nueva con el .env viejo, cuyo
+# BACKUP_DB_USERNAME es el superusuario y el backup.sh nuevo lo rechaza (AUD-1);
+# y la vuelta atras dejaria la version vieja con el compose nuevo, que monta la
+# raiz de BACKUP_PATH en solo lectura (A3-R2) y donde su backup.sh no puede
+# escribir: ninguna copia nocturna funcionaria. Se para aqui, sin tocar nada, con
+# la forma de hacerlo lado a lado.
+readonly KQ_IN_PLACE_MIN_SOURCE="2.2.0"
+check_in_place_source() {
+  [ "${IN_PLACE}" -eq 1 ] && [ -n "${SOURCE_VERSION}" ] || return 0
+  if [ "$(kq_semver_compare "${SOURCE_VERSION%%[-+]*}" "${KQ_IN_PLACE_MIN_SOURCE}")" = "-1" ]; then
+    check_fail "$(kq_format u_c_in_place_source "${SOURCE_VERSION}")" \
+      "$(kq_format u_f_in_place_source "${KQ_IN_PLACE_MIN_SOURCE}" "${SOURCE_VERSION}" \
+        "${SOURCE_VERSION}" "${SOURCE_VERSION}" "${SOURCE_VERSION}" "${CURRENT_COMPOSE}" \
+        "$(dirname -- "${CURRENT_DIR}")" "${TARGET_VERSION}")"
+    return 0
+  fi
+  check_pass "$(kq_format u_c_in_place_source "${SOURCE_VERSION}")"
 }
 
 # Dos .env son de la misma instalacion si comparten los secretos que nacen con
@@ -1490,7 +1536,7 @@ check_wal_key() {
 
   actual="$(env_value "${CURRENT_ENV}" "BACKUP_WAL_KEY")"
   if [ -n "${actual}" ] && [ "${actual}" != "${WAL_KEY_DERIVED}" ]; then
-    check_fail "$(kq_text u_c_wal_key)" "$(kq_format u_f_wal_key_env "${CURRENT_ENV}")"
+    check_fail "$(kq_text u_c_wal_key)" "$(kq_format u_f_wal_key_env "${CURRENT_ENV}" "${CURRENT_DIR}")"
     return 0
   fi
 
@@ -1502,7 +1548,7 @@ check_wal_key() {
     if [ -n "${have_kid}" ]; then
       want_kid="$(kqe_wal_kid "${WAL_KEY_DERIVED}")"
       if [ "${have_kid}" != "${want_kid}" ]; then
-        check_fail "$(kq_text u_c_wal_key)" "$(kq_text u_f_wal_key_kid)"
+        check_fail "$(kq_text u_c_wal_key)" "$(kq_format u_f_wal_key_kid "${CURRENT_DIR}")"
         return 0
       fi
     fi
@@ -1773,7 +1819,7 @@ write_wal_key() {
 }
 
 prepare_package() {
-  local certs_from certs_to
+  local certs_from certs_to branding branding_from branding_to
 
   if [ "${IN_PLACE}" -eq 1 ]; then
     ROLLBACK_COMPOSE="${COMPOSE_FILE}"
@@ -1818,6 +1864,35 @@ prepare_package() {
     fi
     ;;
   esac
+
+  # El logotipo del hotel, con el mismo criterio que el certificado: con
+  # BRANDING_PATH vacia o relativa, la carpeta de marca es `./branding` JUNTO al
+  # compose (RF-PD-08), y el directorio nuevo nace sin ella. Sin esto, tras
+  # actualizar lado a lado los PDF y las tres aplicaciones volverian a la marca
+  # del fabricante y la ruta guardada en el panel diria «no hay ningun fichero».
+  # A diferencia del certificado, NO bloquea: sin logotipo se ficha igual. Se
+  # avisa con la orden para hacerlo a mano.
+  branding="$(env_value "${CURRENT_ENV}" "BRANDING_PATH")"
+  case "${branding}" in
+  /*) ;;
+  *)
+    branding="${branding:-./branding}"
+    branding_from="${CURRENT_DIR}/${branding#./}"
+    branding_to="${PACKAGE_DIR}/${branding#./}"
+    # Si no existe, o si existe VACIA: en un reintento tras una vuelta atras, Docker
+    # ya la creo vacia (de root) al montar `./branding` arrancando `app` desde el
+    # paquete nuevo, y «existe» no significa «tiene el logotipo». Con algo dentro
+    # no se toca: es del operador.
+    if [ -d "${branding_from}" ] && [ -n "$(ls -A -- "${branding_from}" 2>/dev/null)" ] &&
+      { [ ! -e "${branding_to}" ] || { [ -d "${branding_to}" ] && [ -z "$(ls -A -- "${branding_to}" 2>/dev/null)" ]; }; }; then
+      say "$(kq_format u_prepare_branding "${branding_from}" "${branding_to}")"
+      if ! install -d -m 0755 "${branding_to}" || ! cp -a "${branding_from}/." "${branding_to}/"; then
+        kq_msg check_warn "$(kq_format u_w_prepare_branding "${branding_from}" "${branding_to}")"
+        kq_msg fix "$(kq_format u_w_prepare_branding_fix "${branding_from}/." "${branding_to}/")"
+      fi
+    fi
+    ;;
+  esac
 }
 
 #------------------------------------------------------------------------------
@@ -1851,13 +1926,39 @@ write_maintenance_metric() {
 #------------------------------------------------------------------------------
 # Paso 2 — mantenimiento. Desde aqui, cualquier fallo deshace.
 #------------------------------------------------------------------------------
+# Deshace el paso 2 y NADA MAS. `start`, y no `up -d`: el paso 2 solo PARO
+# horizon y scheduler, sus contenedores siguen ahi con la imagen y la
+# configuracion de la version vigente, y volver a arrancarlos es devolverlos
+# exactamente a como estaban. `up -d` compara la definicion del compose con la
+# del contenedor y recrea lo que difiera: in place, ese compose ya es el del
+# paquete nuevo, asi que recreaba horizon y scheduler con la imagen NUEVA sobre el
+# esquema VIEJO y, sin `--no-deps`, tambien postgres y redis si su definicion
+# habia cambiado, para despues decir «no se ha tocado» (V7-RV-1). `start` no
+# recrea nada ni toca dependencias que nadie ha parado.
 lift_maintenance() {
   detail_note "--- retirando el mantenimiento de la version ${SOURCE_VERSION} ---"
   compose_current exec -T app php artisan up >>"$(detail_sink)" 2>&1 || return 1
   write_maintenance_metric 0 "${MAINTENANCE_SINCE}"
-  compose_current up -d horizon scheduler >>"$(detail_sink)" 2>&1 || return 1
+  compose_current start horizon scheduler >>"$(detail_sink)" 2>&1 || return 1
   MAINTENANCE_SECONDS=$(($(now_epoch) - MAINTENANCE_SINCE))
   say "$(kq_format u_maintenance_off "${SOURCE_VERSION}")"
+  return 0
+}
+
+# IN PLACE, al terminar sin haber migrado (copia previa fallida, vuelta atras de
+# los pasos 2 o 3, o una que se queda a medias ahi): la copia `.kronoqr-pre-update`
+# PASA A SER el .env, igual que tras la vuelta atras completa. Es el .env de
+# antes de esta ejecucion con las IMAGE_DIGEST_* vacias, y el docker-compose.yml
+# de la instalacion ya es el del paquete nuevo: solo con el un `docker compose up`
+# a mano levanta lo que esta en pie y no la imagen nueva con la etiqueta vieja. Y
+# no queda una segunda copia de todos los secretos en el directorio (V7-RV-2). El
+# reintento retira las vacias (prepare_package).
+settle_in_place_env() {
+  [ "${IN_PLACE}" -eq 1 ] && [ -n "${ROLLBACK_ENV}" ] && [ -f "${ROLLBACK_ENV}" ] || return 0
+  if ! mv -f "${ROLLBACK_ENV}" "${ENV_FILE}"; then
+    err "$(kq_format u_f_rollback_env "${ROLLBACK_ENV}" "${ENV_FILE}")"
+    remember_check "rollback-env" "$(kq_format u_f_rollback_env "${ROLLBACK_ENV}" "${ENV_FILE}")"
+  fi
   return 0
 }
 
@@ -2043,8 +2144,27 @@ phase_maintenance() {
 }
 
 #------------------------------------------------------------------------------
-# Paso 3 — copia verificada, bloqueante. Con la version ACTUAL: es la que sabe
-# leer su propio esquema y la que ya hace la copia diaria. Y DE ESTA EJECUCION:
+# Paso 3 — copia verificada, bloqueante, con el compose de la instalacion
+# ACTUAL. QUE IMAGEN LA HACE DEPENDE DEL MODO, y hay que decirlo como es (V7-RV-1):
+#
+#   · LADO A LADO, la version vigente: su compose, su .env, su imagen.
+#   · IN PLACE, la imagen del PAQUETE NUEVO. El docker-compose.yml de la
+#     instalacion ya es el nuevo y fija su imagen por digest
+#     (`${IMAGE_DIGEST_PHP-@sha256:<nuevo>}`, package.sh), y el .env vivo no lo
+#     anula. Funciona porque in place SOLO se admite desde la 2.2.0
+#     (check_in_place_source): el .env ya lleva el rol de copias de solo lectura y
+#     el reparto de montajes de copias es el mismo. Desde una anterior fallaria
+#     siempre (superusuario en BACKUP_DB_*, raiz de BACKUP_PATH en solo lectura)
+#     y por eso se rechaza en el paso 1.
+#
+# Que la haga la imagen nueva no toca el esquema: `backup:run` solo invoca
+# backup.sh, que es `pg_dump` de lo que haya, sin escribir en la base, y la copia
+# sale cifrada y autenticada (KQE1). Lo que NO puede hacer este paso es dejar
+# corriendo un contenedor de la version nueva: el de la copia es efimero
+# (`run --rm`) y, si la copia falla, lift_maintenance vuelve a ARRANCAR los
+# contenedores parados en vez de recrearlos.
+#
+# Y DE ESTA EJECUCION:
 # `backup:run --mode dump` deja su nombre en daily/LATEST, y ese fichero tiene
 # que ser posterior al arranque del script; si no, la vuelta atras restauraria
 # la copia de anoche y se llevaria el dia entero.
@@ -2056,6 +2176,7 @@ backup_failed() {
   if ! lift_maintenance; then
     rollback_incomplete_maintenance "${message}"
   fi
+  settle_in_place_env
   ROLLBACK_ARMED=0
   die "${KQ_EXIT_REQUIREMENTS}" "${message}"
 }
@@ -2331,15 +2452,51 @@ verify_constraints() {
 # (regla dura 6). Se comprueba tras migrar y tras restaurar: pg_restore sin
 # los privilegios del volcado dejaria una base en la que las sondas dicen
 # «operativo» y ningun fichaje se puede escribir.
+#
+#   verify_privileges COMPOSE_FN [migrations]
+#
+# Con `migrations` (SOLO tras migrar, V4-SC-1) exige ademas que el rol NO pueda
+# escribir en `migrations`: quien ejecute codigo en la aplicacion podria marcar
+# como aplicada una migracion que no lo esta, o borrar una para que la siguiente
+# actualizacion la repita. La revocacion la hace una migracion de la 2.2.0, asi
+# que tras migrar a la 2.2.0 o posterior siempre esta aplicada. NO se exige tras
+# restaurar: la vuelta atras restaura la copia de la version ANTERIOR, que puede
+# no tenerla, y fallar ahi dejaria a medias una vuelta atras que iba bien.
+#
+# Devuelve 0 si todo cuadra, 1 si falla lo de fichajes o audit_log y 2 si el rol
+# puede escribir en `migrations`.
+#
+# «Alterar» es UPDATE, DELETE o TRUNCATE de la tabla, o UPDATE de alguna columna
+# (`has_any_column_privilege` mira las dos cosas: un GRANT por columna no aparece
+# en `has_table_privilege`). En `migrations`, ademas, INSERT por tabla o columna.
 verify_privileges() {
-  local compose_fn="$1" can_write cannot_touch
-  can_write="$(psql_migrator "${compose_fn}" "SELECT has_table_privilege('${CFG_DB_USERNAME}', 'shift_entries', 'INSERT')")"
-  cannot_touch="$(psql_migrator "${compose_fn}" "SELECT has_table_privilege('${CFG_DB_USERNAME}', 'audit_log', 'UPDATE') OR has_table_privilege('${CFG_DB_USERNAME}', 'audit_log', 'DELETE')")"
-  [ "${can_write}" = "t" ] && [ "${cannot_touch}" = "f" ]
+  local compose_fn="$1" scope="${2:-}" role="${CFG_DB_USERNAME}" can_write cannot_touch migrations
+  can_write="$(psql_migrator "${compose_fn}" "SELECT has_table_privilege('${role}', 'shift_entries', 'INSERT')")"
+  cannot_touch="$(psql_migrator "${compose_fn}" "SELECT has_any_column_privilege('${role}', 'audit_log', 'UPDATE') OR has_table_privilege('${role}', 'audit_log', 'DELETE') OR has_table_privilege('${role}', 'audit_log', 'TRUNCATE')")"
+  [ "${can_write}" = "t" ] && [ "${cannot_touch}" = "f" ] || return 1
+  [ "${scope}" = "migrations" ] || return 0
+  migrations="$(psql_migrator "${compose_fn}" "SELECT has_any_column_privilege('${role}', 'migrations', 'INSERT') OR has_any_column_privilege('${role}', 'migrations', 'UPDATE') OR has_table_privilege('${role}', 'migrations', 'DELETE') OR has_table_privilege('${role}', 'migrations', 'TRUNCATE')")"
+  [ "${migrations}" = "f" ] || return 2
+  return 0
+}
+
+# V4-SC-1, tras migrar. Si el rol de la aplicacion puede escribir en `migrations`
+# con la migracion que se lo retira ya aplicada, alguien se lo ha devuelto (en una
+# 2.2.x que se actualiza, no hay otra explicacion). Antes de deshacer una
+# actualizacion por eso, el migrador lo vuelve a retirar —es exactamente lo que
+# hace esa migracion, y un REVOKE por tabla retira tambien los de columna— y se
+# mira otra vez. Solo si sigue pudiendo (concedido a PUBLIC o heredado de otro
+# rol, que un REVOKE a este rol no toca) se deshace. 0 si queda bien.
+repair_migrations_privileges() {
+  [[ "${CFG_DB_USERNAME}" =~ ^[a-z_][a-z0-9_]*$ ]] || return 1
+  detail_note "--- REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON migrations FROM ${CFG_DB_USERNAME} ---"
+  compose_new exec -T postgres psql -U "${CFG_DB_MIGRATION_USERNAME}" -d "${CFG_DB_DATABASE}" -v ON_ERROR_STOP=1 -qc \
+    "REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE migrations FROM \"${CFG_DB_USERNAME}\"" >>"$(detail_sink)" 2>&1 || return 1
+  verify_privileges compose_new migrations
 }
 
 phase_start_and_verify() {
-  local reported failed path body status service doctor_status doctor_output
+  local reported failed path body status service doctor_status doctor_output privileges
   local audit_json audit_status audit_output
 
   STEP="5"
@@ -2397,13 +2554,28 @@ phase_start_and_verify() {
     rollback_and_die "$(kq_format u_f_verify_constraints "${failed}")" constraint_violation
   fi
 
-  if verify_privileges compose_new; then
+  privileges=0
+  verify_privileges compose_new migrations || privileges=$?
+  case "${privileges}" in
+  0)
     kq_msg check_ok "$(kq_format u_verify_privileges_ok "${CFG_DB_USERNAME}")"
     remember_check "privileges" "$(kq_text u_report_ok)"
-  else
+    ;;
+  2)
+    if repair_migrations_privileges; then
+      kq_msg check_warn "$(kq_format u_w_migrations_privileges_repaired "${CFG_DB_USERNAME}")"
+      kq_msg fix "$(kq_text u_w_migrations_privileges_repaired_fix)"
+      remember_check "privileges" "$(kq_format u_w_migrations_privileges_repaired "${CFG_DB_USERNAME}")"
+    else
+      remember_check "privileges" "$(kq_text u_report_failed) (migrations)"
+      rollback_and_die "$(kq_format u_f_verify_privileges_migrations "${CFG_DB_USERNAME}" "${CFG_DB_USERNAME}")" privileges_check_failed
+    fi
+    ;;
+  *)
     remember_check "privileges" "$(kq_text u_report_failed)"
     rollback_and_die "$(kq_format u_f_verify_privileges "${CFG_DB_USERNAME}")" privileges_check_failed
-  fi
+    ;;
+  esac
 
   # Punta de la cadena DESPUES de migrar y de verificar (RF-PD-10): con la
   # de `check_audit_chain` (CHAIN_BEFORE), es lo que el asiento `system.updated`
@@ -2434,59 +2606,11 @@ phase_start_and_verify() {
     # porque su asiento no se pudo escribir (regla dura 6, doc del script,
     # tarea 5.7 cierre). Se marca para que final_report() salga con
     # KQ_EXIT_VERIFY_FAILED en vez de KQ_EXIT_OK.
-    kq_msg check_warn "$(kq_format u_verify_audit_entry_warn "${audit_status}")" "$(kq_text u_verify_audit_entry_warn_fix)"
+    kq_msg check_warn "$(kq_format u_verify_audit_entry_warn "${audit_status}")"
+    kq_msg fix "$(kq_text u_verify_audit_entry_warn_fix)"
     remember_check "audit-entry" "$(kq_text u_report_failed) (${audit_status})"
     AUDIT_ENTRY_FAILED=1
   fi
-
-  # `product:doctor` (tarea 5.9) es el diagnostico oficial del producto, pero
-  # AQUI ES INFORMATIVO (revision de codigo, segunda vuelta): la version nueva
-  # ya esta verificada por las sondas, la cadena de auditoria, las
-  # restricciones RN-01/RN-02 y los privilegios de base de datos, y buena
-  # parte de los fallos de product:doctor son AMBIENTALES —disco por debajo
-  # del umbral, certificado a punto de caducar, APP_DEBUG— y no dicen nada
-  # del esquema ni del codigo que se acaba de desplegar. Deshacer una
-  # actualizacion correcta por eso seria desproporcionado. Por eso, a partir
-  # de aqui, NINGUN codigo de `product:doctor` deshace: se muestra completo
-  # en el detalle, se resume en el informe (correcto / con avisos / con
-  # fallos) y en pantalla se avisa de que hacer si sale 1 o 2, pero la
-  # actualizacion sigue.
-  #
-  # La UNICA razon para deshacer aqui es que el comando NO EXISTA en la
-  # imagen: eso es un paquete roto, no un hallazgo ambiental del servidor.
-  # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
-  # tal cual los conoce la aplicacion, uno por linea. El mensaje de error de
-  # Symfony Console ante un comando que no existe depende del idioma y de la
-  # version del framework; preguntarle que comandos tiene no depende de
-  # ninguno de los dos (mismo razonamiento que doctor.sh).
-  # Sin tuberia: con `pipefail`, `grep -q` cierra el tubo en cuanto encuentra la
-  # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
-  # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
-  available_commands="$(compose_new exec -T app php artisan list --raw 2>/dev/null || true)"
-  if ! grep -q '^product:doctor' <<<"${available_commands}"; then
-    remember_check "doctor" "$(kq_text u_report_failed)"
-    rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)" doctor_failed
-  fi
-
-  detail_note "--- product:doctor (${TARGET_VERSION}) ---"
-  doctor_status=0
-  doctor_output="$(compose_new exec -T app php artisan product:doctor --lang="${KQ_LANG}" 2>&1)" || doctor_status=$?
-  detail_note "${doctor_output}"
-
-  case "${doctor_status}" in
-  0)
-    kq_msg check_ok "$(kq_text u_verify_doctor_ok)"
-    remember_check "doctor" "$(kq_text u_report_ok)"
-    ;;
-  1)
-    kq_msg check_warn "$(kq_text u_verify_doctor_warn)" "$(kq_text u_verify_doctor_warn_fix)"
-    remember_check "doctor" "$(kq_text u_report_warned)"
-    ;;
-  *)
-    kq_msg check_warn "$(kq_format u_verify_doctor_failed_warn "${doctor_status}")" "$(kq_text u_verify_doctor_failed_fix)"
-    remember_check "doctor" "$(kq_text u_report_doctor_failed)"
-    ;;
-  esac
 
   # La licencia NO bloquea (regla dura 15): se consulta para el informe, y solo
   # su resultado. Su salida lleva el nombre del cliente y no va a ningun
@@ -2558,6 +2682,66 @@ phase_start_and_verify() {
     wait_for_healthy compose_new "${service}" "${KQ_WAIT_WORKERS}" ||
       rollback_and_die "$(kq_format u_f_workers_up "${TARGET_VERSION}")" workers_failed
   done
+
+  # `product:doctor` va AQUI, con los trabajadores ya en marcha, y no antes: su
+  # sonda `queue.worker` pregunta a Horizon por su latido, y ejecutado antes de
+  # arrancarlo lo veia siempre parado y TODA actualizacion acababa «con avisos»
+  # (revision de la verificacion final). `wait_for_healthy` solo dice que el
+  # contenedor corre; el maestro de Horizon tarda unos segundos mas en
+  # registrarse, y se espera a el. Si no llega, no se deshace nada: lo dira
+  # `product:doctor`, que es informativo aqui.
+  wait_for_horizon_heartbeat || true
+
+  # `product:doctor` (tarea 5.9) es el diagnostico oficial del producto, pero
+  # AQUI ES INFORMATIVO (revision de codigo, segunda vuelta): la version nueva
+  # ya esta verificada por las sondas, la cadena de auditoria, las
+  # restricciones RN-01/RN-02 y los privilegios de base de datos, y buena
+  # parte de los fallos de product:doctor son AMBIENTALES —disco por debajo
+  # del umbral, certificado a punto de caducar, APP_DEBUG— y no dicen nada
+  # del esquema ni del codigo que se acaba de desplegar. Deshacer una
+  # actualizacion correcta por eso seria desproporcionado. Por eso, a partir
+  # de aqui, NINGUN codigo de `product:doctor` deshace: se muestra completo
+  # en el detalle, se resume en el informe (correcto / con avisos / con
+  # fallos) y en pantalla se avisa de que hacer si sale 1 o 2, pero la
+  # actualizacion sigue.
+  #
+  # La UNICA razon para deshacer aqui es que el comando NO EXISTA en la
+  # imagen: eso es un paquete roto, no un hallazgo ambiental del servidor.
+  # Comprobacion de PRESENCIA, no de texto: `list --raw` enumera los comandos
+  # tal cual los conoce la aplicacion, uno por linea. El mensaje de error de
+  # Symfony Console ante un comando que no existe depende del idioma y de la
+  # version del framework; preguntarle que comandos tiene no depende de
+  # ninguno de los dos (mismo razonamiento que doctor.sh).
+  # Sin tuberia: con `pipefail`, `grep -q` cierra el tubo en cuanto encuentra la
+  # linea, PHP recibe SIGPIPE y la tuberia falla AUNQUE el comando exista (paso
+  # en la 8b de la 5.9: U1 en verde y U3 «sin product:doctor» con la misma imagen).
+  available_commands="$(compose_new exec -T app php artisan list --raw 2>/dev/null || true)"
+  if ! grep -q '^product:doctor' <<<"${available_commands}"; then
+    remember_check "doctor" "$(kq_text u_report_failed)"
+    rollback_and_die "$(kq_text u_f_verify_doctor_missing_command)" doctor_failed
+  fi
+
+  detail_note "--- product:doctor (${TARGET_VERSION}) ---"
+  doctor_status=0
+  doctor_output="$(compose_new exec -T app php artisan product:doctor --lang="${KQ_LANG}" 2>&1)" || doctor_status=$?
+  detail_note "${doctor_output}"
+
+  case "${doctor_status}" in
+  0)
+    kq_msg check_ok "$(kq_text u_verify_doctor_ok)"
+    remember_check "doctor" "$(kq_text u_report_ok)"
+    ;;
+  1)
+    kq_msg check_warn "$(kq_text u_verify_doctor_warn)"
+    kq_msg fix "$(kq_text u_verify_doctor_warn_fix)"
+    remember_check "doctor" "$(kq_text u_report_warned)"
+    ;;
+  *)
+    kq_msg check_warn "$(kq_format u_verify_doctor_failed_warn "${doctor_status}")"
+    kq_msg fix "$(kq_text u_verify_doctor_failed_fix)"
+    remember_check "doctor" "$(kq_text u_report_doctor_failed)"
+    ;;
+  esac
 }
 
 #------------------------------------------------------------------------------
@@ -2577,6 +2761,7 @@ preserve_failed_state() {
 # `artisan up`. NO hay ninguna copia que restaurar, y decirlo es lo que impide
 # que alguien restaure la de anoche.
 rollback_incomplete_maintenance() {
+  settle_in_place_env
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "$1" "$(kq_text u_report_needs_person)")"
   FINAL_STATE="${SOURCE_VERSION}"
   err ""
@@ -2602,7 +2787,7 @@ rollback_incomplete() {
 
 rollback_and_die() {
   local reason="$1" reason_code="${2:-unexpected_error}" code=0 body reported from_date to_date
-  local failed_step audit_json audit_status audit_output audit_known
+  local failed_step audit_json audit_status audit_output audit_known privileges
 
   # SOLO EN EL PROCESO PRINCIPAL. Con `set -E` el trap se hereda en las
   # subshells de `$(...)`; deshacer desde ahi restauraria la base y el padre
@@ -2624,11 +2809,7 @@ rollback_and_die() {
   if [ "${ROLLBACK_ARMED}" -le 1 ]; then
     # Solo el mantenimiento estaba puesto: retirarlo deja todo como estaba.
     if lift_maintenance; then
-      # La version anterior sigue en pie con su .env de siempre: la copia
-      # in-place sobra y lleva todos los secretos.
-      if [ "${IN_PLACE}" -eq 1 ] && [ -f "${ROLLBACK_ENV}" ]; then
-        rm -f "${ROLLBACK_ENV}"
-      fi
+      settle_in_place_env
       ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "${reason}" "$(kq_text u_report_ok)")"
       FINAL_STATE="${SOURCE_VERSION}"
       err "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
@@ -2678,10 +2859,26 @@ rollback_and_die() {
     err "$(kq_format u_f_rollback_restore "${code}" "$(kq_exit_name "${code}")")"
     rollback_incomplete "${reason}"
   fi
-  if ! verify_privileges compose_new; then
+  privileges=0
+  verify_privileges compose_new migrations || privileges=$?
+  case "${privileges}" in
+  0) ;;
+  2)
+    # La copia es de la version ANTERIOR. Si es la 2.1.0 o antes, que el rol pueda
+    # escribir en `migrations` es lo normal en ella y no se dice nada. Desde la
+    # 2.2.0 no lo es, pero la base restaurada es la buena y la version anterior
+    # funciona igual: se avisa y queda en el informe, sin dejar la vuelta atras a
+    # medias por ello (V4-SC-1).
+    if [ "$(kq_semver_compare "${SOURCE_VERSION%%[-+]*}" "${KQ_MIGRATIONS_REVOKED_IN}")" != "-1" ]; then
+      err "$(kq_format u_w_rollback_migrations_privileges "${CFG_DB_USERNAME}")"
+      remember_check "privileges-after-rollback" "$(kq_format u_w_rollback_migrations_privileges "${CFG_DB_USERNAME}")"
+    fi
+    ;;
+  *)
     err "$(kq_format u_f_verify_privileges "${CFG_DB_USERNAME}")"
     rollback_incomplete "${reason}"
-  fi
+    ;;
+  esac
   say "$(kq_text u_rollback_restore_ok)"
 
   say "$(kq_format u_rollback_relaunch "${SOURCE_VERSION}" "${ROLLBACK_COMPOSE}")"
@@ -2833,12 +3030,7 @@ rollback_and_die() {
   # instalacion: un `docker compose up` a mano levanta lo mismo que esta en
   # pie, no la version nueva sobre la base restaurada, y no queda una segunda
   # copia de los secretos. El reintento retira la marca (prepare_package).
-  if [ "${IN_PLACE}" -eq 1 ] && [ -f "${ROLLBACK_ENV}" ]; then
-    if ! mv -f "${ROLLBACK_ENV}" "${ENV_FILE}"; then
-      err "$(kq_format u_f_rollback_env "${ROLLBACK_ENV}" "${ENV_FILE}")"
-      remember_check "rollback-env" "$(kq_format u_f_rollback_env "${ROLLBACK_ENV}" "${ENV_FILE}")"
-    fi
-  fi
+  settle_in_place_env
 
   err ""
   err "$(kq_format u_rollback_done "${SOURCE_VERSION}" "${REPORT_FILE:-?}")"
@@ -2850,6 +3042,91 @@ rollback_and_die() {
 #------------------------------------------------------------------------------
 # Paso 7 — informe y despedida.
 #------------------------------------------------------------------------------
+
+# V7-SC-1. Tras una actualizacion LADO A LADO hay dos directorios que describen
+# el MISMO proyecto (`name: kronoqr`). Un `docker compose up -d` lanzado por
+# costumbre desde el anterior bajaria la instalacion a la version anterior, en
+# silencio y sobre el esquema ya migrado; desde la 2.1.0, ademas, volveria a
+# meter la credencial del superusuario en todos los contenedores (AUD-1), porque
+# aquel compose pasa el .env entero. Por eso, al terminar BIEN, el directorio
+# anterior se RETIRA:
+#
+#   · su fichero de compose se renombra a `<nombre>.retirado-<version>`, sin
+#     tocar nada mas (.env, certificados, scripts y marca siguen ahi);
+#   · en su lugar queda un compose minimo, de OTRO proyecto, cuya unica imagen es
+#     una variable obligatoria sin valor: cualquier orden de Compose falla antes
+#     de hacer nada, con un mensaje que dice cual es el directorio vigente y como
+#     deshacerlo.
+#
+# REVERSIBLE con un `mv`, que es lo que pide la vuelta atras a mano tras una
+# actualizacion que si termino (runbook de actualizacion, §5.1). Lo que se haga
+# aqui NUNCA cambia el resultado de la actualizacion: si no se puede, se avisa
+# con las dos ordenes para hacerlo a mano y se sigue.
+RETIRED_COMPOSE=""
+retire_previous_directory() {
+  local name stub reason safe=1
+
+  [ "${IN_PLACE}" -eq 0 ] || return 0
+  [ -n "${CURRENT_COMPOSE}" ] && [ -f "${CURRENT_COMPOSE}" ] || return 0
+  [ "$(cd -- "${CURRENT_DIR}" 2>/dev/null && pwd -P)" != "$(cd -- "${PACKAGE_DIR}" && pwd -P)" ] || return 0
+
+  # Ya retirado (una segunda llamada, o `--current` apuntando a el): el compose
+  # que hay es el sustituto, y renombrarlo dejaria como «original» el sustituto
+  # y el `mv` del mensaje no devolveria nada. No se toca.
+  if grep -qx 'name: kronoqr-directorio-retirado' "${CURRENT_COMPOSE}" 2>/dev/null; then
+    RETIRED_COMPOSE=""
+    return 0
+  fi
+
+  name="$(basename -- "${CURRENT_COMPOSE}")"
+  RETIRED_COMPOSE="${CURRENT_COMPOSE}.retirado-${SOURCE_VERSION}"
+  [ ! -e "${RETIRED_COMPOSE}" ] || RETIRED_COMPOSE="${RETIRED_COMPOSE}-${STARTED_UTC}"
+
+  # El mensaje va dentro de `${VAR:?...}` en YAML entre comillas dobles: ni `}`,
+  # ni `$`, ni comillas, ni barras invertidas. Las rutas que no sean de lo mas
+  # corriente no se escriben en el; las versiones ya son SemVer validado.
+  case "${PACKAGE_DIR}${CURRENT_DIR}${RETIRED_COMPOSE}" in
+  *[!A-Za-z0-9._/+-]*) safe=0 ;;
+  esac
+  if [ "${safe}" -eq 1 ]; then
+    reason="$(kq_format u_retired_stub_error "${SOURCE_VERSION}" "${PACKAGE_DIR}" "${TARGET_VERSION}" "${RETIRED_COMPOSE}" "${CURRENT_COMPOSE}")"
+  else
+    reason="$(kq_format u_retired_stub_error_generic "${SOURCE_VERSION}" "${TARGET_VERSION}")"
+  fi
+  reason="$(printf '%s' "${reason}" | tr -d '"$}\\\n')"
+
+  if ! stub="$(mktemp "${CURRENT_DIR}/.${name}.XXXXXX" 2>/dev/null)" ||
+    ! {
+      printf '# %s\n' "$(kq_format u_retired_stub_header "${SOURCE_VERSION}" "${STARTED_UTC}")"
+      printf '#\n'
+      printf '# %s\n' "$(kq_format u_retired_stub_current "${PACKAGE_DIR}" "${TARGET_VERSION}")"
+      printf '# %s\n' "$(kq_format u_retired_stub_undo "${RETIRED_COMPOSE}" "${CURRENT_COMPOSE}")"
+      printf 'name: kronoqr-directorio-retirado\n'
+      printf 'services:\n'
+      printf '  retirado:\n'
+      # shellcheck disable=SC2016 # la expande Compose al leer el fichero, no esta shell.
+      printf '    image: "${KRONOQR_DIRECTORIO_RETIRADO:?%s}"\n' "${reason}"
+    } >"${stub}" 2>/dev/null ||
+    ! chmod 0644 "${stub}" 2>/dev/null ||
+    ! mv -- "${CURRENT_COMPOSE}" "${RETIRED_COMPOSE}" 2>/dev/null; then
+    [ -z "${stub:-}" ] || rm -f -- "${stub}" 2>/dev/null || true
+    RETIRED_COMPOSE=""
+    err "$(kq_format u_w_retire_failed "${CURRENT_DIR}" "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}.retirado-${SOURCE_VERSION}")"
+    remember_check "previous-directory" "$(kq_text u_report_failed)"
+    return 0
+  fi
+  # Entre los dos `mv` no hay compose en el directorio anterior, y `docker
+  # compose` tambien falla: no hay ventana en la que vuelva a servir.
+  if ! mv -- "${stub}" "${CURRENT_COMPOSE}" 2>/dev/null; then
+    rm -f -- "${stub}" 2>/dev/null || true
+  fi
+  remember_check "previous-directory" "$(kq_format u_report_retired "${CURRENT_COMPOSE}" "${RETIRED_COMPOSE}")"
+  # Su .env se queda, pero en 0600: lleva los mismos secretos (y, desde
+  # una 2.1.0, la credencial del superusuario en BACKUP_DB_*). De mejor esfuerzo.
+  chmod 0600 -- "${CURRENT_DIR}/.env" 2>/dev/null || true
+  return 0
+}
+
 final_report() {
   local exit_code="${KQ_EXIT_OK}"
 
@@ -2862,6 +3139,9 @@ final_report() {
   if [ "${IN_PLACE}" -eq 1 ] && [ -f "${ROLLBACK_ENV}" ]; then
     rm -f "${ROLLBACK_ENV}"
   fi
+
+  # ANTES de cerrar el informe, para que conste en el.
+  retire_previous_directory
 
   # El trabajo se hizo: no se deshace nada por esto (instruccion (e)). Se sale
   # con KQ_EXIT_VERIFY_FAILED en vez de KQ_EXIT_OK para que quien automatiza
@@ -2878,9 +3158,11 @@ final_report() {
   say "$(kq_format u_done_backup "${BACKUP_FILE}")"
   say ""
   say "$(kq_text u_done_queue)"
-  if [ "${IN_PLACE}" -eq 0 ]; then
+  say ""
+  say "$(kq_format u_done_current_dir "${PACKAGE_DIR}" "${TARGET_VERSION}" "${PACKAGE_DIR}")"
+  if [ "${IN_PLACE}" -eq 0 ] && [ -n "${RETIRED_COMPOSE}" ]; then
     say ""
-    say "$(kq_format u_done_old_dir "${CURRENT_DIR}")"
+    say "$(kq_format u_done_old_dir "${CURRENT_DIR}" "${RETIRED_COMPOSE}" "${RETIRED_COMPOSE}" "${CURRENT_COMPOSE}")"
   fi
 
   if [ "${exit_code}" -ne "${KQ_EXIT_OK}" ]; then

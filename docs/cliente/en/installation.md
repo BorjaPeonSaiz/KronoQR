@@ -1437,11 +1437,17 @@ physical copies.
   archives unencrypted) and keeps WAL on its own disk, so fix it the same day:
 
   ```bash
-  sudo bash /opt/kronoqr/scripts/backup.sh derive-wal-key --write-env /opt/kronoqr/.env
-  docker compose up -d postgres
+  # the CURRENT installation directory
+  cd /opt/kronoqr-<version>
+  sudo bash ./backup.sh derive-wal-key --write-env .env
+  sudo docker compose up -d postgres
   ```
 
-  Change `/opt/kronoqr` to your installation directory.
+  It is the directory you installed from or, if you have updated side by side,
+  the latest version's: `update.sh` says it when it finishes ("CURRENT
+  DIRECTORY") and `doctor.sh` prints this same command with your server's
+  path. `backup.sh` sits at the root of the package, not under `scripts/`
+  (that path only exists inside the container).
 - **Never make one up or copy it from another server.** A key that is not the
   derived one encrypts segments the restore would not be able to open.
 - **If you have rotated `BACKUP_ENCRYPTION_KEY`**, the WAL key changes too:

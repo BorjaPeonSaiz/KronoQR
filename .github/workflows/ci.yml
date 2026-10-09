@@ -2274,6 +2274,7 @@ jobs:
         if: steps.anterior.outputs.skip != 'true'
         run: |
           set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
           new="${{ steps.anterior.outputs.new_version }}"
           cd paquete-nuevo
           sudo ./update.sh | tee salida-u1.log
@@ -2326,6 +2327,16 @@ jobs:
           test "$(sudo stat -c '%a' paquete-nuevo/.env)" = "600"
           sudo grep -q "^IMAGE_TAG=${new}$" paquete-nuevo/.env
           test "$(sudo stat -c '%u' paquete-nuevo/certs/tls.key)" = "101"
+          # V7-SC-1: el directorio anterior queda RETIRADO. Su compose original,
+          # renombrado; cualquier orden de Compose desde alli falla con el mensaje
+          # que remite al vigente; y la pantalla final dice cual es el vigente.
+          grep -q 'DIRECTORIO VIGENTE' paquete-nuevo/salida-u1.log
+          test -f "paquete-anterior/docker-compose.yml.retirado-${old}"
+          if retirado="$(cd paquete-anterior && sudo docker compose config 2>&1)"; then
+            echo "docker compose config desde el directorio anterior deberia fallar"; exit 1
+          fi
+          grep -q 'ESTE DIRECTORIO ESTA RETIRADO' <<<"${retirado}"
+          test "$(sudo stat -c '%a' paquete-anterior/.env)" = "600"
 
       - name: "U1 · Rescate de los informes de retencion: solo los validos, 0640, sin seguir enlaces"
         if: steps.anterior.outputs.skip != 'true'
@@ -2410,6 +2421,8 @@ jobs:
           sudo rm -f paquete-nuevo/.env
           sudo rm -rf paquete-nuevo/certs
           mkdir -p paquete-nuevo/certs
+          # U1 retiro el directorio anterior; deshacerlo es un `mv` (runbook §5.1).
+          sudo mv "paquete-anterior/docker-compose.yml.retirado-${old}" paquete-anterior/docker-compose.yml
           bash .github/scripts/prepare-package-env.sh paquete-anterior
           (cd paquete-anterior && sudo ./install.sh >salida-reinstalacion.log 2>&1) || { tail -40 paquete-anterior/salida-reinstalacion.log; exit 1; }
           compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
@@ -2601,6 +2614,21 @@ jobs:
           docker image inspect "${reg}/postgres:${new}" >/dev/null
           ! grep -F '[aviso]' paquete-fijado-sano/salida-p1.log | grep -qi 'etiquetar'
 
+      - name: "P1b · ¿Se admite actualizar in place desde la version anterior? (solo desde la 2.2.0)"
+        id: inplace
+        if: steps.anterior.outputs.skip != 'true'
+        # update.sh rechaza en el paso 1 actualizar in place desde una version
+        # anterior a la 2.2.0 (check_in_place_source): la copia previa la haria la
+        # imagen nueva con el superusuario en BACKUP_DB_* y la vuelta atras dejaria
+        # la version vieja con montajes de copias que no sabe usar. Mientras la
+        # version anterior sea la 2.1.0, P2 comprueba ese rechazo y P2b/P3 no
+        # tienen sentido; desde que sea la 2.2.0 vuelven a correr enteros.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          menor="$(printf '%s\n%s\n' "${old%%[-+]*}" 2.2.0 | sort -V | head -n 1)"
+          if [ "${menor}" = "2.2.0" ]; then echo "ok=true" >>"${GITHUB_OUTPUT}"; else echo "ok=false" >>"${GITHUB_OUTPUT}"; fi
+
       - name: "P2 · Vuelta atras IN PLACE con el paquete fijado: vuelve a la version anterior, no a la nueva"
         if: steps.anterior.outputs.skip != 'true'
         # El escenario del bloqueante de la revision: el digest va como valor por
@@ -2617,6 +2645,10 @@ jobs:
           reg=localhost:5000/kronoqr
           sudo docker compose --env-file paquete-fijado-sano/.env -f paquete-fijado-sano/docker-compose.yml down -v --remove-orphans
           sudo rm -rf /var/backups/fichaje /var/log/kronoqr
+          # U3b (lado a lado, salida 0) retiro otra vez el directorio anterior.
+          if [ -f "paquete-anterior/docker-compose.yml.retirado-${old}" ]; then
+            sudo mv "paquete-anterior/docker-compose.yml.retirado-${old}" paquete-anterior/docker-compose.yml
+          fi
           bash .github/scripts/prepare-package-env.sh paquete-anterior
           sed -i "s|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=${reg}|" paquete-anterior/.env
           (cd paquete-anterior && sudo ./install.sh >salida-p2-instalacion.log 2>&1) || { tail -60 paquete-anterior/salida-p2-instalacion.log; exit 1; }
@@ -2634,6 +2666,16 @@ jobs:
           set -e
           cd ..
           tail -60 paquete-anterior/salida-p2.log
+          if [ "${{ steps.inplace.outputs.ok }}" != "true" ]; then
+            # Desde una anterior a la 2.2.0: rechazo en el paso 1, sin tocar nada.
+            test "${codigo}" -eq 2 || { echo "Se esperaba salida 2 (in place rechazado desde ${old}) y fue ${codigo}"; exit 1; }
+            grep -q 'no se puede actualizar con el paquete descomprimido ENCIMA' paquete-anterior/salida-p2.log
+            curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+            test "$(sudo docker inspect -f '{{.Image}}' "$(compose ps -q app)")" = "${id_vieja}"
+            test ! -e paquete-anterior/.env.kronoqr-pre-update
+            sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
+            exit 0
+          fi
           test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
           grep -q 'VUELTA ATRAS COMPLETADA' paquete-anterior/salida-p2.log
           curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
@@ -2647,8 +2689,53 @@ jobs:
           sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
           sudo grep -q '^# KQ_ROLLBACK_DIGESTS' paquete-anterior/.env
 
+      - name: "P2b · Copia previa fallida IN PLACE: no recrea nada y la version anterior sigue con SU imagen (V7-RV-1)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # El defecto: si la copia previa fallaba in place, `lift_maintenance` hacia
+        # `up -d horizon scheduler` con el docker-compose.yml de la instalacion, que
+        # ya es el del paquete nuevo con el digest nuevo por defecto. Compose
+        # recreaba horizon y scheduler con la imagen NUEVA sobre el esquema VIEJO y
+        # el mensaje decia «no se ha tocado». Ahora los vuelve a ARRANCAR (`start`).
+        # Se parte de lo que deja P2 (version anterior en pie, in place), se
+        # superpone el paquete sano y se hace fallar la copia quitando al uid 1000
+        # la escritura en daily/. Tiene que salir con 2, con los MISMOS contenedores
+        # (ninguno recreado, tampoco postgres ni redis) y con la imagen anterior.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          reg=localhost:5000/kronoqr
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          id_vieja="$(docker image inspect -f '{{.Id}}' "${reg}/php:${old}")"
+          declare -A antes=()
+          for s in app postgres redis horizon scheduler; do antes[$s]="$(compose ps -q "$s")"; done
+          cp -a paquete-fijado-sano-p3/. paquete-anterior/
+          sudo chmod 0550 /var/backups/fichaje/daily
+          cd paquete-anterior
+          set +e
+          sudo ./update.sh >salida-p2b.log 2>&1
+          codigo=$?
+          set -e
+          cd ..
+          sudo chmod 0750 /var/backups/fichaje/daily
+          tail -40 paquete-anterior/salida-p2b.log
+          test "${codigo}" -eq 2 || { echo "Se esperaba salida 2 (copia previa fallida) y fue ${codigo}"; exit 1; }
+          grep -q 'LA COPIA PREVIA HA FALLADO' paquete-anterior/salida-p2b.log
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+          for s in app postgres redis horizon scheduler; do
+            test "$(compose ps -q "$s")" = "${antes[$s]}" || { echo "${s} se ha recreado"; exit 1; }
+            test "$(sudo docker inspect -f '{{.State.Running}}' "${antes[$s]}")" = "true" || { echo "${s} no esta en marcha"; exit 1; }
+          done
+          for s in app horizon scheduler; do
+            test "$(sudo docker inspect -f '{{.Image}}' "${antes[$s]}")" = "${id_vieja}" || { echo "${s} corre una imagen distinta de la anterior"; exit 1; }
+          done
+          # La copia del .env pasa a ser el .env (V7-RV-2): ni una segunda copia de
+          # los secretos, ni un .env con el que un `up` a mano levantaria la nueva.
+          test ! -e paquete-anterior/.env.kronoqr-pre-update
+          sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
+          sudo grep -qx 'IMAGE_DIGEST_PHP=' paquete-anterior/.env
+
       - name: "P3 · Y tras esa vuelta atras, actualizar con el paquete fijado sano: salida 0 y la imagen fijada"
-        if: steps.anterior.outputs.skip != 'true'
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
         run: |
           set -euo pipefail
           new="${{ steps.anterior.outputs.new_version }}"
@@ -2691,6 +2778,7 @@ jobs:
             paquete-fijado-sano/salida-p1.log
             paquete-anterior/salida-p2-instalacion.log
             paquete-anterior/salida-p2.log
+            paquete-anterior/salida-p2b.log
             paquete-anterior/salida-p3.log
           retention-days: 14
           if-no-files-found: warn

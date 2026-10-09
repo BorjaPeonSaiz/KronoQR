@@ -227,10 +227,13 @@ dice que la clave del WAL no deriva de la maestra. **PostgreSQL está reteniendo
 WAL**: arréglalo hoy.
 
 ```bash
+# 0. Desde el directorio VIGENTE de la instalación (el que dice update.sh al
+#    terminar; backup.sh está en su raíz, no en scripts/)
+cd /opt/kronoqr-<version>
 # 1. Recalcula la clave a partir de la maestra (no se imprime nada si no pides nada más)
-sudo bash /opt/kronoqr/scripts/backup.sh derive-wal-key --write-env /opt/kronoqr/.env
+sudo bash ./backup.sh derive-wal-key --write-env .env
 # 2. Recrea PostgreSQL para que la lea
-docker compose up -d postgres
+sudo docker compose up -d postgres
 # 3. Comprueba que archiva (a los pocos segundos)
 docker compose exec postgres psql -U "$DB_USERNAME" -d "$DB_DATABASE" -c \
   "SELECT pg_switch_wal()" && sleep 10 && docker compose exec postgres psql -U "$DB_USERNAME" -d "$DB_DATABASE" -tc \
