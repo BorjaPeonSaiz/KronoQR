@@ -5,7 +5,7 @@
 Esto **no es un incidente**: es un procedimiento programado que dura semanas.
 Se ejecuta cuando toca por calendario (§7.7) o cuando hay sospecha de
 compromiso de la clave — en ese segundo caso, lee antes la
-[§7](#7-si-la-clave-esta-comprometida-no-hay-solape-que-valga).
+[§7](#7-si-la-clave-está-comprometida-no-hay-solape-que-valga).
 
 **Impacto en el fichaje, que es lo primero que hay que saber:** **ninguno**,
 si se sigue este orden. Durante el solape conviven dos claves y las tarjetas
@@ -190,7 +190,7 @@ un botón para ver quién falta.
 Y como métrica, para el panel de Grafana:
 
 ```bash
-grep credentials_pending_reprint "$BACKUP_PATH/metrics/kronoqr_credentials.prom"
+grep credentials_pending_reprint "${BACKUP_PATH:-/var/backups/fichaje}/metrics/kronoqr_credentials.prom"
 ```
 
 **Vigila también `pin_fallback_scans_total{site}`.** Si sube durante la
@@ -209,7 +209,7 @@ los quioscos tienen la cola a 0 y `queue_storage` en `durable`, en «Salud de
 quioscos» del panel o con:
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health --json | jq '.devices[] | {name, queue_storage, pending_queue_size, verdict}'
+docker compose exec -T app php artisan kiosk:health --json | jq '.devices[] | {name, queue_storage, pending_queue_size, verdict}'
 ```
 
 Un quiosco con cola pendiente o con tamaño «desconocido» (cola en memoria)

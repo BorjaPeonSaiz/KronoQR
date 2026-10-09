@@ -40,7 +40,7 @@ antes de los cinco minutos del `for:` no llega a notificar; cinco a la vez sí
 llegan, agrupados. Y si el aviso llega dentro de la ventana de mantenimiento
 semanal declarada (`ALERT_MAINTENANCE_*`) o de la que abre `update.sh`
 mientras dura una actualización, está silenciado a propósito — es el mismo
-motivo por el que estas cuatro alertas de quiosco, junto con las de API,
+motivo por el que las alertas de quiosco, junto con las de API,
 certificado y disco, son justo las que se callan en esas ventanas y no las de
 integridad, copia o auditoría.
 
@@ -74,7 +74,7 @@ esté fichando ahí.
 ### 2.2 La consola, que es la segunda red de seguridad
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health
+docker compose exec -T app php artisan kiosk:health
 ```
 
 Mira la fila del quiosco señalado: **último contacto** (relativo y en la zona
@@ -96,12 +96,15 @@ Redis no toca. Por eso la ronda de la mañana (`endurecimiento.md`, lista
 trimestral) incluye ejecutar este comando aunque no haya sonado ninguna
 alerta, y por eso el cuadro «Operación de quioscos» muestra el recuento de
 dispositivos emparejados frente al de series presentes en Prometheus: si
-difieren, es exactamente este límite.
+difieren, es exactamente este límite. Si lo que ocurre es que Redis **está caído**,
+suena `AlmacenDeMetricasCaido` y Alertmanager **inhibe** las alertas de quiosco
+mientras dure: no te fíes de un cuadro en verde y sigue
+[`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md).
 
 ### 2.3 ¿Llega tráfico de esa tablet al servidor?
 
 ```bash
-docker compose -f infra/compose.prod.yaml logs --tail 200 nginx | grep '/api/v1/kiosk/heartbeat'
+docker compose logs --tail 200 nginx | grep '/api/v1/kiosk/heartbeat'
 ```
 
 - **Aparecen peticiones recientes de otras tablets pero ninguna de la
@@ -181,7 +184,7 @@ dispositivo y muestra recuentos (regla dura 21).
 Antes de tocar el dispositivo o de desvincularlo, comprueba su cola:
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health
+docker compose exec -T app php artisan kiosk:health
 ```
 
 La misma cifra está en la columna «Pendientes» del panel —con la antigüedad

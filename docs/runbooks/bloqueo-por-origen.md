@@ -28,7 +28,8 @@ entiende a simple vista. Para saber **quiénes** son, hay dos caminos:
   con la IP en claro en la columna `ip`:
 
   ```bash
-  docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -c \n    "SELECT occurred_at, ip, payload->>'channel' AS channel,
+  docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -c \
+    "SELECT occurred_at, ip, payload->>'channel' AS channel,
             payload->>'failures' AS failures, payload->>'ip_hash' AS ip_hash
        FROM audit_log
       WHERE action = 'auth.origin_locked'

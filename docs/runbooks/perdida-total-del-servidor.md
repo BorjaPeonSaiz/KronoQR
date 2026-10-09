@@ -81,7 +81,7 @@ Monta `BACKUP_PATH` antes de instalar y **copia ahí las copias** que rescataste
 «`BACKUP_PATH`». Comprueba que hay copias:
 
 ```bash
-ls -lt "${BACKUP_PATH}/daily" | head -5
+ls -lt "${BACKUP_PATH:-/var/backups/fichaje}/daily" | head -5
 ```
 
 ### 3.2 Instala el MISMO paquete

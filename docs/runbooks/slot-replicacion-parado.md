@@ -56,9 +56,10 @@ docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB
   -c "SELECT pg_drop_replication_slot('"'"'NOMBRE_DEL_SLOT'"'"')"'
 ```
 
-La métrica se refresca con la siguiente copia (`backup.sh` la escribe en cada
-ejecución): para apagar la alerta sin esperar a la noche,
-`docker compose exec scheduler php artisan backup:run`.
+La métrica la refresca `wal-metrics.sh` **cada minuto** desde el `scheduler`
+(`kronoqr_wal.prom`): con el slot retirado, la alerta se apaga sola en cuanto
+Prometheus la vuelve a leer. Si no cambia tras unos minutos, el exportador no está
+publicando: [`restaurar-backup.md`](restaurar-backup.md) §4.3.
 
 ## 4. Averiguar cómo nació (es una señal de seguridad)
 

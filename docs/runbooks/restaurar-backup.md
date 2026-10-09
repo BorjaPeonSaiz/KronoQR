@@ -13,8 +13,9 @@ verificada | cualquiera | Crítica | IT del cliente»*), definidas en
 | `ArchivadoDeWalFallando` | el último intento de archivado falló y no se ha recuperado, `for: 10m` | Crítica | IT del cliente | [§4](#4-el-archivado-de-wal-está-detenido) |
 | `MedicionDeWalAusente` | el exportador del RPO lleva > 5 min sin publicar, `for: 5m` | Crítica | IT del cliente | [§4.3](#43-no-llega-la-medida-del-rpo) |
 | `ArchiveTimeoutFueraDeRango` | `archive_timeout` = 0 o > 900, `for: 10m` | Crítica | IT del cliente | [§4.4](#44-archive_timeout-fuera-de-rango) |
-| `DiscoDeCopiasCasiLleno` | < 20 % libre, `for: 15m` | Alta | IT del cliente | [§5](#5-disco-de-copias-casi-lleno) |
-| `SimulacroDeRestauracionCaducado` | simulacro fallido o > 100 días | Alta | IT del cliente | [§7](#7-simulacro-trimestral-rnf-d-05-rq-09) |
+| `DiscoDeCopiasCasiLleno` | < 20 % libre, `for: 15m` | Media (aviso) | IT del cliente | [§5](#5-disco-de-copias-casi-lleno) |
+| `SimulacroDeRestauracionNuncaEjecutado` | no consta ningún simulacro correcto, `for: 24h` | Media (aviso) | IT del cliente | [§7](#7-simulacro-trimestral-rnf-d-05-rq-09) |
+| `SimulacroDeRestauracionCaducado` | simulacro fallido o > 100 días, `for: 1h` | Media (aviso) | IT del cliente | [§7](#7-simulacro-trimestral-rnf-d-05-rq-09) |
 
 **Lo primero, y vale para todas: el fichaje no está afectado.** Ninguna de estas
 alertas impide que nadie fiche. Los quioscos siguen registrando y encolando
@@ -94,6 +95,15 @@ cat "${BACKUP_PATH:-/var/backups/fichaje}"/metrics/*.prom
 Salida esperada de una instalación sana: `kronoqr_backup_last_result{type="dump"} 1`,
 `kronoqr_backup_last_verify_result 1` y una marca de tiempo de hace menos de un día.
 
+**Sin Alertmanager configurado la alerta no llega a nadie, pero el diagnóstico sí lo ve.**
+`./doctor.sh` (y `docker compose exec -T app php artisan product:doctor`) lleva la sonda
+`backup.last_good_copy`, que lee los mismos ficheros de métricas y con el mismo umbral de
+26 h: `failure` si la última copia terminó con error, si la última verificación falló o si la
+última copia verificada tiene más de 26 h; `warning` si aún no consta ninguna (normal hasta la
+primera copia nocturna tras instalar, no después de esa noche). Su mensaje trae las órdenes
+de arriba. Y la sonda `scheduler.heartbeat` avisa de que el `scheduler` —que es quien hace
+las copias— no está lanzando sus tareas (§4.3).
+
 ### Códigos de salida y qué significa cada uno
 
 Es la tabla común de los cinco scripts ([`../cliente/operacion.md`](../cliente/operacion.md) §8; hasta la 2.0.0 `backup.sh` tenía una propia, la equivalencia está allí):
@@ -126,7 +136,7 @@ la clave no es la que corresponde, o el fichero está dañado. Comprueba con la
 copia anterior:
 
 ```bash
-docker compose exec scheduler php artisan backup:verify --file="${BACKUP_PATH}/daily/<copia-anterior>.dump.enc"
+docker compose exec scheduler php artisan backup:verify --file="${BACKUP_PATH:-/var/backups/fichaje}/daily/<copia-anterior>.dump.enc"
 ```
 
 **Si el mensaje habla de permisos o de no poder conectar como
@@ -153,7 +163,7 @@ docker compose logs --tail=50 scheduler | grep -i backup
 
 # ¿Existen los ficheros de métricas y los está leyendo node-exporter?
 ls -l "${BACKUP_PATH:-/var/backups/fichaje}"/metrics/
-docker compose exec prometheus wget -qO- http://node-exporter:9100/metrics | grep kronoqr_backup | head
+docker compose exec -T prometheus wget -qO- http://node-exporter:9100/metrics | grep kronoqr_backup | head
 
 # ¿Está montado el destino? (típico con almacenamiento en red)
 mount | grep "$(dirname "${BACKUP_PATH:-/var/backups/fichaje}")"
@@ -173,14 +183,14 @@ la base de datos se para. Además, mientras dure, el RPO deja de ser 15 minutos.
 
 ```bash
 # 1. Qué dice PostgreSQL (fuente autorizada)
-docker compose exec postgres psql -U "$DB_USERNAME" -d "$DB_DATABASE" -c \
-  "SELECT last_archived_wal, last_archived_time, failed_count, last_failed_wal, last_failed_time FROM pg_stat_archiver"
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+  "SELECT last_archived_wal, last_archived_time, failed_count, last_failed_wal, last_failed_time FROM pg_stat_archiver"'
 
 # 2. Por qué falla (el script dice qué hacer en cada caso)
 docker compose logs --tail=100 postgres | grep -i archive
 
 # 3. Cuánto WAL se está acumulando sin archivar
-docker compose exec postgres sh -c 'ls -1 "$PGDATA"/pg_wal | wc -l'
+docker compose exec -T postgres sh -c 'ls -1 "$PGDATA"/pg_wal | wc -l'
 ```
 
 | Causa | Síntoma en el log | Resolución |
@@ -235,9 +245,10 @@ sudo bash ./backup.sh derive-wal-key --write-env .env
 # 2. Recrea PostgreSQL para que la lea
 sudo docker compose up -d postgres
 # 3. Comprueba que archiva (a los pocos segundos)
-docker compose exec postgres psql -U "$DB_USERNAME" -d "$DB_DATABASE" -c \
-  "SELECT pg_switch_wal()" && sleep 10 && docker compose exec postgres psql -U "$DB_USERNAME" -d "$DB_DATABASE" -tc \
-  "SELECT failed_count, last_archived_wal FROM pg_stat_archiver"
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT pg_switch_wal()"' \
+  && sleep 10 \
+  && docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tc \
+    "SELECT failed_count, last_archived_wal FROM pg_stat_archiver"'
 ```
 
 La clave del WAL **se deriva siempre de `BACKUP_ENCRYPTION_KEY`**: no inventes
@@ -254,18 +265,27 @@ con el `kid` del último segmento archivado.
 docker compose ps scheduler
 docker compose logs --tail=50 scheduler | grep -i wal-metrics
 docker compose exec scheduler bash /opt/kronoqr/scripts/wal-metrics.sh   # sale con 2 y dice qué falta
-ls -l "${BACKUP_PATH}"/metrics/kronoqr_wal.prom
+ls -l "${BACKUP_PATH:-/var/backups/fichaje}"/metrics/kronoqr_wal.prom
 ```
 
 Mientras no haya medida **no se sabe si hay RPO**: comprueba a mano `pg_stat_archiver`
 (§4, paso 1) y atiende el `scheduler` hoy.
 
+`./doctor.sh` ve lo mismo sin necesidad de alertas: la sonda `scheduler.heartbeat` de
+`product:doctor` lee esta misma medida y avisa (`warning`) si hace más de 5 min que no se
+publica, o si no consta nunca (tras instalar o actualizar, espera un par de minutos antes de
+alarmarte). Como el latido es indirecto, el aviso nombra las dos causas: el contenedor
+`scheduler` parado (`docker compose up -d scheduler`) o la medida que no puede leer PostgreSQL
+con el rol de copias (`docker compose exec scheduler php artisan backup:wal-metrics` dice
+qué falla). Si el aviso es «no se puede leer» el fichero, el directorio de métricas tiene que
+ser del usuario 1000: `ls -ld "${BACKUP_PATH:-/var/backups/fichaje}/metrics"`.
+
 ### 4.4 `archive_timeout` fuera de rango
 
 Sin `archive_timeout=900` el RPO deja de ser 15 minutos: pasa a ser lo que
-tarde en llenarse un segmento de 16 MB. Lo fija `infra/compose.prod.yaml`
-(y `compose.dev.yaml`): si alguien lo ha editado, restáuralo y
-`docker compose up -d postgres`. `docker compose exec postgres psql -U "$DB_USERNAME" -d "$DB_DATABASE" -tc "SHOW archive_timeout"` debe decir `15min`.
+tarde en llenarse un segmento de 16 MB. Lo fija el `docker-compose.yml` del paquete:
+si alguien lo ha editado, restáuralo (copia el de `kronoqr-<versión>.tar.gz`) y
+`docker compose up -d postgres`. `docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tc "SHOW archive_timeout"'` debe decir `15min`.
 
 ### 4.5 Segmentos antiguos sin cifrar (actualización desde la 2.1.0)
 
@@ -288,7 +308,7 @@ actualizar contienen WAL en claro con datos personales: destrúyelas.**
 
 ```bash
 df -h "${BACKUP_PATH:-/var/backups/fichaje}"
-du -sh "${BACKUP_PATH}"/daily "${BACKUP_PATH}"/base "${BACKUP_PATH}"/wal
+du -sh "${BACKUP_PATH:-/var/backups/fichaje}"/daily "${BACKUP_PATH:-/var/backups/fichaje}"/base "${BACKUP_PATH:-/var/backups/fichaje}"/wal
 ```
 
 Qué ajustar, por orden de preferencia:
@@ -388,7 +408,7 @@ Para restaurar una copia concreta, no la última:
 ```bash
 docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --list
 docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh \
-  --file "${BACKUP_PATH}/daily/kronoqr-<marca>.dump.enc" --yes
+  --file "${BACKUP_PATH:-/var/backups/fichaje}/daily/kronoqr-<marca>.dump.enc" --yes
 ```
 
 ### 6.3 Vuelta atrás
@@ -415,19 +435,21 @@ herramientas que entienden el formato cifrado (`kronoqr-extract-base` y
 
 ```bash
 # 0. Ensáyalo SIEMPRE antes sobre un contenedor limpio, sin tocar nada:
-sudo bash /opt/kronoqr/scripts/restore-drill.sh --mode pitr
+sudo bash ./restore-drill.sh --mode pitr
 
 # 1. Copia física más reciente
-ls -t "${BACKUP_PATH}"/base/
+ls -t "${BACKUP_PATH:-/var/backups/fichaje}"/base/
 
 # 2. Verifica su autenticidad y despliégala sobre un PGDATA vacío. `--user 0:0`: las
 #    copias son del usuario 1000 (0750) y `postgres` no las lee; el PGDATA queda como
 #    `postgres`. `--recovery` deja `recovery.signal`.
-IMG="${IMAGE_REGISTRY:-ghcr.io/kronoqr}/postgres:${IMAGE_TAG}"
+#    La imagen es la que fija el paquete por digest (ADR-053); se lee desde el
+#    directorio vigente de la instalación:
+IMG=$(docker compose config --images | grep '/postgres:')
 docker volume create pgdata-restaurado
 docker run --rm --user 0:0 -e BACKUP_ENCRYPTION_KEY \
   -v pgdata-restaurado:/restaurado \
-  -v "${BACKUP_PATH}/base:/base:ro" "$IMG" \
+  -v "${BACKUP_PATH:-/var/backups/fichaje}/base:/base:ro" "$IMG" \
   kronoqr-extract-base /base/<copia>.tar.gz.enc /restaurado --recovery
 
 # 3. Arráncalo en recuperación con el WAL archivado. La clave del WAL llega por entorno;
@@ -438,7 +460,7 @@ docker run --rm --user 0:0 -e BACKUP_ENCRYPTION_KEY \
 #    (con la anterior en la variable ANTERIOR de tu shell, sin escribirla en la orden).
 docker run --rm -e BACKUP_WAL_KEY -e BACKUP_WAL_KEY_PREVIOUS \
   -v pgdata-restaurado:/var/lib/postgresql/data \
-  -v "${BACKUP_PATH}/wal:/wal:ro" -e KRONOQR_WAL_ARCHIVE_DIR=/wal "$IMG" \
+  -v "${BACKUP_PATH:-/var/backups/fichaje}/wal:/wal:ro" -e KRONOQR_WAL_ARCHIVE_DIR=/wal "$IMG" \
   postgres -c restore_command='kronoqr-restore-wal %f %p' \
            -c recovery_target_time='2026-01-15 06:00:00+00' -c recovery_target_action=promote
 ```
@@ -615,14 +637,16 @@ barata demuestra: que **todas** las claves ajenas se satisfacen con los datos
 restaurados, y que los **conteos por tabla** cuadran con el manifiesto.
 
 ```bash
-# En el servidor del cliente (necesita Docker, que ya está)
-sudo bash /opt/kronoqr/scripts/restore-drill.sh
+# En el servidor del cliente (necesita Docker, que ya está), desde el directorio
+# VIGENTE de la instalación: los scripts están en la raíz del paquete
+cd /opt/kronoqr-<version>
+sudo bash ./restore-drill.sh
 
 # Sin Docker disponible, contra una instancia de PRUEBAS (nunca la de producción)
-sudo bash /opt/kronoqr/scripts/restore-drill.sh --mode database
+sudo bash ./restore-drill.sh --mode database
 
 # Recuperación a un punto en el tiempo: copia física + WAL cifrado, en un contenedor limpio
-sudo bash /opt/kronoqr/scripts/restore-drill.sh --mode pitr
+sudo bash ./restore-drill.sh --mode pitr
 ```
 
 El modo `database` **no** se lanza con el servicio `restore`: ese servicio
@@ -638,10 +662,12 @@ muere dentro del contenedor del simulacro; nunca toca el disco del servidor.
 del cliente, el día 1 de cada trimestre:
 
 ```cron
-0 4 1 1,4,7,10 * /opt/kronoqr/scripts/restore-drill.sh >> /var/log/kronoqr-drill.log 2>&1
+0 4 1 1,4,7,10 * cd /opt/kronoqr-<version> && ./restore-drill.sh >> /var/log/kronoqr-drill.log 2>&1
 ```
 
-El simulacro lee el `.env` de la instalación (`/opt/kronoqr/.env`, junto al directorio `scripts/`) y el `.env` es de `root` con permisos `0600`: por eso se lanza con `sudo` a mano y, en el cron, desde la tabla de `root`. Si tu `.env` está en otro sitio, indícalo con `BACKUP_ENV_FILE=<ruta>` delante de la orden.
+La ruta lleva la versión porque el directorio vigente cambia con cada actualización lado a lado (`update.sh` retira el anterior): **cámbiala en el cron cada vez que actualices** ([`actualizacion-cliente.md`](actualizacion-cliente.md) §3). Si lo olvidas, el cron sigue ejecutando el script (y la imagen) de la versión anterior, y deja de probar lo que de verdad está en marcha; la alerta `SimulacroDeRestauracionCaducado` solo te lo recuerda a los 100 días.
+
+El simulacro lee el `.env` que está junto al script (el del directorio vigente, `/opt/kronoqr-<version>/.env`) y el `.env` es de `root` con permisos `0600`: por eso se lanza con `sudo` a mano y, en el cron, desde la tabla de `root`. Si tu `.env` está en otro sitio, indícalo con `BACKUP_ENV_FILE=<ruta>` delante de la orden.
 
 En el repositorio del fabricante lo ejecuta
 [`.github/workflows/backup-drill.yml`](../../.github/workflows/backup-drill.yml)
@@ -653,6 +679,14 @@ las dos.
 **Qué guardar de cada simulacro.** El informe de
 `BACKUP_PATH/reports/drill-<marca>.log`. Es la evidencia documental de RNF-D-05
 y de RQ-09, y no contiene ni un dato personal.
+
+**`SimulacroDeRestauracionNuncaEjecutado`** suena a las 24 h de una instalación
+(o de una restauración sobre un servidor nuevo) en la que ningún simulacro ha
+terminado bien: no hay métrica que comparar. No es una avería, es un
+pendiente: lanza el primero a mano (`sudo bash ./restore-drill.sh`, arriba),
+déjalo terminar y, con él correcto, la alerta se apaga sola. Si el primero
+falla, la métrica ya existe y quien suena es `SimulacroDeRestauracionCaducado`
+(`last_result == 0`): vale lo de abajo.
 
 **Si el simulacro falla**, la última copia no sirve:
 

@@ -119,6 +119,24 @@ corrección.
 **Si el registro de Redis no habla del AOF**, la causa suele ser disco lleno
 ([`espacio-en-disco.md`](espacio-en-disco.md)) o falta de memoria del servidor.
 
+### 1.2 Lo que `doctor` ve aunque no suene nada: `horizon` parado, `scheduler` mudo, copia sin hacer
+
+Tres fallos son silenciosos: el fichaje sigue funcionando y nadie los nota hasta que
+echa en falta algo. Los ve
+`./doctor.sh` (o `docker compose exec -T app php artisan product:doctor`), con tres sondas
+cuyo texto ya trae la orden:
+
+| Sonda | Qué dice | Qué hacer |
+| --- | --- | --- |
+| `queue.worker` | `failure`: ningún proceso Horizon consume la cola. `warning`: en pausa, o trabajos esperando y ninguno en proceso. Hasta que vuelva no termina ninguna exportación íntegra (Inspección, derechos RGPD), ni informes en diferido, ni avisos de incidencias | `docker compose ps horizon`, `docker compose up -d horizon`, `docker compose logs --tail=100 horizon`. En pausa: reanúdalo si nadie la pidió a propósito (el `fix` de `doctor` trae la orden exacta de Horizon). Tras actualizar, espera un minuto |
+| `scheduler.heartbeat` | `warning`: la medida que el `scheduler` publica cada minuto lleva más de 5 min parada (o nunca se publicó). Sin él no hay copias, ni verificación de la cadena de auditoría, ni cálculo nocturno | [`restaurar-backup.md`](restaurar-backup.md) §4.3 |
+| `backup.last_good_copy` | `failure`: la última copia o su verificación fallaron, o la última verificada tiene más de 26 h | [`restaurar-backup.md`](restaurar-backup.md) §2 |
+
+Las dos últimas tienen su alerta (`MedicionDeWalAusente`, `CopiaDeSeguridadSinVerificar`);
+la sonda existe para la instalación que aún no tiene Alertmanager configurado
+([`entrega-de-alertas.md`](entrega-de-alertas.md)). La primera no tiene alerta: la
+revisión semanal de esta página (y `doctor.sh` tras cada actualización) es lo que la vigila.
+
 ---
 
 ## 2. Qué es esto, y qué NO es
@@ -315,7 +333,7 @@ defecto**, el resumen por origen y nivel más los grupos del periodo —hasta
 dentro del texto. Es lo primero que pide soporte al
 abrir una incidencia, y es lo único que necesita en la mayoría de los casos
 (runbook del fabricante,
-[`incidencia-sin-acceso.md`](incidencia-sin-acceso.md), §4.4). No hace falta
+[`incidencia-sin-acceso.md`](incidencia-sin-acceso.md), §4, punto 4). No hace falta
 copiar filas a mano ni hacer capturas de la tabla.
 
 Escala a soporte del fabricante cuando:

@@ -19,16 +19,12 @@ las entradas y salidas de esas horas se corrigen después desde el panel con el
 motivo `FALLO_TECNICO_QUIOSCO`, que queda trazado (RN-13). No inventes horas:
 pregúntalas.
 
-> **Estado.** Procedimiento real, entregado junto con el emparejamiento por
-> código. **Las capturas de pantalla las añade la tarea 5.11**; los recuadros de
-> texto de este documento reproducen lo que debe verse mientras tanto.
-
 Todos los comandos se ejecutan **en el servidor**, desde el directorio de la
 instalación, igual que en
 [`../cliente/instalacion.md`](../cliente/instalacion.md):
 
 ```bash
-cd /opt/kronoqr-2.0.0
+cd /opt/kronoqr-<versión>        # el directorio VIGENTE (el que dijo update.sh al terminar)
 docker compose exec app php artisan <comando>
 ```
 
@@ -649,7 +645,7 @@ no son culpa de nadie ni un error de la persona, y así lo explica
    menos de un minuto. Desde la consola, el estado de la flota:
 
    ```bash
-   docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health
+   docker compose exec -T app php artisan kiosk:health
    ```
 
 5. **Avisa a RRHH de las incidencias ya abiertas.** Las que se abrieron mientras

@@ -123,7 +123,12 @@ docker compose logs --tail 50 nginx
 Si `SondaDelBordeFallida` suena a la vez, sigue
 [`errores-en-el-panel.md`](errores-en-el-panel.md). Si solo suena esta, el
 borde sirve pero `/metrics` no: revisa `METRICS_ALLOW_CIDR` y el estado del
-objetivo en Prometheus (Estado → Targets, job `kronoqr-api`).
+objetivo en Prometheus (job `kronoqr-api`):
+
+```bash
+docker compose exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/targets \
+  | jq -r '.data.activeTargets[] | select(.labels.job == "kronoqr-api") | [.health, .lastError] | @tsv'
+```
 
 ## 5. Verificación
 

@@ -55,7 +55,7 @@ Lo que ocupa espacio en una instalación de KronoQR, y dónde:
 | **WAL ya archivado** | `BACKUP_PATH/wal` | `BACKUP_WAL_RETENTION_DAYS` (8 de serie) |
 | **Informes de copia, restauración y actualización** | `BACKUP_PATH/reports` | Pequeños, se acumulan indefinidamente — no hay purga automática, es la constancia de que la operación se hizo (`operacion.md` §6) |
 | **Registro técnico y trazas** | Volúmenes con nombre `loki-data` y `tempo-data`, solo si el perfil `observability` está encendido | 90 días (`TECHNICAL_LOG_RETENTION_DAYS`), fijado además en `infra/observability/loki/loki.yaml` y `tempo.yaml`. Nulo si `LOKI_URL` y `OTEL_EXPORTER_OTLP_ENDPOINT` están vacíos |
-| **Métricas de Prometheus** | Volumen con nombre `prometheus-data` | 90 días (`--storage.tsdb.retention.time=90d`, fijo en `infra/compose.prod.yaml`) |
+| **Métricas de Prometheus** | Volumen con nombre `prometheus-data` | 90 días (`--storage.tsdb.retention.time=90d`, fijo en el `docker-compose.yml` del paquete) |
 | **Histórico de errores técnicos** (`error_events`) | Dentro de la propia base de datos | 90 días (`ERROR_HISTORY_RETENTION_DAYS`), purga sola a diario. Pesa poco frente al resto — no es el sospechoso habitual |
 | **Imágenes de versiones anteriores** | Almacenamiento de imágenes de Docker | Cada `update.sh` descarga las imágenes de la versión nueva y **no borra** las de la anterior — es la forma en que la vuelta atrás sigue siendo posible sin volver a descargar nada |
 
@@ -158,12 +158,12 @@ métricas — y con ellas, la alerta de la §2 queda ciega.
 ```bash
 docker compose ps node-exporter
 docker compose logs --tail 50 node-exporter
-curl -s http://node-exporter:9100/metrics | grep node_filesystem_size_bytes | head
+docker compose exec -T prometheus wget -qO- http://node-exporter:9100/metrics | grep node_filesystem_size_bytes | head
 ```
 
 Causas por frecuencia: el contenedor `node-exporter` parado, o sin acceso al
 punto de montaje raíz del anfitrión (`--path.rootfs=/host`, que
-`infra/compose.prod.yaml` ya declara).
+`docker-compose.yml` ya declara).
 
 **Las dos alertas de este documento se callan durante la ventana de
 mantenimiento semanal declarada** (`ALERT_MAINTENANCE_WEEKDAY`,

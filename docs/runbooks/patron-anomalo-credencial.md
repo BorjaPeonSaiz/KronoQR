@@ -163,7 +163,7 @@ el software y no «el informe».
    la suya.
 
    ```bash
-   docker compose -f infra/compose.prod.yaml exec -T app php artisan tinker --execute="
+   docker compose exec -T app php artisan tinker --execute="
      DB::table('incidents')
        ->join('employees', 'employees.id', '=', 'incidents.employee_id')
        ->where('incidents.type', 'anomalous_pattern')
@@ -314,13 +314,13 @@ está mirando».
 
 ```bash
 # ¿Corre el planificador?
-docker compose -f infra/compose.prod.yaml ps scheduler
+docker compose ps scheduler
 
 # ¿Cuándo fue la última pasada?
-docker compose -f infra/compose.prod.yaml exec -T scheduler sh -c 'cat "$BACKUP_PATH/metrics/kronoqr_pattern_detection.prom"'
+docker compose exec -T scheduler sh -c 'cat "$BACKUP_PATH/metrics/kronoqr_pattern_detection.prom"'
 
 # Lánzala a mano. Es idempotente: no duplica lo que ya se abrió.
-docker compose -f infra/compose.prod.yaml exec -T app php artisan attendance:detect-patterns
+docker compose exec -T app php artisan attendance:detect-patterns
 ```
 
 Salida esperada del comando: el recuento por patrón («kiosk_coincidence: n»,
@@ -345,7 +345,7 @@ distinto de cero de una tarea en segundo plano **no deja rastro en
 `error_events`**; su rastro es el log técnico:
 
 ```bash
-docker compose -f infra/compose.prod.yaml logs scheduler | grep -E 'attendance.pattern_detection|scheduler.command_failed|incident_not_opened'
+docker compose logs scheduler | grep -E 'attendance.pattern_detection|scheduler.command_failed|incident_not_opened'
 ```
 
 La línea `attendance.pattern_detection` lleva los recuentos de la pasada
