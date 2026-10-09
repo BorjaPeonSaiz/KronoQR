@@ -28,11 +28,11 @@ ficticios; los `.env` no se entregan).
 |---|---|---|
 | Arquitectura | [`docs/02-stack-tecnologico-y-plan-implementacion.md`](../02-stack-tecnologico-y-plan-implementacion.md) §1 y §2 | Monolito modular hexagonal, fronteras verificadas por Deptrac y Pest Arch |
 | Diseño de seguridad | [`docs/02-stack-tecnologico-y-plan-implementacion.md`](../02-stack-tecnologico-y-plan-implementacion.md) §7 | Limitación de tasa por capas, ámbitos de token, auditoría encadenada, ASVS, secretos |
-| Modelo de amenazas | [`docs/01-especificaciones-proyecto.md`](../01-especificaciones-proyecto.md) §8.1 | STRIDE, quince vectores con mitigación y técnica ATT&CK (catorce en el commit del informe interno; la del canal SMTP entró en el cierre de la Fase 3) |
+| Modelo de amenazas | [`docs/01-especificaciones-proyecto.md`](../01-especificaciones-proyecto.md) §8.1 | STRIDE, veintiún vectores con mitigación y técnica ATT&CK (catorce en el commit del informe interno; el resto entró en el cierre de la Fase 3 y en la 2.2.0) |
 | Madurez y riesgos aceptados | [`docs/07-seguridad-madurez-y-amenazas.md`](../07-seguridad-madurez-y-amenazas.md) | SAMM 2.0 con evidencia, mapa SDL, riesgos aceptados con dueño y fecha (§6) |
-| Contrato de la API | [`docs/api/openapi.yaml`](../api/openapi.yaml) | Fuente de verdad de las 79 rutas y 93 operaciones, ámbitos y respuestas de error |
+| Contrato de la API | [`docs/api/openapi.yaml`](../api/openapi.yaml) | Fuente de verdad de las 86 rutas y 100 operaciones (2.2.0), ámbitos y respuestas de error |
 | Matriz de trazabilidad de pruebas | [`docs/trazabilidad-pruebas.md`](../trazabilidad-pruebas.md) | Requisito → pruebas, generada por `php artisan qa:traceability` |
-| Decisiones arquitectónicas | [`docs/adr/`](../adr/) | ADR-001 a ADR-042; las de seguridad: 005, 009, 010, 014, 015, 016, 019, 020, 033, 037, 038, 039, 041 (enlace de descarga de un solo uso), 042 (el runtime no tiene credencial que pueda alterar el registro) |
+| Decisiones arquitectónicas | [`docs/adr/`](../adr/) | ADR-001 a ADR-057; las de seguridad: 005, 009, 010, 014, 015, 016, 019, 020, 033, 037, 038, 039, 041 (enlace de descarga de un solo uso), 042 (el runtime no tiene credencial que pueda alterar el registro), 043 (PIN rechazado), 044 (rotación del token del quiosco), 047 (ningún fichaje sale de la cola sin desenlace), 048 (lista blanca del histórico de errores), 049 (copias cifradas y autenticadas KQE1), 050 (portal accesible desde internet), 051 (cuentas de gestión), 052 (sesiones Bearer sin cookies), 053 (versiones inmutables), 057 (el registro horario frente a la credencial del runtime) |
 | Revisión interna previa | [`revision-interna-asvs-2026-09.md`](revision-interna-asvs-2026-09.md) | Hallazgos por ASVS y STRIDE, dictamen de los riesgos aceptados, qué mirar con más atención (§7) |
 | Evidencia automática | [`evidencia/`](evidencia/) | Salida resumida de `composer audit`, `npm audit`, Semgrep propio y comunitario, Trivy y gitleaks sobre el commit revisado |
 | Runbooks de seguridad | [`docs/runbooks/brecha-de-seguridad.md`](../runbooks/brecha-de-seguridad.md), [`ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md), [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md), [`triaje-hallazgos-seguridad.md`](../runbooks/triaje-hallazgos-seguridad.md) | Procedimientos de 72 h, respuesta a credenciales, integridad, triaje de hallazgos |
@@ -46,7 +46,7 @@ La instalación de entrega se prueba con `infra/scripts/package.sh` y `install.s
 
 ## Qué NO cubre esta preparación
 
-- **DAST**: no hay escáner dinámico; la revisión externa es el primer análisis dinámico del producto (doc 07 §6, fila «Sin DAST»).
+- **DAST**: solo un *baseline* pasivo de ZAP, manual y sin sesión (`make dast`, `docs/seguridad/evidencia/dast-2026-09-24.md`); la revisión externa es el primer análisis dinámico autenticado del producto (doc 07 §6, fila «Sin DAST»).
 - **Prueba de intrusión** sobre una instalación real ni verificación de la cadena TLS de un cliente.
 - **Validación jurídica** (art. 34.9 ET, RGPD, EIPD): es de la asesoría laboral y del DPO del cliente.
 - Fuera de alcance por decisión: biometría (ADR-009), credencial en móvil y TOTP de empleado (ADR-014), correo como

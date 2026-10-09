@@ -14,6 +14,12 @@ auditoría | cualquiera | Crítica (seguridad)»*), definidas en
 | `ParticionDeAuditoriaAusente` | `horizon="current"` a 0, `for: 5m` | Crítica | IT del cliente | [§5](#5-falta-la-partición-del-año-en-curso) |
 | `ParticionDeAuditoriaDelProximoAnoSinPreparar` | `horizon="next"` a 0 desde noviembre | Alta | IT del cliente | [§5](#5-falta-la-partición-del-año-en-curso) |
 
+**Si la cadena verifica pero el registro no cuadra con ella** (un tramo de
+`shift_entries` sin su asiento, o con otra hora u otra persona), no es esta
+alerta sino `DiscrepanciaEntreRegistroYAuditoria`: ve a
+[`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md). La
+conservación de evidencia de la §2 de este runbook vale para las dos.
+
 **Impacto en el fichaje, que es lo primero que hay que saber:**
 
 - `RoturaDeCadenaDeAuditoria` y `VerificacionDeAuditoriaAusente` — **ninguno**.

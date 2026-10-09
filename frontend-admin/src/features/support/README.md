@@ -36,7 +36,7 @@ guardado.
 
 **No guarda el token de una concesion en ningun sitio mas alla del estado
 efimero de esta vista.** Desaparece al salir de la pantalla, igual que el PIN
-en claro de `credentials` o el secreto TOTP de `auth`.
+en claro de `employees` o el secreto TOTP de `auth`.
 
 ## Quien la ve
 

@@ -19,8 +19,8 @@ aplica, y lo llama quien decide el cuando.
 
 ## Que precachea
 
-`globPatterns: **/*.{js,css,html,svg,woff2}`, con `maximumFileSizeToCacheInBytes` subido a
-6 MiB. El techo por defecto de Workbox (2 MiB) dejaria fuera el trozo del decodificador de
+`globPatterns: ['**/*.{js,css,html,svg,png}', '**/*-latin-*.woff2']` (las fuentes, solo los
+subconjuntos latin y latin-ext), con `maximumFileSizeToCacheInBytes` subido a 6 MiB. El techo por defecto de Workbox (2 MiB) dejaria fuera el trozo del decodificador de
 ZXing, y el quiosco arrancaria **sin poder escanear** precisamente cuando no hay red, que es
 cuando el precacheo importa.
 
@@ -63,6 +63,14 @@ vacie, simplemente espera al minuto siguiente.
 
 La pantalla de diagnostico (RF-KI-08) enseña, junto a la version, si hay una actualizacion
 pendiente y en que ventana se aplicara.
+
+## `testHooks.ts`
+
+Gancho de pruebas acotado para el guardian de actualizacion: fuerza el estado «hay version
+pendiente» y sustituye la recarga final por un marcador observable desde Playwright, dejando
+que decidan la MISMA puerta y el MISMO temporizador. Solo existe si la compilacion lo activa
+(`__KRONOQR_TEST_HOOKS__`, `define` de `vite.config.ts`) y la pagina pone
+`window.__KRONOQR_ENABLE_TEST_HOOKS__`.
 
 Cuando esto exija un service worker propio, se pasa a `strategies: 'injectManifest'` y el
 fuente vive en esta carpeta.

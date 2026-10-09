@@ -92,6 +92,7 @@ señales técnicas y conviene saber qué significa cada una.
 | `access.denied` | `audit_log` | Alguien autenticado fue a por datos fuera de su alcance y se le negó (RF-ID-03). Uno es un error de interfaz; una serie es tanteo |
 | `auth.lockout_started` | `audit_log` | Se abrió un bloqueo por intentos (RS-12, ADR-039) |
 | `legal_export.generated` | `audit_log` | Se generó una exportación legal. **Los datos salieron del servidor** |
+| `DiscrepanciaEntreRegistroYAuditoria` · `ConciliacionDelRegistroAusente` | Alertmanager, [`work-record.yml`](../../infra/observability/prometheus/rules/work-record.yml) | Un tramo del registro horario no cuadra con su asiento de auditoría (ADR-057 §4): tramo inventado, cambiado o borrado fuera de la aplicación. Su procedimiento es [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) |
 | `KronoqrAuthFailureBurst` · `KronoqrAuthLockouts` · `KronoqrAuthFailureSpike` | Alertmanager, [`auth.yml`](../../infra/observability/prometheus/rules/auth.yml) | Ataque a credenciales (MITRE ATT&CK T1110 / T1110.004). Su procedimiento es [`ataque-a-credenciales.md`](ataque-a-credenciales.md): **vuelve aquí solo si alguna cuenta llegó a entrar** |
 
 Las tres consultas que dicen en un minuto si hay algo raro. Lecturas con el rol
@@ -99,7 +100,7 @@ de la aplicación, que tiene `SELECT` sobre `audit_log` y nada más:
 
 ```bash
 # a) Accesos a datos personales de las últimas 48 h, por cuenta y conjunto.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT actor_type, actor_id,
          payload->>'dataset'                       AS conjunto,
@@ -114,7 +115,7 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
 # b) Denegaciones por alcance: quién tanteó, sobre qué y cuántas veces.
 #    `repeated_since_last_entry` cuenta las agrupadas por ventana (ADR-037):
 #    súmalo o subestimarás el intento.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT actor_type, actor_id, payload->>'dataset' AS conjunto,
          count(*) + COALESCE(sum((payload->>'repeated_since_last_entry')::int), 0) AS intentos,
@@ -126,7 +127,7 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
 
 # c) Bloqueos y entradas de las últimas 72 h, en orden. Lo que importa no es el
 #    bloqueo: es si DESPUÉS del bloqueo esa misma cuenta entró.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, action, actor_type, actor_id, ip
     FROM audit_log
@@ -163,19 +164,19 @@ mkdir -p "/var/backups/fichaje/evidencia/$INC"
 #    mantenimiento posterior se lleva la evidencia. Va por el scheduler, el
 #    único contenedor con la clave de las copias (si está parado, cambia
 #    `exec -T` por `run --rm --no-deps -T`).
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T scheduler \
+docker compose --env-file .env exec -T scheduler \
   php artisan backup:run --mode=dump
 
 # 2. La cadena de auditoría, verificada AHORA. Si ya estaba rota, el alcance
 #    que calcules a partir de audit_log no es fiable: ve primero a
 #    rotura-cadena-auditoria.md.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T app \
+docker compose --env-file .env exec -T app \
   php artisan compliance:verify-audit-chain \
   | tee "/var/backups/fichaje/evidencia/$INC/verificacion-cadena.txt"
 
 # 3. Extracto de los asientos relevantes, en CSV, para trabajar fuera.
 #    Ajusta la ventana a la que sospeches; es preferible pasarse.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "\copy (
       SELECT id, occurred_at, actor_type, actor_id, action,
              subject_type, subject_id, payload, ip, user_agent
@@ -190,14 +191,14 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
   ) TO STDOUT WITH CSV HEADER" > "/var/backups/fichaje/evidencia/$INC/audit.csv"
 
 # 4. Sesiones abiertas contra la base y desde dónde, ahora mismo.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
-  psql -U fichaje_app -d fichaje -c \
+docker compose --env-file .env exec -T postgres \
+  psql -U fichaje_migrator -d fichaje -c \
   "SELECT usename, application_name, client_addr, backend_start, state
      FROM pg_stat_activity WHERE datname = current_database();"
 
 # 5. Log técnico y del borde de la ventana sospechosa. No llevan nombres
 #    (regla dura 21): se pueden mover sin más precaución que la habitual.
-docker compose --env-file .env -f infra/compose.prod.yaml logs --no-color --since 168h app nginx \
+docker compose --env-file .env logs --no-color --since 168h app nginx \
   > "/var/backups/fichaje/evidencia/$INC/aplicacion-y-borde.log"
 ```
 
@@ -238,7 +239,7 @@ UUID='<employee_uuid de la persona>'   # se ve en su ficha del panel
 #    por correo), weekly_summary SOLO cuando el alcance tenía 50 personas o
 #    menos (por encima no nombra: ver b), la exportación legal por empleado y
 #    las denegaciones sobre su ficha.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, action, actor_type, actor_id,
          payload->>'dataset' AS conjunto, ip, payload
@@ -254,7 +255,7 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
 #    weekly_summary entra aquí cuando el alcance superó las 50 personas: el
 #    asiento lleva employees, scope, manager_user_id y week_start, sin lista, y
 #    el departamento del responsable dice quién iba dentro.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, actor_type, actor_id,
          payload->>'dataset'       AS conjunto,
@@ -328,7 +329,7 @@ La pregunta simétrica, cuando ya se sospecha de una cuenta o de un dispositivo:
 ```bash
 ACTOR_ID='<id de la cuenta>'   # SELECT id, email FROM users WHERE email = '...'
 
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, action,
          payload->>'dataset'            AS conjunto,
@@ -386,7 +387,7 @@ docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
 dio.
 
 ```bash
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T postgres \
+docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, action, actor_type, actor_id, subject_type, subject_id, payload
     FROM audit_log
@@ -460,19 +461,19 @@ propio asiento en `audit_log` —`credential.revoked`, `credential.reissued`,
 # Retirar el segundo factor de una cuenta de gestión cuyo TOTP pudo quedar en
 # manos ajenas. Deja `auth.two_factor_reset` con actor, momento y motivo; la
 # cuenta vuelve a tener que activarlo en su siguiente acceso.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T app \
+docker compose --env-file .env exec -T app \
   php artisan identity:2fa-reset <users.uuid> --reason='<motivo>'
 
 # Revocar la tarjeta comprometida de una persona. Deja `credential.revoked`
 # con el motivo; la reemisión posterior deja `credential.reissued`.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T app \
+docker compose --env-file .env exec -T app \
   php artisan credentials:revoke <uuid de la credencial> --reason='<motivo>'
 
 # Qué más hay disponible en TU versión, por módulo. Compruébalo antes de
 # teclear nada a las 03:00: este runbook no sustituye a `--help`.
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T app \
+docker compose --env-file .env exec -T app \
   php artisan list identity
-docker compose --env-file .env -f infra/compose.prod.yaml exec -T app \
+docker compose --env-file .env exec -T app \
   php artisan list credentials
 ```
 

@@ -127,10 +127,10 @@ Cada módulo sigue la misma disposición interna: `Domain/` (puro, sin framework
 El proyecto es el trabajo final de un máster de desarrollo con IA, y la forma de construirlo es parte del resultado. Todo el código se ha escrito con Claude Code a partir de una especificación y un plan de implementación redactados antes de la primera línea, con un andamiaje de tres capas:
 
 - [`CLAUDE.md`](CLAUDE.md): contexto permanente con 21 reglas duras (dominio puro, UTC, nada se borra, idempotencia por `scan_id`, cero biometría…) que se cargan en cada sesión.
-- **11 agentes** especializados en [`.claude/agents/`](.claude/agents/) (arquitecto de dominio, backend, tres frontends, QA, DevOps, producto, UI/UX, y dos de solo lectura: revisor de código y seguridad/cumplimiento) y **7 skills** en [`.claude/skills/`](.claude/skills/) con los procedimientos repetibles (caso de uso nuevo, endpoint, regla de negocio, migración segura, informe, revisión de cumplimiento).
+- **11 agentes** especializados en [`.claude/agents/`](.claude/agents/) (arquitecto de dominio, backend, tres frontends, QA, DevOps, producto, UI/UX, y dos de solo lectura: revisor de código y seguridad/cumplimiento) y **7 skills** en [`.claude/skills/`](.claude/skills/) con los procedimientos repetibles (caso de uso nuevo, endpoint, regla de negocio, migración segura, informe, revisión de cumplimiento, análisis de código).
 - **Plan por tareas** ([`docs/02`](docs/02-stack-tecnologico-y-plan-implementacion.md) §11 y [`plan implementacion/`](plan%20implementacion/)) donde cada tarea indica su agente, su skill y las pruebas exigidas; [`HANDOFF.md`](HANDOFF.md) conserva el estado entre sesiones.
 
-La memoria del TFM ([`doc_master/memoria.md`](doc_master/memoria.md)) explica el método, lo que funcionó y lo que no.
+Cada versión pasa además por una verificación completa con los agentes en modo solo lectura. La de la 2.1.0 terminó en NO-GO y la 2.2.0 es el resultado del plan de correcciones que salió de ella ([§7](#7-calidad-pruebas-y-seguridad)). La memoria del TFM ([`doc_master/memoria.md`](doc_master/memoria.md)) explica el método, lo que funcionó y lo que no.
 
 ---
 
@@ -141,7 +141,7 @@ La memoria del TFM ([`doc_master/memoria.md`](doc_master/memoria.md)) explica el
 | Componente | Tecnología |
 | --- | --- |
 | Lenguaje y framework | **PHP 8.4** · **Laravel 13** |
-| Autenticación | Laravel Sanctum (tokens con ámbitos) + `pragmarx/google2fa` (2FA de gestión) |
+| Autenticación | Laravel Sanctum (tokens *bearer* con ámbitos, sin cookies) + `pragmarx/google2fa` (2FA de los roles de gestión) |
 | Autorización | Policies + `spatie/laravel-permission` (RBAC con ámbito por departamento) |
 | Colas | Redis + **Laravel Horizon** |
 | Tiempo real | **Laravel Reverb** (WebSocket), con *fallback* a sondeo |
@@ -155,7 +155,7 @@ La memoria del TFM ([`doc_master/memoria.md`](doc_master/memoria.md)) explica el
 
 | Componente | Uso |
 | --- | --- |
-| **PostgreSQL 17** | Registro legal. Las invariantes críticas se garantizan en la propia base: un único turno abierto por empleado (índice único parcial) y tramos sin solape (`EXCLUDE USING gist` sobre `tstzrange`). Instantes en `TIMESTAMPTZ` (UTC), `audit_log` particionado, archivado WAL. |
+| **PostgreSQL 17** | Registro legal. Las invariantes críticas se garantizan en la propia base: un único turno abierto por empleado (índice único parcial) y tramos sin solape (`EXCLUDE USING gist` sobre `tstzrange`). Instantes en `TIMESTAMPTZ` (UTC), `audit_log` particionado, archivado WAL cifrado. Tres roles con credencial (aplicación, migración y copia de solo lectura), cada uno solo en el contenedor que lo necesita. |
 | **Redis 7** | Colas, caché, rate limiting y sesiones. |
 
 ### 2.3 Frontend
@@ -183,7 +183,7 @@ La memoria del TFM ([`doc_master/memoria.md`](doc_master/memoria.md)) explica el
 | Pruebas | **Pest** (unitarias, integración, feature, contrato, arquitectura y mutación con `--mutate`) · Spectator (contrato OpenAPI) · Vitest · **Playwright** con cámara simulada y axe · k6 (carga) |
 | Calidad estática | Pint (preset `laravel`) · **PHPStan nivel 9** · Deptrac · Rector · ESLint · `vue-tsc` · ShellCheck · shfmt · Redocly |
 | Seguridad | Semgrep · gitleaks · Trivy · `composer audit` / `npm audit` · SBOM CycloneDX |
-| CI/CD | GitHub Actions (`ci.yml`, `release.yml`, `load-test.yml`, `backup-drill.yml`) · imágenes en GHCR |
+| CI/CD | GitHub Actions (`ci.yml`, `release.yml`, `load-test.yml`, `backup-drill.yml`) · imágenes en GHCR, inmutables y fijadas por digest en el paquete (ADR‑053) |
 | Desarrollo con IA | Claude Code (agentes, skills, `CLAUDE.md`, `HANDOFF.md`) · Engram (memoria local entre sesiones) |
 
 ---
@@ -197,7 +197,7 @@ Hay tres escenarios: el **entorno de desarrollo** (este repositorio), la **insta
 | | |
 | --- | --- |
 | Dirección | <https://kronoqr.kodigolab.es> |
-| Versión desplegada | 2.1.0 (ver [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health)) |
+| Versión desplegada | **2.2.0**, la entregada (ver [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health)). Se instaló con la 2.1.0 y se actualizó con `update.sh` lado a lado ([`doc_master/despliegue.md`](doc_master/despliegue.md) §5) |
 | Panel de gestión | <https://kronoqr.kodigolab.es/admin/> |
 | Quiosco de fichaje | <https://kronoqr.kodigolab.es/kiosk/> (necesita emparejarse desde el panel; ver [`doc_master/despliegue.md`](doc_master/despliegue.md)) |
 | Portal del empleado | <https://kronoqr.kodigolab.es/portal/> |
@@ -300,6 +300,7 @@ sudo chmod 0444 certs/tls.crt && sudo chmod 0400 certs/tls.key
 # 2. Configuración: rellenar solo las variables marcadas [CLIENTE]
 cp .env.example .env
 #    APP_URL, KIOSK_VLAN_CIDR, PORTAL_INTERNAL_CIDR, METRICS_ALLOW_CIDR, BACKUP_PATH, ...
+#    (opcionales: ADMIN_INTERNAL_CIDR cierra el panel a una red; IDENTITY_PIN_LENGTH=8 si el portal se abre a internet)
 
 # 3. Comprobación previa (no escribe nada) e instalación
 sudo ./install.sh --check-only
@@ -316,9 +317,9 @@ El instalador comprueba requisitos, **genera todos los secretos en el servidor d
 
 | Script | Uso |
 | --- | --- |
-| `./update.sh` | Actualización a una versión posterior (también no consecutiva) con copia previa verificada, migraciones reversibles, comprobación de salud y vuelta atrás automática. |
+| `./update.sh` | Actualización a una versión posterior (también no consecutiva), desde el paquete nuevo descomprimido **al lado** del actual: copia previa verificada, migraciones reversibles, comprobación de salud y vuelta atrás automática. Al terminar, el directorio anterior queda retirado. Necesita `setpriv` (`util-linux`). |
 | `./doctor.sh` | Diagnóstico en un comando; con la aplicación en marcha delega en `php artisan product:doctor`. |
-| `./backup.sh` · `./restore.sh` · `./restore-drill.sh` | Copia diaria cifrada, restauración y simulacro trimestral. |
+| `./backup.sh` · `./restore.sh` · `./restore-drill.sh` | Copia diaria y archivado WAL cifrados y autenticados, restauración y simulacro trimestral. |
 
 Los procedimientos de operación (rotación de claves y secretos, alta de quioscos, tarjeta perdida, requerimiento de la Inspección, derechos RGPD, brechas…) están en [`docs/runbooks/`](docs/runbooks/) y en [`docs/cliente/operacion.md`](docs/cliente/operacion.md).
 
@@ -337,7 +338,7 @@ kronoqr/
 │   │   │   └── Http/             #   Controladores, requests, recursos, policies
 │   │   ├── Compliance/  Workforce/  Identity/  Reporting/
 │   │   ├── Kiosk/  Product/  Shared/
-│   ├── database/                 # Migraciones reversibles y seeders con casos límite
+│   ├── database/                 # 65 migraciones reversibles y seeders con casos límite
 │   ├── routes/                   # Rutas versionadas (/api/v1)
 │   ├── lang/                     # Textos en español e inglés
 │   ├── tests/                    # Unit · Integration · Feature · Contract · Architecture
@@ -364,12 +365,12 @@ kronoqr/
 ├── docs/
 │   ├── 01…07-*.md                # Especificación, stack y plan, agentes, credencial,
 │   │                             #   presentación al cliente, guía visual, seguridad
-│   ├── adr/                      # 51 registros de decisión de arquitectura
+│   ├── adr/                      # 57 registros de decisión de arquitectura
 │   ├── api/openapi.yaml          # Contrato de la API (fuente de verdad)
 │   ├── cliente/                  # Documentación entregable al cliente (es/en)
-│   ├── runbooks/                 # Procedimientos de operación e incidentes
+│   ├── runbooks/                 # 33 procedimientos de operación e incidentes
 │   ├── seguridad/                # Revisión ASVS y paquete del revisor
-│   ├── verificacion/             # Verificación pre-release de la 2.1.0 y plan de la 2.2.0
+│   ├── verificacion/             # Verificaciones de la 2.1.0 y la 2.2.0 y plan de correcciones
 │   └── trazabilidad-pruebas.md   # Matriz requisito → prueba (generada)
 │
 ├── doc_master/                   # Entrega del TFM: memoria, despliegue, slides, guion del vídeo
@@ -396,10 +397,10 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 - **Jornada partida** con tramos ilimitados y **fichaje de pausa** diferenciado del fin de turno (RF‑AT‑04, RF‑AT‑12).
 - **Turnos que cruzan la medianoche** como un único tramo, atribuido a la jornada de su hora de inicio (RF‑AT‑08).
 - Confirmación **visual y sonora** con nombre, acción, hora y total del día; **antirrebote** configurable (RF‑AT‑05/06).
-- **PIN de 6 dígitos** como respaldo cuando falta la tarjeta, marcado para revisión (RF‑AT‑11).
+- **PIN de 6 u 8 dígitos** (configurable) como respaldo cuando falta la tarjeta, marcado para revisión; un PIN rechazado de quien puede fichar abre incidencia (RF‑AT‑11, RN‑19).
 - **Modo offline**: cola persistente en IndexedDB, padrón cacheado y cifrado, sincronización automática con *backoff* e idempotencia por `scan_id` (RF‑KI‑03/04, RF‑AT‑07).
 - **Doble marca de tiempo** (`occurred_at` / `recorded_at`) y aceptación con incidencia ante desfase de reloj (RF‑AT‑09/10).
-- PWA a pantalla completa con *wake lock*, multiidioma, accesibilidad AA, emparejamiento por código, pantalla de diagnóstico y ventana de actualización configurable (RF‑KI‑*, RF‑PD‑06).
+- PWA a pantalla completa con *wake lock*, multiidioma, accesibilidad AA, emparejamiento por código, token de dispositivo que rota en el latido, aviso de privacidad configurable, pantalla de diagnóstico y ventana de actualización configurable (RF‑KI‑*, RF‑PD‑06).
 
 ### 5.2 Credenciales QR
 
@@ -416,8 +417,9 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 - **Bandeja de incidencias** asignada al responsable: turnos abiertos anómalos, desfases de reloj, fichajes por PIN, patrones anómalos de uso de credencial (RF‑PA‑05, RF‑PR‑01, RF‑PR‑06).
 - **Vista de cumplimiento**: descanso entre jornadas, jornada máxima, pausas y exceso semanal según el perfil configurado (RF‑PA‑06).
 - **Salud de quioscos**: último latido, versión, cola offline y batería (RF‑PA‑07).
-- Gestión de **empleados, contratos historizados, ausencias** e importación masiva CSV/XLSX con simulación (RF‑GP‑*).
-- **Control de acceso**: RBAC (`admin`, `rrhh`, `responsable_departamento`, `auditor`, `empleado`, `kiosk`), ámbito por departamento y 2FA obligatorio para roles con acceso global (RF‑ID‑01…03).
+- Gestión de **empleados, departamentos, contratos historizados, ausencias** e importación masiva CSV/XLSX con simulación; marca informativa de teletrabajo (RF‑GP‑*).
+- **Control de acceso**: RBAC (`admin`, `rrhh`, `responsable_departamento`, `auditor`, `empleado`, `kiosk`), ámbito por departamento y 2FA obligatorio para los cuatro roles de gestión (RF‑ID‑01…03).
+- **Cuentas de gestión** desde el panel: alta con contraseña temporal, cambio obligado en el primer acceso, reautenticación para las acciones sensibles y responsable de cada departamento con asiento de auditoría (RF‑ID‑10, ADR‑051).
 
 ### 5.4 Informes y exportaciones
 
@@ -429,15 +431,16 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 
 ### 5.5 Portal del empleado
 
-- Acceso con **código de empleado y PIN**, sin correo; rate limiting y bloqueo por intentos (RF‑ID‑05/06).
-- Consulta de jornadas y tramos propios y **descarga del histórico**, con ámbito exclusivo de lectura (`self:read`) (RF‑ID‑07).
-- Accesible desde la red interna por defecto; el cliente puede abrirlo a internet (RF‑ID‑08, ADR‑050).
+- Acceso con **código de empleado y PIN**, sin correo; rate limiting, bloqueo por intentos del empleado y bloqueo por origen (RF‑ID‑05/06, ADR‑050).
+- Consulta de jornadas y tramos propios y **descarga del histórico en CSV o PDF sellado**, con ámbito exclusivo de lectura (`self:read`); «Salir» cierra la sesión también en el servidor (RF‑ID‑05, RF‑ID‑07).
+- Accesible desde la red interna por defecto; el cliente puede abrirlo a internet, y entonces se recomienda el PIN de 8 dígitos (RF‑ID‑08, ADR‑050).
 
 ### 5.6 Cumplimiento legal y privacidad
 
 - **Auditoría solo‑append encadenada por hash**, verificable con `compliance:verify-audit-chain`; el usuario de base de datos de la aplicación no tiene `UPDATE` ni `DELETE` sobre ella.
 - **Retención** según el perfil (4 años en España) con purga confirmada por un responsable e informe de lo purgado (RF‑PR‑03).
 - **Reconciliación nocturna** de los totales diarios contra los eventos origen, con alerta si divergen (RF‑PR‑02).
+- **Conciliación diaria y semanal del registro horario con su auditoría**: una edición directa de los tramos en la base de datos sale como alerta crítica (ADR‑057 §4).
 - Aviso de privacidad (art. 13 RGPD) en el quiosco; ningún nombre de empleado en logs técnicos.
 
 ### 5.7 Producto instalable
@@ -447,10 +450,10 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 - **Licencia firmada** con verificación local y **degradación honesta** que nunca bloquea el registro (RF‑PD‑04/05).
 - **Marca blanca** en las tres aplicaciones, las tarjetas y los PDF (RF‑PD‑08).
 - **Paquete de diagnóstico anonimizado**, comprobación de salud `product:doctor` e **histórico de errores** agrupado por huella (RF‑PD‑09, RF‑PD‑13, RF‑PD‑15).
-- **Actualización asistida** entre versiones no consecutivas con vuelta atrás automática (RF‑PD‑10).
+- **Actualización asistida** lado a lado entre versiones no consecutivas, con vuelta atrás automática; **versiones inmutables** con imágenes fijadas por digest (RF‑PD‑10, ADR‑053, ADR‑054).
 - **Acceso de soporte** del fabricante solo con concesión expresa, temporal, acotada y auditada (RF‑PD‑11).
 - **Exportación íntegra** de los datos del cliente en formato abierto y **telemetría opcional, desactivada por defecto** (RF‑PD‑12/14).
-- **Copias de seguridad** diarias cifradas y verificadas, con simulacro de restauración (RF‑PR‑04).
+- **Copias de seguridad** diarias y archivado WAL cifrados, autenticados y verificados, con un rol de base de datos de solo lectura y simulacro de restauración (RF‑PR‑04).
 
 ---
 
@@ -478,19 +481,19 @@ Es una cuenta de demostración sobre datos ficticios. El paso a paso para recorr
 | Responsable de departamento | uno por departamento, p. ej. `cocina@kronoqr.test` (ver [`UserSeeder.php`](backend/database/seeders/UserSeeder.php)) | `kronoqr-dev-only` |
 | Empleado (portal y quiosco) | cualquier código de empleado de la semilla | PIN `246813` |
 
-Los roles con acceso global (`admin`, `rrhh`, `auditor`) tienen 2FA obligatorio: en el primer acceso el panel muestra el QR para la aplicación de autenticación.
+Los cuatro roles de gestión (`admin`, `rrhh`, `auditor` y `responsable_departamento`) tienen 2FA obligatorio: en el primer acceso el panel muestra el QR para la aplicación de autenticación.
 
 ---
 
 ## 7. Calidad, pruebas y seguridad
 
-- **Pirámide de pruebas completa**: unitarias de dominio (milisegundos, sin base de datos), integración contra PostgreSQL real, feature/API, contrato contra `openapi.yaml`, arquitectura, mutación, E2E con Playwright y cámara simulada, accesibilidad con axe y carga con k6 (50 fichajes/s con p95 < 150 ms en el hardware de referencia). Más de 5 000 pruebas de Pest y más de 300 de Playwright, todas etiquetadas con el requisito que cubren.
-- **Autorización negativa por rol en cada endpoint**: cada policy tiene su prueba de que un rol no autorizado recibe 403.
-- **Trazabilidad requisito → prueba**: cada prueba se etiqueta con los requisitos que cubre (`->group('RN-05', 'RF-AT-08')`) y `qa:traceability --check` falla en la CI si un requisito implementado no tiene prueba ([`docs/trazabilidad-pruebas.md`](docs/trazabilidad-pruebas.md)).
-- **Umbrales**: PHPStan nivel 9, cobertura del dominio ≥ 90 % y global ≥ 75 %, MSI ≥ 80 % sobre el dominio, 0 hallazgos en ShellCheck, Semgrep y gitleaks.
+- **Pirámide de pruebas completa**: unitarias de dominio (milisegundos, sin base de datos), integración contra PostgreSQL real, feature/API, contrato contra `openapi.yaml`, arquitectura, mutación, E2E con Playwright, cámara simulada y la CSP de producción, accesibilidad con axe y carga con k6 (objetivo de diseño: 50 fichajes/s con p95 < 150 ms, pendiente de medir en el hardware de referencia). En la 2.2.0, **5 582 pruebas etiquetadas** con el requisito que cubren (5 233 de Pest, 343 de Playwright y 6 escenarios de k6); con los *datasets*, la CI ejecuta 9 254 casos de Pest.
+- **Autorización negativa por rol en cada endpoint**: cada policy tiene su prueba de que un rol no autorizado recibe 403, y una matriz generada del router prueba cada ruta con cada rol.
+- **Trazabilidad requisito → prueba**: cada prueba se etiqueta con los requisitos que cubre (`->group('RN-05', 'RF-AT-08')`) y `qa:traceability --check` falla en la CI si un requisito implementado no tiene prueba ([`docs/trazabilidad-pruebas.md`](docs/trazabilidad-pruebas.md)). De los 168 requisitos del catálogo, 167 tienen prueba automática; el otro (RNF‑M‑05, presupuesto de deuda técnica) se verifica por revisión.
+- **Umbrales y medidas de la 2.2.0**: PHPStan nivel 9 sin baseline; cobertura del dominio 95,99 % (umbral 90 %) y del backend 93,3 % (umbral 75 %); MSI 88,22 % sobre el dominio (umbral 80 %); 0 hallazgos en ShellCheck, Semgrep y gitleaks. Medidas en la CI manual completa del commit publicado.
 - **Pipeline de CI** en ocho etapas: lint y tipos → arquitectura → unitarias y mutación de lo cambiado → trazabilidad → integración y contrato → seguridad → frontend → E2E → instalación limpia desde el paquete de entrega y actualización desde la versión anterior.
 - **Seguridad**: modelo de amenazas STRIDE, revisión interna OWASP ASVS, autoevaluación OWASP SAMM 2.0 con evidencia ([`docs/07-seguridad-madurez-y-amenazas.md`](docs/07-seguridad-madurez-y-amenazas.md)), SBOM CycloneDX por versión y política de divulgación en [`SECURITY.md`](SECURITY.md).
-- **Verificación pre-release**: antes de dar la 2.1.0 por entregable se hizo una verificación completa con agentes en modo solo lectura ([`docs/verificacion/`](docs/verificacion/)), que produjo el plan de correcciones de la 2.2.0; antes de publicarla se repitió la verificación sobre `main` (`docs/verificacion/2.2.0-verificacion-final-resumen.md`).
+- **Verificación pre-release** ([`docs/verificacion/`](docs/verificacion/)): la de la 2.1.0, con los agentes en modo solo lectura, terminó en **NO-GO** (7 bloqueantes, 91 altos y 181 medios con todas las herramientas en verde). De ella salió el plan de correcciones de la 2.2.0, ejecutado en 25 bloques con su rama, sus revisiones y su CI completa; una re-verificación a mitad del plan añadió los bloques 15 a 22. La [verificación final](docs/verificacion/2.2.0-verificacion-final-resumen.md) sobre `main` cerró con 0 críticos y 0 altos de seguridad y 0 bloqueantes del revisor. **Queda pendiente**, y lo dice el propio informe: la prueba en tablet real, la validación jurídica, la revisión externa de seguridad y los hallazgos altos no de seguridad diferidos a la 2.2.x.
 - **Versionado** SemVer con `CHANGELOG.md` generado desde commits convencionales; la publicación se dispara al etiquetar `vX.Y.Z`.
 
 ---
@@ -507,11 +510,11 @@ Los roles con acceso global (`admin`, `rrhh`, `auditor`) tienen 2FA obligatorio:
 | [05 · Presentación al cliente](docs/05-presentacion-cliente.md) | Lo que se promete al cliente |
 | [06 · Guía visual](docs/06-guia-visual.md) | Tokens de diseño, contrastes WCAG y tipografía |
 | [07 · Seguridad, madurez y amenazas](docs/07-seguridad-madurez-y-amenazas.md) | OWASP SAMM, Microsoft SDL, ATT&CK y riesgos aceptados |
-| [ADR](docs/adr/) | Decisiones arquitectónicas |
+| [ADR](docs/adr/) | Las 57 decisiones arquitectónicas |
 | [Contrato OpenAPI](docs/api/openapi.yaml) | Fuente de verdad de la API `/api/v1` |
 | [Documentación de cliente](docs/cliente/) | Instalación, configuración, operación, endurecimiento, guías de RRHH y del portal, obligaciones legales |
-| [Runbooks](docs/runbooks/) | Procedimientos de operación e incidentes |
-| [Verificación](docs/verificacion/) | Verificación pre-release de la 2.1.0 y plan de correcciones de la 2.2.0 |
+| [Runbooks](docs/runbooks/) | 33 procedimientos de operación e incidentes |
+| [Verificación](docs/verificacion/) | Verificación pre-release de la 2.1.0, plan de correcciones, re-verificación y verificación final de la 2.2.0 |
 | [CHANGELOG](CHANGELOG.md) | Historial de versiones |
 | [CLAUDE.md](CLAUDE.md) | Reglas duras del proyecto y convenciones para contribuir |
 | [SECURITY.md](SECURITY.md) | Cómo reportar una vulnerabilidad |

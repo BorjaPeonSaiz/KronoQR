@@ -8,6 +8,11 @@
   les pone nombre.
 - `queryClient.ts` — configuración de la caché de consultas.
 - `organisation.api.ts` — centros y departamentos, que usan varias _features_ a la vez.
+- `passwordChangeInterceptor.ts` — interceptor global del `403 password-change-required`
+  (RF-ID-10): con una contraseña temporal, cualquier petición salvo `/auth/me`, `/auth/logout` y
+  `/auth/password` lo devuelve, y este interceptor lleva a la pantalla de cambio en vez de que
+  cada pantalla tenga que reconocerlo.
+- `problems.ts` — tipos de problema del contrato que el panel trata de forma transversal.
 
 **`http.ts` ya no vive aquí.** La puerta de salida base hacia la API —token de sesión en un solo
 sitio, errores traducidos a un tipo cerrado (`ApiErrorKind`), descarga de documentos sin dejar

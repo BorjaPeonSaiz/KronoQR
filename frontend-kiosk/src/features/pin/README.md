@@ -1,8 +1,22 @@
 # pin
 
-Fichaje de respaldo con codigo de empleado y PIN de 6 digitos cuando la tarjeta no esta o no lee (RF-AT-11, RS-12). Tarea 1.12.
+Fichaje de respaldo con codigo de empleado y PIN cuando la tarjeta no esta o no lee (RF-AT-11, RS-12). Tarea 1.12.
 
 Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).
+
+- `domain/pinCode.ts` — solo la FORMA de la entrada. El PIN tiene 6 u 8 cifras segun
+  `IDENTITY_PIN_LENGTH` (ADR-050), pero conviven PIN antiguos de 6 y nuevos de 8 y el quiosco no
+  sabe cual toca a quien: el teclado acepta de 6 a 8 y envia con «Aceptar», nunca al llegar a una
+  longitud. El rechazo del servidor sigue siendo generico (regla dura 17).
+- `ui/PinView.vue` + `ui/PinNumericKeypad.vue` + `composables/usePinKeypad.ts` — la pantalla y el
+  teclado numerico; los puntos 7 y 8 se pintan como opcionales.
+- `infrastructure/pinSealing.ts` — sobre cerrado de libsodium con la clave publica del padron: el
+  PIN nunca viaja ni se guarda en claro, ni siquiera con red.
+- `composables/usePinSealingStatus.ts` — si se PUEDE sellar (libsodium carga con `import()` para
+  no entrar en el JS critico). Si no, el boton «Ficha con tu codigo y PIN» no se ofrece y la
+  pantalla dice «PIN no disponible» en vez de un rechazo que no es del empleado (PIN-03).
+- `application/pinPipeline.ts` — sella, encola y envia a `POST /api/v1/scan/pin` con la misma
+  cola y la misma idempotencia por `scan_id` que la tarjeta.
 
 ## Fichaje de pausa (tarea 3.5, ADR-024)
 

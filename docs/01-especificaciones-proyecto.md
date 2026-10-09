@@ -5,10 +5,10 @@
 |---|---|
 | **Producto** | **KronoQR** — fichaje de empleados mediante QR en quiosco (tablet) |
 | **Modelo de negocio** | Producto licenciado, desplegado en servidores del cliente, vendible a múltiples hoteles |
-| **Fecha** | 11 de agosto de 2026 |
+| **Fecha** | 11 de agosto de 2026 · revisado contra la versión **2.2.0** el 9 de octubre de 2026 |
 | **Clasificación** | Documentación técnica interna |
 | **Audiencia** | Product Owner, Arquitectura, Desarrollo, QA, DPO, Dirección de RRHH |
-| **Documentos hermanos** | `02-stack-tecnologico-y-plan-implementacion.md`, `03-agentes-y-skills-ia.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md` |
+| **Documentos hermanos** | `02-stack-tecnologico-y-plan-implementacion.md`, `03-agentes-y-skills-ia.md`, `04-decision-credencial.md`, `05-presentacion-cliente.md`, `06-guia-visual.md`, `07-seguridad-madurez-y-amenazas.md` |
 
 > **Nomenclatura.** *KronoQR* es el nombre comercial y el que ve el cliente (documento 05). Los identificadores técnicos internos —prefijo `FH1` del payload QR, nombres de servicios, rutas de copias— se mantienen tal cual: no son visibles para el usuario y renombrarlos rompería credenciales ya emitidas. El nombre de la aplicación que se muestra en pantalla es configuración de marca (RF-PD-08), no una constante.
 
@@ -778,6 +778,8 @@ Desplegable en un VPS o servidor propio con Docker, sin dependencias de servicio
 | RL-14 | **Datos alojados en la UE**, en la infraestructura del propio cliente. |
 | RL-15 | **Notificación de brechas**: procedimiento documentado con plazo de 72 h y capacidad técnica de determinar el alcance a partir de los logs de auditoría. |
 
+> **Hueco conocido en la 2.2.0 frente a RL-02 y RL-11 (R7-SC-01).** El perfil de cumplimiento admite `retention_years` desde 1 para cualquier jurisdicción (`ComplianceProfileField::minimum()`), así que un perfil español mal ajustado propondría purgar registros de jornada con menos de los 4 años que exige RL-02. La purga sigue pidiendo confirmación expresa del responsable y deja informe (RF-PR-03), pero nada la impide: la conciliación de ADR-057 §4 solo marca como no admisible una purga por debajo de ese mismo mínimo de 1 año (`ProfileRetentionYearsFloor`). Decidido por el propietario el 08-10-2026 para la 2.2.x: **suelo legal de `retention_years` por jurisdicción en el perfil, 4 para España**. Hasta entonces, el valor de serie de `ES-hosteleria` es 4 y bajarlo es un error de configuración del cliente, no una opción legal.
+
 ### 7.3 Reparto de roles en el modelo licenciado
 
 | ID | Requisito |
@@ -1002,7 +1004,7 @@ Escenario: QR falsificado
 
 Escenario: Tarjeta no disponible
   Dado un empleado que llega al centro sin su tarjeta
-  Cuando introduce su PIN de 6 dígitos en el quiosco
+  Cuando introduce su PIN (6 u 8 cifras, según la instalación) en el quiosco
   Entonces se registra el fichaje con origen "PIN"
   Y queda marcado para revisión del responsable
 
@@ -1136,7 +1138,8 @@ Escenario: Licencia caducada
   Cuando un empleado ficha en el quiosco
   Entonces el fichaje se registra con normalidad
   Y el panel muestra un aviso de licencia caducada
-  Y los informes y la exportación legal siguen siendo accesibles
+  Y la consulta de jornadas, las correcciones, el portal y la exportación legal siguen accesibles
+  Y los informes por periodo, que son accesorios, responden que la licencia no los cubre (ADR-019, ADR-023)
 
 Escenario: Acceso de soporte del fabricante
   Dado que el administrador del cliente concede acceso de soporte por 24 horas

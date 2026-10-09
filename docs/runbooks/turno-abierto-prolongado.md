@@ -14,6 +14,7 @@ cualquiera | Media | RRHH»*), definidas en
 | `TurnoAbiertoProlongado` | `incidents_open{type="open_shift_expired"} > 0`, `for: 15m` | Media | RRHH | [§3](#3-turno-abierto-por-encima-del-máximo) |
 | `DescansoEntreJornadasInsuficiente` | `incidents_open{type="insufficient_rest"} > 0`, `for: 15m` | Media | RRHH | [§4](#4-descanso-entre-jornadas-por-debajo-del-mínimo) |
 | `MetricaDeIncidenciasAusente` | > 30 min sin recuento, `for: 30m` | Media | IT del cliente | [§5](#5-nadie-está-contando-el-silencio) |
+| `DeteccionDeIncidenciasAusente` | > 26 h sin ejecutarse `attendance:detect-incidents` (diaria, 04:30 UTC), `for: 30m` | Media | IT del cliente | [§5 bis](#5-bis-nadie-está-buscando-incidencias) |
 
 **Impacto en el fichaje, que es lo primero que hay que saber: ninguno.** Nadie se
 ha quedado sin poder fichar. Quien tiene el turno abierto puede seguir pasando su
@@ -56,7 +57,7 @@ alguien lo corrija. Por eso un olvido de hace tres meses no desaparece solo.
 Quién tiene el turno abierto y desde cuándo:
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T app php artisan tinker --execute="
+docker compose exec -T app php artisan tinker --execute="
   DB::table('incidents')
     ->join('employees', 'employees.id', '=', 'incidents.employee_id')
     ->where('incidents.type', 'open_shift_expired')
@@ -167,16 +168,38 @@ publicación de la métrica.
 
 ```bash
 # ¿Corre el planificador?
-docker compose -f infra/compose.prod.yaml ps scheduler
+docker compose ps scheduler
 
 # ¿Escribe el fichero?
-docker compose -f infra/compose.prod.yaml exec -T app php artisan compliance:incident-metrics
-docker compose -f infra/compose.prod.yaml exec -T scheduler sh -c 'ls -l "$BACKUP_PATH/metrics/kronoqr_incidents.prom"'
+docker compose exec -T app php artisan compliance:incident-metrics
+docker compose exec -T scheduler sh -c 'ls -l "$BACKUP_PATH/metrics/kronoqr_incidents.prom"'
 ```
 
 Causas por frecuencia: el contenedor `scheduler` parado, `BACKUP_PATH` sin
 permisos de escritura para el usuario de la aplicación, o
 `METRICS_TEXTFILE_ENABLED` en `false`.
+
+## 5 bis. Nadie está buscando incidencias
+
+`DeteccionDeIncidenciasAusente` es distinta de la anterior: aquí el recuento puede
+refrescarse y aun así **nadie ha ejecutado la detección** (`attendance:detect-incidents`,
+04:30 UTC) en más de 26 h. Las dos alertas de RRHH están ciegas por el mismo motivo:
+dependen de que algo haya detectado el hallazgo primero, y no distinguen «no hay
+ningún turno abierto» de «nadie lo ha buscado».
+
+```bash
+# ¿Corre el planificador y figura la tarea?
+docker compose ps scheduler
+docker compose exec -T app php artisan schedule:list | grep detect-incidents
+
+# Ejecútala a mano: si falla, el motivo sale aquí (repetirla es seguro)
+docker compose exec -T app php artisan attendance:detect-incidents
+```
+
+Si falla con errores, mira `DeteccionDeIncidenciasConFallos` en
+[`errores-en-el-panel.md`](errores-en-el-panel.md). Cuando termina bien, la métrica
+se refresca y la alerta se apaga sola. Las incidencias que no se detectaron mientras
+tanto **no se pierden**: la pasada revisa los últimos días y, además, todos los turnos aún abiertos, y repetirla no duplica nada.
 
 ---
 

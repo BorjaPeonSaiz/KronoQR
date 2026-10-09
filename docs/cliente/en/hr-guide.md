@@ -830,7 +830,10 @@ And two links:
   the counts on the cards are only for their people too.
 - **HR** and **administrator** see everything.
 - The **auditor** does not get into this screen. Auditing is reviewing what was
-  written down, not managing the day-to-day.
+  written down, not managing the day-to-day. **In 2.2.0 their menu still offers
+  "Compliance" and "Presence"**, and opening them shows a notice that they do
+  not have permission: it is a known defect of the menu, not of their account,
+  and there is nothing to fix in it.
 
 **Every query is logged in the audit log**, just like consulting a person's time
 record (§3.2): who looked, which period and with which filters. The scope of the
@@ -1737,6 +1740,8 @@ because they lost a card.
 The ordinary route is **the portal**: they sign in with their code and their
 PIN and download their history whenever they want, without asking anybody. It
 is what the law requires and what stops every request from becoming an errand.
+Remind them to **fill in the start date**: left blank, the download brings only
+the last 31 days, and each download covers 366 at most.
 Give them [`employee-portal-guide.md`](employee-portal-guide.md).
 
 If the request arrives **in writing as the exercise of a right** —access,

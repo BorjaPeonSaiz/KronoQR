@@ -96,7 +96,15 @@ Nunca cambia el camino de fichaje: **el aviso no bloquea nada** (regla dura 19).
 
 `application/ports.ts` declara `ScanSubmissionPort` y `RosterLookupPort`, que enchufa la
 cola de Dexie —transaccional, con retroceso exponencial, lotes de 50 ordenados por
-`occurred_at` y borrado solo tras confirmacion del servidor— y el padron cacheado y cifrado.
+`occurred_at` y nada sale de ella sin desenlace del servidor (RN-22)— y el padron cacheado y
+cifrado. Ver `features/offline/README.md`.
+
+## El enlace al PIN solo si se puede sellar (PIN-03)
+
+El enlace «Ficha con tu codigo y PIN» (`pin-entry-link`) se ofrece solo si
+`usePinSealingStatus` (`features/pin/`) confirma que libsodium puede sellar el PIN en esta tablet.
+Si no puede, el enlace no aparece: nunca una trampa que acabe en un rechazo que no es del
+empleado.
 
 ## Lo que NO se hace aqui, a proposito
 

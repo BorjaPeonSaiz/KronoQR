@@ -411,10 +411,10 @@ in [`configuration.md`](configuration.md), section 3 bis.
 
 ---
 
-## 8. The five scripts and their exit code table
+## 8. The operation scripts and their exit code table
 
-`install.sh`, `update.sh`, `doctor.sh`, `backup.sh` and `restore.sh` **share a
-single table**. The same person runs them, sometimes chained in a cron job, and
+`install.sh`, `update.sh`, `doctor.sh`, `backup.sh`, `restore.sh` and
+`restore-drill.sh` **share a single table**. The same person runs them, sometimes chained in a cron job, and
 a `3` that meant one thing in one and something else in another would be a trap.
 
 **The code says at which phase it stopped and what was left written. The detail
@@ -701,8 +701,8 @@ Redis's follow the same pattern.
 **Tempo** stores traces: the complete path of a request, from the tablet's
 `fetch` to the SQL query that wrote the clock-in, with the same 90-day
 retention as the technical log (changing the period means touching
-`infra/observability/loki/loki.yaml` **and**
-`infra/observability/tempo/tempo.yaml` together: see `configuration.md`
+`observability/loki/loki.yaml` **and**
+`observability/tempo/tempo.yaml` together: see `configuration.md`
 §6.20). It does not turn itself on: you also need
 `OTEL_EXPORTER_OTLP_ENDPOINT` to point to `http://tempo:4318` in your `.env`
 (empty by default, even with the profile on).
@@ -735,7 +735,7 @@ still available.
 
 Prometheus evaluates the alert catalogue from document 01 §9.3 against the
 metrics from §8.2, and Grafana loads **five dashboards versioned as code**
-in `infra/observability/grafana/dashboards/` of your installation — they are
+in `observability/grafana/dashboards/` of your installation — they are
 not edited from the interface (`allowUiUpdates: false`): a change is made in
 the file and deployed, like any other configuration.
 
@@ -769,21 +769,21 @@ would not have said so. An installation with alerts that reach nobody is
 worse than one with no alerts at all: it believes itself watched when it is
 not. Full table in [`configuration.md`](configuration.md) §6.20.
 
-**The Alertmanager interface**, to see the routing and the active silences,
-listens the same way Grafana does — **only on `127.0.0.1:9093`, never from
-the internet** —, and you reach it the same way, over an SSH tunnel:
+**Alertmanager publishes no port**, not even on the server itself: only
+Grafana listens on `127.0.0.1:3000`. Active alerts and silences are queried
+from the installation directory with `amtool`, which ships in the same image:
 
 ```bash
-ssh -L 9093:127.0.0.1:9093 tu-usuario@fichaje.tuhotel.local
+docker compose exec alertmanager amtool alert query
+docker compose exec alertmanager amtool silence query
 ```
 
-And then `http://127.0.0.1:9093` in your browser. **Alertmanager monitors
-itself** with the first two rows of the table below
+**Alertmanager monitors itself** with the first two rows of the table below
 (`EnrutadoDeAlertasCaido`, `EntregaDeAlertasFallando`): if the service
 itself goes down, or if something prevents delivery (email down, a webhook
 not responding), you will know — the second one might not reach you by
-email if email is exactly what is broken, but it shows up the same way on
-the "API health" dashboard and in this same interface. Procedure in
+email if email is exactly what is broken, but Alertmanager still receives it and the first
+command above lists it. Procedure in
 [`entrega-de-alertas.md`](../../runbooks/entrega-de-alertas.md) (in Spanish).
 
 **The full catalogue**, with what to do when each one arrives — it includes
@@ -907,13 +907,20 @@ notifications — this is the practical reading of "a single kiosk restarting
 must not wake anyone up" from document 02 §8.4.
 
 **The thresholds live in the installation, not in the vendor's
-repository.** `infra/observability/` travels in your package and you can
+repository.** `observability/` travels in your package and you can
 edit it. Only one threshold is tied to another part of the system and
 **has to change at the same time**: `KIOSK_HEALTH_SILENT_AFTER_SECONDS`
 ([`configuration.md`](configuration.md) §6.14) and the `QuioscoSinLatido`
 threshold are the same number — separate them and the console
 (`kiosk:health`) and the alert will say different things about the same
 kiosk.
+
+**When you update, your changes to `observability/` do not travel on their
+own.** The new package brings its own `observability/` and `update.sh` does
+not copy the one in the previous directory (it does copy the `.env`, the
+certificates and the branding folder). If you have changed a threshold or a
+dashboard, apply it again in the new directory and reload Prometheus
+(`docker compose restart prometheus`).
 
 **Two limits worth knowing.** There is no shared Alertmanager across
 different clients' installations: each installation has its own, with its
@@ -946,11 +953,18 @@ what consequences each change has is in
 > [`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) (in Spanish).
 > Here, what you need to know every time.
 
-**Clocking does not stop.** During the update the panel, the portal and the
-management API answer "under maintenance" (503), but the kiosks keep confirming
-locally and queueing; when it finishes they sync with the real time of each
-clock-in. If the window was long, the inbox will show sync incidents: they are
-not a fault.
+**Clocking does not stop for the employee, but the server does stop for a
+while.** During the update the whole API — the panel, the portal **and the
+kiosk clock-in endpoint** — answers "under maintenance" (503); only the
+`/api/v1/health` and `/api/v1/ready` probes keep answering. The kiosks keep
+confirming locally and queueing; when it finishes they sync with the real time
+of each clock-in, so nothing is lost and the legal record keeps the moment
+each person scanned. **How long it lasts:** in the vendor's test with an
+almost empty database and no pending migrations, the 503 lasted **about 52
+seconds** from start to finish; with your data it will last longer, because
+the pre-update backup is taken inside that window and grows with the database.
+Schedule it outside shift changes. If the window was long, the inbox will show
+sync incidents: they are not a fault.
 
 ```bash
 cd /opt                                   # el paquete nuevo, AL LADO del actual
@@ -964,10 +978,18 @@ sudo ./update.sh                          # actualiza, verifica y vuelve atrás 
 nothing and says what is missing, if anything; the plain run updates, verifies
 and rolls back on its own if it fails.)
 
+**If you connect over SSH, run it inside `tmux`** (`tmux new -s kronoqr`, like
+the installer: [`installation.md`](installation.md) §1.4). If the session drops,
+the update carries on or rolls back on its own, but without `tmux` you would not
+see how it ended (§18, "…the update was cut off halfway").
+
 **Next to it, not on top.** Unpacked on top of a version older than 2.2.0,
 `update.sh` refuses in step 1 without touching anything and prints the three
 commands to do it side by side
 ([`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) §2, in Spanish).
+On top of 2.2.0 or later it does work — it warns, carries on and keeps the
+automatic rollback — but next to it is still the recommended way: the previous
+directory stays whole for a manual rollback.
 
 The seven steps and what happens if each one fails:
 
@@ -1420,7 +1442,10 @@ directories, backups, logo), generated files (that the `app-storage` volume is
 mounted and writable, that its paths do not coincide with one another, that the
 retention reports folder is writable, and exports for the Labour Inspectorate
 forgotten on the server for more than 30 days; §13.6), disk space (application
-and backups) and settings
+and backups), backups (that the last backup succeeded and there is a verified
+one less than 26 h old; right after installing, until the first nightly backup,
+it is only a warning), scheduler (that it keeps launching its tasks every
+minute) and settings
 (time zone in UTC, debug mode, invalid keys, differences between the `.env` and
 what is stored, licence and branding),
 edge networks (where the portal, the panel, the kiosks and `/metrics` open
@@ -2067,7 +2092,7 @@ clock-ins, beating.
 The legend at the foot of the screen **states your installation's real
 thresholds**, not assumed ones: if you change one, the legend changes with it.
 And if you change `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, you have to change the
-threshold of the `QuioscoSinLatido` alert in `infra/observability/` **at the
+threshold of the `QuioscoSinLatido` alert in `observability/` **at the
 same time** (§10.4): they are the same number, and separating them is precisely
 what breaks the coherence this screen exists to provide.
 
@@ -2964,3 +2989,38 @@ If they stop again, attach those logs to the diagnostics bundle (§12.2). After
 starting `scheduler`, check that the latest backup is from today or last night
 ([`../../runbooks/restaurar-backup.md`](../../runbooks/restaurar-backup.md) §2,
 in Spanish).
+
+### …the update was cut off halfway (SSH session, Ctrl+C) and you do not know how it ended
+
+**What is going on.** `update.sh` catches the interruption: if it had not
+written anything yet, it exits without touching anything (`129`, `130` or
+`143`); if it had already started, it rolls back to the pre-update backup on
+its own, as with any other failure (§11, step 6). What may be missing is **the
+screen**: with the SSH session gone, nobody sees the final message. That is why
+it is run inside `tmux` (§11).
+
+**What to do.** Do not repeat the update yet. First read how it ended in the
+local report, which is written even if the screen is lost:
+
+```bash
+sudo ls -lt /var/log/kronoqr/
+sudo tail -n 40 /var/log/kronoqr/update-<fecha>.log
+```
+
+Use the most recent `update-<fecha>.log` (not the `.detalle.log`, which may
+carry personal data). Depending on what it says at the end:
+
+- **"ROLLBACK COMPLETED"** (or «VUELTA ATRAS COMPLETADA» if the server runs in
+  Spanish): the installation is still on the previous version, with its data,
+  and the current directory is the old one. Check with `./doctor.sh` from that
+  directory and retry the update inside `tmux`.
+- **"ROLLBACK INCOMPLETE"**: the message itself says what is left halfway and
+  the command that removes it. If it only says that maintenance mode was left
+  on, **do not restore any backup**. Follow
+  [`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md)
+  §5 (in Spanish).
+- **"CURRENT DIRECTORY: …"**: the update finished successfully before the
+  cut. Work from the directory it names.
+- **None of the above** (the report stops halfway): run `./doctor.sh` from the
+  previous directory and, if it is not green, open a case with the diagnostic
+  package (§12.2) and that report.

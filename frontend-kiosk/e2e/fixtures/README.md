@@ -52,17 +52,15 @@ FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa
 Su **firma no es valida** contra ninguna clave real, y no importa para esta tarea:
 
 - el quiosco **no verifica firmas** (regla dura 10), solo el formato `FH1`;
-- el E2E de la tarea 1.8 no habla con el backend, lo intercepta con `page.route`.
+- el E2E del quiosco no habla con el backend, lo intercepta con `page.route`.
 
-Cuando exista `php artisan credential:issue` (tarea 1.5), la CI puede inyectar un payload
-**realmente firmado** sin tocar ni el guion ni las pruebas:
+`KIOSK_E2E_QR_PAYLOAD` sustituye el payload sin tocar ni el guion ni las pruebas, por si algun
+dia se quiere un payload **realmente firmado**. Hoy ni la CI ni ningun comando lo usan: el token
+se acuña al imprimir la tarjeta (ADR-034) y `php artisan credentials:issue` no lo imprime.
 
 ```bash
-KIOSK_E2E_QR_PAYLOAD="$(php artisan credential:issue --print-payload)" npm run test:e2e
+KIOSK_E2E_QR_PAYLOAD="FH1...." npm run e2e:fixtures
 ```
-
-Ese es el momento de conectar el E2E contra el servidor de verdad, que es lo que pide el
-ciclo offline completo de la **tarea 1.9**.
 
 El video **no lleva datos personales**: el payload de la tarjeta nunca los contiene
 (regla dura 10).

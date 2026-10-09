@@ -153,14 +153,14 @@ docker compose up -d nginx
 **This is an example, not a supported configuration.** The ranges are made up:
 replace them with yours. Your firewall's manual takes precedence.
 
-With `ufw` (Debian/Ubuntu), assuming kiosk VLAN `10.0.20.0/24`, office network
+With `ufw` (Debian/Ubuntu), assuming kiosk VLAN `10.0.30.0/24`, office network
 `10.0.10.0/24` and VPN `10.8.0.0/24`:
 
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow from 10.0.10.0/24 to any port 22 proto tcp comment 'SSH solo desde ofimatica'
-sudo ufw allow from 10.0.20.0/24 to any port 443 proto tcp comment 'KronoQR quioscos'
+sudo ufw allow from 10.0.30.0/24 to any port 443 proto tcp comment 'KronoQR quioscos'
 sudo ufw allow from 10.0.10.0/24 to any port 443 proto tcp comment 'KronoQR panel'
 sudo ufw allow from 10.8.0.0/24 to any port 443 proto tcp comment 'KronoQR VPN'
 sudo ufw enable
@@ -178,7 +178,7 @@ table inet kronoqr {
     ct state established,related accept
     iif "lo" accept
     ip saddr 10.0.10.0/24 tcp dport 22 accept
-    ip saddr { 10.0.20.0/24, 10.0.10.0/24, 10.8.0.0/24 } tcp dport 443 accept
+    ip saddr { 10.0.30.0/24, 10.0.10.0/24, 10.8.0.0/24 } tcp dport 443 accept
   }
 }
 REGLAS
@@ -462,6 +462,11 @@ And these are yours:
   [`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md) §2.
 - **Physical custody**: anchored mount, in sight of staff, with no public
   access.
+- **Automatic date, time and time zone on the tablet**, set to the site's
+  zone. The kiosk screen shows the device's time in its own zone, not the
+  site's; the record is not affected, but an employee who sees a time different
+  from the one in their record distrusts it. A clock drifting by more than
+  `ATTENDANCE_MAX_CLOCK_SKEW_MINUTES` also opens an incident per clock-in.
 - **The response to a theft or a loss is to unpair that tablet**, immediately,
   from "Kiosks" in the panel ("Unlink kiosk"): it is the action that
   invalidates the token. Afterwards, if warranted, treat the event as a
@@ -639,7 +644,7 @@ to know them before an audit report shows them to you:
 | --- | --- | --- |
 | **The installed version and the licence status**, in one word (`valid`, `expired`, `absent`…) | `GET /api/v1/health` | It is the only probe that requires neither a session nor the database, and it is what lets `doctor` and the diagnostic bundle report the status. It does **not** give away the customer's name, the plan, the limits or the dates: those require an administrator account. An expired licence answers `200`, because otherwise an orchestrator would take out of service a system that clocks people in perfectly well |
 | **The installation's brand**: display name, one colour and the logo | `GET /api/v1/branding` and `/api/v1/branding/logo` | The kiosk and the portal need it **before** identifying anyone. What it reveals is the same thing printed on every card and on the reception sign. The response is closed to five presentation keys and has its own per-IP limit |
-| **That the installation is being updated right now**, during the maintenance window | `503` with `Retry-After` on the panel and the portal | It is what lets the tablet tell "not decided" from "rejected" and **keep the clock-in in its queue**. The body does not say from which version to which, how long is left, or who the customer is |
+| **That the installation is being updated right now**, during the maintenance window | `503` with `Retry-After` on the whole API (panel, portal and kiosk clock-in), except the `/api/v1/health` and `/api/v1/ready` probes | It is what lets the tablet tell "not decided" from "rejected" and **keep the clock-in in its queue**. The body does not say from which version to which, how long is left, or who the customer is |
 | **That a tablet may ask for a pairing code** | `POST /api/v1/kiosk/pair` and `POST /api/v1/kiosk/pair/claim` | Whoever calls them has no credential yet: it is precisely the one they come to fetch. Neither of the two links anything on its own —an administrator has to confirm the request from the panel— and the claim does not hand over the token without a 32-byte secret that never left the tablet. Each one has its own limit, live requests are capped and expire on their own, and the rejection is **a single one**: it does not tell "does not exist" from "no longer valid" |
 | **That the installation still has no management account** | `GET /api/v1/setup/status` and `POST /api/v1/setup/administrator` | It is the "first administrator" screen, and it **only answers as long as no management account exists**: as soon as there is one, it closes on its own and for good. It has its own attempt limit. That is why §1.3 insists on not publishing the panel before finishing step 1 of the wizard |
 

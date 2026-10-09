@@ -18,6 +18,10 @@ color de acento, logotipo e idiomas, tal como los entrega
   otro siempre); ahora hay una sola fuente y este fichero solo la conecta a
   Pinia.
 
+La ultima marca valida se guarda en `localStorage` (`kronoqr.branding`, MB4):
+`apply()` pinta esa copia en el primer fotograma, sin parpadeo de la marca del
+producto, y `load()` la renueva. Una copia ilegible o ausente es «no hay copia».
+
 `main.ts` llama `apply()` y `load()` al arrancar, sin esperar a la segunda:
 la primera pintura no se bloquea por una peticion de red.
 

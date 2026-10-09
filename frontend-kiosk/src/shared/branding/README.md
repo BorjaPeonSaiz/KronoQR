@@ -1,7 +1,7 @@
 # branding
 
 Marca blanca en tiempo de ejecucion (RF-PD-08, tarea 5.8): nombre, color de acento, logotipo e
-idiomas de la instalacion, pedidos a `GET /api/v1/branding` y aplicados sobre los tokens
+idiomas de la instalacion, mas el aviso de privacidad (`privacy_notice`, RF-KI-09), pedidos a `GET /api/v1/branding` y aplicados sobre los tokens
 `--kq-*` de `@kronoqr/web-kit/theme.css` sin recompilar nada (ADR-017, doc 06 §7).
 
 La aritmetica de color, la validacion del contrato y la aplicacion al documento **no viven
@@ -25,5 +25,9 @@ quiosco:
   pasa a "online". Nunca bloquea el escaneo (regla dura 19): todo en `try/catch`, sin `await`
   en el camino del escaneo, y un fallo se ignora en silencio — se queda la marca que ya habia,
   nunca una pantalla en blanco.
+- **El aviso de privacidad viaja con la marca.** El responsable y la URL de la politica
+  (`PRIVACY_CONTROLLER_NAME`, `PRIVACY_POLICY_URL`, editables en el panel → «Marca») llegan en
+  `privacy_notice`; `readPrivacyNotice()` lo lee de la copia guardada, sin red, para
+  `shared/ui/PrivacyNoticePanel.vue`. Sin copia, el aviso generico del producto.
 
 Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).

@@ -2,7 +2,7 @@
 
 Playwright sobre el build (`vite preview`), sin backend: las llamadas a `/api/v1/*` se
 interceptan en `support/admin.ts` con las formas del contrato. `make e2e` las ejecuta junto a
-las del quiosco.
+las del quiosco y del portal.
 
 ```bash
 npm run test:e2e                        # todo
@@ -12,14 +12,35 @@ npx playwright test --ui                # para depurar
 
 ## Qué hay aquí
 
-| Fichero                    | Cubre                                                                                                                                                                                                                                                   |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `login.spec.ts`            | `@RF-ID-01`, `@RF-ID-02` — acceso, redirección con `redirect`, rechazo, cierre de sesión                                                                                                                                                                |
-| `two-factor.spec.ts`       | `@RF-ID-01`, `@RS-06` — segundo factor obligatorio: reto → código → plantilla, y alta con QR y secreto                                                                                                                                                  |
-| `workdays-journey.spec.ts` | `@RF-GP-01`, `@RF-PA-03`, `@RN-13` — plantilla → ficha → registro horario con su corrección                                                                                                                                                             |
-| `live-presence.spec.ts`    | `@RF-PA-01`, `@RF-PA-02`, `@RNF-P-04` — dos pestañas con Reverb simulado (`routeWebSocket`), degradación a sondeo, filtros, 500 filas y LCP                                                                                                             |
-| `incidents.spec.ts`        | `@RF-PA-05` — la bandeja lista y filtra al servidor, resolver retira la fila y deja nota, un `409` dice quien se adelanto sin reintentar, el responsable de departamento ve la seccion y la marca aparece en el detalle de jornada con enlace de vuelta |
-| `accessibility.spec.ts`    | `@RF-ID-01`, `@RF-GP-01`, `@RF-PA-03`, `@RF-PA-05`, `@RS-06` con `@axe-core/playwright`, 0 violaciones criticas/graves, incluida la bandeja y el dialogo de resolucion abierto                                                                          |
+| Fichero                                                                 | Cubre                                                                                                                                                                                        |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `login.spec.ts`                                                         | `@RF-ID-01`, `@RF-ID-02` — acceso, redirección con `redirect`, rechazo, cierre de sesión                                                                                                     |
+| `two-factor.spec.ts`                                                    | `@RF-ID-01`, `@RS-06` — segundo factor obligatorio: reto → código → plantilla, y alta con QR y secreto                                                                                       |
+| `management-accounts.spec.ts`                                           | `@RF-ID-02`, `@RF-ID-10` — cuentas de gestión: filtros, alta con contraseña temporal, baja, restablecimientos y cambio obligado de la contraseña propia                                      |
+| `departments.spec.ts`                                                   | `@RF-ID-03` — departamentos y centro: alta, renombrado, nombre del centro y lectura del auditor                                                                                              |
+| `shell.spec.ts`                                                         | Sin etiqueta a propósito — el marco: `aria-current` y menú apilado por debajo de `md`                                                                                                        |
+| `employees.spec.ts`                                                     | `@RF-GP-01`, `@RF-GP-02`, `@RF-GP-03`, `@RF-ID-03`, `@RN-14` — ficha, contratos (con relectura ante `409`), teletrabajo y baja                                                               |
+| `pin-pending-import.spec.ts`                                            | `@RF-GP-05`, `@RF-ID-09`, `@RF-PD-03`, `@RL-05` — las altas importadas nacen sin PIN; aviso, enlace del resumen y emisión desde la ficha                                                     |
+| `absences.spec.ts`                                                      | `@RF-GP-04`, `@RF-ID-03` — registrar, corregir y anular ausencias; vista del responsable sin nota                                                                                            |
+| `workdays-journey.spec.ts`                                              | `@RF-GP-01`, `@RF-PA-03`, `@RN-13`, `@RF-AT-12` — plantilla → ficha → registro horario con su corrección y pausas                                                                            |
+| `corrections.spec.ts`                                                   | `@RF-PA-04`, `@RN-01`, `@RN-02`, `@RN-05`, `@RN-13`, `@RN-14` — añadir, corregir y anular tramos                                                                                             |
+| `live-presence.spec.ts`                                                 | `@RF-PA-01`, `@RF-PA-02`, `@RF-PA-03`, `@RNF-D-03`, `@RNF-P-04` — dos pestañas con Reverb simulado (`routeWebSocket`), degradación a sondeo, filtros, 500 filas y LCP                        |
+| `incidents.spec.ts`                                                     | `@RF-PA-05`, `@RF-PR-06`, `@RN-16`, `@RN-18` — la bandeja lista y filtra al servidor, resuelve con nota, un `409` dice quién se adelantó, patrones anómalos y marca en el detalle de jornada |
+| `compliance.spec.ts`                                                    | `@RF-PA-06` — vista de cumplimiento                                                                                                                                                          |
+| `period-report.spec.ts` / `period-report-export.spec.ts`                | `@RF-IN-01`, `@RF-IN-02`, `@RF-IN-04`, `@RF-ID-03` — informe por periodo y sus descargas                                                                                                     |
+| `report-exports.spec.ts`                                                | `@RF-IN-06` — exportaciones en segundo plano                                                                                                                                                 |
+| `payroll-export.spec.ts`                                                | `@RF-IN-07` — salida a nómina                                                                                                                                                                |
+| `adoption-dashboard.spec.ts`                                            | `@RF-IN-08`, `@RF-ID-03` — cuadro de impacto y adopción                                                                                                                                      |
+| `credential-rotation.spec.ts` / `credential-instructions-sheet.spec.ts` | `@RF-QR-07`, `@RF-QR-08`, `@RL-05` — avance de la rotación de clave, hoja de instrucciones por idioma y recordatorio de la entrega                                                           |
+| `devices.spec.ts`                                                       | `@RF-PA-07`, `@RF-PD-06`, `@RL-04`, `@RS-03` — vincular y desvincular quioscos, rechazo genérico del código y aviso de cola pendiente                                                        |
+| `settings.spec.ts`                                                      | `@RF-PD-01`, `@RF-AT-12`, `@RF-ID-09`, `@RF-KI-07`, `@RF-KI-08`, `@RF-PR-05`, `@RF-PR-06`, `@RS-12` — ajustes operativos, incluida la longitud del PIN con su aviso de impacto               |
+| `compliance-profile.spec.ts`                                            | `@RF-PD-07`, `@RF-AT-12` — perfil de cumplimiento                                                                                                                                            |
+| `branding.spec.ts`                                                      | `@RF-PD-08` — marca, con el aviso en vivo y la confirmación del acento sin contraste (MB2)                                                                                                   |
+| `setup-wizard.spec.ts`                                                  | `@RF-GP-05`, `@RF-PD-03`, `@RF-PD-04` — asistente de puesta en marcha                                                                                                                        |
+| `support.spec.ts`                                                       | `@RF-PD-09`, `@RF-PD-11`, `@RL-19` — paquete de diagnóstico y accesos de soporte                                                                                                             |
+| `data-export.spec.ts`                                                   | `@RF-PD-14`, `@RL-20` — exportación íntegra de datos                                                                                                                                         |
+| `errors.spec.ts`                                                        | `@RF-PD-15` — histórico de errores                                                                                                                                                           |
+| `accessibility.spec.ts`                                                 | `@axe-core/playwright` sobre las pantallas del panel, 0 violaciones críticas/graves                                                                                                          |
 
 ### El segundo factor (`two-factor.spec.ts`, RS-06)
 
@@ -68,9 +89,13 @@ o deniega —policies, ámbitos de token, 403 por rol— se prueba en el backend
 `tests/Feature/AuthorizationNegativeTest.php` y compañía). Una ruta que el doble no prevé
 responde `404 problem+json` para que una pantalla nueva falle aquí y no se quede esperando.
 
+## Dónde se ejecuta
+
+En la CI, en la etapa ⑦ (`.github/workflows/ci.yml`, una entrada de la matriz por aplicación), o
+en el host. No en el contenedor `node-admin`: es Alpine (musl) y el Chromium de Playwright no
+arranca ahí.
+
 ## Lo que falta
 
-- Recorridos de credenciales (tablero, impresión, entrega) y de exportación legal
-  («auditor entra → genera → descarga el CSV», deuda de la tarea 1.17).
-- Ejecución en la CI: la etapa ⑦ (`.github/workflows/e2e.yml`) sigue siendo el marcador de la
-  tarea 3.7, también para el quiosco.
+- El recorrido de exportación legal («auditor entra → genera → descarga el CSV», deuda de la
+  tarea 1.17): hoy solo se comprueba la navegación hasta `/reports/legal-export`.

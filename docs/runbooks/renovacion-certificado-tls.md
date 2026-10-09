@@ -52,7 +52,7 @@ sitios a la vez:**
 exportador que hace de sonda de disponibilidad, doc 02 §8.1):
 
 ```bash
-curl -s 'http://127.0.0.1:9090/api/v1/query?query=probe_ssl_earliest_cert_expiry' \
+docker compose exec -T prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/query?query=probe_ssl_earliest_cert_expiry' \
   | jq -r '.data.result[0].value[1] | tonumber | gmtime | strftime("%Y-%m-%d %H:%M:%SZ")'
 ```
 
@@ -96,8 +96,8 @@ KronoQR y apunta ahí `TLS_CERT_DIR` — la misma advertencia de la instalación
 ### 3.2 Colocarlo y recargar Nginx sin parar el fichaje
 
 ```bash
-cp /ruta/del/certificado/renovado.crt "${TLS_CERT_DIR:-./certs}"/tls.crt
-cp /ruta/del/certificado/renovado.key "${TLS_CERT_DIR:-./certs}"/tls.key
+sudo cp /ruta/del/certificado/renovado.crt "${TLS_CERT_DIR:-./certs}"/tls.crt
+sudo cp /ruta/del/certificado/renovado.key "${TLS_CERT_DIR:-./certs}"/tls.key
 
 # IMPRESCINDIBLE: el borde corre sin privilegios, con el uid 101.
 sudo chown 101:101 "${TLS_CERT_DIR:-./certs}"/tls.crt "${TLS_CERT_DIR:-./certs}"/tls.key
@@ -113,7 +113,7 @@ docker compose exec nginx nginx -s reload
 portal siguen atendidos durante todo el proceso — no hay ventana de
 mantenimiento ni parada del fichaje que reservar para esto. `TLS_CERT_DIR`
 está montado de solo lectura **dentro** del contenedor pero es una carpeta
-normal **del anfitrión** (`infra/compose.prod.yaml`), así que sustituir el
+normal **del anfitrión** (el `docker-compose.yml` del paquete), así que sustituir el
 fichero en el servidor basta: no hace falta `docker cp` ni recrear ningún
 contenedor.
 
@@ -138,18 +138,14 @@ no una funcionalidad del producto.
 
 ### 3.4 El certificado no verifica (cadena, nombre o emisor): `CertificadoTlsNoVerificable`
 
-**Añadida en la tarea 3.8** (hallazgo H-05 de la revisión interna de
-seguridad). Hasta esta tarea, las dos alertas de arriba vigilaban únicamente
-la **fecha** de caducidad (`probe_ssl_earliest_cert_expiry`), medida desde
-**dentro** de la red de contenedores con `insecure_skip_verify: true` — a
-propósito, porque el nombre `nginx` nunca coincide con el certificado del
-hotel y verificar la cadena ahí daría siempre un falso negativo. Eso dejaba
-un hueco real: una cadena incompleta, un certificado sustituido por otro de
-emisor distinto, o un nombre que dejó de coincidir con `APP_URL` tras un
-cambio de dominio, **no disparaban ninguna alerta** — el síntoma le llegaba
-primero al empleado (aviso del navegador) que al IT del cliente.
+Las dos alertas de caducidad vigilan solo la **fecha** (`probe_ssl_earliest_cert_expiry`),
+medida desde **dentro** de la red de contenedores con `insecure_skip_verify: true`
+— a propósito, porque el nombre `nginx` nunca coincide con el certificado del hotel.
+Una cadena incompleta, un certificado sustituido por otro de emisor distinto o un
+nombre que dejó de coincidir con `APP_URL` tras un cambio de dominio no las
+disparan, y el síntoma le llegaría primero al empleado (aviso del navegador).
 
-`CertificadoTlsNoVerificable` cierra ese hueco con una segunda sonda,
+`CertificadoTlsNoVerificable` cubre ese hueco con una segunda sonda,
 `kronoqr-uptime-tls-verified` (módulo `http_2xx_tls_verified` de
 `infra/observability/blackbox/blackbox.yml`, `insecure_skip_verify: false`),
 que llega por `APP_URL` — el dominio público real — y exige cadena completa,
@@ -215,7 +211,7 @@ inmediata.
 ## 4. Confirmar que la alerta vuelve a estar por encima de 21 días
 
 ```bash
-curl -s 'http://127.0.0.1:9090/api/v1/query?query=(probe_ssl_earliest_cert_expiry-time())/86400' \
+docker compose exec -T prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/query?query=(probe_ssl_earliest_cert_expiry-time())/86400' \
   | jq -r '.data.result[0].value[1]'
 ```
 

@@ -51,11 +51,11 @@ del instalador, y eso se comprueba en cada publicación de versión.
 | `DB_PASSWORD` | 32 caracteres alfanuméricos | §3 |
 | `DB_MIGRATION_PASSWORD` | Íd. | §3 |
 | `BACKUP_DB_PASSWORD` | 32 caracteres alfanuméricos, **propia** (no es la del migrador): la usa `fichaje_backup`, un rol de solo lectura con `REPLICATION` | §3 |
-| `REVERB_APP_ID` / `_KEY` | 8 y 16 bytes en hexadecimal | §6 bis |
-| `REVERB_APP_SECRET` | 32 bytes aleatorios en base64 | §6 bis |
+| `REVERB_APP_ID` / `_KEY` | 8 y 16 bytes en hexadecimal | §5 bis |
+| `REVERB_APP_SECRET` | 32 bytes aleatorios en base64 | §5 bis |
 | `BACKUP_ENCRYPTION_KEY` | 32 bytes aleatorios en base64 | §5 |
-| `IDENTITY_PIN_SEALING_SECRET_KEY` | 32 bytes aleatorios en base64 (es exactamente lo que hace libsodium al crear una privada X25519; la pública se deriva de ella) | §6 bis |
-| `GRAFANA_ADMIN_PASSWORD` | 32 caracteres alfanuméricos | §6 bis |
+| `IDENTITY_PIN_SEALING_SECRET_KEY` | 32 bytes aleatorios en base64 (es exactamente lo que hace libsodium al crear una privada X25519; la pública se deriva de ella) | §5 bis |
+| `GRAFANA_ADMIN_PASSWORD` | 32 caracteres alfanuméricos | §5 bis |
 
 **Las contraseñas de base de datos son alfanuméricas a propósito.** Viajan por
 una cadena de conexión y por un fichero de entorno, y ahí cada capa escapa los
@@ -186,37 +186,6 @@ en la práctica, pero no es cero. Tampoco puede leer un *objeto grande* de
 PostgreSQL (`lo_import`): KronoQR no los usa y, si alguien crea uno, la copia
 falla con un mensaje que lo dice.
 
----
-
-## 4. Tokens de dispositivo del quiosco
-
-Cada token vive `IDENTITY_DEVICE_TOKEN_DAYS` (90 de serie) y **rota solo**: en
-el primer latido después de haber consumido
-`IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` (80 %, hacia el día 72) de su vida,
-el servidor entrega a la tablet un token nuevo y deja el anterior en solape
-`IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS` (24 h) o hasta el primer uso del nuevo
-(ADR-044).
-No hay nada que programar. Cada relevo escribe `device.paired` en `audit_log`
-con `rotation: true`, sin el token ni su hash; si una rotación falla, el latido
-responde igual, se reintenta en el siguiente y el fallo queda en el histórico de
-errores y en `kiosk_token_rotations_total{result="failed"}`.
-
-El límite: una tablet que pasa **más de unos 18 días seguidos sin latido**
-(apagada o sin red) puede no recoger el relevo y caducar; entonces vuelve a la
-pantalla de emparejamiento y hay que desvincularla y volver a vincularla
-([`../cliente/operacion.md`](../cliente/operacion.md) §18).
-
-Rotación forzada de una tablet concreta —robo, extravío, baja del equipo—: se
-**desvincula** desde el panel, con lo que su token queda revocado, ese quiosco
-deja de poder enviar fichajes inmediatamente y hay que volver a emparejarlo. El
-procedimiento está en [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) §5.2 y
-queda en `audit_log`.
-
-Antes de revocar, si la tablet todavía enciende: **déjala conectada hasta que su
-cola local llegue a cero** (`kiosk_offline_queue_size{device}`). Los fichajes que
-no se hayan sincronizado se pierden con el token, y son registro horario de
-alguien.
-
 ### El rol de las copias es privilegiado (`backup.sh` sale con `7`)
 
 `backup.sh run` comprueba, nada más conectar, que el rol con el que copia
@@ -255,6 +224,37 @@ una exposición de esa credencial**: rota `fichaje_migrator` (§3), ejecuta
 
 ---
 
+## 4. Tokens de dispositivo del quiosco
+
+Cada token vive `IDENTITY_DEVICE_TOKEN_DAYS` (90 de serie) y **rota solo**: en
+el primer latido después de haber consumido
+`IDENTITY_DEVICE_TOKEN_ROTATION_THRESHOLD` (80 %, hacia el día 72) de su vida,
+el servidor entrega a la tablet un token nuevo y deja el anterior en solape
+`IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS` (24 h) o hasta el primer uso del nuevo
+(ADR-044).
+No hay nada que programar. Cada relevo escribe `device.paired` en `audit_log`
+con `rotation: true`, sin el token ni su hash; si una rotación falla, el latido
+responde igual, se reintenta en el siguiente y el fallo queda en el histórico de
+errores y en `kiosk_token_rotations_total{result="failed"}`.
+
+El límite: una tablet que pasa **más de unos 18 días seguidos sin latido**
+(apagada o sin red) puede no recoger el relevo y caducar; entonces vuelve a la
+pantalla de emparejamiento y hay que desvincularla y volver a vincularla
+([`../cliente/operacion.md`](../cliente/operacion.md) §18).
+
+Rotación forzada de una tablet concreta —robo, extravío, baja del equipo—: se
+**desvincula** desde el panel, con lo que su token queda revocado, ese quiosco
+deja de poder enviar fichajes inmediatamente y hay que volver a emparejarlo. El
+procedimiento está en [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) §5.2 y
+queda en `audit_log`.
+
+Antes de revocar, si la tablet todavía enciende: **déjala conectada hasta que su
+cola local llegue a cero** (`kiosk_offline_queue_size{device}`). Los fichajes que
+no se hayan sincronizado se pierden con el token, y son registro horario de
+alguien.
+
+---
+
 ## 5. Clave de copia de seguridad
 
 `BACKUP_ENCRYPTION_KEY` cifra las copias. **Custódiala fuera del servidor**: sin
@@ -287,7 +287,7 @@ o el archivado seguiría cifrando con la derivada de la clave anterior:
    PostgreSQL:
    desde el directorio vigente de la instalación (`backup.sh` está en su raíz),
    `sudo bash ./backup.sh derive-wal-key --write-env .env` y
-   `sudo docker compose up -d postgres`. **`doctor.sh` falla** si `BACKUP_WAL_KEY` no es
+   `sudo docker compose up -d postgres` (esto **recrea PostgreSQL**: unos segundos sin base de datos, durante los cuales los quioscos encolan; hazlo fuera de la entrada y la salida de turnos). **`doctor.sh` falla** si `BACKUP_WAL_KEY` no es
    la derivada de la maestra o si el `kid` del último segmento archivado no es el de
    la derivada: así una rotación a medias se ve hoy y no el día de la recuperación.
    `update.sh` hace la misma comprobación **antes** de parar nada y se niega a

@@ -5,7 +5,7 @@ Vue.** You need a Linux server with Docker and thirty minutes.
 
 > **Status.** The procedure in this guide is the real one and is tested on every
 > release (the clean-install stage of the vendor's continuous integration).
-> The screenshots are from version 2.1 and are regenerated on every minor
+> The screenshots are from version 2.2 and are regenerated on every minor
 > version. Once the system is installed, carry on with
 > [`hardening.md`](hardening.md): the server, the network and the tablets.
 > Esta guía también está disponible en español: [`../instalacion.md`](../instalacion.md).
@@ -77,7 +77,9 @@ brightness, the Android update window and the network — is in the runbook
 2. **The TLS certificate** for that name, with its private key.
 3. **The tablets' network range** (`KIOSK_VLAN_CIDR`) and the range of the
    network from which the employee portal can be opened
-   (`PORTAL_INTERNAL_CIDR`). Both are explained in §6.
+   (`PORTAL_INTERNAL_CIDR`). Both are explained in §6. Optional but
+   advisable: the network from which the management panel will be opened
+   (`ADMIN_INTERNAL_CIDR`; left empty, it filters nothing).
 4. **Where backups are stored** (`BACKUP_PATH`): on a destination that is
    **not the server's own disk** and is **hosted in the European Union** (§6,
    "`BACKUP_PATH`"). If it is a network share, **mounted before installing**.
@@ -101,13 +103,24 @@ brightness, the Android update window and the network — is in the runbook
 
 ### 1.1 Unpack the package
 
+The package arrives as `kronoqr-<version>.tar.gz` together with a `SHA256SUMS`
+file. With both in the same folder, first check that the package arrived
+intact:
+
+```bash
+sha256sum -c --ignore-missing SHA256SUMS
+```
+
+It must say `kronoqr-2.2.0.tar.gz: OK`. If it says `FAILED`, do not unpack it:
+download it again or ask the vendor for another copy.
+
 ```bash
 tar xzf kronoqr-2.2.0.tar.gz
 cd kronoqr-2.2.0
-ls
+ls -A
 ```
 
-You should see exactly this:
+You should see this:
 
 ```
 docker-compose.yml       Service definitions. Do not touch.
@@ -118,14 +131,15 @@ doctor.sh                Diagnosis in one command, without entering the containe
 backup.sh restore.sh     Backups and restore.
 restore-drill.sh         Quarterly restore drill.
 lib/                     Script libraries. Do not touch.
-observability/           Alerting configuration. Do not touch.
+observability/           Alerts and dashboards (operation.md §10.4).
 certs/                   Where you put your certificate (step 1.2).
 VERSION                  The version about to be installed.
 versions.txt             Published versions and which ones can update from. Do not touch.
-LICENCIA.txt
-docs/                    This guide and the other three.
+images.lock              The fingerprint (digest) of each image of this version. Do not touch.
+docs/cliente/            This guide and the other client guides, in Spanish and English (en/).
 docs/runbooks/           Procedures: restore, rotate secrets, new kiosk,
                          Labour Inspectorate request, GDPR…
+docs/CHANGELOG.md        What changes in each version.
 ```
 
 > **`./doctor.sh`, for when something is not right.** It locates the
@@ -134,8 +148,13 @@ docs/runbooks/           Procedures: restore, rotate secrets, new kiosk,
 >
 > - **If the application is running**, it delegates to the product's real
 >   diagnosis (`php artisan product:doctor`) and shows its full report:
->   database, queues, email, certificate, permissions, disk, licence and the
->   three edge networks, each check with what to do if it is red.
+>   database, queues, email, certificate, permissions, disk, licence, the last
+>   backup and the edge networks, each check with what to do if it is red.
+>   Then it looks from the outside at what the application cannot see: that
+>   the background processes `scheduler` and `horizon` are running (without
+>   them there are no backups or nightly tasks, and that is a failure) and
+>   `reverb` (a warning), and that you run it from the **current** directory
+>   of the installation.
 > - **If the application is stopped** — the case this script exists for:
 >   without it, `docker compose exec` is of no use — it checks from the outside
 >   what it can: that Docker responds, the state of each service, that the
@@ -200,7 +219,7 @@ The minimum you have to fill in:
 ```dotenv
 APP_ENV=production
 APP_URL=https://fichaje.tuhotel.local
-KIOSK_VLAN_CIDR=10.0.20.0/24
+KIOSK_VLAN_CIDR=10.0.30.0/24
 PORTAL_INTERNAL_CIDR=10.0.10.0/24
 METRICS_ALLOW_CIDR=172.29.0.20/32
 TLS_ALLOW_SELF_SIGNED=false
@@ -245,13 +264,13 @@ docker pull "${registro}/php:$(cat VERSION)"
 ```
 
 If it ends with `Status: Downloaded newer image` (or `Image is up to date`), all
-is well and nothing else is needed. If it answers `denied` or `unauthorized`,
-the registry you have written is not the right one or your version's images are
-not publicly accessible: **you do not need `docker login` if the vendor has told
-you they are public**; if you were given a user and a read token, log in with
-them (§5, "…it says "could not download the images""). And if you do not know
-which case is yours, ask before going on: it is the only variable in this block
-you cannot work out yourself.
+is well and nothing else is needed. **The vendor's images are publicly
+accessible: you need neither `docker login` nor any token to download them.**
+If it answers `denied`, `unauthorized` or `manifest unknown`, the value you have
+written is not the right one — GHCR also answers `denied` when the path does
+not exist —: check it letter by letter (§5, "…it says "could not download the
+images""). It is the only variable in this block you cannot work out yourself:
+if you do not have it in writing, ask for it before going on.
 
 **`TLS_ALLOW_SELF_SIGNED=false` in production, and the installer requires
 it.** With `true`, the web server generates itself a self-signed certificate:
@@ -315,7 +334,7 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    METRICS_ALLOW_CIDR filled in the template
   [ok]    APP_ENV=production
   [ok]    APP_DEBUG=false
-  [ok]    KIOSK_VLAN_CIDR is a valid IPv4 CIDR (10.0.20.0/24)
+  [ok]    KIOSK_VLAN_CIDR is a valid IPv4 CIDR (10.0.30.0/24)
   [ok]    PORTAL_INTERNAL_CIDR is a valid IPv4 CIDR (10.0.10.0/24)
   [ok]    METRICS_ALLOW_CIDR is a valid IPv4 CIDR (172.29.0.20/32)
   [ok]    PORTAL_INTERNAL_CIDR=10.0.10.0/24 covers a network of this server or the kiosk one
@@ -524,10 +543,19 @@ started, and "the day" is measured in the site's zone.
 Get it right the first time. It can be changed later — it is recorded — but
 **changing it does not rewrite the working days already calculated**: from
 that moment on they are calculated with the new one and before that they were
-calculated with the old one.
+calculated with the old one, while the panel, the portal and the reports start
+showing the whole history in the new zone. With clock-ins already recorded, do
+not change it without asking support first
+([`configuration.md`](configuration.md) §6.1, `APP_TIMEZONE`).
 
 If the hotel is in the Canary Islands, it is `Atlantic/Canary`, not
 `Europe/Madrid`.
+
+**The time shown on the tablet's screen is the tablet's own**, in the time zone
+the device is set to, not the site's. Set each tablet to the site's zone, with
+automatic date and time. Otherwise the employee will see a time different from
+the one in their record; **the legal record is not affected**: it stores the
+exact instant and always presents it in the site's zone.
 
 ![Step 3: site, with its name and the time zone](../img/en/asistente-03-centro.png)
 
@@ -678,8 +706,9 @@ shown. Detail in [`configuration.md`](configuration.md) §2.2.
 
 ## 2. Installer exit codes: what to do with each one
 
-The five operation scripts (`install.sh`, `update.sh`, `doctor.sh`,
-`backup.sh`, `restore.sh`) use **the same table**. It lets you write a cron
+The operation scripts (`install.sh`, `update.sh`, `doctor.sh`,
+`backup.sh`, `restore.sh`, `restore-drill.sh`) use **the same table**
+([`operation.md`](operation.md) §8). It lets you write a cron
 job or a runbook without reading every script.
 
 | Code | Meaning | What to do |
@@ -849,16 +878,13 @@ docker pull "${registro}/php:$(cat VERSION)"
 | What it answers | What is going on | What to do |
 | --- | --- | --- |
 | `echo` prints `ghcr.io/kronoqr` | It still holds the template value | Put in `IMAGE_REGISTRY` the value the vendor gave you with the licence (§1.2) and repeat |
-| `denied`, `unauthorized` or `manifest unknown` | Registry misspelt, a version that does not exist in that registry, or images that require logging in | Check the value letter by letter (no trailing slash, no version). If the vendor gave you a user and a read token, log in with the command below and repeat. If you were told the images are public, **do not log in**: the problem is the value or the version, and you need to talk to the vendor |
+| `denied`, `unauthorized` or `manifest unknown` | Registry misspelt or a version that does not exist in that registry. The vendor's images are public: **it is not a credentials problem** | Check the value letter by letter (no trailing slash, no version) against the one the vendor gave you and repeat. **Do not log in** to fix it. If the value is exactly the one you were given and it still fails, send the vendor the output of the three commands |
 | `dial tcp`, `timeout` or `no such host` | The server has no internet access, or a proxy blocks it | If this installation has no internet access, go to §7. If it should have it, check Docker's proxy with your network team |
 
-Log in only if the vendor has given you read credentials. It asks for the user
-and for the token, which you paste; the token does not stay in the shell
-history:
-
-```bash
-docker login ghcr.io
-```
+**If you use an internal registry of your own** (a company mirror instead of
+GHCR), the credentials are that registry's: log in with
+`docker login <your-registry>` before installing. The token does not stay in
+the shell history if you paste it when prompted.
 
 ### …it says "A previous KronoQR installation was found" and exits with `3`
 
@@ -1123,7 +1149,7 @@ installer does not do this for you, and it is on purpose.
 ### `KIOSK_VLAN_CIDR` — the kiosk VLAN range
 
 ```dotenv
-KIOSK_VLAN_CIDR=10.0.20.0/24
+KIOSK_VLAN_CIDR=10.0.30.0/24
 ```
 
 **What it does.** The web server limits the number of clock-ins per minute and
@@ -1501,9 +1527,8 @@ the images get to the server. From a machine that does have access.
 
 On the first line, **change `ghcr.io/kronoqr` to your real `IMAGE_REGISTRY`**
 (the vendor gives it to you with the licence; see §1.2): the template one
-downloads nothing. If the vendor has given you read credentials, run
-`docker login ghcr.io` on that machine first; if you were told the images are
-public, there is no need.
+downloads nothing. The images are public: that machine does not need
+`docker login`.
 
 ```bash
 registro="ghcr.io/kronoqr"

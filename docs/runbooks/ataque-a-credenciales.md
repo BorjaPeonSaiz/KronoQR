@@ -141,8 +141,8 @@ las 06:00, un turno nuevo que aún no se sabe el PIN de memoria. Antes de tratar
 
 ```bash
 # Fallos por canal en la última hora, agrupados en ventanas de 5 min.
-docker compose exec -T app curl -s http://localhost:9000/metrics 2>/dev/null | grep kronoqr_auth_attempts_total
-# O, mejor, desde Prometheus (Grafana → Explore, o curl directo):
+docker compose exec -T prometheus wget -qO- http://nginx:8080/metrics 2>/dev/null | grep kronoqr_auth_attempts_total
+# O, mejor, desde Prometheus (Grafana → Explore, o wget dentro de su contenedor):
 #   sum by (channel, outcome) (increase(kronoqr_auth_attempts_total[1h]))
 ```
 
@@ -248,7 +248,7 @@ Nginx sin que el propio Docker lo puentee.
 **Si hace falta bloquear DENTRO de Nginx** (por ejemplo, para responder con un
 código concreto en vez de cortar la conexión, o si no hay acceso al firewall
 del host): la imagen de Nginx de este producto **no monta un fichero de
-bloqueo editable desde fuera** (`infra/compose.prod.yaml` solo monta el
+bloqueo editable desde fuera** (el `docker-compose.yml` del paquete solo monta el
 certificado TLS). El único camino es editar el contenedor en marcha, y es
 **temporal a propósito** — no sobrevive a un `docker compose up` que recree el
 contenedor:
@@ -366,7 +366,8 @@ T1606.
 #   sum by (device) (increase(scans_total{result="rejected_signature"}[15m]))
 ```
 
-En Grafana → Explore, o `curl` directo contra Prometheus (igual que en
+En Grafana → Explore, o con `wget` dentro del contenedor de Prometheus
+(`docker compose exec -T prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/query?query=…'`;
 [`operacion.md`](../cliente/operacion.md) §10.4).
 
 - **¿Concentrado en un único dispositivo?** Es más probable un problema
@@ -386,10 +387,10 @@ antes de rotar ninguna clave o bloquear ningún origen:
 
 1. El resultado de la consulta del §8.4 (por dispositivo y en total), con
    marca de tiempo.
-2. Los accesos de Nginx del periodo (`docker compose exec -T nginx cat
-   /var/log/nginx/access.log`, filtrando por la ventana de la alerta).
-3. Si hay sospecha de que la clave de firma (`APP_KEY` derivada,
-   `Identity/Domain/ValueObject/QrSigningKey.php`) pudo filtrarse: **no la
+2. Los accesos de Nginx del periodo (`docker compose logs --no-color --since 2h nginx`,
+   ajustando `--since` a la ventana de la alerta: el registro es JSON y sale por la
+   salida estándar, no hay fichero en disco; **rota con Docker**, cópialo ya).
+3. Si hay sospecha de que la clave de firma del QR (`QR_SIGNING_KEY_CURRENT` del `.env`) pudo filtrarse: **no la
    rotes todavía** — sigue el procedimiento de
    [`rotacion-clave-qr.md`](rotacion-clave-qr.md), que está diseñado para no
    dejar a nadie sin fichar durante la transición, y coordina con IT del

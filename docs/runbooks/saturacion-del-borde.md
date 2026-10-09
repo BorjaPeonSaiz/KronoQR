@@ -61,9 +61,10 @@ hay en Nginx» — Nginx limita por **origen**, la aplicación por
 #   sum by (route) (increase(http_requests_total{route=~"attendance\\.scan(\\..*)?", status="429"}[15m]))
 ```
 
-En Grafana → Explore, o `curl` directo contra Prometheus
-(`http://127.0.0.1:9090/api/v1/query`, túnel SSH igual que en
-[`operacion.md`](../cliente/operacion.md) §10.4).
+En Grafana → Explore (túnel SSH a `127.0.0.1:3000`, [`operacion.md`](../cliente/operacion.md) §10.4)
+o, directo contra Prometheus desde su contenedor:
+`docker compose exec -T prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/query?query=...'`
+(la consulta, codificada para URL).
 
 **Logs estructurados (Loki):** el `RateLimiter` de la aplicación no escribe
 un mensaje propio por cada `429` — lo que ves es la respuesta HTTP con
@@ -77,16 +78,19 @@ Prometheus) para saber si el origen es un dispositivo emparejado legítimo.
 ## 3. Diagnóstico — capa de Nginx (lo que la alerta NO mide todavía)
 
 Sin exportador de Nginx, la única forma de ver los `429` rechazados en el
-borde es leer el log de acceso directamente:
+borde es leer su registro de acceso, que es JSON y sale por la salida estándar
+del contenedor (no hay `access.log` en disco):
 
 ```bash
-docker compose exec -T nginx sh -c \
-  "awk '\$9 == 429' /var/log/nginx/access.log | tail -n 200"
+# Los 429 de la última hora, por IP de origen y si vienen de la VLAN de quioscos
+docker compose logs --no-log-prefix --since 1h nginx \
+  | jq -rR 'fromjson? | select(.channel == "nginx.access" and .status == 429) | [.remote_addr, .from_kiosk_vlan, .path] | @tsv' \
+  | sort | uniq -c | sort -rn | head -20
 ```
 
-(El formato exacto del log lo fija `infra/docker/nginx/templates/
-kronoqr.conf.template`; ajusta el campo si tu instalación cambió
-`log_format`.) Cuenta cuántas líneas hay por IP de origen: **todos los
+(El formato lo fija el `log_format kronoqr_json` de `infra/docker/nginx/templates/
+kronoqr.conf.template`; no lleva cuerpos ni nombres. Necesitas `jq` en el
+servidor.) Mira cuántas líneas hay por IP de origen: **todos los
 quioscos de un hotel salen por la misma IP** (`KIOSK_VLAN_CIDR`), así que un
 `429` de la zona `scan_kiosk_vlan` (600 r/m, ráfaga 50) con IPs **dentro** de
 esa VLAN es distinto de uno de la zona `scan_other` (30 r/m, ráfaga 10) con

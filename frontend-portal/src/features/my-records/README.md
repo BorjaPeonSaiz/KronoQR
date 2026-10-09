@@ -3,8 +3,10 @@
 Consulta del registro propio: jornadas, tramos y totales (RF-ID-05, RF-ID-06, RF-ID-07, RL-05). Tarea 1.11.
 
 - `MyRecordsView.vue` — resumen legible arriba, detalle debajo. Filtro de rango de fechas; sin rango, lo resuelve el servidor (RN-04). El `WorkDateRange`/`UNBOUNDED_RANGE` del portal se declaran aqui, junto al endpoint que los consume; la validacion del rango (`exceedsMaxRange`, `isInvertedRange`, `MAX_RANGE_DAYS`) es de `@kronoqr/web-kit/dateRange` (ADR-036).
+- `PeriodSummary.vue` — el resumen de arriba: total del periodo (suma de los `total_minutes` que declara el servidor, en horas y minutos) y como va hoy (`today` lo da el servidor, en la zona del centro). Si un turno abierto, una revision pendiente o un dia que no cuadra hacen provisional la suma, lo dice.
+- `useMyWorkDays.ts` — la consulta, con un `watch` y sin libreria de cache.
 - `workdays.api.ts` — `GET /api/v1/me/workdays`. **Sin ningun identificador de empleado**: la ausencia es la autorizacion (RF-ID-07, regla dura 18).
-- `ShiftEntryTable.vue`, `CorrectionHistory.vue`, `WorkDayCard.vue` — misma forma de datos que el detalle de jornada del panel (tarea 1.16), pantalla mas simple: sin acciones de correccion, solo lectura.
+- `ShiftEntryTable.vue`, `CorrectionHistory.vue`, `WorkDayCard.vue` — misma forma de datos que el detalle de jornada del panel (tarea 1.16), pantalla mas simple: sin acciones de correccion, solo lectura. `ShiftEntryTable.vue` avisa de los tramos que no cuadran con el total y pinta en una sola fila el turno que cruza medianoche, marcando que la salida es del dia siguiente (regla dura 4).
 
 **Fichaje de pausa (tarea 3.5, ADR-024, RF-AT-12).** La pausa son dos tramos, no un hueco mudo:
 `ShiftEntryTable.vue` lee `WorkDayShiftEntry.opened_by`/`closed_by` (contrato) para enseñar una

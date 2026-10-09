@@ -1,104 +1,166 @@
 # Runbooks de KronoQR
 
-Procedimientos de operación interna. Uno por cada modo de fallo que tenga una
-alerta asociada.
+Procedimientos de operación interna: uno por cada modo de fallo que tiene una
+alerta asociada, y uno por cada situación que el cliente o el fabricante
+afrontan sin alerta (una persona que entra, una norma que cambia, un servidor
+que se pierde). **Los 33 viajan en el paquete de entrega** (`docs/runbooks/`):
+los ejecuta el IT del cliente, con el sistema delante y a veces a las 06:30.
 
 **La norma que gobierna esta carpeta** (doc 02 §8.4): *cada alerta lleva
 destinatario, umbral y enlace a su runbook. Una alerta sin procedimiento
 asociado es ruido y se elimina.* Y por el otro lado, la Definición de Terminado
 del §10.3: *runbook o documentación de cliente actualizada si añade un modo de
-fallo o un parámetro.*
+fallo o un parámetro.* La regla de autoría es la misma desde la Fase 0: **el
+runbook se escribe en el cambio que crea la alerta o el procedimiento**, con el
+sistema delante; quien introduce el modo de fallo es quien sabe qué hay que
+hacer cuando ocurra.
 
-## Por qué esta carpeta está casi vacía en la Fase 0
+Lo hacen cumplir las pruebas de `backend/tests/Architecture/`
+(`AlertCatalogueTest`, `BackupAndAlertingTest`, `ClientDocumentationTest`,
+`GrafanaDashboardsTest`): una regla de Prometheus sin `runbook_url`, o cuyo
+`runbook_url` no existe, rompe la CI; y `php artisan docs:consistency --check`
+vigila que los documentos no se contradigan.
 
-Los 20 runbooks del doc 02 §12 describen **la respuesta a una alerta o a un
-procedimiento que todavía no existe**. Escribirlos ahora produciría documentos
-que nadie puede seguir —no hay comando que ejecutar, ni métrica que mirar, ni
-pantalla que abrir— y que envejecerían antes de usarse por primera vez.
+---
 
-La regla que se aplica: **cada runbook se escribe en la tarea que crea su
-alerta o su procedimiento**, con el sistema delante. Quien introduce el modo de
-fallo es quien sabe qué hay que hacer cuando ocurra.
+## Antes de pegar una orden: cómo se leen los comandos de estos runbooks
 
-El escrutinio de la Fase 0 sobre esta regla es sencillo: la tarea 0.1 no añade
-ninguna alerta —el catálogo completo lo entrega la tarea 3.2— y el único modo de fallo nuevo
-que introduce, `KIOSK_VLAN_CIDR` mal configurado, es un **parámetro de
-instalación**, así que se documenta donde le corresponde:
-[`docs/cliente/instalacion.md`](../cliente/instalacion.md).
+- **Directorio.** Todo `docker compose …` y todo `./script.sh` se lanza **desde el
+  directorio vigente de la instalación** (`/opt/kronoqr-<versión>`: el que dijo
+  `update.sh` al terminar, el que lleva el `docker-compose.yml` y el `.env`). Sin
+  `-f`: Compose lo encuentra solo. Tras actualizar, el directorio anterior queda
+  retirado y cualquier `docker compose` lanzado desde él falla a propósito
+  ([`actualizacion-cliente.md`](actualizacion-cliente.md) §3).
+- **Scripts.** Los de operación van en la **raíz del paquete**: `./update.sh`,
+  `./doctor.sh`, `./backup.sh`, `./restore-drill.sh`, `./install.sh`. Con `sudo`
+  cuando tocan el `.env` (es de `root`, `0600`). La ruta `/opt/kronoqr/scripts/…`
+  que aparece en algunas órdenes es la de **dentro de las imágenes**
+  (`docker compose exec scheduler bash /opt/kronoqr/scripts/backup.sh list`,
+  `docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh …`),
+  no una ruta del servidor.
+- **Qué contenedor para qué** (ADR-042). Copias (`backup:run`, `backup:verify`,
+  `backup.sh`): `scheduler`, que recibe el rol de solo lectura `fichaje_backup`.
+  Restaurar: el servicio de un solo uso `restore`. Migraciones a mano: el
+  servicio `migrate`. El resto de órdenes `artisan`: `app`. Nada de eso lleva la
+  credencial de migración salvo `restore` y `migrate`.
+- **Base de datos.** `psql` se lanza dentro de `postgres`: con `fichaje_app` para
+  leer `audit_log` y el registro (solo `SELECT`), y con `fichaje_migrator` solo
+  cuando hace falta ver sesiones o catálogos del sistema.
+- **Observabilidad.** Solo Grafana publica puerto (`127.0.0.1:3000`, por túnel
+  SSH). Prometheus y Alertmanager se consultan desde dentro de su contenedor
+  (`docker compose exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/…`,
+  `docker compose exec alertmanager amtool …`). Existen con el perfil
+  `observability`.
+- **Códigos de salida.** Los cinco scripts comparten una tabla única, publicada en
+  [`../cliente/operacion.md`](../cliente/operacion.md) §8.
+- **Sin PII.** Nada de nombres de empleados en logs, informes ni tickets: se usa
+  `employee_uuid` (regla dura 21). Las consultas que muestran datos personales
+  lo dicen en el propio runbook.
 
-La Fase 1 aplica la misma regla en la otra dirección: la tarea 1.18 **sí** crea
-alertas —seis, sobre la copia de seguridad— y por eso trae escrito
-[`restaurar-backup.md`](restaurar-backup.md) en el mismo cambio. Lo mismo hace la
-tarea 1.14 con las cuatro alertas de la cadena de auditoría y
-[`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md). Ninguna alerta llegó
-antes que su procedimiento, y una prueba de arquitectura
-(`backend/tests/Architecture/BackupAndAlertingTest.php`) falla si alguien añade
-una regla cuyo `runbook_url` no existe.
+---
 
-## Los 20 runbooks y quién escribe cada uno
+## Índice por alerta
 
-Asignación literal del plan de implementación
-(`plan implementacion/08-entrega-despliegue-y-actualizacion.md` §9).
+Las 61 reglas de `infra/observability/prometheus/rules/` y el runbook al que
+apunta su `runbook_url`. Si recibes una alerta, esta es la tabla.
 
-| # | Runbook | Cuándo se usa | Lo escribe |
-|---|---|---|---|
-| 1 | [`quiosco-no-responde.md`](quiosco-no-responde.md) | Alerta de latido perdido | ✅ Fase 3 · tarea 3.2 |
-| 2 | [`cola-offline-atascada.md`](cola-offline-atascada.md) | Cola de un dispositivo por encima del umbral | ✅ Fase 3 · tarea 3.2 |
-| 3 | [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | La reconciliación nocturna detecta discrepancia | ✅ Fase 2 · tarea 2.7 (destinatarios reales, hecho en 3.2) |
-| 4 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | **Incidente de seguridad.** Incluye preservación de evidencia | ✅ Fase 1 · tarea 1.14 (era 2.2, adelantada por ADR-032) |
-| 5 | [`restaurar-backup.md`](restaurar-backup.md) | Recuperación y simulacro trimestral | ✅ Fase 1 · tarea 1.18 (era 2.11, adelantada por ADR-032) → usado por 5.7 |
-| 6 | [`rotacion-secretos.md`](rotacion-secretos.md) | Rotación programada o compromiso | ✅ §7.7 · escrito en la tarea 2.12 con la rotación del QR · ampliado en 5.4 |
-| 7 | [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) | Emparejamiento por código y vinculación. Incluye **lo que no es del producto**: fijar la tablet en modo quiosco | ✅ Fase 5 · tarea 5.6 |
-| 8 | ~~`alta-nuevo-empleado.md`~~ | Alta, emisión, impresión y entrega con la antelación necesaria | ✅ **No se escribe como runbook.** Es el §2 de [`../cliente/guia-rrhh.md`](../cliente/guia-rrhh.md) (Fase 5 · tarea 5.11b, decisión 7) |
-| 9 | [`tarjeta-perdida-o-rota.md`](tarjeta-perdida-o-rota.md) | Revocación, reemisión e impresión de la nueva en el día. Incluye el caso «impresión fallida» de ADR-034 (decisión arquitectónica del fabricante; no viaja en el paquete) | ✅ Fase 5 · tarea 5.11b (era 1.10; lo cita el contrato de `print`) |
-| 10 | [`rotacion-clave-qr.md`](rotacion-clave-qr.md) | Reimpresión progresiva sin dejar a nadie sin fichar | ✅ Fase 2 · tarea 2.12 |
-| 11 | [`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) | **Cómo generar la exportación legal en menos de 1 hora** | ✅ Fase 1 · tarea 1.17 (era 2.9, adelantada por ADR-032) |
-| 12 | [`patron-anomalo-credencial.md`](patron-anomalo-credencial.md) | Revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación. Destinatario el responsable del departamento y RRHH; el IT solo por su §5, si la detección no corre | ✅ Fase 3 · tarea 3.11 |
-| 13 | [`solicitud-derechos-rgpd.md`](solicitud-derechos-rgpd.md) | Acceso, rectificación, portabilidad — y la supresión que **no procede** mientras dure el deber de conservación | ✅ Fase 2 · tarea 2.10 |
-| 14 | [`brecha-de-seguridad.md`](brecha-de-seguridad.md) | **Incidente de seguridad.** Procedimiento de 72 h del art. 33 RGPD, con el alcance acotado desde `audit_log` | ✅ Fase 2 · cierre (RL-15) · revisado en 3.10 |
-| 15 | [`actualizacion-cliente.md`](actualizacion-cliente.md) | Procedimiento y vuelta atrás | ✅ Fase 5 · tarea 5.7 (esqueleto desde la 5.4, porque `install.sh` remite aquí al salir con código `3`) |
-| 16 | [`incidencia-sin-acceso.md`](incidencia-sin-acceso.md) | **Diagnosticar con el paquete que envía el cliente**, sin acceso a su servidor. Es el runbook que decide si el paquete está bien diseñado | ✅ Fase 5 · tarea 5.9 |
-| 17 | [`errores-en-el-panel.md`](errores-en-el-panel.md) | Cómo lee el IT del cliente `error_events` y qué hacer con cada severidad | ✅ Fase 5 · tarea 5.12 |
-| 18 | [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | Turno abierto más de 12 h. **El sistema nunca lo cierra solo** (RN-08). Destinatario RRHH: no es una avería | ✅ Fase 2 · tarea 2.6 |
-| 19 | [`renovacion-certificado-tls.md`](renovacion-certificado-tls.md) | Certificado a menos de 21 días de expirar | ✅ Fase 3 · tarea 3.2 |
-| 20 | [`espacio-en-disco.md`](espacio-en-disco.md) | Espacio libre por debajo del 20 % | ✅ Fase 3 · tarea 3.2 |
+| Runbook | Alertas |
+| --- | --- |
+| [`quiosco-no-responde.md`](quiosco-no-responde.md) | `QuioscoSinLatido` |
+| [`cola-offline-atascada.md`](cola-offline-atascada.md) | `ColaOfflineAtascada` · `ColaOfflineSinVaciar` · `KioskQueueStorageDegraded` (§7) · `KioskUnreportedDiscards` (§8) · `ScanBatchItemNotProcessed` (§9) · `KioskDiscardedScansAttributed` (§10) |
+| [`restaurar-backup.md`](restaurar-backup.md) | `CopiaDeSeguridadFallida` · `CopiaDeSeguridadSinVerificar` · `CopiaDeSeguridadAusente` · `ArchivadoDeWalDetenido` · `ArchivadoDeWalFallando` · `MedicionDeWalAusente` · `ArchiveTimeoutFueraDeRango` · `DiscoDeCopiasCasiLleno` · `SimulacroDeRestauracionNuncaEjecutado` · `SimulacroDeRestauracionCaducado` |
+| [`slot-replicacion-parado.md`](slot-replicacion-parado.md) | `SlotDeReplicacionParado` |
+| [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | `RoturaDeCadenaDeAuditoria` · `VerificacionDeAuditoriaAusente` · `ParticionDeAuditoriaAusente` · `ParticionDeAuditoriaDelProximoAnoSinPreparar` |
+| [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) | `DiscrepanciaEntreRegistroYAuditoria` · `ConciliacionDelRegistroAusente` · `ConciliacionCompletaDelRegistroAusente` |
+| [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | `DivergenciaEnReconciliacionNocturna` · `ReconciliacionDeProyeccionAusente` · `ReconciliacionConFallos` |
+| [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | `TurnoAbiertoProlongado` · `DescansoEntreJornadasInsuficiente` · `MetricaDeIncidenciasAusente` · `DeteccionDeIncidenciasAusente` |
+| [`patron-anomalo-credencial.md`](patron-anomalo-credencial.md) | `DeteccionDePatronesConFallos` · `DeteccionDePatronesAusente` |
+| [`ataque-a-credenciales.md`](ataque-a-credenciales.md) | `KronoqrAuthFailureBurst` · `KronoqrAuthLockouts` · `KronoqrAuthFailureSpike` · `KronoqrManagementTwoFactorReset` · `KronoqrManagementAdminAccountCreated` · `RechazoDeFirmaQr` |
+| [`bloqueo-por-origen.md`](bloqueo-por-origen.md) | `KronoqrPortalOriginLockouts` |
+| [`saturacion-del-borde.md`](saturacion-del-borde.md) | `SaturacionDelBordeEnElFichaje` |
+| [`errores-en-el-panel.md`](errores-en-el-panel.md) | `ErroresCriticosNuevos` · `ErroresDeServidorEnElFichaje` · `LatenciaDelFichajeAlta` · `SondaDelBordeFallida` · `DeteccionDeIncidenciasConFallos` |
+| [`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md) | `AlmacenDeMetricasCaido` · `AlmacenDeMetricasAusente` |
+| [`entrega-de-alertas.md`](entrega-de-alertas.md) | `EnrutadoDeAlertasCaido` · `EntregaDeAlertasFallando` |
+| [`renovacion-certificado-tls.md`](renovacion-certificado-tls.md) | `CertificadoTlsProximoACaducar` · `CertificadoTlsCaducado` · `CertificadoTlsNoVerificable` |
+| [`espacio-en-disco.md`](espacio-en-disco.md) | `EspacioEnDiscoBajo` · `MetricasDelAnfitrionAusentes` |
+| [`ficheros-generados.md`](ficheros-generados.md) | `FicheroGeneradoDesaparecidoAntesDeCaducar` · `FicheroGeneradoSinRetirarPasadoSuPlazo` · `PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo` · `PurgaDeFicherosGeneradosNoPuedeBorrar` |
+| [`actualizacion-cliente.md`](actualizacion-cliente.md) | `VentanaDeMantenimientoActiva` (informativa: sostiene la inhibición durante `update.sh`, no notifica a nadie) |
 
-## Runbooks fuera de esa lista
+---
 
-Los 20 de arriba responden a **una alerta en el servidor de un cliente**. Hay
-modos de fallo internos que no encajan ahí y que aun así merecen procedimiento,
-por la misma razón del §10.3: *runbook actualizado si el cambio añade un modo de
-fallo*. Se escriben en la tarea que los introduce.
+## Índice de runbooks
 
-| Runbook | Cuándo se usa | Lo escribió |
-|---|---|---|
-| [`fallo-de-ci.md`](fallo-de-ci.md) | Una etapa del pipeline está en rojo, o la puerta de versión bloquea una etiqueta | Fase 0 · tarea 0.4 |
-| [`ataque-a-credenciales.md`](ataque-a-credenciales.md) | Alertas `KronoqrAuthFailureBurst`/`KronoqrAuthLockouts`/`KronoqrAuthFailureSpike`/`KronoqrManagementTwoFactorReset`/`KronoqrManagementAdminAccountCreated` (§9, RF-ID-10) (OWASP A09) y `RechazoDeFirmaQr` (T1606, tarea 3.8) | SSDLC · pipeline de seguridad · §8 ampliada en la tarea 3.8 |
-| [`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md) | Un hallazgo de Semgrep comunitario o Trivy en modo informe del job `security` | SSDLC · pipeline de seguridad |
-| [`entrega-de-alertas.md`](entrega-de-alertas.md) | Alertas `EnrutadoDeAlertasCaido`/`EntregaDeAlertasFallando`: Alertmanager caído o sin poder entregar. No responde a una fila del catálogo del doc 01 §9.3, responde a un fallo de la propia infraestructura de alertas | Fase 3 · tarea 3.2 (segunda vuelta, revisión de seguridad) |
-| [`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md) | Alertas `AlmacenDeMetricasCaido`/`AlmacenDeMetricasAusente`: Redis (almacén de métricas) no responde o la aplicación no publica `/metrics`; las alertas de quiosco y cola no son fiables mientras dure. No responde a una fila del catálogo del doc 01 §9.3 | Versión 2.2.0 · bloque 22 (R4-DV-01) |
-| [`saturacion-del-borde.md`](saturacion-del-borde.md) | Alerta `SaturacionDelBordeEnElFichaje` (T1499.002): `429` por encima de lo normal en las rutas de fichaje | Fase 3 · tarea 3.8 (hallazgo H-10) |
-| [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) | **Posible incidente de seguridad.** Alertas `DiscrepanciaEntreRegistroYAuditoria`, `ConciliacionDelRegistroAusente` y `ConciliacionCompletaDelRegistroAusente` (ADR-057 §4): un tramo de `shift_entries` no cuadra con su último asiento de `audit_log` —tramo inventado, hora o persona cambiadas, tramo anulado sin corrección o tramo borrado—, o la conciliación no corre. Preservación de evidencia, consultas por tipo y remedio desde el panel o con el rol de migración. No responde a una fila del catálogo del doc 01 §9.3 | Versión 2.2.0 · bloque 14 (R6-AR-01) |
-| [`slot-replicacion-parado.md`](slot-replicacion-parado.md) | Alerta `SlotDeReplicacionParado` (A3-05): un slot de replicación sin consumidor retiene WAL y puede llenar el disco de datos. KronoQR no usa ninguno, así que es también una señal de seguridad | Bloque 3 · ronda de endurecimiento AUD-1 |
-| [`ficheros-generados.md`](ficheros-generados.md) | Alertas `FicheroGeneradoDesaparecidoAntesDeCaducar` (seguridad: es lo esperado tras restaurar o actualizar desde la 2.1.0, brecha si no), `FicheroGeneradoSinRetirarPasadoSuPlazo` y `PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo` (ADR-045). No responden a una fila del catálogo del doc 01 §9.3 | Bloque 16 de la 2.2.0 |
-| [`bloqueo-por-origen.md`](bloqueo-por-origen.md) | Alerta `KronoqrPortalOriginLockouts` (T1110.003, ADR-050): más de 5 bloqueos de origen en el portal en una hora; origen compartido (hairpin NAT, `TRUSTED_PROXY_CIDR`), desbloqueo con `identity:origin-unlock <ip>` y ataque repartido | Versión 2.2.0 · bloque 12 |
-| [`portal-403.md`](portal-403.md) | **No responde a una alerta: responde a una llamada.** El portal del empleado devuelve `403` (RF-ID-08): cómo saber si es el candado de `PORTAL_INTERNAL_CIDR`, qué IP ve el servidor web (acceso desde el propio servidor, Docker Desktop, proxy, VPN) y cómo abrir el portal a internet sabiendo lo que se asume. Lo ejecuta el IT del cliente; viaja en el paquete | Versión 2.2.0 · incidencia de producción PP-04, PP-05 |
-| [`cuentas-de-gestion.md`](cuentas-de-gestion.md) | **No responde a una alerta: responde a una persona que entra o sale.** Alta y baja de cuentas de gestión desde Panel → Cuentas, contraseña temporal entregada en mano, restablecer contraseña y 2FA con reautenticación, responsable de departamento desde Departamentos, verificación en `audit_log` (`user.created`, `user.deactivated`, `user.password_reset`, `auth.two_factor_reset`, `user.password_changed`, `role_assignment.changed`) y vía de recuperación por consola. Incluye la nota de la 2.2.0: el `admin` vuelve a entrar para ver «Cuentas». Lo ejecuta el cliente; viaja en el paquete | Versión 2.2.0 · bloque 12c (ADR-051) |
-| [`vigilancia-normativa.md`](vigilancia-normativa.md) | **No responde a una alerta: responde a un cambio de la norma.** Quién vigila el art. 34.9 ET, el convenio, la AEPD y la jurisprudencia, cada cuánto, y por dónde entra un cambio (perfil de cumplimiento, nunca el código). Lo ejecuta el cliente; viaja en el paquete. Arranca con [`../cliente/preguntas-asesoria.md`](../cliente/preguntas-asesoria.md) | Fase 3 · cierre (revisión de seguridad, verificaciones humanas) |
-| [`perdida-total-del-servidor.md`](perdida-total-del-servidor.md) | **No responde a una alerta: responde a una situación** (incendio, robo, disco muerto; las alertas viven en el servidor perdido). Servidor nuevo, mismo paquete, secretos repuestos desde la custodia, copia cifrada y quioscos que reemparejar o no. Lo ejecuta el IT del cliente; viaja en el paquete | Versión 2.2.0 · bloque 14 (RL-1) |
+### Respuesta a una alerta
+
+| Runbook | Cuándo se usa | Destinatario |
+| --- | --- | --- |
+| [`quiosco-no-responde.md`](quiosco-no-responde.md) | Un quiosco lleva más de 10 min sin latido. El fichaje no se pierde: la tablet encola | IT del cliente |
+| [`cola-offline-atascada.md`](cola-offline-atascada.md) | La cola de un quiosco no baja, su almacenamiento está degradado, o hay descartes y lotes sin procesar. **Nunca borrar los datos de la tablet con cola pendiente** | IT del cliente; RRHH en los descartes |
+| [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | La reconciliación nocturna de `daily_totals` encuentra o no resuelve una discrepancia, o no corre. Siempre cero | IT del cliente |
+| [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | **Incidente de seguridad.** La cadena de hash de `audit_log` no verifica, no se verifica, o falta la partición. Incluye preservación de evidencia | Seguridad; IT en las particiones |
+| [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) | **Posible incidente de seguridad (ADR-057 §4).** Un tramo de `shift_entries` no cuadra con su último asiento de `audit_log` (inventado, cambiado, anulado sin corrección o borrado), o la conciliación no corre | Seguridad |
+| [`restaurar-backup.md`](restaurar-backup.md) | La copia o el archivado de WAL fallan; restaurar una copia (cifrada y autenticada, ADR-049) o recuperar a un punto en el tiempo; simulacro trimestral | IT del cliente |
+| [`slot-replicacion-parado.md`](slot-replicacion-parado.md) | Un slot de replicación sin consumidor retiene WAL. KronoQR no usa ninguno: es también una señal de seguridad | IT del cliente |
+| [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | Turno abierto más de 12 h o descanso insuficiente. **El sistema nunca cierra un turno solo** (RN-08). No es una avería | RRHH; IT en las alertas de silencio |
+| [`patron-anomalo-credencial.md`](patron-anomalo-credencial.md) | Revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación; o la detección no corre | Responsable de departamento y RRHH; IT por el silencio |
+| [`ataque-a-credenciales.md`](ataque-a-credenciales.md) | Ráfagas de fallos o bloqueos de acceso, alta de `admin` o reinicio de 2FA inesperados, firmas QR inválidas (T1110, T1136, T1098, T1606) | Seguridad |
+| [`bloqueo-por-origen.md`](bloqueo-por-origen.md) | Más de 5 bloqueos de origen en el portal en una hora (T1110.003, ADR-050): origen compartido o ataque repartido; `identity:origin-unlock <ip>` | Seguridad; ejecuta el IT |
+| [`saturacion-del-borde.md`](saturacion-del-borde.md) | `429` por encima de lo normal en las rutas de fichaje (T1499.002) | IT del cliente |
+| [`errores-en-el-panel.md`](errores-en-el-panel.md) | Cómo lee el IT `error_events` y qué hacer con cada severidad; `5xx` y latencia del fichaje; sonda del borde; las sondas de `doctor` que ninguna alerta ve | IT del cliente |
+| [`almacen-de-metricas-caido.md`](almacen-de-metricas-caido.md) | Redis (almacén de métricas) no responde o la aplicación no publica `/metrics`: las alertas de quiosco y cola no son fiables | IT del cliente |
+| [`entrega-de-alertas.md`](entrega-de-alertas.md) | Alertmanager caído o sin poder entregar. No responde a una fila del catálogo del doc 01 §9.3, sino a un fallo de la propia infraestructura de alertas | IT del cliente |
+| [`renovacion-certificado-tls.md`](renovacion-certificado-tls.md) | Certificado a menos de 21 días de expirar, caducado o que no verifica | IT del cliente |
+| [`espacio-en-disco.md`](espacio-en-disco.md) | Menos del 20 % libre en el disco del servidor | IT del cliente |
+| [`ficheros-generados.md`](ficheros-generados.md) | Exportaciones, informes y paquetes de diagnóstico del volumen `app-storage` (ADR-045): desaparecidos antes de caducar (seguridad), sin retirar, o purga que se niega a borrar | Seguridad; IT |
+
+### Procedimientos que no responden a una alerta
+
+| Runbook | Cuándo se usa | Lo ejecuta |
+| --- | --- | --- |
+| [`actualizacion-cliente.md`](actualizacion-cliente.md) | Actualizar una instalación con `update.sh` (lado a lado; encima solo desde la 2.2.0), qué significa cada salida y la vuelta atrás | IT del cliente |
+| [`perdida-total-del-servidor.md`](perdida-total-del-servidor.md) | Incendio, robo, disco muerto: servidor nuevo, mismo paquete, secretos repuestos desde la custodia, copia cifrada y quioscos que reemparejar o no | IT del cliente |
+| [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) | Emparejamiento por código y vinculación de una tablet. Incluye lo que no es del producto: fijar la tablet en modo quiosco | IT del cliente |
+| [`tarjeta-perdida-o-rota.md`](tarjeta-perdida-o-rota.md) | Revocación, reemisión e impresión de la nueva en el día; el caso «impresión fallida» (ADR-034) | RRHH |
+| [`cuentas-de-gestion.md`](cuentas-de-gestion.md) | Alta y baja de cuentas de gestión, contraseña temporal, restablecer contraseña y 2FA, responsable de departamento, vía de recuperación por consola (ADR-051) | Cliente |
+| [`portal-403.md`](portal-403.md) | El portal del empleado devuelve `403` (RF-ID-08): candado de `PORTAL_INTERNAL_CIDR`, qué IP ve el servidor y cómo abrirlo sabiendo lo que se asume | IT del cliente |
+| [`rotacion-clave-qr.md`](rotacion-clave-qr.md) | Reimpresión progresiva de tarjetas sin dejar a nadie sin fichar | RRHH e IT |
+| [`rotacion-secretos.md`](rotacion-secretos.md) | Rotación programada o compromiso: `APP_KEY`, base de datos, copias, WAL, Reverb, sellado de PIN | IT del cliente |
+| [`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) | **Cómo generar la exportación legal en menos de 1 hora** | RRHH e IT |
+| [`solicitud-derechos-rgpd.md`](solicitud-derechos-rgpd.md) | Acceso, rectificación, portabilidad; la supresión **no procede** mientras dure el deber de conservación | RRHH / DPO |
+| [`brecha-de-seguridad.md`](brecha-de-seguridad.md) | **Incidente de seguridad.** Procedimiento de 72 h del art. 33 RGPD, con el alcance acotado desde `audit_log` | Seguridad / DPO |
+| [`vigilancia-normativa.md`](vigilancia-normativa.md) | Quién vigila el art. 34.9 ET, el convenio, la AEPD y la jurisprudencia, y por dónde entra un cambio (perfil de cumplimiento, nunca el código). Arranca con [`../cliente/preguntas-asesoria.md`](../cliente/preguntas-asesoria.md) | Cliente |
+| [`incidencia-sin-acceso.md`](incidencia-sin-acceso.md) | **Diagnosticar con el paquete que envía el cliente**, sin acceso a su servidor. Es el runbook que decide si el paquete está bien diseñado | Soporte del fabricante |
+
+### Solo del fabricante (no del cliente)
+
+| Runbook | Cuándo se usa |
+| --- | --- |
+| [`fallo-de-ci.md`](fallo-de-ci.md) | Una etapa del pipeline está en rojo, o una puerta de versión bloquea una etiqueta |
+| [`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md) | Un hallazgo de Semgrep comunitario o Trivy en modo informe del job de seguridad |
+
+`alta-nuevo-empleado` no es un runbook: es el §2 de
+[`../cliente/guia-rrhh.md`](../cliente/guia-rrhh.md).
+
+---
 
 ## Qué debe contener un runbook
 
 Que una persona del equipo pueda diagnosticar el incidente a las 06:30 sin
 haber tocado nunca esa parte del sistema:
 
-1. **Síntoma y alerta que lo dispara**, con su umbral.
+1. **Síntoma y alerta que lo dispara**, con su umbral, severidad y destinatario.
 2. **Qué significa y qué no significa** — sobre todo en los que señalan a una
    persona.
 3. **Impacto en el fichaje.** Lo primero que hay que saber es si alguien se ha
    quedado sin poder fichar (regla dura 19: el quiosco nunca bloquea al
    empleado).
-4. **Diagnóstico**: comandos concretos, copiables, con la salida esperada.
+4. **Diagnóstico**: comandos concretos, copiables **tal cual** desde el
+   directorio de la instalación, con la salida esperada.
 5. **Resolución**, con la vuelta atrás si la hay.
 6. **Qué preservar antes de tocar nada** en los de seguridad.
 7. **A quién se escala** y en cuánto tiempo.
+
+Si añades una alerta: su `runbook_url` apunta a un runbook (o a un ancla de uno)
+que la nombra, que la lista en su tabla de alertas y que dice qué hacer. Si el
+modo de fallo no cabe en ninguno de los existentes, escribe el runbook en el
+mismo cambio y añádelo a los dos índices de arriba.

@@ -123,6 +123,11 @@ transparencia es el motivo por el que el sistema funciona así.
 
 En «Descargar mi historial» eliges el periodo y el formato, y pulsas **«Descargar CSV»** o **«Descargar PDF»**.
 
+**Pon siempre la fecha de inicio.** Si la dejas en blanco, el fichero trae
+**solo los últimos 31 días** (hasta la fecha final, o hasta hoy), aunque la
+pantalla diga que se incluye tu historial disponible. Cada descarga abarca
+**como mucho 366 días**: para un periodo más largo, descárgalo año a año.
+
 - **CSV**: para abrirlo en una hoja de cálculo.
 - **PDF**: un documento sellado, con la fecha de generación y una huella que
   acredita que no se ha modificado, pensado para presentarlo ante un tercero.

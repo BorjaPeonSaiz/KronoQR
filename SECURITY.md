@@ -10,7 +10,7 @@ prioridad sobre cualquier otro trabajo.
 **No abras una incidencia pública, ni un *pull request*, ni publiques el
 detalle** hasta que el fabricante confirme que hay corrección disponible.
 
-Notifícala **en privado** por correo a **contacto@kodigolab.es**, con «Seguridad
+Notifícala **en privado** por correo a **[contacto@kodigolab.es](mailto:contacto@kodigolab.es)**, con «Seguridad
 KronoQR» en el asunto. Responsable: Borja Peón Saiz.
 
 Si eres **cliente**, puedes usar además el canal de soporte de tu licencia, con
@@ -60,9 +60,12 @@ la misma regla: sin datos personales en el mensaje.
 La matriz de versiones soportadas es la de
 [`infra/versions.txt`](infra/versions.txt): reciben correcciones de seguridad la
 **versión menor vigente y las dos anteriores de la misma versión mayor**
-(con la 2.4.0 publicada: 2.4.x, 2.3.x y 2.2.x). Una instalación fuera de esa
-matriz tiene que actualizar primero con `update.sh`; el script le indica la
-versión intermedia.
+(con la 2.4.0 publicada: 2.4.x, 2.3.x y 2.2.x). **Hoy, con la 2.2.0 como
+versión vigente, son la 2.2.x, la 2.1.x y la 2.0.x**, y la recomendación es
+estar en la 2.2.x: es la que trae el segundo factor obligatorio para los
+responsables, el bloqueo por origen del portal y las copias autenticadas. Una
+instalación fuera de esa matriz tiene que actualizar primero con `update.sh`;
+el script le indica la versión intermedia.
 
 | Versión | ¿Recibe parches de seguridad? |
 | --- | --- |

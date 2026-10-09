@@ -16,6 +16,7 @@ nocturna | cualquiera | Crítica | IT del cliente»*), definidas en
 | --- | --- | --- | --- | --- |
 | `DivergenciaEnReconciliacionNocturna` | cualquiera en 24 h, `for: 5m` | Crítica | IT del cliente | [§3](#3-hubo-divergencia) |
 | `ReconciliacionDeProyeccionAusente` | > 26 h sin reconciliar, `for: 30m` | Alta | IT del cliente | [§5](#5-nadie-está-reconciliando-el-silencio) |
+| `ReconciliacionConFallos` | `projection_reconciliation_last_failures > 0` (la última pasada dejó jornadas sin corregir), `for: 5m` | Alta | IT del cliente | [§5 bis](#5-bis-la-reconciliación-dejó-jornadas-sin-resolver) |
 
 **Impacto en el fichaje, que es lo primero que hay que saber: ninguno.** Nadie se
 ha quedado sin poder fichar y nadie se va a quedar. `daily_totals` es una
@@ -73,16 +74,17 @@ uno de los dos rota:
 ```bash
 # 0. Marca temporal, para nombrar todo lo demás.
 INC=$(date -u +%Y%m%dT%H%M%SZ); echo "$INC"
+sudo mkdir -p /var/backups/fichaje/evidencia   # BACKUP_PATH/evidencia; si cambiaste BACKUP_PATH, usa el tuyo
 
 # 1. El log de la pasada: qué campos no cuadraban y cuánto valía cada uno.
 #    Rota: cópialo YA. Nunca lleva nombres, solo employee_uuid (regla dura 21).
-docker compose -f infra/compose.prod.yaml logs scheduler --since 48h \
+docker compose logs scheduler --since 48h \
   | grep -E 'attendance.projection_(divergence|reconciliation)' \
   > "/var/backups/fichaje/evidencia/$INC-divergencias.log"
 
 # 2. Los asientos de auditoría de la corrección. Esta tabla no se puede alterar,
 #    pero conviene tener el extracto a mano.
-docker compose -f infra/compose.prod.yaml exec -T postgres \
+docker compose exec -T postgres \
   psql -U fichaje_app -d fichaje -c "\copy (
       SELECT occurred_at, actor_type, actor_id, action, payload
         FROM audit_log
@@ -128,7 +130,7 @@ que ninguna otra cosa: **dice qué clase de problema tienes**.
 que ejecuta la reconciliación:
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T postgres \
+docker compose exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT COALESCE(t.employee_id, s.employee_id) AS employee_id,
          COALESCE(t.work_date,   s.work_date)   AS work_date,
@@ -150,11 +152,12 @@ Salida esperada: **cero filas**. Si devuelve algo, la corrección falló: mira
 
 ```bash
 # ¿Hubo un despliegue o una migración en las horas previas?
-docker compose -f infra/compose.prod.yaml run --rm --no-deps -T migrate php artisan migrate:status --database=pgsql_migrator | tail -20
+docker compose run --rm --no-deps -T migrate php artisan migrate:status --database=pgsql_migrator | tail -20
 
-# ¿Hay sesiones conectadas a la base que no sean la aplicación?
-docker compose -f infra/compose.prod.yaml exec -T postgres \
-  psql -U fichaje_app -d fichaje -c \
+# ¿Hay sesiones conectadas a la base que no sean la aplicación? (con el rol de
+# migración: un rol sin privilegios solo ve el detalle de sus propias sesiones)
+docker compose exec -T postgres \
+  psql -U fichaje_migrator -d fichaje -c \
   "SELECT usename, application_name, client_addr, backend_start, state
      FROM pg_stat_activity WHERE datname = 'fichaje';"
 
@@ -170,13 +173,13 @@ momento de detectarla. Lo que queda es cerrar la causa.
 ```bash
 # 1. Reconcilia el rango completo que sospeches, no solo el día que saltó.
 #    Sin --to, el rango es un solo día.
-docker compose -f infra/compose.prod.yaml exec -T app \
+docker compose exec -T app \
   php artisan attendance:reconcile --from=2026-03-01 --to=2026-03-31
 
 # 2. Repite. La segunda pasada tiene que salir limpia: si vuelve a encontrar
 #    divergencias sobre las mismas jornadas, algo las está reescribiendo AHORA,
 #    y eso ya no es un incidente pasado. Ve a la §6.
-docker compose -f infra/compose.prod.yaml exec -T app \
+docker compose exec -T app \
   php artisan attendance:reconcile --from=2026-03-01 --to=2026-03-31
 ```
 
@@ -204,7 +207,7 @@ hay un **procedimiento que se saltó el recálculo**.
 
 ```bash
 # Reconcilia todo el histórico afectado. Es idempotente y no toca ningún tramo.
-docker compose -f infra/compose.prod.yaml exec -T app \
+docker compose exec -T app \
   php artisan attendance:reconcile --from=2026-01-01 --to=2026-12-31
 ```
 
@@ -227,13 +230,13 @@ de que el comando corra.
 
 ```bash
 # ¿Corre el scheduler?
-docker compose -f infra/compose.prod.yaml ps scheduler
+docker compose ps scheduler
 
 # ¿Está la tarea en la lista y a qué hora?
-docker compose -f infra/compose.prod.yaml exec -T app php artisan schedule:list | grep reconcile
+docker compose exec -T app php artisan schedule:list | grep reconcile
 
 # Ejecútala a mano: si falla, el motivo sale aquí.
-docker compose -f infra/compose.prod.yaml exec -T app php artisan attendance:reconcile
+docker compose exec -T app php artisan attendance:reconcile
 
 # ¿Llega el fichero de métricas a node-exporter?
 ls -l /var/backups/fichaje/metrics/kronoqr_projection.prom
@@ -244,6 +247,27 @@ Esperado en el fichero: `projection_divergence_total 0` y un
 `projection_reconciliation_last_run_timestamp_seconds` de esta madrugada. Si el
 contador vale más que cero pero la alerta de la §3 no está activa, es historia:
 alguien ya la investigó. El histórico está en `audit_log`.
+
+## 5 bis. La reconciliación dejó jornadas sin resolver
+
+`ReconciliacionConFallos` es otra cosa que la §3: la pasada **sí corrió** y encontró
+divergencias, pero para al menos una jornada **no pudo reescribir la fila** (por
+ejemplo, un bloqueo de otra transacción). `daily_totals` sigue siendo una
+proyección de lectura: el fichaje y el registro legal no están afectados, pero el
+panel y los informes pueden mostrar un total desviado en esas jornadas.
+
+```bash
+# 1. Qué jornadas (el log trae employee_uuid y fecha, nunca nombres)
+docker compose logs scheduler --since 48h | grep attendance.projection_not_corrected
+
+# 2. Repite la pasada sobre el rango que salga. Sale 0 si ya cuadra
+docker compose exec -T app php artisan attendance:reconcile --from=AAAA-MM-DD --to=AAAA-MM-DD
+```
+
+Si la segunda pasada sale `0`, la métrica `projection_reconciliation_last_failures`
+vuelve a 0 con la siguiente pasada (o con la repetición, que reescribe el fichero
+de métricas) y la alerta se apaga sola. Si **sigue fallando sobre las mismas
+jornadas**, no es un bloqueo pasajero: conserva el log y ve a la §6.
 
 ---
 
@@ -256,6 +280,7 @@ alguien ya la investigó. El histórico está en `audit_log`.
 | Sesiones a la base que no son la aplicación | Responsable de seguridad | Inmediato |
 | Divergencia con la cadena de auditoría rota a la vez | Responsable de seguridad **y** DPO | Inmediato: ve a [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) |
 | Silencio de la reconciliación | IT del cliente | Dentro de la jornada |
+| `ReconciliacionConFallos` persiste tras repetir la pasada | IT del cliente + fabricante (sin datos) | Dentro de la jornada |
 
 **El fabricante no accede a los datos del cliente** (ADR-020, regla dura 16). La
 salida de `attendance:reconcile` y el log de la pasada se pueden compartir tal

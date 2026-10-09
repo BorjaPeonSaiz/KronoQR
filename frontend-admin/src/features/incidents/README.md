@@ -6,15 +6,15 @@ Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).
 
 ## Que hay aqui
 
-| Fichero                     | Que hace                                                                                                                                                                                                                                                                          |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `incidents.api.ts`          | Cliente tipado de `GET /incidents` y `POST /incidents/{id}/resolve`, con los filtros en camelCase que usa el panel.                                                                                                                                                               |
-| `incidents.store.ts`        | Pinia: la pagina, los filtros, el reloj del servidor para la antiguedad, la sustitucion de fila al resolver y la relectura por `409`.                                                                                                                                             |
-| `incidentContext.ts`        | Presentacion pura (sin Vue) del `context` de una incidencia: solo empareja las claves que el contrato confirma (`rest_minutes`/`worked_minutes` con `threshold_minutes`, y desde la 3.11 los dos patrones de `anomalous_pattern`); todo lo demas se pinta en bruto, sin inventar. |
-| `incidentPresentation.ts`   | La clase de color del badge de severidad, compartida con la marca incrustada en `features/workdays/WorkDayCard.vue`: el mismo hecho se ve igual en los dos sitios.                                                                                                                |
-| `IncidentsView.vue`         | La bandeja: filtros al servidor (estado, tipo, severidad, departamento), el aviso de filtro por persona que llega desde el detalle de jornada, paginacion y estados vacio/carga/error.                                                                                            |
-| `IncidentTable.vue`         | Las filas, virtualizadas a partir de 80 (como `features/live/PresenceTable.vue`). Severidad como badge con texto, antiguedad contra el reloj del servidor, enlace al registro horario si el ambito alcanza.                                                                       |
-| `ResolveIncidentDialog.vue` | El dialogo de cierre: `outcome` resolver/descartar, nota obligatoria con validacion local y errores `422` del servidor, y el mensaje de quien se adelanto en un `409` (sin ofrecer reintentar).                                                                                   |
+| Fichero                     | Que hace                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `incidents.api.ts`          | Cliente tipado de `GET /incidents` y `POST /incidents/{id}/resolve`, con los filtros en camelCase que usa el panel.                                                                                                                                                                                                                                                   |
+| `incidents.store.ts`        | Pinia: la pagina, los filtros, el reloj del servidor para la antiguedad, la sustitucion de fila al resolver y la relectura por `409`.                                                                                                                                                                                                                                 |
+| `incidentContext.ts`        | Presentacion pura (sin Vue) del `context` de una incidencia: solo empareja las claves que el contrato confirma (`rest_minutes`/`worked_minutes` con `threshold_minutes`, y desde la 3.11 los dos patrones de `anomalous_pattern`, mas las claves de `rejected_pin_scan`, `scan_before_revocation` y `discarded_scan`); todo lo demas se pinta en bruto, sin inventar. |
+| `incidentPresentation.ts`   | La clase de color del badge de severidad, compartida con la marca incrustada en `features/workdays/WorkDayCard.vue`: el mismo hecho se ve igual en los dos sitios.                                                                                                                                                                                                    |
+| `IncidentsView.vue`         | La bandeja: filtros al servidor (estado, tipo, severidad, departamento), el aviso de filtro por persona que llega desde el detalle de jornada, paginacion y estados vacio/carga/error.                                                                                                                                                                                |
+| `IncidentTable.vue`         | Las filas, virtualizadas a partir de 80 (como `features/live/PresenceTable.vue`). Severidad como badge con texto, antiguedad contra el reloj del servidor, enlace al registro horario si el ambito alcanza.                                                                                                                                                           |
+| `ResolveIncidentDialog.vue` | El dialogo de cierre: `outcome` resolver/descartar, nota obligatoria con validacion local y errores `422` del servidor, y el mensaje de quien se adelanto en un `409` (sin ofrecer reintentar).                                                                                                                                                                       |
 
 ## Por que la bandeja es un store de Pinia y no una consulta de TanStack Query
 
@@ -101,3 +101,14 @@ en el contexto de una sola incidencia.
 Ninguna frase de los dos patrones lleva una palabra que califique («fraude»,
 «sospechoso», «engaño»): RF-PR-06 dice que el sistema aporta el indicio,
 nunca la conclusion.
+
+## Fichajes que el registro no tiene (RN-18, RN-19, RN-20 y RN-22)
+
+La bandeja filtra y describe tambien los tipos que abren la pasada nocturna y el
+lote del quiosco: `out_of_order_scan` (RN-18, fichaje irreconciliable),
+`rejected_pin_scan` (RN-19, intento por PIN de quien podia fichar que nadie
+subsano: `attempts`, `lockout_attempts` y `max_sync_delay_seconds`, esta ultima
+con signo), `scan_before_revocation` (RN-20, fichaje anterior a la retirada de
+la tarjeta) y `discarded_scan` (RN-22, fichaje descartado por el quiosco).
+`incidentContext.ts` traduce los enumerados `withdrawal` y `attribution` y pinta
+el resto con su etiqueta; nunca el motivo de la revocacion ni el contenido del QR.

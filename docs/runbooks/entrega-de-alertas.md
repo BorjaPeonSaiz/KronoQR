@@ -1,6 +1,6 @@
 # Runbook — Alertmanager no responde, o las alertas no llegan
 
-**Alertmanager se vigila a sí mismo.** Las diez alertas de este catálogo no
+**Alertmanager se vigila a sí mismo.** Las alertas de esta instalación no
 sirven de nada si el propio servicio que las envía está caído o no consigue
 entregar — es el hueco que cerró la revisión de seguridad de la tarea 3.2
 (decisión 17c): sin esto, una copia fallando **y** un correo que rebota a la
@@ -43,8 +43,8 @@ por webhook— algo falla: el SMTP del hotel rechaza la conexión, la
 contraseña rotó y nadie actualizó el `.env`, el servicio del webhook
 responde con un error. **Puede que esta alerta tampoco te llegue por
 correo**, si lo que está roto es justamente el correo — por eso el mismo
-dato está también en el cuadro «Salud de la API» de Grafana y en la propia
-interfaz de Alertmanager (§2), que no dependen del canal que ha fallado.
+dato se puede consultar sin el canal roto: en los registros de Alertmanager y en
+Prometheus (§4.1 y §4.3), que no dependen del canal que ha fallado.
 
 ---
 
@@ -133,10 +133,14 @@ docker compose ps alertmanager   # tiene que estar "healthy" o "running"
 docker compose logs --tail 100 alertmanager | grep -i 'error\|fail'
 ```
 
-La propia interfaz de Alertmanager (`http://127.0.0.1:9093` por el túnel de
-§4.2) muestra, para cada alerta activa, el **error exacto de su última
-entrega** por cada integración (`{{ $labels.integration }}`: `email` o
-`webhook`) — no hace falta adivinarlo desde el registro del contenedor.
+El registro de Alertmanager trae el **error exacto de cada entrega fallida** y la
+integración que falló (`email` o `webhook`), y `amtool` lista lo que tiene
+pendiente de enviar; no hace falta adivinar:
+
+```bash
+docker compose logs --tail 200 alertmanager | grep -i "notify|integration"
+docker compose exec alertmanager amtool alert query
+```
 
 Comprueba el transporte de correo, que es el mismo SMTP que usa el resumen
 nocturno de incidencias (`configuracion.md` §6.21): `MAIL_HOST`, `MAIL_PORT`,
@@ -158,24 +162,9 @@ espera, es lo que incrementa `alertmanager_notifications_failed_total`.
 
 ### 4.2 Prueba de entrega, sin esperar a la siguiente alerta real
 
-Por túnel SSH, igual que para ver la interfaz (`operacion.md` §10.4):
-
-```bash
-ssh -L 9093:127.0.0.1:9093 tu-usuario@fichaje.tuhotel.local
-```
-
-Y desde tu propia máquina, con el túnel abierto:
-
-```bash
-curl -s -X POST http://127.0.0.1:9093/api/v2/alerts \
-  -H 'Content-Type: application/json' \
-  -d '[{
-    "labels": {"alertname": "PruebaDeEntrega", "severity": "high", "destinatario": "it-cliente"},
-    "annotations": {"summary": "Prueba manual de entrega, borrar tras confirmar"}
-  }]'
-```
-
-O, desde el propio servidor, con `amtool` (vive en la misma imagen):
+Desde el propio servidor, con `amtool` (vive en la misma imagen de Alertmanager;
+`compose.prod` no publica su puerto 9093 en el anfitrión, así que se lanza dentro
+del contenedor y no hace falta túnel):
 
 ```bash
 docker compose exec alertmanager amtool alert add \
@@ -195,13 +184,14 @@ Mientras se resuelve, las alertas **siguen disparándose y quedan
 registradas**; lo único que falla es la notificación activa. Dos sitios que
 no dependen del canal roto:
 
-- **Prometheus**, por el mismo túnel de siempre (`127.0.0.1:9090`):
-  `http://127.0.0.1:9090/alerts` lista todo lo que está `firing`, con
-  independencia de si se entregó.
-- **Grafana**, cuadro «Salud de la API»: la serie
-  `alertmanager_notifications_failed_total` está ahí, y el resto de
-  cuadros siguen reflejando el estado real de la instalación aunque nadie
-  reciba el correo.
+- **Prometheus**, desde dentro de su contenedor:
+  `docker compose exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/alerts`
+  lista todo lo que está `firing`, con independencia de si se entregó.
+- **Grafana** (`127.0.0.1:3000`, por túnel SSH: `ssh -L 3000:127.0.0.1:3000
+  tu-usuario@servidor`): en *Explore*, la serie
+  `alertmanager_notifications_failed_total` de Prometheus, y los cuadros de mando
+  siguen reflejando el estado real de la instalación aunque nadie reciba el
+  correo.
 
 ### 4.4 Resolución
 

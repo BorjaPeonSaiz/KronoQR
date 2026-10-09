@@ -63,7 +63,7 @@ marcado para revisión** en lugar de reintentarse sin fin. Es el §4.
 ### 2.1 De qué quiosco es, y desde cuándo
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health
+docker compose exec -T app php artisan kiosk:health
 ```
 
 La columna **cola pendiente** y el **veredicto** (`aviso` con cola
@@ -88,7 +88,7 @@ vacían solos al final ([`actualizacion-cliente.md`](actualizacion-cliente.md)
 ### 2.3 Confirmar que sigue creciendo, o que ya está bajando
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health --json | jq '.devices[] | {name, pending_queue_size, verdict}'
+docker compose exec -T app php artisan kiosk:health --json | jq '.devices[] | {name, pending_queue_size, verdict}'
 ```
 
 Repite la orden un par de minutos después. Si el número **baja**, la tablet
@@ -205,7 +205,7 @@ Qué esperar, en orden:
 3. La cola baja y llega a cero. Compruébalo con el mismo comando de §2.1:
 
    ```bash
-   docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health
+   docker compose exec -T app php artisan kiosk:health
    ```
 
 4. `ColaOfflineSinVaciar` se apaga sola en cuanto la cola toca cero.
@@ -283,7 +283,7 @@ Grafana, panel «Cola degradada y descartes sin avisar» del cuadro *Operación 
 quioscos*. Desde la consola:
 
 ```bash
-docker compose -f infra/compose.prod.yaml exec -T app php artisan kiosk:health --json | jq '.devices[] | {name, queue_storage, pending_queue_size, verdict}'
+docker compose exec -T app php artisan kiosk:health --json | jq '.devices[] | {name, queue_storage, pending_queue_size, verdict}'
 ```
 
 ### Qué hacer
@@ -375,7 +375,7 @@ el `scan_id` (UUID, sin datos personales) y el error del servidor que hay
 detrás:
 
 ```bash
-docker compose -f infra/compose.prod.yaml logs --since 1h app | grep attendance.batch_scan_failed
+docker compose logs --since 1h app | grep attendance.batch_scan_failed
 ```
 
 Con ese error (base de datos, bloqueo, restricción, versión) sabrás si es un

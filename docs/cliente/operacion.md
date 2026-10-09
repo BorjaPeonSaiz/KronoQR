@@ -400,10 +400,10 @@ nunca, los límites del plan y qué hacer si una clave no se activa— está en
 
 ---
 
-## 8. Los cinco scripts y su tabla de códigos de salida
+## 8. Los scripts de operación y su tabla de códigos de salida
 
-`install.sh`, `update.sh`, `doctor.sh`, `backup.sh` y `restore.sh` **comparten
-una sola tabla**. Los ejecuta la misma persona, a veces encadenados en un cron,
+`install.sh`, `update.sh`, `doctor.sh`, `backup.sh`, `restore.sh` y
+`restore-drill.sh` **comparten una sola tabla**. Los ejecuta la misma persona, a veces encadenados en un cron,
 y un `3` que significara una cosa en uno y otra en otro sería una trampa.
 
 **El código dice en qué fase se paró y qué quedó escrito. El detalle va en el
@@ -681,7 +681,7 @@ PostgreSQL y Redis, con el mismo patrón.
 **Tempo** guarda las trazas: el recorrido completo de una petición, desde el
 `fetch` de la tablet hasta la consulta SQL que escribió el fichaje, con los
 mismos 90 días de retención que el registro técnico (cambiar el plazo exige
-tocar `infra/observability/loki/loki.yaml` **y** `infra/observability/tempo/tempo.yaml`
+tocar `observability/loki/loki.yaml` **y** `observability/tempo/tempo.yaml`
 a la vez: ver `configuracion.md` §6.20). No se activa por sí solo: hace falta
 además que `OTEL_EXPORTER_OTLP_ENDPOINT` apunte a `http://tempo:4318` en tu
 `.env` (vacío de serie, incluso con el perfil encendido).
@@ -715,7 +715,7 @@ disponible igual.
 
 Prometheus evalúa el catálogo de alertas del documento 01 §9.3 sobre las
 métricas del §8.2, y Grafana carga **cinco cuadros de mando versionados como
-código** en `infra/observability/grafana/dashboards/` de la instalación —no
+código** en `observability/grafana/dashboards/` de la instalación —no
 se editan desde la interfaz (`allowUiUpdates: false`): un cambio se hace en
 el fichero y se despliega, igual que cualquier otra configuración—.
 
@@ -750,21 +750,22 @@ instalación con alertas que no llegan a nadie es peor que sin alertas: se
 cree vigilada sin estarlo. Tabla completa en
 [`configuracion.md`](configuracion.md) §6.20.
 
-**La interfaz de Alertmanager**, para ver el enrutado y los silencios
-activos, escucha igual que Grafana — **solo en `127.0.0.1:9093`, nunca desde
-internet** —, y se llega igual, por túnel SSH:
+**Alertmanager no publica ningún puerto**, ni siquiera en el propio servidor:
+solo Grafana escucha en `127.0.0.1:3000`. Las alertas activas y los silencios
+se consultan desde el directorio de la instalación, con `amtool`, que viene en
+la misma imagen:
 
 ```bash
-ssh -L 9093:127.0.0.1:9093 tu-usuario@fichaje.tuhotel.local
+docker compose exec alertmanager amtool alert query
+docker compose exec alertmanager amtool silence query
 ```
 
-Y después, `http://127.0.0.1:9093` en tu navegador. **Alertmanager se vigila
-a sí mismo** con las dos primeras filas de la tabla de abajo
-(`EnrutadoDeAlertasCaido`, `EntregaDeAlertasFallando`): si el propio
+**Alertmanager se vigila a sí mismo** con las dos primeras filas de la tabla
+de abajo (`EnrutadoDeAlertasCaido`, `EntregaDeAlertasFallando`): si el propio
 servicio cae, o si algo impide entregar (el correo caído, un webhook que no
 responde), lo sabrás — la segunda puede no llegarte por correo si lo roto es
-justamente el correo, pero se ve igual en el cuadro «Salud de la API» y en
-esta misma interfaz. Procedimiento en
+justamente el correo, pero Alertmanager la recibe igual y sale con la primera
+orden de arriba. Procedimiento en
 [`entrega-de-alertas.md`](../runbooks/entrega-de-alertas.md).
 
 **El catálogo completo**, con lo que hay que hacer al recibir cada una —
@@ -891,12 +892,19 @@ dentro, en vez de cinco avisos separados — es la lectura práctica de «un
 único quiosco reiniciándose no debe despertar a nadie» del doc 02 §8.4.
 
 **Los umbrales viven en la instalación, no en el repositorio del
-fabricante.** `infra/observability/` viaja en tu paquete y lo puedes editar.
+fabricante.** `observability/` viaja en tu paquete y lo puedes editar.
 Solo un umbral está atado a otra parte del sistema y **tiene que cambiar a
 la vez**: `KIOSK_HEALTH_SILENT_AFTER_SECONDS` ([`configuracion.md`](configuracion.md)
 §6.14) y el umbral de `QuioscoSinLatido` son el mismo número — si los
 separas, la consola (`kiosk:health`) y la alerta dirán cosas distintas del
 mismo quiosco.
+
+**Al actualizar, tus cambios en `observability/` no viajan solos.** El
+paquete nuevo trae su propio `observability/` y `update.sh` no copia el del
+directorio anterior (sí copia el `.env`, los certificados y la carpeta de
+marca). Si has tocado un umbral o un cuadro de mando, vuelve a aplicarlo en el
+directorio nuevo y recarga Prometheus
+(`docker compose restart prometheus`).
 
 **Dos límites que conviene conocer.** No hay un Alertmanager común entre
 instalaciones de clientes distintos: cada instalación tiene la suya, con sus
@@ -929,11 +937,18 @@ consecuencias tiene cada cambio está en
 > [`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md).
 > Aquí, lo que hay que saber cada vez.
 
-**El fichaje no se detiene.** Durante la actualización el panel, el portal y la
-API de gestión responden «en mantenimiento» (503), pero los quioscos siguen
-confirmando en local y encolando; al terminar sincronizan con la hora real de
-cada fichaje. Si la ventana fue larga, la bandeja mostrará incidencias de
-sincronización: no son un fallo.
+**El fichaje no se detiene para el empleado, pero el servidor sí se detiene un
+rato.** Durante la actualización toda la API —el panel, el portal **y la
+entrada de fichajes del quiosco**— responde «en mantenimiento» (503); solo
+siguen respondiendo las sondas `/api/v1/health` y `/api/v1/ready`. Los quioscos
+siguen confirmando en local y encolando; al terminar sincronizan con la hora
+real de cada fichaje, así que no se pierde nada y el registro legal conserva el
+momento en que cada persona pasó la tarjeta. **Cuánto dura:** en la prueba del
+fabricante, con una base casi vacía y sin migraciones pendientes, el 503 duró
+**unos 52 segundos** de principio a fin; con tus datos durará más, porque la
+copia previa se hace dentro de esa ventana y crece con la base. Prográmala
+fuera de los cambios de turno. Si la ventana fue larga, la bandeja mostrará
+incidencias de sincronización: no son un fallo.
 
 ```bash
 cd /opt                                   # el paquete nuevo, AL LADO del actual
@@ -943,9 +958,17 @@ sudo ./update.sh --check-only             # sin tocar nada: qué falta, si falta
 sudo ./update.sh                          # actualiza, verifica y vuelve atrás sola si falla
 ```
 
+**Si entras por SSH, lánzalo dentro de `tmux`** (`tmux new -s kronoqr`, como el
+instalador: [`instalacion.md`](instalacion.md) §1.4). Si la sesión se corta,
+la actualización sigue o vuelve atrás sola, pero sin `tmux` no verías cómo
+acabó (§18, «…la actualización se cortó a mitad»).
+
 **Al lado, no encima.** Descomprimido encima de una versión anterior a la 2.2.0,
 `update.sh` se niega en el paso 1 sin tocar nada e imprime las tres órdenes para
 hacerlo lado a lado ([`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md) §2).
+Encima de una 2.2.0 o posterior sí funciona —avisa, sigue y conserva la vuelta
+atrás automática—, pero al lado sigue siendo lo recomendado: el directorio
+anterior queda entero para una vuelta atrás a mano.
 
 Los siete pasos y lo que pasa si falla cada uno:
 
@@ -1397,7 +1420,10 @@ autofirmado), permisos (directorios de trabajo, copias, logotipo), ficheros
 generados (que el volumen `app-storage` está montado y se puede escribir, que
 sus rutas no coinciden entre sí, que la carpeta de los informes de retención se
 puede escribir, y exportaciones para la Inspección olvidadas en el servidor
-desde hace más de 30 días; §13.6), espacio en disco (aplicación y copias) y
+desde hace más de 30 días; §13.6), espacio en disco (aplicación y copias),
+copias (que la última copia salió bien y hay una verificada de menos de 26 h;
+recién instalado, hasta la primera copia nocturna, es solo un aviso),
+planificador (que sigue lanzando sus tareas cada minuto) y
 ajustes (zona horaria en UTC, modo depuración,
 claves no válidas, diferencias entre el `.env` y lo guardado, licencia y marca),
 redes del borde (desde dónde se abren el portal, el panel, los quioscos y
@@ -2033,7 +2059,7 @@ pendientes, latiendo.
 La leyenda al pie de la pantalla **dice los umbrales reales de tu
 instalación**, no unos supuestos: si cambias uno, la leyenda cambia con él. Y
 si cambias `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, tienes que cambiar **a la vez**
-el umbral de la alerta `QuioscoSinLatido` en `infra/observability/` (§10.4):
+el umbral de la alerta `QuioscoSinLatido` en `observability/` (§10.4):
 son el mismo número, y separarlos es justamente lo que rompe la coherencia que
 esta pantalla existe para dar.
 
@@ -2910,3 +2936,37 @@ sudo docker compose logs --tail 100 scheduler horizon
 Si se vuelven a parar, adjunta esos registros al paquete de diagnóstico
 (§12.2). Después de arrancar `scheduler`, comprueba que la última copia es de
 hoy o de anoche ([`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2).
+
+### …la actualización se cortó a mitad (sesión SSH, Ctrl+C) y no sabes cómo acabó
+
+**Qué pasa.** `update.sh` atrapa la interrupción: si todavía no había escrito
+nada, sale sin tocar nada (`129`, `130` o `143`); si ya había empezado, vuelve
+atrás solo a la copia previa, como ante cualquier otro fallo (§11, paso 6). Lo
+que puede faltar es **la pantalla**: con la sesión SSH cortada, el mensaje
+final no lo ve nadie. Por eso se lanza dentro de `tmux` (§11).
+
+**Qué hacer.** No repitas la actualización todavía. Lee primero cómo terminó en
+el informe local, que se escribe aunque la pantalla se pierda:
+
+```bash
+sudo ls -lt /var/log/kronoqr/
+sudo tail -n 40 /var/log/kronoqr/update-<fecha>.log
+```
+
+Usa el `update-<fecha>.log` más reciente (no el `.detalle.log`, que puede
+llevar datos personales). Según lo que diga al final:
+
+- **«VUELTA ATRAS COMPLETADA»**: la instalación sigue en la versión anterior,
+  con sus datos, y el directorio vigente es el de antes. Comprueba con
+  `./doctor.sh` desde ese directorio y reintenta la actualización dentro de
+  `tmux`.
+- **«VUELTA ATRAS INCOMPLETA»**: el propio mensaje dice qué queda a medias y
+  la orden que lo retira. Si solo dice que quedó el modo mantenimiento, **no
+  restaures ninguna copia**. Sigue
+  [`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md)
+  §5.
+- **«DIRECTORIO VIGENTE: …»**: la actualización terminó bien antes del corte.
+  Trabaja desde el directorio que indica.
+- **Nada de lo anterior** (el informe se queda a mitad): ejecuta `./doctor.sh`
+  desde el directorio anterior y, si no sale en verde, abre un caso con el
+  paquete de diagnóstico (§12.2) y ese informe.

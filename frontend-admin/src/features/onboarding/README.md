@@ -17,13 +17,15 @@ recién montada, sin ninguna cuenta de gestión ni ningún centro, entra aquí
   y el estado compartido con la guarda de rutas: la guarda decide si hay que
   entrar aquí sin repetir la llamada en cada navegación.
 - **`employeeImport.api.ts`** — `POST /employees/import` (multipart, dos
-  fases).
+  fases). Las altas importadas **nacen sin PIN** (`pin_status: pending`): el paso
+  lo avisa y el PIN se emite al entregar la tarjeta, desde la ficha.
 - **`steps.ts`** — los ocho pasos, en el orden del contrato, y su clave i18n.
 - **`ReviewStep.vue`** — la revisión final antes de `POST /setup/complete`
   (el asistente no se cierra solo).
 - **`CompletionSummary.vue`** — el resumen accionable de RF-PD-03: qué falta
   antes del primer día, con la cifra de tarjetas pendientes por delante de
-  todo lo demás.
+  todo lo demás. Si la importación dejó personas sin PIN, lo dice con un enlace a la
+  plantilla filtrada por `pin_status=pending`.
 - **`steps/*.vue`** — un componente por paso. Dos de ellos **reutilizan
   pantallas ya existentes** en vez de duplicarlas: `ComplianceProfileStep`
   incrusta `features/settings/ComplianceProfileView.vue` (tarea 5.2) y

@@ -6,6 +6,11 @@
 | `types.ts`    | Alias con nombre corto sobre lo generado. No define ninguna forma propia  |
 | `client.ts`   | Transporte: cabeceras, tiempos de espera y traduccion de fallos a valores |
 
+`client.ts` cubre el fichaje (`recordScan`, `recordPinScan`, `syncScanBatch`), el aviso de
+descartes (`reportDiscardedScans`, RN-22), el padron (`fetchRoster`), el latido
+(`sendHeartbeat`, que puede traer el relevo del token en `rotated_token`), el emparejamiento
+(`requestPairing`, `claimPairing`) y la marca (`fetchBranding`).
+
 `schema.d.ts` **no se escribe a mano y no se edita**: el contrato es la fuente de verdad de
 la API (CLAUDE.md, orden de autoridad 2; ADR-013). Esta excluido de Prettier, porque no
 tiene sentido discutir el formato de un fichero que nadie toca.

@@ -138,7 +138,7 @@ Lo que verás, y lo que significa cada paso:
 | 2 · Mantenimiento | El panel, el portal y la API de gestión responden «en mantenimiento» (503). `horizon` y `scheduler` se paran para que nada escriba | **Los quioscos siguen fichando**: confirman en local y encolan. Es invisible para quien ficha |
 | 3 · Copia previa | Copia lógica cifrada **y verificada** con la versión actual (si descomprimiste encima, cosa que solo se admite desde la 2.2.0, con la imagen del paquete nuevo: §2). **Bloqueante**: si falla, sale `2`, retira el mantenimiento, vuelve a arrancar `horizon` y `scheduler` **tal como estaban** (`start`, sin recrear nada) y no ha tocado nada más. No hay bandera para saltárselo | Igual |
 | 4 · Migraciones | Relanza PostgreSQL y Redis con las imágenes nuevas y aplica las migraciones **versión a versión**, con un punto de control entre cada una: `PUNTO DE CONTROL 2.2.0 alcanzado: 3 migraciones aplicadas en 4 s` | Igual |
-| 5 · Arranque y verificación | Arranca la aplicación nueva **sin borde** y la comprueba desde dentro: sondas, versión, cadena de auditoría, restricciones de RN-01 y RN-02. Solo si todo pasa arranca Nginx y los procesos de fondo, y vuelve a comprobar por loopback | Sigue encolando hasta que Nginx vuelve |
+| 5 · Arranque y verificación | Arranca la aplicación nueva **sin borde** y la comprueba desde dentro: sondas, versión, cadena de auditoría, restricciones de RN-01 y RN-02 y `product:doctor` (**informativo**: se muestra y se resume en el informe; solo deshace si el comando ni siquiera existe en la imagen). Solo si todo pasa arranca Nginx y los procesos de fondo, y vuelve a comprobar por loopback | Sigue encolando hasta que Nginx vuelve |
 | 6 · Vuelta atrás | Solo si el 4 o el 5 fallan: restaura la copia del paso 3 y relanza la versión anterior, sin preguntar (§5) | Igual: nada de lo encolado se pierde |
 | 7 · Informe | `BACKUP_PATH/reports/update-<fecha>.log`, siempre, también tras una vuelta atrás (uid 1000, `0640`). **El detalle** `update-<fecha>.detalle.log` (salida cruda de migraciones, copia, restauración y logs; **puede llevar datos personales**) **no se publica ahí**: vive solo en `/var/log/kronoqr/`, `root:root 0600` en un directorio `0700`, junto a una copia local del informe. El informe aparece en `reports/` **al terminar** (o al salir por cualquier camino), **no mientras corre**: durante la ejecución se escribe en `/var/log/kronoqr/` y al final se publica como el uid de la aplicación con `setpriv` (paquete `util-linux`; la fase 1 avisa si falta). Si no se puede publicar, el script lo avisa y el informe queda a salvo en `/var/log/kronoqr/`: cópialo con la orden que indica el aviso | — |
 
@@ -148,6 +148,8 @@ existiría en la base pero no en la copia, y el quiosco ya lo habría sacado de
 su cola porque el servidor lo confirmó. Una vuelta atrás lo perdería. Con el
 mantenimiento primero, todo lo que ocurre durante la ventana sigue en las
 colas de los quioscos y entra después, gane o pierda la actualización.
+
+**Alertas durante la ventana.** Mientras `update.sh` tiene el mantenimiento puesto, suena (sin notificar a nadie) `VentanaDeMantenimientoActiva`, de severidad `info`: existe solo para que Alertmanager **inhiba** las alertas de quiosco, API, certificado TLS y disco, que son síntomas esperados de una actualización en marcha. Auditoría, copias, integridad, autenticación e incidencias **no** se inhiben. La inhibición tiene un tope de **2 h** desde que se puso el mantenimiento: si `update.sh` muriera sin retirarlo (un `kill -9`, una caída del servidor) y alguien no lo advirtiera, pasadas 2 h las alertas vuelven a sonar solas, que es lo que se quiere. Si ves esta alerta activa **sin** una actualización en curso, comprueba que no hay mantenimiento a medias (§5, caso A) en vez de silenciarla.
 
 **Al terminar** (salida `0`):
 
@@ -367,6 +369,7 @@ sudo mv docker-compose.yml.retirado-2.1.0 docker-compose.yml   # el nombre exact
 - **La licencia.** Una licencia caducada o inválida **no impide actualizar**:
   dejaría al cliente sin correcciones de seguridad sobre su registro legal
   (ADR-019). El estado de la licencia se anota en el informe, nada más.
+- **Qué imágenes corren.** El `docker-compose.yml` del paquete fija `php`, `nginx` y `postgres` por **digest** (`:…`, ADR-053): una versión publicada es inmutable, y lo que arranca son los bytes que se publicaron aunque alguien reescribiera la etiqueta en el registro. `docker compose config --images` muestra las referencias exactas. Redis y las imágenes del perfil de observabilidad siguen por etiqueta de versión. Sin salida a internet, vaciar `IMAGE_DIGEST_*` en el `.env` vuelve a la etiqueta (ver [`instalacion.md`](../cliente/instalacion.md) §7) y esa instalación pierde la garantía: no lo hagas si puedes evitarlo.
 - **El fichaje.** Ni durante la actualización ni si falla.
 
 **Lo que sí cambia al pasar de la 2.1.0: dónde viven los ficheros generados**

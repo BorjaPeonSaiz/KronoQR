@@ -79,9 +79,14 @@ Comprobaciones que más veces explican una incidencia, por familia:
 - **`database.*`**: conexión, migraciones pendientes (una actualización a
   medias), privilegios del usuario de la aplicación sobre `audit_log` (regla
   dura 6) y cadena de auditoría.
-- **`queue.*`**: Redis, tamaño de las colas y si hay un trabajador vivo. Una
+- **`queue.*`**: Redis, tamaño de las colas y si hay un trabajador vivo (`queue.worker`
+  pregunta al supervisor de Horizon, no se fía de que la cola esté vacía). Una
   cola que crece sin trabajador es la causa más común de «los informes no
   llegan» y de «la presencia en vivo no se mueve».
+- **`scheduler.heartbeat`** y **`backup.last_good_copy`**: el planificador no está
+  lanzando sus tareas, o no hay una copia verificada de las últimas 26 h. El primero
+  explica «no hay copias» y «la cadena de auditoría no se verifica»; ambos traen el
+  `fix` y remiten a [`restaurar-backup.md`](restaurar-backup.md).
 - **`tls.certificate`**: caducado o autofirmado con `TLS_ALLOW_SELF_SIGNED`
   apagado. Es la causa más común de «las tablets dicen sin conexión» cuando
   la red está bien.
@@ -128,10 +133,12 @@ Comprobaciones que más veces explican una incidencia, por familia:
    | `status: revoked` | Desvinculada a propósito; si el cliente dice que «no ficha», es por eso |
 
 4. **`error_events`** — el histórico de errores agrupado por huella con su
-   `trace_id` (RF-PD-15). Hasta la tarea 5.12 dice `not_installed`; a partir
-   de ella, es la sección con la que se resuelve la mayoría de las
-   incidencias: la huella agrupa las repeticiones y el `trace_id` correlaciona
-   con la petición.
+   `trace_id` (RF-PD-15). Es la sección con la que se resuelve la mayoría de
+   las incidencias: la huella agrupa las repeticiones y el `trace_id` correlaciona
+   con la petición. Desde la 2.2.0 el histórico se vuelve a filtrar con el
+   vocabulario técnico cerrado (ADR-048) y **las huellas cambian** al actualizar:
+   si el cliente cita una huella anterior, búscala por su código y su origen
+   ([`actualizacion-cliente.md`](actualizacion-cliente.md) §3).
 5. **`configuration`** — solo las claves de la lista blanca, con su valor, y
    dos cosas que valen oro: `invalid_keys` (claves de la base de datos con un
    valor que no valida, tal y como las devuelve `GET /api/v1/settings`) y
