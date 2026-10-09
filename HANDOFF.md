@@ -7,14 +7,20 @@
 
 ## Estado y objetivo actual
 
-**Correcciones de la 2.2.0 por bloques** tras la verificación de la 2.1.0 (NO-GO) y la re-verificación sobre `main`. El plan, con
+**KronoQR 2.2.0 publicada el 09-10-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.2.0>): PR #131
+`chore/release-2.2.0` → `main` `7fb3d5e2`, etiqueta `v2.2.0`, `release.yml` 37935103938 en verde (imágenes en GHCR fijadas por
+digest, públicas sin credenciales; paquete, SBOM y `SHA256SUMS`). `load-test.yml` de la etiqueta en rojo solo por R5-QA-02 (8
+instancias frente a la línea base de 3: «no comparable»). Etiquetas `v2.1.0` (`9282af6`) y `v2.0.0` repuestas con `release.yml`
+desactivado. El CHANGELOG 2.2.0 abre con un resumen para el hotel escrito a mano. **Ciclo abierto: 2.2.1** (`VERSION` 2.2.1 y
+`2.2.1 *` en `infra/versions.txt`); una versión de parche no obliga a regenerar las capturas, una menor sí.
+
+**Historia de la 2.2.0. Correcciones por bloques** tras la verificación de la 2.1.0 (NO-GO) y la re-verificación sobre `main`. El plan, con
 el detalle de cada bloque, vive en [docs/verificacion/2.2.0-plan-correcciones.md](docs/verificacion/2.2.0-plan-correcciones.md);
 el método en la sección «Método» de ese plan y en «Método de trabajo acordado» más abajo. **Una rama por bloque desde `origin/main`,
 CI manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge
 commit.** Lo integra quien ejecuta el bloque si la CI está en verde.
 
-**Integrados en `main`:** bloques 0 a 14, 12b, 12c y 15 a 22. **Solo queda el bloque final (publicar la 2.2.0), que NO se
-ejecuta hasta que el propietario lo ordene expresamente** (07-10-2026). El último, **bloque 14 «Pruebas, puertas de calidad y
+**Integrados en `main`:** bloques 0 a 14, 12b, 12c, 15 a 22 y el final. El último de correcciones, **bloque 14 «Pruebas, puertas de calidad y
 documentos de arquitectura»**, es la PR #128 (`main` `bfb3707a`, 08-10-2026; 27 commits). Lo que trae: **matriz de autorización
 generada del router** (`AuthorizationMatrixTest`, un caso por ruta y rol con el token de 2FA pendiente; sin Chromium, con los dobles
 de los renderizadores de PDF), `TestLevelGateTest` (nivel de prueba por requisito; huecos conocidos RF-PR-05 y RF-QR-04),
@@ -37,7 +43,7 @@ privado de GitHub sigue desactivado); runbook de pérdida total del servidor con
 
 **Verificación final sobre `main` a08ed150 (08 y 09-10-2026)** con todo el plan de verificación: 0 CRÍTICO/ALTO de seguridad, 0
 BLOQUEANTE del revisor; faltan la tablet real y la validación jurídica. Registros en `docs/verificacion/2.2.0-verificacion-final-*.md`
-(**sin commit**, por decisión del propietario hasta nueva orden). El propietario ordenó corregir antes de publicar solo cinco hallazgos,
+(entraron con el bloque final; gitleaks pidió la entrada 31 de la allowlist, la `Sec-WebSocket-Key` de ejemplo del RFC 6455). El propietario ordenó corregir antes de publicar solo cinco hallazgos,
 en una rama: **PR #130 `fix/update-sh-verificacion-final`** (CI de push 37902468205 y manual 37904665030 en verde; la mutación completa
 se cortó a los 90 min, lo conocido). Trae: vuelta atrás *in place* temprana con `start` sin recrear y `.env` asentado (V7-RV-1/2);
 **actualizar *in place* solo desde la 2.2.0** (desde la 2.1.0 la copia previa fallaba siempre), por eso P2b y P3 de ⑧b se saltan
@@ -52,11 +58,11 @@ con recorrido guiado, guion del vídeo y `presentacion.html` (el HTML del reposi
 entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador `[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en
 `kronoqr.kodigolab.es` (hoy 2.1.0), actualizar README §3.1/§6 y `doc_master/despliegue.md`.
 
-**Siguiente acción: integrar el PR #130 y, después, nada hasta que el propietario ordene el bloque final.** Cuando lo haga: rama `chore/release-2.2.0` desde
-`origin/main` siguiendo el plan (sección «Bloque final»); **antes de reponer `v2.1.0` (sobre `9282af6`) y `v2.0.0`** (en el remoto
-solo existe `v1.0.0`; `v2.0.0` sigue en local) desactivar `release.yml` (`gh workflow disable release.yml`), porque un push de
-etiqueta ejecuta el `release.yml` del commit etiquetado, sin la guarda de ADR-053, y reescribiría las imágenes `:2.1.0`. Al cerrar,
-dos cosas que dejó la conciliación, decididas por el propietario el 08-10-2026 para la 2.2.x: un «revisado» para la alerta
+**Siguiente acción:** el propietario despliega la 2.2.0 en `kronoqr.kodigolab.es` actualizando **lado a lado** desde la 2.1.0
+(`docs/runbooks/actualizacion-cliente.md`); es la primera prueba real del salto. Cuando lo confirme: README §3.1/§6 y
+`doc_master/despliegue.md` a la 2.2.0. Después, la 2.2.1 con lo diferido (abajo y «Pendiente»). **Nunca empujar etiquetas antiguas
+con `release.yml` activo**: el push ejecuta el `release.yml` del commit etiquetado, sin la guarda de ADR-053. Para la 2.2.1, las
+dos cosas que dejó la conciliación, decididas por el propietario el 08-10-2026: un «revisado» para la alerta
 `purge_out_of_bounds` (un asiento de purga no admisible queda para siempre en `audit_log` y cada pasada lo vuelve a contar) y el
 **suelo legal de `retention_years` por jurisdicción en el perfil, 4 para España** (R7-SC-01; hoy `minimum()` = 1 para todo campo
 entero del perfil), con `arquitecto-dominio` + `backend-laravel` + `frontend-panel`.
@@ -107,7 +113,8 @@ alerta de conciliación; huecos de nivel RF-PR-05 y RF-QR-04 en `TestLevelGateTe
 N5 de ADR-055 (necesita RN-10 en doc 01); regla ESLint contra `localStorage` en panel y portal; anexo B del doc 01 frente a los roles
 de `GET /site`; CSP por ubicación; `restore-drill` usa `IMAGE_TAG`; `CLAUDE.md` dice «28 ADRs» (son 57); cifras de presupuesto en
 `.claude/agents`; del 13: DB5, DB7, DB9 (aceptado en doc 07), `count(*)` de la bandeja, JIT de Postgres, prueba de concurrencia con
-`pg_locks`.
+`pg_locks`. De la publicación: la línea base de `load-test.yml` con los parámetros de la etiqueta (R5-QA-02) y los 🟠 de la
+verificación final que no entraron (lista «¿Se pasó algo por alto?» de `2.2.0-verificacion-final-resumen.md`).
 
 ### Del usuario
 
