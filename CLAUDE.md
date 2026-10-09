@@ -97,7 +97,7 @@ Consulta [docs/02-stack-tecnologico-y-plan-implementacion.md](docs/02-stack-tecn
 
 ## Agentes y skills
 
-Hay 11 agentes en `.claude/agents/` y 7 skills en `.claude/skills/`.
+Hay 11 agentes en `.claude/agents/` y 6 skills en `.claude/skills/`.
 
 **El plan de implementación del documento 02, §11, indica el agente y la skill de cada tarea.** Si estás ejecutando una tarea del plan, usa el que ahí se indica. Para trabajo ad-hoc, consulta [docs/03-agentes-y-skills-ia.md](docs/03-agentes-y-skills-ia.md).
 

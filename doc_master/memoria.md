@@ -35,7 +35,7 @@ KronoQR es un sistema de fichaje para hoteles. Cada empleado escanea su tarjeta 
 
 No es una aplicación de demostración. Es un **producto licenciado** que un hotel instala en su propio servidor, sin depender del fabricante: trae instalador, actualizador, copias de seguridad cifradas, diagnóstico, documentación para el cliente en dos idiomas y una licencia firmada que, si caduca, nunca bloquea el registro legal.
 
-El trabajo tiene dos resultados. El primero es el producto: un monolito modular con arquitectura hexagonal en PHP 8.4 y Laravel 13, PostgreSQL 17, tres aplicaciones Vue 3 con TypeScript estricto (quiosco, panel y portal), 5 582 pruebas automáticas etiquetadas por requisito y una instalación en funcionamiento. La versión entregada es la **2.2.0**, la primera pensada para clientes. El segundo es el método: todo el código se ha escrito con Claude Code a partir de una especificación y un plan previos, con un andamiaje de reglas permanentes, once agentes especializados, siete skills y un protocolo de continuidad entre sesiones. Esta memoria cuenta las dos cosas, y también lo que no funcionó: la 2.1.0 pasó todas las herramientas en verde y una verificación con los agentes concluyó que no debía entregarse a un cliente. La 2.2.0 es la respuesta a ese veredicto.
+El trabajo tiene dos resultados. El primero es el producto: un monolito modular con arquitectura hexagonal en PHP 8.4 y Laravel 13, PostgreSQL 17, tres aplicaciones Vue 3 con TypeScript estricto (quiosco, panel y portal), 5 582 pruebas automáticas etiquetadas por requisito y una instalación en funcionamiento. La versión entregada es la **2.2.0**, la primera pensada para clientes. El segundo es el método: todo el código se ha escrito con Claude Code a partir de una especificación y un plan previos, con un andamiaje de reglas permanentes, once agentes especializados, seis skills y un protocolo de continuidad entre sesiones. Esta memoria cuenta las dos cosas, y también lo que no funcionó: la 2.1.0 pasó todas las herramientas en verde y una verificación con los agentes concluyó que no debía entregarse a un cliente. La 2.2.0 es la respuesta a ese veredicto.
 
 ## 2. Contexto y motivación
 
@@ -85,7 +85,7 @@ La disciplina de escribir primero obligó a decidir pronto las cosas difíciles:
         ┌───────────────────┴───────────────────┐
         │                                       │
 ┌───────▼──────────────────┐        ┌───────────▼──────────────┐
-│  11 AGENTES              │        │  7 SKILLS                │
+│  11 AGENTES              │        │  6 SKILLS                │
 │  roles con criterio      │        │  procedimientos fijos    │
 └──────────────────────────┘        └──────────────────────────┘
                             │
@@ -99,7 +99,7 @@ La disciplina de escribir primero obligó a decidir pronto las cosas difíciles:
 
 **Los agentes** replican las fronteras de la arquitectura: `arquitecto-dominio` defiende el hexágono y diseña antes de que se escriba código de negocio; `backend-laravel` vive en las capas de fuera; `frontend-quiosco`, `frontend-panel` y `frontend-portal-empleado` tienen cada uno su aplicación; `qa-testing` escribe la pirámide de pruebas; `devops-observabilidad` la infraestructura y la CI; `producto-licencia` todo lo que hace el sistema instalable por terceros; `ui-ux` el sistema visual compartido. Dos son **de solo lectura** a propósito: `revisor-codigo` y `seguridad-cumplimiento`. Quien encuentra un problema no lo arregla en el mismo paso: el hallazgo se enuncia por escrito y lo corrige otro.
 
-**Las skills** son procedimientos que siempre se ejecutan igual: crear un caso de uso, añadir un endpoint (contrato primero, policy, prueba negativa por rol), una regla de negocio nueva (prueba antes que código), una migración segura (bloqueos acotados, `CONCURRENTLY`, validación fuera de la transacción), un informe nuevo, una revisión de cumplimiento y un análisis de código.
+**Las skills** son procedimientos que siempre se ejecutan igual: crear un caso de uso, añadir un endpoint (contrato primero, policy, prueba negativa por rol), una regla de negocio nueva (prueba antes que código), una migración segura (bloqueos acotados, `CONCURRENTLY`, validación fuera de la transacción), un informe nuevo y una revisión de cumplimiento.
 
 ### 4.3 Continuidad entre sesiones
 
@@ -267,7 +267,7 @@ El despliegue de <https://kronoqr.kodigolab.es> se hizo con ese mismo paquete y 
 | ADR · migraciones | 57 · 65 |
 | Módulos · aplicaciones | 8 · 3 |
 | Documentación | 7 documentos de diseño, 57 ADR, contrato OpenAPI, 9 guías de cliente en dos idiomas, 33 runbooks |
-| Agentes · skills · reglas duras | 11 · 7 · 21 |
+| Agentes · skills · reglas duras | 11 · 6 · 21 |
 
 Las cifras de pruebas y requisitos salen de la matriz de trazabilidad versionada; las de cobertura y mutación, de la CI manual completa del commit que se publicó (run 37929544729), y la CI de la etiqueta `v2.2.0` (run 37935103940) terminó en verde.
 
