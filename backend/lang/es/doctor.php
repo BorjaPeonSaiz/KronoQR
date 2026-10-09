@@ -140,10 +140,41 @@ return [
                 'warning_unknown' => 'No se ha podido medir el tamaño de la cola de trabajos.',
             ],
             'worker' => [
-                'ok' => 'Hay alguien consumiendo la cola de trabajos.',
+                'ok' => 'Horizon, el proceso que consume la cola de trabajos, esta en marcha (:masters supervisor(es) '
+                    .'activo(s)).',
+                // V3-PL-07: sin poder preguntar a Horizon, solo se afirma lo que
+                // la cola demuestra. Con la cola vacia, nada.
+                'ok_busy' => 'Hay trabajos en proceso: algo esta consumiendo la cola de trabajos.',
+                'ok_idle' => 'La cola de trabajos esta vacia. No se ha podido preguntar a Horizon, asi que desde aqui '
+                    .'no se sabe si el proceso que la consume esta en marcha. Compruebalo con: docker compose ps horizon',
                 'warning' => 'A las :checked_at UTC habia :count trabajos esperando y ninguno en proceso. Es probable '
                     .'que el proceso que consume la cola no este funcionando.',
+                'failure_stopped' => 'A las :checked_at UTC no habia ningun proceso Horizon consumiendo la cola de '
+                    .'trabajos (:count esperando). Fichar no depende de el, pero no termina ninguna exportacion '
+                    .'integra (la de la Inspeccion o la de un empleado que pide sus datos), ningun informe en '
+                    .'diferido ni ningun aviso de incidencias hasta que vuelva.',
+                'warning_paused' => 'Horizon, el proceso que consume la cola de trabajos, esta en pausa (:count '
+                    .'esperando). Mientras siga asi no se ejecutan los avisos, los informes ni el calculo nocturno.',
                 'warning_unknown' => 'No se ha podido saber si el proceso que consume la cola esta vivo.',
+            ],
+        ],
+
+        // --- Planificador ----------------------------------------------------
+
+        'scheduler' => [
+            'probe' => $probe,
+            'heartbeat' => [
+                'ok' => 'El planificador de tareas esta lanzando sus tareas (ultima medida de cada minuto a las '
+                    .':last_run_at UTC).',
+                'warning' => 'La tarea que el planificador lanza cada minuto no ha publicado nada desde las '
+                    .':last_run_at UTC (hace :minutes min). Lo mas probable es que el contenedor «scheduler» este '
+                    .'parado, y sin el no se hacen las copias de seguridad, ni la verificacion diaria del registro '
+                    .'de auditoria, ni el calculo nocturno. Fichar no depende de el.',
+                'warning_never' => 'No hay constancia de que el planificador de tareas este funcionando: la medida '
+                    .'que lanza cada minuto no se ha publicado nunca. Si acabas de instalar o de actualizar, espera '
+                    .'un par de minutos y vuelve a mirarlo.',
+                'warning_unknown' => 'No se puede leer :path, donde el planificador deja la medida que lanza cada '
+                    .'minuto.',
             ],
         ],
 
@@ -375,6 +406,27 @@ return [
             ],
         ],
 
+        // --- Copias de seguridad ---------------------------------------------
+
+        'backup' => [
+            'probe' => $probe,
+            // V3-PL-07: que las copias SE ESTAN HACIENDO, leido del mismo fichero
+            // que las alertas y con su mismo umbral de 26 h.
+            'last_good_copy' => [
+                'ok' => 'La ultima copia de seguridad verificada es de las :verified_at UTC (hace :hours h).',
+                'failure_stale' => 'La ultima copia de seguridad verificada es de las :verified_at UTC, hace :hours '
+                    .'horas. Deberia hacerse y verificarse una cada noche (a las :daily_at UTC): las copias '
+                    .'nocturnas no se estan haciendo o no pasan la verificacion.',
+                'failure_last_failed' => 'La ultima copia de seguridad termino con error. La anterior buena sigue '
+                    .'en su sitio, pero desde entonces no hay ninguna copia nueva.',
+                'failure_verify_failed' => 'La ultima verificacion de la copia de seguridad fallo: la copia no se '
+                    .'descifra o no se puede restaurar. Tratala como si no existiera.',
+                'warning_never' => 'No consta ninguna copia de seguridad verificada. Es normal hasta la primera '
+                    .'copia nocturna despues de instalar (a las :daily_at UTC); despues de esa noche, no lo es.',
+                'warning_unknown' => 'No se puede leer :path, donde la copia de seguridad deja su resultado.',
+            ],
+        ],
+
         // --- Ficheros generados (ADR-045) -----------------------------------
 
         'files' => [
@@ -586,7 +638,35 @@ return [
                     ."  docker compose ps horizon\n"
                     ."  docker compose restart horizon\n"
                     .'Fichar no depende de el; los avisos y los informes si.',
+                'failure_stopped' => "Arranca el proceso que consume la cola y mira por que se paro:\n"
+                    ."  docker compose ps horizon\n"
+                    ."  docker compose up -d horizon\n"
+                    ."  docker compose logs --tail=100 horizon\n"
+                    .'Si acabas de actualizar, puede que aun no haya arrancado: vuelve a mirarlo en un minuto.',
+                'warning_paused' => "Si nadie lo ha pausado a proposito por un mantenimiento, reanudalo:\n"
+                    .'  docker compose exec horizon php artisan horizon:continue',
                 'warning_unknown' => 'Comprueba que Redis responde y vuelve a ejecutar este comando.',
+            ],
+        ],
+
+        'scheduler' => [
+            'probe' => $probeFix,
+            'heartbeat' => [
+                'warning' => "Comprueba que el planificador esta en marcha y arrancalo si no lo esta:\n"
+                    ."  docker compose ps scheduler\n"
+                    ."  docker compose up -d scheduler\n"
+                    ."Si ya estaba en marcha, lo que falla es la medida del archivado de la base de datos.\n"
+                    ."Lanzala a mano y lee su mensaje:\n"
+                    ."  docker compose exec scheduler php artisan backup:wal-metrics\n"
+                    .'Ver docs/runbooks/restaurar-backup.md.',
+                'warning_never' => "Comprueba que el planificador esta en marcha y arrancalo si no lo esta:\n"
+                    ."  docker compose ps scheduler\n"
+                    ."  docker compose up -d scheduler\n"
+                    ."Si lo esta y el aviso sigue al cabo de unos minutos, lanza la medida a mano y lee su mensaje:\n"
+                    .'  docker compose exec scheduler php artisan backup:wal-metrics',
+                'warning_unknown' => "El directorio de metricas tiene que ser del usuario 1000:\n"
+                    ."  ls -l :path\n"
+                    .'Ver docs/runbooks/restaurar-backup.md §4.3.',
             ],
         ],
 
@@ -843,6 +923,31 @@ return [
                     .'cuantas quedan: el minimo esta en BACKUP_MIN_COPIES.',
                 'warning_missing' => 'Comprueba que la ruta :path existe y esta montada.',
                 'warning_unknown' => 'Comprueba que la ruta :path esta montada y es accesible.',
+            ],
+        ],
+
+        'backup' => [
+            'probe' => $probeFix,
+            'last_good_copy' => [
+                'failure_stale' => "Comprueba que el planificador, que es quien hace las copias, esta en marcha, y\n"
+                    ."lanza una copia a mano: su salida dice exactamente que falla.\n"
+                    ."  docker compose ps scheduler\n"
+                    ."  docker compose exec scheduler php artisan backup:run\n"
+                    .'El procedimiento completo esta en docs/runbooks/restaurar-backup.md. Fichar no depende de esto.',
+                'failure_last_failed' => "Lanza una copia a mano: su salida dice exactamente que falla.\n"
+                    ."  docker compose exec scheduler php artisan backup:run\n"
+                    .'El procedimiento completo esta en docs/runbooks/restaurar-backup.md. Fichar no depende de esto.',
+                'failure_verify_failed' => "Verifica la ultima copia a mano para ver el motivo y haz una nueva:\n"
+                    ."  docker compose exec scheduler php artisan backup:verify\n"
+                    ."  docker compose exec scheduler php artisan backup:run\n"
+                    .'Si se cambio la clave de cifrado, sigue docs/runbooks/restaurar-backup.md.',
+                'warning_never' => "Si acabas de instalar, nada: la primera copia se hace sola esta noche.\n"
+                    ."Si la instalacion tiene mas de un dia, lanza una copia a mano y lee su salida:\n"
+                    ."  docker compose ps scheduler\n"
+                    .'  docker compose exec scheduler php artisan backup:run',
+                'warning_unknown' => "El directorio de metricas tiene que ser del usuario 1000:\n"
+                    ."  ls -ld :path\n"
+                    .'Ver docs/runbooks/restaurar-backup.md §4.3.',
             ],
         ],
 
