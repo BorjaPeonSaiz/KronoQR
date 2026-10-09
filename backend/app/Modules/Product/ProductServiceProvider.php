@@ -115,11 +115,13 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\PersonalDataCollect
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ServicesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
+use App\Modules\Product\Infrastructure\Diagnostics\HorizonQueueSupervisors;
 use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
 use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\AccessHardeningProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\AlertRecipientsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\BackupProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\EdgeNetworksProbe;
@@ -130,10 +132,13 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\LicenseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\QueueProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\SchedulerProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SettingsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\TlsProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\QueueSupervisors;
 use App\Modules\Product\Infrastructure\Diagnostics\RuntimeService;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
+use App\Modules\Product\Infrastructure\Diagnostics\TextfileMetricsReader;
 use App\Modules\Product\Infrastructure\Export\TranslatedDataExportGuide;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
 use App\Modules\Product\Infrastructure\Listener\ObservePlanLimits;
@@ -1819,12 +1824,31 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
+        // El latido de Horizon para `queue.worker` (V3-PL-07, V4-PL-3): con la
+        // cola vacia, mirar la cola no distingue «nadie consume» de «nada que
+        // consumir».
+        $this->app->bind(
+            QueueSupervisors::class,
+            HorizonQueueSupervisors::class,
+        );
+
         $this->app->bind(
             RunDoctorHandler::class,
             static fn (Application $app): RunDoctorHandler => new RunDoctorHandler(
                 probes: [
                     $app->make(DatabaseProbe::class),
                     $app->make(QueueProbe::class),
+                    /*
+                     * Si el planificador sigue lanzando tareas (V3-PL-07). Pegada
+                     * a la cola porque el orden de esta lista ES el del informe:
+                     * los dos procesos de fondo, uno detras de otro.
+                     */
+                    new SchedulerProbe(
+                        metrics: new TextfileMetricsReader(
+                            Config::string('observability.metrics.textfile_path'),
+                        ),
+                        clock: $app->make(Clock::class),
+                    ),
                     new MailProbe(
                         mailer: Config::string('mail.default'),
                         // `Config::string()` y `Config::integer()` no valen aqui:
@@ -1898,6 +1922,17 @@ final class ProductServiceProvider extends ServiceProvider
                     new DiskProbe(
                         storagePath: storage_path(),
                         backupPath: Config::string('backup.path'),
+                    ),
+                    /*
+                     * Que las copias SE ESTAN HACIENDO, no solo que se pueden
+                     * escribir (V3-PL-07). Detras de permisos y disco porque
+                     * el orden de esta lista ES el del informe: primero si la
+                     * copia puede escribirse y caber, y despues si se hizo.
+                     */
+                    new BackupProbe(
+                        metrics: new TextfileMetricsReader(Config::string('observability.metrics.textfile_path')),
+                        clock: $app->make(Clock::class),
+                        dailyAt: Config::string('backup.daily_at'),
                     ),
                     /*
                      * Donde viven los ficheros que genera el producto (ADR-045,

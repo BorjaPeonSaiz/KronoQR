@@ -1416,11 +1416,17 @@ copias físicas.
   cifrar) y va reteniendo WAL en su disco, así que arréglalo el mismo día:
 
   ```bash
-  sudo bash /opt/kronoqr/scripts/backup.sh derive-wal-key --write-env /opt/kronoqr/.env
-  docker compose up -d postgres
+  # el directorio VIGENTE de la instalación
+  cd /opt/kronoqr-<version>
+  sudo bash ./backup.sh derive-wal-key --write-env .env
+  sudo docker compose up -d postgres
   ```
 
-  Cambia `/opt/kronoqr` por el directorio de tu instalación.
+  Es el directorio desde el que instalaste o, si has actualizado lado a lado,
+  el de la última versión: `update.sh` lo dice al terminar («DIRECTORIO
+  VIGENTE») y `doctor.sh` imprime esta misma orden con la ruta de tu servidor.
+  `backup.sh` está en la raíz del paquete, no en `scripts/` (esa ruta solo
+  existe dentro del contenedor).
 - **Nunca la inventes ni la copies de otro servidor.** Una clave que no es la
   derivada cifra segmentos que la restauración no sabría abrir.
 - **Si has rotado `BACKUP_ENCRYPTION_KEY`**, la del WAL también cambia: sigue

@@ -285,8 +285,9 @@ o el archivado seguiría cifrando con la derivada de la clave anterior:
    alterada»** (no confundir con «el MAC no cuadra», que es un fichero alterado).
 7. Tras actualizar `BACKUP_ENCRYPTION_KEY` en el `.env`, recalcula la del WAL y recrea
    PostgreSQL:
-   `sudo bash scripts/backup.sh derive-wal-key --write-env .env` y
-   `docker compose up -d postgres`. **`doctor.sh` falla** si `BACKUP_WAL_KEY` no es
+   desde el directorio vigente de la instalación (`backup.sh` está en su raíz),
+   `sudo bash ./backup.sh derive-wal-key --write-env .env` y
+   `sudo docker compose up -d postgres`. **`doctor.sh` falla** si `BACKUP_WAL_KEY` no es
    la derivada de la maestra o si el `kid` del último segmento archivado no es el de
    la derivada: así una rotación a medias se ve hoy y no el día de la recuperación.
    `update.sh` hace la misma comprobación **antes** de parar nada y se niega a

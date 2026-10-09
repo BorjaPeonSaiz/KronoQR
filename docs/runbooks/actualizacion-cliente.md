@@ -47,10 +47,32 @@ del paquete, `versions.txt`; no se edita.
    El directorio de la versión actual **es tu vuelta atrás manual** (§5): su
    `docker-compose.yml` y su `.env` son lo que relanza la versión anterior si
    todo lo demás fallara. No lo borres hasta la siguiente actualización.
+   **Si la actualización termina bien, `update.sh` lo retira** (§3, «Al
+   terminar»): desde ese momento se trabaja **solo** desde el directorio nuevo.
 
-   > Si lo descomprimiste encima, el script lo detecta, avisa y sigue: funciona,
-   > pero la vuelta atrás tendrá que usar el compose nuevo con las imágenes
-   > antiguas. La próxima vez, al lado.
+   > **Si lo descomprimiste encima y tu versión es anterior a la 2.2.0, el
+   > script se niega en el paso 1 y no toca nada** («no se puede actualizar con
+   > el paquete descomprimido ENCIMA»). Con el compose nuevo, la 2.1.0 no puede
+   > hacer la copia previa (las copias pasan a un rol de solo lectura) ni
+   > sostener una vuelta atrás (sus copias nocturnas dejarían de funcionar). Lo
+   > arreglas en tres órdenes, que el propio mensaje imprime con tus rutas:
+   >
+   > ```bash
+   > # 1. Devolver al directorio actual el compose de SU versión, sacado de su paquete
+   > cd /opt
+   > tar xzf kronoqr-2.1.0.tar.gz -O kronoqr-2.1.0/docker-compose.yml | sudo tee /opt/kronoqr-2.1.0/docker-compose.yml >/dev/null
+   > # 2. Descomprimir el paquete nuevo AL LADO
+   > tar xzf kronoqr-2.2.0.tar.gz
+   > # 3. Actualizar desde el directorio nuevo
+   > cd /opt/kronoqr-2.2.0 && sudo ./update.sh
+   > ```
+   >
+   > **Desde la 2.2.0**, encima funciona: avisa y sigue. La vuelta atrás usa el
+   > compose nuevo con las imágenes antiguas, y la copia previa del paso 3 la
+   > hace la imagen del paquete nuevo (el compose nuevo la fija por digest). Si
+   > la copia falla, el script vuelve a **arrancar** `horizon` y `scheduler` tal
+   > como estaban, sin recrearlos, así que la versión anterior sigue entera. Aun
+   > así, la próxima vez, al lado.
 
 2. **Lee qué cambia.** El paquete trae `docs/CHANGELOG.md`; la sección de la
    versión nueva es lo que hay que leer antes de reservar la ventana. Si trae
@@ -114,7 +136,7 @@ Lo que verás, y lo que significa cada paso:
 | --- | --- | --- |
 | 1 · Precondiciones | Lo mismo que `--check-only`, incluida la ruta de gestión que debe responder `401` sin sesión: es lo que el paso 5 y la vuelta atrás exigirán, y tiene que ser verdad ya. Si algo falla, sale `2` y no ha tocado nada | Nada |
 | 2 · Mantenimiento | El panel, el portal y la API de gestión responden «en mantenimiento» (503). `horizon` y `scheduler` se paran para que nada escriba | **Los quioscos siguen fichando**: confirman en local y encolan. Es invisible para quien ficha |
-| 3 · Copia previa | Copia lógica cifrada **y verificada** con la versión actual. **Bloqueante**: si falla, sale `2`, retira el mantenimiento y no ha tocado nada. No hay bandera para saltárselo | Igual |
+| 3 · Copia previa | Copia lógica cifrada **y verificada** con la versión actual (si descomprimiste encima, cosa que solo se admite desde la 2.2.0, con la imagen del paquete nuevo: §2). **Bloqueante**: si falla, sale `2`, retira el mantenimiento, vuelve a arrancar `horizon` y `scheduler` **tal como estaban** (`start`, sin recrear nada) y no ha tocado nada más. No hay bandera para saltárselo | Igual |
 | 4 · Migraciones | Relanza PostgreSQL y Redis con las imágenes nuevas y aplica las migraciones **versión a versión**, con un punto de control entre cada una: `PUNTO DE CONTROL 2.2.0 alcanzado: 3 migraciones aplicadas en 4 s` | Igual |
 | 5 · Arranque y verificación | Arranca la aplicación nueva **sin borde** y la comprueba desde dentro: sondas, versión, cadena de auditoría, restricciones de RN-01 y RN-02. Solo si todo pasa arranca Nginx y los procesos de fondo, y vuelve a comprobar por loopback | Sigue encolando hasta que Nginx vuelve |
 | 6 · Vuelta atrás | Solo si el 4 o el 5 fallan: restaura la copia del paso 3 y relanza la versión anterior, sin preguntar (§5) | Igual: nada de lo encolado se pierde |
@@ -135,9 +157,35 @@ colas de los quioscos y entra después, gane o pierda la actualización.
   sincronización: **no son un fallo**, son el sistema diciendo que hubo una
   ventana.
 - La copia previa queda en `BACKUP_PATH/daily/` con la retención normal.
-- El directorio de la versión anterior sigue ahí. Consérvalo hasta la
-  siguiente actualización; su `.env` lleva los mismos secretos que el nuevo,
-  salvo `BACKUP_DB_*` si vienes de la 2.1.0 (§6.1).
+- **El directorio vigente es el nuevo** (`/opt/kronoqr-2.2.0` en el ejemplo).
+  El script lo dice en su última pantalla («DIRECTORIO VIGENTE»). Desde ahora,
+  `docker compose`, `./doctor.sh`, `./backup.sh`, los cambios del `.env` y del
+  logotipo se hacen **desde ahí**. Si tenías un `cron` o un guion propio que
+  apuntaba al directorio anterior, cámbialo.
+- **El directorio anterior queda retirado.** Su `docker-compose.yml` se
+  renombra a `docker-compose.yml.retirado-<versión anterior>` y en su lugar
+  queda uno que hace fallar **cualquier** orden de Compose lanzada desde allí,
+  con este mensaje:
+
+  ```text
+  required variable KRONOQR_DIRECTORIO_RETIRADO is missing a value: ESTE DIRECTORIO
+  ESTA RETIRADO (KronoQR 2.1.0). La instalacion vigente esta en /opt/kronoqr-2.2.0
+  (version 2.2.0): ejecuta docker compose, doctor.sh y backup.sh desde alli. ...
+  ```
+
+  Es a propósito: los dos directorios describen **el mismo** proyecto de
+  Compose, y un `docker compose up -d` lanzado por costumbre desde el anterior
+  bajaría la instalación a la versión anterior sobre una base ya migrada (y,
+  desde la 2.1.0, volvería a meter la contraseña del superusuario en todos los
+  contenedores). Nada más se toca: su `.env`, sus certificados y sus scripts
+  siguen ahí. Consérvalo hasta la siguiente actualización; su `.env` lleva los
+  mismos secretos que el nuevo, salvo `BACKUP_DB_*` si vienes de la 2.1.0
+  (§6.1). Para deshacer la retirada, y **solo** como parte de §5.1:
+  `sudo mv docker-compose.yml.retirado-<versión> docker-compose.yml` dentro de
+  ese directorio.
+- **El logotipo viaja solo** si estaba en la carpeta `branding/` junto al
+  compose (lo normal, `BRANDING_PATH` vacía): el script la copia al directorio
+  nuevo. Si `BRANDING_PATH` es una ruta absoluta, no hay nada que copiar.
 
 **Después del servidor: las tablets** (`docs/cliente/operacion.md` §11, §11.1).
 Las tablets se actualizan **después** del servidor y **con la cola a cero**:
@@ -217,9 +265,18 @@ Lo único que hay que hacer:
 ```bash
 ACTUAL=/opt/kronoqr-2.1.0
 sudo docker compose --env-file $ACTUAL/.env -f $ACTUAL/docker-compose.yml exec -T app php artisan up
-sudo docker compose --env-file $ACTUAL/.env -f $ACTUAL/docker-compose.yml up -d horizon scheduler
+sudo docker compose --env-file $ACTUAL/.env -f $ACTUAL/docker-compose.yml start horizon scheduler
 curl -k https://127.0.0.1/api/v1/auth/me     # 401 = atiende; 503 = sigue en mantenimiento
 ```
+
+**`start` y no `up -d`**, a propósito. El paso 2 solo **paró** `horizon` y
+`scheduler`: sus contenedores siguen ahí, con la imagen y la configuración de
+la versión que estaba en marcha, y `start` los vuelve a arrancar tal cual.
+`up -d` compara la definición del compose con la de cada contenedor y recrea
+lo que difiera: si descomprimiste el paquete **encima**, ese compose ya es el
+nuevo y levantaría `horizon` y `scheduler` con la **imagen nueva** sobre la
+base **sin migrar** (y, sin `--no-deps`, recrearía también PostgreSQL y Redis
+si su definición cambió).
 
 **Caso B — la vuelta atrás con la copia quedó incompleta.** Son estas órdenes,
 en este orden, y cada una se puede repetir:
@@ -283,6 +340,20 @@ pierde, pero la tablet no lo ve ni lo drena. Por eso:
 - **Tras la vuelta atrás**, en cada tablet que había actualizado: borra los datos
   del sitio y vuelve a emparejarla ([`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md)),
   solo con la cola ya a cero.
+
+### 5.1 Volver a la versión anterior después de una actualización que terminó bien
+
+No es una vuelta atrás del script y no se hace por costumbre: la versión nueva
+está verificada y migrada, y la anterior **no sabe leer su esquema**. Volver
+supone **restaurar la copia previa** del informe y perder todo lo registrado
+desde entonces que no siga en las colas de las tablets. Decídelo con el
+fabricante. Si se decide, son las órdenes del caso B, con un paso previo que
+deshace la retirada del directorio anterior (§3, «Al terminar»):
+
+```bash
+cd $ANTERIOR
+sudo mv docker-compose.yml.retirado-2.1.0 docker-compose.yml   # el nombre exacto está en el informe
+```
 
 ---
 

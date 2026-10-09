@@ -35,13 +35,24 @@ privado de GitHub sigue desactivado); runbook de pérdida total del servidor con
 «Rendimiento de base de datos» (PR #124, `6882124b`), 22 (PR #122), 21 (PR #120), 12c (PR #118, ADR-051; **tras actualizar a la
 2.2.0 el admin tiene que volver a entrar**), 12b (PR #116) y 12 (PR #114, ADR-050).
 
+**Verificación final sobre `main` a08ed150 (08 y 09-10-2026)** con todo el plan de verificación: 0 CRÍTICO/ALTO de seguridad, 0
+BLOQUEANTE del revisor; faltan la tablet real y la validación jurídica. Registros en `docs/verificacion/2.2.0-verificacion-final-*.md`
+(**sin commit**, por decisión del propietario hasta nueva orden). El propietario ordenó corregir antes de publicar solo cinco hallazgos,
+en una rama: **PR #130 `fix/update-sh-verificacion-final`** (CI de push 37902468205 y manual 37904665030 en verde; la mutación completa
+se cortó a los 90 min, lo conocido). Trae: vuelta atrás *in place* temprana con `start` sin recrear y `.env` asentado (V7-RV-1/2);
+**actualizar *in place* solo desde la 2.2.0** (desde la 2.1.0 la copia previa fallaba siempre), por eso P2b y P3 de ⑧b se saltan
+hasta que la versión anterior sea la 2.2.0; directorio anterior retirado tras actualizar lado a lado (V7-SC-1); órdenes de los
+mensajes con todos sus argumentos y `ScriptMessageArgumentsTest` (V3-PL-04); `doctor.sh` y `product:doctor` fallan con scheduler u
+horizon parados o sin copia verificada en 26 h (V3-PL-07); el rol de la app sin escritura sobre `migrations`, comprobado y reparado
+por `update.sh` (V4-SC-1). El resto de la lista «¿Se pasó algo por alto?» del resumen queda para la 2.2.x salvo nueva orden.
+
 **Entrega como TFM (08-10-2026, PR #127 → `main` `2ac00130`):** el proyecto es también el Trabajo de Fin de Máster del propietario
 (Máster de Desarrollo con IA, BIG School). `README.md` sigue el orden que pide la entrega y `doc_master/` lleva memoria, despliegue
 con recorrido guiado, guion del vídeo y `presentacion.html` (el HTML del repositorio es la entrega; la copia publicada como artefacto no se usa). La contraseña de la cuenta de demostración y el teléfono para el código 2FA van en el formulario de
 entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador `[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en
 `kronoqr.kodigolab.es` (hoy 2.1.0), actualizar README §3.1/§6 y `doc_master/despliegue.md`.
 
-**Siguiente acción: ninguna hasta que el propietario ordene el bloque final.** Cuando lo haga: rama `chore/release-2.2.0` desde
+**Siguiente acción: integrar el PR #130 y, después, nada hasta que el propietario ordene el bloque final.** Cuando lo haga: rama `chore/release-2.2.0` desde
 `origin/main` siguiendo el plan (sección «Bloque final»); **antes de reponer `v2.1.0` (sobre `9282af6`) y `v2.0.0`** (en el remoto
 solo existe `v1.0.0`; `v2.0.0` sigue en local) desactivar `release.yml` (`gh workflow disable release.yml`), porque un push de
 etiqueta ejecuta el `release.yml` del commit etiquetado, sin la guarda de ADR-053, y reescribiría las imágenes `:2.1.0`. Al cerrar,

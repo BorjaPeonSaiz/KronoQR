@@ -113,10 +113,38 @@ return [
                 'warning_unknown' => 'The size of the job queue could not be measured.',
             ],
             'worker' => [
-                'ok' => 'Something is consuming the job queue.',
+                'ok' => 'Horizon, the process that consumes the job queue, is running (:masters active '
+                    .'supervisor(s)).',
+                'ok_busy' => 'There are jobs in progress: something is consuming the job queue.',
+                'ok_idle' => 'The job queue is empty. Horizon could not be asked, so from here it is unknown whether '
+                    .'the process that consumes it is running. Check it with: docker compose ps horizon',
                 'warning' => 'At :checked_at UTC there were :count jobs waiting and none in progress. The process '
                     .'that consumes the queue is probably not running.',
+                'failure_stopped' => 'At :checked_at UTC no Horizon process was consuming the job queue (:count '
+                    .'waiting). Clocking in does not depend on it, but no full export (the Labour Inspectorate\'s '
+                    .'or an employee\'s asking for their data), no deferred report and no incident notice gets '
+                    .'done until it is back.',
+                'warning_paused' => 'Horizon, the process that consumes the job queue, is paused (:count waiting). '
+                    .'While it stays paused, notifications, reports and the nightly recalculation do not run.',
                 'warning_unknown' => 'Whether the queue worker is alive could not be determined.',
+            ],
+        ],
+
+        // --- Scheduler -------------------------------------------------------
+
+        'scheduler' => [
+            'probe' => $probe,
+            'heartbeat' => [
+                'ok' => 'The task scheduler is launching its tasks (last every-minute measurement at :last_run_at '
+                    .'UTC).',
+                'warning' => 'The task the scheduler launches every minute has published nothing since :last_run_at '
+                    .'UTC (:minutes min ago). Most likely the «scheduler» container is stopped, and without it there '
+                    .'are no backups, no daily audit log verification and no nightly recalculation. Clocking in '
+                    .'does not depend on it.',
+                'warning_never' => 'There is no record of the task scheduler working: the measurement it launches '
+                    .'every minute has never been published. If you have just installed or updated, wait a couple '
+                    .'of minutes and check again.',
+                'warning_unknown' => ':path, where the scheduler leaves its every-minute measurement, cannot be read.',
             ],
         ],
 
@@ -337,6 +365,25 @@ return [
             ],
         ],
 
+        // --- Backups ---------------------------------------------------------
+
+        'backup' => [
+            'probe' => $probe,
+            'last_good_copy' => [
+                'ok' => 'The last verified backup is from :verified_at UTC (:hours h ago).',
+                'failure_stale' => 'The last verified backup is from :verified_at UTC, :hours hours ago. One should '
+                    .'be made and verified every night (at :daily_at UTC): the nightly backups are not being made '
+                    .'or are not passing verification.',
+                'failure_last_failed' => 'The last backup ended with an error. The previous good one is still in '
+                    .'place, but there has been no new backup since.',
+                'failure_verify_failed' => 'The last backup verification failed: the backup cannot be decrypted or '
+                    .'cannot be restored. Treat it as if it did not exist.',
+                'warning_never' => 'There is no record of any verified backup. That is normal until the first '
+                    .'nightly backup after installing (at :daily_at UTC); after that night, it is not.',
+                'warning_unknown' => ':path, where the backup records its result, cannot be read.',
+            ],
+        ],
+
         'files' => [
             'probe' => $probe,
             'storage_volume' => [
@@ -535,7 +582,35 @@ return [
                     ."  docker compose ps horizon\n"
                     ."  docker compose restart horizon\n"
                     .'Clocking in does not depend on it; notifications and reports do.',
+                'failure_stopped' => "Start the queue worker and find out why it stopped:\n"
+                    ."  docker compose ps horizon\n"
+                    ."  docker compose up -d horizon\n"
+                    ."  docker compose logs --tail=100 horizon\n"
+                    .'If you have just updated, it may not have started yet: check again in a minute.',
+                'warning_paused' => "Unless someone paused it on purpose for maintenance, resume it:\n"
+                    .'  docker compose exec horizon php artisan horizon:continue',
                 'warning_unknown' => 'Check that Redis responds and run this command again.',
+            ],
+        ],
+
+        'scheduler' => [
+            'probe' => $probeFix,
+            'heartbeat' => [
+                'warning' => "Check that the scheduler is running and start it if it is not:\n"
+                    ."  docker compose ps scheduler\n"
+                    ."  docker compose up -d scheduler\n"
+                    ."If it was already running, what fails is the database archiving measurement.\n"
+                    ."Run it by hand and read its message:\n"
+                    ."  docker compose exec scheduler php artisan backup:wal-metrics\n"
+                    .'See docs/runbooks/restaurar-backup.md.',
+                'warning_never' => "Check that the scheduler is running and start it if it is not:\n"
+                    ."  docker compose ps scheduler\n"
+                    ."  docker compose up -d scheduler\n"
+                    ."If it is and the warning is still there after a few minutes, run the measurement by hand:\n"
+                    .'  docker compose exec scheduler php artisan backup:wal-metrics',
+                'warning_unknown' => "The metrics directory must belong to user 1000:\n"
+                    ."  ls -l :path\n"
+                    .'See docs/runbooks/restaurar-backup.md §4.3.',
             ],
         ],
 
@@ -790,6 +865,31 @@ return [
                     .'minimum is in BACKUP_MIN_COPIES.',
                 'warning_missing' => 'Check that the path :path exists and is mounted.',
                 'warning_unknown' => 'Check that the path :path is mounted and accessible.',
+            ],
+        ],
+
+        'backup' => [
+            'probe' => $probeFix,
+            'last_good_copy' => [
+                'failure_stale' => "Check that the scheduler, which is what makes the backups, is running, and\n"
+                    ."run a backup by hand: its output says exactly what is failing.\n"
+                    ."  docker compose ps scheduler\n"
+                    ."  docker compose exec scheduler php artisan backup:run\n"
+                    .'The full procedure is in docs/runbooks/restaurar-backup.md. Clocking in does not depend on this.',
+                'failure_last_failed' => "Run a backup by hand: its output says exactly what is failing.\n"
+                    ."  docker compose exec scheduler php artisan backup:run\n"
+                    .'The full procedure is in docs/runbooks/restaurar-backup.md. Clocking in does not depend on this.',
+                'failure_verify_failed' => "Verify the last backup by hand to see the reason, and make a new one:\n"
+                    ."  docker compose exec scheduler php artisan backup:verify\n"
+                    ."  docker compose exec scheduler php artisan backup:run\n"
+                    .'If the encryption key was changed, follow docs/runbooks/restaurar-backup.md.',
+                'warning_never' => "If you have just installed, nothing: the first backup runs on its own tonight.\n"
+                    ."If the installation is more than a day old, run a backup by hand and read its output:\n"
+                    ."  docker compose ps scheduler\n"
+                    .'  docker compose exec scheduler php artisan backup:run',
+                'warning_unknown' => "The metrics directory must belong to user 1000:\n"
+                    ."  ls -ld :path\n"
+                    .'See docs/runbooks/restaurar-backup.md §4.3.',
             ],
         ],
 

@@ -15,7 +15,10 @@
 #   3  Si el contenedor `app` esta en marcha y sano, DELEGA en el diagnostico
 #      real del producto —`php artisan product:doctor`— y muestra su salida
 #      TAL CUAL: dos diagnosticos distintos del mismo sistema es la forma
-#      segura de que un dia digan cosas distintas.
+#      segura de que un dia digan cosas distintas. Despues mira desde fuera lo
+#      que `product:doctor` no puede ver desde dentro de `app`: que `scheduler`,
+#      `horizon` y `reverb` estan en marcha (V3-PL-07) y que se ejecuta desde el
+#      directorio de la instalacion vigente (V7-SC-1).
 #   4  Si `app` NO esta en marcha, es cuando este script gana su sitio: hace
 #      desde fuera lo que se puede sin el (Docker, estado de cada servicio,
 #      `.env`, espacio en disco, certificado, puertos) y dice como arrancarla.
@@ -259,9 +262,95 @@ check_app_running() {
 # fallado.
 finish_delegated() {
   if [ "${CHECKS_FAILED}" -gt 0 ]; then
-    die "${KQ_EXIT_VERIFY_FAILED}" "$(kq_text d_f_doctor_failed)"
+    die "${KQ_EXIT_VERIFY_FAILED}" "$(kq_text d_f_external_failed)"
   fi
   exit "${KQ_EXIT_OK}"
+}
+
+#------------------------------------------------------------------------------
+# Los procesos de fondo, con `app` en marcha (V3-PL-07). `product:doctor` corre
+# DENTRO de `app` y no ve los demas contenedores: con `scheduler` parado decia
+# «nada esta roto» y este script salia con 0. Cada uno, con su peso:
+#
+#   scheduler  FALLO. Sin el no hay copia nocturna, ni verificacion de la cadena
+#              de auditoria, ni conciliacion del registro, ni purgas, ni metricas
+#              del WAL. Nada de eso se nota hasta el dia que hace falta.
+#   horizon    FALLO. Sin el no termina ningun trabajo en cola: la exportacion
+#              integra (la que se entrega a la Inspeccion o al empleado que
+#              ejerce su derecho de acceso), los informes en diferido y los
+#              avisos de incidencias a los responsables. El fichaje sigue, pero
+#              hay obligaciones que dejan de cumplirse sin que nadie lo vea.
+#   reverb     AVISO. Solo empuja los cambios en vivo al panel (presencia):
+#              recargar la pagina da el dato correcto. No se pierde nada.
+#
+# `restart: unless-stopped` en los tres: si estan parados, o alguien los paro a
+# mano o estan cayendose en bucle. En los dos casos, la orden es la misma.
+#------------------------------------------------------------------------------
+check_background_services() {
+  local service
+
+  read_service_states
+  for service in scheduler horizon reverb; do
+    report_service_state "${service}" "$(service_state_of "${service}")"
+  done
+}
+
+# Una sola lectura de `docker compose ps` para las dos comprobaciones de
+# servicios: «servicio estado» por linea.
+SERVICE_STATES=""
+read_service_states() {
+  SERVICE_STATES="$(compose_current ps -a --format '{{.Service}} {{.State}}' 2>/dev/null || true)"
+}
+
+service_state_of() {
+  awk -v s="$1" '$1 == s { print $2 }' <<<"${SERVICE_STATES}" || true
+}
+
+# La gravedad de cada servicio parado, la MISMA con `app` en marcha o parada, y la
+# misma que da `product:doctor` a Horizon (`queue.worker`): scheduler y horizon,
+# fallo; reverb y los demas, aviso (con `app` parada, `app` ya es un fallo aparte).
+report_service_state() {
+  local service="$1" state="$2"
+
+  if [ "${state}" = "running" ]; then
+    check_pass "$(kq_format d_c_service_state "${service}" "${state}")"
+    return 0
+  fi
+  state="${state:-$(kq_text absent)}"
+  case "${service}" in
+  scheduler)
+    check_fail "$(kq_format d_c_service_state "${service}" "${state}")" \
+      "$(kq_format d_f_scheduler_down "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+    ;;
+  horizon)
+    check_fail "$(kq_format d_c_service_state "${service}" "${state}")" \
+      "$(kq_format d_f_horizon_down "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+    ;;
+  reverb)
+    check_warn "$(kq_format d_c_service_state "${service}" "${state}")" \
+      "$(kq_format d_w_reverb_down "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
+    ;;
+  *)
+    check_warn "$(kq_format d_c_service_state "${service}" "${state}")" \
+      "$(kq_format d_f_service_down "${CURRENT_COMPOSE}" "${service}" "${CURRENT_COMPOSE}" "${service}")"
+    ;;
+  esac
+}
+
+# Tras una actualizacion lado a lado hay dos directorios (V7-SC-1). Este script
+# localiza la instalacion por las etiquetas de `app`, asi que diagnostica la
+# vigente aunque se lance desde el anterior; pero quien lo lanza desde ahi es
+# quien despues hara `docker compose up` desde ahi. Si el directorio de este
+# script es un paquete (tiene VERSION) y no es el de la instalacion, se avisa.
+check_running_from_current_dir() {
+  local here there mine
+  [ -f "${SCRIPT_DIR}/VERSION" ] || return 0
+  here="$(cd -- "${SCRIPT_DIR}" && pwd -P)"
+  there="$(cd -- "${CURRENT_DIR}" 2>/dev/null && pwd -P || printf '%s' "${CURRENT_DIR}")"
+  [ "${here}" != "${there}" ] || return 0
+  mine="$(head -n 1 "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
+  check_warn "$(kq_format d_c_other_dir "${here}" "${mine:-?}")" \
+    "$(kq_format d_w_other_dir "${there}" "$(env_value "${CURRENT_ENV}" IMAGE_TAG)" "${there}")"
 }
 
 #------------------------------------------------------------------------------
@@ -302,6 +391,14 @@ run_delegated_doctor() {
   printf '%s\n' "${output}"
   say ""
 
+  # DESPUES del informe de `product:doctor` y no antes: desde dentro de `app` no
+  # se ve si los otros contenedores estan en marcha, y su resumen puede decir
+  # «nada esta roto» con el planificador parado (V3-PL-07). Lo ultimo que se lee
+  # tiene que ser lo que lo corrige.
+  check_background_services
+  check_running_from_current_dir
+  say ""
+
   case "${status}" in
   0)
     check_pass "$(kq_text d_doctor_ok)"
@@ -332,6 +429,7 @@ run_external_checks() {
   check_fail "$(kq_text d_c_app_down)" "$(kq_format d_f_app_down "${CURRENT_COMPOSE}" "${CURRENT_COMPOSE}")"
 
   check_services_state
+  check_running_from_current_dir
   check_env_permissions
   check_image_digest_overrides "${CURRENT_ENV}" "$(dirname -- "${CURRENT_COMPOSE}")"
   check_backup_role
@@ -363,21 +461,23 @@ run_external_checks() {
 # Estado de CADA servicio del compose, no solo de `app`: un quiosco encola
 # igual si lo que falta es `app`, `nginx` o `redis`, y el mensaje tiene que
 # decir cual.
+#
+# Con la aplicacion parada se listan TODOS; los tres procesos de fondo se juzgan
+# con la misma gravedad que con ella en marcha (report_service_state), y si su
+# contenedor ni existe tambien se dice.
 check_services_state() {
   local service state
 
-  # El tercer campo (salud) no se usa: `state` ya distingue "running" de
-  # cualquier otra cosa, y un servicio sin sonda de salud no rellena ese
-  # campo. `_` descarta lo que no hace falta sin dejar una variable sin usar.
+  read_service_states
+  # El tercer campo (salud) no se pide: `state` ya distingue "running" de
+  # cualquier otra cosa. `_` descarta lo que sobre sin dejar una variable sin usar.
   while IFS=' ' read -r service state _; do
     [ -n "${service}" ] || continue
-    if [ "${state}" = "running" ]; then
-      check_pass "$(kq_format d_c_service_state "${service}" "${state}")"
-    else
-      check_warn "$(kq_format d_c_service_state "${service}" "${state:-$(kq_text unknown_value)}")" \
-        "$(kq_format d_f_service_down "${CURRENT_COMPOSE}" "${service}" "${CURRENT_COMPOSE}" "${service}")"
-    fi
-  done < <(compose_current ps -a --format '{{.Service}} {{.State}} {{.Health}}' 2>/dev/null)
+    report_service_state "${service}" "${state}"
+  done <<<"${SERVICE_STATES}"
+  for service in scheduler horizon reverb; do
+    [ -n "$(service_state_of "${service}")" ] || report_service_state "${service}" ""
+  done
 }
 
 # El `.env` guarda secretos (regla dura 21): SOLO se comprueba que existe y
@@ -441,7 +541,7 @@ check_backup_wal() {
     return 0
   fi
   if [ "${actual}" != "${derived}" ]; then
-    check_fail "$(kq_text d_c_wal_key)" "$(kq_format d_f_wal_key_mismatch "${CURRENT_ENV}")"
+    check_fail "$(kq_text d_c_wal_key)" "$(kq_format d_f_wal_key_mismatch "${CURRENT_ENV}" "${CURRENT_DIR}")"
     return 0
   fi
 
@@ -451,7 +551,7 @@ check_backup_wal() {
   if [ -n "${have_kid}" ]; then
     want_kid="$(kqe_wal_kid "${derived}")"
     if [ "${have_kid}" != "${want_kid}" ]; then
-      check_fail "$(kq_text d_c_wal_key)" "$(kq_text d_f_wal_key_kid)"
+      check_fail "$(kq_text d_c_wal_key)" "$(kq_format d_f_wal_key_kid "${CURRENT_DIR}")"
       return 0
     fi
   fi
@@ -750,7 +850,7 @@ check_certificate_expiry() {
   local file="$1" enddate epoch now days
 
   if ! command -v openssl >/dev/null 2>&1; then
-    check_warn "$(kq_format d_c_cert_expiry_unknown "${file}")" "$(kq_format d_w_cert_unknown "${file}")"
+    check_warn "$(kq_format d_c_cert_expiry_unknown "${file}")" "$(kq_format d_w_cert_unknown "${file}" "${file}")"
     return 0
   fi
 
@@ -759,7 +859,7 @@ check_certificate_expiry() {
   [ -z "${enddate}" ] || epoch="$(date -d "${enddate}" +%s 2>/dev/null || true)"
 
   if [ -z "${enddate}" ] || [ -z "${epoch}" ]; then
-    check_warn "$(kq_format d_c_cert_expiry_unknown "${file}")" "$(kq_format d_w_cert_unknown "${file}")"
+    check_warn "$(kq_format d_c_cert_expiry_unknown "${file}")" "$(kq_format d_w_cert_unknown "${file}" "${file}")"
     return 0
   fi
 

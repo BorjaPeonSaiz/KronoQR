@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Compliance\Infrastructure\Persistence\AuditLogSchema;
 use App\Support\Database\LimitsMigrationLocks;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -67,6 +68,14 @@ return new class extends Migration
         // actualiza en lugar de nacer: `ALTER DEFAULT PRIVILEGES` no mira atras.
         DB::statement('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO '.$application);
         DB::statement('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO '.$application);
+
+        // `ALL TABLES` incluye `migrations`, que ya existe cuando esto corre
+        // (V4-SC-1). Quien escribe ahi decide que ejecuta el migrador en la
+        // siguiente actualizacion; la aplicacion solo la lee. Se retira AQUI
+        // tambien, y no solo en `2026_10_09_100000`, para que esta migracion no
+        // devuelva el privilegio si alguna vez se vuelve a ejecutar.
+        $migrations = '"'.AuditLogSchema::assertIdentifier(Config::string('database.migrations.table', 'migrations')).'"';
+        DB::statement('REVOKE INSERT, UPDATE, DELETE ON TABLE '.$migrations.' FROM '.$application);
     }
 
     public function down(): void

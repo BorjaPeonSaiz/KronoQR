@@ -1421,7 +1421,7 @@ probe() {
 # mismo comando.
 
 phase_verify() {
-  local path doctor_status doctor_output
+  local path doctor_status doctor_output waited=0
 
   heading "$(kq_text phase_5)"
 
@@ -1456,6 +1456,17 @@ phase_verify() {
     exit "${KQ_EXIT_VERIFY_FAILED}"
   fi
 
+  # Horizon parado es un FALLO de `product:doctor` (sin el no termina ninguna
+  # exportacion integra). Su maestro tarda unos segundos en registrarse tras
+  # arrancar el contenedor: se le espera, como mucho KQ_WAIT_APPLICATION, para
+  # no confundir «aun no ha dado señales» con «esta parado». Si no llega, lo
+  # dira `product:doctor` con su orden para arrancarlo.
+  while [ "${waited}" -lt "${KQ_WAIT_APPLICATION}" ] &&
+    ! compose exec -T app php artisan horizon:status >/dev/null 2>&1; do
+    sleep "${KQ_POLL_SECONDS}"
+    waited=$((waited + KQ_POLL_SECONDS))
+  done
+
   doctor_status=0
   doctor_output="$(compose exec -T app php artisan product:doctor --lang="${KQ_LANG}" 2>&1)" || doctor_status=$?
   printf '%s\n' "${doctor_output}"
@@ -1463,7 +1474,10 @@ phase_verify() {
 
   case "${doctor_status}" in
   0) kq_msg check_ok "$(kq_text verify_doctor_ok)" ;;
-  1) kq_msg check_warn "$(kq_text verify_doctor_warn)" "$(kq_format f_verify_doctor_warn "${COMPOSE_FILE}")" ;;
+  1)
+    kq_msg check_warn "$(kq_text verify_doctor_warn)"
+    kq_msg fix "$(kq_format f_verify_doctor_warn "${COMPOSE_FILE}")"
+    ;;
   *)
     err ""
     err "ERROR: $(kq_format f_verify_doctor "${COMPOSE_FILE}")"
