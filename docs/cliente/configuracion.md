@@ -1178,7 +1178,7 @@ no entra.
 | `schema_version` | `1` | Versión del formato del documento. Sube si algún día cambia la lista de campos |
 | `installation_id` | `9f2c7b41-0f6a-4a1e-9d54-6b0f3a2c81de` | Identificador **aleatorio** que genera tu propia instalación la primera vez. No sale de tu licencia, ni de tu nombre, ni de tu dirección. Si borras el fichero de estado, se estrena otro |
 | `sent_at` | `2026-09-08T05:40:12.004311Z` | Momento del envío, en UTC |
-| `product.version` | `2.1.0` | Versión de KronoQR que corre en tu servidor |
+| `product.version` | `2.2.0` | Versión de KronoQR que corre en tu servidor |
 | `product.php_version` | `8.4.24` | Versión de PHP |
 | `product.database_version` | `17.11` | Versión de PostgreSQL, solo el número. Sin la distribución, sin el compilador y sin ninguna ruta de tu servidor |
 | `license.state` | `active` | Estado de la licencia: `active`, `expiring`, `expired`, `absent`, `not_yet_valid` o `unverifiable` |

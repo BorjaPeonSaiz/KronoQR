@@ -1415,7 +1415,7 @@ Cuadrantes y comparación entre planificado y realmente trabajado, vacaciones y 
 ### 11.6.1 Qué se entrega al cliente
 
 ```
-kronoqr-2.1.0/
+kronoqr-2.2.0/
 ├── docker-compose.yml          # Producción, autocontenido, sin dependencias externas
 ├── .env.example                # Comentado, con las tres categorías marcadas (5.4)
 ├── VERSION                     # Fija la etiqueta de imagen. Sin esto no se instala

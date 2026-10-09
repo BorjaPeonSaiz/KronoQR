@@ -1194,7 +1194,7 @@ change does not get in.
 | `schema_version` | `1` | Version of the document format. Goes up if the list of fields ever changes |
 | `installation_id` | `9f2c7b41-0f6a-4a1e-9d54-6b0f3a2c81de` | **Random** identifier your own installation generates the first time. It is not derived from your licence, your name or your address. If you delete the state file, a new one is minted |
 | `sent_at` | `2026-09-08T05:40:12.004311Z` | Moment of the send, in UTC |
-| `product.version` | `2.1.0` | Version of KronoQR running on your server |
+| `product.version` | `2.2.0` | Version of KronoQR running on your server |
 | `product.php_version` | `8.4.24` | PHP version |
 | `product.database_version` | `17.11` | PostgreSQL version, the number only. No distribution, no compiler and no path on your server |
 | `license.state` | `active` | Licence state: `active`, `expiring`, `expired`, `absent`, `not_yet_valid` or `unverifiable` |

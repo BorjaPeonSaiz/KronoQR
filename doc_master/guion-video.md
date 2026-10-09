@@ -15,7 +15,7 @@ Duración objetivo: 10–12 minutos. Captura de pantalla obligatoria; cámara op
 | 7:00 | Panel · Plantilla → ficha → jornada → Corregir | Nada se borra: la corrección crea una versión nueva con autor, momento y motivo. Enseñar el tramo anterior conservado. |
 | 7:45 | Panel · Incidencias · Cumplimiento · Informes | La incidencia del fichaje por PIN. La vista de cumplimiento con los umbrales del perfil. Exportación sellada y exportación para la Inspección. |
 | 8:45 | Portal | La persona consulta y descarga su propio registro con código y PIN. |
-| 9:15 | Repositorio · `backend/app/Modules` · `docs/adr` · `.claude/agents` | Arquitectura hexagonal modular, 51 ADR, y cómo se construyó con Claude Code: `CLAUDE.md`, 11 agentes, 7 skills, plan por tareas, `HANDOFF.md`. |
+| 9:15 | Repositorio · `backend/app/Modules` · `docs/adr` · `.claude/agents` | Arquitectura hexagonal modular, 57 ADR, y cómo se construyó con Claude Code: `CLAUDE.md`, 11 agentes, 7 skills, plan por tareas, `HANDOFF.md`. |
 | 10:15 | GitHub Actions · una ejecución de `ci.yml` | Las ocho etapas: calidad, arquitectura, mutación, trazabilidad requisito → prueba, seguridad, E2E con cámara simulada e instalación limpia desde el paquete. |
 | 11:00 | Slide de cierre | Qué aprendí: la IA acelera lo mecánico; el criterio sobre el negocio, la ley y la seguridad sigue siendo humano. La verificación pre-release encontró lo que las herramientas no miden. |
 
