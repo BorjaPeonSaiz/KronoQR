@@ -296,7 +296,7 @@ Instrucción explícita de no repetir lo que ya reportan Pint, PHPStan, Deptrac 
 
 ## 5. Las skills
 
-Creadas en `.claude/skills/`. Se invocan con `/<nombre>`. Son **seis**; el directorio tiene un séptimo, `code-analyzer/`, que **no es una skill operativa** (ver la nota tras la tabla).
+Creadas en `.claude/skills/`. Se invocan con `/<nombre>`. Son **seis**.
 
 | Skill | Qué automatiza | Pasos |
 |---|---|---|
@@ -306,8 +306,6 @@ Creadas en `.claude/skills/`. Se invocan con `/<nombre>`. Son **seis**; el direc
 | `migracion-segura` | Cambio de esquema sin bloqueos ni parada | 3 despliegues |
 | `revision-cumplimiento` | Checklist legal, de privacidad y de producto | 6 bloques |
 | `informe-nuevo` | Informe o exportación con rendimiento verificado | 8 |
-
-> **`code-analyzer/` no se carga como skill.** Solo tiene `README.md` y `skill.json`, sin el `SKILL.md` con cabecera que Claude Code necesita para registrarla, y su README documenta una orden (`claude analyze-code`) que no existe. Entró con el commit «Fase 1 Sin optimizar» y ningún paso del plan ni del método la usa. Para lo que dice cubrir (duplicación, lógica de dominio, excepciones) están `revisor-codigo`, `arquitecto-dominio` y la skill integrada `/code-review`. Queda anotado como decisión pendiente del propietario: convertirla en skill de verdad o retirarla.
 
 ### 5.1 Qué resuelve cada una
 
@@ -917,6 +915,5 @@ CLAUDE.md                                          Contexto permanente, 21 regla
 ├── endpoint-api/SKILL.md                          Contrato primero, 8 pasos
 ├── migracion-segura/SKILL.md                      Expand / migrate / contract
 ├── revision-cumplimiento/SKILL.md                 Checklist legal y de producto, 6 bloques
-├── informe-nuevo/SKILL.md                         Informes y exportaciones, 8 pasos
-└── code-analyzer/{README.md,skill.json}           Sin SKILL.md: no es una skill operativa (§5)
+└── informe-nuevo/SKILL.md                         Informes y exportaciones, 8 pasos
 ```

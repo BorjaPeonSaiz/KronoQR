@@ -2,9 +2,9 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Propuesta — pendiente del visto bueno de `seguridad-cumplimiento` |
+| **Estado** | Aceptada. Implementada en la 2.2.0 y con el visto bueno de `seguridad-cumplimiento` (nota del 09-10-2026) |
 | **Fecha** | 1 de octubre de 2026 |
-| **Decide** | `backend-laravel` (Bloque 8 de la 2.2.0, hallazgo F1-1). Revisión pendiente de `seguridad-cumplimiento` |
+| **Decide** | `backend-laravel` (Bloque 8 de la 2.2.0, hallazgo F1-1). Revisión de `seguridad-cumplimiento` hecha (nota del 09-10-2026) |
 | **Afecta a** | Precisa el [documento 02](../02-stack-tecnologico-y-plan-implementacion.md) §7.3 («rotación automática al 80 % de vida») · `POST /api/v1/kiosk/heartbeat` (`KioskHeartbeat.rotated_token`) · `Identity\Domain\Policy\DeviceTokenRotationPolicy`, `RotateDeviceTokenIfDue`, `SanctumDeviceTokenIssuer` · `Kiosk\Application\Port\DeviceTokenRenewal` · `IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS` |
 | **Requisitos** | RF-ID-04, RS-04, RF-KI-04, reglas duras 6, 13, 14, 19 y 21 |
 
@@ -86,3 +86,12 @@ día 90.
 - Feature y contrato: `HeartbeatTokenRotationTest` —con y sin relevo contra `openapi.yaml`, respuesta
   perdida, fallo que no tumba el latido y 200 días simulados con dos rotaciones y un fichaje al final—
   y `OpenApiContractTest` sobre la forma de `rotated_token`.
+
+## Nota 09-10-2026 (2.2.0 publicada): estado
+
+**Aceptada e implementada en la 2.2.0.** La decisión no cambia; cambia el estado, que se había quedado en «Propuesta» con el código ya integrado (R3-AR-06 de la [re-verificación](../verificacion/2.2.0-reverificacion-tanda-3.md)).
+
+- **Implementación** (bloque 8 de la 2.2.0, F1-1, commits del 01-10-2026): política pura `Identity/Domain/Policy/DeviceTokenRotationPolicy.php`; caso de uso `Identity/Application/UseCase/RotateDeviceTokenIfDue.php`, que el latido alcanza por el puerto `Kiosk/Application/Port/DeviceTokenRenewal.php` (`RecordHeartbeat` → `Kiosk/Infrastructure/Adapter/IdentityDeviceTokenRenewal.php`); `rotated_token` en la respuesta de `POST /api/v1/kiosk/heartbeat` del contrato; solape de 24 h (`identity.devices.token_overlap_hours`, `IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS`). En el quiosco, `frontend-kiosk/src/shared/telemetry/tokenRotation.ts` adopta el relevo y vuelve a cifrar el padrón.
+- **Pruebas:** `backend/tests/Feature/Kiosk/HeartbeatTokenRotationTest.php`, `HeartbeatTokenRotationConcurrencyTest.php` (dos latidos simultáneos, un solo relevo), `backend/tests/Integration/Identity/DeviceTokenTest.php`; en el quiosco, `tests/unit/tokenRotation.spec.ts` y el E2E `tests/e2e/token-rotation.spec.ts`.
+- **Visto bueno de seguridad:** la pasada final de `seguridad-cumplimiento` de la re-verificación da F1-1 por corregido y el solape por aceptable ([2.2.0-reverificacion-tandas-5-6-7.md](../verificacion/2.2.0-reverificacion-tandas-5-6-7.md), §1.a, fila F1-1). La verificación final de seguridad lo confirma ([2.2.0-verificacion-final-tanda-4.md](../verificacion/2.2.0-verificacion-final-tanda-4.md), «el token rota con solape (ADR-044)»).
+- La cabecera pasa a «Aceptada» por esta nota.
