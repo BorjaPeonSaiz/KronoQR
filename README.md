@@ -490,7 +490,7 @@ Los roles con acceso global (`admin`, `rrhh`, `auditor`) tienen 2FA obligatorio:
 - **Umbrales**: PHPStan nivel 9, cobertura del dominio ≥ 90 % y global ≥ 75 %, MSI ≥ 80 % sobre el dominio, 0 hallazgos en ShellCheck, Semgrep y gitleaks.
 - **Pipeline de CI** en ocho etapas: lint y tipos → arquitectura → unitarias y mutación de lo cambiado → trazabilidad → integración y contrato → seguridad → frontend → E2E → instalación limpia desde el paquete de entrega y actualización desde la versión anterior.
 - **Seguridad**: modelo de amenazas STRIDE, revisión interna OWASP ASVS, autoevaluación OWASP SAMM 2.0 con evidencia ([`docs/07-seguridad-madurez-y-amenazas.md`](docs/07-seguridad-madurez-y-amenazas.md)), SBOM CycloneDX por versión y política de divulgación en [`SECURITY.md`](SECURITY.md).
-- **Verificación pre-release**: antes de dar la 2.1.0 por entregable se hizo una verificación completa con agentes en modo solo lectura ([`docs/verificacion/`](docs/verificacion/)), que produjo el plan de correcciones de la 2.2.0, en curso.
+- **Verificación pre-release**: antes de dar la 2.1.0 por entregable se hizo una verificación completa con agentes en modo solo lectura ([`docs/verificacion/`](docs/verificacion/)), que produjo el plan de correcciones de la 2.2.0; antes de publicarla se repitió la verificación sobre `main` (`docs/verificacion/2.2.0-verificacion-final-resumen.md`).
 - **Versionado** SemVer con `CHANGELOG.md` generado desde commits convencionales; la publicación se dispara al etiquetar `vX.Y.Z`.
 
 ---

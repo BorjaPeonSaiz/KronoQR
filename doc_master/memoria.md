@@ -229,7 +229,7 @@ El despliegue de <https://kronoqr.kodigolab.es> se hizo con ese mismo paquete y 
 | Cobertura · mutación | 95 % dominio, 92 % global · MSI 86 % |
 | ADR | 51 |
 | Módulos · aplicaciones | 8 · 3 |
-| Documentación | 7 documentos de diseño, 57 ADR, contrato OpenAPI, 9 guías de cliente en dos idiomas, 32 runbooks |
+| Documentación | 7 documentos de diseño, 57 ADR, contrato OpenAPI, 9 guías de cliente en dos idiomas, 33 runbooks |
 | Agentes · skills · reglas duras | 11 · 7 · 21 |
 
 Antes de dar la 2.1.0 por entregable se hizo una **verificación pre‑release** de 14 pasos y 12 fases ([`docs/verificacion/`](../docs/verificacion/)) con los agentes en modo solo lectura. Todo lo que miden las herramientas estaba en verde. La verificación encontró, en lo que no mide ninguna herramienta, 7 hallazgos bloqueantes, 91 altos y 181 medios, y concluyó que la versión **no debía entregarse a un cliente tal como estaba**. De ahí salió el plan de correcciones de la 2.2.0, organizado en bloques, cada uno con su rama, sus revisiones y su CI completa. En el momento de esta entrega están integrados todos los bloques salvo la publicación de la versión.
