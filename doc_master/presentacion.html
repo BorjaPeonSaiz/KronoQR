@@ -166,9 +166,9 @@ pre { margin: 0; font-family: var(--mono); font-size: 0.78em; line-height: 1.35;
   <h2>Una tarjeta, una tablet, y el registro se construye solo</h2>
   <p class="lead">Cada empleado acerca su tarjeta QR a la tablet de la entrada de personal. El sistema calcula el tiempo trabajado, admite varios tramos por jornada y produce el registro que exige el art. 34.9 del Estatuto de los Trabajadores.</p>
   <div class="grid">
-    <div class="card"><h3>Quiosco</h3><p>PWA en una tablet Android. Escaneo continuo por cámara, PIN de respaldo, cola sin conexión, confirmación visual y sonora.</p></div>
-    <div class="card"><h3>Panel de gestión</h3><p>Presencia en tiempo real, jornadas, correcciones trazadas, incidencias, cumplimiento, plantilla, credenciales, informes, exportaciones.</p></div>
-    <div class="card"><h3>Portal del empleado</h3><p>Cada persona consulta y descarga su propio registro con su código y su PIN. Sin correo, sin instalar nada.</p></div>
+    <div class="card"><h3>Quiosco</h3><p>PWA en una tablet Android. Escaneo continuo por cámara, PIN de respaldo de 6 u 8 cifras, cola sin conexión, confirmación visual y sonora.</p></div>
+    <div class="card"><h3>Panel de gestión</h3><p>Presencia en tiempo real, jornadas, correcciones trazadas, incidencias, cumplimiento, plantilla, credenciales, cuentas de gestión, informes, exportaciones.</p></div>
+    <div class="card"><h3>Portal del empleado</h3><p>Cada persona consulta y descarga su propio registro (CSV o PDF sellado) con su código y su PIN. Sin correo, sin instalar nada.</p></div>
   </div>
   <p class="muted">Producto licenciado: el mismo software se vende a hoteles distintos y cada uno lo instala en su servidor. Sin SaaS, sin multi‑tenencia, funciona sin internet.</p>
 </div></section>
@@ -249,7 +249,7 @@ pre { margin: 0; font-family: var(--mono); font-size: 0.78em; line-height: 1.35;
     <thead><tr><th>La ley exige</th><th>Cómo lo cumple</th></tr></thead>
     <tbody>
       <tr><td>Registro diario con inicio y fin</td><td>Cada tramo con su hora exacta, en UTC, convertida solo al presentar</td></tr>
-      <tr><td>Fiable e inalterable</td><td>Nada se borra ni se sobrescribe. Auditoría solo‑append encadenada por hash; el rol de la aplicación no tiene <code>UPDATE</code> ni <code>DELETE</code> sobre ella</td></tr>
+      <tr><td>Fiable e inalterable</td><td>Nada se borra ni se sobrescribe. Auditoría solo‑append encadenada por hash; el rol de la aplicación no tiene <code>UPDATE</code> ni <code>DELETE</code> sobre ella. Conciliación diaria del registro con su auditoría: una edición directa de un tramo salta como alerta crítica</td></tr>
       <tr><td>Conservación 4 años</td><td>Retención del perfil de cumplimiento y purga confirmada con informe</td></tr>
       <tr><td>A disposición del trabajador y la Inspección</td><td>Portal personal, rol auditor y exportación normalizada con correcciones y motivos</td></tr>
       <tr><td>Formato legible y tratable</td><td>CSV, XLSX y PDF sellado con hash del contenido</td></tr>
@@ -262,10 +262,10 @@ pre { margin: 0; font-family: var(--mono); font-size: 0.78em; line-height: 1.35;
   <div class="eyebrow">08 · Calidad</div>
   <h2>El nivel de prueba no lo decide quien implementa</h2>
   <div class="figures">
-    <div class="figure"><b>168</b><span>requisitos en catálogo, todos con prueba</span></div>
-    <div class="figure"><b>≈5 100</b><span>pruebas de Pest etiquetadas por requisito</span></div>
-    <div class="figure"><b>343</b><span>pruebas E2E con Playwright y cámara simulada</span></div>
-    <div class="figure"><b>86 %</b><span>índice de mutación sobre el dominio</span></div>
+    <div class="figure"><b>168</b><span>requisitos en catálogo; 167 con prueba automática y 1 por revisión</span></div>
+    <div class="figure"><b>5 582</b><span>pruebas etiquetadas por requisito: 5 233 Pest, 343 Playwright, 6 k6</span></div>
+    <div class="figure"><b>96 %</b><span>cobertura del dominio (93 % del backend)</span></div>
+    <div class="figure"><b>88 %</b><span>índice de mutación sobre el dominio</span></div>
     <div class="figure"><b>9</b><span>PHPStan, nivel máximo, sin baseline</span></div>
   </div>
   <ul>
@@ -281,8 +281,8 @@ pre { margin: 0; font-family: var(--mono); font-size: 0.78em; line-height: 1.35;
   <h2>La amenaza real es el préstamo de tarjeta, no el atacante externo</h2>
   <div class="grid">
     <div class="card"><h3>Credencial</h3><p>QR opaco y firmado. Rechazos genéricos y de tiempo constante. Rotación de clave con solape. Detección de patrones anómalos que abre incidencias.</p></div>
-    <div class="card"><h3>Acceso</h3><p>Tokens con ámbito, 2FA obligatorio en los roles globales, RBAC por departamento, policy y prueba negativa por rol en cada endpoint, límites de tasa por dispositivo y origen.</p></div>
-    <div class="card"><h3>Datos personales</h3><p>Del DNI solo una huella irreversible. Correo opcional. Nunca nombres en logs. Aviso de privacidad en la tablet. Cifrado en tránsito y en reposo.</p></div>
+    <div class="card"><h3>Acceso</h3><p>Tokens con ámbito, 2FA obligatorio en los cuatro roles de gestión, RBAC por departamento, policy y prueba negativa por rol en cada endpoint, límites de tasa por dispositivo y origen, bloqueo por origen en el portal.</p></div>
+    <div class="card"><h3>Datos personales</h3><p>Del DNI solo una huella irreversible. Correo opcional. Nunca nombres en logs. Aviso de privacidad en la tablet. Cifrado en tránsito y en reposo, también las copias y el WAL.</p></div>
     <div class="card"><h3>El fabricante no entra</h3><p>Diagnóstico anonimizado por defecto. Acceso de soporte solo con concesión expresa, temporal, acotada y auditada.</p></div>
   </div>
   <p class="muted">STRIDE y ATT&amp;CK en el modelo de amenazas, revisión interna OWASP ASVS, autoevaluación OWASP SAMM con evidencia del repositorio, SBOM por versión y política de divulgación en <code>SECURITY.md</code>.</p>
@@ -293,11 +293,11 @@ pre { margin: 0; font-family: var(--mono); font-size: 0.78em; line-height: 1.35;
   <h2>Lo que separa un sistema de un producto</h2>
   <div class="grid">
     <div class="card"><h3><code>install.sh</code></h3><p>Comprueba requisitos, genera todos los secretos en el servidor del cliente, levanta la pila, verifica y deshace si falla. Después, un asistente de puesta en marcha.</p></div>
-    <div class="card"><h3><code>update.sh</code></h3><p>Copia previa verificada, migraciones reversibles, salud sin exponer la versión nueva y vuelta atrás automática. Entre versiones no consecutivas.</p></div>
-    <div class="card"><h3><code>backup.sh</code> · <code>restore-drill.sh</code></h3><p>Copia diaria cifrada y verificada, archivado WAL y simulacro que restaura de verdad y cuenta filas.</p></div>
-    <div class="card"><h3>Configuración, marca y licencia</h3><p>Nada de un cliente en el código. Perfiles de cumplimiento, marca blanca, licencia firmada con verificación local.</p></div>
+    <div class="card"><h3><code>update.sh</code></h3><p>Al lado del anterior, nunca encima. Copia previa verificada, migraciones reversibles, salud sin exponer la versión nueva y vuelta atrás automática. Entre versiones no consecutivas.</p></div>
+    <div class="card"><h3><code>backup.sh</code> · <code>restore-drill.sh</code></h3><p>Copia diaria y archivado WAL cifrados y autenticados, y simulacro que restaura de verdad y cuenta filas.</p></div>
+    <div class="card"><h3>Configuración, marca y licencia</h3><p>Nada de un cliente en el código. Perfiles de cumplimiento, marca blanca, licencia firmada con verificación local. Versiones inmutables, con las imágenes fijadas por digest.</p></div>
   </div>
-  <p class="muted">Documentación de cliente en español e inglés, con una prueba que comprueba que cada comando y fichero citado existe. El despliegue de <strong>kronoqr.kodigolab.es</strong> se hizo con este mismo paquete.</p>
+  <p class="muted">Documentación de cliente en español e inglés, con una prueba que comprueba que cada comando y fichero citado existe. El despliegue de <strong>kronoqr.kodigolab.es</strong> se hizo con este mismo paquete, en la 2.1.0.</p>
 </div></section>
 
 <section class="slide"><div class="inner">
@@ -307,30 +307,37 @@ pre { margin: 0; font-family: var(--mono); font-size: 0.78em; line-height: 1.35;
     <div class="card"><h3>Primero los documentos</h3><p>Especificación con 168 requisitos, plan de ~50 tareas con agente, skill y pruebas exigidas, y lo que se promete al cliente. Todo antes de la primera línea.</p></div>
     <div class="card"><h3><code>CLAUDE.md</code>: 21 reglas duras</h3><p>Dominio puro, nunca <code>now()</code>, UTC, los turnos no se parten, nada se borra, idempotencia, cero biometría. Cada regla nombra la herramienta que la verifica.</p></div>
     <div class="card"><h3>11 agentes · 7 skills</h3><p>Los agentes replican las fronteras de la arquitectura. Dos son de solo lectura: revisor de código y seguridad. Quien encuentra un problema no lo arregla en el mismo paso.</p></div>
-    <div class="card"><h3>Continuidad</h3><p><code>HANDOFF.md</code> versionado manda sobre cualquier memoria; Engram guarda el porqué; 51 ADR fijan las decisiones. Cada sesión empieza de cero y no se nota.</p></div>
+    <div class="card"><h3>Continuidad</h3><p><code>HANDOFF.md</code> versionado manda sobre cualquier memoria; Engram guarda el porqué; 57 ADR fijan las decisiones. Cada sesión empieza de cero y no se nota.</p></div>
   </div>
   <p class="muted">Mi papel: product owner, arquitecto y revisor final. Decidir las reglas, responder cuando un agente para a preguntar, leer cada veredicto y juzgar lo que las herramientas no miden.</p>
 </div></section>
 
 <section class="slide"><div class="inner">
   <div class="eyebrow">12 · Resultados</div>
-  <h2>Dos meses, cinco versiones, una instalación real</h2>
+  <h2>Dos meses, seis versiones, una instalación real</h2>
   <div class="figures">
-    <div class="figure"><b>796</b><span>commits, del 11‑08 al 08‑10‑2026</span></div>
-    <div class="figure"><b>126</b><span>pull requests, cada una con revisión y CI completa</span></div>
-    <div class="figure"><b>51</b><span>decisiones de arquitectura registradas</span></div>
-    <div class="figure"><b>5</b><span>versiones publicadas; la 2.1.0 desplegada</span></div>
+    <div class="figure"><b>841</b><span>commits, del 11‑08 al 09‑10‑2026</span></div>
+    <div class="figure"><b>111</b><span>pull requests integradas, de 131 abiertas</span></div>
+    <div class="figure"><b>57</b><span>decisiones de arquitectura registradas</span></div>
+    <div class="figure"><b>2.2.0</b><span>versión entregada, publicada el 09‑10‑2026</span></div>
     <div class="figure"><b>2</b><span>idiomas en producto y documentación de cliente</span></div>
   </div>
-  <p><strong>Verificación pre‑release de la 2.1.0</strong>, con los agentes en modo solo lectura: todo lo que miden las herramientas en verde y, aun así, <span class="warn">7 hallazgos bloqueantes</span>, 91 altos y 181 medios en lo que ninguna herramienta mide. Veredicto: no entregar a un cliente tal como estaba. De ahí salió el plan de correcciones de la 2.2.0, que se está integrando por bloques.</p>
-  <p class="muted">Lo considero el resultado más valioso del proyecto, precisamente porque fue negativo.</p>
+  <div class="flow">
+    <div class="step"><div class="n">2.1.0</div><strong>Verificación: NO‑GO</strong><p>Herramientas en verde y, aun así, <span class="warn">7 bloqueantes</span>, 91 altos y 181 medios en lo que ninguna mide.</p></div>
+    <div class="step"><div class="n">Plan</div><strong>25 bloques</strong><p>Cada uno con su rama, sus revisiones de solo lectura y su CI completa.</p></div>
+    <div class="step"><div class="n">Re‑verificación</div><strong>284 de 286 eran reales</strong><p>Y aparecieron otros: ocho bloques más.</p></div>
+    <div class="step"><div class="n">Final</div><strong>0 críticos, 0 altos de seguridad</strong><p>0 bloqueantes del revisor. Nada produce datos legales incorrectos.</p></div>
+    <div class="step"><div class="n">2.2.0</div><strong>Publicada</strong><p>La primera versión para clientes. Pendiente: tablet real, validación jurídica y revisión externa.</p></div>
+  </div>
+  <p class="muted">La verificación negativa de la 2.1.0 es, para mí, el resultado más valioso del proyecto; la 2.2.0, la prueba de que un veredicto negativo se convierte en un plan y se cierra.</p>
 </div></section>
 
 <section class="slide"><div class="inner">
   <div class="eyebrow">13 · Lo aprendido</div>
   <h2>La IA acelera lo mecánico; el criterio sigue siendo humano</h2>
   <ul>
-    <li><strong>Las herramientas en verde no significan producto entregable.</strong> Cobertura del 95 % convivía con un fichaje por PIN que fallaba en producción por una cabecera CSP que ninguna prueba ejercitaba.</li>
+    <li><strong>Las herramientas en verde no significan producto entregable.</strong> En la 2.1.0, una cobertura del 95 % convivía con un fichaje por PIN que fallaba en producción por una cabecera CSP que ninguna prueba ejercitaba.</li>
+    <li><strong>Verificar una vez no basta.</strong> Cada repaso desde cero encontró algo que el anterior no vio, también en lo que habían traído las propias correcciones.</li>
     <li><strong>La documentación de cliente es una promesa.</strong> La seguridad se revisa contra la promesa, no contra el código: el registro era alterable con la credencial del runtime y los textos decían que no.</li>
     <li><strong>Lo que no está escrito se pierde.</strong> Reglas permanentes, ADR y <code>HANDOFF.md</code> no fueron sobrecarga: fueron lo que permitió dos meses sin degradar la arquitectura.</li>
     <li><strong>Los agentes de solo lectura valen más que los que escriben.</strong> Separar quien implementa de quien revisa, y obligar a escribir el hallazgo, fue lo que más calidad aportó por hora.</li>
@@ -344,7 +351,7 @@ pre { margin: 0; font-family: var(--mono); font-size: 0.78em; line-height: 1.35;
   <p class="lead">Un registro horario que aguanta una inspección, instalable por el IT de un hotel, construido con IA bajo reglas verificables.</p>
   <div class="grid">
     <div class="card"><h3>Repositorio</h3><p><a href="https://github.com/BorjaPeonSaiz/KronoQR">github.com/BorjaPeonSaiz/KronoQR</a></p></div>
-    <div class="card"><h3>Demostración</h3><p><a href="https://kronoqr.kodigolab.es/admin/">kronoqr.kodigolab.es</a> · credenciales en el README</p></div>
+    <div class="card"><h3>Demostración</h3><p><a href="https://kronoqr.kodigolab.es/admin/">kronoqr.kodigolab.es</a> · usuario en el README; contraseña en el formulario de entrega</p></div>
     <div class="card"><h3>Memoria y entrega</h3><p><a href="https://github.com/BorjaPeonSaiz/KronoQR/tree/main/doc_master">doc_master/</a> en el repositorio</p></div>
   </div>
   <p class="brand">Borja Peón Saiz · borja.peon.saiz@gmail.com</p>

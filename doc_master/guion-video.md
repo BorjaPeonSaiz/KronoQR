@@ -16,12 +16,13 @@ Duración objetivo: 10–12 minutos. Captura de pantalla obligatoria; cámara op
 | 7:45 | Panel · Incidencias · Cumplimiento · Informes | La incidencia del fichaje por PIN. La vista de cumplimiento con los umbrales del perfil. Exportación sellada y exportación para la Inspección. |
 | 8:45 | Portal | La persona consulta y descarga su propio registro con código y PIN. |
 | 9:15 | Repositorio · `backend/app/Modules` · `docs/adr` · `.claude/agents` | Arquitectura hexagonal modular, 57 ADR, y cómo se construyó con Claude Code: `CLAUDE.md`, 11 agentes, 7 skills, plan por tareas, `HANDOFF.md`. |
-| 10:15 | GitHub Actions · una ejecución de `ci.yml` | Las ocho etapas: calidad, arquitectura, mutación, trazabilidad requisito → prueba, seguridad, E2E con cámara simulada e instalación limpia desde el paquete. |
-| 11:00 | Slide de cierre | Qué aprendí: la IA acelera lo mecánico; el criterio sobre el negocio, la ley y la seguridad sigue siendo humano. La verificación pre-release encontró lo que las herramientas no miden. |
+| 10:15 | GitHub Actions · la ejecución de `ci.yml` de la etiqueta `v2.2.0` · `docs/verificacion/` | Las ocho etapas: calidad, arquitectura, mutación, trazabilidad requisito → prueba, seguridad, E2E con cámara simulada e instalación limpia y actualización desde el paquete. Después, el ciclo de la versión: verificación de la 2.1.0 en NO-GO → plan de correcciones en 25 bloques → re-verificación → verificación final con 0 críticos y 0 altos de seguridad → 2.2.0 publicada el 9 de octubre. |
+| 11:00 | Slides 12–13 (resultados y lo aprendido) · slide de cierre | Qué aprendí: la IA acelera lo mecánico; el criterio sobre el negocio, la ley y la seguridad sigue siendo humano. La verificación encontró lo que las herramientas no miden. Lo que queda, dicho claro: tablet real, validación jurídica y revisión externa. |
 
 ## Preparación antes de grabar
 
 - Tener abiertas tres pestañas: panel (ya autenticado), quiosco (ya emparejado o con el código listo) y portal.
 - Tener a mano el PDF de una tarjeta ya emitida, y el código y el PIN de esa persona.
+- Comprobar en `/api/v1/health` qué versión está en marcha. Si la demostración ya está en la 2.2.0, añadir al minuto 7:45 la sección *Cuentas* y, al 8:45, la descarga del portal en PDF sellado; si sigue en la 2.1.0, no enseñarlas.
 - Datos ficticios en pantalla; ningún nombre real.
 - Cerrar notificaciones del sistema y poner el navegador a pantalla completa.
