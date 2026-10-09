@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. Describe lo que el código hace desde la Fase 1; no cambia nada. **Revisión de `seguridad-cumplimiento` pendiente** |
+| **Estado** | Aceptada. Describe lo que el código hace desde la Fase 1; no cambia nada. Revisión de `seguridad-cumplimiento` hecha en el bloque 14 (nota del 09-10-2026) |
 | **Fecha** | 8 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo A6-1 de la [tanda 6 de la 2.1.0](../verificacion/2.1.0-tanda-6.md), abierto en la [re-verificación](../verificacion/2.2.0-reverificacion-tandas-5-6-7.md)) |
 | **Afecta a** | Recoge decisiones repartidas en [ADR-015](ADR-015-portal-con-codigo-y-pin.md), [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md), [ADR-039](ADR-039-que-hechos-de-autenticacion-dejan-asiento.md), [ADR-041](ADR-041-descarga-de-ficheros-diferidos-con-enlace-de-un-solo-uso.md), [ADR-044](ADR-044-el-token-del-quiosco-rota-en-el-latido-con-solape.md), [ADR-050](ADR-050-portal-accesible-desde-internet.md) y [ADR-051](ADR-051-cuentas-de-gestion-desde-el-panel-con-contrasenas-temporales.md) · `backend/config/sanctum.php`, `backend/config/cors.php`, `backend/config/identity.php` · `backend/app/Modules/Identity/IdentityServiceProvider.php` · `infra/docker/nginx/snippets/security-headers.conf` · `frontend-admin/src/features/auth/session.store.ts`, `frontend-portal/src/features/login/session.store.ts`, `frontend-kiosk/src/shared/telemetry/deviceIdentity.ts` · doc 02 §7.2 y §7.3 |
@@ -78,3 +78,12 @@ Con este modelo, **un script ajeno que llegue a ejecutarse en una SPA lee el tok
 - Integración y feature de cada titular: una cuenta dada de baja, un quiosco desvinculado, un empleado que deja de cumplir RN-14 y una concesión de soporte revocada reciben `401` en la petición siguiente.
 - Unitarias de las SPA: `frontend-admin/tests/unit/session.store.spec.ts` y `frontend-portal/tests/unit/session.store.spec.ts` comprueban que la sesión va a `sessionStorage`.
 - ESLint: `vue/no-v-html` en las tres SPA y en `packages/web-kit`.
+
+## Nota 09-10-2026 (2.2.0 publicada): estado
+
+**Aceptada, con la revisión de `seguridad-cumplimiento` hecha.** La decisión no cambia.
+
+- **Revisión:** se hizo en el bloque 14 de la 2.2.0, sobre el ADR y el código que describe. Encontró que la sesión restringida `2fa:pending` llegaba a `POST /client-errors`; se corrigió en el mismo bloque y quedó escrito en §2 («Las dos sesiones restringidas…») con el commit `docs(seguridad): doc 07 revisado en el bloque 14, … sesiones restringidas en ADR-052…` (08-10-2026). La misma revisión añadió en Consecuencias que la CSP es común a las tres SPA.
+- **Verificación final:** la de seguridad lo comprueba en `main` ([2.2.0-verificacion-final-tanda-4.md](../verificacion/2.2.0-verificacion-final-tanda-4.md), «Suplantación: ADR-052, Bearer sin cookies»: `config/sanctum.php` sin `stateful` ni `guard`, y ninguna `Set-Cookie` en `/api/v1/health` ni en `/auth/login`). La de arquitectura da A6-1 por corregido con este ADR ([2.2.0-verificacion-final-tanda-3.md](../verificacion/2.2.0-verificacion-final-tanda-3.md)).
+- **Siguen pendientes para la 2.2.1**, y no son de la revisión: la regla de ESLint contra `localStorage` en el panel y el portal (Consecuencias) y la CSP por ubicación ([`2.2.1-lista-cambios.md`](../verificacion/2.2.1-lista-cambios.md) §3).
+- La cabecera se actualiza por esta nota.

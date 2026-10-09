@@ -88,3 +88,11 @@ Una regla nueva en `Shared/Domain` exige una enmienda de este ADR que la añada 
 
 - Unitarias: `AnomalyDetectionPolicyTest` y `ComplianceEvaluationTest`, cada una sobre su evaluador, con los bordes de los límites abiertos.
 - Pendiente: la prueba de escenarios comunes y la prueba de arquitectura de la lista, descritas en Consecuencias.
+
+## Nota 09-10-2026 (2.2.0 publicada): estado
+
+**Sin cambios: la decisión está aceptada y la corrección de N5 sigue pendiente, ahora para la 2.2.1.** La 2.2.0 se publicó sin ella.
+
+- **Por qué no entró:** la primera consecuencia exige que el doc 01 §4 recoja antes la definición de RN-10 del punto 2 (jornada anulada entera y tramo anterior abierto), y RN-10 sigue diciendo solo «entre el fin de un turno y el inicio del siguiente». La verificación final lo registra como conocido y diferido ([2.2.0-verificacion-final-tanda-3.md](../verificacion/2.2.0-verificacion-final-tanda-3.md), fila N5). Ni `DatabaseComplianceFactsReader` ni `EloquentWorkDayLedger` han cambiado desde el 17-09-2026.
+- **Siguen pendientes**, también para la 2.2.1: las dos guardas de `qa-testing` (escenarios comunes a los dos evaluadores y la prueba de arquitectura de la lista del punto 3).
+- **Dónde consta:** [`2.2.1-lista-cambios.md`](../verificacion/2.2.1-lista-cambios.md) §3, «N5 de ADR-055, que necesita RN-10 en el doc 01».

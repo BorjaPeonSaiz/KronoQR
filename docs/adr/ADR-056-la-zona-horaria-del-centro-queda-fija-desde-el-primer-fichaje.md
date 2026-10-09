@@ -60,3 +60,10 @@ Quitar un campo de una respuesta de `v1` es un cambio incompatible (ADR-012), y 
 - *Feature*: `PATCH /site` con otra zona tras el primer tramo devuelve `409` sin asiento; sin tramos devuelve `200` con `site.updated`. Autorización negativa por cada rol que no sea `admin` ni `rrhh`, que son los dos que hoy admite `PATCH /site`.
 - Integración: un primer fichaje concurrente con el cambio de zona no deja la zona cambiada con tramos atribuidos a la anterior.
 - Consola: el comando exige motivo, deja `site.updated` con el motivo y el recuento, y no modifica ninguna fila de `shift_entries`.
+
+## Nota 09-10-2026 (2.2.0 publicada): estado
+
+**Sin cambios: aceptada para la 2.2.x y sin implementar, ahora para la 2.2.1.** La implementación sigue bloqueada hasta que el doc 01 §4 recoja la regla, y hoy no la recoge.
+
+- **En el código de la 2.2.0**, `PATCH /api/v1/site` sigue cambiando la zona con fichajes hechos: `UpdateSiteHandler` no comprueba si hay tramos. La verificación final lo registra como riesgo conocido y diferido, 🟡 MEDIO ([2.2.0-verificacion-final-tanda-3.md](../verificacion/2.2.0-verificacion-final-tanda-3.md) y [2.2.0-verificacion-final-tanda-4.md](../verificacion/2.2.0-verificacion-final-tanda-4.md)). Lo atenúa que el cambio se audita y que la exportación para la Inspección lleva también la hora UTC. Mientras tanto, la guía del cliente avisa de no cambiar la zona con fichajes hechos (`docs/cliente/configuracion.md`).
+- **Dónde consta:** [`2.2.1-lista-cambios.md`](../verificacion/2.2.1-lista-cambios.md) §3, «ADR-056: zona horaria fija desde el primer fichaje».

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. Revisión de `seguridad-cumplimiento` del diseño: aprobada con condiciones C1–C20, incorporadas; implementación pendiente de revisión |
+| **Estado** | Aceptada. Revisión de `seguridad-cumplimiento` del diseño: aprobada con condiciones C1–C20, incorporadas; implementación revisada en el cierre del bloque 20 (nota del 09-10-2026) |
 | **Fecha** | 3 de octubre de 2026 |
 | **Decide** | `devops-observabilidad` (Bloque 20 de la 2.2.0, hallazgos R5-DV-02, R5-DV-04, R5-DV-01) · `seguridad-cumplimiento` (revisión y condiciones) |
 | **Afecta a** | `infra/scripts/lib/kqe.sh` (nuevo), `backup-common.sh`, `backup.sh`, `restore.sh`, `restore-drill.sh`, `update.sh`, `install.sh`, `doctor.sh`, `wal-metrics.sh` (nuevo) · `infra/docker/postgres/` (`archive-wal.sh`, `kronoqr-restore-wal`, `kronoqr-wal-migrate`) · `infra/compose.prod.yaml` y `compose.dev.yaml` · `infra/observability/prometheus/rules/backup.yml` · `docs/runbooks/restaurar-backup.md`, `rotacion-secretos.md` · `docs/cliente/{instalacion,operacion,obligaciones-legales}.md` (+EN) |
@@ -206,3 +206,13 @@ curso), no la edad del último archivado, que crece legítimamente de madrugada.
   nunca llega a `f`) y recuperación completa con `.gz.enc` y un `.gz` heredado.
 - Etapas ⑧ y ⑧b: matriz de montajes, ningún `.gz` en claro tras actualizar (≤ 120 s), vuelta atrás con la copia 2.1.0,
   `BACKUP_WAL_KEY` ausente de la salida de los instaladores y de los logs.
+
+## Nota 09-10-2026 (2.2.0 publicada): estado
+
+**Aceptada, implementada en la 2.2.0 y con la implementación revisada.** La decisión no cambia; la cabecera decía «implementación pendiente de revisión» porque se escribió antes del cierre del bloque 20.
+
+- **Implementación:** bloque 20 de la 2.2.0, PR #112, integrada en `main` el 06-10-2026 (`security(copias): formato autenticado KQE1…`, 03-10-2026, y sus correcciones hasta el 06-10-2026). Entrada del `CHANGELOG.md` de la 2.2.0: «formato autenticado KQE1 para volcados, copias físicas y WAL, subclave del WAL, RPO continuo y BACKUP_PATH en solo lectura para el runtime».
+- **Revisión de la implementación:** el bloque 20 cerró con las dos revisiones del plan, `revisor-codigo` y `seguridad-cumplimiento`, y sus hallazgos se corrigieron en la misma rama antes de integrarla (la pasada de seguridad terminó sin ningún crítico ni alto abierto). Lo que la revisión de seguridad dejó como residuo está en el [doc 07](../07-seguridad-madurez-y-amenazas.md) §6, fila «Residuos de ADR-049», y aquí en «Residuos que se aceptan».
+- **Verificación final:** la de seguridad da R5-DV-02 por corregido (KQE1 en `archive-wal.sh`) y la integridad autenticada como parte del cierre de AUD-1 ([2.2.0-verificacion-final-tanda-4.md](../verificacion/2.2.0-verificacion-final-tanda-4.md)); la funcional comprueba que `restore.sh` rechaza con salida `6` una copia con un byte cambiado, también recalculando el `.sha256` ([2.2.0-verificacion-final-tanda-3.md](../verificacion/2.2.0-verificacion-final-tanda-3.md)).
+- **V3-PL-04** (la orden impresa para reparar la clave del WAL no funcionaba), hallado en la verificación final, quedó corregido antes de publicar la 2.2.0 (PR #130): `doctor.sh` y `update.sh` imprimen `sudo bash ./backup.sh derive-wal-key --write-env .env` desde el directorio vigente.
+- La cabecera se actualiza por esta nota.
