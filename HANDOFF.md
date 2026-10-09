@@ -58,10 +58,10 @@ con recorrido guiado, guion del vídeo y `presentacion.html` (el HTML del reposi
 entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador `[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en
 `kronoqr.kodigolab.es` (hoy 2.1.0), actualizar README §3.1/§6 y `doc_master/despliegue.md`.
 
-**Siguiente acción: el fichaje por PIN no funciona en la demo, ya en la 2.2.0** (pantalla genérica «Código no válido», visto por
-el propietario el 09-10-2026; instalación en la raíz del servidor, `/kronoqr-2.2.0`). Diagnosticarlo es lo primero de la 2.2.1. Todo
-lo candidato a la 2.2.1 está en **[`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md)**; el
-propietario elige qué entra. Pendiente también: README §3.1/§6 y `doc_master/despliegue.md` con la demo en la 2.2.0. **Nunca empujar etiquetas antiguas
+**Siguiente acción: la 2.2.1**, con lo que está en **[`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md)**
+(decisiones del propietario del 09-10-2026 en su §5). Lo primero es su §0: que una tablet no se quede en la versión anterior
+tras actualizar. En la demo (`/kronoqr-2.2.0`, en la raíz del servidor) el PIN falló por la PWA 2.1.0 en caché y un PIN mal guardado;
+ya está resuelto. **Nunca empujar etiquetas antiguas
 con `release.yml` activo**: el push ejecuta el `release.yml` del commit etiquetado, sin la guarda de ADR-053. Para la 2.2.1, las
 dos cosas que dejó la conciliación, decididas por el propietario el 08-10-2026: un «revisado» para la alerta
 `purge_out_of_bounds` (un asiento de purga no admisible queda para siempre en `audit_log` y cada pasada lo vuelve a contar) y el
