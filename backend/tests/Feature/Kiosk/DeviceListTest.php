@@ -44,6 +44,9 @@ uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
     Spectator::using('openapi.yaml');
+    // La version del servidor, fijada a la que declaran los quioscos del
+    // fichero: el aviso de aplicacion desfasada (2.2.1) se prueba aparte.
+    config()->set('app.version', '2.2.0');
 });
 
 /** El token de la unica cuenta que puede ver la flota: `admin` con `settings:*` (§7.3 nota 5). */
@@ -253,3 +256,30 @@ it('devuelve el quiosco ya revocado, con su veredicto, al desvincularlo', functi
         ->assertJsonPath('health.verdict', 'revoked')
         ->assertJsonPath('health.reason', 'revoked');
 })->group('RF-PA-07', 'RF-PD-06');
+
+// --- La aplicacion desfasada (2.2.1, bloque 1) -------------------------------
+
+it('avisa del quiosco cuya aplicacion es anterior a la del servidor, y no con un servidor de desarrollo', function (
+    string $deployed,
+    string $verdict,
+    string $reason,
+): void {
+    // El quiosco declara 2.2.0 (`quioscoEnEstado`). La version del servidor la
+    // entrega `DeployedVersionProvider`, que lee `config('app.version')`.
+    config()->set('app.version', $deployed);
+    FrozenTime::at('2026-09-16 12:00:00');
+
+    quioscoEnEstado('Recepcion', ['last_seen_at' => '2026-09-16 11:59:30+00', 'pending_queue_size' => 0]);
+
+    Api::as(tokenDeFlota())->get('/api/v1/devices')
+        ->assertOk()
+        ->assertValidResponse()
+        ->assertJsonPath('devices.0.app_version', '2.2.0')
+        ->assertJsonPath('devices.0.health.verdict', $verdict)
+        ->assertJsonPath('devices.0.health.reason', $reason);
+})->with([
+    'servidor publicado posterior' => ['2.2.1', 'warning', 'app_version_behind'],
+    'servidor de la CI posterior' => ['2.2.2-ci', 'warning', 'app_version_behind'],
+    'servidor de desarrollo' => ['2.2.1-dev', 'ok', 'beating'],
+    'servidor sin version' => ['0.0.0', 'ok', 'beating'],
+])->group('RF-PA-07', 'RF-KI-07');

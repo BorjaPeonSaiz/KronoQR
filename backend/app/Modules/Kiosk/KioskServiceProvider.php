@@ -34,6 +34,7 @@ use App\Modules\Kiosk\Infrastructure\Persistence\DbDeviceFleet;
 use App\Modules\Kiosk\Infrastructure\Persistence\DbDeviceRegistry;
 use App\Modules\Kiosk\Infrastructure\Persistence\DbPairingRequests;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -179,6 +180,7 @@ final class KioskServiceProvider extends ServiceProvider
             $app->make(DeviceRegistry::class),
             $app->make(Clock::class),
             self::healthThresholds(),
+            $app->make(DeployedVersionProvider::class),
         ));
 
         /*
@@ -193,6 +195,7 @@ final class KioskServiceProvider extends ServiceProvider
             $app->make(Clock::class),
             self::healthThresholds(),
             $app->make(InstallationSiteProvider::class),
+            $app->make(DeployedVersionProvider::class),
         ));
 
         // `unpair` devuelve el quiosco YA REVOCADO con su veredicto, para que el
@@ -203,6 +206,7 @@ final class KioskServiceProvider extends ServiceProvider
             $app->make(RevokeDeviceToken::class),
             $app->make(Clock::class),
             self::healthThresholds(),
+            $app->make(DeployedVersionProvider::class),
         ));
     }
 

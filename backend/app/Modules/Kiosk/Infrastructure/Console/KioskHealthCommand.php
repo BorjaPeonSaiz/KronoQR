@@ -224,6 +224,7 @@ final class KioskHealthCommand extends Command
                 'queue' => $row->pendingQueueSize ?? '?',
                 'discards' => $row->unreportedDiscards,
                 'level' => $row->batteryLevel ?? 0,
+                'version' => $row->appVersion ?? '?',
             ]));
         }
     }

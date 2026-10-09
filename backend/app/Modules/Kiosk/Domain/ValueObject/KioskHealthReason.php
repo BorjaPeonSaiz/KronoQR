@@ -83,4 +83,16 @@ enum KioskHealthReason: string
      * ADR-047): nadie los revisara hasta que el aviso salga.
      */
     case DiscardsUnreported = 'discards_unreported';
+
+    /**
+     * Late al dia, pero su aplicacion es anterior a la del servidor o no dice
+     * una version legible (`AppVersionPolicy`, RF-KI-07; 2.2.1, bloque 1).
+     *
+     * **Aviso, y el ultimo de los avisos**: la tablet sigue fichando con el
+     * build viejo, y se pone al dia sola en cuanto su cola esta vacia y nadie
+     * ficha. Por eso va detras de la cola pendiente: lo que hay que mirar
+     * antes es lo que impide que se actualice. Con un servidor sin version
+     * comparable (`0.0.0`, `-dev`) no aparece nunca.
+     */
+    case AppVersionBehind = 'app_version_behind';
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Kiosk\Domain\ValueObject;
 
+use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
 use DateTimeImmutable;
 use DateTimeZone;
 
@@ -16,7 +17,7 @@ use DateTimeZone;
  * | Codigo | Significado |
  * |---|---|
  * | `0` | Todos los quioscos activos al dia y sin nada encolado. |
- * | `1` | **Avisos.** Algo que mirar: un latido atrasado, una cola sin drenar, o ningun quiosco activo. |
+ * | `1` | **Avisos.** Algo que mirar: un latido atrasado, una cola sin drenar, una aplicacion desfasada, o ningun quiosco activo. |
  * | `2` | **Fallos.** Al menos un quiosco activo lleva mas del plazo de silencio sin aparecer. |
  *
  * Un unico convenio para los dos comandos de consola del producto: quien
@@ -56,10 +57,14 @@ final readonly class KioskHealthReport
     /**
      * @param  list<DeviceSummary>  $devices  La MISMA lista que sirve `GET /api/v1/devices`.
      */
-    public static function of(array $devices, DateTimeImmutable $now, KioskHealthThresholds $thresholds): self
-    {
+    public static function of(
+        array $devices,
+        DateTimeImmutable $now,
+        KioskHealthThresholds $thresholds,
+        AppVersionPolicy $appVersions,
+    ): self {
         $rows = array_map(
-            static fn (DeviceSummary $device): KioskHealthRow => KioskHealthRow::of($device, $now, $thresholds),
+            static fn (DeviceSummary $device): KioskHealthRow => KioskHealthRow::of($device, $now, $thresholds, $appVersions),
             $devices,
         );
 

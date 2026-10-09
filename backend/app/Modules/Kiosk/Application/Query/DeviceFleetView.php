@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Kiosk\Application\Query;
 
+use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
 use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthReport;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
@@ -57,8 +58,9 @@ final readonly class DeviceFleetView
         DateTimeImmutable $now,
         KioskHealthThresholds $thresholds,
         string $timezone,
+        AppVersionPolicy $appVersions,
     ): self {
-        $report = KioskHealthReport::of($devices, $now, $thresholds);
+        $report = KioskHealthReport::of($devices, $now, $thresholds, $appVersions);
 
         $views = [];
 
