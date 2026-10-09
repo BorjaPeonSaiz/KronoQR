@@ -5,20 +5,20 @@
 | | |
 | --- | --- |
 | Dirección | <https://kronoqr.kodigolab.es> |
-| Estado y versión | <https://kronoqr.kodigolab.es/api/v1/health> (responde `{"status":"ok","version":"2.1.0",…}`) |
+| Estado y versión | <https://kronoqr.kodigolab.es/api/v1/health> (responde `{"status":"ok","version":"2.2.0",…}`) |
 | Panel de gestión | <https://kronoqr.kodigolab.es/admin/> |
 | Quiosco de fichaje | <https://kronoqr.kodigolab.es/kiosk/> |
 | Portal del empleado | <https://kronoqr.kodigolab.es/portal/> |
 
 Es una instalación de demostración con datos ficticios. No contiene datos de ningún empleado real.
 
-> **Versión entregada y versión desplegada.** La versión que se entrega es la **2.2.0**, publicada el 9 de octubre de 2026 ([release](https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.2.0)). La demostración **sigue en la 2.1.0** hasta que se actualice con el procedimiento del §5; `/api/v1/health` dice siempre cuál está en marcha. El recorrido del §4 funciona igual en las dos, y donde la 2.2.0 cambia algo visible se indica.
+> **Versión entregada y versión desplegada.** La versión que se entrega es la **2.2.0**, publicada el 9 de octubre de 2026 ([release](https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.2.0)). La demostración **está en la 2.2.0**: se instaló con la 2.1.0 y se actualizó el 9 de octubre de 2026 con el procedimiento del §5. `/api/v1/health` dice siempre cuál está en marcha.
 
 ## 2. Cómo está desplegado
 
-No hay un «entorno de producción» distinto del que recibe un cliente: el despliegue se hizo **con el mismo paquete `kronoqr-2.1.0.tar.gz` y el mismo `install.sh`** que se entrega a un hotel, en un servidor Linux con Docker y Docker Compose v2.
+No hay un «entorno de producción» distinto del que recibe un cliente: el despliegue se hizo **con el mismo paquete `kronoqr-2.1.0.tar.gz` y el mismo `install.sh`** que se entrega a un hotel, en un servidor Linux con Docker y Docker Compose v2, y se actualizó a la 2.2.0 con `kronoqr-2.2.0.tar.gz` y `update.sh`.
 
-- **Imágenes**: las publicadas por `release.yml` en GHCR al etiquetar `v2.1.0` (`php`, `nginx`, `postgres`), más `redis:7-alpine`.
+- **Imágenes**: las publicadas por `release.yml` en GHCR al etiquetar `v2.2.0`, fijadas por digest (`php`, `nginx`, `postgres`), más `redis:7-alpine`.
 - **Servicios**: `nginx` (TLS, estáticos y rate limiting), `app` (PHP‑FPM), `horizon` (colas), `scheduler` (tareas programadas), `reverb` (WebSocket), `postgres` y `redis`. Es la pila de [`infra/compose.prod.yaml`](../infra/compose.prod.yaml).
 - **Secretos**: los generó el instalador en el propio servidor (`APP_KEY`, claves de firma del QR, clave de cifrado de copias, contraseñas de los tres roles de base de datos). Ninguno está en el repositorio.
 - **Puesta en marcha**: el primer acceso al panel abrió el asistente, que creó la organización, el centro con su zona horaria, los departamentos, el perfil de cumplimiento (español, 4 años de retención) y el primer administrador.
@@ -31,7 +31,7 @@ Por defecto el producto restringe el portal del empleado a la red interna del ho
 
 Consecuencia práctica: el quiosco abierto en un navegador desde fuera de la VLAN cae al límite de tasa «por origen» (30 peticiones por minuto). Para una demostración es más que suficiente.
 
-La 2.2.0 añade las defensas que ADR‑050 exige a un portal expuesto, y que la demostración tendrá al actualizarse: bloqueo por origen (20 accesos fallidos en 15 minutos bloquean esa conexión durante una hora), PIN configurable de 8 cifras y la variable `ADMIN_INTERNAL_CIDR` para cerrar el panel a una red. `product:doctor` avisa de un portal expuesto con PIN corto.
+La 2.2.0 añade las defensas que ADR‑050 exige a un portal expuesto, y que la demostración ya tiene: bloqueo por origen (20 accesos fallidos en 15 minutos bloquean esa conexión durante una hora), PIN configurable de 8 cifras y la variable `ADMIN_INTERNAL_CIDR` para cerrar el panel a una red. `product:doctor` avisa de un portal expuesto con PIN corto.
 
 ## 3. Credenciales de prueba
 
@@ -84,7 +84,7 @@ Repite el fichaje para cerrar el turno: la confirmación muestra el total del d�
 - *Plantilla → ficha de la persona → jornadas*: la jornada con sus tramos y totales. Desde ahí se puede **corregir** una hora: motivo obligatorio del catálogo, y el tramo original se conserva como versión anterior.
 - *Incidencias*: el fichaje por PIN ha dejado una incidencia para revisión.
 - *Informes*: horas por persona y por departamento, exportación CSV/XLSX/PDF sellado y la exportación para la Inspección.
-- *Cuentas* (solo en la 2.2.0, con la cuenta de administración): las cuentas del panel, con alta por contraseña temporal y asignación del responsable de cada departamento.
+- *Cuentas* (con la cuenta de administración): las cuentas del panel, con alta por contraseña temporal y asignación del responsable de cada departamento.
 
 ### Paso 7 · El portal del empleado
 
@@ -100,7 +100,7 @@ La entrega es el paquete `kronoqr-2.2.0.tar.gz` de la [release](https://github.c
 
 **Instalación limpia**, en cualquier Linux con Docker 24+ y Compose v2: los pasos del [README §3.3](../README.md#33-instalación-en-el-servidor-del-cliente) y, con detalle, la [guía de instalación](../docs/cliente/instalacion.md).
 
-**Actualización desde la 2.1.0**, que es la que se aplicará a esta demostración. Se hace **al lado, no encima**: el paquete nuevo en su propio directorio.
+**Actualización desde la 2.1.0**, que es la que se aplicó a esta demostración. Se hace **al lado, no encima**: el paquete nuevo en su propio directorio.
 
 ```bash
 command -v setpriv                        # hace falta (paquete util-linux)

@@ -23,6 +23,6 @@ Duración objetivo: 10–12 minutos. Captura de pantalla obligatoria; cámara op
 
 - Tener abiertas tres pestañas: panel (ya autenticado), quiosco (ya emparejado o con el código listo) y portal.
 - Tener a mano el PDF de una tarjeta ya emitida, y el código y el PIN de esa persona.
-- Comprobar en `/api/v1/health` qué versión está en marcha. Si la demostración ya está en la 2.2.0, añadir al minuto 7:45 la sección *Cuentas* y, al 8:45, la descarga del portal en PDF sellado; si sigue en la 2.1.0, no enseñarlas.
+- Comprobar en `/api/v1/health` que está en marcha la 2.2.0, y enseñar al minuto 7:45 la sección *Cuentas* y, al 8:45, la descarga del portal en PDF sellado.
 - Datos ficticios en pantalla; ningún nombre real.
 - Cerrar notificaciones del sistema y poner el navegador a pantalla completa.

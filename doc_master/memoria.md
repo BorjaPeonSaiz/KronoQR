@@ -7,7 +7,7 @@
 | **Alumno** | Borja Peón Saiz · <borja.peon.saiz@gmail.com> |
 | **Máster** | Máster de Desarrollo con IA · BIG School · Módulo 12, Proyecto Final |
 | **Repositorio** | <https://github.com/BorjaPeonSaiz/KronoQR> |
-| **Despliegue** | <https://kronoqr.kodigolab.es> (hoy con la 2.1.0; ver [`despliegue.md`](despliegue.md)) |
+| **Despliegue** | <https://kronoqr.kodigolab.es> (en la 2.2.0; ver [`despliegue.md`](despliegue.md)) |
 | **Periodo** | Del 11 de agosto al 9 de octubre de 2026 |
 | **Versión entregada** | 2.2.0, publicada el 9 de octubre de 2026 ([release](https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.2.0)) |
 
@@ -251,7 +251,7 @@ Lo que separa «un sistema» de «un producto» es la Fase 5 del plan, y es dond
 - **Documentación de cliente** en español e inglés: instalación, configuración, operación, endurecimiento, guía de RRHH, guía del portal, obligaciones legales, preguntas para la asesoría y hoja para el empleado, más 33 runbooks de operación. Una prueba de arquitectura comprueba que los comandos y ficheros que cita existen.
 - **Versiones inmutables**: una versión publicada no se reescribe y el paquete fija sus imágenes por digest (ADR‑053).
 
-El despliegue de <https://kronoqr.kodigolab.es> se hizo con ese mismo paquete y ese mismo instalador, con la 2.1.0; la actualización a la 2.2.0 sigue el procedimiento lado a lado que se describe en [`despliegue.md`](despliegue.md).
+El despliegue de <https://kronoqr.kodigolab.es> se hizo con ese mismo paquete y ese mismo instalador, con la 2.1.0, y se actualizó a la 2.2.0 con el procedimiento lado a lado que se describe en [`despliegue.md`](despliegue.md).
 
 ## 10. Resultados
 

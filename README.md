@@ -197,7 +197,7 @@ Hay tres escenarios: el **entorno de desarrollo** (este repositorio), la **insta
 | | |
 | --- | --- |
 | Dirección | <https://kronoqr.kodigolab.es> |
-| Versión desplegada | 2.1.0 (ver [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health)). La versión entregada es la **2.2.0**; la demostración se actualizará a ella con `update.sh` (ver [`doc_master/despliegue.md`](doc_master/despliegue.md) §5) |
+| Versión desplegada | **2.2.0**, la entregada (ver [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health)). Se instaló con la 2.1.0 y se actualizó con `update.sh` lado a lado ([`doc_master/despliegue.md`](doc_master/despliegue.md) §5) |
 | Panel de gestión | <https://kronoqr.kodigolab.es/admin/> |
 | Quiosco de fichaje | <https://kronoqr.kodigolab.es/kiosk/> (necesita emparejarse desde el panel; ver [`doc_master/despliegue.md`](doc_master/despliegue.md)) |
 | Portal del empleado | <https://kronoqr.kodigolab.es/portal/> |
