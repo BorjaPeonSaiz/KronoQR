@@ -57,20 +57,31 @@ la misma regla: sin datos personales en el mensaje.
 
 ## Versiones que reciben parches
 
-La matriz de versiones soportadas es la de
-[`infra/versions.txt`](infra/versions.txt): reciben correcciones de seguridad la
-**versión menor vigente y las dos anteriores de la misma versión mayor**
-(con la 2.4.0 publicada: 2.4.x, 2.3.x y 2.2.x). **Hoy, con la 2.2.0 como
-versión vigente, son la 2.2.x, la 2.1.x y la 2.0.x**, y la recomendación es
-estar en la 2.2.x: es la que trae el segundo factor obligatorio para los
-responsables, el bloqueo por origen del portal y las copias autenticadas. Una
-instalación fuera de esa matriz tiene que actualizar primero con `update.sh`;
-el script le indica la versión intermedia.
+**Hoy reciben correcciones de seguridad solo las versiones 2.2.x.** La 2.1.0 y
+la 2.0.0 se publicaron, pero no se llegaron a vender a ningún cliente, así que
+no tienen soporte de seguridad: quien tenga una de ellas en una instalación de
+prueba o de demostración actualiza a la 2.2.x con `update.sh`. La 2.2.x es además la que trae el
+segundo factor obligatorio para los responsables, el bloqueo por origen del
+portal y las copias autenticadas.
+
+**La regla para las versiones siguientes.** Reciben parches la **versión menor
+vigente y, como mucho, las dos anteriores de la misma versión mayor**, y de
+esas, **solo las que se hayan vendido a algún cliente**. Una versión que ningún
+cliente ha recibido no entra en el soporte, aunque esté publicada y aunque por
+número le tocara. Con la 2.4.0 vigente, el máximo sería 2.4.x, 2.3.x y 2.2.x.
+Esta tabla se actualiza al publicar cada versión menor.
 
 | Versión | ¿Recibe parches de seguridad? |
 | --- | --- |
-| La menor vigente y las **dos anteriores** de la mayor vigente | Sí |
-| Cualquier otra | No: actualiza con `update.sh` ([`docs/runbooks/actualizacion-cliente.md`](docs/runbooks/actualizacion-cliente.md)) |
+| 2.2.x | Sí |
+| 2.1.0 y 2.0.0 (no vendidas a ningún cliente) | No: actualiza a la 2.2.x con `update.sh` ([`docs/runbooks/actualizacion-cliente.md`](docs/runbooks/actualizacion-cliente.md)) |
+| Cualquier otra | No |
+
+La matriz de [`infra/versions.txt`](infra/versions.txt) es otra cosa: dice
+**desde qué versiones puede actualizar** `update.sh` y por qué versiones
+intermedias pasa, no cuáles reciben parches. Una instalación fuera de esa
+matriz tiene que actualizar primero a la versión intermedia que el script le
+indica.
 
 Cada versión publicada es **inmutable**: una corrección se entrega como una
 versión nueva (por ejemplo, un parche), nunca reescribiendo una ya publicada.

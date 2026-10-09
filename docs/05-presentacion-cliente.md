@@ -47,7 +47,7 @@ Si ese día tiene jornada partida, simplemente pasa la tarjeta cada vez que entr
 
 **¿Y si se ha olvidado la tarjeta?** Introduce su código de empleado y su **PIN** (6 cifras, u 8 si el hotel lo decide) en la misma tablet. El fichaje queda registrado igual, marcado como "por PIN" para que el responsable lo revise. Nunca se queda un día sin registrar por un olvido.
 
-**¿Y si el empleado quiere ver sus horas?** Entra desde cualquier navegador a su **portal personal** con su código y su PIN, y consulta sus jornadas, sus tramos y sus totales, y se descarga su histórico. No necesita correo electrónico ni instalar nada.
+**¿Y si el empleado quiere ver sus horas?** Entra desde cualquier navegador a su **portal personal** con su código y su PIN, y consulta sus jornadas, sus tramos y sus totales, y se descarga su histórico por periodos de hasta un año. No necesita correo electrónico ni instalar nada.
 
 ### 3.2 Para el responsable de departamento
 
@@ -60,7 +60,7 @@ Desde el panel web, en su ordenador:
 
 ### 3.3 Para Recursos Humanos
 
-- Da de alta y de baja empleados, departamentos y contratos.
+- Da de alta y de baja empleados y contratos, y crea y renombra departamentos. Los departamentos no se eliminan.
 - **Emite las tarjetas QR** y las imprime: en formato tarjeta de crédito, o en hojas A4 con varias por página para dar de alta a 40 personas de temporada en una tarde.
 - Registra la **entrega** de cada tarjeta (fecha y quién la entregó).
 - Consulta un **panel de estado de credenciales** que responde a la pregunta clave: *¿quién está de alta pero todavía no puede fichar?*
@@ -223,7 +223,7 @@ Seis perfiles: administrador, RRHH, responsable de departamento, auditor, emplea
 | Conservación **4 años** | Retención configurada y purga controlada al vencimiento, con informe |
 | **A disposición** del trabajador, sus representantes y la Inspección | Portal personal, panel con rol auditor y exportación normalizada |
 | **Fiable e inalterable** | Nada se borra ni se sobrescribe; toda corrección queda trazada con autor, momento, valor anterior y motivo |
-| Acceso del trabajador a **su propio registro** | Portal personal con descarga de su histórico |
+| Acceso del trabajador a **su propio registro** | Portal personal con descarga de su histórico, por periodos de hasta un año |
 | Formato **legible y tratable** | CSV, Excel y PDF, formatos abiertos y no propietarios |
 
 Sobre la inalterabilidad conviene ser preciso, porque es lo que diferencia este sistema de una hoja de cálculo: **cada acción con relevancia legal se anota en un registro de auditoría que solo admite añadir, nunca modificar ni borrar**, y cada anotación va encadenada criptográficamente con la anterior. Si alguien editase la base de datos por fuera de la aplicación, el sistema lo detectaría: una anotación alterada o borrada rompe la cadena, y un tramo del registro horario cambiado, borrado o inventado deja de cuadrar con la anotación que se escribió con él. Las dos comprobaciones corren solas cada noche y avisan al día siguiente; si el tramo tocado tiene más de siete días, lo hace la comprobación completa de los domingos, en como mucho una semana. Hay un límite que conviene conocer: quien llegase a ejecutar código con la credencial de la propia aplicación podría, además de tocar un tramo, añadir anotaciones nuevas que lo «expliquen». No podría cambiar ni borrar las que ya había, y la anotación original seguiría diciendo lo que ocurrió, pero ninguna comprobación automática distingue esas anotaciones añadidas de las legítimas: se ven al revisar el historial del tramo.
@@ -256,9 +256,9 @@ Este punto suele generar dudas, así que conviene dejarlo claro:
 | Riesgo | Qué hace el sistema |
 |---|---|
 | Alguien fabrica la tarjeta de un compañero | Imposible sin la clave del servidor: el código va firmado criptográficamente |
-| Alguien prueba códigos al azar hasta acertar | El espacio de códigos es astronómico y hay límite de intentos por tablet, por tarjeta y por origen |
+| Alguien prueba códigos al azar hasta acertar | El espacio de códigos es astronómico y hay límite de intentos por tablet y por dirección de red. No se limita por tarjeta a propósito: un límite así lo podría agotar cualquiera con la foto del QR de un compañero y dejarle sin fichar |
 | El sistema revela si un código existe o está revocado | No lo hace: todos los rechazos dan el mismo mensaje y tardan lo mismo. El detalle solo va al registro interno |
-| Alguien adivina un PIN por fuerza bruta | Bloqueo temporal creciente tras 3, 5 y 10 intentos, límite y bloqueo por IP, y portal restringido a la red interna salvo decisión expresa del hotel; si lo abre, el sistema le avisa y le recomienda el PIN de 8 cifras |
+| Alguien adivina un PIN por fuerza bruta | Bloqueo del PIN de cada persona tras 3 fallos (5 minutos), que crece si insiste (5 y 10 fallos), límite y bloqueo por dirección de red, y portal restringido a la red interna salvo decisión expresa del hotel; si lo abre, el sistema le avisa y le recomienda el PIN de 8 cifras |
 | Roban la tablet | Su acceso solo sirve para fichar y sincronizar; se revoca desde el panel y los datos que guarda están cifrados y son mínimos |
 | Alguien modifica horas directamente en la base de datos | La cadena de auditoría lo detecta y se dispara una alerta. Además, el usuario de la aplicación no tiene permiso para modificar ni borrar el registro de auditoría |
 | Un empleado niega haber fichado, o niega una corrección | Todo escaneo queda registrado, aceptado o no, con quién, cuándo y desde dónde |
@@ -341,7 +341,7 @@ Sin internet solo se pierden tres cosas accesorias: los certificados de segurida
 | Fichajes simultáneos soportados | 50 por segundo (el pico del cambio de turno) |
 | Disponibilidad del sistema | 99,5 % mensual |
 | **Disponibilidad del acto de fichar** | **99,9 %**, gracias al modo sin conexión |
-| Pérdida máxima de datos ante un desastre | 15 minutos |
+| Pérdida máxima de datos ante un desastre | 15 minutos, **siempre que las copias y el registro continuo de cambios salgan del servidor** a otro disco o a otra máquina, como indica la guía de operación. Si se quedan en el mismo servidor y este se pierde, se pierden con él |
 | Tiempo máximo de recuperación | 4 horas |
 | Carga del panel de presencia con 500 empleados | Menos de 1,5 segundos |
 
@@ -369,14 +369,14 @@ Nada se publica sin que todas estas comprobaciones estén en verde.
 | CPU | 2 núcleos | 4 núcleos |
 | Memoria | 4 GB | 8 GB |
 | Disco | 40 GB SSD | 100 GB SSD |
-| Sistema | Linux con Docker | Íd. |
+| Sistema | Linux con Docker y la utilidad `setpriv` (paquete `util-linux`, de serie en Debian, Ubuntu y Red Hat), que usa el script de actualización | Íd. |
 | Red | Acceso desde la red interna del hotel. Salida a internet **opcional** | Íd. |
 
 Y por cada punto de fichaje: una **tablet Android** con soporte de pared o mesa, gestionada en modo quiosco, y wifi con cobertura razonable en esa zona.
 
 > **Qué es el "modo quiosco".** Es una función estándar de Android, no algo propio de KronoQR: la tablet queda **fijada en una sola aplicación**. No muestra escritorio, no deja salir a los ajustes ni a otras apps, y vuelve sola a la pantalla de fichaje si se reinicia o se va la luz. Se configura una vez, al montar la tablet, y es lo que evita que el dispositivo acabe usado para ver vídeos o que alguien salga de la aplicación sin querer y el siguiente empleado no encuentre dónde fichar.
 
-Un servidor de estas características cubre 500 empleados y 10 tablets con holgura. El diseño soporta diez veces ese volumen sin cambios.
+Un servidor de estas características cubre 500 empleados y 10 tablets con holgura, y el diseño soporta diez veces ese volumen sin cambios. Esto es capacidad técnica: el número de empleados y de tablets contratado lo fija la licencia (punto 10.5).
 
 ### 10.2 Puesta en marcha
 
@@ -405,7 +405,9 @@ Un script se encarga de: verificar precondiciones → **hacer copia de seguridad
 
 Se admite el salto entre versiones no consecutivas: si el hotel lleva tiempo sin actualizar, el sistema encadena los pasos intermedios en orden.
 
-**Durante la actualización el fichaje no se detiene**: la tablet sigue registrando y encolando, y sincroniza cuando el servidor vuelve. La parada de mantenimiento es invisible para la plantilla.
+**Se hace descomprimiendo la versión nueva al lado de la actual, nunca encima**: así la anterior queda entera por si hubiera que volver a ella a mano.
+
+**Durante la actualización el fichaje no se detiene para la plantilla**: la tablet sigue registrando y encolando, y sincroniza cuando el servidor vuelve, con la hora real de cada fichaje. **El servidor sí se detiene**, alrededor de un minuto en una instalación recién puesta y algo más cuanto mayor sea la base de datos, porque la copia previa se hace en esa ventana: durante ese rato el panel y el portal muestran «en mantenimiento». Por eso se programa fuera de los cambios de turno.
 
 ### 10.5 Licencia
 
@@ -486,7 +488,7 @@ El registro sigue funcionando y el hotel puede exportar la totalidad de sus dato
 Sí, son configuración: descanso mínimo, jornada máxima, pausas y retención se ajustan desde el panel, sin tocar el programa.
 
 **¿Cuántas tablets necesito?**
-Una por punto de acceso de personal. El sistema admite hasta 10 por instalación en el dimensionado estándar.
+Una por punto de acceso de personal. Técnicamente, una instalación estándar admite hasta 10; cuántas tiene contratadas el hotel lo fija su licencia.
 
 **¿Y si mi hotel tiene una infraestructura que exige otra base de datos?**
 Existe una variante documentada, pero conviene saber que con ella una garantía de integridad deja de estar en la base de datos y pasa a depender del programa. La recomendación es mantener PostgreSQL.
