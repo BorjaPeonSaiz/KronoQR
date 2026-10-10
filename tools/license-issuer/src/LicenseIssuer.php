@@ -108,6 +108,8 @@ final class LicenseIssuer
     }
 
     /**
+     * @return non-empty-string
+     *
      * @throws InvalidArgumentException
      */
     private static function secretKey(string $hex): string

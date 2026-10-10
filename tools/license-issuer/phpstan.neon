@@ -1,0 +1,22 @@
+# Analisis estatico del emisor de licencias, con el mismo umbral que el
+# backend (doc 02 §9.2: nivel 9, 0 errores, sin baseline).
+#
+# Va en un fichero propio porque el emisor no es parte del producto: no se
+# copia a ninguna imagen ni carga el autoloader del backend, y el
+# `backend/phpstan.neon` (con Larastan) no lo alcanza. Lo lanza `make php-lint`
+# desde backend/, con las rutas relativas a este fichero, y por eso sirve
+# igual en la CI (`../tools/...`) que en el contenedor (`/var/www/repo/...`).
+#
+# Sin `tmpDir`: en el contenedor el repositorio esta montado de solo lectura,
+# y la cache va a la temporal del sistema.
+
+parameters:
+    level: 9
+
+    paths:
+        - src
+        - issue.php
+        - generate-keypair.php
+
+    ignoreErrors: []
+    reportUnmatchedIgnoredErrors: true
