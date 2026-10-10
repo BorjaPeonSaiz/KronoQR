@@ -10,7 +10,7 @@
 //
 // El backend no participa: dobles de `support/admin.ts`.
 //
-// Sin etiqueta de requisito a proposito (tarea 3.7, decision 10 de la ficha):
+// Las pruebas del marco en si no llevan etiqueta de requisito a proposito (tarea 3.7, decision 10 de la ficha):
 // `docs/requisitos.yaml` no tiene un RF/RN/RQ para «el menu de navegacion del
 // panel» en si mismo -RF-PA-01 es la vista en vivo de presencia, no el menu-;
 // lo unico que rige esta pantalla es la guia visual (doc 06 §6 regla 11, que
@@ -81,6 +81,50 @@ test('la seccion activa lleva aria-current, tambien desde la ficha de un emplead
   await expect(nav.getByRole('link', { name: 'Presencia' })).toHaveAttribute('aria-current', 'page')
   await expect(employees).not.toHaveAttribute('aria-current')
 })
+
+// Pedido del propietario (tarea 4.1): «Impacto y adopcion» y «Nomina» tienen
+// entrada propia, asi que al estar en ellas «Informes» NO debe quedar activa.
+// Las etiquetas de requisito son de las pantallas (RF-IN-07, RF-IN-08), no
+// del menu.
+const REPORT_SUBSECTIONS = [
+  {
+    label: 'Impacto y adopción',
+    path: /\/reports\/adoption$/,
+    url: '/reports/adoption',
+    tag: '@RF-IN-08',
+  },
+  { label: 'Nómina', path: /\/reports\/payroll$/, url: '/reports/payroll', tag: '@RF-IN-07' },
+]
+
+for (const subsection of REPORT_SUBSECTIONS) {
+  test(
+    `en «${subsection.label}» solo esa subseccion es activa, no «Informes»`,
+    { tag: [subsection.tag] },
+    async ({ page }) => {
+      const nav = page.getByRole('banner').getByRole('navigation')
+      const reports = nav.getByRole('link', { name: 'Informes', exact: true })
+      const entry = nav.getByRole('link', { name: subsection.label, exact: true })
+
+      // Por el menu: Informes primero y despues la subseccion.
+      await reports.click()
+      await expect(page).toHaveURL(/\/reports$/)
+      await expect(reports).toHaveAttribute('aria-current', 'page')
+
+      await entry.click()
+      await expect(page).toHaveURL(subsection.path)
+      await expect(entry).toHaveAttribute('aria-current', 'page')
+      await expect(reports).not.toHaveAttribute('aria-current')
+      await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
+
+      // Entrando directamente por URL.
+      await page.goto('/employees')
+      await page.goto(subsection.url)
+      await expect(entry).toHaveAttribute('aria-current', 'page')
+      await expect(reports).not.toHaveAttribute('aria-current')
+      await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
+    },
+  )
+}
 
 test('por debajo de md el menu se apila y las diecinueve secciones siguen visibles', async ({
   page,

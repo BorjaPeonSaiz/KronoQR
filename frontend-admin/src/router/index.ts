@@ -199,7 +199,9 @@ export const routes: RouteRecordRaw[] = [
         path: 'reports/payroll',
         name: 'payroll-export',
         component: PayrollExportView,
-        meta: { ability: REPORTS_MANAGE, section: 'reports' },
+        // Sin `meta.section`: tiene entrada propia en el menu y «Informes» no
+        // debe quedar activa a la vez (la prueba de `router.spec.ts` lo exige).
+        meta: { ability: REPORTS_MANAGE },
       },
       {
         // Cuadro de impacto y adopcion (RF-IN-08, tarea 3.13): los seis
@@ -209,10 +211,11 @@ export const routes: RouteRecordRaw[] = [
         // asi que un `responsable_departamento` o un `auditor` no llegan ni
         // por URL. La policy del servidor es la que autoriza de verdad
         // (regla dura 18).
+        // Sin `meta.section`, por la misma razon que «Nomina».
         path: 'reports/adoption',
         name: 'adoption-dashboard',
         component: AdoptionDashboardView,
-        meta: { ability: REPORTS_MANAGE, section: 'reports' },
+        meta: { ability: REPORTS_MANAGE },
       },
       {
         // La exportacion para la Inspeccion (RF-IN-05). Ambito `reports:legal`:

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '@/features/auth/session.store'
 import { routes } from '@/router'
 import { registerAuthGuard } from '@/router/guards'
+import { NAVIGATION_SECTIONS } from '@/shared/ui/navigation'
 import { managementUser, setupStatus } from './support/fixtures'
 import { createTestPinia, createTestRouter, jsonResponse, stubFetch } from './support/harness'
 
@@ -12,6 +13,13 @@ function leafNames(records: readonly RouteRecordRaw[]): (string | symbol | undef
       ? leafNames(record.children)
       : [record.name],
   )
+}
+
+function flatRecords(records: readonly RouteRecordRaw[]): RouteRecordRaw[] {
+  return records.flatMap((record) => [
+    record,
+    ...(record.children !== undefined ? flatRecords(record.children) : []),
+  ])
 }
 
 beforeEach(() => {
@@ -26,6 +34,22 @@ afterEach(() => {
 describe('rutas de la aplicacion', () => {
   it('declara con nombre todas las rutas que se pueden visitar', () => {
     expect(leafNames(routes).every((name) => name !== undefined)).toBe(true)
+  })
+
+  it('ninguna ruta con entrada propia en el menu declara meta.section', () => {
+    // Si la declarara, `AppShellView.isActive` marcaria activas a la vez su
+    // entrada y la seccion padre (pedido del propietario, tarea 4.1).
+    const menuNames = new Set(NAVIGATION_SECTIONS.map((entry) => entry.name))
+    const offenders = flatRecords(routes)
+      .filter(
+        (record) =>
+          typeof record.name === 'string' &&
+          menuNames.has(record.name) &&
+          record.meta?.section !== undefined,
+      )
+      .map((record) => String(record.name))
+
+    expect(offenders).toEqual([])
   })
 
   it('manda al acceso a quien no tiene sesion, y recuerda a donde iba', async () => {
