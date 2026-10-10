@@ -2742,6 +2742,50 @@ jobs:
           sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
           sudo grep -qx 'IMAGE_DIGEST_PHP=' paquete-anterior/.env
 
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: "P3a · Playwright para el quiosco (mismo npm ci y misma cache de Chromium que el job ⑦)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        run: npm ci
+
+      - name: "P3a · Cache de los navegadores de Playwright"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: "P3a · Quiosco abierto ANTES de actualizar: empleados con PIN, emparejamiento y primer fichaje (version anterior)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # Mitad previa de la tarea 3.2 (bloque 3 de la 2.2.1; RF-AT-11, RF-KI-07,
+        # RF-PD-10). Un quiosco que YA estaba en uso cuando se actualiza no es lo
+        # mismo que uno nuevo: la tablet de la demo tenia la PWA de la 2.1.0 en
+        # cache (Service Worker con el documento y SUS cabeceras), el servidor
+        # paso a servir una CSP con `wasm-unsafe-eval` y la tablet siguio con la
+        # antigua, sin la directiva: libsodium no compilaba, el sellado del PIN
+        # fallaba y el quiosco decia «Código no válido» sin mandar nada. Ningun
+        # E2E lo veia (`pin-csp.spec.ts` abre un navegador nuevo).
+        #
+        # Sobre la version ANTERIOR que deja P2b (instalada in place, sin datos):
+        # administrador y centro por la API, tres empleados con PIN, y un Chromium
+        # con perfil PERSISTENTE que se empareja por consola (`kiosk:pairing-code`),
+        # deja la PWA en cache bajo su Service Worker y ficha por PIN con el
+        # primero. P3 actualiza; P3b reabre ese perfil. Va ANTES de P3 porque el
+        # navegador tiene que haberse usado antes de `update.sh`. Detalle, y lo
+        # que NO prueba (la actualizacion urgente: la 2.2.0 no la conoce, la cubre
+        # `kiosk-upgrade.spec.ts`), en la cabecera de
+        # .github/scripts/kiosk-pin-after-update.{sh,mjs}. El navegador necesita
+        # Chromium con sus dependencias del sistema; los PIN no se imprimen.
+        run: |
+          set -euo pipefail
+          npx playwright install --with-deps chromium
+          bash .github/scripts/kiosk-pin-after-update.sh before paquete-anterior
+
       - name: "P3 · Y tras esa vuelta atras, actualizar con el paquete fijado sano: salida 0 y la imagen fijada"
         if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
         run: |
@@ -2756,6 +2800,25 @@ jobs:
           compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
           d_php="$(awk '$1 == "php" { print $2 }' paquete-anterior/images.lock)"
           sudo docker inspect -f '{{.Config.Image}}' "$(compose ps -q app)" | grep -qF "@${d_php}"
+
+      - name: "P3b · El quiosco abierto antes de actualizar ficha por PIN despues (RF-AT-11, RF-KI-07, RF-PD-10)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # Mitad posterior de la tarea 3.2. Reabre el perfil que dejo P3a (token,
+        # roster y Service Worker con la PWA de la version ANTERIOR) contra el nginx
+        # de la version NUEVA y exige: sigue emparejado; ficha por PIN desde lo
+        # que tenia en cache, sin bloqueos de CSP ni de WebAssembly; y, tras el
+        # plan B del runbook (desregistrar el Service Worker y vaciar caches),
+        # ficha por PIN con el build nuevo bajo las cabeceras nuevas. Es lo que
+        # habria cazado el incidente de la demo (PWA 2.1.0 en cache, CSP sin
+        # `wasm-unsafe-eval`, «Código no válido»). Con la version anterior en 2.2.0
+        # el paso comprueba el PIN tras recargar o tras desregistrar, NO la
+        # actualizacion urgente (la 2.2.0 no la conoce: eso es `kiosk-upgrade.spec.ts`).
+        # Trazabilidad: RF-AT-11, RF-KI-07 y RF-PD-10. `qa:traceability` solo lee
+        # `tests/e2e` de las tres SPA, Pest y k6: este paso es evidencia de la CI,
+        # no cuenta en la matriz.
+        run: |
+          set -euo pipefail
+          bash .github/scripts/kiosk-pin-after-update.sh after paquete-anterior
 
       - name: Diagnostico si algo ha fallado
         if: failure() && steps.anterior.outputs.skip != 'true'
@@ -2788,6 +2851,7 @@ jobs:
             paquete-anterior/salida-p2.log
             paquete-anterior/salida-p2b.log
             paquete-anterior/salida-p3.log
+            kiosk-pin-estado/diagnostico/
           retention-days: 14
           if-no-files-found: warn
 
