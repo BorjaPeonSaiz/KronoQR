@@ -8,7 +8,6 @@ use App\Modules\Product\Domain\ValueObject\DoctorReport;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Shared\Application\Port\KioskAppVersions;
 use App\Modules\Shared\Domain\ValueObject\KioskAppVersionSurvey;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
@@ -178,13 +177,12 @@ it('separa las tablets listas de las que tienen que esperar cuando hay de las do
         ->and((string) $check->fix)->toContain('chrome://serviceworker-internals');
 })->group('RF-PD-13', 'RF-KI-07');
 
-it('no aborta la actualizacion por una tablet desfasada: product:doctor no sale con 2', function (): void {
+// El codigo de salida de product:doctor depende de TODAS las sondas (en la CI,
+// por ejemplo, no hay copias); lo que depende de esta es que nunca sea un fallo.
+it('no convierte una tablet desfasada en un fallo de product:doctor', function (): void {
     quioscoConVersion('Recepcion', '0.0.0');
 
-    $code = Artisan::call('product:doctor');
-
-    expect($code)->not->toBe(2)
-        ->and(comprobacionDeVersion(informeDeVersion())->status)->toBe(DoctorStatus::Warning);
+    expect(comprobacionDeVersion(informeDeVersion())->status)->toBe(DoctorStatus::Warning);
 })->group('RF-PD-13', 'RF-KI-07');
 
 it('da por correcta la flota al dia', function (): void {
