@@ -2742,6 +2742,62 @@ jobs:
           sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
           sudo grep -qx 'IMAGE_DIGEST_PHP=' paquete-anterior/.env
 
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: "P3a · Playwright para el quiosco (mismo npm ci y misma cache de Chromium que el job ⑦)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # crazy-max/ghaction-github-runtime exporta a GITHUB_ENV el token de la
+        # cache y de los resultados de Actions. Los scripts de instalacion de
+        # npm y de Playwright no lo necesitan: se anula en el paso.
+        env:
+          ACTIONS_RUNTIME_TOKEN: ""
+          ACTIONS_CACHE_URL: ""
+          ACTIONS_RESULTS_URL: ""
+        run: npm ci
+
+      - name: "P3a · Cache de los navegadores de Playwright"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: "P3a · Quiosco abierto ANTES de actualizar: empleados con PIN, emparejamiento y primer fichaje (version anterior)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # Mitad previa de la tarea 3.2 (bloque 3 de la 2.2.1; RF-AT-11, RF-KI-07,
+        # RF-PD-10). Un quiosco que YA estaba en uso cuando se actualiza no es lo
+        # mismo que uno nuevo: conserva token, roster y un Service Worker con la
+        # PWA y las cabeceras de la version anterior. Aqui se prepara esa tablet.
+        #
+        # Este escenario solo corre con una version anterior >= 2.2.0 (`inplace.ok`),
+        # que ya sirve la CSP con `wasm-unsafe-eval`: NO reproduce el incidente de
+        # la demo (PWA 2.1.0 en cache, CSP sin esa directiva, «Código no válido»),
+        # que cubre `frontend-kiosk/tests/e2e/kiosk-upgrade.spec.ts`. Lo que caza
+        # es la compatibilidad de una PWA YA EN CACHE (token, roster, Service
+        # Worker y sus cabeceras) con el servidor nuevo despues de `update.sh`.
+        #
+        # Sobre la version ANTERIOR que deja P2b (instalada in place, sin datos):
+        # administrador y centro por la API, tres empleados con PIN, y un Chromium
+        # con perfil PERSISTENTE que se empareja por consola (`kiosk:pairing-code`),
+        # deja la PWA en cache bajo su Service Worker y ficha por PIN con el
+        # primero. P3 actualiza; P3b reabre ese perfil. Va ANTES de P3 porque el
+        # navegador tiene que haberse usado antes de `update.sh`. Detalle en la
+        # cabecera de .github/scripts/kiosk-pin-after-update.{sh,mjs}. Los PIN no
+        # se imprimen.
+        env:
+          ACTIONS_RUNTIME_TOKEN: ""
+          ACTIONS_CACHE_URL: ""
+          ACTIONS_RESULTS_URL: ""
+        run: |
+          set -euo pipefail
+          npx playwright install --with-deps chromium
+          bash .github/scripts/kiosk-pin-after-update.sh before paquete-anterior
+
       - name: "P3 · Y tras esa vuelta atras, actualizar con el paquete fijado sano: salida 0 y la imagen fijada"
         if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
         run: |
@@ -2756,6 +2812,32 @@ jobs:
           compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
           d_php="$(awk '$1 == "php" { print $2 }' paquete-anterior/images.lock)"
           sudo docker inspect -f '{{.Config.Image}}' "$(compose ps -q app)" | grep -qF "@${d_php}"
+
+      - name: "P3b · El quiosco abierto antes de actualizar ficha por PIN despues (RF-AT-11, RF-KI-07, RF-PD-10)"
+        if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
+        # Mitad posterior de la tarea 3.2. Reabre el perfil que dejo P3a (token,
+        # roster y Service Worker con la PWA de la version ANTERIOR) contra el nginx
+        # de la version NUEVA y exige: el documento sale del Service Worker (la
+        # tablet sirve su PWA de cache); sigue emparejado; ficha por PIN desde lo
+        # que tenia en cache, sin bloqueos de CSP ni de WebAssembly; y, tras el
+        # plan B del runbook (desregistrar el Service Worker y vaciar caches),
+        # ficha por PIN con el build nuevo bajo las cabeceras nuevas.
+        #
+        # Con `inplace.ok` la version anterior es >= 2.2.0 y ya sirve
+        # `wasm-unsafe-eval`: esto NO reproduce el incidente de la demo (PWA 2.1.0
+        # en cache, CSP sin esa directiva), que cubre `kiosk-upgrade.spec.ts`, ni
+        # la actualizacion urgente (la 2.2.0 no la conoce). Caza la compatibilidad
+        # de la PWA en cache con el servidor nuevo tras `update.sh`.
+        # Trazabilidad: RF-AT-11, RF-KI-07 y RF-PD-10. `qa:traceability` solo lee
+        # `tests/e2e` de las tres SPA, Pest y k6: este paso es evidencia de la CI,
+        # no cuenta en la matriz.
+        env:
+          ACTIONS_RUNTIME_TOKEN: ""
+          ACTIONS_CACHE_URL: ""
+          ACTIONS_RESULTS_URL: ""
+        run: |
+          set -euo pipefail
+          bash .github/scripts/kiosk-pin-after-update.sh after paquete-anterior
 
       - name: Diagnostico si algo ha fallado
         if: failure() && steps.anterior.outputs.skip != 'true'
@@ -2788,6 +2870,7 @@ jobs:
             paquete-anterior/salida-p2.log
             paquete-anterior/salida-p2b.log
             paquete-anterior/salida-p3.log
+            kiosk-pin-estado/diagnostico/
           retention-days: 14
           if-no-files-found: warn
 

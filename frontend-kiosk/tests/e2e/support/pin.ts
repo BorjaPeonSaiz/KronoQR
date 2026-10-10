@@ -2,7 +2,8 @@
 
 import type { Page, Route } from '@playwright/test'
 import { expect } from '@playwright/test'
-import { pairDevice, stubScanApi } from './kiosk'
+import type { HeartbeatStubOptions } from './kiosk'
+import { pairDevice, stubHeartbeat, stubScanApi } from './kiosk'
 import { stubBatchApi } from './offlineQueue'
 
 /**
@@ -25,12 +26,12 @@ async function stubBackgroundQrTraffic(page: Page): Promise<void> {
  */
 export const PIN_SEALING_PUBLIC_KEY = '7cXt0m5rXf8mB2mHnV1kQe0k0f5T2xY3rZq8w9AbCdE='
 
-export interface PinKioskStubOptions {
-  /** `KioskHeartbeat.break_clocking_enabled` (RF-AT-12, tarea 3.5). Por defecto `false`. */
-  readonly breakClockingEnabled?: boolean
-  /** `KioskHeartbeat.clock_skew_tolerance_seconds` (RF-AT-10, tarea 3.5). Por defecto 900. */
-  readonly clockSkewToleranceSeconds?: number
-}
+/**
+ * Las mismas del latido de `stubKioskApi` (`HeartbeatStubOptions`): fichaje de
+ * pausa, tolerancia de desfase, `server_time`, version minima y un oyente de
+ * cada latido.
+ */
+export type PinKioskStubOptions = HeartbeatStubOptions
 
 /** El `GET /api/v1/kiosk/roster` de esta instalacion SI ofrece fichaje por PIN. */
 export async function stubKioskApiWithPin(
@@ -39,18 +40,7 @@ export async function stubKioskApiWithPin(
 ): Promise<void> {
   await pairDevice(page)
   await stubBackgroundQrTraffic(page)
-  await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        server_time: new Date().toISOString(),
-        client_errors_accepted: 0,
-        break_clocking_enabled: options.breakClockingEnabled ?? false,
-        clock_skew_tolerance_seconds: options.clockSkewToleranceSeconds ?? 900,
-      }),
-    })
-  })
+  await stubHeartbeat(page, options)
   await page.route('**/api/v1/kiosk/roster', async (route: Route) => {
     await route.fulfill({
       status: 200,
@@ -71,18 +61,7 @@ export async function stubKioskApiWithoutPin(
 ): Promise<void> {
   await pairDevice(page)
   await stubBackgroundQrTraffic(page)
-  await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        server_time: new Date().toISOString(),
-        client_errors_accepted: 0,
-        break_clocking_enabled: options.breakClockingEnabled ?? false,
-        clock_skew_tolerance_seconds: options.clockSkewToleranceSeconds ?? 900,
-      }),
-    })
-  })
+  await stubHeartbeat(page, options)
   await page.route('**/api/v1/kiosk/roster', async (route: Route) => {
     await route.fulfill({
       status: 200,

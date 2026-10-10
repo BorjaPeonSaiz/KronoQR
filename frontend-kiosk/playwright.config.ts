@@ -79,7 +79,7 @@ export default defineConfig({
   projects: [
     {
       name: 'kiosk-qr',
-      testIgnore: /degraded\.spec\.ts$|worn\.spec\.ts$|layout\.spec\.ts$/,
+      testIgnore: /degraded\.spec\.ts$|worn\.spec\.ts$|layout\.spec\.ts$|kiosk-upgrade\.spec\.ts$/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -118,6 +118,21 @@ export default defineConfig({
       // por la confirmacion a mitad de medicion.
       name: 'kiosk-layout',
       testMatch: /layout\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions: { args: chromiumArgs(fixture('qr-video-blank.y4m')) },
+      },
+    },
+    {
+      // `kiosk-upgrade.spec.ts` (tarea 3.1 de la 2.2.1): la tablet abierta
+      // recibe una version nueva y la aplica sola. Camara SIN QR, como
+      // `kiosk-layout`: cada escaneo de la tarjeta del video cerraria la puerta
+      // de actualizacion durante su silencio (2 min como minimo en modo
+      // urgente) y la version nueva no llegaria nunca. Sirve sus dos builds con
+      // su propio servidor (`support/kioskReleases.ts`), no con `vite preview`.
+      name: 'kiosk-upgrade',
+      testMatch: /kiosk-upgrade\.spec\.ts$/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

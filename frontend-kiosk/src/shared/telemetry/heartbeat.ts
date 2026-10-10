@@ -40,6 +40,7 @@ import {
 } from './deviceIdentity'
 import type { ClientErrorEvent, ErrorReporter } from './errorReporter'
 import { storeMinimumAppVersionReading } from './urgentUpdate'
+import { DEFAULT_HEARTBEAT_INTERVAL_MS } from './heartbeatInterval'
 import type { RotatedToken, TokenAdoptionOutcome } from './tokenRotation'
 import { adoptRotatedToken, isTokenAdoptionFailure, parseRotatedToken } from './tokenRotation'
 
@@ -52,8 +53,7 @@ import { adoptRotatedToken, isTokenAdoptionFailure, parseRotatedToken } from './
  */
 const MAX_CLIENT_ERRORS_PER_HEARTBEAT = 50
 
-/** Cada minuto. La alerta del doc 01 §9.3 dispara a los 10 min sin latido. */
-export const DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000
+export { DEFAULT_HEARTBEAT_INTERVAL_MS }
 
 /**
  * NO HAY YA UNA CONSTANTE DE DESFASE (tarea 3.5, decision 6). Hasta esta

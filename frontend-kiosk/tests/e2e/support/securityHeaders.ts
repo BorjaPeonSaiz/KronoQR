@@ -21,6 +21,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { Page } from '@playwright/test'
 
 /**
  * Variable de entorno que apunta a otro snippet. Solo para demostrar que el
@@ -107,4 +108,39 @@ export function cspDirective(csp: string, directive: string): string[] | null {
     }
   }
   return null
+}
+
+/**
+ * Lo que deja en consola o en `pageerror` un WebAssembly que la CSP no deja
+ * compilar, o cualquier otra violacion de CSP.
+ */
+export const CSP_BLOCKED_DIAGNOSTIC =
+  /CompileError|WebAssembly|wasm|Content Security Policy|Refused to/i
+
+export interface BrowserDiagnostics {
+  /** Todo lo que la pagina ha dejado en `pageerror` y en consola, en orden. */
+  readonly entries: readonly string[]
+  /** Las entradas desde la posicion `from` que delatan un bloqueo de la CSP. */
+  blockedSince(from?: number): string[]
+}
+
+/**
+ * Anota errores y consola de la pagina, y convierte cada
+ * `securitypolicyviolation` en un `console.error` legible. Llamar ANTES de la
+ * primera navegacion: el vigilante se instala con `addInitScript`.
+ */
+export async function watchBrowserDiagnostics(page: Page): Promise<BrowserDiagnostics> {
+  const entries: string[] = []
+  page.on('pageerror', (error) => entries.push(`pageerror: ${error.name}: ${error.message}`))
+  page.on('console', (message) => entries.push(`console.${message.type()}: ${message.text()}`))
+  await page.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', (event) => {
+      console.error(`Content Security Policy violation: ${event.violatedDirective}`)
+    })
+  })
+  return {
+    entries,
+    blockedSince: (from = 0) =>
+      entries.slice(from).filter((text) => CSP_BLOCKED_DIAGNOSTIC.test(text)),
+  }
 }
