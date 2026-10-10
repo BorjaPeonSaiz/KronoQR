@@ -32,6 +32,7 @@ npx playwright test --grep @RF-KI-09   # por etiqueta de requisito (§9.6)
 | `manifest.spec.ts`         | `@RF-KI-01`, `@RF-KI-08` — manifiesto de la PWA                                                                                                    |
 | `diagnostics.spec.ts`      | `@RF-KI-08`, `@RF-PD-06` — pantalla de diagnostico                                                                                                 |
 | `update-window.spec.ts`    | `@RF-KI-07`, `@RF-KI-04`, `@RQ-05`, `@RF-KI-08` — ventana de actualizacion                                                                         |
+| `kiosk-upgrade.spec.ts`    | `@RF-AT-11`, `@RF-KI-07`, `@RF-PD-10`, `@RS-09` — tablet abierta con la CSP de la 2.1.0 aplica la version nueva y ficha por PIN                    |
 
 ## Varios proyectos, y por que
 
@@ -43,6 +44,7 @@ propio navegador:
 - `kiosk-qr-degraded` → `e2e/fixtures/qr-video-degraded.y4m` (solo `degraded.spec.ts`)
 - `kiosk-qr-worn` → `e2e/fixtures/qr-video-worn.y4m` (solo `worn.spec.ts`)
 - `kiosk-layout` → `e2e/fixtures/qr-video-blank.y4m` (solo `layout.spec.ts`)
+- `kiosk-upgrade` → `e2e/fixtures/qr-video-blank.y4m` (solo `kiosk-upgrade.spec.ts`; ver abajo)
 
 Los videos se generan antes de arrancar el servidor; ver `e2e/fixtures/README.md`.
 
@@ -74,6 +76,21 @@ no declara una CSP con `script-src`, la ejecucion se para al cargar la configura
 pone en rojo con otra CSP, se apunta `KRONOQR_SECURITY_HEADERS_SNIPPET` a una copia
 modificada FUERA del repositorio; nunca se edita el snippet real para eso.
 `KRONOQR_E2E_PORT` mueve el puerto (4173 por defecto) si ya hay otro `vite preview` en marcha.
+
+## Actualizacion con la tablet abierta
+
+`kiosk-upgrade.spec.ts` (tarea 3.1 de la 2.2.1) no usa `vite preview` ni el gancho de
+`src/sw/testHooks.ts`: construye DOS builds de produccion (`7.0.0` y `7.0.1`, `KRONOQR_BASE=/kiosk/`,
+unos segundos cada uno) en un directorio temporal y los sirve con `support/kioskReleases.ts`,
+un servidor minimo que reproduce la `location ^~ /kiosk/` de Nginx en un puerto libre. La
+tablet arranca con la 7.0.0 bajo la CSP de la 2.1.0 (la del snippet SIN `'wasm-unsafe-eval'`,
+derivada, no copiada), queda controlada por su service worker y, a mitad de prueba, el mismo
+origen pasa a servir la 7.0.1 con la CSP del snippet y el latido declara
+`minimum_app_version: 7.0.1`. Con el reloj de la pagina a las 11:00 (fuera de la ventana de
+serie), solo el modo urgente puede aplicarla; la prueba exige que la tablet declare la 7.0.1,
+que su documento llegue con la CSP nueva y que el PIN se selle con el WebAssembly real. Con
+la puerta anterior a la 2.2.1, o con la version nueva servida aun con la CSP vieja, se pone
+en rojo (comprobado rompiendolo a proposito).
 
 ## El backend no participa
 
