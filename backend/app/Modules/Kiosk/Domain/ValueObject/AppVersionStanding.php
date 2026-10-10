@@ -26,9 +26,10 @@ enum AppVersionStanding: string
     /**
      * Posterior al servidor: el servidor ha vuelto atras restaurando la copia
      * (ADR-054) y la tablet conserva el build nuevo. Se informa —la sonda de
-     * `product:doctor` lo dice— pero **no se pide nada**: la tablet no puede
-     * «bajar» de version y el codigo antiguo del servidor sigue aceptando sus
-     * fichajes por contrato aditivo.
+     * `product:doctor` lo dice— pero **no se pide nada**: la PWA que sirve el
+     * servidor es la de su version, asi que la tablet se pone en ella sola en
+     * su siguiente actualizacion, y mientras tanto el codigo del servidor
+     * sigue aceptando sus fichajes por contrato aditivo.
      */
     case Ahead = 'ahead';
 

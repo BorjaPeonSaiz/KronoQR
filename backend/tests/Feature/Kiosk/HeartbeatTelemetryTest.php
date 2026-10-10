@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
+use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
@@ -13,6 +14,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Kiosk\RecordingKioskMetrics;
+use Tests\Support\Product\InMemoryErrorEventSink;
 
 /*
  * La telemetria de salud que sube el latido y la huella del codigo de servicio
@@ -466,6 +468,8 @@ it('responde el latido sin version minima si el puerto de la version falla', fun
             throw new RuntimeException('version no disponible');
         }
     });
+    $errores = new InMemoryErrorEventSink;
+    app()->instance(ErrorEventSink::class, $errores);
     $quiosco = quioscoConMetricas();
     DB::table('devices')->where('id', $quiosco['deviceId'])->update(['last_seen_at' => null]);
 
@@ -481,4 +485,13 @@ it('responde el latido sin version minima si el puerto de la version falla', fun
     $row = DB::table('devices')->where('id', $quiosco['deviceId'])->first();
 
     expect($row->last_seen_at)->not->toBeNull();
+
+    // Pero no sin rastro: al historico de errores, con la clase y sin el
+    // mensaje de la excepcion (regla dura 21).
+    $informe = $errores->only();
+
+    expect($informe->exceptionClass)->toBe(RuntimeException::class)
+        ->and($informe->code)->toBe('kiosk.heartbeat.minimum_app_version_unavailable')
+        ->and($informe->deviceId)->toBe($quiosco['deviceUuid'])
+        ->and($informe->message)->not->toContain('version no disponible');
 })->group('RF-KI-07', 'RF-PA-07');

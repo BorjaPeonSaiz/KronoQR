@@ -63,6 +63,8 @@ it('juzga la version del quiosco contra la del servidor', function (
     'quiosco con build de un nucleo anterior' => ['2.2.1', '2.2.0+sha.abc', AppVersionStanding::Behind],
 
     // Sufijos del servidor que SI se comparan: es la CI probando la actualizacion.
+    // El primero parte de que la CI construye la PWA con el mismo `APP_VERSION`
+    // que el servidor (`2.2.2-ci` los dos), que es como se construye.
     'servidor -ci, quiosco del mismo nucleo' => ['2.2.2-ci', '2.2.2-ci', AppVersionStanding::Current],
     'servidor -ci, quiosco publicado del mismo nucleo' => ['2.2.2-ci', '2.2.2', AppVersionStanding::Current],
     'servidor -ci, quiosco anterior' => ['2.2.2-ci', '2.2.1', AppVersionStanding::Behind],

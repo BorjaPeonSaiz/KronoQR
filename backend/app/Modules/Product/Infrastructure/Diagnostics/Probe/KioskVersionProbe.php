@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Shared\Application\Port\KioskAppVersions;
+use App\Modules\Shared\Domain\ValueObject\KioskAppVersionEntry;
 use Throwable;
 
 /**
@@ -16,37 +17,49 @@ use Throwable;
  *
  * ## Que responde
  *
- * «¿Hay alguna tablet que siga con la aplicacion de la version anterior?».
- * Quiosco y servidor salen del mismo `VERSION` (DC8): una tablet que declara
- * otra version mas antigua corre una PWA que su *service worker* no ha
- * renovado. `update.sh` llama a `doctor` justo despues de actualizar, y es ahi
- * donde el IT del cliente tiene que enterarse, con el `uuid` de cada tablet
- * para encontrarla en el panel.
+ * «¿Hay alguna tablet que siga con la aplicacion de la version anterior, y se
+ * la puede tocar ya?». Quiosco y servidor salen del mismo `VERSION` (DC8): una
+ * tablet que declara una version mas antigua corre una PWA que su *service
+ * worker* no ha renovado. Se nombra cada tablet por su `uuid` para encontrarla
+ * en el panel.
+ *
+ * ## Dos clases de tablet desfasada, porque el remedio puede borrar fichajes
+ *
+ * Recargar la PWA —o desregistrar su *service worker*— en una tablet con la
+ * cola en memoria (`queue_storage` distinto de `durable`, ADR-047) **borra los
+ * fichajes que no ha enviado**. Por eso la sonda separa:
+ *
+ * - **lista** (`ready`): cola duradera y vacia. Se le puede aplicar el remedio;
+ * - **esperando** (`draining`): con fichajes pendientes o con la cola en
+ *   memoria. No se toca hasta que drene y vuelva a disco.
+ *
+ * Las variantes `warning`, `warning_draining` y `warning_mixed` dicen cual de
+ * los dos grupos hay, y cada una lleva su «que hacer».
  *
  * ## **Aviso, nunca fallo**
  *
- * Un `failure` devolveria `2` y `update.sh` lo traduce a su codigo `6`: **una
- * actualizacion se abortaria precisamente porque las tablets aun no se han
- * puesto al dia**, que es lo normal en los minutos siguientes. La tablet sigue
- * fichando y encolando con cualquier version (regla dura 19); la sonda avisa
- * y dice que hacer.
+ * Un `failure` hace que `product:doctor` salga con `2`, que `doctor.sh` traduce
+ * a su codigo `6` de «el diagnostico ha encontrado un fallo». Una tablet
+ * desfasada no es eso: sigue fichando y encolando con cualquier version (regla
+ * dura 19), y justo despues de actualizar es lo normal durante un rato.
  *
- * ## Los tres casos que no piden nada
+ * ## Lo que no pide nada, y lo que si avisa sin tablets de por medio
  *
- * - **Por delante** (una vuelta atras del servidor, ADR-054): `ok` con su
- *   frase. Se informa, pero la tablet se pondra en la version del servidor
- *   sola y no hay nada que hacer.
- * - **Servidor sin version comparable** (`0.0.0` o un build `-dev`): `ok` con
- *   su frase y ningun juicio. Un entorno de desarrollo marcaria como
- *   desfasadas todas sus tablets.
+ * - **Por delante** (una vuelta atras del servidor, ADR-054): `ok_ahead`. La
+ *   tablet se pondra en la version del servidor sola.
  * - **Sin quioscos latiendo**: `ok`. Una tablet callada ya sale en
- *   `kiosk:health` y en el panel; su version es lo de menos.
+ *   `kiosk:health` y en el panel.
+ * - **Servidor sin version comparable** (`0.0.0` o un build `-dev`): en
+ *   desarrollo, `ok_unchecked` y ningun juicio —marcaria como desfasadas todas
+ *   las tablets de un entorno de pruebas—. **En produccion es
+ *   `warning_unchecked`**: una imagen construida sin `APP_VERSION` deja el
+ *   aviso de tablets desfasadas apagado, y eso hay que saberlo.
  *
  * ## `details` sin datos personales
  *
  * Este informe viaja en el paquete de diagnostico (ADR-020, regla dura 21): el
- * `uuid` de cada dispositivo y la version que declara, **nunca su nombre** —que
- * lo pone el cliente y puede ser «Tablet de Maria»—.
+ * `uuid` de cada dispositivo, la version que declara y el estado de su cola,
+ * **nunca su nombre** —que lo pone el cliente y puede ser «Tablet de Maria»—.
  *
  * ## Nunca lanza
  *
@@ -58,7 +71,10 @@ final readonly class KioskVersionProbe implements DoctorProbe
 {
     private const string ID = 'kiosk.app_version';
 
-    public function __construct(private KioskAppVersions $versions) {}
+    public function __construct(
+        private KioskAppVersions $versions,
+        private string $environment,
+    ) {}
 
     public function family(): string
     {
@@ -84,8 +100,16 @@ final readonly class KioskVersionProbe implements DoctorProbe
         }
 
         if (! $survey->isEnforced()) {
-            return [new DoctorFinding(self::ID, DoctorStatus::Ok, details: ['enforced' => false], variant: 'unchecked')];
+            $details = ['enforced' => false, 'app_env' => $this->environment];
+
+            return [$this->environment === 'production'
+                ? DoctorFinding::warning(self::ID, 'unchecked', details: $details)
+                : new DoctorFinding(self::ID, DoctorStatus::Ok, details: $details, variant: 'unchecked')];
         }
+
+        $ready = array_values(array_filter($survey->behind, static fn (KioskAppVersionEntry $entry): bool => $entry->isReadyToReload()));
+        $draining = array_values(array_filter($survey->behind, static fn (KioskAppVersionEntry $entry): bool => ! $entry->isReadyToReload()));
+        $minimum = (string) $survey->minimumAppVersion;
 
         $details = [
             'enforced' => true,
@@ -96,56 +120,61 @@ final readonly class KioskVersionProbe implements DoctorProbe
         ];
 
         if ($survey->behind !== []) {
-            return [DoctorFinding::warning(self::ID, params: [
-                'count' => \count($survey->behind),
-                'minimum' => (string) $survey->minimumAppVersion,
-                'devices' => $this->phrase($survey->behind),
+            $variant = match (true) {
+                $draining === [] => null,
+                $ready === [] => 'draining',
+                default => 'mixed',
+            };
+
+            return [DoctorFinding::warning(self::ID, $variant, params: [
+                'minimum' => $minimum,
+                'devices' => $this->phrase($ready),
+                'waiting' => $this->phrase($draining),
             ], details: $details)];
         }
 
         if ($survey->ahead !== []) {
             return [new DoctorFinding(self::ID, DoctorStatus::Ok, params: [
-                'count' => \count($survey->ahead),
-                'minimum' => (string) $survey->minimumAppVersion,
+                'minimum' => $minimum,
                 'devices' => $this->phrase($survey->ahead),
             ], details: $details, variant: 'ahead')];
         }
 
         return [DoctorFinding::ok(self::ID, $details, [
             'count' => $survey->examined,
-            'minimum' => (string) $survey->minimumAppVersion,
+            'minimum' => $minimum,
         ])];
     }
 
     /**
-     * @param  array<string, string|null>  $devices
-     * @return list<array{device: string, app_version: string|null}>
+     * @param  list<KioskAppVersionEntry>  $entries
+     * @return list<array{device: string, app_version: string|null, queue_storage: string, pending_queue_size: int|null, ready: bool}>
      */
-    private function listed(array $devices): array
+    private function listed(array $entries): array
     {
-        $listed = [];
-
-        foreach ($devices as $uuid => $version) {
-            $listed[] = ['device' => $uuid, 'app_version' => $version];
-        }
-
-        return $listed;
+        return array_map(static fn (KioskAppVersionEntry $entry): array => [
+            'device' => $entry->deviceUuid,
+            'app_version' => $entry->appVersion,
+            'queue_storage' => $entry->queueStorage,
+            'pending_queue_size' => $entry->pendingQueueSize,
+            'ready' => $entry->isReadyToReload(),
+        ], $entries);
     }
 
     /**
-     * `uuid (version)` separados por coma. Una version que la tablet no declaro
-     * sale como `-`: es un dato, no una frase, y no hace falta traducirlo.
+     * `uuid (version, queue=..., pending=...)` separados por coma. Son datos y
+     * no frases, asi que no se traducen: `-` es «no lo declaro».
      *
-     * @param  array<string, string|null>  $devices
+     * @param  list<KioskAppVersionEntry>  $entries
      */
-    private function phrase(array $devices): string
+    private function phrase(array $entries): string
     {
-        $parts = [];
-
-        foreach ($devices as $uuid => $version) {
-            $parts[] = \sprintf('%s (%s)', $uuid, $version ?? '-');
-        }
-
-        return implode(', ', $parts);
+        return implode(', ', array_map(static fn (KioskAppVersionEntry $entry): string => \sprintf(
+            '%s (%s, queue=%s, pending=%s)',
+            $entry->deviceUuid,
+            $entry->appVersion ?? '-',
+            $entry->queueStorage,
+            $entry->pendingQueueSize ?? '-',
+        ), $entries));
     }
 }

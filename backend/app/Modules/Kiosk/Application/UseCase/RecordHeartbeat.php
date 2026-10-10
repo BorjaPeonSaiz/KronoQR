@@ -15,6 +15,10 @@ use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
+use App\Modules\Shared\Domain\ValueObject\ErrorReport;
+use App\Modules\Shared\Domain\ValueObject\ErrorSource;
+use DateTimeImmutable;
 use Throwable;
 
 /**
@@ -103,6 +107,12 @@ use Throwable;
  */
 final readonly class RecordHeartbeat
 {
+    /** Codigo y mensaje estables del fallo al resolver la version minima: agrupan en una sola huella. */
+    private const string MINIMUM_VERSION_UNAVAILABLE = 'kiosk.heartbeat.minimum_app_version_unavailable';
+
+    /** El «no se» de `DeployedVersion`, repetido porque Application no importa `App\Support`. */
+    private const string UNKNOWN_VERSION = '0.0.0';
+
     public function __construct(
         private DeviceFleet $devices,
         private KioskMetrics $metrics,
@@ -161,7 +171,7 @@ final readonly class RecordHeartbeat
             $command->presentedTokenId === null
                 ? null
                 : $this->tokens->renewIfDue($command->deviceUuid, $command->presentedTokenId),
-            $this->minimumAppVersion(),
+            $this->minimumAppVersion($command->deviceUuid, $seenAt),
         );
     }
 
@@ -172,12 +182,31 @@ final readonly class RecordHeartbeat
      * configuracion ya cargada, pero el dato es accesorio y el latido es la
      * señal de vida del quiosco. Un fallo aqui no puede convertir un `200` en
      * un `500` (regla dura 19); sin el campo, la tablet no pierde nada.
+     *
+     * **Pero no se traga sin rastro**: el fallo va al historico de errores por
+     * el mismo {@see ErrorEventSink} que ya recibe este caso de uso, con la
+     * CLASE de la excepcion y nunca su mensaje —puede llevar cualquier cosa, y
+     * el historico viaja en el paquete de diagnostico (regla dura 21)—. El sink
+     * no lanza por contrato, asi que informar tampoco tumba el latido.
      */
-    private function minimumAppVersion(): ?string
+    private function minimumAppVersion(string $deviceUuid, DateTimeImmutable $seenAt): ?string
     {
         try {
             return AppVersionPolicy::forDeployed($this->versions->deployedVersion())->minimumAppVersion();
-        } catch (Throwable) {
+        } catch (Throwable $failure) {
+            $this->errors->record(new ErrorReport(
+                source: ErrorSource::Api,
+                level: ErrorLevel::Error,
+                message: self::MINIMUM_VERSION_UNAVAILABLE,
+                occurredAt: $seenAt,
+                // La version es precisamente lo que no se ha podido leer.
+                appVersion: self::UNKNOWN_VERSION,
+                code: self::MINIMUM_VERSION_UNAVAILABLE,
+                exceptionClass: $failure::class,
+                deviceId: $deviceUuid,
+                module: 'Kiosk',
+            ));
+
             return null;
         }
     }

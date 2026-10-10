@@ -26,8 +26,6 @@ use DateTimeImmutable;
  */
 final readonly class KioskHealthRow
 {
-    private const string ACTIVE = 'active';
-
     public function __construct(
         public string $uuid,
         public string $name,
@@ -91,7 +89,7 @@ final readonly class KioskHealthRow
         KioskHealthThresholds $thresholds,
         AppVersionPolicy $appVersions,
     ): self {
-        $elapsed = self::elapsed($device->lastSeenAt, $now);
+        $elapsed = $device->secondsSinceLastSeen($now);
 
         [$verdict, $reason] = self::judge($device, $elapsed, $now, $thresholds, $appVersions);
 
@@ -122,7 +120,7 @@ final readonly class KioskHealthRow
         KioskHealthThresholds $thresholds,
         AppVersionPolicy $appVersions,
     ): array {
-        if ($device->status !== self::ACTIVE) {
+        if (! $device->isActive()) {
             return [KioskHealthVerdict::Revoked, KioskHealthReason::Revoked];
         }
 
@@ -143,7 +141,7 @@ final readonly class KioskHealthRow
     {
         $sincePaired = self::elapsed($device->pairedAt, $now);
 
-        return $sincePaired !== null && $sincePaired <= $thresholds->silentAfterSeconds
+        return $sincePaired !== null && ! $thresholds->isSilentAfter($sincePaired)
             ? [KioskHealthVerdict::Warning, KioskHealthReason::AwaitingFirstHeartbeat]
             : [KioskHealthVerdict::Failure, KioskHealthReason::NeverSeen];
     }
@@ -160,7 +158,7 @@ final readonly class KioskHealthRow
         KioskHealthThresholds $thresholds,
         AppVersionPolicy $appVersions,
     ): array {
-        if ($elapsed > $thresholds->silentAfterSeconds) {
+        if ($thresholds->isSilentAfter($elapsed)) {
             return [KioskHealthVerdict::Failure, KioskHealthReason::Silent];
         }
 

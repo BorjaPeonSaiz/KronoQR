@@ -12,7 +12,8 @@ namespace App\Modules\Shared\Domain\ValueObject;
  * `product:doctor` por el puerto `KioskAppVersions`: `Product` no puede
  * importar el dominio de `Kiosk`, asi que la regla
  * (`Kiosk\Domain\Policy\AppVersionPolicy`) se aplica alli y aqui viaja solo el
- * resultado.
+ * resultado, con el estado de la cola de cada tablet
+ * ({@see KioskAppVersionEntry}), que decide si se la puede tocar.
  *
  * **Sin un solo nombre de quiosco**: viaja en el paquete de diagnostico
  * (ADR-020, regla dura 21). El `uuid` del dispositivo y la version que declara
@@ -24,8 +25,8 @@ final readonly class KioskAppVersionSurvey
      * @param  string|null  $minimumAppVersion  El nucleo `X.Y.Z` del servidor, o `null` si no hay con
      *                                          que comparar (version desconocida o build `-dev`).
      * @param  int  $examined  Quioscos activos con latido reciente que se han comparado.
-     * @param  array<string, string|null>  $behind  `uuid` => `app_version` declarada, de los que van por detras.
-     * @param  array<string, string|null>  $ahead  `uuid` => `app_version` declarada, de los que van por delante.
+     * @param  list<KioskAppVersionEntry>  $behind  Los que van por detras.
+     * @param  list<KioskAppVersionEntry>  $ahead  Los que van por delante.
      */
     public function __construct(
         public ?string $minimumAppVersion,

@@ -22,6 +22,8 @@ use DateTimeImmutable;
  */
 final readonly class DeviceSummary
 {
+    private const string ACTIVE = 'active';
+
     public function __construct(
         public int $id,
         public string $uuid,
@@ -52,4 +54,37 @@ final readonly class DeviceSummary
         /** Descartes sin avisar segun su ultimo latido (RN-22). */
         public int $unreportedDiscards = 0,
     ) {}
+
+    /** `active` frente a `revoked` (doc 01 §5.5). */
+    public function isActive(): bool
+    {
+        return $this->status === self::ACTIVE;
+    }
+
+    /**
+     * Segundos desde el ultimo latido, nunca negativos; `null` si no ha latido
+     * nunca.
+     *
+     * El suelo en cero no es cosmetico: `last_seen_at` lo escribe el servidor con
+     * su propio reloj, pero un `pg_restore` de una copia hecha en otra maquina, o
+     * un salto de NTP hacia atras, pueden dejar un instante en el futuro, y «hace
+     * -12 s» haria dudar de todo el informe.
+     */
+    public function secondsSinceLastSeen(DateTimeImmutable $now): ?int
+    {
+        return $this->lastSeenAt === null ? null : max(0, $now->getTimestamp() - $this->lastSeenAt->getTimestamp());
+    }
+
+    /**
+     * Activo, con algun latido y sin pasar el plazo de silencio: el «latido
+     * reciente» con el que se mira la version de su aplicacion (sonda
+     * `kiosk.app_version`). Mismo criterio que el veredicto `silent` de
+     * `KioskHealthRow`, por {@see KioskHealthThresholds::isSilentAfter()}.
+     */
+    public function isBeatingRecently(DateTimeImmutable $now, KioskHealthThresholds $thresholds): bool
+    {
+        $elapsed = $this->secondsSinceLastSeen($now);
+
+        return $this->isActive() && $elapsed !== null && ! $thresholds->isSilentAfter($elapsed);
+    }
 }

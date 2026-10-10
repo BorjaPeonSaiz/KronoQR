@@ -552,10 +552,18 @@ return [
                 'ok_ahead' => 'Tablets con una version de la aplicacion posterior a la del servidor (:minimum): '
                     .':devices. Pasa tras volver a una version anterior del servidor; las tablets se pondran en la '
                     .'del servidor solas. No hay nada que hacer.',
-                'ok_unchecked' => 'Este servidor no tiene una version publicada (es de desarrollo o no la conoce), '
-                    .'asi que no se compara la version de las tablets.',
-                'warning' => 'Tablets con una version de la aplicacion anterior a la del servidor (:minimum): '
-                    .':devices. Siguen fichando con normalidad; solo les falta recoger la version nueva.',
+                'ok_unchecked' => 'Este servidor de desarrollo no tiene una version publicada, asi que no se '
+                    .'compara la version de las tablets.',
+                'warning_unchecked' => 'La version del servidor no es valida (desconocida o de desarrollo): el '
+                    .'aviso de tablets con la aplicacion desfasada esta apagado. El fichaje no se ve afectado.',
+                'warning' => 'Tablets con una version de la aplicacion anterior a la del servidor (:minimum), '
+                    .'con la cola vacia y en disco: :devices. Siguen fichando con normalidad.',
+                'warning_draining' => 'Tablets con una version de la aplicacion anterior a la del servidor '
+                    .'(:minimum) que todavia tienen fichajes sin enviar o la cola en memoria: :waiting. Siguen '
+                    .'fichando con normalidad, pero no hay que tocarlas todavia.',
+                'warning_mixed' => 'Tablets con una version de la aplicacion anterior a la del servidor (:minimum). '
+                    .'Con la cola vacia y en disco: :devices. Con fichajes sin enviar o la cola en memoria, que no '
+                    .'hay que tocar todavia: :waiting. Todas siguen fichando con normalidad.',
                 'warning_unavailable' => 'No se ha podido comprobar la version de la aplicacion de las tablets. '
                     .'El fichaje no se ve afectado.',
             ],
@@ -1086,13 +1094,30 @@ return [
                     .'Si el problema sigue, mira antes las comprobaciones de la base de datos de este mismo informe.',
             ],
             'app_version' => [
-                'warning' => "Normalmente no hay que hacer nada: cada tablet se pone al dia sola en cuanto su cola de\n"
-                    ."fichajes pendientes esta vacia y nadie ha fichado en unos minutos. Busca cada una por su\n"
-                    ."identificador en el panel, en Quioscos.\n"
-                    ."Si una tablet declara la 2.2.0 o anterior (o 0.0.0), no se actualiza sola: en la propia tablet,\n"
-                    ."abre chrome://serviceworker-internals y pulsa Unregister en la de KronoQR (o F12 > Application >\n"
+                'warning' => "Busca cada tablet por su identificador en el panel, en Quioscos.\n"
+                    ."Si declara la 2.2.1 o posterior, no hagas nada: se actualiza sola en la franja de actualizacion\n"
+                    ."(KIOSK_UPDATE_WINDOW, de serie de 03:00 a 05:00) con la cola vacia y sin fichajes recientes.\n"
+                    ."Si declara la 2.2.0 o anterior (o 0.0.0), no se actualiza sola. SOLO con la tablet con red, su\n"
+                    ."cola pendiente a 0 en el panel y sin el aviso de «cola en memoria»: en la propia tablet abre\n"
+                    ."chrome://serviceworker-internals y pulsa Unregister en el de KronoQR (o F12 > Application >\n"
                     ."Service workers > Unregister) y recarga la pagina.\n"
                     .'NO borres los datos del sitio: ahi estan la cola de fichajes sin enviar y el emparejamiento de la tablet.',
+                'warning_draining' => "Espera. NO recargues estas tablets, NO desregistres su service worker y NO borres los\n"
+                    ."datos del sitio: con la cola en memoria, recargar borra los fichajes que aun no ha enviado.\n"
+                    ."Comprueba en el panel, en Quioscos, que tienen red y que su cola pendiente baja a 0; si sale el\n"
+                    ."aviso de «cola en memoria», sigue el runbook de la cola atascada, apartado 7.\n"
+                    .'Cuando la cola este a 0 y en disco, vuelve a ejecutar `php artisan product:doctor`.',
+                'warning_mixed' => "Las que tienen fichajes sin enviar o la cola en memoria: espera. NO las recargues, NO\n"
+                    ."desregistres su service worker y NO borres los datos del sitio, porque se perderian fichajes; si sale\n"
+                    ."el aviso de «cola en memoria», sigue el runbook de la cola atascada, apartado 7.\n"
+                    ."Las que tienen la cola vacia y en disco: si declaran la 2.2.1 o posterior, se actualizan solas en la\n"
+                    ."franja de actualizacion (KIOSK_UPDATE_WINDOW, de serie de 03:00 a 05:00). Si declaran la 2.2.0 o\n"
+                    ."anterior (o 0.0.0), y SOLO con la tablet con red y la cola a 0: abre chrome://serviceworker-internals,\n"
+                    ."pulsa Unregister en el de KronoQR (o F12 > Application > Service workers > Unregister) y recarga.\n"
+                    .'NO borres los datos del sitio: ahi estan la cola de fichajes y el emparejamiento de la tablet.',
+                'warning_unchecked' => "Comprueba la variable APP_VERSION (o IMAGE_TAG) del servidor: tiene que ser la version\n"
+                    ."publicada, por ejemplo 2.2.1. Una imagen construida sin ella declara 0.0.0-dev.\n"
+                    .'Vuelve a desplegar con la imagen de la version publicada y ejecuta de nuevo `php artisan product:doctor`.',
                 'warning_unavailable' => "Vuelve a ejecutar `php artisan product:doctor` cuando la base de datos responda.\n"
                     .'Si el problema sigue, mira antes las comprobaciones de la base de datos de este mismo informe.',
             ],

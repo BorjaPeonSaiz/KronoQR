@@ -31,7 +31,11 @@ use App\Modules\Kiosk\Domain\ValueObject\AppVersionStanding;
  *    encendido enseña a ignorarlo.
  * 3. Cualquier otro prerelease (`-ci`, `-rc.1`) **si se compara**: es la
  *    version que la CI construye para probar la actualizacion, y es justo donde
- *    el aviso tiene que verse.
+ *    el aviso tiene que verse. Esto **parte de que la CI construye la PWA con
+ *    el mismo `APP_VERSION` que el servidor** (`2.2.2-ci` los dos): asi un
+ *    quiosco de la CI recien construido sale `Current` y solo la tablet que se
+ *    quedo en el build anterior sale `Behind`. Si la PWA de la CI se
+ *    construyera con otra version, la comparacion de la CI no probaria nada.
  *
  * **Lado del quiosco**, con un servidor comparable:
  *

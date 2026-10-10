@@ -80,4 +80,16 @@ final readonly class KioskHealthThresholds
             throw new InvalidArgumentException('El plazo de silencio va despues del de latido fresco.');
         }
     }
+
+    /**
+     * Si con `$elapsed` segundos desde el ultimo latido el quiosco esta callado.
+     *
+     * El criterio unico: lo usan el veredicto de salud (`KioskHealthRow`) y el
+     * «latido reciente» de {@see DeviceSummary::isBeatingRecently()}. El plazo
+     * es exclusivo: a los `silentAfterSeconds` exactos todavia no esta callado.
+     */
+    public function isSilentAfter(int $elapsed): bool
+    {
+        return $elapsed > $this->silentAfterSeconds;
+    }
 }

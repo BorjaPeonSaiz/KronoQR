@@ -118,9 +118,12 @@ return [
             'discards_unreported' => 'It has :discards clock-in(s) the server declared invalid whose report has not arrived yet: '
                 .'nobody will review them until it does. It is usually an outdated app after an update; '
                 .'DO NOT UNPAIR IT and follow the stuck queue runbook, section 8.',
-            'app_version_behind' => 'Its application (:version) is older than the server. It keeps recording clock-ins normally '
-                .'and updates itself as soon as its queue is empty and nobody is clocking in. If it reports 2.2.0 or earlier, '
-                .'unregister the tablet\'s service worker, but NEVER clear the site data: it would take the clock-in queue with it.',
+            'app_version_behind' => 'Its application (:version) is older than the server. It keeps recording clock-ins normally. '
+                .'If it reports 2.2.1 or later, it updates itself during the update window (KIOSK_UPDATE_WINDOW, '
+                .'03:00 to 05:00 by default) with an empty queue. If it reports 2.2.0 or earlier (or 0.0.0), it will not update itself: '
+                .'unregister its service worker ONLY with the tablet online, its pending queue at 0 and no «in-memory queue» warning, '
+                .'because reloading with an in-memory queue deletes the unsent clock-ins. NEVER clear the site data: '
+                .'it would take the clock-in queue and the pairing with it.',
         ],
 
         'fleet_empty' => 'No kiosk is paired yet. Pair the first one from the panel, under "Kiosks", '

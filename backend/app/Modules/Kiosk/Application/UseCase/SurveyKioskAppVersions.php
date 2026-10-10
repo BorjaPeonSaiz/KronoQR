@@ -7,10 +7,12 @@ namespace App\Modules\Kiosk\Application\UseCase;
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
 use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
 use App\Modules\Kiosk\Domain\ValueObject\AppVersionStanding;
+use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\KioskAppVersions;
+use App\Modules\Shared\Domain\ValueObject\KioskAppVersionEntry;
 use App\Modules\Shared\Domain\ValueObject\KioskAppVersionSurvey;
 
 /**
@@ -35,7 +37,8 @@ use App\Modules\Shared\Domain\ValueObject\KioskAppVersionSurvey;
  *
  * ## Solo quioscos activos con latido reciente
  *
- * El plazo es el de silencio de `kiosk:health` (`silentAfterSeconds`): una
+ * El criterio es {@see DeviceSummary::isBeatingRecently()}, el mismo plazo de
+ * silencio de `kiosk:health` (`silentAfterSeconds`) y en un solo sitio: una
  * tablet que ha pasado de el ya sale en `kiosk:health` y en el panel por
  * callada, y su version declarada puede ser de hace semanas.
  *
@@ -46,8 +49,6 @@ use App\Modules\Shared\Domain\ValueObject\KioskAppVersionSurvey;
  */
 final readonly class SurveyKioskAppVersions implements KioskAppVersions
 {
-    private const string ACTIVE = 'active';
-
     public function __construct(
         private DeviceRegistry $devices,
         private Clock $clock,
@@ -65,29 +66,41 @@ final readonly class SurveyKioskAppVersions implements KioskAppVersions
             return KioskAppVersionSurvey::unchecked();
         }
 
-        $now = $this->clock->now()->getTimestamp();
+        $now = $this->clock->now();
         $examined = 0;
         $behind = [];
         $ahead = [];
 
         foreach ($this->devices->all() as $device) {
-            if ($device->status !== self::ACTIVE || $device->lastSeenAt === null) {
-                continue;
-            }
-
-            if ($now - $device->lastSeenAt->getTimestamp() > $this->thresholds->silentAfterSeconds) {
+            // El mismo criterio que el veredicto `silent` de la salud del
+            // quiosco: activo, con latido y dentro del plazo de silencio.
+            if (! $device->isBeatingRecently($now, $this->thresholds)) {
                 continue;
             }
 
             $examined++;
 
             match ($policy->standingOf($device->appVersion)) {
-                AppVersionStanding::Behind => $behind[$device->uuid] = $device->appVersion,
-                AppVersionStanding::Ahead => $ahead[$device->uuid] = $device->appVersion,
+                AppVersionStanding::Behind => $behind[] = $this->entry($device),
+                AppVersionStanding::Ahead => $ahead[] = $this->entry($device),
                 AppVersionStanding::Current, AppVersionStanding::Unchecked => null,
             };
         }
 
         return new KioskAppVersionSurvey($minimum, $examined, $behind, $ahead);
+    }
+
+    /**
+     * La tablet con su cola, que es lo que decide si se la puede recargar
+     * (ADR-047): con la cola en memoria, recargar borra lo que no ha enviado.
+     */
+    private function entry(DeviceSummary $device): KioskAppVersionEntry
+    {
+        return new KioskAppVersionEntry(
+            $device->uuid,
+            $device->appVersion,
+            $device->queueStorage->value,
+            $device->pendingQueueSize,
+        );
     }
 }

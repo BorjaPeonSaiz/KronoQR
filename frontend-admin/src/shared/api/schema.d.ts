@@ -720,8 +720,10 @@ export interface paths {
          *     `unreported_discards` cuenta los fichajes descartados cuyo aviso aun no ha
          *     llegado al servidor (`discards_unreported`).
          *     Un quiosco cuya `app_version` es anterior a la del servidor esta en
-         *     `warning` (`app_version_behind`): se pondra al dia solo, sin dejar de
-         *     fichar (regla dura 19).
+         *     `warning` (`app_version_behind`), sin dejar de fichar (regla dura 19):
+         *     desde la 2.2.1 se pone al dia solo en la franja de actualizacion con la
+         *     cola vacia; uno con la 2.2.0 o anterior necesita que se desregistre su
+         *     *service worker*, sin borrar los datos del sitio.
          *
          *     **`admin` y solo `admin`, con ambito `settings:*`** (documento 02 §7.3,
          *     nota 5). Gestionar dispositivos es la misma potestad que configurar la
@@ -6212,23 +6214,27 @@ export interface components {
             };
             /**
              * @description **La version minima de la PWA del quiosco que publica el servidor**
-             *     (RF-KI-07, RF-PA-07). Es la version del propio servidor —la misma
-             *     `version` de `GET /health/live`—: quiosco y servidor salen del mismo
-             *     fichero `VERSION`, de modo que una tablet que declara en
-             *     `app_version` una version anterior a esta corre una PWA que ya no es
-             *     la desplegada.
+             *     (RF-KI-07, RF-PA-07). Es el **nucleo `X.Y.Z`** de la version del
+             *     propio servidor —no la `version` completa de `GET /health/live`: un
+             *     servidor `2.2.2-ci` anuncia `2.2.2`, y los sufijos de prerelease o de
+             *     build no se anuncian porque la regla solo compara el nucleo—. Quiosco
+             *     y servidor salen del mismo fichero `VERSION`, de modo que una tablet
+             *     que declara en `app_version` un nucleo anterior a este corre una PWA
+             *     que ya no es la desplegada.
              *
-             *     **Una tablet por debajo se pone al dia en cuanto pueda, sin bloquear
-             *     el fichaje** (regla dura 19): sigue fichando y encolando con
-             *     normalidad, y solo se recarga con la cola vacia y sin escaneos en los
-             *     ultimos `update_window.quiet_minutes`. Que la tablet vaya por detras
-             *     no cambia ni un fichaje; en el panel el quiosco pasa a `warning`
-             *     (`DeviceHealth.reason` = `app_version_behind`).
+             *     **Una tablet por debajo se pone al dia sin bloquear el fichaje**
+             *     (regla dura 19): sigue fichando y encolando con normalidad, y solo
+             *     se recarga dentro de `update_window`, con la cola vacia y sin
+             *     escaneos en los ultimos `update_window.quiet_minutes`. Que la tablet
+             *     vaya por detras no cambia ni un fichaje; en el panel el quiosco pasa
+             *     a `warning` (`DeviceHealth.reason` = `app_version_behind`).
              *
              *     **Opcional y aditivo.** El servidor lo **omite** —nunca lo manda a
-             *     `null`— si no puede resolver su propia version; entonces la tablet
-             *     sigue con su cadencia normal de actualizacion. Una PWA anterior a la
-             *     2.2.1 lo ignora.
+             *     `null`— si no puede resolver su propia version **y tambien si es un
+             *     build de desarrollo (`-dev`) o desconocido (`0.0.0`)**, que no tienen
+             *     una version publicada que exigir; entonces la tablet sigue con su
+             *     cadencia normal de actualizacion. Una PWA anterior a la 2.2.1 lo
+             *     ignora.
              * @example 2.2.1
              */
             minimum_app_version?: string;
@@ -6768,12 +6774,20 @@ export interface components {
              *     reinicia), `late` (mas de `fresh_within_seconds`),
              *     `discards_unreported` (`unreported_discards` mayor que cero:
              *     `warning`), `battery_low` (por debajo de `battery_low_percent` **y sin
-             *     cargar**),
+             *     cargar**), `queue_pending`,
              *     `app_version_behind` (`app_version` anterior a la version del
              *     servidor —la `minimum_app_version` del latido— o que no es SemVer:
-             *     `warning`; la tablet se pone al dia sola en cuanto tiene la cola
-             *     vacia y nadie ficha, sin dejar de fichar entre tanto, regla dura 19),
-             *     `queue_pending`, `beating`.
+             *     `warning`) y `beating`.
+             *
+             *     **`app_version_behind` es el ultimo de los avisos a proposito**: la
+             *     tablet solo puede actualizarse con la cola vacia y en disco, asi que
+             *     todo lo anterior es lo que se lo impide y es lo que hay que mirar
+             *     primero. Con la cola en memoria, ademas, recargarla borraria los
+             *     fichajes no enviados (ADR-047). Una tablet 2.2.1 o posterior se
+             *     actualiza sola en la franja de `update_window` con la cola vacia;
+             *     una 2.2.0 o anterior necesita que se desregistre su *service worker*,
+             *     sin borrar los datos del sitio. En ningun caso deja de fichar entre
+             *     tanto (regla dura 19).
              * @enum {string}
              */
             reason: "beating" | "queue_pending" | "late" | "silent" | "awaiting_first_heartbeat" | "never_seen" | "revoked" | "battery_low" | "queue_storage_degraded" | "discards_unreported" | "app_version_behind";

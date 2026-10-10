@@ -1739,6 +1739,8 @@ it('anuncia la version minima de la PWA en el latido, opcional, no anulable y Se
         ->and(Contract::value(...[...$field, 'type']))->toBe('string')
         ->and(Contract::value(...[...$field, 'pattern']))->toBe('^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$')
         ->and(Contract::text(...[...$field, 'description']))->toContain('nunca lo manda a')
+        // Anuncia el nucleo, no la version completa de `/health/live`.
+        ->and(Contract::text(...[...$field, 'description']))->toContain('nucleo `X.Y.Z`')
         ->and(preg_match('/'.Contract::text(...[...$field, 'pattern']).'/', '2.2.1'))->toBe(1)
         ->and(preg_match('/'.Contract::text(...[...$field, 'pattern']).'/', 'latest'))->toBe(0);
 })->group('RF-KI-07', 'RF-PA-07', 'RQ-06');

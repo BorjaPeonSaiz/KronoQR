@@ -1998,9 +1998,14 @@ final class ProductServiceProvider extends ServiceProvider
                      * otra sonda de quioscos porque el orden de esta lista ES
                      * el del informe. **Aviso y nunca fallo**: justo despues de
                      * actualizar, las tablets aun no se han puesto al dia, y un
-                     * `2` aqui abortaria la actualizacion que lo provoca.
+                     * `2` aqui seria un «fallo» en `doctor.sh` por algo normal.
+                     * El entorno decide si un servidor sin version juzgable es
+                     * aviso (produccion) o nada (desarrollo).
                      */
-                    new KioskVersionProbe($app->make(KioskAppVersions::class)),
+                    new KioskVersionProbe(
+                        $app->make(KioskAppVersions::class),
+                        Config::string('app.env'),
+                    ),
                     $app->make(LicenseProbe::class),
                 ],
                 translator: $app->make(DoctorTranslator::class),
