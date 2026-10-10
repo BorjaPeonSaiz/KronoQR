@@ -24,8 +24,8 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * - una tablet por detras de la version del servidor sale como **aviso**, con
  *   su `uuid`, la version que declara y el estado de su cola;
  * - el remedio depende de la cola: con la cola duradera y vacia, «se actualiza
- *   sola en cuanto nadie ficha (2.2.1+), en su franja (2.2.0), o desregistra
- *   el service worker si es 2.1.0 o anterior»;
+ *   sola en cuanto nadie ficha (2.2.1+) o en su franja (anteriores), y si no,
+ *   desregistra el service worker»;
  *   con fichajes pendientes o la cola en memoria, **«espera, no recargues»**,
  *   porque recargar con la cola en memoria borra fichajes (ADR-047);
  * - **nunca** como fallo: `doctor.sh` lo convertiria en su codigo 6;
@@ -122,11 +122,14 @@ it('avisa, sin fallar, de la tablet desfasada con la cola vacia, y dice que se l
         ->and($check->details['behind'] ?? null)->toBe([tabletEnDetalle($desfasada, '2.2.0')])
         ->and($check->details['ahead'] ?? null)->toBe([])
         // La verdad desde la 2.2.1: 2.2.1+ sola en cuanto nadie ficha, a
-        // cualquier hora; 2.2.0 en la franja; 2.1.0 o anterior, desregistrar
-        // con red y cola a 0, y SIN borrar los datos del sitio.
+        // cualquier hora; anteriores en la franja; el plan B,
+        // desregistrar con red y cola a 0, y SIN borrar los datos del sitio.
         ->and((string) $check->fix)->toContain('KIOSK_UPDATE_QUIET_MINUTES')
         ->and((string) $check->fix)->toContain('a cualquier hora')
         ->and((string) $check->fix)->toContain('operacion.md §11.1')
+        // Una 2.1.0 tambien se actualiza sola en su franja: desregistrar es el plan B.
+        ->and((string) $check->fix)->toContain('2.2.0, 2.1.0 o 0.0.0')
+        ->and((string) $check->fix)->not->toContain('no se actualiza sola nunca')
         ->and((string) $check->fix)->toContain('KIOSK_UPDATE_WINDOW')
         ->and((string) $check->fix)->toContain('03:00 a 05:00')
         ->and((string) $check->fix)->toContain('SOLO con la tablet con red')

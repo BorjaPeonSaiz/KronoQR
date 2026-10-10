@@ -1385,11 +1385,12 @@ la tablet es anterior, la tablet busca la versión nueva en ese momento —sin
 esperar a la comprobación de cada hora— y se recarga **en cuanto se cumplen las
 condiciones 2 y 3**, a cualquier hora: cola vacía y guardada en la tablet (no
 solo en memoria) y nadie ha fichado en los últimos `KIOSK_UPDATE_QUIET_MINUTES`
-minutos. La ventana deja de contar para ella; **la cola vacía y los minutos de
-calma, nunca**. En la práctica, tras actualizar el servidor las tablets se ponen
-al día solas en el primer hueco sin fichajes. Esto solo lo sabe hacer una tablet
-que **ya** tiene la 2.2.1 o posterior: una con la 2.2.0 se pone al día en su
-ventana nocturna, y una con la 2.1.0 o anterior no lo hace sola nunca (ver
+minutos (en este caso, al menos 2 aunque el ajuste valga `0`). La ventana deja
+de contar para ella; **la cola vacía y los minutos de calma, nunca**. En la
+práctica, tras actualizar el servidor las tablets se ponen al día solas en el
+primer hueco sin fichajes. Esto solo lo sabe hacer una tablet que **ya** tiene
+la 2.2.1 o posterior: una con una versión anterior (2.2.0, 2.1.0) se pone al
+día sola como siempre, en su ventana, con las tres condiciones de arriba (ver
 «Qué hacer si una tablet no cambia sola», más abajo).
 
 **Dónde se ajusta.** Las dos claves están en Panel → **Ajustes operativos**
@@ -1398,7 +1399,7 @@ y llegan a las tablets en el latido siguiente —en menos de un minuto—; cada
 tablet las guarda, así que valen sin red, y una que aún no ha recibido ninguna
 usa las de serie. **Es una sola ventana para toda la instalación**: no hay una
 por quiosco, ni forma de forzar la actualización de una tablet desde el panel.
-Si necesitas que una tablet con la 2.2.0 cambie ya, mueve la ventana
+Si necesitas que una tablet anterior a la 2.2.1 cambie ya, mueve la ventana
 temporalmente a la hora actual: en cuanto pasen los minutos de calma con la cola
 vacía, se actualiza sola (si ya ha descargado la versión nueva; la busca cada
 hora). Con la 2.2.1 o posterior no hace falta.
@@ -1435,11 +1436,11 @@ fichajes sin enviar.
 
 | Declara | Qué hacer |
 | --- | --- |
-| **2.2.1 o posterior** | Nada. Se pone al día sola en el primer hueco con la cola vacía y sin fichajes. Si lleva horas sin hacerlo, su cola no llega a vaciarse: mira su red y su fila «Cola» en la pantalla de diagnóstico (§16.5). Si esa pantalla dice que la actualización urgente «no se ha podido completar tras varios intentos», haz el paso 3 una vez; si después sigue declarando la misma versión, la aplicación que sirve el servidor no es la de su versión: genera el paquete de diagnóstico (§12.2) y abre un caso con soporte |
-| **2.2.0** | Se pone al día sola en su ventana nocturna (`KIOSK_UPDATE_WINDOW`) con la cola vacía y sin fichajes, o antes si mueves la ventana (arriba). Si al día siguiente sigue igual, el paso 3 |
-| **2.1.0 o anterior, o `0.0.0`** | No se pone al día sola nunca: el paso 3, una sola vez. Desde ahí, las siguientes actualizaciones ya las hace sola |
+| **2.2.1 o posterior** | Nada. Se pone al día sola en el primer hueco con la cola vacía y sin fichajes, a cualquier hora; su pantalla de diagnóstico dice mientras tanto «actualización urgente pendiente». Si **varias horas después** sigue así, o el histórico de errores (§15) muestra `kiosk.update.unreachable` (lo envía tras unos 30 minutos sin encontrar la versión que pide el servidor), o la pantalla dice que la actualización urgente «no se ha podido completar tras varios intentos»: mira primero que tiene red y la cola a 0; si es así, el servidor está pidiendo una versión que no puede servirle. Genera el paquete de diagnóstico (§12.2) y abre un caso con soporte. **No** desregistres su *service worker* por esto: no lo arregla |
+| **Anterior: 2.2.0, 2.1.0 o `0.0.0`** | Nada, de entrada. Se pone al día sola en su ventana (`KIOSK_UPDATE_WINDOW`, de 03:00 a 05:00 de serie) con la cola vacía y sin fichajes, en cuanto haya descargado la versión nueva (la busca cada hora), o antes si mueves la ventana (arriba). Si **después de su ventana** sigue igual —normalmente porque en esa franja nunca hay calma o la cola no se vacía— o no puedes esperar a ella, el paso 3. Desde la 2.2.1, las siguientes actualizaciones ya no esperan a la ventana |
 
-**3. Desregistrar la aplicación de la tablet («service worker»).** Es la pieza
+**3. Plan B, solo para una tablet anterior a la 2.2.1: desregistrar la
+aplicación de la tablet («service worker»).** Es la pieza
 que guarda la versión de la aplicación dentro del navegador. Quitarla obliga a
 la tablet a descargar la versión del servidor al recargar; **no toca la cola de
 fichajes ni el emparejamiento**, que viven aparte, en los datos del sitio.

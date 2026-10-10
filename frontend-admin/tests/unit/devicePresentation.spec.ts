@@ -122,6 +122,9 @@ describe('whatToDoKey', () => {
     expect(text).toContain('KIOSK_UPDATE_QUIET_MINUTES')
     expect(text).toContain('a cualquier hora')
     expect(text).toContain('2.1.0')
+    // Una 2.1.0 también se pone al día sola en su franja: desregistrar es el plan B.
+    expect(text).toContain('Solo si sigue igual después de su franja')
+    expect(text).not.toContain('no se actualiza sola')
     expect(text).toContain('§11.1')
     expect(text).toContain(es.devices.table.pendingQueue)
     expect(text).toContain('SOLO con la tablet con red')

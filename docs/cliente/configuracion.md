@@ -68,7 +68,7 @@ Se cambian solo las que hagan falta.
 | `ATTENDANCE_PATTERN_MIN_REPEATS` | `3` | 1 – 30 | Días con coincidencia que tiene que acumular la misma pareja, dentro de los últimos 30 días, para que se abra la incidencia «Patrón anómalo de uso de la credencial» —**una por cada persona implicada**, cada una con su contraparte principal: si tres entran siempre juntas, son tres incidencias—. Súbelo si en tu centro es normal entrar en grupo por la misma puerta; bájalo a `1` solo si quieres ver cada pareja de escaneos seguidos. **La incidencia no anula ningún fichaje ni califica a nadie**: la revisa el responsable ([`guia-rrhh.md`](guia-rrhh.md) §4.5). |
 | `WEEKLY_SUMMARY_EMAIL` | `disabled` | `enabled` o `disabled` | Enciende el **resumen semanal por correo**: los lunes a las 06:00 UTC, cada responsable de departamento activo y con correo recibe la semana anterior **de su ámbito y de nadie más**. Exige salida de correo configurada (sección 6.21) y la funcionalidad `weekly_email_summary` en la licencia; sin cualquiera de las dos **el sistema funciona igual** y el envío se omite dejando constancia. Ver debajo de la tabla. |
 | `KIOSK_UPDATE_WINDOW` | `03:00-05:00` | `HH:MM-HH:MM`, hora local del centro | Franja en la que las tablets **tienen permiso** para instalar una versión nueva de la app del quiosco. Fuera de ella no se actualizan nunca, aunque la versión lleve días esperando. Puede cruzar la medianoche (`23:30-01:30`). Ver debajo de la tabla. |
-| `KIOSK_UPDATE_QUIET_MINUTES` | `10` | 0 – 120 | Minutos **sin ningún fichaje** que la tablet exige, además de estar dentro de la ventana y con la cola vacía, antes de actualizarse. Cubre el turno que empieza antes de lo previsto. `0` deja solo las otras dos condiciones. |
+| `KIOSK_UPDATE_QUIET_MINUTES` | `10` | 0 – 120 | Minutos **sin ningún fichaje** que la tablet exige, además de estar dentro de la ventana y con la cola vacía, antes de actualizarse. Cubre el turno que empieza antes de lo previsto. `0` deja solo las otras dos condiciones. En la actualización urgente (desde la 2.2.1, la tablet por detrás del servidor, sin ventana) la tablet exige al menos 2 minutos aunque valga `0`. |
 | `BASELINE_MANUAL_HOURS_PER_MONTH` | `0` | 0 – 10000 | Horas al mes que RRHH dedicaba a consolidar hojas de horas **antes** de instalar el sistema, declaradas por el hotel. **Solo alimenta el cuadro de impacto** ([`guia-rrhh.md`](guia-rrhh.md) §6.6), que la enseña junto al objetivo de reducirla un 80 %; el cuadro exige la funcionalidad `impact_dashboard` en la licencia. `0` significa «no declarada» y deja ese indicador vacío. **No cambia ningún cálculo**: ni horas, ni incidencias, ni informes. **El soporte del fabricante no puede tocarla** (403, como `WEEKLY_SUMMARY_EMAIL`): es el denominador declarado del objetivo comercial y describe tu proceso anterior a la instalación ([`operacion.md`](operacion.md) §12.4). |
 
 > **Las tres claves de tránsito y de patrón ajustan un sistema de control sobre
@@ -194,7 +194,10 @@ cumplan **tres condiciones a la vez** —la hora local del centro está dentro d
 la ventana, la cola de fichajes sin enviar está vacía y no ha habido ningún
 fichaje en los últimos `KIOSK_UPDATE_QUIET_MINUTES` minutos— y solo entonces se
 recarga con la versión nueva, en unos segundos. Si la ventana se cierra antes de
-que se cumplan, espera a la siguiente. Los dos valores llegan a las tablets en
+que se cumplan, espera a la siguiente. Desde la 2.2.1, una tablet que va por
+detrás de la versión del servidor no espera a la ventana: se actualiza en cuanto
+la cola está vacía y han pasado esos minutos sin fichajes (al menos 2, aunque
+el ajuste valga `0`). Los dos valores llegan a las tablets en
 el latido —en menos de un minuto, sin tocarlas— y cada tablet los guarda, así
 que valen aunque en ese momento no haya red; una tablet que aún no ha recibido
 ninguno usa los de serie. Pon la ventana en la franja más muerta de tu centro y

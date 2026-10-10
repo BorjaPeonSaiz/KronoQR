@@ -120,12 +120,12 @@ return [
                 .'DO NOT UNPAIR IT and follow the stuck queue runbook, section 8.',
             'app_version_behind' => 'Its application (:version) is older than the server. It keeps recording clock-ins normally. '
                 .'If it reports 2.2.1 or later, it catches up by itself, at any time, as soon as its queue is empty and on disk '
-                .'and nobody has clocked in KIOSK_UPDATE_QUIET_MINUTES. If it reports 2.2.0, during its update window '
-                .'(KIOSK_UPDATE_WINDOW, 03:00 to 05:00 by default) if it has already downloaded the new version. If it reports 2.1.0 or earlier '
-                .'(or 0.0.0), it will not update itself: '
-                .'unregister its service worker ONLY with the tablet online, its pending queue at 0 and no «in-memory queue» warning, '
-                .'because reloading with an in-memory queue deletes the unsent clock-ins. NEVER clear the site data: '
-                .'it would take the clock-in queue and the pairing with it. Step by step: docs/cliente/en/operation.md §11.1.',
+                .'and nobody has clocked in KIOSK_UPDATE_QUIET_MINUTES. If it reports an older one (2.2.0, 2.1.0 or 0.0.0), it catches up '
+                .'by itself in its update window (KIOSK_UPDATE_WINDOW, 03:00 to 05:00 by default) with an empty queue and no recent clock-ins. '
+                .'Only if it is the same after its window, or you cannot wait: unregister its service worker ONLY with the tablet online, '
+                .'its pending queue at 0 and no «in-memory queue» warning, because reloading with an in-memory queue deletes the unsent '
+                .'clock-ins. NEVER clear the site data: it would take the clock-in queue and the pairing with it. '
+                .'Step by step: docs/cliente/en/operation.md §11.1.',
         ],
 
         'fleet_empty' => 'No kiosk is paired yet. Pair the first one from the panel, under "Kiosks", '

@@ -1403,13 +1403,14 @@ every heartbeat the server tells the tablet which version the server runs. If
 the tablet's is older, the tablet looks for the new version right then —without
 waiting for the hourly check— and reloads **as soon as conditions 2 and 3
 hold**, at any time: an empty queue kept on the tablet (not only in memory) and
-nobody has clocked in the last `KIOSK_UPDATE_QUIET_MINUTES` minutes. The window
-stops counting for it; **the empty queue and the quiet minutes, never**. In
-practice, after the server is updated the tablets catch up by themselves at the
-first gap without clockings. Only a tablet that **already** has 2.2.1 or later
-knows how to do this: one on 2.2.0 catches up in its night window, and one on
-2.1.0 or earlier never does it by itself (see "What to do if a tablet does not
-change by itself", below).
+nobody has clocked in the last `KIOSK_UPDATE_QUIET_MINUTES` minutes (in this
+case, at least 2 even if the setting is `0`). The window stops counting for it;
+**the empty queue and the quiet minutes, never**. In practice, after the server
+is updated the tablets catch up by themselves at the first gap without
+clockings. Only a tablet that **already** has 2.2.1 or later knows how to do
+this: one on an older version (2.2.0, 2.1.0) catches up by itself as always, in
+its window, with the three conditions above (see "What to do if a tablet does
+not change by itself", below).
 
 **Where it is set.** Both keys are in Panel → **Operational settings**
 (`/settings`), administrator role ([`configuration.md`](configuration.md) §2.1),
@@ -1417,7 +1418,7 @@ and they reach the tablets on the next heartbeat —in under a minute—; every
 tablet stores them, so they hold without network, and one that has not received
 any yet uses the defaults. **It is a single window for the whole installation**:
 there is no per-kiosk one, and no way to force a tablet's update from the panel.
-If you need a tablet on 2.2.0 to change now, move the window temporarily to the
+If you need a tablet older than 2.2.1 to change now, move the window temporarily to the
 current time: as soon as the quiet minutes pass with an empty queue, it updates
 on its own (if it has already downloaded the new version; it looks for it every
 hour). With 2.2.1 or later it is not needed.
@@ -1453,11 +1454,11 @@ clockings.
 
 | Reports | What to do |
 | --- | --- |
-| **2.2.1 or later** | Nothing. It catches up by itself at the first gap with an empty queue and no clockings. If it has gone hours without doing so, its queue never empties: check its network and its "Queue" row on the diagnostic screen (§16.5). If that screen says the urgent update "could not be completed after several attempts", do step 3 once; if afterwards it still reports the same version, the app the server serves is not the one for its version: generate the diagnostic bundle (§12.2) and open a case with support |
-| **2.2.0** | It catches up by itself in its night window (`KIOSK_UPDATE_WINDOW`) with an empty queue and no clockings, or sooner if you move the window (above). If it is the same the next day, step 3 |
-| **2.1.0 or earlier, or `0.0.0`** | It never catches up by itself: step 3, once. From then on, it does the following updates by itself |
+| **2.2.1 or later** | Nothing. It catches up by itself at the first gap with an empty queue and no clockings, at any time; meanwhile its diagnostic screen says "urgent update pending". If **several hours later** it is still like that, or the error history (§15) shows `kiosk.update.unreachable` (sent after about 30 minutes without finding the version the server asks for), or the screen says the urgent update "could not be completed after several attempts": first check that it is online with the queue at 0; if so, the server is asking for a version it cannot serve. Generate the diagnostic bundle (§12.2) and open a case with support. Do **not** unregister its *service worker* for this: it does not fix it |
+| **Older: 2.2.0, 2.1.0 or `0.0.0`** | Nothing, to begin with. It catches up by itself in its window (`KIOSK_UPDATE_WINDOW`, 03:00 to 05:00 by default) with an empty queue and no clockings, once it has downloaded the new version (it looks for it every hour), or sooner if you move the window (above). If **after its window** it is still the same —usually because there is never a quiet moment in that slot or the queue does not empty— or you cannot wait for it, step 3. From 2.2.1, the following updates no longer wait for the window |
 
-**3. Unregister the tablet's app ("service worker").** It is the piece that
+**3. Plan B, only for a tablet older than 2.2.1: unregister the tablet's app
+("service worker").** It is the piece that
 keeps the app version inside the browser. Removing it forces the tablet to
 download the server's version on reload; **it does not touch the clocking queue
 or the pairing**, which live separately, in the site data.

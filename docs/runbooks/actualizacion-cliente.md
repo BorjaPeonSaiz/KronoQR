@@ -197,27 +197,32 @@ Las tablets se actualizan **después** del servidor y **con la cola a cero**:
   memoria) y nadie ha fichado en `KIOSK_UPDATE_QUIET_MINUTES`: el latido le dice
   que va por detrás del servidor y no espera a la ventana. No hay que hacer
   nada.
-- **Una tablet con la 2.2.0** solo se recarga cuando se cumplen a la vez la
-  ventana `KIOSK_UPDATE_WINDOW` (hora local del centro), la cola vacía y unos
-  minutos sin fichajes, y solo si ya ha descargado la versión nueva (la busca
-  cada hora). Esperar a la franja de serie puede tardar horas; si corre prisa,
-  **mueve temporalmente `KIOSK_UPDATE_WINDOW` a una franja que empiece ahora**
-  (panel, «Ajustes operativos») y devuélvela a su valor cuando estén al día.
-- **Una tablet con la 2.1.0 o anterior** (declara `0.0.0` o nada) **no se
-  pone al día sola nunca**: hay que desregistrar su *service worker* una vez.
-- **Compruébalo el mismo día**: en el panel, **Quioscos** (aviso «Aplicación
-  desactualizada»), o con `docker compose exec app php artisan product:doctor`
+- **Una tablet anterior a la 2.2.1** (2.2.0, o 2.1.0, que declara `0.0.0`)
+  también se pone al día sola, como siempre: se recarga cuando se cumplen a la
+  vez la ventana `KIOSK_UPDATE_WINDOW` (hora local del centro), la cola vacía y
+  unos minutos sin fichajes, y solo si ya ha descargado la versión nueva (la
+  busca cada hora). Esperar a la franja de serie puede tardar horas; si corre
+  prisa, **mueve temporalmente `KIOSK_UPDATE_WINDOW` a una franja que empiece
+  ahora** (panel, «Ajustes operativos») y devuélvela a su valor cuando estén al
+  día.
+- **Compruébalo después de la franja**: en el panel, **Quioscos** (aviso
+  «Aplicación desactualizada»), o con `docker compose exec app php artisan product:doctor`
   (línea de la versión de las tablets) o `php artisan kiosk:health` (versión y
   cola de cada una). El fichaje no se ve afectado mientras tanto.
-- **Si una tablet no cambia sola**, sigue
-  [`operacion.md`](../cliente/operacion.md) §11.1, «Qué hacer si una tablet no
-  cambia sola tras actualizar el servidor». En resumen: desregistrar el
-  *service worker* (`chrome://serviceworker-internals` → **Unregister** en la
-  tablet Android; F12 → **Application** → **Service workers** →
-  **Unregister** en un PC) y recargar, **solo** con las tres condiciones a la
-  vez: la tablet con red, «Fichajes sin sincronizar» a 0 y sin el aviso «Cola
-  solo en memoria» (con la cola en memoria, recargar **borra** los fichajes no
-  enviados).
+- **Si una tablet anterior a la 2.2.1 sigue igual después de su franja** (en
+  esa franja nunca hay calma, o la cola no se vacía) **o no puedes esperar**,
+  sigue [`operacion.md`](../cliente/operacion.md) §11.1, «Qué hacer si una
+  tablet no cambia sola tras actualizar el servidor». En resumen, como plan B:
+  desregistrar el *service worker* (`chrome://serviceworker-internals` →
+  **Unregister** en la tablet Android; F12 → **Application** → **Service
+  workers** → **Unregister** en un PC) y recargar, **solo** con las tres
+  condiciones a la vez: la tablet con red, «Fichajes sin sincronizar» a 0 y sin
+  el aviso «Cola solo en memoria» (con la cola en memoria, recargar **borra**
+  los fichajes no enviados).
+- **Si una 2.2.1 o posterior sigue en «actualización urgente pendiente» varias
+  horas después**, o el histórico de errores muestra `kiosk.update.unreachable`,
+  el servidor pide una versión que no puede servirle: paquete de diagnóstico y
+  caso con soporte (`operacion.md` §11.1). Desregistrar no lo arregla.
 - Recargar la página sin más **no** aplica la versión nueva: la que espera solo
   entra por las vías de arriba.
 - **Nunca borres los datos del sitio ni de la aplicación, ni desvincules una
