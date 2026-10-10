@@ -25,8 +25,21 @@ export function levelBadgeClass(level: ErrorLevel): string {
  * escrito para quien no conoce el sistema: `locales/{es,en}.json`,
  * `errorEvents.whatToDo.<source>.<level>`.
  */
-export function whatToDoKey(source: ErrorSource, level: ErrorLevel): string {
-  return `errorEvents.whatToDo.${source}.${level}`
+export function whatToDoKey(source: ErrorSource, level: ErrorLevel, code?: string | null): string {
+  const byCode = code === undefined || code === null ? undefined : WHAT_TO_DO_BY_CODE[code]
+
+  return byCode ?? `errorEvents.whatToDo.${source}.${level}`
+}
+
+/**
+ * «Que hacer» por CODIGO de error, que gana sobre el generico de origen y
+ * nivel (RF-PA-07, RF-KI-07). Se mapea a una clave plana porque un codigo
+ * lleva puntos y vue-i18n los leeria como ruta. Solo los codigos cuyo
+ * remedio real difiere del generico de su origen: el resto cae en
+ * `errorEvents.whatToDo.<source>.<level>`.
+ */
+const WHAT_TO_DO_BY_CODE: Readonly<Record<string, string>> = {
+  'kiosk.pin.seal_failed': 'errorEvents.whatToDoByCode.kioskPinSealFailed',
 }
 
 /**

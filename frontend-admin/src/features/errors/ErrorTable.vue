@@ -261,7 +261,7 @@ function contextLines(entry: ErrorEvent): ContextLine[] {
                 data-test="what-to-do"
               >
                 <p class="font-semibold">{{ t('errorEvents.detail.whatToDoHeading') }}</p>
-                <p class="mt-1">{{ t(whatToDoKey(entry.source, entry.level)) }}</p>
+                <p class="mt-1">{{ t(whatToDoKey(entry.source, entry.level, entry.code)) }}</p>
               </div>
             </td>
           </tr>

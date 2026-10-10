@@ -2024,7 +2024,8 @@
         "revoked": "Unlinked: it no longer counts for anything.",
         "battery_low": "Low battery and not charging.",
         "queue_storage_degraded": "The tablet's queue has dropped to memory: its clockings are not guaranteed to survive a restart.",
-        "discards_unreported": "The tablet has discarded clockings and has not yet been able to tell the server."
+        "discards_unreported": "The tablet has discarded clockings and has not yet been able to tell the server.",
+        "app_version_behind": "App out of date: the tablet runs a version older than the server's."
       },
       "whatToDoHeading": "What to do",
       "whatToDo": {
@@ -2037,7 +2038,8 @@
         "revoked": "This kiosk is unlinked: no action is needed.",
         "battery_low": "Check the charger: the tablet's battery is low and it is not charging.",
         "queue_storage_degraded": "Failure: how many clockings are pending is unknown. Do not restart or unlink the tablet; open its diagnostics screen, check storage and follow the \"Stuck offline queue\" runbook (docs/runbooks/cola-offline-atascada.md).",
-        "discards_unreported": "Warning: the tablet discarded clockings the server does not know about yet. Keep the tablet online; if the warning persists, check its discards list on the diagnostics screen and follow the \"Stuck offline queue\" runbook (docs/runbooks/cola-offline-atascada.md)."
+        "discards_unreported": "Warning: the tablet discarded clockings the server does not know about yet. Keep the tablet online; if the warning persists, check its discards list on the diagnostics screen and follow the \"Stuck offline queue\" runbook (docs/runbooks/cola-offline-atascada.md).",
+        "app_version_behind": "Clocking is not affected: the tablet keeps recording normally and will catch up by itself as soon as its queue is empty and nobody is clocking. If it reports version 2.2.0 or earlier (or 0.0.0), it will not update by itself: on the tablet, unregister the service worker (in Chrome, chrome://serviceworker-internals, or F12 → Application → Service workers → Unregister) WITHOUT clearing the site data, because it holds the clocking queue and the pairing."
       }
     },
     "battery": {
@@ -2402,6 +2404,9 @@
       "context": "Technical data",
       "notApplicable": "Not applicable",
       "whatToDoHeading": "What to do"
+    },
+    "whatToDoByCode": {
+      "kioskPinSealFailed": "The tablet cannot encrypt the PIN to send it, so it cannot validate PIN clockings. It is almost always a tablet running an old version of the app (it lacks the security permission for encryption) or a browser where encryption does not start. Check that tablet's version under Kiosks: if it shows \"App out of date\", follow that \"What to do\" (the tablet will catch up by itself once its queue is empty; if it reports 2.2.0 or earlier, or 0.0.0, its service worker must be unregistered without clearing the site data). If the version is current, contact support with the trace identifier (trace_id). QR clockings keep working."
     },
     "whatToDo": {
       "api": {

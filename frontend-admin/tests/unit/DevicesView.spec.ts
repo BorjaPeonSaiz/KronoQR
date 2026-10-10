@@ -115,6 +115,37 @@ describe('DevicesView', () => {
     expect(wrapper.text()).not.toContain(es.devices.health.whatToDoHeading)
   })
 
+  it('un quiosco desfasado (app_version_behind) es un aviso con su version y su «que hacer»', async () => {
+    stubRoutes({
+      '/devices': () =>
+        jsonResponse(
+          deviceList([
+            device({
+              name: 'Cocina',
+              app_version: '0.0.0',
+              health: {
+                verdict: 'warning',
+                reason: 'app_version_behind',
+                seconds_since_last_seen: 30,
+              },
+            }),
+          ]),
+        ),
+    })
+
+    const wrapper = await mountView(DevicesView)
+    await settle()
+
+    const row = wrapper.get('[data-test="device-row"]')
+
+    expect(row.attributes('data-verdict')).toBe('warning')
+    expect(row.text()).toContain(es.devices.health.reason.app_version_behind)
+    expect(row.text()).toContain('0.0.0')
+    expect(wrapper.get('[data-test="what-to-do"]').text()).toBe(
+      es.devices.health.whatToDo.app_version_behind,
+    )
+  })
+
   it('un quiosco con bateria baja y sin cargar avisa en la celda de bateria', async () => {
     stubRoutes({
       '/devices': () =>

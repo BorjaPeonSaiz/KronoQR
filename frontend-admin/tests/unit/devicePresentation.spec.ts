@@ -1,4 +1,4 @@
-// Presentacion pura de la salud de la flota de quioscos (RF-PA-07, tarea 3.3).
+// Presentacion pura de la salud de la flota de quioscos (RF-PA-07, RF-KI-07, tarea 3.3).
 import { describe, expect, it } from 'vitest'
 import {
   batteryChargingKey,
@@ -28,6 +28,9 @@ const REASONS: readonly DeviceHealth['reason'][] = [
   'never_seen',
   'revoked',
   'battery_low',
+  'queue_storage_degraded',
+  'discards_unreported',
+  'app_version_behind',
 ]
 
 describe('verdictBadgeClass', () => {
@@ -110,6 +113,25 @@ describe('whatToDoKey', () => {
 
   it('el de «battery_low» dice que hay que revisar el cargador', () => {
     expect(es.devices.health.whatToDo.battery_low).toContain('cargador')
+  })
+
+  it('el de «app_version_behind» (RF-KI-07) tranquiliza y dice desregistrar el service worker sin borrar los datos del sitio', () => {
+    const text = es.devices.health.whatToDo.app_version_behind
+
+    expect(text).toContain('sola')
+    expect(text).toContain('2.2.0')
+    expect(text).toContain('0.0.0')
+    expect(text).toContain('chrome://serviceworker-internals')
+    expect(text).toContain('Unregister')
+    expect(text).toContain('SIN borrar los datos del sitio')
+    expect(en.devices.health.whatToDo.app_version_behind).toContain(
+      'WITHOUT clearing the site data',
+    )
+  })
+
+  it('«app_version_behind» es un aviso (warning) que lleva el bloque «que hacer»', () => {
+    expect(showsWhatToDo('warning')).toBe(true)
+    expect(reasonKey('app_version_behind')).toBe('devices.health.reason.app_version_behind')
   })
 
   // Correccion de `revisor-codigo` (segunda vuelta): un quiosco con
