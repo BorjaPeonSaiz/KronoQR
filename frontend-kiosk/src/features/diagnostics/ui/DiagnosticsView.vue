@@ -36,11 +36,13 @@ import {
   readDeviceName,
   readDeviceToken,
   readDeviceTokenExpiresAt,
+  readMinimumAppVersion,
   readServiceCodeHash,
   readUpdateWindow,
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
+import { currentUrgentGiveUpMotive, currentUrgentUpdateMode } from '@/shared/telemetry/urgentUpdate'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
 import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
@@ -307,6 +309,9 @@ const privacyNotice = readPrivacyNotice()
 // trajera. Leidos una vez al abrir, como `serviceWorkerActive`.
 const updatePending = isUpdatePending()
 const updateWindow = readUpdateWindow()
+const urgentState = currentUrgentUpdateMode()
+const minimumVersion = readMinimumAppVersion()
+const giveUpReason = currentUrgentGiveUpMotive()
 
 const snapshot = computed(() =>
   buildDiagnosticsSnapshot({
@@ -351,9 +356,36 @@ const snapshot = computed(() =>
     wakeLock: { supported: wakeLock.supported, active: wakeLock.active.value },
     pendingErrors: reporter.size(),
     privacyControllerConfigured: privacyNotice.controllerName !== null,
-    update: { pending: updatePending, window: updateWindow },
+    update: {
+      pending: updatePending,
+      window: updateWindow,
+      urgentState,
+      minimumVersion,
+      giveUpReason,
+    },
   }),
 )
+
+// «Actualización urgente pendiente» (RF-KI-07): la tablet esta por debajo de la
+// version minima del servidor. Gana sobre «pendiente en la ventana» porque la
+// ventana horaria deja de aplicar.
+const updateStatusText = computed(() => {
+  const { urgentState: state, pending, window, minimumVersion: minimum } = snapshot.value.update
+  if (state === 'urgent') {
+    return t('diagnostics.values.updateUrgent', { version: minimum ?? '' })
+  }
+  if (state === 'gave_up') {
+    return t(
+      snapshot.value.update.giveUpReason === 'no_update'
+        ? 'diagnostics.values.updateUrgentUnavailable'
+        : 'diagnostics.values.updateUrgentGaveUp',
+      { version: minimum ?? '' },
+    )
+  }
+  return pending
+    ? t('diagnostics.values.updatePending', { start: window.start, end: window.end })
+    : t('diagnostics.values.updateUpToDate')
+})
 
 function formatInstant(iso: string | null): string {
   if (iso === null) return t('diagnostics.values.notAvailable')
@@ -675,14 +707,11 @@ onBeforeUnmount(() => {
           <dd>{{ yesNo(snapshot.serviceWorkerActive) }}</dd>
           <dt>{{ t('diagnostics.rows.version.updateStatus') }}</dt>
           <dd data-testid="diagnostics-update-status">
-            {{
-              snapshot.update.pending
-                ? t('diagnostics.values.updatePending', {
-                    start: snapshot.update.window.start,
-                    end: snapshot.update.window.end,
-                  })
-                : t('diagnostics.values.updateUpToDate')
-            }}
+            {{ updateStatusText }}
+          </dd>
+          <dt>{{ t('diagnostics.rows.version.minimumVersion') }}</dt>
+          <dd data-testid="diagnostics-minimum-version">
+            {{ snapshot.update.minimumVersion ?? t('diagnostics.values.minimumVersionNone') }}
           </dd>
           <dt>{{ t('diagnostics.rows.version.updateWindow') }}</dt>
           <dd data-testid="diagnostics-update-window">

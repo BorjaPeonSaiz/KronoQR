@@ -9,6 +9,10 @@ import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/shared/api/client'
 import {
+  interactionInProgress,
+  resetInteractions,
+} from '@/features/offline/application/interactionGuard'
+import {
   disposeOfflineQueue,
   createOfflineQueueController,
 } from '@/features/offline/useOfflineQueue'
@@ -47,6 +51,7 @@ const KEYS = [
 ]
 
 beforeEach(async () => {
+  resetInteractions()
   await disposeOfflineQueue()
   for (const key of KEYS) localStorage.removeItem(key)
 })
@@ -100,5 +105,67 @@ describe('la cola alimenta la puerta de actualizacion (RF-KI-07, tarea 3.12)', (
     // Sin red (`offlineApi`), el escaneo se queda encolado: la cola no esta vacia.
     await vi.waitFor(() => expect(controller.stats().size).toBe(1))
     expect(controller.canUpdateNow(new Date('2026-08-14T12:00:00.000Z'))).toBe(false)
+  })
+
+  it('urgente: fuera de la ventana y con la cola vacia, SI; con un fichaje encolado, NO', async () => {
+    // Ventana de serie 03:00-05:00; a las 12:00 locales esta cerrada.
+    storeUpdateQuietMinutes(0)
+    const noon = new Date(2026, 7, 14, 12, 0, 0)
+
+    const controller = createOfflineQueueController({
+      api: offlineApi(),
+      reporter: silentReporter(),
+      databaseName: 'kronoqr-update-gate-3',
+    })
+
+    // Antes de la primera lectura de la cola sus cifras son las iniciales, no un
+    // hecho: la puerta NO puede dar «cola vacia y duradera» (R1).
+    expect(controller.queueKnown()).toBe(false)
+    expect(controller.canUpdateNow(noon, true)).toBe(false)
+
+    await vi.waitFor(() => expect(controller.queueKnown()).toBe(true))
+    expect(controller.canUpdateNow(noon)).toBe(false)
+    expect(controller.canUpdateNow(noon, true)).toBe(true)
+
+    await controller.submission.submit({
+      kind: 'qr',
+      scan_id: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b92',
+      qr_payload: PAYLOAD,
+      occurred_at: '2026-08-14T05:58:31.000Z',
+      intent: 'auto',
+      device_id: 'kiosk-1',
+    })
+    await vi.waitFor(() => expect(controller.stats().size).toBe(1))
+
+    expect(controller.canUpdateNow(noon, true)).toBe(false)
+  })
+
+  it('un envio sin resolver cierra la puerta aunque el silencio valga 0 (urgente)', async () => {
+    storeUpdateQuietMinutes(0)
+    const noon = new Date(2026, 7, 14, 12, 0, 0)
+    // La peticion directa nunca contesta: el envio queda en vuelo.
+    const api = offlineApi()
+    api.recordScan = vi.fn((): ReturnType<ApiClient['recordScan']> => new Promise(() => {}))
+
+    const controller = createOfflineQueueController({
+      api,
+      reporter: silentReporter(),
+      databaseName: 'kronoqr-update-gate-4',
+    })
+    await vi.waitFor(() => expect(controller.queueKnown()).toBe(true))
+    expect(controller.canUpdateNow(noon, true)).toBe(true)
+
+    void controller.submission.submit({
+      kind: 'qr',
+      scan_id: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b93',
+      qr_payload: PAYLOAD,
+      occurred_at: '2020-01-01T00:00:00.000Z',
+      intent: 'auto',
+      device_id: 'kiosk-1',
+    })
+
+    expect(interactionInProgress()).toBe(true)
+    expect(controller.canUpdateNow(noon, true)).toBe(false)
+    expect(controller.canUpdateNow(noon, false)).toBe(false)
   })
 })

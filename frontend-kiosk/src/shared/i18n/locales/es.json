@@ -187,6 +187,7 @@
         "app": "Versión de la aplicación",
         "serviceWorker": "Service worker activo",
         "updateStatus": "Actualización",
+        "minimumVersion": "Versión mínima del servidor",
         "updateWindow": "Ventana de actualización"
       },
       "battery": {
@@ -213,7 +214,11 @@
       "configured": "Configurado",
       "notConfigured": "Sin configurar",
       "unpaired": "Esta tablet no está emparejada: no hay padrón que mostrar.",
+      "minimumVersionNone": "No indicada",
       "updatePending": "Pendiente: se aplicará en la ventana {start}–{end}.",
+      "updateUrgent": "Actualización urgente pendiente: el servidor necesita la versión {version}. Se aplicará en cuanto no haya fichajes pendientes ni nadie fichando, a cualquier hora; la pantalla se recargará unos segundos.",
+      "updateUrgentGaveUp": "La tablet ha intentado actualizarse varias veces a la versión {version} y sigue en otra. El quiosco sigue fichando con normalidad; avisa a soporte.",
+      "updateUrgentUnavailable": "El servidor pide la versión {version}, pero esa versión no está disponible para esta tablet: no se ha encontrado ninguna nueva. El quiosco sigue fichando con normalidad; avisa a soporte.",
       "updateUpToDate": "Al día."
     },
     "warnings": {

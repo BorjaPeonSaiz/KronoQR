@@ -115,10 +115,18 @@ describe('whatToDoKey', () => {
     expect(es.devices.health.whatToDo.battery_low).toContain('cargador')
   })
 
-  it('el de «app_version_behind» (RF-KI-07) tranquiliza y dice desregistrar el service worker sin borrar los datos del sitio', () => {
+  it('el de «app_version_behind» (RF-KI-07) tranquiliza y dice cuándo se pone al día sola y cuándo desregistrar el service worker sin borrar los datos del sitio', () => {
     const text = es.devices.health.whatToDo.app_version_behind
 
     expect(text).toContain('KIOSK_UPDATE_WINDOW')
+    expect(text).toContain('KIOSK_UPDATE_QUIET_MINUTES')
+    expect(text).toContain('a cualquier hora')
+    expect(text).toContain('2.1.0')
+    // Una 2.1.0 también se pone al día sola en su franja: desregistrar es el plan B.
+    expect(text).toContain('Solo si sigue igual después de su franja')
+    expect(text).not.toContain('no se actualiza sola')
+    expect(text).toContain('§11.1')
+    expect(text).toContain(es.devices.table.pendingQueue)
     expect(text).toContain('SOLO con la tablet con red')
     expect(text).toContain('Cola solo en memoria')
     expect(text).toContain('2.2.0')
@@ -132,6 +140,7 @@ describe('whatToDoKey', () => {
     expect(en.devices.health.whatToDo.app_version_behind).toContain(
       'ONLY while the tablet is online',
     )
+    expect(en.devices.health.whatToDo.app_version_behind).toContain(en.devices.table.pendingQueue)
   })
 
   it('«app_version_behind» es un aviso (warning) que lleva el bloque «que hacer»', () => {

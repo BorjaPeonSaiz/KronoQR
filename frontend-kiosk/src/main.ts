@@ -2,18 +2,19 @@ import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 import App from './App.vue'
 import './assets/main.css'
-import { canApplyUpdate } from './features/offline/domain/updateWindow'
-import { pendingScanCount } from './features/offline/useOfflineQueue'
+import { canUpdateNowGlobal } from './features/offline/useOfflineQueue'
 import { createAppRouter } from './router'
 import { applyCachedBranding } from './shared/branding/useBranding'
 import { createAppI18n, initialLocale } from './shared/i18n'
+import { APP_VERSION, resolveDeviceId } from './shared/telemetry/deviceIdentity'
 import {
-  APP_VERSION,
-  readLastScanAt,
-  readUpdateQuietMinutes,
-  readUpdateWindow,
-  resolveDeviceId,
-} from './shared/telemetry/deviceIdentity'
+  currentUrgentGiveUpMotive,
+  currentUrgentUpdateMode,
+  onMinimumAppVersionReceived,
+  recordUrgentUpdateAttempt,
+  recordUrgentUpdateCheck,
+  resetUrgentUpdateChecks,
+} from './shared/telemetry/urgentUpdate'
 import { getErrorReporter } from './shared/telemetry/errorReporter'
 import { errorMessageOf, errorTypeOf } from './shared/telemetry/errorType'
 import { registerServiceWorker } from './sw/registerServiceWorker'
@@ -91,14 +92,22 @@ app.mount('#app')
 // puede abrirse dentro de poco sin que nadie tenga que volver a pedirlo.
 void registerServiceWorker({
   onError: (context) => bootReporter.report('kiosk.service_worker.failed', context),
-  canApply: () => {
-    const lastScanAtIso = readLastScanAt()
-    return canApplyUpdate({
-      now: new Date(),
-      pendingScans: pendingScanCount(),
-      lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
-      window: readUpdateWindow(),
-      quietMinutes: readUpdateQuietMinutes(),
-    })
-  },
+  // Modo urgente (version minima del servidor por encima de esta PWA): se
+  // comprueba la version ya y la ventana horaria deja de exigirse. Cola vacia
+  // y duradera, silencio de `quietMinutes` (minimo 2) y ninguna interaccion en
+  // curso siguen mandando. Tras 3 recargas, o 6 comprobaciones sin version
+  // nueva, se renuncia y se reporta (minima inalcanzable).
+  urgentState: currentUrgentUpdateMode,
+  subscribeUrgent: onMinimumAppVersionReceived,
+  onUrgentAttempt: recordUrgentUpdateAttempt,
+  onUrgentCheckEmpty: recordUrgentUpdateCheck,
+  onUrgentUpdateFound: resetUrgentUpdateChecks,
+  onUrgentGaveUp: () =>
+    bootReporter.report('kiosk.update.unreachable', {
+      reason: currentUrgentGiveUpMotive() ?? 'unknown',
+      message: 'minimum_version_unreachable',
+    }),
+  // UNA sola puerta: la del controlador de la cola, la misma que prueban las
+  // unitarias (`canUpdateNowGlobal`).
+  canApply: (urgent) => canUpdateNowGlobal(urgent),
 })

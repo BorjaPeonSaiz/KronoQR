@@ -241,6 +241,32 @@ it('avisa del quiosco que se esta descargando y dice que hacer', function (): vo
         ->and($resultado['output'])->toContain('cargador desenchufado');
 })->group('RF-PA-07');
 
+it('dice a la tablet desfasada que remedio le toca segun su version, sin borrar los datos del sitio', function (): void {
+    // Desde la 2.2.1 la tablet se pone al dia sola en cuanto la cola esta vacia
+    // y nadie ficha, a cualquier hora; una anterior (2.2.0 o 2.1.0), sola en
+    // su franja, y el desregistro del service worker es solo el plan B. El
+    // consejo lo dice todo y remite a la guia, donde esta el paso a paso.
+    config()->set('app.version', '2.2.1');
+    quioscoEnLaBase('Recepcion', '2026-09-09 11:59:30+00', appVersion: '2.1.0');
+
+    $resultado = ejecutarSalud();
+
+    expect($resultado['code'])->toBe(1)
+        ->and($resultado['output'])->toContain('Que hay que mirar')
+        ->and($resultado['output'])->toContain('KIOSK_UPDATE_QUIET_MINUTES')
+        ->and($resultado['output'])->toContain('KIOSK_UPDATE_WINDOW')
+        ->and($resultado['output'])->toContain('2.2.0, 2.1.0 o 0.0.0')
+        ->and($resultado['output'])->toContain('Solo si sigue igual despues de su franja')
+        ->and($resultado['output'])->toContain('SOLO con la tablet con red')
+        ->and($resultado['output'])->toContain('NUNCA borres los datos del sitio')
+        ->and($resultado['output'])->toContain('operacion.md §11.1');
+
+    expect(ejecutarSalud(['--lang' => 'en'])['output'])
+        ->toContain('at any time')
+        ->toContain('NEVER clear the site data')
+        ->toContain('operation.md §11.1');
+})->group('RF-PA-07', 'RF-KI-07');
+
 it('no avisa de la bateria baja de un quiosco enchufado', function (): void {
     // Al 9 % y cargando esta haciendo exactamente lo que tiene que hacer.
     quioscoEnLaBase('Recepcion', '2026-09-09 11:59:30+00', batteryLevel: 9, batteryCharging: true);

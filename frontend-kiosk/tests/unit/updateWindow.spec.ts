@@ -12,6 +12,7 @@ import {
   DEFAULT_UPDATE_WINDOW,
   isValidUpdateWindow,
   isWithinUpdateWindow,
+  URGENT_MIN_QUIET_MINUTES,
 } from '@/features/offline/domain/updateWindow'
 
 /** Hora LOCAL de la tablet: es la del reloj de la pared la que trae la cola de gente. */
@@ -137,5 +138,108 @@ describe('puerta de la actualizacion (canApplyUpdate)', () => {
     expect(canApplyUpdate({ now: at(11, 0), pendingScans: 0, lastScanAt: null, window })).toBe(
       false,
     )
+  })
+})
+
+describe('modo urgente: solo se relaja la ventana horaria (RF-KI-07, regla dura 19)', () => {
+  const OUTSIDE = at(11, 0)
+
+  it('fuera de la ventana, con la cola vacia y sin escaneo reciente: SI', () => {
+    expect(
+      canApplyUpdate({
+        now: OUTSIDE,
+        pendingScans: 0,
+        lastScanAt: new Date(OUTSIDE.getTime() - 30 * 60_000),
+        quietMinutes: 10,
+        urgent: true,
+        queueDurable: true,
+      }),
+    ).toBe(true)
+    // El mismo caso sin urgencia sigue cerrado.
+    expect(canApplyUpdate({ now: OUTSIDE, pendingScans: 0, lastScanAt: null })).toBe(false)
+  })
+
+  it('con la cola llena: NO, a cualquier hora', () => {
+    expect(canApplyUpdate({ now: OUTSIDE, pendingScans: 1, lastScanAt: null, urgent: true })).toBe(
+      false,
+    )
+  })
+
+  it('con la cola en memoria: NUNCA, aunque parezca vacia (ADR-047)', () => {
+    expect(
+      canApplyUpdate({
+        now: OUTSIDE,
+        pendingScans: 0,
+        lastScanAt: null,
+        urgent: true,
+        queueDurable: false,
+      }),
+    ).toBe(false)
+  })
+
+  it('con un escaneo dentro de `quietMinutes`: NO', () => {
+    expect(
+      canApplyUpdate({
+        now: OUTSIDE,
+        pendingScans: 0,
+        lastScanAt: new Date(OUTSIDE.getTime() - 5 * 60_000),
+        quietMinutes: 10,
+        urgent: true,
+        queueDurable: true,
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('modo urgente: silencio minimo, interaccion y cola no leida (RF-KI-07, regla dura 19)', () => {
+  const OUTSIDE = at(11, 0)
+  const minutesBefore = (minutes: number): Date => new Date(OUTSIDE.getTime() - minutes * 60_000)
+  const base = { now: OUTSIDE, pendingScans: 0, queueDurable: true } as const
+
+  it('urgente con silencio configurado a 0 sigue respetando un suelo de 2 minutos', () => {
+    expect(
+      canApplyUpdate({ ...base, urgent: true, quietMinutes: 0, lastScanAt: minutesBefore(1) }),
+    ).toBe(false)
+    expect(
+      canApplyUpdate({ ...base, urgent: true, quietMinutes: 0, lastScanAt: minutesBefore(3) }),
+    ).toBe(true)
+    expect(URGENT_MIN_QUIET_MINUTES).toBe(2)
+  })
+
+  it('con interaccion en curso la puerta esta cerrada, urgente o no', () => {
+    const inWindow = at(4, 0)
+    expect(
+      canApplyUpdate({ ...base, urgent: true, lastScanAt: null, interactionInProgress: true }),
+    ).toBe(false)
+    expect(
+      canApplyUpdate({
+        now: inWindow,
+        pendingScans: 0,
+        lastScanAt: null,
+        interactionInProgress: true,
+      }),
+    ).toBe(false)
+  })
+
+  it('con la cola sin leer todavia, no se da por vacia', () => {
+    expect(canApplyUpdate({ ...base, urgent: true, lastScanAt: null, queueKnown: false })).toBe(
+      false,
+    )
+    expect(canApplyUpdate({ ...base, urgent: true, lastScanAt: null, queueKnown: true })).toBe(true)
+  })
+
+  it('un ultimo escaneo en el futuro cercano (reloj corregido hacia atras) cuenta como reciente', () => {
+    const soonInTheFuture = new Date(OUTSIDE.getTime() + 60_000)
+    expect(
+      canApplyUpdate({ ...base, urgent: true, quietMinutes: 10, lastScanAt: soonInTheFuture }),
+    ).toBe(false)
+    expect(
+      canApplyUpdate({
+        now: at(4, 0),
+        pendingScans: 0,
+        quietMinutes: 10,
+        lastScanAt: new Date(at(4, 0).getTime() + 60_000),
+      }),
+    ).toBe(false)
   })
 })

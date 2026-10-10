@@ -27,9 +27,20 @@
 //      serie) y aplica en cuanto la deja pasar. Si la ventana esta cerrada
 //      ahora, se reintenta al minuto siguiente; no hace falta que nadie
 //      vuelva a pedirlo.
+//
+// MODO URGENTE (RF-KI-07, 2.2.1). Si el latido declara una version minima
+// (`minimum_app_version`) por encima de esta PWA, no se espera a los 60 min:
+// se pregunta por una version nueva en el acto (como mucho cada 5 min) y la
+// puerta se relaja SOLO en la ventana horaria (`canApply(true)`). Cola vacia
+// y duradera y silencio de `quietMinutes` siguen mandando. Cada recarga
+// urgente se anota de forma persistente y, tras 3 sin cambio de version, se
+// renuncia (cadencia normal + `kiosk.update.unreachable`): una minima
+// inalcanzable no puede dejar a la tablet recargando en bucle.
 
 import type { RegisterSWOptions } from 'virtual:pwa-register'
 import { errorMessageOf, errorTypeOf } from '@/shared/telemetry/errorType'
+import type { UrgentUpdateMode } from '@/features/offline/domain/minimumVersion'
+import { URGENT_CHECK_MIN_INTERVAL_MS } from '@/features/offline/domain/minimumVersion'
 import { installTestHooks } from './testHooks'
 
 /** Forma minima que necesita este fichero de `registerSW`, para poder inyectarla en pruebas. */
@@ -57,8 +68,27 @@ export interface RegisterServiceWorkerOptions {
   readonly onUpdateAvailable?: () => void
   readonly onOfflineReady?: () => void
   readonly onError?: (context: Record<string, string | number | boolean>) => void
-  /** `false` = ahora no. Por defecto, se permite: quien no pasa guardian, decide. */
-  readonly canApply?: () => boolean
+  /**
+   * `false` = ahora no. Por defecto, se permite: quien no pasa guardian, decide.
+   * `urgent` = la tablet esta por debajo de la version minima del servidor: el
+   * guardian relaja SOLO la ventana horaria (`canApplyUpdate`, RF-KI-07).
+   */
+  readonly canApply?: (urgent: boolean) => boolean
+  /** Estado del modo urgente, releido en cada decision. Por defecto, `none`. */
+  readonly urgentState?: () => UrgentUpdateMode
+  /** Se llama justo ANTES de una recarga urgente: debe anotar el intento de forma persistente. */
+  readonly onUrgentAttempt?: () => void
+  /** El modo urgente se ha rendido (minima inalcanzable tras N intentos). Una vez por arranque. */
+  readonly onUrgentGaveUp?: () => void
+  /**
+   * Una comprobacion urgente se ha RESUELTO sin que hubiera version pendiente
+   * (debe anotarse de forma persistente: es la mitad del corte del bucle).
+   */
+  readonly onUrgentCheckEmpty?: () => void
+  /** Ha aparecido una version pendiente: las comprobaciones en vacio dejan de contar. */
+  readonly onUrgentUpdateFound?: () => void
+  /** Aviso de que el latido ha dejado una version minima. Devuelve la baja. */
+  readonly subscribeUrgent?: (listener: () => void) => () => void
   /** Cada cuanto se comprueba si hay una version nueva publicada. 60 min de serie. */
   readonly checkForUpdateIntervalMs?: number
   /** Cada cuanto se reevalua la puerta mientras hay una version pendiente. 1 min de serie. */
@@ -97,8 +127,12 @@ export async function registerServiceWorker(
   let registration: ServiceWorkerRegistration | undefined
   let checkTimer: ReturnType<typeof setInterval> | null = null
   let retryTimer: ReturnType<typeof setInterval> | null = null
+  let unsubscribeUrgent: (() => void) | null = null
+  let lastUrgentCheckAt: number | null = null
+  let gaveUpReported = false
 
   const canApply = options.canApply ?? ((): boolean => true)
+  const urgentState = options.urgentState ?? ((): UrgentUpdateMode => 'none')
   const checkIntervalMs = options.checkForUpdateIntervalMs ?? DEFAULT_CHECK_FOR_UPDATE_INTERVAL_MS
   const retryIntervalMs = options.retryIntervalMs ?? DEFAULT_RETRY_INTERVAL_MS
   const loadRegisterSW = options.loadRegisterSW ?? defaultLoadRegisterSW
@@ -129,7 +163,11 @@ export async function registerServiceWorker(
     // «aplicala» pueden pasar horas -o solo un minuto, con el temporizador de
     // reintento-, y lo que importa es el momento de la recarga. `pending` no
     // se limpia si se deniega: la version sigue ahi esperando un momento mejor.
-    if (!canApply()) return false
+    const urgent = urgentState() === 'urgent'
+    if (!canApply(urgent)) return false
+    // El intento se anota ANTES de recargar: la recarga borra la memoria y el
+    // corte del bucle (minima inalcanzable) necesita un contador que sobreviva.
+    if (urgent) options.onUrgentAttempt?.()
     pending = false
     stopRetryTimer()
     try {
@@ -166,12 +204,53 @@ export async function registerServiceWorker(
     void applyUpdate()
   }
 
+  /**
+   * MODO URGENTE (RF-KI-07). Se llama al arrancar y en cada latido que deja una
+   * version minima. Por debajo de ella: se pregunta al navegador por una
+   * version nueva EN EL ACTO (sin esperar a los 60 min; como mucho cada
+   * `URGENT_CHECK_MIN_INTERVAL_MS`) y, si ya hay una pendiente, se reevalua la
+   * puerta ahora. La puerta sigue siendo la de `canApply(true)`: cola vacia y
+   * duradera y silencio reciente. Tras N intentos sin cambio de version se
+   * renuncia (`gave_up`): cadencia normal y un reporte, no un bucle.
+   */
+  function handleUrgentSignal(): void {
+    const state = urgentState()
+    if (state === 'gave_up') {
+      if (!gaveUpReported) {
+        gaveUpReported = true
+        options.onUrgentGaveUp?.()
+      }
+      return
+    }
+    if (state !== 'urgent') return
+    if (pending) {
+      void applyUpdate()
+      return
+    }
+    if (registration === undefined) return
+    const now = Date.now()
+    if (lastUrgentCheckAt !== null && now - lastUrgentCheckAt < URGENT_CHECK_MIN_INTERVAL_MS) return
+    lastUrgentCheckAt = now
+    // Solo cuenta una comprobacion que SE RESUELVE (una tablet sin red no se rinde
+    // por no poder preguntar). Si tras ella no hay version pendiente, es un
+    // intento en vacio; al acumular varios, la minima se da por inalcanzable.
+    void registration
+      .update()
+      .then(() => {
+        if (pending) return
+        options.onUrgentCheckEmpty?.()
+        handleUrgentSignal()
+      })
+      .catch(() => {})
+  }
+
   try {
     const { registerSW } = await loadRegisterSW()
     update = registerSW({
       immediate: true,
       onNeedRefresh() {
         pending = true
+        options.onUrgentUpdateFound?.()
         options.onUpdateAvailable?.()
         startRetryTimer()
       },
@@ -180,6 +259,8 @@ export async function registerServiceWorker(
       },
       onRegisteredSW(_swScriptUrl, reg) {
         registration = reg
+        // Una minima cacheada de antes del reinicio no espera al siguiente latido.
+        handleUrgentSignal()
       },
       onRegisterError(error: unknown) {
         options.onError?.({ error_type: errorTypeOf(error), message: errorMessageOf(error) })
@@ -195,6 +276,9 @@ export async function registerServiceWorker(
   // version nueva si alguien la reinicia a mano. Un fallo al comprobar no es
   // una averia (regla dura 19, al reves): la tablet sigue con la version que
   // ya tiene, y se reintenta en el siguiente ciclo.
+  unsubscribeUrgent = options.subscribeUrgent?.(handleUrgentSignal) ?? null
+  handleUrgentSignal()
+
   checkTimer = setInterval(() => {
     void registration?.update().catch(() => {})
   }, checkIntervalMs)
@@ -205,6 +289,8 @@ export async function registerServiceWorker(
     dispose: () => {
       if (checkTimer !== null) clearInterval(checkTimer)
       checkTimer = null
+      unsubscribeUrgent?.()
+      unsubscribeUrgent = null
       stopRetryTimer()
       if (sharedPendingState === result.needsRefresh) sharedPendingState = null
     },

@@ -187,6 +187,11 @@ export interface KioskApiStubOptions {
    * tablet (RF-AT-10) sin tocar el reloj de la pagina, que sigue midiendo el
    * paso real del tiempo entre latidos.
    */
+  /**
+   * `KioskHeartbeat.minimum_app_version` (RF-KI-07, modo urgente). Ausente = el
+   * servidor no la declara (servidor de desarrollo).
+   */
+  readonly minimumAppVersion?: string
   readonly serverTime?: () => string
 }
 
@@ -221,6 +226,9 @@ export async function stubKioskApi(page: Page, options: KioskApiStubOptions = {}
         service_code_hash: serviceCodeHash,
         break_clocking_enabled: breakClockingEnabled,
         clock_skew_tolerance_seconds: clockSkewToleranceSeconds,
+        ...(options.minimumAppVersion === undefined
+          ? {}
+          : { minimum_app_version: options.minimumAppVersion }),
       }),
     })
   })

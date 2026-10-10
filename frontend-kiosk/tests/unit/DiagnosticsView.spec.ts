@@ -8,6 +8,7 @@
 import 'fake-indexeddb/auto'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { recordUrgentUpdateAttempt } from '@/shared/telemetry/urgentUpdate'
 import { createRouter, createWebHistory } from 'vue-router'
 import DiagnosticsView from '@/features/diagnostics/ui/DiagnosticsView.vue'
 import { routes } from '@/router'
@@ -134,6 +135,41 @@ describe('pantalla de diagnostico — sin huella cacheada (decision 7)', () => {
 
     expect(wrapper.get('[data-testid="diagnostics-update-status"]').text()).toBe('Al día.')
     expect(wrapper.get('[data-testid="diagnostics-update-window"]').text()).toBe('03:00–05:00')
+
+    wrapper.unmount()
+  })
+
+  it('con una version minima superior, enseña «actualización urgente pendiente» y la version recibida (RF-KI-07/08)', async () => {
+    localStorage.setItem('kronoqr.kiosk.minimum_app_version', '999.0.0')
+
+    const { wrapper } = await render()
+
+    expect(wrapper.get('[data-testid="diagnostics-update-status"]').text()).toContain(
+      'Actualización urgente pendiente',
+    )
+    expect(wrapper.get('[data-testid="diagnostics-update-status"]').text()).toContain('999.0.0')
+    expect(wrapper.get('[data-testid="diagnostics-minimum-version"]').text()).toBe('999.0.0')
+
+    wrapper.unmount()
+  })
+
+  it('tras agotar los intentos, lo dice y remite a soporte', async () => {
+    localStorage.setItem('kronoqr.kiosk.minimum_app_version', '999.0.0')
+    recordUrgentUpdateAttempt()
+    recordUrgentUpdateAttempt()
+    recordUrgentUpdateAttempt()
+
+    const { wrapper } = await render()
+
+    expect(wrapper.get('[data-testid="diagnostics-update-status"]').text()).toContain('soporte')
+
+    wrapper.unmount()
+  })
+
+  it('sin version minima, la fila lo dice', async () => {
+    const { wrapper } = await render()
+
+    expect(wrapper.get('[data-testid="diagnostics-minimum-version"]').text()).toBe('No indicada')
 
     wrapper.unmount()
   })

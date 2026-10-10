@@ -1398,14 +1398,30 @@ If the window closes without all three holding, it waits for tomorrow's. That is
 what makes an update invisible to the workforce: **the tablet never updates
 with people in front of it**, and when it does, the queue is empty.
 
+**From 2.2.1, a tablet that has fallen behind does not wait for the window.** On
+every heartbeat the server tells the tablet which version the server runs. If
+the tablet's is older, the tablet looks for the new version right then —without
+waiting for the hourly check— and reloads **as soon as conditions 2 and 3
+hold**, at any time: an empty queue kept on the tablet (not only in memory) and
+nobody has clocked in the last `KIOSK_UPDATE_QUIET_MINUTES` minutes (in this
+case, at least 2 even if the setting is `0`). The window stops counting for it;
+**the empty queue and the quiet minutes, never**. In practice, after the server
+is updated the tablets catch up by themselves at the first gap without
+clockings. Only a tablet that **already** has 2.2.1 or later knows how to do
+this: one on an older version (2.2.0, 2.1.0) catches up by itself as always, in
+its window, with the three conditions above (see "What to do if a tablet does
+not change by itself", below).
+
 **Where it is set.** Both keys are in Panel → **Operational settings**
 (`/settings`), administrator role ([`configuration.md`](configuration.md) §2.1),
 and they reach the tablets on the next heartbeat —in under a minute—; every
 tablet stores them, so they hold without network, and one that has not received
 any yet uses the defaults. **It is a single window for the whole installation**:
 there is no per-kiosk one, and no way to force a tablet's update from the panel.
-If you need it to change now, move the window temporarily to the current time:
-as soon as the quiet minutes pass with an empty queue, it updates on its own.
+If you need a tablet older than 2.2.1 to change now, move the window temporarily to the
+current time: as soon as the quiet minutes pass with an empty queue, it updates
+on its own (if it has already downloaded the new version; it looks for it every
+hour). With 2.2.1 or later it is not needed.
 
 **What the tablet shows.** The diagnostic screen (§16.5), next to the installed
 version, says "up to date" or "update pending: it will be applied in the
@@ -1414,7 +1430,78 @@ tablet has spent days on an older version than the rest: if it says pending, the
 three conditions have never held in its window —usually because there is always
 some clocking in that slot, or because the queue never empties for lack of
 network—, and the fix is to move the window or repair the network, not to
-restart the tablet.
+restart the tablet. From 2.2.1, if the server has told it that it is behind, it
+says "urgent update pending" and the version the server asked for: it will be
+applied at the first gap with an empty queue and no clockings.
+
+#### What to do if a tablet does not change by itself after updating the server
+
+**Clocking is not affected**: a tablet on an older version keeps clocking
+normally. It is not an emergency; it is something to leave sorted the same day.
+
+**1. Look at the version each tablet reports.** In the panel, **Kiosks** (§16):
+the tablet that is behind carries the "App out of date" warning and its
+version. Or from the installation directory:
+
+```bash
+docker compose exec app php artisan product:doctor
+```
+
+The tablet version line says which ones are behind and whether they have unsent
+clockings.
+
+**2. Depending on the version it reports:**
+
+| Reports | What to do |
+| --- | --- |
+| **2.2.1 or later** | Nothing. It catches up by itself at the first gap with an empty queue and no clockings, at any time; meanwhile its diagnostic screen says "urgent update pending". If **several hours later** it is still like that, or the error history (§15) shows `kiosk.update.unreachable` (sent after about 30 minutes without finding the version the server asks for), or the screen says the urgent update "could not be completed after several attempts": first check that it is online with the queue at 0; if so, the server is asking for a version it cannot serve. Generate the diagnostic bundle (§12.2) and open a case with support. Do **not** unregister its *service worker* for this: it does not fix it |
+| **Older: 2.2.0, 2.1.0 or `0.0.0`** | Nothing, to begin with. It catches up by itself in its window (`KIOSK_UPDATE_WINDOW`, 03:00 to 05:00 by default) with an empty queue and no clockings, once it has downloaded the new version (it looks for it every hour), or sooner if you move the window (above). If **after its window** it is still the same —usually because there is never a quiet moment in that slot or the queue does not empty— or you cannot wait for it, step 3. From 2.2.1, the following updates no longer wait for the window |
+
+**3. Plan B, only for a tablet older than 2.2.1: unregister the tablet's app
+("service worker").** It is the piece that
+keeps the app version inside the browser. Removing it forces the tablet to
+download the server's version on reload; **it does not touch the clocking queue
+or the pairing**, which live separately, in the site data.
+
+Before touching anything, **check the three conditions**. If one is missing, do
+not go on: wait and look again.
+
+1. **The tablet is online**: in the panel, its last heartbeat is less than a
+   minute old, or its diagnostic screen says the server is reachable.
+2. **"Unsynced clockings" is at 0** in the panel (or the "Queue" row of the
+   diagnostic screen, at 0).
+3. **The "Queue in memory only" warning does not show.** With the queue in
+   memory, reloading the tablet **deletes the clockings it has not sent yet**.
+   If it shows, follow
+   [`../../runbooks/cola-offline-atascada.md`](../../runbooks/cola-offline-atascada.md)
+   (in Spanish) §7 and do not do this step until it goes away.
+
+Then, on the tablet itself:
+
+- **Android tablet with Chrome.** Leave kiosk mode with the IT PIN
+  ([`../../runbooks/alta-nuevo-quiosco.md`](../../runbooks/alta-nuevo-quiosco.md),
+  in Spanish, §2.1). Open a new Chrome tab, type
+  `chrome://serviceworker-internals` in the address bar and press Enter. Find
+  the entry whose *Scope* is the kiosk address (`https://<your-server>/kiosk/`)
+  and press **Unregister**. Go back to the KronoQR tab and reload it.
+- **PC or laptop with Chrome or Edge.** With the kiosk page open, press **F12**
+  → **Application** tab → **Service workers** → **Unregister** next to the
+  kiosk address. Close the tools (F12) and reload the page (F5).
+
+**Check** on the diagnostic screen (§16.5), or in the panel within a minute,
+that the version is now the server's. Pin the tablet in kiosk mode again.
+
+**What must never be done for this:**
+
+- **Do not clear the site data** —neither "Clear browsing data", nor "Clear
+  site data" in F12 → Application → Storage, nor Chrome's "Clear storage" in
+  the Android settings—: that is where the unsent clocking queue and the
+  tablet's pairing are. Clearing them loses clockings and forces you to pair it
+  again.
+- **Do not uninstall the app** from the home screen or unlink the tablet in the
+  panel: the result is the same.
+- **Do not do it with pending clockings or with the queue in memory**, even if
+  the tablet looks stuck: it is not, it keeps clocking.
 
 ---
 

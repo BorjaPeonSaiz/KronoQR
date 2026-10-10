@@ -15,6 +15,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RegisterSWLoader } from '@/sw/registerServiceWorker'
 import { isUpdatePending, registerServiceWorker } from '@/sw/registerServiceWorker'
+import { MAX_URGENT_CHECKS_WITHOUT_UPDATE } from '@/features/offline/domain/minimumVersion'
+import {
+  currentUrgentGiveUpMotive,
+  currentUrgentUpdateMode,
+  notifyMinimumAppVersionReceived,
+  onMinimumAppVersionReceived,
+  recordUrgentUpdateCheck,
+  resetUrgentUpdateChecks,
+  resetUrgentUpdateSession,
+} from '@/shared/telemetry/urgentUpdate'
 
 /**
  * jsdom NO IMPLEMENTA `navigator.serviceWorker` (comprobado: `'serviceWorker'
@@ -268,6 +278,218 @@ describe('registro del service worker', () => {
     expect(registrationUpdateSpy).toHaveBeenCalledTimes(2)
 
     registration.dispose()
+  })
+
+  describe('modo urgente (version minima del servidor, RF-KI-07)', () => {
+    /** `registerSW` que entrega una `registration` espia y NO avisa de version pendiente. */
+    function loaderWithRegistration(update: () => Promise<void>): RegisterSWLoader {
+      const fakeRegistration = { update } as unknown as ServiceWorkerRegistration
+      return () =>
+        Promise.resolve({
+          registerSW: (opts) => {
+            opts?.onRegisteredSW?.('/sw.js', fakeRegistration)
+            return async () => {}
+          },
+        })
+    }
+
+    it('al arrancar ya urgente, pregunta por una version nueva EN EL ACTO (sin esperar los 60 min)', async () => {
+      vi.useFakeTimers()
+      const update = vi.fn(() => Promise.resolve())
+      const registration = await registerServiceWorker({
+        urgentState: () => 'urgent',
+        loadRegisterSW: loaderWithRegistration(update),
+      })
+
+      expect(update).toHaveBeenCalledTimes(1)
+
+      registration.dispose()
+    })
+
+    it('sin urgencia no pregunta al arrancar', async () => {
+      vi.useFakeTimers()
+      const update = vi.fn(() => Promise.resolve())
+      const registration = await registerServiceWorker({
+        urgentState: () => 'none',
+        loadRegisterSW: loaderWithRegistration(update),
+      })
+
+      expect(update).not.toHaveBeenCalled()
+
+      registration.dispose()
+    })
+
+    it('un latido que deja una minima dispara la comprobacion al momento, con tope de una cada 5 min', async () => {
+      vi.useFakeTimers()
+      const update = vi.fn(() => Promise.resolve())
+      let state: 'none' | 'urgent' = 'none'
+      let signal: () => void = () => {}
+      const registration = await registerServiceWorker({
+        urgentState: () => state,
+        subscribeUrgent: (listener) => {
+          signal = listener
+          return () => {}
+        },
+        loadRegisterSW: loaderWithRegistration(update),
+      })
+      expect(update).not.toHaveBeenCalled()
+
+      state = 'urgent'
+      signal()
+      expect(update).toHaveBeenCalledTimes(1)
+
+      // Latidos de cada minuto: no se repite hasta que pasan 5 min.
+      await vi.advanceTimersByTimeAsync(60_000)
+      signal()
+      expect(update).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+      signal()
+      expect(update).toHaveBeenCalledTimes(2)
+
+      registration.dispose()
+    })
+
+    it('la puerta recibe `urgent` y se anota el intento antes de recargar', async () => {
+      const applied = { value: false }
+      const gate = vi.fn((urgent: boolean) => urgent)
+      const onUrgentAttempt = vi.fn()
+      const registration = await registerServiceWorker({
+        urgentState: () => 'urgent',
+        canApply: gate,
+        onUrgentAttempt,
+        loadRegisterSW: fakeLoadRegisterSW(applied),
+      })
+
+      await vi.waitFor(() => expect(applied.value).toBe(true))
+      expect(gate).toHaveBeenCalledWith(true)
+      expect(onUrgentAttempt).toHaveBeenCalledTimes(1)
+
+      registration.dispose()
+    })
+
+    it('si la puerta deniega (cola llena, escaneo reciente), no hay intento ni recarga', async () => {
+      vi.useFakeTimers()
+      const applied = { value: false }
+      const onUrgentAttempt = vi.fn()
+      const registration = await registerServiceWorker({
+        urgentState: () => 'urgent',
+        canApply: () => false,
+        onUrgentAttempt,
+        loadRegisterSW: fakeLoadRegisterSW(applied),
+      })
+
+      await vi.advanceTimersByTimeAsync(3 * 60_000)
+
+      expect(applied.value).toBe(false)
+      expect(onUrgentAttempt).not.toHaveBeenCalled()
+      expect(registration.needsRefresh()).toBe(true)
+
+      registration.dispose()
+    })
+
+    it('sin urgencia (o rendido) la puerta recibe `false` y no se anota ningun intento', async () => {
+      const applied = { value: false }
+      const gate = vi.fn((urgent: boolean) => !urgent)
+      const onUrgentAttempt = vi.fn()
+      const registration = await registerServiceWorker({
+        urgentState: () => 'gave_up',
+        canApply: gate,
+        onUrgentAttempt,
+        loadRegisterSW: fakeLoadRegisterSW(applied),
+      })
+
+      await vi.waitFor(() => expect(applied.value).toBe(true))
+      expect(gate).toHaveBeenCalledWith(false)
+      expect(onUrgentAttempt).not.toHaveBeenCalled()
+
+      registration.dispose()
+    })
+
+    describe('minima inalcanzable: sin version nueva que recargar (R2)', () => {
+      const KEYS = ['kronoqr.kiosk.minimum_app_version', 'kronoqr.kiosk.urgent_update_attempts']
+      beforeEach(() => {
+        for (const key of KEYS) localStorage.removeItem(key)
+        resetUrgentUpdateSession()
+        localStorage.setItem('kronoqr.kiosk.minimum_app_version', '999.0.0')
+      })
+      afterEach(() => {
+        for (const key of KEYS) localStorage.removeItem(key)
+        resetUrgentUpdateSession()
+      })
+
+      function wired(update: () => Promise<void>, onUrgentGaveUp: () => void) {
+        return registerServiceWorker({
+          urgentState: currentUrgentUpdateMode,
+          onUrgentCheckEmpty: recordUrgentUpdateCheck,
+          onUrgentUpdateFound: resetUrgentUpdateChecks,
+          onUrgentGaveUp,
+          subscribeUrgent: onMinimumAppVersionReceived,
+          loadRegisterSW: loaderWithRegistration(update),
+        })
+      }
+
+      it('tras 6 comprobaciones resueltas sin version nueva se rinde, reporta UNA vez y no vuelve a preguntar', async () => {
+        vi.useFakeTimers()
+        const update = vi.fn(() => Promise.resolve())
+        const onUrgentGaveUp = vi.fn()
+        const registration = await wired(update, onUrgentGaveUp)
+
+        for (let minute = 0; minute < 40; minute += 1) {
+          await vi.advanceTimersByTimeAsync(60_000)
+          notifyMinimumAppVersionReceived()
+        }
+
+        expect(update).toHaveBeenCalledTimes(MAX_URGENT_CHECKS_WITHOUT_UPDATE)
+        expect(currentUrgentUpdateMode()).toBe('gave_up')
+        expect(currentUrgentGiveUpMotive()).toBe('no_update')
+        expect(onUrgentGaveUp).toHaveBeenCalledTimes(1)
+
+        registration.dispose()
+      })
+
+      it('una comprobacion que falla por red no cuenta: sin conexion no se rinde', async () => {
+        vi.useFakeTimers()
+        const update = vi.fn(() => Promise.reject(new Error('offline')))
+        const onUrgentGaveUp = vi.fn()
+        const registration = await wired(update, onUrgentGaveUp)
+
+        for (let minute = 0; minute < 60; minute += 1) {
+          await vi.advanceTimersByTimeAsync(60_000)
+          notifyMinimumAppVersionReceived()
+        }
+
+        expect(update.mock.calls.length).toBeGreaterThan(MAX_URGENT_CHECKS_WITHOUT_UPDATE)
+        expect(currentUrgentUpdateMode()).toBe('urgent')
+        expect(onUrgentGaveUp).not.toHaveBeenCalled()
+
+        registration.dispose()
+      })
+    })
+
+    it('rendido: vuelve a la cadencia normal (no pregunta de golpe) y lo reporta UNA vez', async () => {
+      vi.useFakeTimers()
+      const update = vi.fn(() => Promise.resolve())
+      const onUrgentGaveUp = vi.fn()
+      let signal: () => void = () => {}
+      const registration = await registerServiceWorker({
+        urgentState: () => 'gave_up',
+        onUrgentGaveUp,
+        subscribeUrgent: (listener) => {
+          signal = listener
+          return () => {}
+        },
+        loadRegisterSW: loaderWithRegistration(update),
+      })
+
+      signal()
+      signal()
+
+      expect(update).not.toHaveBeenCalled()
+      expect(onUrgentGaveUp).toHaveBeenCalledTimes(1)
+
+      registration.dispose()
+    })
   })
 
   describe('gancho de pruebas E2E (`src/sw/testHooks.ts`)', () => {

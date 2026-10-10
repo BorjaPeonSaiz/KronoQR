@@ -64,6 +64,45 @@ vacie, simplemente espera al minuto siguiente.
 La pantalla de diagnostico (RF-KI-08) enseña, junto a la version, si hay una actualizacion
 pendiente y en que ventana se aplicara.
 
+**Recargar la pagina no aplica la version nueva** (`registerType: 'prompt'`): el SW nuevo
+espera hasta que la puerta lo aplica, o hasta que no queda ninguna pestaña del origen.
+
+## Actualizacion urgente (RF-KI-07, 2.2.1)
+
+Desde la 2.2.1 el latido trae `minimum_app_version` (nucleo X.Y.Z de la version del
+servidor). `features/offline/domain/minimumVersion.ts` la compara por nucleo con
+`APP_VERSION` (`2.2.1-dev` frente a `2.2.1` no es desfasada) y, si la tablet va por debajo,
+entra en **modo urgente** (`shared/telemetry/urgentUpdate.ts`):
+
+- `registration.update()` en el acto, al arrancar y en cada latido, como mucho cada 5 min;
+- la puerta (`canApplyUpdate(..., urgent)`, UNA sola: `canUpdateNowGlobal` de
+  `useOfflineQueue.ts`) relaja **solo** la ventana horaria. Siguen siendo obligatorias:
+  la cola **leida** (`queueKnown()`: antes de la primera lectura no se da por vacia), vacia
+  y duradera; ningun escaneo en `max(quiet_minutes, 2)` minutos (suelo de 2 min aunque el
+  ajuste valga 0; un ultimo escaneo en el futuro cercano cuenta como reciente); y ninguna
+  **interaccion en curso** (`interactionGuard.ts`: envio sin resolver, PIN o codigo a medio
+  teclear, pausa armada, confirmacion visible), que cierra la puerta SIEMPRE, urgente o no
+  (regla dura 19);
+- con la cola en **memoria** (ADR-047) el urgente se evalua como no urgente: solo dentro de
+  su ventana, para que una tablet con IndexedDB roto aun pueda recibir la version que lo
+  arregle;
+- el corte del bucle se ata a la version de origen (`from`), no a la minima, y se persiste en
+  `localStorage` (`kronoqr.kiosk.urgent_update_attempts`) con copia en memoria por si
+  `setItem` falla. Se rinde (`gave_up`: cadencia normal de 60 min y
+  `kiosk.update.unreachable` una vez por arranque) tras **3** recargas sin cambio de
+  version, o tras **6** comprobaciones `registration.update()` resueltas (~30 min) sin que
+  aparezca ninguna version nueva (minima inalcanzable). Una comprobacion que falla por red
+  no cuenta. El diagnostico distingue los dos motivos.
+
+Cualquier tablet anterior a la 2.2.1 (2.2.0, 2.1.0, `0.0.0`) no tiene este codigo, pero SI la
+misma puerta por ventana: se actualiza sola en su franja `KIOSK_UPDATE_WINDOW` con la cola
+vacia y sin escaneos recientes. Desregistrar el SW (`chrome://serviceworker-internals` o F12
+→ Application → Service workers → Unregister) es solo el plan B, si sigue igual tras su
+franja o no se puede esperar, y **solo** con red, la cola a 0 y sin cola en memoria, y
+**nunca** borrando los datos del sitio (IndexedDB guarda la cola y `localStorage` el
+emparejamiento). Procedimiento completo: `docs/cliente/operacion.md` §11.1, «Que hacer si
+una tablet no cambia sola tras actualizar el servidor».
+
 ## `testHooks.ts`
 
 Gancho de pruebas acotado para el guardian de actualizacion: fuerza el estado «hay version

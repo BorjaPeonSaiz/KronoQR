@@ -8,11 +8,19 @@ import {
 import {
   readBreakClockingEnabled,
   readClockSkewToleranceSeconds,
+  readMinimumAppVersion,
+  readUrgentUpdateAttempts,
   readServiceCodeHash,
   readUpdateQuietMinutes,
   readUpdateWindow,
 } from '@/shared/telemetry/deviceIdentity'
+import { MAX_URGENT_UPDATE_ATTEMPTS } from '@/features/offline/domain/minimumVersion'
 import type { ClientErrorEvent } from '@/shared/telemetry/errorReporter'
+import {
+  currentUrgentUpdateMode,
+  onMinimumAppVersionReceived,
+  recordUrgentUpdateAttempt,
+} from '@/shared/telemetry/urgentUpdate'
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import {
   buildHeartbeatBody,
@@ -714,5 +722,97 @@ describe('latido: cola degradada y descartes sin avisar (ADR-047, RN-22, RF-KI-0
     })
 
     expect(body.unreported_discards).toBe(4)
+  })
+})
+
+describe('latido: version minima de la PWA (RF-KI-07, RF-KI-08)', () => {
+  const KEYS = ['kronoqr.kiosk.minimum_app_version', 'kronoqr.kiosk.urgent_update_attempts']
+  afterEach(() => {
+    for (const key of KEYS) localStorage.removeItem(key)
+  })
+
+  function apiWithMinimum(minimum: unknown): ApiClient {
+    const data = {
+      server_time: '2026-09-23T06:00:00.000Z',
+      client_errors_accepted: 0,
+      service_code_hash: null,
+      break_clocking_enabled: false,
+      clock_skew_tolerance_seconds: DEFAULT_TOLERANCE_SECONDS,
+      ...(minimum === undefined ? {} : { minimum_app_version: minimum }),
+    }
+    return {
+      recordScan: vi.fn(),
+      recordPinScan: vi.fn(),
+      syncScanBatch: vi.fn(),
+      fetchRoster: vi.fn(),
+      sendHeartbeat: vi.fn(async () => ({ outcome: 'ok' as const, data: data as KioskHeartbeat })),
+      requestPairing: vi.fn(),
+      claimPairing: vi.fn(),
+      reportDiscardedScans: vi.fn(),
+      fetchBranding: vi.fn(),
+    }
+  }
+
+  async function beatWith(minimum: unknown): Promise<void> {
+    const scheduler = createHeartbeatScheduler({
+      api: apiWithMinimum(minimum),
+      reporter: createErrorReporter({ appVersion: '1.4.2', deviceId: 'd' }),
+      snapshot: () => ({ appVersion: '1.4.2', pendingQueueSize: 0 }),
+      clock: fixedClock(new Date('2026-09-23T06:00:00.000Z')),
+    })
+    await scheduler.beat()
+  }
+
+  it('la guarda (nucleo) y avisa a los oyentes del service worker', async () => {
+    const heard = vi.fn()
+    const off = onMinimumAppVersionReceived(heard)
+
+    await beatWith('999.1.2')
+
+    off()
+    expect(readMinimumAppVersion()).toBe('999.1.2')
+    expect(currentUrgentUpdateMode()).toBe('urgent')
+    expect(heard).toHaveBeenCalledTimes(1)
+  })
+
+  it('una minima por debajo (o igual) de la de esta PWA no es urgente', async () => {
+    await beatWith('0.0.1')
+
+    expect(readMinimumAppVersion()).toBe('0.0.1')
+    expect(currentUrgentUpdateMode()).toBe('none')
+  })
+
+  it('invalida: NO toca lo cacheado', async () => {
+    await beatWith('999.0.0')
+    await beatWith('esto no es una version')
+
+    expect(readMinimumAppVersion()).toBe('999.0.0')
+  })
+
+  it('ausente: borra la cacheada (el servidor ya no declara minima)', async () => {
+    await beatWith('999.0.0')
+    await beatWith(undefined)
+
+    expect(readMinimumAppVersion()).toBeNull()
+    expect(currentUrgentUpdateMode()).toBe('none')
+  })
+
+  it('al cumplir la minima se descarta el registro de intentos', async () => {
+    await beatWith('999.0.0')
+    recordUrgentUpdateAttempt()
+    expect(readUrgentUpdateAttempts()?.count).toBe(1)
+
+    await beatWith('0.0.1')
+
+    expect(readUrgentUpdateAttempts()).toBeNull()
+  })
+
+  it('tras MAX intentos sin cambio de version, el estado es gave_up', async () => {
+    await beatWith('999.0.0')
+    for (let attempt = 0; attempt < MAX_URGENT_UPDATE_ATTEMPTS; attempt += 1) {
+      recordUrgentUpdateAttempt()
+    }
+
+    expect(currentUrgentUpdateMode()).toBe('gave_up')
   })
 })

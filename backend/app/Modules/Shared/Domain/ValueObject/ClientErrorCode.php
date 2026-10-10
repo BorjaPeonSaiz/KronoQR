@@ -63,6 +63,8 @@ final class ClientErrorCode
         'kiosk.scanner.watchdog_restart',
         'kiosk.service_worker.failed',
         'kiosk.unhandled_error',
+        // 2.2.1: minima inalcanzable tras N recargas urgentes (RF-KI-07).
+        'kiosk.update.unreachable',
         'kiosk.wake_lock.denied',
     ];
 

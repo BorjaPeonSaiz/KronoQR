@@ -385,3 +385,26 @@ test(
     await expect(page.getByTestId('pin-entry-link')).toHaveCount(0)
   },
 )
+
+test(
+  'un PIN abandonado a medio teclear vuelve solo a inicio a los 60 s y borra lo tecleado',
+  { tag: ['@RF-AT-11', '@RF-KI-07'] },
+  async ({ page }) => {
+    await stubKioskApiWithPin(page)
+    await page.goto('/')
+    await page.getByTestId('pin-entry-link').click()
+    await expect(page.getByTestId('pin-step-code')).toBeVisible()
+
+    await page.clock.install()
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await expect(page.getByTestId('pin-step-pin')).toBeVisible()
+    await pressPinDigits(page, '48')
+
+    await page.clock.runFor(59_000)
+    await expect(page.getByTestId('pin-step-pin')).toBeVisible()
+
+    await page.clock.runFor(1_500)
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByTestId('pin-step-pin')).toHaveCount(0)
+  },
+)

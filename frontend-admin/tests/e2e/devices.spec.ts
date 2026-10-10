@@ -190,6 +190,7 @@ test(
 
     const whatToDo = page.getByTestId('what-to-do')
 
+    await expect(whatToDo).toContainText('a cualquier hora')
     await expect(whatToDo).toContainText('franja de actualización')
     await expect(whatToDo).toContainText('chrome://serviceworker-internals')
     await expect(whatToDo).toContainText('Y SIN borrar los datos del sitio')

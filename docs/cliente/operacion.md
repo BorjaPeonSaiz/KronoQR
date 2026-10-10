@@ -1379,14 +1379,30 @@ Es lo que hace que una actualización sea invisible para la plantilla: **la
 tablet nunca se actualiza con gente delante**, y cuando lo hace, la cola está
 vacía.
 
+**Desde la 2.2.1, la tablet que se ha quedado atrás no espera a la ventana.** En
+cada latido el servidor le dice a la tablet cuál es su propia versión. Si la de
+la tablet es anterior, la tablet busca la versión nueva en ese momento —sin
+esperar a la comprobación de cada hora— y se recarga **en cuanto se cumplen las
+condiciones 2 y 3**, a cualquier hora: cola vacía y guardada en la tablet (no
+solo en memoria) y nadie ha fichado en los últimos `KIOSK_UPDATE_QUIET_MINUTES`
+minutos (en este caso, al menos 2 aunque el ajuste valga `0`). La ventana deja
+de contar para ella; **la cola vacía y los minutos de calma, nunca**. En la
+práctica, tras actualizar el servidor las tablets se ponen al día solas en el
+primer hueco sin fichajes. Esto solo lo sabe hacer una tablet que **ya** tiene
+la 2.2.1 o posterior: una con una versión anterior (2.2.0, 2.1.0) se pone al
+día sola como siempre, en su ventana, con las tres condiciones de arriba (ver
+«Qué hacer si una tablet no cambia sola», más abajo).
+
 **Dónde se ajusta.** Las dos claves están en Panel → **Ajustes operativos**
 (`/settings`), rol administrador ([`configuracion.md`](configuracion.md) §2.1),
 y llegan a las tablets en el latido siguiente —en menos de un minuto—; cada
 tablet las guarda, así que valen sin red, y una que aún no ha recibido ninguna
 usa las de serie. **Es una sola ventana para toda la instalación**: no hay una
 por quiosco, ni forma de forzar la actualización de una tablet desde el panel.
-Si necesitas que cambie ya, mueve la ventana temporalmente a la hora actual: en
-cuanto pasen los minutos de calma con la cola vacía, se actualiza sola.
+Si necesitas que una tablet anterior a la 2.2.1 cambie ya, mueve la ventana
+temporalmente a la hora actual: en cuanto pasen los minutos de calma con la cola
+vacía, se actualiza sola (si ya ha descargado la versión nueva; la busca cada
+hora). Con la 2.2.1 o posterior no hace falta.
 
 **Qué enseña la tablet.** La pantalla de diagnóstico (§16.5), junto a la versión
 instalada, dice «al día» o «actualización pendiente: se aplicará en la ventana
@@ -1395,7 +1411,80 @@ lleva días en una versión anterior a la del resto: si dice pendiente, es que e
 su ventana nunca se han dado las tres condiciones —normalmente porque siempre
 hay algún fichaje en esa franja, o porque la cola no llega a vaciarse por falta
 de red—, y la solución es mover la ventana o arreglar la red, no reiniciar la
-tablet.
+tablet. Desde la 2.2.1, si el servidor le ha dicho que va por detrás, dice
+«actualización urgente pendiente» y la versión que le ha pedido el servidor:
+se aplicará en el primer hueco con la cola vacía y sin fichajes.
+
+#### Qué hacer si una tablet no cambia sola tras actualizar el servidor
+
+**El fichaje no se ve afectado**: una tablet con una versión anterior sigue
+fichando con normalidad. No es una urgencia; es algo que se deja resuelto el
+mismo día.
+
+**1. Mira qué versión declara cada tablet.** En el panel, **Quioscos** (§16):
+la tablet que va por detrás lleva el aviso «Aplicación desactualizada» y su
+versión. O desde el directorio de la instalación:
+
+```bash
+docker compose exec app php artisan product:doctor
+```
+
+La línea de la versión de las tablets dice cuáles van por detrás y si tienen
+fichajes sin enviar.
+
+**2. Según la versión que declara:**
+
+| Declara | Qué hacer |
+| --- | --- |
+| **2.2.1 o posterior** | Nada. Se pone al día sola en el primer hueco con la cola vacía y sin fichajes, a cualquier hora; su pantalla de diagnóstico dice mientras tanto «actualización urgente pendiente». Si **varias horas después** sigue así, o el histórico de errores (§15) muestra `kiosk.update.unreachable` (lo envía tras unos 30 minutos sin encontrar la versión que pide el servidor), o la pantalla dice que la actualización urgente «no se ha podido completar tras varios intentos»: mira primero que tiene red y la cola a 0; si es así, el servidor está pidiendo una versión que no puede servirle. Genera el paquete de diagnóstico (§12.2) y abre un caso con soporte. **No** desregistres su *service worker* por esto: no lo arregla |
+| **Anterior: 2.2.0, 2.1.0 o `0.0.0`** | Nada, de entrada. Se pone al día sola en su ventana (`KIOSK_UPDATE_WINDOW`, de 03:00 a 05:00 de serie) con la cola vacía y sin fichajes, en cuanto haya descargado la versión nueva (la busca cada hora), o antes si mueves la ventana (arriba). Si **después de su ventana** sigue igual —normalmente porque en esa franja nunca hay calma o la cola no se vacía— o no puedes esperar a ella, el paso 3. Desde la 2.2.1, las siguientes actualizaciones ya no esperan a la ventana |
+
+**3. Plan B, solo para una tablet anterior a la 2.2.1: desregistrar la
+aplicación de la tablet («service worker»).** Es la pieza
+que guarda la versión de la aplicación dentro del navegador. Quitarla obliga a
+la tablet a descargar la versión del servidor al recargar; **no toca la cola de
+fichajes ni el emparejamiento**, que viven aparte, en los datos del sitio.
+
+Antes de tocar nada, **comprueba las tres condiciones**. Si falta una, no
+sigas: espera y vuelve a mirar.
+
+1. **La tablet tiene red**: en el panel, su último latido es de hace menos de
+   un minuto, o su pantalla de diagnóstico dice que el servidor es alcanzable.
+2. **«Fichajes sin sincronizar» está a 0** en el panel (o la fila «Cola» de la
+   pantalla de diagnóstico, a 0).
+3. **No sale el aviso «Cola solo en memoria».** Con la cola en memoria,
+   recargar la tablet **borra los fichajes que aún no ha enviado**. Si sale,
+   sigue [`../runbooks/cola-offline-atascada.md`](../runbooks/cola-offline-atascada.md)
+   §7 y no hagas este paso hasta que desaparezca.
+
+Después, en la propia tablet:
+
+- **Tablet Android con Chrome.** Sal del modo quiosco con el PIN de IT
+  ([`../runbooks/alta-nuevo-quiosco.md`](../runbooks/alta-nuevo-quiosco.md) §2.1).
+  Abre una pestaña nueva de Chrome, escribe en la barra de direcciones
+  `chrome://serviceworker-internals` y pulsa Intro. Busca la entrada cuyo
+  *Scope* es la dirección del quiosco (`https://<tu-servidor>/kiosk/`) y pulsa
+  **Unregister**. Vuelve a la pestaña de KronoQR y recárgala.
+- **PC o portátil con Chrome o Edge.** Con la página del quiosco abierta, pulsa
+  **F12** → pestaña **Application** → **Service workers** → **Unregister**
+  junto a la dirección del quiosco. Cierra las herramientas (F12) y recarga la
+  página (F5).
+
+**Comprueba** en la pantalla de diagnóstico (§16.5), o en el panel en menos de
+un minuto, que la versión es ya la del servidor. Vuelve a fijar la tablet en
+modo quiosco.
+
+**Lo que no hay que hacer nunca para esto:**
+
+- **No borres los datos del sitio** —ni «Borrar datos de navegación», ni
+  «Clear site data» en F12 → Application → Storage, ni «Borrar almacenamiento»
+  de Chrome en los ajustes de Android—: ahí están la cola de fichajes sin
+  enviar y el emparejamiento de la tablet. Borrarlos pierde fichajes y obliga a
+  emparejarla de nuevo.
+- **No desinstales la aplicación** de la pantalla de inicio ni desvincules la
+  tablet en el panel: el resultado es el mismo.
+- **No lo hagas con fichajes pendientes ni con la cola en memoria**, aunque la
+  tablet parezca bloqueada: no lo está, sigue fichando.
 
 ---
 

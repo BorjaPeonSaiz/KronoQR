@@ -62,6 +62,9 @@ test(
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
     await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBe(0)
 
+    // La confirmacion en pantalla cuenta como interaccion en curso (RF-KI-07): la
+    // puerta solo se abre cuando se ha retirado.
+    await expect(page.getByTestId('scan-confirmation')).toBeHidden()
     await page.clock.install({ time: OUTSIDE_WINDOW })
     await simulateUpdateAvailable(page)
     await page.clock.runFor(0)
@@ -86,6 +89,9 @@ test(
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
     await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBe(0)
 
+    // La confirmacion en pantalla cuenta como interaccion en curso (RF-KI-07): la
+    // puerta solo se abre cuando se ha retirado.
+    await expect(page.getByTestId('scan-confirmation')).toBeHidden()
     await page.clock.install({ time: INSIDE_WINDOW })
     await simulateUpdateAvailable(page)
 
@@ -100,11 +106,13 @@ test(
     // Sin servidor para `/scan`: el fichaje automatico de la camara se queda
     // encolado, y la cola deja de estar vacia.
     await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
-    const batch = await stubBatchApi(page)
 
     await page.goto('/')
     await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBeGreaterThan(0)
 
+    // La confirmacion en pantalla cuenta como interaccion en curso (RF-KI-07): la
+    // puerta solo se abre cuando se ha retirado.
+    await expect(page.getByTestId('scan-confirmation')).toBeHidden()
     await page.clock.install({ time: INSIDE_WINDOW })
     await simulateUpdateAvailable(page)
     await page.clock.runFor(0)
@@ -113,6 +121,7 @@ test(
     expect(await hasApplied(page)).toBe(false)
 
     // La red vuelve y la cola se vacia.
+    const batch = await stubBatchApi(page)
     await page.unroute('**/api/v1/scan')
     await announceOnline(page)
     await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBe(0)
@@ -148,6 +157,9 @@ test(
     // Fuera de la ventana: el intento inmediato del gancho al simular no se
     // resuelve solo, y `pending` se queda estable para que el diagnostico lo
     // enseñe (ver la primera prueba de este fichero).
+    // La confirmacion en pantalla cuenta como interaccion en curso (RF-KI-07): la
+    // puerta solo se abre cuando se ha retirado.
+    await expect(page.getByTestId('scan-confirmation')).toBeHidden()
     await page.clock.install({ time: OUTSIDE_WINDOW })
     await simulateUpdateAvailable(page)
     await page.clock.runFor(0)
@@ -160,5 +172,100 @@ test(
     await expect(page.getByTestId('diagnostics-update-status')).toContainText('03:00')
     await expect(page.getByTestId('diagnostics-update-status')).toContainText('05:00')
     await expect(page.getByTestId('diagnostics-update-window')).toHaveText('03:00–05:00')
+  },
+)
+
+/** Espera a que el latido haya dejado la version minima en la tablet (RF-KI-07). */
+async function minimumVersionStored(page: Page): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('kronoqr.kiosk.minimum_app_version')))
+    .toBe('999.0.0')
+}
+
+test(
+  'modo urgente: con una version minima superior se aplica FUERA de la ventana si la cola esta vacia',
+  { tag: ['@RF-KI-07', '@RF-KI-08'] },
+  async ({ page }) => {
+    // Esta ultima ruta gana a la del `beforeEach`: el latido declara una minima
+    // que la PWA de la prueba no alcanza.
+    await stubKioskApi(page, { minimumAppVersion: '999.0.0' })
+    await stubScanApi(page, { outcome: 'clock_in' })
+    await page.goto('/')
+
+    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+    await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBe(0)
+    await minimumVersionStored(page)
+
+    // 11:00: fuera de la ventana de serie. Sin la minima, NO se aplicaria
+    // (ver la primera prueba de este fichero).
+    // La confirmacion en pantalla cuenta como interaccion en curso (RF-KI-07): la
+    // puerta solo se abre cuando se ha retirado.
+    await expect(page.getByTestId('scan-confirmation')).toBeHidden()
+    await page.clock.install({ time: OUTSIDE_WINDOW })
+    await simulateUpdateAvailable(page)
+
+    await expect.poll(() => hasApplied(page)).toBe(true)
+  },
+)
+
+test(
+  'modo urgente: con un fichaje encolado NO se aplica, ni fuera ni dentro de la ventana; al vaciarse, si',
+  { tag: ['@RF-KI-04', '@RF-KI-07', '@RF-KI-08'] },
+  async ({ page }) => {
+    await stubKioskApi(page, { minimumAppVersion: '999.0.0' })
+    await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
+
+    await page.goto('/')
+    await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBeGreaterThan(0)
+    await minimumVersionStored(page)
+
+    // La confirmacion en pantalla cuenta como interaccion en curso (RF-KI-07): la
+    // puerta solo se abre cuando se ha retirado.
+    await expect(page.getByTestId('scan-confirmation')).toBeHidden()
+    await page.clock.install({ time: OUTSIDE_WINDOW })
+    await simulateUpdateAvailable(page)
+    await page.clock.runFor(60_000)
+
+    // Urgente y fuera de ventana, pero con fichajes sin enviar: nunca (regla dura 19).
+    expect(await hasApplied(page)).toBe(false)
+    expect((await readQueue(page)).length).toBeGreaterThan(0)
+
+    const batch = await stubBatchApi(page)
+    await page.unroute('**/api/v1/scan')
+    await announceOnline(page)
+    await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBe(0)
+    expect(batch.calls.length).toBeGreaterThan(0)
+
+    await page.clock.runFor(60_000)
+    await expect.poll(() => hasApplied(page)).toBe(true)
+    expect(await readQueue(page)).toHaveLength(0)
+  },
+)
+
+test(
+  'el diagnostico enseña «actualización urgente pendiente» y la version minima recibida',
+  { tag: ['@RF-KI-08'] },
+  async ({ page }) => {
+    await stubKioskApi(page, { minimumAppVersion: '999.0.0' })
+    // Cola con un fichaje: la actualizacion urgente se queda pendiente.
+    await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
+    await page.goto('/')
+    await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBeGreaterThan(0)
+    await minimumVersionStored(page)
+
+    // La confirmacion en pantalla cuenta como interaccion en curso (RF-KI-07): la
+    // puerta solo se abre cuando se ha retirado.
+    await expect(page.getByTestId('scan-confirmation')).toBeHidden()
+    await page.clock.install({ time: OUTSIDE_WINDOW })
+    await simulateUpdateAvailable(page)
+    await page.clock.runFor(0)
+    expect(await hasApplied(page)).toBe(false)
+
+    await openDiagnostics(page)
+
+    await expect(page.getByTestId('diagnostics-update-status')).toContainText(
+      'Actualización urgente pendiente',
+    )
+    await expect(page.getByTestId('diagnostics-minimum-version')).toHaveText('999.0.0')
   },
 )

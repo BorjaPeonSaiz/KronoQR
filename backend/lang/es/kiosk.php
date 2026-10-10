@@ -144,11 +144,13 @@ return [
                 .'nadie los revisara hasta que salga. Suele ser una aplicacion desfasada tras una actualizacion; '
                 .'NO LA DESVINCULES y sigue el runbook de la cola atascada, apartado 8.',
             'app_version_behind' => 'Su aplicacion (:version) es anterior a la del servidor. Sigue fichando con normalidad. '
-                .'Si declara la 2.2.1 o posterior, se actualiza sola en la franja de actualizacion (KIOSK_UPDATE_WINDOW, '
-                .'de serie de 03:00 a 05:00) con la cola vacia. Si declara la 2.2.0 o anterior (o 0.0.0), no se actualiza sola: '
-                .'desregistra su service worker SOLO con la tablet con red, su cola pendiente a 0 y sin el aviso de «cola en memoria», '
-                .'porque recargar con la cola en memoria borra los fichajes no enviados. NUNCA borres los datos del sitio: '
-                .'se llevarian la cola de fichajes y el emparejamiento.',
+                .'Si declara la 2.2.1 o posterior, se pone al dia sola, a cualquier hora, en cuanto su cola este vacia y en disco '
+                .'y nadie haya fichado en KIOSK_UPDATE_QUIET_MINUTES. Si declara una anterior (2.2.0, 2.1.0 o 0.0.0), se pone al dia '
+                .'sola en su franja de actualizacion (KIOSK_UPDATE_WINDOW, de serie de 03:00 a 05:00) con la cola vacia y sin fichajes recientes. '
+                .'Solo si sigue igual despues de su franja, o no puedes esperar: desregistra su service worker SOLO con la tablet con red, '
+                .'su cola pendiente a 0 y sin el aviso de «cola en memoria», porque recargar con la cola en memoria borra los fichajes '
+                .'no enviados. NUNCA borres los datos del sitio: se llevarian la cola de fichajes y el emparejamiento. '
+                .'Paso a paso: docs/cliente/operacion.md §11.1.',
         ],
 
         'fleet_empty' => 'Todavia no hay ningun quiosco vinculado. Vincula el primero desde el panel, '
