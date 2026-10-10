@@ -494,6 +494,17 @@ return [
                 'warning_unavailable' => 'Could not check whether a service code is configured for the tablet '
                     .'diagnostics screen. Clocking in is unaffected.',
             ],
+            'app_version' => [
+                'ok' => 'None of the tablets sending heartbeats (:count) is behind the server version (:minimum).',
+                'ok_ahead' => 'Tablets with an app version newer than the server\'s (:minimum): :devices. '
+                    .'This happens after rolling the server back to an earlier version; the tablets will move to '
+                    .'the server\'s version on their own. Nothing to do.',
+                'ok_unchecked' => 'This server has no published version (it is a development build or does not '
+                    .'know it), so the tablets\' version is not compared.',
+                'warning' => 'Tablets on an app version older than the server\'s (:minimum): :devices. '
+                    .'They keep clocking in as normal; they only need to pick up the new version.',
+                'warning_unavailable' => 'Could not check the app version of the tablets. Clocking in is unaffected.',
+            ],
         ],
 
         'license' => [
@@ -1010,6 +1021,17 @@ return [
                     ."«Kiosk service code». The tablets pick it up on their own in under a minute.\n"
                     ."Write it down wherever whoever maintains the kiosks keeps it, and do not stick it on the\n"
                     .'tablet itself. If you would rather leave the screen open to everyone, ignore this warning.',
+                'warning_unavailable' => "Run `php artisan product:doctor` again once the database responds.\n"
+                    .'If it persists, look first at the database checks in this same report.',
+            ],
+            'app_version' => [
+                'warning' => "Usually there is nothing to do: each tablet updates itself as soon as its queue of\n"
+                    ."pending clock-ins is empty and nobody has clocked in for a few minutes. Find each one by its\n"
+                    ."identifier in the panel, under Kiosks.\n"
+                    ."If a tablet reports 2.2.0 or earlier (or 0.0.0), it will not update itself: on the tablet,\n"
+                    ."open chrome://serviceworker-internals and press Unregister on the KronoQR one (or F12 > Application >\n"
+                    ."Service workers > Unregister) and reload the page.\n"
+                    .'Do NOT clear the site data: it holds the queue of unsent clock-ins and the tablet pairing.',
                 'warning_unavailable' => "Run `php artisan product:doctor` again once the database responds.\n"
                     .'If it persists, look first at the database checks in this same report.',
             ],

@@ -109,5 +109,13 @@ final readonly class HeartbeatOutcome
          * responde igual y el siguiente lo reintenta (regla dura 19).
          */
         public ?RenewedDeviceToken $rotatedToken = null,
+        /**
+         * RF-KI-07, RF-PA-07 (2.2.1): la version minima de la PWA, que es el
+         * nucleo `X.Y.Z` de la del servidor (`AppVersionPolicy`). `null` si el
+         * servidor no la resuelve —no es SemVer, es `0.0.0` o un build `-dev`—
+         * o si el puerto fallo, y entonces el campo se omite: nunca tumba el
+         * latido (regla dura 19).
+         */
+        public ?string $minimumAppVersion = null,
     ) {}
 }

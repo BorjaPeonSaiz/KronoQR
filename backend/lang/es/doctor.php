@@ -546,6 +546,19 @@ return [
                 'warning_unavailable' => 'No se ha podido comprobar si hay codigo de servicio configurado para la '
                     .'pantalla de diagnostico de las tablets. El fichaje no se ve afectado.',
             ],
+            'app_version' => [
+                'ok' => 'Ninguna tablet de las que estan latiendo (:count) va por detras de la version del '
+                    .'servidor (:minimum).',
+                'ok_ahead' => 'Tablets con una version de la aplicacion posterior a la del servidor (:minimum): '
+                    .':devices. Pasa tras volver a una version anterior del servidor; las tablets se pondran en la '
+                    .'del servidor solas. No hay nada que hacer.',
+                'ok_unchecked' => 'Este servidor no tiene una version publicada (es de desarrollo o no la conoce), '
+                    .'asi que no se compara la version de las tablets.',
+                'warning' => 'Tablets con una version de la aplicacion anterior a la del servidor (:minimum): '
+                    .':devices. Siguen fichando con normalidad; solo les falta recoger la version nueva.',
+                'warning_unavailable' => 'No se ha podido comprobar la version de la aplicacion de las tablets. '
+                    .'El fichaje no se ve afectado.',
+            ],
         ],
 
         // --- Licencia --------------------------------------------------------
@@ -1069,6 +1082,17 @@ return [
                     ."«Codigo de servicio del quiosco». Las tablets lo reciben solas en menos de un minuto.\n"
                     ."Apuntalo donde lo tenga quien mantiene los quioscos y no lo pegues en la propia tablet.\n"
                     .'Si prefieres dejar la pantalla abierta para todo el mundo, puedes ignorar este aviso.',
+                'warning_unavailable' => "Vuelve a ejecutar `php artisan product:doctor` cuando la base de datos responda.\n"
+                    .'Si el problema sigue, mira antes las comprobaciones de la base de datos de este mismo informe.',
+            ],
+            'app_version' => [
+                'warning' => "Normalmente no hay que hacer nada: cada tablet se pone al dia sola en cuanto su cola de\n"
+                    ."fichajes pendientes esta vacia y nadie ha fichado en unos minutos. Busca cada una por su\n"
+                    ."identificador en el panel, en Quioscos.\n"
+                    ."Si una tablet declara la 2.2.0 o anterior (o 0.0.0), no se actualiza sola: en la propia tablet,\n"
+                    ."abre chrome://serviceworker-internals y pulsa Unregister en la de KronoQR (o F12 > Application >\n"
+                    ."Service workers > Unregister) y recarga la pagina.\n"
+                    .'NO borres los datos del sitio: ahi estan la cola de fichajes sin enviar y el emparejamiento de la tablet.',
                 'warning_unavailable' => "Vuelve a ejecutar `php artisan product:doctor` cuando la base de datos responda.\n"
                     .'Si el problema sigue, mira antes las comprobaciones de la base de datos de este mismo informe.',
             ],

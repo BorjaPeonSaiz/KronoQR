@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
+use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
@@ -409,3 +410,75 @@ it('rechaza una ventana de actualizacion que no es HH:MM-HH:MM', function (strin
     'un solo extremo' => ['03:00'],
     'vacia' => [''],
 ])->group('RF-KI-07', 'RF-PD-01');
+
+// --- La version minima de la PWA (RF-KI-07, RF-PA-07, 2.2.1) ----------------
+
+it('anuncia como version minima el nucleo de la version del servidor', function (string $servidor, string $minima): void {
+    // Quiosco y servidor salen del mismo `VERSION` (DC8): la minima es la
+    // desplegada. Se anuncia solo el nucleo `X.Y.Z` porque es lo unico que la
+    // regla compara; un `-ci` de la CI sigue comparandose.
+    config()->set('app.version', $servidor);
+    $quiosco = quioscoConMetricas();
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.0',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidRequest()
+        ->assertValidResponse()
+        ->assertJsonPath('minimum_app_version', $minima);
+})->with([
+    'publicada' => ['2.2.1', '2.2.1'],
+    'de la CI' => ['2.2.2-ci', '2.2.2'],
+    'con metadatos de build' => ['3.0.0+build.7', '3.0.0'],
+])->group('RF-KI-07', 'RF-PA-07');
+
+it('omite la version minima, y no la manda a null, cuando el servidor no la resuelve', function (string $servidor): void {
+    // Un servidor `-dev` no tiene version publicada que exigir, y `0.0.0` o una
+    // cadena que no es SemVer es «no se». El contrato declara el campo opcional y
+    // no anulable: ausente, la tablet sigue con su cadencia normal.
+    config()->set('app.version', $servidor);
+    $quiosco = quioscoConMetricas();
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.0',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidRequest()
+        ->assertValidResponse()
+        ->assertJsonMissingPath('minimum_app_version');
+})->with([
+    'desarrollo' => ['2.2.1-dev'],
+    'desconocida' => ['0.0.0'],
+    'no SemVer' => ['latest'],
+])->group('RF-KI-07', 'RF-PA-07');
+
+it('responde el latido sin version minima si el puerto de la version falla', function (): void {
+    // Regla dura 19: el dato es accesorio y el latido es la señal de vida del
+    // quiosco. Un fallo al resolver la version no puede convertir el 200 en 500.
+    app()->instance(DeployedVersionProvider::class, new class implements DeployedVersionProvider
+    {
+        #[Override]
+        public function deployedVersion(): string
+        {
+            throw new RuntimeException('version no disponible');
+        }
+    });
+    $quiosco = quioscoConMetricas();
+    DB::table('devices')->where('id', $quiosco['deviceId'])->update(['last_seen_at' => null]);
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.0',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidResponse()
+        ->assertJsonMissingPath('minimum_app_version');
+
+    /** @var object{last_seen_at: string|null} $row */
+    $row = DB::table('devices')->where('id', $quiosco['deviceId'])->first();
+
+    expect($row->last_seen_at)->not->toBeNull();
+})->group('RF-KI-07', 'RF-PA-07');

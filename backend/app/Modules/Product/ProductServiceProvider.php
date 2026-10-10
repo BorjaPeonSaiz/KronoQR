@@ -128,6 +128,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\EdgeNetworksProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ErrorHistoryProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\GeneratedFilesProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\KioskServiceCodeProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\KioskVersionProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\LicenseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
@@ -171,6 +172,7 @@ use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
+use App\Modules\Shared\Application\Port\KioskAppVersions;
 use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Application\Port\ManagementActor;
@@ -1990,6 +1992,15 @@ final class ProductServiceProvider extends ServiceProvider
                      * abortaria una actualizacion por algo que no esta roto.
                      */
                     new KioskServiceCodeProbe($app->make(KioskServiceCodeProvider::class)),
+                    /*
+                     * La version de la PWA de cada tablet frente a la del
+                     * servidor (RF-KI-07, bloque 1 de la 2.2.1). Pegada a la
+                     * otra sonda de quioscos porque el orden de esta lista ES
+                     * el del informe. **Aviso y nunca fallo**: justo despues de
+                     * actualizar, las tablets aun no se han puesto al dia, y un
+                     * `2` aqui abortaria la actualizacion que lo provoca.
+                     */
+                    new KioskVersionProbe($app->make(KioskAppVersions::class)),
                     $app->make(LicenseProbe::class),
                 ],
                 translator: $app->make(DoctorTranslator::class),

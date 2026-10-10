@@ -114,6 +114,13 @@ final class KioskHeartbeatResource extends JsonResource
                         ->format('Y-m-d\TH:i:s\Z'),
                 ],
             ]),
+            // **La version minima de la PWA** (RF-KI-07, RF-PA-07, 2.2.1). Se
+            // OMITE, como el relevo, cuando el servidor no la resuelve: el
+            // contrato la declara opcional y no anulable, y una tablet que la
+            // ve ausente sigue con su cadencia normal de actualizacion.
+            ...($outcome->minimumAppVersion === null ? [] : [
+                'minimum_app_version' => $outcome->minimumAppVersion,
+            ]),
         ];
     }
 }
