@@ -25,6 +25,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
+import { DEFAULT_HEARTBEAT_INTERVAL_MS } from '@/shared/telemetry/heartbeatInterval'
 import {
   KIOSK_BASE_PATH,
   buildKioskRelease,
@@ -34,13 +35,8 @@ import {
   stubUpgradeHeartbeat,
 } from './support/kioskReleases'
 import type { KioskReleaseServer } from './support/kioskReleases'
-import {
-  enterEmployeeCode,
-  pressPinDigits,
-  stubKioskApiWithPin,
-  stubPinScanApi,
-} from './support/pin'
-import { readProductionSecurityHeaders } from './support/securityHeaders'
+import { enterEmployeeCode, pressPinDigits, stubPinScanApi } from './support/pin'
+import { readProductionSecurityHeaders, watchBrowserDiagnostics } from './support/securityHeaders'
 
 const KIOSK_UPGRADE_FROM_VERSION = '7.0.0'
 const KIOSK_UPGRADE_TO_VERSION = '7.0.1'
@@ -50,21 +46,19 @@ const KIOSK_UPGRADE_RAW_PIN = '483920'
 const KIOSK_UPGRADE_SEALED_BYTES = 54
 /** 11:00 en Madrid en enero: fuera de la ventana de serie 03:00-05:00. Solo el modo urgente aplica aqui. */
 const KIOSK_UPGRADE_OUTSIDE_WINDOW = new Date('2030-01-15T11:00:00+01:00')
-/** Un intervalo del latido (`DEFAULT_HEARTBEAT_INTERVAL_MS`). */
-const KIOSK_UPGRADE_HEARTBEAT_MS = 60_000
-const KIOSK_UPGRADE_BLOCKED = /CompileError|WebAssembly|wasm|Content Security Policy|Refused to/i
 
 const productionHeaders = readProductionSecurityHeaders()
 const headers210 = securityHeadersOf210(productionHeaders)
 
 let buildsDir = ''
+const builds = new AbortController()
 let server: KioskReleaseServer | null = null
 
 test.beforeAll(async () => {
   test.setTimeout(120_000)
   buildsDir = await mkdtemp(join(tmpdir(), 'kronoqr-kiosk-upgrade-'))
-  await buildKioskRelease(KIOSK_UPGRADE_FROM_VERSION, join(buildsDir, 'from'))
-  await buildKioskRelease(KIOSK_UPGRADE_TO_VERSION, join(buildsDir, 'to'))
+  await buildKioskRelease(KIOSK_UPGRADE_FROM_VERSION, join(buildsDir, 'from'), builds.signal)
+  await buildKioskRelease(KIOSK_UPGRADE_TO_VERSION, join(buildsDir, 'to'), builds.signal)
 })
 
 test.afterEach(async () => {
@@ -73,6 +67,7 @@ test.afterEach(async () => {
 })
 
 test.afterAll(async () => {
+  builds.abort()
   await rm(buildsDir, { recursive: true, force: true })
 })
 
@@ -86,21 +81,9 @@ test(
       distDir: join(buildsDir, 'from'),
       headers: headers210,
     })
-    const browserDiagnostics: string[] = []
-    page.on('pageerror', (error) =>
-      browserDiagnostics.push(`pageerror: ${error.name}: ${error.message}`),
-    )
-    page.on('console', (message) =>
-      browserDiagnostics.push(`console.${message.type()}: ${message.text()}`),
-    )
-    await page.addInitScript(() => {
-      document.addEventListener('securitypolicyviolation', (event) => {
-        console.error(`Content Security Policy violation: ${event.violatedDirective}`)
-      })
-    })
+    const diagnostics = await watchBrowserDiagnostics(page)
     await page.clock.install({ time: KIOSK_UPGRADE_OUTSIDE_WINDOW })
     const clockInstalledAt = Date.now()
-    await stubKioskApiWithPin(page)
     const heartbeat = await stubUpgradeHeartbeat(page, () =>
       new Date(
         KIOSK_UPGRADE_OUTSIDE_WINDOW.getTime() + (Date.now() - clockInstalledAt),
@@ -128,7 +111,7 @@ test(
     // siguiente latido declara N+1 como minima. Nadie toca la tablet.
     server.publish({ distDir: join(buildsDir, 'to'), headers: productionHeaders })
     heartbeat.announceMinimumAppVersion(KIOSK_UPGRADE_TO_VERSION)
-    await page.clock.runFor(KIOSK_UPGRADE_HEARTBEAT_MS)
+    await page.clock.runFor(DEFAULT_HEARTBEAT_INTERVAL_MS)
 
     // Assert: la tablet ha recargado ella sola en la version nueva y su
     // documento lleva la CSP de produccion.
@@ -146,7 +129,7 @@ test(
     // Y ficha por PIN con el WebAssembly real.
     // PIN-03: el enlace solo aparece si libsodium puede sellar en ESTE documento.
     await expect(page.getByTestId('pin-entry-link')).toBeVisible()
-    const diagnosticsBeforePin = browserDiagnostics.length
+    const diagnosticsBeforePin = diagnostics.entries.length
     await page.getByTestId('pin-entry-link').click()
     await enterEmployeeCode(page, KIOSK_UPGRADE_EMPLOYEE_CODE)
     await pressPinDigits(page, KIOSK_UPGRADE_RAW_PIN)
@@ -157,9 +140,7 @@ test(
       /^(accepted|rejected)$/,
       { timeout: 10_000 },
     )
-    const blocked = browserDiagnostics
-      .slice(diagnosticsBeforePin)
-      .filter((text) => KIOSK_UPGRADE_BLOCKED.test(text))
+    const blocked = diagnostics.blockedSince(diagnosticsBeforePin)
     expect(blocked, blocked.join('\n')).toEqual([])
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted')
     expect(pinApi.recorded).toHaveLength(1)

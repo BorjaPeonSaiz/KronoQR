@@ -170,9 +170,17 @@ export interface ServiceCodeStubOptions {
   readonly code: string
 }
 
-export interface KioskApiStubOptions {
-  /** Ausente = instalacion SIN codigo de servicio (el caso de todas las pruebas que no son de diagnostico). */
-  readonly serviceCode?: ServiceCodeStubOptions
+/** El cuerpo de un latido tal y como lo manda la tablet (`KioskHeartbeatRequest`), lo que interesa aqui. */
+export interface HeartbeatRequestBody {
+  readonly app_version: string
+  readonly [field: string]: unknown
+}
+
+/**
+ * Opciones del latido simulado que comparten `stubKioskApi` y los dobles de
+ * `support/pin.ts`: UN solo sitio escribe la respuesta del latido.
+ */
+export interface HeartbeatStubOptions {
   /** `KioskHeartbeat.break_clocking_enabled` (RF-AT-12, tarea 3.5). Por defecto `false`. */
   readonly breakClockingEnabled?: boolean
   /**
@@ -187,12 +195,55 @@ export interface KioskApiStubOptions {
    * tablet (RF-AT-10) sin tocar el reloj de la pagina, que sigue midiendo el
    * paso real del tiempo entre latidos.
    */
+  readonly serverTime?: () => string
   /**
    * `KioskHeartbeat.minimum_app_version` (RF-KI-07, modo urgente). Ausente = el
-   * servidor no la declara (servidor de desarrollo).
+   * servidor no la declara (servidor de desarrollo). Como funcion, se lee en
+   * CADA latido: un servidor que se actualiza a mitad de prueba
+   * (`kiosk-upgrade.spec.ts`) empieza a declararla sin volver a registrar la ruta.
    */
-  readonly minimumAppVersion?: string
-  readonly serverTime?: () => string
+  readonly minimumAppVersion?: string | (() => string | undefined)
+  /** Cada latido que llega, antes de contestarlo (p. ej., para anotar `app_version`). */
+  readonly onHeartbeat?: (body: HeartbeatRequestBody) => void
+}
+
+function minimumAppVersionOf(
+  option: HeartbeatStubOptions['minimumAppVersion'],
+): string | undefined {
+  return typeof option === 'function' ? option() : option
+}
+
+/** Intercepta `POST /api/v1/kiosk/heartbeat` con una respuesta de exito. */
+export async function stubHeartbeat(
+  page: Page,
+  options: HeartbeatStubOptions & { readonly serviceCodeHash?: string | null } = {},
+): Promise<void> {
+  await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
+    options.onHeartbeat?.(route.request().postDataJSON() as HeartbeatRequestBody)
+    const minimumAppVersion = minimumAppVersionOf(options.minimumAppVersion)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      // `client_errors_accepted` es obligatorio en el contrato (RF-PD-15,
+      // tarea 5.12): `0` porque este doble no inspecciona lo que llego.
+      // `service_code_hash` (RF-KI-08, tarea 3.3): `null` salvo que la prueba
+      // pida explicitamente un codigo de servicio. `break_clocking_enabled`
+      // y `clock_skew_tolerance_seconds` (RF-AT-12, RF-AT-10, tarea 3.5).
+      body: JSON.stringify({
+        server_time: options.serverTime?.() ?? new Date().toISOString(),
+        client_errors_accepted: 0,
+        service_code_hash: options.serviceCodeHash ?? null,
+        break_clocking_enabled: options.breakClockingEnabled ?? false,
+        clock_skew_tolerance_seconds: options.clockSkewToleranceSeconds ?? 900,
+        ...(minimumAppVersion === undefined ? {} : { minimum_app_version: minimumAppVersion }),
+      }),
+    })
+  })
+}
+
+export interface KioskApiStubOptions extends HeartbeatStubOptions {
+  /** Ausente = instalacion SIN codigo de servicio (el caso de todas las pruebas que no son de diagnostico). */
+  readonly serviceCode?: ServiceCodeStubOptions
 }
 
 /** El latido no debe ensuciar las trazas ni fallar por no haber servidor. */
@@ -208,30 +259,7 @@ export async function stubKioskApi(page: Page, options: KioskApiStubOptions = {}
     }, deviceId)
   }
 
-  const breakClockingEnabled = options.breakClockingEnabled ?? false
-  const clockSkewToleranceSeconds = options.clockSkewToleranceSeconds ?? 900
-
-  await page.route('**/api/v1/kiosk/heartbeat', async (route: Route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      // `client_errors_accepted` es obligatorio en el contrato (RF-PD-15,
-      // tarea 5.12): `0` porque este doble no inspecciona lo que llego.
-      // `service_code_hash` (RF-KI-08, tarea 3.3): `null` salvo que la prueba
-      // pida explicitamente un codigo de servicio. `break_clocking_enabled`
-      // y `clock_skew_tolerance_seconds` (RF-AT-12, RF-AT-10, tarea 3.5).
-      body: JSON.stringify({
-        server_time: options.serverTime?.() ?? new Date().toISOString(),
-        client_errors_accepted: 0,
-        service_code_hash: serviceCodeHash,
-        break_clocking_enabled: breakClockingEnabled,
-        clock_skew_tolerance_seconds: clockSkewToleranceSeconds,
-        ...(options.minimumAppVersion === undefined
-          ? {}
-          : { minimum_app_version: options.minimumAppVersion }),
-      }),
-    })
-  })
+  await stubHeartbeat(page, { ...options, serviceCodeHash })
   await page.route('**/api/v1/kiosk/roster', async (route: Route) => {
     await route.fulfill({
       status: 200,

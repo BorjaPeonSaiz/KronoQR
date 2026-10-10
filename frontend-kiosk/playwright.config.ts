@@ -79,7 +79,7 @@ export default defineConfig({
   projects: [
     {
       name: 'kiosk-qr',
-      testIgnore: /degraded.spec.ts$|worn.spec.ts$|layout.spec.ts$|kiosk-upgrade.spec.ts$/,
+      testIgnore: /degraded\.spec\.ts$|worn\.spec\.ts$|layout\.spec\.ts$|kiosk-upgrade\.spec\.ts$/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

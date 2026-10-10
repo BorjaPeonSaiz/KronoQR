@@ -16,15 +16,16 @@ import {
   stubKioskApiWithPin,
   stubPinScanApi,
 } from './support/pin'
-import { cspDirective, readProductionSecurityHeaders } from './support/securityHeaders'
+import {
+  cspDirective,
+  readProductionSecurityHeaders,
+  watchBrowserDiagnostics,
+} from './support/securityHeaders'
 
 const PIN_CSP_EMPLOYEE_CODE = 'E7QK2MXPR'
 const PIN_CSP_RAW_PIN = '483920'
 // `crypto_box_seal`: 32 bytes de clave efimera + 16 de MAC + los 6 del PIN.
 const PIN_CSP_SEALED_BYTES = 54
-// Lo que deja en consola o en `pageerror` un WebAssembly que la CSP no deja
-// compilar, o cualquier otra violacion de CSP.
-const PIN_CSP_BLOCKED = /CompileError|WebAssembly|wasm|Content Security Policy|Refused to/i
 
 test(
   'el quiosco se sirve con la Content-Security-Policy del snippet de Nginx, con script-src',
@@ -44,18 +45,7 @@ test(
   'bajo la CSP de produccion el PIN se sella con el WebAssembly real y viaja en una peticion',
   { tag: ['@RF-AT-11', '@RS-09'] },
   async ({ page }) => {
-    const browserDiagnostics: string[] = []
-    page.on('pageerror', (error) =>
-      browserDiagnostics.push(`pageerror: ${error.name}: ${error.message}`),
-    )
-    page.on('console', (message) =>
-      browserDiagnostics.push(`console.${message.type()}: ${message.text()}`),
-    )
-    await page.addInitScript(() => {
-      document.addEventListener('securitypolicyviolation', (event) => {
-        console.error(`Content Security Policy violation: ${event.violatedDirective}`)
-      })
-    })
+    const diagnostics = await watchBrowserDiagnostics(page)
     await stubKioskApiWithPin(page)
     const pinApi = await stubPinScanApi(page, 'clock_in')
     const response = await page.goto('/')
@@ -73,7 +63,7 @@ test(
       /^(accepted|rejected)$/,
       { timeout: 10_000 },
     )
-    const blocked = browserDiagnostics.filter((text) => PIN_CSP_BLOCKED.test(text))
+    const blocked = diagnostics.blockedSince()
     expect(blocked, blocked.join('\n')).toEqual([])
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted')
     expect(pinApi.recorded).toHaveLength(1)

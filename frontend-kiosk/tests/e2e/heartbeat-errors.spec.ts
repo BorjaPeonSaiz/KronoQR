@@ -20,15 +20,9 @@ import {
   stubScanApi,
 } from './support/kiosk'
 import { announceOnline, queueStoreReady, seedQueue, stubBatchApi } from './support/offlineQueue'
+import { DEFAULT_HEARTBEAT_INTERVAL_MS } from '@/shared/telemetry/heartbeatInterval'
 
-/**
- * `DEFAULT_HEARTBEAT_INTERVAL_MS` de `src/shared/telemetry/heartbeat.ts`. Se
- * repite aqui en vez de importarse: los E2E de este proyecto no importan
- * codigo de `src/` (ningun otro fichero de `tests/e2e/` lo hace), y depender
- * de la resolucion del alias `@/` en el cargador de Playwright seria fragil
- * para una sola constante.
- */
-const HEARTBEAT_INTERVAL_MS = 60_000
+const HEARTBEAT_INTERVAL_MS = DEFAULT_HEARTBEAT_INTERVAL_MS
 
 /** Fuerza que `getUserMedia` falle con `NotAllowedError`, ANTES de que arranque la app. */
 async function forceCameraPermissionDenied(page: Page): Promise<void> {

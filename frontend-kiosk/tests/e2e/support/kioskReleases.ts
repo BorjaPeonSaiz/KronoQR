@@ -27,6 +27,7 @@ import { createRequire } from 'node:module'
 import { dirname, extname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Page } from '@playwright/test'
+import { stubKioskApiWithPin } from './pin'
 import { cspDirective } from './securityHeaders'
 
 /** Prefijo bajo el que Nginx publica el quiosco en produccion. */
@@ -50,8 +51,15 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 /**
  * Construye el quiosco con la version `version` en `outDir`. Mismo comando que
  * la imagen de Nginx (`KRONOQR_APP_VERSION`, `KRONOQR_BASE=/kiosk/`).
+ *
+ * `signal` mata el proceso: si `beforeAll` agota su tiempo, `afterAll` lo aborta
+ * y no queda un `vite build` huerfano escribiendo en un directorio ya borrado.
  */
-export async function buildKioskRelease(version: string, outDir: string): Promise<void> {
+export async function buildKioskRelease(
+  version: string,
+  outDir: string,
+  signal: AbortSignal,
+): Promise<void> {
   const viteBin = resolve(
     dirname(createRequire(import.meta.url).resolve('vite/package.json')),
     'bin/vite.js',
@@ -65,6 +73,7 @@ export async function buildKioskRelease(version: string, outDir: string): Promis
         cwd: KIOSK_ROOT,
         env: { ...process.env, KRONOQR_APP_VERSION: version, KRONOQR_BASE: KIOSK_BASE_PATH },
         stdio: ['ignore', 'pipe', 'pipe'],
+        signal,
       },
     )
     child.stdout.on('data', (chunk: Buffer) => output.push(chunk.toString()))
@@ -176,41 +185,31 @@ export function securityHeadersOf210(
   return { ...production, 'Content-Security-Policy': withoutWasm }
 }
 
-/** La version que declara la tablet en cada latido (`KioskHeartbeatRequest.app_version`). */
+/** Lo que el servidor que se actualiza ve del quiosco, y como se le ordena declarar la minima. */
 export interface UpgradeHeartbeat {
-  readonly appVersions: string[]
+  /** `app_version` de cada latido recibido, en orden. */
+  readonly appVersions: readonly string[]
   /** Desde el siguiente latido, el servidor declara esta `minimum_app_version`. */
   announceMinimumAppVersion(version: string): void
 }
 
 /**
- * Latido de un servidor que se actualiza a mitad de prueba. Sustituye al de
- * `stubKioskApiWithPin` (Playwright usa la ruta registrada mas tarde): llamar
- * DESPUES. `serverTime` sigue al reloj de la pagina, para que la tablet no vea
- * un desfase que no tiene nada que ver con lo que se prueba.
+ * La API de una instalacion CON PIN (`stubKioskApiWithPin`) cuyo servidor se
+ * actualiza a mitad de prueba: anota la version de cada latido y empieza a
+ * declarar la minima cuando se le pide. `serverTime` sigue al reloj de la
+ * pagina, para que la tablet no vea un desfase ajeno a lo que se prueba.
  */
 export async function stubUpgradeHeartbeat(
   page: Page,
   serverTime: () => string,
 ): Promise<UpgradeHeartbeat> {
   const appVersions: string[] = []
-  let minimumAppVersion: string | null = null
+  let minimumAppVersion: string | undefined
 
-  await page.route('**/api/v1/kiosk/heartbeat', async (route) => {
-    const body = route.request().postDataJSON() as { app_version: string }
-    appVersions.push(body.app_version)
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        server_time: serverTime(),
-        client_errors_accepted: 0,
-        service_code_hash: null,
-        break_clocking_enabled: false,
-        clock_skew_tolerance_seconds: 900,
-        ...(minimumAppVersion === null ? {} : { minimum_app_version: minimumAppVersion }),
-      }),
-    })
+  await stubKioskApiWithPin(page, {
+    serverTime,
+    minimumAppVersion: () => minimumAppVersion,
+    onHeartbeat: (body) => appVersions.push(body.app_version),
   })
 
   return {
