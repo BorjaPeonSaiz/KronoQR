@@ -21,6 +21,11 @@ declare(strict_types=1);
  *         --valid-until=2027-08-31 \
  *         --features=advanced_reports,realtime_presence
  *
+ * `--features=all` concede el catalogo entero de esta herramienta: es la licencia
+ * que se vende hoy (todas las secciones del panel). Se expande AQUI, al firmar,
+ * y la clave lleva la lista explicita: una funcionalidad que el producto añada
+ * en una version futura no esta en una clave ya emitida y obliga a reemitir.
+ *
  * Se valida TODO antes de firmar: los limites son enteros positivos, la vigencia
  * no va hacia atras y las funcionalidades estan en el catalogo de ADR-023. Una
  * clave mal emitida se descubriria en casa del cliente, con la factura ya
@@ -83,7 +88,6 @@ function instant(string $day, string $time): string
     return $day.'T'.$time.'Z';
 }
 
-
 /**
  * Un entero positivo, o se aborta.
  *
@@ -99,6 +103,56 @@ function positiveInteger(string $option, string $raw): int
     }
 
     return (int) $raw;
+}
+
+/**
+ * La columna «Degradable» de ADR-023: lo que una licencia puede conceder.
+ *
+ * Esta herramienta es independiente del producto a proposito —no se despliega
+ * con el y no carga su codigo—, asi que la lista vive aqui y en el enum
+ * `Feature` del producto. Las ata `LicenseIssuerRoundTripTest`: la carga util
+ * FIRMADA de una clave emitida con `--features=all` tiene que llevar exactamente
+ * los casos del enum, ni uno de mas ni uno de menos.
+ *
+ * @return list<string>
+ */
+function featureCatalogue(): array
+{
+    return [
+        'advanced_reports',
+        'impact_dashboard',
+        'payroll_export',
+        'weekly_email_summary',
+        'realtime_presence',
+        'white_label',
+        'telemetry',
+    ];
+}
+
+/**
+ * `--features=all` se expande al catalogo completo en el momento de firmar.
+ *
+ * `all` no se mezcla con nombres sueltos: `all,payroll_export` no concede nada
+ * distinto de `all` y delata una orden mal escrita, asi que se rechaza.
+ *
+ * Devuelve tambien si hubo expansion, para que el aviso de reemision dependa de
+ * lo que se interpreto y no del texto crudo de la opcion (`--features=all,` o
+ * `" all "` tambien son `all`).
+ *
+ * @param  list<string>  $features
+ * @return array{features: list<string>, expanded: bool}
+ */
+function expandAll(array $features): array
+{
+    if (! \in_array('all', $features, true)) {
+        return ['features' => $features, 'expanded' => false];
+    }
+
+    if ($features !== ['all']) {
+        fail('--features=all no se combina con otros nombres: ya concede el catalogo entero ('.implode(', ', featureCatalogue()).').');
+    }
+
+    return ['features' => featureCatalogue(), 'expanded' => true];
 }
 
 /**
@@ -121,17 +175,7 @@ function positiveInteger(string $option, string $raw): int
  */
 function knownFeatures(array $features, bool $force): array
 {
-    // La columna «Degradable» de ADR-023. Se escribe aqui y en el enum `Feature`
-    // del producto; las ata `LicenseIssuerRoundTripTest`.
-    $catalogue = [
-        'advanced_reports',
-        'impact_dashboard',
-        'payroll_export',
-        'weekly_email_summary',
-        'realtime_presence',
-        'white_label',
-        'telemetry',
-    ];
+    $catalogue = featureCatalogue();
 
     $unknown = array_values(array_diff($features, $catalogue));
 
@@ -160,10 +204,9 @@ foreach (['customer', 'plan', 'max-employees', 'max-devices', 'valid-from', 'val
     }
 }
 
-$features = knownFeatures(
-    array_values(array_filter(array_map('trim', explode(',', $options['features'] ?? '')))),
-    isset($options['force']),
-);
+$requested = expandAll(array_values(array_filter(array_map('trim', explode(',', $options['features'] ?? '')))));
+
+$features = knownFeatures($requested['features'], isset($options['force']));
 
 $maxEmployees = positiveInteger('max-employees', $options['max-employees']);
 $maxDevices = positiveInteger('max-devices', $options['max-devices']);
@@ -203,5 +246,12 @@ fwrite(STDERR, '  Limites:  '.$claims['max_employees'].' personas, '.$claims['ma
 fwrite(STDERR, '  Vigencia: '.$claims['valid_from'].' -> '.$claims['valid_until'].PHP_EOL);
 fwrite(STDERR, '  Funciones accesorias: '.($features === [] ? 'ninguna' : implode(', ', $features)).PHP_EOL);
 fwrite(STDERR, '  Huella:   '.substr(hash('sha256', $key), 0, 12).PHP_EOL.PHP_EOL);
+
+if ($requested['expanded']) {
+    // El riesgo de `all`, dicho cuando se emite: congela el catalogo de ESTA
+    // herramienta, no el de las versiones futuras del producto.
+    fwrite(STDERR, 'Aviso: --features=all concede el catalogo de esta herramienta a fecha de hoy.'.PHP_EOL);
+    fwrite(STDERR, '  Una funcionalidad que llegue en una version futura no ira en esta clave: habra que reemitirla.'.PHP_EOL.PHP_EOL);
+}
 
 fwrite(STDOUT, $key.PHP_EOL);

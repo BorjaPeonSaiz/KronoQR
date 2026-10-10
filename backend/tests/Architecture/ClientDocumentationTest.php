@@ -651,3 +651,34 @@ it('indexa en los runbooks el de la tarjeta perdida o rota', function (): void {
     expect(str_contains(ClientDocs::contents('docs/runbooks/README.md'), 'tarjeta-perdida-o-rota.md'))
         ->toBeTrue('docs/runbooks/README.md no indexa tarjeta-perdida-o-rota.md.');
 })->group('RF-PD-02');
+
+it('dice de donde se descarga el paquete y como se comprueba', function (string $guide): void {
+    // Tarea 4.4 de la 2.2.1. El paquete se descarga publico de las releases de
+    // GitHub y la licencia llega aparte. Una guia que empieza por «descomprime
+    // el paquete» sin decir de donde sale deja al IT del hotel con la primera
+    // orden imposible de ejecutar, que es la peor primera impresion posible.
+    // Se exige tambien la orden que comprueba las sumas: los nombres de los
+    // artefactos son los que publica `release.yml`.
+    expect(ClientDocs::literalsMissingFrom([
+        'https://github.com/BorjaPeonSaiz/KronoQR/releases',
+        'SHA256SUMS',
+        'sha256sum -c --ignore-missing SHA256SUMS',
+        '.tar.gz',
+    ], $guide))->toBe([], $guide.' no dice de donde se descarga el paquete o como se comprueba.');
+})->with([
+    'instalacion' => 'docs/cliente/instalacion.md',
+    'installation' => 'docs/cliente/en/installation.md',
+    'actualizacion' => 'docs/runbooks/actualizacion-cliente.md',
+])->group('RF-PD-02');
+
+it('publica en la release los ficheros que las guias mandan descargar', function (): void {
+    // Lo que las guias nombran —`kronoqr-<version>.tar.gz` y un `SHA256SUMS`
+    // que lo cubre— tiene que ser lo que `release.yml` publica de verdad. Si el
+    // workflow renombrara el paquete o dejara de sumarlo, la primera orden de la
+    // guia fallaria en casa del hotel.
+    $release = Repo::contents('.github/workflows/release.yml');
+
+    expect($release)->toContain('nombre="kronoqr-${VERSION}"')
+        ->and(preg_match('/^\s*sha256sum "kronoqr-\$\{VERSION\}\.tar\.gz"[^\n]*>SHA256SUMS$/m', $release))
+        ->toBe(1, 'release.yml ya no suma kronoqr-${VERSION}.tar.gz en SHA256SUMS.');
+})->group('RF-PD-02');

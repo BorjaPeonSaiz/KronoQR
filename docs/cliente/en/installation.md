@@ -101,18 +101,58 @@ brightness, the Android update window and the network — is in the runbook
 
 ## 1. The procedure, from start to finish
 
-### 1.1 Unpack the package
+### 1.1 Download, check and unpack the package
 
-The package arrives as `kronoqr-<version>.tar.gz` together with a `SHA256SUMS`
-file. With both in the same folder, first check that the package arrived
-intact:
+**The package is downloaded, publicly, from the releases page:**
+<https://github.com/BorjaPeonSaiz/KronoQR/releases>. No account or password is
+needed. **The licence is not there**: your supplier sends it to you separately
+(§4).
+
+**Which version to pick.** The most recent one in the `v2.2.x` series (this
+guide's examples use `2.2.0`; type the one you picked). **Never** one whose
+title or notes say "do not use" («no usar»), nor one marked as *Pre-release*:
+they are not meant for customer installations.
+
+From each release you need two files, listed under its *Assets* section:
+
+| File | What it is |
+| --- | --- |
+| `kronoqr-<version>.tar.gz` | The installation package |
+| `SHA256SUMS` | The checksums to confirm it arrived intact |
+
+The third one, `kronoqr-<version>.cdx.json`, is the product's component list
+(SBOM): it is not needed to install.
+
+From the server, in a working folder:
+
+```bash
+curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/kronoqr-2.2.0.tar.gz
+curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS
+```
+
+> **If the server has no internet access**, download both files from another
+> computer with a browser and copy them into the same folder on the server
+> (`scp`, WinSCP or a USB stick). That is enough for the package; the
+> system images arrive separately, as explained in
+> [§7](#7-installing-without-internet-access).
+
+With both in the same folder, check that the package arrived intact:
 
 ```bash
 sha256sum -c --ignore-missing SHA256SUMS
 ```
 
 It must say `kronoqr-2.2.0.tar.gz: OK`. If it says `FAILED`, do not unpack it:
-download it again or ask the vendor for another copy.
+delete it and download it again; if it fails again, tell your supplier. If it
+says `no properly formatted checksum lines found`, what you saved as
+`SHA256SUMS` is a web page rather than the file: download it again from
+*Assets*. `--ignore-missing` is there so it does not complain about the SBOM if
+you did not download it.
+
+> This checksum proves the package was not corrupted on the way. The checksums
+> live on the same page as the package, so on their own they do not prove who
+> published it: always download from the address above, never from a forwarded
+> copy.
 
 ```bash
 tar xzf kronoqr-2.2.0.tar.gz
@@ -768,8 +808,10 @@ docker compose exec app php artisan license:activate "KQL1...."
 
 > **If you do not have it at hand, install anyway.** Without an activated
 > licence the system installs, starts and **records working time normally**:
-> the only things that will not be available are accessory features — reports
-> by period and real-time presence updates. You activate it when you have it
+> the only things that will not be available are the plan's accessory sections
+> — reports by period, Impact and adoption, payroll export, your own branding
+> (logo and colour), the weekly email summary and real-time presence updates,
+> which fall back to refreshing every few seconds. You activate it when you have it
 > and they appear on their own, without restarting anything.
 >
 > **And an expired licence never blocks clocking in or access to the record

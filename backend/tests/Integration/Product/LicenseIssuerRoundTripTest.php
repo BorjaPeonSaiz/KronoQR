@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Product\Domain\ValueObject\LicenseRejection;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
 use App\Modules\Product\Infrastructure\Adapter\Ed25519LicenseVerifier;
+use App\Modules\Shared\Domain\ValueObject\Feature;
 use Symfony\Component\Process\Process;
 use Tests\Architecture\Support\Repo;
 
@@ -259,4 +260,79 @@ it('el emisor deja emitir una funcionalidad futura con --force', function (): vo
     // El producto descarta lo que no conoce y concede lo que si.
     expect($result->isVerified())->toBeTrue()
         ->and($result->license?->featureNames())->toBe(['advanced_reports']);
+})->group('RF-PD-04');
+
+/**
+ * Las funcionalidades tal y como viajan FIRMADAS en la carga util de la clave.
+ *
+ * No se usa `License::featureNames()`: el producto descarta en silencio lo que
+ * su enum no conoce (tolerancia deliberada con claves de versiones futuras), asi
+ * que a traves de el no se veria un nombre que SOBRE en el emisor.
+ *
+ * @return list<string>
+ */
+function signedFeatureNames(string $key): array
+{
+    $payload = explode('.', $key)[1] ?? '';
+    $claims = json_decode((string) base64_decode(strtr($payload, '-_', '+/'), true), true);
+    $features = is_array($claims) ? ($claims['features'] ?? null) : null;
+
+    expect($features)->toBeArray('La carga util firmada no trae el campo features.');
+
+    return array_values(array_map(static fn (mixed $name): string => is_string($name) ? $name : '', (array) $features));
+}
+
+it('--features=all emite una clave que verifica y lleva las siete funcionalidades del producto', function (string $raw): void {
+    // La licencia que se vende hoy da acceso a todas las secciones del panel
+    // (decision del propietario, 09-10-2026). `all` se expande al catalogo del
+    // EMISOR al firmar; compararlo con el enum `Feature` del PRODUCTO, en los
+    // dos sentidos y sobre la carga util firmada, es lo que impide que las dos
+    // listas deriven: ni falta una funcionalidad del producto ni sobra un nombre
+    // que el producto no conoce.
+    $pair = factoryKeyPair();
+    $issued = issueWithFactoryTool($pair['secret'], ['features' => $raw]);
+
+    expect($issued['exitCode'])->toBe(0, $issued['stderr']);
+
+    $result = (new Ed25519LicenseVerifier($pair['public']))->verify($issued['key']);
+    $signed = signedFeatureNames($issued['key']);
+    $product = array_map(static fn (Feature $feature): string => $feature->value, Feature::cases());
+
+    expect($result->isVerified())->toBeTrue()
+        ->and($signed)->toEqualCanonicalizing([
+            'advanced_reports',
+            'impact_dashboard',
+            'payroll_export',
+            'weekly_email_summary',
+            'realtime_presence',
+            'white_label',
+            'telemetry',
+        ])
+        ->and(array_values(array_diff($signed, $product)))->toBe([], 'El emisor firma nombres que el producto no conoce.')
+        ->and(array_values(array_diff($product, $signed)))->toBe([], 'El producto tiene funcionalidades que all no concede.')
+        ->and($result->license?->featureNames())->toEqualCanonicalizing($product)
+        // Y lo dice al emitir: `all` congela el catalogo de hoy. El aviso
+        // depende de lo interpretado, no del texto crudo de la opcion.
+        ->and($issued['stderr'])->toContain('habra que reemitirla');
+})->with([
+    'all' => 'all',
+    'all con coma final' => 'all,',
+    'all con espacios' => ' all, ',
+])->group('RF-PD-04', 'RF-PD-05', 'RF-PD-08');
+
+it('una lista explicita no lleva el aviso de reemision de all', function (): void {
+    $pair = factoryKeyPair();
+    $issued = issueWithFactoryTool($pair['secret']);
+
+    expect($issued['exitCode'])->toBe(0, $issued['stderr'])
+        ->and($issued['stderr'])->not->toContain('habra que reemitirla');
+})->group('RF-PD-04');
+
+it('--features=all no se mezcla con nombres sueltos', function (): void {
+    $pair = factoryKeyPair();
+    $issued = issueWithFactoryTool($pair['secret'], ['features' => 'all,payroll_export']);
+
+    expect($issued['exitCode'])->toBe(1)
+        ->and($issued['key'])->toBe('')
+        ->and($issued['stderr'])->toContain('no se combina con otros nombres');
 })->group('RF-PD-04');

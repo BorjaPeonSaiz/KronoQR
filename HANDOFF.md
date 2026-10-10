@@ -59,8 +59,14 @@ entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va
 `kronoqr.kodigolab.es` (hoy 2.1.0), actualizar README §3.1/§6 y `doc_master/despliegue.md`.
 
 **Siguiente acción: la 2.2.1**, con lo que está en **[`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md)**
-(decisiones del propietario del 09-10-2026 en su §5). Lo primero es su §0: que una tablet no se quede en la versión anterior
-tras actualizar. En la demo (`/kronoqr-2.2.0`, en la raíz del servidor) el PIN falló por la PWA 2.1.0 en caché y un PIN mal guardado;
+(decisiones del propietario del 09-10-2026 en su §5) y el plan por bloques
+[`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md). **Integrados (10-10-2026):** B1
+versión mínima del quiosco (PR #136), B2 actualización urgente de la tablet (PR #137) y B3 pruebas de actualización con el PIN
+(PR #138, `main` `7c8d4c84`: `kiosk-upgrade.spec.ts` y P3a/P3b de ⑧b con un Chromium real antes y después de `update.sh`) y
+B4 menú de Informes, `--features=all` en el emisor y guías de descarga desde las releases con `SHA256SUMS` (rama
+`fix/menu-licencia-y-descarga`, CI manual 38051782879 en verde). **Falta la 4.3, del propietario:** reemitir la licencia de la demo
+con `--features=all` (comando en `tools/license-issuer/README.md`, dentro del contenedor `app` y la clave por la entrada estándar) y
+`license:activate`. **Siguiente: bloque 5.** En la demo (`/kronoqr-2.2.0`, en la raíz del servidor) el PIN falló por la PWA 2.1.0 en caché y un PIN mal guardado;
 ya está resuelto. **Nunca empujar etiquetas antiguas
 con `release.yml` activo**: el push ejecuta el `release.yml` del commit etiquetado, sin la guarda de ADR-053. Para la 2.2.1, las
 dos cosas que dejó la conciliación, decididas por el propietario el 08-10-2026: un «revisado» para la alerta
@@ -103,6 +109,13 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 > lo que siga vigente debería pasar al plan o a «Fuera de la 2.2.0, con motivo».
 
 ## Pendiente
+
+### Anotado en el bloque 4 de la 2.2.1 (10-10-2026)
+
+- `frontend-admin/tests/unit/AdministratorStep.spec.ts` falla en local (contenedor node, transformación de módulos > 8 s antes de la
+  importación dinámica del QR) y pasa en la CI: endurecer la espera de `settle()` o ampliar el margen.
+- `tools/license-issuer/src/LicenseIssuer.php:101` no pasa PHPStan 9 (`sodium_crypto_sign_detached` espera `non-empty-string`);
+  el emisor no está en ninguna pasada de PHPStan del proyecto.
 
 ### Diferido a la 2.2.x por el bloque 14 (08-10-2026)
 
