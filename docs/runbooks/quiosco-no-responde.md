@@ -157,7 +157,7 @@ Filas que hay que mirar, por orden de utilidad en este runbook:
 | **Cola** | Cuántos fichajes hay sin enviar y de cuándo es el más antiguo. **Es la cifra que decide si puedes desvincular la tablet o no** (§4) |
 | **Token** | Si la tablet aparece **sin token**, no es un problema de red: alguien la desvinculó o su credencial caducó, y hay que volver a emparejarla. La pantalla enseña ocho caracteres de la huella del token —nunca el token— para poder compararlo con el del panel |
 | **Cámara** | Si los empleados se quejan de que «no lee», aquí están los tres avisos habituales: fondo difuminado, enfoque no continuo y resolución por debajo de 1280×720. No bloquean el fichaje; explican el síntoma. Cómo se corrige cada uno: `alta-nuevo-quiosco.md` §6 |
-| **Versión** | Si no coincide con la del resto de tablets, la PWA se quedó atrás: recarga y comprueba |
+| **Versión** | Si no coincide con la del servidor, la aplicación de la tablet se quedó atrás. **No recargues por eso**: recargar no aplica la versión nueva y, con la cola en memoria, borra los fichajes no enviados. Una 2.2.1 o posterior se pone al día sola en cuanto la cola está vacía y nadie ficha; una 2.2.0, en su ventana nocturna; una 2.1.0 o anterior (`0.0.0`), nunca sola. Qué hacer: §3, «La tablet sigue en una versión anterior a la del servidor» |
 
 La pantalla no enseña ningún nombre ni ningún fichaje: identifica por
 dispositivo y muestra recuentos (regla dura 21).
@@ -173,6 +173,7 @@ dispositivo y muestra recuentos (regla dura 21).
 | **Wifi caído en ese punto, o la tablet salió de cobertura** | §2.3 sin tráfico de esa tablet; otras del mismo wifi también sin latido | Revisa el punto de acceso de esa zona. Si varias tablets del mismo AP fallan a la vez, es la red, no los dispositivos (anti-fatiga: la agrupación por `device` no oculta el patrón, solo evita cinco avisos separados) |
 | **La tablet quedó fuera de `KIOSK_VLAN_CIDR`** | §2.4 | Corrige el DHCP o el rango en el `.env` (instalación, no urgencia de madrugada) |
 | **El token del quiosco caducó o fue revocado** | La tablet muestra sola la pantalla de emparejamiento | No es un fallo de red. O pasó **más de unos 18 días seguidos sin latido** (apagada o sin red) y su token caducó sin llegar a renovarse —mientras lata, se renueva solo hacia el día 72 de sus 90 ([`../cliente/operacion.md`](../cliente/operacion.md) §18)— o alguien la desvinculó. Desvincúlala en el panel si sigue activa y vuelve a emparejarla — [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) §6, «…la tablet vuelve sola a la pantalla de emparejamiento» — con el **mismo nombre** para conservar su historia |
+| **La tablet sigue en una versión anterior a la del servidor** (tras una actualización) | Panel → Quioscos, aviso «Aplicación desactualizada»; `docker compose exec app php artisan product:doctor`, línea de la versión de las tablets; o la fila «Versión» de §2.5. **No es una caída: la tablet sigue fichando** | 2.2.1 o posterior: nada, se pone al día sola en cuanto la cola está vacía y nadie ficha. 2.2.0: en su ventana nocturna, o mueve `KIOSK_UPDATE_WINDOW`. 2.1.0 o anterior (`0.0.0`), o una 2.2.0 que sigue igual al día siguiente: desregistra su *service worker* —`chrome://serviceworker-internals` → **Unregister** en la tablet Android (fuera del modo quiosco); F12 → **Application** → **Service workers** → **Unregister** en un PC— y recarga, **solo** con la tablet con red, «Fichajes sin sincronizar» a 0 y sin el aviso «Cola solo en memoria». **Sin borrar los datos del sitio.** Paso a paso: [`../cliente/operacion.md`](../cliente/operacion.md) §11.1, «Qué hacer si una tablet no cambia sola tras actualizar el servidor» |
 | **Certificado TLS que la tablet dejó de aceptar** | Aviso de sitio no seguro en la propia tablet | [`renovacion-certificado-tls.md`](renovacion-certificado-tls.md) |
 | **El servidor está caído o `/ready` falla** | §2.3 sin tráfico de ningún quiosco | No es este runbook: revisa `docker compose ps`, PostgreSQL y Redis primero |
 | **La tablet se ha roto o se ha perdido** | No enciende, o ha desaparecido físicamente | [`alta-nuevo-quiosco.md`](alta-nuevo-quiosco.md) §5: sustitúyela con el mismo nombre. Si se ha extraviado, desvincúlala ya, sin esperar a que la cola se vacíe — y avisa a RRHH: los fichajes que la tablet tuviera en cola se pierden y hay que reconstruirlos por corrección manual (RN-13, `FALLO_TECNICO_QUIOSCO`) |
@@ -208,7 +209,12 @@ sí se pierden si se desvincula con la cola sin vaciar.
   avisa a RRHH de que habrá que corregir a mano.
 - **No borres los datos del sitio en la tablet** (caché, almacenamiento) para
   «resetear» el problema sin comprobar antes la cola: es lo mismo que perder
-  los fichajes pendientes.
+  los fichajes pendientes. Tampoco para que una tablet coja la versión nueva
+  del servidor: para eso basta desregistrar su *service worker* (§3), que no
+  toca la cola ni el emparejamiento.
+- **No recargues ni desregistres el *service worker* de una tablet con
+  fichajes pendientes o con el aviso «Cola solo en memoria»**: con la cola en
+  memoria, recargar borra los fichajes que aún no ha enviado.
 - **No dejes el código de servicio apuntado en la tablet ni cerca de ella.**
   Se teclea y ya está; si alguien más ha tenido que conocerlo para atender
   esta incidencia, cámbialo después desde el panel — llega a todas las

@@ -192,17 +192,37 @@ colas de los quioscos y entra después, gane o pierda la actualización.
 **Después del servidor: las tablets** (`docs/cliente/operacion.md` §11, §11.1).
 Las tablets se actualizan **después** del servidor y **con la cola a cero**:
 
-- La PWA nueva solo se recarga sola cuando se cumplen a la vez la ventana
-  `KIOSK_UPDATE_WINDOW` (hora local del centro), la cola vacía y unos minutos
-  sin fichajes. Esperar a la franja de serie puede tardar horas; **la vía
-  recomendada es mover temporalmente `KIOSK_UPDATE_WINDOW` a una franja que
-  empiece ahora** (se cambia en el panel, «Ajustes operativos») y devolverla a
-  su valor cuando todas las tablets estén al día. Compruébalo en «Salud de
-  quioscos» o con `php artisan kiosk:health` (versión y cola de cada una).
-- Si prefieres hacerlo a mano en una tablet, recárgala **solo con «Pendientes»
-  a cero**.
-- **Nunca borres los datos de la aplicación ni desvincules una tablet con
-  fichajes pendientes**: se pierden (ver
+- **Una tablet con la 2.2.1 o posterior se pone al día sola**, a cualquier
+  hora, en cuanto su cola está vacía y guardada en la tablet (no solo en
+  memoria) y nadie ha fichado en `KIOSK_UPDATE_QUIET_MINUTES`: el latido le dice
+  que va por detrás del servidor y no espera a la ventana. No hay que hacer
+  nada.
+- **Una tablet con la 2.2.0** solo se recarga cuando se cumplen a la vez la
+  ventana `KIOSK_UPDATE_WINDOW` (hora local del centro), la cola vacía y unos
+  minutos sin fichajes, y solo si ya ha descargado la versión nueva (la busca
+  cada hora). Esperar a la franja de serie puede tardar horas; si corre prisa,
+  **mueve temporalmente `KIOSK_UPDATE_WINDOW` a una franja que empiece ahora**
+  (panel, «Ajustes operativos») y devuélvela a su valor cuando estén al día.
+- **Una tablet con la 2.1.0 o anterior** (declara `0.0.0` o nada) **no se
+  pone al día sola nunca**: hay que desregistrar su *service worker* una vez.
+- **Compruébalo el mismo día**: en el panel, **Quioscos** (aviso «Aplicación
+  desactualizada»), o con `docker compose exec app php artisan product:doctor`
+  (línea de la versión de las tablets) o `php artisan kiosk:health` (versión y
+  cola de cada una). El fichaje no se ve afectado mientras tanto.
+- **Si una tablet no cambia sola**, sigue
+  [`operacion.md`](../cliente/operacion.md) §11.1, «Qué hacer si una tablet no
+  cambia sola tras actualizar el servidor». En resumen: desregistrar el
+  *service worker* (`chrome://serviceworker-internals` → **Unregister** en la
+  tablet Android; F12 → **Application** → **Service workers** →
+  **Unregister** en un PC) y recargar, **solo** con las tres condiciones a la
+  vez: la tablet con red, «Fichajes sin sincronizar» a 0 y sin el aviso «Cola
+  solo en memoria» (con la cola en memoria, recargar **borra** los fichajes no
+  enviados).
+- Recargar la página sin más **no** aplica la versión nueva: la que espera solo
+  entra por las vías de arriba.
+- **Nunca borres los datos del sitio ni de la aplicación, ni desvincules una
+  tablet con fichajes pendientes**: ahí están la cola de fichajes sin enviar y
+  el emparejamiento, y se pierden (ver
   [`cola-offline-atascada.md`](cola-offline-atascada.md) §5).
 - **Desde la 2.2.0, lo que una tablet antigua envíe y el servidor no acepte no se
   pierde**: la tablet lo avisa y queda como incidencia **«Fichaje descartado por

@@ -3159,6 +3159,8 @@ final_report() {
   say ""
   say "$(kq_text u_done_queue)"
   say ""
+  say "$(kq_text u_done_tablets)"
+  say ""
   say "$(kq_format u_done_current_dir "${PACKAGE_DIR}" "${TARGET_VERSION}" "${PACKAGE_DIR}")"
   if [ "${IN_PLACE}" -eq 0 ] && [ -n "${RETIRED_COMPOSE}" ]; then
     say ""

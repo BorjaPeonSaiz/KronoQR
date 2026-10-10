@@ -251,6 +251,13 @@ quiosco — los que le impiden fichar: `kiosk.camera.*`, `kiosk.scanner.*`,
 `error`** — molesta, pero no es de los que paran algo que nadie ve o que no
 puede parar.
 
+Un ejemplo de `error` que conviene reconocer: `kiosk.update.unreachable` (desde la
+2.2.1) dice que una tablet no ha conseguido ponerse en la versión mínima que
+pide el servidor tras tres intentos de actualización urgente. La tablet sigue
+fichando con normalidad y vuelve a su franja nocturna; qué hacer, en
+[`operacion.md`](../cliente/operacion.md) §11.1, «Qué hacer si una tablet no
+cambia sola tras actualizar el servidor».
+
 **El `critical` de un error de cliente solo lo produce un quiosco.** Los
 códigos de `kiosk.*` de arriba son un catálogo cerrado por origen: el
 servidor valida cada código contra el catálogo del origen que lo envía y
