@@ -192,7 +192,7 @@ test(
 
     await expect(whatToDo).toContainText('se pondrá al día sola')
     await expect(whatToDo).toContainText('chrome://serviceworker-internals')
-    await expect(whatToDo).toContainText('SIN borrar los datos del sitio')
+    await expect(whatToDo).toContainText('Y SIN borrar los datos del sitio')
   },
 )
 
