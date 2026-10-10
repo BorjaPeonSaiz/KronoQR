@@ -284,7 +284,7 @@ La tabla es **la misma de los cinco scripts**, publicada en
 | --- | --- | --- |
 | `0` | Actualizado y verificado | Leer el informe. Nada más |
 | `1` | Uso incorrecto. Nada tocado | `./update.sh --help` |
-| `2` | **Una precondición no se cumple, o la copia previa ha fallado.** La instalación no se ha tocado y sigue en su versión; si ya estaba en mantenimiento, se ha retirado | La línea «Que hacer» de cada `[FALLA]`. Tres merecen párrafo: versión de origen fuera de la matriz (§1), cadena de auditoría rota (§4 bis) y copia fallida ([`restaurar-backup.md`](restaurar-backup.md) §2) |
+| `2` | **Una precondición no se cumple, o la copia previa ha fallado.** La instalación no se ha tocado y sigue en su versión; si ya estaba en mantenimiento, se ha retirado | La línea «Que hacer» de cada `[FALLA]`. Cuatro merecen párrafo: versión de origen fuera de la matriz (§1), cadena de auditoría rota (§4 bis), perfil de cumplimiento bajo el suelo legal (§4 ter) y copia fallida ([`restaurar-backup.md`](restaurar-backup.md) §2) |
 | `3` | **Ya está en la versión de destino**, o no hay instalación que actualizar. Nada tocado | Nada. Si de verdad no hay instalación, lo que quieres es `install.sh` |
 | `4` | **Falló y volvió a la versión anterior.** Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante **antes** de reintentar: dice en qué paso y por qué |
 | `5` | **Falló y la vuelta atrás quedó incompleta.** Nada más se toca | §5. Es el único código que exige a una persona delante |
@@ -298,6 +298,47 @@ que ya existía, y actualizar lo taparía —después nadie podría distinguir s
 rompió la actualización—. Sigue
 [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md), preserva la
 evidencia, y **no actualices** hasta resolverlo.
+
+### 4 ter. «Perfil de cumplimiento dentro del suelo legal» (salida `2`)
+
+Desde la 2.2.1 la base de datos rechaza un perfil de jurisdicción `ES` que
+conserve menos de **4 años** (art. 34.9 del Estatuto de los Trabajadores, RL-02)
+y una jurisdicción que no tenga forma ISO 3166 (`ES`, `ES-CN`; no `es`, `ESP`
+ni `ES `). `update.sh` lo comprueba **antes de tocar nada**, con una consulta de
+solo lectura contra la base instalada; si no pasa, sale con `2` y la instalación
+sigue como estaba.
+
+**Plazo bajo (`El perfil N (ES) conserva 3 años…`).** Es lo habitual y se
+arregla desde el producto: Panel → Perfil de cumplimiento, sube «Años de
+conservación» a 4 o más y guarda. El cambio queda en `audit_log` como cualquier
+otro cambio de perfil. Vuelve a lanzar `sudo ./update.sh`.
+
+**Jurisdicción mal escrita (`La jurisdicción del perfil N no tiene forma ISO
+3166…`).** El panel no permite editarla, así que se corrige a mano con el rol
+de migración. Mira primero qué hay (muestra configuración del centro, no datos
+personales):
+
+```bash
+docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -c \
+  "SELECT id, jurisdiction, retention_years FROM compliance_profiles
+    WHERE jurisdiction !~ '^[A-Z]{2}(-[A-Z0-9]{1,3})?\$' ORDER BY id"
+```
+
+Si el valor es una errata evidente de un país o región (`es` por `ES`, `ES `
+por `ES`), corrígela en una sola sentencia, con el `id` de arriba:
+
+```bash
+docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -c \
+  "UPDATE compliance_profiles SET jurisdiction = 'ES' WHERE id = <id>"
+```
+
+Esa sentencia **no escribe en `audit_log`** (es una intervención directa, no un
+cambio hecho por la aplicación): anótala en el registro de cambios del hotel con
+la fecha, quién la hizo, el valor anterior y el nuevo. Si tras corregirla el
+plazo queda por debajo de 4 años en `ES`, aplica el caso anterior. **Si dudas de
+qué jurisdicción corresponde, o el valor no parece una errata, no lo toques y
+consúltalo con el fabricante** (sin datos: basta el `id` y el valor), porque la
+jurisdicción decide el suelo legal de conservación del registro.
 
 ---
 
