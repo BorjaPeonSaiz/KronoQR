@@ -665,15 +665,20 @@ it('dice de donde se descarga el paquete y como se comprueba', function (string 
         'sha256sum -c --ignore-missing SHA256SUMS',
         '.tar.gz',
     ], $guide))->toBe([], $guide.' no dice de donde se descarga el paquete o como se comprueba.');
-
-    // Y lo que la guia nombra es lo que la release publica de verdad: si
-    // `release.yml` renombrara un artefacto, la guia quedaria mintiendo.
-    $release = Repo::contents('.github/workflows/release.yml');
-
-    expect($release)->toContain('kronoqr-*.tar.gz')
-        ->and($release)->toContain('SHA256SUMS');
 })->with([
     'instalacion' => 'docs/cliente/instalacion.md',
     'installation' => 'docs/cliente/en/installation.md',
     'actualizacion' => 'docs/runbooks/actualizacion-cliente.md',
 ])->group('RF-PD-02');
+
+it('publica en la release los ficheros que las guias mandan descargar', function (): void {
+    // Lo que las guias nombran —`kronoqr-<version>.tar.gz` y un `SHA256SUMS`
+    // que lo cubre— tiene que ser lo que `release.yml` publica de verdad. Si el
+    // workflow renombrara el paquete o dejara de sumarlo, la primera orden de la
+    // guia fallaria en casa del hotel.
+    $release = Repo::contents('.github/workflows/release.yml');
+
+    expect($release)->toContain('nombre="kronoqr-${VERSION}"')
+        ->and(preg_match('/^\s*sha256sum "kronoqr-\$\{VERSION\}\.tar\.gz"[^\n]*>SHA256SUMS$/m', $release))
+        ->toBe(1, 'release.yml ya no suma kronoqr-${VERSION}.tar.gz en SHA256SUMS.');
+})->group('RF-PD-02');

@@ -51,8 +51,12 @@ sha256sum -c --ignore-missing SHA256SUMS
 ```
 
 La última orden tiene que decir `kronoqr-2.2.0.tar.gz: OK`; con `FAILED`, no lo
-descomprimas y vuelve a descargarlo. Si el servidor no tiene salida a internet,
-descárgalos desde otro equipo y cópialos a `/opt` (`scp`, WinSCP o un USB). **La
+descomprimas y vuelve a descargarlo. La suma prueba que el paquete llegó entero,
+no quién lo publicó: descárgalo siempre de la dirección oficial de arriba, nunca
+de una copia reenviada. Si el servidor no tiene salida a internet, descarga los
+dos ficheros desde otro equipo y cópialos a `/opt` (`scp`, WinSCP o un USB);
+eso basta para el paquete, pero las imágenes de la versión nueva llegan aparte,
+como explica [`instalacion.md` §7](../cliente/instalacion.md#7-instalar-sin-salida-a-internet). **La
 licencia no cambia al actualizar** y no viaja en el paquete: la que tienes
 activada sigue valiendo; si tu proveedor te envía una nueva, se activa aparte con
 `license:activate` ([`instalacion.md`](../cliente/instalacion.md) §4).

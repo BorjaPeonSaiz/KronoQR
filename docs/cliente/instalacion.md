@@ -131,7 +131,9 @@ curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA2
 
 > **Si el servidor no tiene salida a internet**, descarga los dos ficheros
 > desde otro equipo con el navegador y cópialos a la misma carpeta del servidor
-> (`scp`, WinSCP o un USB). Basta con eso: la instalación no necesita GitHub.
+> (`scp`, WinSCP o un USB). Para el paquete basta con eso; las imágenes del
+> sistema llegan aparte, como explica
+> [§7](#7-instalar-sin-salida-a-internet).
 
 Con los dos en la misma carpeta, comprueba que el paquete llegó entero:
 
@@ -790,8 +792,10 @@ docker compose exec app php artisan license:activate "KQL1...."
 
 > **Si no la tienes a mano, instala igualmente.** Sin licencia activada el
 > sistema se instala, arranca y **registra jornada con normalidad**: lo único
-> que no estará disponible son funcionalidades accesorias —informes por periodo
-> y actualización en tiempo real de la presencia—. La activas cuando la tengas y
+> que no estará disponible son las secciones accesorias del plan —informes por
+> periodo, Impacto y adopción, exportación para nómina, marca propia (logotipo y
+> color), resumen semanal por correo y actualización en tiempo real de la
+> presencia, que pasa a refrescarse cada pocos segundos—. La activas cuando la tengas y
 > aparecen solas, sin reiniciar nada.
 >
 > **Y una licencia caducada tampoco bloquea nunca el fichaje ni el acceso al
