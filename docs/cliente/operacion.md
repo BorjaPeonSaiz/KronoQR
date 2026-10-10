@@ -1346,6 +1346,48 @@ segundo factor avisa al destinatario de seguridad (§10.4,
 [`../runbooks/ataque-a-credenciales.md`](../runbooks/ataque-a-credenciales.md)
 §9). Si vas a hacer varias el mismo día, díselo antes.
 
+**Al actualizar a la 2.2.1: la retención no baja del mínimo legal.** Los años
+de conservación del perfil de cumplimiento (`retention_years`) se pueden
+ampliar, pero no bajar del mínimo legal del país del perfil: **4 años en
+España** (art. 34.9 ET). En un país sin mínimo conocido por el producto, el
+mínimo es 1. Lo que cambia:
+
+- **El panel lo dice y lo impide.** Panel → **Perfil de cumplimiento** muestra
+  el mínimo junto al campo. Si se intenta guardar menos, se rechaza (código
+  `422`) con el mínimo en el mensaje —«La jurisdicción ES obliga a conservar el
+  registro al menos 4 años; has indicado 3.»— y **no se guarda nada**: ni el
+  perfil cambia ni queda asiento del cambio. Se rechaza también al guardar
+  cualquier otro campo de un perfil que ya estuviera por debajo, así que lo
+  primero es subir los años.
+- **La base de datos también lo impide**, aunque se edite la fila a mano.
+- **La purga se niega** si el plazo con el que se lanza está por debajo del
+  mínimo, y la conciliación nocturna marca como fuera de límites
+  (`purge_out_of_bounds`) una purga española hecha con menos de 4 años.
+
+**Antes de actualizar, si tu perfil español tiene menos de 4 años.** Casi
+ninguna instalación está así: el perfil se entrega con 4. Pero si alguien lo
+bajó, la actualización no puede seguir, y lo detecta antes de tocar nada:
+`sudo ./update.sh --check-only` (y el paso 1 de `update.sh`) marca
+`[FALLA]` en «Perfil de cumplimiento dentro del suelo legal», dice qué perfil y
+cuántos años tiene, y **sale con `2` sin haber cambiado nada**. Qué hacer:
+
+1. Entra en el panel con la cuenta de administración, Panel → **Perfil de
+   cumplimiento**, y sube **«Años de conservación del registro»** a 4 o más. Queda en el registro
+   de auditoría.
+2. Vuelve a lanzar `sudo ./update.sh --check-only` y, cuando esa línea salga en
+   verde, `sudo ./update.sh`.
+
+**Subir los años no recupera nada que ya se hubiera purgado** con el plazo
+corto, y la conciliación seguirá señalando esas purgas: es lo correcto, porque
+el registro de esos años falta. Cómo tratarlas está en
+[`../runbooks/discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md);
+cuéntaselo a tu asesoría ([`obligaciones-legales.md`](obligaciones-legales.md)).
+Si la línea que falla habla de una jurisdicción «sin forma ISO 3166» (el perfil
+dice `es` o `ESP` en vez de `ES`), eso no se corrige desde el panel: se
+corrige con el rol de migración, como indica
+[`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md);
+si no lo tienes claro, avisa al fabricante con el informe del paso 1.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.

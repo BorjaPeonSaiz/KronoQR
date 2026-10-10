@@ -1364,6 +1364,49 @@ second factor alerts the security recipient (§10.4,
 [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) §9, in
 Spanish). If you are going to do several on the same day, tell them beforehand.
 
+**When updating to 2.2.1: retention does not go below the legal minimum.** The
+years the compliance profile keeps the record (`retention_years`) can be
+raised, but not lowered below the legal minimum of the profile's country:
+**4 years in Spain** (art. 34.9 of the Workers' Statute). In a country with no
+minimum known to the product, the minimum is 1. What changes:
+
+- **The panel says so and prevents it.** Panel → **Compliance profile** shows
+  the minimum next to the field. Trying to save less is rejected (code `422`)
+  with the minimum in the message —“Jurisdiction ES requires keeping the record
+  for at least 4 years; you entered 3.”— and **nothing is saved**: the profile
+  does not change and no record of the change is written. Saving any other
+  field of a profile that was already below the minimum is rejected too, so
+  raising the years comes first.
+- **The database prevents it as well**, even if the row is edited by hand.
+- **The purge refuses** to run with a period below the minimum, and the nightly
+  reconciliation flags as out of bounds (`purge_out_of_bounds`) a Spanish purge
+  done with fewer than 4 years.
+
+**Before updating, if your Spanish profile has fewer than 4 years.** Almost no
+installation is in that state: the profile ships with 4. But if someone lowered
+it, the update cannot go ahead, and it finds out before touching anything:
+`sudo ./update.sh --check-only` (and step 1 of `update.sh`) marks
+`[FAIL]` on “Compliance profile within the legal floor”, says which profile and
+how many years it has, and **exits with `2` having changed nothing**. What to
+do:
+
+1. Sign in to the panel with the administration account, Panel → **Compliance
+   profile**, and raise **“Years records are kept”** to 4 or more. It is
+   written to the audit log.
+2. Run `sudo ./update.sh --check-only` again and, once that line is green,
+   `sudo ./update.sh`.
+
+**Raising the years does not bring back anything already purged** with the
+short period, and reconciliation will keep flagging those purges: that is
+correct, because the record for those years is missing. How to handle them is
+in [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md)
+(in Spanish); tell your legal advisers ([`legal-obligations.md`](legal-obligations.md)).
+If the failing line talks about a jurisdiction “without ISO 3166 form” (the
+profile says `es` or `ESP` instead of `ES`), that cannot be fixed from the
+panel: it is fixed with the migration role, as
+[`actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) explains
+(in Spanish); if in doubt, tell the manufacturer, with the step 1 report.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which

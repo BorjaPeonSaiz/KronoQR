@@ -452,7 +452,7 @@ The **`ES-hosteleria`** profile is shipped, with these values:
 | `max_weekly_hours` | `40` | Ordinary weekly working hours. **The compliance view applies it**: it warns about the weeks that go over, **opening no incident** (see below) | Art. 34.1 of the Workers' Statute |
 | `week_starts_on` | `1` (Monday) | Day the week starts on. **It defines the week the compliance view measures** | ISO 8601 |
 | `holiday_calendar` | empty | The site's public holidays, one date per line. **The hours-per-period report applies it**: those days are not counted as unexplained absence. **It opens and closes no incident** | You load it |
-| `retention_years` | `4` | Years the record has to be kept before it can be purged | Art. 34.9 of the Workers' Statute |
+| `retention_years` | `4` | Years the record has to be kept before it can be purged. **It does not go below the legal minimum of the profile's country**: 4 in Spain; the panel shows it next to the field and rejects a lower value (see below) | Art. 34.9 of the Workers' Statute |
 | `name` | `ES-hosteleria` | What the collective agreement the profile describes is called | You set it |
 
 **`min_rest_hours` also does a second thing: it caps how long a break can last.**
@@ -550,6 +550,21 @@ hand, proposes first in dry-run mode and demands a confirmation derived from tha
 report. Even so, it is the only field of the profile whose mistake is paid for
 with data that does not come back. If your advisers tell you your period is
 different, change it; if not, leave it alone.
+
+**It has a floor that cannot be lowered: the legal minimum of the profile's
+country.** In Spain it is **4 years** (art. 34.9 of the Workers' Statute); in a
+country whose minimum the product does not know, 1. The floor is set by the
+product, not by your configuration, because it is the law and not a preference
+of the hotel. What you can do is **raise** the period, if your collective
+agreement or your advisers require keeping more. The screen shows the minimum
+next to the field, and if you try to save less the panel rejects it (code
+`422`) with a message stating the minimum —“Jurisdiction ES requires keeping
+the record for at least 4 years; you entered 3.”— **without saving anything**.
+The database enforces the same rule, so it cannot be bypassed by editing the
+row by hand either, and the purge refuses to run with a period below the
+minimum. If your Spanish profile was below 4 before 2.2.1, the update stops
+before touching anything until you raise it:
+[`operation.md`](operation.md) §11.
 
 ### 2.5 Payroll export
 
@@ -1432,7 +1447,9 @@ shift.
 
 **Nothing has been deleted.** Changing `retention_years` does not purge: the
 purge is a separate command that is run by hand, proposes first in dry-run mode
-and demands a confirmation derived from that report. Put the correct value back
+and demands a confirmation derived from that report. And below the legal
+minimum (4 years in Spain) the panel will not have let you save it: the mistake
+can only lie between that minimum and the value you wanted. Put the correct value back
 on the screen and check the dry run before running any purge:
 
 ```bash

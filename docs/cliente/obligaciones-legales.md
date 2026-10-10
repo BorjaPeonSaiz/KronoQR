@@ -396,7 +396,7 @@ tiene el convenio delante y quien responde ante la Inspección y ante su plantil
 | Aplicar los umbrales de tu convenio | Los lee de una fila editable, nunca de código, y los aplica desde el cambio | **Contrastar el perfil con tu convenio** al poner en marcha el sistema y cada vez que se renueve |
 | Cargar los festivos del centro | Guarda el calendario y lo audita | Cargarlo cada año: los festivos son del municipio y del año, y el producto se entrega **sin ninguno** |
 | Justificar por qué una jornada no generó alerta | Guarda cada cambio de umbral con su valor anterior, su autor y su momento | Saber dónde está ese registro y poder enseñarlo |
-| Conservar el plazo correcto | Toma los años del perfil y nunca purga sin confirmación explícita | **No bajar `retention_years` sin que lo diga tu asesoría**: por debajo del plazo legal estarías destruyendo prueba |
+| Conservar el plazo correcto | Toma los años del perfil, no admite un plazo por debajo del mínimo legal del país (4 años en España) y nunca purga sin confirmación explícita | **No bajar `retention_years` sin que lo diga tu asesoría**: por debajo del plazo legal estarías destruyendo prueba |
 
 **Qué NO hace el fabricante, y conviene que quede escrito:** no valida tu
 convenio, no te avisa de que un umbral es más laxo de lo que te corresponde y no

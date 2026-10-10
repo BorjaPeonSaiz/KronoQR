@@ -1554,7 +1554,8 @@ cada umbral, valor a valor, está en [`configuracion.md`](configuracion.md) §2.
 > Bajarlos amplía lo que la purga considera vencido, sobre datos que hay
 > obligación legal de conservar cuatro años. Ninguna purga se ejecuta sola —se
 > propone primero y hay que confirmarla—, pero no toques ese número sin leer
-> [`obligaciones-legales.md`](obligaciones-legales.md) §4.
+> [`obligaciones-legales.md`](obligaciones-legales.md) §4. Por debajo del
+> mínimo legal —cuatro años en España— el panel no deja guardarlo.
 
 ---
 

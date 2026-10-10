@@ -412,7 +412,7 @@ your staff.
 | Apply the thresholds of your collective agreement | Reads them from an editable row, never from code, and applies them from the moment of the change | **Check the profile against your collective agreement** when commissioning the system and every time it is renewed |
 | Load the site's public holidays | Stores the calendar and audits it | Load it every year: public holidays depend on the municipality and the year, and the product ships **with none** |
 | Justify why a working day did not raise an alert | Stores every threshold change with its previous value, its author and its time | Know where that record is and be able to show it |
-| Keep for the right period | Takes the years from the profile and never purges without explicit confirmation | **Do not lower `retention_years` unless your advisers say so**: below the legal period you would be destroying evidence |
+| Keep for the right period | Takes the years from the profile, does not accept a period below the country's legal minimum (4 years in Spain) and never purges without explicit confirmation | **Do not lower `retention_years` unless your advisers say so**: below the legal period you would be destroying evidence |
 
 **What the vendor does NOT do, and it is worth having it in writing:** it does
 not validate your collective agreement, it does not warn you that a threshold

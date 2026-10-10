@@ -395,7 +395,7 @@ Un servidor de estas características cubre 500 empleados y 10 tablets con holgu
 Todo lo que puede variar entre hoteles es **configuración**, no programación:
 
 - **Marca blanca**: logotipo, colores y nombre de la aplicación, aplicados a la tablet, al panel, al portal y a las tarjetas y documentos PDF. El logotipo y el color forman parte del plan contratado: si la licencia caduca, las aplicaciones y los documentos vuelven al aspecto por defecto del producto y **el nombre del hotel se conserva** (punto 10.5). Lo configurado no se borra y se recupera al renovar.
-- **Perfil de cumplimiento**: años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. **Se entrega el perfil español de hostelería ya configurado**, y se puede ajustar si el convenio aplicable difiere. La **jornada semanal ordinaria** y el **inicio de semana** ya los aplica la vista de cumplimiento, que avisa pero no abre incidencia. El **calendario de festivos** lo aplica el **informe de horas por periodo**: los días que figuren en él no cuentan como absentismo no justificado. Ese es su único efecto: **no abre ni cierra ninguna incidencia** y no cambia ninguna hora del registro, y la pantalla lo indica al lado del campo para no dar por hecho un efecto que no existe.
+- **Perfil de cumplimiento**: años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. **Se entrega el perfil español de hostelería ya configurado**, y se puede ajustar si el convenio aplicable difiere. Los **años de retención** se pueden ampliar, pero nunca bajar del mínimo legal del país del perfil: **4 años en España** (art. 34.9 del Estatuto de los Trabajadores). El panel muestra ese mínimo junto al campo y rechaza un valor menor. La **jornada semanal ordinaria** y el **inicio de semana** ya los aplica la vista de cumplimiento, que avisa pero no abre incidencia. El **calendario de festivos** lo aplica el **informe de horas por periodo**: los días que figuren en él no cuentan como absentismo no justificado. Ese es su único efecto: **no abre ni cierra ninguna incidencia** y no cambia ninguna hora del registro, y la pantalla lo indica al lado del campo para no dar por hecho un efecto que no existe.
 - **Umbrales operativos**: margen anti-doble-escaneo, horas a partir de las cuales un turno se considera anómalo, tolerancia de desviación de reloj, intentos de PIN antes del bloqueo.
 - **Idiomas** activos y funcionalidades habilitadas.
 
@@ -487,7 +487,7 @@ Sí. El sistema completo funciona en la red interna del hotel sin salida a inter
 El registro sigue funcionando y el hotel puede exportar la totalidad de sus datos en formato abierto, por sí mismo, para seguir cumpliendo su obligación de conservarlos cuatro años.
 
 **¿Puedo cambiar los umbrales de mi convenio?**
-Sí, son configuración: descanso mínimo, jornada máxima, pausas y retención se ajustan desde el panel, sin tocar el programa.
+Sí, son configuración: descanso mínimo, jornada máxima, pausas y retención se ajustan desde el panel, sin tocar el programa. La retención tiene un límite: se puede ampliar, pero no bajar del mínimo legal de cada país, que en España son 4 años.
 
 **¿Cuántas tablets necesito?**
 Una por punto de acceso de personal. Técnicamente, una instalación estándar admite hasta 10; cuántas tiene contratadas el hotel lo fija su licencia.

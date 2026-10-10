@@ -442,7 +442,7 @@ Se entrega el perfil **`ES-hosteleria`**, con estos valores:
 | `max_weekly_hours` | `40` | Jornada semanal ordinaria. **Lo aplica la vista de cumplimiento** del panel: avisa de las semanas que lo superan, **sin abrir incidencia** (ver abajo) | Art. 34.1 ET |
 | `week_starts_on` | `1` (lunes) | Día en que empieza la semana. **Define la semana que mide la vista de cumplimiento** | ISO 8601 |
 | `holiday_calendar` | vacío | Festivos del centro, una fecha por línea. **Lo aplica el informe de horas por periodo**: esos días no cuentan como absentismo no justificado. **No abre ni cierra ninguna incidencia** | Lo cargas tú |
-| `retention_years` | `4` | Años que hay que conservar el registro antes de poder purgarlo | Art. 34.9 ET |
+| `retention_years` | `4` | Años que hay que conservar el registro antes de poder purgarlo. **No baja del mínimo legal del país del perfil**: 4 en España; el panel lo muestra junto al campo y rechaza un valor menor (ver abajo) | Art. 34.9 ET |
 | `name` | `ES-hosteleria` | Cómo se llama el convenio que el perfil describe | Lo pones tú |
 
 **`min_rest_hours` hace además una segunda cosa: acota cuánto puede durar una
@@ -541,6 +541,20 @@ ejecuta a mano, propone primero en simulación y exige una confirmación derivad
 de ese informe. Aun así, es el único campo del perfil cuyo error se paga con
 datos que no vuelven. Si tu asesoría te dice que tu plazo es otro, cámbialo; si
 no, no lo toques.
+
+**Tiene un suelo que no se puede bajar: el mínimo legal del país del perfil.**
+En España son **4 años** (art. 34.9 ET); en un país cuyo mínimo el producto no
+conoce, 1. El suelo lo fija el producto, no tu configuración, porque es la ley
+y no una preferencia del hotel. Lo que puedes hacer es **ampliarlo**, si tu
+convenio o tu asesoría piden conservar más. La pantalla muestra el mínimo junto
+al campo, y si intentas guardar menos el panel lo rechaza (código `422`) con un
+mensaje que dice el mínimo —«La jurisdicción ES obliga a conservar el registro
+al menos 4 años; has indicado 3.»— **sin guardar nada**. La base de datos tiene
+la misma regla, de modo que tampoco se puede esquivar editando la fila a mano,
+y la purga se niega a ejecutarse con un plazo por debajo del mínimo. Si tu
+perfil español estaba por debajo de 4 antes de la 2.2.1, la actualización se
+detiene antes de tocar nada hasta que lo subas:
+[`operacion.md`](operacion.md) §11.
 
 ### 2.5 Salida a nómina
 
@@ -1414,7 +1428,9 @@ Repetirlo es seguro: no duplica nada y no cierra ningún turno.
 
 **No se ha borrado nada.** Cambiar `retention_years` no purga: la purga es un
 comando aparte que se lanza a mano, propone primero en simulación y exige una
-confirmación derivada de ese informe. Vuelve a poner el valor correcto en la
+confirmación derivada de ese informe. Y por debajo del mínimo legal (4 años en
+España) el panel no te habrá dejado guardarlo: el error solo puede estar entre
+ese mínimo y el valor que querías. Vuelve a poner el valor correcto en la
 pantalla y comprueba la simulación antes de ejecutar ninguna purga:
 
 ```bash
