@@ -104,7 +104,6 @@ void registerServiceWorker({
   onUrgentUpdateFound: resetUrgentUpdateChecks,
   onUrgentGaveUp: () =>
     bootReporter.report('kiosk.update.unreachable', {
-      current_version: APP_VERSION,
       reason: currentUrgentGiveUpMotive() ?? 'unknown',
       message: 'minimum_version_unreachable',
     }),
