@@ -187,6 +187,7 @@
         "app": "App version",
         "serviceWorker": "Service worker active",
         "updateStatus": "Update",
+        "minimumVersion": "Server minimum version",
         "updateWindow": "Update window"
       },
       "battery": {
@@ -213,7 +214,10 @@
       "configured": "Configured",
       "notConfigured": "Not configured",
       "unpaired": "This tablet is not paired: there is no roster to show.",
+      "minimumVersionNone": "Not specified",
       "updatePending": "Pending: will apply within the {start}–{end} window.",
+      "updateUrgent": "Urgent update pending: the server needs version {version}. It will be applied as soon as there are no pending clockings and nobody is clocking in, at any time of day; the screen will reload for a few seconds.",
+      "updateUrgentGaveUp": "The urgent update to version {version} could not be completed after several attempts. The kiosk keeps clocking normally; contact support.",
       "updateUpToDate": "Up to date."
     },
     "warnings": {

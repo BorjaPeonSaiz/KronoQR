@@ -139,3 +139,53 @@ describe('puerta de la actualizacion (canApplyUpdate)', () => {
     )
   })
 })
+
+describe('modo urgente: solo se relaja la ventana horaria (RF-KI-07, regla dura 19)', () => {
+  const OUTSIDE = at(11, 0)
+
+  it('fuera de la ventana, con la cola vacia y sin escaneo reciente: SI', () => {
+    expect(
+      canApplyUpdate({
+        now: OUTSIDE,
+        pendingScans: 0,
+        lastScanAt: new Date(OUTSIDE.getTime() - 30 * 60_000),
+        quietMinutes: 10,
+        urgent: true,
+        queueDurable: true,
+      }),
+    ).toBe(true)
+    // El mismo caso sin urgencia sigue cerrado.
+    expect(canApplyUpdate({ now: OUTSIDE, pendingScans: 0, lastScanAt: null })).toBe(false)
+  })
+
+  it('con la cola llena: NO, a cualquier hora', () => {
+    expect(canApplyUpdate({ now: OUTSIDE, pendingScans: 1, lastScanAt: null, urgent: true })).toBe(
+      false,
+    )
+  })
+
+  it('con la cola en memoria: NUNCA, aunque parezca vacia (ADR-047)', () => {
+    expect(
+      canApplyUpdate({
+        now: OUTSIDE,
+        pendingScans: 0,
+        lastScanAt: null,
+        urgent: true,
+        queueDurable: false,
+      }),
+    ).toBe(false)
+  })
+
+  it('con un escaneo dentro de `quietMinutes`: NO', () => {
+    expect(
+      canApplyUpdate({
+        now: OUTSIDE,
+        pendingScans: 0,
+        lastScanAt: new Date(OUTSIDE.getTime() - 5 * 60_000),
+        quietMinutes: 10,
+        urgent: true,
+        queueDurable: true,
+      }),
+    ).toBe(false)
+  })
+})

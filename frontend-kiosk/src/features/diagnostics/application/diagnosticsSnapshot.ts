@@ -13,6 +13,7 @@
 import type { CameraState } from '@/features/scan/composables/useCamera'
 import type { QueueStorageKind } from '@/features/offline/application/scanQueue'
 import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
+import type { UrgentUpdateMode } from '@/features/offline/domain/minimumVersion'
 
 /**
  * Umbral del paso 4 de la tarea (doc 02, decision de la 3.3): por debajo de
@@ -105,6 +106,13 @@ export interface DiagnosticsSources {
     readonly pending: boolean
     /** Ventana vigente (cacheada del ultimo latido, o la de serie si ninguno la trajo todavia). */
     readonly window: UpdateWindow
+    /**
+     * Modo urgente (RF-KI-07): `urgent` = el servidor pide una version mas nueva y
+     * la tablet la espera; `gave_up` = se renuncio tras varios intentos.
+     */
+    readonly urgentState: UrgentUpdateMode
+    /** Nucleo `X.Y.Z` de la ultima minima recibida, o `null` si el servidor no la declara. */
+    readonly minimumVersion: string | null
   }
 }
 

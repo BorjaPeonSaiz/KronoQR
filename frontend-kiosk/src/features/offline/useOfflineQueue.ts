@@ -86,7 +86,7 @@ export interface OfflineQueueController {
   /** Lo que el latido declara de la cola: `pending_queue_size` y `oldest_pending_at`. */
   telemetry(appVersion: string): KioskTelemetrySnapshot
   /** Puerta del paso 11: una version nueva no se aplica en un cambio de turno. */
-  canUpdateNow(now?: Date): boolean
+  canUpdateNow(now?: Date, urgent?: boolean): boolean
   wakeNow(): void
   dispose(): Promise<void>
 }
@@ -265,13 +265,16 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       }
     },
 
-    canUpdateNow(now = new Date()) {
+    canUpdateNow(now = new Date(), urgent = false) {
       const lastScanAtIso = readLastScanAt()
       return canApplyUpdate({
         now,
         // Con el disco sin ver cuentan las filas de memoria: son las que un
         // reinicio (la actualizacion) perderia.
         pendingScans: pendingOf(queue.stats()),
+        // Urgente: nunca con la cola en memoria (ADR-047), aunque ahora este vacia.
+        urgent,
+        queueDurable: queue.stats().durable,
         lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
         window: readUpdateWindow(),
         quietMinutes: readUpdateQuietMinutes(),
@@ -313,6 +316,15 @@ export function getOfflineQueueController(options: OfflineQueueOptions): Offline
  * se ha montado: en ese caso no hay ninguna, y decir otra cosa seria inventar.
  * La usa la puerta de actualizacion del service worker desde `main.ts`.
  */
+/**
+ * `false` si la cola corre en memoria o sin almacen (ADR-047). La necesita el
+ * modo urgente: con la cola en memoria NUNCA se recarga, aunque parezca vacia.
+ * Sin controlador montado no hay cola que perder: `true`.
+ */
+export function queueIsDurable(): boolean {
+  return singleton?.stats().durable ?? true
+}
+
 export function pendingScanCount(): number {
   const stats = singleton?.stats()
   return stats === undefined ? 0 : pendingOf(stats)

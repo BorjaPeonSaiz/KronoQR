@@ -29,6 +29,7 @@ import type { Clock } from '@/shared/time/clock'
 import { systemClock } from '@/shared/time/clock'
 import { exceedsClockSkewTolerance } from '@/features/scan/domain/clockSkewMessage'
 import { isValidUpdateWindow } from '@/features/offline/domain/updateWindow'
+import { parseMinimumVersionFromHeartbeatData } from '@/features/offline/domain/minimumVersion'
 import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
 import {
   storeBreakClockingEnabled,
@@ -38,6 +39,7 @@ import {
   storeUpdateWindow,
 } from './deviceIdentity'
 import type { ClientErrorEvent, ErrorReporter } from './errorReporter'
+import { storeMinimumAppVersionReading } from './urgentUpdate'
 import type { RotatedToken, TokenAdoptionOutcome } from './tokenRotation'
 import { adoptRotatedToken, isTokenAdoptionFailure, parseRotatedToken } from './tokenRotation'
 
@@ -411,6 +413,11 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
       storeUpdateWindow(updateWindow.window)
       storeUpdateQuietMinutes(updateWindow.quietMinutes)
     }
+
+    // Version minima de la PWA (RF-KI-07): lector tolerante, MISMO PATRON. Ausente
+    // borra la cacheada; invalida no toca nada. Si esta tablet esta por debajo,
+    // el oyente del service worker entra en modo urgente (`sw/`).
+    storeMinimumAppVersionReading(parseMinimumVersionFromHeartbeatData(result.data))
 
     const skew = clockSkewSeconds(clock.now(), result.data.server_time)
     lastHeartbeatResult = { beatAt: clock.now().toISOString(), skewSeconds: skew }

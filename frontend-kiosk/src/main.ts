@@ -3,7 +3,7 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import './assets/main.css'
 import { canApplyUpdate } from './features/offline/domain/updateWindow'
-import { pendingScanCount } from './features/offline/useOfflineQueue'
+import { pendingScanCount, queueIsDurable } from './features/offline/useOfflineQueue'
 import { createAppRouter } from './router'
 import { applyCachedBranding } from './shared/branding/useBranding'
 import { createAppI18n, initialLocale } from './shared/i18n'
@@ -14,6 +14,11 @@ import {
   readUpdateWindow,
   resolveDeviceId,
 } from './shared/telemetry/deviceIdentity'
+import {
+  currentUrgentUpdateMode,
+  onMinimumAppVersionReceived,
+  recordUrgentUpdateAttempt,
+} from './shared/telemetry/urgentUpdate'
 import { getErrorReporter } from './shared/telemetry/errorReporter'
 import { errorMessageOf, errorTypeOf } from './shared/telemetry/errorType'
 import { registerServiceWorker } from './sw/registerServiceWorker'
@@ -91,7 +96,19 @@ app.mount('#app')
 // puede abrirse dentro de poco sin que nadie tenga que volver a pedirlo.
 void registerServiceWorker({
   onError: (context) => bootReporter.report('kiosk.service_worker.failed', context),
-  canApply: () => {
+  // Modo urgente (version minima del servidor por encima de esta PWA): se
+  // comprueba la version ya y la ventana horaria deja de exigirse. Cola vacia
+  // y duradera y silencio de `quietMinutes` siguen mandando. Tras 3 recargas sin
+  // cambio de version se renuncia y se reporta (minima inalcanzable).
+  urgentState: currentUrgentUpdateMode,
+  subscribeUrgent: onMinimumAppVersionReceived,
+  onUrgentAttempt: recordUrgentUpdateAttempt,
+  onUrgentGaveUp: () =>
+    bootReporter.report('kiosk.update.unreachable', {
+      current_version: APP_VERSION,
+      message: 'minimum_version_unreachable',
+    }),
+  canApply: (urgent) => {
     const lastScanAtIso = readLastScanAt()
     return canApplyUpdate({
       now: new Date(),
@@ -99,6 +116,8 @@ void registerServiceWorker({
       lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
       window: readUpdateWindow(),
       quietMinutes: readUpdateQuietMinutes(),
+      urgent,
+      queueDurable: queueIsDurable(),
     })
   },
 })

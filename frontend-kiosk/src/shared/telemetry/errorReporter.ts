@@ -97,6 +97,9 @@ export type ClientErrorCode =
   // Fichaje de respaldo por PIN (tarea 1.12). Nunca lleva el PIN, ni sellado ni
   // en claro: solo dice que el sellado en si ha fallado (RF-AT-11, RL-12).
   | 'kiosk.pin.seal_failed'
+  // Modo urgente de actualizacion (RF-KI-07): el servidor declara una version
+  // minima que esta PWA no alcanza tras varias recargas. Solo versiones, nunca datos.
+  | 'kiosk.update.unreachable'
 
 export interface ClientErrorEvent {
   readonly code: ClientErrorCode

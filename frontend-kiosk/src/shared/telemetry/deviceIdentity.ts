@@ -30,6 +30,8 @@ import {
   DEFAULT_UPDATE_WINDOW,
   isValidUpdateWindow,
 } from '@/features/offline/domain/updateWindow'
+import type { UrgentUpdateAttempts } from '@/features/offline/domain/minimumVersion'
+import { isUrgentUpdateAttempts } from '@/features/offline/domain/minimumVersion'
 
 const DEVICE_ID_KEY = 'kronoqr.kiosk.device_id'
 
@@ -113,6 +115,16 @@ const UPDATE_QUIET_MINUTES_KEY = 'kronoqr.kiosk.update_quiet_minutes'
  * «hace mucho»).
  */
 const LAST_SCAN_AT_KEY = 'kronoqr.kiosk.last_scan_at'
+
+/**
+ * Version minima de la PWA que declaro el servidor en el ultimo latido
+ * (`KioskHeartbeat.minimum_app_version`, RF-KI-07) y los intentos de recarga
+ * urgente ya hechos hacia ella. MISMO PATRON que los demas ajustes del latido
+ * (`localStorage`, sobreviven al reinicio). Los intentos DEBEN persistir: cada
+ * recarga borra la memoria, y un contador en memoria no cortaria nunca el bucle.
+ */
+const MINIMUM_APP_VERSION_KEY = 'kronoqr.kiosk.minimum_app_version'
+const URGENT_UPDATE_ATTEMPTS_KEY = 'kronoqr.kiosk.urgent_update_attempts'
 
 /** Version de la PWA. La inyecta Vite desde `package.json` (ver `vite.config.ts`). */
 export const APP_VERSION: string = __APP_VERSION__
@@ -369,6 +381,56 @@ export function storeLastScanAt(occurredAtIso: string): void {
     // reciente como si no hubiera ocurrido, y eso solo puede hacer la puerta
     // MAS permisiva, nunca menos -el resto de condiciones (cola vacia,
     // ventana) siguen aplicando igual.
+  }
+}
+
+/** Nucleo `X.Y.Z` de la ultima version minima recibida. `null` = ninguna (o el servidor no la declara). */
+export function readMinimumAppVersion(): string | null {
+  const storage = safeStorage()
+  if (storage === null) return null
+  try {
+    const stored = storage.getItem(MINIMUM_APP_VERSION_KEY)
+    return stored === null || stored === '' ? null : stored
+  } catch {
+    return null
+  }
+}
+
+/** Lo llama SOLO el planificador del latido, tras cada `200`. `null` borra la cacheada. */
+export function storeMinimumAppVersion(version: string | null): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    if (version === null) storage.removeItem(MINIMUM_APP_VERSION_KEY)
+    else storage.setItem(MINIMUM_APP_VERSION_KEY, version)
+  } catch {
+    // Degradacion honesta: sin almacenamiento no hay modo urgente que recordar.
+  }
+}
+
+/** Intentos de recarga urgente registrados, o `null` si no hay (o el registro esta danado). */
+export function readUrgentUpdateAttempts(): UrgentUpdateAttempts | null {
+  const storage = safeStorage()
+  if (storage === null) return null
+  try {
+    const stored = storage.getItem(URGENT_UPDATE_ATTEMPTS_KEY)
+    if (stored === null || stored === '') return null
+    const parsed: unknown = JSON.parse(stored)
+    return isUrgentUpdateAttempts(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** `null` borra el registro (la tablet ya cumple la minima). */
+export function storeUrgentUpdateAttempts(attempts: UrgentUpdateAttempts | null): void {
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    if (attempts === null) storage.removeItem(URGENT_UPDATE_ATTEMPTS_KEY)
+    else storage.setItem(URGENT_UPDATE_ATTEMPTS_KEY, JSON.stringify(attempts))
+  } catch {
+    // Sin almacenamiento el contador no persiste: el peor caso es un intento mas.
   }
 }
 

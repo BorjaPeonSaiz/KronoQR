@@ -64,6 +64,31 @@ vacie, simplemente espera al minuto siguiente.
 La pantalla de diagnostico (RF-KI-08) enseña, junto a la version, si hay una actualizacion
 pendiente y en que ventana se aplicara.
 
+**Recargar la pagina no aplica la version nueva** (`registerType: 'prompt'`): el SW nuevo
+espera hasta que la puerta lo aplica, o hasta que no queda ninguna pestaña del origen.
+
+## Actualizacion urgente (RF-KI-07, 2.2.1)
+
+Desde la 2.2.1 el latido trae `minimum_app_version` (nucleo X.Y.Z de la version del
+servidor). `features/offline/domain/minimumVersion.ts` la compara por nucleo con
+`APP_VERSION` (`2.2.1-dev` frente a `2.2.1` no es desfasada) y, si la tablet va por debajo,
+entra en **modo urgente** (`shared/telemetry/urgentUpdate.ts`):
+
+- `registration.update()` en el acto, al arrancar y en cada latido, como mucho cada 5 min;
+- la puerta (`canApplyUpdate(..., urgent)`) relaja **solo** la ventana horaria. Siguen
+  siendo obligatorias la cola vacia, la cola **duradera** (con la cola en memoria nunca se
+  recarga, ADR-047) y ningun escaneo en `quiet_minutes` (regla dura 19);
+- cada recarga urgente se anota antes de recargar (`localStorage`,
+  `kronoqr.kiosk.urgent_update_attempts`). Tras **3** sin cambio de version, se rinde: vuelve a
+  la cadencia normal y reporta `kiosk.update.unreachable` una vez por arranque.
+
+Una tablet con la 2.2.0 o anterior no tiene este codigo: se pone al dia en su ventana, o una
+2.1.0 (declara `0.0.0`) desregistrando el SW (`chrome://serviceworker-internals` o F12 →
+Application → Service workers → Unregister) **solo** con red, la cola a 0 y sin cola en
+memoria, y **nunca** borrando los datos del sitio (IndexedDB guarda la cola y `localStorage`
+el emparejamiento). Procedimiento completo: `docs/cliente/operacion.md` §11.1, «Que hacer si
+una tablet no cambia sola tras actualizar el servidor».
+
 ## `testHooks.ts`
 
 Gancho de pruebas acotado para el guardian de actualizacion: fuerza el estado «hay version

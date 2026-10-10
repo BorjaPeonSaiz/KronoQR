@@ -108,10 +108,23 @@ export interface UpdateGateInput {
   readonly lastScanAt: Date | null
   readonly window?: UpdateWindow
   readonly quietMinutes?: number
+  /**
+   * Modo urgente (version minima del servidor por encima de la de esta PWA):
+   * la ventana horaria deja de exigirse. NADA MAS se relaja: cola vacia, cola
+   * duradera y silencio de `quietMinutes` siguen siendo obligatorios (regla dura 19).
+   */
+  readonly urgent?: boolean
+  /**
+   * `false` = la cola corre en memoria (ADR-047): un reinicio la perderia entera
+   * aunque ahora parezca vacia. En urgente NUNCA se recarga asi. Ausente = durable.
+   */
+  readonly queueDurable?: boolean
 }
 
 /** `true` solo si aplicar la version nueva AHORA no puede dejar a nadie sin fichar. */
 export function canApplyUpdate(input: UpdateGateInput): boolean {
+  const urgent = input.urgent === true
+  if (urgent && input.queueDurable === false) return false
   if (input.pendingScans > 0) return false
 
   const quietMinutes = input.quietMinutes ?? DEFAULT_UPDATE_QUIET_MINUTES
@@ -127,5 +140,7 @@ export function canApplyUpdate(input: UpdateGateInput): boolean {
     if (elapsedMs >= 0 && elapsedMs < quietMinutes * 60_000) return false
   }
 
+  // Urgente: a cualquier hora. La unica puerta que se relaja es la ventana.
+  if (urgent) return true
   return isWithinUpdateWindow(input.now, input.window ?? DEFAULT_UPDATE_WINDOW)
 }
