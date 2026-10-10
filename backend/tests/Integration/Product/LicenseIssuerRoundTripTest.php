@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Product\Domain\ValueObject\LicenseRejection;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
 use App\Modules\Product\Infrastructure\Adapter\Ed25519LicenseVerifier;
+use App\Modules\Shared\Domain\ValueObject\Feature;
 use Symfony\Component\Process\Process;
 use Tests\Architecture\Support\Repo;
 
@@ -259,4 +260,44 @@ it('el emisor deja emitir una funcionalidad futura con --force', function (): vo
     // El producto descarta lo que no conoce y concede lo que si.
     expect($result->isVerified())->toBeTrue()
         ->and($result->license?->featureNames())->toBe(['advanced_reports']);
+})->group('RF-PD-04');
+
+it('--features=all emite una clave que verifica y lleva las siete funcionalidades del producto', function (): void {
+    // La licencia que se vende hoy da acceso a todas las secciones del panel
+    // (decision del propietario, 09-10-2026). `all` se expande al catalogo del
+    // EMISOR al firmar; compararlo con el enum `Feature` del PRODUCTO es lo que
+    // impide que las dos listas deriven: si el producto añade una funcionalidad
+    // y el emisor no, esta prueba falla antes de que se venda una licencia que
+    // no la concede.
+    $pair = factoryKeyPair();
+    $issued = issueWithFactoryTool($pair['secret'], ['features' => 'all']);
+
+    expect($issued['exitCode'])->toBe(0, $issued['stderr']);
+
+    $result = (new Ed25519LicenseVerifier($pair['public']))->verify($issued['key']);
+
+    expect($result->isVerified())->toBeTrue()
+        ->and($result->license?->featureNames())->toEqualCanonicalizing([
+            'advanced_reports',
+            'impact_dashboard',
+            'payroll_export',
+            'weekly_email_summary',
+            'realtime_presence',
+            'white_label',
+            'telemetry',
+        ])
+        ->and($result->license?->featureNames())->toEqualCanonicalizing(
+            array_map(static fn (Feature $feature): string => $feature->value, Feature::cases())
+        )
+        // Y lo dice al emitir: `all` congela el catalogo de hoy.
+        ->and($issued['stderr'])->toContain('habra que reemitirla');
+})->group('RF-PD-04', 'RF-PD-05', 'RF-PD-08');
+
+it('--features=all no se mezcla con nombres sueltos', function (): void {
+    $pair = factoryKeyPair();
+    $issued = issueWithFactoryTool($pair['secret'], ['features' => 'all,payroll_export']);
+
+    expect($issued['exitCode'])->toBe(1)
+        ->and($issued['key'])->toBe('')
+        ->and($issued['stderr'])->toContain('no se combina con otros nombres');
 })->group('RF-PD-04');

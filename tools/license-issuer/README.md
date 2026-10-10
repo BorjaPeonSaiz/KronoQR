@@ -80,6 +80,46 @@ php tools/license-issuer/issue.php \
 La clave sale por la salida estándar (para poder canalizarla a un fichero) y el
 resumen por la salida de error.
 
+### La licencia que se vende hoy: `--features=all`
+
+El plan comercial vigente (decisión del propietario del 09-10-2026, registrada en
+[`docs/verificacion/2.1.0-decisiones-comerciales.md`](../../docs/verificacion/2.1.0-decisiones-comerciales.md))
+da acceso a **todas las secciones del panel**, con 100 personas, 1 quiosco y
+1 centro:
+
+```bash
+KRONOQR_LICENSE_SECRET_KEY="$(pass kronoqr/license-secret)" \
+php tools/license-issuer/issue.php \
+    --customer="Hotel Ejemplo, S.L." \
+    --plan=completo \
+    --max-employees=100 \
+    --max-devices=1 \
+    --valid-from=2026-10-01 \
+    --valid-until=2027-09-30 \
+    --features=all > hotel-ejemplo.licencia
+```
+
+`--features=all` se expande, **en el momento de firmar**, al catálogo completo de
+esta herramienta: `advanced_reports`, `impact_dashboard`, `payroll_export`,
+`weekly_email_summary`, `realtime_presence`, `white_label` y `telemetry`. La
+clave lleva esa lista explícita, no la palabra `all`. `telemetry` es inocua: el
+producto exige además `TELEMETRY_ENABLED=true` en el `.env` del cliente.
+
+`all` no se combina con otros nombres (`all,payroll_export` se rechaza: delata
+una orden mal escrita).
+
+> **Riesgo: `all` congela el catálogo del emisor, no el del producto.** Si una
+> versión futura de KronoQR añade una funcionalidad accesoria, las claves ya
+> emitidas no la llevan: el cliente que actualice la verá apagada hasta que se le
+> **reemita** la licencia. El emisor lo recuerda en su resumen cada vez que se usa
+> `all`. Al publicar una versión que añada un caso al enum `Feature`, hay que
+> añadirlo a `featureCatalogue()` de `issue.php` (lo exige
+> `LicenseIssuerRoundTripTest`) y reemitir las licencias vivas del plan completo.
+
+Superar los límites **no bloquea nada** (ADR-028) y la caducidad **jamás bloquea
+el fichaje ni el acceso al registro** (ADR-019, regla dura 15): solo se apagan las
+funcionalidades accesorias de arriba.
+
 **Se valida todo antes de firmar**, porque una clave mal emitida se descubre en
 casa del cliente con la factura ya mandada: los límites tienen que ser enteros
 positivos (`--max-employees=ochenta` produciría un `0` que el producto rechaza
@@ -88,6 +128,13 @@ nombres de `--features` tienen que estar en el catálogo de ADR-023 —una errat
 como `advanced_report` sin la ese produce una clave que verifica y **no concede
 nada**—. Con `--force` se puede emitir una funcionalidad que esta herramienta
 todavía no conozca, para cuando el producto vaya por delante de ella.
+
+La lista del catálogo vive en `featureCatalogue()` de `issue.php` y en el enum
+`Feature` del producto (`backend/app/Modules/Shared/Domain/ValueObject/Feature.php`).
+El emisor es independiente del producto a propósito —no se despliega con él y no
+carga su código—, así que son dos listas; `LicenseIssuerRoundTripTest` emite con
+`--features=all` y exige que la clave lleve exactamente los casos del enum, de
+modo que no pueden derivar sin que falle la suite.
 
 ### Campos de la carga útil
 
@@ -117,12 +164,12 @@ Solo funcionalidades **accesorias**, las de la columna «Degradable» de
 | Valor | Qué habilita |
 |---|---|
 | `advanced_reports` | Informes por periodo y comparativa con lo contratado |
-| `impact_dashboard` | Cuadro de impacto y adopción (llega en la Fase 3) |
-| `payroll_export` | Exportación configurable para nómina (Fase 3) |
-| `weekly_email_summary` | Resumen semanal por correo (Fase 3) |
+| `impact_dashboard` | Cuadro de impacto y adopción |
+| `payroll_export` | Exportación configurable para nómina |
+| `weekly_email_summary` | Resumen semanal por correo |
 | `realtime_presence` | Presencia en tiempo real; sin ella, la vista **degrada a sondeo** |
-| `white_label` | Marca propia del cliente (llega en la 5.8) |
-| `telemetry` | Telemetría opcional (llega en la 5.10) |
+| `white_label` | Marca propia del cliente |
+| `telemetry` | Telemetría opcional; exige además `TELEMETRY_ENABLED=true` |
 
 **El registro legal no se puede escribir aquí y no existe forma de hacerlo.** El
 fichaje, la sincronización de la cola offline, la consulta de jornadas, el portal
