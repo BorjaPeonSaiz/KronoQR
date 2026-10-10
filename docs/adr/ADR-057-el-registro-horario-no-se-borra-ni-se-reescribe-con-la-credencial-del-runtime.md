@@ -7,6 +7,7 @@
 | **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo R6-AR-01 de la [re-verificación](../verificacion/2.2.0-reverificacion-tandas-5-6-7.md), residuo de AUD-1 y R4-SC-04) |
 | **Afecta a** | Enmienda [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (lo que de verdad garantiza hoy) · Extiende a las tablas del registro horario el patrón de [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-027](ADR-027-audit-log-particionado.md) y [ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md) · Respeta [ADR-007](ADR-007-daily-totals-proyeccion-reconstruible.md), [ADR-026](ADR-026-la-correccion-supersede.md) y [ADR-035](ADR-035-la-correccion-estrena-identificador-y-no-cambia-de-jornada.md) · `backend/database/migrations/2026_08_19_099000_provision_database_privileges.php` · `Attendance/Infrastructure/Persistence/EloquentWorkDayRepository.php` · `Compliance/Infrastructure/Persistence/DatabaseWorkRecordArchive.php`, `DatabaseIncidentLedger.php`, `DatabaseIncidentNotices.php` · `Compliance/RetentionServiceProvider.php` · `infra/scripts/update.sh` (`verify_privileges`) |
 | **Requisitos** | RL-02, RL-04, RS-07 · reglas duras 5, 6 y 7 |
+| **Enmiendas** | [Enmienda del 10-10-2026](#enmienda-del-10-10-2026) (bloque 5 de la 2.2.1): el suelo legal de `retention_years` es por jurisdicción y vive en un catálogo del producto, con su `CHECK` para España; y un asiento de purga no admisible se puede dar por revisado con otro asiento. Añade §5 y §6 y precisa §3 y §4 |
 
 ## Contexto
 
@@ -100,3 +101,33 @@ Además de la pasada diaria, una **pasada completa semanal** recorre todo el reg
 - Feature y E2E existentes del fichaje, de las correcciones, de la resolución de incidencias y de la purga, en verde con los privilegios nuevos.
 - Integración: la conciliación detecta un tramo insertado sin asiento, un `clocked_out_at` que no coincide con su asiento y un tramo borrado dentro del plazo, y no da falsos positivos sobre una purga legítima.
 - Migración: `down()` devuelve los privilegios anteriores y retira el *trigger* y la función, sin tocar datos.
+
+## Enmienda del 10-10-2026
+
+**Bloque 5 de la 2.2.1, hallazgo R7-SC-01: suelo legal por jurisdicción y revisión de una purga no admisible.** Decide `arquitecto-dominio` sobre dos decisiones del propietario: «se mantiene la promesa de 4 años: suelo legal de `retention_years` por jurisdicción, 4 para España» (09-10-2026) y «“revisado” de `purge_out_of_bounds`: sí» (08-10-2026). El diseño ejecutable, con firmas, nombres y pruebas, está en [`2.2.1-plan-correcciones.md`](../verificacion/2.2.1-plan-correcciones.md), «Decisiones del bloque 5».
+
+**Por qué aquí y no en ADR-027 ni en un ADR nuevo.** Este ADR ya nombra «el suelo legal del perfil» en §3 (la función de purga) y en sus consecuencias (cuándo un asiento de purga es admisible), y ya registra como residuo «bajar `retention_years` y purgar». Las dos decisiones completan §3 y §4 y cierran parte de ese residuo; no abren una dirección nueva. ADR-027 decide cómo se suelta una partición de `audit_log`, no cuánto se conserva: el suelo le llega igual, porque la purga de particiones usa el mismo `retention_years`.
+
+### 5. El suelo de `retention_years` es por jurisdicción y es un dato legal del producto
+
+- **Catálogo** en `config/compliance.php`, clave `retention_floors`: `default` = 1 y `jurisdictions` = `{ ES: 4 }` (art. 34.9 ET). Las claves son países ISO 3166-1 alfa-2; una subdivisión ISO 3166-2 (`ES-CN`) hereda el suelo de su país. **Sin variable de entorno**: un suelo que el `.env` puede rebajar no es un suelo.
+- **No vive en `compliance_profiles`.** Una columna de suelo sería editable con la misma credencial que edita el plazo, y el suelo dejaría de serlo. Tampoco es una constante del dominio (regla dura 14): llega ya resuelto por el puerto `Shared\Application\Port\RetentionYearsFloor`, que pasa a resolver por jurisdicción y por centro en lugar de dar un mínimo común a todos los campos.
+- **Regla dura 13 y RF-PD-01.** El suelo no es de ningún cliente: es el mismo para todos los de una jurisdicción. Vender en un país que no está en el catálogo no obliga a tocar el repositorio, porque recibe `default`. Añadir un país es mejorar lo que el producto sabe de la ley, y se publica en una versión, con su `CHECK`.
+- **Lo hacen cumplir cuatro sitios:** la edición del perfil (`422` con el suelo en el mensaje), la purga (se niega a purgar con un plazo por debajo del suelo), la conciliación de §4 (un asiento de purga por debajo del suelo es `purge_out_of_bounds`) y el esquema.
+- **El esquema lleva dos `CHECK`:** `jurisdiction` con forma ISO (`^[A-Z]{2}(-[A-Z0-9]{1,3})?$`) y `split_part(jurisdiction, '-', 1) <> 'ES' OR retention_years >= 4`. Esto enmienda el «no hay tope inferior» de la migración `2026_09_06_100000_bound_compliance_profile_thresholds`. Aquel razonamiento era que el esquema no podía distinguir un 1 tipográfico de un 1 legítimo; con la jurisdicción en la fila, para España sí puede.
+- **El dato está en dos sitios, a propósito, y una prueba los ata.** El `CHECK` es la red de quien edita la fila a mano y no lee la configuración. Cada país del catálogo con suelo mayor que `default` tiene su `CHECK` (`compliance_profiles_chk_retention_floor_<país>`), y una prueba de integración recorre el catálogo e intenta escribir `suelo - 1` en una fila de ese país: añadir un país al catálogo sin su migración la pone en rojo.
+- **La conciliación juzga cada asiento de purga con el suelo más alto** entre el de la jurisdicción actual del centro y el que el propio asiento declara (`retention_floor_years`, que la purga escribe desde la 2.2.1). Un asiento falsificado solo puede endurecerse a sí mismo.
+
+### 6. Un asiento de purga no admisible se puede dar por revisado, con otro asiento
+
+Un `retention.purge_executed` no admisible queda para siempre en `audit_log`, y cada pasada de §4 lo volvía a contar: la alerta no se apagaba nunca, que es la forma más rápida de que alguien la silencie.
+
+- **La revisión es un asiento nuevo**, `retention.purge_reviewed`, en la familia `RetentionPurge` del asiento que revisa. Lleva el `id` del asiento revisado, los defectos que tenía al revisarlo, el suelo vigente, el motivo y la cuenta de gestión responsable, que es el actor. Sin tabla nueva: la marca vive en `audit_log`, que ya es solo-append (regla dura 6). Nada se borra ni se reescribe (regla dura 5).
+- **La escribe solo una persona desde la consola:** `compliance:reconcile-work-record --acknowledge=<id> --reason=… --responsible=<id>`. El asiento tiene que ser una purga del registro horario, tiene que ser no admisible hoy y no puede estar ya revisado. El motivo y una cuenta de gestión activa son obligatorios.
+- **Efecto en la conciliación.** Un asiento revisado deja de contarse como `purge_out_of_bounds` pendiente y se cuenta aparte como revisado. Cualquier purga posterior se juzga igual que antes. Si el único defecto del asiento era el plazo (`retention_years` por debajo del suelo, sin otro fallo de forma, de fecha o de centro), además vuelve a explicar sus borrados, pero solo hasta el corte que su propio plazo permitía el día en que se escribió. Uno con un corte imposible o sin centro sigue sin explicar nada.
+- **Revisar avisa a seguridad.** El número de purgas revisadas se publica como métrica propia, y una alerta informativa salta cuando sube. Un «revisado» falsificado con la credencial del runtime ([riesgo aceptado](../07-seguridad-madurez-y-amenazas.md) «La cadena de auditoría no autentica a quien escribe») no pasa en silencio.
+
+### Lo que esto no impide, actualizado
+
+- **Bajar `retention_years` y purgar** deja de ser posible por debajo de 4 años en España: lo impiden el `CHECK`, la edición del perfil y la purga. Sigue siendo posible cambiar `jurisdiction` con la credencial de la aplicación, que tiene `UPDATE` sobre toda la fila, y con ello salir del `CHECK` español. La edición desde el panel no lo permite y la conciliación juzga con el suelo más alto que conoce. Retirar ese `UPDATE` de columna es una decisión pendiente de `seguridad-cumplimiento` para el bloque 6.
+- **Un par «purga a un año + revisión» falsificado** deja de contar como discrepancia, pero dispara la alerta de revisión. El residuo es el mismo que el de cualquier asiento añadido con la credencial del runtime.

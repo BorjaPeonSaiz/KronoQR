@@ -267,7 +267,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | RF-PD-04 | **Licencia con clave firmada** que codifica cliente, plan, límites (empleados, quioscos) y vigencia del soporte. Una licencia es un centro (ADR-040). Verificación **local, sin llamada a internet**. | M |
 | RF-PD-05 | **Degradación honesta al expirar la licencia.** El sistema **sigue registrando fichajes y permitiendo el acceso a los registros legales**. Se muestran avisos y se bloquean funcionalidades accesorias, nunca el registro. | M |
 | RF-PD-06 | **Vinculación de quiosco por código de emparejamiento** mostrado en la tablet e introducido en el panel. El cliente no tiene por qué usar SSH. | M |
-| RF-PD-07 | **Perfiles de cumplimiento configurables**: jurisdicción, años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. Se entrega el perfil español de serie. | M |
+| RF-PD-07 | **Perfiles de cumplimiento configurables**: jurisdicción, años de retención, descanso mínimo entre jornadas, jornada máxima diaria y semanal, pausas obligatorias, inicio de semana y calendario de festivos. Se entrega el perfil español de serie. **Los años de retención nunca bajan del suelo legal de la jurisdicción del perfil**: 4 en España (art. 34.9 ET, RL-02) y 1 en una jurisdicción cuyo suelo el producto no conoce. El suelo es un dato legal del producto y no del cliente: el panel rechaza un valor menor diciendo cuál es el suelo, y el esquema de la base de datos lo impide también para España. | M |
 | RF-PD-08 | **Marca blanca**: logotipo, colores y nombre de la aplicación configurables, aplicados al quiosco, al panel, al portal y a las tarjetas y documentos PDF. | S |
 | RF-PD-09 | **Paquete de diagnóstico exportable** por el administrador del cliente: versión, configuración sin secretos, estado de servicios, últimos errores, salud de quioscos y comprobaciones internas. **Anonimizado por defecto.** | M |
 | RF-PD-10 | **Actualización asistida** con copia de seguridad previa automática y verificada —si la copia falla, la actualización no continúa—, migraciones reversibles, comprobación posterior de salud y **vuelta atrás automática a la copia previa si la comprobación falla**. Debe soportar el salto entre versiones **no consecutivas**. | M |
@@ -542,7 +542,7 @@ Motor: **PostgreSQL 17**. Los tipos se expresan en su nomenclatura. El Anexo D d
 
 **`compliance_profiles`** — perfil de cumplimiento (RF-PD-07)
 `id`, `name`, `jurisdiction`, `retention_years`, `min_rest_hours`, `max_daily_hours`, `max_weekly_hours`, `break_required_after_hours`, `week_starts_on`, `holiday_calendar` (JSONB), `is_default`
-*Alimenta RN-10, RN-11 y RN-12. Se entrega el perfil `ES-hosteleria` de serie.*
+*Alimenta RN-10, RN-11 y RN-12. Se entrega el perfil `ES-hosteleria` de serie. `jurisdiction` es un país ISO 3166-1 alfa-2, con subdivisión ISO 3166-2 opcional (`ES`, `ES-CN`), y `retention_years` no baja del suelo legal de ese país (RF-PD-07, RL-02): dos `CHECK` del esquema lo garantizan para el formato y para España.*
 
 **`installation_settings`** — configuración de la instalación (RF-PD-01)
 `key`, `value` (JSONB), `updated_by_user_id`, `updated_at`
@@ -754,7 +754,7 @@ Desplegable en un VPS o servidor propio con Docker, sin dependencias de servicio
 | ID | Requisito |
 |---|---|
 | RL-01 | Registro **diario** con hora concreta de inicio y fin de la jornada de cada persona trabajadora. |
-| RL-02 | **Conservación durante 4 años**. Purga controlada y documentada al vencimiento. |
+| RL-02 | **Conservación durante 4 años**. Purga controlada y documentada al vencimiento. El perfil de cumplimiento no admite un plazo menor en España (RF-PD-07). |
 | RL-03 | Los registros permanecen **a disposición** de la persona trabajadora, de la representación legal y de la Inspección de Trabajo, con capacidad de entrega inmediata. |
 | RL-04 | El registro debe ser **fiable e inalterable**: cualquier modificación posterior queda trazada con autor, momento, valor anterior y motivo. |
 | RL-05 | La persona trabajadora puede **acceder a su propio registro** en cualquier momento y obtener copia. |
@@ -778,7 +778,11 @@ Desplegable en un VPS o servidor propio con Docker, sin dependencias de servicio
 | RL-14 | **Datos alojados en la UE**, en la infraestructura del propio cliente. |
 | RL-15 | **Notificación de brechas**: procedimiento documentado con plazo de 72 h y capacidad técnica de determinar el alcance a partir de los logs de auditoría. |
 
-> **Hueco conocido en la 2.2.0 frente a RL-02 y RL-11 (R7-SC-01).** El perfil de cumplimiento admite `retention_years` desde 1 para cualquier jurisdicción (`ComplianceProfileField::minimum()`), así que un perfil español mal ajustado propondría purgar registros de jornada con menos de los 4 años que exige RL-02. La purga sigue pidiendo confirmación expresa del responsable y deja informe (RF-PR-03), pero nada la impide: la conciliación de ADR-057 §4 solo marca como no admisible una purga por debajo de ese mismo mínimo de 1 año (`ProfileRetentionYearsFloor`). Decidido por el propietario el 08-10-2026 para la 2.2.x: **suelo legal de `retention_years` por jurisdicción en el perfil, 4 para España**. Hasta entonces, el valor de serie de `ES-hosteleria` es 4 y bajarlo es un error de configuración del cliente, no una opción legal.
+> **Suelo legal de la retención (2.2.1, cierra R7-SC-01).** Hasta la 2.2.0 el perfil admitía `retention_years` desde 1 en cualquier jurisdicción, así que un perfil español mal ajustado proponía purgar registros con menos de los 4 años de RL-02. Desde la 2.2.1, por decisión del propietario del 09-10-2026 ([ADR-057](adr/ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md), enmienda del 10-10-2026):
+>
+> - **El plazo nunca baja del suelo de la jurisdicción del perfil.** El catálogo de suelos es un dato legal del producto (`config/compliance.php`, `retention_floors`): 4 años para `ES` —también para sus subdivisiones, como `ES-CN`— y 1 para una jurisdicción que no está en el catálogo. El cliente puede **subir** el plazo; no puede bajarlo del suelo. Lo comprueban el panel (con el suelo en el mensaje), el esquema (un `CHECK` para España), la purga y la conciliación de ADR-057 §4, que marca como no admisible un asiento de purga por debajo del suelo.
+> - **Una purga no admisible se puede dar por revisada, pero no se borra.** Un asiento `retention.purge_executed` que no se puede creer queda para siempre en `audit_log` (regla dura 6), y cada pasada de la conciliación lo volvía a contar. Una persona que ya ha investigado el hecho lo da por revisado desde la consola, con su motivo y una cuenta de gestión responsable; eso deja **otro asiento** (`retention.purge_reviewed`) y la conciliación deja de contarlo como pendiente, sin dejar de mostrarlo. Revisar no convierte en legítima la purga, ni autoriza otra, ni vale para las posteriores, y avisa a seguridad. Si el único defecto del asiento era el plazo, sus borrados dejan de contarse como borrados, pero solo hasta el corte que ese mismo plazo permitía.
+> - **Un perfil español por debajo de 4 años frena la actualización, no la rompe.** La instalación no se actualiza a la 2.2.1 hasta que el perfil se suba a 4 desde el panel: la comprobación previa de `update.sh` lo detecta sin tocar nada, y la migración que añade el `CHECK` se niega con un mensaje que dice qué perfil y cómo corregirlo.
 
 ### 7.3 Reparto de roles en el modelo licenciado
 
