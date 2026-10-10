@@ -1166,6 +1166,7 @@ readonly -a PRECONDITION_CHECKS=(
   check_images
   check_services
   check_audit_chain
+  check_compliance_profile_floor
   check_edge_networks
   check_env_new_keys
   check_env_orphan_keys
@@ -1705,6 +1706,45 @@ check_audit_chain() {
     check_fail "$(kq_text u_c_audit_chain)" "$(kq_text u_f_audit_chain)"
     remember_check "audit-chain-before" "$(kq_text u_report_failed)"
   fi
+}
+
+# Primer perfil de cumplimiento que la migracion del suelo legal de la retencion
+# rechazaria (RF-PD-07, RL-02, ADR-057 enmienda del 10-10-2026): un perfil de
+# jurisdiccion ES con menos de 4 anos, o una jurisdiccion sin forma ISO 3166. Es
+# la MISMA consulta que hace esa migracion, pero contra la base ACTUAL y de solo
+# lectura: la version instalada no tiene ningun comando de artisan para esto.
+# Devuelve `id:ES:3` o `id:format`, o nada.
+readonly KQ_PROFILE_FLOOR_SQL="SELECT id || ':' || CASE WHEN jurisdiction !~ '^[A-Z]{2}(-[A-Z0-9]{1,3})?\$' THEN 'format' ELSE jurisdiction || ':' || retention_years END FROM compliance_profiles WHERE jurisdiction !~ '^[A-Z]{2}(-[A-Z0-9]{1,3})?\$' OR (split_part(jurisdiction, '-', 1) = 'ES' AND retention_years < 4) ORDER BY id LIMIT 1"
+
+# Sin esta comprobacion la actualizacion empezaria (copia previa, mantenimiento,
+# imagenes nuevas) y fallaria a mitad, en la migracion, para acabar en vuelta
+# atras. Aqui falla con salida 2 y sin haber tocado nada.
+check_compliance_profile_floor() {
+  [ "${DOCKER_OK}" -eq 1 ] && [ -n "${CURRENT_ENV}" ] || return 0
+
+  local found id jurisdiction years
+  if ! found="$(compose_current exec -T postgres psql -U "${CFG_DB_MIGRATION_USERNAME}" -d "${CFG_DB_DATABASE}" \
+    -v ON_ERROR_STOP=1 -Atqc "${KQ_PROFILE_FLOOR_SQL}" 2>/dev/null | tr -d '[:space:]')"; then
+    # No poder preguntar no es un fallo de la instalacion: la propia migracion
+    # repite la comprobacion antes de cambiar nada. Pero que se sepa.
+    check_warn "$(kq_text u_c_compliance_floor)" "$(kq_text u_f_compliance_floor_unknown)"
+    remember_check "compliance-profile-floor" "$(kq_text u_report_failed)"
+    return 0
+  fi
+
+  if [ -z "${found}" ]; then
+    check_pass "$(kq_text u_c_compliance_floor)"
+    remember_check "compliance-profile-floor" "$(kq_text u_report_ok)"
+    return 0
+  fi
+
+  IFS=: read -r id jurisdiction years <<<"${found}"
+  if [ "${jurisdiction}" = "format" ]; then
+    check_fail "$(kq_text u_c_compliance_floor)" "$(kq_format u_f_compliance_jurisdiction "${id}")"
+  else
+    check_fail "$(kq_text u_c_compliance_floor)" "$(kq_format u_f_compliance_floor "${id}" "${jurisdiction}" "${years}")"
+  fi
+  remember_check "compliance-profile-floor" "$(kq_text u_report_failed)"
 }
 
 # Las redes del borde HTTP del .env actual (PP-01, PP-03). Se comprueban ANTES de

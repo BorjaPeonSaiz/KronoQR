@@ -2278,6 +2278,56 @@ jobs:
         # salta (no hay nada heredado que migrar).
         run: bash .github/scripts/backup-wal-e2e.sh upgrade-seed paquete-anterior
 
+      - name: "U0 · Un perfil ES con 3 anos: --check-only sale con 2 y no toca nada (RF-PD-07, RL-02)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La migracion del suelo legal de la retencion rechaza un perfil `ES` con
+        # menos de 4 anos. Si update.sh lo descubriera a mitad, habria copia
+        # previa, mantenimiento y vuelta atras; la comprobacion de la fase 1 lo
+        # detiene antes. Se baja el plazo del perfil instalado a 3, se exige la
+        # salida 2 con el perfil en el mensaje y la instalacion intacta, y se
+        # restaura el valor. Si la version anterior ya tuviera el CHECK, se
+        # retira para poder escribir el 3 y se repone igual al terminar.
+        run: |
+          set -euo pipefail
+          compose() { sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml "$@"; }
+          consulta() { compose exec -T postgres psql -U fichaje_migrator -d fichaje -v ON_ERROR_STOP=1 -Atqc "$1"; }
+          check=compliance_profiles_chk_retention_floor_es
+          habia="$(consulta "SELECT count(*) FROM pg_constraint WHERE conname = '${check}'")"
+          original="$(consulta "SELECT retention_years FROM compliance_profiles WHERE jurisdiction = 'ES' ORDER BY id LIMIT 1")"
+          test -n "${original}"
+          restaurar() {
+            consulta "UPDATE compliance_profiles SET retention_years = ${original} WHERE jurisdiction = 'ES'" >/dev/null
+            if [ "${habia}" = "1" ]; then
+              consulta "ALTER TABLE compliance_profiles ADD CONSTRAINT ${check} CHECK (split_part(jurisdiction, '-', 1) <> 'ES' OR retention_years >= 4)" >/dev/null
+            fi
+          }
+          trap restaurar EXIT
+          consulta "ALTER TABLE compliance_profiles DROP CONSTRAINT IF EXISTS ${check}" >/dev/null
+          consulta "UPDATE compliance_profiles SET retention_years = 3 WHERE jurisdiction = 'ES'" >/dev/null
+          cd paquete-nuevo
+          set +e
+          sudo ./update.sh --check-only >salida-u0.log 2>&1
+          codigo=$?
+          set -e
+          cat salida-u0.log
+          test "${codigo}" -eq 2 || { echo "Se esperaba salida 2 y fue ${codigo}"; exit 1; }
+          grep -q 'conserva 3 anos' salida-u0.log
+          grep -q 'Perfil de cumplimiento dentro del suelo legal' salida-u0.log
+          grep -q 'La instalacion no se ha tocado' salida-u0.log
+          # Sin tocar nada: el paquete nuevo sigue sin .env y la instalacion sigue
+          # en la version anterior, sirviendo.
+          test ! -e .env
+          cd ..
+          grep -qF "\"version\":\"${{ steps.anterior.outputs.old_version }}\"" <(curl -fsS -k https://127.0.0.1/api/v1/health)
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          # Con el plazo repuesto, la fase 1 ya no se queja de esto.
+          restaurar
+          trap - EXIT
+          cd paquete-nuevo
+          sudo ./update.sh --check-only >salida-u0b.log 2>&1 || { cat salida-u0b.log; exit 1; }
+          grep -q 'Perfil de cumplimiento dentro del suelo legal' salida-u0b.log
+          grep -q '\[ok\].*Perfil de cumplimiento dentro del suelo legal' salida-u0b.log
+
       - name: "U1 · Actualizar: salida 0, version nueva, datos intactos e informe en el servidor"
         if: steps.anterior.outputs.skip != 'true'
         run: |
