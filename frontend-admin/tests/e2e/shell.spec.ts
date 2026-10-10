@@ -18,7 +18,7 @@
 // `id` propio en el catalogo). Inventar una etiqueta aqui falsearia la
 // matriz de trazabilidad.
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { EMPLOYEE_UUID, logInAsAdmin, stubManagementApi } from './support/admin'
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
@@ -85,46 +85,57 @@ test('la seccion activa lleva aria-current, tambien desde la ficha de un emplead
 // Pedido del propietario (tarea 4.1): «Impacto y adopcion» y «Nomina» tienen
 // entrada propia, asi que al estar en ellas «Informes» NO debe quedar activa.
 // Las etiquetas de requisito son de las pantallas (RF-IN-07, RF-IN-08), no
-// del menu.
-const REPORT_SUBSECTIONS = [
-  {
-    label: 'Impacto y adopción',
-    path: /\/reports\/adoption$/,
-    url: '/reports/adoption',
-    tag: '@RF-IN-08',
-  },
-  { label: 'Nómina', path: /\/reports\/payroll$/, url: '/reports/payroll', tag: '@RF-IN-07' },
-]
+// del menu, y van literales en cada `test()` (el escaner de trazabilidad es
+// lexico).
+async function expectOnlySubsectionActive(
+  page: Page,
+  label: string,
+  path: RegExp,
+  url: string,
+): Promise<void> {
+  const nav = page.getByRole('banner').getByRole('navigation')
+  const reports = nav.getByRole('link', { name: 'Informes', exact: true })
+  const entry = nav.getByRole('link', { name: label, exact: true })
 
-for (const subsection of REPORT_SUBSECTIONS) {
-  test(
-    `en «${subsection.label}» solo esa subseccion es activa, no «Informes»`,
-    { tag: [subsection.tag] },
-    async ({ page }) => {
-      const nav = page.getByRole('banner').getByRole('navigation')
-      const reports = nav.getByRole('link', { name: 'Informes', exact: true })
-      const entry = nav.getByRole('link', { name: subsection.label, exact: true })
+  // Por el menu: Informes primero y despues la subseccion.
+  await reports.click()
+  await expect(page).toHaveURL(/\/reports$/)
+  await expect(reports).toHaveAttribute('aria-current', 'page')
 
-      // Por el menu: Informes primero y despues la subseccion.
-      await reports.click()
-      await expect(page).toHaveURL(/\/reports$/)
-      await expect(reports).toHaveAttribute('aria-current', 'page')
+  await entry.click()
+  await expect(page).toHaveURL(path)
+  await expect(entry).toHaveAttribute('aria-current', 'page')
+  await expect(reports).not.toHaveAttribute('aria-current')
+  await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
 
-      await entry.click()
-      await expect(page).toHaveURL(subsection.path)
-      await expect(entry).toHaveAttribute('aria-current', 'page')
-      await expect(reports).not.toHaveAttribute('aria-current')
-      await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
-
-      // Entrando directamente por URL.
-      await page.goto('/employees')
-      await page.goto(subsection.url)
-      await expect(entry).toHaveAttribute('aria-current', 'page')
-      await expect(reports).not.toHaveAttribute('aria-current')
-      await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
-    },
-  )
+  // Entrando directamente por URL.
+  await page.goto('/employees')
+  await page.goto(url)
+  await expect(entry).toHaveAttribute('aria-current', 'page')
+  await expect(reports).not.toHaveAttribute('aria-current')
+  await expect(nav.locator('[aria-current="page"]')).toHaveCount(1)
 }
+
+test(
+  'en «Impacto y adopción» solo esa subseccion es activa, no «Informes»',
+  { tag: ['@RF-IN-08'] },
+  async ({ page }) => {
+    await expectOnlySubsectionActive(
+      page,
+      'Impacto y adopción',
+      /\/reports\/adoption$/,
+      '/reports/adoption',
+    )
+  },
+)
+
+test(
+  'en «Nómina» solo esa subseccion es activa, no «Informes»',
+  { tag: ['@RF-IN-07'] },
+  async ({ page }) => {
+    await expectOnlySubsectionActive(page, 'Nómina', /\/reports\/payroll$/, '/reports/payroll')
+  },
+)
 
 test('por debajo de md el menu se apila y las diecinueve secciones siguen visibles', async ({
   page,
