@@ -430,7 +430,8 @@ export function storeUrgentUpdateAttempts(attempts: UrgentUpdateAttempts | null)
     if (attempts === null) storage.removeItem(URGENT_UPDATE_ATTEMPTS_KEY)
     else storage.setItem(URGENT_UPDATE_ATTEMPTS_KEY, JSON.stringify(attempts))
   } catch {
-    // Sin almacenamiento el contador no persiste: el peor caso es un intento mas.
+    // Sin disco el contador sigue en memoria durante la sesion (`urgentUpdate.ts`);
+    // solo se pierde al reiniciar, que es cuando `localStorage` vuelve a ser la fuente.
   }
 }
 

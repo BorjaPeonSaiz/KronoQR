@@ -2,17 +2,28 @@
 //
 // Une tres cosas que viven en sitios distintos: la version minima que declaro
 // el ultimo latido (`deviceIdentity.ts`), la version de esta PWA (`APP_VERSION`)
-// y los intentos de recarga ya hechos. La decision pura esta en
-// `features/offline/domain/minimumVersion.ts`; aqui solo se lee el disco y se
-// avisa a quien escucha (el registro del service worker, `sw/`), porque el
-// latido lo crean tres pantallas y el service worker se registra en `main.ts`.
+// y lo ya intentado (recargas y comprobaciones sin version nueva). La decision
+// pura esta en `features/offline/domain/minimumVersion.ts`; aqui solo se lee el
+// disco y se avisa a quien escucha (el registro del service worker, `sw/`),
+// porque el latido lo crean tres pantallas y el service worker se registra en
+// `main.ts`.
+//
+// EL REGISTRO TAMBIEN VIVE EN MEMORIA. `localStorage` puede negarse a escribir
+// (cuota, modo privado): sin una copia en memoria el contador no avanzaria en
+// toda la sesion y el corte del bucle no cortaria nada. La copia de sesion y la
+// del disco se funden quedandose con la que mas haya avanzado.
 
 import {
   nextUrgentAttempts,
+  nextUrgentChecks,
+  urgentGiveUpReason,
   urgentUpdateState as decideUrgentUpdateMode,
+  withoutUrgentChecks,
 } from '@/features/offline/domain/minimumVersion'
 import type {
   MinimumVersionReading,
+  UrgentGiveUpMotive,
+  UrgentUpdateAttempts,
   UrgentUpdateMode,
 } from '@/features/offline/domain/minimumVersion'
 import {
@@ -23,22 +34,70 @@ import {
   storeUrgentUpdateAttempts,
 } from './deviceIdentity'
 
-export type { UrgentUpdateMode }
+export type { UrgentGiveUpMotive, UrgentUpdateMode }
+
+let sessionAttempts: UrgentUpdateAttempts | null = null
+
+function progress(record: UrgentUpdateAttempts): number {
+  return record.count + record.checks
+}
+
+/** Lo mas avanzado entre el disco y la memoria de esta sesion, para ESTA version. */
+function currentAttempts(): UrgentUpdateAttempts | null {
+  const disk = readUrgentUpdateAttempts()
+  const memory = sessionAttempts
+  if (disk === null) return memory
+  if (memory === null) return disk
+  if (memory.from !== disk.from) return memory.from === APP_VERSION ? memory : disk
+  return progress(memory) > progress(disk) ? memory : disk
+}
+
+function saveAttempts(next: UrgentUpdateAttempts | null): void {
+  sessionAttempts = next
+  storeUrgentUpdateAttempts(next)
+}
 
 /** Estado actual: `none`, `urgent` o `gave_up` (ver `minimumVersion.ts`). */
 export function currentUrgentUpdateMode(): UrgentUpdateMode {
   return decideUrgentUpdateMode({
     current: APP_VERSION,
     minimum: readMinimumAppVersion(),
-    attempts: readUrgentUpdateAttempts(),
+    attempts: currentAttempts(),
   })
+}
+
+/** Por que se rindio, o `null` si no se ha rendido. Lo usa el diagnostico. */
+export function currentUrgentGiveUpMotive(): UrgentGiveUpMotive | null {
+  return urgentGiveUpReason(APP_VERSION, currentAttempts())
 }
 
 /** Anota una recarga urgente ANTES de hacerla: si la pagina muere, el intento ya cuenta. */
 export function recordUrgentUpdateAttempt(): void {
   const minimum = readMinimumAppVersion()
   if (minimum === null) return
-  storeUrgentUpdateAttempts(nextUrgentAttempts(APP_VERSION, minimum, readUrgentUpdateAttempts()))
+  saveAttempts(nextUrgentAttempts(APP_VERSION, minimum, currentAttempts()))
+}
+
+/**
+ * Una comprobacion urgente (`registration.update()`) RESUELTA sin que apareciera
+ * version nueva. Las que fallan por red no cuentan: una tablet sin conexion no
+ * puede rendirse por eso.
+ */
+export function recordUrgentUpdateCheck(): void {
+  const minimum = readMinimumAppVersion()
+  if (minimum === null) return
+  saveAttempts(nextUrgentChecks(APP_VERSION, minimum, currentAttempts()))
+}
+
+/** Ha aparecido una version nueva: las comprobaciones en vacio dejan de contar. */
+export function resetUrgentUpdateChecks(): void {
+  const next = withoutUrgentChecks(APP_VERSION, currentAttempts())
+  if (next !== null) saveAttempts(next)
+}
+
+/** Solo pruebas. */
+export function resetUrgentUpdateSession(): void {
+  sessionAttempts = null
 }
 
 type Listener = () => void
@@ -72,6 +131,6 @@ export function notifyMinimumAppVersionReceived(): void {
 export function storeMinimumAppVersionReading(reading: MinimumVersionReading): void {
   if (reading.status === 'invalid') return
   storeMinimumAppVersion(reading.status === 'valid' ? reading.version : null)
-  if (currentUrgentUpdateMode() === 'none') storeUrgentUpdateAttempts(null)
+  if (currentUrgentUpdateMode() === 'none') saveAttempts(null)
   notifyMinimumAppVersionReceived()
 }

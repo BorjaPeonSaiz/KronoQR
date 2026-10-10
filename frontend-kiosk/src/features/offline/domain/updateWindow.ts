@@ -119,25 +119,42 @@ export interface UpdateGateInput {
    * aunque ahora parezca vacia. En urgente NUNCA se recarga asi. Ausente = durable.
    */
   readonly queueDurable?: boolean
+  /**
+   * `false` = la cola aun no se ha leido (stats = valores iniciales, no un
+   * hecho): no se sabe si esta vacia, asi que NO se recarga. Ausente = conocida.
+   */
+  readonly queueKnown?: boolean
+  /**
+   * Alguien esta a media interaccion (envio en curso, PIN a medio teclear, pausa
+   * armada, confirmacion visible): la puerta esta cerrada SIEMPRE, urgente o no.
+   */
+  readonly interactionInProgress?: boolean
 }
+
+/** Suelo del silencio en modo urgente aunque el ajuste valga menos (incluso 0). */
+export const URGENT_MIN_QUIET_MINUTES = 2
 
 /** `true` solo si aplicar la version nueva AHORA no puede dejar a nadie sin fichar. */
 export function canApplyUpdate(input: UpdateGateInput): boolean {
   const urgent = input.urgent === true
+  if (input.interactionInProgress === true) return false
+  if (input.queueKnown === false) return false
   if (urgent && input.queueDurable === false) return false
   if (input.pendingScans > 0) return false
 
-  const quietMinutes = input.quietMinutes ?? DEFAULT_UPDATE_QUIET_MINUTES
+  const configuredQuiet = input.quietMinutes ?? DEFAULT_UPDATE_QUIET_MINUTES
+  const quietMinutes = urgent
+    ? Math.max(configuredQuiet, URGENT_MIN_QUIET_MINUTES)
+    : configuredQuiet
   if (input.lastScanAt !== null) {
     const elapsedMs = input.now.getTime() - input.lastScanAt.getTime()
-    // `elapsedMs < 0` = el ultimo escaneo quedo registrado en el FUTURO segun
-    // el reloj actual de la tablet: un reloj que se ha adelantado entre medias
-    // (RF-AT-10, la tablet no tiene la culpa de perder la hora) o que se ha
-    // corregido hacia atras. Tratarlo como «escaneo reciente» dejaria la
-    // puerta cerrada PARA SIEMPRE -ningun tiempo futuro real la abriria-, que
-    // es justo lo que la regla dura 19 prohibe: un reloj desviado no puede
-    // impedir fichar, y tampoco puede impedir actualizar sin fichajes que perder.
-    if (elapsedMs >= 0 && elapsedMs < quietMinutes * 60_000) return false
+    // `elapsedMs < 0` = el ultimo escaneo quedo en el FUTURO segun el reloj
+    // actual (reloj corregido hacia atras). Un escaneo a 3 min «en el futuro»
+    // es, casi seguro, un escaneo de hace un momento: cuenta como reciente.
+    // Pero SOLO dentro del propio periodo de silencio (valor absoluto): un
+    // desfase de horas no puede dejar la puerta cerrada para siempre, que es
+    // lo que la regla dura 19 prohibe (un reloj desviado no impide actualizar).
+    if (Math.abs(elapsedMs) < quietMinutes * 60_000) return false
   }
 
   // Urgente: a cualquier hora. La unica puerta que se relaja es la ventana.

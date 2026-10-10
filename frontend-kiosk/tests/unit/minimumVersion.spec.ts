@@ -3,6 +3,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   isBelowMinimumVersion,
+  MAX_URGENT_CHECKS_WITHOUT_UPDATE,
+  nextUrgentChecks,
+  urgentGiveUpReason,
+  withoutUrgentChecks,
   MAX_URGENT_UPDATE_ATTEMPTS,
   nextUrgentAttempts,
   parseMinimumVersionFromHeartbeatData,
@@ -39,6 +43,10 @@ describe('isBelowMinimumVersion: solo por el nucleo', () => {
   it('por encima', () => {
     expect(isBelowMinimumVersion('2.2.2', '2.2.1')).toBe(false)
     expect(isBelowMinimumVersion('2.10.0', '2.9.0')).toBe(false)
+  })
+
+  it('`0.0.0-dev` SI esta desfasada (es SemVer), igual que en el servidor', () => {
+    expect(isBelowMinimumVersion('0.0.0-dev', '2.2.1')).toBe(true)
   })
 
   it('ante la duda, no esta desfasada', () => {
@@ -90,7 +98,12 @@ describe('estado urgente y corte del bucle', () => {
   })
 
   it('tras N intentos desde la misma version sin cambio: gave_up', () => {
-    const attempts = { minimum: '2.2.1', from: '2.2.0', count: MAX_URGENT_UPDATE_ATTEMPTS }
+    const attempts = {
+      minimum: '2.2.1',
+      from: '2.2.0',
+      count: MAX_URGENT_UPDATE_ATTEMPTS,
+      checks: 0,
+    }
     expect(urgentUpdateState({ current: '2.2.0', minimum: '2.2.1', attempts })).toBe('gave_up')
     expect(
       urgentUpdateState({
@@ -101,17 +114,59 @@ describe('estado urgente y corte del bucle', () => {
     ).toBe('urgent')
   })
 
-  it('si la version cambio entre medias o la minima es otra, la cuenta empieza de cero', () => {
-    const attempts = { minimum: '2.2.1', from: '2.1.0', count: MAX_URGENT_UPDATE_ATTEMPTS }
+  it('si la version de origen cambio entre medias, la cuenta empieza de cero', () => {
+    const attempts = {
+      minimum: '2.2.1',
+      from: '2.1.0',
+      count: MAX_URGENT_UPDATE_ATTEMPTS,
+      checks: 0,
+    }
     expect(urgentUpdateState({ current: '2.2.0', minimum: '2.2.1', attempts })).toBe('urgent')
-    expect(urgentUpdateState({ current: '2.1.0', minimum: '2.3.0', attempts })).toBe('urgent')
   })
 
-  it('nextUrgentAttempts suma sobre el mismo recorrido y reinicia en otro', () => {
+  it('la cuenta va atada a la version de origen: una minima que alterna NO la reinicia', () => {
+    const attempts = {
+      minimum: '2.2.1',
+      from: '2.2.0',
+      count: MAX_URGENT_UPDATE_ATTEMPTS,
+      checks: 0,
+    }
+    expect(urgentUpdateState({ current: '2.2.0', minimum: '2.3.0', attempts })).toBe('gave_up')
+    expect(
+      nextUrgentAttempts('2.2.0', '2.3.0', nextUrgentAttempts('2.2.0', '2.2.1', null)).count,
+    ).toBe(2)
+  })
+
+  it('tras N comprobaciones sin version nueva tambien se rinde, y dice por que', () => {
+    let attempts = null as ReturnType<typeof nextUrgentChecks> | null
+    for (let check = 0; check < MAX_URGENT_CHECKS_WITHOUT_UPDATE - 1; check += 1) {
+      attempts = nextUrgentChecks('2.2.0', '2.2.1', attempts)
+    }
+    expect(urgentUpdateState({ current: '2.2.0', minimum: '2.2.1', attempts })).toBe('urgent')
+    expect(urgentGiveUpReason('2.2.0', attempts)).toBeNull()
+
+    attempts = nextUrgentChecks('2.2.0', '2.2.1', attempts)
+    expect(urgentUpdateState({ current: '2.2.0', minimum: '2.2.1', attempts })).toBe('gave_up')
+    expect(urgentGiveUpReason('2.2.0', attempts)).toBe('no_update')
+  })
+
+  it('las recargas agotadas dicen `reloads`; una version nueva pone las comprobaciones a cero', () => {
+    const reloads = {
+      minimum: '2.2.1',
+      from: '2.2.0',
+      count: MAX_URGENT_UPDATE_ATTEMPTS,
+      checks: 0,
+    }
+    expect(urgentGiveUpReason('2.2.0', reloads)).toBe('reloads')
+
+    const checked = nextUrgentChecks('2.2.0', '2.2.1', null)
+    expect(withoutUrgentChecks('2.2.0', checked)?.checks).toBe(0)
+  })
+
+  it('nextUrgentAttempts suma sobre la misma version de origen y reinicia en otra', () => {
     const first = nextUrgentAttempts('2.2.0', '2.2.1', null)
     expect(first.count).toBe(1)
     expect(nextUrgentAttempts('2.2.0', '2.2.1', first).count).toBe(2)
-    expect(nextUrgentAttempts('2.2.0', '2.3.0', first).count).toBe(1)
-    expect(nextUrgentAttempts('2.2.5', '2.2.1', first).count).toBe(1)
+    expect(nextUrgentAttempts('2.2.5', '2.2.6', first).count).toBe(1)
   })
 })

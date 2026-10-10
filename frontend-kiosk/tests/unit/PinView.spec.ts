@@ -12,7 +12,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { createRouter, createWebHistory } from 'vue-router'
 import PinView from '@/features/pin/ui/PinView.vue'
 import { routes } from '@/router'
-import { disposeOfflineQueue } from '@/features/offline/useOfflineQueue'
+import { PIN_IDLE_RETURN_MS } from '@/features/pin/domain/idleReturn'
+import {
+  interactionInProgress,
+  resetInteractions,
+} from '@/features/offline/application/interactionGuard'
+import { canUpdateNowGlobal, disposeOfflineQueue } from '@/features/offline/useOfflineQueue'
 import { createAppI18n } from '@/shared/i18n'
 import { resetKioskDatabase } from './support/resetKioskDatabase'
 
@@ -91,6 +96,7 @@ async function pressDigits(wrapper: Awaited<ReturnType<typeof render>>['wrapper'
 }
 
 beforeEach(async () => {
+  resetInteractions()
   await disposeOfflineQueue()
   await resetKioskDatabase()
 })
@@ -458,5 +464,64 @@ describe('pantalla de PIN — flujo completo (RF-AT-11)', () => {
 
     expect(replaceSpy).not.toHaveBeenCalled()
     expect(pushSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('pantalla de PIN — puerta de actualizacion (RF-KI-07, regla dura 19)', () => {
+  it('con el codigo o el PIN a medio teclear la puerta esta cerrada, incluso en urgente; al salir se libera', async () => {
+    installFetch(publicKeyBase64)
+    const { wrapper } = await render()
+    await vi.waitFor(() =>
+      expect(wrapper.find('[data-testid="pin-step-code"]').exists()).toBe(true),
+    )
+    expect(interactionInProgress()).toBe(false)
+
+    await wrapper.get('[data-testid="pin-code-input"]').setValue('E7QK2MXPR')
+    expect(interactionInProgress()).toBe(true)
+    expect(canUpdateNowGlobal(true, new Date(2026, 7, 14, 11, 0, 0))).toBe(false)
+
+    await wrapper.get('[data-testid="pin-code-continue"]').trigger('click')
+    await pressDigits(wrapper, '12')
+    expect(interactionInProgress()).toBe(true)
+
+    wrapper.unmount()
+    expect(interactionInProgress()).toBe(false)
+  })
+})
+
+describe('pantalla de PIN — inactividad (PIN_IDLE_RETURN_MS)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('a los 59 s sigue; a los 60 s borra lo tecleado, libera la interaccion y vuelve a inicio; una pulsacion reinicia', async () => {
+    installFetch(publicKeyBase64)
+    const { wrapper, router } = await render()
+    await vi.waitFor(() =>
+      expect(wrapper.find('[data-testid="pin-step-code"]').exists()).toBe(true),
+    )
+
+    // Los temporizadores creados desde aqui son los falsos; el resto de la
+    // pantalla (padron, latido) ya arranco con los reales.
+    vi.useFakeTimers()
+    await wrapper.get('[data-testid="pin-code-input"]').setValue('E7QK2MXPR')
+    await wrapper.get('[data-testid="pin-code-continue"]').trigger('click')
+    expect(interactionInProgress()).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(PIN_IDLE_RETURN_MS - 1_000)
+    expect(router.currentRoute.value.name).toBe('pin')
+
+    // Una pulsacion reinicia la cuenta: 59 s mas despues, sigue.
+    await pressDigits(wrapper, '1')
+    await vi.advanceTimersByTimeAsync(PIN_IDLE_RETURN_MS - 1_000)
+    expect(router.currentRoute.value.name).toBe('pin')
+    expect(interactionInProgress()).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(router.currentRoute.value.name).toBe('home')
+    expect(interactionInProgress()).toBe(false)
+    expect(wrapper.find('[data-testid="pin-step-code"]').exists()).toBe(true)
+
+    wrapper.unmount()
   })
 })

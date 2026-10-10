@@ -217,7 +217,8 @@
       "minimumVersionNone": "Not specified",
       "updatePending": "Pending: will apply within the {start}–{end} window.",
       "updateUrgent": "Urgent update pending: the server needs version {version}. It will be applied as soon as there are no pending clockings and nobody is clocking in, at any time of day; the screen will reload for a few seconds.",
-      "updateUrgentGaveUp": "The urgent update to version {version} could not be completed after several attempts. The kiosk keeps clocking normally; contact support.",
+      "updateUrgentGaveUp": "The tablet has tried several times to update to version {version} and is still on another one. The kiosk keeps clocking normally; contact support.",
+      "updateUrgentUnavailable": "The server asks for version {version}, but that version is not available to this tablet: no newer version was found. The kiosk keeps clocking normally; contact support.",
       "updateUpToDate": "Up to date."
     },
     "warnings": {

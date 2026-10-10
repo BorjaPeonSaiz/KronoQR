@@ -18,10 +18,11 @@
 //
 // Nada de esto exige interaccion para fichar: la camara arranca sola y decodifica
 // en continuo (RF-KI-02). Los botones son accesorios.
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
+import { markInteraction } from '@/features/offline/application/interactionGuard'
 import { useBranding } from '@/shared/branding/useBranding'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import {
@@ -232,9 +233,16 @@ onMounted(() => {
 // El escaner y el bloqueo de pantalla se limpian solos en sus composables. El
 // latido no: es un `setInterval` propio de esta pantalla y hay que pararlo, o
 // sobrevive a la navegacion y late dos veces por minuto por cada montaje.
+// Puerta de actualizacion (RF-KI-07): confirmacion visible o pausa armada = hay
+// alguien usando el quiosco, aunque aun no haya `lastScanAt` que lo diga.
+watchEffect(() => {
+  markInteraction('scan-screen', session.confirmation.value !== null || breakIntent.armed.value)
+})
+
 onUnmounted(() => {
   heartbeat.stop()
   scanner.stop()
+  markInteraction('scan-screen', false)
 })
 </script>
 

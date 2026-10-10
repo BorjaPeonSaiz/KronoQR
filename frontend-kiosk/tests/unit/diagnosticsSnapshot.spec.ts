@@ -31,6 +31,7 @@ function baseSources(): DiagnosticsSources {
       pending: false,
       window: { start: '03:00', end: '05:00' },
       urgentState: 'none',
+      giveUpReason: null,
       minimumVersion: null,
     },
   }
@@ -166,6 +167,7 @@ describe('ensamblado del diagnostico (RF-KI-08, tarea 3.3)', () => {
         pending: true,
         window: { start: '22:00', end: '01:00' },
         urgentState: 'urgent',
+        giveUpReason: null,
         minimumVersion: '2.2.1',
       },
     })
@@ -174,6 +176,7 @@ describe('ensamblado del diagnostico (RF-KI-08, tarea 3.3)', () => {
       pending: true,
       window: { start: '22:00', end: '01:00' },
       urgentState: 'urgent',
+      giveUpReason: null,
       minimumVersion: '2.2.1',
     })
   })

@@ -19,10 +19,11 @@
 // FEEDBACK REUTILIZADO de la 1.8: mismo `ScanConfirmationPanel`, mismo sonido,
 // mismo mensaje generico de rechazo (regla dura 17) — el empleado no deberia
 // notar que esta via es distinta de la tarjeta.
-import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
 import { createApiClient } from '@/shared/api/client'
+import { markInteraction } from '@/features/offline/application/interactionGuard'
 import { readPrivacyNotice } from '@/shared/branding/useBranding'
 import { useConnectivity } from '@/shared/connectivity/useConnectivity'
 import {
@@ -57,6 +58,7 @@ import {
 import { usePinKeypad } from '../composables/usePinKeypad'
 import { usePinSealingStatus } from '../composables/usePinSealingStatus'
 import PinNumericKeypad from './PinNumericKeypad.vue'
+import { PIN_IDLE_RETURN_MS } from '../domain/idleReturn'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -290,19 +292,68 @@ const heartbeat = createHeartbeatScheduler({
 onMounted(() => {
   void wakeLock.request()
   heartbeat.start()
+  restartIdleTimer()
+})
+
+// Inactividad (ver `domain/idleReturn.ts`): sin pulsar nada durante
+// `PIN_IDLE_RETURN_MS` se borra lo tecleado y se vuelve a inicio. No actua con
+// una verificacion en curso ni con una confirmacion visible.
+let idleTimer: ReturnType<typeof setTimeout> | null = null
+
+function stopIdleTimer(): void {
+  if (idleTimer !== null) clearTimeout(idleTimer)
+  idleTimer = null
+}
+
+function restartIdleTimer(): void {
+  stopIdleTimer()
+  if (!alive || step.value === 'submitting' || session.confirmation.value !== null) return
+  idleTimer = setTimeout(onIdle, PIN_IDLE_RETURN_MS)
+}
+
+function onIdle(): void {
+  idleTimer = null
+  if (!alive || step.value === 'submitting' || session.confirmation.value !== null) return
+  clearSensitiveInputs()
+  step.value = 'code'
+  markInteraction('pin-screen', false)
+  void router.replace({ name: 'home' })
+}
+
+// Cualquier cambio de lo tecleado, del paso o de la confirmacion cuenta como actividad.
+watch(
+  [employeeCode, () => pin.value.value, step, () => session.confirmation.value],
+  restartIdleTimer,
+)
+
+// Puerta de actualizacion (RF-KI-07): codigo o PIN a medio teclear, o
+// confirmacion visible = hay alguien usando el quiosco.
+watchEffect(() => {
+  markInteraction(
+    'pin-screen',
+    employeeCode.value.length > 0 ||
+      pin.value.value.length > 0 ||
+      session.confirmation.value !== null,
+  )
 })
 
 onUnmounted(() => {
   // Primero: nada programado despues de este punto puede navegar. El resto
   // de la limpieza (temporizador vivo, latido) va detras a proposito.
   alive = false
+  markInteraction('pin-screen', false)
+  stopIdleTimer()
   heartbeat.stop()
   if (returnTimer !== null) clearTimeout(returnTimer)
 })
 </script>
 
 <template>
-  <main class="flex h-dvh w-full flex-col bg-kq-kiosk-surface text-kq-kiosk-text">
+  <main
+    class="flex h-dvh w-full flex-col bg-kq-kiosk-surface text-kq-kiosk-text"
+    @pointerdown.capture="restartIdleTimer"
+    @keydown.capture="restartIdleTimer"
+  >
     <h1 class="kiosk-sr-only">{{ t('pin.title') }}</h1>
 
     <header class="flex items-center justify-between gap-4 px-6 py-4">

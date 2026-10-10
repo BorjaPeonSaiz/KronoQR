@@ -42,7 +42,7 @@ import {
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
 import { getErrorReporter } from '@/shared/telemetry/errorReporter'
-import { currentUrgentUpdateMode } from '@/shared/telemetry/urgentUpdate'
+import { currentUrgentGiveUpMotive, currentUrgentUpdateMode } from '@/shared/telemetry/urgentUpdate'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
 import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
@@ -311,6 +311,7 @@ const updatePending = isUpdatePending()
 const updateWindow = readUpdateWindow()
 const urgentState = currentUrgentUpdateMode()
 const minimumVersion = readMinimumAppVersion()
+const giveUpReason = currentUrgentGiveUpMotive()
 
 const snapshot = computed(() =>
   buildDiagnosticsSnapshot({
@@ -355,7 +356,13 @@ const snapshot = computed(() =>
     wakeLock: { supported: wakeLock.supported, active: wakeLock.active.value },
     pendingErrors: reporter.size(),
     privacyControllerConfigured: privacyNotice.controllerName !== null,
-    update: { pending: updatePending, window: updateWindow, urgentState, minimumVersion },
+    update: {
+      pending: updatePending,
+      window: updateWindow,
+      urgentState,
+      minimumVersion,
+      giveUpReason,
+    },
   }),
 )
 
@@ -368,7 +375,12 @@ const updateStatusText = computed(() => {
     return t('diagnostics.values.updateUrgent', { version: minimum ?? '' })
   }
   if (state === 'gave_up') {
-    return t('diagnostics.values.updateUrgentGaveUp', { version: minimum ?? '' })
+    return t(
+      snapshot.value.update.giveUpReason === 'no_update'
+        ? 'diagnostics.values.updateUrgentUnavailable'
+        : 'diagnostics.values.updateUrgentGaveUp',
+      { version: minimum ?? '' },
+    )
   }
   return pending
     ? t('diagnostics.values.updatePending', { start: window.start, end: window.end })

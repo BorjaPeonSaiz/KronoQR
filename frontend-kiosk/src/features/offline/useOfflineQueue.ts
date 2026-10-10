@@ -35,6 +35,7 @@ import { createScanQueue } from './application/scanQueue'
 import type { SyncDiagnostic, SyncRunner } from './application/syncRunner'
 import { createSyncRunner } from './application/syncRunner'
 import { canApplyUpdate } from './domain/updateWindow'
+import { holdInteraction, interactionInProgress } from './application/interactionGuard'
 import { createDexieQueueStorage, openKioskDatabase } from './infrastructure/dexieStorage'
 
 export interface OfflineQueueController {
@@ -87,6 +88,8 @@ export interface OfflineQueueController {
   telemetry(appVersion: string): KioskTelemetrySnapshot
   /** Puerta del paso 11: una version nueva no se aplica en un cambio de turno. */
   canUpdateNow(now?: Date, urgent?: boolean): boolean
+  /** `true` cuando la cola ya se ha LEIDO al menos una vez: antes, sus cifras son las iniciales, no un hecho. */
+  queueKnown(): boolean
   wakeNow(): void
   dispose(): Promise<void>
 }
@@ -184,6 +187,17 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
     document.addEventListener('visibilitychange', wake)
   }
 
+  // La primera lectura de la cola. Hasta que termina, `stats()` son los valores
+  // iniciales (vacia, durable) y NO prueban nada: la puerta de actualizacion
+  // no puede fiarse de ellos. Si la lectura falla se queda en «no se sabe».
+  let queueRead = false
+  void queue.refresh().then(
+    () => {
+      queueRead = true
+    },
+    () => {},
+  )
+
   runner.start()
   // OJO: el aviso solo sale DESPUES de `refresh()`, no tras `load()` a secas.
   // `load()` es una lectura de disco que en un dispositivo recien emparejado
@@ -208,7 +222,11 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       // senal de «esta tablet esta en uso ahora mismo».
       submit: (scan) => {
         storeLastScanAt(scan.occurred_at)
-        return runner.submit(scan)
+        // Envio en curso = interaccion en curso (RF-KI-07): la puerta se cierra
+        // hasta que el fichaje esta encolado y resuelto, aunque `lastScanAt` ya diga
+        // «reciente» o el ajuste de silencio valga 0.
+        const release = holdInteraction('submit')
+        return runner.submit(scan).finally(release)
       },
     },
     roster: roster.port,
@@ -265,16 +283,22 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
       }
     },
 
+    queueKnown: () => queueRead,
+
     canUpdateNow(now = new Date(), urgent = false) {
       const lastScanAtIso = readLastScanAt()
+      const stats = queue.stats()
       return canApplyUpdate({
         now,
         // Con el disco sin ver cuentan las filas de memoria: son las que un
         // reinicio (la actualizacion) perderia.
-        pendingScans: pendingOf(queue.stats()),
-        // Urgente: nunca con la cola en memoria (ADR-047), aunque ahora este vacia.
-        urgent,
-        queueDurable: queue.stats().durable,
+        pendingScans: pendingOf(stats),
+        // Urgente con la cola en memoria (ADR-047): se evalua como NO urgente, con
+        // su ventana. Asi una tablet con IndexedDB roto aun puede recibir, dentro de
+        // la franja, la version que lo arregle; nunca a cualquier hora.
+        urgent: urgent && stats.durable,
+        queueKnown: queueRead,
+        interactionInProgress: interactionInProgress(),
         lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
         window: readUpdateWindow(),
         quietMinutes: readUpdateQuietMinutes(),
@@ -312,19 +336,34 @@ export function getOfflineQueueController(options: OfflineQueueOptions): Offline
 }
 
 /**
- * Fichajes sin sincronizar, sin abrir nada. Devuelve `0` si la cola todavia no
- * se ha montado: en ese caso no hay ninguna, y decir otra cosa seria inventar.
- * La usa la puerta de actualizacion del service worker desde `main.ts`.
+ * LA puerta de actualizacion de la tablet (la que usa `main.ts` y la que prueban
+ * las unitarias: `OfflineQueueController.canUpdateNow`). Sin controlador montado:
+ * en modo normal hay via libre (ninguna pantalla de fichaje abierta, y una cola
+ * duradera sobrevive a la recarga); en URGENTE no se sabe nada de la cola, y no
+ * saber es no.
  */
-/**
- * `false` si la cola corre en memoria o sin almacen (ADR-047). La necesita el
- * modo urgente: con la cola en memoria NUNCA se recarga, aunque parezca vacia.
- * Sin controlador montado no hay cola que perder: `true`.
- */
-export function queueIsDurable(): boolean {
-  return singleton?.stats().durable ?? true
+export function canUpdateNowGlobal(urgent: boolean, now: Date = new Date()): boolean {
+  if (singleton === null) {
+    if (urgent) return false
+    const lastScanAtIso = readLastScanAt()
+    return canApplyUpdate({
+      now,
+      pendingScans: 0,
+      interactionInProgress: interactionInProgress(),
+      lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
+      window: readUpdateWindow(),
+      quietMinutes: readUpdateQuietMinutes(),
+    })
+  }
+  return singleton.canUpdateNow(now, urgent)
 }
 
+/**
+ * Fichajes sin sincronizar, sin abrir nada. Devuelve `0` si la cola todavia no
+ * se ha montado (la usa `DiagnosticsView`, que solo informa). NO es la puerta de
+ * actualizacion: esa es `canUpdateNowGlobal`, que no confunde «sin controlador»
+ * con «cola vacia».
+ */
 export function pendingScanCount(): number {
   const stats = singleton?.stats()
   return stats === undefined ? 0 : pendingOf(stats)

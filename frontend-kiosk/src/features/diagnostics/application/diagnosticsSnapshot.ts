@@ -13,7 +13,7 @@
 import type { CameraState } from '@/features/scan/composables/useCamera'
 import type { QueueStorageKind } from '@/features/offline/application/scanQueue'
 import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
-import type { UrgentUpdateMode } from '@/features/offline/domain/minimumVersion'
+import type { UrgentGiveUpMotive, UrgentUpdateMode } from '@/features/offline/domain/minimumVersion'
 
 /**
  * Umbral del paso 4 de la tarea (doc 02, decision de la 3.3): por debajo de
@@ -113,6 +113,8 @@ export interface DiagnosticsSources {
     readonly urgentState: UrgentUpdateMode
     /** Nucleo `X.Y.Z` de la ultima minima recibida, o `null` si el servidor no la declara. */
     readonly minimumVersion: string | null
+    /** Por que se rindio el modo urgente (`gave_up`); `null` si no se ha rendido. */
+    readonly giveUpReason: UrgentGiveUpMotive | null
   }
 }
 

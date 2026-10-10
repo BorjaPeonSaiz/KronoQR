@@ -15,6 +15,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RegisterSWLoader } from '@/sw/registerServiceWorker'
 import { isUpdatePending, registerServiceWorker } from '@/sw/registerServiceWorker'
+import { MAX_URGENT_CHECKS_WITHOUT_UPDATE } from '@/features/offline/domain/minimumVersion'
+import {
+  currentUrgentGiveUpMotive,
+  currentUrgentUpdateMode,
+  notifyMinimumAppVersionReceived,
+  onMinimumAppVersionReceived,
+  recordUrgentUpdateCheck,
+  resetUrgentUpdateChecks,
+  resetUrgentUpdateSession,
+} from '@/shared/telemetry/urgentUpdate'
 
 /**
  * jsdom NO IMPLEMENTA `navigator.serviceWorker` (comprobado: `'serviceWorker'
@@ -394,6 +404,67 @@ describe('registro del service worker', () => {
       expect(onUrgentAttempt).not.toHaveBeenCalled()
 
       registration.dispose()
+    })
+
+    describe('minima inalcanzable: sin version nueva que recargar (R2)', () => {
+      const KEYS = ['kronoqr.kiosk.minimum_app_version', 'kronoqr.kiosk.urgent_update_attempts']
+      beforeEach(() => {
+        for (const key of KEYS) localStorage.removeItem(key)
+        resetUrgentUpdateSession()
+        localStorage.setItem('kronoqr.kiosk.minimum_app_version', '999.0.0')
+      })
+      afterEach(() => {
+        for (const key of KEYS) localStorage.removeItem(key)
+        resetUrgentUpdateSession()
+      })
+
+      function wired(update: () => Promise<void>, onUrgentGaveUp: () => void) {
+        return registerServiceWorker({
+          urgentState: currentUrgentUpdateMode,
+          onUrgentCheckEmpty: recordUrgentUpdateCheck,
+          onUrgentUpdateFound: resetUrgentUpdateChecks,
+          onUrgentGaveUp,
+          subscribeUrgent: onMinimumAppVersionReceived,
+          loadRegisterSW: loaderWithRegistration(update),
+        })
+      }
+
+      it('tras 6 comprobaciones resueltas sin version nueva se rinde, reporta UNA vez y no vuelve a preguntar', async () => {
+        vi.useFakeTimers()
+        const update = vi.fn(() => Promise.resolve())
+        const onUrgentGaveUp = vi.fn()
+        const registration = await wired(update, onUrgentGaveUp)
+
+        for (let minute = 0; minute < 40; minute += 1) {
+          await vi.advanceTimersByTimeAsync(60_000)
+          notifyMinimumAppVersionReceived()
+        }
+
+        expect(update).toHaveBeenCalledTimes(MAX_URGENT_CHECKS_WITHOUT_UPDATE)
+        expect(currentUrgentUpdateMode()).toBe('gave_up')
+        expect(currentUrgentGiveUpMotive()).toBe('no_update')
+        expect(onUrgentGaveUp).toHaveBeenCalledTimes(1)
+
+        registration.dispose()
+      })
+
+      it('una comprobacion que falla por red no cuenta: sin conexion no se rinde', async () => {
+        vi.useFakeTimers()
+        const update = vi.fn(() => Promise.reject(new Error('offline')))
+        const onUrgentGaveUp = vi.fn()
+        const registration = await wired(update, onUrgentGaveUp)
+
+        for (let minute = 0; minute < 60; minute += 1) {
+          await vi.advanceTimersByTimeAsync(60_000)
+          notifyMinimumAppVersionReceived()
+        }
+
+        expect(update.mock.calls.length).toBeGreaterThan(MAX_URGENT_CHECKS_WITHOUT_UPDATE)
+        expect(currentUrgentUpdateMode()).toBe('urgent')
+        expect(onUrgentGaveUp).not.toHaveBeenCalled()
+
+        registration.dispose()
+      })
     })
 
     it('rendido: vuelve a la cadencia normal (no pregunta de golpe) y lo reporta UNA vez', async () => {

@@ -80,6 +80,13 @@ export interface RegisterServiceWorkerOptions {
   readonly onUrgentAttempt?: () => void
   /** El modo urgente se ha rendido (minima inalcanzable tras N intentos). Una vez por arranque. */
   readonly onUrgentGaveUp?: () => void
+  /**
+   * Una comprobacion urgente se ha RESUELTO sin que hubiera version pendiente
+   * (debe anotarse de forma persistente: es la mitad del corte del bucle).
+   */
+  readonly onUrgentCheckEmpty?: () => void
+  /** Ha aparecido una version pendiente: las comprobaciones en vacio dejan de contar. */
+  readonly onUrgentUpdateFound?: () => void
   /** Aviso de que el latido ha dejado una version minima. Devuelve la baja. */
   readonly subscribeUrgent?: (listener: () => void) => () => void
   /** Cada cuanto se comprueba si hay una version nueva publicada. 60 min de serie. */
@@ -224,7 +231,17 @@ export async function registerServiceWorker(
     const now = Date.now()
     if (lastUrgentCheckAt !== null && now - lastUrgentCheckAt < URGENT_CHECK_MIN_INTERVAL_MS) return
     lastUrgentCheckAt = now
-    void registration.update().catch(() => {})
+    // Solo cuenta una comprobacion que SE RESUELVE (una tablet sin red no se rinde
+    // por no poder preguntar). Si tras ella no hay version pendiente, es un
+    // intento en vacio; al acumular varios, la minima se da por inalcanzable.
+    void registration
+      .update()
+      .then(() => {
+        if (pending) return
+        options.onUrgentCheckEmpty?.()
+        handleUrgentSignal()
+      })
+      .catch(() => {})
   }
 
   try {
@@ -233,6 +250,7 @@ export async function registerServiceWorker(
       immediate: true,
       onNeedRefresh() {
         pending = true
+        options.onUrgentUpdateFound?.()
         options.onUpdateAvailable?.()
         startRetryTimer()
       },
