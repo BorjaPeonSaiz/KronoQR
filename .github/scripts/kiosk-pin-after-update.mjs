@@ -14,6 +14,12 @@
 // un navegador NUEVO contra un build y una CSP, nunca un navegador que ya
 // estaba abierto cuando cambio el servidor.
 //
+// ALCANCE EN ⑧b. La version anterior de este escenario es >= 2.2.0, que ya sirve
+// `wasm-unsafe-eval`: aqui no se reproduce la CSP de la 2.1.0 (eso lo cubre
+// `frontend-kiosk/tests/e2e/kiosk-upgrade.spec.ts`). Lo que se caza es la
+// compatibilidad de una PWA YA EN CACHE (token, roster, Service Worker y sus
+// cabeceras) con el servidor nuevo despues de `update.sh`.
+//
 // FASES (el estado entre ellas es un PERFIL PERSISTENTE de Chromium: token en
 // localStorage, roster en IndexedDB y Service Worker con su cache, que es lo
 // que conserva una tablet entre dos dias):
@@ -41,6 +47,8 @@
 // el navegador NO esta abierto durante `update.sh`: se cierra y se reabre con
 // su perfil, que es lo que importa (cache y token), no el proceso.
 //
+// El quiosco vive en /kiosk/. La hora local del navegador se fija a las 11:00 con la zona
+// horaria (no con el reloj), fuera de la ventana de actualizacion 03:00-05:00.
 // Los PIN viajan por un fichero 0600 y NUNCA se imprimen.
 //
 // Entorno:
@@ -56,6 +64,26 @@ import { join } from 'node:path'
 const PHASE = process.argv[2]
 const STATE_DIR = process.env.KQ_KIOSK_STATE_DIR
 const BASE_URL = process.env.KQ_KIOSK_BASE_URL ?? 'https://kronoqr.ci.local'
+// El quiosco vive en /kiosk/ (infra/docker/nginx/extra/spa.conf), no en la raiz: con
+// `baseURL` + `goto('/')` se perdia el prefijo y se pedia la raiz del borde.
+const KIOSK_URL = new URL('/kiosk/', BASE_URL).toString()
+const PAIR_PATH = '/kiosk/pair'
+
+// La ventana de actualizacion de la tablet (03:00-05:00 por defecto,
+// `updateWindow.ts`) se evalua con la HORA LOCAL del navegador. Si la CI cayera
+// en ella, la PWA podria recargarse sola a mitad del fichaje. En vez de falsear
+// el reloj (`page.clock` desfasaria `occurred_at` frente al servidor y daria
+// incidencias de desfase), se elige la ZONA HORARIA del navegador que deja la
+// hora local en las 11:00 con el reloj real: sin timers falsos ni desfase.
+function timezoneAtEleven() {
+  const utcHour = new Date().getUTCHours()
+  let offset = 11 - utcHour
+  if (offset > 12) offset -= 24
+  if (offset < -12) offset += 24
+  if (offset === 0) return 'UTC'
+  return `Etc/GMT${offset > 0 ? '-' : '+'}${Math.abs(offset)}`
+}
+
 
 if (!['before', 'after'].includes(PHASE ?? '') || !STATE_DIR) {
   console.error('uso: KQ_KIOSK_STATE_DIR=DIR kiosk-pin-after-update.mjs before|after')
@@ -121,8 +149,7 @@ async function launch() {
     permissions: ['camera'],
     viewport: { width: 1280, height: 800 },
     locale: 'es-ES',
-    timezoneId: 'Europe/Madrid',
-    baseURL: BASE_URL,
+    timezoneId: timezoneAtEleven(),
   })
 }
 
@@ -179,7 +206,7 @@ async function runBefore(context) {
   await cspViolationsToConsole(page)
 
   begin('before · 1 · pedir el codigo de emparejamiento')
-  await page.goto('/')
+  await page.goto(KIOSK_URL)
   await page.getByTestId('pairing-code').waitFor({ state: 'visible', timeout: 30_000 })
   const code = ((await page.getByTestId('pairing-code').textContent()) ?? '').replace(/\D/g, '')
   if (!/^\d{6}$/.test(code)) fail(`el codigo de emparejamiento no son seis digitos: «${code}»`)
@@ -189,7 +216,7 @@ async function runBefore(context) {
   log('codigo pedido y entregado al script de shell')
 
   begin('before · 2 · recoger el token y llegar a la pantalla de fichaje')
-  await page.waitForURL((url) => !url.pathname.endsWith('/pair'), { timeout: 90_000 })
+  await page.waitForURL((url) => url.pathname !== PAIR_PATH, { timeout: 90_000 })
   await waitForPinEntry(page, 'before')
   const token = await page.evaluate(() => localStorage.getItem('kronoqr.kiosk.device_token'))
   if (!token) fail('el quiosco no guardo el token del emparejamiento')
@@ -215,12 +242,22 @@ async function runAfter(context) {
   await cspViolationsToConsole(page)
 
   begin('after · 1 · reabrir el quiosco tras actualizar: sigue emparejado')
-  const response = await page.goto('/')
+  const response = await page.goto(KIOSK_URL)
   const csp = response?.headers()['content-security-policy'] ?? '(sin cabecera)'
-  console.log(`  documento servido: ${response?.status()} ${response?.fromServiceWorker() ? '(del Service Worker)' : '(de la red)'}`)
+  if (!response?.fromServiceWorker()) {
+    fail(
+      'after: el documento no salio del Service Worker, asi que la tablet no estaba sirviendo su PWA de cache y la prueba ' +
+        'no reproduce lo que dice. Si el Service Worker no controla la pagina, mira la fase before (paso 3).',
+    )
+  }
+  console.log('  documento servido por el Service Worker (cache de la version anterior)')
   console.log(`  script-src del documento: ${(csp.match(/script-src[^;]*/) ?? ['(ninguna)'])[0]}`)
+  // El guard del router decide en el cliente: se espera a que muestre una de las dos pantallas.
+  await page.getByTestId('pin-entry-link').or(page.getByTestId('pairing-code')).first().waitFor({ state: 'visible', timeout: 45_000 })
+  if (new URL(page.url()).pathname === PAIR_PATH) {
+    fail('after: el quiosco volvio a la pantalla de emparejamiento tras actualizar (el token ya no vale)')
+  }
   await waitForPinEntry(page, 'after')
-  if (page.url().endsWith('/pair')) fail('after: el quiosco volvio a la pantalla de emparejamiento tras actualizar')
   log('sigue emparejado y ofrece el PIN')
 
   begin('after · 2 · fichaje por PIN desde lo que la tablet tenia en cache')
@@ -234,7 +271,7 @@ async function runAfter(context) {
     for (const key of await caches.keys()) await caches.delete(key)
   })
   diagnostics.length = 0
-  const fresh = await page.goto('/')
+  const fresh = await page.goto(KIOSK_URL)
   if (fresh?.fromServiceWorker()) fail('after: tras desregistrar, el documento sigue saliendo del Service Worker')
   await waitForPinEntry(page, 'after (build nuevo)')
   const cspAfter = fresh?.headers()['content-security-policy'] ?? ''

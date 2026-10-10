@@ -89,31 +89,9 @@ STEP=""
 
 # --- utilidades --------------------------------------------------------------
 
-step() {
-  STEP="$1"
-  printf '\n=== %s\n' "${STEP}"
-}
-
-fail() {
-  printf '\nFALLO en «%s»: %s\n' "${STEP}" "$*" >&2
-  exit 1
-}
-
-ok() {
-  printf '  ok · %s\n' "$*"
-}
-
-as_root() {
-  if [ -n "${SUDO}" ]; then
-    "${SUDO}" "$@"
-  else
-    "$@"
-  fi
-}
-
-dc() {
-  as_root docker compose --env-file "${PKG}/.env" -f "${PKG}/docker-compose.yml" "$@"
-}
+# step, fail, ok, as_root, dc, api, expect_status, wait_ready, totp y seed_admin_and_site.
+# shellcheck source=.github/scripts/lib/ci-api.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/lib/ci-api.sh"
 
 # Valor de una clave del .env (0600 de root: por eso con sudo).
 env_value() {
@@ -122,39 +100,6 @@ env_value() {
 
 sql() {
   dc exec -T postgres psql -U fichaje_migrator -d fichaje -Atqc "$1"
-}
-
-# api METODO RUTA [CUERPO_JSON] -> codigo HTTP; el cuerpo queda en ${WORK}/body.
-api() {
-  local method="$1" path="$2" data="${3:-}"
-  local -a args=(-sS -k -o "${WORK}/body" -D "${WORK}/headers" -w '%{http_code}'
-    -X "${method}" -H 'Accept: application/json')
-  [ -z "${TOKEN}" ] || args+=(-H "Authorization: Bearer ${TOKEN}")
-  [ -z "${data}" ] || args+=(-H 'Content-Type: application/json' --data "${data}")
-  curl "${args[@]}" "${BASE_URL}${path}"
-}
-
-expect_status() {
-  local expected="$1" actual="$2" what="$3"
-  [ "${actual}" = "${expected}" ] ||
-    fail "${what}: se esperaba ${expected} y fue ${actual}. Cuerpo: $(head -c 600 "${WORK}/body" 2>/dev/null)"
-}
-
-wait_ready() {
-  local code=""
-  for _ in $(seq 1 60); do
-    code="$(curl -sk -o /dev/null -w '%{http_code}' "${BASE_URL}/api/v1/ready" || true)"
-    [ "${code}" = "200" ] && return 0
-    sleep 2
-  done
-  fail "la API no responde 200 en /api/v1/ready tras 120 s (ultimo: ${code})"
-}
-
-totp() {
-  # shellcheck disable=SC2016 # `$argv` es de PHP, no del shell.
-  dc exec -T app php -r \
-    'require "vendor/autoload.php"; echo (new PragmaRX\Google2FA\Google2FA())->getCurrentOtp($argv[1]);' \
-    "$1"
 }
 
 export_status() {
@@ -224,22 +169,7 @@ set_env_key() {
 step "1 · Exportacion integra pedida por la API: genera horizon, descarga app"
 
 wait_ready
-password="Kq-e2e-$(openssl rand -hex 12)-A1!"
-code="$(api POST /api/v1/setup/administrator \
-  "$(jq -nc --arg p "${password}" '{name: "Administracion CI", email: "admin@kronoqr.ci.local", password: $p, locale: "es", device_name: "e2e ficheros generados"}')")"
-expect_status 201 "${code}" "POST /api/v1/setup/administrator"
-TOKEN="$(jq -er '.challenge_token' "${WORK}/body")"
-code="$(api POST /api/v1/auth/2fa/enrol)"
-expect_status 200 "${code}" "POST /api/v1/auth/2fa/enrol"
-secret="$(jq -er '.secret // .data.secret' "${WORK}/body")"
-code="$(api POST /api/v1/auth/2fa/confirm "$(jq -nc --arg c "$(totp "${secret}")" '{code: $c}')")"
-expect_status 200 "${code}" "POST /api/v1/auth/2fa/confirm"
-TOKEN="$(jq -er '.token // .data.token' "${WORK}/body")"
-ok "sesion de admin con segundo factor"
-# El centro, como el segundo paso del asistente: sin el, la retencion no tiene
-# zona horaria con la que calcular el corte.
-code="$(api POST /api/v1/setup/site '{"name": "Hotel CI", "timezone": "Europe/Madrid"}')"
-expect_status 201 "${code}" "POST /api/v1/setup/site"
+seed_admin_and_site "e2e ficheros generados"
 
 first="$(request_export)"
 wait_export "${first}"

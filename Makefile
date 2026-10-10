@@ -78,6 +78,7 @@ SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/observability/alertmanager/*.sh) \
             $(wildcard infra/observability/prometheus/*.sh) \
             $(wildcard .github/scripts/*.sh) \
+            $(wildcard .github/scripts/lib/*.sh) \
             $(wildcard load-tests/k6/*.sh)
 
 # Versiones fijadas de las herramientas de shell. Se declaran aqui, y no en el
