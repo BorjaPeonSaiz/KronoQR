@@ -599,11 +599,7 @@ enum SettingKey: string
                 '03:00-05:00', 11, SettingImpact::PRESENTATION, KioskUpdateWindow::SHAPE,
             ),
             // Cero es legitimo: apaga la guarda de silencio y deja mandar a la
-            // franja y a la cola vacia. En la actualizacion urgente (2.2.1, la
-            // tablet por detras de la version del servidor) no hay franja que
-            // mande, asi que la tablet aplica un minimo de 2 minutos aunque
-            // valga 0: la guarda de silencio es entonces lo unico que la separa
-            // de recargar con alguien delante. El maximo son dos horas, porque una
+            // franja y a la cola vacia. El maximo son dos horas, porque una
             // guarda mayor que la ventana de serie la dejaria cerrada para
             // siempre en un hotel con actividad de madrugada.
             self::KIOSK_UPDATE_QUIET_MINUTES->value => SettingDefinition::integer(
