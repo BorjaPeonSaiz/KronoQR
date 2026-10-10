@@ -376,6 +376,8 @@ Y por cada punto de fichaje: una **tablet Android** con soporte de pared o mesa,
 
 > **Qué es el "modo quiosco".** Es una función estándar de Android, no algo propio de KronoQR: la tablet queda **fijada en una sola aplicación**. No muestra escritorio, no deja salir a los ajustes ni a otras apps, y vuelve sola a la pantalla de fichaje si se reinicia o se va la luz. Se configura una vez, al montar la tablet, y es lo que evita que el dispositivo acabe usado para ver vídeos o que alguien salga de la aplicación sin querer y el siguiente empleado no encuentre dónde fichar.
 
+**De dónde sale el software.** El paquete de instalación se descarga, público y sin cuenta, de la página de versiones del producto (<https://github.com/BorjaPeonSaiz/KronoQR/releases>), junto con un fichero de sumas de comprobación (`SHA256SUMS`) con el que el equipo de IT confirma, con una sola orden, que llegó entero. Se instala siempre la versión más reciente de la serie vigente, nunca una marcada como «no usar». Si el servidor no tiene salida a internet, se descarga desde otro equipo y se copia. **La licencia no viaja en el paquete**: se envía aparte al hotel (punto 10.5), y la instalación se puede completar antes de tenerla.
+
 Un servidor de estas características cubre 500 empleados y 10 tablets con holgura, y el diseño soporta diez veces ese volumen sin cambios. Esto es capacidad técnica: el número de empleados y de tablets contratado lo fija la licencia (punto 10.5).
 
 ### 10.2 Puesta en marcha

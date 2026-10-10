@@ -36,6 +36,27 @@ del paquete, `versions.txt`; no se edita.
 
 ## 2. Preparar la actualización (5 minutos, sin tocar nada)
 
+**Antes: descarga el paquete nuevo y compruébalo.** Se descarga, público, de
+<https://github.com/BorjaPeonSaiz/KronoQR/releases>: elige la versión más
+reciente de tu serie (hoy, la última `v2.2.x`), **nunca** una cuyo título o
+notas digan «no usar» ni una marcada como *Pre-release*. Lee sus notas: dicen si
+la versión exige algo antes de actualizar. Hay que bajar dos ficheros de su
+apartado *Assets*, `kronoqr-<versión>.tar.gz` y `SHA256SUMS`, en `/opt`:
+
+```bash
+cd /opt
+curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/kronoqr-2.2.0.tar.gz
+curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+```
+
+La última orden tiene que decir `kronoqr-2.2.0.tar.gz: OK`; con `FAILED`, no lo
+descomprimas y vuelve a descargarlo. Si el servidor no tiene salida a internet,
+descárgalos desde otro equipo y cópialos a `/opt` (`scp`, WinSCP o un USB). **La
+licencia no cambia al actualizar** y no viaja en el paquete: la que tienes
+activada sigue valiendo; si tu proveedor te envía una nueva, se activa aparte con
+`license:activate` ([`instalacion.md`](../cliente/instalacion.md) §4).
+
 1. **Descomprime el paquete nuevo AL LADO del actual, nunca encima.**
 
    ```bash

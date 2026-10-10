@@ -101,18 +101,55 @@ que también cubre el emparejamiento de la primera tablet.
 
 ## 1. El procedimiento, de principio a fin
 
-### 1.1 Descomprime el paquete
+### 1.1 Descarga, comprueba y descomprime el paquete
 
-El paquete llega como `kronoqr-<versión>.tar.gz` junto con un fichero
-`SHA256SUMS`. Con los dos en la misma carpeta, comprueba primero que el paquete
-llegó entero:
+**El paquete se descarga, público, de la página de versiones:**
+<https://github.com/BorjaPeonSaiz/KronoQR/releases>. No hace falta cuenta ni
+contraseña. **La licencia no está ahí**: te la envía tu proveedor aparte (§4).
+
+**Qué versión elegir.** La más reciente de la serie `v2.2.x` (en esta guía, los
+ejemplos usan la `2.2.0`; escribe la que hayas elegido). **Nunca** una cuyo
+título o notas digan «no usar», ni una marcada como *Pre-release*: no son para
+instalaciones de cliente.
+
+De cada versión necesitas dos ficheros, que están en su apartado *Assets*:
+
+| Fichero | Qué es |
+| --- | --- |
+| `kronoqr-<versión>.tar.gz` | El paquete de instalación |
+| `SHA256SUMS` | Las sumas para comprobar que llegó entero |
+
+El tercero, `kronoqr-<versión>.cdx.json`, es la lista de componentes del
+producto (SBOM): no hace falta para instalar.
+
+Desde el servidor, en una carpeta de trabajo:
+
+```bash
+curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/kronoqr-2.2.0.tar.gz
+curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS
+```
+
+> **Si el servidor no tiene salida a internet**, descarga los dos ficheros
+> desde otro equipo con el navegador y cópialos a la misma carpeta del servidor
+> (`scp`, WinSCP o un USB). Basta con eso: la instalación no necesita GitHub.
+
+Con los dos en la misma carpeta, comprueba que el paquete llegó entero:
 
 ```bash
 sha256sum -c --ignore-missing SHA256SUMS
 ```
 
 Tiene que decir `kronoqr-2.2.0.tar.gz: OK`. Si dice `FAILED`, no lo
-descomprimas: vuelve a descargarlo o pide otro al fabricante.
+descomprimas: bórralo y vuelve a descargarlo; si vuelve a fallar, avisa a tu
+proveedor. Si dice `no properly formatted checksum lines found`, lo que
+descargaste como `SHA256SUMS` es una página web y no el fichero: descárgalo de
+nuevo desde *Assets*. `--ignore-missing` está para que no se queje del SBOM si
+no lo has descargado.
+
+> Esta suma prueba que el paquete no se corrompió por el camino. Las sumas
+> viajan en la misma página que el paquete, así que no prueban por sí solas
+> quién lo publicó: descárgalo siempre de la dirección de arriba, nunca de una
+> copia reenviada.
 
 ```bash
 tar xzf kronoqr-2.2.0.tar.gz
