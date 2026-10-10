@@ -1726,3 +1726,21 @@ it('entrega el relevo del token del quiosco en el latido, opcional y con solo va
         ->and(Contract::text('paths', '/api/v1/kiosk/heartbeat', 'post', 'description'))
         ->toContain('IDENTITY_DEVICE_TOKEN_OVERLAP_HOURS');
 })->group('RF-ID-04', 'RQ-06');
+
+it('anuncia la version minima de la PWA en el latido, opcional, no anulable y SemVer', function (): void {
+    // RF-KI-07, RF-PA-07 (2.2.1). El servidor la OMITE si no resuelve su version
+    // —nunca la manda a `null`—, asi que fuera de `required` y con un solo tipo.
+    // El patron es el SemVer de `app_version`: una tablet anterior a la 2.2.1
+    // lo ignora y la nueva lo compara con su `APP_VERSION`.
+    $schema = ['components', 'schemas', 'KioskHeartbeat'];
+    $field = [...$schema, 'properties', 'minimum_app_version'];
+
+    expect(Contract::value(...[...$schema, 'required']))->not->toContain('minimum_app_version')
+        ->and(Contract::value(...[...$field, 'type']))->toBe('string')
+        ->and(Contract::value(...[...$field, 'pattern']))->toBe('^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$')
+        ->and(Contract::text(...[...$field, 'description']))->toContain('nunca lo manda a')
+        // Anuncia el nucleo, no la version completa de `/health/live`.
+        ->and(Contract::text(...[...$field, 'description']))->toContain('nucleo `X.Y.Z`')
+        ->and(preg_match('/'.Contract::text(...[...$field, 'pattern']).'/', '2.2.1'))->toBe(1)
+        ->and(preg_match('/'.Contract::text(...[...$field, 'pattern']).'/', 'latest'))->toBe(0);
+})->group('RF-KI-07', 'RF-PA-07', 'RQ-06');

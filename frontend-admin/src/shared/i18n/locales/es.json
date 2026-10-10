@@ -2024,7 +2024,8 @@
         "revoked": "Desvinculado: ya no cuenta para nada.",
         "battery_low": "Batería baja y sin cargar.",
         "queue_storage_degraded": "La cola de la tablet ha caído a memoria: no hay garantía de que sus fichajes sobrevivan a un reinicio.",
-        "discards_unreported": "La tablet ha descartado fichajes y aún no ha podido avisar al servidor."
+        "discards_unreported": "La tablet ha descartado fichajes y aún no ha podido avisar al servidor.",
+        "app_version_behind": "Aplicación desactualizada: la tablet corre una versión anterior a la del servidor."
       },
       "whatToDoHeading": "Qué hacer",
       "whatToDo": {
@@ -2037,7 +2038,8 @@
         "revoked": "Este quiosco está desvinculado: no hace falta ninguna acción.",
         "battery_low": "Revisa el cargador: la tablet tiene la batería baja y no está cargando.",
         "queue_storage_degraded": "Fallo: no se sabe cuántos fichajes pendientes hay. No reinicies ni desvincules la tablet; abre su pantalla de diagnóstico, comprueba el almacenamiento y sigue el runbook «Cola offline atascada» (docs/runbooks/cola-offline-atascada.md).",
-        "discards_unreported": "Aviso: hay fichajes que la tablet descartó y el servidor aún no conoce. Mantén la tablet con red; si el aviso persiste, mira su lista de descartes en la pantalla de diagnóstico y sigue el runbook «Cola offline atascada» (docs/runbooks/cola-offline-atascada.md)."
+        "discards_unreported": "Aviso: hay fichajes que la tablet descartó y el servidor aún no conoce. Mantén la tablet con red; si el aviso persiste, mira su lista de descartes en la pantalla de diagnóstico y sigue el runbook «Cola offline atascada» (docs/runbooks/cola-offline-atascada.md).",
+        "app_version_behind": "El fichaje no se ve afectado: la tablet sigue registrando con normalidad. Una tablet 2.2.1 o posterior se pone al día sola en la franja de actualización (KIOSK_UPDATE_WINDOW, de 03:00 a 05:00 de serie; se cambia en Ajustes operativos) con la cola vacía y sin fichajes recientes; si hace falta antes, mueve esa franja. Una tablet que declara 2.2.0 o anterior (o 0.0.0) no se actualiza sola: desregistra su service worker (en Chrome, chrome://serviceworker-internals, o F12 → Application → Service workers → Unregister) SOLO con la tablet con red, con «Fichajes sin sincronizar» a 0 y sin el aviso «Cola solo en memoria» en esta pantalla, porque con la cola en memoria recargar borra los fichajes no enviados. Y SIN borrar los datos del sitio: contienen la cola de fichajes y el emparejamiento."
       }
     },
     "battery": {
@@ -2402,6 +2404,9 @@
       "context": "Datos técnicos",
       "notApplicable": "No aplica",
       "whatToDoHeading": "Qué hacer"
+    },
+    "whatToDoByCode": {
+      "kioskPinSealFailed": "La tablet no puede cifrar el PIN para enviarlo, así que no puede validar fichajes con PIN. Casi siempre es una tablet con una versión antigua de la aplicación (le falta el permiso de seguridad para el cifrado) o un navegador donde el cifrado no arranca. Mira la versión de esa tablet en Quioscos: si aparece «Aplicación desactualizada», sigue el «Qué hacer» de esa tablet. Si la versión es la actual, contacta con soporte con el identificador de traza (trace_id). Los fichajes con QR siguen funcionando."
     },
     "whatToDo": {
       "api": {

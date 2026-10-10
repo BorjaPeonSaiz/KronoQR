@@ -61,6 +61,35 @@ describe('whatToDoKey', () => {
   })
 })
 
+describe('whatToDoKey por codigo (RF-PA-07, RF-KI-07)', () => {
+  it('un codigo con texto propio gana sobre el generico de origen y nivel', () => {
+    const key = whatToDoKey('kiosk', 'critical', 'kiosk.pin.seal_failed')
+
+    expect(key).toBe('errorEvents.whatToDoByCode.kioskPinSealFailed')
+    expect(es.errorEvents.whatToDoByCode.kioskPinSealFailed).toContain('Qué hacer')
+    expect(es.errorEvents.whatToDoByCode.kioskPinSealFailed).not.toBe(
+      es.errorEvents.whatToDo.kiosk.critical,
+    )
+    expect(en.errorEvents.whatToDoByCode.kioskPinSealFailed).toBeTruthy()
+  })
+
+  it('el texto de seal_failed remite a la version de la tablet y a «Aplicación desactualizada»', () => {
+    expect(es.errorEvents.whatToDoByCode.kioskPinSealFailed).not.toContain('Unregister')
+    expect(es.errorEvents.whatToDoByCode.kioskPinSealFailed).toContain('QR siguen funcionando')
+    expect(es.errorEvents.whatToDoByCode.kioskPinSealFailed).toContain('Quioscos')
+    expect(es.errorEvents.whatToDoByCode.kioskPinSealFailed).toContain(
+      es.devices.health.reason.app_version_behind.split(':')[0],
+    )
+  })
+
+  it('un codigo sin texto propio, o sin codigo, cae en el generico', () => {
+    expect(whatToDoKey('kiosk', 'critical', 'kiosk.camera.unavailable')).toBe(
+      'errorEvents.whatToDo.kiosk.critical',
+    )
+    expect(whatToDoKey('kiosk', 'error')).toBe('errorEvents.whatToDo.kiosk.error')
+  })
+})
+
 describe('periodBounds', () => {
   const nowMs = Date.parse('2026-09-09T08:00:00.000Z')
 

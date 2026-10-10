@@ -46,6 +46,9 @@ uses(RefreshDatabase::class);
 beforeEach(function (): void {
     WorkforceFixtures::site('Hotel sin licencia', 'Europe/Madrid');
     LicenseKeys::install();
+    // La version del servidor, fijada a la que declaran los quioscos del
+    // fichero: el aviso de aplicacion desfasada (2.2.1) se prueba aparte.
+    config()->set('app.version', '2.2.0');
 });
 
 /**

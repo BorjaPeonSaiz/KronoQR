@@ -10,6 +10,7 @@ use App\Modules\Kiosk\Domain\ValueObject\KioskHealthRow;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthVerdict;
 use App\Modules\Kiosk\Domain\ValueObject\ProvisionedDevice;
+use Tests\Support\Shared\FixedDeployedVersion;
 use Tests\Support\Time\FixedClock;
 
 /*
@@ -57,13 +58,14 @@ function quioscoDePrueba(
     ?string $pairedAt = '2026-09-09 08:00:00',
     ?int $batteryLevel = null,
     ?bool $batteryCharging = null,
+    ?string $appVersion = '1.4.0',
 ): DeviceSummary {
     return new DeviceSummary(
         id: 1,
         uuid: '0199a1f0-0000-7000-8000-00000000000'.substr(md5($name), 0, 1),
         name: $name,
         status: $status,
-        appVersion: '1.4.0',
+        appVersion: $appVersion,
         lastSeenAt: $lastSeenAt === null ? null : new DateTimeImmutable($lastSeenAt, new DateTimeZone('UTC')),
         pendingQueueSize: $pendingQueueSize,
         pairedAt: $pairedAt === null ? null : new DateTimeImmutable($pairedAt, new DateTimeZone('UTC')),
@@ -80,8 +82,11 @@ function quioscoDePrueba(
  *
  * @param  list<DeviceSummary>  $devices
  */
-function saludDeLaFlota(array $devices, string $now = '2026-09-09 12:00:00'): CheckKioskHealth
-{
+function saludDeLaFlota(
+    array $devices,
+    string $now = '2026-09-09 12:00:00',
+    string $deployed = '1.4.0',
+): CheckKioskHealth {
     $registry = new class($devices) implements DeviceRegistry
     {
         /** @param  list<DeviceSummary>  $devices */
@@ -108,7 +113,7 @@ function saludDeLaFlota(array $devices, string $now = '2026-09-09 12:00:00'): Ch
         }
     };
 
-    return new CheckKioskHealth($registry, FixedClock::at($now), umbralesDeSalud());
+    return new CheckKioskHealth($registry, FixedClock::at($now), umbralesDeSalud(), new FixedDeployedVersion($deployed));
 }
 
 // --- Las dos fronteras, al segundo ------------------------------------------
@@ -393,3 +398,51 @@ it('no publica ni el token ni la clave interna de la fila', function (): void {
         ->and($devices[0])->not->toHaveKey('id')
         ->and($devices[0])->not->toHaveKey('token_hash');
 })->group('RF-PA-07');
+
+// --- La version de la aplicacion (2.2.1, bloque 1) ----------------------------
+
+it('avisa del quiosco al dia cuya aplicacion es anterior a la del servidor', function (): void {
+    // La tablet sigue fichando con el build viejo: aviso, no fallo. La
+    // version del servidor llega por el puerto, nunca del fichero VERSION.
+    $report = saludDeLaFlota(
+        [quioscoDePrueba(lastSeenAt: '2026-09-09 11:59:30', appVersion: '1.4.0')],
+        deployed: '1.5.0',
+    )->handle();
+
+    expect($report->devices[0]->verdict)->toBe(KioskHealthVerdict::Warning)
+        ->and($report->devices[0]->reason)->toBe(KioskHealthReason::AppVersionBehind)
+        ->and($report->exitCode())->toBe(1);
+})->group('RF-PA-07', 'RF-KI-07');
+
+it('cuenta antes la cola que la version, porque la cola es lo que impide actualizar', function (): void {
+    $report = saludDeLaFlota(
+        [quioscoDePrueba(lastSeenAt: '2026-09-09 11:59:30', pendingQueueSize: 2, appVersion: '0.0.0')],
+        deployed: '1.5.0',
+    )->handle();
+
+    expect($report->devices[0]->reason)->toBe(KioskHealthReason::QueuePending);
+})->group('RF-PA-07', 'RF-KI-07');
+
+it('no juzga la version con un servidor de desarrollo ni con uno que no sabe la suya', function (string $deployed): void {
+    $report = saludDeLaFlota(
+        [quioscoDePrueba(lastSeenAt: '2026-09-09 11:59:30', appVersion: '0.0.0')],
+        deployed: $deployed,
+    )->handle();
+
+    expect($report->devices[0]->reason)->toBe(KioskHealthReason::Beating)
+        ->and($report->exitCode())->toBe(0);
+})->with([
+    'desarrollo' => ['2.2.1-dev'],
+    'desconocida' => ['0.0.0'],
+])->group('RF-PA-07', 'RF-KI-07');
+
+it('no avisa del quiosco por delante del servidor tras una vuelta atras', function (): void {
+    // ADR-054: se restaura la copia y la tablet conserva el build nuevo. No
+    // puede «bajar», y no hay nada que pedirle.
+    $report = saludDeLaFlota(
+        [quioscoDePrueba(lastSeenAt: '2026-09-09 11:59:30', appVersion: '1.5.0')],
+        deployed: '1.4.0',
+    )->handle();
+
+    expect($report->devices[0]->reason)->toBe(KioskHealthReason::Beating);
+})->group('RF-PA-07', 'RF-KI-07');

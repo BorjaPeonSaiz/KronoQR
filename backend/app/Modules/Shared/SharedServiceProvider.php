@@ -6,6 +6,7 @@ namespace App\Modules\Shared;
 
 use App\Modules\Shared\Application\Port\AuthenticationMetrics;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\GeneratedFileMetrics;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\PinAttempts;
@@ -13,6 +14,7 @@ use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
+use App\Modules\Shared\Infrastructure\Adapter\ConfigDeployedVersionProvider;
 use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
 use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStore;
@@ -42,6 +44,12 @@ final class SharedServiceProvider extends ServiceProvider
         // Singleton y no bind: el reloj no tiene estado y se resuelve en cada
         // caso de uso. En las pruebas se sustituye por un reloj fijo.
         $this->app->singleton(Clock::class, SystemClock::class);
+
+        // La version desplegada (DC8). Vive aqui porque la leen `Kiosk` —la
+        // salud de cada tablet y el `minimum_app_version` del latido— y
+        // `Product` —la sonda de version de `product:doctor`—, que no pueden
+        // importarse entre si. El dato es de configuracion, no de un modulo.
+        $this->app->singleton(DeployedVersionProvider::class, ConfigDeployedVersionProvider::class);
 
         // El bloqueo por intentos del PIN (RS-12). Vive aqui porque lo limpia
         // `Workforce` al restablecer (RF-ID-09) y lo incrementaran el quiosco

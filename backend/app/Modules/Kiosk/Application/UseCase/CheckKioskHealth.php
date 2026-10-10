@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Kiosk\Application\UseCase;
 
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
+use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthReport;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 
 /**
  * El estado de todos los quioscos, para `php artisan kiosk:health`
@@ -50,10 +52,16 @@ final readonly class CheckKioskHealth
         private DeviceRegistry $devices,
         private Clock $clock,
         private KioskHealthThresholds $thresholds,
+        private DeployedVersionProvider $versions,
     ) {}
 
     public function handle(): KioskHealthReport
     {
-        return KioskHealthReport::of($this->devices->all(), $this->clock->now(), $this->thresholds);
+        return KioskHealthReport::of(
+            $this->devices->all(),
+            $this->clock->now(),
+            $this->thresholds,
+            AppVersionPolicy::forDeployed($this->versions->deployedVersion()),
+        );
     }
 }

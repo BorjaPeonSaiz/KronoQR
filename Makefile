@@ -758,10 +758,11 @@ APK_INDEX_STAMP ?= $(shell date -u +%F)
 # que miente— y el coste en cache es una capa trivial, porque el ARG vive al
 # final de la etapa `prod`.
 #
-# Solo la consume la imagen de PHP, asi que solo a ella se le pasa: dárselo
-# tambien a postgres y a nginx haria que BuildKit avisara de un build-arg sin
-# usar en cada construccion, y un aviso que siempre sale es un aviso que nadie
-# lee.
+# Lo consumen la imagen de PHP (`/health`, `minimum_app_version` del latido) y la
+# de Nginx (`app_version` de la PWA del quiosco): las DOS deben llevar el mismo
+# valor, o en la CI con version sintetica (`X.Y.(Z+1)-ci`) toda tablet saldria
+# desfasada. A postgres no se le pasa: no lo usa y BuildKit avisaria en cada
+# construccion de un build-arg sin usar.
 APP_VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
 
 # ---------------------------------------------------------------------------
@@ -812,7 +813,7 @@ build-ci-images: ## Construye kronoqr/{postgres,app,nginx}:ci (IMAGES=postgres|a
 	  case "$$imagen" in \
 	    postgres) dockerfile=infra/docker/postgres/Dockerfile; tag=kronoqr/postgres:ci; target=; scope=postgres-ci; propios= ;; \
 	    app) dockerfile=infra/docker/php/Dockerfile; tag=kronoqr/app:ci; target="--target prod"; scope=app-ci; propios="--build-arg APP_VERSION=$(APP_VERSION)" ;; \
-	    nginx) dockerfile=infra/docker/nginx/Dockerfile; tag=kronoqr/nginx:ci; target=; scope=nginx-ci; propios= ;; \
+	    nginx) dockerfile=infra/docker/nginx/Dockerfile; tag=kronoqr/nginx:ci; target=; scope=nginx-ci; propios="--build-arg APP_VERSION=$(APP_VERSION)" ;; \
 	    *) echo "[make] IMAGES desconocido: '$$imagen' (valores validos: postgres, app, nginx)"; exit 1 ;; \
 	  esac; \
 	  if [ "$(BUILDX_CACHE)" = "gha" ]; then \

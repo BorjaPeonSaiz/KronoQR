@@ -6,8 +6,10 @@ namespace App\Modules\Kiosk\Application\UseCase;
 
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
 use App\Modules\Kiosk\Application\Query\DeviceFleetView;
+use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 
@@ -69,6 +71,7 @@ final readonly class ListDevices
         private Clock $clock,
         private KioskHealthThresholds $thresholds,
         private InstallationSiteProvider $sites,
+        private DeployedVersionProvider $versions,
     ) {}
 
     public function handle(): DeviceFleetView
@@ -83,6 +86,7 @@ final readonly class ListDevices
             $this->clock->now(),
             $this->thresholds,
             $site instanceof InstallationSite ? $site->timezone : 'UTC',
+            AppVersionPolicy::forDeployed($this->versions->deployedVersion()),
         );
     }
 }

@@ -494,6 +494,25 @@ return [
                 'warning_unavailable' => 'Could not check whether a service code is configured for the tablet '
                     .'diagnostics screen. Clocking in is unaffected.',
             ],
+            'app_version' => [
+                'ok' => 'None of the tablets sending heartbeats (:count) is behind the server version (:minimum).',
+                'ok_ahead' => 'Tablets with an app version newer than the server\'s (:minimum): :devices. '
+                    .'This happens after rolling the server back to an earlier version; the tablets will move to '
+                    .'the server\'s version on their own. Nothing to do.',
+                'ok_unchecked' => 'This development server has no published version, so the tablets\' version '
+                    .'is not compared.',
+                'warning_unchecked' => 'The server version is not valid (unknown or a development build): the '
+                    .'outdated-tablet warning is switched off. Clocking in is unaffected.',
+                'warning' => 'Tablets on an app version older than the server\'s (:minimum), with an empty, '
+                    .'on-disk queue: :devices. They keep clocking in as normal.',
+                'warning_draining' => 'Tablets on an app version older than the server\'s (:minimum) that still '
+                    .'have unsent clock-ins or an in-memory queue: :waiting. They keep clocking in as normal, '
+                    .'but they must not be touched yet.',
+                'warning_mixed' => 'Tablets on an app version older than the server\'s (:minimum). With an empty, '
+                    .'on-disk queue: :devices. With unsent clock-ins or an in-memory queue, not to be touched yet: '
+                    .':waiting. All of them keep clocking in as normal.',
+                'warning_unavailable' => 'Could not check the app version of the tablets. Clocking in is unaffected.',
+            ],
         ],
 
         'license' => [
@@ -1010,6 +1029,34 @@ return [
                     ."«Kiosk service code». The tablets pick it up on their own in under a minute.\n"
                     ."Write it down wherever whoever maintains the kiosks keeps it, and do not stick it on the\n"
                     .'tablet itself. If you would rather leave the screen open to everyone, ignore this warning.',
+                'warning_unavailable' => "Run `php artisan product:doctor` again once the database responds.\n"
+                    .'If it persists, look first at the database checks in this same report.',
+            ],
+            'app_version' => [
+                'warning' => "Find each tablet by its identifier in the panel, under Kiosks.\n"
+                    ."If it reports 2.2.1 or later, do nothing: it updates itself during the update window\n"
+                    ."(KIOSK_UPDATE_WINDOW, 03:00 to 05:00 by default) with an empty queue and no recent clock-ins.\n"
+                    ."If it reports 2.2.0 or earlier (or 0.0.0), it will not update itself. ONLY with the tablet online,\n"
+                    ."its pending queue at 0 in the panel and no «in-memory queue» warning: on the tablet, open\n"
+                    ."chrome://serviceworker-internals and press Unregister on the KronoQR one (or F12 > Application >\n"
+                    ."Service workers > Unregister) and reload the page.\n"
+                    .'Do NOT clear the site data: it holds the queue of unsent clock-ins and the tablet pairing.',
+                'warning_draining' => "Wait. Do NOT reload these tablets, do NOT unregister their service worker and do NOT\n"
+                    ."clear the site data: with an in-memory queue, reloading deletes the clock-ins not yet sent.\n"
+                    ."Check in the panel, under Kiosks, that they are online and that their pending queue drops to 0;\n"
+                    ."if the «in-memory queue» warning shows, follow the stuck queue runbook, section 7.\n"
+                    .'Once the queue is at 0 and on disk, run `php artisan product:doctor` again.',
+                'warning_mixed' => "Those with unsent clock-ins or an in-memory queue: wait. Do NOT reload them, do NOT\n"
+                    ."unregister their service worker and do NOT clear the site data, or clock-ins would be lost; if the\n"
+                    ."«in-memory queue» warning shows, follow the stuck queue runbook, section 7.\n"
+                    ."Those with an empty, on-disk queue: if they report 2.2.1 or later, they update themselves during the\n"
+                    ."update window (KIOSK_UPDATE_WINDOW, 03:00 to 05:00 by default). If they report 2.2.0 or earlier\n"
+                    ."(or 0.0.0), and ONLY with the tablet online and the queue at 0: open chrome://serviceworker-internals,\n"
+                    ."press Unregister on the KronoQR one (or F12 > Application > Service workers > Unregister) and reload.\n"
+                    .'Do NOT clear the site data: it holds the clock-in queue and the tablet pairing.',
+                'warning_unchecked' => "Check the server's APP_VERSION (or IMAGE_TAG) variable: it must be the published\n"
+                    ."version, for example 2.2.1. An image built without it reports 0.0.0-dev.\n"
+                    .'Redeploy with the image of the published version and run `php artisan product:doctor` again.',
                 'warning_unavailable' => "Run `php artisan product:doctor` again once the database responds.\n"
                     .'If it persists, look first at the database checks in this same report.',
             ],

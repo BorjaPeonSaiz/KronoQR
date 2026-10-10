@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Kiosk\Domain\ValueObject;
 
+use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
 use DateTimeImmutable;
 
 /**
@@ -25,8 +26,6 @@ use DateTimeImmutable;
  */
 final readonly class KioskHealthRow
 {
-    private const string ACTIVE = 'active';
-
     public function __construct(
         public string $uuid,
         public string $name,
@@ -74,16 +73,25 @@ final readonly class KioskHealthRow
      * 6. **Con cola** — late al dia pero declara fichajes sin enviar. `aviso` y no
      *    `ok` porque esos fichajes son registro horario de personas reales y se
      *    pierden si alguien revoca el token antes de que drenen (runbook §5.1).
-     * 7. **Correcto**.
+     * 7. **Aplicacion desfasada** — late al dia, sin nada pendiente, pero con una
+     *    `app_version` anterior a la del servidor ({@see AppVersionPolicy}).
+     *    El ultimo de los avisos porque la tablet se actualiza sola en cuanto
+     *    su cola esta vacia: todo lo anterior es lo que se lo impide.
+     * 8. **Correcto**.
      *
      * `pending_queue_size` lo declara el dispositivo y nadie lo comprueba: es
-     * informacion de operacion, no autoridad, y no cambia ni un fichaje.
+     * informacion de operacion, no autoridad, y no cambia ni un fichaje. Con
+     * `app_version` pasa lo mismo: solo cambia un aviso.
      */
-    public static function of(DeviceSummary $device, DateTimeImmutable $now, KioskHealthThresholds $thresholds): self
-    {
-        $elapsed = self::elapsed($device->lastSeenAt, $now);
+    public static function of(
+        DeviceSummary $device,
+        DateTimeImmutable $now,
+        KioskHealthThresholds $thresholds,
+        AppVersionPolicy $appVersions,
+    ): self {
+        $elapsed = $device->secondsSinceLastSeen($now);
 
-        [$verdict, $reason] = self::judge($device, $elapsed, $now, $thresholds);
+        [$verdict, $reason] = self::judge($device, $elapsed, $now, $thresholds, $appVersions);
 
         return new self(
             uuid: $device->uuid,
@@ -110,8 +118,9 @@ final readonly class KioskHealthRow
         ?int $elapsed,
         DateTimeImmutable $now,
         KioskHealthThresholds $thresholds,
+        AppVersionPolicy $appVersions,
     ): array {
-        if ($device->status !== self::ACTIVE) {
+        if (! $device->isActive()) {
             return [KioskHealthVerdict::Revoked, KioskHealthReason::Revoked];
         }
 
@@ -119,7 +128,7 @@ final readonly class KioskHealthRow
             return self::judgeUnseen($device, $now, $thresholds);
         }
 
-        return self::judgeSeen($device, $elapsed, $thresholds);
+        return self::judgeSeen($device, $elapsed, $thresholds, $appVersions);
     }
 
     /**
@@ -132,7 +141,7 @@ final readonly class KioskHealthRow
     {
         $sincePaired = self::elapsed($device->pairedAt, $now);
 
-        return $sincePaired !== null && $sincePaired <= $thresholds->silentAfterSeconds
+        return $sincePaired !== null && ! $thresholds->isSilentAfter($sincePaired)
             ? [KioskHealthVerdict::Warning, KioskHealthReason::AwaitingFirstHeartbeat]
             : [KioskHealthVerdict::Failure, KioskHealthReason::NeverSeen];
     }
@@ -143,9 +152,13 @@ final readonly class KioskHealthRow
      *
      * @return array{KioskHealthVerdict, KioskHealthReason}
      */
-    private static function judgeSeen(DeviceSummary $device, int $elapsed, KioskHealthThresholds $thresholds): array
-    {
-        if ($elapsed > $thresholds->silentAfterSeconds) {
+    private static function judgeSeen(
+        DeviceSummary $device,
+        int $elapsed,
+        KioskHealthThresholds $thresholds,
+        AppVersionPolicy $appVersions,
+    ): array {
+        if ($thresholds->isSilentAfter($elapsed)) {
             return [KioskHealthVerdict::Failure, KioskHealthReason::Silent];
         }
 
@@ -170,6 +183,10 @@ final readonly class KioskHealthRow
 
         if (($device->pendingQueueSize ?? 0) > 0) {
             return [KioskHealthVerdict::Warning, KioskHealthReason::QueuePending];
+        }
+
+        if ($appVersions->isBehind($device->appVersion)) {
+            return [KioskHealthVerdict::Warning, KioskHealthReason::AppVersionBehind];
         }
 
         return [KioskHealthVerdict::Ok, KioskHealthReason::Beating];

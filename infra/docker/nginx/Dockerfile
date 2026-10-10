@@ -80,9 +80,16 @@ COPY VERSION ./VERSION
 # de la CI (etapas ① y ⑥) y repetirlas aqui alargaria cada construccion de
 # imagen sin anadir garantia. Si el type-check falla, la CI no llega a este
 # paso.
+#
+# APP_VERSION (opcional) fija el `app_version` de la PWA del quiosco y GANA sobre
+# VERSION. Debe ser el mismo valor que recibe la imagen de PHP: el servidor
+# anuncia en el latido su version como `minimum_app_version` y una tablet con
+# otra se marcaria desfasada. `make build-ci-images` lo pasa a las dos; en la
+# release coincide con VERSION. Vacio (build a mano) = se usa VERSION.
+ARG APP_VERSION=
 RUN set -eux; \
   cd /build/frontend-admin && KRONOQR_BASE=/admin/ npx vite build; \
-  cd /build/frontend-kiosk && KRONOQR_BASE=/kiosk/ npx vite build; \
+  cd /build/frontend-kiosk && KRONOQR_APP_VERSION="${APP_VERSION}" KRONOQR_BASE=/kiosk/ npx vite build; \
   cd /build/frontend-portal && KRONOQR_BASE=/portal/ npx vite build; \
   test -f /build/frontend-admin/dist/index.html; \
   test -f /build/frontend-kiosk/dist/index.html; \

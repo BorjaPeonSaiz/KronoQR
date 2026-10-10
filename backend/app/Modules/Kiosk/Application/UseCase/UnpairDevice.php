@@ -9,10 +9,12 @@ use App\Modules\Identity\Application\UseCase\RevokeDeviceToken;
 use App\Modules\Kiosk\Application\Command\UnpairDeviceCommand;
 use App\Modules\Kiosk\Application\Port\DeviceRegistry;
 use App\Modules\Kiosk\Application\Query\DeviceView;
+use App\Modules\Kiosk\Domain\Policy\AppVersionPolicy;
 use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthRow;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 
 /**
  * Retira un quiosco de servicio (`POST /api/v1/devices/{uuid}/unpair`,
@@ -69,6 +71,7 @@ final readonly class UnpairDevice
         private RevokeDeviceToken $tokens,
         private Clock $clock,
         private KioskHealthThresholds $thresholds,
+        private DeployedVersionProvider $versions,
     ) {}
 
     /**
@@ -106,6 +109,11 @@ final readonly class UnpairDevice
         // sobre el estado ya revocado: `revoked` no cuenta para ninguna alerta,
         // que es justo lo que el panel tiene que pintar en cuanto se desvincula
         // (decision 2 de la ficha 3.3).
-        return new DeviceView($device, KioskHealthRow::of($device, $this->clock->now(), $this->thresholds));
+        return new DeviceView($device, KioskHealthRow::of(
+            $device,
+            $this->clock->now(),
+            $this->thresholds,
+            AppVersionPolicy::forDeployed($this->versions->deployedVersion()),
+        ));
     }
 }

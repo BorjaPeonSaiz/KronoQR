@@ -157,6 +157,45 @@ test(
   },
 )
 
+test(
+  'un quiosco con una version anterior a la del servidor aparece como aviso y dice como ponerlo al dia',
+  { tag: ['@RF-PA-07', '@RF-KI-07'] },
+  async ({ page }) => {
+    await stubManagementApi(page, {
+      role: 'admin',
+      devices: {
+        devices: [
+          {
+            ...DEVICE,
+            name: 'Cocina',
+            app_version: '0.0.0',
+            health: {
+              verdict: 'warning',
+              reason: 'app_version_behind',
+              seconds_since_last_seen: 30,
+            },
+          },
+        ],
+      },
+    })
+
+    await logInAsAdmin(page)
+    await page.goto('/devices')
+
+    const row = page.getByRole('row', { name: /Cocina/ })
+
+    await expect(row).toHaveAttribute('data-verdict', 'warning')
+    await expect(row).toContainText('Aplicación desactualizada')
+    await expect(row).toContainText('0.0.0')
+
+    const whatToDo = page.getByTestId('what-to-do')
+
+    await expect(whatToDo).toContainText('franja de actualización')
+    await expect(whatToDo).toContainText('chrome://serviceworker-internals')
+    await expect(whatToDo).toContainText('Y SIN borrar los datos del sitio')
+  },
+)
+
 // --- Salud de la flota (RF-PA-07, tarea 3.3) --------------------------------
 //
 // El veredicto lo calcula el SERVIDOR (`health.verdict`/`health.reason`): el

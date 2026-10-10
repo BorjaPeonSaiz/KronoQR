@@ -18,6 +18,7 @@ use App\Modules\Kiosk\Application\UseCase\CheckKioskHealth;
 use App\Modules\Kiosk\Application\UseCase\ClaimPairing;
 use App\Modules\Kiosk\Application\UseCase\ListDevices;
 use App\Modules\Kiosk\Application\UseCase\RequestPairing;
+use App\Modules\Kiosk\Application\UseCase\SurveyKioskAppVersions;
 use App\Modules\Kiosk\Application\UseCase\UnpairDevice;
 use App\Modules\Kiosk\Domain\Model\PairingRequest;
 use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
@@ -34,7 +35,9 @@ use App\Modules\Kiosk\Infrastructure\Persistence\DbDeviceFleet;
 use App\Modules\Kiosk\Infrastructure\Persistence\DbDeviceRegistry;
 use App\Modules\Kiosk\Infrastructure\Persistence\DbPairingRequests;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\KioskAppVersions;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -179,6 +182,7 @@ final class KioskServiceProvider extends ServiceProvider
             $app->make(DeviceRegistry::class),
             $app->make(Clock::class),
             self::healthThresholds(),
+            $app->make(DeployedVersionProvider::class),
         ));
 
         /*
@@ -193,6 +197,7 @@ final class KioskServiceProvider extends ServiceProvider
             $app->make(Clock::class),
             self::healthThresholds(),
             $app->make(InstallationSiteProvider::class),
+            $app->make(DeployedVersionProvider::class),
         ));
 
         // `unpair` devuelve el quiosco YA REVOCADO con su veredicto, para que el
@@ -203,6 +208,18 @@ final class KioskServiceProvider extends ServiceProvider
             $app->make(RevokeDeviceToken::class),
             $app->make(Clock::class),
             self::healthThresholds(),
+            $app->make(DeployedVersionProvider::class),
+        ));
+
+        // La version de cada tablet para la sonda `kiosk.app_version` de
+        // `product:doctor` (RF-KI-07, RF-PD-13). Puerto de `Shared` porque lo
+        // consume `Product`, que no puede importar `Kiosk`; mismos umbrales que
+        // la consola para que «latido reciente» signifique lo mismo en los dos.
+        $this->app->bind(KioskAppVersions::class, static fn ($app): SurveyKioskAppVersions => new SurveyKioskAppVersions(
+            $app->make(DeviceRegistry::class),
+            $app->make(Clock::class),
+            self::healthThresholds(),
+            $app->make(DeployedVersionProvider::class),
         ));
     }
 

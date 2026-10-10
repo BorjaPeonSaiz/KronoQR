@@ -19,7 +19,24 @@ import { VitePWA } from 'vite-plugin-pwa'
 // a proposito, `infra/docker/nginx/Dockerfile`).
 const SEMVER = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/
 
+//
+// KRONOQR_APP_VERSION (opcional) GANA sobre VERSION. La fija la imagen de Nginx
+// (`ARG APP_VERSION`, que `make build-ci-images` rellena con el mismo valor que
+// da a la imagen de PHP): en la CI con version sintetica (`X.Y.(Z+1)-ci`) el
+// servidor anuncia esa version en `minimum_app_version` y la PWA tiene que
+// declarar la misma, o toda tablet saldria desfasada. En una release coincide
+// con VERSION. Si viene y no es semver valido, el build se niega: nunca se cae
+// en silencio a otra version.
+const APP_VERSION_ENV = 'KRONOQR_APP_VERSION'
+
 function readAppVersion(mode: string): string {
+  const forced = process.env[APP_VERSION_ENV]?.trim() ?? ''
+  if (forced !== '') {
+    if (!SEMVER.test(forced)) {
+      throw new Error(`${APP_VERSION_ENV} no contiene una version valida: «${forced}»`)
+    }
+    return forced
+  }
   try {
     const raw = readFileSync(fileURLToPath(new URL('../VERSION', import.meta.url)), 'utf8')
     const version = raw.split('\n', 1)[0]?.trim() ?? ''
