@@ -110,8 +110,9 @@ function positiveInteger(string $option, string $raw): int
  *
  * Esta herramienta es independiente del producto a proposito —no se despliega
  * con el y no carga su codigo—, asi que la lista vive aqui y en el enum
- * `Feature` del producto. Las ata `LicenseIssuerRoundTripTest`: una clave
- * emitida con `--features=all` tiene que llevar exactamente los casos del enum.
+ * `Feature` del producto. Las ata `LicenseIssuerRoundTripTest`: la carga util
+ * FIRMADA de una clave emitida con `--features=all` tiene que llevar exactamente
+ * los casos del enum, ni uno de mas ni uno de menos.
  *
  * @return list<string>
  */
@@ -134,20 +135,24 @@ function featureCatalogue(): array
  * `all` no se mezcla con nombres sueltos: `all,payroll_export` no concede nada
  * distinto de `all` y delata una orden mal escrita, asi que se rechaza.
  *
+ * Devuelve tambien si hubo expansion, para que el aviso de reemision dependa de
+ * lo que se interpreto y no del texto crudo de la opcion (`--features=all,` o
+ * `" all "` tambien son `all`).
+ *
  * @param  list<string>  $features
- * @return list<string>
+ * @return array{features: list<string>, expanded: bool}
  */
 function expandAll(array $features): array
 {
     if (! \in_array('all', $features, true)) {
-        return $features;
+        return ['features' => $features, 'expanded' => false];
     }
 
     if ($features !== ['all']) {
         fail('--features=all no se combina con otros nombres: ya concede el catalogo entero ('.implode(', ', featureCatalogue()).').');
     }
 
-    return featureCatalogue();
+    return ['features' => featureCatalogue(), 'expanded' => true];
 }
 
 /**
@@ -199,10 +204,9 @@ foreach (['customer', 'plan', 'max-employees', 'max-devices', 'valid-from', 'val
     }
 }
 
-$features = knownFeatures(
-    expandAll(array_values(array_filter(array_map('trim', explode(',', $options['features'] ?? ''))))),
-    isset($options['force']),
-);
+$requested = expandAll(array_values(array_filter(array_map('trim', explode(',', $options['features'] ?? '')))));
+
+$features = knownFeatures($requested['features'], isset($options['force']));
 
 $maxEmployees = positiveInteger('max-employees', $options['max-employees']);
 $maxDevices = positiveInteger('max-devices', $options['max-devices']);
@@ -243,7 +247,7 @@ fwrite(STDERR, '  Vigencia: '.$claims['valid_from'].' -> '.$claims['valid_until'
 fwrite(STDERR, '  Funciones accesorias: '.($features === [] ? 'ninguna' : implode(', ', $features)).PHP_EOL);
 fwrite(STDERR, '  Huella:   '.substr(hash('sha256', $key), 0, 12).PHP_EOL.PHP_EOL);
 
-if (trim($options['features'] ?? '') === 'all') {
+if ($requested['expanded']) {
     // El riesgo de `all`, dicho cuando se emite: congela el catalogo de ESTA
     // herramienta, no el de las versiones futuras del producto.
     fwrite(STDERR, 'Aviso: --features=all concede el catalogo de esta herramienta a fecha de hoy.'.PHP_EOL);

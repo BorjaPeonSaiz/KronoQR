@@ -133,8 +133,12 @@ La lista del catálogo vive en `featureCatalogue()` de `issue.php` y en el enum
 `Feature` del producto (`backend/app/Modules/Shared/Domain/ValueObject/Feature.php`).
 El emisor es independiente del producto a propósito —no se despliega con él y no
 carga su código—, así que son dos listas; `LicenseIssuerRoundTripTest` emite con
-`--features=all` y exige que la clave lleve exactamente los casos del enum, de
-modo que no pueden derivar sin que falle la suite.
+`--features=all`, decodifica la carga útil **firmada** y exige que su campo
+`features` coincida con los casos del enum en los dos sentidos: ni falta una
+funcionalidad del producto ni sobra un nombre que el producto no conoce. Se
+mira la carga útil y no lo que concede el verificador porque este descarta en
+silencio los nombres desconocidos. Lo que la prueba no cubre es una lista
+explícita escrita a mano: esa la valida el emisor contra su propio catálogo.
 
 ### Campos de la carga útil
 
