@@ -1452,6 +1452,24 @@ it('no ofrece ningun formato propietario en la descarga del historico propio', f
         ]);
 })->group('RF-ID-05', 'RL-05');
 
+it('documenta que la descarga en blanco es el ultimo año y la pantalla el mes', function (): void {
+    // V3-PO-2 (2.2.1). El esquema de `from` no cambia —una fecha opcional—,
+    // pero su valor por omision si, y es lo que el portal promete en su texto:
+    // «en blanco, se descarga el ultimo año; como maximo un año por descarga».
+    // La pantalla sigue con el parametro compartido de los 31 dias.
+    $export = Contract::value('paths', '/api/v1/me/export', 'get', 'parameters', '0');
+    $journal = Contract::value('paths', '/api/v1/me/workdays', 'get', 'parameters', '0');
+
+    expect($export)->toBe(['$ref' => '#/components/parameters/MyExportFrom'])
+        ->and($journal)->toBe(['$ref' => '#/components/parameters/WorkDateFrom'])
+        ->and(Contract::value('components', 'parameters', 'MyExportFrom', 'schema'))
+        ->toBe(Contract::value('components', 'parameters', 'WorkDateFrom', 'schema'))
+        ->and(Contract::text('components', 'parameters', 'MyExportFrom', 'name'))->toBe('from')
+        ->and(Contract::text('components', 'parameters', 'MyExportFrom', 'description'))->toContain('**366 dias**')
+        ->and(Contract::text('components', 'parameters', 'WorkDateFrom', 'description'))->toContain('**31 dias**')
+        ->and(Contract::text('paths', '/api/v1/me/export', 'get', 'description'))->toContain('maximo un año por descarga');
+})->group('RF-ID-05', 'RL-05');
+
 it('sirve el registro propio con la misma forma que el del panel', function (): void {
     // Deliberado: lo que cambia entre `/me/workdays` y
     // `/employees/{uuid}/workdays` es quien puede pedirlo y sobre quien, no lo

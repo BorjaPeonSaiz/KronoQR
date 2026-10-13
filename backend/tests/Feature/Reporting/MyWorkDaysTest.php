@@ -243,19 +243,69 @@ it('no ofrece ningun formato que no sea CSV o PDF', function (): void {
         ->assertStatus(422);
 })->group('RF-ID-05', 'RQ-06');
 
-it('exporta el mes por omision cuando no se pide rango', function (): void {
-    // Mismo rango por omision que la pantalla, resuelto en el mismo sitio: si
-    // fueran dos, el fichero y la pantalla podrian discrepar.
+it('descarga el ultimo año, 366 dias, cuando no se pide rango', function (): void {
+    // V3-PO-2 (2.2.1), decision del propietario del 09-10-2026: «en blanco
+    // descarga el ultimo año». Hoy es el 20 de marzo de 2026 en Madrid, asi que
+    // el rango empieza el 20 de marzo de 2025 —366 dias contandolo a el— y
+    // NO el 18 de febrero, que es el mes de la pantalla.
     $contexto = miPortal();
+
+    // El primer dia del año descargado entra, el anterior no.
+    miJornada($contexto['site'], $contexto['employee'], '2025-03-20', '2025-03-20 06:00', '2025-03-20 14:00');
+    miJornada($contexto['site'], $contexto['employee'], '2025-03-19', '2025-03-19 07:15', '2025-03-19 15:15');
 
     $respuesta = Api::as($contexto['token'])->get('/api/v1/me/export');
 
-    $respuesta->assertStatus(200)
+    $respuesta->assertValidRequest()
+        ->assertStatus(200)
         ->assertHeader(
             'Content-Disposition',
-            'attachment; filename=mi-registro-horario-2026-02-18_2026-03-20.csv',
+            'attachment; filename=mi-registro-horario-2025-03-20_2026-03-20.csv',
         );
+
+    $csv = $respuesta->streamedContent();
+
+    expect($csv)->toContain('2025-03-20 06:00')
+        ->and($csv)->not->toContain('2025-03-19 07:15');
+})->group('RF-ID-05', 'RL-05', 'RN-04');
+
+it('descarga los 366 dias que terminan en `to` cuando solo viene `to`', function (): void {
+    // Sin `from`, el año termina en la fecha pedida y no en hoy.
+    $contexto = miPortal();
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/export', ['to' => '2025-12-31'])
+        ->assertValidRequest()
+        ->assertStatus(200)
+        ->assertHeader(
+            'Content-Disposition',
+            'attachment; filename=mi-registro-horario-2024-12-31_2025-12-31.csv',
+        );
+})->group('RF-ID-05', 'RL-05');
+
+it('no cambia el mes por omision de la pantalla al cambiar el de la descarga', function (): void {
+    // El valor por omision de la descarga se separo del de `/me/workdays`
+    // (V3-PO-2): la pantalla sigue abriendo en los 31 dias que terminan hoy.
+    $contexto = miPortal();
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/workdays')
+        ->assertValidResponse(200)
+        ->assertJsonPath('from', '2026-02-18')
+        ->assertJsonPath('to', '2026-03-20');
 })->group('RF-ID-05', 'RN-04');
+
+it('sigue rechazando con 422 una descarga de 367 dias', function (string $formato): void {
+    // «Como maximo un año por descarga»: el valor por omision llega al techo,
+    // no lo mueve. Del 20 de marzo de 2025 al 21 de marzo de 2026 hay 367 dias.
+    $contexto = miPortal();
+
+    Api::as($contexto['token'])
+        ->get('/api/v1/me/export', ['from' => '2025-03-20', 'to' => '2026-03-21', 'format' => $formato])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
+})->with(['csv', 'pdf'])->group('RF-ID-05', 'RL-05', 'RQ-06');
 
 it('enseña la pausa tambien en el registro que el empleado consulta', function (): void {
     // RF-AT-12 y RF-ID-05. Quien mas necesita saber que aquel hueco fue un
