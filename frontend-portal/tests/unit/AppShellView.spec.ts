@@ -177,3 +177,37 @@ describe('AppShellView', () => {
     expect(wrapper.find('#main').exists()).toBe(true)
   })
 })
+
+describe('AppShellView: estados del enlace de navegacion (V7-UX-01)', () => {
+  it('el enlace activo lleva fondo y texto a la vez y ninguna utilidad de hover o pulsacion que cambie el fondo', async () => {
+    const pinia = createTestPinia()
+
+    useSessionStore(pinia).employee = portalEmployee()
+    stubFetch(() => jsonResponse(employeeWorkDays()))
+
+    const router = createTestRouter()
+
+    await router.push('/records')
+
+    const wrapper = await mountView(App, { pinia, router })
+
+    await settle()
+
+    const [active, idle] = wrapper.findAll('nav a')
+    const activeClasses = active?.classes() ?? []
+    const idleClasses = idle?.classes() ?? []
+
+    expect(active?.attributes('aria-current')).toBe('page')
+    expect(activeClasses).toContain('bg-kq-primary-strong')
+    expect(activeClasses).toContain('text-kq-on-primary')
+    expect(activeClasses.filter((name) => /^(hover|active|focus):/.test(name))).toEqual([])
+
+    expect(idle?.attributes('aria-current')).toBeUndefined()
+    expect(idleClasses).toContain('text-kq-text')
+    expect(idleClasses).toContain('hover:bg-kq-surface-alt')
+    // Cada fondo de estado se acompaña de su texto: la pareja pulsada es
+    // on-primary-soft sobre primary-soft (medida en themePairs.ts).
+    expect(idleClasses).toContain('active:bg-kq-primary-soft')
+    expect(idleClasses).toContain('active:text-kq-on-primary-soft')
+  })
+})
