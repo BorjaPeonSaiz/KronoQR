@@ -164,6 +164,7 @@ export const lightPairs: readonly ThemePair[] = [
   pair('--kq-color-focus', '--kq-color-surface', 'large', 'focus ring on page'),
   pair('--kq-color-focus', '--kq-color-surface-raised', 'large', 'focus ring on cards'),
   pair('--kq-color-focus', '--kq-color-surface-alt', 'large', 'focus ring on alternate rows'),
+  // Margen: hoy el anillo cae sobre la cabecera (outline-offset 2px); cuenta si el offset baja a 0.
   pair('--kq-color-focus', '--kq-color-primary-soft', 'large', 'focus ring on a pressed nav link'),
 ]
 

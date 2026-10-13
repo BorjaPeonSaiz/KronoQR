@@ -227,7 +227,9 @@ it('descarga en blanco un año de 1.464 tramos en PDF sellado dentro del presupu
         // documento se habria cortado.
         ->and($paginas)->toBeGreaterThan(10)
         // Un PDF que se descarga desde datos moviles y se envia por correo: por
-        // debajo de 5 MiB para un año entero.
+        // debajo de 5 MiB para un año entero. Medido en el bloque 8 de la 2.2.1:
+        // 4,5 MiB con 4 tramos al dia (margen ~10 %). No sale de ningun requisito:
+        // el peso del PDF anual queda como riesgo de PR19 en el bloque 23.
         ->and($bytes)->toBeLessThan(5 * 1_048_576)
         ->and($descarga['seconds'])->toBeLessThan(MY_WORK_DAYS_EXPORT_YEAR_SYNC_LIMIT_SECONDS);
 })->group('RF-ID-05', 'RL-05', 'RNF-P-05')->skip(! anoCompletoHayChromium(), 'Chromium no esta instalado en este contenedor.');

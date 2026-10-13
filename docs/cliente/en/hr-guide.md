@@ -1741,8 +1741,9 @@ because they lost a card.
 The ordinary route is **the portal**: they sign in with their code and their
 PIN and download their history whenever they want, without asking anybody. It
 is what the law requires and what stops every request from becoming an errand.
-Remind them to **fill in the start date**: left blank, the download brings only
-the last 31 days, and each download covers 366 at most.
+Left blank, the download brings the last year (the 366 days up to the end
+date, or today); at most one year per download, so for earlier years they have
+to fill in the dates.
 Give them [`employee-portal-guide.md`](employee-portal-guide.md).
 
 If the request arrives **in writing as the exercise of a right** —access,

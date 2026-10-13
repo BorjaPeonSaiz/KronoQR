@@ -1703,9 +1703,9 @@ perdido una tarjeta.
 
 La vía ordinaria es **el portal**: entra con su código y su PIN y se descarga su
 historial cuando quiera, sin pedírselo a nadie. Es lo que exige la ley y lo que
-evita convertir cada consulta en una gestión. Recuérdale que **ponga la fecha de
-inicio**: en blanco, la descarga trae solo los últimos 31 días, y cada descarga
-abarca como mucho 366.
+evita convertir cada consulta en una gestión. En blanco, la descarga trae el
+último año (los 366 días hasta la fecha final, u hoy); como máximo un año por
+descarga, así que para años anteriores tiene que poner las fechas.
 Entrégale [`guia-portal-empleado.md`](guia-portal-empleado.md).
 
 Si la petición llega **por escrito como ejercicio de un derecho** —acceso,

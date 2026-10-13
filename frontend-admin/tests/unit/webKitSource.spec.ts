@@ -19,7 +19,8 @@ function sourceFiles(dir: string): string[] {
 describe('@source de web-kit en el CSS de cada SPA', () => {
   it.each(SPAS)('%s declara el @source si importa componentes de web-kit', (spa) => {
     const src = join(ROOT, spa, 'src')
-    if (!existsSync(src)) return
+    // Una SPA de la lista que no aparece es una lista vieja, no un caso aprobado.
+    expect(existsSync(src)).toBe(true)
     const imports = sourceFiles(src).some((file) =>
       /from\s+['"]@kronoqr\/web-kit\/components\/[^'"]+\.vue['"]/.test(readFileSync(file, 'utf8')),
     )
