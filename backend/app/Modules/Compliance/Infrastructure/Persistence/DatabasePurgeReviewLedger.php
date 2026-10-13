@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Persistence;
 use App\Modules\Compliance\Application\Port\PurgeReviewLedger;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
+use App\Modules\Compliance\Domain\ValueObject\AuditedPurgeReview;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
 use Illuminate\Database\ConnectionInterface;
@@ -37,17 +38,27 @@ final readonly class DatabasePurgeReviewLedger implements PurgeReviewLedger
         return AuditedPurge::fromEntry($row->int('id'), $row->instant('occurred_at'), $row->json('payload') ?? []);
     }
 
-    public function reviewOf(int $purgeAuditEntryId): ?int
+    public function reviewOf(AuditedPurge $purge): ?int
     {
-        // `->>` da texto: se compara con el id como texto para no depender de
-        // que el payload lo guarde como numero o no. Solo cuenta una revision
-        // posterior a la purga, como en la conciliacion.
-        $id = $this->connection->scalar(
-            'SELECT min(a.id) FROM audit_log a '
-            ."WHERE a.action = ? AND a.payload ->> 'reviewed_audit_entry_id' = ? AND a.id > ?",
-            [AuditAction::RetentionPurgeReviewed->value, (string) $purgeAuditEntryId, $purgeAuditEntryId],
+        // El SQL solo acota candidatas por el indice de accion; si una revision
+        // cuenta lo decide el dominio, con la misma regla que la conciliacion
+        // (`AuditedPurgeReview::reviews()`): una revision con el id en cadena o
+        // anterior a la purga no la cuenta ninguno de los dos caminos.
+        $rows = $this->connection->select(
+            'SELECT a.id, a.occurred_at, a.payload::text AS payload FROM audit_log a '
+            ."WHERE a.action = ? AND a.payload ->> 'reviewed_audit_entry_id' = ? ORDER BY a.id",
+            [AuditAction::RetentionPurgeReviewed->value, (string) $purge->auditEntryId],
         );
 
-        return is_numeric($id) ? (int) $id : null;
+        foreach ($rows as $raw) {
+            $row = Row::of((object) $raw);
+            $review = AuditedPurgeReview::fromEntry($row->int('id'), $row->instant('occurred_at'), $row->json('payload') ?? []);
+
+            if ($review->reviews($purge)) {
+                return $review->auditEntryId;
+            }
+        }
+
+        return null;
     }
 }

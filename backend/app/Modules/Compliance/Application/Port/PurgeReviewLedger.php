@@ -19,6 +19,11 @@ interface PurgeReviewLedger
      */
     public function purge(int $auditEntryId): ?AuditedPurge;
 
-    /** El id del `retention.purge_reviewed` que ya revisa esa purga, si existe. */
-    public function reviewOf(int $purgeAuditEntryId): ?int;
+    /**
+     * El id del primer `retention.purge_reviewed` que ya revisa esa purga, si
+     * existe. Lo decide la misma regla que la conciliacion
+     * (`AuditedPurgeReview::reviews()`): una revision que la conciliacion no
+     * cuenta tampoco cierra el paso a una nueva.
+     */
+    public function reviewOf(AuditedPurge $purge): ?int;
 }

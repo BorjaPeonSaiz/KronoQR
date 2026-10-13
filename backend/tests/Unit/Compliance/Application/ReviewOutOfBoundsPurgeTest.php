@@ -74,11 +74,11 @@ function reviewPurgeUseCase(
             return $this->purges[$auditEntryId] ?? null;
         }
 
-        public function reviewOf(int $purgeAuditEntryId): ?int
+        public function reviewOf(AuditedPurge $purge): ?int
         {
             $this->journal->steps[] = 'reviewOf';
 
-            return $this->reviews[$purgeAuditEntryId] ?? null;
+            return $this->reviews[$purge->auditEntryId] ?? null;
         }
     };
 

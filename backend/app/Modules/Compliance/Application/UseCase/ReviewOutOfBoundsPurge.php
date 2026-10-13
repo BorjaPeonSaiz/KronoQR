@@ -173,7 +173,7 @@ final readonly class ReviewOutOfBoundsPurge
             throw PurgeReviewRejected::purgeIsAdmissible($purgeAuditEntryId);
         }
 
-        $review = $this->ledger->reviewOf($purgeAuditEntryId);
+        $review = $this->ledger->reviewOf($purge);
 
         if ($review !== null) {
             throw PurgeReviewRejected::alreadyReviewed($purgeAuditEntryId, $review);
