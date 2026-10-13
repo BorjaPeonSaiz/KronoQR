@@ -879,19 +879,25 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
     $proceso = bashConElActualizador(<<<'BASH'
         kq_msg_init es
         CFG_DB_USERNAME=fichaje_app
-        aplicadas=2
+        aplicadas=2,1
         psql_migrator() {
           case "$2" in
           *"FROM migrations"*) printf '%s' "${aplicadas}" ;;
           *) printf '%s' "${deriva}" ;;
           esac
         }
-        r=0; work_record_privileges_expected compose_new || r=$?; printf 'con-migraciones=%s\n' "${r}"
-        aplicadas=1
+        r=0; work_record_privileges_expected compose_new || r=$?; printf 'con-migraciones=%s-%s\n' "${r}" "${KQ_WORK_RECORD_STAGE}"
+        aplicadas=2,0
+        r=0; work_record_privileges_expected compose_new || r=$?; printf 'solo-bloque-6=%s-%s\n' "${r}" "${KQ_WORK_RECORD_STAGE}"
+        aplicadas=1,0
         r=0; work_record_privileges_expected compose_new || r=$?; printf 'a-medias=%s\n' "${r}"
-        aplicadas=0
+        aplicadas=0,0
         r=0; work_record_privileges_expected compose_new || r=$?; printf 'version-2.2.0=%s\n' "${r}"
+        aplicadas=0,1
+        r=0; work_record_privileges_expected compose_new || r=$?; printf 'incoherente=%s\n' "${r}"
         aplicadas=; r=0; work_record_privileges_expected compose_new || r=$?; printf 'salida-vacia=%s\n' "${r}"
+        aplicadas=2; r=0; work_record_privileges_expected compose_new || r=$?; printf 'formato-viejo=%s\n' "${r}"
+        aplicadas=2,1; work_record_privileges_expected compose_new
         aplicadas=x; r=0; work_record_privileges_expected compose_new || r=$?; printf 'no-numerica=%s\n' "${r}"
         deriva=ok; printf 'cuadra=%s\n' "$(work_record_privileges_drift compose_new)"
         deriva=shift_entries:UPDATE; printf 'sobra=%s\n' "$(work_record_privileges_drift compose_new)"
@@ -901,11 +907,21 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         grep -c "has_table_privilege('fichaje_app'" "${d}/sql.txt"
         grep -q "('MAINTAIN', false)" "${d}/sql.txt" && printf 'con-maintain\n'
         work_record_privileges_repair_sql >"${d}/repara.txt"
-        grep -q 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE daily_totals TO "fichaje_app";' "${d}/repara.txt" && printf 'misma-lista\n'
-        grep -q "('daily_totals', true, true, true)" "${d}/sql.txt" && printf 'misma-lista\n'
+        grep -q 'GRANT SELECT, INSERT, UPDATE ON TABLE daily_totals TO "fichaje_app";' "${d}/repara.txt" && printf 'misma-lista\n'
+        grep -q "('daily_totals', true, true, false)" "${d}/sql.txt" && printf 'misma-lista\n'
+        grep -q "work_record_purge_batch" "${d}/sql.txt" && grep -q 'aclexplode' "${d}/sql.txt" && printf 'con-funcion-de-purga\n'
+        grep -q "GRANT EXECUTE ON FUNCTION" "${d}/repara.txt" && printf 'repara-la-funcion\n'
+        grep -E 'GRANT .*DELETE' "${d}/repara.txt" || printf 'sin-delete-en-la-reparacion\n'
+        KQ_WORK_RECORD_STAGE=b6
+        work_record_privileges_sql fichaje_app >"${d}/sql-b6.txt"
+        work_record_privileges_repair_sql >"${d}/repara-b6.txt"
+        grep -q "('daily_totals', true, true, true)" "${d}/sql-b6.txt" && printf 'b6-con-delete\n'
+        grep -q "work_record_purge_batch" "${d}/sql-b6.txt" || printf 'b6-sin-funcion\n'
+        grep -q 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE daily_totals' "${d}/repara-b6.txt" && printf 'b6-repara-como-b6\n'
+        KQ_WORK_RECORD_STAGE=b7
         grep -c '^REVOKE ALL PRIVILEGES ON TABLE' "${d}/repara.txt"
         grep -c 'shift_entries TO "fichaje_app"' "${d}/repara.txt"
-        grep -E 'GRANT .*(UPDATE|INSERT) ON TABLE (shift_entries|shift_corrections|scan_events|discarded_scan_reports|incidents) ' "${d}/repara.txt" || printf 'sin-update-de-tabla\n'
+        grep -E 'GRANT .*UPDATE ON TABLE (shift_entries|shift_corrections|scan_events|discarded_scan_reports|incidents) ' "${d}/repara.txt" || printf 'sin-update-de-tabla\n'
         compose_new() { cat >/dev/null; return 0; }
         deriva=ok; r=0; repair_work_record_privileges || r=$?; printf 'reparado=%s\n' "${r}"
         deriva=sites:INSERT; r=0; repair_work_record_privileges || r=$?; printf 'sigue-pudiendo=%s\n' "${r}"
@@ -913,7 +929,16 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         BASH);
 
     expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
-        ->and($proceso->getOutput())->toContain('con-migraciones=0')
+        ->and($proceso->getOutput())->toContain('con-migraciones=0-b7')
+        ->and($proceso->getOutput())->toContain('solo-bloque-6=0-b6')
+        ->and($proceso->getOutput())->toContain('incoherente=2')
+        ->and($proceso->getOutput())->toContain('formato-viejo=2')
+        ->and($proceso->getOutput())->toContain('con-funcion-de-purga')
+        ->and($proceso->getOutput())->toContain('repara-la-funcion')
+        ->and($proceso->getOutput())->toContain('sin-delete-en-la-reparacion')
+        ->and($proceso->getOutput())->toContain('b6-con-delete')
+        ->and($proceso->getOutput())->toContain('b6-sin-funcion')
+        ->and($proceso->getOutput())->toContain('b6-repara-como-b6')
         ->and($proceso->getOutput())->toContain('a-medias=1')
         ->and($proceso->getOutput())->toContain('version-2.2.0=1')
         ->and($proceso->getOutput())->toContain('con-maintain')
@@ -933,6 +958,49 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         ->and($actualizador)->toContain('u_report_skipped')
         ->and($actualizador)->toContain('u_f_verify_work_record');
 })->group('RF-PD-10', 'RS-07', 'RL-04');
+
+it('concilia el registro completo tras migrar y solo informa: sin discrepancias, con ellas, cortada o rota (tarea 7.3, ADR-057 §4)', function (): void {
+    $proceso = bashConElActualizador(<<<'BASH'
+        kq_msg_init es
+        modo=ok
+        compose_new() {
+          { printf '%s ' "$@"; echo; } >>"${TMPDIR:-/tmp}/kq-reconcile-args.$$"
+          case "${modo}" in
+          ok) printf 'Registro y auditoria cuadran (registro completo): 12 tramos conciliados.\n'; return 0 ;;
+          clases) printf 'EL REGISTRO NO CUADRA\n  edited_columns: 2\n  missing_audit: 1\n  shift_entries abc · edited_columns · status\n'; return 1 ;;
+          corta) return 124 ;;
+          rota) printf 'Command is not defined.\n'; return 1 ;;
+          esac
+        }
+        for modo in ok clases corta rota; do
+          REPORT_CHECKS=()
+          r=0; reconcile_work_record >"${TMPDIR:-/tmp}/kq-reconcile-out.$$" 2>&1 || r=$?
+          printf '%s-salida=%s\n' "${modo}" "${r}"
+          printf '%s-informe=%s\n' "${modo}" "${REPORT_CHECKS[0]}"
+        done
+        cat "${TMPDIR:-/tmp}/kq-reconcile-args.$$"
+        rm -f "${TMPDIR:-/tmp}"/kq-reconcile-*.$$
+        BASH);
+
+    $salida = $proceso->getOutput();
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput().$salida)
+        ->and($salida)->toContain('ok-salida=0')
+        ->and($salida)->toContain('work-record-reconciliation|Conciliacion completa del registro horario con su auditoria: sin discrepancias')
+        ->and($salida)->toContain('clases-salida=0')
+        ->and($salida)->toContain('discrepancias (edited_columns=2, missing_audit=1)')
+        ->and($salida)->toContain('corta-salida=0')
+        ->and($salida)->toContain('no ha terminado en 300 s')
+        ->and($salida)->toContain('rota-salida=0')
+        ->and($salida)->toContain('sin dar resultado (codigo 1)')
+        ->and($salida)->toContain('exec -T app timeout 300 php artisan compliance:reconcile-work-record --full');
+
+    $actualizador = (string) file_get_contents(Repo::file('infra/scripts/update.sh'));
+    $llamada = strpos($actualizador, "\n  reconcile_work_record\n");
+    expect($llamada)->not->toBeFalse()
+        ->and($llamada)->toBeGreaterThan((int) strpos($actualizador, 'remember_check "privileges-work-record"'))
+        ->and($llamada)->toBeLessThan((int) strpos($actualizador, '--- artisan up (${TARGET_VERSION}) ---'));
+})->group('RL-04', 'RS-07', 'RF-PD-10');
 
 it('tras una vuelta atras in place el reintento retira las vacias que puso update.sh, y solo esas (A6-2)', function (): void {
     // La vuelta atras completada deja como .env la copia con IMAGE_DIGEST_*

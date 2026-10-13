@@ -631,7 +631,7 @@ check_backup_role() {
 # Tarea 6.4 (ADR-057 §1). Deriva de los privilegios del rol de la aplicacion sobre el
 # registro horario, compliance_profiles y sites: la MISMA consulta que update.sh
 # (lib/work-record-privileges.sh), por conjunto exacto. Solo avisa: reparar es cosa de
-# update.sh. Se exige solo con las dos migraciones aplicadas (una 2.2.0 conserva los
+# update.sh. Se exige solo con las migraciones aplicadas (estado b6 o b7, ver el lib) (una 2.2.0 conserva los
 # privilegios que esa version usa).
 check_work_record_privileges() {
   local role applied drift
@@ -643,16 +643,13 @@ check_work_record_privileges() {
   # El nombre va tal cual en el SQL: se valida como en update.sh.
   [[ "${role}" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || return 0
 
-  applied="$(printf '%s\n' "SELECT count(*) FROM migrations WHERE migration IN (${KQ_WORK_RECORD_MIGRATIONS})" |
+  applied="$(work_record_privileges_stage_sql |
     compose_current exec -T postgres sh -c "${psql_in_container}" 2>/dev/null | tr -d '[:space:]')" || applied=""
-  case "${applied}" in
-  0 | 1) return 0 ;;
-  2) ;;
-  *)
-    check_warn "$(kq_format d_c_work_record_privileges_drift "${role}")" "$(kq_text d_w_work_record_privileges_unknown)"
+  work_record_privileges_stage "${applied}" || {
+    # 1: version sin las migraciones (no se exige). 2: sin respuesta o incoherente (se avisa).
+    [ $? -eq 1 ] || check_warn "$(kq_format d_c_work_record_privileges_drift "${role}")" "$(kq_text d_w_work_record_privileges_unknown)"
     return 0
-    ;;
-  esac
+  }
 
   drift="$(work_record_privileges_sql "${role}" |
     compose_current exec -T postgres sh -c "${psql_in_container}" 2>/dev/null | tr -d '[:space:]')" || drift=""
