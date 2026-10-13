@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Support\Database;
 
+use Closure;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -28,5 +29,28 @@ final class SchemaOwner
     public static function connection(): ConnectionInterface
     {
         return DB::connection(config()->string('database.migrations.connection'));
+    }
+
+    /**
+     * Escribe con el rol propietario **saltandose los triggers de transicion**
+     * de `shift_entries` e `incidents` (ADR-057 §2, bloque 7 de la 2.2.1): es
+     * como se simula la manipulacion que la conciliacion tiene que detectar,
+     * porque el propietario tambien pasa por ellos.
+     *
+     * `session_replication_role = replica` (exige superusuario, que el rol de
+     * migracion es) con `SET LOCAL`: dura lo que la transaccion, que se confirma
+     * al terminar. Desactiva tambien las claves ajenas: lo que se escriba aqui no
+     * las comprueba.
+     *
+     * @param  Closure(ConnectionInterface): mixed  $write
+     */
+    public static function bypassingTransitionGuards(Closure $write): void
+    {
+        $connection = self::connection();
+
+        $connection->transaction(static function () use ($connection, $write): void {
+            $connection->statement('SET LOCAL session_replication_role = replica');
+            $write($connection);
+        });
     }
 }

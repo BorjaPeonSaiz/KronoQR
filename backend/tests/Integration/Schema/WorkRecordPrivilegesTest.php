@@ -158,13 +158,13 @@ it('corre con el rol de la aplicacion, no con el de migracion', function (): voi
 })->group('RS-07', 'RL-04');
 
 it('el catalogo concede a la aplicacion exactamente lo de ADR-057 §1', function (string $table, bool $update): void {
-    // `DELETE` se queda hasta el bloque 7: la purga de retencion lo usa en las
-    // seis tablas, en la transaccion de su asiento.
+    // Sin `DELETE` desde el bloque 7: la purga de retencion pasa por la
+    // funcion `SECURITY DEFINER` `work_record_purge_batch` (ADR-057 §3).
     expect(workRecordTablePrivileges($table))->toBe([
         'SELECT' => true,
         'INSERT' => true,
         'UPDATE' => $update,
-        'DELETE' => true,
+        'DELETE' => false,
         'TRUNCATE' => false,
         'REFERENCES' => false,
         'TRIGGER' => false,
@@ -210,6 +210,12 @@ it('el motor rechaza reescribir lo que el dominio no reescribe', function (strin
     'vaciar incidents' => ['TRUNCATE incidents', static fn () => DB::statement('TRUNCATE incidents')],
     'vaciar daily_totals' => ['TRUNCATE daily_totals', static fn () => DB::statement('TRUNCATE daily_totals')],
 ])->group('RS-07', 'RL-04', 'RN-13');
+
+it('el motor rechaza DELETE sobre el registro horario y sobre los centros', function (string $table): void {
+    // Sin filas que borrar tambien: el privilegio se comprueba antes de leer
+    // ninguna, asi que la prueba no depende de lo que haya sembrado.
+    workRecordExpectDenied('DELETE '.$table, static fn () => DB::table($table)->where('id', '>', 0)->delete());
+})->with([...WORK_RECORD_PRIVILEGES_TABLES, 'sites'])->group('RS-07', 'RL-04', 'RN-13', 'RL-02');
 
 it('la aplicacion sigue pudiendo cerrar, superseder y anular un tramo', function (): void {
     $open = workRecordOpenEntry();
@@ -337,7 +343,9 @@ it('su down() devuelve exactamente lo que habia y su up() lo vuelve a quitar', f
     expect($forward)->toBe(0, $forwardOutput);
 
     foreach (WORK_RECORD_PRIVILEGES_TABLES as $table) {
-        expect(workRecordTablePrivileges($table, $migrator)['UPDATE'])->toBe($table === 'daily_totals', $table);
+        expect(workRecordTablePrivileges($table, $migrator)['UPDATE'])->toBe($table === 'daily_totals', $table)
+            // La migracion del bloque 7 vuelve con las demas y lo retira.
+            ->and(workRecordTablePrivileges($table, $migrator)['DELETE'])->toBeFalse($table);
     }
 
     foreach (WORK_RECORD_PRIVILEGES_UPDATABLE as $table => $columns) {
