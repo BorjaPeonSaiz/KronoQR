@@ -2455,6 +2455,34 @@ jobs:
           # Y NINGUN detalle en el directorio que escribe el runtime.
           test -z "$(sudo sh -c 'ls /var/backups/fichaje/reports/*.detalle.log 2>/dev/null')"
 
+      - name: "U1 · Privilegios del registro horario: estado exacto tras actualizar, y detecta y repara un exceso y un defecto (tarea 6.4, ADR-057 §1)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Las MISMAS funciones que usa el paso 5 de `update.sh` (verify/repair), cargadas
+        # con `.` contra la instalacion recien actualizada. Se simula lo que la
+        # provision `2026_08_19_099000` (GRANT ... ON ALL TABLES) haria al repetirse:
+        # un UPDATE de tabla de mas en el registro horario y un INSERT de columna en
+        # el perfil de cumplimiento, mas un INSERT de menos en scan_events.
+        run: |
+          set -euo pipefail
+          cd paquete-nuevo
+          bash -c '
+            set -Eeuo pipefail
+            . ./update.sh
+            CFG_DB_USERNAME=fichaje_app; CFG_DB_MIGRATION_USERNAME=fichaje_migrator; CFG_DB_DATABASE=fichaje
+            compose_new() { sudo docker compose --env-file .env -f docker-compose.yml "$@"; }
+            work_record_privileges_expected compose_new
+            test "$(work_record_privileges_drift compose_new)" = "ok"
+            psql_alterar() { compose_new exec -T postgres psql -U fichaje_migrator -d fichaje -v ON_ERROR_STOP=1 -qc "$1"; }
+            psql_alterar "GRANT UPDATE ON shift_entries TO fichaje_app; GRANT INSERT (jurisdiction) ON compliance_profiles TO fichaje_app; REVOKE INSERT ON scan_events FROM fichaje_app"
+            drift="$(work_record_privileges_drift compose_new)"
+            echo "deriva detectada: ${drift}"
+            grep -q "shift_entries:UPDATE" <<<"${drift}"
+            grep -q "compliance_profiles.jurisdiction:INSERT" <<<"${drift}"
+            grep -q "scan_events:INSERT" <<<"${drift}"
+            repair_work_record_privileges
+            test "$(work_record_privileges_drift compose_new)" = "ok"
+          '
+
       - name: "U2 · Segunda ejecucion: salida 3 y el sistema sigue en pie"
         if: steps.anterior.outputs.skip != 'true'
         run: |
