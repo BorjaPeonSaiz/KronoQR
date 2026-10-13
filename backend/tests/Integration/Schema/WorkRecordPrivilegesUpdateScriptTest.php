@@ -22,9 +22,10 @@ use Tests\Support\Database\RefreshDatabase;
  * actualizacion de la CI no corre en cada push; esta prueba si.
  *
  * Se carga el SQL tal como lo genera el script —`source` de `update.sh`, que
- * acaba con la guarda de `install.sh`, igual que hace `UpdateScriptTest`— y se
- * ejecuta contra la base de pruebas migrada con el rol de migracion, que es
- * como lo lanza `psql_migrator`.
+ * acaba con la guarda de `install.sh`, igual que hace `UpdateScriptTest`, y
+ * carga la funcion de `lib/work-record-privileges.sh`, que comparte con
+ * `doctor.sh`— y se ejecuta contra la base de pruebas migrada con el rol de
+ * migracion, que es como lo lanza `psql_migrator`.
  */
 
 uses(RefreshDatabase::class);
