@@ -140,33 +140,62 @@ final class ApplyRetentionCommand extends Command
     }
 
     /**
-     * El fallo tipico no es un error de SQL: es que la instalacion todavia no
-     * custodia la credencial del rol de mantenimiento. Decirlo con lo que hay que
-     * hacer vale mas que el mensaje del driver (ADR-016: no podemos entrar a
-     * arreglarlo).
+     * Lo que hay que hacer, segun **por que** fallo (ADR-016: no podemos entrar
+     * a arreglarlo). Toda la purga va en la transaccion del asiento, asi que
+     * cualquier fallo de aqui no ha borrado nada.
+     *
+     * **Por SQLSTATE, no por el texto.** El mensaje de `QueryException` incluye
+     * la sentencia entera, que nombra siempre la funcion de purga: buscar su
+     * nombre en el mensaje era verdadero en cualquier fallo de la purga, y el
+     * operador recibia «revisa los relojes» ante un bloqueo o un perfil que
+     * falta (revision del bloque 7).
+     *
+     * - `42501` con el texto del rechazo del corte: la funcion de ADR-057 §3
+     *   calcula su corte con el reloj de PostgreSQL y el plazo **mas largo de
+     *   todos los centros**. Otro `42501` (un rol sin `EXECUTE`) es generico.
+     * - `55P03`: `lock_timeout` de la funcion; se puede repetir.
+     * - `P0002`: no hay perfil de cumplimiento.
      */
     private function explainDatabaseFailure(QueryException $failed): int
     {
-        $this->error('La purga no ha podido completarse contra la base de datos.');
+        $state = (string) $failed->getCode();
 
-        if (str_contains($failed->getMessage(), DatabaseWorkRecordArchive::PURGE_FUNCTION)) {
-            // La funcion de ADR-057 §3 calcula su propio corte con el reloj de
-            // PostgreSQL y lo ha rechazado: o los relojes de los dos servidores
-            // no coinciden (cerca de medianoche UTC), o el perfil de
-            // cumplimiento cambio entre la simulacion y la ejecucion.
-            $this->line('PostgreSQL ha rechazado el corte del registro de jornada: es posterior al que permite el');
-            $this->line('perfil de cumplimiento con la fecha UTC del servidor de base de datos. No se ha borrado nada.');
-            $this->line('Comprueba la hora de los dos servidores y vuelve a simular.');
-            $this->line('Detalle tecnico: '.$failed->getMessage());
+        $reason = match (true) {
+            $state === '42501' && str_contains($failed->getMessage(), DatabaseWorkRecordArchive::CUTOFF_REJECTED) => 'cutoff',
+            $state === '55P03' => 'lock',
+            $state === 'P0002' => 'profile',
+            default => 'generic',
+        };
 
-            return self::FAILURE;
+        $this->error($this->text('retention.failure.title'));
+
+        foreach ($this->lines('retention.failure.'.$reason) as $line) {
+            $this->line($line);
         }
 
-        $this->line('Si es la conexion «pgsql_maintenance», comprueba que DB_MAINTENANCE_PASSWORD esta puesta y');
-        $this->line('que el rol tiene credencial: infra/docker/postgres/initdb/02-application-roles.sh la asigna.');
-        $this->line('Detalle tecnico: '.$failed->getMessage());
+        $this->line($this->text('retention.failure.detail', ['detail' => $failed->getMessage()]));
 
         return self::FAILURE;
+    }
+
+    /**
+     * @param  array<string, string>  $replace
+     */
+    private function text(string $key, array $replace = []): string
+    {
+        $text = __($key, $replace);
+
+        return \is_string($text) ? $text : $key;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function lines(string $key): array
+    {
+        $lines = __($key);
+
+        return \is_array($lines) ? array_values(array_filter($lines, \is_string(...))) : [$key];
     }
 
     private function batchSize(): int

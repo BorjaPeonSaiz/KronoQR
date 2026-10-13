@@ -81,6 +81,13 @@ final readonly class DatabaseWorkRecordArchive implements WorkRecordArchive
      */
     public const string PURGE_FUNCTION = 'work_record_purge_batch';
 
+    /**
+     * Lo que dice la funcion al rechazar un corte posterior al admisible, con
+     * `42501`. Distingue ese rechazo de otro `42501` (un rol sin `EXECUTE`);
+     * lo ata al texto de la migracion `ApplyRetentionCommandTest`.
+     */
+    public const string CUTOFF_REJECTED = 'posterior al admisible';
+
     /** El lote mas grande que admite la funcion; uno mayor se recorta aqui. */
     public const int MAX_BATCH = 100000;
 

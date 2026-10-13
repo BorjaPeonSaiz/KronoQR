@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Application\Port\WorkRecordArchive;
 use App\Modules\Compliance\Application\UseCase\PlanRetention;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -228,8 +231,97 @@ it('no borra nada ni deja asiento si el reloj de la aplicacion pide un corte que
         '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
     ]);
 
+    $output = Artisan::output();
+
+    expect($output)->not->toContain('pgsql_maintenance');
+
     expect($exit)->toBe(1)
-        ->and(Artisan::output())->toContain('PostgreSQL ha rechazado el corte')
+        ->and($output)->toContain('PostgreSQL ha rechazado el corte')
+        // La funcion toma el plazo mas largo de todos los centros.
+        ->toContain('todos los centros')
+        // El texto con el que el comando reconoce el rechazo es el de la
+        // funcion de la migracion: si uno cambia, esto rompe.
+        ->toContain(DatabaseWorkRecordArchive::CUTOFF_REJECTED)
         ->and(applyRetentionCounts())->toBe($before)
         ->and(DB::table('audit_log')->count())->toBe($audit);
 })->group('RL-02', 'RL-04', 'RS-07', 'RN-13');
+
+/**
+ * Un `QueryException` con ese SQLSTATE, como lo lanzaria el controlador: el
+ * mensaje lleva la sentencia, que nombra la funcion de purga.
+ */
+function applyRetentionFailure(string $sqlState, string $message): QueryException
+{
+    $driver = new class($message) extends PDOException
+    {
+        public function __construct(string $message)
+        {
+            parent::__construct($message);
+        }
+    };
+
+    (new ReflectionProperty(Exception::class, 'code'))->setValue($driver, $sqlState);
+
+    return new QueryException('pgsql', 'SELECT dataset, deleted FROM public.work_record_purge_batch(?::date, ?::integer)', [], $driver);
+}
+
+it('explica cada fallo de la purga por su SQLSTATE, no por el nombre de la funcion', function (string $sqlState, string $message, string $expected, string $notExpected): void {
+    $dates = applyRetentionDates();
+    applyRetentionEntry($dates['expired']);
+
+    // Lo que se inspecciona es lo de verdad; el borrado falla como lo haria la
+    // funcion. El mensaje del controlador nombra siempre la funcion: antes eso
+    // bastaba para decir «revisa los relojes» ante cualquier fallo.
+    $real = app(DatabaseWorkRecordArchive::class);
+    app()->instance(WorkRecordArchive::class, new readonly class($real, applyRetentionFailure($sqlState, $message)) implements WorkRecordArchive
+    {
+        public function __construct(private WorkRecordArchive $real, private QueryException $failure) {}
+
+        public function inspect(DateTimeImmutable $cutoff): array
+        {
+            return $this->real->inspect($cutoff);
+        }
+
+        public function purge(DateTimeImmutable $cutoff, int $batchSize): array
+        {
+            throw $this->failure;
+        }
+    });
+
+    $before = applyRetentionCounts();
+    $audit = DB::table('audit_log')->count();
+
+    $exit = Artisan::call('compliance:apply-retention', [
+        '--confirm' => applyRetentionToken(),
+        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+    ]);
+
+    $output = Artisan::output();
+
+    expect($output)->not->toContain($notExpected);
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('No se ha borrado nada')
+        ->toContain($expected)
+        ->and(applyRetentionCounts())->toBe($before)
+        ->and(DB::table('audit_log')->count())->toBe($audit);
+})->with([
+    'bloqueo (55P03)' => [
+        '55P03',
+        'SQLSTATE[55P03]: Lock not available: 7 ERROR:  canceling statement due to lock timeout',
+        'Vuelve a ejecutar la misma orden',
+        'PostgreSQL ha rechazado el corte',
+    ],
+    'sin perfil (P0002)' => [
+        'P0002',
+        'SQLSTATE[P0002]: No data found: 7 ERROR:  work_record_purge_batch: no hay perfil de cumplimiento con el que calcular el corte',
+        'No hay ningún perfil de cumplimiento',
+        'PostgreSQL ha rechazado el corte',
+    ],
+    'otro 42501 (sin EXECUTE)' => [
+        '42501',
+        'SQLSTATE[42501]: Insufficient privilege: 7 ERROR:  permission denied for function work_record_purge_batch',
+        'pgsql_maintenance',
+        'PostgreSQL ha rechazado el corte',
+    ],
+])->group('RL-02', 'RF-PR-03');
