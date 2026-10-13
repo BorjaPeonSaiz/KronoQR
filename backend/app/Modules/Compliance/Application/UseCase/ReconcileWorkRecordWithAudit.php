@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Application\UseCase;
 
 use App\Modules\Compliance\Application\Port\WorkRecordAuditSource;
 use App\Modules\Compliance\Application\Port\WorkRecordReconciliationMetrics;
+use App\Modules\Compliance\Domain\ValueObject\PurgeFloors;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordAuditContext;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPurgeBoundary;
@@ -14,6 +15,7 @@ use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationScope;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationWindow;
 use App\Modules\Compliance\Domain\WorkRecordReconciliation;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Application\Support\SpanScope;
 use DateTimeImmutable;
@@ -57,8 +59,10 @@ final readonly class ReconcileWorkRecordWithAudit
         private WorkRecordAuditSource $source,
         private WorkRecordReconciliationMetrics $metrics,
         private Clock $clock,
-        /** El suelo de años que admite el perfil, para no creer una purga que conservo menos (regla dura 14). */
+        /** El suelo legal de cada centro, para no creer una purga que conservo menos (RL-02, regla dura 14). */
         private RetentionYearsFloor $floor,
+        /** El centro de la instalacion, para juzgar con su suelo un asiento de purga que no dice centro. */
+        private InstallationSiteProvider $sites,
     ) {}
 
     /**
@@ -94,6 +98,8 @@ final readonly class ReconcileWorkRecordWithAudit
             'outcome' => $result->isConsistent() ? 'consistent' : 'discrepancies',
             'entries_checked' => $result->entriesChecked,
             'discrepancies' => $result->discrepancyCount(),
+            'reviewed_purges' => $result->reviewedPurges,
+            'reviewed_purges_explaining_deletions' => $result->reviewedPurgesExplainingDeletions,
         ]);
 
         return $result;
@@ -112,7 +118,7 @@ final readonly class ReconcileWorkRecordWithAudit
                 // Lo primero que entrega el origen, en la misma instantanea. Los
                 // asientos de purga que no se pueden creer no explican nada y
                 // salen ademas como discrepancia propia.
-                $boundary = WorkRecordPurgeBoundary::assess($item, $runAt, $this->floor->minimumRetentionYears());
+                $boundary = WorkRecordPurgeBoundary::assess($item, $runAt, $this->floorsFor($item));
                 $found = $boundary->rejected;
             } else {
                 $checked++;
@@ -138,6 +144,37 @@ final readonly class ReconcileWorkRecordWithAudit
             counts: $counts,
             discrepancies: $detailed,
             truncated: array_sum($counts) > \count($detailed),
+            reviewedPurges: \count($boundary->reviewedPurgeIds),
+            reviewedPurgesExplainingDeletions: \count($boundary->explainingReviewedPurgeIds),
         );
+    }
+
+    /**
+     * El suelo legal de cada centro que aparece en los asientos de purga: una
+     * consulta al puerto por centro distinto. Si algun asiento no dice centro,
+     * tambien el del centro de la instalacion, como en la revision de una purga
+     * ({@see ReviewOutOfBoundsPurge}): los dos caminos juzgan con el mismo suelo.
+     */
+    private function floorsFor(WorkRecordAuditContext $context): PurgeFloors
+    {
+        $bySite = [];
+        $withoutSite = false;
+
+        foreach ($context->purges as $purge) {
+            if ($purge->siteId === null) {
+                $withoutSite = true;
+            } elseif (! isset($bySite[$purge->siteId])) {
+                $bySite[$purge->siteId] = $this->floor->forSite($purge->siteId);
+            }
+        }
+
+        $installationFloor = null;
+        $installationSite = $withoutSite ? $this->sites->installationSite() : null;
+
+        if ($installationSite !== null) {
+            $installationFloor = $bySite[$installationSite->id] ?? $this->floor->forSite($installationSite->id);
+        }
+
+        return PurgeFloors::of($bySite, $installationFloor);
     }
 }

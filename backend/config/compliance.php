@@ -193,6 +193,9 @@ return [
      * es explicita —«los umbrales legales se leen del perfil de cumplimiento, no
      * son constantes»— y un `4` escrito en este fichero seria indistinguible de
      * uno configurado hasta que alguien comparase una purga con el convenio.
+     * Lo que si vive en este fichero es el SUELO por debajo del cual la ley no
+     * deja bajar ese plazo (`retention_floors`, mas abajo): no es el plazo del
+     * cliente, es el minimo legal de cada jurisdiccion.
      *
      * LO QUE SI ESTA AQUI es el ciclo corto, que no es legal sino operativo:
      * cuanto historico tecnico quiere guardar quien administra el servidor. Los
@@ -282,6 +285,46 @@ return [
          * aporta quien ejecuta la purga. La simulacion no la usa.
          */
         'maintenance_connection' => env('DB_MAINTENANCE_CONNECTION', 'pgsql_maintenance'),
+    ],
+
+    /*
+     * Suelo legal de `compliance_profiles.retention_years` por jurisdiccion
+     * (RL-02, RF-PD-07, ADR-057 enmienda del 10-10-2026, R7-SC-01).
+     *
+     * ES UN DATO LEGAL DEL PRODUCTO, NO DEL CLIENTE (regla dura 13). El plazo lo
+     * elige el cliente en su perfil; el minimo por debajo del cual la ley no le
+     * deja bajar lo fija la norma de su jurisdiccion, y es igual para todos los
+     * clientes de esa jurisdiccion. Por eso:
+     *
+     *   - vive aqui y NO en `compliance_profiles`: una columna editable con la
+     *     credencial de la aplicacion seria un suelo que el propio perfil puede
+     *     bajar;
+     *   - NO lleva variable de entorno, a proposito: un suelo que el `.env` del
+     *     cliente puede rebajar no es un suelo;
+     *   - el dominio no lo lee: le llega ya resuelto por el puerto
+     *     `Shared\Application\Port\RetentionYearsFloor` (regla dura 14).
+     *
+     * LAS CLAVES SON PAISES (ISO 3166-1 alfa-2, en mayusculas). Una subdivision
+     * (`ES-CN`, ISO 3166-2) hereda el suelo de su pais. Una jurisdiccion que no
+     * esta aqui recibe `default`: vender en un pais nuevo no obliga a tocar este
+     * fichero (RF-PD-01); conocer su suelo legal es mejorar el producto, y se
+     * hace en una version, con su `CHECK` en el esquema.
+     *
+     * CADA ENTRADA POR ENCIMA DE `default` TIENE SU `CHECK` EN EL ESQUEMA
+     * (`compliance_profiles_chk_retention_floor_<pais>`), que es la red si
+     * alguien edita la fila a mano. Una prueba de integracion ata las dos
+     * copias: añadir un pais aqui sin su migracion la pone en rojo.
+     *
+     * `default` = 1 es el mismo minimo que ya exige el `CHECK` de positivos: un
+     * cero no describe un convenio mas laxo, apaga la retencion.
+     */
+    'retention_floors' => [
+        'default' => 1,
+        'jurisdictions' => [
+            // Art. 34.9 ET: «La empresa conservará los registros a que se
+            // refiere este precepto durante cuatro años».
+            'ES' => 4,
+        ],
     ],
 
 ];

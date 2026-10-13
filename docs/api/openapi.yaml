@@ -7677,6 +7677,7 @@ paths:
                       week_starts_on: 1
                       holiday_calendar: []
                       retention_years: 4
+                      retention_years_floor: 4
                       is_default: true
                       source: installation_default
                       updated_at: null
@@ -7712,6 +7713,17 @@ paths:
         `compliance:apply-retention` propone en simulacion y exige una
         confirmacion derivada del informe— pero es el unico campo cuyo error se
         paga con datos que no vuelven.
+
+        **`retention_years` no baja del suelo legal de la jurisdiccion**
+        (RL-02, `retention_years_floor` en la respuesta): 4 años en España
+        (art. 34.9 ET). Un valor menor se rechaza con `422` y un mensaje en
+        `errors.retention_years`, en el idioma negociado, que dice la
+        jurisdiccion, el suelo y el valor enviado. La respuesta no lleva un
+        codigo de motivo legible por maquina: quien la consuma compara con
+        `retention_years_floor`, que ya tiene. **Se comprueba en todo `PATCH`**, toque o no
+        `retention_years`, como la invariante semanal ≥ diaria: un perfil que
+        ya estuviera por debajo no admite ningun otro cambio hasta subirlo. Un
+        cambio rechazado no escribe fila ni asiento.
 
         **Guardar el valor que ya regia no escribe nada**: ni fila ni asiento.
 
@@ -7753,7 +7765,28 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
-          $ref: '#/components/responses/ValidationFailed'
+          description: |
+            La peticion no cumple el contrato o deja el perfil en un estado que
+            no admite: un campo fuera de su rango, la jornada semanal por
+            debajo de la diaria, un nombre ya usado o **`retention_years` por
+            debajo del suelo legal de la jurisdiccion** (RL-02). `errors` lleva el detalle colgado del campo que hay que
+            corregir, en el idioma negociado. No se ha cambiado nada y no hay
+            asiento.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblem'
+              examples:
+                por-debajo-del-suelo-legal:
+                  summary: Bajar la retencion a 3 años en un perfil español
+                  value:
+                    type: 'urn:kronoqr:problem:validation-failed'
+                    title: Peticion no valida
+                    status: 422
+                    detail: Revisa los campos indicados.
+                    errors:
+                      retention_years:
+                        - La jurisdicción ES obliga a conservar el registro al menos 4 años; has indicado 3.
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -15681,6 +15714,7 @@ components:
         - week_starts_on
         - holiday_calendar
         - retention_years
+        - retention_years_floor
         - is_default
         - source
         - updated_at
@@ -15705,11 +15739,12 @@ components:
           type: string
           minLength: 2
           maxLength: 8
+          pattern: '^[A-Z]{2}(-[A-Z0-9]{1,3})?$'
           description: |
             Codigo de la jurisdiccion cuyo marco legal describe el perfil.
-            **Solo lectura**: lo fija la instalacion y hoy no lo lee ninguna
-            regla, asi que dejarlo editable seria ofrecer un campo cuyo cambio no
-            tiene ningun efecto.
+            **Solo lectura**: lo fija la instalacion. Su pais (ISO 3166-1 alfa-2,
+            con subdivision ISO 3166-2 opcional, como `ES-CN`) decide el suelo
+            legal de `retention_years` (`retention_years_floor`).
           examples:
             - ES
         min_rest_hours:
@@ -15778,6 +15813,19 @@ components:
             purgarlo. **4 en España** (art. 34.9 ET). Bajarlo amplia lo que la
             purga considera vencido, sobre datos con obligacion legal de
             conservacion.
+            No admite un valor menor que `retention_years_floor`.
+        retention_years_floor:
+          type: integer
+          minimum: 1
+          readOnly: true
+          description: |
+            Suelo legal de `retention_years` en la jurisdiccion del perfil: 4 en
+            España (art. 34.9 ET). El perfil no admite un valor menor (`422`
+            con el mensaje en `errors.retention_years`). **Solo lectura**: es un dato legal del
+            producto, no del cliente (RL-02, ADR-057 enmienda del 10-10-2026);
+            una jurisdiccion sin suelo conocido recibe 1.
+          examples:
+            - 4
         is_default:
           type: boolean
           description: |
@@ -15851,6 +15899,9 @@ components:
           type: integer
           minimum: 1
           maximum: 50
+          description: |
+            Ademas del rango, no puede quedar por debajo del suelo legal de la
+            jurisdiccion del perfil (`retention_years_floor`; 4 en España).
 
     InstallationSettings:
       type: object

@@ -107,6 +107,10 @@ function textfileSeries(): array
         'work_record_reconciliation_discrepancies',
         'work_record_reconciliation_last_run_timestamp_seconds',
         'work_record_reconciliation_entries_checked',
+        // Purgas no admisibles dadas por revisadas (ADR-057 enmienda del
+        // 10-10-2026 §6), con `explains_deletions`: no son discrepancias y no
+        // cuentan en la de arriba.
+        'work_record_reconciliation_reviewed_purges',
         // Identity\Infrastructure\Metrics\TextfileCredentialMetrics
         'employees_without_delivered_credential',
         'credentials_pending_print',

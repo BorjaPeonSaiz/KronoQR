@@ -758,6 +758,18 @@ enum AuditAction: string
     case RetentionPurgeExecuted = 'retention.purge_executed';
 
     /**
+     * Una persona da por revisado un asiento `retention.purge_executed` que la
+     * conciliacion juzga no admisible (`purge_out_of_bounds`, RL-04, RS-07,
+     * ADR-057 enmienda del 10-10-2026 §6). Lo escribe
+     * `compliance:reconcile-work-record --acknowledge`, con actor la cuenta de
+     * gestion activa que responde de ello, y el payload lleva el id del asiento
+     * revisado, el motivo y lo que la revision explica. Comparte sujeto con la
+     * purga para que una consulta por `retention.%` traiga las dos. No borra
+     * ni corrige nada: la purga sigue en `audit_log` (regla dura 6).
+     */
+    case RetentionPurgeReviewed = 'retention.purge_reviewed';
+
+    /**
      * Sujeto de la accion —la parte anterior al punto— y familia del bloque D a
      * la que pertenece.
      *

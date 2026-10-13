@@ -18,9 +18,11 @@ final readonly class WorkRecordAuditContext
     /**
      * @param  list<AuditedPurge>  $purges
      * @param  list<int>  $sealedAuditYears
+     * @param  list<AuditedPurgeReview>  $reviews  Los `retention.purge_reviewed`, en la misma instantanea.
      */
     public function __construct(
         public array $purges = [],
         public array $sealedAuditYears = [],
+        public array $reviews = [],
     ) {}
 }

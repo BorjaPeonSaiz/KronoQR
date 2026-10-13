@@ -1587,7 +1587,8 @@ threshold, value by value, is in [`configuration.md`](configuration.md) §2.4.
 > Lowering it widens what the purge considers expired, over data there is a
 > legal obligation to keep for four years. No purge ever runs on its own —it is
 > proposed first and it has to be confirmed—, but do not touch that number
-> without reading [`legal-obligations.md`](legal-obligations.md) §4.
+> without reading [`legal-obligations.md`](legal-obligations.md) §4. Below
+> the legal minimum —four years in Spain— the panel does not let it be saved.
 
 ---
 

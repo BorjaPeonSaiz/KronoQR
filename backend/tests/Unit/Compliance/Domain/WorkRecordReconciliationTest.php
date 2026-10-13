@@ -5,8 +5,10 @@ declare(strict_types=1);
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Compliance\Domain\Exception\InvalidWorkRecordReconciliationWindow;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
+use App\Modules\Compliance\Domain\ValueObject\AuditedPurgeReview;
 use App\Modules\Compliance\Domain\ValueObject\AuditedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditTrailEntry;
+use App\Modules\Compliance\Domain\ValueObject\PurgeFloors;
 use App\Modules\Compliance\Domain\ValueObject\RecordedCorrection;
 use App\Modules\Compliance\Domain\ValueObject\RecordedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordAuditContext;
@@ -18,6 +20,8 @@ use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationScope;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationWindow;
 use App\Modules\Compliance\Domain\WorkRecordReconciliation;
 use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftSegment;
+use App\Modules\Shared\Domain\ValueObject\Jurisdiction;
+use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 use Tests\Support\Time\Instants;
 
 /*
@@ -207,7 +211,7 @@ function conciliacionLimite(?string $corte = null, array $sellados = []): WorkRe
     return WorkRecordPurgeBoundary::assess(
         new WorkRecordAuditContext($purgas, $sellados),
         new DateTimeImmutable('2031-01-01T00:00:00Z'),
-        1,
+        PurgeFloors::of([]),
     );
 }
 
@@ -485,7 +489,7 @@ it('exige la fila de correccion con el mismo motivo y el mismo autor que su asie
 
 it('admite el asiento de una purga real y lo usa solo para su centro', function (): void {
     $purga = new AuditedPurge(90, new DateTimeImmutable('2030-10-08T05:00:00Z'), '2026-10-08', 4, 1);
-    $limite = WorkRecordPurgeBoundary::assess(new WorkRecordAuditContext([$purga]), new DateTimeImmutable('2031-01-01T00:00:00Z'), 1);
+    $limite = WorkRecordPurgeBoundary::assess(new WorkRecordAuditContext([$purga]), new DateTimeImmutable('2031-01-01T00:00:00Z'), PurgeFloors::of([]));
     $deOtroCentro = AuditedShiftEntry::fromTrail(conciliacionSalidaAuditada(['site_id' => 2]), false);
 
     expect($limite->rejected)->toBe([])
@@ -496,7 +500,7 @@ it('admite el asiento de una purga real y lo usa solo para su centro', function 
 })->group('RL-02', 'RL-04');
 
 it('no cree un asiento de purga que la purga real no pudo escribir, y lo denuncia', function (AuditedPurge $purga, array $campos): void {
-    $limite = WorkRecordPurgeBoundary::assess(new WorkRecordAuditContext([$purga]), new DateTimeImmutable('2026-10-08T04:15:00Z'), 1);
+    $limite = WorkRecordPurgeBoundary::assess(new WorkRecordAuditContext([$purga]), new DateTimeImmutable('2026-10-08T04:15:00Z'), PurgeFloors::of([]));
 
     expect($limite->cutoffFor(1))->toBeNull()
         ->and($limite->rejected)->toHaveCount(1)
@@ -557,3 +561,205 @@ it('abre la ventana diaria con dos dias de margen para los asientos', function (
 it('rechaza una ventana que no mira ningun dia', function (): void {
     WorkRecordReconciliationWindow::recent(Instants::utc('2026-10-08 04:15'), 0);
 })->throws(InvalidWorkRecordReconciliationWindow::class)->group('RL-04');
+
+// --- El suelo legal por jurisdiccion y la purga revisada (bloque 5 de la 2.2.1)
+
+/** Pasada de referencia de las pruebas del suelo y de la revision. */
+const WORK_RECORD_RECONCILIATION_PASADA = '2031-01-01T00:00:00Z';
+
+/**
+ * Una purga del centro 1 escrita el 8 de octubre de 2029 con tres años de
+ * conservacion y el corte que esos tres años permitian: admisible con suelo
+ * 1, no admisible en España (suelo 4) solo por el plazo.
+ */
+function conciliacionPurgaATresAnos(int $id = 90, string $corte = '2026-10-08', ?int $centro = 1, ?int $sueloDeclarado = null): AuditedPurge
+{
+    return new AuditedPurge($id, new DateTimeImmutable('2029-10-08T05:00:00Z'), $corte, 3, $centro, $sueloDeclarado);
+}
+
+/**
+ * @param  list<AuditedPurge>  $purgas
+ * @param  list<AuditedPurgeReview>  $revisiones
+ * @param  array<int, int>  $suelos  Años por centro.
+ */
+function conciliacionLimiteConSuelo(array $purgas, array $revisiones = [], array $suelos = [1 => 4]): WorkRecordPurgeBoundary
+{
+    $porCentro = [];
+
+    foreach ($suelos as $centro => $anos) {
+        $porCentro[$centro] = LegalRetentionFloor::fromCatalog(Jurisdiction::fromCode('ES'), $anos);
+    }
+
+    return WorkRecordPurgeBoundary::assess(
+        new WorkRecordAuditContext($purgas, [], $revisiones),
+        new DateTimeImmutable(WORK_RECORD_RECONCILIATION_PASADA),
+        PurgeFloors::of($porCentro),
+    );
+}
+
+function conciliacionRevision(int $id, ?int $revisada): AuditedPurgeReview
+{
+    return new AuditedPurgeReview($id, new DateTimeImmutable('2030-03-01T10:00:00Z'), $revisada);
+}
+
+/** Si el borrado del tramo de esa jornada queda explicado por el limite. */
+function conciliacionBorradoExplicado(WorkRecordPurgeBoundary $limite, string $jornada = '2026-10-07'): bool
+{
+    $asiento = AuditedShiftEntry::fromTrail(conciliacionSalidaAuditada(['work_date' => $jornada]), false);
+
+    return WorkRecordReconciliation::compare(new WorkRecordPair(WORK_RECORD_RECONCILIATION_TRAMO, null, $asiento), $limite) === null;
+}
+
+it('denuncia una purga española a tres años y admite la de cuatro', function (): void {
+    $aTres = conciliacionLimiteConSuelo([conciliacionPurgaATresAnos()]);
+    $aCuatro = conciliacionLimiteConSuelo([
+        new AuditedPurge(90, new DateTimeImmutable('2030-10-08T05:00:00Z'), '2026-10-08', 4, 1),
+    ]);
+
+    expect($aTres->rejected)->toHaveCount(1)
+        ->and($aTres->rejected[0]->kind)->toBe(WorkRecordDiscrepancyKind::PurgeOutOfBounds)
+        ->and($aTres->rejected[0]->fields)->toBe(['retention_years'])
+        ->and($aTres->cutoffFor(1))->toBeNull()
+        ->and($aTres->reviewedPurgeIds)->toBe([])
+        ->and(conciliacionBorradoExplicado($aTres))->toBeFalse()
+        ->and($aCuatro->rejected)->toBe([])
+        ->and($aCuatro->cutoffFor(1))->toBe('2026-10-08')
+        ->and(conciliacionBorradoExplicado($aCuatro))->toBeTrue();
+})->group('RS-07', 'RL-02', 'RF-PD-07');
+
+it('juzga con el mayor de los suelos: el declarado por el asiento solo lo endurece', function (): void {
+    // Centro sin suelo (1) y asiento que declara 4: gana el 4.
+    $declaradoMayor = conciliacionLimiteConSuelo([conciliacionPurgaATresAnos(sueloDeclarado: 4)], [], [1 => 1]);
+    // Centro español (4) y asiento que declara 1: no se rebaja.
+    $declaradoMenor = conciliacionLimiteConSuelo([conciliacionPurgaATresAnos(sueloDeclarado: 1)], [], [1 => 4]);
+    // Centro sin suelo y asiento sin declaracion: la purga a tres años vale.
+    $sinSuelo = conciliacionLimiteConSuelo([conciliacionPurgaATresAnos()], [], [1 => 1]);
+
+    expect($declaradoMayor->rejected[0]->fields ?? null)->toBe(['retention_years'])
+        ->and($declaradoMenor->rejected[0]->fields ?? null)->toBe(['retention_years'])
+        ->and($sinSuelo->rejected)->toBe([])
+        ->and($sinSuelo->cutoffFor(1))->toBe('2026-10-08');
+})->group('RS-07', 'RL-02');
+
+it('saca de las pendientes una purga revisada y vuelve a explicar sus borrados hasta su corte, no despues', function (): void {
+    $limite = conciliacionLimiteConSuelo([conciliacionPurgaATresAnos()], [conciliacionRevision(95, 90)]);
+
+    expect($limite->rejected)->toBe([])
+        ->and($limite->reviewedPurgeIds)->toBe([90])
+        ->and($limite->explainingReviewedPurgeIds)->toBe([90])
+        ->and($limite->cutoffFor(1))->toBe('2026-10-08')
+        // La jornada anterior al corte: explicada. La del corte y la posterior, no.
+        ->and(conciliacionBorradoExplicado($limite, '2026-10-07'))->toBeTrue()
+        ->and(conciliacionBorradoExplicado($limite, '2026-10-08'))->toBeFalse()
+        ->and(conciliacionBorradoExplicado($limite, '2026-10-09'))->toBeFalse();
+})->group('RS-07', 'RL-02', 'RL-04');
+
+it('se queda con el corte mas reciente de un centro aunque venga de una purga revisada', function (): void {
+    $limite = conciliacionLimiteConSuelo(
+        [
+            new AuditedPurge(80, new DateTimeImmutable('2028-10-08T05:00:00Z'), '2024-10-08', 4, 1),
+            conciliacionPurgaATresAnos(),
+            new AuditedPurge(99, new DateTimeImmutable('2028-10-08T05:00:00Z'), '2023-10-08', 4, 1),
+        ],
+        [conciliacionRevision(95, 90)],
+    );
+
+    expect($limite->cutoffFor(1))->toBe('2026-10-08')
+        ->and($limite->rejected)->toBe([]);
+})->group('RS-07', 'RL-04');
+
+it('no deja que una revision explique un corte imposible ni una purga sin centro', function (AuditedPurge $purga): void {
+    $limite = conciliacionLimiteConSuelo([$purga], [conciliacionRevision(95, 90)]);
+
+    expect($limite->rejected)->toBe([])
+        ->and($limite->reviewedPurgeIds)->toBe([90])
+        ->and($limite->explainingReviewedPurgeIds)->toBe([])
+        ->and($limite->cutoffBySite)->toBe([])
+        ->and(conciliacionBorradoExplicado($limite))->toBeFalse();
+})->with([
+    // Tres años permitian hasta el 8 de octubre de 2026; un dia mas ya no.
+    'corte posterior al que su plazo permitia' => [conciliacionPurgaATresAnos(corte: '2026-10-09')],
+    'corte imposible a tres años' => [conciliacionPurgaATresAnos(corte: '9999-12-31')],
+    'corte que no es una fecha' => [conciliacionPurgaATresAnos(corte: '2026-13-40')],
+    'sin centro' => [conciliacionPurgaATresAnos(centro: null)],
+])->group('RS-07', 'RL-04');
+
+it('ignora una revision anterior a la purga o que apunta a otro asiento', function (AuditedPurgeReview $revision): void {
+    $limite = conciliacionLimiteConSuelo([conciliacionPurgaATresAnos()], [$revision]);
+
+    expect($limite->rejected)->toHaveCount(1)
+        ->and($limite->reviewedPurgeIds)->toBe([])
+        ->and($limite->cutoffFor(1))->toBeNull();
+})->with([
+    'anterior en la cadena' => [conciliacionRevision(89, 90)],
+    'la misma fila' => [conciliacionRevision(90, 90)],
+    'de otro asiento' => [conciliacionRevision(95, 77)],
+    'sin asiento revisado' => [conciliacionRevision(95, null)],
+])->group('RS-07', 'RL-04');
+
+it('cuenta una sola vez una purga revisada dos veces, y sigue contando la posterior sin revisar', function (): void {
+    $limite = conciliacionLimiteConSuelo(
+        [conciliacionPurgaATresAnos(90), conciliacionPurgaATresAnos(100, '2025-10-08')],
+        [conciliacionRevision(95, 90), conciliacionRevision(96, 90)],
+    );
+
+    expect($limite->reviewedPurgeIds)->toBe([90])
+        ->and($limite->rejected)->toHaveCount(1)
+        ->and($limite->rejected[0]->auditEntryId)->toBe(100);
+})->group('RS-07', 'RL-04');
+
+it('explica tras revisarse solo la purga cuyo unico defecto es el plazo', function (AuditedPurge $purga, array $defectos, bool $explica): void {
+    // Los defectos son los que da la regla con el suelo español: el corte se
+    // juzga contra el plazo declarado aunque este bajo el suelo.
+    $calculados = WorkRecordPurgeBoundary::violations($purga, new DateTimeImmutable(WORK_RECORD_RECONCILIATION_PASADA), 4);
+
+    expect($calculados)->toBe($defectos)
+        ->and(WorkRecordPurgeBoundary::explainsOnceReviewed($purga, $calculados))->toBe($explica);
+})->with([
+    'solo el plazo, corte justo' => [conciliacionPurgaATresAnos(), ['retention_years'], true],
+    'solo el plazo, corte anterior' => [conciliacionPurgaATresAnos(corte: '2020-01-01'), ['retention_years'], true],
+    'plazo y corte imposible' => [conciliacionPurgaATresAnos(corte: '9999-12-31'), ['cutoff_date', 'retention_years'], false],
+    'sin defectos' => [new AuditedPurge(90, new DateTimeImmutable('2030-10-08T05:00:00Z'), '2026-10-08', 4, 1), [], false],
+    'otro defecto' => [new AuditedPurge(90, new DateTimeImmutable('2032-01-01T05:00:00Z'), '2028-01-01', 3, 1), ['retention_years', 'occurred_at'], false],
+    'cero años' => [new AuditedPurge(90, new DateTimeImmutable('2029-10-08T05:00:00Z'), '2029-10-08', 0, 1), ['retention_years'], false],
+    'años negativos' => [new AuditedPurge(90, new DateTimeImmutable('2029-10-08T05:00:00Z'), '2029-10-08', -3, 1), ['retention_years'], false],
+    'sin años' => [new AuditedPurge(90, new DateTimeImmutable('2029-10-08T05:00:00Z'), '2026-10-08', null, 1), ['retention_years'], false],
+    'un año, corte justo' => [new AuditedPurge(90, new DateTimeImmutable('2029-10-08T05:00:00Z'), '2028-10-08', 1, 1), ['retention_years'], true],
+    'un año, corte un dia tarde' => [new AuditedPurge(90, new DateTimeImmutable('2029-10-08T05:00:00Z'), '2028-10-09', 1, 1), ['cutoff_date', 'retention_years'], false],
+    'sin centro' => [conciliacionPurgaATresAnos(centro: null), ['retention_years', 'site_id'], false],
+    'corte un dia tarde' => [conciliacionPurgaATresAnos(corte: '2026-10-09'), ['cutoff_date', 'retention_years'], false],
+    'corte invalido' => [conciliacionPurgaATresAnos(corte: '2026-02-30'), ['cutoff_date', 'retention_years'], false],
+])->group('RS-07', 'RL-04');
+
+it('resuelve el suelo de cada centro y el efectivo de cada asiento', function (): void {
+    $suelos = PurgeFloors::of([1 => LegalRetentionFloor::fromCatalog(Jurisdiction::fromCode('ES'), 4)]);
+
+    expect($suelos->yearsFor(1))->toBe(4)
+        ->and($suelos->yearsFor(2))->toBe(1)
+        ->and($suelos->yearsFor(null))->toBe(1)
+        ->and($suelos->effectiveFor(conciliacionPurgaATresAnos()))->toBe(4)
+        ->and($suelos->effectiveFor(conciliacionPurgaATresAnos(sueloDeclarado: 6)))->toBe(6)
+        ->and($suelos->effectiveFor(conciliacionPurgaATresAnos(sueloDeclarado: 2)))->toBe(4)
+        ->and($suelos->effectiveFor(conciliacionPurgaATresAnos(centro: 2, sueloDeclarado: 0)))->toBe(1)
+        ->and($suelos->effectiveFor(conciliacionPurgaATresAnos(centro: null)))->toBe(1);
+
+    // Un asiento sin centro se juzga con el suelo del centro de la instalacion.
+    $conInstalacion = PurgeFloors::of([], LegalRetentionFloor::fromCatalog(Jurisdiction::fromCode('ES'), 4));
+
+    expect($conInstalacion->yearsFor(null))->toBe(4)
+        ->and($conInstalacion->yearsFor(3))->toBe(1)
+        ->and($conInstalacion->effectiveFor(conciliacionPurgaATresAnos(centro: null)))->toBe(4);
+})->group('RL-02');
+
+it('lee del asiento el suelo declarado y el asiento revisado solo si son enteros', function (): void {
+    $instante = new DateTimeImmutable('2030-01-01T00:00:00Z');
+
+    expect(AuditedPurge::fromEntry(1, $instante, ['retention_floor_years' => 4])->declaredFloorYears)->toBe(4)
+        ->and(AuditedPurge::fromEntry(1, $instante, ['retention_floor_years' => '4'])->declaredFloorYears)->toBeNull()
+        ->and(AuditedPurge::fromEntry(1, $instante, [])->declaredFloorYears)->toBeNull()
+        ->and(AuditedPurgeReview::fromEntry(5, $instante, ['reviewed_audit_entry_id' => 1])->reviewedAuditEntryId)->toBe(1)
+        ->and(AuditedPurgeReview::fromEntry(5, $instante, ['reviewed_audit_entry_id' => '1'])->reviewedAuditEntryId)->toBeNull()
+        ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->reviewedAuditEntryId)->toBeNull()
+        ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->occurredAt)->toBe($instante)
+        ->and(AuditedPurgeReview::fromEntry(5, $instante, [])->auditEntryId)->toBe(5);
+})->group('RS-07', 'RL-04');

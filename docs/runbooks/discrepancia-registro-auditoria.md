@@ -13,6 +13,7 @@ procedimiento de 72 h es [`brecha-de-seguridad.md`](brecha-de-seguridad.md).
 | `DiscrepanciaEntreRegistroYAuditoria` | cualquiera, `for: 1m` | Crítica (seguridad) | Responsable de seguridad | [§3](#3-las-cinco-discrepancias) |
 | `ConciliacionDelRegistroAusente` | > 26 h sin la pasada diaria, `for: 30m` | Crítica (seguridad) | Responsable de seguridad | [§5](#5-nadie-está-conciliando-el-silencio) |
 | `ConciliacionCompletaDelRegistroAusente` | > 8 días sin la pasada completa, `for: 30m` | Alta | Responsable de seguridad | [§5](#5-nadie-está-conciliando-el-silencio) |
+| `PurgaFueraDeLimitesRevisada` | `work_record_reconciliation_reviewed_purges` sube respecto a hace un día; se apaga sola al cabo de un día | Aviso (`warning`) | Responsable de seguridad | [§3.1](#31-dar-por-revisada-una-purga-no-admisible) |
 
 **Impacto en el fichaje: ninguno.** Nadie se queda sin fichar y no hay que parar
 nada. Lo que está en juego es que el registro que se entrega a la Inspección
@@ -51,6 +52,7 @@ cadena. La conciliación compara cada tramo con sus asientos:
 | `compliance:reconcile-work-record --full` | Los domingos, 02:15 UTC: todo el registro y toda la auditoría viva. Es la única que ve un borrado o una edición de un tramo antiguo | Contenedor `scheduler` |
 | `work_record_reconciliation_discrepancies{scope,kind}` | Discrepancias de la última pasada de cada alcance. **Debe estar siempre a cero** | `BACKUP_PATH/metrics/kronoqr_work_record_reconciliation_recent.prom` y `..._full.prom` |
 | `work_record_reconciliation_last_run_timestamp_seconds{scope}` | Cuándo terminó la última pasada de cada alcance | Mismos ficheros |
+| `work_record_reconciliation_reviewed_purges{scope}` | Purgas no admisibles que una persona dio por revisadas (§3.1). **No son discrepancias pendientes** y no cuentan en la serie de arriba | Mismos ficheros |
 
 **Solo lee**, en una instantánea `REPEATABLE READ, READ ONLY`, y no corrige
 nada: cuál de los dos lados dice la verdad lo decides tú con este runbook. La
@@ -65,7 +67,7 @@ verdad—:
   `retention.purge_executed` con el corte y el centro, y lo anterior a ese corte
   se da por purgado **solo si el asiento es coherente** —corte con forma de
   fecha, no posterior a la fecha del propio asiento menos sus años de
-  conservación, años no por debajo del mínimo del perfil, asiento no posterior a
+  conservación, años no por debajo del suelo legal de su jurisdicción (4 en España), asiento no posterior a
   la pasada y con su centro—. Un asiento que no lo cumple no explica nada y
   sale él mismo como `purge_out_of_bounds`;
 - el turno de la noche del 31 de diciembre cuyo asiento se fue con la partición
@@ -279,20 +281,114 @@ atacante borrase antes para poder borrarla (sus `shift_corrections`, sus
 
 Un `retention.purge_executed` con un corte que no es una fecha, posterior a la
 fecha del asiento menos sus años de conservación (un `9999-12-31`, un corte de
-ayer), con menos años de los que admite el perfil, fechado después de la pasada
-o sin centro. `compliance:apply-retention` no puede escribir uno así: **alguien
+ayer), con menos años del suelo legal de su jurisdicción (4 en España, art. 34.9 ET), fechado después de la pasada
+o sin centro. Desde la 2.2.1 `compliance:apply-retention` no puede escribir uno así: **alguien
 lo añadió** para que un borrado pareciera una purga. La línea dice el `id` del
 asiento y qué límite incumple.
+
+**Excepción: una purga real anterior a la 2.2.1 con plazo bajo el suelo.** Antes
+de la 2.2.1 una instalación española podía purgar a 3 años, y al actualizar ese
+asiento sale como `purge_out_of_bounds`. No es un ataque. Se reconoce porque el
+asiento **no tiene `retention_floor_years`** en su `payload` (los de la 2.2.1 en
+adelante sí) y **cuadra con un informe de retención**
+([`operacion.md`](../cliente/operacion.md) §3.1: mismo token y mismo corte). Si
+cuadra, no sigas el párrafo siguiente: el asiento es legítimo pero la purga
+borró tramos que aún debían conservarse, y se trata en §3.1 (restaurar desde
+copia o dejar constancia y avisar a la asesoría laboral y al DPO). Si no
+cuadra con ningún informe, sí es sospechoso.
 
 **Resolución:** cotéjalo con los informes de retención
 ([`operacion.md`](../cliente/operacion.md) §3.1) —no habrá ninguno con su
 token—, trátalo como evidencia del ataque ([`brecha-de-seguridad.md`](brecha-de-seguridad.md))
 y busca qué tramos se borraron al amparo del corte: salen en la misma pasada
 como `audit_without_entry`. El asiento no se puede quitar (regla dura 6) y la
-conciliación lo seguirá contando en cada pasada: **la alerta no se apaga sola**.
-Hoy el producto no tiene forma de dar por revisado un asiento así; déjalo
-anotado en el registro del incidente y comunícaselo al fabricante (sin datos:
-basta con el `id` del asiento y la línea de la salida).
+conciliación lo seguirá contando en cada pasada: **la alerta no se apaga sola**
+hasta que la investigación termine y se dé por revisado (§3.1). Mientras tanto,
+anótalo en el registro del incidente.
+
+### 3.1 Dar por revisada una purga no admisible
+
+Un asiento `retention.purge_executed` fuera de límites **no se puede quitar**
+de `audit_log` (regla dura 6) y, sin una salida, la alerta de
+`DiscrepanciaEntreRegistroYAuditoria` sonaría en cada pasada para siempre. La
+salida es dejar constancia, **en la propia cadena**, de que una persona lo ha
+investigado: un asiento nuevo `retention.purge_reviewed` con el id del asiento
+revisado, el motivo y el responsable.
+
+**Cuándo se usa.** Solo para un hecho **ya investigado** y con el informe del
+incidente abierto: se sabe qué pasó, quién escribió el asiento y qué se hizo
+con los tramos borrados. No sirve para «hacer callar la alerta», ni mientras
+la investigación sigue, ni para tapar una purga indebida: la revisión no
+repara ni restaura nada, y no es reversible ni se corrige (una segunda
+revisión del mismo asiento se rechaza; lo que haya que añadir va al informe).
+
+**Antes de dar nada por revisado.** Si la purga borró tramos que aún debían
+conservarse (plazo bajo el suelo legal), primero **restaura desde la copia** (§4)
+esos tramos. Si no se puede, deja constancia en el informe del incidente y avisa
+a la asesoría laboral y al DPO del cliente: la valoración jurídica es suya, no
+del equipo técnico. Con `explains_deletions=true` la revisión hace que esos
+borrados dejen de salir como `audit_without_entry`, así que después ya nada en
+la conciliación te lo recordará.
+
+**Quién y cómo.** Cualquier cuenta de gestión **activa** puede firmarla; no se
+exige un rol concreto, pero quien la firma responde de ella y queda como actor
+del asiento. Primero la simulación, que no escribe nada: sin `--reason` ni
+`--responsible` imprime los defectos del asiento y qué explicaría, y sale con 2.
+
+```bash
+# 1. Simulación: defectos del asiento y, si procede, hasta qué fecha explicaría borrados.
+docker compose exec -T app php artisan compliance:reconcile-work-record --acknowledge=<id-del-asiento>
+
+# 2. Revisión de verdad. El motivo: 10 a 1000 caracteres, qué pasó y qué se hizo.
+#    SIN nombres de la plantilla (es texto libre y queda en audit_log para siempre).
+docker compose exec -T app php artisan compliance:reconcile-work-record \
+  --acknowledge=<id-del-asiento> \
+  --reason="<qué pasó y qué se hizo; referencia del incidente>" \
+  --responsible=<id-de-tu-cuenta-de-gestión>
+```
+
+Sale con 0 si escribe el asiento; con 1 si lo rechaza (no es una purga del
+registro horario, ya estaba revisada, la purga es admisible y no hay nada que
+revisar, motivo demasiado corto o largo, o el responsable no es una cuenta de
+gestión activa). `--acknowledge` no se combina con `--full` ni con `--days`.
+
+**Qué hace y qué no.**
+
+- Escribe `retention.purge_reviewed` en `audit_log` (solo-append, encadenado:
+  `compliance:verify-audit-chain` sigue en verde). El asiento original **no
+  desaparece**.
+- La conciliación deja de contar esa purga como `purge_out_of_bounds` pendiente
+  y pasa a contarla en `work_record_reconciliation_reviewed_purges`. Una purga
+  **posterior** que tampoco sea admisible sí vuelve a contar.
+- Si el único defecto era el plazo, y el corte no va más allá de lo que ese
+  plazo permitía el día del asiento, vuelve a explicar los borrados anteriores a
+  ese corte y dejan de salir como `audit_without_entry`. Si los defectos son
+  otros (corte imposible, sin centro), no explica ningún borrado: esos tramos
+  siguen saliendo hasta que los restaures desde la copia (§4).
+- **Avisa a seguridad.** La subida de la serie dispara
+  `PurgaFueraDeLimitesRevisada` (aviso, se apaga sola en un día) o, si la revisión
+  explica borrados (`explains_deletions="true"`), `PurgaRevisadaQueExplicaBorrados`
+  (crítica, con `integrity="true"`). Una revisión,
+  legítima o escrita con la credencial del runtime para tapar algo, nunca pasa
+  en silencio.
+
+**Si recibes `PurgaFueraDeLimitesRevisada`** (aviso) o **`PurgaRevisadaQueExplicaBorrados`** (crítica, integridad: la revisión explica borrados, así que es el caso de un par purga + revisión falsificado; atiéndela el mismo día) y no esperabas una revisión:
+
+```sql
+-- Quién la firmó, cuándo y con qué motivo (consulta con el rol de migración).
+SELECT id, occurred_at, actor_type, actor_id, payload
+  FROM audit_log WHERE action = 'retention.purge_reviewed' ORDER BY id DESC LIMIT 5;
+```
+
+El actor **no está autenticado**: el comando se ejecuta en la consola del
+servidor, sin sesión, y `--responsible` es solo un id tecleado, así que un
+`auth.login_succeeded` previo no existe en una revisión legítima y no es una
+prueba. Verifica con esa persona que la hizo ella y contrasta quién tenía acceso
+por shell al servidor en ese momento. Comprueba además que el
+motivo cuadra con un incidente abierto. Si alguien lo reconoce, anótalo en el
+informe y no hay más. Si nadie lo reconoce, trátalo como la §1.1: un asiento
+añadido con la credencial de la aplicación; sigue
+[`brecha-de-seguridad.md`](brecha-de-seguridad.md).
 
 ### Al terminar
 

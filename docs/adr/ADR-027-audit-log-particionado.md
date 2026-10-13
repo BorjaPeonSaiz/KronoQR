@@ -7,7 +7,7 @@
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | Tareas 2.2 y 2.10 · §5.5 del documento 01 · Regla dura 6 de `CLAUDE.md` |
 | **Requisitos** | RL-02, RL-04, RL-10, RS-07, RF-PD-13 |
-| **Enmiendas** | Enmendada por [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): quién crea la partición del año siguiente |
+| **Enmiendas** | Enmendada por [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (29-09-2026): quién crea la partición del año siguiente · Precisada por [ADR-057, enmienda del 10-10-2026](ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md#enmienda-del-10-10-2026): los años con los que se decide qué partición vence no bajan del suelo legal de la jurisdicción (4 en España) |
 
 ## Contexto
 

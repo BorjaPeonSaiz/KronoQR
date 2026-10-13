@@ -3961,6 +3961,17 @@ export interface paths {
          *     confirmacion derivada del informe— pero es el unico campo cuyo error se
          *     paga con datos que no vuelven.
          *
+         *     **`retention_years` no baja del suelo legal de la jurisdiccion**
+         *     (RL-02, `retention_years_floor` en la respuesta): 4 años en España
+         *     (art. 34.9 ET). Un valor menor se rechaza con `422` y un mensaje en
+         *     `errors.retention_years`, en el idioma negociado, que dice la
+         *     jurisdiccion, el suelo y el valor enviado. La respuesta no lleva un
+         *     codigo de motivo legible por maquina: quien la consuma compara con
+         *     `retention_years_floor`, que ya tiene. **Se comprueba en todo `PATCH`**, toque o no
+         *     `retention_years`, como la invariante semanal ≥ diaria: un perfil que
+         *     ya estuviera por debajo no admite ningun otro cambio hasta subirlo. Un
+         *     cambio rechazado no escribe fila ni asiento.
+         *
          *     **Guardar el valor que ya regia no escribe nada**: ni fila ni asiento.
          *
          *     **Lo que este endpoint no hace**: no crea perfiles, no los borra, no
@@ -8425,9 +8436,9 @@ export interface components {
             name: string;
             /**
              * @description Codigo de la jurisdiccion cuyo marco legal describe el perfil.
-             *     **Solo lectura**: lo fija la instalacion y hoy no lo lee ninguna
-             *     regla, asi que dejarlo editable seria ofrecer un campo cuyo cambio no
-             *     tiene ningun efecto.
+             *     **Solo lectura**: lo fija la instalacion. Su pais (ISO 3166-1 alfa-2,
+             *     con subdivision ISO 3166-2 opcional, como `ES-CN`) decide el suelo
+             *     legal de `retention_years` (`retention_years_floor`).
              * @example ES
              */
             jurisdiction: string;
@@ -8474,8 +8485,18 @@ export interface components {
              *     purgarlo. **4 en España** (art. 34.9 ET). Bajarlo amplia lo que la
              *     purga considera vencido, sobre datos con obligacion legal de
              *     conservacion.
+             *     No admite un valor menor que `retention_years_floor`.
              */
             retention_years: number;
+            /**
+             * @description Suelo legal de `retention_years` en la jurisdiccion del perfil: 4 en
+             *     España (art. 34.9 ET). El perfil no admite un valor menor (`422`
+             *     con el mensaje en `errors.retention_years`). **Solo lectura**: es un dato legal del
+             *     producto, no del cliente (RL-02, ADR-057 enmienda del 10-10-2026);
+             *     una jurisdiccion sin suelo conocido recibe 1.
+             * @example 4
+             */
+            readonly retention_years_floor: number;
             /**
              * @description Si es el perfil por defecto de la instalacion, que es el que rige en
              *     un centro sin perfil asignado. **Solo lectura.**
@@ -8517,6 +8538,10 @@ export interface components {
             break_required_after_hours?: number;
             week_starts_on?: number;
             holiday_calendar?: string[];
+            /**
+             * @description Ademas del rango, no puede quedar por debajo del suelo legal de la
+             *     jurisdiccion del perfil (`retention_years_floor`; 4 en España).
+             */
             retention_years?: number;
         };
         /**
@@ -17247,7 +17272,22 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            422: components["responses"]["ValidationFailed"];
+            /**
+             * @description La peticion no cumple el contrato o deja el perfil en un estado que
+             *     no admite: un campo fuera de su rango, la jornada semanal por
+             *     debajo de la diaria, un nombre ya usado o **`retention_years` por
+             *     debajo del suelo legal de la jurisdiccion** (RL-02). `errors` lleva el detalle colgado del campo que hay que
+             *     corregir, en el idioma negociado. No se ha cambiado nada y no hay
+             *     asiento.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
         };
     };

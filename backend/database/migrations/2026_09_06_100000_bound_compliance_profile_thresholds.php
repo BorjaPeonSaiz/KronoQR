@@ -56,6 +56,10 @@ use Illuminate\Support\Facades\DB;
  * derivada del propio informe y deja asiento (tarea 2.10, ADR-027). La pantalla
  * del panel lo advierte al lado del campo.
  *
+ * > Enmendado por `2026_10_10_100000_add_retention_floor_checks_to_compliance_profiles.php`
+ * > (RL-02, ADR-057 enmienda del 10-10-2026): con la jurisdiccion, en España el
+ * > esquema si distingue el 1 tipografico del legitimo y exige 4.
+ *
  * ## Patron `/migracion-segura`: esto es un paso EXPAND puro
  *
  * | Despliegue | Que se hace | Estado del codigo |

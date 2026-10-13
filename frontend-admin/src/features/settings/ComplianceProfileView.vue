@@ -40,6 +40,7 @@
 import { announce } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
+import { ApiError } from '@kronoqr/web-kit/http'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -58,7 +59,7 @@ import { fetchInstallationSettings, stringValue } from './settings.api'
  */
 withDefaults(defineProps<{ headingLevel?: 'h1' | 'h2' | 'h3' }>(), { headingLevel: 'h1' })
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const profile = ref<ComplianceProfileBody | null>(null)
 const loading = ref(true)
@@ -67,6 +68,23 @@ const error = ref<unknown>(null)
 const saved = ref(false)
 /** `ATTENDANCE_BREAK_CLOCKING === 'enabled'` (tarea 3.5, RF-AT-12): si RN-12 esta suspendida o no. */
 const breakClockingEnabled = ref(false)
+
+/** Suelo legal de `retention_years` segun la jurisdiccion del perfil; viene SIEMPRE del servidor. */
+const retentionFloor = computed<number | null>(() => profile.value?.retention_years_floor ?? null)
+
+/** Region legible de la jurisdiccion (`ES` -> Espana), en el idioma de la interfaz. */
+const jurisdictionName = computed(() => {
+  const code = profile.value?.jurisdiction ?? ''
+
+  try {
+    return new Intl.DisplayNames([locale.value], { type: 'region' }).of(code) ?? code
+  } catch {
+    return code
+  }
+})
+
+/** Errores del 422 sobre `retention_years`; se limpian al editar el campo o al reintentar. */
+const serverRetentionErrors = ref<string[]>([])
 
 /**
  * El formulario.
@@ -204,14 +222,26 @@ type NumericField = (typeof numericFields)[number][0]
  * El rango sigue siendo cosa del servidor: aquí solo se comprueba que lo escrito
  * sea un entero, que es lo que hace falta para poder enviarlo.
  */
-function issueOf(field: NumericField): 'required' | 'notAWholeNumber' | null {
+function issueOf(field: NumericField): 'required' | 'notAWholeNumber' | 'belowFloor' | null {
   const raw = form.value[field]
 
   if (raw === '' || raw === null) {
     return 'required'
   }
 
-  return asInteger(raw) === undefined ? 'notAWholeNumber' : null
+  const value = asInteger(raw)
+
+  if (value === undefined) {
+    return 'notAWholeNumber'
+  }
+
+  // El suelo lo dicta el servidor (`retention_years_floor`); aqui solo se evita
+  // el viaje de ida y vuelta. El servidor sigue siendo la autoridad.
+  if (field === 'retentionYears' && retentionFloor.value !== null && value < retentionFloor.value) {
+    return 'belowFloor'
+  }
+
+  return null
 }
 
 const invalidFields = computed<NumericField[]>(() =>
@@ -220,9 +250,44 @@ const invalidFields = computed<NumericField[]>(() =>
 
 function errorsFor(field: NumericField): string[] {
   const issue = issueOf(field)
+  const messages: string[] = []
 
-  return issue === null ? [] : [t(`compliance.errors.${issue}`)]
+  if (issue === 'belowFloor') {
+    messages.push(
+      t(
+        'compliance.errors.belowFloor',
+        { years: retentionFloor.value ?? 0 },
+        retentionFloor.value ?? 0,
+      ),
+    )
+  } else if (issue !== null) {
+    messages.push(t(`compliance.errors.${issue}`))
+  }
+
+  // El mensaje del 422 del servidor, junto al campo y no solo en el aviso general.
+  if (field === 'retentionYears' && issue === null) {
+    messages.push(...serverRetentionErrors.value)
+  }
+
+  return messages
 }
+
+/** Pista del campo: el suelo legal que dicta el servidor, y el aviso de irreversibilidad. */
+const retentionHint = computed(() => {
+  const floor = retentionFloor.value
+
+  if (floor === null) {
+    return t('compliance.hints.retentionYears')
+  }
+
+  const floorText = t(
+    'compliance.hints.retentionFloor',
+    { region: jurisdictionName.value, years: floor },
+    floor,
+  )
+
+  return `${floorText} ${t('compliance.hints.retentionYears')}`
+})
 
 /**
  * Solo lo que ha cambiado.
@@ -387,6 +452,7 @@ async function save(): Promise<void> {
   saving.value = true
   error.value = null
   saved.value = false
+  serverRetentionErrors.value = []
 
   try {
     fill((await updateComplianceProfile(pendingChanges.value)).data)
@@ -397,6 +463,11 @@ async function save(): Promise<void> {
     // El fallo se enseña en la pantalla, con los nombres de campo del 422.
     confirming.value = false
     error.value = failure
+
+    if (failure instanceof ApiError && failure.status === 422) {
+      serverRetentionErrors.value = [...(failure.fieldErrors['retention_years'] ?? [])]
+    }
+
     announce(t('compliance.failed'))
   } finally {
     saving.value = false
@@ -594,18 +665,21 @@ async function save(): Promise<void> {
 
       <FormField
         :label="t('compliance.fields.retentionYears')"
-        :hint="t('compliance.hints.retentionYears')"
+        :hint="retentionHint"
         :errors="errorsFor('retentionYears')"
       >
-        <template #default="{ id, describedBy }">
+        <template #default="{ id, describedBy, invalid }">
           <input
             :id="id"
             v-model="form.retentionYears"
             type="number"
             inputmode="numeric"
             data-test="retention-years"
+            :min="retentionFloor ?? undefined"
+            :aria-invalid="invalid ? 'true' : undefined"
             :aria-describedby="describedBy"
             class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
+            @input="serverRetentionErrors = []"
           />
         </template>
       </FormField>

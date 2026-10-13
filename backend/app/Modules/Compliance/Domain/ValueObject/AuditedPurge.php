@@ -25,6 +25,13 @@ final readonly class AuditedPurge
         public ?string $cutoffDate,
         public ?int $retentionYears,
         public ?int $siteId,
+        /**
+         * `retention_floor_years` del asiento, que lo escribe la purga desde el
+         * 10-10-2026 (ADR-057 enmienda, D6). Solo puede **endurecer** el juicio
+         * del asiento: el suelo efectivo es el mayor de este y el del centro, de
+         * modo que un asiento falsificado no puede rebajarse el suyo.
+         */
+        public ?int $declaredFloorYears = null,
     ) {}
 
     /**
@@ -35,6 +42,7 @@ final readonly class AuditedPurge
         $cutoff = $payload['cutoff_date'] ?? null;
         $years = $payload['retention_years'] ?? null;
         $site = $payload['site_id'] ?? null;
+        $floor = $payload['retention_floor_years'] ?? null;
 
         return new self(
             $auditEntryId,
@@ -42,6 +50,7 @@ final readonly class AuditedPurge
             \is_string($cutoff) ? $cutoff : null,
             \is_int($years) ? $years : null,
             \is_int($site) ? $site : null,
+            \is_int($floor) ? $floor : null,
         );
     }
 }

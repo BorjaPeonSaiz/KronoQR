@@ -58,9 +58,12 @@ it('devuelve el perfil ES-hosteleria tal y como se entrega de serie', function (
         'week_starts_on' => 1,
         'holiday_calendar' => [],
         'retention_years' => 4,
+        // El suelo legal de la jurisdiccion (RL-02, art. 34.9 ET), de solo
+        // lectura: el panel lo enseña junto al campo sin escribir el 4.
+        'retention_years_floor' => 4,
         'is_default' => true,
     ]);
-})->group('RF-PD-07');
+})->group('RF-PD-07', 'RL-02');
 
 it('dice como se ha resuelto el perfil', function (bool $assigned, string $expected): void {
     // Un centro sin perfil asignado hereda los cambios del perfil por defecto y
@@ -243,3 +246,57 @@ it('rechaza un festivo repetido aunque el nucleo lo deduplique al leer', functio
     expect(array_filter(array_keys($errors), static fn (string $field): bool => str_starts_with($field, 'holiday_calendar')))
         ->not->toBe([]);
 })->group('RF-PD-07');
+
+// --- Bloque 5 de la 2.2.1: el suelo legal de la retencion ---------------------
+
+it('rechaza bajar la retencion de un perfil español por debajo de cuatro años, y dice el suelo', function (string $locale, string $message): void {
+    // RL-02, art. 34.9 ET: en España el registro se conserva cuatro años. Un 3
+    // no es un convenio mas laxo: es una purga ilegal programada. El mensaje
+    // dice el suelo y el valor, en el idioma de quien lo pide.
+    Api::as(profileAdminToken())
+        ->withHeaders(['Accept-Language' => $locale])
+        ->patch('/api/v1/compliance-profile', ['retention_years' => 3])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('errors.retention_years.0', $message);
+
+    // Y no se ha escrito nada.
+    expect(DB::table('compliance_profiles')->where('is_default', true)->value('retention_years'))->toBe(4);
+})->with([
+    'en español' => ['es', 'La jurisdicción ES obliga a conservar el registro al menos 4 años; has indicado 3.'],
+    'en ingles' => ['en', 'Jurisdiction ES requires keeping the record for at least 4 years; you entered 3.'],
+])->group('RF-PD-07', 'RL-02');
+
+it('acepta la retencion igual al suelo legal y devuelve el suelo en la respuesta', function (): void {
+    // Limite cerrado: cuatro años con suelo de cuatro cumple. Se sube primero
+    // para que el 4 sea un cambio de verdad y no un PATCH sin efecto.
+    $token = profileAdminToken();
+
+    Api::as($token)->patch('/api/v1/compliance-profile', ['retention_years' => 6])
+        ->assertValidResponse(200);
+
+    $response = Api::as($token)
+        ->patch('/api/v1/compliance-profile', ['retention_years' => 4])
+        ->assertValidRequest()
+        ->assertValidResponse(200);
+
+    expect($response->json('data.retention_years'))->toBe(4)
+        ->and($response->json('data.retention_years_floor'))->toBe(4);
+})->group('RF-PD-07', 'RL-02');
+
+it('fuera del catalogo rige el suelo por omision, que es un año', function (): void {
+    // Una jurisdiccion sin suelo legal conocido (Portugal no esta en
+    // `compliance.retention_floors`) no hereda el español: recibe el de
+    // omision, y el panel lo ve.
+    DB::table('compliance_profiles')->update(['jurisdiction' => 'PT']);
+    $token = profileAdminToken();
+
+    Api::as($token)->get('/api/v1/compliance-profile')
+        ->assertValidResponse(200)
+        ->assertJsonPath('data.retention_years_floor', 1);
+
+    Api::as($token)->patch('/api/v1/compliance-profile', ['retention_years' => 1])
+        ->assertValidResponse(200)
+        ->assertJsonPath('data.retention_years', 1)
+        ->assertJsonPath('data.retention_years_floor', 1);
+})->group('RF-PD-07', 'RL-02');

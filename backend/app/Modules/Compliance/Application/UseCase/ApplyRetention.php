@@ -287,6 +287,11 @@ final readonly class ApplyRetention
                     // El umbral con el que se decidio, porque puede cambiar
                     // (RF-PD-07) y sin el la purga no se puede releer.
                     'retention_years' => $plan->policy->legalRecordYears,
+                    // El suelo legal y la jurisdiccion con los que se decidio
+                    // (RL-02, ADR-057 enmienda del 10-10-2026): la conciliacion
+                    // los relee y solo pueden endurecer su juicio del asiento.
+                    'retention_floor_years' => $plan->policy->legalRecordFloorYears,
+                    'jurisdiction' => $plan->policy->jurisdiction,
                     'site_id' => $plan->policy->siteId,
                     'rows' => $rows,
                     'tables' => $counts,

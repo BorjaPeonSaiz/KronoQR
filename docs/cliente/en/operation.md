@@ -828,6 +828,8 @@ stopped running):
 | `DiscrepanciaEntreRegistroYAuditoria` | Any | Critical | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Someone has written to the time record outside the application. Preserve the evidence (§2 of that runbook) before touching anything, and do not generate legal exports of the period until it is cleared up |
 | `ConciliacionDelRegistroAusente` | > 26 h without reconciling | Critical | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Check that the `scheduler` is still alive and run `compliance:reconcile-work-record` by hand |
 | `ConciliacionCompletaDelRegistroAusente` | > 8 days without the full reconciliation | High | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Run `compliance:reconcile-work-record --full` by hand. After installing or updating it does not fire until a Sunday has gone by |
+| `PurgaFueraDeLimitesRevisada` | The number of reviewed purges rises compared with a day earlier | Medium | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | Someone has marked an out-of-bounds purge as reviewed with `--acknowledge`. Check the `retention.purge_reviewed` entry in `audit_log` (who answers for it and the reason) and that it matches an incident already investigated; if nobody recognises it, handle it as `DiscrepanciaEntreRegistroYAuditoria`. It clears itself after a day |
+| `PurgaRevisadaQueExplicaBorrados` | The number of reviewed purges that explain deletions (`explains_deletions="true"`) rises compared with a day earlier | Critical (integrity) | Security | [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md) (in Spanish) | An `--acknowledge` review makes earlier deletions up to the cut-off stop showing as discrepancies. Verify today with the person who signed (`responsible`) that they did it, check who had shell access to the server, and that a matching report exists. If nobody recognises it, it may be a forged purge + review pair: handle it as an integrity incident |
 | `ParticionDeAuditoriaAusente` | The current year's partition is missing | Critical | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | **Clock-ins are down**: run `compliance:ensure-audit-partitions` now |
 | `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Next year's is missing, from November on | Medium | IT | [`rotura-cadena-auditoria.md`](../../runbooks/rotura-cadena-auditoria.md) (in Spanish) | Check that the `scheduler` is running and that migration `2026_09_29_100000` is applied (`migrate:status` through the `migrate` service, see the runbook §5). It no longer depends on `DB_MIGRATION_USERNAME`: the application asks a database function for the partition |
 | `CopiaDeSeguridadFallida` / `CopiaDeSeguridadSinVerificar` | Any | Critical | IT | [`restaurar-backup.md`](../../runbooks/restaurar-backup.md) (in Spanish) | `backup:verify`, then retry with `backup:run`, both in the `scheduler` container (not `app`) |
@@ -1363,6 +1365,49 @@ Every creation of an account with the administration role and every reset of a
 second factor alerts the security recipient (§10.4,
 [`ataque-a-credenciales.md`](../../runbooks/ataque-a-credenciales.md) §9, in
 Spanish). If you are going to do several on the same day, tell them beforehand.
+
+**When updating to 2.2.1: retention does not go below the legal minimum.** The
+years the compliance profile keeps the record (`retention_years`) can be
+raised, but not lowered below the legal minimum of the profile's country:
+**4 years in Spain** (art. 34.9 of the Workers' Statute). In a country with no
+minimum known to the product, the minimum is 1. What changes:
+
+- **The panel says so and prevents it.** Panel → **Compliance profile** shows
+  the minimum next to the field. Trying to save less is rejected (code `422`)
+  with the minimum in the message —“Jurisdiction ES requires keeping the record
+  for at least 4 years; you entered 3.”— and **nothing is saved**: the profile
+  does not change and no record of the change is written. Saving any other
+  field of a profile that was already below the minimum is rejected too, so
+  raising the years comes first.
+- **The database prevents it as well**, even if the row is edited by hand.
+- **The purge refuses** to run with a period below the minimum, and the nightly
+  reconciliation flags as out of bounds (`purge_out_of_bounds`) a Spanish purge
+  done with fewer than 4 years.
+
+**Before updating, if your Spanish profile has fewer than 4 years.** Almost no
+installation is in that state: the profile ships with 4. But if someone lowered
+it, the update cannot go ahead, and it finds out before touching anything:
+`sudo ./update.sh --check-only` (and step 1 of `update.sh`) marks
+`[FAIL]` on “Compliance profile within the legal floor”, says which profile and
+how many years it has, and **exits with `2` having changed nothing**. What to
+do:
+
+1. Sign in to the panel with the administration account, Panel → **Compliance
+   profile**, and raise **“Years records are kept”** to 4 or more. It is
+   written to the audit log.
+2. Run `sudo ./update.sh --check-only` again and, once that line is green,
+   `sudo ./update.sh`.
+
+**Raising the years does not bring back anything already purged** with the
+short period, and reconciliation will keep flagging those purges: that is
+correct, because the record for those years is missing. How to handle them is
+in [`discrepancia-registro-auditoria.md`](../../runbooks/discrepancia-registro-auditoria.md)
+(in Spanish); tell your legal advisers ([`legal-obligations.md`](legal-obligations.md)).
+If the failing line talks about a jurisdiction “without ISO 3166 form” (the
+profile says `es` or `ESP` instead of `ES`), that cannot be fixed from the
+panel: it is fixed with the migration role, as
+[`actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) explains
+(in Spanish); if in doubt, tell the manufacturer, with the step 1 report.
 
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor

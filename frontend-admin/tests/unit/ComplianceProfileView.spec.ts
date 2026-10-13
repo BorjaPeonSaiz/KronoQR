@@ -35,6 +35,7 @@ const profile = {
     week_starts_on: 1,
     holiday_calendar: [],
     retention_years: 4,
+    retention_years_floor: 4,
     is_default: true,
     source: 'installation_default',
     updated_at: null,
@@ -476,5 +477,80 @@ describe('perfil de cumplimiento: entrada que no es un numero', () => {
         '10',
       )
     })
+  })
+})
+
+// Suelo legal de la retencion (RF-PD-07, RL-02, tarea 5.4): el suelo lo dicta
+// el servidor (`retention_years_floor`); la pantalla lo muestra, lo usa como
+// `min`, bloquea por debajo antes de enviar y pinta el 422 junto al campo.
+describe('perfil de cumplimiento: suelo legal de la retencion (RF-PD-07, RL-02)', () => {
+  const withFloor = (floor: number): typeof profile => ({
+    data: { ...profile.data, retention_years: 6, retention_years_floor: floor },
+  })
+
+  it('muestra el suelo que dicta el servidor y lo pone como min del campo', async () => {
+    stubProfileApi(() => jsonResponse(withFloor(3)))
+
+    const wrapper = await mountView(ComplianceProfileView)
+    await settle()
+
+    const input = wrapper.find('[data-test="retention-years"]')
+
+    expect(input.attributes('min')).toBe('3')
+    expect(input.attributes('aria-invalid')).toBeUndefined()
+
+    const hintId = input.attributes('aria-describedby') ?? ''
+
+    expect(wrapper.find(`[id="${hintId}"]`).text()).toContain('Mínimo legal: 3 años')
+  })
+
+  it('bloquea por debajo del suelo antes de enviar y lo explica junto al campo', async () => {
+    const fetchSpy = stubProfileApi(() => jsonResponse(withFloor(4)))
+
+    const wrapper = await mountView(ComplianceProfileView)
+    await settle()
+
+    const input = wrapper.find('[data-test="retention-years"]')
+    await input.setValue('2')
+
+    expect(input.attributes('aria-invalid')).toBe('true')
+    // Forma plural: «{years} año. | {years} años.»; con un suelo de 4, la segunda.
+    const pluralBelowFloor = es.compliance.errors.belowFloor.split(' | ')[1] ?? ''
+    expect(wrapper.text()).toContain(pluralBelowFloor.replace('{years}', '4'))
+    expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('form').trigger('submit')
+
+    expect(fetchSpy.mock.calls.some(([, init]) => (init as RequestInit)?.method === 'PATCH')).toBe(
+      false,
+    )
+  })
+
+  it('pinta el 422 del servidor junto al campo, asociado con aria-describedby', async () => {
+    const message = 'retention_years no puede ser inferior a 4 años (España).'
+
+    stubProfileApi((_url, init) =>
+      init?.method === 'PATCH'
+        ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+            errors: { retention_years: [message] },
+          })
+        : jsonResponse(withFloor(1)),
+    )
+
+    const wrapper = await mountView(ComplianceProfileView)
+    await settle()
+
+    await wrapper.find('[data-test="retention-years"]').setValue('2')
+    await wrapper.find('form').trigger('submit')
+    await confirmSave(wrapper)
+    await settle()
+
+    const input = wrapper.find('[data-test="retention-years"]')
+    const describedBy = (input.attributes('aria-describedby') ?? '').split(' ')
+
+    expect(input.attributes('aria-invalid')).toBe('true')
+    expect(describedBy.some((id) => wrapper.find(`[id="${id}"]`).text().includes(message))).toBe(
+      true,
+    )
   })
 })

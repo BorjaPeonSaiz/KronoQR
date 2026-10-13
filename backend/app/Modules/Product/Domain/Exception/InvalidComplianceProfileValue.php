@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Domain\Exception;
 
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileField;
+use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 
 /**
  * El valor no cumple lo que el campo del perfil de cumplimiento declara
@@ -118,6 +119,32 @@ final class InvalidComplianceProfileValue extends ProductDomainException
             ['weekly' => $weekly, 'daily' => $daily],
             ComplianceProfileField::MaxWeeklyHours,
             'Weekly working hours ('.$weekly.') cannot be lower than daily working hours ('.$daily.').',
+        );
+    }
+
+    /**
+     * `retention_years` por debajo del suelo legal de la jurisdiccion del perfil
+     * (RL-02, RF-PD-07, ADR-057 enmienda del 10-10-2026): 4 años en España
+     * (art. 34.9 ET).
+     *
+     * Su propia clave y no `out_of_range`: el rango del campo (1 a 50) es una
+     * cota estructural, y esto es una obligacion legal que depende del pais. El
+     * mensaje dice el suelo, el valor y la jurisdiccion, porque «admite de 1 a
+     * 50» seria mentira para un perfil español.
+     */
+    public static function belowLegalRetentionFloor(int $value, LegalRetentionFloor $floor): self
+    {
+        return new self(
+            'compliance-profile.errors.below_legal_floor',
+            [
+                'field' => ComplianceProfileField::RetentionYears->value,
+                'minimum' => $floor->years,
+                'value' => $value,
+                'jurisdiction' => $floor->jurisdiction->code,
+            ],
+            ComplianceProfileField::RetentionYears,
+            'Compliance profile field "retention_years" cannot be lower than the legal floor of '
+            .$floor->jurisdiction->code.' ('.$floor->years.' years), got '.$value.'.',
         );
     }
 

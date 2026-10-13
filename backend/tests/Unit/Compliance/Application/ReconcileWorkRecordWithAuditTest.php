@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Compliance\Application\UseCase\ReconcileWorkRecordWithAudit;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
+use App\Modules\Compliance\Domain\ValueObject\AuditedPurgeReview;
 use App\Modules\Compliance\Domain\ValueObject\RecordedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordAuditContext;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
@@ -11,6 +12,7 @@ use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationScope;
 use Tests\Support\Compliance\FixedRetentionYearsFloor;
 use Tests\Support\Compliance\InMemoryWorkRecordAuditSource;
 use Tests\Support\Compliance\RecordingWorkRecordReconciliationMetrics;
+use Tests\Support\Shared\FixedInstallationSiteProvider;
 use Tests\Support\Time\FixedClock;
 
 /*
@@ -44,7 +46,7 @@ it('publica la pasada limpia tambien, con la marca de su ejecucion', function ()
     $metricas = new RecordingWorkRecordReconciliationMetrics;
     $origen = new InMemoryWorkRecordAuditSource;
 
-    $resultado = new ReconcileWorkRecordWithAudit($origen, $metricas, FixedClock::at('2026-10-08 04:15:00'), new FixedRetentionYearsFloor)
+    $resultado = new ReconcileWorkRecordWithAudit($origen, $metricas, FixedClock::at('2026-10-08 04:15:00'), new FixedRetentionYearsFloor, new FixedInstallationSiteProvider)
         ->handle(WorkRecordReconciliationScope::Recent, 7);
 
     expect($resultado->isConsistent())->toBeTrue()
@@ -64,7 +66,7 @@ it('publica la pasada limpia tambien, con la marca de su ejecucion', function ()
 it('pide la pasada completa sin limites cuando se le pide el registro entero', function (): void {
     $origen = new InMemoryWorkRecordAuditSource;
 
-    new ReconcileWorkRecordWithAudit($origen, new RecordingWorkRecordReconciliationMetrics, FixedClock::at('2026-10-11 02:15:00'), new FixedRetentionYearsFloor)
+    new ReconcileWorkRecordWithAudit($origen, new RecordingWorkRecordReconciliationMetrics, FixedClock::at('2026-10-11 02:15:00'), new FixedRetentionYearsFloor, new FixedInstallationSiteProvider)
         ->handle(WorkRecordReconciliationScope::Full, 7);
 
     expect($origen->askedWindows[0]->scope)->toBe(WorkRecordReconciliationScope::Full)
@@ -80,7 +82,7 @@ it('cuenta todas las discrepancias y conserva el detalle solo de las primeras', 
     }
 
     $metricas = new RecordingWorkRecordReconciliationMetrics;
-    $resultado = new ReconcileWorkRecordWithAudit(new InMemoryWorkRecordAuditSource($pares), $metricas, FixedClock::at('2026-10-08 04:15:00'), new FixedRetentionYearsFloor)
+    $resultado = new ReconcileWorkRecordWithAudit(new InMemoryWorkRecordAuditSource($pares), $metricas, FixedClock::at('2026-10-08 04:15:00'), new FixedRetentionYearsFloor, new FixedInstallationSiteProvider)
         ->handle(WorkRecordReconciliationScope::Recent, 7);
 
     // El recuento dice el tamaño del incidente; el detalle, por donde empezar.
@@ -95,7 +97,7 @@ it('cuenta como discrepancia un asiento de purga que no se puede creer, aunque n
     $purgaFalsa = new AuditedPurge(91, new DateTimeImmutable('2026-10-08T03:00:00Z'), '9999-12-31', 4, 1);
     $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([$purgaFalsa]));
 
-    $resultado = new ReconcileWorkRecordWithAudit($origen, new RecordingWorkRecordReconciliationMetrics, FixedClock::at('2026-10-08 04:15:00'), new FixedRetentionYearsFloor)
+    $resultado = new ReconcileWorkRecordWithAudit($origen, new RecordingWorkRecordReconciliationMetrics, FixedClock::at('2026-10-08 04:15:00'), new FixedRetentionYearsFloor, new FixedInstallationSiteProvider)
         ->handle(WorkRecordReconciliationScope::Full, 7);
 
     expect($resultado->counts['purge_out_of_bounds'])->toBe(1)
@@ -103,3 +105,69 @@ it('cuenta como discrepancia un asiento de purga que no se puede creer, aunque n
         ->and($resultado->isConsistent())->toBeFalse()
         ->and($resultado->discrepancies[0]->auditEntryId)->toBe(91);
 })->group('RL-02', 'RL-04', 'RS-07');
+
+it('publica las purgas revisadas aparte, sin contarlas como pendientes', function (): void {
+    // ADR-057 enmienda del 10-10-2026 §6: una purga a 3 años en un centro
+    // español es no admisible; con su revision deja de ser discrepancia y pasa
+    // a `reviewedPurges`, en el resultado y en lo que se publica.
+    // La 90 solo falla el plazo: revisada, vuelve a explicar borrados. La 91
+    // tiene ademas un corte imposible: revisada, no explica nada. Se cuentan
+    // aparte para que la alerta distinga una de otra.
+    $purga = new AuditedPurge(90, new DateTimeImmutable('2030-10-08T03:00:00Z'), '2027-10-08', 3, 1);
+    $imposible = new AuditedPurge(91, new DateTimeImmutable('2030-10-08T03:00:00Z'), '9999-12-31', 3, 1);
+    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([$purga, $imposible], [], [
+        new AuditedPurgeReview(95, new DateTimeImmutable('2030-10-09T09:00:00Z'), 90),
+        new AuditedPurgeReview(96, new DateTimeImmutable('2030-10-09T09:05:00Z'), 91),
+    ]));
+    $metricas = new RecordingWorkRecordReconciliationMetrics;
+
+    $resultado = new ReconcileWorkRecordWithAudit($origen, $metricas, FixedClock::at('2030-10-10 04:15:00'), new FixedRetentionYearsFloor(4), new FixedInstallationSiteProvider)
+        ->handle(WorkRecordReconciliationScope::Full, 7);
+
+    expect($resultado->counts['purge_out_of_bounds'])->toBe(0)
+        ->and($resultado->isConsistent())->toBeTrue()
+        ->and($resultado->reviewedPurges)->toBe(2)
+        ->and($resultado->reviewedPurgesExplainingDeletions)->toBe(1)
+        ->and($resultado->reviewedPurgesNotExplainingDeletions())->toBe(1)
+        ->and($metricas->recorded[0]['result']->reviewedPurges)->toBe(2)
+        ->and($metricas->recorded[0]['result']->reviewedPurgesExplainingDeletions)->toBe(1);
+})->group('RS-07', 'RL-02', 'RL-04');
+
+it('pregunta el suelo legal una sola vez por cada centro distinto de las purgas', function (): void {
+    $suelos = new FixedRetentionYearsFloor(4, [2 => 1]);
+    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([
+        new AuditedPurge(90, new DateTimeImmutable('2030-10-08T03:00:00Z'), '2026-10-08', 4, 1),
+        new AuditedPurge(91, new DateTimeImmutable('2031-10-08T03:00:00Z'), '2027-10-08', 4, 1),
+        new AuditedPurge(92, new DateTimeImmutable('2031-10-08T03:00:00Z'), '2028-10-08', 3, 2),
+        new AuditedPurge(93, new DateTimeImmutable('2031-10-08T03:00:00Z'), '2027-10-08', 4, null),
+    ]));
+
+    $resultado = new ReconcileWorkRecordWithAudit($origen, new RecordingWorkRecordReconciliationMetrics, FixedClock::at('2032-01-01 04:15:00'), $suelos, new FixedInstallationSiteProvider)
+        ->handle(WorkRecordReconciliationScope::Full, 7);
+
+    // El centro 2 tiene suelo 1: su purga a 3 años es admisible. La que no dice
+    // centro es la unica rechazada; se juzga con el suelo del centro de la
+    // instalacion (el 1), que ya estaba preguntado y no se repite.
+    expect($suelos->askedSites)->toBe([1, 2])
+        ->and($resultado->counts['purge_out_of_bounds'])->toBe(1)
+        ->and($resultado->discrepancies[0]->auditEntryId)->toBe(93)
+        ->and($resultado->discrepancies[0]->fields)->toBe(['site_id']);
+})->group('RS-07', 'RL-02');
+
+it('juzga una purga sin centro con el suelo del centro de la instalacion, como la revision', function (?int $instalacion, array $defectos, array $preguntados): void {
+    $suelos = new FixedRetentionYearsFloor(1, [7 => 4]);
+    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([
+        new AuditedPurge(93, new DateTimeImmutable('2031-10-08T03:00:00Z'), '2028-10-08', 3, null),
+    ]));
+
+    $resultado = new ReconcileWorkRecordWithAudit($origen, new RecordingWorkRecordReconciliationMetrics, FixedClock::at('2032-01-01 04:15:00'), $suelos, new FixedInstallationSiteProvider($instalacion))
+        ->handle(WorkRecordReconciliationScope::Full, 7);
+
+    expect($suelos->askedSites)->toBe($preguntados)
+        ->and($resultado->discrepancies[0]->fields)->toBe($defectos);
+})->with([
+    // El centro de la instalacion es español: a 3 años incumple tambien el plazo.
+    'centro de la instalacion con suelo 4' => [7, ['retention_years', 'site_id'], [7]],
+    // Sin centro de instalacion no hay suelo que leer: el minimo estructural.
+    'sin centro de instalacion' => [null, ['site_id'], []],
+])->group('RS-07', 'RL-02');

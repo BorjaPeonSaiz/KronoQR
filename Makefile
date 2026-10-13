@@ -41,7 +41,11 @@ COMPOSE_PROD := docker compose --env-file .env -f infra/compose.prod.yaml
 ifeq ($(CI),true)
 RUN_APP        := cd backend &&
 RUN_APP_XDEBUG := cd backend && XDEBUG_MODE=coverage
+# La raiz del repositorio vista desde donde corre $(RUN_APP): en la CI, el
+# padre de backend/; en el contenedor, el montaje de infra/compose.dev.yaml.
+REPO_IN_APP    := ..
 else
+REPO_IN_APP    := /var/www/repo
 RUN_APP        := $(COMPOSE_DEV) exec -T app
 # Xdebug esta instalado pero con xdebug.mode=off, porque encenderlo cuesta
 # rendimiento en cada peticion (infra/docker/php/Dockerfile). Cobertura y
@@ -516,6 +520,8 @@ endif
 php-lint: tools-ready ## Estilo y tipos: Pint + PHPStan 9 (etapa 1 de la CI)
 	$(RUN_APP) vendor/bin/pint --test
 	$(RUN_APP) vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+	$(RUN_APP) vendor/bin/pint --test $(REPO_IN_APP)/tools/license-issuer
+	$(RUN_APP) vendor/bin/phpstan analyse -c $(REPO_IN_APP)/tools/license-issuer/phpstan.neon --memory-limit=1G --no-progress
 
 deptrac: tools-ready ## Fronteras entre capas y modulos (etapa 2 de la CI)
 	$(RUN_APP) vendor/bin/deptrac analyse --fail-on-uncovered --no-progress

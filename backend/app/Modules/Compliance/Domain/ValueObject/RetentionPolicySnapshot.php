@@ -26,5 +26,14 @@ final readonly class RetentionPolicySnapshot
          * asiento se archivan, y el nombre no anade nada que el `id` no diga.
          */
         public int $siteId,
+        /**
+         * El suelo legal de los años del registro en la jurisdiccion del perfil
+         * (RL-02, ADR-057 enmienda del 10-10-2026). Viaja al asiento de la purga
+         * (`retention_floor_years`) para que la conciliacion pueda releerla con
+         * el suelo con el que se decidio, que solo puede endurecerla.
+         */
+        public int $legalRecordFloorYears,
+        /** La jurisdiccion del perfil (`ES`, `ES-CN`), por el mismo motivo. */
+        public string $jurisdiction,
     ) {}
 }

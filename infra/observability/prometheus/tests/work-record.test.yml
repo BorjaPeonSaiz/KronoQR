@@ -41,6 +41,9 @@ tests:
                 fuera de la aplicacion. El fichaje NO esta afectado y no hay que
                 parar nada: preserva la evidencia antes de tocar ninguna fila y
                 no generes exportaciones legales del periodo hasta aclararlo.
+                Una purga no admisible que una persona ya ha dado por revisada
+                (retention.purge_reviewed) no cuenta aqui: eso lo avisa
+                PurgaFueraDeLimitesRevisada.
               runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
 
   #-----------------------------------------------------------------------------
@@ -57,6 +60,115 @@ tests:
       - eval_time: 30m
         alertname: DiscrepanciaEntreRegistroYAuditoria
         exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # El gauge de purgas revisadas NO es una discrepancia pendiente: con revisadas
+  # y cero pendientes no dispara DiscrepanciaEntreRegistroYAuditoria.
+  #-----------------------------------------------------------------------------
+  - name: purga_revisada_no_es_discrepancia
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"}'
+        values: "2x30"
+      - series: 'work_record_reconciliation_discrepancies{scope="recent",kind="purge_out_of_bounds"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DiscrepanciaEntreRegistroYAuditoria
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # PurgaFueraDeLimitesRevisada: el gauge sube respecto a hace un dia. Antes del
+  # salto (1440 muestras a cero) no dispara; con la primera revision, dispara
+  # (sin `for:`); y con el valor constante, un dia despues, se apaga sola.
+  # 0x1440 son 1441 muestras (minutos 0..1440): el 1 empieza en el minuto 1441.
+  #-----------------------------------------------------------------------------
+  - name: purga_revisada_dispara_al_subir_y_se_apaga_sola
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"}'
+        values: "0x1440 1x1500"
+      - series: 'work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="false"}'
+        values: "0x2940"
+    alert_rule_test:
+      - eval_time: 1440m
+        alertname: PurgaFueraDeLimitesRevisada
+        exp_alerts: []
+      - eval_time: 1442m
+        alertname: PurgaFueraDeLimitesRevisada
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "Se ha dado por revisada una purga no admisible del registro horario"
+              description: >-
+                El numero de purgas fuera de limites revisadas ha subido en el
+                ultimo dia (1 en la ultima pasada diaria). No es una
+                discrepancia pendiente: alguien ha ejecutado
+                compliance:reconcile-work-record --acknowledge. Comprueba en
+                audit_log el asiento retention.purge_reviewed (quien responde, el
+                motivo) y que cuadra con un incidente ya investigado. Si nadie lo
+                reconoce, es un posible uso de la credencial de la aplicacion:
+                trata el caso como el de DiscrepanciaEntreRegistroYAuditoria.
+              runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+      # Un dia despues del salto el valor sigue en 1 pero ya no sube: se apaga.
+      - eval_time: 2882m
+        alertname: PurgaFueraDeLimitesRevisada
+        exp_alerts: []
+
+  #-----------------------------------------------------------------------------
+  # Valor constante desde hace mas de un dia (la revision ya se aviso): nunca
+  # dispara. Y a cero siempre, tampoco.
+  #-----------------------------------------------------------------------------
+  - name: purga_revisada_constante_no_dispara
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"}'
+        values: "3x2000"
+    alert_rule_test:
+      - eval_time: 1500m
+        alertname: PurgaFueraDeLimitesRevisada
+        exp_alerts: []
+
+  - name: purga_revisada_a_cero_no_dispara
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"}'
+        values: "0x2000"
+    alert_rule_test:
+      - eval_time: 1500m
+        alertname: PurgaFueraDeLimitesRevisada
+        exp_alerts: []
+
+  # Primera publicacion de la serie con un valor > 0 y sin historia de hace un
+  # dia: tambien es una revision nueva y dispara.
+  - name: purga_revisada_primera_aparicion_dispara
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PurgaFueraDeLimitesRevisada
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "Se ha dado por revisada una purga no admisible del registro horario"
+              description: >-
+                El numero de purgas fuera de limites revisadas ha subido en el
+                ultimo dia (1 en la ultima pasada diaria). No es una
+                discrepancia pendiente: alguien ha ejecutado
+                compliance:reconcile-work-record --acknowledge. Comprueba en
+                audit_log el asiento retention.purge_reviewed (quien responde, el
+                motivo) y que cuadra con un incidente ya investigado. Si nadie lo
+                reconoce, es un posible uso de la credencial de la aplicacion:
+                trata el caso como el de DiscrepanciaEntreRegistroYAuditoria.
+              runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
 
   #-----------------------------------------------------------------------------
   # ConciliacionDelRegistroAusente, primera mitad: la serie diaria no llega
@@ -193,3 +305,61 @@ tests:
                 tramo antiguo. O el scheduler estuvo parado el domingo, o el
                 comando fallo antes de publicar la metrica.
               runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+
+  #-----------------------------------------------------------------------------
+  # PurgaRevisadaQueExplicaBorrados: la serie explains_deletions="true" sube.
+  # Es critica e integrity; y la de "false" subiendo NO la dispara (solo el aviso).
+  #-----------------------------------------------------------------------------
+  - name: revision_que_explica_borrados_es_critica
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="true"}'
+        values: "0x1440 1x1500"
+      - series: 'work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"}'
+        values: "0x2940"
+    alert_rule_test:
+      - eval_time: 1440m
+        alertname: PurgaRevisadaQueExplicaBorrados
+        exp_alerts: []
+      - eval_time: 1442m
+        alertname: PurgaRevisadaQueExplicaBorrados
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              integrity: "true"
+              destinatario: seguridad
+              component: audit
+            exp_annotations:
+              summary: "Una revision de purga ha pasado a explicar borrados del registro horario"
+              description: >-
+                Alguien ha ejecutado compliance:reconcile-work-record --acknowledge
+                sobre una purga cuyo asiento, desde ahora, explica el borrado de
+                tramos (1 en la ultima pasada diaria): esos tramos ya no
+                salen como audit_without_entry. Verifica HOY con la persona que
+                firma (responsible) que lo hizo ella, y contrasta quien tenia
+                acceso por shell al servidor. Comprueba que existe un informe de
+                incidente o de retencion que cuadra y que se restauraron o se
+                documentaron los tramos. Si nadie lo reconoce, es un par purga +
+                revision escrito con la credencial de la aplicacion para tapar un
+                borrado: trata el caso como un incidente de integridad.
+              runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+      # La serie "false" no ha subido: el aviso no salta.
+      - eval_time: 1442m
+        alertname: PurgaFueraDeLimitesRevisada
+        exp_alerts: []
+      - eval_time: 2882m
+        alertname: PurgaRevisadaQueExplicaBorrados
+        exp_alerts: []
+
+  # Una revision que no explica borrados NO dispara la critica.
+  - name: revision_que_no_explica_no_es_critica
+    interval: 1m
+    input_series:
+      - series: 'work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="true"}'
+        values: "0x2940"
+      - series: 'work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"}'
+        values: "0x1440 1x1500"
+    alert_rule_test:
+      - eval_time: 1442m
+        alertname: PurgaRevisadaQueExplicaBorrados
+        exp_alerts: []
