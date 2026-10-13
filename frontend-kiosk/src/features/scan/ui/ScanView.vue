@@ -518,7 +518,11 @@ onUnmounted(() => {
       <!-- El acceso por PIN vive ahora en el centro de la pantalla de escaneo
            (junto al subtitulo, y como respaldo cuando la camara falla), no
            aqui: el aviso de privacidad se queda solo y ocupa todo el ancho. -->
-      <PrivacyNoticePanel class="min-w-0 flex-1" :notice="branding.current.value.privacyNotice" />
+      <PrivacyNoticePanel
+        class="min-w-0 flex-1"
+        :notice="branding.current.value.privacyNotice"
+        :confirmation="session.confirmation.value"
+      />
 
       <button
         v-if="scanner.torchAvailable.value"

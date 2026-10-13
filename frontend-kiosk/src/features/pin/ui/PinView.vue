@@ -520,7 +520,11 @@ onUnmounted(() => {
     </section>
 
     <footer class="flex items-end justify-between gap-4 px-6 py-4">
-      <PrivacyNoticePanel class="min-w-0 flex-1" :notice="privacyNotice" />
+      <PrivacyNoticePanel
+        class="min-w-0 flex-1"
+        :notice="privacyNotice"
+        :confirmation="session.confirmation.value"
+      />
     </footer>
   </main>
 </template>

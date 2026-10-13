@@ -20,10 +20,25 @@
 // interpone entre una copia manipulada de `localStorage` y la pantalla.
 import type { PrivacyNotice } from '@kronoqr/web-kit/branding'
 import type { QrPath } from '@kronoqr/web-kit/qr/renderQrPath'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  PRIVACY_DIALOG_IDLE_CLOSE_MS,
+  PRIVACY_DIALOG_MAX_OPEN_MS,
+  PRIVACY_DIALOG_WARNING_LEAD_MS,
+} from './privacyDialogTiming'
 
-const props = defineProps<{ notice: PrivacyNotice }>()
+const props = defineProps<{
+  notice: PrivacyNotice
+  /**
+   * La confirmacion de fichaje que haya en pantalla (cualquier tipo). Un fichaje
+   * manda sobre el aviso: en cuanto se PINTA una confirmacion -tambien al
+   * repintarse, p. ej. de «pendiente» a «aceptado»- el dialogo se cierra en el
+   * acto, sin mover el foco ni anunciar nada propio (V7-KI-02). Se compara por
+   * identidad: cada pintado es un objeto nuevo.
+   */
+  confirmation?: object | null
+}>()
 
 /**
  * Solo https y ASCII imprimible (F15 del dictamen de seguridad): defensa en
@@ -54,19 +69,142 @@ const dialogOpen = ref(false)
 const qr = ref<QrPath | null>(null)
 const qrFailed = ref(false)
 
-async function openDialog(): Promise<void> {
-  dialogOpen.value = true
-  if (qr.value !== null || policyUrl.value === null) return
+/** «Se cerrara en breve»: texto de un `role="status"` que existe siempre en el DOM. */
+const closingSoon = ref(false)
 
+const overlay = ref<HTMLElement | null>(null)
+const closeButton = ref<HTMLButtonElement | null>(null)
+const showQrButton = ref<HTMLButtonElement | null>(null)
+
+let idleTimer: ReturnType<typeof setTimeout> | null = null
+let warnTimer: ReturnType<typeof setTimeout> | null = null
+let capTimer: ReturnType<typeof setTimeout> | null = null
+let capWarnTimer: ReturnType<typeof setTimeout> | null = null
+let capWarned = false
+/** Hermanos que ESTE dialogo marco como `inert`, para devolverlos tal cual estaban. */
+let inertedByUs: HTMLElement[] = []
+
+function clearTimer(timer: ReturnType<typeof setTimeout> | null): null {
+  if (timer !== null) clearTimeout(timer)
+  return null
+}
+
+function clearAllTimers(): void {
+  idleTimer = clearTimer(idleTimer)
+  warnTimer = clearTimer(warnTimer)
+  capTimer = clearTimer(capTimer)
+  capWarnTimer = clearTimer(capWarnTimer)
+}
+
+/** Cuenta atras por inactividad: se reinicia con cualquier toque o tecla. */
+function armIdleCountdown(): void {
+  idleTimer = clearTimer(idleTimer)
+  warnTimer = clearTimer(warnTimer)
+  idleTimer = setTimeout(() => closeDialog('idle'), PRIVACY_DIALOG_IDLE_CLOSE_MS)
+  warnTimer = setTimeout(() => {
+    closingSoon.value = true
+  }, PRIVACY_DIALOG_IDLE_CLOSE_MS - PRIVACY_DIALOG_WARNING_LEAD_MS)
+}
+
+function onActivity(): void {
+  if (!dialogOpen.value) return
+  // Si el aviso vino del tope absoluto, tocar no lo retira: el cierre sigue en pie.
+  closingSoon.value = capWarned
+  armIdleCountdown()
+}
+
+/**
+ * `aria-modal` por si solo no lo respetan todos los lectores de pantalla: el
+ * resto de la pagina se marca `inert` (ni foco, ni toque, ni lectura) mientras
+ * el dialogo esta abierto. Sin teleport: se recorre desde el dialogo hacia
+ * arriba marcando a los hermanos de cada nivel.
+ */
+function makeRestInert(): void {
+  let node: HTMLElement | null = overlay.value
+  while (node !== null && node.parentElement !== null && node !== document.body) {
+    const parent: HTMLElement = node.parentElement
+    for (const sibling of Array.from(parent.children)) {
+      if (sibling === node || !(sibling instanceof HTMLElement) || sibling.hasAttribute('inert'))
+        continue
+      sibling.setAttribute('inert', '')
+      inertedByUs.push(sibling)
+    }
+    node = parent
+  }
+}
+
+function restoreInert(): void {
+  for (const element of inertedByUs) element.removeAttribute('inert')
+  inertedByUs = []
+}
+
+async function openDialog(): Promise<void> {
+  if (dialogOpen.value) return
+  dialogOpen.value = true
+  closingSoon.value = false
+  capWarned = false
+  armIdleCountdown()
+  capTimer = setTimeout(() => closeDialog('idle'), PRIVACY_DIALOG_MAX_OPEN_MS)
+  capWarnTimer = setTimeout(() => {
+    capWarned = true
+    closingSoon.value = true
+  }, PRIVACY_DIALOG_MAX_OPEN_MS - PRIVACY_DIALOG_WARNING_LEAD_MS)
+
+  await nextTick()
+  if (!dialogOpen.value) return
+  makeRestInert()
+  closeButton.value?.focus()
+
+  if (qr.value !== null || policyUrl.value === null) return
   const { renderQrPath } = await import('@kronoqr/web-kit/qr/renderQrPath')
   const rendered = await renderQrPath(policyUrl.value)
   qr.value = rendered
   qrFailed.value = rendered === null
 }
 
-function closeDialog(): void {
+/**
+ * `user`: boton «Cerrar» o Escape. `idle`: inactividad o tope absoluto.
+ * `confirmation`: llego un fichaje. Solo las dos primeras devuelven el foco a
+ * «Mostrar QR»: con un fichaje en pantalla el foco no se mueve ni se anuncia
+ * nada, porque lo importante ahora es la confirmacion.
+ */
+function closeDialog(reason: 'user' | 'idle' | 'confirmation'): void {
+  if (!dialogOpen.value) return
+  clearAllTimers()
+  closingSoon.value = false
+  capWarned = false
+  restoreInert()
   dialogOpen.value = false
+  if (reason !== 'confirmation') {
+    void nextTick(() => showQrButton.value?.focus())
+  }
 }
+
+function onOverlayKeydown(event: KeyboardEvent): void {
+  onActivity()
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeDialog('user')
+    return
+  }
+  // Un solo control focalizable: el foco no puede escapar del dialogo.
+  if (event.key === 'Tab') {
+    event.preventDefault()
+    closeButton.value?.focus()
+  }
+}
+
+watch(
+  () => props.confirmation,
+  (next) => {
+    if (next !== null && next !== undefined) closeDialog('confirmation')
+  },
+)
+
+onBeforeUnmount(() => {
+  clearAllTimers()
+  restoreInert()
+})
 
 // Si cambia la configuracion (recarga de marca en 5.8), el QR se regenera.
 watch(policyUrl, () => {
@@ -111,8 +249,10 @@ watch(policyUrl, () => {
           {{ t('privacy.policyLink', { url: policyUrl }) }}
         </p>
         <button
+          ref="showQrButton"
           type="button"
           class="kiosk-touch rounded-kq-sm border border-kq-kiosk-border px-3 text-sm font-medium text-kq-kiosk-text"
+          data-testid="privacy-show-qr"
           @click="openDialog"
         >
           {{ t('privacy.showQr') }}
@@ -123,10 +263,14 @@ watch(policyUrl, () => {
 
   <div
     v-if="dialogOpen"
+    ref="overlay"
     class="fixed inset-0 z-50 flex items-center justify-center bg-kq-kiosk-surface/90 p-6"
     role="dialog"
     aria-modal="true"
     :aria-label="t('privacy.qrDialogTitle')"
+    data-testid="privacy-qr-dialog"
+    @pointerdown="onActivity"
+    @keydown="onOverlayKeydown"
   >
     <div class="max-w-xl rounded-kq bg-kq-surface-raised p-8 text-kq-text">
       <h2 class="font-heading text-2xl font-bold">{{ t('privacy.qrDialogTitle') }}</h2>
@@ -150,10 +294,22 @@ watch(policyUrl, () => {
       </p>
       <p class="mt-1 break-all text-base">{{ policyUrl }}</p>
 
+      <!-- Siempre en el DOM: una region viva que nace ya con el texto no se
+           anuncia, una que se rellena si. -->
+      <p
+        role="status"
+        class="mt-4 min-h-7 text-lg font-semibold"
+        data-testid="privacy-closing-soon"
+      >
+        {{ closingSoon ? t('privacy.closingSoon') : '' }}
+      </p>
+
       <button
+        ref="closeButton"
         type="button"
-        class="kiosk-touch mt-6 w-full rounded-kq-sm bg-kq-primary-strong px-6 text-lg font-semibold text-kq-on-primary"
-        @click="closeDialog"
+        class="kiosk-touch mt-2 w-full rounded-kq-sm bg-kq-primary-strong px-6 text-lg font-semibold text-kq-on-primary"
+        data-testid="privacy-qr-close"
+        @click="closeDialog('user')"
       >
         {{ t('privacy.close') }}
       </button>

@@ -243,6 +243,7 @@
     "qrDialogTitle": "Full privacy policy",
     "qrDialogBody": "Scan this code with your phone to read the full policy.",
     "qrUnavailable": "The code could not be generated.",
-    "close": "Close"
+    "close": "Close",
+    "closingSoon": "It will close shortly. Touch to keep it open"
   }
 }

@@ -243,6 +243,7 @@
     "qrDialogTitle": "Política de privacidad completa",
     "qrDialogBody": "Escanea este código con tu móvil para leer la política completa.",
     "qrUnavailable": "No se ha podido generar el código.",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "closingSoon": "Se cerrará en breve. Toca para seguir viendo"
   }
 }
