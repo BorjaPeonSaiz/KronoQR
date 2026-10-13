@@ -2,12 +2,12 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | **Aceptada** por el propietario (08-10-2026). **§4 implementada en la 2.2.0** (conciliación diaria de los últimos 7 días y semanal completa: `compliance:reconcile-work-record`, `infra/observability/prometheus/rules/work-record.yml`, `docs/runbooks/discrepancia-registro-auditoria.md`; bloque 14, revisado por `seguridad-cumplimiento`). **§1-§3 aceptadas para la 2.2.x.** §1 implementada en la 2.2.1 (bloque 6) salvo la retirada del `DELETE`, que llega con §3 en el bloque 7 ([enmienda del 13-10-2026](#enmienda-del-13-10-2026)); §2 y §3, pendientes para el bloque 7 (`backend-laravel`, con `devops-observabilidad` para `update.sh`). Hoy los privilegios ya impiden reescribir las columnas no concedidas y `UPDATE` alguno en las tablas solo-append, pero no el `DELETE` ni las transiciones de fila que solo distingue el *trigger* de §2 (el residuo exacto está en la [enmienda del 13-10-2026](#lo-que-esto-no-impide-hasta-el-bloque-7)); para eso el registro horario sigue protegido solo por detección (§4), y la enmienda de ADR-042 sigue vigente para sus tablas |
+| **Estado** | **Aceptada** por el propietario (08-10-2026). **§4 implementada en la 2.2.0** (conciliación diaria de los últimos 7 días y semanal completa: `compliance:reconcile-work-record`, `infra/observability/prometheus/rules/work-record.yml`, `docs/runbooks/discrepancia-registro-auditoria.md`; bloque 14, revisado por `seguridad-cumplimiento`). **§1–§3 implementadas en la 2.2.1**: §1 y §7 en el bloque 6 (privilegios por columna, migraciones `2026_10_13_100000` y `2026_10_13_100100`), §2 y §3 en el bloque 7 (*trigger* de transiciones en `shift_entries` y en `incidents`, purga por la función `SECURITY DEFINER` `work_record_purge_batch` y retirada del `DELETE` de las seis tablas y de `sites`, migración `2026_10_14_100000`; [implementación del bloque 7](#implementación-de-2-y-3-bloque-7-de-la-221-13-10-2026)). Lo que sigue sin impedirse con la credencial del runtime está en [«Lo que esto no impide, con §1–§3 en vigor»](#lo-que-esto-no-impide-con-13-en-vigor) y lo cubre la detección de §4 |
 | **Fecha** | 8 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo R6-AR-01 de la [re-verificación](../verificacion/2.2.0-reverificacion-tandas-5-6-7.md), residuo de AUD-1 y R4-SC-04) |
 | **Afecta a** | Enmienda [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (lo que de verdad garantiza hoy) · Extiende a las tablas del registro horario el patrón de [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-027](ADR-027-audit-log-particionado.md) y [ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md) · Respeta [ADR-007](ADR-007-daily-totals-proyeccion-reconstruible.md), [ADR-026](ADR-026-la-correccion-supersede.md) y [ADR-035](ADR-035-la-correccion-estrena-identificador-y-no-cambia-de-jornada.md) · `backend/database/migrations/2026_08_19_099000_provision_database_privileges.php` · `Attendance/Infrastructure/Persistence/EloquentWorkDayRepository.php` · `Compliance/Infrastructure/Persistence/DatabaseWorkRecordArchive.php`, `DatabaseIncidentLedger.php`, `DatabaseIncidentNotices.php` · `Compliance/RetentionServiceProvider.php` · `infra/scripts/update.sh` (`verify_privileges`) |
 | **Requisitos** | RL-02, RL-04, RS-07 · reglas duras 5, 6 y 7 |
-| **Enmiendas** | [Enmienda del 10-10-2026](#enmienda-del-10-10-2026) (bloque 5 de la 2.2.1): el suelo legal de `retention_years` es por jurisdicción y vive en un catálogo del producto, con su `CHECK` para España; y un asiento de purga no admisible se puede dar por revisado con otro asiento. Añade §5 y §6 y precisa §3 y §4 · [Enmienda del 13-10-2026](#enmienda-del-13-10-2026) (bloque 6 de la 2.2.1): orden de §1 frente a §3 y §7, el perfil de cumplimiento no se reasigna ni cambia de jurisdicción con la credencial del runtime |
+| **Enmiendas** | [Enmienda del 10-10-2026](#enmienda-del-10-10-2026) (bloque 5 de la 2.2.1): el suelo legal de `retention_years` es por jurisdicción y vive en un catálogo del producto, con su `CHECK` para España; y un asiento de purga no admisible se puede dar por revisado con otro asiento. Añade §5 y §6 y precisa §3 y §4 · [Enmienda del 13-10-2026](#enmienda-del-13-10-2026) (bloque 6 de la 2.2.1): orden de §1 frente a §3 y §7, el perfil de cumplimiento no se reasigna ni cambia de jurisdicción con la credencial del runtime · [Implementación de §2 y §3](#implementación-de-2-y-3-bloque-7-de-la-221-13-10-2026) (bloque 7 de la 2.2.1): transiciones exactas, *trigger* de `incidents` (extiende §2), el suelo legal en SQL y lo que sigue sin impedirse |
 
 ## Contexto
 
@@ -157,6 +157,8 @@ Son exactamente las columnas que escriben `DatabaseComplianceProfileRepository::
 
 ### Lo que esto no impide hasta el bloque 7
 
+*(Histórico: lo cierra el bloque 7, ver [«Lo que esto no impide, con §1–§3 en vigor»](#lo-que-esto-no-impide-con-13-en-vigor). Se conserva como constancia de la ventana en que existió.)*
+
 El privilegio por columna de §1 dice **qué columnas** puede escribir `fichaje_app`, no **en qué filas** ni **desde qué valor**: eso es el *trigger* de §2, que llega en el bloque 7. Hasta entonces, además de insertar un tramo falso o cerrar uno abierto con una hora falsa, quien ejecute código con la credencial del runtime puede:
 
 - **Reescribir `clocked_out_at`, `duration_minutes` y `clock_out_source` de cualquier tramo ya cerrado**, de cualquier antigüedad.
@@ -165,3 +167,57 @@ El privilegio por columna de §1 dice **qué columnas** puede escribir `fichaje_
 - **Borrar filas de las seis tablas**, porque el `DELETE` se conserva para la purga hasta §3.
 
 Lo de `shift_entries` lo detecta la conciliación de §4 —la diaria dentro de su ventana, la semanal sobre todo el registro—, que compara marcas, estado y `superseded_by` con el último asiento `shift_entry.*`, salvo que la escritura vaya acompañada de asientos falsificados (Consecuencias, primer punto). **La conciliación no cubre `incidents`**: de una resolución reescrita solo queda, intacto, el asiento `incident.resolved` original en `audit_log`, y nada lo compara con la fila. La migración `2026_10_13_100000` lo dice en su docblock con las mismas palabras.
+
+## Implementación de §2 y §3 (bloque 7 de la 2.2.1, 13-10-2026)
+
+Implementa `backend-laravel` con la skill `migracion-segura`; la comprobación del conjunto de privilegios en `update.sh` (`infra/scripts/lib/work-record-privileges.sh`, `DELETE` a `false` en las siete tablas) es de `devops-observabilidad`. Todo vive en la migración `2026_10_14_100000_work_record_trigger_and_purge_function`, que es la que retira el `DELETE`.
+
+### §2 tal y como se ha implementado
+
+`shift_entries_guard_transition`, `BEFORE UPDATE … FOR EACH ROW`, y `shift_entries_superseded_is_linked`, `CONSTRAINT TRIGGER … DEFERRABLE INITIALLY DEFERRED`. Funciones propiedad del rol de migración, `search_path = pg_catalog, pg_temp`, sin `EXECUTE` para `PUBLIC`. Rechazan con `42501` y un mensaje que nombra este ADR. El rol de migración también pasa por ellos: los puede desactivar porque es su propietario, y hacerlo es un acto explícito.
+
+| Regla | Lo que admite |
+|---|---|
+| Columnas | Solo cambian `clocked_out_at`, `duration_minutes`, `status`, `clock_out_source`, `superseded_by_id` y `updated_at`. Se compara la fila entera menos esas seis, así que una columna que se añada mañana nace inmutable |
+| `status` | Igual que estaba, siempre (el `upsert` de la jornada reescribe con los mismos valores los tramos que no cambian). `open` → `closed`, `anomalous`, `superseded` o `voided`; `closed` o `anomalous` → `superseded` o `voided`. `superseded` y `voided` son finales. `closed` ↔ `anomalous` no: el dominio solo marca la anomalía al cerrar |
+| Salida | `clocked_out_at`, `duration_minutes` y `clock_out_source` solo cambian al cerrar: de `open` a `closed` o `anomalous`, con la salida anterior nula y la nueva no nula. Cerrar sin hora de salida tampoco se admite |
+| `superseded_by_id` | Una sola vez, de nulo a valor, en una fila cuyo estado es `superseded`, y apuntando a la **versión siguiente** de ese tramo: mismo empleado, misma `work_date` y `version + 1` (ADR-035), a la que no apunte ya otra fila |
+| Al confirmar | Un tramo que una sentencia de la transacción dejó en `superseded` tiene que tener ya su `superseded_by_id`. Diferido porque `EloquentWorkDayRepository::save` retira la versión antigua, inserta la nueva y solo entonces las encadena (es una clave ajena) |
+
+Se han contrastado con el dominio y el código: `WorkDay::clockOut` (cerrar y, si procede, marcar anómalo en la misma escritura), `correctEntry` (retirar y encadenar, desde `open`, `closed` o `anomalous`), `voidEntry` (anular sin encadenar, desde los mismos tres), `linkSupersededEntries` y el `upsert` de `persistEntries`, además de `CorrectionSeeder`. Las suites Feature e Integration, que corren con `fichaje_app`, los ejercitan de punta a punta.
+
+### §2 se extiende a `incidents`
+
+La resolución de una incidencia cerrada era el otro residuo de filas del bloque 6, y la conciliación de §4 no la cubre. El dominio solo deja cerrar una incidencia una vez (`Incident::resolvedBy` lanza `IncidentAlreadyClosed`) y `DatabaseIncidentNotices` sella el primer aviso y no lo vuelve a tocar, así que el esquema puede decir lo mismo. `incidents_guard_transition`, `BEFORE UPDATE … FOR EACH ROW`:
+
+- solo cambian `status`, `resolved_at`, `resolved_by_user_id`, `resolution_note`, `notified_at` y `updated_at` (fila entera menos esas seis);
+- `status` solo pasa de `open` a `resolved` o `dismissed`, y las tres columnas de la resolución solo cambian en esa transición;
+- `notified_at` solo pasa de nulo a un instante. `markNotified` filtra ya `notified_at IS NULL`: si dos pasadas recogieran la misma incidencia, la segunda no actualiza nada en vez de abortar.
+
+### §3 tal y como se ha implementado
+
+`public.work_record_purge_batch(p_cutoff date, p_batch integer) RETURNS TABLE (dataset text, deleted bigint)`, `SECURITY DEFINER`, propiedad del rol de migración, `SET search_path = pg_catalog, pg_temp`, `SET lock_timeout = '5s'`, `EXECUTE` solo para `fichaje_app`.
+
+- **Su corte máximo** es la fecha UTC de `now()` del servidor de base de datos menos los años efectivos, con la aritmética de `RetentionPolicy::workRecordCutoff()` (un 29 de febrero menos un año es el 1 de marzo, como en PHP; `public.work_record_purge_max_cutoff`). **Los años efectivos** son, por centro, el mayor entre `retention_years` de su perfil —o del perfil por defecto si no tiene— y el suelo de su jurisdicción; entre centros, el mayor; sin centro, el perfil por defecto. Un corte posterior se rechaza con `42501`; un lote fuera de `1..100000` o un corte nulo, con `22023`; la falta de perfil, con `P0002`.
+- **El suelo llega a SQL como `CASE`** en la función inmutable `public.work_record_retention_floor(text)` (el país antes del guion; `default` para los que no están), escrita por la migración desde una copia del catálogo `compliance.retention_floors`. Es el mismo patrón que el `CHECK` de §5: el dato está en dos sitios y `WorkRecordPurgeFunctionTest` los ata (cada país del catálogo, una subdivisión suya y uno que no está). Añadir un país al catálogo sin una migración que reescriba la función pone la prueba en rojo. No se eligió una tabla: tendría que ser igual de inalcanzable para la aplicación, no aporta nada que la función no dé y sería otra relación que vaciar y restaurar en las pruebas.
+- Vacía lo vencido de cada tabla en el orden de `DatabaseWorkRecordArchive` (correcciones, incidencias, escaneos, avisos descartados, tramos por generaciones, totales), en sentencias de `p_batch` filas como mucho. **Precisa §3:** `p_batch` acota cada sentencia, no la llamada. Borrar «un lote de cada tabla» por llamada obligaba a repetir en cada una las consultas de las tablas ya vacías, y con un año de 500 personas (750 000 filas) la purga tardaba el doble que los `DELETE` de antes; la transacción es la misma, la del asiento. `DatabaseWorkRecordArchive::purge` la llama una vez dentro de esa transacción, y no la llama si `inspect()` no encuentra nada vencido.
+- `fichaje_app` pierde `DELETE` sobre `shift_entries`, `shift_corrections`, `scan_events`, `discarded_scan_reports`, `incidents`, `daily_totals` y `sites`.
+
+### Lo que esto no impide, con §1–§3 en vigor
+
+Con la credencial del runtime todavía se puede:
+
+- **Insertar un tramo falso o cerrar uno abierto con una hora falsa.** Son las escrituras del fichaje. Lo detecta §4.
+- **Anular un tramo vigente** (`open`, `closed` o `anomalous` → `voided`) o sustituirlo por una versión siguiente inventada. Son transiciones del dominio y el motor no sabe quién las pide; §4 compara estado y `superseded_by` con el último asiento `shift_entry.*` y lo detecta, salvo que vaya acompañado de asientos falsificados (Consecuencias, primer punto).
+- **Cerrar una incidencia abierta con una resolución falsa.** Es la transición legítima. §4 no cubre `incidents`; lo que queda es la ausencia del asiento `incident.resolved` que la acompañaría.
+- **Bajar `retention_years` hasta el suelo y purgar dentro de él**, como ya decía la enmienda del 13-10-2026 (§7).
+- **Purgar antes de tiempo con el reloj del servidor de base de datos adelantado.** La función confía en `now()` de PostgreSQL, que la aplicación no controla; un reloj mal puesto mueve el corte, y se acepta. Uno atrasado solo hace que la purga se niegue.
+
+Quien tenga la credencial del rol de migración puede desactivar los *triggers* y borrar: esa credencial no llega a ningún contenedor de runtime (ADR-042).
+
+### Verificación del bloque 7
+
+- `tests/Integration/Schema/WorkRecordTransitionsTest.php`: cada transición prohibida de `shift_entries` y de `incidents` da `42501` con el rol de la aplicación (y con el propietario en las columnas que la aplicación no tiene); cada transición del dominio pasa; la sustitución sin versión nueva no llega a confirmarse.
+- `tests/Integration/Schema/WorkRecordPurgeFunctionTest.php`: `EXECUTE` solo para la aplicación (ni `PUBLIC` ni mantenimiento), corte posterior rechazado, también con `retention_years` por debajo del suelo, suelo atado al catálogo, la misma aritmética que `RetentionPolicy`, recuentos por lote y por generaciones, una tabla temporal no la desvía, y `down()`/`up()` reversibles.
+- `tests/Feature/Compliance/ApplyRetentionCommandTest.php`: `compliance:apply-retention` de punta a punta con su asiento, y sin borrar ni asentar nada si el reloj de la aplicación pide un corte que la función no admite.
+- `tests/Integration/Schema/WorkRecordPrivilegesTest.php`: `DELETE` da `42501` en las siete tablas.
