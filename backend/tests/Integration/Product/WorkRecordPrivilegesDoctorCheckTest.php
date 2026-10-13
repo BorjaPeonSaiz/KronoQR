@@ -160,3 +160,125 @@ it('no aparece mientras las migraciones que retiran esos privilegios no esten ap
 
     expect($findings)->toBe([]);
 })->group('RF-PD-13', 'RS-07');
+
+// --- Las guardas del bloque 7 (ADR-057 §2 y §3) ----------------------------------
+
+it('con la migracion del bloque 7, da correcto y sin incidencias en las guardas', function (): void {
+    $findings = privilegiosRegistroDoctor();
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Ok)
+        ->and($findings[0]->details['guards_expected'])->toBeTrue()
+        ->and($findings[0]->details['guard_issues'])->toBe([]);
+})->group('RF-PD-13', 'RS-07', 'RL-04');
+
+it('avisa si falta o esta desactivada una guarda, o la funcion de purga pierde su forma', function (string $statement, array $expected): void {
+    // En una transaccion del rol de migracion que se deshace, y la sonda lee
+    // por esa misma sesion: nada de esto llega a confirmarse. Con el
+    // propietario, lo que sobra sale tambien; aqui se mira la variante y las
+    // guardas.
+    $migrator = privilegiosRegistroMigrador();
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement($statement);
+
+        $findings = privilegiosRegistroDoctor($migrator);
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($findings)->toHaveCount(1)
+        ->and($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->variant)->toBe('guards')
+        ->and($findings[0]->details['guard_issues'])->toBe($expected)
+        ->and($findings[0]->params['issues'])->toContain($expected[0]);
+
+    // Deshecho: la siguiente pasada, con la aplicacion, vuelve a dar correcto.
+    expect(privilegiosRegistroDoctor()[0]->status)->toBe(DoctorStatus::Ok);
+})->with([
+    'un trigger desactivado' => [
+        'ALTER TABLE incidents DISABLE TRIGGER incidents_guard_insert',
+        ['disabled_trigger:incidents_guard_insert'],
+    ],
+    'todos los de una tabla desactivados' => [
+        'ALTER TABLE shift_entries DISABLE TRIGGER ALL',
+        [
+            'disabled_trigger:shift_entries_guard_insert',
+            'disabled_trigger:shift_entries_guard_transition',
+            'disabled_trigger:shift_entries_superseded_is_linked',
+        ],
+    ],
+    'solo en replica' => [
+        'ALTER TABLE shift_entries ENABLE REPLICA TRIGGER shift_entries_guard_transition',
+        ['disabled_trigger:shift_entries_guard_transition'],
+    ],
+    'un trigger borrado' => [
+        'DROP TRIGGER shift_entries_superseded_is_linked ON shift_entries',
+        ['missing_trigger:shift_entries_superseded_is_linked'],
+    ],
+    'la purga sin SECURITY DEFINER' => [
+        'ALTER FUNCTION public.work_record_purge_batch(date, integer) SECURITY INVOKER',
+        ['purge_function:not_security_definer'],
+    ],
+    'la purga sin search_path' => [
+        'ALTER FUNCTION public.work_record_purge_batch(date, integer) RESET search_path',
+        ['purge_function:no_search_path'],
+    ],
+    'la purga borrada' => [
+        'DROP FUNCTION public.work_record_purge_batch(date, integer)',
+        ['purge_function:missing'],
+    ],
+])->group('RF-PD-13', 'RS-07', 'RL-04');
+
+it('avisa si la aplicacion recupera DELETE sobre el registro', function (): void {
+    $migrator = privilegiosRegistroMigrador();
+    $application = '"'.Config::string('database.roles.application').'"';
+
+    try {
+        $migrator->statement('GRANT DELETE ON TABLE scan_events TO '.$application);
+
+        $findings = privilegiosRegistroDoctor();
+    } finally {
+        $migrator->statement('REVOKE DELETE ON TABLE scan_events FROM '.$application);
+    }
+
+    expect($findings[0]->status)->toBe(DoctorStatus::Warning)
+        ->and($findings[0]->variant)->toBe('excess')
+        ->and($findings[0]->details['excess'])->toBe(['scan_events:DELETE']);
+})->group('RF-PD-13', 'RS-07', 'RL-04');
+
+it('no mira las guardas mientras la migracion del bloque 7 no este aplicada', function (): void {
+    $migrator = privilegiosRegistroMigrador();
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->table('migrations')->where('migration', ServiceInspector::WORK_RECORD_GUARD_MIGRATION)->delete();
+        $migrator->statement('ALTER TABLE incidents DISABLE TRIGGER incidents_guard_insert');
+
+        $details = privilegiosRegistroDoctor($migrator)[0]->details;
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($details['guards_expected'])->toBeFalse()
+        ->and($details['guard_issues'])->toBe([]);
+})->group('RF-PD-13', 'RS-07');
+
+it('el aviso de las guardas y su que hacer estan en español y en ingles', function (string $locale): void {
+    $finding = DoctorFinding::warning(
+        'database.work_record_privileges',
+        'guards',
+        params: ['user' => 'fichaje_app', 'issues' => 'disabled_trigger:incidents_guard_insert'],
+    );
+
+    $message = trans($finding->messageKey(), $finding->params, $locale);
+    $fix = trans((string) $finding->fixKey(), $finding->params, $locale);
+
+    expect($message)->toBeString()->toContain('fichaje_app')->toContain('disabled_trigger:incidents_guard_insert')
+        ->and($fix)->toBeString()->toContain('compliance:reconcile-work-record');
+
+    // Una clave sin traducir vuelve tal cual: `doctor.checks.…`.
+    expect($message)->not->toStartWith('doctor.');
+    expect($fix)->not->toStartWith('doctor.');
+})->with(['es', 'en'])->group('RF-PD-13');

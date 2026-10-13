@@ -119,6 +119,9 @@ return [
                     .'horario o el perfil de cumplimiento (:excess). Se sigue fichando con normalidad, pero quien '
                     .'ejecutara codigo en la aplicacion podria reescribir fichajes o rebajar el plazo legal de '
                     .'conservacion.',
+                'warning_guards' => 'Faltan o estan desactivadas protecciones del registro horario en la base de '
+                    .'datos (:issues). Se sigue fichando con normalidad, pero con el usuario «:user» se podrian '
+                    .'reescribir, insertar ya cerrados o borrar fichajes e incidencias sin que el motor lo impida.',
                 'warning_unknown' => 'No se han podido consultar los permisos sobre el registro horario.',
             ],
             'audit_chain' => [
@@ -639,6 +642,11 @@ return [
                     ."update.sh los deja como corresponde con el rol de migracion. No los toques a mano: genera\n"
                     ."el paquete de diagnostico con `php artisan product:diagnostics`, envialo a soporte y\n"
                     .'revisa quien tiene acceso al rol de migracion.',
+                'warning_guards' => "Solo el rol de migracion puede desactivar o cambiar esas protecciones: alguien lo ha\n"
+                    ."usado, o una restauracion las ha dejado a medias. doctor.sh y update.sh tambien lo\n"
+                    ."detectan. No las toques a mano: genera el paquete de diagnostico con\n"
+                    ."`php artisan product:diagnostics`, envialo a soporte, revisa quien tiene acceso al rol de\n"
+                    .'migracion y ejecuta la conciliacion: php artisan compliance:reconcile-work-record --full',
                 'warning_unknown' => "Vuelve a ejecutar `php artisan product:doctor` cuando la base de datos\n"
                     .'responda. Si sigue sin poder comprobarse, genera el paquete de diagnostico.',
             ],

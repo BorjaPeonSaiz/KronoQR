@@ -112,7 +112,12 @@ final readonly class DatabaseProbe implements DoctorProbe
     }
 
     /**
-     * `database.work_record_privileges` (ADR-057 §1 y §7, RL-04, RS-07).
+     * `database.work_record_privileges` (ADR-057 §1 a §3 y §7, RL-04, RS-07).
+     *
+     * Con la migracion del bloque 7 aplicada mira tambien sus guardas: los
+     * *triggers* de `shift_entries` e `incidents` (que existan y que ninguno
+     * este desactivado), la funcion de purga `SECURITY DEFINER` con
+     * `search_path`, y que la aplicacion no tenga `DELETE` sobre el registro.
      *
      * **Aviso y no fallo**: el fichaje y el registro siguen funcionando, y
      * `update.sh` lo repara en la siguiente actualizacion. Pero quien ejecute
@@ -136,7 +141,23 @@ final readonly class DatabaseProbe implements DoctorProbe
             return [];
         }
 
-        $excess = is_array($privileges['excess'] ?? null) ? $privileges['excess'] : [];
+        $excess = self::strings($privileges['excess'] ?? null);
+        $guardIssues = self::strings($privileges['guard_issues'] ?? null);
+        $user = is_string($privileges['database_user'] ?? null) ? $privileges['database_user'] : '?';
+
+        // Las guardas del bloque 7 (ADR-057 §2 y §3): un *trigger* que falta o
+        // esta desactivado, o una funcion de purga que ya no es `SECURITY
+        // DEFINER` con su `search_path`. Se dice antes que lo que sobra y en el
+        // mismo aviso, porque las dos cosas se arreglan igual: con `update.sh`
+        // y preguntando quien tiene el rol de migracion.
+        if ($guardIssues !== []) {
+            return [DoctorFinding::warning(
+                'database.work_record_privileges',
+                'guards',
+                params: ['user' => $user, 'issues' => implode(', ', [...$guardIssues, ...$excess])],
+                details: $privileges,
+            )];
+        }
 
         if ($excess === []) {
             return [DoctorFinding::ok('database.work_record_privileges', $privileges)];
@@ -145,12 +166,17 @@ final readonly class DatabaseProbe implements DoctorProbe
         return [DoctorFinding::warning(
             'database.work_record_privileges',
             'excess',
-            params: [
-                'user' => is_string($privileges['database_user'] ?? null) ? $privileges['database_user'] : '?',
-                'excess' => implode(', ', array_filter($excess, is_string(...))),
-            ],
+            params: ['user' => $user, 'excess' => implode(', ', $excess)],
             details: $privileges,
         )];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function strings(mixed $value): array
+    {
+        return is_array($value) ? array_values(array_filter($value, is_string(...))) : [];
     }
 
     private function chain(): DoctorFinding
