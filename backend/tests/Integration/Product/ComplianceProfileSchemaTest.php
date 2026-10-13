@@ -7,7 +7,8 @@ use App\Modules\Product\Domain\ValueObject\ComplianceProfileFieldType;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -19,9 +20,18 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * defecto y la clave ajena de `sites`— y la cascada de dos escalones que resuelve
  * el umbral. Un doble en memoria daria todo eso por bueno sin haberlo comprobado
  * nunca, y es justo la ultima linea de defensa de un umbral legal.
+ *
+ * CON EL ROL PROPIETARIO Y DATOS CONFIRMADOS. Desde ADR-057 §7 (bloque 6 de la
+ * 2.2.1) la aplicacion no puede crear perfiles, borrarlos ni reasignar el del
+ * centro: el motor le responde `42501`. Las restricciones que se prueban aqui
+ * protegen de quien si puede —el propietario, con `psql`—, y por eso esas
+ * escrituras van por `SchemaOwner`, que es otra sesion; de ahi
+ * `CommittedDatabase`. Cada rechazo se afirma por su restriccion o su
+ * SQLSTATE: un `42501` pasaria por un `QueryException` cualquiera sin haber
+ * probado nada.
  */
 
-uses(RefreshDatabase::class);
+uses(CommittedDatabase::class);
 
 it('entrega el perfil ES-hosteleria sembrado por la migracion, con sus ocho valores', function (): void {
     // El producto que se instala en casa del cliente. Si alguno cambiara sin
@@ -44,7 +54,7 @@ it('no admite dos perfiles por defecto', function (): void {
     // El indice unico parcial `one_default_compliance_profile`. Sin el, dos
     // perfiles se disputarian el fallback de un centro sin perfil asignado y el
     // umbral que rige dependeria del plan de la consulta.
-    expect(fn (): int => DB::table('compliance_profiles')->insertGetId([
+    expect(fn (): int => SchemaOwner::connection()->table('compliance_profiles')->insertGetId([
         'name' => 'Otro convenio',
         'jurisdiction' => 'ES',
         'retention_years' => 4,
@@ -55,7 +65,7 @@ it('no admite dos perfiles por defecto', function (): void {
         'week_starts_on' => 1,
         'holiday_calendar' => '[]',
         'is_default' => true,
-    ]))->toThrow(QueryException::class);
+    ]))->toThrow(QueryException::class, 'one_default_compliance_profile');
 })->group('RF-PD-07');
 
 it('rechaza en el esquema los umbrales que el dominio tampoco admite', function (string $column, int $value): void {
@@ -64,7 +74,7 @@ it('rechaza en el esquema los umbrales que el dominio tampoco admite', function 
     // llegan. Un `max_daily_hours = 90` apagaria RN-11 en silencio.
     expect(fn (): int => DB::table('compliance_profiles')
         ->where('name', 'ES-hosteleria')
-        ->update([$column => $value]))->toThrow(QueryException::class);
+        ->update([$column => $value]))->toThrow(QueryException::class, 'SQLSTATE[23514]');
 })->with([
     'jornada diaria imposible' => ['max_daily_hours', 90],
     'descanso imposible' => ['min_rest_hours', 40],
@@ -81,7 +91,7 @@ it('rechaza en el esquema una jornada semanal por debajo de la diaria', function
     // es el esquema y no una regla por campo.
     expect(fn (): int => DB::table('compliance_profiles')
         ->where('name', 'ES-hosteleria')
-        ->update(['max_weekly_hours' => 8]))->toThrow(QueryException::class);
+        ->update(['max_weekly_hours' => 8]))->toThrow(QueryException::class, 'compliance_profiles_chk_weekly_covers_daily');
 })->group('RF-PD-07');
 
 it('el maximo del catalogo de campos y el del esquema son el mismo numero', function (): void {
@@ -115,7 +125,7 @@ it('resuelve el umbral del centro por su perfil asignado y no por el de la insta
     // nadie lo notaria: los dos numeros existen y los dos son plausibles.
     $siteId = WorkforceFixtures::site();
 
-    $ownId = DB::table('compliance_profiles')->insertGetId([
+    $ownId = SchemaOwner::connection()->table('compliance_profiles')->insertGetId([
         'name' => 'Convenio propio',
         'jurisdiction' => 'ES',
         'retention_years' => 6,
@@ -128,7 +138,7 @@ it('resuelve el umbral del centro por su perfil asignado y no por el de la insta
         'is_default' => false,
     ]);
 
-    DB::table('sites')->where('id', $siteId)->update(['compliance_profile_id' => $ownId]);
+    SchemaOwner::connection()->table('sites')->where('id', $siteId)->update(['compliance_profile_id' => $ownId]);
 
     $policy = app(CompliancePolicyProvider::class)->forSite($siteId);
 
@@ -147,7 +157,7 @@ it('cae en el perfil por defecto cuando el centro no tiene ninguno asignado', fu
     // tenga que asignarlo, y que el asistente cree el centro antes de decidirlo.
     $siteId = WorkforceFixtures::site();
 
-    DB::table('sites')->where('id', $siteId)->update(['compliance_profile_id' => null]);
+    SchemaOwner::connection()->table('sites')->where('id', $siteId)->update(['compliance_profile_id' => null]);
 
     $policy = app(CompliancePolicyProvider::class)->forSite($siteId);
 
@@ -164,8 +174,8 @@ it('no deja borrar un perfil que algun centro esta usando', function (): void {
     $siteId = WorkforceFixtures::site();
     $profileId = DB::table('compliance_profiles')->where('is_default', true)->value('id');
 
-    DB::table('sites')->where('id', $siteId)->update(['compliance_profile_id' => $profileId]);
+    SchemaOwner::connection()->table('sites')->where('id', $siteId)->update(['compliance_profile_id' => $profileId]);
 
-    expect(fn (): int => DB::table('compliance_profiles')->where('id', $profileId)->delete())
-        ->toThrow(QueryException::class);
+    expect(fn (): int => SchemaOwner::connection()->table('compliance_profiles')->where('id', $profileId)->delete())
+        ->toThrow(QueryException::class, 'sites_compliance_profile_id_foreign');
 })->group('RF-PD-07');

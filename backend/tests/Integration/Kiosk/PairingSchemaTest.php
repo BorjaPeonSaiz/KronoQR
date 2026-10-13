@@ -53,8 +53,6 @@ function pairingFixture(): array
     $site = DB::table('sites')->insertGetId([
         'name' => 'Centro de pruebas',
         'timezone' => 'Europe/Madrid',
-        'settings' => '{}',
-        'created_at' => PAIRING_NOW,
     ]);
 
     $device = DB::table('devices')->insertGetId([

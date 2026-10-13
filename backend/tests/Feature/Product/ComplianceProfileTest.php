@@ -6,7 +6,8 @@ use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -22,9 +23,14 @@ use Tests\Support\Workforce\WorkforceFixtures;
  *
  * Las respuestas se validan contra `openapi.yaml` con Spectator: el contrato es
  * la fuente de verdad (ADR-013).
+ *
+ * `CommittedDatabase` y no `RefreshDatabase`: dos pruebas preparan lo que la
+ * aplicacion ya no puede escribir —asignar el perfil al centro, cambiar la
+ * jurisdiccion (ADR-057 §7)— con el rol propietario, que es otra sesion y no
+ * veria el centro sin confirmar. El trait restaura el perfil al terminar.
  */
 
-uses(RefreshDatabase::class);
+uses(CommittedDatabase::class);
 
 beforeEach(function (): void {
     Spectator::using('openapi.yaml');
@@ -70,7 +76,7 @@ it('dice como se ha resuelto el perfil', function (bool $assigned, string $expec
     // uno con perfil propio no: quien edita necesita saber cual de las dos cosas
     // esta tocando.
     if ($assigned) {
-        DB::table('sites')->update([
+        SchemaOwner::connection()->table('sites')->update([
             'compliance_profile_id' => DB::table('compliance_profiles')->where('is_default', true)->value('id'),
         ]);
     }
@@ -288,7 +294,7 @@ it('fuera del catalogo rige el suelo por omision, que es un año', function (): 
     // Una jurisdiccion sin suelo legal conocido (Portugal no esta en
     // `compliance.retention_floors`) no hereda el español: recibe el de
     // omision, y el panel lo ve.
-    DB::table('compliance_profiles')->update(['jurisdiction' => 'PT']);
+    SchemaOwner::connection()->table('compliance_profiles')->update(['jurisdiction' => 'PT']);
     $token = profileAdminToken();
 
     Api::as($token)->get('/api/v1/compliance-profile')
