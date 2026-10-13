@@ -64,7 +64,27 @@ use Illuminate\Support\Facades\DB;
  *
  * Cerrar un tramo abierto con una hora falsa o insertar uno inventado: son las
  * escrituras que el fichaje necesita. Lo detecta la conciliacion de ADR-057 §4.
- * El *trigger* de transiciones de §2 llega en el bloque 7.
+ *
+ * **Hasta el bloque 7 el residuo es mas amplio.** Un privilegio de columna no
+ * distingue filas ni valores anteriores: eso lo hace el *trigger* de
+ * transiciones de ADR-057 §2, que llega en el bloque 7. Hasta entonces, con la
+ * credencial del runtime se puede ademas:
+ *
+ * - reescribir `clocked_out_at`, `duration_minutes` y `clock_out_source` de
+ *   **cualquier** tramo ya cerrado, de cualquier antiguedad;
+ * - pasar a `voided` o `superseded` un tramo vigente, que desaparece de la
+ *   exportacion para la Inspeccion, y poner un `superseded_by_id` arbitrario;
+ * - reescribir la resolucion de una incidencia ya cerrada (`status`,
+ *   `resolved_at`, `resolved_by_user_id`, `resolution_note`): el
+ *   `WHERE status = 'open'` de `DatabaseIncidentLedger` es del codigo, no del
+ *   esquema.
+ *
+ * Lo de `shift_entries` lo detecta la conciliacion de ADR-057 §4 —la diaria
+ * dentro de su ventana, la semanal sobre todo el registro—, porque compara
+ * marcas, estado y `superseded_by` con el ultimo asiento `shift_entry.*`;
+ * salvo que la escritura vaya acompañada de asientos falsificados. La
+ * conciliacion no cubre `incidents`: de una resolucion reescrita solo queda el
+ * asiento `incident.resolved` original en `audit_log`, que no se puede tocar.
  *
  * ## Sin filas, sin bloqueos largos
  *
@@ -83,8 +103,9 @@ use Illuminate\Support\Facades\DB;
  *
  * No hay forma de anticiparlo en la provision, que corre antes de que existan
  * estas tablas: su `GRANT … ON ALL TABLES` lo devolveria todo. Lo comprueba y
- * lo repara `verify_privileges` de `update.sh` (tarea 6.4), con esta misma
- * lista.
+ * lo repara `update.sh` (tarea 6.4) con esta misma lista:
+ * `work_record_privileges_drift` lo comprueba por conjunto exacto y
+ * `repair_work_record_privileges` lo reaplica.
  */
 return new class extends Migration
 {
