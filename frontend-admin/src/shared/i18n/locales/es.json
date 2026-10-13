@@ -1551,7 +1551,7 @@
       "weekStartsOn": "Se usa para agrupar por semanas. Lunes en el perfil español (ISO 8601).",
       "holidayCalendar": "Una fecha por línea, en formato AAAA-MM-DD. Se entrega vacío: los festivos dependen del municipio y del año, así que los carga cada instalación.",
       "retentionFloor": "Mínimo legal: {years} año ({region}). | Mínimo legal: {years} años ({region}).",
-      "retentionYears": "Antes de ese plazo nada puede purgarse."
+      "retentionYears": "Antes de ese plazo nada puede purgarse. El mínimo lo fija la ley de cada país; en España, el art. 34.9 ET."
     },
     "weekDays": {
       "1": "Lunes",
