@@ -388,7 +388,7 @@ it('purga lo vencido, respeta lo vigente y deja asiento con alcance y conteos', 
 
     expect($entry)->not->toBeNull();
 
-    /** @var array{scope: string, cutoff_date: string, retention_years: int, rows: int, tables: array<string, int>} $payload */
+    /** @var array{scope: string, cutoff_date: string, retention_years: int, retention_floor_years: int, jurisdiction: string, rows: int, tables: array<string, int>} $payload */
     $payload = json_decode((string) $entry?->payload, true, 512, JSON_THROW_ON_ERROR);
 
     expect($entry?->subject_type)->toBe('retention')
@@ -399,6 +399,11 @@ it('purga lo vencido, respeta lo vigente y deja asiento con alcance y conteos', 
         ->and($payload['scope'])->toBe('work_records')
         ->and($payload['cutoff_date'])->toBe('2023-06-01')
         ->and($payload['retention_years'])->toBe(4)
+        // Y el suelo legal con el que se purgo (RL-02, ADR-057 enmienda del
+        // 10-10-2026 §5): la conciliacion lo lee del propio asiento, que solo
+        // puede endurecerse a si mismo.
+        ->and($payload['retention_floor_years'])->toBe(4)
+        ->and($payload['jurisdiction'])->toBe('ES')
         ->and($payload['rows'])->toBe(6)
         ->and($payload['tables']['shift_entries'])->toBe(1)
         ->and($payload['tables']['scan_events'])->toBe(2);
@@ -409,7 +414,7 @@ it('purga lo vencido, respeta lo vigente y deja asiento con alcance y conteos', 
     // registro horario todavia bajo el art. 34.9 ET aunque alguien lo pida. El
     // procedimiento de los otros cinco derechos se comprueba en
     // tests/Architecture/DataProtectionGuaranteesTest.php.
-})->group('RL-04', 'RF-PR-03', 'RL-10');
+})->group('RL-04', 'RF-PR-03', 'RL-10', 'RL-02');
 
 it('purga el log tecnico y el historico de errores en su ciclo de 90 dias', function (): void {
     $directory = retentionPaths();

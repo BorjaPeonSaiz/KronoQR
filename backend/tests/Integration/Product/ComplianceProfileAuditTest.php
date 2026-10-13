@@ -270,3 +270,40 @@ it('devuelve 422 y no 500 al renombrar el perfil a uno que ya existe', function 
         ->and(DB::table('compliance_profiles')->where('is_default', true)->value('name'))
         ->toBe('ES-hosteleria');
 })->group('RF-PD-07');
+
+it('no deja asiento ni toca la fila cuando el suelo legal rechaza el cambio', function (): void {
+    // RL-02, RL-04: bajar la retencion de un perfil español a tres años es un
+    // 422 y nada mas. Aunque la peticion traiga ademas un cambio valido, se
+    // rechaza entera: ni fila a medias ni asiento de un cambio que no ocurrio.
+    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->patch('/api/v1/compliance-profile', ['retention_years' => 3, 'min_rest_hours' => 10])
+        ->assertStatus(422)
+        ->assertJsonStructure(['errors' => ['retention_years']]);
+
+    $fila = DB::table('compliance_profiles')->where('is_default', true)->first();
+
+    expect(profileAuditEntries())->toBe([])
+        ->and($fila?->retention_years)->toBe(4)
+        ->and($fila?->min_rest_hours)->toBe(12)
+        ->and($fila?->updated_at)->toBeNull();
+})->group('RF-PD-07', 'RL-02', 'RL-04');
+
+it('deja su asiento cuando la retencion baja hasta el suelo legal, sin pasarlo', function (): void {
+    // El caso aceptado del mismo borde: de seis a cuatro es legal y se audita
+    // como cualquier cambio con efecto en la purga.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+
+    Api::as($token)->patch('/api/v1/compliance-profile', ['retention_years' => 6])->assertStatus(200);
+    Api::as($token)->patch('/api/v1/compliance-profile', ['retention_years' => 4])->assertStatus(200);
+
+    $entries = profileAuditEntries();
+
+    expect($entries)->toHaveCount(2)
+        ->and(profileAuditPayload($entries[1]))->toMatchArray([
+            'affects_retention' => true,
+            'field' => 'retention_years',
+            'new_value' => 4,
+            'previous_value' => 6,
+        ])
+        ->and(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
+})->group('RF-PD-07', 'RL-02', 'RL-04');
