@@ -53,10 +53,12 @@ horizon parados o sin copia verificada en 26 h (V3-PL-07); el rol de la app sin 
 por `update.sh` (V4-SC-1). El resto de la lista «¿Se pasó algo por alto?» del resumen queda para la 2.2.x salvo nueva orden.
 
 **Entrega como TFM (08-10-2026, PR #127 → `main` `2ac00130`):** el proyecto es también el Trabajo de Fin de Máster del propietario
-(Máster de Desarrollo con IA, BIG School). `README.md` sigue el orden que pide la entrega y `doc_master/` lleva memoria, despliegue
-con recorrido guiado, guion del vídeo y `presentacion.html` (el HTML del repositorio es la entrega; la copia publicada como artefacto no se usa). La contraseña de la cuenta de demostración y el teléfono para el código 2FA van en el formulario de
-entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador `[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en
-`kronoqr.kodigolab.es` (hoy 2.1.0), actualizar README §3.1/§6 y `doc_master/despliegue.md`.
+(Máster de Desarrollo con IA, BIG School). `README.md` sigue el orden que pide la entrega. **`doc_master/` (memoria, despliegue,
+guion del vídeo y presentación) se retiró del repositorio el 13-10-2026 por decisión del propietario**; el README ya no la enlaza
+(sigue en el historial de git, `git show 7cbf912f:doc_master/…`). La contraseña de la cuenta de demostración y el teléfono para el
+código 2FA van en el formulario de entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador
+`[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
+actualizar README §3.1/§6.
 
 **Siguiente acción: la 2.2.1, bloque 6** (ADR-057 §1, privilegios por columna; rama `fix/adr-057-privilegios`, creada desde
 `main` `7cbf912f`), con la tarea **6.5** nueva: quitar a `fichaje_app` la escritura de `compliance_profiles.jurisdiction`,
