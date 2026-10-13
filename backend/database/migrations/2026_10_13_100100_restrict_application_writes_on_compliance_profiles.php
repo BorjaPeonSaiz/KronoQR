@@ -77,7 +77,9 @@ use Illuminate\Support\Facades\DB;
  * ## Una instalacion que vuelva a ejecutar la provision
  *
  * Su `GRANT … ON ALL TABLES` lo devolveria todo. Lo comprueba y lo repara
- * `verify_privileges` de `update.sh` (tarea 6.4), con esta misma lista.
+ * `update.sh` (tarea 6.4), con esta misma lista: `work_record_privileges_drift`
+ * lo comprueba por conjunto exacto y `repair_work_record_privileges` lo
+ * reaplica.
  */
 return new class extends Migration
 {
