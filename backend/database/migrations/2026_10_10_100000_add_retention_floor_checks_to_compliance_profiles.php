@@ -137,7 +137,7 @@ return new class extends Migration
             throw new RuntimeException(
                 'compliance_profiles: el perfil #'.$row->id.' ('.$row->jurisdiction.') conserva '
                 .$row->retention_years.' años y el suelo legal de ES es 4 (RL-02, art. 34.9 ET). Súbelo '
-                .'desde el panel (Configuración → Perfil de cumplimiento) y vuelve a actualizar. No se ha '
+                .'a 4 o más en Panel > Perfil de cumplimiento y vuelve a actualizar. No se ha '
                 .'cambiado nada.'
             );
         }
