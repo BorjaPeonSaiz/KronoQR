@@ -1550,7 +1550,8 @@
       "breakRequiredAfterHours": "Threshold for a continuous stretch with no break recorded. 6 in the Spanish profile. It is always stored and evaluated; it only raises issues while break clocking is switched on (see the note below).",
       "weekStartsOn": "Used to group by week. Monday in the Spanish profile (ISO 8601).",
       "holidayCalendar": "One date per line, in YYYY-MM-DD format. Ships empty: holidays depend on the town and the year, so each installation loads its own.",
-      "retentionYears": "Four years in Spain (art. 34.9 ET). Nothing can be purged before that."
+      "retentionFloor": "Legal minimum: {years} year ({region}). | Legal minimum: {years} years ({region}).",
+      "retentionYears": "Nothing can be purged before that."
     },
     "weekDays": {
       "1": "Monday",
@@ -1565,6 +1566,7 @@
     "breakSuspendedDisabledLink": "Switch it on in Operational settings → Break clocking",
     "breakSuspendedEnabled": "The continuous stretch without a break is evaluated and raises issues: break clocking is switched on in this installation.",
     "errors": {
+      "belowFloor": "It cannot be lower than the legal minimum: {years} years.",
       "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
       "required": "This field cannot be left empty."
     }

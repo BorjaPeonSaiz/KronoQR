@@ -125,3 +125,26 @@ test(
     await expect(page.getByTestId('min-rest-hours')).toHaveValue('10')
   },
 )
+
+// --- Suelo legal de la retencion (RF-PD-07, RL-02, tarea 5.4) --------------
+
+test(
+  'la retencion enseña el minimo legal que dicta el servidor y no deja guardar por debajo',
+  { tag: ['@RF-PD-07', '@RL-02'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await logInAsAdmin(page)
+
+    await page.goto('/compliance-profile')
+
+    const input = page.getByTestId('retention-years')
+
+    await expect(page.getByText('Mínimo legal: 4 años')).toBeVisible()
+    await expect(input).toHaveAttribute('min', '4')
+
+    await input.fill('2')
+    await expect(input).toHaveAttribute('aria-invalid', 'true')
+    await expect(page.getByText('No puede ser inferior al mínimo legal: 4 años.')).toBeVisible()
+    await expect(page.getByTestId('save')).toBeDisabled()
+  },
+)

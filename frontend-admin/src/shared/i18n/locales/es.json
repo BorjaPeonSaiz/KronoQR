@@ -1550,7 +1550,8 @@
       "breakRequiredAfterHours": "Umbral del tramo continuo sin pausa registrada. 6 en el perfil español. Se guarda y se evalúa siempre; solo abre incidencias mientras el fichaje de pausa esté activado (ver la nota de debajo).",
       "weekStartsOn": "Se usa para agrupar por semanas. Lunes en el perfil español (ISO 8601).",
       "holidayCalendar": "Una fecha por línea, en formato AAAA-MM-DD. Se entrega vacío: los festivos dependen del municipio y del año, así que los carga cada instalación.",
-      "retentionYears": "Cuatro años en España (art. 34.9 ET). Antes de ese plazo nada puede purgarse."
+      "retentionFloor": "Mínimo legal: {years} año ({region}). | Mínimo legal: {years} años ({region}).",
+      "retentionYears": "Antes de ese plazo nada puede purgarse."
     },
     "weekDays": {
       "1": "Lunes",
@@ -1565,6 +1566,7 @@
     "breakSuspendedDisabledLink": "Actívalo en Ajustes operativos → Fichaje de pausa",
     "breakSuspendedEnabled": "El tramo continuo sin pausa se evalúa y abre incidencias: el fichaje de pausa está activado en esta instalación.",
     "errors": {
+      "belowFloor": "No puede ser inferior al mínimo legal: {years} años.",
       "notAWholeNumber": "Escribe un número entero, sin decimales ni letras.",
       "required": "Este campo no puede quedarse vacío."
     }
