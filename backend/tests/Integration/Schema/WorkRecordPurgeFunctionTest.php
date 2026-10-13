@@ -376,7 +376,9 @@ it('borra en orden, por lotes y por generaciones, y devuelve lo borrado', functi
     // Un tramo vencido con tres correcciones (mas que el lote) y una cadena de
     // versiones vencida (v1 -> v2) en otra jornada.
     purgeFunctionEntry($expired, corrections: 3);
-    $old = purgeFunctionEntry($expired, corrections: 0, version: 1, status: 'superseded', employeeId: null);
+    // La v1 nace vigente y se retira (ADR-057 §2: no se inserta sustituida).
+    $old = purgeFunctionEntry($expired, corrections: 0, version: 1, employeeId: null);
+    DB::table('shift_entries')->where('id', $old['entry'])->update(['status' => 'superseded']);
     $new = purgeFunctionEntry($expired, corrections: 1, employeeId: $old['employee'], version: 2);
 
     DB::table('shift_entries')->where('id', $old['entry'])->update(['superseded_by_id' => $new['entry']]);

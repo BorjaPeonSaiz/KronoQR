@@ -188,11 +188,16 @@ it('no carga los tramos anulados ni los sustituidos', function (): void {
             'clocked_in_at' => '2026-03-14 '.$desde.':00+00',
             'clocked_out_at' => '2026-03-14 '.$hasta.':00+00',
             'duration_minutes' => 120,
-            'status' => $estado,
+            // Nace vigente; se retira despues (ADR-057 §2). `RefreshDatabase` no
+            // confirma, asi que el sustituido no necesita version nueva.
+            'status' => 'closed',
             'clock_in_source' => 'qr_kiosk',
             'clock_out_source' => 'qr_kiosk',
             'version' => 1,
         ]);
+
+        DB::table('shift_entries')->where('employee_id', $employeeId)->where('clocked_in_at', '2026-03-14 '.$desde.':00+00')
+            ->update(['status' => $estado]);
     }
 
     $jornada = repositorio()->findWorkDayFor($employee, WorkDate::fromIsoDate('2026-03-14', Instants::madrid()));

@@ -208,12 +208,15 @@ trait LimitsMigrationLocks
      * @param  string  $definition  lo que va despues del nombre —`ON tabla (...)
      *                              [WHERE ...]`—; constante de la migracion,
      *                              nunca entrada externa
+     * @param  bool  $unique  `CREATE UNIQUE INDEX`; si una fila duplicada impide
+     *                        construirlo, el indice queda `INVALID`, se lanza y
+     *                        el siguiente `migrate` lo borra y lo reintenta
      *
      * @throws LogicException si hay una transaccion abierta o el identificador
      *                        no es simple
      * @throws RuntimeException si el indice no queda valido
      */
-    protected function createIndexConcurrently(string $index, string $definition): void
+    protected function createIndexConcurrently(string $index, string $definition, bool $unique = false): void
     {
         $connection = $this->lockLimitedConnection();
 
@@ -224,12 +227,14 @@ trait LimitsMigrationLocks
             throw new LogicException('La definicion de '.$index.' tiene que empezar por «ON tabla».');
         }
 
-        $this->withLockWaitOnly(function () use ($connection, $index, $definition): void {
+        $this->withLockWaitOnly(function () use ($connection, $index, $definition, $unique): void {
             if ($this->indexValidity($connection, $index) === false) {
                 $connection->statement('DROP INDEX CONCURRENTLY IF EXISTS '.$index);
             }
 
-            $connection->statement('CREATE INDEX CONCURRENTLY IF NOT EXISTS '.$index.' '.$definition);
+            $connection->statement(
+                'CREATE '.($unique ? 'UNIQUE ' : '').'INDEX CONCURRENTLY IF NOT EXISTS '.$index.' '.$definition,
+            );
 
             if ($this->indexValidity($connection, $index) !== true) {
                 throw new RuntimeException(

@@ -5,11 +5,13 @@ declare(strict_types=1);
 use App\Modules\Reporting\Application\Port\WorkDayJournalReader;
 use App\Modules\Reporting\Domain\ValueObject\DateRange;
 use App\Modules\Reporting\Domain\ValueObject\JournalShiftEntry;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Database\QueryPlans;
+use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -100,9 +102,14 @@ function diarioConVolumen(): string
         $scansByEntry[$correction['uuid']] = [['clock_in', $at('06:00')], ['clock_out', $at('14:00')]];
     }
 
-    foreach (array_chunk($superseded, 1_000) as $chunk) {
-        DB::table('shift_entries')->insert($chunk);
-    }
+    // Con el propietario y sin las guardas: una version sustituida ya no se
+    // inserta (ADR-057 §2, `shift_entries_guard_insert`), y recorrer aqui la
+    // correccion de cada una no aporta nada a lo que se mide, que es el plan.
+    SchemaOwner::bypassingTransitionGuards(static function (ConnectionInterface $owner) use ($superseded): void {
+        foreach (array_chunk($superseded, 1_000) as $chunk) {
+            $owner->table('shift_entries')->insert($chunk);
+        }
+    });
 
     workDayJournalIndexScans($device, $scansByEntry);
 
@@ -294,11 +301,11 @@ it('sirve el diario de un mes entero por indices, sin recorrer scan_events ni sh
             ->and(QueryPlans::scansSequentially($nodes, 'shift_entries'))->toBeFalse("Seq Scan de shift_entries en:\n".$query['sql']);
 
         $porTramo = $porTramo || QueryPlans::usesIndex($nodes, 'scan_events_shift_entry_id_occurred_at_index');
-        $porCadena = $porCadena || QueryPlans::usesIndex($nodes, 'shift_entries_superseded_by_id_index');
+        $porCadena = $porCadena || QueryPlans::usesIndex($nodes, 'shift_entries_superseded_by_id_unique');
     }
 
     expect($porTramo)->toBeTrue('Ninguna consulta usa scan_events_shift_entry_id_occurred_at_index')
-        ->and($porCadena)->toBeTrue('Ninguna consulta usa shift_entries_superseded_by_id_index');
+        ->and($porCadena)->toBeTrue('Ninguna consulta usa shift_entries_superseded_by_id_unique');
 
     // Y el contenido sigue siendo el de antes: la pausa se ve en el tramo que
     // abrio, y el tramo corregido conserva la marca de su version sustituida.

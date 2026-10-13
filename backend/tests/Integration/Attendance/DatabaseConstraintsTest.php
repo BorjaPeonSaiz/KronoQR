@@ -182,8 +182,12 @@ it('no cuenta como abierto un turno anulado ni uno sustituido', function (): voi
     // tramo anulado por error bloquearia el fichaje del empleado para siempre.
     $fixture = attendanceFixture();
 
-    insertShiftEntry($fixture, $fixture['employee'], ['status' => 'voided']);
-    insertShiftEntry($fixture, $fixture['employee'], ['status' => 'superseded']);
+    // Nacen abiertos y se retiran (ADR-057 §2, `shift_entries_guard_insert`).
+    // `RefreshDatabase` no confirma: el sustituido no necesita version nueva.
+    foreach (['voided', 'superseded'] as $status) {
+        $id = insertShiftEntry($fixture, $fixture['employee']);
+        DB::table('shift_entries')->where('id', $id)->update(['status' => $status]);
+    }
 
     expect(insertShiftEntry($fixture, $fixture['employee']))->toBeGreaterThan(0);
 })->group('RN-01');
@@ -225,10 +229,10 @@ it('deja fuera del solape los tramos anulados y los sustituidos', function (): v
     // primera correccion del producto seria rechazada por la base de datos.
     $fixture = attendanceFixture();
 
-    insertClosedShiftEntry($fixture, $fixture['employee'], '2026-03-02 14:00:00+00', [
-        'status' => 'superseded',
+    $previous = insertClosedShiftEntry($fixture, $fixture['employee'], '2026-03-02 14:00:00+00', [
         'duration_minutes' => 480,
     ]);
+    DB::table('shift_entries')->where('id', $previous)->update(['status' => 'superseded']);
 
     $corrected = insertClosedShiftEntry($fixture, $fixture['employee'], '2026-03-02 14:00:00+00', [
         'clocked_in_at' => '2026-03-02 06:30:00+00',

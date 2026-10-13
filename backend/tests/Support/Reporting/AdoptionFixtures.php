@@ -118,18 +118,27 @@ final class AdoptionFixtures
         ?string $resolvedAt = null,
         string $type = 'open_shift_expired',
     ): void {
-        DB::table('incidents')->insert([
+        // Nace abierta y, si toca, se resuelve despues: una incidencia no se
+        // inserta ya cerrada (ADR-057 §2, `incidents_guard_insert`).
+        $id = DB::table('incidents')->insertGetId([
             'employee_id' => $employeeId,
             'work_date' => $workDate,
             'type' => $type,
             'severity' => 'medium',
-            'status' => $resolvedAt === null ? 'open' : 'resolved',
+            'status' => 'open',
             'detected_at' => $detectedAt,
-            'resolved_at' => $resolvedAt,
             'context' => '{}',
             'created_at' => $detectedAt,
-            'updated_at' => $resolvedAt ?? $detectedAt,
+            'updated_at' => $detectedAt,
         ]);
+
+        if ($resolvedAt !== null) {
+            DB::table('incidents')->where('id', $id)->update([
+                'status' => 'resolved',
+                'resolved_at' => $resolvedAt,
+                'updated_at' => $resolvedAt,
+            ]);
+        }
     }
 
     /**

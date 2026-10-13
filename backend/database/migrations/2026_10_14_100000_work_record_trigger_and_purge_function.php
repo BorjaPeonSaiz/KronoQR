@@ -21,7 +21,9 @@ use Illuminate\Support\Facades\DB;
  * tramo ya cerrado, pasar a `voided` o `superseded` uno vigente fuera de las
  * transiciones del dominio, apuntar `superseded_by_id` a cualquier fila,
  * reescribir la resolucion de una incidencia cerrada y borrar filas de las seis
- * tablas. Esta migracion lo impide en el motor.
+ * tablas. Y, como el `UPDATE` vigilado se puede esquivar insertando, insertar
+ * un tramo ya sustituido o anulado o una incidencia ya resuelta. Esta migracion
+ * lo impide en el motor.
  *
  * ## 1. Transiciones de `shift_entries` (ADR-057 §2)
  *
@@ -43,9 +45,23 @@ use Illuminate\Support\Facades\DB;
  *   no cambie siempre se admite: el `upsert` de `EloquentWorkDayRepository`
  *   reescribe con los mismos valores los tramos de la jornada que no cambian;
  * - `superseded_by_id` que cambie si ya tenia valor, que se fije sin que el
- *   estado sea `superseded`, o que apunte a una fila que no es la version
- *   siguiente de ese tramo (mismo empleado, misma jornada, `version + 1`,
- *   ADR-035) o a la que ya apunta otra.
+ *   estado sea `superseded`, o que apunte a una fila que no sea **del mismo
+ *   empleado, la misma `work_date` y `version + 1`** (ADR-035). No hay columna
+ *   de linaje: el esquema no sabe si esa fila «continua» este tramo o es otro
+ *   tramo del mismo dia con esa version. Que dos versiones no apunten a la
+ *   misma lo garantiza el indice unico `shift_entries_superseded_by_id_unique`
+ *   (`2026_10_14_100200`), no un `EXISTS` aqui, que no ve la fila sin
+ *   confirmar de otra transaccion.
+ *
+ * `shift_entries_guard_insert`, `AFTER INSERT … FOR EACH ROW`: un tramo nace
+ * vigente. Rechaza con `42501` insertar una fila `superseded` o `voided`, o con
+ * `superseded_by_id`; sin esto, el `UPDATE` vigilado se esquivaba insertando
+ * directamente el estado final. `AFTER` y no `BEFORE`: el `upsert` de
+ * `EloquentWorkDayRepository` propone `superseded` para la version retirada, que
+ * ya existe, y un `BEFORE INSERT` se dispara tambien cuando `ON CONFLICT` acaba
+ * en `UPDATE`. Ningun codigo de `app/` inserta una fila terminal; las semillas
+ * de desarrollo (`CorrectionSeeder`) llegan al estado final por las mismas
+ * transiciones que el dominio.
  *
  * Y `shift_entries_superseded_is_linked`, `CONSTRAINT TRIGGER … DEFERRABLE
  * INITIALLY DEFERRED`: al confirmar, un tramo que una sentencia de la
@@ -66,6 +82,16 @@ use Illuminate\Support\Facades\DB;
  * las tres columnas de la resolucion solo cambian en esa transicion; y
  * `notified_at` solo pasa de nulo a un instante (`DatabaseIncidentNotices`
  * sella el primer aviso y nunca lo vuelve a tocar).
+ *
+ * `incidents_guard_insert`, `AFTER INSERT … FOR EACH ROW`: una incidencia nace
+ * `open`, sin resolucion (`resolved_at`, `resolved_by_user_id`,
+ * `resolution_note`) y sin aviso (`notified_at`), que es como la inserta
+ * `DatabaseIncidentLedger`. `AFTER` por lo mismo que en `shift_entries`.
+ *
+ * Las claves `assigned_to_user_id` y `resolved_by_user_id` hacia `users` eran
+ * `ON DELETE SET NULL`, y esa accion referencial es un `UPDATE` que este
+ * *trigger* rechaza con un `42501` que no habla de la cuenta. Pasan a
+ * `RESTRICT` en `2026_10_14_100100` (`23503` honesto, RN-13).
  *
  * ## 3. La purga por funcion (ADR-057 §3)
  *
@@ -117,24 +143,41 @@ use Illuminate\Support\Facades\DB;
  *
  * ## Lo que esto no impide
  *
- * - Insertar un tramo falso o cerrar uno abierto con una hora falsa: son las
- *   escrituras que el fichaje necesita. Lo detecta la conciliacion de §4.
- * - **Anular un tramo vigente** (`closed` → `voided`): es una transicion
- *   legitima del dominio (`WorkDay::voidEntry`), y el motor no distingue quien
- *   la pide. La conciliacion compara el estado con el ultimo asiento.
- * - **Cerrar una incidencia abierta** con una resolucion falsa, por lo mismo.
- *   La conciliacion no cubre `incidents`; queda el asiento `incident.*`.
- * - Bajar `retention_years` hasta el suelo y purgar dentro de el.
+ * Lo mismo que ADR-057, «Lo que esto no impide, con §1–§3 en vigor». Con la
+ * credencial del runtime todavia se puede:
  *
- * El rol de migracion tambien pasa por los *triggers*: es su propietario y los
- * puede desactivar (`ALTER TABLE … DISABLE TRIGGER`) o saltar
- * (`session_replication_role`, que exige superusuario), y eso es un acto
- * explicito, no un descuido. Una migracion futura que rellene una columna nueva
- * de `shift_entries` o `incidents` con `UPDATE` tiene que hacerlo asi.
+ * - **Insertar un tramo vigente falso o cerrar uno abierto con una hora
+ *   falsa**: son las escrituras del fichaje. Lo detecta la conciliacion de §4.
+ *   Un tramo ya **no** se puede insertar directamente `superseded` o `voided`
+ *   ni con `superseded_by_id`, ni una incidencia ya resuelta o avisada.
+ * - **Anular un tramo vigente** (`open`, `closed` o `anomalous` → `voided`) o
+ *   sustituirlo por una version siguiente inventada: son transiciones del
+ *   dominio (`WorkDay::voidEntry`, `correctEntry`) y el motor no sabe quien las
+ *   pide. La conciliacion compara estado y `superseded_by` con el ultimo
+ *   asiento `shift_entry.*`, salvo que vaya con asientos falsificados.
+ * - **Cerrar una incidencia abierta con una resolucion falsa**: es la
+ *   transicion legitima. La conciliacion no cubre `incidents`; queda la
+ *   ausencia del asiento `incident.resolved` que la acompañaria.
+ * - **Bajar `retention_years` hasta el suelo y purgar dentro de el.**
+ * - **Purgar antes de tiempo con el reloj del servidor de base de datos
+ *   adelantado**: la funcion confia en `now()` de PostgreSQL.
+ * - **Llamar a `work_record_purge_batch` fuera de `compliance:apply-retention`**:
+ *   la aplicacion tiene `EXECUTE` y la funcion no escribe asiento. Purga solo lo
+ *   vencido, pero sin `retention.purge_executed`. En `shift_entries` lo ve la
+ *   conciliacion de §4 como `audit_without_entry` (asientos de tramos que ya no
+ *   estan); en `scan_events`, `discarded_scan_reports`, `incidents` y
+ *   `daily_totals` no lo ve nadie.
+ *
+ * Quien tenga la credencial del rol de migracion es propietario de las tablas y
+ * de los *triggers*: los puede desactivar (`ALTER TABLE … DISABLE TRIGGER`) y
+ * borrar; saltarlos con `session_replication_role` exige superusuario. Esa
+ * credencial no llega a ningun contenedor de runtime (ADR-042), y usarla es un
+ * acto explicito, no un descuido. Una migracion futura que rellene una columna
+ * nueva de `shift_entries` o `incidents` con `UPDATE` tiene que hacerlo asi.
  *
  * ## Despliegue y bloqueos
  *
- * Un solo paso. Ningun dato se lee ni se reescribe: funciones, tres *triggers*
+ * Un solo paso. Ningun dato se lee ni se reescribe: funciones, cinco *triggers*
  * y privilegios. `CREATE TRIGGER` toma `SHARE ROW EXCLUSIVE` sobre la tabla
  * (bloquea escrituras, no lecturas) durante lo que tarda en escribir el
  * catalogo; `lock_timeout` lo hace rendirse en 3 s si una transaccion larga la
@@ -197,8 +240,10 @@ return new class extends Migration
             'work_record_purge_max_cutoff(date, integer)',
             'work_record_purge_batch(date, integer)',
             'shift_entries_guard_transition()',
+            'shift_entries_guard_insert()',
             'shift_entries_assert_superseded_is_linked()',
             'incidents_guard_transition()',
+            'incidents_guard_insert()',
         ] as $function) {
             // `PUBLIC` recibe `EXECUTE` sobre toda funcion nueva si no se le
             // retira. Solo la purga se concede, y solo a la aplicacion.
@@ -222,13 +267,17 @@ return new class extends Migration
             DB::statement('GRANT DELETE ON TABLE '.$table.' TO '.$application);
         }
 
+        DB::statement('DROP TRIGGER IF EXISTS incidents_guard_insert ON incidents');
         DB::statement('DROP TRIGGER IF EXISTS incidents_guard_transition ON incidents');
         DB::statement('DROP TRIGGER IF EXISTS shift_entries_superseded_is_linked ON shift_entries');
         DB::statement('DROP TRIGGER IF EXISTS shift_entries_guard_transition ON shift_entries');
+        DB::statement('DROP TRIGGER IF EXISTS shift_entries_guard_insert ON shift_entries');
 
+        DB::statement('DROP FUNCTION IF EXISTS public.incidents_guard_insert()');
         DB::statement('DROP FUNCTION IF EXISTS public.incidents_guard_transition()');
         DB::statement('DROP FUNCTION IF EXISTS public.shift_entries_assert_superseded_is_linked()');
         DB::statement('DROP FUNCTION IF EXISTS public.shift_entries_guard_transition()');
+        DB::statement('DROP FUNCTION IF EXISTS public.shift_entries_guard_insert()');
         DB::statement('DROP FUNCTION IF EXISTS public.work_record_purge_batch(date, integer)');
         DB::statement('DROP FUNCTION IF EXISTS public.work_record_purge_max_cutoff(date, integer)');
         DB::statement('DROP FUNCTION IF EXISTS public.work_record_retention_floor(text)');
@@ -464,6 +513,11 @@ return new class extends Migration
                                 USING ERRCODE = '42501';
                         END IF;
 
+                        -- Que no la reclame otra version lo garantiza el
+                        -- indice unico `shift_entries_superseded_by_id_unique`
+                        -- (migracion `2026_10_14_100200`): un `EXISTS` aqui
+                        -- no ve la fila sin confirmar de otra transaccion y
+                        -- dos encadenados simultaneos pasaban los dos.
                         IF NOT EXISTS (
                                SELECT 1
                                  FROM public.shift_entries replacement
@@ -471,19 +525,54 @@ return new class extends Migration
                                   AND replacement.employee_id = OLD.employee_id
                                   AND replacement.work_date = OLD.work_date
                                   AND replacement.version = OLD.version + 1
-                           )
-                           OR EXISTS (
-                               SELECT 1
-                                 FROM public.shift_entries other
-                                WHERE other.superseded_by_id = NEW.superseded_by_id
-                                  AND other.id <> OLD.id
                            ) THEN
-                            RAISE EXCEPTION 'shift_entries %: superseded_by_id tiene que ser la version siguiente del mismo tramo (ADR-035, ADR-057 §2)', OLD.uuid
+                            RAISE EXCEPTION 'shift_entries %: superseded_by_id tiene que ser una fila del mismo empleado, la misma jornada y la version siguiente (ADR-035, ADR-057 §2)', OLD.uuid
                                 USING ERRCODE = '42501';
                         END IF;
                     END IF;
 
                     RETURN NEW;
+                END;
+                $kronoqr$
+                SQL,
+            // `AFTER INSERT` y no `BEFORE`: el `upsert` de
+            // `EloquentWorkDayRepository` propone `superseded` para la version
+            // retirada, que ya existe, y un `BEFORE INSERT` se dispara tambien
+            // en el camino de `ON CONFLICT DO UPDATE`. El `AFTER INSERT` solo
+            // ve las filas que de verdad se insertaron.
+            <<<'SQL'
+                CREATE OR REPLACE FUNCTION public.shift_entries_guard_insert()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                SET search_path = pg_catalog, pg_temp
+                AS $kronoqr$
+                BEGIN
+                    IF NEW.status IN ('superseded', 'voided') OR NEW.superseded_by_id IS NOT NULL THEN
+                        RAISE EXCEPTION 'shift_entries %: un tramo nace vigente; se sustituye o se anula despues (ADR-057 §2)', NEW.uuid
+                            USING ERRCODE = '42501';
+                    END IF;
+
+                    RETURN NULL;
+                END;
+                $kronoqr$
+                SQL,
+            <<<'SQL'
+                CREATE OR REPLACE FUNCTION public.incidents_guard_insert()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                SET search_path = pg_catalog, pg_temp
+                AS $kronoqr$
+                BEGIN
+                    IF NEW.status IS DISTINCT FROM 'open'
+                       OR NEW.resolved_at IS NOT NULL
+                       OR NEW.resolved_by_user_id IS NOT NULL
+                       OR NEW.resolution_note IS NOT NULL
+                       OR NEW.notified_at IS NOT NULL THEN
+                        RAISE EXCEPTION 'incidents %: una incidencia nace abierta y sin aviso; se resuelve despues (ADR-057 §2)', NEW.id
+                            USING ERRCODE = '42501';
+                    END IF;
+
+                    RETURN NULL;
                 END;
                 $kronoqr$
                 SQL,
@@ -581,6 +670,9 @@ return new class extends Migration
             'DROP TRIGGER IF EXISTS shift_entries_guard_transition ON shift_entries',
             'CREATE TRIGGER shift_entries_guard_transition BEFORE UPDATE ON shift_entries '
                 .'FOR EACH ROW EXECUTE FUNCTION public.shift_entries_guard_transition()',
+            'DROP TRIGGER IF EXISTS shift_entries_guard_insert ON shift_entries',
+            'CREATE TRIGGER shift_entries_guard_insert AFTER INSERT ON shift_entries '
+                .'FOR EACH ROW EXECUTE FUNCTION public.shift_entries_guard_insert()',
             'DROP TRIGGER IF EXISTS shift_entries_superseded_is_linked ON shift_entries',
             'CREATE CONSTRAINT TRIGGER shift_entries_superseded_is_linked AFTER UPDATE ON shift_entries '
                 .'DEFERRABLE INITIALLY DEFERRED FOR EACH ROW '
@@ -589,6 +681,9 @@ return new class extends Migration
             'DROP TRIGGER IF EXISTS incidents_guard_transition ON incidents',
             'CREATE TRIGGER incidents_guard_transition BEFORE UPDATE ON incidents '
                 .'FOR EACH ROW EXECUTE FUNCTION public.incidents_guard_transition()',
+            'DROP TRIGGER IF EXISTS incidents_guard_insert ON incidents',
+            'CREATE TRIGGER incidents_guard_insert AFTER INSERT ON incidents '
+                .'FOR EACH ROW EXECUTE FUNCTION public.incidents_guard_insert()',
         ];
     }
 

@@ -273,10 +273,12 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
      * La cuenta de gestion de una de las dos columnas, o `null` si la columna lo
      * es.
      *
-     * Se comprueba el UUID y no el identificador: la clave ajena es `SET NULL`,
-     * asi que una cuenta desactivada y borrada deja `assigned_to_user_id` nulo y
-     * el `LEFT JOIN` sin fila. La incidencia se queda **sin asignar**, que es un
-     * estado legitimo y visible, no un agujero.
+     * Se comprueba el UUID y no el identificador porque la columna es nula con
+     * toda legitimidad: un departamento sin responsable deja la incidencia **sin
+     * asignar**, y una abierta no tiene quien la resolvio. Lo que ya no puede
+     * dejarla nula es borrar la cuenta: las dos claves hacia `users` son
+     * `RESTRICT` desde `2026_10_14_100100` (ADR-057 §2, RN-13), y una cuenta que
+     * figura en una incidencia se desactiva, no se borra.
      */
     private function actor(Row $row, string $prefix): ?IncidentActor
     {

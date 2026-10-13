@@ -47,8 +47,10 @@ function tramoDeJornada(
     ?string $clockedOutAt = null,
     string $status = 'closed',
 ): void {
+    $uuid = Str::uuid7()->toString();
+
     DB::table('shift_entries')->insert([
-        'uuid' => Str::uuid7()->toString(),
+        'uuid' => $uuid,
         'employee_id' => AttendanceFixtures::employeeIdOf($employeeUuid),
         'site_id' => $siteId,
         'work_date' => $workDate,
@@ -57,13 +59,19 @@ function tramoDeJornada(
         'duration_minutes' => $clockedOutAt === null
             ? null
             : intdiv(strtotime($clockedOutAt) - strtotime($clockedInAt), 60),
-        'status' => $status,
+        // Nace vigente; anulado o sustituido se queda despues (ADR-057 §2).
+        // `RefreshDatabase` no confirma: el sustituido no necesita version nueva.
+        'status' => in_array($status, ['voided', 'superseded'], true) ? 'closed' : $status,
         'clock_in_source' => 'qr_kiosk',
         'clock_out_source' => $clockedOutAt === null ? null : 'qr_kiosk',
         'version' => 1,
         'created_at' => $clockedInAt,
         'updated_at' => $clockedInAt,
     ]);
+
+    if (in_array($status, ['voided', 'superseded'], true)) {
+        DB::table('shift_entries')->where('uuid', $uuid)->update(['status' => $status]);
+    }
 }
 
 /**
