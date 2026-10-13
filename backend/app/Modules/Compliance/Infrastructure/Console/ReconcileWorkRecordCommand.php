@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Infrastructure\Console;
 
+use App\Modules\Compliance\Application\Command\ReviewOutOfBoundsPurgeCommand;
 use App\Modules\Compliance\Application\UseCase\ReconcileWorkRecordWithAudit;
+use App\Modules\Compliance\Application\UseCase\ReviewOutOfBoundsPurge;
+use App\Modules\Compliance\Domain\Exception\PurgeReviewRejected;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationResult;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationScope;
@@ -40,15 +43,24 @@ final class ReconcileWorkRecordCommand extends Command
     protected $signature = 'compliance:reconcile-work-record
         {--full : Todo el registro y toda la auditoria viva, no solo la ventana de los ultimos dias}
         {--days= : Dias de la ventana diaria. Por defecto, compliance.work_record_reconciliation.window_days}
-        {--chunk=500 : Filas por lote. Solo afecta a la memoria, no al resultado}';
+        {--chunk=500 : Filas por lote. Solo afecta a la memoria, no al resultado}
+        {--acknowledge= : Id del asiento retention.purge_executed que se da por revisado. No concilia: escribe el asiento de revision}
+        {--reason= : Motivo de la revision, de 10 a 1000 caracteres. Obligatorio con --acknowledge}
+        {--responsible= : Id de la cuenta de gestion activa que responde de la revision. Obligatorio con --acknowledge}';
 
     /** Tramos que se detallan en el log tecnico. Ver `handle()`. */
     private const int LOGGED_ROWS = 50;
 
     protected $description = 'Concilia shift_entries con sus asientos de audit_log y alerta ante cualquier discrepancia (ADR-057)';
 
-    public function handle(ReconcileWorkRecordWithAudit $reconcile): int
+    public function handle(ReconcileWorkRecordWithAudit $reconcile, ReviewOutOfBoundsPurge $review): int
     {
+        $acknowledge = $this->stringOption('acknowledge');
+
+        if ($acknowledge !== null) {
+            return $this->acknowledge($review, $acknowledge);
+        }
+
         $scope = (bool) $this->option('full')
             ? WorkRecordReconciliationScope::Full
             : WorkRecordReconciliationScope::Recent;
@@ -66,6 +78,10 @@ final class ReconcileWorkRecordCommand extends Command
         $coverage = $scope === WorkRecordReconciliationScope::Full
             ? 'registro completo'
             : 'ultimos '.$days.' dias';
+
+        if ($result->reviewedPurges > 0) {
+            $this->line('purgas fuera de limites revisadas: '.$result->reviewedPurges.' (no cuentan)');
+        }
 
         if ($result->isConsistent()) {
             $this->info('Registro y auditoria cuadran ('.$coverage.'): '.$result->entriesChecked.' tramos conciliados.');
@@ -131,6 +147,75 @@ final class ReconcileWorkRecordCommand extends Command
         }
 
         $this->error('Posible incidente de seguridad. Procedimiento: docs/runbooks/discrepancia-registro-auditoria.md');
+    }
+
+    /**
+     * `--acknowledge=<id>`: da por revisada una purga no admisible (ADR-057
+     * enmienda del 10-10-2026 §6). No concilia.
+     *
+     * - Con `--full` o `--days`: 2, sin hacer nada.
+     * - Sin `--reason` o sin `--responsible`: vista previa y 2, sin escribir.
+     * - Revision rechazada: 1 y el motivo.
+     * - Escrita: 0.
+     *
+     * El motivo nunca va al log tecnico (regla dura 21): es texto libre.
+     */
+    private function acknowledge(ReviewOutOfBoundsPurge $review, string $acknowledge): int
+    {
+        if ((bool) $this->option('full') || $this->stringOption('days') !== null) {
+            $this->error(__('work-record-review.incompatible_options'));
+
+            return self::INVALID;
+        }
+
+        $purgeId = (int) $acknowledge;
+        $reason = $this->stringOption('reason');
+        $responsible = (int) $this->stringOption('responsible');
+
+        try {
+            if ($reason === null || $responsible < 1) {
+                $preview = $review->preview($purgeId);
+                $this->printReview($purgeId, $preview->violations, $preview->explainsDeletions, $preview->cutoffDate, $preview->siteId);
+                $this->error(__('work-record-review.missing_options', ['id' => $purgeId]));
+
+                return self::INVALID;
+            }
+
+            $outcome = $review->handle(new ReviewOutOfBoundsPurgeCommand($purgeId, $reason, $responsible));
+        } catch (PurgeReviewRejected $rejected) {
+            $this->error(__($rejected->translationKey, $rejected->parameters));
+
+            return self::FAILURE;
+        }
+
+        Log::warning('work_record_purge_reviewed', [
+            'audit_entry_id' => $outcome->purgeAuditEntryId,
+            'review_entry_id' => $outcome->reviewAuditEntryId,
+            'explains_deletions' => $outcome->explainsDeletions,
+        ]);
+
+        $this->info(__('work-record-review.done', ['id' => $outcome->purgeAuditEntryId, 'review' => $outcome->reviewAuditEntryId]));
+        $this->printReview($purgeId, $outcome->violations, $outcome->explainsDeletions, $outcome->cutoffDate, $outcome->siteId);
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * @param  list<string>  $violations
+     */
+    private function printReview(int $purgeId, array $violations, bool $explains, ?string $cutoff, ?int $siteId): void
+    {
+        $this->line('  retention.purge_executed #'.$purgeId.': '.implode(', ', $violations));
+        $this->line('  '.($explains
+            ? __('work-record-review.explains', ['cutoff' => (string) $cutoff, 'site' => (string) $siteId])
+            : __('work-record-review.explains_nothing', ['violations' => implode(', ', $violations)])));
+    }
+
+    private function stringOption(string $name): ?string
+    {
+        $value = $this->option($name);
+
+        return \is_string($value) && trim($value) !== '' ? $value : null;
     }
 
     private function windowDays(): int

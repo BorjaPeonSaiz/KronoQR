@@ -288,7 +288,12 @@ it('da cero discrepancias con el uso normal del producto: fichar, corregir, anul
         ->and($metricas)->toContain('work_record_reconciliation_discrepancies{scope="recent",kind="audit_without_entry"} 0')
         ->and($metricas)->toContain('work_record_reconciliation_entries_checked{scope="recent"} 14')
         ->and($metricas)->toContain('work_record_reconciliation_last_run_timestamp_seconds{scope="recent"} '.Instants::utc(WORK_RECORD_RECONCILIATION_AHORA)->getTimestamp())
-        ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))->toContain('work_record_reconciliation_entries_checked{scope="full"} 14');
+        // El gauge de purgas revisadas (ADR-057 enmienda del 10-10-2026 §6)
+        // sale en los dos ficheros, tambien a cero: sin serie, la alerta
+        // PurgaFueraDeLimitesRevisada no tendria con que comparar.
+        ->and($metricas)->toContain('work_record_reconciliation_reviewed_purges{scope="recent"} 0')
+        ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))->toContain('work_record_reconciliation_entries_checked{scope="full"} 14')
+        ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))->toContain('work_record_reconciliation_reviewed_purges{scope="full"} 0');
 })->group('RL-04', 'RS-07', 'RN-13');
 
 it('detecta las cuatro manipulaciones con la credencial de la aplicacion, con la cadena de hash en verde', function (): void {
@@ -462,9 +467,15 @@ it('no confunde una purga de retencion auditada con un borrado, y si el borrado 
     $tramos = registroAuditadoLegitimo($escenario);
 
     // Un año despues, con un año de conservacion, la purga con corte el 7 de
-    // octubre de 2026 es exactamente la que el producto podia hacer: se lleva
-    // lo anterior (el alta del 6, el turno de noche y la pausa de C, el tramo
-    // viejo de D) y deja su asiento.
+    // octubre de 2026 es exactamente la que el producto podia hacer EN UNA
+    // JURISDICCION SIN SUELO LEGAL CONOCIDO (aqui Portugal, que no esta en el
+    // catalogo y recibe el de omision, 1): se lleva lo anterior (el alta del 6,
+    // el turno de noche y la pausa de C, el tramo viejo de D) y deja su
+    // asiento. En España esa purga es no admisible (RL-02): la prueba de abajo.
+    //
+    // No se usa España con cuatro años porque el esquema de pruebas solo tiene
+    // particiones de audit_log para este año y el siguiente.
+    DB::table('compliance_profiles')->update(['jurisdiction' => 'PT']);
     FrozenTime::at('2027-10-08 05:00:00');
     registroAuditadoPurgar($escenario['site'], '2026-10-07', 1);
 
@@ -541,3 +552,94 @@ it('detecta un origen cambiado en la exportacion legal y una correccion con otro
             ->and($resultado['output'])->toContain('4 discrepancia(s)');
     }
 })->group('RL-04', 'RN-13', 'RS-07');
+
+// --- Bloque 5 de la 2.2.1: el suelo legal español y la purga revisada ------
+
+/**
+ * El rastro de un tramo de una jornada antigua que ya no esta en
+ * `shift_entries`, como si lo hubiera borrado una purga. Se escribe a mano
+ * porque el esquema de pruebas solo tiene particiones de `audit_log` para este
+ * año y el siguiente, y una purga a tres años tiene que llevarse jornadas de
+ * tres años atras.
+ */
+function registroAuditadoTramoAntiguo(int $site, string $jornada): string
+{
+    $uuid = Str::uuid7()->toString();
+
+    resolve(RecordAuditEntry::class)->handle(new RecordAuditEntryCommand(
+        actor: AuditActor::system(),
+        action: AuditAction::ShiftEntryCreated,
+        subject: AuditSubject::of('shift_entry'),
+        payload: AuditPayload::of([
+            'employee_uuid' => Str::uuid7()->toString(),
+            'shift_entry_uuid' => $uuid,
+            'site_id' => $site,
+            'work_date' => $jornada,
+            'clocked_in_at' => $jornada.'T06:00:00.000000Z',
+            'origin' => 'qr_kiosk',
+            'action' => 'clock_in',
+        ]),
+    ));
+
+    return $uuid;
+}
+
+it('denuncia una purga española a tres años, y tras revisarla deja de contarla sin borrarla', function (): void {
+    // RL-02: en España la purga a tres años no es admisible aunque su corte
+    // sea el que esos tres años permitian. Se denuncia, y lo que borro sale
+    // como borrado. Una persona la investiga y la da por revisada: deja de
+    // contar como pendiente, vuelve a explicar lo que borro antes de su corte,
+    // el asiento original sigue en audit_log y la cadena sigue integra.
+    $escenario = registroAuditadoEscenario();
+    $antiguo = registroAuditadoTramoAntiguo($escenario['site'], '2024-03-01');
+
+    FrozenTime::at('2027-10-08 05:00:00');
+    registroAuditadoPurgar($escenario['site'], '2024-10-08', 3, false);
+    $maximo = DB::table('audit_log')->where('action', 'retention.purge_executed')->max('id');
+    $purga = is_numeric($maximo) ? (int) $maximo : 0;
+
+    $antes = registroAuditadoConciliar(true);
+
+    expect($antes['code'])->toBe(1)
+        ->and($antes['output'])->toContain('2 discrepancia(s)')
+        ->and($antes['output'])->toContain('audit_log #'.$purga.' · purge_out_of_bounds · retention_years')
+        ->and($antes['output'])->toContain('shift_entries '.$antiguo.' · audit_without_entry')
+        ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))
+        ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="purge_out_of_bounds"} 1')
+        ->toContain('work_record_reconciliation_reviewed_purges{scope="full"} 0');
+
+    $revision = Artisan::call('compliance:reconcile-work-record', [
+        '--acknowledge' => (string) $purga,
+        '--reason' => 'INC-2027-14: el perfil se bajo a 3 años por error; se ha subido a 4 y se ha informado a la DPO.',
+        '--responsible' => (string) $escenario['autor'],
+    ]);
+
+    expect($revision)->toBe(0, Artisan::output());
+
+    $despues = registroAuditadoConciliar(true);
+
+    expect($despues['code'])->toBe(0, $despues['output'])
+        ->and($despues['output'])->toContain('purgas fuera de limites revisadas: 1 (no cuentan)')
+        ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))
+        ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="purge_out_of_bounds"} 0')
+        ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="audit_without_entry"} 0')
+        ->toContain('work_record_reconciliation_reviewed_purges{scope="full"} 1')
+        // La purga revisada sigue en audit_log, con su revision detras.
+        ->and(DB::table('audit_log')->where('id', $purga)->value('action'))->toBe('retention.purge_executed')
+        ->and(DB::table('audit_log')->where('action', 'retention.purge_reviewed')->count())->toBe(1)
+        ->and(Artisan::call('compliance:verify-audit-chain'))->toBe(0, Artisan::output());
+
+    // Una jornada posterior al corte borrada despues sigue sin explicarse, y
+    // una purga posterior igual de corta, sin revisar, sigue contando.
+    $posterior = registroAuditadoTramoAntiguo($escenario['site'], '2024-10-08');
+    FrozenTime::at('2027-11-08 05:00:00');
+    registroAuditadoPurgar($escenario['site'], '2024-09-08', 3, false);
+
+    $otra = registroAuditadoConciliar(true);
+
+    expect($otra['code'])->toBe(1)
+        ->and($otra['output'])->toContain('2 discrepancia(s)')
+        ->and($otra['output'])->toContain('purge_out_of_bounds · retention_years')
+        ->and($otra['output'])->toContain('shift_entries '.$posterior.' · audit_without_entry')
+        ->and($otra['output'])->toContain('purgas fuera de limites revisadas: 1 (no cuentan)');
+})->group('RS-07', 'RL-04', 'RL-02');
