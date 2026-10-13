@@ -38,6 +38,7 @@ import {
   readDeviceTokenExpiresAt,
   readMinimumAppVersion,
   readServiceCodeHash,
+  readSiteTimeZone,
   readUpdateWindow,
   resolveDeviceId,
 } from '@/shared/telemetry/deviceIdentity'
@@ -45,6 +46,7 @@ import { getErrorReporter } from '@/shared/telemetry/errorReporter'
 import { currentUrgentGiveUpMotive, currentUrgentUpdateMode } from '@/shared/telemetry/urgentUpdate'
 import { createHeartbeatScheduler, getLastHeartbeatResult } from '@/shared/telemetry/heartbeat'
 import { deviceTokenApiOptions } from '@/shared/telemetry/tokenRotation'
+import { resolveTimeZone } from '@/shared/time/siteTimeZone'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import { getOfflineQueueController, pendingScanCount } from '@/features/offline/useOfflineQueue'
 import type { QueueStats } from '@/features/offline/application/scanQueue'
@@ -391,9 +393,14 @@ function formatInstant(iso: string | null): string {
   if (iso === null) return t('diagnostics.values.notAvailable')
   const parsed = new Date(iso)
   if (Number.isNaN(parsed.getTime())) return t('diagnostics.values.notAvailable')
-  return new Intl.DateTimeFormat(locale.value, { dateStyle: 'short', timeStyle: 'medium' }).format(
-    parsed,
-  )
+  // En la zona del CENTRO, la misma del reloj que abre esta pantalla; sin zona
+  // conocida (aun sin latido), la de la tablet.
+  const timeZone = resolveTimeZone(readSiteTimeZone())
+  return new Intl.DateTimeFormat(locale.value, {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+    ...(timeZone === undefined ? {} : { timeZone }),
+  }).format(parsed)
 }
 
 function yesNo(value: boolean | null): string {
