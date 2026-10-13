@@ -99,7 +99,7 @@ describe('RF-KI-09 / V7-KI-02: cierre automatico del dialogo del QR', () => {
     expect(dialog(wrapper).exists()).toBe(false)
   })
 
-  it('avisa UNA vez en los ultimos 10 s, en un role=status que ya estaba en el DOM', async () => {
+  it('avisa UNA vez en los ultimos 20 s (WCAG 2.2.1), en un role=status que ya estaba en el DOM', async () => {
     const wrapper = mountPanel()
     await openDialog(wrapper)
     const status = wrapper.get('[data-testid="privacy-closing-soon"]')
@@ -134,7 +134,8 @@ describe('RF-KI-09 / V7-KI-02: cierre automatico del dialogo del QR', () => {
     await vi.advanceTimersByTimeAsync(1)
     await dialog(wrapper).trigger('pointerdown')
 
-    expect(wrapper.get('[data-testid="privacy-closing-soon"]').text()).not.toBe('')
+    // El tope no se puede ampliar: el texto NO invita a tocar para seguir viendo.
+    expect(wrapper.get('[data-testid="privacy-closing-soon"]').text()).toBe('Se cerrará en breve.')
   })
 
   it('al desmontar no queda ningun temporizador vivo ni el resto inerte', async () => {

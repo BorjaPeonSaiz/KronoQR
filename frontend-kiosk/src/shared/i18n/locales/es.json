@@ -244,6 +244,7 @@
     "qrDialogBody": "Escanea este código con tu móvil para leer la política completa.",
     "qrUnavailable": "No se ha podido generar el código.",
     "close": "Cerrar",
-    "closingSoon": "Se cerrará en breve. Toca para seguir viendo"
+    "closingSoon": "Se cerrará en breve. Toca para seguir viendo",
+    "closingAtLimit": "Se cerrará en breve."
   }
 }

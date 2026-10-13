@@ -244,6 +244,7 @@
     "qrDialogBody": "Scan this code with your phone to read the full policy.",
     "qrUnavailable": "The code could not be generated.",
     "close": "Close",
-    "closingSoon": "It will close shortly. Touch to keep it open"
+    "closingSoon": "It will close shortly. Touch to keep it open",
+    "closingAtLimit": "It will close shortly."
   }
 }

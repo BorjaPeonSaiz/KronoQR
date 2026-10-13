@@ -5,7 +5,13 @@
 // pagina sin parar la camara simulada.
 
 import { expect, test } from '@playwright/test'
-import { delayCameraStart, stubBrandingApi, stubKioskApi, stubScanApi } from './support/kiosk'
+import {
+  delayCameraStart,
+  holdCameraStart,
+  stubBrandingApi,
+  stubKioskApi,
+  stubScanApi,
+} from './support/kiosk'
 
 const POLICY_URL = 'https://marina.example/privacidad'
 
@@ -21,8 +27,8 @@ test(
   'el dialogo del QR se cierra en el acto cuando llega una confirmacion de fichaje',
   { tag: ['@RF-KI-09', '@RF-AT-05'] },
   async ({ page }) => {
-    // La camara arranca tarde para dar tiempo a abrir el dialogo antes del fichaje.
-    await delayCameraStart(page, 3_000)
+    // La camara queda retenida hasta que la prueba la libera, con el dialogo ya abierto.
+    const releaseCamera = await holdCameraStart(page)
     await stubScanApi(page, { outcome: 'clock_in' })
 
     await page.goto('/')
@@ -30,6 +36,8 @@ test(
     const dialog = page.getByTestId('privacy-qr-dialog')
     await expect(dialog).toBeVisible()
     await expect(page.getByTestId('scan-confirmation')).toHaveCount(0)
+
+    await releaseCamera()
 
     // Llega el fichaje: la confirmacion queda a la vista y el dialogo se va solo.
     await expect(page.getByTestId('scan-confirmation')).toBeVisible({ timeout: 10_000 })

@@ -34,6 +34,28 @@ export async function delayCameraStart(page: Page, delayMs: number): Promise<voi
   }, delayMs)
 }
 
+/**
+ * Retiene `getUserMedia` hasta que la prueba llama a la funcion devuelta. Sin
+ * plazos que carrerear: la camara arranca exactamente cuando la prueba lo decide
+ * (p. ej. tras abrir el dialogo de privacidad). Mismo envoltorio que
+ * `delayCameraStart`; no toca codigo de produccion.
+ */
+export async function holdCameraStart(page: Page): Promise<() => Promise<void>> {
+  await page.addInitScript(() => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+    const gate = new Promise<void>((open) => {
+      Object.defineProperty(window, '__releaseCamera', { value: open })
+    })
+    navigator.mediaDevices.getUserMedia = (constraints) => gate.then(() => original(constraints))
+  })
+  return async () => {
+    await page.evaluate(() => {
+      const release = (window as unknown as { __releaseCamera: () => void }).__releaseCamera
+      release()
+    })
+  }
+}
+
 export interface ScanStubOptions {
   /**
    * Desenlace que devuelve el servidor simulado. `break_start` y `break_end`

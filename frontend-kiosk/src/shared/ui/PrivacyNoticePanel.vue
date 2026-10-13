@@ -80,7 +80,8 @@ let idleTimer: ReturnType<typeof setTimeout> | null = null
 let warnTimer: ReturnType<typeof setTimeout> | null = null
 let capTimer: ReturnType<typeof setTimeout> | null = null
 let capWarnTimer: ReturnType<typeof setTimeout> | null = null
-let capWarned = false
+/** Reactivo: decide el texto del aviso (el tope no se puede ampliar tocando). */
+const capWarned = ref(false)
 /** Hermanos que ESTE dialogo marco como `inert`, para devolverlos tal cual estaban. */
 let inertedByUs: HTMLElement[] = []
 
@@ -109,7 +110,7 @@ function armIdleCountdown(): void {
 function onActivity(): void {
   if (!dialogOpen.value) return
   // Si el aviso vino del tope absoluto, tocar no lo retira: el cierre sigue en pie.
-  closingSoon.value = capWarned
+  closingSoon.value = capWarned.value
   armIdleCountdown()
 }
 
@@ -142,11 +143,11 @@ async function openDialog(): Promise<void> {
   if (dialogOpen.value) return
   dialogOpen.value = true
   closingSoon.value = false
-  capWarned = false
+  capWarned.value = false
   armIdleCountdown()
   capTimer = setTimeout(() => closeDialog('idle'), PRIVACY_DIALOG_MAX_OPEN_MS)
   capWarnTimer = setTimeout(() => {
-    capWarned = true
+    capWarned.value = true
     closingSoon.value = true
   }, PRIVACY_DIALOG_MAX_OPEN_MS - PRIVACY_DIALOG_WARNING_LEAD_MS)
 
@@ -172,7 +173,7 @@ function closeDialog(reason: 'user' | 'idle' | 'confirmation'): void {
   if (!dialogOpen.value) return
   clearAllTimers()
   closingSoon.value = false
-  capWarned = false
+  capWarned.value = false
   restoreInert()
   dialogOpen.value = false
   if (reason !== 'confirmation') {
@@ -301,7 +302,7 @@ watch(policyUrl, () => {
         class="mt-4 min-h-7 text-lg font-semibold"
         data-testid="privacy-closing-soon"
       >
-        {{ closingSoon ? t('privacy.closingSoon') : '' }}
+        {{ closingSoon ? t(capWarned ? 'privacy.closingAtLimit' : 'privacy.closingSoon') : '' }}
       </p>
 
       <button
