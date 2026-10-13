@@ -18,6 +18,8 @@ return [
     'responsible_inactive' => 'Account :id is not an active management account. A review is signed by a person who answers for it.',
     'missing_options' => 'To mark entry :id as reviewed, --reason and --responsible are required. Nothing was written.',
     'incompatible_options' => '--acknowledge cannot be combined with --full or --days: either reconcile or review.',
+    'invalid_purge_id' => '--acknowledge must be the audit entry id, a positive integer; ":value" is not. Nothing was written.',
+    'invalid_responsible' => '--responsible must be the account id, a positive integer; ":value" is not. Nothing was written.',
     'done' => 'Entry :review written: purge :id is now reviewed and no longer counted as pending.',
     'explains' => 'It also explains again deletions of work days before :cutoff at site :site.',
     'explains_nothing' => 'It explains no deletion: its defects (:violations) are not only the retention period.',

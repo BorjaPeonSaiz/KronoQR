@@ -154,6 +154,8 @@ final class ReconcileWorkRecordCommand extends Command
      * enmienda del 10-10-2026 §6). No concilia.
      *
      * - Con `--full` o `--days`: 2, sin hacer nada.
+     * - `--acknowledge` o `--responsible` que no son un entero positivo: 2, sin
+     *   hacer nada.
      * - Sin `--reason` o sin `--responsible`: vista previa y 2, sin escribir.
      * - Revision rechazada: 1 y el motivo.
      * - Escrita: 0.
@@ -168,12 +170,28 @@ final class ReconcileWorkRecordCommand extends Command
             return self::INVALID;
         }
 
-        $purgeId = (int) $acknowledge;
+        // `(int)` se tragaria `12abc` como 12: un id de asiento o de cuenta es
+        // un entero positivo escrito tal cual, o no se hace nada.
+        $purgeId = self::positiveId($acknowledge);
+
+        if ($purgeId === null) {
+            $this->error(__('work-record-review.invalid_purge_id', ['value' => $acknowledge]));
+
+            return self::INVALID;
+        }
+
         $reason = $this->stringOption('reason');
-        $responsible = (int) $this->stringOption('responsible');
+        $responsibleOption = $this->stringOption('responsible');
+        $responsible = $responsibleOption === null ? null : self::positiveId($responsibleOption);
+
+        if ($responsibleOption !== null && $responsible === null) {
+            $this->error(__('work-record-review.invalid_responsible', ['value' => $responsibleOption]));
+
+            return self::INVALID;
+        }
 
         try {
-            if ($reason === null || $responsible < 1) {
+            if ($reason === null || $responsible === null) {
                 $preview = $review->preview($purgeId);
                 $this->printReview($purgeId, $preview->violations, $preview->explainsDeletions, $preview->cutoffDate, $preview->siteId);
                 $this->error(__('work-record-review.missing_options', ['id' => $purgeId]));
@@ -209,6 +227,18 @@ final class ReconcileWorkRecordCommand extends Command
         $this->line('  '.($explains
             ? __('work-record-review.explains', ['cutoff' => (string) $cutoff, 'site' => (string) $siteId])
             : __('work-record-review.explains_nothing', ['violations' => implode(', ', $violations)])));
+    }
+
+    /** El entero positivo que dice el texto, sin espacios alrededor, o `null` si no es solo eso. */
+    private static function positiveId(string $value): ?int
+    {
+        $value = trim($value);
+
+        if (! ctype_digit($value) || ltrim($value, '0') === '' || \strlen(ltrim($value, '0')) > 18) {
+            return null;
+        }
+
+        return (int) $value;
     }
 
     private function stringOption(string $name): ?string

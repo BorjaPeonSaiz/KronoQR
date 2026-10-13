@@ -18,6 +18,8 @@ return [
     'responsible_inactive' => 'La cuenta :id no es una cuenta de gestión activa. La revisión la firma una persona que responde de ella.',
     'missing_options' => 'Para dar por revisado el asiento :id faltan --reason y --responsible. No se ha escrito nada.',
     'incompatible_options' => '--acknowledge no se combina con --full ni con --days: o se concilia o se revisa.',
+    'invalid_purge_id' => '--acknowledge tiene que ser el id del asiento, un entero positivo; «:value» no lo es. No se ha escrito nada.',
+    'invalid_responsible' => '--responsible tiene que ser el id de la cuenta, un entero positivo; «:value» no lo es. No se ha escrito nada.',
     'done' => 'Asiento :review escrito: la purga :id queda revisada y deja de contarse como pendiente.',
     'explains' => 'Además vuelve a explicar los borrados de jornadas anteriores a :cutoff en el centro :site.',
     'explains_nothing' => 'No explica ningún borrado: sus defectos (:violations) no son solo el plazo.',

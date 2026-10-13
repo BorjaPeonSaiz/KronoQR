@@ -212,3 +212,39 @@ it('habla ingles en una instalacion en ingles', function (): void {
         ->and($resultado['output'])->toContain('To mark entry '.$purga.' as reviewed, --reason and --responsible are required. Nothing was written.')
         ->and(acuseDePurgaRevisiones())->toBe(0);
 })->group('RL-04', 'RS-07');
+
+it('sale con 2 y sin escribir si un id no es un entero positivo escrito tal cual', function (string $opcion, string $valor, string $mensaje): void {
+    $purga = acuseDePurgaAsiento(WorkforceFixtures::site(), '2024-10-08', 3);
+    $asientos = DB::table('audit_log')->count();
+
+    $resultado = acuseDePurgaOrden([
+        '--acknowledge' => (string) $purga,
+        '--reason' => RECONCILE_ACKNOWLEDGE_MOTIVO,
+        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+        // `(int)` habria leido `12abc` como 12 y `7x` como 7.
+        $opcion => $valor,
+    ]);
+
+    expect($resultado['code'])->toBe(2, $resultado['output'])
+        ->and($resultado['output'])->toContain($mensaje)
+        // Ni siquiera la vista previa: no se ha leido nada.
+        ->and($resultado['output'])->not->toContain('retention.purge_executed #')
+        ->and(DB::table('audit_log')->count())->toBe($asientos);
+})->with([
+    'asiento con letras detras' => ['--acknowledge', '12abc', 'tiene que ser el id del asiento, un entero positivo'],
+    'asiento negativo' => ['--acknowledge', '-3', 'tiene que ser el id del asiento, un entero positivo'],
+    'asiento cero' => ['--acknowledge', '0', 'tiene que ser el id del asiento, un entero positivo'],
+    'responsable con letras detras' => ['--responsible', '7x', 'tiene que ser el id de la cuenta, un entero positivo'],
+    'responsable cero' => ['--responsible', '0', 'tiene que ser el id de la cuenta, un entero positivo'],
+    'responsable negativo' => ['--responsible', '-7', 'tiene que ser el id de la cuenta, un entero positivo'],
+])->group('RL-04', 'RS-07');
+
+it('dice en ingles que el id no es valido', function (): void {
+    app()->setLocale('en');
+
+    $resultado = acuseDePurgaOrden(['--acknowledge' => '12abc']);
+
+    expect($resultado['code'])->toBe(2)
+        ->and($resultado['output'])->toContain('--acknowledge must be the audit entry id, a positive integer; "12abc" is not. Nothing was written.')
+        ->and(acuseDePurgaRevisiones())->toBe(0);
+})->group('RL-04', 'RS-07');
