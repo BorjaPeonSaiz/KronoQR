@@ -32,7 +32,7 @@ readonly KQ_WORK_RECORD_PURGE_FUNCTION="work_record_purge_batch"
 # que TODOS los no internos de las dos tablas esten activos (`tgenabled = 'O'`), de modo que
 # los AFTER INSERT que anada una migracion posterior se vigilan sin tocar esta lista.
 # shellcheck disable=SC2034 # los usan update.sh y doctor.sh, que cargan este fichero.
-readonly KQ_WORK_RECORD_TRIGGERS="shift_entries:shift_entries_guard_transition shift_entries:shift_entries_superseded_is_linked incidents:incidents_guard_transition"
+readonly KQ_WORK_RECORD_TRIGGERS="shift_entries:shift_entries_guard_transition shift_entries:shift_entries_superseded_is_linked shift_entries:shift_entries_guard_insert incidents:incidents_guard_transition incidents:incidents_guard_insert"
 # shellcheck disable=SC2034 # los usan update.sh y doctor.sh, que cargan este fichero.
 readonly KQ_WORK_RECORD_TRIGGER_TABLES="shift_entries incidents"
 

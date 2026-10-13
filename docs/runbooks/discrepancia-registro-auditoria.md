@@ -431,10 +431,10 @@ BEGIN;
 ALTER TABLE shift_entries DISABLE TRIGGER shift_entries_guard_transition;
 ALTER TABLE shift_entries DISABLE TRIGGER shift_entries_superseded_is_linked;
 -- Si tocas incidents: ALTER TABLE incidents DISABLE TRIGGER incidents_guard_transition;
--- Si INSERTAS filas, desactiva también los triggers AFTER INSERT de la tabla (la
--- consulta de abajo los lista), cada uno con su ALTER TABLE.
+-- Si INSERTAS filas: ALTER TABLE shift_entries DISABLE TRIGGER shift_entries_guard_insert;
+--                   (en incidents, incidents_guard_insert). Reactívalos igual abajo.
 
-UPDATE shift_entries SET status = 'active' WHERE uuid = 'U';   -- solo la columna y la fila del asiento
+UPDATE shift_entries SET status = 'closed' WHERE uuid = 'U';    -- solo la columna y la fila del asiento
 
 ALTER TABLE shift_entries ENABLE TRIGGER shift_entries_guard_transition;
 ALTER TABLE shift_entries ENABLE TRIGGER shift_entries_superseded_is_linked;
@@ -485,8 +485,8 @@ SELECT c.relname AS tabla, g.tgname, g.tgenabled
 ```
 
 Esperado: `shift_entries_guard_transition` y `shift_entries_superseded_is_linked`
-en `shift_entries`, `incidents_guard_transition` en `incidents` (más los
-`AFTER INSERT` de la 2.2.1, si los hay), **todos con `tgenabled = O`**. Una `D`
+y `shift_entries_guard_insert` en `shift_entries`, `incidents_guard_transition` e
+`incidents_guard_insert` en `incidents`, **todos con `tgenabled = O`**. Una `D`
 es un trigger desactivado y una fila que falta es un trigger borrado: en los
 dos casos el registro queda sin protección. Vuelve a activarlo con
 `ALTER TABLE <tabla> ENABLE TRIGGER <nombre>` **dentro de una transacción
