@@ -103,7 +103,7 @@ final class ConfiguredRetentionPolicyProvider implements RetentionPolicyProvider
             // `forInstallation()` acaba de resolverlos: aqui nunca son `null`.
             siteId: $this->siteId ?? 0,
             legalRecordFloorYears: $this->floor->years ?? $policy->legalRecordYears,
-            jurisdiction: $this->floor?->jurisdiction->code ?? '',
+            jurisdiction: $this->floor->jurisdiction->code ?? '',
         );
     }
 }

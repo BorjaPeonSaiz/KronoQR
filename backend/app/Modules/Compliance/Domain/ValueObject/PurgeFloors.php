@@ -37,7 +37,7 @@ final readonly class PurgeFloors
             $years[$siteId] = $floor->years;
         }
 
-        return new self($years, $installationSite?->years ?? 1);
+        return new self($years, $installationSite->years ?? 1);
     }
 
     /**
