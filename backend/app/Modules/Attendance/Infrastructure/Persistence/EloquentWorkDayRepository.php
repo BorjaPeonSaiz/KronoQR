@@ -19,6 +19,7 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Database\QueryException;
 use RuntimeException;
 
@@ -302,11 +303,27 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
         // **`version` no esta**, a proposito: un tramo existente nunca cambia de
         // version, porque la correccion estrena fila (ADR-035). Se inserta con
         // la fila y no se vuelve a tocar.
+        //
+        // **La salida solo se escribe si no la habia** (ADR-057 §2). La jornada
+        // se guarda entera, asi que los tramos que no cambian se reescriben, y
+        // su duracion se recalcula desde las marcas. Un tramo cerrado nunca
+        // cambia de salida —la correccion estrena fila—, y el *trigger*
+        // `shift_entries_guard_transition` rechaza que lo haga: si una fila
+        // antigua tuviera una duracion que no cuadra con sus marcas (importada,
+        // o manipulada por fuera y pendiente de remediar desde el panel), cada
+        // fichaje y cada correccion de ese dia fallaria. Con esto, lo que ya
+        // estaba escrito se queda como estaba, que es lo que dice el dominio.
         ShiftEntry::query()->upsert($rows, ['uuid'], [
-            'clocked_out_at',
-            'duration_minutes',
+            'clocked_out_at' => new Expression(
+                'CASE WHEN shift_entries.clocked_out_at IS NULL THEN excluded.clocked_out_at ELSE shift_entries.clocked_out_at END'
+            ),
+            'duration_minutes' => new Expression(
+                'CASE WHEN shift_entries.clocked_out_at IS NULL THEN excluded.duration_minutes ELSE shift_entries.duration_minutes END'
+            ),
             'status',
-            'clock_out_source',
+            'clock_out_source' => new Expression(
+                'CASE WHEN shift_entries.clocked_out_at IS NULL THEN excluded.clock_out_source ELSE shift_entries.clock_out_source END'
+            ),
             'updated_at',
         ]);
     }

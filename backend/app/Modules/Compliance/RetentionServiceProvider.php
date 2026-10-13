@@ -70,18 +70,16 @@ final class RetentionServiceProvider extends ServiceProvider
         );
 
         /*
-         * El registro de jornada se purga con el rol de la APLICACION, que es el
-         * que tiene `DELETE` sobre esas tablas y —esto es lo importante— el unico
+         * El registro de jornada se purga con el rol de la APLICACION, el unico
          * que puede escribir el asiento de `audit_log` en la misma transaccion
          * (regla dura 6). Con el rol de mantenimiento, borrado y constancia
          * caerian en dos sesiones distintas.
          *
-         * Ese `DELETE` es lo unico que la aplicacion conserva para esto: desde
-         * ADR-057 §1 (bloque 6 de la 2.2.1) ya no tiene `UPDATE` sobre el
-         * registro salvo las columnas que el dominio escribe. El bloque 7 lo
-         * retira tambien, cuando la purga pase a la funcion `SECURITY DEFINER`
-         * `work_record_purge_batch` (ADR-057 §3) llamada en esta misma
-         * transaccion.
+         * La aplicacion no tiene `DELETE` sobre esas tablas (ADR-057 §1 y §3,
+         * bloque 7 de la 2.2.1): solo `EXECUTE` sobre la funcion `SECURITY
+         * DEFINER` `work_record_purge_batch`, que calcula su propio corte maximo
+         * con el perfil y el suelo legal, y que el adaptador llama dentro de
+         * esta misma transaccion.
          */
         $this->app->bind(
             WorkRecordArchive::class,

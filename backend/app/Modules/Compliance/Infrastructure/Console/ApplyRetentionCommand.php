@@ -11,6 +11,7 @@ use App\Modules\Compliance\Application\UseCase\ApplyRetention;
 use App\Modules\Compliance\Application\UseCase\RetentionOutcome;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
 use App\Modules\Compliance\Domain\ValueObject\RetentionTally;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
@@ -147,6 +148,20 @@ final class ApplyRetentionCommand extends Command
     private function explainDatabaseFailure(QueryException $failed): int
     {
         $this->error('La purga no ha podido completarse contra la base de datos.');
+
+        if (str_contains($failed->getMessage(), DatabaseWorkRecordArchive::PURGE_FUNCTION)) {
+            // La funcion de ADR-057 §3 calcula su propio corte con el reloj de
+            // PostgreSQL y lo ha rechazado: o los relojes de los dos servidores
+            // no coinciden (cerca de medianoche UTC), o el perfil de
+            // cumplimiento cambio entre la simulacion y la ejecucion.
+            $this->line('PostgreSQL ha rechazado el corte del registro de jornada: es posterior al que permite el');
+            $this->line('perfil de cumplimiento con la fecha UTC del servidor de base de datos. No se ha borrado nada.');
+            $this->line('Comprueba la hora de los dos servidores y vuelve a simular.');
+            $this->line('Detalle tecnico: '.$failed->getMessage());
+
+            return self::FAILURE;
+        }
+
         $this->line('Si es la conexion «pgsql_maintenance», comprueba que DB_MAINTENANCE_PASSWORD esta puesta y');
         $this->line('que el rol tiene credencial: infra/docker/postgres/initdb/02-application-roles.sh la asigna.');
         $this->line('Detalle tecnico: '.$failed->getMessage());
