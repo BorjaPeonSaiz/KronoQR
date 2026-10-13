@@ -875,6 +875,55 @@ it('antes de deshacer por el permiso sobre migrations, el migrador lo retira otr
         ->and($proceso->getOutput())->toContain('nombre-raro=1');
 })->group('RF-PD-10', 'RS-07');
 
+it('exige los privilegios del registro horario solo con sus migraciones aplicadas, y falla cerrado (tarea 6.4, ADR-057)', function (): void {
+    $proceso = bashConElActualizador(<<<'BASH'
+        kq_msg_init es
+        CFG_DB_USERNAME=fichaje_app
+        aplicadas=2
+        psql_migrator() {
+          case "$2" in
+          *"FROM migrations"*) printf '%s' "${aplicadas}" ;;
+          *) printf '%s' "${deriva}" ;;
+          esac
+        }
+        r=0; work_record_privileges_expected compose_new || r=$?; printf 'con-migraciones=%s\n' "${r}"
+        aplicadas=1
+        r=0; work_record_privileges_expected compose_new || r=$?; printf 'a-medias=%s\n' "${r}"
+        aplicadas=0
+        r=0; work_record_privileges_expected compose_new || r=$?; printf 'version-2.2.0=%s\n' "${r}"
+        deriva=ok; printf 'cuadra=%s\n' "$(work_record_privileges_drift compose_new)"
+        deriva=shift_entries:UPDATE; printf 'sobra=%s\n' "$(work_record_privileges_drift compose_new)"
+        deriva=; printf 'consulta-fallida=%s\n' "$(work_record_privileges_drift compose_new)"
+        d="$(mktemp -d)"; trap 'rm -rf "${d}"' EXIT
+        work_record_privileges_sql fichaje_app >"${d}/sql.txt"
+        grep -c "has_table_privilege('fichaje_app'" "${d}/sql.txt"
+        work_record_privileges_repair_sql >"${d}/repara.txt"
+        grep -c '^REVOKE ALL PRIVILEGES ON TABLE' "${d}/repara.txt"
+        grep -c 'shift_entries TO "fichaje_app"' "${d}/repara.txt"
+        grep -E 'GRANT .*(UPDATE|INSERT) ON TABLE (shift_entries|shift_corrections|scan_events|discarded_scan_reports|incidents) ' "${d}/repara.txt" || printf 'sin-update-de-tabla\n'
+        compose_new() { cat >/dev/null; return 0; }
+        deriva=ok; r=0; repair_work_record_privileges || r=$?; printf 'reparado=%s\n' "${r}"
+        deriva=sites:INSERT; r=0; repair_work_record_privileges || r=$?; printf 'sigue-pudiendo=%s\n' "${r}"
+        CFG_DB_USERNAME='x"; DROP'; r=0; repair_work_record_privileges || r=$?; printf 'nombre-raro=%s\n' "${r}"
+        BASH);
+
+    expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput())
+        ->and($proceso->getOutput())->toContain('con-migraciones=0')
+        ->and($proceso->getOutput())->toContain('a-medias=1')
+        ->and($proceso->getOutput())->toContain('version-2.2.0=1')
+        ->and($proceso->getOutput())->toContain('cuadra=ok')
+        ->and($proceso->getOutput())->toContain('sobra=shift_entries:UPDATE')
+        ->and($proceso->getOutput())->toContain('consulta-fallida=?')
+        ->and($proceso->getOutput())->toContain('sin-update-de-tabla')
+        ->and($proceso->getOutput())->toContain('reparado=0')
+        ->and($proceso->getOutput())->toContain('sigue-pudiendo=1')
+        ->and($proceso->getOutput())->toContain('nombre-raro=1');
+
+    $actualizador = (string) file_get_contents(Repo::file('infra/scripts/update.sh'));
+    expect($actualizador)->toContain('if work_record_privileges_expected compose_new; then')
+        ->and($actualizador)->toContain('u_f_verify_work_record');
+})->group('RF-PD-10', 'RS-07', 'RL-04');
+
 it('tras una vuelta atras in place el reintento retira las vacias que puso update.sh, y solo esas (A6-2)', function (): void {
     // La vuelta atras completada deja como .env la copia con IMAGE_DIGEST_*
     // vacias y una marca. El reintento las retira (corre las imagenes fijadas)

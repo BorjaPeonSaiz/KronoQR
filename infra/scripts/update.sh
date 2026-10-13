@@ -2535,8 +2535,103 @@ repair_migrations_privileges() {
   verify_privileges compose_new migrations
 }
 
+# Tarea 6.4 (ADR-057 §1, 2.2.1). Los privilegios de tabla y de columna del rol de
+# la aplicacion sobre el registro horario, `compliance_profiles` y `sites` son
+# EXACTAMENTE los que dejan las migraciones 2026_10_13_100000 y 2026_10_13_100100.
+# La provision (`2026_08_19_099000`, `GRANT ... ON ALL TABLES`) los devuelve todos
+# si alguien la vuelve a ejecutar, y ninguna migracion posterior lo notaria: por
+# eso se comprueba tras cada actualizacion, por CONJUNTO EXACTO (falta y sobra).
+readonly KQ_WORK_RECORD_MIGRATIONS="'2026_10_13_100000_restrict_application_updates_on_work_record','2026_10_13_100100_restrict_application_writes_on_compliance_profiles'"
+
+# 0 si las dos migraciones estan aplicadas (solo entonces hay algo que exigir: con
+# una 2.2.0 como destino el rol conserva los privilegios que esa version usa).
+work_record_privileges_expected() {
+  [ "$(psql_migrator "$1" "SELECT count(*) FROM migrations WHERE migration IN (${KQ_WORK_RECORD_MIGRATIONS})")" = "2" ]
+}
+
+# SQL que devuelve `ok` si el rol cumple el estado esperado, o la lista de
+# diferencias `tabla:PRIVILEGIO` / `tabla.columna:PRIVILEGIO` separadas por comas.
+# `has_table_privilege` mira solo el privilegio de tabla; `has_column_privilege`,
+# tabla o columna, por eso las columnas se comparan con «tabla O lista».
+work_record_privileges_sql() {
+  local role="$1"
+  cat <<SQL
+WITH t(tbl, ins, upd, del) AS (VALUES
+  ('shift_entries', true, false, true), ('shift_corrections', true, false, true),
+  ('scan_events', true, false, true), ('discarded_scan_reports', true, false, true),
+  ('incidents', true, false, true), ('daily_totals', true, true, true),
+  ('compliance_profiles', false, false, false), ('sites', false, false, true)),
+c(tbl, col, priv) AS (VALUES
+  ('shift_entries', 'clocked_out_at', 'UPDATE'), ('shift_entries', 'duration_minutes', 'UPDATE'),
+  ('shift_entries', 'status', 'UPDATE'), ('shift_entries', 'clock_out_source', 'UPDATE'),
+  ('shift_entries', 'superseded_by_id', 'UPDATE'), ('shift_entries', 'updated_at', 'UPDATE'),
+  ('incidents', 'status', 'UPDATE'), ('incidents', 'notified_at', 'UPDATE'),
+  ('incidents', 'resolved_at', 'UPDATE'), ('incidents', 'resolved_by_user_id', 'UPDATE'),
+  ('incidents', 'resolution_note', 'UPDATE'), ('incidents', 'updated_at', 'UPDATE'),
+  ('compliance_profiles', 'name', 'UPDATE'), ('compliance_profiles', 'retention_years', 'UPDATE'),
+  ('compliance_profiles', 'min_rest_hours', 'UPDATE'), ('compliance_profiles', 'max_daily_hours', 'UPDATE'),
+  ('compliance_profiles', 'max_weekly_hours', 'UPDATE'), ('compliance_profiles', 'break_required_after_hours', 'UPDATE'),
+  ('compliance_profiles', 'week_starts_on', 'UPDATE'), ('compliance_profiles', 'holiday_calendar', 'UPDATE'),
+  ('compliance_profiles', 'updated_at', 'UPDATE'), ('compliance_profiles', 'updated_by_user_id', 'UPDATE'),
+  ('sites', 'name', 'INSERT'), ('sites', 'timezone', 'INSERT'),
+  ('sites', 'name', 'UPDATE'), ('sites', 'timezone', 'UPDATE'))
+SELECT coalesce(string_agg(d.x, ',' ORDER BY d.x), 'ok') FROM (
+  SELECT t.tbl || ':' || p.priv AS x
+    FROM t CROSS JOIN LATERAL (VALUES ('SELECT', true), ('INSERT', t.ins), ('UPDATE', t.upd), ('DELETE', t.del),
+      ('TRUNCATE', false), ('REFERENCES', false), ('TRIGGER', false)) AS p(priv, want)
+   WHERE has_table_privilege('${role}', t.tbl, p.priv) IS DISTINCT FROM p.want
+  UNION ALL
+  SELECT t.tbl || '.' || a.attname || ':' || p.priv
+    FROM t JOIN pg_attribute a ON a.attrelid = t.tbl::regclass AND a.attnum > 0 AND NOT a.attisdropped
+    CROSS JOIN LATERAL (VALUES ('INSERT', t.ins), ('UPDATE', t.upd)) AS p(priv, whole)
+   WHERE has_column_privilege('${role}', a.attrelid, a.attnum, p.priv)
+         IS DISTINCT FROM (p.whole OR EXISTS (SELECT 1 FROM c WHERE c.tbl = t.tbl AND c.col = a.attname AND c.priv = p.priv))
+) AS d
+SQL
+}
+
+# Imprime `ok` o las diferencias. Una consulta que falla no imprime `ok`: se trata
+# como diferencia, es decir, se falla cerrado.
+work_record_privileges_drift() {
+  local drift
+  drift="$(psql_migrator "$1" "$(work_record_privileges_sql "${CFG_DB_USERNAME}")")"
+  printf '%s' "${drift:-?}"
+}
+
+# Las sentencias de las dos migraciones, tras un REVOKE ALL por tabla (que retira
+# tambien los privilegios de columna) para que sobre y falte se corrijan igual.
+# `down()` de las migraciones no se usa: devuelve el UPDATE de tabla.
+work_record_privileges_repair_sql() {
+  local role="\"${CFG_DB_USERNAME}\"" table
+  for table in shift_entries shift_corrections scan_events discarded_scan_reports incidents daily_totals compliance_profiles sites; do
+    printf 'REVOKE ALL PRIVILEGES ON TABLE %s FROM %s;\n' "${table}" "${role}"
+  done
+  for table in shift_entries shift_corrections scan_events discarded_scan_reports incidents; do
+    printf 'GRANT SELECT, INSERT, DELETE ON TABLE %s TO %s;\n' "${table}" "${role}"
+  done
+  printf 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE daily_totals TO %s;\n' "${role}"
+  printf 'GRANT SELECT ON TABLE compliance_profiles TO %s;\n' "${role}"
+  printf 'GRANT SELECT, DELETE ON TABLE sites TO %s;\n' "${role}"
+  printf 'GRANT UPDATE (clocked_out_at, duration_minutes, status, clock_out_source, superseded_by_id, updated_at) ON TABLE shift_entries TO %s;\n' "${role}"
+  printf 'GRANT UPDATE (status, notified_at, resolved_at, resolved_by_user_id, resolution_note, updated_at) ON TABLE incidents TO %s;\n' "${role}"
+  printf 'GRANT UPDATE (name, retention_years, min_rest_hours, max_daily_hours, max_weekly_hours, break_required_after_hours, week_starts_on, holiday_calendar, updated_at, updated_by_user_id) ON TABLE compliance_profiles TO %s;\n' "${role}"
+  printf 'GRANT INSERT (name, timezone) ON TABLE sites TO %s;\n' "${role}"
+  printf 'GRANT UPDATE (name, timezone) ON TABLE sites TO %s;\n' "${role}"
+}
+
+# Reaplica el estado esperado como rol de migracion, en una transaccion, y vuelve a
+# mirar. 0 si queda bien; 1 si no se pudo o sigue sin cuadrar (concedido a PUBLIC
+# o heredado de otro rol, que un REVOKE a este rol no toca).
+repair_work_record_privileges() {
+  [[ "${CFG_DB_USERNAME}" =~ ^[a-z_][a-z0-9_]*$ ]] || return 1
+  detail_note "--- REVOKE/GRANT del registro horario, compliance_profiles y sites para ${CFG_DB_USERNAME} ---"
+  work_record_privileges_repair_sql | compose_new exec -T postgres psql -U "${CFG_DB_MIGRATION_USERNAME}" -d "${CFG_DB_DATABASE}" \
+    -v ON_ERROR_STOP=1 -1q -f - >>"$(detail_sink)" 2>&1 || return 1
+  [ "$(work_record_privileges_drift compose_new)" = "ok" ]
+}
+
 phase_start_and_verify() {
-  local reported failed path body status service doctor_status doctor_output privileges
+  local reported failed path body status service doctor_status doctor_output privileges drift
   local audit_json audit_status audit_output
 
   STEP="5"
@@ -2616,6 +2711,22 @@ phase_start_and_verify() {
     rollback_and_die "$(kq_format u_f_verify_privileges "${CFG_DB_USERNAME}")" privileges_check_failed
     ;;
   esac
+
+  # Tarea 6.4: el registro horario, compliance_profiles y sites, por conjunto exacto.
+  if work_record_privileges_expected compose_new; then
+    drift="$(work_record_privileges_drift compose_new)"
+    if [ "${drift}" = "ok" ]; then
+      kq_msg check_ok "$(kq_format u_verify_work_record_ok "${CFG_DB_USERNAME}")"
+      remember_check "privileges-work-record" "$(kq_text u_report_ok)"
+    elif repair_work_record_privileges; then
+      kq_msg check_warn "$(kq_format u_w_work_record_privileges_repaired "${CFG_DB_USERNAME}" "${drift}")"
+      kq_msg fix "$(kq_text u_w_work_record_privileges_repaired_fix)"
+      remember_check "privileges-work-record" "$(kq_format u_w_work_record_privileges_repaired "${CFG_DB_USERNAME}" "${drift}")"
+    else
+      remember_check "privileges-work-record" "$(kq_text u_report_failed) (${drift})"
+      rollback_and_die "$(kq_format u_f_verify_work_record "${CFG_DB_USERNAME}" "${drift}")" privileges_check_failed
+    fi
+  fi
 
   # Punta de la cadena DESPUES de migrar y de verificar (RF-PD-10): con la
   # de `check_audit_chain` (CHAIN_BEFORE), es lo que el asiento `system.updated`
