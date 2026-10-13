@@ -282,9 +282,20 @@ atacante borrase antes para poder borrarla (sus `shift_corrections`, sus
 Un `retention.purge_executed` con un corte que no es una fecha, posterior a la
 fecha del asiento menos sus años de conservación (un `9999-12-31`, un corte de
 ayer), con menos años del suelo legal de su jurisdicción (4 en España, art. 34.9 ET), fechado después de la pasada
-o sin centro. `compliance:apply-retention` no puede escribir uno así: **alguien
+o sin centro. Desde la 2.2.1 `compliance:apply-retention` no puede escribir uno así: **alguien
 lo añadió** para que un borrado pareciera una purga. La línea dice el `id` del
 asiento y qué límite incumple.
+
+**Excepción: una purga real anterior a la 2.2.1 con plazo bajo el suelo.** Antes
+de la 2.2.1 una instalación española podía purgar a 3 años, y al actualizar ese
+asiento sale como `purge_out_of_bounds`. No es un ataque. Se reconoce porque el
+asiento **no tiene `retention_floor_years`** en su `payload` (los de la 2.2.1 en
+adelante sí) y **cuadra con un informe de retención**
+([`operacion.md`](../cliente/operacion.md) §3.1: mismo token y mismo corte). Si
+cuadra, no sigas el párrafo siguiente: el asiento es legítimo pero la purga
+borró tramos que aún debían conservarse, y se trata en §3.1 (restaurar desde
+copia o dejar constancia y avisar a la asesoría laboral y al DPO). Si no
+cuadra con ningún informe, sí es sospechoso.
 
 **Resolución:** cotéjalo con los informes de retención
 ([`operacion.md`](../cliente/operacion.md) §3.1) —no habrá ninguno con su
@@ -310,6 +321,14 @@ con los tramos borrados. No sirve para «hacer callar la alerta», ni mientras
 la investigación sigue, ni para tapar una purga indebida: la revisión no
 repara ni restaura nada, y no es reversible ni se corrige (una segunda
 revisión del mismo asiento se rechaza; lo que haya que añadir va al informe).
+
+**Antes de dar nada por revisado.** Si la purga borró tramos que aún debían
+conservarse (plazo bajo el suelo legal), primero **restaura desde la copia** (§4)
+esos tramos. Si no se puede, deja constancia en el informe del incidente y avisa
+a la asesoría laboral y al DPO del cliente: la valoración jurídica es suya, no
+del equipo técnico. Con `explains_deletions=true` la revisión hace que esos
+borrados dejen de salir como `audit_without_entry`, así que después ya nada en
+la conciliación te lo recordará.
 
 **Quién y cómo.** Cualquier cuenta de gestión **activa** puede firmarla; no se
 exige un rol concreto, pero quien la firma responde de ella y queda como actor
@@ -359,8 +378,11 @@ SELECT id, occurred_at, actor_type, actor_id, payload
   FROM audit_log WHERE action = 'retention.purge_reviewed' ORDER BY id DESC LIMIT 5;
 ```
 
-Comprueba que `actor_id` es una cuenta de gestión que tuvo sesión
-(`auth.login_succeeded` previo, como en «Antes de restaurar nada») y que el
+El actor **no está autenticado**: el comando se ejecuta en la consola del
+servidor, sin sesión, y `--responsible` es solo un id tecleado, así que un
+`auth.login_succeeded` previo no existe en una revisión legítima y no es una
+prueba. Verifica con esa persona que la hizo ella y contrasta quién tenía acceso
+por shell al servidor en ese momento. Comprueba además que el
 motivo cuadra con un incidente abierto. Si alguien lo reconoce, anótalo en el
 informe y no hay más. Si nadie lo reconoce, trátalo como la §1.1: un asiento
 añadido con la credencial de la aplicación; sigue
