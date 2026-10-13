@@ -2,12 +2,12 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | **Aceptada** por el propietario (08-10-2026). **§4 implementada en la 2.2.0** (conciliación diaria de los últimos 7 días y semanal completa: `compliance:reconcile-work-record`, `infra/observability/prometheus/rules/work-record.yml`, `docs/runbooks/discrepancia-registro-auditoria.md`; bloque 14, revisado por `seguridad-cumplimiento`). **§1-§3 aceptadas para la 2.2.x, implementación pendiente** (`backend-laravel`, con `devops-observabilidad` para `update.sh`). Hasta entonces el registro horario se protege por detección, no por privilegios, y la enmienda de ADR-042 sigue vigente para sus tablas |
+| **Estado** | **Aceptada** por el propietario (08-10-2026). **§4 implementada en la 2.2.0** (conciliación diaria de los últimos 7 días y semanal completa: `compliance:reconcile-work-record`, `infra/observability/prometheus/rules/work-record.yml`, `docs/runbooks/discrepancia-registro-auditoria.md`; bloque 14, revisado por `seguridad-cumplimiento`). **§1-§3 aceptadas para la 2.2.x.** §1 implementada en la 2.2.1 (bloque 6) salvo la retirada del `DELETE`, que llega con §3 en el bloque 7 ([enmienda del 13-10-2026](#enmienda-del-13-10-2026)); §2 y §3, pendientes (`backend-laravel`, con `devops-observabilidad` para `update.sh`). Hasta entonces el registro horario se protege por detección, no por privilegios, y la enmienda de ADR-042 sigue vigente para sus tablas |
 | **Fecha** | 8 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo R6-AR-01 de la [re-verificación](../verificacion/2.2.0-reverificacion-tandas-5-6-7.md), residuo de AUD-1 y R4-SC-04) |
 | **Afecta a** | Enmienda [ADR-042](ADR-042-el-runtime-no-tiene-credencial-que-pueda-alterar-el-registro.md) (lo que de verdad garantiza hoy) · Extiende a las tablas del registro horario el patrón de [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-027](ADR-027-audit-log-particionado.md) y [ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md) · Respeta [ADR-007](ADR-007-daily-totals-proyeccion-reconstruible.md), [ADR-026](ADR-026-la-correccion-supersede.md) y [ADR-035](ADR-035-la-correccion-estrena-identificador-y-no-cambia-de-jornada.md) · `backend/database/migrations/2026_08_19_099000_provision_database_privileges.php` · `Attendance/Infrastructure/Persistence/EloquentWorkDayRepository.php` · `Compliance/Infrastructure/Persistence/DatabaseWorkRecordArchive.php`, `DatabaseIncidentLedger.php`, `DatabaseIncidentNotices.php` · `Compliance/RetentionServiceProvider.php` · `infra/scripts/update.sh` (`verify_privileges`) |
 | **Requisitos** | RL-02, RL-04, RS-07 · reglas duras 5, 6 y 7 |
-| **Enmiendas** | [Enmienda del 10-10-2026](#enmienda-del-10-10-2026) (bloque 5 de la 2.2.1): el suelo legal de `retention_years` es por jurisdicción y vive en un catálogo del producto, con su `CHECK` para España; y un asiento de purga no admisible se puede dar por revisado con otro asiento. Añade §5 y §6 y precisa §3 y §4 |
+| **Enmiendas** | [Enmienda del 10-10-2026](#enmienda-del-10-10-2026) (bloque 5 de la 2.2.1): el suelo legal de `retention_years` es por jurisdicción y vive en un catálogo del producto, con su `CHECK` para España; y un asiento de purga no admisible se puede dar por revisado con otro asiento. Añade §5 y §6 y precisa §3 y §4 · [Enmienda del 13-10-2026](#enmienda-del-13-10-2026) (bloque 6 de la 2.2.1): orden de §1 frente a §3 y §7, el perfil de cumplimiento no se reasigna ni cambia de jurisdicción con la credencial del runtime |
 
 ## Contexto
 
@@ -129,5 +129,28 @@ Un `retention.purge_executed` no admisible queda para siempre en `audit_log`, y 
 
 ### Lo que esto no impide, actualizado
 
-- **Bajar `retention_years` y purgar** deja de ser posible por debajo de 4 años en España: lo impiden el `CHECK`, la edición del perfil y la purga. Sigue siendo posible cambiar `jurisdiction` con la credencial de la aplicación, que tiene `UPDATE` sobre toda la fila, y con ello salir del `CHECK` español. La edición desde el panel no lo permite y la conciliación juzga con el suelo más alto que conoce. Retirar ese `UPDATE` de columna es una decisión pendiente de `seguridad-cumplimiento` para el bloque 6.
+- **Bajar `retention_years` y purgar** deja de ser posible por debajo de 4 años en España: lo impiden el `CHECK`, la edición del perfil y la purga. Hasta el bloque 6 seguía siendo posible cambiar `jurisdiction` con la credencial de la aplicación, que tenía `UPDATE` sobre toda la fila, y con ello salir del `CHECK` español. La edición desde el panel no lo permite, pero **la conciliación no lo habría detectado**: juzga con el suelo más alto entre el de la jurisdicción que el centro tiene *hoy* y el que declara el asiento, y si la jurisdicción se cambia antes de purgar, los dos salen de la misma fila manipulada. *(Corregido el 13-10-2026: decía «la conciliación juzga con el suelo más alto que conoce», que daba a entender una defensa que no existía.)* Lo cierra la [enmienda del 13-10-2026](#enmienda-del-13-10-2026), §7.
 - **Un par «purga a un año + revisión» falsificado** deja de contar como discrepancia, pero dispara la alerta de revisión. El residuo es el mismo que el de cualquier asiento añadido con la credencial del runtime.
+
+## Enmienda del 13-10-2026
+
+**Bloque 6 de la 2.2.1: privilegios por columna (§1) y el perfil de cumplimiento fuera del alcance del runtime.** Implementa `backend-laravel` con la skill `migracion-segura`; la comprobación en `update.sh` es la tarea 6.4 de `devops-observabilidad`. El hallazgo que añade §7 es un ALTO de `seguridad-cumplimiento` en la revisión del bloque 5.
+
+### Orden de §1 frente a §3
+
+§1 retira `DELETE` de las seis tablas, pero `DatabaseWorkRecordArchive::purge` borra de **las seis** con la conexión de la aplicación, en la transacción de su asiento. Retirarlo antes de que exista la función de §3 rompería la retención legal (RL-02). Por eso la migración del bloque 6 (`2026_10_13_100000_restrict_application_updates_on_work_record`) retira el `UPDATE` —por columnas donde el dominio actualiza, entero donde no— y **conserva el `DELETE`**, que la migración de §3 (bloque 7) retira en el mismo paso en que la purga pasa a la función. `daily_totals` conserva el `UPDATE` completo. `TRUNCATE`, `REFERENCES` y `TRIGGER` se revocan explícitamente en las seis aunque la provisión nunca los concedió.
+
+Antes, la tarea 6.1 quitó `version` del `upsert` de `EloquentWorkDayRepository` (ADR-035): con la columna en el `SET`, el `ON CONFLICT DO UPDATE` habría dado `42501` en cada cierre de tramo.
+
+### 7. El perfil de cumplimiento no cambia de jurisdicción ni se reasigna con la credencial del runtime
+
+El suelo de §5 se resuelve por la jurisdicción del perfil del centro. Si la credencial de la aplicación puede cambiar esa jurisdicción, crear un perfil o reasignar el del centro, el suelo lo decide quien la tenga. La migración `2026_10_13_100100_restrict_application_writes_on_compliance_profiles` deja a `fichaje_app`:
+
+| Tabla | `SELECT` | `INSERT` | `UPDATE` | `DELETE` |
+|---|---|---|---|---|
+| `compliance_profiles` | sí | **no** | **solo** `name`, `retention_years`, `min_rest_hours`, `max_daily_hours`, `max_weekly_hours`, `break_required_after_hours`, `week_starts_on`, `holiday_calendar`, `updated_at`, `updated_by_user_id` | **no** |
+| `sites` | sí | **solo** `name`, `timezone` | **solo** `name`, `timezone` | sí (sin cambio) |
+
+Son exactamente las columnas que escriben `DatabaseComplianceProfileRepository::save` (panel y asistente) y `EloquentSiteRepository` (`POST` y `PATCH /site`). Ningún código de la aplicación inserta ni borra perfiles —el perfil por defecto lo crea su migración con el rol de migración— ni escribe `sites.compliance_profile_id` o `sites.settings`. El `INSERT` de `sites` se limita por columna para que borrar y volver a crear el centro no sea el mismo atajo; el `DELETE` no se toca porque las claves ajenas `RESTRICT` lo impiden en cuanto hay plantilla.
+
+**Lo que esto no impide.** Bajar `retention_years` hasta el suelo de la jurisdicción vigente y purgar dentro de él sigue siendo posible, como ya decía la enmienda del 10-10-2026: es la edición legítima del panel. Asignar otro perfil al centro o cambiar su jurisdicción pasa a ser una operación con el rol de migración, es decir, de una versión del producto o de quien tenga esa credencial, que no llega a ningún contenedor de runtime (ADR-042).
