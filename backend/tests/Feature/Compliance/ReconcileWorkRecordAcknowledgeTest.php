@@ -11,8 +11,12 @@ use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use OpenTelemetry\SDK\Trace\EventInterface;
+use OpenTelemetry\SDK\Trace\ImmutableSpan;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Observability\CapturedLog;
+use Tests\Support\Telemetry\RecordingTracer;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -248,3 +252,44 @@ it('dice en ingles que el id no es valido', function (): void {
         ->and($resultado['output'])->toContain('--acknowledge must be the audit entry id, a positive integer; "12abc" is not. Nothing was written.')
         ->and(acuseDePurgaRevisiones())->toBe(0);
 })->group('RL-04', 'RS-07');
+
+it('no deja el motivo de la revision en el log tecnico ni en las trazas', function (): void {
+    // Texto libre: puede llevar un nombre (regla dura 21). Va al asiento y a
+    // ningun otro sitio. Se busca en el log ya procesado por Monolog y en todos
+    // los spans cerrados —nombre, atributos y eventos—, incluidos los de la base
+    // de datos, que llevarian el motivo si se trazaran los valores enlazados.
+    $centinela = 'Centinela-Motivo-Q7Zr: lo reviso la persona que firma.';
+    $purga = acuseDePurgaAsiento(WorkforceFixtures::site(), '2024-10-08', 3);
+    $responsable = ManagementUsers::withRole(UserRole::ADMIN)->id;
+
+    RecordingTracer::around(function (RecordingTracer $tracer) use ($centinela, $purga, $responsable): void {
+        CapturedLog::around(function (CapturedLog $log) use ($centinela, $purga, $responsable, $tracer): void {
+            $resultado = acuseDePurgaOrden([
+                '--acknowledge' => (string) $purga,
+                '--reason' => $centinela,
+                '--responsible' => (string) $responsable,
+            ]);
+
+            expect($resultado['code'])->toBe(0, $resultado['output'])
+                // El asiento si lo lleva: la prueba no pasa por no escribirlo.
+                ->and(DB::table('audit_log')->where('action', 'retention.purge_reviewed')->sole()->payload)->toContain('Centinela-Motivo-Q7Zr');
+
+            $spans = $tracer->finishedSpans();
+            $volcado = json_encode(array_map(static fn (ImmutableSpan $span): array => [
+                'name' => $span->getName(),
+                'attributes' => $span->getAttributes()->toArray(),
+                'events' => array_map(
+                    static fn (EventInterface $event): array => [$event->getName(), $event->getAttributes()->toArray()],
+                    $span->getEvents(),
+                ),
+            ], $spans), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+
+            // Que se ha escrito algo en los dos sitios: si no, no prueba nada.
+            expect($log->dump())->toContain('work_record_purge_reviewed')
+                ->and(array_map(static fn (ImmutableSpan $span): string => $span->getName(), $spans))
+                ->toContain('compliance.review_out_of_bounds_purge')
+                ->and($log->dump())->not->toContain('Centinela-Motivo-Q7Zr')
+                ->and($volcado)->not->toContain('Centinela-Motivo-Q7Zr');
+        });
+    });
+})->group('RF-PD-15', 'RL-04', 'RS-07');
