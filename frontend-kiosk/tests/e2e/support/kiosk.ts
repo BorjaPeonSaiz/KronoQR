@@ -46,6 +46,13 @@ export interface ScanStubOptions {
     'clock_in' | 'clock_out' | 'break_start' | 'break_end' | 'debounced' | 'rejected' | 'offline'
   readonly displayName?: string
   readonly workedMinutes?: number
+  /**
+   * Retraso del servidor simulado antes de contestar (RF-AT-05, V7-KI-01): el
+   * tono espera `SCAN_SOUND_SERVER_WAIT_MS` (2 s) a la respuesta, asi que para
+   * probar «respuesta dentro del plazo» y «respuesta tardia» hace falta poder
+   * decidir cuando contesta. Ausente = al instante.
+   */
+  readonly delayMs?: number
 }
 
 interface RecordedScan {
@@ -72,6 +79,7 @@ export async function stubScanApi(page: Page, options: ScanStubOptions = {}): Pr
   const outcome = options.outcome ?? 'clock_in'
   const displayName = options.displayName ?? 'Lucia G.'
   const workedMinutes = options.workedMinutes ?? 0
+  const delayMs = options.delayMs ?? 0
 
   await page.route('**/api/v1/scan', async (route: Route) => {
     const body = route.request().postDataJSON() as {
@@ -87,6 +95,11 @@ export async function stubScanApi(page: Page, options: ScanStubOptions = {}): Pr
       intent: body.intent,
       qrPayload: body.qr_payload,
     })
+
+    if (delayMs > 0) {
+      // eslint-disable-next-line no-restricted-syntax -- el retraso es del servidor simulado, no una espera de la prueba
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
 
     if (outcome === 'offline') {
       await route.abort('failed')

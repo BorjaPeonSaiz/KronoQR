@@ -390,53 +390,129 @@ test('los textos de «pendiente» miden al menos 24 px', { tag: ['@RF-KI-06'] },
   }
 })
 
+// SONIDO TRAS LA RESPUESTA DEL SERVIDOR (RF-AT-05, RF-KI-06, V7-KI-01).
+//
+// La pantalla confirma al instante y MUDA; el tono es el del desenlace que
+// decide el servidor, si contesta dentro de `SCAN_SOUND_SERVER_WAIT_MS` (2 s).
+// Si no, suena `pending` una sola vez y una respuesta tardia solo repinta.
+// Cada firma es inconfundible (`TONES` en `useScanSound.ts`):
+//
+//   entry    784 -> 1175 Hz, sinusoidal      exit     1175 -> 784 Hz, sinusoidal
+//   pending  587 / 587 Hz, triangulo         notice   880 Hz, triangulo
+//   error    196 -> 147 Hz, cuadrada
+const TONE = {
+  entry: { frequencies: [784, 1175], types: ['sine', 'sine'] },
+  exit: { frequencies: [1175, 784], types: ['sine', 'sine'] },
+  pending: { frequencies: [587, 587], types: ['triangle', 'triangle'] },
+  notice: { frequencies: [880], types: ['triangle'] },
+  error: { frequencies: [196, 147], types: ['square', 'square'] },
+} as const
+
+async function expectTones(
+  readTones: () => Promise<ReadonlyArray<{ frequency: number; type: string }>>,
+  expected: { readonly frequencies: readonly number[]; readonly types: readonly string[] },
+): Promise<void> {
+  await expect
+    .poll(async () => (await readTones()).map((tone) => tone.frequency), {
+      message: 'no suena la firma esperada',
+    })
+    .toEqual(expected.frequencies)
+  expect((await readTones()).map((tone) => tone.type)).toEqual(expected.types)
+}
+
 test(
-  'la confirmacion en pantalla va acompanada de un sonido, siempre (RF-KI-06)',
-  { tag: ['@RF-KI-06'] },
+  'aceptado dentro del plazo: suena UNA entrada, sin el «pendiente» previo (RF-AT-05)',
+  { tag: ['@RF-AT-05', '@RF-KI-06'] },
   async ({ page }) => {
-    // Doble canal (doc 01 §6.5): el escaneo NUNCA es solo visual. La
-    // confirmacion local es siempre «pendiente» en el momento de decodificar
-    // -el servidor es quien decide entrada, salida o rechazo (`scanPipeline.ts`,
-    // regla dura 19)-, y ese primer pintado es tambien el primer sonido.
     const { readTones } = await installAudioProbe(page)
     await stubScanApi(page, { outcome: 'clock_in' })
 
     await page.goto('/')
-    await expect(page.getByTestId('scan-confirmation')).toBeVisible()
-
-    const tones = await readTones()
-    expect(tones.length, 'no sono nada al confirmar el fichaje').toBeGreaterThan(0)
-    // `TONES.pending` en `useScanSound.ts`: dos toques de 587 Hz en triangulo.
-    expect(tones[0]?.type).toBe('triangle')
-    expect(tones[0]?.frequency).toBe(587)
-
-    // El desenlace real (aceptado) llega despues por `settle()`, y NO repite
-    // sonido: el «pendiente» de arriba ya fue el unico pitido de este
-    // fichaje -doble pitido seria una molestia, no informacion nueva-.
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted')
-    expect(await readTones()).toEqual(tones)
+
+    await expectTones(readTones, TONE.entry)
   },
 )
 
 test(
-  'un rechazo de tarjeta SI suena, distinto del «pendiente» inicial (RF-KI-06)',
-  { tag: ['@RF-KI-06'] },
+  'una salida aceptada suena distinta de la entrada: baja en vez de subir (RF-KI-06)',
+  { tag: ['@RF-AT-05', '@RF-KI-06'] },
   async ({ page }) => {
-    // Opcion B de la revision de `ui-ux`: `useScanSession.settle()` reproduce
-    // el tono de error cuando el desenlace asentado es un rechazo -el
-    // «pendiente» inicial no decia nada del resultado, asi que no sonar aqui
-    // dejaria al empleado sin saber que su tarjeta no ficho-.
+    const { readTones } = await installAudioProbe(page)
+    await stubScanApi(page, { outcome: 'clock_out' })
+
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted')
+
+    await expectTones(readTones, TONE.exit)
+  },
+)
+
+test(
+  'un rechazo del servidor suena a error y nada mas, sin «pendiente» delante (RF-KI-06)',
+  { tag: ['@RF-AT-05', '@RF-KI-06'] },
+  async ({ page }) => {
     const { readTones } = await installAudioProbe(page)
     await stubScanApi(page, { outcome: 'rejected' })
 
     await page.goto('/')
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected')
 
-    const tones = await readTones()
-    // `TONES.pending` (587/587, triangulo) seguido de `TONES.error`
-    // (196/147, cuadrada): dos firmas inconfundibles, no un doble pitido del
-    // mismo tono.
-    expect(tones.map((tone) => tone.type)).toEqual(['triangle', 'triangle', 'square', 'square'])
-    expect(tones.map((tone) => tone.frequency)).toEqual([587, 587, 196, 147])
+    await expectTones(readTones, TONE.error)
+  },
+)
+
+test(
+  'el anti-rebote del servidor suena a aviso, no a error (RF-AT-06, RF-KI-06)',
+  { tag: ['@RF-AT-05', '@RF-KI-06'] },
+  async ({ page }) => {
+    const { readTones } = await installAudioProbe(page)
+    await stubScanApi(page, { outcome: 'debounced', workedMinutes: 240 })
+
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'debounced')
+
+    await expectTones(readTones, TONE.notice)
+  },
+)
+
+test(
+  'respuesta tardia: la pantalla confirma muda, a los 2 s suena «pendiente» y la respuesta posterior no vuelve a sonar (RF-AT-05)',
+  { tag: ['@RF-AT-05', '@RF-KI-06', '@RNF-P-03'] },
+  async ({ page }) => {
+    const { readTones } = await installAudioProbe(page)
+    // El servidor contesta a los 3,5 s: despues del plazo del sonido (2 s).
+    await stubScanApi(page, { outcome: 'clock_in', delayMs: 3_500 })
+
+    await page.goto('/')
+
+    // Confirmacion inmediata y muda: la persona ya ve que su fichaje esta
+    // recogido, sin esperar ni oir nada todavia.
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending')
+    expect(await readTones()).toEqual([])
+
+    // Vence el plazo: suena «pendiente», una sola vez.
+    await expectTones(readTones, TONE.pending)
+
+    // Llega la respuesta: la pantalla se actualiza y NO suena nada mas.
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted', {
+      timeout: 10_000,
+    })
+    expect((await readTones()).map((tone) => tone.frequency)).toEqual(TONE.pending.frequencies)
+  },
+)
+
+test(
+  'servidor inalcanzable: suena «pendiente» una sola vez y la pantalla no cambia (regla dura 19)',
+  { tag: ['@RF-AT-05', '@RF-KI-06', '@RF-AT-10'] },
+  async ({ page }) => {
+    const { readTones } = await installAudioProbe(page)
+    await stubScanApi(page, { outcome: 'offline' })
+
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending')
+
+    await expectTones(readTones, TONE.pending)
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending')
   },
 )
