@@ -23,6 +23,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * bastaria con que una de las dos filtrara distinto para que el fichero que una
  * persona lleva a una reunion contradijera la pantalla desde la que lo bajo.
  *
+ * Lo unico que difiere es el rango **por omision**: sin `from`, la pantalla abre
+ * el mes y la descarga el ultimo año, 366 dias (V3-PO-2). Lo declara
+ * {@see ExportMyWorkDaysRequest::toQuery()}, no una segunda consulta: con un
+ * rango explicito, los dos caminos siguen leyendo exactamente lo mismo.
+ *
  * ## No es la exportacion legal, y la diferencia importa
  *
  * `GET /api/v1/reports/legal-export` (RF-IN-05, tarea 1.17) la genera RRHH o

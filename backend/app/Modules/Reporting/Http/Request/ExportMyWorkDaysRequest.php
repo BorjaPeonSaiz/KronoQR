@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Reporting\Http\Request;
 
 use App\Modules\Reporting\Application\Query\EmployeeWorkDayRange;
+use App\Modules\Reporting\Application\Query\ReadEmployeeWorkDays;
 use App\Modules\Reporting\Http\Policy\SelfJournalPolicy;
 use App\Modules\Reporting\Http\Support\PortalEmployee;
 use Illuminate\Foundation\Http\FormRequest;
@@ -24,6 +25,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * proposito —RF-IN-04 lo exige para los informes de gestion, donde alguien va a
  * seguir calculando sobre la hoja; para el historico personal de una persona no
  * aporta nada sobre CSV y es un formato propietario—.
+ *
+ * **En blanco, el ultimo año** (V3-PO-2): sin `from` se toman los 366 dias que
+ * terminan en `to`, no el mes de `/me/workdays`.
  *
  * **El mismo rango y el mismo limite para los dos formatos.** El techo de 366
  * dias de {@see ValidatesWorkDateRange} y la zona `throttle:portal` de la ruta
@@ -77,6 +81,9 @@ final class ExportMyWorkDaysRequest extends FormRequest
             to: $this->isoDate('to'),
             // Descargar lo propio tampoco es divulgar a un tercero (RS-05).
             selfService: true,
+            // En blanco se descarga el ultimo año y no el mes de la pantalla
+            // (V3-PO-2): quien descarga quiere su historico.
+            defaultDays: ReadEmployeeWorkDays::EXPORT_DEFAULT_DAYS,
         );
     }
 

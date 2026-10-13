@@ -83,6 +83,15 @@ final readonly class ReadEmployeeWorkDays
      */
     public const int DEFAULT_DAYS = 31;
 
+    /**
+     * El ultimo año que descarga `GET /api/v1/me/export` cuando el campo «desde»
+     * se deja en blanco (V3-PO-2, decision del propietario del 09-10-2026). Es
+     * el techo de {@see DateRange::MAXIMUM_DAYS} y no una cifra propia: «como
+     * maximo un año por descarga» y «en blanco, el ultimo año» son la misma
+     * frase, y si el techo cambiara, las dos tendrian que cambiar juntas.
+     */
+    public const int EXPORT_DEFAULT_DAYS = DateRange::MAXIMUM_DAYS;
+
     /** Vocabulario estable del `audit_log`, en ingles y sin datos dentro. */
     private const string DATASET = 'employee_workdays';
 
@@ -131,7 +140,7 @@ final readonly class ReadEmployeeWorkDays
         $to = $query->to ?? $this->today($timeZone);
 
         if ($query->from === null) {
-            return DateRange::endingOn($to, self::DEFAULT_DAYS);
+            return DateRange::endingOn($to, $query->defaultDays);
         }
 
         return DateRange::between($query->from, $to);
