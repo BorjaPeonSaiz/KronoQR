@@ -23,10 +23,12 @@ final class SiteSeeder extends DevelopmentSeeder
     {
         // El perfil de cumplimiento por defecto lo crea la migracion de
         // `compliance_profiles` (tarea 1.3): es dato de producto, no de
-        // desarrollo. Aqui solo se asigna, y si faltara el centro nace sin
-        // perfil y cae en el `is_default`, que es lo que el esquema permite.
-        $profile = DB::table('compliance_profiles')->select('id')->where('is_default', true)->first();
-
+        // desarrollo. El centro nace SIN perfil asignado y cae en el de
+        // `is_default`, igual que el que crea el asistente: la semilla corre
+        // con el rol de la aplicacion, que desde ADR-057 §7 solo puede escribir
+        // `name` y `timezone` en `sites` (ni `compliance_profile_id` ni
+        // `settings`; `created_at` lo pone su valor por omision).
+        //
         // Idempotente: re-ejecutar la semilla no duplica el centro ni pisa los
         // ajustes que alguien haya tocado a mano en su entorno. Si ya hay un
         // centro con otro nombre, se conserva: es EL centro, y renombrarlo desde
@@ -38,9 +40,6 @@ final class SiteSeeder extends DevelopmentSeeder
         DB::table('sites')->insert([
             'name' => self::NAME,
             'timezone' => self::TIMEZONE,
-            'compliance_profile_id' => $profile?->id,
-            'settings' => json_encode([], JSON_THROW_ON_ERROR),
-            'created_at' => now(),
         ]);
     }
 }

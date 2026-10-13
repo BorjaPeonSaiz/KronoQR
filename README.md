@@ -20,9 +20,7 @@
 | **Repositorio** | <https://github.com/BorjaPeonSaiz/KronoQR> (público) |
 | **Despliegue en funcionamiento** | <https://kronoqr.kodigolab.es> · panel [`/admin/`](https://kronoqr.kodigolab.es/admin/) · quiosco [`/kiosk/`](https://kronoqr.kodigolab.es/kiosk/) · portal [`/portal/`](https://kronoqr.kodigolab.es/portal/) · estado [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health) |
 | **Usuario y contraseña de prueba** | Ver [§6](#6-usuario-y-contraseña-de-prueba) |
-| **Presentación (slides)** | [`doc_master/presentacion.html`](doc_master/presentacion.html) en el repositorio (se abre en cualquier navegador; flechas o clic para avanzar) |
 | **Vídeo** | `[URL DEL VÍDEO — sustituir antes de entregar]` |
-| **Documentación del TFM** | En [`doc_master/`](doc_master/): [`memoria.md`](doc_master/memoria.md) (contexto, objetivos, método de trabajo con IA, arquitectura, calidad, seguridad, despliegue, resultados, lo aprendido, límites), [`despliegue.md`](doc_master/despliegue.md) (el despliegue en funcionamiento, credenciales de prueba y un recorrido guiado para evaluar el producto de punta a punta), [`presentacion.html`](doc_master/presentacion.html) (las slides) y [`guion-video.md`](doc_master/guion-video.md) (guion por minutos del vídeo). La documentación técnica completa del producto vive en [`docs/`](docs/) (ver [§8](#8-documentación-de-referencia)) |
 
 > Este README sigue el orden que pide la documentación del proyecto final: descripción general, stack, instalación y ejecución, estructura, funcionalidades y usuario de prueba. Después añade la calidad, la seguridad y el índice de la documentación.
 
@@ -130,7 +128,7 @@ El proyecto es el trabajo final de un máster de desarrollo con IA, y la forma d
 - **11 agentes** especializados en [`.claude/agents/`](.claude/agents/) (arquitecto de dominio, backend, tres frontends, QA, DevOps, producto, UI/UX, y dos de solo lectura: revisor de código y seguridad/cumplimiento) y **6 skills** en [`.claude/skills/`](.claude/skills/) con los procedimientos repetibles (caso de uso nuevo, endpoint, regla de negocio, migración segura, informe, revisión de cumplimiento).
 - **Plan por tareas** ([`docs/02`](docs/02-stack-tecnologico-y-plan-implementacion.md) §11 y [`plan implementacion/`](plan%20implementacion/)) donde cada tarea indica su agente, su skill y las pruebas exigidas; [`HANDOFF.md`](HANDOFF.md) conserva el estado entre sesiones.
 
-Cada versión pasa además por una verificación completa con los agentes en modo solo lectura. La de la 2.1.0 terminó en NO-GO y la 2.2.0 es el resultado del plan de correcciones que salió de ella ([§7](#7-calidad-pruebas-y-seguridad)). La memoria del TFM ([`doc_master/memoria.md`](doc_master/memoria.md)) explica el método, lo que funcionó y lo que no.
+Cada versión pasa además por una verificación completa con los agentes en modo solo lectura. La de la 2.1.0 terminó en NO-GO y la 2.2.0 es el resultado del plan de correcciones que salió de ella ([§7](#7-calidad-pruebas-y-seguridad)).
 
 ---
 
@@ -197,12 +195,12 @@ Hay tres escenarios: el **entorno de desarrollo** (este repositorio), la **insta
 | | |
 | --- | --- |
 | Dirección | <https://kronoqr.kodigolab.es> |
-| Versión desplegada | **2.2.0**, la entregada (ver [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health)). Se instaló con la 2.1.0 y se actualizó con `update.sh` lado a lado ([`doc_master/despliegue.md`](doc_master/despliegue.md) §5) |
+| Versión desplegada | **2.2.0**, la entregada (ver [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health)). Se instaló con la 2.1.0 y se actualizó con `update.sh` lado a lado |
 | Panel de gestión | <https://kronoqr.kodigolab.es/admin/> |
-| Quiosco de fichaje | <https://kronoqr.kodigolab.es/kiosk/> (necesita emparejarse desde el panel; ver [`doc_master/despliegue.md`](doc_master/despliegue.md)) |
+| Quiosco de fichaje | <https://kronoqr.kodigolab.es/kiosk/> (necesita emparejarse desde el panel: Quioscos → «Vincular quiosco») |
 | Portal del empleado | <https://kronoqr.kodigolab.es/portal/> |
 
-Es una instalación real hecha con el mismo paquete y el mismo `install.sh` que recibe un cliente, en un servidor Linux con Docker. Las credenciales de prueba están en [§6](#6-usuario-y-contraseña-de-prueba) y el detalle del despliegue (qué se puede probar, cómo emparejar un quiosco en el propio navegador, qué está abierto a internet y por qué) en [`doc_master/despliegue.md`](doc_master/despliegue.md).
+Es una instalación real hecha con el mismo paquete y el mismo `install.sh` que recibe un cliente, en un servidor Linux con Docker. Las credenciales de prueba están en [§6](#6-usuario-y-contraseña-de-prueba) y la instalación paso a paso en [`docs/cliente/instalacion.md`](docs/cliente/instalacion.md).
 
 ### 3.2 Entorno de desarrollo
 
@@ -373,7 +371,6 @@ kronoqr/
 │   ├── verificacion/             # Verificaciones de la 2.1.0 y la 2.2.0 y plan de correcciones
 │   └── trazabilidad-pruebas.md   # Matriz requisito → prueba (generada)
 │
-├── doc_master/                   # Entrega del TFM: memoria, despliegue, slides, guion del vídeo
 ├── plan implementacion/          # Detalle tarea a tarea de cada fase
 ├── load-tests/k6/                # Pruebas de carga
 ├── tools/license-issuer/         # Emisor de licencias del fabricante (ed25519)
@@ -467,7 +464,7 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 | Portal del empleado | <https://kronoqr.kodigolab.es/portal/> | Con el código de empleado y el PIN de cualquier empleado dado de alta desde el panel (en la ficha del empleado se asigna el PIN). |
 | Quiosco | <https://kronoqr.kodigolab.es/kiosk/> | No tiene usuario: al abrirlo muestra un código de 6 dígitos que se teclea en el panel (*Quioscos → «Vincular quiosco»*). Después ficha con una tarjeta impresa desde el panel o con código de empleado y PIN. |
 
-Es una cuenta de demostración sobre datos ficticios. El paso a paso para recorrer el producto de punta a punta (dar de alta un empleado, imprimir su tarjeta, emparejar un quiosco en el navegador, fichar y ver el resultado en el panel y en el portal) está en [`doc_master/despliegue.md`](doc_master/despliegue.md).
+Es una cuenta de demostración sobre datos ficticios. El uso diario está en la [guía del panel para RRHH](docs/cliente/guia-rrhh.md) y la [guía del portal del empleado](docs/cliente/guia-portal-empleado.md).
 
 ### 6.2 Entorno de desarrollo (semilla)
 
@@ -502,7 +499,6 @@ Los cuatro roles de gestión (`admin`, `rrhh`, `auditor` y `responsable_departam
 
 | Documento | Contenido |
 | --- | --- |
-| [Entrega del TFM](doc_master/) | Memoria, despliegue, presentación y guion del vídeo |
 | [01 · Especificaciones](docs/01-especificaciones-proyecto.md) | Requisitos funcionales (`RF-*`), reglas de negocio (`RN-*`), modelo de dominio, requisitos legales, de seguridad y de calidad, glosario |
 | [02 · Stack y plan de implementación](docs/02-stack-tecnologico-y-plan-implementacion.md) | Arquitectura (C4), stack, convenciones, seguridad, observabilidad, pruebas, CI/CD y plan por fases |
 | [03 · Agentes y skills de IA](docs/03-agentes-y-skills-ia.md) | Qué agente y qué skill usar en cada tarea |

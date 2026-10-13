@@ -21,12 +21,30 @@ it('no lee los avisos de fichaje descartado desde ningun colector del paquete', 
 
     expect(\count($collectors))->toBeGreaterThan(5, 'El recorrido de los colectores no ha encontrado nada.');
 
+    /*
+     * La unica excepcion, y acotada: `ServiceInspector::workRecordPrivileges`
+     * nombra la tabla para preguntar al catalogo si el rol de la aplicacion
+     * tiene `UPDATE` sobre ella (`has_table_privilege`, ADR-057 §1). No lee
+     * ninguna fila. Aun asi, en ese fichero la tabla no puede aparecer tras un
+     * `FROM`, un `JOIN` ni dentro de `table(...)`.
+     */
+    $privilegeOnly = ['ServiceInspector.php'];
+    $read = '/(?:\bFROM|\bJOIN|table\(\s*[\'"])\s*"?discarded_scan_reports\b/i';
+
     $offenders = [];
 
     foreach ($collectors as $file) {
-        if (str_contains((string) file_get_contents($file), 'discarded_scan_reports')) {
-            $offenders[] = basename($file);
+        $source = (string) file_get_contents($file);
+
+        if (! str_contains($source, 'discarded_scan_reports')) {
+            continue;
         }
+
+        if (\in_array(basename($file), $privilegeOnly, true) && preg_match($read, $source) !== 1) {
+            continue;
+        }
+
+        $offenders[] = basename($file);
     }
 
     expect($offenders)->toBe([], 'Estos ficheros del paquete de diagnostico leen discarded_scan_reports: '.implode(', ', $offenders));

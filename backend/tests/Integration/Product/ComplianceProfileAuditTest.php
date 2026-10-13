@@ -7,6 +7,7 @@ use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -247,7 +248,12 @@ it('devuelve 422 y no 500 al renombrar el perfil a uno que ya existe', function 
     // El `UNIQUE` de la columna es la garantia; sin traducirlo, el intento salia
     // como una averia del servidor y quien lo hacia no sabia que el problema era
     // el nombre.
-    DB::table('compliance_profiles')->insert([
+    //
+    // El otro perfil lo crea el rol propietario: la aplicacion no puede insertar
+    // perfiles (ADR-057 §7). Es otra sesion, asi que se confirma y se retira al
+    // terminar.
+    $owner = SchemaOwner::connection();
+    $owner->table('compliance_profiles')->insert([
         'name' => 'Convenio de Cantabria',
         'jurisdiction' => 'ES',
         'retention_years' => 4,
@@ -260,10 +266,14 @@ it('devuelve 422 y no 500 al renombrar el perfil a uno que ya existe', function 
         'is_default' => false,
     ]);
 
-    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
-        ->patch('/api/v1/compliance-profile', ['name' => 'Convenio de Cantabria'])
-        ->assertStatus(422)
-        ->assertJsonStructure(['errors' => ['name']]);
+    try {
+        Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+            ->patch('/api/v1/compliance-profile', ['name' => 'Convenio de Cantabria'])
+            ->assertStatus(422)
+            ->assertJsonStructure(['errors' => ['name']]);
+    } finally {
+        $owner->table('compliance_profiles')->where('name', 'Convenio de Cantabria')->delete();
+    }
 
     // Y no se ha escrito nada: ni la fila ni el asiento.
     expect(profileAuditEntries())->toBe([])

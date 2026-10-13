@@ -53,8 +53,6 @@ function attendanceFixture(): array
     $site = DB::table('sites')->insertGetId([
         'name' => 'Centro de pruebas',
         'timezone' => 'Europe/Madrid',
-        'settings' => '{}',
-        'created_at' => CLOCK_IN,
     ]);
 
     return [

@@ -5,8 +5,8 @@ declare(strict_types=1);
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Domain\ValueObject\Jurisdiction;
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\DB;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -18,23 +18,27 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * de quien edita la fila a mano— y que digan lo mismo que el catalogo de
  * `config/compliance.php`, que es lo que lee PHP. Son dos copias del mismo dato
  * legal, a proposito; esta prueba es lo que impide que se separen.
+ *
+ * CON EL ROL PROPIETARIO. Desde ADR-057 §7 (bloque 6 de la 2.2.1) la aplicacion
+ * no puede cambiar `jurisdiction`, crear perfiles ni reasignar el del centro
+ * (`42501`): los `CHECK` protegen de quien si puede, y se prueban con su
+ * sesion. `CommittedDatabase` porque esa sesion no ve lo que la transaccion
+ * envolvente no ha confirmado, como el centro de la ultima prueba.
  */
 
-uses(RefreshDatabase::class);
+uses(CommittedDatabase::class);
 
 /**
- * Cambia el perfil de serie en un punto de guardado y devuelve el error de
- * PostgreSQL, o `null` si lo admitio. El punto de guardado deshace el cambio en
- * los dos casos: un error dentro de la transaccion de `RefreshDatabase` la
- * dejaria abortada para las sentencias siguientes.
+ * Cambia el perfil de serie con el rol propietario, en una transaccion que se
+ * deshace siempre, y devuelve el error de PostgreSQL, o `null` si lo admitio.
  *
  * @param  array<string, mixed>  $values
  */
 function retentionFloorSchemaUpdate(array $values): ?QueryException
 {
     try {
-        DB::transaction(static function () use ($values): void {
-            DB::table('compliance_profiles')->where('name', 'ES-hosteleria')->update($values);
+        SchemaOwner::connection()->transaction(static function () use ($values): void {
+            SchemaOwner::connection()->table('compliance_profiles')->where('name', 'ES-hosteleria')->update($values);
 
             throw new RuntimeException('deshacer');
         });
@@ -97,7 +101,7 @@ it('dice lo mismo en el catalogo y en el esquema', function (): void {
 it('resuelve el suelo del centro por su perfil asignado o, si no tiene, por el de omision', function (): void {
     // CatalogRetentionYearsFloor::forSite, con la misma cascada que los umbrales.
     $site = WorkforceFixtures::site();
-    $assigned = DB::table('compliance_profiles')->insertGetId([
+    $assigned = SchemaOwner::connection()->table('compliance_profiles')->insertGetId([
         'name' => 'Convenio portugues',
         'jurisdiction' => 'PT',
         'retention_years' => 5,
@@ -112,7 +116,7 @@ it('resuelve el suelo del centro por su perfil asignado o, si no tiene, por el d
 
     $sinPerfil = resolve(RetentionYearsFloor::class)->forSite($site);
 
-    DB::table('sites')->where('id', $site)->update(['compliance_profile_id' => $assigned]);
+    SchemaOwner::connection()->table('sites')->where('id', $site)->update(['compliance_profile_id' => $assigned]);
     // Enlace `scoped`: una ejecucion nueva lee la fila nueva.
     app()->forgetScopedInstances();
     $conPerfil = resolve(RetentionYearsFloor::class)->forSite($site);

@@ -448,8 +448,6 @@ it('falla de forma visible al escribir en un año sin particion y no confirma la
             DB::table('sites')->insert([
                 'name' => 'Centro que no debe quedar',
                 'timezone' => 'Europe/Madrid',
-                'settings' => '{}',
-                'created_at' => AUDIT_AT,
             ]);
 
             appendAudit([], $sinParticion.'-06-01 06:00:00');

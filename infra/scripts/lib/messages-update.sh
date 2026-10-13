@@ -317,6 +317,12 @@ KQ_MSG_ES[u_f_verify_privileges_migrations]="el rol de la aplicacion (%s) sigue 
 KQ_MSG_ES[u_w_migrations_privileges_repaired_fix]="desde la 2.2.0 nadie deberia habersele concedido: alguien lo hizo a mano o con acceso a la base. La actualizacion sigue. Envia este informe al fabricante y revisa quien tiene acceso al rol de migracion."
 KQ_MSG_ES[u_w_migrations_privileges_repaired]="El rol %s podia escribir en la tabla migrations y se lo ha vuelto a retirar el rol de migracion; ahora ya no puede"
 KQ_MSG_ES[u_w_rollback_migrations_privileges]="AVISO: en la base restaurada el rol de la aplicacion (%s) puede escribir en la tabla migrations, y la copia es de una version que ya se lo retiraba. La version anterior funciona igual y el fichaje no se ve afectado, pero alguien ha devuelto ese privilegio: envia este informe al fabricante con el de la actualizacion."
+KQ_MSG_ES[u_verify_work_record_ok]="El rol %s tiene exactamente los privilegios previstos sobre el registro horario, compliance_profiles y sites (no reescribe fichajes ni el suelo legal)"
+KQ_MSG_ES[u_verify_work_record_skipped]="Privilegios del registro horario: no se exigen aun (las migraciones de la 2.2.1 no estan aplicadas en esta version)"
+KQ_MSG_ES[u_report_skipped]="omitido"
+KQ_MSG_ES[u_w_work_record_privileges_repaired]="El rol %s tenia privilegios distintos de los previstos sobre el registro horario, compliance_profiles o sites (%s) y el rol de migracion los ha dejado como corresponde"
+KQ_MSG_ES[u_w_work_record_privileges_repaired_fix]="lo habitual es que alguien haya vuelto a ejecutar la provision de la base (concede todo) o haya hecho un GRANT a mano. La actualizacion sigue. Envia este informe al fabricante y revisa quien tiene acceso al rol de migracion."
+KQ_MSG_ES[u_f_verify_work_record]="el rol de la aplicacion (%s) sigue con privilegios distintos de los previstos sobre el registro horario, compliance_profiles o sites (%s) incluso despues de que el rol de migracion los haya reaplicado: los recibe por otra via (concedidos a PUBLIC o heredados de otro rol). Con ellos, quien ejecutara codigo en la aplicacion podria reescribir fichajes o bajar el suelo legal de conservacion. Se deshace. Revisa de donde le vienen con: docker compose exec postgres psql -U fichaje_migrator -d fichaje -c '\\dp shift_entries' y '\\du', retira esa concesion y envia el informe al fabricante antes de reintentar."
 KQ_MSG_ES[u_rollback_evidence_at]="Estado fallido preservado en %s (contenedores y ultimas lineas de log; solo root) para el diagnostico."
 
 # --- tarea 5.7, cierre de la Fase 5: asiento de auditoria de la actualizacion ---
@@ -620,6 +626,12 @@ KQ_MSG_EN[u_f_verify_privileges_migrations]="the application role (%s) can still
 KQ_MSG_EN[u_w_migrations_privileges_repaired_fix]="since 2.2.0 nobody should have granted it: someone did it by hand or with database access. The update goes on. Send this report to the manufacturer and check who has access to the migration role."
 KQ_MSG_EN[u_w_migrations_privileges_repaired]="Role %s could write the migrations table and the migration role has revoked it again; now it cannot"
 KQ_MSG_EN[u_w_rollback_migrations_privileges]="WARNING: in the restored database the application role (%s) can write the migrations table, and the backup comes from a version that already revoked it. The previous version works the same and clocking is not affected, but someone has granted that privilege back: send this report to the manufacturer along with the update one."
+KQ_MSG_EN[u_verify_work_record_ok]="Role %s holds exactly the expected privileges on the work record, compliance_profiles and sites (it cannot rewrite clockings or the legal floor)"
+KQ_MSG_EN[u_verify_work_record_skipped]="Work record privileges: not required yet (the 2.2.1 migrations are not applied in this version)"
+KQ_MSG_EN[u_report_skipped]="skipped"
+KQ_MSG_EN[u_w_work_record_privileges_repaired]="Role %s held privileges other than expected on the work record, compliance_profiles or sites (%s) and the migration role has set them right"
+KQ_MSG_EN[u_w_work_record_privileges_repaired_fix]="most likely someone re-ran the database provisioning (it grants everything) or ran a GRANT by hand. The update goes on. Send this report to the manufacturer and check who has access to the migration role."
+KQ_MSG_EN[u_f_verify_work_record]="the application role (%s) still holds privileges other than expected on the work record, compliance_profiles or sites (%s) even after the migration role applied them again: it gets them some other way (granted to PUBLIC or inherited from another role). With them, anyone running code in the application could rewrite clockings or lower the legal retention floor. Rolling back. Find where they come from with: docker compose exec postgres psql -U fichaje_migrator -d fichaje -c '\\dp shift_entries' and '\\du', remove that grant, and send the report to the manufacturer before trying again."
 KQ_MSG_EN[u_rollback_evidence_at]="Failed state preserved at %s (containers and last log lines; root only) for diagnosis."
 
 # --- task 5.7, Phase 5 closeout: the update's audit trail entry ---

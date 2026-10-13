@@ -112,6 +112,15 @@ return [
                     .'servir como prueba ante una inspeccion.',
                 'warning_unknown' => 'No se han podido consultar los permisos sobre el registro de auditoria.',
             ],
+            'work_record_privileges' => [
+                'ok' => 'El usuario de la aplicacion no puede reescribir el registro horario por fuera de lo que '
+                    .'el fichaje necesita ni cambiar el perfil de cumplimiento de un centro.',
+                'warning_excess' => 'El usuario de base de datos «:user» tiene permisos de mas sobre el registro '
+                    .'horario o el perfil de cumplimiento (:excess). Se sigue fichando con normalidad, pero quien '
+                    .'ejecutara codigo en la aplicacion podria reescribir fichajes o rebajar el plazo legal de '
+                    .'conservacion.',
+                'warning_unknown' => 'No se han podido consultar los permisos sobre el registro horario.',
+            ],
             'audit_chain' => [
                 'ok' => 'El registro de auditoria esta encadenado correctamente.',
                 'failure' => 'El ultimo cierre anual del registro de auditoria no cuadra: faltan filas o el '
@@ -621,6 +630,15 @@ return [
                     ."  REVOKE UPDATE, DELETE ON audit_log FROM :user;\n"
                     ."Suele pasar despues de restaurar una copia con el usuario equivocado. Si no sabes como\n"
                     .'llegaron ahi, avisa a soporte antes de tocar nada: puede ser relevante.',
+                'warning_unknown' => "Vuelve a ejecutar `php artisan product:doctor` cuando la base de datos\n"
+                    .'responda. Si sigue sin poder comprobarse, genera el paquete de diagnostico.',
+            ],
+            'work_record_privileges' => [
+                'warning_excess' => "Lo habitual es que se haya vuelto a ejecutar la preparacion de la base de datos\n"
+                    ."(concede todo) o que alguien haya hecho un GRANT a mano. La proxima actualizacion con\n"
+                    ."update.sh los deja como corresponde con el rol de migracion. No los toques a mano: genera\n"
+                    ."el paquete de diagnostico con `php artisan product:diagnostics`, envialo a soporte y\n"
+                    .'revisa quien tiene acceso al rol de migracion.',
                 'warning_unknown' => "Vuelve a ejecutar `php artisan product:doctor` cuando la base de datos\n"
                     .'responda. Si sigue sin poder comprobarse, genera el paquete de diagnostico.',
             ],

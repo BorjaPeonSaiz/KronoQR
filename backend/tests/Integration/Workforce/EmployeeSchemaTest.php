@@ -26,8 +26,6 @@ function siteForSchemaTest(): int
     return DB::table('sites')->insertGetId([
         'name' => 'Centro de pruebas '.Str::random(6),
         'timezone' => 'Europe/Madrid',
-        'settings' => '{}',
-        'created_at' => '2026-01-01 00:00:00+00',
     ]);
 }
 

@@ -21,8 +21,6 @@ function insertSite(string $name): int
     return DB::table('sites')->insertGetId([
         'name' => $name,
         'timezone' => 'Europe/Madrid',
-        'settings' => '{}',
-        'created_at' => '2026-01-01 00:00:00+00',
     ]);
 }
 

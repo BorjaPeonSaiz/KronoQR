@@ -126,6 +126,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/kqe.sh"
 # shellcheck source=lib/app-commands.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/app-commands.sh"
+# shellcheck source=lib/work-record-privileges.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/work-record-privileges.sh"
 
 # Las comparaciones de nombres de migracion y de fronteras usan `[[ a < b ]]`,
 # cuyo orden depende de la colacion. Se fija a la de bytes para que no dependa
@@ -2535,8 +2537,47 @@ repair_migrations_privileges() {
   verify_privileges compose_new migrations
 }
 
+# Tarea 6.4 (ADR-057 §1, 2.2.1). Los privilegios de tabla y de columna del rol de
+# la aplicacion sobre el registro horario, `compliance_profiles` y `sites` son
+# EXACTAMENTE los que dejan las migraciones 2026_10_13_100000 y 2026_10_13_100100.
+# La provision (`2026_08_19_099000`, `GRANT ... ON ALL TABLES`) los devuelve todos
+# si alguien la vuelve a ejecutar, y ninguna migracion posterior lo notaria: por
+# eso se comprueba tras cada actualizacion, por CONJUNTO EXACTO (falta y sobra).
+# 0 si las dos migraciones estan aplicadas (hay que exigir el estado); 1 si faltan 0 o 1
+# (destino 2.2.0: el rol conserva los privilegios que esa version usa, se omite); 2 si
+# la consulta no devolvio un numero (el migrador no respondio): no se puede decir que
+# no haya nada que exigir, asi que quien llama falla cerrado.
+work_record_privileges_expected() {
+  local applied
+  applied="$(psql_migrator "$1" "SELECT count(*) FROM migrations WHERE migration IN (${KQ_WORK_RECORD_MIGRATIONS})")"
+  case "${applied}" in
+  2) return 0 ;;
+  0 | 1) return 1 ;;
+  *) return 2 ;;
+  esac
+}
+
+# Imprime `ok` o las diferencias. Una consulta que falla no imprime `ok`: se trata
+# como diferencia, es decir, se falla cerrado.
+work_record_privileges_drift() {
+  local drift
+  drift="$(psql_migrator "$1" "$(work_record_privileges_sql "${CFG_DB_USERNAME}")")"
+  printf '%s' "${drift:-?}"
+}
+
+# Reaplica el estado esperado como rol de migracion, en una transaccion, y vuelve a
+# mirar. 0 si queda bien; 1 si no se pudo o sigue sin cuadrar (concedido a PUBLIC
+# o heredado de otro rol, que un REVOKE a este rol no toca).
+repair_work_record_privileges() {
+  [[ "${CFG_DB_USERNAME}" =~ ^[a-z_][a-z0-9_]*$ ]] || return 1
+  detail_note "--- REVOKE/GRANT del registro horario, compliance_profiles y sites para ${CFG_DB_USERNAME} ---"
+  work_record_privileges_repair_sql | compose_new exec -T postgres psql -U "${CFG_DB_MIGRATION_USERNAME}" -d "${CFG_DB_DATABASE}" \
+    -v ON_ERROR_STOP=1 -1q -f - >>"$(detail_sink)" 2>&1 || return 1
+  [ "$(work_record_privileges_drift compose_new)" = "ok" ]
+}
+
 phase_start_and_verify() {
-  local reported failed path body status service doctor_status doctor_output privileges
+  local reported failed path body status service doctor_status doctor_output privileges drift expected
   local audit_json audit_status audit_output
 
   STEP="5"
@@ -2614,6 +2655,34 @@ phase_start_and_verify() {
   *)
     remember_check "privileges" "$(kq_text u_report_failed)"
     rollback_and_die "$(kq_format u_f_verify_privileges "${CFG_DB_USERNAME}")" privileges_check_failed
+    ;;
+  esac
+
+  # Tarea 6.4: el registro horario, compliance_profiles y sites, por conjunto exacto.
+  expected=0
+  work_record_privileges_expected compose_new || expected=$?
+  case "${expected}" in
+  0)
+    drift="$(work_record_privileges_drift compose_new)"
+    if [ "${drift}" = "ok" ]; then
+      kq_msg check_ok "$(kq_format u_verify_work_record_ok "${CFG_DB_USERNAME}")"
+      remember_check "privileges-work-record" "$(kq_text u_report_ok)"
+    elif repair_work_record_privileges; then
+      kq_msg check_warn "$(kq_format u_w_work_record_privileges_repaired "${CFG_DB_USERNAME}" "${drift}")"
+      kq_msg fix "$(kq_text u_w_work_record_privileges_repaired_fix)"
+      remember_check "privileges-work-record" "$(kq_format u_w_work_record_privileges_repaired "${CFG_DB_USERNAME}" "${drift}")"
+    else
+      remember_check "privileges-work-record" "$(kq_text u_report_failed) (${drift})"
+      rollback_and_die "$(kq_format u_f_verify_work_record "${CFG_DB_USERNAME}" "${drift}")" privileges_check_failed
+    fi
+    ;;
+  1)
+    kq_msg check_ok "$(kq_text u_verify_work_record_skipped)"
+    remember_check "privileges-work-record" "$(kq_text u_report_skipped)"
+    ;;
+  *)
+    remember_check "privileges-work-record" "$(kq_text u_report_failed) (?)"
+    rollback_and_die "$(kq_format u_f_verify_work_record "${CFG_DB_USERNAME}" "?")" privileges_check_failed
     ;;
   esac
 

@@ -68,6 +68,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/fs.sh"
 # shellcheck source=lib/kqe.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/kqe.sh"
+# shellcheck source=lib/work-record-privileges.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/work-record-privileges.sh"
 
 #------------------------------------------------------------------------------
 # Umbrales.
@@ -366,6 +368,7 @@ run_delegated_doctor() {
   # a PostgreSQL con el superusuario, que el contenedor `app` no tiene): su
   # fallo tambien cuenta para el codigo de salida.
   check_backup_role
+  check_work_record_privileges
   check_backup_wal
   check_backup_mounts
   check_update_logs
@@ -433,6 +436,7 @@ run_external_checks() {
   check_env_permissions
   check_image_digest_overrides "${CURRENT_ENV}" "$(dirname -- "${CURRENT_COMPOSE}")"
   check_backup_role
+  check_work_record_privileges
   check_backup_wal
   check_backup_mounts
   check_update_logs
@@ -622,6 +626,42 @@ check_backup_role() {
   "") check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_missing "${role}")" ;;
   *) check_warn "$(kq_format d_c_backup_role_check "${role}")" "$(kq_format d_w_backup_role_unknown "${role}")" ;;
   esac
+}
+
+# Tarea 6.4 (ADR-057 §1). Deriva de los privilegios del rol de la aplicacion sobre el
+# registro horario, compliance_profiles y sites: la MISMA consulta que update.sh
+# (lib/work-record-privileges.sh), por conjunto exacto. Solo avisa: reparar es cosa de
+# update.sh. Se exige solo con las dos migraciones aplicadas (una 2.2.0 conserva los
+# privilegios que esa version usa).
+check_work_record_privileges() {
+  local role applied drift
+  # shellcheck disable=SC2016 # lo expande el shell DEL CONTENEDOR.
+  local psql_in_container='exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atq -f -'
+
+  role="$(env_value "${CURRENT_ENV}" DB_USERNAME)"
+  [ -n "${role}" ] || role="fichaje_app"
+  # El nombre va tal cual en el SQL: se valida como en update.sh.
+  [[ "${role}" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || return 0
+
+  applied="$(printf '%s\n' "SELECT count(*) FROM migrations WHERE migration IN (${KQ_WORK_RECORD_MIGRATIONS})" |
+    compose_current exec -T postgres sh -c "${psql_in_container}" 2>/dev/null | tr -d '[:space:]')" || applied=""
+  case "${applied}" in
+  0 | 1) return 0 ;;
+  2) ;;
+  *)
+    check_warn "$(kq_format d_c_work_record_privileges_drift "${role}")" "$(kq_text d_w_work_record_privileges_unknown)"
+    return 0
+    ;;
+  esac
+
+  drift="$(work_record_privileges_sql "${role}" |
+    compose_current exec -T postgres sh -c "${psql_in_container}" 2>/dev/null | tr -d '[:space:]')" || drift=""
+  case "${drift}" in
+  ok) check_pass "$(kq_format d_c_work_record_privileges "${role}")" ;;
+  "") check_warn "$(kq_format d_c_work_record_privileges_drift "${role}")" "$(kq_text d_w_work_record_privileges_unknown)" ;;
+  *) check_warn "$(kq_format d_c_work_record_privileges_drift "${role}")" "$(kq_format d_w_work_record_privileges_drift "${drift}")" ;;
+  esac
+  return 0
 }
 
 # Volumen `app-storage` (ADR-045, R3-PL-01). `app`, `horizon` y `scheduler` son

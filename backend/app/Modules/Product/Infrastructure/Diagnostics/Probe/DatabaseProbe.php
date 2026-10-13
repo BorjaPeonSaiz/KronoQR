@@ -11,7 +11,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
 /**
  * Sondas `database.*` de `product:doctor` (RF-PD-13).
  *
- * ## Cuatro comprobaciones, y la tercera es la que mas importa
+ * ## Cinco comprobaciones, y la tercera es la que mas importa
  *
  * `database.audit_log_privileges` verifica que el usuario de la aplicacion **no
  * tiene `UPDATE` ni `DELETE` sobre `audit_log`** (regla dura 6). Es la
@@ -21,11 +21,15 @@ use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
  * legal, y nadie se entera hasta que una inspeccion lo pregunta — cuando ya no
  * tiene arreglo.
  *
+ * `database.work_record_privileges` es su hermana para el registro horario y el
+ * perfil de cumplimiento (ADR-057): avisa si el mismo usuario ha recuperado
+ * privilegios que las migraciones del bloque 6 de la 2.2.1 le retiraron.
+ *
  * ## Si la base de datos no responde, se dice una vez y se para
  *
- * Y no cuatro. Las otras tres comprobaciones necesitan la misma conexion:
- * repetir «no se pudo conectar» cuatro veces con cuatro identificadores
- * distintos convierte un problema en cuatro y esconde el unico que hay.
+ * Y no cinco. Las otras cuatro comprobaciones necesitan la misma conexion:
+ * repetir «no se pudo conectar» cinco veces con cinco identificadores
+ * distintos convierte un problema en cinco y esconde el unico que hay.
  */
 final readonly class DatabaseProbe implements DoctorProbe
 {
@@ -65,6 +69,7 @@ final readonly class DatabaseProbe implements DoctorProbe
             ),
             $this->migrations($pending),
             $this->privileges(),
+            ...$this->workRecordPrivileges(),
             $this->chain(),
         ];
     }
@@ -104,6 +109,48 @@ final readonly class DatabaseProbe implements DoctorProbe
         }
 
         return DoctorFinding::ok('database.audit_log_privileges', $privileges);
+    }
+
+    /**
+     * `database.work_record_privileges` (ADR-057 §1 y §7, RL-04, RS-07).
+     *
+     * **Aviso y no fallo**: el fichaje y el registro siguen funcionando, y
+     * `update.sh` lo repara en la siguiente actualizacion. Pero quien ejecute
+     * codigo en la aplicacion podria, mientras tanto, reescribir fichajes o
+     * rebajar el suelo legal de conservacion, y eso tiene que verlo alguien.
+     *
+     * Sin las migraciones que retiran esos privilegios no hay nada que vigilar
+     * y la comprobacion no aparece: `database.migrations_pending` ya lo dice.
+     *
+     * @return list<DoctorFinding>
+     */
+    private function workRecordPrivileges(): array
+    {
+        $privileges = $this->services->workRecordPrivileges();
+
+        if ($privileges['reachable'] !== true) {
+            return [DoctorFinding::warning('database.work_record_privileges', 'unknown', details: $privileges)];
+        }
+
+        if ($privileges['expected'] !== true) {
+            return [];
+        }
+
+        $excess = is_array($privileges['excess'] ?? null) ? $privileges['excess'] : [];
+
+        if ($excess === []) {
+            return [DoctorFinding::ok('database.work_record_privileges', $privileges)];
+        }
+
+        return [DoctorFinding::warning(
+            'database.work_record_privileges',
+            'excess',
+            params: [
+                'user' => is_string($privileges['database_user'] ?? null) ? $privileges['database_user'] : '?',
+                'excess' => implode(', ', array_filter($excess, is_string(...))),
+            ],
+            details: $privileges,
+        )];
     }
 
     private function chain(): DoctorFinding
