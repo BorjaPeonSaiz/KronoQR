@@ -14,6 +14,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
+use App\Modules\Compliance\Domain\ValueObject\PurgeFloors;
 use App\Modules\Compliance\Domain\ValueObject\PurgeReviewReason;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPurgeBoundary;
 use App\Modules\Shared\Application\Port\Clock;
@@ -166,7 +167,7 @@ final readonly class ReviewOutOfBoundsPurge
             throw PurgeReviewRejected::notAWorkRecordPurge($purgeAuditEntryId);
         }
 
-        $floor = max($this->siteFloor($purge), $purge->declaredFloorYears ?? 1);
+        $floor = $this->floorsFor($purge)->effectiveFor($purge);
         $violations = WorkRecordPurgeBoundary::violations($purge, $this->clock->now(), $floor);
 
         if ($violations === []) {
@@ -189,12 +190,17 @@ final readonly class ReviewOutOfBoundsPurge
 
     /**
      * El suelo legal del centro del asiento o, si no trae centro, el del centro
-     * de la instalacion (ADR-040: hay uno). Sin ninguno, el minimo estructural.
+     * de la instalacion (ADR-040: hay uno). La cuenta del suelo efectivo es la
+     * de {@see PurgeFloors}, la misma que usa la conciliacion.
      */
-    private function siteFloor(AuditedPurge $purge): int
+    private function floorsFor(AuditedPurge $purge): PurgeFloors
     {
-        $siteId = $purge->siteId ?? $this->sites->installationSite()?->id;
+        if ($purge->siteId !== null) {
+            return PurgeFloors::of([$purge->siteId => $this->floors->forSite($purge->siteId)]);
+        }
 
-        return $siteId === null ? 1 : $this->floors->forSite($siteId)->years;
+        $site = $this->sites->installationSite();
+
+        return PurgeFloors::of([], $site === null ? null : $this->floors->forSite($site->id));
     }
 }

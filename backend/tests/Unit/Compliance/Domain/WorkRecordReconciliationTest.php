@@ -740,6 +740,13 @@ it('resuelve el suelo de cada centro y el efectivo de cada asiento', function ()
         ->and($suelos->effectiveFor(conciliacionPurgaATresAnos(sueloDeclarado: 2)))->toBe(4)
         ->and($suelos->effectiveFor(conciliacionPurgaATresAnos(centro: 2, sueloDeclarado: 0)))->toBe(1)
         ->and($suelos->effectiveFor(conciliacionPurgaATresAnos(centro: null)))->toBe(1);
+
+    // Un asiento sin centro se juzga con el suelo del centro de la instalacion.
+    $conInstalacion = PurgeFloors::of([], LegalRetentionFloor::fromCatalog(Jurisdiction::fromCode('ES'), 4));
+
+    expect($conInstalacion->yearsFor(null))->toBe(4)
+        ->and($conInstalacion->yearsFor(3))->toBe(1)
+        ->and($conInstalacion->effectiveFor(conciliacionPurgaATresAnos(centro: null)))->toBe(4);
 })->group('RL-02');
 
 it('lee del asiento el suelo declarado y el asiento revisado solo si son enteros', function (): void {
