@@ -79,22 +79,31 @@ final class IncidentFixtures
         string $resolvedAt = '2026-03-11 09:00:00+00',
         string $note = 'Revisado con el parte de turno.',
     ): int {
-        return DB::table('incidents')->insertGetId([
+        // Abierta y despues cerrada, como `DatabaseIncidentLedger`: una
+        // incidencia nace abierta (ADR-057 §2, `incidents_guard_insert`).
+        $id = DB::table('incidents')->insertGetId([
             'employee_id' => AttendanceFixtures::employeeIdOf($employeeUuid),
             'work_date' => $workDate,
             'shift_entry_id' => null,
             'type' => $type,
             'severity' => $severity,
-            'status' => $outcome,
+            'status' => 'open',
             'assigned_to_user_id' => $resolvedByUserId,
             'detected_at' => $detectedAt,
             'context' => json_encode(['worked_minutes' => 12, 'threshold_minutes' => 15], JSON_THROW_ON_ERROR),
+            'created_at' => $detectedAt,
+            'updated_at' => $detectedAt,
+        ]);
+
+        DB::table('incidents')->where('id', $id)->update([
+            'status' => $outcome,
             'resolved_at' => $resolvedAt,
             'resolved_by_user_id' => $resolvedByUserId,
             'resolution_note' => $note,
-            'created_at' => $detectedAt,
             'updated_at' => $resolvedAt,
         ]);
+
+        return $id;
     }
 
     /**

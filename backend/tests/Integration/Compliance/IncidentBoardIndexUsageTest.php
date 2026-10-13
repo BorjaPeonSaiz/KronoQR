@@ -67,7 +67,6 @@ function bandejaConVolumen(): void
         for ($day = 0; $day < INCIDENT_BOARD_INDEX_DIAS; $day++) {
             $date = new DateTimeImmutable('2025-01-01', $utc)->modify('+'.$day.' days');
             $detectedAt = $date->modify('+1 day')->setTime(3, 30, $i)->format('Y-m-d H:i:sP');
-            $open = $day % 5 < 2;
             $entryUuid = null;
 
             if ($day % 2 === 0) {
@@ -81,11 +80,13 @@ function bandejaConVolumen(): void
                 'shift_entry_id' => $entryUuid,
                 'type' => INCIDENT_BOARD_INDEX_TIPOS[$day % \count(INCIDENT_BOARD_INDEX_TIPOS)],
                 'severity' => ['high', 'medium', 'low'][$day % 3],
-                'status' => $open ? 'open' : 'resolved',
+                // Todas nacen abiertas (ADR-057 §2, `incidents_guard_insert`); las
+                // que no lo estan se cierran despues, en una sola sentencia.
+                'status' => 'open',
                 'assigned_to_user_id' => null,
                 'detected_at' => $detectedAt,
                 'context' => '{}',
-                'resolved_at' => $open ? null : $date->modify('+2 days')->format('Y-m-d H:i:sP'),
+                'resolved_at' => null,
                 'resolved_by_user_id' => null,
                 'resolution_note' => null,
                 'created_at' => $detectedAt,
@@ -110,6 +111,15 @@ function bandejaConVolumen(): void
     foreach (array_chunk($rows, 2_000) as $chunk) {
         DB::table('incidents')->insert($chunk);
     }
+
+    // Cerradas las de los dias 2, 3 y 4 de cada cinco, dos dias despues de su
+    // jornada: la misma reparticion que antes se insertaba ya resuelta.
+    DB::update(<<<'SQL'
+        UPDATE incidents
+           SET status = 'resolved',
+               resolved_at = (work_date + 2)::timestamp AT TIME ZONE 'UTC'
+         WHERE (work_date - DATE '2025-01-01') % 5 >= 2
+        SQL);
 
     expect(DB::table('incidents')->count())->toBe(INCIDENT_BOARD_INDEX_EMPLEADOS * INCIDENT_BOARD_INDEX_DIAS)
         ->and(DB::table('incidents')->whereNotNull('shift_entry_id')->count())->toBe(INCIDENT_BOARD_INDEX_EMPLEADOS * INCIDENT_BOARD_INDEX_DIAS / 2);

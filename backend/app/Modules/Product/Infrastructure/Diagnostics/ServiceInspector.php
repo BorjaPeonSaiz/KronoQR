@@ -52,6 +52,43 @@ final readonly class ServiceInspector
         '2026_10_13_100100_restrict_application_writes_on_compliance_profiles',
     ];
 
+    /**
+     * La migracion que pone las guardas del registro (ADR-057 §2 y §3, bloque 7
+     * de la 2.2.1): *triggers*, funcion de purga y sin `DELETE`. Sin ella
+     * aplicada no hay guardas que vigilar.
+     */
+    public const string WORK_RECORD_GUARD_MIGRATION = '2026_10_14_100000_work_record_trigger_and_purge_function';
+
+    /**
+     * Los *triggers* de esa migracion, los mismos que mira
+     * `infra/scripts/lib/work-record-privileges.sh`.
+     *
+     * @var list<string>
+     */
+    public const array WORK_RECORD_GUARD_TRIGGERS = [
+        'incidents_guard_insert',
+        'incidents_guard_transition',
+        'shift_entries_guard_insert',
+        'shift_entries_guard_transition',
+        'shift_entries_superseded_is_linked',
+    ];
+
+    /**
+     * Las tablas sin `DELETE` para la aplicacion desde esa migracion: la purga
+     * pasa por la funcion.
+     *
+     * @var list<string>
+     */
+    public const array WORK_RECORD_NO_DELETE = [
+        'daily_totals',
+        'discarded_scan_reports',
+        'incidents',
+        'scan_events',
+        'shift_corrections',
+        'shift_entries',
+        'sites',
+    ];
+
     public function __construct(
         private ConnectionInterface $database,
         private Redis $redis,
@@ -261,10 +298,20 @@ final readonly class ServiceInspector
 
             $excess = $privileges->excess === '' ? [] : explode(',', $privileges->excess);
 
+            $guarded = $this->database->table('migrations')
+                ->where('migration', self::WORK_RECORD_GUARD_MIGRATION)
+                ->exists();
+
+            $guards = $guarded ? $this->workRecordGuards() : ['excess' => [], 'issues' => []];
+            $excess = [...$excess, ...$guards['excess']];
+            sort($excess);
+
             return [
                 'reachable' => true,
                 'expected' => true,
                 'excess' => $excess,
+                'guards_expected' => $guarded,
+                'guard_issues' => $guards['issues'],
                 // El NOMBRE del rol, como en `auditLogPrivileges`: sin el, el
                 // aviso no dice a quien quitarselos.
                 'database_user' => (string) $privileges->grantee,
@@ -272,6 +319,94 @@ final readonly class ServiceInspector
         } catch (Throwable $failure) {
             return ['reachable' => false, 'error' => $failure::class];
         }
+    }
+
+    /**
+     * Las guardas del registro que pone la migracion del bloque 7 (ADR-057 §2 y
+     * §3), mirando lo mismo que `update.sh` y `doctor.sh`
+     * (`infra/scripts/lib/work-record-privileges.sh`):
+     *
+     * - que existan los cinco *triggers* de {@see self::WORK_RECORD_GUARD_TRIGGERS};
+     * - que **ningun** *trigger* no interno de `shift_entries` o `incidents`
+     *   este desactivado (`tgenabled <> 'O'`): `ALTER TABLE … DISABLE TRIGGER`
+     *   con el rol de migracion los apaga sin borrarlos, y un *trigger* que se
+     *   añada mañana queda cubierto sin tocar esta lista. Los internos son los de
+     *   las claves ajenas;
+     * - que `work_record_purge_batch` siga siendo `SECURITY DEFINER` y con su
+     *   `search_path` fijado: sin lo primero no puede borrar, sin lo segundo una
+     *   tabla temporal con el mismo nombre la desviaria;
+     * - que la aplicacion no tenga `DELETE` sobre las siete tablas.
+     *
+     * Solo lee el catalogo; ninguna fila del registro.
+     *
+     * @return array{excess: list<string>, issues: list<string>}
+     */
+    private function workRecordGuards(): array
+    {
+        /** @var object{missing: string, disabled: string, definer: bool|null, search_path: bool|null, deletable: string} $row */
+        $row = $this->database->selectOne(
+            <<<'SQL'
+            SELECT
+                coalesce((
+                    SELECT string_agg(expected.name, ',' ORDER BY expected.name)
+                      FROM unnest(?::text[]) AS expected(name)
+                     WHERE NOT EXISTS (
+                         SELECT 1 FROM pg_catalog.pg_trigger g
+                          WHERE g.tgname = expected.name
+                            AND NOT g.tgisinternal
+                            AND g.tgrelid IN ('public.shift_entries'::regclass, 'public.incidents'::regclass)
+                     )
+                ), '') AS missing,
+                coalesce((
+                    SELECT string_agg(g.tgname, ',' ORDER BY g.tgname)
+                      FROM pg_catalog.pg_trigger g
+                     WHERE g.tgrelid IN ('public.shift_entries'::regclass, 'public.incidents'::regclass)
+                       AND NOT g.tgisinternal
+                       AND g.tgenabled <> 'O'
+                ), '') AS disabled,
+                (SELECT p.prosecdef FROM pg_catalog.pg_proc p
+                  WHERE p.oid = to_regprocedure('public.work_record_purge_batch(date, integer)')) AS definer,
+                (SELECT coalesce(bool_or(setting LIKE 'search_path=%'), false)
+                   FROM pg_catalog.pg_proc p, unnest(p.proconfig) AS setting
+                  WHERE p.oid = to_regprocedure('public.work_record_purge_batch(date, integer)')) AS search_path,
+                coalesce((
+                    SELECT string_agg(t.tbl || ':DELETE', ',' ORDER BY t.tbl)
+                      FROM unnest(?::text[]) AS t(tbl)
+                     WHERE has_table_privilege(current_user, t.tbl, 'DELETE')
+                ), '') AS deletable
+            SQL,
+            [
+                '{'.implode(',', self::WORK_RECORD_GUARD_TRIGGERS).'}',
+                '{'.implode(',', self::WORK_RECORD_NO_DELETE).'}',
+            ],
+        );
+
+        $issues = [];
+
+        foreach (array_filter(explode(',', $row->missing)) as $trigger) {
+            $issues[] = 'missing_trigger:'.$trigger;
+        }
+
+        foreach (array_filter(explode(',', $row->disabled)) as $trigger) {
+            $issues[] = 'disabled_trigger:'.$trigger;
+        }
+
+        if ($row->definer === null) {
+            $issues[] = 'purge_function:missing';
+        } else {
+            if ($row->definer !== true) {
+                $issues[] = 'purge_function:not_security_definer';
+            }
+
+            if ($row->search_path !== true) {
+                $issues[] = 'purge_function:no_search_path';
+            }
+        }
+
+        return [
+            'excess' => array_values(array_filter(explode(',', $row->deletable))),
+            'issues' => $issues,
+        ];
     }
 
     /**

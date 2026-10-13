@@ -81,9 +81,14 @@ const PARTITION_NOW = '2031-02-01 06:00:00';
  * Escenario con una jornada VENCIDA y otra VIGENTE, con todo lo que cuelga de
  * ellas.
  *
+ * Las fechas son las de RETENTION_NOW salvo que se pasen otras: las pruebas
+ * que BORRAN las calculan desde la fecha del servidor de base de datos (ver
+ * {@see retentionDatabaseDates()}).
+ *
+ * @param  array{expired: string, current: string, rejected: string}  $dates
  * @return array{site: int, employee: string, expired_entry: int, current_entry: int}
  */
-function retentionScenario(): array
+function retentionScenario(array $dates = ['expired' => '2023-05-01', 'current' => '2023-06-01', 'rejected' => '2023-04-01']): array
 {
     $site = WorkforceFixtures::site('Hotel de retencion', 'Europe/Madrid');
     $department = WorkforceFixtures::department($site, 'Recepcion');
@@ -92,12 +97,12 @@ function retentionScenario(): array
     $device = AttendanceFixtures::device($site);
     $manager = ManagementUsers::withRole(UserRole::ADMIN);
 
-    // Vencida: anterior al corte (2023-06-01).
-    $expired = retentionShiftEntry($employeeId, $site, '2023-05-01');
+    // Vencida: anterior al corte (2023-06-01 con RETENTION_NOW).
+    $expired = retentionShiftEntry($employeeId, $site, $dates['expired']);
     // Vigente por un dia: el limite que la salvaguarda tiene que respetar.
-    $current = retentionShiftEntry($employeeId, $site, '2023-06-01');
+    $current = retentionShiftEntry($employeeId, $site, $dates['current']);
 
-    foreach ([$expired => '2023-05-01', $current => '2023-06-01'] as $entryId => $workDate) {
+    foreach ([$expired => $dates['expired'], $current => $dates['current']] as $entryId => $workDate) {
         DB::table('shift_corrections')->insert([
             'shift_entry_id' => $entryId,
             'performed_by_user_id' => $manager->id,
@@ -151,8 +156,8 @@ function retentionScenario(): array
         'scan_id' => Str::uuid7()->toString(),
         'device_id' => $device['id'],
         'employee_id' => null,
-        'occurred_at' => '2023-04-01 06:00:00+00',
-        'recorded_at' => '2023-04-01 06:00:01+00',
+        'occurred_at' => $dates['rejected'].' 06:00:00+00',
+        'recorded_at' => $dates['rejected'].' 06:00:01+00',
         'origin' => 'qr_kiosk',
         'intent' => 'auto',
         'result' => 'rejected_unknown',
@@ -215,6 +220,33 @@ function retentionCounts(): array
     }
 
     return $counts;
+}
+
+/**
+ * Las fechas de una prueba que BORRA, desde la fecha UTC del servidor de base de
+ * datos y con el suelo de España (4 años).
+ *
+ * Desde ADR-057 §3 la purga la hace `work_record_purge_batch`, que calcula su
+ * corte maximo con **su** reloj y no con el de la aplicacion: con RETENTION_NOW
+ * (2027) el corte de la aplicacion seria posterior al admisible y la funcion lo
+ * rechazaria, que es justo lo que tiene que hacer. El reloj de la aplicacion se
+ * fija a ese mismo dia.
+ *
+ * @return array{now: string, cutoff: string, expired: string, current: string, rejected: string}
+ */
+function retentionDatabaseDates(): array
+{
+    /** @var object{today: string} $row */
+    $row = DB::selectOne("SELECT ((now() AT TIME ZONE 'UTC')::date)::text AS today");
+    $cutoff = (new DateTimeImmutable($row->today.' 00:00:00', new DateTimeZone('UTC')))->sub(new DateInterval('P4Y'));
+
+    return [
+        'now' => $row->today.' 04:00:00',
+        'cutoff' => $cutoff->format('Y-m-d'),
+        'expired' => $cutoff->sub(new DateInterval('P1M'))->format('Y-m-d'),
+        'current' => $cutoff->format('Y-m-d'),
+        'rejected' => $cutoff->sub(new DateInterval('P2M'))->format('Y-m-d'),
+    ];
 }
 
 function retentionClock(string $now = RETENTION_NOW): void
@@ -362,8 +394,9 @@ it('no borra nada sin la frase de confirmacion, ni con una frase que no correspo
 
 it('purga lo vencido, respeta lo vigente y deja asiento con alcance y conteos', function (): void {
     retentionPaths();
-    $scenario = retentionScenario();
-    retentionClock();
+    $dates = retentionDatabaseDates();
+    $scenario = retentionScenario($dates);
+    retentionClock($dates['now']);
 
     $responsible = ManagementUsers::withRole(UserRole::ADMIN);
 
@@ -397,7 +430,7 @@ it('purga lo vencido, respeta lo vigente y deja asiento con alcance y conteos', 
         // El ALCANCE y los CONTEOS, que es lo que RL-04 exige poder responder
         // dos anos despues.
         ->and($payload['scope'])->toBe('work_records')
-        ->and($payload['cutoff_date'])->toBe('2023-06-01')
+        ->and($payload['cutoff_date'])->toBe($dates['cutoff'])
         ->and($payload['retention_years'])->toBe(4)
         // Y el suelo legal con el que se purgo (RL-02, ADR-057 enmienda del
         // 10-10-2026 §5): la conciliacion lo lee del propio asiento, que solo

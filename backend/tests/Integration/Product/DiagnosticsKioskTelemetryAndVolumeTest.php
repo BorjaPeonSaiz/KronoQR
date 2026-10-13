@@ -221,13 +221,16 @@ it('cuenta empleados activos, fichajes y tramos de 30 dias e incidencias abierta
             'clocked_in_at' => $workDate.' 07:00:00+00',
             'clocked_out_at' => $workDate.' 15:00:00+00',
             'duration_minutes' => 480,
-            'status' => $status,
+            // Nace vigente y se anula despues (ADR-057 §2).
+            'status' => 'closed',
             'clock_in_source' => 'qr_kiosk',
             'clock_out_source' => 'qr_kiosk',
             'version' => 1,
             'created_at' => $workDate.' 15:00:00+00',
             'updated_at' => $workDate.' 15:00:00+00',
         ]);
+
+        DB::table('shift_entries')->where('work_date', $workDate)->where('employee_id', $employeeId)->update(['status' => $status]);
     }
 
     // Incidencias: dos abiertas y una resuelta.
@@ -237,13 +240,18 @@ it('cuenta empleados activos, fichajes y tramos de 30 dias e incidencias abierta
             'work_date' => $workDate,
             'type' => 'long_shift',
             'severity' => 'medium',
-            'status' => $status,
+            'status' => 'open',
             'detected_at' => $workDate.' 20:00:00+00',
-            'resolved_at' => $status === 'open' ? null : $workDate.' 21:00:00+00',
             'context' => json_encode([]),
             'created_at' => $workDate.' 20:00:00+00',
             'updated_at' => $workDate.' 20:00:00+00',
         ]);
+
+        // Nace abierta y se cierra despues (ADR-057 §2).
+        if ($status !== 'open') {
+            DB::table('incidents')->where('work_date', $workDate)->where('employee_id', $employeeId)
+                ->update(['status' => $status, 'resolved_at' => $workDate.' 21:00:00+00']);
+        }
     }
 
     $bundle = diagKioskPaquete(DiagnosticsOptions::anonymized());

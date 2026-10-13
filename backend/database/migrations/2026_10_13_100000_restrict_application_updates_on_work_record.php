@@ -65,6 +65,13 @@ use Illuminate\Support\Facades\DB;
  * Cerrar un tramo abierto con una hora falsa o insertar uno inventado: son las
  * escrituras que el fichaje necesita. Lo detecta la conciliacion de ADR-057 §4.
  *
+ * > **Nota del bloque 7 (13-10-2026).** Lo que sigue lo cierra la migracion
+ * > `2026_10_14_100000_work_record_trigger_and_purge_function`: los *triggers*
+ * > de transiciones de `shift_entries` e `incidents`, la purga por
+ * > `work_record_purge_batch` y la retirada del `DELETE` de las seis tablas y
+ * > de `sites` (ADR-057, «Implementacion de §2 y §3»). Se conserva tal cual
+ * > porque esta migracion ya esta publicada.
+ *
  * **Hasta el bloque 7 el residuo es mas amplio.** Un privilegio de columna no
  * distingue filas ni valores anteriores: eso lo hace el *trigger* de
  * transiciones de ADR-057 §2, que llega en el bloque 7. Hasta entonces, con la

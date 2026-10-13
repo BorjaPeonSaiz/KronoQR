@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * Correcciones trazadas y tramos en estado `superseded` (doc 02 §10.2, tarea
@@ -97,6 +98,9 @@ final class CorrectionSeeder extends DevelopmentSeeder
         $in = $this->toUtc('2026-03-20 14:00', $timezone);
 
         // Version 1: lo que el quiosco registro. 14:00 -> 22:10 son 490 minutos.
+        // Nace vigente, como todo tramo (ADR-057 §2: `shift_entries_guard_insert`
+        // no admite insertar uno ya sustituido). Si ya estaba sembrada, la
+        // version 2 vigente la solapa y `insertOrIgnore` no escribe nada.
         $original = $this->insertEntry([
             'employee_id' => $employee,
             'site_id' => $siteId,
@@ -104,35 +108,49 @@ final class CorrectionSeeder extends DevelopmentSeeder
             'clocked_in_at' => $in,
             'clocked_out_at' => $this->toUtc('2026-03-20 22:10', $timezone),
             'duration_minutes' => 490,
-            'status' => 'superseded',
+            'status' => 'closed',
             'clock_in_source' => 'qr_kiosk',
             'clock_out_source' => 'qr_kiosk',
             'version' => 1,
         ]);
 
-        // Version 2: la salida rectificada a 22:00. 480 minutos, no 970.
-        $replacement = $this->insertEntry([
-            'employee_id' => $employee,
-            'site_id' => $siteId,
-            'work_date' => '2026-03-20',
-            'clocked_in_at' => $in,
-            'clocked_out_at' => $this->toUtc('2026-03-20 22:00', $timezone),
-            'duration_minutes' => 480,
-            'status' => 'closed',
-            // La entrada la ficho la persona con su tarjeta y eso no ha dejado de
-            // ser verdad: solo la marca que cambia pasa a `manual_admin`.
-            'clock_in_source' => 'qr_kiosk',
-            'clock_out_source' => 'manual_admin',
-            'version' => 2,
-        ]);
-
-        if ($original === null || $replacement === null) {
+        if ($original === null) {
             return;
         }
 
-        // El puntero que hace recorrible el historico (RL-04). Se escribe
-        // DESPUES de insertar la version nueva, porque es una clave foranea.
-        DB::table('shift_entries')->where('id', $original)->update(['superseded_by_id' => $replacement]);
+        // La correccion en el orden de `EloquentWorkDayRepository::save`, en una
+        // transaccion: retirar la version 1, insertar la 2 en el hueco que deja
+        // y encadenarlas. La comprobacion diferida de los *triggers* exige el
+        // puntero antes de confirmar.
+        $replacement = DB::transaction(function () use ($original, $employee, $siteId, $in, $timezone): int {
+            DB::table('shift_entries')->where('id', $original)->update(['status' => 'superseded']);
+
+            // Version 2: la salida rectificada a 22:00. 480 minutos, no 970.
+            $replacement = $this->insertEntry([
+                'employee_id' => $employee,
+                'site_id' => $siteId,
+                'work_date' => '2026-03-20',
+                'clocked_in_at' => $in,
+                'clocked_out_at' => $this->toUtc('2026-03-20 22:00', $timezone),
+                'duration_minutes' => 480,
+                'status' => 'closed',
+                // La entrada la ficho la persona con su tarjeta y eso no ha dejado de
+                // ser verdad: solo la marca que cambia pasa a `manual_admin`.
+                'clock_in_source' => 'qr_kiosk',
+                'clock_out_source' => 'manual_admin',
+                'version' => 2,
+            ]);
+
+            if ($replacement === null) {
+                throw new RuntimeException('CorrectionSeeder: la version 2 no cabe en el hueco de la 1.');
+            }
+
+            // El puntero que hace recorrible el historico (RL-04). Se escribe
+            // DESPUES de insertar la version nueva, porque es una clave foranea.
+            DB::table('shift_entries')->where('id', $original)->update(['superseded_by_id' => $replacement]);
+
+            return $replacement;
+        });
 
         $this->insertCorrection([
             // Apunta a la version que la accion PRODUJO.
@@ -162,6 +180,30 @@ final class CorrectionSeeder extends DevelopmentSeeder
             return;
         }
 
+        // El sobrante **primero**: quince minutos que nadie trabajo, producto de
+        // dos escaneos seguidos. Nace vigente (ADR-057 §2) y se anula en el acto,
+        // que es la transicion de `WorkDay::voidEntry`; solo anulado deja sitio
+        // al tramo bueno, con el que solapa. Si ya estaba sembrado, el tramo
+        // bueno vigente lo solapa y `insertOrIgnore` no escribe nada.
+        $duplicate = $this->insertEntry([
+            'employee_id' => $employee,
+            'site_id' => $siteId,
+            'work_date' => '2026-03-21',
+            'clocked_in_at' => $this->toUtc('2026-03-21 13:45', $timezone),
+            'clocked_out_at' => $this->toUtc('2026-03-21 14:00', $timezone),
+            'duration_minutes' => 15,
+            'status' => 'closed',
+            'clock_in_source' => 'qr_kiosk',
+            'clock_out_source' => 'qr_kiosk',
+            'version' => 1,
+        ]);
+
+        if ($duplicate === null) {
+            return;
+        }
+
+        DB::table('shift_entries')->where('id', $duplicate)->update(['status' => 'voided']);
+
         $this->insertEntry([
             'employee_id' => $employee,
             'site_id' => $siteId,
@@ -174,26 +216,6 @@ final class CorrectionSeeder extends DevelopmentSeeder
             'clock_out_source' => 'qr_kiosk',
             'version' => 1,
         ]);
-
-        // El sobrante: quince minutos que nadie trabajo, producto de dos escaneos
-        // seguidos. Solapa con el anterior, y solo cabe en la tabla por estar
-        // anulado.
-        $duplicate = $this->insertEntry([
-            'employee_id' => $employee,
-            'site_id' => $siteId,
-            'work_date' => '2026-03-21',
-            'clocked_in_at' => $this->toUtc('2026-03-21 13:45', $timezone),
-            'clocked_out_at' => $this->toUtc('2026-03-21 14:00', $timezone),
-            'duration_minutes' => 15,
-            'status' => 'voided',
-            'clock_in_source' => 'qr_kiosk',
-            'clock_out_source' => 'qr_kiosk',
-            'version' => 1,
-        ]);
-
-        if ($duplicate === null) {
-            return;
-        }
 
         $this->insertCorrection([
             // En una anulacion apunta a la version que TERMINO.

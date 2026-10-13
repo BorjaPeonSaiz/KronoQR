@@ -2356,6 +2356,15 @@ jobs:
             echo "update.sh ha reparado privilegios en una actualizacion limpia: alinear lib/work-record-privileges.sh con las migraciones"
             exit 1
           fi
+          # Tarea 7.3 (ADR-057 §4): update.sh concilia el registro completo con su auditoria
+          # tras migrar y lo deja en la salida. Solo informa; aqui se exige que se ejecute y
+          # que no se haya cortado ni roto (que diga «sin discrepancias» o liste clases lo
+          # decide el contenido de la instalacion de partida, no este paso).
+          grep -qi 'conciliacion completa del registro horario con su auditoria' paquete-nuevo/salida-u1.log
+          if grep -q 'registro horario con su auditoria no ha terminado\|registro horario con su auditoria ha fallado' paquete-nuevo/salida-u1.log; then
+            echo "La conciliacion del registro horario de update.sh no ha dado resultado"
+            exit 1
+          fi
           curl -fsS -k https://127.0.0.1/api/v1/health | tee health-despues.json
           grep -qF "\"version\":\"${new}\"" health-despues.json
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null

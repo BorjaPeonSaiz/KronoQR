@@ -154,6 +154,10 @@ readonly KQ_CONTAINER_MIGRATIONS="/var/www/html/database/migrations"
 readonly KQ_CONTAINER_SCRIPTS="/opt/kronoqr/scripts"
 readonly KQ_MIN_DOCKER_FREE_GIB=2
 readonly KQ_MAINTENANCE_RETRY_SECONDS=60
+# Tiempo maximo de la conciliacion completa del registro con la auditoria (tarea 7.3):
+# con volumen real recorre todo el registro, y es informativa, no puede retener la
+# actualizacion con el mantenimiento puesto.
+readonly KQ_RECONCILE_TIMEOUT_SECONDS=300
 # Huella sha256 de la copia previa para el asiento de auditoria (tarea 5.7,
 # cierre): OPCIONAL a proposito. Un volcado de varios GiB puede tardar mas de
 # lo razonable, y un asiento sin huella vale infinitamente mas que ningun
@@ -2537,24 +2541,21 @@ repair_migrations_privileges() {
   verify_privileges compose_new migrations
 }
 
-# Tarea 6.4 (ADR-057 §1, 2.2.1). Los privilegios de tabla y de columna del rol de
-# la aplicacion sobre el registro horario, `compliance_profiles` y `sites` son
-# EXACTAMENTE los que dejan las migraciones 2026_10_13_100000 y 2026_10_13_100100.
+# Tareas 6.4 y 7.5 (ADR-057 §1 y §3, 2.2.1). Los privilegios de tabla y de columna del
+# rol de la aplicacion sobre el registro horario, `compliance_profiles` y `sites` son
+# EXACTAMENTE los que dejan las migraciones de los bloques 6 y 7 (lib/work-record-privileges.sh).
 # La provision (`2026_08_19_099000`, `GRANT ... ON ALL TABLES`) los devuelve todos
 # si alguien la vuelve a ejecutar, y ninguna migracion posterior lo notaria: por
 # eso se comprueba tras cada actualizacion, por CONJUNTO EXACTO (falta y sobra).
-# 0 si las dos migraciones estan aplicadas (hay que exigir el estado); 1 si faltan 0 o 1
-# (destino 2.2.0: el rol conserva los privilegios que esa version usa, se omite); 2 si
-# la consulta no devolvio un numero (el migrador no respondio): no se puede decir que
-# no haya nada que exigir, asi que quien llama falla cerrado.
+# Deja en KQ_WORK_RECORD_STAGE el estado exigible (b6: solo el bloque 6; b7: tambien la
+# funcion de purga, sin DELETE). 0 si hay que exigirlo; 1 si no (destino 2.2.0: el rol
+# conserva los privilegios que esa version usa, se omite); 2 si la consulta no devolvio
+# lo previsto (el migrador no respondio, o hay migraciones incoherentes): no se puede
+# decir que no haya nada que exigir, asi que quien llama falla cerrado.
 work_record_privileges_expected() {
   local applied
-  applied="$(psql_migrator "$1" "SELECT count(*) FROM migrations WHERE migration IN (${KQ_WORK_RECORD_MIGRATIONS})")"
-  case "${applied}" in
-  2) return 0 ;;
-  0 | 1) return 1 ;;
-  *) return 2 ;;
-  esac
+  applied="$(psql_migrator "$1" "$(work_record_privileges_stage_sql)")"
+  work_record_privileges_stage "${applied}"
 }
 
 # Imprime `ok` o las diferencias. Una consulta que falla no imprime `ok`: se trata
@@ -2574,6 +2575,46 @@ repair_work_record_privileges() {
   work_record_privileges_repair_sql | compose_new exec -T postgres psql -U "${CFG_DB_MIGRATION_USERNAME}" -d "${CFG_DB_DATABASE}" \
     -v ON_ERROR_STOP=1 -1q -f - >>"$(detail_sink)" 2>&1 || return 1
   [ "$(work_record_privileges_drift compose_new)" = "ok" ]
+}
+
+# Tarea 7.3 (ADR-057 §4). Conciliacion COMPLETA del registro horario con su auditoria
+# tras migrar y ANTES de retirar el mantenimiento: es lo que ve un borrado o una edicion
+# directa de un tramo antiguo hecho por fuera de la aplicacion (o por la propia
+# actualizacion). SOLO INFORMA: no deshace ni bloquea (el trabajo esta hecho y una
+# discrepancia pide a una persona, no una vuelta atras). Con el tiempo maximo
+# KQ_RECONCILE_TIMEOUT_SECONDS, dentro del contenedor, para que se corte de verdad el
+# proceso PHP. Deja el resultado en el informe y en la salida.
+reconcile_work_record() {
+  local output status=0 counts
+
+  detail_note "--- compliance:reconcile-work-record --full (maximo ${KQ_RECONCILE_TIMEOUT_SECONDS} s) ---"
+  output="$(compose_new exec -T app timeout "${KQ_RECONCILE_TIMEOUT_SECONDS}" php artisan compliance:reconcile-work-record --full 2>&1)" || status=$?
+  detail_note "${output}"
+
+  case "${status}" in
+  0)
+    kq_msg check_ok "$(kq_text u_reconcile_ok)"
+    remember_check "work-record-reconciliation" "$(kq_text u_reconcile_ok)"
+    ;;
+  124 | 137 | 143)
+    kq_msg check_warn "$(kq_format u_reconcile_timeout "${KQ_RECONCILE_TIMEOUT_SECONDS}")"
+    kq_msg fix "$(kq_text u_reconcile_fix)"
+    remember_check "work-record-reconciliation" "$(kq_format u_reconcile_timeout "${KQ_RECONCILE_TIMEOUT_SECONDS}")"
+    ;;
+  *)
+    # El recuento por clase: las lineas `  <clase>: <n>` de la salida del comando.
+    counts="$(printf '%s\n' "${output}" | sed -n 's/^  \([a-z_][a-z_]*\): \([0-9][0-9]*\)$/\1=\2/p' | paste -sd, - | sed 's/,/, /g')"
+    if [ -n "${counts}" ]; then
+      kq_msg check_warn "$(kq_format u_reconcile_discrepancies "${counts}")"
+      kq_msg fix "$(kq_text u_reconcile_fix)"
+      remember_check "work-record-reconciliation" "$(kq_format u_reconcile_discrepancies "${counts}")"
+    else
+      kq_msg check_warn "$(kq_format u_reconcile_error "${status}")"
+      kq_msg fix "$(kq_text u_reconcile_fix)"
+      remember_check "work-record-reconciliation" "$(kq_format u_reconcile_error "${status}")"
+    fi
+    ;;
+  esac
 }
 
 phase_start_and_verify() {
@@ -2667,6 +2708,11 @@ phase_start_and_verify() {
     if [ "${drift}" = "ok" ]; then
       kq_msg check_ok "$(kq_format u_verify_work_record_ok "${CFG_DB_USERNAME}")"
       remember_check "privileges-work-record" "$(kq_text u_report_ok)"
+    elif work_record_privileges_tampered "${drift}"; then
+      # Triggers o funcion de purga alterados: una actualizacion limpia no puede dejarlos asi.
+      # No se reactivan solos (taparia la causa): se deshace y se deja la causa en el informe.
+      remember_check "privileges-work-record" "$(kq_text u_report_failed) (${drift})"
+      rollback_and_die "$(kq_format u_f_verify_work_record_triggers "${drift}")" privileges_check_failed
     elif repair_work_record_privileges; then
       kq_msg check_warn "$(kq_format u_w_work_record_privileges_repaired "${CFG_DB_USERNAME}" "${drift}")"
       kq_msg fix "$(kq_text u_w_work_record_privileges_repaired_fix)"
@@ -2731,6 +2777,8 @@ phase_start_and_verify() {
     kq_msg check_warn "$(kq_format u_verify_license_warn "${COMPOSE_FILE}")"
     remember_check "license:show" "$(kq_text u_report_failed)"
   fi
+
+  reconcile_work_record
 
   # EL CONTENEDOR NUEVO NACE SIN MANTENIMIENTO (el fichero vive en el
   # contenedor anterior, ya retirado). Se pone AQUI, antes de publicar el

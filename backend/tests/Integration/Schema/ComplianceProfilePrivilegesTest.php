@@ -133,11 +133,13 @@ it('el catalogo deja compliance_profiles sin INSERT ni DELETE y con UPDATE solo 
 })->group('RL-02', 'RS-07');
 
 it('el catalogo deja sites con INSERT y UPDATE solo de name y timezone', function (): void {
+    // Sin `DELETE` desde el bloque 7 (ADR-057, revision del bloque 6): ningun
+    // codigo de la aplicacion borra un centro.
     expect(complianceProfileTablePrivileges('sites'))->toBe([
         'SELECT' => true,
         'INSERT' => false,
         'UPDATE' => false,
-        'DELETE' => true,
+        'DELETE' => false,
         'TRUNCATE' => false,
         'REFERENCES' => false,
         'TRIGGER' => false,

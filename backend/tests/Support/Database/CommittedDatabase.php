@@ -119,6 +119,15 @@ trait CommittedDatabase
 
         $this->beforeApplicationDestroyed(function (): void {
             $this->emptyDatabase();
+
+            // Y se sueltan las dos sesiones. Sin transaccion envolvente nadie
+            // las cierra: el PDO vive hasta que el recolector de ciclos de PHP
+            // se lleva la aplicacion de la prueba, y un fichero con muchas
+            // pruebas confirmadas (`WorkRecordTransitionsTest`, ADR-057 §2)
+            // llegaba a agotar las 100 conexiones del servidor en la suite
+            // completa. Si alguien las vuelve a usar, Laravel reconecta.
+            DB::connection()->disconnect();
+            DB::connection(config()->string('database.migrations.connection'))->disconnect();
         });
     }
 

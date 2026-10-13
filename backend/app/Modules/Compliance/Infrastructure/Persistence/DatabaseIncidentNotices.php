@@ -107,8 +107,13 @@ final readonly class DatabaseIncidentNotices implements IncidentNotices
             return;
         }
 
+        // Solo las que siguen sin avisar: el sello es el del primer aviso, y el
+        // motor rechaza reescribirlo (`incidents_guard_transition`, ADR-057
+        // §2). Si dos pasadas recogieran la misma incidencia, la segunda no
+        // actualiza nada en vez de abortar.
         $this->connection->table('incidents')
             ->whereIn('id', $incidentIds)
+            ->whereNull('notified_at')
             ->update([
                 'notified_at' => $at->format('Y-m-d H:i:s.uP'),
                 'updated_at' => $at->format('Y-m-d H:i:s.uP'),

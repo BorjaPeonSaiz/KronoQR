@@ -42,8 +42,9 @@ use Psr\Log\LoggerInterface;
  * `daily_totals`, que existen desde la migracion inicial precisamente para esto.
  * Lo que toca `scan_events` —las marcas `recorded_at` y {@see clockingMarks()}—
  * va por `scan_events_shift_entry_id_occurred_at_index`, y la subida por la
- * cadena de versiones por `shift_entries_superseded_by_id_index`; los dos de
- * `2026_10_08_100000_index_work_day_journal_lookups` (hallazgos DB1 y DB2: antes
+ * cadena de versiones por `shift_entries_superseded_by_id_unique`; los dos de
+ * `2026_10_08_100000_index_work_day_journal_lookups` (el segundo, unico desde
+ * `2026_10_14_100200`; hallazgos DB1 y DB2: antes
  * eran unos 270 buffers por tramo y dos `Seq Scan` por consulta).
  *
  * ## Vigente y no vigente
@@ -343,7 +344,7 @@ final readonly class DatabaseWorkDayJournalReader implements WorkDayJournalReade
      *
      * Un `WITH RECURSIVE` que sube de cada version a la que sustituyo
      * —`previous.superseded_by_id = descendiente`—, servido por
-     * `shift_entries_superseded_by_id_index`, que es parcial: solo las versiones
+     * `shift_entries_superseded_by_id_unique`, que es parcial: solo las versiones
      * sustituidas. El `IS NOT NULL` explicito no cambia el resultado —la
      * igualdad ya descarta los nulos— y es lo que deja usar ese indice parcial
      * tambien cuando el planificador elige un `Hash Join` o un `Merge Join` y

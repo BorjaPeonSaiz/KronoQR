@@ -92,7 +92,10 @@ it('dice como se ha resuelto el perfil', function (bool $assigned, string $expec
 it('responde 404 antes de la puesta en marcha, cuando no hay centro', function (): void {
     // RF-PD-03. Sin centro no hay perfil vigente que resolver. Inventar uno
     // seria escribir un umbral legal en el codigo (regla dura 14).
-    DB::table('sites')->delete();
+    //
+    // Con el rol propietario: la aplicacion no tiene `DELETE` sobre `sites`
+    // (ADR-057, bloque 7). `CommittedDatabase` lo restaura al terminar.
+    SchemaOwner::connection()->table('sites')->delete();
 
     Api::as(profileAdminToken())->get('/api/v1/compliance-profile')->assertValidResponse(404);
 })->group('RF-PD-07');

@@ -236,11 +236,13 @@ asiento.
   la versión o `superseded_by`**: el panel no los puede cambiar (una corrección
   no mueve un tramo de persona ni de día, y no admite una corrección que deje
   las horas como estaban). Devuelve la columna al valor del asiento con el rol
-  de migración, en una intervención anotada en el registro del incidente; los
+  de migración **desactivando el trigger dentro de la transacción, según la
+  §3.2** (sin eso la base responde `42501`) y anotándolo en el registro del
+  incidente; los
   minutos son `(salida − entrada)` en segundos enteros, divididos por 60 y
   truncados.
 - **`shift_corrections`**: devuelve el motivo o el autor de la fila a los del
-  asiento (`reason_code`, `performed_by_user_id`) con el rol de migración, o
+  asiento (`reason_code`, `performed_by_user_id`) con el rol de migración (§3.2), o
   recupera la fila de la copia (§4) si ha desaparecido.
 
 ### `entry_without_audit` — un tramo que la aplicación nunca escribió
@@ -256,7 +258,8 @@ Un `UPDATE status` a `voided` o `superseded`: desaparecen horas de la
 exportación sin que nadie firme. O una anulación o una sustitución cuya fila de
 `shift_corrections` ha desaparecido o dice otra cosa. **Resolución:** devuelve
 `status` (y `superseded_by_id`, si cambió) a lo que dice el último asiento con
-el rol de migración; si lo que falta es la fila de corrección, recupérala de la
+el rol de migración, **desactivando y reactivando el trigger en la misma
+transacción (§3.2)**; si lo que falta es la fila de corrección, recupérala de la
 copia de anoche (§4).
 
 ### `audit_without_entry` — un asiento cuyo tramo ya no existe
@@ -273,7 +276,8 @@ SELECT id, occurred_at, actor_type, actor_id, payload
 ```
 
 **Resolución:** recupera la fila de la copia de anoche (§4) **con el mismo
-`uuid`** y vuelve a insertarla con el rol de migración, junto con lo que el
+`uuid`** y vuelve a insertarla con el rol de migración (§3.2: los triggers `AFTER INSERT`
+se desactivan y reactivan en la misma transacción), junto con lo que el
 atacante borrase antes para poder borrarla (sus `shift_corrections`, sus
 `scan_events`).
 
@@ -403,6 +407,95 @@ entero, y la diaria reescribe la métrica `scope="recent"`, que si no seguiría
 contando la discrepancia —y la alerta sonando— hasta la pasada de la noche
 siguiente. La tercera recalcula `daily_totals` de los días tocados: la
 proyección se construye desde `shift_entries` y estará contando lo manipulado.
+Y comprueba que los triggers siguen activos (§3.2).
+
+### 3.2 Reactivar los triggers: cómo se escribe en el registro a mano
+
+Desde la 2.2.1 la base lleva triggers en `shift_entries` e `incidents` (ADR-057
+§2) que rechazan las transiciones que la aplicación no hace —reabrir un tramo,
+mover una hora ya fijada, retirarlo sin corrección, sustituirlo sin enlace— y
+**se aplican también al propietario y al rol de migración**. Por eso un
+`UPDATE` o `INSERT` a mano como el que piden las resoluciones de la §3 acaba en
+`ERROR 42501`. No hay otra puerta: para escribir hay que desactivar el trigger
+**dentro de la misma transacción** que la escritura y volver a activarlo antes
+de confirmarla.
+
+Es una intervención sobre el registro legal: **anótala en el registro del
+incidente antes** de hacerla (quién, cuándo, qué fila, qué valor y por qué),
+con el `uuid` del tramo y el `id` del asiento que da el valor bueno. Sin
+nombres de personas.
+
+```bash
+docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+ALTER TABLE shift_entries DISABLE TRIGGER shift_entries_guard_transition;
+ALTER TABLE shift_entries DISABLE TRIGGER shift_entries_superseded_is_linked;
+-- Si tocas incidents: ALTER TABLE incidents DISABLE TRIGGER incidents_guard_transition;
+-- Si INSERTAS filas: ALTER TABLE shift_entries DISABLE TRIGGER shift_entries_guard_insert;
+--                   (en incidents, incidents_guard_insert). Reactívalos igual abajo.
+
+UPDATE shift_entries SET status = 'closed' WHERE uuid = 'U';    -- solo la columna y la fila del asiento
+
+ALTER TABLE shift_entries ENABLE TRIGGER shift_entries_guard_transition;
+ALTER TABLE shift_entries ENABLE TRIGGER shift_entries_superseded_is_linked;
+-- Salvaguarda: si algun trigger no esta activo, la transaccion entera se deshace.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_trigger
+              WHERE tgrelid IN ('shift_entries'::regclass, 'incidents'::regclass)
+                AND NOT tgisinternal AND tgenabled <> 'O') THEN
+    RAISE EXCEPTION 'quedan triggers del registro sin activar';
+  END IF;
+END $$;
+COMMIT;
+SQL
+```
+
+Reglas del procedimiento:
+
+- **Una sola transacción.** `ALTER TABLE … DISABLE TRIGGER` toma un bloqueo que
+  espera a las escrituras en curso y retiene las nuevas hasta el `COMMIT`: la
+  aplicación no llega a escribir con el trigger apagado, y el quiosco encola
+  durante esos segundos (RF-AT-10), no pierde fichajes. Por eso la
+  transacción es corta y sin pausas: nada de abrir `psql` interactivo con el
+  `BEGIN` puesto y marcharse a por café. Si falla (`ON_ERROR_STOP`), la
+  transacción entera se deshace y los triggers quedan como estaban.
+- **Nunca `ALTER TABLE … DISABLE TRIGGER` fuera de una transacción**, ni
+  `DISABLE TRIGGER ALL` (desactiva también los triggers internos de las claves
+  ajenas).
+- **Alternativa, con aviso:** `SET LOCAL session_replication_role = replica;`
+  dentro de la transacción también evita los triggers, pero **desactiva a la
+  vez las comprobaciones de las claves ajenas**: un valor de `superseded_by_id`
+  o de `shift_entry_id` que apunte a una fila inexistente se aceptaría sin
+  queja. Úsala solo si has comprobado a mano cada referencia, y no la dejes
+  puesta (`SET LOCAL` muere con la transacción).
+- **Solo las filas y columnas que dice el asiento.** Nada de `UPDATE` sin
+  `WHERE uuid`. Después, la conciliación de «Al terminar».
+
+**Comprobación al terminar, siempre** (aunque la transacción haya salido bien).
+Todos los triggers no internos de las dos tablas tienen que estar en `O`, y
+tienen que estar los conocidos:
+
+```bash
+docker compose exec -T postgres psql -U fichaje_migrator -d fichaje -c "
+SELECT c.relname AS tabla, g.tgname, g.tgenabled
+  FROM pg_trigger g JOIN pg_class c ON c.oid = g.tgrelid
+ WHERE c.relname IN ('shift_entries', 'incidents') AND NOT g.tgisinternal
+ ORDER BY 1, 2"
+```
+
+Esperado: `shift_entries_guard_transition` y `shift_entries_superseded_is_linked`
+y `shift_entries_guard_insert` en `shift_entries`, `incidents_guard_transition` e
+`incidents_guard_insert` en `incidents`, **todos con `tgenabled = O`**. Una `D`
+es un trigger desactivado y una fila que falta es un trigger borrado: en los
+dos casos el registro queda sin protección. Vuelve a activarlo con
+`ALTER TABLE <tabla> ENABLE TRIGGER <nombre>` **dentro de una transacción
+anotada**, y si no sabes quién lo desactivó, trátalo como la §1.1 (sigue
+[`brecha-de-seguridad.md`](brecha-de-seguridad.md)). `./doctor.sh` hace esta
+misma comprobación (avisa con `trigger:<nombre>:DESACTIVADO` o `AUSENTE`) y
+`./update.sh` **deshace la actualización** si la ve, sin reactivarlos él: una
+actualización limpia nunca los deja así, y reactivarlos sin saber quién los
+tocó taparía la causa.
 
 ---
 

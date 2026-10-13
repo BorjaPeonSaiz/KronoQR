@@ -16,8 +16,8 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
-use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordArchive;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -309,14 +309,18 @@ it('da cero discrepancias con el uso normal del producto: fichar, corregir, anul
         ->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="false"} 0');
 })->group('RL-04', 'RS-07', 'RN-13');
 
-it('detecta las cuatro manipulaciones, tres con la credencial de la aplicacion y la entrada con el rol propietario, con la cadena de hash en verde', function (): void {
+it('detecta las cuatro manipulaciones, dos con la credencial de la aplicacion y dos con el rol propietario, con la cadena de hash en verde', function (): void {
     $escenario = registroAuditadoEscenario();
     $tramos = registroAuditadoLegitimo($escenario);
 
     // 1. UPDATE: la entrada de la version vigente, una hora antes. Los minutos
     //    no se tocan y siguen siendo los del asiento: sale solo la entrada. Con
     //    el rol propietario: la aplicacion ya no tiene esa columna (ADR-057 §1).
-    SchemaOwner::connection()->update("UPDATE shift_entries SET clocked_in_at = clocked_in_at - interval '1 hour' WHERE uuid = ?", [$tramos['corregido']]);
+    //    Y saltandose el *trigger* de transiciones (§2), que tambien le para a el.
+    SchemaOwner::bypassingTransitionGuards(static fn (ConnectionInterface $owner): int => $owner->update(
+        "UPDATE shift_entries SET clocked_in_at = clocked_in_at - interval '1 hour' WHERE uuid = ?",
+        [$tramos['corregido']],
+    ));
 
     // 2. INSERT: un tramo inventado para B, que no solapa con nada suyo.
     $inventado = Str::uuid7()->toString();
@@ -336,10 +340,11 @@ it('detecta las cuatro manipulaciones, tres con la credencial de la aplicacion y
         'updated_at' => '2026-10-07 12:00:00+00',
     ]);
 
-    // 3. DELETE: el alta manual, despues de quitar lo que la referencia.
+    // 3. DELETE: el alta manual, despues de quitar lo que la referencia. Con el
+    //    rol propietario: la aplicacion ya no tiene `DELETE` (ADR-057 §3).
     $alta = DB::table('shift_entries')->where('uuid', $tramos['alta'])->value('id');
-    DB::table('shift_corrections')->where('shift_entry_id', $alta)->delete();
-    DB::table('shift_entries')->where('id', $alta)->delete();
+    SchemaOwner::connection()->table('shift_corrections')->where('shift_entry_id', $alta)->delete();
+    SchemaOwner::connection()->table('shift_entries')->where('id', $alta)->delete();
 
     // 4. UPDATE status: el turno abierto de B, anulado sin correccion. Con la
     //    aplicacion: `status` es una columna que el dominio escribe.
@@ -382,7 +387,10 @@ it('vuelve a cuadrar cuando se remedia desde el panel, como dice el runbook, y d
     $escenario = registroAuditadoEscenario();
     $tramos = registroAuditadoLegitimo($escenario);
 
-    SchemaOwner::connection()->update("UPDATE shift_entries SET clocked_in_at = clocked_in_at - interval '1 hour' WHERE uuid = ?", [$tramos['corregido']]);
+    SchemaOwner::bypassingTransitionGuards(static fn (ConnectionInterface $owner): int => $owner->update(
+        "UPDATE shift_entries SET clocked_in_at = clocked_in_at - interval '1 hour' WHERE uuid = ?",
+        [$tramos['corregido']],
+    ));
     $inventado = Str::uuid7()->toString();
     DB::table('shift_entries')->insert([
         'uuid' => $inventado,
@@ -432,8 +440,8 @@ it('la ventana diaria no mira lo antiguo y la pasada completa si', function (): 
     // para los tramos y el 11 para los asientos. Alguien la borra.
     FrozenTime::at('2026-10-20 04:15:00');
     $alta = DB::table('shift_entries')->where('uuid', $tramos['alta'])->value('id');
-    DB::table('shift_corrections')->where('shift_entry_id', $alta)->delete();
-    DB::table('shift_entries')->where('id', $alta)->delete();
+    SchemaOwner::connection()->table('shift_corrections')->where('shift_entry_id', $alta)->delete();
+    SchemaOwner::connection()->table('shift_entries')->where('id', $alta)->delete();
 
     expect(registroAuditadoConciliar()['code'])->toBe(0);
 
@@ -451,17 +459,45 @@ it('la ventana diaria no mira lo antiguo y la pasada completa si', function (): 
 })->group('RL-04', 'RS-07');
 
 /**
- * La purga real del registro —la misma SQL que `compliance:apply-retention`— y
- * su asiento `retention.purge_executed`, fechado en el «ahora» de la prueba.
- * Sin `$borrar`, solo el asiento: lo que haria quien quiere tapar un borrado.
+ * Lo que borra una purga del registro con ese corte y su asiento
+ * `retention.purge_executed`, fechado en el «ahora» de la prueba. Sin
+ * `$borrar`, solo el asiento: lo que haria quien quiere tapar un borrado.
+ *
+ * **El borrado lo hace el rol propietario, no la funcion de purga.** Desde
+ * ADR-057 §3 (bloque 7 de la 2.2.1) la aplicacion purga por
+ * `work_record_purge_batch`, que calcula su corte con el reloj de PostgreSQL y
+ * no admitiria el de un «ahora» simulado en 2027; la funcion tiene sus propias
+ * pruebas (`WorkRecordPurgeFunctionTest`, `ApplyRetentionCommandTest`). Lo que
+ * se prueba aqui es la conciliacion, que solo ve filas que faltan y asientos:
+ * borra las mismas filas que la funcion —tramos con `work_date` anterior al
+ * corte y lo que cuelga de ellos, y lo que no cuelga de nada por
+ * `LEAST(occurred_at, recorded_at)`— sin claves ajenas (`replica`) para no
+ * tener que repetir el orden por generaciones. Borrado y asiento van en dos
+ * sesiones, cosa que la purga real no hace y que aqui no cambia nada.
  */
 function registroAuditadoPurgar(int $site, string $corte, int $anos, bool $borrar = true): void
 {
-    DB::transaction(static function () use ($site, $corte, $anos, $borrar): void {
-        $tallies = $borrar
-            ? new DatabaseWorkRecordArchive(DB::connection())->purge(new DateTimeImmutable($corte.'T00:00:00Z'), 1000)
-            : [];
+    $rows = 0;
 
+    if ($borrar) {
+        SchemaOwner::bypassingTransitionGuards(static function (ConnectionInterface $owner) use ($corte, &$rows): void {
+            $instante = $corte.' 00:00:00+00';
+            $vencidos = 'SELECT id FROM shift_entries WHERE work_date < ?::date';
+
+            $rows += $owner->delete('DELETE FROM shift_corrections WHERE shift_entry_id IN ('.$vencidos.')', [$corte]);
+            $rows += $owner->delete('DELETE FROM incidents WHERE work_date < ?::date OR shift_entry_id IN ('.$vencidos.')', [$corte, $corte]);
+            $rows += $owner->delete(
+                'DELETE FROM scan_events WHERE shift_entry_id IN ('.$vencidos.') '
+                .'OR (shift_entry_id IS NULL AND LEAST(occurred_at, recorded_at) < ?::timestamptz)',
+                [$corte, $instante],
+            );
+            $rows += $owner->delete('DELETE FROM discarded_scan_reports WHERE LEAST(occurred_at, recorded_at) < ?::timestamptz', [$instante]);
+            $rows += $owner->delete('DELETE FROM shift_entries WHERE work_date < ?::date', [$corte]);
+            $rows += $owner->delete('DELETE FROM daily_totals WHERE work_date < ?::date', [$corte]);
+        });
+    }
+
+    DB::transaction(static function () use ($site, $corte, $anos, $rows): void {
         resolve(RecordAuditEntry::class)->handle(new RecordAuditEntryCommand(
             actor: AuditActor::system(),
             action: AuditAction::RetentionPurgeExecuted,
@@ -471,7 +507,7 @@ function registroAuditadoPurgar(int $site, string $corte, int $anos, bool $borra
                 'cutoff_date' => $corte,
                 'retention_years' => $anos,
                 'site_id' => $site,
-                'rows' => array_sum(array_map(static fn ($tally): int => $tally->rows, $tallies)),
+                'rows' => $rows,
             ]),
         ));
     });
@@ -500,8 +536,8 @@ it('no confunde una purga de retencion auditada con un borrado, y si el borrado 
         ->and($tras['code'])->toBe(0, $tras['output']);
 
     // Un borrado de un tramo posterior al corte no se puede disfrazar de purga.
-    DB::table('scan_events')->where('shift_entry_id', DB::table('shift_entries')->where('uuid', $tramos['abierto'])->value('id'))->delete();
-    DB::table('shift_entries')->where('uuid', $tramos['abierto'])->delete();
+    SchemaOwner::connection()->table('scan_events')->where('shift_entry_id', DB::table('shift_entries')->where('uuid', $tramos['abierto'])->value('id'))->delete();
+    SchemaOwner::connection()->table('shift_entries')->where('uuid', $tramos['abierto'])->delete();
 
     $completa = registroAuditadoConciliar(true);
 
@@ -518,8 +554,8 @@ it('un asiento de purga con corte futuro no tapa un borrado y sale como discrepa
     $tramos = registroAuditadoLegitimo($escenario);
 
     $alta = DB::table('shift_entries')->where('uuid', $tramos['alta'])->value('id');
-    DB::table('shift_corrections')->where('shift_entry_id', $alta)->delete();
-    DB::table('shift_entries')->where('id', $alta)->delete();
+    SchemaOwner::connection()->table('shift_corrections')->where('shift_entry_id', $alta)->delete();
+    SchemaOwner::connection()->table('shift_entries')->where('id', $alta)->delete();
     registroAuditadoPurgar($escenario['site'], '9999-12-31', 4, false);
 
     expect(Artisan::call('compliance:verify-audit-chain'))->toBe(0);
@@ -543,7 +579,9 @@ it('detecta un origen cambiado en la exportacion legal y una correccion con otro
     $otroAutor = ManagementUsers::withRole(UserRole::RRHH)->id;
 
     // El alta manual pasa por un fichaje con tarjeta.
-    SchemaOwner::connection()->table('shift_entries')->where('uuid', $tramos['alta'])->update(['clock_in_source' => 'qr_kiosk']);
+    SchemaOwner::bypassingTransitionGuards(static fn (ConnectionInterface $owner): int => $owner->table('shift_entries')
+        ->where('uuid', $tramos['alta'])
+        ->update(['clock_in_source' => 'qr_kiosk']));
 
     // La anulacion la firma otra persona.
     SchemaOwner::connection()->table('shift_corrections')

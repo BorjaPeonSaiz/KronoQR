@@ -76,13 +76,24 @@ function ledgerShiftEntry(
         'duration_minutes' => $clockedOutAt === null
             ? null
             : intdiv(strtotime($clockedOutAt) - strtotime($clockedInAt), 60),
-        'status' => $clockedOutAt === null ? 'open' : $status,
+        // Nace vigente; anulado o sustituido se queda despues (ADR-057 §2).
+        // Sin version nueva: la comprobacion diferida no llega a correr porque
+        // `RefreshDatabase` nunca confirma.
+        'status' => match (true) {
+            $clockedOutAt === null => 'open',
+            \in_array($status, ['voided', 'superseded'], true) => 'closed',
+            default => $status,
+        },
         'clock_in_source' => 'qr_kiosk',
         'clock_out_source' => $clockedOutAt === null ? null : 'qr_kiosk',
         'version' => 1,
         'created_at' => $clockedInAt,
         'updated_at' => $clockedInAt,
     ]);
+
+    if ($clockedOutAt !== null && \in_array($status, ['voided', 'superseded'], true)) {
+        DB::table('shift_entries')->where('uuid', $uuid)->update(['status' => $status]);
+    }
 
     return $uuid;
 }

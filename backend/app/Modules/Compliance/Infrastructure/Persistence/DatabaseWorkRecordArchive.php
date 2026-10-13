@@ -40,21 +40,32 @@ use Illuminate\Database\ConnectionInterface;
  * chocar con la restriccion, **una version vencida cuya version nueva sigue
  * vigente no se borra**, que es exactamente lo que hay que conservar.
  *
- * ## El `DELETE` que esto necesita, y por cuanto tiempo
+ * ## Sin `DELETE`: la purga la hace una funcion del motor
  *
- * Es la **unica** razon por la que el rol de la aplicacion conserva `DELETE`
- * sobre las seis tablas (ADR-057 §1, migracion
- * `2026_10_13_100000_restrict_application_updates_on_work_record`): ningun
- * otro codigo de la aplicacion borra el registro. `UPDATE` ya no lo tiene, salvo
- * las columnas que el dominio escribe. El bloque 7 de la 2.2.1 cambia estas
- * sentencias por la funcion `SECURITY DEFINER` `work_record_purge_batch`
- * (ADR-057 §3) y retira el `DELETE` en la misma migracion.
+ * El rol de la aplicacion no tiene `DELETE` sobre ninguna tabla del registro
+ * (ADR-057 §1 y §3, migracion
+ * `2026_10_14_100000_work_record_trigger_and_purge_function`). Borra
+ * {@see self::PURGE_FUNCTION}, `SECURITY DEFINER` y propiedad del rol de
+ * migracion, que sigue el orden de arriba y **calcula ella misma el corte mas
+ * reciente admisible** con la fecha UTC del servidor de base de datos, el
+ * `retention_years` del perfil y el suelo legal de su jurisdiccion. Un corte
+ * posterior lo rechaza con `42501`: quien ejecute codigo con la credencial del
+ * runtime no puede pedirle que borre la jornada de ayer.
+ *
+ * Las consultas de {@see self::inspect()} siguen aqui, con la misma forma que
+ * los `DELETE` de la funcion: son las que cuentan y fechan lo que se va a
+ * purgar para el informe y el asiento.
  *
  * ## Lotes, no transacciones
  *
- * `$batchSize` acota cuantas filas toca cada sentencia para no construir un
- * `IN` de cien mil identificadores. La transaccion la abre el caso de uso, que
- * es quien escribe el asiento: si el asiento falla, esto no se ha borrado.
+ * La funcion vacia lo vencido de cada tabla en sentencias de `$batchSize` filas
+ * como mucho, para no construir un `IN` de cien mil identificadores. Se la llama
+ * una vez. La transaccion la abre el caso de uso, que es quien escribe el
+ * asiento: si el asiento falla, esto no se ha borrado.
+ *
+ * **Sin nada que purgar no se llama.** Si {@see self::inspect()} no encuentra
+ * filas vencidas, no hay nada que pedirle a la funcion, y una simulacion o un
+ * reloj de la aplicacion adelantado no se convierten en un error.
  *
  * ## Que NO borra
  *
@@ -64,6 +75,22 @@ use Illuminate\Database\ConnectionInterface;
  */
 final readonly class DatabaseWorkRecordArchive implements WorkRecordArchive
 {
+    /**
+     * La funcion `SECURITY DEFINER` que purga (ADR-057 §3). La nombran tambien
+     * su migracion y las pruebas que comprueban quien la puede ejecutar.
+     */
+    public const string PURGE_FUNCTION = 'work_record_purge_batch';
+
+    /**
+     * Lo que dice la funcion al rechazar un corte posterior al admisible, con
+     * `42501`. Distingue ese rechazo de otro `42501` (un rol sin `EXECUTE`);
+     * lo ata al texto de la migracion `ApplyRetentionCommandTest`.
+     */
+    public const string CUTOFF_REJECTED = 'posterior al admisible';
+
+    /** El lote mas grande que admite la funcion; uno mayor se recorta aqui. */
+    public const int MAX_BATCH = 100000;
+
     public function __construct(private ConnectionInterface $connection) {}
 
     public function inspect(DateTimeImmutable $cutoff): array
@@ -134,65 +161,13 @@ final readonly class DatabaseWorkRecordArchive implements WorkRecordArchive
             $ranges[$tally->dataset] = $tally;
         }
 
-        $date = $cutoff->format('Y-m-d');
-        $instant = $cutoff->format(DateTimeImmutable::ATOM);
-        $limit = max(1, $batchSize);
-
-        $deleted = [
-            'shift_corrections' => $this->deleteInBatches(<<<'SQL'
-                DELETE FROM shift_corrections WHERE id IN (
-                    SELECT sc.id
-                    FROM shift_corrections sc
-                    JOIN shift_entries se ON se.id = sc.shift_entry_id
-                    WHERE se.work_date < ?
-                    LIMIT ?
-                )
-            SQL, [$date, $limit]),
-            'incidents' => $this->deleteInBatches(<<<'SQL'
-                DELETE FROM incidents WHERE id IN (
-                    SELECT i.id
-                    FROM incidents i
-                    LEFT JOIN shift_entries se ON se.id = i.shift_entry_id
-                    WHERE i.work_date < ? OR se.work_date < ?
-                    LIMIT ?
-                )
-            SQL, [$date, $date, $limit]),
-            'scan_events' => $this->deleteInBatches(<<<'SQL'
-                DELETE FROM scan_events WHERE id IN (
-                    SELECT s.id
-                    FROM scan_events s
-                    LEFT JOIN shift_entries se ON se.id = s.shift_entry_id
-                    WHERE (se.id IS NOT NULL AND se.work_date < ?)
-                       OR (se.id IS NULL AND LEAST(s.occurred_at, s.recorded_at) < ?)
-                    LIMIT ?
-                )
-            SQL, [$date, $instant, $limit]),
-            'discarded_scan_reports' => $this->deleteInBatches(<<<'SQL'
-                DELETE FROM discarded_scan_reports WHERE id IN (
-                    SELECT d.id
-                    FROM discarded_scan_reports d
-                    WHERE LEAST(d.occurred_at, d.recorded_at) < ?
-                    LIMIT ?
-                )
-            SQL, [$instant, $limit]),
-            // Por generaciones: solo las versiones a las que ya no apunta nadie.
-            'shift_entries' => $this->deleteInBatches(<<<'SQL'
-                DELETE FROM shift_entries WHERE id IN (
-                    SELECT se.id
-                    FROM shift_entries se
-                    WHERE se.work_date < ?
-                      AND NOT EXISTS (
-                          SELECT 1 FROM shift_entries newer WHERE newer.superseded_by_id = se.id
-                      )
-                    LIMIT ?
-                )
-            SQL, [$date, $limit]),
-            'daily_totals' => $this->deleteInBatches(<<<'SQL'
-                DELETE FROM daily_totals WHERE id IN (
-                    SELECT id FROM daily_totals WHERE work_date < ? LIMIT ?
-                )
-            SQL, [$date, $limit]),
-        ];
+        if (array_sum(array_map(static fn (RetentionTally $tally): int => $tally->rows, $ranges)) === 0) {
+            // Nada vencido: no hay nada que pedirle a la funcion (ver el
+            // docblock de la clase).
+            $deleted = array_fill_keys(array_keys($ranges), 0);
+        } else {
+            $deleted = $this->purgeInBatches($cutoff->format('Y-m-d'), min(self::MAX_BATCH, max(1, $batchSize)));
+        }
 
         $tallies = [];
 
@@ -229,23 +204,26 @@ final readonly class DatabaseWorkRecordArchive implements WorkRecordArchive
     }
 
     /**
-     * Repite la sentencia hasta que no borra nada mas.
+     * Llama una vez a {@see self::PURGE_FUNCTION}, que vacia lo vencido tabla a
+     * tabla en sentencias de `$batchSize` filas como mucho, y devuelve lo
+     * borrado por tabla.
      *
-     * El `LIMIT` va dentro de la subconsulta, asi que cada vuelta se lleva como
-     * mucho `$batchSize` filas. Termina siempre: o borra -y hay menos-, o no
-     * borra -y se sale-.
-     *
-     * @param  list<string|int>  $bindings
+     * @return array<string, int>
      */
-    private function deleteInBatches(string $sql, array $bindings): int
+    private function purgeInBatches(string $cutoffDate, int $batchSize): array
     {
-        $total = 0;
+        /** @var list<object{dataset: string, deleted: int|string}> $rows */
+        $rows = $this->connection->select(
+            'SELECT dataset, deleted FROM public.'.self::PURGE_FUNCTION.'(?::date, ?::integer)',
+            [$cutoffDate, $batchSize],
+        );
 
-        do {
-            $affected = $this->connection->affectingStatement($sql, $bindings);
-            $total += $affected;
-        } while ($affected > 0);
+        $deleted = [];
 
-        return $total;
+        foreach ($rows as $row) {
+            $deleted[$row->dataset] = (int) $row->deleted;
+        }
+
+        return $deleted;
     }
 }

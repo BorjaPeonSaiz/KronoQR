@@ -84,7 +84,7 @@ function registro(
  *
  * @param  array{site: int, employee: string, device: int}  $fixture
  */
-function tramoDeFixture(array $fixture, string $workDate, string $clockedInAt, ?string $clockedOutAt = null): string
+function tramoDeFixture(array $fixture, string $workDate, string $clockedInAt, ?string $clockedOutAt = null, int $version = 1): string
 {
     $uuid = Str::uuid7()->toString();
 
@@ -99,7 +99,7 @@ function tramoDeFixture(array $fixture, string $workDate, string $clockedInAt, ?
         'status' => $clockedOutAt === null ? 'open' : 'closed',
         'clock_in_source' => 'qr_kiosk',
         'clock_out_source' => $clockedOutAt === null ? null : 'qr_kiosk',
-        'version' => 1,
+        'version' => $version,
     ]);
 
     return $uuid;
@@ -419,7 +419,9 @@ it('devuelve el tramo del break_start aunque una correccion lo haya sustituido',
     // para permitir (ADR-026)— y despues se enlazan.
     DB::table('shift_entries')->where('uuid', $original)->update(['status' => 'superseded']);
 
-    $sucesora = tramoDeFixture($fixture, '2026-03-13', '2026-03-13 21:05:00', '2026-03-14 01:00:00');
+    // La version siguiente (ADR-035): el motor solo deja encadenar con ella
+    // (ADR-057 §2).
+    $sucesora = tramoDeFixture($fixture, '2026-03-13', '2026-03-13 21:05:00', '2026-03-14 01:00:00', 2);
 
     DB::table('shift_entries')->where('uuid', $original)->update([
         'superseded_by_id' => DB::table('shift_entries')->where('uuid', $sucesora)->value('id'),

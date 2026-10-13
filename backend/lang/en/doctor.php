@@ -93,6 +93,9 @@ return [
                 'warning_excess' => 'Database user «:user» holds extra privileges on the work record or the '
                     .'compliance profile (:excess). Clocking works as usual, but anyone running code in the '
                     .'application could rewrite clockings or lower the legal retention period.',
+                'warning_guards' => 'Work record protections in the database are missing or disabled (:issues). '
+                    .'Clocking works as usual, but with user «:user» clockings and incidents could be rewritten, '
+                    .'inserted already closed or deleted without the database stopping it.',
                 'warning_unknown' => 'The privileges on the work record could not be read.',
             ],
             'audit_chain' => [
@@ -581,6 +584,11 @@ return [
                     ."migration role. Do not change them by hand: generate the diagnostics bundle with\n"
                     ."`php artisan product:diagnostics`, send it to support and check who has access to the\n"
                     .'migration role.',
+                'warning_guards' => "Only the migration role can disable or change those protections: someone used it,\n"
+                    ."or a restore left them half done. doctor.sh and update.sh detect it too. Do not change\n"
+                    ."them by hand: generate the diagnostics bundle with `php artisan product:diagnostics`,\n"
+                    ."send it to support, check who has access to the migration role and run the reconciliation:\n"
+                    .'php artisan compliance:reconcile-work-record --full',
                 'warning_unknown' => "Run `php artisan product:doctor` again once the database responds. If it\n"
                     .'still cannot be checked, generate the diagnostics bundle.',
             ],
