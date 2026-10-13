@@ -309,7 +309,7 @@ it('da cero discrepancias con el uso normal del producto: fichar, corregir, anul
         ->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="false"} 0');
 })->group('RL-04', 'RS-07', 'RN-13');
 
-it('detecta las cuatro manipulaciones con la credencial de la aplicacion, con la cadena de hash en verde', function (): void {
+it('detecta las cuatro manipulaciones, tres con la credencial de la aplicacion y la entrada con el rol propietario, con la cadena de hash en verde', function (): void {
     $escenario = registroAuditadoEscenario();
     $tramos = registroAuditadoLegitimo($escenario);
 
