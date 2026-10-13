@@ -187,7 +187,7 @@
     "filters": {
       "legend": "Periodo a descargar",
       "from": "Desde",
-      "fromHint": "Por fecha de jornada. En blanco, se incluye tu historial disponible.",
+      "fromHint": "En blanco, se descarga el último año. Como máximo un año por descarga.",
       "to": "Hasta",
       "toHint": "Último día, incluido.",
       "inverted": "El periodo termina antes de empezar. Revisa las dos fechas.",

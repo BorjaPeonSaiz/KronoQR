@@ -187,7 +187,7 @@
     "filters": {
       "legend": "Period to download",
       "from": "From",
-      "fromHint": "By work day. Left blank, your available history is included.",
+      "fromHint": "Left blank, the last year is downloaded. At most one year per download.",
       "to": "To",
       "toHint": "Last day, included.",
       "inverted": "The period ends before it starts. Check both dates.",

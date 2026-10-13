@@ -52,6 +52,29 @@ describe('MyExportView', () => {
     expect(url).not.toContain(EMPLOYEE_UUID)
   })
 
+  it('en blanco no manda fechas (el servidor resuelve el ultimo ano) y el texto lo dice', async () => {
+    stubFetch((url) => {
+      requestedUrls.push(url)
+
+      return csvResponse()
+    })
+
+    const wrapper = await mountView(MyExportView)
+
+    expect(wrapper.text()).toContain(es.myExport.filters.fromHint)
+    expect(es.myExport.filters.fromHint).toBe(
+      'En blanco, se descarga el último año. Como máximo un año por descarga.',
+    )
+
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    const url = requestedUrls.at(-1) ?? ''
+
+    expect(url).not.toContain('from=')
+    expect(url).not.toContain('to=')
+  })
+
   it('descarga el fichero y lo anuncia, sin dejarlo vivo en el navegador', async () => {
     stubFetch(() => csvResponse())
 

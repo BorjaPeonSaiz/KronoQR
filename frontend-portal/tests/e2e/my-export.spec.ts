@@ -176,3 +176,28 @@ for (const width of [320, 195]) {
     },
   )
 }
+
+test(
+  'en blanco se descarga el ultimo ano: el texto lo dice y no se mandan fechas',
+  { tag: ['@RL-05', '@RF-ID-05'] },
+  async ({ page }) => {
+    const api = await stubPortalApi(page, { locale: 'es' })
+    await logInToPortal(page)
+    await page.goto('/export')
+
+    await expect(
+      page.getByText('En blanco, se descarga el último año. Como máximo un año por descarga.'),
+    ).toBeVisible()
+    await expect(page.locator('input[type="date"]').first()).toHaveValue('')
+    await expect(page.locator('input[type="date"]').last()).toHaveValue('')
+
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Descargar CSV' }).click()
+    await download
+
+    const request = api.requests.find((it) => it.path === '/api/v1/me/export')
+
+    expect(request?.query).not.toContain('from=')
+    expect(request?.query).not.toContain('to=')
+  },
+)
