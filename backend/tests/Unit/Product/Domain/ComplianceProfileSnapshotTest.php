@@ -8,6 +8,8 @@ use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSource;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRule;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
+use App\Modules\Shared\Domain\ValueObject\Jurisdiction;
+use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 
 /*
  * El perfil de cumplimiento como objeto de valor (RF-PD-07, regla dura 14).
@@ -61,7 +63,7 @@ it('aplica un cambio sin tocar el perfil anterior', function (): void {
     // El asiento declara un valor anterior y uno nuevo: si `with()` mutara, el
     // «antes» se perderia y el trail diria que el umbral no cambio.
     $before = spanishProfileSnapshot();
-    $after = $before->with(['min_rest_hours' => 10]);
+    $after = $before->with(['min_rest_hours' => 10], spanishRetentionFloor());
 
     expect($after->minRestHours)->toBe(10)
         ->and($before->minRestHours)->toBe(12)
@@ -73,7 +75,7 @@ it('aplica un cambio sin tocar el perfil anterior', function (): void {
 it('conserva lo que no es editable aunque se pida cambiarlo', function (): void {
     // `id`, `jurisdiction`, `is_default` y el origen de la resolucion no son
     // campos del catalogo: `with()` los arrastra tal cual.
-    $after = spanishProfileSnapshot()->with(['retention_years' => 6]);
+    $after = spanishProfileSnapshot()->with(['retention_years' => 6], spanishRetentionFloor());
 
     expect($after->id)->toBe(1)
         ->and($after->jurisdiction)->toBe('ES')
@@ -84,7 +86,7 @@ it('conserva lo que no es editable aunque se pida cambiarlo', function (): void 
 it('rechaza un umbral fuera del rango de su campo', function (string $field, int $value): void {
     // El error peligroso es el silencioso: `max_daily_hours = 90` no rompe nada
     // y apaga RN-11 hasta que alguien compara una nomina con el convenio.
-    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with([$field => $value]))
+    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with([$field => $value], spanishRetentionFloor()))
         ->toThrow(InvalidComplianceProfileValue::class);
 })->with([
     'jornada diaria de 90 horas' => ['max_daily_hours', 90],
@@ -102,7 +104,7 @@ it('acepta los limites exactos de cada campo', function (string $field, int $val
     // El limite es cerrado por los dos lados: el maximo admitido se admite. Sin
     // esta prueba, un `<` por un `<=` pasaria inadvertido y rechazaria un perfil
     // legitimo.
-    expect(spanishProfileSnapshot()->with([$field => $value])->valueOf(ComplianceProfileField::from($field)))
+    expect(spanishProfileSnapshot()->with([$field => $value], spanishRetentionFloor())->valueOf(ComplianceProfileField::from($field)))
         ->toBe($value);
 })->with([
     'un descanso de una hora' => ['min_rest_hours', 1],
@@ -111,7 +113,7 @@ it('acepta los limites exactos de cada campo', function (string $field, int $val
     'una semana de 168 horas' => ['max_weekly_hours', 168],
     'la semana empieza el lunes' => ['week_starts_on', 1],
     'la semana empieza el domingo' => ['week_starts_on', 7],
-    'un ano de retencion' => ['retention_years', 1],
+    'el suelo legal español exacto' => ['retention_years', 4],
     'cincuenta anos de retencion' => ['retention_years', 50],
 ])->group('RF-PD-07');
 
@@ -120,33 +122,33 @@ it('rechaza dejar la jornada semanal por debajo de la diaria', function (): void
     // diaria y la semanal viene de la fila que ya hay. Se comprueba sobre el
     // resultado, que es lo que impide que el orden de los campos deje un perfil
     // imposible.
-    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['max_weekly_hours' => 8]))
+    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['max_weekly_hours' => 8], spanishRetentionFloor()))
         ->toThrow(InvalidComplianceProfileValue::class);
 })->group('RF-PD-07');
 
 it('acepta la jornada semanal exactamente igual a la diaria', function (): void {
     // El limite es «menor que», no «menor o igual».
-    expect(spanishProfileSnapshot()->with(['max_weekly_hours' => 9])->maxWeeklyHours)->toBe(9);
+    expect(spanishProfileSnapshot()->with(['max_weekly_hours' => 9], spanishRetentionFloor())->maxWeeklyHours)->toBe(9);
 })->group('RF-PD-07');
 
 it('rechaza un umbral que llega como texto, aunque sea un numero', function (): void {
     // Un JSON escrito a mano con comillas convertiria un error tipografico en un
     // umbral legal silenciosamente distinto del que se cree haber puesto.
-    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['min_rest_hours' => '10']))
+    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['min_rest_hours' => '10'], spanishRetentionFloor()))
         ->toThrow(InvalidComplianceProfileValue::class);
 })->group('RF-PD-07');
 
 it('recorta el nombre del convenio y rechaza el vacio', function (): void {
-    expect(spanishProfileSnapshot()->with(['name' => '  Convenio de Cantabria  '])->name)
+    expect(spanishProfileSnapshot()->with(['name' => '  Convenio de Cantabria  '], spanishRetentionFloor())->name)
         ->toBe('Convenio de Cantabria')
-        ->and(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['name' => '   ']))
+        ->and(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['name' => '   '], spanishRetentionFloor()))
         ->toThrow(InvalidComplianceProfileValue::class);
 })->group('RF-PD-07');
 
 it('rechaza un nombre mas largo que la columna', function (): void {
-    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['name' => str_repeat('a', 65)]))
+    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['name' => str_repeat('a', 65)], spanishRetentionFloor()))
         ->toThrow(InvalidComplianceProfileValue::class)
-        ->and(spanishProfileSnapshot()->with(['name' => str_repeat('a', 64)])->name)
+        ->and(spanishProfileSnapshot()->with(['name' => str_repeat('a', 64)], spanishRetentionFloor())->name)
         ->toBe(str_repeat('a', 64));
 })->group('RF-PD-07');
 
@@ -154,15 +156,15 @@ it('ordena el calendario de festivos y rechaza los repetidos', function (): void
     // Dos perfiles con los mismos festivos en distinto orden son el mismo perfil:
     // sin normalizar, reordenar la lista produciria un asiento que declara un
     // cambio de umbral legal donde no lo hubo.
-    expect(spanishProfileSnapshot()->with(['holiday_calendar' => ['2026-12-25', '2026-01-01']])->holidayCalendar)
+    expect(spanishProfileSnapshot()->with(['holiday_calendar' => ['2026-12-25', '2026-01-01']], spanishRetentionFloor())->holidayCalendar)
         ->toBe(['2026-01-01', '2026-12-25'])
         ->and(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()
-            ->with(['holiday_calendar' => ['2026-12-25', '2026-12-25']]))
+            ->with(['holiday_calendar' => ['2026-12-25', '2026-12-25']], spanishRetentionFloor()))
         ->toThrow(InvalidComplianceProfileValue::class);
 })->group('RF-PD-07');
 
 it('rechaza un festivo que no es una fecha ISO', function (mixed $calendar): void {
-    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['holiday_calendar' => $calendar]))
+    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['holiday_calendar' => $calendar], spanishRetentionFloor()))
         ->toThrow(InvalidComplianceProfileValue::class);
 })->with([
     'texto libre' => [['Navidad']],
@@ -181,9 +183,9 @@ it('rechaza un festivo que no es una fecha ISO', function (mixed $calendar): voi
 
 it('acepta vaciar el calendario de festivos', function (): void {
     // Caduca cada 31 de diciembre y hay que poder rehacerlo.
-    $withHolidays = spanishProfileSnapshot()->with(['holiday_calendar' => ['2026-12-25']]);
+    $withHolidays = spanishProfileSnapshot()->with(['holiday_calendar' => ['2026-12-25']], spanishRetentionFloor());
 
-    expect($withHolidays->with(['holiday_calendar' => []])->holidayCalendar)->toBe([]);
+    expect($withHolidays->with(['holiday_calendar' => []], spanishRetentionFloor())->holidayCalendar)->toBe([]);
 })->group('RF-PD-07');
 
 it('solo declara cambiado lo que de verdad cambia de valor', function (): void {
@@ -347,7 +349,7 @@ it('rechaza justo por encima del maximo de cada campo', function (string $field,
     // semanales» probado, subir el tope de 168 a 169 pasaria inadvertido — y ese
     // tope existe para que un error tipográfico no apague una regla legal. Es la
     // otra mitad de la prueba de los límites exactos.
-    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with([$field => $value]))
+    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with([$field => $value], spanishRetentionFloor()))
         ->toThrow(InvalidComplianceProfileValue::class);
 })->with([
     'descanso de 25 horas' => ['min_rest_hours', 25],
@@ -357,3 +359,88 @@ it('rechaza justo por encima del maximo de cada campo', function (string $field,
     'la semana empieza el dia 8' => ['week_starts_on', 8],
     'retencion de 51 anos' => ['retention_years', 51],
 ])->group('RF-PD-07');
+
+// --- El suelo legal de la retencion por jurisdiccion (RL-02, bloque 5 de la 2.2.1)
+
+/**
+ * El suelo legal español ya resuelto, como lo entrega el puerto (regla dura 14):
+ * cuatro años, art. 34.9 ET.
+ */
+function spanishRetentionFloor(): LegalRetentionFloor
+{
+    return LegalRetentionFloor::fromCatalog(Jurisdiction::fromCode('ES'), 4);
+}
+
+/** Un perfil de una jurisdiccion fuera del catalogo, cuyo suelo es el de omision. */
+function uncataloguedProfileSnapshot(): ComplianceProfileSnapshot
+{
+    return new ComplianceProfileSnapshot(
+        id: 2,
+        name: 'ZZ-generico',
+        jurisdiction: 'ZZ',
+        minRestHours: 12,
+        maxDailyHours: 9,
+        maxWeeklyHours: 40,
+        breakRequiredAfterHours: 6,
+        weekStartsOn: 1,
+        holidayCalendar: [],
+        retentionYears: 4,
+        isDefault: true,
+        source: ComplianceProfileSource::InstallationDefault,
+    );
+}
+
+it('rechaza bajar la retencion de un perfil español por debajo de cuatro años, con el suelo en el motivo', function (): void {
+    try {
+        spanishProfileSnapshot()->with(['retention_years' => 3], spanishRetentionFloor());
+        $rechazo = null;
+    } catch (InvalidComplianceProfileValue $exception) {
+        $rechazo = $exception;
+    }
+
+    expect($rechazo)->toBeInstanceOf(InvalidComplianceProfileValue::class)
+        ->and($rechazo?->translationKey)->toBe('compliance-profile.errors.below_legal_floor')
+        ->and($rechazo?->field)->toBe(ComplianceProfileField::RetentionYears)
+        ->and($rechazo?->parameters)->toBe(['field' => 'retention_years', 'minimum' => 4, 'value' => 3, 'jurisdiction' => 'ES'])
+        ->and($rechazo?->getMessage())->toBe('Compliance profile field "retention_years" cannot be lower than the legal floor of ES (4 years), got 3.')
+        ->and(spanishProfileSnapshot()->with(['retention_years' => 4], spanishRetentionFloor())->retentionYears)->toBe(4)
+        ->and(spanishProfileSnapshot()->with(['retention_years' => 5], spanishRetentionFloor())->retentionYears)->toBe(5);
+})->group('RF-PD-07', 'RL-02');
+
+it('comprueba el suelo en todo cambio, aunque no toque la retencion', function (): void {
+    // Un perfil que ya estuviera por debajo (fila editada a mano) no admite
+    // ningun otro cambio hasta subirlo: el suelo es del perfil resultante.
+    $porDebajo = new ComplianceProfileSnapshot(
+        id: 1,
+        name: 'ES-hosteleria',
+        jurisdiction: 'ES-CN',
+        minRestHours: 12,
+        maxDailyHours: 9,
+        maxWeeklyHours: 40,
+        breakRequiredAfterHours: 6,
+        weekStartsOn: 1,
+        holidayCalendar: [],
+        retentionYears: 2,
+        isDefault: true,
+        source: ComplianceProfileSource::InstallationDefault,
+    );
+
+    expect(fn (): ComplianceProfileSnapshot => $porDebajo->with(['min_rest_hours' => 10], spanishRetentionFloor()))
+        ->toThrow(InvalidComplianceProfileValue::class, 'legal floor of ES (4 years), got 2')
+        ->and($porDebajo->with(['min_rest_hours' => 10, 'retention_years' => 4], spanishRetentionFloor())->retentionYears)->toBe(4);
+})->group('RF-PD-07', 'RL-02');
+
+it('no acepta el suelo de otra jurisdiccion, que es un error de programacion', function (): void {
+    $portugues = LegalRetentionFloor::byDefault(Jurisdiction::fromCode('PT'), 1);
+
+    expect(fn (): ComplianceProfileSnapshot => spanishProfileSnapshot()->with(['retention_years' => 6], $portugues))
+        ->toThrow(LogicException::class, 'The retention floor of PT cannot validate a profile of ES.');
+})->group('RF-PD-07');
+
+it('admite un año de retencion en una jurisdiccion fuera del catalogo', function (): void {
+    // El caso que la migracion de 2026-09-06 queria proteger: en otra
+    // jurisdiccion un año puede ser legitimo, y el suelo de omision es 1.
+    $suelo = LegalRetentionFloor::byDefault(Jurisdiction::fromCode('ZZ'), 1);
+
+    expect(uncataloguedProfileSnapshot()->with(['retention_years' => 1], $suelo)->retentionYears)->toBe(1);
+})->group('RF-PD-07', 'RL-02');

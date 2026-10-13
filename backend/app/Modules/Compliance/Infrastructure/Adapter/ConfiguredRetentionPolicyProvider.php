@@ -9,7 +9,9 @@ use App\Modules\Compliance\Domain\Policy\RetentionPolicy;
 use App\Modules\Compliance\Domain\ValueObject\RetentionPolicySnapshot;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
+use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 use Illuminate\Support\Facades\Config;
 
 /**
@@ -54,9 +56,17 @@ final class ConfiguredRetentionPolicyProvider implements RetentionPolicyProvider
 
     private ?int $siteId = null;
 
+    private ?LegalRetentionFloor $floor = null;
+
     public function __construct(
         private readonly CompliancePolicyProvider $compliance,
         private readonly InstallationSiteProvider $sites,
+        /**
+         * El suelo legal de la jurisdiccion del perfil del centro (RL-02,
+         * ADR-057 enmienda del 10-10-2026, decision D6): la politica no se
+         * construye por debajo, y la purga tampoco.
+         */
+        private readonly RetentionYearsFloor $retentionFloors,
     ) {}
 
     public function forInstallation(): RetentionPolicy
@@ -72,11 +82,13 @@ final class ConfiguredRetentionPolicyProvider implements RetentionPolicyProvider
         }
 
         $this->siteId = $site->id;
+        $this->floor = $this->retentionFloors->forSite($site->id);
 
         return $this->policy = RetentionPolicy::of(
             legalRecordYears: $this->compliance->forSite($site->id)->retentionYears,
             technicalLogDays: Config::integer('compliance.retention.technical_log_days'),
             errorHistoryDays: Config::integer('compliance.retention.error_history_days'),
+            legalRecordFloor: $this->floor,
         );
     }
 
@@ -88,8 +100,10 @@ final class ConfiguredRetentionPolicyProvider implements RetentionPolicyProvider
             legalRecordYears: $policy->legalRecordYears,
             technicalLogDays: $policy->technicalLogDays,
             errorHistoryDays: $policy->errorHistoryDays,
-            // `forInstallation()` acaba de resolverlo: aqui nunca es `null`.
+            // `forInstallation()` acaba de resolverlos: aqui nunca son `null`.
             siteId: $this->siteId ?? 0,
+            legalRecordFloorYears: $this->floor->years ?? $policy->legalRecordYears,
+            jurisdiction: $this->floor?->jurisdiction->code ?? '',
         );
     }
 }

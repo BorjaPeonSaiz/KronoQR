@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Http\Controller;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Product\Application\Query\ComplianceProfileView;
 use App\Modules\Product\Application\UseCase\GetComplianceProfileHandler;
 use App\Modules\Product\Application\UseCase\UpdateComplianceProfileHandler;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
@@ -38,7 +39,7 @@ final class ComplianceProfileController extends Controller
         Gate::authorize('view', ComplianceProfileSnapshot::class);
 
         $profile = $telemetry->measureRead(
-            static fn (): ?ComplianceProfileSnapshot => $handler->handle(),
+            static fn (): ?ComplianceProfileView => $handler->handle(),
         );
 
         if ($profile === null) {
@@ -57,7 +58,7 @@ final class ComplianceProfileController extends Controller
 
         $profile = $telemetry->measureUpdate(
             array_keys($command->values),
-            static fn (): ?ComplianceProfileSnapshot => $handler->handle($command),
+            static fn (): ?ComplianceProfileView => $handler->handle($command),
         );
 
         if ($profile === null) {

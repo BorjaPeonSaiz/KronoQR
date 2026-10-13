@@ -27,7 +27,7 @@ function informeDeRetencionDePrueba(): RetentionReport
     return new RetentionReport(
         mode: RetentionMode::Simulation,
         generatedAt: new DateTimeImmutable('2026-10-02T05:10:00Z'),
-        policy: new RetentionPolicySnapshot(4, 90, 90, 1),
+        policy: new RetentionPolicySnapshot(4, 90, 90, 1, 4, 'ES'),
         workRecordCutoff: new DateTimeImmutable('2022-01-01T00:00:00Z'),
         auditPartitionYears: [],
         shortCycleCutoffs: [],

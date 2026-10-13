@@ -25,6 +25,13 @@ final readonly class WorkRecordReconciliationResult
         public array $counts,
         public array $discrepancies,
         public bool $truncated = false,
+        /**
+         * Asientos de purga no admisibles que una persona dio por revisados
+         * (`retention.purge_reviewed`, ADR-057 enmienda del 10-10-2026 §6).
+         * **No son discrepancias**: `counts` sigue siendo solo lo pendiente y
+         * una pasada con solo purgas revisadas es coherente.
+         */
+        public int $reviewedPurges = 0,
     ) {}
 
     /**

@@ -73,6 +73,7 @@ use App\Modules\Product\Http\Policy\SupportGrantPolicy;
 use App\Modules\Product\Infrastructure\Adapter\CachedLicenseStatePublisher;
 use App\Modules\Product\Infrastructure\Adapter\CachedSettingsRepository;
 use App\Modules\Product\Infrastructure\Adapter\CacheSupportAccessRecorder;
+use App\Modules\Product\Infrastructure\Adapter\CatalogRetentionYearsFloor;
 use App\Modules\Product\Infrastructure\Adapter\DbBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbCompliancePolicyProvider;
 use App\Modules\Product\Infrastructure\Adapter\DbKioskServiceCodeProvider;
@@ -87,7 +88,6 @@ use App\Modules\Product\Infrastructure\Adapter\LicensedBrandingProvider;
 use App\Modules\Product\Infrastructure\Adapter\LicensedFeatureGate;
 use App\Modules\Product\Infrastructure\Adapter\LocalBrandingLogoReader;
 use App\Modules\Product\Infrastructure\Adapter\LoggingSettingsAnomalyReporter;
-use App\Modules\Product\Infrastructure\Adapter\ProfileRetentionYearsFloor;
 use App\Modules\Product\Infrastructure\Adapter\QueuedDataExportDispatcher;
 use App\Modules\Product\Infrastructure\Adapter\SanctumSupportTokenIssuer;
 use App\Modules\Product\Infrastructure\Branding\LogoFileInspector;
@@ -417,12 +417,21 @@ final class ProductServiceProvider extends ServiceProvider
         );
 
         /*
-         * El suelo de los años de conservacion del perfil (RL-02, ADR-057 §4).
-         * Mismo reparto: lo pide la conciliacion de `Compliance`, que no puede
-         * importar `Product`, para no creer un asiento de purga que dice haber
-         * conservado menos de lo que el perfil admite.
+         * El suelo legal de los años de conservacion por jurisdiccion (RL-02,
+         * ADR-057 enmienda del 10-10-2026). Mismo reparto: lo piden la politica
+         * de retencion y la conciliacion de `Compliance`, que no pueden importar
+         * `Product`. El catalogo es un dato legal del producto y no lleva
+         * variable de entorno: un suelo que el `.env` puede rebajar no es un
+         * suelo.
          */
-        $this->app->singleton(RetentionYearsFloor::class, ProfileRetentionYearsFloor::class);
+        $this->app->scoped(
+            RetentionYearsFloor::class,
+            static fn (): CatalogRetentionYearsFloor => new CatalogRetentionYearsFloor(
+                DB::connection(),
+                Config::integer('compliance.retention_floors.default'),
+                Config::array('compliance.retention_floors.jurisdictions'),
+            ),
+        );
 
         /*
          * La marca (RF-PD-08), CON EL PLAN DELANTE (ADR-023).

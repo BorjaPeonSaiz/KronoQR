@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Http\Resource;
 
-use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
+use App\Modules\Product\Application\Query\ComplianceProfileView;
 use DateTimeInterface;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -33,7 +33,12 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * La conversion a minutos es cosa del adaptador que sirve al nucleo. Aqui se
  * responde en la unidad en la que se escribe el convenio.
  *
- * @property-read ComplianceProfileSnapshot $resource
+ * ## `retention_years_floor`, de solo lectura
+ *
+ * El suelo legal de la retencion en la jurisdiccion del perfil (RL-02: 4 en
+ * España). Lo resuelve `Application` y viaja en la vista; aqui solo se copia.
+ *
+ * @property-read ComplianceProfileView $resource
  */
 final class ComplianceProfileResource extends JsonResource
 {
@@ -44,7 +49,8 @@ final class ComplianceProfileResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $profile = $this->resource;
+        $view = $this->resource;
+        $profile = $view->profile;
 
         return [
             'data' => [
@@ -58,6 +64,7 @@ final class ComplianceProfileResource extends JsonResource
                 'week_starts_on' => $profile->weekStartsOn,
                 'holiday_calendar' => $profile->holidayCalendar,
                 'retention_years' => $profile->retentionYears,
+                'retention_years_floor' => $view->retentionFloor->years,
                 'is_default' => $profile->isDefault,
                 'source' => $profile->source->value,
                 // `null` significa «tal como se instalo»: nadie lo ha tocado.

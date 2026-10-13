@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Port\ComplianceProfileRepository;
-use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
+use App\Modules\Product\Application\Query\ComplianceProfileView;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\RetentionYearsFloor;
+use App\Modules\Shared\Domain\ValueObject\Jurisdiction;
 
 /**
  * El perfil de cumplimiento vigente para el centro de la instalacion
- * (**RF-PD-07**).
+ * (**RF-PD-07**), con el suelo legal de su retencion (RL-02).
  *
  * ## Sin parametro de centro
  *
@@ -26,15 +28,21 @@ use App\Modules\Shared\Application\Port\InstallationSiteProvider;
  * casos se responden con `404` en el borde y los dos se arreglan una sola vez.
  * Lo que no hace es inventar un perfil: sin fila no hay umbral, y un umbral legal
  * escrito en PHP es lo que la regla dura 14 prohibe.
+ *
+ * ## El suelo se resuelve aqui, no en el controlador
+ *
+ * Para la jurisdiccion del perfil leido, por el puerto (regla dura 14). Asi el
+ * suelo que ve el panel es el mismo que aplica la escritura.
  */
 final readonly class GetComplianceProfileHandler
 {
     public function __construct(
         private ComplianceProfileRepository $profiles,
         private InstallationSiteProvider $sites,
+        private RetentionYearsFloor $retentionFloors,
     ) {}
 
-    public function handle(): ?ComplianceProfileSnapshot
+    public function handle(): ?ComplianceProfileView
     {
         $site = $this->sites->installationSite();
 
@@ -42,6 +50,15 @@ final readonly class GetComplianceProfileHandler
             return null;
         }
 
-        return $this->profiles->forSite($site->id);
+        $profile = $this->profiles->forSite($site->id);
+
+        if ($profile === null) {
+            return null;
+        }
+
+        return new ComplianceProfileView(
+            $profile,
+            $this->retentionFloors->forJurisdiction(Jurisdiction::fromCode($profile->jurisdiction)),
+        );
     }
 }

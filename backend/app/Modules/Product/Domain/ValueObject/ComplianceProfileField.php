@@ -18,9 +18,9 @@ use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
  * ## Que NO esta aqui, y por que
  *
  * - **`id`**, evidente.
- * - **`jurisdiction`**: hoy no la lee ninguna regla. Un campo editable cuyo
- *   cambio no tiene efecto es peor que uno que no existe, porque quien lo cambia
- *   cree haber configurado algo.
+ * - **`jurisdiction`**: decide el suelo legal de `retention_years` (RL-02,
+ *   ADR-057 enmienda del 10-10-2026). Dejarla editable seria poder salir del
+ *   suelo español cambiando el pais del perfil.
  * - **`is_default`**: es lo que hace que el centro resuelva su perfil cuando no
  *   tiene uno asignado (ADR-040: un centro por instalacion). Poder apagarlo desde
  *   el panel es poder dejar la instalacion sin umbrales legales resolubles.
@@ -73,6 +73,12 @@ enum ComplianceProfileField: string
      * Uno, sin excepcion: un cero en cualquiera de estos umbrales no describe un
      * convenio mas laxo, apaga la regla — y una regla legal apagada es
      * indistinguible de una plantilla que cumple.
+     *
+     * Es el minimo **estructural**. El de `retention_years` lo sube ademas el
+     * suelo legal de la jurisdiccion del perfil (RL-02: 4 en España), que no
+     * vive en este enum porque depende de la fila y del catalogo
+     * `compliance.retention_floors`: lo comprueba
+     * {@see ComplianceProfileSnapshot::with()} con el suelo ya resuelto.
      */
     public function minimum(): int
     {

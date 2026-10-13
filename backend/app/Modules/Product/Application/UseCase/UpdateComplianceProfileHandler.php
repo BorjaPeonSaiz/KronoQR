@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Command\UpdateComplianceProfileCommand;
 use App\Modules\Product\Application\Port\ComplianceProfileMetrics;
 use App\Modules\Product\Application\Port\ComplianceProfileRepository;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
+use App\Modules\Product\Application\Query\ComplianceProfileView;
 use App\Modules\Product\Domain\Event\ComplianceThresholdChanged;
 use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileField;
@@ -15,7 +16,9 @@ use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
+use App\Modules\Shared\Domain\ValueObject\Jurisdiction;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -95,15 +98,22 @@ final readonly class UpdateComplianceProfileHandler
          * esta instalacion no abre nada.
          */
         private OperationalSettingsProvider $settings,
+        /**
+         * El suelo legal de `retention_years` por jurisdiccion (RL-02, ADR-057
+         * enmienda del 10-10-2026). Puerto de `Shared`: el catalogo es un dato
+         * legal del producto y llega ya resuelto (regla dura 14).
+         */
+        private RetentionYearsFloor $retentionFloors,
     ) {}
 
     /**
      * `null` si la instalacion no tiene centro o no tiene ningun perfil: el
      * borde lo traduce en `404`, igual que en la lectura.
      *
-     * @throws InvalidComplianceProfileValue cuando un valor no cumple lo que su campo declara
+     * @throws InvalidComplianceProfileValue cuando un valor no cumple lo que su campo declara o
+     *                                       deja `retention_years` por debajo del suelo legal
      */
-    public function handle(UpdateComplianceProfileCommand $command): ?ComplianceProfileSnapshot
+    public function handle(UpdateComplianceProfileCommand $command): ?ComplianceProfileView
     {
         $site = $this->sites->installationSite();
 
@@ -122,7 +132,7 @@ final readonly class UpdateComplianceProfileHandler
         /** @var list<ComplianceProfileField> $changed */
         $changed = [];
 
-        $profile = $this->connection->transaction(function () use ($command, $site, $suspension, &$changed): ?ComplianceProfileSnapshot {
+        $profile = $this->connection->transaction(function () use ($command, $site, $suspension, &$changed): ?ComplianceProfileView {
             $this->connection->statement('SELECT pg_advisory_xact_lock(?)', [self::LOCK_KEY]);
 
             $current = $this->profiles->forSiteForWrite($site->id);
@@ -131,15 +141,21 @@ final readonly class UpdateComplianceProfileHandler
                 return null;
             }
 
+            // El suelo legal de la retencion para la jurisdiccion de ESTE perfil
+            // (RL-02, regla dura 14): `with()` lo comprueba sobre el resultado,
+            // toque o no `retention_years`. Un cambio rechazado por el suelo sale
+            // de aqui sin fila ni asiento.
+            $retentionFloor = $this->retentionFloors->forJurisdiction(Jurisdiction::fromCode($current->jurisdiction));
+
             // Valida el perfil entero. Se hace antes de mirar que cambia para que
             // un valor imposible sea un `422` aunque venga acompañado de campos
             // que si cambian.
-            $updated = $current->with($command->values);
+            $updated = $current->with($command->values, $retentionFloor);
 
             $changed = $current->fieldsThatChange($command->values);
 
             if ($changed === []) {
-                return $current;
+                return new ComplianceProfileView($current, $retentionFloor);
             }
 
             // Bajo el candado, para que no haya ventana entre comprobar y
@@ -158,7 +174,10 @@ final readonly class UpdateComplianceProfileHandler
             // acaba de escribirse y es exactamente lo que quedo en la fila, no
             // una reconstruccion que podria diferir el dia que alguien añada una
             // columna derivada. Es el mismo criterio que la tarea 5.1.
-            return $this->profiles->forSiteForWrite($site->id) ?? $updated;
+            return new ComplianceProfileView(
+                $this->profiles->forSiteForWrite($site->id) ?? $updated,
+                $retentionFloor,
+            );
         });
 
         // FUERA de la transaccion, y esto es la mitad del contrato del puerto:

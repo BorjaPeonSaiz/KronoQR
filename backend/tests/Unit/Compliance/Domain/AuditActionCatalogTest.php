@@ -103,6 +103,9 @@ it('nombra el ciclo completo de cada familia que el bloque D enumera', function 
     'retention.partition_sealed',
     'retention.partition_dropped',
     'retention.purge_executed',
+    // Da por revisada una purga no admisible (ADR-057 enmienda del 10-10-2026
+    // §6): la conciliacion deja de contarla como pendiente sin que desaparezca.
+    'retention.purge_reviewed',
 ])->group('RS-07');
 
 it('no abre familia nueva del bloque D al anadir la autenticacion', function (): void {

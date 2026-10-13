@@ -32,6 +32,7 @@ return [
         'duplicated' => 'Field ":field" does not accept repeated values.',
         'weekly_below_daily' => 'Weekly working hours (:weekly h) cannot be lower than daily working hours (:daily h).',
         'name_taken' => 'Another compliance profile is already named ":name". Choose a different name.',
+        'below_legal_floor' => 'Jurisdiction :jurisdiction requires keeping the record for at least :minimum years; you entered :value.',
     ],
 
 ];

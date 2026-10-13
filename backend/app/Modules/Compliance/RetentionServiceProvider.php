@@ -22,6 +22,7 @@ use App\Modules\Compliance\Infrastructure\Retention\FileRetentionReportStore;
 use App\Modules\Compliance\Infrastructure\Retention\FilesystemTechnicalLogArchive;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\RetentionYearsFloor;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -64,6 +65,7 @@ final class RetentionServiceProvider extends ServiceProvider
             static fn (Application $app): ConfiguredRetentionPolicyProvider => new ConfiguredRetentionPolicyProvider(
                 $app->make(CompliancePolicyProvider::class),
                 $app->make(InstallationSiteProvider::class),
+                $app->make(RetentionYearsFloor::class),
             ),
         );
 

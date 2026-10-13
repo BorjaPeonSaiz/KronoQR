@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Http\Support;
 
-use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
+use App\Modules\Product\Application\Query\ComplianceProfileView;
 use App\Modules\Shared\Application\Support\SpanScope;
 use OpenTelemetry\API\Trace\SpanKind;
 use Psr\Log\LoggerInterface;
@@ -40,9 +40,9 @@ final readonly class ComplianceProfileTelemetry
     public function __construct(private LoggerInterface $logger) {}
 
     /**
-     * @param  callable(): ?ComplianceProfileSnapshot  $read
+     * @param  callable(): ?ComplianceProfileView  $read
      */
-    public function measureRead(callable $read): ?ComplianceProfileSnapshot
+    public function measureRead(callable $read): ?ComplianceProfileView
     {
         $span = SpanScope::start('kronoqr.product', 'product.read_compliance_profile', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);
@@ -68,9 +68,9 @@ final readonly class ComplianceProfileTelemetry
 
     /**
      * @param  list<string>  $requestedFields  los campos que la peticion pretende cambiar
-     * @param  callable(): ?ComplianceProfileSnapshot  $update
+     * @param  callable(): ?ComplianceProfileView  $update
      */
-    public function measureUpdate(array $requestedFields, callable $update): ?ComplianceProfileSnapshot
+    public function measureUpdate(array $requestedFields, callable $update): ?ComplianceProfileView
     {
         $span = SpanScope::start('kronoqr.product', 'product.update_compliance_profile', SpanKind::KIND_SERVER);
         $startedAt = microtime(true);

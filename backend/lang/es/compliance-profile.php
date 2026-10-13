@@ -36,6 +36,7 @@ return [
         'duplicated' => 'El campo «:field» no admite valores repetidos.',
         'weekly_below_daily' => 'La jornada semanal (:weekly h) no puede quedar por debajo de la diaria (:daily h).',
         'name_taken' => 'Ya hay otro perfil de cumplimiento llamado «:name». Elige un nombre distinto.',
+        'below_legal_floor' => 'La jurisdicción :jurisdiction obliga a conservar el registro al menos :minimum años; has indicado :value.',
     ],
 
 ];

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Compliance\Application\UseCase\ReconcileWorkRecordWithAudit;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
+use App\Modules\Compliance\Domain\ValueObject\AuditedPurgeReview;
 use App\Modules\Compliance\Domain\ValueObject\RecordedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordAuditContext;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
@@ -103,3 +104,40 @@ it('cuenta como discrepancia un asiento de purga que no se puede creer, aunque n
         ->and($resultado->isConsistent())->toBeFalse()
         ->and($resultado->discrepancies[0]->auditEntryId)->toBe(91);
 })->group('RL-02', 'RL-04', 'RS-07');
+
+it('publica las purgas revisadas aparte, sin contarlas como pendientes', function (): void {
+    // ADR-057 enmienda del 10-10-2026 §6: una purga a 3 años en un centro
+    // español es no admisible; con su revision deja de ser discrepancia y pasa
+    // a `reviewedPurges`, en el resultado y en lo que se publica.
+    $purga = new AuditedPurge(90, new DateTimeImmutable('2030-10-08T03:00:00Z'), '2027-10-08', 3, 1);
+    $revision = new AuditedPurgeReview(95, new DateTimeImmutable('2030-10-09T09:00:00Z'), 90);
+    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([$purga], [], [$revision]));
+    $metricas = new RecordingWorkRecordReconciliationMetrics;
+
+    $resultado = new ReconcileWorkRecordWithAudit($origen, $metricas, FixedClock::at('2030-10-10 04:15:00'), new FixedRetentionYearsFloor(4))
+        ->handle(WorkRecordReconciliationScope::Full, 7);
+
+    expect($resultado->counts['purge_out_of_bounds'])->toBe(0)
+        ->and($resultado->isConsistent())->toBeTrue()
+        ->and($resultado->reviewedPurges)->toBe(1)
+        ->and($metricas->recorded[0]['result']->reviewedPurges)->toBe(1);
+})->group('RS-07', 'RL-02', 'RL-04');
+
+it('pregunta el suelo legal una sola vez por cada centro distinto de las purgas', function (): void {
+    $suelos = new FixedRetentionYearsFloor(4, [2 => 1]);
+    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([
+        new AuditedPurge(90, new DateTimeImmutable('2030-10-08T03:00:00Z'), '2026-10-08', 4, 1),
+        new AuditedPurge(91, new DateTimeImmutable('2031-10-08T03:00:00Z'), '2027-10-08', 4, 1),
+        new AuditedPurge(92, new DateTimeImmutable('2031-10-08T03:00:00Z'), '2028-10-08', 3, 2),
+        new AuditedPurge(93, new DateTimeImmutable('2031-10-08T03:00:00Z'), '2027-10-08', 4, null),
+    ]));
+
+    $resultado = new ReconcileWorkRecordWithAudit($origen, new RecordingWorkRecordReconciliationMetrics, FixedClock::at('2032-01-01 04:15:00'), $suelos)
+        ->handle(WorkRecordReconciliationScope::Full, 7);
+
+    // El centro 2 tiene suelo 1: su purga a 3 años es admisible. La que no dice
+    // centro es la unica rechazada, y por eso no se pregunta por ella.
+    expect($suelos->askedSites)->toBe([1, 2])
+        ->and($resultado->counts['purge_out_of_bounds'])->toBe(1)
+        ->and($resultado->discrepancies[0]->auditEntryId)->toBe(93);
+})->group('RS-07', 'RL-02');

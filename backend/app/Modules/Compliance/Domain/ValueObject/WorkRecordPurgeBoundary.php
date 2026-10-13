@@ -26,8 +26,9 @@ use DateTimeZone;
  * (`ApplyRetention` + `RetentionPolicy::workRecordCutoff()`):
  *
  * - `cutoff_date` es una fecha `YYYY-MM-DD` valida.
- * - `retention_years` es un entero no menor que el **suelo** que admite el
- *   perfil de cumplimiento (lo da un puerto, regla dura 14). El suelo y no el
+ * - `retention_years` es un entero no menor que el **suelo legal** de la
+ *   jurisdiccion del centro (4 en España, RL-02; lo da un puerto, regla dura
+ *   14), o que el que declare el propio asiento si es mayor. El suelo y no el
  *   plazo vigente: un perfil subido despues de una purga legitima haria de
  *   aquella purga un falso positivo.
  * - `cutoff_date` no es posterior a la fecha UTC del propio asiento menos
@@ -40,18 +41,31 @@ use DateTimeZone;
  *
  * Lo que sigue sin poder distinguirse es un asiento falsificado que respeta los
  * cuatro limites —borrar lo que ya se podia purgar—; lo recoge el runbook.
+ *
+ * ## La purga revisada (ADR-057 enmienda del 10-10-2026 §6)
+ *
+ * Un asiento no admisible queda para siempre en `audit_log` (regla dura 6). Si
+ * una persona lo ha investigado, lo dice con un `retention.purge_reviewed` que
+ * lo nombra, y desde entonces **deja de contarse como pendiente** sin
+ * desaparecer: sale en {@see self::$reviewedPurgeIds}. Solo si su unico defecto
+ * era el plazo vuelve a explicar los borrados, y solo hasta el corte que su
+ * propio plazo permitia el dia del asiento
+ * ({@see self::explainsOnceReviewed()}). Una purga posterior sin revisar sigue
+ * contando.
  */
 final readonly class WorkRecordPurgeBoundary
 {
     /**
      * @param  array<int, string>  $cutoffBySite  Corte admitido mas reciente de cada centro.
      * @param  list<int>  $sealedAuditYears
-     * @param  list<WorkRecordDiscrepancy>  $rejected  Un `purge_out_of_bounds` por cada asiento no admisible.
+     * @param  list<WorkRecordDiscrepancy>  $rejected  Un `purge_out_of_bounds` por cada asiento no admisible y sin revisar.
+     * @param  list<int>  $reviewedPurgeIds  Asientos no admisibles que una persona dio por revisados.
      */
     private function __construct(
         public array $cutoffBySite,
         public array $sealedAuditYears,
         public array $rejected,
+        public array $reviewedPurgeIds = [],
     ) {}
 
     public static function none(): self
@@ -59,33 +73,85 @@ final readonly class WorkRecordPurgeBoundary
         return new self([], [], []);
     }
 
-    public static function assess(WorkRecordAuditContext $context, DateTimeImmutable $runAt, int $minimumRetentionYears): self
+    public static function assess(WorkRecordAuditContext $context, DateTimeImmutable $runAt, PurgeFloors $floors): self
     {
         $cutoffBySite = [];
         $rejected = [];
+        $reviewed = [];
 
         foreach ($context->purges as $purge) {
-            $violations = self::violations($purge, $runAt, max(1, $minimumRetentionYears));
+            $violations = self::violations($purge, $runAt, $floors->effectiveFor($purge));
 
             if ($violations !== [] || $purge->siteId === null || $purge->cutoffDate === null) {
-                $rejected[] = new WorkRecordDiscrepancy(
-                    null,
-                    WorkRecordDiscrepancyKind::PurgeOutOfBounds,
-                    $violations,
-                    $purge->auditEntryId,
-                );
+                if (! self::isReviewed($purge, $context->reviews)) {
+                    $rejected[] = new WorkRecordDiscrepancy(
+                        null,
+                        WorkRecordDiscrepancyKind::PurgeOutOfBounds,
+                        $violations,
+                        $purge->auditEntryId,
+                    );
 
-                continue;
+                    continue;
+                }
+
+                $reviewed[] = $purge->auditEntryId;
+
+                if (! self::explainsOnceReviewed($purge, $violations)) {
+                    continue;
+                }
             }
 
+            /** @var int $siteId */
+            $siteId = $purge->siteId;
+            /** @var string $cutoffDate */
+            $cutoffDate = $purge->cutoffDate;
+
             // `YYYY-MM-DD` ya validado: se ordena igual como texto que como fecha.
-            $current = $cutoffBySite[$purge->siteId] ?? null;
-            $cutoffBySite[$purge->siteId] = $current === null || $purge->cutoffDate > $current
-                ? $purge->cutoffDate
+            $current = $cutoffBySite[$siteId] ?? null;
+            $cutoffBySite[$siteId] = $current === null || $cutoffDate > $current
+                ? $cutoffDate
                 : $current;
         }
 
-        return new self($cutoffBySite, $context->sealedAuditYears, $rejected);
+        return new self($cutoffBySite, $context->sealedAuditYears, $rejected, array_values(array_unique($reviewed)));
+    }
+
+    /**
+     * Si una purga revisada vuelve a explicar los borrados anteriores a su
+     * corte.
+     *
+     * Cierto **solo si** su unico defecto es el plazo (`['retention_years']`),
+     * el plazo es al menos 1, dice de que centro es, su corte es una fecha
+     * valida y no pasa del que su propio plazo permitia el dia del asiento. Es
+     * decir: explica lo que la purga hizo de verdad con el plazo que tenia,
+     * nunca mas alla. Un corte imposible no lo arregla ninguna revision.
+     *
+     * @param  list<string>  $violations
+     */
+    public static function explainsOnceReviewed(AuditedPurge $purge, array $violations): bool
+    {
+        if ($violations !== ['retention_years'] || $purge->retentionYears === null || $purge->retentionYears < 1 || $purge->siteId === null) {
+            return false;
+        }
+
+        $cutoff = self::calendarDate($purge->cutoffDate);
+
+        return $cutoff instanceof DateTimeImmutable
+            && $cutoff <= self::latestCutoff($purge->occurredAt, $purge->retentionYears);
+    }
+
+    /**
+     * @param  list<AuditedPurgeReview>  $reviews
+     */
+    private static function isReviewed(AuditedPurge $purge, array $reviews): bool
+    {
+        foreach ($reviews as $review) {
+            if ($review->reviews($purge)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

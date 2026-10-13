@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Domain\Policy;
 
 use App\Modules\Compliance\Domain\Exception\InvalidRetentionPolicy;
 use App\Modules\Compliance\Domain\ValueObject\RetentionScope;
+use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 use DateInterval;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -71,9 +72,28 @@ final readonly class RetentionPolicy
         self::positive($errorHistoryDays, 'los dias del historico de errores (RF-PD-15)');
     }
 
-    public static function of(int $legalRecordYears, int $technicalLogDays, int $errorHistoryDays): self
-    {
-        return new self($legalRecordYears, $technicalLogDays, $errorHistoryDays);
+    /**
+     * **Por debajo del suelo legal no hay politica** (RL-02, ADR-057 enmienda
+     * del 10-10-2026, decision D6). La purga es lo irreversible, y esta es la
+     * unica barrera para un pais del catalogo cuyo `CHECK` aun no exista en el
+     * esquema. Tambien falla la simulacion semanal: proponer una purga ilegal
+     * es igual de incorrecto que ejecutarla.
+     *
+     * @throws InvalidRetentionPolicy
+     */
+    public static function of(
+        int $legalRecordYears,
+        int $technicalLogDays,
+        int $errorHistoryDays,
+        LegalRetentionFloor $legalRecordFloor,
+    ): self {
+        $policy = new self($legalRecordYears, $technicalLogDays, $errorHistoryDays);
+
+        if (! $legalRecordFloor->admits($legalRecordYears)) {
+            throw InvalidRetentionPolicy::belowLegalFloor($legalRecordYears, $legalRecordFloor);
+        }
+
+        return $policy;
     }
 
     /**

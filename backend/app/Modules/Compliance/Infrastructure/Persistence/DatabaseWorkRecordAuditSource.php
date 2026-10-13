@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Persistence;
 use App\Modules\Compliance\Application\Port\WorkRecordAuditSource;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
+use App\Modules\Compliance\Domain\ValueObject\AuditedPurgeReview;
 use App\Modules\Compliance\Domain\ValueObject\AuditedShiftEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditTrailEntry;
 use App\Modules\Compliance\Domain\ValueObject\RecordedCorrection;
@@ -189,7 +190,10 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
                 $this->connection->statement('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
             }
 
-            yield new WorkRecordAuditContext($this->purges(), $this->sealedAuditYears());
+            // Purgas y revisiones en la misma instantanea: una revision
+            // confirmada entre dos lecturas no puede tapar una purga que la
+            // primera no vio, ni al reves.
+            yield new WorkRecordAuditContext($this->purges(), $this->sealedAuditYears(), $this->reviews());
 
             $cursor = $this->declareCursor($window);
             $size = max(1, $chunkSize > 0 ? $chunkSize : $this->fetchSize);
@@ -249,6 +253,29 @@ final readonly class DatabaseWorkRecordAuditSource implements WorkRecordAuditSou
         }
 
         return $purges;
+    }
+
+    /**
+     * Los asientos `retention.purge_reviewed` (ADR-057 enmienda del 10-10-2026
+     * §6), sin filtrar: a que purga se aplican lo decide el dominio. Tan pocos
+     * como las purgas, por el mismo indice.
+     *
+     * @return list<AuditedPurgeReview>
+     */
+    private function reviews(): array
+    {
+        $reviews = [];
+        $rows = $this->connection->select(
+            'SELECT a.id, a.occurred_at, a.payload::text AS payload FROM audit_log a WHERE a.action = ? ORDER BY a.id',
+            [AuditAction::RetentionPurgeReviewed->value],
+        );
+
+        foreach ($rows as $raw) {
+            $row = Row::of((object) $raw);
+            $reviews[] = AuditedPurgeReview::fromEntry($row->int('id'), $row->instant('occurred_at'), $row->json('payload') ?? []);
+        }
+
+        return $reviews;
     }
 
     /**

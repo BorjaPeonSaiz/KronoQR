@@ -6,7 +6,10 @@ namespace App\Modules\Product\Domain\ValueObject;
 
 use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
 use App\Modules\Shared\Domain\ValueObject\HolidayCalendar;
+use App\Modules\Shared\Domain\ValueObject\Jurisdiction;
+use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 use DateTimeImmutable;
+use LogicException;
 
 /**
  * El perfil de cumplimiento vigente para el centro, tal como se lee y como se
@@ -116,11 +119,18 @@ final readonly class ComplianceProfileSnapshot
     /**
      * El perfil resultante de aplicar los cambios, ya validado.
      *
+     * **El suelo legal de la retencion se comprueba en todo cambio** (RL-02,
+     * RF-PD-07), toque o no `retention_years`, igual que la invariante semanal ≥
+     * diaria: es una propiedad del perfil resultante, no del campo enviado. Llega
+     * ya resuelto para la jurisdiccion de este perfil (regla dura 14); uno de
+     * otro pais es un error de programacion, no del cliente.
+     *
      * @param  array<string, mixed>  $changes  indexado por el valor del campo
      *
      * @throws InvalidComplianceProfileValue
+     * @throws LogicException cuando el suelo es de otra jurisdiccion
      */
-    public function with(array $changes): self
+    public function with(array $changes, LegalRetentionFloor $retentionFloor): self
     {
         $values = [];
 
@@ -156,6 +166,17 @@ final readonly class ComplianceProfileSnapshot
 
         if ($updated->maxWeeklyHours < $updated->maxDailyHours) {
             throw InvalidComplianceProfileValue::weeklyBelowDaily($updated->maxWeeklyHours, $updated->maxDailyHours);
+        }
+
+        if ($retentionFloor->jurisdiction->country() !== Jurisdiction::fromCode($this->jurisdiction)->country()) {
+            throw new LogicException(
+                'The retention floor of '.$retentionFloor->jurisdiction->code.' cannot validate a profile of '
+                .$this->jurisdiction.'.'
+            );
+        }
+
+        if (! $retentionFloor->admits($updated->retentionYears)) {
+            throw InvalidComplianceProfileValue::belowLegalRetentionFloor($updated->retentionYears, $retentionFloor);
         }
 
         return $updated;
