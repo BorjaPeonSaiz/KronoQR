@@ -10,14 +10,17 @@
 //   13:00–20:59  tarde
 //   21:00–05:59  noche
 //
-// Se calcula sobre la hora LOCAL del dispositivo, que es la del centro. Es
-// presentacion pura: el instante que viaja al servidor siempre es UTC (regla
-// dura 3).
+// Se calcula sobre la hora de pared DEL CENTRO (`site_time_zone`, el mismo reloj
+// que la hora que se pinta al lado, V2-KI-01); sin zona conocida, la de la
+// tablet. Es presentacion pura: el instante que viaja al servidor siempre es
+// UTC (regla dura 3).
+
+import { wallClockOf } from '@/shared/time/siteTimeZone'
 
 export type GreetingSlot = 'morning' | 'afternoon' | 'night'
 
-export function greetingSlotFor(localInstant: Date): GreetingSlot {
-  const hour = localInstant.getHours()
+export function greetingSlotFor(instant: Date, timeZone?: string | null): GreetingSlot {
+  const hour = wallClockOf(instant, timeZone)?.hour ?? instant.getHours()
   if (hour >= 6 && hour < 13) return 'morning'
   if (hour >= 13 && hour < 21) return 'afternoon'
   return 'night'

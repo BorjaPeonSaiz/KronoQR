@@ -35,6 +35,7 @@ import {
   storeBreakClockingEnabled,
   storeClockSkewToleranceSeconds,
   storeServiceCodeHash,
+  storeSiteTimeZone,
   storeUpdateQuietMinutes,
   storeUpdateWindow,
 } from './deviceIdentity'
@@ -413,6 +414,13 @@ export function createHeartbeatScheduler(options: HeartbeatSchedulerOptions): He
       storeUpdateWindow(updateWindow.window)
       storeUpdateQuietMinutes(updateWindow.quietMinutes)
     }
+
+    // Zona horaria del centro (V2-KI-01): la hora de la confirmacion y la ventana
+    // de actualizacion se leen en SU reloj de pared. Opcional y aditiva: ausente
+    // conserva la cacheada; un tipo que no es texto se ignora.
+    storeSiteTimeZone(
+      typeof result.data.site_time_zone === 'string' ? result.data.site_time_zone : undefined,
+    )
 
     // Version minima de la PWA (RF-KI-07): lector tolerante, MISMO PATRON. Ausente
     // borra la cacheada; invalida no toca nada. Si esta tablet esta por debajo,
