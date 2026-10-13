@@ -126,18 +126,18 @@ final readonly class WorkRecordPurgeBoundary
      * decir: explica lo que la purga hizo de verdad con el plazo que tenia,
      * nunca mas alla. Un corte imposible no lo arregla ninguna revision.
      *
+     * `$violations` es lo que da {@see self::violations()} para ese asiento: el
+     * centro y el corte ya van juzgados ahi.
+     *
      * @param  list<string>  $violations
      */
     public static function explainsOnceReviewed(AuditedPurge $purge, array $violations): bool
     {
-        if ($violations !== ['retention_years'] || $purge->retentionYears === null || $purge->retentionYears < 1 || $purge->siteId === null) {
-            return false;
-        }
-
-        $cutoff = self::calendarDate($purge->cutoffDate);
-
-        return $cutoff instanceof DateTimeImmutable
-            && $cutoff <= self::latestCutoff($purge->occurredAt, $purge->retentionYears);
+        // `violations()` ya exige el centro y un corte valido que no pase del que
+        // permite el plazo declarado cuando es >= 1: solo queda exigir ese plazo.
+        return $violations === ['retention_years']
+            && $purge->retentionYears !== null
+            && $purge->retentionYears >= 1;
     }
 
     /**
@@ -162,12 +162,16 @@ final readonly class WorkRecordPurgeBoundary
     public static function violations(AuditedPurge $purge, DateTimeImmutable $runAt, int $minimumRetentionYears): array
     {
         $cutoff = self::calendarDate($purge->cutoffDate);
-        $yearsAdmissible = $purge->retentionYears !== null && $purge->retentionYears >= $minimumRetentionYears;
+        $years = $purge->retentionYears;
 
+        // El corte se juzga contra el plazo que el propio asiento declara aunque
+        // ese plazo este bajo el suelo: un asiento a 3 años con corte imposible
+        // incumple las dos cosas, no solo el plazo. Sin plazo entero >= 1 no hay
+        // corte maximo que calcular, y el asiento ya incumple `retention_years`.
         $checks = [
             'cutoff_date' => $cutoff instanceof DateTimeImmutable
-                && (! $yearsAdmissible || $cutoff <= self::latestCutoff($purge->occurredAt, (int) $purge->retentionYears)),
-            'retention_years' => $yearsAdmissible,
+                && ($years === null || $years < 1 || $cutoff <= self::latestCutoff($purge->occurredAt, $years)),
+            'retention_years' => $years !== null && $years >= $minimumRetentionYears,
             'occurred_at' => $purge->occurredAt <= $runAt,
             'site_id' => $purge->siteId !== null,
         ];

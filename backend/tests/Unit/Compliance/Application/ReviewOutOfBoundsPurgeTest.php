@@ -202,12 +202,25 @@ it('no explica borrados cuando el defecto no es solo el plazo', function (): voi
         ->handle(new ReviewOutOfBoundsPurgeCommand(90, REVIEW_OUT_OF_BOUNDS_PURGE_REASON, 7));
 
     expect($outcome->explainsDeletions)->toBeFalse()
-        ->and($outcome->violations)->toBe(['retention_years', 'site_id'])
+        ->and($outcome->violations)->toBe(['cutoff_date', 'retention_years', 'site_id'])
         ->and($journal->written[0]->payload->data['site_id'])->toBeNull()
         ->and($journal->written[0]->payload->data['explains_deletions'])->toBeFalse()
         // Sin centro en el asiento, el suelo es el del centro de la instalacion.
         ->and($outcome->floorYears)->toBe(4);
 })->group('RL-04', 'RS-07');
+
+it('deja escrito el corte imposible de una purga bajo el suelo, no solo el plazo', function (): void {
+    // Tres años en España y corte 9999-12-31: incumple el suelo y el corte que
+    // su propio plazo permitia. El asiento de revision dice las dos cosas.
+    $journal = new ReviewPurgeJournal;
+    $outcome = reviewPurgeUseCase($journal, [90 => reviewPurgeSpanishThreeYears(cutoff: '9999-12-31')])
+        ->handle(new ReviewOutOfBoundsPurgeCommand(90, REVIEW_OUT_OF_BOUNDS_PURGE_REASON, 7));
+
+    expect($outcome->violations)->toBe(['cutoff_date', 'retention_years'])
+        ->and($outcome->explainsDeletions)->toBeFalse()
+        ->and($journal->written[0]->payload->data['violations'])->toBe(['cutoff_date', 'retention_years'])
+        ->and($journal->written[0]->payload->data['explains_deletions'])->toBeFalse();
+})->group('RL-04', 'RS-07', 'RL-02');
 
 it('juzga con el suelo declarado por el asiento si es mayor que el del centro', function (): void {
     $journal = new ReviewPurgeJournal;
