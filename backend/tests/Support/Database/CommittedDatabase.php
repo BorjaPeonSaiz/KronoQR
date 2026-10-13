@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
  * Base de datos migrada pero **sin la transaccion envolvente** de
  * `RefreshDatabase`.
  *
- * **Existe por una sola razon y no debe usarse para nada mas.** Las pruebas de
+ * **Existe por dos razones y no debe usarse para nada mas.** La primera: las pruebas de
  * concurrencia del §9.4 —diez peticiones paralelas con el mismo `scan_id`,
  * treinta empleados fichando a la vez— necesitan procesos de verdad, y un
  * proceso hijo abre su propia conexion a PostgreSQL: **no puede ver lo que la
@@ -29,6 +29,13 @@ use Illuminate\Support\Facades\DB;
  * el codigo PHP (regla dura 8): diez llamadas seguidas en el mismo proceso
  * pasarian igual con un `SELECT` previo, que es justo la implementacion que esta
  * prohibida por tener condicion de carrera.
+ *
+ * La segunda (ADR-057 §1 y §7, bloque 6 de la 2.2.1): las pruebas que simulan
+ * una escritura que el rol de la aplicacion **ya no puede hacer** —cambiar la
+ * entrada de un tramo, reescribir una correccion, cambiar la jurisdiccion del
+ * perfil— la hacen con el rol propietario, que abre **otra sesion** y tampoco
+ * veria lo que la transaccion envolvente no ha confirmado. Hacerlas con el rol
+ * de la aplicacion ya no es posible: el motor responde `42501`.
  *
  * ## El aislamiento: vaciado con el rol propietario, a los dos lados
  *

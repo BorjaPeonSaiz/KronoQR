@@ -24,7 +24,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Attendance\FakeCredentialResolver;
-use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\FrozenTime;
@@ -44,14 +45,24 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * los que escribe de verdad `RecordShiftEntryAudit`, y la primera afirmacion de
  * cada prueba es que el uso normal del producto da CERO discrepancias.
  *
- * EL ATACANTE USA LA CONEXION DE LA APLICACION, que es la credencial que ADR-057
- * describe: `fichaje_app` puede hacer `UPDATE`, `INSERT` y `DELETE` sobre el
- * registro horario y no puede tocar `audit_log`. Por eso, ademas, la
- * verificacion de la cadena sigue en verde despues del ataque: es exactamente el
- * hueco que esta conciliacion cierra.
+ * EL ATACANTE USA LA CREDENCIAL MAS DEBIL QUE LE BASTA. Lo que `fichaje_app`
+ * todavia puede hacer —insertar un tramo, anularlo sin correccion y, hasta el
+ * bloque 7, borrarlo— se hace con la conexion de la aplicacion: es lo que los
+ * privilegios no impiden y solo esta conciliacion detecta. Lo que desde ADR-057
+ * §1 y §7 (bloque 6 de la 2.2.1) el motor le niega con `42501` —cambiar la
+ * entrada de un tramo, su origen, el autor o el motivo de una correccion, la
+ * jurisdiccion del perfil— se hace con el rol propietario del esquema, que es
+ * quien todavia puede: una credencial de migracion filtrada o una copia
+ * restaurada manipulada. En los dos casos nadie toca `audit_log`, y la
+ * verificacion de la cadena sigue en verde: es el hueco que esta conciliacion
+ * cierra.
+ *
+ * `CommittedDatabase` y no `RefreshDatabase`: el rol propietario abre otra
+ * sesion, y no veria lo que la transaccion envolvente de la prueba no ha
+ * confirmado. El vaciado y la restauracion del perfil los hace el trait.
  */
 
-uses(RefreshDatabase::class);
+uses(CommittedDatabase::class);
 
 /** El «ahora» de todas las pruebas: la madrugada en la que corre la diaria. */
 const WORK_RECORD_RECONCILIATION_AHORA = '2026-10-08 04:15:00';
@@ -303,8 +314,9 @@ it('detecta las cuatro manipulaciones con la credencial de la aplicacion, con la
     $tramos = registroAuditadoLegitimo($escenario);
 
     // 1. UPDATE: la entrada de la version vigente, una hora antes. Los minutos
-    //    no se tocan y siguen siendo los del asiento: sale solo la entrada.
-    DB::update("UPDATE shift_entries SET clocked_in_at = clocked_in_at - interval '1 hour' WHERE uuid = ?", [$tramos['corregido']]);
+    //    no se tocan y siguen siendo los del asiento: sale solo la entrada. Con
+    //    el rol propietario: la aplicacion ya no tiene esa columna (ADR-057 §1).
+    SchemaOwner::connection()->update("UPDATE shift_entries SET clocked_in_at = clocked_in_at - interval '1 hour' WHERE uuid = ?", [$tramos['corregido']]);
 
     // 2. INSERT: un tramo inventado para B, que no solapa con nada suyo.
     $inventado = Str::uuid7()->toString();
@@ -329,7 +341,8 @@ it('detecta las cuatro manipulaciones con la credencial de la aplicacion, con la
     DB::table('shift_corrections')->where('shift_entry_id', $alta)->delete();
     DB::table('shift_entries')->where('id', $alta)->delete();
 
-    // 4. UPDATE status: el turno abierto de B, anulado sin correccion.
+    // 4. UPDATE status: el turno abierto de B, anulado sin correccion. Con la
+    //    aplicacion: `status` es una columna que el dominio escribe.
     DB::table('shift_entries')->where('uuid', $tramos['abierto'])->update(['status' => 'voided']);
 
     // La cadena no lo ve: nadie ha tocado `audit_log`.
@@ -369,7 +382,7 @@ it('vuelve a cuadrar cuando se remedia desde el panel, como dice el runbook, y d
     $escenario = registroAuditadoEscenario();
     $tramos = registroAuditadoLegitimo($escenario);
 
-    DB::update("UPDATE shift_entries SET clocked_in_at = clocked_in_at - interval '1 hour' WHERE uuid = ?", [$tramos['corregido']]);
+    SchemaOwner::connection()->update("UPDATE shift_entries SET clocked_in_at = clocked_in_at - interval '1 hour' WHERE uuid = ?", [$tramos['corregido']]);
     $inventado = Str::uuid7()->toString();
     DB::table('shift_entries')->insert([
         'uuid' => $inventado,
@@ -477,7 +490,7 @@ it('no confunde una purga de retencion auditada con un borrado, y si el borrado 
     //
     // No se usa España con cuatro años porque el esquema de pruebas solo tiene
     // particiones de audit_log para este año y el siguiente.
-    DB::table('compliance_profiles')->update(['jurisdiction' => 'PT']);
+    SchemaOwner::connection()->table('compliance_profiles')->update(['jurisdiction' => 'PT']);
     FrozenTime::at('2027-10-08 05:00:00');
     registroAuditadoPurgar($escenario['site'], '2026-10-07', 1);
 
@@ -530,15 +543,15 @@ it('detecta un origen cambiado en la exportacion legal y una correccion con otro
     $otroAutor = ManagementUsers::withRole(UserRole::RRHH)->id;
 
     // El alta manual pasa por un fichaje con tarjeta.
-    DB::table('shift_entries')->where('uuid', $tramos['alta'])->update(['clock_in_source' => 'qr_kiosk']);
+    SchemaOwner::connection()->table('shift_entries')->where('uuid', $tramos['alta'])->update(['clock_in_source' => 'qr_kiosk']);
 
     // La anulacion la firma otra persona.
-    DB::table('shift_corrections')
+    SchemaOwner::connection()->table('shift_corrections')
         ->where('shift_entry_id', DB::table('shift_entries')->where('uuid', $tramos['anulado'])->value('id'))
         ->update(['performed_by_user_id' => $otroAutor]);
 
     // La correccion de A cambia de motivo.
-    DB::table('shift_corrections')
+    SchemaOwner::connection()->table('shift_corrections')
         ->where('shift_entry_id', DB::table('shift_entries')->where('uuid', $tramos['corregido'])->value('id'))
         ->update(['reason_code' => 'AJUSTE_ACORDADO_CON_RRHH']);
 

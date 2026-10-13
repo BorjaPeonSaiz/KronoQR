@@ -27,8 +27,6 @@ use Illuminate\Database\ConnectionInterface;
  *    del dictamen del bloque 18); `recorded_at` lo pone el servidor.
  * 3b. `discarded_scan_reports` — los avisos de fichaje descartado (RN-22,
  *    ADR-047): no cuelgan de nada y envejecen igual que los escaneos sin tramo.
- *    El rol de la aplicacion conserva `DELETE` sobre ellos para esto, y solo
- *    para esto: no tiene `UPDATE`.
  * 4. `shift_entries` — el registro legal en si.
  * 5. `daily_totals` — la proyeccion, que no tiene padre.
  *
@@ -41,6 +39,16 @@ use Illuminate\Database\ConnectionInterface;
  * repite hasta que no queda ninguna. El efecto util es doble: ademas de no
  * chocar con la restriccion, **una version vencida cuya version nueva sigue
  * vigente no se borra**, que es exactamente lo que hay que conservar.
+ *
+ * ## El `DELETE` que esto necesita, y por cuanto tiempo
+ *
+ * Es la **unica** razon por la que el rol de la aplicacion conserva `DELETE`
+ * sobre las seis tablas (ADR-057 §1, migracion
+ * `2026_10_13_100000_restrict_application_updates_on_work_record`): ningun
+ * otro codigo de la aplicacion borra el registro. `UPDATE` ya no lo tiene, salvo
+ * las columnas que el dominio escribe. El bloque 7 de la 2.2.1 cambia estas
+ * sentencias por la funcion `SECURITY DEFINER` `work_record_purge_batch`
+ * (ADR-057 §3) y retira el `DELETE` en la misma migracion.
  *
  * ## Lotes, no transacciones
  *

@@ -75,6 +75,13 @@ final class RetentionServiceProvider extends ServiceProvider
          * que puede escribir el asiento de `audit_log` en la misma transaccion
          * (regla dura 6). Con el rol de mantenimiento, borrado y constancia
          * caerian en dos sesiones distintas.
+         *
+         * Ese `DELETE` es lo unico que la aplicacion conserva para esto: desde
+         * ADR-057 §1 (bloque 6 de la 2.2.1) ya no tiene `UPDATE` sobre el
+         * registro salvo las columnas que el dominio escribe. El bloque 7 lo
+         * retira tambien, cuando la purga pase a la funcion `SECURITY DEFINER`
+         * `work_record_purge_batch` (ADR-057 §3) llamada en esta misma
+         * transaccion.
          */
         $this->app->bind(
             WorkRecordArchive::class,
