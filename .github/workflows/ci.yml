@@ -2347,6 +2347,15 @@ jobs:
           grep -q "PUNTO DE CONTROL ${new}" paquete-nuevo/salida-u1.log
           grep -q 'Copia previa verificada' paquete-nuevo/salida-u1.log
           grep -q 'Cadena de auditoria integra DESPUES' paquete-nuevo/salida-u1.log
+          # Una actualizacion limpia NUNCA repara privilegios (ADR-057, tarea 6.4): el rol
+          # ya sale con el estado exacto de las migraciones. Si una migracion futura toca los
+          # privilegios y olvida lib/work-record-privileges.sh, update.sh repararia (y avisaria)
+          # y esto lo para.
+          grep -q 'tiene exactamente los privilegios previstos sobre el registro horario' paquete-nuevo/salida-u1.log
+          if grep -q 'tenia privilegios distintos de los previstos sobre el registro horario' paquete-nuevo/salida-u1.log; then
+            echo "update.sh ha reparado privilegios en una actualizacion limpia: alinear lib/work-record-privileges.sh con las migraciones"
+            exit 1
+          fi
           curl -fsS -k https://127.0.0.1/api/v1/health | tee health-despues.json
           grep -qF "\"version\":\"${new}\"" health-despues.json
           curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
