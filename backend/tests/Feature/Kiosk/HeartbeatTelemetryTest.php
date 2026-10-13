@@ -6,6 +6,8 @@ use App\Modules\Kiosk\Application\Port\KioskMetrics;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
+use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
@@ -495,3 +497,90 @@ it('responde el latido sin version minima si el puerto de la version falla', fun
         ->and($informe->deviceId)->toBe($quiosco['deviceUuid'])
         ->and($informe->message)->not->toContain('version no disponible');
 })->group('RF-KI-07', 'RF-PA-07');
+
+// --- La zona horaria del centro (RF-KI-07, RF-AT-05, 2.2.1) -----------------
+
+it('entrega la zona horaria del centro en cada latido', function (string $zona): void {
+    // La tablet pinta la hora de la confirmacion y lee su ventana de
+    // actualizacion en el reloj de pared del centro, no en la zona del aparato
+    // (ADR-004, nota de ADR-056 del 14-10-2026). Es el nombre IANA de
+    // `sites.timezone`, tal cual: un desfase como `+01:00` no sabe del cambio
+    // de hora.
+    $escenario = AttendanceFixtures::scenario($zona);
+    app()->instance(KioskMetrics::class, new RecordingKioskMetrics);
+
+    Api::as($escenario['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.1',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidRequest()
+        ->assertValidResponse()
+        ->assertJsonPath('site_time_zone', $zona)
+        // Solo presentacion: la hora del servidor sigue en UTC (regla dura 3).
+        ->assertJsonPath('server_time', fn (string $hora): bool => str_ends_with($hora, 'Z'));
+})->with([
+    'peninsula' => ['Europe/Madrid'],
+    'Canarias' => ['Atlantic/Canary'],
+])->group('RF-KI-07', 'RF-AT-05', 'RF-PA-07');
+
+it('omite la zona del centro, y no la manda a null, si la instalacion no tiene centro', function (): void {
+    // Antes de la puesta en marcha (RF-PD-03) el puerto devuelve `null`. El
+    // contrato declara el campo opcional y no anulable: ausente, la tablet usa
+    // su propia zona y sigue fichando.
+    $quiosco = quioscoConMetricas();
+    app()->instance(InstallationSiteProvider::class, new class implements InstallationSiteProvider
+    {
+        #[Override]
+        public function installationSite(): ?InstallationSite
+        {
+            return null;
+        }
+    });
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.1',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidResponse()
+        ->assertJsonMissingPath('site_time_zone');
+})->group('RF-KI-07', 'RF-AT-05', 'RF-PA-07');
+
+it('responde el latido sin zona del centro si el puerto del centro falla', function (): void {
+    // Regla dura 19: la zona es de presentacion y el latido es la señal de vida
+    // del quiosco. Un fallo al leerla no convierte el 200 en 500.
+    $quiosco = quioscoConMetricas();
+    app()->instance(InstallationSiteProvider::class, new class implements InstallationSiteProvider
+    {
+        #[Override]
+        public function installationSite(): ?InstallationSite
+        {
+            throw new RuntimeException('sites no disponible');
+        }
+    });
+    $errores = new InMemoryErrorEventSink;
+    app()->instance(ErrorEventSink::class, $errores);
+    DB::table('devices')->where('id', $quiosco['deviceId'])->update(['last_seen_at' => null]);
+
+    Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
+        'app_version' => '2.2.1',
+        'pending_queue_size' => 0,
+    ])
+        ->assertOk()
+        ->assertValidResponse()
+        ->assertJsonMissingPath('site_time_zone');
+
+    /** @var object{last_seen_at: string|null} $row */
+    $row = DB::table('devices')->where('id', $quiosco['deviceId'])->first();
+
+    expect($row->last_seen_at)->not->toBeNull();
+
+    // Al historico de errores con la clase y sin el mensaje (regla dura 21).
+    $informe = $errores->only();
+
+    expect($informe->exceptionClass)->toBe(RuntimeException::class)
+        ->and($informe->code)->toBe('kiosk.heartbeat.site_time_zone_unavailable')
+        ->and($informe->deviceId)->toBe($quiosco['deviceUuid'])
+        ->and($informe->message)->not->toContain('sites no disponible');
+})->group('RF-KI-07', 'RF-AT-05', 'RF-PA-07');

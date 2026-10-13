@@ -44,7 +44,9 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *   minutos de silencio que exige ademas. La declara el cliente en
  *   `KIOSK_UPDATE_WINDOW` y `KIOSK_UPDATE_QUIET_MINUTES`; el producto no infiere
  *   el cambio de turno (regla dura 13). Fuera de ella el quiosco sigue fichando
- *   y encolando: lo unico que no hace es recargarse.
+ *   y encolando: lo unico que no hace es recargarse. La hora local del centro
+ *   es la de `site_time_zone` (2.2.1), opcional como `minimum_app_version` y
+ *   `rotated_token`.
  *
  * **No devuelve el estado del dispositivo**, ni su nombre, ni su centro, ni
  * cuando caduca su token vigente. Un latido es una escritura, no una consulta, y
@@ -120,6 +122,14 @@ final class KioskHeartbeatResource extends JsonResource
             // ve ausente sigue con su cadencia normal de actualizacion.
             ...($outcome->minimumAppVersion === null ? [] : [
                 'minimum_app_version' => $outcome->minimumAppVersion,
+            ]),
+            // **La zona del centro** (RF-KI-07, RF-AT-05, 2.2.1): el nombre
+            // IANA con el que la tablet pinta la hora y lee su ventana de
+            // actualizacion. Solo presentacion (regla dura 3). Se OMITE, como
+            // los dos de arriba, sin centro o si no se pudo leer: el contrato la
+            // declara opcional y no anulable, y la tablet sigue con su zona.
+            ...($outcome->siteTimeZone === null ? [] : [
+                'site_time_zone' => $outcome->siteTimeZone,
             ]),
         ];
     }

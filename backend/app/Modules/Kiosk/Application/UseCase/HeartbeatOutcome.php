@@ -117,5 +117,14 @@ final readonly class HeartbeatOutcome
          * latido (regla dura 19).
          */
         public ?string $minimumAppVersion = null,
+        /**
+         * RF-KI-07, RF-AT-05 (2.2.1): el nombre IANA de la zona del centro de
+         * la instalacion (`sites.timezone`). La tablet lo usa **solo para
+         * presentar** —la hora de la confirmacion y la ventana de
+         * actualizacion— y nunca para lo que registra, que sigue en UTC (regla
+         * dura 3). `null` sin centro o si el puerto fallo, y entonces el campo
+         * se omite: nunca tumba el latido (regla dura 19).
+         */
+        public ?string $siteTimeZone = null,
     ) {}
 }

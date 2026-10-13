@@ -1762,3 +1762,22 @@ it('anuncia la version minima de la PWA en el latido, opcional, no anulable y Se
         ->and(preg_match('/'.Contract::text(...[...$field, 'pattern']).'/', '2.2.1'))->toBe(1)
         ->and(preg_match('/'.Contract::text(...[...$field, 'pattern']).'/', 'latest'))->toBe(0);
 })->group('RF-KI-07', 'RF-PA-07', 'RQ-06');
+
+it('publica la zona horaria del centro en el latido, opcional, no anulable y con la forma de Site.timezone', function (): void {
+    // RF-KI-07, RF-AT-05 (2.2.1, V2-KI-01). La tablet presenta en la zona del
+    // centro: el servidor la OMITE sin centro —nunca la manda a `null`—, asi que
+    // fuera de `required` y con un solo tipo. Misma forma que `Site.timezone`,
+    // de donde sale. Y la ventana de actualizacion remite a ella.
+    $schema = ['components', 'schemas', 'KioskHeartbeat'];
+    $field = [...$schema, 'properties', 'site_time_zone'];
+    $site = ['components', 'schemas', 'Site', 'properties', 'timezone'];
+
+    expect(Contract::value(...[...$schema, 'required']))->not->toContain('site_time_zone')
+        ->and(Contract::value(...[...$field, 'type']))->toBe('string')
+        ->and(Contract::value(...[...$field, 'minLength']))->toBe(Contract::value(...[...$site, 'minLength']))
+        ->and(Contract::value(...[...$field, 'maxLength']))->toBe(Contract::value(...[...$site, 'maxLength']))
+        ->and(Contract::text(...[...$field, 'description']))->toContain('nunca la manda a')
+        ->and(Contract::text(...[...$field, 'description']))->toContain('regla dura 3')
+        ->and(Contract::text(...[...$schema, 'properties', 'update_window', 'description']))
+        ->toContain('site_time_zone');
+})->group('RF-KI-07', 'RF-AT-05', 'RQ-06');
