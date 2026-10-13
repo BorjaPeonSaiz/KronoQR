@@ -1566,7 +1566,7 @@
     "breakSuspendedDisabledLink": "Switch it on in Operational settings → Break clocking",
     "breakSuspendedEnabled": "The continuous stretch without a break is evaluated and raises issues: break clocking is switched on in this installation.",
     "errors": {
-      "belowFloor": "It cannot be lower than the legal minimum: {years} years.",
+      "belowFloor": "It cannot be lower than the legal minimum: {years} year. | It cannot be lower than the legal minimum: {years} years.",
       "notAWholeNumber": "Enter a whole number, with no decimals or letters.",
       "required": "This field cannot be left empty."
     }

@@ -253,7 +253,7 @@ function errorsFor(field: NumericField): string[] {
   const messages: string[] = []
 
   if (issue === 'belowFloor') {
-    messages.push(t('compliance.errors.belowFloor', { years: retentionFloor.value ?? 0 }))
+    messages.push(t('compliance.errors.belowFloor', { years: retentionFloor.value ?? 0 }, retentionFloor.value ?? 0))
   } else if (issue !== null) {
     messages.push(t(`compliance.errors.${issue}`))
   }

@@ -514,7 +514,9 @@ describe('perfil de cumplimiento: suelo legal de la retencion (RF-PD-07, RL-02)'
     await input.setValue('2')
 
     expect(input.attributes('aria-invalid')).toBe('true')
-    expect(wrapper.text()).toContain(es.compliance.errors.belowFloor.replace('{years}', '4'))
+    // Forma plural: «{years} año. | {years} años.»; con un suelo de 4, la segunda.
+    const pluralBelowFloor = es.compliance.errors.belowFloor.split(' | ')[1] ?? ''
+    expect(wrapper.text()).toContain(pluralBelowFloor.replace('{years}', '4'))
     expect(wrapper.find('[data-test="save"]').attributes('disabled')).toBeDefined()
 
     await wrapper.find('form').trigger('submit')
