@@ -32,7 +32,20 @@ final readonly class WorkRecordReconciliationResult
          * una pasada con solo purgas revisadas es coherente.
          */
         public int $reviewedPurges = 0,
+        /**
+         * De las revisadas, las que **vuelven a explicar borrados** (su unico
+         * defecto era el plazo). Una revision que explica borrados cambia lo
+         * que la conciliacion acepta; una que no, solo silencia la alerta de esa
+         * purga. Se publican aparte para que la alerta las distinga.
+         */
+        public int $reviewedPurgesExplainingDeletions = 0,
     ) {}
+
+    /** Revisadas que no explican ningun borrado. */
+    public function reviewedPurgesNotExplainingDeletions(): int
+    {
+        return $this->reviewedPurges - $this->reviewedPurgesExplainingDeletions;
+    }
 
     /**
      * Recuentos a cero para cada tipo: una serie que desaparece no se distingue

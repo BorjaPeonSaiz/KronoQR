@@ -60,12 +60,14 @@ final readonly class WorkRecordPurgeBoundary
      * @param  list<int>  $sealedAuditYears
      * @param  list<WorkRecordDiscrepancy>  $rejected  Un `purge_out_of_bounds` por cada asiento no admisible y sin revisar.
      * @param  list<int>  $reviewedPurgeIds  Asientos no admisibles que una persona dio por revisados.
+     * @param  list<int>  $explainingReviewedPurgeIds  De esos, los que vuelven a explicar borrados ({@see self::explainsOnceReviewed()}).
      */
     private function __construct(
         public array $cutoffBySite,
         public array $sealedAuditYears,
         public array $rejected,
         public array $reviewedPurgeIds = [],
+        public array $explainingReviewedPurgeIds = [],
     ) {}
 
     public static function none(): self
@@ -78,6 +80,7 @@ final readonly class WorkRecordPurgeBoundary
         $cutoffBySite = [];
         $rejected = [];
         $reviewed = [];
+        $explaining = [];
 
         foreach ($context->purges as $purge) {
             $violations = self::violations($purge, $runAt, $floors->effectiveFor($purge));
@@ -99,6 +102,8 @@ final readonly class WorkRecordPurgeBoundary
                 if (! self::explainsOnceReviewed($purge, $violations)) {
                     continue;
                 }
+
+                $explaining[] = $purge->auditEntryId;
             }
 
             /** @var int $siteId */
@@ -113,7 +118,13 @@ final readonly class WorkRecordPurgeBoundary
                 : $current;
         }
 
-        return new self($cutoffBySite, $context->sealedAuditYears, $rejected, array_values(array_unique($reviewed)));
+        return new self(
+            $cutoffBySite,
+            $context->sealedAuditYears,
+            $rejected,
+            array_values(array_unique($reviewed)),
+            array_values(array_unique($explaining)),
+        );
     }
 
     /**

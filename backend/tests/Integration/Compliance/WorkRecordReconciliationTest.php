@@ -291,9 +291,11 @@ it('da cero discrepancias con el uso normal del producto: fichar, corregir, anul
         // El gauge de purgas revisadas (ADR-057 enmienda del 10-10-2026 §6)
         // sale en los dos ficheros, tambien a cero: sin serie, la alerta
         // PurgaFueraDeLimitesRevisada no tendria con que comparar.
-        ->and($metricas)->toContain('work_record_reconciliation_reviewed_purges{scope="recent"} 0')
+        ->and($metricas)->toContain('work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="true"} 0')
+        ->and($metricas)->toContain('work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"} 0')
         ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))->toContain('work_record_reconciliation_entries_checked{scope="full"} 14')
-        ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))->toContain('work_record_reconciliation_reviewed_purges{scope="full"} 0');
+        ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="true"} 0')
+        ->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="false"} 0');
 })->group('RL-04', 'RS-07', 'RN-13');
 
 it('detecta las cuatro manipulaciones con la credencial de la aplicacion, con la cadena de hash en verde', function (): void {
@@ -606,7 +608,8 @@ it('denuncia una purga española a tres años, y tras revisarla deja de contarla
         ->and($antes['output'])->toContain('shift_entries '.$antiguo.' · audit_without_entry')
         ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))
         ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="purge_out_of_bounds"} 1')
-        ->toContain('work_record_reconciliation_reviewed_purges{scope="full"} 0');
+        ->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="true"} 0')
+        ->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="false"} 0');
 
     $revision = Artisan::call('compliance:reconcile-work-record', [
         '--acknowledge' => (string) $purga,
@@ -623,7 +626,8 @@ it('denuncia una purga española a tres años, y tras revisarla deja de contarla
         ->and(registroAuditadoMetricas($escenario['metricas'], 'full'))
         ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="purge_out_of_bounds"} 0')
         ->toContain('work_record_reconciliation_discrepancies{scope="full",kind="audit_without_entry"} 0')
-        ->toContain('work_record_reconciliation_reviewed_purges{scope="full"} 1')
+        ->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="true"} 1')
+        ->toContain('work_record_reconciliation_reviewed_purges{scope="full",explains_deletions="false"} 0')
         // La purga revisada sigue en audit_log, con su revision detras.
         ->and(DB::table('audit_log')->where('id', $purga)->value('action'))->toBe('retention.purge_executed')
         ->and(DB::table('audit_log')->where('action', 'retention.purge_reviewed')->count())->toBe(1)

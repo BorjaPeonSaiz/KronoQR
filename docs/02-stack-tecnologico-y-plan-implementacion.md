@@ -859,7 +859,7 @@ audit_log_partition_check_timestamp_seconds              gauge
 work_record_reconciliation_discrepancies{scope,kind}     gauge
 work_record_reconciliation_last_run_timestamp_seconds{scope} gauge
 work_record_reconciliation_entries_checked{scope}        gauge
-work_record_reconciliation_reviewed_purges{scope}        gauge
+work_record_reconciliation_reviewed_purges{scope,explains_deletions} gauge
 worked_minutes_total{site,department}                    counter
 report_exports_total{format}                             counter
 installation_setting_changes_total{affects_worked_hours} counter

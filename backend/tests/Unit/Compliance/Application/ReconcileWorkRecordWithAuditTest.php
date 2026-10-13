@@ -110,9 +110,15 @@ it('publica las purgas revisadas aparte, sin contarlas como pendientes', functio
     // ADR-057 enmienda del 10-10-2026 §6: una purga a 3 años en un centro
     // español es no admisible; con su revision deja de ser discrepancia y pasa
     // a `reviewedPurges`, en el resultado y en lo que se publica.
+    // La 90 solo falla el plazo: revisada, vuelve a explicar borrados. La 91
+    // tiene ademas un corte imposible: revisada, no explica nada. Se cuentan
+    // aparte para que la alerta distinga una de otra.
     $purga = new AuditedPurge(90, new DateTimeImmutable('2030-10-08T03:00:00Z'), '2027-10-08', 3, 1);
-    $revision = new AuditedPurgeReview(95, new DateTimeImmutable('2030-10-09T09:00:00Z'), 90);
-    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([$purga], [], [$revision]));
+    $imposible = new AuditedPurge(91, new DateTimeImmutable('2030-10-08T03:00:00Z'), '9999-12-31', 3, 1);
+    $origen = new InMemoryWorkRecordAuditSource([], new WorkRecordAuditContext([$purga, $imposible], [], [
+        new AuditedPurgeReview(95, new DateTimeImmutable('2030-10-09T09:00:00Z'), 90),
+        new AuditedPurgeReview(96, new DateTimeImmutable('2030-10-09T09:05:00Z'), 91),
+    ]));
     $metricas = new RecordingWorkRecordReconciliationMetrics;
 
     $resultado = new ReconcileWorkRecordWithAudit($origen, $metricas, FixedClock::at('2030-10-10 04:15:00'), new FixedRetentionYearsFloor(4), new FixedInstallationSiteProvider)
@@ -120,8 +126,11 @@ it('publica las purgas revisadas aparte, sin contarlas como pendientes', functio
 
     expect($resultado->counts['purge_out_of_bounds'])->toBe(0)
         ->and($resultado->isConsistent())->toBeTrue()
-        ->and($resultado->reviewedPurges)->toBe(1)
-        ->and($metricas->recorded[0]['result']->reviewedPurges)->toBe(1);
+        ->and($resultado->reviewedPurges)->toBe(2)
+        ->and($resultado->reviewedPurgesExplainingDeletions)->toBe(1)
+        ->and($resultado->reviewedPurgesNotExplainingDeletions())->toBe(1)
+        ->and($metricas->recorded[0]['result']->reviewedPurges)->toBe(2)
+        ->and($metricas->recorded[0]['result']->reviewedPurgesExplainingDeletions)->toBe(1);
 })->group('RS-07', 'RL-02', 'RL-04');
 
 it('pregunta el suelo legal una sola vez por cada centro distinto de las purgas', function (): void {

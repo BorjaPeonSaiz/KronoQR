@@ -646,6 +646,7 @@ it('saca de las pendientes una purga revisada y vuelve a explicar sus borrados h
 
     expect($limite->rejected)->toBe([])
         ->and($limite->reviewedPurgeIds)->toBe([90])
+        ->and($limite->explainingReviewedPurgeIds)->toBe([90])
         ->and($limite->cutoffFor(1))->toBe('2026-10-08')
         // La jornada anterior al corte: explicada. La del corte y la posterior, no.
         ->and(conciliacionBorradoExplicado($limite, '2026-10-07'))->toBeTrue()
@@ -672,6 +673,7 @@ it('no deja que una revision explique un corte imposible ni una purga sin centro
 
     expect($limite->rejected)->toBe([])
         ->and($limite->reviewedPurgeIds)->toBe([90])
+        ->and($limite->explainingReviewedPurgeIds)->toBe([])
         ->and($limite->cutoffBySite)->toBe([])
         ->and(conciliacionBorradoExplicado($limite))->toBeFalse();
 })->with([

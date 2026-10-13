@@ -53,10 +53,14 @@ final readonly class TextfileWorkRecordReconciliationMetrics implements WorkReco
         $lines[] = 'work_record_reconciliation_entries_checked{scope="'.$scope.'"} '.$result->entriesChecked;
         // ADR-057 enmienda del 10-10-2026 §6. No suma en `discrepancies`: lo
         // revisado deja de ser pendiente, pero una revision nueva tiene que
-        // verse (alerta `PurgaFueraDeLimitesRevisada`).
-        $lines[] = '# HELP work_record_reconciliation_reviewed_purges Asientos de purga no admisibles que una persona dio por revisados. No son discrepancias; si sube, alguien ha revisado una.';
+        // verse (alerta `PurgaFueraDeLimitesRevisada`). Partida por
+        // `explains_deletions`: la que vuelve a explicar borrados cambia lo que
+        // se acepta y la alerta la trata distinto. Las dos series siempre, a 0
+        // tambien: una que desaparece no se distingue de una que nunca subio.
+        $lines[] = '# HELP work_record_reconciliation_reviewed_purges Asientos de purga no admisibles que una persona dio por revisados, segun vuelvan a explicar borrados o no. No son discrepancias; si sube, alguien ha revisado una.';
         $lines[] = '# TYPE work_record_reconciliation_reviewed_purges gauge';
-        $lines[] = 'work_record_reconciliation_reviewed_purges{scope="'.$scope.'"} '.$result->reviewedPurges;
+        $lines[] = 'work_record_reconciliation_reviewed_purges{scope="'.$scope.'",explains_deletions="true"} '.$result->reviewedPurgesExplainingDeletions;
+        $lines[] = 'work_record_reconciliation_reviewed_purges{scope="'.$scope.'",explains_deletions="false"} '.$result->reviewedPurgesNotExplainingDeletions();
 
         TextfileExposition::write(self::FILE_PREFIX.$scope.'.prom', $lines);
     }

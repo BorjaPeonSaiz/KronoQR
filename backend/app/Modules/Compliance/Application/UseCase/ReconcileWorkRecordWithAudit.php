@@ -99,6 +99,7 @@ final readonly class ReconcileWorkRecordWithAudit
             'entries_checked' => $result->entriesChecked,
             'discrepancies' => $result->discrepancyCount(),
             'reviewed_purges' => $result->reviewedPurges,
+            'reviewed_purges_explaining_deletions' => $result->reviewedPurgesExplainingDeletions,
         ]);
 
         return $result;
@@ -144,6 +145,7 @@ final readonly class ReconcileWorkRecordWithAudit
             discrepancies: $detailed,
             truncated: array_sum($counts) > \count($detailed),
             reviewedPurges: \count($boundary->reviewedPurgeIds),
+            reviewedPurgesExplainingDeletions: \count($boundary->explainingReviewedPurgeIds),
         );
     }
 
