@@ -6135,7 +6135,8 @@ export interface components {
          * @description Lo que el servidor le devuelve al quiosco: su hora, cuantos errores de
          *     cliente ha aceptado, los ajustes que la tablet necesita sin red, la
          *     version minima de la PWA (`minimum_app_version`, cuando el servidor la
-         *     conoce) y, solo cuando toca, el relevo de su token (`rotated_token`).
+         *     conoce), la zona horaria del centro (`site_time_zone`) y, solo cuando
+         *     toca, el relevo de su token (`rotated_token`).
          */
         KioskHeartbeat: {
             /**
@@ -6194,6 +6195,11 @@ export interface components {
              *     `KIOSK_UPDATE_QUIET_MINUTES`, tarea 3.12), en **hora local del
              *     centro**.
              *
+             *     **La hora local del centro es la de `site_time_zone`** (RF-KI-07, doc 01
+             *     §3.7): la tablet evalua `start` y `end` sobre el reloj de pared de esa
+             *     zona, no sobre la que tenga configurada el aparato. Hasta recibirla, o
+             *     si el navegador no reconoce el nombre, usa la zona de la tablet.
+             *
              *     **Es una ventana de PERMISO, no de bloqueo**: fuera de ella la tablet
              *     sigue fichando y sigue encolando con normalidad; lo unico que no hace
              *     es recargarse (regla dura 19). Una actualizacion a las 06:00 con
@@ -6215,12 +6221,12 @@ export interface components {
              */
             update_window: {
                 /**
-                 * @description Inicio de la franja, `HH:MM` en hora local del centro.
+                 * @description Inicio de la franja, `HH:MM` en hora local del centro (`site_time_zone`).
                  * @example 03:00
                  */
                 start: string;
                 /**
-                 * @description Fin de la franja, `HH:MM` en hora local del centro.
+                 * @description Fin de la franja, `HH:MM` en hora local del centro (`site_time_zone`).
                  * @example 05:00
                  */
                 end: string;
@@ -6257,6 +6263,30 @@ export interface components {
              * @example 2.2.1
              */
             minimum_app_version?: string;
+            /**
+             * @description **La zona horaria del centro de la instalacion**, el identificador
+             *     IANA de `sites.timezone` (`Site.timezone`; hay un solo centro por
+             *     instalacion, ADR-040). Es la zona en la que la tablet **presenta**:
+             *     la hora de la confirmacion del fichaje (RF-AT-05) y la ventana de
+             *     actualizacion `update_window` (RF-KI-07), que se leen en el reloj de
+             *     pared del centro y no en la zona que tenga configurada el aparato
+             *     (ADR-004, nota de ADR-056 del 14-10-2026, doc 01 §3.7).
+             *
+             *     **Solo presentacion, nunca registro**: `occurred_at` y `server_time`
+             *     siguen viajando en UTC (regla dura 3) y esta zona no interviene en lo
+             *     que la tablet encola. Guardarla en la tablet es seguro porque con
+             *     fichajes hechos no cambia (ADR-056).
+             *
+             *     **Opcional y aditivo.** El servidor la **omite** —nunca la manda a
+             *     `null`— si todavia no hay centro (antes de la puesta en marcha) o si
+             *     no la puede leer; el latido responde igual (regla dura 19). Sin ella,
+             *     o si el navegador no reconoce el nombre, la tablet usa su propia zona
+             *     y nunca deja de fichar ni de pintar la hora. Una PWA anterior a la
+             *     2.2.1 la ignora.
+             * @example Europe/Madrid
+             * @example Atlantic/Canary
+             */
+            site_time_zone?: string;
             /**
              * @description **El relevo del token del quiosco** (RF-ID-04, documento 02 §7.3,
              *     [ADR-044](../adr/ADR-044-el-token-del-quiosco-rota-en-el-latido-con-solape.md)).
