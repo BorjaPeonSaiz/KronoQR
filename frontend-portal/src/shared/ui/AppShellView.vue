@@ -9,14 +9,30 @@ import { announcement } from '@kronoqr/web-kit/announcer'
 import BrandMark from '@kronoqr/web-kit/components/BrandMark.vue'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/features/login/session.store'
 import { useBrandingStore } from '@/shared/branding/branding.store'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const session = useSessionStore()
 const branding = useBrandingStore()
+
+/**
+ * Estados del enlace de navegacion (V7-UX-01). Cada estado fija fondo Y texto a
+ * la vez, para que ninguna utilidad de `hover:`/`active:` cambie el fondo y deje
+ * el texto del estado anterior (blanco sobre crema, 1,14:1). Las parejas estan
+ * medidas en `themePairs.ts` (`nav link …`). El activo se calcula aqui, no con
+ * `active-class`, igual que en el panel, y no cambia al pasar o pulsar.
+ */
+const LINK_ACTIVE = 'bg-kq-primary-strong text-kq-on-primary'
+const LINK_IDLE =
+  'text-kq-text hover:bg-kq-surface-alt active:bg-kq-primary-soft active:text-kq-on-primary-soft'
+
+function linkClass(name: string): string {
+  return route.name === name ? LINK_ACTIVE : LINK_IDLE
+}
 
 /** Avisa al servidor y borra la sesion local siempre (ver `session.store.ts`, PO1). */
 const signingOut = ref(false)
@@ -72,8 +88,9 @@ async function signOut(): Promise<void> {
             <li>
               <RouterLink
                 :to="{ name: 'my-records' }"
-                class="inline-block min-h-12 rounded-kq-sm px-3 py-2 text-lg hover:bg-kq-surface-alt"
-                active-class="bg-kq-primary-strong text-kq-on-primary hover:bg-kq-primary-strong"
+                class="inline-block min-h-12 rounded-kq-sm px-3 py-2 text-lg"
+                :class="linkClass('my-records')"
+                :aria-current="route.name === 'my-records' ? 'page' : undefined"
               >
                 {{ t('app.nav.myRecords') }}
               </RouterLink>
@@ -81,8 +98,9 @@ async function signOut(): Promise<void> {
             <li>
               <RouterLink
                 :to="{ name: 'my-export' }"
-                class="inline-block min-h-12 rounded-kq-sm px-3 py-2 text-lg hover:bg-kq-surface-alt"
-                active-class="bg-kq-primary-strong text-kq-on-primary hover:bg-kq-primary-strong"
+                class="inline-block min-h-12 rounded-kq-sm px-3 py-2 text-lg"
+                :class="linkClass('my-export')"
+                :aria-current="route.name === 'my-export' ? 'page' : undefined"
               >
                 {{ t('app.nav.myExport') }}
               </RouterLink>

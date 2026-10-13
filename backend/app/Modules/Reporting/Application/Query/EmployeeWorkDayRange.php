@@ -16,7 +16,7 @@ final readonly class EmployeeWorkDayRange
 {
     public function __construct(
         public string $employeeUuid,
-        /** `YYYY-MM-DD` o `null` para «los 31 dias que terminan en `to`». */
+        /** `YYYY-MM-DD` o `null` para «los `$defaultDays` dias que terminan en `to`». */
         public ?string $from = null,
         /** `YYYY-MM-DD` o `null` para «hoy en la zona del centro». */
         public ?string $to = null,
@@ -41,5 +41,17 @@ final readonly class EmployeeWorkDayRange
          * que hay que acordarse de pedir.
          */
         public bool $selfService = false,
+        /**
+         * Cuantos dias abarca el rango cuando no viene `from`.
+         *
+         * El panel y la pantalla del portal abren el mes
+         * ({@see ReadEmployeeWorkDays::DEFAULT_DAYS}); la descarga del historico
+         * propio, el ultimo año ({@see ReadEmployeeWorkDays::EXPORT_DEFAULT_DAYS},
+         * V3-PO-2). Lo declara la peticion por lo mismo que `$selfService`: es
+         * la ruta la que sabe para que se pide el rango, y el caso de uso solo lo
+         * resuelve en la zona del centro. El techo no cambia: lo sigue poniendo
+         * `DateRange`.
+         */
+        public int $defaultDays = ReadEmployeeWorkDays::DEFAULT_DAYS,
     ) {}
 }

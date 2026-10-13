@@ -60,13 +60,12 @@ código 2FA van en el formulario de entrega, **nunca en el repositorio**. Falta 
 `[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
 actualizar README §3.1/§6.
 
-**Siguiente acción: la 2.2.1, bloque 6** (ADR-057 §1, privilegios por columna; rama `fix/adr-057-privilegios`, creada desde
-`main` `7cbf912f`), con la tarea **6.5** nueva: quitar a `fichaje_app` la escritura de `compliance_profiles.jurisdiction`,
-`is_default`, el `INSERT` y `sites.compliance_profile_id` (ALTO de seguridad en la revisión del B5: hoy el suelo legal se esquiva
-cambiando el país del perfil). Plan: [`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md);
+**Siguiente acción: la 2.2.1, bloque 8** (portal: un año por descarga, icono de pausa y enlace activo; rama
+`fix/portal-descarga-y-estilos`, desde `main` `76f215cc`). El propietario ordenó el 13-10-2026 **hacer el plan completo** (B8 a
+B26 y B24 al final; el bloque final solo con su orden). Plan: [`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md);
 lista: [`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md).
 
-**Integrados en la 2.2.1:** B1 (PR #136), B2 (#137), B3 (#138), B4 (#139) y **B5 (#141, `main` `7cbf912f`, 13-10-2026)**: suelo
+**Integrados en la 2.2.1:** B1 (PR #136), B2 (#137), B3 (#138), B4 (#139) , **B5 (#141, `7cbf912f`)**, **B6 (#142, `c2af3f12`)** y **B7 (#143, `main` `76f215cc`, 13-10-2026)**. B6+B7 = ADR-057 §1–§3: `fichaje_app` con `UPDATE` solo por columnas del dominio y sin `DELETE` en el registro horario ni en `sites`; sin escribir `jurisdiction`/`is_default`/`sites.compliance_profile_id`; *triggers* de transición e inserción en `shift_entries` e `incidents` (también frenan al propietario: escribir a mano exige desactivarlos en la misma transacción, runbook `discrepancia-registro-auditoria.md` §3.2); purga por `work_record_purge_batch` (`SECURITY DEFINER`, corte máximo con el suelo legal en el motor); `update.sh` comprueba y repara privilegios por conjunto exacto (`lib/work-record-privileges.sh`), hace rollback si falta un *trigger* y ejecuta la conciliación completa tras migrar (informativa, 300 s); el tramo se bloquea (`FOR NO KEY UPDATE`) al cargar la jornada. B5: suelo
 legal de `retention_years` por jurisdicción (4 en ES; `retention_years_floor` en el contrato; `CHECK` en `compliance_profiles`;
 purga negada bajo el suelo; `update.sh --check-only`) y «revisado» de `purge_out_of_bounds` (`compliance:reconcile-work-record
 --acknowledge`, asiento `retention.purge_reviewed`, alertas `PurgaFueraDeLimitesRevisada` y `PurgaRevisadaQueExplicaBorrados`).
@@ -121,6 +120,16 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+### Anotado en los bloques 6 y 7 de la 2.2.1 (13-10-2026)
+
+- `AddShiftEntryHandler` carga con `findWorkDayFor` sin bloqueo: un alta manual simultánea a un cierre del mismo día acaba en
+  `42501` y rollback (seguro, pero no espera). Bloquear igual que `findOpenWorkDayFor`.
+- El asiento `system.updated` no anota si `update.sh` reparó privilegios: `SystemEventPayload` tiene lista cerrada de claves.
+- Faltan pruebas: `409` de dos correcciones simultáneas del mismo tramo y el alta manual frente a un cierre.
+- Índice `incidents(shift_entry_id)` → B22 (anotado en el plan).
+- La purga es una sola sentencia y una transacción del tamaño del atraso: un `statement_timeout` en el rol o la base la haría
+  fallar entera (ADR-057, precisión de §3).
+
 ### Anotado en el bloque 5 de la 2.2.1 (13-10-2026)
 
 - **Emisor de licencias:** una opción repetida (`--features=all --features=a,b`) se queda con la última sin avisar; debería
@@ -128,9 +137,7 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 - `compliance:reconcile-work-record --days` sigue convirtiendo con `(int)` sin validar (`--acknowledge` y `--responsible` ya se
   validan con `ctype_digit`).
 - Falta una prueba de integración de la conciliación con una revisión cuyo id viene en cadena (la regla está cubierta en dominio).
-- **Redis local roto:** `kronoqr-redis` en bucle por `appendonly.aof.82.incr.aof` corrupto; ~50 pruebas Feature/Integration
-  fallan en local por eso. Reparar (`redis-check-aof --fix` sobre copia) o vaciar el volumen `kronoqr_redis-data`: decide el
-  propietario (el clasificador deniega repararlo a los agentes).
+- Redis local: volumen vaciado el 13-10-2026 por decisión del propietario; vuelve a funcionar.
 - La suite Integration completa en local se aborta por memoria (256 MB) en `Row.php`; por directorios pasa. Sin investigar.
 - La línea suelta sobre teletrabajo en `docs/verificacion/2.1.0-decisiones-comerciales.md` («Acceso desde internet») ya está
   implementada (guía RRHH §2); borrarla.

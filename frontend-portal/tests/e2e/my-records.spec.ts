@@ -255,3 +255,33 @@ test(
     await expect(page.getByRole('heading', { name: 'Esta página no existe' })).toBeVisible()
   },
 )
+
+// V7-PO-1: Tailwind del portal no generaba `h-4 w-4` (clases solo de web-kit) y
+// el icono de pausa salia a ~319 px. Con el `@source` de web-kit, la caja del
+// icono es de 16 px; el margen de 24 px absorbe el redondeo sin dejar pasar la regresion.
+test(
+  'el icono de la insignia de pausa mide como mucho 24 px',
+  { tag: ['@RF-AT-12', '@RL-05', '@RF-ID-05'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es' })
+
+    await page.route('**/api/v1/me/workdays', async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(singleDayEmployeeWorkDays(dayWithBreak())),
+      })
+    })
+
+    await logInToPortal(page)
+
+    const icon = page.getByTestId('workday').getByTestId('break-badge').locator('svg')
+    await expect(icon).toBeVisible()
+
+    const box = await icon.boundingBox()
+
+    expect(box).not.toBeNull()
+    expect(box?.width ?? Infinity).toBeLessThanOrEqual(24)
+    expect(box?.height ?? Infinity).toBeLessThanOrEqual(24)
+  },
+)

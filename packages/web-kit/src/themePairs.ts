@@ -34,7 +34,12 @@ export const lightPairs: readonly ThemePair[] = [
   // Texto sobre superficies.
   pair('--kq-color-text', '--kq-color-surface', 'text', 'body text on page background'),
   pair('--kq-color-text', '--kq-color-surface-raised', 'text', 'body text on cards and dialogs'),
-  pair('--kq-color-text', '--kq-color-surface-alt', 'text', 'body text on alternate rows'),
+  pair(
+    '--kq-color-text',
+    '--kq-color-surface-alt',
+    'text',
+    'body text on alternate rows and on a hovered nav link',
+  ),
   pair('--kq-color-text-muted', '--kq-color-surface', 'text', 'secondary text on page background'),
   pair('--kq-color-text-muted', '--kq-color-surface-raised', 'text', 'secondary text on cards'),
   pair(
@@ -79,7 +84,7 @@ export const lightPairs: readonly ThemePair[] = [
     '--kq-color-on-primary',
     '--kq-color-primary-strong',
     'text',
-    'label of a solid primary button',
+    'label of a solid primary button and of the active nav link',
   ),
   pair('--kq-color-primary-strong', '--kq-color-surface', 'text', 'links and brand text on page'),
   pair(
@@ -92,7 +97,7 @@ export const lightPairs: readonly ThemePair[] = [
     '--kq-color-on-primary-soft',
     '--kq-color-primary-soft',
     'text',
-    'label of a primary chip or selected row',
+    'label of a primary chip, selected row or pressed nav link',
   ),
   pair('--kq-color-text', '--kq-color-primary-soft', 'text', 'body text on a selected row'),
   pair(
@@ -159,6 +164,8 @@ export const lightPairs: readonly ThemePair[] = [
   pair('--kq-color-focus', '--kq-color-surface', 'large', 'focus ring on page'),
   pair('--kq-color-focus', '--kq-color-surface-raised', 'large', 'focus ring on cards'),
   pair('--kq-color-focus', '--kq-color-surface-alt', 'large', 'focus ring on alternate rows'),
+  // Margen: hoy el anillo cae sobre la cabecera (outline-offset 2px); cuenta si el offset baja a 0.
+  pair('--kq-color-focus', '--kq-color-primary-soft', 'large', 'focus ring on a pressed nav link'),
 ]
 
 /** Parejas del quiosco (fondo oscuro, lectura a distancia). */

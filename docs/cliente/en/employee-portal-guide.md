@@ -126,10 +126,11 @@ That transparency is the reason the system works this way.
 
 Under "Download my history" you choose the period and the format, and press **"Download CSV"** or **"Download PDF"**.
 
-**Always fill in the start date.** If you leave it blank, the file contains
-**only the last 31 days** (up to the end date, or up to today), even though the
-screen says your available history is included. Each download covers **366
-days at most**: for a longer period, download it one year at a time.
+**If you leave the start date blank, the last year is downloaded**: the 366
+days ending on the end date, or ending today if you leave that blank too. It is
+what the screen says: "Left blank, the last year is downloaded. At most one year
+per download." Each download covers **one year (366 days) at most**: for a
+longer period, download it one year at a time, choosing both dates.
 
 - **CSV**: to open in a spreadsheet.
 - **PDF**: a sealed document, with the date it was generated and a checksum

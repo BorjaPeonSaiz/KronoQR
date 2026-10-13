@@ -1,6 +1,10 @@
 @import 'tailwindcss';
 @import '@kronoqr/web-kit/theme.css';
 
+/* Tailwind 4 solo escanea el proyecto; las clases de los componentes de web-kit
+   (p. ej. BreakBadge) viven fuera y sin esto no se generan. */
+@source '../../../packages/web-kit/src';
+
 /* Sistema visual compartido (docs/06-guia-visual.md). `@kronoqr/web-kit/theme.css`
    trae los tokens `--kq-*`, las utilidades de Tailwind (`bg-kq-*`, `text-kq-*`,
    `font-heading`...) y la capa base (fondo y color de `body`, encabezados,
