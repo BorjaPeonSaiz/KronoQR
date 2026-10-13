@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useScanSession } from '@/features/scan/composables/useScanSession'
 import type { ScanPipeline } from '@/features/scan/application/scanPipeline'
 import type { FeedbackTone, ScanConfirmation } from '@/features/scan/domain/scanOutcome'
-import { CONFIRMATION_DISPLAY_MS, SCAN_SOUND_SERVER_WAIT_MS } from '@/features/scan/domain/scanOutcome'
+import {
+  CONFIRMATION_DISPLAY_MS,
+  SCAN_SOUND_SERVER_WAIT_MS,
+} from '@/features/scan/domain/scanOutcome'
 import type { ScanSound } from '@/features/scan/composables/useScanSound'
 
 const at = new Date('2026-08-14T05:02:00.000Z')
