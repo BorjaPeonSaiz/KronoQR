@@ -7716,9 +7716,11 @@ paths:
 
         **`retention_years` no baja del suelo legal de la jurisdiccion**
         (RL-02, `retention_years_floor` en la respuesta): 4 años en España
-        (art. 34.9 ET). Un valor menor se rechaza con `422` y el motivo
-        `below_legal_floor` en `errors.retention_years`, cuyo mensaje dice el
-        suelo y el valor enviado. **Se comprueba en todo `PATCH`**, toque o no
+        (art. 34.9 ET). Un valor menor se rechaza con `422` y un mensaje en
+        `errors.retention_years`, en el idioma negociado, que dice la
+        jurisdiccion, el suelo y el valor enviado. La respuesta no lleva un
+        codigo de motivo legible por maquina: quien la consuma compara con
+        `retention_years_floor`, que ya tiene. **Se comprueba en todo `PATCH`**, toque o no
         `retention_years`, como la invariante semanal ≥ diaria: un perfil que
         ya estuviera por debajo no admite ningun otro cambio hasta subirlo. Un
         cambio rechazado no escribe fila ni asiento.
@@ -7767,8 +7769,7 @@ paths:
             La peticion no cumple el contrato o deja el perfil en un estado que
             no admite: un campo fuera de su rango, la jornada semanal por
             debajo de la diaria, un nombre ya usado o **`retention_years` por
-            debajo del suelo legal de la jurisdiccion** (`below_legal_floor`,
-            RL-02). `errors` lleva el detalle colgado del campo que hay que
+            debajo del suelo legal de la jurisdiccion** (RL-02). `errors` lleva el detalle colgado del campo que hay que
             corregir, en el idioma negociado. No se ha cambiado nada y no hay
             asiento.
           content:
@@ -15819,8 +15820,8 @@ components:
           readOnly: true
           description: |
             Suelo legal de `retention_years` en la jurisdiccion del perfil: 4 en
-            España (art. 34.9 ET). El perfil no admite un valor menor
-            (`422` `below_legal_floor`). **Solo lectura**: es un dato legal del
+            España (art. 34.9 ET). El perfil no admite un valor menor (`422`
+            con el mensaje en `errors.retention_years`). **Solo lectura**: es un dato legal del
             producto, no del cliente (RL-02, ADR-057 enmienda del 10-10-2026);
             una jurisdiccion sin suelo conocido recibe 1.
           examples:
