@@ -156,6 +156,22 @@ export function variantFor(confirmation: ScanConfirmation): ConfirmationVariant 
 export const PIN_VERIFY_TIMEOUT_MS = 2_500
 
 /**
+ * Cuanto espera el sonido de un fichaje por tarjeta a que el servidor decida
+ * (RF-AT-05, V7-KI-01). La confirmacion visual es inmediata y MUDA; el tono
+ * suena con el desenlace real si el servidor contesta dentro de este plazo
+ * (`entry`/`exit`, `error`, `notice`) y, si no, suena `pending` y nada mas:
+ * una respuesta posterior actualiza la pantalla pero no vuelve a sonar.
+ *
+ * NO es `PIN_VERIFY_TIMEOUT_MS`: aquella es la duracion de la pantalla
+ * «Comprobando…» del PIN; esta es el plazo del oido. Invariante (probado en
+ * `scanOutcome.spec.ts`): `1500 < SCAN_SOUND_SERVER_WAIT_MS <=
+ * LOCAL_REPEAT_WINDOW_MS < CONFIRMATION_DISPLAY_MS.accepted`. Por encima de
+ * 1,5 s la persona ya se ha ido; no puede pasar de la ventana de repeticion
+ * local, o una tarjeta vuelta a presentar sonaria encima del tono anterior.
+ */
+export const SCAN_SOUND_SERVER_WAIT_MS = 2_000
+
+/**
  * Cuanto tiempo se queda la confirmacion en pantalla. La siguiente persona de la
  * cola no debe esperar a que se apague, pero tiene que dar tiempo a leerla.
  *

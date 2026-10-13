@@ -3,9 +3,11 @@ import {
   CONFIRMATION_DISPLAY_MS,
   isArrival,
   PIN_VERIFY_TIMEOUT_MS,
+  SCAN_SOUND_SERVER_WAIT_MS,
   toneFor,
   variantFor,
 } from '@/features/scan/domain/scanOutcome'
+import { LOCAL_REPEAT_WINDOW_MS } from '@/features/scan/application/scanPipeline'
 import type { ScanConfirmation } from '@/features/scan/domain/scanOutcome'
 import { uuidV7 } from '@/shared/ids/uuidV7'
 
@@ -99,5 +101,19 @@ describe('feedback diferenciado', () => {
     expect(toneFor(confirmation({ kind: 'unavailable' }))).toBe('error')
     expect(variantFor(confirmation({ kind: 'unavailable' }))).toBe('error')
     expect(CONFIRMATION_DISPLAY_MS.unavailable).toBeGreaterThan(CONFIRMATION_DISPLAY_MS.rejected)
+  })
+})
+
+// RF-AT-05 (V7-KI-01): el plazo del oido no es el del PIN y encaja entre lo que
+// tarda una persona en irse y la ventana de repeticion local.
+describe('plazo del sonido del servidor', () => {
+  it('1500 < SCAN_SOUND_SERVER_WAIT_MS <= LOCAL_REPEAT_WINDOW_MS < CONFIRMATION_DISPLAY_MS.accepted', () => {
+    expect(SCAN_SOUND_SERVER_WAIT_MS).toBeGreaterThan(1_500)
+    expect(SCAN_SOUND_SERVER_WAIT_MS).toBeLessThanOrEqual(LOCAL_REPEAT_WINDOW_MS)
+    expect(LOCAL_REPEAT_WINDOW_MS).toBeLessThan(CONFIRMATION_DISPLAY_MS.accepted)
+  })
+
+  it('no es la misma constante que el plazo de «Comprobando…» del PIN', () => {
+    expect(SCAN_SOUND_SERVER_WAIT_MS).not.toBe(PIN_VERIFY_TIMEOUT_MS)
   })
 })

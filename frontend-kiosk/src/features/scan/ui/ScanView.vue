@@ -159,7 +159,13 @@ const pipeline = createScanPipeline({
   onError: (_code, context) => reporter.report('kiosk.scan.submit_failed', context),
 })
 
-const session = useScanSessionWithCleanup({ pipeline, sound })
+// La pantalla confirma al instante y muda; el tono espera al servidor hasta
+// `SCAN_SOUND_SERVER_WAIT_MS` (RF-AT-05). Sin red de antemano suena `pending` ya.
+const session = useScanSessionWithCleanup({
+  pipeline,
+  sound,
+  isOffline: () => connectivity.status.value === 'offline',
+})
 
 const scanner = useQrScanner({
   video,

@@ -227,17 +227,11 @@ async function confirm(): Promise<void> {
       if (!alive) return
 
       // El PIN no se puede validar en local (regla dura 19 + RS-03: viaja
-      // sellado). Mientras estaba «Comprobando…» no ha sonado nada todavia,
-      // asi que el desenlace que llega ahora — real o «pendiente» por plazo
-      // vencido — se pinta CON su propio sonido (`present`), no en silencio.
-      // Si lo que habia en pantalla ya era «pendiente» (sin red, o una
-      // respuesta tardia tras el plazo), el sonido de reconocimiento ya sono
-      // entonces: repetirlo aqui daria dos pitidos por un unico fichaje.
-      if (session.confirmation.value?.kind === 'verifying') {
-        session.present(confirmation)
-      } else {
-        session.settle(confirmation)
-      }
+      // sellado). «Comprobando…» es MUDO (RF-AT-05): el tono es el del
+      // desenlace que llega ahora — real o «pendiente» por plazo vencido — y
+      // la sesion lo hace sonar una sola vez por `scanId`. Una respuesta
+      // tardia tras «pendiente» solo repinta: no suena otra vez.
+      session.settle(confirmation)
       scheduleReturn(confirmation.kind)
     },
     onError: (code, context) =>
