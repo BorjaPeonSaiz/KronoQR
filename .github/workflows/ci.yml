@@ -101,6 +101,11 @@ on:
         description: "Fuerza el refresco de la capa de paquetes Alpine de las imagenes (runbook triaje-hallazgos-seguridad.md, punto 1): un valor nuevo, p. ej. la salida de `date -u +%s`, reconstruye la capa aunque el dia no haya cambiado. Vacio = sello diario de make."
         required: false
         default: ""
+      full_mutation:
+        description: "Ejecuta tambien la mutacion completa (MSI global, hasta 120 min). Por omision solo corre de noche; el cierre de bloque se apoya en make mutate-changed."
+        type: boolean
+        required: false
+        default: false
   schedule:
     # Dispara SOLO los jobs nocturnos: `coverage`, `mutation` y
     # `secrets-history` (ver sus comentarios). Todos los demas de este fichero
@@ -3051,12 +3056,18 @@ jobs:
   # timeout-minutes 90 y no 60 (R6-DV-08): 26, 49 y 53 min medidos en los
   # ultimos runs manuales verdes; con 60 un runner un 15 % mas lento lo mataba
   # por tiempo con el dominio entero en verde.
+  #
+  # 120 y solo nocturna desde el 13-10-2026 (decision del propietario, plan
+  # 2.2.1 «Pendiente de decision»): GitHub la corto dos veces a los 90 min en
+  # un runner lento. Deja de formar parte de la CI manual de cierre de bloque;
+  # alli manda `make mutate-changed` del job `unit`. Se puede pedir a mano con
+  # el input `full_mutation`.
   #-----------------------------------------------------------------------------
   mutation:
     name: "Mutacion completa (RQ-10, nocturna)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 120
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation)
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
