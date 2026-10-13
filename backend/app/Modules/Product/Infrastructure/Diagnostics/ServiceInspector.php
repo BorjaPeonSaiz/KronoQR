@@ -41,6 +41,17 @@ final readonly class ServiceInspector
     /** Trabajos en cola que ya son un problema: el latido del quiosco se retrasa. */
     public const int QUEUE_BACKLOG_FAILURE = 5000;
 
+    /**
+     * Las migraciones que retiran los privilegios que vigila
+     * {@see self::workRecordPrivileges()}, las mismas que mira `update.sh`.
+     *
+     * @var list<string>
+     */
+    public const array WORK_RECORD_PRIVILEGE_MIGRATIONS = [
+        '2026_10_13_100000_restrict_application_updates_on_work_record',
+        '2026_10_13_100100_restrict_application_writes_on_compliance_profiles',
+    ];
+
     public function __construct(
         private ConnectionInterface $database,
         private Redis $redis,
@@ -188,6 +199,74 @@ final readonly class ServiceInspector
                 // El NOMBRE del rol de base de datos, que es del despliegue y no
                 // del cliente: sin el, «alguien tiene UPDATE» no dice a quien
                 // quitarselo.
+                'database_user' => (string) $privileges->grantee,
+            ];
+        } catch (Throwable $failure) {
+            return ['reachable' => false, 'error' => $failure::class];
+        }
+    }
+
+    /**
+     * Lo que el usuario de la aplicacion tiene **de mas** sobre el registro
+     * horario y sobre la asignacion del perfil de cumplimiento (ADR-057 §1 y
+     * §7; RL-04, RS-07).
+     *
+     * Las migraciones `2026_10_13_*` retiran esos privilegios y `update.sh` los
+     * comprueba y repara al actualizar, pero entre una actualizacion y la
+     * siguiente nada los vigilaba: volver a ejecutar la provision (concede todo
+     * con `GRANT … ON ALL TABLES`) o un `GRANT` a mano los devolvia en silencio.
+     *
+     * **Solo se mira lo que sobra**, no el conjunto exacto de `update.sh`: lo que
+     * faltara rompe el fichaje y lo ve cualquiera, lo que sobra no lo ve nadie.
+     * `has_table_privilege` no cuenta los privilegios de columna, que en
+     * `shift_entries` e `incidents` son los legitimos; `has_column_privilege`
+     * cuenta los de tabla y los de columna, que es lo que se quiere para las
+     * tres columnas que deciden el suelo legal.
+     *
+     * Con las migraciones sin aplicar devuelve `expected = false`: esos
+     * privilegios son los que la version anterior del esquema necesita, y la
+     * sonda `database.migrations_pending` ya dice lo que pasa.
+     *
+     * @return array<string, mixed>
+     */
+    public function workRecordPrivileges(): array
+    {
+        try {
+            $applied = $this->database->table('migrations')
+                ->whereIn('migration', self::WORK_RECORD_PRIVILEGE_MIGRATIONS)
+                ->count();
+
+            if ($applied !== \count(self::WORK_RECORD_PRIVILEGE_MIGRATIONS)) {
+                return ['reachable' => true, 'expected' => false];
+            }
+
+            /** @var object{grantee: string, excess: string} $privileges */
+            $privileges = $this->database->selectOne(
+                <<<'SQL'
+                SELECT current_user AS grantee, coalesce(string_agg(d.x, ',' ORDER BY d.x), '') AS excess
+                  FROM (
+                    SELECT t.tbl || ':UPDATE' AS x
+                      FROM unnest(ARRAY['shift_entries', 'shift_corrections', 'scan_events',
+                                        'discarded_scan_reports', 'incidents']) AS t(tbl)
+                     WHERE has_table_privilege(current_user, t.tbl, 'UPDATE')
+                    UNION ALL
+                    SELECT c.tbl || '.' || c.col || ':' || p.priv
+                      FROM (VALUES ('compliance_profiles', 'jurisdiction'), ('compliance_profiles', 'is_default'),
+                                   ('sites', 'compliance_profile_id')) AS c(tbl, col)
+                     CROSS JOIN unnest(ARRAY['INSERT', 'UPDATE']) AS p(priv)
+                     WHERE has_column_privilege(current_user, c.tbl, c.col, p.priv)
+                  ) AS d
+                SQL
+            );
+
+            $excess = $privileges->excess === '' ? [] : explode(',', $privileges->excess);
+
+            return [
+                'reachable' => true,
+                'expected' => true,
+                'excess' => $excess,
+                // El NOMBRE del rol, como en `auditLogPrivileges`: sin el, el
+                // aviso no dice a quien quitarselos.
                 'database_user' => (string) $privileges->grantee,
             ];
         } catch (Throwable $failure) {

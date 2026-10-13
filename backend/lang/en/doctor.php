@@ -87,6 +87,14 @@ return [
                     .'usable as evidence in a labour inspection.',
                 'warning_unknown' => 'The privileges on the audit log could not be read.',
             ],
+            'work_record_privileges' => [
+                'ok' => 'The application user cannot rewrite the work record beyond what clocking needs, nor '
+                    .'change the compliance profile of a site.',
+                'warning_excess' => 'Database user «:user» holds extra privileges on the work record or the '
+                    .'compliance profile (:excess). Clocking works as usual, but anyone running code in the '
+                    .'application could rewrite clockings or lower the legal retention period.',
+                'warning_unknown' => 'The privileges on the work record could not be read.',
+            ],
             'audit_chain' => [
                 'ok' => 'The audit log is correctly chained.',
                 'failure' => 'The last yearly seal of the audit log does not add up: rows are missing or the '
@@ -564,6 +572,15 @@ return [
                     ."  REVOKE UPDATE, DELETE ON audit_log FROM :user;\n"
                     ."This usually happens after restoring a backup with the wrong user. If you do not know how\n"
                     .'they got there, tell support before changing anything: it may be relevant.',
+                'warning_unknown' => "Run `php artisan product:doctor` again once the database responds. If it\n"
+                    .'still cannot be checked, generate the diagnostics bundle.',
+            ],
+            'work_record_privileges' => [
+                'warning_excess' => "Most likely the database provisioning was run again (it grants everything) or\n"
+                    ."someone ran a GRANT by hand. The next update with update.sh sets them right with the\n"
+                    ."migration role. Do not change them by hand: generate the diagnostics bundle with\n"
+                    ."`php artisan product:diagnostics`, send it to support and check who has access to the\n"
+                    .'migration role.',
                 'warning_unknown' => "Run `php artisan product:doctor` again once the database responds. If it\n"
                     .'still cannot be checked, generate the diagnostics bundle.',
             ],
