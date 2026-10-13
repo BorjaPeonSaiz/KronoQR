@@ -366,11 +366,13 @@ gestión activa). `--acknowledge` no se combina con `--full` ni con `--days`.
   otros (corte imposible, sin centro), no explica ningún borrado: esos tramos
   siguen saliendo hasta que los restaures desde la copia (§4).
 - **Avisa a seguridad.** La subida de la serie dispara
-  `PurgaFueraDeLimitesRevisada` (aviso, se apaga sola en un día). Una revisión,
+  `PurgaFueraDeLimitesRevisada` (aviso, se apaga sola en un día) o, si la revisión
+  explica borrados (`explains_deletions="true"`), `PurgaRevisadaQueExplicaBorrados`
+  (crítica, con `integrity="true"`). Una revisión,
   legítima o escrita con la credencial del runtime para tapar algo, nunca pasa
   en silencio.
 
-**Si recibes `PurgaFueraDeLimitesRevisada`** y no esperabas una revisión:
+**Si recibes `PurgaFueraDeLimitesRevisada`** (aviso) o **`PurgaRevisadaQueExplicaBorrados`** (crítica, integridad: la revisión explica borrados, así que es el caso de un par purga + revisión falsificado; atiéndela el mismo día) y no esperabas una revisión:
 
 ```sql
 -- Quién la firmó, cuándo y con qué motivo (consulta con el rol de migración).

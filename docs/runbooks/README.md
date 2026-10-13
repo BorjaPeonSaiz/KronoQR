@@ -71,7 +71,7 @@ apunta su `runbook_url`. Si recibes una alerta, esta es la tabla.
 | [`restaurar-backup.md`](restaurar-backup.md) | `CopiaDeSeguridadFallida` · `CopiaDeSeguridadSinVerificar` · `CopiaDeSeguridadAusente` · `ArchivadoDeWalDetenido` · `ArchivadoDeWalFallando` · `MedicionDeWalAusente` · `ArchiveTimeoutFueraDeRango` · `DiscoDeCopiasCasiLleno` · `SimulacroDeRestauracionNuncaEjecutado` · `SimulacroDeRestauracionCaducado` |
 | [`slot-replicacion-parado.md`](slot-replicacion-parado.md) | `SlotDeReplicacionParado` |
 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | `RoturaDeCadenaDeAuditoria` · `VerificacionDeAuditoriaAusente` · `ParticionDeAuditoriaAusente` · `ParticionDeAuditoriaDelProximoAnoSinPreparar` |
-| [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) | `DiscrepanciaEntreRegistroYAuditoria` · `ConciliacionDelRegistroAusente` · `ConciliacionCompletaDelRegistroAusente` · `PurgaFueraDeLimitesRevisada` |
+| [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) | `DiscrepanciaEntreRegistroYAuditoria` · `ConciliacionDelRegistroAusente` · `ConciliacionCompletaDelRegistroAusente` · `PurgaFueraDeLimitesRevisada` · `PurgaRevisadaQueExplicaBorrados` |
 | [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | `DivergenciaEnReconciliacionNocturna` · `ReconciliacionDeProyeccionAusente` · `ReconciliacionConFallos` |
 | [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | `TurnoAbiertoProlongado` · `DescansoEntreJornadasInsuficiente` · `MetricaDeIncidenciasAusente` · `DeteccionDeIncidenciasAusente` |
 | [`patron-anomalo-credencial.md`](patron-anomalo-credencial.md) | `DeteccionDePatronesConFallos` · `DeteccionDePatronesAusente` |

@@ -73,14 +73,16 @@ groups:
       #
       # Salta cuando el gauge de la pasada diaria SUBE respecto a hace un dia
       # (o aparece por primera vez con valor > 0), y se apaga sola en un dia.
+      # Aqui solo las que NO explican borrados;
+      # las que si, van a PurgaRevisadaQueExplicaBorrados (critica).
       # Es un aviso, no una averia: no hay nada que parar. Quien lo recibe
       # comprueba que la revision la hizo quien debia y que el motivo cuadra con
       # el informe del incidente.
       #------------------------------------------------------------------------
       - alert: PurgaFueraDeLimitesRevisada
         expr: >-
-          max(work_record_reconciliation_reviewed_purges{scope="recent"})
-            > (max(work_record_reconciliation_reviewed_purges{scope="recent"} offset 1d) or vector(0))
+          max(work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"})
+            > (max(work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="false"} offset 1d) or vector(0))
         # Sin espera: el gauge solo cambia una vez al dia, con la pasada
         # diaria, y una revision tiene que avisar en cuanto se publica.
         for: 0m
@@ -99,6 +101,39 @@ groups:
             motivo) y que cuadra con un incidente ya investigado. Si nadie lo
             reconoce, es un posible uso de la credencial de la aplicacion:
             trata el caso como el de DiscrepanciaEntreRegistroYAuditoria.
+          runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
+
+      #------------------------------------------------------------------------
+      # La misma revision, pero de una purga cuyo asiento pasa a EXPLICAR
+      # borrados (explains_deletions="true"): tras ella, esos tramos dejan de
+      # salir como audit_without_entry. Un par purga + revision escrito con la
+      # credencial del runtime es la forma de borrar tramos y que la
+      # conciliacion lo dé por bueno, asi que aqui no basta un aviso de un dia:
+      # es un posible incidente de integridad, critico e inmediato.
+      #------------------------------------------------------------------------
+      - alert: PurgaRevisadaQueExplicaBorrados
+        expr: >-
+          max(work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="true"})
+            > (max(work_record_reconciliation_reviewed_purges{scope="recent",explains_deletions="true"} offset 1d) or vector(0))
+        for: 0m
+        labels:
+          severity: critical
+          integrity: "true"
+          destinatario: seguridad
+          component: audit
+        annotations:
+          summary: "Una revision de purga ha pasado a explicar borrados del registro horario"
+          description: >-
+            Alguien ha ejecutado compliance:reconcile-work-record --acknowledge
+            sobre una purga cuyo asiento, desde ahora, explica el borrado de
+            tramos ({{ $value }} en la ultima pasada diaria): esos tramos ya no
+            salen como audit_without_entry. Verifica HOY con la persona que
+            firma (responsible) que lo hizo ella, y contrasta quien tenia
+            acceso por shell al servidor. Comprueba que existe un informe de
+            incidente o de retencion que cuadra y que se restauraron o se
+            documentaron los tramos. Si nadie lo reconoce, es un par purga +
+            revision escrito con la credencial de la aplicacion para tapar un
+            borrado: trata el caso como un incidente de integridad.
           runbook_url: docs/runbooks/discrepancia-registro-auditoria.md
 
       #------------------------------------------------------------------------
