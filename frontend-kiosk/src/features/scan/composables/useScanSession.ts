@@ -16,7 +16,11 @@
 //   - lo que se decide en local (una lectura que no es tarjeta KronoQR) suena
 //     a error en el acto: no hay nada que esperar.
 //   - nunca dos tonos por `scanId`: `soundedScanId` lo impide, y el
-//     temporizador se cancela en cuanto suena el tono real.
+//     temporizador se cancela en cuanto suena el tono real. UNICA excepcion:
+//     si ya sono `pending` y el desenlace final es un rechazo, suena `error`
+//     (quien oyo «guardado» no puede quedarse creyendo que ficho).
+//   - si una lectura local suena justo cuando se cierra la espera de otra
+//     persona, su tono se desfasa `LOCAL_TONE_STAGGER_MS` para no mezclarse.
 //
 // Si el audio esta bloqueado o falla, se ignora: un sonido que no suena no
 // puede impedir ni retrasar un fichaje (regla dura 19).
@@ -64,6 +68,9 @@ export interface ScanSession {
   dismiss(): void
 }
 
+/** Separacion entre el `pending` de una espera cerrada y el tono local que le sigue. */
+const LOCAL_TONE_STAGGER_MS = 250
+
 function defaultNow(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now()
 }
@@ -79,6 +86,9 @@ export function useScanSession(options: UseScanSessionOptions): ScanSession {
   let soundWait: { readonly scanId: string; readonly timer: ReturnType<typeof setTimeout> } | null =
     null
   let soundedScanId: string | null = null
+  let soundedTone: FeedbackTone | null = null
+  /** Tono local diferido (ver `accept`): como mucho uno vivo. */
+  let deferredSound: ReturnType<typeof setTimeout> | null = null
 
   function clearTimer(): void {
     if (dismissTimer === null) return
@@ -94,8 +104,14 @@ export function useScanSession(options: UseScanSessionOptions): ScanSession {
 
   /** El unico punto por el que suena algo: un tono por `scanId`, nunca dos. */
   function playOnce(scanId: string, tone: FeedbackTone): void {
-    if (soundedScanId === scanId) return
+    if (soundedScanId === scanId) {
+      // Unica excepcion: ya sono `pending` («guardado») y el desenlace final es
+      // un rechazo. Callar dejaria a la persona creyendo que ficho; suena `error`.
+      // Nunca dos tonos de exito: `pending` -> entry/exit/notice sigue sin sonar.
+      if (soundedTone !== 'pending' || tone !== 'error') return
+    }
     soundedScanId = scanId
+    soundedTone = tone
     if (soundWait?.scanId === scanId) cancelSoundWait()
     try {
       options.sound.play(tone)
@@ -145,9 +161,22 @@ export function useScanSession(options: UseScanSessionOptions): ScanSession {
       const startedAt = now()
       const next = options.pipeline.handleDecoded(rawText)
       if (next === null) return // Repeticion inmediata del mismo codigo.
+      const displacing = soundWait !== null && soundWait.scanId !== next.scanId
       show(next)
       if (next.kind === 'pending') {
         waitForServer(next)
+      } else if (displacing) {
+        // Decidido en local, pero el `pending` de la espera anterior acaba de
+        // sonar en este mismo turno (`show`): se desfasa para no mezclar dos
+        // tonos. Desfase y no silencio, para que la persona anterior oiga su
+        // «guardado» y la siguiente su error.
+        const scanId = next.scanId
+        const tone = toneFor(next)
+        if (deferredSound !== null) clearTimeout(deferredSound)
+        deferredSound = setTimeout(() => {
+          deferredSound = null
+          playOnce(scanId, tone)
+        }, LOCAL_TONE_STAGGER_MS)
       } else {
         // Decidido en local (lectura que no es tarjeta): suena en el acto.
         playOnce(next.scanId, toneFor(next))
@@ -173,6 +202,8 @@ export function useScanSession(options: UseScanSessionOptions): ScanSession {
 
     dismiss() {
       clearTimer()
+      if (deferredSound !== null) clearTimeout(deferredSound)
+      deferredSound = null
       cancelSoundWait()
       confirmation.value = null
     },

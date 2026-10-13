@@ -481,8 +481,9 @@ test(
   { tag: ['@RF-AT-05', '@RF-KI-06', '@RNF-P-03'] },
   async ({ page }) => {
     const { readTones } = await installAudioProbe(page)
-    // El servidor contesta a los 3,5 s: despues del plazo del sonido (2 s).
-    await stubScanApi(page, { outcome: 'clock_in', delayMs: 3_500 })
+    // El servidor contesta a los 3 s: despues del plazo del sonido (2 s) y con
+    // 1 s de margen antes de que la pantalla «pendiente» se retire (4 s).
+    await stubScanApi(page, { outcome: 'clock_in', delayMs: 3_000 })
 
     await page.goto('/')
 
@@ -499,6 +500,32 @@ test(
       timeout: 10_000,
     })
     expect((await readTones()).map((tone) => tone.frequency)).toEqual(TONE.pending.frequencies)
+  },
+)
+
+test(
+  'rechazo tardio: «pendiente» y despues «error», para que nadie crea que ficho (RF-AT-05)',
+  { tag: ['@RF-AT-05', '@RF-KI-06'] },
+  async ({ page }) => {
+    const { readTones } = await installAudioProbe(page)
+    // Rechazo a los 3 s: pasado el plazo del sonido (2 s), dentro de los 4 s de pantalla.
+    await stubScanApi(page, { outcome: 'rejected', delayMs: 3_000 })
+
+    await page.goto('/')
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending')
+    await expectTones(readTones, TONE.pending)
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected', {
+      timeout: 10_000,
+    })
+    // Suenan los dos, en orden: «guardado» y luego el error. Nada mas.
+    await expect
+      .poll(async () => (await readTones()).map((tone) => tone.frequency))
+      .toEqual([...TONE.pending.frequencies, ...TONE.error.frequencies])
+    expect((await readTones()).map((tone) => tone.type)).toEqual([
+      ...TONE.pending.types,
+      ...TONE.error.types,
+    ])
   },
 )
 

@@ -185,9 +185,81 @@ describe('sonido de la sesion: tras la respuesta del servidor', () => {
 
     session.settle(accepted('s1'))
     expect(session.confirmation.value?.kind).toBe('accepted')
-    session.settle(rejected('s1'))
     expect(played).toEqual(['pending'])
     session.dismiss()
+  })
+
+  it('rechazo DESPUES del plazo: pending y error (nunca dos tonos de exito, pero el rechazo si se oye)', () => {
+    const { session, played } = scanned()
+
+    vi.advanceTimersByTime(SCAN_SOUND_SERVER_WAIT_MS)
+    expect(played).toEqual(['pending'])
+
+    session.settle(rejected('s1'))
+    expect(session.confirmation.value?.kind).toBe('rejected')
+    expect(played).toEqual(['pending', 'error'])
+
+    // Y una vez, no mas.
+    session.settle(rejected('s1'))
+    expect(played).toEqual(['pending', 'error'])
+    session.dismiss()
+  })
+
+  it('un antirrebote tras el plazo sigue sin sonar (solo el rechazo es excepcion)', () => {
+    const { session, played } = scanned()
+
+    vi.advanceTimersByTime(SCAN_SOUND_SERVER_WAIT_MS)
+    session.settle({
+      kind: 'debounced',
+      scanId: 's1',
+      occurredAt: at,
+      displayName: 'Lucia G.',
+      workedMinutes: 10,
+      lastAcceptedAt: at,
+    })
+
+    expect(played).toEqual(['pending'])
+    session.dismiss()
+  })
+
+  it('A en espera y B ilegible: el pending de A y el error de B no suenan en el mismo turno', () => {
+    const { sound, played } = soundSpy()
+    const session = useScanSession({
+      pipeline: pipelineReturning(pending('s1'), {
+        kind: 'unreadable',
+        scanId: 'u1',
+        occurredAt: at,
+      }),
+      sound,
+    })
+
+    session.accept('FH1.a3.uno.sig')
+    vi.advanceTimersByTime(500)
+    session.accept('basura')
+    expect(played).toEqual(['pending'])
+
+    vi.advanceTimersByTime(300)
+    expect(played).toEqual(['pending', 'error'])
+    session.dismiss()
+  })
+
+  it('dismiss cancela el tono local desfasado', () => {
+    const { sound, played } = soundSpy()
+    const session = useScanSession({
+      pipeline: pipelineReturning(pending('s1'), {
+        kind: 'unreadable',
+        scanId: 'u1',
+        occurredAt: at,
+      }),
+      sound,
+    })
+
+    session.accept('FH1.a3.uno.sig')
+    session.accept('basura')
+    session.dismiss()
+    vi.advanceTimersByTime(1_000)
+
+    expect(played).toEqual(['pending'])
   })
 
   it('sin red de antemano: `pending` en el acto, sin esperar al plazo ni repetirlo', () => {
@@ -335,6 +407,17 @@ describe('sonido de la sesion: tras la respuesta del servidor', () => {
       session.settle(accepted('p1'))
 
       expect(played).toEqual(['pending'])
+      session.dismiss()
+    })
+
+    it('plazo vencido y rechazo tardio: `pending` y luego `error`', () => {
+      const { session, played } = pinSession()
+
+      session.present(verifying('p1'))
+      session.settle(pending('p1'))
+      session.settle(rejected('p1'))
+
+      expect(played).toEqual(['pending', 'error'])
       session.dismiss()
     })
 

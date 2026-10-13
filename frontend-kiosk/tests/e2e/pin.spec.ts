@@ -359,6 +359,48 @@ test(
 )
 
 test(
+  'PIN rechazado tras el plazo: suena «pendiente» y despues «error» (RF-AT-05)',
+  { tag: ['@RF-AT-05', '@RF-AT-11', '@RF-KI-06'] },
+  async ({ page }) => {
+    const { readTones, reset } = await installAudioProbe(page)
+    await stubKioskApiWithPin(page)
+    // Rechaza a los 3,5 s: despues de `PIN_VERIFY_TIMEOUT_MS` (2,5 s).
+    await stubPinScanApi(page, 'rejected', 3_500)
+
+    await page.goto('/')
+    await page.getByTestId('pin-entry-link').click()
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await pressPinDigits(page, RAW_PIN)
+    await reset()
+    await page.getByTestId('pin-confirm').click()
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'verifying')
+    expect(await readTones()).toEqual([])
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending', {
+      timeout: 10_000,
+    })
+    await expect
+      .poll(async () => (await readTones()).map((tone) => tone.frequency))
+      .toEqual([587, 587])
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected', {
+      timeout: 10_000,
+    })
+    // `TONES.error`: 196 -> 147 Hz, cuadrada, detras del «pendiente».
+    await expect
+      .poll(async () => (await readTones()).map((tone) => tone.frequency))
+      .toEqual([587, 587, 196, 147])
+    expect((await readTones()).map((tone) => tone.type)).toEqual([
+      'triangle',
+      'triangle',
+      'square',
+      'square',
+    ])
+  },
+)
+
+test(
   'la pantalla de PIN no tiene violaciones de accesibilidad criticas ni graves',
   { tag: ['@RF-KI-06'] },
   async ({ page }) => {
