@@ -81,6 +81,9 @@ groups:
         expr: >-
           max(work_record_reconciliation_reviewed_purges{scope="recent"})
             > (max(work_record_reconciliation_reviewed_purges{scope="recent"} offset 1d) or vector(0))
+        # Sin espera: el gauge solo cambia una vez al dia, con la pasada
+        # diaria, y una revision tiene que avisar en cuanto se publica.
+        for: 0m
         labels:
           severity: warning
           destinatario: seguridad
