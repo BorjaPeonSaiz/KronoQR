@@ -891,13 +891,18 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         r=0; work_record_privileges_expected compose_new || r=$?; printf 'a-medias=%s\n' "${r}"
         aplicadas=0
         r=0; work_record_privileges_expected compose_new || r=$?; printf 'version-2.2.0=%s\n' "${r}"
+        aplicadas=; r=0; work_record_privileges_expected compose_new || r=$?; printf 'salida-vacia=%s\n' "${r}"
+        aplicadas=x; r=0; work_record_privileges_expected compose_new || r=$?; printf 'no-numerica=%s\n' "${r}"
         deriva=ok; printf 'cuadra=%s\n' "$(work_record_privileges_drift compose_new)"
         deriva=shift_entries:UPDATE; printf 'sobra=%s\n' "$(work_record_privileges_drift compose_new)"
         deriva=; printf 'consulta-fallida=%s\n' "$(work_record_privileges_drift compose_new)"
         d="$(mktemp -d)"; trap 'rm -rf "${d}"' EXIT
         work_record_privileges_sql fichaje_app >"${d}/sql.txt"
         grep -c "has_table_privilege('fichaje_app'" "${d}/sql.txt"
+        grep -q "('MAINTAIN', false)" "${d}/sql.txt" && printf 'con-maintain\n'
         work_record_privileges_repair_sql >"${d}/repara.txt"
+        grep -q 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE daily_totals TO "fichaje_app";' "${d}/repara.txt" && printf 'misma-lista\n'
+        grep -q "('daily_totals', true, true, true)" "${d}/sql.txt" && printf 'misma-lista\n'
         grep -c '^REVOKE ALL PRIVILEGES ON TABLE' "${d}/repara.txt"
         grep -c 'shift_entries TO "fichaje_app"' "${d}/repara.txt"
         grep -E 'GRANT .*(UPDATE|INSERT) ON TABLE (shift_entries|shift_corrections|scan_events|discarded_scan_reports|incidents) ' "${d}/repara.txt" || printf 'sin-update-de-tabla\n'
@@ -911,6 +916,10 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         ->and($proceso->getOutput())->toContain('con-migraciones=0')
         ->and($proceso->getOutput())->toContain('a-medias=1')
         ->and($proceso->getOutput())->toContain('version-2.2.0=1')
+        ->and($proceso->getOutput())->toContain('con-maintain')
+        ->and(substr_count($proceso->getOutput(), 'misma-lista'))->toBe(2)
+        ->and($proceso->getOutput())->toContain('salida-vacia=2')
+        ->and($proceso->getOutput())->toContain('no-numerica=2')
         ->and($proceso->getOutput())->toContain('cuadra=ok')
         ->and($proceso->getOutput())->toContain('sobra=shift_entries:UPDATE')
         ->and($proceso->getOutput())->toContain('consulta-fallida=?')
@@ -920,7 +929,8 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         ->and($proceso->getOutput())->toContain('nombre-raro=1');
 
     $actualizador = (string) file_get_contents(Repo::file('infra/scripts/update.sh'));
-    expect($actualizador)->toContain('if work_record_privileges_expected compose_new; then')
+    expect($actualizador)->toContain('work_record_privileges_expected compose_new || expected=$?')
+        ->and($actualizador)->toContain('u_report_skipped')
         ->and($actualizador)->toContain('u_f_verify_work_record');
 })->group('RF-PD-10', 'RS-07', 'RL-04');
 
