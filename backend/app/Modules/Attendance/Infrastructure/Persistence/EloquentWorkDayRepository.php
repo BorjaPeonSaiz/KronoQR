@@ -52,6 +52,37 @@ use RuntimeException;
  * llegan los dos a una jornada sin turno abierto. El caso de uso sabe que hacer
  * con `ShiftAlreadyOpen` —reintentar, y resolverlo por anti-rebote—, pero no con
  * un `SQLSTATE 23505`.
+ *
+ * ## El tramo que se va a escribir se carga bloqueado
+ *
+ * **Por que existe** (revision del bloque 7 de la 2.2.1). Dos cierres
+ * simultaneos del mismo turno leian los dos el tramo abierto sin candado; el
+ * segundo esperaba en el `upsert` y, cuando el primero confirmaba, la salida
+ * ya estaba escrita. Lo que guardaba el segundo era la salida del primero,
+ * pero su agregado, su `DailyTotalsRecalculated` y su asiento
+ * `shift_entry.closed` llevaban la suya: `daily_totals` y `audit_log` no
+ * cuadraban con `shift_entries` y la conciliacion de ADR-057 §4 daba una
+ * alerta critica falsa. Con el tramo bloqueado al cargar, el segundo espera
+ * **antes** de decidir y decide sobre lo confirmado.
+ *
+ * **`FOR NO KEY UPDATE` y no `FOR UPDATE`**: es el candado que tomaria el
+ * propio `upsert`, que no cambia la clave, y no choca con el `FOR KEY SHARE`
+ * con el que PostgreSQL comprueba las claves ajenas hacia este tramo
+ * (`scan_events`, `incidents`, `shift_corrections`). `FOR UPDATE` haria
+ * esperar a quien solo inserta una fila que lo referencia.
+ *
+ * **Orden de candados** (ADR-046 §1, `SerializedLedgerWrite`): el tramo se
+ * toma antes de la cadena de `audit_log`, igual que ya lo tomaba el `upsert`;
+ * la cadena sigue siendo lo ultimo, al publicar los eventos. Solo se adelanta
+ * el momento, no el orden.
+ *
+ * **Solo en las dos lecturas que entran por un tramo concreto**
+ * ({@see self::findOpenWorkDayFor()}, {@see self::findWorkDayOfShiftEntry()}), y nunca
+ * en {@see self::load()}: una lectura con candado conserva la instantanea de antes
+ * de esperar y no ve las filas que el otro inserto, asi que la jornada
+ * cargada podria faltarle la version nueva de una correccion. Por eso se
+ * bloquea con una consulta y se carga con la siguiente, que ya ve lo
+ * confirmado.
  */
 final readonly class EloquentWorkDayRepository implements WorkDayRepository
 {
@@ -72,10 +103,18 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
         // El indice unico parcial `one_open_shift_per_employee` cubre justo esta
         // consulta: entran solo las filas vigentes sin salida, unas pocas
         // centenas aunque la tabla tenga millones.
+        //
+        // **Con el tramo bloqueado** (ver el docblock de la clase): el que llega
+        // segundo a cerrar el mismo turno espera aqui, y al soltarlo el primero
+        // PostgreSQL vuelve a evaluar el `WHERE` sobre la fila confirmada. Ya no
+        // esta abierta, asi que esta consulta no devuelve nada y el escaneo se
+        // decide como si hubiera llegado despues —anti-rebote, o la entrada
+        // siguiente—, que es lo que es.
         $open = ShiftEntry::query()
             ->where('employee_id', $employeeId)
             ->whereNull('clocked_out_at')
             ->whereNotIn('status', self::historicalStatuses())
+            ->lock('for no key update')
             ->first();
 
         if (! $open instanceof ShiftEntry) {
@@ -123,9 +162,13 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
      */
     public function findWorkDayOfShiftEntry(string $shiftEntryUuid): ?WorkDay
     {
+        // Bloqueado, como el turno abierto: una segunda correccion o anulacion
+        // del mismo tramo espera a la primera, y al releer ya no lo encuentra
+        // vigente (`409`), en vez de retirarlo otra vez.
         return $this->workDayOf(ShiftEntry::query()
             ->where('uuid', $shiftEntryUuid)
             ->whereNotIn('status', self::historicalStatuses())
+            ->lock('for no key update')
             ->first());
     }
 
@@ -304,19 +347,27 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
         // version, porque la correccion estrena fila (ADR-035). Se inserta con
         // la fila y no se vuelve a tocar.
         //
-        // **La salida solo se escribe si no la habia** (ADR-057 §2). La jornada
-        // se guarda entera, asi que los tramos que no cambian se reescriben, y
-        // su duracion se recalcula desde las marcas. Un tramo cerrado nunca
-        // cambia de salida —la correccion estrena fila—, y el *trigger*
-        // `shift_entries_guard_transition` rechaza que lo haga: si una fila
-        // antigua tuviera una duracion que no cuadra con sus marcas (importada,
-        // o manipulada por fuera y pendiente de remediar desde el panel), cada
-        // fichaje y cada correccion de ese dia fallaria. Con esto, lo que ya
-        // estaba escrito se queda como estaba, que es lo que dice el dominio.
+        // **La duracion y el origen de la salida solo se escriben si no habia
+        // salida** (ADR-057 §2). La jornada se guarda entera, asi que los tramos
+        // que no cambian se reescriben, y su duracion se recalcula desde las
+        // marcas. Un tramo cerrado nunca cambia de salida —la correccion estrena
+        // fila—, y el *trigger* `shift_entries_guard_transition` rechaza que lo
+        // haga: si una fila antigua tuviera una duracion que no cuadra con sus
+        // marcas (importada, o manipulada por fuera y pendiente de remediar desde
+        // el panel), cada fichaje y cada correccion de ese dia fallaria. Con
+        // esto, lo que ya estaba escrito se queda como estaba, que es lo que dice
+        // el dominio.
+        //
+        // **`clocked_out_at` no lleva ese `CASE`, a proposito.** Es la marca que
+        // el agregado afirma y la que viaja en su evento y en su asiento. Si la
+        // fila ya tiene otra, guardar en silencio la de la fila dejaria
+        // `daily_totals` y `audit_log` diciendo una hora y `shift_entries` otra
+        // (revision del bloque 7). Con el tramo bloqueado al cargar
+        // (ver el docblock de la clase) no deberia ocurrir; si ocurre —un camino
+        // que cargo sin candado—, el *trigger* lo rechaza con `42501` y la
+        // transaccion entera revierte en vez de divergir.
         ShiftEntry::query()->upsert($rows, ['uuid'], [
-            'clocked_out_at' => new Expression(
-                'CASE WHEN shift_entries.clocked_out_at IS NULL THEN excluded.clocked_out_at ELSE shift_entries.clocked_out_at END'
-            ),
+            'clocked_out_at',
             'duration_minutes' => new Expression(
                 'CASE WHEN shift_entries.clocked_out_at IS NULL THEN excluded.duration_minutes ELSE shift_entries.duration_minutes END'
             ),

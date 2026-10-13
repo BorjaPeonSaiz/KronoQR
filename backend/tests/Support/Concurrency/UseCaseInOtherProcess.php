@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Support\Concurrency;
 
+use App\Modules\Attendance\Application\Command\RegisterScanCommand;
+use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
 use App\Modules\Identity\Application\Command\DeactivateManagementAccountCommand;
 use App\Modules\Identity\Application\Command\DeliverCredentialCommand;
 use App\Modules\Identity\Application\Command\IssueCredentialCommand;
@@ -21,6 +23,7 @@ use App\Modules\Identity\Application\UseCase\ResetManagementPasswordHandler;
 use App\Modules\Identity\Application\UseCase\ResetTwoFactorHandler;
 use App\Modules\Identity\Application\UseCase\RevokeCredential;
 use App\Modules\Identity\Application\UseCase\RotateSigningKey;
+use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Infrastructure\Persistence\AuditChainLock;
 use App\Modules\Workforce\Application\Command\ImportEmployeesCommand;
 use App\Modules\Workforce\Application\Command\OffboardEmployeeCommand;
@@ -36,6 +39,7 @@ use App\Modules\Workforce\Application\UseCase\RegisterEmployeeHandler;
 use App\Modules\Workforce\Application\UseCase\ResetEmployeePinHandler;
 use App\Modules\Workforce\Application\UseCase\UpdateDepartmentHandler;
 use App\Modules\Workforce\Application\UseCase\UpdateEmployeeHandler;
+use DateTimeImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use JsonException;
@@ -245,6 +249,19 @@ final class UseCaseInOtherProcess
                     hiredAt: '2026-10-01',
                     locale: 'es',
                 )),
+            ),
+            // Un escaneo de la persona ya identificada (bloque 7 de la 2.2.1:
+            // dos cierres simultaneos del mismo turno). La resolucion va hecha,
+            // como en el fichaje por PIN: lo que se prueba es la jornada.
+            'register_scan' => static fn (): mixed => app(RegisterScanHandler::class)->handle(
+                new RegisterScanCommand(
+                    scanId: $spec['scan_id'],
+                    qrPayload: $spec['qr_payload'],
+                    occurredAt: new DateTimeImmutable($spec['occurred_at']),
+                    deviceId: (int) $spec['device'],
+                    deviceUuid: $spec['device_uuid'],
+                ),
+                CredentialResolution::resolved($spec['employee']),
             ),
             // El orden PROHIBIDO, a mano: la ficha primero y la cadena despues.
             // Es el control de las pruebas de orden de candados, lo que demuestra
