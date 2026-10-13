@@ -2708,6 +2708,11 @@ phase_start_and_verify() {
     if [ "${drift}" = "ok" ]; then
       kq_msg check_ok "$(kq_format u_verify_work_record_ok "${CFG_DB_USERNAME}")"
       remember_check "privileges-work-record" "$(kq_text u_report_ok)"
+    elif work_record_privileges_tampered "${drift}"; then
+      # Triggers o funcion de purga alterados: una actualizacion limpia no puede dejarlos asi.
+      # No se reactivan solos (taparia la causa): se deshace y se deja la causa en el informe.
+      remember_check "privileges-work-record" "$(kq_text u_report_failed) (${drift})"
+      rollback_and_die "$(kq_format u_f_verify_work_record_triggers "${drift}")" privileges_check_failed
     elif repair_work_record_privileges; then
       kq_msg check_warn "$(kq_format u_w_work_record_privileges_repaired "${CFG_DB_USERNAME}" "${drift}")"
       kq_msg fix "$(kq_text u_w_work_record_privileges_repaired_fix)"

@@ -28,6 +28,13 @@ readonly KQ_WORK_RECORD_MIGRATIONS_B6="'2026_10_13_100000_restrict_application_u
 readonly KQ_WORK_RECORD_MIGRATION_PURGE="'2026_10_14_100000_work_record_trigger_and_purge_function'"
 # La funcion de purga del bloque 7 (se busca por nombre: no depende de su firma).
 readonly KQ_WORK_RECORD_PURGE_FUNCTION="work_record_purge_batch"
+# Triggers del registro (ADR-057 par.2, tarea 7.5), tabla:nombre. Se exige que existan estos y
+# que TODOS los no internos de las dos tablas esten activos (`tgenabled = 'O'`), de modo que
+# los AFTER INSERT que anada una migracion posterior se vigilan sin tocar esta lista.
+# shellcheck disable=SC2034 # los usan update.sh y doctor.sh, que cargan este fichero.
+readonly KQ_WORK_RECORD_TRIGGERS="shift_entries:shift_entries_guard_transition shift_entries:shift_entries_superseded_is_linked incidents:incidents_guard_transition"
+# shellcheck disable=SC2034 # los usan update.sh y doctor.sh, que cargan este fichero.
+readonly KQ_WORK_RECORD_TRIGGER_TABLES="shift_entries incidents"
 
 # Privilegios de TABLA enteros: tabla:INSERT:UPDATE:DELETE (t = concedido, f = no).
 # SELECT siempre se concede; TRUNCATE, REFERENCES, TRIGGER y MAINTAIN, nunca.
@@ -65,6 +72,17 @@ work_record_privileges_stage() {
   return 0
 }
 
+# Devuelve 0 si la deriva (salida de work_record_privileges_sql) incluye un trigger ausente
+# o desactivado, o la funcion de purga sin SECURITY DEFINER / search_path. Eso NO se repara
+# solo: lo hace un superusuario o una migracion rota, y reactivarlo en silencio taparia
+# justo lo que hay que investigar. update.sh deshace y doctor.sh avisa.
+work_record_privileges_tampered() {
+  case "$1" in
+  *trigger:* | *"${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER"*) return 0 ;;
+  esac
+  return 1
+}
+
 # Tabla:INSERT:UPDATE:DELETE del estado exigible (b7 si aun no se ha decidido: es el
 # estado de la version que se publica).
 work_record_privileges_tables() {
@@ -83,7 +101,7 @@ work_record_privileges_tables() {
 work_record_privileges_sql() {
   local role="$1" entry tbl ins upd del priv cols col sep=""
   local IFS=$' \n\t'
-  local tables_values="" columns_values="" purge_sql=""
+  local tables_values="" columns_values="" purge_sql="" trg_names="" trg_tables="" sep2=""
 
   for entry in $(work_record_privileges_tables); do
     IFS=: read -r tbl ins upd del <<<"${entry}"
@@ -101,6 +119,15 @@ work_record_privileges_sql() {
       sep=","$'\n'"  "
     done
   done
+  for entry in ${KQ_WORK_RECORD_TRIGGERS}; do
+    trg_names="${trg_names}${sep2}('${entry%%:*}', '${entry#*:}')"
+    sep2=", "
+  done
+  sep2=""
+  for entry in ${KQ_WORK_RECORD_TRIGGER_TABLES}; do
+    trg_tables="${trg_tables}${sep2}'${entry}'"
+    sep2=", "
+  done
   if [ "${KQ_WORK_RECORD_STAGE:-b7}" = "b7" ]; then
     purge_sql="
   UNION ALL
@@ -115,6 +142,21 @@ work_record_privileges_sql() {
       OR EXISTS (SELECT 1 FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
                   WHERE p.proname = '${KQ_WORK_RECORD_PURGE_FUNCTION}' AND p.pronamespace = 'public'::regnamespace
                     AND a.grantee = 0 AND a.privilege_type = 'EXECUTE')"
+    # Triggers (ausente / desactivado) y funcion de purga (que siga SECURITY DEFINER con su
+    # search_path fijado). NUNCA se reparan solos: un trigger quitado lo quita un superusuario.
+    purge_sql="${purge_sql}
+  UNION ALL
+  SELECT 'trigger:' || k.name || ':AUSENTE'
+    FROM (VALUES ${trg_names}) AS k(tbl, name)
+   WHERE NOT EXISTS (SELECT 1 FROM pg_trigger g WHERE g.tgrelid = k.tbl::regclass AND g.tgname = k.name AND NOT g.tgisinternal)
+  UNION ALL
+  SELECT 'trigger:' || g.tgname || ':DESACTIVADO'
+    FROM pg_trigger g
+   WHERE g.tgrelid IN (SELECT tn::regclass FROM unnest(ARRAY[${trg_tables}]) AS tn) AND NOT g.tgisinternal AND g.tgenabled <> 'O'
+  UNION ALL
+  SELECT '${KQ_WORK_RECORD_PURGE_FUNCTION}:DEFINER'
+   WHERE EXISTS (SELECT 1 FROM pg_proc p WHERE p.proname = '${KQ_WORK_RECORD_PURGE_FUNCTION}' AND p.pronamespace = 'public'::regnamespace
+                   AND (NOT p.prosecdef OR NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}'::text[])) AS c WHERE c LIKE 'search_path=%')))"
   fi
 
   cat <<SQL

@@ -922,6 +922,12 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         grep -c '^REVOKE ALL PRIVILEGES ON TABLE' "${d}/repara.txt"
         grep -c 'shift_entries TO "fichaje_app"' "${d}/repara.txt"
         grep -E 'GRANT .*UPDATE ON TABLE (shift_entries|shift_corrections|scan_events|discarded_scan_reports|incidents) ' "${d}/repara.txt" || printf 'sin-update-de-tabla\n'
+        grep -q "pg_trigger" "${d}/sql.txt" && grep -q "tgenabled <> .O." "${d}/sql.txt" && grep -q "shift_entries_superseded_is_linked" "${d}/sql.txt" && grep -q "incidents_guard_transition" "${d}/sql.txt" && grep -q "prosecdef" "${d}/sql.txt" && printf 'con-triggers\n'
+        grep -q "pg_trigger" "${d}/sql-b6.txt" || printf 'b6-sin-triggers\n'
+        grep -q trigger "${d}/repara.txt" || printf 'no-repara-triggers\n'
+        work_record_privileges_tampered "trigger:shift_entries_guard_transition:DESACTIVADO" && printf 'manipulado-trigger\n'
+        work_record_privileges_tampered "sites:INSERT,work_record_purge_batch:DEFINER" && printf 'manipulado-definer\n'
+        work_record_privileges_tampered "shift_entries:UPDATE,work_record_purge_batch:PUBLIC" || printf 'privilegios-se-reparan\n'
         compose_new() { cat >/dev/null; return 0; }
         deriva=ok; r=0; repair_work_record_privileges || r=$?; printf 'reparado=%s\n' "${r}"
         deriva=sites:INSERT; r=0; repair_work_record_privileges || r=$?; printf 'sigue-pudiendo=%s\n' "${r}"
@@ -949,6 +955,12 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
         ->and($proceso->getOutput())->toContain('sobra=shift_entries:UPDATE')
         ->and($proceso->getOutput())->toContain('consulta-fallida=?')
         ->and($proceso->getOutput())->toContain('sin-update-de-tabla')
+        ->and($proceso->getOutput())->toContain('con-triggers')
+        ->and($proceso->getOutput())->toContain('b6-sin-triggers')
+        ->and($proceso->getOutput())->toContain('no-repara-triggers')
+        ->and($proceso->getOutput())->toContain('manipulado-trigger')
+        ->and($proceso->getOutput())->toContain('manipulado-definer')
+        ->and($proceso->getOutput())->toContain('privilegios-se-reparan')
         ->and($proceso->getOutput())->toContain('reparado=0')
         ->and($proceso->getOutput())->toContain('sigue-pudiendo=1')
         ->and($proceso->getOutput())->toContain('nombre-raro=1');
@@ -956,7 +968,9 @@ it('exige los privilegios del registro horario solo con sus migraciones aplicada
     $actualizador = (string) file_get_contents(Repo::file('infra/scripts/update.sh'));
     expect($actualizador)->toContain('work_record_privileges_expected compose_new || expected=$?')
         ->and($actualizador)->toContain('u_report_skipped')
-        ->and($actualizador)->toContain('u_f_verify_work_record');
+        ->and($actualizador)->toContain('u_f_verify_work_record')
+        ->and($actualizador)->toContain('work_record_privileges_tampered "${drift}"')
+        ->and($actualizador)->toContain('u_f_verify_work_record_triggers');
 })->group('RF-PD-10', 'RS-07', 'RL-04');
 
 it('concilia el registro completo tras migrar y solo informa: sin discrepancias, con ellas, cortada o rota (tarea 7.3, ADR-057 §4)', function (): void {
