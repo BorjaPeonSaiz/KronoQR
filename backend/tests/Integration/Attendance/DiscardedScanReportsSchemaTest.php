@@ -79,9 +79,10 @@ it('rechaza en el esquema los estados que el dominio no puede construir', functi
     'por codigo desde una tarjeta' => [['origin' => 'qr_kiosk'], 'discarded_scan_reports_chk_attribution'],
 ])->group('RN-22');
 
-it('no deja a la aplicacion corregir un aviso, y si purgarlo', function (): void {
-    // F7: sin `UPDATE`; `DELETE` se conserva para la purga de RL-02, que la
-    // ejecuta el rol de la aplicacion en la transaccion que deja su asiento.
+it('no deja a la aplicacion corregir ni borrar un aviso', function (): void {
+    // F7: sin `UPDATE`. Y sin `DELETE` desde el bloque 7 de la 2.2.1: la purga
+    // de RL-02 la hace la funcion `work_record_purge_batch` (ADR-057 §3), que
+    // el rol de la aplicacion llama en la transaccion que deja su asiento.
     $role = AuditLogSchema::applicationRole();
 
     /** @var object{can_update: bool, can_delete: bool, can_insert: bool, can_select: bool} $privilegios */
@@ -94,7 +95,7 @@ it('no deja a la aplicacion corregir un aviso, y si purgarlo', function (): void
     );
 
     expect($privilegios->can_update)->toBeFalse()
-        ->and($privilegios->can_delete)->toBeTrue()
+        ->and($privilegios->can_delete)->toBeFalse()
         ->and($privilegios->can_insert)->toBeTrue()
         ->and($privilegios->can_select)->toBeTrue();
 })->group('RN-22', 'RL-04');

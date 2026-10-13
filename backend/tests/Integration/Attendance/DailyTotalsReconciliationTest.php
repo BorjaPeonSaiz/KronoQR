@@ -285,10 +285,18 @@ it('cuadra con los eventos origen despues de una correccion y una anulacion', fu
     // El historico esta ahi: una version sustituida y un tramo anulado.
     expect(DB::table('shift_entries')->whereIn('status', ['superseded', 'voided'])->count())->toBe(2);
 
-    // Se borra la proyeccion entera para forzar la reconstruccion desde cero,
-    // que es la verificacion que pide ADR-007: reconstruir tiene que dar lo
-    // mismo que habia.
-    DB::table('daily_totals')->delete();
+    // Se vacia la proyeccion para forzar la reconstruccion desde cero, que es
+    // la verificacion que pide ADR-007: reconstruir tiene que dar lo mismo que
+    // habia. Vaciando sus valores y no la fila: desde el bloque 7 de la 2.2.1
+    // la aplicacion no tiene `DELETE` sobre `daily_totals` (ADR-057 §1), y la
+    // fila que falta tiene su propia prueba mas abajo.
+    DB::table('daily_totals')->update([
+        'total_minutes' => 0,
+        'shift_count' => 0,
+        'first_in_at' => null,
+        'last_out_at' => null,
+        'has_open_shift' => false,
+    ]);
     forgetProjectionMetrics();
 
     expect(runReconcile('2026-03-15', '2026-03-15'))->toBe(1);

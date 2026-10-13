@@ -160,21 +160,9 @@ function volumenDelCuadro(): array
           FROM employees e
         SQL);
 
-    // Las jornadas, de donde sale «registro completo». Todas cerradas de entrada:
-    // los turnos abiertos se marcan despues, y ese orden NO es un capricho.
-    DB::statement(<<<'SQL'
-        INSERT INTO shift_entries
-            (uuid, employee_id, site_id, work_date, clocked_in_at, clocked_out_at, duration_minutes,
-             status, clock_in_source, clock_out_source, version, created_at, updated_at)
-        SELECT gen_random_uuid(), e.id, ?, d::date,
-               d + interval '6 hours',
-               d + interval '14 hours',
-               480, 'closed', 'qr_kiosk', 'qr_kiosk', 1, now(), now()
-          FROM employees e
-         CROSS JOIN generate_series(?::date, ?::date, interval '1 day') AS d
-        SQL, [$site, PRIMER_DIA_DEL_CUADRO, $ultimoDia]);
-
     /*
+     * Las jornadas, de donde sale «registro completo».
+     *
      * Una de cada cincuenta personas se deja el turno abierto el 15 de enero, y
      * **su historico termina ahi**.
      *
@@ -187,14 +175,29 @@ function volumenDelCuadro(): array
      * El caso real que esto reproduce: alguien que olvido fichar la salida y se
      * fue de vacaciones, de baja o de la empresa. Es exactamente el defecto que el
      * indicador de «registro completo» existe para enseñar.
+     *
+     * Se siembra asi de entrada, en una sola sentencia. Hasta el bloque 7 de la
+     * 2.2.1 se sembraba todo cerrado y despues se borraba y se reabria, pero la
+     * aplicacion ya no tiene `DELETE` y el motor no deja reabrir un tramo
+     * cerrado (ADR-057 §2 y §3).
      */
-    DB::statement('DELETE FROM shift_entries WHERE work_date > ?::date AND employee_id % 50 = 0', ['2026-01-15']);
     DB::statement(<<<'SQL'
-        UPDATE shift_entries
-           SET clocked_out_at = NULL, duration_minutes = NULL, status = 'open', clock_out_source = NULL
-         WHERE work_date = ?::date
-           AND employee_id % 50 = 0
-        SQL, ['2026-01-15']);
+        INSERT INTO shift_entries
+            (uuid, employee_id, site_id, work_date, clocked_in_at, clocked_out_at, duration_minutes,
+             status, clock_in_source, clock_out_source, version, created_at, updated_at)
+        SELECT gen_random_uuid(), e.id, ?, d::date,
+               d + interval '6 hours',
+               CASE WHEN o.left_open THEN NULL ELSE d + interval '14 hours' END,
+               CASE WHEN o.left_open THEN NULL ELSE 480 END,
+               CASE WHEN o.left_open THEN 'open' ELSE 'closed' END,
+               'qr_kiosk',
+               CASE WHEN o.left_open THEN NULL ELSE 'qr_kiosk' END,
+               1, now(), now()
+          FROM employees e
+         CROSS JOIN generate_series(?::date, ?::date, interval '1 day') AS d
+         CROSS JOIN LATERAL (SELECT e.id % 50 = 0 AND d::date = ?::date AS left_open) AS o
+         WHERE NOT (e.id % 50 = 0 AND d::date > ?::date)
+        SQL, [$site, PRIMER_DIA_DEL_CUADRO, $ultimoDia, '2026-01-15', '2026-01-15']);
 
     // La proyeccion, de donde salen las horas (regla dura 7: no se recalcula).
     DB::statement(<<<'SQL'
