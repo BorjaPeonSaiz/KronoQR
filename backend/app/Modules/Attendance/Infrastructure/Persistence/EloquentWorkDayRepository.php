@@ -295,12 +295,18 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
         // jornada guardada trae tramos nuevos —la entrada que se acaba de
         // abrir— y tramos que cambian —el que se acaba de cerrar—, y
         // distinguirlos aqui obligaria a preguntar antes cuales existen.
+        //
+        // Las columnas del `SET` son exactamente las que el rol de la
+        // aplicacion puede actualizar (ADR-057 §1): `ON CONFLICT DO UPDATE`
+        // exige `UPDATE` sobre cada una, y una mas da `42501` en produccion.
+        // **`version` no esta**, a proposito: un tramo existente nunca cambia de
+        // version, porque la correccion estrena fila (ADR-035). Se inserta con
+        // la fila y no se vuelve a tocar.
         ShiftEntry::query()->upsert($rows, ['uuid'], [
             'clocked_out_at',
             'duration_minutes',
             'status',
             'clock_out_source',
-            'version',
             'updated_at',
         ]);
     }
