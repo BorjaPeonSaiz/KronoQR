@@ -58,21 +58,30 @@ con recorrido guiado, guion del vídeo y `presentacion.html` (el HTML del reposi
 entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador `[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en
 `kronoqr.kodigolab.es` (hoy 2.1.0), actualizar README §3.1/§6 y `doc_master/despliegue.md`.
 
-**Siguiente acción: la 2.2.1**, con lo que está en **[`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md)**
-(decisiones del propietario del 09-10-2026 en su §5) y el plan por bloques
-[`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md). **Integrados (10-10-2026):** B1
-versión mínima del quiosco (PR #136), B2 actualización urgente de la tablet (PR #137) y B3 pruebas de actualización con el PIN
-(PR #138, `main` `7c8d4c84`: `kiosk-upgrade.spec.ts` y P3a/P3b de ⑧b con un Chromium real antes y después de `update.sh`) y
-B4 menú de Informes, `--features=all` en el emisor y guías de descarga desde las releases con `SHA256SUMS` (rama
-`fix/menu-licencia-y-descarga`, CI manual 38051782879 en verde). **Falta la 4.3, del propietario:** reemitir la licencia de la demo
-con `--features=all` (comando en `tools/license-issuer/README.md`, dentro del contenedor `app` y la clave por la entrada estándar) y
-`license:activate`. **Siguiente: bloque 5.** En la demo (`/kronoqr-2.2.0`, en la raíz del servidor) el PIN falló por la PWA 2.1.0 en caché y un PIN mal guardado;
-ya está resuelto. **Nunca empujar etiquetas antiguas
-con `release.yml` activo**: el push ejecuta el `release.yml` del commit etiquetado, sin la guarda de ADR-053. Para la 2.2.1, las
-dos cosas que dejó la conciliación, decididas por el propietario el 08-10-2026: un «revisado» para la alerta
-`purge_out_of_bounds` (un asiento de purga no admisible queda para siempre en `audit_log` y cada pasada lo vuelve a contar) y el
-**suelo legal de `retention_years` por jurisdicción en el perfil, 4 para España** (R7-SC-01; hoy `minimum()` = 1 para todo campo
-entero del perfil), con `arquitecto-dominio` + `backend-laravel` + `frontend-panel`.
+**Siguiente acción: la 2.2.1, bloque 6** (ADR-057 §1, privilegios por columna; rama `fix/adr-057-privilegios`, creada desde
+`main` `7cbf912f`), con la tarea **6.5** nueva: quitar a `fichaje_app` la escritura de `compliance_profiles.jurisdiction`,
+`is_default`, el `INSERT` y `sites.compliance_profile_id` (ALTO de seguridad en la revisión del B5: hoy el suelo legal se esquiva
+cambiando el país del perfil). Plan: [`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md);
+lista: [`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md).
+
+**Integrados en la 2.2.1:** B1 (PR #136), B2 (#137), B3 (#138), B4 (#139) y **B5 (#141, `main` `7cbf912f`, 13-10-2026)**: suelo
+legal de `retention_years` por jurisdicción (4 en ES; `retention_years_floor` en el contrato; `CHECK` en `compliance_profiles`;
+purga negada bajo el suelo; `update.sh --check-only`) y «revisado» de `purge_out_of_bounds` (`compliance:reconcile-work-record
+--acknowledge`, asiento `retention.purge_reviewed`, alertas `PurgaFueraDeLimitesRevisada` y `PurgaRevisadaQueExplicaBorrados`).
+**4.3 hecha por el propietario el 13-10-2026**, pero la primera clave se emitió con `--features` repetido y solo concedió 3
+funcionalidades: el emisor se queda con la última aparición sin avisar (ver «Pendiente»). Hay que reemitirla con solo `--features=all`.
+
+**Decisiones del propietario del 13-10-2026** (detalle en el plan, «Decisiones ya tomadas»): ADR-057 §1–§3 entran en la 2.2.1
+(B6, B7); **B25** el auditor solo ve Inspección (menú y API `403`; enmendar doc 01); **B26** español de serie por configuración
+(`APP_SUPPORTED_LOCALES=es`, SPA sin selector con un idioma; ajustar doc 05); mutación completa solo nocturna con 120 min (input
+`full_mutation`); Rector informativo hasta la 2.3.0; **protecciones de GitHub activadas**: escaneo de secretos, protección de
+*push*, Dependabot de seguridad y 17 comprobaciones obligatorias en `main` (si se renombra un job de `ci.yml`, actualizar la
+protección o las PR quedan bloqueadas). Tablet real de 8-12 h: hecha. Validación jurídica y revisión externa: a la espera.
+Rendimiento en hardware de referencia: la carga k6 se niega en `APP_ENV=production`, así que no se mide contra la demo; habría que
+parar la demo y levantar una copia de desarrollo en el mismo servidor (runbook por escribir si el propietario lo pide).
+
+**Nunca empujar etiquetas antiguas con `release.yml` activo**: el push ejecuta el `release.yml` del commit etiquetado, sin la
+guarda de ADR-053. En la demo (`/kronoqr-2.2.0`, en la raíz del servidor) sigue la 2.2.0.
 
 **Lo que destapó el cierre del bloque 14 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-14-*`; lo del
 13 en `bloque-13-rendimiento-bd` y `bloque-13-revisiones`):
@@ -109,6 +118,20 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 > lo que siga vigente debería pasar al plan o a «Fuera de la 2.2.0, con motivo».
 
 ## Pendiente
+
+### Anotado en el bloque 5 de la 2.2.1 (13-10-2026)
+
+- **Emisor de licencias:** una opción repetida (`--features=all --features=a,b`) se queda con la última sin avisar; debería
+  rechazarse antes de firmar. Le costó al propietario una licencia de la demo con 3 funcionalidades.
+- `compliance:reconcile-work-record --days` sigue convirtiendo con `(int)` sin validar (`--acknowledge` y `--responsible` ya se
+  validan con `ctype_digit`).
+- Falta una prueba de integración de la conciliación con una revisión cuyo id viene en cadena (la regla está cubierta en dominio).
+- **Redis local roto:** `kronoqr-redis` en bucle por `appendonly.aof.82.incr.aof` corrupto; ~50 pruebas Feature/Integration
+  fallan en local por eso. Reparar (`redis-check-aof --fix` sobre copia) o vaciar el volumen `kronoqr_redis-data`: decide el
+  propietario (el clasificador deniega repararlo a los agentes).
+- La suite Integration completa en local se aborta por memoria (256 MB) en `Row.php`; por directorios pasa. Sin investigar.
+- La línea suelta sobre teletrabajo en `docs/verificacion/2.1.0-decisiones-comerciales.md` («Acceso desde internet») ya está
+  implementada (guía RRHH §2); borrarla.
 
 ### Anotado en el bloque 4 de la 2.2.1 (10-10-2026)
 
