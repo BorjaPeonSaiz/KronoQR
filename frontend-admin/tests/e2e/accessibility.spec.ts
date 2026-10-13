@@ -887,3 +887,19 @@ test(
     }
   },
 )
+
+test(
+  'el icono de pausa del registro horario conserva su tamano (Tailwind genera las clases de web-kit)',
+  { tag: ['@RF-PA-03', '@RF-AT-12'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { workdays: WORKDAYS_WITH_BREAK })
+    await logIn(page)
+    await page.goto(`/employees/${EMPLOYEE_UUID}/workdays`)
+
+    const box = await page.getByTestId('break-badge').locator('svg').first().boundingBox()
+    expect(box).not.toBeNull()
+    expect(box?.width ?? 0).toBeGreaterThan(0)
+    expect(box?.width ?? 99).toBeLessThanOrEqual(24)
+    expect(box?.height ?? 99).toBeLessThanOrEqual(24)
+  },
+)
