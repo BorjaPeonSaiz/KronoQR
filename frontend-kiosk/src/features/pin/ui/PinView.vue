@@ -108,9 +108,9 @@ watchEffect(() => {
   }
 })
 
-// PIN-03: si libsodium no arranca, se dice AQUI, antes de pedir codigo y seis
-// digitos, y no con un «codigo no valido» al final. La comprobacion tambien
-// precalienta WASM para que el sellado del sexto digito sea casi sincrono.
+// PIN-03: si libsodium no arranca, se dice AQUI, antes de pedir codigo y PIN,
+// y no con un «codigo no valido» al final. La comprobacion tambien
+// precalienta WASM para que el sellado al pulsar «Aceptar» sea casi sincrono.
 const sealing = usePinSealingStatus({
   onUnavailable: () =>
     reporter.report('kiosk.pin.seal_failed', { reason: 'warmup_failed', message: 'warmup_failed' }),
@@ -246,7 +246,7 @@ async function confirm(): Promise<void> {
 
   // El PIN sale de aqui y no vuelve: el buffer del teclado se vacia YA, antes
   // incluso de saber si el sellado tardara. No hay ninguna ventana en la que
-  // los 6 digitos sigan vivos en la pantalla mas tiempo del imprescindible.
+  // las cifras del PIN sigan vivas en la pantalla mas tiempo del imprescindible.
   step.value = 'submitting'
   clearSensitiveInputs()
 

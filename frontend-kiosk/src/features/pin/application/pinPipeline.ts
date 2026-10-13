@@ -4,7 +4,7 @@
 // eventos (sincrono, RNF-P-03); el PIN tiene un paso previo que es
 // inevitablemente async — sellarlo — porque `crypto_box_seal` corre sobre
 // WebAssembly. No es red: es trabajo local, y `warmUpSealing()` (llamado al
-// montar la pantalla) hace que para cuando llega el sexto digito ya este
+// montar la pantalla) hace que para cuando se pulsa «Aceptar» ya este
 // caliente y el sellado tarde microsegundos, no milisegundos.
 //
 // Fuera de eso, la disciplina es identica: `submit()` encola (via el mismo
