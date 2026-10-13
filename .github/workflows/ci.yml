@@ -635,7 +635,8 @@ jobs:
         # sale vacio y el paso termina en verde sin mutar nada.
         #
         # La pasada GLOBAL (MSI >= 80 % sobre todo el dominio) sigue existiendo
-        # y se ejecuta tambien en el disparo manual y cada noche, pero en el
+        # y se ejecuta cada noche y en el disparo manual SOLO con el input
+        # `full_mutation`, pero en el
         # job `mutation`, al final del fichero: ya corria alli en paralelo
         # con este, y repetirla aqui duplicaba 40-55 min de ③ sin cambiar el
         # veredicto (③ llego a tardar 57 min de 60).
