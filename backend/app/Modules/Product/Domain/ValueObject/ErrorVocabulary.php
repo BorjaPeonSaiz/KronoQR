@@ -2947,6 +2947,7 @@ final readonly class ErrorVocabulary
     private const array WORDS_Y = [
         'ya',
         'yaml',
+        'year',
         'years',
         'yes',
         'yet',
