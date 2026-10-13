@@ -1650,6 +1650,14 @@ export interface paths {
          *     correccion con su autor y su motivo (RN-13). El titulo del documento y
          *     el nombre del fichero no llevan ni nombre ni codigo de empleado.
          *
+         *     **Sin `from` se descarga el ultimo año: los 366 dias que terminan en
+         *     `to`**, o en hoy en la zona del centro si tampoco viene `to` (2.2.1,
+         *     V3-PO-2). No es el mes de `GET /api/v1/me/workdays`: quien deja el campo
+         *     en blanco en una descarga quiere su historico, no la pantalla que estaba
+         *     mirando. Y el techo sigue siendo el mismo:
+         *     **como maximo un año por descarga**, y un rango explicito de 367 dias
+         *     sigue siendo `422`.
+         *
          *     **Mismo rango maximo y misma zona de limite** para los dos formatos: el
          *     PDF no abre una puerta mas ancha que el CSV.
          *
@@ -13188,6 +13196,18 @@ export interface components {
          */
         WorkDateFrom: string;
         /**
+         * @description Primera **jornada** de la descarga del historico propio, inclusive
+         *     (`shift_entries.work_date`): una fecha civil en la zona del centro, no un
+         *     instante (RN-05, regla dura 4).
+         *
+         *     Sin `from` se toman los **366 dias** que terminan en `to`: en blanco se
+         *     descarga el ultimo año. Es la unica diferencia con `WorkDateFrom`, cuyo
+         *     valor por omision es el mes de la pantalla. El rango sigue sin poder
+         *     exceder **366 dias**, como maximo un año por descarga.
+         * @example 2025-03-21
+         */
+        MyExportFrom: string;
+        /**
          * @description Ultima jornada del rango, inclusive. Sin `to` se toma **hoy** en la zona
          *     del centro del empleado —no la del navegador ni la del servidor—, que es
          *     la unica que decide que dia es hoy para esa persona (RN-04).
@@ -14584,18 +14604,17 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description Primera **jornada** del rango, inclusive (`shift_entries.work_date`). Es
-                 *     una fecha civil en la zona del centro, no un instante: filtrar por
-                 *     `work_date` y no por la hora de las marcas es lo que mantiene entero un
-                 *     turno que cruza la medianoche (RN-05, regla dura 4).
+                 * @description Primera **jornada** de la descarga del historico propio, inclusive
+                 *     (`shift_entries.work_date`): una fecha civil en la zona del centro, no un
+                 *     instante (RN-05, regla dura 4).
                  *
-                 *     Sin `from` se toman los **31 dias** que terminan en `to`, que es el mes
-                 *     que el panel abre por omision. El rango no puede exceder **366 dias**: no
-                 *     es una regla de negocio, es el techo que impide que una URL manipulada
-                 *     pida el historico entero de una persona en una sola respuesta.
-                 * @example 2026-03-01
+                 *     Sin `from` se toman los **366 dias** que terminan en `to`: en blanco se
+                 *     descarga el ultimo año. Es la unica diferencia con `WorkDateFrom`, cuyo
+                 *     valor por omision es el mes de la pantalla. El rango sigue sin poder
+                 *     exceder **366 dias**, como maximo un año por descarga.
+                 * @example 2025-03-21
                  */
-                from?: components["parameters"]["WorkDateFrom"];
+                from?: components["parameters"]["MyExportFrom"];
                 /**
                  * @description Ultima jornada del rango, inclusive. Sin `to` se toma **hoy** en la zona
                  *     del centro del empleado —no la del navegador ni la del servidor—, que es
