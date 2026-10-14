@@ -50,13 +50,13 @@ interface AbsenceCells {
 
 /**
  * `absence_days`/`unjustified_absence_days` de la fila del dia `day`
- * (columnas 11ª y 13ª de `PeriodReportTable.vue`: periodo, trabajadas,
+ * (celdas 11ª y 13ª de `PeriodReportTable.vue`, sin contar el sujeto: periodo, trabajadas,
  * contratadas, desviación, exceso, tramos, con actividad, sin actividad,
  * turno abierto, incidencia, **ausencia**, festivo, **absentismo no
  * justificado**).
  */
 async function absenceCellsFor(rows: Locator, day: string): Promise<AbsenceCells> {
-  const cells = rows.filter({ hasText: day }).locator('td')
+  const cells = rows.filter({ hasText: day }).getByRole('cell')
 
   return {
     absenceDays: await cells.nth(10).innerText(),
