@@ -30,11 +30,11 @@ it('no anota nada si no se compara ningun hash', function (): void {
 })->group('RS-03');
 
 it('deja puesto el hasher real al terminar, tambien si la llamada lanza', function (): void {
-    $real = app('hash');
+    $real = resolve('hash');
 
     expect(fn () => HashCheckSpy::during(function (): void {
         throw new RuntimeException('falla a mitad');
     }))->toThrow(RuntimeException::class, 'falla a mitad')
         ->and(Hash::getFacadeRoot())->toBe($real)
-        ->and(app('hash'))->toBe($real);
+        ->and(resolve('hash'))->toBe($real);
 })->group('RS-03');

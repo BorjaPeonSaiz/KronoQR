@@ -737,6 +737,10 @@ jobs:
     # 30 (R6-DV-08): duraba 10,4-14,6 min de los 15 anteriores y un runner
     # lento lo mataba con la suite en verde; ahora ademas ejecuta de verdad las
     # 5 pruebas de sellado de PDF con Chrome. 30 es el doble de lo medido.
+    # La semilla completa (~90 s) se siembra UNA vez en todo el job: la
+    # conciliacion registro ↔ auditoria de la semilla (bloque 11 de la 2.2.1)
+    # corre dentro de `MigrationsRoundTripTest`, antes de deshacer las
+    # migraciones, y no en una prueba propia que la sembraria otra vez.
     timeout-minutes: 30
     needs: architecture
 

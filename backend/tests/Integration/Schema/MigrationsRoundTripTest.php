@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Tests\Feature\Quality\Support\Commands;
+use Tests\Support\Compliance\DevelopmentSeedChecks;
 use Tests\Support\Database\CommittedDatabase;
 
 /*
- * Todas las migraciones vuelven atras y se reaplican (RF-PD-10, tarea 5.7).
+ * Todas las migraciones vuelven atras y se reaplican (RF-PD-10, tarea 5.7), y
+ * la semilla de desarrollo deja el registro horario cuadrado con su auditoria
+ * (ADR-057 §4, RL-04, RS-07, RN-13; bloque 11 de la 2.2.1).
  *
  * «Una migracion cuyo `down()` no se ha probado no tiene `down()`»
  * (skill /migracion-segura). Aqui se prueban TODOS los `down()` de una vez,
@@ -17,14 +22,23 @@ use Tests\Support\Database\CommittedDatabase;
  * de base de datos: las restricciones de RN-01 y RN-02 estan presentes y
  * VALIDAS, y la cadena de auditoria verifica.
  *
+ * ## Una sola siembra para dos comprobaciones
+ *
+ * La semilla completa cuesta en torno a noventa segundos, y hasta la revision
+ * del bloque 11 se sembraba dos veces: aqui y en una prueba propia de la
+ * conciliacion. Ahora esa conciliacion corre aqui, tras sembrar y antes de
+ * deshacer nada ({@see DevelopmentSeedChecks}): lo que se afirma es que
+ * `make seed` deja un entorno sin alerta de manipulacion, y cualquier semilla
+ * que se añada mañana entra en la prueba sin tocarla.
+ *
  * ## Por que CommittedDatabase y no RefreshDatabase
  *
  * `RefreshDatabase` envuelve la prueba en una transaccion sobre la conexion de
  * la aplicacion; la semilla escribiria dentro de ella y dejaria bloqueos de
  * fila y de tabla que un `DROP TABLE` del rol de migracion —otra conexion—
- * tendria que esperar para siempre. Aqui todo se confirma, y el trait vacia la
- * base al terminar con el rol propietario. Es el unico uso legitimo de este
- * trait fuera de las pruebas de concurrencia, y esta es la razon.
+ * tendria que esperar para siempre. Y las comprobaciones diferidas de los
+ * *triggers* de `shift_entries` (ADR-057) solo corren al confirmar. Aqui todo
+ * se confirma, y el trait vacia la base al terminar con el rol propietario.
  *
  * ## El tiempo se anota, no se acota
  *
@@ -36,16 +50,29 @@ use Tests\Support\Database\CommittedDatabase;
 
 uses(CommittedDatabase::class);
 
-it('deshace todas las migraciones y las reaplica sobre volumen realista conservando las invariantes', function (): void {
+it('deshace todas las migraciones y las reaplica sobre la semilla completa, que llega cuadrada con su auditoria', function (): void {
     $name = config()->string('database.migrations.connection');
     $migrator = DB::connection($name);
     $schema = $migrator->getSchemaBuilder();
 
-    $seedStart = microtime(true);
-    [$seeded, $seedOutput] = Commands::run('db:seed --force');
-    $seedSeconds = microtime(true) - $seedStart;
+    $metrics = sys_get_temp_dir().'/kronoqr-semilla-conciliacion-'.bin2hex(random_bytes(6));
+    Config::set('observability.metrics.textfile_path', $metrics);
+    Config::set('observability.metrics.enabled', true);
 
-    expect($seeded)->toBe(0, $seedOutput);
+    try {
+        $seedStart = microtime(true);
+        [$seeded, $seedOutput] = Commands::run('db:seed --force');
+        $seedSeconds = microtime(true) - $seedStart;
+
+        expect($seeded)->toBe(0, $seedOutput);
+
+        // La semilla, antes de tocar el esquema: su contenido y su conciliacion
+        // con la auditoria (ADR-057 §4).
+        DevelopmentSeedChecks::assertExpectedContent();
+        DevelopmentSeedChecks::assertReconciled($metrics);
+    } finally {
+        File::deleteDirectory($metrics);
+    }
 
     $entries = $migrator->table('shift_entries')->count();
     $applied = $migrator->table('migrations')->count();
@@ -100,4 +127,4 @@ it('deshace todas las migraciones y las reaplica sobre volumen realista conserva
         $rollbackSeconds,
         $migrateSeconds,
     ));
-})->group('RF-PD-10', 'RN-01', 'RN-02', 'RL-04', 'RS-07');
+})->group('RF-PD-10', 'RN-01', 'RN-02', 'RL-04', 'RS-07', 'RN-13');

@@ -30,7 +30,7 @@ final class HashCheckSpy
     public static function during(callable $work): array
     {
         /** @var Hasher $real */
-        $real = app('hash');
+        $real = resolve('hash');
         $compared = [];
 
         Hash::partialMock()
