@@ -6,6 +6,8 @@ use App\Support\Scheduling\ForwardScheduledTaskOutput;
 use App\Support\Scheduling\ScheduledTaskOutput;
 use Illuminate\Console\Scheduling\Event as ScheduledTask;
 use Illuminate\Console\Scheduling\EventMutex;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LoggerInterface;
 use Tests\Support\Observability\RecordingLogger;
 
 /*
@@ -172,6 +174,68 @@ it('con salida y codigo cero deja el resumen', function (): void {
     expect($logger->lines)->toHaveCount(1)
         ->and($logger->first()['level'])->toBe('info')
         ->and($logger->first()['message'])->toBe('scheduler.task_finished');
+})->group('RNF-D-02');
+
+it('con la tarea en rojo las lineas van en warning, no en info', function (): void {
+    // Con LOG_LEVEL=warning en produccion, en info se perderia justo la salida
+    // que explica el fallo.
+    $path = forwardOutputCapture("pg_dump: error de conexion\n");
+    $logger = new RecordingLogger;
+
+    (new ForwardScheduledTaskOutput('backup:run --mode=dump', forwardOutputTask('x', 1), $path, true))($logger);
+
+    expect(array_column($logger->lines, 'level'))->toBe(['warning', 'warning'])
+        ->and($logger->lines[0]['context']['event'])->toBe('scheduler.task_output');
+})->group('RNF-D-02');
+
+/**
+ * Un registrador que falla con todo salvo con el apunte del propio fallo.
+ */
+function forwardOutputFailingLogger(RecordingLogger $recorder, bool $evenTheFailure = false): LoggerInterface
+{
+    return new class($recorder, $evenTheFailure) extends AbstractLogger
+    {
+        public function __construct(private readonly RecordingLogger $recorder, private readonly bool $evenTheFailure) {}
+
+        /**
+         * @param  array<string, mixed>  $context
+         */
+        public function log(mixed $level, string|Stringable $message, array $context = []): void
+        {
+            if ($this->evenTheFailure || (string) $message !== 'scheduler.task_output_failed') {
+                throw new RuntimeException('canal roto: Rosa Ficticiana');
+            }
+
+            $this->recorder->log($level, $message, $context);
+        }
+    };
+}
+
+it('si el reenvio falla no lanza, lo dice sin el mensaje y borra la captura', function (): void {
+    // Un fallo aqui cortaria los callbacks que van detras en Event::finish(),
+    // y con ellos scheduler.command_failed.
+    $path = forwardOutputCapture("Copia completada\n");
+    $logger = new RecordingLogger;
+
+    (new ForwardScheduledTaskOutput('backup:run --mode=dump', forwardOutputTask('x', 2), $path, true))(forwardOutputFailingLogger($logger));
+
+    expect($logger->lines)->toHaveCount(1)
+        ->and($logger->first()['level'])->toBe('warning')
+        ->and($logger->first()['context'])->toBe([
+            'command' => 'backup:run --mode=dump',
+            'exit_code' => 2,
+            'exception_class' => RuntimeException::class,
+        ])
+        ->and((string) json_encode($logger->lines))->not->toContain('Ficticiana')
+        ->and(is_file($path))->toBeFalse();
+})->group('RNF-D-02', 'RL-08');
+
+it('no lanza ni aunque no se pueda escribir nada', function (): void {
+    $path = forwardOutputCapture("Copia completada\n");
+
+    (new ForwardScheduledTaskOutput('backup:run --mode=dump', forwardOutputTask('x', 1), $path, true))(forwardOutputFailingLogger(new RecordingLogger, true));
+
+    expect(is_file($path))->toBeFalse();
 })->group('RNF-D-02');
 
 it('nombra la tarea por lo que va detras de artisan, sin el binario ni las comillas', function (): void {

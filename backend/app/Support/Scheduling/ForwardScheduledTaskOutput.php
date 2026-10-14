@@ -7,6 +7,7 @@ namespace App\Support\Scheduling;
 use Illuminate\Console\Scheduling\Event as ScheduledTask;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
+use Throwable;
 
 /**
  * Lo que hace {@see ScheduledTaskOutput} cuando la tarea termina: leer su
@@ -21,7 +22,8 @@ use Psr\Log\LogLevel;
  * - Con `toLog()`, una linea de log por linea no vacia de la salida, **como
  *   mensaje** (ahi es donde el saneador aplica la lista blanca por palabra) y
  *   con `event = scheduler.task_output`, el nombre de la tarea y el numero de
- *   linea en el contexto. Hasta {@see self::MAX_LINES} lineas y
+ *   linea en el contexto, en `info` si la tarea salio 0 y en `warning` si no
+ *   (con `LOG_LEVEL=warning` la salida de un fallo no se pierde). Hasta {@see self::MAX_LINES} lineas y
  *   {@see self::MAX_BYTES} bytes: un comando que vuelca una tabla entera no
  *   inunda el log ni la memoria del proceso.
  * - `scheduler.task_finished` con el nombre, el codigo de salida, los bytes y
@@ -32,6 +34,9 @@ use Psr\Log\LogLevel;
  *   exito silencioso** (codigo 0 y 0 bytes de salida), que no deja apunte: ya
  *   lo dicen las metricas y los spans de cada tarea, y la medida del WAL, que
  *   corre cada minuto, llenaria el log del contenedor de lineas iguales.
+ * - Si leer la captura o escribir falla, `scheduler.task_output_failed` con
+ *   la clase de la excepcion, y nunca lanza: detras van los demas callbacks
+ *   de la tarea, entre ellos `scheduler.command_failed`.
  *
  * ## Que NO escribe
  *
@@ -58,20 +63,50 @@ final readonly class ForwardScheduledTaskOutput
 
     public function __invoke(LoggerInterface $logger): void
     {
+        $exitCode = $this->task->exitCode ?? self::UNKNOWN_EXIT_CODE;
+
+        // Nada de lo que pase aqui puede llegar a `Event::finish()`: un fallo
+        // al leer la captura o al escribir la linea cortaria los callbacks que
+        // van detras —el `scheduler.command_failed` de `onFailure()`— y la
+        // tarea fallida no dejaria rastro. Se deja constancia de que el
+        // reenvio fallo (solo la clase de la excepcion: su mensaje puede
+        // llevar la ruta o el texto de la salida) y se borra la captura.
+        try {
+            $this->forward($logger, $exitCode);
+        } catch (Throwable $exception) {
+            $this->discard();
+
+            try {
+                $logger->warning('scheduler.task_output_failed', [
+                    'command' => $this->command,
+                    'exit_code' => $exitCode,
+                    'exception_class' => $exception::class,
+                ]);
+            } catch (Throwable) {
+                // Si ni esto se puede escribir, no hay a quien contarlo.
+            }
+        }
+    }
+
+    private function forward(LoggerInterface $logger, int $exitCode): void
+    {
         [$bytes, $text] = $this->readAndDiscard();
+
+        // Con la tarea en rojo, las lineas van en `warning` como el resumen:
+        // con `LOG_LEVEL=warning` en produccion, en `info` se perderia
+        // justamente la salida que explica el fallo.
+        $level = $exitCode === 0 ? LogLevel::INFO : LogLevel::WARNING;
 
         $lines = $this->linesOf($text);
         $forwarded = $this->forwardLines ? \array_slice($lines, 0, self::MAX_LINES) : [];
 
         foreach ($forwarded as $index => $line) {
-            $logger->info($line, [
+            $logger->log($level, $line, [
                 'event' => 'scheduler.task_output',
                 'command' => $this->command,
                 'line' => $index + 1,
             ]);
         }
-
-        $exitCode = $this->task->exitCode ?? self::UNKNOWN_EXIT_CODE;
 
         // El exito silencioso no deja apunte: ya lo reflejan las metricas y
         // los spans, y `backup:wal-metrics` dejaria uno por minuto.
@@ -79,7 +114,7 @@ final readonly class ForwardScheduledTaskOutput
             return;
         }
 
-        $logger->log($exitCode === 0 ? LogLevel::INFO : LogLevel::WARNING, 'scheduler.task_finished', [
+        $logger->log($level, 'scheduler.task_finished', [
             'command' => $this->command,
             'exit_code' => $exitCode,
             'output_bytes' => $bytes,
@@ -102,15 +137,35 @@ final readonly class ForwardScheduledTaskOutput
             return [0, ''];
         }
 
-        $bytes = (int) filesize($this->path);
+        try {
+            $bytes = (int) filesize($this->path);
 
-        // Tambien con `summaryOnly()`: hace falta para contar las lineas. Se
-        // lee la misma ventana para no cargar en memoria un volcado enorme.
-        $text = (string) file_get_contents($this->path, false, null, 0, self::MAX_BYTES);
-
-        unlink($this->path);
+            // Tambien con `summaryOnly()`: hace falta para contar las lineas.
+            // Se lee la misma ventana para no cargar en memoria un volcado
+            // enorme.
+            $text = (string) file_get_contents($this->path, false, null, 0, self::MAX_BYTES);
+        } finally {
+            $this->discard();
+        }
 
         return [$bytes, $text];
+    }
+
+    /**
+     * Borra la captura si sigue ahi. Sin lanzar: lo llama tambien la ruta de
+     * fallo.
+     */
+    private function discard(): void
+    {
+        try {
+            if (is_file($this->path)) {
+                unlink($this->path);
+            }
+        } catch (Throwable) {
+            // Laravel convierte el aviso de `unlink()` en excepcion; aqui no
+            // tiene a quien avisar y no debe cortar `finish()`. La siguiente
+            // ejecucion sobrescribe el fichero.
+        }
     }
 
     /**
