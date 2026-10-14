@@ -376,6 +376,7 @@ run_delegated_doctor() {
   check_backup_offsite
   check_update_logs
   check_edge_networks
+  check_log_retention_setting
   check_kiosk_vlan
   check_orphan_restore_databases
   check_redis_restart_loop
@@ -447,6 +448,7 @@ run_external_checks() {
   check_backup_offsite
   check_update_logs
   check_edge_networks
+  check_log_retention_setting
   check_kiosk_vlan
   check_orphan_restore_databases
   check_redis_restart_loop
@@ -853,6 +855,12 @@ check_kiosk_vlan() {
 # pie, que es cuando mas falta hace: con un CIDR invalido, nginx no arranca.
 check_edge_networks() {
   check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE}"
+}
+
+# LOG_RETENTION_HOURS: entero en rango (falla) y aviso por encima de un ano o descuadrado con
+# TECHNICAL_LOG_RETENTION_DAYS (RL-11, RGPD art. 5.1.e). La misma comprobacion que install.sh y update.sh.
+check_log_retention_setting() {
+  check_log_retention "${CURRENT_ENV}"
 }
 
 # R0. Un corte de luz puede dejar el AOF de Redis con una escritura a medias y

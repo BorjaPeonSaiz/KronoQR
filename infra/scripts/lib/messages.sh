@@ -258,6 +258,14 @@ KQ_MSG_ES[f_tls_unknown]="este servidor no tiene 'stat', asi que no se sabe si e
 KQ_MSG_ES[c_port_ours]="Puerto %s: lo ocupa esta misma instalacion de KronoQR"
 
 # Redes del borde y correo, alertas, perfil y licencia (PP-01, PP-03, I1, I3).
+KQ_MSG_ES[c_log_retention_default]="LOG_RETENTION_HOURS sin definir: Loki y Tempo conservan %s h (90 dias)"
+KQ_MSG_ES[c_log_retention_invalid]="LOG_RETENTION_HOURS=%s no es un plazo valido"
+KQ_MSG_ES[f_log_retention_invalid]="pon en LOG_RETENTION_HOURS un numero entero de horas entre %s y %s (2160 = 90 dias) en %s. Loki y Tempo leen esa cifra al arrancar y no arrancarian con otra cosa."
+KQ_MSG_ES[c_log_retention_long]="LOG_RETENTION_HOURS=%s supera un ano"
+KQ_MSG_ES[w_log_retention_long]="el registro tecnico y las trazas pueden llevar datos personales (identificadores, direcciones IP): el RGPD (art. 5.1.e) pide conservarlos solo el tiempo necesario y el plazo de serie es de 90 dias (2160 h). Por encima de %s h, tenlo justificado por escrito o baja LOG_RETENTION_HOURS en %s."
+KQ_MSG_ES[c_log_retention_mismatch]="LOG_RETENTION_HOURS=%s no coincide con TECHNICAL_LOG_RETENTION_DAYS=%s"
+KQ_MSG_ES[w_log_retention_mismatch]="Loki y Tempo conservarian un plazo distinto del que declara la aplicacion. Pon LOG_RETENTION_HOURS=%s (TECHNICAL_LOG_RETENTION_DAYS x 24) en %s, o ajusta la otra."
+KQ_MSG_ES[c_log_retention_ok]="LOG_RETENTION_HOURS=%s h (Loki y Tempo)"
 KQ_MSG_ES[c_cidr_ok]="%s es un CIDR IPv4 valido (%s)"
 KQ_MSG_ES[c_cidr_invalid]="%s='%s' no es un CIDR IPv4 valido"
 KQ_MSG_ES[f_cidr_invalid]="el borde HTTP no arranca con este valor y se queda en bucle de reinicio. Se espera a.b.c.d/n con UN solo rango (por ejemplo 10.20.0.0/24; una direccion suelta se escribe con /32) y IPv6 no se admite, porque el borde solo escucha en IPv4. Corrige %s en %s."
@@ -526,6 +534,14 @@ KQ_MSG_EN[f_tls_unknown]="this server has no 'stat', so whether the edge can rea
 KQ_MSG_EN[c_port_ours]="Port %s: held by this very KronoQR installation"
 
 # Edge networks and mail, alerts, profile and license (PP-01, PP-03, I1, I3).
+KQ_MSG_EN[c_log_retention_default]="LOG_RETENTION_HOURS not set: Loki and Tempo keep %s h (90 days)"
+KQ_MSG_EN[c_log_retention_invalid]="LOG_RETENTION_HOURS=%s is not a valid period"
+KQ_MSG_EN[f_log_retention_invalid]="set LOG_RETENTION_HOURS to a whole number of hours between %s and %s (2160 = 90 days) in %s. Loki and Tempo read that figure on start-up and would not start with anything else."
+KQ_MSG_EN[c_log_retention_long]="LOG_RETENTION_HOURS=%s is over one year"
+KQ_MSG_EN[w_log_retention_long]="the technical log and the traces may carry personal data (identifiers, IP addresses): the GDPR (art. 5.1.e) asks to keep them only as long as needed and the default is 90 days (2160 h). Above %s h, have it justified in writing or lower LOG_RETENTION_HOURS in %s."
+KQ_MSG_EN[c_log_retention_mismatch]="LOG_RETENTION_HOURS=%s does not match TECHNICAL_LOG_RETENTION_DAYS=%s"
+KQ_MSG_EN[w_log_retention_mismatch]="Loki and Tempo would keep a different period from the one the application declares. Set LOG_RETENTION_HOURS=%s (TECHNICAL_LOG_RETENTION_DAYS x 24) in %s, or adjust the other."
+KQ_MSG_EN[c_log_retention_ok]="LOG_RETENTION_HOURS=%s h (Loki and Tempo)"
 KQ_MSG_EN[c_cidr_ok]="%s is a valid IPv4 CIDR (%s)"
 KQ_MSG_EN[c_cidr_invalid]="%s='%s' is not a valid IPv4 CIDR"
 KQ_MSG_EN[f_cidr_invalid]="the HTTP edge does not start with this value and restarts in a loop. Expected a.b.c.d/n with ONE range only (for example 10.20.0.0/24; a single address is written with /32) and IPv6 is not accepted, because the edge only listens on IPv4. Fix %s in %s."

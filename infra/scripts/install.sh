@@ -921,6 +921,7 @@ phase_requirements() {
 
     check_customer_values
     check_network_cidrs "${ENV_FILE}" "${COMPOSE_FILE}" skip-missing
+    check_log_retention "${ENV_FILE}"
     check_operational_settings "${ENV_FILE}" "${COMPOSE_FILE}"
     check_image_digest_overrides "${ENV_FILE}" "$(dirname -- "${COMPOSE_FILE}")"
     check_app_url

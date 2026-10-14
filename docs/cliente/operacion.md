@@ -727,9 +727,9 @@ PostgreSQL y Redis, con el mismo patrón.
 
 **Tempo** guarda las trazas: el recorrido completo de una petición, desde el
 `fetch` de la tablet hasta la consulta SQL que escribió el fichaje, con los
-mismos 90 días de retención que el registro técnico (cambiar el plazo exige
-tocar `observability/loki/loki.yaml` **y** `observability/tempo/tempo.yaml`
-a la vez: ver `configuracion.md` §6.20). No se activa por sí solo: hace falta
+mismos 90 días de retención que el registro técnico (el plazo de los dos es
+`LOG_RETENTION_HOURS` del `.env`, 2160 h de serie, y se cambia solo ahí; no se
+edita ningún fichero de `observability/`: ver `configuracion.md` §6.20). No se activa por sí solo: hace falta
 además que `OTEL_EXPORTER_OTLP_ENDPOINT` apunte a `http://tempo:4318` en tu
 `.env` (vacío de serie, incluso con el perfil encendido).
 
@@ -973,8 +973,10 @@ anterior): las reglas `prometheus/rules/work-record.yml`, `audit.yml`, `backup.y
 y `threat-detection.yml` (registro horario, cadena de auditoría, copias y
 amenazas), `prometheus/prometheus.yml.template` (carga las reglas y apunta a
 Alertmanager), `alertmanager/alertmanager.yml.template`, los dos `render-config.sh`
-y `loki/loki.yaml` y `tempo/tempo.yaml` (la retención: si la cambias ahí, tendrás que
-volver a aplicarla tras cada actualización; `update.sh` te lo recuerda). **El resto
+y `loki/loki.yaml` y `tempo/tempo.yaml` (su retención no se edita ahí: es
+`LOG_RETENTION_HOURS` del `.env`, que sobrevive a las actualizaciones; si la habías
+editado en esos ficheros, `update.sh` te dice el valor que tenías y la variable que
+debes poner). **El resto
 sigue la fusión normal**, incluidas las demás reglas (por ejemplo `kiosk.yml`, cuyo
 umbral se edita junto a `KIOSK_HEALTH_SILENT_AFTER_SECONDS`). Tus reglas propias
 van en **`prometheus/rules/local-<nombre>.yml`**. Las reglas que añadas en

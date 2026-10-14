@@ -1242,6 +1242,7 @@ readonly -a PRECONDITION_CHECKS=(
   check_audit_chain
   check_compliance_profile_floor
   check_edge_networks
+  check_log_retention_setting
   check_env_new_keys
   check_env_orphan_keys
 )
@@ -1835,6 +1836,15 @@ check_edge_networks() {
   check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE:-${COMPOSE_FILE}}"
 }
 
+# LOG_RETENTION_HOURS (Loki y Tempo): un valor que no sea un entero impediria que arrancaran
+# con la ventana de mantenimiento ya abierta. Un entero fuera de rango es un fallo (exit 2); el
+# plazo largo o descuadrado de TECHNICAL_LOG_RETENTION_DAYS, un aviso.
+check_log_retention_setting() {
+  [ -n "${CURRENT_ENV}" ] || return 0
+
+  check_log_retention "${CURRENT_ENV}"
+}
+
 # Claves que trae el .env.example nuevo y el .env del cliente no tiene. No es un
 # fallo —cada una usa su valor de serie—, pero decirlo aqui evita descubrirlo
 # leyendo configuracion.md meses despues.
@@ -1934,6 +1944,29 @@ write_wal_key() {
   fi
 }
 
+# Hasta la 2.2.0 el plazo de retencion de Loki y Tempo se editaba en loki.yaml y tempo.yaml;
+# desde la 2.2.1 es LOG_RETENTION_HOURS del .env y esos ficheros estan protegidos (ganan los
+# del paquete). Si el cliente habia editado el plazo en el directorio anterior, el aviso le
+# dice el valor que tenia y la variable que debe poner. Con cualquier huella o sin ella.
+warn_edited_retention() {
+  local old_dir="$1" rel file value hours
+  for rel in loki/loki.yaml tempo/tempo.yaml; do
+    file="${old_dir}/${rel}"
+    [ -f "${file}" ] || continue
+    value="$(sed -n -E "s/^[[:space:]]*(retention_period|block_retention):[[:space:]]*([^[:space:]#]+).*/\2/p" "${file}" | head -n 1)"
+    case "${value}" in
+    "" | *LOG_RETENTION_HOURS* | 2160h) continue ;;
+    esac
+    hours="?"
+    if [[ "${value}" =~ ^([0-9]+)h$ ]]; then
+      hours="${BASH_REMATCH[1]}"
+    elif [[ "${value}" =~ ^([0-9]+)d$ ]]; then
+      hours="$((10#${BASH_REMATCH[1]} * 24))"
+    fi
+    kq_msg check_warn "$(kq_format u_w_obs_retention "${file}" "${value}" "${hours}" "${ENV_FILE}")"
+  done
+}
+
 # Los cambios que el cliente hizo en `observability/` (umbrales, destinatarios,
 # cuadros) viajan al directorio nuevo SOLO SI LOS HAY, y con aviso. La regla de
 # quien gana en cada fichero y por que esta en lib/observability-merge.sh. Nunca
@@ -1943,6 +1976,8 @@ merge_observability() {
   local old_dir="${CURRENT_DIR}/observability" new_dir="${PACKAGE_DIR}/observability"
 
   [ -d "${old_dir}" ] && [ -d "${new_dir}" ] || return 0
+
+  warn_edited_retention "${old_dir}"
 
   if ! kq_obs_merge "${old_dir}" "${new_dir}" "${CURRENT_DIR}/observability.sha256"; then
     kq_msg check_warn "$(kq_format u_w_obs_copy_failed "${old_dir}" "${new_dir}")"

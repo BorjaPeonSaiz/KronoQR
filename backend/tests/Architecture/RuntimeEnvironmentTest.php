@@ -100,6 +100,7 @@ const RUNTIME_ENVIRONMENT_SECRETS_REVERB_DOES_NOT_USE = [
 const RUNTIME_ENVIRONMENT_NOT_FORWARDED = [
     'GRAFANA_ADMIN_USER' => 'solo el contenedor grafana',
     'GRAFANA_ADMIN_PASSWORD' => 'solo el contenedor grafana',
+    'LOG_RETENTION_HOURS' => 'solo los contenedores loki y tempo (retencion, -config.expand-env); la aplicacion no la lee',
     'ALERT_MAINTENANCE_WEEKDAY' => 'solo alertmanager (ventana de silencio); la aplicacion no la lee',
     'ALERT_MAINTENANCE_START' => 'solo alertmanager (ventana de silencio); la aplicacion no la lee',
     'ALERT_MAINTENANCE_END' => 'solo alertmanager (ventana de silencio); la aplicacion no la lee',

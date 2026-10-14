@@ -1120,7 +1120,9 @@ services:
   loki:
     profiles: [observability]
     image: grafana/loki:3.3.2
-    command: ["-config.file=/etc/loki/loki.yaml"]
+    command: ["-config.file=/etc/loki/loki.yaml", "-config.expand-env=true"]
+    environment:
+      LOG_RETENTION_HOURS: ${LOG_RETENTION_HOURS:-2160}
     volumes:
       - ./observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
       - loki-data:/loki
@@ -1137,7 +1139,9 @@ services:
   tempo:
     profiles: [observability]
     image: grafana/tempo:2.7.1
-    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
+    environment:
+      LOG_RETENTION_HOURS: ${LOG_RETENTION_HOURS:-2160}
     volumes:
       - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo-data:/var/tempo

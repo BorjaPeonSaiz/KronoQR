@@ -746,10 +746,9 @@ Redis's follow the same pattern.
 
 **Tempo** stores traces: the complete path of a request, from the tablet's
 `fetch` to the SQL query that wrote the clock-in, with the same 90-day
-retention as the technical log (changing the period means touching
-`observability/loki/loki.yaml` **and**
-`observability/tempo/tempo.yaml` together: see `configuration.md`
-§6.20). It does not turn itself on: you also need
+retention as the technical log (the period of both is `LOG_RETENTION_HOURS` in
+the `.env`, 2160 h by default, and is changed only there; no file in
+`observability/` is edited: see `configuration.md` §6.20). It does not turn itself on: you also need
 `OTEL_EXPORTER_OTLP_ENDPOINT` to point to `http://tempo:4318` in your `.env`
 (empty by default, even with the profile on).
 
@@ -988,8 +987,9 @@ rules `prometheus/rules/work-record.yml`, `audit.yml`, `backup.yml` and
 `threat-detection.yml` (work record, audit trail, backups and threats),
 `prometheus/prometheus.yml.template` (loads the rules and points at Alertmanager),
 `alertmanager/alertmanager.yml.template`, the two `render-config.sh`, and
-`loki/loki.yaml` and `tempo/tempo.yaml` (retention: if you change it there you will
-have to re-apply it after each update; `update.sh` reminds you). **Everything else
+`loki/loki.yaml` and `tempo/tempo.yaml` (their retention is not edited there: it is
+`LOG_RETENTION_HOURS` in the `.env`, which survives updates; if you had edited those
+files, `update.sh` tells you the value you had and the variable to set). **Everything else
 follows the normal merge**, other rules included (for example `kiosk.yml`, whose
 threshold is edited together with `KIOSK_HEALTH_SILENT_AFTER_SECONDS`). Your own
 rules go in **`prometheus/rules/local-<name>.yml`**. Rules you add in
