@@ -1727,6 +1727,79 @@ social security numbers, bank accounts, cards, phone numbers and employee
 codes in all their forms, and checks that none of them appears, nor the
 internal identifier of any employee.
 
+#### If the database does not answer (since 2.2.1)
+
+That is exactly when the bundle is needed most, and **it can still be
+generated**, always from the console and always the anonymised one:
+
+```bash
+docker compose exec app php artisan product:diagnostics
+```
+
+It takes a few seconds longer than usual and ends with this notice (the
+command prints it in Spanish):
+
+```text
+La base de datos no responde: el asiento de este paquete en la auditoria queda
+PENDIENTE y se escribira solo en cuanto la base vuelva (no tienes que hacer nada).
+El propio paquete lo dice en audit.generation_entry, dentro de su huella.
+Las secciones que dependen de la base salen como "unavailable".
+```
+
+In English: the database does not answer; the audit entry of this bundle is
+PENDING and will be written automatically as soon as the database is back
+(you do not have to do anything).
+
+What it means:
+
+- **The bundle is usable.** It carries the version, the allowed `.env`
+  configuration, the state of the services (the database, as unreachable), the
+  `doctor` report and the report of the last update. The sections read from
+  the database (tablets, error history, audit counts, stored settings) say
+  `{"status": "unavailable", "reason": "…"}`, where `reason` is the technical
+  name of the error, never its text.
+- **Its audit entry is written later, automatically.** Every bundle leaves a
+  record in the audit log that it was generated
+  (`diagnostics.bundle_generated`); without the database, that record is kept
+  in the generated-files volume (`diagnostics-audit-pending/` folder) and the
+  system writes it as soon as the database is back, within five minutes. In
+  the audit log it shows `deferred: true` and the real generation time in
+  `generated_at`. You do not have to do anything.
+- **The bundle says so.** It carries
+  `"audit": {"generation_entry": {"status": "pending", "reason": "database_unavailable"}}`,
+  and that mark is part of its fingerprint: whoever receives it sees it when
+  running `--verify` (`Asiento: PENDIENTE…`).
+- **Not with personal data.** `--with-personal-data` without the database ends
+  with code `1`, writes nothing, and says that it *is not generated because it
+  cannot be audited*: taking your staff's data out without leaving a trace is
+  what the law does not allow. Generate the anonymised one and, when the
+  database is back, repeat if you still need the personal data.
+
+##### What to do if…
+
+- **`product:doctor` warns with `diagnostics.pending_audit`.** A bundle was
+  generated without the database and its audit entry has not been written for
+  more than one hour. Look first at `database.connection` in the same report:
+  if the database is still down, fix it and the entry will be written
+  automatically. If the database already answers, write it by hand:
+
+  ```bash
+  docker compose exec app php artisan product:diagnostics:record-pending
+  ```
+
+  It must say `Asientos de diagnostico pendientes escritos: 1.` If the warning
+  comes back, check `scheduler.heartbeat`: the scheduler is what retries it
+  every five minutes.
+- **The command says it could not save the pending record.** No bundle has
+  been generated. The generated-files volume is not mounted or cannot be
+  written: run `./doctor.sh` from the installation directory and follow what
+  it says about `files.storage_volume`.
+- **The command ends with code `1` and the database does answer.** The
+  generation could not be recorded in the audit log for another reason, and
+  that is why the bundle was not delivered. Run
+  `docker compose exec app php artisan product:doctor` and check the
+  `database.*` checks; if they are green, send that output to support.
+
 #### What it carries about each tablet, your settings and volume (since 2.2.0)
 
 So that support can answer «a tablet does not sync» or «the payroll file comes
@@ -2025,6 +2098,7 @@ apart from that are these files:
 | Full data export (ZIP, §13) | `app-storage` volume, `exports/` folder | 7 days; the hourly purge deletes it | No |
 | Reports generated in the background (§6) | `app-storage` volume, `reports/` folder | 7 days; the daily 04:25 UTC purge deletes them | No |
 | Diagnostic bundle generated from the console (§12.2) | `app-storage` volume, `diagnostics/` folder | 7 days; the hourly purge deletes it | No |
+| Pending audit record of a bundle generated without the database (§12.2) | `app-storage` volume, `diagnostics-audit-pending/` folder | Until the database is back: the scheduler writes it to the audit log and deletes it. Past one hour, `product:doctor` warns | No |
 | Export for the Labour Inspectorate generated from the console | `app-storage` volume, `legal-exports/` folder | **Until you delete it.** After 30 days, `product:doctor` and the `FicheroGeneradoSinRetirarPasadoSuPlazo` alert (§10.4) warn about it | No |
 | Temporary file of the Labour Inspectorate export requested from the panel | `app-storage` volume, `tmp/legal-exports/` folder | Deleted when the download finishes; if the download was cut off, the hourly purge deletes it after 6 hours | No |
 | Telemetry state (§13.4) | `app-storage` volume, `telemetry/` folder | Kept; it holds no personal data | No |

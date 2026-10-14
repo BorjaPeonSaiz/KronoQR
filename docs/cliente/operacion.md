@@ -1710,6 +1710,74 @@ pasaportes, números de afiliación, cuentas bancarias, tarjetas, teléfonos y
 códigos de empleado en todas sus formas, y comprueba que no aparece ninguno,
 ni el identificador interno de ningún empleado.
 
+#### Si la base de datos no responde (desde la 2.2.1)
+
+Es justo cuando más falta hace el paquete, y **se puede generar igual**,
+siempre desde la consola y siempre el anonimizado:
+
+```bash
+docker compose exec app php artisan product:diagnostics
+```
+
+Tarda unos segundos más de lo normal y termina con este aviso:
+
+```text
+La base de datos no responde: el asiento de este paquete en la auditoria queda
+PENDIENTE y se escribira solo en cuanto la base vuelva (no tienes que hacer nada).
+El propio paquete lo dice en audit.generation_entry, dentro de su huella.
+Las secciones que dependen de la base salen como "unavailable".
+```
+
+Qué significa:
+
+- **El paquete sirve.** Lleva la versión, la configuración permitida del
+  `.env`, el estado de los servicios (la base, como no alcanzable), el informe
+  de `doctor` y el de la última actualización. Las secciones que se leen de la
+  base (tablets, histórico de errores, recuentos de auditoría, ajustes
+  guardados) dicen `{"status": "unavailable", "reason": "…"}`, donde `reason`
+  es el nombre técnico del error, nunca su texto.
+- **Su registro en la auditoría se escribe después, solo.** Cada paquete deja
+  constancia en el registro de auditoría de que se generó
+  (`diagnostics.bundle_generated`); sin base, esa constancia queda guardada
+  en el volumen de ficheros generados (carpeta `diagnostics-audit-pending/`) y
+  el sistema la escribe en cuanto la base vuelve, en menos de cinco minutos.
+  En la auditoría aparece con `deferred: true` y la hora real de generación en
+  `generated_at`. No tienes que hacer nada.
+- **El paquete lo declara.** Dentro lleva
+  `"audit": {"generation_entry": {"status": "pending", "reason": "database_unavailable"}}`,
+  y esa marca forma parte de su huella: quien lo reciba la ve al ejecutar
+  `--verify` (`Asiento: PENDIENTE…`).
+- **Con datos personales, no.** `--with-personal-data` sin base termina con
+  código `1`, sin escribir nada, y dice que *no se genera porque no se puede
+  auditar*: sacar datos de tu plantilla sin dejar rastro es lo que la ley no
+  permite. Genera el anonimizado y, cuando la base vuelva, repite si sigues
+  necesitando los datos personales.
+
+##### Qué hacer si…
+
+- **`product:doctor` avisa con `diagnostics.pending_audit`.** Hay un paquete
+  generado sin base cuyo registro lleva más de una hora sin escribirse. Mira
+  primero `database.connection` en el mismo informe: si la base sigue caída,
+  arréglala y el registro se escribirá solo. Si la base ya responde, escríbelo
+  a mano:
+
+  ```bash
+  docker compose exec app php artisan product:diagnostics:record-pending
+  ```
+
+  Debe decir `Asientos de diagnostico pendientes escritos: 1.` Si el aviso
+  vuelve, revisa `scheduler.heartbeat`: el planificador es quien lo reintenta
+  cada cinco minutos.
+- **El comando dice que no ha podido guardar la constancia pendiente.** No se
+  ha generado ningún paquete. El volumen de ficheros generados no está montado
+  o no se puede escribir: ejecuta `./doctor.sh` desde el directorio de la
+  instalación y sigue lo que diga de `files.storage_volume`.
+- **El comando termina con código `1` y la base sí responde.** No se ha podido
+  registrar la generación en la auditoría por otro motivo, y por eso no se ha
+  entregado el paquete. Ejecuta `docker compose exec app php artisan product:doctor`
+  y revisa las comprobaciones `database.*`; si están en verde, envía esa salida
+  a soporte.
+
 #### Lo que lleva de cada tablet, de tus ajustes y del volumen (desde la 2.2.0)
 
 Para que soporte pueda responder a «una tablet no sincroniza» o «la nómina
@@ -2001,6 +2069,7 @@ disco aparte son estos ficheros:
 | Exportación íntegra (ZIP, §13) | Volumen `app-storage`, carpeta `exports/` | 7 días; lo borra la purga horaria | No |
 | Informes generados en segundo plano (§6) | Volumen `app-storage`, carpeta `reports/` | 7 días; los borra la purga diaria de las 04:25 UTC | No |
 | Paquete de diagnóstico generado por consola (§12.2) | Volumen `app-storage`, carpeta `diagnostics/` | 7 días; lo borra la purga horaria | No |
+| Registro de auditoría pendiente de un paquete generado sin base (§12.2) | Volumen `app-storage`, carpeta `diagnostics-audit-pending/` | Hasta que la base vuelve: el planificador lo escribe en la auditoría y lo borra. Si pasa de una hora avisa `product:doctor` | No |
 | Exportación para la Inspección generada por consola | Volumen `app-storage`, carpeta `legal-exports/` | **Hasta que la borres tú.** Pasados 30 días avisan `product:doctor` y la alerta `FicheroGeneradoSinRetirarPasadoSuPlazo` (§10.4) | No |
 | Temporal de la exportación para la Inspección pedida desde el panel | Volumen `app-storage`, carpeta `tmp/legal-exports/` | Se borra al terminar la descarga; si la descarga se cortó, lo borra la purga horaria pasadas 6 horas | No |
 | Estado de la telemetría (§13.4) | Volumen `app-storage`, carpeta `telemetry/` | Se conserva; no lleva datos personales | No |
