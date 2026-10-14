@@ -2676,6 +2676,20 @@ threshold: that headroom is not spare. The edge is a leaky bucket — it release
 one permit every 100 ms, with an initial burst of 50 — and without slack the
 test would be measuring the edge limit instead of the server's capacity.
 
+**It has the shape of a shift change.** Clock-ins do not start all at once:
+they rise from zero to the peak in 30 seconds, hold the peak for `DURATION` and
+fall over another 30 seconds, the way a workforce arrives and leaves. What is
+judged is the sustained part of the peak; the rise and the fall are reported
+separately. That is why a run lasts `DURATION` plus one minute.
+
+**It includes PIN clock-ins.** Besides the cards, each origin clocks in by PIN
+once every 4 seconds, with synthetic employees who have no card, like someone
+who arrives without theirs (RF-AT-11). It is the path that costs the server the
+most CPU — it opens the encrypted PIN and compares it with its protected
+digest — and the verdict says separately whether any correct PIN was rejected
+under load. If your installation **does not offer PIN clock-in**, the test
+detects it, does not measure it and says so; it still gives a verdict.
+
 The duration and the number of origins are changed without touching anything:
 
 ```bash
@@ -2840,6 +2854,8 @@ Worth knowing before launching it, not afterwards.
 **It cleans up after itself, when it finishes:**
 
 - The **cards** it issued are left revoked.
+- The **PIN** of the synthetic employees who clocked in by PIN is reset to a new
+  one that nobody knows, as a manager would reset it.
 - The **tokens of the synthetic kiosks** are left revoked.
 - The management account "Responsable carga k6" is left **deactivated**.
 - The working file `load-tests/k6/.fixtures/` **is deleted**. While the run

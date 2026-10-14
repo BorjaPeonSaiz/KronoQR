@@ -2641,6 +2641,20 @@ del umbral: ese margen no sobra. El borde es un cubo con fuga —deja salir un
 permiso cada 100 ms, con una ráfaga inicial de 50— y sin holgura la prueba
 mediría el límite del borde en lugar de la capacidad del servidor.
 
+**Tiene la forma de un cambio de turno.** Los fichajes no empiezan de golpe:
+suben de cero al pico en 30 segundos, se sostienen en el pico durante
+`DURATION` y bajan otros 30 segundos, como llega y se va una plantilla. Lo que
+se juzga es el tramo sostenido del pico; la subida y la bajada se informan
+aparte. Por eso una pasada dura `DURATION` más un minuto.
+
+**Incluye fichajes por PIN.** Además de las tarjetas, cada origen ficha por
+PIN una vez cada 4 segundos, con empleados sintéticos sin tarjeta, como quien
+llega sin ella (RF-AT-11). Es el camino que más CPU gasta del servidor —abre el
+PIN cifrado y lo compara con su resumen protegido—, y el veredicto dice aparte
+si algún PIN correcto se rechazó bajo carga. Si tu instalación **no ofrece
+fichaje por PIN**, la prueba lo detecta, no lo mide y lo dice; no por eso deja
+de dar veredicto.
+
 La duración y el número de orígenes se cambian sin tocar nada:
 
 ```bash
@@ -2802,6 +2816,8 @@ Conviene saberlo antes de lanzarla, no después.
 **Se limpia solo, al terminar:**
 
 - Las **tarjetas** que emitió quedan revocadas.
+- El **PIN** de los empleados sintéticos que ficharon por PIN se restablece a
+  uno nuevo que nadie conoce, como lo restablecería un responsable.
 - Los **tokens de los quioscos** sintéticos quedan revocados.
 - La cuenta de gestión «Responsable carga k6» queda **desactivada**.
 - El fichero de trabajo `load-tests/k6/.fixtures/` **se borra**. Mientras dura
