@@ -75,12 +75,15 @@ readonly BACKUP_CIPHER="aes-256-cbc"
 # (regla dura 13): el nombre es igual en todas las instalaciones.
 readonly BACKUP_PREFIX="kronoqr"
 
+# Ni log ni err fallan nunca: con la salida cerrada (una tuberia muerta tras un
+# Ctrl+C) un `printf` fallido bajo `set -e` mataria al script a mitad de una tarea
+# que no se puede dejar a medias (restore.sh, entre sus dos renombrados).
 log() {
-  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" 2>/dev/null || true
 }
 
 err() {
-  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2 2>/dev/null || true
 }
 
 # Termina con un codigo documentado y un mensaje que dice QUE HACER.

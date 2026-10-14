@@ -456,7 +456,18 @@ jobs:
           #!/bin/sh
           nombre="$(basename "$0")"
           case "${nombre}:${KQ_STUB_PAUSA:-}:$*" in
-            psql:renombrado:*"RENAME TO"* | pg_restore:restauracion:*--dbname*)
+            psql:renombrado:*"RENAME TO"*)
+              : >"${KQ_STUB_BANDERA}"
+              sleep "${KQ_STUB_SEGUNDOS:-6}"
+              ;;
+            pg_restore:restauracion:*--dbname*)
+              # pg_restore YA CONECTADO a la base nueva (como en la fase post-data): una
+              # sesion que sigue viva cuando llega la senal y que un DROP sin FORCE no
+              # podria eliminar.
+              base="${*#*--dbname=}"
+              base="${base%% *}"
+              "${KQ_STUB_REAL_DIR}/psql" -d "${base}" -Atqc "SELECT pg_sleep(120)" >/dev/null 2>&1 &
+              sleep 2
               : >"${KQ_STUB_BANDERA}"
               sleep "${KQ_STUB_SEGUNDOS:-6}"
               ;;
@@ -500,7 +511,7 @@ jobs:
           q "CREATE DATABASE fichaje_destino" >/dev/null
           en_destino "CREATE TABLE marca_previa (x int)" >/dev/null
           restaurar_y_cortar renombrado /tmp/senal-ventana.log
-          [ "$codigo" -eq 143 ] || { echo "::error::SIGTERM dentro de la ventana debia salir con 143 y salio con $codigo."; exit 1; }
+          [ "$codigo" -eq 8 ] || { echo "::error::SIGTERM dentro de la ventana debia salir con 8 (restaurada pero interrumpida) y salio con $codigo."; exit 1; }
           grep -q 'Restauracion COMPLETADA antes de atender la senal TERM' /tmp/senal-ventana.log
           test "$(q "SELECT count(*) FROM pg_database WHERE datname = 'fichaje_destino'")" = "1" ||
             { echo "::error::Tras la senal no hay base de produccion."; exit 1; }

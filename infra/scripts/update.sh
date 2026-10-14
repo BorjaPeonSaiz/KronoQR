@@ -299,27 +299,50 @@ detail_sink() {
   printf '%s' "${DETAIL_WORK:-/dev/null}"
 }
 
+# say, heading, err y kq_msg NUNCA fallan: con la salida rota (un `| tee` muerto tras un
+# Ctrl+C) un printf fallido bajo `set -e` mataria el script en mitad de la vuelta
+# atras. SIGPIPE se ignora en main(); aqui se absorbe el error de escritura.
 say() {
-  printf '%s\n' "$*"
+  printf '%s\n' "$*" 2>/dev/null || true
   report_append "$*"
 }
 
 heading() {
-  printf '\n%s\n' "$*"
+  printf '\n%s\n' "$*" 2>/dev/null || true
   report_append ""
   report_append "$*"
 }
 
 err() {
-  printf '%s\n' "$*" >&2
+  printf '%s\n' "$*" >&2 2>/dev/null || true
   report_append "$*"
 }
 
-# Lineas FINALES de la vuelta atras (V3-PL-01). Ademas de la salida de error van a
-# /dev/tty si existe y la salida de error no es ya esa terminal: tras un Ctrl+C o
-# un corte de SSH la tuberia (`| tee`) a la que apuntaba la salida estandar puede
-# haber muerto, y la persona se quedaria sin saber que se ha vuelto atras. Nunca
-# falla: sin terminal (cron, CI) no hace nada mas.
+# Una orden en su PROPIA sesion (sin el grupo de procesos del terminal), si hay setsid.
+isolated() {
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "$@"
+  else
+    "$@"
+  fi
+}
+
+# Devuelve la salida estandar y la de error a las que tenia el script al arrancar
+# (descriptores 3 y 4, abiertos en main()). La senal puede saltar DENTRO de una
+# llamada redirigida (`compose ... >>"$(detail_sink)" 2>&1`): el trap hereda esa
+# redireccion y, sin esto, todo lo que dice la vuelta atras acabaria en el fichero de
+# detalle, que es de root, en vez de en la pantalla (V3-PL-01). Nunca falla.
+restore_std_streams() {
+  { : >&3; } 2>/dev/null && exec 1>&3
+  { : >&4; } 2>/dev/null && exec 2>&4
+  return 0
+}
+
+# Lineas FINALES de la vuelta atras (V3-PL-01). Van a la salida de error ORIGINAL y,
+# ademas, a /dev/tty si existe y la salida de error no es ya esa terminal (p. ej.
+# stderr redirigida a un fichero). Si la tuberia de stdout murio, la salida de error
+# sigue siendo la terminal. Sin terminal (cron, CI) solo va a la salida de error.
+# Nunca falla.
 err_final() {
   err "$*"
   if [ ! -t 2 ]; then
@@ -342,7 +365,7 @@ kq_msg() {
   local key="$1" line
   shift
   line="$(kq_format "${key}" "$@")"
-  printf '%s\n' "${line}"
+  printf '%s\n' "${line}" 2>/dev/null || true
   report_append "${line}"
 }
 
@@ -2989,6 +3012,7 @@ preserve_failed_state() {
 # `artisan up`. NO hay ninguna copia que restaurar, y decirlo es lo que impide
 # que alguien restaure la de anoche.
 rollback_incomplete_maintenance() {
+  restore_std_streams
   settle_in_place_env
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "$1" "$(kq_text u_report_needs_person)")"
   FINAL_STATE="${SOURCE_VERSION}"
@@ -3000,6 +3024,7 @@ rollback_incomplete_maintenance() {
 }
 
 rollback_incomplete() {
+  restore_std_streams
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "$1" "$(kq_text u_report_needs_person)")"
   FINAL_STATE="?"
   err ""
@@ -3025,6 +3050,11 @@ rollback_and_die() {
     return 1
   fi
   disarm_rollback_traps
+  # DURANTE la vuelta atras las senales se IGNORAN (un segundo Ctrl+C no la corta a
+  # medias, con los servicios caidos) y el mensaje sale por la pantalla ORIGINAL aunque
+  # la senal saltara dentro de una llamada redirigida.
+  trap '' INT TERM HUP PIPE
+  restore_std_streams
   set +e
 
   # Se resuelve AQUI, con el STEP de cuando se disparo la vuelta atras: nada
@@ -3033,6 +3063,7 @@ rollback_and_die() {
 
   heading "$(kq_text u_phase_6)"
   err_final "$(kq_format u_rollback_reason "${reason}")"
+  err_final "$(kq_text u_rollback_dont_interrupt)"
 
   if [ "${ROLLBACK_ARMED}" -le 1 ]; then
     # Solo el mantenimiento estaba puesto: retirarlo deja todo como estaba.
@@ -3081,10 +3112,18 @@ rollback_and_die() {
     restore_extra+=(--expect-sha256 "${own_sha}")
     [ "${BACKUP_LEGACY:-0}" -ne 1 ] || restore_extra+=(--accept-unauthenticated)
   fi
-  compose_new run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller \
+  # En su propia sesion (setsid): una senal del terminal al grupo en primer plano no
+  # llega a `docker compose run`, que la reenviaria al contenedor y mataria restore.sh
+  # entre sus dos renombrados.
+  isolated docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller \
     "${restore_extra[@]}" >>"$(detail_sink)" 2>&1
   code=$?
-  if [ "${code}" -ne 0 ]; then
+  if [ "${code}" -eq "${KQ_EXIT_RESTORED_INTERRUPTED}" ]; then
+    # 8 = restaurada PERO interrumpida por una senal que le llego a restore.sh: la base
+    # buena esta en servicio y se sigue (lib/exit-codes.sh).
+    err "$(kq_format u_w_rollback_restore_interrupted "${code}")"
+    remember_check "restore-interrupted" "$(kq_format u_w_rollback_restore_interrupted "${code}")"
+  elif [ "${code}" -ne 0 ]; then
     err "$(kq_format u_f_rollback_restore "${code}" "$(kq_exit_name "${code}")")"
     rollback_incomplete "${reason}"
   fi
@@ -3439,6 +3478,11 @@ print_info() {
 
 #------------------------------------------------------------------------------
 main() {
+  # Los descriptores originales, para que la vuelta atras hable por la pantalla aunque la
+  # senal salte dentro de una llamada redirigida (restore_std_streams). SIGPIPE se ignora:
+  # un `| tee` muerto tras un Ctrl+C no puede matar el script a mitad de la vuelta atras.
+  exec 3>&1 4>&2
+  trap '' PIPE
   parse_arguments "$@"
   kq_msg_init "${OPT_LANG}"
   resolve_package_paths
