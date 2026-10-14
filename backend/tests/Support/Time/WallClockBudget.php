@@ -28,9 +28,10 @@ namespace Tests\Support\Time;
  *
  *     [presupuesto-de-reloj] RNF-P-05 sin afirmar bajo cobertura (xdebug): ...
  *
- * Lo que NO pasa por aqui: las comparaciones RELATIVAS entre dos medidas de la
- * misma prueba (tiempo constante de RS-03), que la instrumentacion encarece por
- * igual en los dos lados, y los techos de una espera de red (sonda de
+ * Las comparaciones RELATIVAS entre dos medidas de la misma prueba (tiempo
+ * constante de RS-03) pasan tambien, con {@see self::expectRatioBelow()}: la
+ * instrumentacion no encarece por igual dos caminos que ejecutan distinto PHP.
+ * Lo que NO pasa por aqui: los techos de una espera de red (sonda de
  * disponibilidad, colector caido), donde el tiempo es de la red y no del PHP.
  */
 final class WallClockBudget
@@ -52,6 +53,17 @@ final class WallClockBudget
     public static function expectBelowMilliseconds(float $milliseconds, float $budget, string $requirement): void
     {
         self::announce(self::check($milliseconds, $budget, $requirement, self::coverageDriver(), 'ms'));
+    }
+
+    /**
+     * Una RAZON entre dos medidas de la misma prueba por debajo de un techo: el
+     * tiempo constante de RS-03 (V4-QA-1 de la 2.2.1). Pasa por aqui y no se
+     * afirma a pelo porque bajo Xdebug la instrumentacion no encarece por igual
+     * dos caminos que ejecutan distinto PHP alrededor del mismo `bcrypt`.
+     */
+    public static function expectRatioBelow(float $ratio, float $maxRatio, string $requirement): void
+    {
+        self::announce(self::check($ratio, $maxRatio, $requirement, self::coverageDriver(), 'x'));
     }
 
     /**

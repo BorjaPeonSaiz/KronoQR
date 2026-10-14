@@ -55,3 +55,10 @@ it('anuncia en milisegundos bajo cobertura', function (): void {
         .'presupuesto 0.5 ms. Se afirma en las pasadas sin cobertura ni mutacion (jobs ③ y ④ de la CI y local).'
     );
 })->group('RNF-M-01');
+
+it('afirma la razon entre dos medidas sin cobertura y la anuncia con ella', function (): void {
+    expect(fn (): ?string => WallClockBudget::check(1.5, 1.5, 'RS-03', null, 'x'))
+        ->toThrow(ExpectationFailedException::class, 'RS-03: 1.500 x medidos, presupuesto 1.5 x.')
+        ->and(WallClockBudget::check(42.0, 1.5, 'RS-03', 'xdebug', 'x'))
+        ->toStartWith(WallClockBudget::NOTICE_PREFIX.' RS-03 sin afirmar bajo cobertura (xdebug): 42.000 x');
+})->group('RNF-M-01', 'RS-03');
