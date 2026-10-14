@@ -167,6 +167,10 @@ KQ_MSG_ES[u_obs_carried]="Tus cambios en observability/ viajan al directorio nue
 KQ_MSG_ES[u_w_obs_conflict]="%s ficheros de observability/ los has cambiado tu Y tambien cambian en el paquete nuevo (o ya no existen en el): GANA EL DEL PAQUETE. Tu version sigue, intacta, en %s. Ficheros: %s"
 KQ_MSG_ES[u_w_obs_conflict_fix]="compara cada uno ('diff -u %s/<fichero> %s/<fichero>'), vuelve a aplicar lo tuyo en el directorio nuevo y recarga ('sudo docker compose restart prometheus alertmanager grafana'). Si no cambiaste nada, ignora este aviso."
 KQ_MSG_ES[u_w_obs_nobaseline]="el paquete anterior no trae la huella de observability/, asi que no se puede saber que cambiaste tu. %s ficheros difieren de los del paquete nuevo y se queda el del paquete (puede que no hayas tocado ninguno): %s. Los tuyos siguen, intactos, en %s."
+KQ_MSG_ES[u_obs_deleted]="Has borrado %s ficheros de observability/ que el paquete nuevo no cambia: se borran tambien en el directorio nuevo (%s): %s."
+KQ_MSG_ES[u_w_obs_protected]="%s ficheros de observability/ que NO se personalizan (alertas de serie, plantilla de Alertmanager, arranque, retencion de Loki y Tempo) los has cambiado o borrado tu: GANA EL DEL PAQUETE, siempre. Tu version sigue, intacta, en %s. Ficheros: %s"
+KQ_MSG_ES[u_w_obs_protected_fix]="tus reglas propias van en prometheus/rules/local-<nombre>.yml, que viaja siempre al directorio nuevo (operacion.md §10)."
+KQ_MSG_ES[u_w_obs_links]="%s enlaces simbolicos de observability/ NO se llevan al directorio nuevo (apuntan fuera del arbol): %s. Siguen en %s."
 KQ_MSG_ES[u_w_obs_copy_failed]="no se han podido copiar todos tus cambios de observability/ de %s a %s. La actualizacion sigue con lo del paquete; tu version sigue, intacta, en el directorio anterior."
 
 KQ_MSG_ES[u_maintenance_on]="Panel, portal y API de gestion en mantenimiento (responden 503 con Retry-After). Los quioscos encolan en local y sincronizaran al terminar: la hora real de cada fichaje se conserva."
@@ -491,6 +495,10 @@ KQ_MSG_EN[u_obs_carried]="Your changes in observability/ travel to the new direc
 KQ_MSG_EN[u_w_obs_conflict]="%s files in observability/ were changed by you AND also change in the new package (or no longer exist in it): THE PACKAGE WINS. Your version stays, intact, in %s. Files: %s"
 KQ_MSG_EN[u_w_obs_conflict_fix]="compare each one ('diff -u %s/<file> %s/<file>'), re-apply yours in the new directory and reload ('sudo docker compose restart prometheus alertmanager grafana'). If you changed nothing, ignore this notice."
 KQ_MSG_EN[u_w_obs_nobaseline]="the previous package does not carry the observability/ fingerprint, so it cannot tell what you changed. %s files differ from the new package's and the package's version stays (you may not have touched any): %s. Yours stay, intact, in %s."
+KQ_MSG_EN[u_obs_deleted]="You deleted %s observability/ files that the new package does not change: they are deleted in the new directory (%s) too: %s."
+KQ_MSG_EN[u_w_obs_protected]="%s observability/ files that are NOT customised (built-in alerts, Alertmanager template, start-up, Loki and Tempo retention) were changed or deleted by you: THE PACKAGE ALWAYS WINS. Your version stays, intact, in %s. Files: %s"
+KQ_MSG_EN[u_w_obs_protected_fix]="your own rules go in prometheus/rules/local-<name>.yml, which always travels to the new directory (operation.md §10)."
+KQ_MSG_EN[u_w_obs_links]="%s symbolic links in observability/ are NOT carried to the new directory (they point outside the tree): %s. They stay in %s."
 KQ_MSG_EN[u_w_obs_copy_failed]="not all your observability/ changes could be copied from %s to %s. The update goes on with the package's files; your version stays, intact, in the previous directory."
 
 KQ_MSG_EN[u_maintenance_on]="Panel, portal and management API under maintenance (they answer 503 with Retry-After). Kiosks queue locally and will sync when done: the real time of every clocking is preserved."

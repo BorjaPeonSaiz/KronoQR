@@ -19,9 +19,10 @@ use Tests\Architecture\Support\Repo;
  * @param  array<string, string>  $pristine  ficheros tal como los entrego el paquete anterior
  * @param  array<string, string>  $client  ficheros que tiene ahora el cliente
  * @param  array<string, string>  $new  ficheros del paquete nuevo
+ * @param  array<string, string>  $links  enlaces simbolicos del cliente (nombre => destino)
  * @return array{0: string, 1: Process}
  */
-function observabilityMergeScenario(array $pristine, array $client, array $new, bool $withBaseline = true, string $then = ''): array
+function observabilityMergeScenario(array $pristine, array $client, array $new, bool $withBaseline = true, string $then = '', array $links = []): array
 {
     $root = sys_get_temp_dir().'/kq-obs-merge-'.bin2hex(random_bytes(4));
     foreach (['old' => $client, 'new' => $new, 'pristine' => $pristine] as $name => $files) {
@@ -33,6 +34,10 @@ function observabilityMergeScenario(array $pristine, array $client, array $new, 
             }
             file_put_contents($file, $content);
         }
+    }
+
+    foreach ($links as $name => $target) {
+        symlink($target, $root.'/old/observability/'.$name);
     }
 
     $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
@@ -48,16 +53,16 @@ function observabilityMergeScenario(array $pristine, array $client, array $new, 
 
 it('lleva al directorio nuevo lo que SOLO cambio el cliente, y avisa', function (): void {
     [$root, $process] = observabilityMergeScenario(
-        pristine: ['prometheus/rules/kiosk.yml' => "umbral: 300\n", 'grafana/a.json' => "a\n"],
-        client: ['prometheus/rules/kiosk.yml' => "umbral: 600\n", 'grafana/a.json' => "a\n", 'grafana/mio.json' => "mio\n"],
-        new: ['prometheus/rules/kiosk.yml' => "umbral: 300\n", 'grafana/a.json' => "a\n"],
+        pristine: ['blackbox/blackbox.yml' => "umbral: 300\n", 'grafana/a.json' => "a\n"],
+        client: ['blackbox/blackbox.yml' => "umbral: 600\n", 'grafana/a.json' => "a\n", 'grafana/mio.json' => "mio\n"],
+        new: ['blackbox/blackbox.yml' => "umbral: 300\n", 'grafana/a.json' => "a\n"],
     );
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
         ->and($process->getOutput())->toContain('Tus cambios en observability/ viajan al directorio nuevo (2 ficheros')
-        ->and($process->getOutput())->toContain('prometheus/rules/kiosk.yml')
+        ->and($process->getOutput())->toContain('blackbox/blackbox.yml')
         ->and($process->getOutput())->toContain('grafana/mio.json')
-        ->and(file_get_contents($root.'/new/observability/prometheus/rules/kiosk.yml'))->toBe("umbral: 600\n")
+        ->and(file_get_contents($root.'/new/observability/blackbox/blackbox.yml'))->toBe("umbral: 600\n")
         ->and(file_get_contents($root.'/new/observability/grafana/mio.json'))->toBe("mio\n");
 })->group('RNF-D-04', 'RF-PD-10');
 
@@ -145,3 +150,77 @@ it('package.sh entrega la huella de observability/ tal como se entrega', functio
 
     expect($check->getExitCode())->toBe(0, $check->getErrorOutput().$check->getOutput());
 })->group('RNF-D-04', 'RF-PD-10');
+
+it('un fichero BORRADO por el cliente que el paquete no cambia se borra tambien en el nuevo, y se dice por su nombre', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['grafana/a.json' => "a\n", 'grafana/b.json' => "b\n"],
+        client: ['grafana/b.json' => "b\n"],
+        new: ['grafana/a.json' => "a\n", 'grafana/b.json' => "b\n"],
+    );
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toContain('Has borrado 1 ficheros')
+        ->and($process->getOutput())->toContain('grafana/a.json')
+        ->and(file_exists($root.'/new/observability/grafana/a.json'))->toBeFalse()
+        ->and(file_exists($root.'/new/observability/grafana/b.json'))->toBeTrue();
+})->group('RNF-D-04');
+
+it('un fichero borrado por el cliente que el paquete SI cambia vuelve, con aviso por su nombre', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['grafana/a.json' => "a1\n"],
+        client: [],
+        new: ['grafana/a.json' => "a2\n"],
+    );
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput().$process->getErrorOutput())->toContain('grafana/a.json (borrado)')
+        ->and(file_get_contents($root.'/new/observability/grafana/a.json'))->toBe("a2\n");
+})->group('RNF-D-04');
+
+it('la lista protegida: gana siempre el paquete si el cliente cambia o borra una regla de serie, y local-* viaja', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: [
+            'prometheus/rules/work-record.yml' => "v1\n",
+            'prometheus/rules/audit.yml' => "v1\n",
+            'loki/loki.yaml' => "retencion: 90\n",
+        ],
+        // work-record.yml editada (el paquete NO la cambia), audit.yml borrada, loki editada,
+        // y una regla propia local-*.yml.
+        client: [
+            'prometheus/rules/work-record.yml' => "apagada\n",
+            'loki/loki.yaml' => "retencion: 1\n",
+            'prometheus/rules/local-hotel.yml' => "groups: []\n",
+        ],
+        new: [
+            'prometheus/rules/work-record.yml' => "v1\n",
+            'prometheus/rules/audit.yml' => "v1\n",
+            'loki/loki.yaml' => "retencion: 90\n",
+        ],
+    );
+    $salida = $process->getOutput().$process->getErrorOutput();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($salida)->toContain('GANA EL DEL PAQUETE, siempre')
+        ->and($salida)->toContain('prometheus/rules/work-record.yml')
+        ->and($salida)->toContain('prometheus/rules/audit.yml (borrado)')
+        ->and($salida)->toContain('loki/loki.yaml')
+        ->and(file_get_contents($root.'/new/observability/prometheus/rules/work-record.yml'))->toBe("v1\n")
+        ->and(file_get_contents($root.'/new/observability/prometheus/rules/audit.yml'))->toBe("v1\n")
+        ->and(file_get_contents($root.'/new/observability/loki/loki.yaml'))->toBe("retencion: 90\n")
+        ->and(file_get_contents($root.'/new/observability/prometheus/rules/local-hotel.yml'))->toBe("groups: []\n")
+        // La copia del cliente sigue en el directorio anterior.
+        ->and(file_get_contents($root.'/old/observability/prometheus/rules/work-record.yml'))->toBe("apagada\n");
+})->group('RNF-D-04', 'RS-07');
+
+it('los enlaces simbolicos del cliente no se llevan y se avisa por su nombre', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['a.yml' => "x\n"],
+        client: ['a.yml' => "x\n"],
+        new: ['a.yml' => "x\n"],
+        links: ['enlace.yml' => '/etc/passwd'],
+    );
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput().$process->getErrorOutput())->toContain('enlace.yml')
+        ->and(file_exists($root.'/new/observability/enlace.yml'))->toBeFalse();
+})->group('RNF-D-04');

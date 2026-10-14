@@ -628,6 +628,29 @@ lo lee el `restore.sh` de la 2.1.0**: restaura con el paquete de la 2.2.0, que
 
 ---
 
+### 6.9 Se interrumpió `restore.sh` (Ctrl+C, corte de SSH, `kill`)
+
+`restore.sh` atrapa `HUP`, `INT` y `TERM`. Qué pasa depende de **cuándo** llega:
+
+| Salida | Cuándo llegó la señal | Estado | Qué hacer |
+| --- | --- | --- | --- |
+| `129` (HUP), `130` (INT), `143` (TERM) | **Antes** del intercambio de bases (preparando la copia o en `pg_restore`) | La base de trabajo se ha eliminado y la base de destino **sigue exactamente como estaba** | Repite la restauración. Si el mensaje dice que **no** ha podido eliminar la base de trabajo, elimínala con la orden que trae: lleva una copia entera de los datos personales |
+| `8` | **Durante o después** del intercambio | **La restauración SÍ se completó** y la base restaurada está en servicio; la anterior se conserva como `<base>_pre_restore_<fecha>` | **No repitas la restauración.** Comprueba con `./doctor.sh` y revisa el informe de `BACKUP_PATH/reports/restore-*.log` |
+| `6` | Después del intercambio, con el asiento de auditoría sin escribir | Restaurada y en servicio, asiento **pendiente** | Escribe el asiento con la orden del mensaje (§6.7) |
+| `7` | Antes del intercambio, y la copia había cambiado roles | Ver §6.6 | Ver §6.6 |
+
+Entre los dos `ALTER DATABASE … RENAME` la señal solo se **anota** y se atiende al
+terminar (unos segundos): no hace falta repetirla. `restore.sh` consulta el cluster
+antes de decidir qué ocurrió, así que nunca deja la instalación sin base de
+producción por una señal. Una base `<base>_restore_<fecha>` de más de un día en
+`pg_database` es de una restauración que murió sin limpiar (por ejemplo, con
+`kill -9`): `restore.sh` y `doctor.sh` lo avisan y se elimina con
+`DROP DATABASE "<nombre>" WITH (FORCE)`.
+
+Si la restauración la lanzó `update.sh` en su vuelta atrás, la salida `8` cuenta como
+restaurada y la vuelta atrás sigue; `update.sh` ignora una segunda señal mientras
+vuelve atrás.
+
 ## 7. Simulacro trimestral (RNF-D-05, RQ-09)
 
 **Una copia no verificada no es una copia, y una copia que nunca se ha

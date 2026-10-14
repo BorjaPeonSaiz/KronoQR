@@ -48,6 +48,8 @@ readonly SCRIPT_DIR
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 readonly REPO_ROOT
 
+# shellcheck source=lib/fs.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/fs.sh"
 # shellcheck source=lib/observability-merge.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/observability-merge.sh"
 

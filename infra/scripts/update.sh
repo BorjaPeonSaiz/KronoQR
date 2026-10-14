@@ -1941,6 +1941,16 @@ merge_observability() {
   if [ "${#KQ_OBS_CARRIED[@]}" -gt 0 ]; then
     say "$(kq_format u_obs_carried "${#KQ_OBS_CARRIED[@]}" "$(kq_obs_list 8 "${KQ_OBS_CARRIED[@]}")" "${new_dir}")"
   fi
+  if [ "${#KQ_OBS_DELETED[@]}" -gt 0 ]; then
+    say "$(kq_format u_obs_deleted "${#KQ_OBS_DELETED[@]}" "${new_dir}" "$(kq_obs_list 8 "${KQ_OBS_DELETED[@]}")")"
+  fi
+  if [ "${#KQ_OBS_PROTECTED[@]}" -gt 0 ]; then
+    kq_msg check_warn "$(kq_format u_w_obs_protected "${#KQ_OBS_PROTECTED[@]}" "${old_dir}" "$(kq_obs_list 8 "${KQ_OBS_PROTECTED[@]}")")"
+    kq_msg fix "$(kq_text u_w_obs_protected_fix)"
+  fi
+  if [ "${#KQ_OBS_LINKS[@]}" -gt 0 ]; then
+    kq_msg check_warn "$(kq_format u_w_obs_links "${#KQ_OBS_LINKS[@]}" "$(kq_obs_list 8 "${KQ_OBS_LINKS[@]}")" "${old_dir}")"
+  fi
   if [ "${#KQ_OBS_CONFLICTS[@]}" -gt 0 ]; then
     if [ "${KQ_OBS_BASELINE}" -eq 1 ]; then
       kq_msg check_warn "$(kq_format u_w_obs_conflict "${#KQ_OBS_CONFLICTS[@]}" "${old_dir}" "$(kq_obs_list 8 "${KQ_OBS_CONFLICTS[@]}")")"

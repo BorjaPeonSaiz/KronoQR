@@ -419,7 +419,8 @@ mensaje, que es lo que hay que leer.**
 | `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
 | `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7). `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** (§18, «…la restauración se niega por integridad»). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`) o porque `scheduler` u `horizon` están parados; con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
 | `7` | **Garantía de seguridad rota. NADA aplicado.** Un rol de la base de datos tiene más privilegios de los permitidos, o una copia ha intentado cambiarlos (AUD-1). No es una avería: es una garantía que el producto se niega a saltarse | `backup.sh`: el rol con el que se copia es superusuario, o puede crear roles o bases, o saltarse RLS; no se ha escrito ninguna copia y salta la alerta de copia fallida. `restore.sh` y `restore-drill.sh --mode database`: la copia ha cambiado roles del clúster al restaurarse; no se ha intercambiado ninguna base y se ha intentado devolver los roles a su estado. Sigue `rotacion-secretos.md` («El rol de las copias es privilegiado») o `restaurar-backup.md` §6.6 |
-$1. `restore.sh` también atrapa estas señales: fuera del intercambio de bases elimina la base de trabajo y sale con ellas; **durante** el intercambio las difiere hasta dejar la instalación coherente y sale con ellas diciendo que la restauración sí se completó$2
+| `8` | **Restauración completada pero interrumpida por una señal.** Solo `restore.sh`: la señal llegó durante o después del intercambio de bases. La base restaurada YA está en servicio y la anterior se conserva con su marca | `restore.sh`: **no repitas la restauración**. Si además el asiento de auditoría quedó pendiente, sale con `6` y la orden que lo escribe. `update.sh` lo trata como restaurado y sigue con su vuelta atrás |
+| `129`, `130`, `143` | **Interrumpido antes de escribir nada**: `129` corte de la sesión SSH, `130` Ctrl+C, `143` `kill`. NADA escrito | `install.sh` y `update.sh`: solo en las fases que todavía no han tocado nada; desde que empiezan a escribir, una interrupción se trata como un fallo y sale con `4` o `5` tras deshacer. `restore.sh`: una señal ANTES del intercambio de bases elimina la base de trabajo y sale con ellas (la base de destino no se toca); DURANTE el intercambio la señal se difiere hasta dejar la instalación coherente y entonces sale con `8`. Ejecútalos dentro de `tmux` o `screen` (`instalacion.md` §1.4) |
 
 `install.sh` y `update.sh` invocan `product:doctor` en su fase de verificación
 (RF-PD-13): en `install.sh` un aviso (código `1` de `product:doctor`) se
@@ -961,7 +962,20 @@ vuelve a aplicar lo tuyo y recarga
 (`docker compose restart prometheus alertmanager grafana`). Si el paquete
 anterior es de una versión que no entregaba la huella (hasta la 2.2.0),
 `update.sh` no puede saber qué tocaste tú: deja lo del paquete nuevo, avisa de
-cuántos ficheros difieren y tus ficheros siguen en el directorio anterior.
+cuántos ficheros difieren y tus ficheros siguen en el directorio anterior. Es lo que
+verás **al actualizar de la 2.2.0 a la 2.2.1** (la 2.2.0 no traía la huella): un
+aviso con los ficheros que difieren, aunque no hayas tocado ninguno.
+
+**Qué no se personaliza y dónde va lo tuyo.** Hay ficheros en los que **siempre
+gana el paquete**, los hayas cambiado o borrado tú (`update.sh` lo avisa por su
+nombre y tu copia sigue en el directorio anterior): las reglas de alerta de serie
+(`prometheus/rules/*.yml`, que vigilan el registro horario, la auditoría y las
+copias), la plantilla de Alertmanager, los dos `render-config.sh` y la retención
+de `loki/loki.yaml` y `tempo/tempo.yaml`. Tus reglas propias van en
+**`prometheus/rules/local-<nombre>.yml`**, que viaja siempre. Si borras un
+fichero tuyo que el paquete no cambia, se borra también en el directorio nuevo
+(y se dice); los enlaces simbólicos no se llevan (se avisa).
+
 
 **Dos límites que conviene conocer.** No hay un Alertmanager común entre
 instalaciones de clientes distintos: cada instalación tiene la suya, con sus

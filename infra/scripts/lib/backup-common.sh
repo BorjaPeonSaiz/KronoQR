@@ -209,15 +209,6 @@ require_encryption_key() {
     "este servidor tiene un openssl sin SHA3-256 (hace falta OpenSSL 1.1.1 o posterior) y el formato de las copias (KQE1, ADR-049) lo necesita. Actualiza el paquete openssl del servidor, o ejecuta este script dentro del contenedor (docker compose exec scheduler ...)."
 }
 
-sha256_of() {
-  local file="$1"
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$file" | cut -d' ' -f1
-  else
-    openssl dgst -sha256 "$file" | awk '{print $NF}'
-  fi
-}
-
 # Espacio en disco. La implementacion vive en lib/fs.sh, compartida con el
 # instalador.
 free_bytes_at() {
