@@ -154,7 +154,7 @@ it('el cableado: el actualizador no duplica el asiento, el servicio restore arra
         ->and($restore)->toContain('KQ_EXIT_VERIFY_FAILED');
 
     // El intercambio de bases va ANTES del asiento, y el asiento antes de purgar.
-    $intercambio = strpos($restore, 'ALTER DATABASE \"${base_nueva}\" RENAME TO');
+    $intercambio = strpos($restore, 'intercambiar_bases "$base_nueva" "$base_anterior"');
     $asiento = strpos($restore, "    escribir_asiento\n");
     $purga = strrpos($restore, "  purgar_bases_anteriores\n}");
     expect($intercambio)->not->toBeFalse()->and($asiento)->not->toBeFalse()->and($purga)->not->toBeFalse();

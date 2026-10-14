@@ -980,22 +980,25 @@ the previous directory. That is what
 you will see **when updating from 2.2.0 to 2.2.1** (2.2.0 did not carry the
 fingerprint): a notice listing the files that differ, even if you touched none.
 
-**What is not customised, and where yours goes.** Only what has legal or security
-relevance: in these files **the package always wins**, whether you changed or deleted
-them (`update.sh` warns by name and your copy stays in the previous directory): the
-rules `prometheus/rules/work-record.yml`, `audit.yml`, `backup.yml` and
-`threat-detection.yml` (work record, audit trail, backups and threats),
+**What is not customised, and where yours goes.** In these files **the package always
+wins**, whether you changed or deleted them (`update.sh` warns by name and your copy
+stays in the previous directory): **all the built-in rules
+`prometheus/rules/*.yml`** (work record, audit, projection, incidents, authentication,
+accounts, backups, threats and the one that checks that alerts arrive), with **two
+exceptions**: `local-*` and `kiosk.yml`, which is left out on purpose because this guide
+asks you to adjust its threshold together with `KIOSK_HEALTH_SILENT_AFTER_SECONDS`;
 `prometheus/prometheus.yml.template` (loads the rules and points at Alertmanager),
-`alertmanager/alertmanager.yml.template`, the two `render-config.sh`, and
+`alertmanager/alertmanager.yml.template`, the two `render-config.sh`,
+`retention-guard.sh` and
 `loki/loki.yaml` and `tempo/tempo.yaml` (their retention is not edited there: it is
 `LOG_RETENTION_HOURS` in the `.env`, which survives updates; if you had edited those
-files, `update.sh` tells you the value you had and the variable to set). **Everything else
-follows the normal merge**, other rules included (for example `kiosk.yml`, whose
-threshold is edited together with `KIOSK_HEALTH_SILENT_AFTER_SECONDS`). Your own
-rules go in **`prometheus/rules/local-<name>.yml`**. Rules you add in
-`prometheus/rules/` are validated with `promtool check rules` when available (a
-broken YAML would switch off **all** alerts): if it is not, only `local-*` travel and
-the others are reported. If you delete a file of yours that the package does not
+files, `update.sh` tells you the value you had and the variable to set; if it was SHORTER than 2160 h and your `.env` does not define it, it writes it and says so, and if it was longer it only warns: lengthening retention is your decision). **Everything else
+follows the normal merge**, `kiosk.yml` included. Your own
+rules go in **`prometheus/rules/local-<name>.yml`**. Every rule that travels from
+`prometheus/rules/` (an edited `kiosk.yml`, `local-*` or an added one) is validated with
+the `promtool` of the new compose's **Prometheus image** (a broken YAML would switch off
+**all** alerts): if it rejects it the package wins and you are told; without Docker the
+server's is used, and if there is none, only `local-*` and `kiosk.yml` travel. If you delete a file of yours that the package does not
 change, it is deleted in the new directory too (and reported); symbolic links are not
 carried (reported).
 

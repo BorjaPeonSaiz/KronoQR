@@ -79,6 +79,7 @@ SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/docker/*/*/*.sh) \
             $(wildcard infra/docker/postgres/bin/kronoqr-*) \
             $(wildcard infra/docker/*/*/*.envsh) \
+            $(wildcard infra/observability/*.sh) \
             $(wildcard infra/observability/alertmanager/*.sh) \
             $(wildcard infra/observability/prometheus/*.sh) \
             $(wildcard .github/scripts/*.sh) \

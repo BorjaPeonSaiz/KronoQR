@@ -157,7 +157,7 @@ it('la retencion de Loki y de Tempo la fija LOG_RETENTION_HOURS del .env: el com
 
         foreach (['loki', 'tempo'] as $servicio) {
             $definicion = $compose['services'][$servicio] ?? [];
-            $comando = implode(' ', (array) ($definicion['command'] ?? []));
+            $comando = textoDeLista($definicion['command'] ?? []);
             $entorno = (array) ($definicion['environment'] ?? []);
 
             expect($comando)->toContain('-config.expand-env=true');
@@ -170,5 +170,26 @@ it('.env.example trae LOG_RETENTION_HOURS con el plazo de serie del log tecnico 
     $env = Repo::contents('.env.example');
 
     expect(preg_match('/^LOG_RETENTION_HOURS=(\d+)\s*$/m', $env, $m))->toBe(1)
-        ->and((int) $m[1])->toBe(diasDeRetencionTecnica() * 24);
+        ->and((int) ($m[1] ?? 0))->toBe(diasDeRetencionTecnica() * 24);
 })->group('RL-11');
+
+it('Loki y Tempo arrancan por la guarda que valida LOG_RETENTION_HOURS: un `up -d loki` no pasa por install.sh', function (): void {
+    foreach (['infra/compose.prod.yaml', 'infra/compose.dev.yaml'] as $fichero) {
+        /** @var array{services: array<string, array<string, mixed>>} $compose */
+        $compose = Yaml::parse(Repo::contents($fichero));
+
+        foreach (['loki' => '/usr/bin/loki', 'tempo' => '/tempo'] as $servicio => $binario) {
+            $definicion = $compose['services'][$servicio] ?? [];
+
+            expect($definicion['entrypoint'] ?? null)->toBe(['/bin/sh', '/etc/kronoqr/retention-guard.sh'])
+                ->and(((array) ($definicion['command'] ?? []))[0] ?? null)->toBe($binario)
+                ->and(textoDeLista($definicion['volumes'] ?? []))->toContain('retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro');
+        }
+    }
+})->group('RL-11');
+
+/** Una lista de la configuracion de Compose, como un solo texto. */
+function textoDeLista(mixed $valor): string
+{
+    return implode(' ', array_map(static fn (mixed $elemento): string => is_scalar($elemento) ? (string) $elemento : '', (array) $valor));
+}

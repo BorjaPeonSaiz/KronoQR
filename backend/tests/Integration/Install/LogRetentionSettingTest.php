@@ -97,3 +97,72 @@ it('update.sh no avisa si el plazo del cliente es el de serie o ya usa la variab
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
         ->and($process->getOutput().$process->getErrorOutput())->not->toContain('LOG_RETENTION_HOURS');
 })->group('RL-11', 'RF-PD-10');
+
+/**
+ * @return array{0: Process, 1: string}
+ */
+function warnEditedRetention(string $lokiValue, string $envContent): array
+{
+    $dir = sys_get_temp_dir().'/kq-log-retention-env-'.bin2hex(random_bytes(4));
+    mkdir($dir.'/old/loki', 0777, true);
+    file_put_contents($dir.'/old/loki/loki.yaml', "limits_config:\n  retention_period: {$lokiValue}\n");
+    file_put_contents($dir.'/.env', $envContent);
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; kq_msg_init es; '
+        .'ENV_FILE='.escapeshellarg($dir.'/.env').'; warn_edited_retention '.escapeshellarg($dir.'/old');
+    $process = new Process(['bash', '-c', $script], env: ['KRONOQR_LANG' => 'es'], timeout: 30.0);
+    $process->run();
+
+    return [$process, $dir.'/.env'];
+}
+
+it('un plazo MENOR que el de serie editado a mano se escribe en el .env nuevo (no se alarga lo que se redujo) y se dice', function (): void {
+    [$process, $env] = warnEditedRetention('720h', "APP_URL=x\n");
+    $salida = $process->getOutput().$process->getErrorOutput();
+
+    expect($process->getExitCode())->toBe(0, $salida)
+        ->and((string) file_get_contents($env))->toContain("LOG_RETENTION_HOURS=720\n")
+        ->and($salida)->toContain('MENOR')->toContain('LOG_RETENTION_HOURS=720')
+        ->and(decoct((int) fileperms($env) & 0o777))->toBe('600');
+})->group('RL-11', 'RF-PD-10');
+
+it('un plazo MAYOR que el de serie solo se avisa: no se alarga la retencion sin una decision', function (): void {
+    [$process, $env] = warnEditedRetention('4320h', "APP_URL=x\n");
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and((string) file_get_contents($env))->not->toContain('LOG_RETENTION_HOURS')
+        ->and($process->getOutput().$process->getErrorOutput())->toContain('LOG_RETENTION_HOURS=4320');
+})->group('RL-11', 'RF-PD-10');
+
+it('si el .env ya define LOG_RETENTION_HOURS no se pisa: igual, en silencio; distinta, aviso', function (): void {
+    [$igual, $envIgual] = warnEditedRetention('720h', "LOG_RETENTION_HOURS=720\n");
+    [$distinta, $envDistinta] = warnEditedRetention('720h', "LOG_RETENTION_HOURS=1000\n");
+
+    expect($igual->getOutput().$igual->getErrorOutput())->not->toContain('LOG_RETENTION_HOURS')
+        ->and((string) file_get_contents($envIgual))->toBe("LOG_RETENTION_HOURS=720\n")
+        ->and((string) file_get_contents($envDistinta))->toBe("LOG_RETENTION_HOURS=1000\n")
+        ->and($distinta->getOutput().$distinta->getErrorOutput())->toContain('720');
+})->group('RL-11', 'RF-PD-10');
+
+it('retention-guard.sh exige un entero entre 24 y 17520 antes de arrancar el binario (0 desactivaria la retencion)', function (string $valor, ?string $esperado): void {
+    $process = new Process(['sh', Repo::file('infra/observability/retention-guard.sh'), 'sh', '-c', 'echo arranca=$LOG_RETENTION_HOURS'], env: ['LOG_RETENTION_HOURS' => $valor], timeout: 30.0);
+    $process->run();
+
+    if ($esperado === null) {
+        expect($process->getExitCode())->toBe(64)->and($process->getOutput())->not->toContain('arranca');
+    } else {
+        expect($process->getExitCode())->toBe(0, $process->getErrorOutput())->and(trim($process->getOutput()))->toBe('arranca='.$esperado);
+    }
+})->with([
+    'vacia: la de serie' => ['', '2160'],
+    'el limite inferior' => ['24', '24'],
+    'el limite superior' => ['17520', '17520'],
+    'ceros a la izquierda: decimal, no octal' => ['0100', '100'],
+    'cero' => ['0', null],
+    'por debajo' => ['23', null],
+    'por encima' => ['17521', null],
+    'texto' => ['abc', null],
+    'con sufijo' => ['90d', null],
+    'con salto de linea (inyeccion de claves)' => ["2160\nretention_enabled: false", null],
+    'enorme' => ['99999999999', null],
+])->group('RL-11', 'RF-PD-10');

@@ -966,23 +966,26 @@ cuántos ficheros difieren y tus ficheros siguen en el directorio anterior. Es l
 verás **al actualizar de la 2.2.0 a la 2.2.1** (la 2.2.0 no traía la huella): un
 aviso con los ficheros que difieren, aunque no hayas tocado ninguno.
 
-**Qué no se personaliza y dónde va lo tuyo.** Solo lo que tiene relevancia legal o
-de seguridad: en estos ficheros **siempre gana el paquete**, los hayas cambiado o
-borrado tú (`update.sh` lo avisa por su nombre y tu copia sigue en el directorio
-anterior): las reglas `prometheus/rules/work-record.yml`, `audit.yml`, `backup.yml`
-y `threat-detection.yml` (registro horario, cadena de auditoría, copias y
-amenazas), `prometheus/prometheus.yml.template` (carga las reglas y apunta a
-Alertmanager), `alertmanager/alertmanager.yml.template`, los dos `render-config.sh`
-y `loki/loki.yaml` y `tempo/tempo.yaml` (su retención no se edita ahí: es
+**Qué no se personaliza y dónde va lo tuyo.** En estos ficheros **siempre gana el
+paquete**, los hayas cambiado o borrado tú (`update.sh` lo avisa por su nombre y tu
+copia sigue en el directorio anterior): **todas las reglas de serie
+`prometheus/rules/*.yml`** (registro horario, auditoría, proyección, incidencias,
+autenticación, cuentas, copias, amenazas y la que vigila que las alertas llegan), con
+**dos excepciones**: las `local-*` y `kiosk.yml`, que queda fuera a propósito porque
+esta guía te pide ajustar su umbral junto a `KIOSK_HEALTH_SILENT_AFTER_SECONDS`;
+`prometheus/prometheus.yml.template` (carga las reglas y apunta a
+Alertmanager), `alertmanager/alertmanager.yml.template`, los dos `render-config.sh`,
+`retention-guard.sh` y `loki/loki.yaml` y `tempo/tempo.yaml` (su retención no se edita ahí: es
 `LOG_RETENTION_HOURS` del `.env`, que sobrevive a las actualizaciones; si la habías
 editado en esos ficheros, `update.sh` te dice el valor que tenías y la variable que
-debes poner). **El resto
-sigue la fusión normal**, incluidas las demás reglas (por ejemplo `kiosk.yml`, cuyo
-umbral se edita junto a `KIOSK_HEALTH_SILENT_AFTER_SECONDS`). Tus reglas propias
-van en **`prometheus/rules/local-<nombre>.yml`**. Las reglas que añadas en
-`prometheus/rules/` se validan con `promtool check rules` si está disponible
-(un YAML roto apagaría **todas** las alertas): si no lo está, solo viajan las
-`local-*` y las demás quedan en aviso. Si borras un fichero tuyo que el paquete no
+debes poner; si era MENOR que 2160 h y tu `.env` no la define, la escribe él y lo dice,
+y si era mayor solo avisa: alargar la retención es decisión tuya). **El resto
+sigue la fusión normal**, `kiosk.yml` incluido. Tus reglas propias
+van en **`prometheus/rules/local-<nombre>.yml`**. Toda regla que viaje desde
+`prometheus/rules/` (`kiosk.yml` editado, `local-*` o una añadida) se valida con el
+`promtool` de la **imagen de Prometheus** del compose nuevo (un YAML roto apagaría
+**todas** las alertas): si lo rechaza gana el paquete y se avisa; sin Docker se usa el
+del servidor, y si tampoco hay, solo viajan las `local-*` y `kiosk.yml`. Si borras un fichero tuyo que el paquete no
 cambia, se borra también en el directorio nuevo (y se dice); los enlaces simbólicos
 no se llevan (se avisa).
 
