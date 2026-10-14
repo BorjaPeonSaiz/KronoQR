@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
+use App\Modules\Attendance\Application\Command\CorrectShiftCommand;
+use App\Modules\Attendance\Application\Command\VoidShiftCommand;
+use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
+use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
+use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
+use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
+use Database\Seeders\Support\KioskClocking;
+use Database\Seeders\Support\KioskClockingAudit;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Support\Facades\DB;
@@ -34,21 +43,31 @@ use RuntimeException;
  * caso se lee solo y ninguno depende del orden de las semillas ni puede solapar
  * con las jornadas de nadie (`shift_entries_no_overlap`).
  *
- * **Las duraciones y los minutos del dia estan escritos a mano.** Calculados con
- * la misma aritmetica que el codigo bajo prueba, un error de signo daria una
- * semilla «correcta» y las pruebas que la usen tambien.
+ * ## Las correcciones van por los casos de uso (bloque 11 de la 2.2.1)
  *
- * **No escribe en `audit_log`.** El asiento lo produce el listener de
- * `Compliance` al publicarse el evento de dominio, y una semilla que insertara
- * filas a mano en esa tabla romperia la cadena de hash (ADR-027). El trail de
- * una instalacion real se llena usando el producto, no sembrandolo.
+ * Corregir, anular y dar de alta lo hacen `CorrectShiftHandler`,
+ * `VoidShiftHandler` y `AddShiftEntryHandler`, los mismos que usa el panel. Asi
+ * la version nueva, el puntero `superseded_by_id`, la fila de
+ * `shift_corrections`, el recalculo de `daily_totals` y el asiento de
+ * `audit_log` son los del producto, en su transaccion y con la cadena de hash
+ * intacta (ADR-027). Antes esta semilla escribia las cuatro tablas a mano y
+ * ningun asiento, y `compliance:reconcile-work-record` lo daba por manipulacion
+ * (ADR-057 §4).
+ *
+ * Lo que una correccion necesita delante —el tramo que ficho el quiosco— se
+ * siembra como los demas tramos de quiosco: la fila y sus asientos de entrada y
+ * salida ({@see KioskClockingAudit}), con la duracion **escrita a mano**.
+ *
+ * **El momento de la correccion es el de la siembra.** Los casos de uso lo
+ * toman del puerto `Clock`, y no se finge otro: `shift_corrections.created_at`
+ * y el asiento dicen cuando se sembro, que es cuando de verdad se corrigio.
+ *
+ * **Repetible.** Un caso cuyo empleado ya tiene tramos no se vuelve a sembrar:
+ * una segunda correccion sobre el mismo tramo seria otro dato, no el mismo.
  */
 final class CorrectionSeeder extends DevelopmentSeeder
 {
     private const string TIMEZONE = 'Europe/Madrid';
-
-    /** Anexo C: `AJUSTE_ACORDADO_CON_RRHH` no exige texto; `OTROS` si. */
-    private const string ADJUSTMENT_REASON = 'AJUSTE_ACORDADO_CON_RRHH';
 
     public function run(): void
     {
@@ -73,8 +92,10 @@ final class CorrectionSeeder extends DevelopmentSeeder
 
         $this->seedRectifiedClockOut($siteId, $department, $author, $timezone);
         $this->seedVoidedDuplicate($siteId, $department, $author, $timezone);
-        $this->seedRetroactiveEntry($siteId, $department, $author, $timezone);
+        $this->seedRetroactiveEntry($siteId, $department, $author);
 
+        // Los casos de uso recalculan la jornada que tocan; el tramo bueno del
+        // doble escaneo entra despues de la anulacion y por fuera de ellos.
         $this->projectDailyTotals();
 
         $this->command->info('CorrectionSeeder: 3 correcciones sembradas, con sus versiones anteriores.');
@@ -89,80 +110,28 @@ final class CorrectionSeeder extends DevelopmentSeeder
      */
     private function seedRectifiedClockOut(int $siteId, ?int $department, int $author, DateTimeZone $timezone): void
     {
-        $employee = $this->employee(0, 'Lucia', 'Vilar', $siteId, $department);
+        $employee = $this->freshEmployee(0, 'Lucia', 'Vilar', $siteId, $department);
 
         if ($employee === null) {
             return;
         }
 
-        $in = $this->toUtc('2026-03-20 14:00', $timezone);
-
         // Version 1: lo que el quiosco registro. 14:00 -> 22:10 son 490 minutos.
-        // Nace vigente, como todo tramo (ADR-057 §2: `shift_entries_guard_insert`
-        // no admite insertar uno ya sustituido). Si ya estaba sembrada, la
-        // version 2 vigente la solapa y `insertOrIgnore` no escribe nada.
-        $original = $this->insertEntry([
-            'employee_id' => $employee,
-            'site_id' => $siteId,
-            'work_date' => '2026-03-20',
-            'clocked_in_at' => $in,
-            'clocked_out_at' => $this->toUtc('2026-03-20 22:10', $timezone),
-            'duration_minutes' => 490,
-            'status' => 'closed',
-            'clock_in_source' => 'qr_kiosk',
-            'clock_out_source' => 'qr_kiosk',
-            'version' => 1,
-        ]);
+        $original = $this->kioskEntry($employee, $siteId, '2026-03-20', '2026-03-20 14:00', '2026-03-20 22:10', 490, $timezone);
 
-        if ($original === null) {
-            return;
-        }
-
-        // La correccion en el orden de `EloquentWorkDayRepository::save`, en una
-        // transaccion: retirar la version 1, insertar la 2 en el hueco que deja
-        // y encadenarlas. La comprobacion diferida de los *triggers* exige el
-        // puntero antes de confirmar.
-        $replacement = DB::transaction(function () use ($original, $employee, $siteId, $in, $timezone): int {
-            DB::table('shift_entries')->where('id', $original)->update(['status' => 'superseded']);
-
-            // Version 2: la salida rectificada a 22:00. 480 minutos, no 970.
-            $replacement = $this->insertEntry([
-                'employee_id' => $employee,
-                'site_id' => $siteId,
-                'work_date' => '2026-03-20',
-                'clocked_in_at' => $in,
-                'clocked_out_at' => $this->toUtc('2026-03-20 22:00', $timezone),
-                'duration_minutes' => 480,
-                'status' => 'closed',
-                // La entrada la ficho la persona con su tarjeta y eso no ha dejado de
-                // ser verdad: solo la marca que cambia pasa a `manual_admin`.
-                'clock_in_source' => 'qr_kiosk',
-                'clock_out_source' => 'manual_admin',
-                'version' => 2,
-            ]);
-
-            if ($replacement === null) {
-                throw new RuntimeException('CorrectionSeeder: la version 2 no cabe en el hueco de la 1.');
-            }
-
-            // El puntero que hace recorrible el historico (RL-04). Se escribe
-            // DESPUES de insertar la version nueva, porque es una clave foranea.
-            DB::table('shift_entries')->where('id', $original)->update(['superseded_by_id' => $replacement]);
-
-            return $replacement;
-        });
-
-        $this->insertCorrection([
-            // Apunta a la version que la accion PRODUJO.
-            'shift_entry_id' => $replacement,
-            'performed_by_user_id' => $author,
-            'action' => 'modified',
-            'before' => $this->marks(1, '2026-03-20 14:00', '2026-03-20 22:10', 490, $timezone),
-            'after' => $this->marks(2, '2026-03-20 14:00', '2026-03-20 22:00', 480, $timezone),
-            'reason_code' => self::ADJUSTMENT_REASON,
-            'reason_text' => 'La persona salio a las 22:00; el escaneo se hizo al recoger.',
-            'created_at' => $this->toUtc('2026-03-21 09:15', $timezone),
-        ]);
+        // Version 2: la salida rectificada a 22:00. 480 minutos, no 970. La
+        // entrada la ficho la persona con su tarjeta y eso no deja de ser verdad:
+        // solo la marca que cambia pasa a `manual_admin`.
+        resolve(CorrectShiftHandler::class)->handle(new CorrectShiftCommand(
+            shiftEntryUuid: $original,
+            clockedInAt: null,
+            clockedOutAt: $this->toUtc('2026-03-20 22:00', $timezone),
+            reason: CorrectionReason::fromCode(
+                'AJUSTE_ACORDADO_CON_RRHH',
+                'La persona salio a las 22:00; el escaneo se hizo al recoger.',
+            ),
+            performedByUserId: $author,
+        ));
     }
 
     /**
@@ -174,60 +143,24 @@ final class CorrectionSeeder extends DevelopmentSeeder
      */
     private function seedVoidedDuplicate(int $siteId, ?int $department, int $author, DateTimeZone $timezone): void
     {
-        $employee = $this->employee(1, 'Tomas', 'Bergara', $siteId, $department);
+        $employee = $this->freshEmployee(1, 'Tomas', 'Bergara', $siteId, $department);
 
         if ($employee === null) {
             return;
         }
 
         // El sobrante **primero**: quince minutos que nadie trabajo, producto de
-        // dos escaneos seguidos. Nace vigente (ADR-057 §2) y se anula en el acto,
-        // que es la transicion de `WorkDay::voidEntry`; solo anulado deja sitio
-        // al tramo bueno, con el que solapa. Si ya estaba sembrado, el tramo
-        // bueno vigente lo solapa y `insertOrIgnore` no escribe nada.
-        $duplicate = $this->insertEntry([
-            'employee_id' => $employee,
-            'site_id' => $siteId,
-            'work_date' => '2026-03-21',
-            'clocked_in_at' => $this->toUtc('2026-03-21 13:45', $timezone),
-            'clocked_out_at' => $this->toUtc('2026-03-21 14:00', $timezone),
-            'duration_minutes' => 15,
-            'status' => 'closed',
-            'clock_in_source' => 'qr_kiosk',
-            'clock_out_source' => 'qr_kiosk',
-            'version' => 1,
-        ]);
+        // dos escaneos seguidos. Solo anulado deja sitio al tramo bueno, con el
+        // que solapa.
+        $duplicate = $this->kioskEntry($employee, $siteId, '2026-03-21', '2026-03-21 13:45', '2026-03-21 14:00', 15, $timezone);
 
-        if ($duplicate === null) {
-            return;
-        }
+        resolve(VoidShiftHandler::class)->handle(new VoidShiftCommand(
+            shiftEntryUuid: $duplicate,
+            reason: CorrectionReason::fromCode('ERROR_DE_ESCANEO_DUPLICADO'),
+            performedByUserId: $author,
+        ));
 
-        DB::table('shift_entries')->where('id', $duplicate)->update(['status' => 'voided']);
-
-        $this->insertEntry([
-            'employee_id' => $employee,
-            'site_id' => $siteId,
-            'work_date' => '2026-03-21',
-            'clocked_in_at' => $this->toUtc('2026-03-21 06:00', $timezone),
-            'clocked_out_at' => $this->toUtc('2026-03-21 14:00', $timezone),
-            'duration_minutes' => 480,
-            'status' => 'closed',
-            'clock_in_source' => 'qr_kiosk',
-            'clock_out_source' => 'qr_kiosk',
-            'version' => 1,
-        ]);
-
-        $this->insertCorrection([
-            // En una anulacion apunta a la version que TERMINO.
-            'shift_entry_id' => $duplicate,
-            'performed_by_user_id' => $author,
-            'action' => 'voided',
-            'before' => $this->marks(1, '2026-03-21 13:45', '2026-03-21 14:00', 15, $timezone),
-            'after' => null,
-            'reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO',
-            'reason_text' => null,
-            'created_at' => $this->toUtc('2026-03-22 08:30', $timezone),
-        ]);
+        $this->kioskEntry($employee, $siteId, '2026-03-21', '2026-03-21 06:00', '2026-03-21 14:00', 480, $timezone);
     }
 
     /**
@@ -238,102 +171,104 @@ final class CorrectionSeeder extends DevelopmentSeeder
      * Vale para la nomina igual que uno escaneado; lo que lo distingue es el
      * origen y la fila que lo explica.
      */
-    private function seedRetroactiveEntry(int $siteId, ?int $department, int $author, DateTimeZone $timezone): void
+    private function seedRetroactiveEntry(int $siteId, ?int $department, int $author): void
     {
-        $employee = $this->employee(2, 'Nerea', 'Calafell', $siteId, $department);
+        $employee = $this->freshEmployee(2, 'Nerea', 'Calafell', $siteId, $department);
 
         if ($employee === null) {
             return;
         }
 
-        $entry = $this->insertEntry([
-            'employee_id' => $employee,
-            'site_id' => $siteId,
-            'work_date' => '2026-03-19',
-            'clocked_in_at' => $this->toUtc('2026-03-19 08:00', $timezone),
-            'clocked_out_at' => $this->toUtc('2026-03-19 16:00', $timezone),
-            'duration_minutes' => 480,
-            'status' => 'closed',
-            'clock_in_source' => 'manual_admin',
-            'clock_out_source' => 'manual_admin',
-            'version' => 1,
-        ]);
+        $timezone = new DateTimeZone(self::TIMEZONE);
 
-        if ($entry === null) {
-            return;
-        }
-
-        $this->insertCorrection([
-            'shift_entry_id' => $entry,
-            'performed_by_user_id' => $author,
-            'action' => 'created',
-            // En un alta no hay valor anterior: antes no habia tramo.
-            'before' => null,
-            'after' => $this->marks(1, '2026-03-19 08:00', '2026-03-19 16:00', 480, $timezone),
-            'reason_code' => 'ALTA_RETROACTIVA',
-            'reason_text' => 'Jornada anterior a la puesta en marcha del quiosco.',
-            'created_at' => $this->toUtc('2026-03-20 10:00', $timezone),
-        ]);
+        resolve(AddShiftEntryHandler::class)->handle(new AddShiftEntryCommand(
+            employeeUuid: $employee['uuid'],
+            workDate: '2026-03-19',
+            clockedInAt: $this->toUtc('2026-03-19 08:00', $timezone),
+            clockedOutAt: $this->toUtc('2026-03-19 16:00', $timezone),
+            reason: CorrectionReason::fromCode('ALTA_RETROACTIVA', 'Jornada anterior a la puesta en marcha del quiosco.'),
+            performedByUserId: $author,
+        ));
     }
 
     /**
-     * @param  array<string, mixed>  $row
-     * @return int|null La clave interna del tramo, o `null` si ya existia.
-     */
-    private function insertEntry(array $row): ?int
-    {
-        $uuid = Str::uuid7()->toString();
-
-        $written = DB::table('shift_entries')->insertOrIgnore([
-            'uuid' => $uuid,
-            ...$row,
-            'created_at' => $row['clocked_in_at'],
-            'updated_at' => $row['clocked_out_at'] ?? $row['clocked_in_at'],
-        ]);
-
-        if ($written === 0) {
-            return null;
-        }
-
-        $id = DB::table('shift_entries')->where('uuid', $uuid)->value('id');
-
-        return is_numeric($id) ? (int) $id : null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $row
-     */
-    private function insertCorrection(array $row): void
-    {
-        DB::table('shift_corrections')->insert($row);
-    }
-
-    /**
-     * Las marcas de una version, en la misma forma que escribe el adaptador del
-     * libro de correcciones: version, dos instantes en UTC con sufijo `Z`, y los
-     * minutos ya calculados.
+     * Un tramo cerrado que ficho el quiosco, con sus asientos de entrada y
+     * salida, en una transaccion (regla dura 6, ADR-057 §4).
      *
-     * **Ni un nombre dentro** (regla dura 21): el JSON describe horas, y quien
-     * las trabajo esta en el tramo.
+     * @param  array{id: int, uuid: string}  $employee
+     * @return string El `uuid` del tramo.
      */
-    private function marks(int $version, string $in, ?string $out, int $minutes, DateTimeZone $timezone): string
-    {
-        return json_encode([
-            'version' => $version,
-            'clocked_in_at' => $this->toIso($in, $timezone),
-            'clocked_out_at' => $out === null ? null : $this->toIso($out, $timezone),
-            'worked_minutes' => $minutes,
-        ], JSON_THROW_ON_ERROR);
+    private function kioskEntry(
+        array $employee,
+        int $siteId,
+        string $workDate,
+        string $in,
+        string $out,
+        int $minutes,
+        DateTimeZone $timezone,
+    ): string {
+        $uuid = Str::uuid7()->toString();
+        $clockedInAt = $this->toUtc($in, $timezone);
+        $clockedOutAt = $this->toUtc($out, $timezone);
+
+        DB::transaction(function () use ($uuid, $employee, $siteId, $workDate, $clockedInAt, $clockedOutAt, $minutes, $timezone): void {
+            DB::table('shift_entries')->insert([
+                'uuid' => $uuid,
+                'employee_id' => $employee['id'],
+                'site_id' => $siteId,
+                'work_date' => $workDate,
+                'clocked_in_at' => $clockedInAt->format('Y-m-d H:i:sP'),
+                'clocked_out_at' => $clockedOutAt->format('Y-m-d H:i:sP'),
+                'duration_minutes' => $minutes,
+                'status' => 'closed',
+                'clock_in_source' => 'qr_kiosk',
+                'clock_out_source' => 'qr_kiosk',
+                'version' => 1,
+                'created_at' => $clockedInAt->format('Y-m-d H:i:sP'),
+                'updated_at' => $clockedOutAt->format('Y-m-d H:i:sP'),
+            ]);
+
+            resolve(KioskClockingAudit::class)->record([
+                new KioskClocking(
+                    employeeUuid: $employee['uuid'],
+                    siteId: $siteId,
+                    shiftEntryUuid: $uuid,
+                    workDate: $workDate,
+                    timezone: $timezone,
+                    clockedInAt: $clockedInAt,
+                    clockedOutAt: $clockedOutAt,
+                    dailyTotalMinutes: $this->dailyTotal($employee['id'], $workDate),
+                ),
+            ]);
+        });
+
+        return $uuid;
     }
 
     /**
-     * El empleado del caso, creado si no existe.
+     * Minutos vigentes de la jornada, contando el tramo recien insertado: lo que
+     * el fichaje apunta en el asiento de la salida (RN-06).
+     */
+    private function dailyTotal(int $employeeId, string $workDate): int
+    {
+        return (int) DB::table('shift_entries')
+            ->where('employee_id', $employeeId)
+            ->where('work_date', $workDate)
+            ->whereNotIn('status', ['voided', 'superseded'])
+            ->sum('duration_minutes');
+    }
+
+    /**
+     * El empleado del caso, creado si no existe, o `null` si ya tiene tramos: el
+     * caso ya esta sembrado.
      *
      * Codigo **opaco y estable**, derivado de un hash: nunca del nombre ni de un
      * numero secuencial (doc 01 §5.5). Que sea estable es lo que hace la semilla
      * repetible.
+     *
+     * @return array{id: int, uuid: string}|null
      */
-    private function employee(int $index, string $first, string $last, int $siteId, ?int $departmentId): ?int
+    private function freshEmployee(int $index, string $first, string $last, int $siteId, ?int $departmentId): ?array
     {
         $code = 'E'.mb_strtoupper(mb_substr(hash('sha256', 'kronoqr-seed-correction-'.$index), 0, 9));
 
@@ -354,9 +289,17 @@ final class CorrectionSeeder extends DevelopmentSeeder
             'updated_at' => now(),
         ]);
 
-        $id = DB::table('employees')->where('employee_code', $code)->value('id');
+        $row = DB::table('employees')->where('employee_code', $code)->first(['id', 'uuid']);
 
-        return is_numeric($id) ? (int) $id : null;
+        if ($row === null || ! is_numeric($row->id) || ! \is_string($row->uuid)) {
+            throw new RuntimeException('CorrectionSeeder: the employee of a correction case could not be read back.');
+        }
+
+        if (DB::table('shift_entries')->where('employee_id', (int) $row->id)->exists()) {
+            return null;
+        }
+
+        return ['id' => (int) $row->id, 'uuid' => $row->uuid];
     }
 
     /**
@@ -395,18 +338,9 @@ final class CorrectionSeeder extends DevelopmentSeeder
      * horas a un instante UTC, los turnos se desplazarian una hora en cada
      * cambio de hora.
      */
-    private function toUtc(string $localWallClock, DateTimeZone $timezone): string
+    private function toUtc(string $localWallClock, DateTimeZone $timezone): DateTimeImmutable
     {
-        return (new DateTimeImmutable($localWallClock, $timezone))
-            ->setTimezone(new DateTimeZone('UTC'))
-            ->format('Y-m-d H:i:sP');
-    }
-
-    private function toIso(string $localWallClock, DateTimeZone $timezone): string
-    {
-        return (new DateTimeImmutable($localWallClock, $timezone))
-            ->setTimezone(new DateTimeZone('UTC'))
-            ->format('Y-m-d\TH:i:s.u\Z');
+        return new DateTimeImmutable($localWallClock, $timezone)->setTimezone(new DateTimeZone('UTC'));
     }
 
     /**

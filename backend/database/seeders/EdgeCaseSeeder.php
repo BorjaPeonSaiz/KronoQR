@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\KioskClocking;
+use Database\Seeders\Support\KioskClockingAudit;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * Los **casos limite** del doc 02 §10.2: turnos nocturnos que cruzan la
@@ -44,6 +47,10 @@ use Illuminate\Support\Str;
  * abierto por arriba y solaparia con cualquier jornada posterior de esa persona
  * (`shift_entries_no_overlap`). Con empleados propios, cada caso limite se lee
  * solo y ninguno depende del orden de las semillas.
+ *
+ * **Con sus asientos** de `audit_log`, como {@see VolumeSeeder}: los escribe el
+ * listener del producto ({@see KioskClockingAudit}) en la transaccion del tramo,
+ * y la conciliacion registro ↔ auditoria (ADR-057 §4) da cero discrepancias.
  */
 final class EdgeCaseSeeder extends DevelopmentSeeder
 {
@@ -146,6 +153,25 @@ final class EdgeCaseSeeder extends DevelopmentSeeder
 
         $entryUuid = Str::uuid7()->toString();
 
+        // El tramo y sus asientos, juntos o ninguno (regla dura 6, ADR-057 §4).
+        DB::transaction(function () use ($entryUuid, $employeeId, $siteId, $case, $in, $out, $deviceId, $timezone): void {
+            $this->seedEntry($entryUuid, $employeeId, $siteId, $case, $in, $out, $deviceId, $timezone);
+        });
+    }
+
+    /**
+     * @param  array{first: string, last: string, work_date: string, in: string, out: string|null, minutes: int|null, note: string}  $case
+     */
+    private function seedEntry(
+        string $entryUuid,
+        int $employeeId,
+        int $siteId,
+        array $case,
+        string $in,
+        ?string $out,
+        ?int $deviceId,
+        DateTimeZone $timezone,
+    ): void {
         $written = DB::table('shift_entries')->insertOrIgnore([
             'uuid' => $entryUuid,
             'employee_id' => $employeeId,
@@ -164,7 +190,29 @@ final class EdgeCaseSeeder extends DevelopmentSeeder
             'updated_at' => $out ?? $in,
         ]);
 
-        if ($written === 0 || $deviceId === null) {
+        // Ya sembrado: sus asientos tambien lo estan.
+        if ($written === 0) {
+            return;
+        }
+
+        // Los asientos que el quiosco habria dejado al fichar: la entrada y, si
+        // la hay, la salida. Las duraciones de la semilla estan escritas a mano y
+        // la conciliacion las compara con las de estos asientos, calculadas por
+        // el dominio: si una de las dos se equivoca en un cambio de hora, salta.
+        resolve(KioskClockingAudit::class)->record([
+            KioskClocking::fromColumns(
+                employeeUuid: $this->employeeUuid($employeeId),
+                siteId: $siteId,
+                shiftEntryUuid: $entryUuid,
+                workDate: $case['work_date'],
+                timezone: $timezone,
+                clockedInAt: $in,
+                clockedOutAt: $out,
+                dailyTotalMinutes: $case['minutes'] ?? 0,
+            ),
+        ]);
+
+        if ($deviceId === null) {
             return;
         }
 
@@ -212,6 +260,17 @@ final class EdgeCaseSeeder extends DevelopmentSeeder
         return is_numeric($id) ? (int) $id : null;
     }
 
+    private function employeeUuid(int $employeeId): string
+    {
+        $uuid = DB::table('employees')->where('id', $employeeId)->value('uuid');
+
+        if (! \is_string($uuid)) {
+            throw new RuntimeException('EdgeCaseSeeder: the employee of an edge case has no uuid.');
+        }
+
+        return $uuid;
+    }
+
     private function seedScan(mixed $entryId, int $employeeId, int $deviceId, string $at, string $result): void
     {
         DB::table('scan_events')->insertOrIgnore([
@@ -246,7 +305,7 @@ final class EdgeCaseSeeder extends DevelopmentSeeder
      */
     private function toUtc(string $localWallClock, DateTimeZone $timezone): string
     {
-        return (new DateTimeImmutable($localWallClock, $timezone))
+        return new DateTimeImmutable($localWallClock, $timezone)
             ->setTimezone(new DateTimeZone('UTC'))
             ->format('Y-m-d H:i:sP');
     }
