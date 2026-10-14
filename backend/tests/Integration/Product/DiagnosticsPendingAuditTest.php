@@ -191,3 +191,11 @@ it('doctor avisa si un asiento lleva mas de una hora pendiente, y lo dice en los
             ->toContain('php artisan product:diagnostics:record-pending');
     }
 })->group('RF-PD-13', 'RL-04');
+
+it('sin pendientes, product:diagnostics:record-pending sale bien y no imprime nada (V4-PL-1)', function (): void {
+    // Corre cada cinco minutos y su salida va al log del contenedor (V4-BE-1):
+    // una pasada sin nada que hacer no deja apunte.
+    expect(Artisan::call('product:diagnostics:record-pending'))->toBe(0)
+        ->and(Artisan::output())->toBe('')
+        ->and(diagnosticsPendingAuditRows())->toBe([]);
+})->group('RF-PD-09', 'RNF-D-02');

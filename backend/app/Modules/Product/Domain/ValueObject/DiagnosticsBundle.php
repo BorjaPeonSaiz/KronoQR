@@ -40,6 +40,27 @@ final readonly class DiagnosticsBundle
     public const string GENERATION_ENTRY = 'generation_entry';
 
     /**
+     * Las secciones que puede llevar el paquete, sin el manifiesto (contrato
+     * `DiagnosticsBundle`). Contra esta lista se valida un pendiente releido
+     * del disco.
+     *
+     * @var list<string>
+     */
+    public const array SECTIONS = [
+        'installation',
+        'configuration',
+        'services',
+        'doctor',
+        'license',
+        'kiosks',
+        'error_events',
+        'metrics',
+        'updates',
+        'audit',
+        'personal_data',
+    ];
+
+    /**
      * Orden en el que se renuncia a las secciones cuando el paquete no cabe.
      *
      * De la que menos aporta a la que mas. `personal_data` va primero porque es
@@ -102,8 +123,10 @@ final readonly class DiagnosticsBundle
      * `audit_log` queda pendiente (ADR-020, enmienda del 14-10-2026).
      *
      * La constancia va en la seccion `audit` y **dentro de la huella**: quien
-     * recibe el paquete sabe que el asiento aun no existe, y quitar la marca
-     * hace fallar `--verify`. No va en el manifiesto, cuyo esquema es cerrado.
+     * recibe el paquete sabe que el asiento aun no existe. Quitarla sin
+     * recalcular la huella hace fallar `--verify`; la huella no lleva clave, asi
+     * que la referencia fiable es el `sha256` del asiento
+     * `diagnostics.bundle_generated` en `audit_log`. No va en el manifiesto, cuyo esquema es cerrado.
      *
      * No se vuelve a recortar: la constancia ocupa unas decenas de bytes y
      * recortar ahora podria sacrificar una seccion que ya se habia decidido

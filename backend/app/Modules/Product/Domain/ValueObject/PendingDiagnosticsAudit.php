@@ -100,8 +100,10 @@ final readonly class PendingDiagnosticsAudit
     }
 
     /**
-     * Cada clave con su tipo y su dominio. Sin `anonymized: true` no hay
-     * pendiente posible: el paquete con datos personales no se aplaza.
+     * Cada clave con su tipo y su dominio. Sin `anonymized: true` ni
+     * `generated_by: console` no hay pendiente posible: el paquete con datos
+     * personales y el del panel nunca se aplazan. Las secciones, solo de las
+     * que existen: un nombre inventado no entra en el trail.
      *
      * @param  array<array-key, mixed>  $data
      */
@@ -111,14 +113,15 @@ final readonly class PendingDiagnosticsAudit
             && self::isSectionList($data['sections'])
             && is_int($data['size_bytes']) && $data['size_bytes'] >= 0
             && $data['anonymized'] === true
-            && is_string($data['generated_by']) && DiagnosticsActor::tryFrom($data['generated_by']) !== null
+            && $data['generated_by'] === DiagnosticsActor::Console->value
             && is_string($data['generated_at'])
             && $data['reason'] === self::REASON_DATABASE_UNAVAILABLE;
     }
 
     private static function isSectionList(mixed $value): bool
     {
-        return is_array($value) && array_is_list($value) && array_filter($value, is_string(...)) === $value;
+        return is_array($value) && array_is_list($value)
+            && array_filter($value, static fn (mixed $name): bool => \in_array($name, DiagnosticsBundle::SECTIONS, true)) === $value;
     }
 
     private static function isDigest(mixed $value): bool

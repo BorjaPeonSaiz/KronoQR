@@ -17,9 +17,9 @@ final class DiagnosticsAuditNotDeferred extends ProductDomainException
     public static function in(string $directory): self
     {
         return new self(
-            'No se pudo guardar la constancia pendiente del paquete en '.$directory
-            .'. Comprueba que el volumen de ficheros generados esta montado y que el usuario de la'
-            .' aplicacion puede escribir en el (php artisan product:doctor, comprobacion files.storage_volume).'
+            'No se pudo escribir el asiento pendiente del paquete en '.$directory
+            .'. Comprueba que storage esta montado y que el usuario de la aplicacion puede escribir en el'
+            .' directorio (php artisan product:doctor).'
         );
     }
 }

@@ -38,6 +38,12 @@ final readonly class FilePendingDiagnosticsAudits implements PendingDiagnosticsA
 {
     private const string NAME = '/^[0-9a-f]{64}\.json$/D';
 
+    /**
+     * Tope al releer. Un pendiente legitimo ocupa menos de 1 KiB; cualquier
+     * cosa mayor no lo es, y no se carga en memoria.
+     */
+    private const int MAX_BYTES = 64 * 1024;
+
     public function __construct(private string $directory) {}
 
     public function save(PendingDiagnosticsAudit $pending): void
@@ -109,14 +115,20 @@ final readonly class FilePendingDiagnosticsAudits implements PendingDiagnosticsA
         $path = rtrim($this->directory, '/').'/'.$sha256.'.json';
 
         if (is_file($path) && ! @unlink($path) && is_file($path)) {
-            throw new RuntimeException('No se pudo borrar el pendiente ya escrito '.$path
-                .'. Se volvera a intentar y no se duplicara el asiento; comprueba los permisos del directorio.');
+            throw new RuntimeException('El asiento ya esta en la auditoria, pero el unlink del pendiente '
+                .$path.' no se pudo. No se repite el asiento; comprueba los permisos del directorio.');
         }
     }
 
     private function read(string $path): ?PendingDiagnosticsAudit
     {
-        $raw = @file_get_contents($path);
+        $size = @filesize($path);
+
+        if ($size === false || $size > self::MAX_BYTES) {
+            return null;
+        }
+
+        $raw = @file_get_contents($path, length: self::MAX_BYTES);
 
         if ($raw === false) {
             return null;

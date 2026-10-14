@@ -382,3 +382,20 @@ it('con PostgreSQL caido, --with-personal-data no genera nada porque no se puede
         expect(str_contains($result['output'].implode("\n", $log->getArrayCopy()), $marker))->toBeFalse($marker);
     }
 })->group('RF-PD-09', 'RL-19', 'RL-04');
+
+it('con PostgreSQL caido y sin poder guardar el pendiente, no sale ningun paquete (V4-PL-1)', function (): void {
+    // El padre del directorio de pendientes es un fichero: no se puede crear ni
+    // siendo root, que es como corre la suite en el contenedor.
+    file_put_contents(diagnosticsDbDownRoot().'/bloqueo', 'no es un directorio');
+    config()->set('product.diagnostics_pending_audit_path', diagnosticsDbDownRoot().'/bloqueo/pending');
+
+    diagnosticsDbDownBreakDatabase();
+
+    $result = diagnosticsDbDownRun();
+
+    expect($result['code'])->toBe(1)
+        ->and(diagnosticsDbDownFiles('diagnostics'))->toBe([])
+        ->and(glob(diagnosticsDbDownRoot().'/bloqueo/pending/*') ?: [])->toBe([])
+        ->and($result['output'])->toContain('no se ha podido')
+        ->and($result['output'])->toContain('guardar la constancia');
+})->group('RF-PD-09', 'RL-04', 'RS-08');

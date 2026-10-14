@@ -19,7 +19,8 @@ use Illuminate\Console\Command;
  *
  * ## Lo que imprime
  *
- * Recuentos y, si falla, la **clase** de la excepcion. Nunca su mensaje (regla
+ * Nada si no habia pendientes. Si los habia, recuentos y, si falla, la
+ * **clase** de la excepcion. Nunca su mensaje (regla
  * dura 21): la salida de una tarea programada acaba en el log del contenedor y,
  * de ahi, en el paquete de diagnostico.
  *
@@ -40,9 +41,10 @@ final class ProductDiagnosticsRecordPendingCommand extends Command
     {
         $result = $recordPending->handle();
 
+        // Sin pendientes, en silencio: corre cada cinco minutos y su salida va
+        // al log del contenedor (V4-BE-1). Una linea por pasada sin nada que
+        // hacer seria ruido; el exito silencioso no deja apunte.
         if ($result['recorded'] === 0 && $result['remaining'] === 0) {
-            $this->line('No hay asientos de diagnostico pendientes.');
-
             return self::SUCCESS;
         }
 
