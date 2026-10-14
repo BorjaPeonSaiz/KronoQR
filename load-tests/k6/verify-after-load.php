@@ -14,6 +14,8 @@ declare(strict_types=1);
  *   RQ-03     ningun empleado con dos tramos abiertos.
  *   RF-KI-04  los lotes llegaron con la salida ANTES que la entrada y el
  *             servidor los ordeno: el empleado acabo con un tramo cerrado.
+ *   RF-AT-11  cada fichaje por PIN dejo una sola fila, de su via y marcada
+ *             para revision; ningun PIN correcto quedo rechazado.
  *   RN-18     el elemento imposible del lote —y cada peticion del escenario
  *             `reject-out-of-order`, que mide la separacion de tiempos de A-13—
  *             quedo REGISTRADO como `rejected_out_of_order` y marcado para
@@ -546,13 +548,101 @@ if ($reportedTotal > 0 && $outOfOrderRows !== $reportedTotal) {
         .'muchas mas, mira que otro camino las esta produciendo.');
 }
 
+// --- RF-AT-11: cada fichaje por PIN, una fila, de su via y marcada -----------
+
+/*
+ * El escenario `scan-pin` (K6-3) ficha por PIN a empleados RESERVADOS, sin
+ * tarjeta, y reenvia identico uno de cada cuatro. Lo que tiene que haber
+ * quedado escrito, y lo que se comprueba:
+ *
+ *   - un `scan_id`, una fila (regla dura 8): ningun reenvio deja una segunda.
+ *     Como el guion conoce cuantos ORIGINALES envio, el techo es exacto: hay
+ *     como mucho una fila por envio original, nunca una por peticion;
+ *   - todas con `origin = pin_kiosk`, que es lo que el caso de uso fija y el
+ *     cliente no puede elegir;
+ *   - todo fichaje por PIN que produjo tramo, marcado para revision (RF-AT-11,
+ *     doc 02 §7.5);
+ *   - ningun rechazo con «dueño» (`claimed_employee_id`, RN-19): todos los PIN
+ *     son correctos, asi que un rechazo atribuido a uno de estos empleados es
+ *     un PIN bueno que el servidor no acepto bajo carga;
+ *   - al menos tantas filas con tramo como respuestas con tramo conto k6 (por
+ *     el mismo motivo asimetrico que `RNF-P-06/registro`, abajo).
+ */
+$pinUuids = array_values(array_filter(
+    (array) ($fixtures['pin_employee_uuids'] ?? []),
+    static fn (mixed $uuid): bool => is_string($uuid),
+));
+
+if ($pinUuids === []) {
+    $check('RF-AT-11/registro', false, 'los fixtures no traen pin_employee_uuids: el escenario scan-pin no se monto');
+} else {
+    $pinIds = DB::table('employees')->whereIn('uuid', $pinUuids)->pluck('id')->all();
+
+    $pinRows = DB::table('scan_events')
+        ->whereIn('employee_id', $pinIds)
+        ->where('recorded_at', '>=', $since)
+        ->selectRaw(
+            'count(*) as total, count(distinct scan_id) as distinct_ids, '
+            ."count(*) filter (where origin <> 'pin_kiosk') as other_origin, "
+            ."count(*) filter (where result in ('clock_in', 'clock_out', 'break_start', 'break_end')) as shifts, "
+            ."count(*) filter (where result in ('clock_in', 'clock_out', 'break_start', 'break_end') "
+            .'and not flagged_for_review) as unflagged'
+        )
+        ->first();
+
+    $pinTotal = (int) ($pinRows->total ?? 0);
+    $pinDistinct = (int) ($pinRows->distinct_ids ?? 0);
+    $pinOtherOrigin = (int) ($pinRows->other_origin ?? 0);
+    $pinShiftRows = (int) ($pinRows->shifts ?? 0);
+    $pinUnflagged = (int) ($pinRows->unflagged ?? 0);
+
+    $pinClaimedRejections = DB::table('scan_events')
+        ->whereIn('claimed_employee_id', $pinIds)
+        ->where('recorded_at', '>=', $since)
+        ->count();
+
+    $pinSent = $summary['pin_path']['sent'] ?? null;
+    $pinReportedShifts = $summary['totals']['shift_producing_pin'] ?? null;
+
+    $report['pin'] = [
+        'filas' => $pinTotal,
+        'scan_id_distintos' => $pinDistinct,
+        'con_tramo' => $pinShiftRows,
+        'sin_marcar' => $pinUnflagged,
+        'de_otra_via' => $pinOtherOrigin,
+        'rechazos_con_dueno' => $pinClaimedRejections,
+        'originales_enviados_por_k6' => $pinSent,
+        'con_tramo_segun_k6' => $pinReportedShifts,
+    ];
+
+    $check(
+        'RF-AT-11/registro',
+        $pinTotal > 0
+        && $pinTotal === $pinDistinct
+        && $pinOtherOrigin === 0
+        && $pinUnflagged === 0
+        && $pinClaimedRejections === 0
+        && (! is_numeric($pinSent) || $pinTotal <= (int) $pinSent)
+        && (! is_numeric($pinReportedShifts) || $pinShiftRows >= (int) $pinReportedShifts),
+        $pinTotal.' filas de fichaje por PIN con '.$pinDistinct.' scan_id distintos (k6 envio '
+        .($pinSent ?? 'n/d').' originales, mas sus reenvios); '.$pinShiftRows.' con tramo frente a '
+        .($pinReportedShifts ?? 'n/d').' que conto k6; '.$pinOtherOrigin.' de otra via, '.$pinUnflagged
+        .' sin marcar para revision y '.$pinClaimedRejections.' rechazos de un PIN correcto'
+    );
+}
+
 // --- Lo que k6 dijo frente a lo que la base guarda ---------------------------
 
 $reportedRealtime = $summary['totals']['shift_producing_realtime'] ?? null;
 $reportedBatch = $summary['totals']['shift_producing_batch'] ?? null;
 
 if (is_numeric($reportedRealtime) && is_numeric($reportedBatch)) {
-    $reported = (int) $reportedRealtime + (int) $reportedBatch;
+    // La rampa del cambio de turno (K6-2) y el PIN (K6-3) quedan fuera del pico
+    // de RNF-P-06, pero sus tramos existen igual: sin sumarlos, la base tendria
+    // «de mas» justo lo que esta comprobacion tiene que poder contar.
+    $reported = (int) $reportedRealtime + (int) $reportedBatch
+        + (int) ($summary['totals']['shift_producing_ramp'] ?? 0)
+        + (int) ($summary['totals']['shift_producing_pin'] ?? 0);
     $written = $opening + $closing;
 
     // ASIMETRICO A PROPOSITO. Que la base tenga MAS escaneos que respuestas
@@ -593,4 +683,4 @@ file_put_contents(K6_WORK_DIR.'/verify-ok.json', json_encode([
 ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
 
 $say('VERIFICACION POSTERIOR: verde'.($warnings === [] ? '' : ' con '.count($warnings).' avisos')
-    .'. RN-06, RF-AT-07, RQ-03, RF-KI-04 y RN-18 se sostienen sobre lo que quedo escrito.');
+    .'. RN-06, RF-AT-07, RQ-03, RF-KI-04, RN-18 y RF-AT-11 se sostienen sobre lo que quedo escrito.');

@@ -14,6 +14,7 @@ declare(strict_types=1);
  * QUE SE APAGA Y QUE SE QUEDA.
  *
  * Se apaga todo lo que es una CREDENCIAL: las tarjetas emitidas para la pasada,
+ * el PIN de quienes fichan por PIN (se restablece a uno que nadie conoce),
  * los tokens de los quioscos sinteticos y la sesion del responsable, ademas de
  * desactivar su cuenta. Son secretos vivos con los que se puede fichar y leer
  * datos de personas, y dejarlos encendidos en un entorno de pruebas al que
@@ -32,6 +33,8 @@ declare(strict_types=1);
 use App\Modules\Identity\Application\Command\RevokeDeviceTokenCommand;
 use App\Modules\Identity\Application\UseCase\RevokeDeviceToken;
 use App\Modules\Identity\Infrastructure\Persistence\User;
+use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
+use App\Modules\Workforce\Application\UseCase\IssueEmployeePinHandler;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
@@ -73,6 +76,40 @@ $employeeIds->chunk(2_000)->each(static function ($ids) use ($stamp, &$revokedCa
 });
 
 $say('[cierre] Tarjetas revocadas: '.$revokedCards.'.');
+
+// --- PIN ---------------------------------------------------------------------
+
+// Los sobres cerrados de `pin_scans` (K6-3) valen para fichar mientras el PIN
+// que llevan dentro siga siendo el de la ficha. Se apagan como los apagaria un
+// responsable: RESTABLECIENDO el PIN por el caso de uso del producto, con un
+// PIN nuevo que nadie llega a ver (se descarta aqui mismo). No se pone
+// `pin_hash` a nulo a mano: eso saltaria el asiento de la emision.
+$pinHolders = DB::table('employees')
+    ->whereIn('id', $employeeIds->all())
+    ->whereNotNull('pin_hash')
+    ->get(['uuid', 'site_id']);
+
+$resetPins = 0;
+
+if ($pinHolders->isNotEmpty()) {
+    $pinIssuer = app(IssueEmployeePinHandler::class);
+    $unknownPin = $pinIssuer->freshMaterial();
+
+    foreach ($pinHolders as $holder) {
+        try {
+            $resetPins += $pinIssuer->handle(new IssueEmployeePinCommand(
+                employeeUuid: (string) $holder->uuid,
+                siteId: (int) $holder->site_id,
+                reset: true,
+                material: $unknownPin,
+            )) === null ? 0 : 1;
+        } catch (Throwable $exception) {
+            $say('[cierre] [aviso] No se pudo restablecer el PIN de '.$holder->uuid.': '.$exception->getMessage());
+        }
+    }
+}
+
+$say('[cierre] PIN restablecidos a uno que nadie conoce: '.$resetPins.'.');
 
 // --- Quioscos ----------------------------------------------------------------
 

@@ -16,7 +16,7 @@ declare(strict_types=1);
  * esa mentira.
  *
  * LO QUE SE COMPRUEBA, Y NADA MAS. No se valida que la carga sea correcta —eso
- * lo dice el veredicto de la pasada— sino que el guion esta VIVO: los seis
+ * lo dice el veredicto de la pasada— sino que el guion esta VIVO: los siete
  * escenarios existen, piden trafico, alguien los lanza y su `exec` apunta a
  * codigo de verdad. Y que `run.sh` lanza k6 con el uid del invocante, porque sin
  * eso el contenedor no puede escribir su CSV en un runner de Linux y la pasada
@@ -26,9 +26,10 @@ declare(strict_types=1);
 /**
  * Los escenarios de la decision 2 de la ficha 3.6, con su requisito, mas el
  * cuarto rechazo que anadio la decision 14 de la 3.8 (`reject-out-of-order`,
- * RS-03 y RN-18: la medicion que A-13 del doc 07 §6 prometia).
+ * RS-03 y RN-18: la medicion que A-13 del doc 07 §6 prometia) y el fichaje por
+ * PIN del bloque 15 de la 2.2.1 (`scan-pin`, RF-AT-11, K6-3).
  */
-const ESCENARIOS_DE_CARGA = ['scan', 'resend', 'reject', 'reject-out-of-order', 'batch', 'compliance'];
+const ESCENARIOS_DE_CARGA = ['scan', 'scan-pin', 'resend', 'reject', 'reject-out-of-order', 'batch', 'compliance'];
 
 function fuenteDeCarga(string $fichero): string
 {
@@ -98,27 +99,44 @@ function capturaDeCarga(string $patron, string $sujeto, string $mensaje): string
 }
 
 /**
- * La tasa declarada, resolviendo la constante si la tasa es un identificador.
+ * Un numero del guion, resolviendo la constante si es un identificador.
  *
  * `rate: SCAN_RATE` vale tanto como `rate: 6` mientras la constante tenga un
  * valor por omision positivo; lo que no puede pasar desapercibido es un cero.
  */
-function tasaDeCarga(string $fuente, string $escenario): int
+function valorDeCarga(string $fuente, string $declarada): int
 {
-    $declarada = capturaDeCarga('/\brate:\s*([A-Za-z_0-9]+)/', $escenario, 'El escenario no declara `rate`');
-
     if (is_numeric($declarada)) {
         return (int) $declarada;
     }
 
     return (int) capturaDeCarga(
-        '/const '.preg_quote($declarada, '/').'\s*=.*\|\|\s*(\d+)\s*\)/',
+        '/const '.preg_quote($declarada, '/').'\s*=.*(?:\|\||\?\?)\s*(\d+)\s*\)/',
         $fuente,
-        'La tasa «'.$declarada.'» no tiene valor por omision',
+        'La constante «'.$declarada.'» no tiene valor por omision',
     );
 }
 
-it('declara los seis escenarios de la prueba de carga y todos piden trafico', function (string $nombre): void {
+/**
+ * La tasa que pide el escenario.
+ *
+ * `constant-arrival-rate` la declara en `rate`; `ramping-arrival-rate` —la rampa
+ * del cambio de turno de `scan`, K6-2— la declara en el `target` de sus etapas,
+ * y la que cuenta es la del pico. Un escenario cuyas etapas valen todas cero no
+ * pide trafico, igual que un `rate: 0`.
+ */
+function tasaDeCarga(string $fuente, string $escenario): int
+{
+    preg_match_all('/\btarget:\s*([A-Za-z_0-9]+)/', $escenario, $objetivos);
+
+    $declaradas = $objetivos[1] !== []
+        ? $objetivos[1]
+        : [capturaDeCarga('/\brate:\s*([A-Za-z_0-9]+)/', $escenario, 'El escenario no declara `rate` ni etapas')];
+
+    return max(array_map(static fn (string $declarada): int => valorDeCarga($fuente, $declarada), $declaradas));
+}
+
+it('declara los siete escenarios de la prueba de carga y todos piden trafico', function (string $nombre): void {
     // Un escenario a cero sigue saliendo en la matriz de trazabilidad como
     // cobertura de su requisito, y no ejecuta ni una peticion.
     $fuente = fuenteDeCarga('scan-peak.js');
@@ -180,6 +198,40 @@ it('asigna cada escenario a un rol y lanza los dos roles desde run.sh', function
 
     expect($asignados)->toBe($esperados);
 })->group('RQ-13', 'RNF-P-06');
+
+it('sube el pico del cambio de turno desde cero y lo devuelve a cero', function (): void {
+    // K6-2: la plantilla de las 06:00 no llega de golpe ni se va de golpe. Una
+    // rampa que empezara en el pico, o que no volviera a cero, seria otra vez la
+    // tasa constante de antes con otro nombre. Las tres etapas son subida,
+    // meseta y bajada, en ese orden; y la rampa esta encendida por omision en
+    // el guion y en el lanzador.
+    $fuente = fuenteDeCarga('scan-peak.js');
+    $escenario = escenarioDeCarga($fuente, 'scan');
+
+    preg_match_all('/\{\s*target:\s*([A-Za-z_0-9]+),\s*duration:\s*([A-Za-z_0-9]+)\s*\}/', $escenario, $etapas);
+
+    expect($escenario)->toContain("executor: 'ramping-arrival-rate'")
+        ->and($escenario)->toContain('startRate: RAMP_SECONDS > 0 ? 0 : SCAN_RATE')
+        ->and($etapas[1])->toBe(['SCAN_RATE', 'SCAN_RATE', '0'])
+        ->and($etapas[2])->toBe(['RAMP', 'DURATION', 'RAMP'])
+        ->and(valorDeCarga($fuente, 'RAMP_SECONDS'))->toBeGreaterThan(0)
+        ->and(fuenteDeCarga('run.sh'))->toMatch('/^RAMP_SECONDS="\$\{RAMP_SECONDS:-[1-9]\d*\}"$/m');
+})->group('RNF-P-06', 'RQ-08');
+
+it('ficha por PIN contra /scan/pin con el sobre cerrado que sella el aprovisionamiento', function (): void {
+    // K6-3: el escenario `scan-pin` solo mide el PIN si el sobre lo cierra la
+    // clave publica del propio servidor y la verificacion posterior mira sus
+    // filas. Si cualquiera de los tres eslabones desaparece, el escenario sigue
+    // en la matriz como cobertura de RF-AT-11 y no prueba nada.
+    $guion = fuenteDeCarga('scan-peak.js');
+    $aprovisionamiento = fuenteDeCarga('provision-fixtures.php');
+
+    expect($guion)->toContain('`${BASE}/api/v1/scan/pin`')
+        ->and($guion)->toContain('pin_sealed: pin.pin_sealed')
+        ->and($aprovisionamiento)->toContain('app(SealedPinOpener::class)->publicKey()')
+        ->and($aprovisionamiento)->toContain('sodium_crypto_box_seal($pinMaterial->pin, $publicKeyBytes)')
+        ->and(fuenteDeCarga('verify-after-load.php'))->toContain("'RF-AT-11/registro'");
+})->group('RF-AT-11', 'RQ-08');
 
 it('lanza k6 con el uid de quien invoca el script', function (): void {
     // `grafana/k6` corre como uid 12345. En un runner de Linux, `.results/` lo

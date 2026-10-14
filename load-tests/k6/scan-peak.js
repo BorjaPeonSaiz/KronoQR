@@ -15,13 +15,28 @@
 //   techo.
 //
 //   Por eso: 6 fichajes/s + 1 r/s de reenvio + 1 r/s de rechazo de credencial +
-//   0,5 r/s de rechazo irreconciliable + un lote por minuto ≈ 8,5 r/s = 510/min
-//   por origen, un 15 % por debajo de los 600 del borde. Con INSTANCES=10 salen
-//   60 fichajes validos/s, por encima de los 50 de RNF-P-06.
+//   0,5 r/s de rechazo irreconciliable + 0,3 r/s de PIN con su reenvio + un
+//   lote por minuto ≈ 8,8 r/s = 530/min por origen, un 12 % por debajo de los
+//   600 del borde (`/scan/pin` pasa por la misma zona de Nginx que `/scan`).
+//   Con INSTANCES=10 salen 60 fichajes validos/s, por encima de los 50 de
+//   RNF-P-06.
 //
-// SEIS ESCENARIOS, Y NINGUNO ES DECORATIVO:
+// LA FORMA DEL CAMBIO DE TURNO (K6-2). `scan` no arranca en el pico: sube de 0
+// a SCAN_RATE en RAMP_SECONDS, lo sostiene DURATION y vuelve a 0 en otros
+// RAMP_SECONDS (`ramping-arrival-rate`), que es como llega una plantilla a las
+// 06:00. Los demas escenarios arrancan al final de la subida y duran lo mismo
+// que la MESETA, que es lo unico que juzgan RNF-P-02 y RNF-P-06: los fichajes
+// de la subida y la bajada viajan con la fase `scan_ramp` y `aggregate.js` los
+// publica aparte. Con RAMP_SECONDS=0 la carga es la constante de antes.
 //
-//   scan        6/s    fichajes validos. Es la cifra de RNF-P-06.
+// SIETE ESCENARIOS, Y NINGUNO ES DECORATIVO:
+//
+//   scan        6/s    fichajes validos, con su rampa. Es la cifra de RNF-P-06.
+//   scan-pin    1 cada PIN_PERIOD_SECONDS (4 s): el fichaje de respaldo por PIN
+//                      (RF-AT-11, K6-3), con un reenvio identico de cada cuatro.
+//                      Es el camino que mas CPU gasta —abre un sobre de
+//                      libsodium y paga un bcrypt de coste 12—, y por eso se
+//                      mide aunque sea la minoria del cambio de turno.
 //   resend      0,5/s  un fichaje y su reenvio identico (regla dura 8, RQ-03).
 //   reject      1/s    las tres clases de rechazo de CREDENCIAL, comparadas
 //                      ENTRE SI (RS-03).
@@ -72,6 +87,47 @@ const BASE = __ENV.BASE_URL || 'https://nginx:8443'
 /** Fichajes validos por segundo y por instancia (ver el cubo con fuga, arriba). */
 const SCAN_RATE = Number(__ENV.SCAN_RATE || 6)
 
+/**
+ * Segundos de la meseta. `run.sh` los pasa ya calculados; el analisis de
+ * `DURATION` es solo para lanzar el guion a mano.
+ */
+const DURATION_SECONDS = Number(__ENV.DURATION_SECONDS || secondsOf(DURATION))
+
+/** Subida y bajada del cambio de turno (K6-2). 0 = carga constante, sin rampa. */
+const RAMP_SECONDS = Number(__ENV.RAMP_SECONDS ?? 30)
+
+/** Cuando arranca la meseta, y con ella todo lo que no es `scan`. */
+const PLATEAU_START = `${RAMP_SECONDS}s`
+
+/** Un fichaje por PIN cada tantos segundos y por instancia (K6-3). */
+const PIN_PERIOD_SECONDS = Number(__ENV.PIN_PERIOD_SECONDS || 4)
+
+/** Uno de cada tantos fichajes por PIN se reenvia identico (regla dura 8). */
+const PIN_REPLAY_EVERY = 4
+
+function secondsOf(duration) {
+  const match = /^(\d+)(ms|s|m|h)?$/.exec(String(duration))
+
+  if (match === null) {
+    throw new Error(`DURATION no reconocida: ${duration}. Usa 120s, 2m o DURATION_SECONDS.`)
+  }
+
+  const factor = { ms: 0.001, s: 1, m: 60, h: 3600 }[match[2] ?? 's']
+
+  return Number(match[1]) * factor
+}
+
+/**
+ * Las rampas del escenario `scan`, como duracion de k6.
+ *
+ * CON RAMP_SECONDS=0 LAS ETAPAS DE SUBIDA Y BAJADA DURAN 0 s y no se cambia de
+ * ejecutor: k6 admite etapas de duracion nula (salto instantaneo, comprobado con
+ * grafana/k6 2.2.0) y la carga queda en la constante de antes de la rampa. Un
+ * solo ejecutor es lo que deja leer la tasa del escenario como fuente
+ * (`ScanPeakScenariosTest`) sin seguir ramas.
+ */
+const RAMP = `${RAMP_SECONDS}s`
+
 /** Tamano del lote de sincronizacion (doc 02 §6). */
 const BATCH_SIZE = 50
 
@@ -85,7 +141,7 @@ const BATCH_BACKLOG_SECONDS = 600
 const BATCH_PAIR_SPACING_SECONDS = 20
 
 /**
- * Los seis escenarios, con su etiqueta de requisito.
+ * Los siete escenarios, con su etiqueta de requisito.
  *
  * `tags.requirements` es ETIQUETA NATIVA DE K6: viaja en cada muestra del CSV
  * —de ahi que el agregado pueda dar el veredicto por requisito— y es ademas el
@@ -94,14 +150,46 @@ const BATCH_PAIR_SPACING_SECONDS = 20
  */
 const SCENARIOS = {
   scan: {
-    executor: 'constant-arrival-rate',
+    executor: 'ramping-arrival-rate',
     exec: 'validScan',
-    rate: SCAN_RATE,
+    // De 0 al pico, el pico durante la meseta y vuelta a 0 (K6-2). Sin rampa
+    // se arranca ya en el pico.
+    startRate: RAMP_SECONDS > 0 ? 0 : SCAN_RATE,
     timeUnit: '1s',
-    duration: DURATION,
+    stages: [
+      { target: SCAN_RATE, duration: RAMP },
+      { target: SCAN_RATE, duration: DURATION },
+      { target: 0, duration: RAMP },
+    ],
     preAllocatedVUs: 20,
     maxVUs: 120,
     tags: { requirements: 'RNF-P-06 RNF-P-02 RQ-08' },
+  },
+  /*
+   * El fichaje de respaldo por PIN (RF-AT-11, K6-3): quien llega al cambio de
+   * turno sin su tarjeta.
+   *
+   * UNO CADA CUATRO SEGUNDOS POR ORIGEN, Y NO MAS, POR DOS TECHOS. El del borde
+   * es el de todo `/api/v1/scan*` (arriba). El de la aplicacion es propio y
+   * mucho mas bajo (`throttle:scan-pin`: 10/min por quiosco y 60/min por IP,
+   * RS-12): frena fuerza bruta sobre el PIN, no un ritmo de fichaje. A 0,25/s
+   * mas un reenvio de cada cuatro son ~19/min por IP y ~2/min por quiosco, lejos
+   * de los dos: lo que se mide es el coste del PIN, no el limitador.
+   *
+   * Y es una MINORIA a proposito: en un cambio de turno real ficha por PIN quien
+   * olvido la tarjeta, no la plantilla. Lo que interesa es que su bcrypt
+   * conviva con el pico de tarjetas sin rechazar a nadie.
+   */
+  'scan-pin': {
+    executor: 'constant-arrival-rate',
+    exec: 'pinScan',
+    rate: 1,
+    timeUnit: `${PIN_PERIOD_SECONDS}s`,
+    duration: DURATION,
+    startTime: PLATEAU_START,
+    preAllocatedVUs: 5,
+    maxVUs: 30,
+    tags: { requirements: 'RF-AT-11 RQ-03' },
   },
   resend: {
     executor: 'constant-arrival-rate',
@@ -109,6 +197,7 @@ const SCENARIOS = {
     rate: 1,
     timeUnit: '2s',
     duration: DURATION,
+    startTime: PLATEAU_START,
     preAllocatedVUs: 10,
     maxVUs: 40,
     tags: { requirements: 'RQ-03 RF-AT-07' },
@@ -119,6 +208,7 @@ const SCENARIOS = {
     rate: 1,
     timeUnit: '1s',
     duration: DURATION,
+    startTime: PLATEAU_START,
     preAllocatedVUs: 5,
     maxVUs: 30,
     tags: { requirements: 'RS-03' },
@@ -146,6 +236,7 @@ const SCENARIOS = {
     rate: 1,
     timeUnit: '2s',
     duration: DURATION,
+    startTime: PLATEAU_START,
     preAllocatedVUs: 5,
     maxVUs: 30,
     tags: { requirements: 'RS-03 RN-18' },
@@ -156,6 +247,7 @@ const SCENARIOS = {
     rate: 1,
     timeUnit: '60s',
     duration: DURATION,
+    startTime: PLATEAU_START,
     preAllocatedVUs: 2,
     maxVUs: 8,
     tags: { requirements: 'RF-KI-04 RN-18' },
@@ -166,6 +258,7 @@ const SCENARIOS = {
     rate: 1,
     timeUnit: '2s',
     duration: DURATION,
+    startTime: PLATEAU_START,
     preAllocatedVUs: 5,
     maxVUs: 20,
     tags: { requirements: 'RF-PA-06' },
@@ -182,7 +275,7 @@ const SCENARIOS = {
  * asiento bajo el candado de la cadena de auditoria (ADR-010, ADR-027).
  */
 const SCENARIOS_BY_ROLE = {
-  kiosk: ['scan', 'resend', 'reject', 'reject-out-of-order', 'batch'],
+  kiosk: ['scan', 'scan-pin', 'resend', 'reject', 'reject-out-of-order', 'batch'],
   panel: ['compliance'],
 }
 
@@ -278,6 +371,39 @@ const CARDS = (() => {
     resend: DATA.payloads.slice(scanEnd, resendEnd),
     batch: DATA.payloads.slice(resendEnd, base + perInstance),
   }
+})()
+
+/**
+ * Los fichajes por PIN de esta instancia: `{ employee_code, pin_sealed }`.
+ *
+ * EMPLEADOS PROPIOS, FUERA DE TODA REBANADA DE TARJETAS. Si alguien fichara por
+ * tarjeta y por PIN en la misma pasada, cada via le cerraria el tramo a la
+ * otra y el anti-rebote mediria el guion. `run.sh` dimensiona `pin_cards`
+ * para que nadie repita dentro de la ventana, igual que con las tarjetas.
+ *
+ * UN SOBRE POR EMPLEADO Y NO POR FICHAJE. El sobre cerrado (`crypto_box_seal`)
+ * lleva dentro solo el PIN —sin instante ni valor de un solo uso— y el
+ * servidor no recuerda sobres: lo abre, compara contra `pin_hash` y lo olvida
+ * (`SealedPinOpener`, `RegisterPinScanHandler`). Reenviar el mismo sobre con
+ * otro `scan_id` cuesta en el servidor exactamente lo mismo que uno nuevo, y
+ * sellarlo aqui obligaria a meter libsodium en el generador.
+ */
+const PIN_SCANS = (() => {
+  if (!SCENARIOS_BY_ROLE[ROLE].includes('scan-pin')) {
+    return []
+  }
+
+  const perInstance = GEOMETRY.pin_cards ?? 0
+  const all = DATA.pin_scans ?? []
+
+  if (perInstance < 1 || all.length < INSTANCES * perInstance) {
+    throw new Error(
+      `Faltan fichajes por PIN: hay ${all.length} y ${INSTANCES} instancias de ${perInstance} ` +
+        'necesitan mas. Regenera con provision-fixtures.php.',
+    )
+  }
+
+  return all.slice(INSTANCE * perInstance, (INSTANCE + 1) * perInstance)
 })()
 
 /** Los tokens de quiosco de esta instancia, ya recortados. */
@@ -397,21 +523,93 @@ function unanswered(response) {
 
 // --- scan: el pico de fichajes validos (RNF-P-06, RNF-P-02, RQ-08) -----------
 
+/**
+ * `scan` en la meseta del pico; `scan_ramp` en la subida o la bajada (K6-2).
+ *
+ * Por el reloj del escenario y no por el contador de iteraciones: la rampa
+ * reparte las llegadas de forma desigual y solo el tiempo transcurrido dice en
+ * que tramo de la curva cae cada una. Las de la frontera exacta pueden caer a
+ * un lado o al otro; a esa altura la tasa ya es la del pico, asi que no mueven
+ * la medida.
+ */
+function scanPhase() {
+  const elapsedSeconds = (Date.now() - exec.scenario.startTime) / 1000
+
+  return elapsedSeconds >= RAMP_SECONDS && elapsedSeconds < RAMP_SECONDS + DURATION_SECONDS ? 'scan' : 'scan_ramp'
+}
+
 export function validScan() {
   const iteration = exec.scenario.iterationInTest
   const scanId = uuidv7()
+  const phase = scanPhase()
 
   const response = http.post(
     `${BASE}/api/v1/scan`,
     scanBody(scanId, CARDS.scan[iteration % CARDS.scan.length], utc(Date.now())),
-    { headers: kioskHeaders(deviceToken(iteration), scanId), tags: { phase: 'scan' } },
+    { headers: kioskHeaders(deviceToken(iteration), scanId), tags: { phase } },
   )
 
-  shiftOutcomes.add(1, { phase: 'scan', action: outcomeOf(response) })
+  shiftOutcomes.add(1, { phase, action: outcomeOf(response) })
 
   check(response, {
     'el fichaje se registra o el borde encola (regla dura 19)': (r) =>
       r.status === 200 || unanswered(r),
+  })
+}
+
+// --- scan-pin: el fichaje de respaldo por PIN (RF-AT-11, K6-3) --------------
+
+/**
+ * Un fichaje por PIN y, uno de cada `PIN_REPLAY_EVERY`, su reenvio identico.
+ *
+ * EL REENVIO VA INMEDIATAMENTE DESPUES DE LA RESPUESTA, sin la espera de
+ * `idempotentResend`: lo que se prueba aqui no es el modelo de la cola, es que
+ * el reenvio de un PIN devuelve lo mismo SIN volver a pagar el bcrypt ni sumar
+ * un fallo al bloqueo (PIN-02). `verify-after-load.php` comprueba despues que
+ * ningun reenvio dejo una segunda fila.
+ */
+export function pinScan() {
+  const iteration = exec.scenario.iterationInTest
+  const scanId = uuidv7()
+  const pin = PIN_SCANS[iteration % PIN_SCANS.length]
+  const headers = kioskHeaders(deviceToken(iteration), scanId)
+  const body = JSON.stringify({
+    scan_id: scanId,
+    occurred_at: utc(Date.now()),
+    employee_code: pin.employee_code,
+    pin_sealed: pin.pin_sealed,
+    intent: 'auto',
+  })
+
+  const original = http.post(`${BASE}/api/v1/scan/pin`, body, { headers, tags: { phase: 'pin' } })
+
+  shiftOutcomes.add(1, { phase: 'pin', action: outcomeOf(original) })
+
+  check(original, {
+    'el fichaje por PIN se registra o el borde encola (RF-AT-11, regla dura 19)': (r) =>
+      r.status === 200 || unanswered(r),
+  })
+
+  if (iteration % PIN_REPLAY_EVERY !== 0) {
+    return
+  }
+
+  const replay = http.post(`${BASE}/api/v1/scan/pin`, body, { headers, tags: { phase: 'pin_replay' } })
+
+  // Mismo criterio que en `idempotentResend`: sin respuesta del servidor a
+  // alguno de los dos envios no hay nada que comparar.
+  if (original.status !== 200 || unanswered(replay)) {
+    resendMatches.add(1, { match: 'skipped', channel: 'pin' })
+
+    return
+  }
+
+  const identical = replay.status === original.status && replay.body === original.body
+
+  resendMatches.add(1, { match: identical ? 'yes' : 'no', channel: 'pin' })
+
+  check(replay, {
+    'el reenvio por PIN devuelve el mismo codigo y el mismo cuerpo (regla dura 8)': () => identical,
   })
 }
 

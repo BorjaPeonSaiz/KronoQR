@@ -38,6 +38,15 @@ INSTANCES="${INSTANCES:-10}"
 DURATION="${DURATION:-120s}"
 DEVICES_PER_INSTANCE="${DEVICES_PER_INSTANCE:-8}"
 SCAN_RATE="${SCAN_RATE:-6}"
+# La forma del cambio de turno (K6-2): `scan` sube de 0 al pico en RAMP_SECONDS,
+# lo sostiene DURATION y baja en otros RAMP_SECONDS. 0 = carga constante. La
+# pasada dura por tanto DURATION + 2 x RAMP_SECONDS, pero lo que juzgan
+# RNF-P-02 y RNF-P-06 es solo la meseta.
+RAMP_SECONDS="${RAMP_SECONDS:-30}"
+# Un fichaje por PIN cada tantos segundos y por instancia (K6-3, RF-AT-11). Lo
+# frena antes `throttle:scan-pin` (10/min por quiosco, 60/min por IP) que el
+# borde; ver `scan-pin` en scan-peak.js.
+PIN_PERIOD_SECONDS="${PIN_PERIOD_SECONDS:-4}"
 NETWORK="${NETWORK:-kronoqr-app}"
 BASE_URL="${BASE_URL:-https://nginx:8443}"
 
@@ -246,6 +255,18 @@ fi
 batch_cards=$((batch_windows * 25))
 cards_per_instance=$((scan_cards + resend_cards + batch_cards))
 
+# Los empleados que fichan por PIN, por instancia (K6-3). La misma regla que las
+# tarjetas —una vuelta entera tarda mas que el anti-rebote con un 10 % de
+# margen— a un fichaje cada PIN_PERIOD_SECONDS; y dos de colchon para que el
+# redondeo hacia abajo de la division no deje la vuelta justo en el borde. Son
+# empleados SIN tarjeta: van aparte de `cards_per_instance` y los reserva el
+# aprovisionamiento.
+if [ "${PIN_PERIOD_SECONDS}" -lt 1 ]; then
+  fail_unreliable "PIN_PERIOD_SECONDS tiene que ser 1 o mas (el fichaje por PIN es parte de la carga)."
+fi
+
+pin_cards=$(((debounce_seconds + debounce_seconds / 10 + 1) / PIN_PERIOD_SECONDS + 2))
+
 employees=$((INSTANCES * cards_per_instance))
 devices=$((INSTANCES * DEVICES_PER_INSTANCE))
 offered_rate=$((INSTANCES * SCAN_RATE))
@@ -258,10 +279,14 @@ started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # dos viajan al `summary.json`, que es lo que convierte una pasada en linea base
 # comparable y no en un numero suelto.
 git_sha="${K6_GIT_SHA:-$(git -C "${root}" rev-parse HEAD 2>/dev/null || echo desconocido)}"
+# El commit de `load-tests/` con el que se mide. Distinto de `git_sha` solo
+# cuando el workflow mide otra version con el guion de hoy (`app_ref`).
+harness_sha="${K6_HARNESS_SHA:-${git_sha}}"
 runner="${K6_RUNNER:-$(hostname 2>/dev/null || uname -n)}"
 
 log "Carga: ${INSTANCES} instancias x ${SCAN_RATE} fichajes/s = ${offered_rate}/s durante ${DURATION}."
-log "Anti-rebote de la instalacion: ${debounce_seconds} s -> ${cards_per_instance} tarjetas por instancia."
+log "Rampa: ${RAMP_SECONDS} s de subida y otros tantos de bajada; un fichaje por PIN cada ${PIN_PERIOD_SECONDS} s por instancia."
+log "Anti-rebote de la instalacion: ${debounce_seconds} s -> ${cards_per_instance} tarjetas y ${pin_cards} empleados con PIN por instancia."
 log "Aprovisionamiento: ${employees} empleados, ${devices} quioscos, ${K6_HISTORY_DAYS} dias de historico."
 
 # --- Aprovisionamiento -------------------------------------------------------
@@ -276,6 +301,7 @@ tinker provision-fixtures.php \
   -e K6_SCAN_CARDS="${scan_cards}" \
   -e K6_RESEND_CARDS="${resend_cards}" \
   -e K6_BATCH_CARDS="${batch_cards}" \
+  -e K6_PIN_CARDS="${pin_cards}" \
   -e K6_HISTORY_DAYS="${K6_HISTORY_DAYS}" \
   -e K6_HISTORY_EMPLOYEES="${K6_HISTORY_EMPLOYEES}" \
   -e K6_REJECT_PAYLOADS="${K6_REJECT_PAYLOADS}" \
@@ -340,6 +366,9 @@ k6_instance() {
     -v "${root_mount}/load-tests/k6/.fixtures:/fixtures:ro" \
     -v "${root_mount}/load-tests/k6/.results:/results" \
     -e DURATION="${DURATION}" \
+    -e DURATION_SECONDS="${duration_seconds}" \
+    -e RAMP_SECONDS="${RAMP_SECONDS}" \
+    -e PIN_PERIOD_SECONDS="${PIN_PERIOD_SECONDS}" \
     -e SCAN_RATE="${SCAN_RATE}" \
     -e INSTANCE="${instance}" \
     -e INSTANCES="${instances}" \
@@ -458,7 +487,10 @@ aggregate_args=(
   "--offered-rate=${offered_rate}"
   "--rejection-floor-ms=${rejection_floor_ms}"
   "--debounce-seconds=${debounce_seconds}"
+  "--ramp-seconds=${RAMP_SECONDS}"
+  "--pin-period-seconds=${PIN_PERIOD_SECONDS}"
   "--git-sha=${git_sha}"
+  "--harness-sha=${harness_sha}"
   "--runner=${runner}"
   "--k6-image=${K6_IMAGE}"
   "--latency-verdict=${K6_LATENCY_VERDICT}"
