@@ -3,8 +3,10 @@
 # KronoQR — lleva al directorio nuevo los cambios que el cliente hizo en
 # `observability/` (umbrales, cuadros de mando, reglas propias).
 #
-# NO SE EJECUTA SOLO: lo carga update.sh (y package.sh, para la huella). Necesita
-# `sha256_of` de lib/fs.sh. Hasta la 2.2.0 el paquete nuevo traia su propio
+# NO SE EJECUTA SOLO: lo cargan update.sh, package.sh (que escribe la huella) y la
+# etapa 8b de la CI (que la genera para la version anterior, porque esta aun no la
+# entrega). Carga ELLA MISMA lib/fs.sh, de donde sale `sha256_of`: quien la cargue no
+# tiene que saber de que depende. Hasta la 2.2.0 el paquete nuevo traia su propio
 # `observability/` y `update.sh` no copiaba el del cliente: cada actualizacion le
 # devolvia los umbrales de serie sin avisar, y la guia le pedia volver a aplicarlos
 # a mano (operacion.md §10).
@@ -33,15 +35,19 @@
 #   enlaces          los enlaces simbolicos del cliente NO se llevan (apuntan fuera
 #                    del arbol): se avisa por su nombre.
 #
-# LISTA PROTEGIDA. Hay ficheros en los que SIEMPRE gana el paquete, los haya cambiado
-# o borrado el cliente (se avisa por su nombre): las reglas de alerta de serie
-# (`prometheus/rules/*`, salvo las que empiezan por `local-`), la plantilla de
-# Alertmanager y los dos `render-config.sh` (el arranque de los contenedores), y la
-# retencion de Loki y Tempo. Son las que vigilan el registro horario, la cadena de
-# auditoria y las copias: una edicion (o un borrado) del cliente que las apague
-# no puede sobrevivir a una actualizacion sin que el fabricante la haya decidido. La
-# personalizacion del cliente va en ficheros de capa propios: `prometheus/rules/local-*.yml`
-# viaja siempre.
+# LISTA PROTEGIDA. Solo lo que tiene relevancia legal o de seguridad: en estos ficheros
+# SIEMPRE gana el paquete, los haya cambiado o borrado el cliente (se avisa por su
+# nombre y su copia sigue en el directorio anterior):
+#   · prometheus/rules/work-record.yml, audit.yml, backup.yml y threat-detection.yml
+#     (registro horario, cadena de auditoria, copias, amenazas);
+#   · prometheus/prometheus.yml.template (carga las reglas y apunta a Alertmanager);
+#   · alertmanager/alertmanager.yml.template y los dos render-config.sh (el arranque);
+#   · loki/loki.yaml y tempo/tempo.yaml (la retencion).
+# El resto (p. ej. kiosk.yml, cuyo umbral la guia manda editar junto a
+# KIOSK_HEALTH_SILENT_AFTER_SECONDS) sigue la fusion normal. Las reglas que el cliente
+# ANADE en prometheus/rules/ se validan con `promtool check rules` si esta disponible
+# (un YAML roto apaga TODAS las alertas): si no lo esta, solo viajan las `local-*` y las
+# demas quedan en aviso.
 #
 # Sin `observability.sha256` en el paquete anterior (hasta la 2.2.0) no hay B: no se
 # puede saber quien toco que. Se lleva NADA, gana el paquete en todo lo que difiere
@@ -69,6 +75,15 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+_KQ_OBS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/fs.sh disable=SC1091
+. "${_KQ_OBS_DIR}/fs.sh"
+if ! declare -F sha256_of >/dev/null; then
+  printf 'observability-merge.sh: falta sha256_of (lib/fs.sh)\n' >&2
+  # shellcheck disable=SC2317
+  return 1 2>/dev/null || exit 1
+fi
+
 KQ_OBS_BASELINE=0
 KQ_OBS_CARRIED=()
 KQ_OBS_DELETED=()
@@ -77,17 +92,18 @@ KQ_OBS_PROTECTED=()
 KQ_OBS_LINKS=()
 
 kq_obs_manifest() {
-  local dir="$1" file
+  local dir="$1" file hash
   [ -d "${dir}" ] || return 0
   while IFS= read -r -d '' file; do
-    printf '%s  %s\n' "$(sha256_of "${dir}/${file#./}")" "${file#./}"
+    # Un hash vacio es una huella corrupta: se falla, no se escribe.
+    hash="$(sha256_of "${dir}/${file#./}")" && [ -n "${hash}" ] || return 1
+    printf '%s  %s\n' "${hash}" "${file#./}"
   done < <(cd -- "${dir}" && find . -type f -print0 | LC_ALL=C sort -z)
 }
 
 kq_obs_is_protected() {
   case "$1" in
-  prometheus/rules/local-*) return 1 ;;
-  prometheus/rules/* | alertmanager/alertmanager.yml.template | alertmanager/render-config.sh | prometheus/render-config.sh | loki/loki.yaml | tempo/tempo.yaml) return 0 ;;
+  prometheus/rules/work-record.yml | prometheus/rules/audit.yml | prometheus/rules/backup.yml | prometheus/rules/threat-detection.yml | prometheus/prometheus.yml.template | alertmanager/alertmanager.yml.template | alertmanager/render-config.sh | prometheus/render-config.sh | loki/loki.yaml | tempo/tempo.yaml) return 0 ;;
   esac
   return 1
 }
@@ -111,6 +127,10 @@ kq_obs_merge() {
     while IFS= read -r line; do
       hash="${line%%  *}"
       path="${line#*  }"
+      # Una huella corrupta no se interpreta: ni rutas absolutas o con `..`, ni un hash
+      # que no sea SHA-256.
+      case "${path}" in /* | *..*) continue ;; esac
+      [[ "${hash}" =~ ^[0-9a-f]{64}$ ]] || continue
       if [ -n "${path}" ]; then baseline["${path}"]="${hash}"; fi
     done <"${baseline_file}"
   fi
@@ -122,6 +142,11 @@ kq_obs_merge() {
   while IFS= read -r -d '' file; do
     file="${file#./}"
     current="$(sha256_of "${old_dir}/${file}")"
+    if [ -z "${current}" ]; then
+      KQ_OBS_CONFLICTS+=("${file}")
+      status=1
+      continue
+    fi
     theirs=""
     [ ! -f "${new_dir}/${file}" ] || theirs="$(sha256_of "${new_dir}/${file}")"
 
@@ -146,6 +171,19 @@ kq_obs_merge() {
     # El cliente lo cambio (o lo anadio). Si el paquete no lo ha tocado, gana el
     # cliente; si lo ha tocado o lo ha retirado, gana el paquete.
     if { [ -z "${before}" ] && [ -z "${theirs}" ]; } || { [ -n "${theirs}" ] && [ "${theirs}" = "${before}" ]; }; then
+      case "${file}" in
+      prometheus/rules/*)
+        if command -v promtool >/dev/null 2>&1; then
+          if ! promtool check rules "${old_dir}/${file}" >/dev/null 2>&1; then
+            KQ_OBS_CONFLICTS+=("${file} (promtool la rechaza)")
+            continue
+          fi
+        elif [ -z "${before}" ] && [ "${file#prometheus/rules/local-}" = "${file}" ]; then
+          KQ_OBS_CONFLICTS+=("${file} (regla propia sin validar)")
+          continue
+        fi
+        ;;
+      esac
       if install -d "$(dirname -- "${new_dir}/${file}")" && cp -p -- "${old_dir}/${file}" "${new_dir}/${file}"; then
         KQ_OBS_CARRIED+=("${file}")
       else

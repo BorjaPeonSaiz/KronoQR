@@ -224,3 +224,70 @@ it('los enlaces simbolicos del cliente no se llevan y se avisa por su nombre', f
         ->and($process->getOutput().$process->getErrorOutput())->toContain('enlace.yml')
         ->and(file_exists($root.'/new/observability/enlace.yml'))->toBeFalse();
 })->group('RNF-D-04');
+
+it('solo lo legal o de seguridad esta protegido: kiosk.yml editado viaja, prometheus.yml.template no', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['prometheus/rules/kiosk.yml' => "umbral: 300\n", 'prometheus/prometheus.yml.template' => "rule_files: [rules/*.yml]\n"],
+        client: ['prometheus/rules/kiosk.yml' => "umbral: 600\n", 'prometheus/prometheus.yml.template' => "rule_files: []\n"],
+        new: ['prometheus/rules/kiosk.yml' => "umbral: 300\n", 'prometheus/prometheus.yml.template' => "rule_files: [rules/*.yml]\n"],
+    );
+    $salida = $process->getOutput().$process->getErrorOutput();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(file_get_contents($root.'/new/observability/prometheus/rules/kiosk.yml'))->toBe("umbral: 600\n")
+        ->and(file_get_contents($root.'/new/observability/prometheus/prometheus.yml.template'))->toBe("rule_files: [rules/*.yml]\n")
+        ->and($salida)->toContain('GANA EL DEL PAQUETE, siempre')
+        ->and($salida)->toContain('prometheus/prometheus.yml.template');
+})->group('RNF-D-04', 'RS-07');
+
+it('una regla AÑADIDA por el cliente que no es local-* no viaja sin promtool y queda en aviso', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['prometheus/rules/kiosk.yml' => "k\n"],
+        client: ['prometheus/rules/kiosk.yml' => "k\n", 'prometheus/rules/mia.yml' => "groups: []\n", 'prometheus/rules/local-mia.yml' => "groups: []\n"],
+        new: ['prometheus/rules/kiosk.yml' => "k\n"],
+        then: 'command -v promtool >/dev/null 2>&1 && echo HAY_PROMTOOL || true',
+    );
+    $salida = $process->getOutput().$process->getErrorOutput();
+
+    if (str_contains($salida, 'HAY_PROMTOOL')) {
+        test()->markTestSkipped('promtool disponible: la validacion real decide');
+    }
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(file_exists($root.'/new/observability/prometheus/rules/mia.yml'))->toBeFalse()
+        ->and($salida)->toContain('prometheus/rules/mia.yml (regla propia sin validar)')
+        ->and(file_exists($root.'/new/observability/prometheus/rules/local-mia.yml'))->toBeTrue();
+})->group('RNF-D-04');
+
+it('la biblioteca se carga sola (como hace 8b), la huella no sale con hashes vacios y una huella corrupta no se interpreta', function (): void {
+    $dir = sys_get_temp_dir().'/kq-obs-lib-'.bin2hex(random_bytes(4));
+    mkdir($dir.'/o', 0777, true);
+    mkdir($dir.'/n', 0777, true);
+    file_put_contents($dir.'/o/a.yml', "x\n");
+    file_put_contents($dir.'/n/a.yml', "y\n");
+    $lib = escapeshellarg(Repo::file('infra/scripts/lib/observability-merge.sh'));
+
+    // 1. Cargada SOLA: sha256_of viene de fs.sh, cargada por la propia biblioteca.
+    $sola = Process::fromShellCommandline('bash -c '.escapeshellarg('set -euo pipefail; . '.$lib.'; kq_obs_manifest '.$dir.'/o'), timeout: 30.0);
+    $sola->run();
+    expect($sola->getExitCode())->toBe(0, $sola->getErrorOutput())
+        ->and($sola->getOutput())->toMatch('/^[0-9a-f]{64}  a\.yml$/m');
+
+    // 2. Un hash vacio hace FALLAR la huella en vez de escribir una corrupta.
+    $vacio = Process::fromShellCommandline('bash -c '.escapeshellarg('set -euo pipefail; . '.$lib.'; sha256_of() { :; }; kq_obs_manifest '.$dir.'/o'), timeout: 30.0);
+    $vacio->run();
+    expect($vacio->getExitCode())->not->toBe(0);
+
+    // 3. Una huella con ruta absoluta, con `..` o con un hash que no es SHA-256 se ignora.
+    file_put_contents($dir.'/huella', "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  /etc/passwd\n".str_repeat('b', 64)."  ../fuera\nno-es-un-hash  a.yml\n");
+    $corrupta = Process::fromShellCommandline(
+        'bash -c '.escapeshellarg('set -euo pipefail; . '.$lib.'; kq_obs_merge '.$dir.'/o '.$dir.'/n '.$dir.'/huella; echo "carried=${#KQ_OBS_CARRIED[@]} conflicts=${#KQ_OBS_CONFLICTS[@]}"'),
+        timeout: 30.0,
+    );
+    $corrupta->run();
+    // Sin entradas validas B esta vacio: a.yml (distinto en los dos lados) se trata como "anadido por el cliente"
+    // y como el paquete tiene el suyo, es un conflicto: gana el paquete y nada se lleva.
+    expect($corrupta->getExitCode())->toBe(0, $corrupta->getErrorOutput())
+        ->and($corrupta->getOutput())->toContain('carried=0')
+        ->and(file_get_contents($dir.'/n/a.yml'))->toBe("y\n");
+})->group('RNF-D-04');

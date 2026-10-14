@@ -981,15 +981,23 @@ the previous directory. That is what
 you will see **when updating from 2.2.0 to 2.2.1** (2.2.0 did not carry the
 fingerprint): a notice listing the files that differ, even if you touched none.
 
-**What is not customised, and where yours goes.** Some files **always follow the
-package**, whether you changed or deleted them (`update.sh` warns by name and
-your copy stays in the previous directory): the built-in alert rules
-(`prometheus/rules/*.yml`, which watch the work record, the audit trail and the
-backups), the Alertmanager template, the two `render-config.sh`, and the
-retention in `loki/loki.yaml` and `tempo/tempo.yaml`. Your own rules go in
-**`prometheus/rules/local-<name>.yml`**, which always travels. If you delete a
-file of yours that the package does not change, it is deleted in the new
-directory too (and reported); symbolic links are not carried (reported).
+**What is not customised, and where yours goes.** Only what has legal or security
+relevance: in these files **the package always wins**, whether you changed or deleted
+them (`update.sh` warns by name and your copy stays in the previous directory): the
+rules `prometheus/rules/work-record.yml`, `audit.yml`, `backup.yml` and
+`threat-detection.yml` (work record, audit trail, backups and threats),
+`prometheus/prometheus.yml.template` (loads the rules and points at Alertmanager),
+`alertmanager/alertmanager.yml.template`, the two `render-config.sh`, and
+`loki/loki.yaml` and `tempo/tempo.yaml` (retention: if you change it there you will
+have to re-apply it after each update; `update.sh` reminds you). **Everything else
+follows the normal merge**, other rules included (for example `kiosk.yml`, whose
+threshold is edited together with `KIOSK_HEALTH_SILENT_AFTER_SECONDS`). Your own
+rules go in **`prometheus/rules/local-<name>.yml`**. Rules you add in
+`prometheus/rules/` are validated with `promtool check rules` when available (a
+broken YAML would switch off **all** alerts): if it is not, only `local-*` travel and
+the others are reported. If you delete a file of yours that the package does not
+change, it is deleted in the new directory too (and reported); symbolic links are not
+carried (reported).
 
 **Two limits worth knowing.** There is no shared Alertmanager across
 different clients' installations: each installation has its own, with its
@@ -2371,7 +2379,7 @@ clock-ins, beating.
 The legend at the foot of the screen **states your installation's real
 thresholds**, not assumed ones: if you change one, the legend changes with it.
 And if you change `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, you have to change the
-threshold of the `QuioscoSinLatido` alert in `observability/` **at the
+threshold of the `QuioscoSinLatido` alert in `observability/prometheus/rules/kiosk.yml` (not protected: your change travels on updates) **at the
 same time** (§10.4): they are the same number, and separating them is precisely
 what breaks the coherence this screen exists to provide.
 

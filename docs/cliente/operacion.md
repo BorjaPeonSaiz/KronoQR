@@ -966,15 +966,23 @@ cuántos ficheros difieren y tus ficheros siguen en el directorio anterior. Es l
 verás **al actualizar de la 2.2.0 a la 2.2.1** (la 2.2.0 no traía la huella): un
 aviso con los ficheros que difieren, aunque no hayas tocado ninguno.
 
-**Qué no se personaliza y dónde va lo tuyo.** Hay ficheros en los que **siempre
-gana el paquete**, los hayas cambiado o borrado tú (`update.sh` lo avisa por su
-nombre y tu copia sigue en el directorio anterior): las reglas de alerta de serie
-(`prometheus/rules/*.yml`, que vigilan el registro horario, la auditoría y las
-copias), la plantilla de Alertmanager, los dos `render-config.sh` y la retención
-de `loki/loki.yaml` y `tempo/tempo.yaml`. Tus reglas propias van en
-**`prometheus/rules/local-<nombre>.yml`**, que viaja siempre. Si borras un
-fichero tuyo que el paquete no cambia, se borra también en el directorio nuevo
-(y se dice); los enlaces simbólicos no se llevan (se avisa).
+**Qué no se personaliza y dónde va lo tuyo.** Solo lo que tiene relevancia legal o
+de seguridad: en estos ficheros **siempre gana el paquete**, los hayas cambiado o
+borrado tú (`update.sh` lo avisa por su nombre y tu copia sigue en el directorio
+anterior): las reglas `prometheus/rules/work-record.yml`, `audit.yml`, `backup.yml`
+y `threat-detection.yml` (registro horario, cadena de auditoría, copias y
+amenazas), `prometheus/prometheus.yml.template` (carga las reglas y apunta a
+Alertmanager), `alertmanager/alertmanager.yml.template`, los dos `render-config.sh`
+y `loki/loki.yaml` y `tempo/tempo.yaml` (la retención: si la cambias ahí, tendrás que
+volver a aplicarla tras cada actualización; `update.sh` te lo recuerda). **El resto
+sigue la fusión normal**, incluidas las demás reglas (por ejemplo `kiosk.yml`, cuyo
+umbral se edita junto a `KIOSK_HEALTH_SILENT_AFTER_SECONDS`). Tus reglas propias
+van en **`prometheus/rules/local-<nombre>.yml`**. Las reglas que añadas en
+`prometheus/rules/` se validan con `promtool check rules` si está disponible
+(un YAML roto apagaría **todas** las alertas): si no lo está, solo viajan las
+`local-*` y las demás quedan en aviso. Si borras un fichero tuyo que el paquete no
+cambia, se borra también en el directorio nuevo (y se dice); los enlaces simbólicos
+no se llevan (se avisa).
 
 
 **Dos límites que conviene conocer.** No hay un Alertmanager común entre
@@ -2337,7 +2345,7 @@ pendientes, latiendo.
 La leyenda al pie de la pantalla **dice los umbrales reales de tu
 instalación**, no unos supuestos: si cambias uno, la leyenda cambia con él. Y
 si cambias `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, tienes que cambiar **a la vez**
-el umbral de la alerta `QuioscoSinLatido` en `observability/` (§10.4):
+el umbral de la alerta `QuioscoSinLatido` en `observability/prometheus/rules/kiosk.yml` (§10.4; ese fichero no está protegido y tu cambio viaja en las actualizaciones):
 son el mismo número, y separarlos es justamente lo que rompe la coherencia que
 esta pantalla existe para dar.
 
