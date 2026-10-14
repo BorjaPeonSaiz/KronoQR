@@ -35,19 +35,25 @@
 #   enlaces          los enlaces simbolicos del cliente NO se llevan (apuntan fuera
 #                    del arbol): se avisa por su nombre.
 #
-# LISTA PROTEGIDA. Solo lo que tiene relevancia legal o de seguridad: en estos ficheros
-# SIEMPRE gana el paquete, los haya cambiado o borrado el cliente (se avisa por su
-# nombre y su copia sigue en el directorio anterior):
-#   · prometheus/rules/work-record.yml, audit.yml, backup.yml y threat-detection.yml
-#     (registro horario, cadena de auditoria, copias, amenazas);
+# LISTA PROTEGIDA. En estos ficheros SIEMPRE gana el paquete, los haya cambiado o borrado
+# el cliente (se avisa por su nombre y su copia sigue en el directorio anterior):
+#   · TODAS las reglas de serie `prometheus/rules/*.yml` (registro horario, cadena de
+#     auditoria, proyeccion, incidencias, autenticacion, cuentas, copias, amenazas, y la
+#     que vigila que las alertas llegan), SALVO dos excepciones: las `local-*` (son del
+#     cliente y viajan siempre) y `kiosk.yml`, que queda fuera a proposito porque la guia
+#     pide al cliente ajustar su umbral (QuioscoSinLatido) junto a
+#     KIOSK_HEALTH_SILENT_AFTER_SECONDS;
 #   · prometheus/prometheus.yml.template (carga las reglas y apunta a Alertmanager);
-#   · alertmanager/alertmanager.yml.template y los dos render-config.sh (el arranque);
+#   · alertmanager/alertmanager.yml.template, los dos render-config.sh y retention-guard.sh
+#     (el arranque);
 #   · loki/loki.yaml y tempo/tempo.yaml (la retencion).
-# El resto (p. ej. kiosk.yml, cuyo umbral la guia manda editar junto a
-# KIOSK_HEALTH_SILENT_AFTER_SECONDS) sigue la fusion normal. Las reglas que el cliente
-# ANADE en prometheus/rules/ se validan con `promtool check rules` si esta disponible
-# (un YAML roto apaga TODAS las alertas): si no lo esta, solo viajan las `local-*` y las
-# demas quedan en aviso.
+# El resto sigue la fusion normal. Toda regla que viaje desde prometheus/rules/ (kiosk.yml
+# editado, `local-*`, o una anadida) se valida con `promtool check rules` (un YAML roto apaga
+# TODAS las alertas): el de la IMAGEN DE PROMETHEUS ya fijada en el compose
+# (KQ_OBS_PROMETHEUS_IMAGE, `docker run --entrypoint promtool`), no el del anfitrion; si
+# docker no esta disponible, el promtool del anfitrion; y si tampoco, solo viajan las
+# `local-*` y kiosk.yml, y las anadidas quedan en aviso. Si la validacion falla, gana el
+# paquete y el fichero queda en conflicto.
 #
 # Sin `observability.sha256` en el paquete anterior (hasta la 2.2.0) no hay B: no se
 # puede saber quien toco que. Se lleva NADA, gana el paquete en todo lo que difiere
@@ -103,15 +109,36 @@ kq_obs_manifest() {
 
 kq_obs_is_protected() {
   case "$1" in
-  prometheus/rules/work-record.yml | prometheus/rules/audit.yml | prometheus/rules/backup.yml | prometheus/rules/threat-detection.yml | prometheus/prometheus.yml.template | alertmanager/alertmanager.yml.template | alertmanager/render-config.sh | prometheus/render-config.sh | loki/loki.yaml | tempo/tempo.yaml) return 0 ;;
+  prometheus/rules/local-* | prometheus/rules/kiosk.yml) return 1 ;;
+  prometheus/rules/*.yml | prometheus/prometheus.yml.template | alertmanager/alertmanager.yml.template | alertmanager/render-config.sh | prometheus/render-config.sh | retention-guard.sh | loki/loki.yaml | tempo/tempo.yaml) return 0 ;;
   esac
   return 1
+}
+
+# Valida un fichero de reglas con promtool. 0 valido, 1 invalido, 2 no se ha podido validar.
+# Primero el promtool de la imagen de Prometheus fijada en el compose (el que correra), no el
+# del anfitrion, que puede ser de otra version; sin docker, el del anfitrion.
+KQ_OBS_PROMETHEUS_IMAGE="${KQ_OBS_PROMETHEUS_IMAGE:-}"
+kq_obs_validate_rule() {
+  local file="$1"
+  if [ -n "${KQ_OBS_PROMETHEUS_IMAGE}" ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    if docker run --rm --network none --entrypoint promtool -v "$(dirname -- "${file}"):/rules:ro" \
+      "${KQ_OBS_PROMETHEUS_IMAGE}" check rules "/rules/$(basename -- "${file}")" >/dev/null 2>&1; then
+      return 0
+    fi
+    return 1
+  fi
+  if command -v promtool >/dev/null 2>&1; then
+    promtool check rules "${file}" >/dev/null 2>&1 && return 0
+    return 1
+  fi
+  return 2
 }
 
 kq_obs_merge() {
   local old_dir="$1" new_dir="$2" baseline_file="${3:-}"
   local -A baseline=()
-  local line hash path file current theirs before status=0
+  local line hash path file current theirs before validation status=0
 
   KQ_OBS_BASELINE=0
   KQ_OBS_CARRIED=()
@@ -173,12 +200,12 @@ kq_obs_merge() {
     if { [ -z "${before}" ] && [ -z "${theirs}" ]; } || { [ -n "${theirs}" ] && [ "${theirs}" = "${before}" ]; }; then
       case "${file}" in
       prometheus/rules/*)
-        if command -v promtool >/dev/null 2>&1; then
-          if ! promtool check rules "${old_dir}/${file}" >/dev/null 2>&1; then
-            KQ_OBS_CONFLICTS+=("${file} (promtool la rechaza)")
-            continue
-          fi
-        elif [ -z "${before}" ] && [ "${file#prometheus/rules/local-}" = "${file}" ]; then
+        validation=0
+        kq_obs_validate_rule "${old_dir}/${file}" || validation=$?
+        if [ "${validation}" -eq 1 ]; then
+          KQ_OBS_CONFLICTS+=("${file} (promtool la rechaza)")
+          continue
+        elif [ "${validation}" -eq 2 ] && [ -z "${before}" ] && [ "${file#prometheus/rules/local-}" = "${file}" ]; then
           KQ_OBS_CONFLICTS+=("${file} (regla propia sin validar)")
           continue
         fi

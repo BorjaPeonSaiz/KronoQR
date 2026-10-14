@@ -172,6 +172,7 @@ KQ_MSG_ES[u_w_obs_protected]="%s ficheros de observability/ que NO se personaliz
 KQ_MSG_ES[u_w_obs_protected_fix]="tus reglas propias van en prometheus/rules/local-<nombre>.yml, que viaja siempre al directorio nuevo (operacion.md §10)."
 KQ_MSG_ES[u_w_obs_links]="%s enlaces simbolicos de observability/ NO se llevan al directorio nuevo (apuntan fuera del arbol): %s. Siguen en %s."
 KQ_MSG_ES[u_w_obs_retention]="en %s habias editado a mano el plazo de retencion (%s). Desde la 2.2.1 se fija en el .env y ese fichero es siempre el del paquete: pon LOG_RETENTION_HOURS=%s (horas) en %s y recrea loki y tempo (docker compose up -d loki tempo)."
+KQ_MSG_ES[u_obs_retention_applied]="El plazo de retencion que tenias (%s en %s) es MENOR que el de serie: se ha escrito LOG_RETENTION_HOURS=%s en %s para no alargar lo que decidiste. Revisalo si no era lo que querias."
 KQ_MSG_ES[u_w_obs_copy_failed]="no se han podido copiar todos tus cambios de observability/ de %s a %s. La actualizacion sigue con lo del paquete; tu version sigue, intacta, en el directorio anterior."
 
 KQ_MSG_ES[u_maintenance_on]="Panel, portal y API de gestion en mantenimiento (responden 503 con Retry-After). Los quioscos encolan en local y sincronizaran al terminar: la hora real de cada fichaje se conserva."
@@ -501,6 +502,7 @@ KQ_MSG_EN[u_w_obs_protected]="%s observability/ files that are NOT customised (b
 KQ_MSG_EN[u_w_obs_protected_fix]="your own rules go in prometheus/rules/local-<name>.yml, which always travels to the new directory (operation.md §10)."
 KQ_MSG_EN[u_w_obs_links]="%s symbolic links in observability/ are NOT carried to the new directory (they point outside the tree): %s. They stay in %s."
 KQ_MSG_EN[u_w_obs_retention]="in %s you had edited the retention period by hand (%s). Since 2.2.1 it is set in the .env and that file is always the package one: set LOG_RETENTION_HOURS=%s (hours) in %s and recreate loki and tempo (docker compose up -d loki tempo)."
+KQ_MSG_EN[u_obs_retention_applied]="The retention period you had (%s in %s) is SHORTER than the default: LOG_RETENTION_HOURS=%s has been written to %s so as not to lengthen what you decided. Check it if that was not what you wanted."
 KQ_MSG_EN[u_w_obs_copy_failed]="not all your observability/ changes could be copied from %s to %s. The update goes on with the package's files; your version stays, intact, in the previous directory."
 
 KQ_MSG_EN[u_maintenance_on]="Panel, portal and management API under maintenance (they answer 503 with Retry-After). Kiosks queue locally and will sync when done: the real time of every clocking is preserved."

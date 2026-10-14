@@ -21,9 +21,11 @@ use Tests\Architecture\Support\Repo;
  * @param  array<string, string>  $client  ficheros que tiene ahora el cliente
  * @param  array<string, string>  $new  ficheros del paquete nuevo
  * @param  array<string, string>  $links  enlaces simbolicos del cliente (nombre => destino)
+ * @param  string  $before  codigo de shell previo a la fusion
+ * @param  array<string, string>  $env  entorno del proceso
  * @return array{0: string, 1: Process}
  */
-function observabilityMergeScenario(array $pristine, array $client, array $new, bool $withBaseline = true, string $then = '', array $links = []): array
+function observabilityMergeScenario(array $pristine, array $client, array $new, bool $withBaseline = true, string $then = '', array $links = [], string $before = '', array $env = []): array
 {
     $root = sys_get_temp_dir().'/kq-obs-merge-'.bin2hex(random_bytes(4));
     foreach (['old' => $client, 'new' => $new, 'pristine' => $pristine] as $name => $files) {
@@ -44,9 +46,9 @@ function observabilityMergeScenario(array $pristine, array $client, array $new, 
     $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
         .'kq_msg_init es; CURRENT_DIR='.escapeshellarg($root.'/old').'; PACKAGE_DIR='.escapeshellarg($root.'/new').'; '
         .($withBaseline ? 'kq_obs_manifest '.escapeshellarg($root.'/pristine/observability').' >"${CURRENT_DIR}/observability.sha256"; ' : '')
-        .'merge_observability; '.$then;
+        .$before.'merge_observability; '.$then;
 
-    $process = new Process(['bash', '-c', $script], env: ['KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process = new Process(['bash', '-c', $script], env: array_merge(['KRONOQR_LANG' => 'es'], $env), timeout: 60.0);
     $process->run();
 
     return [$root, $process];
@@ -292,3 +294,45 @@ it('la biblioteca se carga sola (como hace 8b), la huella no sale con hashes vac
         ->and($corrupta->getOutput())->toContain('carried=0')
         ->and(file_get_contents($dir.'/n/a.yml'))->toBe("y\n");
 })->group('RNF-D-04');
+
+it('el cliente BORRA una regla de serie (projection.yml) que el paquete no cambia: vuelve, con aviso por nombre', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['prometheus/rules/projection.yml' => "p\n", 'prometheus/rules/incidents.yml' => "i\n", 'prometheus/rules/alerting.yml' => "a\n"],
+        client: ['prometheus/rules/incidents.yml' => "apagada\n", 'prometheus/rules/alerting.yml' => "a\n"],
+        new: ['prometheus/rules/projection.yml' => "p\n", 'prometheus/rules/incidents.yml' => "i\n", 'prometheus/rules/alerting.yml' => "a\n"],
+    );
+    $salida = $process->getOutput().$process->getErrorOutput();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($salida)->toContain('prometheus/rules/projection.yml (borrado)')
+        ->and($salida)->toContain('prometheus/rules/incidents.yml')
+        ->and(file_get_contents($root.'/new/observability/prometheus/rules/projection.yml'))->toBe("p\n")
+        ->and(file_get_contents($root.'/new/observability/prometheus/rules/incidents.yml'))->toBe("i\n");
+})->group('RNF-D-04', 'RS-07');
+
+it('las reglas que viajan se validan con el promtool de la imagen de Prometheus: si lo rechaza, gana el paquete', function (string $codigo, bool $viaja): void {
+    $bin = sys_get_temp_dir().'/kq-obs-docker-'.bin2hex(random_bytes(4));
+    mkdir($bin, 0777, true);
+    // docker falso: `info` responde y `run` sale con el codigo pedido (la validacion).
+    file_put_contents($bin.'/docker', "#!/bin/sh\nif [ \"\$1\" = info ]; then exit 0; fi\necho \"\$@\" >>".$bin."/llamadas\nexit ".$codigo."\n");
+    chmod($bin.'/docker', 0755);
+
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['prometheus/rules/kiosk.yml' => "umbral: 300\n"],
+        client: ['prometheus/rules/kiosk.yml' => "umbral: 600\n"],
+        new: ['prometheus/rules/kiosk.yml' => "umbral: 300\n"],
+        before: 'COMPOSE_FILE="${CURRENT_DIR}/c.yml"; printf "    image: prom/prometheus:v3.1.0\n" >"${COMPOSE_FILE}"; ',
+        env: ['PATH' => $bin.':'.getenv('PATH')],
+    );
+    $salida = $process->getOutput().$process->getErrorOutput();
+
+    expect($process->getExitCode())->toBe(0, $salida)
+        ->and((string) file_get_contents($bin.'/llamadas'))->toContain('--entrypoint promtool')->toContain('prom/prometheus:v3.1.0')->toContain('check rules')
+        ->and(file_get_contents($root.'/new/observability/prometheus/rules/kiosk.yml'))->toBe($viaja ? "umbral: 600\n" : "umbral: 300\n");
+    if (! $viaja) {
+        expect($salida)->toContain('promtool la rechaza');
+    }
+})->with([
+    'la valida' => ['0', true],
+    'la rechaza' => ['1', false],
+])->group('RNF-D-04');

@@ -1949,7 +1949,7 @@ write_wal_key() {
 # del paquete). Si el cliente habia editado el plazo en el directorio anterior, el aviso le
 # dice el valor que tenia y la variable que debe poner. Con cualquier huella o sin ella.
 warn_edited_retention() {
-  local old_dir="$1" rel file value hours
+  local old_dir="$1" rel file value hours current
   for rel in loki/loki.yaml tempo/tempo.yaml; do
     file="${old_dir}/${rel}"
     [ -f "${file}" ] || continue
@@ -1962,6 +1962,21 @@ warn_edited_retention() {
       hours="${BASH_REMATCH[1]}"
     elif [[ "${value}" =~ ^([0-9]+)d$ ]]; then
       hours="$((10#${BASH_REMATCH[1]} * 24))"
+    fi
+    # Un plazo MENOR que el de serie es una decision de minimizar que no se puede perder en
+    # silencio ni alargar: si el .env nuevo no define la variable (o define otra cosa que la
+    # que ya se escribio aqui) se escribe, y se dice. Uno MAYOR solo se avisa: alargar la
+    # retencion es una decision de la persona responsable (RL-11).
+    current="$(env_value "${ENV_FILE}" "LOG_RETENTION_HOURS")"
+    if [[ "${hours}" =~ ^[0-9]+$ ]] && [ "${hours}" -ge 24 ] && [ "${hours}" -lt 2160 ]; then
+      if [ -z "${current}" ]; then
+        if kq_env_set "${ENV_FILE}" "LOG_RETENTION_HOURS" "${hours}" && chmod 0600 "${ENV_FILE}"; then
+          say "$(kq_format u_obs_retention_applied "${value}" "${file}" "${hours}" "${ENV_FILE}")"
+          continue
+        fi
+      elif [ "${current}" = "${hours}" ]; then
+        continue
+      fi
     fi
     kq_msg check_warn "$(kq_format u_w_obs_retention "${file}" "${value}" "${hours}" "${ENV_FILE}")"
   done
@@ -1978,6 +1993,9 @@ merge_observability() {
   [ -d "${old_dir}" ] && [ -d "${new_dir}" ] || return 0
 
   warn_edited_retention "${old_dir}"
+  # El promtool que valida las reglas es el de la imagen de Prometheus que fija el compose nuevo.
+  # shellcheck disable=SC2034  # la lee kq_obs_validate_rule (lib/observability-merge.sh)
+  KQ_OBS_PROMETHEUS_IMAGE="$(sed -n -E "s/^[[:space:]]*image:[[:space:]]*(prom\/prometheus:[^[:space:]]+).*/\1/p" "${COMPOSE_FILE:-/dev/null}" 2>/dev/null | head -n 1)"
 
   if ! kq_obs_merge "${old_dir}" "${new_dir}" "${CURRENT_DIR}/observability.sha256"; then
     kq_msg check_warn "$(kq_format u_w_obs_copy_failed "${old_dir}" "${new_dir}")"
