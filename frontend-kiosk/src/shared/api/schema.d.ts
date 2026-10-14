@@ -11686,8 +11686,9 @@ export interface components {
              *     ocurre con el paquete anonimizado generado por consola; el asiento
              *     `diagnostics.bundle_generated` lo escribe el producto solo en cuanto
              *     la base vuelve, con `payload.deferred: true` y la misma huella. Va
-             *     dentro de la huella del manifiesto: quitarlo hace fallar
-             *     `--verify`. Sin el campo, el asiento se escribio antes de entregar
+             *     dentro de la huella del manifiesto: quitarlo sin recalcular la
+             *     huella hace fallar `--verify`; la referencia fiable es el `sha256`
+             *     del asiento `diagnostics.bundle_generated` en `audit_log`. Sin el campo, el asiento se escribio antes de entregar
              *     el paquete.
              */
             audit: {
