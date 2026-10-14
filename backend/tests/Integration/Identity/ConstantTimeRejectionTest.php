@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\Credentials;
+use Tests\Support\Time\Samples;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -215,7 +216,7 @@ it('consume el mismo tiempo en los seis rechazos', function (): void {
     }
 
     /** @var non-empty-array<string, float> $medianas */
-    $medianas = array_map(median(...), $muestras);
+    $medianas = array_map(Samples::median(...), $muestras);
 
     foreach ($medianas as $caso => $mediana) {
         expect($mediana)->toBeGreaterThanOrEqual(
@@ -238,21 +239,3 @@ it('consume el mismo tiempo en los seis rechazos', function (): void {
         ))
     );
 })->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07');
-
-/**
- * Mediana y no media: una sola muestra lenta —el planificador del contenedor, un
- * `checkpoint` de PostgreSQL— desplazaria la media y haria fallar la prueba sin
- * que hubiera ningun canal de tiempo.
- *
- * @param  list<float>  $valores
- */
-function median(array $valores): float
-{
-    sort($valores);
-
-    $mitad = \count($valores) >> 1;
-
-    return \count($valores) % 2 === 1
-        ? $valores[$mitad]
-        : ($valores[$mitad - 1] + $valores[$mitad]) / 2;
-}

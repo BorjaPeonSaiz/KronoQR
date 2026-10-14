@@ -9,9 +9,10 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use App\Modules\Workforce\Infrastructure\Adapter\HashedEmployeePinVerifier;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Security\HashCheckSpy;
 use Tests\Support\Time\FrozenTime;
+use Tests\Support\Time\Samples;
 use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -232,38 +233,11 @@ it('fallar en el quiosco no bloquea el portal', function (): void {
 //    anuncia y no se afirma ({@see WallClockBudget}).
 
 /**
- * Los hashes contra los que compara el verificador durante una llamada.
- *
- * Espia del hasher: envuelve el real —la comparacion se sigue haciendo— y anota
- * contra que hash se hizo cada una.
- *
- * @param  callable(): mixed  $work
- * @return list<string>
- */
-function hashesComparados(callable $work): array
-{
-    $real = app('hash');
-    $comparados = [];
-
-    Hash::partialMock()
-        ->shouldReceive('check')
-        ->andReturnUsing(static function (string $value, string $hashedValue, array $options = []) use ($real, &$comparados): bool {
-            $comparados[] = $hashedValue;
-
-            return $real->check($value, $hashedValue, $options);
-        });
-
-    $work();
-
-    Hash::swap($real);
-
-    return $comparados;
-}
-
-/**
  * Un empleado con el bloqueo del quiosco ya abierto (tres fallos, `beforeEach`).
+ *
+ * @return array{uuid: string, code: string}
  */
-function codigoBloqueado(): string
+function empleadoBloqueado(): array
 {
     $empleado = empleadoConPin();
 
@@ -271,7 +245,7 @@ function codigoBloqueado(): string
     verificador()->verify($empleado['code'], PIN_MALO, PinOrigin::KIOSK);
     verificador()->verify($empleado['code'], PIN_MALO, PinOrigin::KIOSK);
 
-    return $empleado['code'];
+    return $empleado;
 }
 
 dataset('rechazos del PIN', [
@@ -282,7 +256,7 @@ dataset('rechazos del PIN', [
     ]],
     'de baja, con su credencial retirada (RN-14)' => [fn (): array => ['code' => empleadoConPin(PIN_BUENO, 'terminated')['code'], 'pin' => PIN_BUENO]],
     'suspendido' => [fn (): array => ['code' => empleadoConPin(PIN_BUENO, 'suspended')['code'], 'pin' => PIN_BUENO]],
-    'bloqueado, aunque teclee el PIN bueno' => [fn (): array => ['code' => codigoBloqueado(), 'pin' => PIN_BUENO]],
+    'bloqueado, aunque teclee el PIN bueno' => [fn (): array => ['code' => empleadoBloqueado()['code'], 'pin' => PIN_BUENO]],
     'PIN incorrecto' => [fn (): array => ['code' => empleadoConPin()['code'], 'pin' => PIN_MALO]],
 ]);
 
@@ -291,13 +265,50 @@ it('paga exactamente una comparacion de hash bcrypt en cada rechazo', function (
     $tecleado = $intento();
     $verificador = verificador();
 
-    $comparados = hashesComparados(fn () => $verificador->verify($tecleado['code'], $tecleado['pin'], PinOrigin::KIOSK));
+    $comparados = HashCheckSpy::during(fn () => $verificador->verify($tecleado['code'], $tecleado['pin'], PinOrigin::KIOSK));
 
     // Una, y contra un hash bcrypt de verdad: comparar contra una cadena vacia
     // tambien seria «una llamada», pero el hasher la descarta sin calcular nada.
     expect($comparados)->toHaveCount(1)
         ->and(password_get_info($comparados[0])['algoName'])->toBe('bcrypt');
 })->with('rechazos del PIN')->group('RS-03', 'RS-12');
+
+/**
+ * El `pin_hash` guardado de un empleado.
+ */
+function pinHashDe(string $uuid): string
+{
+    $hash = DB::table('employees')->where('uuid', $uuid)->value('pin_hash');
+
+    expect($hash)->toBeString();
+
+    /** @var string $hash */
+    return $hash;
+}
+
+it('con el bloqueo activo compara contra el señuelo y nunca contra el hash del empleado', function (): void {
+    // RS-12: si comparase contra el hash real, el bloqueo seria un oraculo que
+    // confirma cuando se acierta. Lo que paga es la misma comparacion, contra
+    // otro hash.
+    $empleado = empleadoBloqueado();
+    $verificador = verificador();
+
+    $comparados = HashCheckSpy::during(fn () => $verificador->verify($empleado['code'], PIN_BUENO, PinOrigin::KIOSK));
+
+    expect($comparados)->toHaveCount(1)
+        ->and($comparados[0])->not->toBe(pinHashDe($empleado['uuid']));
+})->group('RS-03', 'RS-12');
+
+it('con un PIN incorrecto compara contra el hash del propio empleado', function (): void {
+    // El control positivo del anterior: sin el, un verificador que comparase
+    // SIEMPRE contra el señuelo pasaria la prueba del bloqueo.
+    $empleado = empleadoConPin();
+    $verificador = verificador();
+
+    $comparados = HashCheckSpy::during(fn () => $verificador->verify($empleado['code'], PIN_MALO, PinOrigin::KIOSK));
+
+    expect($comparados)->toBe([pinHashDe($empleado['uuid'])]);
+})->group('RS-03', 'RS-12');
 
 /**
  * Coste bcrypt del hash señuelo del verificador, que es el que paga un codigo
@@ -316,19 +327,6 @@ function costeDelSenuelo(): int
 
     /** @var int $coste */
     return $coste;
-}
-
-/**
- * Mediana de unas muestras de tiempo: una muestra lenta —el planificador del
- * contenedor, un `checkpoint`— no la desplaza, y una media si.
- *
- * @param  non-empty-list<float>  $muestras
- */
-function medianaDeTiempos(array $muestras): float
-{
-    sort($muestras);
-
-    return $muestras[intdiv(\count($muestras), 2)];
 }
 
 it('tarda lo mismo, en mediana, con un codigo inexistente que con un PIN incorrecto', function (): void {
@@ -357,7 +355,7 @@ it('tarda lo mismo, en mediana, con un codigo inexistente que con un PIN incorre
         $sinEmpleado[] = medir(fn () => $verificador->verify('ENOEXISTE', PIN_MALO, PinOrigin::PORTAL));
     }
 
-    $medianas = [medianaDeTiempos($conEmpleado), medianaDeTiempos($sinEmpleado)];
+    $medianas = [Samples::median($conEmpleado), Samples::median($sinEmpleado)];
 
     // Saltarse el hash en un camino lo deja en unos pocos milisegundos frente a
     // los cientos de un bcrypt de coste 12: una razon de decenas. 1,5 deja sitio

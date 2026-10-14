@@ -6,7 +6,6 @@ use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
 use Illuminate\Contracts\Cache\Repository as Cache;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Spectator\Spectator;
@@ -15,6 +14,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Security\HashCheckSpy;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 
@@ -145,38 +145,6 @@ function pinScanOpenPortalBody(TestResponse $response): array
     return array_diff_key((array) $response->json(), ['scan_id' => true]);
 }
 
-/**
- * Cuantas comparaciones de hash hace una llamada.
- *
- * **El trabajo y no el reloj.** La suite corre con `BCRYPT_ROUNDS=4`: el hash
- * cuesta menos de un milisegundo y un camino que se lo saltara tardaria lo
- * mismo que uno que no. Y `abs(a - b) < max(a, b)` —el criterio de las medidas
- * de `PinScanTest`— se cumple siempre que las dos duren algo, asi que no puede
- * fallar. Lo que delataria la longitud en produccion, con el coste real, es
- * que un PIN «imposible» se ahorrase la comparacion: eso es lo que se cuenta.
- *
- * @param  callable(): mixed  $work
- */
-function pinScanOpenPortalHashChecks(callable $work): int
-{
-    $real = app('hash');
-    $checks = 0;
-
-    Hash::partialMock()
-        ->shouldReceive('check')
-        ->andReturnUsing(static function (string $value, string $hashedValue, array $options = []) use ($real, &$checks): bool {
-            $checks++;
-
-            return $real->check($value, $hashedValue, $options);
-        });
-
-    $work();
-
-    Hash::swap($real);
-
-    return $checks;
-}
-
 // --- 1 · El quiosco no conoce el bloqueo por origen -------------------------
 
 it('sigue dando el rechazo generico del quiosco tras treinta fallos desde la misma direccion', function (): void {
@@ -256,8 +224,10 @@ it('compara el hash igual en el quiosco con siete cifras que con seis equivocada
     // longitud del PIN de la persona.
     $scenario = pinScanOpenPortalScenario(PIN_SCAN_OPEN_PORTAL_SIX);
 
-    $seis = pinScanOpenPortalHashChecks(fn () => pinScanOpenPortalPost($scenario, '000998'));
-    $siete = pinScanOpenPortalHashChecks(fn () => pinScanOpenPortalPost($scenario, '0009991'));
+    // El trabajo y no el reloj: con `BCRYPT_ROUNDS=4` saltarse el hash no se
+    // notaria en el tiempo, y si en el recuento (`HashCheckSpy`).
+    $seis = count(HashCheckSpy::during(fn () => pinScanOpenPortalPost($scenario, '000998')));
+    $siete = count(HashCheckSpy::during(fn () => pinScanOpenPortalPost($scenario, '0009991')));
 
     expect($seis)->toBe(1)
         ->and($siete)->toBe(1);
@@ -281,14 +251,14 @@ it('rechaza siete cifras en el portal con las mismas cabeceras que seis equivoca
 it('compara el hash igual en el portal con siete cifras que con seis equivocadas', function (): void {
     $scenario = pinScanOpenPortalScenario(PIN_SCAN_OPEN_PORTAL_EIGHT);
 
-    $seis = pinScanOpenPortalHashChecks(fn () => Api::guest()->post('/api/v1/me/login', [
+    $seis = count(HashCheckSpy::during(fn () => Api::guest()->post('/api/v1/me/login', [
         'employee_code' => $scenario['code'],
         'pin' => '000998',
-    ]));
-    $siete = pinScanOpenPortalHashChecks(fn () => Api::guest()->post('/api/v1/me/login', [
+    ])));
+    $siete = count(HashCheckSpy::during(fn () => Api::guest()->post('/api/v1/me/login', [
         'employee_code' => $scenario['code'],
         'pin' => '0009991',
-    ]));
+    ])));
 
     expect($seis)->toBe(1)
         ->and($siete)->toBe(1);

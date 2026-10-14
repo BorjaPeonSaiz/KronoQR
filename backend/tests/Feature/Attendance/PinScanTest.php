@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -15,6 +14,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Security\HashCheckSpy;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 
@@ -256,42 +256,16 @@ it('paga la misma comparacion de hash con un PIN incorrecto que con un codigo in
     // medida estadistica, con el coste real, vive en `PinVerificationTest`.
     $escenario = escenarioDePin();
 
-    $conCodigo = comparacionesDeHashDelFichaje(fn () => ficharConPin($escenario, Str::uuid7()->toString(), pin: PIN_EQUIVOCADO));
-    $sinCodigo = comparacionesDeHashDelFichaje(fn () => ficharConPin(
+    $conCodigo = count(HashCheckSpy::during(fn () => ficharConPin($escenario, Str::uuid7()->toString(), pin: PIN_EQUIVOCADO)));
+    $sinCodigo = count(HashCheckSpy::during(fn () => ficharConPin(
         $escenario,
         Str::uuid7()->toString(),
         overrides: ['employee_code' => 'ENOEXISTE'],
-    ));
+    )));
 
     expect($conCodigo)->toBe(1)
         ->and($sinCodigo)->toBe(1);
 })->group('RS-03', 'RS-12');
-
-/**
- * Cuantas comparaciones de hash hace una peticion: un espia que envuelve el
- * hasher real.
- *
- * @param  callable(): mixed  $work
- */
-function comparacionesDeHashDelFichaje(callable $work): int
-{
-    $real = app('hash');
-    $comparaciones = 0;
-
-    Hash::partialMock()
-        ->shouldReceive('check')
-        ->andReturnUsing(static function (string $value, string $hashedValue, array $options = []) use ($real, &$comparaciones): bool {
-            $comparaciones++;
-
-            return $real->check($value, $hashedValue, $options);
-        });
-
-    $work();
-
-    Hash::swap($real);
-
-    return $comparaciones;
-}
 
 // --- Forma de la peticion ----------------------------------------------------
 
