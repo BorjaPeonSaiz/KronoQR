@@ -577,9 +577,12 @@ final class ClientDocs
     /**
      * Las lineas ejecutables de todos los bloques bash de un documento, ordenadas.
      *
-     * Fuera quedan los comentarios y las lineas en blanco: son lo unico que la
-     * traduccion puede cambiar. Lo que no puede cambiar es el comando, y esta
-     * lista es contra lo que se compara la guia inglesa con la espanola.
+     * Fuera quedan los comentarios —los de linea entera y los que van detras de
+     * la orden— y las lineas en blanco: son lo unico que la traduccion puede
+     * cambiar. Lo que no puede cambiar es el comando, y esta lista es contra lo
+     * que se compara la guia inglesa con la espanola. Hasta la 2.2.1 el
+     * comentario del final de la linea se comparaba con la orden, y la guia
+     * inglesa tenia que dejarlo en espanol para pasar.
      *
      * Se ordena porque una traduccion puede reordenar parrafos —y con ellos los
      * bloques— sin que ningun comando cambie. Lo que importa es el CONJUNTO de
@@ -589,25 +592,71 @@ final class ClientDocs
      */
     public static function bashLines(string $relative): array
     {
-        preg_match_all('/^```bash[^\n]*\n(.*?)^```/ms', self::contents($relative), $blocks);
+        return self::bashLinesOf(self::contents($relative));
+    }
+
+    /**
+     * Lo mismo sobre el texto de un Markdown, para poder probarlo sin fichero.
+     *
+     * @return list<string>
+     */
+    public static function bashLinesOf(string $markdown): array
+    {
+        preg_match_all('/^```bash[^\n]*\n(.*?)^```/ms', $markdown, $blocks);
 
         $lines = [];
 
         foreach ($blocks[1] as $block) {
             foreach (explode("\n", $block) as $line) {
-                $trimmed = rtrim($line);
+                $command = self::withoutShellComment($line);
 
-                if ($trimmed === '' || str_starts_with(ltrim($trimmed), '#')) {
+                if ($command === '') {
                     continue;
                 }
 
-                $lines[] = $trimmed;
+                $lines[] = $command;
             }
         }
 
         sort($lines);
 
         return $lines;
+    }
+
+    /**
+     * La linea sin su comentario de shell y sin espacio al final.
+     *
+     * Un `#` es comentario si esta fuera de comillas y empieza palabra: a
+     * principio de linea o detras de un espacio. Por eso no lo es el de
+     * `sed 's/^X=\([^ #]*\)//'` —dentro de comillas simples— ni el de
+     * `${VAR#prefijo}` o `url#ancla` —pegado a lo anterior—.
+     */
+    public static function withoutShellComment(string $line): string
+    {
+        $quote = null;
+        $length = \strlen($line);
+
+        for ($at = 0; $at < $length; $at++) {
+            $char = $line[$at];
+
+            if ($quote !== null) {
+                $quote = $char === $quote ? null : $quote;
+
+                continue;
+            }
+
+            if ($char === '\'' || $char === '"') {
+                $quote = $char;
+
+                continue;
+            }
+
+            if ($char === '#' && ($at === 0 || ctype_space($line[$at - 1]))) {
+                return rtrim(substr($line, 0, $at));
+            }
+        }
+
+        return rtrim($line);
     }
 
     /**

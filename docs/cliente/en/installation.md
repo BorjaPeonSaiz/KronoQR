@@ -897,7 +897,7 @@ Something else is listening there (almost always a system Apache or Nginx):
 
 ```bash
 sudo ss -lptn 'sport = :443'
-sudo systemctl stop nginx      # o lo que aparezca
+sudo systemctl stop nginx      # or whatever shows up
 ```
 
 If you need to keep that service, publish KronoQR on other ports with
@@ -961,7 +961,7 @@ exists — for example, after renewing the certificate with `certbot`, which
 rewrites it with its own owner. Check it and fix it:
 
 ```bash
-ls -l certs/                       # tls.key tiene que ser legible por el uid 101
+ls -l certs/                       # tls.key must be readable by uid 101
 docker compose logs --tail 20 nginx
 sudo chown 101:101 certs/tls.crt certs/tls.key
 sudo chmod 0400 certs/tls.key
@@ -1178,7 +1178,7 @@ cd /opt/kronoqr-2.2.0
 sudo docker compose --env-file .env -f docker-compose.yml down -v --remove-orphans
 sudo rm -f .env
 sudo rm -rf /var/backups/fichaje
-cp .env.example .env    # y vuelve a rellenar lo marcado [CLIENTE]
+cp .env.example .env    # and fill in again what is marked [CLIENTE]
 ```
 
 `down -v` **deletes the volumes, and with them the working-time record.** The
@@ -1545,9 +1545,9 @@ archived WAL rebuilds nothing and the maximum loss stops being 15 minutes.
 **How to check that it works:**
 
 ```bash
-docker compose exec scheduler php artisan backup:run    # crea y verifica una copia
-docker compose exec scheduler php artisan backup:verify # verifica la última
-sudo bash ./restore-drill.sh           # simulacro trimestral
+docker compose exec scheduler php artisan backup:run    # creates and verifies a backup
+docker compose exec scheduler php artisan backup:verify # verifies the latest one
+sudo bash ./restore-drill.sh           # quarterly drill
 ```
 
 The first two go through the **`scheduler`** container, not `app`: it is the

@@ -340,6 +340,27 @@ it('pide exactamente los mismos comandos en las dos lenguas', function (string $
         .$english.': '.implode(' | ', $onlyInEnglish).'.');
 })->with('las ocho guias del paquete')->group('RF-PD-02');
 
+it('compara la orden y no el comentario que la acompaña', function (string $linea, string $orden): void {
+    // §2 de la 2.2.1: el comentario del final de la linea se comparaba con la
+    // orden, y la guia inglesa tenia que dejarlo en espanol para pasar. Lo que
+    // NO puede perderse es un `#` que forma parte de la orden.
+    expect(ClientDocs::withoutShellComment($linea))->toBe($orden);
+})->with([
+    'comentario detras de la orden' => ['sudo ./update.sh --check-only   # sin tocar nada', 'sudo ./update.sh --check-only'],
+    'comentario de linea entera' => ['   # 1. Comprueba', ''],
+    'almohadilla entre comillas simples' => ["sed -n 's/^X=\\([^ #]*\\).*/\\1/p' .env", "sed -n 's/^X=\\([^ #]*\\).*/\\1/p' .env"],
+    'almohadilla entre comillas dobles' => ['echo "paso # 2"   # aviso', 'echo "paso # 2"'],
+    'almohadilla pegada a la palabra' => ['echo ${VERSION#v}', 'echo ${VERSION#v}'],
+])->group('RF-PD-02');
+
+it('da las mismas ordenes a dos guias que solo difieren en el idioma de sus comentarios', function (): void {
+    $espanol = "```bash\n# Comprueba\nsudo ./update.sh --check-only   # sin tocar nada\n```\n";
+    $ingles = "```bash\n# Check\nsudo ./update.sh --check-only   # without touching anything\n```\n";
+
+    expect(ClientDocs::bashLinesOf($ingles))->toBe(ClientDocs::bashLinesOf($espanol))
+        ->and(ClientDocs::bashLinesOf($espanol))->toBe(['sudo ./update.sh --check-only']);
+})->group('RF-PD-02');
+
 it('conserva en la traduccion todos los apartados del original', function (string $spanish, string $english): void {
     // Decision 2 de la ficha: «traducir no es resumir». Una guia inglesa con tres
     // apartados menos pasa desapercibida —se lee bien, esta en su idioma— y deja
@@ -468,8 +489,11 @@ it('no cita en ninguna guia ni runbook un comando de consola que no exista', fun
     //
     // Los comandos propios se leen del arbol (`$signature` y `Artisan::command`);
     // los de Laravel que las guias usan van en una lista explicita, para que
-    // anadir uno sea una decision y no un descuido.
-    $laravel = ['key:generate', 'migrate:status', 'schedule:list'];
+    // anadir uno sea una decision y no un descuido. `horizon:continue` es de
+    // Laravel Horizon y lo cita el arreglo de `queue.worker` de `product:doctor`
+    // (`lang/*/doctor.php`): reanuda la cola que alguien dejo en pausa (§2 de
+    // la 2.2.1).
+    $laravel = ['horizon:continue', 'key:generate', 'migrate:status', 'schedule:list'];
 
     $nonexistent = array_values(array_diff(
         ClientDocs::citedArtisanCommands([...ClientDocs::markdownFiles(), ...ClientDocs::runbookFiles()]),
