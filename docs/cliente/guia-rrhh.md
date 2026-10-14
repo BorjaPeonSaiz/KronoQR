@@ -1200,8 +1200,10 @@ impresión del navegador y el «buscar en la página» (Ctrl+F) solo alcanzan lo
 está dibujado**: imprimir esta pantalla saca unas pocas filas, no el informe.
 Cuando necesites el informe entero —para imprimirlo, para buscar a una persona
 en todo el periodo o para enviarlo—, **descárgalo** en CSV, Excel o PDF: el
-fichero lleva todas las filas (RF-IN-04). La vista de Cumplimiento (§4 bis) se
-comporta igual con muchos avisos.
+fichero lleva todas las filas (RF-IN-04). La vista de Cumplimiento (§4 bis) también
+dibuja solo lo visible cuando hay muchos avisos, pero **no se descarga**: para
+acotarla usa los filtros de regla y de departamento o un periodo más corto, y
+para el caso de una persona entra por su nombre a su registro.
 
 ### 6.2 La exportación para la Inspección
 

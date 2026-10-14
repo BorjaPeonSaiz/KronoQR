@@ -1222,8 +1222,10 @@ and the rest appear as you scroll. The consequence is that **the browser's print
 and "find in page" (Ctrl+F) only reach what is drawn**: printing this screen gives
 a few rows, not the report. When you need the whole report —to print it, to look
 for a person across the whole period or to send it— **download it** as CSV,
-Excel or PDF: the file carries every row (RF-IN-04). The Compliance view (§4 bis)
-behaves the same way with many alerts.
+Excel or PDF: the file carries every row (RF-IN-04). The Compliance view (§4 bis) also draws
+only what is visible when there are many alerts, but **it cannot be downloaded**:
+to narrow it down use the rule and department filters or a shorter period, and
+for one person open their record from their name.
 
 ### 6.2 The export for the Labour Inspectorate
 
