@@ -47,13 +47,22 @@ it('LOG_RETENTION_HOURS: ausente o igual a TECHNICAL_LOG_RETENTION_DAYS x 24, bi
     'cero' => ["LOG_RETENTION_HOURS=0\n", 'fallos=1'],
 ])->group('RL-11', 'RF-PD-10', 'RF-PD-13');
 
-it('LOG_RETENTION_HOURS por encima de un ano avisa y cita la minimizacion del RGPD; si no coincide con los dias, avisa', function (): void {
+it('LOG_RETENTION_HOURS por encima de 2160 h (90 dias, RL-11) avisa citando RL-11 y el RGPD; bajarlo no avisa', function (): void {
     [$largo] = logRetentionCheck("LOG_RETENTION_HOURS=9000\n");
-    [$descuadrado] = logRetentionCheck("LOG_RETENTION_HOURS=4320\nTECHNICAL_LOG_RETENTION_DAYS=90\n");
+    [$poco] = logRetentionCheck("LOG_RETENTION_HOURS=2161\n");
+    [$menor] = logRetentionCheck("LOG_RETENTION_HOURS=720\nTECHNICAL_LOG_RETENTION_DAYS=90\n");
+    [$limite] = logRetentionCheck("LOG_RETENTION_HOURS=2160\nTECHNICAL_LOG_RETENTION_DAYS=90\n");
 
-    expect($largo->getOutput().$largo->getErrorOutput())->toContain('fallos=0 avisos=1')->toContain('art. 5.1.e')
-        ->and($descuadrado->getOutput().$descuadrado->getErrorOutput())->toContain('fallos=0 avisos=1')
-        ->and($descuadrado->getOutput().$descuadrado->getErrorOutput())->toContain('LOG_RETENTION_HOURS=2160');
+    expect($largo->getOutput().$largo->getErrorOutput())->toContain('fallos=0 avisos=1')->toContain('RL-11')->toContain('art. 5.1.e')
+        ->and($poco->getOutput().$poco->getErrorOutput())->toContain('fallos=0 avisos=1')
+        ->and($menor->getOutput().$menor->getErrorOutput())->toContain('fallos=0 avisos=0')
+        ->and($limite->getOutput().$limite->getErrorOutput())->toContain('fallos=0 avisos=0');
+})->group('RL-11', 'RF-PD-13');
+
+it('LOG_RETENTION_HOURS mayor que TECHNICAL_LOG_RETENTION_DAYS x 24 avisa y dice el valor que casa', function (): void {
+    [$descuadrado] = logRetentionCheck("LOG_RETENTION_HOURS=2160\nTECHNICAL_LOG_RETENTION_DAYS=30\n");
+
+    expect($descuadrado->getOutput().$descuadrado->getErrorOutput())->toContain('fallos=0 avisos=1')->toContain('LOG_RETENTION_HOURS=720');
 })->group('RL-11', 'RF-PD-13');
 
 it('update.sh avisa a quien editaba el plazo en loki.yaml o tempo.yaml: valor que tenia y variable que debe poner', function (): void {

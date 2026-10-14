@@ -857,7 +857,7 @@ check_edge_networks() {
   check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE}"
 }
 
-# LOG_RETENTION_HOURS: entero en rango (falla) y aviso por encima de un ano o descuadrado con
+# LOG_RETENTION_HOURS: entero en rango (falla) y aviso por encima de 90 dias (RL-11) o por encima de
 # TECHNICAL_LOG_RETENTION_DAYS (RL-11, RGPD art. 5.1.e). La misma comprobacion que install.sh y update.sh.
 check_log_retention_setting() {
   check_log_retention "${CURRENT_ENV}"

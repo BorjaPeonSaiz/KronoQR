@@ -300,13 +300,13 @@ check_network_cidrs() {
 #   check_log_retention ENV_FILE
 #
 # FALLA: no es un entero, o esta fuera de 24..17520 h (1 dia a 2 anos).
-# AVISA: por encima de 8760 h (1 ano): los logs tecnicos pueden llevar datos personales
-#   (RGPD art. 5.1.e, minimizacion) y el plazo de serie es de 90 dias; o si no coincide
-#   con TECHNICAL_LOG_RETENTION_DAYS x 24 (el historico de errores de la aplicacion y el
-#   registro de Loki tendrian plazos distintos). Vacia o ausente: vale el de serie.
+# AVISA: por encima de 2160 h (90 dias): RL-11 fija 90 dias para los logs tecnicos y estos
+#   pueden llevar datos personales (RGPD art. 5.1.e, minimizacion); subir el plazo se aparta de
+#   la politica del producto. BAJARLO es minimizar y vale SIN aviso. Tampoco avisa de que sea
+#   menor que TECHNICAL_LOG_RETENTION_DAYS x 24. Vacia o ausente: vale el de serie.
 KQ_LOG_RETENTION_DEFAULT_HOURS=2160
 KQ_LOG_RETENTION_MIN_HOURS=24
-KQ_LOG_RETENTION_WARN_HOURS=8760
+KQ_LOG_RETENTION_WARN_HOURS=2160
 KQ_LOG_RETENTION_MAX_HOURS=17520
 
 check_log_retention() {
@@ -330,7 +330,7 @@ check_log_retention() {
     return 0
   fi
   days="$(env_value "${env_file}" "TECHNICAL_LOG_RETENTION_DAYS")"
-  if [[ "${days}" =~ ^[0-9]{1,5}$ ]] && [ "$((10#${days} * 24))" -ne "${value}" ]; then
+  if [[ "${days}" =~ ^[0-9]{1,5}$ ]] && [ "$((10#${days} * 24))" -lt "${value}" ]; then
     check_warn "$(kq_format c_log_retention_mismatch "${value}" "${days}")" \
       "$(kq_format w_log_retention_mismatch "$((10#${days} * 24))" "${env_file}")"
     return 0
