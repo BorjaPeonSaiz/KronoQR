@@ -18,6 +18,11 @@
 // cumple tambien sin haber comparado ninguno. Un requisito no evaluable termina
 // con salida 2, que es «vuelve a medir», y nunca con 0.
 //
+// Y UN CUARTO, `not_comparable`, que es un `unmeasurable` con causa: RNF-P-02 y
+// RNF-P-06 se juzgan contra la linea base (modo `baseline`) y esta se tomo con
+// otra carga —instancias, duracion, rampa, PIN o escenarios distintos—. No se
+// compara y sale con 2 (R5-QA-02).
+//
 // Y UNO MAS QUE NO ES UN DESENLACE: `info`. Lo lleva `RS-03-RN-18`, que publica
 // cuanto se separa el `422` de RN-18 de los tres rechazos de credencial. A-13
 // (doc 07 §6) acepto esa diferencia SIN suelo de tiempo y pidio la cifra, no una
@@ -43,7 +48,8 @@
 // Uso:
 //   node aggregate.js <directorio con instance-*.csv> --duration=120 --instances=10
 //        [--scan-rate 6] [--rejection-floor-ms 25] [--debounce-seconds 60]
-//        [--git-sha abc1234] [--runner ubuntu-24.04] [--k6-version v2.2.0]
+//        [--ramp-seconds 30] [--pin-period-seconds 4]
+//        [--git-sha abc1234] [--harness-sha def5678] [--runner ubuntu-24.04] [--k6-version v2.2.0]
 //        [--k6-image grafana/k6:2.2.0@sha256:…]
 //        [--edge-limits fichero.json] [--server-metrics fichero.json]
 //        [--baseline load-tests/k6/baseline.json]
@@ -110,7 +116,36 @@ const REALTIME_PHASES = new Set(['scan', 'resend_original'])
  * —si el servidor se lo niega, es un rechazo— pero no cuenta para el pico: lo
  * emite el guion una vez por lote, no una persona en la cola del quiosco.
  */
-const VALID_SCAN_PHASES = new Set(['scan', 'resend_original', 'resend_replay', 'batch', 'batch_seed'])
+const VALID_SCAN_PHASES = new Set(['scan', 'scan_ramp', 'resend_original', 'resend_replay', 'batch', 'batch_seed'])
+
+/**
+ * La subida y la bajada del cambio de turno (K6-2): fichajes validos que llegan
+ * FUERA de la meseta del pico.
+ *
+ * El escenario `scan` sube de 0 al pico, lo sostiene `--duration` segundos y
+ * vuelve a 0. Solo la MESETA cuenta para RNF-P-06 y RNF-P-02 (fase `scan`): la
+ * tasa se divide entre la duracion de la meseta, y mezclar la rampa la
+ * diluiria con trafico que llego a media carga. La rampa se publica aparte; sus
+ * fichajes si son fichajes, y un rechazo en ella es un rechazo al empleado.
+ */
+const RAMP_PHASE = 'scan_ramp'
+
+/**
+ * El fichaje por PIN (RF-AT-11, K6-3): el envio original y su reenvio identico.
+ *
+ * VA APARTE DEL PICO DE TARJETAS, A PROPOSITO. El PIN paga un bcrypt en el
+ * servidor (coste 12, unos 160 ms solo de hash) y meter sus muestras en el p95
+ * de `/scan` cambiaria lo que RNF-P-02 mide desde la tarea 3.6 —y dejaria de
+ * ser comparable con cualquier linea base anterior—. Se juzga en su propio
+ * veredicto, `RF-AT-11`: que bajo carga ningun PIN correcto se rechace y que el
+ * reenvio devuelva lo mismo. Su latencia se publica; ningun requisito la fija.
+ */
+const PIN_PHASE = 'pin'
+const PIN_REPLAY_PHASE = 'pin_replay'
+const PIN_PHASES = new Set([PIN_PHASE, PIN_REPLAY_PHASE])
+
+/** Fichajes por PIN atendidos que hacen falta para dar un veredicto de RF-AT-11. */
+const PIN_SAMPLES_FLOOR = 20
 
 const REJECT_CLASSES = ['signature', 'unknown', 'revoked']
 
@@ -353,6 +388,12 @@ function analyse(results, options = {}) {
   const scanRate = Number(options.scanRate ?? 0)
   const offeredRate = Number(options.offeredRate ?? instanceCount * scanRate)
   const rejectionFloorMs = Number(options.rejectionFloorMs ?? DEFAULT_REJECTION_FLOOR_MS)
+  // `null` y no 0 cuando no se dicen: una pasada anterior a la rampa o al PIN no
+  // declaraba ninguno de los dos, y eso tiene que poder distinguirse de «rampa
+  // de 0 s» al comparar con la linea base.
+  const rampSeconds = options.rampSeconds === undefined || options.rampSeconds === null ? null : Number(options.rampSeconds)
+  const pinPeriodSeconds =
+    options.pinPeriodSeconds === undefined || options.pinPeriodSeconds === null ? null : Number(options.pinPeriodSeconds)
   const { durations, counters, checks } = results
 
   const valuesWhere = (predicate) => durations.filter(predicate).map((sample) => sample.value)
@@ -376,19 +417,44 @@ function analyse(results, options = {}) {
   const baselineP95 = baseline?.write_path?.p95 ?? null
   const baselineRate = baseline?.totals?.shift_entries_per_second ?? null
 
-  // LA LINEA BASE SOLO VALE PARA LA MISMA PASADA. Comparar un p95 de diez
-  // instancias con el de dos, o de 120 s con el de 30, es comparar dos cosas
-  // distintas y llamarlo regresion. Si los parametros no coinciden, el veredicto
-  // no es rojo: es que no hay con que juzgarlo.
+  const scenarioNames = [...new Set(durations.map((sample) => sample.scenario))].sort()
+
+  // LA LINEA BASE SOLO VALE PARA LA MISMA PASADA. Comparar un p95 de ocho
+  // instancias con el de tres, de 120 s con el de 30, con rampa contra sin
+  // rampa o con PIN contra sin PIN es comparar dos cargas distintas y llamarlo
+  // regresion (R5-QA-02: la etiqueta lanzaba 8 instancias contra una linea
+  // base de 3). Si algo no coincide, el veredicto no es rojo ni verde: es
+  // «NO COMPARABLE», y no se calcula ninguna razon entre las dos.
+  //
+  // Los ESCENARIOS se comparan por el conjunto que dejo muestras, y no por un
+  // numero de version del guion: un escenario nuevo —o uno que no llego a
+  // arrancar— cambia lo que compite por la CPU, y eso se ve en los datos sin
+  // depender de que alguien se acuerde de subir una version.
+  const scenarioSet = (names) => [...names].sort().join(' ')
   const baselineParameters = [
     ['instancias', baseline?.instances, instanceCount],
     ['fichajes/s por instancia', baseline?.scan_rate, scanRate],
     ['duracion', baseline?.duration_seconds, durationSeconds],
+    ['rampa', baseline?.ramp_seconds, rampSeconds],
+    ['periodo del PIN', baseline?.pin_period_seconds, pinPeriodSeconds],
+    [
+      'escenarios',
+      baseline?.scenarios === undefined || baseline?.scenarios === null
+        ? undefined
+        : scenarioSet(Object.keys(baseline.scenarios)),
+      scenarioSet(scenarioNames),
+    ],
   ]
-  const baselineMismatches = baselineParameters.filter(([, before, now]) => before !== now)
+  const baselineMismatches =
+    baseline === null ? [] : baselineParameters.filter(([, before, now]) => (before ?? null) !== (now ?? null))
 
-  const baselineUsable =
-    baseline !== null && baselineP95 !== null && baselineRate !== null && baselineMismatches.length === 0
+  const baselineComparable = baseline !== null && baselineMismatches.length === 0
+  const baselineNotComparable = baseline !== null && !baselineComparable
+  const baselineUsable = baselineComparable && baselineP95 !== null && baselineRate !== null
+
+  const mismatchText = baselineMismatches
+    .map(([name, before, now]) => `${name}: ${before ?? 'n/d'} frente a ${now ?? 'n/d'}`)
+    .join('; ')
 
   const baselineReference =
     baseline === null
@@ -396,13 +462,16 @@ function analyse(results, options = {}) {
       : `linea base del runner: p95 ${baselineP95} ms, ${baselineRate} tramos/s ` +
         `(git_sha ${baseline.git_sha ?? 'n/d'})`
 
-  const noBaselineDetail =
-    baseline === null
+  const noBaselineDetail = baselineNotComparable
+    ? `NO COMPARABLE con la linea base (${mismatchText}): no se compara. Mide con los mismos ` +
+      'parametros que la linea base o regenerala con los de esta pasada.'
+    : baseline === null
       ? 'modo linea base sin --baseline: no hay con que comparar. La PRIMERA pasada de este ' +
         'runner es la que la crea; versiona su summary.json como baseline.json y vuelve a medir.'
-      : `la linea base no es comparable con esta pasada (${baselineMismatches
-          .map(([name, before, now]) => `${name}: ${before} frente a ${now}`)
-          .join('; ')}). Mide con los mismos parametros o regenera la linea base.`
+      : 'la linea base no trae el p95 del camino de escritura o la tasa de tramos: no hay con que comparar.'
+
+  /** El desenlace de un veredicto que depende de la linea base y no la tiene. */
+  const withoutBaseline = baselineNotComparable ? 'not_comparable' : 'unmeasurable'
 
   /** La coletilla que explica por que el umbral no se esta juzgando. */
   const thresholdNotJudged =
@@ -411,7 +480,6 @@ function analyse(results, options = {}) {
 
   // --- Por escenario ---------------------------------------------------------
 
-  const scenarioNames = [...new Set(durations.map((sample) => sample.scenario))].sort()
   const scenarios = {}
 
   for (const scenario of scenarioNames) {
@@ -506,11 +574,13 @@ function analyse(results, options = {}) {
 
     verdict(
       'RNF-P-02',
-      !latencyMeasurable || !baselineUsable
+      !latencyMeasurable
         ? 'unmeasurable'
-        : write.p95 <= baselineP95 * BASELINE_REGRESSION_RATIO
-          ? 'pass'
-          : 'fail',
+        : !baselineUsable
+          ? withoutBaseline
+          : write.p95 <= baselineP95 * BASELINE_REGRESSION_RATIO
+            ? 'pass'
+            : 'fail',
       !latencyMeasurable
         ? noSamplesDetail
         : !baselineUsable
@@ -587,15 +657,22 @@ function analyse(results, options = {}) {
     // RS-03 sin muestras. Lo unico que hace evaluable este veredicto es que la
     // linea base sea comparable (mismos parametros); la tasa se juzga contra lo
     // que esta misma maquina demostro sostener con esos parametros.
+    //
+    // LO QUE NO DEPENDE DE LA MAQUINA SE JUZGA AUNQUE NO HAYA CON QUE COMPARAR.
+    // Un rechazo a un fichaje valido es una jornada perdida con linea base y
+    // sin ella: una pasada «no comparable» no puede esconderlo detras de un
+    // «no evaluable».
     verdict(
       'RNF-P-06',
+      !alwaysRequired
+        ? 'fail'
+        : !baselineUsable
+          ? withoutBaseline
+          : shiftRate >= baselineRate * BASELINE_RATE_TOLERANCE
+            ? 'pass'
+            : 'fail',
       !baselineUsable
-        ? 'unmeasurable'
-        : shiftRate >= baselineRate * BASELINE_RATE_TOLERANCE && alwaysRequired
-          ? 'pass'
-          : 'fail',
-      !baselineUsable
-        ? `${noBaselineDetail} ${thresholdNotJudged}`
+        ? `${peakMeasured}. ${noBaselineDetail} ${thresholdNotJudged}`
         : // La degradacion encolable NO se juzga aqui: en este runner es el
           // sintoma de la CPU compartida y ya esta contada en la tasa. Lo que
           // se exige es que la tasa no caiga respecto a lo que esta maquina ya
@@ -620,7 +697,13 @@ function analyse(results, options = {}) {
   // RNF-P-06—, mientras que un `5xx` significa que la peticion entro, se ejecuto
   // codigo y reventó. Un uno por ciento es holgado para una maquina saturada y
   // deja fuera cualquier fallo sistematico.
-  const reachedServer = validScanSamples.filter(
+  //
+  // El PIN entra aqui aunque no entre en el pico: un `5xx` en `/scan/pin` es el
+  // mismo servidor reventando, y es el camino que mas CPU gasta (K6-3).
+  const reachedServer = [
+    ...validScanSamples,
+    ...durations.filter((sample) => PIN_PHASES.has(sample.phase)),
+  ].filter(
     (sample) => sample.status !== '429' && sample.status !== '0' && sample.status !== '(sin status)',
   )
   const serverErrors = reachedServer.filter((sample) => sample.status.startsWith('5'))
@@ -662,6 +745,53 @@ function analyse(results, options = {}) {
         : ` — NO EVALUABLE: ${resendComparable} pares comparables de ${resendAttempted} intentados ` +
           `(hacen falta ${RESEND_PAIRS_FLOOR} y el ${RESEND_PAIRS_RATIO_FLOOR * 100} %)`),
   )
+
+  // --- RF-AT-11: el fichaje por PIN bajo carga (K6-3) ------------------------
+
+  // QUE SE JUZGA. Cada empleado del escenario `scan-pin` tiene un PIN emitido y
+  // un sobre cerrado con la clave publica de la instalacion: TODOS sus
+  // fichajes son correctos. Un `422` aqui no es «PIN incorrecto», es una
+  // persona sin tarjeta a la que el servidor no dejo fichar en el cambio de
+  // turno —la jornada que RF-AT-11 existe para no perder—. Igual que en las
+  // tarjetas, un `429`, un `5xx` o una peticion sin respuesta no cuentan como
+  // rechazo: el quiosco los encola (regla dura 19).
+  //
+  // QUE SOLO SE PUBLICA. La latencia: el PIN paga un bcrypt de coste 12 y
+  // ningun requisito le fija presupuesto (RNF-P-02 es el de `/scan`). Ver el
+  // comentario de `PIN_PHASE`.
+  const pinOriginals = durations.filter((sample) => sample.phase === PIN_PHASE)
+  const pinAttended = percentiles(valuesWhere((sample) => sample.phase === PIN_PHASE && isAttended(sample.status)))
+  const pinRefusals = pinOriginals.filter((sample) => !isQueueable(sample.status) && !isAttended(sample.status))
+  const pinQueueable = pinOriginals.filter((sample) => isQueueable(sample.status))
+  const pinShifts = countersWhere('scan_outcomes', (tags) => tags.phase === PIN_PHASE && SHIFT_ACTIONS.has(tags.action))
+  const pinDebounced = countersWhere('scan_outcomes', (tags) => tags.phase === PIN_PHASE && tags.action === 'debounced')
+  const pinResendYes = countersWhere('resend_matches', (tags) => tags.channel === 'pin' && tags.match === 'yes')
+  const pinResendNo = countersWhere('resend_matches', (tags) => tags.channel === 'pin' && tags.match === 'no')
+  const pinDebounceRatio = pinShifts + pinDebounced === 0 ? 0 : pinDebounced / (pinShifts + pinDebounced)
+  const pinMeasurable = pinAttended.samples >= PIN_SAMPLES_FLOOR
+  const pinBroken =
+    pinRefusals.length > 0 || pinResendNo > 0 || pinDebounceRatio > DEBOUNCE_CEILING_RATIO
+
+  verdict(
+    'RF-AT-11',
+    pinBroken ? 'fail' : !pinMeasurable ? 'unmeasurable' : 'pass',
+    `${pinOriginals.length} fichajes por PIN enviados, ${pinAttended.samples} atendidos ` +
+      `(${pinShifts} con tramo, ${pinDebounced} anti-rebote), ${pinRefusals.length} rechazados al ` +
+      `empleado, ${pinQueueable.length} encolables; reenvios por PIN: ${pinResendYes} identicos y ` +
+      `${pinResendNo} distintos; p50 ${round(pinAttended.p50) ?? 'n/d'} ms y p95 ` +
+      `${round(pinAttended.p95) ?? 'n/d'} ms (informativo: el PIN paga bcrypt y ningun requisito ` +
+      'fija su latencia)' +
+      (pinMeasurable || pinBroken
+        ? ''
+        : ` — NO EVALUABLE: hacen falta ${PIN_SAMPLES_FLOOR} fichajes por PIN atendidos`),
+  )
+
+  // --- La rampa del cambio de turno (K6-2), informativa -----------------------
+
+  // La subida y la bajada no entran en RNF-P-06 ni en RNF-P-02 (ver `RAMP_PHASE`),
+  // pero sus rechazos SI estan en `refusals`, porque son fichajes validos.
+  const rampPath = percentiles(valuesWhere((sample) => sample.phase === RAMP_PHASE && isAttended(sample.status)))
+  const rampShifts = countersWhere('scan_outcomes', (tags) => tags.phase === RAMP_PHASE && SHIFT_ACTIONS.has(tags.action))
 
   // --- RS-03: los tres rechazos, indistinguibles entre si --------------------
 
@@ -862,16 +992,30 @@ function analyse(results, options = {}) {
 
   let baselineReport = null
 
-  if (baseline !== null) {
+  // TAMBIEN EN MODO UMBRAL: el aviso de tendencia no puede calcular una razon
+  // entre dos cargas distintas. Antes lo hacia, y una pasada local de diez
+  // instancias «empeoraba un 400 %» frente a la linea base de tres del runner.
+  if (baselineNotComparable) {
+    baselineReport = {
+      comparable: false,
+      note: `NO COMPARABLE (${mismatchText}): no se compara con la linea base`,
+      regression: null,
+    }
+  } else if (baseline !== null) {
     const before = baseline?.scenarios?.scan?.p95 ?? null
     const now = scenarios.scan?.p95 ?? null
 
     if (before === null || now === null) {
-      baselineReport = { note: 'la linea base o esta pasada no traen el p95 de scan', regression: null }
+      baselineReport = {
+        comparable: true,
+        note: 'la linea base o esta pasada no traen el p95 de scan',
+        regression: null,
+      }
     } else {
       const ratio = now / before
 
       baselineReport = {
+        comparable: true,
         note:
           `p95 de scan ${now} ms frente a ${before} ms de la linea base ` +
           `(${((ratio - 1) * 100).toFixed(1)} %)` +
@@ -888,7 +1032,12 @@ function analyse(results, options = {}) {
 
   return {
     generated_at: options.now ?? new Date().toISOString(),
+    // `git_sha` es la APLICACION medida; `harness_sha`, el commit de
+    // `load-tests/` con el que se midio. Coinciden salvo cuando el workflow mide
+    // otra version con el guion de hoy (`app_ref`), que es justo lo que hace
+    // falta para comparar dos versiones con la misma carga.
     git_sha: options.gitSha ?? null,
+    harness_sha: options.harnessSha ?? options.gitSha ?? null,
     runner: options.runner ?? null,
     k6_version: options.k6Version ?? null,
     k6_image: options.k6Image ?? null,
@@ -897,6 +1046,11 @@ function analyse(results, options = {}) {
     duration_seconds: durationSeconds,
     scan_rate: scanRate,
     offered_scan_rate: offeredRate,
+    // La forma de la carga: subida y bajada del cambio de turno (K6-2) y un
+    // fichaje por PIN cada tantos segundos y por instancia (K6-3). Las dos
+    // entran en la comparacion con la linea base.
+    ramp_seconds: rampSeconds,
+    pin_period_seconds: pinPeriodSeconds,
     // `threshold` (el de serie) juzga RNF-P-02 y RNF-P-06 contra el requisito;
     // `baseline`, contra la pasada anterior de la MISMA maquina (decision 19).
     latency_verdict_mode: mode,
@@ -936,6 +1090,13 @@ function analyse(results, options = {}) {
       batch_unreconcilable: batchUnreconcilable,
       batch_rejected: batchRejected,
       batch_impossible: impossible,
+      // Fuera del pico de RNF-P-06 (ver `RAMP_PHASE` y `PIN_PHASE`), pero dentro
+      // del cuadre de `verify-after-load.php`: son tramos que existen.
+      shift_producing_ramp: rampShifts,
+      shift_producing_pin: pinShifts,
+      pin_debounced: pinDebounced,
+      pin_resend_identical: pinResendYes,
+      pin_resend_divergent: pinResendNo,
       compliance_p95: round(compliance.p95),
       dropped_iterations: droppedTotal,
       dropped_iterations_by_scenario: droppedByScenario,
@@ -953,6 +1114,28 @@ function analyse(results, options = {}) {
         p95: round(entry.stats.p95),
         p99: round(entry.stats.p99),
       })),
+    },
+    // El fichaje por PIN (RF-AT-11): solo las respuestas atendidas del envio
+    // original; los reenvios no pagan bcrypt (PIN-02) y no dicen nada del coste.
+    pin_path: {
+      sent: pinOriginals.length,
+      samples: pinAttended.samples,
+      refusals: pinRefusals.length,
+      queueable: pinQueueable.length,
+      min: round(pinAttended.min),
+      p50: round(pinAttended.p50),
+      p95: round(pinAttended.p95),
+      p99: round(pinAttended.p99),
+      max: round(pinAttended.max),
+    },
+    // La subida y la bajada del cambio de turno (K6-2), fuera de la meseta.
+    ramp_path: {
+      seconds: rampSeconds,
+      samples: rampPath.samples,
+      shift_producing: rampShifts,
+      p50: round(rampPath.p50),
+      p95: round(rampPath.p95),
+      p99: round(rampPath.p99),
     },
     edge_limits: options.edgeLimits ?? null,
     server_metrics: options.serverMetrics ?? null,
@@ -973,6 +1156,11 @@ function analyse(results, options = {}) {
  * decision aceptada con argumento pidio medir; convertirla en codigo de salida
  * seria crear el presupuesto que esa decision dice que no hay. Se ve en el
  * informe y en `summary.json`, y no en el `exit`.
+ *
+ * **`not_comparable` sale con 2, como `unmeasurable`**: la pasada no ha podido
+ * decir si hay regresion, y un 0 ahi seria un verde que no se ha ganado. Lo que
+ * cambia es el texto, que dice POR QUE (R5-QA-02): no es que falten muestras,
+ * es que la linea base se tomo con otra carga.
  */
 function exitCodeOf(summary) {
   const statuses = Object.values(summary.verdicts).map((entry) => entry.status)
@@ -981,7 +1169,7 @@ function exitCodeOf(summary) {
     return 1
   }
 
-  return statuses.includes('unmeasurable') ? 2 : 0
+  return statuses.includes('unmeasurable') || statuses.includes('not_comparable') ? 2 : 0
 }
 
 // --- Informe legible ---------------------------------------------------------
@@ -990,13 +1178,20 @@ function formatReport(summary) {
   const lines = []
   const say = (line) => lines.push(line)
   const fmt = (value) => (value === null || value === undefined ? '     n/d' : value.toFixed(1).padStart(8))
-  const label = { pass: 'OK   ', fail: 'FALLA', unmeasurable: 'S/MED', info: 'INFO ' }
+  const label = { pass: 'OK   ', fail: 'FALLA', unmeasurable: 'S/MED', not_comparable: 'NOCMP', info: 'INFO ' }
 
   say(
     `Instancias: ${summary.instance_ids.join(', ')}   duracion: ${summary.duration_seconds} s   ` +
-      `ofrecidos: ${summary.offered_scan_rate} fichajes/s`,
+      `ofrecidos: ${summary.offered_scan_rate} fichajes/s   rampa: ${summary.ramp_seconds ?? 'n/d'} s   ` +
+      `PIN: uno cada ${summary.pin_period_seconds ?? 'n/d'} s por instancia`,
   )
-  say(`generador ${summary.k6_version ?? 'n/d'}   commit ${summary.git_sha ?? 'n/d'}   runner ${summary.runner ?? 'n/d'}`)
+  say(
+    `generador ${summary.k6_version ?? 'n/d'}   commit ${summary.git_sha ?? 'n/d'}` +
+      (summary.harness_sha !== null && summary.harness_sha !== summary.git_sha
+        ? `   guion ${summary.harness_sha}`
+        : '') +
+      `   runner ${summary.runner ?? 'n/d'}`,
+  )
   say(
     summary.latency_verdict_mode === 'baseline'
       ? 'RNF-P-02 y RNF-P-06 se juzgan contra la LINEA BASE de esta maquina, no contra el umbral (decision 19).'
@@ -1044,7 +1239,7 @@ function formatReport(summary) {
 
   say('')
 
-  for (const requirement of ['CHECKS', 'SERVICIO', 'RNF-P-02', 'RNF-P-06', 'RQ-03', 'RN-18']) {
+  for (const requirement of ['CHECKS', 'SERVICIO', 'RNF-P-02', 'RNF-P-06', 'RQ-03', 'RF-AT-11', 'RN-18']) {
     const entry = summary.verdicts[requirement]
 
     if (entry !== undefined) {
@@ -1092,6 +1287,12 @@ function formatReport(summary) {
       `(orientativo ${COMPLIANCE_BUDGET_MS} ms, ningun requisito lo fija)`,
   )
 
+  say(
+    `INFO rampa del cambio de turno: ${summary.ramp_path.samples} fichajes atendidos en la subida y la ` +
+      `bajada (${summary.ramp_path.shift_producing} con tramo), p95 ${summary.ramp_path.p95 ?? 'n/d'} ms; ` +
+      'fuera de la meseta que juzgan RNF-P-02 y RNF-P-06',
+  )
+
   if (summary.server_metrics !== null) {
     say(`INFO series del servidor (delta de la pasada): ${JSON.stringify(summary.server_metrics)}`)
   }
@@ -1102,11 +1303,22 @@ function formatReport(summary) {
 
   const failed = Object.entries(summary.verdicts).filter(([, entry]) => entry.status === 'fail')
   const unmeasurable = Object.entries(summary.verdicts).filter(([, entry]) => entry.status === 'unmeasurable')
+  const notComparable = Object.entries(summary.verdicts).filter(([, entry]) => entry.status === 'not_comparable')
 
   say('')
 
   if (failed.length > 0) {
     say(`VEREDICTO: rojo en ${failed.map(([requirement]) => requirement).join(', ')}.`)
+  } else if (notComparable.length > 0) {
+    // Antes que «no fiable»: es la causa mas concreta, y la que dice que hacer.
+    say(
+      `VEREDICTO: no comparable. ${notComparable.map(([requirement]) => requirement).join(', ')} se ` +
+        `juzgan contra la linea base y esta se tomo con otra carga (${summary.baseline?.note ?? 'n/d'}). ` +
+        'Mide con sus mismos parametros o regenera baseline.json con esta pasada.' +
+        (unmeasurable.length > 0
+          ? ` Ademas, sin datos suficientes para ${unmeasurable.map(([requirement]) => requirement).join(', ')}.`
+          : ''),
+    )
   } else if (unmeasurable.length > 0) {
     say(
       `VEREDICTO: no fiable. Sin datos suficientes para juzgar ` +
@@ -1189,7 +1401,10 @@ function main() {
     rejectionFloorMs:
       named['rejection-floor-ms'] === undefined ? undefined : Number(named['rejection-floor-ms']),
     debounceSeconds: named['debounce-seconds'] === undefined ? null : Number(named['debounce-seconds']),
+    rampSeconds: named['ramp-seconds'] === undefined ? null : Number(named['ramp-seconds']),
+    pinPeriodSeconds: named['pin-period-seconds'] === undefined ? null : Number(named['pin-period-seconds']),
     gitSha: named['git-sha'] ?? null,
+    harnessSha: named['harness-sha'] ?? null,
     runner: named.runner ?? null,
     k6Version: named['k6-version'] ?? null,
     k6Image: named['k6-image'] ?? null,

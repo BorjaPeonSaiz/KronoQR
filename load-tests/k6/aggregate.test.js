@@ -34,7 +34,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { readResults, analyse, exitCodeOf, splitCsvLine, parseTags, percentiles } = require('./aggregate.js')
+const { readResults, analyse, exitCodeOf, formatReport, splitCsvLine, parseTags, percentiles } = require('./aggregate.js')
 
 // --- Construccion de CSV como el que escribe k6 ------------------------------
 
@@ -119,12 +119,46 @@ function outOfOrderRows({ durations, status = '422' }) {
 }
 
 /**
+ * El fichaje por PIN (RF-AT-11, K6-3): escenario `scan-pin`, fase `pin` para el
+ * envio original y `pin_replay` para su reenvio identico.
+ */
+function pinRows({ durations, status = '200', phase = 'pin' }) {
+  return durations.map((durationMs) =>
+    row({
+      metric: 'http_req_duration',
+      value: durationMs,
+      scenario: 'scan-pin',
+      status,
+      tags: { requirements: 'RF-AT-11 RQ-03', phase },
+    }),
+  )
+}
+
+/** La subida y la bajada del cambio de turno (K6-2): mismo escenario, otra fase. */
+function rampRows({ count, durationMs, status = '200' }) {
+  return scanRows({ count, durationMs, status, phase: 'scan_ramp' })
+}
+
+/**
  * Una pasada VERDE, con las cifras justas por encima de cada suelo. Cada prueba
  * la muta en un solo punto.
  */
 function greenRun(overrides = {}) {
   const lines = [
     ...scanRows({ count: 60, durationMs: overrides.scanDurationMs ?? 100 }),
+    ...pinRows({ durations: overrides.pinDurations ?? Array(20).fill(250) }),
+    row({
+      metric: 'scan_outcomes',
+      value: overrides.pinShiftProducing ?? 20,
+      scenario: 'scan-pin',
+      tags: { phase: 'pin', action: 'clock_in' },
+    }),
+    row({
+      metric: 'resend_matches',
+      value: 5,
+      scenario: 'scan-pin',
+      tags: { match: 'yes', channel: 'pin' },
+    }),
     ...rejectRows({ rejectClass: 'signature', durations: Array(20).fill(30) }),
     ...rejectRows({
       rejectClass: 'unknown',
@@ -203,6 +237,21 @@ function greenRun(overrides = {}) {
     lines.push(...scanRows({ count: 1, durationMs: 100, status: overrides.extraScanStatus }))
   }
 
+  if (overrides.extraPinStatus) {
+    lines.push(...pinRows({ durations: [250], status: overrides.extraPinStatus }))
+  }
+
+  if (overrides.pinResendDivergent) {
+    lines.push(
+      row({
+        metric: 'resend_matches',
+        value: overrides.pinResendDivergent,
+        scenario: 'scan-pin',
+        tags: { match: 'no', channel: 'pin' },
+      }),
+    )
+  }
+
   return lines
 }
 
@@ -218,6 +267,8 @@ function runAnalysis(lines, options = {}) {
       scanRate: 6,
       offeredRate: 60,
       rejectionFloorMs: 25,
+      rampSeconds: 30,
+      pinPeriodSeconds: 4,
       now: '2026-09-17T00:00:00.000Z',
       ...options,
     })
@@ -392,7 +443,7 @@ test('falla SERVICIO cuando el servidor contesta 5xx a los fichajes', () => {
 
   assert.equal(statusOf(summary, 'RNF-P-06'), 'unmeasurable')
   assert.equal(statusOf(summary, 'SERVICIO'), 'fail')
-  assert.match(summary.verdicts.SERVICIO.detail, /60 de 120 fichajes/)
+  assert.match(summary.verdicts.SERVICIO.detail, /60 de 140 fichajes/)
   assert.equal(exitCodeOf(summary), 1)
 })
 
@@ -408,7 +459,7 @@ test('SERVICIO tolera un 5xx suelto en una maquina saturada', () => {
   const summary = runAnalysis(lines)
 
   assert.equal(statusOf(summary, 'SERVICIO'), 'pass')
-  assert.match(summary.verdicts.SERVICIO.detail, /1 de 301 fichajes/)
+  assert.match(summary.verdicts.SERVICIO.detail, /1 de 321 fichajes/)
 })
 
 test('SERVICIO no culpa al servidor de lo que freno el borde', () => {
@@ -547,32 +598,12 @@ test('avisa de que la cifra es orientativa cuando hay pocas muestras', () => {
   assert.equal(exitCodeOf(summary), 0)
 })
 
-// --- Linea base: avisa, no falla ---------------------------------------------
-
-test('avisa de una regresion del 26 por ciento sin cambiar el veredicto', () => {
-  const summary = runAnalysis(greenRun({ scanDurationMs: 126 }), {
-    baseline: { scenarios: { scan: { p95: 100 } } },
-  })
-
-  assert.equal(summary.baseline.regression, true)
-  assert.match(summary.baseline.note, /AVISO/)
-  assert.equal(exitCodeOf(summary), 0)
-})
-
-test('no avisa de una regresion del 24 por ciento', () => {
-  const summary = runAnalysis(greenRun({ scanDurationMs: 124 }), {
-    baseline: { scenarios: { scan: { p95: 100 } } },
-  })
-
-  assert.equal(summary.baseline.regression, false)
-  assert.equal(exitCodeOf(summary), 0)
-})
-
 // --- Modo «linea base»: el runner no juzga el umbral (decision 19) -----------
 
 /**
  * La linea base de una pasada igual a la verde: p95 de 100 ms y 60 tramos/s con
- * los mismos parametros (10 instancias, 6 fichajes/s, 1 s).
+ * la MISMA carga —10 instancias, 6 fichajes/s, 1 s de meseta, 30 s de rampa, un
+ * PIN cada 4 s y los mismos cuatro escenarios con muestras—.
  */
 const RUNNER_BASELINE = {
   git_sha: 'deadbee',
@@ -580,14 +611,67 @@ const RUNNER_BASELINE = {
   instances: 10,
   scan_rate: 6,
   duration_seconds: 1,
+  ramp_seconds: 30,
+  pin_period_seconds: 4,
   write_path: { p95: 100 },
   totals: { shift_entries_per_second: 60 },
-  scenarios: { scan: { p95: 100 } },
+  scenarios: { scan: { p95: 100 }, 'scan-pin': {}, reject: {}, 'reject-out-of-order': {} },
 }
 
 const asBaseline = (overrides = {}) => ({ ...RUNNER_BASELINE, ...overrides })
 
-test('en modo linea base da verde cuando la pasada iguala a la anterior', () => {
+/**
+ * La linea base tal y como estaba versionada antes del bloque 15: tomada con 3
+ * instancias, sin rampa, sin PIN y con los seis escenarios de entonces.
+ */
+const LEGACY_BASELINE = asBaseline({
+  instances: 3,
+  ramp_seconds: undefined,
+  pin_period_seconds: undefined,
+  scenarios: {
+    batch: {},
+    compliance: {},
+    reject: {},
+    'reject-out-of-order': {},
+    resend: {},
+    scan: { p95: 100 },
+  },
+})
+
+// --- Linea base: avisa, no falla ---------------------------------------------
+
+test('[RNF-P-02] avisa de una regresion del 26 por ciento sin cambiar el veredicto', () => {
+  const summary = runAnalysis(greenRun({ scanDurationMs: 126 }), { baseline: asBaseline() })
+
+  assert.equal(summary.baseline.comparable, true)
+  assert.equal(summary.baseline.regression, true)
+  assert.match(summary.baseline.note, /AVISO/)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('[RNF-P-02] no avisa de una regresion del 24 por ciento', () => {
+  const summary = runAnalysis(greenRun({ scanDurationMs: 124 }), { baseline: asBaseline() })
+
+  assert.equal(summary.baseline.regression, false)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('[R5-QA-02] el aviso de tendencia no calcula ninguna razon contra una linea base de otra carga', () => {
+  // p95 cinco veces el de la linea base: si se comparara, saltaria el AVISO.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 500 }), {
+    baseline: asBaseline({ instances: 3 }),
+  })
+
+  assert.equal(summary.baseline.comparable, false)
+  assert.equal(summary.baseline.regression, null)
+  assert.equal(summary.baseline.ratio, undefined)
+  assert.match(summary.baseline.note, /^NO COMPARABLE \(instancias: 3 frente a 10\)/)
+  assert.doesNotMatch(summary.baseline.note, /AVISO/)
+})
+
+// --- Modo «linea base»: juicio ------------------------------------------------
+
+test('[RNF-P-02][RNF-P-06] en modo linea base da verde cuando la pasada iguala a la anterior', () => {
   const summary = runAnalysis(greenRun(), {
     latencyVerdictMode: 'baseline',
     baseline: asBaseline(),
@@ -602,7 +686,7 @@ test('en modo linea base da verde cuando la pasada iguala a la anterior', () => 
   assert.equal(exitCodeOf(summary), 0)
 })
 
-test('en modo linea base una carga ofrecida por debajo de 50/s sigue siendo evaluable', () => {
+test('[RNF-P-06] en modo linea base una carga ofrecida por debajo de 50/s sigue siendo evaluable', () => {
   // El perfil del runner son 18/s (3 instancias) a proposito: a 60/s se satura
   // y RQ-03 y RS-03 se quedan sin muestras. La regla «sin 50/s no hay nada que
   // juzgar» es del modo umbral; aqui lo que se juzga es la tasa frente a la
@@ -619,7 +703,7 @@ test('en modo linea base una carga ofrecida por debajo de 50/s sigue siendo eval
   assert.equal(exitCodeOf(summary), 0)
 })
 
-test('en modo linea base el p95 que empeora un 26 por ciento es rojo', () => {
+test('[RNF-P-02] en modo linea base el p95 que empeora un 26 por ciento es rojo', () => {
   const summary = runAnalysis(greenRun({ scanDurationMs: 126 }), {
     latencyVerdictMode: 'baseline',
     baseline: asBaseline(),
@@ -630,7 +714,7 @@ test('en modo linea base el p95 que empeora un 26 por ciento es rojo', () => {
   assert.equal(exitCodeOf(summary), 1)
 })
 
-test('en modo linea base una caida del 21 por ciento en la tasa es roja', () => {
+test('[RNF-P-06] en modo linea base una caida del 21 por ciento en la tasa es roja', () => {
   // 47 tramos/s frente a los 60 de la linea base: por debajo del 80 %.
   const summary = runAnalysis(greenRun({ shiftProducing: 47 }), {
     latencyVerdictMode: 'baseline',
@@ -643,20 +727,6 @@ test('en modo linea base una caida del 21 por ciento en la tasa es roja', () => 
   assert.equal(exitCodeOf(summary), 1)
 })
 
-test('en modo linea base una pasada con otros parametros no es evaluable', () => {
-  // Comparar un p95 de 120 s de carga con el de 1 s es comparar dos cosas
-  // distintas y llamarlo regresion.
-  const summary = runAnalysis(greenRun(), {
-    latencyVerdictMode: 'baseline',
-    baseline: asBaseline({ duration_seconds: 120 }),
-  })
-
-  assert.equal(statusOf(summary, 'RNF-P-02'), 'unmeasurable')
-  assert.equal(statusOf(summary, 'RNF-P-06'), 'unmeasurable')
-  assert.match(summary.verdicts['RNF-P-02'].detail, /duracion: 120 frente a 1/)
-  assert.equal(exitCodeOf(summary), 2)
-})
-
 test('en modo linea base sin linea base no hay veredicto, y lo dice', () => {
   const summary = runAnalysis(greenRun(), { latencyVerdictMode: 'baseline' })
 
@@ -666,7 +736,7 @@ test('en modo linea base sin linea base no hay veredicto, y lo dice', () => {
   assert.equal(exitCodeOf(summary), 2)
 })
 
-test('en modo linea base un rechazo al empleado sigue siendo rojo', () => {
+test('[RNF-P-06] en modo linea base un rechazo al empleado sigue siendo rojo', () => {
   // Lo que se relaja contra la linea base es la CAPACIDAD, no el trato al
   // empleado: un 403 sobre un fichaje valido es una jornada perdida en
   // cualquier maquina.
@@ -674,6 +744,176 @@ test('en modo linea base un rechazo al empleado sigue siendo rojo', () => {
     latencyVerdictMode: 'baseline',
     baseline: asBaseline(),
   })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
+  assert.match(summary.verdicts['RNF-P-06'].detail, /rechazos al empleado 1/)
+})
+
+// --- R5-QA-02: una linea base de otra carga no se compara --------------------
+
+/**
+ * Lo que dispara «NO COMPARABLE», uno por caso. El 8 frente a 3 es el caso real
+ * de la etiqueta de la 2.2.0; los demas son las otras formas de cambiar la
+ * carga sin cambiar el numero de instancias.
+ */
+const NOT_COMPARABLE_CASES = [
+  ['instancias: la etiqueta lanzo 8 y la linea base era de 3', { instances: 3 }, { instances: 8 }, /instancias: 3 frente a 8/],
+  ['duracion: 120 s frente a 1 s', { duration_seconds: 120 }, {}, /duracion: 120 frente a 1/],
+  ['rampa: la linea base no tenia', { ramp_seconds: undefined }, {}, /rampa: n\/d frente a 30/],
+  ['PIN: otro periodo', { pin_period_seconds: 8 }, {}, /periodo del PIN: 8 frente a 4/],
+  ['escenarios: la linea base no tenia scan-pin', { scenarios: { scan: { p95: 100 }, reject: {}, 'reject-out-of-order': {} } }, {}, /escenarios: reject reject-out-of-order scan frente a reject reject-out-of-order scan scan-pin/],
+]
+
+for (const [name, baselineOverrides, runOverrides, mismatch] of NOT_COMPARABLE_CASES) {
+  test(`[R5-QA-02][RNF-P-02][RNF-P-06] declara NO COMPARABLE y no compara: ${name}`, () => {
+    const summary = runAnalysis(greenRun(), {
+      latencyVerdictMode: 'baseline',
+      baseline: asBaseline(baselineOverrides),
+      ...runOverrides,
+    })
+
+    assert.equal(statusOf(summary, 'RNF-P-02'), 'not_comparable')
+    assert.equal(statusOf(summary, 'RNF-P-06'), 'not_comparable')
+    assert.match(summary.verdicts['RNF-P-02'].detail, mismatch)
+    assert.match(summary.verdicts['RNF-P-02'].detail, /^NO COMPARABLE con la linea base/)
+    assert.doesNotMatch(summary.verdicts['RNF-P-02'].detail, /frente a un maximo de/)
+    assert.equal(exitCodeOf(summary), 2)
+  })
+}
+
+test('[R5-QA-02] la linea base versionada antes del bloque 15 no es comparable con la carga de hoy', () => {
+  const summary = runAnalysis(greenRun(), {
+    instances: 3,
+    offeredRate: 18,
+    latencyVerdictMode: 'baseline',
+    baseline: LEGACY_BASELINE,
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'not_comparable')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /rampa: n\/d frente a 30; periodo del PIN: n\/d frente a 4; escenarios:/)
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('[R5-QA-02] el veredicto legible dice «no comparable» y no «no fiable»', () => {
+  const summary = runAnalysis(greenRun(), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline({ instances: 3 }),
+    instances: 8,
+  })
+
+  const report = formatReport(summary)
+
+  assert.match(report, /NOCMP RNF-P-02: NO COMPARABLE/)
+  assert.match(report, /VEREDICTO: no comparable\. RNF-P-02, RNF-P-06 se juzgan contra la linea base/)
+  assert.doesNotMatch(report, /VEREDICTO: no fiable/)
+})
+
+test('[R5-QA-02][RNF-P-06] una linea base no comparable no esconde un rechazo al empleado', () => {
+  const summary = runAnalysis(greenRun({ extraScanStatus: '403' }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline({ instances: 3 }),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
+  assert.match(summary.verdicts['RNF-P-06'].detail, /rechazos al empleado 1/)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('[R5-QA-02] publica la forma de la carga para que la siguiente pasada pueda compararse', () => {
+  const summary = runAnalysis(greenRun(), { gitSha: 'abc1234', harnessSha: 'def5678' })
+
+  assert.equal(summary.ramp_seconds, 30)
+  assert.equal(summary.pin_period_seconds, 4)
+  assert.equal(summary.git_sha, 'abc1234')
+  assert.equal(summary.harness_sha, 'def5678')
+})
+
+// --- RF-AT-11: el fichaje por PIN bajo carga (K6-3) --------------------------
+
+test('[RF-AT-11] da verde cuando todos los PIN correctos se atienden', () => {
+  const summary = runAnalysis(greenRun())
+
+  assert.equal(statusOf(summary, 'RF-AT-11'), 'pass')
+  assert.equal(summary.pin_path.samples, 20)
+  assert.equal(summary.totals.shift_producing_pin, 20)
+  assert.equal(summary.totals.pin_resend_identical, 5)
+})
+
+test('[RF-AT-11] un 422 a un PIN correcto es una persona sin tarjeta que no ha podido fichar', () => {
+  const summary = runAnalysis(greenRun({ extraPinStatus: '422' }))
+
+  assert.equal(statusOf(summary, 'RF-AT-11'), 'fail')
+  assert.match(summary.verdicts['RF-AT-11'].detail, /1 rechazados al empleado/)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('[RF-AT-11][RQ-03] un reenvio por PIN con otra respuesta es rojo en los dos', () => {
+  const summary = runAnalysis(greenRun({ pinResendDivergent: 1 }))
+
+  assert.equal(statusOf(summary, 'RF-AT-11'), 'fail')
+  assert.equal(statusOf(summary, 'RQ-03'), 'fail')
+})
+
+test('[RF-AT-11] un 429 al PIN se encola y no es un rechazo', () => {
+  const summary = runAnalysis(greenRun({ extraPinStatus: '429' }))
+
+  assert.equal(statusOf(summary, 'RF-AT-11'), 'pass')
+  assert.equal(summary.pin_path.queueable, 1)
+})
+
+test('[RF-AT-11] con 19 PIN atendidos no hay veredicto', () => {
+  const summary = runAnalysis(greenRun({ pinDurations: Array(19).fill(250) }))
+
+  assert.equal(statusOf(summary, 'RF-AT-11'), 'unmeasurable')
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('[RF-AT-11][RNF-P-02] el bcrypt del PIN no entra en el p95 del fichaje por tarjeta', () => {
+  // Dos segundos por PIN: si se mezclara con `/scan`, el p95 de 60 fichajes de
+  // 100 ms mas 20 de 2000 ms saldria muy por encima de 150 ms.
+  const summary = runAnalysis(greenRun({ pinDurations: Array(20).fill(2000) }))
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  assert.equal(summary.write_path.p95, 100)
+  assert.equal(summary.pin_path.p95, 2000)
+})
+
+test('[RF-AT-11] un 5xx en el PIN cuenta para SERVICIO', () => {
+  // 3 de 83 fichajes que llegaron al servidor (60 por tarjeta y 23 por PIN): un 3,6 %, por encima del 1 %.
+  const lines = [...greenRun(), ...pinRows({ durations: [250, 250, 250], status: '503' })]
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'SERVICIO'), 'fail')
+  assert.match(summary.verdicts.SERVICIO.detail, /3 de 83 fichajes/)
+})
+
+// --- K6-2: la rampa del cambio de turno --------------------------------------
+
+test('[RNF-P-06] la rampa no infla la tasa de la meseta', () => {
+  // 49 tramos en la meseta de 1 s y 100 mas en la rampa: sigue por debajo de 50/s.
+  const lines = [
+    ...greenRun({ shiftProducing: 49 }),
+    ...rampRows({ count: 100, durationMs: 80 }),
+    row({ metric: 'scan_outcomes', value: 100, scenario: 'scan', tags: { phase: 'scan_ramp', action: 'clock_in' } }),
+  ]
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
+  assert.match(summary.verdicts['RNF-P-06'].detail, /49 tramos en tiempo real en 1 s/)
+  assert.equal(summary.totals.shift_producing_ramp, 100)
+})
+
+test('[RNF-P-02] la latencia de la rampa no entra en el p95 de la meseta', () => {
+  const lines = [...greenRun(), ...rampRows({ count: 60, durationMs: 900 })]
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  assert.equal(summary.ramp_path.p95, 900)
+})
+
+test('[RNF-P-06] un rechazo en la rampa es un rechazo al empleado', () => {
+  const lines = [...greenRun(), ...rampRows({ count: 1, durationMs: 80, status: '403' })]
+  const summary = runAnalysis(lines)
 
   assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
   assert.match(summary.verdicts['RNF-P-06'].detail, /rechazos al empleado 1/)
