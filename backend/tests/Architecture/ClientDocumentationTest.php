@@ -351,6 +351,9 @@ it('compara la orden y no el comentario que la acompaña', function (string $lin
     'almohadilla entre comillas simples' => ["sed -n 's/^X=\\([^ #]*\\).*/\\1/p' .env", "sed -n 's/^X=\\([^ #]*\\).*/\\1/p' .env"],
     'almohadilla entre comillas dobles' => ['echo "paso # 2"   # aviso', 'echo "paso # 2"'],
     'almohadilla pegada a la palabra' => ['echo ${VERSION#v}', 'echo ${VERSION#v}'],
+    'comilla simple escapada fuera de comillas' => ["echo It\\'s ok   # c", "echo It\\'s ok"],
+    'comilla doble escapada dentro de comillas dobles' => ['echo "a \" b"  # c', 'echo "a \" b"'],
+    'almohadilla escapada' => ['echo \# no es comentario', 'echo \# no es comentario'],
 ])->group('RF-PD-02');
 
 it('da las mismas ordenes a dos guias que solo difieren en el idioma de sus comentarios', function (): void {

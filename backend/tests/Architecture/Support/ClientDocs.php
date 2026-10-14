@@ -630,6 +630,7 @@ final class ClientDocs
      * principio de linea o detras de un espacio. Por eso no lo es el de
      * `sed 's/^X=\([^ #]*\)//'` —dentro de comillas simples— ni el de
      * `${VAR#prefijo}` o `url#ancla` —pegado a lo anterior—.
+     * Y fuera de comillas simples la barra invertida escapa: `It\'s`, `"a \" b"`.
      */
     public static function withoutShellComment(string $line): string
     {
@@ -639,24 +640,39 @@ final class ClientDocs
         for ($at = 0; $at < $length; $at++) {
             $char = $line[$at];
 
-            if ($quote !== null) {
-                $quote = $char === $quote ? null : $quote;
+            // Fuera de comillas simples, `\` escapa el caracter siguiente: ni
+            // `It\'s` abre comillas ni `"a \" b"` las cierra antes de tiempo.
+            // Dentro de comillas simples la barra es literal, como en bash.
+            if ($char === '\\' && $quote !== '\'') {
+                $at++;
 
                 continue;
             }
 
-            if ($char === '\'' || $char === '"') {
-                $quote = $char;
-
-                continue;
-            }
-
-            if ($char === '#' && ($at === 0 || ctype_space($line[$at - 1]))) {
+            if ($quote === null && self::startsComment($line, $at)) {
                 return rtrim(substr($line, 0, $at));
             }
+
+            $quote = self::quoteAfter($quote, $char);
         }
 
         return rtrim($line);
+    }
+
+    /** Un `#` fuera de comillas que empieza palabra. */
+    private static function startsComment(string $line, int $at): bool
+    {
+        return $line[$at] === '#' && ($at === 0 || ctype_space($line[$at - 1]));
+    }
+
+    /** La comilla abierta tras leer `$char`, o `null` si no queda ninguna. */
+    private static function quoteAfter(?string $quote, string $char): ?string
+    {
+        if ($quote !== null) {
+            return $char === $quote ? null : $quote;
+        }
+
+        return $char === '\'' || $char === '"' ? $char : null;
     }
 
     /**
