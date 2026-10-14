@@ -56,24 +56,13 @@ const CUADROS_DE_MANDO = [
 const FUENTES_PROVISIONADAS = ['kronoqr-prometheus', 'kronoqr-loki', 'kronoqr-tempo'];
 
 /**
- * Series que no salen del §8.2 y que las consultas si pueden usar: las del
- * anfitrion, las de la sonda del borde y la marca del actualizador.
- *
- * Lista corta y explicita: cada nombre de aqui es una serie que emite algo que
- * no es la aplicacion, y ampliarla tiene que costar una decision.
+ * Series que no salen del §8.2 y que las consultas si pueden usar: la lista vive
+ * en {@see Doc82Series::EXTERNAL}, porque la comparte con la prueba de que cada
+ * metrica citada en una guia tiene panel.
  *
  * @var list<string>
  */
-const SERIES_EXTERNAS = [
-    'node_filesystem_avail_bytes',
-    'node_filesystem_size_bytes',
-    'probe_success',
-    'probe_duration_seconds',
-    'probe_ssl_earliest_cert_expiry',
-    'up',
-    'kronoqr_maintenance_active',
-    'kronoqr_maintenance_since_timestamp_seconds',
-];
+const SERIES_EXTERNAS = Doc82Series::EXTERNAL;
 
 /**
  * Palabras de PromQL que no son nombres de serie.
