@@ -427,6 +427,110 @@ jobs:
           bash infra/scripts/restore-drill.sh --mode database
           q "DROP DATABASE IF EXISTS fichaje_destino" >/dev/null
 
+      - name: V6-PL-03 — un SIGTERM a restore.sh deja SIEMPRE una base de produccion
+        # restore.sh atrapa INT, TERM y HUP. Con un cluster real y la copia buena:
+        #   (a) SIGTERM DENTRO de la ventana critica (entre los dos ALTER DATABASE ...
+        #       RENAME): se difiere, el intercambio termina y el script sale con 143
+        #       diciendo que la restauracion SI se ha completado.
+        #   (b) SIGTERM FUERA (durante pg_restore): se elimina la base de trabajo y
+        #       la de destino sigue exactamente como estaba.
+        # Para mantener abierta la ventana sin tocar el script se antepone al PATH un
+        # `psql`/`pg_restore` que esperan unos segundos y delegan en los de verdad.
+        env:
+          PGHOST: ${{ env.DB_HOST }}
+          PGPORT: ${{ env.DB_PORT }}
+          PGUSER: ${{ env.DB_USERNAME }}
+          PGPASSWORD: ${{ env.DB_PASSWORD }}
+          # Un rol que no existe en el cluster: restore.sh solo comprueba los privilegios
+          # del rol de la aplicacion cuando existe, y el superusuario de este job no
+          # cumple "no puede tocar audit_log".
+          DB_USERNAME: fichaje_sin_rol_de_aplicacion
+        run: |
+          set -euo pipefail
+          q() { psql -d postgres -Atqc "$1"; }
+          en_destino() { psql -d fichaje_destino -Atqc "$1"; }
+          copia="$(ls "$BACKUP_PATH"/daily/*.dump.enc | tail -n 1)"
+          real_dir="$(dirname "$(command -v psql)")"
+          mkdir -p /tmp/stub-senal
+          cat >/tmp/stub-senal/pausa.sh <<'STUB'
+          #!/bin/sh
+          nombre="$(basename "$0")"
+          case "${nombre}:${KQ_STUB_PAUSA:-}:$*" in
+            psql:renombrado:*"RENAME TO"* | pg_restore:restauracion:*--dbname*)
+              : >"${KQ_STUB_BANDERA}"
+              sleep "${KQ_STUB_SEGUNDOS:-6}"
+              ;;
+          esac
+          exec "${KQ_STUB_REAL_DIR}/${nombre}" "$@"
+          STUB
+          chmod +x /tmp/stub-senal/pausa.sh
+          ln -sf pausa.sh /tmp/stub-senal/psql
+          ln -sf pausa.sh /tmp/stub-senal/pg_restore
+
+          # Lanza restore.sh con la pausa pedida, espera a que este DENTRO de ella, manda
+          # SIGTERM al `bash` del script y devuelve su codigo de salida en $codigo.
+          restaurar_y_cortar() {
+            local pausa="$1" log="$2" pid
+            rm -f /tmp/kq-bandera
+            PATH="/tmp/stub-senal:$PATH" KQ_STUB_PAUSA="$pausa" KQ_STUB_BANDERA=/tmp/kq-bandera \
+              KQ_STUB_REAL_DIR="$real_dir" KQ_STUB_SEGUNDOS=6 \
+              bash infra/scripts/restore.sh --file "$copia" --database fichaje_destino --yes >"$log" 2>&1 &
+            pid=$!
+            for _ in $(seq 1 240); do
+              [ -e /tmp/kq-bandera ] && break
+              kill -0 "$pid" 2>/dev/null || break
+              sleep 0.5
+            done
+            [ -e /tmp/kq-bandera ] || { cat "$log"; echo "::error::restore.sh no llego a la pausa «$pausa»: la prueba no prueba nada."; exit 1; }
+            kill -TERM "$pid"
+            codigo=0
+            wait "$pid" || codigo=$?
+            cat "$log"
+          }
+
+          limpiar() {
+            local base
+            for base in $(q "SELECT datname FROM pg_database WHERE datname = 'fichaje_destino' OR datname LIKE 'fichaje_destino_%'"); do
+              q "DROP DATABASE \"$base\"" >/dev/null
+            done
+          }
+
+          # (a) DENTRO de la ventana critica.
+          limpiar
+          q "CREATE DATABASE fichaje_destino" >/dev/null
+          en_destino "CREATE TABLE marca_previa (x int)" >/dev/null
+          restaurar_y_cortar renombrado /tmp/senal-ventana.log
+          [ "$codigo" -eq 143 ] || { echo "::error::SIGTERM dentro de la ventana debia salir con 143 y salio con $codigo."; exit 1; }
+          grep -q 'Restauracion COMPLETADA antes de atender la senal TERM' /tmp/senal-ventana.log
+          test "$(q "SELECT count(*) FROM pg_database WHERE datname = 'fichaje_destino'")" = "1" ||
+            { echo "::error::Tras la senal no hay base de produccion."; exit 1; }
+          test "$(q "SELECT count(*) FROM pg_database WHERE datname LIKE 'fichaje_destino\_restore\_%'")" = "0" ||
+            { echo "::error::Ha quedado la base de trabajo."; exit 1; }
+          test "$(q "SELECT count(*) FROM pg_database WHERE datname LIKE 'fichaje_destino\_pre\_restore\_%'")" = "1" ||
+            { echo "::error::El intercambio no se completo: falta la base anterior apartada."; exit 1; }
+          test "$(en_destino "SELECT count(*) FROM employees")" = "500" ||
+            { echo "::error::La base de produccion no es la restaurada."; exit 1; }
+          test "$(en_destino "SELECT count(*) FROM pg_class WHERE relname = 'marca_previa'")" = "0"
+
+          # (b) FUERA de la ventana: durante pg_restore.
+          q "DROP DATABASE IF EXISTS fichaje_destino" >/dev/null
+          for base in $(q "SELECT datname FROM pg_database WHERE datname LIKE 'fichaje_destino\_%'"); do
+            q "DROP DATABASE \"$base\"" >/dev/null
+          done
+          q "CREATE DATABASE fichaje_destino" >/dev/null
+          en_destino "CREATE TABLE marca_previa (x int)" >/dev/null
+          restaurar_y_cortar restauracion /tmp/senal-fuera.log
+          [ "$codigo" -eq 143 ] || { echo "::error::SIGTERM durante pg_restore debia salir con 143 y salio con $codigo."; exit 1; }
+          test "$(q "SELECT count(*) FROM pg_database WHERE datname = 'fichaje_destino'")" = "1"
+          test "$(q "SELECT count(*) FROM pg_database WHERE datname LIKE 'fichaje_destino\_%'")" = "0" ||
+            { echo "::error::Ha quedado una base de trabajo o apartada tras interrumpir pg_restore."; exit 1; }
+          test "$(en_destino "SELECT count(*) FROM pg_class WHERE relname = 'marca_previa'")" = "1" ||
+            { echo "::error::La base de destino ha cambiado aunque no se llego a intercambiar."; exit 1; }
+          test "$(en_destino "SELECT count(*) FROM pg_class WHERE relname = 'employees'")" = "0"
+          grep -q 'sigue como estaba' /tmp/senal-fuera.log
+
+          limpiar
+
       - name: SIMULACRO — restaurar en contenedor limpio y validar (RNF-D-05)
         run: bash infra/scripts/restore-drill.sh --timeout 120
 
