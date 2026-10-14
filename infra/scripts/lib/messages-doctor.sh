@@ -57,6 +57,10 @@ que diagnosticar · 6 el diagnostico ha encontrado al menos un fallo. Los
 codigos 4 y 5 no los usa este script: no escribe ni deshace nada. Tabla
 completa en docs/cliente/operacion.md."
 
+KQ_MSG_ES[d_c_orphan_restore_db]="Hay bases de una restauracion que no termino: %s"
+KQ_MSG_ES[d_w_orphan_restore_db]="llevan una copia entera de los datos personales. Si no hay ninguna restauracion en marcha, eliminalas con 'docker compose exec postgres psql -U <migrador> -d postgres -c \"DROP DATABASE \\\"<nombre>\\\" WITH (FORCE)\"' (%s)."
+KQ_MSG_ES[d_c_vlan_not_kiosks]="KIOSK_VLAN_CIDR=%s cubre origenes que no parecen tablets: %s"
+KQ_MSG_ES[d_w_vlan_not_kiosks]="piden el panel o el portal pero Nginx los cuenta como VLAN de quioscos, asi que tienen el limite de 600 r/m en el fichaje. Estrecha KIOSK_VLAN_CIDR en %s al rango de las tablets y recrea nginx."
 KQ_MSG_ES[d_title]="KronoQR — diagnostico (doctor.sh)"
 
 KQ_MSG_ES[d_c_installation]="Instalacion localizada en %s"
@@ -201,6 +205,10 @@ diagnose · 6 the diagnostic found at least one failure. Codes 4 and 5 are
 not used by this script: it writes and undoes nothing. Full table in
 docs/cliente/operacion.md."
 
+KQ_MSG_EN[d_c_orphan_restore_db]="There are databases from a restore that did not finish: %s"
+KQ_MSG_EN[d_w_orphan_restore_db]="they hold a whole copy of the personal data. If no restore is running, drop them with 'docker compose exec postgres psql -U <migrator> -d postgres -c \"DROP DATABASE \\\"<name>\\\" WITH (FORCE)\"' (%s)."
+KQ_MSG_EN[d_c_vlan_not_kiosks]="KIOSK_VLAN_CIDR=%s covers origins that do not look like tablets: %s"
+KQ_MSG_EN[d_w_vlan_not_kiosks]="they ask for the panel or the portal but Nginx counts them as the kiosk VLAN, so they get the 600 r/m clocking limit. Narrow KIOSK_VLAN_CIDR in %s to the tablets' range and recreate nginx."
 KQ_MSG_EN[d_title]="KronoQR — diagnostic (doctor.sh)"
 
 KQ_MSG_EN[d_c_installation]="Installation located at %s"
