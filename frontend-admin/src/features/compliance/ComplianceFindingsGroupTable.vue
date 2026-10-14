@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Los hallazgos de UNA regla de la vista de cumplimiento (RF-PA-06).
 //
-// VIRTUALIZADA A PARTIR DE UN UMBRAL (RC1), con el mismo mecanismo que
-// `features/incidents/IncidentTable.vue` y `features/live/PresenceTable.vue`.
+// VIRTUALIZADA A PARTIR DE UN UMBRAL (RC1), con `useVirtualRows`, el mismo
+// mecanismo de las demas tablas largas del panel.
 // El contrato no pagina esta vista y el rango admite meses de historico de toda
 // la plantilla: con miles de hallazgos, pintarlos todos —cada uno con tres
 // duraciones y un periodo formateados— bloquea el navegador. Solo se calculan y
@@ -23,16 +23,18 @@
 // lleva).
 //
 // COSTE: la virtualizacion rompe la impresion y el «buscar en la pagina» con
-// muchos hallazgos; para eso esta la exportacion (RF-IN-04).
+// muchos hallazgos. Esta vista no tiene exportacion: se acota con los filtros
+// de regla y departamento o un periodo mas corto, y el caso concreto se abre
+// por el nombre de la persona.
 import { formatCivilDate } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
-import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { INCIDENTS_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import type { ComplianceFinding } from '@/shared/api/types'
+import { useVirtualRows } from '@/shared/virtualization/useVirtualRows'
 import {
   differenceLabelKey,
   findingPeriod,
@@ -47,10 +49,11 @@ const props = defineProps<{
   timeZone: string
 }>()
 
-/** A partir de cuantas filas merece la pena no pintarlas todas. */
-const VIRTUALIZE_FROM = 80
-/** Alto fijo de fila: nombre y codigo en dos lineas. */
-const ROW_HEIGHT_PX = 64
+/**
+ * Alto fijo de fila: nombre y codigo en dos lineas, y periodo y etiqueta de turno
+ * abierto en otras dos (la etiqueta va debajo del periodo, nunca a su lado).
+ */
+const ROW_HEIGHT_PX = 72
 
 const { t, locale } = useI18n()
 const session = useSessionStore()
@@ -110,48 +113,19 @@ const findings = computed(() => props.group.findings)
 
 const scroller = ref<HTMLElement | null>(null)
 
-const virtual = computed(() => findings.value.length >= VIRTUALIZE_FROM)
-
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: virtual.value ? findings.value.length : 0,
-    getScrollElement: () => scroller.value,
-    estimateSize: () => ROW_HEIGHT_PX,
-    overscan: 10,
-  })),
-)
-
-interface VisibleRow {
-  row: FindingRow
-  index: number
-  start: number
-  key: string
-}
-
-function visible(finding: ComplianceFinding, index: number, start: number): VisibleRow {
-  return { row: rowOf(finding), index, start, key: String(index) }
-}
-
-const visibleRows = computed<VisibleRow[]>(() => {
-  if (!virtual.value) {
-    return findings.value.map((finding, index) => visible(finding, index, index * ROW_HEIGHT_PX))
-  }
-
-  const rows: VisibleRow[] = []
-
-  for (const item of virtualizer.value.getVirtualItems()) {
-    const finding = findings.value[item.index]
-
-    if (finding !== undefined) {
-      rows.push(visible(finding, item.index, item.start))
-    }
-  }
-
-  return rows
+const { visibleRows, totalHeight } = useVirtualRows(findings, {
+  rowHeight: ROW_HEIGHT_PX,
+  scroller,
 })
 
-const totalHeight = computed(() =>
-  virtual.value ? virtualizer.value.getTotalSize() : findings.value.length * ROW_HEIGHT_PX,
+/** Lo que pinta cada fila visible: `rowOf` se invoca solo para ellas. */
+const entries = computed(() =>
+  visibleRows.value.map((visible) => ({
+    row: rowOf(visible.item),
+    index: visible.index,
+    start: visible.start,
+    key: visible.key,
+  })),
 )
 
 const caption = computed(() =>
@@ -162,7 +136,7 @@ const caption = computed(() =>
 )
 
 const GRID_TEMPLATE =
-  'minmax(12rem,1.8fr) minmax(10rem,1.5fr) repeat(3, minmax(6rem,1fr)) minmax(7rem,1fr)'
+  'minmax(12rem,1.8fr) minmax(13rem,1.5fr) repeat(3, minmax(6rem,1fr)) minmax(7rem,1fr)'
 </script>
 
 <template>
@@ -211,7 +185,7 @@ const GRID_TEMPLATE =
 
       <div role="rowgroup" class="relative" :style="{ height: `${totalHeight}px` }">
         <div
-          v-for="entry of visibleRows"
+          v-for="entry of entries"
           :key="entry.key"
           role="row"
           :aria-rowindex="entry.index + 2"
@@ -236,12 +210,12 @@ const GRID_TEMPLATE =
             </span>
           </span>
 
-          <span role="cell">
-            <span>{{ entry.row.period }}</span>
+          <span role="cell" class="flex min-w-0 flex-col items-start">
+            <span class="whitespace-nowrap">{{ entry.row.period }}</span>
             <span
               v-if="entry.row.finding.has_open_shift"
               data-test="finding-open-shift"
-              class="ml-2 inline-block rounded-full bg-kq-warning-soft px-2 py-0.5 text-sm font-semibold text-kq-warning"
+              class="mt-1 inline-block whitespace-nowrap rounded-full bg-kq-warning-soft px-2 py-0.5 text-sm font-semibold text-kq-warning"
             >
               <span aria-hidden="true">⏳</span>
               {{ t('complianceSummary.table.openShift') }}

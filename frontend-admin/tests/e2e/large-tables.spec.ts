@@ -90,6 +90,28 @@ const BIG_REPORT: PeriodReport = {
   meta: { ...PERIOD_REPORT.meta, row_count: REPORT_ROWS },
 }
 
+/** Informe agrupado por centro: sin columna de sujeto, la rejilla mas corta. */
+const SITE_REPORT: PeriodReport = {
+  ...PERIOD_REPORT,
+  group_by: 'site',
+  data: Array.from({ length: 200 }, (_, index) => {
+    const row = reportRow(index + 1)
+
+    return {
+      ...row,
+      subject: {
+        kind: 'site',
+        employee_uuid: null,
+        employee_code: null,
+        full_name: null,
+        department_id: null,
+        label: null,
+      },
+    }
+  }),
+  meta: { ...PERIOD_REPORT.meta, row_count: 200 },
+}
+
 const BIG_SUMMARY = {
   ...COMPLIANCE_SUMMARY,
   data: Array.from({ length: FINDINGS }, (_, index) => finding(index + 1)),
@@ -103,11 +125,11 @@ const BIG_SUMMARY = {
 }
 
 /** Sirve el volumen grande DESPUES del doble general: la ultima ruta registrada gana. */
-async function serveBigData(page: Page): Promise<void> {
+async function serveBigData(page: Page, report: PeriodReport = BIG_REPORT): Promise<void> {
   await stubManagementApi(page)
   await page.route(
     (url) => url.pathname === '/api/v1/reports/period',
-    (route) => route.fulfill({ status: 200, json: BIG_REPORT }),
+    (route) => route.fulfill({ status: 200, json: report }),
   )
   await page.route(
     (url) => url.pathname === '/api/v1/compliance/summary',
@@ -236,6 +258,64 @@ for (const width of [1024, 768] as const) {
   )
 }
 
+for (const [label, report] of [
+  ['con columna de sujeto', BIG_REPORT],
+  ['sin columna de sujeto', SITE_REPORT],
+] as const) {
+  for (const width of [1024, 1920] as const) {
+    test(
+      `las filas del informe no se salen de la cabecera ${label} a ${width} px`,
+      { tag: ['@RF-IN-01', '@RF-IN-03'] },
+      async ({ page }) => {
+        await page.setViewportSize({ width, height: 768 })
+        await observeLongTasks(page)
+        await serveBigData(page, report)
+        await logIn(page)
+        await requestReport(page)
+
+        const region = page.getByTestId('period-report-table')
+        const widths = await region.evaluate((element) => {
+          const header = element.querySelector<HTMLElement>('[role="row"][aria-rowindex="1"]')
+          const rows = Array.from(element.querySelectorAll<HTMLElement>('[data-test="report-row"]'))
+
+          if (header === null || rows.length === 0) {
+            throw new Error('la tabla no tiene cabecera o filas')
+          }
+
+          const headerRight = header.getBoundingClientRect().right
+
+          // Lo que sobra de las columnas ya resueltas (pistas + huecos + relleno) sobre la caja de
+          // la fila: 0 si la rejilla cabe, y positivo si es mas ancha que la tabla.
+          const spill = (row: HTMLElement): number => {
+            const style = getComputedStyle(row)
+            const tracks = style.gridTemplateColumns.split(' ').map(Number.parseFloat)
+            const sum = tracks.reduce((total, track) => total + track, 0)
+            const gaps = (tracks.length - 1) * Number.parseFloat(style.columnGap)
+            const padding =
+              Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight)
+
+            return sum + gaps + padding - row.clientWidth
+          }
+
+          return {
+            headerSpill: spill(header),
+            rowSpills: rows.map(spill),
+            overshoot: Math.max(
+              ...rows.map((row) => row.getBoundingClientRect().right - headerRight),
+            ),
+          }
+        })
+
+        // La rejilla cabe en la caja de la cabecera y en la de cada fila, y ninguna
+        // fila termina mas a la derecha que la cabecera fija.
+        expect(widths.headerSpill).toBeLessThanOrEqual(1)
+        expect(Math.max(...widths.rowSpills)).toBeLessThanOrEqual(1)
+        expect(widths.overshoot).toBeLessThanOrEqual(0.5)
+      },
+    )
+  }
+}
+
 test(
   'los 3 000 hallazgos de cumplimiento quedan interactivos en menos de 1,5 s, sin tareas largas y sin meter las filas en el DOM',
   { tag: ['@RF-PA-06', '@RNF-P-04'] },
@@ -297,3 +377,46 @@ for (const width of [1024, 768] as const) {
     },
   )
 }
+
+test(
+  'una fila semanal con turno abierto cabe en su altura fija a 768 px',
+  { tag: ['@RF-PA-06'] },
+  async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 768 })
+    await stubManagementApi(page)
+    await logIn(page)
+    await page.goto('/compliance')
+
+    const row = page
+      .getByTestId('compliance-finding-row')
+      .filter({ has: page.getByTestId('finding-open-shift') })
+
+    await expect(row).toBeVisible()
+    await expect(row).toContainText('9 mar 2026 – 15 mar 2026')
+
+    // Nada de lo que hay dentro de la fila (periodo, etiqueta, enlaces) sobresale
+    // de su caja, ni por abajo ni por la derecha de su celda.
+    const overflow = await row.evaluate((element) => {
+      const box = element.getBoundingClientRect()
+      const escapes: string[] = []
+
+      for (const child of Array.from(element.querySelectorAll<HTMLElement>('*'))) {
+        const rect = child.getBoundingClientRect()
+
+        if (rect.bottom > box.bottom + 0.5 || rect.top < box.top - 0.5) {
+          escapes.push(`${child.tagName} vertical: ${child.textContent?.trim() ?? ''}`)
+        }
+      }
+
+      for (const cell of Array.from(element.querySelectorAll<HTMLElement>('[role="cell"]'))) {
+        if (cell.scrollWidth > cell.clientWidth + 0.5) {
+          escapes.push(`celda horizontal: ${cell.textContent?.trim() ?? ''}`)
+        }
+      }
+
+      return escapes
+    })
+
+    expect(overflow).toEqual([])
+  },
+)
