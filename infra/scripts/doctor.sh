@@ -380,6 +380,7 @@ run_delegated_doctor() {
   check_kiosk_vlan
   check_orphan_restore_databases
   check_redis_restart_loop
+  check_prometheus_rules
   check_app_storage
   say ""
 
@@ -452,6 +453,7 @@ run_external_checks() {
   check_kiosk_vlan
   check_orphan_restore_databases
   check_redis_restart_loop
+  check_prometheus_rules
   check_app_storage
   check_disk_space
   check_certificates
@@ -912,6 +914,45 @@ check_redis_restart_loop() {
   else
     check_fail "$(kq_format d_c_redis_loop "${restarts}")" "$(kq_format d_f_redis_loop_other "${CURRENT_COMPOSE}")"
   fi
+}
+
+# Prometheus tiene cargadas las reglas de alerta del paquete (V3-CH-4, pendiente del bloque 13).
+# Prometheus solo lee `rules/*.yml` al arrancar o al recargar: tras una actualizacion que cambia
+# `observability/` con Prometheus sin recrear, las reglas nuevas existen en disco y NO se evaluan,
+# y nada lo dice. Se compara el nombre de cada `- alert:` del directorio con los que devuelve
+# `/api/v1/rules`. Sin la observabilidad encendida (perfil `observability`), no hay nada que mirar.
+# Es un aviso y no un fallo: no bloquea una actualizacion por algo que se arregla recreando un
+# contenedor, pero el texto dice que mientras tanto esas alertas no saltan.
+check_prometheus_rules() {
+  local container rules_dir expected response loaded missing count shown
+  container="$(compose_current ps -q prometheus 2>/dev/null || true)"
+  container="${container%%$'\n'*}"
+  [ -n "${container}" ] || return 0
+
+  rules_dir="${CURRENT_DIR}/observability/prometheus/rules"
+  [ -d "${rules_dir}" ] || return 0
+  expected="$(cat "${rules_dir}"/*.yml 2>/dev/null | sed -nE 's/^[[:space:]]+-[[:space:]]+alert:[[:space:]]+([A-Za-z0-9_]+)[[:space:]]*$/\1/p' | sort -u || true)"
+  [ -n "${expected}" ] || return 0
+
+  response="$(compose_current exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/rules 2>/dev/null || true)"
+  if [ -z "${response}" ]; then
+    check_warn "$(kq_text d_c_prom_rules_unreachable)" "$(kq_format d_w_prom_rules_unreachable "${CURRENT_COMPOSE}")"
+    return 0
+  fi
+
+  loaded="$(grep -oE '"name":"[A-Za-z0-9_]+","query"' <<<"${response}" | sed -E 's/"name":"([^"]+)".*/\1/' | sort -u || true)"
+  missing="$(comm -23 <(printf '%s\n' "${expected}") <(printf '%s\n' "${loaded}") || true)"
+  if [ -z "${missing}" ]; then
+    count="$(grep -c . <<<"${expected}" || true)"
+    check_pass "$(kq_format d_c_prom_rules_ok "${count}")"
+    return 0
+  fi
+
+  count="$(grep -c . <<<"${missing}" || true)"
+  # Las cinco primeras bastan para saber que falta; la lista entera es ruido a las 06:30.
+  shown="$(head -n 5 <<<"${missing}" | tr '\n' ' ')"
+  check_warn "$(kq_format d_c_prom_rules_missing "${count}")" \
+    "$(kq_format d_w_prom_rules_missing "${shown}" "${CURRENT_COMPOSE}")"
 }
 
 # Proporcion de espacio libre, no GiB absolutos (ver el comentario de los

@@ -155,6 +155,11 @@ KQ_MSG_ES[d_f_redis_loop_aof]="el registro de Redis dice que su fichero AOF esta
   docker compose -f %s up -d redis
 Despues repite ./doctor.sh. El procedimiento completo esta en docs/runbooks/errores-en-el-panel.md."
 KQ_MSG_ES[d_f_redis_loop_other]="Redis no se mantiene en pie y su registro no apunta al fichero AOF. Mira por que: docker compose -f %s logs --tail 50 redis. Las causas habituales son disco lleno o falta de memoria; si el registro habla de 'append only file', sigue docs/runbooks/errores-en-el-panel.md. Con Redis caido el fichaje no se para, pero caen el panel, el portal, las colas y el tiempo real."
+KQ_MSG_ES[d_c_prom_rules_ok]="Prometheus: %s reglas de alerta cargadas, todas las del paquete"
+KQ_MSG_ES[d_c_prom_rules_missing]="Prometheus no tiene cargadas %s regla(s) de alerta del paquete"
+KQ_MSG_ES[d_w_prom_rules_missing]="faltan (las cinco primeras): %s. Prometheus solo lee las reglas al arrancar o al recargar: tras una actualizacion que cambia observability/ hay que recrearlo. Ejecuta 'docker compose -f %s up -d --force-recreate prometheus' y repite ./doctor.sh. Mientras no esten cargadas, esas alertas NO saltan. Mas en docs/runbooks/entrega-de-alertas.md."
+KQ_MSG_ES[d_c_prom_rules_unreachable]="Prometheus no contesta a la lista de reglas"
+KQ_MSG_ES[d_w_prom_rules_unreachable]="el contenedor de Prometheus esta en marcha pero no responde en su puerto interno, asi que no se puede saber si tiene cargadas las reglas de alerta. Mira 'docker compose -f %s logs --tail 50 prometheus': lo habitual es un fichero de reglas con un error de sintaxis, que deja SIN evaluar todas las de ese fichero."
 KQ_MSG_ES[d_c_storage_volume]="Volumen de ficheros generados (app-storage) creado"
 KQ_MSG_ES[d_c_storage_volume_missing]="Falta el volumen de ficheros generados (app-storage)"
 KQ_MSG_ES[d_f_storage_volume_missing]="sin el, cada contenedor tiene su propio storage/app: la exportacion integra pedida desde el panel no se puede descargar y las purgas no ven los ficheros que deben borrar. Comprueba que el compose es el del paquete (docker compose -f %s config contiene app-storage) y recrea los servicios con docker compose -f %s up -d. Si la instalacion es anterior a la 2.2.0, actualiza con update.sh."
@@ -303,6 +308,11 @@ KQ_MSG_EN[d_f_redis_loop_aof]="the Redis log says its AOF file is damaged, which
   docker compose -f %s up -d redis
 Then run ./doctor.sh again. The full procedure is in docs/runbooks/errores-en-el-panel.md (in Spanish)."
 KQ_MSG_EN[d_f_redis_loop_other]="Redis does not stay up and its log does not point at the AOF file. Find out why: docker compose -f %s logs --tail 50 redis. Usual causes are a full disk or lack of memory; if the log mentions 'append only file', follow docs/runbooks/errores-en-el-panel.md (in Spanish). With Redis down clocking-in does not stop, but the panel, the portal, the queues and real time do."
+KQ_MSG_EN[d_c_prom_rules_ok]="Prometheus: %s alert rules loaded, all of the package's"
+KQ_MSG_EN[d_c_prom_rules_missing]="Prometheus has %s alert rule(s) from the package not loaded"
+KQ_MSG_EN[d_w_prom_rules_missing]="missing (first five): %s. Prometheus only reads rules on start or reload: after an update that changes observability/ it has to be recreated. Run 'docker compose -f %s up -d --force-recreate prometheus' and repeat ./doctor.sh. Until they are loaded those alerts do NOT fire. More in docs/runbooks/entrega-de-alertas.md (in Spanish)."
+KQ_MSG_EN[d_c_prom_rules_unreachable]="Prometheus does not answer the rules query"
+KQ_MSG_EN[d_w_prom_rules_unreachable]="the Prometheus container is running but does not answer on its internal port, so it cannot be known whether the alert rules are loaded. Look at 'docker compose -f %s logs --tail 50 prometheus': the usual cause is a rules file with a syntax error, which leaves ALL the rules in that file unevaluated."
 KQ_MSG_EN[d_c_storage_volume]="Generated-files volume (app-storage) exists"
 KQ_MSG_EN[d_c_storage_volume_missing]="The generated-files volume (app-storage) is missing"
 KQ_MSG_EN[d_f_storage_volume_missing]="without it every container has its own storage/app: the full export requested from the panel cannot be downloaded and the purges cannot see the files they must delete. Check that the compose file is the one in the package (docker compose -f %s config contains app-storage) and recreate the services with docker compose -f %s up -d. If the installation predates 2.2.0, update with update.sh."
