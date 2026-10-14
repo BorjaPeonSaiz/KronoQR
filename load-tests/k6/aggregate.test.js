@@ -931,3 +931,53 @@ test('[RNF-P-06] un rechazo en la rampa es un rechazo al empleado', () => {
   assert.equal(statusOf(summary, 'RNF-P-06'), 'fail')
   assert.match(summary.verdicts['RNF-P-06'].detail, /rechazos al empleado 1/)
 })
+
+// --- La linea base versionada (bloque 15, R5-QA-02) --------------------------
+
+/**
+ * `baseline.json` tal y como esta en el arbol: el summary.json de la ejecucion
+ * 38654065980 de load-test.yml (aplicacion y guion de la rama del bloque 15).
+ */
+const VERSIONED_BASELINE = JSON.parse(fs.readFileSync(path.join(__dirname, 'baseline.json'), 'utf8'))
+
+/** Una muestra atendida de cada escenario que la verde no trae. */
+const OTHER_SCENARIO_ROWS = [
+  row({ metric: 'http_req_duration', value: 300, scenario: 'batch', status: '207', tags: { phase: 'batch' } }),
+  row({ metric: 'http_req_duration', value: 300, scenario: 'compliance', status: '200', tags: { phase: 'compliance' } }),
+  row({ metric: 'http_req_duration', value: 100, scenario: 'resend', status: '200', tags: { phase: 'resend_replay' } }),
+]
+
+/** Los parametros que lanza load-test.yml sin inputs, y con los que se tomo. */
+const WORKFLOW_PARAMETERS = {
+  instances: 3,
+  scanRate: 6,
+  offeredRate: 18,
+  durationSeconds: 120,
+  rampSeconds: 30,
+  pinPeriodSeconds: 4,
+  latencyVerdictMode: 'baseline',
+  baseline: VERSIONED_BASELINE,
+}
+
+test('[R5-QA-02] la linea base versionada declara la forma de la carga de hoy', () => {
+  assert.equal(VERSIONED_BASELINE.instances, 3)
+  assert.equal(VERSIONED_BASELINE.duration_seconds, 120)
+  assert.equal(VERSIONED_BASELINE.ramp_seconds, 30)
+  assert.equal(VERSIONED_BASELINE.pin_period_seconds, 4)
+  assert.ok(Object.keys(VERSIONED_BASELINE.scenarios).includes('scan-pin'))
+})
+
+test('[R5-QA-02][RNF-P-02][RNF-P-06] la linea base versionada es comparable con una pasada de los parametros del workflow', () => {
+  const summary = runAnalysis([...greenRun(), ...OTHER_SCENARIO_ROWS], WORKFLOW_PARAMETERS)
+
+  assert.equal(summary.baseline.comparable, true)
+  assert.notEqual(statusOf(summary, 'RNF-P-02'), 'not_comparable')
+  assert.notEqual(statusOf(summary, 'RNF-P-06'), 'not_comparable')
+})
+
+test('[R5-QA-02] la linea base versionada no se compara con las 8 instancias que lanzaba la etiqueta', () => {
+  const summary = runAnalysis([...greenRun(), ...OTHER_SCENARIO_ROWS], { ...WORKFLOW_PARAMETERS, instances: 8 })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'not_comparable')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /instancias: 3 frente a 8/)
+})
