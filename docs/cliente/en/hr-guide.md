@@ -1216,6 +1216,15 @@ days, public holidays and unexplained absence. What each one counts exactly
 —and, above all, **what the product cannot know** about rest days— is in
 §5 bis.4. Read it before showing that last column to anybody.
 
+**Long tables, printing and search.** A report can have up to 20,000 rows. So
+that the browser does not freeze, the table **only draws the rows you can see**
+and the rest appear as you scroll. The consequence is that **the browser's print
+and "find in page" (Ctrl+F) only reach what is drawn**: printing this screen gives
+a few rows, not the report. When you need the whole report —to print it, to look
+for a person across the whole period or to send it— **download it** as CSV,
+Excel or PDF: the file carries every row (RF-IN-04). The Compliance view (§4 bis)
+behaves the same way with many alerts.
+
 ### 6.2 The export for the Labour Inspectorate
 
 ![Labour Inspectorate export screen](../img/en/rrhh-13-exportacion-legal.png)
