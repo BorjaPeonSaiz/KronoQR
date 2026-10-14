@@ -36,6 +36,30 @@ use DateTimeImmutable;
  */
 final readonly class DiagnosticsBundle
 {
+    /** Clave de la constancia de asiento pendiente dentro de la seccion `audit`. */
+    public const string GENERATION_ENTRY = 'generation_entry';
+
+    /**
+     * Las secciones que puede llevar el paquete, sin el manifiesto (contrato
+     * `DiagnosticsBundle`). Contra esta lista se valida un pendiente releido
+     * del disco.
+     *
+     * @var list<string>
+     */
+    public const array SECTIONS = [
+        'installation',
+        'configuration',
+        'services',
+        'doctor',
+        'license',
+        'kiosks',
+        'error_events',
+        'metrics',
+        'updates',
+        'audit',
+        'personal_data',
+    ];
+
     /**
      * Orden en el que se renuncia a las secciones cuando el paquete no cabe.
      *
@@ -92,6 +116,46 @@ final readonly class DiagnosticsBundle
             ),
             $sections,
         );
+    }
+
+    /**
+     * El mismo paquete, vuelto a sellar con la constancia de que su asiento en
+     * `audit_log` queda pendiente (ADR-020, enmienda del 14-10-2026).
+     *
+     * La constancia va en la seccion `audit` y **dentro de la huella**: quien
+     * recibe el paquete sabe que el asiento aun no existe. Quitarla sin
+     * recalcular la huella hace fallar `--verify`; la huella no lleva clave, asi
+     * que la referencia fiable es el `sha256` del asiento
+     * `diagnostics.bundle_generated` en `audit_log`. No va en el manifiesto, cuyo esquema es cerrado.
+     *
+     * No se vuelve a recortar: la constancia ocupa unas decenas de bytes y
+     * recortar ahora podria sacrificar una seccion que ya se habia decidido
+     * conservar. La huella se recalcula sobre el documento resultante.
+     */
+    public function withGenerationEntryPending(string $reason): self
+    {
+        $sections = $this->sections;
+        $audit = $sections['audit'] ?? [];
+        $audit[self::GENERATION_ENTRY] = ['status' => 'pending', 'reason' => $reason];
+        $sections['audit'] = $audit;
+
+        return new self(
+            new DiagnosticsManifest(
+                productVersion: $this->manifest->productVersion,
+                generatedAt: $this->manifest->generatedAt,
+                anonymized: $this->manifest->anonymized,
+                generatedBy: $this->manifest->generatedBy,
+                sections: array_keys($sections),
+                sha256: CanonicalJson::digest($sections),
+            ),
+            $sections,
+        );
+    }
+
+    /** Si el asiento de este paquete quedo pendiente al generarlo. */
+    public function generationEntryPending(): bool
+    {
+        return isset($this->sections['audit'][self::GENERATION_ENTRY]);
     }
 
     /**

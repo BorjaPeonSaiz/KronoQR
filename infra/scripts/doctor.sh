@@ -66,6 +66,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/env-file.sh"
 # shellcheck source=lib/fs.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/fs.sh"
+# shellcheck source=lib/offsite.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/offsite.sh"
 # shellcheck source=lib/kqe.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/kqe.sh"
 # shellcheck source=lib/work-record-privileges.sh disable=SC1091
@@ -371,6 +373,7 @@ run_delegated_doctor() {
   check_work_record_privileges
   check_backup_wal
   check_backup_mounts
+  check_backup_offsite
   check_update_logs
   check_edge_networks
   check_redis_restart_loop
@@ -439,6 +442,7 @@ run_external_checks() {
   check_work_record_privileges
   check_backup_wal
   check_backup_mounts
+  check_backup_offsite
   check_update_logs
   check_edge_networks
   check_redis_restart_loop
@@ -566,6 +570,48 @@ check_backup_wal() {
   if [[ "${legacy}" =~ ^[0-9]+$ ]] && [ "${legacy}" -gt 0 ]; then
     check_warn "$(kq_format d_c_wal_legacy "${legacy}")" "$(kq_text d_w_wal_legacy)"
   fi
+}
+
+# V5-DV-05. ¿Salen las copias del servidor? La promesa de perder como mucho 15
+# minutos (doc 05) solo vale si BACKUP_PATH y el archivo del WAL no comparten
+# disco FISICO con los datos de Docker y de PostgreSQL. Se resuelve el disco de
+# origen de cada ruta (findmnt + lsblk -s, que atraviesa particiones, LVM y md;
+# lib/offsite.sh) y se comparan discos, no sistemas de ficheros: una particion o
+# un volumen logico del mismo disco NO cuenta como fuera. Un destino de red si. Es SIEMPRE un
+# aviso, nunca un fallo: el cliente puede sacar las copias por su cuenta. Sin root
+# no se ve /var/lib/docker: entonces se avisa de que no se ha podido comprobar,
+# no se adivina.
+check_backup_offsite() {
+  local backup_path docker_root postgres_id postgres_data dest state
+  local -a refs=() same=() unknown=()
+
+  backup_path="$(env_value "${CURRENT_ENV}" "BACKUP_PATH")"
+  [ -n "${backup_path}" ] || backup_path="/var/backups/fichaje"
+
+  docker_root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
+  [ -z "${docker_root}" ] || refs+=("${docker_root}")
+  postgres_id="$(compose_current ps -q postgres 2>/dev/null | head -n 1 || true)"
+  if [ -n "${postgres_id}" ]; then
+    postgres_data="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Source}}{{end}}{{end}}' "${postgres_id}" 2>/dev/null || true)"
+    [ -z "${postgres_data}" ] || refs+=("${postgres_data}")
+  fi
+
+  for dest in "${backup_path}" "${backup_path}/wal"; do
+    state="$(kq_offsite_state_host "${dest}" "${refs[@]+"${refs[@]}"}")"
+    case "${state}" in
+    local) same+=("${dest}") ;;
+    unknown) unknown+=("${dest}") ;;
+    esac
+  done
+
+  if [ "${#same[@]}" -gt 0 ]; then
+    check_warn "$(kq_format d_c_offsite_same "${same[0]}")" "$(kq_text d_w_offsite_same)"
+  elif [ "${#unknown[@]}" -gt 0 ]; then
+    check_warn "$(kq_text d_c_offsite_unknown)" "$(kq_text d_w_offsite_unknown)"
+  else
+    check_pass "$(kq_text d_c_offsite_ok)"
+  fi
+  return 0
 }
 
 # La raiz de BACKUP_PATH es de SOLO LECTURA para el runtime (A3-R2): `horizon` no puede

@@ -52,6 +52,12 @@ final class LogChannelStack
     public const string LOKI = 'loki';
 
     /**
+     * El canal que hace de `stderr` en las tareas programadas en segundo plano.
+     * Ver {@see ContainerLogChannel}.
+     */
+    public const string SCHEDULER_PRIMARY = 'scheduler-container';
+
+    /**
      * @param  string  $logStack  El valor de `LOG_STACK`, canales separados por coma.
      * @param  string  $lokiUrl  El valor de `LOKI_URL`.
      * @return list<string>
@@ -85,5 +91,25 @@ final class LogChannelStack
         }
 
         return $channels;
+    }
+
+    /**
+     * La pila del canal `scheduler` (V4-BE-1): la misma que la del producto,
+     * con `stderr` cambiado por el log del contenedor.
+     *
+     * `schedule:finish` corre con su salida de error tirada a `/dev/null`, asi
+     * que alli `stderr` no llega a ninguna parte. Todo lo demas se conserva —el
+     * orden incluido, y con el `loki` el ultimo—: quien configuro Loki o un
+     * canal extra en `LOG_STACK` lo recibe tambien de las tareas programadas.
+     *
+     * @param  list<string>  $stack  El resultado de {@see self::compose()}.
+     * @return list<string>
+     */
+    public static function forScheduler(array $stack): array
+    {
+        return array_map(
+            static fn (string $channel): string => $channel === self::PRIMARY ? self::SCHEDULER_PRIMARY : $channel,
+            $stack,
+        );
     }
 }

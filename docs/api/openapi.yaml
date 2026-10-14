@@ -19911,7 +19911,15 @@ components:
 
         Las secciones que dependen de una tabla o de un fichero que no existe en
         esta instalacion no desaparecen: dicen `{"status": "not_installed"}` o
-        `{"status": "unavailable", "reason": "..."}`.
+        `{"status": "unavailable", "reason": "..."}`. `reason` es siempre un
+        identificador o el nombre de una clase de excepcion, **nunca su
+        mensaje**, que puede llevar una cadena de conexion.
+
+        **Con PostgreSQL caido el paquete se sigue generando** por consola
+        (ADR-020, enmienda del 14-10-2026): las secciones que dependen de la
+        base dicen `unavailable`, las que no (`installation.product_version`,
+        `configuration.env`, `doctor`, `updates`…) van completas, y
+        `audit.generation_entry` declara que su asiento queda pendiente.
       additionalProperties: false
       required:
         - manifest
@@ -19972,87 +19980,105 @@ components:
             huella corta de la clave. **Nunca `customer_name`** ni la clave.
           additionalProperties: true
         kiosks:
-          type: array
           description: |
             Un elemento por quiosco. **Sin `name`**, que puede llevar el nombre
             de una persona. Los campos del latido (`oldest_pending_at`,
             `battery_level`, `battery_charging`) y la caducidad del token son
             `null` cuando no hay dato: tablet que nunca ha latido, navegador que
             no informa de la bateria o dispositivo sin token.
-          items:
-            type: object
-            additionalProperties: false
-            required:
-              - uuid
-              - status
-              - app_version
-              - last_seen_at
-              - pending_queue_size
-              - queue_storage
-              - unreported_discards
-              - oldest_pending_at
-              - battery_level
-              - battery_charging
-              - paired_at
-              - token_expires_on
-            properties:
-              uuid:
-                type: string
-                format: uuid
-              status:
-                type: string
-              app_version:
-                type: [string, 'null']
-              last_seen_at:
-                oneOf:
-                  - $ref: '#/components/schemas/UtcTimestamp'
-                  - type: 'null'
-              pending_queue_size:
-                description: |
-                  `null` = desconocido: la cola de la tablet cayo a memoria
-                  (`queue_storage`, ADR-047). Nunca se convierte en `0`.
-                type: ['integer', 'null']
-                minimum: 0
-              queue_storage:
-                type: string
-                enum: [durable, memory, unavailable]
-              unreported_discards:
-                description: |
-                  Fichajes descartados (RN-22) cuyo aviso no ha llegado al
-                  servidor, segun el ultimo latido. Solo el recuento.
-                type: integer
-                minimum: 0
-              oldest_pending_at:
-                description: |
-                  Instante del fichaje mas antiguo que la tablet aun no ha
-                  enviado, segun su ultimo latido (PR13). Solo el instante: ni
-                  `scan_id` ni empleado.
-                oneOf:
-                  - $ref: '#/components/schemas/UtcTimestamp'
-                  - type: 'null'
-              battery_level:
-                description: Porcentaje de bateria del ultimo latido.
-                oneOf:
-                  - type: integer
+
+            Si la tabla no se puede leer (por ejemplo, con la base de datos caida)
+            o la seccion no cabe en el tope de tamano, la lista se sustituye por
+            un objeto `{"status": "unavailable", "reason": "<clase>"}` u
+            `{"status": "omitted", "reason": "size_limit", "bytes": n}`.
+          oneOf:
+            - type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - uuid
+                  - status
+                  - app_version
+                  - last_seen_at
+                  - pending_queue_size
+                  - queue_storage
+                  - unreported_discards
+                  - oldest_pending_at
+                  - battery_level
+                  - battery_charging
+                  - paired_at
+                  - token_expires_on
+                properties:
+                  uuid:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                  app_version:
+                    type: [string, 'null']
+                  last_seen_at:
+                    oneOf:
+                      - $ref: '#/components/schemas/UtcTimestamp'
+                      - type: 'null'
+                  pending_queue_size:
+                    description: |
+                      `null` = desconocido: la cola de la tablet cayo a memoria
+                      (`queue_storage`, ADR-047). Nunca se convierte en `0`.
+                    type: ['integer', 'null']
                     minimum: 0
-                    maximum: 100
-                  - type: 'null'
-              battery_charging:
-                type: [boolean, 'null']
-              paired_at:
-                oneOf:
-                  - $ref: '#/components/schemas/UtcTimestamp'
-                  - type: 'null'
-              token_expires_on:
-                description: |
-                  **Dia** (UTC) en que caduca el token vigente del quiosco; si
-                  hay dos en solape tras una rotacion, el que caduca mas tarde.
-                  Solo la fecha, nunca el token ni su hash. `null` si el
-                  dispositivo no tiene token.
-                oneOf:
-                  - type: string
-                    format: date
-                  - type: 'null'
+                  queue_storage:
+                    type: string
+                    enum: [durable, memory, unavailable]
+                  unreported_discards:
+                    description: |
+                      Fichajes descartados (RN-22) cuyo aviso no ha llegado al
+                      servidor, segun el ultimo latido. Solo el recuento.
+                    type: integer
+                    minimum: 0
+                  oldest_pending_at:
+                    description: |
+                      Instante del fichaje mas antiguo que la tablet aun no ha
+                      enviado, segun su ultimo latido (PR13). Solo el instante: ni
+                      `scan_id` ni empleado.
+                    oneOf:
+                      - $ref: '#/components/schemas/UtcTimestamp'
+                      - type: 'null'
+                  battery_level:
+                    description: Porcentaje de bateria del ultimo latido.
+                    oneOf:
+                      - type: integer
+                        minimum: 0
+                        maximum: 100
+                      - type: 'null'
+                  battery_charging:
+                    type: [boolean, 'null']
+                  paired_at:
+                    oneOf:
+                      - $ref: '#/components/schemas/UtcTimestamp'
+                      - type: 'null'
+                  token_expires_on:
+                    description: |
+                      **Dia** (UTC) en que caduca el token vigente del quiosco; si
+                      hay dos en solape tras una rotacion, el que caduca mas tarde.
+                      Solo la fecha, nunca el token ni su hash. `null` si el
+                      dispositivo no tiene token.
+                    oneOf:
+                      - type: string
+                        format: date
+                      - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [status, reason]
+              properties:
+                status:
+                  type: string
+                  enum: [unavailable, omitted]
+                reason:
+                  type: string
+                bytes:
+                  type: integer
+                  minimum: 0
         error_events:
           type: object
           description: |
@@ -20089,7 +20115,31 @@ components:
             el resultado de verificar la cadena. Ningun payload: los asientos de
             `license_lifecycle` llevan la razon social y los de
             `personal_data_access`, a quien se consulto.
+
+            `generation_entry` (ADR-020, enmienda del 14-10-2026) **solo
+            aparece cuando el asiento de este mismo paquete no se pudo escribir
+            al generarlo** porque la base de datos no estaba disponible:
+            `{"status": "pending", "reason": "database_unavailable"}`. Solo
+            ocurre con el paquete anonimizado generado por consola; el asiento
+            `diagnostics.bundle_generated` lo escribe el producto solo en cuanto
+            la base vuelve, con `payload.deferred: true` y la misma huella. Va
+            dentro de la huella del manifiesto: quitarlo sin recalcular la
+            huella hace fallar `--verify`; la referencia fiable es el `sha256`
+            del asiento `diagnostics.bundle_generated` en `audit_log`. Sin el campo, el asiento se escribio antes de entregar
+            el paquete.
           additionalProperties: true
+          properties:
+            generation_entry:
+              type: object
+              additionalProperties: false
+              required: [status, reason]
+              properties:
+                status:
+                  type: string
+                  enum: [pending]
+                reason:
+                  type: string
+                  enum: [database_unavailable]
         personal_data:
           type: object
           description: |

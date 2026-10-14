@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Console;
 
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
+use App\Modules\Product\Application\Port\ProbeFailureClassifier;
+use App\Modules\Product\Application\UseCase\DeliverDiagnosticsBundle;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
+use App\Modules\Product\Application\UseCase\RecordPendingDiagnosticsAudits;
 use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
+use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
@@ -46,10 +50,17 @@ use Throwable;
  * | Codigo | Significado |
  * |---|---|
  * | `0` | El paquete se genero, o el que se verifico esta integro. |
- * | `1` | No se pudo escribir el fichero. El mensaje dice donde y por que. |
+ * | `1` | No se genero: no se pudo escribir el fichero, o no se pudo dejar constancia en `audit_log` (ni ahora ni como pendiente). El mensaje dice cual y que hacer. |
  * | `2` | Con `--verify`: la huella no coincide, o el fichero no es un paquete. |
  *
  * ## Funciona con la licencia caducada o ausente (regla dura 15)
+ *
+ * ## Y con la base de datos caida, solo el anonimizado (ADR-020, enmienda del 14-10-2026)
+ *
+ * El paquete anonimizado se genera y se escribe con su asiento pendiente, y lo
+ * dice. El que lleva datos personales no se genera si no se puede auditar
+ * (RL-19). Al arrancar, escribe los asientos pendientes de generaciones
+ * anteriores si la base ya responde.
  */
 final class ProductDiagnosticsCommand extends Command
 {
@@ -67,6 +78,9 @@ final class ProductDiagnosticsCommand extends Command
         DiagnosticsBundleWriter $writer,
         SweepExpiredDiagnosticsBundles $sweep,
         Config $config,
+        RecordPendingDiagnosticsAudits $recordPending,
+        DeliverDiagnosticsBundle $delivery,
+        ProbeFailureClassifier $failures,
     ): int {
         $verify = $this->option('verify');
 
@@ -75,6 +89,8 @@ final class ProductDiagnosticsCommand extends Command
         }
 
         $purged = $this->purge($sweep);
+
+        $this->recordPending($recordPending);
 
         $options = $this->requestedOptions($config);
 
@@ -88,9 +104,91 @@ final class ProductDiagnosticsCommand extends Command
             return self::SUCCESS;
         }
 
-        $bundle = $diagnostics->handle($options, DiagnosticsActor::Console);
+        try {
+            $bundle = $diagnostics->handle($options, DiagnosticsActor::Console);
+        } catch (Throwable $failure) {
+            return $this->notAudited($failure, $options, $failures);
+        }
 
-        return $this->write($writer, $bundle, $options, $purged);
+        $path = $this->deliver($delivery, $bundle);
+
+        return $path === null ? self::FAILURE : $this->report($bundle, $options, $purged, $path);
+    }
+
+    /**
+     * Deja el fichero en el disco por {@see DeliverDiagnosticsBundle}, que es
+     * quien ordena temporal, pendiente y renombrado (V4-PL-1, ADR-020). Aqui
+     * solo se dice que paso.
+     */
+    private function deliver(DeliverDiagnosticsBundle $delivery, DiagnosticsBundle $bundle): ?string
+    {
+        $output = $this->option('output');
+
+        try {
+            return $delivery->handle($bundle, is_string($output) && $output !== '' ? $output : null);
+        } catch (DiagnosticsAuditNotDeferred $failure) {
+            $this->line('No se ha generado el paquete: la base de datos no responde y no se ha podido');
+            $this->line('guardar la constancia de su generacion para escribirla en la auditoria despues.');
+            $this->line($failure->getMessage());
+        } catch (Throwable $failure) {
+            $this->line('No se ha podido escribir el paquete.');
+            $this->line($failure->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * El asiento no se pudo escribir y el paquete no se entrega (RL-19, regla
+     * dura 6). Sin el mensaje de la excepcion, que puede llevar la cadena de
+     * conexion: la clase basta para que soporte sepa que se rompio.
+     */
+    private function notAudited(Throwable $failure, DiagnosticsOptions $options, ProbeFailureClassifier $failures): int
+    {
+        $databaseDown = $failures->unavailableService($failure) === ProbeFailureClassifier::DATABASE;
+
+        $this->line('');
+
+        if ($databaseDown && $options->includePersonalData) {
+            $this->line('No se ha generado el paquete CON DATOS PERSONALES: la base de datos no responde y');
+            $this->line('ese paquete no se genera porque no se puede auditar (RL-19). No se ha escrito nada.');
+            $this->line('');
+            $this->line('Si necesitas el paquete ya, genera el anonimizado, que si se puede generar sin base:');
+            $this->line('  php artisan product:diagnostics');
+            $this->line('Cuando la base vuelva, repite este comando si sigues necesitando los datos personales.');
+        } else {
+            // Con la base caida y el paquete anonimizado no se llega aqui: el
+            // caso de uso aplaza el asiento en lugar de lanzar (ADR-020).
+            $this->line('No se ha generado el paquete: no se ha podido dejar constancia de su generacion en');
+            $this->line('la auditoria (error '.$failure::class.'). No se ha escrito nada.');
+            $this->line('Ejecuta php artisan product:doctor y revisa las comprobaciones database.*; si todas');
+            $this->line('estan en verde, avisa a soporte con esa salida.');
+        }
+
+        $this->line('');
+
+        return self::FAILURE;
+    }
+
+    /**
+     * Escribe los asientos de paquetes anteriores generados con la base caida
+     * (ADR-020, enmienda del 14-10-2026). Sin pendientes no toca la base. Un
+     * fallo aqui no impide generar: el paquete de ahora es lo urgente, y la
+     * tarea programada lo volvera a intentar.
+     */
+    private function recordPending(RecordPendingDiagnosticsAudits $recordPending): void
+    {
+        try {
+            $result = $recordPending->handle();
+        } catch (Throwable) {
+            return;
+        }
+
+        if ($result['recorded'] > 0) {
+            $this->line('Se han escrito en la auditoria '.$result['recorded'].' asiento(s) pendiente(s) de paquetes');
+            $this->line('generados mientras la base de datos no respondia.');
+            $this->line('');
+        }
     }
 
     private function requestedOptions(Config $config): ?DiagnosticsOptions
@@ -154,23 +252,12 @@ final class ProductDiagnosticsCommand extends Command
             || $this->confirm('¿Seguro que quieres incluir los datos personales?', false);
     }
 
-    private function write(
-        DiagnosticsBundleWriter $writer,
+    private function report(
         DiagnosticsBundle $bundle,
         DiagnosticsOptions $options,
         int $purged,
+        string $path,
     ): int {
-        $output = $this->option('output');
-
-        try {
-            $path = $writer->write($bundle, is_string($output) && $output !== '' ? $output : null);
-        } catch (Throwable $failure) {
-            $this->line('No se ha podido escribir el paquete.');
-            $this->line($failure->getMessage());
-
-            return self::FAILURE;
-        }
-
         $this->line('');
 
         if ($purged > 0) {
@@ -188,6 +275,16 @@ final class ProductDiagnosticsCommand extends Command
         $this->line('  Contiene: '.implode(', ', $bundle->manifest->sections));
         $this->line('  Anonimo:  '.($bundle->manifest->anonymized ? 'si' : 'NO — lleva datos personales'));
         $this->line('');
+
+        if ($bundle->generationEntryPending()) {
+            // ADR-020, enmienda del 14-10-2026: se entrega antes que su asiento,
+            // y quien lo genera tiene que saberlo y saber que no ha de hacer nada.
+            $this->line('La base de datos no responde: el asiento de este paquete en la auditoria queda');
+            $this->line('PENDIENTE y se escribira solo en cuanto la base vuelva (no tienes que hacer nada).');
+            $this->line('El propio paquete lo dice en audit.generation_entry, dentro de su huella.');
+            $this->line('Las secciones que dependen de la base salen como "unavailable".');
+            $this->line('');
+        }
         $this->line('Antes de enviarlo, abrelo y comprueba que no lleva nada que no quieras enviar:');
         $this->line('  less '.$path);
         $this->line('');
@@ -275,7 +372,25 @@ final class ProductDiagnosticsCommand extends Command
         $this->line('  Anonimo:   '.(($manifest['anonymized'] ?? null) === true ? 'si' : 'NO — lleva datos personales'));
         $this->line('  Huella:    '.self::text($manifest, 'sha256'));
 
+        $this->line('  Asiento:   '.self::generationEntry($document));
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Lo que dice el paquete de su propio asiento (ADR-020, enmienda del
+     * 14-10-2026). Un paquete anterior a la 2.2.1 no lleva la marca, y su
+     * asiento tambien se escribio al generarlo.
+     *
+     * @param  array<string, mixed>  $document
+     */
+    private static function generationEntry(array $document): string
+    {
+        $audit = $document['audit'] ?? null;
+
+        return is_array($audit) && is_array($audit[DiagnosticsBundle::GENERATION_ENTRY] ?? null)
+            ? 'PENDIENTE: la base de datos no respondia al generarlo; se escribe solo al volver'
+            : 'escrito en la auditoria al generarlo';
     }
 
     /**

@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Support\Scheduling\LogScheduledCommandFailure;
+use App\Support\Scheduling\ScheduledTaskOutput;
 use Illuminate\Console\Scheduling\Event as ScheduledTask;
 use Illuminate\Console\Scheduling\EventMutex;
+use Illuminate\Log\LogManager;
 use Tests\Support\Observability\RecordingLogger;
 
 /*
@@ -12,8 +14,8 @@ use Tests\Support\Observability\RecordingLogger;
  *
  * QUE SE FIJA AQUI. Que la linea lleva el nombre de la tarea y su codigo de
  * salida, y que **no lleva la salida del comando**. Lo segundo no es estilo: el
- * apunte va al canal por defecto —Monolog, y de ahi a Loki y al paquete de
- * diagnostico (ADR-020)—, y la salida de `compliance:apply-retention --dry-run`
+ * apunte va al canal `scheduler` —Monolog, y de ahi al log del contenedor y a
+ * Loki, donde no hay borrado selectivo—, y la salida de `compliance:apply-retention --dry-run`
  * son recuentos de filas por tabla del registro horario del cliente (regla dura
  * 21).
  *
@@ -82,8 +84,8 @@ it('escribe el apunte en nivel error, que es el que lo hace visible', function (
 
 it('no escribe la salida del comando ni ninguna otra clave', function (): void {
     // La linea de la retencion es el caso que lo justifica: su salida son
-    // recuentos por tabla del registro horario del cliente, y este apunte viaja
-    // al fabricante dentro del paquete de diagnostico (regla dura 21).
+    // recuentos por tabla del registro horario del cliente, y este apunte va
+    // al log del contenedor y a Loki (regla dura 21).
     $logger = new RecordingLogger;
 
     (new LogScheduledCommandFailure(
@@ -116,10 +118,16 @@ it('entrega a onFailure un cierre que ya conoce su tarea', function (): void {
     $logger = new RecordingLogger;
     $cierre = LogScheduledCommandFailure::of('attendance:reconcile', tareaConCodigoDeSalida('php artisan x', 3));
 
-    $cierre($logger);
+    // V4-BE-1: escribe por el canal `scheduler`, el unico que desde
+    // `schedule:finish` llega al log del contenedor; alli el canal por defecto
+    // acaba en `/dev/null`.
+    $logs = Mockery::mock(LogManager::class);
+    $logs->shouldReceive('channel')->once()->with(ScheduledTaskOutput::CHANNEL)->andReturn($logger);
+
+    $cierre($logs);
 
     expect($logger->first()['context'])->toBe([
         'command' => 'attendance:reconcile',
         'exit_code' => 3,
     ]);
-})->group('RF-PR-02');
+})->group('RF-PR-02', 'RNF-D-02');

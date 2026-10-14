@@ -393,6 +393,32 @@ return [
                     .'nightly backup after installing (at :daily_at UTC); after that night, it is not.',
                 'warning_unknown' => ':path, where the backup records its result, cannot be read.',
             ],
+            // V5-DV-05: the 15-minute promise holds if the backups leave the server.
+            'offsite' => [
+                'ok' => 'The backups and the WAL archive are on a network share, off the server.',
+                'warning_same_disk' => 'The backups are on the same disk as the data: if that disk is lost, the '
+                    .'database and all the backups are lost together.',
+                'warning_wal_same_disk' => 'The WAL archive (the continuous change log) is on the same disk as the '
+                    .'data: if that disk is lost, the 15-minute maximum loss no longer holds.',
+                'warning_other_filesystem' => 'The backups are on a different filesystem from the data, but from here '
+                    .'it cannot be known whether it is a different physical disk (a partition or logical volume of '
+                    .'the same disk does not count as off the server). Check it from the server with ./doctor.sh.',
+                'warning_unknown' => 'It is not yet known whether the backups leave the server: the measurement is '
+                    .'published by the nightly backup (at :daily_at UTC). From the server, ./doctor.sh checks it '
+                    .'right away.',
+            ],
+        ],
+
+        // --- Diagnostic bundle (ADR-020, amendment of 14-10-2026) ----------
+
+        'diagnostics' => [
+            'probe' => $probe,
+            'pending_audit' => [
+                'ok' => 'There are no diagnostic bundles whose audit entry has been pending for more than one hour.',
+                'warning' => ':count diagnostic bundle(s) were generated while the database was down and their audit '
+                    .'entry has not been written for more than one hour (the oldest, from :oldest UTC). It is written '
+                    .'automatically when the database is back; clocking in does not depend on this.',
+            ],
         ],
 
         'files' => [
@@ -934,6 +960,35 @@ return [
                 'warning_unknown' => "The metrics directory must belong to user 1000:\n"
                     ."  ls -ld :path\n"
                     .'See docs/runbooks/restaurar-backup.md §4.3.',
+            ],
+            'offsite' => [
+                'warning_same_disk' => "Mount BACKUP_PATH on another disk or on a network share (NFS, SMB), or copy the\n"
+                    ."whole of BACKUP_PATH, wal/ included, to another machine regularly. This is a warning: if you\n"
+                    .'already take the backups out yourself, nothing is broken. See docs/cliente/en/operation.md, "The backups must leave the server".',
+                'warning_wal_same_disk' => "Take wal/ off the server too, as you do with the daily backups: without\n"
+                    ."the WAL you can only recover up to the last backup, not to 15 minutes ago. See\n"
+                    .'docs/cliente/en/operation.md, "The backups must leave the server".',
+                'warning_other_filesystem' => 'On the server, run the check that does see the physical disks:
+'
+                    .'  sudo ./doctor.sh
+'
+                    .'To count as off the server it must be a different physical disk or a network share. See docs/cliente/en/operation.md, "The backups must leave the server".',
+                'warning_unknown' => "Wait for the first nightly backup, or check now from the server:\n"
+                    ."  sudo ./doctor.sh\n"
+                    .'See docs/cliente/en/operation.md, "The backups must leave the server".',
+            ],
+        ],
+
+        'diagnostics' => [
+            'probe' => $probeFix,
+            'pending_audit' => [
+                'warning' => "If the «database.connection» check of this report is fine, write them now (inside\n"
+                    ."the application container):\n"
+                    ."  php artisan product:diagnostics:record-pending\n"
+                    ."If the database still does not answer, fix it first: the entry will be written automatically.\n"
+                    ."If the database answers and the warning has not gone in five minutes, look at the\n"
+                    ."«scheduler.heartbeat» check.\n"
+                    .'See docs/cliente/en/operation.md §12.2, "If the database does not answer".',
             ],
         ],
 

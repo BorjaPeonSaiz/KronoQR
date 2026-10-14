@@ -511,6 +511,53 @@ Clear the shell history when you are done:
 history -c
 ```
 
+### The backups must leave the server
+
+The promise of **losing at most 15 minutes** of records after a disaster holds
+**as long as the backups and the continuous change log (the WAL) leave the
+server**, to another disk or another machine. If they stay on the same disk as
+the database and that disk is lost, everything goes together: the database, the
+backups and the WAL. The backups would be made, verified and even restored every
+night... on the very disk that has just died.
+
+The product cannot take the backups out for you (it sends nothing anywhere: your
+hotel's data never leaves your infrastructure). What it does is **warn you**
+when `BACKUP_PATH` and its `wal/` folder share a disk with the Docker and
+PostgreSQL data:
+
+- `./doctor.sh` checks it from the server and is **the complete check**: it
+  resolves the **physical disk** behind each path (through partitions, LVM
+  logical volumes and software RAID) and compares disks. It needs `sudo` to see
+  the Docker disk; without it, or with ZFS, it says it could not check;
+- the nightly backup publishes a coarser measurement and `product:doctor` reads
+  it in the **`backup.offsite`** check, which appears in the backups section.
+  From inside the container only the **filesystem** is visible, not the disk: a
+  network share shows green; a destination on a different filesystem gives a
+  soft warning ("it cannot be known whether it is a different physical disk")
+  that points to `./doctor.sh`.
+
+It is **always a warning, never a failure**: it does not change the exit code
+and does not block `install.sh` or `update.sh`. If you already take the backups
+out yourself (sync to another machine, tape, an EU cloud), nothing is broken;
+the warning will keep appearing because the product cannot see that.
+
+The backups count as **leaving** if `BACKUP_PATH` is a network share (NFS,
+SMB/CIFS) or is on a **different physical disk**; a partition or logical volume
+of the same disk does not count (if the disk dies, both die). The second only
+protects against the disk failing, **not against theft or fire** at the premises: the
+ideal is a different machine and, if possible, another building. To clear the
+warning:
+
+1. Mount the destination before starting, at the same place as `BACKUP_PATH` in
+   the `.env` (for example, an NFS volume at `/var/backups/fichaje`).
+2. Restart with `docker compose up -d` and run a backup
+   (`docker compose exec scheduler php artisan backup:run`).
+3. Run `sudo ./doctor.sh`: it must say the backups are not on the same physical
+   disk as the data (or that they are on a network share).
+
+Remember that **the encryption key must be kept off the server too** (previous
+section): a backup off the server without its key is worthless bytes.
+
 ### `fichaje_maintenance`: the role that is born without a password
 
 It is the only database role that can drop an expired partition of the audit
@@ -1574,7 +1621,8 @@ retention reports folder is writable, and exports for the Labour Inspectorate
 forgotten on the server for more than 30 days; §13.6), disk space (application
 and backups), backups (that the last backup succeeded and there is a verified
 one less than 26 h old; right after installing, until the first nightly backup,
-it is only a warning), scheduler (that it keeps launching its tasks every
+it is only a warning; and, also as a warning, that the backups and the WAL leave the
+server: "The backups must leave the server", in section 9), scheduler (that it keeps launching its tasks every
 minute) and settings
 (time zone in UTC, debug mode, invalid keys, differences between the `.env` and
 what is stored, licence and branding),
@@ -1685,6 +1733,79 @@ and in nested data— first names, surnames, emails, DNI, NIE, passports,
 social security numbers, bank accounts, cards, phone numbers and employee
 codes in all their forms, and checks that none of them appears, nor the
 internal identifier of any employee.
+
+#### If the database does not answer (since 2.2.1)
+
+That is exactly when the bundle is needed most, and **it can still be
+generated**, always from the console and always the anonymised one:
+
+```bash
+docker compose exec app php artisan product:diagnostics
+```
+
+It takes a few seconds longer than usual and ends with this notice (the
+command prints it in Spanish):
+
+```text
+La base de datos no responde: el asiento de este paquete en la auditoria queda
+PENDIENTE y se escribira solo en cuanto la base vuelva (no tienes que hacer nada).
+El propio paquete lo dice en audit.generation_entry, dentro de su huella.
+Las secciones que dependen de la base salen como "unavailable".
+```
+
+In English: the database does not answer; the audit entry of this bundle is
+PENDING and will be written automatically as soon as the database is back
+(you do not have to do anything).
+
+What it means:
+
+- **The bundle is usable.** It carries the version, the allowed `.env`
+  configuration, the state of the services (the database, as unreachable), the
+  `doctor` report and the report of the last update. The sections read from
+  the database (tablets, error history, audit counts, stored settings) say
+  `{"status": "unavailable", "reason": "…"}`, where `reason` is the technical
+  name of the error, never its text.
+- **Its audit entry is written later, automatically.** Every bundle leaves a
+  record in the audit log that it was generated
+  (`diagnostics.bundle_generated`); without the database, that record is kept
+  in the generated-files volume (`diagnostics-audit-pending/` folder) and the
+  system writes it as soon as the database is back, within five minutes. In
+  the audit log it shows `deferred: true` and the real generation time in
+  `generated_at`. You do not have to do anything.
+- **The bundle says so.** It carries
+  `"audit": {"generation_entry": {"status": "pending", "reason": "database_unavailable"}}`,
+  and that mark is part of its fingerprint: whoever receives it sees it when
+  running `--verify` (`Asiento: PENDIENTE…`).
+- **Not with personal data.** `--with-personal-data` without the database ends
+  with code `1`, writes nothing, and says that it *is not generated because it
+  cannot be audited*: taking your staff's data out without leaving a trace is
+  what the law does not allow. Generate the anonymised one and, when the
+  database is back, repeat if you still need the personal data.
+
+##### What to do if…
+
+- **`product:doctor` warns with `diagnostics.pending_audit`.** A bundle was
+  generated without the database and its audit entry has not been written for
+  more than one hour. Look first at `database.connection` in the same report:
+  if the database is still down, fix it and the entry will be written
+  automatically. If the database already answers, write it by hand:
+
+  ```bash
+  docker compose exec app php artisan product:diagnostics:record-pending
+  ```
+
+  It must say `Asientos de diagnostico pendientes escritos: 1.` If the warning
+  comes back, check `scheduler.heartbeat`: the scheduler is what retries it
+  every five minutes.
+- **The command says it could not save the pending record.** No bundle has
+  been generated. The generated-files volume is not mounted or cannot be
+  written: run `./doctor.sh` from the installation directory and follow what
+  it says about `files.storage_volume`.
+- **The command ends with code `1` and the database does answer.** The
+  generation could not be recorded in the audit log for another reason, and
+  that is why the bundle was not delivered. Run
+  `docker compose exec app php artisan product:doctor` and check the
+  `database.*` checks; if they are green, send that output to support.
 
 #### What it carries about each tablet, your settings and volume (since 2.2.0)
 
@@ -1984,6 +2105,7 @@ apart from that are these files:
 | Full data export (ZIP, §13) | `app-storage` volume, `exports/` folder | 7 days; the hourly purge deletes it | No |
 | Reports generated in the background (§6) | `app-storage` volume, `reports/` folder | 7 days; the daily 04:25 UTC purge deletes them | No |
 | Diagnostic bundle generated from the console (§12.2) | `app-storage` volume, `diagnostics/` folder | 7 days; the hourly purge deletes it | No |
+| Pending audit record of a bundle generated without the database (§12.2) | `app-storage` volume, `diagnostics-audit-pending/` folder | Until the database is back: the scheduler writes it to the audit log and deletes it. Past one hour, `product:doctor` warns | No |
 | Export for the Labour Inspectorate generated from the console | `app-storage` volume, `legal-exports/` folder | **Until you delete it.** After 30 days, `product:doctor` and the `FicheroGeneradoSinRetirarPasadoSuPlazo` alert (§10.4) warn about it | No |
 | Temporary file of the Labour Inspectorate export requested from the panel | `app-storage` volume, `tmp/legal-exports/` folder | Deleted when the download finishes; if the download was cut off, the hourly purge deletes it after 6 hours | No |
 | Telemetry state (§13.4) | `app-storage` volume, `telemetry/` folder | Kept; it holds no personal data | No |

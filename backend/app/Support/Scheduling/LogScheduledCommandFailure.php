@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Support\Scheduling;
 
+use App\Support\Observability\Logging\ContainerLogChannel;
 use Closure;
 use Illuminate\Console\Scheduling\Event as ScheduledTask;
+use Illuminate\Log\LogManager;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -35,9 +37,8 @@ use Psr\Log\LoggerInterface;
  *
  * Nunca. `Event::onFailureWithOutput()` existe y aqui esta descartado a
  * proposito: la salida de `compliance:apply-retention --dry-run` son recuentos
- * por tabla del registro horario del cliente, y este apunte va al canal por
- * defecto, o sea a Loki y de ahi al paquete de diagnostico (ADR-020, regla dura
- * 21). Ademas `onFailureWithOutput()` obliga a capturar la salida en un fichero
+ * por tabla del registro horario del cliente, y este apunte va al log del
+ * contenedor y a Loki, donde no hay borrado selectivo (regla dura 21). Ademas `onFailureWithOutput()` obliga a capturar la salida en un fichero
  * de `storage/logs`, que es otra copia de lo mismo en el disco del cliente.
  *
  * Se escriben dos claves y ninguna mas: `command` —el nombre de la tarea, no la
@@ -80,11 +81,20 @@ final readonly class LogScheduledCommandFailure
     /**
      * El cierre que `Event::onFailure()` exige, ya atado a su tarea.
      *
+     * Escribe por el canal `scheduler` (V4-BE-1), no por el de por defecto:
+     * este cierre corre en `schedule:finish`, cuya salida de error Laravel
+     * tira a `/dev/null`, y por `stderr` el apunte no llegaba al log del
+     * contenedor. Ver {@see ContainerLogChannel}.
+     *
      * @param  string  $command  Nombre de la tarea tal como se programa, `attendance:reconcile`.
      */
     public static function of(string $command, ScheduledTask $task): Closure
     {
-        return Closure::fromCallable(new self($command, $task));
+        $log = new self($command, $task);
+
+        return static function (LogManager $logs) use ($log): void {
+            $log($logs->channel(ScheduledTaskOutput::CHANNEL));
+        };
     }
 
     public function __invoke(LoggerInterface $logger): void

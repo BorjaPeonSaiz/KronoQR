@@ -499,6 +499,52 @@ Limpia el historial del intérprete de órdenes cuando termines:
 history -c
 ```
 
+### Las copias tienen que salir del servidor
+
+La promesa de **perder como máximo 15 minutos** de registro ante un desastre
+vale **siempre que las copias y el registro continuo de cambios (el WAL) salgan
+del servidor**, a otro disco o a otra máquina. Si se quedan en el mismo disco
+que la base de datos y se pierde ese disco, se pierde todo junto: la base, las
+copias y el WAL. Las copias se harían, se verificarían y hasta se restaurarían
+cada noche... en el mismo disco que acaba de morir.
+
+El producto no puede sacar las copias por ti (no envía nada a ninguna parte:
+los datos de tu hotel no salen de tu infraestructura). Lo que sí hace es
+**avisarte** cuando `BACKUP_PATH` y su carpeta `wal/` comparten disco con los
+datos de Docker y de PostgreSQL:
+
+- `./doctor.sh` lo comprueba desde el servidor y es **la comprobación completa**:
+  resuelve el **disco físico** de cada ruta (a través de particiones, volúmenes
+  lógicos de LVM y RAID por software) y compara discos. Necesita `sudo` para ver
+  el disco de Docker; sin él, o con ZFS, dice que no ha podido comprobarlo;
+- la copia nocturna publica una medida más gruesa y `product:doctor` la lee en la
+  comprobación **`backup.offsite`**, que aparece en el apartado de copias. Desde
+  dentro del contenedor solo se ve el **sistema de ficheros**, no el disco: un
+  destino de red sale en verde; un destino en otro sistema de ficheros da un
+  aviso suave («no se puede saber si es otro disco físico») que remite a
+  `./doctor.sh`.
+
+Es **siempre un aviso, nunca un fallo**: no cambia el código de salida y no
+bloquea `install.sh` ni `update.sh`. Si ya sacas las copias por tu cuenta
+(sincronización a otra máquina, cinta, nube en la UE), no hay nada roto; el
+aviso seguirá saliendo porque el producto no puede verlo.
+
+Se considera que las copias **salen** si `BACKUP_PATH` es un recurso de red (NFS,
+SMB/CIFS) o está en **otro disco físico**; una partición o un volumen lógico del
+mismo disco no cuenta (si muere el disco, mueren las dos). Lo segundo protege de
+la avería del disco, **no del robo ni del incendio** del local: lo ideal es una
+máquina distinta y, si puede ser, otro edificio. Para quitar el aviso:
+
+1. Monta el destino antes de arrancar, en el mismo sitio que `BACKUP_PATH` del
+   `.env` (por ejemplo, un volumen NFS en `/var/backups/fichaje`).
+2. Reinicia con `docker compose up -d` y lanza una copia
+   (`docker compose exec scheduler php artisan backup:run`).
+3. Ejecuta `sudo ./doctor.sh`: debe decir que las copias no están en el mismo
+   disco físico que los datos (o que están en un recurso de red).
+
+Recuerda que **la clave de cifrado también tiene que estar fuera** (apartado
+anterior): una copia fuera del servidor sin su clave son bytes sin valor.
+
 ### `fichaje_maintenance`: el rol que nace sin contraseña
 
 Es el único rol de base de datos que puede soltar una partición vencida del
@@ -1555,7 +1601,9 @@ sus rutas no coinciden entre sí, que la carpeta de los informes de retención s
 puede escribir, y exportaciones para la Inspección olvidadas en el servidor
 desde hace más de 30 días; §13.6), espacio en disco (aplicación y copias),
 copias (que la última copia salió bien y hay una verificada de menos de 26 h;
-recién instalado, hasta la primera copia nocturna, es solo un aviso),
+recién instalado, hasta la primera copia nocturna, es solo un aviso; y, también
+como aviso, que las copias y el WAL salen del servidor: «Las copias tienen que
+salir del servidor», en la sección 9),
 planificador (que sigue lanzando sus tareas cada minuto) y
 ajustes (zona horaria en UTC, modo depuración,
 claves no válidas, diferencias entre el `.env` y lo guardado, licencia y marca),
@@ -1668,6 +1716,74 @@ en las claves y en datos anidados— nombres, apellidos, correos, DNI, NIE,
 pasaportes, números de afiliación, cuentas bancarias, tarjetas, teléfonos y
 códigos de empleado en todas sus formas, y comprueba que no aparece ninguno,
 ni el identificador interno de ningún empleado.
+
+#### Si la base de datos no responde (desde la 2.2.1)
+
+Es justo cuando más falta hace el paquete, y **se puede generar igual**,
+siempre desde la consola y siempre el anonimizado:
+
+```bash
+docker compose exec app php artisan product:diagnostics
+```
+
+Tarda unos segundos más de lo normal y termina con este aviso:
+
+```text
+La base de datos no responde: el asiento de este paquete en la auditoria queda
+PENDIENTE y se escribira solo en cuanto la base vuelva (no tienes que hacer nada).
+El propio paquete lo dice en audit.generation_entry, dentro de su huella.
+Las secciones que dependen de la base salen como "unavailable".
+```
+
+Qué significa:
+
+- **El paquete sirve.** Lleva la versión, la configuración permitida del
+  `.env`, el estado de los servicios (la base, como no alcanzable), el informe
+  de `doctor` y el de la última actualización. Las secciones que se leen de la
+  base (tablets, histórico de errores, recuentos de auditoría, ajustes
+  guardados) dicen `{"status": "unavailable", "reason": "…"}`, donde `reason`
+  es el nombre técnico del error, nunca su texto.
+- **Su registro en la auditoría se escribe después, solo.** Cada paquete deja
+  constancia en el registro de auditoría de que se generó
+  (`diagnostics.bundle_generated`); sin base, esa constancia queda guardada
+  en el volumen de ficheros generados (carpeta `diagnostics-audit-pending/`) y
+  el sistema la escribe en cuanto la base vuelve, en menos de cinco minutos.
+  En la auditoría aparece con `deferred: true` y la hora real de generación en
+  `generated_at`. No tienes que hacer nada.
+- **El paquete lo declara.** Dentro lleva
+  `"audit": {"generation_entry": {"status": "pending", "reason": "database_unavailable"}}`,
+  y esa marca forma parte de su huella: quien lo reciba la ve al ejecutar
+  `--verify` (`Asiento: PENDIENTE…`).
+- **Con datos personales, no.** `--with-personal-data` sin base termina con
+  código `1`, sin escribir nada, y dice que *no se genera porque no se puede
+  auditar*: sacar datos de tu plantilla sin dejar rastro es lo que la ley no
+  permite. Genera el anonimizado y, cuando la base vuelva, repite si sigues
+  necesitando los datos personales.
+
+##### Qué hacer si…
+
+- **`product:doctor` avisa con `diagnostics.pending_audit`.** Hay un paquete
+  generado sin base cuyo registro lleva más de una hora sin escribirse. Mira
+  primero `database.connection` en el mismo informe: si la base sigue caída,
+  arréglala y el registro se escribirá solo. Si la base ya responde, escríbelo
+  a mano:
+
+  ```bash
+  docker compose exec app php artisan product:diagnostics:record-pending
+  ```
+
+  Debe decir `Asientos de diagnostico pendientes escritos: 1.` Si el aviso
+  vuelve, revisa `scheduler.heartbeat`: el planificador es quien lo reintenta
+  cada cinco minutos.
+- **El comando dice que no ha podido guardar la constancia pendiente.** No se
+  ha generado ningún paquete. El volumen de ficheros generados no está montado
+  o no se puede escribir: ejecuta `./doctor.sh` desde el directorio de la
+  instalación y sigue lo que diga de `files.storage_volume`.
+- **El comando termina con código `1` y la base sí responde.** No se ha podido
+  registrar la generación en la auditoría por otro motivo, y por eso no se ha
+  entregado el paquete. Ejecuta `docker compose exec app php artisan product:doctor`
+  y revisa las comprobaciones `database.*`; si están en verde, envía esa salida
+  a soporte.
 
 #### Lo que lleva de cada tablet, de tus ajustes y del volumen (desde la 2.2.0)
 
@@ -1960,6 +2076,7 @@ disco aparte son estos ficheros:
 | Exportación íntegra (ZIP, §13) | Volumen `app-storage`, carpeta `exports/` | 7 días; lo borra la purga horaria | No |
 | Informes generados en segundo plano (§6) | Volumen `app-storage`, carpeta `reports/` | 7 días; los borra la purga diaria de las 04:25 UTC | No |
 | Paquete de diagnóstico generado por consola (§12.2) | Volumen `app-storage`, carpeta `diagnostics/` | 7 días; lo borra la purga horaria | No |
+| Registro de auditoría pendiente de un paquete generado sin base (§12.2) | Volumen `app-storage`, carpeta `diagnostics-audit-pending/` | Hasta que la base vuelve: el planificador lo escribe en la auditoría y lo borra. Si pasa de una hora avisa `product:doctor` | No |
 | Exportación para la Inspección generada por consola | Volumen `app-storage`, carpeta `legal-exports/` | **Hasta que la borres tú.** Pasados 30 días avisan `product:doctor` y la alerta `FicheroGeneradoSinRetirarPasadoSuPlazo` (§10.4) | No |
 | Temporal de la exportación para la Inspección pedida desde el panel | Volumen `app-storage`, carpeta `tmp/legal-exports/` | Se borra al terminar la descarga; si la descarga se cortó, lo borra la purga horaria pasadas 6 horas | No |
 | Estado de la telemetría (§13.4) | Volumen `app-storage`, carpeta `telemetry/` | Se conserva; no lleva datos personales | No |

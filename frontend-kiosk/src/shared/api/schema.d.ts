@@ -11531,7 +11531,15 @@ export interface components {
          *
          *     Las secciones que dependen de una tabla o de un fichero que no existe en
          *     esta instalacion no desaparecen: dicen `{"status": "not_installed"}` o
-         *     `{"status": "unavailable", "reason": "..."}`.
+         *     `{"status": "unavailable", "reason": "..."}`. `reason` es siempre un
+         *     identificador o el nombre de una clase de excepcion, **nunca su
+         *     mensaje**, que puede llevar una cadena de conexion.
+         *
+         *     **Con PostgreSQL caido el paquete se sigue generando** por consola
+         *     (ADR-020, enmienda del 14-10-2026): las secciones que dependen de la
+         *     base dicen `unavailable`, las que no (`installation.product_version`,
+         *     `configuration.env`, `doctor`, `updates`…) van completas, y
+         *     `audit.generation_entry` declara que su asiento queda pendiente.
          */
         DiagnosticsBundle: {
             manifest: components["schemas"]["DiagnosticsManifest"];
@@ -11587,6 +11595,11 @@ export interface components {
              *     `battery_level`, `battery_charging`) y la caducidad del token son
              *     `null` cuando no hay dato: tablet que nunca ha latido, navegador que
              *     no informa de la bateria o dispositivo sin token.
+             *
+             *     Si la tabla no se puede leer (por ejemplo, con la base de datos caida)
+             *     o la seccion no cabe en el tope de tamano, la lista se sustituye por
+             *     un objeto `{"status": "unavailable", "reason": "<clase>"}` u
+             *     `{"status": "omitted", "reason": "size_limit", "bytes": n}`.
              */
             kiosks: {
                 /** Format: uuid */
@@ -11623,7 +11636,12 @@ export interface components {
                  *     dispositivo no tiene token.
                  */
                 token_expires_on: string | null;
-            }[];
+            }[] | {
+                /** @enum {string} */
+                status: "unavailable" | "omitted";
+                reason: string;
+                bytes?: number;
+            };
             /**
              * @description Historico de errores agrupado por huella con su `trace_id`
              *     (RF-PD-15, tarea 5.12): `status: ok`, `period_days`, `summary`
@@ -11660,8 +11678,27 @@ export interface components {
              *     el resultado de verificar la cadena. Ningun payload: los asientos de
              *     `license_lifecycle` llevan la razon social y los de
              *     `personal_data_access`, a quien se consulto.
+             *
+             *     `generation_entry` (ADR-020, enmienda del 14-10-2026) **solo
+             *     aparece cuando el asiento de este mismo paquete no se pudo escribir
+             *     al generarlo** porque la base de datos no estaba disponible:
+             *     `{"status": "pending", "reason": "database_unavailable"}`. Solo
+             *     ocurre con el paquete anonimizado generado por consola; el asiento
+             *     `diagnostics.bundle_generated` lo escribe el producto solo en cuanto
+             *     la base vuelve, con `payload.deferred: true` y la misma huella. Va
+             *     dentro de la huella del manifiesto: quitarlo sin recalcular la
+             *     huella hace fallar `--verify`; la referencia fiable es el `sha256`
+             *     del asiento `diagnostics.bundle_generated` en `audit_log`. Sin el campo, el asiento se escribio antes de entregar
+             *     el paquete.
              */
             audit: {
+                generation_entry?: {
+                    /** @enum {string} */
+                    status: "pending";
+                    /** @enum {string} */
+                    reason: "database_unavailable";
+                };
+            } & {
                 [key: string]: unknown;
             };
             /**

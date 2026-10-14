@@ -176,6 +176,19 @@ return [
      * El escritor lo crea con permisos `0700` y el fichero con `0600`.
      */
     'diagnostics_storage_path' => env('PRODUCT_DIAGNOSTICS_PATH', storage_path('app/diagnostics')),
+    /*
+     * Donde quedan los asientos `diagnostics.bundle_generated` de los paquetes
+     * generados con la base de datos caida, hasta que la base vuelve (ADR-020,
+     * enmienda del 14-10-2026). Un fichero `0600` por paquete.
+     *
+     * FIJA y sin variable de entorno, como las raices de la exportacion legal:
+     * tiene que estar en el volumen compartido para que la tarea del `scheduler`
+     * vea lo que deja `app`, y FUERA de `diagnostics_storage_path` para que la
+     * purga de paquetes caducados no la alcance. `product:doctor` comprueba que
+     * no se solapa con ninguna otra raiz y avisa si un pendiente tiene mas de
+     * una hora (`diagnostics.pending_audit`).
+     */
+    'diagnostics_pending_audit_path' => storage_path('app/diagnostics-audit-pending'),
 
     /*
      * ACCESOS DE SOPORTE (RF-PD-11, RL-18, ADR-020, tarea 5.9).

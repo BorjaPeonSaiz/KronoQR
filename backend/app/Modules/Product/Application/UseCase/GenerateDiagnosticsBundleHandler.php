@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Port\DiagnosticsCollector;
+use App\Modules\Product\Application\Port\ProbeFailureClassifier;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
 use App\Modules\Product\Domain\Event\PersonalDataIncludedInDiagnostics;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
+use App\Modules\Product\Domain\ValueObject\PendingDiagnosticsAudit;
 use App\Modules\Shared\Application\Port\Clock;
 use Throwable;
 
@@ -40,10 +42,33 @@ use Throwable;
  * permite responder «¿cuando han salido de aqui datos de mi gente?» con un
  * `WHERE action =` en lugar de con una auditoria.
  *
- * **Los asientos se publican dentro de la transaccion de quien llama** y son
- * sincronos: si el asiento no se puede escribir, el paquete no se entrega. Sin
- * esa garantia, la promesa de ADR-020 —«el cliente sabe que sale de aqui»— seria
- * una intencion.
+ * **Los asientos son sincronos**: se escriben antes de devolver el paquete, y
+ * si no se pueden escribir el paquete no se entrega. Sin esa garantia, la
+ * promesa de ADR-020 —«el cliente sabe que sale de aqui»— seria una intencion.
+ *
+ * ## La unica excepcion: la base caida, el paquete anonimizado y la consola
+ *
+ * El paquete se necesita sobre todo cuando algo va mal, y lo que mas a menudo
+ * va mal es la base de datos. Por eso, **y solo si se cumplen las tres
+ * condiciones** —el asiento fallo porque la base no esta disponible (segun
+ * {@see ProbeFailureClassifier}), el paquete es el anonimizado y lo pidio la
+ * consola—, el asiento se **aplaza**, no se pierde (ADR-020, enmienda del
+ * 14-10-2026):
+ *
+ * 1. se vuelve a sellar el paquete con `audit.generation_entry` pendiente,
+ *    dentro de su huella;
+ * 2. se devuelve el paquete, y lo entrega {@see DeliverDiagnosticsBundle}:
+ *    temporal, pendiente guardado y renombrado, en ese orden. El escritor no
+ *    publica un paquete pendiente sin el comprobante de su pendiente, asi que
+ *    el orden no depende de quien llama.
+ *
+ * Solo la consola recibe un paquete pendiente: un paquete pedido por el panel
+ * o con datos personales nunca se aplaza, asi que `handle()` lanza.
+ *
+ * El asiento lo escribe despues {@see RecordPendingDiagnosticsAudits}, en
+ * cuanto la base vuelve. Cualquier otro fallo del asiento —con la base arriba,
+ * con datos personales o desde el panel— sube tal cual: sin asiento no hay
+ * paquete.
  *
  * ## Funciona con la licencia caducada o ausente (regla dura 15)
  *
@@ -61,6 +86,7 @@ final readonly class GenerateDiagnosticsBundleHandler
         private Clock $clock,
         private string $productVersion,
         private int $maxBytes,
+        private ProbeFailureClassifier $failures,
     ) {}
 
     public function handle(DiagnosticsOptions $options, DiagnosticsActor $actor): DiagnosticsBundle
@@ -86,9 +112,28 @@ final readonly class GenerateDiagnosticsBundleHandler
             maxBytes: $this->maxBytes,
         );
 
-        $this->audit($bundle, $options, $actor);
+        try {
+            $this->audit($bundle, $options, $actor);
+        } catch (Throwable $failure) {
+            if (! $this->mayDefer($failure, $options, $actor)) {
+                throw $failure;
+            }
+
+            return $bundle->withGenerationEntryPending(PendingDiagnosticsAudit::REASON_DATABASE_UNAVAILABLE);
+        }
 
         return $bundle;
+    }
+
+    /**
+     * Las tres condiciones de la enmienda de ADR-020, todas a la vez. Ver el
+     * docblock de la clase.
+     */
+    private function mayDefer(Throwable $failure, DiagnosticsOptions $options, DiagnosticsActor $actor): bool
+    {
+        return $actor === DiagnosticsActor::Console
+            && ! $options->includePersonalData
+            && $this->failures->unavailableService($failure) === ProbeFailureClassifier::DATABASE;
     }
 
     /**
