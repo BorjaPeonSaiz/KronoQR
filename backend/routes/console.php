@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Support\Scheduling\LogScheduledCommandFailure;
+use App\Support\Scheduling\ScheduledTaskOutput;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -25,6 +26,16 @@ use Illuminate\Support\Facades\Schedule;
  * `LogScheduledCommandFailure`, que deja `scheduler.command_failed` con el
  * nombre de la tarea y su codigo, NUNCA su salida (regla dura 21: la de la
  * retencion son recuentos del registro horario del cliente).
+ *
+ * ADONDE VA LA SALIDA DE UNA TAREA EN SEGUNDO PLANO (V4-BE-1, RNF-D-02). Por
+ * defecto Laravel la tira a `/dev/null`. Toda tarea con `runInBackground()` se
+ * envuelve por eso en `ScheduledTaskOutput`, el ayudante unico: su salida y su
+ * codigo de salida llegan al log del contenedor `scheduler` (y a Loki) como
+ * `scheduler.task_output` y `scheduler.task_finished`, cada linea por el
+ * saneador de Monolog (L1, regla dura 21). `toLog()` reenvia las lineas;
+ * `summaryOnly()` solo el codigo y los recuentos, y lo lleva unicamente la
+ * propuesta de purga, por lo dicho arriba. `ScheduledTaskOutputTest`
+ * (Architecture) falla si una tarea en segundo plano no pasa por el ayudante.
  */
 
 /*
@@ -43,15 +54,15 @@ use Illuminate\Support\Facades\Schedule;
  * Las horas salen de config/backup.php y por defecto son de madrugada: nunca
  * cerca del cambio de turno de las 06:00.
  */
-Schedule::command('backup:run', ['--mode' => config()->string('backup.daily_mode')])
+ScheduledTaskOutput::toLog(Schedule::command('backup:run', ['--mode' => config()->string('backup.daily_mode')])
     ->dailyAt(config()->string('backup.daily_at'))
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
-Schedule::command('backup:run', ['--mode' => config()->string('backup.weekly_mode')])
+ScheduledTaskOutput::toLog(Schedule::command('backup:run', ['--mode' => config()->string('backup.weekly_mode')])
     ->weeklyOn(config()->integer('backup.weekly_on'), config()->string('backup.weekly_at'))
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * La medida continua del RPO (RNF-D-02; bloque 20, R5-DV-01): cuanto WAL esta
@@ -65,10 +76,10 @@ Schedule::command('backup:run', ['--mode' => config()->string('backup.weekly_mod
  * `MedicionDeWalAusente` (latido del propio fichero), y una fila por minuto en
  * `error_events` solo seria ruido.
  */
-Schedule::command('backup:wal-metrics')
+ScheduledTaskOutput::toLog(Schedule::command('backup:wal-metrics')
     ->everyMinute()
     ->withoutOverlapping(5)
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * Cadena de hash de la auditoria (RS-07, ADR-010, tarea 1.14).
@@ -85,10 +96,10 @@ Schedule::command('backup:wal-metrics')
  * `withoutOverlapping` porque, con historico de cuatro años, una verificacion
  * puede durar mas de lo previsto y dos a la vez solo duplican la lectura.
  */
-Schedule::command('compliance:verify-audit-chain')
+ScheduledTaskOutput::toLog(Schedule::command('compliance:verify-audit-chain')
     ->dailyAt('04:05')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * Conciliacion entre el registro horario y su auditoria (ADR-057 §4, RL-04,
@@ -123,16 +134,16 @@ Schedule::command('compliance:verify-audit-chain')
  * fichero) y NUNCA su salida: aunque solo lleva identificadores, la regla dura
  * 21 gobierna el habito. Termina en rojo con cualquier discrepancia.
  */
-$reconcileWorkRecord = Schedule::command('compliance:reconcile-work-record')
+$reconcileWorkRecord = ScheduledTaskOutput::toLog(Schedule::command('compliance:reconcile-work-record')
     ->dailyAt('04:15')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 $reconcileWorkRecord->onFailure(LogScheduledCommandFailure::of('compliance:reconcile-work-record', $reconcileWorkRecord));
 
-$reconcileWorkRecordFull = Schedule::command('compliance:reconcile-work-record', ['--full'])
+$reconcileWorkRecordFull = ScheduledTaskOutput::toLog(Schedule::command('compliance:reconcile-work-record', ['--full'])
     ->weeklyOn(0, '02:15')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 $reconcileWorkRecordFull->onFailure(LogScheduledCommandFailure::of('compliance:reconcile-work-record --full', $reconcileWorkRecordFull));
 
 /*
@@ -152,10 +163,10 @@ $reconcileWorkRecordFull->onFailure(LogScheduledCommandFailure::of('compliance:r
  * tiene los permisos del propietario y solo admite el año en curso o el
  * siguiente (ADR-042). El `scheduler` no recibe la credencial del migrador.
  */
-Schedule::command('compliance:ensure-audit-partitions')
+ScheduledTaskOutput::toLog(Schedule::command('compliance:ensure-audit-partitions')
     ->dailyAt('02:45')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * Metricas de credenciales (RF-QR-08, doc 02 §8.2, tarea 1.10).
@@ -176,10 +187,10 @@ Schedule::command('compliance:ensure-audit-partitions')
  * `withoutOverlapping` porque son dos consultas sobre la plantilla completa y
  * dos a la vez solo duplican la lectura.
  */
-Schedule::command('credentials:status', ['--quiet-table'])
+ScheduledTaskOutput::toLog(Schedule::command('credentials:status', ['--quiet-table'])
     ->hourly()
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * Temporales huerfanos de la exportacion legal (RF-IN-05, hallazgo MEDIO-3
@@ -203,10 +214,10 @@ Schedule::command('credentials:status', ['--quiet-table'])
  * copia de madrugada para desaparecer, y la ventana es lo bastante ancha
  * para no borrar una descarga legitima todavia en curso.
  */
-Schedule::command('compliance:purge-legal-export-temp')
+ScheduledTaskOutput::toLog(Schedule::command('compliance:purge-legal-export-temp')
     ->hourly()
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * Metricas de la presencia en vivo (doc 02 §8.2, doc 01 §9.2, tarea 2.4).
@@ -279,10 +290,10 @@ Schedule::command('reporting:presence-metrics')
  * fichero; la unica sin `runInBackground` es la de Reverb, y su comentario dice
  * por que.
  */
-Schedule::command('reporting:adoption-metrics')
+ScheduledTaskOutput::toLog(Schedule::command('reporting:adoption-metrics')
     ->dailyAt('04:50')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * Reconciliacion de `daily_totals` con sus eventos origen (RF-PR-02, ADR-007,
@@ -324,10 +335,10 @@ Schedule::command('reporting:adoption-metrics')
  * `schedule:finish` y es la unica traza localizable de que anoche fallo. La
  * alerta la dispara `projection_reconciliation_last_failures`.
  */
-$reconcile = Schedule::command('attendance:reconcile')
+$reconcile = ScheduledTaskOutput::toLog(Schedule::command('attendance:reconcile')
     ->dailyAt('03:50')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 $reconcile->onFailure(LogScheduledCommandFailure::of('attendance:reconcile', $reconcile));
 
 /*
@@ -356,10 +367,10 @@ $reconcile->onFailure(LogScheduledCommandFailure::of('attendance:reconcile', $re
  * `incident_detection_last_run_timestamp_seconds` delata que la pasada dejo de
  * ejecutarse — que hasta la tarea 3.2 no vigilaba nadie.
  */
-$detectIncidents = Schedule::command('attendance:detect-incidents')
+$detectIncidents = ScheduledTaskOutput::toLog(Schedule::command('attendance:detect-incidents')
     ->dailyAt('04:30')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 $detectIncidents->onFailure(LogScheduledCommandFailure::of('attendance:detect-incidents', $detectIncidents));
 
 /*
@@ -394,10 +405,10 @@ $detectIncidents->onFailure(LogScheduledCommandFailure::of('attendance:detect-in
  * indicio sobre dos personas concretas se revisa en la bandeja por quien conoce
  * el turno, no se enruta a un canal de guardia.
  */
-$detectPatterns = Schedule::command('attendance:detect-patterns')
+$detectPatterns = ScheduledTaskOutput::toLog(Schedule::command('attendance:detect-patterns')
     ->dailyAt('04:35')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 $detectPatterns->onFailure(LogScheduledCommandFailure::of('attendance:detect-patterns', $detectPatterns));
 
 /*
@@ -431,10 +442,10 @@ $detectPatterns->onFailure(LogScheduledCommandFailure::of('attendance:detect-pat
  * con `runInBackground()`, Laravel ejecuta ese callback desde `schedule:finish` y
  * es la unica traza localizable de que anoche fallo.
  */
-$complianceMetrics = Schedule::command('reporting:compliance-metrics')
+$complianceMetrics = ScheduledTaskOutput::toLog(Schedule::command('reporting:compliance-metrics')
     ->dailyAt('04:45')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 $complianceMetrics->onFailure(LogScheduledCommandFailure::of('reporting:compliance-metrics', $complianceMetrics));
 
 /*
@@ -476,10 +487,10 @@ $complianceMetrics->onFailure(LogScheduledCommandFailure::of('reporting:complian
  * fichero), NUNCA su salida: el comando no imprime ni tipos de ausencia ni
  * nombres, pero la regla dura 21 gobierna el habito.
  */
-$absenceMetrics = Schedule::command('reporting:absence-metrics')
+$absenceMetrics = ScheduledTaskOutput::toLog(Schedule::command('reporting:absence-metrics')
     ->dailyAt('04:55')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 $absenceMetrics->onFailure(LogScheduledCommandFailure::of('reporting:absence-metrics', $absenceMetrics));
 
 /*
@@ -529,12 +540,14 @@ Schedule::command('compliance:incident-metrics')
  * `schedule:finish`. Aqui la salida del comando **no** entra en el apunte, y es
  * el caso que mas lo justifica: son recuentos de filas por tabla del registro
  * horario del cliente, y el log tecnico viaja al fabricante dentro del paquete
- * de diagnostico (ADR-020, regla dura 21).
+ * de diagnostico (ADR-020, regla dura 21). Por lo mismo es la unica tarea con
+ * `ScheduledTaskOutput::summaryOnly()`: al log va su codigo de salida y cuantas
+ * lineas escribio, nunca los recuentos.
  */
-$retentionDryRun = Schedule::command('compliance:apply-retention', ['--dry-run'])
+$retentionDryRun = ScheduledTaskOutput::summaryOnly(Schedule::command('compliance:apply-retention', ['--dry-run'])
     ->weeklyOn(1, '05:10')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 $retentionDryRun->onFailure(LogScheduledCommandFailure::of('compliance:apply-retention', $retentionDryRun));
 
 /*
@@ -584,10 +597,10 @@ $retentionDryRun->onFailure(LogScheduledCommandFailure::of('compliance:apply-ret
  * leyeron la misma fila solo una la marca, y solo esa sella
  * `data_export.file_missing`. Nunca se pisa `purged_at` (regla dura 5).
  */
-Schedule::command('product:export-all', ['--purge'])
+ScheduledTaskOutput::toLog(Schedule::command('product:export-all', ['--purge'])
     ->hourly()
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * Purga de los informes generados en diferido (RF-IN-06, ADR-041, tarea 3.9).
@@ -626,10 +639,10 @@ Schedule::command('product:export-all', ['--purge'])
  * `report_export.file_missing`; `purged_at` no se pisa—, pero dos a la vez
  * borrando los mismos ficheros no aportan nada.
  */
-Schedule::command('reporting:purge-expired-exports')
+ScheduledTaskOutput::toLog(Schedule::command('reporting:purge-expired-exports')
     ->dailyAt('04:25')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * Telemetria opcional (RF-PD-12, ADR-020, ADR-023, tarea 5.10).
@@ -662,10 +675,10 @@ Schedule::command('reporting:purge-expired-exports')
  * tardar hasta los diez segundos del tiempo de espera y no debe retener al
  * planificador.
  */
-Schedule::command('product:telemetry', ['--send'])
+ScheduledTaskOutput::toLog(Schedule::command('product:telemetry', ['--send'])
     ->weeklyOn(1, '05:40')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 
 /*
  * Resumen semanal por correo al responsable de cada departamento (RF-PR-05,
@@ -705,10 +718,10 @@ Schedule::command('product:telemetry', ['--send'])
  * cuantos salieron, pero nadie tiene que levantarse a las 06:30 porque un correo
  * de gestion no haya salido (§8.4: una alerta sin runbook es ruido).
  */
-$weeklySummary = Schedule::command('reporting:weekly-summary')
+$weeklySummary = ScheduledTaskOutput::toLog(Schedule::command('reporting:weekly-summary')
     ->weeklyOn(1, '06:00')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());
 $weeklySummary->onFailure(LogScheduledCommandFailure::of('reporting:weekly-summary', $weeklySummary));
 
 /*
@@ -740,7 +753,7 @@ $weeklySummary->onFailure(LogScheduledCommandFailure::of('reporting:weekly-summa
  * borrar dos veces- pero dos `DELETE` a la vez sobre la misma tabla no aportan
  * nada.
  */
-Schedule::command('product:errors:prune')
+ScheduledTaskOutput::toLog(Schedule::command('product:errors:prune')
     ->dailyAt('03:35')
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground());

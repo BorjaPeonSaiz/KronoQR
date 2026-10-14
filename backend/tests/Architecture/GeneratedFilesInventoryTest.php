@@ -96,6 +96,9 @@ const GENERATED_FILES_INVENTORY = [
         'tempnam:' => 'disposable',
         'sys_get_temp_dir:' => 'disposable',
     ],
+    // V4-BE-1: la salida de una tarea programada mientras corre. La borra
+    // `schedule:finish` al llevarla al log, y se sobrescribe en cada ejecucion.
+    'app/Support/Scheduling/ScheduledTaskOutput.php' => ['sys_get_temp_dir:' => 'disposable'],
 ];
 
 const GENERATED_FILES_INVENTORY_CLASSES = ['shared', 'disposable', 'probe', 'unused', 'dev_only'];
