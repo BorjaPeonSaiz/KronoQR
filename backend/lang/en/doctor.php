@@ -395,12 +395,14 @@ return [
             ],
             // V5-DV-05: the 15-minute promise holds if the backups leave the server.
             'offsite' => [
-                'ok' => 'The backups and the WAL archive are not on the same disk as the data, or are on a network '
-                    .'share.',
+                'ok' => 'The backups and the WAL archive are on a network share, off the server.',
                 'warning_same_disk' => 'The backups are on the same disk as the data: if that disk is lost, the '
                     .'database and all the backups are lost together.',
                 'warning_wal_same_disk' => 'The WAL archive (the continuous change log) is on the same disk as the '
                     .'data: if that disk is lost, the 15-minute maximum loss no longer holds.',
+                'warning_other_filesystem' => 'The backups are on a different filesystem from the data, but from here '
+                    .'it cannot be known whether it is a different physical disk (a partition or logical volume of '
+                    .'the same disk does not count as off the server). Check it from the server with ./doctor.sh.',
                 'warning_unknown' => 'It is not yet known whether the backups leave the server: the measurement is '
                     .'published by the nightly backup (at :daily_at UTC). From the server, ./doctor.sh checks it '
                     .'right away.',
@@ -966,6 +968,11 @@ return [
                 'warning_wal_same_disk' => "Take wal/ off the server too, as you do with the daily backups: without\n"
                     ."the WAL you can only recover up to the last backup, not to 15 minutes ago. See\n"
                     .'docs/cliente/en/operation.md, "The backups must leave the server".',
+                'warning_other_filesystem' => 'On the server, run the check that does see the physical disks:
+'
+                    .'  sudo ./doctor.sh
+'
+                    .'To count as off the server it must be a different physical disk or a network share. See docs/cliente/en/operation.md, "The backups must leave the server".',
                 'warning_unknown' => "Wait for the first nightly backup, or check now from the server:\n"
                     ."  sudo ./doctor.sh\n"
                     .'See docs/cliente/en/operation.md, "The backups must leave the server".',

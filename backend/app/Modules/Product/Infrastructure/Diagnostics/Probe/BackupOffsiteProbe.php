@@ -29,16 +29,27 @@ use App\Modules\Product\Infrastructure\Diagnostics\TextfileMetricsReader;
  * - `kronoqr_backup_destination_offsite`: `BACKUP_PATH`.
  * - `kronoqr_backup_wal_offsite`: `BACKUP_PATH/wal`, donde archiva PostgreSQL.
  *
- * Valen 1 (red, o dispositivo distinto del de los datos), 0 (el mismo
- * dispositivo) o -1 (no se pudo medir). `./doctor.sh`, desde el anfitrion, hace
- * la medida completa contra los datos de PostgreSQL.
+ * Desde el contenedor solo se ve el SISTEMA DE FICHEROS, no el disco fisico: una
+ * particion, un volumen logico de LVM, un subvolumen de btrfs o un dataset de ZFS
+ * del mismo disco tienen dispositivos distintos. Por eso la medida no dice «otro
+ * disco» sino:
+ *
+ * - 2: sistema de ficheros de red. Fuera del servidor.
+ * - 1: otro sistema de ficheros que los datos. NO se sabe si es otro disco: aviso
+ *   suave que remite a `./doctor.sh`.
+ * - 0: el mismo sistema de ficheros que los datos.
+ * - -1: no se pudo medir.
+ *
+ * `./doctor.sh`, desde el anfitrion, resuelve el disco fisico (findmnt + lsblk) y
+ * compara discos contra los datos de PostgreSQL y de Docker: es la unica medida
+ * que puede dar por buena una copia en un disco local distinto.
  *
  * ## Es un aviso, nunca un fallo
  *
  * El cliente puede sacar las copias por su cuenta (rsync, cinta, nube europea) y
  * esto no puede saberlo: un fallo daria un `doctor` en rojo, y un `update.sh`
  * parado, en una instalacion que no tiene nada roto. Por eso solo hay `ok` y
- * `warning`.
+ * `warning`. Y solo un destino de red da `ok` aqui: el resto lo confirma doctor.sh.
  */
 final readonly class BackupOffsiteProbe implements DoctorProbe
 {
@@ -73,18 +84,29 @@ final readonly class BackupOffsiteProbe implements DoctorProbe
             'wal_offsite' => $wal,
         ];
 
-        if ($destination !== null && $destination === 0.0) {
-            return [DoctorFinding::warning($id, 'same_disk', $params, $details)];
-        }
+        $variant = self::variant($destination, $wal);
 
-        if ($wal !== null && $wal === 0.0) {
-            return [DoctorFinding::warning($id, 'wal_same_disk', $params, $details)];
-        }
-
-        if ($destination === null || $wal === null || $destination < 0.0 || $wal < 0.0) {
-            return [DoctorFinding::warning($id, 'unknown', $params, $details)];
+        if ($variant !== null) {
+            return [DoctorFinding::warning($id, $variant, $params, $details)];
         }
 
         return [DoctorFinding::ok($id, $details, $params)];
+    }
+
+    /**
+     * La variante del aviso, o null si los dos son de red. Lo peor manda: mismo
+     * disco, despues WAL en el mismo disco, despues sin medir, despues «otro
+     * sistema de ficheros».
+     */
+    private static function variant(?float $destination, ?float $wal): ?string
+    {
+        return match (true) {
+            $destination === 0.0 => 'same_disk',
+            $wal === 0.0 => 'wal_same_disk',
+            $destination === null, $wal === null, $destination < 0.0, $wal < 0.0 => 'unknown',
+            // 1 = otro sistema de ficheros: desde aqui no se sabe si es otro disco.
+            $destination < 2.0, $wal < 2.0 => 'other_filesystem',
+            default => null,
+        };
     }
 }

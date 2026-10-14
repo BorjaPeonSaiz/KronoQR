@@ -81,7 +81,7 @@ function copiasFueraDelServidorArreglo(DoctorFinding $finding, string $locale = 
 
 it('da por buenas las copias que salen del servidor', function (): void {
     $finding = copiasFueraDelServidorSonda([
-        BackupOffsiteProbe::RUN_FILE => copiasFueraDelServidorFichero('1', '1'),
+        BackupOffsiteProbe::RUN_FILE => copiasFueraDelServidorFichero('2', '2'),
     ]);
 
     expect($finding->id)->toBe('backup.offsite')
@@ -103,7 +103,7 @@ it('avisa, sin fallar, cuando las copias estan en el mismo disco que los datos',
 
 it('avisa del WAL aunque las copias diarias si salgan', function (): void {
     $finding = copiasFueraDelServidorSonda([
-        BackupOffsiteProbe::RUN_FILE => copiasFueraDelServidorFichero('1', '0'),
+        BackupOffsiteProbe::RUN_FILE => copiasFueraDelServidorFichero('2', '0'),
     ]);
 
     expect($finding->status)->toBe(DoctorStatus::Warning)
@@ -118,11 +118,12 @@ it('nunca es un fallo: ninguna combinacion de medidas sale en rojo', function (s
 
     expect($finding->status)->not->toBe(DoctorStatus::Failure);
 })->with([
-    'ambas fuera' => ['1', '1'],
+    'ambas en red' => ['2', '2'],
+    'otro sistema de ficheros' => ['1', '1'],
     'ambas en el mismo disco' => ['0', '0'],
-    'solo el WAL en el mismo disco' => ['1', '0'],
+    'solo el WAL en el mismo disco' => ['2', '0'],
     'ambas sin medir' => ['-1', '-1'],
-    'una sin medir' => ['1', '-1'],
+    'una sin medir' => ['2', '-1'],
 ])->group('RF-PD-13', 'RF-PD-15');
 
 it('dice que no consta cuando la medida no se pudo hacer o aun no existe', function (array $ficheros): void {
@@ -139,7 +140,7 @@ it('dice que no consta cuando la medida no se pudo hacer o aun no existe', funct
 ])->group('RF-PD-13', 'RF-PD-15');
 
 it('tiene texto en espanol y en ingles para cada resultado', function (): void {
-    $casos = ['same_disk' => ['0', '0'], 'wal_same_disk' => ['1', '0'], 'unknown' => ['-1', '-1']];
+    $casos = ['same_disk' => ['0', '0'], 'wal_same_disk' => ['2', '0'], 'other_filesystem' => ['1', '1'], 'unknown' => ['-1', '-1']];
 
     foreach ($casos as $variant => [$destino, $wal]) {
         $finding = copiasFueraDelServidorSonda([
@@ -151,7 +152,7 @@ it('tiene texto en espanol y en ingles para cada resultado', function (): void {
             ->and(copiasFueraDelServidorArreglo($finding, 'en'))->toContain('operation.md');
     }
 
-    $ok = copiasFueraDelServidorSonda([BackupOffsiteProbe::RUN_FILE => copiasFueraDelServidorFichero('1', '1')]);
+    $ok = copiasFueraDelServidorSonda([BackupOffsiteProbe::RUN_FILE => copiasFueraDelServidorFichero('2', '2')]);
 
     expect(copiasFueraDelServidorTexto($ok, 'en'))->not->toBe(copiasFueraDelServidorTexto($ok, 'es'));
 })->group('RF-PD-13', 'RF-PD-15');
@@ -163,4 +164,38 @@ it('lee las mismas series que publica backup.sh, en el mismo fichero que el resu
     expect($lib)->toContain(BackupOffsiteProbe::DESTINATION_METRIC.' ${dest}')
         ->and($lib)->toContain(BackupOffsiteProbe::WAL_METRIC.' ${wal}')
         ->and($backup)->toMatch('/emit_offsite_metrics\n\s*\} \| write_metrics "\$\{BACKUP_DIR_METRICS\}\/'.preg_quote(BackupOffsiteProbe::RUN_FILE, '/').'"/');
+})->group('RF-PD-13', 'RL-14');
+
+it('no da por bueno un destino que solo esta en otro sistema de ficheros: no se sabe si es otro disco', function (): void {
+    // `stat -c %d` distingue sistemas de ficheros, no discos: una particion o un
+    // volumen logico del mismo disco fisico daria 1 y no esta fuera del servidor.
+    foreach ([['1', '1'], ['2', '1'], ['1', '2']] as [$destino, $wal]) {
+        $finding = copiasFueraDelServidorSonda([
+            BackupOffsiteProbe::RUN_FILE => copiasFueraDelServidorFichero($destino, $wal),
+        ]);
+
+        expect($finding->status)->toBe(DoctorStatus::Warning)
+            ->and($finding->variant)->toBe('other_filesystem')
+            ->and(copiasFueraDelServidorTexto($finding))->toContain('no se puede saber si es otro disco fisico')
+            ->and(copiasFueraDelServidorArreglo($finding))->toContain('sudo ./doctor.sh')
+            ->and(copiasFueraDelServidorTexto($finding, 'en'))->toContain('whether it is a different physical disk');
+    }
+})->group('RF-PD-13', 'RF-PD-15', 'RL-12', 'RL-14');
+
+it('solo un recurso de red da el verde pleno', function (): void {
+    $finding = copiasFueraDelServidorSonda([
+        BackupOffsiteProbe::RUN_FILE => copiasFueraDelServidorFichero('2', '2'),
+    ]);
+
+    expect($finding->status)->toBe(DoctorStatus::Ok)
+        ->and(copiasFueraDelServidorTexto($finding))->toContain('recurso de red');
+})->group('RF-PD-13', 'RL-14');
+
+it('doctor.sh compara discos fisicos y no sistemas de ficheros', function (): void {
+    $lib = (string) file_get_contents(Repo::file('infra/scripts/lib/offsite.sh'));
+    $doctor = (string) file_get_contents(Repo::file('infra/scripts/doctor.sh'));
+
+    expect($doctor)->toContain('kq_offsite_state_host')
+        ->and($lib)->toContain('findmnt -no SOURCE -T')
+        ->and($lib)->toContain('lsblk -nrs -o NAME,TYPE');
 })->group('RF-PD-13', 'RL-14');
