@@ -120,6 +120,17 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+### Anotado en el bloque 13 de la 2.2.1 (14-10-2026)
+
+- V6-DV-9: la ventana de 503 de una actualización sigue sin medirse con carga; `update.sh` la reparte por fases y ⑧b la
+  publica en el resumen del job. Sustituir la cifra «unos 52 s» de `operacion.md` (es/en) por la medida.
+- `doctor.sh` no comprueba que Prometheus tenga cargados los nombres de alerta del paquete (`/api/v1/rules`).
+- `product:doctor` no muestra `LOG_RETENTION_HOURS`: la app no recibe la variable; hacerlo pasa por ADR-042.
+- El salto 2.2.0 → 2.2.1 no fusiona `observability/` (la 2.2.0 no trae `observability.sha256`): gana el paquete y avisa.
+  Las reglas protegidas son todas las `prometheus/rules/*.yml` salvo `local-*` y `kiosk.yml`.
+- `backend/vendor` local trae `spatie/laravel-pdf` 1.9.0 frente a 2.13.1 del lock: `RuntimeEnvironmentTest` falla en local
+  (no en la CI). `composer install` en el contenedor `app` lo arregla.
+
 ### Anotado en el bloque 12 de la 2.2.1 (14-10-2026)
 
 - El camino `popen('exec cat >> /proc/1/fd/2')` de `ContainerLogChannel` solo se ha probado a mano en el contenedor; cubrirlo
