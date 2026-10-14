@@ -12,8 +12,8 @@
 // lea. Los minutos enteros van en el `title` de cada celda, para quien necesite
 // el numero exacto.
 //
-// VIRTUALIZADA A PARTIR DE UN UMBRAL (V5-PA-1), con el mismo mecanismo que
-// `features/incidents/IncidentTable.vue` y `features/live/PresenceTable.vue`: el
+// VIRTUALIZADA A PARTIR DE UN UMBRAL (V5-PA-1), con `useVirtualRows`, el mismo
+// mecanismo de las demas tablas largas del panel: el
 // servidor admite hasta 20 000 filas por informe y pintarlas todas bloquea el
 // navegador. Solo se pinta la ventana visible; `aria-rowcount` declara el total
 // y `aria-rowindex` la posicion de cada fila (PA7-003). El contenedor con
@@ -22,10 +22,10 @@
 // COSTE: la virtualizacion rompe la impresion del navegador y el «buscar en la
 // pagina» (solo existe en el DOM lo que se ve). Para eso esta la exportacion
 // (RF-IN-04), que lleva TODAS las filas.
-import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PeriodReportRow } from '@/shared/api/types'
+import { useVirtualRows } from '@/shared/virtualization/useVirtualRows'
 
 const props = defineProps<{
   rows: readonly PeriodReportRow[]
@@ -33,8 +33,6 @@ const props = defineProps<{
   timeZone: string
 }>()
 
-/** A partir de cuantas filas merece la pena no pintarlas todas. */
-const VIRTUALIZE_FROM = 80
 /** Alto fijo de fila: la celda del sujeto lleva nombre y codigo en dos lineas. */
 const ROW_HEIGHT_PX = 64
 
@@ -42,46 +40,12 @@ const { t } = useI18n()
 
 const scroller = ref<HTMLElement | null>(null)
 
-const virtual = computed(() => props.rows.length >= VIRTUALIZE_FROM)
+const items = computed(() => props.rows)
 
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: virtual.value ? props.rows.length : 0,
-    getScrollElement: () => scroller.value,
-    estimateSize: () => ROW_HEIGHT_PX,
-    overscan: 10,
-  })),
-)
-
-interface VisibleRow {
-  row: PeriodReportRow
-  index: number
-  start: number
-  key: string
-}
-
-const visibleRows = computed<VisibleRow[]>(() =>
-  virtual.value
-    ? virtualizer.value
-        .getVirtualItems()
-        .map((item) => ({
-          row: props.rows[item.index],
-          index: item.index,
-          start: item.start,
-          key: String(item.key),
-        }))
-        .filter((visible): visible is VisibleRow => visible.row !== undefined)
-    : props.rows.map((row, index) => ({
-        row,
-        index,
-        start: index * ROW_HEIGHT_PX,
-        key: String(index),
-      })),
-)
-
-const totalHeight = computed(() =>
-  virtual.value ? virtualizer.value.getTotalSize() : props.rows.length * ROW_HEIGHT_PX,
-)
+const { visibleRows, totalHeight } = useVirtualRows(items, {
+  rowHeight: ROW_HEIGHT_PX,
+  scroller,
+})
 
 /**
  * La etiqueta del sujeto de una fila.
@@ -114,11 +78,35 @@ function deviationClass(row: PeriodReportRow): string {
 
 const hasSubjectColumn = computed(() => props.rows.some((row) => row.subject.kind !== 'site'))
 
+/** Anchos minimos de las columnas, en rem: de ellos salen la rejilla y el ancho de la tabla. */
+const SUBJECT_COLUMN_REM = 11
+const PERIOD_COLUMN_REM = 9
+const METRIC_COLUMN_REM = 4.5
+const METRIC_COLUMNS = 12
+/** `gap-3` entre columnas y `pr-3` al final de la fila. */
+const GAP_REM = 0.75
+
 /** La rejilla de columnas, la misma en la cabecera y en cada fila. */
 const gridTemplate = computed(
   () =>
-    `${hasSubjectColumn.value ? 'minmax(11rem,1.6fr) ' : ''}minmax(9rem,1.4fr) repeat(12, minmax(4.5rem,1fr))`,
+    `${hasSubjectColumn.value ? `minmax(${SUBJECT_COLUMN_REM}rem,1.6fr) ` : ''}minmax(${PERIOD_COLUMN_REM}rem,1.4fr) repeat(${METRIC_COLUMNS}, minmax(${METRIC_COLUMN_REM}rem,1fr))`,
 )
+
+/**
+ * Lo que mide la rejilla con todas las columnas en su minimo. La tabla no puede
+ * ser mas estrecha: las filas van en `absolute w-full`, y una tabla mas corta que
+ * su rejilla las dejaria desbordadas por la derecha, con la ultima franja fuera
+ * de la cabecera fija.
+ */
+const gridMinWidth = computed(() => {
+  const columns = METRIC_COLUMNS + 1 + (hasSubjectColumn.value ? 1 : 0)
+  const columnsRem =
+    (hasSubjectColumn.value ? SUBJECT_COLUMN_REM : 0) +
+    PERIOD_COLUMN_REM +
+    METRIC_COLUMNS * METRIC_COLUMN_REM
+
+  return `${columnsRem + (columns - 1) * GAP_REM + GAP_REM}rem`
+})
 
 const caption = computed(() => t('reports.table.caption', { timeZone: props.timeZone }))
 </script>
@@ -136,7 +124,8 @@ const caption = computed(() => t('reports.table.caption', { timeZone: props.time
       role="table"
       :aria-rowcount="rows.length + 1"
       :aria-label="caption"
-      class="min-w-7xl text-left"
+      class="text-left"
+      :style="{ minWidth: `max(100%, ${gridMinWidth})` }"
     >
       <div
         role="rowgroup"
@@ -198,58 +187,60 @@ const caption = computed(() => t('reports.table.caption', { timeZone: props.time
           data-test="report-row"
         >
           <span v-if="hasSubjectColumn" role="rowheader" class="min-w-0">
-            <span class="block truncate" :title="subjectLabel(visible.row)">{{
-              subjectLabel(visible.row)
+            <span class="block truncate" :title="subjectLabel(visible.item)">{{
+              subjectLabel(visible.item)
             }}</span>
             <span
-              v-if="visible.row.subject.employee_code !== null"
+              v-if="visible.item.subject.employee_code !== null"
               class="block truncate text-sm text-kq-text-muted"
-              >{{ visible.row.subject.employee_code }}</span
+              >{{ visible.item.subject.employee_code }}</span
             >
           </span>
-          <span role="cell" class="tabular-nums">{{ periodLabel(visible.row) }}</span>
+          <span role="cell" class="tabular-nums">{{ periodLabel(visible.item) }}</span>
           <span
             role="cell"
             class="text-right tabular-nums"
-            :title="`${visible.row.worked_minutes} min`"
+            :title="`${visible.item.worked_minutes} min`"
           >
-            {{ visible.row.worked }}
+            {{ visible.item.worked }}
           </span>
           <span
             role="cell"
             class="text-right tabular-nums"
-            :title="`${visible.row.contracted_minutes} min`"
+            :title="`${visible.item.contracted_minutes} min`"
           >
-            {{ visible.row.contracted }}
+            {{ visible.item.contracted }}
           </span>
           <span
             role="cell"
             class="text-right tabular-nums"
-            :class="deviationClass(visible.row)"
-            :title="`${visible.row.deviation_minutes} min`"
+            :class="deviationClass(visible.item)"
+            :title="`${visible.item.deviation_minutes} min`"
           >
-            {{ visible.row.deviation }}
+            {{ visible.item.deviation }}
           </span>
           <span
             role="cell"
             class="text-right tabular-nums"
-            :title="`${visible.row.overtime_minutes} min`"
+            :title="`${visible.item.overtime_minutes} min`"
           >
-            {{ visible.row.overtime }}
+            {{ visible.item.overtime }}
           </span>
-          <span role="cell" class="text-right tabular-nums">{{ visible.row.shift_count }}</span>
+          <span role="cell" class="text-right tabular-nums">{{ visible.item.shift_count }}</span>
           <span role="cell" class="text-right tabular-nums">{{
-            visible.row.days_with_activity
+            visible.item.days_with_activity
           }}</span>
           <span role="cell" class="text-right tabular-nums">{{
-            visible.row.days_without_activity
+            visible.item.days_without_activity
           }}</span>
-          <span role="cell" class="text-right tabular-nums">{{ visible.row.open_shift_days }}</span>
-          <span role="cell" class="text-right tabular-nums">{{ visible.row.incident_days }}</span>
-          <span role="cell" class="text-right tabular-nums">{{ visible.row.absence_days }}</span>
-          <span role="cell" class="text-right tabular-nums">{{ visible.row.holiday_days }}</span>
           <span role="cell" class="text-right tabular-nums">{{
-            visible.row.unjustified_absence_days
+            visible.item.open_shift_days
+          }}</span>
+          <span role="cell" class="text-right tabular-nums">{{ visible.item.incident_days }}</span>
+          <span role="cell" class="text-right tabular-nums">{{ visible.item.absence_days }}</span>
+          <span role="cell" class="text-right tabular-nums">{{ visible.item.holiday_days }}</span>
+          <span role="cell" class="text-right tabular-nums">{{
+            visible.item.unjustified_absence_days
           }}</span>
         </div>
       </div>
