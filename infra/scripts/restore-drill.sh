@@ -47,7 +47,8 @@
 #   --base RUTA     (pitr) copia fisica. Por defecto la ultima de base/
 #   --wal-source X  (pitr) donde esta el archivo de WAL: una ruta o un volumen de
 #                   Docker, que se monta en solo lectura. Por defecto BACKUP_PATH/wal
-#   --image IMAGEN  imagen del contenedor limpio. Por defecto postgres:17-alpine
+#   --image IMAGEN  imagen del contenedor limpio. Por defecto postgres:17-alpine fijada
+#                   por digest (ADR-053)
 #                   (en pitr, la imagen de postgres DEL PRODUCTO, la fijada por
 #                   digest en el paquete —images.lock o IMAGE_DIGEST_POSTGRES,
 #                   ADR-053—; sin digest, la de IMAGE_TAG. Trae las herramientas
@@ -104,6 +105,10 @@ readonly SCRIPT_DIR
 FICHERO=""
 BASE_FISICA=""
 FUENTE_WAL=""
+# La imagen del contenedor limpio de los modos container y database, FIJADA POR DIGEST (ADR-053):
+# la misma base que la Dockerfile del producto (infra/docker/postgres/Dockerfile) —una prueba de
+# arquitectura exige que coincidan— y no un tag movil que pudo cambiar desde la copia.
+IMAGEN_PREDETERMINADA="postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24"
 IMAGEN="${DRILL_POSTGRES_IMAGE:-}"
 MODO="container"
 ESPERA=90
@@ -403,6 +408,10 @@ digest_postgres_del_paquete() {
   fi
   if [[ "$valor" =~ ^sha256:[0-9a-f]{64}$ ]]; then
     printf '%s' "$valor"
+  elif [ -n "$valor" ]; then
+    # Definido pero mal formado: nunca se cae en silencio a la etiqueta, que es justo lo
+    # que ADR-053 prohibe. Quien lo vea, que lo corrija o lo vacie a proposito.
+    return 2
   fi
   return 0
 }
@@ -417,7 +426,8 @@ imagen_pitr() {
     printf '%s' "$IMAGEN"
     return 0
   }
-  digest="$(digest_postgres_del_paquete)"
+  digest="$(digest_postgres_del_paquete)" || die "${KQ_EXIT_REQUIREMENTS}" \
+    "IMAGE_DIGEST_POSTGRES (o el images.lock del paquete) no es un digest valido (@sha256:<64 hexadecimales>). Corrigelo, o dejalo VACIO a proposito si quieres usar la etiqueta (ADR-053). No se ha tocado nada."
   if [ -n "$digest" ]; then
     printf '%s/postgres@%s' "${IMAGE_REGISTRY:-ghcr.io/kronoqr}" "$digest"
     return 0
@@ -621,7 +631,7 @@ main() {
   require_cmd openssl openssl
   require_encryption_key
   ensure_backup_tree reports metrics
-  [ -n "$IMAGEN" ] || [ "$MODO" = "pitr" ] || IMAGEN="postgres:17-alpine"
+  [ -n "$IMAGEN" ] || [ "$MODO" = "pitr" ] || IMAGEN="$IMAGEN_PREDETERMINADA"
 
   TRABAJO="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-drill.XXXXXX")"
   chmod 0700 "$TRABAJO"
