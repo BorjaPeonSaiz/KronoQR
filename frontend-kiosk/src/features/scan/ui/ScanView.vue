@@ -159,7 +159,13 @@ const pipeline = createScanPipeline({
   onError: (_code, context) => reporter.report('kiosk.scan.submit_failed', context),
 })
 
-const session = useScanSessionWithCleanup({ pipeline, sound })
+// La pantalla confirma al instante y muda; el tono espera al servidor hasta
+// `SCAN_SOUND_SERVER_WAIT_MS` (RF-AT-05). Sin red de antemano suena `pending` ya.
+const session = useScanSessionWithCleanup({
+  pipeline,
+  sound,
+  isOffline: () => connectivity.status.value === 'offline',
+})
 
 const scanner = useQrScanner({
   video,
@@ -512,7 +518,11 @@ onUnmounted(() => {
       <!-- El acceso por PIN vive ahora en el centro de la pantalla de escaneo
            (junto al subtitulo, y como respaldo cuando la camara falla), no
            aqui: el aviso de privacidad se queda solo y ocupa todo el ancho. -->
-      <PrivacyNoticePanel class="min-w-0 flex-1" :notice="branding.current.value.privacyNotice" />
+      <PrivacyNoticePanel
+        class="min-w-0 flex-1"
+        :notice="branding.current.value.privacyNotice"
+        :confirmation="session.confirmation.value"
+      />
 
       <button
         v-if="scanner.torchAvailable.value"

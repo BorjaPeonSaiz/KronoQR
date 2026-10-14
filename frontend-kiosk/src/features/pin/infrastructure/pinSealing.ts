@@ -1,7 +1,7 @@
 // Sobre cerrado de libsodium para el PIN de respaldo (RF-AT-11, RL-12).
 //
 // EL PIN NUNCA VIAJA NI SE GUARDA EN CLARO, NI SIQUIERA CON RED. En cuanto el
-// empleado teclea el sexto digito, esta funcion lo cierra con la clave publica
+// empleado pulsa «Aceptar» con su PIN (de 6 a 8 cifras, ADR-050), esta funcion lo cierra con la clave publica
 // de la instalacion (`pin_sealing_public_key`, de `GET /api/v1/kiosk/roster`)
 // y lo que sale es el UNICO rastro que existe del PIN a partir de ese momento:
 //
@@ -24,7 +24,7 @@
 // la primera vez, y eso SI puede tardar unos milisegundos — nada que ver con la
 // red, pero es trabajo que no interesa hacer mientras el empleado ya ha
 // pulsado «Confirmar». La pantalla del teclado llama a `warmUpSealing()` al
-// montarse, para que cuando llegue el sexto digito el sellado sea, en la
+// montarse, para que cuando se pulse «Aceptar» el sellado sea, en la
 // practica, sincrono.
 
 // Importacion POR DEFECTO, no con espacio de nombres. Verificado contra el
@@ -58,7 +58,7 @@ function whenReady(): Promise<typeof sodium> {
   const attempt = sodium.ready.then(() => {
     // Con el modulo «listo» pero sin la primitiva (paquete mal empaquetado,
     // ver el comentario de la importacion) sellar fallaria siempre: mejor
-    // saberlo aqui, donde se puede ocultar el boton, que al sexto digito.
+    // saberlo aqui, donde se puede ocultar el boton, que al pulsar «Aceptar».
     if (typeof sodium.crypto_box_seal !== 'function') {
       throw new PinSealingError('primitive_missing')
     }
@@ -78,7 +78,7 @@ export type SealingStatus = 'ready' | 'unavailable'
  * Se llama al montar las pantallas del quiosco, para que `sealPin` no espere a
  * WASM y para saber SI se podra sellar antes de ofrecer la via del PIN. Nunca
  * lanza. Devolver un estado es lo que permite a la pantalla ocultar el boton
- * en vez de ofrecer un teclado que fallaria al sexto digito.
+ * en vez de ofrecer un teclado que fallaria al pulsar «Aceptar».
  */
 export async function warmUpSealing(): Promise<SealingStatus> {
   try {
@@ -94,7 +94,7 @@ export async function warmUpSealing(): Promise<SealingStatus> {
  * referencia a el mas alla de esta llamada: no se asigna a ninguna variable
  * exterior, no se registra y no se guarda.
  *
- * @param pin Seis digitos ASCII, sin relleno ni terminador (doc de contrato).
+ * @param pin De 6 a 8 cifras ASCII, sin relleno ni terminador (doc de contrato).
  * @param publicKeyBase64 `pin_sealing_public_key` del padron, en base64 estandar.
  * @returns El sobre cerrado, en base64 estandar (`pin_sealed`).
  */

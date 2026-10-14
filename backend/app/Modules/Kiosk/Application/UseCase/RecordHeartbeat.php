@@ -13,6 +13,7 @@ use App\Modules\Kiosk\Domain\ValueObject\ServiceCodeFingerprint;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
+use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\KioskServiceCodeProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
@@ -104,11 +105,25 @@ use Throwable;
  * tumbar un latido** (regla dura 19): si el puerto lanza, si la version no es
  * SemVer o si es un build `-dev`, el campo se omite y la tablet sigue con su
  * cadencia normal de actualizacion.
+ *
+ * ## Y desde la 2.2.1, la zona horaria del centro (RF-KI-07, RF-AT-05)
+ *
+ * `site_time_zone` es el nombre IANA de `sites.timezone` del centro de la
+ * instalacion (hay uno, ADR-040), que llega por {@see InstallationSiteProvider}
+ * porque `sites` es de `Workforce` (ADR-025). La tablet lo usa **solo para
+ * presentar**: la hora de la confirmacion y la ventana de actualizacion se leen
+ * en el reloj de pared del centro (ADR-004, nota de ADR-056 del 14-10-2026).
+ * Nada de lo que registra cambia: los instantes siguen en UTC (regla dura 3).
+ * **Tampoco puede tumbar un latido** (regla dura 19): sin centro todavia, o si
+ * el puerto lanza, el campo se omite y la tablet sigue con su propia zona.
  */
 final readonly class RecordHeartbeat
 {
     /** Codigo y mensaje estables del fallo al resolver la version minima: agrupan en una sola huella. */
     private const string MINIMUM_VERSION_UNAVAILABLE = 'kiosk.heartbeat.minimum_app_version_unavailable';
+
+    /** Codigo y mensaje estables del fallo al leer la zona del centro: una sola huella. */
+    private const string SITE_TIME_ZONE_UNAVAILABLE = 'kiosk.heartbeat.site_time_zone_unavailable';
 
     /** El «no se» de `DeployedVersion`, repetido porque Application no importa `App\Support`. */
     private const string UNKNOWN_VERSION = '0.0.0';
@@ -122,6 +137,7 @@ final readonly class RecordHeartbeat
         private OperationalSettingsProvider $settings,
         private DeviceTokenRenewal $tokens,
         private DeployedVersionProvider $versions,
+        private InstallationSiteProvider $sites,
     ) {}
 
     public function handle(RecordHeartbeatCommand $command): HeartbeatOutcome
@@ -172,6 +188,10 @@ final readonly class RecordHeartbeat
                 ? null
                 : $this->tokens->renewIfDue($command->deviceUuid, $command->presentedTokenId),
             $this->minimumAppVersion($command->deviceUuid, $seenAt),
+            // La zona del centro, para que la tablet pinte la hora y lea su
+            // ventana de actualizacion en el reloj de pared del hotel y no en el
+            // del aparato. Solo presentacion: nada de lo registrado cambia.
+            $this->siteTimeZone($command->deviceUuid, $seenAt),
         );
     }
 
@@ -208,6 +228,48 @@ final readonly class RecordHeartbeat
             ));
 
             return null;
+        }
+    }
+
+    /**
+     * El nombre IANA de la zona del centro de la instalacion, o `null` para
+     * omitirlo.
+     *
+     * `null` sin centro todavia (antes de la puesta en marcha, RF-PD-03): un
+     * quiosco no se vincula sin centro, pero el latido no es quien tiene que
+     * afirmarlo. Y `null` tambien si el puerto lanza, por lo mismo que la
+     * version minima: el dato es de presentacion y el latido es la señal de
+     * vida (regla dura 19). El fallo va al historico con la clase de la
+     * excepcion y nunca su mensaje (regla dura 21).
+     */
+    private function siteTimeZone(string $deviceUuid, DateTimeImmutable $seenAt): ?string
+    {
+        try {
+            return $this->sites->installationSite()?->timezone;
+        } catch (Throwable $failure) {
+            $this->errors->record(new ErrorReport(
+                source: ErrorSource::Api,
+                level: ErrorLevel::Error,
+                message: self::SITE_TIME_ZONE_UNAVAILABLE,
+                occurredAt: $seenAt,
+                appVersion: $this->deployedVersionOrUnknown(),
+                code: self::SITE_TIME_ZONE_UNAVAILABLE,
+                exceptionClass: $failure::class,
+                deviceId: $deviceUuid,
+                module: 'Kiosk',
+            ));
+
+            return null;
+        }
+    }
+
+    /** La version desplegada para etiquetar un informe de error, sin que leerla pueda lanzar. */
+    private function deployedVersionOrUnknown(): string
+    {
+        try {
+            return $this->versions->deployedVersion();
+        } catch (Throwable) {
+            return self::UNKNOWN_VERSION;
         }
     }
 }

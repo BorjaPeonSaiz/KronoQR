@@ -23,6 +23,7 @@ import type { ClientErrorCode, ErrorReporter } from '@/shared/telemetry/errorRep
 import {
   readDeviceToken,
   readLastScanAt,
+  readSiteTimeZone,
   readUpdateQuietMinutes,
   readUpdateWindow,
   storeLastScanAt,
@@ -301,6 +302,7 @@ export function createOfflineQueueController(options: OfflineQueueOptions): Offl
         interactionInProgress: interactionInProgress(),
         lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
         window: readUpdateWindow(),
+        timeZone: readSiteTimeZone(),
         quietMinutes: readUpdateQuietMinutes(),
       })
     },
@@ -352,6 +354,7 @@ export function canUpdateNowGlobal(urgent: boolean, now: Date = new Date()): boo
       interactionInProgress: interactionInProgress(),
       lastScanAt: lastScanAtIso === null ? null : new Date(lastScanAtIso),
       window: readUpdateWindow(),
+      timeZone: readSiteTimeZone(),
       quietMinutes: readUpdateQuietMinutes(),
     })
   }

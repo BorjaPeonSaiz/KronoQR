@@ -7,12 +7,19 @@
 // depender de las preferencias regionales del aparato.
 //
 // La conversion de UTC a la hora local ocurre AQUI, en presentacion, y solo
-// aqui (regla dura 3). La zona es la del dispositivo, que es la del centro.
+// aqui (regla dura 3). La zona es la DEL CENTRO (`site_time_zone` del latido,
+// RF-AT-05): una tablet con la zona mal puesta pinta igualmente la hora de la
+// pared del hotel. Sin zona conocida, o con un nombre que el navegador no
+// reconoce, se usa la de la tablet y la hora se pinta igual.
 
-export function formatClockTime(instant: Date, locale: string): string {
+import { resolveTimeZone } from '@/shared/time/siteTimeZone'
+
+export function formatClockTime(instant: Date, locale: string, timeZone?: string | null): string {
   if (Number.isNaN(instant.getTime())) return '--:--'
 
+  const zone = resolveTimeZone(timeZone)
   return new Intl.DateTimeFormat(locale, {
+    ...(zone === undefined ? {} : { timeZone: zone }),
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',

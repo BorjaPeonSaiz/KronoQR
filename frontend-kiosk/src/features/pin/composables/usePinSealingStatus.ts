@@ -3,7 +3,7 @@
 // Por que existe (PIN-03). Sin esto, la pantalla de tarjeta ofrecia el boton
 // «Ficha con tu codigo y PIN» en cuanto el padron traia la clave publica, aunque
 // libsodium no pudiera arrancar (WebAssembly bloqueado, modulo roto): el
-// empleado tecleaba codigo y seis digitos para acabar con un «codigo no valido»
+// empleado tecleaba codigo y su PIN (6 a 8 cifras) para acabar con un «codigo no valido»
 // que no era suyo. Ahora el boton solo se ofrece si se PUEDE sellar, y si deja de
 // poderse, desaparece en vez de quedar como una trampa.
 //

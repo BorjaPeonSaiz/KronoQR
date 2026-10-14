@@ -26,6 +26,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { formatClockTime } from '@/features/scan/domain/clockTime'
+import { readSiteTimeZone } from '@/shared/telemetry/deviceIdentity'
 import { useLongPress } from '../composables/useLongPress'
 
 const { t, locale } = useI18n()
@@ -79,6 +80,6 @@ function onKeyDown(event: KeyboardEvent): void {
     @keyup.space="longPress.onPointerUp"
     @blur="longPress.onPointerCancel"
   >
-    {{ formatClockTime(now, locale) }}
+    {{ formatClockTime(now, locale, readSiteTimeZone()) }}
   </button>
 </template>

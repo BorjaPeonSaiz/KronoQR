@@ -1262,6 +1262,7 @@ paths:
                       end: '02:00'
                       quiet_minutes: 15
                     minimum_app_version: 2.2.1
+                    site_time_zone: Atlantic/Canary
                 con-relevo-del-token:
                   summary: |
                     Latido firmado con un token que ha pasado el 80 % de su vida.
@@ -1277,6 +1278,7 @@ paths:
                       start: '03:00'
                       end: '05:00'
                       quiet_minutes: 10
+                    site_time_zone: Europe/Madrid
                     rotated_token:
                       value: 93|Vx8kQ2mNp4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyAb
                       expires_at: '2027-02-10T06:00:03Z'
@@ -12726,7 +12728,8 @@ components:
         Lo que el servidor le devuelve al quiosco: su hora, cuantos errores de
         cliente ha aceptado, los ajustes que la tablet necesita sin red, la
         version minima de la PWA (`minimum_app_version`, cuando el servidor la
-        conoce) y, solo cuando toca, el relevo de su token (`rotated_token`).
+        conoce), la zona horaria del centro (`site_time_zone`) y, solo cuando
+        toca, el relevo de su token (`rotated_token`).
       additionalProperties: false
       required:
         - server_time
@@ -12804,6 +12807,11 @@ components:
             `KIOSK_UPDATE_QUIET_MINUTES`, tarea 3.12), en **hora local del
             centro**.
 
+            **La hora local del centro es la de `site_time_zone`** (RF-KI-07, doc 01
+            §3.7): la tablet evalua `start` y `end` sobre el reloj de pared de esa
+            zona, no sobre la que tenga configurada el aparato. Hasta recibirla, o
+            si el navegador no reconoce el nombre, usa la zona de la tablet.
+
             **Es una ventana de PERMISO, no de bloqueo**: fuera de ella la tablet
             sigue fichando y sigue encolando con normalidad; lo unico que no hace
             es recargarse (regla dura 19). Una actualizacion a las 06:00 con
@@ -12826,12 +12834,12 @@ components:
             start:
               type: string
               pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
-              description: Inicio de la franja, `HH:MM` en hora local del centro.
+              description: Inicio de la franja, `HH:MM` en hora local del centro (`site_time_zone`).
               example: '03:00'
             end:
               type: string
               pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
-              description: Fin de la franja, `HH:MM` en hora local del centro.
+              description: Fin de la franja, `HH:MM` en hora local del centro (`site_time_zone`).
               example: '05:00'
             quiet_minutes:
               type: integer
@@ -12870,6 +12878,33 @@ components:
             ignora.
           examples:
             - 2.2.1
+        site_time_zone:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: |
+            **La zona horaria del centro de la instalacion**, el identificador
+            IANA de `sites.timezone` (`Site.timezone`; hay un solo centro por
+            instalacion, ADR-040). Es la zona en la que la tablet **presenta**:
+            la hora de la confirmacion del fichaje (RF-AT-05) y la ventana de
+            actualizacion `update_window` (RF-KI-07), que se leen en el reloj de
+            pared del centro y no en la zona que tenga configurada el aparato
+            (ADR-004, nota de ADR-056 del 14-10-2026, doc 01 §3.7).
+
+            **Solo presentacion, nunca registro**: `occurred_at` y `server_time`
+            siguen viajando en UTC (regla dura 3) y esta zona no interviene en lo
+            que la tablet encola. Guardarla en la tablet es seguro porque con
+            fichajes hechos no cambia (ADR-056).
+
+            **Opcional y aditivo.** El servidor la **omite** —nunca la manda a
+            `null`— si todavia no hay centro (antes de la puesta en marcha) o si
+            no la puede leer; el latido responde igual (regla dura 19). Sin ella,
+            o si el navegador no reconoce el nombre, la tablet usa su propia zona
+            y nunca deja de fichar ni de pintar la hora. Una PWA anterior a la
+            2.2.1 la ignora.
+          examples:
+            - Europe/Madrid
+            - Atlantic/Canary
         rotated_token:
           type: object
           additionalProperties: false

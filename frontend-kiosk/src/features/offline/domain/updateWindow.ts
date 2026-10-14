@@ -31,15 +31,29 @@
 //      hora exacta que declaro el centro. `lastScanAt` en `null` cuenta como
 //      «sin escaneo» (tablet que nunca ha fichado en esta sesion): no hay
 //      motivo para inventar un escaneo reciente que no ha ocurrido.
-//   3. La hora LOCAL de la tablet cae dentro de la ventana declarada, que
+//   3. La hora de PARED DEL CENTRO cae dentro de la ventana declarada, que
 //      puede cruzar la medianoche (`23:00-02:00`).
 //
-// HORA LOCAL A PROPOSITO. El resto del sistema trabaja en UTC (regla dura 3)
-// porque son instantes con valor legal; esto no es un instante, es «la hora
-// del reloj de la pared del centro», que es la que declaro quien configuro
-// la ventana y la que decide cuando hay cola de gente.
+// HORA DEL CENTRO A PROPOSITO (V2-KI-01, RF-KI-07). El resto del sistema
+// trabaja en UTC (regla dura 3) porque son instantes con valor legal; esto no
+// es un instante, es «la hora del reloj de la pared del centro», que es la que
+// declaro quien configuro la ventana y la que decide cuando hay cola de gente.
+// Se lee en la zona `site_time_zone` del latido (cacheada en
+// `deviceIdentity.ts`) con `Intl`, NO en la zona que tenga la tablet: una
+// tablet en UTC o en la zona equivocada abriria la ventana a las 06:00 de la
+// cola. Sin zona recibida todavia, o con un nombre que el navegador no
+// reconoce, se usa la de la tablet (regla dura 19: nunca se bloquea nada por
+// esto).
+//
+// EL DIA DEL CAMBIO DE HORA se lee el reloj de pared tal cual: la hora que no
+// existe (02:30 al adelantar) nunca se lee, asi que una ventana que cayera
+// entera en ella no abre ese dia; la hora que se repite (02:30 al atrasar) se
+// lee dos veces y la ventana puede abrir dos veces. Las dos lecturas son
+// inocuas: la puerta sigue exigiendo cola vacia y silencio.
 
-/** Franja horaria LOCAL del centro, en formato `"HH:MM"`. Puede cruzar la medianoche (`start` > `end`). */
+import { wallClockOf } from '@/shared/time/siteTimeZone'
+
+/** Franja horaria de PARED del centro (`site_time_zone`), en formato `"HH:MM"`. Puede cruzar la medianoche (`start` > `end`). */
 export interface UpdateWindow {
   readonly start: string
   readonly end: string
@@ -75,7 +89,8 @@ export function isValidUpdateWindow(value: unknown): value is UpdateWindow {
 }
 
 /**
- * `true` si la hora LOCAL `localNow` cae dentro de `window`. Admite una
+ * `true` si el instante `now`, leido en el reloj de pared de `timeZone` (o de
+ * la tablet si es `null`/ausente/desconocida), cae dentro de `window`. Admite una
  * ventana que cruza la medianoche (`start > end`, p. ej. `23:00-02:00`). Una
  * ventana con horas mal formadas nunca esta «abierta»: es mas seguro no
  * aplicar nada que adivinar.
@@ -86,14 +101,17 @@ export function isValidUpdateWindow(value: unknown): value is UpdateWindow {
  * «nunca», la lectura mas segura, en vez de como «siempre».
  */
 export function isWithinUpdateWindow(
-  localNow: Date,
+  now: Date,
   window: UpdateWindow = DEFAULT_UPDATE_WINDOW,
+  timeZone: string | null = null,
 ): boolean {
   const start = parseHHMM(window.start)
   const end = parseHHMM(window.end)
   if (start === null || end === null) return false
 
-  const current = localNow.getHours() * 60 + localNow.getMinutes()
+  const wall = wallClockOf(now, timeZone)
+  if (wall === null) return false
+  const current = wall.hour * 60 + wall.minute
   return start <= end
     ? current >= start && current < end
     : // Ventana que cruza la medianoche (23:00 -> 02:00).
@@ -101,8 +119,13 @@ export function isWithinUpdateWindow(
 }
 
 export interface UpdateGateInput {
-  /** Hora LOCAL de la tablet en el instante de decidir. */
+  /**
+   * El INSTANTE de decidir. La ventana se lee en el reloj de pared de
+   * `timeZone`, no en el de la tablet.
+   */
   readonly now: Date
+  /** `site_time_zone` del ultimo latido. `null`/ausente = la zona de la tablet. */
+  readonly timeZone?: string | null
   readonly pendingScans: number
   /** Instante del ultimo escaneo conocido por esta tablet. `null` = ninguno: cuenta como «sin escaneo». */
   readonly lastScanAt: Date | null
@@ -159,5 +182,9 @@ export function canApplyUpdate(input: UpdateGateInput): boolean {
 
   // Urgente: a cualquier hora. La unica puerta que se relaja es la ventana.
   if (urgent) return true
-  return isWithinUpdateWindow(input.now, input.window ?? DEFAULT_UPDATE_WINDOW)
+  return isWithinUpdateWindow(
+    input.now,
+    input.window ?? DEFAULT_UPDATE_WINDOW,
+    input.timeZone ?? null,
+  )
 }

@@ -39,7 +39,7 @@ El resultado habitual es una hoja de papel en recepción, horas apuntadas a mano
 1. Llega al centro y acerca su **tarjeta plastificada** a la tablet colocada en la entrada de personal.
 2. La tablet lee el QR sin que tenga que tocar nada, y en menos de un segundo muestra:
    > **Buenos días, Lucía — Entrada 07:02**
-   con un sonido de confirmación distinto para entrada, para salida y para error.
+   con un sonido de confirmación distinto para entrada, para salida y para error, que suena en cuanto el servidor lo confirma. Si en ese momento la tablet no tiene conexión, el fichaje se guarda igual, la pantalla lo dice y suena un tono de «guardado».
 3. Al salir, vuelve a pasar la tarjeta:
    > **Hasta luego, Lucía — Salida 15:02 · Hoy: 8 h 0 min**
 

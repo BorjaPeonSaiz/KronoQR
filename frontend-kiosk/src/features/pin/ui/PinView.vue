@@ -108,9 +108,9 @@ watchEffect(() => {
   }
 })
 
-// PIN-03: si libsodium no arranca, se dice AQUI, antes de pedir codigo y seis
-// digitos, y no con un «codigo no valido» al final. La comprobacion tambien
-// precalienta WASM para que el sellado del sexto digito sea casi sincrono.
+// PIN-03: si libsodium no arranca, se dice AQUI, antes de pedir codigo y PIN,
+// y no con un «codigo no valido» al final. La comprobacion tambien
+// precalienta WASM para que el sellado al pulsar «Aceptar» sea casi sincrono.
 const sealing = usePinSealingStatus({
   onUnavailable: () =>
     reporter.report('kiosk.pin.seal_failed', { reason: 'warmup_failed', message: 'warmup_failed' }),
@@ -227,17 +227,11 @@ async function confirm(): Promise<void> {
       if (!alive) return
 
       // El PIN no se puede validar en local (regla dura 19 + RS-03: viaja
-      // sellado). Mientras estaba «Comprobando…» no ha sonado nada todavia,
-      // asi que el desenlace que llega ahora — real o «pendiente» por plazo
-      // vencido — se pinta CON su propio sonido (`present`), no en silencio.
-      // Si lo que habia en pantalla ya era «pendiente» (sin red, o una
-      // respuesta tardia tras el plazo), el sonido de reconocimiento ya sono
-      // entonces: repetirlo aqui daria dos pitidos por un unico fichaje.
-      if (session.confirmation.value?.kind === 'verifying') {
-        session.present(confirmation)
-      } else {
-        session.settle(confirmation)
-      }
+      // sellado). «Comprobando…» es MUDO (RF-AT-05): el tono es el del
+      // desenlace que llega ahora — real o «pendiente» por plazo vencido — y
+      // la sesion lo hace sonar una sola vez por `scanId`. Una respuesta
+      // tardia tras «pendiente» solo repinta: no suena otra vez.
+      session.settle(confirmation)
       scheduleReturn(confirmation.kind)
     },
     onError: (code, context) =>
@@ -252,7 +246,7 @@ async function confirm(): Promise<void> {
 
   // El PIN sale de aqui y no vuelve: el buffer del teclado se vacia YA, antes
   // incluso de saber si el sellado tardara. No hay ninguna ventana en la que
-  // los 6 digitos sigan vivos en la pantalla mas tiempo del imprescindible.
+  // las cifras del PIN sigan vivas en la pantalla mas tiempo del imprescindible.
   step.value = 'submitting'
   clearSensitiveInputs()
 
@@ -526,7 +520,11 @@ onUnmounted(() => {
     </section>
 
     <footer class="flex items-end justify-between gap-4 px-6 py-4">
-      <PrivacyNoticePanel class="min-w-0 flex-1" :notice="privacyNotice" />
+      <PrivacyNoticePanel
+        class="min-w-0 flex-1"
+        :notice="privacyNotice"
+        :confirmation="session.confirmation.value"
+      />
     </footer>
   </main>
 </template>

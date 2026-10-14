@@ -25,6 +25,7 @@
 import { PRODUCT_BRANDING, type Branding } from '@kronoqr/web-kit/branding'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { readSiteTimeZone } from '@/shared/telemetry/deviceIdentity'
 import { formatClockTime } from '../domain/clockTime'
 import { clockSkewMinutesFrom } from '../domain/clockSkewMessage'
 import { greetingSlotFor } from '../domain/greeting'
@@ -102,13 +103,16 @@ const symbol = computed<string>(() => {
   return SYMBOLS[variant.value]
 })
 
-const time = computed(() => formatClockTime(props.confirmation.occurredAt, locale.value))
+// La hora de pared DEL CENTRO (V2-KI-01), no la de la tablet.
+const time = computed(() =>
+  formatClockTime(props.confirmation.occurredAt, locale.value, readSiteTimeZone()),
+)
 
 function headlineFor(confirmation: ScanConfirmation): string {
   switch (confirmation.kind) {
     case 'accepted':
       return isArrival(confirmation.action)
-        ? t(`scan.greeting.${greetingSlotFor(confirmation.occurredAt)}`, {
+        ? t(`scan.greeting.${greetingSlotFor(confirmation.occurredAt, readSiteTimeZone())}`, {
             name: confirmation.displayName,
           })
         : t('scan.greeting.farewell', { name: confirmation.displayName })

@@ -296,6 +296,111 @@ test(
 )
 
 test(
+  '«Comprobando…» es mudo y el tono llega con el desenlace del servidor (RF-AT-05, RF-AT-11)',
+  { tag: ['@RF-AT-05', '@RF-AT-11', '@RF-KI-06'] },
+  async ({ page }) => {
+    const { readTones, reset } = await installAudioProbe(page)
+    await stubKioskApiWithPin(page)
+    // Contesta a los 1,2 s: pasada la gracia (300 ms) y dentro del plazo del PIN (2,5 s).
+    await stubPinScanApi(page, 'clock_in', 1_200)
+
+    await page.goto('/')
+    await page.getByTestId('pin-entry-link').click()
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await pressPinDigits(page, RAW_PIN)
+    await reset()
+    await page.getByTestId('pin-confirm').click()
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'verifying')
+    expect(await readTones(), 'Comprobando… no debe sonar').toEqual([])
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted', {
+      timeout: 10_000,
+    })
+    // Un solo tono: `TONES.entry` (784 -> 1175 Hz, sinusoidal).
+    const tones = await readTones()
+    expect(tones.map((tone) => tone.frequency)).toEqual([784, 1175])
+    expect(tones.map((tone) => tone.type)).toEqual(['sine', 'sine'])
+  },
+)
+
+test(
+  'PIN con plazo vencido: suena «pendiente» una vez y la respuesta tardia no vuelve a sonar (RF-AT-05)',
+  { tag: ['@RF-AT-05', '@RF-AT-11', '@RF-KI-06'] },
+  async ({ page }) => {
+    const { readTones, reset } = await installAudioProbe(page)
+    await stubKioskApiWithPin(page)
+    // Contesta a los 3,5 s: despues de `PIN_VERIFY_TIMEOUT_MS` (2,5 s).
+    await stubPinScanApi(page, 'clock_in', 3_500)
+
+    await page.goto('/')
+    await page.getByTestId('pin-entry-link').click()
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await pressPinDigits(page, RAW_PIN)
+    await reset()
+    await page.getByTestId('pin-confirm').click()
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'verifying')
+    expect(await readTones()).toEqual([])
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending', {
+      timeout: 10_000,
+    })
+    // `TONES.pending`: dos toques de 587 Hz en triangulo.
+    await expect
+      .poll(async () => (await readTones()).map((tone) => tone.frequency))
+      .toEqual([587, 587])
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted', {
+      timeout: 10_000,
+    })
+    expect((await readTones()).map((tone) => tone.frequency)).toEqual([587, 587])
+  },
+)
+
+test(
+  'PIN rechazado tras el plazo: suena «pendiente» y despues «error» (RF-AT-05)',
+  { tag: ['@RF-AT-05', '@RF-AT-11', '@RF-KI-06'] },
+  async ({ page }) => {
+    const { readTones, reset } = await installAudioProbe(page)
+    await stubKioskApiWithPin(page)
+    // Rechaza a los 3,5 s: despues de `PIN_VERIFY_TIMEOUT_MS` (2,5 s).
+    await stubPinScanApi(page, 'rejected', 3_500)
+
+    await page.goto('/')
+    await page.getByTestId('pin-entry-link').click()
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await pressPinDigits(page, RAW_PIN)
+    await reset()
+    await page.getByTestId('pin-confirm').click()
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'verifying')
+    expect(await readTones()).toEqual([])
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending', {
+      timeout: 10_000,
+    })
+    await expect
+      .poll(async () => (await readTones()).map((tone) => tone.frequency))
+      .toEqual([587, 587])
+
+    await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected', {
+      timeout: 10_000,
+    })
+    // `TONES.error`: 196 -> 147 Hz, cuadrada, detras del «pendiente».
+    await expect
+      .poll(async () => (await readTones()).map((tone) => tone.frequency))
+      .toEqual([587, 587, 196, 147])
+    expect((await readTones()).map((tone) => tone.type)).toEqual([
+      'triangle',
+      'triangle',
+      'square',
+      'square',
+    ])
+  },
+)
+
+test(
   'la pantalla de PIN no tiene violaciones de accesibilidad criticas ni graves',
   { tag: ['@RF-KI-06'] },
   async ({ page }) => {

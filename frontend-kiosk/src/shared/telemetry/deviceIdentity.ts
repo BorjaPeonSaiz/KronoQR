@@ -24,6 +24,7 @@
 // sin consecuencias. La cola es registro legal sin escribir y va a IndexedDB.
 
 import { uuidV7 } from '@/shared/ids/uuidV7'
+import { isValidTimeZone } from '@/shared/time/siteTimeZone'
 import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
 import {
   DEFAULT_UPDATE_QUIET_MINUTES,
@@ -100,6 +101,15 @@ const CLOCK_SKEW_TOLERANCE_SECONDS_KEY = 'kronoqr.kiosk.clock_skew_tolerance_sec
  */
 const UPDATE_WINDOW_KEY = 'kronoqr.kiosk.update_window'
 const UPDATE_QUIET_MINUTES_KEY = 'kronoqr.kiosk.update_quiet_minutes'
+
+/**
+ * Zona horaria del centro (`KioskHeartbeat.site_time_zone`, IANA, V2-KI-01,
+ * RF-AT-05, RF-KI-07). MISMO PATRON que los ajustes de arriba: la cachea el
+ * latido para que la hora de la confirmacion y la ventana de actualizacion se
+ * lean en el reloj de pared del centro tambien sin red. Solo PRESENTACION: no
+ * interviene en nada que se encole (regla dura 3).
+ */
+const SITE_TIME_ZONE_KEY = 'kronoqr.kiosk.site_time_zone'
 
 /**
  * Instante del ULTIMO escaneo que ha pasado por esta tablet (RF-KI-07, tarea
@@ -349,6 +359,43 @@ export function storeUpdateQuietMinutes(minutes: number): void {
     storage.setItem(UPDATE_QUIET_MINUTES_KEY, String(minutes))
   } catch {
     // Degradacion honesta, igual que el resto de ajustes de este fichero.
+  }
+}
+
+/**
+ * Zona del centro cacheada, o `null` = usar la de la tablet: tablet que aun no
+ * ha latido con una version que la trajera, servidor que la omite, o un nombre
+ * que el navegador no reconoce (se descarta aqui, sin error: la hora se pinta
+ * igual con la zona del aparato, regla dura 19).
+ */
+export function readSiteTimeZone(): string | null {
+  const storage = safeStorage()
+  if (storage === null) return null
+  try {
+    const stored = storage.getItem(SITE_TIME_ZONE_KEY)
+    return stored !== null && isValidTimeZone(stored) ? stored : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Lo llama SOLO el planificador del latido, tras cada `200`. `undefined` (el
+ * servidor la omite: aun no hay centro, o no la pudo leer) CONSERVA la
+ * cacheada, igual que `minimum_app_version` ausente en un latido que no dijo
+ * nada; con fichajes hechos la zona del centro no cambia (ADR-056). Un nombre
+ * que `Intl` no reconoce BORRA la cacheada: mas vale la zona de la tablet que
+ * una que no se sabe leer.
+ */
+export function storeSiteTimeZone(zone: string | undefined): void {
+  if (zone === undefined) return
+  const storage = safeStorage()
+  if (storage === null) return
+  try {
+    if (isValidTimeZone(zone)) storage.setItem(SITE_TIME_ZONE_KEY, zone)
+    else storage.removeItem(SITE_TIME_ZONE_KEY)
+  } catch {
+    // Degradacion honesta: se sigue con la zona que ya tenia, o con la de la tablet.
   }
 }
 
