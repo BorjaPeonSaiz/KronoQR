@@ -140,7 +140,11 @@ final class TraceabilityCommand extends Command
         $destination = is_string($destination) && $destination !== '' ? $destination : $this->defaultOutput();
 
         if ($destination === '-') {
-            $this->output->write($markdown);
+            // En crudo: es Markdown con miles de `<br>`, y el formateador de
+            // estilos de la consola lo recorria con coste cuadratico —diez
+            // minutos para 1,4 MB en `make traceability`— y borraba del texto
+            // lo que tomaba por una etiqueta de estilo.
+            $this->output->write($markdown, false, OutputInterface::OUTPUT_RAW);
 
             return self::SUCCESS;
         }

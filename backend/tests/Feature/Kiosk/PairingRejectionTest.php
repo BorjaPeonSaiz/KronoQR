@@ -13,6 +13,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\FrozenTime;
+use Tests\Support\Time\Samples;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -189,7 +190,7 @@ it('consume el mismo tiempo en los tres rechazos', function (): void {
     }
 
     /** @var non-empty-array<string, float> $medianas */
-    $medianas = array_map(medianaDeMuestras(...), $muestras);
+    $medianas = array_map(Samples::median(...), $muestras);
 
     foreach ($medianas as $caso => $mediana) {
         expect($mediana)->toBeGreaterThanOrEqual(
@@ -254,21 +255,3 @@ it('no distingue las tres causas del codigo tampoco en el confirm', function ():
     expect(array_unique(array_values($cuerpos)))
         ->toHaveCount(1, 'El confirm distingue las causas del codigo: '.json_encode($cuerpos));
 })->group('RS-03', 'RF-PD-06');
-
-/**
- * Mediana y no media: una sola muestra lenta —el planificador del contenedor, un
- * `checkpoint` de PostgreSQL— desplazaria la media y haria fallar la prueba sin
- * que hubiera ningun canal de tiempo.
- *
- * @param  list<float>  $valores
- */
-function medianaDeMuestras(array $valores): float
-{
-    sort($valores);
-
-    $mitad = count($valores) >> 1;
-
-    return count($valores) % 2 === 1
-        ? $valores[$mitad]
-        : ($valores[$mitad - 1] + $valores[$mitad]) / 2;
-}

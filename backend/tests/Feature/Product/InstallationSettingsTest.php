@@ -605,3 +605,27 @@ it('nace con el fichaje de pausa desactivado', function (): void {
         // boton del quiosco y mantiene RN-12 suspendida.
         ->and(app(OperationalSettingsProvider::class)->forSite(1)->breakClockingEnabled)->toBeFalse();
 })->group('RF-PD-01', 'RF-AT-12');
+
+it('enciende el resumen semanal por correo desde los ajustes, apagado de serie y como cambio de divulgacion', function (): void {
+    // RF-PR-05. El resumen semanal es un proceso programado sin endpoint propio:
+    // esta es su UNICA superficie HTTP, y por eso es donde se valida su
+    // contrato (hueco de nivel del bloque 14, cerrado en la 2.2.1). Viene
+    // apagado porque encenderlo saca nombres y horas por SMTP cada lunes, y el
+    // catalogo lo publica como `data_disclosure` para que el panel lo avise.
+    DB::table('installation_settings')->delete();
+    $token = adminToken();
+
+    $deSerie = settingsByKey(Api::as($token)->get('/api/v1/settings')->assertValidResponse(200)->json('data'));
+
+    $encendido = settingsByKey(Api::as($token)
+        ->patch('/api/v1/settings', ['settings' => [SettingKey::WEEKLY_SUMMARY_EMAIL->value => 'enabled']])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->json('data'));
+
+    expect($deSerie['WEEKLY_SUMMARY_EMAIL']['value'])->toBe('disabled')
+        ->and($deSerie['WEEKLY_SUMMARY_EMAIL']['source'])->toBe('product_default')
+        ->and($encendido['WEEKLY_SUMMARY_EMAIL']['value'])->toBe('enabled')
+        ->and($encendido['WEEKLY_SUMMARY_EMAIL']['source'])->toBe('installation')
+        ->and($encendido['WEEKLY_SUMMARY_EMAIL']['impact'])->toBe('data_disclosure');
+})->group('RF-PR-05', 'RF-PD-01');

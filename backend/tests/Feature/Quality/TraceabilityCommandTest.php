@@ -165,6 +165,21 @@ it('genera la matriz por la salida estandar sin escribir ficheros', function ():
     expect($output)->toContain('` — no parte el turno |');
 })->group('RQ-13');
 
+it('saca la matriz por la salida estandar tal cual, sin pasarla por el formateador de la consola', function (): void {
+    // La matriz es Markdown con miles de `<br>`, y el formateador de estilos de
+    // Symfony la recorria buscando etiquetas con un coste cuadratico: 1,4 MB
+    // tardaban diez minutos en salir por `make traceability` (bloque 11 de la
+    // 2.2.1). Y lo que reconoce como estilo lo borra del texto: un nombre de
+    // prueba con `<comment>` llegaba mutilado a la evidencia.
+    useCatalog("- { id: RN-05, fase: 0, titulo: El turno no se parte a medianoche }\n");
+    useTests(FakeTestSource::file([FakeTestSource::pest('muestra <comment>esto</comment> tal cual', ['RN-05'])]));
+    config(['quality.current_phase' => 0]);
+
+    [, $output] = Commands::run('qa:traceability --output=-');
+
+    expect($output)->toContain('` — muestra <comment>esto</comment> tal cual |');
+})->group('RQ-13');
+
 it('da por cubierto un requisito cuya unica prueba es un escenario de k6', function (): void {
     // RNF-P-06 y RQ-08 no tienen ni pueden tener prueba de Pest: los mide la
     // prueba de carga, que dura minutos y necesita la pila levantada (§10.1).

@@ -584,24 +584,22 @@ phone, only the console is left.
 **The console still exists as the recovery route**, for when the panel is not
 available or nobody with the administration role can sign in. It applies the
 same rules —it will not deactivate the last administrator either— and leaves
-the same records, with “console” as their origin (the comments are in Spanish:
-“list”, “create”, “deactivate”, “new temporary password”, “remove the second
-factor”):
+the same records, with “console” as their origin:
 
 ```bash
-# Lista de cuentas: UUID, correo, rol, estado, 2FA y tipo de contraseña. Lleva correos: no la guardes en un fichero
+# List of accounts: UUID, email, role, status, 2FA and password type. It contains email addresses: do not save it to a file
 docker compose exec app php artisan identity:list-users
 
-# Alta con su rol. Pregunta nombre y correo, y muestra UNA vez la contraseña temporal
+# Create with its role. Asks for name and email, and shows the temporary password ONCE
 docker compose exec app php artisan identity:create-user --role=rrhh
 
-# Baja. Deja de poder entrar, y sus sesiones abiertas dejan de valer al instante
+# Deactivate. The account can no longer sign in, and its open sessions stop working at once
 docker compose exec app php artisan identity:deactivate-user persona@tuhotel.example --reason="Baja del hotel"
 
-# Contraseña temporal nueva, mostrada UNA sola vez
+# New temporary password, shown ONCE only
 docker compose exec app php artisan identity:reset-password persona@tuhotel.example --reason="Contraseña olvidada / Forgotten password"
 
-# Retirar el segundo factor a quien perdió el móvil, para que lo dé de alta otra vez (UUID de la lista)
+# Remove the second factor of someone who lost their phone, so they can enrol it again (UUID from the list)
 docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --reason="Móvil perdido / Lost phone"
 ```
 
@@ -969,11 +967,11 @@ Schedule it outside shift changes. If the window was long, the inbox will show
 sync incidents: they are not a fault.
 
 ```bash
-cd /opt                                   # el paquete nuevo, AL LADO del actual
+cd /opt                                   # the new package, NEXT TO the current one
 tar xzf kronoqr-<version>.tar.gz
 cd kronoqr-<version>
-sudo ./update.sh --check-only             # sin tocar nada: qué falta, si falta algo
-sudo ./update.sh                          # actualiza, verifica y vuelve atrás sola si falla
+sudo ./update.sh --check-only             # without touching anything: what is missing, if anything
+sudo ./update.sh                          # updates, verifies and rolls itself back if it fails
 ```
 
 (Unpack the new package **next to** the current one; `--check-only` touches
@@ -1558,8 +1556,8 @@ are precisely what you need when something goes wrong.
 ### 12.1 `doctor`: the health check in one command
 
 ```bash
-docker compose exec app php artisan product:doctor          # informe legible
-docker compose exec app php artisan product:doctor --json   # el mismo informe, para máquinas
+docker compose exec app php artisan product:doctor          # human-readable report
+docker compose exec app php artisan product:doctor --json   # the same report, for machines
 docker compose exec app php artisan product:doctor --lang=en
 ```
 

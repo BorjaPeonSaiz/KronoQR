@@ -6,10 +6,14 @@ use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
+use App\Modules\Workforce\Infrastructure\Adapter\HashedEmployeePinVerifier;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Security\HashCheckSpy;
 use Tests\Support\Time\FrozenTime;
+use Tests\Support\Time\Samples;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -213,26 +217,150 @@ it('fallar en el quiosco no bloquea el portal', function (): void {
 })->group('RS-12', 'RF-ID-06');
 
 // --- Tiempo constante ---------------------------------------------------------
+//
+// RS-03 y regla dura 17. Hasta la 2.2.1 esto lo vigilaba una sola medida por
+// camino y la asercion `abs(a - b) < max(a, b)`, que es cierta para cualesquiera
+// dos duraciones positivas: no podia fallar (V4-QA-1). Ahora son dos pruebas que
+// se reparten el trabajo:
+//
+// 1. **La estructura, determinista.** Un espia del hasher cuenta las
+//    comparaciones de cada rechazo. Saltarse el hash en un camino —el `return`
+//    temprano «porque no hay empleado»— deja ese camino con cero y la prueba
+//    falla, aunque la suite corra con `BCRYPT_ROUNDS=4` y el reloj no pudiera
+//    notarlo.
+// 2. **El reloj, estadistico.** Medianas de varias muestras intercaladas, con el
+//    PIN al mismo coste que el señuelo, y una razon acotada. Bajo cobertura se
+//    anuncia y no se afirma ({@see WallClockBudget}).
 
-it('tarda lo mismo con un codigo inexistente que con un PIN incorrecto', function (): void {
-    // RS-03 y regla dura 17. La comparacion del hash se paga en los dos caminos
-    // —con el hash real o con el señuelo—, y es el trabajo caro: si uno de los
-    // dos se la saltara, la diferencia seria de decenas de milisegundos y quien
-    // la midiera sabria que codigos de empleado existen sin acertar ni un PIN.
+/**
+ * Un empleado con el bloqueo del quiosco ya abierto (tres fallos, `beforeEach`).
+ *
+ * @return array{uuid: string, code: string}
+ */
+function empleadoBloqueado(): array
+{
+    $empleado = empleadoConPin();
+
+    verificador()->verify($empleado['code'], PIN_MALO, PinOrigin::KIOSK);
+    verificador()->verify($empleado['code'], PIN_MALO, PinOrigin::KIOSK);
+    verificador()->verify($empleado['code'], PIN_MALO, PinOrigin::KIOSK);
+
+    return $empleado;
+}
+
+dataset('rechazos del PIN', [
+    'codigo inexistente' => [fn (): array => ['code' => 'ENOEXISTE', 'pin' => PIN_BUENO]],
+    'PIN nunca emitido' => [fn (): array => [
+        'code' => EmployeePins::codeOf(WorkforceFixtures::employee(WorkforceFixtures::site('Hotel sin PIN', 'Europe/Madrid'))),
+        'pin' => PIN_BUENO,
+    ]],
+    'de baja, con su credencial retirada (RN-14)' => [fn (): array => ['code' => empleadoConPin(PIN_BUENO, 'terminated')['code'], 'pin' => PIN_BUENO]],
+    'suspendido' => [fn (): array => ['code' => empleadoConPin(PIN_BUENO, 'suspended')['code'], 'pin' => PIN_BUENO]],
+    'bloqueado, aunque teclee el PIN bueno' => [fn (): array => ['code' => empleadoBloqueado()['code'], 'pin' => PIN_BUENO]],
+    'PIN incorrecto' => [fn (): array => ['code' => empleadoConPin()['code'], 'pin' => PIN_MALO]],
+]);
+
+it('paga exactamente una comparacion de hash bcrypt en cada rechazo', function (Closure $intento): void {
+    /** @var array{code: string, pin: string} $tecleado */
+    $tecleado = $intento();
+    $verificador = verificador();
+
+    $comparados = HashCheckSpy::during(fn () => $verificador->verify($tecleado['code'], $tecleado['pin'], PinOrigin::KIOSK));
+
+    // Una, y contra un hash bcrypt de verdad: comparar contra una cadena vacia
+    // tambien seria «una llamada», pero el hasher la descarta sin calcular nada.
+    expect($comparados)->toHaveCount(1)
+        ->and(password_get_info($comparados[0])['algoName'])->toBe('bcrypt');
+})->with('rechazos del PIN')->group('RS-03', 'RS-12');
+
+/**
+ * El `pin_hash` guardado de un empleado.
+ */
+function pinHashDe(string $uuid): string
+{
+    $hash = DB::table('employees')->where('uuid', $uuid)->value('pin_hash');
+
+    expect($hash)->toBeString();
+
+    /** @var string $hash */
+    return $hash;
+}
+
+it('con el bloqueo activo compara contra el señuelo y nunca contra el hash del empleado', function (): void {
+    // RS-12: si comparase contra el hash real, el bloqueo seria un oraculo que
+    // confirma cuando se acierta. Lo que paga es la misma comparacion, contra
+    // otro hash.
+    $empleado = empleadoBloqueado();
+    $verificador = verificador();
+
+    $comparados = HashCheckSpy::during(fn () => $verificador->verify($empleado['code'], PIN_BUENO, PinOrigin::KIOSK));
+
+    expect($comparados)->toHaveCount(1)
+        ->and($comparados[0])->not->toBe(pinHashDe($empleado['uuid']));
+})->group('RS-03', 'RS-12');
+
+it('con un PIN incorrecto compara contra el hash del propio empleado', function (): void {
+    // El control positivo del anterior: sin el, un verificador que comparase
+    // SIEMPRE contra el señuelo pasaria la prueba del bloqueo.
     $empleado = empleadoConPin();
     $verificador = verificador();
 
-    // Una pasada en vacio para que el primer `Hash::check` no pague el arranque
-    // de la extension y falsee la comparacion.
+    $comparados = HashCheckSpy::during(fn () => $verificador->verify($empleado['code'], PIN_MALO, PinOrigin::KIOSK));
+
+    expect($comparados)->toBe([pinHashDe($empleado['uuid'])]);
+})->group('RS-03', 'RS-12');
+
+/**
+ * Coste bcrypt del hash señuelo del verificador, que es el que paga un codigo
+ * inexistente.
+ */
+function costeDelSenuelo(): int
+{
+    $senuelo = (new ReflectionClass(HashedEmployeePinVerifier::class))->getConstant('DECOY_HASH');
+
+    expect($senuelo)->toBeString();
+
+    /** @var string $senuelo */
+    $coste = password_get_info($senuelo)['options']['cost'] ?? null;
+
+    expect($coste)->toBeInt();
+
+    /** @var int $coste */
+    return $coste;
+}
+
+it('tarda lo mismo, en mediana, con un codigo inexistente que con un PIN incorrecto', function (): void {
+    // La suite hashea con `BCRYPT_ROUNDS=4` y el señuelo esta clavado al coste
+    // de produccion: sin igualarlos, la prueba compararia dos costes distintos
+    // y no el trabajo de los dos caminos.
+    $empleado = empleadoConPin();
+    DB::table('employees')
+        ->where('uuid', $empleado['uuid'])
+        ->update(['pin_hash' => password_hash(PIN_BUENO, PASSWORD_BCRYPT, ['cost' => costeDelSenuelo()])]);
+    $verificador = verificador();
+    $intentos = app(PinAttempts::class);
+
+    // Una pasada en vacio para que el primer `Hash::check` no pague el arranque.
     $verificador->verify($empleado['code'], PIN_MALO, PinOrigin::PORTAL);
 
-    $conEmpleado = medir(fn () => $verificador->verify($empleado['code'], PIN_MALO, PinOrigin::PORTAL));
-    $sinEmpleado = medir(fn () => $verificador->verify('ENOEXISTE', PIN_MALO, PinOrigin::PORTAL));
+    $conEmpleado = [];
+    $sinEmpleado = [];
 
-    // Tolerancia amplia a proposito: lo que se vigila es que no haya un orden de
-    // magnitud de diferencia —que es lo que produce saltarse el hash—, no que
-    // dos medidas de reloj coincidan al microsegundo en una maquina compartida.
-    expect(abs($conEmpleado - $sinEmpleado))->toBeLessThan(max($conEmpleado, $sinEmpleado));
+    // Intercaladas, para que una racha lenta de la maquina caiga sobre los dos
+    // caminos por igual. El contador se limpia fuera de la medida: siete fallos
+    // seguidos abririan el bloqueo y se mediria otro camino.
+    for ($ronda = 0; $ronda < 7; $ronda++) {
+        $intentos->clear($empleado['uuid']);
+        $conEmpleado[] = medir(fn () => $verificador->verify($empleado['code'], PIN_MALO, PinOrigin::PORTAL));
+        $sinEmpleado[] = medir(fn () => $verificador->verify('ENOEXISTE', PIN_MALO, PinOrigin::PORTAL));
+    }
+
+    $medianas = [Samples::median($conEmpleado), Samples::median($sinEmpleado)];
+
+    // Saltarse el hash en un camino lo deja en unos pocos milisegundos frente a
+    // los cientos de un bcrypt de coste 12: una razon de decenas. 1,5 deja sitio
+    // al ruido de un contenedor compartido sin dejarselo a esa asimetria.
+    WallClockBudget::expectRatioBelow(max($medianas) / min($medianas), 1.5, 'RS-03');
 })->group('RS-03', 'RS-12');
 
 /**

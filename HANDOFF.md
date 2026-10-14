@@ -60,12 +60,12 @@ código 2FA van en el formulario de entrega, **nunca en el repositorio**. Falta 
 `[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
 actualizar README §3.1/§6.
 
-**Siguiente acción: la 2.2.1, bloque 8** (portal: un año por descarga, icono de pausa y enlace activo; rama
-`fix/portal-descarga-y-estilos`, desde `main` `76f215cc`). El propietario ordenó el 13-10-2026 **hacer el plan completo** (B8 a
+**Siguiente acción: la 2.2.1, bloque 11** («Pruebas que no prueban y `make test` en local»; rama
+`test/pruebas-que-prueban`, desde `main` `e8176e4b`). El propietario ordenó el 13-10-2026 **hacer el plan completo** (B8 a
 B26 y B24 al final; el bloque final solo con su orden). Plan: [`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md);
 lista: [`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md).
 
-**Integrados en la 2.2.1:** B1 (PR #136), B2 (#137), B3 (#138), B4 (#139) , **B5 (#141, `7cbf912f`)**, **B6 (#142, `c2af3f12`)** y **B7 (#143, `main` `76f215cc`, 13-10-2026)**. B6+B7 = ADR-057 §1–§3: `fichaje_app` con `UPDATE` solo por columnas del dominio y sin `DELETE` en el registro horario ni en `sites`; sin escribir `jurisdiction`/`is_default`/`sites.compliance_profile_id`; *triggers* de transición e inserción en `shift_entries` e `incidents` (también frenan al propietario: escribir a mano exige desactivarlos en la misma transacción, runbook `discrepancia-registro-auditoria.md` §3.2); purga por `work_record_purge_batch` (`SECURITY DEFINER`, corte máximo con el suelo legal en el motor); `update.sh` comprueba y repara privilegios por conjunto exacto (`lib/work-record-privileges.sh`), hace rollback si falta un *trigger* y ejecuta la conciliación completa tras migrar (informativa, 300 s); el tramo se bloquea (`FOR NO KEY UPDATE`) al cargar la jornada. B5: suelo
+**Integrados en la 2.2.1:** B1 (PR #136), B2 (#137), B3 (#138), B4 (#139) , **B5 (#141, `7cbf912f`)**, **B6 (#142, `c2af3f12`)** , **B7 (#143, `76f215cc`, 13-10-2026)**, B8 (#144), B9 (#145) y **B10 (#150, `main` `e8176e4b`, 14-10-2026**: informe por periodo y cumplimiento virtualizados con el composable único `frontend-admin/src/shared/virtualization/useVirtualRows.ts`, que usan también incidencias y presencia; la vista de Cumplimiento no tiene exportación y la guía lo dice). **Merge:** `gh pr merge N --merge` siempre solo, sin tuberías ni `;`; encadenado no casa con la regla de `~/.claude/settings.json` y el clasificador lo deniega. B6+B7 = ADR-057 §1–§3: `fichaje_app` con `UPDATE` solo por columnas del dominio y sin `DELETE` en el registro horario ni en `sites`; sin escribir `jurisdiction`/`is_default`/`sites.compliance_profile_id`; *triggers* de transición e inserción en `shift_entries` e `incidents` (también frenan al propietario: escribir a mano exige desactivarlos en la misma transacción, runbook `discrepancia-registro-auditoria.md` §3.2); purga por `work_record_purge_batch` (`SECURITY DEFINER`, corte máximo con el suelo legal en el motor); `update.sh` comprueba y repara privilegios por conjunto exacto (`lib/work-record-privileges.sh`), hace rollback si falta un *trigger* y ejecuta la conciliación completa tras migrar (informativa, 300 s); el tramo se bloquea (`FOR NO KEY UPDATE`) al cargar la jornada. B5: suelo
 legal de `retention_years` por jurisdicción (4 en ES; `retention_years_floor` en el contrato; `CHECK` en `compliance_profiles`;
 purga negada bajo el suelo; `update.sh --check-only`) y «revisado» de `purge_out_of_bounds` (`compliance:reconcile-work-record
 --acknowledge`, asiento `retention.purge_reviewed`, alertas `PurgaFueraDeLimitesRevisada` y `PurgaRevisadaQueExplicaBorrados`).
@@ -119,6 +119,14 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 > lo que siga vigente debería pasar al plan o a «Fuera de la 2.2.0, con motivo».
 
 ## Pendiente
+
+### Anotado en el bloque 11 de la 2.2.1 (14-10-2026)
+
+- La semilla de desarrollo escribe sus asientos uno a uno bajo el candado de la cadena: `make seed` pasa de ~13 s a ~90 s y
+  `MigrationsRoundTripTest` paga lo mismo en el job ④. Bajarlo exige asientos en bloque en `DatabaseAuditTrail` (producción).
+- Contrato: `PrintCredentialBatchRequest` dice «solo el centro, y es opcional» pero declara `properties: {}`.
+- La BD de desarrollo `fichaje` arrastra ~19 700 `entry_without_audit` de la semilla antigua; se quitan con `make fresh` +
+  `make seed` (borra los datos). Decisión del propietario.
 
 ### Anotado en los bloques 6 y 7 de la 2.2.1 (13-10-2026)
 

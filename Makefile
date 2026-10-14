@@ -367,11 +367,26 @@ else
 	$(COMPOSE_DEV) exec -T app php artisan db:seed --force
 endif
 
+# Memoria de la suite completa (V2-QA-1 de la 2.2.1). El contenedor `app` lleva
+# los 256 MB de infra/docker/php/conf.d/zz-kronoqr.ini, que son los de
+# produccion y no se tocan: una peticion que pase de ahi es un fallo. Pero la
+# suite entera —mas de 4000 pruebas en un solo proceso— no cabe en 256 MB y
+# `make test` moria a mitad de camino («Allowed memory size ... exhausted»),
+# mientras la CI, que corre con el `memory_limit=1G` de
+# .github/actions/php-toolchain, terminaba en verde. Se iguala a la CI, y
+# `QualityGatesTest` falla si los dos valores se separan.
+#
+# `php -d` y vendor/bin/pest, no `php artisan test`: artisan lanza pest en un
+# proceso hijo que NO hereda los `-d` del padre, y un `<ini>` en phpunit.xml
+# haria `ini_set` sobre el `-d memory_limit=3G` de `make coverage` y lo bajaria
+# a 1 GB.
+TEST_MEMORY_LIMIT ?= 1G
+
 test: ## Toda la suite
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else
-	$(RUN_APP) php artisan test
+	$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST)
 endif
 
 # El presupuesto de la suite unitaria, y su UNICA fuente (Q1 de la 2.1.0): doc
@@ -1010,12 +1025,13 @@ traceability-check: ## Falla si un requisito ya implementado no tiene prueba (RQ
 docs-consistency: ## Coherencia entre los documentos y los ficheros que los ejecutan
 	$(RUN_APP) php artisan docs:consistency --check
 
-# Estos dos objetivos llaman a vendor/bin/pest y no a `php artisan test`, que es
-# lo que usa el resto del fichero. No es un descuido: `artisan test --coverage`
-# termina en verde sin emitir informe y sin aplicar --min, asi que el umbral
-# pasaria SIEMPRE. Un umbral que no puede fallar es peor que no tenerlo, porque
-# figura en la CI como si protegiera algo. Comprobado: con pest el informe sale
-# y --min bloquea; con artisan, ni una cosa ni la otra.
+# Estos dos objetivos —y `test`, por su memoria— llaman a vendor/bin/pest y no a
+# `php artisan test`, que es lo que usa el resto del fichero. No es un descuido:
+# `artisan test --coverage` termina en verde sin emitir informe y sin aplicar
+# --min, asi que el umbral pasaria SIEMPRE. Un umbral que no puede fallar es
+# peor que no tenerlo, porque figura en la CI como si protegiera algo.
+# Comprobado: con pest el informe sale y --min bloquea; con artisan, ni una
+# cosa ni la otra.
 PEST := vendor/bin/pest
 
 # Cobertura y mutacion se activan SOLAS en cuanto exista el primer modelo de
@@ -1069,8 +1085,8 @@ CLOVER               := storage/framework/cache/clover.xml
 
 # `--coverage` corre la suite ENTERA (Unit, Integration, Feature, Contract) con
 # Xdebug instrumentando cada linea, y la suite ha crecido por encima de 4000
-# pruebas: con el `memory_limit=1G` de infra/docker/php/Dockerfile y del
-# job `unit` de la CI, revienta a mitad de camino
+# pruebas: con el `memory_limit=1G` de `make test` (TEST_MEMORY_LIMIT) y de la
+# CI, revienta a mitad de camino
 # ("memory_size of 268435456 bytes exhausted") en el fichero que le toque, hoy
 # `ClientErrorEndpointTest`. No es una fuga: es el coste normal de mantener el
 # arbol de cobertura de Xdebug de toda la suite en memoria a la vez. Medido

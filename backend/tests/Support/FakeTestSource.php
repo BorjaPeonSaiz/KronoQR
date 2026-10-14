@@ -74,6 +74,23 @@ final class FakeTestSource
     }
 
     /**
+     * La misma llamada repartida en varias lineas y con el nombre tal cual se
+     * escribe, delimitadores incluidos: una plantilla con acento grave —la de
+     * las pruebas generadas en un `for`— o una cadena con comillas del otro
+     * tipo dentro (V1-QA-1 de la 2.2.1).
+     *
+     *     test(
+     *       `nombre (${variant.name})`,
+     *       { tag: ['@RN-21'] },
+     *       async () => {},
+     *     )
+     */
+    public static function playwrightMultiline(string $nameLiteral, string $requirement): string
+    {
+        return "test(\n  ".$nameLiteral.",\n  { ".self::PLAYWRIGHT_TAG.": ['@".$requirement."'] },\n  async () => {},\n)\n";
+    }
+
+    /**
      * Un `export const options` de k6 con sus escenarios (tarea 3.6, dec. 11).
      *
      * El cuerpo de cada escenario va crudo para que las pruebas puedan montar

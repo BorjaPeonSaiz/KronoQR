@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\KioskClocking;
+use Database\Seeders\Support\KioskClockingAudit;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +30,12 @@ use Illuminate\Support\Str;
  * **Las tres formas de jornada** que se generan cubren lo que el sector tiene:
  * turno de manana, turno de tarde y **jornada partida** de dos tramos, que es la
  * que rompe la suposicion de «un empleado, una entrada y una salida al dia».
+ *
+ * **Con sus asientos.** Cada tramo deja en `audit_log` la entrada y la salida
+ * que el quiosco habria apuntado, por el listener del producto
+ * ({@see KioskClockingAudit}) y en la misma transaccion que el tramo: sin ellos,
+ * la conciliacion registro ↔ auditoria (ADR-057 §4) daba cada tramo sembrado por
+ * un `INSERT` inventado y la alerta saltaba nada mas sembrar.
  *
  * `daily_totals` se construye al final con un `INSERT ... SELECT` que **agrega
  * los tramos vigentes**, no acumulando conforme se insertan (RN-06, regla dura
@@ -65,6 +73,14 @@ final class VolumeSeeder extends DevelopmentSeeder
 
             $employees = $this->activeEmployeesOf($site->id);
             $workDates = $this->workDates($timezone);
+
+            // Las particiones de `audit_log` de toda la ventana, antes de abrir
+            // ninguna transaccion de lote (ver KioskClockingAudit). Un dia de
+            // margen por cada lado: un turno de noche termina al dia siguiente.
+            $this->clockingAudit()->preparePartitionsBetween(
+                new DateTimeImmutable($workDates[0], $timezone)->modify('-1 day'),
+                new DateTimeImmutable($workDates[\count($workDates) - 1], $timezone)->modify('+2 days'),
+            );
 
             foreach (array_chunk($employees, self::EMPLOYEES_PER_BATCH) as $batch) {
                 $generated += $this->seedBatch($batch, $site->id, $timezone, $devices, $workDates);
@@ -144,11 +160,19 @@ final class VolumeSeeder extends DevelopmentSeeder
             return 0;
         }
 
-        foreach (array_chunk($shifts, 2_000) as $chunk) {
-            DB::table('shift_entries')->insert($chunk);
-        }
+        // El tramo, sus escaneos y sus asientos, en la misma transaccion: como en
+        // el fichaje real, no hay un instante en el que el registro exista sin
+        // su auditoria (regla dura 6, ADR-057 §4).
+        DB::transaction(function () use ($shifts, $employeeIds, $deviceIds, $siteId, $timezone): void {
+            foreach (array_chunk($shifts, 2_000) as $chunk) {
+                DB::table('shift_entries')->insert($chunk);
+            }
 
-        $this->seedScansFor($employeeIds, $deviceIds);
+            $entries = $this->entriesOf($employeeIds);
+
+            $this->seedScansFor($entries, $deviceIds);
+            $this->auditClockings($entries, $siteId, $timezone);
+        });
 
         return \count($shifts);
     }
@@ -260,19 +284,11 @@ final class VolumeSeeder extends DevelopmentSeeder
      * tendra el registro real: `occurred_at` es el momento del fichaje y
      * `recorded_at` la recepcion en el servidor (regla dura 9).
      *
-     * @param  list<int>  $employeeIds
+     * @param  list<object{id: int, uuid: string, employee_id: int, employee_uuid: string, work_date: string, clocked_in_at: string, clocked_out_at: string, duration_minutes: int}>  $entries
      * @param  list<int>  $deviceIds
      */
-    private function seedScansFor(array $employeeIds, array $deviceIds): void
+    private function seedScansFor(array $entries, array $deviceIds): void
     {
-        /** @var list<object{id: int, employee_id: int, clocked_in_at: string, clocked_out_at: string, duration_minutes: int}> $entries */
-        $entries = DB::table('shift_entries')
-            ->select(['id', 'employee_id', 'clocked_in_at', 'clocked_out_at', 'duration_minutes'])
-            ->whereIn('employee_id', $employeeIds)
-            ->orderBy('id')
-            ->get()
-            ->all();
-
         $scans = [];
 
         foreach ($entries as $entry) {
@@ -285,6 +301,78 @@ final class VolumeSeeder extends DevelopmentSeeder
         foreach (array_chunk($scans, 2_000) as $chunk) {
             DB::table('scan_events')->insert($chunk);
         }
+    }
+
+    /**
+     * Los tramos recien insertados del lote, con el `uuid` de su empleado, por
+     * orden de entrada.
+     *
+     * @param  list<int>  $employeeIds
+     * @return list<object{id: int, uuid: string, employee_id: int, employee_uuid: string, work_date: string, clocked_in_at: string, clocked_out_at: string, duration_minutes: int}>
+     */
+    private function entriesOf(array $employeeIds): array
+    {
+        /** @var list<object{id: int, uuid: string, employee_id: int, employee_uuid: string, work_date: string, clocked_in_at: string, clocked_out_at: string, duration_minutes: int}> $entries */
+        $entries = DB::table('shift_entries')
+            ->join('employees', 'employees.id', '=', 'shift_entries.employee_id')
+            ->select([
+                'shift_entries.id',
+                'shift_entries.uuid',
+                'shift_entries.employee_id',
+                'employees.uuid as employee_uuid',
+                'shift_entries.work_date',
+                'shift_entries.clocked_in_at',
+                'shift_entries.clocked_out_at',
+                'shift_entries.duration_minutes',
+            ])
+            ->whereIn('shift_entries.employee_id', $employeeIds)
+            ->oldest('shift_entries.clocked_in_at')
+            ->orderBy('shift_entries.id')
+            ->get()
+            ->all();
+
+        return $entries;
+    }
+
+    /**
+     * Los asientos `shift_entry.created` y `shift_entry.closed` de cada tramo,
+     * los que el quiosco habria dejado al fichar (ADR-057 §4). Sin ellos,
+     * `compliance:reconcile-work-record` ve cada tramo sembrado como un `INSERT`
+     * por fuera de la aplicacion.
+     *
+     * El total del dia de cada salida es la suma de los tramos de esa jornada
+     * cerrados hasta ese momento, que es lo que el fichaje recalcula (RN-06): en
+     * una jornada partida, la primera salida apunta 240 y la segunda 480.
+     *
+     * @param  list<object{id: int, uuid: string, employee_id: int, employee_uuid: string, work_date: string, clocked_in_at: string, clocked_out_at: string, duration_minutes: int}>  $entries
+     */
+    private function auditClockings(array $entries, int $siteId, DateTimeZone $timezone): void
+    {
+        $dayTotals = [];
+        $clockings = [];
+
+        foreach ($entries as $entry) {
+            $day = $entry->employee_id.'|'.$entry->work_date;
+            $dayTotals[$day] = ($dayTotals[$day] ?? 0) + $entry->duration_minutes;
+
+            $clockings[] = KioskClocking::fromColumns(
+                employeeUuid: $entry->employee_uuid,
+                siteId: $siteId,
+                shiftEntryUuid: $entry->uuid,
+                workDate: $entry->work_date,
+                timezone: $timezone,
+                clockedInAt: $entry->clocked_in_at,
+                clockedOutAt: $entry->clocked_out_at,
+                dailyTotalMinutes: $dayTotals[$day],
+            );
+        }
+
+        $this->clockingAudit()->record($clockings);
+    }
+
+    private function clockingAudit(): KioskClockingAudit
+    {
+        return resolve(KioskClockingAudit::class);
     }
 
     /**

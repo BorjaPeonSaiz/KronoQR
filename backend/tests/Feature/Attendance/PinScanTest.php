@@ -14,6 +14,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Security\HashCheckSpy;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 
@@ -247,37 +248,24 @@ it('no deja fichar por PIN a quien esta de baja', function (): void {
     expect(DB::table('shift_entries')->count())->toBe(0);
 })->group('RN-14', 'RF-AT-11');
 
-it('tarda lo mismo en rechazar un PIN incorrecto que un codigo inexistente', function (): void {
-    // RS-03: el suelo lo pone la comparacion del hash, que se paga en los dos
-    // caminos. Lo que se vigila es que no haya un orden de magnitud de
-    // diferencia, que es lo que produciria saltarse esa comparacion.
+it('paga la misma comparacion de hash con un PIN incorrecto que con un codigo inexistente', function (): void {
+    // RS-03: el suelo de tiempo lo pone la comparacion del hash, que se paga en
+    // los dos caminos. Se cuenta y no se cronometra: la suite hashea con
+    // `BCRYPT_ROUNDS=4` y saltarse ese hash no se notaria en el reloj. Hasta la
+    // 2.2.1 esto lo vigilaba `abs(a - b) < max(a, b)`, que no podia fallar. La
+    // medida estadistica, con el coste real, vive en `PinVerificationTest`.
     $escenario = escenarioDePin();
 
-    // Pasada en vacio para no medir el arranque del hasher.
-    ficharConPin($escenario, Str::uuid7()->toString(), pin: PIN_EQUIVOCADO);
-
-    $conCodigo = cronometrar(fn () => ficharConPin($escenario, Str::uuid7()->toString(), pin: PIN_EQUIVOCADO));
-    $sinCodigo = cronometrar(fn () => ficharConPin(
+    $conCodigo = count(HashCheckSpy::during(fn () => ficharConPin($escenario, Str::uuid7()->toString(), pin: PIN_EQUIVOCADO)));
+    $sinCodigo = count(HashCheckSpy::during(fn () => ficharConPin(
         $escenario,
         Str::uuid7()->toString(),
         overrides: ['employee_code' => 'ENOEXISTE'],
-    ));
+    )));
 
-    expect(abs($conCodigo - $sinCodigo))->toBeLessThan(max($conCodigo, $sinCodigo));
+    expect($conCodigo)->toBe(1)
+        ->and($sinCodigo)->toBe(1);
 })->group('RS-03', 'RS-12');
-
-/**
- * Milisegundos que tarda una llamada, con reloj monotono.
- *
- * @param  callable(): mixed  $work
- */
-function cronometrar(callable $work): float
-{
-    $startedAt = hrtime(true);
-    $work();
-
-    return (hrtime(true) - $startedAt) / 1_000_000;
-}
 
 // --- Forma de la peticion ----------------------------------------------------
 
