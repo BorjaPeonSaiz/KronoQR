@@ -172,6 +172,7 @@ backup.sh restore.sh     Backups and restore.
 restore-drill.sh         Quarterly restore drill.
 lib/                     Script libraries. Do not touch.
 observability/           Alerts and dashboards (operation.md §10.4).
+observability.sha256     The fingerprint of each observability/ file as delivered. Do not touch.
 certs/                   Where you put your certificate (step 1.2).
 VERSION                  The version about to be installed.
 versions.txt             Published versions and which ones can update from. Do not touch.

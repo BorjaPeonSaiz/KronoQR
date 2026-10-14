@@ -2312,6 +2312,33 @@ jobs:
         # salta (no hay nada heredado que migrar).
         run: bash .github/scripts/backup-wal-e2e.sh upgrade-seed paquete-anterior
 
+      - name: "Cambios del cliente en observability/, para que sobrevivan a la actualizacion (RNF-D-04)"
+        if: steps.anterior.outputs.skip != 'true'
+        # El cliente edita un umbral y anade un fichero suyo en el directorio de la
+        # version anterior. U1 comprueba despues que viajan al directorio nuevo. La
+        # huella `observability.sha256` la entrega package.sh desde esta version; si
+        # la version anterior de esta etapa aun no la entregaba, se genera aqui desde
+        # su observability/ ANTES de editarlo, que es exactamente lo que habria
+        # hecho su package.sh.
+        #
+        # El fichero editado (blackbox.yml) solo se edita si el paquete nuevo lo trae
+        # igual que el anterior: si no, la edicion seria un conflicto legitimo (gana
+        # el paquete) y no probaria lo que esta etapa quiere probar.
+        run: |
+          set -euo pipefail
+          if [ ! -f paquete-anterior/observability.sha256 ]; then
+            . infra/scripts/lib/observability-merge.sh
+            kq_obs_manifest paquete-anterior/observability >paquete-anterior/observability.sha256
+          fi
+          printf 'fichero del cliente (CI)\n' >paquete-anterior/observability/loki/cliente-ci.txt
+          if cmp -s anterior/infra/observability/blackbox/blackbox.yml infra/observability/blackbox/blackbox.yml; then
+            printf '# edicion del cliente (CI)\n' >>paquete-anterior/observability/blackbox/blackbox.yml
+            echo "editado=1" >observability-cliente.txt
+          else
+            echo "editado=0" >observability-cliente.txt
+          fi
+          cat observability-cliente.txt
+
       - name: "U0 · Un perfil ES con 3 anos: --check-only sale con 2 y no toca nada (RF-PD-07, RL-02)"
         if: steps.anterior.outputs.skip != 'true'
         # La migracion del suelo legal de la retencion rechaza un perfil `ES` con
@@ -2447,6 +2474,47 @@ jobs:
           fi
           grep -q 'ESTE DIRECTORIO ESTA RETIRADO' <<<"${retirado}"
           test "$(sudo stat -c '%a' paquete-anterior/.env)" = "600"
+
+      - name: "U1 · Los cambios del cliente en observability/ viajan al directorio nuevo y se avisa (RNF-D-04)"
+        if: steps.anterior.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          grep -q 'Tus cambios en observability/ viajan al directorio nuevo' paquete-nuevo/salida-u1.log
+          grep -q 'cliente-ci.txt' paquete-nuevo/salida-u1.log
+          test "$(cat paquete-nuevo/observability/loki/cliente-ci.txt)" = 'fichero del cliente (CI)'
+          if grep -q '^editado=1$' observability-cliente.txt; then
+            tail -n 1 paquete-nuevo/observability/blackbox/blackbox.yml | grep -qx '# edicion del cliente (CI)'
+            grep -q 'blackbox/blackbox.yml' paquete-nuevo/salida-u1.log
+          fi
+          # La copia del cliente sigue donde estaba y la del paquete nuevo conserva su huella.
+          test -f paquete-anterior/observability/loki/cliente-ci.txt
+          test -f paquete-nuevo/observability.sha256
+          # Y lo del paquete que el cliente no toco es lo del paquete.
+          cmp infra/observability/prometheus/render-config.sh paquete-nuevo/observability/prometheus/render-config.sh
+
+      - name: "U1 · Ventana de mantenimiento medida: cifra y reparto por fases (V6-DV-9)"
+        if: steps.anterior.outputs.skip != 'true'
+        # La cifra de `operacion.md` §11 sale de AQUI, no de una estimacion: el informe de
+        # update.sh trae la ventana entera (de `artisan down` a `artisan up`) y su reparto
+        # por fases —parada de trabajadores, copia previa, migraciones, arranque y
+        # verificacion—. La descarga de imagenes NO esta en la ventana: es del paso 1
+        # (`check_images`), antes del mantenimiento. Se imprime y va al resumen del job;
+        # el tope solo detecta una regresion gorda con la base casi vacia de esta etapa.
+        run: |
+          set -euo pipefail
+          informe="$(sudo sh -c 'ls -t /var/backups/fichaje/reports/update-*.log | head -n 1')"
+          sudo cat "${informe}" | grep -E 'Ventana de mantenimiento' | tee ventana.txt
+          segundos="$(sed -n 's/.*Ventana de mantenimiento: \([0-9][0-9]*\) s.*/\1/p' ventana.txt | head -n 1)"
+          test -n "${segundos}" || { echo "El informe no trae la ventana de mantenimiento"; exit 1; }
+          grep -q 'por fases: workers=.* backup=.* migrations=.* start=' ventana.txt
+          {
+            echo "### Ventana de mantenimiento de la actualizacion (503 en toda la API salvo las sondas)"
+            echo
+            echo '```'
+            cat ventana.txt
+            echo '```'
+          } >>"${GITHUB_STEP_SUMMARY}"
+          test "${segundos}" -le 180 || { echo "La ventana de mantenimiento fue de ${segundos} s con la base casi vacia (tope de regresion: 180 s)"; exit 1; }
 
       - name: "U1 · Rescate de los informes de retencion: solo los validos, 0640, sin seguir enlaces"
         if: steps.anterior.outputs.skip != 'true'

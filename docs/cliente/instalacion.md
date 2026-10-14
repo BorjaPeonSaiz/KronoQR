@@ -171,6 +171,7 @@ backup.sh restore.sh     Copias de seguridad y restauración.
 restore-drill.sh         Simulacro trimestral de restauración.
 lib/                     Bibliotecas de los scripts. No se tocan.
 observability/           Alertas y cuadros de mando (operacion.md §10.4).
+observability.sha256     La huella de cada fichero de observability/ tal como se entrega. No se toca.
 certs/                   Aquí colocas tu certificado (paso 1.2).
 VERSION                  La versión que se va a instalar.
 versions.txt             Versiones publicadas y desde cuáles se actualiza. No se toca.

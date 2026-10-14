@@ -1,0 +1,147 @@
+<?php
+
+declare(strict_types=1);
+
+use Symfony\Component\Process\Process;
+use Tests\Architecture\Support\Repo;
+
+/*
+ * Los cambios del cliente en `observability/` sobreviven a una actualizacion
+ * lado a lado (RNF-D-04, RF-PD-10, ADR-054), sin perder nada en silencio.
+ *
+ * Se ejecuta `merge_observability` de update.sh de verdad, cargado con `source`,
+ * sobre dos directorios temporales: el del cliente (editado) y el del paquete
+ * nuevo (pristino), con la huella `observability.sha256` del paquete anterior.
+ * Las reglas de quien gana en cada fichero estan en lib/observability-merge.sh.
+ */
+
+/**
+ * @param  array<string, string>  $pristine  ficheros tal como los entrego el paquete anterior
+ * @param  array<string, string>  $client  ficheros que tiene ahora el cliente
+ * @param  array<string, string>  $new  ficheros del paquete nuevo
+ * @return array{0: string, 1: Process}
+ */
+function observabilityMergeScenario(array $pristine, array $client, array $new, bool $withBaseline = true, string $then = ''): array
+{
+    $root = sys_get_temp_dir().'/kq-obs-merge-'.bin2hex(random_bytes(4));
+    foreach (['old' => $client, 'new' => $new, 'pristine' => $pristine] as $name => $files) {
+        mkdir($root.'/'.$name.'/observability', 0777, true);
+        foreach ($files as $path => $content) {
+            $file = $root.'/'.$name.'/observability/'.$path;
+            if (! is_dir(dirname($file))) {
+                mkdir(dirname($file), 0777, true);
+            }
+            file_put_contents($file, $content);
+        }
+    }
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+        .'kq_msg_init es; CURRENT_DIR='.escapeshellarg($root.'/old').'; PACKAGE_DIR='.escapeshellarg($root.'/new').'; '
+        .($withBaseline ? 'kq_obs_manifest '.escapeshellarg($root.'/pristine/observability').' >"${CURRENT_DIR}/observability.sha256"; ' : '')
+        .'merge_observability; '.$then;
+
+    $process = new Process(['bash', '-c', $script], env: ['KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process->run();
+
+    return [$root, $process];
+}
+
+it('lleva al directorio nuevo lo que SOLO cambio el cliente, y avisa', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['prometheus/rules/kiosk.yml' => "umbral: 300\n", 'grafana/a.json' => "a\n"],
+        client: ['prometheus/rules/kiosk.yml' => "umbral: 600\n", 'grafana/a.json' => "a\n", 'grafana/mio.json' => "mio\n"],
+        new: ['prometheus/rules/kiosk.yml' => "umbral: 300\n", 'grafana/a.json' => "a\n"],
+    );
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toContain('Tus cambios en observability/ viajan al directorio nuevo (2 ficheros')
+        ->and($process->getOutput())->toContain('prometheus/rules/kiosk.yml')
+        ->and($process->getOutput())->toContain('grafana/mio.json')
+        ->and(file_get_contents($root.'/new/observability/prometheus/rules/kiosk.yml'))->toBe("umbral: 600\n")
+        ->and(file_get_contents($root.'/new/observability/grafana/mio.json'))->toBe("mio\n");
+})->group('RNF-D-04', 'RF-PD-10');
+
+it('lo nuevo del paquete gana en lo que el cliente no toco, y en silencio', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['prometheus/rules/kiosk.yml' => "v1\n"],
+        client: ['prometheus/rules/kiosk.yml' => "v1\n"],
+        new: ['prometheus/rules/kiosk.yml' => "v2\n", 'prometheus/rules/nueva.yml' => "nueva\n"],
+    );
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput().$process->getErrorOutput())->not->toContain('observability/')
+        ->and(file_get_contents($root.'/new/observability/prometheus/rules/kiosk.yml'))->toBe("v2\n")
+        ->and(file_exists($root.'/new/observability/prometheus/rules/nueva.yml'))->toBeTrue();
+})->group('RNF-D-04');
+
+it('ante un conflicto gana el paquete, se avisa y la copia del cliente queda en el directorio anterior', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['a.yml' => "v1\n", 'b.yml' => "b1\n"],
+        client: ['a.yml' => "mio\n", 'b.yml' => "mio\n"],
+        // a.yml lo cambian los dos; b.yml el paquete lo ha retirado.
+        new: ['a.yml' => "v2\n"],
+    );
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput().$process->getErrorOutput())->toContain('GANA EL DEL PAQUETE')
+        ->and($process->getOutput().$process->getErrorOutput())->toContain('a.yml, b.yml')
+        ->and(file_get_contents($root.'/new/observability/a.yml'))->toBe("v2\n")
+        ->and(file_exists($root.'/new/observability/b.yml'))->toBeFalse()
+        ->and(file_get_contents($root.'/old/observability/a.yml'))->toBe("mio\n")
+        ->and(file_get_contents($root.'/old/observability/b.yml'))->toBe("mio\n");
+})->group('RNF-D-04');
+
+it('sin la huella del paquete anterior no adivina: gana el paquete, avisa una vez y no pierde nada', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: [],
+        client: ['a.yml' => "mio\n", 'igual.yml' => "x\n"],
+        new: ['a.yml' => "v2\n", 'igual.yml' => "x\n"],
+        withBaseline: false,
+    );
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput().$process->getErrorOutput())->toContain('no trae la huella de observability/')
+        ->and($process->getOutput().$process->getErrorOutput())->toContain('1 ficheros difieren')
+        ->and(file_get_contents($root.'/new/observability/a.yml'))->toBe("v2\n")
+        ->and(file_get_contents($root.'/old/observability/a.yml'))->toBe("mio\n");
+})->group('RNF-D-04');
+
+it('sin la huella y sin diferencias no dice nada', function (): void {
+    [, $process] = observabilityMergeScenario(
+        pristine: [],
+        client: ['a.yml' => "x\n"],
+        new: ['a.yml' => "x\n"],
+        withBaseline: false,
+    );
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput().$process->getErrorOutput())->not->toContain('observability/');
+})->group('RNF-D-04');
+
+it('es idempotente: un reintento tras una vuelta atras no vuelve a llevar nada', function (): void {
+    [$root, $process] = observabilityMergeScenario(
+        pristine: ['a.yml' => "v1\n"],
+        client: ['a.yml' => "mio\n"],
+        new: ['a.yml' => "v1\n"],
+        then: 'merge_observability',
+    );
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        // La segunda pasada ya ve el fichero igual en los dos lados: calla.
+        ->and(substr_count($process->getOutput(), 'viajan al directorio nuevo'))->toBe(1)
+        ->and(file_get_contents($root.'/new/observability/a.yml'))->toBe("mio\n");
+})->group('RNF-D-04');
+
+it('package.sh entrega la huella de observability/ tal como se entrega', function (): void {
+    $dest = sys_get_temp_dir().'/kq-package-'.bin2hex(random_bytes(4));
+    $process = new Process(['bash', Repo::file('infra/scripts/package.sh'), $dest], timeout: 60.0);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and(file_exists($dest.'/observability.sha256'))->toBeTrue();
+
+    $check = Process::fromShellCommandline('cd '.escapeshellarg($dest.'/observability').' && sha256sum -c ../observability.sha256 >/dev/null', timeout: 60.0);
+    $check->run();
+
+    expect($check->getExitCode())->toBe(0, $check->getErrorOutput().$check->getOutput());
+})->group('RNF-D-04', 'RF-PD-10');

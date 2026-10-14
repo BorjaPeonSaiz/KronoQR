@@ -128,6 +128,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/app-commands.sh"
 # shellcheck source=lib/work-record-privileges.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/work-record-privileges.sh"
+# shellcheck source=lib/observability-merge.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/observability-merge.sh"
 
 # Las comparaciones de nombres de migracion y de fronteras usan `[[ a < b ]]`,
 # cuyo orden depende de la colacion. Se fija a la de bytes para que no dependa
@@ -235,6 +237,9 @@ STARTED_AT=0
 STARTED_UTC=""
 MAINTENANCE_SINCE=0
 MAINTENANCE_SECONDS=0
+# Reparto de la ventana de mantenimiento por fases (V6-DV-9): "fase=Ns", en orden.
+LAPS=()
+LAP_PREV=0
 BACKUP_FILE=""
 BACKUP_RESULT=""
 MIGRATIONS_IN_IMAGE=""
@@ -347,6 +352,17 @@ timestamp_utc() {
 
 now_epoch() {
   date +%s
+}
+
+# Cierra una fase de la ventana de mantenimiento: anota cuanto ha tardado desde la
+# anterior. Es el dato con el que se decide que sacar de la ventana (V6-DV-9); no
+# decide nada ni falla nunca.
+mark_lap() {
+  local now
+  now="$(now_epoch)"
+  LAPS+=("$1=$((now - LAP_PREV))s")
+  LAP_PREV="${now}"
+  return 0
 }
 
 remember_check() {
@@ -1141,6 +1157,12 @@ close_report() {
   fi
   report_append "$(kq_format u_report_backup "${BACKUP_FILE:-$(kq_text u_report_none)}" "${BACKUP_RESULT:-$(kq_text u_report_not_run)}")"
   report_append "$(kq_format u_report_maintenance "${MAINTENANCE_SECONDS}")"
+  if [ "${#LAPS[@]}" -gt 0 ]; then
+    report_append "$(kq_format u_report_maintenance_laps "$(
+      IFS=' '
+      printf '%s' "${LAPS[*]}"
+    )")"
+  fi
   for entry in ${CHECKPOINTS+"${CHECKPOINTS[@]}"}; do
     IFS='|' read -r c_version c_count c_seconds c_batch <<<"${entry}"
     report_append "$(kq_format u_report_checkpoint "${c_version}" "$(kq_text u_report_ok)" "${c_count}" "${c_seconds}" "${c_batch}")"
@@ -1651,8 +1673,10 @@ check_images() {
   done
 
   # Referencia fijada por digest: ni la descarga ni una imagen ya presente por su
-  # digest dejan la etiqueta local, y `restore-drill.sh --mode pitr` nombra la
-  # imagen por etiqueta (A6-2). Se etiqueta cuando falta o apunta a otra imagen.
+  # digest dejan la etiqueta local. `restore-drill.sh --mode pitr` ya nombra la
+  # imagen por su digest (ADR-053), pero la etiqueta local sigue siendo la que
+  # reconocen `docker images` y quien lanza un `docker run` a mano (A6-2). Se
+  # etiqueta cuando falta o apunta a otra imagen.
   for image in ${all+"${all[@]}"}; do
     [ "${image}" != "${image%%@*}" ] || continue
     pinned_id="$(docker image inspect -f '{{.Id}}' "${image}" 2>/dev/null || true)"
@@ -1877,6 +1901,34 @@ write_wal_key() {
   fi
 }
 
+# Los cambios que el cliente hizo en `observability/` (umbrales, destinatarios,
+# cuadros) viajan al directorio nuevo SOLO SI LOS HAY, y con aviso. La regla de
+# quien gana en cada fichero y por que esta en lib/observability-merge.sh. Nunca
+# aborta: la configuracion de observabilidad no vale una vuelta atras, y lo que
+# no se lleva sigue, intacto, en el directorio anterior (RNF-D-04, ADR-054).
+merge_observability() {
+  local old_dir="${CURRENT_DIR}/observability" new_dir="${PACKAGE_DIR}/observability"
+
+  [ -d "${old_dir}" ] && [ -d "${new_dir}" ] || return 0
+
+  if ! kq_obs_merge "${old_dir}" "${new_dir}" "${CURRENT_DIR}/observability.sha256"; then
+    kq_msg check_warn "$(kq_format u_w_obs_copy_failed "${old_dir}" "${new_dir}")"
+  fi
+
+  if [ "${#KQ_OBS_CARRIED[@]}" -gt 0 ]; then
+    say "$(kq_format u_obs_carried "${#KQ_OBS_CARRIED[@]}" "$(kq_obs_list 8 "${KQ_OBS_CARRIED[@]}")" "${new_dir}")"
+  fi
+  if [ "${#KQ_OBS_CONFLICTS[@]}" -gt 0 ]; then
+    if [ "${KQ_OBS_BASELINE}" -eq 1 ]; then
+      kq_msg check_warn "$(kq_format u_w_obs_conflict "${#KQ_OBS_CONFLICTS[@]}" "${old_dir}" "$(kq_obs_list 8 "${KQ_OBS_CONFLICTS[@]}")")"
+      kq_msg fix "$(kq_format u_w_obs_conflict_fix "${old_dir}" "${new_dir}")"
+    else
+      kq_msg check_warn "$(kq_format u_w_obs_nobaseline "${#KQ_OBS_CONFLICTS[@]}" "$(kq_obs_list 8 "${KQ_OBS_CONFLICTS[@]}")" "${old_dir}")"
+    fi
+  fi
+  return 0
+}
+
 prepare_package() {
   local certs_from certs_to branding branding_from branding_to
 
@@ -1952,6 +2004,8 @@ prepare_package() {
     fi
     ;;
   esac
+
+  merge_observability
 }
 
 #------------------------------------------------------------------------------
@@ -2184,6 +2238,7 @@ phase_maintenance() {
   arm_rollback_traps
   ROLLBACK_ARMED=1
   MAINTENANCE_SINCE="$(now_epoch)"
+  LAP_PREV="${MAINTENANCE_SINCE}"
 
   detail_note "--- artisan down (${SOURCE_VERSION}) ---"
   if ! compose_current exec -T app php artisan down --retry="${KQ_MAINTENANCE_RETRY_SECONDS}" >>"$(detail_sink)" 2>&1; then
@@ -2200,6 +2255,7 @@ phase_maintenance() {
   # Con los trabajadores parados nadie escribe ya un informe nuevo, y los
   # contenedores siguen existiendo (se recrean en el paso 5): es el momento.
   rescue_retention_reports
+  mark_lap workers
 }
 
 #------------------------------------------------------------------------------
@@ -2314,6 +2370,7 @@ phase_backup() {
 
   BACKUP_RESULT="$(kq_text u_report_ok)"
   say "$(kq_format u_backup_done "${BACKUP_FILE}")"
+  mark_lap backup
 }
 
 #------------------------------------------------------------------------------
@@ -2843,6 +2900,7 @@ phase_start_and_verify() {
     rollback_and_die "$(kq_format u_f_verify_lifted "${KQ_MANAGEMENT_PROBE}" "${status}")" health_probe_failed
   fi
   MAINTENANCE_SECONDS=$(($(now_epoch) - MAINTENANCE_SINCE))
+  mark_lap start
 
   say "$(kq_format u_workers_up "${TARGET_VERSION}")"
   detail_note "--- up -d (resto de servicios, ${TARGET_VERSION}) ---"
@@ -3405,6 +3463,7 @@ main() {
   phase_maintenance
   phase_backup
   phase_migrations
+  mark_lap migrations
   phase_start_and_verify
 
   disarm_rollback_traps
