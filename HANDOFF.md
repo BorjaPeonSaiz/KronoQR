@@ -120,6 +120,15 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+### Anotado en el bloque 14 de la 2.2.1 (15-10-2026)
+
+- `make alerts-drill`: `disparadas_en_prometheus` devuelve vacío si Prometheus no contesta, y la comprobación del estado
+  sano pasa en silencio (no da OK falsos: cada alerta sigue teniendo que llegar a Alertmanager). Distinguir «no contesta».
+- `GuideMetricsHavePanelTest`: 22 series citadas en guías sin panel (deuda V4-DV-2), en trinquete.
+- Prueba de volumen del informe por periodo (`ReportTooLargeForSynchronousDelivery`, corte de 10 s) falló una vez bajo
+  xdebug en la cobertura de la CI (38638188375) y pasó al relanzar. Si se repite, tratarla como frágil.
+- El pendiente del bloque 13 «doctor.sh no comprueba las alertas cargadas» quedó cerrado en el bloque 14.
+
 ### Anotado en el bloque 13 de la 2.2.1 (14-10-2026)
 
 - V6-DV-9: la ventana de 503 de una actualización sigue sin medirse con carga; `update.sh` la reparte por fases y ⑧b la
