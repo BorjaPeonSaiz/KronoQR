@@ -450,6 +450,19 @@ return [
             ],
         ],
 
+        // --- Paquete de diagnostico (ADR-020, enmienda del 14-10-2026) -----
+
+        'diagnostics' => [
+            'probe' => $probe,
+            'pending_audit' => [
+                'ok' => 'No hay paquetes de diagnostico con su asiento en la auditoria pendiente desde hace mas de '
+                    .'una hora.',
+                'warning' => 'Hay :count paquete(s) de diagnostico generados con la base de datos caida cuyo asiento '
+                    .'en la auditoria lleva mas de una hora sin escribirse (el mas antiguo, de las :oldest UTC). Se '
+                    .'escribe solo cuando la base vuelve; fichar no depende de esto.',
+            ],
+        ],
+
         // --- Ficheros generados (ADR-045) -----------------------------------
 
         'files' => [
@@ -1017,6 +1030,18 @@ return [
                 'warning_unknown' => "Espera a la primera copia nocturna, o comprueba ahora desde el servidor:\n"
                     ."  sudo ./doctor.sh\n"
                     .'Ver docs/cliente/operacion.md, «Las copias tienen que salir del servidor».',
+            ],
+        ],
+
+        'diagnostics' => [
+            'probe' => $probeFix,
+            'pending_audit' => [
+                'warning' => "Si la comprobacion «database.connection» de este informe sale bien, escribelos ahora\n"
+                    ."(dentro del contenedor de la aplicacion):\n"
+                    ."  php artisan product:diagnostics:record-pending\n"
+                    ."Si la base sigue sin responder, arreglala primero: el asiento se escribira solo. Si la base\n"
+                    ."responde y el aviso no desaparece en cinco minutos, mira la comprobacion «scheduler.heartbeat».\n"
+                    .'Ver docs/cliente/operacion.md §12.2, «Si la base de datos no responde».',
             ],
         ],
 

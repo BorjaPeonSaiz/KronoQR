@@ -22,7 +22,9 @@ use App\Modules\Product\Application\Port\LicenseRepository;
 use App\Modules\Product\Application\Port\LicenseStatePublisher;
 use App\Modules\Product\Application\Port\LicenseVerifier;
 use App\Modules\Product\Application\Port\LogoInspector;
+use App\Modules\Product\Application\Port\PendingDiagnosticsAudits;
 use App\Modules\Product\Application\Port\PlanUsageCounter;
+use App\Modules\Product\Application\Port\ProbeFailureClassifier;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Application\Port\SettingsAnomalyReporter;
 use App\Modules\Product\Application\Port\SettingsMetrics;
@@ -96,6 +98,7 @@ use App\Modules\Product\Infrastructure\Capture\ServerErrorReporter;
 use App\Modules\Product\Infrastructure\Console\LicenseActivateCommand;
 use App\Modules\Product\Infrastructure\Console\LicenseShowCommand;
 use App\Modules\Product\Infrastructure\Console\ProductDiagnosticsCommand;
+use App\Modules\Product\Infrastructure\Console\ProductDiagnosticsRecordPendingCommand;
 use App\Modules\Product\Infrastructure\Console\ProductDoctorCommand;
 use App\Modules\Product\Infrastructure\Console\ProductErrorsCommand;
 use App\Modules\Product\Infrastructure\Console\ProductErrorsPruneCommand;
@@ -115,6 +118,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\PersonalDataCollect
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ServicesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
+use App\Modules\Product\Infrastructure\Diagnostics\FilePendingDiagnosticsAudits;
 use App\Modules\Product\Infrastructure\Diagnostics\HorizonQueueSupervisors;
 use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
 use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
@@ -132,6 +136,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\KioskServiceCodeProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\KioskVersionProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\LicenseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\PendingDiagnosticsAuditProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\QueueProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SchedulerProbe;
@@ -1610,6 +1615,9 @@ final class ProductServiceProvider extends ServiceProvider
                  */
                 ProductDoctorCommand::class,
                 ProductDiagnosticsCommand::class,
+                // Los asientos de paquetes generados con la base caida (ADR-020,
+                // enmienda del 14-10-2026). Lo programa `routes/console.php`.
+                ProductDiagnosticsRecordPendingCommand::class,
                 /*
                  * La exportacion integra (RF-PD-14, RL-20, tarea 5.10).
                  *
@@ -1979,6 +1987,15 @@ final class ProductServiceProvider extends ServiceProvider
                         clock: $app->make(Clock::class),
                         store: $app->make(GeneratedFileStore::class),
                     ),
+                    /*
+                     * Asientos de paquetes de diagnostico generados con la base
+                     * caida que llevan mas de una hora sin escribirse (ADR-020,
+                     * enmienda del 14-10-2026). Aviso: no toca la base.
+                     */
+                    new PendingDiagnosticsAuditProbe(
+                        $app->make(PendingDiagnosticsAudits::class),
+                        $app->make(Clock::class),
+                    ),
                     new ApplicationProbe(
                         timezone: Config::string('app.timezone'),
                         debug: Config::boolean('app.debug'),
@@ -2043,6 +2060,19 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
+        // V4-PL-1: el reconocedor de caidas de Redis y PostgreSQL, tambien para
+        // decidir si el asiento de un paquete se puede aplazar (ADR-020).
+        $this->app->bind(ProbeFailureClassifier::class, ConnectionProbeFailureClassifier::class);
+
+        // Los asientos de paquetes generados con la base caida, en su raiz
+        // fija del volumen de ficheros generados (ADR-045, ADR-020).
+        $this->app->bind(
+            PendingDiagnosticsAudits::class,
+            static fn (): FilePendingDiagnosticsAudits => new FilePendingDiagnosticsAudits(
+                Config::string('product.diagnostics_pending_audit_path'),
+            ),
+        );
+
         $this->app->bind(
             GenerateDiagnosticsBundleHandler::class,
             static fn (Application $app): GenerateDiagnosticsBundleHandler => new GenerateDiagnosticsBundleHandler(
@@ -2077,6 +2107,8 @@ final class ProductServiceProvider extends ServiceProvider
                 clock: $app->make(Clock::class),
                 productVersion: Config::string('app.version'),
                 maxBytes: Config::integer('product.diagnostics_max_bytes'),
+                failures: $app->make(ProbeFailureClassifier::class),
+                pending: $app->make(PendingDiagnosticsAudits::class),
             ),
         );
     }

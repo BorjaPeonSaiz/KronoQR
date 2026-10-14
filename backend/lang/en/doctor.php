@@ -407,6 +407,18 @@ return [
             ],
         ],
 
+        // --- Diagnostic bundle (ADR-020, amendment of 14-10-2026) ----------
+
+        'diagnostics' => [
+            'probe' => $probe,
+            'pending_audit' => [
+                'ok' => 'There are no diagnostic bundles whose audit entry has been pending for more than one hour.',
+                'warning' => ':count diagnostic bundle(s) were generated while the database was down and their audit '
+                    .'entry has not been written for more than one hour (the oldest, from :oldest UTC). It is written '
+                    .'automatically when the database is back; clocking in does not depend on this.',
+            ],
+        ],
+
         'files' => [
             'probe' => $probe,
             'storage_volume' => [
@@ -957,6 +969,19 @@ return [
                 'warning_unknown' => "Wait for the first nightly backup, or check now from the server:\n"
                     ."  sudo ./doctor.sh\n"
                     .'See docs/cliente/en/operation.md, "The backups must leave the server".',
+            ],
+        ],
+
+        'diagnostics' => [
+            'probe' => $probeFix,
+            'pending_audit' => [
+                'warning' => "If the «database.connection» check of this report is fine, write them now (inside\n"
+                    ."the application container):\n"
+                    ."  php artisan product:diagnostics:record-pending\n"
+                    ."If the database still does not answer, fix it first: the entry will be written automatically.\n"
+                    ."If the database answers and the warning has not gone in five minutes, look at the\n"
+                    ."«scheduler.heartbeat» check.\n"
+                    .'See docs/cliente/en/operation.md §12.2, "If the database does not answer".',
             ],
         ],
 

@@ -80,6 +80,8 @@ const GENERATED_FILES_INVENTORY = [
     'config/logging.php' => ['storage_path:logs/laravel.log' => 'disposable'],
     'config/product.php' => [
         'storage_path:app/diagnostics' => 'shared',
+        // V4-PL-1: los asientos pendientes de paquetes generados con la base caida.
+        'storage_path:app/diagnostics-audit-pending' => 'shared',
         'storage_path:app/exports' => 'shared',
         'storage_path:app/telemetry/state.json' => 'shared',
     ],
@@ -351,7 +353,7 @@ it('las raices de clase de serie no coinciden, no se solapan y no son storage/ap
         }
     }
 
-    expect(\count($roots))->toBe(6)
+    expect(\count($roots))->toBe(7)
         ->and($problems)->toBe([]);
 })->group('RF-PD-14', 'RF-IN-06');
 

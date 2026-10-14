@@ -58,6 +58,12 @@ use Throwable;
  * seria el intercambio que la regla dura 19 prohibe. El `warning`
  * `auth.lockout_started` del log tecnico y el contador siguen ahi.
  *
+ * Hay otro asiento que se escribe tarde, y **no es una cesion de la regla**: el
+ * del paquete de diagnostico generado con la base caida (enmienda de ADR-020
+ * del 14-10-2026). Ese no se pierde, se aplaza: queda un pendiente duradero en
+ * el volumen del cliente y el producto escribe el asiento en cuanto la base
+ * vuelve (`RecordPendingDiagnosticsAudits`). Este, si falla, se pierde.
+ *
  * **Del fallo se registra la clase de la excepcion y no su mensaje** (regla dura
  * 21). El mensaje de una `QueryException` de Laravel lleva el SQL con sus
  * valores enlazados, y desde ADR-039 uno de esos valores es la **IP en claro**

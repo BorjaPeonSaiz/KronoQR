@@ -142,6 +142,10 @@ final class GeneratedFileAreas
             'storage/app/tmp/legal-exports' => Config::string('compliance.legal_export_temp_path'),
             'storage/app/legal-exports' => Config::string('compliance.legal_export_console_path'),
             'PRODUCT_DIAGNOSTICS_PATH' => Config::string('product.diagnostics_storage_path'),
+            // Los asientos pendientes de paquetes generados con la base caida
+            // (ADR-020, enmienda del 14-10-2026). No es una clase que se purgue:
+            // se vacia al escribir el asiento.
+            'storage/app/diagnostics-audit-pending' => Config::string('product.diagnostics_pending_audit_path'),
             // La telemetria es un fichero; su raiz es el directorio que lo contiene.
             'TELEMETRY_STATE_PATH' => \dirname(Config::string('product.telemetry_state_path')),
         ];

@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\DiagnosticsCollector;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\InvalidSetting;
+use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SettingsDrift;
 use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsConfigurationAllowlist;
 use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsSettingsAllowlist;
@@ -53,10 +54,24 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
 
     public function collect(DiagnosticsOptions $options): array
     {
-        $resolved = $this->settings->handle();
+        // El `.env` filtrado no depende de la base; los ajustes guardados si.
+        // Con PostgreSQL caido (V4-PL-1) sale el primero y las cuatro claves
+        // que dependen de los segundos dicen `unavailable`.
+        $resolved = SectionPart::of($this->settings->handle(...));
+        $env = DiagnosticsConfigurationAllowlist::apply($this->environment);
+
+        if (! $resolved instanceof ResolvedSettings) {
+            return [
+                'env' => $env,
+                'installation_settings' => $resolved,
+                'invalid_keys' => $resolved,
+                'unknown_keys' => $resolved,
+                'env_differs_from_database' => $resolved,
+            ];
+        }
 
         return [
-            'env' => DiagnosticsConfigurationAllowlist::apply($this->environment),
+            'env' => $env,
             // PR14: los ajustes guardados, que mandan sobre el `.env`, por lista
             // de permitidos y con su procedencia (`DiagnosticsSettingsAllowlist`).
             'installation_settings' => DiagnosticsSettingsAllowlist::apply($resolved),

@@ -28,6 +28,17 @@ use DateTimeImmutable;
  * para reconocer **ese** paquete si vuelve mas adelante en una conversacion. No
  * viaja el contenido —el asiento acaba en el trail y el trail se exporta— ni el
  * actor, que lo resuelve la sesion en curso.
+ *
+ * ## `deferred`: el asiento que se escribe al volver la base (ADR-020, enmienda
+ * del 14-10-2026)
+ *
+ * Con PostgreSQL caido, el paquete anonimizado de consola se entrega con su
+ * asiento pendiente. Cuando la base vuelve, `Product` publica este mismo evento
+ * otra vez con `deferred = true` y `generatedAt` = el instante en que se genero
+ * el paquete. `occurredAt` es entonces el instante en que se escribe el asiento,
+ * nunca el de la generacion: la cadena de ADR-010 y el sellado de ADR-027
+ * suponen `occurred_at` creciente. Con `deferred = false` (el caso normal)
+ * `generatedAt` es nulo y el asiento se escribe en el momento.
  */
 final readonly class DiagnosticsBundleGenerated implements DomainEvent
 {
@@ -41,6 +52,8 @@ final readonly class DiagnosticsBundleGenerated implements DomainEvent
         public int $sizeBytes,
         public string $generatedBy,
         private DateTimeImmutable $occurredAt,
+        public bool $deferred = false,
+        public ?DateTimeImmutable $generatedAt = null,
     ) {}
 
     public function eventName(): string

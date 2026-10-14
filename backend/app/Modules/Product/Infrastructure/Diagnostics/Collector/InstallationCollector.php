@@ -9,6 +9,7 @@ use App\Modules\Product\Application\Port\DiagnosticsCollector;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Domain\ValueObject\ComplianceProfileSnapshot;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
+use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SettingKey;
 use App\Modules\Shared\Application\Port\Clock;
 use DateTimeZone;
@@ -72,7 +73,12 @@ final readonly class InstallationCollector implements DiagnosticsCollector
 
     public function collect(DiagnosticsOptions $options): array
     {
-        $resolved = $this->settings->handle();
+        // Ajustes guardados, centro, perfil y volumen leen la base; version,
+        // entorno y huso no. Cada parte cae por separado (V4-PL-1): con
+        // PostgreSQL caido, la version que corre es la primera pregunta de la
+        // incidencia, y perderla con el resto de la seccion era perder lo unico
+        // que no dependia de la base.
+        $resolved = SectionPart::of($this->settings->handle(...));
 
         return [
             'product_version' => $this->productVersion,
@@ -82,11 +88,11 @@ final readonly class InstallationCollector implements DiagnosticsCollector
             // es la prueba de que lo sigue siendo — `doctor` lo comprueba y esta
             // linea deja constancia en el paquete.
             'app_timezone' => $this->applicationTimezone,
-            'default_locale' => $resolved->text(SettingKey::LOCALE_DEFAULT),
-            'available_locales' => $resolved->textList(SettingKey::LOCALE_AVAILABLE),
-            'site' => $this->site(),
-            'compliance_profile' => $this->complianceProfile(),
-            'volume' => $this->volume(),
+            'default_locale' => $resolved instanceof ResolvedSettings ? $resolved->text(SettingKey::LOCALE_DEFAULT) : $resolved,
+            'available_locales' => $resolved instanceof ResolvedSettings ? $resolved->textList(SettingKey::LOCALE_AVAILABLE) : $resolved,
+            'site' => SectionPart::of($this->site(...)),
+            'compliance_profile' => SectionPart::of($this->complianceProfile(...)),
+            'volume' => SectionPart::of($this->volume(...)),
         ];
     }
 
