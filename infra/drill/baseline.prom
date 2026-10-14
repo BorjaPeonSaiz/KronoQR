@@ -55,11 +55,14 @@ scan_batch_items_not_processed_total 0
 work_record_reconciliation_last_run_timestamp_seconds{scope="recent"} @NOW@
 work_record_reconciliation_last_run_timestamp_seconds{scope="full"} @NOW@
 projection_reconciliation_last_failures 0
+projection_reconciliation_last_run_timestamp_seconds @NOW@
 
 # --- Incidencias y patrones (incidents.yml) -----------------------------------
 incidents_open{type="insufficient_rest"} 0
 incident_detection_last_failures 0
+incident_detection_last_run_timestamp_seconds @NOW@
 pattern_detection_last_failures 0
+pattern_detection_last_run_timestamp_seconds @NOW@
 incidents_metrics_timestamp_seconds @NOW@
 
 # --- Ficheros generados (generated-files.yml) ---------------------------------
@@ -71,6 +74,7 @@ kronoqr_management_account_changes_total{action="created",role="admin"} 0
 kronoqr_management_account_changes_total{action="two_factor_reset",role="admin"} 0
 
 # --- Auditoria (audit.yml) ----------------------------------------------------
+audit_chain_last_verification_timestamp_seconds @NOW@
 audit_chain_verification_failures_total 0
 audit_log_partition_ready{horizon="current"} 1
 audit_log_partition_ready{horizon="next"} 1

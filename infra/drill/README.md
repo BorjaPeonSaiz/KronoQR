@@ -73,7 +73,7 @@ simulacro evita.
 | `DeteccionDeIncidenciasConFallos` | `incident_detection_last_failures` 1 | it-cliente | excepción en la detección nocturna |
 | `DeteccionDePatronesConFallos` | `pattern_detection_last_failures` 1 | it-cliente | excepción en la detección de patrones |
 | `DiscoDeCopiasCasiLleno` | `kronoqr_backup_volume_free_ratio` 0,10 | it-cliente | volumen de copias al 90 % |
-| `EntregaDeAlertasFallando` | ninguna: las entregas de las demás fallan de verdad | it-cliente | SMTP rechaza, contraseña rotada, webhook caído |
+| `EntregaDeAlertasFallando` | mantiene encendida una alerta de copia (`kronoqr_wal_replication_slots_inactive` 1) hacia webhooks que dan 404: la entrega falla de verdad | it-cliente | SMTP rechaza, contraseña rotada, webhook caído |
 | `EspacioEnDiscoBajo` | `node_filesystem_avail_bytes` al 10 % | it-cliente | disco del servidor lleno |
 | `FicheroGeneradoSinRetirarPasadoSuPlazo` | `generated_files_overdue` 3 | it-cliente | purga programada que no retira |
 | `KioskDiscardedScansAttributed` | `kiosk_discarded_scans_total{attributed="true"}` +5 | it-cliente | quiosco descartó fichajes atribuibles a una tarjeta |

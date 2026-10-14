@@ -4,13 +4,19 @@
 #   ALERTA     nombre exacto de la regla (infra/observability/prometheus/rules/)
 #   ACCION     set   sustituye (o anade) la serie indicada por la linea dada
 #              del   retira las series que casen con el selector dado (alertas de tipo absent())
-#              none  no toca ninguna serie: la falla la produce el propio simulacro
+#              none  no toca ninguna serie (hoy ninguna receta la usa)
 #   ARGUMENTO  una linea de exposicion (set), un selector `metrica` o `metrica{etiqueta="valor"}` (del)
 #              o un texto que explica por que no hace falta tocar nada (none)
 #
 # Una alerta puede tener varias lineas; se aplican todas a la vez sobre baseline.prom.
 # Los contadores suben mas de lo que pide el umbral: increase() extrapola y un salto
 # justo en el umbral podria quedarse corto sin que la regla estuviera mal.
+#
+# EntregaDeAlertasFallando: no tiene serie propia que sembrar. Sus destinatarios son webhooks
+# a 127.0.0.1:9093 que dan 404, asi que CUALQUIER alerta que se notifique falla de verdad. Una
+# alerta que dura 10 s se resuelve antes de que pase el group_wait de 30 s y no notifica nunca;
+# por eso su receta mantiene una alerta de copia (SlotDeReplicacionParado) encendida mientras
+# espera, y es lo que hace subir alertmanager_notifications_failed_total.
 #
 # Las alertas que NO se pueden fabricar sin romper algo van en not-fabricable.tsv, con su motivo.
 AlmacenDeMetricasAusente	del	kronoqr_metrics_store_up
@@ -26,7 +32,7 @@ DescansoEntreJornadasInsuficiente	set	incidents_open{type="insufficient_rest"} 2
 DeteccionDeIncidenciasConFallos	set	incident_detection_last_failures 1
 DeteccionDePatronesConFallos	set	pattern_detection_last_failures 1
 DiscoDeCopiasCasiLleno	set	kronoqr_backup_volume_free_ratio 0.10
-EntregaDeAlertasFallando	none	los destinatarios son .invalid: cada notificacion de las demas alertas falla de verdad
+EntregaDeAlertasFallando	set	kronoqr_wal_replication_slots_inactive 1
 EspacioEnDiscoBajo	set	node_filesystem_avail_bytes{mountpoint="/",fstype="ext4",device="/dev/sda1"} 10000000000
 FicheroGeneradoSinRetirarPasadoSuPlazo	set	generated_files_overdue 3
 KioskDiscardedScansAttributed	set	kiosk_discarded_scans_total{device="drill-kiosk-1",attributed="true"} 5

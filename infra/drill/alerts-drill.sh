@@ -130,7 +130,10 @@ renderizar() {
   if [ -n "${alerta}" ]; then
     grep -vE '^[[:space:]]*(#|$)' "${FAULTS}" | awk -F'\t' -v a="${alerta}" '$1 == a { print $2 "\t" $3 }' >"${seleccion}"
   fi
-  awk -F'\t' -v now="$(date +%s)" '
+  # La seleccion se distingue por NOMBRE de fichero y no por `FNR == NR`: vacia
+  # (el estado sano) awk no la lee, y `FNR == NR` se cumpliria con baseline.prom
+  # y publicaria cero series.
+  awk -F'\t' -v now="$(date +%s)" -v sel="${seleccion}" '
     function clave(linea, k) { k = linea; sub(/ [^ ]+$/, "", k); return k }
     function nombre(k) { sub(/\{.*/, "", k); return k }
     function marcas(linea, ini, tok, desplazamiento) {
@@ -141,7 +144,7 @@ renderizar() {
       }
       return linea
     }
-    FNR == NR {
+    FILENAME == sel {
       if ($1 == "set") { conjunto[clave($2)] = $2; orden[++n] = clave($2) }
       if ($1 == "del") { borrar[$2] = 1 }
       next
@@ -168,19 +171,23 @@ publicar() {
     compose exec -T node-exporter sh -c 'cat > /textfile/drill.tmp && mv /textfile/drill.tmp /textfile/drill.prom'
 }
 
-# "estado receptores" de la alerta en Alertmanager, o nada si no esta.
+# Alertas en firing segun PROMETHEUS (la fuente de verdad: Alertmanager tarda en
+# enterarse y conserva las ya resueltas). Una por linea.
+disparadas_en_prometheus() {
+  local respuesta
+  respuesta="$(compose exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/alerts 2>/dev/null || true)"
+  [ -n "${respuesta}" ] || return 0
+  jq -r '.data.alerts[] | select(.state == "firing") | .labels.alertname' <<<"${respuesta}" | sort -u
+}
+
+# Lo que Alertmanager sabe de la alerta: "estado receptores", o nada si no esta.
+# Con "!" delante cuando NINGUNO de sus receptores es el de su etiqueta
+# `destinatario`: una alerta mal enrutada llega y no avisa a quien toca.
 consultar() {
   local nombre="$1" respuesta
   respuesta="$(compose exec -T alertmanager wget -qO- http://127.0.0.1:9093/api/v2/alerts 2>/dev/null || true)"
   [ -n "${respuesta}" ] || return 0
-  jq -r --arg a "${nombre}" '[.[] | select(.labels.alertname == $a)] | first | if . == null then empty else "\(.status.state) \([.receivers[].name] | join(","))" end' <<<"${respuesta}"
-}
-
-alertas_activas() {
-  local respuesta
-  respuesta="$(compose exec -T alertmanager wget -qO- http://127.0.0.1:9093/api/v2/alerts 2>/dev/null || true)"
-  [ -n "${respuesta}" ] || return 0
-  jq -r '.[] | .labels.alertname' <<<"${respuesta}" | sort -u
+  jq -r --arg a "${nombre}" '[.[] | select(.labels.alertname == $a)] | first | if . == null then empty else (if (.labels.destinatario as $d | [.receivers[].name] | index($d)) == null then "!" else "" end) + "\(.status.state) \([.receivers[].name] | join(","))" end' <<<"${respuesta}"
 }
 
 esperar_pila() {
@@ -269,20 +276,20 @@ main() {
     publicar ""
     sleep 5
   done
-
+  # Las `absent()` saltan en la primera evaluacion, antes de que llegue el primer
+  # .prom: se les da hasta 30 s mas para apagarse antes de juzgar.
   local fallos=0 total=0 alerta activas
-  activas="$(alertas_activas)"
-  for alerta in $(alertas_del_simulacro); do
-    case " ${NO_PRECHECK} " in *" ${alerta} "*) continue ;; esac
-    if grep -qxF -- "${alerta}" <<<"${activas}"; then
-      err "ESTADO SANO NO SILENCIOSO: ${alerta} ya esta activa antes de aplicar su falla. El baseline (infra/drill/baseline.prom) no cubre alguna serie que esa regla lee."
-      fallos=$((fallos + 1))
-    fi
+  for _ in 1 2 3 4 5 6; do
+    activas="$(disparadas_en_prometheus)"
+    [ -n "${activas}" ] || break
+    publicar ""
+    sleep 5
   done
-  local ajenas
-  ajenas="$(grep -vxF -f <(printf '%s\n' "${propias}") <<<"${activas}" | tr '\n' ' ' || true)"
-  if [ -n "${ajenas// /}" ]; then
-    info "Otras alertas activas en el estado sano (ajenas al simulacro, p. ej. sin API ni blackbox): ${ajenas}"
+  # El estado sano tiene que estar en silencio TOTAL: si no, un OK posterior no
+  # prueba que la receta dispare la alerta.
+  if [ -n "${activas}" ]; then
+    err "ESTADO SANO NO SILENCIOSO: Prometheus tiene disparadas: $(tr '\n' ' ' <<<"${activas}"). baseline.prom (infra/drill/) no cubre alguna serie que esas reglas leen."
+    fallos=$((fallos + 1))
   fi
 
   info ""
@@ -291,6 +298,19 @@ main() {
     [ -z "${solo}" ] || [ "${solo}" = "${alerta}" ] || continue
     total=$((total + 1))
     local resultado="" inicio
+    # Antes de aplicar la falla, la alerta NO puede estar ya disparada: si lo
+    # estuviera, el OK de abajo no probaria nada. (La de entrega fallida se
+    # exime: depende de las notificaciones fallidas de las anteriores.)
+    case " ${NO_PRECHECK} " in
+    *" ${alerta} "*) ;;
+    *)
+      if grep -qxF -- "${alerta}" <<<"$(disparadas_en_prometheus)"; then
+        info "FALLA  ${alerta} | ya estaba disparada antes de aplicar su falla; el estado sano no la apaga"
+        fallos=$((fallos + 1))
+        continue
+      fi
+      ;;
+    esac
     inicio="$(date +%s)"
     while [ $(($(date +%s) - inicio)) -lt "${TIMEOUT}" ]; do
       publicar "${alerta}"
@@ -298,7 +318,10 @@ main() {
       [ -z "${resultado}" ] || break
       sleep 3
     done
-    if [ -n "${resultado}" ]; then
+    if [ "${resultado:0:1}" = "!" ]; then
+      info "FALLA  ${alerta} | llego mal enrutada: ${resultado:1} (ningun receptor es el de su etiqueta destinatario)"
+      fallos=$((fallos + 1))
+    elif [ -n "${resultado}" ]; then
       info "OK     ${alerta} | ${resultado} | $(($(date +%s) - inicio)) s"
     else
       info "FALLA  ${alerta} | no llego a Alertmanager en ${TIMEOUT} s"
@@ -321,4 +344,7 @@ main() {
   fi
 }
 
-main "$@"
+# Solo se ejecuta si se invoca el script; AlertsDrillTest lo carga con `source` para probar renderizar().
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

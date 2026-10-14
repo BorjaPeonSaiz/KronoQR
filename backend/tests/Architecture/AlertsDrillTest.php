@@ -272,3 +272,40 @@ it('el runbook de entrega de alertas explica el simulacro y avisa de que no es p
         ->toContain('make alerts-drill')
         ->toContain('alertmanager_notifications_failed_total');
 })->group('RF-PD-13');
+
+it('renderizar publica el estado sano completo y aplica set y del (V4-DV-3)', function (): void {
+    // El fallo que esto vigila: con la seleccion vacia, awk tomaba baseline.prom por
+    // la seleccion y publicaba CERO series. El estado sano disparaba las `absent()` y
+    // sus OK no probaban nada.
+    $renderiza = static function (string $alerta): string {
+        $proceso = new Process(
+            ['bash', '-c', 'set -euo pipefail; . "$1"; renderizar "$2"', 'x', Repo::file('infra/drill/alerts-drill.sh'), $alerta],
+            timeout: 30.0,
+        );
+        $proceso->run();
+        expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput());
+
+        return $proceso->getOutput();
+    };
+
+    $series = static fn (string $texto): array => array_values(array_filter(
+        explode("\n", $texto),
+        static fn (string $linea): bool => trim($linea) !== '' && ! str_starts_with($linea, '#'),
+    ));
+
+    $baseline = $series(Repo::contents('infra/drill/baseline.prom'));
+    $sano = $series($renderiza(''));
+
+    expect($sano)->toHaveCount(count($baseline));
+    expect(implode("\n", $sano))->not->toContain('@NOW');
+
+    // `set`: cambia el valor y no anade una serie.
+    $conSet = $series($renderiza('ColaOfflineAtascada'));
+    expect($conSet)->toHaveCount(count($baseline));
+    expect($conSet)->toContain('kiosk_offline_queue_size{device="drill-kiosk-1"} 80');
+
+    // `del`: retira la serie.
+    $conDel = $series($renderiza('AlmacenDeMetricasAusente'));
+    expect($conDel)->toHaveCount(count($baseline) - 1);
+    expect(implode("\n", $conDel))->not->toContain('kronoqr_metrics_store_up');
+})->group('RF-PD-13', 'RNF-D-01');
