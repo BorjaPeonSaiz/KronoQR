@@ -511,6 +511,46 @@ Clear the shell history when you are done:
 history -c
 ```
 
+### The backups must leave the server
+
+The promise of **losing at most 15 minutes** of records after a disaster holds
+**as long as the backups and the continuous change log (the WAL) leave the
+server**, to another disk or another machine. If they stay on the same disk as
+the database and that disk is lost, everything goes together: the database, the
+backups and the WAL. The backups would be made, verified and even restored every
+night... on the very disk that has just died.
+
+The product cannot take the backups out for you (it sends nothing anywhere: your
+hotel's data never leaves your infrastructure). What it does is **warn you**
+when `BACKUP_PATH` and its `wal/` folder share a disk with the Docker and
+PostgreSQL data:
+
+- `./doctor.sh` checks it from the server (it needs `sudo` to see the Docker
+  disk; without it, it says it could not check);
+- the nightly backup publishes the measurement and `product:doctor` reads it in
+  the **`backup.offsite`** check, which appears in the backups section.
+
+It is **always a warning, never a failure**: it does not change the exit code
+and does not block `install.sh` or `update.sh`. If you already take the backups
+out yourself (sync to another machine, tape, an EU cloud), nothing is broken;
+the warning will keep appearing because the product cannot see that.
+
+The backups count as **leaving** if `BACKUP_PATH` is a network share (NFS,
+SMB/CIFS) or is on a different device from the data. The second only protects
+against the disk failing, **not against theft or fire** at the premises: the
+ideal is a different machine and, if possible, another building. To clear the
+warning:
+
+1. Mount the destination before starting, at the same place as `BACKUP_PATH` in
+   the `.env` (for example, an NFS volume at `/var/backups/fichaje`).
+2. Restart with `docker compose up -d` and run a backup
+   (`docker compose exec scheduler php artisan backup:run`).
+3. Run `sudo ./doctor.sh`: it must say the backups are not on the same disk as
+   the data.
+
+Remember that **the encryption key must be kept off the server too** (previous
+section): a backup off the server without its key is worthless bytes.
+
 ### `fichaje_maintenance`: the role that is born without a password
 
 It is the only database role that can drop an expired partition of the audit
@@ -1574,7 +1614,8 @@ retention reports folder is writable, and exports for the Labour Inspectorate
 forgotten on the server for more than 30 days; §13.6), disk space (application
 and backups), backups (that the last backup succeeded and there is a verified
 one less than 26 h old; right after installing, until the first nightly backup,
-it is only a warning), scheduler (that it keeps launching its tasks every
+it is only a warning; and, also as a warning, that the backups and the WAL leave the
+server: "The backups must leave the server", in section 9), scheduler (that it keeps launching its tasks every
 minute) and settings
 (time zone in UTC, debug mode, invalid keys, differences between the `.env` and
 what is stored, licence and branding),

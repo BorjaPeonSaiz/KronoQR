@@ -1928,6 +1928,20 @@ jobs:
           # alerta, portal fuera de la red del runner— no son fallos.
           sudo ./doctor.sh | tee doctor-g.log
 
+      - name: "G · doctor.sh avisa de que las copias no salen del servidor (V5-DV-05)"
+        # BACKUP_PATH esta en el disco raiz del runner, el mismo que /var/lib/docker y que
+        # los datos de PostgreSQL: es exactamente el caso que el aviso describe. Tiene que
+        # AVISAR (el texto, en los dos idiomas) y NO fallar (la salida sigue siendo 0, que
+        # `set -e` y `pipefail` exigen). Un destino de red o de otro disco no avisa, y eso
+        # lo cubren la prueba de la sonda y la medida de lib/offsite.sh.
+        run: |
+          set -euo pipefail
+          cd paquete-g
+          sudo ./doctor.sh --lang es | tee doctor-g-offsite-es.log
+          grep -q 'Las copias no salen del servidor' doctor-g-offsite-es.log
+          sudo ./doctor.sh --lang en | tee doctor-g-offsite-en.log
+          grep -q 'The backups do not leave the server' doctor-g-offsite-en.log
+
       - name: "G · Prometheus raspa /metrics: el target kronoqr-api esta up"
         # `up == 1` exige un 200 de /metrics a traves de nginx, asi que un
         # METRICS_ALLOW_CIDR que no cubra a Prometheus (403) deja `up == 0`. Es

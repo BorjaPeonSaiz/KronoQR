@@ -499,6 +499,45 @@ Limpia el historial del intérprete de órdenes cuando termines:
 history -c
 ```
 
+### Las copias tienen que salir del servidor
+
+La promesa de **perder como máximo 15 minutos** de registro ante un desastre
+vale **siempre que las copias y el registro continuo de cambios (el WAL) salgan
+del servidor**, a otro disco o a otra máquina. Si se quedan en el mismo disco
+que la base de datos y se pierde ese disco, se pierde todo junto: la base, las
+copias y el WAL. Las copias se harían, se verificarían y hasta se restaurarían
+cada noche... en el mismo disco que acaba de morir.
+
+El producto no puede sacar las copias por ti (no envía nada a ninguna parte:
+los datos de tu hotel no salen de tu infraestructura). Lo que sí hace es
+**avisarte** cuando `BACKUP_PATH` y su carpeta `wal/` comparten disco con los
+datos de Docker y de PostgreSQL:
+
+- `./doctor.sh` lo comprueba desde el servidor (necesita `sudo` para ver el disco
+  de Docker; sin él dice que no ha podido comprobarlo);
+- la copia nocturna publica la medida y `product:doctor` la lee en la
+  comprobación **`backup.offsite`**, que aparece en el apartado de copias.
+
+Es **siempre un aviso, nunca un fallo**: no cambia el código de salida y no
+bloquea `install.sh` ni `update.sh`. Si ya sacas las copias por tu cuenta
+(sincronización a otra máquina, cinta, nube en la UE), no hay nada roto; el
+aviso seguirá saliendo porque el producto no puede verlo.
+
+Se considera que las copias **salen** si `BACKUP_PATH` es un recurso de red (NFS,
+SMB/CIFS) o está en un dispositivo distinto del de los datos. Lo segundo protege
+de la avería del disco, **no del robo ni del incendio** del local: lo ideal es
+una máquina distinta y, si puede ser, otro edificio. Para quitar el aviso:
+
+1. Monta el destino antes de arrancar, en el mismo sitio que `BACKUP_PATH` del
+   `.env` (por ejemplo, un volumen NFS en `/var/backups/fichaje`).
+2. Reinicia con `docker compose up -d` y lanza una copia
+   (`docker compose exec scheduler php artisan backup:run`).
+3. Ejecuta `sudo ./doctor.sh`: debe decir que las copias no están en el mismo
+   disco que los datos.
+
+Recuerda que **la clave de cifrado también tiene que estar fuera** (apartado
+anterior): una copia fuera del servidor sin su clave son bytes sin valor.
+
 ### `fichaje_maintenance`: el rol que nace sin contraseña
 
 Es el único rol de base de datos que puede soltar una partición vencida del
@@ -1555,7 +1594,9 @@ sus rutas no coinciden entre sí, que la carpeta de los informes de retención s
 puede escribir, y exportaciones para la Inspección olvidadas en el servidor
 desde hace más de 30 días; §13.6), espacio en disco (aplicación y copias),
 copias (que la última copia salió bien y hay una verificada de menos de 26 h;
-recién instalado, hasta la primera copia nocturna, es solo un aviso),
+recién instalado, hasta la primera copia nocturna, es solo un aviso; y, también
+como aviso, que las copias y el WAL salen del servidor: «Las copias tienen que
+salir del servidor», en la sección 9),
 planificador (que sigue lanzando sus tareas cada minuto) y
 ajustes (zona horaria en UTC, modo depuración,
 claves no válidas, diferencias entre el `.env` y lo guardado, licencia y marca),
