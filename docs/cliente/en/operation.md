@@ -584,9 +584,7 @@ phone, only the console is left.
 **The console still exists as the recovery route**, for when the panel is not
 available or nobody with the administration role can sign in. It applies the
 same rules —it will not deactivate the last administrator either— and leaves
-the same records, with “console” as their origin (the comments are in Spanish:
-“list”, “create”, “deactivate”, “new temporary password”, “remove the second
-factor”):
+the same records, with “console” as their origin:
 
 ```bash
 # List of accounts: UUID, email, role, status, 2FA and password type. It contains email addresses: do not save it to a file
