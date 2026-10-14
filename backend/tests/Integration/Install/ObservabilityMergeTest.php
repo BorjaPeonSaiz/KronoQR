@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use PHPUnit\Framework\Assert;
 use Symfony\Component\Process\Process;
 use Tests\Architecture\Support\Repo;
 
@@ -250,7 +251,7 @@ it('una regla AÑADIDA por el cliente que no es local-* no viaja sin promtool y 
     $salida = $process->getOutput().$process->getErrorOutput();
 
     if (str_contains($salida, 'HAY_PROMTOOL')) {
-        test()->markTestSkipped('promtool disponible: la validacion real decide');
+        Assert::markTestSkipped('promtool disponible: la validacion real decide');
     }
 
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
