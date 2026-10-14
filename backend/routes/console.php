@@ -34,7 +34,9 @@ use Illuminate\Support\Facades\Schedule;
  * `scheduler.task_output` y `scheduler.task_finished`, cada linea por el
  * saneador de Monolog (L1, regla dura 21). `toLog()` reenvia las lineas;
  * `summaryOnly()` solo el codigo y los recuentos, y lo lleva unicamente la
- * propuesta de purga, por lo dicho arriba. `ScheduledTaskOutputTest`
+ * propuesta de purga, por lo dicho arriba. Una tarea que sale 0 sin escribir
+ * nada no deja apunte: eso ya lo dicen sus metricas y sus spans.
+ * `ScheduledTaskOutputTest`
  * (Architecture) falla si una tarea en segundo plano no pasa por el ayudante.
  */
 
@@ -755,5 +757,30 @@ $weeklySummary->onFailure(LogScheduledCommandFailure::of('reporting:weekly-summa
  */
 ScheduledTaskOutput::toLog(Schedule::command('product:errors:prune')
     ->dailyAt('03:35')
+    ->withoutOverlapping()
+    ->runInBackground());
+
+/*
+ * Asientos pendientes de paquetes de diagnostico (ADR-020, enmienda del
+ * 14-10-2026; RL-04, regla dura 6).
+ *
+ * Con PostgreSQL caido, el paquete anonimizado de consola se entrega con su
+ * asiento `diagnostics.bundle_generated` pendiente en un fichero del volumen de
+ * ficheros generados. Esta tarea lo escribe en cuanto la base vuelve, con
+ * `payload.deferred = true` y el instante original en `payload.generated_at`.
+ * `product:diagnostics` hace lo mismo al arrancar.
+ *
+ * CADA CINCO MINUTOS porque el plazo entre «la base vuelve» y «el asiento
+ * existe» es el que el cliente no ve, y `product:doctor` avisa a la hora. Sin
+ * pendientes no toca la base: con la base caida y nada pendiente, ni un intento
+ * de conexion. Con pendientes y la base caida, un intento cada cinco minutos,
+ * acotado por el cortacircuitos (R3-CH-02).
+ *
+ * `withoutOverlapping` es higiene: el listener es idempotente por huella dentro
+ * del candado de la cadena, asi que dos pasadas a la vez dejan una sola fila.
+ * La salida son recuentos y, si falla, la clase de la excepcion.
+ */
+ScheduledTaskOutput::toLog(Schedule::command('product:diagnostics:record-pending')
+    ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground());

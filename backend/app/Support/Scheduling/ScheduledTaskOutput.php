@@ -123,7 +123,7 @@ final class ScheduledTaskOutput
         $task->sendOutputTo($path);
 
         // `then()` y no `onSuccess()` ni `onFailure()`: el resumen se escribe
-        // siempre, y el fichero se borra siempre.
+        // si hubo salida o fallo, y el fichero se borra siempre.
         $task->then(static function (LogManager $logs) use ($forward): void {
             $forward($logs->channel(self::CHANNEL));
         });

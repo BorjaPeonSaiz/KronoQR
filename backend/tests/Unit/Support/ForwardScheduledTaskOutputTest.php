@@ -140,6 +140,40 @@ it('sin fichero de captura deja el resumen igualmente, con -1 si no hubo codigo'
         ->and($logger->first()['context'])->toMatchArray(['exit_code' => -1, 'output_bytes' => 0, 'output_lines' => 0]);
 })->group('RNF-D-02');
 
+it('el exito silencioso no deja apunte, pero si borra la captura', function (bool $forwardLines): void {
+    // Codigo 0 y 0 bytes: lo dicen las metricas y los spans. Sin esto,
+    // `backup:wal-metrics` dejaria una linea por minuto en el log.
+    $path = forwardOutputCapture('');
+    $logger = new RecordingLogger;
+
+    (new ForwardScheduledTaskOutput('backup:wal-metrics', forwardOutputTask('x', 0), $path, $forwardLines))($logger);
+
+    expect($logger->lines)->toBe([])
+        ->and(is_file($path))->toBeFalse();
+})->with(['toLog' => true, 'summaryOnly' => false])->group('RNF-D-02');
+
+it('con codigo distinto de cero deja el resumen aunque no haya salida', function (): void {
+    $path = forwardOutputCapture('');
+    $logger = new RecordingLogger;
+
+    (new ForwardScheduledTaskOutput('backup:wal-metrics', forwardOutputTask('x', 1), $path, true))($logger);
+
+    expect($logger->lines)->toHaveCount(1)
+        ->and($logger->first()['level'])->toBe('warning')
+        ->and($logger->first()['context'])->toMatchArray(['exit_code' => 1, 'output_bytes' => 0]);
+})->group('RNF-D-02');
+
+it('con salida y codigo cero deja el resumen', function (): void {
+    $path = forwardOutputCapture("Copia completada\n");
+    $logger = new RecordingLogger;
+
+    (new ForwardScheduledTaskOutput('backup:run --mode=dump', forwardOutputTask('x', 0), $path, false))($logger);
+
+    expect($logger->lines)->toHaveCount(1)
+        ->and($logger->first()['level'])->toBe('info')
+        ->and($logger->first()['message'])->toBe('scheduler.task_finished');
+})->group('RNF-D-02');
+
 it('nombra la tarea por lo que va detras de artisan, sin el binario ni las comillas', function (): void {
     $task = forwardOutputTask("'/usr/local/bin/php' 'artisan' backup:run --mode='logical'", null);
 

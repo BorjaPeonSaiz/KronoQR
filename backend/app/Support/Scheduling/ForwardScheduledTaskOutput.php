@@ -24,11 +24,14 @@ use Psr\Log\LogLevel;
  *   linea en el contexto. Hasta {@see self::MAX_LINES} lineas y
  *   {@see self::MAX_BYTES} bytes: un comando que vuelca una tabla entera no
  *   inunda el log ni la memoria del proceso.
- * - Siempre, `scheduler.task_finished` con el nombre, el codigo de salida, los
- *   bytes y las lineas que escribio, si se escribieron (`forwarded`) o solo se
+ * - `scheduler.task_finished` con el nombre, el codigo de salida, los bytes y
+ *   las lineas que escribio, si se escribieron (`forwarded`) o solo se
  *   contaron (`summarized`) y si se recorto. `info` si salio 0 y `warning` si
  *   no: el `error` lo sigue poniendo `scheduler.command_failed` en las tareas
- *   cuyo codigo significa algo, y las alertas de Loki no cambian.
+ *   cuyo codigo significa algo, y las alertas de Loki no cambian. **Salvo el
+ *   exito silencioso** (codigo 0 y 0 bytes de salida), que no deja apunte: ya
+ *   lo dicen las metricas y los spans de cada tarea, y la medida del WAL, que
+ *   corre cada minuto, llenaria el log del contenedor de lineas iguales.
  *
  * ## Que NO escribe
  *
@@ -69,6 +72,12 @@ final readonly class ForwardScheduledTaskOutput
         }
 
         $exitCode = $this->task->exitCode ?? self::UNKNOWN_EXIT_CODE;
+
+        // El exito silencioso no deja apunte: ya lo reflejan las metricas y
+        // los spans, y `backup:wal-metrics` dejaria uno por minuto.
+        if ($exitCode === 0 && $bytes === 0) {
+            return;
+        }
 
         $logger->log($exitCode === 0 ? LogLevel::INFO : LogLevel::WARNING, 'scheduler.task_finished', [
             'command' => $this->command,
