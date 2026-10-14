@@ -23,7 +23,7 @@ import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { useQuery } from '@tanstack/vue-query'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type {
@@ -65,7 +65,8 @@ const to = ref('')
 const departmentFilter = ref<number | ''>('')
 const ruleFilter = ref<ComplianceRuleName | ''>('')
 
-const summary = ref<ComplianceSummary | null>(null)
+// `shallowRef`: miles de hallazgos que nadie muta; el proxy profundo solo suma coste (RC1).
+const summary = shallowRef<ComplianceSummary | null>(null)
 const loading = ref(true)
 const error = ref<unknown>(null)
 
