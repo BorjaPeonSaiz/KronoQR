@@ -48,6 +48,11 @@ readonly SCRIPT_DIR
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 readonly REPO_ROOT
 
+# shellcheck source=lib/fs.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/fs.sh"
+# shellcheck source=lib/observability-merge.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/observability-merge.sh"
+
 err() {
   printf 'package.sh: %s\n' "$*" >&2
 }
@@ -108,6 +113,10 @@ for script in install update backup restore restore-drill doctor; do
 done
 cp -r "${REPO_ROOT}/infra/scripts/lib" "${DEST}/lib"
 cp -r "${REPO_ROOT}/infra/observability" "${DEST}/observability"
+# La huella de cada fichero TAL COMO SE ENTREGA: es lo que permite a update.sh saber
+# que cambio el cliente en observability/ y que cambia el paquete (ver
+# lib/observability-merge.sh). Va junto al directorio, no dentro, y no se edita.
+kq_obs_manifest "${DEST}/observability" >"${DEST}/observability.sha256"
 # LA DOCUMENTACION MANTIENE EL LAYOUT DEL REPOSITORIO —docs/cliente/ y
 # docs/runbooks/— y no se aplana: las guias enlazan a los runbooks con rutas
 # `../runbooks/...`, y check-package-links.sh comprueba que ninguna sale del

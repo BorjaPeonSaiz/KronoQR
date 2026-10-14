@@ -1120,9 +1120,15 @@ services:
   loki:
     profiles: [observability]
     image: grafana/loki:3.3.2
-    command: ["-config.file=/etc/loki/loki.yaml"]
+    # La guarda valida LOG_RETENTION_HOURS (entero 24..17520) ANTES de arrancar el binario:
+    # un `up -d loki` no pasa por install.sh ni update.sh, y 0 desactivaria la retencion.
+    entrypoint: ["/bin/sh", "/etc/kronoqr/retention-guard.sh"]
+    command: ["/usr/bin/loki", "-config.file=/etc/loki/loki.yaml", "-config.expand-env=true"]
+    environment:
+      LOG_RETENTION_HOURS: ${LOG_RETENTION_HOURS:-2160}
     volumes:
       - ./observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - ./observability/retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro
       - loki-data:/loki
     networks:
       - app
@@ -1137,9 +1143,13 @@ services:
   tempo:
     profiles: [observability]
     image: grafana/tempo:2.7.1
-    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    entrypoint: ["/bin/sh", "/etc/kronoqr/retention-guard.sh"]
+    command: ["/tempo", "-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
+    environment:
+      LOG_RETENTION_HOURS: ${LOG_RETENTION_HOURS:-2160}
     volumes:
       - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - ./observability/retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro
       - tempo-data:/var/tempo
     networks:
       # 'app': la aplicacion exporta aqui. 'observability': Grafana lo usa

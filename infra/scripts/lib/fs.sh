@@ -2,7 +2,7 @@
 #
 # KronoQR — espacio en disco, en un solo sitio.
 #
-# NO SE EJECUTA SOLO: lo cargan install.sh y lib/backup-common.sh.
+# NO SE EJECUTA SOLO: lo cargan install.sh, update.sh, package.sh y lib/backup-common.sh.
 #
 # Habia tres invocaciones distintas de `df -Pk` repartidas por los scripts —dos
 # en la biblioteca de copia y una en el instalador—, cada una con su propio
@@ -14,6 +14,17 @@
 
 set -euo pipefail
 IFS=$'\n\t'
+
+# Huella SHA-256 de un fichero. Unica: la usan backup-common.sh, observability-merge.sh
+# y package.sh.
+sha256_of() {
+  local file="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | cut -d' ' -f1
+  else
+    openssl dgst -sha256 "$file" | awk '{print $NF}'
+  fi
+}
 
 # El ancestro existente mas cercano de una ruta.
 #

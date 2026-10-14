@@ -69,6 +69,14 @@
 #      (doctor.sh vigila el rol de las copias, pero su fallo sale con 6: es un
 #      fallo del diagnostico, y el mensaje dice cual.)
 #
+#   8  RESTAURACION COMPLETADA PERO INTERRUMPIDA. Solo restore.sh: una senal (SIGHUP,
+#      SIGINT, SIGTERM) llego durante o despues del intercambio de bases. La base
+#      restaurada YA esta en servicio, la anterior se conserva con su marca, y NO
+#      hay que repetir la restauracion. update.sh lo trata como restaurado. Si el
+#      asiento de auditoria quedo pendiente sale con 6 y la orden que lo escribe.
+#      Una senal ANTES del intercambio sale con 129, 130 o 143 y la base de destino
+#      no se ha tocado.
+#
 # Por que 4 y 5 son dos codigos y no uno: son dos llamadas de telefono
 # distintas. Con un 4 el IT reintenta; con un 5 alguien tiene que mirar el
 # servidor antes de volver a ejecutar nada. Colapsarlos obligaria a leerse el
@@ -95,6 +103,8 @@ readonly KQ_EXIT_ROLLED_BACK=4
 readonly KQ_EXIT_ROLLBACK_INCOMPLETE=5
 readonly KQ_EXIT_VERIFY_FAILED=6
 readonly KQ_EXIT_SECURITY=7
+# 8: solo restore.sh. Restauracion COMPLETADA pero interrumpida por una senal.
+readonly KQ_EXIT_RESTORED_INTERRUPTED=8
 
 # Idioma de los nombres de codigo.
 #
@@ -138,6 +148,7 @@ kq_exit_name() {
     5) printf 'failure, rollback INCOMPLETE, needs intervention' ;;
     6) printf 'post-run verification failed, services up' ;;
     7) printf 'security guarantee broken, nothing applied' ;;
+    8) printf 'restore COMPLETED but interrupted by a signal' ;;
     *) printf 'undocumented code' ;;
     esac
     return 0
@@ -152,6 +163,7 @@ kq_exit_name() {
   5) printf 'fallo con vuelta atras INCOMPLETA, requiere intervencion' ;;
   6) printf 'verificacion posterior fallida, servicios en pie' ;;
   7) printf 'garantia de seguridad rota, nada aplicado' ;;
+  8) printf 'restauracion COMPLETADA pero interrumpida por una senal' ;;
   *) printf 'codigo no documentado' ;;
   esac
 }

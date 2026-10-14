@@ -132,6 +132,9 @@ readonly -a EXCLUIDAS=(
   # BACKUP_WAL_KEY es la subclave del WAL derivada de BACKUP_ENCRYPTION_KEY (ADR-049):
   # solo la recibe postgres, para su archive_command. app no la lee ni debe tenerla.
   BACKUP_WAL_KEY
+  # LOG_RETENTION_HOURS es el plazo de Loki y Tempo (retention-guard.sh): solo lo
+  # reciben esos dos servicios; la aplicacion no lo lee.
+  LOG_RETENTION_HOURS
 )
 
 status=0

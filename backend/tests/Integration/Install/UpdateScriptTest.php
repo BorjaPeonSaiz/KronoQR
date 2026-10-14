@@ -666,6 +666,58 @@ it('in place, la vuelta atras que solo tenia que retirar el mantenimiento tampoc
         ->and($env)->toMatch('/^IMAGE_DIGEST_PHP=$/m');
 })->group('RF-PD-10');
 
+it('una interrupcion por señal vuelve atras y LO DICE en la salida de error, con el mismo codigo de salida (V3-PL-01)', function (): void {
+    // El defecto: la vuelta atras funcionaba pero la persona no veia nada. Las
+    // lineas finales salen por la salida de error (y por /dev/tty si existe) y
+    // el codigo sigue siendo 4.
+    $proceso = inPlaceParadoAntesDeMigrar('exec 3>&1 4>&2; STEP=2; rollback_and_die "$(kq_format u_interrupted INT)" interrupted');
+
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('senal INT')
+        ->and($proceso->getErrorOutput())->toContain('ACTUALIZACION DESHECHA')
+        ->and($proceso->getErrorOutput())->toContain('Salida 4');
+})->group('RF-PD-10', 'RNF-D-04');
+
+it('la senal que salta DENTRO de una llamada redirigida tambien se dice por la pantalla original (V3-PL-01)', function (): void {
+    // El defecto real: el trap hereda `>>detalle 2>&1` de la llamada en curso y todo el
+    // mensaje de la vuelta atras acababa en el fichero de detalle (de root), no en la
+    // pantalla. Con los descriptores 3 y 4 guardados en main() se restauran al entrar.
+    $proceso = inPlaceParadoAntesDeMigrar(
+        'exec 3>&1 4>&2; arm_rollback_traps; STEP=2; { kill -TERM $$; sleep 5; echo NO_DEBE_LLEGAR; } >/dev/null 2>&1'
+    );
+
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('senal TERM')
+        ->and($proceso->getErrorOutput())->toContain('ACTUALIZACION DESHECHA')
+        ->and($proceso->getErrorOutput())->toContain('Salida 4')
+        ->and($proceso->getOutput())->not->toContain('NO_DEBE_LLEGAR');
+})->group('RF-PD-10', 'RNF-D-04');
+
+it('con la salida estandar muerta (tuberia cerrada) la vuelta atras se completa y habla por la de error (V3-PL-01)', function (): void {
+    // `| tee` muere con el Ctrl+C: toda escritura en stdout falla. SIGPIPE se ignora
+    // y say/heading no hacen fallar al script.
+    $proceso = inPlaceParadoAntesDeMigrar(
+        'exec 3>/dev/full 4>&2 1>/dev/full; trap "" PIPE; arm_rollback_traps; STEP=2; kill -INT $$; sleep 5; echo NO_DEBE_LLEGAR >&2'
+    );
+
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('senal INT')
+        ->and($proceso->getErrorOutput())->toContain('ACTUALIZACION DESHECHA')
+        ->and($proceso->getErrorOutput())->not->toContain('NO_DEBE_LLEGAR');
+})->group('RF-PD-10', 'RNF-D-04');
+
+it('una segunda senal durante la vuelta atras se ignora y la vuelta atras termina (V3-PL-02)', function (): void {
+    $proceso = inPlaceParadoAntesDeMigrar(
+        'exec 3>&1 4>&2; lift_maintenance() { kill -INT $$; kill -TERM $$; kill -HUP $$; return 0; }; '
+        .'arm_rollback_traps; STEP=2; kill -TERM $$; sleep 5; echo NO_DEBE_LLEGAR >&2'
+    );
+
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('ACTUALIZACION DESHECHA')
+        ->and($proceso->getErrorOutput())->toContain('NO LA INTERRUMPAS')
+        ->and($proceso->getErrorOutput())->not->toContain('NO_DEBE_LLEGAR');
+})->group('RF-PD-10', 'RNF-D-04');
+
 it('exige que el rol de la aplicacion no escriba en migrations tras migrar, y no tras restaurar una copia anterior (V4-SC-1)', function (): void {
     // Tras migrar a la 2.2.0 la migracion que lo revoca ya esta aplicada: si el
     // rol sigue pudiendo escribir en `migrations`, se deshace. Tras restaurar, la
@@ -1097,3 +1149,22 @@ it('avisa cuando el .env declara IMAGE_DIGEST_* distintas de las del paquete y c
         ->toContain("anuladas=[IMAGE_DIGEST_PHP, IMAGE_DIGEST_POSTGRES]\n")
         ->toContain('IMAGE_DIGEST_PHP, IMAGE_DIGEST_POSTGRES');
 })->group('RF-PD-10', 'RS-08');
+
+it('con la salida estandar en una TUBERIA YA CERRADA (SIGPIPE real) la vuelta atras se completa y sale con 4 (V3-PL-01)', function (): void {
+    // `sudo ./update.sh | tee log` + Ctrl+C: tee muere y cada escritura en stdout recibe
+    // SIGPIPE. main() ignora SIGPIPE (se reproduce aqui su preambulo) y say/heading no fallan.
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; kq_msg_init es; '
+        .'exec 3>&1 4>&2; trap "" PIPE; '
+        .'lift_maintenance() { return 0; }; settle_in_place_env() { return 0; }; close_report() { return 0; }; '
+        .'ROLLBACK_ARMED=1; SOURCE_VERSION=2.2.0; TARGET_VERSION=2.2.1; REPORT_FILE=r; STEP=2; '
+        .'arm_rollback_traps; sleep 0.5; kill -INT $$; sleep 5; echo NO_DEBE_LLEGAR >&2';
+
+    $process = new Process(['bash', '-c', 'bash -c '.escapeshellarg($script).' 2>/tmp/kq-upd-pipe.err | true; exit ${PIPESTATUS[0]}'], env: ['KRONOQR_LANG' => 'es'], timeout: 30.0);
+    $process->run();
+    $stderr = (string) file_get_contents('/tmp/kq-upd-pipe.err');
+    @unlink('/tmp/kq-upd-pipe.err');
+
+    expect($process->getExitCode())->toBe(4, $stderr)
+        ->and($stderr)->toContain('ACTUALIZACION DESHECHA')
+        ->and($stderr)->not->toContain('NO_DEBE_LLEGAR');
+})->group('RF-PD-10', 'RNF-D-04');

@@ -376,6 +376,9 @@ run_delegated_doctor() {
   check_backup_offsite
   check_update_logs
   check_edge_networks
+  check_log_retention_setting
+  check_kiosk_vlan
+  check_orphan_restore_databases
   check_redis_restart_loop
   check_app_storage
   say ""
@@ -445,6 +448,9 @@ run_external_checks() {
   check_backup_offsite
   check_update_logs
   check_edge_networks
+  check_log_retention_setting
+  check_kiosk_vlan
+  check_orphan_restore_databases
   check_redis_restart_loop
   check_app_storage
   check_disk_space
@@ -804,6 +810,44 @@ check_app_storage() {
   return 0
 }
 
+# Bases `<base>_restore_<fecha>` de mas de un dia: son de una restauracion que murio
+# sin limpiar (`kill -9`, un corte de luz) y llevan una copia ENTERA de los datos
+# personales. Solo avisa: eliminarlas es una decision de quien sabe que no hay una
+# restauracion en marcha.
+check_orphan_restore_databases() {
+  local names db
+  db="$(env_value "${CURRENT_ENV}" DB_DATABASE)"
+  db="${db:-fichaje}"
+  [[ "${db}" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || return 0
+  # Anclada a `^<base>_restore_<fecha>$`, como restore.sh: las `<base>_pre_restore_*` son la
+  # base anterior de una vuelta atras (7 dias) y NO se recomienda borrarlas.
+  names="$(compose_current exec -T postgres sh -c "exec psql -U \"\$POSTGRES_USER\" -d postgres -Atq -c \"SELECT datname FROM pg_database WHERE datname ~ '^${db}_restore_[0-9]{8}T[0-9]{6}Z\$' AND to_timestamp(substr(right(datname, 16), 1, 8), 'YYYYMMDD') < now() - interval '1 day'\"" 2>/dev/null | tr '\n' ' ')" || return 0
+  names="${names% }"
+  [ -z "${names}" ] || check_warn "$(kq_format d_c_orphan_restore_db "${names}")" "$(kq_format d_w_orphan_restore_db "${names}")"
+  return 0
+}
+
+# KIOSK_VLAN_CIDR (2.2.1, bloque 13). Igual a la plantilla: avisa (puede ser de verdad
+# la VLAN, pero hay que decirlo; el aviso de install.sh se pierde en la pantalla de la
+# instalacion). Y la comprobacion INVERSA: origenes que Nginx cuenta como VLAN de
+# quioscos (from_kiosk_vlan:1) y que piden rutas del panel o del portal no son tablets:
+# el rango es demasiado ancho y les da el limite de 600 r/m en el fichaje.
+check_kiosk_vlan() {
+  local value template ips
+  value="$(env_value "${CURRENT_ENV}" KIOSK_VLAN_CIDR)"
+  [ -n "${value}" ] || return 0
+  template="$(env_value "$(dirname -- "${CURRENT_COMPOSE}")/.env.example" KIOSK_VLAN_CIDR)"
+  if [ -n "${template}" ] && [ "${value}" = "${template}" ]; then
+    check_warn "$(kq_format c_kiosk_vlan_template "${value}")" "$(kq_format f_kiosk_vlan_template "${value}" "${CURRENT_ENV}")"
+  fi
+  ips="$(compose_current logs --no-log-prefix --since 24h nginx 2>/dev/null | tail -n 50000 |
+    grep -E '"from_kiosk_vlan":1,' | grep -E '"path":"/(admin|portal|api/v1/auth)' |
+    sed -n 's/.*"remote_addr":"\([^"]*\)".*/\1/p' | sort -u | head -n 8 | tr '\n' ' ' || true)"
+  ips="${ips% }"
+  [ -z "${ips}" ] || check_warn "$(kq_format d_c_vlan_not_kiosks "${value}" "${ips}")" "$(kq_format d_w_vlan_not_kiosks "${CURRENT_ENV}")"
+  return 0
+}
+
 # Las redes del borde del .env (PP-01, PP-03, I1): sintaxis, cobertura del portal
 # y de Prometheus, y TRUSTED_PROXY_CIDR. Es la MISMA comprobacion que hacen
 # install.sh y update.sh (lib/checks.sh). `product:doctor` la repite desde
@@ -811,6 +855,12 @@ check_app_storage() {
 # pie, que es cuando mas falta hace: con un CIDR invalido, nginx no arranca.
 check_edge_networks() {
   check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE}"
+}
+
+# LOG_RETENTION_HOURS: entero en rango (falla) y aviso por encima de 90 dias (RL-11) o por encima de
+# TECHNICAL_LOG_RETENTION_DAYS (RL-11, RGPD art. 5.1.e). La misma comprobacion que install.sh y update.sh.
+check_log_retention_setting() {
+  check_log_retention "${CURRENT_ENV}"
 }
 
 # R0. Un corte de luz puede dejar el AOF de Redis con una escritura a medias y

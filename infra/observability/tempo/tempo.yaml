@@ -10,15 +10,13 @@
 # producto se instala en el servidor de UN cliente (ADR-017), no en un cluster,
 # y es el mismo criterio que ya rige Loki y Prometheus en este directorio.
 #
-# RETENCION: 90 dias, LA MISMA que el log tecnico de Loki (RL-11, doc 02
-# §8.2.1). Atada aqui a mano —Tempo, igual que Loki, no admite dias ni
-# expresiones de configuracion, solo horas— a `TECHNICAL_LOG_RETENTION_DAYS`
-# (90 de serie, `backend/config/compliance.php`): si cambias esa variable,
-# cambia tambien `compactor.compaction.block_retention` aqui Y `retention_period`
-# en `infra/observability/loki/loki.yaml`. Las dos retenciones NO se sincronizan
-# solas: son dos ficheros YAML estaticos, y quien suba `TECHNICAL_LOG_RETENTION_DAYS`
-# sin tocarlos deja el registro tecnico con dos plazos distintos sin que nada lo
-# avise.
+# RETENCION: 90 dias de serie (2160 h), LA MISMA que el log tecnico de Loki (RL-11,
+# doc 02 §8.2.1). Se fija con `LOG_RETENTION_HOURS` del .env, que el servicio
+# recibe por entorno y Tempo expande al leer el fichero (`-config.expand-env=true`
+# en el compose; `:-` aplica 2160 tambien si esta vacia). Es la MISMA variable que
+# usa `limits_config.retention_period` de loki.yaml, asi que las dos retenciones no
+# pueden separarse. Este fichero esta protegido en las actualizaciones: el plazo
+# se cambia en el .env, no aqui.
 
 server:
   # Puerto de consulta (la API que usa Grafana como datasource) y de estado.
@@ -51,9 +49,9 @@ ingester:
 
 compactor:
   compaction:
-    # 90 dias = 2160 horas. Ver la nota de retencion de arriba: acompana a
+    # LOG_RETENTION_HOURS (2160 h = 90 dias de serie). Ver la nota de retencion de arriba: acompana a
     # `limits_config.retention_period` de loki.yaml, no lo sustituye.
-    block_retention: 2160h
+    block_retention: ${LOG_RETENTION_HOURS:-2160}h
 
 storage:
   trace:

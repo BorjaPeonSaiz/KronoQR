@@ -126,6 +126,10 @@
 # lib/backup-common.sh y en docs/cliente/operacion.md.
 #
 # NINGUN SECRETO EN LA SALIDA NI EN EL INFORME.
+#
+# OJO: `trap '' PIPE` (SIGPIPE ignorado, para que una tuberia cerrada no mate el script entre
+# los dos renombrados) SE HEREDA en los hijos: una tuberia nueva con un productor largo
+# (`cmd | head`) dejaria de terminar por SIGPIPE y fallaria por EPIPE. Vigilalo al anadirlas.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -171,6 +175,140 @@ CADENA_DESCARTADA=""
 # la misma imagen que `app`).
 ARTISAN_DIR="${KQ_ARTISAN_DIR:-/var/www/html}"
 
+# SENALES (V6-PL-03). INT, TERM y HUP se atrapan: un Ctrl+C o un corte de SSH ya
+# no dejan la base de trabajo a medias ni, sobre todo, la instalacion entre sus
+# dos renombrados. Tres tramos:
+#   · ANTES del intercambio (INTERCAMBIO_HECHO=0, VENTANA_CRITICA=0): se para el
+#     hijo largo (pg_restore), se elimina la base de trabajo (WITH (FORCE): el
+#     pg_restore muerto puede seguir conectado), se comprueban los roles y se sale
+#     con 128+n (129 HUP, 130 INT, 143 TERM). '<base>' sigue como estaba.
+#   · DENTRO (los dos ALTER DATABASE ... RENAME y el asiento de auditoria): el
+#     manejador SOLO ANOTA —no escribe nada: con la salida estandar rota escribir
+#     fallaria— y se atiende cuando la instalacion queda coherente.
+#   · DESPUES del intercambio (INTERCAMBIO_HECHO=1): la restauracion ya esta hecha;
+#     sale con KQ_EXIT_RESTORED_INTERRUPTED (8), o por el 6 con la orden del asiento
+#     si este quedo pendiente. Nunca por la rama «no se ha modificado».
+# SIGPIPE se ignora: una tuberia cerrada (`| tee` muerto tras un Ctrl+C) no puede
+# matar el script entre los dos renombrados.
+VENTANA_CRITICA=0
+INTERCAMBIO_HECHO=0
+SENAL_PENDIENTE=""
+BASE_NUEVA_ACTIVA=""
+HIJO=""
+
+codigo_de_senal() {
+  case "$1" in
+  HUP) printf '129' ;;
+  INT) printf '130' ;;
+  *) printf '143' ;;
+  esac
+}
+
+# Lanza un hijo largo en segundo plano y espera por el con `wait`, que SI se
+# interrumpe con una senal: con el hijo en primer plano, bash no ejecutaria el
+# trap hasta que el hijo acabara (minutos, en un pg_restore grande). La salida del
+# hijo se redirige DENTRO (primer argumento): una redireccion en la llamada a la
+# funcion seguiria vigente dentro del trap y se tragaria sus mensajes.
+correr_hijo() {
+  local salida="$1" estado=0
+  shift
+  "$@" >>"$salida" 2>&1 &
+  HIJO=$!
+  wait "$HIJO" || estado=$?
+  HIJO=""
+  return "$estado"
+}
+
+# Una orden de la ventana critica en su PROPIA sesion: el Ctrl+C o el HUP del
+# terminal van al grupo en primer plano, y un `psql` o un `php` matados a mitad de
+# un ALTER confirmado dejarian al script eligiendo la rama equivocada. Sin `setsid`
+# (BusyBox lo trae; util-linux tambien) se ejecuta tal cual. Con `-w` (util-linux) setsid
+# espera y devuelve el codigo del hijo aunque el llamador sea lider de grupo; BusyBox no lo
+# tiene, y sin `-w` solo hace fork cuando el llamador es lider de grupo, que un script
+# lanzado desde una terminal no es.
+aislada() {
+  if ! command -v setsid >/dev/null 2>&1; then
+    "$@"
+  elif setsid -w true 2>/dev/null; then
+    setsid -w "$@"
+  else
+    setsid "$@"
+  fi
+}
+
+# ¿Existe la base en el cluster? 0 si, 1 no, 2 si NO se ha podido preguntar. Se consulta antes
+# de elegir mensaje y codigo tras un fallo de renombrado: el ALTER pudo confirmarse aunque su
+# cliente muriera.
+existe_base() {
+  local salida
+  salida="$(psql -d postgres -Atqc "SELECT count(*) FROM pg_database WHERE datname = '$1'" 2>/dev/null)" || return 2
+  [ "$(printf '%s' "$salida" | tr -d '[:space:]')" = "1" ]
+}
+
+# Elimina una base de trabajo aunque el pg_restore muerto siga conectado. Nunca falla.
+borrar_base_de_trabajo() {
+  psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"$1\" WITH (FORCE)" >/dev/null 2>&1
+}
+
+al_recibir_senal() {
+  local senal="$1" codigo
+  codigo="$(codigo_de_senal "$senal")"
+
+  if [ "$VENTANA_CRITICA" -eq 1 ]; then
+    SENAL_PENDIENTE="$senal"
+    return 0
+  fi
+
+  # Una segunda senal durante la limpieza no la corta a medias.
+  trap '' INT TERM HUP
+
+  if [ "$INTERCAMBIO_HECHO" -eq 1 ]; then
+    SENAL_PENDIENTE="$senal"
+    atender_senal_diferida
+    return 0
+  fi
+
+  if [ -n "$HIJO" ]; then
+    kill "$HIJO" 2>/dev/null || true
+    wait "$HIJO" 2>/dev/null || true
+    HIJO=""
+  fi
+  if [ -n "$BASE_NUEVA_ACTIVA" ]; then
+    # Primero se suelta la base (FORCE), despues se comprueban los roles: pg_restore
+    # corre como superusuario y pudo haber ejecutado ya algo que los toca (A3-01);
+    # si es asi, esto sale con 7 y lo dice.
+    borrar_base_de_trabajo "$BASE_NUEVA_ACTIVA" || true
+    if [ -f "${TRABAJO}/roles-antes.txt" ]; then
+      guardar_roles "$BASE_NUEVA_ACTIVA"
+    fi
+    if existe_base "$BASE_NUEVA_ACTIVA"; then
+      informar "Interrumpido por la senal ${senal}: NO se ha podido eliminar la base de trabajo '${BASE_NUEVA_ACTIVA}' (contiene datos personales). '${BASE_DESTINO}' sigue como estaba; elimina la sobrante con: psql -d postgres -c 'DROP DATABASE \"${BASE_NUEVA_ACTIVA}\" WITH (FORCE)'."
+    else
+      informar "Interrumpido por la senal ${senal}: la base de trabajo '${BASE_NUEVA_ACTIVA}' se ha eliminado y '${BASE_DESTINO}' sigue como estaba."
+    fi
+    BASE_NUEVA_ACTIVA=""
+  else
+    informar "Interrumpido por la senal ${senal} antes de tocar la instalacion: '${BASE_DESTINO}' sigue como estaba."
+  fi
+  err "Interrumpido por la senal ${senal} (salida ${codigo}). ${BASE_DESTINO} no se ha modificado. Informe: ${INFORME:-no abierto}."
+  exit "$codigo"
+}
+
+# Con la instalacion coherente (fin de la ventana, o senal llegada ya despues del
+# intercambio): si hay una senal pendiente, se atiende ahora. Con el asiento
+# pendiente termina por el 6 y la orden que lo escribe, que es lo que la persona
+# necesita leer; si no, por KQ_EXIT_RESTORED_INTERRUPTED. Una restauracion hecha
+# NUNCA sale por «no se ha modificado».
+atender_senal_diferida() {
+  [ -n "$SENAL_PENDIENTE" ] || return 0
+  informar "Restauracion COMPLETADA antes de atender la senal ${SENAL_PENDIENTE}: '${BASE_DESTINO}' es la base restaurada."
+  if [ "$ASIENTO_PENDIENTE" -eq 1 ]; then
+    salir_con_asiento_pendiente
+  fi
+  err "Senal ${SENAL_PENDIENTE} atendida tras terminar el intercambio. La restauracion SI se ha completado (salida ${KQ_EXIT_RESTORED_INTERRUPTED}). Informe: ${INFORME}."
+  exit "${KQ_EXIT_RESTORED_INTERRUPTED}"
+}
+
 al_salir() {
   publicar_informe || true
   kqe_forget
@@ -190,6 +328,10 @@ publicar_informe() {
 }
 
 trap al_salir EXIT
+trap 'al_recibir_senal INT' INT
+trap 'al_recibir_senal TERM' TERM
+trap 'al_recibir_senal HUP' HUP
+trap '' PIPE
 
 uso() {
   # La cabecera entera, sin numeros de linea que mantener sincronizados: se
@@ -202,7 +344,7 @@ uso() {
 
 informar() {
   log "$*"
-  [ -z "$INFORME_TRABAJO" ] || printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INFORME_TRABAJO"
+  [ -z "$INFORME_TRABAJO" ] || printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INFORME_TRABAJO" 2>/dev/null || true
   return 0
 }
 
@@ -217,7 +359,7 @@ guardar_roles() {
   # Si hay cambios, la base de trabajo sobra y se suelta ANTES de revertir: un
   # rol nuevo puede ser su propietario y no se dejaria borrar.
   kq_roles_unchanged "${TRABAJO}/roles-antes.txt" \
-    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" || resultado=$?
+    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\" WITH (FORCE)" || resultado=$?
   [ "$resultado" -ne 0 ] || return 0
 
   if [ "$resultado" -eq 1 ]; then
@@ -250,11 +392,15 @@ texto() {
 artisan_migrador() {
   local base="$1"
   shift
+  # En su propia sesion (aislada): pcntl o Symfony pueden reinstalar manejadores de senal
+  # y SIG_IGN no basta; un `php` matado tras el COMMIT dejaria el asiento escrito. Las
+  # variables se exportan en una subshell (nunca en la linea de ordenes: la contrasena no
+  # puede verse en `ps`).
   (
-    cd -- "$ARTISAN_DIR" &&
-      DB_CONNECTION=pgsql_migrator DB_DATABASE="$base" DB_HOST="$PGHOST" DB_PORT="$PGPORT" \
-        DB_MIGRATION_USERNAME="$PGUSER" DB_MIGRATION_PASSWORD="${PGPASSWORD:-}" \
-        php artisan "$@"
+    export DB_CONNECTION=pgsql_migrator DB_DATABASE="$base" DB_HOST="$PGHOST" DB_PORT="$PGPORT"
+    export DB_MIGRATION_USERNAME="$PGUSER" DB_MIGRATION_PASSWORD="${PGPASSWORD:-}"
+    # shellcheck disable=SC2016  # el script entre comillas simples lo expande el bash hijo
+    aislada bash -c 'cd -- "$1" && shift && exec php artisan "$@"' _ "$ARTISAN_DIR" "$@"
   )
 }
 
@@ -358,7 +504,12 @@ escribir_asiento() {
     "report_id=$(basename -- "$INFORME" .log)")"
 
   informar "Escribiendo el asiento system.restored_from_backup en audit_log"
-  salida="$(artisan_migrador "$BASE_DESTINO" compliance:record-system-event system.restored_from_backup --data=- 2>&1 <<<"$ASIENTO_JSON")" || estado=$?
+  # Con INT, TERM y HUP ignorados: un php matado tras el COMMIT dejaria un asiento
+  # escrito que el script daria por pendiente (y un reintento duplicaria).
+  salida="$( (
+    trap '' INT TERM HUP
+    artisan_migrador "$BASE_DESTINO" compliance:record-system-event system.restored_from_backup --data=- 2>&1 <<<"$ASIENTO_JSON"
+  ))" || estado=$?
 
   if [ "$estado" -eq 0 ]; then
     informar "Asiento escrito: ${salida}"
@@ -472,6 +623,7 @@ restaurar() {
     die "${KQ_EXIT_STATE_CONFLICT}" "hay ${abiertas} conexiones abiertas contra '${BASE_DESTINO}'. Para primero lo que escribe: 'docker compose stop app horizon scheduler reverb'. El fichaje sigue funcionando en los quioscos, que encolan en local (regla dura 19). No se ha tocado nada."
   fi
 
+  BASE_NUEVA_ACTIVA="$base_nueva"
   informar "Creando base de trabajo ${base_nueva}"
   psql -d postgres -Atqc "CREATE DATABASE \"${base_nueva}\"" >/dev/null || die "${KQ_EXIT_REQUIREMENTS}" \
     "no se ha podido crear la base de trabajo. El usuario ${PGUSER} necesita el permiso CREATEDB. Nada se ha tocado."
@@ -495,10 +647,10 @@ restaurar() {
   kq_roles_snapshot "${TRABAJO}/roles-antes.txt"
 
   informar "Restaurando el volcado (esto es lo que mas tarda)"
-  if ! pg_restore --dbname="$base_nueva" --no-owner "${privilegios[@]}" --exit-on-error \
-    "${TRABAJO}/copia.dump" >>"${INFORME_TRABAJO:-/dev/null}" 2>&1; then
+  if ! correr_hijo "${INFORME_TRABAJO:-/dev/null}" pg_restore --dbname="$base_nueva" --no-owner "${privilegios[@]}" --exit-on-error \
+    "${TRABAJO}/copia.dump"; then
     guardar_roles "$base_nueva"
-    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
+    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\" WITH (FORCE)" >/dev/null || true
     die "${KQ_EXIT_ROLLED_BACK}" "la restauracion ha fallado; la base de trabajo se ha eliminado y '${BASE_DESTINO}' sigue como estaba. Revisa el informe '${INFORME}' y prueba con la copia anterior."
   fi
 
@@ -507,12 +659,12 @@ restaurar() {
   informar "Comprobando la copia restaurada antes de darla por buena"
   if [ "${#privilegios[@]}" -eq 0 ]; then
     comprobar_privilegios "$base_nueva" || {
-      psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
+      psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\" WITH (FORCE)" >/dev/null || true
       die "${KQ_EXIT_ROLLED_BACK}" "la base restaurada no conserva los privilegios del rol de la aplicacion (${DB_USERNAME:-fichaje_app}): o no puede escribir fichajes, o puede alterar audit_log. NO se ha sustituido '${BASE_DESTINO}'. La copia es de una version que no volcaba privilegios: avisa al fabricante."
     }
   fi
   comprobar_restauracion "$base_nueva" || {
-    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\"" >/dev/null || true
+    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base_nueva}\" WITH (FORCE)" >/dev/null || true
     die "${KQ_EXIT_ROLLED_BACK}" "la copia restaurada no supera las comprobaciones de integridad. NO se ha sustituido '${BASE_DESTINO}'. Prueba con la copia anterior y avisa al responsable del sistema."
   }
 
@@ -523,15 +675,11 @@ restaurar() {
     informar "Punta de la cadena de auditoria que se descarta: ${CADENA_DESCARTADA:-no disponible}"
   fi
 
-  # Intercambio de nombres. Es el unico momento en que la instalacion cambia, y
-  # dura lo que dos ALTER DATABASE.
+  # Intercambio de nombres. Es el unico momento en que la instalacion cambia, y dura lo que
+  # dos ALTER DATABASE (intercambiar_bases).
+  VENTANA_CRITICA=1
   informar "Intercambiando ${BASE_DESTINO} -> ${base_anterior} y ${base_nueva} -> ${BASE_DESTINO}"
-  psql -d postgres -Atqc "ALTER DATABASE \"${BASE_DESTINO}\" RENAME TO \"${base_anterior}\"" >/dev/null || die "${KQ_EXIT_ROLLBACK_INCOMPLETE}" \
-    "no se ha podido apartar la base actual: probablemente ha vuelto a haber conexiones. Para los servicios y repite. La base restaurada esta en '${base_nueva}' y no se ha perdido nada."
-  if ! psql -d postgres -Atqc "ALTER DATABASE \"${base_nueva}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null; then
-    psql -d postgres -Atqc "ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null || true
-    die "${KQ_EXIT_ROLLED_BACK}" "no se ha podido activar la base restaurada; se ha devuelto la anterior a su nombre. La instalacion queda como estaba."
-  fi
+  intercambiar_bases "$base_nueva" "$base_anterior"
 
   informar "Restauracion completada. Base anterior conservada como '${base_anterior}'."
   informar "VUELTA ATRAS (mientras exista esa base): pare los servicios y ejecute"
@@ -542,7 +690,54 @@ restaurar() {
     escribir_asiento
   fi
 
+  VENTANA_CRITICA=0
+  atender_senal_diferida
+
   purgar_bases_anteriores
+}
+
+# El intercambio de nombres: dos ALTER DATABASE ... RENAME. Cada `psql` va en su propia sesion
+# (aislada) y, pase lo que pase con su cliente, antes de elegir rama se CONSULTA el cluster
+# (existe_base): un ALTER pudo confirmarse aunque su psql muriera, y la rama equivocada deja
+# la instalacion sin base de produccion. Si ni siquiera se puede consultar, sale por el 5 con
+# la orden de mirar pg_database: no se adivina.
+intercambiar_bases() {
+  local base_nueva="$1" base_anterior="$2" r=0 a=0 b=0
+  local consulta="psql -d postgres -c \"SELECT datname FROM pg_database WHERE datname LIKE '${BASE_DESTINO}%'\""
+
+  if ! aislada psql -d postgres -Atqc "ALTER DATABASE \"${BASE_DESTINO}\" RENAME TO \"${base_anterior}\"" >/dev/null 2>&1; then
+    existe_base "$base_anterior" || r=$?
+    if [ "$r" -eq 2 ]; then
+      die "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "no se puede consultar PostgreSQL tras un fallo al apartar la base actual y no se sabe si el renombrado se hizo. Con los servicios parados ejecuta: ${consulta} . Si existe '${base_anterior}' y no '${BASE_DESTINO}': ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\". La base restaurada esta en '${base_nueva}'."
+    elif [ "$r" -ne 0 ]; then
+      borrar_base_de_trabajo "$base_nueva" || true
+      VENTANA_CRITICA=0
+      die "${KQ_EXIT_STATE_CONFLICT}" \
+        "no se ha podido apartar la base actual: probablemente ha vuelto a haber conexiones. Para los servicios y repite. '${BASE_DESTINO}' sigue como estaba y la base de trabajo, con una copia de datos personales, se ha eliminado."
+    fi
+  fi
+
+  if ! aislada psql -d postgres -Atqc "ALTER DATABASE \"${base_nueva}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null 2>&1; then
+    existe_base "$base_nueva" || a=$?
+    existe_base "$BASE_DESTINO" || b=$?
+    if [ "$a" -eq 2 ] || [ "$b" -eq 2 ]; then
+      die "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "no se puede consultar PostgreSQL tras un fallo al activar la base restaurada y no se sabe si el renombrado se hizo. Con los servicios parados ejecuta: ${consulta} . Si no existe '${BASE_DESTINO}': ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\" (la restaurada esta en '${base_nueva}')."
+    fi
+    # a=1 (la base nueva ya no existe) y b=0 (existe la de destino): el renombrado SI se hizo.
+    if ! { [ "$a" -eq 1 ] && [ "$b" -eq 0 ]; }; then
+      aislada psql -d postgres -Atqc "ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null 2>&1 || true
+      b=0
+      existe_base "$BASE_DESTINO" || b=$?
+      if [ "$b" -eq 0 ]; then
+        borrar_base_de_trabajo "$base_nueva" || true
+        VENTANA_CRITICA=0
+        die "${KQ_EXIT_ROLLED_BACK}" "no se ha podido activar la base restaurada; se ha devuelto la anterior a su nombre. La instalacion queda como estaba."
+      fi
+      die "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "no se ha podido activar la base restaurada ni devolver la anterior a su nombre. Con los servicios parados ejecuta: ${consulta} . Si no existe '${BASE_DESTINO}': ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\" (la restaurada esta en '${base_nueva}')."
+    fi
+  fi
+  BASE_NUEVA_ACTIVA=""
+  INTERCAMBIO_HECHO=1
 }
 
 # Comprobacion de lo restaurado ANTES de sustituir la base viva: que estan
@@ -581,10 +776,20 @@ comprobar_privilegios() {
 # que no hace falta preguntarle al sistema de ficheros.
 purgar_bases_anteriores() {
   local base
+  # Bases de trabajo huerfanas de una restauracion que murio sin limpiar (SIGKILL, corte de
+  # luz): llevan una copia entera de los datos personales. Se avisa; no se borran aqui
+  # porque otra restauracion en curso tendria la suya.
+  while IFS= read -r base; do
+    [ -n "$base" ] || continue
+    informar "AVISO: la base '${base}' es de una restauracion que no termino y contiene datos personales. Si no hay ninguna restauracion en marcha, eliminala: psql -d postgres -c 'DROP DATABASE \"${base}\" WITH (FORCE)'"
+  done < <(psql -d postgres -Atqc "
+    SELECT datname FROM pg_database
+    WHERE datname ~ ('^${BASE_DESTINO}_restore_[0-9]{8}T[0-9]{6}Z\$')
+      AND to_timestamp(right(datname, 16), 'YYYYMMDD\"T\"HH24MISS\"Z\"') < now() - interval '1 day'" 2>/dev/null || true)
   while IFS= read -r base; do
     [ -n "$base" ] || continue
     informar "Eliminando base de restauracion antigua: ${base}"
-    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base}\"" >/dev/null || true
+    psql -d postgres -Atqc "DROP DATABASE IF EXISTS \"${base}\" WITH (FORCE)" >/dev/null || true
   done < <(psql -d postgres -Atqc "
     SELECT datname FROM pg_database
     WHERE datname ~ ('^${BASE_DESTINO}_pre_restore_[0-9]{8}T[0-9]{6}Z\$')
@@ -729,10 +934,16 @@ main() {
   # Asiento pendiente: la base esta restaurada y en servicio, pero el intervalo
   # descartado aun no consta en audit_log. Codigo 6, con la orden que lo arregla.
   if [ "$ASIENTO_PENDIENTE" -eq 1 ]; then
-    die "${KQ_EXIT_VERIFY_FAILED}" "$(texto \
-      "la base esta RESTAURADA y en servicio, pero el asiento 'system.restored_from_backup' de audit_log NO se ha escrito: el intervalo descartado no consta todavia en el registro (regla dura 6). NO repitas la restauracion. Escribelo ahora con: docker compose run --rm --no-deps -T -e DB_CONNECTION=pgsql_migrator migrate php artisan compliance:record-system-event system.restored_from_backup --data='${ASIENTO_JSON}' ; comprueba despues 'docker compose exec app php artisan compliance:verify-audit-chain'. El mismo asiento y el motivo del fallo estan en el informe '${INFORME}'. Procedimiento: docs/runbooks/restaurar-backup.md §6.7." \
-      "the database is RESTORED and in service, but the 'system.restored_from_backup' entry in audit_log was NOT written: the discarded interval is not yet recorded in the ledger (hard rule 6). Do NOT restore again. Write it now with: docker compose run --rm --no-deps -T -e DB_CONNECTION=pgsql_migrator migrate php artisan compliance:record-system-event system.restored_from_backup --data='${ASIENTO_JSON}' ; then check 'docker compose exec app php artisan compliance:verify-audit-chain'. The same entry and the failure reason are in the report '${INFORME}'. Procedure: docs/runbooks/restaurar-backup.md §6.7 (in Spanish).")"
+    salir_con_asiento_pendiente
   fi
+}
+
+# Termina por el 6 con la orden que escribe el asiento pendiente. La usan main() y el
+# manejador de senales: una senal despues del intercambio no puede perder esta salida.
+salir_con_asiento_pendiente() {
+  die "${KQ_EXIT_VERIFY_FAILED}" "$(texto \
+    "la base esta RESTAURADA y en servicio, pero el asiento 'system.restored_from_backup' de audit_log NO se ha escrito: el intervalo descartado no consta todavia en el registro (regla dura 6). NO repitas la restauracion. Escribelo ahora con: docker compose run --rm --no-deps -T -e DB_CONNECTION=pgsql_migrator migrate php artisan compliance:record-system-event system.restored_from_backup --data='${ASIENTO_JSON}' ; comprueba despues 'docker compose exec app php artisan compliance:verify-audit-chain'. El mismo asiento y el motivo del fallo estan en el informe '${INFORME}'. Procedimiento: docs/runbooks/restaurar-backup.md §6.7." \
+    "the database is RESTORED and in service, but the 'system.restored_from_backup' entry in audit_log was NOT written: the discarded interval is not yet recorded in the ledger (hard rule 6). Do NOT restore again. Write it now with: docker compose run --rm --no-deps -T -e DB_CONNECTION=pgsql_migrator migrate php artisan compliance:record-system-event system.restored_from_backup --data='${ASIENTO_JSON}' ; then check 'docker compose exec app php artisan compliance:verify-audit-chain'. The same entry and the failure reason are in the report '${INFORME}'. Procedure: docs/runbooks/restaurar-backup.md §6.7 (in Spanish).")"
 }
 
 # Ejecutable, o cargable con `source` para probar sus funciones sin restaurar.

@@ -102,6 +102,10 @@
 #     dice cual es el directorio vigente (V7-SC-1). Todo lo demas queda intacto
 #     y se deshace con un `mv` (retire_previous_directory).
 #   · No retrocede versiones.
+#
+# OJO: `trap "" PIPE` (SIGPIPE ignorado en main(), para que una tuberia cerrada tras un
+# Ctrl+C no mate la vuelta atras) SE HEREDA en los hijos: una tuberia nueva con un productor
+# largo (`cmd | head`) dejaria de terminar por SIGPIPE y fallaria por EPIPE. Vigilalo.
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -128,6 +132,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/app-commands.sh"
 # shellcheck source=lib/work-record-privileges.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/work-record-privileges.sh"
+# shellcheck source=lib/observability-merge.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/observability-merge.sh"
 
 # Las comparaciones de nombres de migracion y de fronteras usan `[[ a < b ]]`,
 # cuyo orden depende de la colacion. Se fija a la de bytes para que no dependa
@@ -235,6 +241,9 @@ STARTED_AT=0
 STARTED_UTC=""
 MAINTENANCE_SINCE=0
 MAINTENANCE_SECONDS=0
+# Reparto de la ventana de mantenimiento por fases (V6-DV-9): "fase=Ns", en orden.
+LAPS=()
+LAP_PREV=0
 BACKUP_FILE=""
 BACKUP_RESULT=""
 MIGRATIONS_IN_IMAGE=""
@@ -294,20 +303,62 @@ detail_sink() {
   printf '%s' "${DETAIL_WORK:-/dev/null}"
 }
 
+# say, heading, err y kq_msg NUNCA fallan: con la salida rota (un `| tee` muerto tras un
+# Ctrl+C) un printf fallido bajo `set -e` mataria el script en mitad de la vuelta
+# atras. SIGPIPE se ignora en main(); aqui se absorbe el error de escritura.
 say() {
-  printf '%s\n' "$*"
+  printf '%s\n' "$*" 2>/dev/null || true
   report_append "$*"
 }
 
 heading() {
-  printf '\n%s\n' "$*"
+  printf '\n%s\n' "$*" 2>/dev/null || true
   report_append ""
   report_append "$*"
 }
 
 err() {
-  printf '%s\n' "$*" >&2
+  printf '%s\n' "$*" >&2 2>/dev/null || true
   report_append "$*"
+}
+
+# Una orden en su PROPIA sesion (sin el grupo de procesos del terminal), si hay setsid.
+# Con `-w` (util-linux) setsid ESPERA y devuelve el codigo del hijo aunque el llamador sea
+# lider de grupo. BusyBox no lo tiene: sin `-w`, setsid solo hace fork cuando el llamador
+# es lider de grupo, y un script lanzado desde una terminal no lo es (su `bash` es el
+# lider, no sus hijos), asi que ejecuta directamente y propaga el codigo.
+isolated() {
+  if ! command -v setsid >/dev/null 2>&1; then
+    "$@"
+  elif setsid -w true 2>/dev/null; then
+    setsid -w "$@"
+  else
+    setsid "$@"
+  fi
+}
+
+# Devuelve la salida estandar y la de error a las que tenia el script al arrancar
+# (descriptores 3 y 4, abiertos en main()). La senal puede saltar DENTRO de una
+# llamada redirigida (`compose ... >>"$(detail_sink)" 2>&1`): el trap hereda esa
+# redireccion y, sin esto, todo lo que dice la vuelta atras acabaria en el fichero de
+# detalle, que es de root, en vez de en la pantalla (V3-PL-01). Nunca falla.
+restore_std_streams() {
+  { : >&3; } 2>/dev/null && exec 1>&3
+  { : >&4; } 2>/dev/null && exec 2>&4
+  return 0
+}
+
+# Lineas FINALES de la vuelta atras (V3-PL-01). Van a la salida de error ORIGINAL y,
+# ademas, a /dev/tty si existe y la salida de error no es ya esa terminal (p. ej.
+# stderr redirigida a un fichero). Si la tuberia de stdout murio, la salida de error
+# sigue siendo la terminal. Sin terminal (cron, CI) solo va a la salida de error.
+# Nunca falla.
+err_final() {
+  err "$*"
+  if [ ! -t 2 ]; then
+    { printf '%s\n' "$*" >/dev/tty; } 2>/dev/null || true
+  fi
+  return 0
 }
 
 # Solo al detalle: una linea de contexto entre volcados.
@@ -324,7 +375,7 @@ kq_msg() {
   local key="$1" line
   shift
   line="$(kq_format "${key}" "$@")"
-  printf '%s\n' "${line}"
+  printf '%s\n' "${line}" 2>/dev/null || true
   report_append "${line}"
 }
 
@@ -334,6 +385,17 @@ timestamp_utc() {
 
 now_epoch() {
   date +%s
+}
+
+# Cierra una fase de la ventana de mantenimiento: anota cuanto ha tardado desde la
+# anterior. Es el dato con el que se decide que sacar de la ventana (V6-DV-9); no
+# decide nada ni falla nunca.
+mark_lap() {
+  local now
+  now="$(now_epoch)"
+  LAPS+=("$1=$((now - LAP_PREV))s")
+  LAP_PREV="${now}"
+  return 0
 }
 
 remember_check() {
@@ -1128,6 +1190,12 @@ close_report() {
   fi
   report_append "$(kq_format u_report_backup "${BACKUP_FILE:-$(kq_text u_report_none)}" "${BACKUP_RESULT:-$(kq_text u_report_not_run)}")"
   report_append "$(kq_format u_report_maintenance "${MAINTENANCE_SECONDS}")"
+  if [ "${#LAPS[@]}" -gt 0 ]; then
+    report_append "$(kq_format u_report_maintenance_laps "$(
+      IFS=' '
+      printf '%s' "${LAPS[*]}"
+    )")"
+  fi
   for entry in ${CHECKPOINTS+"${CHECKPOINTS[@]}"}; do
     IFS='|' read -r c_version c_count c_seconds c_batch <<<"${entry}"
     report_append "$(kq_format u_report_checkpoint "${c_version}" "$(kq_text u_report_ok)" "${c_count}" "${c_seconds}" "${c_batch}")"
@@ -1174,6 +1242,7 @@ readonly -a PRECONDITION_CHECKS=(
   check_audit_chain
   check_compliance_profile_floor
   check_edge_networks
+  check_log_retention_setting
   check_env_new_keys
   check_env_orphan_keys
 )
@@ -1638,8 +1707,10 @@ check_images() {
   done
 
   # Referencia fijada por digest: ni la descarga ni una imagen ya presente por su
-  # digest dejan la etiqueta local, y `restore-drill.sh --mode pitr` nombra la
-  # imagen por etiqueta (A6-2). Se etiqueta cuando falta o apunta a otra imagen.
+  # digest dejan la etiqueta local. `restore-drill.sh --mode pitr` ya nombra la
+  # imagen por su digest (ADR-053), pero la etiqueta local sigue siendo la que
+  # reconocen `docker images` y quien lanza un `docker run` a mano (A6-2). Se
+  # etiqueta cuando falta o apunta a otra imagen.
   for image in ${all+"${all[@]}"}; do
     [ "${image}" != "${image%%@*}" ] || continue
     pinned_id="$(docker image inspect -f '{{.Id}}' "${image}" 2>/dev/null || true)"
@@ -1765,6 +1836,15 @@ check_edge_networks() {
   check_network_cidrs "${CURRENT_ENV}" "${CURRENT_COMPOSE:-${COMPOSE_FILE}}"
 }
 
+# LOG_RETENTION_HOURS (Loki y Tempo): un valor que no sea un entero impediria que arrancaran
+# con la ventana de mantenimiento ya abierta. Un entero fuera de rango es un fallo (exit 2); el
+# plazo largo o descuadrado de TECHNICAL_LOG_RETENTION_DAYS, un aviso.
+check_log_retention_setting() {
+  [ -n "${CURRENT_ENV}" ] || return 0
+
+  check_log_retention "${CURRENT_ENV}"
+}
+
 # Claves que trae el .env.example nuevo y el .env del cliente no tiene. No es un
 # fallo —cada una usa su valor de serie—, pero decirlo aqui evita descubrirlo
 # leyendo configuracion.md meses despues.
@@ -1864,6 +1944,87 @@ write_wal_key() {
   fi
 }
 
+# Hasta la 2.2.0 el plazo de retencion de Loki y Tempo se editaba en loki.yaml y tempo.yaml;
+# desde la 2.2.1 es LOG_RETENTION_HOURS del .env y esos ficheros estan protegidos (ganan los
+# del paquete). Si el cliente habia editado el plazo en el directorio anterior, el aviso le
+# dice el valor que tenia y la variable que debe poner. Con cualquier huella o sin ella.
+warn_edited_retention() {
+  local old_dir="$1" rel file value hours current
+  for rel in loki/loki.yaml tempo/tempo.yaml; do
+    file="${old_dir}/${rel}"
+    [ -f "${file}" ] || continue
+    value="$(sed -n -E "s/^[[:space:]]*(retention_period|block_retention):[[:space:]]*([^[:space:]#]+).*/\2/p" "${file}" | head -n 1)"
+    case "${value}" in
+    "" | *LOG_RETENTION_HOURS* | 2160h) continue ;;
+    esac
+    hours="?"
+    if [[ "${value}" =~ ^([0-9]+)h$ ]]; then
+      hours="${BASH_REMATCH[1]}"
+    elif [[ "${value}" =~ ^([0-9]+)d$ ]]; then
+      hours="$((10#${BASH_REMATCH[1]} * 24))"
+    fi
+    # Un plazo MENOR que el de serie es una decision de minimizar que no se puede perder en
+    # silencio ni alargar: si el .env nuevo no define la variable (o define otra cosa que la
+    # que ya se escribio aqui) se escribe, y se dice. Uno MAYOR solo se avisa: alargar la
+    # retencion es una decision de la persona responsable (RL-11).
+    current="$(env_value "${ENV_FILE}" "LOG_RETENTION_HOURS")"
+    if [[ "${hours}" =~ ^[0-9]+$ ]] && [ "${hours}" -ge 24 ] && [ "${hours}" -lt 2160 ]; then
+      if [ -z "${current}" ]; then
+        if kq_env_set "${ENV_FILE}" "LOG_RETENTION_HOURS" "${hours}" && chmod 0600 "${ENV_FILE}"; then
+          say "$(kq_format u_obs_retention_applied "${value}" "${file}" "${hours}" "${ENV_FILE}")"
+          continue
+        fi
+      elif [ "${current}" = "${hours}" ]; then
+        continue
+      fi
+    fi
+    kq_msg check_warn "$(kq_format u_w_obs_retention "${file}" "${value}" "${hours}" "${ENV_FILE}")"
+  done
+}
+
+# Los cambios que el cliente hizo en `observability/` (umbrales, destinatarios,
+# cuadros) viajan al directorio nuevo SOLO SI LOS HAY, y con aviso. La regla de
+# quien gana en cada fichero y por que esta en lib/observability-merge.sh. Nunca
+# aborta: la configuracion de observabilidad no vale una vuelta atras, y lo que
+# no se lleva sigue, intacto, en el directorio anterior (RNF-D-04, ADR-054).
+merge_observability() {
+  local old_dir="${CURRENT_DIR}/observability" new_dir="${PACKAGE_DIR}/observability"
+
+  [ -d "${old_dir}" ] && [ -d "${new_dir}" ] || return 0
+
+  warn_edited_retention "${old_dir}"
+  # El promtool que valida las reglas es el de la imagen de Prometheus que fija el compose nuevo.
+  # shellcheck disable=SC2034  # la lee kq_obs_validate_rule (lib/observability-merge.sh)
+  KQ_OBS_PROMETHEUS_IMAGE="$(sed -n -E "s/^[[:space:]]*image:[[:space:]]*(prom\/prometheus:[^[:space:]]+).*/\1/p" "${COMPOSE_FILE:-/dev/null}" 2>/dev/null | head -n 1)"
+
+  if ! kq_obs_merge "${old_dir}" "${new_dir}" "${CURRENT_DIR}/observability.sha256"; then
+    kq_msg check_warn "$(kq_format u_w_obs_copy_failed "${old_dir}" "${new_dir}")"
+  fi
+
+  if [ "${#KQ_OBS_CARRIED[@]}" -gt 0 ]; then
+    say "$(kq_format u_obs_carried "${#KQ_OBS_CARRIED[@]}" "$(kq_obs_list 8 "${KQ_OBS_CARRIED[@]}")" "${new_dir}")"
+  fi
+  if [ "${#KQ_OBS_DELETED[@]}" -gt 0 ]; then
+    say "$(kq_format u_obs_deleted "${#KQ_OBS_DELETED[@]}" "${new_dir}" "$(kq_obs_list 8 "${KQ_OBS_DELETED[@]}")")"
+  fi
+  if [ "${#KQ_OBS_PROTECTED[@]}" -gt 0 ]; then
+    kq_msg check_warn "$(kq_format u_w_obs_protected "${#KQ_OBS_PROTECTED[@]}" "${old_dir}" "$(kq_obs_list 8 "${KQ_OBS_PROTECTED[@]}")")"
+    kq_msg fix "$(kq_text u_w_obs_protected_fix)"
+  fi
+  if [ "${#KQ_OBS_LINKS[@]}" -gt 0 ]; then
+    kq_msg check_warn "$(kq_format u_w_obs_links "${#KQ_OBS_LINKS[@]}" "$(kq_obs_list 8 "${KQ_OBS_LINKS[@]}")" "${old_dir}")"
+  fi
+  if [ "${#KQ_OBS_CONFLICTS[@]}" -gt 0 ]; then
+    if [ "${KQ_OBS_BASELINE}" -eq 1 ]; then
+      kq_msg check_warn "$(kq_format u_w_obs_conflict "${#KQ_OBS_CONFLICTS[@]}" "${old_dir}" "$(kq_obs_list 8 "${KQ_OBS_CONFLICTS[@]}")")"
+      kq_msg fix "$(kq_format u_w_obs_conflict_fix "${old_dir}" "${new_dir}")"
+    else
+      kq_msg check_warn "$(kq_format u_w_obs_nobaseline "${#KQ_OBS_CONFLICTS[@]}" "$(kq_obs_list 8 "${KQ_OBS_CONFLICTS[@]}")" "${old_dir}")"
+    fi
+  fi
+  return 0
+}
+
 prepare_package() {
   local certs_from certs_to branding branding_from branding_to
 
@@ -1939,6 +2100,8 @@ prepare_package() {
     fi
     ;;
   esac
+
+  merge_observability
 }
 
 #------------------------------------------------------------------------------
@@ -2171,6 +2334,7 @@ phase_maintenance() {
   arm_rollback_traps
   ROLLBACK_ARMED=1
   MAINTENANCE_SINCE="$(now_epoch)"
+  LAP_PREV="${MAINTENANCE_SINCE}"
 
   detail_note "--- artisan down (${SOURCE_VERSION}) ---"
   if ! compose_current exec -T app php artisan down --retry="${KQ_MAINTENANCE_RETRY_SECONDS}" >>"$(detail_sink)" 2>&1; then
@@ -2187,6 +2351,7 @@ phase_maintenance() {
   # Con los trabajadores parados nadie escribe ya un informe nuevo, y los
   # contenedores siguen existiendo (se recrean en el paso 5): es el momento.
   rescue_retention_reports
+  mark_lap workers
 }
 
 #------------------------------------------------------------------------------
@@ -2301,6 +2466,7 @@ phase_backup() {
 
   BACKUP_RESULT="$(kq_text u_report_ok)"
   say "$(kq_format u_backup_done "${BACKUP_FILE}")"
+  mark_lap backup
 }
 
 #------------------------------------------------------------------------------
@@ -2830,6 +2996,7 @@ phase_start_and_verify() {
     rollback_and_die "$(kq_format u_f_verify_lifted "${KQ_MANAGEMENT_PROBE}" "${status}")" health_probe_failed
   fi
   MAINTENANCE_SECONDS=$(($(now_epoch) - MAINTENANCE_SINCE))
+  mark_lap start
 
   say "$(kq_format u_workers_up "${TARGET_VERSION}")"
   detail_note "--- up -d (resto de servicios, ${TARGET_VERSION}) ---"
@@ -2918,26 +3085,28 @@ preserve_failed_state() {
 # `artisan up`. NO hay ninguna copia que restaurar, y decirlo es lo que impide
 # que alguien restaure la de anoche.
 rollback_incomplete_maintenance() {
+  restore_std_streams
   settle_in_place_env
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "$1" "$(kq_text u_report_needs_person)")"
   FINAL_STATE="${SOURCE_VERSION}"
   err ""
-  err "$(kq_format u_rollback_incomplete_maintenance "${SOURCE_VERSION}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}")"
-  err "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
+  err_final "$(kq_format u_rollback_incomplete_maintenance "${SOURCE_VERSION}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}")"
+  err_final "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
   close_report "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
   exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
 }
 
 rollback_incomplete() {
+  restore_std_streams
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "$1" "$(kq_text u_report_needs_person)")"
   FINAL_STATE="?"
   err ""
-  err "$(kq_format u_rollback_incomplete \
+  err_final "$(kq_format u_rollback_incomplete \
     "${ENV_FILE}" "${COMPOSE_FILE}" \
     "${ENV_FILE}" "${COMPOSE_FILE}" "${BACKUP_FILE}" \
     "${SOURCE_VERSION}" "${ROLLBACK_ENV}" "${ROLLBACK_COMPOSE}" \
     "${CFG_HTTPS_PORT}" "${SOURCE_VERSION}")"
-  err "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
+  err_final "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
   close_report "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
   exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
 }
@@ -2953,7 +3122,13 @@ rollback_and_die() {
   if [ "${BASHPID}" != "$$" ]; then
     return 1
   fi
-  disarm_rollback_traps
+  # DURANTE la vuelta atras las senales se IGNORAN (un segundo Ctrl+C no la corta a
+  # medias, con los servicios caidos) y el mensaje sale por la pantalla ORIGINAL aunque
+  # la senal saltara dentro de una llamada redirigida. Primero se ignoran y DESPUES se
+  # retira el ERR: no hay un instante con la accion por defecto.
+  trap '' INT TERM HUP PIPE
+  trap - ERR
+  restore_std_streams
   set +e
 
   # Se resuelve AQUI, con el STEP de cuando se disparo la vuelta atras: nada
@@ -2961,7 +3136,8 @@ rollback_and_die() {
   failed_step="$(resolve_failed_step)"
 
   heading "$(kq_text u_phase_6)"
-  err "$(kq_format u_rollback_reason "${reason}")"
+  err_final "$(kq_format u_rollback_reason "${reason}")"
+  err_final "$(kq_text u_rollback_dont_interrupt)"
 
   if [ "${ROLLBACK_ARMED}" -le 1 ]; then
     # Solo el mantenimiento estaba puesto: retirarlo deja todo como estaba.
@@ -2969,7 +3145,8 @@ rollback_and_die() {
       settle_in_place_env
       ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "${reason}" "$(kq_text u_report_ok)")"
       FINAL_STATE="${SOURCE_VERSION}"
-      err "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
+      err_final "$(kq_format u_rollback_lifted_only "${SOURCE_VERSION}" "${REPORT_FILE:-?}")"
+      err_final "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
       close_report "${KQ_EXIT_ROLLED_BACK}"
       exit "${KQ_EXIT_ROLLED_BACK}"
     fi
@@ -3009,10 +3186,18 @@ rollback_and_die() {
     restore_extra+=(--expect-sha256 "${own_sha}")
     [ "${BACKUP_LEGACY:-0}" -ne 1 ] || restore_extra+=(--accept-unauthenticated)
   fi
-  compose_new run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller \
+  # En su propia sesion (setsid): una senal del terminal al grupo en primer plano no
+  # llega a `docker compose run`, que la reenviaria al contenedor y mataria restore.sh
+  # entre sus dos renombrados.
+  isolated docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" run --rm --no-deps -T restore bash "${KQ_CONTAINER_SCRIPTS}/restore.sh" --file "${BACKUP_FILE}" --yes --audit-by-caller \
     "${restore_extra[@]}" >>"$(detail_sink)" 2>&1
   code=$?
-  if [ "${code}" -ne 0 ]; then
+  if [ "${code}" -eq "${KQ_EXIT_RESTORED_INTERRUPTED}" ]; then
+    # 8 = restaurada PERO interrumpida por una senal que le llego a restore.sh: la base
+    # buena esta en servicio y se sigue (lib/exit-codes.sh).
+    err "$(kq_format u_w_rollback_restore_interrupted "${code}")"
+    remember_check "restore-interrupted" "$(kq_format u_w_rollback_restore_interrupted "${code}")"
+  elif [ "${code}" -ne 0 ]; then
     err "$(kq_format u_f_rollback_restore "${code}" "$(kq_exit_name "${code}")")"
     rollback_incomplete "${reason}"
   fi
@@ -3131,7 +3316,7 @@ rollback_and_die() {
   kq_app_knows_command compose_rollback compliance:record-system-event || audit_known=$?
   if [ "${audit_known}" -eq 0 ]; then
     audit_status=0
-    audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
+    audit_output="$(isolated docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
       audit_status=$?
     detail_note "${audit_output}"
 
@@ -3190,8 +3375,8 @@ rollback_and_die() {
   settle_in_place_env
 
   err ""
-  err "$(kq_format u_rollback_done "${SOURCE_VERSION}" "${REPORT_FILE:-?}")"
-  err "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
+  err_final "$(kq_format u_rollback_done "${SOURCE_VERSION}" "${REPORT_FILE:-?}")"
+  err_final "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
   close_report "${KQ_EXIT_ROLLED_BACK}"
   exit "${KQ_EXIT_ROLLED_BACK}"
 }
@@ -3367,6 +3552,11 @@ print_info() {
 
 #------------------------------------------------------------------------------
 main() {
+  # Los descriptores originales, para que la vuelta atras hable por la pantalla aunque la
+  # senal salte dentro de una llamada redirigida (restore_std_streams). SIGPIPE se ignora:
+  # un `| tee` muerto tras un Ctrl+C no puede matar el script a mitad de la vuelta atras.
+  exec 3>&1 4>&2
+  trap '' PIPE
   parse_arguments "$@"
   kq_msg_init "${OPT_LANG}"
   resolve_package_paths
@@ -3391,6 +3581,7 @@ main() {
   phase_maintenance
   phase_backup
   phase_migrations
+  mark_lap migrations
   phase_start_and_verify
 
   disarm_rollback_traps

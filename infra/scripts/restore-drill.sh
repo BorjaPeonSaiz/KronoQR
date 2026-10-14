@@ -47,9 +47,12 @@
 #   --base RUTA     (pitr) copia fisica. Por defecto la ultima de base/
 #   --wal-source X  (pitr) donde esta el archivo de WAL: una ruta o un volumen de
 #                   Docker, que se monta en solo lectura. Por defecto BACKUP_PATH/wal
-#   --image IMAGEN  imagen del contenedor limpio. Por defecto postgres:17-alpine
-#                   (en pitr, la imagen de postgres DEL PRODUCTO: trae las
-#                   herramientas que entienden el formato cifrado)
+#   --image IMAGEN  imagen del contenedor limpio. Por defecto postgres:17-alpine fijada
+#                   por digest (ADR-053)
+#                   (en pitr, la imagen de postgres DEL PRODUCTO, la fijada por
+#                   digest en el paquete —images.lock o IMAGE_DIGEST_POSTGRES,
+#                   ADR-053—; sin digest, la de IMAGE_TAG. Trae las herramientas
+#                   que entienden el formato cifrado)
 #   --mode MODO     container (por defecto), database o pitr
 #   --timeout SEG   espera maxima a que arranque el contenedor. Por defecto 90
 #   --keep          conserva el contenedor para inspeccionarlo a mano
@@ -102,6 +105,10 @@ readonly SCRIPT_DIR
 FICHERO=""
 BASE_FISICA=""
 FUENTE_WAL=""
+# La imagen del contenedor limpio de los modos container y database, FIJADA POR DIGEST (ADR-053):
+# la misma base que la Dockerfile del producto (infra/docker/postgres/Dockerfile) —una prueba de
+# arquitectura exige que coincidan— y no un tag movil que pudo cambiar desde la copia.
+IMAGEN_PREDETERMINADA="postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24"
 IMAGEN="${DRILL_POSTGRES_IMAGE:-}"
 MODO="container"
 ESPERA=90
@@ -384,14 +391,49 @@ comprobar_conteos() {
 # --mode pitr: copia fisica + WAL archivado y CIFRADO (RNF-D-02, ADR-049)
 #------------------------------------------------------------------------------
 
+# El digest con el que el PAQUETE fija la imagen de postgres (ADR-053), o nada.
+#
+#   1. IMAGE_DIGEST_POSTGRES, si esta DEFINIDA (entorno o .env): `@sha256:...` o
+#      `sha256:...`. Definida y VACIA es la excepcion documentada (un IT sin
+#      internet, o la vuelta atras in place de update.sh): se usa la etiqueta.
+#   2. El `images.lock` que package.sh deja junto a este script.
+#   3. Nada: un paquete armado sin KQ_IMAGES_LOCK (la CI, un entorno de desarrollo).
+digest_postgres_del_paquete() {
+  local valor="" lock="${SCRIPT_DIR}/images.lock"
+
+  if [ -n "${IMAGE_DIGEST_POSTGRES+x}" ]; then
+    valor="${IMAGE_DIGEST_POSTGRES#@}"
+  elif [ -f "$lock" ]; then
+    valor="$(awk '$1 == "postgres" { print $2 }' "$lock" 2>/dev/null || true)"
+  fi
+  if [[ "$valor" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    printf '%s' "$valor"
+  elif [ -n "$valor" ]; then
+    # Definido pero mal formado: nunca se cae en silencio a la etiqueta, que es justo lo
+    # que ADR-053 prohibe. Quien lo vea, que lo corrija o lo vacie a proposito.
+    return 2
+  fi
+  return 0
+}
+
 # La imagen de postgres DEL PRODUCTO: trae `kronoqr-restore-wal` y el formato KQE1.
+# La MISMA que corre la instalacion: la fijada por digest en el paquete (ADR-053,
+# V6-PL), no la que resuelva una etiqueta que alguien pudo mover. Sin digest, por
+# etiqueta (IMAGE_TAG).
 imagen_pitr() {
+  local digest
   [ -z "$IMAGEN" ] || {
     printf '%s' "$IMAGEN"
     return 0
   }
+  digest="$(digest_postgres_del_paquete)" || die "${KQ_EXIT_REQUIREMENTS}" \
+    "IMAGE_DIGEST_POSTGRES (o el images.lock del paquete) no es un digest valido (@sha256:<64 hexadecimales>). Corrigelo, o dejalo VACIO a proposito si quieres usar la etiqueta (ADR-053). No se ha tocado nada."
+  if [ -n "$digest" ]; then
+    printf '%s/postgres@%s' "${IMAGE_REGISTRY:-ghcr.io/kronoqr}" "$digest"
+    return 0
+  fi
   [ -n "${IMAGE_TAG:-}" ] || die "${KQ_EXIT_REQUIREMENTS}" \
-    "el modo pitr usa la imagen de postgres del producto y no se sabe cual: pon IMAGE_TAG en el .env o pasa --image <imagen> (por ejemplo ghcr.io/kronoqr/postgres:<version>). No se ha tocado nada."
+    "el modo pitr usa la imagen de postgres del producto y no se sabe cual: el paquete no la fija por digest (falta images.lock) y el .env no tiene IMAGE_TAG. Pon IMAGE_TAG en el .env o pasa --image <imagen> (por ejemplo ghcr.io/kronoqr/postgres:<version>). No se ha tocado nada."
   printf '%s/postgres:%s' "${IMAGE_REGISTRY:-ghcr.io/kronoqr}" "$IMAGE_TAG"
 }
 
@@ -402,6 +444,10 @@ simulacro_pitr() {
   docker info >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
     "Docker no responde. El simulacro pitr necesita levantar un contenedor limpio. No se ha tocado nada."
   imagen="$(imagen_pitr)"
+  case "$imagen" in
+  *@sha256:*) informar "Imagen de postgres del producto, fijada por digest del paquete: ${imagen}" ;;
+  *) informar "Imagen de postgres: ${imagen} (sin digest: el paquete no la fija o se ha indicado a mano)" ;;
+  esac
   docker image inspect "$imagen" >/dev/null 2>&1 || die "${KQ_EXIT_REQUIREMENTS}" \
     "no esta la imagen '${imagen}'. Descargala ('docker pull ${imagen}') o indica otra con --image. No se ha tocado nada."
   kq_wal_key_ensure || die "${KQ_EXIT_REQUIREMENTS}" \
@@ -585,7 +631,7 @@ main() {
   require_cmd openssl openssl
   require_encryption_key
   ensure_backup_tree reports metrics
-  [ -n "$IMAGEN" ] || [ "$MODO" = "pitr" ] || IMAGEN="postgres:17-alpine"
+  [ -n "$IMAGEN" ] || [ "$MODO" = "pitr" ] || IMAGEN="$IMAGEN_PREDETERMINADA"
 
   TRABAJO="$(mktemp -d "${TMPDIR:-/tmp}/kronoqr-drill.XXXXXX")"
   chmod 0700 "$TRABAJO"
@@ -656,4 +702,7 @@ main() {
   die "${KQ_EXIT_VERIFY_FAILED}" "el simulacro ha fallado: la ultima copia NO se puede dar por buena. Revisa '${INFORME}', repitelo con la copia anterior ('--file') y sigue docs/runbooks/restaurar-backup.md."
 }
 
-main "$@"
+# Ejecutable, o cargable con `source` para probar sus funciones sin lanzar un simulacro.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

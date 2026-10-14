@@ -75,12 +75,15 @@ readonly BACKUP_CIPHER="aes-256-cbc"
 # (regla dura 13): el nombre es igual en todas las instalaciones.
 readonly BACKUP_PREFIX="kronoqr"
 
+# Ni log ni err fallan nunca: con la salida cerrada (una tuberia muerta tras un
+# Ctrl+C) un `printf` fallido bajo `set -e` mataria al script a mitad de una tarea
+# que no se puede dejar a medias (restore.sh, entre sus dos renombrados).
 log() {
-  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" 2>/dev/null || true
 }
 
 err() {
-  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2 2>/dev/null || true
 }
 
 # Termina con un codigo documentado y un mensaje que dice QUE HACER.
@@ -204,15 +207,6 @@ require_encryption_key() {
   export BACKUP_ENCRYPTION_KEY
   kqe_require || die "${KQ_EXIT_REQUIREMENTS}" \
     "este servidor tiene un openssl sin SHA3-256 (hace falta OpenSSL 1.1.1 o posterior) y el formato de las copias (KQE1, ADR-049) lo necesita. Actualiza el paquete openssl del servidor, o ejecuta este script dentro del contenedor (docker compose exec scheduler ...)."
-}
-
-sha256_of() {
-  local file="$1"
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$file" | cut -d' ' -f1
-  else
-    openssl dgst -sha256 "$file" | awk '{print $NF}'
-  fi
 }
 
 # Espacio en disco. La implementacion vive en lib/fs.sh, compartida con el

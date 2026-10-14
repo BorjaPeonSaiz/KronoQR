@@ -93,7 +93,7 @@ function limitesDeLoki(): array
 
 it('la retencion de Loki es la del log tecnico expresada en horas', function (string $clave): void {
     $dias = diasDeRetencionTecnica();
-    $esperado = ($dias * 24).'h';
+    $esperado = '${LOG_RETENTION_HOURS:-'.($dias * 24).'}h';
 
     expect(limitesDeLoki()[$clave] ?? null)->toBe(
         $esperado,
@@ -105,7 +105,7 @@ it('la retencion de Loki es la del log tecnico expresada en horas', function (st
 
 it('la retencion de las trazas de Tempo es la misma que la del log tecnico', function (): void {
     $dias = diasDeRetencionTecnica();
-    $esperado = ($dias * 24).'h';
+    $esperado = '${LOG_RETENTION_HOURS:-'.($dias * 24).'}h';
 
     /** @var array{compactor?: array{compaction?: array<string, mixed>}} $documento */
     $documento = Yaml::parse(Repo::contents('infra/observability/tempo/tempo.yaml'));
@@ -145,3 +145,51 @@ it('el mismo plazo rige el historico de errores, y por eso son dos variables', f
     expect($config)->toContain("env('TECHNICAL_LOG_RETENTION_DAYS'")
         ->and($config)->toContain("env('ERROR_HISTORY_RETENTION_DAYS'");
 })->group('RL-11', 'RF-PD-15');
+
+it('la retencion de Loki y de Tempo la fija LOG_RETENTION_HOURS del .env: el compose se la pasa y ellos la expanden', function (): void {
+    // Los dos ficheros estan PROTEGIDOS en las actualizaciones (gana el paquete), asi que el
+    // plazo no se edita ahi: se pone en el .env, el compose lo entrega por entorno y Loki y Tempo
+    // expanden `${LOG_RETENTION_HOURS:-2160}` al leer su fichero (`-config.expand-env=true`).
+    // Sin la bandera, Loki intentaria leer el texto `${...}h` como duracion y no arrancaria.
+    foreach (['infra/compose.prod.yaml', 'infra/compose.dev.yaml'] as $fichero) {
+        /** @var array{services: array<string, array<string, mixed>>} $compose */
+        $compose = Yaml::parse(Repo::contents($fichero));
+
+        foreach (['loki', 'tempo'] as $servicio) {
+            $definicion = $compose['services'][$servicio] ?? [];
+            $comando = textoDeLista($definicion['command'] ?? []);
+            $entorno = (array) ($definicion['environment'] ?? []);
+
+            expect($comando)->toContain('-config.expand-env=true');
+            expect($entorno['LOG_RETENTION_HOURS'] ?? null)->toBe('${LOG_RETENTION_HOURS:-2160}', "{$fichero}: {$servicio} no recibe LOG_RETENTION_HOURS");
+        }
+    }
+})->group('RL-11');
+
+it('.env.example trae LOG_RETENTION_HOURS con el plazo de serie del log tecnico en horas', function (): void {
+    $env = Repo::contents('.env.example');
+
+    expect(preg_match('/^LOG_RETENTION_HOURS=(\d+)\s*$/m', $env, $m))->toBe(1)
+        ->and((int) ($m[1] ?? 0))->toBe(diasDeRetencionTecnica() * 24);
+})->group('RL-11');
+
+it('Loki y Tempo arrancan por la guarda que valida LOG_RETENTION_HOURS: un `up -d loki` no pasa por install.sh', function (): void {
+    foreach (['infra/compose.prod.yaml', 'infra/compose.dev.yaml'] as $fichero) {
+        /** @var array{services: array<string, array<string, mixed>>} $compose */
+        $compose = Yaml::parse(Repo::contents($fichero));
+
+        foreach (['loki' => '/usr/bin/loki', 'tempo' => '/tempo'] as $servicio => $binario) {
+            $definicion = $compose['services'][$servicio] ?? [];
+
+            expect($definicion['entrypoint'] ?? null)->toBe(['/bin/sh', '/etc/kronoqr/retention-guard.sh'])
+                ->and(((array) ($definicion['command'] ?? []))[0] ?? null)->toBe($binario)
+                ->and(textoDeLista($definicion['volumes'] ?? []))->toContain('retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro');
+        }
+    }
+})->group('RL-11');
+
+/** Una lista de la configuracion de Compose, como un solo texto. */
+function textoDeLista(mixed $valor): string
+{
+    return implode(' ', array_map(static fn (mixed $elemento): string => is_scalar($elemento) ? (string) $elemento : '', (array) $valor));
+}

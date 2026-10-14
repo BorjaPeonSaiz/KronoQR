@@ -430,7 +430,8 @@ is in the message, which is what you have to read.**
 | `5` | **Failed and NOT everything could be undone. Manual intervention required.** The message says exactly what is left and which order removes it | It is the only code that requires a person present. `doctor.sh`: **does not use it**, it neither writes nor undoes anything |
 | `6` | **The work was done but the subsequent verification failed.** Nothing is undone | `install.sh`: the services are up, check the certificate and the logs. `backup.sh`: the backup exists but **does not verify: treat it as non-existent**. `restore-drill.sh`: today the record could not be recovered. `update.sh`: **almost never** (every failed verification of the new version rolls back); the only exception is that the `system.updated` entry in `audit_log` could not be written after an update that did finish — the work was done and is not undone because of that. `restore.sh`: **the database is restored and in service, but the `system.restored_from_backup` entry in `audit_log` could not be written**; do not restore again, write the entry with the command in the message (`restaurar-backup.md` §6.7, in Spanish). `restore.sh`, `restore-drill.sh` and `backup.sh verify`, **since 2.2.0, also on integrity**: the `.sha256` is missing, the MAC does not match, the file name is not the one in its header, the authenticated manifest (`.manifest.mac`) is missing or does not match, or the backup is from 2.1.0 and was not explicitly requested; in that case **nothing has been touched** (§18, "…the restore refuses on integrity grounds"). `doctor.sh`: **the diagnosis has found at least one failure** — with the application running, in its own report (`product:doctor`) or because `scheduler` or `horizon` are stopped; with the application stopped, in one of the external checks. The message says what to read |
 | `7` | **Security guarantee broken. NOTHING applied.** A database role has more privileges than allowed, or a backup tried to change them (AUD-1). It is not a fault: it is a guarantee the product refuses to bypass | `backup.sh`: the role used to copy is a superuser, or can create roles or databases, or bypass RLS; no backup was written and the failed-backup alert fires. `restore.sh` and `restore-drill.sh --mode database`: the backup changed cluster roles when restored; no database was swapped and the roles were put back as they were. Follow `rotacion-secretos.md` («El rol de las copias es privilegiado») or `restaurar-backup.md` §6.6 (both in Spanish) |
-| `129`, `130`, `143` | **Interrupted before writing anything**: `129` dropped SSH session, `130` Ctrl+C, `143` `kill`. NOTHING written | `install.sh` and `update.sh`: only in the phases that have not touched anything yet; once they start writing, an interruption is treated as a failure and exits with `4` or `5` after rolling back. Run them inside `tmux` or `screen` (`installation.md` §1.4) |
+| `8` | **Restore completed but interrupted by a signal.** `restore.sh` only: the signal arrived during or after the database swap. The restored database is ALREADY in service and the previous one is kept with its mark | `restore.sh`: **do not restore again**. If the audit entry was also left pending, it exits with `6` and the command that writes it. `update.sh` treats it as restored and carries on with its rollback |
+| `129`, `130`, `143` | **Interrupted before writing anything**: `129` dropped SSH session, `130` Ctrl+C, `143` `kill`. NOTHING written | `install.sh` and `update.sh`: only in the phases that have not touched anything yet; once they start writing, an interruption is treated as a failure and exits with `4` or `5` after rolling back. `restore.sh`: a signal BEFORE the database swap drops the working database and exits with them (the target database is not touched); DURING the swap the signal is deferred until the installation is consistent and then it exits with `8`. Run them inside `tmux` or `screen` (`installation.md` §1.4) |
 
 `install.sh` and `update.sh` invoke `product:doctor` in their verification
 phase (RF-PD-13): in `install.sh` a warning (`product:doctor` code `1`) is
@@ -745,10 +746,9 @@ Redis's follow the same pattern.
 
 **Tempo** stores traces: the complete path of a request, from the tablet's
 `fetch` to the SQL query that wrote the clock-in, with the same 90-day
-retention as the technical log (changing the period means touching
-`observability/loki/loki.yaml` **and**
-`observability/tempo/tempo.yaml` together: see `configuration.md`
-§6.20). It does not turn itself on: you also need
+retention as the technical log (the period of both is `LOG_RETENTION_HOURS` in
+the `.env`, 2160 h by default, and is changed only there; no file in
+`observability/` is edited: see `configuration.md` §6.20). It does not turn itself on: you also need
 `OTEL_EXPORTER_OTLP_ENDPOINT` to point to `http://tempo:4318` in your `.env`
 (empty by default, even with the profile on).
 
@@ -962,12 +962,45 @@ threshold are the same number — separate them and the console
 (`kiosk:health`) and the alert will say different things about the same
 kiosk.
 
-**When you update, your changes to `observability/` do not travel on their
-own.** The new package brings its own `observability/` and `update.sh` does
-not copy the one in the previous directory (it does copy the `.env`, the
-certificates and the branding folder). If you have changed a threshold or a
-dashboard, apply it again in the new directory and reload Prometheus
-(`docker compose restart prometheus`).
+**When you update, your changes to `observability/` travel to the new
+directory —if there are any— and `update.sh` tells you.** Each package carries
+the fingerprint of its files (`observability.sha256`), which lets `update.sh`
+tell what you changed from what the package changes. What only you touched (a
+threshold, a recipient, a dashboard, a file of your own) is copied to the new
+directory and reported on screen. What neither you nor the package changed is
+the package's. **If you changed a file that the new package also changes, the
+package's wins**, `update.sh` warns with the list, and **your version stays,
+intact, in `observability/` of the previous directory**: compare it
+(`diff -u <previous>/observability/<file> <new>/observability/<file>`), apply
+yours again and reload (`docker compose restart prometheus alertmanager
+grafana`). If the previous package is from a version that did not ship the
+fingerprint (up to 2.2.0), `update.sh` cannot know what you touched: it leaves
+the new package's files, warns how many files differ, and your files stay in
+the previous directory. That is what
+you will see **when updating from 2.2.0 to 2.2.1** (2.2.0 did not carry the
+fingerprint): a notice listing the files that differ, even if you touched none.
+
+**What is not customised, and where yours goes.** In these files **the package always
+wins**, whether you changed or deleted them (`update.sh` warns by name and your copy
+stays in the previous directory): **all the built-in rules
+`prometheus/rules/*.yml`** (work record, audit, projection, incidents, authentication,
+accounts, backups, threats and the one that checks that alerts arrive), with **two
+exceptions**: `local-*` and `kiosk.yml`, which is left out on purpose because this guide
+asks you to adjust its threshold together with `KIOSK_HEALTH_SILENT_AFTER_SECONDS`;
+`prometheus/prometheus.yml.template` (loads the rules and points at Alertmanager),
+`alertmanager/alertmanager.yml.template`, the two `render-config.sh`,
+`retention-guard.sh` and
+`loki/loki.yaml` and `tempo/tempo.yaml` (their retention is not edited there: it is
+`LOG_RETENTION_HOURS` in the `.env`, which survives updates; if you had edited those
+files, `update.sh` tells you the value you had and the variable to set; if it was SHORTER than 2160 h and your `.env` does not define it, it writes it and says so, and if it was longer it only warns: lengthening retention is your decision). **Everything else
+follows the normal merge**, `kiosk.yml` included. Your own
+rules go in **`prometheus/rules/local-<name>.yml`**. Every rule that travels from
+`prometheus/rules/` (an edited `kiosk.yml`, `local-*` or an added one) is validated with
+the `promtool` of the new compose's **Prometheus image** (a broken YAML would switch off
+**all** alerts): if it rejects it the package wins and you are told; without Docker the
+server's is used, and if there is none, only `local-*` and `kiosk.yml` travel. If you delete a file of yours that the package does not
+change, it is deleted in the new directory too (and reported); symbolic links are not
+carried (reported).
 
 **Two limits worth knowing.** There is no shared Alertmanager across
 different clients' installations: each installation has its own, with its
@@ -1007,10 +1040,15 @@ kiosk clock-in endpoint** — answers "under maintenance" (503); only the
 confirming locally and queueing; when it finishes they sync with the real time
 of each clock-in, so nothing is lost and the legal record keeps the moment
 each person scanned. **How long it lasts:** in the vendor's test with an
-almost empty database and no pending migrations, the 503 lasted **about 52
-seconds** from start to finish; with your data it will last longer, because
-the pre-update backup is taken inside that window and grows with the database.
-Schedule it outside shift changes. If the window was long, the inbox will show
+almost empty database and no pending migrations, the 503 lasted **under a
+minute** (about 52 seconds the last time it was measured) from start to
+finish; with your data it will last longer, because the pre-update backup is
+taken inside that window and grows with the database. **Downloading the new
+images does not count**: `update.sh` does it in step 1, before turning
+maintenance on. Your real figure is in the update report
+(`BACKUP_PATH/reports/update-*.log`): the "Maintenance window: N s" line and,
+below it, its breakdown by phase (workers stopped, pre-update backup,
+migrations, start-up). Schedule it outside shift changes. If the window was long, the inbox will show
 sync incidents: they are not a fault.
 
 ```bash
@@ -2344,7 +2382,7 @@ clock-ins, beating.
 The legend at the foot of the screen **states your installation's real
 thresholds**, not assumed ones: if you change one, the legend changes with it.
 And if you change `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, you have to change the
-threshold of the `QuioscoSinLatido` alert in `observability/` **at the
+threshold of the `QuioscoSinLatido` alert in `observability/prometheus/rules/kiosk.yml` (not protected: your change travels on updates) **at the
 same time** (§10.4): they are the same number, and separating them is precisely
 what breaks the coherence this screen exists to provide.
 
@@ -3247,9 +3285,11 @@ in Spanish).
 **What is going on.** `update.sh` catches the interruption: if it had not
 written anything yet, it exits without touching anything (`129`, `130` or
 `143`); if it had already started, it rolls back to the pre-update backup on
-its own, as with any other failure (§11, step 6). What may be missing is **the
-screen**: with the SSH session gone, nobody sees the final message. That is why
-it is run inside `tmux` (§11).
+its own, as with any other failure (§11, step 6), and **says so on screen**: the
+final message ("ROLLBACK COMPLETED" and exit `4`) goes to the error output and,
+if there is a terminal, to it as well. What may still be missing is **the
+screen**: with the SSH session gone, nobody sees it. That is why it is run
+inside `tmux` (§11).
 
 **What to do.** Do not repeat the update yet. First read how it ended in the
 local report, which is written even if the screen is lost:

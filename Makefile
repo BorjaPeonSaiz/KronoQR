@@ -79,6 +79,7 @@ SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/docker/*/*/*.sh) \
             $(wildcard infra/docker/postgres/bin/kronoqr-*) \
             $(wildcard infra/docker/*/*/*.envsh) \
+            $(wildcard infra/observability/*.sh) \
             $(wildcard infra/observability/alertmanager/*.sh) \
             $(wildcard infra/observability/prometheus/*.sh) \
             $(wildcard .github/scripts/*.sh) \
@@ -1015,8 +1016,14 @@ sbom: ## SBOM CycloneDX en sbom/kronoqr-<version>.cdx.json
 # dentro tiene por que escribir en el arbol de fuentes), asi que el comando
 # emite la matriz por la salida estandar con --output=- y es make quien la
 # guarda. Sus avisos van a la salida de error y no contaminan el fichero.
+# Se escribe a un temporal y se renombra solo si el comando acaba bien y la
+# salida no esta vacia: con el contenedor parado, la redireccion directa dejaba
+# la matriz a 0 bytes y el fallo pasaba inadvertido.
 traceability: ## Genera docs/trazabilidad-pruebas.md (RQ-13, doc 02 seccion 9.6)
-	( $(RUN_APP) php artisan qa:traceability --output=- ) >docs/trazabilidad-pruebas.md
+	( $(RUN_APP) php artisan qa:traceability --output=- ) >docs/trazabilidad-pruebas.md.tmp \
+		&& test -s docs/trazabilidad-pruebas.md.tmp \
+		&& mv docs/trazabilidad-pruebas.md.tmp docs/trazabilidad-pruebas.md \
+		|| { rm -f docs/trazabilidad-pruebas.md.tmp; echo "[make] qa:traceability fallo: la matriz NO se ha tocado" >&2; exit 1; }
 	@echo "[make] Matriz escrita en docs/trazabilidad-pruebas.md"
 
 traceability-check: ## Falla si un requisito ya implementado no tiene prueba (RQ-13)

@@ -419,7 +419,8 @@ mensaje, que es lo que hay que leer.**
 | `5` | **Falló y NO se pudo deshacer todo. Hay que intervenir a mano.** El mensaje dice exactamente qué queda y qué orden lo retira | Es el único código que exige a una persona delante. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
 | `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie, revisa certificado y logs. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7). `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** (§18, «…la restauración se niega por integridad»). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`) o porque `scheduler` u `horizon` están parados; con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
 | `7` | **Garantía de seguridad rota. NADA aplicado.** Un rol de la base de datos tiene más privilegios de los permitidos, o una copia ha intentado cambiarlos (AUD-1). No es una avería: es una garantía que el producto se niega a saltarse | `backup.sh`: el rol con el que se copia es superusuario, o puede crear roles o bases, o saltarse RLS; no se ha escrito ninguna copia y salta la alerta de copia fallida. `restore.sh` y `restore-drill.sh --mode database`: la copia ha cambiado roles del clúster al restaurarse; no se ha intercambiado ninguna base y se ha intentado devolver los roles a su estado. Sigue `rotacion-secretos.md` («El rol de las copias es privilegiado») o `restaurar-backup.md` §6.6 |
-| `129`, `130`, `143` | **Interrumpido antes de escribir nada**: `129` corte de la sesión SSH, `130` Ctrl+C, `143` `kill`. NADA escrito | `install.sh` y `update.sh`: solo en las fases que todavía no han tocado nada; desde que empiezan a escribir, una interrupción se trata como un fallo y sale con `4` o `5` tras deshacer. Ejecútalos dentro de `tmux` o `screen` (`instalacion.md` §1.4) |
+| `8` | **Restauración completada pero interrumpida por una señal.** Solo `restore.sh`: la señal llegó durante o después del intercambio de bases. La base restaurada YA está en servicio y la anterior se conserva con su marca | `restore.sh`: **no repitas la restauración**. Si además el asiento de auditoría quedó pendiente, sale con `6` y la orden que lo escribe. `update.sh` lo trata como restaurado y sigue con su vuelta atrás |
+| `129`, `130`, `143` | **Interrumpido antes de escribir nada**: `129` corte de la sesión SSH, `130` Ctrl+C, `143` `kill`. NADA escrito | `install.sh` y `update.sh`: solo en las fases que todavía no han tocado nada; desde que empiezan a escribir, una interrupción se trata como un fallo y sale con `4` o `5` tras deshacer. `restore.sh`: una señal ANTES del intercambio de bases elimina la base de trabajo y sale con ellas (la base de destino no se toca); DURANTE el intercambio la señal se difiere hasta dejar la instalación coherente y entonces sale con `8`. Ejecútalos dentro de `tmux` o `screen` (`instalacion.md` §1.4) |
 
 `install.sh` y `update.sh` invocan `product:doctor` en su fase de verificación
 (RF-PD-13): en `install.sh` un aviso (código `1` de `product:doctor`) se
@@ -726,9 +727,9 @@ PostgreSQL y Redis, con el mismo patrón.
 
 **Tempo** guarda las trazas: el recorrido completo de una petición, desde el
 `fetch` de la tablet hasta la consulta SQL que escribió el fichaje, con los
-mismos 90 días de retención que el registro técnico (cambiar el plazo exige
-tocar `observability/loki/loki.yaml` **y** `observability/tempo/tempo.yaml`
-a la vez: ver `configuracion.md` §6.20). No se activa por sí solo: hace falta
+mismos 90 días de retención que el registro técnico (el plazo de los dos es
+`LOG_RETENTION_HOURS` del `.env`, 2160 h de serie, y se cambia solo ahí; no se
+edita ningún fichero de `observability/`: ver `configuracion.md` §6.20). No se activa por sí solo: hace falta
 además que `OTEL_EXPORTER_OTLP_ENDPOINT` apunte a `http://tempo:4318` en tu
 `.env` (vacío de serie, incluso con el perfil encendido).
 
@@ -947,12 +948,47 @@ la vez**: `KIOSK_HEALTH_SILENT_AFTER_SECONDS` ([`configuracion.md`](configuracio
 separas, la consola (`kiosk:health`) y la alerta dirán cosas distintas del
 mismo quiosco.
 
-**Al actualizar, tus cambios en `observability/` no viajan solos.** El
-paquete nuevo trae su propio `observability/` y `update.sh` no copia el del
-directorio anterior (sí copia el `.env`, los certificados y la carpeta de
-marca). Si has tocado un umbral o un cuadro de mando, vuelve a aplicarlo en el
-directorio nuevo y recarga Prometheus
-(`docker compose restart prometheus`).
+**Al actualizar, tus cambios en `observability/` viajan al directorio nuevo
+—si los hay— y `update.sh` te lo dice.** Cada paquete trae la huella de sus
+ficheros (`observability.sha256`), y con ella `update.sh` distingue lo que
+cambiaste tú de lo que cambia el paquete. Lo que solo tocaste tú (un umbral,
+un destinatario, un cuadro, un fichero tuyo) se copia al directorio nuevo y
+queda dicho en pantalla. Lo que ni tú ni el paquete habéis cambiado es lo del
+paquete. **Si cambiaste un fichero que el paquete nuevo también cambia, gana el
+del paquete**, `update.sh` lo avisa con la lista y **tu versión sigue, intacta,
+en `observability/` del directorio anterior**: compárala
+(`diff -u <anterior>/observability/<fichero> <nuevo>/observability/<fichero>`),
+vuelve a aplicar lo tuyo y recarga
+(`docker compose restart prometheus alertmanager grafana`). Si el paquete
+anterior es de una versión que no entregaba la huella (hasta la 2.2.0),
+`update.sh` no puede saber qué tocaste tú: deja lo del paquete nuevo, avisa de
+cuántos ficheros difieren y tus ficheros siguen en el directorio anterior. Es lo que
+verás **al actualizar de la 2.2.0 a la 2.2.1** (la 2.2.0 no traía la huella): un
+aviso con los ficheros que difieren, aunque no hayas tocado ninguno.
+
+**Qué no se personaliza y dónde va lo tuyo.** En estos ficheros **siempre gana el
+paquete**, los hayas cambiado o borrado tú (`update.sh` lo avisa por su nombre y tu
+copia sigue en el directorio anterior): **todas las reglas de serie
+`prometheus/rules/*.yml`** (registro horario, auditoría, proyección, incidencias,
+autenticación, cuentas, copias, amenazas y la que vigila que las alertas llegan), con
+**dos excepciones**: las `local-*` y `kiosk.yml`, que queda fuera a propósito porque
+esta guía te pide ajustar su umbral junto a `KIOSK_HEALTH_SILENT_AFTER_SECONDS`;
+`prometheus/prometheus.yml.template` (carga las reglas y apunta a
+Alertmanager), `alertmanager/alertmanager.yml.template`, los dos `render-config.sh`,
+`retention-guard.sh` y `loki/loki.yaml` y `tempo/tempo.yaml` (su retención no se edita ahí: es
+`LOG_RETENTION_HOURS` del `.env`, que sobrevive a las actualizaciones; si la habías
+editado en esos ficheros, `update.sh` te dice el valor que tenías y la variable que
+debes poner; si era MENOR que 2160 h y tu `.env` no la define, la escribe él y lo dice,
+y si era mayor solo avisa: alargar la retención es decisión tuya). **El resto
+sigue la fusión normal**, `kiosk.yml` incluido. Tus reglas propias
+van en **`prometheus/rules/local-<nombre>.yml`**. Toda regla que viaje desde
+`prometheus/rules/` (`kiosk.yml` editado, `local-*` o una añadida) se valida con el
+`promtool` de la **imagen de Prometheus** del compose nuevo (un YAML roto apagaría
+**todas** las alertas): si lo rechaza gana el paquete y se avisa; sin Docker se usa el
+del servidor, y si tampoco hay, solo viajan las `local-*` y `kiosk.yml`. Si borras un fichero tuyo que el paquete no
+cambia, se borra también en el directorio nuevo (y se dice); los enlaces simbólicos
+no se llevan (se avisa).
+
 
 **Dos límites que conviene conocer.** No hay un Alertmanager común entre
 instalaciones de clientes distintos: cada instalación tiene la suya, con sus
@@ -993,9 +1029,14 @@ siguen confirmando en local y encolando; al terminar sincronizan con la hora
 real de cada fichaje, así que no se pierde nada y el registro legal conserva el
 momento en que cada persona pasó la tarjeta. **Cuánto dura:** en la prueba del
 fabricante, con una base casi vacía y sin migraciones pendientes, el 503 duró
-**unos 52 segundos** de principio a fin; con tus datos durará más, porque la
-copia previa se hace dentro de esa ventana y crece con la base. Prográmala
-fuera de los cambios de turno. Si la ventana fue larga, la bandeja mostrará
+**menos de un minuto** (unos 52 segundos la última vez que se midió) de
+principio a fin; con tus datos durará más, porque la copia previa se hace
+dentro de esa ventana y crece con la base. **La descarga de las imágenes nuevas
+no cuenta**: `update.sh` la hace en el paso 1, antes de poner el mantenimiento.
+Tu cifra real queda en el informe de la actualización
+(`BACKUP_PATH/reports/update-*.log`): la línea «Ventana de mantenimiento: N s»
+y, debajo, su reparto por fases (parada de trabajadores, copia previa,
+migraciones, arranque). Prográmala fuera de los cambios de turno. Si la ventana fue larga, la bandeja mostrará
 incidencias de sincronización: no son un fallo.
 
 ```bash
@@ -2309,7 +2350,7 @@ pendientes, latiendo.
 La leyenda al pie de la pantalla **dice los umbrales reales de tu
 instalación**, no unos supuestos: si cambias uno, la leyenda cambia con él. Y
 si cambias `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, tienes que cambiar **a la vez**
-el umbral de la alerta `QuioscoSinLatido` en `observability/` (§10.4):
+el umbral de la alerta `QuioscoSinLatido` en `observability/prometheus/rules/kiosk.yml` (§10.4; ese fichero no está protegido y tu cambio viaja en las actualizaciones):
 son el mismo número, y separarlos es justamente lo que rompe la coherencia que
 esta pantalla existe para dar.
 
@@ -3191,9 +3232,11 @@ hoy o de anoche ([`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backu
 
 **Qué pasa.** `update.sh` atrapa la interrupción: si todavía no había escrito
 nada, sale sin tocar nada (`129`, `130` o `143`); si ya había empezado, vuelve
-atrás solo a la copia previa, como ante cualquier otro fallo (§11, paso 6). Lo
-que puede faltar es **la pantalla**: con la sesión SSH cortada, el mensaje
-final no lo ve nadie. Por eso se lanza dentro de `tmux` (§11).
+atrás solo a la copia previa, como ante cualquier otro fallo (§11, paso 6), y
+**lo dice en pantalla**: el mensaje final («VUELTA ATRAS COMPLETADA» y la salida
+`4`) va a la salida de error y, si hay una terminal, también a ella. Lo que aún
+puede faltar es **la pantalla**: con la sesión SSH cortada, nadie lo ve. Por eso
+se lanza dentro de `tmux` (§11).
 
 **Qué hacer.** No repitas la actualización todavía. Lee primero cómo terminó en
 el informe local, que se escribe aunque la pantalla se pierda:
