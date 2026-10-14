@@ -1,0 +1,94 @@
+# KronoQR — pila EFIMERA del simulacro de alertas (V4-DV-3, `make alerts-drill`).
+#
+# NO ES LA INSTALACION NI EL ENTORNO DE DESARROLLO. Es una pila aparte, con su
+# propio nombre de proyecto (`kq-drill`, lo fija alerts-drill.sh con -p), sin
+# volumenes con nombre y sin puertos publicados: no puede chocar con la pila
+# `kronoqr` ni leer sus datos. Se crea y se destruye en cada ejecucion.
+#
+# Que contiene, y por que son estas piezas y no otras:
+#
+#   node-exporter   El MISMO colector `textfile` que sirve en produccion las
+#                   series de la copia, la ventana de mantenimiento o los
+#                   quioscos. El simulacro escribe ahi un `.prom` y Prometheus
+#                   lo lee por el camino real. Solo el colector textfile: asi
+#                   tambien puede publicar `node_filesystem_*` sin chocar con
+#                   el colector del anfitrion.
+#   prometheus      Las reglas REALES de infra/observability/prometheus/rules/,
+#                   montadas de solo lectura. Una unica transformacion, hecha al
+#                   arrancar: `for:` pasa a 0s y `interval:` a 5s (esperar 24 h
+#                   a SimulacroDeRestauracionNuncaEjecutado no es repetible). La
+#                   persistencia del `for:` la prueban los casos de promtool.
+#   alertmanager    El Alertmanager REAL: su plantilla y su render-config.sh,
+#                   con destinatarios que responden 404. Ejercita
+#                   el enrutado y la inhibicion verdaderos y hace que las
+#                   entregas fallen de verdad, que es lo que dispara
+#                   EntregaDeAlertasFallando.
+#
+# Las imagenes son las de compose.prod.yaml (las lee alerts-drill.sh): la
+# herramienta que simula es la que despues evalua en produccion.
+
+name: kq-drill
+
+services:
+  node-exporter:
+    image: ${KQ_DRILL_NODE_EXPORTER_IMAGE:?alerts-drill.sh exporta la imagen de node-exporter}
+    command:
+      - --collector.disable-defaults
+      - --collector.textfile
+      - --collector.textfile.directory=/textfile
+      - --web.listen-address=:9100
+    tmpfs:
+      - /textfile:mode=1777
+
+  alertmanager:
+    image: ${KQ_DRILL_ALERTMANAGER_IMAGE:?alerts-drill.sh exporta la imagen de Alertmanager}
+    entrypoint: ["/etc/alertmanager/render-config.sh"]
+    command:
+      - --config.file=/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    environment:
+      # Sin correo. Cada destinatario es un webhook que apunta a una ruta que no
+      # existe en el propio Alertmanager: responde 404, que Alertmanager NO
+      # reintenta, y la entrega falla al instante y se cuenta en
+      # `alertmanager_notifications_failed_total`. Con un SMTP inexistente la
+      # cuenta tardaba un `group_interval` (5 min) porque el error de red se
+      # reintenta, y el simulacro no esperaria tanto.
+      ALERT_EMAIL_IT: ""
+      ALERT_EMAIL_RRHH: ""
+      ALERT_EMAIL_SEGURIDAD: ""
+      ALERT_WEBHOOK_IT: http://127.0.0.1:9093/drill-sin-destino/it
+      ALERT_WEBHOOK_RRHH: http://127.0.0.1:9093/drill-sin-destino/rrhh
+      ALERT_WEBHOOK_SEGURIDAD: http://127.0.0.1:9093/drill-sin-destino/seguridad
+      ALERT_MAINTENANCE_WEEKDAY: sunday
+      ALERT_MAINTENANCE_START: "02:00"
+      ALERT_MAINTENANCE_END: "04:00"
+      MAIL_HOST: smtp.drill.invalid
+      MAIL_PORT: "25"
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      MAIL_FROM_ADDRESS: drill@drill.invalid
+      MAIL_SCHEME: ""
+    volumes:
+      - ../observability/alertmanager:/etc/alertmanager:ro
+    tmpfs:
+      - /alertmanager:mode=1777
+
+  prometheus:
+    image: ${KQ_DRILL_PROMETHEUS_IMAGE:?alerts-drill.sh exporta la imagen de Prometheus}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        for f in /rules-src/*.yml; do
+          sed -E -e 's/^( +for:).*/\1 0s/' -e 's/^( +interval:).*/\1 5s/' "$$f" > "/rules-run/$$(basename "$$f")"
+        done
+        exec /bin/prometheus --config.file=/etc/drill/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=1h
+    volumes:
+      - ../observability/prometheus/rules:/rules-src:ro
+      - ./prometheus.yml:/etc/drill/prometheus.yml:ro
+    tmpfs:
+      - /rules-run:mode=1777
+      - /prometheus:mode=1777
+    depends_on:
+      - node-exporter
+      - alertmanager

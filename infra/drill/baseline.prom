@@ -1,0 +1,80 @@
+# KronoQR — estado SANO de la instalacion simulada (V4-DV-3, make alerts-drill).
+#
+# Una linea por serie, en formato de exposicion de Prometheus. alerts-drill.sh
+# lo publica tal cual por el colector textfile de node-exporter y, para cada
+# alerta, lo vuelve a publicar con UNA falla aplicada (faults.tsv): cambiar el
+# valor de una serie, o retirarla.
+#
+# Dos marcas se sustituyen al publicar, para que las comparaciones con time()
+# no caduquen mientras corre el simulacro:
+#   @NOW@               el instante actual en segundos Unix
+#   @NOW-N@ / @NOW+N@   ese instante menos o mas N segundos
+#
+# Los contadores arrancan en 0 a proposito: `increase()` necesita una muestra
+# anterior para ver el salto.
+#
+# Si una regla nueva lee una serie y esa serie no esta aqui, las alertas de tipo
+# `absent()` dispararan en el estado sano y el simulacro lo dira.
+
+# --- Copia de seguridad y WAL (backup.yml) ------------------------------------
+kronoqr_backup_last_result{type="daily"} 1
+kronoqr_backup_last_verify_result{type="daily"} 1
+kronoqr_backup_last_success_timestamp_seconds{type="daily"} @NOW@
+kronoqr_backup_last_verified_timestamp_seconds{type="daily"} @NOW@
+kronoqr_backup_volume_free_ratio 0.60
+kronoqr_backup_restore_drill_last_result 1
+kronoqr_backup_restore_drill_last_success_timestamp_seconds @NOW@
+kronoqr_wal_exporter_last_run_timestamp_seconds @NOW@
+kronoqr_wal_archive_timeout_seconds 900
+kronoqr_wal_unarchived_age_seconds 0
+kronoqr_wal_unarchived_segments 0
+kronoqr_wal_archive_failing 0
+kronoqr_wal_replication_slots_inactive 0
+
+# --- Almacen de metricas (metrics-store.yml) ----------------------------------
+kronoqr_metrics_store_up 1
+
+# --- Certificado TLS (tls.yml): las dos sondas de blackbox --------------------
+probe_success{job="kronoqr-uptime",instance="https://nginx:8443/api/v1/health"} 1
+probe_ssl_earliest_cert_expiry{job="kronoqr-uptime",instance="https://nginx:8443/api/v1/health"} @NOW+7776000@
+probe_success{job="kronoqr-uptime-tls-verified",instance="https://hotel.drill.invalid/api/v1/health"} 1
+probe_ssl_earliest_cert_expiry{job="kronoqr-uptime-tls-verified",instance="https://hotel.drill.invalid/api/v1/health"} @NOW+7776000@
+
+# --- Disco del servidor (host.yml) --------------------------------------------
+node_filesystem_size_bytes{mountpoint="/",fstype="ext4",device="/dev/sda1"} 100000000000
+node_filesystem_avail_bytes{mountpoint="/",fstype="ext4",device="/dev/sda1"} 60000000000
+
+# --- Quioscos (kiosk.yml) -----------------------------------------------------
+kiosk_offline_queue_size{device="drill-kiosk-1"} 0
+kiosk_queue_storage_degraded{device="drill-kiosk-1"} 0
+kiosk_unreported_discards{device="drill-kiosk-1"} 0
+kiosk_discarded_scans_total{device="drill-kiosk-1",attributed="true"} 0
+scan_batch_items_not_processed_total 0
+
+# --- Conciliacion del registro (work-record.yml) y proyecciones ---------------
+work_record_reconciliation_last_run_timestamp_seconds{scope="recent"} @NOW@
+work_record_reconciliation_last_run_timestamp_seconds{scope="full"} @NOW@
+projection_reconciliation_last_failures 0
+
+# --- Incidencias y patrones (incidents.yml) -----------------------------------
+incidents_open{type="insufficient_rest"} 0
+incident_detection_last_failures 0
+pattern_detection_last_failures 0
+incidents_metrics_timestamp_seconds @NOW@
+
+# --- Ficheros generados (generated-files.yml) ---------------------------------
+generated_files_overdue 0
+generated_files_remove_failed_total 0
+
+# --- Cuentas de gestion (management-accounts.yml) -----------------------------
+kronoqr_management_account_changes_total{action="created",role="admin"} 0
+kronoqr_management_account_changes_total{action="two_factor_reset",role="admin"} 0
+
+# --- Auditoria (audit.yml) ----------------------------------------------------
+audit_chain_verification_failures_total 0
+audit_log_partition_ready{horizon="current"} 1
+audit_log_partition_ready{horizon="next"} 1
+
+# --- Deteccion de amenazas (threat-detection.yml) -----------------------------
+scans_total{result="rejected_signature"} 0
+http_requests_total{route="attendance.scan",status="429"} 0

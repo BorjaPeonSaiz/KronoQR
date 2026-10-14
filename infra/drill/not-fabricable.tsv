@@ -1,0 +1,7 @@
+# KronoQR — alertas del inventario V4-DV-3 que el simulacro NO dispara, con el motivo.
+#
+# Dos columnas separadas por TABULADOR: ALERTA y MOTIVO. Cada una queda cubierta
+# por `promtool test rules` (infra/observability/prometheus/tests/) y la prueba
+# AlertsDrillTest comprueba que el caso existe. No se silencian: el simulacro las
+# lista en cada ejecucion para que nadie crea que se han disparado.
+ParticionDeAuditoriaDelProximoAnoSinPreparar	depende de month() >= 11 y el reloj de una pila efimera es el real: hasta el 1 de noviembre no puede saltar. La cubre tests/audit-noviembre.test.yml, que situa la evaluacion en noviembre
