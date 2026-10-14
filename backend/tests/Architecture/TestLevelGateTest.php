@@ -235,23 +235,11 @@ function testLevelGateKnownGaps(): array
             // calculo es la de integracion con volumen, `PeriodReportVolumeTest`.
             TEST_LEVEL_GATE_UNITARIA => 'el agregado lo calcula la consulta SQL, no el dominio',
         ],
-        // Los dos que destapo conceder el contrato por prueba y no por fichero
-        // (bloque 14): tenian el nivel prestado de pruebas vecinas.
-        'RF-PR-05' => [
-            // El resumen semanal es un proceso programado que envia correo: no
-            // tiene endpoint propio cuya respuesta validar. Su unica superficie
-            // HTTP es el ajuste `WEEKLY_SUMMARY_EMAIL` de `PATCH /settings`.
-            // Pendiente de decidir si se reclasifica como `sin fila` o se
-            // valida el contrato de ese ajuste en una prueba etiquetada.
-            TEST_LEVEL_GATE_CONTRATO => 'proceso programado sin endpoint propio; la reclasificacion esta pendiente',
-        ],
-        'RF-QR-04' => [
-            // Ninguna prueba valida contra `openapi.yaml` la respuesta de
-            // `POST /credentials/{uuid}/print` ni `/credentials/print-batch`
-            // (un PDF que renderiza Chromium). Las de la disposicion de la
-            // tarjeta van contra el renderizador, no contra el endpoint.
-            TEST_LEVEL_GATE_CONTRATO => 'falta validar contra el contrato la respuesta PDF de la impresion',
-        ],
+        // RF-PR-05 y RF-QR-04, los dos que destapo conceder el contrato por
+        // prueba y no por fichero (bloque 14), se cerraron en la 2.2.1 con su
+        // prueba de contrato: `InstallationSettingsTest` valida el ajuste
+        // `WEEKLY_SUMMARY_EMAIL`, unica superficie HTTP del resumen semanal, y
+        // `CredentialPrintContractTest` la respuesta PDF de las dos impresiones.
     ];
 }
 
