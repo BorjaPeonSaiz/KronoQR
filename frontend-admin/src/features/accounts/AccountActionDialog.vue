@@ -3,8 +3,8 @@
 //
 // Las tres son actos serios y auditados, asi que el dialogo dice QUE cambia,
 // DESDE que valor y HACIA cual (`ChangePreview`) antes de confirmar, y pide el
-// motivo donde el contrato lo exige (baja y restablecimiento del 2FA; el de la
-// contrasena no lleva cuerpo).
+// motivo en las tres: el contrato lo exige en la baja y en los dos
+// restablecimientos, el de la contrasena incluido (lleva cuerpo `{ reason }`).
 //
 //  - `deactivate`: estado `active` → `deactivated`. Nunca un borrado: la cuenta
 //    y su historial se conservan (regla dura 5). `404` unico para «no existe» o
