@@ -2809,7 +2809,11 @@ jobs:
           d_php="$(awk '$1 == "php" { print $2 }' paquete-fijado-sano/images.lock)"
           # El contenedor corre la referencia FIJADA, no la etiqueta suelta...
           sudo docker inspect -f '{{.Config.Image}}' "$(compose ps -q app)" | grep -qF "@${d_php}"
-          # ...y install.sh ha dejado la etiqueta local que `restore-drill.sh --mode pitr` nombra.
+          # ...y la imagen de postgres esta en local POR SU DIGEST, que es la referencia que
+          # `restore-drill.sh --mode pitr` nombra (images.lock, ADR-053), y no solo por
+          # etiqueta.
+          d_pg="$(awk '$1 == "postgres" { print $2 }' paquete-fijado-sano/images.lock)"
+          docker image inspect "${reg}/postgres@${d_pg}" >/dev/null
           docker image inspect "${reg}/postgres:${new}" >/dev/null
           ! grep -F '[aviso]' paquete-fijado-sano/salida-p1.log | grep -qi 'etiquetar'
 
