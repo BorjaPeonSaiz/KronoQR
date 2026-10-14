@@ -81,15 +81,22 @@ const hasSubjectColumn = computed(() => props.rows.some((row) => row.subject.kin
 /** Anchos minimos de las columnas, en rem: de ellos salen la rejilla y el ancho de la tabla. */
 const SUBJECT_COLUMN_REM = 11
 const PERIOD_COLUMN_REM = 9
-const METRIC_COLUMN_REM = 4.5
-const METRIC_COLUMNS = 12
+/**
+ * Las doce columnas de cifras, en el orden de la cabecera. Las que llevan una palabra
+ * larga («Contratadas», «Contracted», «incidencia») son mas anchas: partir una
+ * palabra a mitad no es fiable (depende del diccionario de guionado del navegador) y
+ * una cabecera que se monta sobre la vecina se lee mal. El resto parte por espacios.
+ */
+const METRIC_COLUMN_REMS: readonly number[] = [
+  6.25, 6.25, 6.25, 4.5, 4.5, 4.5, 4.5, 4.5, 6.25, 4.5, 4.5, 6.25,
+]
 /** `gap-3` entre columnas y `pr-3` al final de la fila. */
 const GAP_REM = 0.75
 
 /** La rejilla de columnas, la misma en la cabecera y en cada fila. */
 const gridTemplate = computed(
   () =>
-    `${hasSubjectColumn.value ? `minmax(${SUBJECT_COLUMN_REM}rem,1.6fr) ` : ''}minmax(${PERIOD_COLUMN_REM}rem,1.4fr) repeat(${METRIC_COLUMNS}, minmax(${METRIC_COLUMN_REM}rem,1fr))`,
+    `${hasSubjectColumn.value ? `minmax(${SUBJECT_COLUMN_REM}rem,1.6fr) ` : ''}minmax(${PERIOD_COLUMN_REM}rem,1.4fr) ${METRIC_COLUMN_REMS.map((rem) => `minmax(${rem}rem,1fr)`).join(' ')}`,
 )
 
 /**
@@ -99,11 +106,11 @@ const gridTemplate = computed(
  * de la cabecera fija.
  */
 const gridMinWidth = computed(() => {
-  const columns = METRIC_COLUMNS + 1 + (hasSubjectColumn.value ? 1 : 0)
+  const columns = METRIC_COLUMN_REMS.length + 1 + (hasSubjectColumn.value ? 1 : 0)
   const columnsRem =
     (hasSubjectColumn.value ? SUBJECT_COLUMN_REM : 0) +
     PERIOD_COLUMN_REM +
-    METRIC_COLUMNS * METRIC_COLUMN_REM
+    METRIC_COLUMN_REMS.reduce((total, rem) => total + rem, 0)
 
   return `${columnsRem + (columns - 1) * GAP_REM + GAP_REM}rem`
 })
@@ -134,7 +141,7 @@ const caption = computed(() => t('reports.table.caption', { timeZone: props.time
         <div
           role="row"
           aria-rowindex="1"
-          class="grid items-end gap-3 py-2 pr-3"
+          class="grid items-end gap-3 py-2 pr-3 hyphens-auto break-words"
           :style="{ gridTemplateColumns: gridTemplate }"
         >
           <span v-if="hasSubjectColumn" role="columnheader">{{ t('reports.table.subject') }}</span>

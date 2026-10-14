@@ -125,8 +125,12 @@ const BIG_SUMMARY = {
 }
 
 /** Sirve el volumen grande DESPUES del doble general: la ultima ruta registrada gana. */
-async function serveBigData(page: Page, report: PeriodReport = BIG_REPORT): Promise<void> {
-  await stubManagementApi(page)
+async function serveBigData(
+  page: Page,
+  report: PeriodReport = BIG_REPORT,
+  locale?: 'es' | 'en',
+): Promise<void> {
+  await stubManagementApi(page, locale === undefined ? {} : { locale })
   await page.route(
     (url) => url.pathname === '/api/v1/reports/period',
     (route) => route.fulfill({ status: 200, json: report }),
@@ -314,6 +318,47 @@ for (const [label, report] of [
       },
     )
   }
+}
+
+for (const locale of ['es', 'en'] as const) {
+  test(
+    `ningun texto de cabecera del informe desborda su celda a 1024 px en ${locale}`,
+    { tag: ['@RF-IN-01', '@RF-IN-03'] },
+    async ({ page }) => {
+      await page.setViewportSize({ width: 1024, height: 768 })
+      await serveBigData(page, BIG_REPORT, locale)
+      await logIn(page)
+      await page.goto('/reports')
+      await page.getByLabel(/Desde|From/).fill('2026-03-01')
+      await page.getByLabel(/Hasta|To/).fill('2026-03-31')
+      await page.getByRole('button', { name: /Generar informe|Generate report/ }).click()
+      await expect(page.getByTestId('report-row').first()).toBeVisible()
+      await expect(page.locator('html')).toHaveAttribute('lang', locale)
+
+      const region = page.getByTestId('period-report-table')
+
+      // Sin partir palabras: se quitan el guionado y el corte de palabra del
+      // navegador, que dependen de su diccionario, y se exige que cada palabra
+      // quepa entera en su columna (las cabeceras solo parten por espacios).
+      await region.evaluate((element) => {
+        for (const header of element.querySelectorAll<HTMLElement>('[role="columnheader"]')) {
+          header.style.hyphens = 'manual'
+          header.style.overflowWrap = 'normal'
+        }
+      })
+
+      const overflowing = await region.evaluate((element) =>
+        Array.from(element.querySelectorAll<HTMLElement>('[role="columnheader"]'))
+          .filter((header) => header.scrollWidth > header.clientWidth)
+          .map(
+            (header) =>
+              `${header.textContent?.trim() ?? ''}: ${header.scrollWidth} > ${header.clientWidth}`,
+          ),
+      )
+
+      expect(overflowing).toEqual([])
+    },
+  )
 }
 
 test(
