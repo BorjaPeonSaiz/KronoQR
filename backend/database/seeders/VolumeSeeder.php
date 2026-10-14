@@ -74,6 +74,14 @@ final class VolumeSeeder extends DevelopmentSeeder
             $employees = $this->activeEmployeesOf($site->id);
             $workDates = $this->workDates($timezone);
 
+            // Las particiones de `audit_log` de toda la ventana, antes de abrir
+            // ninguna transaccion de lote (ver KioskClockingAudit). Un dia de
+            // margen por cada lado: un turno de noche termina al dia siguiente.
+            $this->clockingAudit()->preparePartitionsBetween(
+                new DateTimeImmutable($workDates[0], $timezone)->modify('-1 day'),
+                new DateTimeImmutable($workDates[\count($workDates) - 1], $timezone)->modify('+2 days'),
+            );
+
             foreach (array_chunk($employees, self::EMPLOYEES_PER_BATCH) as $batch) {
                 $generated += $this->seedBatch($batch, $site->id, $timezone, $devices, $workDates);
             }

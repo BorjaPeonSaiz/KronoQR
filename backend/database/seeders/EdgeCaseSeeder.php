@@ -153,6 +153,13 @@ final class EdgeCaseSeeder extends DevelopmentSeeder
 
         $entryUuid = Str::uuid7()->toString();
 
+        // Las particiones de `audit_log` antes de abrir la transaccion: el DDL va
+        // por la conexion del rol de migracion (ver KioskClockingAudit).
+        resolve(KioskClockingAudit::class)->preparePartitionsBetween(
+            new DateTimeImmutable($in),
+            new DateTimeImmutable($out ?? $in),
+        );
+
         // El tramo y sus asientos, juntos o ninguno (regla dura 6, ADR-057 §4).
         DB::transaction(function () use ($entryUuid, $employeeId, $siteId, $case, $in, $out, $deviceId, $timezone): void {
             $this->seedEntry($entryUuid, $employeeId, $siteId, $case, $in, $out, $deviceId, $timezone);

@@ -211,6 +211,10 @@ final class CorrectionSeeder extends DevelopmentSeeder
         $clockedInAt = $this->toUtc($in, $timezone);
         $clockedOutAt = $this->toUtc($out, $timezone);
 
+        // Las particiones de `audit_log` antes de abrir la transaccion: el DDL va
+        // por la conexion del rol de migracion (ver KioskClockingAudit).
+        resolve(KioskClockingAudit::class)->preparePartitionsBetween($clockedInAt, $clockedOutAt);
+
         DB::transaction(function () use ($uuid, $employee, $siteId, $workDate, $clockedInAt, $clockedOutAt, $minutes, $timezone): void {
             DB::table('shift_entries')->insert([
                 'uuid' => $uuid,

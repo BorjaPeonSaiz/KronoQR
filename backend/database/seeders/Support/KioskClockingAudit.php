@@ -15,7 +15,9 @@ use App\Modules\Compliance\Infrastructure\Listener\RecordShiftEntryAudit;
 use App\Modules\Compliance\Infrastructure\Persistence\AuditLogSchema;
 use Database\Seeders\VolumeSeeder;
 use DateTimeImmutable;
+use DateTimeZone;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 
 /**
  * Los asientos de `audit_log` de los tramos que la semilla escribe como si los
@@ -69,7 +71,7 @@ final readonly class KioskClockingAudit
             return;
         }
 
-        $this->ensurePartitionsFor($clockings);
+        $this->assertPartitionsFor($clockings);
 
         $events = [];
 
@@ -127,30 +129,38 @@ final readonly class KioskClockingAudit
     }
 
     /**
+     * Crea las particiones anuales de `audit_log` que faltan entre dos instantes,
+     * ambos incluidos. **Se llama ANTES de abrir la transaccion del lote.**
+     *
      * Un asiento cuyo `occurred_at` no cae en ninguna particion anual hace
      * fallar el `INSERT` (ADR-027). Las migraciones crean el primer año del
      * producto, el en curso y el siguiente; la ventana de noventa dias de
-     * {@see VolumeSeeder} puede empezar en el anterior. La
-     * funcion de la base solo crea el año en curso o el siguiente, asi que la
-     * que falte la crea aqui el rol de migracion, con los mismos permisos
-     * solo-append que la migracion (regla dura 6). Es una semilla de desarrollo:
-     * en una instalacion no corre (SC7-03).
+     * {@see VolumeSeeder} puede empezar en el anterior, o caer entera en años
+     * que la instalacion no tiene si el reloj va por delante. La funcion de la
+     * base solo crea el año en curso o el siguiente, asi que la que falte la
+     * crea aqui el rol de migracion, con los mismos permisos solo-append que la
+     * migracion (regla dura 6). Es una semilla de desarrollo: en una
+     * instalacion no corre (SC7-03).
      *
-     * @param  list<KioskClocking>  $clockings
+     * **Por que fuera de la transaccion.** El DDL va por OTRA conexion —la del
+     * rol de migracion— y crear una particion pide un candado exclusivo sobre
+     * `audit_log`. Con la transaccion de la aplicacion abierta y un asiento ya
+     * escrito, esa conexion esperaria a una transaccion que a su vez la espera
+     * a ella: un interbloqueo entre dos conexiones que PostgreSQL no ve. Por eso
+     * se niega a correr dentro de una.
      */
-    private function ensurePartitionsFor(array $clockings): void
+    public function preparePartitionsBetween(DateTimeImmutable $from, DateTimeImmutable $to): void
     {
-        $needed = [];
-
-        foreach ($clockings as $clocking) {
-            $needed[(int) $clocking->clockedInAt->format('Y')] = true;
-
-            if ($clocking->clockedOutAt instanceof DateTimeImmutable) {
-                $needed[(int) $clocking->clockedOutAt->format('Y')] = true;
-            }
+        if (DB::transactionLevel() > 0) {
+            throw new LogicException(
+                'Las particiones de audit_log se crean antes de abrir la transaccion del lote, no dentro: '
+                .'el DDL va por la conexion del rol de migracion y esperaria a la transaccion abierta.',
+            );
         }
 
-        $missing = array_diff(array_keys($needed), $this->partitions->years());
+        $first = $this->utcYear($from);
+        $last = $this->utcYear($to);
+        $missing = array_diff(range(min($first, $last), max($first, $last)), $this->partitions->years());
 
         if ($missing === []) {
             return;
@@ -163,5 +173,39 @@ final readonly class KioskClockingAudit
                 $migrator->statement($statement);
             }
         }
+    }
+
+    /**
+     * Falla con el motivo, y antes de escribir nada, si el lote cae en un año
+     * sin particion: quien lo llama tenia que haber llamado a
+     * {@see self::preparePartitionsBetween()} antes de abrir su transaccion.
+     *
+     * @param  list<KioskClocking>  $clockings
+     */
+    private function assertPartitionsFor(array $clockings): void
+    {
+        $needed = [];
+
+        foreach ($clockings as $clocking) {
+            $needed[$this->utcYear($clocking->clockedInAt)] = true;
+
+            if ($clocking->clockedOutAt instanceof DateTimeImmutable) {
+                $needed[$this->utcYear($clocking->clockedOutAt)] = true;
+            }
+        }
+
+        $missing = array_diff(array_keys($needed), $this->partitions->years());
+
+        if ($missing !== []) {
+            throw new LogicException(
+                'audit_log no tiene particion para '.implode(', ', $missing)
+                .': llama a preparePartitionsBetween() antes de abrir la transaccion del lote.',
+            );
+        }
+    }
+
+    private function utcYear(DateTimeImmutable $instant): int
+    {
+        return (int) $instant->setTimezone(new DateTimeZone('UTC'))->format('Y');
     }
 }
