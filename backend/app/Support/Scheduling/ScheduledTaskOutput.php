@@ -47,11 +47,11 @@ use Illuminate\Log\LogManager;
  *   Es lo normal.
  * - {@see self::summaryOnly()}: solo el resumen —codigo de salida y
  *   recuentos de lineas y bytes—, y el fichero se borra sin leerse entero.
- *   Para la tarea cuya salida es, entera, informacion del registro del
- *   cliente que el paquete de diagnostico no tiene por que llevar:
- *   `compliance:apply-retention --dry-run` imprime recuentos de filas por
- *   tabla del registro horario, y esa decision ya estaba tomada
- *   (`LogScheduledCommandFailure`).
+ *   Para las tareas que ya habian decidido no dejar su salida en el log
+ *   tecnico: la propuesta de purga (recuentos de filas por tabla del
+ *   registro horario), las dos conciliaciones del registro (UUID de
+ *   `shift_entries` e `#id` de `audit_log`) y las metricas de ausencias. La
+ *   lista cerrada, con el motivo de cada una, vive en `ScheduledTaskOutputTest`.
  *
  * `ScheduledTaskOutputTest` (Architecture) exige que toda tarea con
  * `runInBackground()` pase por uno de los dos y que nadie declare la salida a

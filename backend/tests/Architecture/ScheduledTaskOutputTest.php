@@ -18,7 +18,7 @@ use Tests\Architecture\Support\Repo;
  *
  * Y con el ayudante y no a mano: `sendOutputTo('/proc/1/fd/1')` llevaria la
  * salida al log del contenedor **sin sanear** —el contenedor no pasa por
- * Monolog—, y ese log viaja en el paquete de diagnostico.
+ * Monolog—, y de ahi a Loki, donde no hay borrado selectivo.
  *
  * Se lee `routes/console.php` con el tokenizador (los comentarios no cuentan)
  * porque esta suite corre sin framework. La comprobacion sobre las tareas que
@@ -94,14 +94,37 @@ it('nadie declara la salida de una tarea a mano', function (string $metodo): voi
     'onFailureWithOutput',
 ])->group('RNF-D-02', 'RL-08');
 
-it('solo la propuesta de purga se limita al resumen', function (): void {
+/**
+ * Las unicas tareas que se limitan al resumen, con su motivo. Todas habian
+ * decidido antes de V4-BE-1 no dejar su salida en el log (`routes/console.php`
+ * lo dice en el comentario de cada una). Lo normal es reenviarla saneada: una
+ * tarea nueva que necesite callar la suya se anade aqui con su motivo.
+ *
+ * Clave: el principio de la llamada en `routes/console.php`, sin espacios de
+ * mas. Valor: por que.
+ */
+const SCHEDULED_TASK_OUTPUT_SUMMARY_ONLY = [
+    "Schedule::command('compliance:apply-retention', ['--dry-run'])" => 'recuentos de filas por tabla del registro horario del cliente',
+    "Schedule::command('compliance:reconcile-work-record')" => 'UUID de shift_entries e #id de audit_log de cada discrepancia',
+    "Schedule::command('compliance:reconcile-work-record', ['--full'])" => 'lo mismo, sobre el registro entero',
+    "Schedule::command('reporting:absence-metrics')" => 'datos de ausencias de la plantilla; la regla dura 21 gobierna el habito',
+];
+
+it('solo las tareas de la lista se limitan al resumen, y todas ellas lo hacen', function (): void {
     $resumen = array_values(array_filter(
         scheduledTaskOutputStatements(),
         static fn (string $statement): bool => str_contains($statement, 'ScheduledTaskOutput::summaryOnly('),
     ));
 
-    // Si otra tarea necesita callar su salida, que se anada aqui con su motivo
-    // en routes/console.php: lo normal es reenviarla saneada.
-    expect($resumen)->toHaveCount(1)
-        ->and($resumen[0])->toContain("Schedule::command('compliance:apply-retention', ['--dry-run'])");
+    $tareas = array_map(
+        static fn (string $statement): string => preg_match('/Schedule::command\((?:[^()]|\([^()]*\))*\)/', $statement, $m) === 1 ? $m[0] : $statement,
+        $resumen,
+    );
+
+    $esperadas = array_keys(SCHEDULED_TASK_OUTPUT_SUMMARY_ONLY);
+    sort($tareas);
+    sort($esperadas);
+
+    expect($tareas)->toBe($esperadas, 'summaryOnly() calla la salida de una tarea: cada una tiene que estar en '
+        .'SCHEDULED_TASK_OUTPUT_SUMMARY_ONLY con su motivo, y cada una de la lista tiene que usarlo.');
 })->group('RNF-D-02', 'RL-08');

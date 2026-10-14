@@ -33,8 +33,9 @@ use Illuminate\Support\Facades\Schedule;
  * codigo de salida llegan al log del contenedor `scheduler` (y a Loki) como
  * `scheduler.task_output` y `scheduler.task_finished`, cada linea por el
  * saneador de Monolog (L1, regla dura 21). `toLog()` reenvia las lineas;
- * `summaryOnly()` solo el codigo y los recuentos, y lo lleva unicamente la
- * propuesta de purga, por lo dicho arriba. Una tarea que sale 0 sin escribir
+ * `summaryOnly()` solo el codigo y los recuentos, y lo llevan las tareas que
+ * ya habian decidido no dejar su salida en el log: la propuesta de purga, las
+ * dos conciliaciones del registro y las metricas de ausencias. Una tarea que sale 0 sin escribir
  * nada no deja apunte: eso ya lo dicen sus metricas y sus spans.
  * `ScheduledTaskOutputTest`
  * (Architecture) falla si una tarea en segundo plano no pasa por el ayudante.
@@ -133,16 +134,18 @@ ScheduledTaskOutput::toLog(Schedule::command('compliance:verify-audit-chain')
  * SOLO LEE, y en una instantanea `REPEATABLE READ, READ ONLY`: no bloquea ni un
  * fichaje. `withoutOverlapping` porque dos pasadas a la vez solo duplican la
  * lectura. `onFailure()` deja el codigo de salida en el log (ver la cabecera del
- * fichero) y NUNCA su salida: aunque solo lleva identificadores, la regla dura
- * 21 gobierna el habito. Termina en rojo con cualquier discrepancia.
+ * fichero) y NUNCA su salida: aunque solo lleva identificadores (UUID de
+ * `shift_entries`, `#id` de `audit_log`), la regla dura 21 gobierna el habito.
+ * Por eso `ScheduledTaskOutput::summaryOnly()`: al log va el codigo de salida y
+ * cuantas lineas escribio. Termina en rojo con cualquier discrepancia.
  */
-$reconcileWorkRecord = ScheduledTaskOutput::toLog(Schedule::command('compliance:reconcile-work-record')
+$reconcileWorkRecord = ScheduledTaskOutput::summaryOnly(Schedule::command('compliance:reconcile-work-record')
     ->dailyAt('04:15')
     ->withoutOverlapping()
     ->runInBackground());
 $reconcileWorkRecord->onFailure(LogScheduledCommandFailure::of('compliance:reconcile-work-record', $reconcileWorkRecord));
 
-$reconcileWorkRecordFull = ScheduledTaskOutput::toLog(Schedule::command('compliance:reconcile-work-record', ['--full'])
+$reconcileWorkRecordFull = ScheduledTaskOutput::summaryOnly(Schedule::command('compliance:reconcile-work-record', ['--full'])
     ->weeklyOn(0, '02:15')
     ->withoutOverlapping()
     ->runInBackground());
@@ -487,9 +490,10 @@ $complianceMetrics->onFailure(LogScheduledCommandFailure::of('reporting:complian
  *
  * `onFailure()` deja el codigo de salida en el log (ver la cabecera del
  * fichero), NUNCA su salida: el comando no imprime ni tipos de ausencia ni
- * nombres, pero la regla dura 21 gobierna el habito.
+ * nombres, pero la regla dura 21 gobierna el habito. Por eso
+ * `ScheduledTaskOutput::summaryOnly()`, como la propuesta de purga.
  */
-$absenceMetrics = ScheduledTaskOutput::toLog(Schedule::command('reporting:absence-metrics')
+$absenceMetrics = ScheduledTaskOutput::summaryOnly(Schedule::command('reporting:absence-metrics')
     ->dailyAt('04:55')
     ->withoutOverlapping()
     ->runInBackground());
