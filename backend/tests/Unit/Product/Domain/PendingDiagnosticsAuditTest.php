@@ -85,6 +85,8 @@ it('rechaza lo que no tiene exactamente la forma escrita', function (Closure $al
     'secciones que no son array' => [static fn (array $d): array => [...$d, 'sections' => 'installation']],
     'una seccion inventada' => [static fn (array $d): array => [...$d, 'sections' => ['installation', 'contrasenas']]],
     'una seccion que no es texto' => [static fn (array $d): array => [...$d, 'sections' => ['installation', 3]]],
+    // `true == 'installation'` en PHP: sin comparacion estricta pasaria.
+    'una seccion booleana' => [static fn (array $d): array => [...$d, 'sections' => ['installation', true]]],
     'tamaño negativo' => [static fn (array $d): array => [...$d, 'size_bytes' => -1]],
     'tamaño que no es entero' => [static fn (array $d): array => [...$d, 'size_bytes' => '10']],
     'anonymized false' => [static fn (array $d): array => [...$d, 'anonymized' => false]],
