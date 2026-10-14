@@ -1149,3 +1149,22 @@ it('avisa cuando el .env declara IMAGE_DIGEST_* distintas de las del paquete y c
         ->toContain("anuladas=[IMAGE_DIGEST_PHP, IMAGE_DIGEST_POSTGRES]\n")
         ->toContain('IMAGE_DIGEST_PHP, IMAGE_DIGEST_POSTGRES');
 })->group('RF-PD-10', 'RS-08');
+
+it('con la salida estandar en una TUBERIA YA CERRADA (SIGPIPE real) la vuelta atras se completa y sale con 4 (V3-PL-01)', function (): void {
+    // `sudo ./update.sh | tee log` + Ctrl+C: tee muere y cada escritura en stdout recibe
+    // SIGPIPE. main() ignora SIGPIPE (se reproduce aqui su preambulo) y say/heading no fallan.
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; kq_msg_init es; '
+        .'exec 3>&1 4>&2; trap "" PIPE; '
+        .'lift_maintenance() { return 0; }; settle_in_place_env() { return 0; }; close_report() { return 0; }; '
+        .'ROLLBACK_ARMED=1; SOURCE_VERSION=2.2.0; TARGET_VERSION=2.2.1; REPORT_FILE=r; STEP=2; '
+        .'arm_rollback_traps; sleep 0.5; kill -INT $$; sleep 5; echo NO_DEBE_LLEGAR >&2';
+
+    $process = new Process(['bash', '-c', 'bash -c '.escapeshellarg($script).' 2>/tmp/kq-upd-pipe.err | true; exit ${PIPESTATUS[0]}'], env: ['KRONOQR_LANG' => 'es'], timeout: 30.0);
+    $process->run();
+    $stderr = (string) file_get_contents('/tmp/kq-upd-pipe.err');
+    @unlink('/tmp/kq-upd-pipe.err');
+
+    expect($process->getExitCode())->toBe(4, $stderr)
+        ->and($stderr)->toContain('ACTUALIZACION DESHECHA')
+        ->and($stderr)->not->toContain('NO_DEBE_LLEGAR');
+})->group('RF-PD-10', 'RNF-D-04');

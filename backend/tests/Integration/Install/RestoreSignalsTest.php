@@ -114,3 +114,17 @@ it('sin senal pendiente, atender_senal_diferida no hace nada', function (): void
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
         ->and($process->getOutput())->toContain('ok');
 })->group('RNF-D-04');
+
+it('con la salida estandar en una TUBERIA YA CERRADA (SIGPIPE real) una senal tras el intercambio sale con el 8', function (): void {
+    // No /dev/full: un lector que ya salio. Sin `trap '' PIPE` la primera escritura mataria al
+    // script con SIGPIPE (141) y se perderia la salida.
+    $script = 'set -euo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/restore.sh')).'; '
+        .'BASE_DESTINO=fichaje; INFORME=; INFORME_TRABAJO=; TRABAJO='.escapeshellarg(sys_get_temp_dir()).'/kq-pipe-'.getmypid().'; mkdir -p "$TRABAJO"; '
+        .'INTERCAMBIO_HECHO=1; sleep 0.5; kill -HUP $$; sleep 5';
+
+    // PIPESTATUS es de bash: se ejecuta con bash y no con sh.
+    $process = new Process(['bash', '-c', 'bash -c '.escapeshellarg($script).' 2>/dev/null | true; exit ${PIPESTATUS[0]}'], env: ['KRONOQR_LANG' => 'es'], timeout: 30.0);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(8);
+})->group('RNF-D-04', 'RNF-D-05');

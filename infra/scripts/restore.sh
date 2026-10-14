@@ -126,6 +126,10 @@
 # lib/backup-common.sh y en docs/cliente/operacion.md.
 #
 # NINGUN SECRETO EN LA SALIDA NI EN EL INFORME.
+#
+# OJO: `trap '' PIPE` (SIGPIPE ignorado, para que una tuberia cerrada no mate el script entre
+# los dos renombrados) SE HEREDA en los hijos: una tuberia nueva con un productor largo
+# (`cmd | head`) dejaria de terminar por SIGPIPE y fallaria por EPIPE. Vigilalo al anadirlas.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -218,19 +222,27 @@ correr_hijo() {
 # Una orden de la ventana critica en su PROPIA sesion: el Ctrl+C o el HUP del
 # terminal van al grupo en primer plano, y un `psql` o un `php` matados a mitad de
 # un ALTER confirmado dejarian al script eligiendo la rama equivocada. Sin `setsid`
-# (BusyBox lo trae; util-linux tambien) se ejecuta tal cual.
+# (BusyBox lo trae; util-linux tambien) se ejecuta tal cual. Con `-w` (util-linux) setsid
+# espera y devuelve el codigo del hijo aunque el llamador sea lider de grupo; BusyBox no lo
+# tiene, y sin `-w` solo hace fork cuando el llamador es lider de grupo, que un script
+# lanzado desde una terminal no es.
 aislada() {
-  if command -v setsid >/dev/null 2>&1; then
-    setsid "$@"
-  else
+  if ! command -v setsid >/dev/null 2>&1; then
     "$@"
+  elif setsid -w true 2>/dev/null; then
+    setsid -w "$@"
+  else
+    setsid "$@"
   fi
 }
 
-# ¿Existe la base en el cluster? Se consulta antes de elegir mensaje y codigo tras
-# un fallo de renombrado: el ALTER pudo confirmarse aunque su cliente muriera.
+# ¿Existe la base en el cluster? 0 si, 1 no, 2 si NO se ha podido preguntar. Se consulta antes
+# de elegir mensaje y codigo tras un fallo de renombrado: el ALTER pudo confirmarse aunque su
+# cliente muriera.
 existe_base() {
-  [ "$(psql -d postgres -Atqc "SELECT count(*) FROM pg_database WHERE datname = '$1'" 2>/dev/null | tr -d '[:space:]')" = "1" ]
+  local salida
+  salida="$(psql -d postgres -Atqc "SELECT count(*) FROM pg_database WHERE datname = '$1'" 2>/dev/null)" || return 2
+  [ "$(printf '%s' "$salida" | tr -d '[:space:]')" = "1" ]
 }
 
 # Elimina una base de trabajo aunque el pg_restore muerto siga conectado. Nunca falla.
@@ -380,11 +392,15 @@ texto() {
 artisan_migrador() {
   local base="$1"
   shift
+  # En su propia sesion (aislada): pcntl o Symfony pueden reinstalar manejadores de senal
+  # y SIG_IGN no basta; un `php` matado tras el COMMIT dejaria el asiento escrito. Las
+  # variables se exportan en una subshell (nunca en la linea de ordenes: la contrasena no
+  # puede verse en `ps`).
   (
-    cd -- "$ARTISAN_DIR" &&
-      DB_CONNECTION=pgsql_migrator DB_DATABASE="$base" DB_HOST="$PGHOST" DB_PORT="$PGPORT" \
-        DB_MIGRATION_USERNAME="$PGUSER" DB_MIGRATION_PASSWORD="${PGPASSWORD:-}" \
-        php artisan "$@"
+    export DB_CONNECTION=pgsql_migrator DB_DATABASE="$base" DB_HOST="$PGHOST" DB_PORT="$PGPORT"
+    export DB_MIGRATION_USERNAME="$PGUSER" DB_MIGRATION_PASSWORD="${PGPASSWORD:-}"
+    # shellcheck disable=SC2016  # el script entre comillas simples lo expande el bash hijo
+    aislada bash -c 'cd -- "$1" && shift && exec php artisan "$@"' _ "$ARTISAN_DIR" "$@"
   )
 }
 
@@ -659,32 +675,11 @@ restaurar() {
     informar "Punta de la cadena de auditoria que se descarta: ${CADENA_DESCARTADA:-no disponible}"
   fi
 
-  # Intercambio de nombres. Es el unico momento en que la instalacion cambia, y
-  # dura lo que dos ALTER DATABASE. Cada `psql` va en su propia sesion (aislada): la
-  # senal del terminal no lo mata a medias. Y, pase lo que pase con su cliente, antes
-  # de elegir rama se CONSULTA el cluster: un ALTER pudo confirmarse aunque su psql
-  # muriera, y la rama equivocada deja la instalacion sin base de produccion.
+  # Intercambio de nombres. Es el unico momento en que la instalacion cambia, y dura lo que
+  # dos ALTER DATABASE (intercambiar_bases).
   VENTANA_CRITICA=1
   informar "Intercambiando ${BASE_DESTINO} -> ${base_anterior} y ${base_nueva} -> ${BASE_DESTINO}"
-  if ! aislada psql -d postgres -Atqc "ALTER DATABASE \"${BASE_DESTINO}\" RENAME TO \"${base_anterior}\"" >/dev/null 2>&1 &&
-    ! existe_base "$base_anterior"; then
-    borrar_base_de_trabajo "$base_nueva" || true
-    VENTANA_CRITICA=0
-    die "${KQ_EXIT_STATE_CONFLICT}" \
-      "no se ha podido apartar la base actual: probablemente ha vuelto a haber conexiones. Para los servicios y repite. '${BASE_DESTINO}' sigue como estaba y la base de trabajo, con una copia de datos personales, se ha eliminado."
-  fi
-  if ! aislada psql -d postgres -Atqc "ALTER DATABASE \"${base_nueva}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null 2>&1 &&
-    { existe_base "$base_nueva" || ! existe_base "$BASE_DESTINO"; }; then
-    aislada psql -d postgres -Atqc "ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null 2>&1 || true
-    if existe_base "$BASE_DESTINO"; then
-      borrar_base_de_trabajo "$base_nueva" || true
-      VENTANA_CRITICA=0
-      die "${KQ_EXIT_ROLLED_BACK}" "no se ha podido activar la base restaurada; se ha devuelto la anterior a su nombre. La instalacion queda como estaba."
-    fi
-    die "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "no se ha podido activar la base restaurada ni devolver la anterior a su nombre. NO hay base '${BASE_DESTINO}'. Con los servicios parados ejecuta: psql -d postgres -c 'ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\"' (la base restaurada esta en '${base_nueva}')."
-  fi
-  BASE_NUEVA_ACTIVA=""
-  INTERCAMBIO_HECHO=1
+  intercambiar_bases "$base_nueva" "$base_anterior"
 
   informar "Restauracion completada. Base anterior conservada como '${base_anterior}'."
   informar "VUELTA ATRAS (mientras exista esa base): pare los servicios y ejecute"
@@ -699,6 +694,50 @@ restaurar() {
   atender_senal_diferida
 
   purgar_bases_anteriores
+}
+
+# El intercambio de nombres: dos ALTER DATABASE ... RENAME. Cada `psql` va en su propia sesion
+# (aislada) y, pase lo que pase con su cliente, antes de elegir rama se CONSULTA el cluster
+# (existe_base): un ALTER pudo confirmarse aunque su psql muriera, y la rama equivocada deja
+# la instalacion sin base de produccion. Si ni siquiera se puede consultar, sale por el 5 con
+# la orden de mirar pg_database: no se adivina.
+intercambiar_bases() {
+  local base_nueva="$1" base_anterior="$2" r=0 a=0 b=0
+  local consulta="psql -d postgres -c \"SELECT datname FROM pg_database WHERE datname LIKE '${BASE_DESTINO}%'\""
+
+  if ! aislada psql -d postgres -Atqc "ALTER DATABASE \"${BASE_DESTINO}\" RENAME TO \"${base_anterior}\"" >/dev/null 2>&1; then
+    existe_base "$base_anterior" || r=$?
+    if [ "$r" -eq 2 ]; then
+      die "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "no se puede consultar PostgreSQL tras un fallo al apartar la base actual y no se sabe si el renombrado se hizo. Con los servicios parados ejecuta: ${consulta} . Si existe '${base_anterior}' y no '${BASE_DESTINO}': ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\". La base restaurada esta en '${base_nueva}'."
+    elif [ "$r" -ne 0 ]; then
+      borrar_base_de_trabajo "$base_nueva" || true
+      VENTANA_CRITICA=0
+      die "${KQ_EXIT_STATE_CONFLICT}" \
+        "no se ha podido apartar la base actual: probablemente ha vuelto a haber conexiones. Para los servicios y repite. '${BASE_DESTINO}' sigue como estaba y la base de trabajo, con una copia de datos personales, se ha eliminado."
+    fi
+  fi
+
+  if ! aislada psql -d postgres -Atqc "ALTER DATABASE \"${base_nueva}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null 2>&1; then
+    existe_base "$base_nueva" || a=$?
+    existe_base "$BASE_DESTINO" || b=$?
+    if [ "$a" -eq 2 ] || [ "$b" -eq 2 ]; then
+      die "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "no se puede consultar PostgreSQL tras un fallo al activar la base restaurada y no se sabe si el renombrado se hizo. Con los servicios parados ejecuta: ${consulta} . Si no existe '${BASE_DESTINO}': ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\" (la restaurada esta en '${base_nueva}')."
+    fi
+    # a=1 (la base nueva ya no existe) y b=0 (existe la de destino): el renombrado SI se hizo.
+    if ! { [ "$a" -eq 1 ] && [ "$b" -eq 0 ]; }; then
+      aislada psql -d postgres -Atqc "ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\"" >/dev/null 2>&1 || true
+      b=0
+      existe_base "$BASE_DESTINO" || b=$?
+      if [ "$b" -eq 0 ]; then
+        borrar_base_de_trabajo "$base_nueva" || true
+        VENTANA_CRITICA=0
+        die "${KQ_EXIT_ROLLED_BACK}" "no se ha podido activar la base restaurada; se ha devuelto la anterior a su nombre. La instalacion queda como estaba."
+      fi
+      die "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "no se ha podido activar la base restaurada ni devolver la anterior a su nombre. Con los servicios parados ejecuta: ${consulta} . Si no existe '${BASE_DESTINO}': ALTER DATABASE \"${base_anterior}\" RENAME TO \"${BASE_DESTINO}\" (la restaurada esta en '${base_nueva}')."
+    fi
+  fi
+  BASE_NUEVA_ACTIVA=""
+  INTERCAMBIO_HECHO=1
 }
 
 # Comprobacion de lo restaurado ANTES de sustituir la base viva: que estan

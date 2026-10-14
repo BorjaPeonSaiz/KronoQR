@@ -102,6 +102,10 @@
 #     dice cual es el directorio vigente (V7-SC-1). Todo lo demas queda intacto
 #     y se deshace con un `mv` (retire_previous_directory).
 #   · No retrocede versiones.
+#
+# OJO: `trap "" PIPE` (SIGPIPE ignorado en main(), para que una tuberia cerrada tras un
+# Ctrl+C no mate la vuelta atras) SE HEREDA en los hijos: una tuberia nueva con un productor
+# largo (`cmd | head`) dejaria de terminar por SIGPIPE y fallaria por EPIPE. Vigilalo.
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -319,11 +323,17 @@ err() {
 }
 
 # Una orden en su PROPIA sesion (sin el grupo de procesos del terminal), si hay setsid.
+# Con `-w` (util-linux) setsid ESPERA y devuelve el codigo del hijo aunque el llamador sea
+# lider de grupo. BusyBox no lo tiene: sin `-w`, setsid solo hace fork cuando el llamador
+# es lider de grupo, y un script lanzado desde una terminal no lo es (su `bash` es el
+# lider, no sus hijos), asi que ejecuta directamente y propaga el codigo.
 isolated() {
-  if command -v setsid >/dev/null 2>&1; then
-    setsid "$@"
-  else
+  if ! command -v setsid >/dev/null 2>&1; then
     "$@"
+  elif setsid -w true 2>/dev/null; then
+    setsid -w "$@"
+  else
+    setsid "$@"
   fi
 }
 
@@ -3059,11 +3069,12 @@ rollback_and_die() {
   if [ "${BASHPID}" != "$$" ]; then
     return 1
   fi
-  disarm_rollback_traps
   # DURANTE la vuelta atras las senales se IGNORAN (un segundo Ctrl+C no la corta a
   # medias, con los servicios caidos) y el mensaje sale por la pantalla ORIGINAL aunque
-  # la senal saltara dentro de una llamada redirigida.
+  # la senal saltara dentro de una llamada redirigida. Primero se ignoran y DESPUES se
+  # retira el ERR: no hay un instante con la accion por defecto.
   trap '' INT TERM HUP PIPE
+  trap - ERR
   restore_std_streams
   set +e
 
@@ -3252,7 +3263,7 @@ rollback_and_die() {
   kq_app_knows_command compose_rollback compliance:record-system-event || audit_known=$?
   if [ "${audit_known}" -eq 0 ]; then
     audit_status=0
-    audit_output="$(compose_new run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
+    audit_output="$(isolated docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" run --rm --no-deps -T app php artisan compliance:record-system-event system.restored_from_backup --data="${audit_json}" 2>&1)" ||
       audit_status=$?
     detail_note "${audit_output}"
 
