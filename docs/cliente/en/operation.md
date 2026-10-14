@@ -525,10 +525,16 @@ hotel's data never leaves your infrastructure). What it does is **warn you**
 when `BACKUP_PATH` and its `wal/` folder share a disk with the Docker and
 PostgreSQL data:
 
-- `./doctor.sh` checks it from the server (it needs `sudo` to see the Docker
-  disk; without it, it says it could not check);
-- the nightly backup publishes the measurement and `product:doctor` reads it in
-  the **`backup.offsite`** check, which appears in the backups section.
+- `./doctor.sh` checks it from the server and is **the complete check**: it
+  resolves the **physical disk** behind each path (through partitions, LVM
+  logical volumes and software RAID) and compares disks. It needs `sudo` to see
+  the Docker disk; without it, or with ZFS, it says it could not check;
+- the nightly backup publishes a coarser measurement and `product:doctor` reads
+  it in the **`backup.offsite`** check, which appears in the backups section.
+  From inside the container only the **filesystem** is visible, not the disk: a
+  network share shows green; a destination on a different filesystem gives a
+  soft warning ("it cannot be known whether it is a different physical disk")
+  that points to `./doctor.sh`.
 
 It is **always a warning, never a failure**: it does not change the exit code
 and does not block `install.sh` or `update.sh`. If you already take the backups
@@ -536,8 +542,9 @@ out yourself (sync to another machine, tape, an EU cloud), nothing is broken;
 the warning will keep appearing because the product cannot see that.
 
 The backups count as **leaving** if `BACKUP_PATH` is a network share (NFS,
-SMB/CIFS) or is on a different device from the data. The second only protects
-against the disk failing, **not against theft or fire** at the premises: the
+SMB/CIFS) or is on a **different physical disk**; a partition or logical volume
+of the same disk does not count (if the disk dies, both die). The second only
+protects against the disk failing, **not against theft or fire** at the premises: the
 ideal is a different machine and, if possible, another building. To clear the
 warning:
 
@@ -545,8 +552,8 @@ warning:
    the `.env` (for example, an NFS volume at `/var/backups/fichaje`).
 2. Restart with `docker compose up -d` and run a backup
    (`docker compose exec scheduler php artisan backup:run`).
-3. Run `sudo ./doctor.sh`: it must say the backups are not on the same disk as
-   the data.
+3. Run `sudo ./doctor.sh`: it must say the backups are not on the same physical
+   disk as the data (or that they are on a network share).
 
 Remember that **the encryption key must be kept off the server too** (previous
 section): a backup off the server without its key is worthless bytes.

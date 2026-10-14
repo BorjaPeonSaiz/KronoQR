@@ -513,10 +513,16 @@ los datos de tu hotel no salen de tu infraestructura). Lo que sí hace es
 **avisarte** cuando `BACKUP_PATH` y su carpeta `wal/` comparten disco con los
 datos de Docker y de PostgreSQL:
 
-- `./doctor.sh` lo comprueba desde el servidor (necesita `sudo` para ver el disco
-  de Docker; sin él dice que no ha podido comprobarlo);
-- la copia nocturna publica la medida y `product:doctor` la lee en la
-  comprobación **`backup.offsite`**, que aparece en el apartado de copias.
+- `./doctor.sh` lo comprueba desde el servidor y es **la comprobación completa**:
+  resuelve el **disco físico** de cada ruta (a través de particiones, volúmenes
+  lógicos de LVM y RAID por software) y compara discos. Necesita `sudo` para ver
+  el disco de Docker; sin él, o con ZFS, dice que no ha podido comprobarlo;
+- la copia nocturna publica una medida más gruesa y `product:doctor` la lee en la
+  comprobación **`backup.offsite`**, que aparece en el apartado de copias. Desde
+  dentro del contenedor solo se ve el **sistema de ficheros**, no el disco: un
+  destino de red sale en verde; un destino en otro sistema de ficheros da un
+  aviso suave («no se puede saber si es otro disco físico») que remite a
+  `./doctor.sh`.
 
 Es **siempre un aviso, nunca un fallo**: no cambia el código de salida y no
 bloquea `install.sh` ni `update.sh`. Si ya sacas las copias por tu cuenta
@@ -524,16 +530,17 @@ bloquea `install.sh` ni `update.sh`. Si ya sacas las copias por tu cuenta
 aviso seguirá saliendo porque el producto no puede verlo.
 
 Se considera que las copias **salen** si `BACKUP_PATH` es un recurso de red (NFS,
-SMB/CIFS) o está en un dispositivo distinto del de los datos. Lo segundo protege
-de la avería del disco, **no del robo ni del incendio** del local: lo ideal es
-una máquina distinta y, si puede ser, otro edificio. Para quitar el aviso:
+SMB/CIFS) o está en **otro disco físico**; una partición o un volumen lógico del
+mismo disco no cuenta (si muere el disco, mueren las dos). Lo segundo protege de
+la avería del disco, **no del robo ni del incendio** del local: lo ideal es una
+máquina distinta y, si puede ser, otro edificio. Para quitar el aviso:
 
 1. Monta el destino antes de arrancar, en el mismo sitio que `BACKUP_PATH` del
    `.env` (por ejemplo, un volumen NFS en `/var/backups/fichaje`).
 2. Reinicia con `docker compose up -d` y lanza una copia
    (`docker compose exec scheduler php artisan backup:run`).
 3. Ejecuta `sudo ./doctor.sh`: debe decir que las copias no están en el mismo
-   disco que los datos.
+   disco físico que los datos (o que están en un recurso de red).
 
 Recuerda que **la clave de cifrado también tiene que estar fuera** (apartado
 anterior): una copia fuera del servidor sin su clave son bytes sin valor.
