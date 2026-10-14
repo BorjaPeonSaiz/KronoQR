@@ -16,8 +16,8 @@ use Monolog\Processor\PsrLogMessageProcessor;
 /*
  * La pila de canales activos (doc 02 §8.2.1, decision 8 de la ficha 3.1).
  *
- * `stderr` es el canal PRIMARIO y no es negociable: Docker lo conserva, el
- * paquete de diagnostico lo lee y sigue existiendo cuando Loki no esta. `loki`
+ * `stderr` es el canal PRIMARIO y no es negociable: Docker lo conserva (`docker compose logs`)
+ * y sigue existiendo cuando Loki no esta; el paquete de diagnostico NO lo lee. `loki`
  * es la COPIA CONSULTABLE, y entra en la pila **solo si `LOKI_URL` tiene
  * valor**: en una instalacion que no lo use, el canal no se construye, su
  * handler no se resuelve y no hay ni un viaje a la red. Y al reves: con
@@ -170,8 +170,8 @@ return [
          *
          * El formateador JSON se declara AQUI, versionado, y no en
          * `LOG_STDERR_FORMATTER`. El formato del log tecnico es una propiedad del
-         * producto —lo consultan Loki, el paquete de diagnostico y quien depura
-         * una incidencia—, y dejarlo en una variable de entorno significaba que
+         * producto —lo consultan Loki, `docker compose logs` y quien depura una
+         * incidencia—, y dejarlo en una variable de entorno significaba que
          * un `.env` mal copiado convertia todo el historico en texto suelto sin
          * que nada fallara. La variable sigue pudiendo existir en un `.env`
          * antiguo: ya no la lee nadie (decision 9 de la ficha 3.1).
