@@ -573,8 +573,17 @@ $pinUuids = array_values(array_filter(
     static fn (mixed $uuid): bool => is_string($uuid),
 ));
 
-if ($pinUuids === []) {
-    $check('RF-AT-11/registro', false, 'los fixtures no traen pin_employee_uuids: el escenario scan-pin no se monto');
+// Una instalacion sin clave de sellado no ofrece PIN (ADR-017): el
+// aprovisionamiento no emite sobres y el escenario no se lanza. Se avisa, no se
+// falla. Lo que si es un fallo es que haya sobres y ningun empleado al que
+// atribuirlos.
+$pinOffered = ((array) ($fixtures['pin_scans'] ?? [])) !== [];
+
+if (! $pinOffered) {
+    $warn('RF-AT-11: la instalacion no ofrece fichaje por PIN (sin IDENTITY_PIN_SEALING_SECRET_KEY) o se apago '
+        .'con PIN_PERIOD_SECONDS=0; no hay fichajes por PIN que verificar.');
+} elseif ($pinUuids === []) {
+    $check('RF-AT-11/registro', false, 'los fixtures traen sobres de PIN y ningun pin_employee_uuids al que atribuirlos');
 } else {
     $pinIds = DB::table('employees')->whereIn('uuid', $pinUuids)->pluck('id')->all();
 

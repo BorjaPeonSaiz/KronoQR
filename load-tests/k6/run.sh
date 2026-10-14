@@ -261,11 +261,14 @@ cards_per_instance=$((scan_cards + resend_cards + batch_cards))
 # redondeo hacia abajo de la division no deje la vuelta justo en el borde. Son
 # empleados SIN tarjeta: van aparte de `cards_per_instance` y los reserva el
 # aprovisionamiento.
-if [ "${PIN_PERIOD_SECONDS}" -lt 1 ]; then
-  fail_unreliable "PIN_PERIOD_SECONDS tiene que ser 1 o mas (el fichaje por PIN es parte de la carga)."
+#
+# PIN_PERIOD_SECONDS=0 apaga el escenario a proposito; tambien se apaga solo, mas
+# abajo, si la instalacion no ofrece PIN.
+if [ "${PIN_PERIOD_SECONDS}" -gt 0 ]; then
+  pin_cards=$(((debounce_seconds + debounce_seconds / 10 + 1) / PIN_PERIOD_SECONDS + 2))
+else
+  pin_cards=0
 fi
-
-pin_cards=$(((debounce_seconds + debounce_seconds / 10 + 1) / PIN_PERIOD_SECONDS + 2))
 
 employees=$((INSTANCES * cards_per_instance))
 devices=$((INSTANCES * DEVICES_PER_INSTANCE))
@@ -323,6 +326,26 @@ chmod 600 "${fixtures}/k6-fixtures.json"
 rejection_floor_ms="$(node -e \
   "process.stdout.write(String(require('${script_dir}/.fixtures/k6-fixtures.json').rejection_floor_ms ?? 25))" \
   2>/dev/null || echo 25)"
+
+# UNA INSTALACION SIN FICHAJE POR PIN ES LEGITIMA (ADR-017): sin clave de
+# sellado el aprovisionamiento no emite sobres, y aqui se apaga el escenario en
+# lugar de lanzar uno que solo podria fallar. El veredicto de RF-AT-11 lo dice.
+#
+# LA RUTA VA COMO ARGUMENTO, NO DENTRO DEL CODIGO: en Git Bash, MSYS convierte
+# `/d/...` en `D:/...` en los argumentos de un programa nativo, pero no dentro
+# de la cadena de `-e`, y `require('/d/...')` no encuentra nada. Y SIN VALOR DE
+# RESERVA: leer «0» por un fallo de lectura apagaria el PIN en silencio, que es
+# justo perder cobertura sin que nadie se entere (paso en la primera pasada en
+# Windows).
+pin_scans="$(node -e \
+  "process.stdout.write(String((JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).pin_scans ?? []).length))" \
+  "${fixtures}/k6-fixtures.json")" ||
+  fail_unreliable "no se pudo leer cuantos fichajes por PIN dejo el aprovisionamiento."
+
+if [ "${PIN_PERIOD_SECONDS}" -gt 0 ] && [ "${pin_scans}" -eq 0 ]; then
+  log "AVISO: la instalacion no ofrece fichaje por PIN; el escenario scan-pin no se lanza."
+  PIN_PERIOD_SECONDS=0
+fi
 
 # --- Series del servidor antes de la carga (instrumentacion de la 3.1) -------
 

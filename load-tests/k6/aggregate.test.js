@@ -864,6 +864,16 @@ test('[RF-AT-11] un 429 al PIN se encola y no es un rechazo', () => {
   assert.equal(summary.pin_path.queueable, 1)
 })
 
+test('[RF-AT-11] una instalacion sin fichaje por PIN no deja la pasada sin veredicto', () => {
+  // ADR-017: sin clave de sellado el quiosco no ofrece PIN y es legitimo. La
+  // pasada no trae ni una muestra de `scan-pin`, y eso no es una medida rota.
+  const summary = runAnalysis(greenRun({ pinDurations: [], pinShiftProducing: 0 }), { pinPeriodSeconds: 0 })
+
+  assert.equal(statusOf(summary, 'RF-AT-11'), 'info')
+  assert.match(summary.verdicts['RF-AT-11'].detail, /fichaje por PIN NO medido/)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
 test('[RF-AT-11] con 19 PIN atendidos no hay veredicto', () => {
   const summary = runAnalysis(greenRun({ pinDurations: Array(19).fill(250) }))
 

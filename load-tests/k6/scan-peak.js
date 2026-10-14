@@ -288,7 +288,9 @@ function scenariosFor(role) {
 
   const selected = {}
 
-  for (const name of names) {
+  // PIN_PERIOD_SECONDS=0: la instalacion no ofrece fichaje por PIN (ADR-017) o
+  // se apago a proposito. `run.sh` lo decide con lo que dejo el aprovisionamiento.
+  for (const name of names.filter((scenario) => scenario !== 'scan-pin' || PIN_PERIOD_SECONDS > 0)) {
     selected[name] = SCENARIOS[name]
   }
 
@@ -389,7 +391,7 @@ const CARDS = (() => {
  * sellarlo aqui obligaria a meter libsodium en el generador.
  */
 const PIN_SCANS = (() => {
-  if (!SCENARIOS_BY_ROLE[ROLE].includes('scan-pin')) {
+  if (!SCENARIOS_BY_ROLE[ROLE].includes('scan-pin') || PIN_PERIOD_SECONDS === 0) {
     return []
   }
 

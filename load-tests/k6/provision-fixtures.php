@@ -131,7 +131,8 @@ $geometry = [
     // Empleados que fichan por PIN en cada instancia (K6-3). NO cuentan en
     // `cards_per_instance`: no tienen tarjeta, y su rebanada es la de
     // `pin_scans`, no la de `payloads`.
-    'pin_cards' => max(1, $intEnv('K6_PIN_CARDS', 18)),
+    // 0 apaga el escenario a proposito (`PIN_PERIOD_SECONDS=0` en `run.sh`).
+    'pin_cards' => $intEnv('K6_PIN_CARDS', 18),
 ];
 $geometry['cards_per_instance'] = $geometry['scan_cards'] + $geometry['resend_cards'] + $geometry['batch_cards'];
 
@@ -485,59 +486,69 @@ $say('Payloads de rechazo: '.count($unknownPayloads).' desconocidos, '.count($re
  * `scan_id` le cuesta exactamente lo mismo que uno recien sellado.
  */
 $publicKey = app(SealedPinOpener::class)->publicKey();
+$pinScans = [];
 
-if ($publicKey === null) {
-    throw new RuntimeException(
-        'La instalacion no tiene IDENTITY_PIN_SEALING_SECRET_KEY: sin ella el quiosco oculta el teclado del PIN '
-        ."y el escenario scan-pin no tiene nada que medir.\n"
-        .'QUE HACER: install.sh la genera; en desarrollo, ponla en .env (ver SodiumSealedPinOpener) y recrea app.'
-    );
+/*
+ * SIN CLAVE DE SELLADO NO HAY FICHAJE POR PIN, Y ESO ES LEGITIMO. Una
+ * instalacion que no quiere la segunda via no configura
+ * IDENTITY_PIN_SEALING_SECRET_KEY y el quiosco oculta el teclado (ADR-017,
+ * `SealedPinOpener::publicKey()`). La prueba de carga no puede negarse a medir
+ * esa instalacion: deja `pin_scans` vacio, `run.sh` apaga el escenario y el
+ * veredicto de RF-AT-11 dice que no se ha medido, sin declarar la pasada no
+ * fiable. Con `K6_PIN_CARDS=0` se apaga a proposito.
+ */
+if ($publicKey === null || $pinTarget === 0) {
+    $say('[aviso] Fichaje por PIN NO medido: '.($publicKey === null
+        ? 'la instalacion no tiene IDENTITY_PIN_SEALING_SECRET_KEY (el quiosco no ofrece PIN).'
+        : 'K6_PIN_CARDS=0.'));
+    $pinOwners = collect();
 }
 
 $pinIssuer = app(IssueEmployeePinHandler::class);
-$pinMaterial = $pinIssuer->freshMaterial();
-$publicKeyBytes = base64_decode($publicKey, true);
+$pinMaterial = $pinOwners->isEmpty() ? null : $pinIssuer->freshMaterial();
+$publicKeyBytes = $publicKey === null ? false : base64_decode($publicKey, true);
 
-if (! is_string($publicKeyBytes) || strlen($publicKeyBytes) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES) {
+if ($pinMaterial !== null
+    && (! is_string($publicKeyBytes) || strlen($publicKeyBytes) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES)) {
     throw new RuntimeException('La clave publica de sellado del PIN no es una clave X25519 en base64.');
 }
-
-$pinScans = [];
 
 // El codigo de empleado se lee aparte: `k6_load_employees()` solo trae `id` y
 // `uuid`, y un codigo vacio sale del quiosco como un `400` de peticion mal
 // formada, no como un fichaje (asi lo encontro la primera pasada local).
-$pinCodes = DB::table('employees')
-    ->whereIn('id', $pinOwners->pluck('id')->all())
-    ->pluck('employee_code', 'id')
-    ->all();
+if ($pinMaterial !== null && is_string($publicKeyBytes)) {
+    $pinCodes = DB::table('employees')
+        ->whereIn('id', $pinOwners->pluck('id')->all())
+        ->pluck('employee_code', 'id')
+        ->all();
 
-foreach ($pinOwners as $owner) {
-    $employeeCode = $pinCodes[$owner->id] ?? null;
+    foreach ($pinOwners as $owner) {
+        $employeeCode = $pinCodes[$owner->id] ?? null;
 
-    if (! is_string($employeeCode) || $employeeCode === '') {
-        throw new RuntimeException('Un empleado de la carga no tiene codigo de empleado ('.$owner->uuid.').');
+        if (! is_string($employeeCode) || $employeeCode === '') {
+            throw new RuntimeException('Un empleado de la carga no tiene codigo de empleado ('.$owner->uuid.').');
+        }
+
+        $issuedPin = $pinIssuer->handle(new IssueEmployeePinCommand(
+            employeeUuid: (string) $owner->uuid,
+            siteId: $siteId,
+            reset: true,
+            material: $pinMaterial,
+        ));
+
+        if ($issuedPin === null) {
+            throw new RuntimeException('No se pudo emitir el PIN de un empleado de la carga ('.$owner->uuid.').');
+        }
+
+        $pinScans[] = [
+            'employee_code' => $employeeCode,
+            'pin_sealed' => base64_encode(sodium_crypto_box_seal($pinMaterial->pin, $publicKeyBytes)),
+        ];
     }
 
-    $issuedPin = $pinIssuer->handle(new IssueEmployeePinCommand(
-        employeeUuid: (string) $owner->uuid,
-        siteId: $siteId,
-        reset: true,
-        material: $pinMaterial,
-    ));
-
-    if ($issuedPin === null) {
-        throw new RuntimeException('No se pudo emitir el PIN de un empleado de la carga ('.$owner->uuid.').');
-    }
-
-    $pinScans[] = [
-        'employee_code' => $employeeCode,
-        'pin_sealed' => base64_encode(sodium_crypto_box_seal($pinMaterial->pin, $publicKeyBytes)),
-    ];
+    $say('Fichaje por PIN: '.count($pinScans).' empleados con PIN emitido y sobre cerrado '
+        .'('.$geometry['pin_cards'].' por instancia).');
 }
-
-$say('Fichaje por PIN: '.count($pinScans).' empleados con PIN emitido y sobre cerrado '
-    .'('.$geometry['pin_cards'].' por instancia).');
 
 // --- Quioscos sinteticos -----------------------------------------------------
 

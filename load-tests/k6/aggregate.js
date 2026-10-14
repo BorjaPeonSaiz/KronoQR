@@ -772,18 +772,27 @@ function analyse(results, options = {}) {
   const pinBroken =
     pinRefusals.length > 0 || pinResendNo > 0 || pinDebounceRatio > DEBOUNCE_CEILING_RATIO
 
+  // `--pin-period-seconds=0`: la instalacion no ofrece fichaje por PIN —sin
+  // clave de sellado el quiosco oculta el teclado, y es legitimo (ADR-017)— o
+  // se apago a proposito. No hay nada que juzgar y no es una medida rota:
+  // `info`, que no entra en el codigo de salida.
+  const pinOff = pinPeriodSeconds === 0
+
   verdict(
     'RF-AT-11',
-    pinBroken ? 'fail' : !pinMeasurable ? 'unmeasurable' : 'pass',
-    `${pinOriginals.length} fichajes por PIN enviados, ${pinAttended.samples} atendidos ` +
-      `(${pinShifts} con tramo, ${pinDebounced} anti-rebote), ${pinRefusals.length} rechazados al ` +
-      `empleado, ${pinQueueable.length} encolables; reenvios por PIN: ${pinResendYes} identicos y ` +
-      `${pinResendNo} distintos; p50 ${round(pinAttended.p50) ?? 'n/d'} ms y p95 ` +
-      `${round(pinAttended.p95) ?? 'n/d'} ms (informativo: el PIN paga bcrypt y ningun requisito ` +
-      'fija su latencia)' +
-      (pinMeasurable || pinBroken
-        ? ''
-        : ` — NO EVALUABLE: hacen falta ${PIN_SAMPLES_FLOOR} fichajes por PIN atendidos`),
+    pinOff ? 'info' : pinBroken ? 'fail' : !pinMeasurable ? 'unmeasurable' : 'pass',
+    pinOff
+      ? 'fichaje por PIN NO medido: la instalacion no lo ofrece (sin IDENTITY_PIN_SEALING_SECRET_KEY) o ' +
+        'se apago con PIN_PERIOD_SECONDS=0'
+      : `${pinOriginals.length} fichajes por PIN enviados, ${pinAttended.samples} atendidos ` +
+        `(${pinShifts} con tramo, ${pinDebounced} anti-rebote), ${pinRefusals.length} rechazados al ` +
+        `empleado, ${pinQueueable.length} encolables; reenvios por PIN: ${pinResendYes} identicos y ` +
+        `${pinResendNo} distintos; p50 ${round(pinAttended.p50) ?? 'n/d'} ms y p95 ` +
+        `${round(pinAttended.p95) ?? 'n/d'} ms (informativo: el PIN paga bcrypt y ningun requisito ` +
+        'fija su latencia)' +
+        (pinMeasurable || pinBroken
+          ? ''
+          : ` — NO EVALUABLE: hacen falta ${PIN_SAMPLES_FLOOR} fichajes por PIN atendidos`),
   )
 
   // --- La rampa del cambio de turno (K6-2), informativa -----------------------
