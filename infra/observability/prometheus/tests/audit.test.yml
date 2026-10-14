@@ -182,17 +182,10 @@ tests:
         exp_alerts: []
 
   #-----------------------------------------------------------------------------
-  # ParticionDeAuditoriaDelProximoAnoSinPreparar: LIMITE CONOCIDO de esta
-  # comprobacion. `month() >= 11` exige noviembre o diciembre, y el reloj
-  # simulado de `promtool test rules` arranca SIEMPRE en el instante Unix 0
-  # (1 de enero de 1970: comprobado con `promql_expr_test` sobre `month()`,
-  # que devuelve 1 en cualquier `eval_time` de esta suite). No existe forma de
-  # anclar la prueba a un mes distinto, asi que el "dispara" de esta regla NO
-  # se puede ejercitar con promtool: solo se puede afirmar que, aunque falte
-  # la particion del año que viene, la alerta NO dispara mientras estemos
-  # (siempre, en esta herramienta) en enero.
+  # Valor limite: en enero (cualquier mes anterior a noviembre) no dispara
+  # aunque falte la particion.
   #-----------------------------------------------------------------------------
-  - name: particion_proximo_ano_no_disparable_en_enero
+  - name: particion_proximo_ano_no_dispara_antes_de_noviembre
     interval: 1m
     input_series:
       - series: audit_log_partition_ready{horizon="next"}

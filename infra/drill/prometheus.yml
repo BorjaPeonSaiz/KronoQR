@@ -1,0 +1,37 @@
+# KronoQR — configuracion de Prometheus del simulacro de alertas (V4-DV-3).
+#
+# No es la de produccion (esa es prometheus.yml.template): aqui no hay API,
+# nginx ni blackbox que sondear. Lo unico que importa es que las reglas reales
+# reciban series y que lo que disparen llegue al Alertmanager real.
+#
+# `honor_labels: true` en el job de node-exporter: algunas reglas casan por la
+# etiqueta `job` de otra fuente (`kronoqr-uptime`, `kronoqr-uptime-tls-verified`,
+# la sonda de TLS). El `.prom` del simulacro la lleva escrita y Prometheus la
+# respeta en lugar de pisarla con `kronoqr-node`.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+rule_files:
+  - /rules-run/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: kronoqr-node
+    honor_labels: true
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: node
+
+  # El Alertmanager real, como en produccion: de aqui sale
+  # `alertmanager_notifications_failed_total` y `up{job="alertmanager"}`.
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]
+        labels:
+          service: alerting

@@ -147,3 +147,57 @@ it('las bases huerfanas se buscan ancladas a «<base>_restore_<fecha>» y no cas
     expect($doctor)->toContain("datname ~ '^\${db}_restore_[0-9]{8}T[0-9]{6}Z")
         ->and($doctor)->not->toContain("datname ~ '_restore_[0-9]");
 })->group('RNF-D-04', 'RF-PD-13');
+
+it('avisa si Prometheus no tiene cargadas las reglas de alerta del paquete (pendiente del bloque 13)', function (): void {
+    $base = sys_get_temp_dir().'/kronoqr-doctor-reglas-'.bin2hex(random_bytes(6));
+    mkdir($base.'/observability/prometheus/rules', 0o755, true);
+    file_put_contents(
+        $base.'/observability/prometheus/rules/a.yml',
+        "groups:\n  - name: g\n    rules:\n      - alert: ReglaUno\n        expr: up == 0\n      - alert: ReglaDos\n        expr: up == 0\n"
+        ."      # - alert: Comentada\n      - record: no_es_una_alerta\n        expr: up\n",
+    );
+    file_put_contents(
+        $base.'/observability/prometheus/rules/b.yml',
+        "groups:\n  - name: h\n    rules:\n      - alert: ReglaTres\n        expr: up == 0\n",
+    );
+
+    $json = static fn (array $nombres): string => '{"status":"success","data":{"groups":[{"name":"g","file":"/x","rules":['
+        .implode(',', array_map(static fn (string $n): string => '{"state":"inactive","name":"'.$n.'","query":"up == 0","type":"alerting"}', $nombres))
+        .']}]}}';
+
+    $ejecuta = function (string $contenedor, string $respuesta) use ($base): array {
+        $proceso = Process::fromShellCommandline(
+            'bash -c '.escapeshellarg(
+                'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/doctor.sh')).'; kq_msg_init es; '
+                .'CURRENT_DIR='.escapeshellarg($base).'; CURRENT_COMPOSE=/srv/kq/docker-compose.yml; '
+                .'compose_current() { case "$1" in ps) printf "%s" "${CONTENEDOR}";; exec) printf "%s" "${RESPUESTA}";; esac; }; '
+                .'check_prometheus_rules; echo "@@ comprobadas=${CHECKS_RUN} avisos=${CHECKS_WARNED} fallos=${CHECKS_FAILED}"'
+            ),
+            env: ['CONTENEDOR' => $contenedor, 'RESPUESTA' => $respuesta],
+            timeout: 30.0,
+        );
+        $proceso->run();
+        expect($proceso->getExitCode())->toBe(0, $proceso->getErrorOutput());
+
+        return ['salida' => $proceso->getOutput().$proceso->getErrorOutput()];
+    };
+
+    $completo = $ejecuta('abc123', $json(['ReglaUno', 'ReglaDos', 'ReglaTres', 'AjenaDelCliente']));
+    $falta = $ejecuta('abc123', $json(['ReglaUno']));
+    $muda = $ejecuta('abc123', '');
+    $sinObservabilidad = $ejecuta('', '');
+    (new Process(['rm', '-rf', $base]))->run();
+
+    expect($completo['salida'])->toContain('3 reglas de alerta cargadas')->toContain('avisos=0')
+        // Una regla de un registro (`record:`) o comentada no es una alerta que esperar.
+        ->and($falta['salida'])->toContain('no tiene cargadas 2 regla(s)')
+        ->and($falta['salida'])->toContain('ReglaDos')->toContain('ReglaTres')
+        ->and($falta['salida'])->toContain('--force-recreate prometheus')->toContain('avisos=1')->toContain('fallos=0')
+        ->and($muda['salida'])->toContain('no contesta a la lista de reglas')->toContain('avisos=1')
+        // Sin el perfil `observability` no hay Prometheus y no hay nada que comprobar.
+        ->and($sinObservabilidad['salida'])->toContain('comprobadas=0')->toContain('avisos=0');
+})->group('RF-PD-13');
+
+it('doctor.sh lanza la comprobacion de las reglas de Prometheus en sus dos ramas', function (): void {
+    expect(substr_count(Repo::contents('infra/scripts/doctor.sh'), "\n  check_prometheus_rules\n"))->toBe(2);
+})->group('RF-PD-13');

@@ -1,0 +1,54 @@
+# KronoQR — la falla de cada alerta del simulacro (V4-DV-3, make alerts-drill).
+#
+# Tres columnas separadas por TABULADOR:
+#   ALERTA     nombre exacto de la regla (infra/observability/prometheus/rules/)
+#   ACCION     set   sustituye (o anade) la serie indicada por la linea dada
+#              del   retira las series que casen con el selector dado (alertas de tipo absent())
+#              none  no toca ninguna serie (hoy ninguna receta la usa)
+#   ARGUMENTO  una linea de exposicion (set), un selector `metrica` o `metrica{etiqueta="valor"}` (del)
+#              o un texto que explica por que no hace falta tocar nada (none)
+#
+# Una alerta puede tener varias lineas; se aplican todas a la vez sobre baseline.prom.
+# Los contadores suben mas de lo que pide el umbral: increase() extrapola y un salto
+# justo en el umbral podria quedarse corto sin que la regla estuviera mal.
+#
+# EntregaDeAlertasFallando: no tiene serie propia que sembrar. Sus destinatarios son webhooks
+# a 127.0.0.1:9093 que dan 404, asi que CUALQUIER alerta que se notifique falla de verdad. Una
+# alerta que dura 10 s se resuelve antes de que pase el group_wait de 30 s y no notifica nunca;
+# por eso su receta mantiene una alerta de copia (SlotDeReplicacionParado) encendida mientras
+# espera, y es lo que hace subir alertmanager_notifications_failed_total.
+#
+# Las alertas que NO se pueden fabricar sin romper algo van en not-fabricable.tsv, con su motivo.
+AlmacenDeMetricasAusente	del	kronoqr_metrics_store_up
+ArchivadoDeWalFallando	set	kronoqr_wal_archive_failing 1
+CertificadoTlsCaducado	set	probe_ssl_earliest_cert_expiry{job="kronoqr-uptime",instance="https://nginx:8443/api/v1/health"} @NOW-86400@
+CertificadoTlsNoVerificable	set	probe_success{job="kronoqr-uptime-tls-verified",instance="https://hotel.drill.invalid/api/v1/health"} 0
+CertificadoTlsProximoACaducar	set	probe_ssl_earliest_cert_expiry{job="kronoqr-uptime",instance="https://nginx:8443/api/v1/health"} @NOW+864000@
+ColaOfflineAtascada	set	kiosk_offline_queue_size{device="drill-kiosk-1"} 80
+ConciliacionCompletaDelRegistroAusente	set	work_record_reconciliation_last_run_timestamp_seconds{scope="full"} @NOW-800000@
+ConciliacionDelRegistroAusente	del	work_record_reconciliation_last_run_timestamp_seconds{scope="recent"}
+CopiaDeSeguridadAusente	del	kronoqr_backup_last_success_timestamp_seconds
+DescansoEntreJornadasInsuficiente	set	incidents_open{type="insufficient_rest"} 2
+DeteccionDeIncidenciasConFallos	set	incident_detection_last_failures 1
+DeteccionDePatronesConFallos	set	pattern_detection_last_failures 1
+DiscoDeCopiasCasiLleno	set	kronoqr_backup_volume_free_ratio 0.10
+EntregaDeAlertasFallando	set	kronoqr_wal_replication_slots_inactive 1
+EspacioEnDiscoBajo	set	node_filesystem_avail_bytes{mountpoint="/",fstype="ext4",device="/dev/sda1"} 10000000000
+FicheroGeneradoSinRetirarPasadoSuPlazo	set	generated_files_overdue 3
+KioskDiscardedScansAttributed	set	kiosk_discarded_scans_total{device="drill-kiosk-1",attributed="true"} 5
+KioskQueueStorageDegraded	set	kiosk_queue_storage_degraded{device="drill-kiosk-1"} 1
+KioskUnreportedDiscards	set	kiosk_unreported_discards{device="drill-kiosk-1"} 4
+KronoqrManagementAdminAccountCreated	set	kronoqr_management_account_changes_total{action="created",role="admin"} 3
+KronoqrManagementTwoFactorReset	set	kronoqr_management_account_changes_total{action="two_factor_reset",role="admin"} 3
+MedicionDeWalAusente	set	kronoqr_wal_exporter_last_run_timestamp_seconds @NOW-3600@
+MetricaDeIncidenciasAusente	del	incidents_metrics_timestamp_seconds
+ParticionDeAuditoriaAusente	set	audit_log_partition_ready{horizon="current"} 0
+PurgaDeFicherosGeneradosNoPuedeBorrar	set	generated_files_remove_failed_total 3
+RechazoDeFirmaQr	set	scans_total{result="rejected_signature"} 60
+ReconciliacionConFallos	set	projection_reconciliation_last_failures 1
+RoturaDeCadenaDeAuditoria	set	audit_chain_verification_failures_total 1
+SaturacionDelBordeEnElFichaje	set	http_requests_total{route="attendance.scan",status="429"} 60
+ScanBatchItemNotProcessed	set	scan_batch_items_not_processed_total 12
+SimulacroDeRestauracionCaducado	set	kronoqr_backup_restore_drill_last_result 0
+SimulacroDeRestauracionNuncaEjecutado	del	kronoqr_backup_restore_drill_last_success_timestamp_seconds
+SlotDeReplicacionParado	set	kronoqr_wal_replication_slots_inactive 1

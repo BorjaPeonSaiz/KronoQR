@@ -1,0 +1,67 @@
+# KronoQR — simulacro de alertas (V4-DV-3, RF-PD-13, RNF-D-01).
+#
+# Dispara a proposito, en una pila efimera, las alertas que nunca habian saltado
+# de verdad, y comprueba que el Alertmanager las recibe (infra/drill/). Una
+# alerta cuya expresion nunca puede ser cierta —como ParticionDeAuditoria
+# DelProximoAnoSinPreparar hasta la 2.2.1, que llevaba un `and` sin `on()`— pasa
+# `promtool check` y puede pasar un caso de prueba mal escrito; aqui no.
+#
+# CUANDO se ejecuta, y por que asi:
+#
+#   · En cada cambio de las reglas, de Alertmanager o del propio simulacro: son
+#     el unico sitio donde una regla muerta se descubre antes de ir a produccion.
+#   · Una vez a la semana: las imagenes de Prometheus y Alertmanager las fija
+#     compose.prod.yaml, pero un cambio de comportamiento entre versiones no
+#     avisa por si solo.
+#   · A mano.
+#
+# NO forma parte de `ci.yml` ni de su presupuesto de 15 minutos para las etapas
+# 1-3 (doc 02 §10.1): son ~8 minutos de reloj. La puerta rapida de reglas
+# (`make observability-check`: promtool check + test de TODAS) sigue en la etapa
+# 2 de ci.yml.
+#
+# El runner es efimero: la guarda de entorno del script (APP_ENV=testing) es la
+# misma que protege las semillas y no se puede saltar desde aqui.
+
+name: Simulacro de alertas
+
+on:
+  schedule:
+    # 05:00 UTC de los lunes.
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "infra/observability/**"
+      - "infra/drill/**"
+      - ".github/workflows/alerts-drill.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/observability/**"
+      - "infra/drill/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alerts-drill-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulacro:
+    name: "Cada alerta del inventario salta y llega a Alertmanager"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    env:
+      APP_ENV: testing
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Simulacro de alertas (pila efimera kq-drill)
+        run: bash infra/drill/alerts-drill.sh
+

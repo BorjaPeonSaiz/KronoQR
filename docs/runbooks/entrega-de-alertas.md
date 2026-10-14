@@ -188,10 +188,12 @@ no dependen del canal roto:
   `docker compose exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/alerts`
   lista todo lo que está `firing`, con independencia de si se entregó.
 - **Grafana** (`127.0.0.1:3000`, por túnel SSH: `ssh -L 3000:127.0.0.1:3000
-  tu-usuario@servidor`): en *Explore*, la serie
-  `alertmanager_notifications_failed_total` de Prometheus, y los cuadros de mando
-  siguen reflejando el estado real de la instalación aunque nadie reciba el
-  correo.
+  tu-usuario@servidor`): el panel *Entregas de alertas fallidas, por integración
+  (15 min)* del cuadro *Salud de la API* grafica
+  `alertmanager_notifications_failed_total` (cero es lo normal; una integración
+  por encima de cero es el canal que falla), y los cuadros de mando siguen
+  reflejando el estado real de la instalación aunque nadie reciba el correo. Si
+  prefieres consultarla a mano, está en *Explore*.
 
 ### 4.4 Resolución
 
@@ -228,6 +230,41 @@ el contenedor salvo que el registro diga lo contrario.
 | `EntregaDeAlertasFallando` por el SMTP del hotel | IT del cliente, coordinando con quien administra el correo | El mismo día |
 | `EntregaDeAlertasFallando` por un webhook de terceros | IT del cliente, con el proveedor de ese servicio | Según la urgencia del canal afectado (seguridad, primero) |
 | Los dos canales de un mismo destinatario llevan más de un día sin funcionar | Escalar fuera del canal roto: llamar, no esperar a que se arregle solo | Inmediato |
+
+---
+
+## 7. Comprobar que las alertas llegan de verdad
+
+**Cuándo se cuenta un fallo de entrega.** `alertmanager_notifications_failed_total`
+sube cuando Alertmanager *renuncia* a entregar, no en el primer intento fallido.
+Un error de red (SMTP que no responde, DNS) se reintenta hasta agotar el
+`group_interval` (5 minutos); una respuesta de rechazo del webhook (un 4xx) no se
+reintenta y se cuenta al instante. Con `for: 5m` en la regla, **una entrega rota
+por red puede tardar unos 10 minutos en avisar**: es esperable y no es un fallo
+de la alerta. Mientras tanto, el registro de Alertmanager ya dice el motivo
+(§4.1).
+
+**El simulacro del fabricante.** Que una alerta exista y tenga una prueba de
+umbral no demuestra que salte en una instalación: una expresión puede ser
+sintácticamente correcta y no poder ser cierta nunca (le pasó a
+`ParticionDeAuditoriaDelProximoAnoSinPreparar`, que llevaba un `and` sin `on()`).
+Por eso el repositorio del fabricante incluye `make alerts-drill`: levanta una
+pila efímera aparte (proyecto `kq-drill`), dispara una a una las 33 alertas que
+nunca habían saltado de verdad —retirando una serie o sembrando un valor en el
+colector de ficheros de texto— y comprueba en la API de Alertmanager
+(`/api/v2/alerts`) que cada una llega, con su destinatario. La que no se puede
+fabricar (`ParticionDeAuditoriaDelProximoAnoSinPreparar`: depende de que sea
+noviembre) la cubre `promtool test rules`, con el motivo escrito en
+`infra/drill/not-fabricable.tsv`.
+
+**No es una herramienta del cliente.** El simulacro no viaja en este paquete y se
+niega a ejecutarse si el entorno no es de desarrollo o de integración continua:
+nunca se lanza contra una instalación real, porque falsear la copia o la cadena
+de auditoría en una instalación de verdad sería provocar el incidente. Lo que sí
+hace el cliente es la **prueba de entrega de §4.2**, que comprueba su SMTP y sus
+webhooks de verdad.
+
+---
 
 **Relacionados:** [`../cliente/operacion.md`](../cliente/operacion.md) §10.4 ·
 [`../cliente/configuracion.md`](../cliente/configuracion.md) §6.20 y §6.21 ·

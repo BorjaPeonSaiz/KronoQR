@@ -36,6 +36,29 @@ final class Doc82Series
     public const HEADING = '### 8.2 Métricas expuestas';
 
     /**
+     * Series que las consultas de los cuadros pueden usar y que NO salen del §8.2
+     * porque no las emite la aplicacion: las del anfitrion, las de la sonda del
+     * borde, la marca del actualizador y las del propio Alertmanager.
+     *
+     * Lista corta y explicita: cada nombre es una serie que emite algo ajeno al
+     * producto, y ampliarla tiene que costar una decision. Vive aqui y no en
+     * `GrafanaDashboardsTest` porque la usan dos pruebas.
+     *
+     * @var list<string>
+     */
+    public const EXTERNAL = [
+        'node_filesystem_avail_bytes',
+        'node_filesystem_size_bytes',
+        'probe_success',
+        'probe_duration_seconds',
+        'probe_ssl_earliest_cert_expiry',
+        'up',
+        'kronoqr_maintenance_active',
+        'kronoqr_maintenance_since_timestamp_seconds',
+        'alertmanager_notifications_failed_total',
+    ];
+
+    /**
      * Las series con su tipo y sus etiquetas, en el orden en que las declara el
      * documento.
      *

@@ -82,6 +82,7 @@ SH_FILES := $(wildcard infra/scripts/*.sh) \
             $(wildcard infra/observability/*.sh) \
             $(wildcard infra/observability/alertmanager/*.sh) \
             $(wildcard infra/observability/prometheus/*.sh) \
+            $(wildcard infra/drill/*.sh) \
             $(wildcard .github/scripts/*.sh) \
             $(wildcard .github/scripts/lib/*.sh) \
             $(wildcard load-tests/k6/*.sh)
@@ -656,6 +657,19 @@ observability-check: ## Reglas de Prometheus, pruebas de umbral y Alertmanager (
 	$(AMTOOL) check-config /alertmanager/alertmanager.yml
 	@docker volume rm -f $(AMTOOL_CHECK_VOLUME) >/dev/null 2>&1 || true
 	@echo [make] promtool y amtool: 0 errores.
+
+# Simulacro de alertas (V4-DV-3, RF-PD-13, RNF-D-01). Dispara a proposito las
+# alertas que nunca han saltado de verdad en una pila EFIMERA (proyecto
+# `kq-drill`, sin puertos ni volumenes) y comprueba que el Alertmanager las
+# recibe. No toca la pila `kronoqr` ni ninguna instalacion, y se niega a correr
+# si APP_ENV (del entorno o de .env) no es local o testing: misma guarda que las
+# semillas (SC7-03). No se le da un valor por omision a proposito.
+# Fuera de `make observability-check` a proposito: tarda unos 8 minutos y la
+# puerta rapida de la etapa 2 no puede pagarlos; lo ejecuta alerts-drill.yml.
+#   make alerts-drill                        todas
+#   make alerts-drill ALERT=RoturaDeCadenaDeAuditoria   una sola
+alerts-drill: ## Simulacro de alertas en una pila efimera (no toca la pila kronoqr)
+	bash infra/drill/alerts-drill.sh $(if $(ALERT),--only $(ALERT),)
 
 deps-audit-php: tools-ready ## composer audit (RS-10, umbral: 0 vulnerabilidades)
 	$(RUN_APP) composer audit --no-interaction
