@@ -121,6 +121,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\LaravelDoctorTranslator;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\AccessHardeningProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\AlertRecipientsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\BackupOffsiteProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\BackupProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
@@ -1943,6 +1944,15 @@ final class ProductServiceProvider extends ServiceProvider
                     new BackupProbe(
                         metrics: new TextfileMetricsReader(Config::string('observability.metrics.textfile_path')),
                         clock: $app->make(Clock::class),
+                        dailyAt: Config::string('backup.daily_at'),
+                    ),
+                    /*
+                     * Si las copias salen del servidor (V5-DV-05): un AVISO, no un
+                     * fallo. Detras de la sonda de la copia porque lee el mismo
+                     * fichero de metricas.
+                     */
+                    new BackupOffsiteProbe(
+                        metrics: new TextfileMetricsReader(Config::string('observability.metrics.textfile_path')),
                         dailyAt: Config::string('backup.daily_at'),
                     ),
                     /*

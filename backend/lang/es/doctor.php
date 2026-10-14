@@ -437,6 +437,17 @@ return [
                     .'copia nocturna despues de instalar (a las :daily_at UTC); despues de esa noche, no lo es.',
                 'warning_unknown' => 'No se puede leer :path, donde la copia de seguridad deja su resultado.',
             ],
+            // V5-DV-05: la promesa de 15 minutos vale si las copias salen del servidor.
+            'offsite' => [
+                'ok' => 'Las copias y el archivo del WAL no estan en el mismo disco que los datos, o estan en un '
+                    .'recurso de red.',
+                'warning_same_disk' => 'Las copias de seguridad estan en el mismo disco que los datos: si ese disco '
+                    .'se pierde, se pierden con el la base de datos y todas las copias.',
+                'warning_wal_same_disk' => 'El archivo del WAL (el registro continuo de cambios) esta en el mismo disco '
+                    .'que los datos: si ese disco se pierde, la perdida maxima de 15 minutos deja de valer.',
+                'warning_unknown' => 'Todavia no consta si las copias salen del servidor: la medida la publica la '
+                    .'copia nocturna (a las :daily_at UTC). Desde el servidor, ./doctor.sh la comprueba al momento.',
+            ],
         ],
 
         // --- Ficheros generados (ADR-045) -----------------------------------
@@ -995,6 +1006,17 @@ return [
                 'warning_unknown' => "El directorio de metricas tiene que ser del usuario 1000:\n"
                     ."  ls -ld :path\n"
                     .'Ver docs/runbooks/restaurar-backup.md §4.3.',
+            ],
+            'offsite' => [
+                'warning_same_disk' => "Monta BACKUP_PATH en otro disco o en un recurso de red (NFS, SMB), o copia\n"
+                    ."BACKUP_PATH entero, wal/ incluido, a otra maquina con regularidad. Es un aviso: si ya sacas las\n"
+                    .'copias por tu cuenta, no hay nada roto. Ver docs/cliente/operacion.md, «Las copias tienen que salir del servidor».',
+                'warning_wal_same_disk' => "Lleva tambien wal/ fuera del servidor, igual que las copias diarias: sin\n"
+                    ."el WAL solo se recupera hasta la ultima copia, no hasta hace 15 minutos. Ver\n"
+                    .'docs/cliente/operacion.md, «Las copias tienen que salir del servidor».',
+                'warning_unknown' => "Espera a la primera copia nocturna, o comprueba ahora desde el servidor:\n"
+                    ."  sudo ./doctor.sh\n"
+                    .'Ver docs/cliente/operacion.md, «Las copias tienen que salir del servidor».',
             ],
         ],
 
