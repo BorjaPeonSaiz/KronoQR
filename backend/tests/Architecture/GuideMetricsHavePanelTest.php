@@ -55,6 +55,7 @@ $guiasSinPanel = [
     'kronoqr_wal_replication_slots_inactive',
     'kronoqr_wal_unarchived_segments',
     'projection_reconciliation_last_run_timestamp_seconds',
+    'scan_batch_items_not_processed_total',
     'scan_processing_duration_seconds',
     'work_record_reconciliation_discrepancies',
     'work_record_reconciliation_last_run_timestamp_seconds',
@@ -74,17 +75,25 @@ $seriesCitadasEnGuias = static function (): array {
     $ficheros = array_merge(
         glob(Repo::file('docs/runbooks').'/*.md') ?: [],
         glob(Repo::file('docs/cliente').'/*.md') ?: [],
+        glob(Repo::file('docs/cliente/en').'/*.md') ?: [],
     );
     sort($ficheros);
 
     $citadas = [];
 
     foreach ($ficheros as $fichero) {
-        preg_match_all('/`([a-z][a-z0-9_]*)(?=[`{\[( ])/', (string) file_get_contents($fichero), $coincidencias);
+        // Cada tramo entre comillas invertidas se descompone en palabras: asi se ven
+        // tambien `nombre{etiqueta}`, `increase(nombre[5m])` y las guias en ingles.
+        preg_match_all('/`([^`\n]+)`/', (string) file_get_contents($fichero), $tramos);
+        $guia = basename(\dirname($fichero)).'/'.basename($fichero);
 
-        foreach (array_unique($coincidencias[1]) as $nombre) {
-            if (isset($conocidas[$nombre])) {
-                $citadas[$nombre][] = basename(\dirname($fichero)).'/'.basename($fichero);
+        foreach ($tramos[1] as $tramo) {
+            preg_match_all('/(?<![a-z0-9_])[a-z][a-z0-9_]*/', $tramo, $palabras);
+
+            foreach ($palabras[0] as $nombre) {
+                if (isset($conocidas[$nombre]) && ! in_array($guia, $citadas[$nombre] ?? [], true)) {
+                    $citadas[$nombre][] = $guia;
+                }
             }
         }
     }
