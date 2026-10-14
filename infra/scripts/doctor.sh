@@ -813,8 +813,13 @@ check_app_storage() {
 # personales. Solo avisa: eliminarlas es una decision de quien sabe que no hay una
 # restauracion en marcha.
 check_orphan_restore_databases() {
-  local names
-  names="$(compose_current exec -T postgres sh -c "exec psql -U \"\$POSTGRES_USER\" -d postgres -Atq -c \"SELECT datname FROM pg_database WHERE datname ~ '_restore_[0-9]{8}T[0-9]{6}Z\$' AND to_timestamp(substr(right(datname, 16), 1, 8), 'YYYYMMDD') < now() - interval '1 day'\"" 2>/dev/null | tr '\n' ' ')" || return 0
+  local names db
+  db="$(env_value "${CURRENT_ENV}" DB_DATABASE)"
+  db="${db:-fichaje}"
+  [[ "${db}" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || return 0
+  # Anclada a `^<base>_restore_<fecha>$`, como restore.sh: las `<base>_pre_restore_*` son la
+  # base anterior de una vuelta atras (7 dias) y NO se recomienda borrarlas.
+  names="$(compose_current exec -T postgres sh -c "exec psql -U \"\$POSTGRES_USER\" -d postgres -Atq -c \"SELECT datname FROM pg_database WHERE datname ~ '^${db}_restore_[0-9]{8}T[0-9]{6}Z\$' AND to_timestamp(substr(right(datname, 16), 1, 8), 'YYYYMMDD') < now() - interval '1 day'\"" 2>/dev/null | tr '\n' ' ')" || return 0
   names="${names% }"
   [ -z "${names}" ] || check_warn "$(kq_format d_c_orphan_restore_db "${names}")" "$(kq_format d_w_orphan_restore_db "${names}")"
   return 0

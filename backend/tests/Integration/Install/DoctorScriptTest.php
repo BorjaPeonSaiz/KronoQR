@@ -140,3 +140,10 @@ it('con la aplicacion parada juzga los procesos de fondo con la misma gravedad q
         ->and($proceso->getOutput())->toContain('[aviso] Servicio nginx: exited')
         ->and($proceso->getOutput())->toContain('[ok]    Servicio reverb: running');
 })->group('RF-PD-13');
+
+it('las bases huerfanas se buscan ancladas a «<base>_restore_<fecha>» y no casan con las de la vuelta atras (<base>_pre_restore_)', function (): void {
+    $doctor = Repo::contents('infra/scripts/doctor.sh');
+
+    expect($doctor)->toContain("datname ~ '^\${db}_restore_[0-9]{8}T[0-9]{6}Z")
+        ->and($doctor)->not->toContain("datname ~ '_restore_[0-9]");
+})->group('RNF-D-04', 'RF-PD-13');
