@@ -130,6 +130,8 @@ IFS=' ' read -r -a log_services <<<"${K6_LOG_SERVICES}"
 log() { printf '[k6] %s\n' "$1"; }
 
 verdict=0
+# 1 si es ESTE script quien declara la pasada no fiable (no el agregado).
+own_unreliable=0
 
 # Todo lo que no sea «verde» o «rojo» es «no fiable». Sin esta normalizacion, un
 # `node` que falta sale con 127 y quien lea el codigo de salida se inventara que
@@ -158,15 +160,34 @@ tinker() {
     "php artisan tinker --execute=\"include '/tmp/k6/${script}';\""
 }
 
-seconds_of() {
-  case "$1" in
-  *ms) echo $((${1%ms} / 1000)) ;;
-  *s) echo "${1%s}" ;;
-  *m) echo $((${1%m} * 60)) ;;
-  *h) echo $((${1%h} * 3600)) ;;
-  *) echo "$1" ;;
-  esac
-}
+# El analizador de DURATION e INSTANCES, el mismo que usa el workflow.
+# shellcheck source=load-tests/k6/parameters.sh
+. "${script_dir}/parameters.sh"
+
+# --- Los parametros, validados ANTES de cualquier cuenta ---------------------
+
+# Todos acaban en `$(( ))`, que evalua lo que recibe: un valor con forma de
+# expresion ejecutaria lo que llevara dentro. Y todo antes del `trap` de cierre,
+# para que un parametro mal escrito no llegue a tocar la pila.
+for count_name in INSTANCES SCAN_RATE DEVICES_PER_INSTANCE RAMP_SECONDS PIN_PERIOD_SECONDS; do
+  if ! k6_is_count "${!count_name}"; then
+    fail_unreliable "${count_name}=${!count_name} no es un entero sin signo."
+  fi
+
+  # En base 10: sin esto, un «08» seria un octal invalido en la primera cuenta.
+  printf -v "${count_name}" '%d' "$((10#${!count_name}))"
+done
+
+if [ "${INSTANCES}" -lt 1 ] || [ "${SCAN_RATE}" -lt 1 ] || [ "${DEVICES_PER_INSTANCE}" -lt 1 ]; then
+  fail_unreliable "INSTANCES, SCAN_RATE y DEVICES_PER_INSTANCE tienen que ser 1 o mas."
+fi
+
+duration_seconds="$(k6_seconds_of "${DURATION}")" ||
+  fail_unreliable "DURATION=${DURATION} no es una duracion de k6 (120, 120s, 2m, 1h o 500ms)."
+
+if [ "${duration_seconds}" -lt 1 ]; then
+  fail_unreliable "DURATION=${DURATION} es menos de un segundo: no hay meseta que medir."
+fi
 
 # --- Cierre de la pasada, pase lo que pase -----------------------------------
 
@@ -204,8 +225,6 @@ close_out() {
 trap close_out EXIT INT TERM
 
 # --- Geometria de la pasada --------------------------------------------------
-
-duration_seconds="$(seconds_of "${DURATION}")"
 
 log "Pila: docker compose ${K6_COMPOSE_ARGS}"
 
@@ -661,6 +680,7 @@ printf '{"log_matches": %d, "error_event_matches": %s, "services": "%s"}\n' \
 if [ "${log_read_failed}" -eq 1 ] || [ -z "${error_event_hits}" ]; then
   log "MEDIDA NO FIABLE: la comprobacion de la regla dura 21 no pudo leer todas sus fuentes."
   verdict=2
+  own_unreliable=1
 elif [ "${pii_hits}" -gt 0 ] || [ "${error_event_hits}" -gt 0 ]; then
   log "FALLA regla dura 21: ${pii_hits} lineas de registro y ${error_event_hits} filas de error_events"
   log "         con un nombre de la carga. El detalle esta en ${hits_file}, que NO se sube como artefacto."
@@ -673,10 +693,29 @@ fi
 
 log "Resultados en ${results} (summary.json, edge-limits.json, privacy.json, instance-*.csv, instance-*.log)."
 
+# UN 2 DEL AGREGADO NO ES SIEMPRE «NO FIABLE». Si lo unico que falta es una
+# linea base con la misma carga (`not_comparable`, R5-QA-02), la medida es buena
+# y lo que no hay es con que compararla: decir «no fiable» mandaria a repetir
+# una pasada que no hay que repetir. Se lee de summary.json, que es quien lo
+# sabe; si no se puede leer, queda el mensaje generico.
+verdict_kind=""
+
+if [ "${verdict}" -eq 2 ] && [ "${aggregate_exit}" -eq 2 ] && [ "${own_unreliable}" -eq 0 ]; then
+  verdict_kind="$(node -e \
+    "const s = Object.values(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).verdicts).map((v) => v.status); process.stdout.write(s.includes('not_comparable') && !s.includes('unmeasurable') ? 'not_comparable' : '')" \
+    "${results}/summary.json" 2>/dev/null)" || verdict_kind=""
+fi
+
 case "${verdict}" in
 0) log "VEREDICTO: verde." ;;
 1) log "VEREDICTO: rojo." ;;
-*) log "VEREDICTO: no fiable; hay requisitos sin datos suficientes para juzgarlos." ;;
+*)
+  if [ "${verdict_kind}" = "not_comparable" ]; then
+    log "VEREDICTO: no comparable; la linea base se tomo con otra carga (el detalle esta arriba y en summary.json)."
+  else
+    log "VEREDICTO: no fiable; hay requisitos sin datos suficientes para juzgarlos."
+  fi
+  ;;
 esac
 
 exit "$(normalise_exit "${verdict}")"
