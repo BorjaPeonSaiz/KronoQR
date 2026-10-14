@@ -93,13 +93,16 @@ groups:
 
       #------------------------------------------------------------------------
       # Aviso temprano: en noviembre y diciembre debe existir ya la del año
-      # siguiente. No es urgente hoy; lo seria el 1 de enero a las 00:00, que es
+      # siguiente. `on()` es imprescindible: `month()` no lleva etiquetas y sin
+      # ella el `and` no casa nunca con `horizon="next"` (la alerta no habria
+      # saltado jamas, ni en noviembre; hallazgo del simulacro de alertas, V4-DV-3).
+      # No es urgente hoy; lo seria el 1 de enero a las 00:00, que es
       # turno de noche y hotel lleno.
       #------------------------------------------------------------------------
       - alert: ParticionDeAuditoriaDelProximoAnoSinPreparar
         expr: >-
           audit_log_partition_ready{horizon="next"} == 0
-          and month() >= 11
+          and on() month() >= 11
         for: 6h
         labels:
           severity: warning

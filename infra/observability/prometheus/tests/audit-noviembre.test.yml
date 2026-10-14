@@ -1,0 +1,51 @@
+# KronoQR — prueba de calendario de ParticionDeAuditoriaDelProximoAnoSinPreparar
+# (V4-DV-3, R4-DV-07). Va en un fichero aparte porque necesita un
+# `evaluation_interval` de 1 h: llegar a noviembre con evaluaciones de 1 minuto
+# serian 450 000 evaluaciones, y con muestras horarias y evaluaciones cada
+# minuto el `for:` de 6 h nunca se acumularia (entre dos muestras la serie
+# caduca a los 5 minutos y la alerta vuelve a empezar).
+rule_files:
+  - ../rules/audit.yml
+
+evaluation_interval: 1h
+
+tests:
+  #-----------------------------------------------------------------------------
+  # ParticionDeAuditoriaDelProximoAnoSinPreparar. `month() >= 11` exige noviembre
+  # o diciembre. El reloj de `promtool test rules` arranca en el instante Unix 0
+  # (1 de enero de 1970), pero `month()` sigue al `eval_time`: con 7640 h
+  # (318 d y 8 h, el 15 de noviembre de 1970) devuelve 11. Hasta la 2.2.1 este
+  # caso solo existia en negativo —se daba por imposible—, y por eso nadie vio que
+  # la expresion nunca podia disparar: `month()` no lleva etiquetas, y sin
+  # `on()` el `and` no casaba con `horizon="next"`. Alerta muerta desde que se
+  # escribio (V4-DV-3, R4-DV-07).
+  #-----------------------------------------------------------------------------
+  - name: particion_proximo_ano_dispara_en_noviembre
+    interval: 1h
+    input_series:
+      - series: audit_log_partition_ready{horizon="next"}
+        values: "0x7700"
+    alert_rule_test:
+      # 1 de noviembre (dia 304) + 6 h de `for:` = 7302 h: aun pendiente a 7301 h.
+      - eval_time: 7301h
+        alertname: ParticionDeAuditoriaDelProximoAnoSinPreparar
+        exp_alerts: []
+      - eval_time: 7640h
+        alertname: ParticionDeAuditoriaDelProximoAnoSinPreparar
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              destinatario: it-cliente
+              component: audit
+              horizon: next
+            exp_annotations:
+              summary: "No existe la particion de audit_log del año que viene"
+              description: >-
+                La tarea programada la crea a partir de noviembre. Que no
+                exista significa que la tarea no se esta ejecutando o que no
+                puede crearla: comprueba que el scheduler corre y que la
+                migracion 2026_09_29_100000_audit_log_partition_function esta
+                aplicada (la particion la crea esa funcion de la base, ADR-042;
+                se aplica actualizando). Si llega el 1 de enero sin ella, se
+                para el fichaje.
+              runbook_url: docs/runbooks/rotura-cadena-auditoria.md
