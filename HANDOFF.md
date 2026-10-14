@@ -120,6 +120,14 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+### Anotado en el bloque 11 de la 2.2.1 (14-10-2026)
+
+- La semilla de desarrollo escribe sus asientos uno a uno bajo el candado de la cadena: `make seed` pasa de ~13 s a ~90 s y
+  `MigrationsRoundTripTest` paga lo mismo en el job ④. Bajarlo exige asientos en bloque en `DatabaseAuditTrail` (producción).
+- Contrato: `PrintCredentialBatchRequest` dice «solo el centro, y es opcional» pero declara `properties: {}`.
+- La BD de desarrollo `fichaje` arrastra ~19 700 `entry_without_audit` de la semilla antigua; se quitan con `make fresh` +
+  `make seed` (borra los datos). Decisión del propietario.
+
 ### Anotado en los bloques 6 y 7 de la 2.2.1 (13-10-2026)
 
 - `AddShiftEntryHandler` carga con `findWorkDayFor` sin bloqueo: un alta manual simultánea a un cierre del mismo día acaba en
