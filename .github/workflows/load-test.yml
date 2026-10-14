@@ -79,7 +79,9 @@ jobs:
     # Generoso a proposito: construye tres imagenes, instala el paquete
     # completo (mismo coste que el escenario C de `clean-install`) y sostiene
     # la carga durante `duration` (mas un minuto de rampa) en siete escenarios a
-    # la vez. Con INSTANCES=8 y DURATION=120s, medido en frio: 15-20 min.
+    # la vez. Con INSTANCES=3 y DURATION=120s, medido en el bloque 15: unos
+    # 7 min con la cache de capas; con `app_ref` se construye sin ella y tarda
+    # mas.
     timeout-minutes: 50
 
     env:
@@ -90,19 +92,46 @@ jobs:
       # construccion. 3 instancias (18/s) es lo que el runner aguanta con todo
       # medible —RQ-03 y RS-03 con muestras—, y es lo que la linea base usa. Si
       # alguna vez cambia uno, cambia el otro: el paso «Parametros frente a la
-      # linea base» lo avisa antes de gastar veinte minutos.
+      # linea base» compara los cuatro parametros de la carga antes de
+      # construir nada.
       INSTANCES: ${{ github.event.inputs.instances || '3' }}
       DURATION: ${{ github.event.inputs.duration || '120s' }}
+      # La forma de la carga (K6-2 y K6-3), escrita aqui aunque coincida con la
+      # de serie de run.sh: es lo que el paso previo compara con baseline.json,
+      # y un valor que solo existe dentro de run.sh no se puede comparar antes.
+      RAMP_SECONDS: "30"
+      PIN_PERIOD_SECONDS: "4"
 
     steps:
+      - name: "app_ref: una version publicada o un commit de main, nada mas"
+        # Seguridad (revision del bloque 15). `app_ref` decide QUE CODIGO se
+        # construye y se ejecuta en este job. Solo valen dos formas: una
+        # etiqueta de version (vX.Y.Z) o un SHA completo, y en los dos casos se
+        # exige despues que el commit sea antecesor de origin/main. Una rama
+        # cualquiera, un SHA de una bifurcacion o un nombre con caracteres raros
+        # no pasan de aqui.
+        if: inputs.app_ref != ''
+        env:
+          APP_REF: ${{ inputs.app_ref }}
+        run: |
+          set -euo pipefail
+          # [[ =~ ]] y no grep: grep casa linea a linea, y un valor con salto de
+          # linea pasaria por su primera linea.
+          if ! [[ "${APP_REF}" =~ ^(v[0-9]+\.[0-9]+\.[0-9]+|[0-9a-f]{40})$ ]]; then
+            echo "::error title=app_ref no valido::app_ref tiene que ser una etiqueta vX.Y.Z o un SHA completo de 40 caracteres de un commit de main."
+            exit 1
+          fi
+
       # DOS ARBOLES CUANDO SE PIDE `app_ref`. El de la raiz es la APLICACION que
       # se construye, empaqueta e instala; el guion de carga (`load-tests/k6/`)
       # es SIEMPRE el de este commit. Medir v2.2.0 con su propio guion daria una
       # cifra de otra carga —sin rampa y sin PIN— que no se puede comparar con
-      # la de hoy; medirla con el de hoy si.
+      # la de hoy; medirla con el de hoy si. Con `app_ref` la historia entera
+      # (fetch-depth 0): la necesita la comprobacion de antecesor de main.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.app_ref || github.sha }}
+          fetch-depth: ${{ inputs.app_ref != '' && '0' || '1' }}
           persist-credentials: false
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -119,39 +148,64 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${APP_REF}" ]; then
+            app_sha="$(git rev-parse HEAD)"
+            if ! git merge-base --is-ancestor "${app_sha}" origin/main; then
+              echo "::error title=app_ref fuera de main::${APP_REF} (${app_sha}) no es antecesor de origin/main: solo se mide codigo que ya esta en main."
+              exit 1
+            fi
             rm -rf load-tests/k6
             cp -R .harness/load-tests/k6 load-tests/k6
             rm -rf .harness
-            echo "Aplicacion de ${APP_REF} ($(git rev-parse HEAD)) medida con load-tests/k6 de ${HARNESS_SHA}."
+            echo "Aplicacion de ${APP_REF} (${app_sha}) medida con load-tests/k6 de ${HARNESS_SHA}."
           fi
           echo "app=$(git rev-parse HEAD)" >>"${GITHUB_OUTPUT}"
           echo "harness=${HARNESS_SHA}" >>"${GITHUB_OUTPUT}"
 
       - name: Parametros frente a la linea base
-        # Barato y antes de construir nada: si INSTANCES o DURATION no son los
-        # de baseline.json, el agregado dira «no comparable» y no juzgara
-        # RNF-P-02 ni RNF-P-06. Se avisa aqui para que nadie espere veinte
-        # minutos a enterarse. No falla: medir con otros parametros a proposito
-        # es legitimo (p. ej. para regenerar la linea base).
+        # Barato y antes de construir nada. Valida DURATION, INSTANCES y la forma
+        # de la carga con el MISMO analizador que run.sh (parameters.sh: un
+        # valor con forma de expresion no llega a ninguna cuenta de bash) y los
+        # compara con baseline.json. Si alguno no coincide, el agregado dira
+        # «no comparable» y no juzgara RNF-P-02 ni RNF-P-06: se avisa aqui para
+        # que nadie espere veinte minutos a enterarse. Un parametro mal escrito
+        # SI falla; uno distinto de la linea base no, porque medir con otros
+        # parametros a proposito es legitimo (p. ej. para regenerarla).
         run: |
           set -euo pipefail
-          base_instances="$(jq -r '.instances' load-tests/k6/baseline.json)"
-          base_duration="$(jq -r '.duration_seconds' load-tests/k6/baseline.json)"
-          case "${DURATION}" in
-            *s) duration_seconds="${DURATION%s}" ;;
-            *m) duration_seconds="$((${DURATION%m} * 60))" ;;
-            *) duration_seconds="${DURATION}" ;;
-          esac
-          echo "Esta pasada: ${INSTANCES} instancias, ${duration_seconds} s. Linea base: ${base_instances} instancias, ${base_duration} s."
-          if [ "${INSTANCES}" != "${base_instances}" ] || [ "${duration_seconds}" != "${base_duration}" ]; then
-            echo "::warning title=Linea base no comparable::Esta pasada (${INSTANCES} instancias, ${duration_seconds} s) no usa los parametros de baseline.json (${base_instances} instancias, ${base_duration} s): RNF-P-02 y RNF-P-06 saldran «no comparable»."
+          . load-tests/k6/parameters.sh
+          for nombre in INSTANCES RAMP_SECONDS PIN_PERIOD_SECONDS; do
+            if ! k6_is_count "${!nombre}"; then
+              echo "::error title=${nombre} no valido::${nombre}=${!nombre} no es un entero sin signo."
+              exit 1
+            fi
+          done
+          if ! duration_seconds="$(k6_seconds_of "${DURATION}")"; then
+            echo "::error title=DURATION no valida::DURATION=${DURATION} no es una duracion de k6 (120, 120s, 2m, 1h o 500ms)."
+            exit 1
+          fi
+          esta="$(printf '%d %d %d %d' "$((10#${INSTANCES}))" "${duration_seconds}" "$((10#${RAMP_SECONDS}))" "$((10#${PIN_PERIOD_SECONDS}))")"
+          base="$(jq -r '[.instances, .duration_seconds, .ramp_seconds, .pin_period_seconds] | map(if . == null then "n/d" else tostring end) | join(" ")' load-tests/k6/baseline.json)"
+          echo "Instancias, meseta (s), rampa (s) y periodo del PIN (s). Esta pasada: ${esta}. Linea base: ${base}."
+          if [ "${esta}" != "${base}" ]; then
+            echo "::warning title=Linea base no comparable::Esta pasada (${esta}) no usa los parametros de baseline.json (${base}), en el orden instancias, meseta, rampa y periodo del PIN: RNF-P-02 y RNF-P-06 saldran «no comparable»."
           fi
 
       - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+
+      # LA CACHE DE CAPAS SOLO PARA EL CODIGO DE ESTE COMMIT. La cache `gha` es
+      # compartida por ambito con los demas workflows del repositorio, incluido
+      # release.yml. Con `app_ref` se construye otra version: ni se expone el
+      # runtime de la cache ni se le pasa BUILDX_CACHE=gha, asi que esa
+      # construccion no lee ni escribe capas que despues pudiera reutilizar una
+      # publicacion (revision de seguridad del bloque 15). Tarda mas; es el
+      # precio.
       - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+        if: inputs.app_ref == ''
 
       - name: Construir las tres imagenes de entrega
-        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE=gha
+        env:
+          BUILD_CACHE: ${{ inputs.app_ref == '' && 'gha' || '' }}
+        run: make build-ci-images IMAGES="postgres app nginx" BUILDX_CACHE="${BUILD_CACHE}"
 
       - name: "Pool de PHP-FPM contra la imagen real: lo que la etapa de Integracion no puede cubrir"
         # La etapa ④ de `ci.yml` instala PHP directamente en el runner
