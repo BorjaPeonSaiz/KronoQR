@@ -29,8 +29,12 @@
 #     de serie (172.29.0.20/32) y `COMPOSE_PROFILES=observability` (encendida). Es
 #     lo que usa la segunda pasada del ⑧ (escenario G).
 #
+# `--kiosk-vlan CIDR` cambia el rango de quioscos (10.92.0.0/24 por defecto). El
+# escenario G pasa el MISMO de la plantilla, 10.0.20.0/24: un hotel cuya VLAN es
+# justo esa tiene que poder instalar, con aviso y sin fallo (2.2.1, bloque 13).
+#
 # Uso:
-#   prepare-package-env.sh DIRECTORIO [--literal] [--backup-path RUTA] [--http-port N] [--https-port N]
+#   prepare-package-env.sh DIRECTORIO [--literal] [--kiosk-vlan CIDR] [--backup-path RUTA] [--http-port N] [--https-port N]
 #
 # Necesita sudo: el certificado se entrega al uid 101 (nginx sin privilegios).
 # Codigos de salida: 0 correcto · 1 fallo · 2 uso incorrecto.
@@ -53,12 +57,17 @@ BACKUP_PATH="/var/backups/fichaje"
 HTTP_PORT="80"
 HTTPS_PORT="443"
 LITERAL=0
+KIOSK_VLAN="10.92.0.0/24"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
   --literal)
     LITERAL=1
     shift
+    ;;
+  --kiosk-vlan)
+    KIOSK_VLAN="$2"
+    shift 2
     ;;
   --backup-path)
     BACKUP_PATH="$2"
@@ -115,7 +124,7 @@ sed -i \
   -e 's|^APP_ENV=.*|APP_ENV=production|' \
   -e 's|^APP_URL=.*|APP_URL=https://kronoqr.ci.local|' \
   -e 's|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=kronoqr|' \
-  -e 's|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=10.92.0.0/24|' \
+  -e "s|^KIOSK_VLAN_CIDR=.*|KIOSK_VLAN_CIDR=${KIOSK_VLAN}|" \
   -e 's|^TLS_ALLOW_SELF_SIGNED=.*|TLS_ALLOW_SELF_SIGNED=false|' \
   -e "s|^BACKUP_PATH=.*|BACKUP_PATH=${BACKUP_PATH}|" \
   -e "s|^HTTP_PORT=.*|HTTP_PORT=${HTTP_PORT}|" \

@@ -267,12 +267,25 @@ BACKUP_PATH=/var/backups/fichaje
 IMAGE_REGISTRY=ghcr.io/kronoqr
 ```
 
-**The three network values and `APP_URL` cannot be left as they come.** The
-installer **compares against the template** and refuses to install if
-`APP_URL`, `KIOSK_VLAN_CIDR` or `PORTAL_INTERNAL_CIDR` still hold the example
-value. The reason is concrete: with `APP_URL=https://localhost` the system
-starts, every check passes — the final verification probes `127.0.0.1` — and
-**no kiosk can reach it**. Nothing afterwards detects that.
+**`APP_URL` and `PORTAL_INTERNAL_CIDR` cannot be left as they come.** The
+installer **compares against the template** and refuses to install if they
+still hold the example value. The reason is concrete: with
+`APP_URL=https://localhost` the system starts, every check passes — the final
+verification probes `127.0.0.1` — and **no kiosk can reach it**.
+Nothing afterwards detects that.
+
+**`KIOSK_VLAN_CIDR=10.0.20.0/24` is an example too, but it may be your real
+range.** If your kiosk VLAN is exactly that one, leave it: the installer shows
+a `[warn]` saying it matches the template and **goes on installing**. If it is
+not, change it: with a range that does not cover the tablets nothing fails,
+but clocking falls into the request limit meant for the internet and slows
+down at shift change. After installing, check that no tablet is left out:
+
+```bash
+sudo docker compose logs --tail 200 nginx | grep '"from_kiosk_vlan":0'
+```
+
+No line with the IP of a tablet should appear.
 
 **`METRICS_ALLOW_CIDR=172.29.0.20/32` is left as it is.** It is the fixed
 address of Prometheus, the product's own metrics collector, and it is the right

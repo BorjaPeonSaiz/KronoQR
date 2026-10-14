@@ -1910,14 +1910,24 @@ jobs:
           test -z "$(docker volume ls -q --filter name=^kronoqr_)"
 
           bash infra/scripts/package.sh paquete-g
-          bash .github/scripts/prepare-package-env.sh paquete-g --literal
+          # La VLAN de quioscos es la MISMA de la plantilla (2.2.1, bloque 13): un
+          # hotel cuya VLAN es 10.0.20.0/24 la declara tal cual, y el instalador
+          # avisa de que coincide con el ejemplo pero no se niega a instalar.
+          bash .github/scripts/prepare-package-env.sh paquete-g --literal --kiosk-vlan 10.0.20.0/24
           cd paquete-g
           # Lo que la guia deja como viene, tal como viene.
           grep -q '^COMPOSE_PROFILES=observability' .env
           grep -q '^METRICS_ALLOW_CIDR=172.29.0.20/32' .env
+          grep -q '^KIOSK_VLAN_CIDR=10.0.20.0/24$' .env
+          grep -q '^KIOSK_VLAN_CIDR=10.0.20.0/24$' .env.example
 
           sudo ./install.sh | tee salida-g.log
           grep -q 'instalado y verificado' salida-g.log
+          grep -qF '[aviso] KIOSK_VLAN_CIDR=10.0.20.0/24 coincide con el ejemplo de la plantilla' salida-g.log
+          if grep -F '[FALLA]' salida-g.log | grep -q 'KIOSK_VLAN_CIDR'; then
+            echo "KIOSK_VLAN_CIDR igual a la plantilla no puede ser un fallo de la fase 1"
+            exit 1
+          fi
 
       - name: "G · doctor.sh sale sin fallos (avisos si, fallos no)"
         run: |

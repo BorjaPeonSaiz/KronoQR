@@ -785,12 +785,20 @@ check_tls() {
 # Los valores que rellena el cliente.
 #
 # NO BASTA CON QUE NO ESTEN VACIOS. Un `.env` recien copiado los trae con el
-# valor de DESARROLLO —`APP_URL=https://localhost`, la VLAN de ejemplo, la red
-# de Docker Compose— y todos son cadenas no vacias. Con la comprobacion anterior
-# pasaban la fase 1, y la fase 5 los daba por buenos porque sondea 127.0.0.1
-# con `--insecure`: la instalacion se declaraba correcta y ningun quiosco podia
-# llegar a ella. Por eso estas tres se comparan contra la PLANTILLA: si siguen
-# valiendo lo mismo que en `.env.example`, nadie las ha decidido.
+# valor de DESARROLLO —`APP_URL=https://localhost`, la red de Docker Compose— y
+# todos son cadenas no vacias. Con la comprobacion anterior pasaban la fase 1,
+# y la fase 5 los daba por buenos porque sondea 127.0.0.1 con `--insecure`: la
+# instalacion se declaraba correcta y ningun quiosco podia llegar a ella. Por
+# eso estas dos se comparan contra la PLANTILLA: si siguen valiendo lo mismo
+# que en `.env.example`, nadie las ha decidido.
+#
+# `KIOSK_VLAN_CIDR` se compara tambien, pero AVISA en vez de fallar (2.2.1,
+# bloque 13). Su ejemplo, `10.0.20.0/24`, es un rango privado corriente y la
+# VLAN de quioscos de un hotel puede ser exactamente esa: rechazarlo obligaba a
+# un cliente con la red bien declarada a mentir en el `.env` para poder
+# instalar. Y un valor sin decidir no deja el sistema inalcanzable —los
+# quioscos llegan igual—, solo los deja en el limite general de peticiones;
+# por eso el aviso dice como comprobarlo tras instalar.
 #
 # Las otras —`BACKUP_PATH`, `TLS_CERT_DIR` y `METRICS_ALLOW_CIDR`— SI pueden
 # coincidir con la plantilla legitimamente: `/var/backups/fichaje` y `./certs`
@@ -803,7 +811,7 @@ check_tls() {
 check_customer_values() {
   local key value plantilla
 
-  for key in APP_URL KIOSK_VLAN_CIDR PORTAL_INTERNAL_CIDR; do
+  for key in APP_URL PORTAL_INTERNAL_CIDR; do
     value="$(env_value "${ENV_FILE}" "${key}")"
     plantilla="$(env_value "${ENV_TEMPLATE}" "${key}")"
 
@@ -817,6 +825,18 @@ check_customer_values() {
       check_pass "$(kq_format c_env_key "${key}")"
     fi
   done
+
+  value="$(env_value "${ENV_FILE}" "KIOSK_VLAN_CIDR")"
+  plantilla="$(env_value "${ENV_TEMPLATE}" "KIOSK_VLAN_CIDR")"
+  if [ -z "${value}" ]; then
+    check_fail "$(kq_format c_env_missing "KIOSK_VLAN_CIDR")" \
+      "$(kq_format f_env_key "KIOSK_VLAN_CIDR" "${ENV_FILE}")"
+  elif [ -n "${plantilla}" ] && [ "${value}" = "${plantilla}" ]; then
+    check_warn "$(kq_format c_kiosk_vlan_template "${value}")" \
+      "$(kq_format f_kiosk_vlan_template "${value}" "${ENV_FILE}")"
+  else
+    check_pass "$(kq_format c_env_key "KIOSK_VLAN_CIDR")"
+  fi
 
   for key in BACKUP_PATH TLS_CERT_DIR METRICS_ALLOW_CIDR; do
     value="$(env_value "${ENV_FILE}" "${key}")"

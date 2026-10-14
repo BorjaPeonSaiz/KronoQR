@@ -264,12 +264,24 @@ BACKUP_PATH=/var/backups/fichaje
 IMAGE_REGISTRY=ghcr.io/kronoqr
 ```
 
-**Los tres valores de red y `APP_URL` no pueden quedarse como vienen.** El
-instalador **compara con la plantilla** y se niega a instalar si `APP_URL`,
-`KIOSK_VLAN_CIDR` o `PORTAL_INTERNAL_CIDR` siguen con el valor de ejemplo. El
-motivo es concreto: con `APP_URL=https://localhost` el sistema arranca, todas
-las comprobaciones pasan —la verificación final sondea `127.0.0.1`— y **ningún
-quiosco puede llegar a él**. Nada posterior detecta eso.
+**`APP_URL` y `PORTAL_INTERNAL_CIDR` no pueden quedarse como vienen.** El
+instalador **compara con la plantilla** y se niega a instalar si siguen con el
+valor de ejemplo. El motivo es concreto: con `APP_URL=https://localhost` el
+sistema arranca, todas las comprobaciones pasan —la verificación final sondea
+`127.0.0.1`— y **ningún quiosco puede llegar a él**. Nada posterior detecta eso.
+
+**`KIOSK_VLAN_CIDR=10.0.20.0/24` también es un ejemplo, pero puede ser tu
+rango real.** Si la VLAN de tus quioscos es justo esa, déjalo: el instalador
+muestra un `[aviso]` de que coincide con la plantilla y **sigue instalando**.
+Si no lo es, cámbialo: con un rango que no cubre las tablets nada falla, pero
+el fichaje cae al límite de peticiones pensado para internet y se frena en el
+cambio de turno. Tras instalar, comprueba que ninguna tablet queda fuera:
+
+```bash
+sudo docker compose logs --tail 200 nginx | grep '"from_kiosk_vlan":0'
+```
+
+No debe salir ninguna línea con la IP de una tablet.
 
 **`METRICS_ALLOW_CIDR=172.29.0.20/32` se deja tal cual.** Es la dirección fija
 de Prometheus, el recolector de métricas del propio producto, y es el valor

@@ -177,6 +177,57 @@ it('rechaza los valores de ejemplo de la plantilla, que no son de ninguna instal
     borrarPaquete($paquete['dir']);
 })->group('RF-PD-02');
 
+it('acepta, avisando, un KIOSK_VLAN_CIDR real que coincide con el ejemplo de la plantilla', function (string $idioma, string $aviso, string $fallo): void {
+    // 10.0.20.0/24 es un rango privado corriente: la VLAN de quioscos de un
+    // hotel puede ser justo esa. Rechazarla obligaba a falsear el .env para
+    // poder instalar (2.2.1, bloque 13). Un valor sin decidir no deja el
+    // sistema inalcanzable, solo en el limite general: por eso avisa y sigue.
+    $paquete = paqueteDePrueba();
+    $plantilla = (string) file_get_contents($paquete['dir'].'/.env.example');
+    expect($plantilla)->toMatch('/^KIOSK_VLAN_CIDR=10\.0\.20\.0\/24$/m');
+
+    $env = (string) file_get_contents($paquete['env']);
+    $env = (string) preg_replace('/^KIOSK_VLAN_CIDR=.*$/m', 'KIOSK_VLAN_CIDR=10.0.20.0/24', $env);
+    file_put_contents($paquete['env'], $env);
+
+    $resultado = ejecutarInstalador(['--check-only', '--compose-file', $paquete['compose']], ['KRONOQR_LANG' => $idioma]);
+    $salida = $resultado->getOutput();
+
+    // Sale 0 o 2 segun tenga Docker y root la maquina de pruebas; lo que se fija
+    // es que KIOSK_VLAN_CIDR no es uno de los fallos y que el aviso aparece con
+    // la orden para comprobarlo.
+    $lineasDeFallo = array_filter(
+        explode("\n", $salida),
+        static fn (string $linea): bool => str_contains($linea, $fallo),
+    );
+
+    expect($resultado->getExitCode())->toBeIn([0, 2])
+        ->and($salida)->toContain($aviso)
+        ->and($salida)->toContain('from_kiosk_vlan')
+        ->and(implode("\n", $lineasDeFallo))->not->toContain('KIOSK_VLAN_CIDR');
+
+    borrarPaquete($paquete['dir']);
+})->with([
+    'espanol' => ['es', '[aviso] KIOSK_VLAN_CIDR=10.0.20.0/24 coincide con el ejemplo de la plantilla', '[FALLA]'],
+    'ingles' => ['en', '[warn]  KIOSK_VLAN_CIDR=10.0.20.0/24 matches the template example', '[FAIL]'],
+])->group('RF-PD-02');
+
+it('sigue rechazando un KIOSK_VLAN_CIDR vacio', function (): void {
+    // Sin la red de quioscos el borde no arranca: eso si es un fallo.
+    $paquete = paqueteDePrueba();
+
+    $env = (string) file_get_contents($paquete['env']);
+    $env = (string) preg_replace('/^KIOSK_VLAN_CIDR=.*$/m', 'KIOSK_VLAN_CIDR=', $env);
+    file_put_contents($paquete['env'], $env);
+
+    $resultado = ejecutarInstalador(['--check-only', '--compose-file', $paquete['compose']]);
+
+    expect($resultado->getExitCode())->toBe(2)
+        ->and($resultado->getOutput())->toMatch('/\[FALLA\][^\n]*KIOSK_VLAN_CIDR/');
+
+    borrarPaquete($paquete['dir']);
+})->group('RF-PD-02');
+
 it('se niega a instalar en produccion con un certificado autofirmado', function (): void {
     // Con true, el borde se genera uno: las tablets avisarian cada manana y
     // alguien acabaria desactivando la comprobacion. Es el valor por defecto de
