@@ -248,6 +248,25 @@ it('declara las cinco suites de la piramide de pruebas', function (): void {
     }
 })->group('RQ-14');
 
+it('ejecuta la suite completa en local con la misma memoria que la CI', function (): void {
+    // V2-QA-1 (2.2.1): `make test` moria en local con los 256 MB del
+    // contenedor mientras la CI, con 1 GB, terminaba en verde. Una suite que
+    // solo cabe en la CI no se ejecuta antes de abrir la PR. El valor local
+    // vive en TEST_MEMORY_LIMIT y el de la CI en el `ini-values` de la accion
+    // compuesta: si alguien cambia uno sin el otro, esto falla.
+    $makefile = repoContents('Makefile');
+    $toolchain = repoContents('.github/actions/php-toolchain/action.yml');
+
+    preg_match('/^TEST_MEMORY_LIMIT\s*\?=\s*(\S+)\s*$/m', $makefile, $local);
+    preg_match('/^\s*ini-values:.*\bmemory_limit=(\w+)/m', $toolchain, $ci);
+
+    expect($local[1] ?? null)->toBeString('El Makefile no declara TEST_MEMORY_LIMIT.')
+        ->and($ci[1] ?? null)->toBe($local[1] ?? null);
+
+    // Y el objetivo lo aplica de verdad, al proceso que ejecuta las pruebas.
+    expect($makefile)->toMatch('/^test:.*\n(?:.*\n){0,3}\t\$\(RUN_APP\) php -d memory_limit=\$\(TEST_MEMORY_LIMIT\) \$\(PEST\)$/m');
+})->group('RQ-14');
+
 it('ata cada convencion del stack a una herramienta que la verifica', function (): void {
     // RNF-M-06: "se verifican por herramienta en la CI, no por revision humana".
     // Se comprueba que el fichero de configuracion de cada verificador existe;
