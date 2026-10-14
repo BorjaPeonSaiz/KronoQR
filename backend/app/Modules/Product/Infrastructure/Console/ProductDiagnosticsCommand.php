@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Console;
 
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
-use App\Modules\Product\Application\Port\PendingDiagnosticsAudits;
 use App\Modules\Product\Application\Port\ProbeFailureClassifier;
-use App\Modules\Product\Application\Port\StagedDiagnosticsBundle;
+use App\Modules\Product\Application\UseCase\DeliverDiagnosticsBundle;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Application\UseCase\RecordPendingDiagnosticsAudits;
 use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
@@ -80,7 +79,7 @@ final class ProductDiagnosticsCommand extends Command
         SweepExpiredDiagnosticsBundles $sweep,
         Config $config,
         RecordPendingDiagnosticsAudits $recordPending,
-        PendingDiagnosticsAudits $pending,
+        DeliverDiagnosticsBundle $delivery,
         ProbeFailureClassifier $failures,
     ): int {
         $verify = $this->option('verify');
@@ -111,80 +110,32 @@ final class ProductDiagnosticsCommand extends Command
             return $this->notAudited($failure, $options, $failures);
         }
 
-        $path = $this->deliver($writer, $diagnostics, $pending, $bundle);
+        $path = $this->deliver($delivery, $bundle);
 
         return $path === null ? self::FAILURE : $this->report($bundle, $options, $purged, $path);
     }
 
     /**
-     * Escribe el fichero. Con el asiento pendiente, en el orden que cierra la
-     * ventana de «asiento de un paquete que no existe» (V4-PL-1, ADR-020):
-     * primero el paquete entero en un temporal, despues el pendiente y por
-     * ultimo el renombrado, que es atomico. Si el pendiente no se puede
-     * guardar, el temporal se borra y no sale nada.
+     * Deja el fichero en el disco por {@see DeliverDiagnosticsBundle}, que es
+     * quien ordena temporal, pendiente y renombrado (V4-PL-1, ADR-020). Aqui
+     * solo se dice que paso.
      */
-    private function deliver(
-        DiagnosticsBundleWriter $writer,
-        GenerateDiagnosticsBundleHandler $diagnostics,
-        PendingDiagnosticsAudits $pending,
-        DiagnosticsBundle $bundle,
-    ): ?string {
+    private function deliver(DeliverDiagnosticsBundle $delivery, DiagnosticsBundle $bundle): ?string
+    {
         $output = $this->option('output');
 
         try {
-            $staged = $writer->stage($bundle, is_string($output) && $output !== '' ? $output : null);
-        } catch (Throwable $failure) {
-            $this->line('No se ha podido escribir el paquete.');
-            $this->line($failure->getMessage());
-
-            return null;
-        }
-
-        if ($bundle->generationEntryPending() && ! $this->deferred($diagnostics, $writer, $staged, $bundle)) {
-            return null;
-        }
-
-        try {
-            return $writer->publish($staged);
-        } catch (Throwable $failure) {
-            $writer->discard($staged);
-
-            if ($bundle->generationEntryPending()) {
-                // Sin fichero no hay nada que auditar despues: el pendiente de
-                // un paquete que no llego a escribirse seria un asiento falso.
-                $this->forget($pending, $bundle);
-            }
-
-            $this->line('No se ha podido escribir el paquete.');
-            $this->line($failure->getMessage());
-
-            return null;
-        }
-    }
-
-    /**
-     * Guarda el pendiente del asiento. Si no puede, borra el temporal: sin
-     * pendiente, el asiento se perderia, y el paquete no sale.
-     */
-    private function deferred(
-        GenerateDiagnosticsBundleHandler $diagnostics,
-        DiagnosticsBundleWriter $writer,
-        StagedDiagnosticsBundle $staged,
-        DiagnosticsBundle $bundle,
-    ): bool {
-        try {
-            $diagnostics->deferAudit($bundle);
-
-            return true;
-        } catch (Throwable $failure) {
-            $writer->discard($staged);
-
+            return $delivery->handle($bundle, is_string($output) && $output !== '' ? $output : null);
+        } catch (DiagnosticsAuditNotDeferred $failure) {
             $this->line('No se ha generado el paquete: la base de datos no responde y no se ha podido');
             $this->line('guardar la constancia de su generacion para escribirla en la auditoria despues.');
-            $this->line($failure instanceof DiagnosticsAuditNotDeferred ? $failure->getMessage() : 'Error '.$failure::class.'.');
-
-            return false;
+            $this->line($failure->getMessage());
+        } catch (Throwable $failure) {
+            $this->line('No se ha podido escribir el paquete.');
+            $this->line($failure->getMessage());
         }
+
+        return null;
     }
 
     /**
@@ -237,16 +188,6 @@ final class ProductDiagnosticsCommand extends Command
             $this->line('Se han escrito en la auditoria '.$result['recorded'].' asiento(s) pendiente(s) de paquetes');
             $this->line('generados mientras la base de datos no respondia.');
             $this->line('');
-        }
-    }
-
-    private function forget(PendingDiagnosticsAudits $pending, DiagnosticsBundle $bundle): void
-    {
-        try {
-            $pending->remove($bundle->manifest->sha256);
-        } catch (Throwable) {
-            // El asiento de un paquete que no se escribio diria que salio algo
-            // que no salio; si ni siquiera se puede borrar, lo dira doctor.
         }
     }
 

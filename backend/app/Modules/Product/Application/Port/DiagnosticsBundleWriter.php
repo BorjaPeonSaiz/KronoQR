@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Application\Port;
 
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
+use LogicException;
 
 /**
  * Deja el paquete en el disco de la instalacion (`product:diagnostics`).
@@ -17,32 +18,41 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
  * no escribe nada: un fichero por cada clic acumularia datos del cliente en
  * `storage/` sin que nadie los borre. Por consola si se escribe, porque quien
  * ejecuta el comando por SSH necesita una ruta que pasar a `scp`.
+ *
+ * ## En dos pasos, y solo desde `DeliverDiagnosticsBundle`
+ *
+ * No hay `write()` de un paso. Un paquete con el asiento pendiente (ADR-020,
+ * enmienda del 14-10-2026) solo se puede publicar despues de guardar su
+ * pendiente, y eso no puede depender de que quien llama se acuerde: por eso
+ * `publish()` exige el comprobante {@see DeferredAuditReceipt} de ese paquete, y
+ * `DiagnosticsDeliveryTest` (Architecture) exige que solo el caso de uso
+ * `DeliverDiagnosticsBundle` llame a `stage()`, `publish()` y `discard()`.
  */
 interface DiagnosticsBundleWriter
 {
-    /**
-     * @param  string|null  $path  Ruta pedida con `--output`, o nula para el
-     *                             directorio de serie de la instalacion.
-     * @return string La ruta absoluta donde quedo, para decirsela a quien lo pidio.
-     */
-    public function write(DiagnosticsBundle $bundle, ?string $path = null): string;
-
     /**
      * Escribe el paquete entero en un temporal junto a su destino, `0600`, sin
      * publicarlo todavia. El temporal casa con el patron de los paquetes, asi
      * que si el proceso muere antes de publicarlo lo barre la purga por
      * antiguedad.
      *
-     * @param  string|null  $path  Como en {@see self::write()}.
+     * @param  string|null  $path  Ruta pedida con `--output` (fichero o
+     *                             directorio), o nula para el directorio de
+     *                             serie de la instalacion.
      */
     public function stage(DiagnosticsBundle $bundle, ?string $path = null): StagedDiagnosticsBundle;
 
     /**
      * Renombra el temporal a su destino, de forma atomica.
      *
+     * Con el asiento pendiente, **se niega** sin el comprobante de que su
+     * pendiente esta guardado, o con el de otro paquete: lanza y no renombra.
+     *
      * @return string La ruta absoluta donde quedo.
+     *
+     * @throws LogicException
      */
-    public function publish(StagedDiagnosticsBundle $staged): string;
+    public function publish(StagedDiagnosticsBundle $staged, ?DeferredAuditReceipt $receipt = null): string;
 
     /** Borra el temporal de un paquete que no se va a publicar. */
     public function discard(StagedDiagnosticsBundle $staged): void;

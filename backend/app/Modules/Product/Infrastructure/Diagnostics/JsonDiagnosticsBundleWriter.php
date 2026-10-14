@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Infrastructure\Diagnostics;
 
+use App\Modules\Product\Application\Port\DeferredAuditReceipt;
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
 use App\Modules\Product\Application\Port\StagedDiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
+use LogicException;
 use RuntimeException;
 use Throwable;
 
@@ -32,11 +34,6 @@ use Throwable;
 final readonly class JsonDiagnosticsBundleWriter implements DiagnosticsBundleWriter
 {
     public function __construct(private string $defaultDirectory) {}
-
-    public function write(DiagnosticsBundle $bundle, ?string $path = null): string
-    {
-        return $this->publish($this->stage($bundle, $path));
-    }
 
     /**
      * ## El temporal casa con el patron de los paquetes, a proposito
@@ -81,11 +78,22 @@ final readonly class JsonDiagnosticsBundleWriter implements DiagnosticsBundleWri
 
         @chmod($temporary, 0o600);
 
-        return new StagedDiagnosticsBundle($temporary, $target);
+        return new StagedDiagnosticsBundle(
+            temporary: $temporary,
+            target: $target,
+            sha256: $bundle->manifest->sha256,
+            auditPending: $bundle->generationEntryPending(),
+        );
     }
 
-    public function publish(StagedDiagnosticsBundle $staged): string
+    public function publish(StagedDiagnosticsBundle $staged, ?DeferredAuditReceipt $receipt = null): string
     {
+        // ADR-020, enmienda del 14-10-2026: un paquete con el asiento pendiente
+        // no sale sin el comprobante de que SU pendiente esta guardado.
+        if ($staged->auditPending && $receipt?->sha256 !== $staged->sha256) {
+            throw new LogicException('Sin el pendiente del asiento no se puede escribir el paquete.');
+        }
+
         if (! @rename($staged->temporary, $staged->target)) {
             throw new RuntimeException(
                 'No se pudo escribir el paquete de diagnostico en '.$staged->target

@@ -2108,7 +2108,6 @@ final class ProductServiceProvider extends ServiceProvider
                 productVersion: Config::string('app.version'),
                 maxBytes: Config::integer('product.diagnostics_max_bytes'),
                 failures: $app->make(ProbeFailureClassifier::class),
-                pending: $app->make(PendingDiagnosticsAudits::class),
             ),
         );
     }

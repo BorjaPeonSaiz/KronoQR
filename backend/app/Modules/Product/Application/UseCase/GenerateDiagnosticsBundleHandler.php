@@ -5,18 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Port\DiagnosticsCollector;
-use App\Modules\Product\Application\Port\PendingDiagnosticsAudits;
 use App\Modules\Product\Application\Port\ProbeFailureClassifier;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
 use App\Modules\Product\Domain\Event\PersonalDataIncludedInDiagnostics;
-use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\PendingDiagnosticsAudit;
 use App\Modules\Shared\Application\Port\Clock;
-use LogicException;
 use Throwable;
 
 /**
@@ -60,12 +57,10 @@ use Throwable;
  *
  * 1. se vuelve a sellar el paquete con `audit.generation_entry` pendiente,
  *    dentro de su huella;
- * 2. se devuelve el paquete, y **quien llama tiene que** escribirlo en un
- *    temporal, llamar a {@see self::deferAudit()} —que guarda el pendiente en
- *    {@see PendingDiagnosticsAudits} y lanza si no puede— y solo entonces
- *    publicarlo. Ese orden cierra la ventana de un asiento de un paquete que
- *    nunca llego a escribirse (el proceso muere entre el pendiente y el
- *    fichero). Si `deferAudit()` lanza, el paquete no se entrega.
+ * 2. se devuelve el paquete, y lo entrega {@see DeliverDiagnosticsBundle}:
+ *    temporal, pendiente guardado y renombrado, en ese orden. El escritor no
+ *    publica un paquete pendiente sin el comprobante de su pendiente, asi que
+ *    el orden no depende de quien llama.
  *
  * Solo la consola recibe un paquete pendiente: un paquete pedido por el panel
  * o con datos personales nunca se aplaza, asi que `handle()` lanza.
@@ -92,7 +87,6 @@ final readonly class GenerateDiagnosticsBundleHandler
         private string $productVersion,
         private int $maxBytes,
         private ProbeFailureClassifier $failures,
-        private PendingDiagnosticsAudits $pending,
     ) {}
 
     public function handle(DiagnosticsOptions $options, DiagnosticsActor $actor): DiagnosticsBundle
@@ -140,23 +134,6 @@ final readonly class GenerateDiagnosticsBundleHandler
         return $actor === DiagnosticsActor::Console
             && ! $options->includePersonalData
             && $this->failures->unavailableService($failure) === ProbeFailureClassifier::DATABASE;
-    }
-
-    /**
-     * Guarda el pendiente del asiento de un paquete devuelto con la constancia.
-     * Ver el docblock de la clase: se llama con el paquete ya escrito en un
-     * temporal y antes de publicarlo. Lanza si no lo puede guardar, y el
-     * paquete no debe salir.
-     *
-     * @throws DiagnosticsAuditNotDeferred
-     */
-    public function deferAudit(DiagnosticsBundle $bundle): void
-    {
-        if (! $bundle->generationEntryPending()) {
-            throw new LogicException('El paquete no lleva el asiento pendiente: no hay nada que aplazar.');
-        }
-
-        $this->pending->save(PendingDiagnosticsAudit::of($bundle, PendingDiagnosticsAudit::REASON_DATABASE_UNAVAILABLE));
     }
 
     /**
