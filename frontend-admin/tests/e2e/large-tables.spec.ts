@@ -198,6 +198,10 @@ test(
       'aria-rowcount',
       String(REPORT_ROWS + 1),
     )
+
+    // Lo medido al generar se comprueba ANTES de reiniciar el contador para el scroll.
+    expect(await longestTask(page)).toBeLessThan(LONG_TASK_BUDGET_MS)
+
     await region.focus()
     await resetLongTasks(page)
     await region.evaluate((element) => {
@@ -247,6 +251,7 @@ test(
     await expect(page.getByTestId('compliance-finding-row').first()).toBeVisible()
 
     expect(Date.now() - startedAt).toBeLessThan(INTERACTIVE_BUDGET_MS)
+    expect(await longestTask(page)).toBeLessThan(LONG_TASK_BUDGET_MS)
 
     const painted = await page.getByTestId('compliance-finding-row').count()
 
