@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Filas de la bandeja de incidencias (RF-PA-05).
 //
-// VIRTUALIZADA A PARTIR DE UN UMBRAL, igual que `features/live/PresenceTable.vue`
-// (mismo motivo, doc 02 Anexo A: 500 empleados y meses de historico). El
+// VIRTUALIZADA A PARTIR DE UN UMBRAL con `useVirtualRows`, como las demas tablas
+// largas (mismo motivo, doc 02 Anexo A: 500 empleados y meses de historico). El
 // contrato limita `per_page` a 100, asi que en la practica casi nunca se
 // virtualiza dentro de una pagina, pero el componente no depende de eso.
 //
@@ -13,13 +13,13 @@
 // vista pasa `serverNowMs`, nunca se usa `Date.now()` aqui dentro.
 import { formatInstant, formatZoneLabel, minutesBetween } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
-import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { ATTENDANCE_READ } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import type { Incident } from '@/shared/api/types'
+import { useVirtualRows } from '@/shared/virtualization/useVirtualRows'
 import { severityBadgeClass } from './incidentPresentation'
 
 const props = defineProps<{
@@ -31,8 +31,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{ resolve: [incident: Incident] }>()
 
-/** A partir de cuantas filas merece la pena no pintarlas todas. */
-const VIRTUALIZE_FROM = 80
 const ROW_HEIGHT_PX = 84
 
 const { t, locale } = useI18n()
@@ -45,42 +43,13 @@ const canViewWorkday = computed(() => session.can(ATTENDANCE_READ))
 
 const scroller = ref<HTMLElement | null>(null)
 
-const virtual = computed(() => props.entries.length >= VIRTUALIZE_FROM)
+const items = computed(() => props.entries)
 
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: virtual.value ? props.entries.length : 0,
-    getScrollElement: () => scroller.value,
-    estimateSize: () => ROW_HEIGHT_PX,
-    overscan: 10,
-  })),
-)
-
-const visibleRows = computed(() =>
-  virtual.value
-    ? virtualizer.value
-        .getVirtualItems()
-        .map((item) => ({
-          incident: props.entries[item.index],
-          index: item.index,
-          start: item.start,
-          key: String(item.key),
-        }))
-        .filter(
-          (row): row is { incident: Incident; index: number; start: number; key: string } =>
-            row.incident !== undefined,
-        )
-    : props.entries.map((incident, index) => ({
-        incident,
-        index,
-        start: index * ROW_HEIGHT_PX,
-        key: String(incident.id),
-      })),
-)
-
-const totalHeight = computed(() =>
-  virtual.value ? virtualizer.value.getTotalSize() : props.entries.length * ROW_HEIGHT_PX,
-)
+const { visibleRows, totalHeight } = useVirtualRows(items, {
+  rowHeight: ROW_HEIGHT_PX,
+  scroller,
+  key: (incident) => String(incident.id),
+})
 
 const zoneLabel = computed(() =>
   props.entries[0] === undefined
@@ -148,67 +117,67 @@ function detectedAtLabel(incident: Incident): string {
           class="absolute left-0 grid w-full grid-cols-[0.9fr_1.6fr_2fr_1fr_1.5fr_1.2fr_1fr] items-center gap-3 border-b border-kq-border px-3 py-2"
           :style="{ transform: `translateY(${row.start}px)`, height: `${ROW_HEIGHT_PX}px` }"
           data-test="incident-row"
-          :data-incident-id="row.incident.id"
+          :data-incident-id="row.item.id"
         >
           <span role="cell">
             <span
               class="inline-block rounded-full px-3 py-1 text-sm font-semibold"
-              :class="severityBadgeClass(row.incident.severity)"
+              :class="severityBadgeClass(row.item.severity)"
             >
-              {{ t(`incidents.severities.${row.incident.severity}`) }}
+              {{ t(`incidents.severities.${row.item.severity}`) }}
             </span>
           </span>
 
           <span role="cell" class="truncate" data-test="incident-type">
-            {{ t(`incidents.types.${row.incident.type}`) }}
+            {{ t(`incidents.types.${row.item.type}`) }}
           </span>
 
           <span role="cell" class="truncate" data-test="incident-employee">
             <span class="block font-medium">
-              {{ row.incident.employee.full_name }}
+              {{ row.item.employee.full_name }}
               <span class="font-mono text-sm text-kq-text-muted">
-                {{ row.incident.employee.employee_code }}
+                {{ row.item.employee.employee_code }}
               </span>
             </span>
             <span class="block text-sm text-kq-text-muted">
-              {{ row.incident.employee.department?.name ?? t('incidents.table.noDepartment') }}
+              {{ row.item.employee.department?.name ?? t('incidents.table.noDepartment') }}
             </span>
           </span>
 
           <span role="cell">
             <RouterLink
               v-if="canViewWorkday"
-              :to="{ name: 'employee-workdays', params: { uuid: row.incident.employee.uuid } }"
+              :to="{ name: 'employee-workdays', params: { uuid: row.item.employee.uuid } }"
               class="text-kq-primary-strong underline"
             >
-              {{ row.incident.work_date }}
+              {{ row.item.work_date }}
             </RouterLink>
-            <span v-else>{{ row.incident.work_date }}</span>
+            <span v-else>{{ row.item.work_date }}</span>
           </span>
 
           <span role="cell" class="tabular-nums" data-test="incident-age">
-            <span class="block">{{ ageLabel(row.incident) }}</span>
+            <span class="block">{{ ageLabel(row.item) }}</span>
             <span class="block text-sm text-kq-text-muted">
-              {{ t('incidents.table.detectedAt', { moment: detectedAtLabel(row.incident) }) }}
+              {{ t('incidents.table.detectedAt', { moment: detectedAtLabel(row.item) }) }}
             </span>
           </span>
 
           <span role="cell" class="truncate text-kq-text-muted">
-            {{ row.incident.assigned_to?.name ?? t('incidents.table.unassigned') }}
+            {{ row.item.assigned_to?.name ?? t('incidents.table.unassigned') }}
           </span>
 
           <span role="cell">
             <button
-              v-if="row.incident.status === 'open'"
+              v-if="row.item.status === 'open'"
               type="button"
               class="rounded-kq-sm bg-kq-primary-strong px-3 py-2 text-sm font-semibold text-kq-on-primary"
               data-test="resolve-button"
-              @click="emit('resolve', row.incident)"
+              @click="emit('resolve', row.item)"
             >
               {{ t('incidents.table.resolve') }}
             </button>
             <span v-else class="text-sm text-kq-text-muted">
-              {{ t(`incidents.status.${row.incident.status}`) }}
+              {{ t(`incidents.status.${row.item.status}`) }}
             </span>
           </span>
         </div>

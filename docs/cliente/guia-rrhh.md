@@ -1193,6 +1193,18 @@ ausencia, festivos y absentismo no justificado. Qué cuenta exactamente cada una
 —y, sobre todo, **lo que el producto no puede saber** de los días de descanso—
 está en el §5 bis.4. Léelo antes de enseñarle esa última columna a nadie.
 
+**Tablas largas, impresión y búsqueda.** Un informe puede tener hasta 20 000
+filas. Para que el navegador no se quede colgado, la tabla **solo dibuja las filas
+que se ven** y las demás aparecen al desplazarte. La consecuencia es que **la
+impresión del navegador y el «buscar en la página» (Ctrl+F) solo alcanzan lo que
+está dibujado**: imprimir esta pantalla saca unas pocas filas, no el informe.
+Cuando necesites el informe entero —para imprimirlo, para buscar a una persona
+en todo el periodo o para enviarlo—, **descárgalo** en CSV, Excel o PDF: el
+fichero lleva todas las filas (RF-IN-04). La vista de Cumplimiento (§4 bis) también
+dibuja solo lo visible cuando hay muchos avisos, pero **no se descarga**: para
+acotarla usa los filtros de regla y de departamento o un periodo más corto, y
+para el caso de una persona entra por su nombre a su registro.
+
 ### 6.2 La exportación para la Inspección
 
 ![Pantalla de exportación para la Inspección](img/es/rrhh-13-exportacion-legal.png)

@@ -11,12 +11,12 @@
 // servidor que entrega el store, nunca contra el del navegador.
 import { formatZoneLabel, minutesBetween, todayInZone } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
-import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { useSessionStore } from '@/features/auth/session.store'
 import type { LivePresenceEntry } from '@/shared/api/types'
+import { useVirtualRows } from '@/shared/virtualization/useVirtualRows'
 
 const props = defineProps<{
   entries: readonly LivePresenceEntry[]
@@ -25,8 +25,6 @@ const props = defineProps<{
   serverNowMs: number
 }>()
 
-/** A partir de cuantas filas merece la pena no pintarlas todas. */
-const VIRTUALIZE_FROM = 80
 const ROW_HEIGHT_PX = 52
 
 const { t, locale } = useI18n()
@@ -46,42 +44,14 @@ const canReadWorkDays = computed(() =>
 
 const scroller = ref<HTMLElement | null>(null)
 
-const virtual = computed(() => props.entries.length >= VIRTUALIZE_FROM)
+const items = computed(() => props.entries)
 
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: virtual.value ? props.entries.length : 0,
-    getScrollElement: () => scroller.value,
-    estimateSize: () => ROW_HEIGHT_PX,
-    overscan: 12,
-  })),
-)
-
-const visibleRows = computed(() =>
-  virtual.value
-    ? virtualizer.value
-        .getVirtualItems()
-        .map((item) => ({
-          entry: props.entries[item.index],
-          index: item.index,
-          start: item.start,
-          key: String(item.key),
-        }))
-        .filter(
-          (row): row is { entry: LivePresenceEntry; index: number; start: number; key: string } =>
-            row.entry !== undefined,
-        )
-    : props.entries.map((entry, index) => ({
-        entry,
-        index,
-        start: index * ROW_HEIGHT_PX,
-        key: entry.employee_uuid,
-      })),
-)
-
-const totalHeight = computed(() =>
-  virtual.value ? virtualizer.value.getTotalSize() : props.entries.length * ROW_HEIGHT_PX,
-)
+const { visibleRows, totalHeight } = useVirtualRows(items, {
+  rowHeight: ROW_HEIGHT_PX,
+  scroller,
+  key: (entry) => entry.employee_uuid,
+  overscan: 12,
+})
 
 const zoneLabel = computed(() =>
   props.entries[0]?.clocked_in_at
@@ -210,34 +180,34 @@ function originLabel(entry: LivePresenceEntry): string {
           class="absolute left-0 grid w-full grid-cols-[2fr_1.2fr_1fr_1fr_1.4fr] items-center gap-2 border-b border-kq-border px-3"
           :style="{ transform: `translateY(${row.start}px)`, height: `${ROW_HEIGHT_PX}px` }"
           data-test="presence-entry"
-          :data-employee="row.entry.employee_uuid"
-          :data-status="row.entry.status"
+          :data-employee="row.item.employee_uuid"
+          :data-status="row.item.status"
         >
           <span role="cell" class="truncate font-medium" data-test="entry-name">
             <RouterLink
               v-if="canReadWorkDays"
-              :to="workdaysLink(row.entry)"
+              :to="workdaysLink(row.item)"
               class="underline decoration-kq-border-strong underline-offset-2"
               data-test="entry-workdays-link"
-              :aria-label="t('live.table.openWorkDay', { name: row.entry.full_name })"
+              :aria-label="t('live.table.openWorkDay', { name: row.item.full_name })"
             >
-              {{ row.entry.full_name }}
+              {{ row.item.full_name }}
             </RouterLink>
-            <template v-else>{{ row.entry.full_name }}</template>
+            <template v-else>{{ row.item.full_name }}</template>
           </span>
           <span role="cell" class="truncate text-kq-text-muted">
-            {{ row.entry.department?.name ?? t('live.table.noDepartment') }}
+            {{ row.item.department?.name ?? t('live.table.noDepartment') }}
           </span>
           <span role="cell" class="tabular-nums" data-test="entry-since">
-            {{ clockedInLabel(row.entry) }}
+            {{ clockedInLabel(row.item) }}
           </span>
           <span role="cell" class="tabular-nums" data-test="entry-elapsed">
-            {{ elapsedLabel(row.entry) }}
+            {{ elapsedLabel(row.item) }}
           </span>
           <span role="cell" class="truncate text-kq-text-muted" data-test="entry-origin">
-            <template v-if="row.entry.status === 'present'">
-              {{ originLabel(row.entry) }}
-              <template v-if="row.entry.device !== null"> · {{ row.entry.device.name }}</template>
+            <template v-if="row.item.status === 'present'">
+              {{ originLabel(row.item) }}
+              <template v-if="row.item.device !== null"> · {{ row.item.device.name }}</template>
             </template>
             <template v-else>{{ t('live.table.notInside') }}</template>
           </span>

@@ -7,12 +7,12 @@ Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).
 
 ## Qué hay aquí
 
-| Fichero                       | Qué hace                                                                                                                                                                                              |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `compliance.api.ts`           | Cliente tipado de `GET /api/v1/compliance/summary`, con los filtros en camelCase que usa el panel. `undefined` no se serializa: sin filtro no se manda el parámetro.                                  |
-| `compliancePresentation.ts`   | Presentación pura (sin Vue): `HH:MM` de cada hallazgo, si la diferencia es lo que falta o lo que sobra, el motivo de una regla suspendida y el agrupado por regla en el orden de `meta.rules[]`.      |
-| `ComplianceView.vue`          | La pantalla: carga al abrir sin parámetros, filtros de periodo/departamento/regla, cuatro tarjetas con el umbral y el perfil, estados vacío/carga/error, y los criterios tal cual los da el servidor. |
-| `ComplianceFindingsTable.vue` | Los hallazgos, agrupados por regla en tablas semánticas (sin virtualizar: el contrato no pagina esta vista). Enlace al registro de la persona y a la incidencia de la bandeja cuando existe.          |
+| Fichero                       | Qué hace                                                                                                                                                                                                                                                  |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compliance.api.ts`           | Cliente tipado de `GET /api/v1/compliance/summary`, con los filtros en camelCase que usa el panel. `undefined` no se serializa: sin filtro no se manda el parámetro.                                                                                      |
+| `compliancePresentation.ts`   | Presentación pura (sin Vue): `HH:MM` de cada hallazgo, si la diferencia es lo que falta o lo que sobra, el motivo de una regla suspendida y el agrupado por regla en el orden de `meta.rules[]`.                                                          |
+| `ComplianceView.vue`          | La pantalla: carga al abrir sin parámetros, filtros de periodo/departamento/regla, cuatro tarjetas con el umbral y el perfil, estados vacío/carga/error, y los criterios tal cual los da el servidor.                                                     |
+| `ComplianceFindingsTable.vue` | Los hallazgos, agrupados por regla en una región enfocable por regla (`ComplianceFindingsGroupTable.vue`, VIRTUALIZADA desde 80 filas: el contrato no pagina esta vista). Enlace al registro de la persona y a la incidencia de la bandeja cuando existe. |
 
 ## Por qué no hay store de Pinia ni `useQuery` para el propio resumen
 

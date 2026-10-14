@@ -1,8 +1,7 @@
 // Cuentas de gestion (RF-ID-10). Todas las formas salen del contrato.
 //
-// Los campos `actor_*` (reautenticacion de quien actua) y el `reason` del
-// restablecimiento de contrasena los anade la revision de seguridad del 12c; los
-// tipos generados los traeran cuando el contrato los declare.
+// Los campos `actor_*` (reautenticacion de quien actua, revision de seguridad del
+// 12c) y el `reason` de cada accion ya los declara el contrato.
 //
 // Las contrasenas temporales que devuelven `createManagementAccount` y
 // `resetManagementAccountPassword` existen en claro SOLO en esa respuesta: quien
@@ -16,6 +15,7 @@ import type {
   ManagementAccountProvisioned,
   ManagementAccountStatus,
   ManagementRole,
+  ResetManagementPasswordRequest,
   ResetManagementTwoFactorRequest,
   TemporaryPasswordIssued,
 } from '@/shared/api/types'
@@ -68,7 +68,7 @@ export function deactivateManagementAccount(
 
 export function resetManagementAccountPassword(
   uuid: string,
-  body: ResetManagementTwoFactorRequest & ActorReauth,
+  body: ResetManagementPasswordRequest & ActorReauth,
 ): Promise<TemporaryPasswordIssued> {
   return requestJson<TemporaryPasswordIssued>(
     `/api/v1/management-accounts/${uuid}/password/reset`,

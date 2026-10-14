@@ -25,7 +25,7 @@ import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { EMPLOYEES_MANAGE } from '@/features/auth/abilities'
@@ -83,7 +83,8 @@ const grouping = ref<ReportGrouping>('employee')
 const departmentFilter = ref<number | ''>('')
 const includeOpenShifts = ref(false)
 
-const report = ref<PeriodReport | null>(null)
+// `shallowRef`: hasta 20 000 filas que nadie muta; el proxy profundo de `ref` solo suma coste.
+const report = shallowRef<PeriodReport | null>(null)
 const loading = ref(false)
 const error = ref<unknown>(null)
 
@@ -522,15 +523,9 @@ const fieldClass =
         :description="t('reports.period.empty.description')"
       />
 
-      <div
-        v-else
-        tabindex="0"
-        role="region"
-        :aria-label="t('reports.table.caption', { timeZone: report.meta.time_zone })"
-        class="mt-4 overflow-x-auto"
-      >
-        <PeriodReportTable :rows="report.data" :time-zone="report.meta.time_zone" />
-      </div>
+      <!-- El contenedor con desplazamiento (region enfocable y con nombre) vive
+           en la tabla: es el que virtualiza las filas (V5-PA-1, AX7-01). -->
+      <PeriodReportTable v-else :rows="report.data" :time-zone="report.meta.time_zone" />
 
       <!-- Los criterios, tal cual los da el servidor. No se reordenan ni se
            resumen: son parte del informe (`/informe-nuevo`, paso 1). -->
