@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Product\Infrastructure\Logging\RedactPersonalData;
 use App\Support\Observability\Logging\AddCorrelation;
+use App\Support\Observability\Logging\ContainerLogChannel;
 use App\Support\Observability\Logging\LogChannelStack;
 use App\Support\Observability\Logging\LokiLogChannel;
 use Monolog\Formatter\JsonFormatter;
@@ -184,6 +185,43 @@ return [
             ],
             'formatter' => JsonFormatter::class,
             'processors' => [PsrLogMessageProcessor::class],
+            'tap' => [AddCorrelation::class, RedactPersonalData::class],
+        ],
+
+        /*
+         * LAS TAREAS PROGRAMADAS EN SEGUNDO PLANO (V4-BE-1, RNF-D-02, regla
+         * dura 21). Lo usa `App\Support\Scheduling\ScheduledTaskOutput`, desde
+         * `schedule:finish`, para dejar en el log del contenedor `scheduler` la
+         * salida de cada tarea y su codigo de salida.
+         *
+         * La pila del producto con `stderr` cambiado por `scheduler-container`
+         * ({@see LogChannelStack::forScheduler()}): `schedule:finish` corre con
+         * su error tirado a `/dev/null` y alli `stderr` no llega a nadie.
+         *
+         * `ignore_exceptions` A `true`, al reves que en `stack`: un fallo al
+         * escribir esta linea no puede impedir que corran los demas callbacks de
+         * la tarea —el `onFailure()` de `scheduler.command_failed` va detras— ni
+         * que se libere su candado. El tap de saneado se declara aunque la pila
+         * herede el de cada canal: deja uno solo y el ultimo.
+         */
+        'scheduler' => [
+            'driver' => 'stack',
+            'channels' => LogChannelStack::forScheduler($stack),
+            'ignore_exceptions' => true,
+            'tap' => [RedactPersonalData::class],
+        ],
+
+        /*
+         * El log del contenedor visto desde un proceso cuya salida no llega a
+         * el: `/proc/1/fd/2`, la salida de error de `schedule:work`. Si no se
+         * puede abrir, escribe por la salida de error propia. Ver
+         * {@see ContainerLogChannel}.
+         */
+        LogChannelStack::SCHEDULER_PRIMARY => [
+            'driver' => 'custom',
+            'via' => ContainerLogChannel::class,
+            'stream' => '/proc/1/fd/2',
+            'level' => env('LOG_LEVEL', 'debug'),
             'tap' => [AddCorrelation::class, RedactPersonalData::class],
         ],
 
