@@ -234,6 +234,7 @@ KQ_MSG_ES[u_f_rollback_restore]="restore.sh ha salido con %d (%s) y NO se ha res
 KQ_MSG_ES[u_rollback_relaunch]="Relanzando la version %s desde %s."
 KQ_MSG_ES[u_f_rollback_relaunch]="la version %s no ha arrancado sana tras restaurar."
 KQ_MSG_ES[u_rollback_verify_ok]="La version %s responde: %s"
+KQ_MSG_ES[u_rollback_lifted_only]="ACTUALIZACION DESHECHA. Solo estaba puesto el mantenimiento y se ha retirado: la instalacion sigue en la version %s con sus datos, sin tocar. Informe: %s."
 KQ_MSG_ES[u_rollback_done]="VUELTA ATRAS COMPLETADA. La instalacion esta operativa en la version %s con los datos de la copia previa. Los fichajes hechos durante la ventana siguen en las colas de los quioscos y entraran ahora. Envia el informe %s al fabricante para saber por que fallo antes de reintentar."
 KQ_MSG_ES[u_rollback_incomplete]="VUELTA ATRAS INCOMPLETA. NO SE TOCA NADA MAS: hace falta una persona delante.
 
@@ -549,6 +550,7 @@ KQ_MSG_EN[u_f_rollback_restore]="restore.sh exited %d (%s) and the backup was NO
 KQ_MSG_EN[u_rollback_relaunch]="Relaunching version %s from %s."
 KQ_MSG_EN[u_f_rollback_relaunch]="version %s did not come up healthy after restoring."
 KQ_MSG_EN[u_rollback_verify_ok]="Version %s answers: %s"
+KQ_MSG_EN[u_rollback_lifted_only]="UPDATE UNDONE. Only maintenance mode was on and it has been lifted: the installation stays at version %s with its data, untouched. Report: %s."
 KQ_MSG_EN[u_rollback_done]="ROLLBACK COMPLETED. The installation is operational at version %s with the data of the pre-update backup. Clockings made during the window are still in the kiosk queues and will come in now. Send the report %s to the manufacturer to learn why it failed before retrying."
 KQ_MSG_EN[u_rollback_incomplete]="ROLLBACK INCOMPLETE. NOTHING ELSE IS TOUCHED: a person is needed.
 

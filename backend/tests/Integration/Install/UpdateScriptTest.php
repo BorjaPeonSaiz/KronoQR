@@ -666,6 +666,18 @@ it('in place, la vuelta atras que solo tenia que retirar el mantenimiento tampoc
         ->and($env)->toMatch('/^IMAGE_DIGEST_PHP=$/m');
 })->group('RF-PD-10');
 
+it('una interrupcion por señal vuelve atras y LO DICE en la salida de error, con el mismo codigo de salida (V3-PL-01)', function (): void {
+    // El defecto: la vuelta atras funcionaba pero la persona no veia nada. Las
+    // lineas finales salen por la salida de error (y por /dev/tty si existe) y
+    // el codigo sigue siendo 4.
+    $proceso = inPlaceParadoAntesDeMigrar('STEP=2; rollback_and_die "$(kq_format u_interrupted INT)" interrupted');
+
+    expect($proceso->getExitCode())->toBe(4, $proceso->getErrorOutput())
+        ->and($proceso->getErrorOutput())->toContain('senal INT')
+        ->and($proceso->getErrorOutput())->toContain('ACTUALIZACION DESHECHA')
+        ->and($proceso->getErrorOutput())->toContain('Salida 4');
+})->group('RF-PD-10', 'RNF-D-04');
+
 it('exige que el rol de la aplicacion no escriba en migrations tras migrar, y no tras restaurar una copia anterior (V4-SC-1)', function (): void {
     // Tras migrar a la 2.2.0 la migracion que lo revoca ya esta aplicada: si el
     // rol sigue pudiendo escribir en `migrations`, se deshace. Tras restaurar, la

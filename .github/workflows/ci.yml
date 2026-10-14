@@ -2643,6 +2643,67 @@ jobs:
           mapfile -t informes < <(sudo sh -c 'ls /var/backups/fichaje/reports/update-*.log /var/log/kronoqr/update-*.log')
           bash .github/scripts/assert-no-secrets.sh paquete-anterior/.env paquete-nuevo/salida-u3.log "${informes[@]}"
 
+      - name: "U3 · Senal durante la actualizacion (SIGINT en la fase de migracion): vuelta atras, el mensaje en pantalla y salida 4 (V3-PL-01)"
+        if: steps.anterior.outputs.skip != 'true'
+        # Una actualizacion interrumpida (Ctrl+C, corte de SSH, `kill`) vuelve atras
+        # sola, y ahora LO DICE: las lineas finales van a la salida de error (y a
+        # /dev/tty si existe). Se separan stdout y stderr a proposito: el mensaje tiene
+        # que estar en el segundo.
+        #
+        # Es SIGINT, la que mas se manda a mano. Bash IGNORA SIGINT en lo que lanza con
+        # `&` desde un guion y una disposicion ignorada al arrancar no se puede atrapar;
+        # `perl` la deja en su valor por defecto antes de `exec`. Se manda al `bash` de
+        # update.sh y no a `sudo`, que es el proceso con los traps (como el escenario J).
+        #
+        # Va entre la vuelta atras de U3 y su reintento: la instalacion esta en la
+        # version anterior y la imagen de borde de la nueva sigue rota, asi que, si la
+        # senal NO surtiera efecto, la actualizacion fallaria igualmente por el borde
+        # y con la misma salida 4 pero SIN la linea «senal INT», que es lo que se exige.
+        run: |
+          set -euo pipefail
+          old="${{ steps.anterior.outputs.old_version }}"
+          cd paquete-nuevo
+          perl -e '$SIG{INT} = "DEFAULT"; exec @ARGV' \
+            sudo bash -c 'exec bash ./update.sh' >salida-u3s.log 2>err-u3s.log &
+          lanzador=$!
+          en_fase_4=0
+          for _ in $(seq 1 600); do
+            if grep -q 'Paso 4 de 7' salida-u3s.log; then
+              en_fase_4=1
+              break
+            fi
+            estado="$(ps -o stat= -p "${lanzador}" 2>/dev/null || true)"
+            case "${estado}" in
+              '' | Z*) break ;;
+            esac
+            sleep 0.5
+          done
+          if [ "${en_fase_4}" -ne 1 ]; then
+            set +e
+            wait "${lanzador}"
+            codigo=$?
+            set -e
+            cat salida-u3s.log err-u3s.log
+            echo "update.sh no llego al paso 4 (salio con ${codigo}): no hay migracion que interrumpir."
+            exit 1
+          fi
+          sudo pkill -INT -f '^bash \./update\.sh'
+          set +e
+          wait "${lanzador}"
+          codigo=$?
+          set -e
+          echo "--- stdout"; tail -25 salida-u3s.log
+          echo "--- stderr"; cat err-u3s.log
+          test "${codigo}" -eq 4 || { echo "Se esperaba salida 4 (vuelta atras completada) y fue ${codigo}"; exit 1; }
+          grep -q 'senal INT' err-u3s.log || { echo "La salida de error no dice que la actualizacion se interrumpio por SIGINT"; exit 1; }
+          grep -q 'VUELTA ATRAS COMPLETADA' err-u3s.log || { echo "La salida de error no dice que se ha vuelto atras"; exit 1; }
+          grep -q 'Salida 4' err-u3s.log
+          cd ..
+          curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${old}\""
+          curl -fsS -k https://127.0.0.1/api/v1/ready >/dev/null
+          sudo docker compose --env-file paquete-anterior/.env -f paquete-anterior/docker-compose.yml \
+            exec -T app php artisan compliance:verify-audit-chain
+
       - name: "U3 · Y tras la vuelta atras se puede reintentar: salida 0"
         if: steps.anterior.outputs.skip != 'true'
         run: |

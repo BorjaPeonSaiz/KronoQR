@@ -310,6 +310,19 @@ err() {
   report_append "$*"
 }
 
+# Lineas FINALES de la vuelta atras (V3-PL-01). Ademas de la salida de error van a
+# /dev/tty si existe y la salida de error no es ya esa terminal: tras un Ctrl+C o
+# un corte de SSH la tuberia (`| tee`) a la que apuntaba la salida estandar puede
+# haber muerto, y la persona se quedaria sin saber que se ha vuelto atras. Nunca
+# falla: sin terminal (cron, CI) no hace nada mas.
+err_final() {
+  err "$*"
+  if [ ! -t 2 ]; then
+    { printf '%s\n' "$*" >/dev/tty; } 2>/dev/null || true
+  fi
+  return 0
+}
+
 # Solo al detalle: una linea de contexto entre volcados.
 detail_note() {
   [ -n "${DETAIL_WORK}" ] || return 0
@@ -2922,8 +2935,8 @@ rollback_incomplete_maintenance() {
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "$1" "$(kq_text u_report_needs_person)")"
   FINAL_STATE="${SOURCE_VERSION}"
   err ""
-  err "$(kq_format u_rollback_incomplete_maintenance "${SOURCE_VERSION}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}")"
-  err "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
+  err_final "$(kq_format u_rollback_incomplete_maintenance "${SOURCE_VERSION}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}" "${CURRENT_ENV}" "${CURRENT_COMPOSE}")"
+  err_final "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
   close_report "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
   exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
 }
@@ -2932,12 +2945,12 @@ rollback_incomplete() {
   ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "$1" "$(kq_text u_report_needs_person)")"
   FINAL_STATE="?"
   err ""
-  err "$(kq_format u_rollback_incomplete \
+  err_final "$(kq_format u_rollback_incomplete \
     "${ENV_FILE}" "${COMPOSE_FILE}" \
     "${ENV_FILE}" "${COMPOSE_FILE}" "${BACKUP_FILE}" \
     "${SOURCE_VERSION}" "${ROLLBACK_ENV}" "${ROLLBACK_COMPOSE}" \
     "${CFG_HTTPS_PORT}" "${SOURCE_VERSION}")"
-  err "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
+  err_final "$(kq_format exit_line "${KQ_EXIT_ROLLBACK_INCOMPLETE}" "$(kq_exit_name "${KQ_EXIT_ROLLBACK_INCOMPLETE}")")"
   close_report "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
   exit "${KQ_EXIT_ROLLBACK_INCOMPLETE}"
 }
@@ -2961,7 +2974,7 @@ rollback_and_die() {
   failed_step="$(resolve_failed_step)"
 
   heading "$(kq_text u_phase_6)"
-  err "$(kq_format u_rollback_reason "${reason}")"
+  err_final "$(kq_format u_rollback_reason "${reason}")"
 
   if [ "${ROLLBACK_ARMED}" -le 1 ]; then
     # Solo el mantenimiento estaba puesto: retirarlo deja todo como estaba.
@@ -2969,7 +2982,8 @@ rollback_and_die() {
       settle_in_place_env
       ROLLBACK_SUMMARY="$(kq_format u_report_rollback "${STEP}" "${reason}" "$(kq_text u_report_ok)")"
       FINAL_STATE="${SOURCE_VERSION}"
-      err "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
+      err_final "$(kq_format u_rollback_lifted_only "${SOURCE_VERSION}" "${REPORT_FILE:-?}")"
+      err_final "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
       close_report "${KQ_EXIT_ROLLED_BACK}"
       exit "${KQ_EXIT_ROLLED_BACK}"
     fi
@@ -3190,8 +3204,8 @@ rollback_and_die() {
   settle_in_place_env
 
   err ""
-  err "$(kq_format u_rollback_done "${SOURCE_VERSION}" "${REPORT_FILE:-?}")"
-  err "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
+  err_final "$(kq_format u_rollback_done "${SOURCE_VERSION}" "${REPORT_FILE:-?}")"
+  err_final "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
   close_report "${KQ_EXIT_ROLLED_BACK}"
   exit "${KQ_EXIT_ROLLED_BACK}"
 }
