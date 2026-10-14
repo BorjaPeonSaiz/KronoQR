@@ -574,8 +574,10 @@ check_backup_wal() {
 
 # V5-DV-05. ¿Salen las copias del servidor? La promesa de perder como mucho 15
 # minutos (doc 05) solo vale si BACKUP_PATH y el archivo del WAL no comparten
-# disco con los datos de Docker y de PostgreSQL. Se compara el dispositivo
-# (`stat -c %d`, lib/offsite.sh) o se mira si el destino es de red. Es SIEMPRE un
+# disco FISICO con los datos de Docker y de PostgreSQL. Se resuelve el disco de
+# origen de cada ruta (findmnt + lsblk -s, que atraviesa particiones, LVM y md;
+# lib/offsite.sh) y se comparan discos, no sistemas de ficheros: una particion o
+# un volumen logico del mismo disco NO cuenta como fuera. Un destino de red si. Es SIEMPRE un
 # aviso, nunca un fallo: el cliente puede sacar las copias por su cuenta. Sin root
 # no se ve /var/lib/docker: entonces se avisa de que no se ha podido comprobar,
 # no se adivina.
@@ -595,7 +597,7 @@ check_backup_offsite() {
   fi
 
   for dest in "${backup_path}" "${backup_path}/wal"; do
-    state="$(kq_offsite_state "${dest}" "${refs[@]+"${refs[@]}"}")"
+    state="$(kq_offsite_state_host "${dest}" "${refs[@]+"${refs[@]}"}")"
     case "${state}" in
     local) same+=("${dest}") ;;
     unknown) unknown+=("${dest}") ;;

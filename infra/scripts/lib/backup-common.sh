@@ -488,17 +488,19 @@ EOF
 # el mismo disco que el de Docker: se compara el dispositivo de BACKUP_PATH (y de
 # su `wal/`) con el de ese volumen, o se mira si el destino es de red. Es un AVISO
 # que lee `product:doctor` (sonda `backup.offsite`); doctor.sh hace la medida
-# completa desde el anfitrion. -1 = no se pudo medir.
+# completa, por disco fisico, desde el anfitrion. Desde aqui solo se ve el sistema
+# de ficheros: 2 = red, 1 = otro sistema de ficheros (no se sabe si otro disco), 0 =
+# el mismo, -1 = no se pudo medir.
 emit_offsite_metrics() {
   local ref="${KQ_OFFSITE_REFERENCE_PATH:-/var/www/html/storage/app}" dest wal
   dest="$(kq_offsite_value "$(kq_offsite_state "$BACKUP_PATH" "$ref")")"
   wal="$(kq_offsite_value "$(kq_offsite_state "${BACKUP_PATH}/wal" "$ref")")"
 
   cat <<EOF
-# HELP kronoqr_backup_destination_offsite Las copias salen del servidor: 1 si, 0 mismo disco que los datos, -1 sin medir.
+# HELP kronoqr_backup_destination_offsite Destino de copias frente a los datos: 2 red, 1 otro sistema de ficheros (no se sabe si otro disco), 0 el mismo, -1 sin medir.
 # TYPE kronoqr_backup_destination_offsite gauge
 kronoqr_backup_destination_offsite ${dest}
-# HELP kronoqr_backup_wal_offsite El archivo del WAL sale del servidor: 1 si, 0 mismo disco que los datos, -1 sin medir.
+# HELP kronoqr_backup_wal_offsite Archivo del WAL frente a los datos: 2 red, 1 otro sistema de ficheros (no se sabe si otro disco), 0 el mismo, -1 sin medir.
 # TYPE kronoqr_backup_wal_offsite gauge
 kronoqr_backup_wal_offsite ${wal}
 EOF

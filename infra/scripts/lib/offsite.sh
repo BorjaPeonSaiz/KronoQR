@@ -8,23 +8,31 @@
 #
 # POR QUE. La promesa de «perder como mucho 15 minutos» (doc 05) vale SIEMPRE QUE
 # LAS COPIAS Y EL WAL SALGAN DEL SERVIDOR. Si BACKUP_PATH vive en el mismo disco
-# que los datos de PostgreSQL y de Docker, el dia que ese disco se pierde se
-# pierden la base y todas las copias juntas. Nada lo detecta solo: las copias se
-# hacen, se verifican y se restauran —en el mismo disco— hasta que el disco muere.
+# FISICO que los datos de PostgreSQL y de Docker, el dia que ese disco se pierde
+# se pierden la base y todas las copias juntas. Nada lo detecta solo: las copias
+# se hacen, se verifican y se restauran —en el mismo disco— hasta que muere.
 #
-# QUE SE CONSIDERA «FUERA»:
-#   · un sistema de ficheros de RED (NFS, SMB/CIFS, Ceph...): otra maquina;
-#   · un DISPOSITIVO DISTINTO del de los datos (`stat -c %d`): otro disco. Protege
-#     de la averia del disco, no del robo ni del incendio: la guia lo dice.
-# Lo que NO sale es un destino en el MISMO dispositivo que los datos.
+# DOS MEDIDAS, CON DOS NIVELES DE CERTEZA (no se mezclan):
+#
+#  1. Desde el CONTENEDOR (backup.sh, kq_offsite_state): solo se ve el sistema de
+#     ficheros. `stat -c %d` distingue sistemas de ficheros, NO discos: una
+#     particion, un volumen logico de LVM, un subvolumen de btrfs o un dataset de
+#     ZFS del mismo disco fisico tienen dispositivos distintos. Por eso:
+#       network   2   sistema de ficheros de RED (NFS, SMB...): otra maquina. Fuera.
+#       other_fs  1   otro sistema de ficheros que los datos. NO se sabe si es otro
+#                     disco: se remite a doctor.sh.
+#       local     0   el mismo sistema de ficheros que los datos. No sale.
+#       unknown  -1   no se pudo medir.
+#  2. Desde el ANFITRION (doctor.sh, kq_offsite_state_host): se resuelve el disco
+#     fisico de origen (findmnt + lsblk -s, que atraviesa particiones, LVM y md) y
+#     se comparan discos, no sistemas de ficheros:
+#       offsite   red, o discos fisicos distintos de todas las referencias
+#       local     comparte algun disco fisico con los datos
+#       unknown   ZFS, btrfs sin dispositivo, sin findmnt/lsblk o sin root: no se
+#                 adivina
 #
 # Es un AVISO, nunca un fallo: el cliente puede sacar las copias por su cuenta
 # (rsync a otra maquina, cinta, nube europea) y este script no puede saberlo.
-#
-# Estados, que son tambien el valor de la metrica kronoqr_backup_*_offsite:
-#   offsite   1   red, o dispositivo distinto de todas las referencias
-#   local     0   el mismo dispositivo que alguna referencia
-#   unknown  -1   no se pudo medir (ruta ilegible o sin referencia)
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -57,17 +65,15 @@ kq_fs_is_network() {
   return 1
 }
 
-# kq_offsite_state DESTINO [REFERENCIA...] → offsite | local | unknown
+# Medida 1, desde el contenedor: network | other_fs | local | unknown.
 #
-# Una referencia que no existe o no se puede leer (p. ej. /var/lib/docker sin ser
-# root) se ignora; si no queda ninguna y el destino no es de red, «unknown»: no se
-# adivina.
+# kq_offsite_state DESTINO [REFERENCIA...]
 kq_offsite_state() {
   local dest="$1" dest_dev ref ref_dev measured=0
   shift
 
   if kq_fs_is_network "$(kq_fs_type "${dest}")"; then
-    printf 'offsite'
+    printf 'network'
     return 0
   fi
 
@@ -89,7 +95,7 @@ kq_offsite_state() {
   done
 
   if [ "${measured}" -eq 1 ]; then
-    printf 'offsite'
+    printf 'other_fs'
   else
     printf 'unknown'
   fi
@@ -98,8 +104,86 @@ kq_offsite_state() {
 # Estado → valor de la metrica.
 kq_offsite_value() {
   case "$1" in
-  offsite) printf '1' ;;
+  network) printf '2' ;;
+  other_fs) printf '1' ;;
   local) printf '0' ;;
   *) printf -- '-1' ;;
   esac
+}
+
+#------------------------------------------------------------------------------
+# Medida 2, desde el anfitrion: discos fisicos.
+#------------------------------------------------------------------------------
+
+# Origen del montaje que contiene la ruta (`/dev/mapper/vg-lv`, `/dev/sda2`,
+# `pool/dataset`, `tmpfs`...), sin el `[/subvolumen]` que findmnt anade en btrfs.
+# Funcion aparte para poder sustituirla en las pruebas.
+kq_mount_source() {
+  local path source
+  path="$(kq_existing_ancestor "$1")"
+  command -v findmnt >/dev/null 2>&1 || return 0
+  source="$(findmnt -no SOURCE -T "${path}" 2>/dev/null | head -n 1 || true)"
+  printf '%s' "${source%%\[*}"
+}
+
+# Discos fisicos (uno por linea) bajo un dispositivo de bloques: `lsblk -s` sube
+# por particiones, LVM y md hasta el disco. Funcion aparte por lo mismo.
+kq_block_disks() {
+  command -v lsblk >/dev/null 2>&1 || return 0
+  lsblk -nrs -o NAME,TYPE "$1" 2>/dev/null | awk '$2 == "disk" || $2 == "loop" {print $1}' || true
+}
+
+# Discos fisicos de la ruta, ordenados y sin repetidos, uno por linea. Vacio si no
+# se pueden determinar (ZFS, tmpfs, sin permisos, herramientas ausentes).
+kq_physical_disks() {
+  local source
+  source="$(kq_mount_source "$1")"
+  case "${source}" in
+  /dev/*) kq_block_disks "${source}" | sort -u ;;
+  esac
+}
+
+# kq_offsite_state_host DESTINO [REFERENCIA...] → offsite | local | unknown
+#
+# Red = fuera. Si ALGUN disco del destino coincide con alguno de una referencia:
+# local, aunque otra referencia no se haya podido resolver. Si no coincide ninguno
+# pero alguna referencia (o el destino) no existe o no se pudo resolver: unknown.
+kq_offsite_state_host() {
+  local dest="$1" dest_disks ref ref_disks unresolved=0 disk other
+  shift
+
+  if kq_fs_is_network "$(kq_fs_type "${dest}")"; then
+    printf 'offsite'
+    return 0
+  fi
+
+  dest_disks="$(kq_physical_disks "${dest}")"
+  if [ -z "${dest_disks}" ]; then
+    printf 'unknown'
+    return 0
+  fi
+
+  for ref in "$@"; do
+    [ -n "${ref}" ] || continue
+    ref_disks=""
+    [ ! -e "${ref}" ] || ref_disks="$(kq_physical_disks "${ref}")"
+    if [ -z "${ref_disks}" ]; then
+      unresolved=1
+      continue
+    fi
+    while IFS= read -r disk; do
+      while IFS= read -r other; do
+        if [ "${disk}" = "${other}" ]; then
+          printf 'local'
+          return 0
+        fi
+      done <<<"${ref_disks}"
+    done <<<"${dest_disks}"
+  done
+
+  if [ "${unresolved}" -eq 1 ] || [ "$#" -eq 0 ]; then
+    printf 'unknown'
+  else
+    printf 'offsite'
+  fi
 }
