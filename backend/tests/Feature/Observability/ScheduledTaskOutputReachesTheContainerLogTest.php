@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Product\Infrastructure\Logging\RedactPersonalDataProcessor;
 use App\Support\Observability\Logging\ContainerLogChannel;
 use App\Support\Observability\Logging\LogChannelStack;
+use App\Support\Scheduling\LogScheduledCommandFailure;
 use App\Support\Scheduling\ScheduledTaskOutput;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Console\Kernel;
@@ -105,6 +106,28 @@ it('lleva al log del contenedor la salida saneada y el resumen de la tarea', fun
 
     unlink($log);
 })->group('RNF-D-02', 'RL-08');
+
+it('scheduler.command_failed llega al log del contenedor detras del resumen', function (): void {
+    // Hasta V4-BE-1 iba por el canal por defecto, que en schedule:finish acaba
+    // en /dev/null: solo llegaba a Loki.
+    $log = scheduledTaskOutputContainerLog();
+
+    $task = ScheduledTaskOutput::summaryOnly(resolve(Schedule::class)->command('attendance:reconcile')->runInBackground());
+    $task->onFailure(LogScheduledCommandFailure::of('attendance:reconcile', $task));
+    file_put_contents($task->output, "divergencia en 0190a1b2-0000-7000-8000-000000000001\n");
+    $task->exitCode = 1;
+
+    $task->callAfterCallbacks(app());
+
+    $lines = scheduledTaskOutputLines($log);
+
+    expect(array_column($lines, 'message'))->toBe(['scheduler.task_finished', 'scheduler.command_failed'])
+        ->and($lines[1]['level_name'])->toBe('ERROR')
+        ->and($lines[1]['context'])->toBe(['command' => 'attendance:reconcile', 'exit_code' => 1])
+        ->and((string) file_get_contents($log))->not->toContain('0190a1b2');
+
+    unlink($log);
+})->group('RNF-D-02', 'RF-PR-02', 'RL-08');
 
 it('con summaryOnly el log del contenedor no lleva la salida', function (): void {
     $log = scheduledTaskOutputContainerLog();

@@ -20,15 +20,16 @@ use Monolog\Processor\PsrLogMessageProcessor;
  * `schedule:finish`, y Laravel lanza ese proceso con su salida y su error
  * redirigidos a `/dev/null` (`CommandBuilder::buildBackgroundCommand()`, sin
  * forma de cambiarlo). Todo lo que ese proceso escribiera por el canal
- * `stderr` —el apunte `scheduler.command_failed` incluido— se perdia: solo
- * llegaba a Loki, y solo si la instalacion lo tiene.
+ * `stderr` se perdia: solo llegaba a Loki, y solo si la instalacion lo tiene.
+ * Por eso escriben por aqui, a traves del canal `scheduler`, tanto la salida
+ * de las tareas (`ScheduledTaskOutput`) como el apunte
+ * `scheduler.command_failed` (`LogScheduledCommandFailure`).
  *
  * El log del contenedor es la salida de error de su proceso principal: en
  * `scheduler`, `php artisan schedule:work`, PID 1 porque el *entrypoint* hace
  * `exec`. `/proc/1/fd/2` es ese mismo descriptor, y cualquier proceso del
  * contenedor con el mismo usuario puede abrirlo y escribir: lo que se escribe
- * ahi es lo que `docker compose logs scheduler` ensena y lo que el paquete de
- * diagnostico lee.
+ * ahi es lo que ensena `docker compose logs scheduler`.
  *
  * ## Por que con `cat` y no con `fopen()`
  *
