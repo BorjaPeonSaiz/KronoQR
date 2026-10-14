@@ -998,6 +998,7 @@ function analyse(results, options = {}) {
   if (baselineNotComparable) {
     baselineReport = {
       comparable: false,
+      differences: mismatchText,
       note: `NO COMPARABLE (${mismatchText}): no se compara con la linea base`,
       regression: null,
     }
@@ -1313,7 +1314,7 @@ function formatReport(summary) {
     // Antes que «no fiable»: es la causa mas concreta, y la que dice que hacer.
     say(
       `VEREDICTO: no comparable. ${notComparable.map(([requirement]) => requirement).join(', ')} se ` +
-        `juzgan contra la linea base y esta se tomo con otra carga (${summary.baseline?.note ?? 'n/d'}). ` +
+        `juzgan contra la linea base y esta se tomo con otra carga (${summary.baseline?.differences ?? 'n/d'}). ` +
         'Mide con sus mismos parametros o regenera baseline.json con esta pasada.' +
         (unmeasurable.length > 0
           ? ` Ademas, sin datos suficientes para ${unmeasurable.map(([requirement]) => requirement).join(', ')}.`

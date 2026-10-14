@@ -804,7 +804,10 @@ test('[R5-QA-02] el veredicto legible dice «no comparable» y no «no fiable»'
   const report = formatReport(summary)
 
   assert.match(report, /NOCMP RNF-P-02: NO COMPARABLE/)
-  assert.match(report, /VEREDICTO: no comparable\. RNF-P-02, RNF-P-06 se juzgan contra la linea base/)
+  assert.match(
+    report,
+    /VEREDICTO: no comparable\. RNF-P-02, RNF-P-06 se juzgan contra la linea base y esta se tomo con otra carga \(instancias: 3 frente a 8\)\./,
+  )
   assert.doesNotMatch(report, /VEREDICTO: no fiable/)
 })
 
