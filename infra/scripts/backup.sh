@@ -227,6 +227,7 @@ kronoqr_backup_last_size_bytes{type="${tipo}"} ${tamano}
 kronoqr_backup_copies_total{type="dump"} $(contar_copias)
 EOF
     emit_volume_metrics
+    emit_offsite_metrics
   } | write_metrics "${BACKUP_DIR_METRICS}/kronoqr_backup_run.prom"
 }
 

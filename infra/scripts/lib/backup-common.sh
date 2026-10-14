@@ -52,6 +52,8 @@ readonly BACKUP_COMMON_DIR
 . "${BACKUP_COMMON_DIR}/fs.sh"
 # shellcheck source=kqe.sh disable=SC1091
 . "${BACKUP_COMMON_DIR}/kqe.sh"
+# shellcheck source=offsite.sh disable=SC1091
+. "${BACKUP_COMMON_DIR}/offsite.sh"
 
 # Cifrado en reposo de las copias (RL-12) y su autenticidad (R5-DV-04).
 #
@@ -478,6 +480,27 @@ kronoqr_backup_volume_free_bytes ${libre}
 # HELP kronoqr_backup_volume_free_ratio Fraccion libre del destino de copias.
 # TYPE kronoqr_backup_volume_free_ratio gauge
 kronoqr_backup_volume_free_ratio ${ratio}
+EOF
+}
+
+# ¿Salen las copias y el WAL del servidor? (V5-DV-05). Desde el contenedor
+# `scheduler` no se ve el volumen de PostgreSQL, pero SI `app-storage`, que vive en
+# el mismo disco que el de Docker: se compara el dispositivo de BACKUP_PATH (y de
+# su `wal/`) con el de ese volumen, o se mira si el destino es de red. Es un AVISO
+# que lee `product:doctor` (sonda `backup.offsite`); doctor.sh hace la medida
+# completa desde el anfitrion. -1 = no se pudo medir.
+emit_offsite_metrics() {
+  local ref="${KQ_OFFSITE_REFERENCE_PATH:-/var/www/html/storage/app}" dest wal
+  dest="$(kq_offsite_value "$(kq_offsite_state "$BACKUP_PATH" "$ref")")"
+  wal="$(kq_offsite_value "$(kq_offsite_state "${BACKUP_PATH}/wal" "$ref")")"
+
+  cat <<EOF
+# HELP kronoqr_backup_destination_offsite Las copias salen del servidor: 1 si, 0 mismo disco que los datos, -1 sin medir.
+# TYPE kronoqr_backup_destination_offsite gauge
+kronoqr_backup_destination_offsite ${dest}
+# HELP kronoqr_backup_wal_offsite El archivo del WAL sale del servidor: 1 si, 0 mismo disco que los datos, -1 sin medir.
+# TYPE kronoqr_backup_wal_offsite gauge
+kronoqr_backup_wal_offsite ${wal}
 EOF
 }
 
