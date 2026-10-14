@@ -205,4 +205,11 @@ useDefault = true
     #    que el quiosco descarta un `site_time_zone` que `Intl` no reconoce. La regla
     #    `generic-api-key` la captura por el nombre de la constante, no por su forma.
     '''^Marte/Olympus$''',
+    # 33) backend/tests/Feature/Product/DiagnosticsWithDatabaseDownTest.php (V4-PL-1,
+    #    bloque 12 de la 2.2.1): la contraseña MARCADOR que la prueba pone en la conexion
+    #    de PostgreSQL caida para afirmar que no aparece en el paquete, el pendiente, la
+    #    salida ni el log. Ninguna base la tiene; ya esta en commits subidos de la rama y
+    #    por eso entra aqui y no basta con cambiarla. La version vigente usa un marcador
+    #    sin forma de clave.
+    '''^kq_clave_marcador_9Xz$''',
   ]

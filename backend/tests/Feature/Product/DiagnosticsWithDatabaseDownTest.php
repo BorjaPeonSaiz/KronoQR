@@ -50,7 +50,7 @@ const DIAGNOSTICS_DB_DOWN_PERSONAL = [
 
 const DIAGNOSTICS_DB_DOWN_CREDENTIALS = [
     'username' => 'kq_usuario_marcador',
-    'password' => 'kq_clave_marcador_9Xz',
+    'password' => 'contrasena-marcador-de-la-prueba',
     'host' => '127.0.0.1',
     'database' => 'kq_base_marcador',
 ];
