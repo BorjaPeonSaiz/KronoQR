@@ -23,8 +23,19 @@ use Symfony\Component\Finder\Finder;
  */
 final class TagScanner
 {
-    /** `it('nombre')`, `test('nombre')`, `describe('nombre')`. */
-    private const string DECLARATION = '/\b(?:it|test|describe)\s*\(\s*[\'"](?<name>[^\'"\n]*)[\'"]/u';
+    /**
+     * `it('nombre')`, `test("nombre")`, `describe(`nombre`)`, tambien con el
+     * nombre en la linea siguiente a la del parentesis.
+     *
+     * Cada delimitador cierra SOLO con el suyo (`(?|…)` reinicia la numeracion,
+     * asi que las tres ramas llenan el mismo `name`). Hasta la 2.2.1 la clase
+     * era `[\'"]…[^\'"]*…[\'"]`: no reconocia la plantilla con acento grave de
+     * las pruebas generadas en un `for`, ni una cadena con comillas del otro
+     * tipo dentro, y esas pruebas heredaban el nombre del `test('…')` anterior
+     * del fichero (V1-QA-1). La interpolacion `${…}` se deja tal cual: el nombre
+     * de la matriz dice que la prueba se repite por variante.
+     */
+    private const string DECLARATION = '/\b(?:it|test|describe)\s*\(\s*(?|\'(?<name>[^\'\n]*)\'|"(?<name>[^"\n]*)"|`(?<name>[^`\n]*)`)/u';
 
     /** `->group('RN-05', 'RF-AT-08')` y `#[Group('RN-05')]`. */
     private const string PEST_TAG = '/(?:->\s*group|#\[\s*Group)\s*\(\s*(?<args>[^)]*)\)/u';

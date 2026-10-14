@@ -257,6 +257,25 @@ it('atribuye cada etiqueta al nombre de su prueba', function (): void {
     expect($tests[0]->name)->toBe('no parte el turno a medianoche');
 })->group('RQ-13');
 
+it('atribuye la etiqueta de Playwright a su prueba aunque el nombre no vaya entre comillas simples', function (string $literal, string $nombre): void {
+    // V1-QA-1 de la 2.2.1: el escaner solo reconocia nombres entre `'` o `"` sin
+    // ninguna comilla dentro, y a las pruebas generadas en un `for` —nombre en
+    // plantilla— les atribuia el `test('…')` anterior del fichero. La matriz se
+    // entrega como evidencia: el peor escenario offline de RN-21 figuraba con el
+    // nombre de otra prueba.
+    $root = scannerFixture('generadas.spec.ts', FakeTestSource::playwright('la prueba de antes', 'RF-KI-03')
+        .FakeTestSource::playwrightMultiline($literal, 'RN-21'));
+
+    $scan = scanOf($root, 'playwright')->byRequirement();
+
+    expect($scan['RN-21'][0]->name)->toBe($nombre)
+        ->and($scan['RF-KI-03'][0]->name)->toBe('la prueba de antes');
+})->with([
+    'plantilla con acento grave' => ['`el peor escenario (${server.name})`', 'el peor escenario (${server.name})'],
+    'comillas dobles con simples dentro' => ['"muestra el aviso \'sin red\'"', "muestra el aviso 'sin red'"],
+    'comillas simples con dobles dentro' => ['\'muestra el aviso "sin red"\'', 'muestra el aviso "sin red"'],
+])->group('RQ-13');
+
 /*
  * k6, el tercer formato del §9.6 (tarea 3.6, decision 11).
  *
