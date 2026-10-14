@@ -2830,6 +2830,17 @@ Conviene saberlo antes de lanzarla, no después.
 - Los **empleados sintéticos** («Carga k6 NNNN») y su departamento «Carga k6».
 - Los **fichajes** que generó y el histórico que sembró para que las consultas
   trabajen con volumen realista.
+- Sus **asientos en el registro de auditoría** (`audit_log`), que es solo de
+  añadir y no se puede limpiar. En una pasada quedan: `device.paired` y
+  `device.revoked` de los quioscos sintéticos y `pin.issued` o `pin.reset` de
+  los empleados que fichan por PIN, los cuatro con actor `system`;
+  `shift_entry.created` y `shift_entry.closed` de cada fichaje, con el quiosco
+  como actor; y `personal_data.accessed` de las lecturas del panel, con la
+  cuenta «Responsable carga k6» como actor. La primera pasada añade
+  `department.created` del departamento «Carga k6» y, si la instalación no
+  tenía centro, `site.created`. **No dejan asiento** la emisión y la revocación de
+  las tarjetas de la pasada ni la desactivación de esa cuenta: la herramienta
+  las escribe directamente en la base, no por el panel.
 
 Se quedan porque borrarlos exigiría que el producto supiera borrar registros de
 jornada, y **el producto no borra nada**: las correcciones crean versiones

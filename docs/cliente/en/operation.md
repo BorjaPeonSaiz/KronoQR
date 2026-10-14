@@ -2869,6 +2869,17 @@ Worth knowing before launching it, not afterwards.
 - The **synthetic employees** ("Carga k6 NNNN") and their "Carga k6" department.
 - The **clock-ins** it generated and the history it seeded so that the queries
   work with realistic volume.
+- Its **entries in the audit log** (`audit_log`), which is append-only and
+  cannot be cleaned. A run leaves: `device.paired` and `device.revoked` for the
+  synthetic kiosks and `pin.issued` or `pin.reset` for the employees who clock
+  in by PIN, all four with actor `system`; `shift_entry.created` and
+  `shift_entry.closed` for every clock-in, with the kiosk as actor; and
+  `personal_data.accessed` for the panel reads, with the "Responsable carga k6"
+  account as actor. The first run adds `department.created` for the "Carga k6"
+  department and, if the installation had no site, `site.created`.
+  **No entry is left** for issuing and revoking the run's cards or for
+  deactivating that account: the tool writes them straight into the database,
+  not through the panel.
 
 They stay because deleting them would require the product to know how to delete
 attendance records, and **the product deletes nothing**: corrections create new
