@@ -88,10 +88,7 @@ final class ContractCoverage
         $statements = self::topLevelStatements(self::significantTokens($source));
         $helpers = self::helperRequests($statements, $operations);
         $loaders = self::contractLoaders($statements);
-        $everywhere = array_filter(
-            $statements,
-            static fn (array $tokens): bool => ($tokens[0][1] ?? '') === 'beforeEach' && self::loadsContract($tokens, $loaders),
-        ) !== [];
+        $everywhere = self::loadsEverywhere($statements, $loaders);
         $validated = [];
 
         foreach ($statements as $tokens) {
@@ -101,6 +98,81 @@ final class ContractCoverage
         }
 
         return array_values(array_unique($validated));
+    }
+
+    /**
+     * ¿Valida contra el contrato el cuerpo de UNA prueba de este fichero?
+     *
+     * Es el criterio que usa `TestLevelGateTest` para dar a una prueba de
+     * feature el nivel «contrato» (RQ-14), y vive aqui para que las dos puertas
+     * no puedan divergir: el cuerpo llama a `assertValidResponse` —o a una
+     * funcion ayudante del fichero que lo hace— **y** el contrato esta cargado,
+     * por un `beforeEach` del fichero, por el propio cuerpo o por un ayudante al
+     * que llama. Sin lo segundo la asercion pasa sin comprobar nada.
+     *
+     * El cuerpo puede llegar cortado (desde el `it(` hasta la linea de su
+     * etiqueta): se tokeniza tal cual, que para buscar llamadas basta.
+     */
+    public static function bodyValidatesContract(string $fileSource, string $body): bool
+    {
+        $statements = self::topLevelStatements(self::significantTokens($fileSource));
+        $loaders = self::contractLoaders($statements);
+        $tokens = self::significantTokens("<?php\n".$body);
+
+        return self::callsValidation($tokens, self::validatingHelpers($statements))
+            && (self::loadsEverywhere($statements, $loaders) || self::loadsContract($tokens, $loaders));
+    }
+
+    /**
+     * ¿Carga el contrato un `beforeEach` del fichero?
+     *
+     * @param  list<list<array{0: int, 1: string}>>  $statements
+     * @param  list<string>  $loaders
+     */
+    private static function loadsEverywhere(array $statements, array $loaders): bool
+    {
+        return array_filter(
+            $statements,
+            static fn (array $tokens): bool => ($tokens[0][1] ?? '') === 'beforeEach' && self::loadsContract($tokens, $loaders),
+        ) !== [];
+    }
+
+    /**
+     * Las funciones de primer nivel del fichero que llaman a `assertValidResponse`.
+     *
+     * @param  list<list<array{0: int, 1: string}>>  $statements
+     * @return list<string>
+     */
+    private static function validatingHelpers(array $statements): array
+    {
+        $helpers = [];
+
+        foreach ($statements as $tokens) {
+            if (($tokens[0][1] ?? '') === 'function' && ($tokens[1][0] ?? 0) === T_STRING && self::callsValidation($tokens, [])) {
+                $helpers[] = $tokens[1][1];
+            }
+        }
+
+        return $helpers;
+    }
+
+    /**
+     * ¿Llaman los tokens a `assertValidResponse`, o a una de las funciones dadas?
+     *
+     * @param  list<array{0: int, 1: string}>  $tokens
+     * @param  list<string>  $helpers
+     */
+    private static function callsValidation(array $tokens, array $helpers): bool
+    {
+        foreach (array_keys($tokens) as $i) {
+            $called = self::calledFunctionAt($tokens, $i);
+
+            if (self::isMethodCall($tokens, $i, 'assertValidResponse') || ($called !== null && \in_array($called, $helpers, true))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

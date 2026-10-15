@@ -32,18 +32,35 @@ beforeEach(function (): void {
 
 const UNKNOWN_INPUT_REJECTED_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90';
 
-it('responde con el 422 del contrato a un campo que la operacion no admite', function (string $metodo, string $ruta, string $campo): void {
+/**
+ * La peticion con un campo que la operacion no admite, desde una sesion de
+ * administracion, y el `422` del contrato con el nombre del campo.
+ */
+function campoDesconocido(string $metodo, string $ruta, string $campo): void
+{
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
         ->call($metodo, $ruta, [$campo => 'x'])
         ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
         ->assertJsonStructure(['errors' => [$campo]]);
+}
+
+// Un dataset por requisito: la etiqueta de un dataset se aplica a todas sus
+// filas, y mezclar quioscos y PIN inflaria la matriz de trazabilidad.
+
+it('responde con el 422 del contrato a un campo que la operacion de quioscos no admite', function (string $metodo, string $ruta, string $campo): void {
+    campoDesconocido($metodo, $ruta, $campo);
 })->with([
     'lista de quioscos, por la consulta' => ['GET', '/api/v1/devices', 'status'],
     'desvincular un quiosco' => ['POST', '/api/v1/devices/'.UNKNOWN_INPUT_REJECTED_UUID.'/unpair', 'reason'],
+])->group('RF-PD-06');
+
+it('responde con el 422 del contrato a un campo que la operacion del PIN no admite', function (string $metodo, string $ruta, string $campo): void {
+    campoDesconocido($metodo, $ruta, $campo);
+})->with([
     'restablecer el PIN' => ['POST', '/api/v1/employees/'.UNKNOWN_INPUT_REJECTED_UUID.'/pin/reset', 'pin'],
     'registrar la entrega del PIN' => ['POST', '/api/v1/employees/'.UNKNOWN_INPUT_REJECTED_UUID.'/pin/deliver', 'delivered_by'],
-])->group('RF-PD-06', 'RF-ID-09');
+])->group('RF-ID-09');
 
 it('responde con el 422 del contrato a un campo en el alta del segundo factor', function (): void {
     // Con la sesion pendiente de segundo factor, que es la unica que puede pedir

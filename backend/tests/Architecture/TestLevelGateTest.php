@@ -7,6 +7,7 @@ use App\Console\Commands\Quality\Support\Requirement;
 use App\Console\Commands\Quality\Support\RequirementCatalog;
 use App\Console\Commands\Quality\Support\TaggedTest;
 use App\Console\Commands\Quality\Support\TagScanner;
+use Tests\Architecture\Support\ContractCoverage;
 use Tests\Architecture\Support\Repo;
 
 /*
@@ -305,47 +306,30 @@ function testLevelGateLevelsOf(TaggedTest $test): array
  * solo tenian el contrato prestado (ver {@see testLevelGateKnownGaps()}).
  *
  * El cuerpo de la prueba va desde su `it(`/`test(` hasta la linea de su
- * etiqueta, que es donde la situa el escaner. Cuenta tambien la llamada a una
- * funcion **del mismo fichero** que valida (`ficharConDesfase()` en
- * `ClockSkewIncidentTest`), porque es como se escriben muchas: un nivel de
- * indireccion y solo en el fichero. Un ayudante de `tests/Support` que validara
- * no contaria; hoy no hay ninguno.
+ * etiqueta, que es donde la situa el escaner. **El criterio es el de
+ * {@see ContractCoverage::bodyValidatesContract()}**, el mismo que usa
+ * `ContractResponseCoverageTest` (revision del bloque 16 de la 2.2.1): cuenta
+ * la llamada a una funcion del mismo fichero que valida (`ficharConDesfase()`
+ * en `ClockSkewIncidentTest`), y exige que el contrato este cargado con
+ * `Spectator::using()`, porque sin el la asercion pasa sin comprobar nada.
  */
 function testLevelGateValidatesContract(TaggedTest $test): bool
 {
+    /** @var array<string, array{source: string, lines: list<string>}> $files */
     static $files = [];
 
     $file = \dirname(__DIR__, 3).'/'.$test->file;
-    $files[$file] ??= testLevelGateContractShapeOf((string) @file_get_contents($file));
+
+    if (! isset($files[$file])) {
+        $source = (string) @file_get_contents($file);
+        $files[$file] = ['source' => $source, 'lines' => explode("\n", $source)];
+    }
 
     $preceding = array_slice($files[$file]['lines'], 0, $test->line);
     $starts = array_keys(array_filter($preceding, static fn (string $line): bool => preg_match('/^\s*(it|test)\(/', $line) === 1));
     $body = implode("\n", array_slice($preceding, $starts === [] ? 0 : max($starts)));
 
-    $calls = array_filter(
-        $files[$file]['validatingHelpers'],
-        static fn (string $helper): bool => preg_match('/\b'.preg_quote($helper, '/').'\(/', $body) === 1,
-    );
-
-    return str_contains($body, 'assertValidResponse') || $calls !== [];
-}
-
-/**
- * Las lineas de un fichero de pruebas y sus funciones de primer nivel que
- * validan contra el contrato.
- *
- * @return array{lines: list<string>, validatingHelpers: list<string>}
- */
-function testLevelGateContractShapeOf(string $source): array
-{
-    preg_match_all('/^function\s+(\w+)\s*\(.*?^\}/ms', $source, $functions, PREG_SET_ORDER);
-
-    $helpers = array_values(array_map(
-        static fn (array $function): string => $function[1],
-        array_filter($functions, static fn (array $function): bool => str_contains($function[0], 'assertValidResponse')),
-    ));
-
-    return ['lines' => explode("\n", $source), 'validatingHelpers' => $helpers];
+    return ContractCoverage::bodyValidatesContract($files[$file]['source'], $body);
 }
 
 /**

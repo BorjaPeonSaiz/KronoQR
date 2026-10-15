@@ -203,3 +203,16 @@ it('resuelve la ruta con texto literal antes que la del parametro, como el route
         ->and(ContractCoverage::match('DELETE', '/api/v1/employees/x', CONTRACT_RESPONSE_COVERAGE_OPS))
         ->toBeNull();
 })->group('RQ-06');
+
+it('da el nivel contrato a una prueba solo si valida y el contrato esta cargado, el mismo criterio que TestLevelGateTest', function (): void {
+    $cuerpo = "it('a', function (): void {\n    Api::as(\$t)->get('/api/v1/employees')->assertValidResponse(200);\n";
+    $sinContrato = "<?php\n\n".$cuerpo.'});';
+    $conContrato = "<?php\n\nbeforeEach(function (): void {\n    Spectator::using('openapi.yaml');\n});\n\n".$cuerpo.'});';
+    $conAyudante = "<?php\n\nfunction fichar(): void\n{\n    Spectator::using('openapi.yaml');\n    Api::as('t')->post('/api/v1/scan', [])->assertValidResponse(200);\n}\n\n"
+        ."it('b', function (): void {\n    fichar();\n});";
+
+    expect(ContractCoverage::bodyValidatesContract($sinContrato, $cuerpo))->toBeFalse()
+        ->and(ContractCoverage::bodyValidatesContract($conContrato, $cuerpo))->toBeTrue()
+        ->and(ContractCoverage::bodyValidatesContract($conContrato, "it('c', function (): void {\n    \$x->assertOk();\n"))->toBeFalse()
+        ->and(ContractCoverage::bodyValidatesContract($conAyudante, "it('b', function (): void {\n    fichar();\n"))->toBeTrue();
+})->group('RQ-06', 'RQ-14');
