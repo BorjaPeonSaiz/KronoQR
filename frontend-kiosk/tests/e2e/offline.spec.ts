@@ -272,7 +272,11 @@ test(
   { tag: ['@RF-KI-04'] },
   async ({ page }) => {
     await page.route('**/api/v1/scan', async (route) => route.abort('failed'))
-    await stubBatchApi(page)
+    // El lote contesta 503: el fichaje se CONSERVA para reintento y el indicador
+    // lo sigue contando. Con un lote que lo consolida (200), `pending` pasa de 1 a 0
+    // en cuanto el reintento sale y la prueba solo pasaba si el sondeo caia en esa
+    // ventana: mide el indicador, no la carrera con la sincronizacion.
+    await stubBatchApi(page, 503)
 
     await page.goto('/')
 

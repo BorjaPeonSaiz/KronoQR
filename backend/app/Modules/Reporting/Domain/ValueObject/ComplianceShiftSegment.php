@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\ValueObject\ElapsedMinutes;
 use DateTimeImmutable;
 
 /**
@@ -37,6 +38,8 @@ final readonly class ComplianceShiftSegment
      */
     public function minutes(): int
     {
-        return intdiv($this->clockedOutAt->getTimestamp() - $this->clockedInAt->getTimestamp(), 60);
+        // RN-09 con la regla unica del producto. La salida nunca es anterior a
+        // la entrada: lo impide el CHECK de `shift_entries` (RN-03).
+        return ElapsedMinutes::between($this->clockedInAt, $this->clockedOutAt)->minutes;
     }
 }

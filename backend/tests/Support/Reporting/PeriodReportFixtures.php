@@ -14,6 +14,7 @@ use App\Modules\Workforce\Domain\ValueObject\ScheduleType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Factory\ClockingPolicyFactory;
+use Tests\Support\Factory\CorrectionFactory;
 use Tests\Support\Time\Instants;
 
 /**
@@ -66,6 +67,77 @@ final class PeriodReportFixtures
             $day->clockOut(Instants::inMadrid($clockOut), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
         }
 
+        $repository->save($day);
+
+        foreach ($day->releaseEvents() as $event) {
+            if ($event instanceof DailyTotalsRecalculated) {
+                $projector->handle($event);
+            }
+        }
+    }
+
+    /**
+     * Una jornada con **varios** tramos cerrados, en un solo agregado.
+     *
+     * No se puede componer con dos llamadas a {@see self::workDay()}: cada una
+     * proyectaria su propio agregado y la segunda pisaria la fila de
+     * `daily_totals` con solo su tramo. Aqui el proyector recibe la jornada
+     * entera, como cuando se ficha de verdad.
+     *
+     * @param  list<array{0: string, 1: string}>  $shifts  pares entrada/salida en hora del centro
+     */
+    public static function splitWorkDay(
+        int $siteId,
+        string $employeeUuid,
+        string $workDate,
+        array $shifts,
+        string $timeZone = 'Europe/Madrid',
+    ): void {
+        $repository = app(WorkDayRepository::class);
+        $projector = app(DailyTotalsProjector::class);
+
+        $day = WorkDay::start($employeeUuid, $siteId, WorkDate::fromIsoDate($workDate, new \DateTimeZone($timeZone)));
+
+        foreach ($shifts as [$clockIn, $clockOut]) {
+            $day->clockIn(Str::uuid7()->toString(), Instants::inMadrid($clockIn), ScanOrigin::QR_KIOSK);
+            $day->clockOut(Instants::inMadrid($clockOut), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+        }
+
+        $repository->save($day);
+
+        foreach ($day->releaseEvents() as $event) {
+            if ($event instanceof DailyTotalsRecalculated) {
+                $projector->handle($event);
+            }
+        }
+    }
+
+    /**
+     * Una jornada cuyo unico tramo se registro y despues **se anulo** (RN-13).
+     *
+     * Se anula con `WorkDay::voidEntry` y se proyecta el `DailyTotalsRecalculated`
+     * que emite, como hace la correccion de verdad: la fila de `daily_totals`
+     * queda con `shift_count = 0` porque la escribio el proyector, no porque la
+     * prueba la fabrique. Es el borde de ADR-055 §2 «una jornada anulada entera
+     * no existe a efectos de RN-10».
+     */
+    public static function voidedWorkDay(
+        int $siteId,
+        string $employeeUuid,
+        string $workDate,
+        string $clockIn,
+        string $clockOut,
+        string $timeZone = 'Europe/Madrid',
+    ): void {
+        $repository = app(WorkDayRepository::class);
+        $projector = app(DailyTotalsProjector::class);
+
+        $day = WorkDay::start($employeeUuid, $siteId, WorkDate::fromIsoDate($workDate, new \DateTimeZone($timeZone)));
+        $entry = $day->clockIn(Str::uuid7()->toString(), Instants::inMadrid($clockIn), ScanOrigin::QR_KIOSK);
+        $day->clockOut(Instants::inMadrid($clockOut), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+        $repository->save($day);
+
+        $day->voidEntry($entry->uuid(), CorrectionFactory::standard());
         $repository->save($day);
 
         foreach ($day->releaseEvents() as $event) {

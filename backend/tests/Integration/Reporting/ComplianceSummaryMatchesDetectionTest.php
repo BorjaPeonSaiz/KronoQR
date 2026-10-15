@@ -125,20 +125,11 @@ function escenarioComparadoDeCumplimiento(): array
  *
  * @return list<string>
  */
-function paresDeLaVista(string $rule): array
+function paresDeLaVista(string $rule, string $from = '2026-03-01'): array
 {
-    $summary = app(ReadComplianceSummary::class)->handle(
-        new ComplianceSummaryCriteria(
-            scope: AccessScope::unrestricted(),
-            from: '2026-03-01',
-            to: '2026-03-31',
-        ),
-        maxRangeDays: 92,
-    );
-
     $pares = [];
 
-    foreach ($summary->findings as $finding) {
+    foreach (hallazgosDeLaVista($from) as $finding) {
         if ($finding->rule->value === $rule && $finding->workDate !== null) {
             $pares[] = $finding->employee->uuid.'|'.$finding->workDate;
         }
@@ -147,6 +138,23 @@ function paresDeLaVista(string $rule): array
     sort($pares);
 
     return $pares;
+}
+
+/**
+ * Todos los hallazgos de la vista de marzo, desde `$from`.
+ *
+ * @return list<ComplianceFinding>
+ */
+function hallazgosDeLaVista(string $from = '2026-03-01'): array
+{
+    return app(ReadComplianceSummary::class)->handle(
+        new ComplianceSummaryCriteria(
+            scope: AccessScope::unrestricted(),
+            from: $from,
+            to: '2026-03-31',
+        ),
+        maxRangeDays: 92,
+    )->findings;
 }
 
 /**
@@ -398,3 +406,220 @@ it('con el fichaje de pausa activado, la bandeja y la vista cuentan RN-12 igual'
 
     throw new RuntimeException('La vista ya no publica RN-12 en meta.rules.');
 })->group('RN-12', 'RF-AT-12', 'RF-PA-06');
+
+/*
+ * ## N5: los bordes de RN-10 de ADR-055 §2
+ *
+ * Un escenario aparte, para no tocar la comparacion estricta de arriba. Cada
+ * persona es un borde en el que la vista y la bandeja leian el fin de la
+ * jornada anterior de forma distinta, todos en Europe/Madrid.
+ *
+ * El borde «la jornada anterior tiene un tramo abierto» no se puede sembrar: un
+ * tramo abierto ocupa `[entrada, ∞)` y cualquier jornada posterior lo solaparia
+ * (`shift_entries_no_overlap`) o seria un segundo abierto
+ * (`one_open_shift_per_employee`). Lo cubren las unitarias de los dos
+ * evaluadores con la salida anterior nula.
+ */
+
+/**
+ * @return array{e1: string, e2: string, e3: string, e4: string, e5: string}
+ */
+function escenarioN5(): array
+{
+    $site = WorkforceFixtures::site('Hotel de los bordes', 'Europe/Madrid');
+    $department = WorkforceFixtures::department($site, 'Pisos');
+
+    $e1 = WorkforceFixtures::employee($site, $department, 'active', 'Ana', 'Anulada');
+    $e2 = WorkforceFixtures::employee($site, $department, 'active', 'Bruno', 'Borde');
+    $e3 = WorkforceFixtures::employee($site, $department, 'active', 'Carla', 'Cero');
+    $e4 = WorkforceFixtures::employee($site, $department, 'active', 'Dario', 'Horario');
+    $e5 = WorkforceFixtures::employee($site, $department, 'active', 'Elena', 'Partida');
+
+    // E1: la jornada del 12 se anulo entera; el descanso del 13 se mide desde la
+    // salida del turno del 11 (12:30 del 12): 11 h 30 min, 690 minutos.
+    PeriodReportFixtures::workDay($site, $e1, '2026-03-11', '2026-03-11 22:00', '2026-03-12 12:30');
+    PeriodReportFixtures::voidedWorkDay($site, $e1, '2026-03-12', '2026-03-12 13:00', '2026-03-12 13:30');
+    PeriodReportFixtures::workDay($site, $e1, '2026-03-13', '2026-03-13 00:00', '2026-03-13 08:00');
+
+    // E2: lo mismo, justo antes de la ventana de la vista que empieza el lunes 9.
+    PeriodReportFixtures::workDay($site, $e2, '2026-03-07', '2026-03-07 22:00', '2026-03-08 12:30');
+    PeriodReportFixtures::voidedWorkDay($site, $e2, '2026-03-08', '2026-03-08 13:00', '2026-03-08 13:30');
+    PeriodReportFixtures::workDay($site, $e2, '2026-03-09', '2026-03-09 00:00', '2026-03-09 08:00');
+
+    // E3: cero minutos de descanso, la salida coincide con la entrada.
+    PeriodReportFixtures::workDay($site, $e3, '2026-03-18', '2026-03-18 16:00', '2026-03-19 00:00');
+    PeriodReportFixtures::workDay($site, $e3, '2026-03-19', '2026-03-19 00:00', '2026-03-19 08:00');
+
+    // E4: cambio de hora. 22:00 CET del 28 a 10:30 CEST del 29 son 11 h 30 reales,
+    // aunque el reloj de pared marque 12 h 30.
+    PeriodReportFixtures::workDay($site, $e4, '2026-03-28', '2026-03-28 14:00', '2026-03-28 22:00');
+    PeriodReportFixtures::workDay($site, $e4, '2026-03-29', '2026-03-29 10:30', '2026-03-29 18:30');
+
+    // E5: jornada partida el mismo dia, con descanso de sobra antes y despues.
+    // El hueco de 15:00 a 23:00 es intrajornada: RN-10 no lo mide.
+    PeriodReportFixtures::workDay($site, $e5, '2026-03-06', '2026-03-06 07:00', '2026-03-06 15:00');
+    PeriodReportFixtures::splitWorkDay($site, $e5, '2026-03-07', [
+        ['2026-03-07 07:00', '2026-03-07 15:00'],
+        ['2026-03-07 23:00', '2026-03-07 23:30'],
+    ]);
+    PeriodReportFixtures::workDay($site, $e5, '2026-03-08', '2026-03-08 12:00', '2026-03-08 20:00');
+
+    return ['e1' => $e1, 'e2' => $e2, 'e3' => $e3, 'e4' => $e4, 'e5' => $e5];
+}
+
+/**
+ * Los minutos de descanso que la vista mide para una jornada, o `null`.
+ */
+function descansoDeLaVista(string $employee, string $workDate, string $from = '2026-03-01'): ?int
+{
+    foreach (hallazgosDeLaVista($from) as $finding) {
+        if ($finding->rule->value === 'insufficient_rest'
+            && $finding->employee->uuid === $employee
+            && $finding->workDate === $workDate) {
+            return $finding->measuredMinutes;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Los minutos de descanso de la incidencia de la bandeja, o `null`.
+ */
+function descansoDeLaBandeja(string $employee, string $workDate): ?int
+{
+    $context = DB::table('incidents')
+        ->join('employees', 'employees.id', '=', 'incidents.employee_id')
+        ->where('incidents.type', 'insufficient_rest')
+        ->where('employees.uuid', $employee)
+        ->where('incidents.work_date', $workDate)
+        ->value('incidents.context');
+
+    if (! \is_string($context)) {
+        return null;
+    }
+
+    $decoded = json_decode($context, true, 512, JSON_THROW_ON_ERROR);
+
+    return \is_array($decoded) && \is_int($decoded['rest_minutes'] ?? null) ? $decoded['rest_minutes'] : null;
+}
+
+it('N5: en los bordes de ADR-055 la vista y la bandeja señalan las mismas jornadas por RN-10', function (): void {
+    FrozenTime::at('2026-03-31 04:30:00');
+    $n5 = escenarioN5();
+
+    expect(Artisan::call('attendance:detect-incidents'))->toBe(0);
+
+    $esperados = [
+        $n5['e1'].'|2026-03-13',
+        $n5['e2'].'|2026-03-09',
+        $n5['e3'].'|2026-03-19',
+        $n5['e4'].'|2026-03-29',
+    ];
+    sort($esperados);
+
+    $vista = paresDeLaVista('insufficient_rest');
+
+    expect($vista)->toBe($esperados)
+        ->and(paresDeLaBandeja('insufficient_rest'))->toBe($esperados);
+
+    // La jornada anulada no existe: se mide desde la salida del 12 a las 12:30.
+    expect(descansoDeLaVista($n5['e1'], '2026-03-13'))->toBe(690)
+        ->and(descansoDeLaBandeja($n5['e1'], '2026-03-13'))->toBe(690)
+        // Cero minutos es el peor descanso, no la ausencia de descanso.
+        ->and(descansoDeLaVista($n5['e3'], '2026-03-19'))->toBe(0)
+        ->and(descansoDeLaBandeja($n5['e3'], '2026-03-19'))->toBe(0)
+        // RN-09: se restan instantes UTC, no horas de pared.
+        ->and(descansoDeLaVista($n5['e4'], '2026-03-29'))->toBe(690)
+        ->and(descansoDeLaBandeja($n5['e4'], '2026-03-29'))->toBe(690);
+})->group('RN-10', 'RN-09', 'RF-PA-06', 'RF-PR-01');
+
+it('N5: la jornada anterior a la ventana de la vista salta la anulada', function (): void {
+    // E2 con la vista empezando el lunes 9: la jornada del 8 (anulada) y la del
+    // 7 caen fuera de la ventana y las trae el `LATERAL`, no el `lag()`.
+    FrozenTime::at('2026-03-31 04:30:00');
+    $n5 = escenarioN5();
+
+    expect(Artisan::call('attendance:detect-incidents'))->toBe(0);
+
+    expect(paresDeLaVista('insufficient_rest', '2026-03-09'))->toContain($n5['e2'].'|2026-03-09')
+        ->and(descansoDeLaVista($n5['e2'], '2026-03-09', '2026-03-09'))->toBe(690)
+        ->and(descansoDeLaBandeja($n5['e2'], '2026-03-09'))->toBe(690);
+})->group('RN-10', 'RF-PA-06');
+
+it('N5: con el fichaje de pausa activado, la bandeja no afirma nada que la vista niegue en RN-10, RN-11 y RN-12', function (): void {
+    // ADR-055 §1: la bandeja puede callar lo que la vista señala, nunca al revés.
+    FrozenTime::at('2026-03-31 04:30:00');
+    $n5 = escenarioN5();
+
+    DB::table('installation_settings')->updateOrInsert(
+        ['key' => 'ATTENDANCE_BREAK_CLOCKING'],
+        ['value' => '"enabled"', 'updated_at' => '2026-03-31 04:30:00+00'],
+    );
+    app()->forgetScopedInstances();
+
+    expect(Artisan::call('attendance:detect-incidents'))->toBe(0);
+
+    $descanso = paresDeLaVista('insufficient_rest');
+    $exceso = paresDeLaVista('daily_excess');
+    $pausa = paresDeLaVista('missing_break');
+
+    expect($descanso)->toBe(paresDeLaBandeja('insufficient_rest'))
+        ->and(array_values(array_diff(paresDeLaBandeja('long_shift'), $exceso)))->toBe([])
+        ->and(array_values(array_diff(paresDeLaBandeja('missing_break'), $pausa)))->toBe([])
+        // Y no por vacio: las dos ultimas reglas tienen algo que comparar.
+        ->and($exceso)->not->toBe([])
+        ->and($pausa)->not->toBe([]);
+
+    // E5, la jornada partida, no aparece por RN-10 en ningun lado.
+    foreach ($descanso as $par) {
+        expect($par)->not->toStartWith($n5['e5'].'|');
+    }
+})->group('RN-10', 'RN-11', 'RN-12', 'RF-AT-12', 'RF-PA-06');
+
+it('RN-12: el tramo mas largo de la vista se mide con la misma regla de minutos que la bandeja', function (): void {
+    /*
+     * Dos tramos casi iguales. Con microsegundos, B (6 h 0 min 59,9 s) es mas
+     * largo que A (6 h 0 min 59,001 s). Con la regla del producto —cada marca
+     * truncada a su segundo, `ElapsedMinutes`— A son 361 minutos y supera el
+     * maximo de 6 h; B son 360 y no. La bandeja abre RN-12 sobre A; si la vista
+     * eligiera B, callaria lo que la bandeja afirma (ADR-055 §1).
+     */
+    FrozenTime::at('2026-03-31 04:30:00');
+
+    $site = WorkforceFixtures::site('Hotel del segundo', 'Europe/Madrid');
+    $department = WorkforceFixtures::department($site, 'Cocina');
+    $employee = WorkforceFixtures::employee($site, $department, 'active', 'Sara', 'Segundo');
+
+    PeriodReportFixtures::splitWorkDay($site, $employee, '2026-03-10', [
+        ['2026-03-10 08:00:00.999', '2026-03-10 14:01:00.000'],
+        ['2026-03-10 16:00:00.000', '2026-03-10 22:00:59.900'],
+    ]);
+
+    DB::table('installation_settings')->updateOrInsert(
+        ['key' => 'ATTENDANCE_BREAK_CLOCKING'],
+        ['value' => '"enabled"', 'updated_at' => '2026-03-31 04:30:00+00'],
+    );
+    app()->forgetScopedInstances();
+
+    expect(Artisan::call('attendance:detect-incidents'))->toBe(0);
+
+    $tramoDeLaBandeja = DB::table('incidents')
+        ->join('shift_entries', 'shift_entries.id', '=', 'incidents.shift_entry_id')
+        ->where('incidents.type', 'missing_break')
+        ->pluck('shift_entries.uuid')
+        ->all();
+
+    $pausa = array_values(array_filter(
+        hallazgosDeLaVista(),
+        static fn (ComplianceFinding $f): bool => $f->rule->value === 'missing_break',
+    ));
+
+    expect(paresDeLaVista('missing_break'))->toBe([$employee.'|2026-03-10'])
+        ->and(paresDeLaBandeja('missing_break'))->toBe([$employee.'|2026-03-10'])
+        ->and($tramoDeLaBandeja)->toHaveCount(1)
+        ->and($pausa[0]->measuredMinutes)->toBe(361)
+        // El mismo tramo en las dos pantallas, y por eso el enlace funciona.
+        ->and($pausa[0]->shiftEntryUuid)->toBe($tramoDeLaBandeja[0])
+        ->and($pausa[0]->incident)->not->toBeNull();
+})->group('RN-12', 'RN-09', 'RF-AT-12', 'RF-PA-06');

@@ -187,3 +187,58 @@ it('dice exactamente lo mismo que la lectura en bloque de ese dia', function ():
             ->and($single?->lastClockOutAt()?->format('U.u'))->toBe($fromBulk?->lastClockOutAt()?->format('U.u'));
     }
 })->group('RF-PR-02', 'RN-06');
+
+/*
+ * `previousShiftEndBefore()`: el fin de la jornada anterior con la definicion de
+ * RN-10 de ADR-055 §2, la misma que lee la vista de cumplimiento.
+ */
+
+it('devuelve la salida anterior aunque coincida con el instante: cero minutos de descanso', function (): void {
+    // El `<` estricto sobre la salida se saltaba este tramo y media desde uno
+    // mas antiguo, o no media nada.
+    $scenario = ledgerScenario();
+
+    ledgerShiftEntry($scenario['employee'], $scenario['site'], '2026-03-17', '2026-03-17 06:00:00+00', '2026-03-17 14:00:00+00');
+    ledgerShiftEntry($scenario['employee'], $scenario['site'], '2026-03-18', '2026-03-18 15:00:00+00', '2026-03-18 23:00:00+00');
+
+    $end = attendanceLedger()->previousShiftEndBefore($scenario['employee'], new DateTimeImmutable('2026-03-18 23:00:00+00'));
+
+    expect($end?->format(DATE_ATOM))->toBe('2026-03-18T23:00:00+00:00');
+})->group('RN-10', 'RF-PR-01');
+
+it('salta los tramos anulados y sustituidos, y una jornada anulada entera no existe', function (): void {
+    $scenario = ledgerScenario();
+
+    ledgerShiftEntry($scenario['employee'], $scenario['site'], '2026-03-11', '2026-03-11 21:00:00+00', '2026-03-12 11:30:00+00');
+    ledgerShiftEntry($scenario['employee'], $scenario['site'], '2026-03-12', '2026-03-12 12:00:00+00', '2026-03-12 12:30:00+00', 'voided');
+    ledgerShiftEntry($scenario['employee'], $scenario['site'], '2026-03-12', '2026-03-12 13:00:00+00', '2026-03-12 13:30:00+00', 'superseded');
+
+    $end = attendanceLedger()->previousShiftEndBefore($scenario['employee'], new DateTimeImmutable('2026-03-12 23:00:00+00'));
+
+    expect($end?->format(DATE_ATOM))->toBe('2026-03-12T11:30:00+00:00');
+})->group('RN-10', 'RN-13', 'RF-PR-01');
+
+it('devuelve null si el ultimo tramo anterior sigue abierto, aunque antes haya uno cerrado', function (): void {
+    // Entre la salida del 16 y el instante hay un turno sin cerrar: RN-10 no se
+    // evalua y responde RN-08 (ADR-055 §2).
+    $scenario = ledgerScenario();
+
+    ledgerShiftEntry($scenario['employee'], $scenario['site'], '2026-03-16', '2026-03-16 06:00:00+00', '2026-03-16 14:00:00+00');
+    ledgerShiftEntry($scenario['employee'], $scenario['site'], '2026-03-17', '2026-03-17 06:00:00+00');
+
+    expect(attendanceLedger()->previousShiftEndBefore($scenario['employee'], new DateTimeImmutable('2026-03-17 20:00:00+00')))
+        ->toBeNull();
+})->group('RN-10', 'RN-08', 'RF-PR-01');
+
+it('devuelve null sin tramo anterior y para una persona que no existe', function (): void {
+    $scenario = ledgerScenario();
+
+    ledgerShiftEntry($scenario['other'], $scenario['site'], '2026-03-16', '2026-03-16 06:00:00+00', '2026-03-16 14:00:00+00');
+    // Un tramo que empieza justo en el instante no es anterior.
+    ledgerShiftEntry($scenario['employee'], $scenario['site'], '2026-03-17', '2026-03-17 06:00:00+00', '2026-03-17 14:00:00+00');
+
+    $instant = new DateTimeImmutable('2026-03-17 06:00:00+00');
+
+    expect(attendanceLedger()->previousShiftEndBefore($scenario['employee'], $instant))->toBeNull()
+        ->and(attendanceLedger()->previousShiftEndBefore('0199f0c2-0000-7000-8000-000000000000', $instant))->toBeNull();
+})->group('RN-10', 'RF-PR-01');

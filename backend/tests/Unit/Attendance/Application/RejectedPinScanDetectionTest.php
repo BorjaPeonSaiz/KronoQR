@@ -147,7 +147,7 @@ function rejectedPinDetectionRun(InMemoryRejectedPinScans $port, int $lookbackDa
                 return null;
             }
 
-            public function lastClockOutBefore(string $employeeUuid, DateTimeImmutable $instant): ?DateTimeImmutable
+            public function previousShiftEndBefore(string $employeeUuid, DateTimeImmutable $instant): ?DateTimeImmutable
             {
                 return null;
             }

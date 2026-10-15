@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Reporting\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\ValueObject\ElapsedMinutes;
 use DateTimeImmutable;
 
 /**
@@ -102,8 +103,7 @@ final readonly class ComplianceFacts
             return null;
         }
 
-        $seconds = $this->firstInAt->getTimestamp() - $this->previousLastOutAt->getTimestamp();
-
-        return $seconds < 0 ? null : intdiv($seconds, 60);
+        // La misma medida que la bandeja (`AnomalyDetectionPolicy`, ADR-055).
+        return ElapsedMinutes::gapBetween($this->previousLastOutAt, $this->firstInAt)?->minutes;
     }
 }

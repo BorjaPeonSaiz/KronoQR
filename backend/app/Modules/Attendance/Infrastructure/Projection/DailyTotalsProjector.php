@@ -93,8 +93,9 @@ final readonly class DailyTotalsProjector
             $event->total->minutes,
             $event->shiftCount,
             $this->timestamp($event->firstClockInAt),
-            // Nulo mientras la jornada tenga un tramo abierto: una «ultima
-            // salida» inventada convertiria un turno en curso en uno terminado.
+            // Nulo solo si ningun tramo de la jornada esta cerrado. Con uno
+            // cerrado y otro abierto es la salida del cerrado, y por eso la
+            // vista de cumplimiento lo descarta si `has_open_shift` (ADR-055 §2).
             $this->timestamp($event->lastClockOutAt),
             $event->hasOpenShift,
             $event->hasAnomaly,

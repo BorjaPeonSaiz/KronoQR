@@ -494,6 +494,27 @@ it('cuenta como descanso de cero minutos el turno que empieza justo al terminar 
         ->and($found[0]->context)->toBe(['rest_minutes' => 0, 'threshold_minutes' => 720]);
 })->group('RN-10', 'RF-PD-07');
 
+it('ADR-055 §2: los dos bordes del fin de la jornada anterior', function (?string $previousShiftEnd, array $expected): void {
+    // El puerto entrega `null` cuando el ultimo tramo anterior sigue abierto
+    // (RN-10 no se evalua, responde RN-08) y la salida tal cual cuando coincide
+    // con la entrada (cero minutos, hallazgo). Mismo contrato que la vista.
+    $day = WorkDayFactory::new()
+        ->onWorkDate('2026-03-19')
+        ->withClosedShift('2026-03-19 00:00', '2026-03-19 04:00')
+        ->build();
+
+    $found = detectionPolicy()->inspect(
+        $day,
+        Instants::utc('2026-03-19 23:00'),
+        $previousShiftEnd === null ? null : Instants::utc($previousShiftEnd),
+    );
+
+    expect(typesOf($found))->toBe($expected);
+})->with([
+    'salida anterior nula: sin hallazgo' => [null, []],
+    'cero minutos: hallazgo' => ['2026-03-19 00:00', ['insufficient_rest']],
+])->group('RN-10', 'RF-PD-07');
+
 it('no revisa el descanso de una jornada sin tramos', function (): void {
     // `WorkDay::start()` produce una jornada vacia —el primer fichaje del dia
     // todavia no ha ocurrido— y sin tramos no hay ni descanso que medir ni tramo

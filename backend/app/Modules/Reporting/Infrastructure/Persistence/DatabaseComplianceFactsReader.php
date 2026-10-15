@@ -60,6 +60,21 @@ use Throwable;
  * —un `LATERAL` por fila buscando la jornada anterior— es una busqueda por indice
  * por cada dia de cada persona: cuarenta y cinco mil en una vista de tres meses.
  *
+ * ## El fin de la jornada anterior, con la definicion de ADR-055 §2
+ *
+ * La bandeja (`EloquentWorkDayLedger::previousShiftEndBefore`) y esta vista
+ * leen el mismo hecho, y si lo leen distinto una afirma lo que la otra niega:
+ *
+ *   - **Una jornada anulada entera no existe.** Su fila de `daily_totals`
+ *     sigue ahi con `shift_count = 0` y `last_out_at` nulo; se descarta en las
+ *     dos ramas (`shift_count > 0`) para que `lag()` mire la anterior en vez
+ *     de recibir un nulo que callaria RN-10.
+ *   - **Si la jornada anterior tiene un tramo abierto, RN-10 no se evalua**:
+ *     `previous_last_out_at` es NULL aunque esa jornada tenga otro tramo
+ *     cerrado. Del turno sin cerrar responde RN-08.
+ *
+ * `ComplianceSummaryMatchesDetectionTest` vigila que las dos sigan de acuerdo.
+ *
  * ## Solo tramos VIGENTES
  *
  * `closed` y `anomalous` para lo que se mide; `open` marca la jornada y aporta
@@ -151,6 +166,9 @@ final readonly class DatabaseComplianceFactsReader implements ComplianceFactsRea
                   JOIN daily_totals dt
                     ON dt.employee_id = s.employee_id
                    AND dt.work_date BETWEEN ?::date AND ?::date
+                   -- Una jornada anulada entera queda con `shift_count = 0`: no existe
+                   -- a efectos de RN-10 ni tiene nada que evaluar (ADR-055 §2).
+                   AND dt.shift_count > 0
 
                 UNION ALL
 
@@ -172,16 +190,22 @@ final readonly class DatabaseComplianceFactsReader implements ComplianceFactsRea
                         FROM daily_totals dt
                        WHERE dt.employee_id = s.employee_id
                          AND dt.work_date < ?::date
+                         AND dt.shift_count > 0
                        ORDER BY dt.work_date DESC
                        LIMIT 1
                   ) AS prev ON TRUE
             ), days AS (
                 SELECT scanned.*,
-                       -- El fin de la jornada ANTERIOR de esta misma persona.
-                       lag(scanned.last_out_at) OVER (
-                           PARTITION BY scanned.employee_id ORDER BY scanned.work_date
-                       ) AS previous_last_out_at
+                       -- El fin de la jornada ANTERIOR de esta misma persona, o NULL
+                       -- si esa jornada sigue con un tramo abierto: entonces RN-10
+                       -- no se evalua y responde RN-08 (ADR-055 §2). Con un tramo
+                       -- cerrado y otro abierto, `last_out_at` NO es nulo.
+                       CASE
+                           WHEN lag(scanned.has_open_shift) OVER previous THEN NULL
+                           ELSE lag(scanned.last_out_at) OVER previous
+                       END AS previous_last_out_at
                   FROM scanned
+                WINDOW previous AS (PARTITION BY scanned.employee_id ORDER BY scanned.work_date)
             ), windowed AS (
                 SELECT * FROM days WHERE in_window
             )
@@ -205,6 +229,13 @@ final readonly class DatabaseComplianceFactsReader implements ComplianceFactsRea
               -- Y el tramo CERRADO mas largo, que es el unico que puede superar el
               -- maximo continuo de RN-12: traer los demas seria cargar la
               -- plantilla entera para mirar una fila por dia.
+              --
+              -- «Mas largo» con la regla de minutos del producto
+              -- (`ElapsedMinutes`): cada marca truncada a su segundo antes de
+              -- restar. Con microsegundos, un tramo de 360 min y 59,9 s ganaria
+              -- a otro de 361 min truncados que empezo en .999, y la vista
+              -- callaria el RN-12 que la bandeja abre sobre el segundo. Ante un
+              -- empate se queda el que empezo antes, como el tramo que abre.
               LEFT JOIN LATERAL (
                   SELECT se.uuid, se.clocked_in_at, se.clocked_out_at
                     FROM shift_entries se
@@ -212,7 +243,8 @@ final readonly class DatabaseComplianceFactsReader implements ComplianceFactsRea
                      AND se.work_date = w.work_date
                      AND se.status IN ('closed', 'anomalous')
                      AND se.clocked_out_at IS NOT NULL
-                   ORDER BY (se.clocked_out_at - se.clocked_in_at) DESC, se.id
+                   ORDER BY (date_trunc('second', se.clocked_out_at) - date_trunc('second', se.clocked_in_at)) DESC,
+                            se.clocked_in_at, se.id
                    LIMIT 1
               ) AS longest ON TRUE
              ORDER BY lower(w.last_name), lower(w.first_name), w.employee_uuid, w.work_date

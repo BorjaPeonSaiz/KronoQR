@@ -1492,6 +1492,16 @@ panel: it is fixed with the migration role, as
 [`actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md) explains
 (in Spanish); if in doubt, tell the manufacturer, with the step 1 report.
 
+**When updating to 2.2.1: new rest-between-work-days warnings in past
+periods.** The compliance view may show insufficient-rest warnings that did
+not appear before. **No clocking and no total changes**: rest is now measured
+across a work day that was voided entirely —the work day before it is used
+instead—, and a rest of zero minutes (clocking in at the very instant the
+previous work day ended) also counts. The incident inbox only reviews the
+last few days (`COMPLIANCE_INCIDENT_LOOKBACK_DAYS`, 7 by default) and does not
+close or reopen old incidents. No report already issued and no export for the
+Labour Inspectorate changes.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which

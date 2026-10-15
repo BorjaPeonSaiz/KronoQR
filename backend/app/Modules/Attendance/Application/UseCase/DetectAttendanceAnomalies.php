@@ -354,7 +354,8 @@ final readonly class DetectAttendanceAnomalies
 
     /**
      * El fin del ultimo tramo anterior a esta jornada, que es la mitad que le
-     * falta a RN-10.
+     * falta a RN-10. `null` si ese tramo sigue abierto o no hay ninguno
+     * (ADR-055 §2, {@see WorkDayLedger::previousShiftEndBefore()}).
      *
      * Se pregunta **por jornada** y no una vez por empleado: entre dos jornadas
      * revisadas puede haber otra que no entro en la ventana, y arrastrar en
@@ -370,7 +371,7 @@ final readonly class DetectAttendanceAnomalies
             return null;
         }
 
-        return $this->workDays->lastClockOutBefore($workDay->employeeUuid(), $firstClockInAt);
+        return $this->workDays->previousShiftEndBefore($workDay->employeeUuid(), $firstClockInAt);
     }
 
     /**

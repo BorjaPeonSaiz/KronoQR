@@ -12,6 +12,7 @@ use App\Modules\Attendance\Domain\ValueObject\DetectedAnomaly;
 use App\Modules\Attendance\Domain\ValueObject\TimeRange;
 use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Domain\ValueObject\CompliancePolicy;
+use App\Modules\Shared\Domain\ValueObject\ElapsedMinutes;
 use DateTimeImmutable;
 
 /**
@@ -304,15 +305,16 @@ final readonly class AnomalyDetectionPolicy
         //
         // Empezar EXACTAMENTE cuando termino la anterior si es descanso: cero
         // minutos, que es el peor cumplimiento de RN-10 que se puede registrar
-        // sin solapar. Por eso la resta se hace sobre las marcas y no con un
-        // `TimeRange`, que exige fin > inicio (RN-03) y no admite el cero.
-        $restSeconds = $firstClockInAt->getTimestamp() - $previousShiftEndedAt->getTimestamp();
+        // sin solapar. Por eso se mide como hueco (`ElapsedMinutes::gapBetween`)
+        // y no con un `TimeRange`, que exige fin > inicio (RN-03) y no admite el
+        // cero. La vista mide con el mismo metodo (`ComplianceFacts`).
+        $gap = ElapsedMinutes::gapBetween($previousShiftEndedAt, $firstClockInAt);
 
-        if ($restSeconds < 0) {
+        if (! $gap instanceof ElapsedMinutes) {
             return null;
         }
 
-        $rest = WorkedDuration::ofMinutes(intdiv($restSeconds, 60));
+        $rest = WorkedDuration::ofMinutes($gap->minutes);
 
         if (! $this->legal->restIsInsufficient($rest->minutes)) {
             return null;

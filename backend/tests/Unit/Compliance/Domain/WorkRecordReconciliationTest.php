@@ -19,7 +19,6 @@ use App\Modules\Compliance\Domain\ValueObject\WorkRecordPurgeBoundary;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationScope;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationWindow;
 use App\Modules\Compliance\Domain\WorkRecordReconciliation;
-use App\Modules\Reporting\Domain\ValueObject\ComplianceShiftSegment;
 use App\Modules\Shared\Domain\ValueObject\Jurisdiction;
 use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
 use Tests\Support\Time\Instants;
@@ -531,22 +530,37 @@ it('no deja que el plazo vigente del perfil convierta en sospechosa una purga le
 
 // --- Piezas -----------------------------------------------------------------
 
-it('cuenta los minutos con la misma regla que el registro horario', function (string $entrada, string $salida): void {
-    // La regla esta repetida a proposito (Compliance no puede importar
-    // Attendance): esta prueba es lo que impide que las dos se separen.
-    $in = new DateTimeImmutable($entrada);
-    $out = new DateTimeImmutable($salida);
+it('cuenta los minutos del asiento con la regla unica del registro', function (string $salida, int $minutos): void {
+    // Ya no hay copia que atar: la conciliacion, `TimeRange` y
+    // `ComplianceShiftSegment` usan `ElapsedMinutes` (bloque 19, y la guarda
+    // `SingleMinuteRuleTest`). Lo que se fija aqui es que la conciliacion la
+    // aplica: los minutos que el registro escribio coinciden, y uno mas no.
+    $fila = ['clockedOutAt' => $salida];
+    $asiento = conciliacionAsientoDeSalida(['clocked_out_at' => $salida]);
 
-    expect(WorkRecordReconciliation::workedMinutes($in, $out))
-        ->toBe(new TimeRange($in, $out)->duration()->minutes)
-        // Y la tercera copia, la del cumplimiento de `Reporting`.
-        ->toBe(new ComplianceShiftSegment('x', $in, $out)->minutes());
+    expect(conciliacionCompara(conciliacionFila([...$fila, 'durationMinutes' => $minutos]), $asiento))->toBeNull()
+        ->and(conciliacionCompara(conciliacionFila([...$fila, 'durationMinutes' => $minutos + 1]), $asiento)?->fields)
+        ->toBe(['duration_minutes'])
+        // Y es la misma cifra que da el registro horario.
+        ->and(new TimeRange(new DateTimeImmutable(WORK_RECORD_RECONCILIATION_ENTRADA), new DateTimeImmutable($salida))->duration()->minutes)
+        ->toBe($minutos);
 })->with([
-    'jornada redonda' => ['2026-10-07T06:00:00Z', '2026-10-07T14:00:00Z'],
-    'segundos sueltos' => ['2026-10-07T06:00:59Z', '2026-10-07T14:00:58Z'],
-    'microsegundos' => ['2026-10-07T06:00:00.999999Z', '2026-10-07T06:01:00.000001Z'],
-    'turno de noche' => ['2026-10-07T20:00:00Z', '2026-10-08T04:30:30Z'],
-])->group('RL-04', 'RN-06');
+    'jornada redonda' => ['2026-10-07T14:00:00.000000Z', 480],
+    'segundos sueltos' => ['2026-10-07T14:00:59.000000Z', 480],
+    'microsegundos' => ['2026-10-07T14:00:59.999999Z', 480],
+    'turno de noche' => ['2026-10-08T04:30:30.000000Z', 1350],
+])->group('RL-04', 'RN-06', 'RN-09');
+
+it('un asiento con la salida antes que la entrada no tiene minutos con los que coincidir', function (): void {
+    // Imposible desde el registro (RN-03 y el CHECK de `shift_entries`): solo
+    // lo produce un asiento manipulado, y ahi la duracion tambien discrepa.
+    $salida = '2026-10-07T05:59:30.000000Z';
+
+    expect(conciliacionCompara(
+        conciliacionFila(['clockedOutAt' => $salida, 'durationMinutes' => 0]),
+        conciliacionAsientoDeSalida(['clocked_out_at' => $salida]),
+    )?->fields)->toBe(['duration_minutes']);
+})->group('RL-04', 'RN-09');
 
 it('abre la ventana diaria con dos dias de margen para los asientos', function (): void {
     $ventana = WorkRecordReconciliationWindow::recent(Instants::utc('2026-10-08 04:15'), 7);
