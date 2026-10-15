@@ -42,6 +42,11 @@ Opciones:
                       preguntando a Docker por el proyecto en marcha.
   --compose-file RUTA Fichero de compose de ESTE paquete. Por defecto, el que
                       acompana al actualizador.
+  --skip-signature-check
+                      No verifica la firma cosign de las imagenes (solo vale
+                      el digest). Para un registro propio que no firma. Queda
+                      anotado en el aviso y en el informe. Con las imagenes del
+                      fabricante, NO la uses.
   --lang es|en        Idioma de los mensajes. Por defecto, el del sistema.
   --help              Esta ayuda.
   --version           Version del producto que instalaria este paquete.
@@ -62,8 +67,14 @@ en la version de destino, o no hay instalacion que actualizar (nada tocado) ·
 5 fallo con vuelta atras INCOMPLETA: el mensaje dice que hacer a mano. El 6
 casi nunca lo usa este script (toda verificacion fallida deshace); la unica
 excepcion es una actualizacion que SI termino pero cuyo asiento de auditoria
-(system.updated) no se pudo escribir: el trabajo no se deshace por eso. Tabla
-completa en docs/cliente/operacion.md."
+(system.updated) no se pudo escribir: el trabajo no se deshace por eso. El 7: la
+firma cosign de una imagen del producto no es valida; no se ha tocado nada y no
+se continua. Tabla completa en docs/cliente/operacion.md."
+
+KQ_MSG_ES[u_report_sig_verified]="firma de las imagenes verificada con cosign"
+KQ_MSG_ES[u_report_sig_no_cosign]="cosign no instalado: solo se valido el digest"
+KQ_MSG_ES[u_report_sig_skipped]="OMITIDA por --skip-signature-check: solo se valido el digest"
+KQ_MSG_ES[u_report_sig_not_pinned]="no aplica: imagenes sin digest"
 
 KQ_MSG_ES[u_phase_1]="Paso 1 de 7 — precondiciones. Todavia no se toca la instalacion."
 KQ_MSG_ES[u_phase_2]="Paso 2 de 7 — modo mantenimiento. El panel responde 'en mantenimiento'; los quioscos siguen fichando y encolan."
@@ -372,6 +383,11 @@ Options:
                       located by asking Docker for the running project.
   --compose-file PATH Compose file of THIS package. Defaults to the one next
                       to the updater.
+  --skip-signature-check
+                      Does not verify the images' cosign signature (the digest
+                      alone is trusted). For a private registry that does not
+                      sign. Recorded in the warning and in the report. With the
+                      manufacturer's images, do NOT use it.
   --lang es|en        Message language. Defaults to the system's.
   --help              This help.
   --version           Product version this package would install.
@@ -392,8 +408,14 @@ rollback completed: the previous version is running · 5 failure with
 INCOMPLETE rollback: the message says what to do by hand. This script almost
 never exits 6 (every failed verification rolls back); the only exception is
 an update that DID finish but whose audit entry (system.updated) could not be
-written: the work is not undone because of that. Full table in
-docs/cliente/operacion.md."
+written: the work is not undone because of that. 7: the cosign signature of a
+product image is not valid; nothing was touched and it does not carry on. Full
+table in docs/cliente/operacion.md."
+
+KQ_MSG_EN[u_report_sig_verified]="image signature verified with cosign"
+KQ_MSG_EN[u_report_sig_no_cosign]="cosign not installed: only the digest was validated"
+KQ_MSG_EN[u_report_sig_skipped]="SKIPPED by --skip-signature-check: only the digest was validated"
+KQ_MSG_EN[u_report_sig_not_pinned]="not applicable: images without a digest"
 
 KQ_MSG_EN[u_phase_1]="Step 1 of 7 — preconditions. The installation is not touched yet."
 KQ_MSG_EN[u_phase_2]="Step 2 of 7 — maintenance mode. The panel answers 'under maintenance'; kiosks keep clocking and queue locally."

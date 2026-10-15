@@ -51,8 +51,9 @@ it('fija en el paquete las tres imagenes por digest', function (): void {
         ->and($workflow)->toContain('KQ_IMAGES_LOCK=')
         ->and($workflow)->toContain('bash infra/scripts/package.sh paquete');
 
-    // El job que arma el paquete depende del que empuja las imagenes.
-    expect($workflow)->toMatch('/\n  paquete:.*?needs:\s*\[resolver,\s*imagenes\]/s');
+    // El job que arma el paquete depende del que empuja las imagenes Y del que las
+    // firma (B18): no se entrega un paquete con imagenes sin firmar.
+    expect($workflow)->toMatch('/\n  paquete:.*?needs:\s*\[resolver,\s*imagenes,\s*firmar\]/s');
 
     // package.sh exige un digest bien formado para las tres.
     expect($package)->toContain('KQ_IMAGES_LOCK')
@@ -66,6 +67,35 @@ it('fija en el paquete las tres imagenes por digest', function (): void {
     }
     expect(preg_match_all('/\$\{IMAGE_TAG:\?[^}]*\}\$\{IMAGE_DIGEST_[A-Z]+:-\}/', $compose))->toBe(3);
 })->group('RF-PD-02', 'RS-10');
+
+it('firma las tres imagenes con cosign keyless por digest y comprueba la firma con el codigo de los instaladores', function (): void {
+    // B18 (2.2.1). El certificado lo emite Sigstore a la identidad del workflow:
+    // sin `id-token: write` no hay firma, y sin `--yes` cosign se para a preguntar.
+    $workflow = Repo::contents('.github/workflows/release.yml');
+    $lib = Repo::contents('infra/scripts/lib/image-signature.sh');
+
+    preg_match('/\n  firmar:(.*?)\n  paquete:/s', $workflow, $job);
+    $firmar = $job[1] ?? '';
+
+    expect($firmar)->not->toBe('')
+        ->and($firmar)->toContain('id-token: write')
+        ->and($firmar)->toContain('needs: [resolver, imagenes]')
+        ->and($firmar)->toContain('sigstore/cosign-installer@')
+        ->and($firmar)->toContain('cosign sign --yes "${ref}"')
+        // Por digest, no por etiqueta.
+        ->and($firmar)->toContain('ref="${REGISTRO}/${imagen}@${digest}"')
+        // Y verifica con la funcion de los instaladores (la identidad que casa con el certificado real).
+        ->and($firmar)->toContain('. infra/scripts/lib/image-signature.sh')
+        ->and($firmar)->toContain('kq_cosign_verify_ref "${ref}"');
+
+    // `id-token: write` solo en ese job: el resto de la publicacion no emite certificados.
+    expect(substr_count($workflow, "\n      id-token: write"))->toBe(1)
+        ->and($workflow)->not->toMatch('/^permissions:\n(?:  .*\n)*?  id-token:/m');
+
+    // La identidad esperada es el workflow de publicacion de ESTE repositorio y el emisor de GitHub.
+    expect($lib)->toContain('https://token.actions.githubusercontent.com')
+        ->and($lib)->toContain('/\.github/workflows/release\.yml@refs/');
+})->group('RS-10', 'RF-PD-02');
 
 it('fija por digest toda imagen de compose.prod.yaml, salvo las siete de observabilidad que ADR-053 deja pendientes', function (): void {
     // B18 (2.2.1). Una etiqueta de terceros se puede mover: un Redis sustituido

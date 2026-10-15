@@ -47,6 +47,11 @@ Opciones:
                       fichero de compose.
   --compose-file RUTA Fichero de compose de produccion. Por defecto, el que
                       acompaña al instalador.
+  --skip-signature-check
+                      No verifica la firma cosign de las imagenes (solo vale
+                      el digest). Para un registro propio que no firma. Queda
+                      anotado con un aviso. Con las imagenes del fabricante,
+                      NO la uses.
   --lang es|en        Idioma de los mensajes. Por defecto, el del sistema.
   --help              Esta ayuda.
   --version           Version del producto que instalaria.
@@ -54,7 +59,8 @@ Opciones:
 Codigos de salida: 0 correcto · 1 uso incorrecto · 2 requisitos no cumplidos
 (nada escrito) · 3 hay una instalacion previa (nada escrito) · 4 fallo con
 vuelta atras completada · 5 fallo con vuelta atras INCOMPLETA · 6 verificacion
-posterior fallida. Si se interrumpe (corte de SSH, Ctrl+C, kill) desde la fase 3,
+posterior fallida · 7 la firma de una imagen no es valida (vuelta atras
+completada, nada instalado). Si se interrumpe (corte de SSH, Ctrl+C, kill) desde la fase 3,
 deshace lo hecho y sale con 4 o 5: por SSH, lanzalo dentro de tmux o screen.
 Tabla completa en docs/cliente/operacion.md."
 
@@ -136,6 +142,12 @@ KQ_MSG_ES[f_wal_dir]="no se ha podido crear %s. Ejecuta \"sudo install -d -o 70 
 
 KQ_MSG_ES[images_pull]="Descargando las imagenes de la version %s. La primera vez tarda unos minutos."
 KQ_MSG_ES[f_images]="no se han podido descargar las imagenes de la version %s desde %s. Comprueba que el servidor llega al registro y que has iniciado sesion con \"docker login %s\". Si esta instalacion no tiene salida a internet, carga las imagenes del paquete con \"docker load -i imagenes-%s.tar\" y vuelve a ejecutar."
+KQ_MSG_ES[c_sig_verified]="Firma de las imagenes del producto verificada con cosign (workflow de publicacion del fabricante)"
+KQ_MSG_ES[c_sig_no_cosign]="cosign no esta instalado: las imagenes se validan solo por su digest"
+KQ_MSG_ES[w_sig_no_cosign]="El digest garantiza QUE bytes se instalan, no QUIEN los publico. Para verificar tambien la firma del fabricante, instala cosign (es opcional; docs/cliente/instalacion.md §7.1) y vuelve a ejecutar. No es un fallo: esto sigue adelante."
+KQ_MSG_ES[c_sig_skipped]="Verificacion de la firma de las imagenes OMITIDA (--skip-signature-check)"
+KQ_MSG_ES[w_sig_skipped]="Solo se confia en el digest, y esta omision queda anotada. Usala unicamente con un registro propio que no firma sus imagenes; con las del fabricante, quita la opcion."
+KQ_MSG_ES[f_sig_failed]="la firma de la imagen %s NO se ha podido verificar con cosign, y no se continua: podria no ser la que publico el fabricante. Detalle de cosign: %s. Que hacer: comprueba que el servidor llega a internet (cosign consulta Sigstore) y repite. Si persiste, NO instales y avisa al fabricante con ese detalle. Si las imagenes vienen de un registro propio que no las firma, repite con --skip-signature-check (queda anotado)."
 KQ_MSG_ES[services_up]="Levantando los servicios."
 KQ_MSG_ES[f_services_up]="los servicios no han arrancado. El detalle esta arriba; amplialo con \"docker compose -f %s logs\"."
 KQ_MSG_ES[waiting]="Esperando a que %s este listo (hasta %d s)..."
@@ -323,13 +335,19 @@ Options:
                       compose file.
   --compose-file PATH Production compose file. Defaults to the one shipped
                       with the installer.
+  --skip-signature-check
+                      Does not verify the images' cosign signature (the digest
+                      alone is trusted). For a private registry that does not
+                      sign. It is recorded with a warning. With the
+                      manufacturer's images, do NOT use it.
   --lang es|en        Message language. Defaults to the system locale.
   --help              This help.
   --version           Product version that would be installed.
 
 Exit codes: 0 success · 1 wrong usage · 2 requirements not met (nothing
 written) · 3 previous installation found (nothing written) · 4 failure, rolled
-back · 5 failure, rollback INCOMPLETE · 6 post-install verification failed.
+back · 5 failure, rollback INCOMPLETE · 6 post-install verification failed ·
+7 an image signature is not valid (rolled back, nothing installed).
 If interrupted (SSH drop, Ctrl+C, kill) from phase 3 on, it undoes what it did
 and exits with 4 or 5: over SSH, launch it inside tmux or screen.
 Full table in docs/cliente/operacion.md."
@@ -412,6 +430,12 @@ KQ_MSG_EN[f_wal_dir]="could not create %s. Run \"sudo install -d -o 70 -g 70 -m 
 
 KQ_MSG_EN[images_pull]="Downloading the images for version %s. The first time takes a few minutes."
 KQ_MSG_EN[f_images]="could not download the images for version %s from %s. Check the server reaches the registry and that you logged in with \"docker login %s\". If this installation has no internet access, load the images from the package with \"docker load -i imagenes-%s.tar\" and run again."
+KQ_MSG_EN[c_sig_verified]="Signature of the product images verified with cosign (manufacturer's release workflow)"
+KQ_MSG_EN[c_sig_no_cosign]="cosign is not installed: the images are validated by their digest only"
+KQ_MSG_EN[w_sig_no_cosign]="The digest guarantees WHICH bytes are installed, not WHO published them. To also verify the manufacturer's signature, install cosign (optional; docs/cliente/en/installation.md §7.1) and run again. This is not a failure: it carries on."
+KQ_MSG_EN[c_sig_skipped]="Image signature verification SKIPPED (--skip-signature-check)"
+KQ_MSG_EN[w_sig_skipped]="Only the digest is trusted, and this omission is recorded. Use it only with a private registry that does not sign its images; with the manufacturer's, drop the option."
+KQ_MSG_EN[f_sig_failed]="the signature of image %s could NOT be verified with cosign, and it does not carry on: it might not be the one the manufacturer published. cosign detail: %s. What to do: check the server reaches the internet (cosign queries Sigstore) and retry. If it persists, do NOT install and tell the manufacturer with that detail. If the images come from a private registry that does not sign them, run again with --skip-signature-check (it is recorded)."
 KQ_MSG_EN[services_up]="Starting the services."
 KQ_MSG_EN[f_services_up]="the services did not start. The detail is above; expand it with \"docker compose -f %s logs\"."
 KQ_MSG_EN[waiting]="Waiting for %s to be ready (up to %d s)..."

@@ -1595,13 +1595,15 @@ while read -r imagen digest; do
   docker pull "${registro}/${imagen}@${digest}"
   docker tag "${registro}/${imagen}@${digest}" "${registro}/${imagen}:${version}"
 done <images.lock
-docker pull redis:7-alpine
+# Redis is also pinned by digest in docker-compose.yml: that exact image is downloaded.
+redis="$(grep -oE 'redis:[^[:space:]]+@sha256:[0-9a-f]{64}' docker-compose.yml)"
+docker pull "${redis}"
 
 docker save -o "imagenes-${version}.tar" \
   "${registro}/php:${version}" \
   "${registro}/nginx:${version}" \
   "${registro}/postgres:${version}" \
-  redis:7-alpine
+  "${redis}"
 ```
 
 Copy that file to the hotel's server (USB, internal share). There, the `.env`
@@ -1637,6 +1639,72 @@ sudo ./install.sh
 **The installer only downloads what is missing**, image by image: if they are
 already loaded, it does not try to talk to any registry and does not sit
 waiting.
+
+**Redis is also pinned by digest** in `docker-compose.yml`
+(`redis:7-alpine@sha256:…`) and has no variable to fall back to the tag. Docker
+25 or later with the *containerd* image store (the default on recent new
+installations) keeps the digest when the image is loaded. If your Docker uses
+the classic store and the installer tries to download Redis even though it is
+loaded, check `docker image inspect "${redis}"`: if it fails, remove the
+`@sha256:…` from the `image: redis…` line of your `docker-compose.yml` by hand
+(it falls back to the tag for Redis; the change is lost with the next package)
+and run again.
+
+### 7.1 Verifying the images' signature (optional)
+
+The digest fixes **which** bytes are installed; the signature proves **who**
+published them: that they came out of the manufacturer's release process and not
+from someone else with access to the registry. The three product images (`php`,
+`nginx` and `postgres`) are signed with [cosign](https://github.com/sigstore/cosign),
+with no key to safeguard: the identity is that of the release process itself,
+recorded in Sigstore's public transparency service.
+
+**It is optional.** If cosign is not installed, `install.sh` and `update.sh`
+carry on and tell you with a warning: the digest already guarantees the bytes.
+If cosign **is** installed, they use it by themselves before downloading
+anything: you have nothing more to do. It needs internet access to Sigstore
+(which is why a server without internet, already emptying `IMAGE_DIGEST_*` per
+this section, does not verify the signature: with no digest there is nothing to
+check).
+
+To install cosign on Linux (x86-64; for ARM change `amd64` to `arm64`):
+
+```bash
+curl -fsSLO https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+curl -fsSLO https://github.com/sigstore/cosign/releases/latest/download/cosign_checksums.txt
+sha256sum --check --ignore-missing cosign_checksums.txt
+sudo install -m 0755 cosign-linux-amd64 /usr/local/bin/cosign
+cosign version
+```
+
+The checksum must say `cosign-linux-amd64: OK`. Downloading the binary on a
+machine with internet and copying it to the server is just as valid.
+
+If a signature is **not valid**, the script exits with code **7** ("security
+guarantee broken", see [`operation.md`](operation.md) §8): `update.sh` at step 1,
+touching nothing, and `install.sh` undoing what it had written. **Do not install
+those images** and tell the manufacturer with the detail the script prints. If
+your images come from a private registry that does not sign them, run the script
+with `--skip-signature-check`: only the digest is trusted, the script warns about
+it and the update records it in its report. Do not use it with the manufacturer's
+images.
+
+To check by hand, with the digest from `images.lock`:
+
+```bash
+registro="ghcr.io/kronoqr"   # your real IMAGE_REGISTRY
+while read -r imagen digest; do
+  cosign verify \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity-regexp '^https://github\.com/BorjaPeonSaiz/KronoQR/\.github/workflows/release\.yml@refs/(tags/v[0-9][0-9A-Za-z.+-]*|heads/main)$' \
+    "${registro}/${imagen}@${digest}" >/dev/null && echo "${imagen}: OK"
+done <images.lock
+```
+
+What it does **not** cover: the package itself (the scripts and the
+`docker-compose.yml`) arrives through the same channel as its checksums, with no
+signature of its own. Always download it from the address the manufacturer gave
+you.
 
 If you are also going to use observability (on by default), add to the
 `docker save` the seven public images of the profile: `prom/prometheus`,
