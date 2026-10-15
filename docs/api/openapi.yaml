@@ -585,6 +585,8 @@ paths:
                     scan_id: 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 
   /api/v1/scan/batch:
     post:
@@ -780,6 +782,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 
   /api/v1/scan/pin:
     post:
@@ -928,6 +932,8 @@ paths:
                     scan_id: 0199f2a1-3b7c-7e12-9f04-6a1b2c3d4e5f
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
 
   /api/v1/scan/discarded:
     post:
@@ -1119,6 +1125,8 @@ paths:
                       - token_hash: 6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b
                         display_name: Maria G.
                     pin_sealing_public_key: null
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -1645,6 +1653,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/SiteNotConfigured'
         '422':
           description: |
             **Dos cuerpos distintos, y la diferencia importa.**
@@ -1813,6 +1823,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnknownInputRejected'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -1891,6 +1903,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnknownInputRejected'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -2110,6 +2124,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnknownInputRejected'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -3781,6 +3797,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/EmployeeConflict'
+        '422':
+          $ref: '#/components/responses/UnknownInputRejected'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -3832,6 +3850,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/EmployeeConflict'
+        '422':
+          $ref: '#/components/responses/UnknownInputRejected'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -4090,6 +4110,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/SiteNotConfigured'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -4295,6 +4317,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/SiteNotConfigured'
         '422':
           description: |
             La peticion no es valida —rango invertido, fechas mal formadas— **o**
@@ -5155,6 +5179,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/SiteNotConfigured'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -5357,6 +5383,8 @@ paths:
                     title: Conflicto con el estado actual
                     status: 409
                     detail: 'La credencial 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01 ya se imprimio: su token no se puede volver a acuñar.'
+        '422':
+          $ref: '#/components/responses/UnknownInputRejected'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
@@ -5435,6 +5463,8 @@ paths:
                     title: Conflicto con el estado actual
                     status: 409
                     detail: 'La credencial 0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01 no se ha impreso todavia: no hay tarjeta que entregar.'
+        '422':
+          $ref: '#/components/responses/UnknownInputRejected'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -6950,6 +6980,16 @@ paths:
                 $ref: '#/components/schemas/ValidationProblem'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: |
+            Solo con `format=pdf`: el motor de composicion de PDF no esta
+            disponible en esta instalacion (falta Chromium, o no arranca). La
+            salida es descargar el mismo cuadro en CSV o en XLSX, que no
+            dependen de el. `problem+json` y nunca un `500` opaco.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 
   /api/v1/reports/legal-export:
     get:
@@ -7514,6 +7554,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/SiteNotConfigured'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -8420,6 +8462,16 @@ paths:
           schema:
             type: string
             pattern: '^[0-9a-f]{12}$'
+        - name: If-None-Match
+          in: header
+          required: false
+          description: |
+            `ETag` de una respuesta anterior. Si coincide con la huella del
+            logotipo vigente, la respuesta es `304` sin cuerpo en lugar de los
+            bytes: el quiosco revalida al recuperar la red, a menudo por la
+            conexion del hotel.
+          schema:
+            type: string
       responses:
         '200':
           description: El logotipo, tal cual esta en el servidor del cliente.
@@ -8442,6 +8494,21 @@ paths:
               schema:
                 type: string
                 format: binary
+        '304':
+          description: |
+            La peticion trae en `If-None-Match` la huella vigente: quien pregunta
+            ya tiene este logotipo. Sin cuerpo; conserva las cabeceras de
+            validacion para que la cache lo renueve.
+          headers:
+            Cache-Control:
+              description: La misma politica que el `200`.
+              schema:
+                type: string
+                examples: ['public, max-age=31536000, immutable']
+            ETag:
+              description: Huella SHA-256 del contenido, entre comillas.
+              schema:
+                type: string
         '404':
           $ref: '#/components/responses/NotFound'
         '429':
@@ -8739,6 +8806,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -11638,6 +11707,44 @@ components:
                 errors:
                   hired_at:
                     - La fecha de alta es obligatoria.
+    UnknownInputRejected:
+      description: |
+        La peticion trae un campo de cuerpo o un parametro de consulta que esta
+        operacion no admite. La operacion no tiene campos propios, y lo que
+        llegue se rechaza en lugar de ignorarse en silencio: un `force` o un
+        `reprint` que el servidor tirase sin decir nada haria creer al cliente
+        que se ha aplicado. `errors` lleva el nombre de cada campo sobrante.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblem'
+          examples:
+            campo-desconocido:
+              value:
+                type: 'urn:kronoqr:problem:validation-failed'
+                title: Peticion no valida
+                status: 422
+                detail: Revisa los campos indicados.
+                errors:
+                  force:
+                    - El campo force no forma parte de esta peticion.
+    SiteNotConfigured:
+      description: |
+        La instalacion todavia no tiene centro de trabajo (RF-PD-03, ADR-040):
+        la puesta en marcha no se ha completado. Es un estado de la
+        instalacion, no un fallo de la peticion; se completa el asistente y se
+        repite.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            sin-centro:
+              value:
+                type: 'urn:kronoqr:problem:conflict'
+                title: Conflicto con el estado actual
+                status: 409
+                detail: La instalacion no tiene centro de trabajo, completa la puesta en marcha antes de continuar.
     ActorReauthenticationFailed:
       description: |
         La peticion no cumple el contrato, o **la reautenticacion de quien la
@@ -11820,6 +11927,44 @@ components:
                 title: Servicio no disponible
                 status: 503
                 detail: La instalacion no tiene una clave de firma de credenciales valida. Revisa la configuracion del servidor.
+    DependencyUnavailable:
+      description: |
+        La instalacion no puede atender ahora el fichaje, y no es culpa de quien
+        lo envia: la base de datos esta inalcanzable
+        (`urn:kronoqr:problem:service-unavailable`, R3-CH-02, RNF-D-03) o la
+        instalacion se esta actualizando (`urn:kronoqr:problem:maintenance`,
+        RF-PD-10). Ver `info.description`, donde se describen las dos para toda
+        la API.
+
+        **No dice nada del fichaje enviado**: puede haberse registrado o no. El
+        quiosco lo conserva en su cola y lo reenvia pasado `Retry-After` con el
+        mismo `scan_id` e `Idempotency-Key` (reglas duras 8 y 19); si ya se
+        habia registrado, recibe la respuesta original.
+      headers:
+        Retry-After:
+          description: Segundos durante los que no conviene reintentar.
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 10
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            base-de-datos:
+              value:
+                type: 'urn:kronoqr:problem:service-unavailable'
+                title: Servicio no disponible
+                status: 503
+                detail: El servicio no esta disponible en este momento. Reintenta pasados unos segundos.
+            mantenimiento:
+              value:
+                type: 'urn:kronoqr:problem:maintenance'
+                title: En mantenimiento
+                status: 503
+                detail: La instalacion se esta actualizando. Reintenta pasados unos segundos; nada se ha perdido.
 
   schemas:
     Health:
