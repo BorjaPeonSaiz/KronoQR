@@ -55,9 +55,9 @@ por `update.sh` (V4-SC-1). El resto de la lista «¿Se pasó algo por alto?» de
 **Entrega como TFM (08-10-2026, PR #127 → `main` `2ac00130`):** el proyecto es también el Trabajo de Fin de Máster del propietario
 (Máster de Desarrollo con IA, BIG School). `README.md` sigue el orden que pide la entrega. **`doc_master/` (memoria, despliegue,
 guion del vídeo y presentación) se retiró del repositorio el 13-10-2026 por decisión del propietario**; el README ya no la enlaza
-(sigue en el historial de git, `git show 7cbf912f:doc_master/…`). La contraseña de la cuenta de demostración y el teléfono para el
-código 2FA van en el formulario de entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador
-`[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
+(sigue en el historial de git, `git show 7cbf912f:doc_master/…`). Los datos de acceso a la demostración (usuario, contraseña y
+teléfono para el código 2FA) y el enlace al vídeo van en el formulario de entrega del máster, **nunca en el repositorio**; el
+`README.md` lo dice así desde el 15-10-2026. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
 actualizar README §3.1/§6.
 
 **Siguiente acción: la 2.2.1, bloque 13** («Scripts: señales, VLAN, `observability/` y `restore-drill`», 🔒; rama
