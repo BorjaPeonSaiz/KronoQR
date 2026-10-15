@@ -60,10 +60,7 @@ teléfono para el código 2FA) y el enlace al vídeo van en el formulario de ent
 `README.md` lo dice así desde el 15-10-2026. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
 actualizar README §3.1/§6.
 
-**Siguiente acción: la 2.2.1, bloque 17** («Arranque: LCP del quiosco y chunk de entrada del panel»; rama desde `main`
-`1aebebcd`), **cuando el propietario lo ordene**: el 15-10-2026 ordenó el 16 y se paró tras integrarlo. La latencia del PIN
-quedó decidida el 15-10-2026 (RNF-P-08, PR #159, `main` `4b17c42a`; ver «Pendiente», bloque 15). Valorar en el 17 la #149 de Dependabot
-(`vite-plugin-pwa` 2.0, mayor) con la tablet. El 13-10-2026 había ordenado **hacer el plan completo**
+**Siguiente acción: la 2.2.1, bloques 18 a 26 y 24, encadenados** por orden del propietario del 15-10-2026 (tarde): un PR por bloque mientras todo esté en verde; si algo sale rojo y no se arregla en el bloque, parar. **B17 integrado** (#161, `main` `d10a3616`: cámara, ZXing y libsodium tras el primer pintado; E2E `perf-lcp` con LCP 1,34 s en la CI; panel con vistas bajo demanda, entrada 253 → 106 KiB gzip, recarga única si falta un trozo tras `update.sh`; un solo `bundle-budget.mjs` en web-kit). La #149 de Dependabot (`vite-plugin-pwa` 2.0) queda para la 2.3.0: necesita la tablet. El 13-10-2026 había ordenado **hacer el plan completo**
 (B8 a B26 y B24 al final; el bloque final solo con su orden). Plan: [`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md);
 lista: [`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md).
 
