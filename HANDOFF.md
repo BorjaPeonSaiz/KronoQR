@@ -62,7 +62,7 @@ actualizar README §3.1/§6.
 
 **Siguiente acción: la 2.2.1, bloque 17** («Arranque: LCP del quiosco y chunk de entrada del panel»; rama desde `main`
 `1aebebcd`), **cuando el propietario lo ordene**: el 15-10-2026 ordenó el 16 y se paró tras integrarlo. La latencia del PIN
-quedó decidida el 15-10-2026 (RNF-P-08, rama `docs/rnf-p-07-pin` con push y sin PR; ver «Pendiente», bloque 15). Valorar en el 17 la #149 de Dependabot
+quedó decidida el 15-10-2026 (RNF-P-08, PR #159, `main` `4b17c42a`; ver «Pendiente», bloque 15). Valorar en el 17 la #149 de Dependabot
 (`vite-plugin-pwa` 2.0, mayor) con la tablet. El 13-10-2026 había ordenado **hacer el plan completo**
 (B8 a B26 y B24 al final; el bloque final solo con su orden). Plan: [`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md);
 lista: [`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md).
