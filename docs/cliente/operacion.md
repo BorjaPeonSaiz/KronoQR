@@ -1477,6 +1477,17 @@ corrige con el rol de migración, como indica
 [`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md);
 si no lo tienes claro, avisa al fabricante con el informe del paso 1.
 
+**Al actualizar a la 2.2.1: avisos nuevos de descanso entre jornadas en
+periodos pasados.** La vista de cumplimiento puede mostrar avisos de descanso
+insuficiente que antes no salían. **No cambia ningún fichaje ni ningún
+total**: ahora el descanso se mide por encima de una jornada anulada entera
+—se toma la jornada anterior a ella—, y un descanso de cero minutos (entrar en
+el mismo instante en que terminó la jornada anterior) también cuenta. La
+bandeja de incidencias solo revisa los últimos días
+(`COMPLIANCE_INCIDENT_LOOKBACK_DAYS`, 7 de serie) y no cierra ni reabre
+incidencias antiguas. Ningún informe ya emitido ni ninguna exportación para la
+Inspección cambia.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
