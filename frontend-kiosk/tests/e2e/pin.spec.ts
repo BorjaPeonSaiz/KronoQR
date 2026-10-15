@@ -8,12 +8,12 @@
 // 16 §4, la misma causa que `pin-lockout.spec.ts`). El video del proyecto
 // `kiosk-qr` decodifica la tarjeta en bucle, y su confirmacion desmonta el
 // enlace «Ficha con tu codigo y PIN»: si llegaba durante el clic, el clic se
-// perdia y la prueba agotaba el plazo en el `fill` del codigo. Las pruebas que
-// solo recorren el PIN llaman a `blockCamera`; todas entran con
-// `openPinScreen`, que espera al paso del codigo antes de teclear. Quedan con
-// la camara en marcha la de la instalacion sin PIN y la de WebAssembly
-// bloqueado (no pulsan el enlace y miran la pantalla de tarjeta) y la de los
-// tonos, que convive con el trafico QR de fondo a proposito.
+// perdia y la prueba agotaba el plazo en el `fill` del codigo. Toda prueba que
+// pulsa el enlace llama a `blockCamera` y entra con `openPinScreen`, que espera
+// al paso del codigo antes de teclear. Solo quedan con la camara en marcha la
+// de la instalacion sin PIN y la de WebAssembly bloqueado: no pulsan el enlace
+// y miran la pantalla de tarjeta. La convivencia del fichaje con la camara la
+// prueba `scan.spec.ts`, no este fichero.
 
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
@@ -252,26 +252,19 @@ test(
     // Es la unica via del producto donde hoy se puede demostrar de extremo a
     // extremo lo que pide el principio de diseno: firmas distintas para la
     // entrada y para el rechazo.
-    const { readTones, reset } = await installAudioProbe(page)
+    // Con la camara bloqueada no hay fichaje de tarjeta de fondo que suene
+    // por su cuenta (antes colaba un «pendiente» 587/587, hallazgo de la
+    // revision QA sobre `3d004f4`), y cada `openPinScreen` recarga la pagina
+    // y con ella el registro del doble: lo que se lee es el sonido COMPLETO
+    // de cada intento, sin vaciados intermedios.
+    const { readTones } = await installAudioProbe(page)
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
     await stubPinScanApi(page, 'clock_in')
 
-    // `stubKioskApiWithPin` deja el trafico de fondo del ESCANEO DE TARJETA
-    // corriendo en la MISMA pagina (el video de camara del proyecto
-    // `kiosk-qr` decodifica solo, ver `support/pin.ts`), y ese fichaje de
-    // fondo suena tambien -su propio «pendiente»-, sin relacion con el PIN.
-    // Con `retries: 0` una relectura de fondo podia colarse justo entre el
-    // desenlace del PIN y la lectura del registro (hallazgo de la revision
-    // QA sobre `3d004f4`: dos tonos 587/587 en vez de los del PIN). Por eso
-    // se vacia el registro justo ANTES del ultimo gesto -pulsar «Comprobar»-,
-    // lo mas cerca posible del sonido que interesa, y se lee el registro
-    // COMPLETO despues: si algo de fondo se colara igualmente, la asercion de
-    // longitud fallaria en vez de comparar contra un tono equivocado en
-    // silencio.
     await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
-    await reset()
     await page.getByTestId('pin-confirm').click()
 
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'accepted', {
@@ -288,7 +281,6 @@ test(
     await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
-    await reset()
     await page.getByTestId('pin-confirm').click()
 
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected', {
