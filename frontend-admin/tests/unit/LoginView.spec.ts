@@ -73,7 +73,9 @@ describe('LoginView', () => {
     await fillAndSubmit(wrapper)
 
     expect(useSessionStore(pinia).isAuthenticated).toBe(true)
-    expect(router.currentRoute.value.path).toBe('/credentials')
+    // El destino se carga por import() dinamico (carga diferida de vistas): se
+    // espera a que la navegacion termine en vez de contar microtareas.
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/credentials'))
   })
 
   it('no distingue una contrasena incorrecta de una cuenta que no existe', async () => {

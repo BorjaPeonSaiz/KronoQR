@@ -54,16 +54,19 @@ describe('AdministratorStep', () => {
     // Dos vueltas: la primera crea la cuenta y monta `TwoFactorEnrolPanel`; la
     // segunda es su propia carga del secreto TOTP (con importacion dinamica
     // del renderizador del QR), que ese componente dispara en su `onMounted`.
-    await settle()
-
-    expect(wrapper.text()).toContain(es.auth.twoFactor.enrolHeading)
-    expect(wrapper.find('[data-test="two-factor-secret"]').text()).toBe(enrolment.secret)
+    // Con las vistas del router cargadas por import() ya no se calientan los
+    // modulos de este arbol de antemano: se espera a la condicion, no a un
+    // numero de vueltas.
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain(es.auth.twoFactor.enrolHeading)
+      expect(wrapper.find('[data-test="two-factor-secret"]').text()).toBe(enrolment.secret)
+    })
 
     await wrapper.find('input[name="code"]').setValue('492013')
     await wrapper.find('form').trigger('submit')
-    await settle()
-
-    expect(useSessionStore(pinia).isAuthenticated).toBe(true)
+    // La navegacion posterior carga la vista por import() dinamico: en Vitest
+    // tarda mas que unos microtareas, asi que se espera a la condicion.
+    await vi.waitFor(() => expect(useSessionStore(pinia).isAuthenticated).toBe(true))
     expect(useSetupStore(pinia).stepState('administrator')).toBe('completed')
   })
 
