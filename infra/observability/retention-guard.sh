@@ -13,8 +13,11 @@
 #     podria inyectar claves en el YAML.
 # Aqui se exige `^[0-9]+$` y 24..17520 antes de ejecutar nada. Vacia o ausente vale 2160.
 #
-# USO (lo pone el compose): entrypoint = este script, command = el binario y sus banderas.
-# Los dos contenedores traen `sh`. NINGUN SECRETO. Codigo 64 = valor invalido (nada arranca).
+# USO (lo pone el compose): corre en el servicio de un solo uso `retention-guard`, con
+# `command: /bin/true`; Loki y Tempo dependen de el con `service_completed_successfully`.
+# Desde Loki 3.7 su imagen no trae shell, asi que la guarda ya no puede ser su entrypoint.
+# Arrancar Loki o Tempo con `--no-deps` se salta la guarda: ningun guion del producto lo hace
+# y `doctor.sh` vuelve a validar la variable. NINGUN SECRETO. Codigo 64 = valor invalido.
 
 set -eu
 IFS="$(printf '\n\t')"

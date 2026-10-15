@@ -185,16 +185,36 @@ it('Loki y Tempo arrancan por la guarda que valida LOG_RETENTION_HOURS: un `up -
             // script de la guarda (que corre aparte, en el servicio `retention-guard`).
             expect($definicion['entrypoint'] ?? null)->toBe([$binario])
                 ->and(((array) ($definicion['command'] ?? []))[0] ?? null)->toStartWith('-config.file=')
-                ->and($definicion['depends_on']['retention-guard']['condition'] ?? null)->toBe('service_completed_successfully');
+                ->and(valorAnidado($definicion, 'depends_on', 'retention-guard', 'condition'))->toBe('service_completed_successfully');
         }
+    }
+})->group('RL-11');
 
+it('la guarda de retencion corre aparte, con el script montado y sin reinicio', function (): void {
+    foreach (['infra/compose.prod.yaml', 'infra/compose.dev.yaml'] as $fichero) {
+        /** @var array{services: array<string, array<string, mixed>>} $compose */
+        $compose = Yaml::parse(Repo::contents($fichero));
         $guarda = $compose['services']['retention-guard'] ?? [];
         expect($guarda['entrypoint'] ?? null)->toBe(['/bin/sh', '/etc/kronoqr/retention-guard.sh'])
             ->and(textoDeLista($guarda['volumes'] ?? []))->toContain('retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro')
-            ->and($guarda['environment']['LOG_RETENTION_HOURS'] ?? null)->toBe('${LOG_RETENTION_HOURS:-2160}')
+            ->and(valorAnidado($guarda, 'environment', 'LOG_RETENTION_HOURS'))->toBe('${LOG_RETENTION_HOURS:-2160}')
             ->and($guarda['restart'] ?? null)->toBe('no');
     }
 })->group('RL-11');
+
+/** Un valor anidado de la configuracion de Compose, o null si falta algun nivel. */
+function valorAnidado(mixed $valor, string ...$claves): mixed
+{
+    foreach ($claves as $clave) {
+        if (! is_array($valor) || ! array_key_exists($clave, $valor)) {
+            return null;
+        }
+
+        $valor = $valor[$clave];
+    }
+
+    return $valor;
+}
 
 /** Una lista de la configuracion de Compose, como un solo texto. */
 function textoDeLista(mixed $valor): string
