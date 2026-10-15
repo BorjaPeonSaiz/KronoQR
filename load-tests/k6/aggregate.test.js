@@ -935,8 +935,8 @@ test('[RNF-P-06] un rechazo en la rampa es un rechazo al empleado', () => {
 // --- La linea base versionada (bloque 15, R5-QA-02) --------------------------
 
 /**
- * `baseline.json` tal y como esta en el arbol: el summary.json de la ejecucion
- * 38654065980 de load-test.yml (aplicacion y guion de la rama del bloque 15).
+ * `baseline.json` tal y como esta en el arbol: la mediana (`baseline.js`) de tres
+ * pasadas de load-test.yml sobre la rama del bloque 15 con la misma carga.
  */
 const VERSIONED_BASELINE = JSON.parse(fs.readFileSync(path.join(__dirname, 'baseline.json'), 'utf8'))
 
@@ -959,6 +959,14 @@ const WORKFLOW_PARAMETERS = {
   baseline: VERSIONED_BASELINE,
 }
 
+test('[R5-QA-02] la linea base versionada es la mediana de tres pasadas y dice cuales', () => {
+  assert.deepEqual(
+    VERSIONED_BASELINE.baseline_of.runs.map((run) => run.run_id),
+    ['38654065980', '38656006160', '38659326956'],
+  )
+  assert.equal(VERSIONED_BASELINE.write_path.p95, 401.6)
+})
+
 test('[R5-QA-02] la linea base versionada declara la forma de la carga de hoy', () => {
   assert.equal(VERSIONED_BASELINE.instances, 3)
   assert.equal(VERSIONED_BASELINE.duration_seconds, 120)
@@ -980,4 +988,65 @@ test('[R5-QA-02] la linea base versionada no se compara con las 8 instancias que
 
   assert.equal(statusOf(summary, 'RNF-P-02'), 'not_comparable')
   assert.match(summary.verdicts['RNF-P-02'].detail, /instancias: 3 frente a 8/)
+})
+
+// --- baseline.js: la linea base es la mediana de varias pasadas --------------
+
+const { buildBaseline } = require('./baseline.js')
+
+/** Un summary.json minimo con la carga del workflow y las cifras indicadas. */
+function runSummary({ writeP95, scanP95, rate, instances = 3 }) {
+  return {
+    git_sha: 'abc1234',
+    runner: 'github-Linux-X64',
+    instances,
+    scan_rate: 6,
+    duration_seconds: 120,
+    ramp_seconds: 30,
+    pin_period_seconds: 4,
+    scenarios: { scan: { p95: scanP95 }, 'scan-pin': { p95: 600 }, reject: {}, 'reject-out-of-order': {} },
+    write_path: { p95: writeP95 },
+    pin_path: { p95: 600 },
+    totals: { shift_entries_per_second: rate },
+  }
+}
+
+const THREE_RUNS = [
+  { id: '101', summary: runSummary({ writeP95: 287, scanP95: 267.3, rate: 19.5 }) },
+  { id: '102', summary: runSummary({ writeP95: 401.6, scanP95: 371, rate: 19.4 }) },
+  { id: '103', summary: runSummary({ writeP95: 330, scanP95: 300, rate: 19.6 }) },
+]
+
+test('[R5-QA-02] la linea base es la mediana de cada metrica, no una pasada', () => {
+  const baseline = buildBaseline(THREE_RUNS)
+
+  assert.equal(baseline.write_path.p95, 330)
+  assert.equal(baseline.scenarios.scan.p95, 300)
+  assert.equal(baseline.totals.shift_entries_per_second, 19.5)
+  assert.deepEqual(baseline.baseline_of.runs.map((run) => run.run_id), ['101', '102', '103'])
+  assert.equal(baseline.baseline_of.spread.write_path_p95_max_over_median, 1.217)
+})
+
+test('[R5-QA-02] no construye una linea base con pasadas de cargas distintas', () => {
+  const mixed = [...THREE_RUNS.slice(0, 2), { id: '104', summary: runSummary({ writeP95: 300, scanP95: 300, rate: 19.5, instances: 8 }) }]
+
+  assert.throws(() => buildBaseline(mixed), /no tienen la misma carga/)
+})
+
+test('[R5-QA-02] no construye una linea base con menos de tres pasadas', () => {
+  assert.throws(() => buildBaseline(THREE_RUNS.slice(0, 2)), /al menos 3 pasadas/)
+})
+
+test('[R5-QA-02][RNF-P-02] el agregado acepta la linea base de la mediana y dice de que pasadas sale', () => {
+  const summary = runAnalysis(greenRun(), {
+    latencyVerdictMode: 'baseline',
+    baseline: buildBaseline(THREE_RUNS),
+    instances: 3,
+    offeredRate: 18,
+    durationSeconds: 120,
+  })
+
+  assert.equal(summary.baseline.comparable, true)
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /mediana de 3 pasadas: 101, 102, 103/)
 })

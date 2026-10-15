@@ -1,315 +1,108 @@
 {
-  "generated_at": "2026-10-14T23:32:47.025Z",
-  "git_sha": "715a13710bcf24364de8ab4c59e52bb1c7381f4b",
-  "harness_sha": "715a13710bcf24364de8ab4c59e52bb1c7381f4b",
+  "baseline_of": {
+    "criterion": "mediana por metrica de las pasadas listadas, todas con la misma carga (baseline.js). Una sola pasada no vale: el runner varia mas de un 25 % entre pasadas del mismo codigo.",
+    "runs": [
+      {
+        "run_id": "38654065980",
+        "git_sha": "715a13710bcf24364de8ab4c59e52bb1c7381f4b",
+        "harness_sha": "715a13710bcf24364de8ab4c59e52bb1c7381f4b",
+        "generated_at": "2026-10-14T23:32:47.025Z",
+        "write_path_p95": 287,
+        "scan_p95": 267.3,
+        "shift_entries_per_second": 19.5,
+        "pin_p95": 625.7,
+        "reject_p50": 80,
+        "write_path_p95_over_reject_p50": 3.59
+      },
+      {
+        "run_id": "38656006160",
+        "git_sha": "71cc7c4ba834bef064b21b7d13aa31017a248773",
+        "harness_sha": "71cc7c4ba834bef064b21b7d13aa31017a248773",
+        "generated_at": "2026-10-14T23:50:58.728Z",
+        "write_path_p95": 401.6,
+        "scan_p95": 371,
+        "shift_entries_per_second": 19.5,
+        "pin_p95": 895.2,
+        "reject_p50": 104.7,
+        "write_path_p95_over_reject_p50": 3.84
+      },
+      {
+        "run_id": "38659326956",
+        "git_sha": "71cc7c4ba834bef064b21b7d13aa31017a248773",
+        "harness_sha": "71cc7c4ba834bef064b21b7d13aa31017a248773",
+        "generated_at": "2026-10-15T00:28:54.072Z",
+        "write_path_p95": 999.7,
+        "scan_p95": 970.1,
+        "shift_entries_per_second": 19.5,
+        "pin_p95": 2076.4,
+        "reject_p50": 260,
+        "write_path_p95_over_reject_p50": 3.85
+      }
+    ],
+    "spread": {
+      "write_path_p95_max_over_median": 2.489,
+      "write_path_p95_min_over_median": 0.715,
+      "shift_rate_min_over_median": 1
+    }
+  },
+  "git_sha": null,
   "runner": "github-Linux-X64",
   "k6_version": "k6 v2.2.0 (commit/00a9a1b7f5, go1.26.5, linux/amd64)",
   "k6_image": "grafana/k6:2.2.0@sha256:9bd01d6941fca969cb61bb57d2da5ee9b385fe2aa8881df3798c196564d6ace6",
   "instances": 3,
-  "instance_ids": [
-    "0",
-    "1",
-    "2",
-    "panel"
-  ],
   "duration_seconds": 120,
   "scan_rate": 6,
   "offered_scan_rate": 18,
   "ramp_seconds": 30,
   "pin_period_seconds": 4,
   "latency_verdict_mode": "baseline",
-  "rejection_floor_ms": 25,
-  "debounce_seconds": 60,
   "scenarios": {
     "batch": {
-      "requirements": [
-        "RF-KI-04",
-        "RN-18"
-      ],
-      "samples": 16,
-      "answered_samples": 16,
-      "p50": 416.4,
-      "p95": 1547,
-      "p99": 1547,
-      "max": 1547,
-      "statuses": {
-        "200": 8,
-        "207": 8
-      }
+      "p50": 441.2,
+      "p95": 2534.2,
+      "p99": 2534.2
     },
     "compliance": {
-      "requirements": [
-        "RF-PA-06"
-      ],
-      "samples": 61,
-      "answered_samples": 61,
-      "p50": 165.9,
-      "p95": 183.4,
-      "p99": 377.6,
-      "max": 377.6,
-      "statuses": {
-        "200": 61
-      }
+      "p50": 235.8,
+      "p95": 345.6,
+      "p99": 561.6
     },
     "reject": {
-      "requirements": [
-        "RS-03"
-      ],
-      "samples": 363,
-      "answered_samples": 363,
-      "p50": 79.7,
+      "p50": 103.3,
       "p95": 304.8,
-      "p99": 362.8,
-      "max": 469.7,
-      "statuses": {
-        "422": 363
-      }
+      "p99": 390.2
     },
     "reject-out-of-order": {
-      "requirements": [
-        "RS-03",
-        "RN-18"
-      ],
-      "samples": 182,
-      "answered_samples": 182,
-      "p50": 141.6,
-      "p95": 268.5,
-      "p99": 425.1,
-      "max": 436.5,
-      "statuses": {
-        "422": 182
-      }
+      "p50": 183,
+      "p95": 318.5,
+      "p99": 454.2
     },
     "resend": {
-      "requirements": [
-        "RQ-03",
-        "RF-AT-07"
-      ],
-      "samples": 366,
-      "answered_samples": 366,
-      "p50": 171.5,
-      "p95": 341.5,
-      "p99": 455.2,
-      "max": 491.6,
-      "statuses": {
-        "200": 366
-      }
+      "p50": 220.8,
+      "p95": 423.7,
+      "p99": 505.2
     },
     "scan": {
-      "requirements": [
-        "RNF-P-06",
-        "RNF-P-02",
-        "RQ-08"
-      ],
-      "samples": 2699,
-      "answered_samples": 2699,
-      "p50": 69.9,
-      "p95": 267.3,
-      "p99": 373.1,
-      "max": 493.1,
-      "statuses": {
-        "200": 2699
-      }
+      "p50": 73.6,
+      "p95": 371,
+      "p99": 534.1
     },
     "scan-pin": {
-      "requirements": [
-        "RF-AT-11",
-        "RQ-03"
-      ],
-      "samples": 117,
-      "answered_samples": 117,
-      "p50": 414.1,
-      "p95": 621.4,
-      "p99": 670.7,
-      "max": 692.5,
-      "statuses": {
-        "200": 117
-      }
+      "p50": 674.4,
+      "p95": 888.1,
+      "p99": 1327.7
     }
-  },
-  "reject_classes": {
-    "signature": {
-      "samples": 123,
-      "offered": 123,
-      "min": 58.4,
-      "p50": 78.9,
-      "p95": 304.8,
-      "max": 398.4,
-      "measurable": true
-    },
-    "unknown": {
-      "samples": 120,
-      "offered": 120,
-      "min": 61,
-      "p50": 80.8,
-      "p95": 306.4,
-      "max": 350.1,
-      "measurable": true
-    },
-    "revoked": {
-      "samples": 120,
-      "offered": 120,
-      "min": 59.1,
-      "p50": 80,
-      "p95": 281,
-      "max": 469.7,
-      "measurable": true
-    }
-  },
-  "reject_out_of_order": {
-    "samples": 182,
-    "offered": 182,
-    "reconciled": 0,
-    "min": 63.5,
-    "p50": 141.6,
-    "p95": 268.5,
-    "max": 436.5,
-    "firm": true,
-    "separation_ms": {
-      "median": {
-        "signature": 62.7,
-        "unknown": 60.8,
-        "revoked": 61.5
-      },
-      "minimum": {
-        "signature": 5.1,
-        "unknown": 2.5,
-        "revoked": 4.4
-      }
-    }
-  },
-  "checks": {
-    "total": 4166,
-    "failed": []
-  },
-  "totals": {
-    "shift_producing_realtime": 2343,
-    "shift_entries_per_second": 19.5,
-    "shift_producing_batch": 392,
-    "batch_entries_per_second": 3.3,
-    "debounced": 0,
-    "debounced_ratio": 0,
-    "queueable_degradation": 0,
-    "employee_refusals": 0,
-    "resend_identical": 207,
-    "resend_divergent": 0,
-    "resend_skipped": 0,
-    "batch_accepted": 392,
-    "batch_debounced": 0,
-    "batch_retryable": 0,
-    "batch_unreconcilable": 8,
-    "batch_rejected": 0,
-    "batch_impossible": {
-      "unreconcilable": 8,
-      "retried": 0,
-      "accepted": 0,
-      "inconclusive": 0,
-      "not_set_up": 0
-    },
-    "shift_producing_ramp": 539,
-    "shift_producing_pin": 93,
-    "pin_debounced": 0,
-    "pin_resend_identical": 24,
-    "pin_resend_divergent": 0,
-    "compliance_p95": 183.4,
-    "dropped_iterations": 0,
-    "dropped_iterations_by_scenario": {}
   },
   "write_path": {
-    "samples": 2343,
-    "min": 54.6,
-    "p50": 72.9,
-    "p95": 287,
-    "p99": 376.8,
-    "max": 493.1,
-    "per_instance": [
-      {
-        "instance": "0",
-        "samples": 781,
-        "p95": 263.1,
-        "p99": 346.9
-      },
-      {
-        "instance": "1",
-        "samples": 781,
-        "p95": 316,
-        "p99": 420.9
-      },
-      {
-        "instance": "2",
-        "samples": 781,
-        "p95": 266.1,
-        "p99": 361
-      }
-    ]
+    "p50": 81.9,
+    "p95": 401.6,
+    "p99": 551.6
   },
   "pin_path": {
-    "sent": 93,
-    "samples": 93,
-    "refusals": 0,
-    "queueable": 0,
-    "min": 315.4,
-    "p50": 477,
-    "p95": 625.7,
-    "p99": 692.5,
-    "max": 692.5
+    "p50": 708.6,
+    "p95": 895.2
   },
-  "ramp_path": {
-    "seconds": 30,
-    "samples": 539,
-    "shift_producing": 539,
-    "p50": 67.2,
-    "p95": 92.5,
-    "p99": 329
-  },
-  "edge_limits": {
-    "service": "nginx",
-    "limiting_requests": 0,
-    "limiting_connections": 0
-  },
-  "server_metrics": null,
-  "verdicts": {
-    "CHECKS": {
-      "status": "pass",
-      "detail": "4166 comprobaciones de k6, 0 con fallos"
-    },
-    "RNF-P-02": {
-      "status": "not_comparable",
-      "detail": "NO COMPARABLE con la linea base (rampa: n/d frente a 30; periodo del PIN: n/d frente a 4; escenarios: batch compliance reject reject-out-of-order resend scan frente a batch compliance reject reject-out-of-order resend scan scan-pin): no se compara. Mide con los mismos parametros que la linea base o regenerala con los de esta pasada. El umbral de RNF-P-02 y RNF-P-06 NO se juzga en este runner (decision 19): solo en hardware de referencia con make load-test."
-    },
-    "RNF-P-06": {
-      "status": "not_comparable",
-      "detail": "2343 tramos en tiempo real en 120 s = 19.5/s (ofrecidos 18/s); anti-rebote 0.0 %; degradacion encolable 0 (0.00 %); rechazos al empleado 0. NO COMPARABLE con la linea base (rampa: n/d frente a 30; periodo del PIN: n/d frente a 4; escenarios: batch compliance reject reject-out-of-order resend scan frente a batch compliance reject reject-out-of-order resend scan scan-pin): no se compara. Mide con los mismos parametros que la linea base o regenerala con los de esta pasada. El umbral de RNF-P-02 y RNF-P-06 NO se juzga en este runner (decision 19): solo en hardware de referencia con make load-test."
-    },
-    "SERVICIO": {
-      "status": "pass",
-      "detail": "0 de 3198 fichajes que llegaron al servidor terminaron en 5xx (0.00 %, tope 1 %)"
-    },
-    "RQ-03": {
-      "status": "pass",
-      "detail": "207 reenvios identicos al original, 0 distintos, 0 sin respuesta del servidor en alguno de los dos envios"
-    },
-    "RF-AT-11": {
-      "status": "pass",
-      "detail": "93 fichajes por PIN enviados, 93 atendidos (93 con tramo, 0 anti-rebote), 0 rechazados al empleado, 0 encolables; reenvios por PIN: 24 identicos y 0 distintos; p50 477 ms y p95 625.7 ms (informativo: el PIN paga bcrypt y ningun requisito fija su latencia)"
-    },
-    "RS-03": {
-      "status": "pass",
-      "detail": "separacion de medianas 1.9 ms y de minimos 2.6 ms (tope 20); suelo de 25 ms respetado sobre el minimo de cada clase"
-    },
-    "RS-03-RN-18": {
-      "status": "info",
-      "detail": "mediana 141.6 ms y minimo 63.5 ms sobre 182 rechazos de RN-18. Separacion de medianas frente a la credencial: signature 62.7, unknown 60.8, revoked 61.5; de minimos: signature 5.1, unknown 2.5, revoked 4.4. INFORMATIVO: A-13 acepta esta diferencia sin suelo de tiempo (doc 07 §6), asi que la cifra no cambia el veredicto"
-    },
-    "RN-18": {
-      "status": "pass",
-      "detail": "8 elementos imposibles registrados como irreconciliables (422), 0 devueltos a la cola con 5xx y 0 aceptados. Un 5xx aqui es el bucle de reintentos infinito que RN-18 vino a eliminar."
-    }
-  },
-  "baseline": {
-    "comparable": false,
-    "differences": "rampa: n/d frente a 30; periodo del PIN: n/d frente a 4; escenarios: batch compliance reject reject-out-of-order resend scan frente a batch compliance reject reject-out-of-order resend scan scan-pin",
-    "note": "NO COMPARABLE (rampa: n/d frente a 30; periodo del PIN: n/d frente a 4; escenarios: batch compliance reject reject-out-of-order resend scan frente a batch compliance reject reject-out-of-order resend scan scan-pin): no se compara con la linea base",
-    "regression": null
+  "totals": {
+    "shift_entries_per_second": 19.5
   }
 }

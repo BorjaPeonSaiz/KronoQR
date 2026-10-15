@@ -81,6 +81,20 @@ const COMPLIANCE_BUDGET_MS = 2000 // orientativo: ningun requisito lo fija
  * El MISMO numero en los dos usos que tiene, y a proposito: en modo `threshold`
  * es un aviso sobre la tendencia y en modo `baseline` es el veredicto. Lo que
  * cambia es quien manda, no cuanto se tolera.
+ *
+ * DISPERSION MEDIDA DEL RUNNER, Y POR QUE 1,25 SE QUEDA CORTO (bloque 15).
+ * Tres pasadas del MISMO codigo con la misma carga (38654065980, 38656006160 y
+ * 38659326956) dieron un p95 de escritura de 287, 401,6 y 999,7 ms: la mas
+ * lenta es 2,49 veces la mediana y 3,48 veces la mas rapida. Con 1,25 sobre la
+ * mediana, una de cada tres pasadas sale roja sin que nada haya cambiado, que
+ * es una prueba intermitente. En las tres, la mediana de los rechazos de
+ * credencial —trabajo poco y fijo, la «velocidad de la maquina» de esa
+ * pasada— crecio en la misma proporcion (80, 104,7 y 260 ms), y el p95 medido
+ * en esa unidad fue 3,59, 3,84 y 3,85: un 7 % de dispersion en vez de un 248 %.
+ * PROPUESTA, PENDIENTE DE DECISION (no aplicada): juzgar en modo `baseline` ese
+ * cociente con esta misma tolerancia, y dejar el p95 en milisegundos como
+ * guarda gruesa a 3x para que una ralentizacion GLOBAL —que el cociente no ve—
+ * no pase. Las cifras por pasada estan en `baseline.json`, `baseline_of.runs`.
  */
 const BASELINE_REGRESSION_RATIO = 1.25
 
@@ -460,7 +474,12 @@ function analyse(results, options = {}) {
     baseline === null
       ? ''
       : `linea base del runner: p95 ${baselineP95} ms, ${baselineRate} tramos/s ` +
-        `(git_sha ${baseline.git_sha ?? 'n/d'})`
+        // `baseline.js` la construye como mediana de varias pasadas y dice de
+        // cuales; una linea base de una sola pasada lleva su `git_sha`.
+        (Array.isArray(baseline.baseline_of?.runs)
+          ? `(mediana de ${baseline.baseline_of.runs.length} pasadas: ` +
+            `${baseline.baseline_of.runs.map((run) => run.run_id).join(', ')})`
+          : `(git_sha ${baseline.git_sha ?? 'n/d'})`)
 
   const noBaselineDetail = baselineNotComparable
     ? `NO COMPARABLE con la linea base (${mismatchText}): no se compara. Mide con los mismos ` +
