@@ -1693,7 +1693,7 @@ check_images() {
   # (este paso no escribe la instalacion): las imagenes se resuelven ya con los
   # digests del paquete, que son los que correra el reintento.
   if kq_env_has_rollback_digests "${CURRENT_ENV}" && [ -f "${PACKAGE_DIR}/images.lock" ]; then
-    while read -r name digest; do
+    while IFS=" " read -r name digest; do
       case "${name}" in php | nginx | postgres) ;; *) continue ;; esac
       [ -n "${digest}" ] || continue
       digest_env+=("IMAGE_DIGEST_$(printf '%s' "${name}" | tr '[:lower:]' '[:upper:]')=@${digest}")

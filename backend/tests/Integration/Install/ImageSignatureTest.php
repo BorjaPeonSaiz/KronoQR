@@ -334,3 +334,29 @@ it('avisa cuando el .env declara REDIS_IMAGE_DIGEST (vacia o con otro valor) y n
     'con otro digest' => ["REDIS_IMAGE_DIGEST=@sha256:otro\n", 'avisos=1 nombres=REDIS_IMAGE_DIGEST'],
     'sin declarar' => ["APP_KEY=x\n", 'avisos=0 nombres='],
 ])->group('RS-10', 'RF-PD-02');
+
+it('update.sh lee el images.lock separado por espacios y pasa IMAGE_DIGEST_*=@sha256 a compose tras una vuelta atras in place', function (): void {
+    // Con IFS=$'\n\t' (el de update.sh) `read -r name digest` metia la linea entera en
+    // `name` y el reintento nunca fijaba los digests del paquete.
+    ['dir' => $dir, 'path' => $path] = imageSignatureInstallation(null);
+    file_put_contents(
+        $dir.'/bin/docker',
+        "#!/usr/bin/env bash\ncase \"\$*\" in *'config --images'*) printf 'ENV_PHP=%s ENV_NGINX=%s ENV_POSTGRES=%s\n' \"\$IMAGE_DIGEST_PHP\" \"\$IMAGE_DIGEST_NGINX\" \"\$IMAGE_DIGEST_POSTGRES\" >>".escapeshellarg($dir.'/entorno')."; cat ".escapeshellarg($dir.'/imagenes')." ;; esac\nexit 0\n",
+    );
+    $a = 'sha256:'.str_repeat('a', 64);
+    $b = 'sha256:'.str_repeat('b', 64);
+    $c = 'sha256:'.str_repeat('c', 64);
+    file_put_contents($dir.'/images.lock', "php {$a}\nnginx {$b}\npostgres {$c}\n");
+    file_put_contents($dir.'/.env', "APP_KEY=x\nIMAGE_REGISTRY=".IMAGE_SIGNATURE_REGISTRY."\nIMAGE_DIGEST_PHP=\nIMAGE_DIGEST_NGINX=\nIMAGE_DIGEST_POSTGRES=\n");
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; kq_msg_init es; '
+        .'kq_env_mark_rollback_digests '.escapeshellarg($dir.'/.env').'; '
+        .'DOCKER_OK=1; TARGET_VERSION=2.2.1; SOURCE_VERSION=2.2.0; '
+        .'CURRENT_ENV='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; PACKAGE_DIR='.escapeshellarg($dir).'; '
+        .'check_images >/dev/null 2>&1 || true';
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => $dir.'/bin:'.getenv('PATH'), 'KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process->run();
+
+    expect((string) file_get_contents($dir.'/entorno'))
+        ->toContain("ENV_PHP=@{$a} ENV_NGINX=@{$b} ENV_POSTGRES=@{$c}");
+})->group('RS-10', 'RF-PD-10');
