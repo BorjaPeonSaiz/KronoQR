@@ -408,8 +408,8 @@ it('comprueba el presupuesto de bundle del panel en el propio build', function (
     // RNF-P-04 (carga del panel): JS critico <= 190 KiB gzip, CSS <= 40 KiB. El
     // chunk de entrada pesaba ~247 KiB cuando las vistas se importaban de forma
     // sincrona; ahora cargan por import() desde el router. Esta prueba solo
-    // comprueba que el guardian sigue enganchado al `build` y que el router no
-    // ha vuelto a importar vistas de golpe (la medida la hace el propio script).
+    // comprueba que el guardian sigue enganchado al `build` (la medida la hace el propio
+    // script).
     $script = repoContents('frontend-admin/scripts/check-bundle-budget.mjs');
 
     expect($script)->toContain('190 * KIB');
