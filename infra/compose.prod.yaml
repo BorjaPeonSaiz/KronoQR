@@ -1174,7 +1174,7 @@ services:
   # backend ni arranca, y el fichaje no depende de que este contenedor viva).
   tempo:
     profiles: [observability]
-    image: grafana/tempo:2.7.1
+    image: grafana/tempo:3.1.0
     entrypoint: ["/tempo"]
     command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
     depends_on:
