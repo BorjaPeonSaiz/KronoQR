@@ -3324,9 +3324,10 @@ jobs:
       # vive unos minutos en un runner efimero; no son secretos del producto.
       KQ_RESTORE_CYCLE: "1"
       DB_HOST: 127.0.0.1
-      # La base del servidor es `fichaje`; phpunit.xml fuerza DB_DATABASE=fichaje_test
-      # solo para la suite de integracion, y esta prueba no la usa: siembra, copia y
-      # restaura `fichaje` con la conexion de este entorno.
+      # OJO: phpunit.xml fuerza DB_DATABASE=fichaje_test (<env> y <server> con
+      # force="true") para TODA suite, tambien Restore: la prueba siembra, copia y
+      # restaura `fichaje_test`, que crea 01-test-database.sql. El `fichaje` de aqui
+      # solo lo usan los pasos de shell previos a Pest.
       DB_PORT: "5432"
       DB_DATABASE: fichaje
       DB_USERNAME: fichaje_migrator
