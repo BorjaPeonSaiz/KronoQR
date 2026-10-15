@@ -3,13 +3,25 @@
 // Mismo patron que `offline.spec.ts` de la 1.9 para la parte de cola: el
 // backend no participa, se intercepta cada llamada, y se abre IndexedDB por
 // debajo para comprobar lo que queda escrito de verdad.
+//
+// LA CAMARA, BLOQUEADA DONDE NO SE PRUEBA (intermitencia de la 2.2.1, bloque
+// 16 §4, la misma causa que `pin-lockout.spec.ts`). El video del proyecto
+// `kiosk-qr` decodifica la tarjeta en bucle, y su confirmacion desmonta el
+// enlace «Ficha con tu codigo y PIN»: si llegaba durante el clic, el clic se
+// perdia y la prueba agotaba el plazo en el `fill` del codigo. Las pruebas que
+// solo recorren el PIN llaman a `blockCamera`; todas entran con
+// `openPinScreen`, que espera al paso del codigo antes de teclear. Quedan con
+// la camara en marcha la de la instalacion sin PIN y la de WebAssembly
+// bloqueado (no pulsan el enlace y miran la pantalla de tarjeta) y la de los
+// tonos, que convive con el trafico QR de fondo a proposito.
 
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { installAudioProbe } from './support/audio'
-import { readQueue } from './support/offlineQueue'
+import { blockCamera, readQueue } from './support/offlineQueue'
 import {
   enterEmployeeCode,
+  openPinScreen,
   pressPinDigits,
   stubKioskApiWithoutPin,
   stubKioskApiWithPin,
@@ -37,6 +49,7 @@ test(
   'la instalacion con PIN ofrece el boton, y ficha con red',
   { tag: ['@RF-AT-11'] },
   async ({ page }) => {
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
     // Un retraso de 1200 ms -- por encima de `PIN_VERIFY_GRACE_MS` (300 ms), con
     // holgura para que el sondeo de Playwright lo vea en un runner lento, y
@@ -49,11 +62,7 @@ test(
     // llegar a aparecer.
     const pinApi = await stubPinScanApi(page, 'clock_in', 1200)
 
-    await page.goto('/')
-    await expect(page.getByTestId('pin-entry-link')).toBeVisible()
-    await page.getByTestId('pin-entry-link').click()
-
-    await expect(page.getByTestId('pin-step-code')).toBeVisible()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
 
     await expect(page.getByTestId('pin-step-pin')).toBeVisible()
@@ -89,11 +98,11 @@ test(
   'un PIN de 8 cifras no se envia solo: se envia con «Aceptar» (ADR-050)',
   { tag: ['@RF-AT-11', '@RF-ID-09'] },
   async ({ page }) => {
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
     const pinApi = await stubPinScanApi(page, 'clock_in')
 
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await expect(page.getByTestId('pin-step-pin')).toBeVisible()
 
@@ -125,11 +134,11 @@ test(
     // real en la misma red. «Comprobando…» pintado y sustituido de inmediato
     // seria un parpadeo (dos pintados, dos sonidos por un unico fichaje):
     // este es el hallazgo de revision que la ventana de gracia corrige.
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
     const pinApi = await stubPinScanApi(page, 'clock_in')
 
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
     await page.getByTestId('pin-confirm').click()
@@ -163,11 +172,11 @@ test(
   'sin red: se confirma en local, se encola sellado y se sincroniza al volver',
   { tag: ['@RF-AT-11', '@RQ-05'] },
   async ({ page }) => {
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
     await page.route('**/api/v1/scan/pin', async (route) => route.abort('failed'))
 
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
     await page.getByTestId('pin-confirm').click()
@@ -197,14 +206,14 @@ test(
   'PIN erroneo: nunca se ve «pendiente» (indigo), solo «Comprobando…» y despues el rechazo generico (regla dura 17)',
   { tag: ['@RF-AT-11', '@RS-03'] },
   async ({ page }) => {
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
     // El mismo retraso que en el caso de exito: sin el, la interceptacion de
     // Playwright contesta tan rapido que no llega a comprobarse que
     // «Comprobando…» aparecio de verdad (con 400 ms fallaba en el runner de la CI).
     await stubPinScanApi(page, 'rejected', 1200)
 
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
 
@@ -259,8 +268,7 @@ test(
     // COMPLETO despues: si algo de fondo se colara igualmente, la asercion de
     // longitud fallaria en vez de comparar contra un tono equivocado en
     // silencio.
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
     await reset()
@@ -277,8 +285,7 @@ test(
     await page.unroute('**/api/v1/scan/pin')
     await stubPinScanApi(page, 'rejected')
 
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
     await reset()
@@ -300,12 +307,12 @@ test(
   { tag: ['@RF-AT-05', '@RF-AT-11', '@RF-KI-06'] },
   async ({ page }) => {
     const { readTones, reset } = await installAudioProbe(page)
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
     // Contesta a los 1,2 s: pasada la gracia (300 ms) y dentro del plazo del PIN (2,5 s).
     await stubPinScanApi(page, 'clock_in', 1_200)
 
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
     await reset()
@@ -329,12 +336,12 @@ test(
   { tag: ['@RF-AT-05', '@RF-AT-11', '@RF-KI-06'] },
   async ({ page }) => {
     const { readTones, reset } = await installAudioProbe(page)
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
     // Contesta a los 3,5 s: despues de `PIN_VERIFY_TIMEOUT_MS` (2,5 s).
     await stubPinScanApi(page, 'clock_in', 3_500)
 
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
     await reset()
@@ -363,12 +370,12 @@ test(
   { tag: ['@RF-AT-05', '@RF-AT-11', '@RF-KI-06'] },
   async ({ page }) => {
     const { readTones, reset } = await installAudioProbe(page)
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
     // Rechaza a los 3,5 s: despues de `PIN_VERIFY_TIMEOUT_MS` (2,5 s).
     await stubPinScanApi(page, 'rejected', 3_500)
 
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await pressPinDigits(page, RAW_PIN)
     await reset()
@@ -404,10 +411,9 @@ test(
   'la pantalla de PIN no tiene violaciones de accesibilidad criticas ni graves',
   { tag: ['@RF-KI-06'] },
   async ({ page }) => {
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
-    await expect(page.getByTestId('pin-step-code')).toBeVisible()
+    await openPinScreen(page)
 
     const codeResults = await new AxeBuilder({ page })
       .withTags(WCAG_TAGS)
@@ -442,9 +448,9 @@ test(
   'el teclado numerico del PIN mide al menos 48 px por digito',
   { tag: ['@RF-KI-06'] },
   async ({ page }) => {
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
+    await openPinScreen(page)
     await enterEmployeeCode(page, EMPLOYEE_CODE)
     await expect(page.getByTestId('pin-step-pin')).toBeVisible()
 
@@ -495,10 +501,9 @@ test(
   'un PIN abandonado a medio teclear vuelve solo a inicio a los 60 s y borra lo tecleado',
   { tag: ['@RF-AT-11', '@RF-KI-07'] },
   async ({ page }) => {
+    await blockCamera(page)
     await stubKioskApiWithPin(page)
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
-    await expect(page.getByTestId('pin-step-code')).toBeVisible()
+    await openPinScreen(page)
 
     await page.clock.install()
     await enterEmployeeCode(page, EMPLOYEE_CODE)
