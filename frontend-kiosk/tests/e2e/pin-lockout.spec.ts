@@ -41,10 +41,31 @@
 // puede fallar de una forma que importa -el quiosco no exhibe ningun
 // oraculo, aunque el propio servidor simulado lo ofreciera- y su control
 // negativo.
+//
+// LA CAMARA NO ARRANCA EN ESTE FICHERO (intermitencia de la 2.2.1, bloque 16
+// §4). El proyecto `kiosk-qr` pone delante de la camara un video con una
+// tarjeta que se decodifica EN BUCLE, y su confirmacion sustituye a la pantalla
+// de espera, enlace «Ficha con tu codigo y PIN» incluido. Cada intento de aqui
+// empieza en `/` y pulsa ese enlace: si la primera lectura de la camara
+// llegaba entre la comprobacion de Playwright y el clic, el clic caia sobre la
+// confirmacion, no se navegaba al PIN y el `fill` del codigo agotaba el plazo
+// esperando un campo que no existia. No era el teclado deshabilitado: el campo
+// del codigo no tiene `disabled` y el quiosco no pinta ningun estado de
+// bloqueo. Nada de esto prueba la camara, asi que se quita la carrera de raiz
+// (`blockCamera`) y cada intento espera, ademas, al paso del codigo
+// (`openPinScreen`) antes de teclear.
 
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { consecutiveRejections, stubKioskApiWithPin, stubPinScanApi } from './support/pin'
+import { blockCamera } from './support/offlineQueue'
+import {
+  consecutiveRejections,
+  enterEmployeeCode,
+  openPinScreen,
+  pressPinDigits,
+  stubKioskApiWithPin,
+  stubPinScanApi,
+} from './support/pin'
 import { expectTouchTargets } from './support/touchTargets'
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
@@ -53,6 +74,10 @@ const DISABLED_RULES = ['video-caption']
 const EMPLOYEE_CODE = 'E7QK2MXPR'
 const PIN = '483920'
 const CONSECUTIVE_ATTEMPTS = 3
+
+test.beforeEach(async ({ page }) => {
+  await blockCamera(page)
+})
 
 test(
   'el quiosco no exhibe ningun oraculo de bloqueo: varios rechazos seguidos, mismo cuerpo generico',
@@ -105,13 +130,9 @@ test(
       })
     })
 
-    await page.goto('/')
-    await page.getByTestId('pin-entry-link').click()
-    await page.getByTestId('pin-code-input').fill(EMPLOYEE_CODE)
-    await page.getByTestId('pin-code-continue').click()
-    for (const digit of PIN) {
-      await page.getByRole('button', { name: digit, exact: true }).click()
-    }
+    await openPinScreen(page)
+    await enterEmployeeCode(page, EMPLOYEE_CODE)
+    await pressPinDigits(page, PIN)
     await page.getByTestId('pin-confirm').click()
 
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'rejected', {
