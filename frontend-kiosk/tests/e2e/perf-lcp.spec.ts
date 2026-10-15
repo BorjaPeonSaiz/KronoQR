@@ -21,9 +21,9 @@
 // 1364-1456 ms, es decir un margen del 27-32 % sobre los 2000 ms. Con el perfil
 // «Fast 3G» de las DevTools (562,5 ms por peticion, solo informativo): 2184-2296 ms.
 // Antes de KP1 el mismo harness daba 1496-1500 ms (Lighthouse) y 2356 ms (DevTools).
-// Valores de la CI (job ⑦ del quiosco): pendientes de anotar al terminar su
-// primera ejecucion; si alli el margen baja del 25 % (LCP > 1500 ms),
-// se revisa el umbral o el numero de muestras, no se ignora.
+// Valores de la CI (job ⑦ del quiosco, run 38762123501): 1340 / 1352 / 1364 ms
+// (margen del 32 %) y 2132 ms con el perfil de las DevTools. Si el margen baja
+// del 25 % (LCP > 1500 ms), se revisa el umbral o el numero de muestras, no se ignora.
 //
 // LO QUE QUEDA ABIERTO: el LCP en la tablet real. Esto es la maquina de quien
 // ejecuta la prueba estrangulada, y se declara asi (mismo criterio que
