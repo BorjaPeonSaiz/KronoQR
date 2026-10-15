@@ -6,6 +6,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Spectator\Spectator;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -28,6 +29,9 @@ uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
     WorkforceFixtures::site();
+    // Los `422` se validan contra el contrato desde que lo declara (CT1 de la
+    // verificacion de la 2.1.0): antes salian sin que el contrato los nombrara.
+    Spectator::using('openapi.yaml');
     // Los limites de esta zona se prueban en su propio caso; el resto no puede
     // depender de cuantas peticiones lleve el fichero.
     RateLimiter::clear('client-errors');
@@ -104,12 +108,12 @@ it('el origen lo decide el token aunque el cuerpo intente decir otra cosa', func
 
     Api::as($token)->post('/api/v1/client-errors', [
         'errors' => [array_merge(errorDePanel(), ['source' => 'scheduler'])],
-    ])->assertStatus(422);
+    ])->assertValidResponse(422);
 
     Api::as($token)->post('/api/v1/client-errors', [
         'errors' => [errorDePanel()],
         'app' => 'kiosk',
-    ])->assertStatus(422);
+    ])->assertValidResponse(422);
 
     expect(DB::table('error_events')->count())->toBe(0);
 })->group('RF-PD-15');
@@ -128,7 +132,7 @@ it('rechaza un codigo de quiosco desde una sesion de gestion', function (): void
      */
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
         ->post('/api/v1/client-errors', ['errors' => [errorDePanel('kiosk.camera.unavailable')]])
-        ->assertStatus(422);
+        ->assertValidResponse(422);
 
     expect(DB::table('error_events')->count())->toBe(0);
 })->group('RF-PD-15', 'RS-04');
@@ -138,7 +142,7 @@ it('rechaza un codigo de quiosco desde una sesion de portal', function (): void 
 
     Api::as(PortalLogins::open($uuid))
         ->post('/api/v1/client-errors', ['errors' => [errorDePanel('kiosk.camera.unavailable')]])
-        ->assertStatus(422);
+        ->assertValidResponse(422);
 
     expect(DB::table('error_events')->count())->toBe(0);
 })->group('RF-PD-15', 'RS-04');
@@ -165,7 +169,7 @@ it('rechaza un codigo que no esta en ningun catalogo', function (): void {
     // filas por minuto y actor. El catalogo corta la entropia en el origen.
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
         ->post('/api/v1/client-errors', ['errors' => [errorDePanel('web.inventado_por_alguien')]])
-        ->assertStatus(422);
+        ->assertValidResponse(422);
 
     expect(DB::table('error_events')->count())->toBe(0);
 })->group('RF-PD-15');
@@ -317,7 +321,7 @@ it('admite cincuenta errores por envio y rechaza cincuenta y uno', function (): 
         ->assertExactJson(['accepted' => 50]);
 
     Api::as($token)->post('/api/v1/client-errors', ['errors' => [...$cincuenta, errorDePanel()]])
-        ->assertStatus(422);
+        ->assertValidResponse(422);
 })->group('RF-PD-15');
 
 it('agrupa por huella: cincuenta veces el mismo error son una fila', function (): void {
@@ -334,10 +338,10 @@ it('agrupa por huella: cincuenta veces el mismo error son una fila', function ()
 it('rechaza un cuerpo vacio y un codigo que no sigue el catalogo', function (): void {
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
 
-    Api::as($token)->post('/api/v1/client-errors', ['errors' => []])->assertStatus(422);
+    Api::as($token)->post('/api/v1/client-errors', ['errors' => []])->assertValidResponse(422);
     Api::as($token)->post('/api/v1/client-errors', [
         'errors' => [errorDePanel('Se rompio al cargar la ficha de Ana')],
-    ])->assertStatus(422);
+    ])->assertValidResponse(422);
 })->group('RF-PD-15');
 
 it('tiene su propia zona de limite, por token', function (): void {

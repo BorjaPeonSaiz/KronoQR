@@ -37,13 +37,13 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * pruebas de integracion. Lo que esta separacion compra es que un numero mal
  * calculado falle en un sitio y solo en uno.
  *
- * ## El contrato se comprueba con Spectator sobre la consulta
+ * ## El contrato se comprueba con Spectator, tambien en la descarga
  *
- * La descarga devuelve un fichero binario, y `assertValidResponse` espera un
- * cuerpo JSON deserializable: la forma de esa respuesta —los tres tipos de
- * contenido, las cabeceras— la comprueba `tests/Contract/OpenApiContractTest.php`.
- * Es el mismo reparto que hicieron la descarga del informe por periodo y la
- * salida a nomina.
+ * La descarga devuelve un fichero binario. Sobre ella `assertValidResponse`
+ * comprueba que el codigo esta declarado y que el tipo de contenido es uno de los
+ * tres del contrato; el cuerpo de un `format: binary` no tiene forma que validar.
+ * Los `422` y el `503` son JSON y se validan enteros (Q3 de la verificacion de la
+ * 2.2.0). Las cabeceras las comprueba ademas `tests/Contract/OpenApiContractTest.php`.
  */
 
 uses(RefreshDatabase::class);
@@ -442,7 +442,7 @@ it('descarga el cuadro sellado y deja su asiento en audit_log', function (string
 
     $response = Api::as($context['token'])
         ->get('/api/v1/reports/adoption/export?format='.$format.'&from=2026-03-01&to=2026-03-31')
-        ->assertOk();
+        ->assertValidResponse(200);
 
     expect($response->headers->get('content-type'))->toContain($contentType)
         ->and($response->headers->get('cache-control'))->toContain('no-store')
@@ -631,5 +631,24 @@ it('rechaza un formato que no existe sin llegar a consultar nada', function (): 
 
     Api::as($context['token'])
         ->get('/api/v1/reports/adoption/export?format=json&from=2026-03-01&to=2026-03-31')
-        ->assertStatus(422);
+        ->assertValidResponse(422);
+})->group('RF-IN-08');
+
+it('responde 503 con problem+json cuando el motor de PDF no esta, y el CSV sigue saliendo', function (): void {
+    // El mismo criterio que la descarga del informe por periodo: la ausencia de
+    // Chromium degrada UN FORMATO, no la descarga. El `503` lo declara el contrato
+    // desde la 2.2.1 (CT3); antes salia igual y el cliente no lo tenia tipado.
+    FrozenTime::at('2026-04-15 10:00:00');
+    $context = hotelConCuadroDeImpacto();
+
+    FakeReportDocumentRenderer::bindFailing();
+
+    Api::as($context['token'])
+        ->get('/api/v1/reports/adoption/export?format=pdf&from=2026-03-01&to=2026-03-31')
+        ->assertValidResponse(503)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:service-unavailable');
+
+    Api::as($context['token'])
+        ->get('/api/v1/reports/adoption/export?format=csv&from=2026-03-01&to=2026-03-31')
+        ->assertValidResponse(200);
 })->group('RF-IN-08');

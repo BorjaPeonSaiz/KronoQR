@@ -553,7 +553,8 @@ it('devuelve 304 sin cuerpo a quien ya tiene esa version del logotipo', function
     $revalidacion = Api::guest()
         ->withHeaders(['If-None-Match' => (string) $etag])
         ->get('/api/v1/branding/logo')
-        ->assertStatus(304);
+        ->assertValidRequest()
+        ->assertValidResponse(304);
 
     expect($revalidacion->getContent())->toBe('');
 })->group('RF-PD-08');

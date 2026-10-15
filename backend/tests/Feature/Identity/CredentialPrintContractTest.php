@@ -10,11 +10,13 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\FakeCardRenderer;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
- * `POST /credentials/{uuid}/print` y `POST /credentials/print-batch` contra el
- * contrato (RF-QR-04, ADR-034).
+ * `POST /credentials/{uuid}/print`, `POST /credentials/print-batch` y
+ * `POST /credentials/{uuid}/deliver` contra el contrato (RF-QR-04, RF-QR-06,
+ * ADR-034).
  *
  * Cerraba el hueco de nivel de RF-QR-04 en `TestLevelGateTest`: ninguna prueba
  * validaba contra `openapi.yaml` la respuesta de la impresion —las de la
@@ -93,3 +95,51 @@ it('imprime el lote pendiente en una sola hoja A4 que cumple el contrato, y la s
     Api::as($token)->post('/api/v1/credentials/print-batch')
         ->assertValidResponse(204);
 })->group('RF-QR-04');
+
+it('registra la entrega de una tarjeta impresa con una respuesta que cumple el contrato', function (): void {
+    // Q3 de la verificacion de la 2.2.0: `deliver` era una de las operaciones sin
+    // ninguna respuesta validada, y la suya es JSON, sin la excusa del binario.
+    FrozenTime::at('2026-08-21 06:40:15');
+    app()->instance(CardRenderer::class, new FakeCardRenderer);
+    $token = tokenDeRrhhParaImprimir();
+    $credencial = credencialPendienteDeImprimir($token);
+
+    Api::as($token)->post('/api/v1/credentials/'.$credencial.'/print')->assertValidResponse(200);
+
+    $entrega = Api::as($token)->post('/api/v1/credentials/'.$credencial.'/deliver')
+        ->assertValidResponse(200);
+
+    expect($entrega->json('uuid'))->toBe($credencial)
+        ->and($entrega->json('delivered_at'))->toBe('2026-08-21T06:40:15.000000Z');
+
+    // No es idempotente: una segunda entrega cambiaria responsable y momento.
+    Api::as($token)->post('/api/v1/credentials/'.$credencial.'/deliver')
+        ->assertValidResponse(409);
+})->group('RF-QR-06');
+
+it('no entrega una tarjeta que todavia no se ha impreso, con el 409 del contrato', function (): void {
+    FrozenTime::at('2026-08-21 06:40:15');
+    $token = tokenDeRrhhParaImprimir();
+    $credencial = credencialPendienteDeImprimir($token);
+
+    Api::as($token)->post('/api/v1/credentials/'.$credencial.'/deliver')
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+})->group('RF-QR-06');
+
+it('rechaza con el 422 del contrato un campo que imprimir o entregar no admiten', function (string $accion, string $campo): void {
+    // `RejectsUnknownInput` con `rules()` vacio: un `reprint` o un `delivered_by`
+    // tirados en silencio harian creer al panel que se han aplicado (CT2).
+    FrozenTime::at('2026-08-21 06:40:15');
+    app()->instance(CardRenderer::class, new FakeCardRenderer);
+    $token = tokenDeRrhhParaImprimir();
+    $credencial = credencialPendienteDeImprimir($token);
+
+    Api::as($token)->post('/api/v1/credentials/'.$credencial.'/'.$accion, [$campo => true])
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
+        ->assertJsonStructure(['errors' => [$campo]]);
+})->with([
+    'reimprimir' => ['print', 'reprint'],
+    'entregar a nombre de otro' => ['deliver', 'delivered_by'],
+])->group('RF-QR-04', 'RF-QR-06');
