@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+#!/usr/bin/env bash
 #
 # Lectura de los parametros de la prueba de carga, compartida por `run.sh` y
 # por `.github/workflows/load-test.yml` (bloque 15 de la 2.2.1).
@@ -11,6 +11,17 @@
 # workflow y el lanzador lean «2m» de dos maneras distintas.
 #
 # Se carga con `.` y no define nada fuera de estas dos funciones.
+#
+# PREAMBULO COMO EN `infra/scripts/lib/`, Y NO EXCEPCION COMO LOS `.envsh`. Un
+# fichero cargado impone su `set` y su `IFS` a quien lo carga. Los `.envsh` se
+# eximen porque los carga el punto de entrada de la imagen de Nginx, que no es
+# codigo nuestro. Aqui los dos cargadores SI lo son, y los dos corren ya con
+# estas mismas garantias: `run.sh` declara exactamente este preambulo, y el
+# paso del workflow corre con `set -euo pipefail` y solo itera sobre palabras
+# literales y cadenas entrecomilladas, que no dependen de `IFS`. Repetirlo aqui
+# no cambia nada a quien carga y deja el fichero dentro de `make sh-lint`.
+set -euo pipefail
+IFS=$'\n\t'
 
 # Un entero sin signo, en decimal. Devuelve 1 si no lo es.
 k6_is_count() {
