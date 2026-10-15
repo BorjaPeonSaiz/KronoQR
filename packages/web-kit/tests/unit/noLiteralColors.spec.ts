@@ -88,6 +88,16 @@ vueTester.run('no-literal-colors (.vue)', rule, {
   ],
 })
 
+describe('noLiteralColors (mensaje)', () => {
+  const message = rule.meta?.messages?.literalColor ?? ''
+
+  it('sugiere utilidades y tokens que existen, no una funcion que web-kit no exporta', () => {
+    expect(message).not.toContain('readToken')
+    expect(message).toContain('bg-kq-surface')
+    expect(message).toContain('var(--kq-color-text)')
+  })
+})
+
 describe('noLiteralColors (bloque de configuracion)', () => {
   it('activa la regla como error sobre src y propaga las rutas exentas', () => {
     const block = noLiteralColors(undefined, ['**/*.d.ts', 'src/branding.ts'])
