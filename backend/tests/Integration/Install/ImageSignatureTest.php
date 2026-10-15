@@ -29,6 +29,10 @@ function imageSignatureSandbox(?string $mode, string $version = 'v3.1.3'): strin
         $failure = match ($mode) {
             'invalid' => "echo 'Error: no matching signatures' >&2\nexit 1\n",
             'network' => "echo 'Error: dial tcp: lookup rekor.sigstore.dev: no such host' >&2\nexit 1\n",
+            'denied' => "echo 'Error: GET https://ghcr.io/v2/acme/kronoqr/php/referrers: DENIED: denied' >&2\nexit 1\n",
+            'ratelimit' => "echo 'Error: unexpected status code 429 Too Many Requests: toomanyrequests' >&2\nexit 1\n",
+            // Se verifican todas las imagenes aunque la primera no tenga red. La primera llamada no tiene red; las siguientes, firma inexistente.
+            'network-then-invalid' => "if [ ! -e ".escapeshellarg($dir.'/segunda')." ]; then : >".escapeshellarg($dir.'/segunda')."; echo 'Error: dial tcp: i/o timeout' >&2; exit 1; fi\necho 'Error: no matching signatures' >&2\nexit 1\n",
             default => "exit 0\n",
         };
         file_put_contents(
@@ -121,7 +125,24 @@ it('no poder consultar Sigstore o el registro NO es una firma invalida: aviso y 
     expect($run['result'])->toBe('unverifiable')
         ->and($run['exit'])->toBe(0)
         ->and($run['detail'])->toContain('no such host')
-        ->and(substr_count($run['calls'], 'verify '))->toBe(1);
+        ->and(substr_count($run['calls'], 'verify '))->toBe(2);
+})->group('RS-10', 'RF-PD-02');
+
+it('una respuesta del registro (denied, 429) a la firma es una firma invalida, nunca un aviso', function (string $mode): void {
+    $run = imageSignatureRun([imageSignaturePinned('php')], $mode);
+
+    expect($run['result'])->toBe('failed')
+        ->and($run['exit'])->toBe(1)
+        ->and($run['failed'])->toBe(imageSignaturePinned('php'));
+})->with(['denied', 'ratelimit'])->group('RS-10', 'RF-PD-02');
+
+it('una imagen inaccesible seguida de otra invalida es un fallo: se verifican todas y manda la peor', function (): void {
+    $run = imageSignatureRun([imageSignaturePinned('php'), imageSignaturePinned('nginx')], 'network-then-invalid');
+
+    expect($run['result'])->toBe('failed')
+        ->and($run['exit'])->toBe(1)
+        ->and($run['failed'])->toBe(imageSignaturePinned('nginx'))
+        ->and(substr_count($run['calls'], 'verify '))->toBe(2);
 })->group('RS-10', 'RF-PD-02');
 
 it('sin cosign no falla: avisa y sigue valiendo el digest', function (): void {

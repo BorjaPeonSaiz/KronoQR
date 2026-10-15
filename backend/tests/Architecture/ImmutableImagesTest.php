@@ -176,6 +176,14 @@ it('fija por digest toda imagen de compose.prod.yaml, salvo las siete de observa
 
     // Y Redis, la prioritaria, lleva etiqueta Y digest.
     expect($compose)->toMatch('/image:\s*redis:7-alpine\$\{REDIS_IMAGE_DIGEST-@sha256:[0-9a-f]{64}\}\s*$/m');
+
+    // Dependabot no lee la linea de produccion (lleva interpolacion): lee la de
+    // desarrollo, que lleva el MISMO digest literal. Si la PR de Dependabot lo
+    // sube solo alli, esta prueba falla hasta copiarlo a produccion.
+    $dev = Repo::contents('infra/compose.dev.yaml');
+    expect(preg_match('/image:\s*redis:7-alpine@(sha256:[0-9a-f]{64})\s*$/m', $dev, $enDesarrollo))->toBe(1)
+        ->and(preg_match('/REDIS_IMAGE_DIGEST-@(sha256:[0-9a-f]{64})\}/', $compose, $enProduccion))->toBe(1)
+        ->and($enProduccion[1] ?? '')->toBe($enDesarrollo[1] ?? 'x', 'El digest de Redis de compose.prod.yaml difiere del de compose.dev.yaml: copia el nuevo a produccion.');
 })->group('RF-PD-02', 'RS-10');
 
 it('la vuelta atras in-place anula los digests, la primera publicacion es explicita y la CI ejercita el paquete fijado', function (): void {

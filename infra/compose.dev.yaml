@@ -291,7 +291,10 @@ services:
 
   #--- 4 · Redis 7: colas, cache, rate limiting, sesiones ---------------------
   redis:
-    image: redis:7-alpine
+    # Mismo digest literal que el de produccion (compose.prod.yaml, valor por defecto de
+    # REDIS_IMAGE_DIGEST): esta es la linea que Dependabot SI lee, y ImmutableImagesTest
+    # falla si los dos digests difieren, de modo que su PR no pasa hasta copiarlo a prod.
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     container_name: kronoqr-redis
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
     ports:

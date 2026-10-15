@@ -804,9 +804,9 @@ services:
     # REDIS_IMAGE_DIGEST (`${VAR-valor}`: sin definir, fijada; definida y VACIA en el
     # .env, vuelve a la etiqueta; es el opt-out de un servidor sin internet que
     # carga las imagenes con `docker load`, igual que IMAGE_DIGEST_*, y install.sh,
-    # update.sh y doctor.sh avisan). Dependabot probablemente no lea esta linea por
-    # llevar interpolacion: la actualizacion del digest es manual (ver ADR-053,
-    # Enmienda 2.2.1). QualityGatesTest exige digest en toda imagen de este fichero.
+    # update.sh y doctor.sh avisan). Dependabot no lee esta linea (lleva interpolacion):
+    # lee la de compose.dev.yaml, con el MISMO digest, y ImmutableImagesTest falla
+    # mientras los dos difieran; hay que copiarlo aqui a mano (ADR-053, Enmienda 2.2.1). QualityGatesTest exige digest en toda imagen de este fichero.
     image: redis:7-alpine${REDIS_IMAGE_DIGEST-@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499}
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     volumes:

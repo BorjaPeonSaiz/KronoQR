@@ -118,9 +118,14 @@ kq_cosign_version_ok() {
 kq_cosign_classify() {
   local output="$1"
 
-  if grep -qiE 'no matching signatures|no signatures found|none of the expected identities|certificate identity|invalid signature|signature verification|does not match|no signature' <<<"${output}"; then
+  # CUALQUIER respuesta HTTP del registro (401, 403, 429, 5xx, denied, unauthorized,
+  # toomanyrequests...) es `invalid`: un registro comprometido puede servir la
+  # imagen sustituida y negar solo la firma, y eso no puede degradar a un aviso.
+  if grep -qiE 'no matching signatures|no signatures found|none of the expected identities|certificate identity|invalid signature|signature verification|does not match|no signature|denied|unauthorized|forbidden|toomanyrequests|too many requests|status code|unexpected status|\b(401|403|404|429|50[0-9])\b' <<<"${output}"; then
     printf 'invalid'
-  elif grep -qiE 'dial tcp|no such host|i/o timeout|connection refused|connection reset|context deadline exceeded|tls handshake|network is unreachable|temporary failure|service unavailable|bad gateway|gateway timeout|failed to fetch|unable to fetch|tuf|toomanyrequests|unauthorized|denied' <<<"${output}"; then
+  elif grep -qiE 'dial tcp|no such host|i/o timeout|connection refused|connection reset|network is unreachable|context deadline exceeded|tls handshake' <<<"${output}"; then
+    # Solo un fallo de RED sin respuesta de nadie (contra el registro o contra
+    # Sigstore: Rekor, Fulcio, TUF).
     printf 'unreachable'
   else
     printf 'invalid'
@@ -213,17 +218,31 @@ kq_verify_product_images() {
     return 0
   fi
 
+  # Se verifican TODAS: el resultado agregado es el peor, y un `invalid` en
+  # cualquiera manda sobre un `unreachable` anterior.
+  local unreachable_image="" unreachable_detail=""
   for image in "${pinned[@]}"; do
     if ! kq_cosign_verify_ref "${image}"; then
-      KQ_SIG_FAILED_IMAGE="${image}"
       if [ "${KQ_SIG_KIND}" = "unreachable" ]; then
-        KQ_SIG_RESULT="unverifiable"
-        return 0
+        [ -n "${unreachable_image}" ] || {
+          unreachable_image="${image}"
+          unreachable_detail="${KQ_SIG_DETAIL}"
+        }
+        continue
       fi
+      KQ_SIG_FAILED_IMAGE="${image}"
       KQ_SIG_RESULT="failed"
       return 1
     fi
   done
+
+  if [ -n "${unreachable_image}" ]; then
+    KQ_SIG_FAILED_IMAGE="${unreachable_image}"
+    KQ_SIG_DETAIL="${unreachable_detail}"
+    KQ_SIG_KIND="unreachable"
+    KQ_SIG_RESULT="unverifiable"
+    return 0
+  fi
 
   KQ_SIG_RESULT="verified"
   return 0
