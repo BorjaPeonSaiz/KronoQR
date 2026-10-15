@@ -35,6 +35,14 @@ final readonly class DatabaseWorkRecordPresence implements WorkRecordPresence
         return (bool) $row->present;
     }
 
+    public function count(): int
+    {
+        /** @var object{entries: int|string} $row */
+        $row = $this->connection->selectOne('SELECT count(*) AS entries FROM shift_entries');
+
+        return (int) $row->entries;
+    }
+
     public function extent(): ?WorkRecordExtent
     {
         /** @var object{entries: int|string, first_work_date: string|null, last_work_date: string|null} $row */

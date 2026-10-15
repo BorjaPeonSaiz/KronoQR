@@ -49,7 +49,7 @@ final class InvalidSiteTimezoneCorrection extends WorkforceDomainException
         return new self(
             'site.correct_timezone.responsible_inactive',
             ['id' => $userId],
-            'Account '.$userId.' is not an active management account.',
+            'Account '.$userId.' is not an active management account with a role that can change the site.',
         );
     }
 }

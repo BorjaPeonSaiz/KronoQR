@@ -26,7 +26,7 @@ return [
         'invalid_responsible' => '--responsible must be the account id, a positive integer; «:value» is not. Nothing has been changed.',
         'reason_too_short' => 'The reason must explain the setup mistake: at least :min characters.',
         'reason_too_long' => 'The reason accepts at most :max characters.',
-        'responsible_inactive' => 'Account :id is not an active management account. The correction is signed by a person who answers for it.',
+        'responsible_inactive' => 'Account :id is not an active management account with the administration or HR role. The correction is signed by someone who can change the site from the panel. Nothing has been changed.',
         'summary_current' => 'Current site time zone: :timezone',
         'summary_new' => 'Corrected time zone:    :timezone',
         'summary_entries' => 'Recorded clock-ins:     :count shift entry(ies), from work day :first to :last',

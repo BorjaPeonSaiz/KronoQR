@@ -33,9 +33,17 @@ interface WorkRecordPresence
     public function exists(): bool;
 
     /**
-     * Cuanto registro horario hay, para la confirmacion de la correccion por
+     * Cuantos tramos hay, en cualquier estado: el numero que lleva el asiento
+     * de la correccion por consola. Recorre el indice de la tabla; solo se
+     * llama ahi, que es una orden manual y rara.
+     */
+    public function count(): int;
+
+    /**
+     * Cuanto registro horario hay, para la vista previa de la correccion por
      * consola: numero de tramos y primera y ultima jornada. `null` si no hay
-     * ninguno.
+     * ninguno. Se lee **sin** el centro bloqueado: con el bloqueado, los
+     * fichajes esperarian a que terminara.
      */
     public function extent(): ?WorkRecordExtent;
 }

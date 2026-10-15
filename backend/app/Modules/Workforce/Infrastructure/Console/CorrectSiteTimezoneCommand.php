@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Infrastructure\Console;
 
+use App\Modules\Shared\Infrastructure\Console\ConsoleIds;
 use App\Modules\Workforce\Application\Command\CorrectSiteTimezoneCommand as CorrectSiteTimezone;
 use App\Modules\Workforce\Application\UseCase\CorrectSiteTimezoneHandler;
 use App\Modules\Workforce\Application\UseCase\SiteTimezoneCorrectionOutcome;
@@ -88,7 +89,7 @@ final class CorrectSiteTimezoneCommand extends Command
         Log::warning('site_time_zone_corrected', [
             'previous_timezone' => $report->currentTimezone,
             'timezone' => $report->newTimezone,
-            'shift_entry_count' => $report->extent->shiftEntryCount ?? null,
+            'shift_entry_count' => $report->shiftEntryCount,
             'responsible_user_id' => $request->responsibleUserId,
         ]);
 
@@ -115,7 +116,7 @@ final class CorrectSiteTimezoneCommand extends Command
             return self::INVALID;
         }
 
-        $responsible = self::positiveId($responsibleOption);
+        $responsible = ConsoleIds::positive($responsibleOption);
 
         if ($responsible === null) {
             $this->error(__('site.correct_timezone.invalid_responsible', ['value' => $responsibleOption]));
@@ -127,8 +128,10 @@ final class CorrectSiteTimezoneCommand extends Command
     }
 
     /**
-     * La vista previa, con el motivo comprobado antes: no se pide «¿seguro?» por
-     * algo que despues se va a negar.
+     * La vista previa, con el motivo y el responsable comprobados antes: no se
+     * pide «¿seguro?» por algo que despues se va a negar. El responsable se
+     * vuelve a comprobar dentro de la transaccion, por si se da de baja entre
+     * medias.
      *
      * @throws UnknownTimezone
      * @throws InvalidSiteTimezoneCorrection
@@ -137,7 +140,7 @@ final class CorrectSiteTimezoneCommand extends Command
     {
         SiteTimezoneCorrection::reason($request->reason);
 
-        return $handler->preview($request->timezone);
+        return $handler->preview($request->timezone, $request->responsibleUserId);
     }
 
     /**
@@ -200,7 +203,7 @@ final class CorrectSiteTimezoneCommand extends Command
         $this->line(__('site.correct_timezone.summary_current', ['timezone' => (string) $report->currentTimezone]));
         $this->line(__('site.correct_timezone.summary_new', ['timezone' => $report->newTimezone]));
         $this->line(__('site.correct_timezone.summary_entries', [
-            'count' => (string) ($report->extent->shiftEntryCount ?? 0),
+            'count' => (string) $report->shiftEntryCount,
             'first' => (string) $report->extent?->firstWorkDate,
             'last' => (string) $report->extent?->lastWorkDate,
         ]));
@@ -219,18 +222,6 @@ final class CorrectSiteTimezoneCommand extends Command
         $this->error($message);
 
         return self::FAILURE;
-    }
-
-    /** El entero positivo que dice el texto, sin espacios alrededor, o `null` si no es solo eso. */
-    private static function positiveId(string $value): ?int
-    {
-        $value = trim($value);
-
-        if (! ctype_digit($value) || ltrim($value, '0') === '' || \strlen(ltrim($value, '0')) > 18) {
-            return null;
-        }
-
-        return (int) $value;
     }
 
     private function stringOption(string $name): ?string

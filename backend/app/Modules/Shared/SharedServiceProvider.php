@@ -10,6 +10,7 @@ use App\Modules\Shared\Application\Port\DeployedVersionProvider;
 use App\Modules\Shared\Application\Port\GeneratedFileMetrics;
 use App\Modules\Shared\Application\Port\GeneratedFileStore;
 use App\Modules\Shared\Application\Port\PinAttempts;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
@@ -21,8 +22,10 @@ use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStor
 use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\RedisGeneratedFileMetrics;
 use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
+use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Psr\Log\LoggerInterface;
 
@@ -110,5 +113,15 @@ final class SharedServiceProvider extends ServiceProvider
             ),
         );
         $this->app->singleton(GeneratedFileMetrics::class, RedisGeneratedFileMetrics::class);
+
+        // La cuenta que firma una accion de consola con relevancia legal: la
+        // revision de una purga (`Compliance`) y la correccion de la zona del
+        // centro (`Workforce`, RN-23). Por la conexion de la aplicacion, la
+        // misma de `SerializedLedgerWrite`, porque se pregunta con la cadena
+        // tomada.
+        $this->app->bind(
+            ResponsibleAccounts::class,
+            static fn (): DatabaseResponsibleAccounts => new DatabaseResponsibleAccounts(DB::connection()),
+        );
     }
 }

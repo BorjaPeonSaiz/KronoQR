@@ -11,6 +11,7 @@ use App\Modules\Compliance\Domain\Exception\PurgeReviewRejected;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancy;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationResult;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordReconciliationScope;
+use App\Modules\Shared\Infrastructure\Console\ConsoleIds;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
@@ -172,7 +173,7 @@ final class ReconcileWorkRecordCommand extends Command
 
         // `(int)` se tragaria `12abc` como 12: un id de asiento o de cuenta es
         // un entero positivo escrito tal cual, o no se hace nada.
-        $purgeId = self::positiveId($acknowledge);
+        $purgeId = ConsoleIds::positive($acknowledge);
 
         if ($purgeId === null) {
             $this->error(__('work-record-review.invalid_purge_id', ['value' => $acknowledge]));
@@ -182,7 +183,7 @@ final class ReconcileWorkRecordCommand extends Command
 
         $reason = $this->stringOption('reason');
         $responsibleOption = $this->stringOption('responsible');
-        $responsible = $responsibleOption === null ? null : self::positiveId($responsibleOption);
+        $responsible = $responsibleOption === null ? null : ConsoleIds::positive($responsibleOption);
 
         if ($responsibleOption !== null && $responsible === null) {
             $this->error(__('work-record-review.invalid_responsible', ['value' => $responsibleOption]));
@@ -227,18 +228,6 @@ final class ReconcileWorkRecordCommand extends Command
         $this->line('  '.($explains
             ? __('work-record-review.explains', ['cutoff' => (string) $cutoff, 'site' => (string) $siteId])
             : __('work-record-review.explains_nothing', ['violations' => implode(', ', $violations)])));
-    }
-
-    /** El entero positivo que dice el texto, sin espacios alrededor, o `null` si no es solo eso. */
-    private static function positiveId(string $value): ?int
-    {
-        $value = trim($value);
-
-        if (! ctype_digit($value) || ltrim($value, '0') === '' || \strlen(ltrim($value, '0')) > 18) {
-            return null;
-        }
-
-        return (int) $value;
     }
 
     private function stringOption(string $name): ?string

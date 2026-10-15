@@ -26,7 +26,7 @@ return [
         'invalid_responsible' => '--responsible tiene que ser el id de la cuenta, un entero positivo; «:value» no lo es. No se ha cambiado nada.',
         'reason_too_short' => 'El motivo tiene que explicar el error de la puesta en marcha: al menos :min caracteres.',
         'reason_too_long' => 'El motivo admite como mucho :max caracteres.',
-        'responsible_inactive' => 'La cuenta :id no es una cuenta de gestión activa. La corrección la firma una persona que responde de ella.',
+        'responsible_inactive' => 'La cuenta :id no es una cuenta de gestión activa con rol de administración o de RRHH. La corrección la firma quien puede modificar el centro desde el panel. No se ha cambiado nada.',
         'summary_current' => 'Zona actual del centro: :timezone',
         'summary_new' => 'Zona corregida:          :timezone',
         'summary_entries' => 'Fichajes registrados:    :count tramo(s), de la jornada :first a la :last',

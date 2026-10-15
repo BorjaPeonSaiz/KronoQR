@@ -115,7 +115,7 @@ it('dice por que se niega el motivo o el responsable, con la clave que lee la co
         ->and(InvalidSiteTimezoneCorrection::reasonTooLong(1000)->parameters)->toBe(['max' => 1000])
         ->and(InvalidSiteTimezoneCorrection::responsibleNotActive(7)->translationKey)->toBe('site.correct_timezone.responsible_inactive')
         ->and(InvalidSiteTimezoneCorrection::responsibleNotActive(7)->parameters)->toBe(['id' => 7])
-        ->and(InvalidSiteTimezoneCorrection::responsibleNotActive(7)->getMessage())->toBe('Account 7 is not an active management account.');
+        ->and(InvalidSiteTimezoneCorrection::responsibleNotActive(7)->getMessage())->toBe('Account 7 is not an active management account with a role that can change the site.');
 })->group('RN-23');
 
 it('lleva en la correccion el motivo, el recuento y la cuenta que responde', function (): void {

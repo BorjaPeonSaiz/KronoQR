@@ -6,6 +6,9 @@ use App\Modules\Attendance\Application\Command\RegisterScanCommand;
 use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Workforce\Application\Command\CorrectSiteTimezoneCommand;
+use App\Modules\Workforce\Application\UseCase\CorrectSiteTimezoneHandler;
+use App\Modules\Workforce\Domain\Exception\InvalidSiteTimezoneCorrection;
 use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -353,3 +356,56 @@ it('habla en ingles a una instalacion en ingles', function (): void {
         ->and($orden['output'])->toContain('Time zone corrected from Europe/Madrid to Atlantic/Canary')
         ->and($orden['output'])->toContain('No work day is moved and nothing is recalculated');
 })->group('RN-23');
+
+it('no acepta como responsable a quien no puede modificar el centro por la API', function (UserRole $rol): void {
+    // La consola no puede ser la via por la que alguien hace lo que el panel le
+    // niega: firma quien tiene `SitePolicy::update` (admin o rrhh). Y se dice
+    // antes de pedir confirmacion.
+    $escenario = correccionDeZonaConRegistro();
+
+    $orden = correccionDeZonaOrdenInteractiva([
+        'timezone' => 'Atlantic/Canary',
+        '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
+        '--responsible' => (string) ManagementUsers::withRole($rol)->id,
+    ], 'yes');
+
+    expect($orden['code'])->toBe(2, $orden['output'])
+        ->and($orden['output'])->toContain('rol de administración o de RRHH')
+        ->and($orden['output'])->not->toContain('¿Corregir la zona horaria del centro?')
+        ->and(DB::table('sites')->where('id', $escenario['site'])->value('timezone'))->toBe('Europe/Madrid')
+        ->and(correccionDeZonaAsientos())->toBe(0);
+})->with([
+    'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
+    'auditor' => [UserRole::AUDITOR],
+    'empleado' => [UserRole::EMPLEADO],
+])->group('RN-23', 'RS-05');
+
+it('acepta como responsable al administrador', function (): void {
+    $escenario = correccionDeZonaConRegistro();
+
+    $orden = correccionDeZonaOrden([
+        'timezone' => 'Atlantic/Canary',
+        '--reason' => CORRECT_SITE_TIMEZONE_MOTIVO,
+        '--responsible' => (string) ManagementUsers::withRole(UserRole::ADMIN)->id,
+        '--force' => true,
+    ]);
+
+    expect($orden['code'])->toBe(0, $orden['output'])
+        ->and(DB::table('sites')->where('id', $escenario['site'])->value('timezone'))->toBe('Atlantic/Canary');
+})->group('RN-23');
+
+it('vuelve a comprobar al responsable dentro de la transaccion, sin fiarse de la vista previa', function (): void {
+    // Si la cuenta se da de baja entre la confirmacion y la correccion, el
+    // asiento no puede quedar firmado por ella. Se llama al caso de uso sin
+    // vista previa: lo que se afirma es que la comprobacion esta tambien ahi.
+    $escenario = correccionDeZonaConRegistro();
+    $responsable = correccionDeZonaResponsable();
+    DB::table('users')->where('id', $responsable)->update(['is_active' => false]);
+
+    expect(fn (): mixed => app(CorrectSiteTimezoneHandler::class)->handle(
+        new CorrectSiteTimezoneCommand('Atlantic/Canary', CORRECT_SITE_TIMEZONE_MOTIVO, $responsable),
+    ))->toThrow(InvalidSiteTimezoneCorrection::class);
+
+    expect(DB::table('sites')->where('id', $escenario['site'])->value('timezone'))->toBe('Europe/Madrid')
+        ->and(correccionDeZonaAsientos())->toBe(0);
+})->group('RN-23', 'RL-04');

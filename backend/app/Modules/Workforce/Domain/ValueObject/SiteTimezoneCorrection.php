@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Domain\ValueObject;
 
+use App\Modules\Shared\Domain\ValueObject\SignOffReason;
+use App\Modules\Shared\Domain\ValueObject\SignOffReasonViolation;
 use App\Modules\Workforce\Domain\Exception\InvalidSiteTimezoneCorrection;
 use InvalidArgumentException;
 
@@ -22,10 +24,6 @@ use InvalidArgumentException;
  */
 final readonly class SiteTimezoneCorrection
 {
-    public const int MIN_REASON_LENGTH = 10;
-
-    public const int MAX_REASON_LENGTH = 1000;
-
     private function __construct(
         public string $reason,
         public int $shiftEntryCount,
@@ -56,21 +54,19 @@ final readonly class SiteTimezoneCorrection
      * Publico para que la consola lo compruebe antes de pedir confirmacion: no
      * tiene sentido preguntar «¿seguro?» por algo que despues se va a negar.
      *
+     * La regla es la de toda firma de consola ({@see SignOffReason}); aqui solo
+     * se pone el rechazo propio de la correccion, con sus textos.
+     *
      * @throws InvalidSiteTimezoneCorrection
      */
     public static function reason(string $text): string
     {
-        $trimmed = trim($text);
-        $length = mb_strlen($trimmed);
-
-        if ($length < self::MIN_REASON_LENGTH) {
-            throw InvalidSiteTimezoneCorrection::reasonTooShort(self::MIN_REASON_LENGTH);
-        }
-
-        if ($length > self::MAX_REASON_LENGTH) {
-            throw InvalidSiteTimezoneCorrection::reasonTooLong(self::MAX_REASON_LENGTH);
-        }
-
-        return $trimmed;
+        return SignOffReason::fromText(
+            $text,
+            static fn (SignOffReasonViolation $violation, int $limit): InvalidSiteTimezoneCorrection => match ($violation) {
+                SignOffReasonViolation::TooShort => InvalidSiteTimezoneCorrection::reasonTooShort($limit),
+                SignOffReasonViolation::TooLong => InvalidSiteTimezoneCorrection::reasonTooLong($limit),
+            },
+        )->text;
     }
 }
