@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. La regla de admisión en `Shared/Domain` y el reparto describen el código actual. **La corrección de N5 está pendiente** (`backend-laravel`), igual que la prueba que vigila el invariante (`qa-testing`) |
+| **Estado** | Aceptada. La regla de admisión en `Shared/Domain` y el reparto describen el código actual. **N5 corregida en la 2.2.1**, con la prueba que vigila el invariante y `ElapsedMinutes` añadida a la lista del punto 3 ([enmienda del 15-10-2026](#enmienda-del-15-10-2026-bloque-19-de-la-221-n5-corregida-y-una-regla-más-en-la-lista-del-punto-3)). Pendiente: la prueba de arquitectura de esa lista (`qa-testing`) |
 | **Fecha** | 8 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo A6-6 de la [tanda 6 de la 2.1.0](../verificacion/2.1.0-tanda-6.md); divergencia N5 de la [tanda 3](../verificacion/2.1.0-tanda-3.md), abierta en la [re-verificación](../verificacion/2.2.0-reverificacion-tanda-3.md)) |
 | **Afecta a** | Precisa [ADR-021](ADR-021-clock-en-shared.md) (criterio de admisión en `Shared`) y [ADR-025](ADR-025-frontera-de-dependencias-del-nucleo.md) · Respeta [ADR-017](ADR-017-toda-diferencia-entre-clientes-es-configuracion.md) y [ADR-024](ADR-024-la-pausa-son-dos-tramos.md) · `backend/app/Modules/Shared/Domain/ValueObject/CompliancePolicy.php`, `ComplianceRule.php`, `ComplianceRuleSuspension.php`, `Shared/Domain/Policy/PinLockoutPolicy.php` · `Attendance/Domain/Policy/AnomalyDetectionPolicy.php`, `Attendance/Application/UseCase/DetectAttendanceAnomalies.php`, `Attendance/Infrastructure/Persistence/EloquentWorkDayLedger.php` · `Reporting/Domain/Policy/ComplianceEvaluation.php`, `Reporting/Domain/ValueObject/ComplianceFacts.php`, `Reporting/Infrastructure/Persistence/DatabaseComplianceFactsReader.php` |
@@ -96,3 +96,24 @@ Una regla nueva en `Shared/Domain` exige una enmienda de este ADR que la añada 
 - **Por qué no entró:** la primera consecuencia exige que el doc 01 §4 recoja antes la definición de RN-10 del punto 2 (jornada anulada entera y tramo anterior abierto), y RN-10 sigue diciendo solo «entre el fin de un turno y el inicio del siguiente». La verificación final lo registra como conocido y diferido ([2.2.0-verificacion-final-tanda-3.md](../verificacion/2.2.0-verificacion-final-tanda-3.md), fila N5). Ni `DatabaseComplianceFactsReader` ni `EloquentWorkDayLedger` han cambiado desde el 17-09-2026.
 - **Siguen pendientes**, también para la 2.2.1: las dos guardas de `qa-testing` (escenarios comunes a los dos evaluadores y la prueba de arquitectura de la lista del punto 3).
 - **Dónde consta:** [`2.2.1-lista-cambios.md`](../verificacion/2.2.1-lista-cambios.md) §3, «N5 de ADR-055, que necesita RN-10 en el doc 01».
+
+## Enmienda del 15-10-2026 (bloque 19 de la 2.2.1): N5 corregida y una regla más en la lista del punto 3
+
+**N5 corregida en la 2.2.1.** El doc 01 §4 recoge en RN-10 la definición del punto 2 (jornada anulada entera y tramo anterior abierto), y los dos lectores la aplican:
+
+- **La vista** (`Reporting/Infrastructure/Persistence/DatabaseComplianceFactsReader`) descarta las jornadas sin tramos vigentes (`daily_totals.shift_count = 0`) antes de buscar la anterior, también la que precede a la ventana, y no mide desde una jornada anterior con un tramo abierto (`lag(has_open_shift)`).
+- **La bandeja** (`Attendance/Infrastructure/Persistence/EloquentWorkDayLedger`, puerto `WorkDayLedger`) toma el último tramo vigente que **empieza** antes de la primera entrada: si sigue abierto devuelve nulo y RN-10 no se evalúa, y si terminó en el mismo instante cuenta cero minutos. Antes comparaba la salida con `<` y, en ese borde, medía desde una salida más antigua: callaba un descanso de cero minutos que la vista sí señalaba.
+- **El tramo anterior abierto no puede persistir** con RN-01 y RN-02 en el esquema (`one_open_shift_per_employee` y `shift_entries_no_overlap`, cuyo rango sin salida queda abierto por arriba). Las dos ramas son defensa, no un caso que hoy ocurra.
+- **Corrección del Contexto:** `daily_totals.last_out_at` no es nulo en una jornada con un tramo abierto si tiene otro cerrado: es la última salida cerrada (`WorkDay::lastClockOutAt()`). En los datos reales, el borde que de verdad separaba a la vista de la bandeja era la jornada anulada entera.
+
+**El invariante del punto 1 tiene guarda.** `tests/Integration/Reporting/ComplianceSummaryMatchesDetectionTest.php` (`escenarioN5`) siembra la jornada anulada entera —en medio y justo antes de la ventana—, el descanso de cero minutos, el cambio de hora y la jornada partida, junto al caso ya existente de RN-08 que explica RN-11, y comprueba que las incidencias de RN-10, RN-11 y RN-12 están contenidas en los hallazgos de la vista y que las de RN-10 coinciden. Responde a la primera pendiente de Consecuencias.
+
+**La lista del punto 3 se amplía.** La resta de instantes en minutos enteros estaba escrita cinco veces en tres módulos que no pueden verse —tres para la duración de un tramo (`TimeRange`, `ComplianceShiftSegment`, `WorkRecordReconciliation`, atadas por una prueba) y dos para el hueco de RN-10 (`AnomalyDetectionPolicy`, `ComplianceFacts`)—. Cumple las cuatro condiciones:
+
+| Regla | Clase | Por qué cumple |
+|---|---|---|
+| Minutos enteros entre dos instantes (RN-09) y hueco de descanso de RN-10, nulo si es un solape | `Shared\Domain\ValueObject\ElapsedMinutes` | `Attendance` (registro y bandeja), `Reporting` (vista) y `Compliance` (conciliación de [ADR-057](ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md) §4) tienen que contar igual el mismo tramo, y ninguno puede importar el dominio de otro. Es pura y no recibe umbrales |
+
+**La semántica no cambia:** se restan segundos enteros (`getTimestamp()`) y se trunca al minuto, como hasta ahora. Medir con microsegundos (C3 de la [re-verificación de la 2.2.0, tanda 1](../verificacion/2.2.0-reverificacion-tanda-1.md)) cambiaría `shift_entries.duration_minutes` respecto a lo ya guardado: la conciliación de ADR-057 §4 denunciaría como `entry_differs_from_audit` cada tramo histórico que cruzara un minuto por fracciones de segundo, y `attendance:reconcile` vería divergencias en `daily_totals`. Es una precisión de RN-09 que decide el propietario, con su plan de transición, y no entra aquí.
+
+**Sigue pendiente** la prueba de arquitectura de la lista del punto 3 (`qa-testing`): que falle si aparece en `Shared/Domain` una regla que no está en la lista.
