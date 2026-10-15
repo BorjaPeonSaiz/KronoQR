@@ -2698,12 +2698,17 @@ la va a haber.** Depende de tu hardware, de tu disco y de tu red. La cifra de tu
 instalación sale de tu propia ejecución de `make load-test` sobre tu servidor.
 
 **Qué es —y qué no es— la «línea base» del fabricante.**
-`load-tests/k6/baseline.json` guarda el resultado de una pasada en la máquina de
-integración continua del fabricante: p95 y tramos por segundo, junto al `git_sha`
-de la versión medida, la máquina y la versión de la herramienta. Sirve para una
-sola cosa: comparar la versión siguiente **consigo misma en esa misma máquina**
-y detectar que ha empeorado —se admite hasta un 25 % más de p95 y hasta un 20 %
-menos de tramos por segundo—. **No es una promesa de latencia ni el p95 que
+`load-tests/k6/baseline.json` guarda la **mediana de tres pasadas** en la máquina
+de integración continua del fabricante —p95 y tramos por segundo—, con la lista
+de esas pasadas, la máquina y la versión de la herramienta. Son tres y no una
+porque esa máquina varía mucho de una pasada a otra con el mismo código. Sirve
+para una sola cosa: comparar la versión siguiente **consigo misma en esa misma
+máquina** y detectar que ha empeorado. El p95 no se compara en milisegundos
+sino **en relación con la velocidad de la máquina en esa misma pasada**, que se
+mide con lo que tardan los rechazos de tarjeta, un trabajo pequeño y siempre
+igual: se admite hasta un 25 % más en esa medida, y además el p95 en
+milisegundos no puede pasar de tres veces el de la línea base. De tramos por
+segundo se admite hasta un 20 % menos. **No es una promesa de latencia ni el p95 que
 debería dar tu servidor**: en esa máquina el servidor comparte CPU con los once
 generadores de carga, de modo que sus milisegundos no significan nada fuera de
 ella. Si el fichero no está, la herramienta se limita a aplicar el presupuesto

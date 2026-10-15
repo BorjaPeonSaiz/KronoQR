@@ -2734,12 +2734,17 @@ network. The figure for your installation comes from your own run of
 `make load-test` on your own server.
 
 **What the vendor's "baseline" is — and what it is not.**
-`load-tests/k6/baseline.json` keeps the result of one run on the vendor's
-continuous integration machine: p95 and entries per second, along with the
-`git_sha` of the version measured, the machine and the version of the tool. It
-serves one purpose only: comparing the next version **with itself on that same
-machine** and detecting that it has got worse — up to 25 % more p95 and up to
-20 % fewer entries per second are allowed. **It is not a latency promise, nor
+`load-tests/k6/baseline.json` keeps the **median of three runs** on the
+vendor's continuous integration machine — p95 and entries per second — with the
+list of those runs, the machine and the version of the tool. Three and not one
+because that machine varies a lot from one run to the next with the same code.
+It serves one purpose only: comparing the next version **with itself on that
+same machine** and detecting that it has got worse. The p95 is not compared in
+milliseconds but **relative to the speed of the machine in that same run**,
+measured by how long card rejections take, a small and always identical piece
+of work: up to 25 % more in that measure is allowed, and on top of that the p95
+in milliseconds may not exceed three times the baseline's. Up to 20 % fewer
+entries per second are allowed. **It is not a latency promise, nor
 the p95 your server should give**: on that machine the server shares CPU with
 the eleven load generators, so its milliseconds mean nothing outside it. If the
 file is not there, the tool simply applies the budget — the 150 ms and the 50
