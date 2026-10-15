@@ -67,6 +67,7 @@
 # Se FIJA el presupuesto en 15 min con aviso a los 12 y se COMPRUEBA en el
 # ultimo paso de `unit` («Presupuesto del run ①-③»), ademas de los avisos por
 # etapa de cada job (① backend 240 s, ② 90 s, ③ 480 s, medidos con margen).
+# El job `restore-cycle` (T3) corre en paralelo y no alarga esta ruta.
 #
 # LA PUERTA DE COBERTURA (RNF-M-01: dominio >= 90 %, global >= 75 %, doc 02
 # §9.2) NO ES NINGUNA DE LAS OCHO ETAPAS NUMERADAS. `make coverage` instrumenta
@@ -120,8 +121,8 @@ on:
         required: false
         default: false
   schedule:
-    # Dispara SOLO los jobs nocturnos: `coverage`, `mutation` y
-    # `secrets-history` (ver sus comentarios). Todos los demas de este fichero
+    # Dispara SOLO los jobs nocturnos: `coverage`, `mutation`, `restore-cycle`
+    # y `secrets-history` (ver sus comentarios). Todos los demas de este fichero
     # llevan `if: github.event_name != 'schedule'` -o la variante que ya tenian
     # `clean-install`/`update`, que sin la exclusion explicita habrian
     # arrastrado el pipeline entero, y `install`/`update` con el, cada noche. Hora fuera del horario de trabajo habitual
@@ -3287,6 +3288,95 @@ jobs:
             echo "Umbrales: dominio >= 90 %, global >= 75 %. Detalle linea a linea en el"
             echo "log de \`make coverage\` de este mismo job."
           } >>"$GITHUB_STEP_SUMMARY"
+
+  #-----------------------------------------------------------------------------
+  # Restauracion real de una copia — RNF-D-05, RQ-09 (T3, bloque 16 de la 2.2.1)
+  #
+  # Hasta la 2.2.1 la restauracion de verdad (copia cifrada -> contenedor
+  # limpio) solo corria en `backup-drill.yml` con pasos de shell, que
+  # `qa:traceability` no lee: la matriz cubria RNF-D-05 con pruebas de
+  # configuracion. Ahora la hace una prueba de Pest etiquetada
+  # (`backend/tests/Restore/RestoreCycleTest.php`, suite `Restore`) y entra en
+  # la matriz como cualquier otra. El simulacro trimestral y completo (WAL,
+  # pitr, senales, roles) sigue siendo `backup-drill.yml`.
+  #
+  # Sin `needs` y sin `if` de evento: corre en paralelo a las etapas, en cada
+  # push, de noche (`schedule`) y a mano, y por eso NO alarga el camino critico
+  # ①->③ ni su presupuesto de 15 min. Es lo que el comentario del `schedule`
+  # llama «job nocturno»: tambien lo es, ademas de ejecutarse en el push.
+  #-----------------------------------------------------------------------------
+  restore-cycle:
+    name: "Restauracion real de una copia (RNF-D-05)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    env:
+      APP_KEY: "base64:a3Jvbm9xci1jaS1jbGF2ZS1kZS0zMi1ieXRlcyEhISE="
+      # La conexion que lee la prueba. Claves de usar y tirar de un servidor que
+      # vive unos minutos en un runner efimero; no son secretos del producto.
+      KQ_RESTORE_CYCLE: "1"
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_migrator
+      DB_PASSWORD: ciclo_local_ci
+      BACKUP_DB_USERNAME: fichaje_backup
+      BACKUP_DB_PASSWORD: ciclo_backup_ci
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cliente de PostgreSQL 17
+        # La version mayor tiene que coincidir con la del servidor (ver backup-drill.yml).
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" |
+            sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          pg_dump --version
+
+      - name: PostgreSQL 17 del producto, con el rol de copias
+        run: |
+          make build-ci-images
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+            -e DB_BACKUP_USERNAME="$BACKUP_DB_USERNAME" \
+            -e DB_BACKUP_PASSWORD="$BACKUP_DB_PASSWORD" \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC \
+              -c hba_file=/etc/kronoqr/pg_hba.conf
+          # `-h 127.0.0.1` a proposito (ver backup-drill.yml): por TCP solo
+          # contesta el servidor definitivo, no el temporal de initdb.d.
+          for i in $(seq 1 45); do
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "Servidor listo en $((i * 2)) s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=PostgreSQL no arranco::pg_isready por TCP sigue fallando tras 90 s."
+          docker logs kronoqr-pg | tail -80
+          exit 1
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+
+      - name: Pest — suite Restore (copia cifrada, restauracion en contenedor limpio y copia alterada)
+        working-directory: backend
+        run: vendor/bin/pest --testsuite=Restore --no-coverage
+
+      - name: Apagar el servidor de pruebas
+        if: always()
+        run: docker rm -f kronoqr-pg >/dev/null 2>&1 || true
 
   #-----------------------------------------------------------------------------
   # Mutacion completa — RQ-10: MSI >= 80 % sobre Modules/*/Domain (doc 02 §9.2)
