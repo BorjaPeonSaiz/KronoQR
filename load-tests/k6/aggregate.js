@@ -982,8 +982,13 @@ function analyse(results, options = {}) {
   // y RNF-P-06: `scan-pin` corre en la MISMA meseta que `scan` (scan-peak.js),
   // en un volumen de via de reserva —uno cada `--pin-period-seconds` por origen,
   // frente a `--scan-rate` tarjetas por segundo—, y el periodo del PIN forma
-  // parte de la carga que se compara con la linea base. Si el bcrypt le quita
-  // CPU al fichaje con tarjeta, el rojo sale en el p95 o en la tasa de esos dos.
+  // parte de la carga que se compara con la linea base. En modo `threshold`
+  // (hardware de referencia) la guarda es literal: el umbral de RNF-P-02. En
+  // modo `baseline` NO lo es del todo: si el bcrypt solo quita CPU, frena por
+  // igual tarjetas y rechazos y el cociente de RNF-P-02 no se mueve; alli la
+  // guarda la dan la gruesa de 3x y el propio RNF-P-08 (su cociente se dispara
+  // si el PIN se encarece). Una interferencia que no es CPU (un bloqueo que
+  // retiene `/scan`) si sale en el cociente de RNF-P-02.
   const pinNotJudged =
     `El umbral de RNF-P-08 (p95 < ${PIN_P95_BUDGET_MS} ms, p99 < ${PIN_P99_BUDGET_MS} ms) NO se juzga en este ` +
     'runner: solo en hardware de referencia con make load-test.'

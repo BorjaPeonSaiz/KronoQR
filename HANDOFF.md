@@ -126,6 +126,14 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+### Anotado con RNF-P-08 (15-10-2026)
+
+- `load-tests/k6/aggregate.test.js` (98 casos, toda la lógica de veredicto de la carga) no corre en ninguna CI: añadir
+  `node --test load-tests/k6/aggregate.test.js` a un job con Node ya existente (< 1 s), en el bloque que toque la CI.
+- El margen de RNF-P-08 se apoya en tres pasadas con ~90 PIN cada una (cocientes 7,82-8,55; máximo 9,99): vigilar falsos
+  rojos; si salen, más muestras de PIN en la línea base, no más tolerancia. En `threshold`, con pocas decenas de PIN, el
+  p99 es el máximo. La ayuda del `Makefile` (`:296`, `:1290`) solo cita RNF-P-06.
+
 ### Anotado en el bloque 16 de la 2.2.1 (15-10-2026)
 
 - `InstallationSiteMissing` se lanza sin mensaje en `ReadIncidentBoard`, `ReadComplianceSummary`, `ReadLivePresence`,
@@ -660,7 +668,7 @@ verificación final que no entraron (lista «¿Se pasó algo por alto?» de `2.2
   colas): acotar por `recorded_at` y derivar la jornada del `occurred_at` (RN-18).
 - **Un `workflow_dispatch` nuevo no se puede lanzar desde una rama hasta que el fichero existe en la rama por defecto** (404 en la API): la primera ejecución de un workflow nuevo es tras integrar; después sí se lanza con `--ref rama` (3.6, restos).
 - **El paquete instala con `APP_ENV=production` (lo exige `install.sh`) y el aprovisionamiento de k6 se niega contra producción**: el workflow declara la pila `staging` DESPUÉS de instalar y recrea los roles PHP; ningún camino del producto consulta `isProduction()` (3.6, restos).
-- **El runner de GitHub no alcanza RNF-P-06** (4 vCPU compartidas entre servidor y once generadores: ~29 fichajes/s con p95 de decenas de segundos, igual con el pool doblado): allí RNF-P-02/06 se juzgan contra `baseline.json` (`K6_LATENCY_VERDICT=baseline`), nunca contra el umbral (decisión 19).
+- **El runner de GitHub no alcanza RNF-P-06** (4 vCPU compartidas entre servidor y once generadores: ~29 fichajes/s con p95 de decenas de segundos, igual con el pool doblado): allí RNF-P-02/06/08 se juzgan contra `baseline.json` (`K6_LATENCY_VERDICT=baseline`), nunca contra el umbral (decisión 19).
 - **Prueba de carga en Docker Desktop: los `429` salen de `limit_conn conn_per_ip 64`, no de `limit_req`** (3.6): con p95 de 44 s
   cada origen acumula rate × latencia ≈ 400 conexiones abiertas; `summary.json.edge_limits` distingue las dos causas. Un rojo por
   429 en local no dice nada del presupuesto de tasa; el veredicto vale solo en el runner o en Linux.

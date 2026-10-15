@@ -1061,10 +1061,10 @@ test('[RNF-P-08] en modo linea base sin linea base no hay veredicto, y lo dice',
   assert.equal(statusOf(summary, 'RNF-P-08'), 'unmeasurable')
 })
 
-test('[RNF-P-02][RNF-P-06][RNF-P-08] el PIN en marcha que frena las tarjetas sale rojo en RNF-P-02 aunque el PIN cumpla', () => {
-  // La guarda de capacidad: RNF-P-02 y RNF-P-06 se juzgan con `scan-pin`
-  // corriendo en la misma meseta, y la linea base lleva el mismo periodo del
-  // PIN. Si el bcrypt frena el fichaje con tarjeta, el rojo sale en RNF-P-02.
+test('[RNF-P-02][RNF-P-08] con el PIN en marcha y en verde, RNF-P-02 se sigue juzgando aparte y sale rojo si las tarjetas van lentas', () => {
+  // Solo comprueba que los dos veredictos son independientes: un PIN que cumple
+  // no tapa unas tarjetas lentas. No modela la contencion de CPU (ver el
+  // comentario de la guarda de capacidad en aggregate.js).
   const summary = runAnalysis(greenRun({ scanDurationMs: 130, pinDurations: Array(20).fill(250) }), {
     latencyVerdictMode: 'baseline',
     baseline: asBaseline(),
