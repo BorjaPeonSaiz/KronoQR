@@ -13,8 +13,8 @@
 #                     para las tres SPA y packages/web-kit)
 #   github-actions    .github/workflows/*.yml, .github/actions/*/action.yml
 #   docker            imagenes base de infra/docker/*/Dockerfile
-#   docker-compose    imagenes de terceros fijadas por digest en infra/compose.*.yaml
-#                     (Redis, B18 de la 2.2.1)
+#   docker-compose    imagenes de terceros en infra/compose.*.yaml
+#                     (observabilidad; el digest de Redis se actualiza a mano, B18)
 #
 # Las acciones de GitHub fijadas por SHA con comentario de version
 # (`uses: foo@<sha> # vX.Y.Z`) las actualiza Dependabot igual que a las demas:
@@ -123,14 +123,13 @@ updates:
       docker-menores-y-parches:
         update-types: ["minor", "patch"]
 
-  # B18 (2.2.1, ADR-053): imagenes de TERCEROS fijadas por digest en el compose de
-  # produccion (`redis:7-alpine@sha256:...`). El ecosistema `docker` de arriba solo
-  # lee Dockerfiles; este lee los `image:` de los ficheros compose de `infra/` y
-  # propone la etiqueta Y el digest nuevos juntos, para que el digest no se pudra.
-  # Las imagenes propias (`${IMAGE_REGISTRY}/php:${IMAGE_TAG}...`) llevan
-  # interpolacion y las ignora: las fija la publicacion (release.yml).
-  # OJO: tambien leera `compose.dev.yaml` (misma etiqueta de Redis y observabilidad);
-  # una PR de ahi que no toque `compose.prod.yaml` no cierra este hueco.
+  # B18 (2.2.1, ADR-053): imagenes de TERCEROS de los ficheros compose de `infra/`
+  # (observabilidad, por version). El ecosistema `docker` de arriba solo lee
+  # Dockerfiles. OJO con Redis: su linea lleva interpolacion
+  # (`redis:7-alpine${REDIS_IMAGE_DIGEST-@sha256:...}`, el opt-out sin internet) y es
+  # probable que Dependabot NO la entienda: el digest de Redis se actualiza A MANO
+  # (`docker buildx imagetools inspect redis:7-alpine`), dejado por escrito en
+  # ADR-053 (Enmienda 2.2.1). Tambien leera `compose.dev.yaml`.
   - package-ecosystem: "docker-compose"
     directory: "/infra"
     schedule:
@@ -140,6 +139,10 @@ updates:
     # Semgrep `dependabot-missing-cooldown`: ver arriba.
     cooldown:
       default-days: 7
+    # Redis 8 cambia de licencia: una mayor no se propone sola, se decide.
+    ignore:
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
     labels: ["dependencies", "docker"]
     groups:
       compose-menores-y-parches:

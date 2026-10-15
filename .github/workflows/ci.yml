@@ -2998,7 +2998,7 @@ jobs:
           # IN PLACE: los ficheros del paquete nuevo sobre el directorio de la instalacion.
           # El .env y certs/ no viajan en el paquete, asi que se conservan.
           cp -a paquete-fijado-roto/. paquete-anterior/
-          grep -q '@sha256:' paquete-anterior/docker-compose.yml
+          test "$(grep -E '^[[:space:]]*image:.*IMAGE_TAG' paquete-anterior/docker-compose.yml | grep -c '@sha256:')" -eq 3
           cd paquete-anterior
           set +e
           sudo ./update.sh --skip-signature-check >salida-p2.log 2>&1

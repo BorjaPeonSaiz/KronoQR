@@ -1722,6 +1722,10 @@ check_images() {
     check_warn "$(kq_text c_sig_no_cosign)" "$(kq_text w_sig_no_cosign)"
     remember_check "image-signature" "$(kq_text u_report_sig_no_cosign)"
     ;;
+  unverifiable)
+    check_warn "$(kq_text c_sig_unverifiable)" "$(kq_format w_sig_unverifiable "${KQ_SIG_DETAIL:-?}")"
+    remember_check "image-signature" "$(kq_text u_report_sig_unverifiable)"
+    ;;
   skipped)
     check_warn "$(kq_text c_sig_skipped)" "$(kq_text w_sig_skipped)"
     remember_check "image-signature" "$(kq_text u_report_sig_skipped)"
@@ -1730,7 +1734,7 @@ check_images() {
     remember_check "image-signature" "$(kq_text u_report_sig_not_pinned)"
     ;;
   failed)
-    remember_check "image-signature" "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    remember_check "image-signature" "FALLIDA / FAILED: ${KQ_SIG_FAILED_IMAGE}"
     die "${KQ_EXIT_SECURITY}" "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
     ;;
   esac
@@ -2952,6 +2956,7 @@ phase_start_and_verify() {
     "chain_after=${CHAIN_AFTER}" \
     "backup_fingerprint=${BACKUP_SHA256}" \
     "report_id=update-${STARTED_UTC}" \
+    "image_signature=${KQ_SIG_RESULT:-not-pinned}" \
     "portal_exposed=$(kq_portal_exposed "${CURRENT_ENV}")")"
 
   detail_note "--- compliance:record-system-event system.updated ---"

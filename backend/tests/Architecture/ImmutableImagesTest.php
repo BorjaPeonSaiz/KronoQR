@@ -88,8 +88,25 @@ it('firma las tres imagenes con cosign keyless por digest y comprueba la firma c
         ->and($firmar)->toContain('. infra/scripts/lib/image-signature.sh')
         ->and($firmar)->toContain('kq_cosign_verify_ref "${ref}"');
 
-    // `id-token: write` solo en ese job: el resto de la publicacion no emite certificados.
-    expect(substr_count($workflow, "\n      id-token: write"))->toBe(1)
+    // La version de cosign esta fijada en los dos jobs de firma (cosign 3 escribe el
+    // bundle nuevo) y coincide con lo que el cliente exige como minimo.
+    expect(substr_count($workflow, 'cosign-release: "v3.'))->toBe(2)
+        ->and($lib)->toContain('KQ_COSIGN_MIN_VERSION="3.0.0"');
+
+    // SHA256SUMS tambien se firma, en un job aparte que nace del que lo genera, se
+    // autoverifica con la funcion de los clientes y publica el bundle en la release.
+    preg_match('/\n  firmar-sumas:(.*?)\n  publicar:/s', $workflow, $sumas);
+    $firmarSumas = $sumas[1] ?? '';
+
+    expect($firmarSumas)->toContain('needs: [resolver, paquete]')
+        ->and($firmarSumas)->toContain('id-token: write')
+        ->and($firmarSumas)->toContain('cosign sign-blob --yes --bundle firmadas/SHA256SUMS.bundle entrega/SHA256SUMS')
+        ->and($firmarSumas)->toContain('kq_cosign_verify_blob entrega/SHA256SUMS firmadas/SHA256SUMS.bundle')
+        ->and($workflow)->toMatch('/\n  publicar:.*?needs:\s*\[resolver,\s*imagenes,\s*paquete,\s*firmar-sumas\]/s')
+        ->and($workflow)->toContain("            SHA256SUMS.bundle\n");
+
+    // `id-token: write` solo en los dos jobs de firma: el resto de la publicacion no emite certificados.
+    expect(substr_count($workflow, "\n      id-token: write"))->toBe(2)
         ->and($workflow)->not->toMatch('/^permissions:\n(?:  .*\n)*?  id-token:/m');
 
     // La identidad esperada es el workflow de publicacion de ESTE repositorio y el emisor de GitHub.
@@ -134,6 +151,12 @@ it('fija por digest toda imagen de compose.prod.yaml, salvo las siete de observa
             continue;
         }
 
+        // Redis: el digest es el valor por defecto de REDIS_IMAGE_DIGEST (`${VAR-valor}`:
+        // sin definir, fijada; definida y vacia, la etiqueta; opt-out sin internet).
+        if (preg_match('/^redis:7-alpine\$\{REDIS_IMAGE_DIGEST-@sha256:[0-9a-f]{64}\}$/', $imagen) === 1) {
+            continue;
+        }
+
         if (preg_match('/^[a-z0-9._\/-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$/', $imagen) === 1) {
             continue;
         }
@@ -152,7 +175,7 @@ it('fija por digest toda imagen de compose.prod.yaml, salvo las siete de observa
     expect($nombres)->toBe($esperadas);
 
     // Y Redis, la prioritaria, lleva etiqueta Y digest.
-    expect($compose)->toMatch('/image:\s*redis:7-alpine@sha256:[0-9a-f]{64}\s*$/m');
+    expect($compose)->toMatch('/image:\s*redis:7-alpine\$\{REDIS_IMAGE_DIGEST-@sha256:[0-9a-f]{64}\}\s*$/m');
 })->group('RF-PD-02', 'RS-10');
 
 it('la vuelta atras in-place anula los digests, la primera publicacion es explicita y la CI ejercita el paquete fijado', function (): void {

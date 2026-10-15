@@ -65,7 +65,7 @@ final readonly class SystemEventPayload
     private const array SPEC = [
         'system.updated' => [
             'required' => ['from_version', 'to_version', 'migrations_applied'],
-            'optional' => ['chain_before', 'chain_after', 'backup_fingerprint', 'report_id', 'portal_exposed'],
+            'optional' => ['chain_before', 'chain_after', 'backup_fingerprint', 'report_id', 'portal_exposed', 'image_signature'],
         ],
         'system.restored_from_backup' => [
             'required' => ['backup_file', 'backup_taken_at', 'failed_step', 'reason', 'from_version', 'to_version'],
@@ -232,6 +232,7 @@ final readonly class SystemEventPayload
             'migrations_applied' => self::assertMigrations($value),
             'portal_exposed' => self::assertPortalExposed($value),
             'integrity' => self::assertEnum($field, $value, self::BACKUP_INTEGRITY),
+            'image_signature' => self::assertEnum($field, $value, self::IMAGE_SIGNATURE),
             'legacy_wal' => self::assertLegacyWal($value),
             default => null,
         };
@@ -245,6 +246,18 @@ final readonly class SystemEventPayload
      * @var list<string>
      */
     private const array BACKUP_INTEGRITY = ['authenticated', 'legacy_accepted'];
+
+    /**
+     * `image_signature` (B18, ADR-053): que paso con la verificacion cosign de las
+     * imagenes del producto en esta actualizacion. `verified`; `no-cosign` (sin
+     * cosign, o anterior a 3.0.0); `unverifiable` (no pudo consultar Sigstore o el
+     * registro); `skipped` (el operador paso `--skip-signature-check`);
+     * `not-pinned` (imagenes sin digest). Una firma invalida no llega aqui: la
+     * actualizacion se para en el paso 1, antes de escribir ningun asiento.
+     *
+     * @var list<string>
+     */
+    private const array IMAGE_SIGNATURE = ['verified', 'no-cosign', 'unverifiable', 'skipped', 'not-pinned'];
 
     /**
      * `portal_exposed` (PP-10/ADR-050): solo existe, y vale `true`, cuando el

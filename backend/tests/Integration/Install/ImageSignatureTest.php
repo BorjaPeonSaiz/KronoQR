@@ -9,30 +9,59 @@ use Tests\Architecture\Support\Repo;
  * Verificacion de la firma cosign de las imagenes del producto (B18, 2.2.1,
  * enmienda de ADR-053). `lib/image-signature.sh` se carga con `source` y se
  * ejecuta de verdad, con un `cosign` falso en el PATH que anota como se le llama.
+ * Los caminos de salida 7 de `install.sh` y `update.sh` se ejercitan tambien de
+ * verdad (con `docker` y `cosign` falsos), no por busqueda de texto.
  */
 
 const IMAGE_SIGNATURE_REGISTRY = 'ghcr.io/acme/kronoqr';
 const IMAGE_SIGNATURE_DIGEST = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 /**
- * @param  list<string>  $images
- * @param  int|null  $cosignExit  null = sin cosign en el PATH
- * @return array{result: string, failed: string, detail: string, calls: string, exit: int|null}
+ * Crea un directorio con un `bin/` que lleva un cosign falso, y devuelve el
+ * directorio. `$mode`: ok | invalid | network. `null` = sin cosign.
  */
-function imageSignatureRun(array $images, ?int $cosignExit, bool $skip = false): array
+function imageSignatureSandbox(?string $mode, string $version = 'v3.1.3'): string
 {
     $dir = sys_get_temp_dir().'/kq-image-signature-'.bin2hex(random_bytes(4));
     mkdir($dir.'/bin', 0777, true);
 
-    if ($cosignExit !== null) {
+    if ($mode !== null) {
+        $failure = match ($mode) {
+            'invalid' => "echo 'Error: no matching signatures' >&2\nexit 1\n",
+            'network' => "echo 'Error: dial tcp: lookup rekor.sigstore.dev: no such host' >&2\nexit 1\n",
+            default => "exit 0\n",
+        };
         file_put_contents(
             $dir.'/bin/cosign',
-            "#!/usr/bin/env bash\nprintf '%s\\n' \"\$*\" >>".escapeshellarg($dir.'/llamadas')."\n"
-            .($cosignExit === 0 ? '' : "echo 'Error: no matching signatures' >&2\n")
-            ."exit {$cosignExit}\n",
+            "#!/usr/bin/env bash\n"
+            ."if [ \"\$1\" = version ]; then printf 'GitVersion:    %s\\n' ".escapeshellarg($version)."; exit 0; fi\n"
+            ."printf '%s\\n' \"\$*\" >>".escapeshellarg($dir.'/llamadas')."\n"
+            .$failure,
         );
         chmod($dir.'/bin/cosign', 0755);
     }
+
+    return $dir;
+}
+
+/** El PATH con el cosign falso delante, o sin ningun cosign si no hay falso. */
+function imageSignaturePath(string $dir, bool $hasCosign): string
+{
+    return $hasCosign
+        ? $dir.'/bin:'.getenv('PATH')
+        : implode(':', array_filter(
+            explode(':', (string) getenv('PATH')),
+            static fn (string $part): bool => ! is_file($part.'/cosign'),
+        ));
+}
+
+/**
+ * @param  list<string>  $images
+ * @return array{result: string, failed: string, detail: string, calls: string, exit: int}
+ */
+function imageSignatureRun(array $images, ?string $mode, bool $skip = false, string $version = 'v3.1.3'): array
+{
+    $dir = imageSignatureSandbox($mode, $version);
 
     $quoted = implode(' ', array_map('escapeshellarg', $images));
     $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/lib/image-signature.sh')).'; '
@@ -40,15 +69,7 @@ function imageSignatureRun(array $images, ?int $cosignExit, bool $skip = false):
         .'status=0; kq_verify_product_images '.escapeshellarg(IMAGE_SIGNATURE_REGISTRY).' '.$quoted.' || status=$?; '
         .'printf "%s|%s|%s|%s" "${KQ_SIG_RESULT}" "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL}" "${status}"';
 
-    // El cosign falso va el primero; sin el, se quita cualquier cosign real del PATH.
-    $path = $cosignExit !== null
-        ? $dir.'/bin:'.getenv('PATH')
-        : implode(':', array_filter(
-            explode(':', (string) getenv('PATH')),
-            static fn (string $part): bool => ! is_file($part.'/cosign'),
-        ));
-
-    $process = new Process(['bash', '-c', $script], env: ['PATH' => $path], timeout: 30.0);
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => imageSignaturePath($dir, $mode !== null)], timeout: 30.0);
     $process->run();
     expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
 
@@ -68,7 +89,7 @@ it('verifica cada imagen del producto por digest con la identidad del workflow d
         imageSignaturePinned('php'),
         imageSignaturePinned('nginx'),
         imageSignaturePinned('postgres'),
-    ], 0);
+    ], 'ok');
 
     expect($run['result'])->toBe('verified')
         ->and($run['exit'])->toBe(0)
@@ -85,12 +106,21 @@ it('una firma que no vale es un fallo: dice que imagen y deja el detalle de cosi
     $run = imageSignatureRun([
         imageSignaturePinned('php'),
         imageSignaturePinned('nginx'),
-    ], 1);
+    ], 'invalid');
 
     expect($run['result'])->toBe('failed')
         ->and($run['exit'])->toBe(1)
         ->and($run['failed'])->toBe(imageSignaturePinned('php'))
         ->and($run['detail'])->toContain('no matching signatures')
+        ->and(substr_count($run['calls'], 'verify '))->toBe(1);
+})->group('RS-10', 'RF-PD-02');
+
+it('no poder consultar Sigstore o el registro NO es una firma invalida: aviso y sigue valiendo el digest', function (): void {
+    $run = imageSignatureRun([imageSignaturePinned('php'), imageSignaturePinned('nginx')], 'network');
+
+    expect($run['result'])->toBe('unverifiable')
+        ->and($run['exit'])->toBe(0)
+        ->and($run['detail'])->toContain('no such host')
         ->and(substr_count($run['calls'], 'verify '))->toBe(1);
 })->group('RS-10', 'RF-PD-02');
 
@@ -101,8 +131,22 @@ it('sin cosign no falla: avisa y sigue valiendo el digest', function (): void {
         ->and($run['exit'])->toBe(0);
 })->group('RS-10', 'RF-PD-02');
 
+it('un cosign anterior a 3.0.0 se trata como no instalado, con su aviso, y no se le llama', function (string $version, string $esperado): void {
+    $run = imageSignatureRun([imageSignaturePinned('php')], 'invalid', version: $version);
+
+    expect($run['result'])->toBe($esperado)
+        ->and($run['exit'])->toBe($esperado === 'failed' ? 1 : 0)
+        ->and(str_contains($run['calls'], 'verify '))->toBe($esperado === 'failed');
+})->with([
+    'cosign 2.4.1' => ['v2.4.1', 'no-cosign'],
+    'cosign 2.6.0' => ['v2.6.0', 'no-cosign'],
+    'cosign 3.0.0 (el minimo)' => ['v3.0.0', 'failed'],
+    'cosign 3.1.3' => ['v3.1.3', 'failed'],
+    'una prueba de 3.2' => ['v3.2.0-rc.1', 'failed'],
+])->group('RS-10', 'RF-PD-02');
+
 it('--skip-signature-check no llama a cosign aunque este y fallaria', function (): void {
-    $run = imageSignatureRun([imageSignaturePinned('php')], 1, skip: true);
+    $run = imageSignatureRun([imageSignaturePinned('php')], 'invalid', skip: true);
 
     expect($run['result'])->toBe('skipped')
         ->and($run['exit'])->toBe(0)
@@ -114,14 +158,148 @@ it('no hay nada que verificar sin digest ni en las imagenes de terceros (redis, 
         IMAGE_SIGNATURE_REGISTRY.'/php:2.2.1',
         'redis:7-alpine@'.IMAGE_SIGNATURE_DIGEST,
         'grafana/grafana:11.5.1@'.IMAGE_SIGNATURE_DIGEST,
-    ], 1);
+    ], 'invalid');
 
     expect($run['result'])->toBe('not-pinned')
         ->and($run['exit'])->toBe(0)
         ->and($run['calls'])->toBe('');
 })->group('RS-10', 'RF-PD-02');
 
-it('install.sh y update.sh verifican antes de descargar y salen con 7 si la firma falla; la CI de las imagenes sin firmar usa la opcion', function (): void {
+it('verifica SHA256SUMS contra su bundle con la misma identidad (verify-blob)', function (): void {
+    $dir = imageSignatureSandbox('ok');
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/lib/image-signature.sh')).'; '
+        .'kq_cosign_verify_blob SHA256SUMS SHA256SUMS.bundle && echo valida';
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => imageSignaturePath($dir, true)], timeout: 30.0);
+    $process->run();
+    $calls = (string) file_get_contents($dir.'/llamadas');
+
+    expect($process->getOutput())->toContain('valida')
+        ->and($calls)->toContain('verify-blob --bundle SHA256SUMS.bundle')
+        ->and($calls)->toContain('--certificate-oidc-issuer https://token.actions.githubusercontent.com')
+        ->and($calls)->toContain('--certificate-identity-regexp');
+})->group('RS-10', 'RF-PD-02');
+
+/**
+ * Un directorio con `docker` y (si se pide) `cosign` falsos. El `docker` falso
+ * lista las cuatro imagenes de `compose config --images` y dice que NINGUNA esta
+ * en local, para que cualquier descarga se vea en `docker.log`.
+ *
+ * @return array{dir: string, path: string}
+ */
+function imageSignatureInstallation(?string $cosignMode): array
+{
+    $dir = imageSignatureSandbox($cosignMode);
+    file_put_contents($dir.'/imagenes', implode("\n", [
+        imageSignaturePinned('php'),
+        imageSignaturePinned('nginx'),
+        imageSignaturePinned('postgres'),
+        'redis:7-alpine@'.IMAGE_SIGNATURE_DIGEST,
+    ])."\n");
+    file_put_contents(
+        $dir.'/bin/docker',
+        "#!/usr/bin/env bash\nprintf '%s\\n' \"\$*\" >>".escapeshellarg($dir.'/docker.log')."\n"
+        ."case \"\$*\" in *'config --images'*) cat ".escapeshellarg($dir.'/imagenes')."; exit 0 ;; *'image inspect'*) exit 1 ;; esac\nexit 0\n",
+    );
+    chmod($dir.'/bin/docker', 0755);
+    file_put_contents($dir.'/.env', "APP_KEY=base64:secreto\nIMAGE_REGISTRY=".IMAGE_SIGNATURE_REGISTRY."\nIMAGE_TAG=2.2.1\n");
+    file_put_contents($dir.'/docker-compose.yml', '');
+
+    return ['dir' => $dir, 'path' => imageSignaturePath($dir, $cosignMode !== null)];
+}
+
+it('install.sh con una firma invalida deshace lo escrito, no descarga nada y sale con 7', function (): void {
+    ['dir' => $dir, 'path' => $path] = imageSignatureInstallation('invalid');
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/install.sh')).'; '
+        .'kq_msg_init es; ENV_FILE='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; PRODUCT_VERSION=2.2.1; '
+        // Lo que la fase 3 habria dejado, y su deshacer.
+        .'register_undo "env" "rm -f \'${ENV_FILE}\'"; '
+        .'pull_images_if_needed';
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => $path, 'KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process->run();
+
+    $docker = is_file($dir.'/docker.log') ? (string) file_get_contents($dir.'/docker.log') : '';
+
+    expect($process->getExitCode())->toBe(7, $process->getErrorOutput())
+        ->and($process->getErrorOutput())->toContain('no es valida segun cosign')
+        ->and($process->getErrorOutput())->toContain('no matching signatures')
+        // Vuelta atras hecha: el .env con secretos ya no esta, ni la constancia.
+        ->and(is_file($dir.'/.env'))->toBeFalse()
+        ->and(is_file($dir.'/.kronoqr-signature-check'))->toBeFalse()
+        // Y no se descargo ni un byte.
+        ->and($docker)->not->toContain('pull');
+})->group('RS-10', 'RF-PD-02');
+
+it('install.sh con la firma valida deja constancia 0600 junto al .env; con --skip-signature-check, tambien', function (string $mode, bool $skip, string $esperado): void {
+    ['dir' => $dir, 'path' => $path] = imageSignatureInstallation($mode);
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/install.sh')).'; '
+        .'kq_msg_init es; ENV_FILE='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; PRODUCT_VERSION=2.2.1; '
+        .($skip ? 'KQ_SKIP_SIGNATURE_CHECK=1; ' : '')
+        .'verify_image_signatures $(compose config --images)';
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => $path, 'KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and((string) file_get_contents($dir.'/.kronoqr-signature-check'))->toContain('image_signature='.$esperado)
+        ->and(substr(sprintf('%o', fileperms($dir.'/.kronoqr-signature-check')), -4))->toBe('0600');
+})->with([
+    'verificada' => ['ok', false, 'verified'],
+    'omitida' => ['invalid', true, 'skipped'],
+    'sin poder consultar' => ['network', false, 'unverifiable'],
+])->group('RS-10', 'RF-PD-02');
+
+it('install.sh detecta la firma invalida YA en la fase 1 (--check-only), antes de generar secretos, y sale con 7', function (): void {
+    ['dir' => $dir, 'path' => $path] = imageSignatureInstallation('invalid');
+    file_put_contents($dir.'/images.lock', 'php '.IMAGE_SIGNATURE_DIGEST."\nnginx ".IMAGE_SIGNATURE_DIGEST."\npostgres ".IMAGE_SIGNATURE_DIGEST."\n");
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/install.sh')).'; '
+        .'kq_msg_init es; ENV_FILE='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; '
+        .'check_image_signatures';
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => $path, 'KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(7, $process->getErrorOutput())
+        ->and($process->getErrorOutput())->toContain('no es valida segun cosign');
+})->group('RS-10', 'RF-PD-02');
+
+it('update.sh con una firma invalida sale con 7 en el paso 1, no descarga nada y deja image-signature en el informe', function (): void {
+    ['dir' => $dir, 'path' => $path] = imageSignatureInstallation('invalid');
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+        .'kq_msg_init es; DOCKER_OK=1; TARGET_VERSION=2.2.1; SOURCE_VERSION=2.2.0; '
+        .'CURRENT_ENV='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; PACKAGE_DIR='.escapeshellarg($dir).'; '
+        .'REPORT_WORK='.escapeshellarg($dir.'/informe.txt').'; : >"${REPORT_WORK}"; '
+        .'trap \'cat "${REPORT_WORK}"\' EXIT; '
+        .'check_images';
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => $path, 'KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process->run();
+
+    $docker = is_file($dir.'/docker.log') ? (string) file_get_contents($dir.'/docker.log') : '';
+
+    expect($process->getExitCode())->toBe(7, $process->getErrorOutput().$process->getOutput())
+        ->and($process->getErrorOutput())->toContain('no es valida segun cosign')
+        ->and($process->getOutput())->toContain('image-signature')
+        ->and($process->getOutput())->toContain('Salida 7')
+        ->and($docker)->not->toContain('pull');
+})->group('RS-10', 'RF-PD-02', 'RF-PD-10');
+
+it('update.sh sin poder consultar Sigstore sigue (aviso) y lo anota en el informe', function (): void {
+    ['dir' => $dir, 'path' => $path] = imageSignatureInstallation('network');
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+        .'kq_msg_init es; DOCKER_OK=1; TARGET_VERSION=2.2.1; SOURCE_VERSION=2.2.0; '
+        .'CURRENT_ENV='.escapeshellarg($dir.'/.env').'; COMPOSE_FILE='.escapeshellarg($dir.'/docker-compose.yml').'; PACKAGE_DIR='.escapeshellarg($dir).'; '
+        .'check_images >/dev/null 2>&1 || true; '
+        .'printf "%s|%s\n" "${KQ_SIG_RESULT}" "$(printf "%s;" "${REPORT_CHECKS[@]}")"';
+    $process = new Process(['bash', '-c', $script], env: ['PATH' => $path, 'KRONOQR_LANG' => 'es'], timeout: 60.0);
+    $process->run();
+
+    expect($process->getOutput())->toContain('unverifiable|')
+        ->and($process->getOutput())->toContain('image-signature|no se pudo consultar');
+})->group('RS-10', 'RF-PD-10');
+
+it('install.sh y update.sh llaman a la verificacion antes de descargar, usan el 7 y la CI de las imagenes sin firmar usa la opcion', function (): void {
     $install = Repo::contents('infra/scripts/install.sh');
     $update = Repo::contents('infra/scripts/update.sh');
     $ci = Repo::contents('.github/workflows/ci.yml');
@@ -129,16 +307,30 @@ it('install.sh y update.sh verifican antes de descargar y salen con 7 si la firm
     foreach ([$install, $update] as $script) {
         expect($script)->toContain('. "${SCRIPT_DIR}/lib/image-signature.sh"')
             ->and($script)->toContain('--skip-signature-check)')
-            ->and($script)->toContain('kq_verify_product_images')
             ->and($script)->toContain('"${KQ_EXIT_SECURITY}"');
     }
 
-    // Antes del primer `docker pull` de cada script.
-    expect(strpos($install, 'verify_image_signatures ${all+'))->toBeLessThan((int) strpos($install, 'docker pull --quiet'))
-        ->and(strpos($update, 'kq_verify_product_images "'))->toBeLessThan((int) strpos($update, 'docker pull --quiet'));
-
     // La etapa 8b instala desde un registro local con imagenes SIN firmar y fijadas por
-    // digest: cada install.sh/update.sh sobre los paquetes `paquete-fijado-*` (y sobre
-    // `paquete-anterior` tras superponerlos) lleva la opcion, a la vista en el log.
-    expect($ci)->toContain('--skip-signature-check');
+    // digest: cada install.sh/update.sh sobre los paquetes `paquete-fijado-*` lleva la
+    // opcion, a la vista en el log.
+    expect(substr_count($ci, '--skip-signature-check'))->toBeGreaterThanOrEqual(4);
 })->group('RS-10', 'RF-PD-02');
+
+it('avisa cuando el .env declara REDIS_IMAGE_DIGEST (vacia o con otro valor) y no avisa si no esta', function (string $env, string $esperado): void {
+    $dir = sys_get_temp_dir().'/kq-redis-digest-'.bin2hex(random_bytes(4));
+    mkdir($dir, 0777, true);
+    file_put_contents($dir.'/.env', $env);
+
+    $script = 'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; kq_msg_init es; '
+        .'check_image_digest_overrides '.escapeshellarg($dir.'/.env').' '.escapeshellarg($dir).'; '
+        .'printf "avisos=%s nombres=%s\n" "${CHECKS_WARNED}" "${KQ_DIGEST_OVERRIDES}"';
+    $process = new Process(['bash', '-c', $script], env: ['KRONOQR_LANG' => 'es'], timeout: 30.0);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toContain($esperado);
+})->with([
+    'vacia (opt-out sin internet)' => ["REDIS_IMAGE_DIGEST=\n", 'avisos=1 nombres=REDIS_IMAGE_DIGEST'],
+    'con otro digest' => ["REDIS_IMAGE_DIGEST=@sha256:otro\n", 'avisos=1 nombres=REDIS_IMAGE_DIGEST'],
+    'sin declarar' => ["APP_KEY=x\n", 'avisos=0 nombres='],
+])->group('RS-10', 'RF-PD-02');

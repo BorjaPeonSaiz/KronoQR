@@ -800,10 +800,14 @@ services:
   redis:
     # Fijada por DIGEST del indice multi-arquitectura (B18, 2.2.1, ADR-053): `7-alpine`
     # es una etiqueta que se mueve, y un Redis sustituido alimenta la cola de
-    # trabajos que ejecuta `horizon`. La etiqueta se conserva para que Dependabot
-    # (ecosistema docker-compose, .github/dependabot.yml) proponga el digest nuevo
-    # con la etiqueta. QualityGatesTest exige digest en toda imagen de este fichero.
-    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    # trabajos que ejecuta `horizon`. El digest es el VALOR POR DEFECTO de
+    # REDIS_IMAGE_DIGEST (`${VAR-valor}`: sin definir, fijada; definida y VACIA en el
+    # .env, vuelve a la etiqueta; es el opt-out de un servidor sin internet que
+    # carga las imagenes con `docker load`, igual que IMAGE_DIGEST_*, y install.sh,
+    # update.sh y doctor.sh avisan). Dependabot probablemente no lea esta linea por
+    # llevar interpolacion: la actualizacion del digest es manual (ver ADR-053,
+    # Enmienda 2.2.1). QualityGatesTest exige digest en toda imagen de este fichero.
+    image: redis:7-alpine${REDIS_IMAGE_DIGEST-@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499}
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     volumes:
       - redis-data:/data

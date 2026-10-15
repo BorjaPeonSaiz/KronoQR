@@ -390,6 +390,13 @@ check_image_digest_overrides() {
     [ "${declared}" = "${expected}" ] || names="${names:+${names}, }${var}"
   done
 
+  # Redis (B18): su digest vive como valor por defecto del compose, no en
+  # images.lock. Declarar REDIS_IMAGE_DIGEST (vacia: vuelve a la etiqueta; con
+  # otro valor: otra imagen) es siempre apartarse de lo publicado.
+  if grep -qE '^[[:space:]]*(export[[:space:]]+)?REDIS_IMAGE_DIGEST=' "${env_file}"; then
+    names="${names:+${names}, }REDIS_IMAGE_DIGEST"
+  fi
+
   [ -n "${names}" ] || return 0
   # shellcheck disable=SC2034  # lo lee update.sh (informe); install y doctor no.
   KQ_DIGEST_OVERRIDES="${names}"
