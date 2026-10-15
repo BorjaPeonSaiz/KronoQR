@@ -12967,32 +12967,6 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /**
-         * @description La instalacion no puede atender ahora el fichaje, y no es culpa de quien
-         *     lo envia: la base de datos esta inalcanzable
-         *     (`urn:kronoqr:problem:service-unavailable`, R3-CH-02, RNF-D-03) o la
-         *     instalacion se esta actualizando (`urn:kronoqr:problem:maintenance`,
-         *     RF-PD-10). Ver `info.description`, donde se describen las dos para toda
-         *     la API.
-         *
-         *     **No dice nada del fichaje enviado**: puede haberse registrado o no. El
-         *     quiosco lo conserva en su cola y lo reenvia pasado `Retry-After` con el
-         *     mismo `scan_id` e `Idempotency-Key` (reglas duras 8 y 19); si ya se
-         *     habia registrado, recibe la respuesta original.
-         */
-        DependencyUnavailable: {
-            headers: {
-                /**
-                 * @description Segundos durante los que no conviene reintentar.
-                 * @example 10
-                 */
-                "Retry-After": number;
-                [name: string]: unknown;
-            };
-            content: {
-                "application/problem+json": components["schemas"]["Problem"];
-            };
-        };
     };
     parameters: {
         /**
@@ -13748,7 +13722,6 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["DependencyUnavailable"];
         };
     };
     syncScanBatch: {
@@ -13804,7 +13777,6 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["DependencyUnavailable"];
         };
     };
     recordPinScan: {
@@ -13869,7 +13841,6 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["DependencyUnavailable"];
         };
     };
     reportDiscardedScans: {
