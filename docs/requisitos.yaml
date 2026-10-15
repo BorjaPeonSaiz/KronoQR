@@ -144,7 +144,7 @@
 - { id: RS-06,     fase: 2, titulo: "2FA obligatorio para admin, rrhh, auditor y responsable_departamento (ADR-050)" }
 - { id: RS-07,     fase: 1, titulo: "El trail de auditoría es detectablemente manipulable: cada entrada encadena el hash de la anterior; la cadena se verifica a diario y cualquier rotu..." }
 
-# --- Fase 3 -------------------------------------------- (25 requisitos)
+# --- Fase 3 -------------------------------------------- (26 requisitos)
 - { id: RF-AT-10,  fase: 3, titulo: "Control de desfase de reloj" }
 - { id: RF-AT-12,  fase: 3, titulo: "El sistema soporta fichaje de pausa (inicio y fin de descanso) diferenciado del fin de turno, configurable por centro" }
 - { id: RF-GP-04,  fase: 3, titulo: "Registro de ausencias (vacaciones, baja médica, permiso) para no contabilizar como absentismo no justificado" }
@@ -165,8 +165,9 @@
 - { id: RN-21,     fase: 3, titulo: "Orden de la cola offline: nada se registra mientras un fichaje anterior del mismo quiosco siga sin decidir..." }
 - { id: RN-22,     fase: 3, titulo: "Fichaje descartado por el quiosco: lo que el servidor declara inválido se conserva, se avisa y abre incidencia..." }
 - { id: RNF-D-01,  fase: 3, titulo: "Disponibilidad del servicio: 99,5 % mensual" }
-- { id: RNF-P-02,  fase: 3, titulo: "Latencia del endpoint de fichaje en servidor" }
+- { id: RNF-P-02,  fase: 3, titulo: "Latencia del endpoint de fichaje con tarjeta (POST /scan) en servidor" }
 - { id: RNF-P-06,  fase: 3, titulo: "Pico de concurrencia soportado" }
+- { id: RNF-P-08,  fase: 3, titulo: "Latencia del endpoint de fichaje por PIN (POST /scan/pin) en servidor, en hardware de referencia" }
 - { id: RQ-04,     fase: 3, titulo: "Existen pruebas E2E del flujo de quiosco con cámara simulada alimentada por vídeo con un QR real" }
 - { id: RQ-08,     fase: 3, titulo: "Prueba de carga que valida RNF-P-06 antes de cada versión mayor" }
 - { id: RS-11,     fase: 3, titulo: "Revisión de seguridad externa antes de la primera versión comercial y con periodicidad anual" }

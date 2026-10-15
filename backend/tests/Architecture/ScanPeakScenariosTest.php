@@ -33,6 +33,11 @@ const ESCENARIOS_DE_CARGA = ['scan', 'scan-pin', 'resend', 'reject', 'reject-out
 
 function fuenteDeCarga(string $fichero): string
 {
+    return fuenteDelRepositorio('load-tests/k6/'.$fichero);
+}
+
+function fuenteDelRepositorio(string $rutaRelativa): string
+{
     // SIN FACADES: la suite Architecture corre sobre PHPUnit puro y no arranca el
     // framework, asi que `config('quality.repo_path')` no existe aqui. Se
     // resuelve igual que en `config/quality.php`: dentro del contenedor el
@@ -45,7 +50,7 @@ function fuenteDeCarga(string $fichero): string
         $raiz = is_dir('/var/www/repo') ? '/var/www/repo' : dirname(__DIR__, 3);
     }
 
-    $ruta = rtrim($raiz, '/').'/load-tests/k6/'.$fichero;
+    $ruta = rtrim($raiz, '/').'/'.$rutaRelativa;
 
     expect(is_readable($ruta))->toBeTrue('No se encuentra '.$ruta);
 
@@ -232,6 +237,21 @@ it('ficha por PIN contra /scan/pin con el sobre cerrado que sella el aprovisiona
         ->and($aprovisionamiento)->toContain('sodium_crypto_box_seal($pinMaterial->pin, $publicKeyBytes)')
         ->and(fuenteDeCarga('verify-after-load.php'))->toContain("'RF-AT-11/registro'");
 })->group('RF-AT-11', 'RQ-08');
+
+it('juzga la latencia del PIN con el presupuesto de RNF-P-08 del doc 01 y la mide en scan-pin', function (): void {
+    // Decision del propietario (15-10-2026): RNF-P-02 es solo el de `/scan` y el
+    // PIN tiene su propio presupuesto. El agregado no corre en la CI —sus
+    // pruebas de Node se lanzan a mano—, asi que lo que esta prueba impide es que
+    // la cifra del agregado y la del requisito se separen sin que nadie lo vea.
+    $agregado = fuenteDeCarga('aggregate.js');
+    $requisitos = fuenteDelRepositorio('docs/01-especificaciones-proyecto.md');
+
+    expect($agregado)->toContain('const PIN_P95_BUDGET_MS = 400 // RNF-P-08')
+        ->and($agregado)->toContain('const PIN_P99_BUDGET_MS = 800 // RNF-P-08')
+        ->and($requisitos)->toMatch('/^\| RNF-P-08 \| [^|]*`POST \/scan\/pin`[^|]*\| p95 < 400 ms; p99 < 800 ms /m')
+        ->and($requisitos)->toMatch('/^\| RNF-P-02 \| [^|]*`POST \/scan`[^|]*\| p95 < 150 ms; p99 < 400 ms \|$/m')
+        ->and(escenarioDeCarga(fuenteDeCarga('scan-peak.js'), 'scan-pin'))->toMatch("/requirements: '[^']*\\bRNF-P-08\\b/");
+})->group('RNF-P-08', 'RNF-P-02', 'RQ-08');
 
 it('lanza k6 con el uid de quien invoca el script', function (): void {
     // `grafana/k6` corre como uid 12345. En un runner de Linux, `.results/` lo

@@ -703,12 +703,15 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
 | ID | Requisito | Objetivo |
 |---|---|---|
 | RNF-P-01 | Latencia percibida del fichaje (de escaneo a confirmación en pantalla) | p95 < 800 ms; p99 < 1,5 s |
-| RNF-P-02 | Latencia del endpoint de fichaje en servidor | p95 < 150 ms; p99 < 400 ms |
+| RNF-P-02 | Latencia del endpoint de fichaje **con tarjeta** (`POST /scan`) en servidor | p95 < 150 ms; p99 < 400 ms |
 | RNF-P-03 | Tiempo de decodificación del QR en tablet de gama media | < 300 ms |
 | RNF-P-04 | Carga del panel de presencia en vivo (500 empleados) | < 1,5 s (LCP) |
 | RNF-P-05 | Generación de informe mensual de 500 empleados | < 5 s síncrono; asíncrono si supera 10 s |
 | RNF-P-06 | Pico de concurrencia soportado | 50 fichajes/segundo (cambio de turno) |
 | RNF-P-07 | Presupuesto de bundle del quiosco | < 250 KB gzip (JS crítico) |
+| RNF-P-08 | Latencia del endpoint de fichaje **por PIN** (`POST /scan/pin`) en servidor, en hardware de referencia | p95 < 400 ms; p99 < 800 ms (estimado, a confirmar) |
+
+> **Por qué el PIN tiene su propio presupuesto (decisión del propietario, 15-10-2026).** El fichaje por PIN paga un hash bcrypt de coste 12 (unos 160 ms solo el hash) y **ese coste no se rebaja**: con un PIN de pocas cifras es lo único que frena una fuerza bruta *offline* si alguien se lleva la base de datos. Con él, el p95 < 150 ms de RNF-P-02 es inalcanzable por diseño, así que RNF-P-02 se aplica **solo al fichaje con tarjeta** y el PIN —la vía de reserva, con su pantalla de «comprobando»— se juzga contra RNF-P-08. Sus cifras son **estimadas** (los 150 ms de RNF-P-02, más el hash, más margen) y se confirmarán cuando se midan en el hardware de referencia (doc 02 §11.6.2). En el runner de la CI, RNF-P-08 se juzga como RNF-P-02: contra la línea base, en unidades de velocidad de la máquina (doc 02 §10.1). El documento 05 solo promete la velocidad de la tarjeta, así que no cambia.
 
 ### 6.2 Disponibilidad y resiliencia
 
@@ -1270,7 +1273,7 @@ Orden de ejecución: **0 → 1 → 2 → 5 → 3 → 4**.
 | **Fase 1 — MVP de fichaje** | RF-AT-01..09, RF-AT-11, RF-QR-01..06, RF-QR-08, RF-ID-01..02 (**autenticación de gestión básica, sin 2FA**), RF-ID-04..09, RF-KI-01..06, RF-KI-09, RF-GP-01, RF-GP-03, RF-PA-03..04, RF-IN-05, RF-PR-04, RN-01..09, RN-13, RN-15, RL-01, RL-03..06, RL-09, RL-12, RS-01..04, RS-07, RS-12, **RS-13**, RNF-D-02, **RNF-P-01**, **RNF-P-03**, **RNF-D-04**, **RNF-D-05**, **RQ-01..03**, **RQ-05**, **RQ-07**, **RQ-09**, **RQ-10** |
 | **Fase 2 — Gestión y cumplimiento** | RF-PA-01..02, RF-PA-05, RF-IN-01..04, RF-GP-02, RF-PR-01..03, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..12, RN-14, RL-02, RL-07..08, RL-10..11, RL-13..15, RS-05..06, **RNF-P-04..05**, **RNF-D-03** |
 | **Fase 5 — Productización** | RF-PD-01..15, RL-16..21, RQ-11, **RF-GP-05** |
-| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04, RF-PR-05..06, **RN-16..22**, §9 completo, RS-11, **RNF-P-02**, **RNF-P-06**, **RNF-D-01**, **RQ-04**, **RQ-08** |
+| **Fase 3 — Operación y refuerzo** | RF-PA-06..07, RF-KI-07..08, RF-AT-10, RF-AT-12, RF-IN-06..08, RF-GP-04, RF-PR-05..06, **RN-16..22**, §9 completo, RS-11, **RNF-P-02**, **RNF-P-06**, RNF-P-08, **RNF-D-01**, **RQ-04**, **RQ-08** |
 | **Fase 4 — Evolución** | **RF-ID-10** (cuentas de gestión desde el panel, adelantado a la 2.2.0), cuadrantes, vacaciones con aprobación, integración de nómina |
 
 > **Los 21 requisitos en negrita se añadieron el 14 de agosto de 2026, y no son requisitos nuevos.** Existían desde la primera redacción, con su enunciado en las secciones §6.1, §6.2 y §10, pero **este anexo no los repartía a ninguna fase**. Lo detectó `qa:traceability` al construirse en la tarea 0.7, y no como una curiosidad: el comando avisó de que había pruebas ya escritas citando `RNF-D-01` y `RQ-07` que el catálogo no reconocía.
