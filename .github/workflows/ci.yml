@@ -2910,7 +2910,7 @@ jobs:
             # sintetica o ciclo abierto): es lo unico que difiere del package.sh de arriba.
             cp paquete-nuevo/VERSION paquete-nuevo/versions.txt "paquete-fijado-${variante}/"
             test -f "paquete-fijado-${variante}/images.lock"
-            test "$(grep -c '@sha256:' "paquete-fijado-${variante}/docker-compose.yml")" -eq 3
+            test "$(grep -E '^[[:space:]]*image:.*IMAGE_TAG' "paquete-fijado-${variante}/docker-compose.yml" | grep -c '@sha256:')" -eq 3
           done
           grep -q "@${d_nginx_roto}" paquete-fijado-roto/docker-compose.yml
           grep -q "@${d_nginx}" paquete-fijado-sano/docker-compose.yml

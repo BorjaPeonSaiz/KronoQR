@@ -13,6 +13,8 @@
 #                     para las tres SPA y packages/web-kit)
 #   github-actions    .github/workflows/*.yml, .github/actions/*/action.yml
 #   docker            imagenes base de infra/docker/*/Dockerfile
+#   docker-compose    imagenes de terceros fijadas por digest en infra/compose.*.yaml
+#                     (Redis, B18 de la 2.2.1)
 #
 # Las acciones de GitHub fijadas por SHA con comentario de version
 # (`uses: foo@<sha> # vX.Y.Z`) las actualiza Dependabot igual que a las demas:
@@ -119,4 +121,26 @@ updates:
     labels: ["dependencies", "docker"]
     groups:
       docker-menores-y-parches:
+        update-types: ["minor", "patch"]
+
+  # B18 (2.2.1, ADR-053): imagenes de TERCEROS fijadas por digest en el compose de
+  # produccion (`redis:7-alpine@sha256:...`). El ecosistema `docker` de arriba solo
+  # lee Dockerfiles; este lee los `image:` de los ficheros compose de `infra/` y
+  # propone la etiqueta Y el digest nuevos juntos, para que el digest no se pudra.
+  # Las imagenes propias (`${IMAGE_REGISTRY}/php:${IMAGE_TAG}...`) llevan
+  # interpolacion y las ignora: las fija la publicacion (release.yml).
+  # OJO: tambien leera `compose.dev.yaml` (misma etiqueta de Redis y observabilidad);
+  # una PR de ahi que no toque `compose.prod.yaml` no cierra este hueco.
+  - package-ecosystem: "docker-compose"
+    directory: "/infra"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    # Semgrep `dependabot-missing-cooldown`: ver arriba.
+    cooldown:
+      default-days: 7
+    labels: ["dependencies", "docker"]
+    groups:
+      compose-menores-y-parches:
         update-types: ["minor", "patch"]

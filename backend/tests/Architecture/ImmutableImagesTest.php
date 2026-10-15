@@ -67,6 +67,64 @@ it('fija en el paquete las tres imagenes por digest', function (): void {
     expect(preg_match_all('/\$\{IMAGE_TAG:\?[^}]*\}\$\{IMAGE_DIGEST_[A-Z]+:-\}/', $compose))->toBe(3);
 })->group('RF-PD-02', 'RS-10');
 
+it('fija por digest toda imagen de compose.prod.yaml, salvo las siete de observabilidad que ADR-053 deja pendientes', function (): void {
+    // B18 (2.2.1). Una etiqueta de terceros se puede mover: un Redis sustituido
+    // alimenta la cola de trabajos de `horizon`. Cada `image:` es una de:
+    //   · una imagen del producto (registro + IMAGE_TAG + hueco IMAGE_DIGEST_*, que
+    //     package.sh rellena con el digest de la publicacion), o su alias YAML
+    //     (`*php-image`: `horizon` y `scheduler` reutilizan el ancla de `app`);
+    //   · una imagen de terceros con `@sha256:<64 hex>` literal.
+    // Las siete del perfil `observability` van por version (ADR-053, «Pendiente»):
+    // la lista es cerrada, y una imagen nueva sin digest que no este en ella rompe
+    // esta prueba. Cuando se fijen, la lista se vacia.
+    $pendientes = [
+        'prom/prometheus', 'prom/node-exporter', 'prom/alertmanager', 'grafana/grafana',
+        'grafana/loki', 'grafana/tempo', 'prom/blackbox-exporter',
+    ];
+    $compose = Repo::contents('infra/compose.prod.yaml');
+
+    preg_match_all('/^\s*(?:- )?image:\s*(?:&\S+\s+)?(\S.*?)\s*$/m', $compose, $matches);
+    $imagenes = $matches[1];
+    expect(count($imagenes))->toBeGreaterThanOrEqual(11);
+
+    $sinDigest = [];
+    $propias = 0;
+
+    foreach ($imagenes as $imagen) {
+        if (str_starts_with($imagen, '*')) {
+            // Alias del ancla de la imagen de la aplicacion.
+            expect($imagen)->toBe('*php-image');
+
+            continue;
+        }
+
+        if (preg_match('/^\$\{IMAGE_REGISTRY:-[^}]*\}\/(?:php|nginx|postgres):\$\{IMAGE_TAG:\?[^}]*\}\$\{IMAGE_DIGEST_(?:PHP|NGINX|POSTGRES):-\}$/', $imagen) === 1) {
+            $propias++;
+
+            continue;
+        }
+
+        if (preg_match('/^[a-z0-9._\/-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$/', $imagen) === 1) {
+            continue;
+        }
+
+        $sinDigest[] = $imagen;
+    }
+
+    // Tres imagenes del producto (la de `app` y su ancla cuentan una vez).
+    expect($propias)->toBe(3);
+
+    // Lo que queda sin digest es exactamente la lista cerrada, ni mas ni menos.
+    $nombres = array_map(static fn (string $imagen): string => explode(':', $imagen)[0], $sinDigest);
+    sort($nombres);
+    $esperadas = $pendientes;
+    sort($esperadas);
+    expect($nombres)->toBe($esperadas);
+
+    // Y Redis, la prioritaria, lleva etiqueta Y digest.
+    expect($compose)->toMatch('/image:\s*redis:7-alpine@sha256:[0-9a-f]{64}\s*$/m');
+})->group('RF-PD-02', 'RS-10');
+
 it('la vuelta atras in-place anula los digests, la primera publicacion es explicita y la CI ejercita el paquete fijado', function (): void {
     $update = Repo::contents('infra/scripts/update.sh');
     $guard = Repo::contents('.github/scripts/assert-image-tags-free.sh');

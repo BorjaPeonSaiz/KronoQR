@@ -147,8 +147,10 @@ if [ -n "${KQ_IMAGES_LOCK:-}" ]; then
     # sed con delimitador | y el marcador escapado: el digest solo lleva [0-9a-f:].
     sed -i "s|\\\$[{]${var}:-[}]|\${${var}-@${digest}}|" "${DEST}/docker-compose.yml"
   done
-  [ "$(grep -c '@sha256:' "${DEST}/docker-compose.yml")" -eq 3 ] ||
-    die 1 "tras fijar los digests el docker-compose.yml no tiene exactamente tres referencias @sha256: (una por imagen)."
+  # Solo las lineas `image:` del producto (llevan IMAGE_TAG): redis lleva su
+  # propio digest literal en el compose del repositorio (B18, 2.2.1) y no cuenta.
+  [ "$(grep -E '^[[:space:]]*image:.*IMAGE_TAG' "${DEST}/docker-compose.yml" | grep -c '@sha256:')" -eq 3 ] ||
+    die 1 "tras fijar los digests el docker-compose.yml no tiene exactamente tres imagenes del producto con @sha256: (una por imagen)."
   cp "${KQ_IMAGES_LOCK}" "${DEST}/images.lock"
 fi
 
