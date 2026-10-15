@@ -1488,6 +1488,16 @@ bandeja de incidencias solo revisa los últimos días
 incidencias antiguas. Ningún informe ya emitido ni ninguna exportación para la
 Inspección cambia.
 
+**Al actualizar a la 2.2.1: la zona horaria del centro queda fija.** Desde el
+primer fichaje, la zona horaria del centro ya no se puede cambiar desde el
+panel ni desde la API: el panel la muestra sin dejar editarla y explica por
+qué. Si tu instalación ya tiene fichajes, no tienes que hacer nada. Si la zona
+se configuró mal en la puesta en marcha, hay una orden de consola, con motivo,
+confirmación y asiento en la auditoría, que la corrige **sin mover ninguna
+jornada ya registrada**: el histórico pasa a verse con la zona corregida. Cómo
+se usa está en [`configuracion.md`](configuracion.md) (fila `APP_TIMEZONE`).
+Ningún fichaje ni ningún total cambia al actualizar.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.
