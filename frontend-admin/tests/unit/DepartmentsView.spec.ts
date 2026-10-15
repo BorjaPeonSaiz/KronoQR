@@ -231,7 +231,7 @@ describe('DepartmentsView', () => {
   })
 })
 
-const SITE_BODY = { id: 1, name: 'Hotel Marina', timezone: 'Europe/Madrid' }
+const SITE_BODY = { id: 1, name: 'Hotel Marina', timezone: 'Europe/Madrid', timezone_locked: false }
 
 function writeApi(
   deps: unknown,
@@ -385,7 +385,7 @@ describe('DepartmentsView: crear, renombrar y centro', () => {
 
     expect(wrapper.find('[data-test="site-name"]').text()).toContain('Hotel Marina')
     expect(wrapper.find('[data-test="site-timezone"]').text()).toBe('Europe/Madrid')
-    expect(wrapper.find('[data-test="site-timezone-note"]').text()).toBe(es.site.timezoneNote)
+    expect(wrapper.find('[data-test="site-timezone-note"]').text()).toBe(es.site.timezoneOpen)
 
     await wrapper.find('[data-test="site-rename"]').trigger('click')
 

@@ -20,7 +20,7 @@ export function getSite(): Promise<Site> {
   return requestJson<Site>('/api/v1/site')
 }
 
-/** Renombra el centro. La zona horaria no se envia desde el panel (R6-AR-02). */
+/** Renombra el centro o cambia su zona horaria (esta, solo hasta el primer fichaje, RN-23). */
 export function updateSite(body: UpdateSiteRequest): Promise<Site> {
   return requestJson<Site>('/api/v1/site', { method: 'PATCH', body })
 }

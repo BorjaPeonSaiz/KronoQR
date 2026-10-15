@@ -2515,12 +2515,19 @@
     "loading": "Loading the site…",
     "name": "Site name",
     "timezone": "Time zone",
-    "timezoneNote": "The time zone cannot be changed here: it decides which work day each shift belongs to, and changing it will be handled separately.",
+    "timezoneOpen": "You can change it until the first clocking. After that it is fixed.",
+    "timezoneLocked": "The time zone can no longer be changed: there are clockings recorded with it, and it decides which work day each shift belongs to. If it was set wrongly during setup, it is corrected on the server with a console command; the configuration guide explains how.",
+    "changeTimezone": "Change time zone",
+    "timezoneTitle": "Site time zone",
     "rename": "Rename site",
     "renameTitle": "Rename the site",
     "announce": {
       "saved": "Site renamed to {name}.",
-      "failed": "The site name was not changed."
+      "failed": "The site name was not changed.",
+      "timezoneSaved": "Time zone saved: {timezone}."
+    },
+    "errors": {
+      "timezoneLocked": "The first clocking was recorded while you were changing the time zone, so it can no longer be changed. Nothing was saved."
     }
   }
 }

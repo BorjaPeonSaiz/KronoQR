@@ -2515,12 +2515,19 @@
     "loading": "Cargando el centro…",
     "name": "Nombre del centro",
     "timezone": "Zona horaria",
-    "timezoneNote": "La zona horaria no se cambia desde aquí: decide a qué jornada pertenece cada turno y su cambio se tratará aparte.",
+    "timezoneOpen": "Puedes cambiarla hasta el primer fichaje. Después queda fija.",
+    "timezoneLocked": "La zona horaria ya no se puede cambiar: hay fichajes registrados con ella, y es la que decide a qué jornada pertenece cada turno. Si se configuró mal en la puesta en marcha, se corrige en el servidor con una orden de consola; lo explica la guía de configuración.",
+    "changeTimezone": "Cambiar zona",
+    "timezoneTitle": "Zona horaria del centro",
     "rename": "Renombrar centro",
     "renameTitle": "Renombrar el centro",
     "announce": {
       "saved": "Centro renombrado como {name}.",
-      "failed": "No se ha cambiado el nombre del centro."
+      "failed": "No se ha cambiado el nombre del centro.",
+      "timezoneSaved": "Zona horaria guardada: {timezone}."
+    },
+    "errors": {
+      "timezoneLocked": "Mientras cambiabas la zona se ha registrado el primer fichaje y ya no se puede cambiar. No se ha guardado nada."
     }
   }
 }

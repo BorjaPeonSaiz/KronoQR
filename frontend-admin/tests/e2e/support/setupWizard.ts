@@ -27,7 +27,12 @@ export const PAIRING_CODE = '483921'
 export const CHALLENGE_TOKEN = '41|Kd2pQ9vLmN4tZbYcF1wQ8sE3rT6uI0oP5aS7dXyZ'
 export const TOTP_CODE = '492013'
 export const SESSION_TOKEN = '17|GhK2mXpR9vLdN4tZbYcF1wQ8sE3rT6uI0oP5aS7d'
-export const SITE: Site = { id: 1, name: 'Hotel Marina', timezone: 'Europe/Madrid' }
+export const SITE: Site = {
+  id: 1,
+  name: 'Hotel Marina',
+  timezone: 'Europe/Madrid',
+  timezone_locked: false,
+}
 
 const STEP_ORDER: readonly SetupStep[] = [
   'administrator',
