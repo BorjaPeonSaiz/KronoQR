@@ -55,6 +55,19 @@
 # por lo medido. La CI completa de un push (hasta ④, la mas lenta) termina en
 # 15-19 min. Si ① -> ③ pasa de 15 min, se mide y se arregla, no se sube.
 #
+# RE-MEDIDO (V1-DV-02, 15-10-2026), 12 pushes verdes del 14 y 15-10-2026 (`gh api
+# .../actions/runs/<id>/jobs`): ①->③ de extremo a extremo 6,2-9,3 min (mediana
+# 8,4), con ① backend 2:46-4:47, ② 1:03-1:50 y ③ 4:43-7:37. Margen sobre el
+# peor caso medido: 5,7 min (61 %). No hay recorte barato con ganancia clara:
+# el 90 % de ① y ③ son las propias herramientas (Pint+PHPStan 87-107 s,
+# Pest Contract+Feature 390-400 s) y la ruta critica ①->②->③ es la cadena de
+# `needs` a proposito (falla rapido, no gasta ③ en un cambio que ① rechaza).
+# Rector (informativo, 69-79 s) esta en la ruta critica de ①; sacarlo a un job
+# paralelo ahorra ~1 min a cambio de otro runner y otro toolchain: no se hace.
+# Se FIJA el presupuesto en 15 min con aviso a los 12 y se COMPRUEBA en el
+# ultimo paso de `unit` («Presupuesto del run ①-③»), ademas de los avisos por
+# etapa de cada job (① backend 240 s, ② 90 s, ③ 480 s, medidos con margen).
+#
 # LA PUERTA DE COBERTURA (RNF-M-01: dominio >= 90 %, global >= 75 %, doc 02
 # §9.2) NO ES NINGUNA DE LAS OCHO ETAPAS NUMERADAS. `make coverage` instrumenta
 # con Xdebug la suite ENTERA -Unit, Integration, Feature y Contract juntas, no
@@ -211,7 +224,7 @@ jobs:
         if: always()
         env:
           ETAPA: "① Lint + Tipos · backend"
-          PRESUPUESTO: "60"
+          PRESUPUESTO: "240"
         run: |
           ahora=$(date +%s)
           comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
@@ -491,6 +504,11 @@ jobs:
     # ultimos runs manuales verdes: 39, 57 y 57 min (con la completa aqui).
     timeout-minutes: 90
     needs: architecture
+    # `actions: read` solo para leer la hora de inicio del run en el paso
+    # «Presupuesto del run ①-③» (V1-DV-02); el resto sigue siendo solo lectura.
+    permissions:
+      contents: read
+      actions: read
 
     env:
       # Credenciales de usar y tirar para servicios que viven lo que dura el
@@ -692,7 +710,7 @@ jobs:
         if: always()
         env:
           ETAPA: "③ Unitarias + Mutacion"
-          PRESUPUESTO: "120"
+          PRESUPUESTO: "480"
         run: |
           ahora=$(date +%s)
           comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
@@ -706,6 +724,39 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           if [ "$comprobaciones" -gt "$PRESUPUESTO" ]; then
             echo "::warning title=Presupuesto excedido::${ETAPA} ha tardado ${comprobaciones} s frente a los ${PRESUPUESTO} s del doc 02 §10.1."
+          fi
+
+      # PRESUPUESTO DEL RUN ①-③ (V1-DV-02, 15-10-2026): la cifra del doc 02
+      # §10.1 -15 min de reloj desde que arranca el run hasta que acaba ③- se
+      # COMPRUEBA aqui, no solo se declara. Aviso a los 12 min (el 80 %: aun se
+      # puede arreglar sin urgencia) y error visible a los 15. Es informativo, no
+      # una puerta: ni falla el job ni depende de que la API conteste.
+      - name: Presupuesto del run ①-③ (15 min, doc 02 §10.1)
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          AVISO: "720"
+          LIMITE: "900"
+        run: |
+          inicio="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}" --jq '.run_started_at')" || {
+            echo "::notice::No se ha podido leer la hora de inicio del run; presupuesto ①-③ sin comprobar."
+            exit 0
+          }
+          total=$(($(date +%s) - $(date -d "${inicio}" +%s)))
+          {
+            echo "### Run ①-③ completo"
+            echo ""
+            echo "| Desde el inicio del run | Aviso | Presupuesto §10.1 |"
+            echo "|---|---|---|"
+            echo "| ${total} s | ${AVISO} s | ${LIMITE} s |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$total" -gt "$LIMITE" ]; then
+            echo "::error title=Presupuesto ①-③ excedido::①-③ han tardado ${total} s frente a los ${LIMITE} s (15 min) del doc 02 §10.1. Se mide y se arregla, no se sube."
+          elif [ "$total" -gt "$AVISO" ]; then
+            echo "::warning title=Presupuesto ①-③ cerca del limite::①-③ han tardado ${total} s; el limite es ${LIMITE} s (doc 02 §10.1)."
           fi
 
   #-----------------------------------------------------------------------------
