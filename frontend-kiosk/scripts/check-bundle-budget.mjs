@@ -106,6 +106,27 @@ const total = (entries) => entries.reduce((sum, entry) => sum + entry.size, 0)
 const criticalJs = total(critical.js)
 const criticalCss = total(critical.css)
 
+// KP1 (Anexo A, LCP): el decodificador (ZXing) y libsodium se cargan por
+// import() tras el primer pintado. Si algun cambio los devuelve al camino
+// critico, el tamano puede seguir cabiendo en 250 KiB y aun asi el LCP con CPU
+// x4 se estropea; por eso se comprueba el CONTENIDO de los trozos criticos, no
+// solo su peso. Los marcadores son cadenas que el minificador no renombra.
+const HEAVY_MARKERS = [
+  ['ZXing (@zxing/browser)', 'ChecksumException'],
+  ['libsodium', 'crypto_box_seal'],
+]
+for (const entry of critical.js) {
+  const content = readFileSync(path.join(distDir, entry.name), 'utf8')
+  const found = HEAVY_MARKERS.filter(([, marker]) => content.includes(marker)).map(([name]) => name)
+  if (found.length > 0) {
+    fail(
+      entry.name + ' (JS critico) contiene ' + found.join(' y ') + '.',
+      'carga esa dependencia con import() dinamico tras el primer pintado ' +
+        '(features/scan/composables/useQrScanner.ts, features/pin/composables/usePinSealingStatus.ts).',
+    )
+  }
+}
+
 // Presupuesto del precacheo de fuentes (doc 02 §6, RF-KI-01): el quiosco tiene
 // que arrancar SIN red con Poppins e Inter, no con la pila de respaldo del
 // sistema. `vite.config.ts` restringe Workbox a `**/*-latin-*.woff2`

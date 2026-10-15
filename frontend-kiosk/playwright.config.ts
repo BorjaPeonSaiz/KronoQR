@@ -79,7 +79,8 @@ export default defineConfig({
   projects: [
     {
       name: 'kiosk-qr',
-      testIgnore: /degraded\.spec\.ts$|worn\.spec\.ts$|layout\.spec\.ts$|kiosk-upgrade\.spec\.ts$/,
+      testIgnore:
+        /degraded\.spec\.ts$|worn\.spec\.ts$|layout\.spec\.ts$|kiosk-upgrade\.spec\.ts$|perf-lcp\.spec\.ts$/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
@@ -118,6 +119,17 @@ export default defineConfig({
       // por la confirmacion a mitad de medicion.
       name: 'kiosk-layout',
       testMatch: /layout\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        launchOptions: { args: chromiumArgs(fixture('qr-video-blank.y4m')) },
+      },
+    },
+    {
+      // `perf-lcp.spec.ts` (KP1, 2.2.1): LCP en frio con CPU x4 y 3G rapida. Camara
+      // SIN QR para que la pantalla de espera sea estable mientras se mide.
+      name: 'kiosk-perf',
+      testMatch: /perf-lcp\.spec\.ts$/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

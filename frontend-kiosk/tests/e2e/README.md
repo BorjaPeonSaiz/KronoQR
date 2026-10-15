@@ -11,28 +11,29 @@ npx playwright test --grep @RF-KI-09   # por etiqueta de requisito (§9.6)
 
 ## Que hay aqui
 
-| Fichero                    | Cubre                                                                                                                                              |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scan.spec.ts`             | `@RF-KI-01`, `@RF-KI-02`, `@RF-KI-05`, `@RF-KI-06`, `@RF-KI-09`, `@RF-AT-01`, `@RF-AT-05`, `@RL-09`, `@RQ-04` — escaneo y confirmacion             |
-| `degraded.spec.ts`         | `@RF-KI-02`, `@RF-QR-05`, `@RF-AT-05`, `@RQ-04` — tarjeta deteriorada                                                                              |
-| `worn.spec.ts`             | `@RF-QR-05`, `@RQ-04` — tarjeta gastada, al limite de la correccion de errores                                                                     |
-| `qr-decode-budget.spec.ts` | `@RF-QR-05`, `@RNF-P-03` — presupuesto de tiempo de la decodificacion                                                                              |
-| `layout.spec.ts`           | `@RF-KI-06` — disposicion de la pantalla, con la camara sin QR delante                                                                             |
-| `accessibility.spec.ts`    | `@RF-KI-05`, `@RF-KI-06`, `@RF-AT-05`, `@RF-AT-10`, `@RF-AT-12`, `@RF-PD-08`, `@RS-03` con `@axe-core/playwright`, 0 violaciones criticas o graves |
-| `offline.spec.ts`          | `@RF-KI-03`, `@RF-KI-04`, `@RF-AT-07`, `@RQ-05`, `@RN-18`, `@RN-21`, `@RN-22` — cola offline, orden y descartes                                    |
-| `break.spec.ts`            | `@RF-AT-12`, `@RF-AT-10` — fichaje de pausa y aviso de desfase                                                                                     |
-| `pin.spec.ts`              | `@RF-AT-11`, `@RF-ID-09`, `@RS-03`, `@RQ-05` — fichaje por PIN de 6 a 8 cifras                                                                     |
-| `pin-lockout.spec.ts`      | `@RF-AT-11`, `@RS-12`, `@RS-03` — bloqueo del PIN                                                                                                  |
-| `pin-csp.spec.ts`          | `@RF-AT-11`, `@RS-09` — PIN sellado con WebAssembly bajo la CSP de Nginx                                                                           |
-| `pairing.spec.ts`          | `@RF-PD-06` — emparejamiento                                                                                                                       |
-| `token-rotation.spec.ts`   | `@RF-ID-04`, `@RF-KI-03`, `@RQ-05` — relevo del token en el latido                                                                                 |
-| `heartbeat-errors.spec.ts` | `@RF-PD-15`, `@RF-ID-04`, `@RF-KI-03`, `@RQ-05` — errores enviados en el latido                                                                    |
-| `traceparent.spec.ts`      | `@RF-PD-15`, `@RF-KI-02` — cabecera `traceparent`                                                                                                  |
-| `branding.spec.ts`         | `@RF-PD-08`, `@RF-KI-03`, `@RF-KI-09`, `@RL-09` — marca y aviso de privacidad, tambien sin red                                                     |
-| `manifest.spec.ts`         | `@RF-KI-01`, `@RF-KI-08` — manifiesto de la PWA                                                                                                    |
-| `diagnostics.spec.ts`      | `@RF-KI-08`, `@RF-PD-06` — pantalla de diagnostico                                                                                                 |
-| `update-window.spec.ts`    | `@RF-KI-07`, `@RF-KI-04`, `@RQ-05`, `@RF-KI-08` — ventana de actualizacion                                                                         |
-| `kiosk-upgrade.spec.ts`    | `@RF-AT-11`, `@RF-KI-07`, `@RF-PD-10`, `@RS-09` — tablet abierta con la CSP de la 2.1.0 aplica la version nueva y ficha por PIN                    |
+| Fichero                    | Cubre                                                                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scan.spec.ts`             | `@RF-KI-01`, `@RF-KI-02`, `@RF-KI-05`, `@RF-KI-06`, `@RF-KI-09`, `@RF-AT-01`, `@RF-AT-05`, `@RL-09`, `@RQ-04` — escaneo y confirmacion                        |
+| `degraded.spec.ts`         | `@RF-KI-02`, `@RF-QR-05`, `@RF-AT-05`, `@RQ-04` — tarjeta deteriorada                                                                                         |
+| `worn.spec.ts`             | `@RF-QR-05`, `@RQ-04` — tarjeta gastada, al limite de la correccion de errores                                                                                |
+| `qr-decode-budget.spec.ts` | `@RF-QR-05`, `@RNF-P-03` — presupuesto de tiempo de la decodificacion                                                                                         |
+| `layout.spec.ts`           | `@RF-KI-06` — disposicion de la pantalla, con la camara sin QR delante                                                                                        |
+| `accessibility.spec.ts`    | `@RF-KI-05`, `@RF-KI-06`, `@RF-AT-05`, `@RF-AT-10`, `@RF-AT-12`, `@RF-PD-08`, `@RS-03` con `@axe-core/playwright`, 0 violaciones criticas o graves            |
+| `offline.spec.ts`          | `@RF-KI-03`, `@RF-KI-04`, `@RF-AT-07`, `@RQ-05`, `@RN-18`, `@RN-21`, `@RN-22` — cola offline, orden y descartes                                               |
+| `break.spec.ts`            | `@RF-AT-12`, `@RF-AT-10` — fichaje de pausa y aviso de desfase                                                                                                |
+| `pin.spec.ts`              | `@RF-AT-11`, `@RF-ID-09`, `@RS-03`, `@RQ-05` — fichaje por PIN de 6 a 8 cifras                                                                                |
+| `pin-lockout.spec.ts`      | `@RF-AT-11`, `@RS-12`, `@RS-03` — bloqueo del PIN                                                                                                             |
+| `pin-csp.spec.ts`          | `@RF-AT-11`, `@RS-09` — PIN sellado con WebAssembly bajo la CSP de Nginx                                                                                      |
+| `pairing.spec.ts`          | `@RF-PD-06` — emparejamiento                                                                                                                                  |
+| `token-rotation.spec.ts`   | `@RF-ID-04`, `@RF-KI-03`, `@RQ-05` — relevo del token en el latido                                                                                            |
+| `heartbeat-errors.spec.ts` | `@RF-PD-15`, `@RF-ID-04`, `@RF-KI-03`, `@RQ-05` — errores enviados en el latido                                                                               |
+| `traceparent.spec.ts`      | `@RF-PD-15`, `@RF-KI-02` — cabecera `traceparent`                                                                                                             |
+| `branding.spec.ts`         | `@RF-PD-08`, `@RF-KI-03`, `@RF-KI-09`, `@RL-09` — marca y aviso de privacidad, tambien sin red                                                                |
+| `manifest.spec.ts`         | `@RF-KI-01`, `@RF-KI-08` — manifiesto de la PWA                                                                                                               |
+| `diagnostics.spec.ts`      | `@RF-KI-08`, `@RF-PD-06` — pantalla de diagnostico                                                                                                            |
+| `update-window.spec.ts`    | `@RF-KI-07`, `@RF-KI-04`, `@RQ-05`, `@RF-KI-08` — ventana de actualizacion                                                                                    |
+| `kiosk-upgrade.spec.ts`    | `@RF-AT-11`, `@RF-KI-07`, `@RF-PD-10`, `@RS-09` — tablet abierta con la CSP de la 2.1.0 aplica la version nueva y ficha por PIN                               |
+| `perf-lcp.spec.ts`         | `@RNF-P-01`, `@RNF-P-03`, `@RNF-P-07` — LCP en frio <= 2 s con CPU x4 y 3G rapida (Lighthouse), sobre el build; informa tambien el perfil Fast 3G de DevTools |
 
 ## Varios proyectos, y por que
 

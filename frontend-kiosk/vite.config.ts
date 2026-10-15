@@ -1,8 +1,11 @@
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { extname, resolve, sep } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
+import { gzipSync } from 'node:zlib'
 import { defineConfig } from 'vite'
+import type { Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // La version que declara el latido (`app_version`) sale del fichero `VERSION`
@@ -96,10 +99,110 @@ function previewSecurityHeaders(): Record<string, string> | undefined {
 
 const previewHeaders = previewSecurityHeaders()
 
+// KP1: `vite preview` sirve sin comprimir, y Nginx (la tablet real) si: `gzip on`,
+// nivel 5, minimo 1 KiB, JS/CSS/JSON/SVG (`kronoqr.conf.template`). Medir el LCP
+// del Anexo A contra bytes sin comprimir seria medir un servidor que no existe
+// (340 KB en vez de ~115 KB por una 3G de 1,6 Mbit/s). Solo con las cabeceras
+// del E2E activas: `npm run preview` a mano sigue siendo el de siempre.
+const COMPRESSIBLE = /\.(?:js|css|html|svg|json|webmanifest)$/
+
+function gzipLikeNginx(): Plugin {
+  const cache = new Map<string, Buffer>()
+  return {
+    name: 'kronoqr-preview-gzip',
+    configurePreviewServer(server) {
+      if (previewHeaders === undefined) return
+      const outDir = resolve(server.config.root, server.config.build.outDir)
+      server.middlewares.use((req, res, next) => {
+        const accepts = String(req.headers['accept-encoding'] ?? '')
+        if (req.method !== 'GET' || !accepts.includes('gzip') || req.url === undefined) {
+          next()
+          return
+        }
+        const pathname = decodeURIComponent(req.url.split('?', 1)[0] ?? '')
+        const relative = pathname.startsWith(base) ? pathname.slice(base.length) : ''
+        const file = resolve(outDir, relative)
+        if (
+          relative === '' ||
+          !file.startsWith(outDir + sep) ||
+          !COMPRESSIBLE.test(file) ||
+          !existsSync(file) ||
+          statSync(file).size < 1024
+        ) {
+          next()
+          return
+        }
+        let body = cache.get(file)
+        if (body === undefined) {
+          body = gzipSync(readFileSync(file), { level: 5 })
+          cache.set(file, body)
+        }
+        for (const [name, value] of Object.entries(previewHeaders)) res.setHeader(name, value)
+        res.setHeader(
+          'Content-Type',
+          MIME_BY_EXTENSION[extname(file)] ?? 'application/octet-stream',
+        )
+        res.setHeader('Content-Encoding', 'gzip')
+        res.setHeader('Vary', 'Accept-Encoding')
+        res.setHeader('Content-Length', body.byteLength)
+        res.end(body)
+      })
+    },
+  }
+}
+
+const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.html': 'text/html',
+  '.svg': 'image/svg+xml',
+  '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
+}
+
+// KP1: precarga de las fuentes de la pantalla de escaneo (Anexo A, LCP). El CSS
+// solo descubre los `@font-face` cuando ya ha descargado y analizado la hoja;
+// con `<link rel="preload">` el navegador las pide en paralelo con el JS. Solo
+// el subconjunto `latin` de los pesos que usa la guia (Poppins 600/700, Inter
+// variable): `latin-ext` (ca/ro) se descarga cuando hace falta, no en cada
+// arranque, para no competir por el ancho de banda de una 3G. Los nombres salen
+// del `bundle` real, asi que siguen a los hashes y a `base`.
+const FONT_PRELOAD_PATTERN = /^assets\/(?:poppins-latin-600-normal)-[^/]+\.woff2$/
+
+function preloadScanFonts(): Plugin {
+  return {
+    name: 'kronoqr-preload-scan-fonts',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(_html, context) {
+        const bundle = context.bundle
+        if (bundle === undefined) return []
+        return Object.keys(bundle)
+          .filter((file) => FONT_PRELOAD_PATTERN.test(file))
+          .sort()
+          .map((file) => ({
+            tag: 'link',
+            attrs: {
+              rel: 'preload',
+              as: 'font',
+              type: 'font/woff2',
+              crossorigin: '',
+              href: `${base}${file}`,
+            },
+            injectTo: 'head-prepend' as const,
+          }))
+      },
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => ({
   base,
   plugins: [
     vue(),
+    preloadScanFonts(),
+    gzipLikeNginx(),
     tailwindcss(),
     VitePWA({
       // 'prompt' y no 'autoUpdate' a proposito: una actualizacion que se
