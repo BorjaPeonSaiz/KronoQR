@@ -13,6 +13,7 @@ import App from './App.vue'
 import './assets/main.css'
 import { useSessionStore } from './features/auth/session.store'
 import { createAppRouter } from './router'
+import { installChunkLoadRecovery } from './router/chunkLoadRecovery'
 import { registerAuthGuard } from './router/guards'
 import { installPasswordChangeInterceptor } from './shared/api/passwordChangeInterceptor'
 import { createAppQueryClient } from './shared/api/queryClient'
@@ -106,6 +107,10 @@ installPasswordChangeInterceptor(() => {
 })
 
 registerAuthGuard(router)
+
+// Tras una actualizacion, una pestana vieja pide trozos que ya no existen:
+// se recarga una vez (ver `chunkLoadRecovery.ts`).
+installChunkLoadRecovery(router, { reload: (target) => window.location.assign(target) })
 
 app.use(router)
 app.use(i18n)

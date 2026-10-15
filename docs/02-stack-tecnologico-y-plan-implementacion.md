@@ -1604,6 +1604,8 @@ Generado por el administrador del cliente con un clic o un comando. Contiene ver
 | Memoria en marcha 12 h | ≤ 250 MB, sin crecimiento sostenido |
 | Consumo de batería con pantalla activa | Documentar y validar en la prueba de campo |
 
+**El panel tiene su propio presupuesto de arranque** (2.2.1, bloque 17): JS crítico ≤ 190 KiB gzip y CSS ≤ 40 KiB, comprobado en el `build` por `frontend-admin/scripts/check-bundle-budget.mjs`. Las vistas se cargan bajo demanda salvo el marco, el acceso y la de aterrizaje; el umbral salta si una vista o ECharts vuelven al chunk de entrada. Apoya RNF-P-04.
+
 El escaneo continuo por cámara durante turnos de 8 h es un caso de uso poco habitual: **se exige una prueba de resistencia de 12 h en el dispositivo real** antes de dar por buena la Fase 1. Las fugas de memoria en el bucle de decodificación son un fallo típico y no aparecen en pruebas cortas.
 
 ## Anexo B — Variables de entorno principales

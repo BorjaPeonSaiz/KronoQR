@@ -46,6 +46,7 @@ import { clockSkewMinutesFrom, exceedsClockSkewTolerance } from '../domain/clock
 import { useQrScanner } from '../composables/useQrScanner'
 import { useBreakIntent } from '../composables/useBreakIntent'
 import { usePinSealingStatus } from '@/features/pin/composables/usePinSealingStatus'
+import { afterFirstPaint } from '@/shared/ui/afterFirstPaint'
 import { useScanSessionWithCleanup } from '../composables/useScanSession'
 import { useScanSound } from '../composables/useScanSound'
 import { useWakeLock } from '../composables/useWakeLock'
@@ -95,6 +96,7 @@ const offline = useOfflineQueue({
 // padron pero libsodium sin arrancar, el boton llevaba a un teclado que
 // acababa en un «codigo no valido» que no era del empleado.
 const pinSealing = usePinSealingStatus({
+  deferFirstCheck: true,
   onUnavailable: () =>
     reporter.report('kiosk.pin.seal_failed', { reason: 'warmup_failed', message: 'warmup_failed' }),
 })
@@ -231,10 +233,20 @@ const cameraFailed = computed(
 )
 
 onMounted(() => {
-  void scanner.start()
-  void wakeLock.request()
+  // KP1: la camara (y con ella la descarga del decodificador) arranca tras el
+  // primer pintado, no antes: el LCP no compite con ZXing. Coste para el primer
+  // escaneo: un fotograma (~16 ms), muy por debajo del tiempo que tarda en
+  // abrirse la camara. `scanner.start()` es idempotente. El bloqueo de pantalla
+  // va detras de la camara, como siempre: el orden en que se anotan sus
+  // diagnosticos en el latido no cambia.
+  cancelDeferredStart = afterFirstPaint(() => {
+    void scanner.start()
+    void wakeLock.request()
+  })
   heartbeat.start()
 })
+
+let cancelDeferredStart: (() => void) | null = null
 
 // El escaner y el bloqueo de pantalla se limpian solos en sus composables. El
 // latido no: es un `setInterval` propio de esta pantalla y hay que pararlo, o
@@ -246,6 +258,7 @@ watchEffect(() => {
 })
 
 onUnmounted(() => {
+  cancelDeferredStart?.()
   heartbeat.stop()
   scanner.stop()
   markInteraction('scan-screen', false)

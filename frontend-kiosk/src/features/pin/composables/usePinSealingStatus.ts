@@ -15,6 +15,7 @@
 import { onMounted, onUnmounted, readonly, ref } from 'vue'
 import type { Ref } from 'vue'
 import type { SealingStatus } from '../infrastructure/pinSealing'
+import { whenIdleAfterPaint } from '@/shared/ui/afterFirstPaint'
 
 /**
  * `import()` y no un `import` estatico, y no es un detalle: la pantalla de tarjeta
@@ -47,6 +48,8 @@ export interface PinSealingStatusOptions {
   readonly onUnavailable?: () => void
   readonly warmUp?: () => Promise<SealingStatus>
   readonly retryMs?: number
+  /** KP1: la primera comprobacion espera a un hueco tras el primer pintado (pantalla de tarjeta). */
+  readonly deferFirstCheck?: boolean
 }
 
 export interface PinSealingStatusHandle {
@@ -86,12 +89,21 @@ export function usePinSealingStatus(options: PinSealingStatusOptions = {}): PinS
     return next
   }
 
+  let cancelDeferred: (() => void) | null = null
+
   onMounted(() => {
+    if (options.deferFirstCheck === true) {
+      cancelDeferred = whenIdleAfterPaint(() => {
+        if (alive) void check()
+      })
+      return
+    }
     void check()
   })
 
   onUnmounted(() => {
     alive = false
+    cancelDeferred?.()
     clear()
   })
 

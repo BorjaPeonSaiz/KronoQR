@@ -404,6 +404,28 @@ it('comprueba el presupuesto de bundle del quiosco en el propio build', function
     expect($package['scripts']['build'] ?? '')->toContain('check-bundle-budget');
 })->group('RNF-P-07');
 
+it('comprueba el presupuesto de bundle del panel en el propio build', function (): void {
+    // RNF-P-04 (carga del panel): JS critico <= 190 KiB gzip, CSS <= 40 KiB. El
+    // chunk de entrada pesaba ~247 KiB cuando las vistas se importaban de forma
+    // sincrona; ahora cargan por import() desde el router. Esta prueba solo
+    // comprueba que el guardian sigue enganchado al `build` (la medida la hace el propio
+    // script).
+    $script = repoContents('frontend-admin/scripts/check-bundle-budget.mjs');
+
+    expect($script)->toContain('190 * KIB');
+    expect($script)->toContain('40 * KIB');
+
+    /** @var array{scripts?: array<string, string>} $package */
+    $package = json_decode(
+        repoContents('frontend-admin/package.json'),
+        true,
+        512,
+        JSON_THROW_ON_ERROR
+    );
+
+    expect($package['scripts']['build'] ?? '')->toContain('check-bundle-budget');
+})->group('RNF-P-04');
+
 it('registra cada decision de arquitectura como ADR versionado', function (): void {
     // RNF-M-04. La comprobacion de verdad la hace `docs:consistency`, que cruza
     // las dos direcciones: cada fila del §4 tiene su fichero y cada fichero su

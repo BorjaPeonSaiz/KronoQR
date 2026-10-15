@@ -15,30 +15,8 @@ import {
   SETTINGS_MANAGE,
   SUPPORT_MANAGE,
 } from '@/features/auth/abilities'
-import AccountsView from '@/features/accounts/AccountsView.vue'
-import AbsenceListView from '@/features/absences/AbsenceListView.vue'
-import AdoptionDashboardView from '@/features/reports/AdoptionDashboardView.vue'
 import LoginView from '@/features/auth/LoginView.vue'
-import ChangePasswordView from '@/features/auth/ChangePasswordView.vue'
-import DepartmentsView from '@/features/departments/DepartmentsView.vue'
-import ComplianceView from '@/features/compliance/ComplianceView.vue'
-import CredentialBoardView from '@/features/credentials/CredentialBoardView.vue'
-import DevicesView from '@/features/devices/DevicesView.vue'
-import EmployeeDetailView from '@/features/employees/EmployeeDetailView.vue'
 import EmployeeListView from '@/features/employees/EmployeeListView.vue'
-import ErrorsView from '@/features/errors/ErrorsView.vue'
-import IncidentsView from '@/features/incidents/IncidentsView.vue'
-import LivePresenceView from '@/features/live/LivePresenceView.vue'
-import OnboardingView from '@/features/onboarding/OnboardingView.vue'
-import LegalExportView from '@/features/reports/LegalExportView.vue'
-import PayrollExportView from '@/features/reports/PayrollExportView.vue'
-import PeriodReportView from '@/features/reports/PeriodReportView.vue'
-import BrandingView from '@/features/settings/BrandingView.vue'
-import ComplianceProfileView from '@/features/settings/ComplianceProfileView.vue'
-import LicenseView from '@/features/settings/LicenseView.vue'
-import OperationalSettingsView from '@/features/settings/OperationalSettingsView.vue'
-import SupportView from '@/features/support/SupportView.vue'
-import EmployeeWorkDaysView from '@/features/workdays/EmployeeWorkDaysView.vue'
 import AppShellView from '@/shared/ui/AppShellView.vue'
 import ForbiddenView from '@/shared/ui/ForbiddenView.vue'
 
@@ -87,7 +65,7 @@ export const routes: RouteRecordRaw[] = [
     // cuanto se cierra, esta deja de ser accesible (es de un solo uso).
     path: '/setup',
     name: 'setup',
-    component: OnboardingView,
+    component: () => import('@/features/onboarding/OnboardingView.vue'),
     meta: { public: true },
   },
   {
@@ -106,7 +84,7 @@ export const routes: RouteRecordRaw[] = [
       {
         path: 'employees/:uuid',
         name: 'employee',
-        component: EmployeeDetailView,
+        component: () => import('@/features/employees/EmployeeDetailView.vue'),
         props: true,
         meta: { ability: EMPLOYEES_MANAGE, section: 'employees' },
       },
@@ -121,7 +99,7 @@ export const routes: RouteRecordRaw[] = [
         // la policy del servidor es la que autoriza de verdad (regla dura 18).
         path: 'absences',
         name: 'absences',
-        component: AbsenceListView,
+        component: () => import('@/features/absences/AbsenceListView.vue'),
         meta: { ability: EMPLOYEES_READ },
       },
       {
@@ -134,7 +112,7 @@ export const routes: RouteRecordRaw[] = [
         // que autoriza de verdad (regla dura 18).
         path: 'employees/:uuid/workdays',
         name: 'employee-workdays',
-        component: EmployeeWorkDaysView,
+        component: () => import('@/features/workdays/EmployeeWorkDaysView.vue'),
         props: true,
         meta: { ability: ATTENDANCE_READ, section: 'employees' },
       },
@@ -144,13 +122,13 @@ export const routes: RouteRecordRaw[] = [
         // firma del canal: ver quien esta dentro es leer el registro, no tocarlo.
         path: 'live',
         name: 'live',
-        component: LivePresenceView,
+        component: () => import('@/features/live/LivePresenceView.vue'),
         meta: { ability: ATTENDANCE_READ },
       },
       {
         path: 'credentials',
         name: 'credentials',
-        component: CredentialBoardView,
+        component: () => import('@/features/credentials/CredentialBoardView.vue'),
         meta: { ability: CREDENTIALS_MANAGE },
       },
       {
@@ -159,7 +137,7 @@ export const routes: RouteRecordRaw[] = [
         // un estrecho de solo lectura como en el registro horario.
         path: 'incidents',
         name: 'incidents',
-        component: IncidentsView,
+        component: () => import('@/features/incidents/IncidentsView.vue'),
         meta: { ability: INCIDENTS_MANAGE },
       },
       {
@@ -174,7 +152,7 @@ export const routes: RouteRecordRaw[] = [
         // presencia.
         path: 'compliance',
         name: 'compliance',
-        component: ComplianceView,
+        component: () => import('@/features/compliance/ComplianceView.vue'),
         meta: { ability: ATTENDANCE_READ },
       },
       {
@@ -185,7 +163,7 @@ export const routes: RouteRecordRaw[] = [
         // servidor es la que autoriza de verdad (regla dura 18).
         path: 'reports',
         name: 'reports',
-        component: PeriodReportView,
+        component: () => import('@/features/reports/PeriodReportView.vue'),
         meta: { ability: REPORTS_MANAGE },
       },
       {
@@ -198,7 +176,7 @@ export const routes: RouteRecordRaw[] = [
         // autoriza de verdad (regla dura 18).
         path: 'reports/payroll',
         name: 'payroll-export',
-        component: PayrollExportView,
+        component: () => import('@/features/reports/PayrollExportView.vue'),
         // Sin `meta.section`: tiene entrada propia en el menu y «Informes» no
         // debe quedar activa a la vez (la prueba de `router.spec.ts` lo exige).
         meta: { ability: REPORTS_MANAGE },
@@ -214,7 +192,7 @@ export const routes: RouteRecordRaw[] = [
         // Sin `meta.section`, por la misma razon que «Nomina».
         path: 'reports/adoption',
         name: 'adoption-dashboard',
-        component: AdoptionDashboardView,
+        component: () => import('@/features/reports/AdoptionDashboardView.vue'),
         meta: { ability: REPORTS_MANAGE },
       },
       {
@@ -223,7 +201,7 @@ export const routes: RouteRecordRaw[] = [
         // servidor es la que autoriza de verdad (regla dura 18).
         path: 'reports/legal-export',
         name: 'legal-export',
-        component: LegalExportView,
+        component: () => import('@/features/reports/LegalExportView.vue'),
         meta: { ability: REPORTS_LEGAL },
       },
       {
@@ -234,7 +212,7 @@ export const routes: RouteRecordRaw[] = [
         // autoriza de verdad (regla dura 18).
         path: 'compliance-profile',
         name: 'compliance-profile',
-        component: ComplianceProfileView,
+        component: () => import('@/features/settings/ComplianceProfileView.vue'),
         meta: { ability: SETTINGS_MANAGE },
       },
       {
@@ -246,7 +224,7 @@ export const routes: RouteRecordRaw[] = [
         // servidor es la que autoriza de verdad (regla dura 18).
         path: 'settings',
         name: 'operational-settings',
-        component: OperationalSettingsView,
+        component: () => import('@/features/settings/OperationalSettingsView.vue'),
         meta: { ability: SETTINGS_MANAGE },
       },
       {
@@ -258,7 +236,7 @@ export const routes: RouteRecordRaw[] = [
         // (regla dura 18).
         path: 'devices',
         name: 'devices',
-        component: DevicesView,
+        component: () => import('@/features/devices/DevicesView.vue'),
         meta: { ability: SETTINGS_MANAGE },
       },
       {
@@ -269,7 +247,7 @@ export const routes: RouteRecordRaw[] = [
         // policy del servidor es la que autoriza de verdad (regla dura 18).
         path: 'branding',
         name: 'branding',
-        component: BrandingView,
+        component: () => import('@/features/settings/BrandingView.vue'),
         meta: { ability: SETTINGS_MANAGE },
       },
       {
@@ -282,7 +260,7 @@ export const routes: RouteRecordRaw[] = [
         // poder activar la renovacion que acaba de comprar.
         path: 'license',
         name: 'license',
-        component: LicenseView,
+        component: () => import('@/features/settings/LicenseView.vue'),
         meta: { ability: LICENSE_MANAGE },
       },
       {
@@ -294,7 +272,7 @@ export const routes: RouteRecordRaw[] = [
         // autoriza de verdad (regla dura 18).
         path: 'support',
         name: 'support',
-        component: SupportView,
+        component: () => import('@/features/support/SupportView.vue'),
         meta: { abilities: [SUPPORT_MANAGE, DIAGNOSTICS_MANAGE] },
       },
       {
@@ -307,7 +285,7 @@ export const routes: RouteRecordRaw[] = [
         // de soporte, y eso lo decide el servidor, no esta ruta.
         path: 'errors',
         name: 'errors',
-        component: ErrorsView,
+        component: () => import('@/features/errors/ErrorsView.vue'),
         meta: { ability: DIAGNOSTICS_MANAGE },
       },
       {
@@ -317,7 +295,7 @@ export const routes: RouteRecordRaw[] = [
         // vista los oculta y el servidor los exige.
         path: 'departments',
         name: 'departments',
-        component: DepartmentsView,
+        component: () => import('@/features/departments/DepartmentsView.vue'),
         meta: { abilities: [EMPLOYEES_READ, ATTENDANCE_READ] },
       },
       {
@@ -325,7 +303,7 @@ export const routes: RouteRecordRaw[] = [
         // policy del servidor es la que autoriza de verdad (regla dura 18).
         path: 'accounts',
         name: 'accounts',
-        component: AccountsView,
+        component: () => import('@/features/accounts/AccountsView.vue'),
         meta: { ability: ACCOUNTS_MANAGE },
       },
       {
@@ -334,7 +312,7 @@ export const routes: RouteRecordRaw[] = [
         // contrasena temporal (la guarda no le deja salir de ella).
         path: 'account/password',
         name: 'change-password',
-        component: ChangePasswordView,
+        component: () => import('@/features/auth/ChangePasswordView.vue'),
       },
       { path: 'forbidden', name: 'forbidden', component: ForbiddenView },
       {
