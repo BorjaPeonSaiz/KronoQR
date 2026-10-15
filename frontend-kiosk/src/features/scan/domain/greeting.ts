@@ -15,7 +15,7 @@
 // tablet. Es presentacion pura: el instante que viaja al servidor siempre es
 // UTC (regla dura 3).
 
-import { wallClockOf } from '@/shared/time/siteTimeZone'
+import { wallClockOf } from '@kronoqr/web-kit/datetime'
 
 export type GreetingSlot = 'morning' | 'afternoon' | 'night'
 

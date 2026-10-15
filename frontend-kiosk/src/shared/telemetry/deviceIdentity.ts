@@ -24,7 +24,7 @@
 // sin consecuencias. La cola es registro legal sin escribir y va a IndexedDB.
 
 import { uuidV7 } from '@/shared/ids/uuidV7'
-import { isValidTimeZone } from '@/shared/time/siteTimeZone'
+import { isValidTimeZone } from '@kronoqr/web-kit/datetime'
 import type { UpdateWindow } from '@/features/offline/domain/updateWindow'
 import {
   DEFAULT_UPDATE_QUIET_MINUTES,

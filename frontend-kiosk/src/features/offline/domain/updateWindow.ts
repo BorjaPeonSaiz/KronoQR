@@ -51,7 +51,7 @@
 // lee dos veces y la ventana puede abrir dos veces. Las dos lecturas son
 // inocuas: la puerta sigue exigiendo cola vacia y silencio.
 
-import { wallClockOf } from '@/shared/time/siteTimeZone'
+import { wallClockOf } from '@kronoqr/web-kit/datetime'
 
 /** Franja horaria de PARED del centro (`site_time_zone`), en formato `"HH:MM"`. Puede cruzar la medianoche (`start` > `end`). */
 export interface UpdateWindow {

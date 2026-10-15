@@ -2,8 +2,9 @@
 // que exigen las tres operaciones de correccion (RF-PA-04, regla dura 3).
 //
 // `@kronoqr/web-kit/datetime` ya resuelve la direccion contraria -leer un
-// instante UTC en la zona del centro-, pero nunca la necesito: el servidor
-// manda cada marca ya resuelta (`*_local`). La que falta es esta, y solo la
+// instante UTC en la zona del centro (`readWallClock`)-, y esta funcion la
+// reutiliza en vez de tener su propia copia: el servidor manda cada marca ya
+// resuelta (`*_local`). La que falta es esta, y solo la
 // necesita `CorrectionDialog.vue`: convertir lo que alguien acaba de teclear en
 // un `<input type="datetime-local">` -pensado en la hora del centro, nunca en
 // la del navegador- al `UtcTimestamp` del contrato.
@@ -34,15 +35,11 @@
 //    convencion por prueba (`zonedTime.spec.ts`) en vez de dejarla como
 //    accidente del algoritmo.
 
+import { readWallClock, type WallClockParts } from '@kronoqr/web-kit/datetime'
+
 const LOCAL_INPUT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/
 
-interface WallClock {
-  year: number
-  month: number
-  day: number
-  hour: number
-  minute: number
-}
+type WallClock = WallClockParts
 
 function parseLocalInput(value: string): WallClock | null {
   const match = LOCAL_INPUT_PATTERN.exec(value)
@@ -74,28 +71,11 @@ function asUtcMs(wall: WallClock): number {
   return Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, 0)
 }
 
-/** Que hora de pared lee `timeZone` cuando el instante UTC es `ms`. */
-function readInZone(ms: number, timeZone: string): WallClock {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).formatToParts(new Date(ms))
+/** La hora de pared que lee `timeZone` cuando el instante UTC es `ms`, como si fuera UTC. `NaN` si `ms` no es un instante. */
+function readInZoneAsUtcMs(ms: number, timeZone: string): number {
+  const wall = readWallClock(ms, timeZone)
 
-  const value = (type: string): number =>
-    Number(parts.find((part) => part.type === type)?.value ?? '0')
-
-  return {
-    year: value('year'),
-    month: value('month'),
-    day: value('day'),
-    hour: value('hour'),
-    minute: value('minute'),
-  }
+  return wall === null ? Number.NaN : asUtcMs(wall)
 }
 
 /**
@@ -119,7 +99,7 @@ export function zonedInputToUtcIso(value: string, timeZone: string): string | nu
   // un cambio de horario de verano en el que la primera aproximacion cae al
   // otro lado de la transicion.
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const reading = asUtcMs(readInZone(guess, timeZone))
+    const reading = readInZoneAsUtcMs(guess, timeZone)
     const drift = target - reading
 
     if (drift === 0) {
@@ -134,7 +114,7 @@ export function zonedInputToUtcIso(value: string, timeZone: string): string | nu
   // -el hueco del cambio de horario de primavera-, y no hay ningun instante
   // UTC que la represente. Sin esto, las dos pasadas de arriba convergian en
   // silencio a la hora siguiente (02:30 se guardaba como si fuera 03:30).
-  if (asUtcMs(readInZone(guess, timeZone)) !== target) {
+  if (readInZoneAsUtcMs(guess, timeZone) !== target) {
     return null
   }
 
