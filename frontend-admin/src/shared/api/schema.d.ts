@@ -9200,7 +9200,10 @@ export interface components {
          * @description Zona horaria IANA del centro (`sites.timezone`). **Se muestra, no se
          *     adivina**: viaja en la respuesta para que ninguna pantalla use la del
          *     navegador. `Europe/Madrid` y `Atlantic/Canary` son el mismo pais y una
-         *     hora de diferencia: la zona es del centro, no del pais.
+         *     hora de diferencia: la zona es del centro, no del pais. **Siempre es la
+         *     del centro** (hay uno, ADR-040, y su zona queda fija con el primer
+         *     tramo, RN-23); que viaje en cada jornada y en cada tramo se conserva por
+         *     compatibilidad de la v1 (ADR-012, ADR-056).
          * @example Europe/Madrid
          */
         TimeZoneName: string;
