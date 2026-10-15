@@ -120,6 +120,16 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+### Anotado en el bloque 15 de la 2.2.1 (15-10-2026)
+
+- **Decisión pendiente del propietario:** el fichaje por PIN paga bcrypt de coste 12 (~160 ms solo el hash); si RNF-P-02
+  (p95 < 150 ms) se le aplica, es inalcanzable por diseño. Hoy la latencia del PIN solo se publica (p95 ~700 ms en el runner).
+- `v2.2.0` medida con el guion nuevo salió roja en RS-03 dos veces (38654069785, 38656009180) en runners lentos; la rama
+  siempre en verde. No es regresión de la 2.2.1; repetir si se quiere una comparación entre versiones.
+- K6-2 parcial: falta la topología de una sola IP con NAT y una plantilla de 500 personas. K6-4: la ayuda del `Makefile`
+  dice `INSTANCES=8` y `run.sh` usa 10.
+- La línea base (`load-tests/k6/baseline.json`) es la mediana de tres pasadas; para rehacerla, `baseline.js`.
+
 ### Anotado en el bloque 14 de la 2.2.1 (15-10-2026)
 
 - `make alerts-drill`: `disparadas_en_prometheus` devuelve vacío si Prometheus no contesta, y la comprobación del estado
