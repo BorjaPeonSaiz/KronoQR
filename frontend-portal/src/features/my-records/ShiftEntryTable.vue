@@ -10,8 +10,8 @@
 //    ficho y la hora a la que el servidor la recibio. Cuando se diferencian, es
 //    que el fichaje viajo en la cola del quiosco sin conexion.
 //  - **La hora local se lee, no se convierte** (regla dura 3): el servidor la
-//    manda ya resuelta en la zona del centro. Si un tramo se ficho en otro
-//    centro -un traslado no reescribe donde ocurrieron las jornadas- se dice.
+//    manda ya resuelta en la zona del centro, que es unica y fija (RN-23,
+//    ADR-040, ADR-056): un tramo nunca lleva sufijo de zona.
 //  - **Un turno nocturno es UN tramo** (regla dura 4). No se parte: se marca
 //    que la salida cae en el dia siguiente.
 //  - **La pausa son dos tramos, no un hueco mudo** (tarea 3.5, ADR-024). Un
@@ -72,7 +72,6 @@ interface EntryRow {
   source: ClockingSource
   outSource: ClockingSource | null
   durationMinutes: number | null
-  otherTimeZone: string | null
   clockIn: MarkView
   clockOut: MarkView | null
   /** `closed_by: break_start`: esta salida es un inicio de pausa, no un fin de jornada. */
@@ -104,7 +103,6 @@ const rows = computed<EntryRow[]>(() =>
       source: entry.clock_in_source,
       outSource: entry.clock_out_source,
       durationMinutes: entry.duration_minutes,
-      otherTimeZone: entry.time_zone === props.timeZone ? null : entry.time_zone,
       clockIn: mark(entry.clocked_in_at, entry.clocked_in_at_local, entry.clocked_in_recorded_at),
       clockOut:
         entry.clocked_out_at === null || entry.clocked_out_at_local === null
@@ -171,9 +169,6 @@ function duration(minutes: number): string {
             <tr class="border-b border-kq-border align-top">
               <th scope="row" class="px-3 py-2 font-medium">
                 <span class="text-lg tabular-nums">{{ row.clockIn.local }}</span>
-                <span v-if="row.otherTimeZone !== null" class="ml-1 text-sm font-normal">
-                  ({{ row.otherTimeZone }})
-                </span>
                 <span
                   v-if="row.clockIn.queueDelayMinutes !== null"
                   class="mt-1 block text-sm font-normal text-kq-warning"
