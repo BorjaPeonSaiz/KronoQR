@@ -505,7 +505,7 @@ services:
   # escribe en `/prometheus/prometheus.yml` (el volumen de datos, nunca la
   # plantilla de solo lectura).
   prometheus:
-    image: prom/prometheus:v3.15.0
+    image: &obs-shell-image prom/prometheus:v3.15.0
     container_name: kronoqr-prometheus
     entrypoint: ["/etc/prometheus/render-config.sh"]
     command:
@@ -629,19 +629,42 @@ services:
       timeout: 5s
       retries: 3
 
+  # Guarda de LOG_RETENTION_HOURS de Loki y Tempo (RL-11): valida el plazo (entero 24..17520)
+  # ANTES de que arranquen, porque un `up -d loki` no pasa por install.sh ni update.sh, y 0
+  # desactivaria la retencion. Es un servicio de UN SOLO USO y no un entrypoint de Loki: desde
+  # Loki 3.7 la imagen es sin shell (solo /usr/bin/loki) y un entrypoint `sh` no arranca.
+  # Corre en la imagen de Prometheus (busybox, la misma de abajo por ancla: una sola version
+  # que mantener) y Loki/Tempo dependen de que termine bien. Con un valor invalido sale con 64
+  # y `up` se detiene con el motivo. Ver infra/observability/retention-guard.sh.
+  retention-guard:
+    image: *obs-shell-image
+    container_name: kronoqr-retention-guard
+    entrypoint: ["/bin/sh", "/etc/kronoqr/retention-guard.sh"]
+    command: ["/bin/true"]
+    user: "65534:65534"
+    environment:
+      LOG_RETENTION_HOURS: ${LOG_RETENTION_HOURS:-2160}
+    volumes:
+      - ./observability/retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro
+    network_mode: none
+    restart: "no"
+    read_only: true
+
   #--- 15 · Logs estructurados ------------------------------------------------
   loki:
     image: grafana/loki:3.7.8
     container_name: kronoqr-loki
-    # La guarda valida LOG_RETENTION_HOURS (entero 24..17520) ANTES de arrancar el binario:
-    # un `up -d loki` no pasa por install.sh ni update.sh, y 0 desactivaria la retencion.
-    entrypoint: ["/bin/sh", "/etc/kronoqr/retention-guard.sh"]
-    command: ["/usr/bin/loki", "-config.file=/etc/loki/loki.yaml", "-config.expand-env=true"]
+    # Sin entrypoint propio: la imagen no tiene shell. LOG_RETENTION_HOURS lo valida el servicio
+    # `retention-guard` (dependencia de abajo) antes de que este arranque.
+    entrypoint: ["/usr/bin/loki"]
+    command: ["-config.file=/etc/loki/loki.yaml", "-config.expand-env=true"]
+    depends_on:
+      retention-guard:
+        condition: service_completed_successfully
     environment:
       LOG_RETENTION_HOURS: ${LOG_RETENTION_HOURS:-2160}
     volumes:
       - ./observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
-      - ./observability/retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro
       - loki-data:/loki
     networks:
       # Tambien en la red de la aplicacion: Monolog empuja los logs desde app,
@@ -649,12 +672,8 @@ services:
       - app
       - observability
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:3100/ready || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    # Sin healthcheck: la imagen (desde 3.7) no trae wget ni shell. La sonda de Loki es
+    # el propio Grafana/Prometheus desde fuera.
 
   #--- 16 · Trazas --------------------------------------------------------
   # Grafana Tempo, monolitico y sobre sistema de ficheros (tarea 3.1, §8.1): el
@@ -664,13 +683,15 @@ services:
   tempo:
     image: grafana/tempo:2.7.1
     container_name: kronoqr-tempo
-    entrypoint: ["/bin/sh", "/etc/kronoqr/retention-guard.sh"]
-    command: ["/tempo", "-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
+    entrypoint: ["/tempo"]
+    command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
+    depends_on:
+      retention-guard:
+        condition: service_completed_successfully
     environment:
       LOG_RETENTION_HOURS: ${LOG_RETENTION_HOURS:-2160}
     volumes:
       - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
-      - ./observability/retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro
       - tempo-data:/var/tempo
     ports:
       # Solo para inspeccionar trazas a mano en desarrollo (API de consulta de

@@ -181,10 +181,18 @@ it('Loki y Tempo arrancan por la guarda que valida LOG_RETENTION_HOURS: un `up -
         foreach (['loki' => '/usr/bin/loki', 'tempo' => '/tempo'] as $servicio => $binario) {
             $definicion = $compose['services'][$servicio] ?? [];
 
-            expect($definicion['entrypoint'] ?? null)->toBe(['/bin/sh', '/etc/kronoqr/retention-guard.sh'])
-                ->and(((array) ($definicion['command'] ?? []))[0] ?? null)->toBe($binario)
-                ->and(textoDeLista($definicion['volumes'] ?? []))->toContain('retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro');
+            // Desde Loki 3.7 la imagen no trae shell: el entrypoint es el binario y no el
+            // script de la guarda (que corre aparte, en el servicio `retention-guard`).
+            expect($definicion['entrypoint'] ?? null)->toBe([$binario])
+                ->and(((array) ($definicion['command'] ?? []))[0] ?? null)->toStartWith('-config.file=')
+                ->and($definicion['depends_on']['retention-guard']['condition'] ?? null)->toBe('service_completed_successfully');
         }
+
+        $guarda = $compose['services']['retention-guard'] ?? [];
+        expect($guarda['entrypoint'] ?? null)->toBe(['/bin/sh', '/etc/kronoqr/retention-guard.sh'])
+            ->and(textoDeLista($guarda['volumes'] ?? []))->toContain('retention-guard.sh:/etc/kronoqr/retention-guard.sh:ro')
+            ->and($guarda['environment']['LOG_RETENTION_HOURS'] ?? null)->toBe('${LOG_RETENTION_HOURS:-2160}')
+            ->and($guarda['restart'] ?? null)->toBe('no');
     }
 })->group('RL-11');
 
