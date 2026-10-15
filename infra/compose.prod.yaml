@@ -1106,7 +1106,7 @@ services:
 
   grafana:
     profiles: [observability]
-    image: grafana/grafana:11.5.1
+    image: grafana/grafana:13.2.3
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?define GRAFANA_ADMIN_PASSWORD en el .env; install.sh lo genera}
