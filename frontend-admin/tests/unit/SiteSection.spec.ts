@@ -119,4 +119,29 @@ describe('SiteSection: zona horaria', () => {
     expect(wrapper.find('[data-test="site-timezone-note"]').text()).toBe(es.site.timezoneLocked)
     expect(spy.mock.calls.length - patches(spy).length).toBeGreaterThanOrEqual(2)
   })
+
+  it('un 422 por zona desconocida se pinta junto al campo y el dialogo sigue abierto', async () => {
+    stubFetch((_url, init) =>
+      init?.method === 'PATCH'
+        ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+            errors: { timezone: ['Zona horaria no reconocida.'] },
+          })
+        : jsonResponse(SITE),
+    )
+
+    const wrapper = await mountView(SiteSection)
+
+    await settle()
+    await wrapper.find('[data-test="site-change-timezone"]').trigger('click')
+    await wrapper.find('[data-test="timezone-input"]').setValue('Mars/Olympus')
+    await buttonWith(wrapper.find('[role="dialog"]'), es.site.changeTimezone).trigger('click')
+    await settle()
+
+    const dialog = wrapper.find('[role="dialog"]')
+
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.text()).toContain('Zona horaria no reconocida.')
+    expect(dialog.find('[data-test="timezone-input"]').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.find('[data-test="site-timezone-locked-error"]').exists()).toBe(false)
+  })
 })

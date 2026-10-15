@@ -3892,7 +3892,11 @@ export async function stubManagementApi(
           const patch = request.postDataJSON() as { name?: string; timezone?: string }
 
           // RN-23: con fichajes registrados la zona no se cambia (409).
-          if (patch.timezone !== undefined && siteState.timezone_locked) {
+          if (
+            patch.timezone !== undefined &&
+            patch.timezone !== siteState.timezone &&
+            siteState.timezone_locked
+          ) {
             await problem(
               route,
               409,
