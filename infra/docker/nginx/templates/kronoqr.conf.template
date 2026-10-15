@@ -299,6 +299,8 @@ server {
   ssl_session_timeout 1d;
   ssl_session_tickets off;
 
+  # CSP estricta (sin WebAssembly) para todo el server. Solo `location ^~ /kiosk/`
+  # (extra/spa.conf) incluye `security-headers-kiosk.conf`, con 'wasm-unsafe-eval'.
   include /etc/nginx/snippets/security-headers.conf;
 
   client_max_body_size ${NGINX_CLIENT_MAX_BODY_SIZE};

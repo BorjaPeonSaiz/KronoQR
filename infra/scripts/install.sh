@@ -42,6 +42,9 @@
 #      dice exactamente que ha quedado y que orden lo retira.
 #   6  Verificacion posterior fallida, con los servicios en pie. No se deshace
 #      nada: la instalacion y sus datos existen.
+#   7  La firma cosign de una imagen del producto no es valida (solo con cosign
+#      instalado y la imagen fijada por digest). Se ha deshecho lo escrito y no
+#      se ha instalado nada. Ver lib/image-signature.sh y --skip-signature-check.
 #
 # INTERRUPCIONES (R6-PL-01). Un corte de la sesion SSH (SIGHUP, 129), un `kill`
 # (SIGTERM, 143) o Ctrl+C (SIGINT, 130) se tratan como un fallo mas:
@@ -89,6 +92,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/fs.sh"
 # shellcheck source=lib/kqe.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/kqe.sh"
+# shellcheck source=lib/image-signature.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/image-signature.sh"
 
 #------------------------------------------------------------------------------
 # Umbrales publicados (doc 02 §11.6.2). Son los MINIMOS, no los recomendados.
@@ -128,6 +133,9 @@ OPT_CHECK_ONLY=0
 OPT_LANG=""
 OPT_ENV_FILE=""
 OPT_COMPOSE_FILE=""
+# 1 si el operador paso --skip-signature-check. La lee lib/image-signature.sh.
+# shellcheck disable=SC2034  # la lee kq_verify_product_images (lib/image-signature.sh).
+KQ_SKIP_SIGNATURE_CHECK=0
 
 COMPOSE_FILE=""
 ENV_FILE=""
@@ -148,6 +156,11 @@ declare -a TEMP_FILES=()
 # empieza (el ERR de la orden que una Ctrl+C acaba de matar y el INT de la
 # propia Ctrl+C, por ejemplo) no puede lanzar una segunda vuelta atras encima.
 ROLLING_BACK=0
+
+# Codigo con el que sale la vuelta atras cuando LLEGA A TERMINAR. Es el 4 salvo
+# que el motivo sea la firma de una imagen (7): nada instalado, pero no por una
+# averia reintentable sino por una garantia de seguridad rota.
+ROLLBACK_DONE_CODE="${KQ_EXIT_ROLLED_BACK}"
 
 # Valores leidos del .env del cliente. Se rellenan en la fase 1.
 CFG_APP_URL=""
@@ -298,8 +311,8 @@ rollback_and_die() {
 
   if [ "${incomplete}" -eq 0 ]; then
     err "$(kq_text rollback_done)"
-    err "$(kq_format exit_line "${KQ_EXIT_ROLLED_BACK}" "$(kq_exit_name "${KQ_EXIT_ROLLED_BACK}")")"
-    exit "${KQ_EXIT_ROLLED_BACK}"
+    err "$(kq_format exit_line "${ROLLBACK_DONE_CODE}" "$(kq_exit_name "${ROLLBACK_DONE_CODE}")")"
+    exit "${ROLLBACK_DONE_CODE}"
   fi
 
   err "$(kq_format rollback_incomplete "${COMPOSE_FILE}" "${ENV_FILE}")"
@@ -332,6 +345,10 @@ parse_arguments() {
     case "$1" in
     --check-only)
       OPT_CHECK_ONLY=1
+      ;;
+    --skip-signature-check)
+      # shellcheck disable=SC2034  # la lee kq_verify_product_images (lib/image-signature.sh).
+      KQ_SKIP_SIGNATURE_CHECK=1
       ;;
     --lang)
       [ "$#" -ge 2 ] || die "${KQ_EXIT_USAGE}" "$(kq_format missing_value "--lang")"
@@ -924,6 +941,7 @@ phase_requirements() {
     check_log_retention "${ENV_FILE}"
     check_operational_settings "${ENV_FILE}" "${COMPOSE_FILE}"
     check_image_digest_overrides "${ENV_FILE}" "$(dirname -- "${COMPOSE_FILE}")"
+    check_image_signatures
     check_app_url
     check_tls
     check_ports
@@ -1287,6 +1305,86 @@ ensure_backup_subdirectories() {
   return 0
 }
 
+# Verifica la firma cosign de las imagenes DEL PRODUCTO fijadas por digest
+# (B18 de la 2.2.1, ADR-053; lib/image-signature.sh). Con cosign y una firma que
+# no vale, la instalacion se deshace y sale con 7. Sin cosign, avisa y sigue: el
+# digest ya fija que bytes se instalan.
+verify_image_signatures() {
+  local registry
+
+  registry="$(env_value "${ENV_FILE}" "IMAGE_REGISTRY")"
+  # El mismo valor por defecto que compose.prod.yaml.
+  registry="${registry:-ghcr.io/kronoqr}"
+
+  kq_verify_product_images "${registry}" "$@" || true
+
+  case "${KQ_SIG_RESULT}" in
+  verified) check_pass "$(kq_text c_sig_verified)" ;;
+  no-cosign) check_warn "$(kq_text c_sig_no_cosign)" "$(kq_text w_sig_no_cosign)" ;;
+  unverifiable) check_warn "$(kq_text c_sig_unverifiable)" "$(kq_format w_sig_unverifiable "${KQ_SIG_DETAIL:-?}")" ;;
+  skipped) check_warn "$(kq_text c_sig_skipped)" "$(kq_text w_sig_skipped)" ;;
+  failed)
+    ROLLBACK_DONE_CODE="${KQ_EXIT_SECURITY}"
+    rollback_and_die "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    ;;
+  esac
+  record_signature_result
+  return 0
+}
+
+# Deja constancia, junto al `.env` y en 0600, de que paso con la verificacion de
+# firma. Es lo que permite saber despues si la instalacion se hizo con
+# --skip-signature-check o sin cosign (la instalacion no tiene un informe como el
+# de update.sh). Se deshace con la instalacion.
+record_signature_result() {
+  local file
+
+  file="$(dirname -- "${ENV_FILE}")/.kronoqr-signature-check"
+  register_undo "$(kq_format undo_sig_record "${file}")" "rm -f '${file}'"
+  (
+    umask 077
+    printf 'image_signature=%s\nrecorded_at=%s\nversion=%s\n' \
+      "${KQ_SIG_RESULT:-not-pinned}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${PRODUCT_VERSION}" >"${file}"
+  )
+}
+
+# Fase 1 (B18): la misma verificacion, ANTES de escribir nada, a partir del
+# images.lock del paquete y el IMAGE_REGISTRY del .env. Asi `--check-only` ya
+# detecta una firma invalida y los secretos no se generan para una instalacion
+# que no va a ocurrir. Sale con 7 (nada escrito). La de la fase 4 sigue siendo
+# la autoritativa: verifica las referencias que Compose resuelve de verdad.
+check_image_signatures() {
+  local lock registry name digest
+  declare -a refs=()
+
+  lock="$(dirname -- "${COMPOSE_FILE}")/images.lock"
+  [ -f "${lock}" ] || return 0
+
+  registry="$(env_value "${ENV_FILE}" "IMAGE_REGISTRY")"
+  registry="${registry:-ghcr.io/kronoqr}"
+
+  while IFS=" " read -r name digest; do
+    case "${name}" in php | nginx | postgres) ;; *) continue ;; esac
+    # Con IMAGE_DIGEST_<imagen> declarada (opt-out de un servidor sin internet)
+    # esa imagen no se instala por digest y no hay firma que verificar.
+    grep -qE "^[[:space:]]*(export[[:space:]]+)?IMAGE_DIGEST_$(printf '%s' "${name}" | tr '[:lower:]' '[:upper:]')=" "${ENV_FILE}" && continue
+    refs+=("${registry}/${name}@${digest}")
+  done <"${lock}"
+
+  kq_verify_product_images "${registry}" ${refs+"${refs[@]}"} || true
+
+  case "${KQ_SIG_RESULT}" in
+  verified) check_pass "$(kq_text c_sig_verified)" ;;
+  no-cosign) check_warn "$(kq_text c_sig_no_cosign)" "$(kq_text w_sig_no_cosign)" ;;
+  unverifiable) check_warn "$(kq_text c_sig_unverifiable)" "$(kq_format w_sig_unverifiable "${KQ_SIG_DETAIL:-?}")" ;;
+  skipped) check_warn "$(kq_text c_sig_skipped)" "$(kq_text w_sig_skipped)" ;;
+  failed)
+    die "${KQ_EXIT_SECURITY}" "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    ;;
+  esac
+  return 0
+}
+
 # Descarga UNA A UNA solo las imagenes que falten.
 #
 # No es `docker compose pull` a secas, y la diferencia importa: esa orden
@@ -1304,6 +1402,9 @@ pull_images_if_needed() {
     all+=("${image}")
     docker image inspect "${image}" >/dev/null 2>&1 || missing+=("${image}")
   done < <(compose config --images 2>/dev/null || true)
+
+  # ANTES de descargar nada: si la firma no es valida no se baja ni un byte.
+  verify_image_signatures ${all+"${all[@]}"}
 
   if [ "${#missing[@]}" -eq 0 ]; then
     tag_pinned_images ${all+"${all[@]}"}

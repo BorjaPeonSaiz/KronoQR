@@ -91,6 +91,10 @@
 #      `system.updated` de `audit_log` (RF-PD-10, regla dura 6) no se pudo
 #      escribir. El trabajo hecho no se deshace por eso: se deja escrito en el
 #      informe («audit-entry» con el codigo) y se sale con `6` en vez de `0`.
+#   7  La firma cosign de una imagen del producto no es valida (solo con cosign
+#      instalado y la imagen fijada por digest). Sale en el PASO 1, antes de
+#      tocar la instalacion: no se ha escrito nada. Ver lib/image-signature.sh y
+#      la opcion --skip-signature-check.
 #
 # Que NO hace, a proposito:
 #   · No exige licencia. Una licencia caducada no puede dejar a un cliente sin
@@ -134,6 +138,8 @@ readonly SCRIPT_DIR
 . "${SCRIPT_DIR}/lib/work-record-privileges.sh"
 # shellcheck source=lib/observability-merge.sh disable=SC1091
 . "${SCRIPT_DIR}/lib/observability-merge.sh"
+# shellcheck source=lib/image-signature.sh disable=SC1091
+. "${SCRIPT_DIR}/lib/image-signature.sh"
 
 # Las comparaciones de nombres de migracion y de fronteras usan `[[ a < b ]]`,
 # cuyo orden depende de la colacion. Se fija a la de bytes para que no dependa
@@ -187,6 +193,9 @@ OPT_CURRENT=""
 OPT_COMPOSE_FILE=""
 OPT_INFO=""
 OPT_INFO_ARG=""
+# 1 si el operador paso --skip-signature-check. La lee lib/image-signature.sh.
+# shellcheck disable=SC2034  # la lee kq_verify_product_images (lib/image-signature.sh).
+KQ_SKIP_SIGNATURE_CHECK=0
 
 # El paquete NUEVO, desde el que se ejecuta este script.
 PACKAGE_DIR=""
@@ -761,6 +770,10 @@ parse_arguments() {
       ;;
     --compose-file=*)
       OPT_COMPOSE_FILE="${1#--compose-file=}"
+      ;;
+    --skip-signature-check)
+      # shellcheck disable=SC2034  # la lee kq_verify_product_images (lib/image-signature.sh).
+      KQ_SKIP_SIGNATURE_CHECK=1
       ;;
     --lang)
       [ "$#" -ge 2 ] || die "${KQ_EXIT_USAGE}" "$(kq_format missing_value "--lang")"
@@ -1680,7 +1693,7 @@ check_images() {
   # (este paso no escribe la instalacion): las imagenes se resuelven ya con los
   # digests del paquete, que son los que correra el reintento.
   if kq_env_has_rollback_digests "${CURRENT_ENV}" && [ -f "${PACKAGE_DIR}/images.lock" ]; then
-    while read -r name digest; do
+    while IFS=" " read -r name digest; do
       case "${name}" in php | nginx | postgres) ;; *) continue ;; esac
       [ -n "${digest}" ] || continue
       digest_env+=("IMAGE_DIGEST_$(printf '%s' "${name}" | tr '[:lower:]' '[:upper:]')=@${digest}")
@@ -1694,6 +1707,38 @@ check_images() {
   done < <(env ${digest_env+"${digest_env[@]}"} IMAGE_TAG="${TARGET_VERSION}" docker compose --env-file "${CURRENT_ENV}" -f "${COMPOSE_FILE}" config --images 2>/dev/null || true)
 
   registry="$(env_value "${CURRENT_ENV}" "IMAGE_REGISTRY")"
+
+  # Firma cosign de las imagenes del producto fijadas por digest (B18, ADR-053),
+  # ANTES de descargar nada. Con cosign y una firma que no vale se sale con 7:
+  # la instalacion no se ha tocado. Sin cosign, avisa y sigue: el digest ya fija
+  # que bytes se instalan.
+  kq_verify_product_images "${registry:-ghcr.io/kronoqr}" ${all+"${all[@]}"} || true
+  case "${KQ_SIG_RESULT}" in
+  verified)
+    check_pass "$(kq_text c_sig_verified)"
+    remember_check "image-signature" "$(kq_text u_report_sig_verified)"
+    ;;
+  no-cosign)
+    check_warn "$(kq_text c_sig_no_cosign)" "$(kq_text w_sig_no_cosign)"
+    remember_check "image-signature" "$(kq_text u_report_sig_no_cosign)"
+    ;;
+  unverifiable)
+    check_warn "$(kq_text c_sig_unverifiable)" "$(kq_format w_sig_unverifiable "${KQ_SIG_DETAIL:-?}")"
+    remember_check "image-signature" "$(kq_text u_report_sig_unverifiable)"
+    ;;
+  skipped)
+    check_warn "$(kq_text c_sig_skipped)" "$(kq_text w_sig_skipped)"
+    remember_check "image-signature" "$(kq_text u_report_sig_skipped)"
+    ;;
+  not-pinned)
+    remember_check "image-signature" "$(kq_text u_report_sig_not_pinned)"
+    ;;
+  failed)
+    remember_check "image-signature" "FALLIDA / FAILED: ${KQ_SIG_FAILED_IMAGE}"
+    die "${KQ_EXIT_SECURITY}" "$(kq_format f_sig_failed "${KQ_SIG_FAILED_IMAGE}" "${KQ_SIG_DETAIL:-?}")"
+    ;;
+  esac
+
   for image in ${missing+"${missing[@]}"}; do
     if [ "${announced}" -eq 0 ]; then
       kq_msg u_images_pull "${TARGET_VERSION}"
@@ -2911,6 +2956,7 @@ phase_start_and_verify() {
     "chain_after=${CHAIN_AFTER}" \
     "backup_fingerprint=${BACKUP_SHA256}" \
     "report_id=update-${STARTED_UTC}" \
+    "image_signature=${KQ_SIG_RESULT:-not-pinned}" \
     "portal_exposed=$(kq_portal_exposed "${CURRENT_ENV}")")"
 
   detail_note "--- compliance:record-system-event system.updated ---"

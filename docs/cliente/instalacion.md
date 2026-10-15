@@ -118,6 +118,7 @@ De cada versión necesitas dos ficheros, que están en su apartado *Assets*:
 | --- | --- |
 | `kronoqr-<versión>.tar.gz` | El paquete de instalación |
 | `SHA256SUMS` | Las sumas para comprobar que llegó entero |
+| `SHA256SUMS.bundle` | Opcional: la firma de las sumas, para comprobar **quién** lo publicó con cosign ([§7.1](#71-verificar-la-firma-del-paquete-y-de-las-imágenes-opcional-recomendado)) |
 
 El tercero, `kronoqr-<versión>.cdx.json`, es la lista de componentes del
 producto (SBOM): no hace falta para instalar.
@@ -151,7 +152,9 @@ no lo has descargado.
 > Esta suma prueba que el paquete no se corrompió por el camino. Las sumas
 > viajan en la misma página que el paquete, así que no prueban por sí solas
 > quién lo publicó: descárgalo siempre de la dirección de arriba, nunca de una
-> copia reenviada.
+> copia reenviada. Si puedes instalar cosign, verifica antes `SHA256SUMS` con
+> `SHA256SUMS.bundle` (§7.1) y solo después comprueba la suma: es la única
+> comprobación que protege de un paquete sustituido.
 
 ```bash
 tar xzf kronoqr-2.2.0.tar.gz
@@ -1570,7 +1573,11 @@ while read -r imagen digest; do
   docker pull "${registro}/${imagen}@${digest}"
   docker tag "${registro}/${imagen}@${digest}" "${registro}/${imagen}:${version}"
 done <images.lock
-docker pull redis:7-alpine
+# Redis también va fijado por digest (valor por defecto de REDIS_IMAGE_DIGEST en
+# docker-compose.yml): se descarga ESA imagen y se le pone su etiqueta.
+redis_digest="$(grep -oE 'REDIS_IMAGE_DIGEST-@sha256:[0-9a-f]{64}' docker-compose.yml | cut -d@ -f2)"
+docker pull "redis:7-alpine@${redis_digest}"
+docker tag "redis:7-alpine@${redis_digest}" redis:7-alpine
 
 docker save -o "imagenes-${version}.tar" \
   "${registro}/php:${version}" \
@@ -1588,19 +1595,21 @@ intentaría descargarlas.
 `docker-compose.yml` pide `php:<versión>@sha256:…`, y una imagen cargada con
 `docker load` conserva la etiqueta pero no siempre el digest, así que el
 instalador no la reconocería e intentaría descargarla. En un servidor sin
-internet, **añade al final del `.env`, antes de instalar**, estas tres líneas
-(vacías a propósito: vuelven a la etiqueta de la versión):
+internet, **añade al final del `.env`, antes de instalar**, estas cuatro líneas
+(vacías a propósito: vuelven a la etiqueta de la versión; la cuarta es Redis, que
+también va fijado por digest):
 
 ```dotenv
 IMAGE_DIGEST_PHP=
 IMAGE_DIGEST_NGINX=
 IMAGE_DIGEST_POSTGRES=
+REDIS_IMAGE_DIGEST=
 ```
 
 La integridad de las imágenes la dio entonces la descarga por digest de la
 máquina con internet. Con internet en el servidor **no hagas esto**: el digest
 es lo que garantiza que corres los mismos bytes que el resto de clientes de esa
-versión. Mientras esas tres líneas sigan en el `.env`, `install.sh`, `update.sh` y
+versión. Mientras esas cuatro líneas sigan en el `.env`, `install.sh`, `update.sh` y
 `doctor.sh` te lo recordarán con un aviso; cuando el servidor tenga internet, bórralas. Después:
 
 ```bash
@@ -1618,6 +1627,92 @@ save` las siete imágenes públicas del perfil: `prom/prometheus`,
 `docker-compose.yml`. Si prefieres no hacerlo, apaga el perfil dejando
 `COMPOSE_PROFILES=` vacío en el `.env` y lee en [`operacion.md`](operacion.md)
 qué avisos pierdes.
+
+### 7.1 Verificar la firma del paquete y de las imágenes (opcional, recomendado)
+
+El digest fija **qué** bytes se instalan; la firma prueba **quién** los
+publicó: que salieron del proceso de publicación del fabricante y no de otra
+persona con acceso al registro o a la descarga. Se firman, con
+[cosign](https://github.com/sigstore/cosign), **sin clave que custodiar** (la
+identidad es la del propio proceso de publicación, registrada en el servicio
+público de transparencia de Sigstore):
+
+- `SHA256SUMS` (que cubre el paquete y el SBOM): su firma es el fichero
+  `SHA256SUMS.bundle` de la misma release.
+- Las tres imágenes del producto (`php`, `nginx` y `postgres`).
+
+**Es opcional.** Sin cosign, `install.sh` y `update.sh` siguen adelante y te lo
+dicen con un aviso: el digest ya te garantiza los bytes. Con cosign instalado, las
+imágenes las verifican solos antes de descargar nada. Pero **lo que cierra el
+hueco más grande es verificar `SHA256SUMS` tú mismo, antes de descomprimir el
+paquete**: los scripts del paquete llevan dentro la identidad que esperan, y un
+paquete sustituido llevaría también una identidad a su medida. Por eso la
+identidad de abajo se copia **de esta guía** y nunca del paquete que acabas de
+descargar.
+
+Hace falta **cosign 3.0.0 o posterior** (los anteriores no garantizan leer la
+firma que se escribe ahora; el instalador los trata como «cosign no instalado») y
+salida a internet hacia Sigstore. Para instalarlo en Linux (x86-64; para ARM
+cambia `amd64` por `arm64`):
+
+```bash
+curl -fsSLO https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+curl -fsSLO https://github.com/sigstore/cosign/releases/latest/download/cosign_checksums.txt
+sha256sum --check --ignore-missing cosign_checksums.txt
+sudo install -m 0755 cosign-linux-amd64 /usr/local/bin/cosign
+cosign version
+```
+
+La suma tiene que decir `cosign-linux-amd64: OK`, y `cosign version` una versión
+3.0.0 o posterior. Descargar el binario en una máquina con internet y copiarlo al
+servidor es igual de válido.
+
+**Antes de descomprimir el paquete**, con `kronoqr-<versión>.tar.gz`,
+`SHA256SUMS` y `SHA256SUMS.bundle` en la misma carpeta (los tres están en
+*Assets*), y *después* de la descarga:
+
+```bash
+cosign verify-blob \
+  --bundle SHA256SUMS.bundle \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/BorjaPeonSaiz/KronoQR/\.github/workflows/release\.yml@refs/(tags/v[0-9][0-9A-Za-z.+-]*|heads/main)$' \
+  SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+```
+
+La primera orden tiene que decir `Verified OK`; solo entonces vale la segunda
+(`kronoqr-<versión>.tar.gz: OK`). Si la primera falla, **no descomprimas nada**
+y avisa al fabricante. Es el mismo paso que va en la guía de actualización
+([`actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md) §2).
+
+Si una firma de **imagen** no es válida, el script sale con el código **7**
+(«garantía de seguridad rota», ver [`operacion.md`](operacion.md) §8):
+`update.sh` en el paso 1, sin tocar nada, e `install.sh` deshaciendo lo que
+había escrito. Avisa al fabricante con el detalle que imprime el script. Si
+cosign **no puede consultar** Sigstore o el registro (sin red, caída del
+servicio), el script **no** lo trata como firma inválida: lo avisa, sigue valiendo
+el digest y queda anotado; repite cuando haya red. Si tus imágenes vienen de un
+registro propio que no las firma, ejecuta el script con
+`--skip-signature-check`: se confía solo en el digest, el script lo avisa y queda
+anotado (en el informe de `update.sh` y en el asiento `system.updated`; en
+`.kronoqr-signature-check`, junto al `.env`, con `install.sh`). No lo uses con las
+imágenes del fabricante.
+
+Para comprobar las imágenes a mano, con el digest de `images.lock`:
+
+```bash
+registro="ghcr.io/kronoqr"   # tu IMAGE_REGISTRY real
+while read -r imagen digest; do
+  cosign verify \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    --certificate-identity-regexp '^https://github\.com/BorjaPeonSaiz/KronoQR/\.github/workflows/release\.yml@refs/(tags/v[0-9][0-9A-Za-z.+-]*|heads/main)$' \
+    "${registro}/${imagen}@${digest}" >/dev/null && echo "${imagen}: OK"
+done <images.lock
+```
+
+Sin internet en el servidor, un servidor que vacía `IMAGE_DIGEST_*` no verifica la
+firma de las imágenes (sin digest no hay nada que comprobar), pero sí puedes
+verificar `SHA256SUMS` en la máquina con internet donde descargas el paquete.
 
 ---
 

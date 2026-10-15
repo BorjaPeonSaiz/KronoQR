@@ -67,7 +67,8 @@ version pendiente. Verificar que el bundle de PRODUCCION no lo lleva es cosa de
 ## Con las cabeceras de seguridad de produccion
 
 `vite preview` sirve las MISMAS cabeceras que Nginx (CSP incluida), leidas del snippet real
-`infra/docker/nginx/snippets/security-headers.conf` por `support/securityHeaders.ts`
+`infra/docker/nginx/snippets/security-headers-kiosk.conf` (el de `location ^~ /kiosk/`, con
+`'wasm-unsafe-eval'`; su `include` del snippet comun se expande) por `support/securityHeaders.ts`
 (`playwright.config.ts` -> `KRONOQR_PREVIEW_SECURITY_HEADERS` -> `vite.config.ts`
 `preview.headers`). Sin esto, la 2.1.0 llego a produccion con el PIN roto (PIN-01: la CSP no
 dejaba compilar el WebAssembly de libsodium) y ningun E2E lo vio. Si el snippet no existe o
@@ -75,7 +76,8 @@ no declara una CSP con `script-src`, la ejecucion se para al cargar la configura
 
 `pin-csp.spec.ts` sella el PIN con el WebAssembly real bajo esa CSP. Para demostrar que se
 pone en rojo con otra CSP, se apunta `KRONOQR_SECURITY_HEADERS_SNIPPET` a una copia
-modificada FUERA del repositorio; nunca se edita el snippet real para eso.
+modificada FUERA del repositorio (copiando tambien `security-headers-common.conf` junto a ella);
+nunca se edita el snippet real para eso.
 `KRONOQR_E2E_PORT` mueve el puerto (4173 por defecto) si ya hay otro `vite preview` en marcha.
 
 ## Actualizacion con la tablet abierta

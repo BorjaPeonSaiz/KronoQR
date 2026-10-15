@@ -367,6 +367,19 @@ it('PP-10: anota que el portal esta expuesto a internet, solo como true', functi
     expect(SystemEventPayload::for(AuditAction::SystemUpdated, $data)->payload->data)->toBe($data);
 })->group('RL-04', 'RS-07', 'RF-PD-10', 'RF-ID-08');
 
+it('B18: anota el resultado de la verificacion cosign de las imagenes, solo con un valor del vocabulario', function (string $result): void {
+    $data = [...updatedData(), 'image_signature' => $result];
+
+    expect(SystemEventPayload::for(AuditAction::SystemUpdated, $data)->payload->data)->toBe($data);
+})->with(['verified', 'no-cosign', 'unverifiable', 'skipped', 'not-pinned'])->group('RL-04', 'RS-10', 'RF-PD-10');
+
+it('B18: image_signature rechaza lo que no es del vocabulario (una firma invalida no llega a escribirse) y no existe en la vuelta atras', function (mixed $value): void {
+    expect(fn () => SystemEventPayload::for(AuditAction::SystemUpdated, [...updatedData(), 'image_signature' => $value]))
+        ->toThrow(InvalidSystemEventPayload::class, 'image_signature');
+    expect(fn () => SystemEventPayload::for(AuditAction::SystemRestoredFromBackup, [...restoredData(), 'image_signature' => 'verified']))
+        ->toThrow(InvalidSystemEventPayload::class, 'no esta en la lista cerrada');
+})->with(['failed', '', 'Verified', true, 1, null])->group('RL-04', 'RS-10', 'RF-PD-10');
+
 it('PP-10: portal_exposed no admite false, texto ni otro valor, ni en la vuelta atras', function (mixed $value): void {
     expect(fn () => SystemEventPayload::for(AuditAction::SystemUpdated, [...updatedData(), 'portal_exposed' => $value]))
         ->toThrow(InvalidSystemEventPayload::class, 'portal_exposed');

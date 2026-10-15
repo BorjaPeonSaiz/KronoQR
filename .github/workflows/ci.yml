@@ -2868,6 +2868,15 @@ jobs:
         #     serviria: Docker manda por el digest y no por la etiqueta.
         # `registry:2` por etiqueta: es un andamio de la CI que no llega a ningun
         # entregable; la imagen de un cliente nunca sale de aqui.
+        #
+        # LAS IMAGENES DE AQUI NO ESTAN FIRMADAS (las construye esta misma ejecucion,
+        # no release.yml), asi que los install.sh/update.sh de P1, P2, P2b y P3 llevan
+        # `--skip-signature-check`: la verificacion cosign (B18, ADR-053) no tiene firma
+        # que encontrar. Es una opcion de la linea de ordenes y no un interruptor del
+        # .env a proposito: queda a la vista en el log y en el informe de la
+        # actualizacion. La verificacion en si la ejercita ImageSignatureTest (Pest) con
+        # un cosign falso, y la real la hace el job `firmar` de release.yml al publicar.
+        # Los escenarios sin digest (etiqueta suelta) no verifican nada y no la necesitan.
         run: |
           set -euo pipefail
           old="${{ steps.anterior.outputs.old_version }}"
@@ -2910,7 +2919,7 @@ jobs:
             # sintetica o ciclo abierto): es lo unico que difiere del package.sh de arriba.
             cp paquete-nuevo/VERSION paquete-nuevo/versions.txt "paquete-fijado-${variante}/"
             test -f "paquete-fijado-${variante}/images.lock"
-            test "$(grep -c '@sha256:' "paquete-fijado-${variante}/docker-compose.yml")" -eq 3
+            test "$(grep -E '^[[:space:]]*image:.*IMAGE_TAG' "paquete-fijado-${variante}/docker-compose.yml" | grep -c '@sha256:')" -eq 3
           done
           grep -q "@${d_nginx_roto}" paquete-fijado-roto/docker-compose.yml
           grep -q "@${d_nginx}" paquete-fijado-sano/docker-compose.yml
@@ -2930,7 +2939,7 @@ jobs:
           docker rmi "${reg}/php:${new}" "${reg}/postgres:${new}" "${reg}/nginx:${new}" "${reg}/nginx:${new}-roto"
           bash .github/scripts/prepare-package-env.sh paquete-fijado-sano
           sed -i "s|^IMAGE_REGISTRY=.*|IMAGE_REGISTRY=${reg}|" paquete-fijado-sano/.env
-          (cd paquete-fijado-sano && sudo ./install.sh >salida-p1.log 2>&1) || { tail -60 paquete-fijado-sano/salida-p1.log; exit 1; }
+          (cd paquete-fijado-sano && sudo ./install.sh --skip-signature-check >salida-p1.log 2>&1) || { tail -60 paquete-fijado-sano/salida-p1.log; exit 1; }
           grep -q 'instalado y verificado' paquete-fijado-sano/salida-p1.log
           curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${new}\""
           compose() { sudo docker compose --env-file paquete-fijado-sano/.env -f paquete-fijado-sano/docker-compose.yml "$@"; }
@@ -2989,10 +2998,10 @@ jobs:
           # IN PLACE: los ficheros del paquete nuevo sobre el directorio de la instalacion.
           # El .env y certs/ no viajan en el paquete, asi que se conservan.
           cp -a paquete-fijado-roto/. paquete-anterior/
-          grep -q '@sha256:' paquete-anterior/docker-compose.yml
+          test "$(grep -E '^[[:space:]]*image:.*IMAGE_TAG' paquete-anterior/docker-compose.yml | grep -c '@sha256:')" -eq 3
           cd paquete-anterior
           set +e
-          sudo ./update.sh >salida-p2.log 2>&1
+          sudo ./update.sh --skip-signature-check >salida-p2.log 2>&1
           codigo=$?
           set -e
           cd ..
@@ -3043,7 +3052,7 @@ jobs:
           sudo chmod 0550 /var/backups/fichaje/daily
           cd paquete-anterior
           set +e
-          sudo ./update.sh >salida-p2b.log 2>&1
+          sudo ./update.sh --skip-signature-check >salida-p2b.log 2>&1
           codigo=$?
           set -e
           cd ..
@@ -3128,7 +3137,7 @@ jobs:
           new="${{ steps.anterior.outputs.new_version }}"
           cp -a paquete-fijado-sano-p3/. paquete-anterior/
           cd paquete-anterior
-          sudo ./update.sh >salida-p3.log 2>&1 || { tail -60 salida-p3.log; exit 1; }
+          sudo ./update.sh --skip-signature-check >salida-p3.log 2>&1 || { tail -60 salida-p3.log; exit 1; }
           cd ..
           grep -q 'actualizado y verificado' paquete-anterior/salida-p3.log
           curl -fsS -k https://127.0.0.1/api/v1/health | grep -qF "\"version\":\"${new}\""

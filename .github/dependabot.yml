@@ -13,6 +13,8 @@
 #                     para las tres SPA y packages/web-kit)
 #   github-actions    .github/workflows/*.yml, .github/actions/*/action.yml
 #   docker            imagenes base de infra/docker/*/Dockerfile
+#   docker-compose    imagenes de terceros en infra/compose.*.yaml
+#                     (observabilidad; Redis: digest en compose.dev.yaml, copiado a mano a prod, B18)
 #
 # Las acciones de GitHub fijadas por SHA con comentario de version
 # (`uses: foo@<sha> # vX.Y.Z`) las actualiza Dependabot igual que a las demas:
@@ -119,4 +121,30 @@ updates:
     labels: ["dependencies", "docker"]
     groups:
       docker-menores-y-parches:
+        update-types: ["minor", "patch"]
+
+  # B18 (2.2.1, ADR-053): imagenes de TERCEROS de los ficheros compose de `infra/`
+  # (observabilidad, por version). El ecosistema `docker` de arriba solo lee
+  # Dockerfiles. OJO con Redis: su linea lleva interpolacion
+  # (`redis:7-alpine${REDIS_IMAGE_DIGEST-@sha256:...}`, el opt-out sin internet) y es
+  # probable que Dependabot NO la entienda. Por eso `compose.dev.yaml` lleva el MISMO
+  # digest literal (esa linea SI la lee) y `ImmutableImagesTest` falla si el de produccion
+  # difiere: la PR de Dependabot no pasa hasta copiar el digest a `compose.prod.yaml` a mano
+  # (ADR-053, Enmienda 2.2.1).
+  - package-ecosystem: "docker-compose"
+    directory: "/infra"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    # Semgrep `dependabot-missing-cooldown`: ver arriba.
+    cooldown:
+      default-days: 7
+    # Redis 8 cambia de licencia: una mayor no se propone sola, se decide.
+    ignore:
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
+    labels: ["dependencies", "docker"]
+    groups:
+      compose-menores-y-parches:
         update-types: ["minor", "patch"]
