@@ -1098,6 +1098,15 @@ Escenario: Descanso insuficiente entre dos jornadas
   Entonces se crea una incidencia de tipo insufficient_rest
   Y con entrada a las 10:00, doce horas exactas, no se crea ninguna
 
+Escenario: Descanso medido por encima de una jornada anulada entera
+  Dado un perfil de cumplimiento con 12 horas de descanso mínimo
+  Y "Marc" con un turno del día 11 de 22:00 a 12:30 del día 12
+  Y un tramo suyo del día 12, de 13:00 a 13:30, anulado con su corrección
+  Cuando entra el día 13 a las 00:00
+  Entonces la bandeja abre una incidencia insufficient_rest para la jornada del 13 con 690 minutos
+  Y la vista de cumplimiento señala la misma jornada
+  Y si hubiera salido a las 00:00 del 13 y entrado en ese mismo instante, cero minutos, también lo señalarían las dos
+
 Escenario: Tramo demasiado corto para computar
   Dado un tramo con entrada a las 08:00:00 y salida a las 08:00:59
   Cuando se ejecuta el proceso de detección de anomalías
@@ -1200,7 +1209,93 @@ Escenario: La instalación nunca se queda sin administrador
   Cuando se intenta darla de baja, desde el panel o desde la consola
   Entonces se rechaza sin cambiar nada
   Y ningún administrador puede darse de baja a sí mismo
+
+Escenario: La baja se registra cuando ya ha ocurrido
+  Dado un centro en "Europe/Madrid" y "Elena", activa desde el 1 de marzo
+  Cuando RRHH registra su baja el 16 de octubre a las 00:30, hora del centro (22:30 UTC del 15), con fecha de cese el 16
+  Entonces la baja es efectiva en el acto y todas sus tarjetas quedan revocadas, cada una con su asiento
+  Y su tarjeta recibe el mismo rechazo genérico que un código inexistente
+  Y su historial se conserva
+  Y la misma baja con fecha de cese el 17 se rechaza con 422 en terminated_at sin tocar la ficha, las tarjetas, la auditoría ni el portal
+
+Escenario: Completar a mano los días trabajados hasta el cese
+  Dada "Elena", de baja con fecha de cese el 15 de octubre
+  Cuando un responsable crea, con motivo, un tramo para su jornada del 15
+  Entonces el tramo se crea con su corrección y su asiento
+  Y un tramo para la jornada del 16 se rechaza con 422 en work_date sin escribir nada
+  Y una persona suspendida sigue sin admitir tramos nuevos
+
+Escenario: Fichaje anterior a la retirada de la tarjeta
+  Dada "Nadia", que ficha su salida a las 15:00 en una tablet sin red
+  Y RRHH registra su baja a las 16:00, lo que revoca su tarjeta
+  Cuando la tablet sincroniza a las 17:00
+  Entonces el fichaje recibe el mismo rechazo genérico, con el mismo cuerpo y el mismo tiempo, que cualquier otro
+  Y el quiosco lo saca de su cola
+  Y el escaneo queda atribuido a Nadia y marcado para revisión, sin crear ni cerrar ningún tramo
+  Y la revisión diaria abre una única incidencia scan_before_revocation para esa jornada
+  Y un escaneo de su tarjeta con hora real 16:30 se rechaza igual, sin atribuir ni abrir nada
+  Y si Nadia estuviera suspendida en vez de dada de baja, no se atribuiría ni se abriría nada
+
+Escenario: Un fichaje no adelanta a otro anterior que sigue sin decidir
+  Dado un quiosco sin red con la entrada de "Iker" a las 07:00 y su salida a las 15:00 en cola
+  Cuando vuelve la red y el servidor no puede procesar la entrada (503)
+  Entonces la salida de ese mismo lote vuelve aplazada (503, scan-held-back) y no se registra
+  Y el quiosco detiene el envío y conserva los dos fichajes
+  Y en el siguiente reintento se registran en orden: el tramo se abre a las 07:00 y se cierra a las 15:00
+  Y un rechazo decidido (422) dentro de un lote no detiene nada
+
+Escenario: Fichajes que el servidor ya no entiende tras una actualización
+  Dado un quiosco con 40 fichajes en cola que el servidor actualizado declara inválidos (400)
+  Cuando el quiosco envía su cola
+  Entonces saca cada fichaje de la cola de envío, pero lo conserva aparte
+  Y avisa al servidor en tandas de 10 con scan_id, occurred_at, la vía y la respuesta recibida
+  Y solo olvida los avisos que el servidor confirma; los demás siguen pendientes y el latido los declara
+  Y el aviso de una tarjeta auténtica abre una única incidencia discarded_scan por persona y jornada
+  Y ningún aviso registra el fichaje: lo decide una persona con una corrección
+  Y un aviso sin dueño, de un fichaje que ya consta o fuera de la ventana creíble, no abre nada
+
+Escenario: El registro horario cuadra con su auditoría
+  Dado un registro con tramos fichados, corregidos, anulados y dados de alta a mano desde el producto
+  Cuando se ejecuta compliance:reconcile-work-record
+  Entonces termina sin discrepancias y la métrica de cada clase vale 0
+
+Escenario: Una manipulación directa del registro se detecta
+  Dado un registro horario con sus asientos
+  Cuando, sin pasar por el producto, alguien inserta un tramo, cambia una entrada, anula un tramo por SQL o borra otro
+  Entonces la pasada diaria de compliance:reconcile-work-record termina con fallo
+  Y cada hecho sale con su clase: entry_without_audit, entry_differs_from_audit, retired_without_correction y audit_without_entry
+  Y la métrica de cada clase vale 1 y suena la alerta, sin nombres de persona
+  Y tras remediarlo con una corrección trazada desde el panel la siguiente pasada vuelve a cuadrar
+  Y lo que la pasada diaria ya no alcanza lo ve la pasada completa semanal
+
+Escenario: Una purga legal no es un borrado, y un asiento falso no la imita
+  Dada una purga de retención asentada con su corte
+  Cuando se concilia
+  Entonces no se denuncian los tramos purgados hasta ese corte
+  Y un borrado que ninguna purga explica sale como audit_without_entry
+  Y un asiento de purga con corte futuro, o con un plazo por debajo del suelo español de 4 años, sale como purge_out_of_bounds
+
+Escenario: El turno de Nochevieja no se toma por un tramo inventado
+  Dado un tramo con entrada a las 00:30 del 1 de enero, hora de Madrid (23:30 UTC del 31 de diciembre), cuyo asiento se fue con la partición de su año
+  Cuando se concilia
+  Entonces no se denuncia
+  Y un tramo corriente de un año sellado, o uno con la entrada en 2022 y la jornada en 2026, sí sale como entry_without_audit
 ```
+
+**Escenarios añadidos en la 2.2.1 y sus pruebas** (V3-QA-1, bloque 19). Cada prueba lleva el grupo de su requisito, así que `qa:traceability` las encuentra por él; esta tabla dice además qué escenario sostiene cada una. Se citan por fichero y descripción, no por línea, para que no envejezcan con cada cambio.
+
+| Escenario | Requisitos | Pruebas (`backend/tests/` salvo indicación) |
+|---|---|---|
+| Descanso medido por encima de una jornada anulada entera | RN-10, RF-PA-06, RF-PR-01 | `Integration/Reporting/ComplianceSummaryMatchesDetectionTest.php` (`escenarioN5`: jornada anulada en medio y antes de la ventana, y descanso de cero minutos) · las unitarias de RN-10 en `AnomalyDetectionPolicyTest` y `ComplianceEvaluationTest` |
+| La baja se registra cuando ya ha ocurrido | RN-14, RF-GP-03 | `Feature/Workforce/OffboardingDateRuleTest.php` («rechaza un cese posterior a hoy…», «resuelve hoy con la fecha civil del centro…», «a una persona que aun no ha empezado…») · `Feature/Workforce/OffboardingDateBoundariesTest.php` (las dos fronteras de la medianoche) · `Feature/Identity/OffboardingRevokesCredentialTest.php` («tras la baja el QR deja de valer…», «revoca todas las credenciales activas…») |
+| Completar a mano los días trabajados hasta el cese | RN-14, RF-PA-04 | `Feature/Attendance/ShiftEntryForOffboardedEmployeeTest.php` (las cinco: jornada del cese, del alta, posterior al cese, anterior al alta y persona suspendida) |
+| Fichaje anterior a la retirada de la tarjeta | RN-20, RS-03 | `Feature/Attendance/ScanBeforeRevocationTest.php` («rechaza igual antes y despues de la retirada…», «compara con la recepcion…», «no atribuye ni marca nada a una persona suspendida», «marca y atribuye el escaneo de la carrera…») · `Integration/Attendance/WithdrawnAndDiscardedScanReviewTest.php` («abre una sola scan_before_revocation…», «dice offboarding…») · `Unit/Attendance/Domain/Policy/WithdrawnCredentialPolicyTest.php` |
+| Un fichaje no adelanta a otro anterior que sigue sin decidir | RN-21, RF-KI-04 | `Unit/Attendance/Application/ScanBatchHeldBackTest.php` · `Feature/Attendance/ScanBatchTest.php` («aplaza la salida si la entrada no se pudo procesar…») · `frontend-kiosk/tests/e2e/offline.spec.ts` (`@RN-21`: «un fichaje en vuelo no lo adelanta…» y «la salida de las 15:00 no se registra antes que la entrada de las 07:00…») |
+| Fichajes que el servidor ya no entiende tras una actualización | RN-22, RF-KI-04, RF-PA-07 | `Feature/Attendance/DiscardedScanReportTest.php` («acusa todos los avisos y atribuye solo…», «acusa igual un aviso repetido…», «acusa y marca como ya registrado…») · `Integration/Attendance/WithdrawnAndDiscardedScanReviewTest.php` («abre una sola discarded_scan…», «no abre nada sin dueño…») · `Unit/Attendance/Domain/Policy/DiscardedScanReviewPolicyTest.php` · `frontend-kiosk/tests/e2e/offline.spec.ts` (`@RN-22`: los 40 fichajes en tandas de 10 y el acuse parcial) |
+| El registro horario cuadra con su auditoría | RL-04, RS-07 (ADR-057 §4) | `Integration/Compliance/WorkRecordReconciliationTest.php` («da cero discrepancias con el uso normal del producto…») |
+| Una manipulación directa del registro se detecta | RL-04, RS-07, RN-13 (ADR-057 §4) | `Integration/Compliance/WorkRecordReconciliationTest.php` («detecta las cuatro manipulaciones…», «vuelve a cuadrar cuando se remedia desde el panel…», «la ventana diaria no mira lo antiguo y la pasada completa si») |
+| Una purga legal no es un borrado, y un asiento falso no la imita | RL-02, RL-04 (ADR-057 §4) | `Integration/Compliance/WorkRecordReconciliationTest.php` («no confunde una purga de retencion auditada con un borrado…», «un asiento de purga con corte futuro…», «denuncia una purga española a tres años…») |
+| El turno de Nochevieja no se toma por un tramo inventado | RL-04, RL-02, RS-07 (ADR-027) | `Unit/Compliance/Domain/WorkRecordReconciliationTest.php` («no denuncia el turno de la noche del 31 de diciembre…», «no deja que un año sellado tape un tramo inventado…») |
 
 ---
 
