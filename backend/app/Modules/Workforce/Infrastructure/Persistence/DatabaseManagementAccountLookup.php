@@ -46,4 +46,12 @@ final readonly class DatabaseManagementAccountLookup implements ManagementAccoun
 
         return $row === null ? null : new EligibleManager((int) $row->id, $row->uuid);
     }
+
+    public function isActiveManagementAccount(int $userId): bool
+    {
+        return $this->connection->table('users')
+            ->where('id', $userId)
+            ->where('is_active', true)
+            ->exists();
+    }
 }

@@ -54,6 +54,7 @@ use App\Modules\Workforce\Infrastructure\Adapter\LaravelPinHasher;
 use App\Modules\Workforce\Infrastructure\Adapter\LaravelWorkforceEventPublisher;
 use App\Modules\Workforce\Infrastructure\Adapter\SanctumPortalSessionIssuer;
 use App\Modules\Workforce\Infrastructure\Adapter\SimpleExcelImportSource;
+use App\Modules\Workforce\Infrastructure\Console\CorrectSiteTimezoneCommand;
 use App\Modules\Workforce\Infrastructure\Metrics\RedisPinMetrics;
 use App\Modules\Workforce\Infrastructure\Persistence\DatabaseManagementAccountLookup;
 use App\Modules\Workforce\Infrastructure\Persistence\DatabaseParentRowLocks;
@@ -240,5 +241,13 @@ final class WorkforceServiceProvider extends ServiceProvider
         Gate::policy(Department::class, DepartmentPolicy::class);
         Gate::policy(EmploymentContract::class, EmploymentContractPolicy::class);
         Gate::policy(Absence::class, AbsencePolicy::class);
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                // RN-23, ADR-056 §3: la unica via para corregir la zona horaria
+                // con registro horario. No se programa: se ejecuta a mano.
+                CorrectSiteTimezoneCommand::class,
+            ]);
+        }
     }
 }

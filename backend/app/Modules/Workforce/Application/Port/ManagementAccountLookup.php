@@ -29,4 +29,12 @@ interface ManagementAccountLookup
      * distinguir el motivo: el contrato da un unico `422` para los tres.
      */
     public function eligibleManager(string $uuid): ?EligibleManager;
+
+    /**
+     * Si la cuenta de gestion existe y esta activa, sin mirar el rol: la que
+     * responde de la correccion de la zona horaria por consola (RN-23, ADR-056
+     * §3). Lo que se exige es una persona que responda, igual que el
+     * `--responsible` de `compliance:reconcile-work-record --acknowledge`.
+     */
+    public function isActiveManagementAccount(int $userId): bool;
 }
