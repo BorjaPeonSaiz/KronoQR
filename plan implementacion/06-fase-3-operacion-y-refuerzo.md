@@ -642,7 +642,7 @@ Esperado: con el reloj del dispositivo adelantado 40 minutos, la respuesta del e
 |---|---|
 | **Horas** | 4–6 |
 | **Agente / Skill** | `qa-testing` + `devops-observabilidad` |
-| **Requisitos** | RNF-P-06 (doc 02 §11). RQ-08: «Prueba de carga que valida RNF-P-06 antes de cada versión mayor». Derivada: RN-18 «Fichaje irreconciliable» (decisión 20) |
+| **Requisitos** | RNF-P-06 (doc 02 §11). RQ-08: «Prueba de carga que valida RNF-P-06 antes de cada versión mayor». Derivada: RN-18 «Fichaje irreconciliable» (decisión 20). Añadido el 15-10-2026 (2.2.1, decisión del propietario): RNF-P-08, latencia del fichaje por PIN (doc 01 §6.1) |
 | **Precondiciones** | Derivado: el endpoint de fichaje con *rate limiting* (**1.7**) y la instrumentación de **3.1**, sin la cual el ajuste se hace a ciegas |
 | **Bloquea a** | Publicación de versión mayor (RQ-08, §9.2: umbral bloqueante «RNF-P-06: 50 fichajes/s con p95 < 150 ms») |
 
