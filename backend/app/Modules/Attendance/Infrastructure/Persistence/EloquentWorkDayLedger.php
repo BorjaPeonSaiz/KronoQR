@@ -137,7 +137,7 @@ final class EloquentWorkDayLedger implements WorkDayLedger
         return $this->groupIntoWorkDays(array_values($rows))[0] ?? null;
     }
 
-    public function lastClockOutBefore(string $employeeUuid, DateTimeImmutable $instant): ?DateTimeImmutable
+    public function previousShiftEndBefore(string $employeeUuid, DateTimeImmutable $instant): ?DateTimeImmutable
     {
         $employeeId = $this->employeeIdOf($employeeUuid);
 
@@ -145,15 +145,26 @@ final class EloquentWorkDayLedger implements WorkDayLedger
             return null;
         }
 
-        $lastClockOut = ShiftEntry::query()
+        // El ultimo tramo vigente que EMPIEZA antes del instante, este cerrado o
+        // no (ADR-055 §2). Buscar por la salida (`clocked_out_at < instante`)
+        // tenia dos fallos: se saltaba el descanso de cero minutos —la salida
+        // anterior coincide con la entrada— y, si ese ultimo tramo seguia
+        // abierto, media desde una salida mas antigua un descanso que no existe.
+        // `superseded` y `voided` no cuentan: una jornada anulada entera no
+        // existe a estos efectos y se mira la anterior.
+        $previous = ShiftEntry::query()
             ->where('employee_id', $employeeId)
-            ->whereNotNull('clocked_out_at')
             ->whereNotIn('status', self::historicalStatuses())
-            ->where('clocked_out_at', '<', $instant->format('Y-m-d H:i:s.uP'))
-            ->orderByDesc('clocked_out_at')
-            ->value('clocked_out_at');
+            ->where('clocked_in_at', '<', $instant->format('Y-m-d H:i:s.uP'))
+            ->orderByDesc('clocked_in_at')
+            ->orderByDesc('id')
+            ->first(['clocked_out_at']);
 
-        return $lastClockOut instanceof DateTimeInterface ? self::toUtc($lastClockOut) : null;
+        // Sin tramo anterior, o con el anterior abierto, RN-10 no se evalua: del
+        // turno sin cerrar responde RN-08.
+        $previousEnd = $previous?->clocked_out_at;
+
+        return $previousEnd instanceof DateTimeInterface ? self::toUtc($previousEnd) : null;
     }
 
     /**

@@ -198,6 +198,32 @@ it('no confunde un solape con el peor descanso posible', function (): void {
     expect(ruleNamesOf($findings))->toBe([]);
 })->group('RN-10', 'RN-02', 'RF-PA-06');
 
+it('ADR-055 §2: sin salida anterior —la jornada anterior sigue abierta— no hay hallazgo de RN-10', function (): void {
+    // El lector entrega `previous_last_out_at` nulo cuando la jornada anterior
+    // tiene un tramo abierto, aunque otro tramo suyo este cerrado. RN-10 no se
+    // evalua: del turno sin cerrar responde RN-08. Una entrada a las 00:30, que
+    // con cualquier salida de la vispera seria un descanso corto, no sale.
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
+        [evaluationDay('2026-03-15', firstIn: '2026-03-15 00:30', lastOut: '2026-03-15 08:30', previousLastOut: null, totalMinutes: 480)],
+        DateRange::between('2026-03-15', '2026-03-15'),
+    );
+
+    expect(ruleNamesOf($findings))->toBe([]);
+})->group('RN-10', 'RF-PA-06');
+
+it('ADR-055 §2: un descanso de cero minutos es hallazgo de RN-10, no ausencia de descanso', function (): void {
+    // La salida anterior coincide con la entrada: `[inicio, fin)` no solapa
+    // (RN-02) y el descanso es 0, el peor que se puede registrar.
+    $findings = (evaluationOf(evaluationProfile()))->evaluate(
+        [evaluationDay('2026-03-19', firstIn: '2026-03-19 00:00', lastOut: '2026-03-19 08:00', previousLastOut: '2026-03-19 00:00', totalMinutes: 480)],
+        DateRange::between('2026-03-19', '2026-03-19'),
+    );
+
+    expect(ruleNamesOf($findings))->toBe(['insufficient_rest'])
+        ->and($findings[0]->measuredMinutes)->toBe(0)
+        ->and($findings[0]->differenceMinutes)->toBe(12 * 60);
+})->group('RN-10', 'RF-PA-06');
+
 it('el cambio de hora de marzo no regala una hora de descanso ni desplaza la semana', function (): void {
     /*
      * RN-09. El 29 de marzo de 2026 Madrid pasa de las 02:00 a las 03:00.

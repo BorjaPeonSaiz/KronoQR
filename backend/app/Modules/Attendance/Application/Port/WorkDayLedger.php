@@ -66,13 +66,26 @@ interface WorkDayLedger
     public function workDayOf(string $employeeUuid, WorkDate $workDate): ?WorkDay;
 
     /**
-     * Fin del ultimo tramo **cerrado** anterior a ese instante, o `null` si no
-     * consta ninguno.
+     * Fin del ultimo tramo **vigente** que empieza antes de ese instante, con la
+     * definicion de RN-10 de ADR-055 §2.
      *
      * Es la mitad que le falta a RN-10: el descanso se mide entre el fin de la
      * jornada anterior y el inicio de esta, y la anterior puede caer fuera de la
-     * ventana revisada. Devolver `null` cuando no hay nada es significativo —el
-     * dominio entonces **no evalua** la regla— y no un cero disfrazado.
+     * ventana revisada. El contrato:
+     *
+     *   - se toma el ultimo tramo vigente (ni `superseded` ni `voided`) cuya
+     *     **entrada** es anterior al instante. Una jornada anulada entera no
+     *     existe a estos efectos: se mira la anterior;
+     *   - si ese tramo sigue **abierto**, devuelve `null`: entre la salida
+     *     anterior y esta jornada hay un turno sin cerrar, y de eso responde
+     *     RN-08, no RN-10;
+     *   - si esta cerrado, devuelve su salida **aunque coincida con el
+     *     instante**: un descanso de cero minutos es el incumplimiento mas
+     *     claro de RN-10, no la ausencia de descanso que medir;
+     *   - sin tramo anterior, `null`.
+     *
+     * `null` es significativo —el dominio entonces **no evalua** la regla— y
+     * no un cero disfrazado.
      */
-    public function lastClockOutBefore(string $employeeUuid, DateTimeImmutable $instant): ?DateTimeImmutable;
+    public function previousShiftEndBefore(string $employeeUuid, DateTimeImmutable $instant): ?DateTimeImmutable;
 }

@@ -106,8 +106,8 @@ final class RacingWorkDayLedger implements WorkDayLedger
         return $this->inner->workDayOf($employeeUuid, $workDate);
     }
 
-    public function lastClockOutBefore(string $employeeUuid, DateTimeImmutable $instant): ?DateTimeImmutable
+    public function previousShiftEndBefore(string $employeeUuid, DateTimeImmutable $instant): ?DateTimeImmutable
     {
-        return $this->inner->lastClockOutBefore($employeeUuid, $instant);
+        return $this->inner->previousShiftEndBefore($employeeUuid, $instant);
     }
 }

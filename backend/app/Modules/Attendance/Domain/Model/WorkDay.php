@@ -577,8 +577,10 @@ final class WorkDay
     }
 
     /**
-     * Ultima salida de la jornada, para `daily_totals.last_out_at`. Nula
-     * mientras quede un tramo abierto sin cerrar por delante.
+     * Ultima salida de la jornada, para `daily_totals.last_out_at`. Nula solo
+     * si ningun tramo esta cerrado: con un tramo cerrado y otro abierto
+     * devuelve la salida del cerrado, y quien la lea para RN-10 tiene que mirar
+     * tambien `has_open_shift` (ADR-055 §2).
      */
     public function lastClockOutAt(): ?DateTimeImmutable
     {
