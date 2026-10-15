@@ -680,7 +680,11 @@ jobs:
             git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
             base="${EVENT_BEFORE}"
           fi
+          inicio_mutacion=$(date +%s)
           make mutate-changed MUTATE_BASE="${base}"
+          # Para el presupuesto del run ①-③ (paso final): la mutacion de lo que
+          # el cambio toca depende de cuanto dominio toque, no de la CI.
+          echo "MUTATION_SECONDS=$(($(date +%s) - inicio_mutacion))" >>"$GITHUB_ENV"
 
       # --- etapa ③b · Trazabilidad y coherencia documental --------------------
       #
@@ -732,6 +736,10 @@ jobs:
       # COMPRUEBA aqui, no solo se declara. Aviso a los 12 min (el 80 %: aun se
       # puede arreglar sin urgencia) y error visible a los 15. Es informativo, no
       # una puerta: ni falla el job ni depende de que la API conteste.
+      # QUE MIDE: el reloj del run desde su inicio hasta este paso, MENOS la
+      # duracion de `make mutate-changed` (MUTATION_SECONDS): esa depende de cuanto
+      # dominio toque la rama (37-57 min si lo toca casi entero), no de la CI, y
+      # una rama de dominio daria error siempre.
       - name: Presupuesto del run ①-③ (15 min, doc 02 §10.1)
         if: always()
         continue-on-error: true
@@ -746,11 +754,11 @@ jobs:
             echo "::notice::No se ha podido leer la hora de inicio del run; presupuesto ①-③ sin comprobar."
             exit 0
           }
-          total=$(($(date +%s) - $(date -d "${inicio}" +%s)))
+          total=$(($(date +%s) - $(date -d "${inicio}" +%s) - ${MUTATION_SECONDS:-0}))
           {
             echo "### Run ①-③ completo"
             echo ""
-            echo "| Desde el inicio del run | Aviso | Presupuesto §10.1 |"
+            echo "| Run sin la mutacion (${MUTATION_SECONDS:-0} s de mutacion descontados) | Aviso | Presupuesto §10.1 |"
             echo "|---|---|---|"
             echo "| ${total} s | ${AVISO} s | ${LIMITE} s |"
           } >>"$GITHUB_STEP_SUMMARY"
@@ -3316,6 +3324,9 @@ jobs:
       # vive unos minutos en un runner efimero; no son secretos del producto.
       KQ_RESTORE_CYCLE: "1"
       DB_HOST: 127.0.0.1
+      # La base del servidor es `fichaje`; phpunit.xml fuerza DB_DATABASE=fichaje_test
+      # solo para la suite de integracion, y esta prueba no la usa: siembra, copia y
+      # restaura `fichaje` con la conexion de este entorno.
       DB_PORT: "5432"
       DB_DATABASE: fichaje
       DB_USERNAME: fichaje_migrator
@@ -3372,7 +3383,7 @@ jobs:
 
       - name: Pest — suite Restore (copia cifrada, restauracion en contenedor limpio y copia alterada)
         working-directory: backend
-        run: vendor/bin/pest --testsuite=Restore --no-coverage
+        run: bash ../.github/scripts/pest-max-skipped.sh run 0 "vendor/bin/pest --testsuite=Restore --no-coverage"
 
       - name: Apagar el servidor de pruebas
         if: always()

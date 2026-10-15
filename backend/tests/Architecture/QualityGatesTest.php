@@ -1111,3 +1111,19 @@ it('publica las tres imagenes de entrega y adjunta el paquete y el SBOM a la rel
     expect($workflow)->toMatch('/packages:\s*write/');
     expect($workflow)->toMatch('/contents:\s*write/');
 })->group('RQ-11', 'RF-PD-02', 'RS-10');
+
+it('ejecuta la suite Restore en el job restore-cycle, con la conexion exportada y sin omitidas', function (): void {
+    // T3: la restauracion real entra en la matriz solo si el job la ejecuta de
+    // verdad. Sin KQ_RESTORE_CYCLE las dos pruebas se omiten (y se darian por
+    // buenas), y sin la puerta de omitidas un cambio de entorno las silenciaria.
+    $ci = repoContents('.github/workflows/ci.yml');
+
+    expect($ci)->toMatch('/^  restore-cycle:\s*$/m');
+
+    $job = (string) preg_replace('/^.*?^  restore-cycle:\s*$/ms', '', $ci, 1);
+    $job = (string) preg_replace('/^  [a-z][a-z0-9-]*:\s*$.*/ms', '', $job, 1);
+
+    expect($job)->toContain('KQ_RESTORE_CYCLE: "1"')
+        ->and($job)->toContain('--testsuite=Restore')
+        ->and($job)->toContain('pest-max-skipped.sh run 0 ');
+})->group('RNF-D-05', 'RQ-09', 'RQ-13');

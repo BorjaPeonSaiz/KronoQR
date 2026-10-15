@@ -171,6 +171,9 @@ it('rechaza con salida 6 una copia alterada: no se restaura lo que no se autenti
 
         $drill = restoreCycleRun('restore-drill.sh', ['--timeout', '120'], $backupPath);
         expect($drill->getExitCode())->toBe(6, $drill->getOutput().$drill->getErrorOutput());
+        // El 6 tambien saldria si la restauracion fallara despues de abrir la copia:
+        // el motivo tiene que ser que NO supera la comprobacion de autenticidad.
+        expect($drill->getOutput().$drill->getErrorOutput())->toContain('NO supera la comprobacion de autenticidad');
     } finally {
         restoreCycleRemove($backupPath);
     }
