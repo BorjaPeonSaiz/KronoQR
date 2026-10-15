@@ -7,7 +7,8 @@
 // porque `vite preview` no servia NINGUNA cabecera de seguridad. Desde aqui,
 // el servidor de los E2E sirve las MISMAS cabeceras que Nginx, leidas del
 // MISMO fichero que incluye Nginx (`infra/docker/nginx/snippets/
-// security-headers.conf`, via `extra/spa.conf` -> `location ^~ /kiosk/`).
+// security-headers-kiosk.conf`, via `extra/spa.conf` -> `location ^~ /kiosk/`),
+// con su `include` del snippet comun expandido.
 //
 // NO SE COPIA LA CSP A MANO. Una segunda copia divergiria el primer dia que
 // alguien tocara el snippet, y el E2E volveria a probar un navegador que no
@@ -30,12 +31,15 @@ import type { Page } from '@playwright/test'
  */
 export const SECURITY_HEADERS_SNIPPET_ENV = 'KRONOQR_SECURITY_HEADERS_SNIPPET'
 
-/** El snippet real que incluye Nginx en produccion. */
+/**
+ * El snippet real que incluye Nginx en `location ^~ /kiosk/` (el del QUIOSCO, con
+ * 'wasm-unsafe-eval'; el resto del borde usa `security-headers.conf`, sin el).
+ */
 // Con `resolve` y no con `new URL(..., import.meta.url)`: Vite reescribe ese
 // patron como URL de recurso (http:) cuando el modulo pasa por Vitest.
 export const PRODUCTION_SECURITY_HEADERS_SNIPPET = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../infra/docker/nginx/snippets/security-headers.conf',
+  '../../../../infra/docker/nginx/snippets/security-headers-kiosk.conf',
 )
 
 const CSP_HEADER = 'Content-Security-Policy'
@@ -87,6 +91,42 @@ export function parseSecurityHeaders(conf: string, source: string): Record<strin
   return headers
 }
 
+/** `include /etc/nginx/snippets/nombre.conf;` — el snippet del quiosco incluye al comun. */
+const INCLUDE_LINE = /^include\s+\/etc\/nginx\/snippets\/([A-Za-z0-9._-]+)\s*;$/
+const MAX_INCLUDE_DEPTH = 3
+
+/**
+ * Sustituye cada `include /etc/nginx/snippets/x.conf;` por el contenido de
+ * `x.conf`, buscado junto al snippet leido (en la imagen estan todos en
+ * `/etc/nginx/snippets/`, en el repositorio en el mismo directorio). Un include
+ * que no existe, o una cadena demasiado profunda, es un error.
+ */
+export function expandSnippetIncludes(
+  conf: string,
+  directory: string,
+  source: string,
+  depth = 0,
+): string {
+  if (depth > MAX_INCLUDE_DEPTH) {
+    throw new SecurityHeadersSnippetError(source, 'includes anidados demasiado profundos')
+  }
+
+  return conf
+    .split(/\r?\n/)
+    .map((rawLine) => {
+      const included = INCLUDE_LINE.exec(rawLine.trim())?.[1]
+      if (included === undefined) {
+        return rawLine
+      }
+      const includedPath = resolve(directory, included)
+      if (!existsSync(includedPath)) {
+        throw new SecurityHeadersSnippetError(source, `el include ${included} no existe`)
+      }
+      return expandSnippetIncludes(readFileSync(includedPath, 'utf8'), directory, source, depth + 1)
+    })
+    .join('\n')
+}
+
 /** Lee el snippet (el real, salvo que la variable de entorno apunte a otro). */
 export function readProductionSecurityHeaders(
   snippetPath: string = process.env[SECURITY_HEADERS_SNIPPET_ENV] ??
@@ -96,7 +136,12 @@ export function readProductionSecurityHeaders(
     throw new SecurityHeadersSnippetError(snippetPath, 'no existe')
   }
 
-  return parseSecurityHeaders(readFileSync(snippetPath, 'utf8'), snippetPath)
+  const conf = expandSnippetIncludes(
+    readFileSync(snippetPath, 'utf8'),
+    dirname(snippetPath),
+    snippetPath,
+  )
+  return parseSecurityHeaders(conf, snippetPath)
 }
 
 /** Las fuentes de una directiva CSP (`script-src` -> `["'self'", ...]`), o `null`. */

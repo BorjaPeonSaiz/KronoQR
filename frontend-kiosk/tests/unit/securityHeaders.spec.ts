@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   cspDirective,
+  expandSnippetIncludes,
   parseSecurityHeaders,
   readProductionSecurityHeaders,
   SecurityHeadersSnippetError,
@@ -18,6 +19,21 @@ describe('lector del snippet de cabeceras de seguridad', () => {
     const headers = readProductionSecurityHeaders()
 
     expect(cspDirective(headers['Content-Security-Policy'] ?? '', 'script-src')).not.toBeNull()
+  })
+
+  it('el snippet del quiosco expande el comun y permite WebAssembly', () => {
+    const headers = readProductionSecurityHeaders()
+
+    expect(cspDirective(headers['Content-Security-Policy'] ?? '', 'script-src')).toContain(
+      "'wasm-unsafe-eval'",
+    )
+    expect(headers['Permissions-Policy']).toContain('camera=(self)')
+  })
+
+  it('un include que no existe es un error, no «sin cabeceras»', () => {
+    expect(() =>
+      expandSnippetIncludes('include /etc/nginx/snippets/no-existe.conf;', '/no/existe', 'prueba'),
+    ).toThrow(SecurityHeadersSnippetError)
   })
 
   it('lee cada add_header e ignora comentarios y lineas vacias', () => {

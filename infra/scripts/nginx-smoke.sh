@@ -357,12 +357,19 @@ main() {
   # abierto sin que nadie lo notara hasta que alguien mirara desde fuera.
   comprobar /metrics 403
 
-  # PIN-01: libsodium compila WebAssembly. Sin 'wasm-unsafe-eval' el fichaje por
-  # PIN del quiosco falla siempre en produccion; 'unsafe-eval' sigue prohibido.
+  # CSP por ubicacion (B18, 2.2.1). PIN-01: libsodium compila WebAssembly, y sin
+  # 'wasm-unsafe-eval' el fichaje por PIN del quiosco falla siempre en
+  # produccion; solo /kiosk/ lo lleva. El panel, el portal, la API y las paginas
+  # de error (403 del portal, 502/404 de la API) llevan la estricta.
+  # 'unsafe-eval' y 'unsafe-inline' estan prohibidos en todas.
   # CORP: la misma cabecera en las tres SPA y en la API.
   local ruta activo
+  cabecera /kiosk/ Content-Security-Policy "script-src 'self' 'wasm-unsafe-eval';"
+  for ruta in /admin/ /portal/ /api/v1/ready /api/v1/no-existe; do
+    cabecera "${ruta}" Content-Security-Policy "script-src 'self';"
+    sin_cabecera "${ruta}" Content-Security-Policy "wasm-unsafe-eval"
+  done
   for ruta in /kiosk/ /admin/ /portal/ /api/v1/ready; do
-    cabecera "${ruta}" Content-Security-Policy "script-src 'self' 'wasm-unsafe-eval';"
     sin_cabecera "${ruta}" Content-Security-Policy "'unsafe-eval'|'unsafe-inline'"
     cabecera "${ruta}" Cross-Origin-Resource-Policy "^Cross-Origin-Resource-Policy: same-origin$"
   done

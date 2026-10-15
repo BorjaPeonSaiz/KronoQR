@@ -328,7 +328,16 @@ it('sirve las cabeceras de seguridad completas', function (): void {
     // RS-09 (§7.2). Permissions-Policy no esta por simetria: sin
     // `camera=(self)` la PWA del quiosco no puede abrir la camara, y el fallo
     // aparecería en la Fase 1 sin causa aparente.
-    $headers = repoContents('infra/docker/nginx/snippets/security-headers.conf');
+    // B18 (2.2.1): la CSP depende de la ubicacion. Los comunes viven en
+    // `security-headers-common.conf` y los dos snippets de CSP lo incluyen.
+    $common = repoContents('infra/docker/nginx/snippets/security-headers-common.conf');
+    $strict = repoContents('infra/docker/nginx/snippets/security-headers.conf');
+    $kiosk = repoContents('infra/docker/nginx/snippets/security-headers-kiosk.conf');
+    $headers = $common.$strict;
+
+    foreach ([$strict, $kiosk] as $variant) {
+        expect($variant)->toContain('include /etc/nginx/snippets/security-headers-common.conf;');
+    }
 
     foreach ([
         'Strict-Transport-Security',
@@ -345,15 +354,74 @@ it('sirve las cabeceras de seguridad completas', function (): void {
     expect($headers)->toContain('camera=(self)');
     expect($headers)->toContain('Cross-Origin-Resource-Policy "same-origin"');
 
-    // PIN-01: libsodium compila WebAssembly; sin 'wasm-unsafe-eval' el fichaje por
-    // PIN falla siempre en produccion. 'unsafe-eval' e 'unsafe-inline' siguen
-    // prohibidos: el primer permiso no abre `eval` de JavaScript, los otros si.
-    expect(preg_match('/Content-Security-Policy "[^"]*?script-src ([^;"]*)/', $headers, $csp))->toBe(1);
-    $scriptSrc = $csp[1] ?? '';
+    // La CSP NO esta en el comun: o se declara en una variante o en ninguna.
+    expect($common)->not->toContain('Content-Security-Policy "');
 
-    expect($scriptSrc)->toContain("'wasm-unsafe-eval'");
-    expect($scriptSrc)->not->toContain("'unsafe-eval'");
-    expect($scriptSrc)->not->toContain("'unsafe-inline'");
+    // PIN-01: libsodium compila WebAssembly; sin 'wasm-unsafe-eval' el fichaje por
+    // PIN del QUIOSCO falla siempre en produccion. 'unsafe-eval' e 'unsafe-inline'
+    // siguen prohibidos en ambas: el primer permiso no abre `eval` de JavaScript,
+    // los otros si.
+    $scriptSrc = static function (string $conf): string {
+        expect(preg_match('/Content-Security-Policy "[^"]*?script-src ([^;"]*)/', $conf, $csp))->toBe(1);
+
+        return $csp[1] ?? '';
+    };
+
+    expect($scriptSrc($kiosk))->toContain("'wasm-unsafe-eval'");
+
+    foreach ([$strict, $kiosk] as $variant) {
+        expect($scriptSrc($variant))->not->toContain("'unsafe-eval'")
+            ->and($scriptSrc($variant))->not->toContain("'unsafe-inline'");
+    }
+
+    // B18: el resto del borde (panel, portal, API, errores) no compila WebAssembly.
+    expect($scriptSrc($strict))->not->toContain('wasm-unsafe-eval');
+
+    // Las dos variantes se diferencian SOLO en ese permiso: una tercera
+    // directiva distinta seria una divergencia silenciosa.
+    $cspLine = static fn (string $conf): string => (string) preg_replace('/^.*?(add_header Content-Security-Policy "[^"]*" always;).*$/s', '$1', $conf);
+
+    expect(str_replace(" 'wasm-unsafe-eval'", '', $cspLine($kiosk)))->toBe($cspLine($strict));
+})->group('RS-09');
+
+it('da la CSP con WebAssembly solo al quiosco y la estricta al panel y al portal', function (): void {
+    // B18 (2.2.1), RS-09. El portal y el panel no incluyen libsodium (el sellado
+    // del PIN es del quiosco), asi que no necesitan 'wasm-unsafe-eval'. Si algun
+    // dia lo usan, esta prueba obliga a decidirlo aqui y no por accidente.
+    $spa = repoContents('infra/docker/nginx/extra/spa.conf');
+
+    $location = static function (string $path) use ($spa): string {
+        if (preg_match('/location \^~ '.preg_quote($path, '/').' \{(.*?)\n\}/s', $spa, $match) !== 1) {
+            throw new RuntimeException("No se encuentra la location de {$path} en infra/docker/nginx/extra/spa.conf.");
+        }
+
+        return $match[1];
+    };
+
+    // Se busca la directiva `include` entera, con su sangria: los comentarios
+    // de la location tambien nombran el snippet.
+    expect($location('/kiosk/'))->toContain("\n  include /etc/nginx/snippets/security-headers-kiosk.conf;")
+        ->and($location('/kiosk/'))->not->toContain("\n  include /etc/nginx/snippets/security-headers.conf;");
+
+    foreach (['/admin/', '/portal/'] as $path) {
+        expect($location($path))->toContain("\n  include /etc/nginx/snippets/security-headers.conf;")
+            ->and($location($path))->not->toContain('security-headers-kiosk.conf;');
+    }
+
+    // Y fuera de spa.conf nadie incluye la variante del quiosco: servidor 80/443
+    // y paginas de error de la API van con la estricta.
+    foreach ([
+        'infra/docker/nginx/templates/kronoqr.conf.template',
+        'infra/docker/nginx/snippets/api-error-locations.conf',
+    ] as $file) {
+        expect(repoContents($file))->not->toContain('include /etc/nginx/snippets/security-headers-kiosk.conf;');
+    }
+
+    // Ni el panel ni el portal dependen de libsodium ni de WebAssembly: la razon
+    // por la que su CSP puede ser la estricta.
+    foreach (['frontend-admin', 'frontend-portal'] as $app) {
+        expect(repoContents($app.'/package.json'))->not->toContain('libsodium');
+    }
 })->group('RS-09');
 
 it('no deja los argumentos de las funciones en las trazas de excepcion', function (): void {
@@ -883,7 +951,9 @@ it('sirve las tres SPA construidas y deja el portal detras del mismo candado que
     // anade su propio add_header, y las tres anaden Cache-Control. Sin este
     // include, el HTML del quiosco se serviria sin `Permissions-Policy:
     // camera=(self)` y la camara dejaria de abrirse (RS-09, §7.2).
-    expect(substr_count($spa, 'include /etc/nginx/snippets/security-headers.conf;'))->toBe(3);
+    // Panel y portal, el estricto; quiosco, el suyo (B18, 2.2.1).
+    expect(substr_count($spa, "\n  include /etc/nginx/snippets/security-headers.conf;"))->toBe(2)
+        ->and(substr_count($spa, "\n  include /etc/nginx/snippets/security-headers-kiosk.conf;"))->toBe(1);
 
     // Las tres se construyen con su prefijo: si el build y la location se
     // desalinean, la SPA pide sus ficheros a una ruta que no existe.
