@@ -311,7 +311,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.detect.outputs.present == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -400,7 +400,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -958,7 +958,7 @@ jobs:
       - name: composer audit (0 vulnerabilidades)
         run: make deps-audit-php
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -1135,7 +1135,7 @@ jobs:
 
       - name: Subir los informes de seguridad y el SBOM
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: seguridad-informe-y-sbom
           path: |
@@ -1196,7 +1196,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -1283,7 +1283,7 @@ jobs:
             exit 1
           }
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -1334,7 +1334,7 @@ jobs:
 
       - name: Subir los artefactos de Playwright SOLO si algo ha fallado
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-${{ matrix.app }}
           path: ${{ matrix.app }}/test-results/
@@ -2095,7 +2095,7 @@ jobs:
 
       - name: Subir las salidas del instalador
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: instalacion-limpia
           # TODAS las salidas, no solo la del escenario B. La primera ejecucion
@@ -3057,7 +3057,7 @@ jobs:
           sudo grep -qx "IMAGE_TAG=${old}" paquete-anterior/.env
           sudo grep -qx 'IMAGE_DIGEST_PHP=' paquete-anterior/.env
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.anterior.outputs.skip != 'true' && steps.inplace.outputs.ok == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -3168,7 +3168,7 @@ jobs:
 
       - name: Subir las salidas del actualizador
         if: always() && steps.anterior.outputs.skip != 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: actualizacion
           # Sin ningun .env: llevan los secretos de la instalacion de prueba.
