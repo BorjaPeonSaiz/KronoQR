@@ -160,9 +160,9 @@ it('la lista dice quien la concedio, para que y cuando caduca', function (): voi
 it('revocar es idempotente y no borra la fila', function (): void {
     $issued = SupportGrants::issue();
 
-    Api::as(supportAdminToken())->delete('/api/v1/support/grants/'.$issued->grant->uuid)->assertStatus(204);
+    Api::as(supportAdminToken())->delete('/api/v1/support/grants/'.$issued->grant->uuid)->assertValidResponse(204);
     // La segunda pulsacion del boton: mismo codigo, sin volver a auditar.
-    Api::as(supportAdminToken())->delete('/api/v1/support/grants/'.$issued->grant->uuid)->assertStatus(204);
+    Api::as(supportAdminToken())->delete('/api/v1/support/grants/'.$issued->grant->uuid)->assertValidResponse(204);
 
     expect(DB::table('support_grants')->count())->toBe(1)
         ->and(DB::table('support_grants')->first()?->revoked_at)->not->toBeNull()
@@ -172,7 +172,7 @@ it('revocar es idempotente y no borra la fila', function (): void {
 it('revocar una concesion que no existe es 404', function (): void {
     Api::as(supportAdminToken())
         ->delete('/api/v1/support/grants/0199f6a2-4c1e-7d3b-8a90-000000000000')
-        ->assertStatus(404);
+        ->assertValidResponse(404);
 })->group('RF-PD-11');
 
 it('revocar retira el token en el acto', function (): void {

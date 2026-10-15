@@ -166,6 +166,21 @@ export async function stubPinScanApi(
   return { recorded }
 }
 
+/**
+ * Desde una carga limpia de `/`, abre la pantalla del PIN y ESPERA a que el
+ * paso del codigo este pintado. Que el `click` en el enlace termine no
+ * demuestra que se haya navegado: si algo cambia la pantalla de tarjeta entre
+ * la comprobacion de Playwright y el evento (una lectura de la camara que pinta
+ * su confirmacion y desmonta el enlace), el clic se pierde y la siguiente
+ * accion agota su plazo esperando un campo que no existe. Con esta espera, un
+ * fallo dice donde esta, no `fill` agotado.
+ */
+export async function openPinScreen(page: Page): Promise<void> {
+  await page.goto('/')
+  await page.getByTestId('pin-entry-link').click()
+  await expect(page.getByTestId('pin-step-code')).toBeVisible()
+}
+
 /** Teclea el codigo de empleado y pasa al paso del PIN. */
 export async function enterEmployeeCode(page: Page, code: string): Promise<void> {
   await page.getByTestId('pin-code-input').fill(code)
@@ -186,8 +201,7 @@ export async function pressPinDigits(page: Page, pin: string): Promise<void> {
  * disfrazado-: fuerza la vuelta navegando de nuevo a `/`.
  */
 async function attemptRejectedPin(page: Page, employeeCode: string, pin: string): Promise<string> {
-  await page.goto('/')
-  await page.getByTestId('pin-entry-link').click()
+  await openPinScreen(page)
   await enterEmployeeCode(page, employeeCode)
   await pressPinDigits(page, pin)
   await page.getByTestId('pin-confirm').click()

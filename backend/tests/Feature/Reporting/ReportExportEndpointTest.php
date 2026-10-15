@@ -246,7 +246,7 @@ it('el enlace entrega el fichero con sus cabeceras de comprobacion, y solo una v
 
     // Y el enlace esta gastado: repetir la URL —volver atras en el navegador,
     // reenviarla— responde `410` y no `404`, porque el fichero sigue ahi.
-    $repetida = Api::guest()->get($enlace)->assertStatus(410);
+    $repetida = Api::guest()->get($enlace)->assertValidResponse(410);
 
     expect($repetida->json('type'))->toBe('urn:kronoqr:problem:report-export-link-used');
 
@@ -271,7 +271,7 @@ it('un enlace caducado responde 410 con su propio motivo', function (): void {
         ->where('uuid', $export->uuid)
         ->update(['download_token_expires_at' => '2020-01-01 00:00:00+00']);
 
-    $response = Api::guest()->get($enlace)->assertStatus(410);
+    $response = Api::guest()->get($enlace)->assertValidResponse(410);
 
     expect($response->json('type'))->toBe('urn:kronoqr:problem:report-export-link-expired');
 })->group('RF-IN-06');
@@ -287,7 +287,7 @@ it('un token que no es el vigente responde 404 sin decir nada mas', function ():
 
     Api::guest()
         ->get('/api/v1/reports/exports/'.$export->uuid.'/download?token='.str_repeat('f', 64))
-        ->assertStatus(404);
+        ->assertValidResponse(404);
 })->group('RF-IN-06');
 
 it('la descarga sin token responde 404 aunque haya un enlace vivo', function (): void {
@@ -299,7 +299,7 @@ it('la descarga sin token responde 404 aunque haya un enlace vivo', function ():
 
     Api::as(ManagementUsers::tokenFor($user))->get('/api/v1/reports/exports/'.$export->uuid);
 
-    Api::guest()->get('/api/v1/reports/exports/'.$export->uuid.'/download')->assertStatus(404);
+    Api::guest()->get('/api/v1/reports/exports/'.$export->uuid.'/download')->assertValidResponse(404);
 })->group('RF-IN-06');
 
 it('una exportacion purgada sigue en la lista y su descarga responde 404', function (): void {
@@ -586,7 +586,7 @@ it('no dice «ese enlace ya se ha usado» de una exportacion de la que nunca se 
     // Sin pasar por `GET /reports/exports/{uuid}`: nunca se emitio enlace.
     Api::guest()
         ->get('/api/v1/reports/exports/'.$export->uuid.'/download?token='.str_repeat('a', 64))
-        ->assertStatus(404);
+        ->assertValidResponse(404);
 })->group('RF-IN-06', 'RS-03');
 
 it('no entrega el fichero de una exportacion cuyo plazo ya vencio', function (): void {

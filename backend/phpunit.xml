@@ -72,6 +72,15 @@
         <testsuite name="Architecture">
             <directory>tests/Architecture</directory>
         </testsuite>
+        <!--
+            El ciclo real de copia y restauracion (T3, RNF-D-05). Solo lo ejecuta el
+            job `restore-cycle` de ci.yml, que le da servidor, cliente de PostgreSQL 17 y
+            Docker; en cualquier otro sitio se omite de forma condicionada a
+            `KQ_RESTORE_CYCLE=1`. No extiende TestCase (Pest.php): no toca la base de pruebas.
+        -->
+        <testsuite name="Restore">
+            <directory>tests/Restore</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>

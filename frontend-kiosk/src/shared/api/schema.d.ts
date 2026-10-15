@@ -12820,6 +12820,35 @@ export interface components {
             };
         };
         /**
+         * @description La peticion trae un campo de cuerpo o un parametro de consulta que esta
+         *     operacion no admite. La operacion no tiene campos propios, y lo que
+         *     llegue se rechaza en lugar de ignorarse en silencio: un `force` o un
+         *     `reprint` que el servidor tirase sin decir nada haria creer al cliente
+         *     que se ha aplicado. `errors` lleva el nombre de cada campo sobrante.
+         */
+        UnknownInputRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ValidationProblem"];
+            };
+        };
+        /**
+         * @description La instalacion todavia no tiene centro de trabajo (RF-PD-03, ADR-040):
+         *     la puesta en marcha no se ha completado. Es un estado de la
+         *     instalacion, no un fallo de la peticion; se completa el asistente y se
+         *     repite.
+         */
+        SiteNotConfigured: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description La peticion no cumple el contrato, o **la reautenticacion de quien la
          *     hace no vale** (ADR-051 §7). `errors.actor_totp_code` señala un codigo
          *     incorrecto, caducado o ya usado en su franja —o que la cuenta que actua
@@ -13864,6 +13893,7 @@ export interface operations {
                     "application/json": components["schemas"]["KioskRoster"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             429: components["responses"]["TooManyRequests"];
@@ -14030,6 +14060,7 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["SiteNotConfigured"];
             /**
              * @description **Dos cuerpos distintos, y la diferencia importa.**
              *
@@ -14077,6 +14108,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -14118,6 +14150,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -14210,6 +14243,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -15046,6 +15080,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["EmployeeConflict"];
+            422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -15079,6 +15114,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["EmployeeConflict"];
+            422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -15252,6 +15288,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["SiteNotConfigured"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -15320,6 +15357,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["SiteNotConfigured"];
             /**
              * @description La peticion no es valida —rango invertido, fechas mal formadas— **o**
              *     el periodo no cabe en una respuesta sincrona (RNF-P-05): mas de
@@ -15752,6 +15790,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["SiteNotConfigured"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -15867,6 +15906,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["ServiceUnavailable"];
         };
@@ -15914,6 +15954,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            422: components["responses"]["UnknownInputRejected"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -16930,6 +16971,20 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+            /**
+             * @description Solo con `format=pdf`: el motor de composicion de PDF no esta
+             *     disponible en esta instalacion (falta Chromium, o no arranca). La
+             *     salida es descargar el mismo cuadro en CSV o en XLSX, que no
+             *     dependen de el. `problem+json` y nunca un `500` opaco.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     generateLegalExport: {
@@ -17258,6 +17313,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["SiteNotConfigured"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -17534,7 +17590,15 @@ export interface operations {
                  */
                 v?: string;
             };
-            header?: never;
+            header?: {
+                /**
+                 * @description `ETag` de una respuesta anterior. Si coincide con la huella del
+                 *     logotipo vigente, la respuesta es `304` sin cuerpo en lugar de los
+                 *     bytes: el quiosco revalida al recuperar la red, a menudo por la
+                 *     conexion del hotel.
+                 */
+                "If-None-Match"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -17553,6 +17617,21 @@ export interface operations {
                     "image/png": string;
                     "image/svg+xml": string;
                 };
+            };
+            /**
+             * @description La peticion trae en `If-None-Match` la huella vigente: quien pregunta
+             *     ya tiene este logotipo. Sin cuerpo; conserva las cabeceras de
+             *     validacion para que la cache lo renueve.
+             */
+            304: {
+                headers: {
+                    /** @description La misma politica que el `200`. */
+                    "Cache-Control"?: string;
+                    /** @description Huella SHA-256 del contenido, entre comillas. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
@@ -17685,6 +17764,7 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };

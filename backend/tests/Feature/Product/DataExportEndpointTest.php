@@ -145,7 +145,7 @@ it('descarga el ZIP con la huella y el total de filas en las cabeceras', functio
 
     $response = Api::as($token)
         ->get('/api/v1/data-export/'.$export->uuid.'/download')
-        ->assertStatus(200);
+        ->assertValidResponse(200);
 
     expect($response->headers->get('X-Kronoqr-Export-Sha256'))->toBe($export->sha256)
         // El total de filas de datos: 500 + 45.000. Es lo que permite comprobar
@@ -201,7 +201,7 @@ it('responde 409 al descargar una que todavia no ha terminado', function (): voi
 
     $response = Api::as(exportAdminToken())
         ->get('/api/v1/data-export/'.$enCurso->uuid.'/download')
-        ->assertStatus(409);
+        ->assertValidResponse(409);
 
     expect($response->json('type'))->toBe('urn:kronoqr:problem:data-export-not-ready');
 })->group('RF-PD-14');
@@ -227,9 +227,9 @@ it('responde 404 con una purgada, con una fallida y con una que no existe', func
 
     $token = exportAdminToken();
 
-    Api::as($token)->get('/api/v1/data-export/'.$purgada->uuid.'/download')->assertStatus(404);
-    Api::as($token)->get('/api/v1/data-export/'.$fallida->uuid.'/download')->assertStatus(404);
-    Api::as($token)->get('/api/v1/data-export/0199f6a2-9999-7d3b-8a90-1b2c3d4e5f61/download')->assertStatus(404);
+    Api::as($token)->get('/api/v1/data-export/'.$purgada->uuid.'/download')->assertValidResponse(404);
+    Api::as($token)->get('/api/v1/data-export/'.$fallida->uuid.'/download')->assertValidResponse(404);
+    Api::as($token)->get('/api/v1/data-export/0199f6a2-9999-7d3b-8a90-1b2c3d4e5f61/download')->assertValidResponse(404);
 
     // Ninguna de las tres deja asiento de descarga: no se descargo nada.
     expect(DB::table('audit_log')->where('action', 'data_export.downloaded')->count())->toBe(0);
@@ -244,7 +244,7 @@ it('responde 404 si la fila dice completed pero alguien borro el fichero a mano'
 
     Api::as(exportAdminToken())
         ->get('/api/v1/data-export/'.$export->uuid.'/download')
-        ->assertStatus(404);
+        ->assertValidResponse(404);
 })->group('RF-PD-14');
 
 it('no expone la ruta del fichero en el servidor', function (): void {

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\DB;
+use Spectator\Spectator;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -109,9 +110,12 @@ it('rechaza un site_id en la peticion en vez de ignorarlo en silencio', function
     // (regla dura 17).
     $hotel = hotelConDosTarjetas();
 
+    // Y es el `400` del contrato (CT2 de la verificacion de la 2.1.0).
+    Spectator::using('openapi.yaml');
+
     Api::as($hotel['token'])
         ->get('/api/v1/kiosk/roster', ['site_id' => 999])
-        ->assertStatus(400);
+        ->assertValidResponse(400);
 
     // Y un intento rechazado no es una divulgacion: no se ha entregado nada.
     expect(DB::table('audit_log')->count())->toBe(0);

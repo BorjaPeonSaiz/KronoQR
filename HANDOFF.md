@@ -121,6 +121,22 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+### Anotado en el bloque 16 de la 2.2.1 (15-10-2026)
+
+- `InstallationSiteMissing` se lanza sin mensaje en `ReadIncidentBoard`, `ReadComplianceSummary`, `ReadLivePresence`,
+  `ConfirmPairing`, `GeneratePeriodReport`, `ReadAdoptionReport`, `SendWeeklySummaries` y `PayrollExportController`:
+  el 409 sale con `detail: ""` (el ejemplo de `SiteNotConfigured` promete texto) y se registra como ERROR (no hay
+  `dontReport`). Arreglo: `::make()` en todos y `dontReport(InstallationSiteMissing::class)`. Cambia comportamiento.
+- CT5 vivo: la descarga CSV de `/reports/exports/{uuid}/download` sale como `text/plain`; su 200 no se valida.
+- El 400 `InvalidRequest` de `POST /client-errors` probablemente nunca sale; la descripción de `ServiceUnavailable`
+  cita una respuesta `DependencyUnavailable` que no existe en el contrato.
+- El 409 «sin centro» de `kiosk/pair/confirm` solo lo produce una prueba con un código de relleno; V6-BE-4 (ramas de
+  esquema que ninguna prueba produce) sigue abierto.
+- El aviso de duración de ④ (180 s) está desfasado (el job dura 10-15 min). Sacar Rector a un job paralelo ahorraría
+  ~70 s en ①.
+- Dependabot: #147 (Composer) roja por 2 errores de PHPStan con larastan 3.12.3 (un `listen()` con `callable` y un
+  `->and()` de Pest); #149 (`vite-plugin-pwa` 2.0, mayor) aparcada para el bloque 17 o la 2.3.0, con tablet.
+
 ### Anotado en el bloque 15 de la 2.2.1 (15-10-2026)
 
 - **Decisión pendiente del propietario:** el fichaje por PIN paga bcrypt de coste 12 (~160 ms solo el hash); si RNF-P-02

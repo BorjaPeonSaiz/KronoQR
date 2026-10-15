@@ -33,13 +33,15 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * la misma consulta. El formato de una duracion tampoco: es de `PayrollCellTest`,
  * sobre el objeto de valor que lo implementa.
  *
- * ## El contrato se comprueba sobre la PETICION
+ * ## El contrato, en la peticion y en la respuesta
  *
- * La respuesta es un fichero binario servido con `StreamedResponse`, y
- * `assertValidResponse` de Spectator espera un cuerpo JSON deserializable. La
- * forma del endpoint —los dos tipos de contenido, las cabeceras, los enumerados—
- * la comprueba `tests/Contract/OpenApiContractTest.php`. Es el mismo reparto que
- * hizo la descarga del informe por periodo.
+ * La respuesta es un fichero binario servido con `StreamedResponse`. Sobre ella
+ * `assertValidResponse` comprueba que el codigo esta declarado y que el tipo de
+ * contenido es uno de los dos del contrato; el cuerpo de un `format: binary` no
+ * tiene forma que validar, y lo que hay dentro lo afirman las pruebas. Los `422`
+ * son JSON y se validan enteros (Q3 de la verificacion de la 2.2.0). La forma del
+ * endpoint —las cabeceras, los enumerados— la comprueba ademas
+ * `tests/Contract/OpenApiContractTest.php`.
  */
 
 uses(RefreshDatabase::class);
@@ -141,7 +143,7 @@ it('descarga la nomina con la plantilla de serie: BOM, punto y coma, cabecera y 
     $respuesta = Api::as($contexto['rrhh'])
         ->get('/api/v1/reports/payroll-export', nominaDeMarzo())
         ->assertValidRequest()
-        ->assertOk();
+        ->assertValidResponse(200);
 
     $respuesta->assertHeader('Content-Type', 'text/csv; charset=utf-8');
     $respuesta->assertHeader('Cache-Control', 'no-store, private');
@@ -330,7 +332,7 @@ it('descarga la nomina como XLSX legible, con las columnas configuradas y como t
     $respuesta = Api::as($contexto['rrhh'])
         ->get('/api/v1/reports/payroll-export', nominaDeMarzo('xlsx'))
         ->assertValidRequest()
-        ->assertOk();
+        ->assertValidResponse(200);
 
     $respuesta->assertHeader(
         'Content-Type',
@@ -393,7 +395,7 @@ it('rechaza la granularidad semanal, que ninguna nomina sabe repartir', function
 
     Api::as($contexto['rrhh'])
         ->get('/api/v1/reports/payroll-export', [...nominaDeMarzo(), 'granularity' => 'week'])
-        ->assertStatus(422)
+        ->assertValidResponse(422)
         ->assertJsonStructure(['errors' => ['granularity']]);
 })->group('RF-IN-07');
 
@@ -525,7 +527,7 @@ it('remite a la generacion en diferido cuando el rango no cabe en el acto', func
             'from' => '2026-01-01',
             'to' => '2026-12-31',
         ])
-        ->assertStatus(422)
+        ->assertValidResponse(422)
         // `type` PROPIO, el mismo que el informe por periodo: la salida es la
         // misma —pedirlo en segundo plano— y el cliente la reconoce por el `type`
         // y no por el texto.

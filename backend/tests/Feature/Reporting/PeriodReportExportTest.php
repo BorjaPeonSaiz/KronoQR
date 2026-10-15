@@ -39,14 +39,15 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * `PeriodReportTest`, sobre la misma consulta— y el formato `HH:MM` tampoco: es
  * de `ReportedDurationTest`, sobre el objeto de valor que lo implementa.
  *
- * ## El contrato se comprueba sobre la PETICION
+ * ## El contrato, en la peticion y en la respuesta
  *
- * La respuesta es un fichero binario servido con `StreamedResponse`, y
- * `assertValidResponse` de Spectator espera un cuerpo JSON deserializable: un
- * `assertValidResponse` aqui no comprobaria nada y lo pareceria. La forma del
- * endpoint —los tres tipos de contenido, las cabeceras, el enumerado de
- * `format`— la comprueba `tests/Contract/OpenApiContractTest.php`. Es el mismo
- * reparto que hizo la exportacion legal de la 1.17.
+ * La respuesta es un fichero binario servido con `StreamedResponse`. Sobre ella
+ * `assertValidResponse` comprueba que el codigo esta declarado y que el tipo de
+ * contenido es uno de los tres del contrato; el cuerpo de un `format: binary` no
+ * tiene forma que validar, y lo que hay dentro lo afirman las pruebas. Los `422`
+ * y el `503` son JSON y se validan enteros (Q3 de la verificacion de la 2.2.0).
+ * Las cabeceras y el enumerado de `format` los comprueba ademas
+ * `tests/Contract/OpenApiContractTest.php`.
  *
  * ## El motor de PDF se sustituye por un doble
  *
@@ -146,7 +147,7 @@ it('descarga el informe como CSV con BOM, punto y coma y las horas en HH:MM', fu
     $respuesta = Api::as($contexto['token'])
         ->get('/api/v1/reports/period/export', descargaDeMarzo('csv'))
         ->assertValidRequest()
-        ->assertOk();
+        ->assertValidResponse(200);
 
     $respuesta->assertHeader('Content-Type', 'text/csv; charset=utf-8');
     $respuesta->assertHeader('Cache-Control', 'no-store, private');
@@ -331,7 +332,7 @@ it('descarga el informe como PDF, con su tipo y su nombre de fichero', function 
     $respuesta = Api::as($contexto['token'])
         ->get('/api/v1/reports/period/export', descargaDeMarzo('pdf'))
         ->assertValidRequest()
-        ->assertOk();
+        ->assertValidResponse(200);
 
     $respuesta->assertHeader('Content-Type', 'application/pdf');
     $respuesta->assertHeader(
@@ -517,7 +518,7 @@ it('marca json como formato invalido, porque esa forma la sirve el otro endpoint
 
     Api::as($contexto['token'])
         ->get('/api/v1/reports/period/export', descargaDeMarzo('json'))
-        ->assertStatus(422)
+        ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
 })->group('RF-IN-04');
 
@@ -527,7 +528,7 @@ it('exige el formato en vez de suponer uno', function (): void {
 
     Api::as($contexto['token'])
         ->get('/api/v1/reports/period/export', ['from' => '2026-03-01', 'to' => '2026-03-07'])
-        ->assertStatus(422)
+        ->assertValidResponse(422)
         // Se señala EL CAMPO y no se compara el texto: el mensaje sale del
         // paquete de idioma del framework y no es una decision de este producto.
         ->assertJsonStructure(['errors' => ['format']]);
@@ -542,7 +543,7 @@ it('responde 503 con problem+json cuando el motor de PDF no esta, y no un 500 op
 
     Api::as($contexto['token'])
         ->get('/api/v1/reports/period/export', descargaDeMarzo('pdf'))
-        ->assertStatus(503)
+        ->assertValidResponse(503)
         ->assertJsonPath('type', 'urn:kronoqr:problem:service-unavailable');
 
     // Y los otros dos siguen funcionando con el motor caido, que es el objeto de

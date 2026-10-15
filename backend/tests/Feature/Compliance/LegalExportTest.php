@@ -38,13 +38,14 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * de estado, las cabeceras de la descarga, la validacion de los parametros y que
  * el cuerpo sea de verdad un `text/csv` y no un JSON.
  *
- * **El contrato se comprueba con Spectator sobre la peticion.** La respuesta es
- * un fichero binario servido con `BinaryFileResponse`: `assertValidResponse` de
- * Spectator espera un cuerpo JSON deserializable, asi que aqui se afirma
- * directamente lo que el contrato declara —tipo de contenido, `Content-Disposition`,
- * `Cache-Control` y las dos cabeceras de recuento— y la forma del endpoint la
- * comprueba `tests/Contract/OpenApiContractTest.php`. Un `assertValidResponse`
- * que no pudiera leer el cuerpo no comprobaria nada y lo pareceria.
+ * **El contrato se comprueba con Spectator en la peticion y en la respuesta.**
+ * La respuesta es un fichero binario servido con `BinaryFileResponse`, y sobre
+ * ella `assertValidResponse` comprueba lo que puede: que el codigo esta
+ * declarado y que el tipo de contenido es uno de los del contrato (`text/csv`).
+ * El cuerpo de un `format: binary` no tiene forma que validar, asi que lo demas
+ * que el contrato declara —`Content-Disposition`, `Cache-Control` y las dos
+ * cabeceras de recuento— se afirma aqui directamente. Los `422` si son JSON y
+ * se validan enteros (Q3 de la verificacion de la 2.2.0).
  */
 
 uses(RefreshDatabase::class);
@@ -104,7 +105,7 @@ it('descarga el registro horario del periodo como CSV', function (): void {
     $respuesta = Api::as($contexto['token'])
         ->get('/api/v1/reports/legal-export', ['from' => '2026-03-01', 'to' => '2026-03-31'])
         ->assertValidRequest()
-        ->assertOk();
+        ->assertValidResponse(200);
 
     $respuesta
         // RL-06: tabular, legible y tratable. No JSON.
@@ -210,7 +211,7 @@ it('rechaza un periodo mal formado o invertido', function (array $query, string 
 
     Api::as($contexto['token'])
         ->get('/api/v1/reports/legal-export', $query)
-        ->assertStatus(422)
+        ->assertValidResponse(422)
         ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed')
         ->assertJsonStructure(['errors' => [$campo]]);
 })->with([
@@ -238,7 +239,7 @@ it('no ignora en silencio un filtro que no existe', function (): void {
             'to' => '2026-03-31',
             'site_id' => '3',
         ])
-        ->assertStatus(422)
+        ->assertValidResponse(422)
         ->assertJsonStructure(['errors' => ['site_id']]);
 })->group('RF-IN-05', 'RQ-06');
 

@@ -55,6 +55,20 @@
 # por lo medido. La CI completa de un push (hasta ④, la mas lenta) termina en
 # 15-19 min. Si ① -> ③ pasa de 15 min, se mide y se arregla, no se sube.
 #
+# RE-MEDIDO (V1-DV-02, 15-10-2026), 12 pushes verdes del 14 y 15-10-2026 (`gh api
+# .../actions/runs/<id>/jobs`): ①->③ de extremo a extremo 6,2-9,3 min (mediana
+# 8,4), con ① backend 2:46-4:47, ② 1:03-1:50 y ③ 4:43-7:37. Margen sobre el
+# peor caso medido: 5,7 min (61 %). No hay recorte barato con ganancia clara:
+# el 90 % de ① y ③ son las propias herramientas (Pint+PHPStan 87-107 s,
+# Pest Contract+Feature 390-400 s) y la ruta critica ①->②->③ es la cadena de
+# `needs` a proposito (falla rapido, no gasta ③ en un cambio que ① rechaza).
+# Rector (informativo, 69-79 s) esta en la ruta critica de ①; sacarlo a un job
+# paralelo ahorra ~1 min a cambio de otro runner y otro toolchain: no se hace.
+# Se FIJA el presupuesto en 15 min con aviso a los 12 y se COMPRUEBA en el
+# ultimo paso de `unit` («Presupuesto del run ①-③»), ademas de los avisos por
+# etapa de cada job (① backend 240 s, ② 90 s, ③ 480 s, medidos con margen).
+# El job `restore-cycle` (T3) corre en paralelo y no alarga esta ruta.
+#
 # LA PUERTA DE COBERTURA (RNF-M-01: dominio >= 90 %, global >= 75 %, doc 02
 # §9.2) NO ES NINGUNA DE LAS OCHO ETAPAS NUMERADAS. `make coverage` instrumenta
 # con Xdebug la suite ENTERA -Unit, Integration, Feature y Contract juntas, no
@@ -107,8 +121,8 @@ on:
         required: false
         default: false
   schedule:
-    # Dispara SOLO los jobs nocturnos: `coverage`, `mutation` y
-    # `secrets-history` (ver sus comentarios). Todos los demas de este fichero
+    # Dispara SOLO los jobs nocturnos: `coverage`, `mutation`, `restore-cycle`
+    # y `secrets-history` (ver sus comentarios). Todos los demas de este fichero
     # llevan `if: github.event_name != 'schedule'` -o la variante que ya tenian
     # `clean-install`/`update`, que sin la exclusion explicita habrian
     # arrastrado el pipeline entero, y `install`/`update` con el, cada noche. Hora fuera del horario de trabajo habitual
@@ -211,7 +225,7 @@ jobs:
         if: always()
         env:
           ETAPA: "① Lint + Tipos · backend"
-          PRESUPUESTO: "60"
+          PRESUPUESTO: "240"
         run: |
           ahora=$(date +%s)
           comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
@@ -491,6 +505,11 @@ jobs:
     # ultimos runs manuales verdes: 39, 57 y 57 min (con la completa aqui).
     timeout-minutes: 90
     needs: architecture
+    # `actions: read` solo para leer la hora de inicio del run en el paso
+    # «Presupuesto del run ①-③» (V1-DV-02); el resto sigue siendo solo lectura.
+    permissions:
+      contents: read
+      actions: read
 
     env:
       # Credenciales de usar y tirar para servicios que viven lo que dura el
@@ -661,7 +680,11 @@ jobs:
             git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
             base="${EVENT_BEFORE}"
           fi
+          inicio_mutacion=$(date +%s)
           make mutate-changed MUTATE_BASE="${base}"
+          # Para el presupuesto del run ①-③ (paso final): la mutacion de lo que
+          # el cambio toca depende de cuanto dominio toque, no de la CI.
+          echo "MUTATION_SECONDS=$(($(date +%s) - inicio_mutacion))" >>"$GITHUB_ENV"
 
       # --- etapa ③b · Trazabilidad y coherencia documental --------------------
       #
@@ -692,7 +715,7 @@ jobs:
         if: always()
         env:
           ETAPA: "③ Unitarias + Mutacion"
-          PRESUPUESTO: "120"
+          PRESUPUESTO: "480"
         run: |
           ahora=$(date +%s)
           comprobaciones=$((ahora - ${TOOLS_START:-$ahora}))
@@ -706,6 +729,43 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           if [ "$comprobaciones" -gt "$PRESUPUESTO" ]; then
             echo "::warning title=Presupuesto excedido::${ETAPA} ha tardado ${comprobaciones} s frente a los ${PRESUPUESTO} s del doc 02 §10.1."
+          fi
+
+      # PRESUPUESTO DEL RUN ①-③ (V1-DV-02, 15-10-2026): la cifra del doc 02
+      # §10.1 -15 min de reloj desde que arranca el run hasta que acaba ③- se
+      # COMPRUEBA aqui, no solo se declara. Aviso a los 12 min (el 80 %: aun se
+      # puede arreglar sin urgencia) y error visible a los 15. Es informativo, no
+      # una puerta: ni falla el job ni depende de que la API conteste.
+      # QUE MIDE: el reloj del run desde su inicio hasta este paso, MENOS la
+      # duracion de `make mutate-changed` (MUTATION_SECONDS): esa depende de cuanto
+      # dominio toque la rama (37-57 min si lo toca casi entero), no de la CI, y
+      # una rama de dominio daria error siempre.
+      - name: Presupuesto del run ①-③ (15 min, doc 02 §10.1)
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          AVISO: "720"
+          LIMITE: "900"
+        run: |
+          inicio="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}" --jq '.run_started_at')" || {
+            echo "::notice::No se ha podido leer la hora de inicio del run; presupuesto ①-③ sin comprobar."
+            exit 0
+          }
+          total=$(($(date +%s) - $(date -d "${inicio}" +%s) - ${MUTATION_SECONDS:-0}))
+          {
+            echo "### Run ①-③ completo"
+            echo ""
+            echo "| Run sin la mutacion (${MUTATION_SECONDS:-0} s de mutacion descontados) | Aviso | Presupuesto §10.1 |"
+            echo "|---|---|---|"
+            echo "| ${total} s | ${AVISO} s | ${LIMITE} s |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$total" -gt "$LIMITE" ]; then
+            echo "::error title=Presupuesto ①-③ excedido::①-③ han tardado ${total} s frente a los ${LIMITE} s (15 min) del doc 02 §10.1. Se mide y se arregla, no se sube."
+          elif [ "$total" -gt "$AVISO" ]; then
+            echo "::warning title=Presupuesto ①-③ cerca del limite::①-③ han tardado ${total} s; el limite es ${LIMITE} s (doc 02 §10.1)."
           fi
 
   #-----------------------------------------------------------------------------
@@ -3236,6 +3296,99 @@ jobs:
             echo "Umbrales: dominio >= 90 %, global >= 75 %. Detalle linea a linea en el"
             echo "log de \`make coverage\` de este mismo job."
           } >>"$GITHUB_STEP_SUMMARY"
+
+  #-----------------------------------------------------------------------------
+  # Restauracion real de una copia — RNF-D-05, RQ-09 (T3, bloque 16 de la 2.2.1)
+  #
+  # Hasta la 2.2.1 la restauracion de verdad (copia cifrada -> contenedor
+  # limpio) solo corria en `backup-drill.yml` con pasos de shell, que
+  # `qa:traceability` no lee: la matriz cubria RNF-D-05 con pruebas de
+  # configuracion. Ahora la hace una prueba de Pest etiquetada
+  # (`backend/tests/Restore/RestoreCycleTest.php`, suite `Restore`) y entra en
+  # la matriz como cualquier otra. El simulacro trimestral y completo (WAL,
+  # pitr, senales, roles) sigue siendo `backup-drill.yml`.
+  #
+  # Sin `needs` y sin `if` de evento: corre en paralelo a las etapas, en cada
+  # push, de noche (`schedule`) y a mano, y por eso NO alarga el camino critico
+  # ①->③ ni su presupuesto de 15 min. Es lo que el comentario del `schedule`
+  # llama «job nocturno»: tambien lo es, ademas de ejecutarse en el push.
+  #-----------------------------------------------------------------------------
+  restore-cycle:
+    name: "Restauracion real de una copia (RNF-D-05)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    env:
+      APP_KEY: "base64:a3Jvbm9xci1jaS1jbGF2ZS1kZS0zMi1ieXRlcyEhISE="
+      # La conexion que lee la prueba. Claves de usar y tirar de un servidor que
+      # vive unos minutos en un runner efimero; no son secretos del producto.
+      KQ_RESTORE_CYCLE: "1"
+      DB_HOST: 127.0.0.1
+      # OJO: phpunit.xml fuerza DB_DATABASE=fichaje_test (<env> y <server> con
+      # force="true") para TODA suite, tambien Restore: la prueba siembra, copia y
+      # restaura `fichaje_test`, que crea 01-test-database.sql. El `fichaje` de aqui
+      # solo lo usan los pasos de shell previos a Pest.
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_migrator
+      DB_PASSWORD: ciclo_local_ci
+      BACKUP_DB_USERNAME: fichaje_backup
+      BACKUP_DB_PASSWORD: ciclo_backup_ci
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cliente de PostgreSQL 17
+        # La version mayor tiene que coincidir con la del servidor (ver backup-drill.yml).
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" |
+            sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          pg_dump --version
+
+      - name: PostgreSQL 17 del producto, con el rol de copias
+        run: |
+          make build-ci-images
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_PASSWORD" \
+            -e DB_BACKUP_USERNAME="$BACKUP_DB_USERNAME" \
+            -e DB_BACKUP_PASSWORD="$BACKUP_DB_PASSWORD" \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC \
+              -c hba_file=/etc/kronoqr/pg_hba.conf
+          # `-h 127.0.0.1` a proposito (ver backup-drill.yml): por TCP solo
+          # contesta el servidor definitivo, no el temporal de initdb.d.
+          for i in $(seq 1 45); do
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "Servidor listo en $((i * 2)) s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=PostgreSQL no arranco::pg_isready por TCP sigue fallando tras 90 s."
+          docker logs kronoqr-pg | tail -80
+          exit 1
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+
+      - name: Pest — suite Restore (copia cifrada, restauracion en contenedor limpio y copia alterada)
+        working-directory: backend
+        run: bash ../.github/scripts/pest-max-skipped.sh run 0 "vendor/bin/pest --testsuite=Restore --no-coverage"
+
+      - name: Apagar el servidor de pruebas
+        if: always()
+        run: docker rm -f kronoqr-pg >/dev/null 2>&1 || true
 
   #-----------------------------------------------------------------------------
   # Mutacion completa — RQ-10: MSI >= 80 % sobre Modules/*/Domain (doc 02 §9.2)

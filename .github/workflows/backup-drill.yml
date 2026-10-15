@@ -19,6 +19,12 @@
 #     meses.
 #   · A mano, cuando alguien quiera comprobarlo.
 #
+# El nucleo del ciclo (copia cifrada -> restauracion en contenedor limpio, y la
+# negativa de una copia alterada) lo ejecuta ademas, en cada push, la prueba
+# `backend/tests/Restore/RestoreCycleTest.php` desde el job `restore-cycle` de
+# `ci.yml`: es la que lee la matriz de trazabilidad (T3, RNF-D-05). Este
+# workflow sigue siendo el simulacro COMPLETO (WAL, pitr, senales, roles).
+#
 # NO se ejecuta en cada push: son ~3 minutos y no aporta nada a un cambio de
 # frontend. Por eso vive fuera del pipeline de `ci.yml` y de su presupuesto de
 # 15 minutos para las etapas 1-3 (doc 02 §10.1, medido).
