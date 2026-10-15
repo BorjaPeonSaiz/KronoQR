@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Domain\Event;
 
 use App\Modules\Shared\Domain\Event\DomainEvent;
+use App\Modules\Workforce\Domain\ValueObject\SiteTimezoneCorrection;
 use DateTimeImmutable;
 
 /**
@@ -50,6 +51,14 @@ use DateTimeImmutable;
  *
  * En el **alta** no hay valor anterior y los dos campos son `null`. Es
  * deliberado: `null` significa «no habia centro», no «no se sabe».
+ *
+ * ## La correccion por consola (RN-23, ADR-056 §3)
+ *
+ * Con registro horario la zona solo se corrige por consola, y ese asiento es
+ * tambien `site.updated` —es el mismo hecho: la zona del centro cambio— pero
+ * dice ademas **por que y quien responde**: `correction` lleva el motivo, el
+ * numero de tramos que ya existian y la cuenta de gestion que firma. Es `null`
+ * en el alta y en la modificacion desde el panel.
  */
 final readonly class SiteConfigured implements DomainEvent
 {
@@ -61,6 +70,7 @@ final readonly class SiteConfigured implements DomainEvent
         public ?string $previousTimezone,
         public bool $created,
         private DateTimeImmutable $occurredAt,
+        public ?SiteTimezoneCorrection $correction = null,
     ) {}
 
     public static function created(
@@ -81,6 +91,21 @@ final readonly class SiteConfigured implements DomainEvent
         DateTimeImmutable $occurredAt,
     ): self {
         return new self($siteId, $name, $timezone, $previousName, $previousTimezone, false, $occurredAt);
+    }
+
+    /**
+     * La zona corregida por consola con registro horario (RN-23, ADR-056 §3).
+     * El nombre no cambia: la orden solo toca la zona.
+     */
+    public static function corrected(
+        int $siteId,
+        string $name,
+        string $timezone,
+        string $previousTimezone,
+        SiteTimezoneCorrection $correction,
+        DateTimeImmutable $occurredAt,
+    ): self {
+        return new self($siteId, $name, $timezone, $name, $previousTimezone, false, $occurredAt, $correction);
     }
 
     public function eventName(): string

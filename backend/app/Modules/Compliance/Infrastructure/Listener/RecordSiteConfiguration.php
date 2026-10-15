@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Listener;
 use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
@@ -54,12 +55,20 @@ final readonly class RecordSiteConfiguration
 
     public function handle(SiteConfigured $event): void
     {
+        $correction = $event->correction;
+
         $this->audit->handle(new RecordAuditEntryCommand(
             // De la sesion en curso. En el alta del centro esa sesion es la del
             // primer administrador, que es exactamente la razon por la que el
             // asistente lo crea antes que nada: sin el, este asiento saldria
             // como `system` y no responderia a quien puso la zona horaria.
-            actor: $this->context->actor(),
+            //
+            // La correccion por consola (RN-23, ADR-056 §3) no tiene sesion: la
+            // firma la cuenta de gestion que responde de ella (`--responsible`),
+            // como la revision de una purga.
+            actor: $correction === null
+                ? $this->context->actor()
+                : AuditActor::user($correction->responsibleUserId),
             action: $event->created ? AuditAction::SiteCreated : AuditAction::SiteUpdated,
             subject: AuditSubject::of('site', $event->siteId),
             // El antes y el despues, que es lo que hace el asiento
@@ -80,6 +89,16 @@ final readonly class RecordSiteConfiguration
                     // El campo por el que este asiento existe.
                     'timezone' => $event->timezone,
                 ],
+                // Solo en la correccion por consola (RN-23, ADR-056 §3): por
+                // donde, por que, cuanto historico pasa a presentarse con la zona
+                // nueva y quien responde. El motivo es texto libre y va SOLO
+                // aqui, nunca al log tecnico (regla dura 21).
+                ...($correction === null ? [] : [
+                    'via' => 'console',
+                    'reason' => $correction->reason,
+                    'shift_entry_count' => $correction->shiftEntryCount,
+                    'responsible_user_id' => $correction->responsibleUserId,
+                ]),
             ]),
             occurredAt: $event->occurredAt(),
             ip: $this->context->ip(),

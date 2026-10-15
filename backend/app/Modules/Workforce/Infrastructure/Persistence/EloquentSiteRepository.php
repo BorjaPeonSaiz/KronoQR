@@ -59,6 +59,13 @@ final readonly class EloquentSiteRepository implements SiteRepository
         return $row instanceof Site ? $this->toEntity($row) : null;
     }
 
+    public function installationSiteForUpdate(): ?SiteEntity
+    {
+        $row = Site::query()->orderBy('id')->lockForUpdate()->first();
+
+        return $row instanceof Site ? $this->toEntity($row) : null;
+    }
+
     private function toEntity(Site $row): SiteEntity
     {
         return new SiteEntity(

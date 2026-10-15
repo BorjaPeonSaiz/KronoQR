@@ -35,4 +35,24 @@ interface SiteCalendar
      * no dejar a alguien sin jornada (regla dura 19).
      */
     public function timezoneOf(int $siteId): ?DateTimeZone;
+
+    /**
+     * La zona con la que se va a **escribir** un tramo, leida con la fila del
+     * centro compartida (`FOR KEY SHARE`) hasta el final de la transaccion de
+     * quien llama (RN-23, ADR-056).
+     *
+     * Es la otra mitad de la carrera con el cambio de zona: `PATCH /site` bloquea
+     * la fila con `FOR UPDATE` y despues pregunta si hay registro horario. Con
+     * esta lectura, o el cambio espera a que el tramo confirme —y entonces lo ve
+     * y se niega—, o el tramo espera al cambio y se atribuye con la zona nueva.
+     * Sin ella, un primer fichaje concurrente podia escribir su `work_date` con
+     * la zona vieja justo cuando la nueva quedaba fija.
+     *
+     * **Un metodo aparte y no un cambio en {@see self::timezoneOf()}**: un
+     * candado de fila falla en una transaccion `READ ONLY`, y las lecturas del
+     * registro —el diario, el portal, los informes— la usan asi. Solo la
+     * llaman, **dentro de su transaccion**, los casos de uso que escriben un
+     * tramo nuevo: el fichaje y el alta manual.
+     */
+    public function timezoneForRecording(int $siteId): ?DateTimeZone;
 }

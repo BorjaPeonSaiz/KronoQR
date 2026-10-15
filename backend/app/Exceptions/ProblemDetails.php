@@ -221,6 +221,18 @@ final class ProblemDetails
     public const string TYPE_EMPLOYEE_TERMINATED = 'urn:kronoqr:problem:employee-terminated';
 
     /**
+     * **La zona horaria del centro ya esta fija**: existe registro horario y la
+     * peticion pedia otra zona (RN-23, ADR-056). No ha cambiado nada, tampoco el
+     * nombre si viajaba en la misma peticion.
+     *
+     * **Tipo propio y no `TYPE_CONFLICT`**, aunque los dos sean `409` en `PATCH
+     * /site`, porque al panel le cambia la accion: el generico —un nombre ya
+     * usado— se corrige en el formulario; este dice «la zona no se cambia desde
+     * aqui: relee el centro», que vendra con `timezone_locked: true`.
+     */
+    public const string TYPE_SITE_TIME_ZONE_LOCKED = 'urn:kronoqr:problem:site-time-zone-locked';
+
+    /**
      * Las horas pisarian a **otro tramo vigente** de la misma persona (RN-02).
      *
      * Mismo acotamiento que {@see self::TYPE_SHIFT_ALREADY_OPEN}: rutas de
@@ -534,6 +546,17 @@ final class ProblemDetails
         return self::response(
             self::TYPE_EMPLOYEE_TERMINATED,
             'La persona ya esta dada de baja',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /** `409` de la zona horaria ya fija (RN-23). {@see self::TYPE_SITE_TIME_ZONE_LOCKED} */
+    public static function siteTimezoneLocked(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_SITE_TIME_ZONE_LOCKED,
+            'La zona horaria del centro ya esta fija',
             JsonResponse::HTTP_CONFLICT,
             $detail,
         );

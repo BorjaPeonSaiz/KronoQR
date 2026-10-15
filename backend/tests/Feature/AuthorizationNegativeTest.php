@@ -6,7 +6,10 @@ use App\Modules\Identity\Application\Port\CardRenderer;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\FakeCardRenderer;
@@ -1006,3 +1009,37 @@ it('deja pasar a RRHH a pedir un informe en diferido, que es el control positivo
         ])
         ->assertStatus(202);
 })->group('RF-IN-06', 'RQ-07');
+
+it('deniega cambiar la zona del centro con registro horario antes de decir que esta fija', function (string $actor): void {
+    // RN-23 (ADR-056): con un tramo registrado, `PATCH /site` con otra zona es
+    // `409`. Para quien no puede modificar el centro tiene que ser `403`, y
+    // nunca el `409`: la autorizacion va antes que el estado, o el conflicto
+    // le diria a un token de quiosco que ya hay fichajes y con que zona.
+    $site = WorkforceFixtures::site('Hotel con registro', 'Europe/Madrid');
+    $employee = WorkforceFixtures::employee($site);
+
+    DB::table('shift_entries')->insert([
+        'uuid' => Str::uuid7()->toString(),
+        'employee_id' => AttendanceFixtures::employeeIdOf($employee),
+        'site_id' => $site,
+        'work_date' => '2026-03-14',
+        'clocked_in_at' => '2026-03-14 07:00:00+00',
+        'clocked_out_at' => '2026-03-14 15:00:00+00',
+        'duration_minutes' => 480,
+        'status' => 'closed',
+        'clock_in_source' => 'qr_kiosk',
+        'clock_out_source' => 'qr_kiosk',
+        'version' => 1,
+    ]);
+
+    $token = $actor === 'responsable'
+        ? ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO))
+        : tokenDeActorSinPotestad($actor);
+
+    Api::as($token)->patch('/api/v1/site', ['timezone' => 'Atlantic/Canary'])->assertStatus(403);
+
+    expect(DB::table('sites')->where('id', $site)->value('timezone'))->toBe('Europe/Madrid');
+})->with([
+    ...actoresSinPotestadDeAdministracion(),
+    'con un responsable de departamento' => ['responsable'],
+])->group('RN-23', 'RS-05', 'RQ-07');

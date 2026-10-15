@@ -93,23 +93,31 @@ final readonly class AddShiftEntryHandler
             throw EmployeeCannotBeClocked::withUuid($command->employeeUuid);
         }
 
-        $timezone = $this->calendar->timezoneOf($employee->siteId);
+        return $this->connection->transaction(
+            fn (): CorrectedShift => $this->add($command, $employee, $performedAt),
+        );
+    }
+
+    /**
+     * @throws EmployeeCannotBeClocked
+     * @throws ShiftMarkInFuture
+     * @throws WorkDateOutsideEmployment
+     */
+    private function add(
+        AddShiftEntryCommand $command,
+        EmployeeSnapshot $employee,
+        DateTimeImmutable $performedAt,
+    ): CorrectedShift {
+        // RN-23 (ADR-056): la zona se lee DENTRO de la transaccion y con la fila
+        // del centro compartida hasta confirmar. Leida fuera, un alta manual que
+        // fuera el primer tramo podia atribuirse con la zona vieja justo cuando
+        // un cambio de zona la daba por libre.
+        $timezone = $this->calendar->timezoneForRecording($employee->siteId);
 
         if (! $timezone instanceof DateTimeZone) {
             throw EmployeeCannotBeClocked::withUuid($command->employeeUuid);
         }
 
-        return $this->connection->transaction(
-            fn (): CorrectedShift => $this->add($command, $employee, $timezone, $performedAt),
-        );
-    }
-
-    private function add(
-        AddShiftEntryCommand $command,
-        EmployeeSnapshot $employee,
-        DateTimeZone $timezone,
-        DateTimeImmutable $performedAt,
-    ): CorrectedShift {
         $workDate = WorkDate::fromIsoDate($command->workDate, $timezone);
         $times = ShiftTimes::of($command->clockedInAt, $command->clockedOutAt);
         $settings = $this->settings->forSite($employee->siteId);

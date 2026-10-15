@@ -7,10 +7,14 @@ use App\Modules\Workforce\Application\Command\CreateSiteCommand;
 use App\Modules\Workforce\Application\Command\UpdateSiteCommand;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
+use App\Modules\Workforce\Application\Port\WorkRecordExtent;
+use App\Modules\Workforce\Application\Port\WorkRecordPresence;
 use App\Modules\Workforce\Application\UseCase\CreateSiteHandler;
 use App\Modules\Workforce\Application\UseCase\UpdateSiteHandler;
 use App\Modules\Workforce\Domain\Event\SiteConfigured;
 use App\Modules\Workforce\Domain\Exception\SiteAlreadyConfigured;
+use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
+use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
 use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezone;
 use Tests\Support\Database\ImmediateTransactions;
@@ -31,12 +35,14 @@ use Tests\Support\Time\FixedClock;
  */
 
 /**
- * @return SiteRepository&object{stored: ?Site}
+ * @return SiteRepository&object{stored: ?Site, saves: int}
  */
 function siteRepositoryHolding(?Site $site): SiteRepository
 {
     return new class($site) implements SiteRepository
     {
+        public int $saves = 0;
+
         public function __construct(public ?Site $stored) {}
 
         public function add(Site $site): Site
@@ -48,10 +54,16 @@ function siteRepositoryHolding(?Site $site): SiteRepository
 
         public function save(Site $site): void
         {
+            $this->saves++;
             $this->stored = $site;
         }
 
         public function installationSite(): ?Site
+        {
+            return $this->stored;
+        }
+
+        public function installationSiteForUpdate(): ?Site
         {
             return $this->stored;
         }
@@ -77,6 +89,28 @@ function siteEventRecorder(): WorkforceEventPublisher
     };
 }
 
+/**
+ * El registro horario, reducido a lo que el centro necesita saber de el: si
+ * existe (RN-23).
+ */
+function siteWorkRecord(bool $hayRegistro): WorkRecordPresence
+{
+    return new class($hayRegistro) implements WorkRecordPresence
+    {
+        public function __construct(private readonly bool $hayRegistro) {}
+
+        public function exists(): bool
+        {
+            return $this->hayRegistro;
+        }
+
+        public function extent(): ?WorkRecordExtent
+        {
+            return $this->hayRegistro ? new WorkRecordExtent(1, '2026-09-01', '2026-09-01') : null;
+        }
+    };
+}
+
 function createSiteHandler(SiteRepository $sites, WorkforceEventPublisher $events): CreateSiteHandler
 {
     return new CreateSiteHandler(
@@ -87,10 +121,11 @@ function createSiteHandler(SiteRepository $sites, WorkforceEventPublisher $event
     );
 }
 
-function updateSiteHandler(SiteRepository $sites, WorkforceEventPublisher $events): UpdateSiteHandler
+function updateSiteHandler(SiteRepository $sites, WorkforceEventPublisher $events, bool $hayRegistro = false): UpdateSiteHandler
 {
     return new UpdateSiteHandler(
         $sites,
+        siteWorkRecord($hayRegistro),
         $events,
         FixedClock::at('2026-09-02T08:00:00'),
         ImmediateTransactions::connection(),
@@ -156,8 +191,8 @@ it('modifica el centro de la instalacion sin identificarlo', function (): void {
     $site = updateSiteHandler($repository, siteEventRecorder())
         ->handle(new UpdateSiteCommand(timezone: 'Atlantic/Canary'));
 
-    expect($site?->name)->toBe('Hotel Marina')
-        ->and($site?->timezone->identifier)->toBe('Atlantic/Canary')
+    expect($site?->site->name)->toBe('Hotel Marina')
+        ->and($site?->site->timezone->identifier)->toBe('Atlantic/Canary')
         ->and($repository->installationSite()?->timezone->identifier)->toBe('Atlantic/Canary');
 })->group('RN-05');
 
@@ -203,7 +238,7 @@ it('no anuncia nada cuando el PATCH no cambia nada', function (): void {
         ->handle(new UpdateSiteCommand(name: 'Hotel Marina', timezone: 'Europe/Madrid'));
 
     // Y aun asi devuelve el centro: para quien llama, quedo como pedia.
-    expect($site?->name)->toBe('Hotel Marina')
+    expect($site?->site->name)->toBe('Hotel Marina')
         ->and($events->published)->toBe([]);
 })->group('RN-05', 'RL-04');
 
@@ -215,3 +250,71 @@ it('no tiene nada que modificar antes de la puesta en marcha', function (): void
 
     expect($events->published)->toBe([]);
 })->group('RF-GP-01');
+
+/*
+ * RN-23 (ADR-056): la zona queda fija con el primer tramo. El caso de uso
+ * pregunta si hay registro horario y el centro decide; estas pruebas fijan lo
+ * que el caso de uso hace con la respuesta.
+ */
+
+it('no guarda ni anuncia nada si pide otra zona con registro horario, aunque traiga tambien un nombre', function (): void {
+    // Una peticion se acepta entera o no se acepta: el nombre tampoco cambia, y
+    // no queda asiento de un cambio que no ocurrio.
+    $original = Site::create('Hotel Marina', SiteTimezone::fromString('Europe/Madrid'))->withId(1);
+    $repository = siteRepositoryHolding($original);
+    $events = siteEventRecorder();
+
+    expect(fn () => updateSiteHandler($repository, $events, hayRegistro: true)
+        ->handle(new UpdateSiteCommand(name: 'Hotel Atlantico', timezone: 'Atlantic/Canary')))
+        ->toThrow(SiteTimezoneLocked::class);
+
+    expect($repository->saves)->toBe(0)
+        ->and($repository->stored)->toBe($original)
+        ->and($events->published)->toBe([]);
+})->group('RN-23', 'RL-04');
+
+it('renombra el centro con registro horario y anuncia solo el nombre', function (): void {
+    $repository = siteRepositoryHolding(Site::create('Hotel Marina', SiteTimezone::fromString('Europe/Madrid'))->withId(1));
+    $events = siteEventRecorder();
+
+    $view = updateSiteHandler($repository, $events, hayRegistro: true)
+        ->handle(new UpdateSiteCommand(name: 'Hotel Atlantico', timezone: 'Europe/Madrid'));
+
+    expect($view?->site->name)->toBe('Hotel Atlantico')
+        ->and($view?->timezoneLocked())->toBeTrue()
+        ->and($repository->saves)->toBe(1)
+        ->and($events->published)->toHaveCount(1);
+})->group('RN-23', 'RF-GP-01');
+
+it('con la misma zona y registro horario responde el centro sin guardar ni anunciar', function (): void {
+    $repository = siteRepositoryHolding(Site::create('Hotel Marina', SiteTimezone::fromString('Europe/Madrid'))->withId(1));
+    $events = siteEventRecorder();
+
+    $view = updateSiteHandler($repository, $events, hayRegistro: true)
+        ->handle(new UpdateSiteCommand(timezone: 'Europe/Madrid'));
+
+    expect($view?->site->timezone->identifier)->toBe('Europe/Madrid')
+        ->and($view?->timezoneLocked())->toBeTrue()
+        ->and($repository->saves)->toBe(0)
+        ->and($events->published)->toBe([]);
+})->group('RN-23', 'RL-04');
+
+it('sin registro horario cambia la zona y dice que sigue abierta', function (): void {
+    $repository = siteRepositoryHolding(Site::create('Hotel Marina', SiteTimezone::fromString('Europe/Madrid'))->withId(1));
+
+    $view = updateSiteHandler($repository, siteEventRecorder())
+        ->handle(new UpdateSiteCommand(timezone: 'Atlantic/Canary'));
+
+    expect($view?->site->timezone->identifier)->toBe('Atlantic/Canary')
+        ->and($view?->timezoneLocked())->toBeFalse();
+})->group('RN-23', 'RN-05');
+
+it('rechaza una zona que no existe antes de mirar el registro horario', function (): void {
+    $repository = siteRepositoryHolding(Site::create('Hotel Marina', SiteTimezone::fromString('Europe/Madrid'))->withId(1));
+
+    expect(fn () => updateSiteHandler($repository, siteEventRecorder(), hayRegistro: true)
+        ->handle(new UpdateSiteCommand(timezone: 'Europe/Atlantida')))
+        ->toThrow(UnknownTimezone::class);
+
+    expect($repository->saves)->toBe(0);
+})->group('RN-23', 'RN-05');

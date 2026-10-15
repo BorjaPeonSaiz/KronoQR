@@ -36,4 +36,17 @@ interface SiteRepository
      * `null` solo antes de la puesta en marcha (RF-PD-03).
      */
     public function installationSite(): ?Site;
+
+    /**
+     * El centro con su fila bloqueada (`FOR UPDATE`) hasta el final de la
+     * transaccion de quien llama (RN-23, ADR-056).
+     *
+     * Es lo que hace que el cambio de zona y el primer fichaje no se crucen:
+     * `FOR UPDATE` choca con el `FOR KEY SHARE` con que el fichaje lee la zona
+     * (`SiteCalendar::timezoneForRecording()`), asi que uno de los dos espera
+     * al otro. Fuera de una transaccion no protege nada.
+     *
+     * `null` solo antes de la puesta en marcha.
+     */
+    public function installationSiteForUpdate(): ?Site;
 }
