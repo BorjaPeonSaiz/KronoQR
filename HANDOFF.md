@@ -55,9 +55,9 @@ por `update.sh` (V4-SC-1). El resto de la lista «¿Se pasó algo por alto?» de
 **Entrega como TFM (08-10-2026, PR #127 → `main` `2ac00130`):** el proyecto es también el Trabajo de Fin de Máster del propietario
 (Máster de Desarrollo con IA, BIG School). `README.md` sigue el orden que pide la entrega. **`doc_master/` (memoria, despliegue,
 guion del vídeo y presentación) se retiró del repositorio el 13-10-2026 por decisión del propietario**; el README ya no la enlaza
-(sigue en el historial de git, `git show 7cbf912f:doc_master/…`). La contraseña de la cuenta de demostración y el teléfono para el
-código 2FA van en el formulario de entrega, **nunca en el repositorio**. Falta la URL del vídeo (lo graba él): va en el marcador
-`[URL DEL VÍDEO — sustituir antes de entregar]` de `README.md`. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
+(sigue en el historial de git, `git show 7cbf912f:doc_master/…`). Los datos de acceso a la demostración (usuario, contraseña y
+teléfono para el código 2FA) y el enlace al vídeo van en el formulario de entrega del máster, **nunca en el repositorio**; el
+`README.md` lo dice así desde el 15-10-2026. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
 actualizar README §3.1/§6.
 
 **Siguiente acción: la 2.2.1, bloque 13** («Scripts: señales, VLAN, `observability/` y `restore-drill`», 🔒; rama
@@ -119,6 +119,16 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 > lo que siga vigente debería pasar al plan o a «Fuera de la 2.2.0, con motivo».
 
 ## Pendiente
+
+### Anotado en el bloque 15 de la 2.2.1 (15-10-2026)
+
+- **Decisión pendiente del propietario:** el fichaje por PIN paga bcrypt de coste 12 (~160 ms solo el hash); si RNF-P-02
+  (p95 < 150 ms) se le aplica, es inalcanzable por diseño. Hoy la latencia del PIN solo se publica (p95 ~700 ms en el runner).
+- `v2.2.0` medida con el guion nuevo salió roja en RS-03 dos veces (38654069785, 38656009180) en runners lentos; la rama
+  siempre en verde. No es regresión de la 2.2.1; repetir si se quiere una comparación entre versiones.
+- K6-2 parcial: falta la topología de una sola IP con NAT y una plantilla de 500 personas. K6-4: la ayuda del `Makefile`
+  dice `INSTANCES=8` y `run.sh` usa 10.
+- La línea base (`load-tests/k6/baseline.json`) es la mediana de tres pasadas; para rehacerla, `baseline.js`.
 
 ### Anotado en el bloque 14 de la 2.2.1 (15-10-2026)
 

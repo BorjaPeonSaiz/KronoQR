@@ -19,8 +19,8 @@
 | **Máster** | Máster de Desarrollo con IA · BIG School · Módulo 12, Proyecto Final |
 | **Repositorio** | <https://github.com/BorjaPeonSaiz/KronoQR> (público) |
 | **Despliegue en funcionamiento** | <https://kronoqr.kodigolab.es> · panel [`/admin/`](https://kronoqr.kodigolab.es/admin/) · quiosco [`/kiosk/`](https://kronoqr.kodigolab.es/kiosk/) · portal [`/portal/`](https://kronoqr.kodigolab.es/portal/) · estado [`/api/v1/health`](https://kronoqr.kodigolab.es/api/v1/health) |
-| **Usuario y contraseña de prueba** | Ver [§6](#6-usuario-y-contraseña-de-prueba) |
-| **Vídeo** | `[URL DEL VÍDEO — sustituir antes de entregar]` |
+| **Usuario y contraseña de prueba** | Los datos de acceso a la demostración se envían en el formulario de entrega del máster, no en este repositorio público. Ver [§6](#6-usuario-y-contraseña-de-prueba) |
+| **Vídeo** | El enlace al vídeo se envía en el formulario de entrega del máster. |
 
 > Este README sigue el orden que pide la documentación del proyecto final: descripción general, stack, instalación y ejecución, estructura, funcionalidades y usuario de prueba. Después añade la calidad, la seguridad y el índice de la documentación.
 
@@ -460,7 +460,7 @@ Los identificadores entre paréntesis remiten a los requisitos de [`docs/01-espe
 
 | Aplicación | Dirección | Acceso |
 | --- | --- | --- |
-| **Panel de gestión** | <https://kronoqr.kodigolab.es/admin/> | Usuario: `bpeonsai@gmail.com` · La contraseña se facilita en el formulario de entrega del TFM, no en este repositorio público. La cuenta tiene segundo factor: el panel pide un código de 6 dígitos que genera el móvil del alumno; su teléfono va también en el formulario de entrega para solicitárselo en el momento de entrar. |
+| **Panel de gestión** | <https://kronoqr.kodigolab.es/admin/> | El usuario y la contraseña se envían en el formulario de entrega del máster, no en este repositorio público. La cuenta tiene segundo factor: el panel pide un código de 6 dígitos que genera el móvil del alumno; su teléfono va también en el formulario de entrega para solicitárselo en el momento de entrar. |
 | Portal del empleado | <https://kronoqr.kodigolab.es/portal/> | Con el código de empleado y el PIN de cualquier empleado dado de alta desde el panel (en la ficha del empleado se asigna el PIN). |
 | Quiosco | <https://kronoqr.kodigolab.es/kiosk/> | No tiene usuario: al abrirlo muestra un código de 6 dígitos que se teclea en el panel (*Quioscos → «Vincular quiosco»*). Después ficha con una tarjeta impresa desde el panel o con código de empleado y PIN. |
 

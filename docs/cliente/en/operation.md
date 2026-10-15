@@ -2676,6 +2676,20 @@ threshold: that headroom is not spare. The edge is a leaky bucket — it release
 one permit every 100 ms, with an initial burst of 50 — and without slack the
 test would be measuring the edge limit instead of the server's capacity.
 
+**It has the shape of a shift change.** Clock-ins do not start all at once:
+they rise from zero to the peak in 30 seconds, hold the peak for `DURATION` and
+fall over another 30 seconds, the way a workforce arrives and leaves. What is
+judged is the sustained part of the peak; the rise and the fall are reported
+separately. That is why a run lasts `DURATION` plus one minute.
+
+**It includes PIN clock-ins.** Besides the cards, each origin clocks in by PIN
+once every 4 seconds, with synthetic employees who have no card, like someone
+who arrives without theirs (RF-AT-11). It is the path that costs the server the
+most CPU — it opens the encrypted PIN and compares it with its protected
+digest — and the verdict says separately whether any correct PIN was rejected
+under load. If your installation **does not offer PIN clock-in**, the test
+detects it, does not measure it and says so; it still gives a verdict.
+
 The duration and the number of origins are changed without touching anything:
 
 ```bash
@@ -2720,12 +2734,17 @@ network. The figure for your installation comes from your own run of
 `make load-test` on your own server.
 
 **What the vendor's "baseline" is — and what it is not.**
-`load-tests/k6/baseline.json` keeps the result of one run on the vendor's
-continuous integration machine: p95 and entries per second, along with the
-`git_sha` of the version measured, the machine and the version of the tool. It
-serves one purpose only: comparing the next version **with itself on that same
-machine** and detecting that it has got worse — up to 25 % more p95 and up to
-20 % fewer entries per second are allowed. **It is not a latency promise, nor
+`load-tests/k6/baseline.json` keeps the **median of three runs** on the
+vendor's continuous integration machine — p95 and entries per second — with the
+list of those runs, the machine and the version of the tool. Three and not one
+because that machine varies a lot from one run to the next with the same code.
+It serves one purpose only: comparing the next version **with itself on that
+same machine** and detecting that it has got worse. The p95 is not compared in
+milliseconds but **relative to the speed of the machine in that same run**,
+measured by how long card rejections take, a small and always identical piece
+of work: up to 25 % more in that measure is allowed, and on top of that the p95
+in milliseconds may not exceed three times the baseline's. Up to 20 % fewer
+entries per second are allowed. **It is not a latency promise, nor
 the p95 your server should give**: on that machine the server shares CPU with
 the eleven load generators, so its milliseconds mean nothing outside it. If the
 file is not there, the tool simply applies the budget — the 150 ms and the 50
@@ -2840,6 +2859,8 @@ Worth knowing before launching it, not afterwards.
 **It cleans up after itself, when it finishes:**
 
 - The **cards** it issued are left revoked.
+- The **PIN** of the synthetic employees who clocked in by PIN is reset to a new
+  one that nobody knows, as a manager would reset it.
 - The **tokens of the synthetic kiosks** are left revoked.
 - The management account "Responsable carga k6" is left **deactivated**.
 - The working file `load-tests/k6/.fixtures/` **is deleted**. While the run
@@ -2853,6 +2874,17 @@ Worth knowing before launching it, not afterwards.
 - The **synthetic employees** ("Carga k6 NNNN") and their "Carga k6" department.
 - The **clock-ins** it generated and the history it seeded so that the queries
   work with realistic volume.
+- Its **entries in the audit log** (`audit_log`), which is append-only and
+  cannot be cleaned. A run leaves: `device.paired` and `device.revoked` for the
+  synthetic kiosks and `pin.issued` or `pin.reset` for the employees who clock
+  in by PIN, all four with actor `system`; `shift_entry.created` and
+  `shift_entry.closed` for every clock-in, with the kiosk as actor; and
+  `personal_data.accessed` for the panel reads, with the "Responsable carga k6"
+  account as actor. The first run adds `department.created` for the "Carga k6"
+  department and, if the installation had no site, `site.created`.
+  **No entry is left** for issuing and revoking the run's cards or for
+  deactivating that account: the tool writes them straight into the database,
+  not through the panel.
 
 They stay because deleting them would require the product to know how to delete
 attendance records, and **the product deletes nothing**: corrections create new

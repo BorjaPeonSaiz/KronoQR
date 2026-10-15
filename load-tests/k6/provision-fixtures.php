@@ -43,6 +43,10 @@ declare(strict_types=1);
  *                           ABIERTO: el instante es anterior a esa entrada, asi
  *                           que el escaneo no puede cuadrar y sale
  *                           `rejected_out_of_order` (RN-18);
+ *   - `pin_scans` / `pin_employee_uuids`  `{employee_code, pin_sealed}` de
+ *                           otros empleados RESERVADOS, sin tarjeta, con PIN
+ *                           emitido por el caso de uso del producto y sellado
+ *                           como lo sella el quiosco (RF-AT-11, K6-3);
  *   - `management_token`    sesion de un `responsable_departamento` emitida por
  *                           el propio servidor con las abilities de su rol;
  *   - `geometry`            el reparto de tarjetas por instancia, que calcula
@@ -74,10 +78,13 @@ use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
 use App\Modules\Product\Domain\ValueObject\PlanLimit;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Workforce\Application\Command\CreateDepartmentCommand;
 use App\Modules\Workforce\Application\Command\CreateSiteCommand;
+use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\UseCase\CreateDepartmentHandler;
 use App\Modules\Workforce\Application\UseCase\CreateSiteHandler;
+use App\Modules\Workforce\Application\UseCase\IssueEmployeePinHandler;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -121,8 +128,23 @@ $geometry = [
     'scan_cards' => max(1, $intEnv('K6_SCAN_CARDS', 396)),
     'resend_cards' => max(1, $intEnv('K6_RESEND_CARDS', 60)),
     'batch_cards' => max(2, $intEnv('K6_BATCH_CARDS', 100)),
+    // Empleados que fichan por PIN en cada instancia (K6-3). NO cuentan en
+    // `cards_per_instance`: no tienen tarjeta, y su rebanada es la de
+    // `pin_scans`, no la de `payloads`.
+    // 0 apaga el escenario a proposito (`PIN_PERIOD_SECONDS=0` en `run.sh`).
+    'pin_cards' => $intEnv('K6_PIN_CARDS', 18),
 ];
 $geometry['cards_per_instance'] = $geometry['scan_cards'] + $geometry['resend_cards'] + $geometry['batch_cards'];
+
+/*
+ * Los empleados del escenario `scan-pin` (RF-AT-11, K6-3).
+ *
+ * RESERVADOS, como los de los rechazos: ni tarjeta viva ni sitio en ninguna
+ * rebanada. Si una misma persona fichara por tarjeta y por PIN en la pasada,
+ * cada via le cerraria el tramo a la otra y ni el anti-rebote ni el cuadre de
+ * `verify-after-load.php` significarian nada.
+ */
+$pinTarget = $geometry['instances'] * $geometry['pin_cards'];
 
 $outputPath = (static function (): string {
     $raw = getenv('K6_FIXTURES_PATH');
@@ -251,7 +273,10 @@ if ($departmentId === null) {
 // cuadre posterior significarian nada. Lo mismo, y peor, con los de RN-18: su
 // turno ABIERTO haria que un fichaje valido cerrara el tramo que el escenario
 // necesita encontrar abierto.
-$totalNeeded = $employeeTarget + $rejectTarget + $outOfOrderTarget;
+//
+// Los de PIN van AL FINAL a proposito: las rebanadas de antes conservan los
+// mismos empleados que en las pasadas anteriores al PIN.
+$totalNeeded = $employeeTarget + $rejectTarget + $outOfOrderTarget + $pinTarget;
 $existing = k6_load_employees($departmentId);
 $toCreate = max(0, $totalNeeded - $existing->count());
 
@@ -315,10 +340,12 @@ if ($everyone->count() < $totalNeeded) {
 $carriers = $everyone->take($employeeTarget)->values();
 $revokedOwners = $everyone->slice($employeeTarget, $rejectTarget)->values();
 $outOfOrderOwners = $everyone->slice($employeeTarget + $rejectTarget, $outOfOrderTarget)->values();
+$pinOwners = $everyone->slice($employeeTarget + $rejectTarget + $outOfOrderTarget, $pinTarget)->values();
 
 $say('Empleados creados en esta pasada: '.$created.'. '
     .$carriers->count().' con tarjeta viva, '.$revokedOwners->count().' reservados para el rechazo '
-    .'por credencial y '.$outOfOrderOwners->count().' para el irreconciliable de RN-18.');
+    .'por credencial, '.$outOfOrderOwners->count().' para el irreconciliable de RN-18 y '
+    .$pinOwners->count().' que fichan por PIN.');
 
 // --- Credenciales vivas cuyo secreto se conoce -------------------------------
 
@@ -431,6 +458,97 @@ $flushCredentials($outOfOrderCredentialRows);
 
 $say('Payloads de rechazo: '.count($unknownPayloads).' desconocidos, '.count($revokedPayloads)
     .' revocados y '.count($outOfOrderPayloads).' vivos para el irreconciliable de RN-18.');
+
+// --- Fichaje por PIN: PIN emitido y sobre cerrado (RF-AT-11, K6-3) -----------
+
+/*
+ * EL PIN LO EMITE EL CASO DE USO DEL PRODUCTO, con su asiento `pin.issued`, su
+ * longitud y la limpieza del contador de intentos (RS-12): es la ficha que
+ * tendria una persona real, y si la emision cambia, esto se rompe aqui y no da
+ * falsos rechazos en la medida.
+ *
+ * UN SOLO PIN Y UN SOLO HASH PARA TODOS, y es deliberado. `freshMaterial()` es
+ * el bcrypt de coste 12 que la produccion paga al emitir (~160 ms); repetirlo
+ * por empleado no cambia nada de lo que se mide —el coste de VERIFICAR es el
+ * mismo con un hash compartido— y con diez instancias costaria medio minuto de
+ * aprovisionamiento. El PIN no sale de este proceso en claro: lo que viaja en
+ * los fixtures es el sobre cerrado.
+ *
+ * EL SOBRE SE SELLA COMO LO SELLA EL QUIOSCO (`pinSealing.ts`):
+ *
+ *   pin_sealed = base64( crypto_box_seal( PIN en ASCII, clave publica ) )
+ *
+ * con la clave publica que el servidor publica en el padron y que se pide al
+ * mismo puerto que abre el sobre (`SealedPinOpener::publicKey()`): si la
+ * derivacion cambia, cambia en los dos lados a la vez. UNO POR EMPLEADO Y NO
+ * POR FICHAJE: el mensaje es solo el PIN —sin instante ni valor de un solo
+ * uso— y el servidor no recuerda sobres, asi que reenviar el mismo con otro
+ * `scan_id` le cuesta exactamente lo mismo que uno recien sellado.
+ */
+$publicKey = app(SealedPinOpener::class)->publicKey();
+$pinScans = [];
+
+/*
+ * SIN CLAVE DE SELLADO NO HAY FICHAJE POR PIN, Y ESO ES LEGITIMO. Una
+ * instalacion que no quiere la segunda via no configura
+ * IDENTITY_PIN_SEALING_SECRET_KEY y el quiosco oculta el teclado (ADR-017,
+ * `SealedPinOpener::publicKey()`). La prueba de carga no puede negarse a medir
+ * esa instalacion: deja `pin_scans` vacio, `run.sh` apaga el escenario y el
+ * veredicto de RF-AT-11 dice que no se ha medido, sin declarar la pasada no
+ * fiable. Con `K6_PIN_CARDS=0` se apaga a proposito.
+ */
+if ($publicKey === null || $pinTarget === 0) {
+    $say('[aviso] Fichaje por PIN NO medido: '.($publicKey === null
+        ? 'la instalacion no tiene IDENTITY_PIN_SEALING_SECRET_KEY (el quiosco no ofrece PIN).'
+        : 'K6_PIN_CARDS=0.'));
+    $pinOwners = collect();
+}
+
+$pinIssuer = app(IssueEmployeePinHandler::class);
+$pinMaterial = $pinOwners->isEmpty() ? null : $pinIssuer->freshMaterial();
+$publicKeyBytes = $publicKey === null ? false : base64_decode($publicKey, true);
+
+if ($pinMaterial !== null
+    && (! is_string($publicKeyBytes) || strlen($publicKeyBytes) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES)) {
+    throw new RuntimeException('La clave publica de sellado del PIN no es una clave X25519 en base64.');
+}
+
+// El codigo de empleado se lee aparte: `k6_load_employees()` solo trae `id` y
+// `uuid`, y un codigo vacio sale del quiosco como un `400` de peticion mal
+// formada, no como un fichaje (asi lo encontro la primera pasada local).
+if ($pinMaterial !== null && is_string($publicKeyBytes)) {
+    $pinCodes = DB::table('employees')
+        ->whereIn('id', $pinOwners->pluck('id')->all())
+        ->pluck('employee_code', 'id')
+        ->all();
+
+    foreach ($pinOwners as $owner) {
+        $employeeCode = $pinCodes[$owner->id] ?? null;
+
+        if (! is_string($employeeCode) || $employeeCode === '') {
+            throw new RuntimeException('Un empleado de la carga no tiene codigo de empleado ('.$owner->uuid.').');
+        }
+
+        $issuedPin = $pinIssuer->handle(new IssueEmployeePinCommand(
+            employeeUuid: (string) $owner->uuid,
+            siteId: $siteId,
+            reset: true,
+            material: $pinMaterial,
+        ));
+
+        if ($issuedPin === null) {
+            throw new RuntimeException('No se pudo emitir el PIN de un empleado de la carga ('.$owner->uuid.').');
+        }
+
+        $pinScans[] = [
+            'employee_code' => $employeeCode,
+            'pin_sealed' => base64_encode(sodium_crypto_box_seal($pinMaterial->pin, $publicKeyBytes)),
+        ];
+    }
+
+    $say('Fichaje por PIN: '.count($pinScans).' empleados con PIN emitido y sobre cerrado '
+        .'('.$geometry['pin_cards'].' por instancia).');
+}
 
 // --- Quioscos sinteticos -----------------------------------------------------
 
@@ -740,6 +858,11 @@ file_put_contents($outputPath, json_encode([
     // irreconciliable, leido de la entrada abierta que se acaba de sembrar. El
     // guion no calcula nada: envia esto tal cual.
     'out_of_order_scans' => $outOfOrderScans,
+    // El fichaje por PIN (K6-3): `{employee_code, pin_sealed}` por empleado,
+    // en rebanadas de `geometry.pin_cards` por instancia. Los UUID, alineados,
+    // son los que usa la verificacion para encontrar sus filas.
+    'pin_scans' => $pinScans,
+    'pin_employee_uuids' => $pinOwners->pluck('uuid')->all(),
     'management_token' => $managementToken,
     'rejection_floor_ms' => $rejectionFloorMs,
     'debounce_seconds' => $debounceSeconds,

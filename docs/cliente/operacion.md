@@ -2641,6 +2641,20 @@ del umbral: ese margen no sobra. El borde es un cubo con fuga —deja salir un
 permiso cada 100 ms, con una ráfaga inicial de 50— y sin holgura la prueba
 mediría el límite del borde en lugar de la capacidad del servidor.
 
+**Tiene la forma de un cambio de turno.** Los fichajes no empiezan de golpe:
+suben de cero al pico en 30 segundos, se sostienen en el pico durante
+`DURATION` y bajan otros 30 segundos, como llega y se va una plantilla. Lo que
+se juzga es el tramo sostenido del pico; la subida y la bajada se informan
+aparte. Por eso una pasada dura `DURATION` más un minuto.
+
+**Incluye fichajes por PIN.** Además de las tarjetas, cada origen ficha por
+PIN una vez cada 4 segundos, con empleados sintéticos sin tarjeta, como quien
+llega sin ella (RF-AT-11). Es el camino que más CPU gasta del servidor —abre el
+PIN cifrado y lo compara con su resumen protegido—, y el veredicto dice aparte
+si algún PIN correcto se rechazó bajo carga. Si tu instalación **no ofrece
+fichaje por PIN**, la prueba lo detecta, no lo mide y lo dice; no por eso deja
+de dar veredicto.
+
 La duración y el número de orígenes se cambian sin tocar nada:
 
 ```bash
@@ -2684,12 +2698,17 @@ la va a haber.** Depende de tu hardware, de tu disco y de tu red. La cifra de tu
 instalación sale de tu propia ejecución de `make load-test` sobre tu servidor.
 
 **Qué es —y qué no es— la «línea base» del fabricante.**
-`load-tests/k6/baseline.json` guarda el resultado de una pasada en la máquina de
-integración continua del fabricante: p95 y tramos por segundo, junto al `git_sha`
-de la versión medida, la máquina y la versión de la herramienta. Sirve para una
-sola cosa: comparar la versión siguiente **consigo misma en esa misma máquina**
-y detectar que ha empeorado —se admite hasta un 25 % más de p95 y hasta un 20 %
-menos de tramos por segundo—. **No es una promesa de latencia ni el p95 que
+`load-tests/k6/baseline.json` guarda la **mediana de tres pasadas** en la máquina
+de integración continua del fabricante —p95 y tramos por segundo—, con la lista
+de esas pasadas, la máquina y la versión de la herramienta. Son tres y no una
+porque esa máquina varía mucho de una pasada a otra con el mismo código. Sirve
+para una sola cosa: comparar la versión siguiente **consigo misma en esa misma
+máquina** y detectar que ha empeorado. El p95 no se compara en milisegundos
+sino **en relación con la velocidad de la máquina en esa misma pasada**, que se
+mide con lo que tardan los rechazos de tarjeta, un trabajo pequeño y siempre
+igual: se admite hasta un 25 % más en esa medida, y además el p95 en
+milisegundos no puede pasar de tres veces el de la línea base. De tramos por
+segundo se admite hasta un 20 % menos. **No es una promesa de latencia ni el p95 que
 debería dar tu servidor**: en esa máquina el servidor comparte CPU con los once
 generadores de carga, de modo que sus milisegundos no significan nada fuera de
 ella. Si el fichero no está, la herramienta se limita a aplicar el presupuesto
@@ -2802,6 +2821,8 @@ Conviene saberlo antes de lanzarla, no después.
 **Se limpia solo, al terminar:**
 
 - Las **tarjetas** que emitió quedan revocadas.
+- El **PIN** de los empleados sintéticos que ficharon por PIN se restablece a
+  uno nuevo que nadie conoce, como lo restablecería un responsable.
 - Los **tokens de los quioscos** sintéticos quedan revocados.
 - La cuenta de gestión «Responsable carga k6» queda **desactivada**.
 - El fichero de trabajo `load-tests/k6/.fixtures/` **se borra**. Mientras dura
@@ -2814,6 +2835,17 @@ Conviene saberlo antes de lanzarla, no después.
 - Los **empleados sintéticos** («Carga k6 NNNN») y su departamento «Carga k6».
 - Los **fichajes** que generó y el histórico que sembró para que las consultas
   trabajen con volumen realista.
+- Sus **asientos en el registro de auditoría** (`audit_log`), que es solo de
+  añadir y no se puede limpiar. En una pasada quedan: `device.paired` y
+  `device.revoked` de los quioscos sintéticos y `pin.issued` o `pin.reset` de
+  los empleados que fichan por PIN, los cuatro con actor `system`;
+  `shift_entry.created` y `shift_entry.closed` de cada fichaje, con el quiosco
+  como actor; y `personal_data.accessed` de las lecturas del panel, con la
+  cuenta «Responsable carga k6» como actor. La primera pasada añade
+  `department.created` del departamento «Carga k6» y, si la instalación no
+  tenía centro, `site.created`. **No dejan asiento** la emisión y la revocación de
+  las tarjetas de la pasada ni la desactivación de esa cuenta: la herramienta
+  las escribe directamente en la base, no por el panel.
 
 Se quedan porque borrarlos exigiría que el producto supiera borrar registros de
 jornada, y **el producto no borra nada**: las correcciones crean versiones
