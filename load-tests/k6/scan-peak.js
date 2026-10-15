@@ -1,6 +1,7 @@
 // Prueba de carga del pico del cambio de turno (RNF-P-06: 50 fichajes/s
-// sostenidos; RNF-P-02: p95 < 150 ms y p99 < 400 ms en el endpoint de fichaje;
-// RQ-08: la prueba que valida RNF-P-06 antes de cada version mayor).
+// sostenidos; RNF-P-02: p95 < 150 ms y p99 < 400 ms en el fichaje con tarjeta,
+// `/scan`; RNF-P-08: p95 < 400 ms y p99 < 800 ms en el fichaje por PIN,
+// `/scan/pin`; RQ-08: la prueba que valida RNF-P-06 antes de cada version mayor).
 //
 // UNA INSTANCIA DE K6 ES UN ORIGEN (una IP) y el pico se compone sumando
 // origenes, como en un hotel de verdad. El presupuesto por origen sale del
@@ -36,7 +37,8 @@
 //                      (RF-AT-11, K6-3), con un reenvio identico de cada cuatro.
 //                      Es el camino que mas CPU gasta —abre un sobre de
 //                      libsodium y paga un bcrypt de coste 12—, y por eso se
-//                      mide aunque sea la minoria del cambio de turno.
+//                      mide aunque sea la minoria del cambio de turno. Su
+//                      latencia es RNF-P-08 (p95 < 400 ms, p99 < 800 ms).
 //   resend      0,5/s  un fichaje y su reenvio identico (regla dura 8, RQ-03).
 //   reject      1/s    las tres clases de rechazo de CREDENCIAL, comparadas
 //                      ENTRE SI (RS-03).
@@ -179,6 +181,12 @@ const SCENARIOS = {
    * Y es una MINORIA a proposito: en un cambio de turno real ficha por PIN quien
    * olvido la tarjeta, no la plantilla. Lo que interesa es que su bcrypt
    * conviva con el pico de tarjetas sin rechazar a nadie.
+   *
+   * RNF-P-08 (decision del propietario, 15-10-2026): su latencia tiene
+   * presupuesto propio —p95 < 400 ms, p99 < 800 ms, estimado— porque RNF-P-02
+   * es solo el de `/scan`. Corre en la MISMA meseta que `scan`, asi que
+   * RNF-P-02 y RNF-P-06 se juzgan con el PIN en marcha: esa es la guarda de que
+   * el PIN no frena las tarjetas, y por eso este volumen no se sube.
    */
   'scan-pin': {
     executor: 'constant-arrival-rate',
@@ -189,7 +197,7 @@ const SCENARIOS = {
     startTime: PLATEAU_START,
     preAllocatedVUs: 5,
     maxVUs: 30,
-    tags: { requirements: 'RF-AT-11 RQ-03' },
+    tags: { requirements: 'RF-AT-11 RQ-03 RNF-P-08' },
   },
   resend: {
     executor: 'constant-arrival-rate',

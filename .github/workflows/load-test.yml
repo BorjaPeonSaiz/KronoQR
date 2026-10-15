@@ -1,4 +1,5 @@
-# KronoQR — prueba de carga k6 sobre las imagenes de entrega (RQ-08, RNF-P-06).
+# KronoQR — prueba de carga k6 sobre las imagenes de entrega (RQ-08, RNF-P-06,
+# RNF-P-02 y RNF-P-08).
 #
 # POR QUE UN WORKFLOW PROPIO Y NO `ci.yml` NI `release.yml` (decision 12 de la
 # ficha 3.6, plan 06). Las etapas ①-③ de `ci.yml` tienen que seguir por debajo
@@ -13,7 +14,10 @@
 # el paquete del §11.6.1 con el instalador real -no contra la imagen de
 # desarrollo, y no contra el arbol del repositorio-, exactamente como hace el
 # job `clean-install` (etapa ⑧) de `ci.yml`. El umbral bloqueante es el que
-# fija el doc 02 §9.2: RNF-P-06, 50 fichajes/s con p95 < 150 ms.
+# fija el doc 02 §9.2: RNF-P-06, 50 fichajes/s con p95 < 150 ms. El fichaje por
+# PIN tiene presupuesto propio, RNF-P-08 (p95 < 400 ms, p99 < 800 ms, cifras
+# estimadas): paga un bcrypt de coste 12 que no se rebaja (decision del
+# propietario, 15-10-2026).
 #
 # EL RUNNER PUBLICO NO ES EL HARDWARE DE REFERENCIA. GitHub da 4 vCPU/16 GB a
 # este workflow; el numero que vale para decirle a un cliente que su servidor
@@ -166,7 +170,7 @@ jobs:
         # de la carga con el MISMO analizador que run.sh (parameters.sh: un
         # valor con forma de expresion no llega a ninguna cuenta de bash) y los
         # compara con baseline.json. Si alguno no coincide, el agregado dira
-        # «no comparable» y no juzgara RNF-P-02 ni RNF-P-06: se avisa aqui para
+        # «no comparable» y no juzgara RNF-P-02, RNF-P-06 ni RNF-P-08: se avisa aqui para
         # que nadie espere veinte minutos a enterarse. Un parametro mal escrito
         # SI falla; uno distinto de la linea base no, porque medir con otros
         # parametros a proposito es legitimo (p. ej. para regenerarla).
@@ -187,7 +191,7 @@ jobs:
           base="$(jq -r '[.instances, .duration_seconds, .ramp_seconds, .pin_period_seconds] | map(if . == null then "n/d" else tostring end) | join(" ")' load-tests/k6/baseline.json)"
           echo "Instancias, meseta (s), rampa (s) y periodo del PIN (s). Esta pasada: ${esta}. Linea base: ${base}."
           if [ "${esta}" != "${base}" ]; then
-            echo "::warning title=Linea base no comparable::Esta pasada (${esta}) no usa los parametros de baseline.json (${base}), en el orden instancias, meseta, rampa y periodo del PIN: RNF-P-02 y RNF-P-06 saldran «no comparable»."
+            echo "::warning title=Linea base no comparable::Esta pasada (${esta}) no usa los parametros de baseline.json (${base}), en el orden instancias, meseta, rampa y periodo del PIN: RNF-P-02, RNF-P-06 y RNF-P-08 saldran «no comparable»."
           fi
 
       - uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
@@ -364,11 +368,13 @@ jobs:
           K6_ACKNOWLEDGE_TEST_DATABASE: "yes"
           K6_INSECURE_TLS: "1"
           K6_EDGE_SERVICE: nginx
-          # El runner no alcanza el umbral de RNF-P-02/06 (4 vCPU compartidas
+          # El runner no alcanza el umbral de RNF-P-02/06/08 (4 vCPU compartidas
           # entre el servidor y los generadores: ~29 fichajes/s con p95 de
-          # decenas de segundos), asi que aqui esos dos requisitos se juzgan
+          # decenas de segundos), asi que aqui esos tres requisitos se juzgan
           # contra la linea base del propio runner (load-tests/k6/baseline.json:
-          # p95 <= +25 %, tramos/s >= -20 %), no contra el umbral, que se mide en
+          # p95 en unidades de velocidad de la maquina <= +25 % y en ms <= 3x,
+          # para la tarjeta y para el PIN; tramos/s >= -20 %), no contra el
+          # umbral, que se mide en
           # el hardware de referencia con `make load-test` (decision 19, ficha
           # 3.6). Contrato, RQ-03, RS-03, verificacion posterior y regla 21
           # siguen bloqueando.

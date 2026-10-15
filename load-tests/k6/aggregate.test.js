@@ -305,6 +305,7 @@ test('da verde cuando todo esta dentro de presupuesto', () => {
 
   assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
   assert.equal(statusOf(summary, 'RNF-P-06'), 'pass')
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'pass')
   assert.equal(statusOf(summary, 'RQ-03'), 'pass')
   assert.equal(statusOf(summary, 'RS-03'), 'pass')
   assert.equal(statusOf(summary, 'CHECKS'), 'pass')
@@ -619,6 +620,9 @@ const RUNNER_BASELINE = {
   // su p95 de 100 ms vale 3,33 rechazos.
   reject_classes: { signature: { p50: 30 }, unknown: { p50: 30 }, revoked: { p50: 30 } },
   totals: { shift_entries_per_second: 60 },
+  // El PIN de la pasada verde (RNF-P-08): 250 ms con rechazos de 30 ms son 8,33
+  // rechazos; maximo 10,41 y guarda gruesa 750 ms.
+  pin_path: { p95: 250, p95_over_reject_p50: 8.33 },
   scenarios: { scan: { p95: 100 }, 'scan-pin': {}, reject: {}, 'reject-out-of-order': {} },
 }
 
@@ -769,7 +773,7 @@ const NOT_COMPARABLE_CASES = [
 ]
 
 for (const [name, baselineOverrides, runOverrides, mismatch] of NOT_COMPARABLE_CASES) {
-  test(`[R5-QA-02][RNF-P-02][RNF-P-06] declara NO COMPARABLE y no compara: ${name}`, () => {
+  test(`[R5-QA-02][RNF-P-02][RNF-P-06][RNF-P-08] declara NO COMPARABLE y no compara: ${name}`, () => {
     const summary = runAnalysis(greenRun(), {
       latencyVerdictMode: 'baseline',
       baseline: asBaseline(baselineOverrides),
@@ -778,6 +782,8 @@ for (const [name, baselineOverrides, runOverrides, mismatch] of NOT_COMPARABLE_C
 
     assert.equal(statusOf(summary, 'RNF-P-02'), 'not_comparable')
     assert.equal(statusOf(summary, 'RNF-P-06'), 'not_comparable')
+    assert.equal(statusOf(summary, 'RNF-P-08'), 'not_comparable')
+    assert.match(summary.verdicts['RNF-P-08'].detail, mismatch)
     assert.match(summary.verdicts['RNF-P-02'].detail, mismatch)
     assert.match(summary.verdicts['RNF-P-02'].detail, /^NO COMPARABLE con la linea base/)
     assert.doesNotMatch(summary.verdicts['RNF-P-02'].detail, /frente a un maximo de/)
@@ -810,7 +816,7 @@ test('[R5-QA-02] el veredicto legible dice «no comparable» y no «no fiable»'
   assert.match(report, /NOCMP RNF-P-02: NO COMPARABLE/)
   assert.match(
     report,
-    /VEREDICTO: no comparable\. RNF-P-02, RNF-P-06 se juzgan contra la linea base y esta se tomo con otra carga \(instancias: 3 frente a 8\)\./,
+    /VEREDICTO: no comparable\. RNF-P-02, RNF-P-06, RNF-P-08 se juzgan contra la linea base y esta se tomo con otra carga \(instancias: 3 frente a 8\)\./,
   )
   assert.doesNotMatch(report, /VEREDICTO: no fiable/)
 })
@@ -902,6 +908,170 @@ test('[RF-AT-11] un 5xx en el PIN cuenta para SERVICIO', () => {
 
   assert.equal(statusOf(summary, 'SERVICIO'), 'fail')
   assert.match(summary.verdicts.SERVICIO.detail, /3 de 83 fichajes/)
+})
+
+// --- RNF-P-08: la latencia del fichaje por PIN (decision de 15-10-2026) ------
+//
+// p95 < 400 ms y p99 < 800 ms en hardware de referencia (modo `threshold`); en
+// el runner, el mismo juicio que RNF-P-02: cociente frente a la velocidad de la
+// maquina y guarda gruesa de 3x en milisegundos (modo `baseline`).
+
+/** Los PIN de la pasada y el desenlace de RNF-P-08 en modo umbral. */
+const PIN_THRESHOLD_CASES = [
+  ['un p95 de 400 ms cabe en el presupuesto', Array(20).fill(400), 'pass'],
+  ['un p95 de 401 ms se sale del presupuesto', Array(20).fill(401), 'fail'],
+  ['un p99 de 800 ms cabe en el presupuesto', [...Array(19).fill(300), 800], 'pass'],
+  ['un p99 de 801 ms se sale del presupuesto aunque el p95 quepa', [...Array(19).fill(300), 801], 'fail'],
+]
+
+for (const [name, pinDurations, expected] of PIN_THRESHOLD_CASES) {
+  test(`[RNF-P-08] en modo umbral ${name}`, () => {
+    const summary = runAnalysis(greenRun({ pinDurations }))
+
+    assert.equal(statusOf(summary, 'RNF-P-08'), expected)
+    assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  })
+}
+
+test('[RNF-P-08] en modo umbral el detalle dice que las cifras estan por confirmar', () => {
+  const summary = runAnalysis(greenRun({ pinDurations: Array(20).fill(401) }))
+
+  assert.match(
+    summary.verdicts['RNF-P-08'].detail,
+    /p95 401 ms \(presupuesto 400\), p99 401 ms \(presupuesto 800\) sobre 20 fichajes por PIN atendidos/,
+  )
+  assert.match(summary.verdicts['RNF-P-08'].detail, /a confirmar en hardware de referencia/)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('[RNF-P-08] con 19 PIN atendidos no hay veredicto de latencia', () => {
+  const summary = runAnalysis(greenRun({ pinDurations: Array(19).fill(250) }))
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'unmeasurable')
+})
+
+test('[RNF-P-08] una instalacion sin fichaje por PIN no deja la pasada sin veredicto', () => {
+  const summary = runAnalysis(greenRun({ pinDurations: [], pinShiftProducing: 0 }), { pinPeriodSeconds: 0 })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'info')
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('[RNF-P-08] un 429 al PIN no entra en su latencia', () => {
+  // Un 429 del borde se resuelve sin pagar el bcrypt: con estos 400 de 1 ms
+  // dentro, el p95 bajaria a 1 ms y el PIN saldria verde.
+  const lines = [...greenRun({ pinDurations: Array(20).fill(401) }), ...pinRows({ durations: Array(400).fill(1), status: '429' })]
+  const summary = runAnalysis(lines)
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'fail')
+})
+
+test('[RNF-P-08] en modo linea base da verde cuando el PIN iguala a la linea base', () => {
+  const summary = runAnalysis(greenRun(), { latencyVerdictMode: 'baseline', baseline: asBaseline() })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'pass')
+  assert.match(summary.verdicts['RNF-P-08'].detail, /vale 8\.33 rechazos, frente a un maximo de 10\.41/)
+  assert.match(summary.verdicts['RNF-P-08'].detail, /El umbral de RNF-P-08 \(p95 < 400 ms, p99 < 800 ms\) NO se juzga en este runner/)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('[RNF-P-08] en modo linea base un PIN que empeora frente a la velocidad de la maquina es rojo', () => {
+  // 315 ms con rechazos de 30 ms: 10,5 rechazos, por encima de 10,41.
+  const summary = runAnalysis(greenRun({ pinDurations: Array(20).fill(315) }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'fail')
+  assert.match(summary.verdicts['RNF-P-08'].detail, /vale 10\.5 rechazos, frente a un maximo de 10\.41/)
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('[RNF-P-08] en modo linea base 310 ms siguen dentro de la tolerancia', () => {
+  // 310 ms con rechazos de 30 ms: 10,33 rechazos, por debajo de 10,41.
+  const summary = runAnalysis(greenRun({ pinDurations: Array(20).fill(310) }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'pass')
+})
+
+test('[RNF-P-08] en modo linea base un runner tres veces mas lento con el mismo codigo sigue en verde', () => {
+  // 740 ms con rechazos de 87 ms: 8,51 rechazos, y 740 <= 750.
+  const summary = runAnalysis(greenRun({ pinDurations: Array(20).fill(740), rejectDurationMs: 87 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'pass')
+})
+
+test('[RNF-P-08] en modo linea base un PIN por encima de 3x la linea base en ms es rojo aunque el cociente cuadre', () => {
+  // 780 ms con rechazos de 99 ms: 7,88 rechazos, pero 780 > 750.
+  const summary = runAnalysis(greenRun({ pinDurations: Array(20).fill(780), rejectDurationMs: 99 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'fail')
+  assert.match(summary.verdicts['RNF-P-08'].detail, /ROJO por la guarda gruesa/)
+})
+
+test('[RNF-P-08] en modo linea base sin rechazos bastantes para medir la velocidad de la maquina no hay verde', () => {
+  const summary = runAnalysis(greenRun({ unknownSamples: 19 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'unmeasurable')
+  assert.match(summary.verdicts['RNF-P-08'].detail, /NO EVALUABLE: sin rechazos de credencial suficientes/)
+})
+
+test('[RNF-P-08] una linea base sin la latencia del PIN en unidades de la maquina no es comparable', () => {
+  // La forma de baseline.json antes del 15-10-2026: p50 y p95 del PIN, sin cociente.
+  const summary = runAnalysis(greenRun(), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline({ pin_path: { p50: 708.6, p95: 895.2 } }),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'not_comparable')
+  assert.match(summary.verdicts['RNF-P-08'].detail, /^NO COMPARABLE: la linea base no trae .*baseline\.js/)
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('[RNF-P-08] el veredicto legible de una linea base sin PIN dice que rehacer y no inventa diferencias de carga', () => {
+  const summary = runAnalysis(greenRun(), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline({ pin_path: { p50: 708.6, p95: 895.2 } }),
+  })
+
+  const report = formatReport(summary)
+
+  assert.match(report, /NOCMP RNF-P-08: NO COMPARABLE/)
+  assert.match(report, /VEREDICTO: no comparable\. RNF-P-08 se juzgan contra la linea base y esta no trae lo necesario/)
+  assert.doesNotMatch(report, /otra carga \(n\/d\)/)
+})
+
+test('[RNF-P-08] en modo linea base sin linea base no hay veredicto, y lo dice', () => {
+  const summary = runAnalysis(greenRun(), { latencyVerdictMode: 'baseline' })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'unmeasurable')
+})
+
+test('[RNF-P-02][RNF-P-06][RNF-P-08] el PIN en marcha que frena las tarjetas sale rojo en RNF-P-02 aunque el PIN cumpla', () => {
+  // La guarda de capacidad: RNF-P-02 y RNF-P-06 se juzgan con `scan-pin`
+  // corriendo en la misma meseta, y la linea base lleva el mismo periodo del
+  // PIN. Si el bcrypt frena el fichaje con tarjeta, el rojo sale en RNF-P-02.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 130, pinDurations: Array(20).fill(250) }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-08'), 'pass')
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'fail')
 })
 
 // --- K6-2: la rampa del cambio de turno --------------------------------------
@@ -999,7 +1169,7 @@ test('[R5-QA-02] la linea base versionada no se compara con las 8 instancias que
 const { buildBaseline } = require('./baseline.js')
 
 /** Un summary.json minimo con la carga del workflow y las cifras indicadas. */
-function runSummary({ writeP95, scanP95, rate, rejectP50 = 80, instances = 3 }) {
+function runSummary({ writeP95, scanP95, rate, rejectP50 = 80, pinP95 = 600, instances = 3 }) {
   return {
     git_sha: 'abc1234',
     runner: 'github-Linux-X64',
@@ -1010,16 +1180,16 @@ function runSummary({ writeP95, scanP95, rate, rejectP50 = 80, instances = 3 }) 
     pin_period_seconds: 4,
     scenarios: { scan: { p95: scanP95 }, 'scan-pin': { p95: 600 }, reject: {}, 'reject-out-of-order': {} },
     write_path: { p95: writeP95 },
-    pin_path: { p95: 600 },
+    pin_path: { p95: pinP95 },
     reject_classes: { signature: { p50: rejectP50 }, unknown: { p50: rejectP50 }, revoked: { p50: rejectP50 } },
     totals: { shift_entries_per_second: rate },
   }
 }
 
 const THREE_RUNS = [
-  { id: '101', summary: runSummary({ writeP95: 287, scanP95: 267.3, rate: 19.5, rejectP50: 80 }) },
-  { id: '102', summary: runSummary({ writeP95: 401.6, scanP95: 371, rate: 19.4, rejectP50: 104.7 }) },
-  { id: '103', summary: runSummary({ writeP95: 330, scanP95: 300, rate: 19.6, rejectP50: 90 }) },
+  { id: '101', summary: runSummary({ writeP95: 287, scanP95: 267.3, rate: 19.5, rejectP50: 80, pinP95: 625.7 }) },
+  { id: '102', summary: runSummary({ writeP95: 401.6, scanP95: 371, rate: 19.4, rejectP50: 104.7, pinP95: 895.2 }) },
+  { id: '103', summary: runSummary({ writeP95: 330, scanP95: 300, rate: 19.6, rejectP50: 90, pinP95: 900 }) },
 ]
 
 test('[R5-QA-02] la linea base es la mediana de cada metrica, no una pasada', () => {
@@ -1142,3 +1312,40 @@ test('[RNF-P-02] el aviso de tendencia tambien lee el p95 en unidades de velocid
   assert.equal(summary.write_path.machine_speed_ms, 87)
   assert.equal(summary.write_path.p95_over_reject_p50, 3.33)
 })
+
+// --- RNF-P-08 contra la linea base: baseline.js y la pasada real -------------
+
+test('[RNF-P-08] la linea base del PIN es la mediana de los cocientes de cada pasada, no el cociente de las medianas', () => {
+  // Cocientes por pasada: 625,7/80 = 7,82; 895,2/104,7 = 8,55; 900/90 = 10.
+  // El cociente de las medianas seria 895,2/90 = 9,95.
+  const baseline = buildBaseline(THREE_RUNS)
+
+  assert.equal(baseline.pin_path.p95_over_reject_p50, 8.55)
+  assert.equal(baseline.pin_path.p95, 895.2)
+  assert.deepEqual(
+    baseline.baseline_of.runs.map((run) => run.pin_p95_over_reject_p50),
+    [7.82, 8.55, 10],
+  )
+})
+
+test('[RNF-P-08] la linea base versionada trae la latencia del PIN en unidades de velocidad de la maquina', () => {
+  // Las tres pasadas reales: 625,7/80 = 7,82; 895,2/104,7 = 8,55; 2076,4/260 = 7,99.
+  assert.equal(VERSIONED_BASELINE.pin_path.p95, 895.2)
+  assert.equal(VERSIONED_BASELINE.pin_path.p95_over_reject_p50, 7.99)
+})
+
+for (const run of VERSIONED_BASELINE.baseline_of.runs) {
+  test(`[RNF-P-08] la pasada real ${run.run_id} da verde en el PIN contra la linea base que ayudo a construir`, () => {
+    const lines = [
+      ...greenRun({
+        scanDurationMs: run.write_path_p95,
+        rejectDurationMs: run.reject_p50,
+        pinDurations: Array(20).fill(run.pin_p95),
+      }),
+      ...OTHER_SCENARIO_ROWS,
+    ]
+    const summary = runAnalysis(lines, WORKFLOW_PARAMETERS)
+
+    assert.equal(statusOf(summary, 'RNF-P-08'), 'pass')
+  })
+}

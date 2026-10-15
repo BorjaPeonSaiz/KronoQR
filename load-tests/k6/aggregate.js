@@ -18,10 +18,11 @@
 // cumple tambien sin haber comparado ninguno. Un requisito no evaluable termina
 // con salida 2, que es «vuelve a medir», y nunca con 0.
 //
-// Y UN CUARTO, `not_comparable`, que es un `unmeasurable` con causa: RNF-P-02 y
-// RNF-P-06 se juzgan contra la linea base (modo `baseline`) y esta se tomo con
-// otra carga —instancias, duracion, rampa, PIN o escenarios distintos—. No se
-// compara y sale con 2 (R5-QA-02).
+// Y UN CUARTO, `not_comparable`, que es un `unmeasurable` con causa: RNF-P-02,
+// RNF-P-06 y RNF-P-08 se juzgan contra la linea base (modo `baseline`) y esta
+// se tomo con otra carga —instancias, duracion, rampa, PIN o escenarios
+// distintos— o, en RNF-P-08, no trae la latencia del PIN en unidades de
+// velocidad de la maquina. No se compara y sale con 2 (R5-QA-02).
 //
 // Y UNO MAS QUE NO ES UN DESENLACE: `info`. Lo lleva `RS-03-RN-18`, que publica
 // cuanto se separa el `422` de RN-18 de los tres rechazos de credencial. A-13
@@ -67,6 +68,13 @@ const path = require('path')
 
 const P95_BUDGET_MS = 150 // RNF-P-02
 const P99_BUDGET_MS = 400 // RNF-P-02
+// RNF-P-08 (decision del propietario, 15-10-2026): el fichaje por PIN paga un
+// bcrypt de coste 12 (~160 ms solo el hash) que no se rebaja, porque con un PIN
+// de pocas cifras es lo unico que frena una fuerza bruta offline si se roba la
+// base. Cifras ESTIMADAS —150 ms de RNF-P-02 + el hash + margen—, a confirmar
+// cuando se midan en hardware de referencia (doc 01 §6.1).
+const PIN_P95_BUDGET_MS = 400 // RNF-P-08
+const PIN_P99_BUDGET_MS = 800 // RNF-P-08
 const SHIFT_RATE_BUDGET = 50 // RNF-P-06: fichajes que producen tramo, por segundo
 const QUEUEABLE_DEGRADATION_RATIO = 0.005 // regla dura 19: 429, 5xx y sin respuesta
 const DEBOUNCE_CEILING_RATIO = 0.05 // el anti-rebote no puede ser la mayoria
@@ -165,15 +173,20 @@ const RAMP_PHASE = 'scan_ramp'
  * VA APARTE DEL PICO DE TARJETAS, A PROPOSITO. El PIN paga un bcrypt en el
  * servidor (coste 12, unos 160 ms solo de hash) y meter sus muestras en el p95
  * de `/scan` cambiaria lo que RNF-P-02 mide desde la tarea 3.6 —y dejaria de
- * ser comparable con cualquier linea base anterior—. Se juzga en su propio
- * veredicto, `RF-AT-11`: que bajo carga ningun PIN correcto se rechace y que el
- * reenvio devuelva lo mismo. Su latencia se publica; ningun requisito la fija.
+ * ser comparable con cualquier linea base anterior—. RNF-P-02 es SOLO el de
+ * `/scan` (decision del propietario, 15-10-2026). El PIN tiene dos veredictos
+ * propios: `RF-AT-11`, que bajo carga ningun PIN correcto se rechace y que el
+ * reenvio devuelva lo mismo; y `RNF-P-08`, su latencia, con su presupuesto y el
+ * mismo mecanismo de linea base que RNF-P-02.
  */
 const PIN_PHASE = 'pin'
 const PIN_REPLAY_PHASE = 'pin_replay'
 const PIN_PHASES = new Set([PIN_PHASE, PIN_REPLAY_PHASE])
 
-/** Fichajes por PIN atendidos que hacen falta para dar un veredicto de RF-AT-11. */
+/**
+ * Fichajes por PIN atendidos que hacen falta para dar un veredicto de RF-AT-11
+ * y de RNF-P-08. Con 20, el p99 es el maximo: el suelo es conservador, no laxo.
+ */
 const PIN_SAMPLES_FLOOR = 20
 
 const REJECT_CLASSES = ['signature', 'unknown', 'revoked']
@@ -329,6 +342,60 @@ function machineSpeedOf(durations) {
   })
 
   return medianOf(medians)
+}
+
+/**
+ * El juicio de una latencia contra la linea base en modo `baseline`: el de
+ * RNF-P-02 desde la decision del 15-10-2026, y el mismo para RNF-P-08 (el PIN).
+ * UNA funcion y no dos copias, para que los dos veredictos no puedan divergir.
+ *
+ * DOS CONDICIONES, Y LAS DOS TIENEN QUE CUMPLIRSE:
+ *   1. el p95 en unidades de velocidad de la maquina no empeora mas de
+ *      BASELINE_REGRESSION_RATIO frente al de la linea base: es lo que separa
+ *      una regresion del producto de un runner lento;
+ *   2. el p95 en milisegundos no pasa de BASELINE_GROSS_RATIO veces el de la
+ *      linea base: lo que una ralentizacion global —que frena tambien los
+ *      rechazos— esconderia en el cociente.
+ * Sin velocidad de la maquina que medir, o sin cociente en la linea base,
+ * `speedMissing`: quien llama dice «no fiable», nunca verde.
+ */
+function judgeAgainstMachineSpeed({ p95, machineSpeedMs, baselineP95, baselineNormalisedP95 }) {
+  const normalisedP95 = machineSpeedMs === null || machineSpeedMs <= 0 || p95 === null ? null : p95 / machineSpeedMs
+  const allowedNormalised = baselineNormalisedP95 === null ? null : baselineNormalisedP95 * BASELINE_REGRESSION_RATIO
+  const allowedGrossP95 = baselineP95 === null ? null : baselineP95 * BASELINE_GROSS_RATIO
+  const speedMissing = normalisedP95 === null || allowedNormalised === null
+  const grossOk = allowedGrossP95 !== null && p95 !== null && p95 <= allowedGrossP95
+  const normalisedOk = !speedMissing && normalisedP95 <= allowedNormalised
+
+  return {
+    status: !grossOk ? 'fail' : speedMissing ? 'unmeasurable' : normalisedOk ? 'pass' : 'fail',
+    normalisedP95,
+    allowedNormalised,
+    allowedGrossP95,
+    grossOk,
+    speedMissing,
+  }
+}
+
+/** Dos decimales para los cocientes del detalle; `n/d` si no hay. */
+const twoDecimals = (value) => (value === null ? 'n/d' : (Math.round(value * 100) / 100).toString())
+
+/** La explicacion legible de `judgeAgainstMachineSpeed`, la misma para los dos requisitos. */
+function machineSpeedDetail({ judgement, p95, samples, what, machineSpeedMs, baselineNormalisedP95, reference }) {
+  return (
+    `p95 ${round(p95)} ms sobre ${samples} ${what}; velocidad de la maquina ` +
+    `(mediana de los rechazos de credencial) ${round(machineSpeedMs) ?? 'n/d'} ms, asi que el p95 ` +
+    `vale ${twoDecimals(judgement.normalisedP95)} rechazos, frente a un maximo de ${twoDecimals(judgement.allowedNormalised)} ` +
+    `(${BASELINE_REGRESSION_RATIO}x el ${twoDecimals(baselineNormalisedP95)} de la ${reference}); ` +
+    `guarda gruesa: ${round(p95)} ms frente a un maximo de ${round(judgement.allowedGrossP95)} ms ` +
+    `(${BASELINE_GROSS_RATIO}x)` +
+    (!judgement.grossOk
+      ? ' — ROJO por la guarda gruesa: el p95 en milisegundos se ha ido mas alla de lo que el runner varia'
+      : judgement.speedMissing
+        ? ' — NO EVALUABLE: sin rechazos de credencial suficientes (los suelos de RS-03) no hay ' +
+          'velocidad de la maquina con que medir, o la linea base no la trae'
+        : '')
+  )
 }
 
 /**
@@ -503,6 +570,13 @@ function analyse(results, options = {}) {
     baseline?.write_path?.p95_over_reject_p50 ??
     (baselineP95 !== null && baselineSpeedMs !== null && baselineSpeedMs > 0 ? baselineP95 / baselineSpeedMs : null)
 
+  // La del PIN (RNF-P-08), con el mismo criterio pero SIN calcularla si falta:
+  // `baseline.js` la trae desde el 15-10-2026, y una linea base anterior no
+  // tiene con que juzgar el PIN. Se dice «no comparable» y se rehace con
+  // `baseline.js` a partir de las pasadas que la construyeron, nunca a ojo.
+  const baselinePinP95 = baseline?.pin_path?.p95 ?? null
+  const baselinePinNormalisedP95 = baseline?.pin_path?.p95_over_reject_p50 ?? null
+
   const scenarioNames = [...new Set(durations.map((sample) => sample.scenario))].sort()
 
   // LA LINEA BASE SOLO VALE PARA LA MISMA PASADA. Comparar un p95 de ocho
@@ -542,16 +616,18 @@ function analyse(results, options = {}) {
     .map(([name, before, now]) => `${name}: ${before ?? 'n/d'} frente a ${now ?? 'n/d'}`)
     .join('; ')
 
-  const baselineReference =
+  // `baseline.js` la construye como mediana de varias pasadas y dice de
+  // cuales; una linea base de una sola pasada lleva su `git_sha`.
+  const baselineProvenance =
     baseline === null
       ? ''
-      : `linea base del runner: p95 ${baselineP95} ms, ${baselineRate} tramos/s ` +
-        // `baseline.js` la construye como mediana de varias pasadas y dice de
-        // cuales; una linea base de una sola pasada lleva su `git_sha`.
-        (Array.isArray(baseline.baseline_of?.runs)
-          ? `(mediana de ${baseline.baseline_of.runs.length} pasadas: ` +
-            `${baseline.baseline_of.runs.map((run) => run.run_id).join(', ')})`
-          : `(git_sha ${baseline.git_sha ?? 'n/d'})`)
+      : Array.isArray(baseline.baseline_of?.runs)
+        ? `(mediana de ${baseline.baseline_of.runs.length} pasadas: ` +
+          `${baseline.baseline_of.runs.map((run) => run.run_id).join(', ')})`
+        : `(git_sha ${baseline.git_sha ?? 'n/d'})`
+
+  const baselineReference =
+    baseline === null ? '' : `linea base del runner: p95 ${baselineP95} ms, ${baselineRate} tramos/s ${baselineProvenance}`
 
   const noBaselineDetail = baselineNotComparable
     ? `NO COMPARABLE con la linea base (${mismatchText}): no se compara. Mide con los mismos ` +
@@ -661,54 +737,31 @@ function analyse(results, options = {}) {
           `${instancesOutOfBudget.length} de ${perInstance.length} instancias fuera de presupuesto`,
     )
   } else {
-    // DOS CONDICIONES, Y LAS DOS TIENEN QUE CUMPLIRSE (decision de 15-10-2026):
-    //   1. el p95 en unidades de velocidad de la maquina no empeora mas de
-    //      BASELINE_REGRESSION_RATIO frente al de la linea base: es lo que
-    //      separa una regresion del producto de un runner lento;
-    //   2. el p95 en milisegundos no pasa de BASELINE_GROSS_RATIO veces el de la
-    //      linea base: lo que una ralentizacion global —que frena tambien los
-    //      rechazos— esconderia en el cociente.
-    // Sin velocidad de la maquina que medir, o sin cociente en la linea base, no
-    // hay veredicto: «no fiable», nunca verde.
-    const normalisedP95 = machineSpeedMs === null || machineSpeedMs <= 0 ? null : write.p95 / machineSpeedMs
-    const allowedNormalised =
-      baselineNormalisedP95 === null ? null : baselineNormalisedP95 * BASELINE_REGRESSION_RATIO
-    const allowedGrossP95 = baselineP95 === null ? null : baselineP95 * BASELINE_GROSS_RATIO
-    const speedMissing = normalisedP95 === null || allowedNormalised === null
-    const normalisedOk = !speedMissing && normalisedP95 <= allowedNormalised
-    const grossOk = allowedGrossP95 !== null && write.p95 <= allowedGrossP95
-    const twoDecimals = (value) => (value === null ? 'n/d' : (Math.round(value * 100) / 100).toString())
+    // El juicio de la decision de 15-10-2026: cociente frente a la velocidad de
+    // la maquina y guarda gruesa en milisegundos (`judgeAgainstMachineSpeed`).
+    const judgement = judgeAgainstMachineSpeed({
+      p95: write.p95,
+      machineSpeedMs,
+      baselineP95,
+      baselineNormalisedP95,
+    })
 
     verdict(
       'RNF-P-02',
-      !latencyMeasurable
-        ? 'unmeasurable'
-        : !baselineUsable
-          ? withoutBaseline
-          : !grossOk
-            ? 'fail'
-            : speedMissing
-              ? 'unmeasurable'
-              : normalisedOk
-                ? 'pass'
-                : 'fail',
+      !latencyMeasurable ? 'unmeasurable' : !baselineUsable ? withoutBaseline : judgement.status,
       !latencyMeasurable
         ? noSamplesDetail
         : !baselineUsable
           ? `${noBaselineDetail} ${thresholdNotJudged}`
-          : `p95 ${round(write.p95)} ms sobre ${write.samples} fichajes atendidos; velocidad de la maquina ` +
-            `(mediana de los rechazos de credencial) ${round(machineSpeedMs) ?? 'n/d'} ms, asi que el p95 ` +
-            `vale ${twoDecimals(normalisedP95)} rechazos, frente a un maximo de ${twoDecimals(allowedNormalised)} ` +
-            `(${BASELINE_REGRESSION_RATIO}x el ${twoDecimals(baselineNormalisedP95)} de la ${baselineReference}); ` +
-            `guarda gruesa: ${round(write.p95)} ms frente a un maximo de ${round(allowedGrossP95)} ms ` +
-            `(${BASELINE_GROSS_RATIO}x)` +
-            (!grossOk
-              ? ' — ROJO por la guarda gruesa: el p95 en milisegundos se ha ido mas alla de lo que el runner varia'
-              : speedMissing
-                ? ' — NO EVALUABLE: sin rechazos de credencial suficientes (los suelos de RS-03) no hay ' +
-                  'velocidad de la maquina con que medir, o la linea base no la trae'
-                : '') +
-            `. ${thresholdNotJudged}`,
+          : machineSpeedDetail({
+              judgement,
+              p95: write.p95,
+              samples: write.samples,
+              what: 'fichajes atendidos',
+              machineSpeedMs,
+              baselineNormalisedP95,
+              reference: baselineReference,
+            }) + `. ${thresholdNotJudged}`,
     )
   }
 
@@ -877,9 +930,8 @@ function analyse(results, options = {}) {
   // tarjetas, un `429`, un `5xx` o una peticion sin respuesta no cuentan como
   // rechazo: el quiosco los encola (regla dura 19).
   //
-  // QUE SOLO SE PUBLICA. La latencia: el PIN paga un bcrypt de coste 12 y
-  // ningun requisito le fija presupuesto (RNF-P-02 es el de `/scan`). Ver el
-  // comentario de `PIN_PHASE`.
+  // LO QUE NO JUZGA. La latencia: es RNF-P-08, mas abajo (RNF-P-02 es solo el
+  // de `/scan`). Ver el comentario de `PIN_PHASE`.
   const pinOriginals = durations.filter((sample) => sample.phase === PIN_PHASE)
   const pinAttended = percentiles(valuesWhere((sample) => sample.phase === PIN_PHASE && isAttended(sample.status)))
   const pinRefusals = pinOriginals.filter((sample) => !isQueueable(sample.status) && !isAttended(sample.status))
@@ -909,12 +961,85 @@ function analyse(results, options = {}) {
         `(${pinShifts} con tramo, ${pinDebounced} anti-rebote), ${pinRefusals.length} rechazados al ` +
         `empleado, ${pinQueueable.length} encolables; reenvios por PIN: ${pinResendYes} identicos y ` +
         `${pinResendNo} distintos; p50 ${round(pinAttended.p50) ?? 'n/d'} ms y p95 ` +
-        `${round(pinAttended.p95) ?? 'n/d'} ms (informativo: el PIN paga bcrypt y ningun requisito ` +
-        'fija su latencia)' +
+        `${round(pinAttended.p95) ?? 'n/d'} ms (la latencia la juzga RNF-P-08)` +
         (pinMeasurable || pinBroken
           ? ''
           : ` — NO EVALUABLE: hacen falta ${PIN_SAMPLES_FLOOR} fichajes por PIN atendidos`),
   )
+
+  // --- RNF-P-08: latencia del fichaje por PIN (decision de 15-10-2026) -------
+
+  // LA MISMA REGLA QUE RNF-P-02, SOBRE OTRA POBLACION: solo los envios
+  // originales atendidos (`pin_path`; los reenvios no pagan bcrypt, PIN-02, y
+  // un 429 del borde no ejecuta ni una linea de PHP). En modo `threshold`, el
+  // presupuesto del requisito; en modo `baseline`, `judgeAgainstMachineSpeed`
+  // con la velocidad de la maquina de esta misma pasada. No hay umbral por
+  // instancia como en RNF-P-02: a un PIN cada pocos segundos por origen, ninguna
+  // instancia reune muestras para un percentil propio.
+  //
+  // LA GUARDA DE CAPACIDAD NO ES UN VEREDICTO MAS, Y ES A PROPOSITO. Que los
+  // fichajes por PIN simultaneos no frenen los de tarjeta ya lo juzgan RNF-P-02
+  // y RNF-P-06: `scan-pin` corre en la MISMA meseta que `scan` (scan-peak.js),
+  // en un volumen de via de reserva —uno cada `--pin-period-seconds` por origen,
+  // frente a `--scan-rate` tarjetas por segundo—, y el periodo del PIN forma
+  // parte de la carga que se compara con la linea base. Si el bcrypt le quita
+  // CPU al fichaje con tarjeta, el rojo sale en el p95 o en la tasa de esos dos.
+  const pinNotJudged =
+    `El umbral de RNF-P-08 (p95 < ${PIN_P95_BUDGET_MS} ms, p99 < ${PIN_P99_BUDGET_MS} ms) NO se juzga en este ` +
+    'runner: solo en hardware de referencia con make load-test.'
+
+  if (pinOff) {
+    verdict(
+      'RNF-P-08',
+      'info',
+      'latencia del fichaje por PIN NO medida: la instalacion no lo ofrece o se apago con PIN_PERIOD_SECONDS=0',
+    )
+  } else if (!pinMeasurable) {
+    verdict(
+      'RNF-P-08',
+      'unmeasurable',
+      `solo ${pinAttended.samples} fichajes por PIN atendidos, hacen falta ${PIN_SAMPLES_FLOOR}`,
+    )
+  } else if (mode === 'threshold') {
+    verdict(
+      'RNF-P-08',
+      pinAttended.p95 <= PIN_P95_BUDGET_MS && pinAttended.p99 <= PIN_P99_BUDGET_MS ? 'pass' : 'fail',
+      `p95 ${round(pinAttended.p95)} ms (presupuesto ${PIN_P95_BUDGET_MS}), p99 ${round(pinAttended.p99)} ms ` +
+        `(presupuesto ${PIN_P99_BUDGET_MS}) sobre ${pinAttended.samples} fichajes por PIN atendidos; ` +
+        'cifras estimadas, a confirmar en hardware de referencia (doc 01 §6.1)',
+    )
+  } else if (!baselineComparable || baselinePinP95 === null || baselinePinNormalisedP95 === null) {
+    verdict(
+      'RNF-P-08',
+      baseline === null ? 'unmeasurable' : 'not_comparable',
+      baselineComparable
+        ? 'NO COMPARABLE: la linea base no trae la latencia del PIN en unidades de velocidad de la maquina ' +
+            '(pin_path.p95_over_reject_p50). Rehazla con baseline.js a partir de las pasadas que la construyeron. ' +
+            pinNotJudged
+        : `${noBaselineDetail} ${pinNotJudged}`,
+    )
+  } else {
+    const judgement = judgeAgainstMachineSpeed({
+      p95: pinAttended.p95,
+      machineSpeedMs,
+      baselineP95: baselinePinP95,
+      baselineNormalisedP95: baselinePinNormalisedP95,
+    })
+
+    verdict(
+      'RNF-P-08',
+      judgement.status,
+      machineSpeedDetail({
+        judgement,
+        p95: pinAttended.p95,
+        samples: pinAttended.samples,
+        what: 'fichajes por PIN atendidos',
+        machineSpeedMs,
+        baselineNormalisedP95: baselinePinNormalisedP95,
+        reference: `linea base del PIN: p95 ${baselinePinP95} ms ${baselineProvenance}`,
+      }) + `. ${pinNotJudged}`,
+    )
+  }
 
   // --- La rampa del cambio de turno (K6-2), informativa -----------------------
 
@@ -1278,6 +1403,12 @@ function analyse(results, options = {}) {
       p95: round(pinAttended.p95),
       p99: round(pinAttended.p99),
       max: round(pinAttended.max),
+      // El p95 del PIN en unidades de velocidad de la maquina: lo que juzga
+      // RNF-P-08 en modo `baseline` y lo que `baseline.js` hace mediana.
+      p95_over_reject_p50:
+        machineSpeedMs === null || machineSpeedMs <= 0 || pinAttended.p95 === null
+          ? null
+          : Math.round((pinAttended.p95 / machineSpeedMs) * 100) / 100,
     },
     // La subida y la bajada del cambio de turno (K6-2), fuera de la meseta.
     ramp_path: {
@@ -1345,8 +1476,8 @@ function formatReport(summary) {
   )
   say(
     summary.latency_verdict_mode === 'baseline'
-      ? 'RNF-P-02 y RNF-P-06 se juzgan contra la LINEA BASE de esta maquina, no contra el umbral (decision 19).'
-      : 'RNF-P-02 y RNF-P-06 se juzgan contra el UMBRAL del requisito.',
+      ? 'RNF-P-02, RNF-P-06 y RNF-P-08 se juzgan contra la LINEA BASE de esta maquina, no contra el umbral (decision 19).'
+      : 'RNF-P-02, RNF-P-06 y RNF-P-08 se juzgan contra el UMBRAL del requisito.',
   )
   say('')
   say('Latencia de las respuestas CONTESTADAS por el servidor, por escenario (ms):')
@@ -1390,7 +1521,7 @@ function formatReport(summary) {
 
   say('')
 
-  for (const requirement of ['CHECKS', 'SERVICIO', 'RNF-P-02', 'RNF-P-06', 'RQ-03', 'RF-AT-11', 'RN-18']) {
+  for (const requirement of ['CHECKS', 'SERVICIO', 'RNF-P-02', 'RNF-P-06', 'RQ-03', 'RF-AT-11', 'RNF-P-08', 'RN-18']) {
     const entry = summary.verdicts[requirement]
 
     if (entry !== undefined) {
@@ -1464,8 +1595,14 @@ function formatReport(summary) {
     // Antes que «no fiable»: es la causa mas concreta, y la que dice que hacer.
     say(
       `VEREDICTO: no comparable. ${notComparable.map(([requirement]) => requirement).join(', ')} se ` +
-        `juzgan contra la linea base y esta se tomo con otra carga (${summary.baseline?.differences ?? 'n/d'}). ` +
-        'Mide con sus mismos parametros o regenera baseline.json con esta pasada.' +
+        // Dos causas: otra carga, o una linea base que no trae lo que el
+        // requisito juzga (la del PIN anterior a RNF-P-08). No se inventa una
+        // diferencia de carga donde no la hay.
+        (summary.baseline?.differences
+          ? `juzgan contra la linea base y esta se tomo con otra carga (${summary.baseline.differences}). ` +
+            'Mide con sus mismos parametros o regenera baseline.json con esta pasada.'
+          : 'juzgan contra la linea base y esta no trae lo necesario para juzgarlos. ' +
+            'Rehazla con baseline.js a partir de las pasadas que la construyeron.') +
         (unmeasurable.length > 0
           ? ` Ademas, sin datos suficientes para ${unmeasurable.map(([requirement]) => requirement).join(', ')}.`
           : ''),

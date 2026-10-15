@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Prueba de carga del pico del cambio de turno (RNF-P-06, RNF-P-02, RQ-08).
+# Prueba de carga del pico del cambio de turno (RNF-P-06, RNF-P-02, RNF-P-08, RQ-08).
 #
 # UNA INSTANCIA DE K6 ES UN ORIGEN (una IP) y el pico se compone sumando
 # origenes, como en un hotel de verdad. El presupuesto por origen sale del cubo
@@ -43,7 +43,10 @@ SCAN_RATE="${SCAN_RATE:-6}"
 # pasada dura por tanto DURATION + 2 x RAMP_SECONDS, pero lo que juzgan
 # RNF-P-02 y RNF-P-06 es solo la meseta.
 RAMP_SECONDS="${RAMP_SECONDS:-30}"
-# Un fichaje por PIN cada tantos segundos y por instancia (K6-3, RF-AT-11). Lo
+# Un fichaje por PIN cada tantos segundos y por instancia (K6-3, RF-AT-11; su
+# latencia es RNF-P-08). Volumen de via de reserva a proposito: RNF-P-02 y
+# RNF-P-06 se juzgan con el PIN en marcha, y eso es lo que demuestra que el PIN
+# no frena las tarjetas. Lo
 # frena antes `throttle:scan-pin` (10/min por quiosco, 60/min por IP) que el
 # borde; ver `scan-pin` en scan-peak.js.
 PIN_PERIOD_SECONDS="${PIN_PERIOD_SECONDS:-4}"
@@ -84,7 +87,7 @@ K6_INSECURE_TLS="${K6_INSECURE_TLS:-1}"
 # sesiones vivas. Fuera de una depuracion no se usa.
 K6_KEEP_FIXTURES="${K6_KEEP_FIXTURES:-0}"
 
-# Contra que se juzgan RNF-P-02 y RNF-P-06 (decision 19 de la ficha 3.6):
+# Contra que se juzgan RNF-P-02, RNF-P-06 y RNF-P-08 (decision 19 de la ficha 3.6):
 #
 #   threshold  contra el requisito. Es el de serie y el que vale en hardware de
 #              referencia, que es donde el umbral significa algo.

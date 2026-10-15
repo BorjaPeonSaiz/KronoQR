@@ -98,11 +98,12 @@ function buildBaseline(runs) {
         pin_p95: run.summary.pin_path?.p95 ?? null,
         // La velocidad de la maquina en esa pasada: la mediana de los rechazos
         // de credencial, que hacen el mismo trabajo poco y fijo en cualquier
-        // version. Y el p95 de escritura medido en esa unidad. Es la evidencia
-        // de la propuesta de normalizacion del informe del bloque 15; hoy NO
-        // la usa ningun veredicto.
+        // version. Y el p95 de escritura y el del PIN medidos en esa unidad:
+        // la evidencia por pasada de lo que juzgan RNF-P-02 y RNF-P-08 en modo
+        // `baseline` (decisiones de 15-10-2026).
         reject_p50: medianRejectP50(run.summary),
         write_path_p95_over_reject_p50: ratioOrNull(run.summary.write_path?.p95, medianRejectP50(run.summary)),
+        pin_p95_over_reject_p50: ratioOrNull(run.summary.pin_path?.p95, medianRejectP50(run.summary)),
       })),
       // La dispersion observada, para que quien mire la tolerancia de
       // aggregate.js vea contra que se fijo: la pasada mas lenta frente a la
@@ -160,6 +161,13 @@ function buildBaseline(runs) {
     pin_path: {
       p50: pick((summary) => summary.pin_path?.p50 ?? null),
       p95: pick((summary) => summary.pin_path?.p95 ?? null),
+      p99: pick((summary) => summary.pin_path?.p99 ?? null),
+      // Lo que juzga RNF-P-08 en modo `baseline` (decision del propietario,
+      // 15-10-2026): el p95 del PIN en unidades de velocidad de la maquina,
+      // con el mismo criterio que `write_path.p95_over_reject_p50`.
+      p95_over_reject_p50: median(
+        runs.map((run) => ratioOrNull(run.summary.pin_path?.p95, medianRejectP50(run.summary))),
+      ),
     },
     totals: {
       shift_entries_per_second: median(rates),

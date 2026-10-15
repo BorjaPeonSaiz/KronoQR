@@ -12,7 +12,8 @@
         "shift_entries_per_second": 19.5,
         "pin_p95": 625.7,
         "reject_p50": 80,
-        "write_path_p95_over_reject_p50": 3.59
+        "write_path_p95_over_reject_p50": 3.59,
+        "pin_p95_over_reject_p50": 7.82
       },
       {
         "run_id": "38656006160",
@@ -24,7 +25,8 @@
         "shift_entries_per_second": 19.5,
         "pin_p95": 895.2,
         "reject_p50": 104.7,
-        "write_path_p95_over_reject_p50": 3.84
+        "write_path_p95_over_reject_p50": 3.84,
+        "pin_p95_over_reject_p50": 8.55
       },
       {
         "run_id": "38659326956",
@@ -36,7 +38,8 @@
         "shift_entries_per_second": 19.5,
         "pin_p95": 2076.4,
         "reject_p50": 260,
-        "write_path_p95_over_reject_p50": 3.85
+        "write_path_p95_over_reject_p50": 3.85,
+        "pin_p95_over_reject_p50": 7.99
       }
     ],
     "spread": {
@@ -112,7 +115,9 @@
   },
   "pin_path": {
     "p50": 708.6,
-    "p95": 895.2
+    "p95": 895.2,
+    "p99": 1483.7,
+    "p95_over_reject_p50": 7.99
   },
   "totals": {
     "shift_entries_per_second": 19.5
