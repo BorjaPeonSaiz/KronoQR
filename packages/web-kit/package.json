@@ -28,8 +28,8 @@
   },
   "peerDependencies": {
     "vue": "^3.5.43",
-    "vue-i18n": "^10.0.8",
-    "vue-router": "^4.6.4"
+    "vue-i18n": "^11.4.13",
+    "vue-router": "^5.4.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.9",
