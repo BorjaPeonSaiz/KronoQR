@@ -16,6 +16,15 @@
 // devuelva ZXing o libsodium (500-900 KB sin comprimir) al camino critico, o que
 // quite la precarga de fuentes—, no un 5 %.
 //
+// VALORES MEDIDOS EN LOCAL (portatil de desarrollo, Windows, Chromium de
+// Playwright, 3 muestras, perfil Lighthouse: 150 ms, 1,6 Mbit/s, CPU x4):
+// 1364-1456 ms, es decir un margen del 27-32 % sobre los 2000 ms. Con el perfil
+// «Fast 3G» de las DevTools (562,5 ms por peticion, solo informativo): 2184-2296 ms.
+// Antes de KP1 el mismo harness daba 1496-1500 ms (Lighthouse) y 2356 ms (DevTools).
+// Valores de la CI (job ⑦ del quiosco): pendientes de anotar al terminar su
+// primera ejecucion; si alli el margen baja del 25 % (LCP > 1500 ms),
+// se revisa el umbral o el numero de muestras, no se ignora.
+//
 // LO QUE QUEDA ABIERTO: el LCP en la tablet real. Esto es la maquina de quien
 // ejecuta la prueba estrangulada, y se declara asi (mismo criterio que
 // `qr-decode-budget.spec.ts`).
@@ -133,7 +142,7 @@ async function measureColdLoad(
 
 test(
   'el LCP del quiosco en frio, con CPU x4 y 3G rapida, no pasa de 2 s',
-  { tag: ['@RNF-P-01', '@RNF-P-03', '@RNF-P-07'] },
+  { tag: ['@RNF-P-07'] },
   async ({ browser, baseURL }) => {
     test.setTimeout(180_000)
     expect(baseURL).toBeDefined()

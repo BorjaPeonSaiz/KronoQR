@@ -119,7 +119,14 @@ function gzipLikeNginx(): Plugin {
           next()
           return
         }
-        const pathname = decodeURIComponent(req.url.split('?', 1)[0] ?? '')
+        let pathname: string
+        try {
+          pathname = decodeURIComponent(req.url.split('?', 1)[0] ?? '')
+        } catch {
+          // URL mal codificada: que la resuelva el servidor estatico (400/404).
+          next()
+          return
+        }
         const relative = pathname.startsWith(base) ? pathname.slice(base.length) : ''
         const file = resolve(outDir, relative)
         if (
@@ -160,14 +167,16 @@ const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
   '.webmanifest': 'application/manifest+json',
 }
 
-// KP1: precarga de las fuentes de la pantalla de escaneo (Anexo A, LCP). El CSS
-// solo descubre los `@font-face` cuando ya ha descargado y analizado la hoja;
-// con `<link rel="preload">` el navegador las pide en paralelo con el JS. Solo
-// el subconjunto `latin` de los pesos que usa la guia (Poppins 600/700, Inter
-// variable): `latin-ext` (ca/ro) se descarga cuando hace falta, no en cada
-// arranque, para no competir por el ancho de banda de una 3G. Los nombres salen
-// del `bundle` real, asi que siguen a los hashes y a `base`.
-const FONT_PRELOAD_PATTERN = /^assets\/(?:poppins-latin-600-normal)-[^/]+\.woff2$/
+// KP1: precarga de la UNICA fuente del elemento LCP de la pantalla de escaneo: el
+// titulo, en Poppins 600 subconjunto `latin`. El CSS solo descubre los
+// `@font-face` cuando ya ha descargado y analizado la hoja; con
+// `<link rel="preload">` el navegador la pide en paralelo con el JS. No se
+// precargan Poppins 700 ni Inter (48 KB): comparten el ancho de banda con el JS
+// critico y retrasaban el LCP (medido con la 3G de las DevTools), y `font-display:
+// swap` ya pinta el texto con la de respaldo. `latin-ext` (ca/ro) se descarga
+// cuando hace falta. El nombre sale del `bundle` real: sigue a los hashes y a
+// `base`.
+const FONT_PRELOAD_PATTERN = /^assets\/poppins-latin-600-normal-[^/]+\.woff2$/
 
 function preloadScanFonts(): Plugin {
   return {
