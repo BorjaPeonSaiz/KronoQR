@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Domain\ValueObject;
 
 use App\Modules\Attendance\Domain\Exception\ClockOutBeforeClockIn;
 use App\Modules\Attendance\Domain\Exception\InstantIsNotUtc;
+use App\Modules\Shared\Domain\ValueObject\ElapsedMinutes;
 use DateTimeImmutable;
 
 /**
@@ -55,13 +56,12 @@ final readonly class TimeRange
     }
 
     /**
-     * RN-09. Los segundos sobrantes se truncan aqui, una sola vez.
+     * RN-09, con la regla unica de minutos ({@see ElapsedMinutes}): instantes
+     * UTC, truncando los segundos.
      */
     public function duration(): WorkedDuration
     {
-        return WorkedDuration::ofMinutes(
-            intdiv($this->end->getTimestamp() - $this->start->getTimestamp(), 60)
-        );
+        return WorkedDuration::ofMinutes(ElapsedMinutes::between($this->start, $this->end)->minutes);
     }
 
     /**

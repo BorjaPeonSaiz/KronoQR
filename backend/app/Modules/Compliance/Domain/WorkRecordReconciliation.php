@@ -12,6 +12,7 @@ use App\Modules\Compliance\Domain\ValueObject\WorkRecordDiscrepancyKind;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordInstant;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPair;
 use App\Modules\Compliance\Domain\ValueObject\WorkRecordPurgeBoundary;
+use App\Modules\Shared\Domain\ValueObject\ElapsedMinutes;
 use DateTimeImmutable;
 
 /**
@@ -103,22 +104,6 @@ final class WorkRecordReconciliation
         }
 
         return null;
-    }
-
-    /**
-     * Minutos trabajados entre dos marcas, con la misma regla que el registro:
-     * segundos enteros de diferencia divididos por sesenta, truncando
-     * (`Attendance\Domain\ValueObject\TimeRange::duration()` y
-     * `Reporting\Domain\ValueObject\ComplianceShiftSegment::minutes()`).
-     *
-     * Se repite aqui porque este modulo no puede importar `Attendance` (doc 02
-     * §1.6). Que las tres den lo mismo lo comprueba
-     * `tests/Unit/Compliance/Domain/WorkRecordReconciliationTest.php` contra las
-     * otras dos: si una cambia, la prueba rompe antes que la alerta.
-     */
-    public static function workedMinutes(DateTimeImmutable $in, DateTimeImmutable $out): int
-    {
-        return intdiv($out->getTimestamp() - $in->getTimestamp(), 60);
     }
 
     private static function compareBoth(string $uuid, RecordedShiftEntry $recorded, AuditedShiftEntry $audited): ?WorkRecordDiscrepancy
@@ -269,7 +254,13 @@ final class WorkRecordReconciliation
             return true;
         }
 
-        return $recorded->durationMinutes === self::workedMinutes($in, $out);
+        // RN-09 con la regla del registro (`ElapsedMinutes`, la misma que
+        // `TimeRange::duration()`). Un asiento con la salida antes que la entrada
+        // no tiene duracion con la que coincidir: discrepa, como discrepaba el
+        // negativo que daba la resta antes de unificar la regla.
+        $elapsed = ElapsedMinutes::gapBetween($in, $out);
+
+        return $elapsed instanceof ElapsedMinutes && $recorded->durationMinutes === $elapsed->minutes;
     }
 
     /**
