@@ -576,3 +576,50 @@ it('N5: con el fichaje de pausa activado, la bandeja no afirma nada que la vista
         expect($par)->not->toStartWith($n5['e5'].'|');
     }
 })->group('RN-10', 'RN-11', 'RN-12', 'RF-AT-12', 'RF-PA-06');
+
+it('RN-12: el tramo mas largo de la vista se mide con la misma regla de minutos que la bandeja', function (): void {
+    /*
+     * Dos tramos casi iguales. Con microsegundos, B (6 h 0 min 59,9 s) es mas
+     * largo que A (6 h 0 min 59,001 s). Con la regla del producto —cada marca
+     * truncada a su segundo, `ElapsedMinutes`— A son 361 minutos y supera el
+     * maximo de 6 h; B son 360 y no. La bandeja abre RN-12 sobre A; si la vista
+     * eligiera B, callaria lo que la bandeja afirma (ADR-055 §1).
+     */
+    FrozenTime::at('2026-03-31 04:30:00');
+
+    $site = WorkforceFixtures::site('Hotel del segundo', 'Europe/Madrid');
+    $department = WorkforceFixtures::department($site, 'Cocina');
+    $employee = WorkforceFixtures::employee($site, $department, 'active', 'Sara', 'Segundo');
+
+    PeriodReportFixtures::splitWorkDay($site, $employee, '2026-03-10', [
+        ['2026-03-10 08:00:00.999', '2026-03-10 14:01:00.000'],
+        ['2026-03-10 16:00:00.000', '2026-03-10 22:00:59.900'],
+    ]);
+
+    DB::table('installation_settings')->updateOrInsert(
+        ['key' => 'ATTENDANCE_BREAK_CLOCKING'],
+        ['value' => '"enabled"', 'updated_at' => '2026-03-31 04:30:00+00'],
+    );
+    app()->forgetScopedInstances();
+
+    expect(Artisan::call('attendance:detect-incidents'))->toBe(0);
+
+    $tramoDeLaBandeja = DB::table('incidents')
+        ->join('shift_entries', 'shift_entries.id', '=', 'incidents.shift_entry_id')
+        ->where('incidents.type', 'missing_break')
+        ->pluck('shift_entries.uuid')
+        ->all();
+
+    $pausa = array_values(array_filter(
+        hallazgosDeLaVista(),
+        static fn (ComplianceFinding $f): bool => $f->rule->value === 'missing_break',
+    ));
+
+    expect(paresDeLaVista('missing_break'))->toBe([$employee.'|2026-03-10'])
+        ->and(paresDeLaBandeja('missing_break'))->toBe([$employee.'|2026-03-10'])
+        ->and($tramoDeLaBandeja)->toHaveCount(1)
+        ->and($pausa[0]->measuredMinutes)->toBe(361)
+        // El mismo tramo en las dos pantallas, y por eso el enlace funciona.
+        ->and($pausa[0]->shiftEntryUuid)->toBe($tramoDeLaBandeja[0])
+        ->and($pausa[0]->incident)->not->toBeNull();
+})->group('RN-12', 'RN-09', 'RF-AT-12', 'RF-PA-06');

@@ -30,7 +30,12 @@ final readonly class DailyTotalsRecalculated implements DomainEvent
         public WorkedDuration $total,
         public int $shiftCount,
         public ?DateTimeImmutable $firstClockInAt,
-        /** Nulo mientras la jornada tenga un tramo abierto. */
+        /**
+         * Ultima salida de la jornada (`WorkDay::lastClockOutAt()`). Nula
+         * solo si ningun tramo esta cerrado: con uno cerrado y otro abierto es
+         * la salida del cerrado, y quien la lea para RN-10 mira tambien
+         * `hasOpenShift` (ADR-055 §2).
+         */
         public ?DateTimeImmutable $lastClockOutAt,
         public bool $hasOpenShift,
         /** Si algun tramo de la jornada quedo marcado para revision (RN-07, RN-08). */

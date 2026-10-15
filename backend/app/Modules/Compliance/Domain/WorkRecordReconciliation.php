@@ -256,8 +256,9 @@ final class WorkRecordReconciliation
 
         // RN-09 con la regla del registro (`ElapsedMinutes`, la misma que
         // `TimeRange::duration()`). Un asiento con la salida antes que la entrada
-        // no tiene duracion con la que coincidir: discrepa, como discrepaba el
-        // negativo que daba la resta antes de unificar la regla.
+        // no tiene duracion con la que coincidir y ahora discrepa SIEMPRE. Antes
+        // no: `intdiv(-30, 60)` daba 0 y casaba con una fila de 0 minutos. Es
+        // mas estricto, y a proposito: solo un asiento manipulado llega aqui.
         $elapsed = ElapsedMinutes::gapBetween($in, $out);
 
         return $elapsed instanceof ElapsedMinutes && $recorded->durationMinutes === $elapsed->minutes;
