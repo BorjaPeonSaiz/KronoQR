@@ -8,29 +8,38 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Workforce\Application\Command\UpdateSiteCommand;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
+use App\Modules\Workforce\Application\Port\WorkRecordPresence;
+use App\Modules\Workforce\Application\Query\SiteView;
 use App\Modules\Workforce\Domain\Event\SiteConfigured;
 use App\Modules\Workforce\Domain\Exception\SiteNameAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
-use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezone;
+use App\Modules\Workforce\Domain\ValueObject\SiteTimezoneLock;
 use Illuminate\Database\ConnectionInterface;
 
 /**
  * Modifica el centro de la instalacion: nombre o zona horaria.
  *
- * **Cambiar la zona cambia el calculo de las jornadas siguientes** (RN-05) y por
- * eso queda auditado como `site.updated`. No reescribe el pasado: las jornadas
- * ya calculadas conservan su `work_date`.
+ * ## La zona queda fija con el primer tramo (RN-23, ADR-056)
  *
- * **Hasta la tarea 5.5 este docblock decia que el cambio quedaba auditado y no
- * lo estaba**: no se publicaba ningun evento y no habia ningun oyente. Se dice
- * aqui porque una promesa incumplida en un comentario es peor que la ausencia de
- * la promesa — el siguiente que lo leyera habria dado la traza por hecha.
+ * Mientras no haya registro horario, la zona se cambia aqui y queda auditada
+ * como `site.updated`. **Desde el primer tramo, en cualquier estado, pedir otra
+ * zona es `SiteTimezoneLocked` (`409`)** y no cambia nada: tampoco el nombre si
+ * viajaba en la misma peticion, y no deja asiento. La misma zona que ya tiene no
+ * es un cambio. Corregir una zona mal puesta es `CorrectSiteTimezoneHandler`,
+ * por consola.
+ *
+ * **Todo ocurre dentro de la transaccion y con la fila del centro bloqueada**
+ * (`FOR UPDATE`): se bloquea, se pregunta si hay registro horario y se aplica.
+ * El fichaje y el alta manual leen la zona con `FOR KEY SHARE` antes de escribir
+ * su tramo (`SiteCalendar::timezoneForRecording()`), asi que un primer fichaje
+ * concurrente o confirmo antes —y esta consulta lo ve— o espera y ficha con la
+ * zona nueva. Nunca queda la zona cambiada con un tramo atribuido con la vieja.
  *
  * El asiento va **dentro** de la transaccion (ADR-027, regla dura 6): si falla,
- * la zona horaria no cambia. Mover las horas de toda la plantilla de un dia a
- * otro sin dejar constancia de quien lo hizo es exactamente lo que el trail
- * existe para impedir.
+ * la zona no cambia. El orden de candados es el de ADR-046: la fila padre —el
+ * centro— antes que la cadena de `audit_log`.
  *
  * **Un PATCH que no cambia nada no deja asiento.** El panel manda el formulario
  * entero, asi que guardar sin tocar nada es lo mas facil que puede pasar; un
@@ -43,6 +52,7 @@ final readonly class UpdateSiteHandler
 {
     public function __construct(
         private SiteRepository $sites,
+        private WorkRecordPresence $workRecord,
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private ConnectionInterface $connection,
@@ -50,48 +60,54 @@ final readonly class UpdateSiteHandler
 
     /**
      * @throws SiteNameAlreadyTaken
+     * @throws SiteTimezoneLocked si ya hay registro horario y la zona pedida es otra
      * @throws UnknownTimezone
      */
-    public function handle(UpdateSiteCommand $command): ?Site
+    public function handle(UpdateSiteCommand $command): ?SiteView
     {
-        $current = $this->sites->installationSite();
+        // Antes de abrir la transaccion: una zona que no existe es un `422` y no
+        // necesita bloquear nada.
+        $timezone = $command->timezone === null ? null : SiteTimezone::fromString($command->timezone);
 
-        if ($current === null) {
-            return null;
-        }
+        return $this->connection->transaction(function () use ($command, $timezone): ?SiteView {
+            $current = $this->sites->installationSiteForUpdate();
 
-        $site = $current;
+            if ($current === null) {
+                return null;
+            }
 
-        if ($command->name !== null) {
-            $site = $site->rename($command->name);
-        }
+            // Con la fila del centro ya bloqueada: ver el docblock de la clase.
+            $lock = SiteTimezoneLock::fromWorkRecordPresence($this->workRecord->exists());
 
-        if ($command->timezone !== null) {
-            $site = $site->relocateTo(SiteTimezone::fromString($command->timezone));
-        }
+            $site = $current;
 
-        $previousName = $current->name;
-        $previousTimezone = $current->timezone->identifier;
+            if ($command->name !== null) {
+                $site = $site->rename($command->name);
+            }
 
-        // Nada que escribir y, sobre todo, nada que auditar. El `200` se
-        // devuelve igual: para quien llama, el centro quedo como pedia.
-        if ($site->name === $previousName && $site->timezone->identifier === $previousTimezone) {
-            return $current;
-        }
+            // Lanza antes de guardar nada: el nombre tampoco cambia (RN-23).
+            if ($timezone !== null) {
+                $site = $site->relocateTo($timezone, $lock);
+            }
 
-        return $this->connection->transaction(function () use ($site, $previousName, $previousTimezone): Site {
+            // Nada que escribir y, sobre todo, nada que auditar. El `200` se
+            // devuelve igual: para quien llama, el centro quedo como pedia.
+            if ($site->name === $current->name && $site->timezone->equals($current->timezone)) {
+                return new SiteView($current, $lock);
+            }
+
             $this->sites->save($site);
 
             $this->events->publish(SiteConfigured::updated(
                 siteId: (int) $site->id,
                 name: $site->name,
                 timezone: $site->timezone->identifier,
-                previousName: $previousName,
-                previousTimezone: $previousTimezone,
+                previousName: $current->name,
+                previousTimezone: $current->timezone->identifier,
                 occurredAt: $this->clock->now(),
             ));
 
-            return $site;
+            return new SiteView($site, $lock);
         });
     }
 }

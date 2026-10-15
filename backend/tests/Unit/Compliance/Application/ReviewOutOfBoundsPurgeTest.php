@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Modules\Compliance\Application\Command\ReviewOutOfBoundsPurgeCommand;
 use App\Modules\Compliance\Application\Port\AuditTrail;
 use App\Modules\Compliance\Application\Port\PurgeReviewLedger;
-use App\Modules\Compliance\Application\Port\ResponsibleAccounts;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Application\UseCase\ReviewOutOfBoundsPurge;
 use App\Modules\Compliance\Domain\Exception\PurgeReviewRejected;
@@ -15,6 +14,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditedPurge;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntryDraft;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use Tests\Support\Compliance\FixedRetentionYearsFloor;
@@ -87,8 +87,14 @@ function reviewPurgeUseCase(
         /** @param list<int> $active */
         public function __construct(private array $active) {}
 
-        public function isActiveManagementAccount(int $userId): bool
+        public function isActiveManagementAccount(int $userId, array $roles = []): bool
         {
+            // La revision no exige rol (decision D7): si alguien empezara a
+            // pedirlo, esta doble lo denunciaria.
+            if ($roles !== []) {
+                throw new LogicException('La revision de una purga no exige rol.');
+            }
+
             return in_array($userId, $this->active, true);
         }
     };

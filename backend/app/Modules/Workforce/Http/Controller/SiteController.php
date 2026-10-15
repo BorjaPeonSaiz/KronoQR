@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Http\Controller;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Workforce\Application\Query\SiteQueries;
+use App\Modules\Workforce\Application\Query\SiteView;
 use App\Modules\Workforce\Application\UseCase\CreateSiteHandler;
 use App\Modules\Workforce\Application\UseCase\UpdateSiteHandler;
 use App\Modules\Workforce\Domain\Model\Site;
@@ -66,9 +67,16 @@ final class SiteController extends Controller
     {
         $site = $handler->handle($request->toCommand());
 
-        return (new SiteResource($site))->response()->setStatusCode(JsonResponse::HTTP_CREATED);
+        // `timezone_locked` siempre `false`: un tramo cuelga del centro y el
+        // centro acaba de nacer (RN-23).
+        return (new SiteResource(SiteView::justCreated($site)))->response()->setStatusCode(JsonResponse::HTTP_CREATED);
     }
 
+    /**
+     * `409` con `urn:kronoqr:problem:site-time-zone-locked` si ya hay registro
+     * horario y se pide otra zona (RN-23, ADR-056). Lo traduce el renderizador
+     * global desde `SiteTimezoneLocked`.
+     */
     public function update(UpdateSiteRequest $request, UpdateSiteHandler $handler): JsonResponse
     {
         $site = $handler->handle($request->toCommand());

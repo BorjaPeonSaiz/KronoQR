@@ -175,7 +175,7 @@
 # --- Fase 4 -------------------------------------------- (1 requisito)
 - { id: RF-ID-10,  fase: 4, titulo: "Cuentas de gestión desde el panel" }
 
-# --- Fase 5 -------------------------------------------- (23 requisitos)
+# --- Fase 5 -------------------------------------------- (24 requisitos)
 - { id: RF-GP-05,  fase: 5, titulo: "Importación masiva inicial de plantilla desde CSV o XLSX, con validación previa y modo simulación" }
 - { id: RF-PD-01,  fase: 5, titulo: "Cero configuración en código" }
 - { id: RF-PD-02,  fase: 5, titulo: "Instalación autónoma: el personal de IT del cliente despliega el sistema siguiendo una guía, sin intervención del fabricante" }
@@ -198,4 +198,5 @@
 - { id: RL-19,     fase: 5, titulo: "El paquete de diagnóstico no contiene datos personales por defecto (RF-PD-09)" }
 - { id: RL-20,     fase: 5, titulo: "Continuidad e independencia del cliente" }
 - { id: RL-21,     fase: 5, titulo: "La documentación entregada debe indicar con claridad qué obligaciones asume el cliente: registro de actividades, información a la plantilla y a su..." }
+- { id: RN-23,     fase: 5, titulo: "La zona horaria del centro queda fija con el primer tramo; después solo se corrige por consola, con motivo y sin recalcular la jornada de lo ya fichado" }
 - { id: RQ-11,     fase: 5, titulo: "Prueba de instalación limpia y de actualización desde la versión anterior antes de cada publicación" }

@@ -68,6 +68,7 @@ use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
 use App\Modules\Workforce\Domain\Exception\InvalidAbsencePeriod;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
+use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
 use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use App\Modules\Workforce\Domain\Exception\WorkforceConflict;
@@ -560,6 +561,17 @@ return Application::configure(basePath: dirname(__DIR__))
          * obliga a recargar la ficha.
          */
         $exceptions->render(static fn (EmployeeAlreadyTerminated $exception): mixed => ProblemDetails::employeeTerminated($exception->getMessage()));
+
+        /*
+         * La zona horaria del centro ya esta fija (RN-23, ADR-056): `409` con
+         * `type` propio, `urn:kronoqr:problem:site-time-zone-locked`, y el
+         * `detail` en el idioma negociado. Antes que `WorkforceConflict`, que es
+         * su clase madre: el `PATCH /site` tambien devuelve el `409` generico del
+         * nombre ya usado, y el panel tiene que distinguirlos.
+         */
+        $exceptions->render(static fn (SiteTimezoneLocked $exception): mixed => ProblemDetails::siteTimezoneLocked(
+            ProblemDetails::translated($exception->translationKey, $exception->parameters, $exception->getMessage()),
+        ));
 
         $exceptions->render(static fn (WorkforceConflict $exception): mixed => ProblemDetails::conflict($exception->getMessage()));
 

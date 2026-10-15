@@ -39,7 +39,12 @@ import type {
   WorkDayShiftEntry,
 } from '@/shared/api/types'
 
-export const SITE: Site = { id: 1, name: 'Hotel Marina', timezone: 'Europe/Madrid' }
+export const SITE: Site = {
+  id: 1,
+  name: 'Hotel Marina',
+  timezone: 'Europe/Madrid',
+  timezone_locked: false,
+}
 
 export const EMPLOYEE_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'
 export const CREDENTIAL_UUID = '0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01'

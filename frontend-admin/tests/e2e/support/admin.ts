@@ -75,7 +75,12 @@ export const TOTP_CODE = '492013'
 /** Clave de `sessionStorage` del panel (`session.store.ts`). */
 export const SESSION_STORAGE_KEY = 'kronoqr.admin.session'
 
-export const SITE: Site = { id: 1, name: 'Hotel Marina', timezone: 'Europe/Madrid' }
+export const SITE: Site = {
+  id: 1,
+  name: 'Hotel Marina',
+  timezone: 'Europe/Madrid',
+  timezone_locked: false,
+}
 
 /**
  * El estado del asistente de puesta en marcha (RF-PD-03) para el resto de
@@ -1478,6 +1483,8 @@ export interface ManagementApiOptions {
    * tarea 5.11b): ve el registro horario y ningun boton de sus tres correcciones.
    */
   readonly role?: 'rrhh' | 'manager' | 'admin' | 'auditor'
+  /** `Site.timezone_locked` de partida (RN-23): `true` = ya hubo fichajes y la zona no se puede cambiar. Por omision, `false`. */
+  readonly siteTimezoneLocked?: boolean
   /**
    * El idioma de la cuenta que entra (`session.user.locale`). Por omision,
    * `'es'`, como las tres cuentas de ejemplo. `main.ts` adopta este idioma
@@ -2031,7 +2038,7 @@ export async function stubManagementApi(
   // Departamentos y centro (RF-ID-03, bloque 21): mutables, para que crear y
   // renombrar se vean en el listado siguiente como en el servidor.
   const departmentsState: Department[] = DEPARTMENTS.data.map((candidate) => ({ ...candidate }))
-  let siteState: Site = { ...SITE }
+  let siteState: Site = { ...SITE, timezone_locked: options.siteTimezoneLocked ?? false }
 
   function canWriteEmployees(): boolean {
     return currentUser.abilities.includes('*') || currentUser.abilities.includes('employees:*')
@@ -3882,9 +3889,28 @@ export async function stubManagementApi(
           await json(route, 200, siteState)
           return
         case 'PATCH /api/v1/site': {
-          const patch = request.postDataJSON() as { name?: string }
+          const patch = request.postDataJSON() as { name?: string; timezone?: string }
 
-          siteState = { ...siteState, ...(patch.name === undefined ? {} : { name: patch.name }) }
+          // RN-23: con fichajes registrados la zona no se cambia (409).
+          if (
+            patch.timezone !== undefined &&
+            patch.timezone !== siteState.timezone &&
+            siteState.timezone_locked
+          ) {
+            await problem(
+              route,
+              409,
+              'urn:kronoqr:problem:site-time-zone-locked',
+              'Zona horaria fija',
+            )
+            return
+          }
+
+          siteState = {
+            ...siteState,
+            ...(patch.name === undefined ? {} : { name: patch.name }),
+            ...(patch.timezone === undefined ? {} : { timezone: patch.timezone }),
+          }
           await json(route, 200, siteState)
           return
         }

@@ -27,7 +27,6 @@ use App\Modules\Compliance\Application\Port\LegalExportMetrics;
 use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Application\Port\PurgeReviewLedger;
-use App\Modules\Compliance\Application\Port\ResponsibleAccounts;
 use App\Modules\Compliance\Application\Port\WorkRecordAuditSource;
 use App\Modules\Compliance\Application\Port\WorkRecordReconciliationMetrics;
 use App\Modules\Compliance\Application\UseCase\LegalExport;
@@ -94,7 +93,6 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentLedger;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentNotices;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportSource;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabasePurgeReviewLedger;
-use App\Modules\Compliance\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordAuditSource;
 use App\Modules\Identity\Domain\Event\CredentialDelivered;
 use App\Modules\Identity\Domain\Event\CredentialIssued;
@@ -234,17 +232,14 @@ final class ComplianceServiceProvider extends ServiceProvider
 
         /*
          * La revision de una purga no admisible (ADR-057 enmienda del
-         * 10-10-2026 §6). Las dos lecturas van por la conexion de la
-         * aplicacion, la misma de `SerializedLedgerWrite`, para que la
-         * comprobacion de «ya revisada» caiga dentro de su candado.
+         * 10-10-2026 §6). La lectura va por la conexion de la aplicacion, la
+         * misma de `SerializedLedgerWrite`, para que la comprobacion de «ya
+         * revisada» caiga dentro de su candado. La cuenta que responde la
+         * resuelve `Shared` (`ResponsibleAccounts`), por la misma conexion.
          */
         $this->app->bind(
             PurgeReviewLedger::class,
             static fn (): DatabasePurgeReviewLedger => new DatabasePurgeReviewLedger(DB::connection()),
-        );
-        $this->app->bind(
-            ResponsibleAccounts::class,
-            static fn (): DatabaseResponsibleAccounts => new DatabaseResponsibleAccounts(DB::connection()),
         );
 
         /*

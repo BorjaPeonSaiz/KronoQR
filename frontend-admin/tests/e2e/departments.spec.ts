@@ -3,8 +3,8 @@
 // LOS RECORRIDOS QUE IMPORTAN: quien administra crea un departamento y lo
 // renombra viendo «antes → despues»; un nombre repetido se explica junto al
 // campo; el nombre del centro se edita y su zona horaria se ve sin poder
-// cambiarse; y quien solo consulta (auditor) ve la lista sin ningun control de
-// escritura.
+// cambiarse mientras no haya fichajes (RN-23); y quien solo consulta
+// (auditor) ve la lista sin ningun control de escritura.
 //
 // El backend no participa: la API va simulada con las formas del contrato
 // (`support/admin.ts`). Que `rrhh` no pueda asignar responsable o que el nombre
@@ -14,7 +14,7 @@
 // llevan un asterisco aria-hidden.
 import AxeBuilder from '@axe-core/playwright'
 import { expect, type Page, test } from '@playwright/test'
-import { logInAsAdmin, logInAsAuditor, stubManagementApi } from './support/admin'
+import { logInAsAdmin, logInAsAuditor, SITE, stubManagementApi } from './support/admin'
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
@@ -108,6 +108,104 @@ test.describe('departamentos y centro: administracion', () => {
       await expect(dialog).toHaveCount(0)
       await expect(site.locator('[data-test="site-name"]')).toContainText('Hotel Marina Playa')
       await expect(site.locator('[data-test="site-timezone"]')).toHaveText('Europe/Madrid')
+    },
+  )
+})
+
+test.describe('centro: zona horaria (RN-23)', () => {
+  test(
+    'con la zona libre se cambia desde un dialogo con antes y despues',
+    { tag: ['@RN-23'] },
+    async ({ page }) => {
+      await stubManagementApi(page, { role: 'admin' })
+      await logInAsAdmin(page)
+      await openDepartments(page)
+
+      const site = page.locator('[data-test="site-section"]')
+
+      await expect(site.locator('[data-test="site-timezone-note"]')).toContainText(
+        'hasta el primer fichaje',
+      )
+      await site.locator('[data-test="site-change-timezone"]').click()
+
+      const dialog = page.getByRole('dialog')
+
+      await dialog.locator('[data-test="timezone-input"]').fill('Atlantic/Canary')
+      await expect(dialog.locator('[data-test="timezone-preview"]')).toContainText('Europe/Madrid')
+      await expect(dialog.locator('[data-test="timezone-preview"]')).toContainText(
+        'Atlantic/Canary',
+      )
+      await expectNoAxeViolations(page)
+
+      await dialog.getByRole('button', { name: 'Cambiar zona' }).click()
+
+      await expect(dialog).toHaveCount(0)
+      await expect(site.locator('[data-test="site-timezone"]')).toHaveText('Atlantic/Canary')
+    },
+  )
+
+  test(
+    'si el primer fichaje llega con el dialogo abierto, el 409 se explica y la zona queda fija',
+    { tag: ['@RN-23'] },
+    async ({ page }) => {
+      await stubManagementApi(page, { role: 'admin' })
+      await logInAsAdmin(page)
+      await openDepartments(page)
+
+      const site = page.locator('[data-test="site-section"]')
+
+      await site.locator('[data-test="site-change-timezone"]').click()
+
+      const dialog = page.getByRole('dialog')
+
+      await dialog.locator('[data-test="timezone-input"]').fill('Atlantic/Canary')
+
+      // Entre tanto se registra el primer fichaje: el servidor ya la da por fija.
+      await page.route('**/api/v1/site', async (route) => {
+        const patching = route.request().method() === 'PATCH'
+
+        await route.fulfill({
+          status: patching ? 409 : 200,
+          contentType: patching ? 'application/problem+json' : 'application/json',
+          body: JSON.stringify(
+            patching
+              ? {
+                  type: 'urn:kronoqr:problem:site-time-zone-locked',
+                  title: 'Zona horaria fija',
+                  status: 409,
+                }
+              : { ...SITE, timezone_locked: true },
+          ),
+        })
+      })
+      await dialog.getByRole('button', { name: 'Cambiar zona' }).click()
+
+      await expect(dialog).toHaveCount(0)
+      await expect(site.locator('[data-test="site-timezone-locked-error"]')).toContainText(
+        'ya no se puede cambiar',
+      )
+      await expect(site.locator('[data-test="site-change-timezone"]')).toHaveCount(0)
+      await expect(site.locator('[data-test="site-timezone"]')).toHaveText('Europe/Madrid')
+    },
+  )
+
+  test(
+    'con la zona fija no hay boton ni campo y se explica por que',
+    { tag: ['@RN-23'] },
+    async ({ page }) => {
+      await stubManagementApi(page, { role: 'admin', siteTimezoneLocked: true })
+      await logInAsAdmin(page)
+      await openDepartments(page)
+
+      const site = page.locator('[data-test="site-section"]')
+
+      await expect(site.locator('[data-test="site-timezone"]')).toHaveText('Europe/Madrid')
+      await expect(site.locator('[data-test="site-change-timezone"]')).toHaveCount(0)
+      await expect(site.getByRole('textbox')).toHaveCount(0)
+      await expect(site.locator('[data-test="site-timezone-note"]')).toContainText(
+        'ya no se puede cambiar',
+      )
+      await expectNoAxeViolations(page)
     },
   )
 })

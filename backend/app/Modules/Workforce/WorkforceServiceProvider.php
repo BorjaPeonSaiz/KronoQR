@@ -28,6 +28,7 @@ use App\Modules\Workforce\Application\Port\PinMetrics;
 use App\Modules\Workforce\Application\Port\PinPolicyProvider;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
+use App\Modules\Workforce\Application\Port\WorkRecordPresence;
 use App\Modules\Workforce\Domain\Model\Absence;
 use App\Modules\Workforce\Domain\Model\Department;
 use App\Modules\Workforce\Domain\Model\Employee;
@@ -39,6 +40,7 @@ use App\Modules\Workforce\Http\Policy\EmployeePolicy;
 use App\Modules\Workforce\Http\Policy\EmploymentContractPolicy;
 use App\Modules\Workforce\Http\Policy\SitePolicy;
 use App\Modules\Workforce\Infrastructure\Adapter\ConfiguredPinPolicyProvider;
+use App\Modules\Workforce\Infrastructure\Adapter\DatabaseWorkRecordPresence;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentClockingEmployees;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeCardDirectory;
 use App\Modules\Workforce\Infrastructure\Adapter\EloquentEmployeeDirectory;
@@ -52,6 +54,7 @@ use App\Modules\Workforce\Infrastructure\Adapter\LaravelPinHasher;
 use App\Modules\Workforce\Infrastructure\Adapter\LaravelWorkforceEventPublisher;
 use App\Modules\Workforce\Infrastructure\Adapter\SanctumPortalSessionIssuer;
 use App\Modules\Workforce\Infrastructure\Adapter\SimpleExcelImportSource;
+use App\Modules\Workforce\Infrastructure\Console\CorrectSiteTimezoneCommand;
 use App\Modules\Workforce\Infrastructure\Metrics\RedisPinMetrics;
 use App\Modules\Workforce\Infrastructure\Persistence\DatabaseManagementAccountLookup;
 use App\Modules\Workforce\Infrastructure\Persistence\DatabaseParentRowLocks;
@@ -97,6 +100,10 @@ final class WorkforceServiceProvider extends ServiceProvider
 
         // ADR-046 §1.1 punto 2: las filas padre de la ficha, antes de la cadena.
         $this->app->bind(ParentRowLocks::class, DatabaseParentRowLocks::class);
+
+        // RN-23, ADR-056: si ya hay registro horario, leido de `shift_entries`
+        // sin importar `Attendance`. Es lo que fija la zona horaria del centro.
+        $this->app->bind(WorkRecordPresence::class, DatabaseWorkRecordPresence::class);
 
         /*
          * Importacion masiva de plantilla (tarea 5.5, RF-GP-05).
@@ -234,5 +241,13 @@ final class WorkforceServiceProvider extends ServiceProvider
         Gate::policy(Department::class, DepartmentPolicy::class);
         Gate::policy(EmploymentContract::class, EmploymentContractPolicy::class);
         Gate::policy(Absence::class, AbsencePolicy::class);
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                // RN-23, ADR-056 §3: la unica via para corregir la zona horaria
+                // con registro horario. No se programa: se ejecuta a mano.
+                CorrectSiteTimezoneCommand::class,
+            ]);
+        }
     }
 }

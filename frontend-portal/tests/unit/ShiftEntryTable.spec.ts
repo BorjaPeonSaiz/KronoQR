@@ -123,3 +123,13 @@ describe('ShiftEntryTable, el turno que cruza la medianoche (RF-ID-05, RN-05, re
     expect(wrapper.text()).not.toContain('21:00')
   })
 })
+
+describe('ShiftEntryTable, la zona del centro es unica y fija (RF-ID-05, RN-05, RN-23)', () => {
+  it('no ensena ningun sufijo de zona aunque la del tramo sea distinta a la del centro', async () => {
+    const wrapper = await mountTable([shiftEntry({ time_zone: 'America/Bogota' })], 485)
+
+    expect(wrapper.text()).not.toContain('America/Bogota')
+    expect(wrapper.text()).not.toContain('Europe/Madrid')
+    expect(wrapper.find('tbody tr:first-child > th').text()).toBe('06:00')
+  })
+})

@@ -47,6 +47,14 @@ const EMPLOYEE_LOCK_DISCIPLINE_ROW_LOCKS = [
     // ADR-046 §1.1 punto 3: el renombrado toma su fila ANTES de la cadena,
     // porque `name` esta en un indice unico completo.
     'Workforce/Infrastructure/Persistence/EloquentDepartmentRepository.php' => 'departments, antes de la cadena (§1.1 punto 3)',
+    // RN-23, ADR-056: el cambio y la correccion de la zona del centro toman su
+    // fila con FOR UPDATE ANTES de la cadena (fila padre, §1.1). Choca a
+    // proposito con el FOR KEY SHARE con que el fichaje y el alta manual leen
+    // la zona (`EloquentSiteCalendar::timezoneForRecording()`, que no entra
+    // aqui porque FOR KEY SHARE es el candado de las filas padre y el detector
+    // no lo cuenta), y ese fichaje tambien la toma antes de la cadena: el orden
+    // es el mismo en los dos lados y no hay ciclo.
+    'Workforce/Infrastructure/Persistence/EloquentSiteRepository.php' => 'sites, antes de la cadena (§1.1, RN-23)',
 ];
 
 /**

@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Support\Concurrency;
 
+use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
 use App\Modules\Attendance\Application\Command\RegisterScanCommand;
+use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
 use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
+use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
+use App\Modules\Attendance\Domain\ValueObject\CorrectionReasonCode;
 use App\Modules\Identity\Application\Command\DeactivateManagementAccountCommand;
 use App\Modules\Identity\Application\Command\DeliverCredentialCommand;
 use App\Modules\Identity\Application\Command\IssueCredentialCommand;
@@ -32,6 +36,7 @@ use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
 use App\Modules\Workforce\Application\Command\ResetEmployeePinCommand;
 use App\Modules\Workforce\Application\Command\UpdateDepartmentCommand;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
+use App\Modules\Workforce\Application\Command\UpdateSiteCommand;
 use App\Modules\Workforce\Application\UseCase\ImportEmployeesHandler;
 use App\Modules\Workforce\Application\UseCase\OffboardEmployeeHandler;
 use App\Modules\Workforce\Application\UseCase\RecordPinDeliveryHandler;
@@ -39,6 +44,7 @@ use App\Modules\Workforce\Application\UseCase\RegisterEmployeeHandler;
 use App\Modules\Workforce\Application\UseCase\ResetEmployeePinHandler;
 use App\Modules\Workforce\Application\UseCase\UpdateDepartmentHandler;
 use App\Modules\Workforce\Application\UseCase\UpdateEmployeeHandler;
+use App\Modules\Workforce\Application\UseCase\UpdateSiteHandler;
 use DateTimeImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -263,6 +269,20 @@ final class UseCaseInOtherProcess
                 ),
                 CredentialResolution::resolved($spec['employee']),
             ),
+            // El cambio de zona del centro contra el primer tramo (RN-23,
+            // ADR-056): la otra mitad de `SiteTimezoneFirstScanRaceTest`.
+            'update_site_timezone' => static fn (): mixed => app(UpdateSiteHandler::class)->handle(
+                new UpdateSiteCommand(timezone: $spec['timezone']),
+            ),
+            // Un alta manual de tramo, firmada por la cuenta indicada (RN-23).
+            'add_shift_entry' => static fn (): mixed => app(AddShiftEntryHandler::class)->handle(new AddShiftEntryCommand(
+                employeeUuid: $spec['employee'],
+                workDate: $spec['work_date'],
+                clockedInAt: new DateTimeImmutable($spec['clocked_in_at']),
+                clockedOutAt: new DateTimeImmutable($spec['clocked_out_at']),
+                reason: CorrectionReason::of(CorrectionReasonCode::OLVIDO_FICHAJE_ENTRADA),
+                performedByUserId: (int) $spec['user'],
+            )),
             // El orden PROHIBIDO, a mano: la ficha primero y la cadena despues.
             // Es el control de las pruebas de orden de candados, lo que demuestra
             // que pueden fallar.

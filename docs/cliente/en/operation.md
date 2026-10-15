@@ -1502,6 +1502,16 @@ last few days (`COMPLIANCE_INCIDENT_LOOKBACK_DAYS`, 7 by default) and does not
 close or reopen old incidents. No report already issued and no export for the
 Labour Inspectorate changes.
 
+**When updating to 2.2.1: the site's time zone becomes fixed.** From the first
+clock-in, the site's time zone can no longer be changed from the panel or the
+API: the panel shows it without letting you edit it and explains why. If your
+installation already has clock-ins, there is nothing to do. If the zone was set
+wrongly at start-up, a console command, with a reason, confirmation and an
+audit entry, corrects it **without moving any work day already recorded**: the
+history is then shown in the corrected zone. How to use it is in
+[`configuration.md`](configuration.md) (`APP_TIMEZONE` row). No clock-in and no
+total changes when updating.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which

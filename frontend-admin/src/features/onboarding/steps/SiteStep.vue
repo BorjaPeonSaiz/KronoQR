@@ -14,6 +14,7 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import TimezoneField from '@/shared/ui/TimezoneField.vue'
 import { createInstallationSite } from '../setup.api'
 import { useSetupStore } from '../setup.store'
 
@@ -80,30 +81,12 @@ async function submit(): Promise<void> {
         />
       </FormField>
 
-      <FormField
-        v-slot="field"
+      <TimezoneField
+        v-model="timezone"
         :label="t('onboarding.steps.site.fields.timezone')"
         :hint="t('onboarding.steps.site.hints.timezone')"
         :errors="fieldErrors('timezone')"
-        required
-      >
-        <input
-          :id="field.id"
-          v-model="timezone"
-          type="text"
-          list="onboarding-timezones"
-          required
-          :aria-describedby="field.describedBy"
-          :aria-invalid="field.invalid"
-          class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text"
-        />
-        <datalist id="onboarding-timezones">
-          <option value="Europe/Madrid" />
-          <option value="Atlantic/Canary" />
-          <option value="Europe/Lisbon" />
-          <option value="Europe/Paris" />
-        </datalist>
-      </FormField>
+      />
 
       <div>
         <button

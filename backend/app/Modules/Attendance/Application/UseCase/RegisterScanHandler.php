@@ -376,7 +376,10 @@ final readonly class RegisterScanHandler implements ScanRegistration
             );
         }
 
-        $timezone = $this->calendar->timezoneOf($employee->siteId);
+        // RN-23 (ADR-056): con la fila del centro compartida hasta confirmar. Si
+        // la zona esta cambiando, se espera al cambio y se ficha con la nueva; si
+        // este es el primer tramo, el cambio lo vera y se negara.
+        $timezone = $this->calendar->timezoneForRecording($employee->siteId);
 
         if (! $timezone instanceof DateTimeZone) {
             return $this->reject($command, $recordedAt, $employeeUuid, ScanResult::REJECTED_UNKNOWN);

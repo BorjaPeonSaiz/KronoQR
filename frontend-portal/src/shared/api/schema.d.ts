@@ -2480,10 +2480,16 @@ export interface paths {
          * Modificacion del centro
          * @description Cambia el nombre o la zona horaria del centro.
          *
-         *     **Cambiar la zona horaria cambia el calculo de las jornadas
-         *     siguientes** (RN-05): es configuracion con efecto sobre el registro
-         *     legal, y por eso queda auditada. No reescribe el pasado — las jornadas
-         *     ya calculadas conservan su `work_date`. `timezone` es un identificador
+         *     **La zona horaria queda fija con el primer tramo** (RN-23, ADR-056):
+         *     decide a que jornada va cada tramo (RN-05) y con ella se presenta todo
+         *     el historico. Mientras no exista ningun tramo, en cualquier estado, se
+         *     cambia aqui y queda auditada. Desde el primero, una peticion que cambie
+         *     la zona responde `409` (`urn:kronoqr:problem:site-time-zone-locked`) y
+         *     no cambia nada, tampoco el nombre si viajaba en la misma peticion. La
+         *     misma zona que ya tiene no es un cambio. Corregir una zona mal puesta en
+         *     la puesta en marcha es una orden de consola en el servidor
+         *     (`workforce:correct-site-timezone`), con motivo y asiento, que no mueve
+         *     ninguna jornada registrada. `timezone` es un identificador
          *     IANA (`Europe/Madrid`), nunca un desfase en horas: un desfase no sabe de
          *     cambios de hora y rompe RN-09 dos veces al año.
          */
@@ -7805,6 +7811,13 @@ export interface components {
              * @example Europe/Madrid
              */
             timezone: string;
+            /**
+             * @description `true` desde que existe el primer tramo del registro horario, en
+             *     cualquier estado (RN-23, ADR-056): la zona ya no se cambia por la
+             *     API y el panel no ofrece cambiarla. Al crear el centro siempre es
+             *     `false`.
+             */
+            timezone_locked: boolean;
         };
         /**
          * UpdateSiteRequest
@@ -9187,7 +9200,10 @@ export interface components {
          * @description Zona horaria IANA del centro (`sites.timezone`). **Se muestra, no se
          *     adivina**: viaja en la respuesta para que ninguna pantalla use la del
          *     navegador. `Europe/Madrid` y `Atlantic/Canary` son el mismo pais y una
-         *     hora de diferencia: la zona es del centro, no del pais.
+         *     hora de diferencia: la zona es del centro, no del pais. **Siempre es la
+         *     del centro** (hay uno, ADR-040, y su zona queda fija con el primer
+         *     tramo, RN-23); que viaje en cada jornada y en cada tramo se conserva por
+         *     compatibilidad de la v1 (ADR-012, ADR-056).
          * @example Europe/Madrid
          */
         TimeZoneName: string;
@@ -12780,6 +12796,28 @@ export interface components {
             };
         };
         /**
+         * @description La modificacion del centro choca con su estado. **`type` distingue las
+         *     causas:**
+         *
+         *     - `urn:kronoqr:problem:site-time-zone-locked` — **ya existe registro
+         *       horario y la peticion cambia la zona** (RN-23, ADR-056). No cambia
+         *       nada, tampoco el nombre si viajaba en la misma peticion, y no deja
+         *       asiento. No hay nada que corregir en el formulario: se relee el
+         *       centro (`timezone_locked` sera `true`). Una zona mal puesta en la
+         *       puesta en marcha se corrige en el servidor con
+         *       `workforce:correct-site-timezone`.
+         *     - `urn:kronoqr:problem:conflict` — cualquier otro choque con el estado
+         *       del centro.
+         */
+        SiteConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description La operacion sobre la ficha de una persona choca con su estado. **`type`
          *     distingue las causas**, porque a quien las recibe le cambia la accion
          *     siguiente:
@@ -15610,7 +15648,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["SiteConflict"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };

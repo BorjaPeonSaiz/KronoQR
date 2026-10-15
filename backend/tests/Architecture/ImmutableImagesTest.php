@@ -140,7 +140,9 @@ it('fija por digest toda imagen de compose.prod.yaml, salvo las siete de observa
     foreach ($imagenes as $imagen) {
         if (str_starts_with($imagen, '*')) {
             // Alias del ancla de la imagen de la aplicacion.
-            expect($imagen)->toBe('*php-image');
+            // Alias de un ancla: la imagen de la aplicacion, o la de Prometheus que reutiliza el
+            // servicio de un solo uso `retention-guard` (una sola version que mantener).
+            expect($imagen)->toBeIn(['*php-image', '*obs-shell-image']);
 
             continue;
         }

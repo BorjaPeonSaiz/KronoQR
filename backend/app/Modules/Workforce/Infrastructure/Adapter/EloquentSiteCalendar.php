@@ -35,4 +35,18 @@ final readonly class EloquentSiteCalendar implements SiteCalendar
 
         return new DateTimeZone($row->timezone);
     }
+
+    /**
+     * `FOR KEY SHARE`, el candado mas debil: no choca con otros fichajes ni con
+     * las claves ajenas de nadie, y si con el `FOR UPDATE` de
+     * `EloquentSiteRepository::installationSiteForUpdate()` (RN-23, ADR-056).
+     * En `READ COMMITTED`, si espera a un cambio de zona, devuelve la fila ya
+     * confirmada: la zona nueva.
+     */
+    public function timezoneForRecording(int $siteId): ?DateTimeZone
+    {
+        $row = Site::query()->select(['timezone'])->whereKey($siteId)->lock('FOR KEY SHARE')->first();
+
+        return $row instanceof Site ? new DateTimeZone($row->timezone) : null;
+    }
 }
