@@ -53,7 +53,27 @@ sha256sum -c --ignore-missing SHA256SUMS
 La última orden tiene que decir `kronoqr-2.2.0.tar.gz: OK`; con `FAILED`, no lo
 descomprimas y vuelve a descargarlo. La suma prueba que el paquete llegó entero,
 no quién lo publicó: descárgalo siempre de la dirección oficial de arriba, nunca
-de una copia reenviada. Si el servidor no tiene salida a internet, descarga los
+de una copia reenviada.
+
+**Y, si tienes cosign 3.0.0 o posterior, antes de comprobar la suma, verifica quién
+lo publicó.** Baja también `SHA256SUMS.bundle` (tercer fichero del apartado
+*Assets*) y ejecuta, **antes de descomprimir** y con la identidad copiada de
+[`instalacion.md`](../cliente/instalacion.md) §7.1 —nunca la del paquete nuevo,
+porque un paquete sustituido llevaría una a su medida—:
+
+```bash
+curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS.bundle
+cosign verify-blob \
+  --bundle SHA256SUMS.bundle \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/BorjaPeonSaiz/KronoQR/\.github/workflows/release\.yml@refs/(tags/v[0-9][0-9A-Za-z.+-]*|heads/main)$' \
+  SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+```
+
+La primera tiene que decir `Verified OK`. Con cualquier otra salida, no
+descomprimas nada y avisa al fabricante. Sin cosign esta comprobación se omite y
+sigue valiendo la suma de arriba; instalarlo es opcional (§7.1). Si el servidor no tiene salida a internet, descarga los
 dos ficheros desde otro equipo y cópialos a `/opt` (`scp`, WinSCP o un USB);
 eso basta para el paquete, pero las imágenes de la versión nueva llegan aparte,
 como explica [`instalacion.md` §7](../cliente/instalacion.md#7-instalar-sin-salida-a-internet). **La
@@ -111,6 +131,17 @@ activada sigue valiendo; si tu proveedor te envía una nueva, se activa aparte c
    ```bash
    docker load -i imagenes-2.2.0.tar
    ```
+
+   El `.env` de un servidor así ya lleva `IMAGE_DIGEST_PHP=`,
+   `IMAGE_DIGEST_NGINX=`, `IMAGE_DIGEST_POSTGRES=` y `REDIS_IMAGE_DIGEST=`
+   vacías (las tres del producto y Redis, que también va fijado por digest): se
+   conservan al actualizar y el aviso de `update.sh` te lo recordará en cada
+   actualización. Sin digest no hay firma que comprobar, así que `cosign` no
+   interviene en las imágenes; lo que sí puedes hacer es verificar `SHA256SUMS`
+   con su `.bundle` en el equipo con internet donde descargas el paquete (paso
+   previo de arriba). Si tus imágenes vienen de un registro propio que no las
+   firma, `update.sh` acepta `--skip-signature-check` (queda en su informe), pero
+   **nunca** con las imágenes del fabricante.
 
 4. **Comprueba sin tocar:**
 
@@ -288,7 +319,8 @@ La tabla es **la misma de los cinco scripts**, publicada en
 | `3` | **Ya está en la versión de destino**, o no hay instalación que actualizar. Nada tocado | Nada. Si de verdad no hay instalación, lo que quieres es `install.sh` |
 | `4` | **Falló y volvió a la versión anterior.** Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante **antes** de reintentar: dice en qué paso y por qué |
 | `5` | **Falló y la vuelta atrás quedó incompleta.** Nada más se toca | §5. Es el único código que exige a una persona delante |
-| `6` | **No lo usa `update.sh`**: toda verificación fallida deshace (RF-PD-10). Si lo ves, es de otro script | — |
+| `6` | **Casi nunca**: toda verificación fallida deshace (RF-PD-10). La única excepción es una actualización que SÍ terminó, con la versión nueva en marcha, pero cuyo asiento `system.updated` de la auditoría no se pudo escribir: el trabajo no se deshace por eso | Leer el informe: dice qué orden escribe el asiento que falta |
+| `7` | **La firma de cosign de una imagen del producto no es válida.** Sale en el paso 1: la instalación no se ha tocado y sigue en su versión. Solo ocurre si tienes cosign 3.0.0 o posterior instalado y la imagen va fijada por digest ([`instalacion.md`](../cliente/instalacion.md) §7.1). Si cosign no pudo consultar Sigstore o el registro, **no** es esto: avisa y sigue | **No sigas con ese paquete.** Envía al fabricante el detalle que imprime el script y el informe (línea `image-signature`). No uses `--skip-signature-check` con las imágenes del fabricante |
 
 ### 4 bis. «La cadena de auditoría NO está íntegra» (salida `2`)
 
@@ -460,7 +492,7 @@ sudo mv docker-compose.yml.retirado-2.1.0 docker-compose.yml   # el nombre exact
 - **La licencia.** Una licencia caducada o inválida **no impide actualizar**:
   dejaría al cliente sin correcciones de seguridad sobre su registro legal
   (ADR-019). El estado de la licencia se anota en el informe, nada más.
-- **Qué imágenes corren.** El `docker-compose.yml` del paquete fija `php`, `nginx` y `postgres` por **digest** (`:…`, ADR-053): una versión publicada es inmutable, y lo que arranca son los bytes que se publicaron aunque alguien reescribiera la etiqueta en el registro. `docker compose config --images` muestra las referencias exactas. Redis y las imágenes del perfil de observabilidad siguen por etiqueta de versión. Sin salida a internet, vaciar `IMAGE_DIGEST_*` en el `.env` vuelve a la etiqueta (ver [`instalacion.md`](../cliente/instalacion.md) §7) y esa instalación pierde la garantía: no lo hagas si puedes evitarlo.
+- **Qué imágenes corren.** El `docker-compose.yml` del paquete fija `php`, `nginx` y `postgres` por **digest** (`:…`, ADR-053): una versión publicada es inmutable, y lo que arranca son los bytes que se publicaron aunque alguien reescribiera la etiqueta en el registro. `docker compose config --images` muestra las referencias exactas. Redis también va por digest (`REDIS_IMAGE_DIGEST`); las siete imágenes del perfil de observabilidad siguen por etiqueta de versión. Las tres del producto van además **firmadas con cosign**: con cosign 3.0.0 o posterior instalado, `update.sh` verifica la firma en el paso 1 y sale con el código 7 si no es válida (§4); sin cosign avisa y vale el digest. Sin salida a internet, vaciar `IMAGE_DIGEST_*` y `REDIS_IMAGE_DIGEST` en el `.env` vuelve a la etiqueta (ver [`instalacion.md`](../cliente/instalacion.md) §7) y esa instalación pierde la garantía: no lo hagas si puedes evitarlo.
 - **El fichaje.** Ni durante la actualización ni si falla.
 
 **Lo que sí cambia al pasar de la 2.1.0: dónde viven los ficheros generados**
