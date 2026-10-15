@@ -32,7 +32,7 @@ function imageSignatureSandbox(?string $mode, string $version = 'v3.1.3'): strin
             'denied' => "echo 'Error: GET https://ghcr.io/v2/acme/kronoqr/php/referrers: DENIED: denied' >&2\nexit 1\n",
             'ratelimit' => "echo 'Error: unexpected status code 429 Too Many Requests: toomanyrequests' >&2\nexit 1\n",
             // Se verifican todas las imagenes aunque la primera no tenga red. La primera llamada no tiene red; las siguientes, firma inexistente.
-            'network-then-invalid' => "if [ ! -e ".escapeshellarg($dir.'/segunda')." ]; then : >".escapeshellarg($dir.'/segunda')."; echo 'Error: dial tcp: i/o timeout' >&2; exit 1; fi\necho 'Error: no matching signatures' >&2\nexit 1\n",
+            'network-then-invalid' => 'if [ ! -e '.escapeshellarg($dir.'/segunda').' ]; then : >'.escapeshellarg($dir.'/segunda')."; echo 'Error: dial tcp: i/o timeout' >&2; exit 1; fi\necho 'Error: no matching signatures' >&2\nexit 1\n",
             default => "exit 0\n",
         };
         file_put_contents(
@@ -362,7 +362,7 @@ it('update.sh lee el images.lock separado por espacios y pasa IMAGE_DIGEST_*=@sh
     ['dir' => $dir, 'path' => $path] = imageSignatureInstallation(null);
     file_put_contents(
         $dir.'/bin/docker',
-        "#!/usr/bin/env bash\ncase \"\$*\" in *'config --images'*) printf 'ENV_PHP=%s ENV_NGINX=%s ENV_POSTGRES=%s\n' \"\$IMAGE_DIGEST_PHP\" \"\$IMAGE_DIGEST_NGINX\" \"\$IMAGE_DIGEST_POSTGRES\" >>".escapeshellarg($dir.'/entorno')."; cat ".escapeshellarg($dir.'/imagenes')." ;; esac\nexit 0\n",
+        "#!/usr/bin/env bash\ncase \"\$*\" in *'config --images'*) printf 'ENV_PHP=%s ENV_NGINX=%s ENV_POSTGRES=%s\n' \"\$IMAGE_DIGEST_PHP\" \"\$IMAGE_DIGEST_NGINX\" \"\$IMAGE_DIGEST_POSTGRES\" >>".escapeshellarg($dir.'/entorno').'; cat '.escapeshellarg($dir.'/imagenes')." ;; esac\nexit 0\n",
     );
     $a = 'sha256:'.str_repeat('a', 64);
     $b = 'sha256:'.str_repeat('b', 64);
