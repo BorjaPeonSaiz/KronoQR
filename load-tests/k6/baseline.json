@@ -96,7 +96,19 @@
   "write_path": {
     "p50": 81.9,
     "p95": 401.6,
-    "p99": 551.6
+    "p99": 551.6,
+    "p95_over_reject_p50": 3.84
+  },
+  "reject_classes": {
+    "signature": {
+      "p50": 105.7
+    },
+    "unknown": {
+      "p50": 104.7
+    },
+    "revoked": {
+      "p50": 96.6
+    }
   },
   "pin_path": {
     "p50": 708.6,

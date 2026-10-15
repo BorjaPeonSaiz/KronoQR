@@ -91,12 +91,27 @@ const COMPLIANCE_BUDGET_MS = 2000 // orientativo: ningun requisito lo fija
  * credencial —trabajo poco y fijo, la «velocidad de la maquina» de esa
  * pasada— crecio en la misma proporcion (80, 104,7 y 260 ms), y el p95 medido
  * en esa unidad fue 3,59, 3,84 y 3,85: un 7 % de dispersion en vez de un 248 %.
- * PROPUESTA, PENDIENTE DE DECISION (no aplicada): juzgar en modo `baseline` ese
- * cociente con esta misma tolerancia, y dejar el p95 en milisegundos como
- * guarda gruesa a 3x para que una ralentizacion GLOBAL —que el cociente no ve—
- * no pase. Las cifras por pasada estan en `baseline.json`, `baseline_of.runs`.
+ *
+ * DECISION DEL PROPIETARIO (15-10-2026), APLICADA. En modo `baseline`, RNF-P-02
+ * juzga ese COCIENTE —p95 de escritura entre la mediana de los p50 de las tres
+ * clases de rechazo de credencial de la MISMA pasada— con esta tolerancia sobre
+ * el cociente de la linea base. El p95 en milisegundos queda como guarda gruesa
+ * a `BASELINE_GROSS_RATIO`: una ralentizacion GLOBAL, que tambien frena los
+ * rechazos y que el cociente no ve, sigue saliendo roja. Sin rechazos bastantes
+ * para medir la velocidad de la maquina, el veredicto es «no fiable», nunca
+ * verde. En modo `threshold` la cifra solo alimenta el aviso de tendencia. Las
+ * cifras por pasada estan en `baseline.json`, `baseline_of.runs`.
  */
 const BASELINE_REGRESSION_RATIO = 1.25
+
+/**
+ * La guarda gruesa en milisegundos del modo `baseline` (decision de 15-10-2026).
+ *
+ * 3x la linea base: por encima de lo que se ha visto variar el runner con el
+ * mismo codigo (la pasada mas lenta fue 2,49 veces la mediana), y por debajo de
+ * lo que costaria una regresion global seria que el cociente no detecta.
+ */
+const BASELINE_GROSS_RATIO = 3
 
 /** Cuanto puede caer la tasa de tramos frente a la linea base (modo `baseline`). */
 const BASELINE_RATE_TOLERANCE = 0.8
@@ -274,6 +289,48 @@ function percentiles(values) {
   }
 }
 
+/** Mediana de los valores numericos; `null` si no hay ninguno o falta alguno. */
+function medianOf(values) {
+  if (values.length === 0 || values.some((value) => typeof value !== 'number')) {
+    return null
+  }
+
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+/**
+ * La «velocidad de la maquina» de una pasada: la mediana de los p50 de las tres
+ * clases de rechazo de credencial, contestadas con `422`.
+ *
+ * POR QUE ESTA. Un rechazo de credencial hace poco trabajo, y el mismo en
+ * cualquier version —firma, busqueda, suelo de tiempo constante—, asi que lo
+ * que hace variar su mediana de una pasada a otra es la maquina: la CPU que el
+ * runner tenia libre. Medido en el bloque 15: 80, 104,7 y 260 ms en tres
+ * pasadas del mismo codigo.
+ *
+ * `null` si alguna clase no llega a los suelos de RS-03: entonces no hay
+ * velocidad que medir, y quien la necesite tiene que decir «no fiable».
+ */
+function machineSpeedOf(durations) {
+  const medians = REJECT_CLASSES.map((rejectClass) => {
+    const answered = percentiles(
+      durations
+        .filter((sample) => sample.rejectClass === rejectClass && sample.status === '422')
+        .map((sample) => sample.value),
+    )
+    const offered = durations.filter((sample) => sample.rejectClass === rejectClass).length
+    const enough =
+      answered.samples >= REJECT_SAMPLES_FLOOR && offered > 0 && answered.samples / offered >= REJECT_SAMPLES_RATIO_FLOOR
+
+    return enough ? answered.p50 : null
+  })
+
+  return medianOf(medians)
+}
+
 /**
  * Lee los `instance-*.csv` de un directorio.
  *
@@ -430,6 +487,21 @@ function analyse(results, options = {}) {
   const baseline = options.baseline ?? null
   const baselineP95 = baseline?.write_path?.p95 ?? null
   const baselineRate = baseline?.totals?.shift_entries_per_second ?? null
+
+  // LA VELOCIDAD DE LA MAQUINA de esta pasada y el p95 medido en esa unidad
+  // (decision de 15-10-2026, ver `BASELINE_REGRESSION_RATIO`). Solo cuenta si las
+  // tres clases de rechazo tienen las muestras que exige RS-03: con menos, la
+  // mediana de un puñado de rechazos no es la velocidad de nada.
+  const machineSpeedMs = machineSpeedOf(durations)
+  const baselineSpeedMs =
+    baseline === null
+      ? null
+      : medianOf(REJECT_CLASSES.map((rejectClass) => baseline?.reject_classes?.[rejectClass]?.p50 ?? null))
+  // La linea base de varias pasadas trae el cociente ya hecho (mediana de los
+  // cocientes de cada pasada, `baseline.js`); la de una sola, se calcula.
+  const baselineNormalisedP95 =
+    baseline?.write_path?.p95_over_reject_p50 ??
+    (baselineP95 !== null && baselineSpeedMs !== null && baselineSpeedMs > 0 ? baselineP95 / baselineSpeedMs : null)
 
   const scenarioNames = [...new Set(durations.map((sample) => sample.scenario))].sort()
 
@@ -589,7 +661,23 @@ function analyse(results, options = {}) {
           `${instancesOutOfBudget.length} de ${perInstance.length} instancias fuera de presupuesto`,
     )
   } else {
-    const allowedP95 = baselineP95 === null ? null : round(baselineP95 * BASELINE_REGRESSION_RATIO)
+    // DOS CONDICIONES, Y LAS DOS TIENEN QUE CUMPLIRSE (decision de 15-10-2026):
+    //   1. el p95 en unidades de velocidad de la maquina no empeora mas de
+    //      BASELINE_REGRESSION_RATIO frente al de la linea base: es lo que
+    //      separa una regresion del producto de un runner lento;
+    //   2. el p95 en milisegundos no pasa de BASELINE_GROSS_RATIO veces el de la
+    //      linea base: lo que una ralentizacion global —que frena tambien los
+    //      rechazos— esconderia en el cociente.
+    // Sin velocidad de la maquina que medir, o sin cociente en la linea base, no
+    // hay veredicto: «no fiable», nunca verde.
+    const normalisedP95 = machineSpeedMs === null || machineSpeedMs <= 0 ? null : write.p95 / machineSpeedMs
+    const allowedNormalised =
+      baselineNormalisedP95 === null ? null : baselineNormalisedP95 * BASELINE_REGRESSION_RATIO
+    const allowedGrossP95 = baselineP95 === null ? null : baselineP95 * BASELINE_GROSS_RATIO
+    const speedMissing = normalisedP95 === null || allowedNormalised === null
+    const normalisedOk = !speedMissing && normalisedP95 <= allowedNormalised
+    const grossOk = allowedGrossP95 !== null && write.p95 <= allowedGrossP95
+    const twoDecimals = (value) => (value === null ? 'n/d' : (Math.round(value * 100) / 100).toString())
 
     verdict(
       'RNF-P-02',
@@ -597,16 +685,30 @@ function analyse(results, options = {}) {
         ? 'unmeasurable'
         : !baselineUsable
           ? withoutBaseline
-          : write.p95 <= baselineP95 * BASELINE_REGRESSION_RATIO
-            ? 'pass'
-            : 'fail',
+          : !grossOk
+            ? 'fail'
+            : speedMissing
+              ? 'unmeasurable'
+              : normalisedOk
+                ? 'pass'
+                : 'fail',
       !latencyMeasurable
         ? noSamplesDetail
         : !baselineUsable
           ? `${noBaselineDetail} ${thresholdNotJudged}`
-          : `p95 ${round(write.p95)} ms sobre ${write.samples} fichajes atendidos, frente a un maximo ` +
-            `de ${allowedP95} ms (${BASELINE_REGRESSION_RATIO}x la ${baselineReference}). ` +
-            thresholdNotJudged,
+          : `p95 ${round(write.p95)} ms sobre ${write.samples} fichajes atendidos; velocidad de la maquina ` +
+            `(mediana de los rechazos de credencial) ${round(machineSpeedMs) ?? 'n/d'} ms, asi que el p95 ` +
+            `vale ${twoDecimals(normalisedP95)} rechazos, frente a un maximo de ${twoDecimals(allowedNormalised)} ` +
+            `(${BASELINE_REGRESSION_RATIO}x el ${twoDecimals(baselineNormalisedP95)} de la ${baselineReference}); ` +
+            `guarda gruesa: ${round(write.p95)} ms frente a un maximo de ${round(allowedGrossP95)} ms ` +
+            `(${BASELINE_GROSS_RATIO}x)` +
+            (!grossOk
+              ? ' — ROJO por la guarda gruesa: el p95 en milisegundos se ha ido mas alla de lo que el runner varia'
+              : speedMissing
+                ? ' — NO EVALUABLE: sin rechazos de credencial suficientes (los suelos de RS-03) no hay ' +
+                  'velocidad de la maquina con que medir, o la linea base no la trae'
+                : '') +
+            `. ${thresholdNotJudged}`,
     )
   }
 
@@ -1041,17 +1143,30 @@ function analyse(results, options = {}) {
         regression: null,
       }
     } else {
-      const ratio = now / before
+      // EL MISMO CRITERIO QUE RNF-P-02 EN MODO `baseline` (decision de
+      // 15-10-2026): si las dos pasadas miden la velocidad de su maquina, la
+      // tendencia se lee en esa unidad, y la guarda gruesa en milisegundos
+      // sigue avisando. Sin velocidad en alguna de las dos, en milisegundos,
+      // y lo dice.
+      const normalised = machineSpeedMs !== null && baselineSpeedMs !== null && baselineSpeedMs > 0
+      const ratio = normalised ? now / machineSpeedMs / (before / baselineSpeedMs) : now / before
+      const gross = now / before
+      const regression = ratio > BASELINE_REGRESSION_RATIO || gross > BASELINE_GROSS_RATIO
 
       baselineReport = {
         comparable: true,
         note:
-          `p95 de scan ${now} ms frente a ${before} ms de la linea base ` +
-          `(${((ratio - 1) * 100).toFixed(1)} %)` +
-          (ratio > BASELINE_REGRESSION_RATIO
-            ? ` — AVISO: empeora mas del ${((BASELINE_REGRESSION_RATIO - 1) * 100).toFixed(0)} %`
+          `p95 de scan ${now} ms frente a ${before} ms de la linea base; ` +
+          (normalised
+            ? `en unidades de velocidad de la maquina (${round(machineSpeedMs)} ms frente a ` +
+              `${round(baselineSpeedMs)} ms) ${((ratio - 1) * 100).toFixed(1)} %`
+            : `${((ratio - 1) * 100).toFixed(1)} % en milisegundos (sin velocidad de la maquina que comparar)`) +
+          (regression
+            ? ` — AVISO: empeora mas del ${((BASELINE_REGRESSION_RATIO - 1) * 100).toFixed(0)} %` +
+              (gross > BASELINE_GROSS_RATIO ? ` o pasa de ${BASELINE_GROSS_RATIO}x en milisegundos` : '')
             : ''),
-        regression: ratio > BASELINE_REGRESSION_RATIO,
+        regression,
+        normalised,
         ratio: Math.round(ratio * 1000) / 1000,
       }
     }
@@ -1137,6 +1252,13 @@ function analyse(results, options = {}) {
       p95: round(write.p95),
       p99: round(write.p99),
       max: round(write.max),
+      // La velocidad de la maquina de esta pasada y el p95 en esa unidad, lo
+      // que juzga RNF-P-02 en modo `baseline` (decision de 15-10-2026).
+      machine_speed_ms: round(machineSpeedMs),
+      p95_over_reject_p50:
+        machineSpeedMs === null || machineSpeedMs <= 0 || write.p95 === null
+          ? null
+          : Math.round((write.p95 / machineSpeedMs) * 100) / 100,
       per_instance: perInstance.map((entry) => ({
         instance: entry.instance,
         samples: entry.stats.samples,

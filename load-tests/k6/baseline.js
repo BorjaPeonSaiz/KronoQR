@@ -141,7 +141,22 @@ function buildBaseline(runs) {
       p50: pick((summary) => summary.write_path?.p50 ?? null),
       p95: writeP95Median,
       p99: pick((summary) => summary.write_path?.p99 ?? null),
+      // Lo que juzga RNF-P-02 en modo `baseline` (decision del propietario,
+      // 15-10-2026): el p95 de escritura en unidades de «velocidad de la
+      // maquina» de cada pasada. Mediana de los cocientes por pasada, no
+      // cociente de medianas: cada cociente es de una misma maquina.
+      p95_over_reject_p50: median(
+        runs.map((run) => ratioOrNull(run.summary.write_path?.p95, medianRejectP50(run.summary))),
+      ),
     },
+    // La velocidad de la maquina de cada clase de rechazo, en mediana: es lo
+    // que lee aggregate.js si una linea base no trae el cociente.
+    reject_classes: Object.fromEntries(
+      ['signature', 'unknown', 'revoked'].map((rejectClass) => [
+        rejectClass,
+        { p50: pick((summary) => summary.reject_classes?.[rejectClass]?.p50 ?? null) },
+      ]),
+    ),
     pin_path: {
       p50: pick((summary) => summary.pin_path?.p50 ?? null),
       p95: pick((summary) => summary.pin_path?.p95 ?? null),

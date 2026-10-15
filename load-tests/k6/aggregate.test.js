@@ -144,6 +144,7 @@ function rampRows({ count, durationMs, status = '200' }) {
  * la muta en un solo punto.
  */
 function greenRun(overrides = {}) {
+  const rejectMs = overrides.rejectDurationMs ?? 30
   const lines = [
     ...scanRows({ count: 60, durationMs: overrides.scanDurationMs ?? 100 }),
     ...pinRows({ durations: overrides.pinDurations ?? Array(20).fill(250) }),
@@ -159,12 +160,12 @@ function greenRun(overrides = {}) {
       scenario: 'scan-pin',
       tags: { match: 'yes', channel: 'pin' },
     }),
-    ...rejectRows({ rejectClass: 'signature', durations: Array(20).fill(30) }),
+    ...rejectRows({ rejectClass: 'signature', durations: Array(20).fill(rejectMs) }),
     ...rejectRows({
       rejectClass: 'unknown',
-      durations: Array(overrides.unknownSamples ?? 20).fill(30),
+      durations: Array(overrides.unknownSamples ?? 20).fill(rejectMs),
     }),
-    ...rejectRows({ rejectClass: 'revoked', durations: overrides.revokedDurations ?? Array(20).fill(30) }),
+    ...rejectRows({ rejectClass: 'revoked', durations: overrides.revokedDurations ?? Array(20).fill(rejectMs) }),
     ...outOfOrderRows({ durations: overrides.outOfOrderDurations ?? Array(20).fill(50) }),
     row({
       metric: 'scan_outcomes',
@@ -614,6 +615,9 @@ const RUNNER_BASELINE = {
   ramp_seconds: 30,
   pin_period_seconds: 4,
   write_path: { p95: 100 },
+  // La velocidad de la maquina de la pasada verde: rechazos de 30 ms, asi que
+  // su p95 de 100 ms vale 3,33 rechazos.
+  reject_classes: { signature: { p50: 30 }, unknown: { p50: 30 }, revoked: { p50: 30 } },
   totals: { shift_entries_per_second: 60 },
   scenarios: { scan: { p95: 100 }, 'scan-pin': {}, reject: {}, 'reject-out-of-order': {} },
 }
@@ -995,7 +999,7 @@ test('[R5-QA-02] la linea base versionada no se compara con las 8 instancias que
 const { buildBaseline } = require('./baseline.js')
 
 /** Un summary.json minimo con la carga del workflow y las cifras indicadas. */
-function runSummary({ writeP95, scanP95, rate, instances = 3 }) {
+function runSummary({ writeP95, scanP95, rate, rejectP50 = 80, instances = 3 }) {
   return {
     git_sha: 'abc1234',
     runner: 'github-Linux-X64',
@@ -1007,14 +1011,15 @@ function runSummary({ writeP95, scanP95, rate, instances = 3 }) {
     scenarios: { scan: { p95: scanP95 }, 'scan-pin': { p95: 600 }, reject: {}, 'reject-out-of-order': {} },
     write_path: { p95: writeP95 },
     pin_path: { p95: 600 },
+    reject_classes: { signature: { p50: rejectP50 }, unknown: { p50: rejectP50 }, revoked: { p50: rejectP50 } },
     totals: { shift_entries_per_second: rate },
   }
 }
 
 const THREE_RUNS = [
-  { id: '101', summary: runSummary({ writeP95: 287, scanP95: 267.3, rate: 19.5 }) },
-  { id: '102', summary: runSummary({ writeP95: 401.6, scanP95: 371, rate: 19.4 }) },
-  { id: '103', summary: runSummary({ writeP95: 330, scanP95: 300, rate: 19.6 }) },
+  { id: '101', summary: runSummary({ writeP95: 287, scanP95: 267.3, rate: 19.5, rejectP50: 80 }) },
+  { id: '102', summary: runSummary({ writeP95: 401.6, scanP95: 371, rate: 19.4, rejectP50: 104.7 }) },
+  { id: '103', summary: runSummary({ writeP95: 330, scanP95: 300, rate: 19.6, rejectP50: 90 }) },
 ]
 
 test('[R5-QA-02] la linea base es la mediana de cada metrica, no una pasada', () => {
@@ -1049,4 +1054,91 @@ test('[R5-QA-02][RNF-P-02] el agregado acepta la linea base de la mediana y dice
   assert.equal(summary.baseline.comparable, true)
   assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
   assert.match(summary.verdicts['RNF-P-02'].detail, /mediana de 3 pasadas: 101, 102, 103/)
+})
+
+// --- RNF-P-02 en modo linea base: el cociente y la guarda gruesa -------------
+//
+// Decision del propietario (15-10-2026). La linea base de `asBaseline()` es
+// p95 100 ms con rechazos de 30 ms: 3,33 rechazos, maximo 4,17; guarda gruesa
+// 300 ms.
+
+test('[RNF-P-02] un p95 que empeora frente a la velocidad de la maquina es rojo aunque los ms quepan en la guarda', () => {
+  // 130 ms con rechazos de 30 ms: 4,33 rechazos, por encima de 4,17.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 130 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'fail')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /vale 4\.33 rechazos, frente a un maximo de 4\.17/)
+})
+
+test('[RNF-P-02] un runner tres veces mas lento con el mismo codigo sigue en verde', () => {
+  // 290 ms con rechazos de 87 ms: los mismos 3,33 rechazos, y 290 <= 300.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 290, rejectDurationMs: 87 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+})
+
+test('[RNF-P-02] un p95 por encima de 3x la linea base en ms es rojo aunque el cociente cuadre', () => {
+  // 330 ms con rechazos de 99 ms: 3,33 rechazos, pero 330 > 300. Una
+  // ralentizacion global frena tambien los rechazos y el cociente no la ve.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 330, rejectDurationMs: 99 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'fail')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /ROJO por la guarda gruesa/)
+  assert.equal(exitCodeOf(summary), 1)
+})
+
+test('[RNF-P-02] sin rechazos bastantes para medir la velocidad de la maquina no hay verde', () => {
+  // 19 rechazos `unknown`: por debajo del suelo de RS-03.
+  const summary = runAnalysis(greenRun({ unknownSamples: 19 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'unmeasurable')
+  assert.match(summary.verdicts['RNF-P-02'].detail, /NO EVALUABLE: sin rechazos de credencial suficientes/)
+  assert.equal(exitCodeOf(summary), 2)
+})
+
+test('[RNF-P-02] la guarda gruesa da rojo aunque no se pueda medir la velocidad de la maquina', () => {
+  const summary = runAnalysis(greenRun({ scanDurationMs: 400, unknownSamples: 19 }), {
+    latencyVerdictMode: 'baseline',
+    baseline: asBaseline(),
+  })
+
+  assert.equal(statusOf(summary, 'RNF-P-02'), 'fail')
+})
+
+for (const run of VERSIONED_BASELINE.baseline_of.runs) {
+  test(`[R5-QA-02][RNF-P-02] la pasada real ${run.run_id} da verde contra la linea base que ayudo a construir`, () => {
+    // Las cifras reales de la pasada: su p95 de escritura y la velocidad de la
+    // maquina que midio. Con la linea base de una sola pasada y 1,25x en ms, la
+    // 38659326956 (999,7 ms) salia roja con el mismo codigo.
+    const lines = [
+      ...greenRun({ scanDurationMs: run.write_path_p95, rejectDurationMs: run.reject_p50 }),
+      ...OTHER_SCENARIO_ROWS,
+    ]
+    const summary = runAnalysis(lines, WORKFLOW_PARAMETERS)
+
+    assert.equal(statusOf(summary, 'RNF-P-02'), 'pass')
+  })
+}
+
+test('[RNF-P-02] el aviso de tendencia tambien lee el p95 en unidades de velocidad de la maquina', () => {
+  // El mismo codigo en un runner tres veces mas lento: +190 % en ms, 0 % en
+  // unidades de velocidad. No hay regresion que avisar.
+  const summary = runAnalysis(greenRun({ scanDurationMs: 290, rejectDurationMs: 87 }), { baseline: asBaseline() })
+
+  assert.equal(summary.baseline.normalised, true)
+  assert.equal(summary.baseline.regression, false)
+  assert.equal(summary.write_path.machine_speed_ms, 87)
+  assert.equal(summary.write_path.p95_over_reject_p50, 3.33)
 })
