@@ -1001,7 +1001,7 @@ services:
   # igual, solo que sin esa serie.
   prometheus:
     profiles: [observability]
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.15.0
     entrypoint: ["/etc/prometheus/render-config.sh"]
     command:
       - --config.file=/prometheus/prometheus.yml
@@ -1024,7 +1024,7 @@ services:
   # convierte "el cron fallo" en una alerta y no en un hallazgo de fin de mes.
   node-exporter:
     profiles: [observability]
-    image: prom/node-exporter:v1.9.1
+    image: prom/node-exporter:v1.12.1
     # El uid que escribe las copias (el mismo del contenedor de aplicacion).
     # El arbol de copias es 0750 y contiene datos personales cifrados: se le da
     # el uid justo en lugar de relajar los permisos del directorio.
@@ -1070,7 +1070,7 @@ services:
   # entorno de un binario de terceros que solo necesita quince variables.
   alertmanager:
     profiles: [observability]
-    image: prom/alertmanager:v0.28.0
+    image: prom/alertmanager:v0.34.1
     entrypoint: ["/etc/alertmanager/render-config.sh"]
     command:
       - --config.file=/alertmanager/alertmanager.yml
@@ -1128,7 +1128,7 @@ services:
 
   loki:
     profiles: [observability]
-    image: grafana/loki:3.3.2
+    image: grafana/loki:3.7.8
     # La guarda valida LOG_RETENTION_HOURS (entero 24..17520) ANTES de arrancar el binario:
     # un `up -d loki` no pasa por install.sh ni update.sh, y 0 desactivaria la retencion.
     entrypoint: ["/bin/sh", "/etc/kronoqr/retention-guard.sh"]
@@ -1178,7 +1178,7 @@ services:
   # TLS: un solo contenedor para las dos sondas HTTP.
   blackbox-exporter:
     profiles: [observability]
-    image: prom/blackbox-exporter:v0.25.0
+    image: prom/blackbox-exporter:v0.29.0
     command:
       - --config.file=/etc/blackbox_exporter/blackbox.yml
       - --web.listen-address=:9115

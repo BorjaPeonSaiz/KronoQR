@@ -479,7 +479,7 @@ services:
 
   #--- 11 · Correo de desarrollo ----------------------------------------------
   mailpit:
-    image: axllent/mailpit:v1.21
+    image: axllent/mailpit:v1.30
     container_name: kronoqr-mailpit
     environment:
       MP_MAX_MESSAGES: "500"
@@ -505,7 +505,7 @@ services:
   # escribe en `/prometheus/prometheus.yml` (el volumen de datos, nunca la
   # plantilla de solo lectura).
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.15.0
     container_name: kronoqr-prometheus
     entrypoint: ["/etc/prometheus/render-config.sh"]
     command:
@@ -560,7 +560,7 @@ services:
   # la superficie pasa de "todo el `.env`" a "las quince variables que este
   # binario declara usar", que es el umbral que se puede razonar y auditar.
   alertmanager:
-    image: prom/alertmanager:v0.28.0
+    image: prom/alertmanager:v0.34.1
     container_name: kronoqr-alertmanager
     entrypoint: ["/etc/alertmanager/render-config.sh"]
     command:
@@ -631,7 +631,7 @@ services:
 
   #--- 15 · Logs estructurados ------------------------------------------------
   loki:
-    image: grafana/loki:3.3.2
+    image: grafana/loki:3.7.8
     container_name: kronoqr-loki
     # La guarda valida LOG_RETENTION_HOURS (entero 24..17520) ANTES de arrancar el binario:
     # un `up -d loki` no pasa por install.sh ni update.sh, y 0 desactivaria la retencion.
@@ -703,7 +703,7 @@ services:
   # exportador sirve la comprobacion de caducidad del certificado TLS que anade
   # la tarea 3.2.
   blackbox-exporter:
-    image: prom/blackbox-exporter:v0.25.0
+    image: prom/blackbox-exporter:v0.29.0
     container_name: kronoqr-blackbox-exporter
     command:
       - --config.file=/etc/blackbox_exporter/blackbox.yml
@@ -727,7 +727,7 @@ services:
   # lee nadie, que es exactamente como se descubre a fin de mes que no habia
   # copias.
   node-exporter:
-    image: prom/node-exporter:v1.9.1
+    image: prom/node-exporter:v1.12.1
     container_name: kronoqr-node-exporter
     # Con el mismo uid que escribe las copias, y no como el `nobody` de la
     # imagen. El arbol de copias es 0750 —dentro hay datos personales
