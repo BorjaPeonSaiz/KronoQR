@@ -163,14 +163,11 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
 
     state.value = 'starting'
 
-    // KP1: la descarga del decodificador arranca EN PARALELO con la apertura de la
-    // camara (que tarda cientos de ms), no despues. Ya estamos tras el primer
-    // pintado (`ScanView`), asi que no compite con el LCP y el primer escaneo no
-    // espera al trozo. El rechazo se atiende mas abajo; `.catch` evita que se
-    // quede como promesa rechazada sin manejar si la camara falla antes.
-    const decoderLoad = import('@zxing/browser')
-    decoderLoad.catch(() => undefined)
-
+    // El `import()` del decodificador va DESPUES de la camara a proposito (KP1 lo
+    // probo en paralelo y se revirtio): un lanzamiento invalidado no pide el trozo, y
+    // el orden de las esperas es el que fija `cameraLifecycleRace.spec.ts`. Con el
+    // `import()` adelantado, bajo carga y cobertura esa prueba fallaba de forma
+    // intermitente (3 de 30). El trozo esta precacheado por el service worker.
     const stream = await camera.start()
     if (stream === null) return // `useCamera` ya ha fijado el estado y avisado.
     // Obsoleto: `teardown()` ya paro las pistas. NO se llama a `camera.stop()`: el
@@ -179,7 +176,7 @@ export function useQrScanner(options: UseQrScannerOptions): QrScanner {
 
     let BrowserQRCodeReader
     try {
-      ;({ BrowserQRCodeReader } = await decoderLoad)
+      ;({ BrowserQRCodeReader } = await import('@zxing/browser'))
     } catch (error) {
       if (stale()) return
       camera.stop()
