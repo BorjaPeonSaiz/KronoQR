@@ -26,7 +26,6 @@ import type { PairingState } from '../application/pairingFlow'
 import { createApiClient } from '@/shared/api/client'
 import type { PairingCompleted } from '@/shared/api/types'
 import { APP_VERSION, persistPairedDevice } from '@/shared/telemetry/deviceIdentity'
-import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import LanguageSelector from '@/shared/ui/LanguageSelector.vue'
 import ClockDiagnosticsTrigger from '@/features/diagnostics/ui/ClockDiagnosticsTrigger.vue'
 
@@ -144,9 +143,6 @@ onUnmounted(() => {
   flow.stop()
   stopTicking()
 })
-
-// Idiomas de la instalacion segun la copia de la marca (RF-KI-05): sin copia, solo espanol.
-const localePolicy = readCachedLocalePolicy()
 </script>
 
 <template>
@@ -163,7 +159,7 @@ const localePolicy = readCachedLocalePolicy()
     </div>
 
     <div class="absolute top-6 right-6">
-      <LanguageSelector :policy="localePolicy" />
+      <LanguageSelector />
     </div>
 
     <div

@@ -324,11 +324,39 @@ test.describe('instalacion de serie (solo espanol)', () => {
     { tag: ['@RF-KI-05'] },
     async ({ page }) => {
       await stubScanApi(page, { outcome: 'clock_in', displayName: 'Lucia G.' })
+      await stubBrandingApi(page, { variant: 'product' }) // available: [es]
       await page.goto('/')
 
       await expect(page.getByTestId('scan-confirmation')).toBeVisible()
       await expect(page.locator('html')).toHaveAttribute('lang', 'es')
       await expect(page.getByTestId('privacy-notice')).not.toContainText('Data protection notice')
+      await expect(page.getByRole('button', { name: 'English' })).toHaveCount(0)
+      await expect(page.getByRole('group', { name: /idioma/i })).toHaveCount(0)
+    },
+  )
+
+  test(
+    'copia guardada con dos idiomas y servidor con uno solo: desaparece el selector y vuelve el espanol',
+    { tag: ['@RF-KI-05'] },
+    async ({ page }) => {
+      await page.addInitScript(() => {
+        window.localStorage.setItem(
+          'kronoqr.kiosk.branding',
+          JSON.stringify({
+            application_name: 'KronoQR',
+            accent_color: null,
+            logo_url: null,
+            locales: { default: 'es', available: ['es', 'en'] },
+            privacy_notice: { controller_name: null, policy_url: null },
+          }),
+        )
+      })
+      await stubScanApi(page, { outcome: 'clock_in', displayName: 'Lucia G.' })
+      await stubBrandingApi(page, { variant: 'product' }) // available: [es]
+      await page.goto('/')
+
+      await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+      await expect(page.locator('html')).toHaveAttribute('lang', 'es')
       await expect(page.getByRole('button', { name: 'English' })).toHaveCount(0)
       await expect(page.getByRole('group', { name: /idioma/i })).toHaveCount(0)
     },

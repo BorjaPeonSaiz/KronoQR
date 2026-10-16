@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
-import { DEFAULT_LOCALE, initialLocale, isSupportedLocale, resolveLocale } from '@/shared/i18n'
+import { initialLocale, isSupportedLocale } from '@/shared/i18n'
 
 /** Aplana un arbol de mensajes a la lista de sus claves con punto. */
 function flatKeys(value: unknown, prefix = ''): string[] {
@@ -31,16 +31,6 @@ describe('idiomas de la aplicacion', () => {
   it('no deja ningun texto vacio en ninguno de los dos idiomas', () => {
     expect(flatValues(es).every((text) => text.trim().length > 0)).toBe(true)
     expect(flatValues(en).every((text) => text.trim().length > 0)).toBe(true)
-  })
-
-  it('elige el primer idioma soportado de las preferencias del navegador', () => {
-    expect(resolveLocale(['en-GB', 'es-ES'])).toBe('en')
-    expect(resolveLocale(['fr-FR', 'es-ES'])).toBe('es')
-  })
-
-  it('cae al idioma por defecto cuando ninguna preferencia encaja', () => {
-    expect(resolveLocale(['fr-FR', 'de-DE'])).toBe(DEFAULT_LOCALE)
-    expect(resolveLocale([])).toBe(DEFAULT_LOCALE)
   })
 
   it('rechaza lo que no es un idioma soportado sin suponer que es texto', () => {

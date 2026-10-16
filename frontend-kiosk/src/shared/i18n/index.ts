@@ -19,10 +19,7 @@ import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import en from './locales/en.json'
 import es from './locales/es.json'
 
-export const SUPPORTED_LOCALES = ['es', 'en'] as const
-
-/** Los idiomas traducidos en esta version, en el formato que pide `resolveUiLocale`. */
-export const SHIPPED_LOCALES: readonly [AppLocale, ...AppLocale[]] = ['es', 'en']
+export const SUPPORTED_LOCALES = ['es', 'en'] as const satisfies readonly [string, ...string[]]
 
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number]
 
@@ -32,22 +29,6 @@ const LOCALE_STORAGE_KEY = 'kronoqr.kiosk.locale'
 
 export function isSupportedLocale(value: unknown): value is AppLocale {
   return typeof value === 'string' && SUPPORTED_LOCALES.some((locale) => locale === value)
-}
-
-/**
- * Elige el primer idioma soportado de la lista de preferencias del navegador.
- * Acepta etiquetas completas ('es-ES') y cae al idioma por defecto si ninguna
- * encaja: el quiosco nunca se queda sin textos.
- */
-export function resolveLocale(candidates: readonly string[]): AppLocale {
-  for (const candidate of candidates) {
-    const base = candidate.split('-')[0]?.toLowerCase()
-    if (isSupportedLocale(base)) {
-      return base
-    }
-  }
-
-  return DEFAULT_LOCALE
 }
 
 export function readStoredLocale(storage: Storage | null = safeStorage()): AppLocale | null {
@@ -83,7 +64,7 @@ export function initialLocale(
 ): AppLocale {
   return resolveUiLocale<AppLocale>({
     policy,
-    shipped: SHIPPED_LOCALES,
+    shipped: SUPPORTED_LOCALES,
     stored: readStoredLocale(storage),
     browser: browserLanguages,
   })

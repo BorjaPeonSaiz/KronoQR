@@ -16,7 +16,7 @@ import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import type { AppLocale } from '@/shared/i18n'
-import { isSupportedLocale, readStoredLocale, SHIPPED_LOCALES, storeLocale } from '@/shared/i18n'
+import { isSupportedLocale, readStoredLocale, SUPPORTED_LOCALES, storeLocale } from '@/shared/i18n'
 
 const props = defineProps<{ policy?: LocalePolicy }>()
 
@@ -25,7 +25,7 @@ const { locale, t } = useI18n()
 const effectivePolicy = computed<LocalePolicy>(() => props.policy ?? readCachedLocalePolicy())
 
 const options = computed<readonly AppLocale[]>(() =>
-  offeredLocales(effectivePolicy.value, SHIPPED_LOCALES),
+  offeredLocales(effectivePolicy.value, SUPPORTED_LOCALES),
 )
 
 function apply(next: AppLocale): void {
@@ -53,7 +53,7 @@ watch(
     apply(
       resolveUiLocale<AppLocale>({
         policy: effectivePolicy.value,
-        shipped: SHIPPED_LOCALES,
+        shipped: SUPPORTED_LOCALES,
         stored: readStoredLocale(),
         browser: typeof navigator === 'undefined' ? [] : navigator.languages,
       }),
