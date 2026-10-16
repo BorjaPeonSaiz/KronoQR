@@ -23,7 +23,7 @@ final class RetentionResponsibleNotActive extends RuntimeException
     public function __construct(public readonly int $userId)
     {
         parent::__construct(
-            'La cuenta '.$userId.' de --responsible no existe o no esta activa. No se ha borrado nada.',
+            'La cuenta '.$userId.' de --responsible no existe o no esta activa. No se borra nada.',
         );
     }
 }

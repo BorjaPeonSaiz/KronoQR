@@ -28,8 +28,8 @@ final class ReportRenderingBusy extends RuntimeException
     public static function allSlotsTaken(int $retryAfterSeconds): self
     {
         return new self(
-            'Ahora mismo se estan componiendo demasiados PDF a la vez. '
-            .'Reintentalo en unos segundos o descarga el mismo documento en CSV, que no depende del motor de PDF.',
+            'El motor de PDF no tiene ahora ningun hueco libre. '
+            .'Vuelve en unos segundos o descarga el mismo documento en CSV, que no pasa por el motor de PDF.',
             max(1, $retryAfterSeconds),
         );
     }

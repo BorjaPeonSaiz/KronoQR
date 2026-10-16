@@ -49,7 +49,7 @@ final readonly class ConcurrencyLimitedReportRenderer implements ReportDocumentR
     {
         $render = fn (): string => $this->engine->renderPdf($html, $footerHtml);
         $busy = function (): never {
-            $this->logger->warning('reporting.pdf_rendering_saturated', [
+            $this->logger->warning('reporting.pdf_rendering_busy', [
                 'max_concurrent' => $this->maxConcurrent,
                 'wait_seconds' => $this->waitSeconds,
             ]);

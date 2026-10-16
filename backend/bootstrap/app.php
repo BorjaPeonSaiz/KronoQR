@@ -960,7 +960,7 @@ return Application::configure(basePath: dirname(__DIR__))
          * (`reporting.pdf.max_concurrent`). `503` con `Retry-After` y su propio
          * `type`, con la salida en el `detail`: el CSV no pasa por el motor
          * (RL-05). No se informa: es capacidad, no un fallo, y ya deja su
-         * linea `reporting.pdf_rendering_saturated` en el log.
+         * linea `reporting.pdf_rendering_busy` en el log.
          */
         $exceptions->dontReport(ReportRenderingBusy::class);
 

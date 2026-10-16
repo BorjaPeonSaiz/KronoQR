@@ -52,8 +52,8 @@ final class ReportRenderingUnavailable extends RuntimeException
     public static function limiterFailed(Throwable $cause): self
     {
         return new self(
-            'El motor de composicion de PDF no puede repartir turnos porque Redis no responde. '
-            .'Comprueba el servicio de Redis de la instalacion.',
+            'El motor de composicion de PDF no tiene turnos porque Redis no responde. '
+            .'Comprueba Redis en la instalacion.',
             previous: $cause,
         );
     }
