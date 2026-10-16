@@ -6,6 +6,7 @@ use App\Modules\Compliance\Infrastructure\Persistence\AuditLogSchema;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Sleep;
 use Symfony\Component\Process\Process;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\RefreshDatabase;
@@ -166,7 +167,7 @@ function lecturaDeAuditLogEnOtroProceso(int $holdMs): Process
 
     for ($i = 0; $i < 500 && ! str_contains($process->getOutput(), 'held'); $i++) {
         expect($process->isRunning())->toBeTrue('La lectura en otro proceso no arranco: '.$process->getErrorOutput());
-        usleep(20_000);
+        Sleep::usleep(20_000);
     }
 
     expect($process->getOutput())->toContain('held');

@@ -6,6 +6,7 @@ use App\Support\Database\LimitsMigrationLocks;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Sleep;
 
 /**
  * Retira `audit_log_payload_gin` y sus indices de particion, que no sirven a
@@ -89,7 +90,7 @@ return new class extends Migration
                     throw $failure;
                 }
 
-                sleep(self::SECONDS_BETWEEN_ATTEMPTS);
+                Sleep::sleep(self::SECONDS_BETWEEN_ATTEMPTS);
             }
         }
     }
