@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Workforce\Application\Command\PinProvisioning;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
@@ -98,6 +99,7 @@ final readonly class ApplyEmployeeImport
         private WorkforceEventPublisher $events,
         private Clock $clock,
         private EmployeeWriteRetry $retry,
+        private LocalePolicyProvider $locales,
     ) {}
 
     public function handle(ImportReport $report): ImportReport
@@ -193,7 +195,10 @@ final readonly class ApplyEmployeeImport
             // propia sentencia (RL-08).
             nationalId: $employee->nationalId,
             hiredAt: self::hiredAtOf($employee),
-            locale: $employee->locale ?? 'es',
+            // Sin idioma en la linea —o con uno que la instalacion no tiene
+            // activo, que el plan ya dejo en `null` con su aviso—, el de la
+            // instalacion (`LOCALE_DEFAULT`, regla dura 13).
+            locale: $employee->locale ?? $this->locales->current()->default,
             // PIN pendiente, pedido por su nombre (RF-ID-09, RF-GP-05): se emite
             // desde la ficha al entregar la tarjeta, que es cuando hay alguien
             // delante para recibirlo. Sin hash que calcular, ninguna fila hace

@@ -55,6 +55,10 @@ return [
         'employee_terminated' => 'This person has been offboarded. The import does not change their record '
             .'or make them employed again; remove the line from the file.',
 
+        'locale_not_active' => 'The language in this row is not active on this installation, so it is '
+            .'ignored: a new record gets the installation language and an existing one keeps its own. To '
+            .'offer that language, turn it on in Operational settings > Languages and import again.',
+
         'unknown_column' => 'Column ":column" is not used. If you expected it to be, check its name: the '
             .'names the system recognises are in the configuration guide, and you can add your own '
             .'without touching the program.',

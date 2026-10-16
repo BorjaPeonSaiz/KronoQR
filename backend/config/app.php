@@ -126,11 +126,12 @@ return [
     | RF-PD-01). `NegotiateLocale` elige entre estos con `Accept-Language`; fuera
     | de la lista, o sin cabecera, responde en `locale`. Los documentos (CSV,
     | XLSX, PDF) no negocian y salen siempre en `locale`. Que exista `lang/xx`
-    | no basta para ofrecer un idioma: lo decide esta lista. La tarea 5.8 la
-    | lleva a `installation_settings`.
+    | no basta para ofrecer un idioma: lo decide esta lista. Desde la tarea 5.8
+    | manda `LOCALE_AVAILABLE` de `installation_settings` y esto es solo el
+    | RESPALDO si la base de datos no responde; de serie, solo `es` (bloque 26).
     */
     'supported_locales' => array_values(array_filter(
-        array_map(trim(...), explode(',', (string) env('APP_SUPPORTED_LOCALES', 'es,en'))),
+        array_map(trim(...), explode(',', (string) env('APP_SUPPORTED_LOCALES', 'es'))),
         static fn (string $locale): bool => $locale !== '',
     )),
 

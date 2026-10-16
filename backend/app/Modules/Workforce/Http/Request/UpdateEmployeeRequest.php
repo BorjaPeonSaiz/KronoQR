@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
+use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
 use App\Modules\Workforce\Domain\Model\Employee;
@@ -36,7 +37,8 @@ final class UpdateEmployeeRequest extends FormRequest
             'last_name' => ['sometimes', 'string', 'max:150'],
             'email' => ['sometimes', 'nullable', 'string', 'email:rfc', 'max:190'],
             'status' => ['sometimes', 'string', 'in:'.EmploymentStatus::ACTIVE->value.','.EmploymentStatus::SUSPENDED->value],
-            'locale' => ['sometimes', 'string', 'min:2', 'max:10'],
+            // Uno de los idiomas activos de la instalacion. Fuera de la lista, 422.
+            'locale' => ['sometimes', 'string', 'in:'.implode(',', $this->availableLocales())],
             // Informativo (RF-GP-01). No anulable: `null` responde `422`.
             'teleworking' => ['sometimes', 'boolean'],
         ];
@@ -58,6 +60,16 @@ final class UpdateEmployeeRequest extends FormRequest
             locale: $this->filledString('locale'),
             teleworking: $this->has('teleworking') ? $this->boolean('teleworking') : null,
         );
+    }
+
+    /**
+     * Los idiomas activos de la instalacion (`LOCALE_AVAILABLE`, regla dura 13).
+     *
+     * @return list<string>
+     */
+    private function availableLocales(): array
+    {
+        return resolve(LocalePolicyProvider::class)->current()->available;
     }
 
     private function filledString(string $key): ?string

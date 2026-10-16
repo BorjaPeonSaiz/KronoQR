@@ -159,7 +159,15 @@ enum SettingKey: string
     /** Idioma con el que se sirven las SPA y los documentos cuando nadie elige otro. */
     case LOCALE_DEFAULT = 'LOCALE_DEFAULT';
 
-    /** Idiomas que la instalacion ofrece. El producto se entrega con dos (DoD §10.3: textos en español e ingles). */
+    /**
+     * Idiomas que la instalacion ofrece. **De serie, solo el español**
+     * (decision del propietario, bloque 26 de la 2.2.1): con un unico idioma
+     * las SPA no enseñan selector ni siguen al navegador. El producto trae dos
+     * traducciones (DoD §10.3: textos en español e ingles) y el ingles se activa
+     * aqui, sin tocar el codigo (regla dura 13). Las instalaciones anteriores
+     * conservan los dos: lo hace la migracion
+     * `preserve_locales_on_existing_installations`.
+     */
     case LOCALE_AVAILABLE = 'LOCALE_AVAILABLE';
 
     /**
@@ -532,7 +540,7 @@ enum SettingKey: string
                 'es', self::SHIPPED_LOCALES, SettingImpact::PRESENTATION,
             ),
             self::LOCALE_AVAILABLE->value => SettingDefinition::choiceList(
-                self::SHIPPED_LOCALES, self::SHIPPED_LOCALES, SettingImpact::PRESENTATION,
+                ['es'], self::SHIPPED_LOCALES, SettingImpact::PRESENTATION,
             ),
             // Vacio de serie: sin codigo, la pantalla de diagnostico de la
             // tablet se abre sin el (RF-KI-08). Solo cifras y de 8 a 12 porque
