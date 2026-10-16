@@ -26,8 +26,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * cambio de turno: es la potestad de quien responde por la instalacion, no la de
  * quien gestiona la plantilla.
  *
- * **El `auditor` tampoco.** Es el rol que mira, y lo que necesita —quien vinculo
- * que quiosco y cuando— esta en `audit_log`, al que llega con `audit:read`.
+ * **El `auditor` tampoco.** Desde la 2.2.1 su unica funcion en la API es la
+ * exportacion para la Inspeccion (RF-ID-02); quien vinculo que quiosco y cuando
+ * queda en `audit_log`, que no lee.
  *
  * **Y el propio quiosco menos que nadie.** Un token de dispositivo no puede
  * confirmar emparejamientos —ni siquiera el suyo— ni leer la lista: conoceria a

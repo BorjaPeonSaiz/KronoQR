@@ -189,6 +189,18 @@ it('devuelve el usuario, su rol y su ambito de la sesion en curso', function ():
         ->assertJsonPath('roles', ['admin']);
 })->group('RF-ID-01', 'RF-ID-02');
 
+it('ensena al auditor que su sesion solo lleva la exportacion para la Inspeccion', function (): void {
+    // RF-ID-02, bloque 25 de la 2.2.1: el panel decide su menu con estos
+    // ambitos, y el del auditor es uno solo.
+    $user = ManagementUsers::withRole(UserRole::AUDITOR);
+
+    Api::as(ManagementUsers::tokenFor($user))
+        ->get('/api/v1/auth/me')
+        ->assertValidResponse(200)
+        ->assertJsonPath('roles', ['auditor'])
+        ->assertJsonPath('abilities', ['reports:legal']);
+})->group('RF-ID-02', 'RQ-07');
+
 it('no deja consultar la sesion sin token', function (): void {
     Api::guest()->get('/api/v1/auth/me')
         ->assertValidResponse(401)

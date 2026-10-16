@@ -37,9 +37,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * **`rrhh` no entra**, aunque gestione los datos que un acceso de soporte podria
  * llegar a leer: autorizar la entrada del fabricante es una decision de quien
  * responde de la instalacion, y ademas es la firma del encargo del art. 28 RGPD
- * (RL-18). **El `auditor` tampoco**: su trabajo es mirar el registro, y lo que
- * necesite sobre accesos de soporte lo tiene en `audit_log` con `audit:read`,
- * que es exactamente el reparto correcto —quien vigila no autoriza—. **El
+ * (RL-18). **El `auditor` tampoco**: su trabajo es mirar el registro, y desde la
+ * 2.2.1 su unica funcion en la API es la exportacion para la Inspeccion
+ * (RF-ID-02) —quien vigila no autoriza—. **El
  * `responsable_departamento` menos aun**: su alcance es su departamento y esto no
  * es de ningun departamento. **El quiosco y el portal** no llevan ninguno de
  * estos ambitos y se quedan en el middleware.

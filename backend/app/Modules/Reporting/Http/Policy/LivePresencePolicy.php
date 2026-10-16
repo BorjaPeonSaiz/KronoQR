@@ -27,14 +27,15 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * `Attendance\Http\Policy\ShiftEntryPolicy` y la de este mismo directorio,
  * `WorkDayJournalPolicy`.
  *
- * ## Por que el `auditor` no esta, teniendo el ambito
+ * ## Por que el `auditor` no esta
  *
- * `auditor` lleva `attendance:read` en su token (§7.3) y aun asi recibe `403`
- * aqui, exactamente igual que en `GET /employees/{uuid}/workdays`. No es una
- * contradiccion: es para lo que sirven las dos comprobaciones del §7.3. El Anexo
- * B no lo pone en `manager+`, y lo que ese rol necesita —el registro para un
- * requerimiento— se sirve por `GET /reports/legal-export`, que es suyo. Auditar
- * es mirar lo que quedo escrito, no mirar quien esta en la cocina ahora.
+ * Desde la 2.2.1 su token solo lleva `reports:legal` (RF-ID-02, decision del
+ * propietario de 13-10-2026), asi que ya no pasa el ambito; y la policy lo
+ * rechaza ademas por rol, porque un token emitido antes del cambio conserva
+ * `attendance:read` hasta que caduca. Lo mismo en `GET /employees/{uuid}/workdays`.
+ * Lo que ese rol necesita —el registro para un requerimiento— se sirve por
+ * `GET /reports/legal-export`, que es suyo. Auditar es mirar lo que quedo
+ * escrito, no mirar quien esta en la cocina ahora.
  *
  * ## La policy es la mitad de la autorizacion
  *

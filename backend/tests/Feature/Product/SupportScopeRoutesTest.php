@@ -588,9 +588,9 @@ it('no deja al fabricante ver la presencia en vivo ni el resumen de cumplimiento
 it('no deja al fabricante leer el catalogo de departamentos', function (SupportScope $scope): void {
     /*
      * Bloque 21 de la 2.2.0 (R6-BD-01, R4-QA-03). La lectura de departamentos
-     * pasa de `employees:*` —que ningun alcance concede— a `employees:read` o
-     * `attendance:read`, para que la lean los cuatro roles de gestion. Con
-     * `read_only` el AMBITO las alcanza ahora; lo que las deja fuera de la
+     * pasa de `employees:*` —que ningun alcance concede— a `employees:read`
+     * (desde el bloque 25 de la 2.2.1, solo ese: el `auditor` deja de leerla,
+     * RF-ID-02). Con `read_only` el AMBITO las alcanza; lo que las deja fuera de la
      * comparacion es que responden `403`, y eso lo pone `DepartmentPolicy`.
      *
      * Se cierran para que abrir el catalogo a los roles del hotel no amplie de

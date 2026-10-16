@@ -10,7 +10,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 /**
  * Quien puede emitir y revocar credenciales (Anexo B del doc 01, regla dura 18).
  *
- * **`rrhh+`: `{admin, rrhh}`.** Ni el auditor, que es de solo lectura, ni el
+ * **`rrhh+`: `{admin, rrhh}`.** Ni el auditor, que solo exporta para la Inspeccion, ni el
  * responsable de departamento: su alcance esta acotado a sus departamentos
  * (RF-ID-03), y emitir tarjetas es un acto sobre toda la plantilla.
  *
@@ -26,7 +26,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * a alguien sin poder fichar, leer la lista nominal de quien no tiene tarjeta y
  * descargar la hoja que se entrega con ella (tarea 5.11b) son seis
  * responsabilidades distintas. El dia que se repartan —un recepcionista
- * que solo registra entregas, un auditor que solo lee el panel—, una sola lista
+ * que solo registra entregas, un rol que solo lee el panel—, una sola lista
  * obligaria a separarlas justo cuando se cometen los errores. Escribirlas
  * separadas hoy cuesta seis metodos; separarlas despues cuesta revisar cada
  * llamada.
@@ -108,8 +108,8 @@ final class CredentialPolicy
      *
      * **Es de solo lectura y aun asi no lo abre el auditor.** El panel es una
      * lista nominal de la plantilla con su centro y su departamento: quien la lee
-     * reconstruye el organigrama del hotel. El auditor tiene `attendance:read`,
-     * `audit:read` y `reports:legal`, y la plantilla no esta ahi.
+     * reconstruye el organigrama del hotel. El auditor solo lleva `reports:legal`
+     * (RF-ID-02, desde la 2.2.1), y la plantilla no esta ahi.
      */
     public function viewStatus(ManagementActor $actor): bool
     {

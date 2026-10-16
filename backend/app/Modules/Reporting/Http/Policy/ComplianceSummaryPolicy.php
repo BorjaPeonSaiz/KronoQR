@@ -27,13 +27,14 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * Deptrac rechaza. Las de este mismo directorio son `LivePresencePolicy`,
  * `PeriodReportPolicy` y `WorkDayJournalPolicy`.
  *
- * ## Por que el `auditor` no esta, teniendo el ambito
+ * ## Por que el `auditor` no esta
  *
- * `auditor` lleva `attendance:read` en su token (§7.3) y aun asi recibe `403`,
- * exactamente igual que en la presencia en vivo. No es una contradiccion: es para
- * lo que sirven las dos comprobaciones del §7.3. Lo que ese rol necesita —el
- * registro para un requerimiento— se sirve por `GET /reports/legal-export`, que es
- * suyo. **Auditar es mirar lo que quedo escrito, no la gestion del dia**, y esta
+ * Desde la 2.2.1 su token solo lleva `reports:legal` (RF-ID-02, decision del
+ * propietario de 13-10-2026), asi que ya no pasa el ambito; y la policy lo
+ * rechaza ademas por rol, porque un token emitido antes del cambio conserva
+ * `attendance:read` hasta que caduca. Lo que ese rol necesita —el registro para
+ * un requerimiento— se sirve por `GET /reports/legal-export`, que es suyo.
+ * **Auditar es mirar lo que quedo escrito, no la gestion del dia**, y esta
  * pantalla es gestion: lo que enseña es trabajo pendiente de RRHH.
  *
  * ## La policy es la mitad de la autorizacion

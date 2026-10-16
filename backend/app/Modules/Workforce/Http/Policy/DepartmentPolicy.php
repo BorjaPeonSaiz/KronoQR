@@ -10,9 +10,12 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 /**
  * Quien puede ver y tocar los departamentos (regla dura 18).
  *
- * - **Ver**: los cuatro roles de gestion —`admin`, `rrhh`,
- *   `responsable_departamento` y `auditor`— (decision del propietario de
- *   02-10-2026).
+ * - **Ver**: `admin`, `rrhh` y `responsable_departamento` (decision del
+ *   propietario de 02-10-2026). **El `auditor` no**, desde la decision del
+ *   13-10-2026 (RF-ID-02, bloque 25 de la 2.2.1): su unica funcion en la API es
+ *   la exportacion para la Inspeccion. Se le rechaza aqui por rol y no solo por
+ *   ambito porque un token emitido antes del cambio conserva `attendance:read`
+ *   hasta que caduca, y con el la ruta le dejaria pasar.
  * - **Crear y renombrar**: `admin` y `rrhh`.
  * - **Elegir el responsable**: solo `admin`, y nunca un acceso de soporte
  *   ({@see self::assignManager()}, RF-ID-10).
@@ -25,13 +28,12 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * El contrato lo declara asi (`GET /api/v1/departments`) y el esquema
  * `Department` ya contaba con que los responsables vieran `manager_name`.
  *
- * El ambito lo comprueba antes la ruta: `employees:read` o `attendance:read`
- * para leer (el `auditor` solo lleva el segundo), `employees:*` para escribir.
- * Ninguno de los dos de lectura lo tienen el quiosco ni el portal.
+ * El ambito lo comprueba antes la ruta: `employees:read` para leer,
+ * `employees:*` para escribir. Ninguno lo tienen el quiosco ni el portal.
  *
  * **Un acceso de soporte no lee el catalogo**, aunque el alcance `read_only`
- * lleve los dos ambitos de lectura y se presente como `admin`: abrir la lectura
- * a los cuatro roles no debe ampliar de rebote lo que ve el fabricante (regla
+ * lleve `employees:read` y se presente como `admin`: abrir la lectura a los
+ * roles de gestion no debe ampliar de rebote lo que ve el fabricante (regla
  * dura 16, ADR-020): `manager_name` es el nombre de una cuenta de gestion, y
  * esas cuentas solo las lista `admin` sin soporte (`ManagementAccountPolicy`).
  * Lo enumera `SupportScopeRoutesTest`.
@@ -41,7 +43,7 @@ final class DepartmentPolicy
     /** @return list<UserRole> */
     private static function readers(): array
     {
-        return [UserRole::ADMIN, UserRole::RRHH, UserRole::RESPONSABLE_DEPARTAMENTO, UserRole::AUDITOR];
+        return [UserRole::ADMIN, UserRole::RRHH, UserRole::RESPONSABLE_DEPARTAMENTO];
     }
 
     private static function canRead(ManagementActor $actor): bool

@@ -28,8 +28,8 @@ use Illuminate\Database\ConnectionInterface;
  *   RRHH a la que ademas se le asigna un departamento seguiria siendo de alcance
  *   global, y derivar la lista de la tabla de departamentos le habria mandado un
  *   correo con un alcance que no es el suyo.
- * - **Sin rol global.** `admin`, `rrhh` y `auditor` tienen el panel entero, y un
- *   correo semanal con toda la plantilla seria una copia periodica del registro
+ * - **Sin rol global.** `admin`, `rrhh` y `auditor` tienen alcance sobre toda la
+ *   plantilla, y un correo semanal con toda la plantilla seria una copia periodica del registro
  *   **fuera** del sistema, reenviable y sin control de acceso (minimizacion,
  *   RGPD art. 5.1.c). El orden es ademas el mismo que aplica `User::accessScope()`
  *   —el rol global gana sobre el de departamento—, asi que quien tenga los dos
