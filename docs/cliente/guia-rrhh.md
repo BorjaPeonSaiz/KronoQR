@@ -810,11 +810,8 @@ Y dos enlaces:
 - Un **responsable de departamento** ve a la gente de su departamento y nada
   más; también los recuentos de las tarjetas son solo de su gente.
 - **RRHH** y **administrador** lo ven todo.
-- El **auditor** no entra en esta pantalla. Auditar es revisar lo que quedó
-  escrito, no gestionar el día a día. **En la 2.2.0 su menú todavía le ofrece
-  «Cumplimiento» y «Presencia»**, y al abrirlas recibe un aviso de que no tiene
-  permiso: es un defecto conocido del menú, no de su cuenta, y no hay nada que
-  corregir en ella.
+- El **auditor** no entra en esta pantalla: su panel solo tiene «Inspección»
+  (§7 bis.1).
 
 **Cada consulta queda anotada en el registro de auditoría**, igual que consultar
 el registro horario de una persona (§3.2): quién ha mirado, qué periodo y con
@@ -1588,6 +1585,16 @@ tarjeta ni con el PIN de la plantilla: quien ficha no tiene cuenta del panel.
 **Cuentas** → «Nueva cuenta»: nombre (el de la persona, no el del puesto, porque
 es el que firma las correcciones), correo y rol. El correo es solo su
 identificador para entrar: **el producto no le envía nada por correo**.
+
+**Qué ve cada rol.** **Administración**: todo, y es quien gestiona las cuentas.
+**RRHH**: la plantilla, las tarjetas, el registro, las incidencias y los
+informes. **Responsable de departamento**: la presencia, las jornadas, la
+bandeja y el cumplimiento de su departamento. **Auditoría**: **solo
+«Inspección»**, la exportación del registro para un requerimiento; no ve la
+presencia, las jornadas, la plantilla, los departamentos ni los informes, y si
+teclea otra dirección del panel vuelve a «Inspección». Da este rol a quien
+atienda a la Inspección o a una asesoría externa que solo tenga que llevarse el
+registro; si alguien tiene que consultarlo en pantalla, necesita otro rol.
 
 **La contraseña temporal.** Al crear la cuenta, el panel genera una contraseña
 **temporal** y la enseña **una sola vez**. Anótala y entrégala **en mano** o de
