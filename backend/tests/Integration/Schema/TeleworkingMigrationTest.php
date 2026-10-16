@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\DB;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Workforce\WorkforceFixtures;
-use UnexpectedValueException;
 
 /*
  * `2026_10_01_100000_add_teleworking_to_employees_table`, deshecha y

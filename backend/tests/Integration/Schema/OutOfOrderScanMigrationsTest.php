@@ -5,7 +5,6 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\CommittedDatabase;
-use UnexpectedValueException;
 
 /*
  * Las tres migraciones expand de RN-18, deshechas y reaplicadas (skill

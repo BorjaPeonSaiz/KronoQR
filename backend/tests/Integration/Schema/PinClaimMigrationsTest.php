@@ -8,7 +8,6 @@ use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Compliance\IncidentFixtures;
 use Tests\Support\Database\CommittedDatabase;
-use UnexpectedValueException;
 
 /*
  * Las tres migraciones de RN-19, deshechas y reaplicadas, y sus dos `down()`

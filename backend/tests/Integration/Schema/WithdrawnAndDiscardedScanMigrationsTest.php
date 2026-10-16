@@ -8,7 +8,6 @@ use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Compliance\IncidentFixtures;
 use Tests\Support\Database\CommittedDatabase;
-use UnexpectedValueException;
 
 /*
  * Las tres migraciones del bloque 18 (RN-20, RN-22, ADR-047), deshechas y
