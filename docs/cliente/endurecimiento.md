@@ -543,7 +543,7 @@ mirando que llega el resumen de la noche siguiente.
   | --- | --- | --- |
   | `responsable_departamento` | Jefes de sala, de pisos, de cocina | Su departamento: consulta, corrección e incidencias |
   | `rrhh` | Quien opera el producto a diario | Toda la plantilla: jornadas, correcciones, empleados, tarjetas e informes |
-  | `auditor` | Auditoría interna, asesoría laboral | Lectura: jornadas, auditoría y exportación legal |
+  | `auditor` | Auditoría interna, asesoría laboral | Solo la exportación para la Inspección (toda la plantilla) |
   | `admin` | IT | Lo anterior, más ajustes, licencia, soporte y diagnóstico |
 
   **No des `admin` a RRHH.** El rol `rrhh` hace todo el trabajo diario; `admin`
