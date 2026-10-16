@@ -105,23 +105,37 @@ function msDelDisparadorDeIncidencias(ConnectionInterface $migrador, array $ids,
         $placeholders = implode(', ', array_fill(0, \count($ids), '?'));
         $filas = $migrador->select('EXPLAIN (ANALYZE, FORMAT JSON) DELETE FROM shift_entries WHERE id IN ('.$placeholders.')', $ids);
         $plan = isset($filas[0]) && \is_object($filas[0]) ? ($filas[0]->{'QUERY PLAN'} ?? null) : null;
-        /** @var mixed $decodificado */
-        $decodificado = json_decode(\is_string($plan) ? $plan : '', true);
-        $raiz = \is_array($decodificado) && \is_array($decodificado[0] ?? null) ? $decodificado[0] : [];
-        $disparadores = \is_array($raiz['Triggers'] ?? null) ? $raiz['Triggers'] : [];
 
-        foreach ($disparadores as $disparador) {
-            if (\is_array($disparador) && ($disparador['Constraint Name'] ?? null) === 'incidents_shift_entry_id_foreign') {
-                $tiempo = $disparador['Time'] ?? null;
-
-                return is_numeric($tiempo) ? (float) $tiempo : -1.0;
-            }
-        }
-
-        return -1.0;
+        return msDelDisparadorEnElPlan(\is_string($plan) ? $plan : '');
     } finally {
         $migrador->rollBack();
     }
+}
+
+/**
+ * El `Time` del disparador de `incidents_shift_entry_id_foreign` en el JSON de
+ * `EXPLAIN ANALYZE`, o -1 si no aparece.
+ */
+function msDelDisparadorEnElPlan(string $plan): float
+{
+    /** @var mixed $decodificado */
+    $decodificado = json_decode($plan, true);
+    $raiz = \is_array($decodificado) && \is_array($decodificado[0] ?? null) ? $decodificado[0] : [];
+    $disparadores = \is_array($raiz['Triggers'] ?? null) ? $raiz['Triggers'] : [];
+    $tiempos = array_map(
+        static fn (mixed $disparador): mixed => \is_array($disparador) && ($disparador['Constraint Name'] ?? null) === 'incidents_shift_entry_id_foreign'
+            ? ($disparador['Time'] ?? null)
+            : null,
+        $disparadores,
+    );
+
+    foreach ($tiempos as $tiempo) {
+        if (is_numeric($tiempo)) {
+            return (float) $tiempo;
+        }
+    }
+
+    return -1.0;
 }
 
 it('comprueba la clave ajena de incidents por incidents_shift_entry_id_index y no recorriendo la tabla', function (): void {

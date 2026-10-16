@@ -143,7 +143,7 @@ it('validateConstraint() termina con un INSERT sin confirmar de otra sesion en l
         expect(bloqueosSobreLaTablaDeLaValidacion($migrator, $writer))->toContain('RowExclusiveLock');
 
         // Con el `lock_timeout` de 3 s del ayudante: si esperase al INSERT, lanzaria 55P03.
-        (new LockLimitedMigration(config()->string('database.migrations.connection')))
+        new LockLimitedMigration(config()->string('database.migrations.connection'))
             ->validate(VALIDATE_CONCURRENCY_TABLE, VALIDATE_CONCURRENCY_CONSTRAINT);
     } finally {
         $writer->rollBack();

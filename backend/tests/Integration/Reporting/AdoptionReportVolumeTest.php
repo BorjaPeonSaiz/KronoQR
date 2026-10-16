@@ -314,7 +314,7 @@ it('lee scan_events por scan_events_occurred_at_index, una vez por consulta y si
     volumenDelCuadro();
 
     $consultas = QueryPlans::selectsOn('scan_events', static function (): void {
-        app(AdoptionFactsReader::class)->factsFor(
+        resolve(AdoptionFactsReader::class)->factsFor(
             AdoptionReportQuery::of(DateRange::between('2026-01-01', '2026-01-31')),
             timeZone: 'Europe/Madrid',
         );
@@ -397,7 +397,7 @@ it('cuenta los mismos escaneos que el filtro por fecha civil alrededor de la med
             SQL, [$device, $employee, $dia, $zona, $dia, $zona, $zona, $dia, $dia]);
     }
 
-    $lector = app(AdoptionFactsReader::class);
+    $lector = resolve(AdoptionFactsReader::class);
     $comprobados = 0;
 
     foreach ($dias as $dia) {
