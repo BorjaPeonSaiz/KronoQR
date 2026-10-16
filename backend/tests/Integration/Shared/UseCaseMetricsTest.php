@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Application\Port\UseCaseMetrics;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\RedisMetricReader;
 use App\Modules\Shared\Infrastructure\Metrics\RedisUseCaseMetrics;
 use Illuminate\Contracts\Redis\Factory as Redis;
+use Illuminate\Support\Facades\DB;
 use Prometheus\RenderTextFormat;
 
 /*
@@ -90,7 +92,7 @@ it('el ayudante llega a Redis por el registro que enlaza el proveedor', function
     // `toContain` y no la lista exacta: otra prueba que corra a la vez puede
     // estar midiendo sus propios casos de uso en el mismo Redis.
     expect(useCaseMetricsKeys())
-        ->toContain(RedisUseCaseMetrics::DURATION.':use_case=workforce.create_site,outcome=error')
+        ->toContain(RedisUseCaseMetrics::DURATION.':use_case=workforce.create_site,outcome=rejected')
         ->toContain(RedisUseCaseMetrics::DURATION.':use_case=workforce.create_site,outcome=ok');
 })->group('RQ-06', 'RNF-D-01');
 
@@ -111,4 +113,61 @@ it('/metrics lo publica con use_case y outcome y nada mas', function (): void {
         ->toContain('# TYPE use_case_duration_seconds histogram')
         ->toContain('use_case_duration_seconds_count{use_case="identity.log_out",outcome="ok"} 1')
         ->toContain('use_case_duration_seconds_bucket{use_case="identity.log_out",outcome="ok",le="0.01"} 1');
+})->group('RQ-06', 'RNF-D-01');
+
+it('con una transaccion abierta no toca Redis hasta el commit', function (): void {
+    $metricas = resolve(UseCaseMetrics::class);
+    $clave = RedisUseCaseMetrics::DURATION.':use_case=workforce.register_employee,outcome=ok';
+    $conexion = DB::connection();
+
+    $conexion->beginTransaction();
+
+    try {
+        $metricas->observe('workforce.register_employee', 'ok', 0.02);
+
+        // Dentro de la transaccion —la que en una importacion tiene tomado el
+        // candado de `audit_log`—, Redis no se ha tocado todavia.
+        expect(useCaseMetricsKeys())->not->toContain($clave);
+
+        $conexion->commit();
+    } finally {
+        while ($conexion->transactionLevel() > 0) {
+            $conexion->rollBack();
+        }
+    }
+
+    // Tras el commit, una sola observacion.
+    expect(useCaseMetricsKeys())->toContain($clave)
+        ->and(resolve(Redis::class)->connection()->command('HGET', [$clave, 'count']))->toBe('1');
+})->group('RQ-06', 'RNF-D-01');
+
+it('tras un rollback escribe la observacion igualmente, una sola vez', function (): void {
+    $metricas = resolve(UseCaseMetrics::class);
+    $clave = RedisUseCaseMetrics::DURATION.':use_case=workforce.register_employee,outcome=error';
+    $conexion = DB::connection();
+
+    $conexion->beginTransaction();
+    $metricas->observe('workforce.register_employee', 'error', 0.02);
+
+    expect(useCaseMetricsKeys())->not->toContain($clave);
+
+    $conexion->rollBack();
+
+    // Justo la observacion que no se puede perder: la del caso de uso que
+    // arrastro la transaccion.
+    expect(resolve(Redis::class)->connection()->command('HGET', [$clave, 'count']))->toBe('1');
+})->group('RQ-06', 'RNF-D-01');
+
+it('con un punto de guardado anidado escribe una sola vez al confirmar la exterior', function (): void {
+    $metricas = resolve(UseCaseMetrics::class);
+    $clave = RedisUseCaseMetrics::DURATION.':use_case=workforce.register_employee,outcome=ok';
+    $conexion = DB::connection();
+
+    $conexion->transaction(function () use ($metricas, $conexion): void {
+        $conexion->transaction(function () use ($metricas): void {
+            $metricas->observe('workforce.register_employee', 'ok', 0.02);
+        });
+    });
+
+    expect(resolve(Redis::class)->connection()->command('HGET', [$clave, 'count']))->toBe('1');
 })->group('RQ-06', 'RNF-D-01');

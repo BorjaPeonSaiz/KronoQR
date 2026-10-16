@@ -133,7 +133,7 @@ final class MetricCatalogue
                 'use_case_duration_seconds',
                 MetricType::Histogram,
                 MetricStorage::Histogram,
-                'Duracion de cada caso de uso, por nombre estable del caso y desenlace (ok o error). Nunca lleva datos de personas: ni uuid ni nombre.',
+                'Duracion de cada caso de uso, por nombre estable del caso y desenlace: ok, rejected si fue una regla de negocio, error si fue una averia. Nunca lleva datos de personas: ni uuid ni nombre.',
                 ['use_case', 'outcome'],
             ),
 

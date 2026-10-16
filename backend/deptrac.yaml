@@ -400,7 +400,15 @@ parameters:
     - name: SharedApplicationPort
       collectors:
         - type: classNameRegex
-          value: '#^App\\Modules\\Shared\\Application\\Port\\#'
+          value: '#^App\\Modules\\Shared\\Application\\Port\\(?!UseCaseMetrics$)#'
+    # El puerto de `use_case_duration_seconds`, en capa propia y por nombre
+    # exacto: es lo UNICO de `Shared\Application\Port` que alcanza
+    # `SharedTracingSupport`, y asi la arista no abre los demas puertos al
+    # armazon (bloque 24 de la 2.2.1).
+    - name: SharedUseCaseMetricsPort
+      collectors:
+        - type: classNameRegex
+          value: '#^App\\Modules\\Shared\\Application\\Port\\UseCaseMetrics$#'
     # Todo Shared/Application MENOS Port y MENOS Support. Ver SharedTracingSupport.
     - name: SharedApplication
       collectors:
@@ -1493,6 +1501,9 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
 
+    # Una interfaz sin dependencias: ni dominio necesita.
+    SharedUseCaseMetricsPort: ~
+
     SharedApplication:
       - SharedDomain
       - SharedDomainEvent
@@ -1511,8 +1522,8 @@ parameters:
     # falta el contenedor, un facade o el reloj, lo que se ha metido en `Support`
     # no es andamiaje: es un caso de uso, y su sitio es `SharedApplication`.
     #
-    # La UNICA arista hacia otra capa de Shared es `SharedApplicationPort`, y
-    # solo por `UseCaseInstrumentation` y su registro (bloque 24 de la 2.2.1):
+    # La UNICA arista hacia otra capa de Shared es `SharedUseCaseMetricsPort`
+    # —una sola interfaz, por nombre exacto—, y solo por `UseCaseInstrumentation` y su registro (bloque 24 de la 2.2.1):
     # la medida comun de los casos de uso necesita el puerto `UseCaseMetrics`
     # para observar su duracion sin saber que hay detras. Un puerto es una
     # interfaz que solo depende del dominio compartido: no trae Laravel, ni el
@@ -1520,7 +1531,7 @@ parameters:
     SharedTracingSupport:
       - SharedDomain
       - SharedDomainEvent
-      - SharedApplicationPort
+      - SharedUseCaseMetricsPort
       - ExternalCode
 
     # SystemClock vive aqui (ADR-021).
@@ -1528,6 +1539,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplicationPort
+      - SharedUseCaseMetricsPort
       - SharedApplication
       - SharedTracingSupport
       - Laravel
@@ -1564,6 +1576,7 @@ parameters:
       - SharedDomain
       - SharedDomainEvent
       - SharedApplicationPort
+      - SharedUseCaseMetricsPort
       - SharedApplication
       - SharedTracingSupport
       - SharedInfrastructure

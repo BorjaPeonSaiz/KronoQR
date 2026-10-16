@@ -15,8 +15,8 @@ namespace App\Modules\Shared\Application\Port;
  *
  * **Dos etiquetas y ninguna identifica a nadie** (regla dura 21). `use_case`
  * es un literal estable del codigo (`workforce.register_employee`), nunca un
- * dato de la peticion; `outcome` es `ok` o `error`. La cardinalidad es el
- * numero de casos de uso por dos.
+ * dato de la peticion; `outcome` es `ok`, `rejected` o `error`. La cardinalidad es
+ * el numero de casos de uso por tres.
  *
  * Es un puerto y no una llamada directa por lo mismo que
  * {@see AuthenticationMetrics}: quien mide no sabe si detras hay Redis o nada.
@@ -31,7 +31,7 @@ interface UseCaseMetrics
      * `outcome` no tenga la forma esperada en lugar de lanzar.
      *
      * @param  string  $useCase  `<modulo>.<accion_snake>`.
-     * @param  string  $outcome  `ok` o `error`.
+     * @param  string  $outcome  `ok`, `rejected` o `error`.
      */
     public function observe(string $useCase, string $outcome, float $seconds): void;
 }

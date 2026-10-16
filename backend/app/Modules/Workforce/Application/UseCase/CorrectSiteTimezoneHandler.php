@@ -78,8 +78,8 @@ use Illuminate\Database\ConnectionInterface;
  *
  * **El motivo nunca sale de aqui hacia un log** (regla dura 21): es texto libre
  * y va solo al asiento. La medida es la comun de los casos de uso
- * (`UseCaseInstrumentation`): span y duracion con `outcome` `ok` o `error`;
- * el desenlace detallado y el recuento constan en el asiento y en el informe.
+ * (`UseCaseInstrumentation`), y el span lleva ademas el desenlace detallado
+ * (`result`) y el recuento de tramos (`shift_entry_count`).
  */
 final readonly class CorrectSiteTimezoneHandler
 {
@@ -116,7 +116,21 @@ final readonly class CorrectSiteTimezoneHandler
      */
     public function handle(CorrectSiteTimezoneCommand $command): SiteTimezoneCorrectionReport
     {
-        return UseCaseInstrumentation::run('workforce.correct_site_timezone', fn (): SiteTimezoneCorrectionReport => $this->correct($command));
+        return UseCaseInstrumentation::run(
+            'workforce.correct_site_timezone',
+            fn (): SiteTimezoneCorrectionReport => $this->correct($command),
+            // El desenlace detallado y el recuento de tramos: un valor de un
+            // catalogo cerrado y un numero, nada de la persona que firma.
+            static fn (SiteTimezoneCorrectionReport $report): array => [
+                'result' => match ($report->outcome) {
+                    SiteTimezoneCorrectionOutcome::Corrected => 'corrected',
+                    SiteTimezoneCorrectionOutcome::NoSite => 'no_site',
+                    SiteTimezoneCorrectionOutcome::SameTimezone => 'same_timezone',
+                    SiteTimezoneCorrectionOutcome::NoWorkRecord => 'no_work_record',
+                },
+                'shift_entry_count' => $report->shiftEntryCount,
+            ],
+        );
     }
 
     /**

@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Application\Exception\IncidentNotFound;
+use App\Modules\Kiosk\Application\Exception\PairingCapacityExhausted;
+use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
+use App\Modules\Reporting\Application\Exception\ReportRenderingBusy;
 use App\Modules\Shared\Application\Port\UseCaseMetrics;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Application\Support\UseCaseMetricsRegistry;
@@ -109,7 +113,7 @@ it('relanza la misma excepcion del cuerpo y observa error', function (): void {
     $observado = new ArrayObject;
     $metricas = instrumentacionMetricasQueApuntan($observado);
     UseCaseMetricsRegistry::resolveWith(static fn (): UseCaseMetrics => $metricas);
-    $fallo = new DomainException('regla de negocio');
+    $fallo = new RuntimeException('la base de datos no responde');
 
     $capturada = null;
 
@@ -117,7 +121,7 @@ it('relanza la misma excepcion del cuerpo y observa error', function (): void {
         UseCaseInstrumentation::run('identity.log_out', static function () use ($fallo): never {
             throw $fallo;
         });
-    } catch (DomainException $excepcion) {
+    } catch (RuntimeException $excepcion) {
         $capturada = $excepcion;
     }
 
@@ -197,11 +201,11 @@ it('el adaptador descarta un use_case con espacio, arroba o guion sin tocar Redi
     'mayusculas' => ['Workforce.RegisterEmployee'],
 ])->group('RQ-06', 'RNF-D-01');
 
-it('el adaptador descarta un desenlace que no es ok ni error', function (): void {
+it('el adaptador descarta un desenlace que no es ok, rejected ni error', function (): void {
     /** @var ArrayObject<int, string> $conexiones */
     $conexiones = new ArrayObject;
 
-    new RedisUseCaseMetrics(instrumentacionRedisQueApunta($conexiones))->observe('workforce.register_employee', 'rejected', 0.01);
+    new RedisUseCaseMetrics(instrumentacionRedisQueApunta($conexiones))->observe('workforce.register_employee', 'failed', 0.01);
 
     expect($conexiones)->toHaveCount(0);
 })->group('RQ-06', 'RNF-D-01');
@@ -214,4 +218,69 @@ it('el adaptador traga el fallo de Redis con una observacion valida', function (
 
     // Pidio la conexion —la observacion era valida— y el fallo no salio.
     expect($conexiones)->toHaveCount(1);
+})->group('RQ-06', 'RNF-D-01');
+
+it('observa rejected con una excepcion de negocio y la relanza igual', function (Throwable $fallo): void {
+    /** @var ArrayObject<int, array{0: string, 1: string, 2: float}> $observado */
+    $observado = new ArrayObject;
+    $metricas = instrumentacionMetricasQueApuntan($observado);
+    UseCaseMetricsRegistry::resolveWith(static fn (): UseCaseMetrics => $metricas);
+
+    $capturada = null;
+
+    try {
+        UseCaseInstrumentation::run('product.generate_diagnostics_bundle', static function () use ($fallo): never {
+            throw $fallo;
+        });
+    } catch (Throwable $excepcion) {
+        $capturada = $excepcion;
+    }
+
+    expect($capturada)->toBe($fallo)
+        ->and($observado->getArrayCopy()[0][1] ?? null)->toBe('rejected');
+})->with([
+    // Una `DomainException`, como las bases de Attendance, Workforce e Identity.
+    'DomainException' => [new DomainException('regla de negocio')],
+    // Una de un modulo cuya base hereda de `RuntimeException`: cuenta donde vive.
+    'Product\Domain\Exception' => [DiagnosticsAuditNotDeferred::in('/tmp/pendientes')],
+    'Compliance\Application\Exception' => [IncidentNotFound::withId(7)],
+])->group('RQ-06', 'RNF-D-01');
+
+it('una excepcion de indisponibilidad de un modulo es error y no rejected', function (Throwable $fallo): void {
+    expect(UseCaseInstrumentation::isRejection($fallo))->toBeFalse();
+})->with([
+    // Por su nombre, y por el de su padre aunque el suyo no lo diga.
+    'ReportRenderingBusy' => [ReportRenderingBusy::allSlotsTaken(30)],
+    'PairingCapacityExhausted (es una PairingUnavailable)' => [new PairingCapacityExhausted(3, 3)],
+    'RuntimeException suelta' => [new RuntimeException('Redis no responde')],
+])->group('RQ-06', 'RNF-D-01');
+
+it('cierra el span con los atributos que describen el resultado, sin pisar outcome', function (): void {
+    RecordingTracer::around(function (RecordingTracer $tracer): void {
+        UseCaseInstrumentation::run(
+            'workforce.correct_site_timezone',
+            static fn (): int => 3,
+            static fn (int $tramos): array => ['shift_entry_count' => $tramos, 'outcome' => 'pisado'],
+        );
+
+        $atributos = $tracer->finishedSpans()[0]->getAttributes();
+
+        expect($atributos->get('shift_entry_count'))->toBe(3)
+            ->and($atributos->get('outcome'))->toBe('ok');
+    });
+})->group('RQ-06', 'RNF-D-01');
+
+it('un descriptor que lanza no impide cerrar el span ni devolver el resultado', function (): void {
+    RecordingTracer::around(function (RecordingTracer $tracer): void {
+        $resultado = UseCaseInstrumentation::run(
+            'workforce.correct_site_timezone',
+            static fn (): int => 3,
+            static function (int $tramos): array {
+                throw new LogicException('no se puede describir');
+            },
+        );
+
+        expect($resultado)->toBe(3)
+            ->and($tracer->finishedSpans())->toHaveCount(1);
+    });
 })->group('RQ-06', 'RNF-D-01');
