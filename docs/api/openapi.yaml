@@ -8516,6 +8516,109 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/branding/manifest.webmanifest:
+    get:
+      operationId: getBrandingManifest
+      summary: Manifiesto de aplicacion web del quiosco, con la marca de la instalacion
+      description: |
+        El manifiesto W3C que el quiosco enlaza desde su `index.html` para que,
+        al instalarlo en la tablet, el icono y el nombre de la pantalla de inicio
+        sean **los del hotel** y no los del fabricante (RF-PD-08, regla dura 13,
+        ADR-017). Un manifiesto compilado en la PWA es el mismo para todos los
+        clientes; este se resuelve en cada instalacion con la misma marca que
+        `GET /api/v1/branding`, sin recompilar nada.
+
+        **Lo que cambia con la marca** y nada mas:
+
+        - `name` y `short_name`: el nombre de la aplicacion configurado
+          (`BRANDING_APP_NAME`), o el del producto. Como en `GET /api/v1/branding`,
+          **el nombre no lo degrada la licencia**.
+        - `lang`: el idioma por defecto de la instalacion (`LOCALE_DEFAULT`), y
+          `description` en ese idioma.
+        - `theme_color`: el color de acento elegido, o el de serie del quiosco
+          si no hay ninguno o el plan no incluye la marca blanca (ADR-023).
+        - `icons`: **el logotipo de la marca solo si es un PNG cuadrado de al
+          menos 512 px de lado**, que es lo que Android necesita para ofrecer la
+          instalacion; se publica la misma URL con huella que
+          `GET /api/v1/branding` (`logo_url`), en **una sola entrada con su
+          tamaño real** (de `512x512` a `2048x2048`): declararla a un tamaño
+          que no tiene hace que el navegador avise de un manifiesto
+          incoherente, y el de 512 o mas ya lo reduce el navegador. En
+          cualquier otro caso —SVG, PNG pequeño o no cuadrado, sin logotipo, o
+          sin la marca blanca en el plan— los iconos de serie del quiosco,
+          incluido el `maskable`. **El servidor no rasteriza nada.**
+
+        **Lo que no cambia nunca:** `id` es `/kiosk/` siempre —cambiar la marca
+        no convierte la aplicacion instalada en otra—, y `start_url`, `scope`,
+        `display`, `display_override`, `orientation` y `background_color` son los
+        del quiosco, porque son comportamiento y no aspecto.
+
+        **Es publico, y tiene que serlo**: el navegador lo pide sin credenciales
+        al cargar la pagina, antes de que la tablet tenga token. Lo que revela es
+        lo mismo que `GET /api/v1/branding`. Nunca falla por la configuracion:
+        sin poder leerla, el manifiesto del producto. Comparte el limite por IP
+        de `GET /api/v1/branding` (`429`).
+      tags: [Product]
+      security: []
+      responses:
+        '200':
+          description: El manifiesto del quiosco con la marca vigente.
+          content:
+            application/manifest+json:
+              schema:
+                $ref: '#/components/schemas/WebAppManifest'
+              examples:
+                producto:
+                  summary: Sin marca configurada, o con un logotipo que no sirve de icono
+                  value:
+                    id: /kiosk/
+                    name: KronoQR
+                    short_name: KronoQR
+                    description: Registro horario por QR
+                    lang: es
+                    start_url: /kiosk/
+                    scope: /kiosk/
+                    display: fullscreen
+                    display_override: [fullscreen, standalone]
+                    orientation: landscape
+                    theme_color: '#0f172a'
+                    background_color: '#0f172a'
+                    icons:
+                      - src: /kiosk/icons/icon-192.png
+                        sizes: 192x192
+                        type: image/png
+                        purpose: any
+                      - src: /kiosk/icons/icon-512.png
+                        sizes: 512x512
+                        type: image/png
+                        purpose: any
+                      - src: /kiosk/icons/icon-maskable-512.png
+                        sizes: 512x512
+                        type: image/png
+                        purpose: maskable
+                hotel:
+                  summary: Un hotel con nombre, color y logotipo PNG cuadrado de 512 px
+                  value:
+                    id: /kiosk/
+                    name: Hotel Marina
+                    short_name: Hotel Marina
+                    description: Registro horario por QR
+                    lang: es
+                    start_url: /kiosk/
+                    scope: /kiosk/
+                    display: fullscreen
+                    display_override: [fullscreen, standalone]
+                    orientation: landscape
+                    theme_color: '#0f5c8c'
+                    background_color: '#0f172a'
+                    icons:
+                      - src: /api/v1/branding/logo?v=3f9a1c2b7e4d
+                        sizes: 1024x1024
+                        type: image/png
+                        purpose: any
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   # ---------------------------------------------------------------------------
   # Diagnostico y soporte (RF-PD-09, RF-PD-11, tarea 5.9). Ver el tag `Product`
   # y ADR-020: el soporte se presta con un paquete que genera el cliente; el
@@ -15230,6 +15333,114 @@ components:
                 Idiomas que la instalacion ofrece (`LOCALE_AVAILABLE`). El
                 selector del quiosco no enseña ninguno fuera de esta lista, y
                 el idioma por defecto esta siempre dentro de ella.
+
+    WebAppManifest:
+      type: object
+      title: WebAppManifest
+      description: |
+        Manifiesto de aplicacion web (W3C *Web Application Manifest*) del
+        quiosco, resuelto con la marca de la instalacion (RF-PD-08). Los nombres
+        de campo son los del estandar, por eso `snake_case`. Solo se declaran los
+        miembros que el producto publica; ninguno mas.
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - short_name
+        - description
+        - lang
+        - start_url
+        - scope
+        - display
+        - display_override
+        - orientation
+        - theme_color
+        - background_color
+        - icons
+      properties:
+        id:
+          type: string
+          const: /kiosk/
+          description: |
+            Identidad de la aplicacion instalada. **No cambia con la marca**: si
+            cambiara, el navegador trataria el quiosco rebautizado como otra
+            aplicacion y la tablet acabaria con dos instaladas.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: El nombre de la aplicacion de la marca (`BRANDING_APP_NAME`), o el del producto.
+        short_name:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: El mismo valor que `name`.
+        description:
+          type: string
+          minLength: 1
+          description: Descripcion del producto en el idioma de `lang`.
+        lang:
+          type: string
+          minLength: 1
+          description: El idioma por defecto de la instalacion (`LOCALE_DEFAULT`).
+        start_url:
+          type: string
+          const: /kiosk/
+        scope:
+          type: string
+          const: /kiosk/
+        display:
+          type: string
+          const: fullscreen
+          description: El quiosco ocupa la pantalla entera, sin barras del sistema (RF-KI-01).
+        display_override:
+          type: array
+          items:
+            type: string
+            enum: [fullscreen, standalone]
+        orientation:
+          type: string
+          const: landscape
+        theme_color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+          description: El color de acento de la marca, o el de serie del quiosco.
+        background_color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+          description: Fijo, el de la pantalla de arranque del quiosco; no es marca.
+        icons:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/WebAppManifestIcon'
+
+    WebAppManifestIcon:
+      type: object
+      title: WebAppManifestIcon
+      description: |
+        Un icono del manifiesto. O bien la URL con huella del logotipo de la
+        marca (`/api/v1/branding/logo?v=...`), cuando es un PNG cuadrado de al
+        menos 512 px, o bien uno de los iconos de serie del quiosco
+        (`/kiosk/icons/...`). Rutas absolutas en el mismo origen.
+      additionalProperties: false
+      required: [src, sizes, type, purpose]
+      properties:
+        src:
+          type: string
+          pattern: '^/(kiosk/icons/[a-z0-9-]+\.png|api/v1/branding/logo\?v=[0-9a-f]{12})$'
+        sizes:
+          type: string
+          pattern: '^[1-9][0-9]{0,3}x[1-9][0-9]{0,3}$'
+          description: |
+            Tamaño real del fichero, `ANCHOxALTO`. Los de serie son `192x192` y
+            `512x512`; el del logotipo, su lado real, cuadrado y de al menos 512.
+        type:
+          type: string
+          const: image/png
+        purpose:
+          type: string
+          enum: [any, maskable]
 
     SettingKey:
       type: string

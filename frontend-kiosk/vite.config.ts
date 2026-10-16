@@ -206,6 +206,28 @@ function preloadScanFonts(): Plugin {
   }
 }
 
+// PR7: el manifiesto del quiosco lo sirve el backend con la marca configurada
+// (`GET /api/v1/branding/manifest.webmanifest`), enlazado a mano desde
+// `index.html`. `vite-plugin-pwa` inyecta SIEMPRE su propio
+// `<link rel="manifest">` mientras `manifest` este definido, y dos enlaces
+// dejan al navegador elegir. Este plugin corre DESPUES del suyo y quita el
+// enlace al estatico; el fichero estatico se sigue generando como reserva sin
+// enlazar (y es la fuente de verdad que lee `KioskManifestParityTest`).
+const PLUGIN_MANIFEST_LINK =
+  /<link rel="manifest" href="(?!\/api\/)[^"]*\/manifest\.webmanifest"[^>]*>\s*/g
+
+function brandedManifestLink(): Plugin {
+  return {
+    name: 'kronoqr-branded-manifest-link',
+    enforce: 'post',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler: (html) => html.replace(PLUGIN_MANIFEST_LINK, ''),
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => ({
   base,
   plugins: [
@@ -242,8 +264,11 @@ export default defineConfig(({ mode }) => ({
         // (regla dura 13): Android solo ofrece «Instalar» con PNG de 192 y 512.
         // Se generan con `scripts/generate-icons.mjs`. Relativos al manifiesto,
         // asi que siguen a `base` (`/kiosk/` en produccion). Que el icono
-        // instalado siga la marca blanca de un cliente (RF-PD-08) no se resuelve
-        // aqui: el manifiesto es estatico.
+        // instalado siga la marca blanca de un cliente (RF-PD-08) lo resuelve el
+        // manifiesto DINAMICO (`GET /api/v1/branding/manifest.webmanifest`, PR7),
+        // enlazado desde `index.html`. Este es la reserva sin enlazar: lo que se
+        // instalaria si el servidor no contestara, y la fuente de verdad de los
+        // valores que `KioskManifestResource` copia (`KioskManifestParityTest`).
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
@@ -291,6 +316,20 @@ export default defineConfig(({ mode }) => ({
         // depende de esta cache es el LOGOTIPO, porque sus bytes no caben ahi.
         runtimeCaching: [
           {
+            // El manifiesto con la marca (PR7): mismo trato que la marca. Sin red,
+            // el ultimo que se pudo guardar. Una PWA ya instalada puede tardar en
+            // reflejar un cambio de nombre o icono, o no hacerlo, o pedir
+            // confirmacion en pantalla (Chrome revisa el manifiesto por su `id`
+            // estable); pendiente de comprobar en la tablet real.
+            urlPattern: /\/api\/v1\/branding\/manifest\.webmanifest$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'kronoqr-branding',
+              networkTimeoutSeconds: 3,
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
             // NetworkFirst con techo corto: si hay red, la marca vigente; si
             // no contesta en 3 s, la ultima que se pudo guardar. Nunca un
             // fichaje, asi que un dato de unos minutos de retraso no importa.
@@ -318,6 +357,7 @@ export default defineConfig(({ mode }) => ({
       },
       devOptions: { enabled: false },
     }),
+    brandedManifestLink(),
   ],
   resolve: {
     alias: {

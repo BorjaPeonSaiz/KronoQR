@@ -14,6 +14,7 @@ import pluginVue from 'eslint-plugin-vue'
 import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
 import { noBareStrings } from '@kronoqr/web-kit/eslint/no-bare-strings'
 import { noLiteralColors } from '@kronoqr/web-kit/eslint/no-literal-colors'
+import { noBrowserStorage } from '@kronoqr/web-kit/eslint/no-browser-storage'
 
 export default defineConfigWithVueTs(
   {
@@ -96,5 +97,17 @@ export default defineConfigWithVueTs(
   noBareStrings(),
   // U1: sin colores literales; todo color sale de un token --kq-* (docs/06).
   noLiteralColors(),
+  // Datos del registro fuera del navegador (bloque 21, §3). Regla y mensaje
+  // en web-kit; aqui solo las excepciones de ESTA aplicacion, fichero a fichero.
+  ...noBrowserStorage({
+    exceptions: [
+      {
+        file: 'src/features/login/session.store.ts',
+        allow: ['sessionStorage'],
+        reason:
+          'Sesion del portal, solo en esta pestana (muere al cerrarla): token, caducidad y los datos de la PROPIA persona que ha entrado (uuid, nombre, codigo de empleado, idioma y zona horaria). Son datos personales de su titular, no de terceros; el PIN nunca entra y salir borra la sesion tambien en el servidor (cabecera del fichero).',
+      },
+    ],
+  }),
   skipFormatting,
 )

@@ -1616,7 +1616,10 @@ Route::middleware([
 
 /*
  * GET /api/v1/branding y GET /api/v1/branding/logo — la marca de la instalacion
- * (tarea 5.8, RF-PD-08, regla dura 13).
+ * (tarea 5.8, RF-PD-08, regla dura 13). Y, desde la 2.2.1 (PR7),
+ * GET /api/v1/branding/manifest.webmanifest: el manifiesto del quiosco con esa
+ * misma marca, para que el icono instalado en la tablet sea el del hotel. Comparte
+ * cubo de `throttle:branding`: una tablet que arranca pide las tres.
  *
  * PUBLICAS, Y TIENEN QUE SERLO. El quiosco pinta su pantalla de espera antes de
  * que nadie escanee nada y el portal la de acceso antes de que nadie se
@@ -1668,6 +1671,7 @@ Route::middleware([
 Route::prefix('branding')->middleware('throttle:branding')->group(function (): void {
     Route::get('/', [BrandingController::class, 'show'])->name('product.branding.show');
     Route::get('/logo', [BrandingController::class, 'logo'])->name('product.branding.logo');
+    Route::get('/manifest.webmanifest', [BrandingController::class, 'manifest'])->name('product.branding.manifest');
 });
 
 /*

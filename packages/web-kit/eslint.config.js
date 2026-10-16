@@ -7,6 +7,7 @@ import pluginVue from 'eslint-plugin-vue'
 
 import { identifierLanguage } from './eslint/identifier-language.js'
 import { noLiteralColors } from './eslint/no-literal-colors.js'
+import { noBrowserStorage } from './eslint/no-browser-storage.js'
 
 export default defineConfigWithVueTs(
   {
@@ -35,5 +36,17 @@ export default defineConfigWithVueTs(
   // U1: sin colores literales (docs/06). Excepcion: los dos ficheros que fijan
   // por contrato valores de color del producto (acento de serie y pares de contraste).
   noLiteralColors(undefined, ['**/*.d.ts', 'src/branding.ts', 'src/themePairs.ts']),
+  // Datos del registro fuera del navegador. Unica excepcion: la cache de marca (MB4),
+  // que es dato de marca del cliente y no personal.
+  noBrowserStorage({
+    exceptions: [
+      {
+        file: 'src/brandingState.ts',
+        allow: ['localStorage'],
+        reason:
+          'Cache de la ultima marca valida (MB4): pinta sin parpadeo; es marca, no datos personales.',
+      },
+    ],
+  }),
   skipFormatting,
 )

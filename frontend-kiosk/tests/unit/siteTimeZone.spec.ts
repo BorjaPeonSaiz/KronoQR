@@ -1,7 +1,9 @@
 // La hora y la ventana de actualizacion se leen en el reloj de pared DEL CENTRO
 // (`site_time_zone` del latido), no en la zona de la tablet (V2-KI-01, RF-AT-05,
 // RF-KI-07). Todas las pruebas pasan la zona explicita para no depender de la
-// zona de la maquina que las ejecuta.
+// zona de la maquina que las ejecuta. La logica de la hora de pared vive en
+// `packages/web-kit/tests/unit/datetime.spec.ts`; aqui se prueba lo que hacen
+// con ella el saludo, el reloj y la ventana de actualizacion.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/shared/api/client'
@@ -13,7 +15,6 @@ import { readSiteTimeZone, storeSiteTimeZone } from '@/shared/telemetry/deviceId
 import { createErrorReporter } from '@/shared/telemetry/errorReporter'
 import { createHeartbeatScheduler } from '@/shared/telemetry/heartbeat'
 import { fixedClock } from '@/shared/time/clock'
-import { isValidTimeZone, resolveTimeZone, wallClockOf } from '@/shared/time/siteTimeZone'
 
 const CANARIAS = 'Atlantic/Canary'
 const MADRID = 'Europe/Madrid'
@@ -144,31 +145,6 @@ describe('RF-KI-07: la ventana de actualizacion se lee en la pared del centro', 
     expect(canApplyUpdate({ ...base, timeZone: CANARIAS })).toBe(true)
     expect(canApplyUpdate({ ...base, pendingScans: 1, timeZone: MADRID })).toBe(false)
     expect(canApplyUpdate({ ...base, interactionInProgress: true })).toBe(false)
-  })
-})
-
-describe('zonas horarias: validacion', () => {
-  it('reconoce los nombres IANA y descarta lo demas', () => {
-    expect(isValidTimeZone(MADRID)).toBe(true)
-    expect(isValidTimeZone(CANARIAS)).toBe(true)
-    expect(isValidTimeZone('UTC')).toBe(true)
-    expect(isValidTimeZone('Marte/Olympus')).toBe(false)
-    expect(isValidTimeZone('')).toBe(false)
-  })
-
-  it('`resolveTimeZone`: nombre valido o `undefined` (= la del aparato)', () => {
-    expect(resolveTimeZone(MADRID)).toBe(MADRID)
-    expect(resolveTimeZone(null)).toBeUndefined()
-    expect(resolveTimeZone(undefined)).toBeUndefined()
-    expect(resolveTimeZone('Marte/Olympus')).toBeUndefined()
-  })
-
-  it('`wallClockOf` nunca devuelve la hora 24', () => {
-    expect(wallClockOf(new Date('2026-07-14T22:00:00.000Z'), MADRID)).toEqual({
-      hour: 0,
-      minute: 0,
-    })
-    expect(wallClockOf(new Date('nope'), MADRID)).toBeNull()
   })
 })
 

@@ -30,7 +30,7 @@ const HEX_COLOR = /(?<![\w&#-])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})(?![\w-
 const COLOR_FUNCTION = /(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/i
 
 const MESSAGE =
-  'Color literal ({{ value }}): ninguna SPA declara un color propio (docs/06-guia-visual.md). Usa un token `--kq-*` de `packages/web-kit/src/theme.css` (en Tailwind, su utilidad semantica: `bg-surface`, `text-text-muted`, `text-danger`...; en JS, `readToken(...)`). Si hace falta un tono nuevo, es un token nuevo en web-kit, no un valor aqui.'
+  'Color literal ({{ value }}): ninguna SPA declara un color propio (docs/06-guia-visual.md). Usa un token `--kq-*` de `packages/web-kit/src/theme.css` (en una plantilla, su utilidad de Tailwind: `bg-kq-surface`, `text-kq-text-muted`, `text-kq-danger`...; en JS o en un estilo en linea, `var(--kq-color-text)` o `getComputedStyle(document.documentElement).getPropertyValue(...)`). Si hace falta un tono nuevo, es un token nuevo en web-kit, no un valor aqui.'
 
 /** @param {unknown} text */
 function containsColor(text) {

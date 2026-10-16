@@ -171,4 +171,13 @@ return [
             .'Si necesitas ayuda, genera el paquete de diagnostico con `php artisan product:diagnostics` y enviaselo a soporte.',
     ],
 
+    /*
+     * El manifiesto de aplicacion web del quiosco (RF-PD-08): la descripcion que
+     * el sistema enseña al instalarlo en la tablet. Va en el idioma por defecto
+     * de la instalacion, el mismo que declara `lang`.
+     */
+    'manifest' => [
+        'description' => 'Registro horario por QR',
+    ],
+
 ];

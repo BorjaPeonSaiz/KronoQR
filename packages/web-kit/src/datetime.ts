@@ -8,18 +8,151 @@
 // que consulta el portal desde su movil en otro pais, tienen que ver las
 // horas de SU centro, que son las que constan en el contrato de esa persona.
 //
-// La direccion CONTRARIA -de lo que alguien teclea pensando en la hora del
-// centro al `UtcTimestamp` que exige el contrato- no vive aqui: la necesita
-// solo `frontend-admin/src/features/workdays/zonedTime.ts`, al corregir un
-// tramo (RF-PA-04), y no se ha traido a este paquete porque ademas de leer
-// tiene que adivinar-y-corregir en los dos filos del cambio de horario, que
-// es un algoritmo bastante mas largo que el resto de este fichero.
+// La LECTURA de la hora de pared (`readWallClock`, `wallClockOf`) vive tambien
+// aqui y es la unica: el quiosco la usa para el saludo y la ventana de
+// actualizacion, y el panel para la conversion inversa. La direccion CONTRARIA
+// -de lo que alguien teclea pensando en la hora del centro al `UtcTimestamp`
+// que exige el contrato- no vive aqui: la necesita solo
+// `frontend-admin/src/features/workdays/zonedTime.ts`, al corregir un tramo
+// (RF-PA-04), y es un algoritmo bastante mas largo que el resto de este
+// fichero; pero lee con `readWallClock`, no con una copia.
 //
 // Las fechas civiles (`hired_at`, `work_date`) NO son instantes y no se
 // convierten: un `2026-08-14` es el 14 de agosto en cualquier zona.
 
 /** Zona de reserva cuando todavia no se sabe la del centro. Nunca la del navegador. */
 export const FALLBACK_TIMEZONE = 'UTC'
+
+// --- Hora de pared en una zona -----------------------------------------------
+//
+// Calculada con `Intl.DateTimeFormat` y `timeZone`, NO con `getHours()`, que
+// lee la zona del aparato. El dia del cambio de hora el reloj de pared salta
+// (la hora que no existe nunca se lee) o se repite (se lee dos veces): es lo
+// que ve la gente en la pared, y es lo que se quiere.
+
+const validityCache = new Map<string, boolean>()
+const wallClockFormatterCache = new Map<string, Intl.DateTimeFormat>()
+
+/** `true` si el navegador reconoce `name` como zona horaria. */
+export function isValidTimeZone(name: string): boolean {
+  if (name === '') {
+    return false
+  }
+
+  const cached = validityCache.get(name)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  let valid: boolean
+
+  try {
+    new Intl.DateTimeFormat('en-GB', { timeZone: name })
+    valid = true
+  } catch {
+    valid = false
+  }
+
+  validityCache.set(name, valid)
+
+  return valid
+}
+
+/**
+ * La zona a usar: `name` si es valida; `undefined` en cualquier otro caso, que
+ * significa "la zona del aparato" (regla dura 19: el quiosco nunca deja de
+ * pintar la hora). Si algun dia una SPA necesita otra zona de reserva, se
+ * anade aqui un parametro; hoy nadie lo usa.
+ */
+export function resolveTimeZone(name: string | null | undefined): string | undefined {
+  return typeof name === 'string' && isValidTimeZone(name) ? name : undefined
+}
+
+/** La hora de pared completa; `hour` es siempre 0-23 y `minute` 0-59. */
+export interface WallClockParts {
+  readonly year: number
+  readonly month: number
+  readonly day: number
+  readonly hour: number
+  readonly minute: number
+}
+
+function wallClockFormatter(timeZone: string | undefined): Intl.DateTimeFormat {
+  const key = timeZone ?? ''
+  const cached = wallClockFormatterCache.get(key)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    ...(timeZone === undefined ? {} : { timeZone }),
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  wallClockFormatterCache.set(key, formatter)
+
+  return formatter
+}
+
+/**
+ * Que hora de pared lee `timeZone` en `instant` (milisegundos UTC o `Date`).
+ * `timeZone` ya debe ser valida (si no, `Intl` lanza `RangeError`); `undefined`
+ * es la zona del aparato. `null` si `instant` no es una fecha.
+ */
+export function readWallClock(
+  instant: Date | number,
+  timeZone: string | undefined,
+): WallClockParts | null {
+  const date = typeof instant === 'number' ? new Date(instant) : instant
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const parts = wallClockFormatter(timeZone).formatToParts(date)
+  const value = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((part) => part.type === type)?.value)
+
+  const wall = {
+    year: value('year'),
+    month: value('month'),
+    day: value('day'),
+    hour: value('hour'),
+    minute: value('minute'),
+  }
+
+  if (Object.values(wall).some((part) => !Number.isFinite(part))) {
+    return null
+  }
+
+  // Algunos motores devuelven `24` a medianoche aun con `h23`.
+  return { ...wall, hour: wall.hour % 24 }
+}
+
+/** Hora y minuto de pared. */
+export interface WallClock {
+  /** 0-23. */
+  readonly hour: number
+  /** 0-59. */
+  readonly minute: number
+}
+
+/**
+ * Hora y minuto en el reloj de pared de `timeZone`; si no es valida (o falta),
+ * en la del aparato. `null` si `instant` no es una fecha.
+ */
+export function wallClockOf(instant: Date, timeZone?: string | null): WallClock | null {
+  const wall = readWallClock(instant, resolveTimeZone(timeZone))
+
+  return wall === null ? null : { hour: wall.hour, minute: wall.minute }
+}
 
 const CIVIL_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
 

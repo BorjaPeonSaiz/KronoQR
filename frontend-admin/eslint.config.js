@@ -14,6 +14,7 @@ import pluginVue from 'eslint-plugin-vue'
 import { identifierLanguage } from '@kronoqr/web-kit/eslint/identifier-language'
 import { noBareStrings } from '@kronoqr/web-kit/eslint/no-bare-strings'
 import { noLiteralColors } from '@kronoqr/web-kit/eslint/no-literal-colors'
+import { noBrowserStorage } from '@kronoqr/web-kit/eslint/no-browser-storage'
 
 export default defineConfigWithVueTs(
   {
@@ -96,5 +97,23 @@ export default defineConfigWithVueTs(
   noBareStrings(),
   // U1: sin colores literales; todo color sale de un token --kq-* (docs/06).
   noLiteralColors(),
+  // Datos del registro fuera del navegador (bloque 21, §3). Regla y mensaje
+  // en web-kit; aqui solo las excepciones de ESTA aplicacion, fichero a fichero.
+  ...noBrowserStorage({
+    exceptions: [
+      {
+        file: 'src/features/auth/session.store.ts',
+        allow: ['sessionStorage'],
+        reason:
+          'Token y caducidad de la sesion de gestion, solo en esta pestana (muere al cerrarla); el usuario no se persiste y el PIN nunca entra (cabecera del fichero).',
+      },
+      {
+        file: 'src/router/chunkLoadRecovery.ts',
+        allow: ['sessionStorage'],
+        reason:
+          'Marca tecnica por pestana contra el bucle de recarga tras un fallo de carga de chunk: un booleano con hora, sin datos personales.',
+      },
+    ],
+  }),
   skipFormatting,
 )

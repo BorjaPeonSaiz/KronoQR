@@ -146,4 +146,11 @@ return [
             .'If you need help, generate the diagnostics package with `php artisan product:diagnostics` and send it to support.',
     ],
 
+    /*
+     * El manifiesto de aplicacion web del quiosco (RF-PD-08). Ver lang/es/kiosk.php.
+     */
+    'manifest' => [
+        'description' => 'QR time tracking',
+    ],
+
 ];

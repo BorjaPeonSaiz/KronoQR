@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Http\Support;
 
 use App\Modules\Product\Application\UseCase\InstallationBranding;
+use App\Modules\Product\Application\UseCase\KioskManifest;
 use App\Modules\Shared\Application\Support\SpanScope;
 use App\Modules\Shared\Domain\ValueObject\LogoImage;
 use OpenTelemetry\API\Trace\SpanKind;
@@ -77,5 +78,41 @@ final readonly class BrandingTelemetry
         ]);
 
         return $branding;
+    }
+
+    /**
+     * La traza y el log de `GET /api/v1/branding/manifest.webmanifest`.
+     *
+     * Los mismos criterios que {@see self::measureRead()}: dos hechos y ningun
+     * valor. Ni el nombre, ni el color, ni la URL del logotipo.
+     *
+     * @param  callable(): KioskManifest  $read
+     */
+    public function measureManifest(callable $read): KioskManifest
+    {
+        $span = SpanScope::start('kronoqr.product', 'product.read_branding_manifest', SpanKind::KIND_SERVER);
+        $startedAt = microtime(true);
+
+        try {
+            $manifest = $read();
+        } catch (Throwable $failure) {
+            $span->end();
+
+            throw $failure;
+        }
+
+        $span->end([
+            'branding.custom_accent' => $manifest->customThemeColor,
+            'branding.branded_icons' => $manifest->brandedIcons,
+        ]);
+
+        $this->logger->info('product.branding_manifest_read', [
+            'trace_id' => $span->traceId(),
+            'custom_accent' => $manifest->customThemeColor,
+            'branded_icons' => $manifest->brandedIcons,
+            'duration_seconds' => round(microtime(true) - $startedAt, 3),
+        ]);
+
+        return $manifest;
     }
 }

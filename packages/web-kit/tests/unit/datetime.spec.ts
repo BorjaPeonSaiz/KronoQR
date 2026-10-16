@@ -7,9 +7,13 @@ import {
   formatLocalTime,
   formatUtcTime,
   formatZoneLabel,
+  isValidTimeZone,
   minutesBetween,
   readLocalTimestamp,
+  readWallClock,
+  resolveTimeZone,
   todayInZone,
+  wallClockOf,
 } from '../../src/datetime'
 
 describe('presentacion del tiempo', () => {
@@ -81,5 +85,107 @@ describe('presentacion del tiempo', () => {
 
     expect(todayInZone('Europe/Madrid', instant)).toBe('2026-08-21')
     expect(todayInZone('Atlantic/Canary', instant)).toBe('2026-08-20')
+  })
+})
+
+const MADRID = 'Europe/Madrid'
+const CANARIAS = 'Atlantic/Canary'
+
+describe('zonas horarias: validacion', () => {
+  it('reconoce los nombres IANA y descarta lo demas', () => {
+    expect(isValidTimeZone(MADRID)).toBe(true)
+    expect(isValidTimeZone(CANARIAS)).toBe(true)
+    expect(isValidTimeZone('UTC')).toBe(true)
+    expect(isValidTimeZone('Marte/Olympus')).toBe(false)
+    expect(isValidTimeZone('')).toBe(false)
+  })
+
+  it('`resolveTimeZone`: nombre valido o `undefined` (= la del aparato)', () => {
+    expect(resolveTimeZone(MADRID)).toBe(MADRID)
+    expect(resolveTimeZone(null)).toBeUndefined()
+    expect(resolveTimeZone(undefined)).toBeUndefined()
+    expect(resolveTimeZone('Marte/Olympus')).toBeUndefined()
+  })
+})
+
+describe('hora de pared en una zona', () => {
+  it('lee la pared de la zona pedida, no la del aparato', () => {
+    const instant = new Date('2026-07-15T05:30:00.000Z')
+
+    expect(wallClockOf(instant, CANARIAS)).toEqual({ hour: 6, minute: 30 })
+    expect(wallClockOf(instant, MADRID)).toEqual({ hour: 7, minute: 30 })
+  })
+
+  it('devuelve tambien la fecha y cruza la medianoche de la zona', () => {
+    // 22:30Z en verano: ya es el dia siguiente en Madrid (+02:00).
+    expect(readWallClock(new Date('2026-07-14T22:30:00.000Z'), MADRID)).toEqual({
+      year: 2026,
+      month: 7,
+      day: 15,
+      hour: 0,
+      minute: 30,
+    })
+  })
+
+  it('la medianoche exacta es la hora 0, nunca la 24', () => {
+    expect(wallClockOf(new Date('2026-07-14T22:00:00.000Z'), MADRID)).toEqual({
+      hour: 0,
+      minute: 0,
+    })
+    expect(readWallClock(new Date('2026-01-14T23:00:00.000Z'), MADRID)?.hour).toBe(0)
+    expect(readWallClock(0, 'UTC')?.hour).toBe(0)
+  })
+
+  it('acepta milisegundos y los trata igual que un Date', () => {
+    const ms = Date.parse('2026-07-15T05:30:00.000Z')
+
+    expect(readWallClock(ms, MADRID)).toEqual(readWallClock(new Date(ms), MADRID))
+  })
+
+  it('cambio de hora de primavera (Madrid, 29-03-2026): la hora 02:xx no se lee nunca', () => {
+    expect(wallClockOf(new Date('2026-03-29T00:59:00.000Z'), MADRID)).toEqual({
+      hour: 1,
+      minute: 59,
+    })
+    expect(wallClockOf(new Date('2026-03-29T01:00:00.000Z'), MADRID)).toEqual({
+      hour: 3,
+      minute: 0,
+    })
+  })
+
+  it('cambio de hora de otono (Madrid, 25-10-2026): la hora 02:30 se lee dos veces', () => {
+    expect(wallClockOf(new Date('2026-10-25T00:30:00.000Z'), MADRID)).toEqual({
+      hour: 2,
+      minute: 30,
+    })
+    expect(wallClockOf(new Date('2026-10-25T01:30:00.000Z'), MADRID)).toEqual({
+      hour: 2,
+      minute: 30,
+    })
+  })
+
+  it('cambio de hora en Canarias (WET/WEST) un dia distinto al de Madrid', () => {
+    // Las dos zonas cambian a la vez (01:00Z), pero la pared de Canarias salta de 01:00 a 02:00.
+    expect(wallClockOf(new Date('2026-03-29T00:59:00.000Z'), CANARIAS)).toEqual({
+      hour: 0,
+      minute: 59,
+    })
+    expect(wallClockOf(new Date('2026-03-29T01:00:00.000Z'), CANARIAS)).toEqual({
+      hour: 2,
+      minute: 0,
+    })
+  })
+
+  it('una zona invalida o ausente usa la del aparato', () => {
+    const instant = new Date('2026-07-15T05:30:00.000Z')
+    const device = wallClockOf(instant)
+
+    expect(wallClockOf(instant, 'Marte/Olympus')).toEqual(device)
+    expect(wallClockOf(instant, '')).toEqual(device)
+  })
+
+  it('una fecha invalida da null y no revienta', () => {
+    expect(wallClockOf(new Date('nope'), MADRID)).toBeNull()
+    expect(readWallClock(Number.NaN, MADRID)).toBeNull()
   })
 })

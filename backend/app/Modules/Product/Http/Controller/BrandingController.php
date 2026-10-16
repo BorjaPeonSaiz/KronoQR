@@ -7,7 +7,9 @@ namespace App\Modules\Product\Http\Controller;
 use App\Exceptions\ProblemDetails;
 use App\Http\Controllers\Controller;
 use App\Modules\Product\Application\UseCase\GetBrandingHandler;
+use App\Modules\Product\Application\UseCase\GetKioskManifestHandler;
 use App\Modules\Product\Http\Resource\BrandingResource;
+use App\Modules\Product\Http\Resource\KioskManifestResource;
 use App\Modules\Product\Http\Support\BrandingTelemetry;
 use App\Modules\Shared\Application\Port\BrandingLogoReader;
 use App\Modules\Shared\Domain\ValueObject\LogoFormat;
@@ -60,6 +62,26 @@ final class BrandingController extends Controller
         );
 
         return (new BrandingResource($branding))->response();
+    }
+
+    /**
+     * `GET /api/v1/branding/manifest.webmanifest` — el manifiesto del quiosco
+     * con la marca de la instalacion, para que el icono y el nombre instalados
+     * en la tablet sean los del hotel (RF-PD-08).
+     *
+     * Publico por lo mismo que {@see self::show()}: el navegador lo pide sin
+     * credenciales al cargar la pagina. Y con `application/manifest+json`, el
+     * tipo que el estandar W3C declara para este documento.
+     */
+    public function manifest(GetKioskManifestHandler $handler, BrandingTelemetry $telemetry): JsonResponse
+    {
+        $manifest = $telemetry->measureManifest(
+            static fn () => $handler->handle(),
+        );
+
+        return (new KioskManifestResource($manifest))
+            ->response()
+            ->header('Content-Type', KioskManifestResource::CONTENT_TYPE);
     }
 
     /**

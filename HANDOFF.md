@@ -60,7 +60,7 @@ teléfono para el código 2FA) y el enlace al vídeo van en el formulario de ent
 `README.md` lo dice así desde el 15-10-2026. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
 actualizar README §3.1/§6.
 
-**Siguiente acción: la 2.2.1, bloques 18 a 26 y 24, encadenados** por orden del propietario del 15-10-2026 (tarde): un PR por bloque mientras todo esté en verde; si algo sale rojo y no se arregla en el bloque, parar. **B17 integrado** (#161, `main` `d10a3616`: cámara, ZXing y libsodium tras el primer pintado; E2E `perf-lcp` con LCP 1,34 s en la CI; panel con vistas bajo demanda, entrada 253 → 106 KiB gzip, recarga única si falta un trozo tras `update.sh`; un solo `bundle-budget.mjs` en web-kit). La #149 de Dependabot (`vite-plugin-pwa` 2.0) queda para la 2.3.0: necesita la tablet. El 13-10-2026 había ordenado **hacer el plan completo**
+**Siguiente acción: la 2.2.1, bloques 18 a 26 y 24, encadenados** por orden del propietario del 15-10-2026 (tarde): un PR por bloque mientras todo esté en verde; si algo sale rojo y no se arregla en el bloque, parar. **B17 a B20 integrados** (#161, #162, #167, #168; `main` `3ee0eb9a`; ver «Pendiente», bloques 18 a 20). B17 (#161: cámara, ZXing y libsodium tras el primer pintado; E2E `perf-lcp` con LCP 1,34 s en la CI; panel con vistas bajo demanda, entrada 253 → 106 KiB gzip, recarga única si falta un trozo tras `update.sh`; un solo `bundle-budget.mjs` en web-kit). La #149 de Dependabot (`vite-plugin-pwa` 2.0) queda para la 2.3.0: necesita la tablet. El 13-10-2026 había ordenado **hacer el plan completo**
 (B8 a B26 y B24 al final; el bloque final solo con su orden). Plan: [`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md);
 lista: [`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md).
 
@@ -122,6 +122,23 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 > lo que siga vigente debería pasar al plan o a «Fuera de la 2.2.0, con motivo».
 
 ## Pendiente
+
+### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
+
+- **Integrados:** B18 (#162: CSP por ubicación, cosign *keyless* de imágenes y de `SHA256SUMS`, Redis por digest),
+  B19 (#167: N5 de ADR-055, `ElapsedMinutes`, Gherkin), B20 (#168: RN-23, zona fija; arreglo de Loki 3.7 sin shell).
+  Dependabot: #164 y #163 integradas; **#163 rompió ⑧** (Loki 3.7.8 sin `/bin/sh`): antes de integrar una PR de
+  imágenes, CI manual completa (`gh workflow run ci.yml --ref <rama>`), la del PR no corre ⑧ ni la observabilidad.
+- **Para el propietario:** ¿la revisión de la purga (`compliance:reconcile-work-record --acknowledge`) debe exigir rol
+  (admin/rrhh, ¿y auditor?) como la corrección de zona? Hoy vale cualquier cuenta de gestión activa (decisión D7).
+- **B23 (deuda de backend), añadido:** `compliance:apply-retention --responsible` no valida el id (`(int)` de `12abc`)
+  ni que la cuenta exista (🟡 MEDIO de seguridad): usar `ConsoleIds` y `ResponsibleAccounts`; #147 de Dependabot
+  (larastan 3.13: 2 errores de PHPStan); `ignore` de mayores de observabilidad en `dependabot.yml` y cerrar #165
+  (Grafana 13) y #166 (Tempo 3); restos de `retention-guard.sh` (título, `export` y `exec` ya inocuos); `SitePolicy`
+  lee los roles de `CorrectSiteTimezoneHandler` (altitud).
+- El desarrollo local sigue con el Loki viejo hasta recrear `loki` y `tempo` (aparece `kronoqr-retention-guard`, sale 0).
+- La primera ejecución real de los jobs `firmar` y `firmar-sumas` de `release.yml` será la etiqueta `v2.2.1`.
+- La métrica Prometheus de `workforce:correct-site-timezone` queda para el B24 (tiene *span* y asiento).
 
 ### Anotado con RNF-P-08 (15-10-2026)
 

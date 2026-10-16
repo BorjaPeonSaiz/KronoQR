@@ -50,6 +50,27 @@ final readonly class FixedLogo implements BrandingLogoReader
         );
     }
 
+    /**
+     * Los bytes de un PNG valido de ese tamaño, en escala de grises y en blanco.
+     *
+     * Se construye trozo a trozo (IHDR, IDAT, IEND con su CRC) y no con GD,
+     * que no es una dependencia de la imagen: asi el manifiesto del quiosco se
+     * prueba con un PNG que cualquier navegador sabria dibujar.
+     */
+    public static function pngOfSize(int $width, int $height): string
+    {
+        $chunk = static fn (string $type, string $data): string => pack('N', \strlen($data))
+            .$type.$data.pack('N', crc32($type.$data));
+
+        // Cada fila empieza con el byte de filtro (0) y lleva un byte por pixel.
+        $rows = str_repeat("\x00".str_repeat("\xff", $width), $height);
+
+        return "\x89PNG\r\n\x1a\n"
+            .$chunk('IHDR', pack('NNCCCCC', $width, $height, 8, 0, 0, 0, 0))
+            .$chunk('IDAT', (string) gzcompress($rows))
+            .$chunk('IEND', '');
+    }
+
     public function current(): ?LogoImage
     {
         return $this->logo;

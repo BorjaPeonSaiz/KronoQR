@@ -73,9 +73,17 @@ test(
     const manifestHref = await page.locator('link[rel="manifest"]').first().getAttribute('href')
     expect(manifestHref).toBeTruthy()
 
-    const manifest = await page.request.get(manifestHref ?? '')
-    expect(manifest.ok()).toBe(true)
-    const parsed = (await manifest.json()) as { display?: string; orientation?: string }
+    // Desde la pagina y no con `page.request`: el manifiesto lo sirve la API (PR7)
+    // y el doble de `stubKioskApi` solo intercepta las peticiones del navegador.
+    const served = await page.evaluate(async (url) => {
+      const response = await fetch(url)
+      return {
+        ok: response.ok,
+        body: (await response.json()) as { display?: string; orientation?: string },
+      }
+    }, manifestHref ?? '')
+    expect(served.ok).toBe(true)
+    const parsed = served.body
     expect(parsed.display).toBe('fullscreen')
     expect(parsed.orientation).toBe('landscape')
 
