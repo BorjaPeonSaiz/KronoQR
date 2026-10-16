@@ -1510,9 +1510,17 @@ parameters:
     # al alcance de `bootstrap/` y de cualquier middleware. Si algun dia hace
     # falta el contenedor, un facade o el reloj, lo que se ha metido en `Support`
     # no es andamiaje: es un caso de uso, y su sitio es `SharedApplication`.
+    #
+    # La UNICA arista hacia otra capa de Shared es `SharedApplicationPort`, y
+    # solo por `UseCaseInstrumentation` y su registro (bloque 24 de la 2.2.1):
+    # la medida comun de los casos de uso necesita el puerto `UseCaseMetrics`
+    # para observar su duracion sin saber que hay detras. Un puerto es una
+    # interfaz que solo depende del dominio compartido: no trae Laravel, ni el
+    # contenedor, ni ningun adaptador al alcance del armazon.
     SharedTracingSupport:
       - SharedDomain
       - SharedDomainEvent
+      - SharedApplicationPort
       - ExternalCode
 
     # SystemClock vive aqui (ADR-021).

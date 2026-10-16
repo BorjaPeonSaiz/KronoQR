@@ -13,7 +13,9 @@ use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SealedPinOpener;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Port\UseCaseMetrics;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
+use App\Modules\Shared\Application\Support\UseCaseMetricsRegistry;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
 use App\Modules\Shared\Infrastructure\Adapter\ConfigDeployedVersionProvider;
 use App\Modules\Shared\Infrastructure\Adapter\SodiumSealedPinOpener;
@@ -21,6 +23,7 @@ use App\Modules\Shared\Infrastructure\Adapter\SystemClock;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\FilesystemGeneratedFileStore;
 use App\Modules\Shared\Infrastructure\Metrics\RedisAuthenticationMetrics;
 use App\Modules\Shared\Infrastructure\Metrics\RedisGeneratedFileMetrics;
+use App\Modules\Shared\Infrastructure\Metrics\RedisUseCaseMetrics;
 use App\Modules\Shared\Infrastructure\Persistence\ChainLockedWrite;
 use App\Modules\Shared\Infrastructure\Persistence\DatabaseResponsibleAccounts;
 use Illuminate\Contracts\Foundation\Application;
@@ -75,6 +78,16 @@ final class SharedServiceProvider extends ServiceProvider
         // importarse entre si, y una metrica contada por tres adaptadores
         // distintos serian tres series con el mismo nombre y distinto criterio.
         $this->app->singleton(AuthenticationMetrics::class, RedisAuthenticationMetrics::class);
+
+        // `use_case_duration_seconds{use_case,outcome}` (doc 02 §8). Los casos de
+        // uso no reciben el puerto por constructor —son `final`, sin interfaz y
+        // se construyen a mano en las pruebas—: lo encuentran en el registro
+        // estatico, que se rellena con un resolutor PEREZOSO para no tocar Redis
+        // hasta la primera medicion y para que cada aplicacion que arranca
+        // sustituya a la anterior.
+        $this->app->singleton(UseCaseMetrics::class, RedisUseCaseMetrics::class);
+        $app = $this->app;
+        UseCaseMetricsRegistry::resolveWith(static fn (): UseCaseMetrics => $app->make(UseCaseMetrics::class));
 
         // El orden de candados de toda escritura que se audita (ADR-010,
         // ADR-027, tarea 3.6). Vive aqui, y no en `Compliance`, porque lo
