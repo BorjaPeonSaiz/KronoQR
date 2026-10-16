@@ -8,6 +8,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Reporting\PeriodReportFixtures;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -302,6 +303,8 @@ it('devuelve vacio y no 422 con un identificador de persona que no existe', func
 })->group('RF-PA-06', 'RS-04');
 
 it('sirve los criterios traducidos al idioma de la peticion', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     // RF-KI-05: el producto se vende con español e ingles como minimo, y estos
     // textos van en la respuesta porque son parte del aviso.
     $escenario = escenarioDeCumplimiento();

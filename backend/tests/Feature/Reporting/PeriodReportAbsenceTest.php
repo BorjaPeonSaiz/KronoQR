@@ -8,6 +8,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\PeriodReportFixtures;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -228,6 +229,8 @@ it('explica en los criterios que las ausencias justifican, cuantos festivos hay 
 })->group('RF-GP-04', 'RF-IN-01');
 
 it('traduce las tres lineas nuevas al idioma de la peticion', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     // Los textos van en `i18n` y el codigo en ingles (doc 02 §3.5). Sin esta
     // prueba, un cliente con el panel en ingles recibiria la advertencia del
     // cuadrante en castellano y nadie se enteraria hasta la demo.
