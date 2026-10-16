@@ -168,11 +168,13 @@ ticket ni en un correo al fabricante.
 -- La fila tal y como está ahora.
 SELECT * FROM shift_entries WHERE uuid = 'U';
 
--- Todo lo que la auditoría dice de ese tramo, en orden.
+-- Todo lo que la auditoría dice de ese tramo, en orden. Si conoces la fecha del
+-- tramo, añade `AND occurred_at >= '…'` para que solo lea las particiones de
+-- ese año (audit_log no tiene índice sobre el payload desde la 2.2.1).
 SELECT id, occurred_at, action, actor_type, actor_id, payload
   FROM audit_log
  WHERE action LIKE 'shift_entry.%'
-   AND (payload @> '{"shift_entry_uuid": "U"}' OR payload @> '{"superseded_shift_entry_uuid": "U"}')
+   AND (payload ->> 'shift_entry_uuid' = 'U' OR payload ->> 'superseded_shift_entry_uuid' = 'U')
  ORDER BY id;
 
 -- Sus correcciones (autor y motivo) y sus fichajes en el quiosco.
