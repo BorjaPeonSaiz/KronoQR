@@ -66,6 +66,36 @@ final class QueryPlans
     }
 
     /**
+     * `VACUUM (ANALYZE)` con el rol de migracion: estadisticas Y mapa de
+     * visibilidad.
+     *
+     * Para las pruebas de un `Index Only Scan`. Tras una carga masiva, y mas
+     * tras un `UPDATE`, ninguna pagina esta marcada como visible para todos: el
+     * planificador cuenta una visita al heap por fila y prefiere leer la tabla.
+     * En produccion el mapa lo mantiene el autovacuum; aqui hay que pedirlo.
+     * Fuera de transaccion, como exige `VACUUM`: las pruebas que lo usan
+     * siembran con {@see CommittedDatabase}.
+     */
+    public static function vacuumAnalyze(string ...$tables): void
+    {
+        $connection = DB::connection(config()->string('database.migrations.connection'));
+
+        foreach ($tables as $table) {
+            if (preg_match('/\A[a-z_]+\z/', $table) !== 1) {
+                throw new RuntimeException('Tabla no admitida: '.$table);
+            }
+
+            $connection->statement('VACUUM (ANALYZE) '.$table);
+
+            $visible = $connection->table('pg_class')->where('relname', $table)->value('relallvisible');
+
+            if (! is_numeric($visible) || (int) $visible <= 0) {
+                throw new RuntimeException('VACUUM '.$table.' no dejo paginas visibles: el plan no reflejaria el autovacuum.');
+            }
+        }
+    }
+
+    /**
      * Las consultas que emite `$call` y que cumplen `$keep`, con sus bindings.
      *
      * @param  Closure(): mixed  $call

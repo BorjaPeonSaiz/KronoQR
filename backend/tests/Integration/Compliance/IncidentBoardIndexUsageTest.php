@@ -85,7 +85,11 @@ function bandejaConVolumen(): void
                 'status' => 'open',
                 'assigned_to_user_id' => null,
                 'detected_at' => $detectedAt,
-                'context' => '{}',
+                // Del tamaño de uno real (el `context` de `insufficient_rest`
+                // del contrato, con sus instantes): con `{}` la fila seria mas
+                // estrecha que su entrada de indice y el plan del recuento no
+                // diria nada de una bandeja de verdad.
+                'context' => '{"rest_minutes": 420, "threshold_minutes": 720, "previous_clock_out": "2025-01-01T22:30:00Z", "next_clock_in": "2025-01-02T05:30:00Z"}',
                 'resolved_at' => null,
                 'resolved_by_user_id' => null,
                 'resolution_note' => null,
@@ -117,7 +121,8 @@ function bandejaConVolumen(): void
     DB::update(<<<'SQL'
         UPDATE incidents
            SET status = 'resolved',
-               resolved_at = (work_date + 2)::timestamp AT TIME ZONE 'UTC'
+               resolved_at = (work_date + 2)::timestamp AT TIME ZONE 'UTC',
+               resolution_note = 'Revisado con la persona y con su responsable: la salida se fichó al día siguiente.'
          WHERE (work_date - DATE '2025-01-01') % 5 >= 2
         SQL);
 
@@ -193,3 +198,77 @@ it('sirve la pagina de la bandeja por el indice, sin ordenar incidents', functio
     'abiertas' => [IncidentStatus::Open],
     'resueltas' => [IncidentStatus::Resolved],
 ])->group('RNF-P-02', 'RF-PA-05');
+
+it('cuenta la bandeja sin cruzar employees cuando ningun filtro mira la ficha', function (IncidentStatus $status, bool $soloIndice): void {
+    /*
+     * El recuento de `meta.total` es exacto (el contrato lo promete y el panel
+     * pagina y anuncia con el). Sin alcance ni filtros de persona o
+     * departamento no necesita `employees` —la clave ajena de la persona es
+     * obligatoria—: la consulta solo toca `incidents`.
+     *
+     * Las abiertas, que en una bandeja real son la minoria, se cuentan
+     * entonces desde un indice sin leer la tabla (`Index Only Scan`; cual de
+     * los dos que empiezan por el estado lo decide el planificador). Las
+     * resueltas son casi todo el historico y ahi recorrer la tabla puede ser lo
+     * barato, asi que no se fija. El mapa de visibilidad lo deja el `VACUUM`,
+     * como lo dejaria el autovacuum en produccion.
+     */
+    bandejaConVolumen();
+    QueryPlans::vacuumAnalyze('incidents');
+    $board = resolve(IncidentBoard::class);
+
+    $queries = QueryPlans::capture(
+        static fn (): mixed => $board->page(new IncidentBoardQuery(AccessScope::unrestricted(), $status)),
+        static fn (string $sql): bool => str_contains($sql, 'count(*)') && str_contains($sql, 'from incidents'),
+    );
+
+    expect($queries)->toHaveCount(1);
+
+    $nodes = QueryPlans::nodes($queries[0]);
+
+    if (getenv('KRONOQR_PRINT_PLAN') !== false) {
+        fwrite(STDOUT, json_encode([$queries[0]['sql'], $nodes], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n");
+    }
+
+    $relations = array_values(array_unique(array_filter(array_map(
+        static fn (array $node): string => \is_string($node['Relation Name'] ?? null) ? $node['Relation Name'] : '',
+        $nodes,
+    ))));
+
+    expect($relations)->toBe(['incidents']);
+
+    if ($soloIndice) {
+        expect(array_any($nodes, static fn (array $node): bool => ($node['Node Type'] ?? '') === 'Index Only Scan'))
+            ->toBeTrue('El recuento de las abiertas no sale de un indice')
+            ->and(QueryPlans::scansSequentially($nodes, 'incidents'))->toBeFalse('El recuento de las abiertas recorre incidents entera');
+    }
+})->with([
+    'abiertas' => [IncidentStatus::Open, true],
+    'resueltas' => [IncidentStatus::Resolved, false],
+])->group('RNF-P-02', 'RF-PA-05');
+
+it('con alcance por departamento el recuento sigue cruzando employees, y sin departamentos no pregunta', function (): void {
+    bandejaConVolumen();
+    $board = resolve(IncidentBoard::class);
+
+    $porDepartamento = QueryPlans::capture(
+        static fn (): mixed => $board->page(new IncidentBoardQuery(AccessScope::forDepartments(999_999), IncidentStatus::Open)),
+        static fn (string $sql): bool => str_contains($sql, 'count(*)'),
+    );
+
+    expect($porDepartamento)->toHaveCount(1)
+        ->and(strtolower($porDepartamento[0]['sql']))->toContain('join employees');
+
+    $page = null;
+    $aNadie = QueryPlans::capture(
+        static function () use ($board, &$page): void {
+            $page = $board->page(new IncidentBoardQuery(AccessScope::forDepartments(), IncidentStatus::Open));
+        },
+        static fn (string $sql): bool => str_contains($sql, 'incidents'),
+    );
+
+    \assert($page !== null);
+    expect($aNadie)->toBe([])
+        ->and($page->total)->toBe(0)
+        ->and($page->rows)->toBe([]);
+})->group('RF-ID-03', 'RF-PA-05');
