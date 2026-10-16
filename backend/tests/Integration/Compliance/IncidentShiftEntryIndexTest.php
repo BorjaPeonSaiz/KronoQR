@@ -150,7 +150,7 @@ it('comprueba la clave ajena de incidents por incidents_shift_entry_id_index y n
         ->and(QueryPlans::scansSequentially($nodos, 'incidents'))->toBeFalse('La comprobacion de la clave ajena recorre incidents entera');
 })->group('RNF-P-02', 'RL-02');
 
-it('borrar mil tramos cuesta menos en la clave ajena de incidents con el indice que sin el', function (): void {
+it('mide el borrado de mil tramos con y sin el indice de incidents, sin borrar nada', function (): void {
     $ids = tramosConIncidencias();
     $migrador = DB::connection(config()->string('database.migrations.connection'));
 
@@ -163,10 +163,12 @@ it('borrar mil tramos cuesta menos en la clave ajena de incidents con el indice 
         fwrite(STDOUT, \sprintf("B7: clave ajena de incidents al borrar %d tramos: %.1f ms sin indice, %.1f ms con indice\n", \count($ids), $sin, $con));
     }
 
-    // Las dos medidas existen (el disparador se ha leido del plan) y nada se ha
-    // borrado de verdad: las dos transacciones se deshicieron.
+    // Sin aserciones de reloj: el uso del indice lo ata la prueba de plan de
+    // arriba, y las cifras se miran con KRONOQR_PRINT_PLAN. Aqui solo que el
+    // disparador aparece en los dos planes y que nada se ha borrado de verdad:
+    // las dos transacciones se deshicieron.
     expect($con)->toBeGreaterThan(0.0)
-        ->and($sin)->toBeGreaterThan($con)
+        ->and($sin)->toBeGreaterThan(0.0)
         ->and(DB::table('shift_entries')->whereIn('id', $ids)->count())->toBe(INCIDENT_SHIFT_ENTRY_INDEX_BORRADOS)
         ->and(DB::table('pg_indexes')->where('indexname', 'incidents_shift_entry_id_index')->exists())->toBeTrue();
 })->group('RNF-P-02', 'RL-02');

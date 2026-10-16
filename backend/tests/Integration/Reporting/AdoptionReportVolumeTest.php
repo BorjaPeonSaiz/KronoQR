@@ -346,9 +346,10 @@ it('lee scan_events por scan_events_occurred_at_index, una vez por consulta y si
  *
  * - **Europe/Madrid:** el 29 de marzo tiene 23 horas y el 25 de octubre 25; el
  *   cambio es de madrugada, no a medianoche.
- * - **America/Santiago:** el cambio cae JUSTO a medianoche. El 5 de abril la
- *   medianoche se repite (a las 00:00 se vuelve a las 23:00 del dia 4), y el 6
- *   de septiembre no existe (de las 23:59:59 del dia 5 se salta a la 01:00).
+ * - **America/Santiago:** el cambio cae JUSTO a medianoche. El 5 de abril, a las
+ *   00:00 (-03) se vuelve a las 23:00 (-04) del dia 4: se repite la ultima hora
+ *   del dia 4, no la medianoche. El 6 de septiembre no existe la hora de las
+ *   00:00 a las 01:00 (de las 23:59:59 del dia 5 se salta a la 01:00).
  *
  * @return array<string, array{0: string, 1: list<string>}>
  */
