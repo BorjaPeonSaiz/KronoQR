@@ -542,7 +542,7 @@ wizard**. There is nothing to look for in any menu.
 | # | Step | Mandatory? | What it does |
 | --- | --- | --- | --- |
 | 1 | **First administrator** | Yes | Creates your account and enables its second factor. |
-| 2 | **Organisation** | Yes | The system's visible name and languages. |
+| 2 | **Organisation** | Yes | The system's visible name and languages. **Spanish only by default**: leave only Spanish ticked if nobody will use English; if somebody will, tick it here (or later in **Operational settings**). |
 | 3 | **Site** and time zone | Yes | The hotel. **The time zone decides which day each shift goes to.** |
 | 4 | **Departments** | Can be skipped | The ones you use. They can be created later. |
 | 5 | **Compliance profile** | Yes | The legal thresholds, in plain sight, for you to check them. |

@@ -329,7 +329,7 @@ Sin internet solo se pierden tres cosas accesorias: los certificados de segurida
 
 ### 9.3 Tres aplicaciones distintas
 
-1. **La app del quiosco** — la que corre en la tablet. Instalable, a pantalla completa, con la pantalla siempre encendida, funciona sin conexión, con textos grandes, botones amplios, alto contraste y avisos sonoros. Operable con una mano, con guantes y con poca luz. En español e inglés de serie, ampliable a otros idiomas.
+1. **La app del quiosco** — la que corre en la tablet. Instalable, a pantalla completa, con la pantalla siempre encendida, funciona sin conexión, con textos grandes, botones amplios, alto contraste y avisos sonoros. Operable con una mano, con guantes y con poca luz. **Sale en español de serie**; el inglés viene incluido y se activa desde el panel, sin tocar nada del programa, y la arquitectura admite otros idiomas. Con un solo idioma activo no hay selector: todo sale en ese idioma.
 2. **El panel de gestión** — para responsables, RRHH, auditores y administración.
 3. **El portal del empleado** — una web sencilla y responsive para consultar el registro propio.
 
