@@ -563,6 +563,45 @@ describe('EmployeeDetailView', () => {
 
     expect(patchBody).toEqual({ teleworking: true })
   })
+
+  it('con un solo idioma la ficha no enseña el idioma ni al leer ni al editar (bloque 26)', async () => {
+    const wrapper = await mountDetail(employee({ locale: 'en' }))
+
+    expect(wrapper.text()).not.toContain(es.employees.fields.locale)
+
+    await buttonWith(wrapper, es.common.edit).trigger('click')
+    await settle(1)
+
+    expect(wrapper.find('#employee-edit-form').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain(es.employees.fields.locale)
+    expect(wrapper.find('#employee-edit-form select option[value="en"]').exists()).toBe(false)
+  })
+
+  it('con un solo idioma el PATCH no lleva locale aunque la ficha este guardada en en (bloque 26)', async () => {
+    let patchBody: unknown = null
+    const wrapper = await mountDetail(
+      employee({ locale: 'en', teleworking: false }),
+      (_url, init) => {
+        if (init?.method === 'PATCH') {
+          patchBody = JSON.parse(String(init.body))
+
+          return jsonResponse(employee({ locale: 'en', teleworking: true }))
+        }
+
+        return null
+      },
+    )
+
+    await buttonWith(wrapper, es.common.edit).trigger('click')
+    await settle(1)
+    await wrapper.find('[data-test="teleworking-checkbox"]').setValue(true)
+    await wrapper.find('#employee-edit-form').trigger('submit')
+    await settle(1)
+    await buttonWith(wrapper, es.employees.detail.confirmAction).trigger('click')
+    await settle(1)
+
+    expect(patchBody).toEqual({ teleworking: true })
+  })
   // --- Baja: fecha de cese (RF-GP-03, RN-14) ----------------------------------
   describe('baja con fecha de cese', () => {
     afterEach(() => {
