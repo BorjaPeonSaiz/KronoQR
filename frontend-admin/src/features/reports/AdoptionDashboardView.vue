@@ -29,6 +29,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
+import { isApiError } from '@kronoqr/web-kit/http'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -40,6 +41,7 @@ import type {
   AdoptionOriginShare,
   AdoptionReport,
 } from '@/shared/api/types'
+import { isPdfRenderingBusy } from '@/shared/api/problems'
 import ChartWithTable from '@/shared/ui/ChartWithTable.vue'
 import type { ChartSeries } from '@/shared/ui/ChartWithTable.vue'
 import {
@@ -49,6 +51,7 @@ import {
   isAdoptionReportTooLarge,
   type AdoptionReportQuery,
 } from './adoptionReport.api'
+import PdfBusyNotice from './PdfBusyNotice.vue'
 
 const FORMATS: readonly AdoptionExportFormat[] = ['csv', 'xlsx', 'pdf']
 
@@ -396,6 +399,9 @@ function formatShareValue(value: number): string {
 
 const downloading = ref<AdoptionExportFormat | null>(null)
 const downloadError = ref<unknown>(null)
+/** El motor de PDF esta ocupado: se ofrecen CSV y XLSX, que no lo usan. */
+const pdfBusy = ref(false)
+const pdfBusyRetryAfter = ref<number | null>(null)
 
 async function download(format: AdoptionExportFormat): Promise<void> {
   const query = generatedQuery.value
@@ -406,6 +412,8 @@ async function download(format: AdoptionExportFormat): Promise<void> {
 
   downloading.value = format
   downloadError.value = null
+  pdfBusy.value = false
+  pdfBusyRetryAfter.value = null
 
   try {
     const downloaded = await downloadAdoptionReport(query, format)
@@ -413,6 +421,17 @@ async function download(format: AdoptionExportFormat): Promise<void> {
     downloadDocument(downloaded.document)
     announce(t('reports.adoption.export.done', { format: format.toUpperCase() }))
   } catch (caught) {
+    if (format === 'pdf' && isPdfRenderingBusy(caught)) {
+      pdfBusy.value = true
+      pdfBusyRetryAfter.value = isApiError(caught) ? caught.retryAfterSeconds : null
+      announce(
+        pdfBusyRetryAfter.value === null
+          ? t('reports.pdfBusy.messageNoWait')
+          : t('reports.pdfBusy.message', { seconds: pdfBusyRetryAfter.value }),
+      )
+      return
+    }
+
     downloadError.value = caught
     announce(t('reports.adoption.export.failed'))
   } finally {
@@ -703,6 +722,14 @@ const fieldClass =
         </section>
 
         <ErrorNotice v-if="downloadError !== null" :error="downloadError" class="mt-3" />
+
+        <PdfBusyNotice
+          v-if="pdfBusy"
+          :retry-after-seconds="pdfBusyRetryAfter"
+          :formats="['csv', 'xlsx']"
+          :disabled="downloading !== null"
+          @use="(format) => download(format as AdoptionExportFormat)"
+        />
 
         <!-- Los criterios, tal cual los da el servidor (mismo patron que
              `PeriodReportView.vue`/`ComplianceView.vue`). -->

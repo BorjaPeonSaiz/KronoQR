@@ -866,6 +866,11 @@
     "noData": "Sin datos"
   },
   "reports": {
+    "pdfBusy": {
+      "message": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en {seconds} segundos, o descarga el CSV, que siempre está disponible.",
+      "messageNoWait": "Ahora mismo hay muchas descargas en PDF. Inténtalo de nuevo en unos instantes, o descarga el CSV, que siempre está disponible.",
+      "useFormat": "Descargar {format}"
+    },
     "legalExport": {
       "heading": "Exportación para la Inspección de Trabajo",
       "intro": "Genera el registro diario de jornada por trabajador y periodo que se entrega ante un requerimiento de la Inspección de Trabajo (art. 34.9 del Estatuto de los Trabajadores). El fichero se descarga en formato CSV y no se guarda en el navegador.",

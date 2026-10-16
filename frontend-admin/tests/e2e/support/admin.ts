@@ -1562,7 +1562,7 @@ export interface ManagementApiOptions {
    * generado el informe: es lo que pasa si a alguien le retiran el ambito con la
    * pantalla abierta, y el panel tiene que decirlo en vez de quedarse pensando.
    */
-  readonly exportOutcome?: 'ok' | 'forbidden'
+  readonly exportOutcome?: 'ok' | 'forbidden' | 'pdfBusy'
   /**
    * `tooLarge` hace que `GET /reports/period`, `GET /reports/period/export` y
    * `GET /reports/payroll-export` respondan el `422` de
@@ -4573,6 +4573,22 @@ export async function stubManagementApi(
           // `Content-Disposition`, el panel no sabria como llamar al fichero.
           if (exportOutcome === 'forbidden') {
             await problem(route, 403, 'urn:kronoqr:problem:forbidden', 'Sin permiso')
+
+            return
+          }
+
+          // Tope de PDF simultaneos (B23): 503 con `Retry-After`; CSV y XLSX no pasan por el motor.
+          if (exportOutcome === 'pdfBusy' && url.searchParams.get('format') === 'pdf') {
+            await route.fulfill({
+              status: 503,
+              contentType: 'application/problem+json',
+              headers: { 'Retry-After': '15' },
+              body: JSON.stringify({
+                type: 'urn:kronoqr:problem:pdf-rendering-busy',
+                title: 'Motor de PDF ocupado',
+                status: 503,
+              }),
+            })
 
             return
           }

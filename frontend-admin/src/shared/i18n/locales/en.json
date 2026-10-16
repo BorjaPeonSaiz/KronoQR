@@ -866,6 +866,11 @@
     "noData": "No data"
   },
   "reports": {
+    "pdfBusy": {
+      "message": "There are a lot of PDF downloads right now. Try again in {seconds} seconds, or download the CSV, which is always available.",
+      "messageNoWait": "There are a lot of PDF downloads right now. Try again in a moment, or download the CSV, which is always available.",
+      "useFormat": "Download {format}"
+    },
     "legalExport": {
       "heading": "Export for the Labour Inspectorate",
       "intro": "Generates the daily working time record per worker and period that is handed over on a Labour Inspectorate request (article 34.9 of the Spanish Workers' Statute). The file downloads as CSV and is not kept in the browser.",

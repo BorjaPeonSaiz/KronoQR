@@ -510,4 +510,60 @@ describe('descarga del informe por periodo', () => {
 
     expect(announcement.value).toContain('XLSX')
   })
+
+  it.each([
+    ['con Retry-After', '12', es.reports.pdfBusy.message.replace('{seconds}', '12')],
+    ['sin Retry-After', null, es.reports.pdfBusy.messageNoWait],
+  ])(
+    '503 pdf-rendering-busy %s: aviso propio con salida en CSV y XLSX, no el error generico',
+    async (_case, retryAfter, message) => {
+      const { wrapper, fetchSpy } = await generated((_url, init) => {
+        const accept = new Headers(init?.headers).get('Accept') ?? ''
+
+        if (!accept.includes('application/pdf')) {
+          return fileResponse('text/csv; charset=utf-8')
+        }
+
+        const response = problemResponse(503, 'urn:kronoqr:problem:pdf-rendering-busy')
+
+        return retryAfter === null
+          ? response
+          : new Response(response.body, {
+              status: 503,
+              headers: { 'Content-Type': 'application/problem+json', 'Retry-After': retryAfter },
+            })
+      })
+
+      await wrapper.find('[data-test="export-pdf"]').trigger('click')
+      await settle()
+
+      expect(wrapper.find('[data-test="pdf-busy"]').text()).toContain(message)
+      expect(wrapper.find('[data-test="pdf-busy-use-csv"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="pdf-busy-use-xlsx"]').exists()).toBe(true)
+      expect(announcement.value).toBe(message)
+
+      await wrapper.find('[data-test="pdf-busy-use-csv"]').trigger('click')
+      await settle()
+
+      const formats = fetchSpy.mock.calls
+        .filter((call) => String(call[0]).includes('/reports/period/export'))
+        .map((call) => /format=([a-z]+)/.exec(String(call[0]))?.[1])
+
+      expect(formats).toEqual(['pdf', 'csv'])
+      expect(wrapper.find('[data-test="pdf-busy"]').exists()).toBe(false)
+    },
+  )
+
+  it('503 service-unavailable (motor ausente) NO es el aviso de ocupado: sigue siendo el error generico', async () => {
+    const { wrapper } = await generated(() =>
+      problemResponse(503, 'urn:kronoqr:problem:service-unavailable'),
+    )
+
+    await wrapper.find('[data-test="export-pdf"]').trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-test="pdf-busy"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="report-export"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain(es.errors.unavailable.title)
+  })
 })
