@@ -2272,6 +2272,23 @@ un ZIP con toda la instalación y solo la genera el administrador.
 | `REPORTING_EXPORT_STALE_AFTER` | — | Segundos tras los que una generación interrumpida —paraste los contenedores, se reinició el trabajador de cola— se da por fallida y deja pedir otra | `3600` | **Nunca por debajo de lo que tarda tu informe más grande**: darías por muerta una generación que sigue escribiendo | No |
 | `REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT` | — | Descargas por minuto y por dirección IP en la ruta de descarga. Va aparte del resto porque esa ruta se abre **sin sesión**, con el enlace de un solo uso | `30` | Casi nunca | No |
 
+### 6.26 Documentos PDF
+
+Los PDF —el registro propio que descarga cada persona desde el portal, el
+informe por periodo y el cuadro de impacto— los compone un navegador Chromium
+dentro del servidor, y **cada documento en curso es un Chromium**: el de un año
+entero del registro propio llega a unos 600 MB de memoria en su pico. Estos
+parámetros ponen un tope a cuántos se componen a la vez. **El CSV no pasa por
+aquí**: con el tope lleno, quien pide un PDF recibe el aviso de reintentar en
+unos segundos o descargar lo mismo en CSV, y el CSV sale siempre.
+
+| Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
+| --- | --- | --- | --- | --- | --- |
+| `REPORTING_PDF_MAX_CONCURRENT` | — | Cuántos PDF se componen a la vez en toda la instalación, sumando portal, panel e informes en segundo plano | `2` | Súbelo solo si el servidor tiene memoria libre para otro Chromium (unos 600 MB por documento grande) y ves avisos de «motor de PDF ocupado» en horas punta | No |
+| `REPORTING_PDF_WAIT_SECONDS` | — | Cuántos segundos espera una descarga a que quede un hueco antes de responder que el motor está ocupado | `3` | Casi nunca. Hay una persona mirando la pantalla: subirlo solo alarga la espera | No |
+| `REPORTING_PDF_QUEUED_WAIT_SECONDS` | — | Lo mismo para un PDF generado en segundo plano, que no tiene a nadie esperando | `300` | Casi nunca. Si un informe en segundo plano falla con el motor ocupado, súbelo o sube el tope | No |
+| `REPORTING_PDF_TAGGED` | — | Genera los PDF **etiquetados**, con la estructura que leen los lectores de pantalla | `false` | Si alguien de tu plantilla usa lector de pantalla y necesita el PDF y no el CSV. **Multiplica el peso del documento** —un año del registro propio pasa de unos 350 KB a unos 4,5 MB— y alarga su composición | No |
+
 ---
 
 ← [Instalación](instalacion.md) · [Operación](operacion.md) · [Obligaciones legales](obligaciones-legales.md)

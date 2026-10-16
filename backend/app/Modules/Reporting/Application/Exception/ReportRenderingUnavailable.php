@@ -44,4 +44,17 @@ final class ReportRenderingUnavailable extends RuntimeException
             previous: $cause,
         );
     }
+
+    /**
+     * El tope de composiciones simultaneas vive en Redis y Redis no responde.
+     * Falla cerrado: sin el tope no se arranca ningun Chromium.
+     */
+    public static function limiterFailed(Throwable $cause): self
+    {
+        return new self(
+            'El motor de composicion de PDF no puede repartir turnos porque Redis no responde. '
+            .'Comprueba el servicio de Redis de la instalacion.',
+            previous: $cause,
+        );
+    }
 }

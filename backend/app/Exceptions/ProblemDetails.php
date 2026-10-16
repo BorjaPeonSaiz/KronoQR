@@ -85,6 +85,17 @@ final class ProblemDetails
     public const string TYPE_NOT_READY = 'urn:kronoqr:problem:not-ready';
 
     /**
+     * Todas las composiciones de PDF simultaneas estan ocupadas
+     * (`reporting.pdf.max_concurrent`).
+     *
+     * **Tipo propio y no `TYPE_SERVICE_UNAVAILABLE`**, aunque los dos sean `503`
+     * en las mismas rutas: aquel dice «a esta instalacion le falta el motor,
+     * avisa a quien administra» y este «el motor esta, pero ocupado: reintenta
+     * pasado `Retry-After` o descargalo ya en CSV».
+     */
+    public const string TYPE_PDF_RENDERING_BUSY = 'urn:kronoqr:problem:pdf-rendering-busy';
+
+    /**
      * Peticion mal formada.
      *
      * **No es lo mismo que `TYPE_VALIDATION_FAILED` y la diferencia importa en
@@ -780,6 +791,24 @@ final class ProblemDetails
             'Servicio no disponible',
             JsonResponse::HTTP_SERVICE_UNAVAILABLE,
             $detail,
+        );
+    }
+
+    /**
+     * El motor de PDF esta ocupado: `503` con `Retry-After`.
+     * {@see self::TYPE_PDF_RENDERING_BUSY}
+     *
+     * El `detail` dice la salida, que es la que exige RL-05: el mismo registro
+     * en CSV no pasa por el motor y se descarga ya.
+     */
+    public static function pdfRenderingBusy(string $detail, int $retryAfterSeconds): JsonResponse
+    {
+        return self::response(
+            self::TYPE_PDF_RENDERING_BUSY,
+            'Motor de PDF ocupado',
+            JsonResponse::HTTP_SERVICE_UNAVAILABLE,
+            $detail,
+            headers: ['Retry-After' => (string) max(1, $retryAfterSeconds)],
         );
     }
 

@@ -43,7 +43,9 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * - **El PDF, contra los 10 s**, que es la frontera a partir de la cual
  *   RNF-P-05 obligaria a generarlo en diferido. Medido el 13-10-2026 en el
  *   entorno de desarrollo: 3,9 s aislado y 6,9 s con otra suite corriendo a la
- *   vez. Afirmar 5 s seria una prueba que falla segun la carga de la maquina;
+ *   vez; sin PDF etiquetado (16-10-2026), 2,4 s aislado, de ellos 2,0 en
+ *   Chromium, con un pico de ~620 MiB de memoria proporcional de Chromium
+ *   (~690 MiB etiquetado). Afirmar 5 s seria una prueba que falla segun la carga de la maquina;
  *   afirmar 10 s es la que avisa el dia que la descarga en blanco deba dejar
  *   de ser sincrona.
  *
@@ -226,10 +228,15 @@ it('descarga en blanco un año de 1.464 tramos en PDF sellado dentro del presupu
         // Un año de tramos ocupa varias paginas: si saliera una sola, el
         // documento se habria cortado.
         ->and($paginas)->toBeGreaterThan(10)
-        // Un PDF que se descarga desde datos moviles y se envia por correo: por
-        // debajo de 5 MiB para un año entero. Medido en el bloque 8 de la 2.2.1:
-        // 4,5 MiB con 4 tramos al dia (margen ~10 %). No sale de ningun requisito:
-        // el peso del PDF anual queda como riesgo de PR19 en el bloque 23.
-        ->and($bytes)->toBeLessThan(5 * 1_048_576)
+        // Un PDF que se descarga desde datos moviles y se envia por correo. En
+        // el bloque 8 de la 2.2.1 pesaba 4,5 MiB: 4,2 eran el arbol de
+        // estructura del PDF etiquetado que Puppeteer genera por omision. Sin
+        // etiquetar (bloque 23), 343 KiB; el techo de 512 KiB deja ~50 % de
+        // margen y salta si vuelve el etiquetado o la plantilla engorda.
+        ->and($bytes)->toBeLessThan(512 * 1_024)
+        // De serie sin etiquetar (`reporting.pdf.tagged`): si una version de
+        // Puppeteer o de Browsershot dejara de respetar la opcion, el peso se
+        // multiplicaria por trece sin que nadie lo hubiera pedido.
+        ->and($descarga['body'])->not->toContain('/StructTreeRoot')
         ->and($descarga['seconds'])->toBeLessThan(MY_WORK_DAYS_EXPORT_YEAR_SYNC_LIMIT_SECONDS);
 })->group('RF-ID-05', 'RL-05', 'RNF-P-05')->skip(! anoCompletoHayChromium(), 'Chromium no esta instalado en este contenedor.');

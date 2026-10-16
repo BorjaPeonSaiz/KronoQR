@@ -2296,6 +2296,23 @@ a ZIP with the whole installation and only the administrator generates it.
 | `REPORTING_EXPORT_STALE_AFTER` | — | Seconds after which an interrupted generation —you stopped the containers, the queue worker restarted— is given up as failed and lets another one be requested | `3600` | **Never below what your largest report takes**: you would give up for dead a generation that is still writing | No |
 | `REPORTING_EXPORT_DOWNLOAD_RATE_LIMIT` | — | Downloads per minute and per IP address on the download route. It is separate from the rest because that route is opened **without a session**, with the single-use link | `30` | Almost never | No |
 
+### 6.26 PDF documents
+
+PDFs —the personal record each person downloads from the portal, the period
+report and the impact dashboard— are composed by a Chromium browser inside the
+server, and **each document in progress is one Chromium**: a whole year of the
+personal record peaks at about 600 MB of memory. These settings cap how many are
+composed at once. **CSV does not go through here**: with the cap full, whoever
+asks for a PDF is told to retry in a few seconds or download the same thing as
+CSV, and the CSV always comes out.
+
+| Variable | Mark | What it does | Default | When to change it | Does it affect the hours calculation? |
+| --- | --- | --- | --- | --- | --- |
+| `REPORTING_PDF_MAX_CONCURRENT` | — | How many PDFs are composed at once across the whole installation, adding up portal, panel and background reports | `2` | Raise it only if the server has free memory for one more Chromium (about 600 MB per large document) and you see "PDF engine busy" notices at peak times | No |
+| `REPORTING_PDF_WAIT_SECONDS` | — | How many seconds a download waits for a free slot before answering that the engine is busy | `3` | Almost never. Someone is looking at the screen: raising it only makes the wait longer | No |
+| `REPORTING_PDF_QUEUED_WAIT_SECONDS` | — | The same for a PDF generated in the background, which has nobody waiting | `300` | Almost never. If a background report fails with the engine busy, raise this or raise the cap | No |
+| `REPORTING_PDF_TAGGED` | — | Generates **tagged** PDFs, with the structure screen readers use | `false` | If someone on your staff uses a screen reader and needs the PDF rather than the CSV. **It multiplies the document's size** —a year of the personal record goes from about 350 KB to about 4.5 MB— and makes it slower to compose | No |
+
 ---
 
 ← [Installation](installation.md) · [Operation](operation.md) · [Legal obligations](legal-obligations.md)

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
-use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
+use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Attendance\AttendanceFixtures;
@@ -187,7 +187,9 @@ it('compone el PDF del cuadro con el motor de verdad y lo sella con la huella de
 
     // Control: sin esto, la prueba pasaria igual con el doble enlazado por otra
     // prueba de la suite y no estaria comprobando ningun PDF.
-    expect(app(ReportDocumentRenderer::class))->toBeInstanceOf(BrowsershotReportRenderer::class);
+    // El puerto es el tope de Chromium simultaneos delante de Browsershot
+    // (bloque 23 de la 2.2.1); el doble de feature lo sustituiria entero.
+    expect(app(ReportDocumentRenderer::class))->toBeInstanceOf(ConcurrencyLimitedReportRenderer::class);
 
     $response = Api::as($context['token'])
         ->get('/api/v1/reports/adoption/export?format=pdf&from=2026-03-01&to=2026-03-31')

@@ -55,6 +55,7 @@ use App\Modules\Product\Domain\Exception\UnknownSettingKey;
 use App\Modules\Product\Domain\Exception\UnknownSetupStep;
 use App\Modules\Product\Http\Middleware\RecordSupportAccess;
 use App\Modules\Reporting\Application\Exception\EmployeeNotFound;
+use App\Modules\Reporting\Application\Exception\ReportRenderingBusy;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
 use App\Modules\Reporting\Domain\Exception\InvalidDateRange;
 use App\Modules\Reporting\Domain\Exception\ReportTooLargeForSynchronousDelivery;
@@ -952,6 +953,20 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->render(static fn (ReportRenderingUnavailable $exception): mixed => ProblemDetails::serviceUnavailable(
             $exception->getMessage(),
+        ));
+
+        /*
+         * El motor de PDF esta, pero todos sus huecos estan ocupados
+         * (`reporting.pdf.max_concurrent`). `503` con `Retry-After` y su propio
+         * `type`, con la salida en el `detail`: el CSV no pasa por el motor
+         * (RL-05). No se informa: es capacidad, no un fallo, y ya deja su
+         * linea `reporting.pdf_rendering_saturated` en el log.
+         */
+        $exceptions->dontReport(ReportRenderingBusy::class);
+
+        $exceptions->render(static fn (ReportRenderingBusy $exception): mixed => ProblemDetails::pdfRenderingBusy(
+            $exception->getMessage(),
+            $exception->retryAfterSeconds,
         ));
 
         /*
