@@ -12689,8 +12689,14 @@ export interface components {
         EmployeeImportMessage: {
             /**
              * @description **`unknown_column` viaja en `file.warnings`, no en una fila**: es del
-             *     fichero entero. `hired_at_not_updated` es un aviso de fila y no la
-             *     impide. Los demas rechazan la fila que los lleva.
+             *     fichero entero. `hired_at_not_updated` y `locale_not_active` son
+             *     avisos de fila y no la impiden. Los demas rechazan la fila que los
+             *     lleva.
+             *
+             *     **`locale_not_active`** (2.2.1): el idioma de la fila no esta entre
+             *     los activos de la instalacion (`LOCALE_AVAILABLE`). La fila se
+             *     importa igual: un alta toma `LOCALE_DEFAULT` y una ficha que ya
+             *     existe conserva su idioma, asi que `locale` no aparece en `changes`.
              *
              *     **`employee_terminated`** (2.2.0): la fila corresponde a una persona
              *     dada de baja. La importacion no modifica su ficha ni la da de alta
@@ -12709,7 +12715,7 @@ export interface components {
              *     comprobacion, antes de escribir nada.
              * @enum {string}
              */
-            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "unknown_column";
+            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "unknown_column" | "locale_not_active";
             /** @enum {string} */
             severity: "error" | "warning";
             /** @description Columna del fichero a la que se refiere, si es a una. */
