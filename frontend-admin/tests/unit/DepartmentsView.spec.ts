@@ -359,7 +359,7 @@ describe('DepartmentsView: crear, renombrar y centro', () => {
 
   it.each([
     ['responsable', ['employees:read']],
-    ['auditor', ['attendance:read', 'audit:read', 'reports:legal']],
+    ['rol con employees:read sin employees:*', ['employees:read', 'attendance:read']],
   ])('%s: solo lectura, sin alta, renombrado, selector ni centro', async (_role, abilities) => {
     const spy = stubFetch(writeApi(departments(ACCOUNT_UUID, 'Jefatura de Cocina')))
 

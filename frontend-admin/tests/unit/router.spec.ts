@@ -107,8 +107,8 @@ describe('rutas de la aplicacion', () => {
 
     // `attendance:read` ya no vale como ejemplo: desde la 2.4 alcanza la
     // presencia, e `incidents:*` tampoco: desde la 2.5 alcanza la bandeja.
-    // `audit:read` es el ambito del `auditor` que no abre ninguna seccion por
-    // si solo (necesita `reports:legal` para eso).
+    // `audit:read` no abre ninguna seccion por si solo (el auditor, desde el
+    // bloque 25, lleva solo `reports:legal`).
     session.user = managementUser({ abilities: ['audit:read'] })
     session.token = 'un-token'
     session.status = 'authenticated'

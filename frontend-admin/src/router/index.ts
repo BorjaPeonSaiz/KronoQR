@@ -148,8 +148,8 @@ export const routes: RouteRecordRaw[] = [
         // es una lectura del registro con una regla legal encima, y quien
         // puede leerlo puede leerlo con la regla. La policy del servidor
         // (`ComplianceSummaryPolicy`) es la que autoriza de verdad (regla dura
-        // 18); el `auditor` la lleva y aun asi recibe `403`, como en la
-        // presencia.
+        // 18). El `auditor` ya no lleva `attendance:read` (bloque 25): ni ve la
+        // ruta ni llega a ella.
         path: 'compliance',
         name: 'compliance',
         component: () => import('@/features/compliance/ComplianceView.vue'),

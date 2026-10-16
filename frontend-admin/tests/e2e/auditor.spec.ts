@@ -4,7 +4,7 @@
 // plantilla, ni departamentos. La interfaz lo refleja (menu de una entrada y
 // guarda de rutas); la seguridad real es de la policy del servidor (regla dura 18).
 import { expect, test } from '@playwright/test'
-import { logInAsAuditor, stubManagementApi } from './support/admin'
+import { EMPLOYEE_UUID, logInAsAuditor, stubManagementApi } from './support/admin'
 
 test.describe('auditor: solo la exportacion para la Inspeccion', () => {
   test.beforeEach(async ({ page }) => {
@@ -25,7 +25,12 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
     },
   )
 
-  for (const path of ['/live', '/compliance', '/departments']) {
+  for (const path of [
+    '/live',
+    '/compliance',
+    '/departments',
+    `/employees/${EMPLOYEE_UUID}/workdays`,
+  ]) {
     test(
       `${path} tecleado a mano vuelve a Inspeccion`,
       { tag: ['@RF-ID-02', '@regla-dura-18'] },

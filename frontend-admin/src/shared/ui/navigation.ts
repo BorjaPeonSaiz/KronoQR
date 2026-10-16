@@ -42,7 +42,8 @@ export interface NavigationSection {
 export const NAVIGATION_SECTIONS: readonly NavigationSection[] = [
   { name: 'employees', labelKey: 'app.nav.employees', abilities: [EMPLOYEES_MANAGE] },
   {
-    // Lectura de plantilla (R6-BD-01): admin, rrhh y responsable; el auditor no la lleva; crear y renombrar los decide la vista.
+    // Lectura de plantilla (R6-BD-01): admin, rrhh y responsable; el auditor no
+    // la lleva (bloque 25). Crear y renombrar los decide la vista.
     name: 'departments',
     labelKey: 'app.nav.departments',
     abilities: [EMPLOYEES_READ],

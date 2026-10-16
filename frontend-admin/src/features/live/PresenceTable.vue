@@ -32,8 +32,8 @@ const session = useSessionStore()
 
 /**
  * `WorkDayJournalPolicy::readers()`: administracion, RRHH y responsable de
- * departamento. El auditor NO lee el detalle de jornada (decision pendiente del
- * propietario): un enlace que acaba en 403 crea frustracion, no la evita. La
+ * departamento. El auditor NO lee el detalle de jornada (decision del propietario, bloque 25:
+ * solo ve la Inspeccion): un enlace que acaba en 403 crea frustracion, no la evita. La
  * autorizacion real es del servidor.
  */
 const canReadWorkDays = computed(() =>
