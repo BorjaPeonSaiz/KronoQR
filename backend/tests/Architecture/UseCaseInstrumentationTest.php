@@ -4,33 +4,25 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
 use App\Modules\Attendance\Application\UseCase\CorrectShiftHandler;
-use App\Modules\Attendance\Application\UseCase\DetectAttendanceAnomalies;
-use App\Modules\Attendance\Application\UseCase\DetectCredentialPatterns;
-use App\Modules\Attendance\Application\UseCase\ReconcileDailyTotals;
 use App\Modules\Attendance\Application\UseCase\RegisterPinScanHandler;
 use App\Modules\Attendance\Application\UseCase\RegisterScanBatchHandler;
 use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
 use App\Modules\Attendance\Application\UseCase\ReportDiscardedScans;
 use App\Modules\Attendance\Application\UseCase\VoidShiftHandler;
 use App\Modules\Compliance\Application\UseCase\ApplyRetention;
-use App\Modules\Compliance\Application\UseCase\EnsureAuditLogPartitions;
-use App\Modules\Compliance\Application\UseCase\GenerateLegalExport;
 use App\Modules\Compliance\Application\UseCase\NotifyPendingIncidents;
 use App\Modules\Compliance\Application\UseCase\OpenIncident;
 use App\Modules\Compliance\Application\UseCase\PlanRetention;
-use App\Modules\Compliance\Application\UseCase\PublishIncidentMetrics;
 use App\Modules\Compliance\Application\UseCase\ReadIncidentBoard;
 use App\Modules\Compliance\Application\UseCase\ReconcileWorkRecordWithAudit;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
-use App\Modules\Compliance\Application\UseCase\ResolveIncident;
 use App\Modules\Compliance\Application\UseCase\ReviewOutOfBoundsPurge;
-use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
 use App\Modules\Identity\Application\UseCase\AuthenticatePortalEmployeeHandler;
 use App\Modules\Identity\Application\UseCase\ChangeOwnPasswordHandler;
 use App\Modules\Identity\Application\UseCase\CreateManagementAccountHandler;
-use App\Modules\Identity\Application\UseCase\CredentialStatusBoard;
 use App\Modules\Identity\Application\UseCase\DeactivateManagementAccountHandler;
 use App\Modules\Identity\Application\UseCase\DeliverCredential;
+use App\Modules\Identity\Application\UseCase\IssueDeviceToken;
 use App\Modules\Identity\Application\UseCase\PrintCredential;
 use App\Modules\Identity\Application\UseCase\PrintCredentialBatch;
 use App\Modules\Identity\Application\UseCase\RenderInstructionsSheet;
@@ -38,35 +30,23 @@ use App\Modules\Identity\Application\UseCase\ResetManagementPasswordHandler;
 use App\Modules\Identity\Application\UseCase\ResetTwoFactorHandler;
 use App\Modules\Identity\Application\UseCase\RetireSigningKey;
 use App\Modules\Identity\Application\UseCase\RevokeCredentialsOfOffboardedEmployee;
+use App\Modules\Identity\Application\UseCase\RevokeDeviceToken;
+use App\Modules\Identity\Application\UseCase\RotateDeviceTokenIfDue;
 use App\Modules\Identity\Application\UseCase\RotateSigningKey;
-use App\Modules\Kiosk\Application\UseCase\ClaimPairing;
-use App\Modules\Kiosk\Application\UseCase\ConfirmPairing;
 use App\Modules\Kiosk\Application\UseCase\ListDevices;
 use App\Modules\Kiosk\Application\UseCase\RecordHeartbeat;
-use App\Modules\Kiosk\Application\UseCase\RequestPairing;
-use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
 use App\Modules\Product\Application\UseCase\BuildTelemetryReportHandler;
-use App\Modules\Product\Application\UseCase\DescribeLicenseHandler;
 use App\Modules\Product\Application\UseCase\GetBrandingHandler;
 use App\Modules\Product\Application\UseCase\GetComplianceProfileHandler;
 use App\Modules\Product\Application\UseCase\GetKioskManifestHandler;
-use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
-use App\Modules\Product\Application\UseCase\GetSettingsHandler;
 use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
 use App\Modules\Product\Application\UseCase\RevokeSupportGrantsOfDeactivatedAccount;
-use App\Modules\Product\Application\UseCase\UpdateComplianceProfileHandler;
-use App\Modules\Product\Application\UseCase\UpdateSettingsHandler;
-use App\Modules\Reporting\Application\UseCase\PublishAbsenceMetrics;
-use App\Modules\Reporting\Application\UseCase\PublishAdoptionMetrics;
-use App\Modules\Reporting\Application\UseCase\PublishComplianceMetrics;
-use App\Modules\Reporting\Application\UseCase\PublishPresenceMetrics;
-use App\Modules\Reporting\Application\UseCase\SendWeeklySummaries;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricCatalogue;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricDefinition;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricType;
 use App\Modules\Shared\Infrastructure\Metrics\RedisUseCaseMetrics;
 use App\Modules\Workforce\Application\UseCase\EmployeeWriteRetry;
-use App\Modules\Workforce\Application\UseCase\ResetEmployeePinHandler;
+use App\Modules\Workforce\Application\UseCase\IssueEmployeePinHandler;
 use Tests\Architecture\Support\ModuleTree;
 
 /*
@@ -74,36 +54,36 @@ use Tests\Architecture\Support\ModuleTree;
  *
  * ## Que se exige
  *
- * Toda clase de `Modules/*\/Application/UseCase/` con un metodo publico
+ * Toda clase de `Modules/<Modulo>/Application/UseCase/` con un metodo publico
  * `handle`, `__invoke`, `execute` o `run` es un caso de uso —Compliance y Kiosk
  * no usan el sufijo `Handler`, asi que el sufijo no sirve para reconocerlos—, y
  * tiene que llamar a `UseCaseInstrumentation::run('<modulo>.<accion_snake>', …)`
  * con un literal. Las clases sin esos metodos —comandos, resultados, vistas— y
  * los enumerados e interfaces quedan fuera por construccion.
  *
- * ## La lista de excepciones solo puede encoger
+ * ## La lista de excepciones solo puede encoger, y cada motivo se comprueba
  *
- * Cada excepcion lleva un motivo de un catalogo cerrado:
- *
- * - `telemetria_propia`: el caso de uso ya mide con su puerto de metricas o su
- *   `*Telemetry` de `Application`, con atributos que son dominio de cada acto.
- * - `telemetria_http`: lo mide el controlador con un `*Telemetry` de
- *   `Http/Support`.
+ * - `telemetria_propia`: el caso de uso ya abre su span y mide su duracion
+ *   (`SpanScope::start` o un `*Telemetry` con `measure`). Un contador suelto no
+ *   basta: sin duracion ni span, se envuelve con el ayudante.
+ * - `telemetria_http`: un controlador lo envuelve con un `*Telemetry` que mide
+ *   (`->measure…`), y no tiene entrada por consola ni por cola, donde ese
+ *   controlador no lo veria.
  * - `sin_logica`: no es un caso de uso aunque viva aqui (un ayudante de
  *   reintento).
- * - `interno_anidado`: solo se invoca desde dentro de otro caso de uso ya
- *   medido —por un oyente sincrono, un adaptador o directamente— y no tiene
- *   entrada propia (HTTP, consola, cola). Medirlo duplicaria la medida y, en
- *   el caso de `RecordAuditEntry`, pondria escrituras en Redis dentro de la
- *   transaccion de cada fichaje.
+ * - `interno_anidado`: no tiene entrada propia —ningun controlador, comando,
+ *   trabajo en cola, middleware, ruta ni migracion lo nombra—: solo lo invoca
+ *   otro caso de uso ya medido, un oyente o un adaptador. Medirlo duplicaria la
+ *   medida del acto de fuera; en el caso de `RecordAuditEntry`, una vez por
+ *   asiento.
  *
  * La prueba falla en los dos sentidos: por un caso de uso sin medir que no esta
- * en la lista, y por una entrada de la lista que ya usa el ayudante o que ya no
- * existe. Y `USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS` solo baja: una excepcion
- * nueva exige subirla, y eso se ve en la revision.
+ * en la lista, y por una entrada de la lista que ya usa el ayudante, que ya no
+ * existe o cuyo motivo ya no se sostiene. Y
+ * `USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS` solo baja.
  */
 
-const USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS = 61;
+const USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS = 41;
 
 const USE_CASE_INSTRUMENTATION_PATTERN = '/^[a-z]+\.[a-z0-9_]+$/';
 
@@ -111,26 +91,13 @@ const USE_CASE_INSTRUMENTATION_REASONS = ['telemetria_propia', 'telemetria_http'
 
 /** @var array<class-string, string> $excepciones */
 $excepciones = [
-    // --- Telemetria propia en el caso de uso.
-    DetectAttendanceAnomalies::class => 'telemetria_propia',
-    DetectCredentialPatterns::class => 'telemetria_propia',
-    ReconcileDailyTotals::class => 'telemetria_propia',
-    RegisterPinScanHandler::class => 'telemetria_propia',
-    RegisterScanBatchHandler::class => 'telemetria_propia',
-    RegisterScanHandler::class => 'telemetria_propia',
-    ReportDiscardedScans::class => 'telemetria_propia',
+    // --- Abren su span y miden su duracion.
     ApplyRetention::class => 'telemetria_propia',
-    EnsureAuditLogPartitions::class => 'telemetria_propia',
-    GenerateLegalExport::class => 'telemetria_propia',
-    PublishIncidentMetrics::class => 'telemetria_propia',
     ReconcileWorkRecordWithAudit::class => 'telemetria_propia',
-    ResolveIncident::class => 'telemetria_propia',
     ReviewOutOfBoundsPurge::class => 'telemetria_propia',
-    VerifyAuditChain::class => 'telemetria_propia',
     AuthenticatePortalEmployeeHandler::class => 'telemetria_propia',
     ChangeOwnPasswordHandler::class => 'telemetria_propia',
     CreateManagementAccountHandler::class => 'telemetria_propia',
-    CredentialStatusBoard::class => 'telemetria_propia',
     DeactivateManagementAccountHandler::class => 'telemetria_propia',
     DeliverCredential::class => 'telemetria_propia',
     PrintCredential::class => 'telemetria_propia',
@@ -141,46 +108,38 @@ $excepciones = [
     RetireSigningKey::class => 'telemetria_propia',
     RevokeCredentialsOfOffboardedEmployee::class => 'telemetria_propia',
     RotateSigningKey::class => 'telemetria_propia',
-    ClaimPairing::class => 'telemetria_propia',
-    ConfirmPairing::class => 'telemetria_propia',
-    RecordHeartbeat::class => 'telemetria_propia',
-    RequestPairing::class => 'telemetria_propia',
-    RecordPlanUsageHandler::class => 'telemetria_propia',
-    UpdateComplianceProfileHandler::class => 'telemetria_propia',
-    UpdateSettingsHandler::class => 'telemetria_propia',
-    PublishAbsenceMetrics::class => 'telemetria_propia',
-    PublishAdoptionMetrics::class => 'telemetria_propia',
-    PublishComplianceMetrics::class => 'telemetria_propia',
-    PublishPresenceMetrics::class => 'telemetria_propia',
-    SendWeeklySummaries::class => 'telemetria_propia',
-    ResetEmployeePinHandler::class => 'telemetria_propia',
 
     // --- Medidos desde el controlador con un `*Telemetry` de `Http/Support`.
+    // Los cinco primeros son el camino del fichaje y el latido.
+    RegisterScanHandler::class => 'telemetria_http',
+    RegisterPinScanHandler::class => 'telemetria_http',
+    RegisterScanBatchHandler::class => 'telemetria_http',
+    ReportDiscardedScans::class => 'telemetria_http',
+    RecordHeartbeat::class => 'telemetria_http',
     AddShiftEntryHandler::class => 'telemetria_http',
     CorrectShiftHandler::class => 'telemetria_http',
     VoidShiftHandler::class => 'telemetria_http',
     ReadIncidentBoard::class => 'telemetria_http',
     ListDevices::class => 'telemetria_http',
-    ActivateLicenseHandler::class => 'telemetria_http',
-    DescribeLicenseHandler::class => 'telemetria_http',
     GetBrandingHandler::class => 'telemetria_http',
     GetKioskManifestHandler::class => 'telemetria_http',
     GetComplianceProfileHandler::class => 'telemetria_http',
-    GetSettingsHandler::class => 'telemetria_http',
 
     // --- No es un caso de uso: el reintento de la transaccion de plantilla.
     EmployeeWriteRetry::class => 'sin_logica',
 
-    // --- Solo se invocan desde dentro de otro acto ya medido: medirlos sumaria
-    // escrituras en Redis por cada llamada, a menudo dentro de la transaccion
-    // del registro legal, sin decir nada que el acto de fuera no diga ya.
+    // --- Sin entrada propia: solo los invoca otro acto ya medido.
     RecordAuditEntry::class => 'interno_anidado',
     OpenIncident::class => 'interno_anidado',
     NotifyPendingIncidents::class => 'interno_anidado',
     PlanRetention::class => 'interno_anidado',
     BuildTelemetryReportHandler::class => 'interno_anidado',
-    GetLicenseStatusHandler::class => 'interno_anidado',
+    RecordPlanUsageHandler::class => 'interno_anidado',
     RevokeSupportGrantsOfDeactivatedAccount::class => 'interno_anidado',
+    IssueDeviceToken::class => 'interno_anidado',
+    RotateDeviceTokenIfDue::class => 'interno_anidado',
+    RevokeDeviceToken::class => 'interno_anidado',
+    IssueEmployeePinHandler::class => 'interno_anidado',
 ];
 
 /*
@@ -215,6 +174,28 @@ $casosDeUso = static function (): array {
     return $found;
 };
 
+/*
+ * Los ficheros que son una ENTRADA al producto, `ruta => codigo fuente`:
+ * controladores y middleware, comandos de consola, trabajos en cola, rutas y
+ * migraciones. Es donde un caso de uso empieza un acto propio.
+ */
+$entradas = static function (): array {
+    $backend = \dirname(ModuleTree::root(), 2);
+    $found = [];
+
+    foreach (ModuleTree::filesIn('') as $file) {
+        if (preg_match('#/(?:Http/Controller|Http/Middleware|Console|Job|Jobs|Middleware)/#', ModuleTree::relative($file)) === 1) {
+            $found[$file] = (string) file_get_contents($file);
+        }
+    }
+
+    foreach ([...ModuleTree::phpFilesUnder($backend.'/routes'), ...ModuleTree::phpFilesUnder($backend.'/database/migrations')] as $file) {
+        $found[$file] = (string) file_get_contents($file);
+    }
+
+    return $found;
+};
+
 /**
  * Los literales que cada caso de uso pasa al ayudante.
  *
@@ -227,14 +208,23 @@ function useCaseInstrumentationLiterals(string $source): array
     return $matches[1];
 }
 
-it('reconoce los casos de uso del arbol (red de seguridad de la prueba)', function () use ($casosDeUso): void {
+/**
+ * Si un fichero nombra la clase: importandola o por su nombre completo.
+ */
+function useCaseInstrumentationMentions(string $source, string $class): bool
+{
+    return str_contains($source, 'use '.$class.';') || str_contains($source, '\\'.$class);
+}
+
+it('reconoce los casos de uso del arbol (red de seguridad de la prueba)', function () use ($casosDeUso, $entradas): void {
     // Si el recorrido o el reconocimiento se rompen, las comprobaciones de abajo
     // pasarian sobre un conjunto vacio.
     $todos = $casosDeUso();
     $medidos = array_filter($todos, static fn (string $source): bool => useCaseInstrumentationLiterals($source) !== []);
 
     expect(\count($todos))->toBeGreaterThan(100)
-        ->and(\count($medidos))->toBeGreaterThanOrEqual(65);
+        ->and(\count($medidos))->toBeGreaterThanOrEqual(85)
+        ->and(\count($entradas()))->toBeGreaterThan(100);
 })->group('RQ-06', 'RNF-D-01');
 
 it('mide todo caso de uso con el ayudante, salvo la lista de excepciones', function () use ($casosDeUso, $excepciones): void {
@@ -271,6 +261,74 @@ it('solo admite motivos del catalogo cerrado y la lista no crece', function () u
         ->and(\count($excepciones))->toBeLessThanOrEqual(USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS);
 })->group('RQ-06', 'RNF-D-01');
 
+it('telemetria_propia: el caso de uso abre su span o mide con su Telemetry', function () use ($casosDeUso, $excepciones): void {
+    $todos = $casosDeUso();
+    $sinMedida = [];
+
+    foreach ($excepciones as $class => $motivo) {
+        if ($motivo !== 'telemetria_propia' || ! \array_key_exists($class, $todos)) {
+            continue;
+        }
+
+        if (preg_match('/SpanScope::start|->telemetry->measure\w*\(/', $todos[$class]) !== 1) {
+            $sinMedida[] = $class;
+        }
+    }
+
+    expect($sinMedida)->toBe([], 'Sin span ni duracion propios: envuelvelos con UseCaseInstrumentation.');
+})->group('RQ-06', 'RNF-D-01');
+
+it('telemetria_http: lo mide un controlador y no entra por consola ni por cola', function () use ($excepciones, $entradas): void {
+    $todasLasEntradas = $entradas();
+    $malClasificados = [];
+
+    foreach ($excepciones as $class => $motivo) {
+        if ($motivo !== 'telemetria_http') {
+            continue;
+        }
+
+        $medidoPorUnControlador = false;
+
+        foreach ($todasLasEntradas as $file => $source) {
+            if (! useCaseInstrumentationMentions($source, $class)) {
+                continue;
+            }
+
+            if (str_contains($file, '/Http/Controller/')) {
+                $medidoPorUnControlador = $medidoPorUnControlador
+                    || preg_match('/\$telemetry->measure\w*\(/', $source) === 1;
+            } else {
+                $malClasificados[] = $class.' (tambien entra por '.ModuleTree::relative($file, \dirname(ModuleTree::root(), 2)).')';
+            }
+        }
+
+        if (! $medidoPorUnControlador) {
+            $malClasificados[] = $class.' (ningun controlador lo mide)';
+        }
+    }
+
+    expect($malClasificados)->toBe([]);
+})->group('RQ-06', 'RNF-D-01');
+
+it('interno_anidado: ninguna entrada al producto lo nombra', function () use ($excepciones, $entradas): void {
+    $todasLasEntradas = $entradas();
+    $conEntradaPropia = [];
+
+    foreach ($excepciones as $class => $motivo) {
+        if ($motivo !== 'interno_anidado') {
+            continue;
+        }
+
+        foreach ($todasLasEntradas as $file => $source) {
+            if (useCaseInstrumentationMentions($source, $class)) {
+                $conEntradaPropia[] = $class.' <- '.ModuleTree::relative($file, \dirname(ModuleTree::root(), 2));
+            }
+        }
+    }
+
+    expect($conEntradaPropia)->toBe([], 'Tiene entrada propia: instrumentalo.');
+})->group('RQ-06', 'RNF-D-01');
+
 it('nombra cada caso de uso con un literal unico de forma modulo.accion', function () use ($casosDeUso): void {
     $vistos = [];
     $malFormados = [];
@@ -296,8 +354,9 @@ it('nombra cada caso de uso con un literal unico de forma modulo.accion', functi
         ->and($repetidos)->toBe([]);
 })->group('RQ-06', 'RNF-D-01');
 
-it('el adaptador valida con la misma forma que exige esta prueba', function (): void {
-    expect(RedisUseCaseMetrics::USE_CASE_PATTERN)->toBe(USE_CASE_INSTRUMENTATION_PATTERN);
+it('el adaptador valida con la misma forma y los mismos desenlaces que exige esta prueba', function (): void {
+    expect(RedisUseCaseMetrics::USE_CASE_PATTERN)->toBe(USE_CASE_INSTRUMENTATION_PATTERN)
+        ->and(RedisUseCaseMetrics::OUTCOMES)->toBe(['ok', 'rejected', 'error']);
 })->group('RQ-06', 'RNF-D-01');
 
 it('el catalogo declara la serie con exactamente use_case y outcome, sin datos de personas', function (): void {
@@ -309,5 +368,6 @@ it('el catalogo declara la serie con exactamente use_case y outcome, sin datos d
     expect($definitions)->toHaveCount(1)
         ->and($definitions[0]->type)->toBe(MetricType::Histogram)
         ->and($definitions[0]->labels)->toBe(['use_case', 'outcome'])
+        ->and($definitions[0]->help)->toContain('rejected')
         ->and($definitions[0]->help)->toContain('Nunca lleva datos de personas');
 })->group('RQ-06', 'RNF-D-01');
