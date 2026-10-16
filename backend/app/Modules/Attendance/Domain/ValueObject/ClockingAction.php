@@ -11,7 +11,7 @@ namespace App\Modules\Attendance\Domain\ValueObject;
  * ## Por que vive en el dominio
  *
  * Una regla del dominio razona sobre `clock_in` frente a `break_start`:
- * {@see \App\Modules\Attendance\Domain\ Policy\ScanIntentPolicy}, y ademas el
+ * {@see \App\Modules\Attendance\Domain\Policy\ScanIntentPolicy}, y ademas el
  * anti-rebote de RF-AT-06 necesita saber **que fue** el escaneo vecino para no
  * tragarse una vuelta de pausa.
  *

@@ -11,7 +11,8 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * Quien puede emitir y revocar credenciales (Anexo B del doc 01, regla dura 18).
  *
  * **`rrhh+`: `{admin, rrhh}`.** Ni el auditor, que es de solo lectura, ni el
- * responsable de departamento.
+ * responsable de departamento: su alcance esta acotado a sus departamentos
+ * (RF-ID-03), y emitir tarjetas es un acto sobre toda la plantilla.
  *
  * **La policy es la mitad de la autorizacion.** La otra es el ambito
  * `credentials:*` del token, que comprueba el middleware `ability` antes de
@@ -37,7 +38,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 final class CredentialPolicy
 {
     /**
-     * `rrhh+` del Anexo B, que en la Fase 1 resuelve a `{admin, rrhh}`.
+     * `rrhh+` del Anexo B, que resuelve a `{admin, rrhh}`.
      *
      * Se escribe **una vez** y la usan las seis habilidades: si cada metodo
      * tuviera su propia lista literal, el dia que un rol nuevo entre en el
