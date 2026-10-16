@@ -59,12 +59,17 @@ export interface Branding {
  * Lo que se enseña mientras no llega —o no puede llegar— la respuesta del
  * servidor. Coincide con los valores de serie del catalogo de
  * `installation_settings`: el producto, nunca la marca de otro cliente.
+ *
+ * Idiomas: solo espanol de serie (`LOCALE_AVAILABLE = [es]`, bloque 26 de la
+ * 2.2.1). Las aplicaciones traen el ingles traducido, pero no lo ofrecen hasta
+ * que la instalacion lo activa; mientras tanto no hay selector ni deteccion
+ * del navegador (`resolveUiLocale`).
  */
 export const PRODUCT_BRANDING: Branding = Object.freeze({
   applicationName: 'KronoQR',
   accentColor: null,
   logoUrl: null,
-  locales: Object.freeze({ default: 'es', available: Object.freeze(['es', 'en']) }),
+  locales: Object.freeze({ default: 'es', available: Object.freeze(['es']) }),
   privacyNotice: Object.freeze({ controllerName: null, policyUrl: null }),
 })
 
@@ -482,4 +487,64 @@ export function offeredLocales<T extends string>(
 ): readonly T[] {
   const offered = shipped.filter((locale) => policy.available.includes(locale))
   return offered.length > 0 ? offered : shipped
+}
+
+/** Lo que `resolveUiLocale` necesita para decidir el idioma de la interfaz. */
+export interface UiLocaleInputs<T extends string> {
+  /** Los idiomas de la instalacion (`GET /api/v1/branding` → `locales`). */
+  readonly policy: LocalePolicy
+  /** Los idiomas que esta version de la aplicacion trae traducidos; nunca vacia. */
+  readonly shipped: readonly [T, ...T[]]
+  /** Lo que alguien eligio a mano en este dispositivo (selector persistente). */
+  readonly stored?: string | null
+  /** El idioma de la persona autenticada (`employees.locale`, cuenta del panel). */
+  readonly personal?: string | null
+  /** Preferencias del navegador, en su orden (`navigator.languages`). */
+  readonly browser: readonly string[]
+}
+
+/**
+ * El idioma con el que se pinta la interfaz (RF-KI-05, §6.6 del doc 01).
+ *
+ * **Con un unico idioma ofrecido, ese y nada mas**: ni la eleccion guardada,
+ * ni el idioma de la persona, ni el navegador lo cambian. Es la instalacion de
+ * serie (`LOCALE_AVAILABLE = [es]`), y por eso las aplicaciones no enseñan
+ * entonces selector ni campo de idioma.
+ *
+ * Con varios, por este orden: la eleccion guardada en el dispositivo, el
+ * idioma de la persona, el primer idioma del navegador que coincide —primero
+ * la etiqueta completa, despues el idioma sin region (`en-GB` → `en`)— y, al
+ * final, el idioma por defecto de la instalacion. Un candidato que no esta
+ * ofrecido se ignora. Nunca lanza y siempre devuelve un idioma traducido.
+ */
+export function resolveUiLocale<T extends string>(inputs: UiLocaleInputs<T>): T {
+  const offered = offeredLocales(inputs.policy, inputs.shipped)
+  const first = offered[0] ?? inputs.shipped[0]
+  if (offered.length === 1) return first
+
+  const exact = (candidate: string | null | undefined): T | undefined => {
+    if (typeof candidate !== 'string') return undefined
+    const wanted = candidate.trim().toLowerCase()
+    return offered.find((locale) => locale.toLowerCase() === wanted)
+  }
+  const byLanguage = (candidate: string): T | undefined => {
+    const language = primarySubtag(candidate)
+    return language === ''
+      ? undefined
+      : offered.find((locale) => primarySubtag(locale) === language)
+  }
+
+  const chosen = exact(inputs.stored) ?? exact(inputs.personal)
+  if (chosen !== undefined) return chosen
+
+  for (const candidate of inputs.browser) {
+    const match = exact(candidate) ?? byLanguage(candidate)
+    if (match !== undefined) return match
+  }
+
+  return exact(inputs.policy.default) ?? first
+}
+
+function primarySubtag(tag: string): string {
+  return (tag.trim().split(/[-_]/)[0] ?? '').toLowerCase()
 }
