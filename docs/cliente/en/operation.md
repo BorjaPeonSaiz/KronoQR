@@ -1517,6 +1517,15 @@ history is then shown in the corrected zone. How to use it is in
 [`configuration.md`](configuration.md) (`APP_TIMEZONE` row). No clock-in and no
 total changes when updating.
 
+**When updating to 2.2.1: audit accounts only see "Inspectorate".** An
+account with the audit role no longer sees "Departments", "Presence" and
+"Compliance" (in the last two it already got a notice that it had no
+permission): its panel is left with the export for the Labour Inspectorate and
+nothing else. If someone used that role to look at the record on screen, give
+them a different role in **Accounts** ([`hr-guide.md`](hr-guide.md) §7 bis.1).
+The export for the Labour Inspectorate does not change, and open sessions are
+not closed: the menu updates the next time the panel loads.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which
