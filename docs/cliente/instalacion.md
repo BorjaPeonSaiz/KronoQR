@@ -108,7 +108,7 @@ que también cubre el emparejamiento de la primera tablet.
 contraseña. **La licencia no está ahí**: te la envía tu proveedor aparte (§4).
 
 **Qué versión elegir.** La más reciente de la serie `v2.2.x` (en esta guía, los
-ejemplos usan la `2.2.0`; escribe la que hayas elegido). **Nunca** una cuyo
+ejemplos usan la `2.2.1`; escribe la que hayas elegido). **Nunca** una cuyo
 título o notas digan «no usar», ni una marcada como *Pre-release*: no son para
 instalaciones de cliente.
 
@@ -126,8 +126,8 @@ producto (SBOM): no hace falta para instalar.
 Desde el servidor, en una carpeta de trabajo:
 
 ```bash
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/kronoqr-2.2.0.tar.gz
-curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.0/SHA256SUMS
+curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/kronoqr-2.2.1.tar.gz
+curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/SHA256SUMS
 ```
 
 > **Si el servidor no tiene salida a internet**, descarga los dos ficheros
@@ -142,7 +142,7 @@ Con los dos en la misma carpeta, comprueba que el paquete llegó entero:
 sha256sum -c --ignore-missing SHA256SUMS
 ```
 
-Tiene que decir `kronoqr-2.2.0.tar.gz: OK`. Si dice `FAILED`, no lo
+Tiene que decir `kronoqr-2.2.1.tar.gz: OK`. Si dice `FAILED`, no lo
 descomprimas: bórralo y vuelve a descargarlo; si vuelve a fallar, avisa a tu
 proveedor. Si dice `no properly formatted checksum lines found`, lo que
 descargaste como `SHA256SUMS` es una página web y no el fichero: descárgalo de
@@ -157,8 +157,8 @@ no lo has descargado.
 > comprobación que protege de un paquete sustituido.
 
 ```bash
-tar xzf kronoqr-2.2.0.tar.gz
-cd kronoqr-2.2.0
+tar xzf kronoqr-2.2.1.tar.gz
+cd kronoqr-2.2.1
 ls -A
 ```
 
@@ -368,9 +368,9 @@ Salida esperada:
 
 ```
 Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
-  [ok]    Fichero de compose /opt/kronoqr-2.2.0/docker-compose.yml
-  [ok]    Version que se instala: 2.2.0
-  [ok]    Plantilla de configuracion /opt/kronoqr-2.2.0/.env
+  [ok]    Fichero de compose /opt/kronoqr-2.2.1/docker-compose.yml
+  [ok]    Version que se instala: 2.2.1
+  [ok]    Plantilla de configuracion /opt/kronoqr-2.2.1/.env
   [ok]    Permiso para hablar con Docker
   [ok]    Docker 27.3.1 (se exige 24 o superior)
   [ok]    Docker Compose v2 (2.29.7)
@@ -398,13 +398,13 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    ALERT_EMAIL_*: hay al menos un destinatario de alertas
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    El nombre fichaje.tuhotel.local resuelve desde este servidor
-  [ok]    Certificado TLS en /opt/kronoqr-2.2.0/certs
+  [ok]    Certificado TLS en /opt/kronoqr-2.2.1/certs
   [ok]    El borde (uid 101) puede leer tls.crt
   [ok]    El borde (uid 101) puede leer tls.key
   [ok]    Puerto 80 libre
   [ok]    Puerto 443 libre
   [ok]    Se puede escribir en /var/backups/fichaje
-  [ok]    Se puede escribir en /opt/kronoqr-2.2.0
+  [ok]    Se puede escribir en /opt/kronoqr-2.2.1
   [ok]    Privilegios para asignar el propietario del archivo de WAL
 
 Requisitos cumplidos: 38 comprobaciones, 0 avisos.
@@ -439,7 +439,7 @@ Tarda entre tres y quince minutos, según lo que tarde en descargar las
 imágenes. Verás las cinco fases. Al terminar:
 
 ```
-KronoQR 2.2.0 instalado y verificado.
+KronoQR 2.2.1 instalado y verificado.
 
   Panel de gestion:    https://fichaje.tuhotel.local/admin/
   Quiosco (tablet):    https://fichaje.tuhotel.local/kiosk/
@@ -450,7 +450,7 @@ que crea la organizacion, el centro, el primer administrador y el primer
 quiosco. Hasta que lo termines no hay ninguna cuenta: el instalador no crea
 usuarios.
 
-DOCUMENTACION, en /opt/kronoqr-2.2.0/docs
+DOCUMENTACION, en /opt/kronoqr-2.2.1/docs
   ...
 
 ANTES DE CERRAR LA SESION: custodia BACKUP_ENCRYPTION_KEY fuera de este
@@ -1112,7 +1112,7 @@ Qué hacer, en este orden:
    puede reescribir:
 
    ```bash
-   cd /opt/kronoqr-2.2.0
+   cd /opt/kronoqr-2.2.1
    sudo docker compose --env-file .env -f docker-compose.yml \
      exec -T postgres psql -U fichaje_migrator -d fichaje -c \
      "SELECT occurred_at, action, ip, payload
@@ -1182,7 +1182,7 @@ esta vez dentro de `tmux` (§1.4):
 Solo si estás seguro de que **no hay datos que conservar**:
 
 ```bash
-cd /opt/kronoqr-2.2.0
+cd /opt/kronoqr-2.2.1
 sudo docker compose --env-file .env -f docker-compose.yml down -v --remove-orphans
 sudo rm -f .env
 sudo rm -rf /var/backups/fichaje
