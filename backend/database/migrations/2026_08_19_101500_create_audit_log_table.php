@@ -123,8 +123,7 @@ return new class extends Migration
         DB::statement('CREATE UNIQUE INDEX audit_log_hash_index ON audit_log (hash, occurred_at)');
 
         // La consulta de una inspeccion y la de una brecha (RL-15) son la misma:
-        // «que paso con este sujeto». JSONB con GIN para el payload, igual que
-        // en `scan_events`.
+        // «que paso con este sujeto».
         DB::statement(<<<'SQL'
             CREATE INDEX audit_log_subject_index
                 ON audit_log (subject_type, subject_id, occurred_at DESC)
@@ -134,6 +133,10 @@ return new class extends Migration
                 ON audit_log (actor_type, actor_id, occurred_at DESC)
         SQL);
         DB::statement('CREATE INDEX audit_log_action_index ON audit_log (action, occurred_at DESC)');
+        // Ninguna consulta lo ha usado nunca: el `payload` se filtra con `->>`,
+        // que un GIN `jsonb_path_ops` no sirve, y siempre tras acotar por
+        // `action` o por `id`. Lo retira
+        // `2026_10_16_100200_drop_unused_audit_log_payload_gin` (DB7).
         DB::statement('CREATE INDEX audit_log_payload_gin ON audit_log USING gin (payload jsonb_path_ops)');
     }
 

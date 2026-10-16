@@ -366,7 +366,7 @@ Ventajas adicionales aprovechadas:
 | `TIMESTAMPTZ` con semántica correcta | RN-04 y RN-09: almacenamiento UTC, presentación en zona del centro, inmune a DST |
 | `tstzrange` y operadores de rango | Solapes, huecos entre turnos y descanso entre jornadas (RN-10) |
 | Índices parciales | Consulta de turnos abiertos en O(log n) sin escanear el histórico |
-| `JSONB` con índices GIN | `client_meta`, `payload` de auditoría, `settings` de instalación |
+| `JSONB` | `client_meta` de los escaneos, `payload` de auditoría, `context` de incidencias. **Sin índices GIN**: ninguna consulta pregunta por contención (`@>`, `@?`, `@@`); el `payload` se lee con `->>` tras acotar por `action` o `id`. Los dos que hubo se retiraron por no usarse (DB7, 2.2.1). Uno nuevo solo con la consulta que lo usa y su prueba de plan |
 | Funciones de ventana y `generate_series` | Informes con días sin actividad incluidos, sin bucles en PHP |
 | Particionado nativo | `scan_events` por mes cuando supere 10 M filas |
 | `pgcrypto` | Hash del DNI, cadena de hash de auditoría |
