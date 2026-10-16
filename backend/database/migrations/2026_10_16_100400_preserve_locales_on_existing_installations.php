@@ -11,11 +11,9 @@ use Illuminate\Support\Facades\DB;
  * Las instalaciones que ya estaban en uso conservan sus dos idiomas (**RF-KI-05**,
  * bloque 26 de la 2.2.1).
  *
- * **Propuesta del bloque 26, pendiente de validar por el propietario.** El
- * español de serie si es decision suya; esta migracion es como se propone no
- * cambiar nada a quien ya estaba en uso. Si la rechaza, se retira junto con los
- * parrafos que la cuentan en `docs/cliente/configuracion.md` §2.3 y
- * `operacion.md` §11 (y sus versiones en ingles).
+ * **Aceptada por el propietario el 16-10-2026.** El español de serie es
+ * decision suya del 13-10; esta migracion hace que actualizar no cambie nada a
+ * quien ya estaba en uso.
  *
  * ## Por que hace falta
  *
