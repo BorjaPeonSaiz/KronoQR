@@ -749,7 +749,7 @@ WCAG 2.2 nivel AA en el panel y el portal. En el quiosco, además: objetivos tá
 
 ### 6.6 Internacionalización
 
-Todos los textos externalizados. Traducciones incluidas: español e inglés; **activo de serie, solo español** (`LOCALE_AVAILABLE=es`, decisión del propietario del 16-10-2026, bloque 26 de la 2.2.1). Activar el inglés es configuración (`LOCALE_AVAILABLE=es,en`); con un único idioma activo, las tres aplicaciones no enseñan selector ni campo de idioma y no siguen el idioma del navegador. Preparado para catalán, rumano y árabe, incluido soporte RTL. Formatos de fecha, hora y primer día de semana según *locale*.
+Todos los textos externalizados. Traducciones incluidas: español e inglés; **activo de serie, solo español** (`LOCALE_AVAILABLE=es`, decisión del propietario del 13-10-2026, bloque 26 de la 2.2.1). Activar el inglés es configuración (`LOCALE_AVAILABLE=es,en`); con un único idioma activo, las tres aplicaciones no enseñan selector ni campo de idioma y no siguen el idioma del navegador. Preparado para catalán, rumano y árabe, incluido soporte RTL. Formatos de fecha, hora y primer día de semana según *locale*.
 
 ### 6.7 Portabilidad
 

@@ -167,7 +167,7 @@ Cada versión pasa además por una verificación completa con los agentes en mod
 | Cliente HTTP | Generado desde el contrato OpenAPI |
 | Escaneo QR (quiosco) | `@zxing/browser` + `@zxing/library` |
 | PWA y cola offline (quiosco) | `vite-plugin-pwa` + Workbox · **Dexie** (IndexedDB) |
-| Internacionalización | `vue-i18n` (español e inglés de serie) |
+| Internacionalización | `vue-i18n`: español e inglés traducidos; **activo de serie, solo español**, y el inglés se activa por configuración (`LOCALE_AVAILABLE`) |
 | Panel | TanStack Table + TanStack Query · ECharts |
 | Paquete compartido | `packages/web-kit`: tokens visuales `--kq-*`, cálculo de totales, fechas, marca blanca y componentes comunes (npm workspaces, ADR‑036) |
 

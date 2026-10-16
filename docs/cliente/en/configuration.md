@@ -423,12 +423,18 @@ shows the kiosk in Spanish.
 
 **How to turn English on.** Panel → **Operational settings** → **Languages**:
 tick English under "Available languages" and save. Nothing has to be restarted
-and the `.env` is not touched: the next request already offers it. From then on:
+and the `.env` is not touched: the server offers it from the next request. The
+applications pick it up like this: **the panel and the portal, when the page is
+reloaded**; **tablets, when they refresh the branding**, which is when the kiosk
+app starts or when it gets its connection back (to avoid waiting, reload the app
+on the tablet). From then on:
 
 - the kiosk shows the language selector, and each tablet remembers the one
   chosen on it;
-- the panel and the portal follow the browser language if it is among the active
-  ones, and otherwise the default language;
+- the panel and the portal come out in **the person's language** (the one on
+  their record or account); if they have no active one, in the browser's, if it
+  is among the active ones; and failing that, in the installation's default
+  language;
 - employee and account records show the "Language" field.
 
 To go back to Spanish only, untick it. If you want the installation to work in

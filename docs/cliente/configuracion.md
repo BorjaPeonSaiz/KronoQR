@@ -414,12 +414,17 @@ español.
 
 **Cómo se activa el inglés.** Panel → **Ajustes operativos** → **Idiomas**:
 marca el inglés en «Idiomas disponibles» y guarda. No hay que reiniciar nada ni
-tocar el `.env`: la petición siguiente ya lo ofrece. Desde ese momento:
+tocar el `.env`: el servidor lo ofrece desde la petición siguiente. Las
+aplicaciones lo notan así: **el panel y el portal, al recargar la página**; **las
+tablets, cuando refrescan la marca**, que es al arrancar la app del quiosco o al
+recuperar la conexión (para no esperar, recarga la app en la tablet). Desde ese
+momento:
 
 - el quiosco enseña el selector de idioma, y cada tablet recuerda el que se elija
   en ella;
-- el panel y el portal siguen el idioma del navegador si está entre los activos,
-  y si no, el idioma por defecto;
+- el panel y el portal salen en **el idioma de la persona** (el de su ficha o su
+  cuenta); si no tiene uno activo, en el del navegador, si está entre los
+  activos; y si tampoco, en el idioma por defecto de la instalación;
 - las fichas de empleado y de cuenta enseñan el campo «Idioma».
 
 Para volver a solo español, desmárcalo. Si quieres que la instalación trabaje en
