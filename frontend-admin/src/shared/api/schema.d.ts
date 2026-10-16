@@ -8038,9 +8038,11 @@ export interface components {
                  *     idioma por defecto esta siempre dentro de ella. De serie es
                  *     `[es]`. **Con un unico idioma**, las tres aplicaciones no
                  *     enseñan selector ni campo de idioma y no siguen el idioma del
-                 *     navegador: todo sale en ese idioma. Con varios, el selector no
-                 *     enseña ninguno fuera de esta lista, y sin eleccion guardada se
-                 *     prueba el idioma del navegador y despues `default`.
+                 *     navegador: todo sale en ese idioma. Con varios, ninguna
+                 *     aplicacion ofrece uno fuera de esta lista, y el orden es: el
+                 *     idioma de la persona (la eleccion guardada en la tablet, o el
+                 *     de la ficha o la cuenta), si esta en la lista; si no, el del
+                 *     navegador, si esta en la lista; y si no, `default`.
                  */
                 available: string[];
             };
