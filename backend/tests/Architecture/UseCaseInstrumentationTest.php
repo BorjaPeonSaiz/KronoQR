@@ -22,10 +22,8 @@ use App\Modules\Compliance\Application\UseCase\PublishIncidentMetrics;
 use App\Modules\Compliance\Application\UseCase\ReadIncidentBoard;
 use App\Modules\Compliance\Application\UseCase\ReconcileWorkRecordWithAudit;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
-use App\Modules\Compliance\Application\UseCase\RecordSystemEvent;
 use App\Modules\Compliance\Application\UseCase\ResolveIncident;
 use App\Modules\Compliance\Application\UseCase\ReviewOutOfBoundsPurge;
-use App\Modules\Compliance\Application\UseCase\SweepLegalExportFiles;
 use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
 use App\Modules\Identity\Application\UseCase\AuthenticatePortalEmployeeHandler;
 use App\Modules\Identity\Application\UseCase\ChangeOwnPasswordHandler;
@@ -41,59 +39,28 @@ use App\Modules\Identity\Application\UseCase\ResetTwoFactorHandler;
 use App\Modules\Identity\Application\UseCase\RetireSigningKey;
 use App\Modules\Identity\Application\UseCase\RevokeCredentialsOfOffboardedEmployee;
 use App\Modules\Identity\Application\UseCase\RotateSigningKey;
-use App\Modules\Kiosk\Application\UseCase\CheckKioskHealth;
 use App\Modules\Kiosk\Application\UseCase\ClaimPairing;
 use App\Modules\Kiosk\Application\UseCase\ConfirmPairing;
 use App\Modules\Kiosk\Application\UseCase\ListDevices;
 use App\Modules\Kiosk\Application\UseCase\RecordHeartbeat;
 use App\Modules\Kiosk\Application\UseCase\RequestPairing;
-use App\Modules\Kiosk\Application\UseCase\UnpairDevice;
 use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
 use App\Modules\Product\Application\UseCase\BuildTelemetryReportHandler;
-use App\Modules\Product\Application\UseCase\CompleteSetupHandler;
-use App\Modules\Product\Application\UseCase\DeliverDiagnosticsBundle;
 use App\Modules\Product\Application\UseCase\DescribeLicenseHandler;
-use App\Modules\Product\Application\UseCase\DownloadDataExportHandler;
-use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
-use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Application\UseCase\GetBrandingHandler;
 use App\Modules\Product\Application\UseCase\GetComplianceProfileHandler;
 use App\Modules\Product\Application\UseCase\GetKioskManifestHandler;
 use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
 use App\Modules\Product\Application\UseCase\GetSettingsHandler;
-use App\Modules\Product\Application\UseCase\GetSetupStateHandler;
-use App\Modules\Product\Application\UseCase\GrantSupportAccessHandler;
-use App\Modules\Product\Application\UseCase\ListDataExportsHandler;
-use App\Modules\Product\Application\UseCase\ListErrorEvents;
-use App\Modules\Product\Application\UseCase\ListSupportGrantsHandler;
-use App\Modules\Product\Application\UseCase\PruneErrorEvents;
-use App\Modules\Product\Application\UseCase\PurgeExpiredDataExportsHandler;
-use App\Modules\Product\Application\UseCase\RecordPendingDiagnosticsAudits;
 use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
-use App\Modules\Product\Application\UseCase\RecordSetupStepHandler;
-use App\Modules\Product\Application\UseCase\RecordSupportAccessUseHandler;
-use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
-use App\Modules\Product\Application\UseCase\ResanitizeErrorHistory;
-use App\Modules\Product\Application\UseCase\ResolveErrorEvent;
-use App\Modules\Product\Application\UseCase\RevokeSupportAccessHandler;
 use App\Modules\Product\Application\UseCase\RevokeSupportGrantsOfDeactivatedAccount;
-use App\Modules\Product\Application\UseCase\RunDoctorHandler;
-use App\Modules\Product\Application\UseCase\SendTelemetryHandler;
-use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Application\UseCase\UpdateComplianceProfileHandler;
 use App\Modules\Product\Application\UseCase\UpdateSettingsHandler;
-use App\Modules\Reporting\Application\UseCase\DownloadReportExport;
-use App\Modules\Reporting\Application\UseCase\GenerateReportExportHandler;
-use App\Modules\Reporting\Application\UseCase\ListReportExports;
 use App\Modules\Reporting\Application\UseCase\PublishAbsenceMetrics;
 use App\Modules\Reporting\Application\UseCase\PublishAdoptionMetrics;
 use App\Modules\Reporting\Application\UseCase\PublishComplianceMetrics;
 use App\Modules\Reporting\Application\UseCase\PublishPresenceMetrics;
-use App\Modules\Reporting\Application\UseCase\PurgeExpiredReportExports;
-use App\Modules\Reporting\Application\UseCase\RecordAdoptionReportExport;
-use App\Modules\Reporting\Application\UseCase\RequestReportExport;
 use App\Modules\Reporting\Application\UseCase\SendWeeklySummaries;
-use App\Modules\Reporting\Application\UseCase\ShowReportExport;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricCatalogue;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricDefinition;
 use App\Modules\Shared\Infrastructure\Metrics\Exposition\MetricType;
@@ -124,7 +91,11 @@ use Tests\Architecture\Support\ModuleTree;
  *   `Http/Support`.
  * - `sin_logica`: no es un caso de uso aunque viva aqui (un ayudante de
  *   reintento).
- * - `pendiente_pr_b`: lo instrumenta la segunda mitad del bloque 24.
+ * - `interno_anidado`: solo se invoca desde dentro de otro caso de uso ya
+ *   medido —por un oyente sincrono, un adaptador o directamente— y no tiene
+ *   entrada propia (HTTP, consola, cola). Medirlo duplicaria la medida y, en
+ *   el caso de `RecordAuditEntry`, pondria escrituras en Redis dentro de la
+ *   transaccion de cada fichaje.
  *
  * La prueba falla en los dos sentidos: por un caso de uso sin medir que no esta
  * en la lista, y por una entrada de la lista que ya usa el ayudante o que ya no
@@ -132,11 +103,11 @@ use Tests\Architecture\Support\ModuleTree;
  * nueva exige subirla, y eso se ve en la revision.
  */
 
-const USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS = 94;
+const USE_CASE_INSTRUMENTATION_MAX_EXCEPTIONS = 61;
 
 const USE_CASE_INSTRUMENTATION_PATTERN = '/^[a-z]+\.[a-z0-9_]+$/';
 
-const USE_CASE_INSTRUMENTATION_REASONS = ['telemetria_propia', 'telemetria_http', 'sin_logica', 'pendiente_pr_b'];
+const USE_CASE_INSTRUMENTATION_REASONS = ['telemetria_propia', 'telemetria_http', 'sin_logica', 'interno_anidado'];
 
 /** @var array<class-string, string> $excepciones */
 $excepciones = [
@@ -200,47 +171,16 @@ $excepciones = [
     // --- No es un caso de uso: el reintento de la transaccion de plantilla.
     EmployeeWriteRetry::class => 'sin_logica',
 
-    // --- Segunda mitad del bloque 24.
-    NotifyPendingIncidents::class => 'pendiente_pr_b',
-    OpenIncident::class => 'pendiente_pr_b',
-    PlanRetention::class => 'pendiente_pr_b',
-    RecordAuditEntry::class => 'pendiente_pr_b',
-    RecordSystemEvent::class => 'pendiente_pr_b',
-    SweepLegalExportFiles::class => 'pendiente_pr_b',
-    CheckKioskHealth::class => 'pendiente_pr_b',
-    UnpairDevice::class => 'pendiente_pr_b',
-    BuildTelemetryReportHandler::class => 'pendiente_pr_b',
-    CompleteSetupHandler::class => 'pendiente_pr_b',
-    DeliverDiagnosticsBundle::class => 'pendiente_pr_b',
-    DownloadDataExportHandler::class => 'pendiente_pr_b',
-    GenerateDataExportHandler::class => 'pendiente_pr_b',
-    GenerateDiagnosticsBundleHandler::class => 'pendiente_pr_b',
-    GetLicenseStatusHandler::class => 'pendiente_pr_b',
-    GetSetupStateHandler::class => 'pendiente_pr_b',
-    GrantSupportAccessHandler::class => 'pendiente_pr_b',
-    ListDataExportsHandler::class => 'pendiente_pr_b',
-    ListErrorEvents::class => 'pendiente_pr_b',
-    ListSupportGrantsHandler::class => 'pendiente_pr_b',
-    PruneErrorEvents::class => 'pendiente_pr_b',
-    PurgeExpiredDataExportsHandler::class => 'pendiente_pr_b',
-    RecordPendingDiagnosticsAudits::class => 'pendiente_pr_b',
-    RecordSetupStepHandler::class => 'pendiente_pr_b',
-    RecordSupportAccessUseHandler::class => 'pendiente_pr_b',
-    RequestDataExportHandler::class => 'pendiente_pr_b',
-    ResanitizeErrorHistory::class => 'pendiente_pr_b',
-    ResolveErrorEvent::class => 'pendiente_pr_b',
-    RevokeSupportAccessHandler::class => 'pendiente_pr_b',
-    RevokeSupportGrantsOfDeactivatedAccount::class => 'pendiente_pr_b',
-    RunDoctorHandler::class => 'pendiente_pr_b',
-    SendTelemetryHandler::class => 'pendiente_pr_b',
-    SweepExpiredDiagnosticsBundles::class => 'pendiente_pr_b',
-    DownloadReportExport::class => 'pendiente_pr_b',
-    GenerateReportExportHandler::class => 'pendiente_pr_b',
-    ListReportExports::class => 'pendiente_pr_b',
-    PurgeExpiredReportExports::class => 'pendiente_pr_b',
-    RecordAdoptionReportExport::class => 'pendiente_pr_b',
-    RequestReportExport::class => 'pendiente_pr_b',
-    ShowReportExport::class => 'pendiente_pr_b',
+    // --- Solo se invocan desde dentro de otro acto ya medido: medirlos sumaria
+    // escrituras en Redis por cada llamada, a menudo dentro de la transaccion
+    // del registro legal, sin decir nada que el acto de fuera no diga ya.
+    RecordAuditEntry::class => 'interno_anidado',
+    OpenIncident::class => 'interno_anidado',
+    NotifyPendingIncidents::class => 'interno_anidado',
+    PlanRetention::class => 'interno_anidado',
+    BuildTelemetryReportHandler::class => 'interno_anidado',
+    GetLicenseStatusHandler::class => 'interno_anidado',
+    RevokeSupportGrantsOfDeactivatedAccount::class => 'interno_anidado',
 ];
 
 /*
@@ -294,7 +234,7 @@ it('reconoce los casos de uso del arbol (red de seguridad de la prueba)', functi
     $medidos = array_filter($todos, static fn (string $source): bool => useCaseInstrumentationLiterals($source) !== []);
 
     expect(\count($todos))->toBeGreaterThan(100)
-        ->and(\count($medidos))->toBeGreaterThanOrEqual(32);
+        ->and(\count($medidos))->toBeGreaterThanOrEqual(65);
 })->group('RQ-06', 'RNF-D-01');
 
 it('mide todo caso de uso con el ayudante, salvo la lista de excepciones', function () use ($casosDeUso, $excepciones): void {
