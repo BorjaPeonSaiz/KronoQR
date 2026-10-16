@@ -259,6 +259,9 @@ services:
       - log_timezone=UTC
       - -c
       - hba_file=/etc/kronoqr/pg_hba.conf
+      # Sin JIT, como en produccion: ver compose.prod.yaml.
+      - -c
+      - jit=off
       - -c
       - wal_level=replica
       - -c

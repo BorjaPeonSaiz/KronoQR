@@ -131,7 +131,7 @@ jobs:
             -v "$BACKUP_PATH/wal:/var/backups/fichaje/wal" \
             -p 5432:5432 \
             kronoqr/postgres:ci \
-            postgres -c timezone=UTC -c log_timezone=UTC \
+            postgres -c timezone=UTC -c log_timezone=UTC -c jit=off \
               -c hba_file=/etc/kronoqr/pg_hba.conf \
               -c wal_level=replica -c archive_mode=on -c archive_timeout=60 \
               -c "archive_command=/usr/local/bin/kronoqr-archive-wal %p %f" \
