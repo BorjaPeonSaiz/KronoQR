@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\PendingDiagnosticsAudits;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Throwable;
 
 /**
@@ -54,6 +55,14 @@ final readonly class RecordPendingDiagnosticsAudits
      * @return array{recorded: int, remaining: int, failure: class-string<Throwable>|null}
      */
     public function handle(): array
+    {
+        return UseCaseInstrumentation::run('product.record_pending_diagnostics_audits', fn () => $this->doHandle());
+    }
+
+    /**
+     * @return array{recorded: int, remaining: int, failure: class-string<Throwable>|null}
+     */
+    private function doHandle(): array
     {
         $pending = $this->pending->all();
         $recorded = 0;

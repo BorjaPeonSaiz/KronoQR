@@ -8,6 +8,7 @@ use App\Modules\Reporting\Application\Port\ReportingEventPublisher;
 use App\Modules\Reporting\Domain\Event\AdoptionReportExported;
 use App\Modules\Reporting\Domain\ValueObject\AdoptionReport;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Deja constancia de que el cuadro de impacto ha salido como fichero
@@ -61,6 +62,26 @@ final readonly class RecordAdoptionReportExport
      * @param  int  $actorUserId  Cuenta de gestion que pidio la descarga.
      */
     public function handle(
+        AdoptionReport $report,
+        string $format,
+        string $sha256,
+        int $sizeBytes,
+        int $actorUserId,
+    ): void {
+        UseCaseInstrumentation::run('reporting.record_adoption_report_export', function () use ($report, $format, $sha256, $sizeBytes, $actorUserId): void {
+            $this->doHandle($report, $format, $sha256, $sizeBytes, $actorUserId);
+        });
+    }
+
+    /**
+     * @param  string  $format  `csv`, `xlsx` o `pdf`.
+     * @param  string  $sha256  Huella del **contenido** del cuadro, la misma para los tres
+     *                          formatos: es lo que permite confirmar que el papel que alguien
+     *                          tiene delante es el que salio de aqui.
+     * @param  int  $sizeBytes  Tamaño del fichero entregado.
+     * @param  int  $actorUserId  Cuenta de gestion que pidio la descarga.
+     */
+    private function doHandle(
         AdoptionReport $report,
         string $format,
         string $sha256,

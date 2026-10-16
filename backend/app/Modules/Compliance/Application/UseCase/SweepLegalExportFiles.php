@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Application\UseCase;
 
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 
 /**
@@ -52,6 +53,15 @@ final readonly class SweepLegalExportFiles
      *                                           que ya superan el plazo de aviso.
      */
     public function handle(): array
+    {
+        return UseCaseInstrumentation::run('compliance.sweep_legal_export_files', fn () => $this->doHandle());
+    }
+
+    /**
+     * @return array{removed: int, overdue: int} Temporales borrados y exportaciones de consola
+     *                                           que ya superan el plazo de aviso.
+     */
+    private function doHandle(): array
     {
         $now = $this->clock->now();
         $window = max(1, $this->temporaryRetentionHours) * 3600;

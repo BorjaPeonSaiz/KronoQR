@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\ErrorEventQuery;
 use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use Throwable;
 
@@ -54,6 +55,11 @@ final readonly class ListErrorEvents
     ) {}
 
     public function handle(ErrorEventQuery $query): ErrorHistoryView
+    {
+        return UseCaseInstrumentation::run('product.list_error_events', fn (): ErrorHistoryView => $this->doHandle($query));
+    }
+
+    private function doHandle(ErrorEventQuery $query): ErrorHistoryView
     {
         return new ErrorHistoryView(
             page: $this->errors->page($query),

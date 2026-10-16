@@ -22,6 +22,7 @@ use App\Modules\Reporting\Domain\ValueObject\PeriodReport;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportFailure;
 use App\Modules\Reporting\Domain\ValueObject\ReportExportKind;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeInterface;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
@@ -118,6 +119,11 @@ final readonly class GenerateReportExportHandler
     ) {}
 
     public function handle(string $uuid): ReportExport
+    {
+        return UseCaseInstrumentation::run('reporting.generate_report_export', fn (): ReportExport => $this->doHandle($uuid));
+    }
+
+    private function doHandle(string $uuid): ReportExport
     {
         $export = $this->exports->findByUuid($uuid)
             ?? throw new RuntimeException('No existe el informe en diferido solicitado: '.$uuid);

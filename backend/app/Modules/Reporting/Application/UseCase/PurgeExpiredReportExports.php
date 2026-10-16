@@ -12,6 +12,7 @@ use App\Modules\Reporting\Domain\ValueObject\ReportExportMaintenance;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileClass;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileEntry;
@@ -87,6 +88,11 @@ final readonly class PurgeExpiredReportExports
     ) {}
 
     public function handle(): ReportExportMaintenance
+    {
+        return UseCaseInstrumentation::run('reporting.purge_expired_report_exports', fn (): ReportExportMaintenance => $this->doHandle());
+    }
+
+    private function doHandle(): ReportExportMaintenance
     {
         $now = $this->clock->now();
         $staleAfter = max(1, $this->staleAfterSeconds);

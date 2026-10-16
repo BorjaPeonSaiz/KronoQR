@@ -7,6 +7,7 @@ namespace App\Modules\Reporting\Application\UseCase;
 use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Application\Support\IssuedReportExportLink;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -77,6 +78,11 @@ final readonly class ShowReportExport
     ) {}
 
     public function handle(string $uuid, int $requestedByUserId): ?IssuedReportExportLink
+    {
+        return UseCaseInstrumentation::run('reporting.show_report_export', fn (): ?IssuedReportExportLink => $this->doHandle($uuid, $requestedByUserId));
+    }
+
+    private function doHandle(string $uuid, int $requestedByUserId): ?IssuedReportExportLink
     {
         /*
          * **TODO DENTRO DE UNA TRANSACCION, CON LA FILA BLOQUEADA.**

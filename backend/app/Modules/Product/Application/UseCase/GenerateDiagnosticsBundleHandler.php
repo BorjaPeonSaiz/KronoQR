@@ -14,6 +14,7 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\PendingDiagnosticsAudit;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Throwable;
 
 /**
@@ -90,6 +91,11 @@ final readonly class GenerateDiagnosticsBundleHandler
     ) {}
 
     public function handle(DiagnosticsOptions $options, DiagnosticsActor $actor): DiagnosticsBundle
+    {
+        return UseCaseInstrumentation::run('product.generate_diagnostics_bundle', fn (): DiagnosticsBundle => $this->doHandle($options, $actor));
+    }
+
+    private function doHandle(DiagnosticsOptions $options, DiagnosticsActor $actor): DiagnosticsBundle
     {
         $sections = [];
 

@@ -12,6 +12,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Product\Domain\ValueObject\DoctorReport;
 use App\Modules\Product\Domain\ValueObject\DoctorStatus;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Throwable;
 
 /**
@@ -64,6 +65,11 @@ final readonly class RunDoctorHandler
     ) {}
 
     public function handle(string $locale): DoctorReport
+    {
+        return UseCaseInstrumentation::run('product.run_doctor', fn (): DoctorReport => $this->doHandle($locale));
+    }
+
+    private function doHandle(string $locale): DoctorReport
     {
         $checks = [];
 

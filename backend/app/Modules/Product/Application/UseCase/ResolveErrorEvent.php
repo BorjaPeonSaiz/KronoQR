@@ -7,6 +7,7 @@ namespace App\Modules\Product\Application\UseCase;
 use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * `POST /api/v1/diagnostics/errors/{id}/resolve` — dar un grupo por atendido
@@ -63,6 +64,16 @@ final readonly class ResolveErrorEvent
      * @return ErrorEvent|null Nulo si no existe.
      */
     public function handle(int $id, int $userId): ?ErrorEvent
+    {
+        return UseCaseInstrumentation::run('product.resolve_error_event', fn (): ?ErrorEvent => $this->doHandle($id, $userId));
+    }
+
+    /**
+     * @param  int  $id  Identificador del grupo.
+     * @param  int  $userId  Clave interna de la cuenta que lo resuelve.
+     * @return ErrorEvent|null Nulo si no existe.
+     */
+    private function doHandle(int $id, int $userId): ?ErrorEvent
     {
         return $this->errors->resolve($id, $userId, $this->clock->now());
     }

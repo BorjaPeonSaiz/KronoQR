@@ -7,6 +7,7 @@ namespace App\Modules\Product\Application\UseCase;
 use App\Modules\Product\Application\Port\SupportGrantRepository;
 use App\Modules\Product\Domain\Model\SupportGrant;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 
 /**
@@ -45,6 +46,12 @@ final readonly class ListSupportGrantsHandler
 
     /** @return list<SupportGrant> */
     public function handle(): array
+    {
+        return UseCaseInstrumentation::run('product.list_support_grants', fn () => $this->doHandle());
+    }
+
+    /** @return list<SupportGrant> */
+    private function doHandle(): array
     {
         return $this->grants->recent(self::LIMIT);
     }
