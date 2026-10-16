@@ -1,7 +1,7 @@
 #!/bin/sh
 #
-# KronoQR — guarda de arranque de Loki y Tempo: valida LOG_RETENTION_HOURS y arranca el
-# binario (RL-11, RGPD art. 5.1.e).
+# KronoQR — guarda de arranque de Loki y Tempo: valida LOG_RETENTION_HOURS antes de que
+# arranquen (RL-11, RGPD art. 5.1.e).
 #
 # POR QUE EXISTE. Loki y Tempo expanden `${LOG_RETENTION_HOURS:-2160}h` al leer su
 # fichero (`-config.expand-env=true`). `install.sh`, `update.sh` y `doctor.sh` validan
@@ -40,7 +40,8 @@ if [ "${#horas}" -gt 6 ] || [ "${horas}" -lt 24 ] || [ "${horas}" -gt 17520 ]; t
   exit 64
 fi
 
-# Lo que se exporta es el numero ya validado y normalizado.
+# El valor validado se exporta y se ejecuta lo que venga detras (en el compose, /bin/true;
+# en LogRetentionSettingTest, un eco del valor): asi la prueba ve lo que la guarda deja pasar.
 LOG_RETENTION_HOURS="${horas}"
 export LOG_RETENTION_HOURS
 

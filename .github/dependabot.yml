@@ -141,8 +141,19 @@ updates:
     cooldown:
       default-days: 7
     # Redis 8 cambia de licencia: una mayor no se propone sola, se decide.
+    # Las mayores de observabilidad (Grafana 13, Tempo 3...) cambian configuracion,
+    # cuadros y provision, y la CI del PR no arranca ese perfil: se planifican en una
+    # version menor con `make alerts-drill`, no llegan solas (2.2.1, bloque 23).
+    # OJO tambien con las menores: Loki 3.7 perdio el shell y rompio ⑧ (#163); antes de
+    # integrar una PR de imagenes, CI manual completa.
     ignore:
       - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "grafana/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "prom/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "axllent/mailpit"
         update-types: ["version-update:semver-major"]
     labels: ["dependencies", "docker"]
     groups:
