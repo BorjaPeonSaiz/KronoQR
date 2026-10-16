@@ -69,7 +69,7 @@ Desde el panel web, en su ordenador:
 
 ### 3.4 Para el auditor o la Inspección
 
-Un rol de **solo lectura** que puede consultar los registros y las trazas, y descargar la exportación normalizada del periodo requerido, con las correcciones y sus motivos incluidos.
+Un rol que **solo descarga la exportación normalizada para la Inspección**: el registro diario de toda la plantilla o de una persona, del periodo requerido, con las correcciones y sus motivos incluidos. No ve nada más del panel; lo que necesite revisar está en ese fichero.
 
 ### 3.5 Para el informático del hotel
 
@@ -221,7 +221,7 @@ Seis perfiles: administrador, RRHH, responsable de departamento, auditor, emplea
 |---|---|
 | Registro **diario** con hora de inicio y fin | Cada tramo queda registrado con su hora exacta |
 | Conservación **4 años** | Retención configurada y purga controlada al vencimiento, con informe |
-| **A disposición** del trabajador, sus representantes y la Inspección | Portal personal, panel con rol auditor y exportación normalizada |
+| **A disposición** del trabajador, sus representantes y la Inspección | Portal personal y exportación normalizada, que descargan el rol auditor o RRHH |
 | **Fiable e inalterable** | Nada se borra ni se sobrescribe; toda corrección queda trazada con autor, momento, valor anterior y motivo |
 | Acceso del trabajador a **su propio registro** | Portal personal con descarga de su histórico, por periodos de hasta un año |
 | Formato **legible y tratable** | CSV, Excel y PDF, formatos abiertos y no propietarios |
