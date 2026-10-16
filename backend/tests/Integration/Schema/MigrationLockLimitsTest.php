@@ -149,8 +149,8 @@ it('se niega a validar una restriccion dentro de una transaccion', function (): 
     $migration = new LockLimitedMigration;
 
     expect(static fn () => DB::transaction(static fn () => $migration->validate('incidents', 'incidents_chk_type')))
-        ->toThrow(LogicException::class, '$withinTransaction = false')
-        ->and(static fn () => DB::transaction(static fn () => $migration->lockWaitOnly(static fn (): bool => true)))
+        ->toThrow(LogicException::class, '$withinTransaction = false');
+    expect(static fn () => DB::transaction(static fn () => $migration->lockWaitOnly(static fn (): null => null)))
         ->toThrow(LogicException::class, '$withinTransaction = false');
 })->group('RNF-D-04');
 
