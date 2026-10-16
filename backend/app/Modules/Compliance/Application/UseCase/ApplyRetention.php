@@ -271,8 +271,11 @@ final readonly class ApplyRetention
             $rows = array_sum(array_map(static fn (RetentionTally $tally): int => $tally->rows, $tallies));
 
             if ($rows === 0) {
-                // No ha pasado nada y no hay nada que auditar. Mismo criterio que
-                // una incidencia que ya estaba abierta.
+                // No ha pasado nada y no hay nada que auditar, como una incidencia
+                // que ya estaba abierta. La cuenta se vuelve a comprobar igual:
+                // lo que sigue es soltar particiones.
+                $this->assertResponsible($command);
+
                 return $tallies;
             }
 
@@ -339,6 +342,11 @@ final readonly class ApplyRetention
         $tallies = [];
 
         foreach ($anchors as $anchor) {
+            // Soltar una particion es irreversible: la cuenta se comprueba otra
+            // vez justo antes. Sin tomar la cadena: el sellado va por otra
+            // conexion, con el rol de mantenimiento, y se bloquearia contra ella.
+            $this->assertResponsible($command);
+
             // La transaccion del rol de mantenimiento vive dentro del adaptador:
             // sellar y soltar son un solo acto (ADR-027).
             $this->partitions->sealAndDrop($anchor);
@@ -423,14 +431,6 @@ final readonly class ApplyRetention
     }
 
     /**
-     * Quien responde de la purga.
-     *
-     * `user` cuando se indica la cuenta de gestion que la autoriza; `system`
-     * cuando la lanza quien tiene acceso al servidor sin sesion en el panel, que
-     * es la verdad y se cruza con el registro de acceso a la maquina. Decir
-     * «usuario desconocido» seria peor que decir la verdad (ADR-039).
-     */
-    /**
      * @throws RetentionResponsibleNotActive
      */
     private function assertResponsible(RetentionRunCommand $command): void
@@ -445,6 +445,14 @@ final readonly class ApplyRetention
         }
     }
 
+    /**
+     * Quien responde de la purga.
+     *
+     * `user` cuando se indica la cuenta de gestion que la autoriza; `system`
+     * cuando la lanza quien tiene acceso al servidor sin sesion en el panel, que
+     * es la verdad y se cruza con el registro de acceso a la maquina. Decir
+     * «usuario desconocido» seria peor que decir la verdad (ADR-039).
+     */
     private function actorFor(RetentionRunCommand $command): AuditActor
     {
         return $command->responsibleUserId === null
