@@ -743,6 +743,10 @@ Dimensionado objetivo por instalación: 500 empleados, 10 quioscos, ~6.000 event
 
 WCAG 2.2 nivel AA en el panel y el portal. En el quiosco, además: objetivos táctiles ≥ 48 px, texto de confirmación ≥ 24 px, contraste ≥ 4.5:1, doble canal de feedback visual y sonoro, operable con una sola mano y con guantes, y funcional bajo iluminación baja.
 
+**Documentos PDF.** El **registro propio de cada empleado** (portal, `GET /api/v1/me/export?format=pdf`) sale **siempre como PDF etiquetado**: con la estructura que necesita un lector de pantalla (títulos, tablas con encabezados, orden de lectura e idioma), conforme a WCAG2ICT y a la cláusula 10 de EN 301 549. Los **informes de gestión** —el informe por periodo y el cuadro de impacto y adopción— salen **sin etiquetar de serie**, y un cliente puede etiquetarlos con `REPORTING_PDF_TAGGED=true`.
+
+> **Por qué el registro propio sí y los informes de gestión no** (decisión del propietario del 16-10-2026, bloque 23 de la 2.2.1). El registro propio es el único documento sellado y el que una persona puede presentar en una reclamación: tiene que poder leerlo quien lo recibe, use o no lector de pantalla, y no admite una alternativa. Los informes de gestión son documentos de trabajo internos y tienen alternativas accesibles en CSV y XLSX, que además son mejores para recorrer una tabla con un lector de pantalla que un PDF. Etiquetarlos multiplica su peso por unas 13 —4,6 MiB frente a 343 KiB en un informe de un año— y su composición está limitada a dos simultáneas, así que etiquetarlos de serie castigaría a todos para un uso que ya cubren los otros formatos. Un cliente que los distribuya fuera de la organización, o que lo necesite por su política de accesibilidad, lo activa sin tocar el código (regla dura 13).
+
 ### 6.6 Internacionalización
 
 Todos los textos externalizados. Idiomas iniciales: español e inglés. Preparado para catalán, rumano y árabe, incluido soporte RTL. Formatos de fecha, hora y primer día de semana según *locale*.
