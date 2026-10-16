@@ -30,6 +30,12 @@ use Illuminate\Database\ConnectionInterface;
  * salen en la misma consulta que la fila; preguntarlos despues, uno a uno, es el
  * problema N+1 en la pantalla de trabajo diario.
  *
+ * El recuento es **exacto** —el contrato promete `meta.total` dentro del alcance,
+ * y el panel lo anuncia y pagina con el—; lo que se abarata es como se cuenta:
+ * sin `JOIN employees` cuando ningun predicado mira la ficha
+ * ({@see filtersOnEmployee()}), y sin consulta cuando el alcance no alcanza a
+ * nadie.
+ *
  * ## El alcance entra en el `WHERE`
  *
  * RF-ID-03. Nunca se filtra la pagina ya traida: si se hiciera, `meta.total`
@@ -127,20 +133,26 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
 
     public function page(IncidentBoardQuery $query): IncidentBoardPage
     {
+        $perPage = max(1, $query->perPage);
+        $page = max(1, $query->page);
+
+        // Un alcance que no alcanza a nadie tiene una respuesta conocida sin
+        // preguntar: pagina vacia y total cero (RF-ID-03).
+        if (! $query->scope->isUnrestricted() && $query->scope->reachesNobody()) {
+            return new IncidentBoardPage([], 0, $page, $perPage);
+        }
+
         [$where, $bindings] = $this->filters($query);
 
         /** @var list<object> $counted */
-        $counted = $this->connection->select(<<<SQL
-            SELECT count(*) AS total
-              FROM incidents i
-              JOIN employees e ON e.id = i.employee_id
-            {$where}
-            SQL, $bindings);
+        $counted = $this->connection->select(
+            'SELECT count(*) AS total FROM incidents i'
+            .($this->filtersOnEmployee($query) ? ' JOIN employees e ON e.id = i.employee_id' : '')
+            ."\n".$where,
+            $bindings,
+        );
 
         $total = $counted === [] ? 0 : Row::of($counted[0])->int('total');
-
-        $perPage = max(1, $query->perPage);
-        $page = max(1, $query->page);
 
         /** @var list<object> $rows */
         $rows = $this->connection->select(
@@ -163,6 +175,23 @@ final readonly class DatabaseIncidentBoard implements IncidentBoard
         $rows = $this->connection->select(self::SELECT_ROW."\n".'WHERE i.id = ?', [$incidentId]);
 
         return $rows === [] ? null : $this->hydrate(Row::of($rows[0]));
+    }
+
+    /**
+     * Si algun predicado de {@see filters()} mira la ficha (`e.*`).
+     *
+     * Sin ninguno, el recuento no necesita `employees`: toda incidencia tiene
+     * persona —la clave ajena es obligatoria—, asi que el `JOIN` no quita ni
+     * pone filas, y sin el, el recuento sale solo de
+     * `incidents_status_urgency_index` (`Index Only Scan`) en vez de leer cada
+     * incidencia del estado para cruzarla. Con `resolved`, que es casi todo el
+     * historico, es la diferencia entre el indice y la tabla.
+     */
+    private function filtersOnEmployee(IncidentBoardQuery $query): bool
+    {
+        return ! $query->scope->isUnrestricted()
+            || $query->departmentId !== null
+            || $query->employeeUuid !== null;
     }
 
     /**

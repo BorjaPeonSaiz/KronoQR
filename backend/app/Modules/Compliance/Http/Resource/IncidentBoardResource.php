@@ -56,8 +56,8 @@ final class IncidentBoardResource extends JsonResource
             'meta' => [
                 'page' => $page->page,
                 'per_page' => $page->perPage,
-                // Acotado al alcance de quien pregunta (RF-ID-03): lo cuenta la
-                // misma consulta que trae las filas.
+                // Acotado al alcance de quien pregunta (RF-ID-03): el recuento
+                // usa los mismos predicados que la pagina (`DatabaseIncidentBoard`).
                 'total' => $page->total,
                 'total_pages' => $page->totalPages(),
                 'time_zone' => $this->timeZone,

@@ -177,11 +177,10 @@ return new class extends Migration
                 WHERE flagged_for_review
         SQL);
 
-        // JSONB con GIN porque el paquete de diagnostico y el panel consultan
-        // por clave dentro de `client_meta` (doc 02 §3.2). `jsonb_path_ops` es
-        // la clase de operadores para la pregunta que se hace de verdad
-        // —«contiene esta clave con este valor»—: indice mas pequeno y mas
-        // rapido que el completo.
+        // Ninguna consulta lo ha usado nunca: `client_meta` solo se inserta y
+        // se exporta como texto, y el paquete de diagnostico lo excluye. Lo
+        // retira `2026_10_16_100100_drop_unused_scan_events_client_meta_gin`
+        // (DB7); se deja aqui porque una migracion aplicada no se reescribe.
         DB::statement(<<<'SQL'
             CREATE INDEX scan_events_client_meta_gin
                 ON scan_events USING gin (client_meta jsonb_path_ops)

@@ -756,6 +756,15 @@ services:
       - log_timezone=UTC
       - -c
       - hba_file=/etc/kronoqr/pg_hba.conf
+      # Sin JIT (bloque 22 de la 2.2.1). La carga es OLTP mas informes acotados
+      # por statement_timeout: compilar con LLVM una consulta que pasa del umbral
+      # de coste costo 90-150 ms y no gano nada en la ejecucion (cuadro de
+      # adopcion medido en desarrollo: 221-305 ms con JIT, 146-151 sin el), y en
+      # una consulta del fichaje mal estimada pasa de 0,1 a 16-60 ms. Aqui y no
+      # por conexion: vale para app, horizon, scheduler y copias, y no pisa el
+      # PGOPTIONS de `app`.
+      - -c
+      - jit=off
       - -c
       - wal_level=replica
       - -c

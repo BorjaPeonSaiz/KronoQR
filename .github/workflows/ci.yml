@@ -569,7 +569,7 @@ jobs:
             -e DB_PASSWORD="$DB_PASSWORD" \
             -p 5432:5432 \
             kronoqr/postgres:ci \
-            postgres -c timezone=UTC -c log_timezone=UTC \
+            postgres -c timezone=UTC -c log_timezone=UTC -c jit=off \
               -c hba_file=/etc/kronoqr/pg_hba.conf
           docker run -d --name kronoqr-redis -p 6379:6379 redis:7-alpine
 
@@ -834,7 +834,7 @@ jobs:
             -e DB_PASSWORD="$DB_PASSWORD" \
             -p 5432:5432 \
             kronoqr/postgres:ci \
-            postgres -c timezone=UTC -c log_timezone=UTC \
+            postgres -c timezone=UTC -c log_timezone=UTC -c jit=off \
               -c hba_file=/etc/kronoqr/pg_hba.conf
           docker run -d --name kronoqr-redis -p 6379:6379 redis:7-alpine
 
@@ -3268,7 +3268,7 @@ jobs:
             -e DB_PASSWORD="$DB_PASSWORD" \
             -p 5432:5432 \
             kronoqr/postgres:ci \
-            postgres -c timezone=UTC -c log_timezone=UTC \
+            postgres -c timezone=UTC -c log_timezone=UTC -c jit=off \
               -c hba_file=/etc/kronoqr/pg_hba.conf
           docker run -d --name kronoqr-redis -p 6379:6379 redis:7-alpine
 
@@ -3372,7 +3372,7 @@ jobs:
             -e DB_BACKUP_PASSWORD="$BACKUP_DB_PASSWORD" \
             -p 5432:5432 \
             kronoqr/postgres:ci \
-            postgres -c timezone=UTC -c log_timezone=UTC \
+            postgres -c timezone=UTC -c log_timezone=UTC -c jit=off \
               -c hba_file=/etc/kronoqr/pg_hba.conf
           # `-h 127.0.0.1` a proposito (ver backup-drill.yml): por TCP solo
           # contesta el servidor definitivo, no el temporal de initdb.d.
