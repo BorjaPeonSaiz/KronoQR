@@ -66,6 +66,9 @@ final readonly class PersonalRecordPdfWriter
         return $this->renderer->renderPdf(
             $this->body($journal, $holderName, $digest, $generatedAt),
             $this->footer($journal, $holderName, $digest, $generatedAt),
+            // Etiquetado siempre: es el unico documento sellado de la persona y el
+            // CSV no lleva sello ni huella (doc 01 §6.5).
+            alwaysTagged: true,
         );
     }
 

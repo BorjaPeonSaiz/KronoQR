@@ -48,11 +48,18 @@ interface ReportDocumentRenderer
      *                              el cuerpo solo aparece una vez, al final del flujo: el
      *                              sello de RF-IN-04 tiene que estar en todas las hojas,
      *                              tambien en la que alguien fotocopie suelta.
+     * @param  bool  $alwaysTagged  El documento sale ETIQUETADO (estructura para lectores
+     *                              de pantalla) diga lo que diga la configuracion. Lo pide
+     *                              el registro propio del portal: es el unico documento
+     *                              sellado de la persona y el CSV no lleva sello ni
+     *                              huella, asi que no tiene alternativa accesible
+     *                              equivalente (doc 01 §6.5). Los informes de gestion
+     *                              siguen la configuracion de la instalacion.
      * @return string Bytes del PDF.
      *
      * Lanza `ReportRenderingUnavailable` —de `Application\Exception`, nombrada en
      * prosa porque un puerto no puede depender de la capa que lo consume— cuando
      * el motor no esta disponible o falla.
      */
-    public function renderPdf(string $html, string $footerHtml): string;
+    public function renderPdf(string $html, string $footerHtml, bool $alwaysTagged = false): string;
 }

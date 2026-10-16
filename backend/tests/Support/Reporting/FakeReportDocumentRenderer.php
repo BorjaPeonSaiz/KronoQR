@@ -38,6 +38,8 @@ final class FakeReportDocumentRenderer implements ReportDocumentRenderer
 
     private static ?string $footer = null;
 
+    private static ?bool $alwaysTagged = null;
+
     public function __construct(private readonly bool $fails = false) {}
 
     /** Sustituye el motor real por este en el contenedor. */
@@ -45,6 +47,7 @@ final class FakeReportDocumentRenderer implements ReportDocumentRenderer
     {
         self::$html = null;
         self::$footer = null;
+        self::$alwaysTagged = null;
 
         App::instance(ReportDocumentRenderer::class, new self);
     }
@@ -65,10 +68,17 @@ final class FakeReportDocumentRenderer implements ReportDocumentRenderer
         return self::$footer ?? throw new RuntimeException('No se ha compuesto ningun PDF.');
     }
 
-    public function renderPdf(string $html, string $footerHtml): string
+    /** Si el ultimo documento pidio salir etiquetado siempre. */
+    public static function lastAlwaysTagged(): bool
+    {
+        return self::$alwaysTagged ?? throw new RuntimeException('No se ha compuesto ningun PDF.');
+    }
+
+    public function renderPdf(string $html, string $footerHtml, bool $alwaysTagged = false): string
     {
         self::$html = $html;
         self::$footer = $footerHtml;
+        self::$alwaysTagged = $alwaysTagged;
 
         if ($this->fails) {
             throw ReportRenderingUnavailable::engineFailed(

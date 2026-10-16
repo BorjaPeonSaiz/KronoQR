@@ -2301,17 +2301,23 @@ a ZIP with the whole installation and only the administrator generates it.
 PDFs —the personal record each person downloads from the portal, the period
 report and the impact dashboard— are composed by a Chromium browser inside the
 server, and **each document in progress is one Chromium**: a whole year of the
-personal record peaks at about 600 MB of memory. These settings cap how many are
-composed at once. **CSV does not go through here**: with the cap full, whoever
+personal record peaks at about 700 MB of memory. These settings cap how many are
+composed at once. **CSV stays outside the PDF cap**: with the cap full, whoever
 asks for a PDF is told to retry in a few seconds or download the same thing as
-CSV, and the CSV always comes out.
+CSV.
+
+**The personal record from the portal is always tagged** —with the structure
+screen readers use—, whatever the configuration: it is each person's only sealed
+document and the CSV carries no seal or fingerprint. A whole year weighs about
+4.5 MB. Management reports (period and impact dashboard) have the same data in
+CSV and XLSX and are untagged by default.
 
 | Variable | Mark | What it does | Default | When to change it | Does it affect the hours calculation? |
 | --- | --- | --- | --- | --- | --- |
-| `REPORTING_PDF_MAX_CONCURRENT` | — | How many PDFs are composed at once across the whole installation, adding up portal, panel and background reports | `2` | Raise it only if the server has free memory for one more Chromium (about 600 MB per large document) and you see "PDF engine busy" notices at peak times | No |
+| `REPORTING_PDF_MAX_CONCURRENT` | — | How many report PDFs are composed at once: the personal record from the portal, the period report and the impact dashboard, including those generated in the background. Cards and the instructions sheet do not count here | `2` | Raise it only if the server has free memory for one more Chromium (about 700 MB per large document) and you see "PDF engine busy" notices at peak times | No |
 | `REPORTING_PDF_WAIT_SECONDS` | — | How many seconds a download waits for a free slot before answering that the engine is busy | `3` | Almost never. Someone is looking at the screen: raising it only makes the wait longer | No |
 | `REPORTING_PDF_QUEUED_WAIT_SECONDS` | — | The same for a PDF generated in the background, which has nobody waiting | `300` | Almost never. If a background report fails with the engine busy, raise this or raise the cap | No |
-| `REPORTING_PDF_TAGGED` | — | Generates **tagged** PDFs, with the structure screen readers use | `false` | If someone on your staff uses a screen reader and needs the PDF rather than the CSV. **It multiplies the document's size** —a year of the personal record goes from about 350 KB to about 4.5 MB— and makes it slower to compose | No |
+| `REPORTING_PDF_TAGGED` | — | Also generates the management reports' PDFs (period and impact dashboard) **tagged**, with the structure screen readers use. The personal record from the portal is always tagged already | `false` | If someone in management uses a screen reader and needs those reports as PDF rather than CSV or XLSX. **It multiplies the document's size** —thirteen times in a long table— and makes it slower to compose | No |
 
 ---
 

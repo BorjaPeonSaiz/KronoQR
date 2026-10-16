@@ -277,6 +277,13 @@ final class MetricCatalogue
                 ['format'],
             ),
             new MetricDefinition(
+                'reporting_pdf_rendering_rejected_total',
+                MetricType::Counter,
+                MetricStorage::LabelledHash,
+                'PDF de informes que el tope de composiciones simultaneas no dejo componer, por motivo.',
+                ['reason'],
+            ),
+            new MetricDefinition(
                 'installation_setting_changes_total',
                 MetricType::Counter,
                 MetricStorage::ScalarKeys,

@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 use App\Exceptions\ProblemDetails;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
+use App\Modules\Reporting\Application\Port\PdfRenderingMetrics;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\BrowsershotReportRenderer;
 use App\Modules\Reporting\Infrastructure\Adapter\ConcurrencyLimitedReportRenderer;
+use App\Modules\Reporting\Infrastructure\Export\PeriodReportDocumentWriters;
+use App\Modules\Reporting\Infrastructure\Export\PeriodReportPdfWriter;
+use App\Modules\Reporting\Infrastructure\Metrics\RedisPdfRenderingMetrics;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Support\Facades\App;
@@ -66,6 +70,7 @@ function topePdfEmbudo(): string
         new FakeReportDocumentRenderer,
         app(Redis::class),
         app(LoggerInterface::class),
+        app(PdfRenderingMetrics::class),
         PDF_RENDERING_CONCURRENCY_SLOTS,
         0,
         $funnel,
@@ -229,7 +234,7 @@ it('sin Redis falla cerrado: 503 de motor no disponible, sin arrancar ningun Chr
         }
     };
 
-    $tope = new ConcurrencyLimitedReportRenderer($motor, $sinRedis, app(LoggerInterface::class), 2, 0);
+    $tope = new ConcurrencyLimitedReportRenderer($motor, $sinRedis, app(LoggerInterface::class), app(PdfRenderingMetrics::class), 2, 0);
 
     expect(fn (): string => $tope->renderPdf('<p>x</p>', '<p>pie</p>'))
         ->toThrow(ReportRenderingUnavailable::class, 'Redis');
@@ -244,12 +249,7 @@ it('la instalacion pone el tope delante del motor real, con el limite y la esper
     config()->set('reporting.pdf.tagged', false);
 
     $renderer = app(ReportDocumentRenderer::class);
-    $propiedades = (new ReflectionClass($renderer))->getProperties();
-    $valores = [];
-
-    foreach ($propiedades as $propiedad) {
-        $valores[$propiedad->getName()] = $propiedad->getValue($renderer);
-    }
+    $valores = topePdfPropiedades($renderer);
 
     expect($renderer)->toBeInstanceOf(ConcurrencyLimitedReportRenderer::class)
         ->and($valores['engine'])->toBeInstanceOf(BrowsershotReportRenderer::class)
@@ -257,3 +257,89 @@ it('la instalacion pone el tope delante del motor real, con el limite y la esper
         ->and($valores['waitSeconds'])->toBe(4)
         ->and($valores['funnel'])->toBe(ConcurrencyLimitedReportRenderer::FUNNEL);
 })->group('RF-IN-04', 'RL-05');
+
+it('suelta el hueco tambien cuando el motor falla', function (): void {
+    // Un Chromium que no arranca no puede dejar su hueco ocupado hasta que
+    // caduque: dos fallos seguidos bloquearian todos los PDF de la instalacion
+    // durante dos minutos.
+    $funnel = 'testing:pdf-rendering:'.Str::random(12);
+    $tope = new ConcurrencyLimitedReportRenderer(
+        new FakeReportDocumentRenderer(fails: true),
+        app(Redis::class),
+        app(LoggerInterface::class),
+        app(PdfRenderingMetrics::class),
+        1,
+        0,
+        $funnel,
+    );
+
+    try {
+        expect(fn (): string => $tope->renderPdf('<p>x</p>', '<p>pie</p>'))
+            ->toThrow(ReportRenderingUnavailable::class, 'Chromium');
+
+        expect(app(Redis::class)->connection()->exists($funnel.'1'))->toBe(0);
+    } finally {
+        topePdfLiberar($funnel);
+    }
+})->group('RF-IN-04');
+
+it('el informe en diferido recibe el tope con la espera larga de la cola', function (): void {
+    config()->set('reporting.pdf.max_concurrent', 3);
+    config()->set('reporting.pdf.wait_seconds', 4);
+    config()->set('reporting.pdf.queued_wait_seconds', 240);
+
+    $escritores = app(PeriodReportDocumentWriters::class);
+    $pdf = topePdfPropiedades($escritores)['pdf'];
+    \assert($pdf instanceof PeriodReportPdfWriter);
+    $renderer = topePdfPropiedades($pdf)['renderer'];
+    \assert(\is_object($renderer));
+    $valores = topePdfPropiedades($renderer);
+
+    expect($renderer)->toBeInstanceOf(ConcurrencyLimitedReportRenderer::class)
+        ->and($valores['engine'])->toBeInstanceOf(BrowsershotReportRenderer::class)
+        ->and($valores['maxConcurrent'])->toBe(3)
+        ->and($valores['waitSeconds'])->toBe(240);
+})->group('RF-IN-04');
+
+it('cuenta cada PDF rechazado por el tope en reporting_pdf_rendering_rejected_total', function (): void {
+    $funnel = topePdfEmbudo();
+    $contexto = topePdfPortal();
+    app(Redis::class)->connection()->command('DEL', [RedisPdfRenderingMetrics::PDF_RENDERING_REJECTED_TOTAL]);
+    topePdfSaturar($funnel);
+
+    try {
+        for ($vez = 0; $vez < 2; $vez++) {
+            Api::as($contexto['token'])
+                ->get('/api/v1/me/export', ['from' => '2026-03-01', 'to' => '2026-03-31', 'format' => 'pdf'])
+                ->assertStatus(503);
+        }
+
+        // El CSV no pasa por el tope: no cuenta.
+        Api::as($contexto['token'])->get('/api/v1/me/export', ['from' => '2026-03-01', 'to' => '2026-03-31'])->assertOk();
+    } finally {
+        topePdfLiberar($funnel);
+    }
+
+    /** @var array<string, string> $serie */
+    $serie = app(Redis::class)->connection()->command('HGETALL', [RedisPdfRenderingMetrics::PDF_RENDERING_REJECTED_TOTAL]);
+
+    // Ninguna etiqueta con datos de nadie (regla dura 21).
+    expect($serie)->toBe(['reason=busy' => '2']);
+})->group('RF-IN-04');
+
+/**
+ * Las propiedades privadas de un objeto, por nombre: el cableado del contenedor
+ * no tiene otra forma de leerse sin abrir una API solo para las pruebas.
+ *
+ * @return array<string, mixed>
+ */
+function topePdfPropiedades(object $objeto): array
+{
+    $valores = [];
+
+    foreach ((new ReflectionClass($objeto))->getProperties() as $propiedad) {
+        $valores[$propiedad->getName()] = $propiedad->getValue($objeto);
+    }
+
+    return $valores;
+}

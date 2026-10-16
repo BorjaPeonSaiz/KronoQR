@@ -265,11 +265,10 @@ return [
     |--------------------------------------------------------------------------
     |
     | Cada PDF arranca un Chromium: un año del registro propio llega a unos
-    | 600 MiB de memoria en su pico (medido en el bloque 23 de la 2.2.1). El
+    | 700 MiB de memoria en su pico (medido en el bloque 23 de la 2.2.1). El
     | limite por tasa de cada ruta no acota cuantos corren A LA VEZ; esto si,
     | para todas las rutas que componen PDF con este motor y para el informe en
-    | diferido. El CSV no pasa por aqui: el registro siempre se puede descargar
-    | (RL-05).
+    | diferido. El CSV queda fuera de este tope (RL-05).
     */
     'pdf' => [
         /*
@@ -294,9 +293,11 @@ return [
         'queued_wait_seconds' => (int) env('REPORTING_PDF_QUEUED_WAIT_SECONDS', 300),
 
         /*
-         * PDF etiquetado (estructura para lectores de pantalla). Apagado de
-         * serie: en una tabla de un año multiplica el peso por trece. El mismo
-         * dato esta accesible en la pantalla y en el CSV.
+         * PDF etiquetado (estructura para lectores de pantalla) de los INFORMES
+         * DE GESTION: periodo y cuadro de impacto, que tienen el mismo dato en
+         * CSV y XLSX. Apagado de serie: en una tabla larga multiplica el peso
+         * por trece. El registro propio del portal sale etiquetado SIEMPRE, con
+         * o sin esto: es el unico documento sellado de la persona (doc 01 §6.5).
          */
         'tagged' => (bool) env('REPORTING_PDF_TAGGED', false),
     ],

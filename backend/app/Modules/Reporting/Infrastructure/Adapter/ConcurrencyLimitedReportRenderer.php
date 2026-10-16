@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Infrastructure\Adapter;
 
 use App\Modules\Reporting\Application\Exception\ReportRenderingBusy;
 use App\Modules\Reporting\Application\Exception\ReportRenderingUnavailable;
+use App\Modules\Reporting\Application\Port\PdfRenderingMetrics;
 use App\Modules\Reporting\Application\Port\ReportDocumentRenderer;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Psr\Log\LoggerInterface;
@@ -40,19 +41,21 @@ final readonly class ConcurrencyLimitedReportRenderer implements ReportDocumentR
         private ReportDocumentRenderer $engine,
         private Redis $redis,
         private LoggerInterface $logger,
+        private PdfRenderingMetrics $metrics,
         private int $maxConcurrent,
         private int $waitSeconds,
         private string $funnel = self::FUNNEL,
     ) {}
 
-    public function renderPdf(string $html, string $footerHtml): string
+    public function renderPdf(string $html, string $footerHtml, bool $alwaysTagged = false): string
     {
-        $render = fn (): string => $this->engine->renderPdf($html, $footerHtml);
+        $render = fn (): string => $this->engine->renderPdf($html, $footerHtml, $alwaysTagged);
         $busy = function (): never {
             $this->logger->warning('reporting.pdf_rendering_busy', [
                 'max_concurrent' => $this->maxConcurrent,
                 'wait_seconds' => $this->waitSeconds,
             ]);
+            $this->metrics->rejected(PdfRenderingMetrics::REASON_BUSY);
 
             throw ReportRenderingBusy::allSlotsTaken($this->waitSeconds);
         };
@@ -70,6 +73,7 @@ final readonly class ConcurrencyLimitedReportRenderer implements ReportDocumentR
             $this->logger->error('reporting.pdf_rendering_limiter_unavailable', [
                 'exception' => $redisFailure::class,
             ]);
+            $this->metrics->rejected(PdfRenderingMetrics::REASON_LIMITER);
 
             throw ReportRenderingUnavailable::limiterFailed($redisFailure);
         }
