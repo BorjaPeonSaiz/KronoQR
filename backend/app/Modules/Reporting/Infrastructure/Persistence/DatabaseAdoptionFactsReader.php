@@ -137,7 +137,9 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
     private const string OPEN_SHIFT_INCIDENT = 'open_shift_expired';
 
     /**
-     * Los dos periodos como intervalos semiabiertos de instantes `[from_at, to_at)`.
+     * Los dos periodos como intervalos semiabiertos de instantes `[from_at, to_at)`,
+     * y los mismos limites en hora de pared UTC (`from_utc`, `to_utc`) para el
+     * indice de expresion de `scan_events` (ver {@see scansByPeriod()}).
      *
      * Enlaza, por este orden, las cuatro fechas (desde y hasta del actual y del
      * anterior) y la zona del centro: {@see self::periodBindings()}.
@@ -146,11 +148,18 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
         local_periods (period, from_date, to_date) AS (
             VALUES ('current'::text, ?::date, ?::date), ('previous'::text, ?::date, ?::date)
         ), periods AS (
-            SELECT lp.period,
-                   lp.from_date::timestamp AT TIME ZONE z.tz       AS from_at,
-                   (lp.to_date + 1)::timestamp AT TIME ZONE z.tz   AS to_at
-              FROM local_periods lp
-             CROSS JOIN (SELECT ?::text AS tz) AS z
+            SELECT b.period,
+                   b.from_at,
+                   b.to_at,
+                   b.from_at AT TIME ZONE 'UTC'   AS from_utc,
+                   b.to_at AT TIME ZONE 'UTC'     AS to_utc
+              FROM (
+                    SELECT lp.period,
+                           lp.from_date::timestamp AT TIME ZONE z.tz       AS from_at,
+                           (lp.to_date + 1)::timestamp AT TIME ZONE z.tz   AS to_at
+                      FROM local_periods lp
+                     CROSS JOIN (SELECT ?::text AS tz) AS z
+                   ) AS b
         )
         SQL;
 
@@ -256,9 +265,19 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
      * Con `LEFT JOIN` sobre los periodos y `count(*) FILTER (WHERE …)` cada fila
      * del periodo se lee **una vez** y se clasifica al pasar; y como el periodo
      * llega en instantes (ver el docblock de la clase), cada uno de los dos es un
-     * recorrido de rango de `scan_events_occurred_at_index`, no de la tabla. La
-     * aritmetica no cambia: los `FILTER` cuentan exactamente lo que contaban las
-     * subconsultas.
+     * recorrido de rango de `scan_events_occurred_at_utc_index`, no de la tabla.
+     * La aritmetica no cambia: los `FILTER` cuentan exactamente lo que contaban
+     * las subconsultas.
+     *
+     * ## El rango, en hora de pared UTC
+     *
+     * Solo aqui el filtro es `(s.occurred_at AT TIME ZONE 'UTC')` contra
+     * `from_utc`/`to_utc`, y no `s.occurred_at` contra `from_at`/`to_at`: es la
+     * expresion del indice, que tiene que coincidir caracter a caracter. Es el
+     * mismo rango —UTC no tiene cambios de hora, la conversion es biyectiva y
+     * creciente—, y el porque del indice de expresion en vez de uno simple de
+     * `occurred_at` (que robaba el plan a las consultas por persona del fichaje)
+     * esta en la migracion `2026_10_16_100000`.
      *
      * ## El `LEFT JOIN` conserva la fila del periodo vacio
      *
@@ -307,8 +326,8 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
                    count(s.id) FILTER (WHERE s.recorded_at - s.occurred_at > ?::interval)  AS offline_resolved{$originColumns}
               FROM periods p
               LEFT JOIN scan_events s
-                     ON s.occurred_at >= p.from_at
-                    AND s.occurred_at < p.to_at
+                     ON (s.occurred_at AT TIME ZONE 'UTC') >= p.from_utc
+                    AND (s.occurred_at AT TIME ZONE 'UTC') < p.to_utc
              GROUP BY p.period
             SQL, [
             ...$this->periodBindings($query, $timeZone),

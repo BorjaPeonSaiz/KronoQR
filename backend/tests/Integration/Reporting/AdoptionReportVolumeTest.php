@@ -50,10 +50,12 @@ use Tests\Support\Workforce\WorkforceFixtures;
  *
  * El lector convierte los LIMITES de cada periodo —la medianoche local del primer
  * dia y la del dia siguiente al ultimo— a instantes UTC con la zona del centro, y
- * acota `occurred_at >= desde AND occurred_at < hasta`. Asi lo resuelve
- * `scan_events_occurred_at_index` sin meter la zona en el esquema (ADR-017, regla
- * dura 13): el indice es de la columna, y la zona solo entra en dos constantes por
- * consulta. Hasta la 2.2.1 el filtro era `(occurred_at AT TIME ZONE zona)::date
+ * acota `occurred_at` por ese rango (en `scan_events`, expresado en hora de pared
+ * UTC). Asi lo resuelve `scan_events_occurred_at_utc_index` sin meter la zona del
+ * centro en el esquema (ADR-017, regla dura 13): el indice es de
+ * `occurred_at AT TIME ZONE 'UTC'`, y la zona solo entra en dos constantes por
+ * consulta. Por que de expresion y no de la columna sola: para no robarle el plan
+ * al fichaje (migracion `2026_10_16_100000`, `ScanLogIndexUsageTest`). Hasta la 2.2.1 el filtro era `(occurred_at AT TIME ZONE zona)::date
  * BETWEEN …`, que convertia cada fila y obligaba a recorrer el historico entero.
  *
  * Dos pruebas lo atan: la del plan (sin `Seq Scan` de `scan_events`, con el
@@ -188,7 +190,7 @@ function volumenDelCuadro(): array
     // Dos escaneos por jornada: entrada y salida. Uno de cada cien es por PIN.
     // EN ORDEN CRONOLOGICO, como llegan de verdad: el orden fisico de la tabla
     // es lo que el planificador mira (`pg_stats.correlation`) para decidir si
-    // recorrer un mes por `scan_events_occurred_at_index` le sale a cuenta.
+    // recorrer un mes por `scan_events_occurred_at_utc_index` le sale a cuenta.
     // Sembrados persona a persona, cada mes estaria repartido por toda la tabla.
     DB::statement(<<<'SQL'
         INSERT INTO scan_events
@@ -298,14 +300,14 @@ it('resuelve el recuento de jornadas completas sin recorrer dos años de shift_e
     expect($plan)->not->toContain('Seq Scan on shift_entries');
 })->group('RNF-P-05', 'RF-IN-08');
 
-it('lee scan_events por scan_events_occurred_at_index, una vez por consulta y sin recorrerla entera', function (): void {
+it('lee scan_events por scan_events_occurred_at_utc_index, una vez por consulta y sin recorrerla entera', function (): void {
     /*
      * DB5. Se captura el SQL que emite el lector de verdad (no se transcribe) y
      * se mira su PLAN, que es lo que sigue valiendo mañana en otra maquina.
      *
      * - Sin `Seq Scan on scan_events`: con el filtro antiguo por fecha civil
      *   convertida fila a fila, cada cuadro leia el historico entero.
-     * - Con `scan_events_occurred_at_index`: el que el filtro por instantes
+     * - Con `scan_events_occurred_at_utc_index`: el que el filtro por instantes
      *   tiene que usar.
      * - Un solo nodo sobre `scan_events`: la regresion de la decision 15 de la
      *   ficha 3.13 —subconsultas correlacionadas por periodo y origen, catorce
@@ -336,7 +338,7 @@ it('lee scan_events por scan_events_occurred_at_index, una vez por consulta y si
     $sobreScanEvents = array_filter($nodos, static fn (array $nodo): bool => ($nodo['Relation Name'] ?? '') === 'scan_events');
 
     expect(QueryPlans::scansSequentially($nodos, 'scan_events'))->toBeFalse('El cuadro recorre scan_events entera')
-        ->and(QueryPlans::usesIndex($nodos, 'scan_events_occurred_at_index'))->toBeTrue('El cuadro no usa scan_events_occurred_at_index')
+        ->and(QueryPlans::usesIndex($nodos, 'scan_events_occurred_at_utc_index'))->toBeTrue('El cuadro no usa scan_events_occurred_at_utc_index')
         ->and($sobreScanEvents)->toHaveCount(1);
 })->group('RNF-P-05', 'RNF-P-02', 'RF-IN-08');
 
