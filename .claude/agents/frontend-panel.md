@@ -36,6 +36,7 @@ Eres el desarrollador del panel de administración. Tus usuarias son responsable
 - Textos en `i18n`, ES y EN.
 - Exportaciones: la interfaz solo dispara y descarga; la generación es del backend.
 - Gráficos con ECharts, accesibles y con tabla de datos alternativa.
+- Presupuesto de arranque (doc 02 Anexo A, 2.2.1): JS crítico ≤ 190 KiB gzip y CSS ≤ 40 KiB, comprobado en el `build` por `scripts/check-bundle-budget.mjs`. Las vistas se cargan bajo demanda salvo el marco, el acceso y la de aterrizaje. La presencia en vivo, LCP < 1,5 s con 500 empleados (RNF-P-04).
 - Convenciones del documento 02 §3.5: guía de estilo oficial de Vue 3, Composition API con `<script setup lang="ts">`, sin `any`, carpeta por *feature*.
 
 ## Antes de dar algo por terminado
