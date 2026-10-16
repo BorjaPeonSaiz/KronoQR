@@ -20,6 +20,7 @@ use App\Modules\Identity\Domain\ValueObject\PasswordStatus;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 
@@ -74,6 +75,11 @@ final readonly class ConfirmTwoFactorHandler
      * @throws TwoFactorNotEnrolled cuando no hay ningun alta pendiente que confirmar
      */
     public function handle(VerifyTwoFactorCommand $command): LoginOutcome
+    {
+        return UseCaseInstrumentation::run('identity.confirm_two_factor', fn (): LoginOutcome => $this->doHandle($command));
+    }
+
+    private function doHandle(VerifyTwoFactorCommand $command): LoginOutcome
     {
         if ($this->attempts->isLocked($command->throttleKey)) {
             $this->journal->failed(AuthChannel::MANAGEMENT, $command->userUuid, AuthFailureReason::LOCKED);

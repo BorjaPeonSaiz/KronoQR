@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\UpdateDepartmentCommand;
 use App\Modules\Workforce\Application\Exception\DepartmentManagerNotEligible;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
@@ -67,6 +68,11 @@ final readonly class UpdateDepartmentHandler
      * @throws DepartmentManagerNotEligible si la cuenta no existe, esta de baja o tiene otro rol
      */
     public function handle(UpdateDepartmentCommand $command): ?DepartmentView
+    {
+        return UseCaseInstrumentation::run('workforce.update_department', fn (): ?DepartmentView => $this->doHandle($command));
+    }
+
+    private function doHandle(UpdateDepartmentCommand $command): ?DepartmentView
     {
         return $this->connection->transaction(function () use ($command): ?DepartmentView {
             $department = $this->departments->findForUpdate($command->id);

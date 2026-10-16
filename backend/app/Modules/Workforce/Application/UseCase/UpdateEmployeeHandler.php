@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -57,6 +58,11 @@ final readonly class UpdateEmployeeHandler
      * @throws EmployeeAlreadyTerminated si la ficha esta de baja, tambien si la baja llego mientras se esperaba
      */
     public function handle(UpdateEmployeeCommand $command): ?Employee
+    {
+        return UseCaseInstrumentation::run('workforce.update_employee', fn (): ?Employee => $this->doHandle($command));
+    }
+
+    private function doHandle(UpdateEmployeeCommand $command): ?Employee
     {
         return $this->retry->run('employee.update', function () use ($command): ?Employee {
             if ($command->departmentGiven && $command->departmentId !== null) {

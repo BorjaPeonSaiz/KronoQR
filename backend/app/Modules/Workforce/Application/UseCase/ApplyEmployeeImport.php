@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\PinProvisioning;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
@@ -103,6 +104,11 @@ final readonly class ApplyEmployeeImport
     ) {}
 
     public function handle(ImportReport $report): ImportReport
+    {
+        return UseCaseInstrumentation::run('workforce.apply_employee_import', fn (): ImportReport => $this->doHandle($report));
+    }
+
+    private function doHandle(ImportReport $report): ImportReport
     {
         $applied = $this->retry->run('employee.import', function () use ($report): array {
             // FILAS PADRE ANTES DEL PRIMER ASIENTO (ADR-046 §1.1 punto 2, §5).

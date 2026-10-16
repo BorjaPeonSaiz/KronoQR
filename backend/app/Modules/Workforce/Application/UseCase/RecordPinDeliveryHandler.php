@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\RecordPinDeliveryCommand;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -59,6 +60,14 @@ final readonly class RecordPinDeliveryHandler
      * @throws PinAlreadyDelivered cuando ya constaba entregado
      */
     public function handle(RecordPinDeliveryCommand $command): ?PinDeliveryRecord
+    {
+        return UseCaseInstrumentation::run('workforce.record_pin_delivery', fn (): ?PinDeliveryRecord => $this->doHandle($command));
+    }
+
+    /**
+     * @return PinDeliveryRecord|null `null` si el empleado no existe
+     */
+    private function doHandle(RecordPinDeliveryCommand $command): ?PinDeliveryRecord
     {
         $employee = $this->employees->findByUuid($command->employeeUuid);
 

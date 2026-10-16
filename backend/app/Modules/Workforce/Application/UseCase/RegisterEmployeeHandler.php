@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\Command\PinProvisioning;
@@ -75,6 +76,11 @@ final readonly class RegisterEmployeeHandler
      * @throws RandomException si el sistema no puede dar aleatoriedad para el PIN
      */
     public function handle(RegisterEmployeeCommand $command): RegisteredEmployee
+    {
+        return UseCaseInstrumentation::run('workforce.register_employee', fn (): RegisteredEmployee => $this->doHandle($command));
+    }
+
+    private function doHandle(RegisterEmployeeCommand $command): RegisteredEmployee
     {
         // El centro no viene en el comando: es el de la instalacion (ADR-040).
         // Se resuelve fuera de la transaccion porque no cambia dentro de ella

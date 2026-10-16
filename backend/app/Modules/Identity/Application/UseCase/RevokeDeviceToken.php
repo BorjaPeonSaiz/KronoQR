@@ -12,6 +12,7 @@ use App\Modules\Identity\Domain\Event\DeviceTokenRevoked;
 use App\Modules\Identity\Domain\Model\Device;
 use App\Modules\Identity\Domain\ValueObject\DeviceStatus;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -37,6 +38,11 @@ final readonly class RevokeDeviceToken
      * Devuelve si habia un dispositivo que revocar.
      */
     public function handle(RevokeDeviceTokenCommand $command): bool
+    {
+        return UseCaseInstrumentation::run('identity.revoke_device_token', fn (): bool => $this->doHandle($command));
+    }
+
+    private function doHandle(RevokeDeviceTokenCommand $command): bool
     {
         $device = $this->devices->findByUuid($command->deviceUuid);
 

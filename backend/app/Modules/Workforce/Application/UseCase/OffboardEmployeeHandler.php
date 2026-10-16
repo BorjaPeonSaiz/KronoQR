@@ -6,6 +6,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Command\OffboardEmployeeCommand;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -65,6 +66,11 @@ final readonly class OffboardEmployeeHandler
      * @throws InstallationSiteMissing antes de la puesta en marcha: sin centro no hay «hoy» (R-4)
      */
     public function handle(OffboardEmployeeCommand $command): ?Employee
+    {
+        return UseCaseInstrumentation::run('workforce.offboard_employee', fn (): ?Employee => $this->doHandle($command));
+    }
+
+    private function doHandle(OffboardEmployeeCommand $command): ?Employee
     {
         $site = $this->sites->installationSite();
 

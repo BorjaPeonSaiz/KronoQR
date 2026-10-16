@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\UseCase;
 
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Application\Port\EmployeeImportSource;
@@ -73,6 +74,14 @@ final readonly class PlanAbsenceImport
      * @throws UnreadableImportFile
      */
     public function handle(string $path, int $maxRows, array $columnAliases): AbsenceImportReport
+    {
+        return UseCaseInstrumentation::run('workforce.plan_absence_import', fn (): AbsenceImportReport => $this->doHandle($path, $maxRows, $columnAliases));
+    }
+
+    /**
+     * @param  array<string, list<string>>  $columnAliases
+     */
+    private function doHandle(string $path, int $maxRows, array $columnAliases): AbsenceImportReport
     {
         $map = ImportColumnMap::of($columnAliases);
 

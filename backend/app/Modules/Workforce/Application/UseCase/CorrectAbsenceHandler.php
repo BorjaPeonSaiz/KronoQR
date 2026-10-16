@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\CorrectAbsenceCommand;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -65,6 +66,11 @@ final readonly class CorrectAbsenceHandler
      * @throws OverlappingAbsence si el periodo nuevo pisa otra ausencia activa
      */
     public function handle(CorrectAbsenceCommand $command): ?Absence
+    {
+        return UseCaseInstrumentation::run('workforce.correct_absence', fn (): ?Absence => $this->doHandle($command));
+    }
+
+    private function doHandle(CorrectAbsenceCommand $command): ?Absence
     {
         return $this->connection->transaction(function () use ($command): ?Absence {
             // LA LECTURA VA DENTRO DE LA TRANSACCION Y CON CANDADO. Leerla fuera

@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Application\UseCase;
 
 use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 
 /**
@@ -41,6 +42,18 @@ final readonly class LogOutHandler
      *                                    correo ni su nombre (regla dura 21).
      */
     public function handle(int|string $tokenId, AuthChannel $channel, ?string $subjectUuid): void
+    {
+        UseCaseInstrumentation::run('identity.log_out', function () use ($tokenId, $channel, $subjectUuid): void {
+            $this->doHandle($tokenId, $channel, $subjectUuid);
+        });
+    }
+
+    /**
+     * @param  string|null  $subjectUuid  UUID publico de quien cierra sesion, o `null` si el
+     *                                    token no cuelga de nadie identificable. Nunca su
+     *                                    correo ni su nombre (regla dura 21).
+     */
+    private function doHandle(int|string $tokenId, AuthChannel $channel, ?string $subjectUuid): void
     {
         $this->tokens->revoke($tokenId);
 

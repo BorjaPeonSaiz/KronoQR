@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\UseCase;
 
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\ImportAbsencesCommand;
 use App\Modules\Workforce\Domain\Exception\ImportFileChanged;
 use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
@@ -48,6 +49,17 @@ final readonly class ImportAbsencesHandler
      * @throws ImportTooLarge si el fichero venia truncado: se parte y se importa por trozos
      */
     public function handle(
+        ImportAbsencesCommand $command,
+        int $maxRows,
+        array $columnAliases,
+    ): AbsenceImportReport {
+        return UseCaseInstrumentation::run('workforce.import_absences', fn (): AbsenceImportReport => $this->doHandle($command, $maxRows, $columnAliases));
+    }
+
+    /**
+     * @param  array<string, list<string>>  $columnAliases
+     */
+    private function doHandle(
         ImportAbsencesCommand $command,
         int $maxRows,
         array $columnAliases,

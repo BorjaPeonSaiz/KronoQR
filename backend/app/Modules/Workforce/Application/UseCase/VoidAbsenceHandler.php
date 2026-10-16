@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\VoidAbsenceCommand;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
@@ -48,6 +49,11 @@ final readonly class VoidAbsenceHandler
      * @throws AbsenceNotActive si ya estaba anulada o sustituida
      */
     public function handle(VoidAbsenceCommand $command): ?Absence
+    {
+        return UseCaseInstrumentation::run('workforce.void_absence', fn (): ?Absence => $this->doHandle($command));
+    }
+
+    private function doHandle(VoidAbsenceCommand $command): ?Absence
     {
         return $this->connection->transaction(function () use ($command): ?Absence {
             // LA LECTURA VA DENTRO DE LA TRANSACCION Y CON CANDADO, por lo mismo

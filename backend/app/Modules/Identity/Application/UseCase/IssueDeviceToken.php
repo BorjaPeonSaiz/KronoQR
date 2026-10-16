@@ -13,6 +13,7 @@ use App\Modules\Identity\Domain\Model\Device;
 use App\Modules\Identity\Domain\ValueObject\IssuedAccessToken;
 use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -58,6 +59,11 @@ final readonly class IssueDeviceToken
      * que reactivarlo, que es una decision con nombre y no un efecto colateral.
      */
     public function handle(IssueDeviceTokenCommand $command): ?IssuedAccessToken
+    {
+        return UseCaseInstrumentation::run('identity.issue_device_token', fn (): ?IssuedAccessToken => $this->doHandle($command));
+    }
+
+    private function doHandle(IssueDeviceTokenCommand $command): ?IssuedAccessToken
     {
         $device = $this->devices->findByUuid($command->deviceUuid);
 

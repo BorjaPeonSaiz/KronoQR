@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\CreateSiteCommand;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
@@ -52,6 +53,11 @@ final readonly class CreateSiteHandler
      * @throws UnknownTimezone
      */
     public function handle(CreateSiteCommand $command): Site
+    {
+        return UseCaseInstrumentation::run('workforce.create_site', fn (): Site => $this->doHandle($command));
+    }
+
+    private function doHandle(CreateSiteCommand $command): Site
     {
         if ($this->sites->installationSite() instanceof Site) {
             throw SiteAlreadyConfigured::make();

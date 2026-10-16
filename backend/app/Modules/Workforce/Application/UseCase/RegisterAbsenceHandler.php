@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\RegisterAbsenceCommand;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -72,6 +73,11 @@ final readonly class RegisterAbsenceHandler
      * @throws OverlappingAbsence si pisa otra ausencia activa de esa persona
      */
     public function handle(RegisterAbsenceCommand $command): ?Absence
+    {
+        return UseCaseInstrumentation::run('workforce.register_absence', fn (): ?Absence => $this->doHandle($command));
+    }
+
+    private function doHandle(RegisterAbsenceCommand $command): ?Absence
     {
         $employee = $this->employees->findByUuid($command->employeeUuid);
 

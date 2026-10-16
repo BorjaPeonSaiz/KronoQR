@@ -15,6 +15,7 @@ use App\Modules\Identity\Domain\Event\ManagementRoleAssigned;
 use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\ConnectionInterface;
 
@@ -84,6 +85,11 @@ final readonly class CreateFirstAdministratorHandler
      * @throws ManagementAccountAlreadyExists si la instalacion ya tiene cuentas
      */
     public function handle(CreateFirstAdministratorCommand $command): LoginOutcome
+    {
+        return UseCaseInstrumentation::run('identity.create_first_administrator', fn (): LoginOutcome => $this->doHandle($command));
+    }
+
+    private function doHandle(CreateFirstAdministratorCommand $command): LoginOutcome
     {
         // El hash, FUERA de todo candado: cuesta decenas de milisegundos y la
         // cadena de auditoria es la misma por la que pasa cada fichaje.

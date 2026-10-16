@@ -18,6 +18,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\EmploymentStatusLookup;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 use Illuminate\Support\Str;
 
@@ -71,6 +72,11 @@ final readonly class IssueCredential
      * @throws CredentialHolderIsOffboarded cuando la persona esta de baja (RN-14)
      */
     public function handle(IssueCredentialCommand $command): ?IssuedCredential
+    {
+        return UseCaseInstrumentation::run('identity.issue_credential', fn (): ?IssuedCredential => $this->doHandle($command));
+    }
+
+    private function doHandle(IssueCredentialCommand $command): ?IssuedCredential
     {
         $employeeId = $this->employees->internalIdFor($command->employeeUuid);
 

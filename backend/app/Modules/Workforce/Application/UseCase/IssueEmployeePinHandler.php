@@ -7,6 +7,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\PinLength;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\Pin\PinGenerator;
@@ -88,6 +89,14 @@ final readonly class IssueEmployeePinHandler
      * @return IssuedPin|null `null` si el empleado no existe: quien llama lo traduce a 404.
      */
     public function handle(IssueEmployeePinCommand $command): ?IssuedPin
+    {
+        return UseCaseInstrumentation::run('workforce.issue_employee_pin', fn (): ?IssuedPin => $this->doHandle($command));
+    }
+
+    /**
+     * @return IssuedPin|null `null` si el empleado no existe: quien llama lo traduce a 404.
+     */
+    private function doHandle(IssueEmployeePinCommand $command): ?IssuedPin
     {
         $issued = $this->serialized->withChainLock(function () use ($command): ?IssuedPin {
             $issuedAt = $this->clock->now();
