@@ -5,6 +5,9 @@ import LoginView from '@/features/login/LoginView.vue'
 import { useSessionStore } from '@/features/login/session.store'
 import { useBrandingStore } from '@/shared/branding/branding.store'
 import type { Branding } from '@/shared/api/types'
+import en from '@/shared/i18n/locales/en.json'
+import { createAppI18n } from '@/shared/i18n'
+import { bindPortalLocale } from '@/shared/i18n/portalLocale'
 import es from '@/shared/i18n/locales/es.json'
 import { brandingPayload, portalSession } from './support/fixtures'
 import {
@@ -383,6 +386,38 @@ describe('LoginView', () => {
 
       expect(wrapper.find('[role="alert"]').text()).toContain(es.errors.invalidCredentials.title)
       expect(wrapper.text()).not.toContain(es.login.originLocked.title)
+    })
+  })
+  describe('idioma segun la politica de la marca (RF-PD-08)', () => {
+    /** Monta el acceso con el idioma atado como en `main.ts`, navegador en ingles. */
+    async function mountBound(available: string[]): Promise<Awaited<ReturnType<typeof mountView>>> {
+      const pinia = createTestPinia()
+
+      await loadBranding(pinia, { locales: { default: 'es', available } })
+
+      const branding = useBrandingStore(pinia)
+      const i18n = createAppI18n()
+
+      bindPortalLocale(
+        i18n,
+        () => ({ policy: branding.current.locales, personal: null }),
+        () => ['en-GB'],
+      )
+
+      return mountView(LoginView, { pinia, i18n })
+    }
+
+    it('con un solo idioma ofrecido el acceso sale en espanol aunque el navegador pida ingles', async () => {
+      const wrapper = await mountBound(['es'])
+
+      expect(wrapper.text()).toContain(es.login.heading)
+      expect(wrapper.text()).not.toContain(en.login.heading)
+    })
+
+    it('con dos idiomas ofrecidos el acceso sigue al navegador', async () => {
+      const wrapper = await mountBound(['es', 'en'])
+
+      expect(wrapper.text()).toContain(en.login.heading)
     })
   })
 })

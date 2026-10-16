@@ -10,14 +10,18 @@ use App\Modules\Workforce\Domain\ValueObject\ImportMessageCode;
  * decidir que es sale aqui como error, que es lo seguro.
  */
 
-it('solo avisan la fecha de alta no aplicada y la columna desconocida; el resto rechaza la linea', function (): void {
+it('solo avisan la fecha de alta no aplicada, la columna desconocida y el idioma inactivo; el resto rechaza la linea', function (): void {
     $avisos = array_values(array_filter(
         ImportMessageCode::cases(),
         static fn (ImportMessageCode $code): bool => $code->isWarning(),
     ));
 
-    expect($avisos)->toBe([ImportMessageCode::HIRED_AT_NOT_UPDATED, ImportMessageCode::UNKNOWN_COLUMN]);
-})->group('RF-GP-05');
+    expect($avisos)->toBe([
+        ImportMessageCode::HIRED_AT_NOT_UPDATED,
+        ImportMessageCode::UNKNOWN_COLUMN,
+        ImportMessageCode::LOCALE_NOT_ACTIVE,
+    ]);
+})->group('RF-GP-05', 'RF-KI-05');
 
 it('rechaza la linea de una persona dada de baja con el codigo del contrato', function (): void {
     // ADR-046 §5: la importacion no modifica ni reactiva una baja. Es un error,

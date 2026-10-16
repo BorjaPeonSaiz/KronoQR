@@ -9,6 +9,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\ImportFiles;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -176,6 +177,8 @@ it('lista el teletrabajo junto a los demas campos tocados', function (): void {
     $contexto = teletrabajoContexto();
     $uuid = WorkforceFixtures::employee($contexto['site'], $contexto['department']);
 
+    // El ingles tiene que estar activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     Api::as($contexto['token'])->patch('/api/v1/employees/'.$uuid, ['locale' => 'en', 'teleworking' => true])
         ->assertValidResponse(200);
 

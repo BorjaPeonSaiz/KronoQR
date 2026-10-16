@@ -12,6 +12,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -249,6 +250,8 @@ it('publica los eventos de plantilla que otros modulos necesitan', function (): 
 
     $uuid = is_string($created) ? $created : '';
 
+    // El ingles tiene que estar activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     Api::as($context['token'])->patch('/api/v1/employees/'.$uuid, ['locale' => 'en']);
     Api::as($context['token'])->post('/api/v1/employees/'.$uuid.'/offboard', [
         'terminated_at' => '2026-09-30',

@@ -8,6 +8,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -68,6 +69,8 @@ it('no exige el correo en ninguna de las operaciones de plantilla', function ():
     $employee = '/api/v1/employees/'.(is_string($uuid) ? $uuid : '');
 
     Api::as($token)->get($employee)->assertStatus(200);
+    // El ingles tiene que estar activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     Api::as($token)->patch($employee, ['locale' => 'en'])->assertStatus(200);
     Api::as($token)->post($employee.'/offboard', ['terminated_at' => '2026-09-30'])->assertStatus(200);
 })->group('RF-GP-01', 'RF-GP-03');

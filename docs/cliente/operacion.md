@@ -1511,6 +1511,15 @@ alguien usaba ese rol para consultar el registro en pantalla, dale otro rol en
 Inspección no cambia, y las sesiones abiertas no se cierran: el menú se
 actualiza la próxima vez que se cargue el panel.
 
+**Al actualizar a la 2.2.1: tus idiomas no cambian.** Desde la 2.2.1 una
+instalación **nueva** sale solo en español, sin selector de idioma, y el inglés
+se activa desde el panel. Una instalación que ya estaba en uso **conserva el
+español y el inglés** que tenía: la actualización lo deja escrito en
+**Ajustes operativos** → **Idiomas**, y el quiosco, el panel y el portal siguen
+como estaban. Si nadie usa el inglés, desmárcalo ahí y desaparece el selector
+([`configuracion.md`](configuracion.md) §2.3). No hace falta tocar
+`APP_SUPPORTED_LOCALES` del `.env`: es solo un respaldo.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.

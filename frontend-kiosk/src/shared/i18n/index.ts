@@ -2,20 +2,24 @@
 // persona se escribe en una plantilla. Espanol e ingles desde el primer dia, y
 // anadir un idioma nuevo es anadir un fichero, no tocar componentes.
 //
-// SELECTOR PERSISTENTE Y DETECCION AUTOMATICA, en ese orden de prioridad:
+// SELECTOR PERSISTENTE Y DETECCION AUTOMATICA, solo si la instalacion ofrece
+// mas de un idioma; entonces, en este orden de prioridad:
 //   1. lo que alguien eligio a mano en esta tablet,
 //   2. lo que dice el navegador,
-//   3. el idioma por defecto.
+//   3. el idioma por defecto de la instalacion.
+// Con uno solo (lo de serie: espanol) no hay eleccion ni deteccion.
 //
 // Se guarda en `localStorage` a proposito, y no contradice la prohibicion de
 // usarlo para la cola: son dos caracteres cuya perdida no tiene ninguna
 // consecuencia. La cola es registro legal sin escribir y va a IndexedDB.
 
+import { resolveUiLocale, type LocalePolicy } from '@kronoqr/web-kit/branding'
 import { createI18n } from 'vue-i18n'
+import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import en from './locales/en.json'
 import es from './locales/es.json'
 
-export const SUPPORTED_LOCALES = ['es', 'en'] as const
+export const SUPPORTED_LOCALES = ['es', 'en'] as const satisfies readonly [string, ...string[]]
 
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number]
 
@@ -25,22 +29,6 @@ const LOCALE_STORAGE_KEY = 'kronoqr.kiosk.locale'
 
 export function isSupportedLocale(value: unknown): value is AppLocale {
   return typeof value === 'string' && SUPPORTED_LOCALES.some((locale) => locale === value)
-}
-
-/**
- * Elige el primer idioma soportado de la lista de preferencias del navegador.
- * Acepta etiquetas completas ('es-ES') y cae al idioma por defecto si ninguna
- * encaja: el quiosco nunca se queda sin textos.
- */
-export function resolveLocale(candidates: readonly string[]): AppLocale {
-  for (const candidate of candidates) {
-    const base = candidate.split('-')[0]?.toLowerCase()
-    if (isSupportedLocale(base)) {
-      return base
-    }
-  }
-
-  return DEFAULT_LOCALE
 }
 
 export function readStoredLocale(storage: Storage | null = safeStorage()): AppLocale | null {
@@ -63,12 +51,23 @@ export function storeLocale(locale: AppLocale, storage: Storage | null = safeSto
   }
 }
 
-/** Preferencia guardada, si no hay, la del navegador; si no, la de por defecto. */
+/**
+ * Con un unico idioma ofrecido (`branding.locales.available`, de serie `[es]`),
+ * ese y nada mas: ni la eleccion guardada ni el navegador lo cambian. Con
+ * varios: la eleccion guardada, el navegador y el predeterminado de la
+ * instalacion. La politica sale de la copia de la marca, sin red.
+ */
 export function initialLocale(
   browserLanguages: readonly string[] = typeof navigator === 'undefined' ? [] : navigator.languages,
   storage: Storage | null = safeStorage(),
+  policy: LocalePolicy = readCachedLocalePolicy(),
 ): AppLocale {
-  return readStoredLocale(storage) ?? resolveLocale(browserLanguages)
+  return resolveUiLocale<AppLocale>({
+    policy,
+    shipped: SUPPORTED_LOCALES,
+    stored: readStoredLocale(storage),
+    browser: browserLanguages,
+  })
 }
 
 function safeStorage(): Storage | null {

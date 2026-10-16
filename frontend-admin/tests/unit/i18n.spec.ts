@@ -3,7 +3,10 @@ import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
-import { DEFAULT_LOCALE, isSupportedLocale, resolveLocale } from '@/shared/i18n'
+import { DEFAULT_LOCALE, isSupportedLocale, resolveAppLocale } from '@/shared/i18n'
+
+const ONLY_SPANISH = { default: 'es', available: ['es'] }
+const BOTH = { default: 'es', available: ['es', 'en'] }
 
 /** Aplana un arbol de mensajes a la lista de sus claves con punto. */
 function flatKeys(value: unknown, prefix = ''): string[] {
@@ -181,14 +184,22 @@ describe('idiomas de la aplicacion', () => {
     expect(en.pin.reveal.onlyOnce).toContain('once')
   })
 
-  it('elige el primer idioma soportado de las preferencias del navegador', () => {
-    expect(resolveLocale(['en-GB', 'es-ES'])).toBe('en')
-    expect(resolveLocale(['fr-FR', 'es-ES'])).toBe('es')
+  it('con un solo idioma ofrecido ignora el navegador y el idioma de la persona', () => {
+    expect(resolveAppLocale({ policy: ONLY_SPANISH, personal: 'en', browser: ['en-GB'] })).toBe(
+      'es',
+    )
+  })
+
+  it('con dos idiomas elige el de la persona y despues el del navegador', () => {
+    expect(resolveAppLocale({ policy: BOTH, personal: 'en', browser: ['es-ES'] })).toBe('en')
+    expect(resolveAppLocale({ policy: BOTH, personal: null, browser: ['en-GB', 'es-ES'] })).toBe(
+      'en',
+    )
   })
 
   it('cae al idioma por defecto cuando ninguna preferencia encaja', () => {
-    expect(resolveLocale(['fr-FR', 'de-DE'])).toBe(DEFAULT_LOCALE)
-    expect(resolveLocale([])).toBe(DEFAULT_LOCALE)
+    expect(resolveAppLocale({ policy: BOTH, browser: ['fr-FR', 'de-DE'] })).toBe(DEFAULT_LOCALE)
+    expect(resolveAppLocale({ policy: BOTH, browser: [] })).toBe(DEFAULT_LOCALE)
   })
 
   it('rechaza lo que no es un idioma soportado sin suponer que es texto', () => {

@@ -9,6 +9,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\Credentials;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -93,6 +94,8 @@ it('rechaza un cese posterior a hoy con 422 en terminated_at y no cambia nada', 
 })->group('RN-14', 'RF-GP-03');
 
 it('dice lo mismo en ingles a quien pide ingles', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     FrozenTime::at('2026-10-02 10:00:00');
     $persona = personaParaLaBajaConFecha();
     $antes = estadoAntesDeLaBajaConFecha($persona);

@@ -20,6 +20,7 @@ import { todayInZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
 import { useQuery } from '@tanstack/vue-query'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type { CreateEmployeeRequest, EmployeeProvisioned } from '@/shared/api/types'
@@ -31,13 +32,14 @@ const props = defineProps<{ timezone: string }>()
 const emit = defineEmits<{ close: []; created: [EmployeeProvisioned] }>()
 
 const { t } = useI18n()
+const { locales: offered, multilingual, defaultLocale } = useOfferedLocales()
 
 const departmentId = ref<number | null>(null)
 const firstName = ref('')
 const lastName = ref('')
 const email = ref('')
 const nationalId = ref('')
-const locale = ref('es')
+const locale = ref<string>(defaultLocale.value)
 const hiredAt = ref(todayInZone(props.timezone))
 const teleworking = ref(false)
 
@@ -66,7 +68,7 @@ async function submit(): Promise<void> {
     email: email.value.trim() === '' ? null : email.value.trim(),
     national_id: nationalId.value.trim() === '' ? null : nationalId.value.trim(),
     hired_at: hiredAt.value,
-    locale: locale.value,
+    ...(multilingual.value ? { locale: locale.value } : {}),
     teleworking: teleworking.value,
   }
 
@@ -204,10 +206,11 @@ const inputClass =
         />
       </FormField>
 
-      <FormField v-slot="field" :label="t('employees.fields.locale')">
+      <FormField v-if="multilingual" v-slot="field" :label="t('employees.fields.locale')">
         <select :id="field.id" v-model="locale" :class="inputClass">
-          <option value="es">{{ t('common.locales.es') }}</option>
-          <option value="en">{{ t('common.locales.en') }}</option>
+          <option v-for="option in offered" :key="option" :value="option">
+            {{ t(`common.locales.${option}`) }}
+          </option>
         </select>
       </FormField>
 

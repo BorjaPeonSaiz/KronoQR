@@ -31,6 +31,7 @@ import {
   parseBranding,
   PRODUCT_BRANDING,
   type Branding,
+  type LocalePolicy,
   type PrivacyNotice,
 } from '@kronoqr/web-kit/branding'
 import { readonly, ref, watch, type Ref } from 'vue'
@@ -88,6 +89,15 @@ export function applyCachedBranding(): void {
  */
 export function readPrivacyNotice(): PrivacyNotice {
   return (readCachedBranding() ?? PRODUCT_BRANDING).privacyNotice
+}
+
+/**
+ * Los idiomas que ofrece la instalacion segun la copia guardada, sin red (RF-KI-05).
+ * Sin copia, o con una anterior que no los traiga, son los del producto: espanol
+ * de serie, sin selector.
+ */
+export function readCachedLocalePolicy(): LocalePolicy {
+  return (readCachedBranding() ?? PRODUCT_BRANDING).locales
 }
 
 export interface UseBrandingOptions {

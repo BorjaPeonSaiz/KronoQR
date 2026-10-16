@@ -251,7 +251,6 @@ describe('AccountsView', () => {
       name: 'Dirección RRHH',
       email: 'rrhh@hotel.example',
       role: 'rrhh',
-      locale: 'es',
       actor_totp_code: '123456',
     })
     expect(wrapper.find('[data-test="password-value"]').text()).toBe('Kd2pQ9vLmN4tZbYc#F1w')

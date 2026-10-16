@@ -14,13 +14,18 @@
 // EL IDIOMA LO DECIDE EL PROYECTO (`playwright.screenshots.config.ts`: `es` o
 // `en`), y `stubPortalApi(page, { locale })` hace que la SESION que emite el
 // doble sea de ese idioma: sin eso, el portal volveria al español en cuanto
-// llega `PortalEmployee.locale` (el `watch` de `main.ts` lo adopta, no el del
+// llega `PortalEmployee.locale` (`bindPortalLocale` lo adopta si la marca ofrece los dos idiomas, no el del
 // navegador).
 import { expect, test } from '@playwright/test'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PORTAL_EMPLOYEE_CODE, PORTAL_PIN, stubPortalApi } from '../e2e/support/portal'
+import {
+  BILINGUAL_BRANDING,
+  PORTAL_EMPLOYEE_CODE,
+  PORTAL_PIN,
+  stubPortalApi,
+} from '../e2e/support/portal'
 
 type Locale = 'es' | 'en'
 
@@ -101,7 +106,7 @@ test('genera las cuatro capturas del portal del empleado', async ({ page }, test
     })
   }
 
-  await stubPortalApi(page, { locale })
+  await stubPortalApi(page, { locale, branding: BILINGUAL_BRANDING })
 
   // 1. Acceso: codigo de empleado y PIN RELLENOS, antes de enviar.
   await page.goto('/login')

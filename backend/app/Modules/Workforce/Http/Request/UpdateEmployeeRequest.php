@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
+use App\Http\Rules\ActiveLocale;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
 use App\Modules\Workforce\Domain\Model\Employee;
@@ -26,7 +27,7 @@ final class UpdateEmployeeRequest extends FormRequest
     }
 
     /**
-     * @return array<string, list<string>>
+     * @return array<string, list<mixed>>
      */
     public function rules(): array
     {
@@ -36,7 +37,8 @@ final class UpdateEmployeeRequest extends FormRequest
             'last_name' => ['sometimes', 'string', 'max:150'],
             'email' => ['sometimes', 'nullable', 'string', 'email:rfc', 'max:190'],
             'status' => ['sometimes', 'string', 'in:'.EmploymentStatus::ACTIVE->value.','.EmploymentStatus::SUSPENDED->value],
-            'locale' => ['sometimes', 'string', 'min:2', 'max:10'],
+            // Uno de los idiomas activos de la instalacion. Fuera de la lista, 422.
+            'locale' => ['sometimes', 'string', ActiveLocale::rule()],
             // Informativo (RF-GP-01). No anulable: `null` responde `422`.
             'teleworking' => ['sometimes', 'boolean'],
         ];

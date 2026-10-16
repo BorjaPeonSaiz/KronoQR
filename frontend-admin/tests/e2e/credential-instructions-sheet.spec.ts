@@ -8,7 +8,7 @@
 //     entregan la tarjeta, el PIN y la hoja (decision 10 de la ficha).
 import { expect, test } from '@playwright/test'
 import type { CredentialStatusBoard } from '@/shared/api/types'
-import { EMPLOYEE_UUID, logIn, stubManagementApi } from './support/admin'
+import { BILINGUAL_BRANDING, EMPLOYEE_UUID, logIn, stubManagementApi } from './support/admin'
 
 /** Una persona con tarjeta impresa, esperando a que se le entregue: la unica
  *  fila donde aparece el boton «Registrar la entrega». */
@@ -47,8 +47,8 @@ test(
   'hay un boton de la hoja de instrucciones por cada idioma activo de la instalacion',
   { tag: ['@RL-05'] },
   async ({ page }) => {
-    // `PRODUCT_BRANDING` (por omision del doble) trae `locales.available: ['es', 'en']`.
-    await stubManagementApi(page)
+    // La hoja ofrece un boton por idioma activo: hace falta la instalacion bilingue.
+    await stubManagementApi(page, { branding: BILINGUAL_BRANDING })
     await logIn(page)
     await page.goto('/credentials')
 
@@ -67,7 +67,7 @@ test(
   'descargar la hoja en un idioma pide ese locale al servidor',
   { tag: ['@RL-05'] },
   async ({ page }) => {
-    const api = await stubManagementApi(page)
+    const api = await stubManagementApi(page, { branding: BILINGUAL_BRANDING })
     await logIn(page)
     await page.goto('/credentials')
 

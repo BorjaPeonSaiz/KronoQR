@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\UseCase;
 
+use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Application\Port\EmployeeImportSource;
@@ -68,6 +69,7 @@ final readonly class PlanEmployeeImport
         private EmployeeImportSource $source,
         private EmployeeImportDirectory $directory,
         private EmployeeRepository $employees,
+        private LocalePolicyProvider $locales,
     ) {}
 
     /**
@@ -209,6 +211,8 @@ final readonly class PlanEmployeeImport
             return ImportRow::rejected($line, $this->labelOf($employee), $errors);
         }
 
+        [$employee, $localeWarnings] = $this->withActiveLocale($employee);
+
         // Se apunta DESPUES de validar: una linea ya rechazada no debe consumir
         // ni la clave ni el correo, y hacer que la siguiente —correcta— salga
         // como duplicada de algo que no se llego a importar.
@@ -230,9 +234,44 @@ final readonly class PlanEmployeeImport
                 $employee,
                 $existing->uuid,
                 $this->changesFor($existing, $employee, $departments),
-                $this->hiredAtWarning($existing, $employee),
+                [...$this->hiredAtWarning($existing, $employee), ...$localeWarnings],
             )
-            : ImportRow::created($line, $employee);
+            : ImportRow::created($line, $employee, $localeWarnings);
+    }
+
+    /**
+     * **Un idioma que la instalacion no tiene activo no rechaza la linea**
+     * (bloque 26 de la 2.2.1, regla dura 13).
+     *
+     * Se trata como una celda vacia —el alta toma el idioma de la instalacion
+     * (`LOCALE_DEFAULT`) y una ficha que ya existe conserva el suyo— y se dice
+     * con un aviso de esa linea. Rechazarla dejaria fuera a una persona por un
+     * dato que no afecta a su registro horario, y el caso tipico es un `en`
+     * exportado de otro sistema en una instalacion que solo tiene el español.
+     *
+     * Se compara sin distinguir mayusculas y se guarda en la forma de la lista
+     * (`ES` del fichero se guarda como `es`).
+     *
+     * @return array{0: ImportedEmployee, 1: list<ImportMessage>}
+     */
+    private function withActiveLocale(ImportedEmployee $employee): array
+    {
+        if ($employee->locale === null) {
+            return [$employee, []];
+        }
+
+        $wanted = mb_strtolower($employee->locale);
+
+        foreach ($this->locales->current()->available as $locale) {
+            if (mb_strtolower($locale) === $wanted) {
+                return [$employee->withLocale($locale), []];
+            }
+        }
+
+        return [
+            $employee->withLocale(null),
+            [ImportMessage::of(ImportMessageCode::LOCALE_NOT_ACTIVE, 'locale')],
+        ];
     }
 
     /**

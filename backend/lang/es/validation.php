@@ -12,7 +12,9 @@ declare(strict_types=1);
  * no «boolean».
  *
  * El idioma de la respuesta lo elige `NegotiateLocale` con `Accept-Language`,
- * dentro de `APP_SUPPORTED_LOCALES`.
+ * dentro de los idiomas activos de la instalacion (`LOCALE_AVAILABLE`; de serie,
+ * solo `es`). `APP_SUPPORTED_LOCALES` es solo el respaldo si la base de datos
+ * no responde.
  */
 
 return [

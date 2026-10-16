@@ -7305,7 +7305,8 @@ export interface components {
             /** Format: email */
             email: string;
             /**
-             * @description Idioma del panel para esta persona (ES y EN de serie).
+             * @description Idioma del panel para esta persona. Traducciones incluidas: ES y
+             *     EN; activo de serie, solo ES (`LOCALE_AVAILABLE`).
              * @example es
              */
             locale: string;
@@ -7480,9 +7481,9 @@ export interface components {
             email: string;
             role: components["schemas"]["ManagementRole"];
             /**
-             * @description Idioma del panel para esta cuenta, uno de los activos en la
-             *     instalacion (`APP_SUPPORTED_LOCALES`). Sin el, el de la instalacion
-             *     (`APP_LOCALE`).
+             * @description Idioma del panel para esta cuenta, uno de los idiomas activos de la
+             *     instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
+             *     la lista es `422`.
              * @example es
              */
             locale?: string;
@@ -7658,7 +7659,11 @@ export interface components {
              *     futura, y se devuelve tal cual.
              */
             terminated_at: string | null;
-            /** @example es */
+            /**
+             * @description Idioma de la persona. Al fijarse es uno de los idiomas activos de
+             *     la instalacion (`LOCALE_AVAILABLE`).
+             * @example es
+             */
             locale: string;
             teleworking: components["schemas"]["Teleworking"];
             pin_status: components["schemas"]["PinStatus"];
@@ -7811,8 +7816,12 @@ export interface components {
             national_id?: string | null;
             /** Format: date */
             hired_at: string;
-            /** @default es */
-            locale: string;
+            /**
+             * @description Idioma de la persona, uno de los idiomas activos de la
+             *     instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
+             *     la lista es `422`.
+             */
+            locale?: string;
             teleworking?: components["schemas"]["Teleworking"];
         };
         /**
@@ -7835,6 +7844,11 @@ export interface components {
              * @enum {string}
              */
             status?: "active" | "suspended";
+            /**
+             * @description Idioma de la persona, uno de los idiomas activos de la
+             *     instalacion (`LOCALE_AVAILABLE`). Sin el, no cambia. Fuera de la
+             *     lista es `422`.
+             */
             locale?: string;
             teleworking?: components["schemas"]["Teleworking"];
         };
@@ -8020,9 +8034,15 @@ export interface components {
                 /** @description Idioma con el que se sirven las aplicaciones cuando nadie elige otro (`LOCALE_DEFAULT`). */
                 default: string;
                 /**
-                 * @description Idiomas que la instalacion ofrece (`LOCALE_AVAILABLE`). El
-                 *     selector del quiosco no enseña ninguno fuera de esta lista, y
-                 *     el idioma por defecto esta siempre dentro de ella.
+                 * @description Idiomas que la instalacion ofrece (`LOCALE_AVAILABLE`); el
+                 *     idioma por defecto esta siempre dentro de ella. De serie es
+                 *     `[es]`. **Con un unico idioma**, las tres aplicaciones no
+                 *     enseñan selector ni campo de idioma y no siguen el idioma del
+                 *     navegador: todo sale en ese idioma. Con varios, ninguna
+                 *     aplicacion ofrece uno fuera de esta lista, y el orden es: el
+                 *     idioma de la persona (la eleccion guardada en la tablet, o el
+                 *     de la ficha o la cuenta), si esta en la lista; si no, el del
+                 *     navegador, si esta en la lista; y si no, `default`.
                  */
                 available: string[];
             };
@@ -12602,10 +12622,11 @@ export interface components {
              */
             password: string;
             /**
-             * @description Idioma del panel para esta cuenta.
-             * @default es
+             * @description Idioma del panel para esta cuenta, uno de los idiomas activos de la
+             *     instalacion (`LOCALE_AVAILABLE`). Sin el, `LOCALE_DEFAULT`. Fuera de
+             *     la lista es `422`.
              */
-            locale: string;
+            locale?: string;
             /**
              * @description Nombre con el que se guarda la sesion, igual que en `/auth/login`. Sin
              *     PII: es «Panel de gestion», no el nombre de una persona.
@@ -12670,8 +12691,14 @@ export interface components {
         EmployeeImportMessage: {
             /**
              * @description **`unknown_column` viaja en `file.warnings`, no en una fila**: es del
-             *     fichero entero. `hired_at_not_updated` es un aviso de fila y no la
-             *     impide. Los demas rechazan la fila que los lleva.
+             *     fichero entero. `hired_at_not_updated` y `locale_not_active` son
+             *     avisos de fila y no la impiden. Los demas rechazan la fila que los
+             *     lleva.
+             *
+             *     **`locale_not_active`** (2.2.1): el idioma de la fila no esta entre
+             *     los activos de la instalacion (`LOCALE_AVAILABLE`). La fila se
+             *     importa igual: un alta toma `LOCALE_DEFAULT` y una ficha que ya
+             *     existe conserva su idioma, asi que `locale` no aparece en `changes`.
              *
              *     **`employee_terminated`** (2.2.0): la fila corresponde a una persona
              *     dada de baja. La importacion no modifica su ficha ni la da de alta
@@ -12690,7 +12717,7 @@ export interface components {
              *     comprobacion, antes de escribir nada.
              * @enum {string}
              */
-            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "unknown_column";
+            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "unknown_column" | "locale_not_active";
             /** @enum {string} */
             severity: "error" | "warning";
             /** @description Columna del fichero a la que se refiere, si es a una. */

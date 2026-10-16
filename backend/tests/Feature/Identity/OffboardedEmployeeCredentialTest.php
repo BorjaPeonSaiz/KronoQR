@@ -11,6 +11,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -85,6 +86,8 @@ it('no reemite a una persona de baja ni revoca la tarjeta que ya tenia', functio
 })->group('RN-14', 'RF-QR-01');
 
 it('responde en ingles cuando la peticion lo pide', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     $context = offboardedCredentialContext();
     WorkforceFixtures::terminate($context['employee']);
 

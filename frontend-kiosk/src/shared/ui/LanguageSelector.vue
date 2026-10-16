@@ -8,47 +8,56 @@
 // FILTRADO POR LA MARCA (RF-PD-08, tarea 5.8). `policy` es la que trae
 // `GET /api/v1/branding`: los idiomas que la INSTALACION ofrece, no los que
 // esta version de la aplicacion trae traducidos. `offeredLocales` (web-kit)
-// cruza las dos listas y nunca deja el selector vacio. Sin `policy` (las
-// pantallas de emparejamiento y de PIN, que no llevan marca todavia) se
-// ofrecen los dos de siempre: es el mismo comportamiento que habia antes de
-// esta tarea.
-import type { LocalePolicy } from '@kronoqr/web-kit/branding'
-import { offeredLocales } from '@kronoqr/web-kit/branding'
+// cruza las dos listas y nunca deja el selector vacio. Sin `policy` se usa la
+// de la copia guardada de la marca (`readCachedLocalePolicy`), que sin copia es
+// la del producto: solo espanol, y entonces el selector ni se pinta.
+import { offeredLocales, resolveUiLocale, type LocalePolicy } from '@kronoqr/web-kit/branding'
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { readCachedLocalePolicy } from '@/shared/branding/useBranding'
 import type { AppLocale } from '@/shared/i18n'
-import { isSupportedLocale, SUPPORTED_LOCALES, storeLocale } from '@/shared/i18n'
+import { isSupportedLocale, readStoredLocale, SUPPORTED_LOCALES, storeLocale } from '@/shared/i18n'
 
 const props = defineProps<{ policy?: LocalePolicy }>()
 
 const { locale, t } = useI18n()
 
+const effectivePolicy = computed<LocalePolicy>(() => props.policy ?? readCachedLocalePolicy())
+
 const options = computed<readonly AppLocale[]>(() =>
-  props.policy === undefined ? SUPPORTED_LOCALES : offeredLocales(props.policy, SUPPORTED_LOCALES),
+  offeredLocales(effectivePolicy.value, SUPPORTED_LOCALES),
 )
 
-function select(next: AppLocale): void {
+function apply(next: AppLocale): void {
   locale.value = next
-  storeLocale(next)
   if (typeof document !== 'undefined') document.documentElement.lang = next
 }
 
-// Si la instalacion deja de ofrecer el idioma activo (la marca llega DESPUES
-// del arranque, cuando ya se habia elegido uno), se cambia solo: al
-// predeterminado de la instalacion si esta entre los ofrecidos, si no al
-// primero de la lista. Nunca se deja el selector marcando un idioma que ya no
-// esta entre los botones.
+function select(next: AppLocale): void {
+  apply(next)
+  storeLocale(next)
+}
+
+// La marca llega DESPUES del arranque y su politica de idiomas puede cambiar.
+// Dos casos, ninguno guarda nada (no es una eleccion de nadie):
+//   - el idioma activo ya no se ofrece: se recalcula (con uno solo, ese);
+//   - la politica cambia y no hay eleccion guardada: se recalcula con el
+//     navegador, como en el arranque.
+// Una eleccion guardada que sigue ofrecida no se toca.
 watch(
   options,
-  (next) => {
-    if (isSupportedLocale(locale.value) && next.includes(locale.value)) return
-    const fallback =
-      props.policy !== undefined &&
-      isSupportedLocale(props.policy.default) &&
-      next.includes(props.policy.default)
-        ? props.policy.default
-        : next[0]
-    if (fallback !== undefined) select(fallback)
+  (next, previous) => {
+    const current = isSupportedLocale(locale.value) && next.includes(locale.value)
+    const changed = previous !== undefined
+    if (current && !(changed && readStoredLocale() === null)) return
+    apply(
+      resolveUiLocale<AppLocale>({
+        policy: effectivePolicy.value,
+        shipped: SUPPORTED_LOCALES,
+        stored: readStoredLocale(),
+        browser: typeof navigator === 'undefined' ? [] : navigator.languages,
+      }),
+    )
   },
   { immediate: true },
 )

@@ -411,8 +411,44 @@ section 3 bis.3.
 
 | Key | Default | What it is |
 | --- | --- | --- |
-| `LOCALE_AVAILABLE` | `["es","en"]` | Languages the installation offers. Only those the product ships translated are accepted. |
+| `LOCALE_AVAILABLE` | `["es"]` | Languages the installation offers. Only those the product ships translated are accepted: today, `es` and `en`. |
 | `LOCALE_DEFAULT` | `es` | Language the applications and documents are served in when the browser does not ask for another. |
+
+**Spanish only by default.** The product ships with English translated, but a
+new installation does not offer it: with **a single active language**, the
+kiosk, the panel and the portal always come out in that language, **show no
+language selector**, employee and account records have no "Language" field and
+**the browser language is not followed**. A tablet whose system is in English
+shows the kiosk in Spanish.
+
+**How to turn English on.** Panel → **Operational settings** → **Languages**:
+tick English under "Available languages" and save. Nothing has to be restarted
+and the `.env` is not touched: the server offers it from the next request. The
+applications pick it up like this: **the panel and the portal, when the page is
+reloaded**; **tablets, when they refresh the branding**, which is when the kiosk
+app starts or when it gets its connection back (to avoid waiting, reload the app
+on the tablet). From then on:
+
+- the kiosk shows the language selector, and each tablet remembers the one
+  chosen on it;
+- the panel and the portal come out in **the person's language** (the one on
+  their record or account); if they have no active one, in the browser's, if it
+  is among the active ones; and failing that, in the installation's default
+  language;
+- employee and account records show the "Language" field.
+
+To go back to Spanish only, untick it. If you want the installation to work in
+English by default, tick it, make it the default language and save both changes
+together.
+
+> **Updating from 2.2.0 or earlier changes nothing.** An installation that was
+> already in use keeps Spanish and English active, which is what it had: the
+> update writes that into this key and **Operational settings** shows it that
+> way. If nobody uses English, untick it whenever you like.
+
+> **A language you turn off is not erased from any record.** Whoever had English
+> stored keeps it; while English is not active, the applications show them the
+> installation language. Turn it back on and they get theirs back.
 
 **These two keys are now the ones that rule.** `APP_LOCALE` and
 `APP_SUPPORTED_LOCALES` in the `.env` remain only as a fallback: they apply if
@@ -972,6 +1008,16 @@ columns do no harm: the unused ones are reported and ignored.
 
 **Names are compared ignoring case, accents and separators**: `Fecha de alta`,
 `FECHA_ALTA` and `fecha alta` are the same column.
+
+> **The Language column is only useful with more than one active language**
+> (section 2.3). It is written as the language code: `es` or `en`, upper or lower
+> case. If the cell holds a language the installation **does not have active**
+> —typically an `en` exported from another program into a Spanish-only
+> installation—, **the row is imported anyway** with the warning "The language
+> in this row is not active on this installation": a new record gets the
+> installation language and an existing one keeps its own. If you really want to
+> offer that language, turn it on and import the file again. Without the column,
+> or with an empty cell, a new record gets the installation language.
 
 > **Document or email, at least one.** It is not a whim: it is what makes it
 > possible to **re-import the same file without duplicating anyone**. If a line
@@ -1844,7 +1890,7 @@ lines.
 | `APP_TIMEZONE` | `[FIJO]` | Time zone of the process | `UTC` | **Never.** Every instant is stored in UTC and the conversion to local time happens on presentation. The **site's** time zone is something else: it is chosen at start-up and **becomes fixed with the first clock-in** (RN-23). Until then it is changed in the panel, on the departments screen, “Site” section; after that the panel shows it without letting you edit it. If it was set wrongly, it is corrected on the server with `docker compose exec app php artisan workforce:correct-site-timezone <zone> --reason="…" --responsible=<id>`, which asks for confirmation, leaves an audit entry and **does not move any work day already recorded**: the history is then shown in the corrected zone. If there are shifts close to midnight, talk to your legal advisers first. Changing this invalidates the working-day calculation and strips the working-time record of its legal value; the installer does not even offer to touch it | **Yes** — changing it invalidates the record |
 | `APP_LOCALE` | — | Fallback language of the API and of the documents if the database does not answer | `es` | Almost never: `LOCALE_DEFAULT` in the panel rules (section 2.3) | No |
 | `APP_FALLBACK_LOCALE` | — | Language fallen back on if a translation is missing | `es` | Almost never | No |
-| `APP_SUPPORTED_LOCALES` | — | Languages the API accepts negotiating, as a fallback | `es,en` | Almost never: `LOCALE_AVAILABLE` in the panel rules (section 2.3) | No |
+| `APP_SUPPORTED_LOCALES` | — | Languages the API accepts negotiating, as a fallback | `es` | Almost never: `LOCALE_AVAILABLE` in the panel rules (section 2.3). **This is not where English is turned on**: that is done in the panel | No |
 
 ### 6.2 Database
 

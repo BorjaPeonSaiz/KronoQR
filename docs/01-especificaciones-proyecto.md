@@ -238,7 +238,7 @@ Nomenclatura: `RF-<módulo>-<nº>`. Prioridad MoSCoW: **M**ust / **S**hould / **
 | RF-KI-02 | Escaneo continuo por cámara sin interacción del usuario. | M |
 | RF-KI-03 | **Modo offline**: cola local persistente (IndexedDB) de escaneos, con resolución local del empleado contra un padrón cacheado y cifrado, y confirmación provisional al usuario. | M |
 | RF-KI-04 | Sincronización automática al recuperar conexión, con reintentos y *backoff* exponencial. Indicador visible de estado de conexión y elementos pendientes. **En orden y sin adelantar a un fichaje anterior que siga sin decidir** (RN-21), y **sin olvidar nada que el servidor no haya decidido**: lo que el servidor declara inválido se avisa y abre incidencia (RN-22). Si IndexedDB falla, la cola se reabre antes de caer a memoria, y en memoria no declara una cola vacía que no conoce. | M |
-| RF-KI-05 | Multiidioma (mínimo español e inglés, extensible) con selector persistente y detección automática. | M |
+| RF-KI-05 | Multiidioma (traducciones incluidas español e inglés, extensible). Selector persistente y detección automática del idioma del navegador **solo cuando la instalación tiene más de un idioma activo** (`LOCALE_AVAILABLE`); de serie, solo español, y entonces ni selector ni detección. El inglés se activa por configuración, sin tocar el código. | M |
 | RF-KI-06 | Accesibilidad: contraste AA, tipografía ≥ 24 px en mensajes de confirmación, mensajes también sonoros. | M |
 | RF-KI-07 | Actualización de la app controlada: no se actualiza durante un cambio de turno; ventana de actualización configurable. **La ventana se lee en la hora del centro** (`sites.timezone`, que el quiosco recibe en el latido), no en la zona que tenga configurada la tablet; hasta recibirla, usa la de la tablet. | S |
 | RF-KI-08 | Pantalla de diagnóstico accesible con código de servicio: estado de cámara, red, cola, token y versión. | S |
@@ -749,7 +749,7 @@ WCAG 2.2 nivel AA en el panel y el portal. En el quiosco, además: objetivos tá
 
 ### 6.6 Internacionalización
 
-Todos los textos externalizados. Idiomas iniciales: español e inglés. Preparado para catalán, rumano y árabe, incluido soporte RTL. Formatos de fecha, hora y primer día de semana según *locale*.
+Todos los textos externalizados. Traducciones incluidas: español e inglés; **activo de serie, solo español** (`LOCALE_AVAILABLE=es`, decisión del propietario del 13-10-2026, bloque 26 de la 2.2.1). Activar el inglés es configuración (`LOCALE_AVAILABLE=es,en`); con un único idioma activo, las tres aplicaciones no enseñan selector ni campo de idioma y no siguen el idioma del navegador. Preparado para catalán, rumano y árabe, incluido soporte RTL. Formatos de fecha, hora y primer día de semana según *locale*.
 
 ### 6.7 Portabilidad
 

@@ -119,7 +119,9 @@ it('sirve la marca del producto, sin autenticar, cuando no hay ninguna fila', fu
         ->and($response->json('accent_color'))->toBeNull()
         ->and($response->json('logo_url'))->toBeNull()
         ->and($response->json('locales.default'))->toBe('es')
-        ->and($response->json('locales.available'))->toBe(['es', 'en']);
+        // Solo el español de serie (bloque 26 de la 2.2.1): el ingles se activa
+        // por configuracion.
+        ->and($response->json('locales.available'))->toBe(['es']);
 })->group('RF-PD-08');
 
 it('sirve el nombre y el color que el cliente ha configurado', function (): void {
@@ -609,7 +611,7 @@ it('responde 200 con la marca del producto aunque la configuracion sea ilegible'
         ->and($response->json('logo_url'))->toBeNull()
         // Y con idiomas utilizables: una lista vacia dejaria al quiosco sin
         // selector y al portal sin saber en que idioma pintarse.
-        ->and($response->json('locales.available'))->toBe(['es', 'en']);
+        ->and($response->json('locales.available'))->toBe(['es']);
 })->group('RF-PD-08');
 
 // --- RF-KI-09, RL-09: el aviso de privacidad del quiosco (2.2.0) -------------

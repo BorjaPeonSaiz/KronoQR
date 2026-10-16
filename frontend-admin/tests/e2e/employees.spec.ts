@@ -9,7 +9,14 @@ import type { Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import type { Employee, EmploymentContract } from '@/shared/api/types'
-import { EMPLOYEE, EMPLOYEE_UUID, logIn, logInAsManager, stubManagementApi } from './support/admin'
+import {
+  BILINGUAL_BRANDING,
+  EMPLOYEE,
+  EMPLOYEE_UUID,
+  logIn,
+  logInAsManager,
+  stubManagementApi,
+} from './support/admin'
 
 const CURRENT_CONTRACT: EmploymentContract = {
   id: 58,
@@ -235,6 +242,61 @@ test(
 
     expect(created?.body).toMatchObject({ teleworking: true })
     await expect(page.getByRole('row', { name: /Marta Soler/ })).toContainText('Teletrabaja')
+  },
+)
+
+test(
+  'con un solo idioma la ficha de alta no tiene campo idioma y no envia locale',
+  { tag: ['@RF-GP-01', '@RF-PD-01'] },
+  async ({ page }) => {
+    const stub = await stubManagementApi(page)
+    await logIn(page)
+    await page.goto('/employees')
+
+    await page.getByRole('button', { name: 'Dar de alta' }).click()
+
+    const dialog = page.getByRole('dialog', { name: 'Alta de empleado' })
+
+    await expect(dialog.getByLabel('Idioma')).toHaveCount(0)
+
+    await dialog.getByLabel(/^Nombre/).fill('Marta')
+    await dialog.getByLabel(/^Apellidos/).fill('Soler')
+    await dialog.getByRole('button', { name: 'Dar de alta' }).click()
+    await page.getByRole('button', { name: 'Ya lo he anotado, lo entregaré después' }).click()
+
+    const created = stub.requests.find(
+      (request) => request.method === 'POST' && request.path === '/api/v1/employees',
+    )
+
+    expect(created?.body).not.toHaveProperty('locale')
+  },
+)
+
+test(
+  'con el ingles activado la ficha de alta ofrece los dos idiomas y envia el elegido',
+  { tag: ['@RF-GP-01', '@RF-PD-01'] },
+  async ({ page }) => {
+    const stub = await stubManagementApi(page, { branding: BILINGUAL_BRANDING })
+    await logIn(page)
+    await page.goto('/employees')
+
+    await page.getByRole('button', { name: 'Dar de alta' }).click()
+
+    const dialog = page.getByRole('dialog', { name: 'Alta de empleado' })
+    const language = dialog.getByLabel('Idioma')
+
+    await expect(language.getByRole('option')).toHaveCount(2)
+    await dialog.getByLabel(/^Nombre/).fill('Marta')
+    await dialog.getByLabel(/^Apellidos/).fill('Soler')
+    await language.selectOption('en')
+    await dialog.getByRole('button', { name: 'Dar de alta' }).click()
+    await page.getByRole('button', { name: 'Ya lo he anotado, lo entregaré después' }).click()
+
+    const created = stub.requests.find(
+      (request) => request.method === 'POST' && request.path === '/api/v1/employees',
+    )
+
+    expect(created?.body).toMatchObject({ locale: 'en' })
   },
 )
 

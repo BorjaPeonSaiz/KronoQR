@@ -8,6 +8,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -101,6 +102,8 @@ it('rechaza con 422 en work_date la jornada posterior al cese y no escribe nada'
 })->group('RN-14', 'RF-PA-04');
 
 it('rechaza la jornada anterior al alta de una persona de baja, tambien en ingles', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     $contexto = contextoDelTramoDeUnaBaja();
 
     Api::as($contexto['token'])

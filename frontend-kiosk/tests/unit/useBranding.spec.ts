@@ -5,7 +5,11 @@
 import { PRODUCT_BRANDING } from '@kronoqr/web-kit/branding'
 import { readonly, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyCachedBranding, useBranding } from '@/shared/branding/useBranding'
+import {
+  applyCachedBranding,
+  readCachedLocalePolicy,
+  useBranding,
+} from '@/shared/branding/useBranding'
 import type { ApiClient, ApiResult } from '@/shared/api/client'
 import type { Branding as RawBranding } from '@/shared/api/types'
 import type {
@@ -174,5 +178,33 @@ describe('applyCachedBranding', () => {
     applyCachedBranding()
 
     expect(document.title).toBe('KronoQR')
+  })
+})
+
+describe('readCachedLocalePolicy (RF-KI-05)', () => {
+  it('sin copia guardada, es la del producto: solo espanol', () => {
+    expect(readCachedLocalePolicy()).toEqual(PRODUCT_BRANDING.locales)
+    expect(readCachedLocalePolicy().available).toEqual(['es'])
+  })
+
+  it('con una copia de un solo idioma, devuelve ese', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(HOTEL))
+
+    expect(readCachedLocalePolicy()).toEqual({ default: 'es', available: ['es'] })
+  })
+
+  it('con una copia bilingue, devuelve los dos', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...HOTEL, locales: { default: 'es', available: ['es', 'en'] } }),
+    )
+
+    expect(readCachedLocalePolicy()).toEqual({ default: 'es', available: ['es', 'en'] })
+  })
+
+  it('con una copia rota, cae a la del producto', () => {
+    localStorage.setItem(STORAGE_KEY, '{no es json')
+
+    expect(readCachedLocalePolicy()).toEqual(PRODUCT_BRANDING.locales)
   })
 })

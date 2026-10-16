@@ -6,6 +6,8 @@ import { useBrandingStore } from '@/shared/branding/branding.store'
 import type { Branding } from '@/shared/api/types'
 import es from '@/shared/i18n/locales/es.json'
 import en from '@/shared/i18n/locales/en.json'
+import { createAppI18n } from '@/shared/i18n'
+import { bindPortalLocale } from '@/shared/i18n/portalLocale'
 import { brandingPayload, employeeWorkDays, portalEmployee } from './support/fixtures'
 import {
   createTestPinia,
@@ -209,5 +211,47 @@ describe('AppShellView: estados del enlace de navegacion (V7-UX-01)', () => {
     // on-primary-soft sobre primary-soft (medida en themePairs.ts).
     expect(idleClasses).toContain('active:bg-kq-primary-soft')
     expect(idleClasses).toContain('active:text-kq-on-primary-soft')
+  })
+  describe('idioma segun la politica de la marca (RF-PD-08)', () => {
+    /** Monta el portal con el idioma atado como en `main.ts`, navegador en ingles. */
+    async function mountBound(available: string[]): Promise<Awaited<ReturnType<typeof mountView>>> {
+      const pinia = createTestPinia()
+      const session = useSessionStore(pinia)
+
+      session.employee = portalEmployee({ locale: 'en' })
+      await loadBranding(pinia, { locales: { default: 'es', available } })
+
+      const branding = useBrandingStore(pinia)
+      const i18n = createAppI18n()
+
+      bindPortalLocale(
+        i18n,
+        () => ({ policy: branding.current.locales, personal: session.employee?.locale }),
+        () => ['en-GB'],
+      )
+
+      const router = createTestRouter()
+
+      await router.push('/records')
+
+      const wrapper = await mountView(App, { pinia, router, i18n })
+
+      await settle()
+
+      return wrapper
+    }
+
+    it('con un solo idioma ofrecido se pinta en espanol aunque la persona y el navegador pidan ingles', async () => {
+      const wrapper = await mountBound(['es'])
+
+      expect(wrapper.text()).toContain(es.app.nav.myRecords)
+      expect(wrapper.text()).not.toContain(en.app.nav.myRecords)
+    })
+
+    it('con dos idiomas ofrecidos se pinta en el de la persona', async () => {
+      const wrapper = await mountBound(['es', 'en'])
+
+      expect(wrapper.text()).toContain(en.app.nav.myRecords)
+    })
   })
 })

@@ -61,6 +61,20 @@ async function pressDigits(wrapper: Awaited<ReturnType<typeof render>>['wrapper'
   }
 }
 
+// El selector de idioma solo se pinta si la instalacion ofrece mas de uno (RF-KI-05).
+function seedBilingualBranding(): void {
+  localStorage.setItem(
+    'kronoqr.kiosk.branding',
+    JSON.stringify({
+      application_name: 'KronoQR',
+      accent_color: null,
+      logo_url: null,
+      locales: { default: 'es', available: ['es', 'en'] },
+      privacy_notice: { controller_name: null, policy_url: null },
+    }),
+  )
+}
+
 beforeEach(async () => {
   await disposeOfflineQueue()
   await resetKioskDatabase()
@@ -286,6 +300,7 @@ describe('vuelta al fichaje (decision 8)', () => {
   })
 
   it('pulsar un control real SI reinicia la cuenta de 120 s', async () => {
+    seedBilingualBranding()
     vi.useFakeTimers()
     const { wrapper, router } = await render()
 
@@ -308,6 +323,7 @@ describe('vuelta al fichaje (decision 8)', () => {
   })
 
   it('techo absoluto de 5 min desde la apertura, aunque haya interaccion continua', async () => {
+    seedBilingualBranding()
     vi.useFakeTimers()
     const { wrapper, router } = await render()
 

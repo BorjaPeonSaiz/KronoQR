@@ -6,6 +6,8 @@
 import { PRODUCT_BRANDING } from '@kronoqr/web-kit/branding'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useBrandingStore } from '@/shared/branding/branding.store'
+import { createAppI18n } from '@/shared/i18n'
+import { bindPortalLocale } from '@/shared/i18n/portalLocale'
 import { brandingPayload } from './support/fixtures'
 import { createTestPinia, jsonResponse, stubFetch } from './support/harness'
 
@@ -93,5 +95,59 @@ describe('tienda de marca del portal', () => {
     createTestPinia()
 
     expect(useBrandingStore().current).toEqual(PRODUCT_BRANDING)
+  })
+})
+
+describe('idioma segun la politica de la marca (RF-PD-08)', () => {
+  const browserEnglish = (): readonly string[] => ['en-GB']
+
+  /** Ata el idioma como lo hace `main.ts`: politica de la marca + persona. */
+  function bind(personal: string | null) {
+    const pinia = createTestPinia()
+    const branding = useBrandingStore(pinia)
+    const i18n = createAppI18n()
+    bindPortalLocale(i18n, () => ({ policy: branding.current.locales, personal }), browserEnglish)
+
+    return { branding, i18n }
+  }
+
+  it('de serie solo hay espanol: el navegador en ingles no lo cambia', () => {
+    const { i18n } = bind(null)
+
+    expect(i18n.global.locale.value).toBe('es')
+  })
+
+  it('con un solo idioma, ni la marca recibida ni el idioma de la persona lo cambian', async () => {
+    const { branding, i18n } = bind('en')
+    stubFetch(() => jsonResponse(brandingPayload()))
+
+    await branding.load()
+
+    expect(branding.current.locales.available).toEqual(['es'])
+    expect(i18n.global.locale.value).toBe('es')
+  })
+
+  it('al llegar una marca bilingue, el idioma se recalcula con el navegador', async () => {
+    const { branding, i18n } = bind(null)
+    stubFetch(() =>
+      jsonResponse(brandingPayload({ locales: { default: 'es', available: ['es', 'en'] } })),
+    )
+
+    expect(i18n.global.locale.value).toBe('es')
+
+    await branding.load()
+
+    expect(i18n.global.locale.value).toBe('en')
+  })
+
+  it('con dos idiomas gana el de la persona sobre el del navegador', async () => {
+    const { branding, i18n } = bind('es')
+    stubFetch(() =>
+      jsonResponse(brandingPayload({ locales: { default: 'es', available: ['es', 'en'] } })),
+    )
+
+    await branding.load()
+
+    expect(i18n.global.locale.value).toBe('es')
   })
 })

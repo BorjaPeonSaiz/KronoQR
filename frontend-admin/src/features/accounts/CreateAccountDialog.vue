@@ -14,6 +14,7 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
 import type { ManagementAccountProvisioned, ManagementRole } from '@/shared/api/types'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
 import ActorReauthFields from './ActorReauthFields.vue'
@@ -25,11 +26,14 @@ const ROLES: readonly ManagementRole[] = ['admin', 'rrhh', 'responsable_departam
 const emit = defineEmits<{ close: []; created: [ManagementAccountProvisioned] }>()
 
 const { t, locale: uiLocale } = useI18n()
+const { locales: offered, multilingual, defaultLocale } = useOfferedLocales()
 
 const name = ref('')
 const email = ref('')
 const role = ref<ManagementRole>('rrhh')
-const locale = ref(uiLocale.value === 'en' ? 'en' : 'es')
+const locale = ref<string>(
+  offered.value.find((option) => option === uiLocale.value) ?? defaultLocale.value,
+)
 const submitting = ref(false)
 const error = ref<unknown>(null)
 const reauth = useActorReauth()
@@ -70,7 +74,7 @@ async function submit(): Promise<void> {
         name: name.value.trim(),
         email: email.value.trim(),
         role: role.value,
-        locale: locale.value,
+        ...(multilingual.value ? { locale: locale.value } : {}),
         ...reauth.payload(),
       }),
     )
@@ -162,10 +166,11 @@ const inputClass =
         </select>
       </FormField>
 
-      <FormField v-slot="field" :label="t('accounts.fields.locale')">
+      <FormField v-if="multilingual" v-slot="field" :label="t('accounts.fields.locale')">
         <select :id="field.id" v-model="locale" :class="inputClass" data-test="account-locale">
-          <option value="es">{{ t('common.locales.es') }}</option>
-          <option value="en">{{ t('common.locales.en') }}</option>
+          <option v-for="option in offered" :key="option" :value="option">
+            {{ t(`common.locales.${option}`) }}
+          </option>
         </select>
       </FormField>
 

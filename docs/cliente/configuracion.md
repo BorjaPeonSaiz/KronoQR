@@ -402,8 +402,44 @@ sección 3 bis.3.
 
 | Clave | De serie | Qué es |
 | --- | --- | --- |
-| `LOCALE_AVAILABLE` | `["es","en"]` | Idiomas que la instalación ofrece. Solo se admiten los que el producto trae traducidos. |
+| `LOCALE_AVAILABLE` | `["es"]` | Idiomas que la instalación ofrece. Solo se admiten los que el producto trae traducidos: hoy, `es` y `en`. |
 | `LOCALE_DEFAULT` | `es` | Idioma con el que se sirven las aplicaciones y los documentos cuando el navegador no pide otro. |
+
+**De serie, solo español.** El producto trae el inglés traducido, pero una
+instalación nueva no lo ofrece: con **un único idioma activo**, el quiosco, el
+panel y el portal salen siempre en ese idioma, **no enseñan selector de idioma**,
+las fichas de empleado y de cuenta no tienen campo «Idioma» y **no se sigue el
+idioma del navegador**. Una tablet con el sistema en inglés enseña el quiosco en
+español.
+
+**Cómo se activa el inglés.** Panel → **Ajustes operativos** → **Idiomas**:
+marca el inglés en «Idiomas disponibles» y guarda. No hay que reiniciar nada ni
+tocar el `.env`: el servidor lo ofrece desde la petición siguiente. Las
+aplicaciones lo notan así: **el panel y el portal, al recargar la página**; **las
+tablets, cuando refrescan la marca**, que es al arrancar la app del quiosco o al
+recuperar la conexión (para no esperar, recarga la app en la tablet). Desde ese
+momento:
+
+- el quiosco enseña el selector de idioma, y cada tablet recuerda el que se elija
+  en ella;
+- el panel y el portal salen en **el idioma de la persona** (el de su ficha o su
+  cuenta); si no tiene uno activo, en el del navegador, si está entre los
+  activos; y si tampoco, en el idioma por defecto de la instalación;
+- las fichas de empleado y de cuenta enseñan el campo «Idioma».
+
+Para volver a solo español, desmárcalo. Si quieres que la instalación trabaje en
+inglés por defecto, márcalo, ponlo como idioma por defecto y guarda los
+dos cambios a la vez.
+
+> **Al actualizar desde la 2.2.0 o anterior no cambia nada.** Una instalación que
+> ya estaba en uso conserva el español y el inglés activos, que es lo que tenía:
+> la actualización lo deja escrito en esta clave y la pantalla de **Ajustes
+> operativos** lo muestra así. Si nadie usa el inglés, desmárcalo cuando quieras.
+
+> **Un idioma que desactivas no se borra de ninguna ficha.** Quien tenía el
+> inglés guardado lo conserva; mientras el inglés no esté activo, las
+> aplicaciones le enseñan el idioma de la instalación. Si lo vuelves a activar,
+> recupera el suyo.
 
 **Estas dos claves son ahora las que mandan.** `APP_LOCALE` y
 `APP_SUPPORTED_LOCALES` del `.env` quedan solo como respaldo: se aplican si la
@@ -959,6 +995,16 @@ columnas no molesta: las que no se usan se avisan y se ignoran.
 
 **Los nombres se comparan sin distinguir mayúsculas, tildes ni separadores**:
 `Fecha de alta`, `FECHA_ALTA` y `fecha alta` son la misma columna.
+
+> **La columna Idioma solo sirve con más de un idioma activo** (sección 2.3). Se
+> escribe con el código del idioma: `es` o `en`, en mayúsculas o minúsculas. Si
+> la celda trae un idioma que la instalación **no tiene activo** —el caso típico
+> es un `en` exportado de otro programa en una instalación solo en español—, **la
+> línea se importa igual** con el aviso «El idioma de esta línea no está activo
+> en la instalación»: el alta se crea con el idioma de la instalación y una ficha
+> que ya existía conserva el suyo. Si de verdad quieres ofrecer ese idioma,
+> actívalo y vuelve a importar el fichero. Sin la columna, o con la celda vacía,
+> el alta toma el idioma de la instalación.
 
 > **Documento o correo, al menos uno.** No es un capricho: es lo que permite
 > **volver a importar el mismo fichero sin duplicar a nadie**. Si una línea no
@@ -1822,7 +1868,7 @@ cinco líneas.
 | `APP_TIMEZONE` | `[FIJO]` | Zona horaria del proceso | `UTC` | **Nunca.** Todo instante se almacena en UTC y la conversión a hora local ocurre al presentarlo. La zona horaria **del centro** es otra cosa: se elige en la puesta en marcha y **queda fija con el primer fichaje** (RN-23). Hasta entonces se cambia en el panel, en la pantalla de departamentos, apartado «Centro»; después el panel la muestra sin dejar editarla. Si se puso mal, se corrige en el servidor con `docker compose exec app php artisan workforce:correct-site-timezone <zona> --reason="…" --responsible=<id>`, que pide confirmación, deja asiento y **no mueve ninguna jornada ya registrada**: el histórico pasa a verse con la zona corregida. Si hay turnos cerca de la medianoche, habla antes con tu asesoría. Cambiar esto invalida el cálculo de jornada y deja el registro horario sin valor legal; el instalador ni siquiera ofrece tocarlo | **Sí** — cambiarla invalida el registro |
 | `APP_LOCALE` | — | Idioma de respaldo de la API y de los documentos si la base de datos no responde | `es` | Casi nunca: manda `LOCALE_DEFAULT` del panel (sección 2.3) | No |
 | `APP_FALLBACK_LOCALE` | — | Idioma al que se recurre si falta una traducción | `es` | Casi nunca | No |
-| `APP_SUPPORTED_LOCALES` | — | Idiomas que la API acepta negociar, como respaldo | `es,en` | Casi nunca: manda `LOCALE_AVAILABLE` del panel (sección 2.3) | No |
+| `APP_SUPPORTED_LOCALES` | — | Idiomas que la API acepta negociar, como respaldo | `es` | Casi nunca: manda `LOCALE_AVAILABLE` del panel (sección 2.3). **No es donde se activa el inglés**: eso se hace en el panel | No |
 
 ### 6.2 Base de datos
 

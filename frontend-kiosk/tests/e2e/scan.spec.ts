@@ -8,7 +8,13 @@
 
 import { expect, test } from '@playwright/test'
 import { installAudioProbe } from './support/audio'
-import { FIXTURE_PAYLOAD, delayCameraStart, stubKioskApi, stubScanApi } from './support/kiosk'
+import {
+  FIXTURE_PAYLOAD,
+  delayCameraStart,
+  stubBrandingApi,
+  stubKioskApi,
+  stubScanApi,
+} from './support/kiosk'
 import { stubKioskApiWithPin } from './support/pin'
 import { expectTouchTargets } from './support/touchTargets'
 
@@ -279,6 +285,7 @@ test(
   { tag: ['@RF-KI-05'] },
   async ({ page }) => {
     await stubScanApi(page)
+    await stubBrandingApi(page, { variant: 'bilingual' })
     await page.goto('/')
 
     await page.getByRole('button', { name: 'English' }).click()
@@ -298,12 +305,62 @@ test.describe('tablet configurada en ingles', () => {
 
   test('arranca en ingles sin que nadie elija nada', { tag: ['@RF-KI-05'] }, async ({ page }) => {
     await stubScanApi(page, { outcome: 'clock_in', displayName: 'Lucia G.' })
+    await stubBrandingApi(page, { variant: 'bilingual' })
     await page.goto('/')
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
     await expect(page.getByTestId('confirmation-detail')).toContainText('Clock-in')
   })
+})
+
+test.describe('instalacion de serie (solo espanol)', () => {
+  // Un navegador en ingles NO cambia el idioma si la instalacion solo ofrece
+  // espanol, y no hay selector que lo permita (RF-KI-05).
+  test.use({ locale: 'en-GB' })
+
+  test(
+    'sin selector y en espanol aunque el navegador este en ingles',
+    { tag: ['@RF-KI-05'] },
+    async ({ page }) => {
+      await stubScanApi(page, { outcome: 'clock_in', displayName: 'Lucia G.' })
+      await stubBrandingApi(page, { variant: 'product' }) // available: [es]
+      await page.goto('/')
+
+      await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+      await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+      await expect(page.getByTestId('privacy-notice')).not.toContainText('Data protection notice')
+      await expect(page.getByRole('button', { name: 'English' })).toHaveCount(0)
+      await expect(page.getByRole('group', { name: /idioma/i })).toHaveCount(0)
+    },
+  )
+
+  test(
+    'copia guardada con dos idiomas y servidor con uno solo: desaparece el selector y vuelve el espanol',
+    { tag: ['@RF-KI-05'] },
+    async ({ page }) => {
+      await page.addInitScript(() => {
+        window.localStorage.setItem(
+          'kronoqr.kiosk.branding',
+          JSON.stringify({
+            application_name: 'KronoQR',
+            accent_color: null,
+            logo_url: null,
+            locales: { default: 'es', available: ['es', 'en'] },
+            privacy_notice: { controller_name: null, policy_url: null },
+          }),
+        )
+      })
+      await stubScanApi(page, { outcome: 'clock_in', displayName: 'Lucia G.' })
+      await stubBrandingApi(page, { variant: 'product' }) // available: [es]
+      await page.goto('/')
+
+      await expect(page.getByTestId('scan-confirmation')).toBeVisible()
+      await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+      await expect(page.getByRole('button', { name: 'English' })).toHaveCount(0)
+      await expect(page.getByRole('group', { name: /idioma/i })).toHaveCount(0)
+    },
+  )
 })
 
 test('los objetivos tactiles miden al menos 48 px', { tag: ['@RF-KI-06'] }, async ({ page }) => {

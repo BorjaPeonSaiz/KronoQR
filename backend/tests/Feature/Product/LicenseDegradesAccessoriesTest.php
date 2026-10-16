@@ -16,6 +16,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -358,6 +359,8 @@ it('CON REVERB APAGADO y licencia caducada, el motivo NO es la licencia', functi
 })->group('RF-PD-05');
 
 it('el aviso sale con la fecha en el formato del idioma que se pide', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     // La version anterior formateaba `d/m/Y` fijo dentro del dominio, asi que el
     // mensaje ingles decia «expired on 31/12/2025» — una fecha española en una
     // frase inglesa. El dominio no sabe en que idioma se va a leer: la fecha la

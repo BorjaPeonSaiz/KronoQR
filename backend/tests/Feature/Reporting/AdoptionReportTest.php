@@ -12,6 +12,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\AdoptionFixtures;
 use Tests\Support\Reporting\FakeReportDocumentRenderer;
@@ -607,11 +608,10 @@ it('escribe los numeros con el separador del idioma de la instalacion, y sale de
     // EL IDIOMA SALE DE LA INSTALACION Y NO DE `Accept-Language`: la ruta lleva
     // `locale.installation` porque esto es un DOCUMENTO, y lo abre una persona que
     // puede no ser quien lo descargo (regla dura 13, `UseInstallationLocale`). Se
-    // mueve el ajuste, que es lo que de verdad decide.
-    DB::table('installation_settings')->updateOrInsert(
-        ['key' => 'LOCALE_DEFAULT'],
-        ['value' => '"'.$idioma.'"', 'updated_at' => '2026-01-01 00:00:00+00'],
-    );
+    // mueve el ajuste, que es lo que de verdad decide. Con los dos idiomas
+    // activos: de serie solo lo esta el español (bloque 26), y un idioma por
+    // defecto fuera de la lista no es una configuracion valida.
+    InstallationLocale::set($idioma, ['es', 'en']);
 
     $csv = Api::as($context['token'])
         ->get('/api/v1/reports/adoption/export?format=csv&from=2026-03-01&to=2026-03-31')

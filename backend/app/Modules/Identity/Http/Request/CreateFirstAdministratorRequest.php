@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Request;
 
 use App\Http\Requests\RejectsUnknownInput;
+use App\Http\Rules\ActiveLocale;
 use App\Modules\Identity\Application\Command\CreateFirstAdministratorCommand;
 use App\Modules\Identity\Http\Rule\ManagementPasswordPolicy;
 use Illuminate\Foundation\Http\FormRequest;
@@ -64,7 +65,9 @@ final class CreateFirstAdministratorRequest extends FormRequest
             // segunda por «ya hay cuentas».
             'email' => ['required', 'string', 'email:rfc', 'max:190'],
             'password' => ['required', ...ManagementPasswordPolicy::rules()],
-            'locale' => ['sometimes', 'string', 'min:2', 'max:10'],
+            // Uno de los idiomas activos de la instalacion; sin el, el de la
+            // instalacion (`LOCALE_DEFAULT`). Fuera de la lista, 422.
+            'locale' => ['sometimes', 'string', ActiveLocale::rule()],
             'device_name' => ['sometimes', 'string', 'max:60'],
         ];
     }
@@ -75,7 +78,9 @@ final class CreateFirstAdministratorRequest extends FormRequest
             name: $this->string('name')->trim()->value(),
             email: $this->string('email')->trim()->value(),
             password: $this->string('password')->value(),
-            locale: $this->string('locale', 'es')->trim()->value(),
+            locale: $this->has('locale')
+                ? $this->string('locale')->trim()->value()
+                : ActiveLocale::defaultLocale(),
             deviceName: $this->string('device_name', 'Panel de gestion')->trim()->value(),
         );
     }

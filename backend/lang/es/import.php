@@ -64,6 +64,10 @@ return [
         'employee_terminated' => 'Esta persona está dada de baja. La importación no modifica su ficha ni la '
             .'vuelve a dar de alta; quita la línea del fichero.',
 
+        'locale_not_active' => 'El idioma de esta línea no está activo en la instalación, así que se '
+            .'ignora: un alta se crea con el idioma de la instalación y una ficha que ya existe conserva el '
+            .'suyo. Si quieres ofrecer ese idioma, actívalo en Ajustes operativos > Idiomas y vuelve a importar.',
+
         'unknown_column' => 'La columna «:column» no se usa. Si esperabas que sí, revisa cómo se llama: '
             .'los nombres que el sistema reconoce están en la guía de configuración, y puedes añadir los '
             .'tuyos sin tocar nada del programa.',

@@ -90,9 +90,22 @@ enum ImportMessageCode: string
      */
     case UNKNOWN_COLUMN = 'unknown_column';
 
+    /**
+     * Aviso: el idioma de la linea no esta activo en la instalacion
+     * (`LOCALE_AVAILABLE`; bloque 26 de la 2.2.1).
+     *
+     * No rechaza la linea: el alta toma el idioma de la instalacion y una ficha
+     * que ya existe conserva el suyo. Se arregla activando ese idioma en la
+     * configuracion, si de verdad se quiere ofrecer, o quitando la columna.
+     */
+    case LOCALE_NOT_ACTIVE = 'locale_not_active';
+
     /** Un aviso no impide la linea; un error si. */
     public function isWarning(): bool
     {
-        return $this === self::HIRED_AT_NOT_UPDATED || $this === self::UNKNOWN_COLUMN;
+        return match ($this) {
+            self::HIRED_AT_NOT_UPDATED, self::UNKNOWN_COLUMN, self::LOCALE_NOT_ACTIVE => true,
+            default => false,
+        };
     }
 }

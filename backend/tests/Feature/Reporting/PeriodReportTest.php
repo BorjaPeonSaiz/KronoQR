@@ -9,6 +9,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Reporting\PeriodReportFixtures;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -289,6 +290,8 @@ it('devuelve los criterios de inclusion en la propia respuesta', function (): vo
 })->group('RF-IN-01', 'RF-IN-02');
 
 it('traduce los criterios al idioma de la peticion', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     // Los textos van en `i18n` y el codigo en ingles (doc 02 §3.5). Sin esta
     // prueba, un cliente con el panel en ingles recibiria los criterios en
     // castellano y nadie se enteraria hasta la demo.

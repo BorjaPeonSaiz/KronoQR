@@ -16,6 +16,7 @@ import {
   offeredLocales,
   parseBranding,
   PRODUCT_BRANDING,
+  resolveUiLocale,
   type Branding,
 } from '../../src/branding'
 import { contrastRatio, WCAG_AA_MINIMUM } from '../../src/contrast'
@@ -62,13 +63,17 @@ describe('parseBranding (RF-PD-08)', () => {
     })
   })
 
+  it('de serie solo ofrece espanol (LOCALE_AVAILABLE = [es], RF-KI-05)', () => {
+    expect(PRODUCT_BRANDING.locales).toEqual({ default: 'es', available: ['es'] })
+  })
+
   it('acepta la marca del producto: sin color y sin logotipo', () => {
     expect(
       parseBranding({
         application_name: 'KronoQR',
         accent_color: null,
         logo_url: null,
-        locales: { default: 'es', available: ['es', 'en'] },
+        locales: { default: 'es', available: ['es'] },
       }),
     ).toEqual(PRODUCT_BRANDING)
   })
@@ -436,5 +441,88 @@ describe('offeredLocales', () => {
 
   it('si ninguno esta traducido, ofrece todos los traducidos: nunca cero idiomas', () => {
     expect(offeredLocales({ default: 'ro', available: ['ro'] }, shipped)).toEqual(['es', 'en'])
+  })
+})
+
+describe('resolveUiLocale (RF-KI-05, doc 01 §6.6)', () => {
+  const shipped = ['es', 'en'] as const
+
+  describe('con un unico idioma activo, el de serie', () => {
+    const policy = { default: 'es', available: ['es'] }
+
+    it('es ese idioma aunque el navegador pida otro', () => {
+      expect(resolveUiLocale({ policy, shipped, browser: ['en-GB', 'en'] })).toBe('es')
+    })
+
+    it('ni la eleccion guardada ni el idioma de la persona lo cambian', () => {
+      expect(
+        resolveUiLocale({ policy, shipped, stored: 'en', personal: 'en', browser: ['en-US'] }),
+      ).toBe('es')
+    })
+
+    it('si el unico activo es el ingles, todo sale en ingles', () => {
+      expect(
+        resolveUiLocale({
+          policy: { default: 'en', available: ['en'] },
+          shipped,
+          stored: 'es',
+          browser: ['es-ES'],
+        }),
+      ).toBe('en')
+    })
+
+    it('un idioma activo que no esta traducido no deja la interfaz sin idioma', () => {
+      // `ro` no viene en esta version: se ofrecen los traducidos y decide el navegador.
+      expect(
+        resolveUiLocale({ policy: { default: 'ro', available: ['ro'] }, shipped, browser: [] }),
+      ).toBe('es')
+    })
+  })
+
+  describe('con dos idiomas activos', () => {
+    const policy = { default: 'es', available: ['es', 'en'] }
+
+    it('manda la eleccion guardada en el dispositivo', () => {
+      expect(
+        resolveUiLocale({ policy, shipped, stored: 'en', personal: 'es', browser: ['es-ES'] }),
+      ).toBe('en')
+    })
+
+    it('sin eleccion guardada, el idioma de la persona', () => {
+      expect(resolveUiLocale({ policy, shipped, personal: 'en', browser: ['es-ES'] })).toBe('en')
+    })
+
+    it('una eleccion o un idioma personal fuera de la lista se ignoran', () => {
+      expect(
+        resolveUiLocale({ policy, shipped, stored: 'fr', personal: 'ro', browser: ['en-US'] }),
+      ).toBe('en')
+    })
+
+    it('sin eleccion, el primer idioma del navegador que coincide por prefijo', () => {
+      expect(resolveUiLocale({ policy, shipped, browser: ['fr-FR', 'en-GB', 'es'] })).toBe('en')
+      expect(resolveUiLocale({ policy, shipped, browser: ['EN_us'] })).toBe('en')
+    })
+
+    it('si el navegador no coincide en nada, el idioma por defecto de la instalacion', () => {
+      expect(
+        resolveUiLocale({
+          policy: { default: 'en', available: ['es', 'en'] },
+          shipped,
+          browser: ['de-DE'],
+        }),
+      ).toBe('en')
+      expect(resolveUiLocale({ policy, shipped, browser: [] })).toBe('es')
+    })
+
+    it('un idioma activo pero no traducido no se elige nunca', () => {
+      expect(
+        resolveUiLocale({
+          policy: { default: 'ro', available: ['ro', 'en'] },
+          shipped,
+          stored: 'ro',
+          browser: ['ro-RO', 'es-ES'],
+        }),
+      ).toBe('en')
+    })
   })
 })

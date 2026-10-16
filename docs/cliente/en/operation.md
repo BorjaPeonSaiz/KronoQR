@@ -1526,6 +1526,15 @@ them a different role in **Accounts** ([`hr-guide.md`](hr-guide.md) §7 bis.1).
 The export for the Labour Inspectorate does not change, and open sessions are
 not closed: the menu updates the next time the panel loads.
 
+**When updating to 2.2.1: your languages do not change.** From 2.2.1 a **new**
+installation comes out in Spanish only, without a language selector, and
+English is turned on from the panel. An installation that was already in use
+**keeps the Spanish and English** it had: the update writes that into
+**Operational settings** → **Languages**, and the kiosk, the panel and the
+portal stay as they were. If nobody uses English, untick it there and the
+selector disappears ([`configuration.md`](configuration.md) §2.3). There is no
+need to touch `APP_SUPPORTED_LOCALES` in the `.env`: it is only a fallback.
+
 **Which versions you can jump from** to the package's, without touching
 anything: `./update.sh --supported-sources`. The rule is the current minor
 version and the two before it; from an older one, the script tells you which

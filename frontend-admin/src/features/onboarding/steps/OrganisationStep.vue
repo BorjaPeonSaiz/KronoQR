@@ -12,6 +12,7 @@
 // contrato lo marca `skippable: false`. La interfaz exige un nombre no vacio
 // antes de continuar para que el paso tenga sentido —de lo contrario el hotel
 // se quedaria con «KronoQR» a secas en sus informes.
+import { PRODUCT_BRANDING } from '@kronoqr/web-kit/branding'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
@@ -37,7 +38,7 @@ const settings = ref<InstallationSettings | null>(null)
 
 const appName = ref('')
 const defaultLocale = ref<AppLocale>('es')
-const availableLocales = ref<AppLocale[]>(['es', 'en'])
+const availableLocales = ref<AppLocale[]>([...PRODUCT_BRANDING.locales.available] as AppLocale[])
 
 function listValue(catalog: InstallationSettings, key: string): string[] {
   const found = catalog.data.find((entry) => entry.key === key)
@@ -63,7 +64,10 @@ async function load(): Promise<void> {
     defaultLocale.value = (SUPPORTED_LOCALES as readonly string[]).includes(storedDefault)
       ? (storedDefault as AppLocale)
       : 'es'
-    availableLocales.value = storedAvailable.length > 0 ? storedAvailable : ['es', 'en']
+    availableLocales.value =
+      storedAvailable.length > 0
+        ? storedAvailable
+        : ([...PRODUCT_BRANDING.locales.available] as AppLocale[])
   } catch (caught) {
     error.value = caught
   } finally {

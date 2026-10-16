@@ -1,11 +1,12 @@
 // Infraestructura de idiomas (doc 02 §3.5): ningun texto que vea una persona
 // se escribe en una plantilla. Espanol e ingles desde el primer dia, y anadir
 // un idioma nuevo es anadir un fichero, no tocar componentes.
+import { type LocalePolicy, resolveUiLocale } from '@kronoqr/web-kit/branding'
 import { createI18n } from 'vue-i18n'
 import en from './locales/en.json'
 import es from './locales/es.json'
 
-export const SUPPORTED_LOCALES = ['es', 'en'] as const
+export const SUPPORTED_LOCALES = ['es', 'en'] as const satisfies readonly [string, ...string[]]
 
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number]
 
@@ -16,34 +17,24 @@ export function isSupportedLocale(value: unknown): value is AppLocale {
 }
 
 /**
- * Elige el primer idioma soportado de la lista de preferencias del navegador.
- * Acepta etiquetas completas ('es-ES') y cae al idioma por defecto si ninguna
- * encaja: el quiosco nunca se queda sin textos.
+ * El idioma con el que se pinta el portal. Lo decide `resolveUiLocale` del
+ * web-kit con la politica de la marca de la instalacion (RF-PD-08): con un
+ * unico idioma ofrecido (`LOCALE_AVAILABLE = [es]`, de serie) es ese y ni el
+ * navegador ni `employees.locale` lo cambian; con varios, sigue el de la
+ * persona que ha entrado, despues el del navegador y al final el de la
+ * instalacion. El portal no tiene selector, asi que no hay eleccion guardada.
  */
-export function resolveLocale(candidates: readonly string[]): AppLocale {
-  for (const candidate of candidates) {
-    const base = candidate.split('-')[0]?.toLowerCase()
-    if (isSupportedLocale(base)) {
-      return base
-    }
-  }
-
-  return DEFAULT_LOCALE
-}
-
-/**
- * Si el navegador pide alguno de los idiomas que trae esta aplicacion.
- *
- * Sirve para decidir quien elige el idioma inicial de una visita anonima
- * (nadie ha entrado todavia, `session.employee` es `null`): si el navegador
- * ya pedia un idioma soportado, esa es una preferencia real de la persona y
- * gana siempre. Si no pedia ninguno, `main.ts` puede ofrecer el
- * `locales.default` de la marca de la instalacion (RF-PD-08) en cuanto
- * llega: la instalacion sabe mejor que un idioma por omision fijo cual es el
- * idioma habitual de su plantilla.
- */
-export function browserHasSupportedLocale(candidates: readonly string[]): boolean {
-  return candidates.some((candidate) => isSupportedLocale(candidate.split('-')[0]?.toLowerCase()))
+export function resolvePortalLocale(inputs: {
+  readonly policy: LocalePolicy
+  readonly personal?: string | null | undefined
+  readonly browser: readonly string[]
+}): AppLocale {
+  return resolveUiLocale<AppLocale>({
+    policy: inputs.policy,
+    personal: inputs.personal ?? null,
+    browser: inputs.browser,
+    shipped: SUPPORTED_LOCALES,
+  })
 }
 
 export const messages = { es, en }

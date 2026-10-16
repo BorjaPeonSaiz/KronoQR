@@ -8,6 +8,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -179,6 +180,8 @@ it('rechaza mover a futuro la entrada de un tramo abierto', function (): void {
 })->group('RF-PA-04', 'RL-04');
 
 it('responde el rechazo en ingles si el panel lo pide en ingles', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     $contexto = contextoHorasFuturas();
 
     Api::as($contexto['token'])

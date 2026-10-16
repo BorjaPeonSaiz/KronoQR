@@ -532,7 +532,7 @@ puesta en marcha**. No hay nada que buscar en ningún menú.
 | # | Paso | ¿Obligatorio? | Qué hace |
 | --- | --- | --- | --- |
 | 1 | **Primer administrador** | Sí | Crea tu cuenta y activa su segundo factor. |
-| 2 | **Datos de la organización** | Sí | Nombre visible del sistema e idiomas. |
+| 2 | **Datos de la organización** | Sí | Nombre visible del sistema e idiomas. **De serie, solo español**: deja marcado solo el español si nadie va a usar el inglés; si alguien lo va a usar, márcalo aquí (o más tarde en **Ajustes operativos**). |
 | 3 | **Centro y zona horaria** | Sí | El hotel. **La zona horaria decide a qué día va cada turno.** |
 | 4 | **Departamentos** | Se puede omitir | Los que uses. Se pueden crear después. |
 | 5 | **Perfil de convenio** | Sí | Los umbrales legales, a la vista, para que los contrastes. |

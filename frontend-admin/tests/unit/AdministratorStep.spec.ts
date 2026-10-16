@@ -10,6 +10,7 @@ import {
   twoFactorChallenge,
   twoFactorEnrolment,
 } from './support/fixtures'
+import { loadBrandingWithLocales } from './support/branding'
 import { createTestPinia, jsonResponse, mountView, settle, stubRoutes } from './support/harness'
 
 // Paso 1 del asistente: el primer administrador (RF-PD-03, regla dura 6).
@@ -95,4 +96,40 @@ describe('AdministratorStep', () => {
       spy.mock.calls.filter(([url]) => String(url).includes('/setup/administrator')).length,
     ).toBe(1)
   })
+
+  it('con un solo idioma no envia locale: lo decide la instalacion', async () => {
+    const pinia = createTestPinia()
+
+    await loadBrandingWithLocales(['es'])
+
+    const spy = stubRoutes({
+      '/setup/administrator': () => jsonResponse(twoFactorChallenge(), 201),
+    })
+    const wrapper = await mountView(AdministratorStep, { pinia })
+
+    await fillForm(wrapper)
+
+    expect(administratorBody(spy)).not.toHaveProperty('locale')
+  })
+
+  it('con dos idiomas envia el idioma del asistente', async () => {
+    const pinia = createTestPinia()
+
+    await loadBrandingWithLocales(['es', 'en'])
+
+    const spy = stubRoutes({
+      '/setup/administrator': () => jsonResponse(twoFactorChallenge(), 201),
+    })
+    const wrapper = await mountView(AdministratorStep, { pinia })
+
+    await fillForm(wrapper)
+
+    expect(administratorBody(spy)).toMatchObject({ locale: 'es' })
+  })
 })
+
+function administratorBody(spy: ReturnType<typeof vi.fn>): Record<string, unknown> {
+  const call = spy.mock.calls.find(([url]) => String(url).endsWith('/setup/administrator'))
+
+  return JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>
+}

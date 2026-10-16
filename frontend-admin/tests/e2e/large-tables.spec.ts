@@ -18,6 +18,7 @@ import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import type { ComplianceFinding, PeriodReport, PeriodReportRow } from '@/shared/api/types'
 import {
+  BILINGUAL_BRANDING,
   COMPLIANCE_SUMMARY,
   EMPLOYEE_UUID,
   logIn,
@@ -130,7 +131,11 @@ async function serveBigData(
   report: PeriodReport = BIG_REPORT,
   locale?: 'es' | 'en',
 ): Promise<void> {
-  await stubManagementApi(page, locale === undefined ? {} : { locale })
+  // Las dos variantes de idioma exigen la instalacion bilingue.
+  await stubManagementApi(page, {
+    branding: BILINGUAL_BRANDING,
+    ...(locale === undefined ? {} : { locale }),
+  })
   await page.route(
     (url) => url.pathname === '/api/v1/reports/period',
     (route) => route.fulfill({ status: 200, json: report }),

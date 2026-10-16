@@ -102,6 +102,7 @@ test(
 
 test('en ingles tampoco', { tag: ['@RF-KI-05', '@RF-KI-06'] }, async ({ page }) => {
   await stubScanApi(page, { outcome: 'offline' })
+  await stubBrandingApi(page, { variant: 'bilingual' })
   await page.goto('/')
   await page.getByRole('button', { name: 'English' }).click()
   await expect(page.getByTestId('privacy-notice')).toContainText('Data protection notice')
