@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Support\Database\LimitsMigrationLocks;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -28,10 +29,21 @@ use Illuminate\Support\Facades\DB;
  * que arrastra los de las particiones y toma `ACCESS EXCLUSIVE` sobre `audit_log`
  * y sobre cada particion. Dura milisegundos —solo toca el catalogo—, pero choca
  * con cualquier lectura o escritura de la tabla, asi que va en una transaccion
- * corta con `limitLockWait()`: si alguien la tiene ocupada, la migracion se rinde
- * a los 3 s con `55P03` en vez de encolar el fichaje detras, y se reintenta.
+ * corta con `limitLockWait()`: si alguien la tiene ocupada, ese intento se rinde
+ * a los 3 s con `55P03` en vez de encolar el fichaje detras.
+ *
+ * **`up()` lo intenta tres veces** ({@see ATTEMPTS}), cada vez en su propia
+ * transaccion y con {@see SECONDS_BETWEEN_ATTEMPTS} s de espera entre una y otra:
+ * una lectura corta que coincida con la migracion no la tumba. Solo se reintenta
+ * ante `55P03`; cualquier otro error, y el `55P03` del ultimo intento, salen tal
+ * cual. En el peor caso son unos 13 s.
+ *
  * `update.sh` migra con el mantenimiento puesto y `horizon` y `scheduler`
- * parados, asi que ahi no espera a nadie.
+ * parados, pero **no se excluye con la copia nocturna**: un `pg_dump` de
+ * `backup.sh` (cron, 03:15 UTC) tiene `ACCESS SHARE` sobre `audit_log` durante
+ * minutos. Si coinciden, se agotan los tres intentos, la migracion falla y
+ * `update.sh` deshace la actualizacion entera (restaura la copia previa, nada
+ * queda a medias); basta con repetirla cuando la copia haya terminado.
  *
  * Las particiones que se creen despues (`audit_log_create_partition`) heredan los
  * indices del padre: ya no tendran este.
@@ -52,13 +64,34 @@ return new class extends Migration
     /** `down()` construye indices concurrentes, que no pueden ir en una transaccion. */
     public $withinTransaction = false;
 
+    /** Intentos del `DROP INDEX` ante `55P03`; ver el docblock. */
+    private const int ATTEMPTS = 3;
+
+    /** Espera entre un intento rendido y el siguiente. */
+    private const int SECONDS_BETWEEN_ATTEMPTS = 2;
+
+    /** `lock_not_available`: el `SQLSTATE` con el que `lock_timeout` rinde una sentencia. */
+    private const string LOCK_NOT_AVAILABLE = '55P03';
+
     public function up(): void
     {
-        DB::transaction(function (): void {
-            $this->limitLockWait();
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                DB::transaction(function (): void {
+                    $this->limitLockWait();
 
-            DB::statement('DROP INDEX IF EXISTS audit_log_payload_gin');
-        });
+                    DB::statement('DROP INDEX IF EXISTS audit_log_payload_gin');
+                });
+
+                return;
+            } catch (QueryException $failure) {
+                if ($attempt >= self::ATTEMPTS || ($failure->errorInfo[0] ?? null) !== self::LOCK_NOT_AVAILABLE) {
+                    throw $failure;
+                }
+
+                sleep(self::SECONDS_BETWEEN_ATTEMPTS);
+            }
+        }
     }
 
     public function down(): void
@@ -79,6 +112,9 @@ return new class extends Migration
             SQL);
 
         foreach ($partitions as $row) {
+            // El nombre sale del catalogo y va a un DDL sin parametros: se exige
+            // un identificador simple, como a cualquier constante de migracion.
+            $this->assertSimpleIdentifier($row->partition, 'down()');
             $index = $row->partition.'_payload_idx';
 
             $this->createIndexConcurrently($index, 'ON '.$row->partition.' USING gin (payload jsonb_path_ops)');
