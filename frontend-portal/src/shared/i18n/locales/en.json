@@ -207,6 +207,10 @@
       "advice": "It is nothing you did. You can download the same history as CSV, or try the PDF again later.",
       "useCsv": "Download CSV instead"
     },
+    "pdfBusy": {
+      "message": "There are a lot of PDF downloads right now. Try again in {seconds} seconds, or download the CSV, which is always available.",
+      "messageNoWait": "There are a lot of PDF downloads right now. Try again in a moment, or download the CSV, which is always available."
+    },
     "downloading": "Generating the download…",
     "announce": {
       "done": "Download ready. Check your device's downloads."

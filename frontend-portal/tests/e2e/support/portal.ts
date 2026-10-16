@@ -382,7 +382,7 @@ export interface PortalApiOptions {
    * Que pasa con `GET /api/v1/me/export?format=pdf`. Por omision, `'ok'`.
    * `'unavailable'`: el servidor no tiene Chromium y responde `503` (PR19).
    */
-  pdfOutcome?: 'ok' | 'unavailable'
+  pdfOutcome?: 'ok' | 'unavailable' | 'busy'
 }
 
 export interface RecordedRequest {
@@ -525,6 +525,21 @@ export async function stubPortalApi(page: Page, options: PortalApiOptions): Prom
           const to = url.searchParams.get('to') ?? WORKDAYS_TO
 
           if (url.searchParams.get('format') === 'pdf') {
+            if (pdfOutcome === 'busy') {
+              await route.fulfill({
+                status: 503,
+                contentType: 'application/problem+json',
+                headers: { 'Retry-After': '5' },
+                body: JSON.stringify({
+                  type: 'urn:kronoqr:problem:pdf-rendering-busy',
+                  title: 'Motor de PDF ocupado',
+                  status: 503,
+                }),
+              })
+
+              return
+            }
+
             if (pdfOutcome === 'unavailable') {
               await route.fulfill({
                 status: 503,

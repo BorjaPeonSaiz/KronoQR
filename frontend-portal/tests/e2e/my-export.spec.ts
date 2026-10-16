@@ -135,6 +135,31 @@ test(
   },
 )
 
+test(
+  'si el motor de PDF esta ocupado (503 pdf-rendering-busy), dice cuanto esperar y ofrece el CSV',
+  { tag: ['@RL-05', '@RF-ID-05'] },
+  async ({ page }) => {
+    await stubPortalApi(page, { locale: 'es', pdfOutcome: 'busy' })
+    await logInToPortal(page)
+    await page.goto('/export')
+
+    await page.getByRole('radio', { name: /PDF/ }).check()
+    await page.getByRole('button', { name: 'Descargar PDF' }).click()
+
+    const notice = page.getByTestId('pdf-busy')
+
+    await expect(notice).toBeVisible()
+    await expect(notice).toContainText('Inténtalo de nuevo en 5 segundos')
+    await expect(page.getByTestId('pdf-unavailable')).toHaveCount(0)
+
+    const download = page.waitForEvent('download')
+    await notice.getByRole('button', { name: 'Descargar CSV en su lugar' }).click()
+    const file = await download
+
+    expect(file.suggestedFilename()).toBe(`mi-registro-horario-${WORKDAYS_FROM}_${WORKDAYS_TO}.csv`)
+  },
+)
+
 // Reflujo (WCAG 2.2 AA, 1.4.10; R7-PO-02): a 320 px CSS (zoom al 200 % sobre
 // 640 px) la pantalla no se desplaza en horizontal y los controles siguen
 // siendo operables.
