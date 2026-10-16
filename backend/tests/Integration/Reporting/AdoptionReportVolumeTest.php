@@ -46,44 +46,20 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * comprueba**: el `EXPLAIN ANALYZE` es lo que sigue valiendo mañana en otro
  * servidor.
  *
- * ## Las cifras medidas, y por que la segunda vuelta las mejoro tres veces
+ * ## `scan_events` se lee por indice, no entera (DB5)
  *
- * Medido en la maquina de desarrollo con este mismo conjunto —500 personas, 365 000
- * jornadas y 730 000 escaneos—:
+ * El lector convierte los LIMITES de cada periodo —la medianoche local del primer
+ * dia y la del dia siguiente al ultimo— a instantes UTC con la zona del centro, y
+ * acota `occurred_at >= desde AND occurred_at < hasta`. Asi lo resuelve
+ * `scan_events_occurred_at_index` sin meter la zona en el esquema (ADR-017, regla
+ * dura 13): el indice es de la columna, y la zona solo entra en dos constantes por
+ * consulta. Hasta la 2.2.1 el filtro era `(occurred_at AT TIME ZONE zona)::date
+ * BETWEEN …`, que convertia cada fila y obligaba a recorrer el historico entero.
  *
- * | | Antes (decisiones 1-12) | Ahora (decision 15) |
- * |---|---|---|
- * | Cuadro completo, dos periodos | **2,179 s** | **0,891 s** |
- * | Recorridos de `scan_events` | 14 (`loops=8` + `loops=6`) | **1** (`loops=1`) |
- * | Consulta de fichajes y origenes | — | 627 ms, una pasada |
- * | Recuento de jornadas completas | 136 ms, por indice | 142 ms, por indice |
- *
- * Lo que cambio no fue una optimizacion cosmetica: las subconsultas escalares
- * correlacionadas con la CTE de periodos recorrian `scan_events` **catorce veces**, y
- * como el filtro por fecha civil no es sargable (ver abajo) cada pasada es un
- * recorrido completo. Con los cuatro años de retencion de RL-02 —unas 2,9 M de
- * filas— eran del orden de trece segundos, por encima del `statement_timeout` de
- * diez: el cuadro habria dejado de funcionar **justo en la instalacion mas antigua**,
- * que es la que renueva. Con `count(*) FILTER` y `LEFT JOIN` queda una pasada por
- * consulta, y la prueba del `loops=1` impide que la regresion vuelva sin que nadie la
- * vea.
- *
- * ## Por que el cuadro puede permitirse recorrer `scan_events`
- *
- * Y esto es una decision, no un descuido. El filtro de los escaneos es
- * `(occurred_at AT TIME ZONE 'Europe/Madrid')::date BETWEEN …`, que **no es
- * sargable**: ningun indice de `occurred_at` lo resuelve, porque la expresion
- * indexada tendria que ser la conversion entera —y esa depende de la zona del
- * centro, que es configuracion (ADR-040)—. Un indice sobre
- * `((occurred_at AT TIME ZONE 'Europe/Madrid')::date)` seria un indice con un
- * literal de cliente dentro, que es exactamente lo que ADR-017 y la regla dura 13
- * prohiben.
- *
- * La alternativa —filtrar en UTC y perder la ultima noche del mes— no es una
- * alternativa: rompe RN-05. Asi que el cuadro asume el recorrido, lo acota con su
- * `statement_timeout` y lo mide aqui. Si algun dia no cupiera, la salida no es un
- * indice con la zona dentro sino una columna generada con la zona del centro, y
- * eso es una migracion de expansion que hoy no hace falta.
+ * Dos pruebas lo atan: la del plan (sin `Seq Scan` de `scan_events`, con el
+ * indice) sobre el SQL que emite el lector, y la de equivalencia, que compara el
+ * filtro nuevo con el antiguo alrededor de la medianoche de los dias de cambio de
+ * hora de Madrid y de Santiago de Chile (donde el cambio cae a medianoche).
  */
 
 /*
@@ -210,6 +186,10 @@ function volumenDelCuadro(): array
         SQL, [PRIMER_DIA_DEL_CUADRO, $ultimoDia]);
 
     // Dos escaneos por jornada: entrada y salida. Uno de cada cien es por PIN.
+    // EN ORDEN CRONOLOGICO, como llegan de verdad: el orden fisico de la tabla
+    // es lo que el planificador mira (`pg_stats.correlation`) para decidir si
+    // recorrer un mes por `scan_events_occurred_at_index` le sale a cuenta.
+    // Sembrados persona a persona, cada mes estaria repartido por toda la tabla.
     DB::statement(<<<'SQL'
         INSERT INTO scan_events
             (scan_id, device_id, employee_id, occurred_at, recorded_at, origin, intent, result,
@@ -225,6 +205,7 @@ function volumenDelCuadro(): array
           FROM employees e
          CROSS JOIN generate_series(?::date, ?::date, interval '1 day') AS d
          CROSS JOIN (VALUES (6), (14)) AS t(h)
+         ORDER BY d, t.h, e.id
         SQL, [$device, PRIMER_DIA_DEL_CUADRO, $ultimoDia]);
 
     QueryPlans::analyze('shift_entries', 'scan_events', 'daily_totals', 'employees', 'employment_contracts');
@@ -317,69 +298,136 @@ it('resuelve el recuento de jornadas completas sin recorrer dos años de shift_e
     expect($plan)->not->toContain('Seq Scan on shift_entries');
 })->group('RNF-P-05', 'RF-IN-08');
 
-it('recorre scan_events UNA sola vez por consulta y no una por periodo y origen', function (): void {
+it('lee scan_events por scan_events_occurred_at_index, una vez por consulta y sin recorrerla entera', function (): void {
     /*
-     * LA REGRESION QUE ESTA PRUEBA IMPIDE (decision 15 de la ficha 3.13).
+     * DB5. Se captura el SQL que emite el lector de verdad (no se transcribe) y
+     * se mira su PLAN, que es lo que sigue valiendo mañana en otra maquina.
      *
-     * La primera version del lector preguntaba con subconsultas escalares
-     * correlacionadas con la CTE de periodos: tres recuentos y cuatro origenes, todo
-     * por dos periodos. `EXPLAIN ANALYZE` lo delataba con `loops=8` sobre
-     * `scan_events`: **catorce recorridos completos** de la tabla por peticion.
-     *
-     * Con 39 000 filas eran 12,6 ms por pasada y no se notaba. El problema es que el
-     * filtro por fecha civil NO es sargable —la expresion lleva la zona del centro
-     * dentro y no se puede indexar sin meter un literal de cliente en el esquema
-     * (ADR-017)—, asi que cada pasada es un recorrido entero: con los cuatro años de
-     * retencion de RL-02, unas 2,9 M de filas, catorce pasadas son del orden de trece
-     * segundos y el `statement_timeout` de diez corta la consulta. El cuadro habria
-     * dejado de funcionar **justo en la instalacion mas antigua**, que es la que
-     * renueva.
-     *
-     * Lo que se afirma es `loops=1`: una pasada, con los dos periodos y los cuatro
-     * origenes resueltos por `count(*) FILTER` sobre la misma fila. Es una propiedad
-     * del PLAN y no del reloj, asi que sigue valiendo mañana en otra maquina.
+     * - Sin `Seq Scan on scan_events`: con el filtro antiguo por fecha civil
+     *   convertida fila a fila, cada cuadro leia el historico entero.
+     * - Con `scan_events_occurred_at_index`: el que el filtro por instantes
+     *   tiene que usar.
+     * - Un solo nodo sobre `scan_events`: la regresion de la decision 15 de la
+     *   ficha 3.13 —subconsultas correlacionadas por periodo y origen, catorce
+     *   lecturas de la tabla— apareceria aqui como varios nodos.
      */
     volumenDelCuadro();
 
-    /** @var list<object> $filas */
-    $filas = DB::select(<<<'SQL'
-        EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-        WITH periods (period, from_date, to_date) AS (
-            VALUES ('current'::text, ?::date, ?::date), ('previous'::text, ?::date, ?::date)
-        )
-        SELECT p.period,
-               count(s.id)                                                           AS attended,
-               count(s.id) FILTER (WHERE s.recorded_at - s.occurred_at > ?::interval) AS offline_resolved,
-               count(s.id) FILTER (WHERE NOT starts_with(s.result, 'rejected_') AND s.origin = ?) AS origin_0,
-               count(s.id) FILTER (WHERE NOT starts_with(s.result, 'rejected_') AND s.origin = ?) AS origin_1,
-               count(s.id) FILTER (WHERE NOT starts_with(s.result, 'rejected_') AND s.origin = ?) AS origin_2,
-               count(s.id) FILTER (WHERE NOT starts_with(s.result, 'rejected_') AND s.origin = ?) AS origin_3
-          FROM periods p
-          LEFT JOIN scan_events s
-                 ON (s.occurred_at AT TIME ZONE ?)::date BETWEEN p.from_date AND p.to_date
-         GROUP BY p.period
-        SQL, [
-        '2026-01-01', '2026-01-31', '2025-12-01', '2025-12-31',
-        '60 seconds',
-        'qr_kiosk', 'pin_kiosk', 'manual_admin', 'import',
-        'Europe/Madrid',
-    ]);
+    $consultas = QueryPlans::selectsOn('scan_events', static function (): void {
+        app(AdoptionFactsReader::class)->factsFor(
+            AdoptionReportQuery::of(DateRange::between('2026-01-01', '2026-01-31')),
+            timeZone: 'Europe/Madrid',
+        );
+    });
 
-    $plan = implode("\n", array_map(static function (object $fila): string {
-        $linea = get_object_vars($fila)['QUERY PLAN'] ?? '';
+    expect($consultas)->toHaveCount(1);
 
-        return is_scalar($linea) ? (string) $linea : '';
-    }, $filas));
+    $root = QueryPlans::root('EXPLAIN (ANALYZE, FORMAT JSON) ', $consultas[0]);
+
+    expect($root)->not->toBeNull('El plan de ejecucion no se pudo leer');
+    \assert($root !== null);
+
+    $nodos = QueryPlans::flatten($root);
 
     if (getenv('KRONOQR_PRINT_PLAN') !== false) {
-        fwrite(STDOUT, $plan."\n");
+        fwrite(STDOUT, json_encode($root, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n");
     }
 
-    // Ni un `loops=` por encima de uno sobre `scan_events`: si vuelven las
-    // subconsultas correlacionadas, aqui aparece `loops=8` y esto se pone rojo.
-    expect($plan)->toContain('on scan_events')
-        ->and($plan)->not->toMatch('/on scan_events s.*loops=(?!1\))/');
-})->group('RNF-P-05', 'RF-IN-08');
+    $sobreScanEvents = array_filter($nodos, static fn (array $nodo): bool => ($nodo['Relation Name'] ?? '') === 'scan_events');
+
+    expect(QueryPlans::scansSequentially($nodos, 'scan_events'))->toBeFalse('El cuadro recorre scan_events entera')
+        ->and(QueryPlans::usesIndex($nodos, 'scan_events_occurred_at_index'))->toBeTrue('El cuadro no usa scan_events_occurred_at_index')
+        ->and($sobreScanEvents)->toHaveCount(1);
+})->group('RNF-P-05', 'RNF-P-02', 'RF-IN-08');
+
+/**
+ * Los dias civiles alrededor de los que se comprueba la equivalencia: los de
+ * cambio de hora de 2026 y los de su alrededor.
+ *
+ * - **Europe/Madrid:** el 29 de marzo tiene 23 horas y el 25 de octubre 25; el
+ *   cambio es de madrugada, no a medianoche.
+ * - **America/Santiago:** el cambio cae JUSTO a medianoche. El 5 de abril la
+ *   medianoche se repite (a las 00:00 se vuelve a las 23:00 del dia 4), y el 6
+ *   de septiembre no existe (de las 23:59:59 del dia 5 se salta a la 01:00).
+ *
+ * @return array<string, array{0: string, 1: list<string>}>
+ */
+function diasDeCambioDeHoraDelCuadro(): array
+{
+    return [
+        'Madrid' => ['Europe/Madrid', ['2026-03-29', '2026-10-25']],
+        'Santiago de Chile' => ['America/Santiago', ['2026-04-05', '2026-09-06']],
+    ];
+}
+
+it('cuenta los mismos escaneos que el filtro por fecha civil alrededor de la medianoche de los cambios de hora', /** @param list<string> $dias */ function (string $zona, array $dias): void {
+    /*
+     * La equivalencia que permitio cambiar el filtro (DB5): convertir los
+     * LIMITES del periodo a instantes tiene que dar exactamente el mismo
+     * conjunto de filas que convertir cada fila a su fecha civil, que es el
+     * criterio de RN-05 y de las reglas duras 3 y 4. El filtro antiguo se usa
+     * aqui como oraculo.
+     *
+     * Escaneos cada diez minutos durante tres dias alrededor de cada cambio, mas
+     * uno a un segundo y a un microsegundo de cada medianoche local; y se piden
+     * periodos de un dia y de varios que empiezan y terminan en los dias del
+     * cambio.
+     */
+    $site = WorkforceFixtures::site('Hotel del cambio de hora');
+    $device = AttendanceFixtures::device($site)['id'];
+    $employee = AttendanceFixtures::employeeIdOf(WorkforceFixtures::employee($site));
+
+    foreach ($dias as $dia) {
+        DB::statement(<<<'SQL'
+            INSERT INTO scan_events
+                (scan_id, device_id, employee_id, occurred_at, recorded_at, origin, intent, result,
+                 worked_minutes, client_meta)
+            SELECT gen_random_uuid(), ?, ?, t, t, 'qr_kiosk', 'auto', 'clock_in', 0, '{}'::jsonb
+              FROM (
+                    SELECT generate_series(
+                               ((?::date - 1)::timestamp AT TIME ZONE ?),
+                               ((?::date + 2)::timestamp AT TIME ZONE ?),
+                               interval '10 minutes') AS t
+                    UNION ALL
+                    SELECT (d::timestamp AT TIME ZONE ?) + o
+                      FROM generate_series(?::date - 1, ?::date + 2, interval '1 day') AS d
+                     CROSS JOIN (VALUES (interval '-1 second'), (interval '-1 microsecond'),
+                                        (interval '1 microsecond'), (interval '1 second')) AS v(o)
+                   ) AS instantes
+            SQL, [$device, $employee, $dia, $zona, $dia, $zona, $zona, $dia, $dia]);
+    }
+
+    $lector = app(AdoptionFactsReader::class);
+    $comprobados = 0;
+
+    foreach ($dias as $dia) {
+        $base = new DateTimeImmutable($dia, new DateTimeZone('UTC'));
+        $periodos = [
+            [$base->modify('-1 day'), $base->modify('-1 day')],
+            [$base, $base],
+            [$base->modify('+1 day'), $base->modify('+1 day')],
+            [$base->modify('-1 day'), $base],
+            [$base, $base->modify('+1 day')],
+        ];
+
+        foreach ($periodos as [$desde, $hasta]) {
+            $consulta = AdoptionReportQuery::of(DateRange::between($desde->format('Y-m-d'), $hasta->format('Y-m-d')));
+            $hechos = $lector->factsFor($consulta, $zona);
+
+            foreach (['current' => [$consulta->range, $hechos->current], 'previous' => [$consulta->previousRange, $hechos->previous]] as $cual => [$rango, $periodo]) {
+                $oraculo = DB::table('scan_events')
+                    ->whereRaw('(occurred_at AT TIME ZONE ?)::date BETWEEN ?::date AND ?::date', [$zona, $rango->isoFrom(), $rango->isoTo()])
+                    ->count();
+
+                expect($periodo->attendedScans)->toBe($oraculo, $zona.' '.$cual.' '.$rango->isoFrom().'..'.$rango->isoTo());
+                $comprobados += $oraculo;
+            }
+        }
+    }
+
+    // El control de que la prueba mira algo: con cero filas, la igualdad pasaria siempre.
+    expect($comprobados)->toBeGreaterThan(0);
+})->with(diasDeCambioDeHoraDelCuadro())->group('RNF-P-05', 'RF-IN-08', 'RN-09');
 
 it('traduce la cancelacion de PostgreSQL al 422 del cuadro y no a un 500', function (): void {
     /*

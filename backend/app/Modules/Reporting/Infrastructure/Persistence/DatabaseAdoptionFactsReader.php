@@ -44,7 +44,7 @@ use Throwable;
  * 3.1: con dos consultas, Grafana y el cuadro darian dos porcentajes para la misma
  * semana (decision 8 de la ficha 3.13).
  *
- * ## `AT TIME ZONE` de la zona del centro, y no `date_trunc` en UTC
+ * ## Dias civiles de la zona del centro, convertidos a instantes ANTES de filtrar
  *
  * Aqui si hay conversion de zona, al contrario que en el informe por periodo: las
  * jornadas se filtran por `work_date` —que **ya es** una fecha civil con RN-05
@@ -54,9 +54,16 @@ use Throwable;
  * resolver con la zona del **centro**: en UTC ese fichaje seria del dia siguiente,
  * y un cuadro de marzo dejaria fuera la ultima noche del mes.
  *
- * Con el cambio de hora la aritmetica no se mueve: PostgreSQL convierte cada
- * instante con las reglas de la zona, asi que el domingo de 23 horas tiene 23 y el
- * de 25 tiene 25, y los dos caen enteros en su dia civil (RN-09).
+ * Por eso no se convierte cada fila, sino los **limites** del periodo: la
+ * medianoche local del primer dia y la del dia siguiente al ultimo pasan a
+ * instantes UTC una sola vez, en la CTE {@see self::PERIODS}, y las filas se
+ * acotan con `col >= desde AND col < hasta`. Es el mismo conjunto de filas que
+ * `(col AT TIME ZONE zona)::date BETWEEN desde AND hasta` —la conversion la hace
+ * el mismo PostgreSQL con las mismas reglas de la zona, asi que el domingo de 23
+ * horas tiene 23 y el de 25 tiene 25 (RN-09)—, pero ahora **un indice de la
+ * columna lo resuelve**, en vez de convertir y descartar el historico entero
+ * fila a fila (DB5). Lo ata `AdoptionReportVolumeTest`, con la equivalencia en
+ * los cambios de hora de Madrid y de Santiago de Chile.
  *
  * ## Los dos periodos en las mismas consultas
  *
@@ -128,6 +135,24 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
 
     /** La incidencia que mide el §1.3 con su «tiempo medio hasta resolver un turno sin cerrar». */
     private const string OPEN_SHIFT_INCIDENT = 'open_shift_expired';
+
+    /**
+     * Los dos periodos como intervalos semiabiertos de instantes `[from_at, to_at)`.
+     *
+     * Enlaza, por este orden, las cuatro fechas (desde y hasta del actual y del
+     * anterior) y la zona del centro: {@see self::periodBindings()}.
+     */
+    private const string PERIODS = <<<'SQL'
+        local_periods (period, from_date, to_date) AS (
+            VALUES ('current'::text, ?::date, ?::date), ('previous'::text, ?::date, ?::date)
+        ), periods AS (
+            SELECT lp.period,
+                   lp.from_date::timestamp AT TIME ZONE z.tz       AS from_at,
+                   (lp.to_date + 1)::timestamp AT TIME ZONE z.tz   AS to_at
+              FROM local_periods lp
+             CROSS JOIN (SELECT ?::text AS tz) AS z
+        )
+        SQL;
 
     public function __construct(
         private ConnectionInterface $connection,
@@ -225,18 +250,15 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
      *
      * La primera version preguntaba con subconsultas escalares correlacionadas con la
      * CTE de periodos: tres por los recuentos y una por cada origen, todas
-     * multiplicadas por los dos periodos. **Catorce recorridos de `scan_events` por
-     * peticion.** Con 39 000 filas el `EXPLAIN ANALYZE` daba `loops=8` y 12,6 ms por
-     * pasada —imperceptible—, pero el filtro por fecha civil **no es sargable** (ver
-     * el docblock de la clase) y por tanto cada pasada es un recorrido completo: con
-     * los cuatro años de retencion de RL-02 y unas 2,9 M de filas, catorce pasadas
-     * son del orden de trece segundos y el `statement_timeout` de diez corta la
-     * consulta. El cuadro habria dejado de funcionar **justo en la instalacion mas
-     * antigua**, que es la que tiene que renovar la licencia.
+     * multiplicadas por los dos periodos: **catorce lecturas de `scan_events` por
+     * peticion**, del orden de trece segundos con los cuatro años de RL-02.
      *
-     * Con `LEFT JOIN` sobre los periodos y `count(*) FILTER (WHERE …)` se recorre la
-     * tabla **una vez** y cada fila se clasifica al pasar. La aritmetica no cambia:
-     * los `FILTER` cuentan exactamente lo que contaban las subconsultas.
+     * Con `LEFT JOIN` sobre los periodos y `count(*) FILTER (WHERE …)` cada fila
+     * del periodo se lee **una vez** y se clasifica al pasar; y como el periodo
+     * llega en instantes (ver el docblock de la clase), cada uno de los dos es un
+     * recorrido de rango de `scan_events_occurred_at_index`, no de la tabla. La
+     * aritmetica no cambia: los `FILTER` cuentan exactamente lo que contaban las
+     * subconsultas.
      *
      * ## El `LEFT JOIN` conserva la fila del periodo vacio
      *
@@ -276,23 +298,22 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
             $originBindings[] = $origin;
         }
 
+        $periods = self::PERIODS;
+
         $rows = $this->select(<<<SQL
-            WITH periods (period, from_date, to_date) AS (
-                VALUES ('current'::text, ?::date, ?::date), ('previous'::text, ?::date, ?::date)
-            )
+            WITH {$periods}
             SELECT p.period,
                    count(s.id)                                                            AS attended,
                    count(s.id) FILTER (WHERE s.recorded_at - s.occurred_at > ?::interval)  AS offline_resolved{$originColumns}
               FROM periods p
               LEFT JOIN scan_events s
-                     ON (s.occurred_at AT TIME ZONE ?)::date BETWEEN p.from_date AND p.to_date
+                     ON s.occurred_at >= p.from_at
+                    AND s.occurred_at < p.to_at
              GROUP BY p.period
             SQL, [
-            $query->range->isoFrom(), $query->range->isoTo(),
-            $query->previousRange->isoFrom(), $query->previousRange->isoTo(),
+            ...$this->periodBindings($query, $timeZone),
             self::OFFLINE_THRESHOLD,
             ...$originBindings,
-            $timeZone,
         ]);
 
         $scans = [];
@@ -350,23 +371,22 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
     {
         $codes = implode(', ', array_fill(0, \count(self::FAILED_ATTEMPT_CODES), '?'));
 
+        $periods = self::PERIODS;
+
         $rows = $this->select(<<<SQL
-            WITH periods (period, from_date, to_date) AS (
-                VALUES ('current'::text, ?::date, ?::date), ('previous'::text, ?::date, ?::date)
-            )
+            WITH {$periods}
             SELECT p.period,
                    coalesce(sum(e.occurrences), 0) AS failed_attempts
               FROM periods p
               LEFT JOIN error_events e
                      ON e.source = 'kiosk'
                     AND e.code IN ({$codes})
-                    AND (e.last_seen_at AT TIME ZONE ?)::date BETWEEN p.from_date AND p.to_date
+                    AND e.last_seen_at >= p.from_at
+                    AND e.last_seen_at < p.to_at
              GROUP BY p.period
             SQL, [
-            $query->range->isoFrom(), $query->range->isoTo(),
-            $query->previousRange->isoFrom(), $query->previousRange->isoTo(),
+            ...$this->periodBindings($query, $timeZone),
             ...self::FAILED_ATTEMPT_CODES,
-            $timeZone,
         ]);
 
         $failed = [];
@@ -397,21 +417,18 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
      */
     private function correctionsByPeriod(AdoptionReportQuery $query, string $timeZone): array
     {
-        $rows = $this->select(<<<'SQL'
-            WITH periods (period, from_date, to_date) AS (
-                VALUES ('current'::text, ?::date, ?::date), ('previous'::text, ?::date, ?::date)
-            )
+        $periods = self::PERIODS;
+
+        $rows = $this->select(<<<SQL
+            WITH {$periods}
             SELECT p.period,
                    count(c.id) AS corrections
               FROM periods p
               LEFT JOIN shift_corrections c
-                     ON (c.created_at AT TIME ZONE ?)::date BETWEEN p.from_date AND p.to_date
+                     ON c.created_at >= p.from_at
+                    AND c.created_at < p.to_at
              GROUP BY p.period
-            SQL, [
-            $query->range->isoFrom(), $query->range->isoTo(),
-            $query->previousRange->isoFrom(), $query->previousRange->isoTo(),
-            $timeZone,
-        ]);
+            SQL, $this->periodBindings($query, $timeZone));
 
         $corrections = [];
 
@@ -452,17 +469,17 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
      */
     private function resolvedIncidentsByPeriod(AdoptionReportQuery $query, string $timeZone): array
     {
-        $rows = $this->select(<<<'SQL'
-            WITH periods (period, from_date, to_date) AS (
-                VALUES ('current'::text, ?::date, ?::date), ('previous'::text, ?::date, ?::date)
-            ), resolutions AS (
+        $periods = self::PERIODS;
+
+        $rows = $this->select(<<<SQL
+            WITH {$periods}, resolutions AS (
                 SELECT p.period,
                        extract(epoch FROM (i.resolved_at - i.detected_at)) / 60.0 AS minutes
                   FROM periods p
                   JOIN incidents i
                     ON i.type = ?
-                   AND i.resolved_at IS NOT NULL
-                   AND (i.resolved_at AT TIME ZONE ?)::date BETWEEN p.from_date AND p.to_date
+                   AND i.resolved_at >= p.from_at
+                   AND i.resolved_at < p.to_at
             )
             SELECT p.period,
                    count(r.minutes)                                                     AS resolved,
@@ -472,10 +489,8 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
               LEFT JOIN resolutions r ON r.period = p.period
              GROUP BY p.period
             SQL, [
-            $query->range->isoFrom(), $query->range->isoTo(),
-            $query->previousRange->isoFrom(), $query->previousRange->isoTo(),
+            ...$this->periodBindings($query, $timeZone),
             self::OPEN_SHIFT_INCIDENT,
-            $timeZone,
         ]);
 
         $incidents = [];
@@ -546,6 +561,20 @@ final readonly class DatabaseAdoptionFactsReader implements AdoptionFactsReader
         return [
             'open_incidents' => $reader->int('open_incidents'),
             'employees_without_credential' => $reader->int('employees_without_credential'),
+        ];
+    }
+
+    /**
+     * Los parametros de {@see self::PERIODS}, en su orden.
+     *
+     * @return list<string>
+     */
+    private function periodBindings(AdoptionReportQuery $query, string $timeZone): array
+    {
+        return [
+            $query->range->isoFrom(), $query->range->isoTo(),
+            $query->previousRange->isoFrom(), $query->previousRange->isoTo(),
+            $timeZone,
         ];
     }
 
