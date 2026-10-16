@@ -3,7 +3,8 @@
 // que no pasan por el motor (CSV, XLSX). No es un fallo del informe: hay un tope de
 // PDF simultaneos y basta esperar `Retry-After` o llevarse el mismo informe en otro
 // formato. Con el motor ausente (`service-unavailable`) NO se usa este aviso.
-import { computed } from 'vue'
+import { announce } from '@kronoqr/web-kit/announcer'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
@@ -23,6 +24,10 @@ const message = computed(() =>
     ? t('reports.pdfBusy.messageNoWait')
     : t('reports.pdfBusy.message', { seconds: props.retryAfterSeconds }),
 )
+// Se anuncia al aparecer: el aviso llega tras una peticion y no hay foco que lo lea.
+onMounted(() => {
+  announce(message.value)
+})
 </script>
 
 <template>

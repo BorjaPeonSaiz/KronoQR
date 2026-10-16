@@ -22,16 +22,3 @@ export function isSiteTimeZoneLocked(error: unknown): boolean {
     isApiError(error) && error.status === 409 && error.problem?.type === SITE_TIME_ZONE_LOCKED_TYPE
   )
 }
-
-/** `503` de las exportaciones en PDF: hay demasiados PDF simultaneos (con `Retry-After`). */
-export const PDF_RENDERING_BUSY_TYPE = 'urn:kronoqr:problem:pdf-rendering-busy'
-
-/**
- * Si el fallo es el `503` «el motor de PDF esta ocupado». Se distingue del motor
- * ausente (`service-unavailable`), que no se arregla esperando.
- */
-export function isPdfRenderingBusy(error: unknown): boolean {
-  return (
-    isApiError(error) && error.status === 503 && error.problem?.type === PDF_RENDERING_BUSY_TYPE
-  )
-}

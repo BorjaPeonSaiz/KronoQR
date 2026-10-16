@@ -10,7 +10,7 @@
 import { announce } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
-import { isApiError } from '@kronoqr/web-kit/http'
+import { isApiError, isPdfRenderingBusy } from '@kronoqr/web-kit/http'
 import { exceedsMaxRange, isInvertedRange, MAX_RANGE_DAYS } from '@kronoqr/web-kit/dateRange'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
 import { computed, ref } from 'vue'
@@ -33,7 +33,6 @@ const pdfUnavailable = ref(false)
 /** El motor de PDF esta ocupado (tope de PDF simultaneos): reintentar o usar el CSV. */
 const pdfBusy = ref(false)
 const retryAfterSeconds = ref<number | null>(null)
-const PDF_BUSY_TYPE = 'urn:kronoqr:problem:pdf-rendering-busy'
 
 const busyMessage = computed(() =>
   retryAfterSeconds.value === null
@@ -78,7 +77,7 @@ async function submit(): Promise<void> {
     announce(t('myExport.announce.done'))
   } catch (caught) {
     if (format.value === 'pdf' && isApiError(caught) && caught.status === 503) {
-      if (caught.problem?.type === PDF_BUSY_TYPE) {
+      if (isPdfRenderingBusy(caught)) {
         pdfBusy.value = true
         retryAfterSeconds.value = caught.retryAfterSeconds
         announce(busyMessage.value)

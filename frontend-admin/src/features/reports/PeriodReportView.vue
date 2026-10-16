@@ -24,7 +24,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
-import { isApiError } from '@kronoqr/web-kit/http'
+import { isApiError, isPdfRenderingBusy } from '@kronoqr/web-kit/http'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -32,7 +32,6 @@ import { RouterLink } from 'vue-router'
 import { EMPLOYEES_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
 import { listDepartments } from '@/shared/api/organisation.api'
-import { isPdfRenderingBusy } from '@/shared/api/problems'
 import type {
   PeriodReport,
   ReportExport,
@@ -278,11 +277,6 @@ async function download(format: PeriodReportFormat): Promise<void> {
     if (format === 'pdf' && isPdfRenderingBusy(caught)) {
       pdfBusy.value = true
       pdfBusyRetryAfter.value = isApiError(caught) ? caught.retryAfterSeconds : null
-      announce(
-        pdfBusyRetryAfter.value === null
-          ? t('reports.pdfBusy.messageNoWait')
-          : t('reports.pdfBusy.message', { seconds: pdfBusyRetryAfter.value }),
-      )
       return
     }
 

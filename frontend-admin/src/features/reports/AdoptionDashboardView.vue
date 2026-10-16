@@ -29,7 +29,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
-import { isApiError } from '@kronoqr/web-kit/http'
+import { isApiError, isPdfRenderingBusy } from '@kronoqr/web-kit/http'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -41,7 +41,6 @@ import type {
   AdoptionOriginShare,
   AdoptionReport,
 } from '@/shared/api/types'
-import { isPdfRenderingBusy } from '@/shared/api/problems'
 import ChartWithTable from '@/shared/ui/ChartWithTable.vue'
 import type { ChartSeries } from '@/shared/ui/ChartWithTable.vue'
 import {
@@ -424,11 +423,6 @@ async function download(format: AdoptionExportFormat): Promise<void> {
     if (format === 'pdf' && isPdfRenderingBusy(caught)) {
       pdfBusy.value = true
       pdfBusyRetryAfter.value = isApiError(caught) ? caught.retryAfterSeconds : null
-      announce(
-        pdfBusyRetryAfter.value === null
-          ? t('reports.pdfBusy.messageNoWait')
-          : t('reports.pdfBusy.message', { seconds: pdfBusyRetryAfter.value }),
-      )
       return
     }
 
