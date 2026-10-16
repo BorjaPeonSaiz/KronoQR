@@ -30,6 +30,8 @@ export function createTestRouter(): Router {
 export interface HarnessOptions<Props> {
   props?: Props
   locale?: AppLocale
+  /** Un i18n ya montado (p. ej. atado a la politica de la marca); gana a `locale`. */
+  i18n?: ReturnType<typeof createAppI18n>
   router?: Router
   pinia?: ReturnType<typeof createPinia>
 }
@@ -54,7 +56,7 @@ export async function mountView<Props extends Record<string, unknown>>(
   const mountingOptions = {
     props: options.props,
     global: {
-      plugins: [pinia, router, createAppI18n(options.locale ?? 'es')],
+      plugins: [pinia, router, options.i18n ?? createAppI18n(options.locale ?? 'es')],
     },
   } as unknown as ComponentMountingOptions<Component>
 

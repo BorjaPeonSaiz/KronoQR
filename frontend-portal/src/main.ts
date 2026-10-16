@@ -14,12 +14,8 @@ import { useSessionStore } from './features/login/session.store'
 import { createAppRouter } from './router'
 import { registerAuthGuard } from './router/guards'
 import { useBrandingStore } from './shared/branding/branding.store'
-import {
-  browserHasSupportedLocale,
-  createAppI18n,
-  isSupportedLocale,
-  resolveLocale,
-} from './shared/i18n'
+import { createAppI18n } from './shared/i18n'
+import { bindPortalLocale } from './shared/i18n/portalLocale'
 
 const app = createApp(App)
 
@@ -37,8 +33,10 @@ const pinia = createPinia()
 app.use(pinia)
 
 const router = createAppRouter()
-const i18n = createAppI18n(resolveLocale(navigator.languages))
 const session = useSessionStore(pinia)
+const branding = useBrandingStore(pinia)
+
+const i18n = createAppI18n()
 
 // El cliente HTTP no conoce la tienda y la tienda no conoce al router: se atan
 // aqui, en el arranque, que es el unico sitio donde se puede sin crear un ciclo.
@@ -78,39 +76,23 @@ setLocaleProvider(() => i18n.global.locale.value)
 // El documento declara el idioma que se esta mostrando (WCAG 3.1.1, PA7-001).
 syncDocumentLang(() => i18n.global.locale.value)
 
-// El idioma del portal es el de la persona que ha entrado (`employees.locale`),
-// no el del navegador desde el que mira ni el del dispositivo compartido del
-// centro (doc 01 §6.6, PortalEmployee.locale).
-watch(
-  () => session.employee?.locale,
-  (employeeLocale) => {
-    if (isSupportedLocale(employeeLocale)) {
-      i18n.global.locale.value = employeeLocale
-    }
-  },
-  { immediate: true },
-)
+// El idioma lo decide la politica de la marca (`branding.locales`): con un
+// solo idioma ofrecido -el de serie, espanol- ni el navegador ni el idioma de
+// la persona lo cambian. Con varios gana el de la persona que ha entrado
+// (`employees.locale`, doc 01 §6.6) y despues el del navegador. Se recalcula
+// al entrar o salir una persona y al llegar la marca del servidor.
+bindPortalLocale(i18n, () => ({
+  policy: branding.current.locales,
+  personal: session.employee?.locale,
+}))
 
 registerAuthGuard(router)
 
 // Marca de la instalacion (RF-PD-08). Se pinta el producto de inmediato -sin
 // esperar a la red, para no retrasar la primera pantalla- y se pide la marca
 // real en paralelo; si llega y es valida, sustituye a la del producto.
-const branding = useBrandingStore(pinia)
 branding.apply()
-void branding.load().then(() => {
-  // Solo cuando nadie ha elegido idioma todavia: ni el navegador pedia uno
-  // soportado (`browserHasSupportedLocale`) ni hay una persona identificada
-  // cuyo `employees.locale` ya haya fijado el idioma (el `watch` de abajo).
-  // El idioma de la instalacion nunca gana a una preferencia real.
-  if (
-    session.employee === null &&
-    !browserHasSupportedLocale(navigator.languages) &&
-    isSupportedLocale(branding.current.locales.default)
-  ) {
-    i18n.global.locale.value = branding.current.locales.default
-  }
-})
+void branding.load()
 
 app.use(router)
 app.use(i18n)

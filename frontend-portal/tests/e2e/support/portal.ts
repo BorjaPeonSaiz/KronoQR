@@ -39,13 +39,19 @@ export const PORTAL_SESSION_TOKEN = '41|Zt6QpX1nR8vKcLm3bYdF9wS2eT5rU7iO0aP4sD8h
 /** Clave de `sessionStorage` del portal (`session.store.ts`). */
 export const SESSION_STORAGE_KEY = 'kronoqr.portal.session'
 
-/** Lo que responde `GET /api/v1/branding` sin nada configurado: el producto (RF-PD-08). */
+/** Lo que responde `GET /api/v1/branding` sin nada configurado: el producto, solo en espanol (RF-PD-08). */
 export const PRODUCT_BRANDING: Branding = {
   application_name: 'KronoQR',
   accent_color: null,
   logo_url: null,
-  locales: { default: 'es', available: ['es', 'en'] },
+  locales: { default: 'es', available: ['es'] },
   privacy_notice: { controller_name: null, policy_url: null },
+}
+
+/** La misma marca del producto con el ingles activado por configuracion (RF-PD-08). */
+export const BILINGUAL_BRANDING: Branding = {
+  ...PRODUCT_BRANDING,
+  locales: { default: 'es', available: ['es', 'en'] },
 }
 
 /** La huella que lleva la URL del logotipo de ejemplo (`?v=`, contrato). */
