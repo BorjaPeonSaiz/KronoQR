@@ -1699,9 +1699,10 @@ export interface paths {
          *     **El alcance por departamento de RF-ID-03 se aplica en la consulta**, no
          *     despues: un `responsable_departamento` recibe una pagina que solo
          *     contiene a la gente de los departamentos que dirige —`meta.total`
-         *     incluido—, y `admin`, `rrhh` y `auditor` la ven entera. Filtrar despues
+         *     incluido—, y `admin` y `rrhh` la ven entera. Filtrar despues
          *     de contar daria un `meta.total` que describe a personas que quien
-         *     pregunta no puede ver, que es una fuga por si misma.
+         *     pregunta no puede ver, que es una fuga por si misma. El `auditor` no
+         *     lleva `employees:read` y recibe `403` (RF-ID-02).
          *
          *     Un responsable **sin ningun departamento asignado** recibe una pagina
          *     vacia, no la plantilla entera. El caso existe: un departamento puede
@@ -2236,9 +2237,9 @@ export interface paths {
          *     incluidos los recuentos de `meta.totals`: un
          *     `responsable_departamento` recibe a su gente y solo a su gente, y un
          *     `department_id` fuera de su alcance devuelve `data` vacio, no `403`
-         *     (mismo criterio que la presencia en vivo). El `auditor` lleva
-         *     `attendance:read` y aun asi recibe `403`: auditar es mirar lo que quedo
-         *     escrito, no la gestion del dia.
+         *     (mismo criterio que la presencia en vivo). El `auditor` recibe `403`:
+         *     su unica funcion en la API es la exportacion para la Inspeccion
+         *     (RF-ID-02), y lo rechazan el ambito y la policy.
          *
          *     **Solo lee.** Nada de lo que devuelve cambia el registro ni ninguna
          *     incidencia. **No se degrada con la licencia** (ADR-023): es una lectura
@@ -2348,21 +2349,28 @@ export interface paths {
          *     construye el selector del alta de empleado y los filtros por
          *     departamento de la presencia y de la plantilla.
          *
-         *     **La leen los cuatro roles de gestion**: `admin`, `rrhh`,
-         *     `responsable_departamento` y `auditor`. Es un catalogo de la
+         *     **La leen `admin`, `rrhh` y `responsable_departamento`**, los tres
+         *     roles de gestion que llevan `employees:read`. Es un catalogo de la
          *     instalacion y no un dato de personas, asi que **no se acota por
          *     departamento**: un responsable ve la lista entera, incluidos los
          *     departamentos que no dirige, y con ella quien dirige cada uno
          *     (`manager_name`). El alcance de RF-ID-03 se aplica sobre las personas
          *     (`GET /employees`, presencia, jornadas), no sobre este catalogo.
          *     Crear, renombrar y elegir responsable siguen siendo de `admin` y
-         *     `rrhh` (y lo ultimo, solo de `admin`): un `responsable_departamento` o
-         *     un `auditor` que lo intenten reciben `403`.
+         *     `rrhh` (y lo ultimo, solo de `admin`): un `responsable_departamento`
+         *     que lo intente recibe `403`.
+         *
+         *     **El `auditor` recibe `403`** (RF-ID-02, decision del propietario de
+         *     13-10-2026): su unica funcion en la API es la exportacion para la
+         *     Inspeccion (`GET /api/v1/reports/legal-export`), y desde la 2.2.1 su
+         *     token ya no lleva `attendance:read`. La policy lo rechaza ademas por
+         *     rol, de modo que un token emitido antes del cambio, que conserva sus
+         *     ambitos hasta que caduca, tampoco lo lee.
          *
          *     **Un acceso de soporte del fabricante no lo lee** (`403`), con ningun
-         *     alcance: hasta esta version la lectura exigia `employees:*`, que ningun
-         *     alcance concede, y abrirla a los cuatro roles no amplia lo que ve el
-         *     fabricante (regla dura 16, ADR-020).
+         *     alcance: el alcance `read_only` lleva `employees:read`, pero la policy
+         *     lo rechaza para que el catalogo no amplie lo que ve el fabricante
+         *     (regla dura 16, ADR-020).
          */
         get: operations["listDepartments"];
         put?: never;
@@ -2394,9 +2402,10 @@ export interface paths {
         };
         /**
          * Detalle de un departamento
-         * @description Nombre y responsable del departamento. Lo leen los cuatro roles de
-         *     gestion, sin acotar por departamento, por lo mismo que el listado
-         *     (`GET /api/v1/departments`): es catalogo, no datos de personas.
+         * @description Nombre y responsable del departamento. Lo leen `admin`, `rrhh` y
+         *     `responsable_departamento`, sin acotar por departamento, por lo mismo
+         *     que el listado (`GET /api/v1/departments`): es catalogo, no datos de
+         *     personas. El `auditor` y un acceso de soporte reciben `403`.
          */
         get: operations["getDepartment"];
         put?: never;
@@ -9772,7 +9781,7 @@ export interface components {
             /**
              * @description Los canales a los que **esta cuenta** puede suscribirse, ya resueltos
              *     por su alcance (RF-ID-03). **Lista vacia cuando `enabled` es
-             *     `false`**, por lo mismo que `key` va nula. `admin`, `rrhh` y `auditor` reciben
+             *     `false`**, por lo mismo que `key` va nula. `admin` y `rrhh` reciben
              *     `presence.all`; un `responsable_departamento` recibe un
              *     `presence.department.{id}` por cada departamento que dirige y **no**
              *     recibe `presence.all`.

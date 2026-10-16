@@ -136,8 +136,9 @@ function managementEndpoints(): array
 
         // Presencia en tiempo real (tarea 2.4, RF-PA-01). Ambito
         // `attendance:read` y policy propia: es «manager+» del Anexo B, asi que
-        // el `auditor` recibe `403` **teniendo el ambito** —es la mitad que
-        // aporta la policy— y el quiosco ni siquiera lo tiene.
+        // un rol con el ambito y sin el rol recibe `403` —es la mitad que aporta
+        // la policy— y el quiosco ni siquiera lo tiene. El `auditor`, desde la
+        // 2.2.1, tampoco lleva el ambito (RF-ID-02).
         //
         // La suscripcion al canal de WebSocket es el mismo recurso por otra
         // puerta y se prueba en `Tests\Feature\Reporting\PresenceChannelAuthorizationTest`:
@@ -147,9 +148,9 @@ function managementEndpoints(): array
 
         // Vista de cumplimiento (tarea 3.4, RF-PA-06). Mismo ambito
         // `attendance:read` y policy propia: es «manager+» del Anexo B, asi que
-        // el `auditor` recibe `403` **teniendo el ambito** —auditar es mirar lo
-        // que quedo escrito, no la gestion del dia— y el quiosco ni siquiera lo
-        // tiene.
+        // el `auditor` recibe `403` por las dos mitades —desde la 2.2.1 no lleva
+        // el ambito, y la policy lo rechaza por rol con un token anterior— y el
+        // quiosco ni siquiera lo tiene.
         //
         // **Y aqui el `403` del auditor importa mas que en ninguna otra ruta del
         // grupo**: lo que esta pantalla reparte es una lista de quien ha
@@ -511,32 +512,53 @@ it('deniega a un token de quiosco cualquier endpoint de gestion', function (stri
 })->with(managementEndpoints())->group('RS-04', 'RS-05', 'RQ-07', 'RF-ID-04');
 
 /**
- * Los endpoints de gestion que un `auditor` sigue sin poder tocar.
+ * Todo lo que un `auditor` no puede tocar: **la matriz entera**, y ademas las
+ * jornadas de un empleado, que no estan en ella.
  *
- * Es la matriz entera menos las dos LECTURAS del catalogo de departamentos, que
- * el bloque 21 de la 2.2.0 abre a los cuatro roles de gestion (decision del
- * propietario de 02-10-2026). Crear y renombrar se quedan: son `rrhh+`. El `200`
- * de las dos lecturas se prueba en
- * `Tests\Feature\Workforce\DepartmentReadAccessTest`.
+ * Desde el bloque 25 de la 2.2.1 (RF-ID-02, decision del propietario de
+ * 13-10-2026) su unica funcion en la API es la exportacion para la Inspeccion, y
+ * su token solo lleva `reports:legal`. Hasta entonces quedaban fuera de esta
+ * lista las dos lecturas del catalogo de departamentos; ya no queda ninguna. El
+ * `200` de la exportacion es el control positivo de abajo.
+ *
+ * `/employees/{uuid}/workdays` entra solo aqui y no en {@see managementEndpoints()}
+ * porque el responsable si la lee, acotada a su departamento, y aquella lista la
+ * comparten todos los actores sin potestad.
  *
  * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
  */
 function endpointsDeniedToAuditor(): array
 {
-    $endpoints = managementEndpoints();
-
-    unset($endpoints['listar departamentos'], $endpoints['ver un departamento']);
-
-    return $endpoints;
+    return [
+        ...managementEndpoints(),
+        'ver las jornadas de un empleado' => ['GET', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/workdays?from=2026-03-01&to=2026-03-31', []],
+    ];
 }
 
-it('deniega a un auditor escribir o leer plantilla', function (string $method, string $uri, array $body): void {
-    // El auditor es de solo lectura y su ambito es `attendance:read`,
-    // `audit:read` y `reports:legal` (§7.3): la plantilla no esta ahi.
+it('deniega a un auditor todo salvo la exportacion para la Inspeccion', function (string $method, string $uri, array $body): void {
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
 })->with(endpointsDeniedToAuditor())->group('RS-05', 'RQ-07', 'RF-ID-02');
+
+it('deniega lo mismo a un auditor con un token emitido antes de la 2.2.1', function (string $method, string $uri, array $body): void {
+    // El token conserva `attendance:read`, que abre el middleware de la
+    // presencia, el cumplimiento, las jornadas y —hasta esta version— el
+    // catalogo de departamentos. El `403` lo tiene que poner la policy.
+    $token = ManagementUsers::legacyAuditorTokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
+
+    Api::as($token)->call($method, $uri, $body)->assertStatus(403);
+})->with(endpointsDeniedToAuditor())->group('RS-05', 'RQ-07', 'RF-ID-02');
+
+it('deja al auditor descargar la exportacion para la Inspeccion', function (): void {
+    // El control positivo de las dos de arriba: si el auditor recibiera `403` en
+    // todo, tambien pasarian en verde.
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR));
+
+    Api::as($token)
+        ->get('/api/v1/reports/legal-export?from=2026-01-01&to=2026-01-31')
+        ->assertOk();
+})->group('RQ-07', 'RF-ID-02', 'RF-IN-05');
 
 /**
  * Los endpoints de gestion que un `responsable_departamento` **sigue** sin poder

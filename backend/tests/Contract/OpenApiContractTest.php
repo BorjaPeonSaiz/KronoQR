@@ -482,8 +482,8 @@ it('exige el ambito employees:* en todo endpoint que ESCRIBE plantilla', functio
         '/api/v1/site',
     ];
 
-    // La LECTURA de departamentos no es escritura de plantilla: la leen los
-    // cuatro roles de gestion (bloque 21 de la 2.2.0) y tiene su propia prueba.
+    // La LECTURA de departamentos no es escritura de plantilla: la leen quienes
+    // llevan `employees:read` (bloque 21 de la 2.2.0) y tiene su propia prueba.
     $lecturasDeCatalogo = [
         'get /api/v1/departments',
         'get /api/v1/departments/{id}',
@@ -518,15 +518,14 @@ it('exige el ambito estrecho employees:read en las dos rutas de lectura de plant
         ->toBe([['managementToken' => ['employees:read']]]);
 })->group('RF-ID-03', 'RQ-07');
 
-it('abre la lectura de departamentos a employees:read o attendance:read y nada mas', function (): void {
-    // Bloque 21 de la 2.2.0 (R6-BD-01, R4-QA-03): la leen los cuatro roles de
-    // gestion. `admin`, `rrhh` y el responsable llevan `employees:read`; el
-    // `auditor`, solo `attendance:read`. Dos requisitos separados es «o». Si
-    // alguno volviera a `employees:*`, el responsable y el auditor perderian el
-    // catalogo; si ganara un ambito de quiosco o de portal, lo leerian ellos.
+it('abre la lectura de departamentos solo a employees:read', function (): void {
+    // Bloque 21 de la 2.2.0 (R6-BD-01, R4-QA-03): la leen `admin`, `rrhh` y el
+    // responsable, que llevan `employees:read`. Desde el bloque 25 de la 2.2.1
+    // el `auditor` no (RF-ID-02): se retira el «o `attendance:read`» que le
+    // abria el catalogo. Si volviera, o si la ruta volviera a `employees:*` o
+    // ganara un ambito de quiosco o de portal, esta prueba lo dice.
     $lectura = [
         ['managementToken' => ['employees:read']],
-        ['managementToken' => ['attendance:read']],
     ];
 
     expect(Contract::value('paths', '/api/v1/departments', 'get', 'security'))->toBe($lectura)
@@ -535,7 +534,7 @@ it('abre la lectura de departamentos a employees:read o attendance:read y nada m
         ->toBe([['managementToken' => ['employees:*']]])
         ->and(Contract::value('paths', '/api/v1/departments/{id}', 'patch', 'security'))
         ->toBe([['managementToken' => ['employees:*']]]);
-})->group('RF-ID-03', 'RF-GP-01', 'RS-04', 'RQ-06', 'RQ-07');
+})->group('RF-ID-03', 'RF-ID-02', 'RF-GP-01', 'RS-04', 'RQ-06', 'RQ-07');
 
 it('mantiene el correo del empleado opcional en el contrato', function (): void {
     // Regla dura 12 y ADR-015. El contrato es el sitio donde esto se rompe sin
@@ -959,9 +958,10 @@ it('no deja que el anti-rebote afirme un tramo que no se creo', function (): voi
 
 it('exige el ambito attendance:correct en los tres endpoints de correccion', function (): void {
     // §7.3 y regla dura 18. Leer el registro de alguien y rectificarlo son dos
-    // potestades distintas: un `auditor` tiene `attendance:read` y no puede
-    // tener esta, porque auditar es mirar. Con un solo ambito, quien puede
-    // consultar la presencia podria cambiar las horas de cualquiera.
+    // potestades distintas: el alcance de soporte `read_only` lleva
+    // `attendance:read` y no puede tener esta, porque solo mira. Con un solo
+    // ambito, quien puede consultar la presencia podria cambiar las horas de
+    // cualquiera.
     $paths = [
         '/api/v1/shift-entries',
         '/api/v1/shift-entries/{uuid}',

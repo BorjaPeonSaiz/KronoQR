@@ -13,8 +13,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * ## Tres roles, y cada uno por un motivo distinto
  *
- * - **`auditor`.** Es su funcion: mirar el registro sin poder tocarlo. Su token
- *   lleva `reports:legal` y **no** lleva `attendance:correct`.
+ * - **`auditor`.** Es su funcion, y desde la 2.2.1 la unica que tiene en la API
+ *   (RF-ID-02, decision del propietario de 13-10-2026): su token lleva solo
+ *   `reports:legal`, y cualquier otra ruta de gestion le responde `403`.
  * - **`rrhh`.** Es quien atiende materialmente un requerimiento de Inspeccion en
  *   un hotel. Lleva `reports:*`, la familia entera.
  * - **`admin`.** Administrador de la instalacion; lleva las dos.

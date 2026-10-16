@@ -311,8 +311,8 @@ test(
 
 // R3-PA-05 (doc 05 §3.2): el responsable llega al detalle de jornada desde la
 // fila de la presencia, en el dia de la entrada en la zona del centro. El
-// auditor NO lo lee (WorkDayJournalPolicy::readers(), decision pendiente del
-// propietario): no se le ofrece un enlace que acabaria en 403.
+// auditor NO lo lee (WorkDayJournalPolicy::readers(); desde el bloque 25 solo
+// ve la Inspeccion): no se le ofrece un enlace que acabaria en 403.
 test(
   'el responsable abre desde la fila de presencia el detalle de jornada de esa persona',
   { tag: ['@RF-PA-01', '@RF-PA-03'] },
@@ -337,7 +337,7 @@ test(
 )
 
 test(
-  'el auditor ve la presencia pero no se le ofrece el enlace a la jornada',
+  'el auditor ya no ve la presencia: /live tecleado le lleva a la Inspeccion',
   { tag: ['@RF-PA-01', '@regla-dura-18'] },
   async ({ context, page }) => {
     await fakeReverb(context)
@@ -345,8 +345,8 @@ test(
     await logInAsAuditor(page)
     await page.goto('/live')
 
-    await expect(page.getByTestId('presence-entry').first()).toBeVisible()
-    await expect(page.getByTestId('entry-workdays-link')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/reports\/legal-export$/)
+    await expect(page.getByTestId('presence-entry')).toHaveCount(0)
   },
 )
 

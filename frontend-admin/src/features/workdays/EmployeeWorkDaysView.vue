@@ -7,9 +7,9 @@
 //  - **La lectura es de todo el mundo con `attendance:read`; corregir, no.**
 //    Añadir un tramo, rectificarlo o anularlo (RF-PA-04) exige el ambito
 //    `attendance:correct`, que esta pantalla comprueba aparte
-//    (`canCorrect`/`CorrectionDialog.vue`) y que un `auditor` con solo
-//    `attendance:read` no lleva: sigue pudiendo leer el registro sin que se le
-//    ofrezca nada que lo cambie.
+//    (`canCorrect`/`CorrectionDialog.vue`). Un rol con solo `attendance:read`
+//    lee el registro sin que se le ofrezca nada que lo cambie. El `auditor` ya
+//    no llega aqui (bloque 25): solo lleva `reports:legal`.
 //  - **Se dice que el acceso queda auditado**, porque es verdad: el servidor
 //    escribe en `audit_log` quien miro, de quien y que rango (RS-05). Quien lo
 //    hace tiene derecho a saberlo antes, no a enterarse despues.

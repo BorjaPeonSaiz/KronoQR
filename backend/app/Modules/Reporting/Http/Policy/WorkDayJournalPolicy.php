@@ -36,12 +36,13 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *     forma de llegar a ella: una comprobacion inalcanzable no protege nada y
  *     ademas no se puede probar.
  *
- * ## Por que el `auditor` no esta, teniendo el ambito
+ * ## Por que el `auditor` no esta
  *
- * `auditor` lleva `attendance:read` en su token (catalogo de roles) y aun asi
- * recibe `403` aqui. No es una contradiccion: es exactamente para lo que sirven
- * las dos comprobaciones del doc 02 §7.3. El Anexo B no lo pone en `manager+`, y
- * lo que ese rol necesita —el registro para un requerimiento— se sirve por
+ * Desde la 2.2.1 su token solo lleva `reports:legal` (RF-ID-02, decision del
+ * propietario de 13-10-2026), asi que ya no pasa el ambito; y la policy lo
+ * rechaza ademas por rol, porque un token emitido antes del cambio conserva
+ * `attendance:read` hasta que caduca (doc 02 §7.3: dos comprobaciones). Lo que
+ * ese rol necesita —el registro para un requerimiento— se sirve por
  * `GET /api/v1/reports/legal-export`, que es suyo (`auditor|rrhh`, tarea 1.17) y
  * queda auditado como exportacion legal, no como consulta de pantalla.
  *

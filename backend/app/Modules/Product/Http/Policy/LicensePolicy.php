@@ -23,8 +23,8 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * gobierna: lo que se contrato es una decision de quien firma el contrato, no de
  * quien gestiona la plantilla. **El `auditor` tampoco**: su trabajo es el
  * registro horario, y la licencia no forma parte de el —de hecho, la promesa del
- * producto es justo la contraria (ADR-019)—. Lo que necesite sobre activaciones
- * lo tiene en `audit_log` con `audit:read`.
+ * producto es justo la contraria (ADR-019)—. Desde la 2.2.1 su unica funcion en
+ * la API es la exportacion para la Inspeccion (RF-ID-02).
  *
  * **El quiosco menos que nadie.** Su token lleva tres ambitos y ninguno es
  * `license:*`, asi que se queda en el middleware; la policy lo rechazaria

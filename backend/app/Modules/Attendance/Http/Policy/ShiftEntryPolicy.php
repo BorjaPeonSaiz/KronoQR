@@ -31,8 +31,8 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * **La policy es la mitad de la autorizacion.** La otra es el ambito
  * `attendance:correct` del token, que comprueba el middleware `ability` antes de
  * llegar aqui (doc 02 §7.3). Con las dos, un token de quiosco no alcanza estos
- * endpoints aunque su portador tuviera rol —no tiene el ambito— y un `auditor`
- * con `attendance:read` tampoco puede escribir aunque llegue al controlador.
+ * endpoints aunque su portador tuviera rol —no tiene el ambito— y un rol de
+ * solo lectura tampoco puede escribir aunque llegue al controlador.
  *
  * **Un empleado no corrige nada, ni siquiera lo suyo.** Su token lleva
  * `self:read` y su rol no esta en ninguna de las dos listas: las dos mitades le

@@ -1502,6 +1502,15 @@ jornada ya registrada**: el histórico pasa a verse con la zona corregida. Cómo
 se usa está en [`configuracion.md`](configuracion.md) (fila `APP_TIMEZONE`).
 Ningún fichaje ni ningún total cambia al actualizar.
 
+**Al actualizar a la 2.2.1: las cuentas de auditoría solo ven «Inspección».**
+Una cuenta con rol de auditoría deja de ver «Departamentos», «Presencia» y
+«Cumplimiento» (en las dos últimas ya recibía un aviso de que no tenía
+permiso): su panel queda con la exportación para la Inspección y nada más. Si
+alguien usaba ese rol para consultar el registro en pantalla, dale otro rol en
+**Cuentas** ([`guia-rrhh.md`](guia-rrhh.md) §7 bis.1). La exportación para la
+Inspección no cambia, y las sesiones abiertas no se cierran: el menú se
+actualiza la próxima vez que se cargue el panel.
+
 **Desde qué versiones se puede saltar** a la del paquete, sin tocar nada:
 `./update.sh --supported-sources`. La regla es la versión menor vigente y las
 dos anteriores; desde una más antigua, el script te dice a cuál ir primero.

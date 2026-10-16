@@ -32,9 +32,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * **La policy es la mitad de la autorizacion.** La otra es el ambito del token,
  * que comprueba el middleware `ability` antes de llegar aqui (doc 02 §7.3): un
- * token de quiosco no alcanza estas rutas aunque su portador tuviera rol, y un
- * `auditor` con `attendance:read` tampoco puede escribir aunque llegue al
- * controlador.
+ * token de quiosco no alcanza estas rutas aunque su portador tuviera rol, y una
+ * cuenta que solo lleva un ambito de lectura tampoco puede escribir aunque
+ * llegue al controlador.
  */
 final class EmployeePolicy
 {

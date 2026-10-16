@@ -57,9 +57,10 @@ it('reparte los ambitos del documento 02 §7.3 rol por rol', function (string $r
         'attendance:read', 'attendance:correct', 'incidents:*',
         'employees:read', 'employees:*', 'credentials:*', 'reports:*',
     ]],
-    'auditor' => ['auditor', [
-        'attendance:read', 'audit:read', 'reports:legal',
-    ]],
+    // RF-ID-02, bloque 25 de la 2.2.1: el auditor solo descarga la exportacion
+    // para la Inspeccion. Pierde `attendance:read` y `audit:read`
+    // (migracion `narrow_auditor_abilities`).
+    'auditor' => ['auditor', ['reports:legal']],
     'admin' => ['admin', [
         'attendance:read', 'attendance:correct', 'incidents:*',
         'employees:read', 'employees:*', 'credentials:*', 'reports:*', 'reports:legal',

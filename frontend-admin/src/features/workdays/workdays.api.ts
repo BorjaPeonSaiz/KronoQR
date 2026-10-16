@@ -9,7 +9,7 @@
 // corregirlo o anularlo (RF-PA-04) es `corrections.api.ts`, que exige el
 // ambito `attendance:correct` y no el `attendance:read` con el que se puede
 // pedir esta lectura. Dos ficheros y no uno es lo que permite que un rol de
-// solo lectura (el `auditor`, `attendance:read` sin `attendance:correct`) siga
+// solo lectura (`attendance:read` sin `attendance:correct`) siga
 // pudiendo consultar el registro sin que este modulo le ofrezca, ni de lejos,
 // nada que escriba en el.
 import { requestJson } from '@kronoqr/web-kit/http'

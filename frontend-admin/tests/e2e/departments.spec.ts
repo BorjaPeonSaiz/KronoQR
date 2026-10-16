@@ -3,8 +3,8 @@
 // LOS RECORRIDOS QUE IMPORTAN: quien administra crea un departamento y lo
 // renombra viendo «antes → despues»; un nombre repetido se explica junto al
 // campo; el nombre del centro se edita y su zona horaria se ve sin poder
-// cambiarse mientras no haya fichajes (RN-23); y quien solo consulta
-// (auditor) ve la lista sin ningun control de escritura.
+// cambiarse mientras no haya fichajes (RN-23). El auditor ya no llega aqui
+// (bloque 25): lo cubre `auditor.spec.ts`.
 //
 // El backend no participa: la API va simulada con las formas del contrato
 // (`support/admin.ts`). Que `rrhh` no pueda asignar responsable o que el nombre
@@ -14,7 +14,7 @@
 // llevan un asterisco aria-hidden.
 import AxeBuilder from '@axe-core/playwright'
 import { expect, type Page, test } from '@playwright/test'
-import { logInAsAdmin, logInAsAuditor, SITE, stubManagementApi } from './support/admin'
+import { logInAsAdmin, SITE, stubManagementApi } from './support/admin'
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
@@ -205,25 +205,6 @@ test.describe('centro: zona horaria (RN-23)', () => {
       await expect(site.locator('[data-test="site-timezone-note"]')).toContainText(
         'ya no se puede cambiar',
       )
-      await expectNoAxeViolations(page)
-    },
-  )
-})
-
-test.describe('departamentos: solo lectura', () => {
-  test(
-    'el auditor ve la lista sin alta, renombrado ni centro',
-    { tag: ['@RF-ID-03'] },
-    async ({ page }) => {
-      await stubManagementApi(page, { role: 'auditor' })
-      await logInAsAuditor(page)
-      await openDepartments(page)
-
-      await expect(page.locator('[data-test="department-3"]')).toBeVisible()
-      await expect(page.locator('[data-test="department-create"]')).toHaveCount(0)
-      await expect(page.locator('[data-test="rename-3"]')).toHaveCount(0)
-      await expect(page.locator('[data-test="site-section"]')).toHaveCount(0)
-      await expect(page.getByRole('combobox')).toHaveCount(0)
       await expectNoAxeViolations(page)
     },
   )

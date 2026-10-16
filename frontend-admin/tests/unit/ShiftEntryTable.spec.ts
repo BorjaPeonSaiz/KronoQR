@@ -273,8 +273,8 @@ describe('ShiftEntryTable, botones de correccion (RF-PA-04, regla dura 18)', () 
     expect(wrapper.find('[data-test="entry-void"]').text()).toBe(es.corrections.actions.void)
   })
 
-  it('sin `attendance:correct` (un `auditor` con solo lectura), no ofrece ninguno', async () => {
-    const wrapper = await mountTableAs(['attendance:read'], ['auditor'])
+  it('sin `attendance:correct` (solo lectura), no ofrece ninguno', async () => {
+    const wrapper = await mountTableAs(['attendance:read'], ['rrhh'])
 
     expect(wrapper.find('[data-test="entry-correct"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="entry-void"]').exists()).toBe(false)

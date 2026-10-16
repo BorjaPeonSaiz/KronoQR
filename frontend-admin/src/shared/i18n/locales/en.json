@@ -152,7 +152,7 @@
       "email": "Email",
       "emailHint": "It is their sign-in identifier. The product sends nothing to it by email.",
       "role": "Role",
-      "roleHint": "A department manager reaches nobody until a department is assigned to them.",
+      "roleHint": "A department manager reaches nobody until a department is assigned to them. Audit: only the export for the Labour Inspectorate.",
       "locale": "Panel language"
     },
     "create": {

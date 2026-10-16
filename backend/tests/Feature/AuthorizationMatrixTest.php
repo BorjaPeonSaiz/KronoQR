@@ -206,7 +206,7 @@ function authorizationMatrix(): array
         'GET api/v1/incidents' => [$admin, $rrhh, $responsable],
         'POST api/v1/incidents/{id}/resolve' => [$admin, $rrhh, $responsable],
         // El canal global de presencia: el responsable solo firma el de sus
-        // departamentos, y el auditor tiene el ambito pero no el rol.
+        // departamentos, y el auditor no tiene ni el ambito ni el rol.
         'GET api/v1/broadcasting/auth' => [$admin, $rrhh],
         'POST api/v1/broadcasting/auth' => [$admin, $rrhh],
 
@@ -238,9 +238,10 @@ function authorizationMatrix(): array
         'POST api/v1/absences/import' => [$admin, $rrhh],
         'PATCH api/v1/absences/{uuid}' => [$admin, $rrhh],
         'POST api/v1/absences/{uuid}/void' => [$admin, $rrhh],
-        // Lectura de departamentos abierta a toda cuenta de gestion (2.2.0).
-        'GET api/v1/departments' => [$admin, $rrhh, $responsable, $auditor],
-        'GET api/v1/departments/{id}' => [$admin, $rrhh, $responsable, $auditor],
+        // Lectura de departamentos: quien lleva `employees:read` (2.2.0). El
+        // auditor no desde la 2.2.1: solo la exportacion legal (RF-ID-02).
+        'GET api/v1/departments' => [$admin, $rrhh, $responsable],
+        'GET api/v1/departments/{id}' => [$admin, $rrhh, $responsable],
         'POST api/v1/departments' => [$admin, $rrhh],
         'PATCH api/v1/departments/{id}' => [$admin, $rrhh],
         'GET api/v1/site' => [$admin, $rrhh],

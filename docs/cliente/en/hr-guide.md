@@ -829,11 +829,8 @@ And two links:
 - A **department manager** sees the people in their department and nobody else;
   the counts on the cards are only for their people too.
 - **HR** and **administrator** see everything.
-- The **auditor** does not get into this screen. Auditing is reviewing what was
-  written down, not managing the day-to-day. **In 2.2.0 their menu still offers
-  "Compliance" and "Presence"**, and opening them shows a notice that they do
-  not have permission: it is a known defect of the menu, not of their account,
-  and there is nothing to fix in it.
+- The **auditor** does not get into this screen: their panel only has
+  "Inspectorate" (§7 bis.1).
 
 **Every query is logged in the audit log**, just like consulting a person's time
 record (§3.2): who looked, which period and with which filters. The scope of the
@@ -1620,6 +1617,16 @@ people who clock in do not have a panel account.
 **Accounts** → "New account": name (the person's, not the job title's, because
 it is the one that signs corrections), email and role. The email is only their
 identifier for signing in: **the product sends them nothing by email**.
+
+**What each role sees.** **Administration**: everything, and manages the
+accounts. **HR**: staff, cards, the record, incidents and reports.
+**Department manager**: presence, work days, the inbox and compliance for their
+department. **Audit**: **only "Inspectorate"**, the export of the record for a
+request; it does not see presence, work days, staff, departments or reports, and
+typing another panel address takes it back to "Inspectorate". Give this role to
+whoever deals with the Labour Inspectorate, or to an external adviser who only
+needs to take the record away; anyone who has to look at it on screen needs a
+different role.
 
 **The temporary password.** When the account is created, the panel generates a
 **temporary** password and shows it **once only**. Write it down and hand it

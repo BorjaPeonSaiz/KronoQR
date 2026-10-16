@@ -553,7 +553,7 @@ the next night's digest arrives.
   | --- | --- | --- |
   | `responsable_departamento` | Heads of front of house, housekeeping, kitchen | Their department: viewing, corrections and incidents |
   | `rrhh` | Whoever operates the product day to day | The whole workforce: workdays, corrections, employees, cards and reports |
-  | `auditor` | Internal audit, employment advisers | Read-only: workdays, audit log and legal export |
+  | `auditor` | Internal audit, employment advisers | Only the export for the Labour Inspectorate (whole workforce) |
   | `admin` | IT | All of the above, plus settings, licence, support and diagnostics |
 
   **Do not give `admin` to HR.** The `rrhh` role does all the daily work;

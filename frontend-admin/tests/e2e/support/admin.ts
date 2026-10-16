@@ -387,7 +387,7 @@ export const AUDITOR_USER: ManagementUser = {
   email: 'auditoria@hotel.example',
   locale: 'es',
   roles: ['auditor'],
-  abilities: ['attendance:read', 'audit:read', 'reports:legal'],
+  abilities: ['reports:legal'],
   scope: { kind: 'all', department_ids: [] },
 }
 

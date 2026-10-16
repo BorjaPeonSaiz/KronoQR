@@ -30,8 +30,8 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * ## Por que el `auditor` no esta, teniendo un ambito de informes
  *
- * Lleva `reports:legal`, que es el estrecho: le abre `GET
- * /reports/legal-export` y nada mas. Lo suyo es el registro normalizado para un
+ * Lleva `reports:legal`, que es el estrecho y, desde la 2.2.1, su unico ambito
+ * (RF-ID-02): le abre `GET /reports/legal-export` y nada mas. Lo suyo es el registro normalizado para un
  * requerimiento (RF-IN-05, RL-03), no el cuadro de horas trabajadas frente a
  * contratadas, que es una herramienta de gestion de personal. Auditar es mirar
  * lo que quedo escrito.

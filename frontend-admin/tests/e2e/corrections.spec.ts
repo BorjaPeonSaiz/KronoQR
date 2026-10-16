@@ -5,17 +5,11 @@
 // recorrido por el panel con las tres operaciones simuladas en
 // `support/admin.ts`. La autorizacion real -que un `responsable_departamento`
 // no pueda anular aunque el panel se lo dejara pasar, que un `auditor` reciba
-// `403` si fuerza la peticion- se prueba en el backend.
+// `403` si fuerza la peticion- se prueba en el backend. El auditor ya no llega a
+// esta pantalla (bloque 25): lo cubre `auditor.spec.ts`.
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import {
-  EMPLOYEE,
-  EMPLOYEE_UUID,
-  logIn,
-  logInAsAuditor,
-  logInAsManager,
-  stubManagementApi,
-} from './support/admin'
+import { EMPLOYEE, EMPLOYEE_UUID, logIn, logInAsManager, stubManagementApi } from './support/admin'
 
 const WORKDAYS_URL = `/employees/${EMPLOYEE_UUID}/workdays`
 
@@ -293,24 +287,6 @@ test.describe('Anular el tramo', () => {
 })
 
 test.describe('Los botones se ocultan sin el ambito', () => {
-  test(
-    'un auditor (attendance:read sin attendance:correct) no recibe el detalle de jornada ni ve ninguna de las tres acciones',
-    { tag: ['@RF-PA-04', '@regla-dura-18'] },
-    async ({ page }) => {
-      await stubManagementApi(page, { role: 'auditor' })
-      await logInAsAuditor(page)
-      await page.goto(WORKDAYS_URL)
-
-      await expect(page.getByRole('heading', { level: 1, name: 'Registro horario' })).toBeVisible()
-      // El servidor no le entrega el detalle de jornada (WorkDayJournalPolicy): ve el
-      // aviso de error y ningun control de escritura.
-      await expect(page.getByRole('alert')).toBeVisible()
-      await expect(page.getByTestId('add-shift-entry')).toHaveCount(0)
-      await expect(page.getByTestId('entry-correct')).toHaveCount(0)
-      await expect(page.getByTestId('entry-void')).toHaveCount(0)
-    },
-  )
-
   test(
     'un responsable de departamento corrige, pero no ve «Anular el tramo»',
     { tag: ['@RF-PA-04'] },

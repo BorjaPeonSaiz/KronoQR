@@ -28,10 +28,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * siguientes.
  *
  * **El `auditor` tampoco**, y es el caso que mas conviene entender: es el rol
- * que mira, y aun asi no lee esta pantalla. Lo que necesita para su trabajo —que
- * umbral regia el 14 de marzo y quien lo cambio— esta en `audit_log`, al que si
- * llega con `audit:read`, y ahi es historico y encadenado en lugar de ser el
- * valor de hoy.
+ * que mira, y aun asi no lee esta pantalla. Desde la 2.2.1 su unica funcion en la API
+ * es la exportacion para la Inspeccion (RF-ID-02); que umbral regia el 14 de
+ * marzo y quien lo cambio queda en `audit_log`, historico y encadenado.
  *
  * ## Dos metodos aunque el conjunto de roles sea el mismo
  *

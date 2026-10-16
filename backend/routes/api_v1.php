@@ -268,9 +268,9 @@ Route::middleware([
  *
  * LA OTRA MITAD ES `LivePresencePolicy`, que comprueba el ROL: `manager+` del
  * Anexo B, que desde la tarea 2.1 es `{admin, rrhh, responsable_departamento}`
- * (regla dura 18). Es la mitad que deja fuera al `auditor`, que lleva
- * `attendance:read` en el token y aun asi recibe `403`: auditar es mirar lo que
- * quedo escrito, no quien esta en la cocina ahora.
+ * (regla dura 18). Tambien deja fuera al `auditor` con un token
+ * emitido antes de la 2.2.1, que aun lleve `attendance:read`: desde entonces solo
+ * lleva `reports:legal` (RF-ID-02).
  *
  * Y ES TAMBIEN LA MITAD QUE DEJA FUERA A TODO ACTOR DE SOPORTE del fabricante
  * (decision del 24-09-2026): `SupportScope::ReadOnly` lleva `attendance:read` y
@@ -318,9 +318,9 @@ Route::get('/attendance/live', LivePresenceController::class)
  *
  * LA OTRA MITAD ES `ComplianceSummaryPolicy`, que comprueba el ROL: «manager+»
  * del Anexo B, que aqui es `{admin, rrhh, responsable_departamento}` (regla dura
- * 18). Es la mitad que deja fuera al `auditor`, que lleva `attendance:read` en el
- * token y aun asi recibe `403`: auditar es mirar lo que quedo escrito, no la
- * gestion del dia.
+ * 18). Tambien deja fuera al `auditor` con un token emitido antes de la 2.2.1, que
+ * aun lleve `attendance:read`: desde entonces solo lleva `reports:legal`
+ * (RF-ID-02).
  *
  * Y ES TAMBIEN LA MITAD QUE DEJA FUERA A TODO ACTOR DE SOPORTE del fabricante
  * (decision del 24-09-2026): el ambito abre y el rol abre —se presenta como
@@ -367,10 +367,10 @@ Route::get('/compliance/summary', ComplianceSummaryController::class)
  *
  * LA OTRA MITAD ES `WorkDayJournalPolicy`, que comprueba el ROL: `manager+` del
  * Anexo B, que en esta fase es `{admin, rrhh}` (regla dura 18). Es la mitad que
- * deja fuera al `auditor` y al `responsable_departamento`, que llevan
- * `attendance:read` en el token y aun asi reciben `403`: el primero tiene la
- * exportacion legal de la tarea 1.17 y el segundo no adquiere alcance propio
- * hasta RF-ID-03 (tarea 2.1).
+ * deja fuera al `responsable_departamento`, que lleva `attendance:read` en el
+ * token y aun asi recibe `403` (no adquiere alcance propio hasta RF-ID-03,
+ * tarea 2.1), y al `auditor` con un token emitido antes de la 2.2.1: desde
+ * entonces solo lleva `reports:legal` (RF-ID-02).
  *
  * EL `self` DEL ANEXO B NO ENTRA POR AQUI. El propio empleado consulta lo suyo
  * en `GET /api/v1/me/workdays`, con sesion de portal y ambito `self:read`
@@ -774,8 +774,8 @@ Route::get('/reports/adoption/export', AdoptionReportExportController::class)
  *
  * Y NO `attendance:read`, aunque lo que se mira sean horas: leer el registro de
  * alguien y decidir que se hace con lo que esta pendiente son dos potestades del
- * §7.3, y el `auditor` es la prueba de que la distincion importa — lleva
- * `attendance:read` y no lleva este, asi que ni siquiera pasa del middleware.
+ * §7.3: `attendance:read` lo llevan roles y alcances de soporte que no deciden
+ * sobre incidencias, y con este ambito ni siquiera pasan del middleware.
  *
  * LA OTRA MITAD ES `IncidentPolicy`, que comprueba el ROL: «manager+» del Anexo
  * B, que desde la tarea 2.1 es `{admin, rrhh, responsable_departamento}`.
@@ -1405,8 +1405,9 @@ Route::middleware([
         ->name('absences.void');
 
     // La LECTURA de departamentos no esta aqui: vive en su propio grupo, mas
-    // abajo, porque la leen los cuatro roles de gestion y este grupo exige
-    // `employees:*`.
+    // abajo, porque la abre `employees:read` —`admin`, `rrhh` y el
+    // `responsable_departamento`; el `auditor` no desde la 2.2.1, doc 02 §7.3,
+    // notas 8 y 9— y este grupo exige `employees:*`.
     Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');
     Route::patch('/departments/{id}', [DepartmentController::class, 'update'])
         ->whereNumber('id')
@@ -1419,33 +1420,33 @@ Route::middleware([
 });
 
 /*
- * LECTURA DEL CATALOGO DE DEPARTAMENTOS: los cuatro roles de gestion (bloque 21
- * de la 2.2.0, R6-BD-01 y R4-QA-03; decision del propietario de 02-10-2026).
+ * LECTURA DEL CATALOGO DE DEPARTAMENTOS: `admin`, `rrhh` y
+ * `responsable_departamento` (bloque 21 de la 2.2.0, R6-BD-01 y R4-QA-03;
+ * decision del propietario de 02-10-2026), los tres roles que llevan
+ * `employees:read`.
  *
- * `employees:read` O `attendance:read`, y no uno solo. `admin`, `rrhh` y el
- * `responsable_departamento` llevan `employees:read`; el `auditor` no lleva
- * ningun ambito de plantilla —su funcion es el registro horario ante la
- * Inspeccion— pero los cuatro llevan `attendance:read`, que es el ambito de lectura
- * comun a toda cuenta de gestion. Darle `employees:read` al auditor para esto le
- * abriria el ambito de `GET /employees` y de las ausencias, y la unica defensa
- * quedaria en sus policies: se prefiere no tocar el reparto de ambitos. El
- * middleware `ability` acepta CUALQUIERA de la lista (como `/reports/legal-export`).
+ * **El `auditor` no** (RF-ID-02, bloque 25 de la 2.2.1, decision del
+ * propietario de 13-10-2026): su unica funcion en la API es la exportacion para
+ * la Inspeccion y su token solo lleva `reports:legal`. Hasta entonces el grupo
+ * aceptaba tambien `attendance:read` para dejarle leer el catalogo; ese «o» se
+ * retira y `DepartmentPolicy` le rechaza ademas por rol, porque un token emitido
+ * antes del cambio conserva `attendance:read` durante sus 12 h.
  *
- * Ninguno de los dos ambitos abre una escritura de departamentos: crear y
- * renombrar siguen en el grupo de `employees:*` y en `DepartmentPolicy::writers()`.
+ * `employees:read` no abre una escritura de departamentos: crear y renombrar
+ * siguen en el grupo de `employees:*` y en `DepartmentPolicy::writers()`.
  *
- * Un acceso de soporte `read_only` lleva los dos ambitos y alcanza la ruta, pero
- * no la lee: lo cierra `DepartmentPolicy`, para que abrir el catalogo a los
- * cuatro roles no amplie lo que ve el fabricante (regla dura 16, ADR-020). Lo
- * enumera `SupportScopeRoutesTest`, que sigue comprobando ademas que ninguno de
- * los dos ambitos abre una ruta que no sea `GET`.
+ * Un acceso de soporte `read_only` lleva `employees:read` y alcanza la ruta, pero
+ * no la lee: lo cierra `DepartmentPolicy`, para que el catalogo no amplie lo que
+ * ve el fabricante (regla dura 16, ADR-020). Lo enumera `SupportScopeRoutesTest`,
+ * que sigue comprobando ademas que ningun ambito de lectura abre una ruta que no
+ * sea `GET`.
  *
  * `throttle:management` por lo mismo que el resto de la gestion: sale de las
  * mismas pantallas y con el mismo token.
  */
 Route::middleware([
     'auth:sanctum',
-    'ability:'.TokenAbility::EMPLOYEES_READ->value.','.TokenAbility::ATTENDANCE_READ->value,
+    'ability:'.TokenAbility::EMPLOYEES_READ->value,
     'throttle:management',
 ])->group(function (): void {
     Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
@@ -1560,9 +1561,9 @@ Route::middleware([
  *
  * **`rrhh` no entra**, aunque corrija fichajes: corregir un tramo deja traza
  * sobre UNA jornada; mover el anti-rebote cambia el calculo de TODAS las
- * siguientes. **El `auditor` tampoco**: lo que necesita —que umbral regia el 14
- * de marzo y quien lo cambio— esta en `audit_log`, al que si llega con
- * `audit:read`, y ahi es historico y encadenado en lugar de ser el valor de hoy.
+ * siguientes. **El `auditor` tampoco**: desde la 2.2.1 solo exporta para la
+ * Inspeccion (RF-ID-02); que umbral regia el 14 de marzo y quien lo cambio queda
+ * en `audit_log`, historico y encadenado.
  *
  * `throttle:management` POR LO QUE ESCRIBE EL `PATCH`. Cada clave cambiada deja
  * un asiento en `audit_log` bajo el candado global de ADR-010 —el mismo por el
@@ -1894,8 +1895,8 @@ Route::post('/client-errors', [ClientErrorController::class, 'store'])
  * segunda comprobacion seria indistinguible del administrador del hotel justo en
  * el endpoint que decide cuanto acceso tiene. **`rrhh` no entra** aunque gestione
  * los datos que el acceso podria leer: quien autoriza es quien responde de la
- * instalacion. **El `auditor` tampoco**: quien vigila no autoriza, y lo que
- * necesite lo tiene en `audit_log` con `audit:read`. **El quiosco y el portal**
+ * instalacion. **El `auditor` tampoco**: quien vigila no autoriza, y desde la
+ * 2.2.1 solo exporta para la Inspeccion (RF-ID-02). **El quiosco y el portal**
  * se quedan en el middleware.
  *
  * EL `GET` ES DEL CLIENTE Y ES LA MITAD VISIBLE DEL REQUISITO. RF-PD-11 no pide

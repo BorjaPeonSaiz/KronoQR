@@ -24,9 +24,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * plantilla, hacia delante, sin que ninguna jornada cambie de aspecto. Son dos
  * potestades distintas y la segunda es la del responsable de la instalacion.
  *
- * **El `auditor` tampoco.** Es el rol que mira, y lo que necesita —que umbral
- * regia el 14 de marzo y quien lo cambio— esta en `audit_log`, al que llega con
- * `audit:read`, y ahi es historico y encadenado en lugar de ser el valor de hoy.
+ * **El `auditor` tampoco.** Desde la 2.2.1 su unica funcion en la API es la
+ * exportacion para la Inspeccion (RF-ID-02). Que umbral regia el 14 de marzo y
+ * quien lo cambio queda en `audit_log`, historico y encadenado.
  *
  * ## Dos metodos aunque el conjunto de roles sea el mismo
  *

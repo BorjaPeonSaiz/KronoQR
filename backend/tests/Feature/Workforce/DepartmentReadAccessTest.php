@@ -20,16 +20,18 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * Quien LEE el catalogo de departamentos (bloque 21 de la 2.2.0, R6-BD-01 y
  * R4-QA-03; decision del propietario de 02-10-2026).
  *
- * `GET /api/v1/departments` y `GET /api/v1/departments/{id}` los leen los cuatro
- * roles de gestion —`admin`, `rrhh`, `responsable_departamento` y `auditor`— y
- * **sin acotar por departamento**: es un catalogo, no datos de personas, y el
- * alcance de RF-ID-03 se aplica sobre las personas. Crear y renombrar siguen
- * siendo de `admin` y `rrhh` (regla dura 18).
+ * `GET /api/v1/departments` y `GET /api/v1/departments/{id}` los leen `admin`,
+ * `rrhh` y `responsable_departamento`, **sin acotar por departamento**: es un
+ * catalogo, no datos de personas, y el alcance de RF-ID-03 se aplica sobre las
+ * personas. Crear y renombrar siguen siendo de `admin` y `rrhh` (regla dura 18).
+ *
+ * **El `auditor` no**, desde el bloque 25 de la 2.2.1 (RF-ID-02, decision del
+ * propietario de 13-10-2026): solo descarga la exportacion para la Inspeccion.
  *
  * Los dos controles del §7.3 se ejercitan por separado: el AMBITO
- * (`employees:read` o `attendance:read`; el auditor solo lleva el segundo) y la
- * POLICY (`DepartmentPolicy`, que ademas cierra la lectura a todo acceso de
- * soporte aunque su ambito la alcance).
+ * (`employees:read`) y la POLICY (`DepartmentPolicy`, que cierra la lectura al
+ * auditor aunque un token anterior a la 2.2.1 aun lleve `attendance:read`, y a
+ * todo acceso de soporte aunque su ambito la alcance).
  */
 
 uses(RefreshDatabase::class);
@@ -65,7 +67,7 @@ function departamentosDelCatalogo(?int $managerUserId = null): array
     return [$cocina, $recepcion];
 }
 
-it('deja leer el listado y el detalle a los cuatro roles de gestion', function (UserRole $role): void {
+it('deja leer el listado y el detalle a admin, rrhh y responsable', function (UserRole $role): void {
     // arrange
     [$cocina] = departamentosDelCatalogo();
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole($role));
@@ -85,8 +87,32 @@ it('deja leer el listado y el detalle a los cuatro roles de gestion', function (
     'admin' => UserRole::ADMIN,
     'rrhh' => UserRole::RRHH,
     'responsable_departamento' => UserRole::RESPONSABLE_DEPARTAMENTO,
-    'auditor' => UserRole::AUDITOR,
 ])->group('RF-ID-03', 'RF-GP-01', 'RQ-06', 'RQ-07');
+
+it('no deja leer el catalogo al auditor, ni con un token anterior a la 2.2.1', function (string $token): void {
+    // RF-ID-02: el auditor solo descarga la exportacion para la Inspeccion. Su
+    // token de hoy no pasa el ambito; el de antes de la 2.2.1 —que conserva
+    // `attendance:read` hasta que caduca— lo para `DepartmentPolicy` por rol.
+
+    // arrange
+    [$cocina] = departamentosDelCatalogo();
+    $auditor = ManagementUsers::withRole(UserRole::AUDITOR);
+    $plainText = $token === 'actual'
+        ? ManagementUsers::tokenFor($auditor)
+        : ManagementUsers::legacyAuditorTokenFor($auditor);
+
+    // act / assert
+    Api::as($plainText)->get('/api/v1/departments')
+        ->assertValidResponse(403)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:forbidden');
+
+    Api::as($plainText)->get('/api/v1/departments/'.$cocina)
+        ->assertValidResponse(403)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:forbidden');
+})->with([
+    'token actual' => 'actual',
+    'token anterior a la 2.2.1' => 'anterior',
+])->group('RF-ID-02', 'RQ-07', 'RS-05');
 
 it('ensena al responsable el catalogo entero, tambien los departamentos que no dirige', function (): void {
     // Es un catalogo, no datos de personas: el alcance de RF-ID-03 no se aplica
@@ -142,9 +168,9 @@ it('no deja crear ni renombrar al responsable ni al auditor', function (UserRole
 ])->group('RF-ID-03', 'RF-GP-01', 'RQ-07', 'RS-05');
 
 it('no deja leer el catalogo a ningun acceso de soporte', function (SupportScope $scope): void {
-    // `read_only` lleva `employees:read` y `attendance:read`, asi que su AMBITO
-    // alcanza la ruta: el `403` lo pone `DepartmentPolicy`. `diagnostics` y
-    // `configuration` ni siquiera pasan del middleware.
+    // `read_only` lleva `employees:read`, asi que su AMBITO alcanza la ruta:
+    // el `403` lo pone `DepartmentPolicy`. `diagnostics` y `configuration` ni
+    // siquiera pasan del middleware.
 
     // arrange
     [$cocina] = departamentosDelCatalogo();
