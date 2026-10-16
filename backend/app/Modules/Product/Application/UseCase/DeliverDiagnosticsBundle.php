@@ -11,6 +11,7 @@ use App\Modules\Product\Application\Port\StagedDiagnosticsBundle;
 use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\PendingDiagnosticsAudit;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Throwable;
 
 /**
@@ -55,6 +56,16 @@ final readonly class DeliverDiagnosticsBundle
      * @throws DiagnosticsAuditNotDeferred Si el pendiente no se pudo guardar.
      */
     public function handle(DiagnosticsBundle $bundle, ?string $path = null): string
+    {
+        return UseCaseInstrumentation::run('product.deliver_diagnostics_bundle', fn (): string => $this->doHandle($bundle, $path));
+    }
+
+    /**
+     * @param  string|null  $path  Ruta pedida con `--output`, o nula para el
+     *                             directorio de serie.
+     * @return string La ruta absoluta donde quedo el paquete.
+     */
+    private function doHandle(DiagnosticsBundle $bundle, ?string $path = null): string
     {
         $staged = $this->writer->stage($bundle, $path);
         $receipt = $bundle->generationEntryPending() ? $this->deferAudit($bundle, $staged) : null;

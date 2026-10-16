@@ -10,6 +10,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Domain\ValueObject\SystemEventPayload;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Deja asiento de que la instalacion se ha actualizado o de que se ha restaurado
@@ -68,6 +69,11 @@ final readonly class RecordSystemEvent
     public function __construct(private RecordAuditEntry $audit) {}
 
     public function handle(RecordSystemEventCommand $command): AuditEntry
+    {
+        return UseCaseInstrumentation::run('compliance.record_system_event', fn (): AuditEntry => $this->doHandle($command));
+    }
+
+    private function doHandle(RecordSystemEventCommand $command): AuditEntry
     {
         $event = SystemEventPayload::for($command->action, $command->data);
 

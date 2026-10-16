@@ -129,6 +129,13 @@ final class MetricCatalogue
                 'Duracion de las consultas a PostgreSQL, agrupadas por operacion. Nunca la sentencia: un valor ligado puede ser un nombre.',
                 ['operation'],
             ),
+            new MetricDefinition(
+                'use_case_duration_seconds',
+                MetricType::Histogram,
+                MetricStorage::Histogram,
+                'Duracion de cada caso de uso, por nombre estable del caso y desenlace: ok, rejected si fue una regla de negocio, error si fue una averia. Nunca lleva datos de personas: ni uuid ni nombre.',
+                ['use_case', 'outcome'],
+            ),
 
             // ---------------------------------------------------------------
             // Negocio.

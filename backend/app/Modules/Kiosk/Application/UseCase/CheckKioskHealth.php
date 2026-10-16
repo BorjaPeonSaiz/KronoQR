@@ -10,6 +10,7 @@ use App\Modules\Kiosk\Domain\ValueObject\KioskHealthReport;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * El estado de todos los quioscos, para `php artisan kiosk:health`
@@ -56,6 +57,11 @@ final readonly class CheckKioskHealth
     ) {}
 
     public function handle(): KioskHealthReport
+    {
+        return UseCaseInstrumentation::run('kiosk.check_kiosk_health', fn (): KioskHealthReport => $this->doHandle());
+    }
+
+    private function doHandle(): KioskHealthReport
     {
         return KioskHealthReport::of(
             $this->devices->all(),

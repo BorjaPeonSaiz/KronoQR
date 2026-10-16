@@ -10,6 +10,7 @@ use App\Modules\Product\Domain\ValueObject\TelemetryBlockReason;
 use App\Modules\Product\Domain\ValueObject\TelemetryState;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\FeatureGate;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\Feature;
 use Psr\Log\LoggerInterface;
 
@@ -78,6 +79,11 @@ final readonly class SendTelemetryHandler
     ) {}
 
     public function handle(): TelemetryOutcome
+    {
+        return UseCaseInstrumentation::run('product.send_telemetry', fn (): TelemetryOutcome => $this->doHandle());
+    }
+
+    private function doHandle(): TelemetryOutcome
     {
         $blocked = $this->blockedBy();
 

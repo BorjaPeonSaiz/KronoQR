@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\UseCase;
 
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\IssueEmployeePinCommand;
 use App\Modules\Workforce\Application\Command\ResetEmployeePinCommand;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -46,6 +47,14 @@ final readonly class ResetEmployeePinHandler
      * @throws RandomException si el sistema no puede dar aleatoriedad
      */
     public function handle(ResetEmployeePinCommand $command): ?IssuedPin
+    {
+        return UseCaseInstrumentation::run('workforce.reset_employee_pin', fn (): ?IssuedPin => $this->doHandle($command));
+    }
+
+    /**
+     * @return IssuedPin|null `null` si el empleado no existe
+     */
+    private function doHandle(ResetEmployeePinCommand $command): ?IssuedPin
     {
         $employee = $this->employees->findByUuid($command->employeeUuid);
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\UpdateSiteCommand;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
@@ -64,6 +65,11 @@ final readonly class UpdateSiteHandler
      * @throws UnknownTimezone
      */
     public function handle(UpdateSiteCommand $command): ?SiteView
+    {
+        return UseCaseInstrumentation::run('workforce.update_site', fn (): ?SiteView => $this->doHandle($command));
+    }
+
+    private function doHandle(UpdateSiteCommand $command): ?SiteView
     {
         // Antes de abrir la transaccion: una zona que no existe es un `422` y no
         // necesita bloquear nada.

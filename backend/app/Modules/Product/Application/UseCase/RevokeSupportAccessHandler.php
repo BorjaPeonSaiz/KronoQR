@@ -13,6 +13,7 @@ use App\Modules\Product\Domain\Exception\SupportGrantAlreadyClosed;
 use App\Modules\Product\Domain\Model\SupportGrant;
 use App\Modules\Product\Domain\ValueObject\SupportRevocationOutcome;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -57,6 +58,11 @@ final readonly class RevokeSupportAccessHandler
     ) {}
 
     public function handle(RevokeSupportAccessCommand $command): SupportRevocationOutcome
+    {
+        return UseCaseInstrumentation::run('product.revoke_support_access', fn (): SupportRevocationOutcome => $this->doHandle($command));
+    }
+
+    private function doHandle(RevokeSupportAccessCommand $command): SupportRevocationOutcome
     {
         $grant = $this->grants->findByUuid($command->grantUuid);
 

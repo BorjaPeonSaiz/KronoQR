@@ -27,6 +27,7 @@ use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\Feature;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
@@ -175,6 +176,15 @@ final readonly class SendWeeklySummaries
      * @throws InstallationSiteMissing antes de la puesta en marcha (RF-PD-03)
      */
     public function handle(?string $week = null): WeeklySummaryPass
+    {
+        return UseCaseInstrumentation::run('reporting.send_weekly_summaries', fn (): WeeklySummaryPass => $this->doHandle($week));
+    }
+
+    /**
+     * @param  string|null  $week  `AAAA-Www` para reenviar una semana concreta a mano.
+     *                             Nulo es «la semana pasada en la zona del centro».
+     */
+    private function doHandle(?string $week = null): WeeklySummaryPass
     {
         $now = $this->clock->now();
 

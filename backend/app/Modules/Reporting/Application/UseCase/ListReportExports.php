@@ -6,6 +6,7 @@ namespace App\Modules\Reporting\Application\UseCase;
 
 use App\Modules\Reporting\Application\Port\ReportExportRepository;
 use App\Modules\Reporting\Domain\Model\ReportExport;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Los informes en diferido recientes **del solicitante** (**RF-IN-06**).
@@ -48,6 +49,14 @@ final readonly class ListReportExports
      * @return list<ReportExport>
      */
     public function handle(int $requestedByUserId): array
+    {
+        return UseCaseInstrumentation::run('reporting.list_report_exports', fn () => $this->doHandle($requestedByUserId));
+    }
+
+    /**
+     * @return list<ReportExport>
+     */
+    private function doHandle(int $requestedByUserId): array
     {
         return $this->exports->recentFor($requestedByUserId, self::LIMIT);
     }

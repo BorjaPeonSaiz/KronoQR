@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Application\Port\EmployeeImportSource;
@@ -78,6 +79,14 @@ final readonly class PlanEmployeeImport
      * @throws UnreadableImportFile
      */
     public function handle(string $path, int $maxRows, array $columnAliases): ImportReport
+    {
+        return UseCaseInstrumentation::run('workforce.plan_employee_import', fn (): ImportReport => $this->doHandle($path, $maxRows, $columnAliases));
+    }
+
+    /**
+     * @param  array<string, list<string>>  $columnAliases
+     */
+    private function doHandle(string $path, int $maxRows, array $columnAliases): ImportReport
     {
         $map = ImportColumnMap::of($columnAliases);
 

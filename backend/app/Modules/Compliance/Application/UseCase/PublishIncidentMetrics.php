@@ -8,6 +8,7 @@ use App\Modules\Compliance\Application\Port\IncidentLedger;
 use App\Modules\Compliance\Application\Port\IncidentMetrics;
 use App\Modules\Compliance\Application\Port\IncidentTally;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Publica `incidents_open{type,severity}` (doc 02 §8.2, doc 01 §9.2).
@@ -34,6 +35,11 @@ final readonly class PublishIncidentMetrics
      * comando.
      */
     public function handle(): int
+    {
+        return UseCaseInstrumentation::run('compliance.publish_incident_metrics', fn (): int => $this->doHandle());
+    }
+
+    private function doHandle(): int
     {
         $tallies = $this->ledger->openTally();
 

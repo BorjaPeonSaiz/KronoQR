@@ -9,6 +9,7 @@ use App\Modules\Product\Application\Port\SupportAccessRecorder;
 use App\Modules\Product\Application\Port\SupportGrantRepository;
 use App\Modules\Product\Domain\Event\SupportAccessUsed;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -62,6 +63,19 @@ final readonly class RecordSupportAccessUseHandler
      *                         sitio que se exporta (regla dura 21).
      */
     public function handle(int $grantId, string $grantUuid, string $scope, string $method, string $route): void
+    {
+        UseCaseInstrumentation::run('product.record_support_access_use', function () use ($grantId, $grantUuid, $scope, $method, $route): void {
+            $this->doHandle($grantId, $grantUuid, $scope, $method, $route);
+        });
+    }
+
+    /**
+     * @param  string  $route  El PATRON de la ruta (`api/v1/employees/{uuid}`),
+     *                         nunca la URL concreta: un UUID de empleado escrito
+     *                         en `audit_log.payload` seria un dato personal en un
+     *                         sitio que se exporta (regla dura 21).
+     */
+    private function doHandle(int $grantId, string $grantUuid, string $scope, string $method, string $route): void
     {
         $now = $this->clock->now();
 

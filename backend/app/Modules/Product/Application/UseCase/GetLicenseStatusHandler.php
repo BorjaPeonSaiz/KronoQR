@@ -10,6 +10,7 @@ use App\Modules\Product\Application\Port\LicenseVerifier;
 use App\Modules\Product\Domain\ValueObject\LicenseStatus;
 use App\Modules\Product\Domain\ValueObject\StoredLicense;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Resuelve el estado de la licencia: leer la fila, verificar la firma y
@@ -61,6 +62,11 @@ final readonly class GetLicenseStatusHandler
     ) {}
 
     public function handle(bool $touch = false): LicenseStatus
+    {
+        return UseCaseInstrumentation::run('product.get_license_status', fn (): LicenseStatus => $this->doHandle($touch));
+    }
+
+    private function doHandle(bool $touch = false): LicenseStatus
     {
         return $this->publish($this->resolve($touch));
     }

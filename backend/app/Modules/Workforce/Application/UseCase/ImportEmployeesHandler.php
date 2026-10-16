@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\UseCase;
 
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\ImportEmployeesCommand;
 use App\Modules\Workforce\Domain\Exception\ImportFileChanged;
 use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
@@ -49,6 +50,14 @@ final readonly class ImportEmployeesHandler
      * @throws ImportTooLarge si el fichero venia truncado: se parte y se importa por trozos
      */
     public function handle(ImportEmployeesCommand $command, int $maxRows, array $columnAliases): ImportReport
+    {
+        return UseCaseInstrumentation::run('workforce.import_employees', fn (): ImportReport => $this->doHandle($command, $maxRows, $columnAliases));
+    }
+
+    /**
+     * @param  array<string, list<string>>  $columnAliases
+     */
+    private function doHandle(ImportEmployeesCommand $command, int $maxRows, array $columnAliases): ImportReport
     {
         $report = $this->plan->handle($command->path, $maxRows, $columnAliases);
 

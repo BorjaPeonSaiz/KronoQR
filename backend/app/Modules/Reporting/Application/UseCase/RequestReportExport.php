@@ -12,6 +12,7 @@ use App\Modules\Reporting\Domain\Event\ReportExportRequested;
 use App\Modules\Reporting\Domain\Exception\ReportExportAlreadyInProgress;
 use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
 
@@ -82,6 +83,11 @@ final readonly class RequestReportExport
      * @throws ReportExportAlreadyInProgress si esa cuenta ya tiene una `pending` o `running`
      */
     public function handle(RequestReportExportCommand $command): ReportExport
+    {
+        return UseCaseInstrumentation::run('reporting.request_report_export', fn (): ReportExport => $this->doHandle($command));
+    }
+
+    private function doHandle(RequestReportExportCommand $command): ReportExport
     {
         $now = $this->clock->now();
 

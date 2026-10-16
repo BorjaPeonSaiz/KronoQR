@@ -15,6 +15,7 @@ use App\Modules\Kiosk\Domain\ValueObject\KioskHealthRow;
 use App\Modules\Kiosk\Domain\ValueObject\KioskHealthThresholds;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\DeployedVersionProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Retira un quiosco de servicio (`POST /api/v1/devices/{uuid}/unpair`,
@@ -81,6 +82,17 @@ final readonly class UnpairDevice
      *                         existe: es el `404` del contrato.
      */
     public function handle(UnpairDeviceCommand $command): ?DeviceView
+    {
+        return UseCaseInstrumentation::run('kiosk.unpair_device', fn (): ?DeviceView => $this->doHandle($command));
+    }
+
+    /**
+     * @return DeviceView|null El quiosco **ya revocado**, con su veredicto —que
+     *                         sera `revoked`—, para que el panel repinte la fila
+     *                         sin volver a pedir la lista. `null` si el `uuid` no
+     *                         existe: es el `404` del contrato.
+     */
+    private function doHandle(UnpairDeviceCommand $command): ?DeviceView
     {
         $before = $this->devices->findByUuid($command->deviceUuid);
 

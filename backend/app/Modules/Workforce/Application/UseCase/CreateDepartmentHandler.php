@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Command\CreateDepartmentCommand;
 use App\Modules\Workforce\Application\Port\DepartmentRepository;
@@ -43,6 +44,11 @@ final readonly class CreateDepartmentHandler
      * @throws InstallationSiteMissing
      */
     public function handle(CreateDepartmentCommand $command): Department
+    {
+        return UseCaseInstrumentation::run('workforce.create_department', fn (): Department => $this->doHandle($command));
+    }
+
+    private function doHandle(CreateDepartmentCommand $command): Department
     {
         $site = $this->sites->installationSite();
 

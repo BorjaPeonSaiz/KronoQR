@@ -19,6 +19,7 @@ use App\Modules\Product\Domain\ValueObject\DataExportFile;
 use App\Modules\Product\Domain\ValueObject\DataExportManifest;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
@@ -110,6 +111,11 @@ final readonly class GenerateDataExportHandler
     ) {}
 
     public function handle(string $uuid): DataExport
+    {
+        return UseCaseInstrumentation::run('product.generate_data_export', fn (): DataExport => $this->doHandle($uuid));
+    }
+
+    private function doHandle(string $uuid): DataExport
     {
         $export = $this->exports->findByUuid($uuid)
             ?? throw new RuntimeException('No existe la exportacion integra solicitada: '.$uuid);

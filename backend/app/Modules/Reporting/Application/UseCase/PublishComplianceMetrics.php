@@ -11,6 +11,7 @@ use App\Modules\Reporting\Domain\ValueObject\ComplianceWeek;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use DateTimeZone;
@@ -67,6 +68,14 @@ final readonly class PublishComplianceMetrics
      * @return bool `false` si todavia no hay centro de trabajo.
      */
     public function handle(): bool
+    {
+        return UseCaseInstrumentation::run('reporting.publish_compliance_metrics', fn (): bool => $this->doHandle());
+    }
+
+    /**
+     * @return bool `false` si todavia no hay centro de trabajo.
+     */
+    private function doHandle(): bool
     {
         $site = $this->installation->installationSite();
 

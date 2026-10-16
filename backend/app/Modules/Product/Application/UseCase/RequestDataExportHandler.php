@@ -13,6 +13,7 @@ use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
 
@@ -81,6 +82,11 @@ final readonly class RequestDataExportHandler
      * @throws DataExportAlreadyInProgress si ya hay una `pending` o `running`
      */
     public function handle(RequestDataExportCommand $command): DataExport
+    {
+        return UseCaseInstrumentation::run('product.request_data_export', fn (): DataExport => $this->doHandle($command));
+    }
+
+    private function doHandle(RequestDataExportCommand $command): DataExport
     {
         $now = $this->clock->now();
 

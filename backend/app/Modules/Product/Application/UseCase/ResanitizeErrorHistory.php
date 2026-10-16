@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\ErrorHistoryRewriter;
 use App\Modules\Product\Domain\ValueObject\ErrorColumnSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -57,6 +58,11 @@ final readonly class ResanitizeErrorHistory
     ) {}
 
     public function run(): ResanitizeErrorHistoryResult
+    {
+        return UseCaseInstrumentation::run('product.resanitize_error_history', fn (): ResanitizeErrorHistoryResult => $this->doRun());
+    }
+
+    private function doRun(): ResanitizeErrorHistoryResult
     {
         $size = max(1, $this->batchSize);
         $afterId = 0;

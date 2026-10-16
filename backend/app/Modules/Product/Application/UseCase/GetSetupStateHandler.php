@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\SetupFacts;
 use App\Modules\Product\Application\Port\SetupProgressRepository;
 use App\Modules\Product\Domain\ValueObject\SetupState;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * El estado del asistente de puesta en marcha (**RF-PD-03**).
@@ -32,6 +33,11 @@ final readonly class GetSetupStateHandler
     ) {}
 
     public function handle(): SetupState
+    {
+        return UseCaseInstrumentation::run('product.get_setup_state', fn (): SetupState => $this->doHandle());
+    }
+
+    private function doHandle(): SetupState
     {
         return SetupState::of(
             recorded: $this->progress->recorded(),

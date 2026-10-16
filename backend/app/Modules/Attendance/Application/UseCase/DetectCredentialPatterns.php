@@ -20,6 +20,7 @@ use App\Modules\Attendance\Domain\ValueObject\PatternReviewState;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\ConflictingFinding;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -81,6 +82,11 @@ final readonly class DetectCredentialPatterns
     ) {}
 
     public function handle(DetectPatternsCommand $command): PatternScanResult
+    {
+        return UseCaseInstrumentation::run('attendance.detect_credential_patterns', fn (): PatternScanResult => $this->doHandle($command));
+    }
+
+    private function doHandle(DetectPatternsCommand $command): PatternScanResult
     {
         $site = $this->sites->installationSite();
         $now = $this->clock->now();

@@ -13,6 +13,7 @@ use App\Modules\Identity\Application\Port\TwoFactorAuthenticator;
 use App\Modules\Identity\Application\Port\TwoFactorSecrets;
 use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Domain\ValueObject\TwoFactorEnrolment;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Alta del segundo factor de una cuenta de gestion (**RS-06**, `POST
@@ -63,6 +64,11 @@ final readonly class EnrolTwoFactorHandler
      * @throws TwoFactorAlreadyEnabled si ya tiene un segundo factor activo
      */
     public function handle(EnrolTwoFactorCommand $command): TwoFactorEnrolment
+    {
+        return UseCaseInstrumentation::run('identity.enrol_two_factor', fn (): TwoFactorEnrolment => $this->doHandle($command));
+    }
+
+    private function doHandle(EnrolTwoFactorCommand $command): TwoFactorEnrolment
     {
         // Lo PRIMERO, igual que en la verificacion y en la confirmacion: si la
         // cuenta esta bloqueada, no se lee nada ni se genera nada.

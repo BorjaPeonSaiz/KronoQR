@@ -16,6 +16,7 @@ use App\Modules\Kiosk\Domain\Event\DeviceProvisioned;
 use App\Modules\Kiosk\Domain\ValueObject\ConfirmOutcome;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
 use Illuminate\Database\ConnectionInterface;
@@ -88,6 +89,11 @@ final readonly class ConfirmPairing
      * @throws InstallationSiteMissing si la instalacion todavia no tiene centro
      */
     public function handle(ConfirmPairingCommand $command): PairingConfirmation
+    {
+        return UseCaseInstrumentation::run('kiosk.confirm_pairing', fn (): PairingConfirmation => $this->doHandle($command));
+    }
+
+    private function doHandle(ConfirmPairingCommand $command): PairingConfirmation
     {
         $site = $this->sites->installationSite();
 

@@ -7,7 +7,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
-use App\Modules\Shared\Application\Support\SpanScope;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\CorrectSiteTimezoneCommand;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
@@ -21,8 +21,6 @@ use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezone;
 use App\Modules\Workforce\Domain\ValueObject\SiteTimezoneCorrection;
 use Illuminate\Database\ConnectionInterface;
-use OpenTelemetry\API\Trace\SpanKind;
-use Throwable;
 
 /**
  * **Corrige la zona horaria de un centro que ya tiene registro horario**
@@ -79,7 +77,9 @@ use Throwable;
  * (regla dura 19).
  *
  * **El motivo nunca sale de aqui hacia un log** (regla dura 21): es texto libre
- * y va solo al asiento. El span lleva el resultado y el recuento.
+ * y va solo al asiento. La medida es la comun de los casos de uso
+ * (`UseCaseInstrumentation`), y el span lleva ademas el desenlace detallado
+ * (`result`) y el recuento de tramos (`shift_entry_count`).
  */
 final readonly class CorrectSiteTimezoneHandler
 {
@@ -116,29 +116,21 @@ final readonly class CorrectSiteTimezoneHandler
      */
     public function handle(CorrectSiteTimezoneCommand $command): SiteTimezoneCorrectionReport
     {
-        $span = SpanScope::start('kronoqr.workforce', 'workforce.correct_site_timezone', SpanKind::KIND_INTERNAL);
-
-        try {
-            $report = $this->correct($command);
-        } catch (Throwable $failure) {
-            $span->end(['outcome' => $failure instanceof InvalidSiteTimezoneCorrection || $failure instanceof UnknownTimezone
-                ? 'rejected'
-                : 'error']);
-
-            throw $failure;
-        }
-
-        $span->end([
-            'outcome' => match ($report->outcome) {
-                SiteTimezoneCorrectionOutcome::Corrected => 'corrected',
-                SiteTimezoneCorrectionOutcome::NoSite => 'no_site',
-                SiteTimezoneCorrectionOutcome::SameTimezone => 'same_timezone',
-                SiteTimezoneCorrectionOutcome::NoWorkRecord => 'no_work_record',
-            },
-            'shift_entry_count' => $report->shiftEntryCount,
-        ]);
-
-        return $report;
+        return UseCaseInstrumentation::run(
+            'workforce.correct_site_timezone',
+            fn (): SiteTimezoneCorrectionReport => $this->correct($command),
+            // El desenlace detallado y el recuento de tramos: un valor de un
+            // catalogo cerrado y un numero, nada de la persona que firma.
+            static fn (SiteTimezoneCorrectionReport $report): array => [
+                'result' => match ($report->outcome) {
+                    SiteTimezoneCorrectionOutcome::Corrected => 'corrected',
+                    SiteTimezoneCorrectionOutcome::NoSite => 'no_site',
+                    SiteTimezoneCorrectionOutcome::SameTimezone => 'same_timezone',
+                    SiteTimezoneCorrectionOutcome::NoWorkRecord => 'no_work_record',
+                },
+                'shift_entry_count' => $report->shiftEntryCount,
+            ],
+        );
     }
 
     /**

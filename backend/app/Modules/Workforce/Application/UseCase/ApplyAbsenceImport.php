@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -72,6 +73,11 @@ final readonly class ApplyAbsenceImport
     ) {}
 
     public function handle(AbsenceImportReport $report, ?int $importedByUserId): AbsenceImportReport
+    {
+        return UseCaseInstrumentation::run('workforce.apply_absence_import', fn (): AbsenceImportReport => $this->doHandle($report, $importedByUserId));
+    }
+
+    private function doHandle(AbsenceImportReport $report, ?int $importedByUserId): AbsenceImportReport
     {
         $applied = $this->connection->transaction(
             fn (): array => $this->applyRows($report, $importedByUserId),

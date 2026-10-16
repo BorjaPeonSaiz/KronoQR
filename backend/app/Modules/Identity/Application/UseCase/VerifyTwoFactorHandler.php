@@ -15,6 +15,7 @@ use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Domain\ValueObject\PasswordStatus;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 
@@ -90,6 +91,11 @@ final readonly class VerifyTwoFactorHandler
      * @throws AuthenticationFailed cuando el codigo no vale, por la causa que sea
      */
     public function handle(VerifyTwoFactorCommand $command): LoginOutcome
+    {
+        return UseCaseInstrumentation::run('identity.verify_two_factor', fn (): LoginOutcome => $this->doHandle($command));
+    }
+
+    private function doHandle(VerifyTwoFactorCommand $command): LoginOutcome
     {
         if ($this->attempts->isLocked($command->throttleKey)) {
             $this->journal->failed(AuthChannel::MANAGEMENT, $command->userUuid, AuthFailureReason::LOCKED);

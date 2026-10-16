@@ -14,6 +14,7 @@ use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Revocacion de una credencial (RF-QR-03).
@@ -48,6 +49,11 @@ final readonly class RevokeCredential
      * @throws CredentialRevocationNeedsReason
      */
     public function handle(RevokeCredentialCommand $command): ?CredentialView
+    {
+        return UseCaseInstrumentation::run('identity.revoke_credential', fn (): ?CredentialView => $this->doHandle($command));
+    }
+
+    private function doHandle(RevokeCredentialCommand $command): ?CredentialView
     {
         // CADENA PRIMERO, Y LA CREDENCIAL SE LEE DENTRO (ADR-046 §1.2). Hasta la
         // 2.2.0 se escribia la fila y despues el asiento, al reves que la baja

@@ -20,6 +20,7 @@ use App\Modules\Attendance\Domain\ValueObject\WorkedDuration;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Database\QueryException;
@@ -120,6 +121,11 @@ final readonly class ReconcileDailyTotals
     ) {}
 
     public function handle(ReconcileDailyTotalsCommand $command): ReconciliationReport
+    {
+        return UseCaseInstrumentation::run('attendance.reconcile_daily_totals', fn (): ReconciliationReport => $this->doHandle($command));
+    }
+
+    private function doHandle(ReconcileDailyTotalsCommand $command): ReconciliationReport
     {
         $site = $this->sites->installationSite();
 

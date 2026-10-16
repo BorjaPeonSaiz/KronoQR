@@ -6,6 +6,7 @@ namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 
 /**
@@ -49,6 +50,11 @@ final readonly class SweepExpiredDiagnosticsBundles
 
     /** @return int Paquetes borrados. */
     public function handle(): int
+    {
+        return UseCaseInstrumentation::run('product.sweep_expired_diagnostics_bundles', fn (): int => $this->doHandle());
+    }
+
+    private function doHandle(): int
     {
         $minimumAge = max(1, $this->retentionDays) * 86400;
 

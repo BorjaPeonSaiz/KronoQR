@@ -11,6 +11,7 @@ use App\Modules\Product\Domain\Exception\SetupStepNotRecordable;
 use App\Modules\Product\Domain\ValueObject\SetupState;
 use App\Modules\Product\Domain\ValueObject\SetupStepState;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Deja constancia de que un paso del asistente se termino o se omitio
@@ -55,6 +56,11 @@ final readonly class RecordSetupStepHandler
      * @throws SetupStepNotRecordable si el paso no admite esa marca
      */
     public function handle(RecordSetupStepCommand $command): SetupState
+    {
+        return UseCaseInstrumentation::run('product.record_setup_step', fn (): SetupState => $this->doHandle($command));
+    }
+
+    private function doHandle(RecordSetupStepCommand $command): SetupState
     {
         $state = $this->state->handle();
 

@@ -9,6 +9,7 @@ use App\Modules\Compliance\Application\Port\AuditLogPartitions;
 use App\Modules\Compliance\Application\Port\AuditMetrics;
 use App\Modules\Compliance\Domain\ValueObject\AuditPartitionStatus;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Throwable;
 
 /**
@@ -55,6 +56,11 @@ final readonly class EnsureAuditLogPartitions
      *                                           crear la particion (ADR-042)
      */
     public function handle(): AuditPartitionStatus
+    {
+        return UseCaseInstrumentation::run('compliance.ensure_audit_log_partitions', fn (): AuditPartitionStatus => $this->doHandle());
+    }
+
+    private function doHandle(): AuditPartitionStatus
     {
         $now = $this->clock->now();
         $currentYear = (int) $now->format('Y');

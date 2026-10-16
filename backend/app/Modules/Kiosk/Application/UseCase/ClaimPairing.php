@@ -18,6 +18,7 @@ use App\Modules\Kiosk\Domain\ValueObject\DeviceSummary;
 use App\Modules\Kiosk\Domain\ValueObject\PairingStatus;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateTimeImmutable;
 use Psr\Log\LoggerInterface;
 
@@ -98,6 +99,11 @@ final readonly class ClaimPairing
     ) {}
 
     public function handle(ClaimPairingCommand $command): PairingClaimResult
+    {
+        return UseCaseInstrumentation::run('kiosk.claim_pairing', fn (): PairingClaimResult => $this->doHandle($command));
+    }
+
+    private function doHandle(ClaimPairingCommand $command): PairingClaimResult
     {
         $startedAt = $this->floor->startedAt();
         $now = $this->clock->now();

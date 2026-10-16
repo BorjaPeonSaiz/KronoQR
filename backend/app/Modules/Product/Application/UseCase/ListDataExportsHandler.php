@@ -6,6 +6,7 @@ namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Domain\Model\DataExport;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Las exportaciones integras recientes (**RF-PD-14**, RL-20).
@@ -35,6 +36,14 @@ final readonly class ListDataExportsHandler
      * @return list<DataExport>
      */
     public function handle(): array
+    {
+        return UseCaseInstrumentation::run('product.list_data_exports', fn () => $this->doHandle());
+    }
+
+    /**
+     * @return list<DataExport>
+     */
+    private function doHandle(): array
     {
         return $this->exports->recent(self::LIMIT);
     }

@@ -12,6 +12,7 @@ use App\Modules\Product\Domain\Event\SupportAccessGranted;
 use App\Modules\Product\Domain\Exception\InvalidSupportGrant;
 use App\Modules\Product\Domain\Model\SupportGrant;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -64,6 +65,11 @@ final readonly class GrantSupportAccessHandler
      * @throws InvalidSupportGrant si el motivo o la duracion no valen
      */
     public function handle(GrantSupportAccessCommand $command): IssuedSupportGrant
+    {
+        return UseCaseInstrumentation::run('product.grant_support_access', fn (): IssuedSupportGrant => $this->doHandle($command));
+    }
+
+    private function doHandle(GrantSupportAccessCommand $command): IssuedSupportGrant
     {
         $now = $this->clock->now();
 

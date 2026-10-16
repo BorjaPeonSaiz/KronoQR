@@ -17,6 +17,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\OperationalSettingsProvider;
 use App\Modules\Shared\Application\Port\RetentionYearsFloor;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\ComplianceRuleSuspension;
 use App\Modules\Shared\Domain\ValueObject\Jurisdiction;
 use Illuminate\Database\ConnectionInterface;
@@ -114,6 +115,11 @@ final readonly class UpdateComplianceProfileHandler
      *                                       deja `retention_years` por debajo del suelo legal
      */
     public function handle(UpdateComplianceProfileCommand $command): ?ComplianceProfileView
+    {
+        return UseCaseInstrumentation::run('product.update_compliance_profile', fn (): ?ComplianceProfileView => $this->doHandle($command));
+    }
+
+    private function doHandle(UpdateComplianceProfileCommand $command): ?ComplianceProfileView
     {
         $site = $this->sites->installationSite();
 

@@ -12,6 +12,7 @@ use App\Modules\Product\Domain\Exception\SetupNotCompletable;
 use App\Modules\Product\Domain\ValueObject\SetupStep;
 use App\Modules\Product\Domain\ValueObject\SetupSummary;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
@@ -78,6 +79,11 @@ final readonly class CompleteSetupHandler
      * @throws SetupNotCompletable si queda algun paso sin resolver, o ya estaba cerrado
      */
     public function handle(?string $actorUuid): CompletedSetup
+    {
+        return UseCaseInstrumentation::run('product.complete_setup', fn (): CompletedSetup => $this->doHandle($actorUuid));
+    }
+
+    private function doHandle(?string $actorUuid): CompletedSetup
     {
         $this->connection->transaction(function () use ($actorUuid): void {
             $this->connection->statement('SELECT pg_advisory_xact_lock(?)', [self::LOCK_KEY]);

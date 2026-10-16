@@ -9,6 +9,7 @@ use App\Modules\Reporting\Application\Port\PresenceMetrics;
 use App\Modules\Reporting\Application\Port\RealtimeConnectionCounter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Recalcula y publica las dos metricas de presencia del doc 02 §8.2.
@@ -59,6 +60,14 @@ final readonly class PublishPresenceMetrics
      * @return bool `false` si todavia no hay centro de trabajo que etiquetar.
      */
     public function handle(): bool
+    {
+        return UseCaseInstrumentation::run('reporting.publish_presence_metrics', fn (): bool => $this->doHandle());
+    }
+
+    /**
+     * @return bool `false` si todavia no hay centro de trabajo que etiquetar.
+     */
+    private function doHandle(): bool
     {
         $site = $this->installation->installationSite();
 

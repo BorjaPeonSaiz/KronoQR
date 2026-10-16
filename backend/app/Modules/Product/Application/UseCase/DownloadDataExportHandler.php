@@ -12,6 +12,7 @@ use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\RecordedFileLocation;
 
@@ -66,6 +67,14 @@ final readonly class DownloadDataExportHandler
      * @throws DataExportNotReady si la exportacion sigue `pending` o `running`
      */
     public function handle(string $uuid, ?int $downloadedByUserId): ?DataExport
+    {
+        return UseCaseInstrumentation::run('product.download_data_export', fn (): ?DataExport => $this->doHandle($uuid, $downloadedByUserId));
+    }
+
+    /**
+     * @param  ?int  $downloadedByUserId  La cuenta que se lo lleva.
+     */
+    private function doHandle(string $uuid, ?int $downloadedByUserId): ?DataExport
     {
         $export = $this->exports->findByUuid($uuid);
 

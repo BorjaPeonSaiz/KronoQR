@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Application\UseCase;
 use App\Modules\Identity\Application\Port\PortalOriginAttempts;
 use App\Modules\Identity\Domain\ValueObject\RequestOrigin;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 
 /**
@@ -33,6 +34,14 @@ final readonly class UnlockPortalOrigin
      * @return bool Si habia cuenta o bloqueo que borrar.
      */
     public function handle(RequestOrigin $origin): bool
+    {
+        return UseCaseInstrumentation::run('identity.unlock_portal_origin', fn (): bool => $this->doHandle($origin));
+    }
+
+    /**
+     * @return bool Si habia cuenta o bloqueo que borrar.
+     */
+    private function doHandle(RequestOrigin $origin): bool
     {
         $history = $this->origins->historyFor($origin);
         $hadState = $history->failures !== [] || $history->lockedUntil !== null;

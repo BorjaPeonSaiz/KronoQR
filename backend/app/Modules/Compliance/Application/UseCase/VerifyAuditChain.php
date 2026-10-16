@@ -12,6 +12,7 @@ use App\Modules\Compliance\Domain\ValueObject\AuditChainBreak;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainBreakKind;
 use App\Modules\Compliance\Domain\ValueObject\AuditChainVerification;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
 /**
  * Recorre `audit_log` de principio a fin y comprueba que cada eslabon encaja
@@ -56,6 +57,11 @@ final readonly class VerifyAuditChain
     ) {}
 
     public function handle(int $chunkSize = 1000): AuditChainVerification
+    {
+        return UseCaseInstrumentation::run('compliance.verify_audit_chain', fn (): AuditChainVerification => $this->doHandle($chunkSize));
+    }
+
+    private function doHandle(int $chunkSize = 1000): AuditChainVerification
     {
         $expectedPrevious = null;
         $sealedPurgeYears = [];

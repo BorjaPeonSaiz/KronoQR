@@ -12,6 +12,7 @@ use App\Modules\Reporting\Domain\Model\ReportExport;
 use App\Modules\Shared\Application\GeneratedFiles\GeneratedFileHousekeeping;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
 use App\Modules\Shared\Domain\ValueObject\RecordedFileLocation;
 use DateTimeImmutable;
@@ -82,6 +83,14 @@ final readonly class DownloadReportExport
      * @throws ReportExportLinkUnavailable si el enlace se uso o caduco
      */
     public function handle(string $uuid, string $token): ?ReportExport
+    {
+        return UseCaseInstrumentation::run('reporting.download_report_export', fn (): ?ReportExport => $this->doHandle($uuid, $token));
+    }
+
+    /**
+     * @param  string  $token  El token en claro tal y como llego en la URL.
+     */
+    private function doHandle(string $uuid, string $token): ?ReportExport
     {
         /** @var ReportExport|null $export */
         // Candado de la cadena de `audit_log` ANTES que el `FOR UPDATE` de la

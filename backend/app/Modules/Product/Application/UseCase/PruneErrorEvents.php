@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\ErrorEventQuery;
 use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Product\Domain\ValueObject\ErrorEventStatusFilter;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use DateInterval;
 use DateTimeImmutable;
 
@@ -95,6 +96,11 @@ final readonly class PruneErrorEvents
 
     /** Borra, por lotes, y devuelve cuantos se fueron. */
     public function handle(): int
+    {
+        return UseCaseInstrumentation::run('product.prune_error_events', fn (): int => $this->doHandle());
+    }
+
+    private function doHandle(): int
     {
         return $this->errors->pruneOlderThan($this->cutoff(), $this->batchSize);
     }

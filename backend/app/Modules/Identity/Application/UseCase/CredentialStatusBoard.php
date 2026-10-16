@@ -15,6 +15,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeCardDirectory;
 use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Shared\Domain\ValueObject\EmployeeCardProfile;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
@@ -72,6 +73,11 @@ final readonly class CredentialStatusBoard
      * @throws InstallationSiteMissing antes de la puesta en marcha
      */
     public function handle(CredentialStatusQuery $query): CredentialStatusReport
+    {
+        return UseCaseInstrumentation::run('identity.credential_status_board', fn (): CredentialStatusReport => $this->doHandle($query));
+    }
+
+    private function doHandle(CredentialStatusQuery $query): CredentialStatusReport
     {
         $site = $this->installation->installationSite();
 

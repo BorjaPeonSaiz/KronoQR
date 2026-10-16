@@ -13,6 +13,7 @@ use App\Modules\Identity\Application\Port\UserAccounts;
 use App\Modules\Identity\Domain\Policy\TwoFactorRequirement;
 use App\Modules\Shared\Application\Port\AuthenticationJournal;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 
@@ -71,6 +72,11 @@ final readonly class AuthenticateUserHandler
      * @throws AuthenticationFailed cuando las credenciales no valen, por la causa que sea
      */
     public function handle(AuthenticateUserCommand $command): LoginOutcome
+    {
+        return UseCaseInstrumentation::run('identity.authenticate_user', fn (): LoginOutcome => $this->doHandle($command));
+    }
+
+    private function doHandle(AuthenticateUserCommand $command): LoginOutcome
     {
         if ($this->attempts->isLocked($command->throttleKey)) {
             $this->journal->failed(AuthChannel::MANAGEMENT, null, AuthFailureReason::LOCKED);

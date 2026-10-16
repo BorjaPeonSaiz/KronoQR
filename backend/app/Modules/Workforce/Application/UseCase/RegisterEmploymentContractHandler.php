@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\RegisterEmploymentContractCommand;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
@@ -60,6 +61,11 @@ final readonly class RegisterEmploymentContractHandler
      * @throws OverlappingEmploymentContract cuando el contrato nuevo pisa a otro ya registrado
      */
     public function handle(RegisterEmploymentContractCommand $command): ?EmploymentContract
+    {
+        return UseCaseInstrumentation::run('workforce.register_employment_contract', fn (): ?EmploymentContract => $this->doHandle($command));
+    }
+
+    private function doHandle(RegisterEmploymentContractCommand $command): ?EmploymentContract
     {
         $employee = $this->employees->findByUuid($command->employeeUuid);
 
