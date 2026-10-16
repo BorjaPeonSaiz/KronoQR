@@ -18,7 +18,7 @@ namespace App\Modules\Product\Infrastructure\Diagnostics;
  *
  * ## Por que no se confia en el contenido
  *
- * `metrics/` lo escriben tambien `app` y `horizon` (bloque 20, A3-R2). El
+ * `metrics/` lo escriben tambien `app` y `horizon`. El
  * fichero se trata como entrada no confiable: tamaño acotado, una expresion
  * regular de numeros y nada mas —ni `eval` ni deserializacion—, igual que hace
  * `wal-metrics.sh` con su estado. Un proceso comprometido puede falsear el

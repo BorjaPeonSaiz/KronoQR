@@ -158,7 +158,7 @@ final class WorkforceServiceProvider extends ServiceProvider
         $this->app->bind(PinMetrics::class, RedisPinMetrics::class);
 
         /*
-         * El hasher del PIN, detras de un puerto (revision de la 5.5).
+         * El hasher del PIN, detras de un puerto.
          *
          * Existe para que el CALCULO pueda ocurrir donde decide el caso de uso y
          * no donde ocurre la escritura: la importacion masiva lo hace fuera de su

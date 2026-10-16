@@ -83,7 +83,7 @@ use App\Modules\Workforce\Domain\ValueObject\ImportRow;
  * ficha al entregar la tarjeta, y mientras tanto la persona sale en el listado
  * con `pin_status=pending`: el pendiente esta a la vista, no escondido.
  *
- * De paso, la importacion **no calcula ningun bcrypt** (antes, unos 160 ms por
+ * De paso, la importacion **no calcula ningun bcrypt** (unos 160 ms por
  * alta con el coste 12 de produccion, 80 s para 500): ningun hash puede correr
  * con la cadena de `audit_log` tomada ni acercar la peticion al
  * `max_execution_time` (ADR-046 §1.1 punto 5).
@@ -205,8 +205,8 @@ final readonly class ApplyEmployeeImport
             // la cuenta por fila, un hotel con plan de 80 que importara 300
             // personas escribia trescientos asientos `license.plan_exceeded`
             // casi identicos, todos bajo el `pg_advisory_xact_lock` global de
-            // `audit_log` (ADR-010), que es el mismo por el que pasa cada fichaje
-            // del hotel (H-04 de la revision de la 3.8).
+            // `audit_log` (ADR-010), que es el mismo por el que pasa cada
+            // fichaje del hotel.
             viaImport: true,
         ));
 

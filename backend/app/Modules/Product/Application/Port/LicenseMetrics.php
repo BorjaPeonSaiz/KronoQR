@@ -22,12 +22,12 @@ use App\Modules\Product\Domain\ValueObject\PlanLimit;
  * ## Una operacion, un incremento — tambien la importacion
  *
  * Una carga masiva de plantilla (RF-GP-05) sube el contador **una vez**, no una
- * por persona: es la misma unidad que el asiento de `audit_log` desde la 3.8
- * (H-04), y subirlo doscientas veces de golpe dibujaria un pico indistinguible
- * de doscientas altas hechas una a una. **La magnitud no se muestrea aqui**: el
- * asiento lleva el recuento alcanzado y cuantas altas de esa operacion quedaron
- * por encima del plan, y `GET /api/v1/license` responde la cifra de hoy cuando
- * se le pregunta.
+ * por persona: es la misma unidad que el asiento de `audit_log`, y subirlo
+ * doscientas veces de golpe dibujaria un pico indistinguible de doscientas
+ * altas hechas una a una. **La magnitud no se muestrea aqui**: el asiento lleva
+ * el recuento alcanzado y cuantas altas de esa operacion quedaron por encima
+ * del plan, y `GET /api/v1/license` responde la cifra de hoy cuando se le
+ * pregunta.
  */
 interface LicenseMetrics
 {

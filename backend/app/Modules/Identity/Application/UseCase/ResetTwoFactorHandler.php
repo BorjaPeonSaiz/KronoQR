@@ -29,13 +29,13 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * ## Por que existe, y por que tambien por el panel
  *
  * Sin esto, perder el telefono deja a alguien fuera de su cuenta para siempre.
- * Hasta la 2.2.0 solo se podia por consola, con el argumento de que por API seria
- * la forma mas comoda de que un `admin` comprometido se preparara el acceso a la
- * cuenta de otro; el coste real fue que un hotel sin acceso al servidor no podia
- * hacerlo. El propietario decidio el panel (doc 01, Anexo B) y el riesgo se
- * mitiga en lugar de evitarse: **motivo obligatorio, reautenticacion del `admin`
- * que actua, nunca sobre la propia cuenta, nunca junto con la contrasena** (dos
- * acciones, dos asientos), y una alerta de seguridad en cada uso.
+ * Por API es la forma mas comoda de que un `admin` comprometido se prepare el
+ * acceso a la cuenta de otro, pero solo por consola un hotel sin acceso al
+ * servidor no podria hacerlo. El propietario decidio el panel (doc 01, Anexo B)
+ * y el riesgo se mitiga en lugar de evitarse: **motivo obligatorio,
+ * reautenticacion del `admin` que actua, nunca sobre la propia cuenta, nunca
+ * junto con la contrasena** (dos acciones, dos asientos), y una alerta de
+ * seguridad en cada uso.
  *
  * ## Lo que no retira nada no deja asiento
  *

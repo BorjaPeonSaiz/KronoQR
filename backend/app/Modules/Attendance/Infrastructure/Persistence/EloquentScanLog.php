@@ -79,13 +79,13 @@ final readonly class EloquentScanLog implements ScanLog
      *
      * ## RN-20: `employee_id` por el mismo camino (ADR-047)
      *
-     * Desde la 2.2.0 un rechazo de tarjeta **autentica** retirada lleva a su
-     * titular en `employee_id`, y ese rechazo comparte suelo de tiempo con los
-     * demas (RS-03). Resolver el `id` con una consulta previa solo cuando hay
-     * titular seria, otra vez, un viaje de mas que solo paga la tarjeta real.
-     * Por eso `employee_id` se resuelve tambien **dentro** del `INSERT`, con
-     * la misma subconsulta y siempre: con y sin titular, la sentencia y el
-     * numero de viajes son los mismos.
+     * Un rechazo de tarjeta **autentica** retirada lleva a su titular en
+     * `employee_id`, y ese rechazo comparte suelo de tiempo con los demas
+     * (RS-03). Resolver el `id` con una consulta previa solo cuando hay titular
+     * seria, otra vez, un viaje de mas que solo paga la tarjeta real. Por eso
+     * `employee_id` se resuelve tambien **dentro** del `INSERT`, con la misma
+     * subconsulta y siempre: con y sin titular, la sentencia y el numero de
+     * viajes son los mismos.
      */
     public function record(ScanRecord $scan): bool
     {

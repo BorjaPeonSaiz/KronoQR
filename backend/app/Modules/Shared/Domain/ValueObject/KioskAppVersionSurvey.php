@@ -6,7 +6,7 @@ namespace App\Modules\Shared\Domain\ValueObject;
 
 /**
  * Que version de la PWA declaran los quioscos que estan latiendo, frente a la
- * del servidor (RF-KI-07, RF-PD-13; bloque 1 de la 2.2.1).
+ * del servidor (RF-KI-07, RF-PD-13).
  *
  * Es lo que `Kiosk` le entrega a la sonda `kiosk.app_version` de
  * `product:doctor` por el puerto `KioskAppVersions`: `Product` no puede

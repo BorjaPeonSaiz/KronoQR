@@ -75,11 +75,11 @@ final class RetentionServiceProvider extends ServiceProvider
          * (regla dura 6). Con el rol de mantenimiento, borrado y constancia
          * caerian en dos sesiones distintas.
          *
-         * La aplicacion no tiene `DELETE` sobre esas tablas (ADR-057 §1 y §3,
-         * bloque 7 de la 2.2.1): solo `EXECUTE` sobre la funcion `SECURITY
-         * DEFINER` `work_record_purge_batch`, que calcula su propio corte maximo
-         * con el perfil y el suelo legal, y que el adaptador llama dentro de
-         * esta misma transaccion.
+         * La aplicacion no tiene `DELETE` sobre esas tablas (ADR-057 §1 y
+         * §3): solo `EXECUTE` sobre la funcion `SECURITY DEFINER`
+         * `work_record_purge_batch`, que calcula su propio corte maximo con el
+         * perfil y el suelo legal, y que el adaptador llama dentro de esta
+         * misma transaccion.
          */
         $this->app->bind(
             WorkRecordArchive::class,

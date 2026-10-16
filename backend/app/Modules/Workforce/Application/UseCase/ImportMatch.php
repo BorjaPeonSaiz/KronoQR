@@ -19,10 +19,9 @@ use App\Modules\Workforce\Domain\ValueObject\ImportMessage;
  * que dice su documento.
  *
  * Con un `?Employee`, ese tercer caso solo cabia como `null`, es decir, «da de
- * alta» — que es exactamente el fallo que la revision de la 5.5 encontro: la
- * fila se escribia y chocaba con el indice unico parcial de `employees.email` en
- * la fase de aplicacion, reventando el lote entero con un `409` que no nombraba
- * ninguna linea.
+ * alta» — y la fila se escribiria y chocaria con el indice unico parcial de
+ * `employees.email` en la fase de aplicacion, reventando el lote entero con un
+ * `409` que no nombraba ninguna linea.
  *
  * ## Es de `Application` y no de `Domain`
  *

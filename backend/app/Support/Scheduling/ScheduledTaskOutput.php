@@ -9,7 +9,7 @@ use Illuminate\Log\LogManager;
 
 /**
  * El ayudante unico que decide adonde va la salida de una tarea programada en
- * segundo plano (V4-BE-1, RNF-D-02, regla dura 21).
+ * segundo plano (RNF-D-02, regla dura 21).
  *
  * ## El hueco que cierra
  *

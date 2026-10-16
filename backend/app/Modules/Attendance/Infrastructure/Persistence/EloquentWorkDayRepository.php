@@ -55,7 +55,7 @@ use RuntimeException;
  *
  * ## El tramo que se va a escribir se carga bloqueado
  *
- * **Por que existe** (revision del bloque 7 de la 2.2.1). Dos cierres
+ * **Por que existe**. Dos cierres
  * simultaneos del mismo turno leian los dos el tramo abierto sin candado; el
  * segundo esperaba en el `upsert` y, cuando el primero confirmaba, la salida
  * ya estaba escrita. Lo que guardaba el segundo era la salida del primero,
@@ -361,9 +361,9 @@ final readonly class EloquentWorkDayRepository implements WorkDayRepository
         // **`clocked_out_at` no lleva ese `CASE`, a proposito.** Es la marca que
         // el agregado afirma y la que viaja en su evento y en su asiento. Si la
         // fila ya tiene otra, guardar en silencio la de la fila dejaria
-        // `daily_totals` y `audit_log` diciendo una hora y `shift_entries` otra
-        // (revision del bloque 7). Con el tramo bloqueado al cargar
-        // (ver el docblock de la clase) no deberia ocurrir; si ocurre —un camino
+        // `daily_totals` y `audit_log` diciendo una hora y `shift_entries` otra.
+        // Con el tramo bloqueado al cargar (ver el docblock de la clase) no
+        // deberia ocurrir; si ocurre —un camino
         // que cargo sin candado—, el *trigger* lo rechaza con `42501` y la
         // transaccion entera revierte en vez de divergir.
         ShiftEntry::query()->upsert($rows, ['uuid'], [

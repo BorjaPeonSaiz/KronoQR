@@ -65,13 +65,12 @@ final readonly class DatabaseAuditTrail implements AuditChainHead, AuditTrail
         // no una segunda transaccion: el candado de transaccion sigue siendo el
         // de la exterior y se suelta con ella.
         return $this->connection->transaction(function () use ($draft): AuditEntry {
-            // La clave vive en `AuditChainLock` y no aqui desde la tarea 3.6: la
-            // toma tambien, **por delante de cualquier fila**, quien va a
-            // escribir algo que se audita (`SerializedLedgerWrite`), y con la
-            // clave copiada en dos clases los dos caminos podrian dejar de
-            // serializarse entre si sin que nada fallara. Es reentrante en la
-            // misma transaccion, asi que a quien ya lo tenga esto no le cuesta
-            // una espera.
+            // La clave vive en `AuditChainLock` y no aqui: la toma tambien,
+            // **por delante de cualquier fila**, quien va a escribir algo que
+            // se audita (`SerializedLedgerWrite`), y con la clave copiada en
+            // dos clases los dos caminos podrian dejar de serializarse entre si
+            // sin que nada fallara. Es reentrante en la misma transaccion, asi
+            // que a quien ya lo tenga esto no le cuesta una espera.
             AuditChainLock::takeOn($this->connection);
 
             $entry = AuditChain::link($draft, $this->previousHash());

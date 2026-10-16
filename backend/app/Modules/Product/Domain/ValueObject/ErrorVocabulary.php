@@ -92,7 +92,7 @@ final readonly class ErrorVocabulary
         'abarca', 'an', 'aria', 'bajo', 'bin', 'campo', 'day', 'dias', 'do', 'dura', 'field', 'grant', 'ha',
         'han', 'june', 'le', 'lo', 'long', 'may', 'mayo', 'na', 'page', 'read', 'real', 'regla', 'segunda',
         'segundo', 'son', 'su', 'uri',
-        // Del dictamen de seguridad de la implementacion.
+        // Las que señalo la revision de seguridad de la implementacion.
         'april', 'major',
         // Las que vio la CI en Linux y el bind mount escondia en local.
         'blanco', 'cerro', 'domingo',

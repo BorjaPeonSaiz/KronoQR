@@ -13,7 +13,7 @@ use PDOException;
 
 /**
  * The framework's PostgreSQL connector with a circuit breaker in front of every
- * connection attempt (R3-CH-02).
+ * connection attempt.
  *
  * Bound as `db.connector.pgsql`, the hook `ConnectionFactory` offers for this,
  * so it serves every `pgsql` connection: `pgsql`, `error_events`, the migrator

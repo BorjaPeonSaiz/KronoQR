@@ -17,11 +17,10 @@ use Illuminate\Database\ConnectionInterface;
 /**
  * **Una baja deja sin credencial a quien se va** (RN-14, RF-GP-03, N1).
  *
- * Dar de baja a una persona ya le impedia fichar —el escaneo mira el estado
- * laboral—, pero su tarjeta seguia «activa» en el panel, en la rotacion de la
- * clave de firma y en el recuento de tarjetas por reimprimir, y su sesion del
- * portal seguia abierta hasta caducar. El contrato afirmaba desde la Fase 2
- * que la baja revoca la credencial; nadie escuchaba el evento.
+ * Dar de baja a una persona ya le impide fichar —el escaneo mira el estado
+ * laboral—, pero sin este caso de uso su tarjeta seguiria «activa» en el
+ * panel, en la rotacion de la clave de firma y en el recuento de tarjetas por
+ * reimprimir, y su sesion del portal seguiria abierta hasta caducar.
  *
  * ## Que hace
  *

@@ -248,12 +248,11 @@ final class IdentityServiceProvider extends ServiceProvider
             // `credentials:rotate-key` y su cierre, `credentials:retire-key`.
             $this->commands([
                 /*
-                 * Ciclo de vida de la cuenta de gestion (tarea 3.8, H-03;
-                 * RF-ID-10). Desde la 2.2.0 tambien tiene pantalla
-                 * (`/management-accounts`), y los comandos pasan por los MISMOS
-                 * casos de uso: quedan para cuando el panel no esta disponible.
-                 * Las mismas invariantes —nunca la ultima `admin` activa— y los
-                 * mismos asientos, con el sistema como autor.
+                 * Ciclo de vida de la cuenta de gestion (RF-ID-10). Tiene
+                 * pantalla (`/management-accounts`), y los comandos pasan por
+                 * los MISMOS casos de uso: quedan para cuando el panel no esta
+                 * disponible. Las mismas invariantes —nunca la ultima `admin`
+                 * activa— y los mismos asientos, con el sistema como autor.
                  */
                 CreateManagementUserCommand::class,
                 ResetTwoFactorCommand::class,
@@ -261,7 +260,7 @@ final class IdentityServiceProvider extends ServiceProvider
                 ResetManagementPasswordCommand::class,
                 // Solo lee. Su salida lleva correos: lo advierte su `--help`.
                 ListManagementUsersCommand::class,
-                // Levanta el bloqueo por origen del portal (ADR-050, dictamen M3).
+                // Levanta el bloqueo por origen del portal (ADR-050).
                 // Sin endpoint: es operacion del servidor, con asiento.
                 UnlockPortalOriginCommand::class,
                 IssueCredentialCommand::class,
@@ -933,8 +932,8 @@ final class IdentityServiceProvider extends ServiceProvider
      * expira. Con esto, la baja tiene efecto en la peticion siguiente.
      *
      * **Vale para los tres `tokenable` del producto** —cuenta de gestion,
-     * quiosco y, desde la tarea 1.11, empleado con sesion de portal— y sigue
-     * fallando cerrado ante cualquier otro.
+     * quiosco y empleado con sesion de portal— y sigue fallando cerrado ante
+     * cualquier otro.
      */
     private function rejectTokensOfDeactivatedAccounts(): void
     {

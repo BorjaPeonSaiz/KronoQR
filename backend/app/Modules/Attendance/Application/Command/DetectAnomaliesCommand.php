@@ -24,7 +24,7 @@ use InvalidArgumentException;
 final readonly class DetectAnomaliesCommand
 {
     /**
-     * @param  int  $discardReviewWindowDays  RN-22 (F6 del dictamen del bloque 18): cuantos
+     * @param  int  $discardReviewWindowDays  RN-22: cuantos
      *                                        dias hacia atras desde su recepcion puede
      *                                        caer un fichaje descartado para abrir
      *                                        incidencia. Sale de

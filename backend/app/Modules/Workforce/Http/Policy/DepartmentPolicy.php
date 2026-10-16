@@ -12,7 +12,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * - **Ver**: los cuatro roles de gestion —`admin`, `rrhh`,
  *   `responsable_departamento` y `auditor`— (decision del propietario de
- *   02-10-2026, bloque 21 de la 2.2.0, R6-BD-01 y R4-QA-03).
+ *   02-10-2026).
  * - **Crear y renombrar**: `admin` y `rrhh`.
  * - **Elegir el responsable**: solo `admin`, y nunca un acceso de soporte
  *   ({@see self::assignManager()}, RF-ID-10).
@@ -30,12 +30,11 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * Ninguno de los dos de lectura lo tienen el quiosco ni el portal.
  *
  * **Un acceso de soporte no lee el catalogo**, aunque el alcance `read_only`
- * lleve los dos ambitos de lectura y se presente como `admin`. Hasta el bloque
- * 21 la ruta exigia `employees:*`, que ningun alcance concede, asi que abrir la
- * lectura a los cuatro roles no debe ampliar de rebote lo que ve el fabricante
- * (regla dura 16, ADR-020): `manager_name` es el nombre de una cuenta de
- * gestion, y esas cuentas solo las lista `admin` sin soporte
- * (`ManagementAccountPolicy`). Lo enumera `SupportScopeRoutesTest`.
+ * lleve los dos ambitos de lectura y se presente como `admin`: abrir la lectura
+ * a los cuatro roles no debe ampliar de rebote lo que ve el fabricante (regla
+ * dura 16, ADR-020): `manager_name` es el nombre de una cuenta de gestion, y
+ * esas cuentas solo las lista `admin` sin soporte (`ManagementAccountPolicy`).
+ * Lo enumera `SupportScopeRoutesTest`.
  */
 final class DepartmentPolicy
 {

@@ -11,7 +11,7 @@ use InvalidArgumentException;
 
 /**
  * `identity:origin-unlock <ip>` — levanta el bloqueo por origen del portal
- * (ADR-050 §2, dictamen de seguridad M3).
+ * (ADR-050 §2).
  *
  * Para el caso del residuo 2: una red compartida —el NAT del hotel, un CGNAT—
  * que se ha quedado sin portal una hora por fallos de otros. Con una IPv6 se

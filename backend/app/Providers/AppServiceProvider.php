@@ -34,7 +34,7 @@ use Symfony\Component\Clock\NativeClock;
  * porque no es del producto sino del DESPLIEGUE, y la degradacion de la cache y
  * de la cola cuando Redis no responde (CH1), que es de su configuracion y no de
  * quien las usa, con el cortacircuitos que evita reintentar Redis en cada acceso
- * mientras esta caido (R3-CH-01).
+ * mientras esta caido.
  */
 final class AppServiceProvider extends ServiceProvider
 {
@@ -57,7 +57,7 @@ final class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * The Redis circuit breaker (R3-CH-01): once Redis fails, no process tries
+     * The Redis circuit breaker: once Redis fails, no process tries
      * again for a few seconds and everything falls back at once. See
      * {@see RedisCircuitBreaker} for the why and the trade-offs.
      *
@@ -90,7 +90,7 @@ final class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * The PostgreSQL circuit breaker (R3-CH-02): same mechanism, own state. See
+     * The PostgreSQL circuit breaker: same mechanism, own state. See
      * {@see DatabaseCircuitBreaker}.
      *
      * `db.connector.pgsql` is the binding `ConnectionFactory` looks up before

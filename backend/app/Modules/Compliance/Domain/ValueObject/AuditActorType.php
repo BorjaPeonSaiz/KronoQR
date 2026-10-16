@@ -5,10 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Compliance\Domain\ValueObject;
 
 /**
- * Quien actua. En la Fase 1 son tres y no cuatro por accidente (doc 02 §11,
- * nota de ADR-032): el RBAC completo llega en la 2.1, pero identificar al actor
- * ya es posible con los tokens de dispositivo de la 1.5 y la autenticacion de
- * gestion minima de la 1.6.
+ * Quien actua en un asiento de `audit_log` (ADR-032).
  */
 enum AuditActorType: string
 {

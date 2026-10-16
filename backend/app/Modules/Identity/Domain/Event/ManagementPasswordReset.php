@@ -26,7 +26,7 @@ final readonly class ManagementPasswordReset implements DomainEvent
     public function __construct(
         public string $userUuid,
         /**
-         * Por que se restablecio (RF-ID-10). Obligatorio desde la 2.2.0: es lo
+         * Por que se restablecio (RF-ID-10). Obligatorio: es lo
          * que separa «lo olvido» de «sospechamos que otra persona la conoce»
          * cuando se lee el asiento meses despues.
          */

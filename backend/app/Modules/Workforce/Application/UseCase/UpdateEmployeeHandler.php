@@ -116,7 +116,7 @@ final readonly class UpdateEmployeeHandler
         $changed = [];
 
         // EL PUNTO DE EXTENSION DEL ASIENTO `employee.updated` (AUD-2). Un campo
-        // editable nuevo de la ficha —el teletrabajo del bloque 9, por ejemplo—
+        // editable nuevo de la ficha —el teletrabajo, por ejemplo—
         // entra aqui con su nombre de columna y queda trazado sin tocar el
         // evento ni el listener de `Compliance`: el asiento lleva esta lista.
         $comparisons = [

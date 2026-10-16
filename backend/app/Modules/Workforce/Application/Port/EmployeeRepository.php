@@ -23,7 +23,7 @@ use App\Modules\Workforce\Domain\Model\Employee;
  * elige sus columnas —{@see self::saveProfile()}, {@see self::saveTermination()}—
  * y lleva el predicado `status <> 'terminated'`: con un `save()` generico, una
  * modificacion de nombre que leyo la ficha antes de una baja reescribia el estado
- * y deshacia la baja (R7-RV-01, R4-BE-01).
+ * y deshacia la baja.
  *
  * **El documento de identidad entra por aqui y no vuelve a salir.** `add()` y
  * `updateNationalId()` lo reciben en claro y lo convierten en digest con

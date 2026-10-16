@@ -24,7 +24,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * persona lleva a una reunion contradijera la pantalla desde la que lo bajo.
  *
  * Lo unico que difiere es el rango **por omision**: sin `from`, la pantalla abre
- * el mes y la descarga el ultimo año, 366 dias (V3-PO-2). Lo declara
+ * el mes y la descarga el ultimo año, 366 dias. Lo declara
  * {@see ExportMyWorkDaysRequest::toQuery()}, no una segunda consulta: con un
  * rango explicito, los dos caminos siguen leyendo exactamente lo mismo.
  *

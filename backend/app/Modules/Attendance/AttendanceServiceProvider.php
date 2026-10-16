@@ -144,7 +144,7 @@ final class AttendanceServiceProvider extends ServiceProvider
         $this->app->bind(DiscardedScans::class, DatabaseDiscardedScans::class);
         $this->app->bind(DiscardedScanReportLog::class, DatabaseDiscardedScanReportLog::class);
 
-        // N2 del dictamen del bloque 18: el aviso de descarte rellena cada
+        // RS-03: el aviso de descarte rellena cada
         // aviso hasta el DOBLE del suelo de RS-03, despues del INSERT. El
         // resolutor ya rellena sus rechazos hasta el suelo sencillo; con el
         // mismo numero aqui una tarjeta vigente volvia antes que una retirada.

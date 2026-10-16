@@ -9,7 +9,7 @@ use Throwable;
 
 /**
  * PostgreSQL cannot be reached, or was found unreachable less than the circuit
- * TTL ago (R3-CH-02).
+ * TTL ago.
  *
  * A `PDOException` on purpose: it travels through the framework exactly like
  * the driver's own connection error —`ConnectionFactory` skips to the next

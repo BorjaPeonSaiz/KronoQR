@@ -55,13 +55,13 @@ use DateTimeZone;
  *
  * ## Consultar el registro PROPIO no lo deja
  *
- * Desde la tarea 1.11, este mismo caso de uso sirve tambien `GET
- * /api/v1/me/workdays` (RF-ID-05, RL-05): la persona mirando sus propias horas
- * desde el portal. Ahi no se escribe el apunte, y el motivo es el literal de
- * RS-05 —*«acceso a datos personales de **terceros**»*—: no hay tercero. Un
- * asiento por cada consulta convertiria un derecho reconocido por el art. 34.9
- * ET en una traza del ejercicio de ese derecho, guardada cuatro años (RL-02) y
- * consultable por el empleador.
+ * Este mismo caso de uso sirve tambien `GET /api/v1/me/workdays` (RF-ID-05,
+ * RL-05): la persona mirando sus propias horas desde el portal. Ahi no se
+ * escribe el apunte, y el motivo es el literal de RS-05 —*«acceso a datos
+ * personales de **terceros**»*—: no hay tercero. Un asiento por cada
+ * consulta convertiria un derecho reconocido por el art. 34.9 ET en una traza
+ * del ejercicio de ese derecho, guardada cuatro años (RL-02) y consultable por
+ * el empleador.
  *
  * Hay ademas una razon tecnica que apunta en la misma direccion: el catalogo de
  * actores de `audit_log` no tiene un tipo para un empleado —solo `user`,
@@ -85,7 +85,7 @@ final readonly class ReadEmployeeWorkDays
 
     /**
      * El ultimo año que descarga `GET /api/v1/me/export` cuando el campo «desde»
-     * se deja en blanco (V3-PO-2, decision del propietario del 09-10-2026). Es
+     * se deja en blanco (decision del propietario del 09-10-2026). Es
      * el techo de {@see DateRange::MAXIMUM_DAYS} y no una cifra propia: «como
      * maximo un año por descarga» y «en blanco, el ultimo año» son la misma
      * frase, y si el techo cambiara, las dos tendrian que cambiar juntas.

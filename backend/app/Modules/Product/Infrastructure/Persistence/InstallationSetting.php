@@ -22,10 +22,9 @@ use Illuminate\Database\Eloquent\Model;
  * arrastra el ORM a los casos de uso y convierte cada prueba de una regla en una
  * prueba con base de datos.
  *
- * **Una fila por clave desde la tarea 5.1**: `scope` y `scope_id` se retiraron
- * con la migracion de contraccion `2026_09_05_100000`, porque hay un centro por
- * instalacion (ADR-040) y un ambito que siempre resuelve al mismo sitio no es
- * una cascada. La unicidad la garantiza `one_setting_per_key`.
+ * **Una fila por clave**, porque hay un centro por instalacion (ADR-040) y un
+ * ambito que siempre resuelve al mismo sitio no es una cascada. La unicidad la
+ * garantiza `one_setting_per_key`.
  */
 final class InstallationSetting extends Model
 {

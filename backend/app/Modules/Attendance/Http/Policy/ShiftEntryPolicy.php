@@ -19,11 +19,10 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *     efecto directo en su nomina. No es la misma responsabilidad que ajustar
  *     diez minutos, y por eso no es el mismo permiso.
  *
- * **Desde la tarea 2.1 dejan de coincidir**, que es exactamente lo que este
- * docblock anticipaba: `responsable_departamento` entra en `manager+` —crea y
- * corrige— y **no** en `rrhh+` —no anula—. Anular saca horas del registro de una
- * persona y tiene efecto directo en su nomina; que quien lleva un turno pueda
- * ajustar diez minutos no significa que pueda borrar una jornada.
+ * **No coinciden**: `responsable_departamento` entra en `manager+` —crea y
+ * corrige— y **no** en `rrhh+` —no anula—. Anular saca horas del registro
+ * de una persona y tiene efecto directo en su nomina; que quien lleva un turno
+ * pueda ajustar diez minutos no significa que pueda borrar una jornada.
  *
  * Su alcance lo acota `ScopeGuard` en el controlador (RF-ID-03): puede corregir a
  * la gente de sus departamentos y recibe `403` con asiento en `audit_log` para

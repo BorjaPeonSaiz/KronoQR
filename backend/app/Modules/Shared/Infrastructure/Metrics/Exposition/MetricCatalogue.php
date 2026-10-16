@@ -96,11 +96,11 @@ final class MetricCatalogue
                 'Trabajos esperando en cada cola en este momento. Se calcula en el scrape: es un estado, no un acontecimiento.',
                 ['queue'],
             ),
-            // R3-CH-01, R4-DV-01: las series de arriba y casi todas las de
-            // abajo viven en Redis y DESAPARECEN con el; sin esta, una alerta
-            // de quiosco se «resolveria» justo cuando el almacen cae. Se
-            // calcula en el scrape, y con el cortacircuitos de Redis abierto
-            // sin tocar la red.
+            // Las series de arriba y casi todas las de abajo viven en Redis y
+            // DESAPARECEN con el; sin esta, una alerta de quiosco se
+            // «resolveria» justo cuando el almacen cae. Se calcula en el
+            // scrape, y con el cortacircuitos de Redis abierto sin tocar la
+            // red.
             new MetricDefinition(
                 'kronoqr_metrics_store_up',
                 MetricType::Gauge,

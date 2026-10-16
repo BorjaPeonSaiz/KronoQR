@@ -32,9 +32,9 @@ use Illuminate\Support\Facades\App;
  *
  * El plan de la tarea 2.9 nombra esa libreria para los tres formatos, y para el
  * XLSX es la que se usa. Para el CSV **no se puede**, y el motivo esta escrito
- * desde la tarea 1.17 en el escritor de la exportacion legal —nombrado en prosa
- * porque `Reporting` no puede importar `Compliance` (doc 02 §1.6)—: su escritor
- * de CSV llama a `fputcsv` con el fin de linea por omision, `\n`, y no expone
+ * en el escritor de la exportacion legal —nombrado en prosa porque
+ * `Reporting` no puede importar `Compliance` (doc 02 §1.6)—: su escritor de
+ * CSV llama a `fputcsv` con el fin de linea por omision, `\n`, y no expone
  * ninguna opcion para cambiarlo. Con el es imposible entregar el `\r\n` del RFC
  * 4180 que espera Excel en Windows.
  *

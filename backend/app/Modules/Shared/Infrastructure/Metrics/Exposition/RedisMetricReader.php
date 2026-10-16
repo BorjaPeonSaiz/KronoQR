@@ -11,8 +11,7 @@ use Throwable;
 
 /**
  * Compone las familias de Prometheus a partir de las series que los catorce
- * adaptadores `Redis*Metrics` llevan escribiendo desde la Fase 1 (decision 1 de
- * la ficha 3.1).
+ * adaptadores `Redis*Metrics` escriben.
  *
  * ## Lee, no escribe
  *

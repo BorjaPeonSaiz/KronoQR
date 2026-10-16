@@ -14,9 +14,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  *
  * ## «manager+», que aqui son tres roles
  *
- * `{admin, rrhh, responsable_departamento}` desde la tarea 2.1. El ultimo entra
- * **acotado**: el listado le devuelve las incidencias de su gente y solo de su
- * gente (RF-ID-03), y resolver una de otro departamento es `403` con asiento.
+ * `{admin, rrhh, responsable_departamento}`. El ultimo entra **acotado**: el
+ * listado le devuelve las incidencias de su gente y solo de su gente
+ * (RF-ID-03), y resolver una de otro departamento es `403` con asiento.
  *
  * Escrito asi y no como `{@see}` a las policies hermanas porque Pint resolveria
  * la referencia a un `use`, y un `use` de otro modulo es la frontera del §1.6 que

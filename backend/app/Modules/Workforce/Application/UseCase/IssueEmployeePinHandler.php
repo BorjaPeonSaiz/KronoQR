@@ -36,12 +36,11 @@ use Random\RandomException;
  * la ficha: dos «Emitir» simultaneos sobre un pendiente dan un `pin.issued` y un
  * `pin.reset`, que es exactamente lo que paso.
  *
- * **Bajo el candado de la cadena** (ADR-046 §1, tabla de §1.2). La escritura de
- * la ficha y el asiento van dentro de `withChainLock()`, en el orden unico
- * cadena → `employees`: hasta la 2.2.0 se escribia la fila y despues el asiento,
- * al reves que la baja, y una baja y un restablecimiento simultaneos podian
- * cerrar un ciclo. Dentro del alta el candado es reentrante: la transaccion es
- * la suya.
+ * **Bajo el candado de la cadena** (ADR-046 §1, tabla de §1.2). La escritura
+ * de la ficha y el asiento van dentro de `withChainLock()`, en el orden unico
+ * cadena → `employees`, el mismo que la baja: en el orden contrario, una baja
+ * y un restablecimiento simultaneos cerrarian un ciclo. Dentro del alta el
+ * candado es reentrante: la transaccion es la suya.
  *
  * **El hash NO se calcula aqui** (A-3). bcrypt cuesta unos 160 ms en
  * produccion y aqui dentro correria con la cadena tomada, congelando los

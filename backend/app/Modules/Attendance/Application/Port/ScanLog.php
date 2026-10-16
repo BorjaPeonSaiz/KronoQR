@@ -68,12 +68,12 @@ interface ScanLog
      * hiciera bastaria con pasar la tarjeta cada 50 segundos para prolongarla
      * indefinidamente.
      *
-     * **Desde la tarea 3.5 lleva tambien QUE fue cada uno** (ADR-024): el
-     * anti-rebote ya no puede decidir solo con el instante, porque un
-     * `break_end` a veinte segundos de un `break_start` no es un rebote sino
-     * alguien corrigiendo una pausa mal pulsada. El adaptador devuelve por tanto
-     * `result` y `shift_entry_uuid` ademas de `occurred_at`, y como todos son
-     * aceptados la accion siempre cabe en {@see ClockingAction}.
+     * **Lleva tambien QUE fue cada uno** (ADR-024): el anti-rebote ya no puede
+     * decidir solo con el instante, porque un `break_end` a veinte segundos de
+     * un `break_start` no es un rebote sino alguien corrigiendo una pausa mal
+     * pulsada. El adaptador devuelve por tanto `result` y `shift_entry_uuid`
+     * ademas de `occurred_at`, y como todos son aceptados la accion siempre
+     * cabe en {@see ClockingAction}.
      *
      * @return list<AcceptedScan> Cero, uno o dos escaneos, con su instante en UTC.
      */

@@ -47,7 +47,7 @@ use DateTimeImmutable;
  * `recorded_at` haria que un lote offline de tres horas se autosuprimiera
  * entero al llegar de golpe.
  *
- * ## Desde la tarea 3.5 mira tambien la intencion (ADR-024)
+ * ## Mira tambien la intencion (ADR-024)
  *
  * El propio ADR-024 lo pide al introducir la pausa: *«un `break_end` inmediato
  * tras un `break_start` mal pulsado caeria hoy en `rejected_debounce` con los

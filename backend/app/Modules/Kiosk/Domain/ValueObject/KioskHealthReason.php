@@ -86,7 +86,7 @@ enum KioskHealthReason: string
 
     /**
      * Late al dia, pero su aplicacion es anterior a la del servidor o no dice
-     * una version legible (`AppVersionPolicy`, RF-KI-07; 2.2.1, bloque 1).
+     * una version legible (`AppVersionPolicy`, RF-KI-07).
      *
      * **Aviso, y el ultimo de los avisos**: la tablet sigue fichando con el
      * build viejo, y se pone al dia sola en cuanto su cola esta vacia y nadie

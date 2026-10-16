@@ -13,7 +13,7 @@ use RedisException;
 
 /**
  * The framework's phpredis connector with a circuit breaker in front of every
- * connection attempt (R3-CH-01).
+ * connection attempt.
  *
  * It overrides `createClient()` and not `connect()` because the framework
  * re-runs `createClient()` from inside `PhpRedisConnection` when a connected

@@ -12,7 +12,7 @@ use Monolog\Processor\PsrLogMessageProcessor;
 
 /**
  * El canal que escribe en el log **del contenedor** desde un proceso cuya
- * salida no llega a el (V4-BE-1, RNF-D-02, regla dura 21).
+ * salida no llega a el (RNF-D-02, regla dura 21).
  *
  * ## El hueco que cierra
  *

@@ -24,14 +24,13 @@ use Throwable;
  * el mismo —«a veces da error 500»— y la causa nunca esta donde se busca. Cuatro
  * comprobaciones de tres lineas ahorran la mitad de las llamadas de soporte.
  *
- * ## Las copias: lo que cada contenedor puede tocar (2.2.0, bloque 20, A3-R2)
+ * ## Las copias: lo que cada contenedor puede tocar
  *
- * Hasta la 2.1.0 la sonda exigia que la raiz de `BACKUP_PATH` fuera escribible,
- * porque `app`, `horizon` y `scheduler` la montaban entera en escritura: quien
- * ejecutara codigo en cualquiera de ellos podia borrar copias o plantar una sin
- * la clave. Desde la 2.2.0 la raiz se monta en solo lectura y cada servicio
- * recibe en escritura solo lo suyo ({@see RuntimeService}). Las tres
- * comprobaciones dicen exactamente eso:
+ * Si `app`, `horizon` y `scheduler` montaran entera en escritura la raiz de
+ * `BACKUP_PATH`, quien ejecutara codigo en cualquiera de ellos podria borrar
+ * copias o plantar una sin la clave. Por eso la raiz se monta en solo lectura y
+ * cada servicio recibe en escritura solo lo suyo ({@see RuntimeService}). Las
+ * tres comprobaciones dicen exactamente eso:
  *
  * - `permissions.backup_path` — la raiz existe y se puede leer (si no, **no hay
  *   copias**: `failure`) y NO se puede escribir. Escribible en produccion es el

@@ -27,11 +27,11 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ## Por que existe
  *
- * `users.is_active` se consultaba al autenticar desde la Fase 1, pero nada lo
- * ponia a `false`: retirarle el acceso a quien deja el hotel exigia editar la
- * fila a mano, fuera del producto y del trail (hallazgo H-03 de la revision
- * ASVS de 2026-09). La consola lo resolvio en la 3.8; desde la 2.2.0 tambien el
- * panel, porque un hotel sin acceso al servidor no daba de baja a nadie.
+ * `users.is_active` se consulta al autenticar, y algo tiene que ponerlo a
+ * `false`: sin este caso de uso, retirarle el acceso a quien deja el hotel
+ * exigiria editar la fila a mano, fuera del producto y del trail. Hay consola y
+ * panel porque un hotel sin acceso al servidor tambien tiene que poder dar de
+ * baja.
  *
  * ## La invariante, bajo candado
  *

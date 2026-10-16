@@ -194,8 +194,8 @@ enum AnomalyType: string
      *
      * Deriva de {@see ComplianceRuleSuspension}, que es donde la decision vive.
      * **La suspension llega por parametro y no se pregunta a un estatico**
-     * (regla dura 14): desde la tarea 3.5 depende de si el hotel tiene activado
-     * el fichaje de pausa, y quien lo sabe es el caso de uso que ya inyecta
+     * (regla dura 14): depende de si el hotel tiene activado el fichaje de
+     * pausa, y quien lo sabe es el caso de uso que ya inyecta
      * `OperationalSettingsProvider`. Un enum que fuera a buscarlo por su cuenta
      * seria dominio leyendo configuracion.
      */

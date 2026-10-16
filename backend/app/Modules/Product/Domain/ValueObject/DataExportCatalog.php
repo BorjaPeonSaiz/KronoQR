@@ -66,18 +66,16 @@ namespace App\Modules\Product\Domain\ValueObject;
  *   columna `roles` de `users.csv`, que es lo que responde la pregunta; las
  *   tablas de union son un detalle de implementacion de la libreria de permisos.
  *
- * ## Ya no hay ningun conjunto «no instalado»
+ * ## Ningun conjunto «no instalado»
  *
- * `absences` fue el ultimo, y entra como un conjunto mas desde la tarea 3.10,
- * que creo la tabla (RF-GP-04). Antes el manifiesto la declaraba
- * `not_installed` en lugar de escribir un fichero vacio, y la diferencia
- * importaba: un `absences.csv` con cero filas le dice al cliente «no tienes
- * ausencias registradas», y lo cierto era «esta version no registra ausencias».
- * `error_events` recorrio el mismo camino en la tarea 5.12.
+ * Todas las tablas declaradas existen. Un conjunto `not_installed` no es un
+ * fichero vacio, y la diferencia importa: un `absences.csv` con cero filas le
+ * dice al cliente «no tienes ausencias registradas», y un conjunto no
+ * instalado, «esta version no registra ausencias».
  *
- * {@see self::notInstalled()} **sigue existiendo y devuelve una lista vacia**:
- * el mecanismo tiene que estar el dia que el producto declare una tabla antes de
- * implementarla, que es lo que ha pasado dos veces.
+ * {@see self::notInstalled()} **existe y devuelve una lista vacia**: el
+ * mecanismo tiene que estar el dia que el producto declare una tabla antes de
+ * implementarla.
  *
  * ## `absences` lleva `note`, y es la excepcion que merece explicacion
  *

@@ -54,14 +54,13 @@ use Illuminate\Database\ConnectionInterface;
  * en distinto orden en dos paginas consecutivas y una de ellas no aparecer nunca.
  *
  * El filtro por `status` y el orden completo caen sobre
- * `incidents_status_urgency_index` (`2026_10_08_100100`, hallazgo DB6): la
+ * `incidents_status_urgency_index` (`2026_10_08_100100`): la
  * pagina lee sus entradas del indice ya ordenadas, sin `Sort` y sin recorrer la
- * tabla, para cualquier estado. Hasta la 2.2.0 era `Seq Scan` mas `top-N
- * heapsort` en cada visita: `incidents_open_by_assignee` empieza por el
- * responsable y no sirve a una bandeja sin el. **La expresion de {@see ORDER}
- * es la del indice, literal a literal**; si cambia una, tiene que cambiar la
- * otra con una migracion nueva, y `IncidentBoardIndexUsageTest` falla mientras
- * no coincidan.
+ * tabla, para cualquier estado; sin el seria `Seq Scan` mas `top-N heapsort` en
+ * cada visita, porque `incidents_open_by_assignee` empieza por el responsable y
+ * no sirve a una bandeja sin el. **La expresion de {@see ORDER} es la del
+ * indice, literal a literal**; si cambia una, tiene que cambiar la otra con una
+ * migracion nueva, y `IncidentBoardIndexUsageTest` falla mientras no coincidan.
  *
  * ## Lee tablas de otros modulos
  *

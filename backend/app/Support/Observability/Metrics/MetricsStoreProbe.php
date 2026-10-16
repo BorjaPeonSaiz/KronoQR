@@ -13,7 +13,7 @@ use Throwable;
 
 /**
  * `kronoqr_metrics_store_up`: whether the store that holds almost every series
- * of `/metrics` —Redis— answers right now (R3-CH-01, R4-DV-01).
+ * of `/metrics` —Redis— answers right now.
  *
  * ## Why an explicit series and not `absent()`
  *

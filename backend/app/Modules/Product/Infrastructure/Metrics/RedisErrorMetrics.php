@@ -35,8 +35,8 @@ use Throwable;
  * adelante en silencio: se llega aqui desde el camino de un fallo que ya ocurrio
  * -o desde el latido de un quiosco- y perder un contador es infinitamente mas
  * barato que romper una peticion o dejar a alguien sin fichar (regla dura 19).
- * `/metrics` publica la serie desde la tarea 3.1, con `MetricCatalogue` y
- * `MetricsCatalogueTest` contra el doc 02 §8.2.
+ * `/metrics` publica la serie con `MetricCatalogue` y `MetricsCatalogueTest`
+ * contra el doc 02 §8.2.
  */
 final readonly class RedisErrorMetrics implements ErrorMetrics
 {

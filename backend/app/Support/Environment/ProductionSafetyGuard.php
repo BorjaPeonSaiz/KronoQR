@@ -13,12 +13,10 @@ namespace App\Support\Environment;
  * excepcion **y la configuracion resuelta**, que incluye credenciales de base
  * de datos y claves de firma. En un producto que se instala en el servidor de
  * un tercero, ese es el fallo de configuracion mas facil de cometer y el mas
- * caro: basta con copiar el `.env` de ejemplo sin leerlo. Estuvo anotado como
- * hueco en `docs/07-seguridad-madurez-y-amenazas.md` §6 hasta esta tarea.
+ * caro: basta con copiar el `.env` de ejemplo sin leerlo.
  *
- * El aviso escrito no basta —`.env.example` llevaba «false SIEMPRE en
- * produccion» desde la Fase 0 y aun asi el hueco seguia abierto—, asi que la
- * comprobacion es una guarda y no una recomendacion.
+ * El aviso escrito en `.env.example` («false SIEMPRE en produccion») no
+ * basta, asi que la comprobacion es una guarda y no una recomendacion.
  *
  * ## Por que se para el arranque en lugar de avisar
  *

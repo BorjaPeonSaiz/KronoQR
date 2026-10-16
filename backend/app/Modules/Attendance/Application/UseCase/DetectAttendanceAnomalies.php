@@ -309,10 +309,10 @@ final readonly class DetectAttendanceAnomalies
      *
      * La regla sigue enunciada, implementada en `AnomalyDetectionPolicy` y
      * cubierta por su prueba unitaria; lo que se suspende es SOLO la apertura de
-     * la incidencia. **Desde la tarea 3.5 la suspension es del hotel y no del
-     * producto**: RN-12 vuelve a abrir `missing_break` en cuanto la instalacion
-     * active `ATTENDANCE_BREAK_CLOCKING` (RF-AT-12, ADR-024), y sigue suspendida
-     * donde el quiosco no registra la pausa — abrirla alli seria senalar a quien
+     * la incidencia. **La suspension es del hotel y no del producto**: RN-12
+     * vuelve a abrir `missing_break` en cuanto la instalacion active
+     * `ATTENDANCE_BREAK_CLOCKING` (RF-AT-12, ADR-024), y sigue suspendida donde
+     * el quiosco no registra la pausa — abrirla alli seria senalar a quien
      * descanso sin fichar.
      *
      * **La lista ya no vive aqui** (tarea 5.2). Estaba escrita como una constante
@@ -323,10 +323,10 @@ final readonly class DetectAttendanceAnomalies
      * afirmar `affects_incident_detection: true` sobre un registro con valor
      * legal. `Product` no puede importar `Attendance` (doc 02 §1.6), asi que el
      * hecho subio a `Shared\Domain\ValueObject\ComplianceRuleSuspension` y aqui
-     * se **recibe ya resuelto** (regla dura 14). Desde la 3.5 no hay ninguna
-     * lista que vaciar: la suspension se construye desde
-     * `ATTENDANCE_BREAK_CLOCKING`, asi que un hotel la reactiva desde el panel y
-     * el filtro, la pantalla del perfil y el asiento se enteran solos.
+     * se **recibe ya resuelto** (regla dura 14). No hay ninguna lista que
+     * vaciar: la suspension se construye desde `ATTENDANCE_BREAK_CLOCKING`, asi
+     * que un hotel la reactiva desde el panel y el filtro, la pantalla del
+     * perfil y el asiento se enteran solos.
      *
      * @param  list<WorkDay>  $workDays
      * @return list<DetectedAnomaly>
@@ -660,10 +660,10 @@ final readonly class DetectAttendanceAnomalies
         $groups = [];
 
         foreach ($this->withdrawnCredentialScans->withdrawnBetween($from, $now) as $scan) {
-            // La misma ventana de antiguedad que los descartes (revision de
-            // codigo del bloque 18): el `occurred_at` lo pone la tablet, y la
-            // cola de una tablet no guarda fichajes de hace meses. La fila sigue
-            // marcada; solo no abre incidencia.
+            // La misma ventana de antiguedad que los descartes: el
+            // `occurred_at` lo pone la tablet, y la cola de una tablet no
+            // guarda fichajes de hace meses. La fila sigue marcada; solo no
+            // abre incidencia.
             if ($scan->occurredAt < $scan->recordedAt->modify('-'.$command->discardReviewWindowDays.' days')) {
                 continue;
             }
@@ -720,11 +720,11 @@ final readonly class DetectAttendanceAnomalies
      *
      * El puerto ya omite los que estaban registrados al recibirse y los cuyo
      * `scan_id` exista hoy en `scan_events`. Aqui se quedan solo los que caen en
-     * la **ventana creible** de {@see DiscardedScanReviewPolicy} (F6 del dictamen
-     * del bloque 18) —ni posteriores a la recepcion mas el desfase admitido, ni
-     * anteriores a la emision de la tarjeta o al alta, ni mas antiguos que la
-     * ventana de la instalacion— y se agrupan **por persona y jornada**, como
-     * RN-19: la fecha civil del `occurred_at` en la zona del centro.
+     * la **ventana creible** de {@see DiscardedScanReviewPolicy} —ni
+     * posteriores a la recepcion mas el desfase admitido, ni anteriores a la
+     * emision de la tarjeta o al alta, ni mas antiguos que la ventana de la
+     * instalacion— y se agrupan **por persona y jornada**, como RN-19: la
+     * fecha civil del `occurred_at` en la zona del centro.
      *
      * El `context` lleva el primero —`scan_id`, instante, quiosco, via,
      * respuesta— y cuantos avisos fueron. `problem` es un identificador del

@@ -26,13 +26,11 @@ use App\Modules\Workforce\Domain\Event\SiteConfigured;
  * el turno de noche de marzo cuenta en otro dia que el de febrero?» no tiene
  * respuesta.
  *
- * ## Deuda saldada
+ * ## La modificacion tambien se audita
  *
- * `UpdateSiteHandler` afirmaba desde la tarea 1.6 que el cambio de zona «queda
- * auditado por el oyente de `Compliance`». **No habia oyente ni asiento**: el
- * caso de uso no publicaba ningun evento. La tarea 5.5 lo cierra, porque tenia
- * que auditar el alta del centro y dejar la modificacion sin auditar al lado
- * habria sido peor que no tener ninguna de las dos.
+ * El alta y la modificacion del centro dejan asiento las dos: auditar el alta y
+ * dejar sin auditar la modificacion, que es la que cambia la zona, seria peor
+ * que no auditar ninguna.
  *
  * ## `subject_id` si va, al contrario que en el contrato de empleado
  *

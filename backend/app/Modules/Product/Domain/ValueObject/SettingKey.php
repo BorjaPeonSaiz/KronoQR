@@ -107,10 +107,11 @@ enum SettingKey: string
     /**
      * RF-PD-08: nombre de la aplicacion.
      *
-     * **Se pinta desde la tarea 5.8**: la cabecera y el titulo de pestaÃ±a de las
-     * tres SPA âque lo reciben por `GET /api/v1/branding`â, la tarjeta de
-     * credencial, el informe sellado y la cabecera de la exportacion legal. Todos
-     * lo reciben por el puerto `BrandingProvider`; ninguno lee esta tabla.
+     * **Se pinta en**: la cabecera y el titulo de pestaña de las tres SPA
+     * —que lo reciben por `GET /api/v1/branding`—, la tarjeta de
+     * credencial, el informe sellado y la cabecera de la exportacion legal.
+     * Todos lo reciben por el puerto `BrandingProvider`; ninguno lee esta
+     * tabla.
      */
     case BRANDING_APP_NAME = 'BRANDING_APP_NAME';
 
@@ -140,10 +141,10 @@ enum SettingKey: string
     /**
      * RF-PD-08: color de acento, en notacion CSS.
      *
-     * **Se pinta desde la tarea 5.8**: el filete de la tarjeta impresa, la
-     * cabecera del informe sellado y, en las tres SPA, los tokens `--kq-*` de la
-     * familia primaria, derivados en tiempo de ejecucion. No se recompila nada
-     * por cliente (ADR-017).
+     * **Se pinta en**: el filete de la tarjeta impresa, la cabecera del informe
+     * sellado y, en las tres SPA, los tokens `--kq-*` de la familia primaria,
+     * derivados en tiempo de ejecucion. No se recompila nada por cliente
+     * (ADR-017).
      *
      * `GET /api/v1/branding` publica `null` mientras rija el valor de serie, para
      * que las SPA no toquen ningun token y el sistema visual del doc 06 quede
@@ -380,9 +381,7 @@ enum SettingKey: string
      *
      * Hasta 160 caracteres, **sin saltos de linea ni caracteres de control ni de
      * formato** (categorias Unicode `Cc` y `Cf`: nada de marcas bidireccionales
-     * ni de anchura cero que disfracen el nombre, F15 del dictamen del bloque
-     * 18). Antes era una variable de compilacion de la PWA que nadie fijaba
-     * (R6-KI-01).
+     * ni de anchura cero que disfracen el nombre).
      *
      * Impacto `PRESENTATION`: no mueve ni un minuto del registro.
      */

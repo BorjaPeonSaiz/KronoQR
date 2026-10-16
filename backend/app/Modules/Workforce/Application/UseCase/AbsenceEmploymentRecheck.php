@@ -11,7 +11,7 @@ use App\Modules\Workforce\Domain\Model\Absence;
 
 /**
  * **El periodo de empleo de una ausencia, vuelto a mirar con la cadena de
- * `audit_log` ya tomada** (RN-14, ADR-046; revision del bloque 17).
+ * `audit_log` ya tomada** (RN-14, ADR-046).
  *
  * El registro, la correccion y la importacion de ausencias leen la ficha sin
  * candado y antes de su asiento. Una baja que confirmara entre esa lectura y la

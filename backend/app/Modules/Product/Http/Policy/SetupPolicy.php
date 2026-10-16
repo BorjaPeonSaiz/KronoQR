@@ -59,8 +59,8 @@ final class SetupPolicy
      * El asistente es un acto del cliente, no de soporte (tarea 5.9).
      *
      * Un token de soporte con alcance `configuration` lleva `settings:*`, que
-     * es el ambito bajo el que viajan estas rutas desde la 5.5; sin esta linea
-     * podria completar el asistente —irreversible y con asiento— como efecto
+     * es el ambito bajo el que viajan estas rutas; sin esta linea podria
+     * completar el asistente —irreversible y con asiento— como efecto
      * lateral del ambito. Poner en marcha la instalacion lo decide quien la
      * contrata, aunque quien la configure sea el fabricante.
      */

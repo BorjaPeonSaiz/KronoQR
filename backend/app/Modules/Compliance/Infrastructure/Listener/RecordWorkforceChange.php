@@ -44,7 +44,7 @@ use DateTimeImmutable;
  *
  * ## Punto de extension
  *
- * Un campo editable nuevo de la ficha (el teletrabajo del bloque 9) entra en
+ * Un campo editable nuevo de la ficha (el teletrabajo, por ejemplo) entra en
  * `UpdateEmployeeHandler::changedFields()` y llega aqui dentro de
  * `changed_fields` sin tocar este listener.
  *

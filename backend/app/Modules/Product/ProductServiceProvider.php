@@ -223,21 +223,19 @@ use Throwable;
  * `Shared/Application/Port/` y sus adaptadores aqui, que es donde estan las
  * tablas.
  *
- * ## Los tres proveedores, y por que dos existian antes de la tarea 5.1
+ * ## Los tres proveedores
  *
- * - **`OperationalSettingsProvider`** se enlaza desde la tarea 1.3, porque sin el
- *   el fichaje no tendria de donde sacar la ventana anti-rebote de RF-AT-06 ni la
- *   duracion anomala de RN-08, y la unica alternativa era escribir 60 s y 12 h
- *   como constantes en PHP — lo que la regla dura 14 prohibe. La 5.1 le cambia
- *   por dentro de donde salen los valores (la cascada) y le añade la edicion
- *   desde el panel; la forma que ve el nucleo no cambia.
- * - **`CompliancePolicyProvider`** se enlaza desde la tarea 2.6 y por el mismo
- *   motivo. La 5.2 le añade la edicion y la auditoria del cambio.
- * - **`BrandingProvider`** lo enlaza la tarea 5.1 (RF-PD-08). La 5.8 le suma
- *   `BrandingLogoReader` —el logotipo, ya leido y ya comprobado— y
- *   `LocalePolicyProvider`, y pasa a los tres a sus consumidores:
+ * - **`OperationalSettingsProvider`**: sin el, el fichaje no tendria de donde
+ *   sacar la ventana anti-rebote de RF-AT-06 ni la duracion anomala de RN-08, y
+ *   la unica alternativa seria escribir 60 s y 12 h como constantes en PHP —
+ *   lo que la regla dura 14 prohibe. Los valores salen de la cascada y se
+ *   editan desde el panel; la forma que ve el nucleo no depende de eso.
+ * - **`CompliancePolicyProvider`**, por el mismo motivo, con su edicion y la
+ *   auditoria del cambio.
+ * - **`BrandingProvider`** (RF-PD-08), con `BrandingLogoReader` —el logotipo,
+ *   ya leido y ya comprobado— y `LocalePolicyProvider`. Los consumen
  *   `BrowsershotCardRenderer`, `CsvLegalExportWriter`, `PeriodReportPdf` y las
- *   tres SPA a traves de `GET /api/v1/branding`. Ninguno lee ya
+ *   tres SPA a traves de `GET /api/v1/branding`. Ninguno lee
  *   `config('branding.*')`.
  *
  * ## `scoped()` y no `singleton()`
@@ -1085,8 +1083,8 @@ final class ProductServiceProvider extends ServiceProvider
      * `App\Support` que usa el middleware que negocia el idioma de cada
      * respuesta, y existe porque ese middleware esta **fuera de los modulos y no
      * puede nombrar un tipo de `Shared`** (Deptrac: `AppFramework` no alcanza
-     * `App\Modules\*`, frontera intacta desde la tarea 0.2). Es la misma solucion
-     * que ya usa `LicenseStateProbe` para el estado de licencia de `/health`.
+     * `App\Modules\*`). Es la misma solucion que ya usa `LicenseStateProbe`
+     * para el estado de licencia de `/health`.
      *
      * El segundo enlace apunta a la MISMA instancia. Dos adaptadores duplicarian
      * la consulta, la memoria y el respaldo, y el dia que divergieran la API
@@ -1844,7 +1842,7 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
-        // El latido de Horizon para `queue.worker` (V3-PL-07, V4-PL-3): con la
+        // El latido de Horizon para `queue.worker`: con la
         // cola vacia, mirar la cola no distingue «nadie consume» de «nada que
         // consumir».
         $this->app->bind(
@@ -1859,7 +1857,7 @@ final class ProductServiceProvider extends ServiceProvider
                     $app->make(DatabaseProbe::class),
                     $app->make(QueueProbe::class),
                     /*
-                     * Si el planificador sigue lanzando tareas (V3-PL-07). Pegada
+                     * Si el planificador sigue lanzando tareas. Pegada
                      * a la cola porque el orden de esta lista ES el del informe:
                      * los dos procesos de fondo, uno detras de otro.
                      */
@@ -1933,7 +1931,7 @@ final class ProductServiceProvider extends ServiceProvider
                         brandingLogoRoot: Config::string('branding.logo_root'),
                         settings: $app->make(GetSettingsHandler::class),
                         logos: $app->make(LogoInspector::class),
-                        // Bloque 20 (A3-R2): la raiz de BACKUP_PATH va en solo
+                        // La raiz de BACKUP_PATH va en solo
                         // lectura y cada servicio escribe solo lo suyo.
                         metricsPath: Config::string('observability.metrics.textfile_path'),
                         environment: Config::string('app.env'),
@@ -1945,7 +1943,7 @@ final class ProductServiceProvider extends ServiceProvider
                     ),
                     /*
                      * Que las copias SE ESTAN HACIENDO, no solo que se pueden
-                     * escribir (V3-PL-07). Detras de permisos y disco porque
+                     * escribir. Detras de permisos y disco porque
                      * el orden de esta lista ES el del informe: primero si la
                      * copia puede escribirse y caber, y despues si se hizo.
                      */
@@ -1955,7 +1953,7 @@ final class ProductServiceProvider extends ServiceProvider
                         dailyAt: Config::string('backup.daily_at'),
                     ),
                     /*
-                     * Si las copias salen del servidor (V5-DV-05): un AVISO, no un
+                     * Si las copias salen del servidor: un AVISO, no un
                      * fallo. Detras de la sonda de la copia porque lee el mismo
                      * fichero de metricas.
                      */
@@ -2030,7 +2028,7 @@ final class ProductServiceProvider extends ServiceProvider
                     new KioskServiceCodeProbe($app->make(KioskServiceCodeProvider::class)),
                     /*
                      * La version de la PWA de cada tablet frente a la del
-                     * servidor (RF-KI-07, bloque 1 de la 2.2.1). Pegada a la
+                     * servidor (RF-KI-07). Pegada a la
                      * otra sonda de quioscos porque el orden de esta lista ES
                      * el del informe. **Aviso y nunca fallo**: justo despues de
                      * actualizar, las tablets aun no se han puesto al dia, y un
@@ -2060,7 +2058,7 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
-        // V4-PL-1: el reconocedor de caidas de Redis y PostgreSQL, tambien para
+        // El reconocedor de caidas de Redis y PostgreSQL, tambien para
         // decidir si el asiento de un paquete se puede aplazar (ADR-020).
         $this->app->bind(ProbeFailureClassifier::class, ConnectionProbeFailureClassifier::class);
 

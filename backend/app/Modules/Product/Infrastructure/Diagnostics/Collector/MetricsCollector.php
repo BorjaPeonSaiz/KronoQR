@@ -36,23 +36,20 @@ use Throwable;
  * tipo: `TYPE` devuelve un objeto en un cliente y una cadena en el otro, y
  * depender de eso romperia el paquete al cambiar de driver de Redis.
  *
- * ## Restos de la 3.1: las claves sueltas nunca llegaban al paquete
+ * ## Las claves sueltas: `SCAN` por el envoltorio de Laravel
  *
  * `installation_setting_changes_total`, `compliance_profile_changes_total` y
- * `license_limit_exceeded_total` viven exactamente asi —una clave por
- * combinacion de etiquetas— y desde la 5.5 no viajaban en el paquete de
- * diagnostico: {@see self::labelled()} llamaba a `command('SCAN', [$cursor,
- * 'MATCH', $pattern, 'COUNT', $count])`, que traduce a
- * `$client->SCAN($cursor, 'MATCH', $pattern, 'COUNT', $count)` —cinco
- * argumentos posicionales—, y `phpredis` no tiene un `SCAN` que acepte eso:
- * su metodo `scan()` es `scan(&$iterator, $pattern, $count, $type)`, con
- * cuatro como mucho. La llamada lanzaba `ArgumentCountError`, {@see
- * self::command()} lo atrapaba en silencio (el mismo `try` que protege una
- * serie individual de tumbar a las demas) y la seccion `metrics` del paquete
- * seguia saliendo sin decir que le faltaban tres series.
+ * `license_limit_exceeded_total` viven como una clave por combinacion de
+ * etiquetas. `command('SCAN', [$cursor, 'MATCH', $pattern, 'COUNT', $count])`
+ * no sirve para recorrerlas: traduce a cinco argumentos posicionales, y el
+ * `scan()` de `phpredis` es `scan(&$iterator, $pattern, $count, $type)`, con
+ * cuatro como mucho. Lanzaria `ArgumentCountError`, {@see self::command()} lo
+ * atraparia en silencio (el mismo `try` que protege una serie individual de
+ * tumbar a las demas) y la seccion `metrics` del paquete saldria sin decir que
+ * le faltan tres series.
  *
- * La correccion usa el mismo envoltorio que ya arreglo esto en
- * `RedisMetricReader` (tarea 3.1, Integration
+ * Por eso usa el mismo envoltorio que
+ * `RedisMetricReader` (Integration
  * `MetricsExpositionTest::it('encuentra las series que viven como claves
  * sueltas...')`): el `scan()` de `PhpRedisConnection`, que SI traduce
  * `match`/`count` y devuelve `[cursor, claves]`, y a mano las dos trampas que

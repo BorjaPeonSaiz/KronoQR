@@ -16,12 +16,10 @@ use DateTimeImmutable;
  * pausa (RF-AT-02, RF-AT-03, RF-AT-12, ADR-024).
  *
  * Es una regla de negocio y por eso vive en `Domain/` y no en el handler
- * (reglas duras 1 y 2). Hasta la tarea 3.5 la decision cabia en un `if
- * (hasOpenEntry())` dentro del caso de uso, porque solo habia dos desenlaces
- * posibles. Con la pausa declarada hay cuatro, la respuesta depende de cuatro
- * hechos y no de uno, y **una equivocacion aqui no da un error: da una nomina
- * mal pagada**. Eso es exactamente lo que se escribe como politica del dominio,
- * con su tabla y una prueba por fila.
+ * (reglas duras 1 y 2). Con la pausa declarada hay cuatro desenlaces, la
+ * respuesta depende de cuatro hechos y no de uno, y **una equivocacion aqui no
+ * da un error: da una nomina mal pagada**. Eso es exactamente lo que se escribe
+ * como politica del dominio, con su tabla y una prueba por fila.
  *
  * ## Los cuatro hechos que entran
  *

@@ -87,12 +87,12 @@ final readonly class PlanEmployeeImport
 
         // Los dos mapas de «ya visto» del fichero, y son dos por una razon: la
         // clave de identidad detecta la MISMA persona repetida y el correo
-        // detecta a DOS personas distintas peleandose por el mismo correo. La
-        // segunda existe desde la revision de la 5.5: sin ella, dos filas con
-        // documentos distintos y el mismo correo salian las dos como `create` y
-        // reventaban el lote entero en la fase de aplicacion con un `409` del
-        // indice unico —sin decir que linea—, despues de que quien importa
-        // hubiera revisado un informe que decia que todo iba bien.
+        // detecta a DOS personas distintas peleandose por el mismo correo. Sin
+        // la segunda, dos filas con documentos distintos y el mismo correo
+        // saldrian las dos como `create` y reventarian el lote entero en la
+        // fase de aplicacion con un `409` del indice unico —sin decir que
+        // linea—, despues de que quien importa hubiera revisado un informe
+        // que decia que todo iba bien.
         $seen = [];
         $seenEmails = [];
 
@@ -107,12 +107,10 @@ final readonly class PlanEmployeeImport
      * Avisos que son **del fichero entero**, no de una linea: hoy, las cabeceras
      * que el mapa no reconoce.
      *
-     * **Se avisan una vez, y desde la revision de la 5.5 de verdad.** Antes se
-     * componian aqui y se copiaban en cada fila, que es exactamente lo que este
-     * docblock decia evitar: una cabecera con tres columnas desconocidas y
-     * cuarenta filas producia **ciento veinte mensajes identicos** que
-     * sepultaban los rechazos de verdad. Ahora viven en `file.warnings` del
-     * informe y las filas no los llevan.
+     * **Se avisan una vez**, en `file.warnings` del informe, y las filas no los
+     * llevan: una cabecera con tres columnas desconocidas y cuarenta filas
+     * produciria **ciento veinte mensajes identicos** que sepultarian los
+     * rechazos de verdad.
      *
      * Se avisan aunque no impidan nada, porque el caso que importa no es la
      * exportacion con veinte columnas de nomina, sino el `e-mail` escrito donde
@@ -389,18 +387,17 @@ final readonly class PlanEmployeeImport
      *
      * ## EL DOCUMENTO MANDA, Y CUANDO HAY DOCUMENTO EL CORREO NO EMPAREJA
      *
-     * Es la correccion mas importante de la revision de la 5.5, y el fallo que
-     * cierra era el peor que este endpoint podia producir. Antes se buscaba por
-     * documento y, **si no aparecia nadie, se buscaba por correo**: una linea con
-     * un documento nuevo y el correo de otra persona —dos camareros compartiendo
-     * `recepcion@hotel.example`, o una errata en una celda— salia como `update`
-     * de la ficha de esa otra persona. Se le reescribia el nombre y los
-     * apellidos, y a partir de ahi **su registro horario quedaba a nombre de
-     * quien no era** (RL-04, regla dura 5). Nadie lo habria notado hasta una
+     * Es la regla que evita el peor fallo que este endpoint podria producir. Si
+     * se buscara por documento y, **sin nadie, por correo**, una linea con un
+     * documento nuevo y el correo de otra persona —dos camareros compartiendo
+     * `recepcion@hotel.example`, o una errata en una celda— saldria como
+     * `update` de la ficha de esa otra persona. Se le reescribiria el nombre y
+     * los apellidos, y a partir de ahi **su registro horario quedaria a nombre
+     * de quien no era** (RL-04, regla dura 5). Nadie lo notaria hasta una
      * nomina o una inspeccion.
      *
-     * Ahora: si la linea trae documento, se busca **solo** por documento. Si no
-     * aparece nadie, es un alta — aunque su correo ya exista.
+     * Por eso, si la linea trae documento, se busca **solo** por documento. Si
+     * no aparece nadie, es un alta — aunque su correo ya exista.
      *
      * ## Ese correo repetido no se ignora: se rechaza la linea
      *

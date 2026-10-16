@@ -8,9 +8,9 @@ namespace App\Modules\Workforce\Domain\Exception;
  * Otro empleado ya tiene ese documento de identidad.
  *
  * El documento no se guarda —solo su digest (RL-08)— y es unico cuando existe
- * (`employees_national_id_hash_unique`, parcial sobre los no nulos). Antes de
- * la 2.2.0 el choque con ese indice salia como `500`; ahora es el `409` de
- * cualquier otro dato ya usado (bloque 17, alta contra importacion simultanea).
+ * (`employees_national_id_hash_unique`, parcial sobre los no nulos). El choque
+ * con ese indice —un alta contra una importacion simultanea— es el `409` de
+ * cualquier otro dato ya usado, no un `500`.
  */
 final class EmployeeNationalIdAlreadyTaken extends WorkforceConflict
 {

@@ -21,7 +21,7 @@ use Throwable;
  * la `RedisException` y el quiosco recibia un `500` por cada fichaje: el
  * empleado no podia fichar por ninguna via del servidor mientras durase la
  * averia, y la cola offline del hotel entero crecia sin que nadie lo notara
- * hasta `ColaOfflineSinVaciar` (tanda 3 de la verificacion de la 2.1.0).
+ * hasta `ColaOfflineSinVaciar`.
  *
  * ## Por que abrir, y por que solo aqui
  *

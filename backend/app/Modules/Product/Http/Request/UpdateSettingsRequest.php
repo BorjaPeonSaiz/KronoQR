@@ -144,14 +144,14 @@ final class UpdateSettingsRequest extends FormRequest
         // apagar una deteccion desde fuera es peor que encenderla.
         SettingKey::ATTENDANCE_PATTERN_WINDOW_SECONDS->value,
         SettingKey::ATTENDANCE_PATTERN_MIN_REPEATS->value,
-        // RL-09, RF-KI-09 (2.2.0, bloque 18): son LA DECLARACION LEGAL del hotel
+        // RL-09, RF-KI-09: son LA DECLARACION LEGAL del hotel
         // ante su plantilla —quien responde del tratamiento y donde esta su
         // politica, art. 13 RGPD—, que la tablet enseña antes de cada fichaje.
         // Quien mantiene el producto no puede firmar por el responsable ni
         // apuntar a los empleados a una politica que el hotel no ha aprobado.
         SettingKey::PRIVACY_CONTROLLER_NAME->value,
         SettingKey::PRIVACY_POLICY_URL->value,
-        // RF-ID-09, ADR-050 (2.2.0, bloque 12): la FUERZA DEL PIN de toda la
+        // RF-ID-09, ADR-050: la FUERZA DEL PIN de toda la
         // plantilla. Bajarla de 8 a 6 con el portal abierto a internet devuelve
         // el riesgo de PP-09, y quien decide cuanto riesgo asume sobre el acceso
         // a los datos de su gente es el responsable del tratamiento, no quien
@@ -553,7 +553,7 @@ final class UpdateSettingsRequest extends FormRequest
      * `users.id` de quien firma, tomado de la sesion autenticada, o `null` si no
      * hay ninguna persona de la organizacion detras.
      *
-     * ## `null` es un caso real desde la tarea 5.9
+     * ## `null` es un caso real
      *
      * Un **acceso de soporte** con alcance `configuration` cambia ajustes y no
      * es una cuenta de `users`: el fabricante no tiene cuenta en la instalacion

@@ -139,13 +139,11 @@ final readonly class IssueCredential
      * Una persona, una tarjeta: emitir sin `reissue` a quien ya tiene una activa
      * es un `409` (doc 01 §5.2).
      *
-     * **Por que hace falta esta comprobacion desde la tarea 2.12.** Antes la
-     * hacia sola la base de datos: el indice era unico por empleado entre las no
-     * revocadas. La rotacion con solape obliga a admitir exactamente dos
-     * —la tarjeta en la mano y su relevo pendiente de imprimir—, asi que el
-     * indice paso a ser por empleado **y clave**, y una emision suelta sobre
-     * alguien que ya tiene tarjeta ya no choca con nada: crearia una pendiente
-     * silenciosa que chocaria semanas despues, al imprimir.
+     * **Por que no basta con el indice.** La rotacion con solape obliga a
+     * admitir exactamente dos —la tarjeta en la mano y su relevo pendiente de
+     * imprimir—, asi que el indice es por empleado **y clave**, y una emision
+     * suelta sobre alguien que ya tiene tarjeta no choca con nada: crearia una
+     * pendiente silenciosa que chocaria semanas despues, al imprimir.
      *
      * **No reintroduce la condicion de carrera que el repositorio evita.** Dos
      * emisiones simultaneas siguen decidiendose en PostgreSQL, con

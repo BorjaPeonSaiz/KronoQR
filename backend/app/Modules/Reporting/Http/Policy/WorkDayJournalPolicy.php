@@ -17,15 +17,14 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * El Anexo B lo escribe como `[rol: manager+ | self]`, y las dos mitades no se
  * resuelven en el mismo sitio:
  *
- *   - **`manager+`** es esta policy. Desde la tarea 2.1 resuelve a
- *     `{admin, rrhh, responsable_departamento}`; en la Fase 1 era `{admin, rrhh}`,
- *     por lo mismo que en `Workforce\Http\Policy\EmployeePolicy` y en
+ *   - **`manager+`** es esta policy, y resuelve a
+ *     `{admin, rrhh, responsable_departamento}`, como en
+ *     `Workforce\Http\Policy\EmployeePolicy` y en
  *     `Attendance\Http\Policy\ShiftEntryPolicy` —escritas asi y no como
  *     `{@see}` porque Pint resolveria la referencia a un `use`, y un `use` de
- *     otro modulo es la frontera del §1.6 que Deptrac rechaza—:
- *     porque el `responsable_departamento` no tenia alcance propio y darle esta
- *     ruta habria sido darle el registro horario de **toda** la instalacion. Ahora
- *     lo tiene: el controlador comprueba con `ScopeGuard` que el empleado sea de
+ *     otro modulo es la frontera del §1.6 que Deptrac rechaza—. Sin alcance, el
+ *     `responsable_departamento` veria el registro horario de **toda** la
+ *     instalacion: el controlador comprueba con `ScopeGuard` que el empleado sea de
  *     uno de sus departamentos y responde `403` con asiento en `audit_log` si no
  *     lo es (RF-ID-03, RS-05).
  *   - **`self`** no entra por aqui. El propio empleado consulta lo suyo en

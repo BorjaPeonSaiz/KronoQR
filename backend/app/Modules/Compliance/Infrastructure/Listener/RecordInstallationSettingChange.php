@@ -26,13 +26,12 @@ use App\Modules\Product\Domain\Event\InstallationSettingChanged;
  * fichaje**. Quien investigue una discrepancia de nomina seis meses despues
  * necesita poder ver ese cambio con su autor, su momento y su antes y despues.
  *
- * ## `calculation_setting.changed`, que ya existia
+ * ## `calculation_setting.changed`
  *
- * No se estrena accion. El catalogo la declaro desde la tarea 0.x precisamente
- * para esto, y pertenece a la familia `AuthorityOrCalculationChange` del bloque
- * D, la misma que un cambio de rol o de permiso. Ninguna familia nueva: cambiar
- * el umbral que decide que es un tramo anomalo y cambiar quien puede corregirlo
- * son la misma pregunta —«¿quien movio las reglas?»— y separarlas obligaria a
+ * Pertenece a la familia `AuthorityOrCalculationChange` del bloque D, la misma
+ * que un cambio de rol o de permiso. Ninguna familia nueva: cambiar el umbral
+ * que decide que es un tramo anomalo y cambiar quien puede corregirlo son la
+ * misma pregunta —«¿quien movio las reglas?»— y separarlas obligaria a
  * consultar dos veces para responderla.
  *
  * ## Sin `subject_id`

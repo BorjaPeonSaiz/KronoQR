@@ -10,7 +10,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\TextfileMetricsReader;
 
 /**
  * Sonda `backup.offsite` de `product:doctor`: ¿las copias salen del servidor?
- * (V5-DV-05; RF-PD-13, RF-PD-15, RL-12, RL-14).
+ * (RF-PD-13, RF-PD-15, RL-12, RL-14).
  *
  * ## Por que existe
  *

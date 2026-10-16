@@ -236,9 +236,9 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         );
 
         // Sin ninguna clave confidencial, `key IN ()` no es SQL valido: se usa un
-        // predicado que siempre es falso. No es teorico —el catalogo no tenia
-        // ninguna hasta la tarea 3.3— y deja la consulta correcta en los dos
-        // estados del producto.
+        // predicado que siempre es falso. No es teorico —un catalogo sin
+        // ninguna es valido— y deja la consulta correcta en los dos estados
+        // del producto.
         $predicate = $confidential === [] ? 'false' : 's.key IN ('.implode(', ', $confidential).')';
 
         return <<<SQL

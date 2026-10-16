@@ -81,7 +81,7 @@ use Illuminate\Contracts\Cache\Repository as Cache;
  * intentos a la vez, de nueve a veinte se probaban contra el PIN real y el
  * contador guardaba de tres a nueve. Quien paralelizaba no llegaba al escalon
  * que le tocaba y el espacio de busqueda por empleado y dia dejaba de ser el
- * calculado (`PinLockoutConcurrencyTest`, bloque 12 de la 2.2.0). Por eso
+ * calculado (`PinLockoutConcurrencyTest`). Por eso
  * {@see self::reserve()} y {@see self::clear()} trabajan con el candado de la
  * entrada cogido.
  *
@@ -330,10 +330,10 @@ final readonly class CachePinAttempts implements PinAttempts
     /**
      * Los seis umbrales, resueltos de la configuracion (regla dura 13 y 14).
      *
-     * El primer escalon reutiliza las dos claves que ya existian desde la tarea
-     * 1.13 —`max_attempts` y `lockout_seconds`— en lugar de crear un
-     * `tier1_attempts` paralelo: dos nombres para el mismo numero es la forma en
-     * que una instalacion acaba con el valor cambiado en uno de los dos.
+     * El primer escalon reutiliza las dos claves de siempre —`max_attempts` y
+     * `lockout_seconds`— en lugar de crear un `tier1_attempts` paralelo: dos
+     * nombres para el mismo numero es la forma en que una instalacion acaba con
+     * el valor cambiado en uno de los dos.
      */
     private function policy(): PinLockoutPolicy
     {

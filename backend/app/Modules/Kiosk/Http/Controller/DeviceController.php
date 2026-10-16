@@ -28,12 +28,12 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * quiosco romperia ademas la reactivacion por nombre de ADR-028, que es como se
  * sustituye una tablet averiada.
  *
- * **Las dos devuelven el veredicto de salud** desde la tarea 3.3, calculado en
- * el servidor con la misma regla que `php artisan kiosk:health` y con los mismos
- * umbrales que la alerta «Quiosco sin latido > 10 min» del doc 01 §9.3. Asi el
- * panel, la consola y la observabilidad cuentan lo mismo del mismo quiosco, que
- * es lo que la ficha pide; el `unpair` lo devuelve ya en `revoked` para que la
- * fila se repinte sin volver a pedir la lista.
+ * **Las dos devuelven el veredicto de salud**, calculado en el servidor con la
+ * misma regla que `php artisan kiosk:health` y con los mismos umbrales que la
+ * alerta «Quiosco sin latido > 10 min» del doc 01 §9.3. Asi el panel, la
+ * consola y la observabilidad cuentan lo mismo del mismo quiosco, que es lo que
+ * la ficha pide; el `unpair` lo devuelve ya en `revoked` para que la fila se
+ * repinte sin volver a pedir la lista.
  *
  * **`unpair` es `POST` y no `DELETE`** porque no borra nada (regla dura 5): es un
  * cambio de estado con consecuencias, como revocar una credencial o dar de baja a

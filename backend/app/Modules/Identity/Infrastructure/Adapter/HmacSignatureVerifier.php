@@ -116,8 +116,8 @@ final readonly class HmacSignatureVerifier implements CredentialResolver
         /**
          * El suelo de tiempo de todo rechazo (RS-03), compartido con la
          * recogida de un emparejamiento: los dos caminos tienen la misma
-         * obligacion y desde la tarea 5.6 tambien el mismo umbral y el mismo
-         * codigo, en lugar de dos copias que podian divergir.
+         * obligacion, y por eso el mismo umbral y el mismo codigo, no dos
+         * copias que podrian divergir.
          */
         private ConstantTimeFloor $floor,
     ) {}

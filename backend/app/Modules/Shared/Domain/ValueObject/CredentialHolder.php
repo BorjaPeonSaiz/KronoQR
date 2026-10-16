@@ -36,8 +36,7 @@ final readonly class CredentialHolder
         /**
          * Cuando se emitio la credencial (`credentials.issued_at`), en UTC. Es la
          * cota inferior: el `occurred_at` lo pone la tablet, y sin ella cualquier
-         * fecha anterior —elegida por quien tenga la tarjeta— pediria revision
-         * (F2 del dictamen del bloque 18).
+         * fecha anterior —elegida por quien tenga la tarjeta— pediria revision.
          */
         public DateTimeImmutable $issuedAt,
         /**

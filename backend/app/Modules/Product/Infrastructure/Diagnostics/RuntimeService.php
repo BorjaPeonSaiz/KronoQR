@@ -8,9 +8,8 @@ namespace App\Modules\Product\Infrastructure\Diagnostics;
  * El contenedor en el que corre `product:doctor` (`backup.runtime_service`,
  * variable `KRONOQR_SERVICE`).
  *
- * Desde la 2.2.0 (bloque 20, A3-R2) cada servicio monta `BACKUP_PATH` a su
- * manera, y lo que una sonda debe encontrar escribible depende de donde se
- * ejecuta:
+ * Cada servicio monta `BACKUP_PATH` a su manera, y lo que una sonda debe
+ * encontrar escribible depende de donde se ejecuta:
  *
  * | Servicio    | raiz | `metrics/` | `reports/retention` | `daily/` `base/` |
  * |-------------|------|------------|---------------------|------------------|

@@ -13,12 +13,12 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /**
  * Serializa el `200` de `GET /api/v1/devices`: el esquema `DeviceList`.
  *
- * **Se envuelve en un objeto y no es un array desnudo**, y desde la tarea 3.3
- * ese envoltorio se usa: lleva `meta`. Una instalacion es un hotel (ADR-040) con
- * unos pocos quioscos y la respuesta **no pagina** —paginar una lista que cabe
- * entera en la pantalla solo añadiria contrato que nadie usaria y que despues no
- * se puede quitar sin `v2` (ADR-012)—; lo que el envoltorio permitio es crecer
- * sin romper a quien ya la lee, que es justo lo que un array raiz no admite.
+ * **Se envuelve en un objeto y no es un array desnudo**: lleva `meta`. Una
+ * instalacion es un hotel (ADR-040) con unos pocos quioscos y la respuesta **no
+ * pagina** —paginar una lista que cabe entera en la pantalla solo añadiria
+ * contrato que nadie usaria y que despues no se puede quitar sin `v2`
+ * (ADR-012)—; lo que el envoltorio permitio es crecer sin romper a quien ya
+ * la lee, que es justo lo que un array raiz no admite.
  *
  * ## Que lleva `meta`, y por que sin ello el panel mentiria
  *

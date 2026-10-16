@@ -50,11 +50,11 @@ use Illuminate\Http\Exceptions\HttpResponseException;
  *
  * ## `oldest_pending_at`, en UTC como todo lo demas
  *
- * Regla dura 3: solo se acepta el sufijo `Z`. **Desde la tarea 3.3 se persiste**
- * —hasta entonces se validaba y se tiraba—, asi que el motivo ya no es solo de
- * coherencia: es la columna que convierte «37 pendientes» en «el mas antiguo es
- * de hace tres horas». Dos formatos de instante en la misma API serian dos
- * formatos que alguien tendra que distinguir a mano algun dia.
+ * Regla dura 3: solo se acepta el sufijo `Z`. **Se persiste**, asi que el
+ * motivo no es solo de coherencia: es la columna que convierte «37
+ * pendientes» en «el mas antiguo es de hace tres horas». Dos formatos de
+ * instante en la misma API serian dos formatos que alguien tendra que
+ * distinguir a mano algun dia.
  *
  * ## `client_errors`: el cuarto campo, y el unico que se persiste
  *

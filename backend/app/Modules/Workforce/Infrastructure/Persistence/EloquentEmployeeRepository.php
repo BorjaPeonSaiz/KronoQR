@@ -414,7 +414,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
             );
         } catch (QueryException $exception) {
             // El indice unico parcial del documento: `409` como el del correo, y
-            // no un `500` (bloque 17). Cualquier otro fallo sube tal cual.
+            // no un `500`. Cualquier otro fallo sube tal cual.
             if (str_contains($exception->getMessage(), 'employees_national_id_hash_unique')) {
                 throw EmployeeNationalIdAlreadyTaken::make();
             }

@@ -12,12 +12,12 @@ use Illuminate\Database\ConnectionInterface;
 /**
  * `discarded_scan_reports` sobre PostgreSQL (RN-22, ADR-047).
  *
- * **Una sola sentencia por aviso, con y sin dueño** (F5 del dictamen del bloque
- * 18, el patron de ADR-043 punto 4): `owner_employee_id` se resuelve dentro del
- * `INSERT` con una subconsulta sobre `employees.uuid`, y `already_recorded` con
- * otra sobre `scan_events.scan_id`. Sin dueño, el parametro es `NULL` y la
- * subconsulta no encuentra fila: la sentencia, el plan y el numero de viajes son
- * los mismos se atribuya o no.
+ * **Una sola sentencia por aviso, con y sin dueño** (el patron de ADR-043
+ * punto 4): `owner_employee_id` se resuelve dentro del `INSERT` con una
+ * subconsulta sobre `employees.uuid`, y `already_recorded` con otra sobre
+ * `scan_events.scan_id`. Sin dueño, el parametro es `NULL` y la subconsulta no
+ * encuentra fila: la sentencia, el plan y el numero de viajes son los mismos se
+ * atribuya o no.
  *
  * **La idempotencia es el UNIQUE** (regla dura 8): `ON CONFLICT DO NOTHING`
  * espera a la transaccion que inserta la misma clave y devuelve cero. Nunca dos

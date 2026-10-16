@@ -6,7 +6,7 @@ namespace App\Modules\Product\Application\Port;
 
 /**
  * Un paquete ya escrito entero en un temporal, junto a su destino, a falta del
- * renombrado (`DiagnosticsBundleWriter::stage()`, V4-PL-1).
+ * renombrado (`DiagnosticsBundleWriter::stage()`).
  *
  * Existe para poder guardar el pendiente de su asiento **entre** la escritura
  * y la publicacion: asi no puede quedar un asiento de un paquete que no llego a

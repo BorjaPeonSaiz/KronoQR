@@ -8,15 +8,12 @@ namespace App\Modules\Attendance\Domain\ValueObject;
  * Lo que un escaneo **hace con la jornada**: las cuatro acciones de fichaje de
  * RF-AT-02, RF-AT-03 y RF-AT-12 (ADR-024).
  *
- * ## Por que sube al dominio ahora
+ * ## Por que vive en el dominio
  *
- * Hasta la tarea 3.5 este vocabulario vivia solo en `Application\Port\
- * ScanResult`, que es quien escribe `scan_events.result`, y el docblock de
- * aquel enum dejo escrito el criterio para moverlo: *«si una regla futura
- * tuviera que razonar sobre `clock_in` frente a `break_start`, el enum completo
- * subiria a `Domain/`»*. Esa regla es {@see \App\Modules\Attendance\Domain\
- * Policy\ScanIntentPolicy}, y ademas el anti-rebote de RF-AT-06 necesita saber
- * **que fue** el escaneo vecino para no tragarse una vuelta de pausa.
+ * Una regla del dominio razona sobre `clock_in` frente a `break_start`:
+ * {@see \App\Modules\Attendance\Domain\ Policy\ScanIntentPolicy}, y ademas el
+ * anti-rebote de RF-AT-06 necesita saber **que fue** el escaneo vecino para no
+ * tragarse una vuelta de pausa.
  *
  * Son dos enums y no uno por la restriccion 2 de ADR-025 leida al reves: el
  * dominio no puede nombrar `Application\Port\` (Deptrac: `AttendanceDomain` no

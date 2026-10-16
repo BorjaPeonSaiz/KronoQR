@@ -19,10 +19,10 @@ namespace App\Modules\Product\Domain\ValueObject;
  *
  * ## Lista blanca por palabra, no lista negra de formas (ADR-048)
  *
- * Hasta la 2.2.0 esta clase solo tenia patrones —correos, DNI, telefonos, lo
- * entrecomillado— y un nombre sin comillas pasaba: «Ana Ruiz» no se distingue
- * de «Cocina Central» con ninguna expresion regular. Ahora el texto pasa por
- * seis pasos, y el que hace el trabajo de fondo es el quinto:
+ * Los patrones —correos, DNI, telefonos, lo entrecomillado— no bastan: un
+ * nombre sin comillas pasaria, porque «Ana Ruiz» no se distingue de «Cocina
+ * Central» con ninguna expresion regular. El texto pasa por seis pasos, y el
+ * que hace el trabajo de fondo es el quinto:
  *
  * 1. **Colapsar** los espacios (solo {@see sanitize()}) y **quitar** los
  *    caracteres de uso privado U+E000–U+F8FF, que se reservan para el paso 2.

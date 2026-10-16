@@ -32,12 +32,10 @@ use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
  *
  * ## Un solo camino para el panel y la consola
  *
- * Hasta la 2.2.0 el alta vivia entera dentro del comando de consola, que pedia
- * la contrasena con eco apagado. Ahora las dos entradas pasan por aqui y las dos
- * entregan lo mismo: una contrasena **generada**, que se enseña una vez, se
- * entrega en mano (regla dura 12) y caduca. Quien la recibe entra con ella,
- * activa su segundo factor si su rol lo exige y fija la suya antes de poder
- * hacer nada mas.
+ * Las dos entradas pasan por aqui y las dos entregan lo mismo: una contrasena
+ * **generada**, que se enseña una vez, se entrega en mano (regla dura 12) y
+ * caduca. Quien la recibe entra con ella, activa su segundo factor si su rol lo
+ * exige y fija la suya antes de poder hacer nada mas.
  *
  * ## Lo caro, fuera del candado
  *

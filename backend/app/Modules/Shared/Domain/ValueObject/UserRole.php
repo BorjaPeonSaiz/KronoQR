@@ -21,12 +21,11 @@ namespace App\Modules\Shared\Domain\ValueObject;
  * nunca la lista: una lista por cliente obligaria a tocar el repositorio para
  * vender, que es exactamente lo que ADR-017 prohibe.
  *
- * **Que hay hoy y que no.** En la Fase 1 se usan `ADMIN` y `RRHH`. Los otros
- * cuatro existen en el catalogo desde el principio —RF-ID-02 los enumera— pero
- * no tienen todavia su ambito: `RESPONSABLE_DEPARTAMENTO` no adquiere el
- * alcance por departamento hasta la tarea 2.1 (RF-ID-03), `EMPLEADO` entra por
- * el portal con codigo y PIN (ADR-015) y `KIOSK` es el token del dispositivo
- * (RF-ID-04), no una persona con contrasena.
+ * **Cada uno entra por su sitio** (RF-ID-02). `ADMIN`, `RRHH`, `AUDITOR` y
+ * `RESPONSABLE_DEPARTAMENTO` son cuentas de gestion, el ultimo acotado a sus
+ * departamentos (RF-ID-03); `EMPLEADO` entra por el portal con codigo y PIN
+ * (ADR-015) y `KIOSK` es el token del dispositivo (RF-ID-04), no una persona
+ * con contrasena.
  *
  * Los nombres van **en espanol** y es la unica excepcion consciente a «el
  * codigo se escribe en ingles» (doc 02 §3.5): estos valores no son

@@ -40,9 +40,9 @@ use Throwable;
  * horas seria una segunda verdad sobre las mismas horas.
  *
  * **No define «jornada completa».** La define {@see WorkDayCompletionReader}, que
- * es el mismo lector que publica `workdays_complete_ratio{site}` desde la tarea
- * 3.1: con dos consultas, Grafana y el cuadro darian dos porcentajes para la misma
- * semana (decision 8 de la ficha 3.13).
+ * es el mismo lector que publica `workdays_complete_ratio{site}`: con dos
+ * consultas, Grafana y el cuadro darian dos porcentajes para la misma semana
+ * (decision 8 de la ficha 3.13).
  *
  * ## Dias civiles de la zona del centro, convertidos a instantes ANTES de filtrar
  *
@@ -62,7 +62,7 @@ use Throwable;
  * el mismo PostgreSQL con las mismas reglas de la zona, asi que el domingo de 23
  * horas tiene 23 y el de 25 tiene 25 (RN-09)—, pero ahora **un indice de la
  * columna lo resuelve**, en vez de convertir y descartar el historico entero
- * fila a fila (DB5). Lo ata `AdoptionReportVolumeTest`, con la equivalencia en
+ * fila a fila. Lo ata `AdoptionReportVolumeTest`, con la equivalencia en
  * los cambios de hora de Madrid y de Santiago de Chile.
  *
  * ## Los dos periodos en las mismas consultas

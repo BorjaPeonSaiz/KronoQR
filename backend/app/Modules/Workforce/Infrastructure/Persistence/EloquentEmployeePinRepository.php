@@ -20,12 +20,12 @@ use RuntimeException;
 /**
  * El PIN sobre Eloquent (RF-ID-09).
  *
- * **Hash y nunca el PIN, y desde la revision de la 5.5 el PIN en claro ni
- * siquiera entra aqui.** El hash lo calcula el caso de uso con el algoritmo
- * `.env` —bcrypt o argon2id—, el mismo de las contrasenas de gestion: no hay una
- * segunda decision criptografica que mantener. Ninguna consulta de esta clase
- * devuelve `pin_hash`, y el modelo lo tiene en `$hidden` para que no salga por
- * un `toArray()` de depuracion.
+ * **Hash y nunca el PIN; el PIN en claro ni siquiera entra aqui.** El hash lo
+ * calcula el caso de uso con el algoritmo `.env` —bcrypt o argon2id—, el
+ * mismo de las contrasenas de gestion: no hay una segunda decision
+ * criptografica que mantener. Ninguna consulta de esta clase devuelve
+ * `pin_hash`, y el modelo lo tiene en `$hidden` para que no salga por un
+ * `toArray()` de depuracion.
  *
  * **Emitir borra la entrega anterior.** Un PIN nuevo no esta entregado porque lo
  * estuviera el que sustituye: dejar la fecha antigua haria que el panel diera
@@ -51,11 +51,11 @@ final readonly class EloquentEmployeePinRepository implements EmployeePinReposit
     /**
      * Escribe el hash **ya calculado**.
      *
-     * Al contrario que hasta la revision de la 5.5, aqui ya no se llama a
-     * `Hash::make()`: el calculo lo decide el caso de uso, porque tiene que poder
-     * ocurrir FUERA de una transaccion larga. bcrypt cuesta unos 160 ms por PIN
-     * y 500 de ellos dentro de la transaccion de una importacion monopolizaban el
-     * candado global de `audit_log`, y con el los fichajes del hotel.
+     * Aqui no se llama a `Hash::make()`: el calculo lo decide el caso de uso,
+     * porque tiene que poder ocurrir FUERA de una transaccion larga. bcrypt
+     * cuesta unos 160 ms por PIN y 500 de ellos dentro de la transaccion de una
+     * importacion monopolizaban el candado global de `audit_log`, y con el los
+     * fichajes del hotel.
      *
      * **El PIN en claro ya no entra en este metodo**, que es una garantia mas
      * fuerte que la anterior: no hay ninguna via por la que pueda acabar en el

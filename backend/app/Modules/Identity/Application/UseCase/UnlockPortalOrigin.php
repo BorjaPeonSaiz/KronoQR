@@ -11,7 +11,7 @@ use App\Modules\Shared\Domain\ValueObject\AuthChannel;
 
 /**
  * **Levanta a mano el bloqueo por origen del portal** (`identity:origin-unlock`,
- * ADR-050 §2, dictamen de seguridad M3).
+ * ADR-050 §2).
  *
  * Existe por el residuo 2 de ADR-050: tras el NAT del hotel o un CGNAT, veinte
  * fallos ajenos cierran el portal a toda la plantilla una hora, y sin esto la

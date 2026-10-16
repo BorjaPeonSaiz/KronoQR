@@ -8,7 +8,7 @@ use Throwable;
 
 /**
  * Una parte de una seccion del paquete que puede caer **sin llevarse la
- * seccion entera** (V4-PL-1, ADR-020).
+ * seccion entera** (ADR-020).
  *
  * El caso de uso ya aisla cada seccion; esto aisla cada parte dentro de una.
  * Con PostgreSQL caido, `installation` y `configuration` perdian la version del

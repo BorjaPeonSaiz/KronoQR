@@ -31,12 +31,12 @@ use RuntimeException;
  * ## Los ayudantes, uno por forma de migracion
  *
  * - {@see limitLockWait()} — la migracion **transaccional** de siempre. Los dos
- *   topes van con `SET LOCAL` y mueren con la transaccion. Hasta la 2.2.0 eran
- *   `SET` de sesion: sobrevivian al `COMMIT` y los heredaba la siguiente
- *   migracion del mismo `artisan migrate` —incluida la de un `CREATE INDEX
- *   CONCURRENTLY`, que a los 30 s quedaba `INVALID`— (hallazgo DB4, R5-BD-02).
- *   `SET LOCAL` fuera de transaccion no hace nada salvo avisar, asi que el
- *   ayudante **lanza** si no la hay en lugar de dejar la migracion sin topes.
+ *   topes van con `SET LOCAL` y mueren con la transaccion: un `SET` de sesion
+ *   sobreviviria al `COMMIT` y lo heredaria la siguiente migracion del mismo
+ *   `artisan migrate` —incluida la de un `CREATE INDEX CONCURRENTLY`, que a
+ *   los 30 s quedaria `INVALID`—. `SET LOCAL` fuera de transaccion no hace
+ *   nada salvo avisar, asi que el ayudante **lanza** si no la hay en lugar de
+ *   dejar la migracion sin topes.
  * - {@see withLockWaitOnly()} — la migracion **no transaccional**
  *   (`public $withinTransaction = false;`): solo `lock_timeout`, **sin tope de
  *   duracion**, y la sesion vuelve a sus valores al terminar aunque el closure
@@ -46,21 +46,21 @@ use RuntimeException;
  *   a que terminen las transacciones abiertas, y ahi si conviene rendirse
  *   pronto.
  * - {@see validateConstraint()} — el `VALIDATE CONSTRAINT` de una restriccion
- *   que entro `NOT VALID`, **fuera de la transaccion** que la creo (hallazgo
- *   DB3, R5-BD-01). Dentro de ella, el `ACCESS EXCLUSIVE` que tomo el `ADD
- *   CONSTRAINT` se mantiene durante todo el recorrido del `VALIDATE` y el patron
- *   en dos pasos no sirve de nada: la tabla queda bloqueada igual que con un
- *   `ADD CONSTRAINT` de golpe. Fuera, el `VALIDATE` toma solo `SHARE UPDATE
- *   EXCLUSIVE`, que no bloquea lecturas ni escrituras.
+ *   que entro `NOT VALID`, **fuera de la transaccion** que la creo. Dentro de
+ *   ella, el `ACCESS EXCLUSIVE` que tomo el `ADD CONSTRAINT` se mantiene
+ *   durante todo el recorrido del `VALIDATE` y el patron en dos pasos no sirve
+ *   de nada: la tabla queda bloqueada igual que con un `ADD CONSTRAINT` de
+ *   golpe. Fuera, el `VALIDATE` toma solo `SHARE UPDATE EXCLUSIVE`, que no
+ *   bloquea lecturas ni escrituras.
  * - {@see createIndexConcurrently()} y {@see dropIndexConcurrently()} — el
  *   `CREATE INDEX CONCURRENTLY` y su vuelta atras, sobre
  *   {@see withLockWaitOnly()}. Una construccion concurrente interrumpida deja
  *   el indice `INVALID`, y `IF NOT EXISTS` lo da por bueno en el reintento: la
  *   migracion quedaria anotada con un indice que se mantiene en cada escritura
- *   y no sirve a ninguna lectura (revision del bloque 13 de la 2.2.0). El
- *   ayudante borra el `INVALID` antes de construir y comprueba `indisvalid`
- *   despues. Una migracion no escribe `CREATE INDEX CONCURRENTLY` a mano: lo
- *   impide `tests/Architecture/MigrationSafetyTest.php`.
+ *   y no sirve a ninguna lectura. El ayudante borra el `INVALID` antes de
+ *   construir y comprueba `indisvalid` despues. Una migracion no escribe
+ *   `CREATE INDEX CONCURRENTLY` a mano: lo impide
+ *   `tests/Architecture/MigrationSafetyTest.php`.
  *
  * ## La forma de una migracion con `VALIDATE`
  *

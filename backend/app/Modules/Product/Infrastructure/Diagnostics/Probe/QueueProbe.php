@@ -26,10 +26,9 @@ use App\Modules\Shared\Application\Port\Clock;
  *
  * Primero se pregunta a Horizon si su supervisor ha dado señales de vida en los
  * ultimos segundos ({@see QueueSupervisors}): es lo unico que distingue «nadie
- * consume» de «no hay nada que consumir» con la cola vacia. Hasta la 2.2.0 esta
- * sonda solo miraba la cola y, vacia, decia «hay alguien consumiendo» con
- * Horizon parado (V3-PL-07, V4-PL-3): el «ok optimista» que este mismo
- * comentario decia evitar.
+ * consume» de «no hay nada que consumir» con la cola vacia. Mirando solo la
+ * cola, vacia diria «hay alguien consumiendo» con Horizon parado: un «ok
+ * optimista».
  *
  * Si no se puede preguntar al supervisor, se mira la cola como antes, pero sin
  * inventar: con trabajos encolados y ninguno reservado sale `warning` con el

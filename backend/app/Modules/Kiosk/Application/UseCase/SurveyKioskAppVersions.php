@@ -17,8 +17,7 @@ use App\Modules\Shared\Domain\ValueObject\KioskAppVersionSurvey;
 
 /**
  * Que quioscos van por detras —o por delante— de la version del servidor, para
- * la sonda `kiosk.app_version` de `product:doctor` (RF-KI-07, RF-PD-13; bloque
- * 1 de la 2.2.1).
+ * la sonda `kiosk.app_version` de `product:doctor` (RF-KI-07, RF-PD-13).
  *
  * ## La misma lectura y la misma regla que la salud del quiosco
  *

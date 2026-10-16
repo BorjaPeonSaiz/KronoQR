@@ -8,7 +8,7 @@ use RuntimeException;
 
 /**
  * A dependency whose host did not resolve or did not accept a TCP connection
- * within the readiness budget (R3-CH-02).
+ * within the readiness budget.
  *
  * Only its CLASS travels, as `DependencyFailure::$failure`: never a host or a
  * port (hard rule 21). Never thrown: it names a kind of failure, and is handed

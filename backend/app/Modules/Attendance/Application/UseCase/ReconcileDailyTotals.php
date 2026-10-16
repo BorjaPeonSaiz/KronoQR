@@ -495,9 +495,9 @@ final readonly class ReconcileDailyTotals
      * era.
      *
      * Que se anuncie con el candado tomado y no en la inspeccion es lo que hace
-     * que esta linea siga significando algo: antes se escribia un `warning` por
-     * cada sospecha, incluidas las que se deshacian solas al releer, y una
-     * advertencia que aparece cada noche sin que haya nada roto se deja de leer.
+     * que esta linea siga significando algo: un `warning` por cada sospecha,
+     * incluidas las que se deshacen solas al releer, apareceria cada noche sin
+     * que haya nada roto, y una advertencia asi se deja de leer.
      *
      * `employee_uuid`, nunca nombres (regla dura 21): esto viaja a Loki y de ahi
      * al paquete de diagnostico (ADR-020).

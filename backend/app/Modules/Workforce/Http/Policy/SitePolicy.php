@@ -13,7 +13,7 @@ use App\Modules\Workforce\Application\Support\SiteMaintainers;
  *
  * Sin `viewAny`: no hay lista, y no la habra.
  *
- * ## `create` existe desde la tarea 5.5, y es de `admin` y de nadie mas
+ * ## `create` es de `admin` y de nadie mas
  *
  * Crear el centro es la puesta en marcha (`POST /api/v1/setup/site`) y ocurre
  * **una vez en la vida de la instalacion**: fija la zona horaria con la que se

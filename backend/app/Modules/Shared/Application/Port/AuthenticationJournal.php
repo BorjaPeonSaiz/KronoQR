@@ -128,7 +128,7 @@ interface AuthenticationJournal
 
     /**
      * Alguien ha levantado a mano el bloqueo por origen (`identity:origin-unlock`,
-     * dictamen de seguridad M3 de ADR-050).
+     * ADR-050).
      *
      * Asiento **sincrono** `auth.origin_unlocked` con el `ip_hash` del origen y
      * nunca la IP en claro: lo provoca una persona con acceso al servidor, no

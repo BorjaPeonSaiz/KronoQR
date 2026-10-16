@@ -13,8 +13,7 @@ use App\Modules\Shared\Domain\ValueObject\LegalRetentionFloor;
  *
  * El suelo se resuelve en `Application` y viaja aqui para que el panel lo
  * pinte junto al campo (`retention_years_floor`) sin escribir el 4 en el
- * frontend, que seria duplicar el catalogo en un sitio sin prueba que lo ate
- * (decision D4 del bloque 5 de la 2.2.1).
+ * frontend, que seria duplicar el catalogo en un sitio sin prueba que lo ate.
  */
 final readonly class ComplianceProfileView
 {

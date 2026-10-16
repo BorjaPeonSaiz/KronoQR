@@ -11,7 +11,7 @@ use Throwable;
 
 /**
  * Lo que hace {@see ScheduledTaskOutput} cuando la tarea termina: leer su
- * salida, borrarla y escribirla en el log (V4-BE-1, RNF-D-02, regla dura 21).
+ * salida, borrarla y escribirla en el log (RNF-D-02, regla dura 21).
  *
  * Corre en `schedule:finish`, con el codigo de salida ya puesto en la tarea, y
  * recibe el registrador por parametro para poder probarse sin framework

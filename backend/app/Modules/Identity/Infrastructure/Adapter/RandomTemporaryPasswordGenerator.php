@@ -9,8 +9,8 @@ use App\Modules\Identity\Domain\Policy\ManagementPasswordLength;
 
 /**
  * Contrasenas temporales que cumplen la politica de RF-ID-01 **por
- * construccion** (RF-ID-10). Era un metodo privado de `identity:reset-password`;
- * desde la 2.2.0 lo usan tambien el alta y la API.
+ * construccion** (RF-ID-10). Lo usan `identity:reset-password`, el alta y la
+ * API.
  */
 final readonly class RandomTemporaryPasswordGenerator implements TemporaryPasswordGenerator
 {

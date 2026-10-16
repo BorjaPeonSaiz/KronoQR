@@ -12,18 +12,13 @@ use App\Modules\Shared\Domain\ValueObject\GeneratedFileArea;
  * Barre los paquetes de diagnostico escritos por consola que superan su plazo
  * (**RF-PD-09**, **RL-19**, art. 5.1.e RGPD; ADR-045 §g, condicion C4).
  *
- * ## Por que existe una tarea que borra, si antes se decidio que no
+ * ## Por que una tarea borra ficheros del cliente
  *
- * Hasta la 2.1.0 el paquete se borraba solo al generar el siguiente, y la
- * razon era buena: «una tarea que borrase ficheros del cliente por su cuenta
- * seria una sorpresa». Pero entonces cada contenedor tenia su propio
- * `storage/app` y cualquier actualizacion se lo llevaba por delante: el ultimo
- * paquete desaparecia de rebote. Con el volumen `app-storage` persistente ya no
- * desaparece, y un paquete pedido con `--with-personal-data` —una copia de la
- * plantilla y de los fichajes de un periodo— viviria para siempre si nadie
- * generara otro. RL-19 autoriza a generarlo para una incidencia, no a
- * conservarlo. La sorpresa la evita la guia, que lo dice, no la ausencia del
- * barrido.
+ * El volumen `app-storage` es persistente, asi que un paquete pedido con
+ * `--with-personal-data` —una copia de la plantilla y de los fichajes de un
+ * periodo— viviria para siempre si nadie generara otro. RL-19 autoriza a
+ * generarlo para una incidencia, no a conservarlo. Que el borrado no sea una
+ * sorpresa lo garantiza la guia, que lo dice, no la ausencia del barrido.
  *
  * ## Un solo camino de borrado
  *
