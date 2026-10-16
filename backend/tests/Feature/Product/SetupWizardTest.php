@@ -10,6 +10,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -515,6 +516,8 @@ it('deja de estar accesible en cuanto se completa, y no vuelve', function (): vo
 })->group('RF-PD-03');
 
 it('sirve el estado del asistente en el idioma negociado', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     $response = Api::as(wizardAdminToken())
         ->withHeaders(['Accept-Language' => 'en'])
         ->call('PUT', '/api/v1/setup/steps/compliance_profile', ['state' => 'skipped'])

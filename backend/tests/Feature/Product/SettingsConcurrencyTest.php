@@ -106,7 +106,7 @@ it('nunca deja el idioma por defecto fuera de los idiomas disponibles', function
     // Sin fila rige el valor de serie del catalogo, que es coherente por
     // construccion.
     $default = storedSetting('LOCALE_DEFAULT') ?? 'es';
-    $available = storedSetting('LOCALE_AVAILABLE') ?? ['es', 'en'];
+    $available = storedSetting('LOCALE_AVAILABLE') ?? ['es'];
 
     expect($available)->toBeArray()
         ->and($default)->toBeString()

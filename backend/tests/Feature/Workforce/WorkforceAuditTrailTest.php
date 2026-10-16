@@ -10,6 +10,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -202,6 +203,8 @@ it('mantiene integra la cadena de audit_log tras alta, cambio, baja y departamen
         'hired_at' => '2026-09-14',
     ])->assertValidResponse(201)->json('employee.uuid');
 
+    // El ingles tiene que estar activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     Api::as($contexto['token'])->patch('/api/v1/employees/'.$uuid, ['locale' => 'en'])->assertValidResponse(200);
     Api::as($contexto['token'])->post('/api/v1/employees/'.$uuid.'/offboard', ['terminated_at' => '2026-09-14'])
         ->assertValidResponse(200);

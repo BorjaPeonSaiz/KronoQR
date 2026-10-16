@@ -15,6 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\ImportFiles;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -120,6 +121,8 @@ it('rechaza la linea de una persona de baja con employee_terminated y aplica el 
 })->group('RF-GP-05', 'RN-14');
 
 it('lo dice en ingles a quien pide ingles', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     WorkforceFixtures::site();
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
     WorkforceFixtures::terminate(youssefImportado($token));

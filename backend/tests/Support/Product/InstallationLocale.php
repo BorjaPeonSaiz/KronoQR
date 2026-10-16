@@ -7,6 +7,7 @@ namespace Tests\Support\Product;
 use App\Modules\Product\Infrastructure\Adapter\DbLocalePolicyProvider;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
 use App\Support\Locale\NegotiableLocales;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -34,8 +35,12 @@ use Illuminate\Support\Facades\DB;
  */
 final class InstallationLocale
 {
+    /** La de `CachedSettingsRepository`, que es privada. */
+    private const string SETTINGS_CACHE_KEY = 'kronoqr:product:installation_settings:v1';
+
     /**
      * @param  list<string>  $available  por defecto, los dos que trae el producto
+     *                                   (de serie la instalacion solo activa `es`)
      */
     public static function set(string $default, array $available = ['es', 'en']): void
     {
@@ -47,6 +52,10 @@ final class InstallationLocale
         foreach ([LocalePolicyProvider::class, NegotiableLocales::class, DbLocalePolicyProvider::class] as $abstract) {
             app()->forgetInstance($abstract);
         }
+
+        // Y `CachedSettingsRepository` guarda las filas: una prueba que ya hizo
+        // una peticion antes de llamar aqui seguiria leyendo las de entonces.
+        Cache::forget(self::SETTINGS_CACHE_KEY);
     }
 
     private static function write(string $key, string $json): void

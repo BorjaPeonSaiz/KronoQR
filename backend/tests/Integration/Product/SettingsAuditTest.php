@@ -227,9 +227,10 @@ it('mantiene la cadena de auditoria intacta despues de varios cambios', function
         ->assertStatus(200);
 
     // Cuatro del umbral (el ultimo cambia de 12 a 9; el tercero vuelve a 12 y
-    // tambien cuenta) y dos de la segunda peticion: `LOCALE_AVAILABLE` no cambia
-    // nada y por eso no deja asiento.
-    expect(settingAuditEntries())->toHaveCount(6);
+    // tambien cuenta) y tres de la segunda peticion: desde la 2.2.1 el valor de
+    // serie de `LOCALE_AVAILABLE` es `["es"]`, asi que activar el ingles es un
+    // cambio y deja su asiento.
+    expect(settingAuditEntries())->toHaveCount(7);
 
     expect(app(VerifyAuditChain::class)->handle()->isIntact())->toBeTrue();
 })->group('RF-PD-01', 'RL-04', 'RS-07');

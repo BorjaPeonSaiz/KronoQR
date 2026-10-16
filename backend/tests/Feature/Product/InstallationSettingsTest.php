@@ -15,6 +15,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\FixedLogo;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Product\LicenseKeys;
 
 /*
@@ -244,6 +245,8 @@ it('rechaza un cuerpo sin ninguna clave', function (): void {
 })->group('RF-PD-01');
 
 it('devuelve los errores de validacion en el idioma negociado', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     // `NegotiateLocale` acota `Accept-Language` a los idiomas activos. Sin esto,
     // el panel enseñaria el mensaje en ingles a un administrador que trabaja en
     // castellano.
@@ -507,6 +510,8 @@ function firstErrorFor(mixed $errors): string
 }
 
 it('traduce tambien los errores que produce el dominio', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     // La invariante ENTRE claves no la puede comprobar el `FormRequest` —depende
     // de lo que ya hay guardado—, asi que la lanza el dominio y la traduce el
     // borde. Antes el `render()` volcaba el mensaje de la excepcion tal cual, lo
@@ -534,6 +539,8 @@ it('traduce tambien los errores que produce el dominio', function (): void {
 })->group('RF-PD-01');
 
 it('traduce el motivo de una fila descartada al idioma negociado', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     // El mismo mecanismo por el otro camino: `meta.invalid_keys` lo lee una
     // persona, asi que su motivo tambien se traduce.
     DB::table('installation_settings')->updateOrInsert(

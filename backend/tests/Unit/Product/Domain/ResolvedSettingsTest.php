@@ -34,7 +34,7 @@ it('devuelve el valor de serie de cada clave cuando no hay ninguna fila', functi
         ->and($settings->integer(SettingKey::ATTENDANCE_DEBOUNCE_SECONDS))->toBe(60)
         ->and($settings->text(SettingKey::BRANDING_APP_NAME))->toBe('KronoQR')
         ->and($settings->text(SettingKey::BRANDING_LOGO_PATH))->toBe('')
-        ->and($settings->textList(SettingKey::LOCALE_AVAILABLE))->toBe(['es', 'en'])
+        ->and($settings->textList(SettingKey::LOCALE_AVAILABLE))->toBe(['es'])
         ->and($settings->get(SettingKey::LOCALE_DEFAULT)->isProductDefault)->toBeTrue();
 })->group('RF-PD-01');
 

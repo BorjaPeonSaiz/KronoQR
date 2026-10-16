@@ -10,6 +10,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -119,6 +120,8 @@ it('con un tramo responde 409 con su type, sin cambiar la zona ni dejar asiento'
 ])->group('RN-23', 'RL-04');
 
 it('da el detalle en ingles a quien lo pide en ingles', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     $site = WorkforceFixtures::site('Hotel Marina', 'Europe/Madrid');
     zonaFijaTramo($site);
 

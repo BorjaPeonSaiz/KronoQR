@@ -10,6 +10,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 
 /*
  * `PATCH /api/v1/settings` con un acento sin contraste sobre las superficies claras (MB2,
@@ -189,6 +190,8 @@ it('exige un booleano de verdad en la confirmacion', function (mixed $confirmaci
 ])->group('RF-PD-08');
 
 it('explica el contraste en el idioma negociado, con las cifras en su formato', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     $token = accentContrastAdminToken();
     $body = ['settings' => ['BRANDING_ACCENT_COLOR' => '#ffe14d']];
 

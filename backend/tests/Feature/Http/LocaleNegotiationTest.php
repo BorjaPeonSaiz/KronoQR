@@ -98,6 +98,8 @@ function cuerpoDelDocumento(TestResponse $response): string
 }
 
 it('responde en el idioma que pide el navegador, si la instalacion lo tiene', function (string $header, string $expected): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     Api::guest()
         ->withHeaders(['Accept-Language' => $header])
         ->post('/api/v1/auth/login', [])
@@ -218,6 +220,8 @@ it('traduce tambien el nombre del campo, no solo la frase', function (): void {
 })->group('RF-PD-01', 'RF-IN-01');
 
 it('los criterios del informe en pantalla salen en el idioma negociado', function (): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     // `meta.criteria` es texto para una persona: sigue al panel, no a la
     // instalacion. El fichero es otra historia (prueba siguiente).
     $contexto = contextoDeIdioma();

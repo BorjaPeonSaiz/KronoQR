@@ -10,6 +10,7 @@ use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\InstallationLocale;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -259,6 +260,8 @@ it('rechaza un festivo repetido aunque el nucleo lo deduplique al leer', functio
 // --- Bloque 5 de la 2.2.1: el suelo legal de la retencion ---------------------
 
 it('rechaza bajar la retencion de un perfil español por debajo de cuatro años, y dice el suelo', function (string $locale, string $message): void {
+    // Con el ingles activo: de serie solo lo esta el español (bloque 26).
+    InstallationLocale::set('es', ['es', 'en']);
     // RL-02, art. 34.9 ET: en España el registro se conserva cuatro años. Un 3
     // no es un convenio mas laxo: es una purga ilegal programada. El mensaje
     // dice el suelo y el valor, en el idioma de quien lo pide.
