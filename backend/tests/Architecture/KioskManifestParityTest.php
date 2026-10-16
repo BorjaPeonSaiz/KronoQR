@@ -70,12 +70,12 @@ it('declara el mismo display y la misma orientacion que el manifiesto estatico',
 
     foreach (['display', 'orientation'] as $key) {
         expect(preg_match("/'{$key}'\\s*=>\\s*'([^']*)'/", $resource, $match))->toBe(1)
-            ->and($match[1])->toBe(kioskManifestParityViteString($key));
+            ->and($match[1] ?? null)->toBe(kioskManifestParityViteString($key));
     }
 
     expect(preg_match("/'display_override'\\s*=>\\s*\\[([^\\]]*)\\]/", $resource, $php))->toBe(1)
         ->and(preg_match('/display_override:\\s*\\[([^\\]]*)\\]/', kioskManifestParityViteManifest(), $vite))->toBe(1)
-        ->and(preg_split('/\s*,\s*/', trim($php[1], " ,\n")))->toBe(preg_split('/\s*,\s*/', trim($vite[1], " ,\n")));
+        ->and(preg_split('/\s*,\s*/', trim($php[1] ?? '', " ,\n")))->toBe(preg_split('/\s*,\s*/', trim($vite[1] ?? '', " ,\n")));
 })->group('RF-PD-08');
 
 it('publica como iconos de serie los mismos que genera el manifiesto estatico', function (): void {
@@ -108,7 +108,7 @@ it('cuelga el manifiesto de la misma ruta en la que Nginx monta el quiosco', fun
     $dockerfile = Repo::contents('infra/docker/nginx/Dockerfile');
 
     expect(preg_match('~frontend-kiosk && [^\n]*KRONOQR_BASE=(\S+)~', $dockerfile, $base))->toBe(1)
-        ->and(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_RESOURCE, 'KIOSK_PATH'))->toBe($base[1]);
+        ->and(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_RESOURCE, 'KIOSK_PATH'))->toBe($base[1] ?? null);
 })->group('RF-PD-08');
 
 it('apunta el index.html del quiosco al manifiesto del servidor y no al estatico', function (): void {
