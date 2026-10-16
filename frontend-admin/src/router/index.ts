@@ -290,13 +290,13 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         // Departamentos y su responsable (RF-ID-03). Lectura abierta a los cuatro roles
-        // (R6-BD-01): `employees:read` (responsable) o `attendance:read` (auditor). Crear y
+        // (R6-BD-01): `employees:read` (responsable, rrhh, admin); el auditor ya no entra. Crear y
         // renombrar exigen `employees:*` y el selector de responsable `accounts:*`; la
         // vista los oculta y el servidor los exige.
         path: 'departments',
         name: 'departments',
         component: () => import('@/features/departments/DepartmentsView.vue'),
-        meta: { abilities: [EMPLOYEES_READ, ATTENDANCE_READ] },
+        meta: { ability: EMPLOYEES_READ },
       },
       {
         // Cuentas de gestion (RF-ID-10). Ambito `accounts:*`, solo `admin`. La

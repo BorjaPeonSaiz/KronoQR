@@ -294,17 +294,15 @@ test.describe('Anular el tramo', () => {
 
 test.describe('Los botones se ocultan sin el ambito', () => {
   test(
-    'un auditor (attendance:read sin attendance:correct) no recibe el detalle de jornada ni ve ninguna de las tres acciones',
+    'un auditor (solo reports:legal) no llega al detalle de jornada: la guarda le lleva a la Inspeccion',
     { tag: ['@RF-PA-04', '@regla-dura-18'] },
     async ({ page }) => {
       await stubManagementApi(page, { role: 'auditor' })
       await logInAsAuditor(page)
       await page.goto(WORKDAYS_URL)
 
-      await expect(page.getByRole('heading', { level: 1, name: 'Registro horario' })).toBeVisible()
-      // El servidor no le entrega el detalle de jornada (WorkDayJournalPolicy): ve el
-      // aviso de error y ningun control de escritura.
-      await expect(page.getByRole('alert')).toBeVisible()
+      // Sin attendance:read la guarda ni siquiera monta la pantalla (bloque 25).
+      await expect(page).toHaveURL(/\/reports\/legal-export$/)
       await expect(page.getByTestId('add-shift-entry')).toHaveCount(0)
       await expect(page.getByTestId('entry-correct')).toHaveCount(0)
       await expect(page.getByTestId('entry-void')).toHaveCount(0)

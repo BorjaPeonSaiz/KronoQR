@@ -337,7 +337,7 @@ test(
 )
 
 test(
-  'el auditor ve la presencia pero no se le ofrece el enlace a la jornada',
+  'el auditor ya no ve la presencia: /live tecleado le lleva a la Inspeccion',
   { tag: ['@RF-PA-01', '@regla-dura-18'] },
   async ({ context, page }) => {
     await fakeReverb(context)
@@ -345,8 +345,8 @@ test(
     await logInAsAuditor(page)
     await page.goto('/live')
 
-    await expect(page.getByTestId('presence-entry').first()).toBeVisible()
-    await expect(page.getByTestId('entry-workdays-link')).toHaveCount(0)
+    await expect(page).toHaveURL(/\/reports\/legal-export$/)
+    await expect(page.getByTestId('presence-entry')).toHaveCount(0)
   },
 )
 

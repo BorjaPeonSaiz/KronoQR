@@ -72,6 +72,13 @@ describe('AppShellView', () => {
     expect(hr.text()).not.toContain(es.app.nav.accounts)
   })
 
+  it('el auditor (solo reports:legal) ve una unica entrada, «Inspeccion» (bloque 25)', async () => {
+    const wrapper = await mountShell(['reports:legal'])
+    const links = wrapper.find('nav').findAll('a')
+
+    expect(links.map((link) => link.text())).toEqual([es.app.nav.legalExport])
+  })
+
   it('no ofrece ninguna seccion a quien no tiene ambitos de gestion', async () => {
     const wrapper = await mountShell(['attendance:read'])
 

@@ -123,14 +123,15 @@ describe('rutas de la aplicacion', () => {
 
   it('lleva a un auditor a la exportacion para la Inspeccion, que es lo unico que alcanza', async () => {
     // El `auditor` no tiene ni plantilla ni credenciales: su token lleva
-    // `attendance:read`, `audit:read` y `reports:legal` (doc 02 §7.3). Antes de
+    // solo `reports:legal` (bloque 25: ya no lleva `attendance:read` ni
+    // `audit:read`). Antes de
     // que existiera esta seccion, entrar con ese rol acababa en «sin permiso»
     // teniendo permiso para algo.
     const session = useSessionStore()
 
     session.user = managementUser({
       roles: ['auditor'],
-      abilities: ['attendance:read', 'reports:legal'],
+      abilities: ['reports:legal'],
     })
     session.token = 'un-token'
     session.status = 'authenticated'
@@ -139,6 +140,26 @@ describe('rutas de la aplicacion', () => {
 
     registerAuthGuard(router)
     await router.push('/employees')
+
+    expect(router.currentRoute.value.name).toBe('legal-export')
+  })
+
+  it.each([
+    '/live',
+    '/compliance',
+    '/departments',
+    '/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/workdays',
+  ])('un auditor que teclea %s a mano acaba en la Inspeccion (bloque 25)', async (path) => {
+    const session = useSessionStore()
+
+    session.user = managementUser({ roles: ['auditor'], abilities: ['reports:legal'] })
+    session.token = 'un-token'
+    session.status = 'authenticated'
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push(path)
 
     expect(router.currentRoute.value.name).toBe('legal-export')
   })

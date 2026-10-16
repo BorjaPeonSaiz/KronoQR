@@ -152,7 +152,7 @@
       "email": "Correo electrónico",
       "emailHint": "Es su identificador de acceso. El producto no le envía nada por correo.",
       "role": "Rol",
-      "roleHint": "Un responsable de departamento no alcanza a nadie hasta que se le asigna un departamento.",
+      "roleHint": "Un responsable de departamento no alcanza a nadie hasta que se le asigna un departamento. Auditoría: solo la exportación para la Inspección.",
       "locale": "Idioma del panel"
     },
     "create": {
