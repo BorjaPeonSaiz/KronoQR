@@ -17,6 +17,7 @@ use App\Modules\Shared\Application\Port\InstallationSiteProvider;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Domain\ValueObject\InstallationSite;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Tests\Support\Compliance\FixedRetentionYearsFloor;
 use Tests\Support\Time\FixedClock;
 
@@ -89,10 +90,11 @@ function reviewPurgeUseCase(
 
         public function isActiveManagementAccount(int $userId, array $roles = []): bool
         {
-            // La revision no exige rol (decision D7): si alguien empezara a
-            // pedirlo, esta doble lo denunciaria.
-            if ($roles !== []) {
-                throw new LogicException('La revision de una purga no exige rol.');
+            // La revision exige administracion o RRHH (decision del propietario
+            // del 16-10-2026, que cambia la D7): si alguien dejara de pedirlo, o
+            // pidiera otros, esta doble lo denunciaria.
+            if ($roles !== ReviewOutOfBoundsPurge::RESPONSIBLE_ROLES) {
+                throw new LogicException('La revision de una purga exige admin o rrhh.');
             }
 
             return in_array($userId, $this->active, true);
@@ -310,4 +312,21 @@ it('rechaza tambien en la vista previa lo que no se puede revisar', function ():
         ->and(reviewPurgeRejection(fn (): mixed => reviewPurgeUseCase($journal, [90 => reviewPurgeSpanishThreeYears()], [90 => 95])->preview(90))?->translationKey)
         ->toBe('work-record-review.already_reviewed')
         ->and($journal->written)->toBe([]);
+})->group('RL-04', 'RS-07');
+
+it('exige administracion o RRHH a quien firma la revision', function (): void {
+    // Decision del propietario del 16-10-2026, que cambia la D7: los mismos
+    // roles que la correccion de la zona del centro.
+    expect(ReviewOutOfBoundsPurge::RESPONSIBLE_ROLES)->toBe([UserRole::ADMIN, UserRole::RRHH]);
+})->group('RL-04', 'RS-07');
+
+it('rechaza ya en la vista previa una cuenta que no puede firmar, sin candado ni lectura', function (): void {
+    $journal = new ReviewPurgeJournal;
+
+    $useCase = reviewPurgeUseCase($journal, [90 => reviewPurgeSpanishThreeYears()]);
+
+    expect(fn (): mixed => $useCase->preview(90, 8))
+        ->toThrow(PurgeReviewRejected::class, 'allowed to sign this review');
+
+    expect($journal->steps)->toBe([]);
 })->group('RL-04', 'RS-07');

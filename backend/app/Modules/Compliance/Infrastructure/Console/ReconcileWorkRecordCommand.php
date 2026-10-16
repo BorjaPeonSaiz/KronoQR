@@ -157,6 +157,8 @@ final class ReconcileWorkRecordCommand extends Command
      * - Con `--full` o `--days`: 2, sin hacer nada.
      * - `--acknowledge` o `--responsible` que no son un entero positivo: 2, sin
      *   hacer nada.
+     * - `--responsible` que no es una cuenta de gestion activa con rol admin o
+     *   rrhh: 2, sin escribir (tambien en la vista previa).
      * - Sin `--reason` o sin `--responsible`: vista previa y 2, sin escribir.
      * - Revision rechazada: 1 y el motivo.
      * - Escrita: 0.
@@ -193,7 +195,7 @@ final class ReconcileWorkRecordCommand extends Command
 
         try {
             if ($reason === null || $responsible === null) {
-                $preview = $review->preview($purgeId);
+                $preview = $review->preview($purgeId, $responsible);
                 $this->printReview($purgeId, $preview->violations, $preview->explainsDeletions, $preview->cutoffDate, $preview->siteId);
                 $this->error(__('work-record-review.missing_options', ['id' => $purgeId]));
 
@@ -202,9 +204,7 @@ final class ReconcileWorkRecordCommand extends Command
 
             $outcome = $review->handle(new ReviewOutOfBoundsPurgeCommand($purgeId, $reason, $responsible));
         } catch (PurgeReviewRejected $rejected) {
-            $this->error(__($rejected->translationKey, $rejected->parameters));
-
-            return self::FAILURE;
+            return $this->rejected($rejected);
         }
 
         Log::warning('work_record_purge_reviewed', [
@@ -217,6 +217,19 @@ final class ReconcileWorkRecordCommand extends Command
         $this->printReview($purgeId, $outcome->violations, $outcome->explainsDeletions, $outcome->cutoffDate, $outcome->siteId);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Una cuenta que no puede firmar es un error de quien teclea la orden, como
+     * un id mal escrito: 2. El resto son negativas sobre el asiento: 1.
+     */
+    private function rejected(PurgeReviewRejected $rejected): int
+    {
+        $this->error(__($rejected->translationKey, $rejected->parameters));
+
+        return $rejected->translationKey === PurgeReviewRejected::RESPONSIBLE_NOT_ACTIVE
+            ? self::INVALID
+            : self::FAILURE;
     }
 
     /**

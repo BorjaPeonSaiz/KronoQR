@@ -336,9 +336,11 @@ del equipo técnico. Con `explains_deletions=true` la revisión hace que esos
 borrados dejen de salir como `audit_without_entry`, así que después ya nada en
 la conciliación te lo recordará.
 
-**Quién y cómo.** Cualquier cuenta de gestión **activa** puede firmarla; no se
-exige un rol concreto, pero quien la firma responde de ella y queda como actor
-del asiento. Primero la simulación, que no escribe nada: sin `--reason` ni
+**Quién y cómo.** La firma una cuenta de gestión **activa con rol de
+administración o de RRHH** (desde el 16-10-2026, por decisión del propietario;
+antes valía cualquier cuenta activa). Quien la firma responde de ella y queda
+como actor del asiento. Si `--responsible` no es una de esas cuentas, la orden
+sale con 2 sin escribir nada, también en la simulación. Primero la simulación, que no escribe nada: sin `--reason` ni
 `--responsible` imprime los defectos del asiento y qué explicaría, y sale con 2.
 
 ```bash
@@ -355,8 +357,7 @@ docker compose exec -T app php artisan compliance:reconcile-work-record \
 
 Sale con 0 si escribe el asiento; con 1 si lo rechaza (no es una purga del
 registro horario, ya estaba revisada, la purga es admisible y no hay nada que
-revisar, motivo demasiado corto o largo, o el responsable no es una cuenta de
-gestión activa). `--acknowledge` no se combina con `--full` ni con `--days`.
+revisar, o motivo demasiado corto o largo). `--acknowledge` no se combina con `--full` ni con `--days`.
 
 **Qué hace y qué no.**
 

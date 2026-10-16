@@ -131,8 +131,12 @@ docker compose -f docker-compose.yml run --rm \
 
 **Qué pasa, en orden:**
 
-1. Se comprueba la frase. Si no corresponde a lo que se purgaría **ahora**, no se
-   sigue: un informe de hace tres meses no puede ejecutarse.
+1. Se comprueba `--responsible`: tiene que ser el id (un entero positivo) de una
+   **cuenta de gestión activa**. Si no lo es —letras, una cuenta que no existe o
+   una dada de baja—, la orden sale con código `2` sin simular ni borrar nada.
+   Se vuelve a comprobar antes de soltar cada partición y antes del asiento.
+   Después se comprueba la frase. Si no corresponde a lo que se purgaría
+   **ahora**, no se sigue: un informe de hace tres meses no puede ejecutarse.
 2. Se **verifica la cadena** de cada partición de auditoría que iba a soltarse. Si
    una no verifica, **aborta sin borrar nada**.
 3. Se purga el registro de jornada vencido, con su asiento en `audit_log` en la
@@ -857,7 +861,7 @@ la alimenta dejó de ejecutarse):
 | `DiscrepanciaEntreRegistroYAuditoria` | Cualquiera | Crítica | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Alguien ha escrito en el registro horario por fuera de la aplicación. Preserva la evidencia (§2 de ese runbook) antes de tocar nada y no generes exportaciones legales del periodo hasta aclararlo |
 | `ConciliacionDelRegistroAusente` | > 26 h sin conciliar | Crítica | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Comprueba que el `scheduler` sigue vivo y lanza `compliance:reconcile-work-record` a mano |
 | `ConciliacionCompletaDelRegistroAusente` | > 8 días sin la conciliación completa | Alta | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Lanza `compliance:reconcile-work-record --full` a mano. Tras instalar o actualizar no suena hasta que ha pasado un domingo |
-| `PurgaFueraDeLimitesRevisada` | Sube el número de purgas revisadas respecto a hace un día | Media | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Alguien ha dado por revisada una purga no admisible con `--acknowledge`. Comprueba en `audit_log` el asiento `retention.purge_reviewed` (quién responde y el motivo) y que corresponde a un incidente ya investigado; si nadie lo reconoce, trátalo como `DiscrepanciaEntreRegistroYAuditoria`. Se apaga sola en un día |
+| `PurgaFueraDeLimitesRevisada` | Sube el número de purgas revisadas respecto a hace un día | Media | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Alguien ha dado por revisada una purga no admisible con `--acknowledge`. Comprueba en `audit_log` el asiento `retention.purge_reviewed` (quién responde —una cuenta activa de administración o RRHH, la única que puede firmarla— y el motivo) y que corresponde a un incidente ya investigado; si nadie lo reconoce, trátalo como `DiscrepanciaEntreRegistroYAuditoria`. Se apaga sola en un día |
 | `PurgaRevisadaQueExplicaBorrados` | Sube el número de purgas revisadas que explican borrados (`explains_deletions="true"`) respecto a hace un día | Crítica (integridad) | Seguridad | [`discrepancia-registro-auditoria.md`](../runbooks/discrepancia-registro-auditoria.md) | Una revisión con `--acknowledge` hace que los borrados anteriores al corte dejen de salir como discrepancia. Verifica hoy con quien firma (`responsible`) que lo hizo, contrasta quién tenía acceso por shell al servidor y que existe un informe que cuadra. Si nadie lo reconoce, es un posible par purga + revisión falsificado: trátalo como incidente de integridad |
 | `ParticionDeAuditoriaAusente` | Falta la partición del año en curso | Crítica | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | **El fichaje está caído**: `compliance:ensure-audit-partitions` ya |
 | `ParticionDeAuditoriaDelProximoAnoSinPreparar` | Falta la del año próximo, desde noviembre | Media | IT | [`rotura-cadena-auditoria.md`](../runbooks/rotura-cadena-auditoria.md) | Comprueba que el `scheduler` corre y que la migración `2026_09_29_100000` está aplicada (`migrate:status` por el servicio `migrate`, ver el runbook §5). Ya no depende de `DB_MIGRATION_USERNAME`: la partición la pide la aplicación a una función de la base |

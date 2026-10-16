@@ -15,7 +15,7 @@ return [
     'admissible' => 'El asiento :id es una purga admisible: la conciliación ya la cree y no hay nada que revisar.',
     'reason_too_short' => 'El motivo tiene que explicar lo investigado: al menos :min caracteres.',
     'reason_too_long' => 'El motivo admite como mucho :max caracteres.',
-    'responsible_inactive' => 'La cuenta :id no es una cuenta de gestión activa. La revisión la firma una persona que responde de ella.',
+    'responsible_inactive' => 'La cuenta :id no es una cuenta de gestión activa con rol de administración o de RRHH. La revisión la firma una persona que responde de ella. No se ha escrito nada.',
     'missing_options' => 'Para dar por revisado el asiento :id faltan --reason y --responsible. No se ha escrito nada.',
     'incompatible_options' => '--acknowledge no se combina con --full ni con --days: o se concilia o se revisa.',
     'invalid_purge_id' => '--acknowledge tiene que ser el id del asiento, un entero positivo; «:value» no lo es. No se ha escrito nada.',
