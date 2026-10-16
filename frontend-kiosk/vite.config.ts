@@ -317,9 +317,10 @@ export default defineConfig(({ mode }) => ({
         runtimeCaching: [
           {
             // El manifiesto con la marca (PR7): mismo trato que la marca. Sin red,
-            // el ultimo que se pudo guardar; la PWA ya instalada no lo relee para
-            // cambiar nombre ni icono (hay que reinstalar), pero el navegador lo
-            // pide al instalar y al comprobar la actualizacion del manifiesto.
+            // el ultimo que se pudo guardar. Una PWA ya instalada puede tardar en
+            // reflejar un cambio de nombre o icono, o no hacerlo, o pedir
+            // confirmacion en pantalla (Chrome revisa el manifiesto por su `id`
+            // estable); pendiente de comprobar en la tablet real.
             urlPattern: /\/api\/v1\/branding\/manifest\.webmanifest$/,
             handler: 'NetworkFirst',
             options: {

@@ -60,16 +60,13 @@ export function isValidTimeZone(name: string): boolean {
 }
 
 /**
- * La zona a usar: `name` si es valida; si no, `fallback`. Con `fallback`
- * `undefined` el resultado `undefined` significa «la zona del aparato», que es
- * lo que quiere el quiosco (regla dura 19: nunca se deja de pintar la hora).
- * El panel y el portal pasan `FALLBACK_TIMEZONE`.
+ * La zona a usar: `name` si es valida; `undefined` en cualquier otro caso, que
+ * significa "la zona del aparato" (regla dura 19: el quiosco nunca deja de
+ * pintar la hora). Si algun dia una SPA necesita otra zona de reserva, se
+ * anade aqui un parametro; hoy nadie lo usa.
  */
-export function resolveTimeZone(
-  name: string | null | undefined,
-  fallback?: string,
-): string | undefined {
-  return typeof name === 'string' && isValidTimeZone(name) ? name : fallback
+export function resolveTimeZone(name: string | null | undefined): string | undefined {
+  return typeof name === 'string' && isValidTimeZone(name) ? name : undefined
 }
 
 /** La hora de pared completa; `hour` es siempre 0-23 y `minute` 0-59. */
@@ -149,15 +146,10 @@ export interface WallClock {
 
 /**
  * Hora y minuto en el reloj de pared de `timeZone`; si no es valida (o falta),
- * en `fallbackTimeZone`, y si tampoco hay, en la del aparato. `null` si
- * `instant` no es una fecha.
+ * en la del aparato. `null` si `instant` no es una fecha.
  */
-export function wallClockOf(
-  instant: Date,
-  timeZone?: string | null,
-  fallbackTimeZone?: string,
-): WallClock | null {
-  const wall = readWallClock(instant, resolveTimeZone(timeZone, fallbackTimeZone))
+export function wallClockOf(instant: Date, timeZone?: string | null): WallClock | null {
+  const wall = readWallClock(instant, resolveTimeZone(timeZone))
 
   return wall === null ? null : { hour: wall.hour, minute: wall.minute }
 }

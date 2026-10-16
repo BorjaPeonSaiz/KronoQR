@@ -100,14 +100,11 @@ describe('zonas horarias: validacion', () => {
     expect(isValidTimeZone('')).toBe(false)
   })
 
-  it('`resolveTimeZone`: nombre valido, o la zona de reserva, o `undefined` (= la del aparato)', () => {
+  it('`resolveTimeZone`: nombre valido o `undefined` (= la del aparato)', () => {
     expect(resolveTimeZone(MADRID)).toBe(MADRID)
     expect(resolveTimeZone(null)).toBeUndefined()
     expect(resolveTimeZone(undefined)).toBeUndefined()
     expect(resolveTimeZone('Marte/Olympus')).toBeUndefined()
-    expect(resolveTimeZone('Marte/Olympus', 'UTC')).toBe('UTC')
-    expect(resolveTimeZone(null, 'UTC')).toBe('UTC')
-    expect(resolveTimeZone(MADRID, 'UTC')).toBe(MADRID)
   })
 })
 
@@ -179,12 +176,10 @@ describe('hora de pared en una zona', () => {
     })
   })
 
-  it('una zona invalida usa la de reserva, y sin reserva la del aparato', () => {
+  it('una zona invalida o ausente usa la del aparato', () => {
     const instant = new Date('2026-07-15T05:30:00.000Z')
     const device = wallClockOf(instant)
 
-    expect(wallClockOf(instant, 'Marte/Olympus', 'UTC')).toEqual({ hour: 5, minute: 30 })
-    expect(wallClockOf(instant, null, 'UTC')).toEqual({ hour: 5, minute: 30 })
     expect(wallClockOf(instant, 'Marte/Olympus')).toEqual(device)
     expect(wallClockOf(instant, '')).toEqual(device)
   })

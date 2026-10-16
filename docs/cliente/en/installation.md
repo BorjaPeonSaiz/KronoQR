@@ -759,12 +759,14 @@ extension), 512 KiB and 2048 pixels on a side at most.
 > 512 × 512 pixels**. With an SVG, a smaller PNG or a non-square one, the tablet
 > is installed with the KronoQR icon (the name is still yours), because a
 > distorted icon on the home screen is worse than the manufacturer's. **A tablet
-> that is already installed does not refresh the name or the icon** when you
-> change the brand: Android fixes them when the app is installed. For it to see
-> them you have to **uninstall the app from the tablet and install it again**
-> from the kiosk address. The rest of the brand (name on screen, colour, logo
-> inside the app) does update by itself. If you are going to use your own brand,
-> set it up **before** installing the tablets and you save the reinstall.
+> that is already installed may be slow to reflect a change of name or icon, or
+> may not reflect it at all**: Chrome on Android checks the app's manifest from
+> time to time and sometimes updates those details by itself, sometimes asks
+> for confirmation on the tablet's own screen, and sometimes leaves them as
+> they were. To be sure, **uninstall the app from the tablet and install it
+> again** from the kiosk address; best of all, **set the brand before installing
+> the tablets** and do not depend on it. The rest of the brand (name on screen,
+> colour, logo inside the app) does update by itself.
 
 All of this is optional in another sense too: custom branding is a plan
 feature. If your licence does not include it, what you configure is kept and

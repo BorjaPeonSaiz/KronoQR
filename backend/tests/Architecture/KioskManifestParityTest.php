@@ -86,7 +86,7 @@ it('publica como iconos de serie los mismos que genera el manifiesto estatico', 
         PREG_SET_ORDER,
     );
 
-    $vite = array_map(static fn (array $m): array => ['/kiosk/'.$m[1], $m[2], $m[3]], $matches);
+    $vite = array_map(static fn (array $m): array => [$m[1], $m[2], $m[3]], $matches);
 
     $constants = (new ReflectionClass(GetKioskManifestHandler::class))->getReflectionConstants();
     $php = null;
@@ -99,6 +99,16 @@ it('publica como iconos de serie los mismos que genera el manifiesto estatico', 
 
     expect($vite)->not->toBeEmpty()
         ->and($php)->toBe($vite);
+})->group('RF-PD-08');
+
+it('cuelga el manifiesto de la misma ruta en la que Nginx monta el quiosco', function (): void {
+    // `id`, `start_url` y `scope` van en el borde HTTP del backend y los iconos de
+    // serie, relativos, se resuelven contra esa ruta: la misma que el Dockerfile de
+    // Nginx pasa a `vite build` como base del quiosco.
+    $dockerfile = Repo::contents('infra/docker/nginx/Dockerfile');
+
+    expect(preg_match('~frontend-kiosk && [^\n]*KRONOQR_BASE=(\S+)~', $dockerfile, $base))->toBe(1)
+        ->and(kioskManifestParityPhpConstant(KIOSK_MANIFEST_PARITY_RESOURCE, 'KIOSK_PATH'))->toBe($base[1]);
 })->group('RF-PD-08');
 
 it('apunta el index.html del quiosco al manifiesto del servidor y no al estatico', function (): void {
