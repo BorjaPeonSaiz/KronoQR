@@ -4,7 +4,8 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
-import { stubKioskApi } from './support/kiosk'
+import { stubBrandingApi, stubKioskApi } from './support/kiosk'
+import { readProductionSecurityHeaders, watchBrowserDiagnostics } from './support/securityHeaders'
 
 interface ManifestIcon {
   readonly src: string
@@ -44,6 +45,36 @@ test(
       expect(image.ok(), icon.src).toBe(true)
       expect(image.headers()['content-type']).toContain('image/png')
     }
+  },
+)
+
+test(
+  'el index.html enlaza el manifiesto del servidor, UNO solo, y la CSP real lo deja cargar (PR7)',
+  { tag: ['@RF-PD-08', '@RS-09'] },
+  async ({ page }) => {
+    await stubBrandingApi(page, { variant: 'hotel-marina' })
+    const diagnostics = await watchBrowserDiagnostics(page)
+
+    const document = await page.goto('/')
+    const links = page.locator('link[rel="manifest"]')
+    await expect(links).toHaveCount(1)
+    await expect(links).toHaveAttribute('href', '/api/v1/branding/manifest.webmanifest')
+
+    // La CSP es la de produccion (snippet de Nginx) y declara `manifest-src`.
+    const csp = readProductionSecurityHeaders()['Content-Security-Policy'] ?? ''
+    expect(csp).toContain("manifest-src 'self'")
+    expect(document?.headers()['content-security-policy']).toContain("manifest-src 'self'")
+
+    // Chromium solo pide el manifiesto cuando va a instalar, no en cada carga: se
+    // pide el enlace tal cual, desde la pagina, y llega con la marca.
+    const href = await links.getAttribute('href')
+    const served = await page.evaluate(async (url) => {
+      const response = await fetch(url)
+      return { status: response.status, body: (await response.json()) as { name: string } }
+    }, href ?? '')
+    expect(served.status).toBe(200)
+    expect(served.body.name).toBe('Hotel Marina')
+    expect(diagnostics.blockedSince()).toEqual([])
   },
 )
 

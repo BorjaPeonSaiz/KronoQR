@@ -369,6 +369,31 @@ export async function stubBrandingApi(
     })
   })
 
+  // El manifiesto con la marca (PR7): el mismo que sirve el backend, con el
+  // ejemplo del contrato para «Hotel Marina» y los iconos de serie sin marca.
+  await page.route('**/api/v1/branding/manifest.webmanifest', async (route: Route) => {
+    const branded = variant === 'hotel-marina'
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/manifest+json',
+      body: JSON.stringify({
+        id: '/kiosk/',
+        name: branded ? 'Hotel Marina' : 'KronoQR',
+        short_name: branded ? 'Hotel Marina' : 'KronoQR',
+        start_url: '/kiosk/',
+        scope: '/kiosk/',
+        display: 'fullscreen',
+        orientation: 'landscape',
+        theme_color: branded ? '#0f5c8c' : '#0f172a',
+        background_color: '#0f172a',
+        icons: [
+          { src: '/kiosk/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/kiosk/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+        ],
+      }),
+    })
+  })
+
   // Regex y no glob: el patron tiene que sobrevivir a la huella `?v=...` que
   // el propio `body.logo_url` publica.
   await page.route(/\/api\/v1\/branding\/logo(\?.*)?$/, async (route: Route) => {

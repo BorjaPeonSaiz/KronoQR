@@ -754,6 +754,18 @@ extension), 512 KiB and 2048 pixels on a side at most.
 > the file in the server folder and the next request already serves it. Step 2
 > is only repeated if you move the folder.
 
+> **The name and icon the tablet is installed with** are those of your brand,
+> with one condition for the icon: the logo has to be a **square PNG of at least
+> 512 × 512 pixels**. With an SVG, a smaller PNG or a non-square one, the tablet
+> is installed with the KronoQR icon (the name is still yours), because a
+> distorted icon on the home screen is worse than the manufacturer's. **A tablet
+> that is already installed does not refresh the name or the icon** when you
+> change the brand: Android fixes them when the app is installed. For it to see
+> them you have to **uninstall the app from the tablet and install it again**
+> from the kiosk address. The rest of the brand (name on screen, colour, logo
+> inside the app) does update by itself. If you are going to use your own brand,
+> set it up **before** installing the tablets and you save the reinstall.
+
 All of this is optional in another sense too: custom branding is a plan
 feature. If your licence does not include it, what you configure is kept and
 applied only once the licence covers it — in the meantime the KronoQR brand is

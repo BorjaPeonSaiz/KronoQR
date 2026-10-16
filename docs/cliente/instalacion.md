@@ -737,6 +737,19 @@ que si algo no cuadra te lo dice en el momento y con qué hacer.
 > en la carpeta del servidor y la petición siguiente ya lo sirve. El paso 2 solo
 > se repite si mueves la carpeta.
 
+> **El nombre y el icono con los que se instala la tablet** son los de tu marca,
+> con una condición para el icono: el logotipo tiene que ser un **PNG cuadrado de
+> al menos 512 × 512 píxeles**. Con un SVG, un PNG más pequeño o uno que no sea
+> cuadrado, la tablet se instala con el icono de KronoQR (el nombre sí es el
+> tuyo), porque un icono deformado en la pantalla de inicio es peor que el del
+> fabricante. **Una tablet que ya está instalada no refresca el nombre ni el
+> icono** cuando cambias la marca: Android los fija al instalar la aplicación.
+> Para que los vea hay que **desinstalar la aplicación de la tablet y volver a
+> instalarla** desde la dirección del quiosco. Lo demás de la marca (nombre en
+> pantalla, color, logotipo dentro de la aplicación) sí se actualiza solo. Si vas
+> a poner marca propia, configúrala **antes** de instalar las tablets y te
+> ahorras la reinstalación.
+
 Todo esto es opcional también en otro sentido: la marca propia es una
 funcionalidad del plan. Si tu licencia no la incluye, lo que configures se guarda
 y se aplica solo cuando la licencia lo cubra — mientras tanto se ve la marca de
