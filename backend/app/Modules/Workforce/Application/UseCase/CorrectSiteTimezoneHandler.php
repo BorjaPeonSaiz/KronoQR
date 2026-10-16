@@ -8,12 +8,12 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\SpanScope;
-use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Application\Command\CorrectSiteTimezoneCommand;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Application\Port\WorkRecordExtent;
 use App\Modules\Workforce\Application\Port\WorkRecordPresence;
+use App\Modules\Workforce\Application\Support\SiteMaintainers;
 use App\Modules\Workforce\Domain\Event\SiteConfigured;
 use App\Modules\Workforce\Domain\Exception\InvalidSiteTimezoneCorrection;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
@@ -38,7 +38,7 @@ use Throwable;
  *
  * ## Quien puede responder
  *
- * Una cuenta de gestion **activa** con rol {@see self::RESPONSIBLE_ROLES}: los
+ * Una cuenta de gestion **activa** con rol {@see SiteMaintainers::ROLES}: los
  * mismos que pueden modificar el centro por la API (`SitePolicy::update`). La
  * consola no puede ser la via por la que alguien hace lo que el panel le niega.
  * Se comprueba en la vista previa —para no pedir confirmacion de algo que se va
@@ -83,15 +83,6 @@ use Throwable;
  */
 final readonly class CorrectSiteTimezoneHandler
 {
-    /**
-     * Los roles que pueden responder de la correccion: los que pueden
-     * modificar el centro por la API. `SitePolicy::update` los lee de aqui, y
-     * asi los dos caminos no pueden separarse.
-     *
-     * @var list<UserRole>
-     */
-    public const array RESPONSIBLE_ROLES = [UserRole::ADMIN, UserRole::RRHH];
-
     public function __construct(
         private SiteRepository $sites,
         private WorkRecordPresence $workRecord,
@@ -198,7 +189,7 @@ final readonly class CorrectSiteTimezoneHandler
      */
     private function assertResponsible(int $userId): void
     {
-        if (! $this->accounts->isActiveManagementAccount($userId, self::RESPONSIBLE_ROLES)) {
+        if (! $this->accounts->isActiveManagementAccount($userId, SiteMaintainers::ROLES)) {
             throw InvalidSiteTimezoneCorrection::responsibleNotActive($userId);
         }
     }

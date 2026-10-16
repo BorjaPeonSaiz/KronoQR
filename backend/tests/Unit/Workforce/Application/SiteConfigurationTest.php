@@ -13,6 +13,7 @@ use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Application\Port\WorkRecordExtent;
 use App\Modules\Workforce\Application\Port\WorkRecordPresence;
+use App\Modules\Workforce\Application\Support\SiteMaintainers;
 use App\Modules\Workforce\Application\UseCase\CorrectSiteTimezoneHandler;
 use App\Modules\Workforce\Application\UseCase\CreateSiteHandler;
 use App\Modules\Workforce\Application\UseCase\SiteTimezoneCorrectionOutcome;
@@ -406,7 +407,7 @@ it('comprueba al responsable con los roles del centro y con la cadena tomada', f
         ->and($report->shiftEntryCount)->toBe(1)
         ->and($journal->steps)->toBe(['responsible:chain:admin,rrhh'])
         ->and($repository->stored?->timezone->identifier)->toBe('Atlantic/Canary')
-        ->and(CorrectSiteTimezoneHandler::RESPONSIBLE_ROLES)->toBe([UserRole::ADMIN, UserRole::RRHH]);
+        ->and(SiteMaintainers::ROLES)->toBe([UserRole::ADMIN, UserRole::RRHH]);
 })->group('RN-23', 'RL-04');
 
 it('no corrige ni guarda si el responsable no vale al confirmar', function (): void {

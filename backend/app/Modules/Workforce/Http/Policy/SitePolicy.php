@@ -6,7 +6,7 @@ namespace App\Modules\Workforce\Http\Policy;
 
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
-use App\Modules\Workforce\Application\UseCase\CorrectSiteTimezoneHandler;
+use App\Modules\Workforce\Application\Support\SiteMaintainers;
 
 /**
  * Quien puede ver, crear y modificar el centro de la instalacion (ADR-040).
@@ -38,15 +38,14 @@ final class SitePolicy
     }
 
     /**
-     * Los mismos que pueden responder de la correccion de la zona por consola
-     * (RN-23): la lista vive en el caso de uso para que la consola nunca
-     * permita lo que la API niega.
+     * Los mismos que corrigen la zona por consola (RN-23): una sola lista para
+     * que la consola nunca permita lo que la API niega.
      *
      * @return list<UserRole>
      */
     private static function writers(): array
     {
-        return CorrectSiteTimezoneHandler::RESPONSIBLE_ROLES;
+        return SiteMaintainers::ROLES;
     }
 
     public function view(ManagementActor $actor): bool
