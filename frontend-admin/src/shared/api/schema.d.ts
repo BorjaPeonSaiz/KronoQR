@@ -3811,8 +3811,9 @@ export interface paths {
          *
          *     **El orden es el de trabajo, no el de creacion**: primero la severidad
          *     —`high`, `medium`, `low`— y dentro de ella la mas reciente primero. Se
-         *     resuelve sobre el indice parcial `incidents_open_by_assignee`, no
-         *     ordenando el historico entero.
+         *     resuelve sobre el indice `incidents_status_urgency_index` (estado,
+         *     severidad, deteccion e `id`), que da el filtro y el orden sin ordenar
+         *     el historico entero, con cualquier `status`.
          *
          *     **El alcance por departamento de RF-ID-03 entra en la consulta**, no
          *     filtra despues: un `responsable_departamento` recibe una pagina que solo
